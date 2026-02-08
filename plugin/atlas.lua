@@ -1,0 +1,3 @@
+-- Commands are now registered in the setup() function
+-- This file is kept for lazy.nvim plugin loading
+-- vim: set ts=2 sts=2 sw=2 et ai si sta:

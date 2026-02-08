@@ -1,0 +1,373 @@
+local state = require("atlas.jira-board-state")
+local util = require("atlas.jira-util")
+
+---@class Jira.UI
+local M = {}
+
+---@param status_name string|nil
+---@return string name
+function M.get_status_hl(status_name)
+  if not status_name or status_name == "" then
+    return "JiraStatus"
+  end
+
+  local hl_name = "JiraStatus_" .. status_name:gsub("%s+", "_"):gsub("[^%w_]", "")
+  if state.status_hls[status_name] then
+    return hl_name
+  end
+
+  local palette = util.get_palette()
+  local bg_base = util.get_theme_color({ "Normal" }, "bg") or "#1e1e2e"
+
+  local name_upper = status_name:upper()
+  local color
+  if name_upper:find("READY FOR DEV") or name_upper:find("READY FOR TEST") then
+    color = palette[7] -- Grey
+  elseif
+    name_upper:find("DONE")
+    or name_upper:find("RESOLVED")
+    or name_upper:find("CLOSED")
+    or name_upper:find("FINISHED")
+  then
+    color = palette[1] -- Green
+  elseif name_upper:find("DEVELOPMENT") then
+    color = palette[6] -- Cyan
+  elseif name_upper:find("PROGRESS") or name_upper:find("BUILDING") or name_upper:find("WORKING") then
+    color = palette[3] -- Yellow
+  elseif
+    name_upper:find("TODO")
+    or name_upper:find("TO DO")
+    or name_upper:find("OPEN")
+    or name_upper:find("BACKLOG")
+  then
+    color = palette[2] -- Blue
+  elseif
+    name_upper:find("BLOCK")
+    or name_upper:find("REJECT")
+    or name_upper:find("BUG")
+    or name_upper:find("ERROR")
+  then
+    color = palette[4] -- Red
+  elseif name_upper:find("REVIEW") or name_upper:find("QA") or name_upper:find("TEST") then
+    color = palette[5] -- Magenta
+  else
+    -- Hash
+    local hash = 0
+    for i = 1, #status_name do
+      hash = (hash * 31 + (status_name):byte(i)) % #palette
+    end
+    color = palette[hash + 1]
+  end
+
+  vim.api.nvim_set_hl(0, hl_name, {
+    fg = bg_base,
+    bg = color,
+    bold = true,
+  })
+
+  state.status_hls[status_name] = hl_name
+  return hl_name
+end
+
+function M.create_window()
+  -- Backdrop
+  local dim_buf = vim.api.nvim_create_buf(false, true)
+  state.dim_win = vim.api.nvim_open_win(dim_buf, false, {
+    relative = "editor",
+    width = vim.o.columns,
+    height = vim.o.lines,
+    row = 0,
+    col = 0,
+    style = "minimal",
+    focusable = false,
+    zindex = 44,
+  })
+  vim.api.nvim_set_option_value("winblend", 50, { win = state.dim_win })
+  vim.api.nvim_set_option_value("winhighlight", "Normal:JiraDim", { win = state.dim_win })
+  vim.api.nvim_set_hl(0, "JiraDim", { bg = "#000000" })
+
+  state.buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_set_option_value("bufhidden", "wipe", { buf = state.buf })
+  vim.api.nvim_set_option_value("modifiable", false, { buf = state.buf })
+
+  local height = 42
+  local width = 160
+
+  state.win = vim.api.nvim_open_win(state.buf, true, {
+    width = width,
+    height = height,
+    col = (vim.o.columns - width) / 2,
+    row = (vim.o.lines - height) / 2 - 1,
+
+    relative = "editor",
+    style = "minimal",
+    border = { " ", " ", " ", " ", " ", " ", " ", " " },
+    title = { { "  Jira Board ", "StatusLineTerm" } },
+    title_pos = "center",
+    zindex = 45,
+  })
+
+  vim.api.nvim_win_set_hl_ns(state.win, state.ns)
+  vim.api.nvim_set_option_value("cursorline", true, { win = state.win })
+
+  vim.api.nvim_create_autocmd("BufWipeout", {
+    buffer = state.buf,
+    callback = function()
+      if state.dim_win and vim.api.nvim_win_is_valid(state.dim_win) then
+        vim.api.nvim_win_close(state.dim_win, true)
+        state.dim_win = nil
+      end
+    end,
+  })
+
+  vim.api.nvim_set_current_win(state.win)
+end
+
+function M.show_help_popup()
+  local help_content = {
+    { section = "Navigation & View" },
+    { k = "j/k", d = "Navigate between issues" },
+    { k = "<Tab>", d = "Toggle Node (Expand/Collapse)" },
+    { k = "zR", d = "Expand All Nodes" },
+    { k = "zM", d = "Collapse All Nodes" },
+    { k = "J", d = "Switch to JQL view" },
+    { k = "H", d = "Show Help" },
+    { k = "q", d = "Close Board" },
+    { k = "r", d = "Refresh current view" },
+
+    { section = "Search & Favorites" },
+    { k = "?", d = "Search issues (text/JQL/key)" },
+    { k = "s", d = "Star/Unstar issue" },
+    { k = "f", d = "Show Favorites" },
+
+    { section = "Issue Actions" },
+    { k = "<CR>", d = "Show Issue Details (Popup)" },
+    { k = "K", d = "Show Issue Details (Popup)" },
+    { k = "i", d = "Create Issue / Sub-task" },
+    { k = "y", d = "Copy Issue Key to Clipboard" },
+    { k = "c", d = "Add Comment" },
+    { k = "gd", d = "Read Task as info" },
+    { k = "ge", d = "Edit Task" },
+    { k = "gx", d = "Open Task in Browser" },
+    { k = "gs", d = "Update Status" },
+    { k = "ga", d = "Change Assignee" },
+    { k = "go", d = "Show Child Issues (Sub-tasks)" },
+    { k = "gp", d = "View Parent & Children" },
+  }
+
+  local lines = { " Jira Keybindings", " " .. ("━"):rep(50) }
+  local hls = {}
+  
+  table.insert(hls, { row = 0, col = 1, end_col = -1, hl = "Title" })
+  table.insert(hls, { row = 1, col = 0, end_col = -1, hl = "Comment" })
+  
+  local row = 2
+  for _, item in ipairs(help_content) do
+    if item.section then
+      table.insert(lines, "")
+      table.insert(lines, " " .. item.section)
+      table.insert(hls, { row = row + 1, col = 1, end_col = -1, hl = "Label" })
+      row = row + 2
+    else
+      local line = ("   %-18s %s"):format(item.k, item.d)
+      table.insert(lines, line)
+      table.insert(hls, { row = row, col = 3, end_col = 3 + #item.k, hl = "Special" })
+      row = row + 1
+    end
+  end
+
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
+
+  local width = 60
+  local height = #lines
+  local win = vim.api.nvim_open_win(buf, true, {
+    relative = "editor",
+    width = width,
+    height = height,
+    col = (vim.o.columns - width) / 2,
+    row = (vim.o.lines - height) / 2,
+    style = "minimal",
+    border = "rounded",
+    title = " Help ",
+    title_pos = "center",
+  })
+
+  for _, hl in ipairs(hls) do
+    vim.api.nvim_buf_add_highlight(buf, -1, hl.hl, hl.row, hl.col, hl.end_col)
+  end
+
+  vim.keymap.set("n", "q", function()
+    vim.api.nvim_win_close(win, true)
+  end, { buffer = buf, nowait = true })
+  
+  vim.keymap.set("n", "<Esc>", function()
+    vim.api.nvim_win_close(win, true)
+  end, { buffer = buf, nowait = true })
+end
+
+function M.show_issue_details_popup(node)
+  local lines = {
+    " " .. node.key .. ": " .. (node.summary or ""),
+    " " .. ("━"):rep(math.min(60, #node.key + #(node.summary or "") + 2)),
+    (" Type:     %s"):format(node.type or "Unknown"),
+    (" Status:   %s"):format(node.status or "Unknown"),
+    (" Category: %s"):format(node.status_category or "Unknown"),
+    (" Priority: %s"):format(node.priority or "None"),
+    (" Assignee: %s"):format(node.assignee or "Unassigned"),
+  }
+
+  local hls = {}
+  -- Header highlight
+  table.insert(hls, { row = 0, col = 1, end_col = 1 + #node.key, hl = "Title" })
+  table.insert(hls, { row = 1, col = 0, end_col = -1, hl = "Comment" })
+
+  local next_row = 2
+  
+  -- Type
+  table.insert(hls, { row = next_row, col = 1, end_col = 10, hl = "Label" })
+  table.insert(hls, { row = next_row, col = 11, end_col = -1, hl = "Type" })
+  next_row = next_row + 1
+  
+  -- Status
+  table.insert(hls, { row = next_row, col = 1, end_col = 10, hl = "Label" })
+  table.insert(hls, { row = next_row, col = 11, end_col = -1, hl = M.get_status_hl(node.status) })
+  next_row = next_row + 1
+  
+  -- Status Category
+  table.insert(hls, { row = next_row, col = 1, end_col = 10, hl = "Label" })
+  table.insert(hls, { row = next_row, col = 11, end_col = -1, hl = "Comment" })
+  next_row = next_row + 1
+
+  -- Priority
+  table.insert(hls, { row = next_row, col = 1, end_col = 10, hl = "Label" })
+  table.insert(hls, { row = next_row, col = 11, end_col = -1, hl = "Special" })
+  next_row = next_row + 1
+
+  -- Assignee
+  table.insert(hls, { row = next_row, col = 1, end_col = 10, hl = "Label" })
+  local ass_hl = (node.assignee == nil or node.assignee == "Unassigned") and "JiraAssigneeUnassigned" or "JiraAssignee"
+  table.insert(hls, { row = next_row, col = 11, end_col = -1, hl = ass_hl })
+  next_row = next_row + 1
+
+  -- Parent info
+  if node.parent then
+    table.insert(lines, (" Parent:   %s"):format(node.parent))
+    table.insert(hls, { row = next_row, col = 1, end_col = 10, hl = "Label" })
+    table.insert(hls, { row = next_row, col = 11, end_col = -1, hl = "Identifier" })
+    next_row = next_row + 1
+    
+    if node.parent_summary then
+      local truncated_summary = node.parent_summary
+      if #truncated_summary > 50 then
+        truncated_summary = truncated_summary:sub(1, 47) .. "..."
+      end
+      table.insert(lines, ("           %s"):format(truncated_summary))
+      table.insert(hls, { row = next_row, col = 11, end_col = -1, hl = "Comment" })
+      next_row = next_row + 1
+    end
+  end
+
+  if node.story_points then
+    table.insert(lines, (" Points:   %s"):format(node.story_points))
+    table.insert(hls, { row = next_row, col = 1, end_col = 10, hl = "Label" })
+    table.insert(hls, { row = next_row, col = 11, end_col = -1, hl = "JiraStoryPoint" })
+    next_row = next_row + 1
+  end
+
+  local spent = node.time_spent or 0
+  local estimate = node.time_estimate or 0
+  if spent > 0 or estimate > 0 then
+    table.insert(lines, (" Time:     %s / %s"):format(util.format_time(spent), util.format_time(estimate)))
+    table.insert(hls, { row = next_row, col = 1, end_col = 10, hl = "Label" })
+    table.insert(hls, { row = next_row, col = 11, end_col = -1, hl = "Number" })
+    next_row = next_row + 1
+  end
+
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
+  vim.api.nvim_set_option_value("bufhidden", "wipe", { buf = buf })
+
+  -- Apply highlights
+  for _, h in ipairs(hls) do
+    local end_col = h.end_col
+    if end_col == -1 then
+      end_col = #lines[h.row + 1]
+    end
+    vim.api.nvim_buf_set_extmark(buf, state.ns, h.row, h.col, {
+      end_col = end_col,
+      hl_group = h.hl,
+    })
+  end
+
+  local width = 0
+  for _, l in ipairs(lines) do
+    width = math.max(width, vim.fn.strdisplaywidth(l))
+  end
+  width = width + 2
+  local height = #lines
+
+  local win = vim.api.nvim_open_win(buf, false, {
+    relative = "cursor",
+    width = width,
+    height = height,
+    row = 1,
+    col = 0,
+    style = "minimal",
+    border = "rounded",
+    focusable = false,
+  })
+
+  vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI", "BufLeave" }, {
+    buffer = state.buf,
+    once = true,
+    callback = function()
+      if vim.api.nvim_win_is_valid(win) then
+        vim.api.nvim_win_close(win, true)
+      end
+    end,
+  })
+end
+
+function M.open_jql_input(default, callback)
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, { default or "" })
+
+  local width = 80
+  local height = 3
+  local win = vim.api.nvim_open_win(buf, true, {
+    relative = "editor",
+    width = width,
+    height = height,
+    row = (vim.o.lines - height) / 2,
+    col = (vim.o.columns - width) / 2,
+    style = "minimal",
+    border = "rounded",
+    title = " Enter Custom JQL (Press <CR> to submit, q to cancel) ",
+    title_pos = "center",
+  })
+
+  vim.api.nvim_command("startinsert!")
+
+  local function submit()
+    local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+    local input = table.concat(lines, " "):gsub("^%s*(.-)%s*$", "%1")
+    vim.api.nvim_win_close(win, true)
+    vim.api.nvim_command("stopinsert")
+    if input ~= "" then
+      callback(input)
+    end
+  end
+
+  vim.keymap.set({ "n", "i" }, "<CR>", submit, { buffer = buf, silent = true })
+  vim.keymap.set("n", "q", function()
+    vim.api.nvim_win_close(win, true)
+  end, { buffer = buf, silent = true })
+  vim.keymap.set("n", "<Esc>", function()
+    vim.api.nvim_win_close(win, true)
+  end, { buffer = buf, silent = true })
+end
+
+return M
