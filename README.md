@@ -2,9 +2,15 @@
 
 A Neovim plugin for managing Bitbucket PRs and Jira issues without leaving your editor.
 
-<!-- Add your images here -->
-<!-- <img src="./media/bitbucket.png" style="border-radius: 8px;" alt="Bitbucket PRs" /> -->
-<!-- <img src="./media/jira.png" style="border-radius: 8px;" alt="Jira Issues" /> -->
+<div style="display: flex;">
+<img src="./examples/bitbucket_example.png" style="border-radius: 8px; width: 50%;" alt="Bitbucket PRs" />
+<img src="./examples/jira_example.png" style="border-radius: 8px; width: 50%;" alt="Jira Issues" />
+</div>
+<br>
+
+> [!NOTE]
+Inspired by [jira.nvim](https://github.com/letieu/jira.nvim). This plugin is adapted for my personal workflow and preferences. I highly recommend checking out the original project for a more general-purpose solution.
+
 
 ### Using [lazy.nvim](https://github.com/folke/lazy.nvim)
 
@@ -126,11 +132,6 @@ export JIRA_TOKEN="your-api-token"
 | `ga` | Change assignee |
 | `r` | Refresh |
 | `q` | Close |
-
-
-## Credits
-
-Inspired by [jira.nvim](https://github.com/letieu/jira.nvim). This plugin is adapted for my personal workflow and preferences. I highly recommend checking out the original project for a more general-purpose solution.
 
 ## License
 
