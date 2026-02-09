@@ -94,6 +94,15 @@ function M.setup_keymaps()
     navigate_to_next_pr("up")
   end, opts)
 
+  local views = config.options.bitbucket_views or {}
+  for _, view in ipairs(views) do
+    if view.key then
+      vim.keymap.set("n", view.key, function()
+        require("atlas.bitbucket-board").load_view(view.name)
+      end, opts)
+    end
+  end
+
   vim.keymap.set("n", "<Tab>", function()
     local views = config.options.bitbucket_views or {}
     if #views == 0 then return end
@@ -128,6 +137,10 @@ function M.setup_keymaps()
   end, opts)
   vim.keymap.set("n", "K", function()
     require("atlas.bitbucket-board").show_pr_details()
+  end, opts)
+
+  vim.keymap.set("n", "a", function()
+    require("atlas.bitbucket-board").show_pr_actions()
   end, opts)
 
   vim.keymap.set("n", "gx", function()
@@ -351,6 +364,55 @@ function M.open_pr_in_browser()
   end
 
   vim.ui.open(url)
+end
+
+function M.open_pr_build()
+  local pr = helper.get_pr_at_cursor()
+  if not pr then
+    vim.notify("No PR found at cursor", vim.log.levels.WARN)
+    return
+  end
+  
+  if not pr.build_url or pr.build_url == "" then
+    vim.notify("No build URL available for PR #" .. (pr.id or "unknown"), vim.log.levels.WARN)
+    return
+  end
+
+  vim.ui.open(pr.build_url)
+end
+
+function M.show_pr_actions()
+  local pr = helper.get_pr_at_cursor()
+  if not pr then
+    vim.notify("No PR found at cursor", vim.log.levels.WARN)
+    return
+  end
+
+  local details = require("atlas.bitbucket-board-details")
+  local actions = {
+    { label = "View full details", fn = function() details.show_pr_full_details(pr) end },
+    { label = "View comments", fn = function() details.show_pr_comments_view(pr) end },
+    { label = "View commits", fn = function() details.show_pr_commits_view(pr) end },
+    { label = "Open build", fn = function() M.open_pr_build() end },
+  }
+
+  local labels = {}
+  for _, a in ipairs(actions) do
+    table.insert(labels, a.label)
+  end
+
+  vim.ui.select(labels, {
+    prompt = "PR #" .. (pr.id or "?") .. " – choose action:",
+    format_item = function(item) return item end,
+  }, function(choice)
+    if not choice then return end
+    for _, a in ipairs(actions) do
+      if a.label == choice then
+        a.fn()
+        break
+      end
+    end
+  end)
 end
 
 function M.refresh(force)

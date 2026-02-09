@@ -122,6 +122,8 @@ end
 ---@param is_my_pr boolean
 ---@param callback fun(enriched_pr: table)
 function M.enrich_pr(workspace, repo, pr, is_my_pr, callback)
+  local author_account_id = pr.author and pr.author.account_id or pr.author and pr.author.uuid or nil
+  
   local enriched = vim.tbl_extend("force", pr, {
     workspace = workspace,
     repo = repo,
@@ -135,12 +137,14 @@ function M.enrich_pr(workspace, repo, pr, is_my_pr, callback)
     needs_work = 0,
     total_reviewers = 0,
     build_status = nil,
+    build_url = nil,
     task_count = pr.task_count or 0,
     is_draft = pr.draft or false,
     commit_hash = pr.source and pr.source.commit and pr.source.commit.hash and pr.source.commit.hash:sub(1, 7) or nil,
     time_spent = 0,
     time_estimate = 0,
     assignee = pr.author and pr.author.display_name or "Unknown",
+    author_account_id = author_account_id,
     status = pr.state or "OPEN",
   })
 
@@ -171,6 +175,7 @@ function M.enrich_pr(workspace, repo, pr, is_my_pr, callback)
             if not status_err and statuses and statuses.values and #statuses.values > 0 then
               local latest = statuses.values[1]
               enriched.build_status = latest.state
+              enriched.build_url = latest.url
             end
             callback(enriched)
           end)
@@ -188,6 +193,7 @@ function M.enrich_pr(workspace, repo, pr, is_my_pr, callback)
         if not status_err and statuses and statuses.values and #statuses.values > 0 then
           local latest = statuses.values[1]
           enriched.build_status = latest.state
+          enriched.build_url = latest.url
         end
         callback(enriched)
       end)

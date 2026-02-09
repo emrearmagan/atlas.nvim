@@ -134,4 +134,147 @@ function M.get_build_statuses(workspace, repo, commit_hash, callback)
   curl_request("GET", endpoint, callback)
 end
 
+-- Get PR commits (with pagination)
+---@param workspace string
+---@param repo string
+---@param pr_id number
+---@param callback fun(commits?: table, err?: string)
+function M.get_pr_commits(workspace, repo, pr_id, callback)
+  local all_commits = {}
+  
+  local function fetch_page(url)
+    local endpoint = url or string.format("/repositories/%s/%s/pullrequests/%d/commits", workspace, repo, pr_id)
+    
+    curl_request("GET", endpoint, function(result, err)
+      if err then
+        callback(nil, err)
+        return
+      end
+
+      if result and result.values then
+        for _, commit in ipairs(result.values) do
+          table.insert(all_commits, commit)
+        end
+        
+        if result.next then
+          local next_path = result.next:match("https://api%.bitbucket%.org/2%.0(.*)")
+          if next_path then
+            fetch_page(next_path)
+          else
+            callback({ values = all_commits }, nil)
+          end
+        else
+          callback({ values = all_commits }, nil)
+        end
+      else
+        callback({ values = all_commits }, nil)
+      end
+    end)
+  end
+  
+  fetch_page()
+end
+
+---@param workspace string
+---@param repo string
+---@param pr_id number
+---@param callback fun(diffstat?: table, err?: string)
+function M.get_pr_diffstat(workspace, repo, pr_id, callback)
+  local endpoint = string.format("/repositories/%s/%s/pullrequests/%d/diffstat", workspace, repo, pr_id)
+  
+  curl_request("GET", endpoint, function(result, err)
+    if err then
+      callback(nil, err)
+      return
+    end
+
+    if result and result.values then
+      callback(result, nil)
+    else
+      callback({ values = {} }, nil)
+    end
+  end)
+end
+
+-- Get PR statuses (build/pipeline statuses with pagination)
+---@param workspace string
+---@param repo string
+---@param pr_id number
+---@param callback fun(statuses?: table, err?: string)
+function M.get_pr_statuses(workspace, repo, pr_id, callback)
+  local all_statuses = {}
+  
+  local function fetch_page(url)
+    local endpoint = url or string.format("/repositories/%s/%s/pullrequests/%d/statuses", workspace, repo, pr_id)
+    
+    curl_request("GET", endpoint, function(result, err)
+      if err then
+        callback(nil, err)
+        return
+      end
+
+      if result and result.values then
+        for _, status in ipairs(result.values) do
+          table.insert(all_statuses, status)
+        end
+        
+        if result.next then
+          local next_path = result.next:match("https://api%.bitbucket%.org/2%.0(.*)")
+          if next_path then
+            fetch_page(next_path)
+          else
+            callback({ values = all_statuses }, nil)
+          end
+        else
+          callback({ values = all_statuses }, nil)
+        end
+      else
+        callback({ values = all_statuses }, nil)
+      end
+    end)
+  end
+  
+  fetch_page()
+end
+
+---@param workspace string
+---@param repo string
+---@param pr_id number
+---@param callback fun(tasks?: table, err?: string)
+function M.get_pr_tasks(workspace, repo, pr_id, callback)
+  local all_tasks = {}
+  
+  local function fetch_page(url)
+    local endpoint = url or string.format("/repositories/%s/%s/pullrequests/%d/tasks", workspace, repo, pr_id)
+    
+    curl_request("GET", endpoint, function(result, err)
+      if err then
+        callback(nil, err)
+        return
+      end
+
+      if result and result.values then
+        for _, task in ipairs(result.values) do
+          table.insert(all_tasks, task)
+        end
+        
+        if result.next then
+          local next_path = result.next:match("https://api%.bitbucket%.org/2%.0(.*)")
+          if next_path then
+            fetch_page(next_path)
+          else
+            callback({ values = all_tasks }, nil)
+          end
+        else
+          callback({ values = all_tasks }, nil)
+        end
+      else
+        callback({ values = all_tasks }, nil)
+      end
+    end)
+  end
+  
+  fetch_page()
+end
+
 return M
