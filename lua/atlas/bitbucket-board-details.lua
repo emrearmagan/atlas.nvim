@@ -9,13 +9,13 @@ function M.show_help_popup()
 		{ section = "Navigation & View" },
 		{ k = "<Tab> / <S-Tab>", d = "Next/Previous view" },
 		{ k = "j/k", d = "Navigate between PRs" },
-		{ k = "e", d = "Expand/Collapse repo" },
+		{ k = "za", d = "Expand/Collapse repo" },
 		{ k = "H", d = "Show Help" },
 		{ k = "q", d = "Close Board" },
 		{ k = "r", d = "Refresh current view" },
 
 		{ section = "PR Actions" },
-		{ k = "<CR>", d = "Show PR Details" },
+		{ k = "<CR> / K", d = "Show PR Details" },
 		{ k = "gx", d = "Open PR in Browser" },
 	}
 

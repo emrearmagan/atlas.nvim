@@ -153,7 +153,6 @@ function M.handle_cr()
   -- Check if cursor is on an issue line
   local node = helper.get_node_at_cursor()
   if node and node.key then
-    -- Show issue details popup (same as K command)
     board_ui.show_issue_details_popup(node)
   else
     -- Fallback to toggle node if it's not an issue line
@@ -202,11 +201,10 @@ function M.setup_keymaps()
 
   -- Clear existing buffer keymaps
   local keys_to_clear = {
-    "q", "r", "i", "c", "s", "y", "f",
+    "q", "r", "i", "c", "s", "y", "f", "a",
     "H", "J", "K",
     "j", "k", "<Tab>", "<CR>",
-    "gx", "gd", "ge", "gs", "ga", "go", "gp",
-    "zR", "zM", "?",
+    "za", "?", "gx",
   }
   for _, k in ipairs(keys_to_clear) do
     pcall(vim.api.nvim_buf_del_keymap, state.buf, "n", k)
@@ -250,46 +248,10 @@ function M.setup_keymaps()
   end, opts)
   
   vim.keymap.set("n", "<Tab>", function()
-    local views_ordered = {}
-    for _, v in ipairs(config.options.jira_views or {}) do
-      table.insert(views_ordered, v.name)
-    end
-    table.insert(views_ordered, "Help")
-    table.insert(views_ordered, "JQL")
-    if #views_ordered == 0 then return end
-    local idx = nil
-    for i, name in ipairs(views_ordered) do
-      if name == state.current_view then idx = i break end
-    end
-    idx = idx or 1
-    local next_idx = (idx % #views_ordered) + 1
-    require("atlas.jira-board").load_view(state.project_key, views_ordered[next_idx])
-  end, opts)
-  vim.keymap.set("n", "<S-Tab>", function()
-    local views_ordered = {}
-    for _, v in ipairs(config.options.jira_views or {}) do
-      table.insert(views_ordered, v.name)
-    end
-    table.insert(views_ordered, "Help")
-    table.insert(views_ordered, "JQL")
-    if #views_ordered == 0 then return end
-    local idx = nil
-    for i, name in ipairs(views_ordered) do
-      if name == state.current_view then idx = i break end
-    end
-    idx = idx or 1
-    local prev_idx = idx - 1
-    if prev_idx < 1 then prev_idx = #views_ordered end
-    require("atlas.jira-board").load_view(state.project_key, views_ordered[prev_idx])
-  end, opts)
-  vim.keymap.set("n", "e", function()
     require("atlas.jira-board").toggle_node()
   end, opts)
-  vim.keymap.set("n", "zR", function()
-    require("atlas.jira-board").set_all_expanded(true)
-  end, opts)
-  vim.keymap.set("n", "zM", function()
-    require("atlas.jira-board").set_all_expanded(false)
+  vim.keymap.set("n", "za", function()
+    require("atlas.jira-board").toggle_node()
   end, opts)
   vim.keymap.set("n", "<CR>", function()
     require("atlas.jira-board").handle_cr()
@@ -302,7 +264,7 @@ function M.setup_keymaps()
       require("atlas.jira-board").load_view(state.project_key, view.name)
     end, opts)
   end
-  
+
   -- JQL view (always present)
   vim.keymap.set("n", "J", function()
     if state.current_view == "JQL" then
@@ -335,20 +297,11 @@ function M.setup_keymaps()
   vim.keymap.set("n", "K", function()
     require("atlas.jira-board").show_issue_details()
   end, opts)
-  vim.keymap.set("n", "gd", function()
-    require("atlas.jira-board").read_task()
-  end, opts)
-  vim.keymap.set("n", "ge", function()
-    require("atlas.jira-board").edit_issue()
+  vim.keymap.set("n", "a", function()
+    require("atlas.jira-board").show_issue_actions()
   end, opts)
   vim.keymap.set("n", "gx", function()
     require("atlas.jira-board").open_in_browser()
-  end, opts)
-  vim.keymap.set("n", "gs", function()
-    require("atlas.jira-board").change_status()
-  end, opts)
-  vim.keymap.set("n", "ga", function()
-    require("atlas.jira-board").change_assignee()
   end, opts)
   vim.keymap.set("n", "i", function()
     require("atlas.jira-board").create_issue()
@@ -358,12 +311,6 @@ function M.setup_keymaps()
   end, opts)
   vim.keymap.set("n", "c", function()
     require("atlas.jira-board").add_comment()
-  end, opts)
-  vim.keymap.set("n", "go", function()
-    require("atlas.jira-board").show_child_issues()
-  end, opts)
-  vim.keymap.set("n", "gp", function()
-    require("atlas.jira-board").show_parent_issue()
   end, opts)
 end
 
@@ -507,6 +454,43 @@ function M.show_issue_details()
   end
 
   board_ui.show_issue_details_popup(node)
+end
+
+function M.show_issue_actions()
+  local node = helper.get_node_at_cursor()
+  if not node or not node.key then
+    vim.notify("No issue selected", vim.log.levels.WARN)
+    return
+  end
+
+  local actions = {
+    { label = "Show details", fn = function() board_ui.show_issue_details_popup(node) end },
+    { label = "Read task", fn = function() M.read_task() end },
+    { label = "Edit task", fn = function() M.edit_issue() end },
+    { label = "Open in browser", fn = function() M.open_in_browser() end },
+    { label = "Update status", fn = function() M.change_status() end },
+    { label = "Change assignee", fn = function() M.change_assignee() end },
+    { label = "Child issues", fn = function() M.show_child_issues() end },
+    { label = "Parent & children", fn = function() M.show_parent_issue() end },
+  }
+
+  local labels = {}
+  for _, a in ipairs(actions) do
+    table.insert(labels, a.label)
+  end
+
+  vim.ui.select(labels, {
+    prompt = "Issue " .. node.key .. " – choose action:",
+    format_item = function(item) return item end,
+  }, function(choice)
+    if not choice then return end
+    for _, a in ipairs(actions) do
+      if a.label == choice then
+        a.fn()
+        break
+      end
+    end
+  end)
 end
 
 function M.change_status()

@@ -119,18 +119,17 @@ function M.setup_keymaps()
     require("atlas.bitbucket-board").load_view(views[prev_idx].name)
   end, opts)
 
-  vim.keymap.set("n", "e", function()
+  vim.keymap.set("n", "za", function()
     require("atlas.bitbucket-board").toggle_node()
   end, opts)
 
   vim.keymap.set("n", "<CR>", function()
     require("atlas.bitbucket-board").show_pr_details()
   end, opts)
-
-  vim.keymap.set("n", "o", function()
-    require("atlas.bitbucket-board").open_pr_in_browser()
+  vim.keymap.set("n", "K", function()
+    require("atlas.bitbucket-board").show_pr_details()
   end, opts)
-  
+
   vim.keymap.set("n", "gx", function()
     require("atlas.bitbucket-board").open_pr_in_browser()
   end, opts)
