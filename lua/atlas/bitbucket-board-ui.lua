@@ -43,6 +43,7 @@ function M.create_window()
 
   vim.api.nvim_win_set_hl_ns(state.win, state.ns)
   vim.api.nvim_set_option_value("cursorline", true, { win = state.win })
+  vim.api.nvim_set_option_value("winhighlight", "CursorLine:BitbucketCursorLine", { win = state.win })
 
   vim.api.nvim_create_autocmd("BufWipeout", {
     buffer = state.buf,

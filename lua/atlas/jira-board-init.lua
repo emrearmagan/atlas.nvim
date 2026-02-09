@@ -250,6 +250,39 @@ function M.setup_keymaps()
   end, opts)
   
   vim.keymap.set("n", "<Tab>", function()
+    local views_ordered = {}
+    for _, v in ipairs(config.options.jira_views or {}) do
+      table.insert(views_ordered, v.name)
+    end
+    table.insert(views_ordered, "Help")
+    table.insert(views_ordered, "JQL")
+    if #views_ordered == 0 then return end
+    local idx = nil
+    for i, name in ipairs(views_ordered) do
+      if name == state.current_view then idx = i break end
+    end
+    idx = idx or 1
+    local next_idx = (idx % #views_ordered) + 1
+    require("atlas.jira-board").load_view(state.project_key, views_ordered[next_idx])
+  end, opts)
+  vim.keymap.set("n", "<S-Tab>", function()
+    local views_ordered = {}
+    for _, v in ipairs(config.options.jira_views or {}) do
+      table.insert(views_ordered, v.name)
+    end
+    table.insert(views_ordered, "Help")
+    table.insert(views_ordered, "JQL")
+    if #views_ordered == 0 then return end
+    local idx = nil
+    for i, name in ipairs(views_ordered) do
+      if name == state.current_view then idx = i break end
+    end
+    idx = idx or 1
+    local prev_idx = idx - 1
+    if prev_idx < 1 then prev_idx = #views_ordered end
+    require("atlas.jira-board").load_view(state.project_key, views_ordered[prev_idx])
+  end, opts)
+  vim.keymap.set("n", "e", function()
     require("atlas.jira-board").toggle_node()
   end, opts)
   vim.keymap.set("n", "zR", function()

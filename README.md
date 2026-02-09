@@ -99,36 +99,6 @@ export JIRA_TOKEN="your-api-token"
 - `:Jira edit <ISSUE_KEY>` - Edit issue
 - `:Jira create [PROJECT_KEY]` - Create new issue
 
-## Keybindings
-
-### Bitbucket
-| Key | Action |
-|-----|--------|
-| `j/k` | Navigate between PRs |
-| `<Tab>` | Expand/Collapse repository |
-| `<CR>` | Show PR details |
-| `o`, `gx` | Open PR in browser |
-| `r` | Refresh |
-| `q` | Close |
-
-### Jira
-| Key | Action |
-|-----|--------|
-| `j/k` | Navigate between issues |
-| `<Tab>` | Expand/Collapse Epic |
-| `<CR>`, `K` | Show issue details |
-| `?` | Search issues |
-| `s` | Star/Unstar issue |
-| `f` | Show favorites |
-| `y` | Copy issue key |
-| `c` | Add comment |
-| `i` | Create issue |
-| `gx` | Open in browser |
-| `gs` | Change status |
-| `ga` | Change assignee |
-| `r` | Refresh |
-| `q` | Close |
-
 ## License
 
 MIT License - see [LICENSE](LICENSE) for details.

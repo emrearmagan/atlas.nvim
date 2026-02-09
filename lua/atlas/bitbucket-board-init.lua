@@ -95,6 +95,31 @@ function M.setup_keymaps()
   end, opts)
 
   vim.keymap.set("n", "<Tab>", function()
+    local views = config.options.bitbucket_views or {}
+    if #views == 0 then return end
+    local idx = nil
+    for i, v in ipairs(views) do
+      if v.name == state.current_view then idx = i break end
+    end
+    idx = idx or 1
+    local next_idx = (idx % #views) + 1
+    require("atlas.bitbucket-board").load_view(views[next_idx].name)
+  end, opts)
+
+  vim.keymap.set("n", "<S-Tab>", function()
+    local views = config.options.bitbucket_views or {}
+    if #views == 0 then return end
+    local idx = nil
+    for i, v in ipairs(views) do
+      if v.name == state.current_view then idx = i break end
+    end
+    idx = idx or 1
+    local prev_idx = idx - 1
+    if prev_idx < 1 then prev_idx = #views end
+    require("atlas.bitbucket-board").load_view(views[prev_idx].name)
+  end, opts)
+
+  vim.keymap.set("n", "e", function()
     require("atlas.bitbucket-board").toggle_node()
   end, opts)
 
@@ -114,13 +139,6 @@ function M.setup_keymaps()
     local details = require("atlas.bitbucket-board-details")
     details.show_help_popup()
   end, opts)
-
-  local views = config.options.bitbucket_views or {}
-  for _, view in ipairs(views) do
-    vim.keymap.set("n", view.key, function()
-      require("atlas.bitbucket-board").load_view(view.name)
-    end, opts)
-  end
 end
 
 function M.load_view_with_all_prs(prs)

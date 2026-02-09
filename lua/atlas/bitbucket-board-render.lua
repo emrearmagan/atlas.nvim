@@ -288,71 +288,38 @@ local function render_issue_line(node, depth, row)
   
   add_hl(highlights, current_col, comments, "Comment")
   current_col = current_col + #comments + #comments_pad + 2
-  
+
   add_hl(highlights, current_col, tasks, "Comment")
   current_col = current_col + #tasks + #tasks_pad + 2
-  
+
   add_hl(highlights, current_col, approvals, "Comment")
   current_col = current_col + #approvals + #approvals_pad + 2
-  
+
   local author_colors = {
-    "#f38ba8", -- red
-    "#fab387", -- peach
-    "#f9e2af", -- yellow
-    "#a6e3a1", -- green
-    "#94e2d5", -- teal
-    "#89dceb", -- sky
-    "#89b4fa", -- blue
-    "#cba6f7", -- mauve
-    "#f5c2e7", -- pink
-    "#eba0ac", -- maroon
-    "#f5e0dc", -- rosewater
-    "#b4befe", -- lavender
-    "#74c7ec", -- sapphire
-    "#f2cdcd", -- flamingo
-    "#e78284", -- red variant
-    "#ef9f76", -- peach variant
-    "#e5c890", -- yellow variant
-    "#a6d189", -- green variant
-    "#81c8be", -- teal variant
-    "#85c1dc", -- sky variant
+    "#f38ba8", "#fab387", "#f9e2af", "#a6e3a1", "#94e2d5", "#89dceb", "#89b4fa",
+    "#cba6f7", "#f5c2e7", "#eba0ac", "#f5e0dc", "#b4befe", "#74c7ec", "#f2cdcd",
+    "#e78284", "#ef9f76", "#e5c890", "#a6d189", "#81c8be", "#85c1dc",
   }
-  
   local repo_colors = {
-    "#94e2d5", -- teal
-    "#89dceb", -- sky
-    "#89b4fa", -- blue
-    "#cba6f7", -- mauve
-    "#f5c2e7", -- pink
-    "#b4befe", -- lavender
-    "#74c7ec", -- sapphire
-    "#f2cdcd", -- flamingo
-    "#81c8be", -- teal variant
-    "#85c1dc", -- sky variant
+    "#94e2d5", "#89dceb", "#89b4fa", "#cba6f7", "#f5c2e7", "#b4befe",
+    "#74c7ec", "#f2cdcd", "#81c8be", "#85c1dc",
   }
-  
   local author_name = (node.author and node.author.display_name) or "Unknown"
   local author_hash = 0
-  for i = 1, #author_name do
-    author_hash = author_hash + author_name:byte(i)
-  end
-  local author_color = author_colors[(author_hash % #author_colors) + 1]
+  for i = 1, #author_name do author_hash = author_hash + author_name:byte(i) end
   local author_hl_name = "BitbucketAuthor_" .. author_name:gsub("[^%w]", "_")
-  vim.api.nvim_set_hl(0, author_hl_name, { fg = author_color })
+  vim.api.nvim_set_hl(0, author_hl_name, { fg = author_colors[(author_hash % #author_colors) + 1] })
   add_hl(highlights, current_col, author, author_hl_name)
   current_col = current_col + #author + #author_pad + 2
-  
+
   local repo_name = string.format("%s/%s", node.workspace or "", node.repo or "")
   local repo_hash = 0
-  for i = 1, #repo_name do
-    repo_hash = repo_hash + repo_name:byte(i)
-  end
-  local repo_color = repo_colors[(repo_hash % #repo_colors) + 1]
+  for i = 1, #repo_name do repo_hash = repo_hash + repo_name:byte(i) end
   local repo_hl_name = "BitbucketRepo_" .. repo_name:gsub("[^%w]", "_")
-  vim.api.nvim_set_hl(0, repo_hl_name, { fg = repo_color })
+  vim.api.nvim_set_hl(0, repo_hl_name, { fg = repo_colors[(repo_hash % #repo_colors) + 1] })
   add_hl(highlights, current_col, repo, repo_hl_name)
   current_col = current_col + #repo + #repo_pad + 2
-  
+
   add_hl(highlights, current_col, updated, "Comment")
 
   vim.api.nvim_set_option_value("modifiable", true, { buf = state.buf })

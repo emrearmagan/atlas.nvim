@@ -72,7 +72,7 @@ function M.curl_request(method, url, headers, data, callback)
         return
       end
 
-      local raw = table.concat(stdout_data, "\n")
+      local raw = table.concat(stdout_data, "")
       local ok, result = pcall(vim.json.decode, raw)
 
       if not ok then

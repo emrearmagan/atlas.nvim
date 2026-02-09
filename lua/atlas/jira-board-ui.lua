@@ -127,9 +127,7 @@ function M.show_help_popup()
   local help_content = {
     { section = "Navigation & View" },
     { k = "j/k", d = "Navigate between issues" },
-    { k = "<Tab>", d = "Toggle Node (Expand/Collapse)" },
-    { k = "zR", d = "Expand All Nodes" },
-    { k = "zM", d = "Collapse All Nodes" },
+    { k = "<Tab> / za", d = "Expand/Collapse node" },
     { k = "J", d = "Switch to JQL view" },
     { k = "H", d = "Show Help" },
     { k = "q", d = "Close Board" },
@@ -141,18 +139,12 @@ function M.show_help_popup()
     { k = "f", d = "Show Favorites" },
 
     { section = "Issue Actions" },
-    { k = "<CR>", d = "Show Issue Details (Popup)" },
-    { k = "K", d = "Show Issue Details (Popup)" },
+    { k = "<CR> / K", d = "Show Issue Details (Popup)" },
+    { k = "a", d = "Issue actions (menu)" },
+    { k = "gx", d = "Open in Browser" },
     { k = "i", d = "Create Issue / Sub-task" },
     { k = "y", d = "Copy Issue Key to Clipboard" },
     { k = "c", d = "Add Comment" },
-    { k = "gd", d = "Read Task as info" },
-    { k = "ge", d = "Edit Task" },
-    { k = "gx", d = "Open Task in Browser" },
-    { k = "gs", d = "Update Status" },
-    { k = "ga", d = "Change Assignee" },
-    { k = "go", d = "Show Child Issues (Sub-tasks)" },
-    { k = "gp", d = "View Parent & Children" },
   }
 
   local lines = { " Jira Keybindings", " " .. ("━"):rep(50) }
