@@ -151,6 +151,10 @@ function M.setup_keymaps()
     local details = require("atlas.bitbucket-board-details")
     details.show_help_popup()
   end, opts)
+
+  vim.keymap.set("n", "?", function()
+    require("atlas.bitbucket-board").search_repos()
+  end, opts)
 end
 
 function M.load_view_with_all_prs(prs)
@@ -548,6 +552,273 @@ function M.refresh(force)
       end)
     end
   end
+end
+
+function M.search_repos()
+  -- Get workspace from config
+  local workspace = config.options.bitbucket.workspace
+  if not workspace or workspace == "" then
+    vim.notify("Bitbucket workspace not configured", vim.log.levels.ERROR)
+    return
+  end
+  
+  -- Prompt for search query FIRST
+  vim.ui.input({
+    prompt = "Search Bitbucket repos: ",
+    default = "",
+  }, function(query)
+    if not query or query == "" then
+      return
+    end
+    
+    common_ui.start_loading("Searching repositories...")
+    
+    -- Use server-side search
+    bb_api.search_repositories(workspace, query, function(repos, err)
+      common_ui.stop_loading()
+      
+      if err then
+        vim.notify("Error searching repos: " .. err, vim.log.levels.ERROR)
+        return
+      end
+      
+      if not repos or not repos.values or #repos.values == 0 then
+        vim.notify("No repositories match: " .. query, vim.log.levels.WARN)
+        return
+      end
+      
+      -- Format results for selection
+      local items = {}
+      local repo_map = {}
+      
+      for i, repo in ipairs(repos.values) do
+        local name = repo.name or ""
+        local desc = repo.description or ""
+        
+        -- Truncate description
+        local short_desc = desc
+        if #short_desc > 50 then
+          short_desc = short_desc:sub(1, 47) .. "..."
+        end
+        
+        local label = string.format("%s - %s", name, short_desc ~= "" and short_desc or "No description")
+        table.insert(items, label)
+        repo_map[i] = repo
+      end
+      
+      -- Show selection menu
+      vim.ui.select(items, {
+        prompt = string.format("Found %d repositories:", #items),
+        format_item = function(item) return item end,
+      }, function(choice, idx)
+        if not choice or not idx then
+          return
+        end
+        
+        local selected_repo = repo_map[idx]
+        if not selected_repo then
+          return
+        end
+        
+        -- Show action menu
+        local actions = {
+          { label = "Open in browser", action = "browser" },
+          { label = "Show repo info", action = "info" },
+          { label = "View PRs", action = "prs" },
+        }
+        
+        local action_labels = {}
+        for _, a in ipairs(actions) do
+          table.insert(action_labels, a.label)
+        end
+        
+        vim.ui.select(action_labels, {
+          prompt = string.format("%s - Choose action:", selected_repo.name or "Repository"),
+          format_item = function(item) return item end,
+        }, function(action_choice, action_idx)
+          if not action_choice or not action_idx then
+            return
+          end
+          
+          local action = actions[action_idx].action
+          
+          if action == "browser" then
+            -- Open in browser
+            if selected_repo.links and selected_repo.links.html then
+              vim.ui.open(selected_repo.links.html.href)
+            end
+            
+          elseif action == "info" then
+            -- Show repo info
+            M.show_repo_info(selected_repo)
+            
+          elseif action == "prs" then
+            -- View PRs
+            M.show_repo_prs(selected_repo)
+          end
+        end)
+      end)
+    end)
+  end)
+end
+
+function M.show_repo_info(repo)
+  local lines = {}
+  local hls = {}
+  
+  -- Title
+  table.insert(lines, " Repository Info")
+  table.insert(hls, { row = 0, col = 1, end_col = -1, hl = "Title" })
+  table.insert(lines, " " .. ("━"):rep(80))
+  table.insert(lines, "")
+  
+  -- Name
+  local name = repo.name or "Unknown"
+  table.insert(lines, " Name:        " .. name)
+  table.insert(hls, { row = #lines - 1, col = 14, end_col = -1, hl = "BitbucketRepo" })
+  
+  -- Full name (workspace/repo)
+  local full_name = repo.full_name or (repo.workspace and repo.slug and (repo.workspace.slug .. "/" .. repo.slug)) or "Unknown"
+  table.insert(lines, " Full Name:   " .. full_name)
+  table.insert(hls, { row = #lines - 1, col = 14, end_col = -1, hl = "Comment" })
+  
+  -- Description
+  local desc = repo.description or "No description"
+  table.insert(lines, " Description: " .. desc)
+  
+  -- Language
+  if repo.language then
+    table.insert(lines, " Language:    " .. repo.language)
+    table.insert(hls, { row = #lines - 1, col = 14, end_col = -1, hl = "String" })
+  end
+  
+  -- Size
+  if repo.size then
+    local size_mb = math.floor(repo.size / 1024 / 1024 * 10) / 10
+    table.insert(lines, " Size:        " .. size_mb .. " MB")
+  end
+  
+  -- Updated
+  if repo.updated_on then
+    local updated = util.format_relative_time(repo.updated_on)
+    table.insert(lines, " Updated:     " .. updated)
+    table.insert(hls, { row = #lines - 1, col = 14, end_col = -1, hl = "BitbucketTime" })
+  end
+  
+  -- Private/Public
+  local visibility = repo.is_private and "Private" or "Public"
+  local vis_hl = repo.is_private and "WarningMsg" or "String"
+  table.insert(lines, " Visibility:  " .. visibility)
+  table.insert(hls, { row = #lines - 1, col = 14, end_col = -1, hl = vis_hl })
+  
+  -- Clone URLs
+  if repo.links and repo.links.clone then
+    table.insert(lines, "")
+    table.insert(lines, " URLs:")
+    table.insert(hls, { row = #lines - 1, col = 1, end_col = -1, hl = "Keyword" })
+    
+    for _, clone in ipairs(repo.links.clone) do
+      local url = clone.href or ""
+      table.insert(lines, "   " .. url)
+    end
+  end
+  
+  table.insert(lines, "")
+  table.insert(lines, " Press q or <Esc> to close")
+  table.insert(hls, { row = #lines - 1, col = 1, end_col = -1, hl = "Comment" })
+  
+  -- Create popup
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
+  
+  local width = 85
+  local height = #lines
+  local win = vim.api.nvim_open_win(buf, true, {
+    relative = "editor",
+    width = width,
+    height = height,
+    col = (vim.o.columns - width) / 2,
+    row = (vim.o.lines - height) / 2,
+    style = "minimal",
+    border = "rounded",
+    title = " Repository Info ",
+    title_pos = "center",
+  })
+  
+  -- Apply highlights
+  for _, hl in ipairs(hls) do
+    vim.api.nvim_buf_add_highlight(buf, -1, hl.hl, hl.row, hl.col, hl.end_col)
+  end
+  
+  -- Close on q or Esc
+  vim.keymap.set("n", "q", function()
+    vim.api.nvim_win_close(win, true)
+  end, { buffer = buf, nowait = true })
+  
+  vim.keymap.set("n", "<Esc>", function()
+    vim.api.nvim_win_close(win, true)
+  end, { buffer = buf, nowait = true })
+end
+
+function M.show_repo_prs(repo)
+  local workspace = repo.workspace and repo.workspace.slug or config.options.bitbucket.workspace
+  local repo_slug = repo.slug
+  
+  if not workspace or not repo_slug then
+    vim.notify("Cannot determine workspace/repo", vim.log.levels.ERROR)
+    return
+  end
+  
+  common_ui.start_loading("Loading PRs...")
+  
+  bb_api.get_pull_requests(workspace, repo_slug, function(result, err)
+    common_ui.stop_loading()
+    
+    if err then
+      vim.notify("Error loading PRs: " .. err, vim.log.levels.ERROR)
+      return
+    end
+    
+    if not result or not result.values or #result.values == 0 then
+      vim.notify("No open PRs in " .. repo_slug, vim.log.levels.WARN)
+      return
+    end
+    
+    -- Format PRs for selection
+    local items = {}
+    local pr_map = {}
+    
+    for i, pr in ipairs(result.values) do
+      local title = pr.title or "Untitled"
+      local author = pr.author and pr.author.display_name or "Unknown"
+      local pr_id = pr.id or "?"
+      
+      -- Truncate title if too long
+      if #title > 60 then
+        title = title:sub(1, 57) .. "..."
+      end
+      
+      local label = string.format("#%s - %s (by %s)", pr_id, title, author)
+      table.insert(items, label)
+      pr_map[i] = pr
+    end
+    
+    -- Show selection menu
+    vim.ui.select(items, {
+      prompt = string.format("Found %d PRs in %s:", #items, repo_slug),
+      format_item = function(item) return item end,
+    }, function(choice, idx)
+      if not choice or not idx then
+        return
+      end
+      
+      local selected_pr = pr_map[idx]
+      if selected_pr and selected_pr.links and selected_pr.links.html then
+        vim.ui.open(selected_pr.links.html.href)
+      end
+    end)
+  end)
 end
 
 function M.open()

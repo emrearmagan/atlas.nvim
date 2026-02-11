@@ -18,6 +18,7 @@ function M.show_help_popup()
 		{ k = "<CR> / K", d = "Show PR Details" },
 		{ k = "a", d = "PR actions (menu)" },
 		{ k = "gx", d = "Open PR in Browser" },
+		{ k = "?", d = "Search & open repo in browser" },
 	}
 
 	local lines = { " Bitbucket Keybindings", " " .. ("━"):rep(50) }

@@ -277,4 +277,52 @@ function M.get_pr_tasks(workspace, repo, pr_id, callback)
   fetch_page()
 end
 
+---Search repositories in a workspace (with server-side filtering)
+---@param workspace string
+---@param query string Search query (searches name, slug, description)
+---@param callback fun(repos?: table, err?: string)
+function M.search_repositories(workspace, query, callback)
+  local all_repos = {}
+  local log = require("atlas.common.log")
+  
+  -- Build search query - searches in name, slug, and description
+  local search_query = string.format('name~"%s" OR slug~"%s" OR description~"%s"', query, query, query)
+  local encoded_query = search_query:gsub(" ", "%%20"):gsub('"', "%%22")
+  
+  local function fetch_page(url)
+    local endpoint = url or string.format("/repositories/%s?q=%s&pagelen=50", workspace, encoded_query)
+    
+    -- Log the search query for debugging
+    log.bitbucket("Searching repos with query: " .. search_query)
+    
+    curl_request("GET", endpoint, function(result, err)
+      if err then
+        callback(nil, err)
+        return
+      end
+
+      if result and result.values then
+        for _, repo in ipairs(result.values) do
+          table.insert(all_repos, repo)
+        end
+        
+        if result.next then
+          local next_path = result.next:match("https://api%.bitbucket%.org/2%.0(.*)")
+          if next_path then
+            fetch_page(next_path)
+          else
+            callback({ values = all_repos }, nil)
+          end
+        else
+          callback({ values = all_repos }, nil)
+        end
+      else
+        callback({ values = all_repos }, nil)
+      end
+    end)
+  end
+  
+  fetch_page()
+end
+
 return M
