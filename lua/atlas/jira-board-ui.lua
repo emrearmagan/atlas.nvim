@@ -109,6 +109,38 @@ function M.create_window()
 
   vim.api.nvim_win_set_hl_ns(state.win, state.ns)
   vim.api.nvim_set_option_value("cursorline", true, { win = state.win })
+  vim.api.nvim_set_option_value("wrap", false, { win = state.win })
+
+  vim.api.nvim_create_autocmd("VimResized", {
+    buffer = state.buf,
+    callback = function()
+      if not state.win or not vim.api.nvim_win_is_valid(state.win) then
+        return
+      end
+      
+      if state.dim_win and vim.api.nvim_win_is_valid(state.dim_win) then
+        vim.api.nvim_win_set_config(state.dim_win, {
+          relative = "editor",
+          width = vim.o.columns,
+          height = vim.o.lines,
+          row = 0,
+          col = 0,
+        })
+      end
+      
+      vim.api.nvim_win_set_config(state.win, {
+        width = width,
+        height = height,
+        col = (vim.o.columns - width) / 2,
+        row = (vim.o.lines - height) / 2 - 1,
+        relative = "editor",
+      })
+      
+      local render = require("atlas.jira-board-render")
+      render.clear(state.buf)
+      render.render_issue_tree(state.tree, state.current_view)
+    end,
+  })
 
   vim.api.nvim_create_autocmd("BufWipeout", {
     buffer = state.buf,
