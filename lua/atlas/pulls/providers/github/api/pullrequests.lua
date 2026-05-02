@@ -169,9 +169,13 @@ function M.get_merge_checks(pr, on_done)
 	end
 
 	return cli.gh({
-		"pr", "view", tostring(pr.id),
-		"--repo", repo_slug,
-		"--json", "mergeable,mergeStateStatus,reviewDecision",
+		"pr",
+		"view",
+		tostring(pr.id),
+		"--repo",
+		repo_slug,
+		"--json",
+		"mergeable,mergeStateStatus,reviewDecision",
 	}, function(result, err)
 		if err or type(result) ~= "table" then
 			on_done(nil, err or "Failed to fetch merge checks")
@@ -182,6 +186,61 @@ function M.get_merge_checks(pr, on_done)
 			merge_state = tostring(result.mergeStateStatus or ""),
 			review_decision = tostring(result.reviewDecision or ""),
 		}, nil)
+	end)
+end
+
+---@param opts PullsCreatePROpts
+---@param on_done fun(result: PullsCreatePRResult|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.create_pr(opts, on_done)
+	local slug = tostring(opts.repo_slug or "")
+	if slug == "" then
+		vim.schedule(function()
+			on_done(nil, "Missing repository slug")
+		end)
+		return nil
+	end
+
+	local args = {
+		"pr",
+		"create",
+		"--repo",
+		slug,
+		"--head",
+		opts.head,
+		"--base",
+		opts.base,
+		"--title",
+		opts.title,
+		"--body",
+		opts.body or "",
+	}
+	if opts.draft then
+		table.insert(args, "--draft")
+	end
+
+	logger.loginfo("github.create_pr", { slug = slug, head = opts.head, base = opts.base, draft = opts.draft == true })
+
+	return cli.gh(args, function(result, err)
+		if err then
+			on_done(nil, err)
+			return
+		end
+
+		-- gh prints the new PR URL on stdout. result is either a parsed table
+		-- (unlikely here) or a string (the URL). Trim and surface it.
+		local url = nil
+		local id = nil
+		if type(result) == "string" then
+			url = vim.trim(result)
+			-- last segment of /pull/<id>
+			id = url:match("/pull/(%d+)")
+			if id then
+				id = tonumber(id) or id
+			end
+		end
+
+		on_done({ id = id, url = url, message = "PR created" }, nil)
 	end)
 end
 

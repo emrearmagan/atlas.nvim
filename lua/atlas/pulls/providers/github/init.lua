@@ -477,7 +477,7 @@ function M.fetch_activity(pr, opts, on_done)
 					end
 				elseif event == "review_requested" then
 					local reviewer = type(item.requested_reviewer) == "table"
-						and tostring(item.requested_reviewer.login or "")
+							and tostring(item.requested_reviewer.login or "")
 						or ""
 					table.insert(entries, {
 						kind = "update",
@@ -597,26 +597,37 @@ function M.add_comment(pr, content, on_done)
 	local cli = require("atlas.pulls.providers.github.api.cli")
 	local repo_slug = pr.repo_full_name or ""
 	if repo_slug == "" then
-		vim.schedule(function() on_done(nil, "Missing repo") end)
+		vim.schedule(function()
+			on_done(nil, "Missing repo")
+		end)
 		return nil
 	end
-	return cli.api("POST", string.format("repos/%s/issues/%s/comments", repo_slug, tostring(pr.id)), { body = content }, function(result, err)
-		if err or type(result) ~= "table" then
-			on_done(nil, err or "Failed to create comment")
-			return
+	return cli.api(
+		"POST",
+		string.format("repos/%s/issues/%s/comments", repo_slug, tostring(pr.id)),
+		{ body = content },
+		function(result, err)
+			if err or type(result) ~= "table" then
+				on_done(nil, err or "Failed to create comment")
+				return
+			end
+			local user = result.user or {}
+			on_done({
+				id = result.id,
+				parent_id = nil,
+				author = {
+					name = tostring(user.login or ""),
+					nickname = tostring(user.login or ""),
+					id = tostring(user.id or ""),
+				},
+				content_raw = tostring(result.body or ""),
+				created_on = tostring(result.created_at or ""),
+				deleted = false,
+				inline = nil,
+				html_url = tostring(result.html_url or ""),
+			}, nil)
 		end
-		local user = result.user or {}
-		on_done({
-			id = result.id,
-			parent_id = nil,
-			author = { name = tostring(user.login or ""), nickname = tostring(user.login or ""), id = tostring(user.id or "") },
-			content_raw = tostring(result.body or ""),
-			created_on = tostring(result.created_at or ""),
-			deleted = false,
-			inline = nil,
-			html_url = tostring(result.html_url or ""),
-		}, nil)
-	end)
+	)
 end
 
 ---@param pr PullRequest
@@ -638,26 +649,37 @@ function M.edit_comment(pr, comment_id, content, on_done)
 	local cli = require("atlas.pulls.providers.github.api.cli")
 	local repo_slug = pr.repo_full_name or ""
 	if repo_slug == "" then
-		vim.schedule(function() on_done(nil, "Missing repo") end)
+		vim.schedule(function()
+			on_done(nil, "Missing repo")
+		end)
 		return nil
 	end
-	return cli.api("PATCH", string.format("repos/%s/issues/comments/%s", repo_slug, tostring(comment_id)), { body = content }, function(result, err)
-		if err or type(result) ~= "table" then
-			on_done(nil, err or "Failed to edit comment")
-			return
+	return cli.api(
+		"PATCH",
+		string.format("repos/%s/issues/comments/%s", repo_slug, tostring(comment_id)),
+		{ body = content },
+		function(result, err)
+			if err or type(result) ~= "table" then
+				on_done(nil, err or "Failed to edit comment")
+				return
+			end
+			local user = result.user or {}
+			on_done({
+				id = result.id,
+				parent_id = nil,
+				author = {
+					name = tostring(user.login or ""),
+					nickname = tostring(user.login or ""),
+					id = tostring(user.id or ""),
+				},
+				content_raw = tostring(result.body or ""),
+				created_on = tostring(result.created_at or ""),
+				deleted = false,
+				inline = nil,
+				html_url = tostring(result.html_url or ""),
+			}, nil)
 		end
-		local user = result.user or {}
-		on_done({
-			id = result.id,
-			parent_id = nil,
-			author = { name = tostring(user.login or ""), nickname = tostring(user.login or ""), id = tostring(user.id or "") },
-			content_raw = tostring(result.body or ""),
-			created_on = tostring(result.created_at or ""),
-			deleted = false,
-			inline = nil,
-			html_url = tostring(result.html_url or ""),
-		}, nil)
-	end)
+	)
 end
 
 ---@param pr PullRequest
@@ -668,16 +690,23 @@ function M.delete_comment(pr, comment_id, on_done)
 	local cli = require("atlas.pulls.providers.github.api.cli")
 	local repo_slug = pr.repo_full_name or ""
 	if repo_slug == "" then
-		vim.schedule(function() on_done(false, "Missing repo") end)
+		vim.schedule(function()
+			on_done(false, "Missing repo")
+		end)
 		return nil
 	end
-	return cli.api("DELETE", string.format("repos/%s/issues/comments/%s", repo_slug, tostring(comment_id)), nil, function(_, err)
-		if err then
-			on_done(false, err)
-			return
+	return cli.api(
+		"DELETE",
+		string.format("repos/%s/issues/comments/%s", repo_slug, tostring(comment_id)),
+		nil,
+		function(_, err)
+			if err then
+				on_done(false, err)
+				return
+			end
+			on_done(true, nil)
 		end
-		on_done(true, nil)
-	end)
+	)
 end
 
 ---@param pr PullRequest
@@ -822,8 +851,11 @@ function M.fetch_repo_details(repo, opts, on_done)
 	end
 
 	return cli.gh({
-		"repo", "view", slug,
-		"--json", "name,nameWithOwner,owner,description,defaultBranchRef,isPrivate,createdAt,diskUsage",
+		"repo",
+		"view",
+		slug,
+		"--json",
+		"name,nameWithOwner,owner,description,defaultBranchRef,isPrivate,createdAt,diskUsage",
 	}, function(result, err)
 		if err or type(result) ~= "table" then
 			on_done(nil, err or "Failed to fetch repo details")
@@ -841,7 +873,8 @@ function M.fetch_repo_details(repo, opts, on_done)
 			repo_name = tostring(result.name or repo_name),
 			description = tostring(result.description or ""),
 			size = tonumber(result.diskUsage) or nil,
-			default_branch = type(result.defaultBranchRef) == "table" and tostring(result.defaultBranchRef.name or "") or nil,
+			default_branch = type(result.defaultBranchRef) == "table" and tostring(result.defaultBranchRef.name or "")
+				or nil,
 			is_private = result.isPrivate == true,
 			created_on = tostring(result.createdAt or ""),
 			readme = nil,
@@ -850,8 +883,10 @@ function M.fetch_repo_details(repo, opts, on_done)
 
 		-- Fetch README separately
 		cli.gh({
-			"api", string.format("repos/%s/readme", slug),
-			"--header", "Accept: application/vnd.github.raw+json",
+			"api",
+			string.format("repos/%s/readme", slug),
+			"--header",
+			"Accept: application/vnd.github.raw+json",
 		}, function(readme_result, readme_err)
 			if not readme_err and readme_result then
 				details.readme = tostring(readme_result)
@@ -888,7 +923,8 @@ function M.fetch_repo_branches(repo, opts, on_done)
 	end
 
 	return cli.gh({
-		"api", string.format("repos/%s/branches?per_page=100", slug),
+		"api",
+		string.format("repos/%s/branches?per_page=100", slug),
 	}, function(result, err)
 		if err or type(result) ~= "table" then
 			on_done(nil, err or "Failed to fetch branches")
@@ -939,7 +975,8 @@ function M.fetch_repo_tags(repo, opts, on_done)
 	end
 
 	return cli.gh({
-		"api", string.format("repos/%s/tags?per_page=100", slug),
+		"api",
+		string.format("repos/%s/tags?per_page=100", slug),
 	}, function(result, err)
 		if err or type(result) ~= "table" then
 			on_done(nil, err or "Failed to fetch tags")
@@ -1016,6 +1053,14 @@ end
 function M.mark_notification_done(id, on_done)
 	local notifications = require("atlas.pulls.providers.github.api.notifications")
 	return notifications.mark_done(id, on_done)
+end
+
+---@param opts PullsCreatePROpts
+---@param on_done fun(result: PullsCreatePRResult|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.create_pr(opts, on_done)
+	local pr_api = require("atlas.pulls.providers.github.api.pullrequests")
+	return pr_api.create_pr(opts, on_done)
 end
 
 return M

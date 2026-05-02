@@ -36,22 +36,22 @@ end
 function M.fetch_pullrequests(view, opts, on_done)
 	local pr_api = require("atlas.pulls.providers.bitbucket.api.pullrequests")
 	---@cast view AtlasBitbucketViewConfig
-  local pullrequest_state = require("atlas.pulls.state")
-  local active_statuses = {}
+	local pullrequest_state = require("atlas.pulls.state")
+	local active_statuses = {}
 
-  for status, enabled in pairs(pullrequest_state.status_filters or {}) do
-    if enabled then 
-      table.insert(active_statuses, status)
-    end
-  end
-  if #active_statuses == 0 then
-    active_statuses = { "OPEN" }
-  end
+	for status, enabled in pairs(pullrequest_state.status_filters or {}) do
+		if enabled then
+			table.insert(active_statuses, status)
+		end
+	end
+	if #active_statuses == 0 then
+		active_statuses = { "OPEN" }
+	end
 
 	return pr_api.fetch_pullrequests(view.repos or {}, {
 		force_load = opts.force_load == true,
 		pagelen = opts.pagelen,
-    statuses = active_statuses,
+		statuses = active_statuses,
 	}, function(groups, err)
 		if type(view.filter) ~= "function" then
 			on_done(groups, err)
@@ -322,6 +322,14 @@ end
 function M.delete_comment(pr, comment_id, on_done)
 	local comments_api = require("atlas.pulls.providers.bitbucket.api.comments")
 	return comments_api.delete_comment(pr, comment_id, on_done)
+end
+
+---@param opts PullsCreatePROpts
+---@param on_done fun(result: PullsCreatePRResult|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.create_pr(opts, on_done)
+	local pr_api = require("atlas.pulls.providers.bitbucket.api.pullrequests")
+	return pr_api.create_pr(opts, on_done)
 end
 
 return M
