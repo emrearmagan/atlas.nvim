@@ -63,25 +63,7 @@ end
 -- Pickers
 --------------------------------------------------------------------------------
 
----@param login string
-local function login_in_list(login, list)
-	for _, item in ipairs(list) do
-		if item.login == login then
-			return true
-		end
-	end
-	return false
-end
-
----@param name string
-local function label_in_list(name, list)
-	for _, item in ipairs(list) do
-		if item.name == name then
-			return true
-		end
-	end
-	return false
-end
+local multi_select = require("atlas.ui.popups.multi_select")
 
 local function pick_assignees()
 	if type(state.pickers.list_assignees) ~= "function" then
@@ -102,42 +84,21 @@ local function pick_assignees()
 				return
 			end
 
-			local function loop()
-				local choices = { "✓ Done" }
-				local map = { ["✓ Done"] = nil }
-				for _, item in ipairs(items) do
-					local marker = login_in_list(item.login, state.fields.assignees) and "[x] " or "[ ] "
-					local label =
-						string.format("%s@%s%s", marker, item.login, item.name and (" — " .. item.name) or "")
-					table.insert(choices, label)
-					map[label] = item
-				end
-
-				vim.ui.select(choices, { prompt = "Toggle assignees (Done to finish):" }, function(choice)
-					if choice == nil or choice == "✓ Done" then
-						renderer.render_meta(state)
-						return
-					end
-					local item = map[choice]
-					if item == nil then
-						return
-					end
-					if login_in_list(item.login, state.fields.assignees) then
-						local kept = {}
-						for _, a in ipairs(state.fields.assignees) do
-							if a.login ~= item.login then
-								table.insert(kept, a)
-							end
-						end
-						state.fields.assignees = kept
-					else
-						table.insert(state.fields.assignees, item)
-					end
-					loop()
-				end)
-			end
-
-			loop()
+			multi_select.open({
+				items = items,
+				selected = state.fields.assignees,
+				key = function(item)
+					return item.login
+				end,
+				format = function(item)
+					return string.format("@%s%s", item.login, item.name and (" — " .. item.name) or "")
+				end,
+				prompt = "Toggle assignees (Done to finish):",
+				on_done = function(selected)
+					state.fields.assignees = selected
+					renderer.render_meta(state)
+				end,
+			})
 		end)
 	end)
 end
@@ -161,41 +122,21 @@ local function pick_labels()
 				return
 			end
 
-			local function loop()
-				local choices = { "✓ Done" }
-				local map = {}
-				for _, item in ipairs(items) do
-					local marker = label_in_list(item.name, state.fields.labels) and "[x] " or "[ ] "
-					local label = marker .. tostring(item.name)
-					table.insert(choices, label)
-					map[label] = item
-				end
-
-				vim.ui.select(choices, { prompt = "Toggle labels (Done to finish):" }, function(choice)
-					if choice == nil or choice == "✓ Done" then
-						renderer.render_meta(state)
-						return
-					end
-					local item = map[choice]
-					if item == nil then
-						return
-					end
-					if label_in_list(item.name, state.fields.labels) then
-						local kept = {}
-						for _, l in ipairs(state.fields.labels) do
-							if l.name ~= item.name then
-								table.insert(kept, l)
-							end
-						end
-						state.fields.labels = kept
-					else
-						table.insert(state.fields.labels, item)
-					end
-					loop()
-				end)
-			end
-
-			loop()
+			multi_select.open({
+				items = items,
+				selected = state.fields.labels,
+				key = function(item)
+					return item.name
+				end,
+				format = function(item)
+					return tostring(item.name)
+				end,
+				prompt = "Toggle labels (Done to finish):",
+				on_done = function(selected)
+					state.fields.labels = selected
+					renderer.render_meta(state)
+				end,
+			})
 		end)
 	end)
 end
