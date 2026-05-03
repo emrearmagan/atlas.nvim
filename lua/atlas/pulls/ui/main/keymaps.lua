@@ -35,22 +35,6 @@ local function item(action_id, map_item)
 	return out
 end
 
----@param action_id AtlasKeymapActionId|string
----@param mode string|string[]|nil
----@return table|nil
-local function remove_item(action_id, mode)
-	local keys = resolver.resolve(action_id)
-	if keys == nil then
-		return nil
-	end
-
-	local out = { key = (#keys == 1 and keys[1] or keys) }
-	if mode ~= nil then
-		out.mode = mode
-	end
-	return out
-end
-
 ---@param buf integer
 ---@param views AtlasPullsViewConfig[]
 function M.register(buf, views)
@@ -76,19 +60,22 @@ function M.register(buf, views)
 	end
 
 	local STATUS_TOGGLES = {
-		{ status = "OPEN",     action_id = "pulls.filter_status_open" },
-		{ status = "MERGED",   action_id = "pulls.filter_status_merged" },
+		{ status = "OPEN", action_id = "pulls.filter_status_open" },
+		{ status = "MERGED", action_id = "pulls.filter_status_merged" },
 		{ status = "DECLINED", action_id = "pulls.filter_status_declined" },
 	}
 	for _, sf in ipairs(STATUS_TOGGLES) do
 		local s = sf
-		utils.insert_if(items, item(s.action_id, {
-			desc = string.format("Toggle %s filter", s.status:lower()),
-			callback = function()
-				local controller = require("atlas.pulls.ui.main.controller")
-				controller.toggle_status_filter(s.status)
-			end,
-		}))
+		utils.insert_if(
+			items,
+			item(s.action_id, {
+				desc = string.format("Toggle %s filter", s.status:lower()),
+				callback = function()
+					local controller = require("atlas.pulls.ui.main.controller")
+					controller.toggle_status_filter(s.status)
+				end,
+			})
+		)
 	end
 
 	if state.provider and state.provider.open_actions then
@@ -173,44 +160,44 @@ function M.register(buf, views)
 		})
 	)
 
-		table.insert(items, {
-			key = "o",
-			desc = "Open repo panel",
-			opts = { nowait = true, silent = true },
-			callback = function()
-				local pr = selected_pr()
-				if pr == nil then
-					footer.notify("warn", "No PR selected")
-					return
+	table.insert(items, {
+		key = "o",
+		desc = "Open repo panel",
+		opts = { nowait = true, silent = true },
+		callback = function()
+			local pr = selected_pr()
+			if pr == nil then
+				footer.notify("warn", "No PR selected")
+				return
+			end
+
+			local layout = require("atlas.ui.layout")
+			local ui_state = require("atlas.ui.state")
+			local panel = require("atlas.pulls.ui.panel")
+			local panel_state = require("atlas.pulls.ui.panel.state")
+			local detail_open = layout.win_id("detail") ~= nil
+
+			if detail_open and panel_state.current_panel == "repo" then
+				layout.toggle_detail()
+				if ui_state.on_panel_close then
+					ui_state.on_panel_close()
 				end
+				return
+			end
 
-				local layout = require("atlas.ui.layout")
-				local ui_state = require("atlas.ui.state")
-				local panel = require("atlas.pulls.ui.panel")
-				local panel_state = require("atlas.pulls.ui.panel.state")
-				local detail_open = layout.win_id("detail") ~= nil
+			panel_state.current_panel = "repo"
 
-				if detail_open and panel_state.current_panel == "repo" then
-					layout.toggle_detail()
-					if ui_state.on_panel_close then
-						ui_state.on_panel_close()
-					end
-					return
+			if not detail_open then
+				layout.toggle_detail()
+				if ui_state.on_panel_open then
+					ui_state.on_panel_open()
 				end
+				return
+			end
 
-				panel_state.current_panel = "repo"
-
-				if not detail_open then
-					layout.toggle_detail()
-					if ui_state.on_panel_open then
-						ui_state.on_panel_open()
-					end
-					return
-				end
-
-				panel.on_select(pr, nil)
-			end,
-		})
+			panel.on_select(pr, nil)
+		end,
+	})
 
 	utils.insert_if(
 		items,
@@ -245,21 +232,27 @@ function M.register(buf, views)
 	)
 
 	if state.provider and state.provider.search then
-		utils.insert_if(items, item("pulls.search", {
-			desc = "Search repositories",
-			callback = function()
-				actions.search()
-			end,
-		}))
+		utils.insert_if(
+			items,
+			item("pulls.search", {
+				desc = "Search repositories",
+				callback = function()
+					actions.search()
+				end,
+			})
+		)
 	end
 
 	if state.provider and state.provider.fetch_notifications then
-		utils.insert_if(items, item("pulls.open_notifications", {
-			desc = "Open notifications",
-			callback = function()
-				require("atlas.pulls.ui.notifications").open()
-			end,
-		}))
+		utils.insert_if(
+			items,
+			item("pulls.open_notifications", {
+				desc = "Open notifications",
+				callback = function()
+					require("atlas.pulls.ui.notifications").open()
+				end,
+			})
+		)
 	end
 
 	utils.insert_if(
