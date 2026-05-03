@@ -90,14 +90,21 @@ local function get_tabs()
 end
 
 ---@param tab_key string
----@return PullsPanelTabModule|nil
-local function get_tab_module(tab_key)
+---@return PullsPanelTab|nil
+local function get_tab(tab_key)
 	for _, tab in ipairs(get_tabs()) do
 		if tab.key == tab_key then
-			return tab.mod
+			return tab
 		end
 	end
 	return nil
+end
+
+---@param tab_key string
+---@return PullsPanelTabModule|nil
+local function get_tab_module(tab_key)
+	local tab = get_tab(tab_key)
+	return tab and tab.mod or nil
 end
 
 local function refresh_panel()
@@ -108,9 +115,15 @@ end
 
 local function activate_current_tab()
 	local buf = layout.buf_id("detail")
-	local tab_mod = get_tab_module(panel_state.current_tab)
-	if tab_mod and type(tab_mod.activate) == "function" then
-		tab_mod.activate(buf, refresh_panel)
+	local tab = get_tab(panel_state.current_tab)
+	if tab == nil then
+		return
+	end
+	if tab.mod and type(tab.mod.activate) == "function" then
+		tab.mod.activate(buf, refresh_panel)
+	end
+	if buf ~= nil and vim.api.nvim_buf_is_valid(buf) and tab.keymaps and type(tab.keymaps.register) == "function" then
+		tab.keymaps.register(buf)
 	end
 end
 
@@ -122,17 +135,27 @@ local function switch_tab_keymaps(old_key, new_key)
 		return
 	end
 
-	if old_key then
-		local old_mod = get_tab_module(old_key)
-		if old_mod and type(old_mod.deactivate) == "function" and old_key ~= new_key then
-			old_mod.deactivate(buf)
+	if old_key and old_key ~= new_key then
+		local old_tab = get_tab(old_key)
+		if old_tab then
+			if old_tab.keymaps and type(old_tab.keymaps.remove) == "function" then
+				old_tab.keymaps.remove(buf)
+			end
+			if old_tab.mod and type(old_tab.mod.deactivate) == "function" then
+				old_tab.mod.deactivate(buf)
+			end
 		end
 	end
 
-	if new_key then
-		local new_mod = get_tab_module(new_key)
-		if new_mod and type(new_mod.activate) == "function" and old_key ~= new_key then
-			new_mod.activate(buf, refresh_panel)
+	if new_key and old_key ~= new_key then
+		local new_tab = get_tab(new_key)
+		if new_tab then
+			if new_tab.mod and type(new_tab.mod.activate) == "function" then
+				new_tab.mod.activate(buf, refresh_panel)
+			end
+			if new_tab.keymaps and type(new_tab.keymaps.register) == "function" then
+				new_tab.keymaps.register(buf)
+			end
 		end
 	end
 end

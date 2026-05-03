@@ -94,6 +94,10 @@
 ---@field fetches (fun(pr: PullRequest, refresh: fun()))|nil
 ---@field is_loading (fun(pr: PullRequest, active_tab: string|nil): boolean)|nil
 
+---@class PullsProviderPanelKeymaps
+---@field register fun(buf: integer)
+---@field remove fun(buf: integer)
+
 ---@class PullsProviderRepoPanel
 ---@field header_rows (fun(repo: PullsRepo): PullsPanelHeaderRow[])|nil
 ---@field chips (fun(repo: PullsRepo): PullsPanelChip[])|nil
@@ -130,6 +134,7 @@
 ---@field label string
 ---@field icon string|nil
 ---@field mod PullsPanelTabModule
+---@field keymaps PullsProviderPanelKeymaps|nil provider-specific keymaps registered while this tab is active
 
 --------------------------------------------------------------------------------
 -- Repo panel types
