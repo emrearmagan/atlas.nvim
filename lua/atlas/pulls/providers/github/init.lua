@@ -1063,4 +1063,18 @@ function M.create_pr(opts, on_done)
 	return pr_api.create_pr(opts, on_done)
 end
 
+---@param opts PullsCreateIssueOpts
+---@param on_done fun(result: PullsCreateIssueResult|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.create_issue(opts, on_done)
+	local issues_api = require("atlas.pulls.providers.github.api.issues")
+	return issues_api.create_issue(opts, function(result, err)
+		if err or result == nil then
+			on_done(nil, err)
+			return
+		end
+		on_done({ id = result.number, url = result.url, message = "Issue created" }, nil)
+	end)
+end
+
 return M

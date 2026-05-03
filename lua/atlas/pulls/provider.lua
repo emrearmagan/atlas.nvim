@@ -56,8 +56,24 @@
 ---@field mark_notification_read (fun(id: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field mark_notification_done (fun(id: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
 ---
---- PR creation (optional – providers without create support omit it):
+--- PR creation (optional - providers without create support omit it):
 ---@field create_pr (fun(opts: PullsCreatePROpts, on_done: fun(result: PullsCreatePRResult|nil, err: string|nil)): { cancel: fun() }|nil)|nil
+---
+--- Issue creation (optional - providers without issue tracker omit it).
+---@field create_issue (fun(opts: PullsCreateIssueOpts, on_done: fun(result: PullsCreateIssueResult|nil, err: string|nil)): { cancel: fun() }|nil)|nil
+
+---@class PullsCreateIssueOpts
+---@field repo_slug string
+---@field title string
+---@field body string|nil
+---@field labels string[]|nil
+---@field assignees string[]|nil
+---@field milestone integer|nil
+
+---@class PullsCreateIssueResult
+---@field id string|number|nil
+---@field url string|nil
+---@field message string|nil
 ---
 --- Main list rendering (optional – falls back to default table when nil):
 ---@field render (fun(groups: PullsGroup[], layout: string, opts: { width: integer }): PullsMainRenderResult)|nil
