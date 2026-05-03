@@ -143,6 +143,9 @@ function M.open_diff(pr)
 			if open_cmd == "CodeDiff" then
 				vim.cmd("tabnew")
 				local launcher_tab = vim.api.nvim_get_current_tabpage()
+				local launcher_buf = vim.api.nvim_get_current_buf()
+				vim.bo[launcher_buf].buflisted = false
+				vim.bo[launcher_buf].bufhidden = "wipe"
 				-- CodeDiff opens its own tab, so close the temporary one.
 				vim.api.nvim_create_autocmd("User", {
 					pattern = "CodeDiffOpen",
@@ -152,6 +155,9 @@ function M.open_diff(pr)
 							if vim.api.nvim_tabpage_is_valid(launcher_tab) then
 								local tabnr = vim.api.nvim_tabpage_get_number(launcher_tab)
 								pcall(vim.cmd, tabnr .. "tabclose")
+							end
+							if vim.api.nvim_buf_is_valid(launcher_buf) then
+								pcall(vim.api.nvim_buf_delete, launcher_buf, { force = true })
 							end
 						end)
 					end,
