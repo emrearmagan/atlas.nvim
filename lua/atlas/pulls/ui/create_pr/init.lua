@@ -212,6 +212,7 @@ function M.open(opts)
 		return
 	end
 
+	require("atlas.ui.shared.highlights").setup()
 	require("atlas.pulls.ui.highlights").setup()
 
 	state.reset()
