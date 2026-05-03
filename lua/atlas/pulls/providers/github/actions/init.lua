@@ -12,6 +12,8 @@ local footer = require("atlas.ui.components.footer")
 ---| "reopen"
 ---| "ready_for_review"
 ---| "convert_to_draft"
+---| "add_reviewers"
+---| "add_assignees"
 ---| "create_issue"
 ---| "notifications"
 ---| "search"

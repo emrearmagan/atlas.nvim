@@ -93,7 +93,7 @@ local function pick_assignees()
 				format = function(item)
 					return string.format("@%s%s", item.login, item.name and (" — " .. item.name) or "")
 				end,
-				prompt = "Toggle assignees (Done to finish):",
+				prompt = "Toggle assignees:",
 				on_done = function(selected)
 					state.fields.assignees = selected
 					renderer.render_meta(state)
@@ -131,7 +131,7 @@ local function pick_labels()
 				format = function(item)
 					return tostring(item.name)
 				end,
-				prompt = "Toggle labels (Done to finish):",
+				prompt = "Toggle labels:",
 				on_done = function(selected)
 					state.fields.labels = selected
 					renderer.render_meta(state)
