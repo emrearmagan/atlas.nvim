@@ -64,11 +64,13 @@
 ---@field name string
 ---@field owner string|nil
 ---@field repo_name string|nil
+---@field html_url string|nil
 
 ---@class PullsRepoDetails : PullsRepo
 ---@field full_name string|nil
 ---@field owner string|nil
 ---@field repo_name string|nil
+---@field html_url string|nil
 ---@field description string|nil
 ---@field size number|nil
 ---@field default_branch string|nil

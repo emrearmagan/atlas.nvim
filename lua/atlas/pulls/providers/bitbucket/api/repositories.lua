@@ -13,6 +13,8 @@ local function normalize_repo_details(raw, fallback_workspace)
 	raw = type(raw) == "table" and raw or {}
 	local workspace_obj = type(raw.workspace) == "table" and raw.workspace or {}
 	local mainbranch = type(raw.mainbranch) == "table" and raw.mainbranch or {}
+	local links = as_table(raw.links) or {}
+	local html_link = as_table(links.html) or {}
 	local full_name = tostring(raw.full_name or raw.name or raw.slug or "")
 	local owner = tostring(workspace_obj.slug or fallback_workspace or "")
 	local repo_name = tostring(raw.slug or raw.name or "")
@@ -23,6 +25,7 @@ local function normalize_repo_details(raw, fallback_workspace)
 		full_name = full_name,
 		owner = owner,
 		repo_name = repo_name,
+		html_url = tostring(html_link.href or ""),
 		description = tostring(raw.description or ""),
 		size = tonumber(raw.size) or 0,
 		default_branch = tostring(mainbranch.name or ""),
