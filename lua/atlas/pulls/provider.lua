@@ -51,7 +51,6 @@
 ---@field open_actions fun(pr: PullRequest|nil, source: "main"|"panel"|nil, on_done: fun(result: PullsActionResult|nil))|nil
 ---@field search fun()|nil
 ---
---- Notifications (optional – providers without notification support omit these):
 ---@field fetch_notifications (fun(opts: { force_load: boolean|nil }|nil, on_done: fun(notifications: AtlasNotification[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field mark_notification_read (fun(id: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field mark_notification_done (fun(id: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
