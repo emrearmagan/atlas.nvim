@@ -72,12 +72,12 @@ function M.remote_url(root, remote)
 end
 
 ---@class AtlasGitRemoteInfo
----@field host string         -- e.g. "github.com" / "bitbucket.org"
+---@field host string -- e.g. "github.com" / "bitbucket.org"
 ---@field provider "github"|"bitbucket"|"unknown"
----@field slug string         -- "owner/repo" (without .git)
+---@field slug string -- "owner/repo" (without .git)
 ---@field owner string
 ---@field repo string
----@field url string          -- original remote URL
+---@field url string -- original remote URL
 
 ---@param url string
 ---@return AtlasGitRemoteInfo|nil info, string|nil err
@@ -122,7 +122,8 @@ function M.parse_remote_url(url)
 		owner = owner,
 		repo = repo,
 		url = url,
-	}, nil
+	},
+		nil
 end
 
 ---@param root string
@@ -131,11 +132,8 @@ end
 function M.default_branch(root, remote)
 	remote = remote or "origin"
 
-	-- Try the symbolic ref first (set when origin was cloned with HEAD pointer)
-	local res = vim.system(
-		{ "git", "-C", root, "symbolic-ref", "refs/remotes/" .. remote .. "/HEAD" },
-		{ text = true }
-	):wait()
+	local res = vim.system({ "git", "-C", root, "symbolic-ref", "refs/remotes/" .. remote .. "/HEAD" }, { text = true })
+		:wait()
 	if res.code == 0 then
 		local ref = trim(res.stdout)
 		local branch = ref:match("refs/remotes/[^/]+/(.+)$")
@@ -144,7 +142,6 @@ function M.default_branch(root, remote)
 		end
 	end
 
-	-- Fallback: query the remote (may be slow but reliable)
 	res = vim.system({ "git", "-C", root, "ls-remote", "--symref", remote, "HEAD" }, { text = true }):wait()
 	if res.code == 0 then
 		local ref = res.stdout:match("ref: refs/heads/([^%s]+)%s+HEAD")
@@ -175,13 +172,10 @@ end
 
 ---@param root string
 ---@param remote string
----@return string[] branches  (remote branches sans the remote/ prefix)
+---@return string[] branches
 function M.list_remote_branches(root, remote)
 	remote = remote or "origin"
-	local res = vim.system(
-		{ "git", "-C", root, "branch", "-r", "--format=%(refname:short)" },
-		{ text = true }
-	):wait()
+	local res = vim.system({ "git", "-C", root, "branch", "-r", "--format=%(refname:short)" }, { text = true }):wait()
 	if res.code ~= 0 then
 		return {}
 	end
@@ -210,7 +204,8 @@ function M.branch_exists_on_remote(root, branch, remote)
 	local res = vim.system(
 		{ "git", "-C", root, "ls-remote", "--exit-code", "--heads", remote, branch },
 		{ text = true }
-	):wait()
+	)
+		:wait()
 	return res.code == 0
 end
 
@@ -220,17 +215,21 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 function M.push_branch(root, branch, remote, on_done)
 	remote = remote or "origin"
-	run({ "git", "-C", root, "push", "-u", remote, branch }, root, vim.schedule_wrap(function(res)
-		if res.code ~= 0 then
-			local err = trim(res.stderr)
-			if err == "" then
-				err = string.format("git push failed with code %d", res.code)
+	run(
+		{ "git", "-C", root, "push", "-u", remote, branch },
+		root,
+		vim.schedule_wrap(function(res)
+			if res.code ~= 0 then
+				local err = trim(res.stderr)
+				if err == "" then
+					err = string.format("git push failed with code %d", res.code)
+				end
+				on_done(false, err)
+				return
 			end
-			on_done(false, err)
-			return
-		end
-		on_done(true, nil)
-	end))
+			on_done(true, nil)
+		end)
+	)
 end
 
 return M
