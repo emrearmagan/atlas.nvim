@@ -8,7 +8,8 @@ function M.normalize_pr(raw)
 	local author_id = ""
 	if type(raw.author) == "table" then
 		author_login = tostring(raw.author.login or "")
-		local name = tostring(raw.author.name or "")
+		local raw_name = raw.author.name
+		local name = (raw_name ~= nil and raw_name ~= vim.NIL) and tostring(raw_name) or ""
 		author_name = name ~= "" and name or author_login
 		author_id = tostring(raw.author.id or "")
 	end

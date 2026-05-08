@@ -13,30 +13,27 @@ end
 ---@param callback fun(body?: string, status?: integer|nil, err?: string)
 ---@return { job_id: integer, cancel: fun() }
 local function curl_fetch(method, url, headers, data, callback)
-	local header_args = {}
-	for key, value in pairs(headers or {}) do
-		table.insert(header_args, string.format('-H "%s: %s"', key, value))
-	end
-	local header_str = table.concat(header_args, " ")
+	local args = { "curl", "-sS", "-X", method }
 
-	local cmd
-	if data then
-		cmd = string.format(
-			"curl -sS -X %s %s -d '%s' -w '__ATLAS_HTTP_CODE:%%{http_code}' \"%s\"",
-			method,
-			header_str,
-			data,
-			url
-		)
-	else
-		cmd = string.format('curl -sS -X %s %s -w "__ATLAS_HTTP_CODE:%%{http_code}" "%s"', method, header_str, url)
+	for key, value in pairs(headers or {}) do
+		table.insert(args, "-H")
+		table.insert(args, string.format("%s: %s", key, value))
 	end
+
+	if data then
+		table.insert(args, "--data-raw")
+		table.insert(args, data)
+	end
+
+	table.insert(args, "-w")
+	table.insert(args, "__ATLAS_HTTP_CODE:%{http_code}")
+	table.insert(args, url)
 
 	local out = {}
 	local err_out = {}
 	local cancelled = false
 
-	local job_id = vim.fn.jobstart(cmd, {
+	local job_id = vim.fn.jobstart(args, {
 		stdout_buffered = true,
 		stderr_buffered = true,
 		on_stdout = function(_, response)
