@@ -17,6 +17,7 @@
 ---@field title string
 ---@field body string
 ---@field draft boolean
+---@field commit_count integer
 ---@field available_bases string[]
 
 ---@class CreatePRState
@@ -35,6 +36,7 @@ local M = {
 		title = "",
 		body = "",
 		draft = false,
+		commit_count = 0,
 		available_bases = {},
 	},
 	layout = {},
@@ -52,6 +54,7 @@ function M.reset()
 		title = "",
 		body = "",
 		draft = false,
+		commit_count = 0,
 		available_bases = {},
 	}
 	M.layout = {}

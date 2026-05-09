@@ -65,6 +65,7 @@ end
 ---@param head string
 ---@return string title
 ---@return string body
+---@return integer commit_count
 local function build_pr_content(root, provider_id, base, head)
 	local commits = git_branch.commits_for_range(root, git_branch.commit_range(root, base, head))
 	local latest_commit = commits[#commits]
@@ -72,7 +73,7 @@ local function build_pr_content(root, provider_id, base, head)
 
 	local template = trim(read_configured_pr_template(root, provider_id))
 	if template ~= "" then
-		return title, template
+		return title, template, #commits
 	end
 
 	local commit_lines = {}
@@ -80,7 +81,7 @@ local function build_pr_content(root, provider_id, base, head)
 		table.insert(commit_lines, string.format("- `%s` %s", commit.hash, commit.subject))
 	end
 
-	return title, table.concat(commit_lines, "\n")
+	return title, table.concat(commit_lines, "\n"), #commits
 end
 
 ---@param provider_id "github"|"bitbucket"
@@ -263,9 +264,11 @@ end
 ---@field initial_title string
 ---@field initial_body string
 ---@field draft boolean
+---@field commit_count integer
 
 ---@param opts CreatePROpenOpts
 function M.open(opts)
+	require("atlas.ui.shared.highlights").setup()
 	require("atlas.pulls.ui.highlights").setup()
 
 	state.reset()
@@ -277,6 +280,7 @@ function M.open(opts)
 	state.fields.title = opts.initial_title
 	state.fields.body = opts.initial_body
 	state.fields.draft = opts.draft
+	state.fields.commit_count = opts.commit_count
 	state.fields.available_bases = type(opts.available_bases) == "table" and opts.available_bases
 		or { state.fields.base }
 
@@ -351,7 +355,7 @@ function M.start()
 		end
 	end
 
-	local default_title, default_body = build_pr_content(root, info.provider, base, head)
+	local default_title, default_body, commit_count = build_pr_content(root, info.provider, base, head)
 
 	M.open({
 		provider = provider,
@@ -363,6 +367,7 @@ function M.start()
 		initial_title = default_title,
 		initial_body = default_body,
 		draft = false,
+		commit_count = commit_count,
 	})
 end
 

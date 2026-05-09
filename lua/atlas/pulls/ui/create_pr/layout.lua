@@ -2,10 +2,6 @@ local M = {}
 
 local renderer = require("atlas.pulls.ui.create_pr.renderer")
 
-local function notify_warn(msg)
-	vim.notify("[Atlas] " .. tostring(msg), vim.log.levels.WARN)
-end
-
 local function valid_win(win)
 	return win ~= nil and vim.api.nvim_win_is_valid(win)
 end
@@ -195,7 +191,7 @@ function M.open(state)
 end
 
 ---@param state CreatePRState
----@param actions { confirm_close: fun(), submit: fun() }
+---@param actions { confirm_close: fun(), pick_base: fun(on_change: fun()), submit: fun() }
 function M.setup(state, actions)
 	local keymap_opts = { silent = true, nowait = true }
 
@@ -215,29 +211,6 @@ function M.setup(state, actions)
 		end
 	end
 
-	local function pick_base()
-		local choices = state.fields.available_bases
-		if type(choices) ~= "table" or #choices == 0 then
-			notify_warn("No base branches available")
-			return
-		end
-
-		vim.ui.select(choices, {
-			prompt = "Select base branch:",
-		}, function(choice)
-			if type(choice) ~= "string" or choice == "" then
-				return
-			end
-			state.fields.base = choice
-			renderer.render_meta(state)
-		end)
-	end
-
-	local function toggle_draft()
-		state.fields.draft = not state.fields.draft
-		renderer.render_meta(state)
-	end
-
 	if valid_buf(state.layout.title_buf) then
 		local buf = state.layout.title_buf
 		set_keymap(buf, "n", "q", actions.confirm_close)
@@ -246,8 +219,15 @@ function M.setup(state, actions)
 		set_keymap(buf, "n", "<S-Tab>", jump_to_desc)
 		set_keymap(buf, "n", "<C-j>", jump_to_desc)
 		set_keymap(buf, "n", "<C-k>", jump_to_title)
-		set_keymap(buf, "n", "gb", pick_base)
-		set_keymap(buf, "n", "gd", toggle_draft)
+		set_keymap(buf, "n", "gb", function()
+			actions.pick_base(function()
+				renderer.render_meta(state)
+			end)
+		end)
+		set_keymap(buf, "n", "gd", function()
+			state.fields.draft = not state.fields.draft
+			renderer.render_meta(state)
+		end)
 		set_keymap(buf, "i", "<CR>", function()
 			vim.cmd("stopinsert")
 			jump_to_desc()
@@ -277,8 +257,15 @@ function M.setup(state, actions)
 		set_keymap(buf, "n", "<S-Tab>", jump_to_title)
 		set_keymap(buf, "n", "<C-j>", jump_to_desc)
 		set_keymap(buf, "n", "<C-k>", jump_to_title)
-		set_keymap(buf, "n", "gb", pick_base)
-		set_keymap(buf, "n", "gd", toggle_draft)
+		set_keymap(buf, "n", "gb", function()
+			actions.pick_base(function()
+				renderer.render_meta(state)
+			end)
+		end)
+		set_keymap(buf, "n", "gd", function()
+			state.fields.draft = not state.fields.draft
+			renderer.render_meta(state)
+		end)
 		set_keymap(buf, "i", "<C-j>", function()
 			vim.cmd("stopinsert")
 			jump_to_desc()
