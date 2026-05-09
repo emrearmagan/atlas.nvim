@@ -310,7 +310,7 @@ return {
         providers = {
           github = {
             cache_ttl = 300,
-            pr_template = nil, -- e.g. ".github/pull_request_template.md"
+            pr_template = ".github/pull_request_template.md", -- default
 
             ---@type AtlasGitHubViewConfig[]
             views = {

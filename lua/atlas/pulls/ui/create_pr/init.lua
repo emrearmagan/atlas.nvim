@@ -6,6 +6,8 @@ local git_branch = require("atlas.core.git")
 local config = require("atlas.config")
 local spinner = require("atlas.ui.popups.spinner")
 
+local DEFAULT_GITHUB_PR_TEMPLATE = ".github/pull_request_template.md"
+
 local function notify(level, msg)
 	vim.notify("[Atlas] " .. tostring(msg), level)
 end
@@ -40,7 +42,7 @@ local function read_configured_pr_template(root, provider_id)
 	local pulls = (config.options or {}).pulls or {}
 	local providers = pulls.providers or {}
 	local github = providers.github or {}
-	local template_path = type(github.pr_template) == "string" and trim(github.pr_template) or ""
+	local template_path = type(github.pr_template) == "string" and trim(github.pr_template) or DEFAULT_GITHUB_PR_TEMPLATE
 	if template_path == "" then
 		return ""
 	end
@@ -136,6 +138,25 @@ local function confirm_close()
 		if type(input) == "string" and input:match("^[yY]") then
 			close()
 		end
+	end)
+end
+
+---@param on_change fun()
+local function pick_base(on_change)
+	local choices = state.fields.available_bases
+	if type(choices) ~= "table" or #choices == 0 then
+		notify_warn("No base branches available")
+		return
+	end
+
+	vim.ui.select(choices, {
+		prompt = "Select base branch:",
+	}, function(choice)
+		if type(choice) ~= "string" or choice == "" then
+			return
+		end
+		state.fields.base = choice
+		on_change()
 	end)
 end
 
@@ -263,6 +284,7 @@ function M.open(opts)
 
 	layout.setup(state, {
 		confirm_close = confirm_close,
+		pick_base = pick_base,
 		submit = submit,
 	})
 
