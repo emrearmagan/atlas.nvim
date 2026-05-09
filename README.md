@@ -112,7 +112,7 @@ use {
 
 - `:AtlasIssues [provider]` - Open Atlas issues domain
 - `:AtlasPulls [provider]` - Open Atlas pulls domain
-- `:AtlasCreatePR` - Create a pull request from the current branch (auto-detects repo + provider)
+- `:AtlasCreatePR` - Create a pull request from the current branch
 - `:AtlasJqlSearch {query}` - Search Jira issues with JQL
 - `:AtlasClearCache` - Clear Atlas disk and memory cache
 - `:AtlasLogs` - Toggle Atlas logs
@@ -458,67 +458,53 @@ Set an action to `false` to disable it, or set it to a list to add aliases.
 require("atlas").setup({
   keymaps = {
     ui = {
-      toggle_panel = false,
-      next_panel_tab = { "]", "<Tab>", "gn" },
-      previous_panel_tab = { "[", "<S-Tab>", "gp" },
+      help = "g?",
+      close = "q", -- false would disable it
+      toggle_panel = "p", -- { "p", "k" } would add aliases
+      toggle_fold = "za",
+      toggle_all_folds = "zA",
+      previous_panel_tab = "<S-Tab>",
+      next_panel_tab = "<Tab>",
     },
     issues = {
+      open_actions = "A",
+      open_in_browser = "gx",
+      copy_url = "Y",
+      copy_key = "y",
+      show_details = "K",
+      search = "?",
+      refresh = "r",
+      refresh_view = "R",
       transition_issue = "gs",
       change_assignee = "ga",
+      change_reporter = "gr",
       edit_issue = "ge",
-      search = "?",
+      create_issue = "c",
     },
     pulls = {
-      open_diff = { "go", "gd" },
+      refresh = "r",
+      refresh_view = "R",
+      open_actions = "A",
+      open_in_browser = "gx",
+      copy_url = "Y",
+      copy_id = "y",
+      open_diff = "gd",
+      checkout = "gc",
+      show_details = "K",
+      search = "?",
+      open_notifications = "N",
+      notifications_mark_read = "r",
+      notifications_mark_done = "d",
+      notifications_refresh = "R",
+      pr_files_next_hunk = "]h",
+      pr_files_previous_hunk = "[h",
+      filter_status_open = "gpo",
+      filter_status_merged = "gpm",
+      filter_status_declined = "gpd",
     },
   },
 })
 ```
-
-##### General
-
-| Context | Key                     | Action                              |
-| ------- | ----------------------- | ----------------------------------- |
-| Atlas   | `q`                     | Close Atlas                         |
-| Atlas   | `g?`                    | Toggle help popup                   |
-| Atlas   | `p`                     | Toggle detail pane                  |
-| Atlas   | `<S-Tab>`               | Previous panel tab                  |
-| Atlas   | `<Tab>`                 | Next panel tab                      |
-| Atlas   | `R`                     | Refresh current view                |
-| Atlas   | `r`                     | Refresh selected issue/pr           |
-| Atlas   | `a/i` / `c` / `e` / `d` | Add / reply / edit / delete comment |
-
-##### Issues
-
-| Context | Key         | Action                                    |
-| ------- | ----------- | ----------------------------------------- |
-| Issues  | `A`         | Open Jira actions                         |
-| Issues  | `K`         | Show issue details                        |
-| Issues  | `c`         | Create issue                              |
-| Issues  | `?`         | Search issues                             |
-| Issues  | `gs`        | Transition issue                          |
-| Issues  | `ga`        | Change assignee                           |
-| Issues  | `gr`        | Change reporter                           |
-| Issues  | `ge`        | Edit issue                                |
-| Issues  | `gx`        | Open issue/comment in browser             |
-| Issues  | `y` / `Y`   | Copy issue key / URL                      |
-| Issues  | `za` / `zA` | Toggle fold / all folds                   |
-| Issues  | `m`         | Toggle markdown / raw view (overview tab) |
-
-##### Pulls
-
-| Context              | Key         | Action                           |
-| -------------------- | ----------- | -------------------------------- |
-| Pulls                | `A`         | Open PR actions                  |
-| Pulls                | `o`         | Toggle repository panel          |
-| Pulls                | `T`         | Create new tasks on PR           |
-| Pulls                | `?`         | Search repositories              |
-| Pulls                | `gc`        | Checkout selected PR             |
-| Pulls                | `gd`        | Open selected PR diff            |
-| Pulls                | `gx`        | Open pr/build/comment in browser |
-| Pulls                | `y` / `Y`   | Copy PR id / URL                 |
-| Pulls (File changes) | `za` / `zA` | Toggle fold / all folds          |
-| Pulls (File changes) | `]h` / `[h` | Next / previous hunk             |
 
 ## Contributors ✨
 
