@@ -43,7 +43,7 @@ end
 ---@param provider PullsProvider
 ---@param repo_slug string
 local function open_pulls_editor(provider, repo_slug)
-	local create_issue_ui = require("atlas.pulls.ui.create_issue")
+	local create_issue_ui = require("atlas.pulls.create.issue")
 
 	local pickers = {}
 	if provider.id == "github" then
