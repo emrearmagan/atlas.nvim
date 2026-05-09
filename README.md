@@ -270,6 +270,32 @@ Examples:
 - [x] Create pull requests (`:AtlasCreatePR`)
 - [ ] Pagination for API results
 
+### Configuration
+
+```lua
+require("atlas").setup({
+  pulls = {
+    diff = {
+      -- Command must support range input: origin/<destination>...origin/<source>
+      open_cmd = "DiffviewOpen", -- e.g. "DiffviewOpen" or "CodeDiff", defaults to nil.
+    },
+    repo_config = {
+      -- Maps `workspace/repo` to local paths. Used for checkout and custom actions.
+      paths = {
+        ["your-workspace/*"] = "~/code/repos/*",
+        ["your-workspace/atlas"] = "~/code/atlas",
+      },
+      settings = {
+        ["your-workspace/atlas"] = {
+          readme = "README.md", -- optional, defaults to README.md
+        },
+      },
+    },
+    custom_actions = {}, -- See Custom Actions below.
+  },
+})
+```
+
 ### GitHub
 
 <details>
@@ -281,13 +307,10 @@ return {
   config = function()
     require("atlas").setup({
       pulls = {
-        diff = {
-          -- Command must support range input: origin/<destination>...origin/<source>
-          open_cmd = "DiffviewOpen", -- e.g. "DiffviewOpen" or "CodeDiff", defaults to nil.
-        },
         providers = {
           github = {
             cache_ttl = 300,
+            pr_template = nil, -- e.g. ".github/pull_request_template.md"
 
             ---@type AtlasGitHubViewConfig[]
             views = {
@@ -328,23 +351,6 @@ return {
   config = function()
     require("atlas").setup({
       pulls = {
-        diff = {
-          -- Command must support range input: origin/<destination>...origin/<source>
-          open_cmd = "DiffviewOpen", -- e.g. "DiffviewOpen" or "CodeDiff", defaults to nil.
-        },
-        repo_config = {
-          -- Maps `workspace/repo` to local paths. Used for checkout and custom actions.
-          paths = {
-            ["your-workspace/*"] = "~/code/repos/*",
-            ["your-workspace/atlas"] = "~/code/atlas",
-          },
-          settings = {
-            ["your-workspace/atlas"] = {
-              readme = "README.md", -- optional, defaults to README.md
-            },
-          },
-        },
-        custom_actions = {}, -- See Custom Actions below.
         providers = {
           bitbucket = {
             user = os.getenv("BITBUCKET_USER") or "",
@@ -388,7 +394,6 @@ return {
 
 </details>
 
-<details>
 <summary><strong>Custom Actions</strong></summary>
 
 You can add custom PR actions under `pulls.custom_actions`.
@@ -444,8 +449,6 @@ pulls = {
 ```
 
 ![CleanShot2026-03-31at20 08 06-ezgif com-video-to-gif-converter](https://github.com/user-attachments/assets/a8ca355b-09e2-428c-b3fb-3280fd161110)
-
-</details>
 
 #### Keymaps
 
