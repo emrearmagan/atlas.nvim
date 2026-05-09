@@ -26,6 +26,7 @@
 
 ---@class AtlasPullsRepoSettings
 ---@field readme string|nil
+---@field pr_template string|nil
 
 ---@class AtlasPullsDiffConfig
 ---@field open_cmd "DiffviewOpen"|"CodeDiff"|string|nil

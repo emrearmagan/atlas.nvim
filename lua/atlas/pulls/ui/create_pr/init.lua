@@ -32,17 +32,19 @@ local function trim(value)
 end
 
 ---@param root string
----@param provider_id string
+---@param repo_slug string
 ---@return string
-local function read_configured_pr_template(root, provider_id)
-	if provider_id ~= "github" then
-		return ""
+local function read_configured_pr_template(root, repo_slug)
+	local pulls = (config.options or {}).pulls or {}
+	local repo_config = pulls.repo_config or {}
+	local settings = repo_config.settings or {}
+	local repo_settings = settings[repo_slug]
+	if type(repo_settings) ~= "table" then
+		repo_settings = {}
 	end
 
-	local pulls = (config.options or {}).pulls or {}
-	local providers = pulls.providers or {}
-	local github = providers.github or {}
-	local template_path = type(github.pr_template) == "string" and trim(github.pr_template) or DEFAULT_GITHUB_PR_TEMPLATE
+	local template_path = type(repo_settings.pr_template) == "string" and trim(repo_settings.pr_template)
+		or DEFAULT_GITHUB_PR_TEMPLATE
 	if template_path == "" then
 		return ""
 	end
@@ -60,18 +62,18 @@ local function read_configured_pr_template(root, provider_id)
 end
 
 ---@param root string
----@param provider_id string
+---@param repo_slug string
 ---@param base string
 ---@param head string
 ---@return string title
 ---@return string body
 ---@return integer commit_count
-local function build_pr_content(root, provider_id, base, head)
+local function build_pr_content(root, repo_slug, base, head)
 	local commits = git_branch.commits_for_range(root, git_branch.commit_range(root, base, head))
 	local latest_commit = commits[#commits]
 	local title = latest_commit and latest_commit.subject or ""
 
-	local template = trim(read_configured_pr_template(root, provider_id))
+	local template = trim(read_configured_pr_template(root, repo_slug))
 	if template ~= "" then
 		return title, template, #commits
 	end
@@ -268,6 +270,7 @@ end
 
 ---@param opts CreatePROpenOpts
 function M.open(opts)
+	--- Atlas might not be open when this is called, so we need to load the highlights
 	require("atlas.ui.shared.highlights").setup()
 	require("atlas.pulls.ui.highlights").setup()
 
@@ -355,7 +358,7 @@ function M.start()
 		end
 	end
 
-	local default_title, default_body, commit_count = build_pr_content(root, info.provider, base, head)
+	local default_title, default_body, commit_count = build_pr_content(root, info.slug, base, head)
 
 	M.open({
 		provider = provider,

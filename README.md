@@ -288,6 +288,7 @@ require("atlas").setup({
       settings = {
         ["your-workspace/atlas"] = {
           readme = "README.md", -- optional, defaults to README.md
+          pr_template = ".github/pull_request_template.md", -- optional, defaults to .github/pull_request_template.md
         },
       },
     },
@@ -310,7 +311,6 @@ return {
         providers = {
           github = {
             cache_ttl = 300,
-            pr_template = ".github/pull_request_template.md", -- default
 
             ---@type AtlasGitHubViewConfig[]
             views = {
