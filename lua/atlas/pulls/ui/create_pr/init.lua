@@ -4,6 +4,7 @@ local layout = require("atlas.pulls.ui.create_pr.layout")
 local renderer = require("atlas.pulls.ui.create_pr.renderer")
 local state = require("atlas.pulls.ui.create_pr.state")
 local git_branch = require("atlas.core.git.branch")
+local config = require("atlas.config")
 local spinner = require("atlas.ui.popups.spinner")
 
 local function notify(level, msg)
@@ -18,6 +19,131 @@ local function notify_warn(msg)
 end
 local function notify_error(msg)
 	notify(vim.log.levels.ERROR, msg)
+end
+
+local function trim(value)
+	if type(value) ~= "string" then
+		return ""
+	end
+	return vim.trim(value)
+end
+
+---@param root string
+---@param rev string
+---@return boolean
+local function git_rev_exists(root, rev)
+	if root == "" or rev == "" then
+		return false
+	end
+	local res = vim.system({ "git", "-C", root, "rev-parse", "--verify", "--quiet", rev }, { text = true }):wait()
+	return res.code == 0
+end
+
+---@param root string
+---@param base string
+---@param head string
+---@return string
+local function commit_range(root, base, head)
+	local remote_base = "origin/" .. base
+	if git_rev_exists(root, remote_base) then
+		return remote_base .. ".." .. head
+	end
+	if git_rev_exists(root, base) then
+		return base .. ".." .. head
+	end
+	return head
+end
+
+---@param root string
+---@param range string
+---@return { hash: string, subject: string }[]
+local function commits_for_range(root, range)
+	local res = vim.system({ "git", "-C", root, "log", "--reverse", "--format=%h %s", range }, { text = true }):wait()
+	if res.code ~= 0 then
+		return {}
+	end
+
+	local commits = {}
+	for line in tostring(res.stdout or ""):gmatch("[^\r\n]+") do
+		local hash, subject = line:match("^(%S+)%s+(.+)$")
+		hash = trim(hash)
+		subject = trim(subject)
+		if hash ~= "" and subject ~= "" then
+			table.insert(commits, { hash = hash, subject = subject })
+		end
+	end
+	return commits
+end
+
+---@param commits { hash: string, subject: string }[]
+---@return string
+local function body_from_commits(commits)
+	if #commits == 0 then
+		return ""
+	end
+
+	local lines = {}
+	for _, commit in ipairs(commits) do
+		table.insert(lines, string.format("- `%s` %s", commit.hash, commit.subject))
+	end
+	return table.concat(lines, "\n")
+end
+
+---@param root string
+---@param provider_id string
+---@return string
+local function read_configured_pr_template(root, provider_id)
+	if provider_id ~= "github" then
+		return ""
+	end
+
+	local pulls = (config.options or {}).pulls or {}
+	local providers = pulls.providers or {}
+	local github = providers.github or {}
+	local template_path = type(github.pr_template) == "string" and trim(github.pr_template) or ""
+	if template_path == "" then
+		return ""
+	end
+
+	local path = root .. "/" .. template_path
+	if vim.fn.filereadable(path) ~= 1 then
+		return ""
+	end
+
+	local ok, lines = pcall(vim.fn.readfile, path)
+	if not ok or type(lines) ~= "table" then
+		return ""
+	end
+	return table.concat(lines, "\n")
+end
+
+---@param template string
+---@param commits_body string
+---@return string
+local function combine_body(template, commits_body)
+	template = trim(template)
+	commits_body = trim(commits_body)
+
+	if template == "" then
+		return commits_body
+	end
+	if commits_body == "" then
+		return template
+	end
+	return template .. "\n\n" .. commits_body
+end
+
+---@param root string
+---@param provider_id string
+---@param base string
+---@param head string
+---@return string title
+---@return string body
+local function default_pr_text(root, provider_id, base, head)
+	local commits = commits_for_range(root, commit_range(root, base, head))
+	local latest_commit = commits[#commits]
+	local title = latest_commit and latest_commit.subject or ""
+	return title, combine_body(read_configured_pr_template(root, provider_id), body_from_commits(commits))
 end
 
 ---@param provider_id "github"|"bitbucket"
@@ -253,18 +379,8 @@ function M.open(opts)
 	end)
 end
 
----@class CreatePRStartOpts
----@field cwd string|nil
----@field initial_title string|nil
----@field initial_body string|nil
-
----Detect the active git repo from the current buffer / cwd, choose the matching
----provider, gather the source/target branches and open the PR-create editor.
----@param opts CreatePRStartOpts|nil
-function M.start(opts)
-	opts = opts or {}
-
-	local root, root_err = git_branch.repo_root(opts.cwd)
+function M.start()
+	local root, root_err = git_branch.repo_root(nil)
 	if not root then
 		notify_error(root_err or "Not in a git repository")
 		return
@@ -320,6 +436,8 @@ function M.start(opts)
 		end
 	end
 
+	local default_title, default_body = default_pr_text(root, info.provider, base, head)
+
 	M.open({
 		provider = provider,
 		repo_slug = info.slug,
@@ -327,8 +445,8 @@ function M.start(opts)
 		head = head,
 		base = base,
 		available_bases = available_bases,
-		initial_title = opts.initial_title,
-		initial_body = opts.initial_body,
+		initial_title = default_title,
+		initial_body = default_body,
 		draft = false,
 	})
 end

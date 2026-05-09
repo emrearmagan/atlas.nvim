@@ -154,23 +154,6 @@ function M.default_branch(root, remote)
 end
 
 ---@param root string
----@return string[] branches  (local branches; current branch first)
-function M.list_branches(root)
-	local res = vim.system({ "git", "-C", root, "branch", "--format=%(refname:short)" }, { text = true }):wait()
-	if res.code ~= 0 then
-		return {}
-	end
-	local out = {}
-	for line in (res.stdout or ""):gmatch("[^\r\n]+") do
-		local name = trim(line)
-		if name ~= "" then
-			table.insert(out, name)
-		end
-	end
-	return out
-end
-
----@param root string
 ---@param remote string
 ---@return string[] branches
 function M.list_remote_branches(root, remote)
