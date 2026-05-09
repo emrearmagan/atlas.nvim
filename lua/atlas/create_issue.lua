@@ -92,7 +92,7 @@ local function dispatch(choice)
 		return
 	end
 
-	local git_branch = require("atlas.core.git.branch")
+	local git_branch = require("atlas.core.git")
 	local root, root_err = git_branch.repo_root(nil)
 	if not root then
 		notify_error(root_err or "Not in a git repository")
