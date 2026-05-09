@@ -30,11 +30,6 @@ local logger = require("atlas.core.logger")
 ---@field number integer|nil
 ---@field url string|nil
 
---------------------------------------------------------------------------------
--- Lookups
---------------------------------------------------------------------------------
-
----List repository labels.
 ---@param slug string
 ---@param on_done fun(labels: GitHubLabel[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil

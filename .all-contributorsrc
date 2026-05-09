@@ -25,6 +25,25 @@
       "contributions": [
         "code"
       ]
+    },
+    {
+      "login": "franroa",
+      "name": "franroa",
+      "avatar_url": "https://avatars.githubusercontent.com/u/2432583?v=4",
+      "profile": "https://github.com/franroa",
+      "contributions": [
+        "code",
+        "bug"
+      ]
+    },
+    {
+      "login": "eertmanhidde",
+      "name": "hiddederidder",
+      "avatar_url": "https://avatars.githubusercontent.com/u/45388384?v=4",
+      "profile": "https://github.com/eertmanhidde",
+      "contributions": [
+        "code"
+      ]
     }
   ]
 }
