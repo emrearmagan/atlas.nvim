@@ -66,19 +66,16 @@ function M.render(notifications, width)
 		table.insert(lines, line1)
 		local lnum1 = #lines - 1
 
-		-- highlight: dot
 		local dot_start = PADDING_X
 		local dot_end = dot_start + #dot
 		table.insert(spans, { line = lnum1, start_col = dot_start, end_col = dot_end, hl_group = dot_hl })
 
-		-- highlight: type icon
 		if type_icon ~= "" then
 			local icon_start = dot_end + 1
 			local icon_end = icon_start + #type_icon
 			table.insert(spans, { line = lnum1, start_col = icon_start, end_col = icon_end, hl_group = type_hl })
 		end
 
-		-- highlight: title
 		if not n.unread then
 			table.insert(spans, {
 				line = lnum1,
@@ -88,7 +85,6 @@ function M.render(notifications, width)
 			})
 		end
 
-		-- highlight: timestamp
 		if timestamp ~= "" then
 			local ts_start = #line1 - #timestamp
 			table.insert(spans, {
@@ -101,7 +97,6 @@ function M.render(notifications, width)
 
 		line_map[#lines] = { kind = "notification", notification = n }
 
-		-- second line: subtitle
 		local subtitle = tostring(n.subtitle or "")
 		if subtitle ~= "" then
 			local indent = string.rep(" ", prefix_w)

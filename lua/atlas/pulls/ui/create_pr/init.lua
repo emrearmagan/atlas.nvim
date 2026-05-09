@@ -1,10 +1,12 @@
 local M = {}
 
 local layout = require("atlas.pulls.ui.create_pr.layout")
-local renderer = require("atlas.pulls.ui.create_pr.renderer")
 local state = require("atlas.pulls.ui.create_pr.state")
-local git_branch = require("atlas.core.git.branch")
+local git_branch = require("atlas.core.git")
+local config = require("atlas.config")
 local spinner = require("atlas.ui.popups.spinner")
+
+local DEFAULT_GITHUB_PR_TEMPLATE = ".github/pull_request_template.md"
 
 local function notify(level, msg)
 	vim.notify("[Atlas] " .. tostring(msg), level)
@@ -13,11 +15,75 @@ end
 local function notify_info(msg)
 	notify(vim.log.levels.INFO, msg)
 end
+
 local function notify_warn(msg)
 	notify(vim.log.levels.WARN, msg)
 end
+
 local function notify_error(msg)
 	notify(vim.log.levels.ERROR, msg)
+end
+
+local function trim(value)
+	if type(value) ~= "string" then
+		return ""
+	end
+	return vim.trim(value)
+end
+
+---@param root string
+---@param repo_slug string
+---@return string
+local function read_configured_pr_template(root, repo_slug)
+	local pulls = (config.options or {}).pulls or {}
+	local repo_config = pulls.repo_config or {}
+	local settings = repo_config.settings or {}
+	local repo_settings = settings[repo_slug]
+	if type(repo_settings) ~= "table" then
+		repo_settings = {}
+	end
+
+	local template_path = type(repo_settings.pr_template) == "string" and trim(repo_settings.pr_template)
+		or DEFAULT_GITHUB_PR_TEMPLATE
+	if template_path == "" then
+		return ""
+	end
+
+	local path = root .. "/" .. template_path
+	if vim.fn.filereadable(path) ~= 1 then
+		return ""
+	end
+
+	local ok, lines = pcall(vim.fn.readfile, path)
+	if not ok or type(lines) ~= "table" then
+		return ""
+	end
+	return table.concat(lines, "\n")
+end
+
+---@param root string
+---@param repo_slug string
+---@param base string
+---@param head string
+---@return string title
+---@return string body
+---@return integer commit_count
+local function build_pr_content(root, repo_slug, base, head)
+	local commits = git_branch.commits_for_range(root, git_branch.commit_range(root, base, head))
+	local latest_commit = commits[#commits]
+	local title = latest_commit and latest_commit.subject or ""
+
+	local template = trim(read_configured_pr_template(root, repo_slug))
+	if template ~= "" then
+		return title, template, #commits
+	end
+
+	local commit_lines = {}
+	for _, commit in ipairs(commits) do
+		table.insert(commit_lines, string.format("- `%s` %s", commit.hash, commit.subject))
+	end
+
+	return title, table.concat(commit_lines, "\n"), #commits
 end
 
 ---@param provider_id "github"|"bitbucket"
@@ -78,12 +144,8 @@ local function confirm_close()
 	end)
 end
 
-local function toggle_draft()
-	state.fields.draft = not state.fields.draft
-	renderer.render_meta(state)
-end
-
-local function pick_base()
+---@param on_change fun()
+local function pick_base(on_change)
 	local choices = state.fields.available_bases
 	if type(choices) ~= "table" or #choices == 0 then
 		notify_warn("No base branches available")
@@ -97,7 +159,7 @@ local function pick_base()
 			return
 		end
 		state.fields.base = choice
-		renderer.render_meta(state)
+		on_change()
 	end)
 end
 
@@ -201,50 +263,36 @@ end
 ---@field head string
 ---@field base string
 ---@field available_bases string[]|nil
----@field initial_title string|nil
----@field initial_body string|nil
----@field draft boolean|nil
+---@field initial_title string
+---@field initial_body string
+---@field draft boolean
+---@field commit_count integer
 
 ---@param opts CreatePROpenOpts
 function M.open(opts)
-	if type(opts) ~= "table" then
-		notify_warn("create_pr.open: missing options")
-		return
-	end
-
+	--- Atlas might not be open when this is called, so we need to load the highlights
 	require("atlas.ui.shared.highlights").setup()
 	require("atlas.pulls.ui.highlights").setup()
 
 	state.reset()
 	state.fields.provider = opts.provider
-	state.fields.repo_slug = tostring(opts.repo_slug or "")
-	state.fields.repo_root = tostring(opts.repo_root or "")
-	state.fields.head = tostring(opts.head or "")
-	state.fields.base = tostring(opts.base or "")
-	state.fields.title = tostring(opts.initial_title or "")
-	state.fields.draft = opts.draft == true
+	state.fields.repo_slug = opts.repo_slug
+	state.fields.repo_root = opts.repo_root
+	state.fields.head = opts.head
+	state.fields.base = opts.base
+	state.fields.title = opts.initial_title
+	state.fields.body = opts.initial_body
+	state.fields.draft = opts.draft
+	state.fields.commit_count = opts.commit_count
 	state.fields.available_bases = type(opts.available_bases) == "table" and opts.available_bases
 		or { state.fields.base }
 
 	layout.open(state)
 
-	if valid_buf(state.layout.desc_buf) and type(opts.initial_body) == "string" and opts.initial_body ~= "" then
-		vim.api.nvim_buf_set_lines(
-			state.layout.desc_buf,
-			0,
-			-1,
-			false,
-			vim.split(opts.initial_body, "\n", { plain = true })
-		)
-	end
-
-	renderer.render_meta(state)
-
 	layout.setup(state, {
 		confirm_close = confirm_close,
-		submit = submit,
 		pick_base = pick_base,
-		toggle_draft = toggle_draft,
+		submit = submit,
 	})
 
 	vim.schedule(function()
@@ -254,18 +302,8 @@ function M.open(opts)
 	end)
 end
 
----@class CreatePRStartOpts
----@field cwd string|nil
----@field initial_title string|nil
----@field initial_body string|nil
-
----Detect the active git repo from the current buffer / cwd, choose the matching
----provider, gather the source/target branches and open the PR-create editor.
----@param opts CreatePRStartOpts|nil
-function M.start(opts)
-	opts = opts or {}
-
-	local root, root_err = git_branch.repo_root(opts.cwd)
+function M.start()
+	local root, root_err = git_branch.repo_root(nil)
 	if not root then
 		notify_error(root_err or "Not in a git repository")
 		return
@@ -310,7 +348,6 @@ function M.start(opts)
 		return
 	end
 
-	-- Build base candidates: default branch + all remote branches (deduped, default first).
 	local remote_branches = git_branch.list_remote_branches(root, "origin")
 	local available_bases = { base }
 	local seen = { [base] = true }
@@ -321,6 +358,8 @@ function M.start(opts)
 		end
 	end
 
+	local default_title, default_body, commit_count = build_pr_content(root, info.slug, base, head)
+
 	M.open({
 		provider = provider,
 		repo_slug = info.slug,
@@ -328,9 +367,10 @@ function M.start(opts)
 		head = head,
 		base = base,
 		available_bases = available_bases,
-		initial_title = opts.initial_title,
-		initial_body = opts.initial_body,
+		initial_title = default_title,
+		initial_body = default_body,
 		draft = false,
+		commit_count = commit_count,
 	})
 end
 

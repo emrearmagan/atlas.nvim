@@ -1,32 +1,3 @@
-if _G.vim == nil then
-	_G.vim = {
-		env = { HOME = os.getenv("HOME") or "" },
-		fn = {
-			expand = function(x)
-				if x == "~" then
-					return os.getenv("HOME") or ""
-				end
-				return x
-			end,
-			fnamemodify = function(path, _)
-				return path
-			end,
-			isdirectory = function(_)
-				return 1
-			end,
-			stdpath = function(_)
-				return "/tmp"
-			end,
-			writefile = function(_, _, _)
-				return 0
-			end,
-		},
-		inspect = function(v)
-			return tostring(v)
-		end,
-	}
-end
-
 local checkout = require("atlas.core.git.checkout")
 
 describe("repo_paths", function()
