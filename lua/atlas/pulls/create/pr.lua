@@ -1,12 +1,40 @@
 local M = {}
 
-local layout = require("atlas.pulls.ui.create_pr.layout")
-local state = require("atlas.pulls.ui.create_pr.state")
+local editor = require("atlas.ui.popups.editor")
 local git_branch = require("atlas.core.git")
 local config = require("atlas.config")
 local spinner = require("atlas.ui.popups.spinner")
+local pulls_helper = require("atlas.pulls.ui.main.helper")
 
 local DEFAULT_GITHUB_PR_TEMPLATE = ".github/pull_request_template.md"
+
+---@class CreatePRLayout
+---@field container_buf integer|nil
+---@field container_win integer|nil
+---@field title_buf integer|nil
+---@field title_win integer|nil
+---@field meta_buf integer|nil
+---@field meta_win integer|nil
+---@field desc_buf integer|nil
+---@field desc_win integer|nil
+
+---@class CreatePRFields
+---@field repo_slug string         -- "owner/repo"
+---@field repo_root string         -- absolute path to local repo
+---@field provider PullsProvider|nil
+---@field head string              -- source branch
+---@field base string              -- destination branch
+---@field title string
+---@field body string
+---@field draft boolean
+---@field commit_count integer
+---@field available_bases string[]
+
+---@class CreatePRState
+---@field fields CreatePRFields
+---@field layout CreatePRLayout
+---@field content_width integer
+---@field is_submitting boolean
 
 local function notify(level, msg)
 	vim.notify("[Atlas] " .. tostring(msg), level)
@@ -104,49 +132,78 @@ local function load_provider(provider_id)
 	return mod, nil
 end
 
+---@param pr_state CreatePRState
+---@return EditorPopupMetaRow[]
+local function meta_rows(pr_state)
+	local repo = tostring(pr_state.fields.repo_slug or "")
+	local head = tostring(pr_state.fields.head or "")
+	local base = tostring(pr_state.fields.base or "")
+	local draft = pr_state.fields.draft == true
+	local commit_count = tonumber(pr_state.fields.commit_count) or 0
+
+	local branch_value = string.format("%s → %s", head, base)
+	local status = draft and "DRAFT" or "READY"
+	local status_hl = draft and pulls_helper.pr_state_hl("draft") or pulls_helper.pr_state_hl("open")
+	local commit_label = commit_count == 1 and "1 commit" or string.format("%d commits", commit_count)
+
+	return {
+		{ "Repo:", { text = repo, hl = pulls_helper.repo_hl(repo) }, "Status:", { text = status, hl = status_hl } },
+		{ "Branch:", branch_value, "Commits:", commit_label },
+	}
+end
+
 local function valid_buf(buf)
 	return buf ~= nil and vim.api.nvim_buf_is_valid(buf)
 end
 
-local function get_title()
-	if not valid_buf(state.layout.title_buf) then
+---@param pr_state CreatePRState
+local function get_title(pr_state)
+	if not valid_buf(pr_state.layout.title_buf) then
 		return ""
 	end
-	local lines = vim.api.nvim_buf_get_lines(state.layout.title_buf, 0, -1, false)
+	local lines = vim.api.nvim_buf_get_lines(pr_state.layout.title_buf, 0, -1, false)
 	return vim.trim(table.concat(lines, " "))
 end
 
-local function get_body()
-	if not valid_buf(state.layout.desc_buf) then
+---@param pr_state CreatePRState
+local function get_body(pr_state)
+	if not valid_buf(pr_state.layout.desc_buf) then
 		return ""
 	end
-	return table.concat(vim.api.nvim_buf_get_lines(state.layout.desc_buf, 0, -1, false), "\n")
+	return table.concat(vim.api.nvim_buf_get_lines(pr_state.layout.desc_buf, 0, -1, false), "\n")
 end
 
-local function close()
+---@param pr_state CreatePRState
+local function render_meta(pr_state)
+	editor.render_meta(pr_state, meta_rows(pr_state))
+end
+
+---@param pr_state CreatePRState
+local function close(pr_state)
 	spinner.stop()
-	layout.close(state.layout)
-	state.reset()
+	editor.close(pr_state.layout)
 end
 
-local function confirm_close()
-	local title = get_title()
-	local body = get_body()
+---@param pr_state CreatePRState
+local function confirm_close(pr_state)
+	local title = get_title(pr_state)
+	local body = get_body(pr_state)
 	if title == "" and body == "" then
-		close()
+		close(pr_state)
 		return
 	end
 
 	vim.ui.input({ prompt = "Discard pull request draft? [y/N]: " }, function(input)
 		if type(input) == "string" and input:match("^[yY]") then
-			close()
+			close(pr_state)
 		end
 	end)
 end
 
 ---@param on_change fun()
-local function pick_base(on_change)
-	local choices = state.fields.available_bases
+---@param pr_state CreatePRState
+local function pick_base(pr_state, on_change)
+	local choices = pr_state.fields.available_bases
 	if type(choices) ~= "table" or #choices == 0 then
 		notify_warn("No base branches available")
 		return
@@ -158,16 +215,17 @@ local function pick_base(on_change)
 		if type(choice) ~= "string" or choice == "" then
 			return
 		end
-		state.fields.base = choice
+		pr_state.fields.base = choice
 		on_change()
 	end)
 end
 
+---@param pr_state CreatePRState
 ---@param result PullsCreatePRResult
-local function on_success(result)
-	state.is_submitting = false
+local function on_success(pr_state, result)
+	pr_state.is_submitting = false
 	spinner.stop()
-	close()
+	close(pr_state)
 
 	local url = result and result.url or nil
 	if type(url) == "string" and url ~= "" then
@@ -183,71 +241,72 @@ local function on_success(result)
 	end)
 end
 
-local function submit()
-	if state.is_submitting then
+---@param pr_state CreatePRState
+local function submit(pr_state)
+	if pr_state.is_submitting then
 		return
 	end
 
-	local title = get_title()
+	local title = get_title(pr_state)
 	if title == "" then
 		notify_warn("Title is required")
 		return
 	end
 
-	local body = get_body()
-	local provider = state.fields.provider
+	local body = get_body(pr_state)
+	local provider = pr_state.fields.provider
 	if type(provider) ~= "table" or type(provider.create_pr) ~= "function" then
 		notify_error("Provider does not support PR creation")
 		return
 	end
 
-	if state.fields.head == "" or state.fields.base == "" then
+	if pr_state.fields.head == "" or pr_state.fields.base == "" then
 		notify_warn("Head and base branches are required")
 		return
 	end
 
-	if state.fields.head == state.fields.base then
+	if pr_state.fields.head == pr_state.fields.base then
 		notify_warn("Head and base branches must differ")
 		return
 	end
 
-	state.is_submitting = true
+	pr_state.is_submitting = true
 	spinner.start("Creating pull request…")
 
 	local function do_create()
 		spinner.start("Creating pull request…")
 		provider.create_pr({
-			repo_slug = state.fields.repo_slug,
-			repo_root = state.fields.repo_root,
+			repo_slug = pr_state.fields.repo_slug,
+			repo_root = pr_state.fields.repo_root,
 			title = title,
 			body = body,
-			head = state.fields.head,
-			base = state.fields.base,
-			draft = state.fields.draft,
+			head = pr_state.fields.head,
+			base = pr_state.fields.base,
+			draft = pr_state.fields.draft,
 		}, function(result, err)
 			vim.schedule(function()
 				if err then
-					state.is_submitting = false
+					pr_state.is_submitting = false
 					spinner.stop()
 					notify_error("Create PR failed: " .. tostring(err))
 					return
 				end
-				on_success(result or {})
+				on_success(pr_state, result or {})
 			end)
 		end)
 	end
 
 	-- Make sure the source branch exists on the remote first.
-	local has_remote = git_branch.branch_exists_on_remote(state.fields.repo_root, state.fields.head, "origin")
+	local has_remote = git_branch.branch_exists_on_remote(pr_state.fields.repo_root, pr_state.fields.head, "origin")
 	if has_remote then
 		do_create()
 		return
 	end
 
-	spinner.start("Pushing " .. state.fields.head .. " to origin…")
-	git_branch.push_branch(state.fields.repo_root, state.fields.head, "origin", function(ok, push_err)
+	spinner.start("Pushing " .. pr_state.fields.head .. " to origin…")
+	git_branch.push_branch(pr_state.fields.repo_root, pr_state.fields.head, "origin", function(ok, push_err)
 		if not ok then
-			state.is_submitting = false
+			pr_state.is_submitting = false
 			spinner.stop()
 			notify_error("git push failed: " .. tostring(push_err or ""))
 			return
@@ -274,29 +333,71 @@ function M.open(opts)
 	require("atlas.ui.shared.highlights").setup()
 	require("atlas.pulls.ui.highlights").setup()
 
-	state.reset()
-	state.fields.provider = opts.provider
-	state.fields.repo_slug = opts.repo_slug
-	state.fields.repo_root = opts.repo_root
-	state.fields.head = opts.head
-	state.fields.base = opts.base
-	state.fields.title = opts.initial_title
-	state.fields.body = opts.initial_body
-	state.fields.draft = opts.draft
-	state.fields.commit_count = opts.commit_count
-	state.fields.available_bases = type(opts.available_bases) == "table" and opts.available_bases
-		or { state.fields.base }
+	---@type CreatePRState
+	local pr_state = {
+		fields = {
+			provider = opts.provider,
+			repo_slug = opts.repo_slug,
+			repo_root = opts.repo_root,
+			head = opts.head,
+			base = opts.base,
+			title = opts.initial_title,
+			body = opts.initial_body,
+			draft = opts.draft,
+			commit_count = opts.commit_count,
+			available_bases = type(opts.available_bases) == "table" and opts.available_bases or { opts.base },
+		},
+		layout = {},
+		content_width = 80,
+		is_submitting = false,
+	}
 
-	layout.open(state)
-
-	layout.setup(state, {
-		confirm_close = confirm_close,
-		pick_base = pick_base,
-		submit = submit,
+	editor.open(pr_state, {
+		title = " Create Pull Request ",
+		min_height = 20,
+		meta_height = 2,
+		title_winbar = "Title",
+		desc_winbar = "Description",
+		initial_title = pr_state.fields.title,
+		initial_body = pr_state.fields.body,
+		close = function()
+			confirm_close(pr_state)
+		end,
+		submit = function()
+			submit(pr_state)
+		end,
+		meta = function()
+			return meta_rows(pr_state)
+		end,
+		keymaps = {
+			{
+				key = "gb",
+				mode = "n",
+				buffers = { "title", "desc" },
+				desc = "base",
+				show_in_footer = true,
+				action = function()
+					pick_base(pr_state, function()
+						render_meta(pr_state)
+					end)
+				end,
+			},
+			{
+				key = "gd",
+				mode = "n",
+				buffers = { "title", "desc" },
+				desc = "toggle draft",
+				show_in_footer = true,
+				action = function()
+					pr_state.fields.draft = not pr_state.fields.draft
+					render_meta(pr_state)
+				end,
+			},
+		},
 	})
 
 	vim.schedule(function()
-		if vim.api.nvim_get_current_buf() == state.layout.title_buf then
+		if vim.api.nvim_get_current_buf() == pr_state.layout.title_buf then
 			vim.cmd("startinsert!")
 		end
 	end)
