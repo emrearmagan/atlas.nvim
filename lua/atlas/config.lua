@@ -246,7 +246,7 @@ local function register_commands()
 
 	vim.api.nvim_create_user_command("AtlasCreateIssue", function()
 		require("atlas.create_issue").start()
-	end, { desc = "Create an issue (provider picker: GitHub / Jira / Bitbucket)" })
+	end, { desc = "Create an issue" })
 
 	if M.options.issues then
 		if M.options.issues.providers and M.options.issues.providers.jira then

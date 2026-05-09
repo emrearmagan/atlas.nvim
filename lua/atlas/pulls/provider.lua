@@ -72,7 +72,7 @@
 ---@field url string|nil
 ---@field message string|nil
 ---
---- Main list rendering (optional – falls back to default table when nil):
+--- Main list rendering
 ---@field render (fun(groups: PullsGroup[], layout: string, opts: { width: integer }): PullsMainRenderResult)|nil
 ---
 ---@field panel PullsProviderPanel|nil
