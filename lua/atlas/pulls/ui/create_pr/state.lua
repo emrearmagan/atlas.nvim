@@ -15,6 +15,7 @@
 ---@field head string              -- source branch
 ---@field base string              -- destination branch
 ---@field title string
+---@field body string
 ---@field draft boolean
 ---@field available_bases string[]
 
@@ -32,6 +33,7 @@ local M = {
 		head = "",
 		base = "",
 		title = "",
+		body = "",
 		draft = false,
 		available_bases = {},
 	},
@@ -48,6 +50,7 @@ function M.reset()
 		head = "",
 		base = "",
 		title = "",
+		body = "",
 		draft = false,
 		available_bases = {},
 	}

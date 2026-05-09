@@ -1,5 +1,11 @@
 local M = {}
 
+local renderer = require("atlas.pulls.ui.create_pr.renderer")
+
+local function notify_warn(msg)
+	vim.notify("[Atlas] " .. tostring(msg), vim.log.levels.WARN)
+end
+
 local function valid_win(win)
 	return win ~= nil and vim.api.nvim_win_is_valid(win)
 end
@@ -135,6 +141,13 @@ function M.open(state)
 	})
 
 	vim.api.nvim_buf_set_lines(state.layout.title_buf, 0, -1, false, { tostring(state.fields.title or "") })
+	vim.api.nvim_buf_set_lines(
+		state.layout.desc_buf,
+		0,
+		-1,
+		false,
+		vim.split(tostring(state.fields.body or ""), "\n", { plain = true })
+	)
 
 	local separator = string.rep("─", inner_width)
 	vim.api.nvim_buf_set_lines(state.layout.container_buf, 0, -1, false, vim.fn["repeat"]({ "" }, height))
@@ -177,10 +190,12 @@ function M.open(state)
 
 	vim.api.nvim_buf_set_lines(state.layout.container_buf, 3, 4, false, { separator })
 	vim.api.nvim_buf_set_lines(state.layout.container_buf, 6, 7, false, { separator })
+
+	renderer.render_meta(state)
 end
 
 ---@param state CreatePRState
----@param actions { confirm_close: fun(), submit: fun(), pick_base: fun(), toggle_draft: fun() }
+---@param actions { confirm_close: fun(), submit: fun() }
 function M.setup(state, actions)
 	local keymap_opts = { silent = true, nowait = true }
 
@@ -200,14 +215,40 @@ function M.setup(state, actions)
 		end
 	end
 
+	local function pick_base()
+		local choices = state.fields.available_bases
+		if type(choices) ~= "table" or #choices == 0 then
+			notify_warn("No base branches available")
+			return
+		end
+
+		vim.ui.select(choices, {
+			prompt = "Select base branch:",
+		}, function(choice)
+			if type(choice) ~= "string" or choice == "" then
+				return
+			end
+			state.fields.base = choice
+			renderer.render_meta(state)
+		end)
+	end
+
+	local function toggle_draft()
+		state.fields.draft = not state.fields.draft
+		renderer.render_meta(state)
+	end
+
 	if valid_buf(state.layout.title_buf) then
 		local buf = state.layout.title_buf
 		set_keymap(buf, "n", "q", actions.confirm_close)
 		set_keymap(buf, "n", "<CR>", jump_to_desc)
 		set_keymap(buf, "n", "<Tab>", jump_to_desc)
 		set_keymap(buf, "n", "<S-Tab>", jump_to_desc)
-		set_keymap(buf, "n", "gb", actions.pick_base)
-		set_keymap(buf, "n", "gd", actions.toggle_draft)
+		set_keymap(buf, "n", "<C-j>", jump_to_desc)
+		set_keymap(buf, "n", "<NL>", jump_to_desc)
+		set_keymap(buf, "n", "<C-k>", jump_to_title)
+		set_keymap(buf, "n", "gb", pick_base)
+		set_keymap(buf, "n", "gd", toggle_draft)
 		set_keymap(buf, "i", "<CR>", function()
 			vim.cmd("stopinsert")
 			jump_to_desc()
@@ -220,6 +261,14 @@ function M.setup(state, actions)
 			vim.cmd("stopinsert")
 			jump_to_desc()
 		end)
+		set_keymap(buf, "i", "<NL>", function()
+			vim.cmd("stopinsert")
+			jump_to_desc()
+		end)
+		set_keymap(buf, "i", "<C-k>", function()
+			vim.cmd("stopinsert")
+			jump_to_title()
+		end)
 		set_keymap(buf, { "n", "i" }, "<C-s>", function()
 			vim.cmd("stopinsert")
 			actions.submit()
@@ -231,8 +280,19 @@ function M.setup(state, actions)
 		set_keymap(buf, "n", "q", actions.confirm_close)
 		set_keymap(buf, "n", "<Tab>", jump_to_title)
 		set_keymap(buf, "n", "<S-Tab>", jump_to_title)
-		set_keymap(buf, "n", "gb", actions.pick_base)
-		set_keymap(buf, "n", "gd", actions.toggle_draft)
+		set_keymap(buf, "n", "<C-j>", jump_to_desc)
+		set_keymap(buf, "n", "<NL>", jump_to_desc)
+		set_keymap(buf, "n", "<C-k>", jump_to_title)
+		set_keymap(buf, "n", "gb", pick_base)
+		set_keymap(buf, "n", "gd", toggle_draft)
+		set_keymap(buf, "i", "<C-j>", function()
+			vim.cmd("stopinsert")
+			jump_to_desc()
+		end)
+		set_keymap(buf, "i", "<NL>", function()
+			vim.cmd("stopinsert")
+			jump_to_desc()
+		end)
 		set_keymap(buf, { "n", "i" }, "<C-k>", function()
 			vim.cmd("stopinsert")
 			jump_to_title()
