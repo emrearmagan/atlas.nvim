@@ -1,9 +1,3 @@
-if _G.vim == nil then
-	_G.vim = {}
-end
-
-vim.env = vim.env or {}
-
 local config = require("atlas.config")
 local keymaps = require("atlas.core.keymaps")
 

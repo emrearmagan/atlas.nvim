@@ -51,15 +51,12 @@
 ---@field open_actions fun(pr: PullRequest|nil, source: "main"|"panel"|nil, on_done: fun(result: PullsActionResult|nil))|nil
 ---@field search fun()|nil
 ---
---- Notifications (optional – providers without notification support omit these):
 ---@field fetch_notifications (fun(opts: { force_load: boolean|nil }|nil, on_done: fun(notifications: AtlasNotification[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field mark_notification_read (fun(id: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field mark_notification_done (fun(id: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
 ---
---- PR creation (optional - providers without create support omit it):
+--- Features:
 ---@field create_pr (fun(opts: PullsCreatePROpts, on_done: fun(result: PullsCreatePRResult|nil, err: string|nil)): { cancel: fun() }|nil)|nil
----
---- Issue creation (optional - providers without issue tracker omit it).
 ---@field create_issue (fun(opts: PullsCreateIssueOpts, on_done: fun(result: PullsCreateIssueResult|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 
 ---@class PullsCreateIssueOpts

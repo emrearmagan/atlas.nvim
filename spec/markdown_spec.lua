@@ -1,23 +1,3 @@
-if _G.vim == nil then
-	_G.vim = {
-		split = function(s, sep, opts)
-			local plain = opts and opts.plain
-			local result = {}
-			local from = 1
-			while true do
-				local start, finish = s:find(sep, from, plain)
-				if not start then
-					table.insert(result, s:sub(from))
-					break
-				end
-				table.insert(result, s:sub(from, start - 1))
-				from = finish + 1
-			end
-			return result
-		end,
-	}
-end
-
 local md = require("atlas.issues.providers.jira.converted.markdown")
 
 --- Helper: wraps content nodes in a full ADF doc

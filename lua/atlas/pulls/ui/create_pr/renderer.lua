@@ -16,19 +16,27 @@ function M.render_meta(state)
 	local head = tostring(state.fields.head or "")
 	local base = tostring(state.fields.base or "")
 	local draft = state.fields.draft == true
+	local commit_count = tonumber(state.fields.commit_count) or 0
 
 	local branch_value = string.format("%s → %s", head, base)
-	local chip_label = draft and " DRAFT " or " READY "
+	local status = draft and "DRAFT" or "READY"
 	local chip_hl = draft and pulls_helper.pr_state_hl("draft") or pulls_helper.pr_state_hl("open")
+	local commit_label = commit_count == 1 and "1 commit" or string.format("%d commits", commit_count)
 
 	local rows = {
 		{
 			k1 = "Repo:",
 			v1 = repo,
 			v1_hl = pulls_helper.repo_hl(repo),
-			k2 = "Branch:",
-			v2 = branch_value,
-			v2_hl = "AtlasTextMuted",
+			k2 = "Status:",
+			v2 = status,
+			v2_hl = chip_hl,
+		},
+		{
+			k1 = "Branch:",
+			v1 = branch_value,
+			k2 = "Commits:",
+			v2 = commit_label,
 		},
 	}
 
@@ -62,7 +70,7 @@ function M.render_meta(state)
 				}
 			end
 
-			if col.key == "v2" and row.v2 ~= "" then
+			if col.key == "v2" and row.v2 ~= "" and row.v2_hl then
 				return {
 					{ start_col = 0, end_col = #row.v2, hl_group = row.v2_hl },
 				}
@@ -71,9 +79,6 @@ function M.render_meta(state)
 			return nil
 		end,
 	})
-
-	local chip_line_idx = #lines
-	table.insert(lines, chip_label)
 
 	vim.api.nvim_set_option_value("modifiable", true, { buf = buf })
 	vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
@@ -87,11 +92,6 @@ function M.render_meta(state)
 			hl_group = span.hl_group,
 		})
 	end
-
-	pcall(vim.api.nvim_buf_set_extmark, buf, NS, chip_line_idx, 0, {
-		end_col = #chip_label,
-		hl_group = chip_hl,
-	})
 end
 
 return M
