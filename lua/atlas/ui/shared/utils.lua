@@ -63,8 +63,7 @@ function M.get_version()
 	return _cached_version
 end
 
----Convert UTC date components to a Unix epoch without relying on the
----system timezone (Howard Hinnant's days_from_civil algorithm).
+---Convert UTC date components to a Unix epoch without relying on the system timezone
 ---@param y integer @ year (e.g. 2026)
 ---@param m integer @ month 1-12
 ---@param d integer @ day 1-31

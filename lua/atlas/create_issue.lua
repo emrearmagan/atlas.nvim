@@ -1,4 +1,3 @@
---- for `:AtlasCreateIssue`.
 local M = {}
 
 local function notify(level, msg)
