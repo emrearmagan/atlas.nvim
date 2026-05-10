@@ -3,6 +3,7 @@ local M = {}
 
 local icons = require("atlas.ui.shared.icons")
 local utils = require("atlas.ui.shared.utils")
+local helper = require("atlas.issues.ui.main.helper")
 
 local overview_state = require("atlas.issues.ui.panel.issue.tabs.overview.state")
 local comments_state = require("atlas.issues.ui.panel.issue.tabs.comments.state")
@@ -15,7 +16,38 @@ local history_state = require("atlas.issues.ui.panel.issue.tabs.history.state")
 ---@param issue Issue
 ---@return IssuesPanelHeaderRow[]
 function M.header_rows(issue)
-	local rows = {}
+	local user_icon = icons.general("user")
+	local priority = tostring(issue.priority or "-")
+	local priority_icon = icons.issues_priority(priority)
+	local priority_text = priority_icon ~= "" and string.format("%s %s", priority_icon, priority) or priority
+	local assignee_name = type(issue.assignee) == "table" and tostring(issue.assignee.display_name or "") or ""
+	local reporter_name = type(issue.reporter) == "table" and tostring(issue.reporter.display_name or "") or ""
+
+	if assignee_name == "" then
+		assignee_name = "Unassigned"
+	end
+	if reporter_name == "" then
+		reporter_name = "Unknown"
+	end
+
+	local rows = {
+		{
+			k1 = "Status:",
+			v1 = tostring(issue.status or "Unknown"),
+			v1_hl = helper.status_hl(issue.status_id),
+			k2 = "Priority:",
+			v2 = priority_text,
+			v2_hl = helper.priority_hl(issue.priority),
+		},
+		{
+			k1 = "Assignee:",
+			v1 = assignee_name,
+			v1_hl = helper.person_hl(assignee_name),
+			k2 = "Reporter:",
+			v2 = string.format("%s %s", user_icon, reporter_name),
+			v2_hl = helper.person_hl(reporter_name),
+		},
+	}
 
 	local project_key = issue.project and issue.project.key or nil
 	if project_key then

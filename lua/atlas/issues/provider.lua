@@ -63,7 +63,6 @@
 --------------------------------------------------------------------------------
 
 ---@class IssuesProviderPanel
----@field render_header (fun(issue: Issue, width: integer): string[], table[])|nil
 ---@field header_rows (fun(issue: Issue): IssuesPanelHeaderRow[])|nil
 ---@field chips (fun(issue: Issue): IssuesPanelChip[])|nil
 ---@field tabs (fun(): IssuesPanelTab[])|nil
@@ -82,10 +81,10 @@
 ---@class IssuesPanelHeaderRow
 ---@field k1 string
 ---@field v1 string
----@field v1_hl string
+---@field v1_hl string|table[]|nil hl group name, or list of {start_col, end_col, hl_group} relative to the v1 cell
 ---@field k2 string
 ---@field v2 string
----@field v2_hl string
+---@field v2_hl string|table[]|nil hl group name, or list of {start_col, end_col, hl_group} relative to the v2 cell
 
 ---@class IssuesPanelChip
 ---@field label string
