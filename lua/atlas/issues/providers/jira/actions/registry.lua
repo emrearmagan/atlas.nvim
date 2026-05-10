@@ -20,6 +20,12 @@ local function has_issue_key(ctx)
 	return key ~= ""
 end
 
+---@return string
+local function current_jql()
+	local view = issues_state.active_view or issues_state.current_view or {}
+	return tostring(view.jql or "")
+end
+
 ---@type table[]
 local ACTIONS = {
 	{
@@ -854,8 +860,20 @@ local ACTIONS = {
 			return true, nil
 		end,
 		run = function(_, done)
-			require("atlas.issues.providers.jira.completion.search").open_cmdline()
-			done({ changed_issue_key = nil, message = "Type query and press Enter" }, nil)
+			vim.ui.input({ prompt = "Jira search: ", default = current_jql() }, function(input)
+				local jql = input ~= nil and vim.trim(tostring(input)) or ""
+				if jql == "" then
+					done({ changed_issue_key = nil, message = "Cancelled" }, nil)
+					return
+				end
+
+				local search_view = {
+					name = "Search (JQL)",
+					jql = jql,
+				}
+				require("atlas.issues.ui.main.controller").switch_view(search_view)
+				done({ changed_issue_key = nil, message = "Searching..." }, nil)
+			end)
 		end,
 	},
 	{

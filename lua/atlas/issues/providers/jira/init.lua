@@ -240,7 +240,7 @@ end
 ---@param on_done fun(result: table|nil, err: string|nil)|nil
 function M.search(on_done)
 	local jira_actions = require("atlas.issues.providers.jira.actions")
-	jira_actions.run("search_query_issue", { issue = nil, source = "main" }, function(result, err)
+	jira_actions.run("search_issues", { issue = nil, source = "main" }, function(result, err)
 		if on_done ~= nil then
 			on_done(result, err)
 		end
