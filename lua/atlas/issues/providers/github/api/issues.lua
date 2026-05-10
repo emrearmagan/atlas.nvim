@@ -4,24 +4,71 @@ local cli = require("atlas.issues.providers.github.api.cli")
 local normalizer = require("atlas.issues.providers.github.api.normalizer")
 local logger = require("atlas.core.logger")
 
-local DETAIL_JSON_FIELDS =
-	"number,title,state,author,assignees,labels,createdAt,updatedAt,closedAt,url,body,comments,milestone,reactionGroups"
-
 local SEARCH_GQL = [[
 query($search: String!, $limit: Int!) {
   search(query: $search, type: ISSUE, first: $limit) {
     nodes {
       ... on Issue {
-        number title state
-        createdAt updatedAt closedAt url body
-        repository { nameWithOwner }
-        author { login ... on User { name } }
-        assignees(first: 10) { nodes { login name } }
-        labels(first: 20) { nodes { name color } }
-        comments { totalCount }
+        ...IssueFields
+        parent { ...IssueFields }
+        subIssues(first: 20) {
+          nodes {
+            ...IssueFields
+            parent { ...IssueFields }
+          }
+        }
       }
     }
   }
+}
+
+fragment IssueFields on Issue {
+  number title state
+  createdAt updatedAt closedAt url body
+  repository { nameWithOwner }
+  author { login ... on User { name } }
+  assignees(first: 10) { nodes { login name } }
+  labels(first: 20) { nodes { name color } }
+  comments { totalCount }
+}
+]]
+
+local DETAIL_GQL = [[
+query($owner: String!, $repo: String!, $number: Int!) {
+  repository(owner: $owner, name: $repo) {
+    issue(number: $number) {
+      ...IssueFields
+      milestone { number title state description }
+      reactionGroups { content reactors { totalCount } }
+      parent {
+        ...IssueFields
+        milestone { number title state description }
+        reactionGroups { content reactors { totalCount } }
+      }
+      subIssues(first: 20) {
+        nodes {
+          ...IssueFields
+          milestone { number title state description }
+          reactionGroups { content reactors { totalCount } }
+          parent {
+            ...IssueFields
+            milestone { number title state description }
+            reactionGroups { content reactors { totalCount } }
+          }
+        }
+      }
+    }
+  }
+}
+
+fragment IssueFields on Issue {
+  number title state
+  createdAt updatedAt closedAt url body
+  repository { nameWithOwner }
+  author { login ... on User { name } }
+  assignees(first: 10) { nodes { login name } }
+  labels(first: 20) { nodes { name color } }
+  comments { totalCount }
 }
 ]]
 
@@ -133,21 +180,35 @@ function M.get_issue(key, on_done, opts)
 		end
 	end
 
+	local owner, repo = slug:match("^([^/]+)/(.+)$")
+	if owner == nil or repo == nil then
+		on_done(nil, "Invalid issue repository: " .. tostring(slug))
+		return nil
+	end
+
 	logger.loginfo("GitHub fetch issue", { slug = slug, number = number })
 	return cli.gh({
-		"issue",
-		"view",
-		tostring(number),
-		"--repo",
-		slug,
-		"--json",
-		DETAIL_JSON_FIELDS,
+		"api",
+		"graphql",
+		"-f",
+		"query=" .. vim.trim(DETAIL_GQL),
+		"-f",
+		"owner=" .. owner,
+		"-f",
+		"repo=" .. repo,
+		"-F",
+		"number=" .. tostring(number),
 	}, function(result, err)
 		if err or type(result) ~= "table" then
 			on_done(nil, err or "Empty response")
 			return
 		end
-		local issue = normalizer.normalize_issue(result, slug)
+
+		local raw = type(result.data) == "table"
+			and type(result.data.repository) == "table"
+			and result.data.repository.issue
+			or nil
+		local issue = normalizer.normalize_issue(type(raw) == "table" and raw or {}, slug)
 		if issue then
 			cli.set_cache(cache_key, issue)
 		end

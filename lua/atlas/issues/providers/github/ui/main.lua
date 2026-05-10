@@ -18,6 +18,9 @@ local function task_progress(body)
 			end
 		end
 	end
+	if total == 0 then
+		return "-"
+	end
 	return string.format("%d/%d", completed, total)
 end
 
@@ -156,9 +159,12 @@ local function cell_hl(row, col, ctx)
 	end
 
 	if col.key == "tasks" then
-		local completed, total = tostring(row.tasks or ""):match("^(%d+)/(%d+)$")
-		local hl = tonumber(total) == 0 and "AtlasTextMuted"
-			or (tonumber(completed) == tonumber(total) and "AtlasTextPositive" or "AtlasTextWarning")
+		local task_text = tostring(row.tasks or "")
+		local completed, total = task_text:match("^(%d+)/(%d+)$")
+		local hl = "AtlasTextMuted"
+		if completed and total then
+			hl = tonumber(completed) == tonumber(total) and "AtlasTextPositive" or "AtlasTextWarning"
+		end
 		return { { start_col = 0, end_col = #ctx.padded, hl_group = hl } }
 	end
 

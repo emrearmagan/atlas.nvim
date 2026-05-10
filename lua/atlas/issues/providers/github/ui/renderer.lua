@@ -43,7 +43,7 @@ function M.format_row(issue, is_child)
 	local key_label = slug ~= "" and string.format("%s#%d", slug, number) or string.format("#%d", number)
 	local s_icon = state_icon(issue.status_id)
 
-	local name = is_child and ("  " .. key_label .. "  " .. title) or (key_label .. "  " .. title)
+	local name = is_child and ("  " .. s_icon .. "  " .. key_label .. "  " .. title) or (key_label .. "  " .. title)
 
 	local assignee_name = type(issue.assignee) == "table" and issue.assignee.display_name or "Unassigned"
 	local reporter_name = type(issue.reporter) == "table" and issue.reporter.display_name or "Unknown"
@@ -81,6 +81,15 @@ function M.cell_hl(row, col, ctx)
 
 	if col.key == "name" then
 		local spans = {}
+		local is_child = (tonumber(row._tv2_depth) or 0) > 0
+		if is_child then
+			local s_icon = state_icon(issue.status_id)
+			local is, ie = ctx.text:find(s_icon, 1, true)
+			if is and ie then
+				table.insert(spans, { start_col = is - 1, end_col = ie, hl_group = state_hl(issue.status_id) })
+			end
+		end
+
 		local raw = type(issue._raw) == "table" and issue._raw or {}
 		local number = raw.number or 0
 		local slug = tostring(raw.slug or "")

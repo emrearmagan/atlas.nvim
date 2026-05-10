@@ -177,6 +177,7 @@ function M.normalize_issue(raw, fallback_slug)
 
 	local labels = connection_nodes(raw.labels)
 	local assignees = connection_nodes(raw.assignees)
+	local parent = M.normalize_issue(nilify(raw.parent), fallback_slug)
 	local milestone = nilify(raw.milestone)
 	local body = safe_str(raw.body) or ""
 	local created_at = safe_str(raw.createdAt) or safe_str(raw.created_at) or ""
@@ -205,7 +206,7 @@ function M.normalize_issue(raw, fallback_slug)
 		reporter = author,
 		story_points = nil,
 		duedate = nil,
-		parent = nil,
+		parent = parent,
 		url = url ~= "" and url or nil,
 		_raw = {
 			number = number,
@@ -242,7 +243,35 @@ end
 ---@param nodes table[]|nil
 ---@return Issue[]
 function M.normalize_graphql_search_results(nodes)
-	return M.normalize_issues(nodes, nil)
+	local out = {}
+	local seen = {}
+
+	local function insert_issue(issue)
+		local key = type(issue) == "table" and tostring(issue.key or "") or ""
+		if key == "" or seen[key] then
+			return
+		end
+		seen[key] = true
+		table.insert(out, issue)
+	end
+
+	for _, raw in ipairs(nodes or {}) do
+		local issue = M.normalize_issue(raw, nil)
+		if type(issue) == "table" then
+			insert_issue(issue.parent)
+			insert_issue(issue)
+
+			for _, child_raw in ipairs(connection_nodes(raw.subIssues)) do
+				local child = M.normalize_issue(child_raw, nil)
+				if type(child) == "table" and child.parent == nil then
+					child.parent = issue
+				end
+				insert_issue(child)
+			end
+		end
+	end
+
+	return out
 end
 
 ---@param key string
