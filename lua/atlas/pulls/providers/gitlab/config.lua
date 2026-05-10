@@ -25,6 +25,7 @@
 --   sort:     "asc" | "desc"
 --
 -- Anything not covered above can be passed via `extra_params = { key = "value", ... }`.
+-- TODO: It should work in theory, but i have not tested it yet...
 
 ---@class AtlasGitLabPullsViewConfig : AtlasPullsViewConfig
 ---@field scope "created_by_me"|"assigned_to_me"|"all"|nil

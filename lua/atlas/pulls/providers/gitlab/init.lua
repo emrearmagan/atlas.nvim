@@ -76,6 +76,31 @@ function M.open_actions(pr, source, on_done)
 	end)
 end
 
+---@param opts PullsCreatePROpts
+---@param on_done fun(result: PullsCreatePRResult|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.create_pr(opts, on_done)
+	local mr_api = require("atlas.pulls.providers.gitlab.api.mergerequests")
+	return mr_api.create_mr({
+		project_path = opts.repo_slug,
+		source_branch = opts.head,
+		target_branch = opts.base,
+		title = opts.title,
+		description = opts.body,
+		draft = opts.draft == true,
+	}, function(result, err)
+		if err or result == nil then
+			on_done(nil, err)
+			return
+		end
+		on_done({
+			id = result.iid,
+			url = result.url,
+			message = "Merge request created",
+		}, nil)
+	end)
+end
+
 ---@return AtlasGitLabPullsViewConfig[]
 function M.views()
 	local cfg = require("atlas.pulls.providers.gitlab.api.service").gitlab_config()

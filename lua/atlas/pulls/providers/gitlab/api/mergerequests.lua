@@ -307,6 +307,113 @@ function M.merge(pr, opts, on_done)
 	end)
 end
 
+---@class GitLabCreateMrOpts
+---@field project_path string
+---@field source_branch string
+---@field target_branch string
+---@field title string
+---@field description string|nil
+---@field draft boolean|nil
+---@field remove_source_branch boolean|nil
+---@field squash boolean|nil
+---@field assignee_ids integer[]|nil
+---@field reviewer_ids integer[]|nil
+---@field labels string[]|nil
+---@field milestone_id integer|nil
+---@field target_project_id integer|nil
+
+---@class GitLabCreateMrResult
+---@field iid integer|nil
+---@field id string|number|nil
+---@field url string|nil
+
+---@param opts GitLabCreateMrOpts
+---@param on_done fun(result: GitLabCreateMrResult|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.create_mr(opts, on_done)
+	if type(opts) ~= "table" then
+		on_done(nil, "Missing options")
+		return nil
+	end
+	local path = tostring(opts.project_path or "")
+	if path == "" then
+		on_done(nil, "Missing project_path")
+		return nil
+	end
+	local source = tostring(opts.source_branch or "")
+	if source == "" then
+		on_done(nil, "Missing source_branch")
+		return nil
+	end
+	local target = tostring(opts.target_branch or "")
+	if target == "" then
+		on_done(nil, "Missing target_branch")
+		return nil
+	end
+	local title = tostring(opts.title or "")
+	if vim.trim(title) == "" then
+		on_done(nil, "Title is required")
+		return nil
+	end
+
+	-- GitLab marks drafts via the "Draft: " title prefix.
+	if opts.draft == true and not (title:match("^%s*[Dd]raft:") or title:match("^%s*WIP:")) then
+		title = "Draft: " .. title
+	end
+
+	local payload = {
+		source_branch = source,
+		target_branch = target,
+		title = title,
+	}
+	if type(opts.description) == "string" and opts.description ~= "" then
+		payload.description = opts.description
+	end
+	if type(opts.assignee_ids) == "table" and #opts.assignee_ids > 0 then
+		payload.assignee_ids = opts.assignee_ids
+	end
+	if type(opts.reviewer_ids) == "table" and #opts.reviewer_ids > 0 then
+		payload.reviewer_ids = opts.reviewer_ids
+	end
+	if type(opts.labels) == "table" and #opts.labels > 0 then
+		payload.labels = table.concat(opts.labels, ",")
+	end
+	if type(opts.milestone_id) == "number" then
+		payload.milestone_id = opts.milestone_id
+	end
+	if opts.remove_source_branch ~= nil then
+		payload.remove_source_branch = opts.remove_source_branch == true
+	end
+	if opts.squash ~= nil then
+		payload.squash = opts.squash == true
+	end
+	if type(opts.target_project_id) == "number" then
+		payload.target_project_id = opts.target_project_id
+	end
+
+	local endpoint = string.format("/projects/%s/merge_requests", service.url_encode(path))
+	logger.loginfo("GitLab create MR", {
+		path = path,
+		source = source,
+		target = target,
+		draft = opts.draft == true,
+	})
+
+	return service.request("POST", endpoint, payload, function(result, err)
+		if err or type(result) ~= "table" then
+			on_done(nil, err or "Empty response")
+			return
+		end
+		local mr = normalizer.normalize_mr(result)
+		local iid = (mr and mr._raw and mr._raw.iid) or tonumber(result.iid)
+		on_done({
+			iid = iid,
+			id = iid,
+			url = (mr and mr.link and mr.link.html) or (type(result.web_url) == "string" and result.web_url or nil),
+		}, nil)
+	end)
+end
+
 ---@param pr PullRequest
 ---@param opts { force_refresh?: boolean }|nil
 ---@param on_done fun(reviewers: PullsReviewer[]|nil, err: string|nil)

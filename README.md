@@ -347,8 +347,7 @@ return {
                 key = "3",
                 scope = "all",
                 state = "opened",
-                -- Anything not covered by the explicit fields below can be
-                -- passed via `extra_params`.
+                -- Anything not covered by the explicit fields below can be passed via `extra_params`.
                 extra_params = { ["not[labels]"] = "wontfix" },
               },
             },
