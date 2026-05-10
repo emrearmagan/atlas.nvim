@@ -38,6 +38,7 @@
 ---@field create_issue (fun(opts: table, on_done: fun(result: table|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---
 --- Main UI Style
+---@field render (fun(issue_groups: table[], opts: { width: integer }): { lines: string[], spans: table[], line_map: table<integer, table> })|nil
 ---@field format_row fun(issue: Issue, is_child: boolean): table|nil
 ---@field cell_hl fun(row: table, col: table, ctx: { text: string, padded: string, width: integer }): table[]|nil|nil
 ---

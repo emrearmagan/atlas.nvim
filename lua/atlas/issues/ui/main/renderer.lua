@@ -96,11 +96,77 @@ local function should_show_indicator(issue_groups)
 	return false
 end
 
+local cell_hl
+
+---@param opts { width: integer }
+---@param issue_groups table[]
+---@return string[], table<integer, table>, table[]
+local function render_issue_table(opts, issue_groups)
+	local rows = issues_to_rows(issue_groups)
+	local show_tree_indicator = should_show_indicator(issue_groups)
+	if state.is_loading then
+		table.insert(rows, {
+			icon = "",
+			name = "",
+			assignee = "",
+			reporter = "",
+			status = "",
+		})
+		table.insert(rows, {
+			icon = state.reload_spinner_frame or "⠋",
+			name = "Loading...",
+			assignee = "",
+			reporter = "",
+			status = "",
+		})
+	end
+
+	return table_tree.render({
+		width = opts.width,
+		margin = 1,
+		columns = {
+			{ key = "icon", name = "", can_grow = false, align = "center" },
+			{ key = "name", name = "Issue" },
+			{
+				key = "assignee",
+				name = string.format("%s Assignee", icons.general("user")),
+				max_width = 22,
+				can_grow = false,
+			},
+			{
+				key = "reporter",
+				name = string.format("%s Reporter", icons.general("user")),
+				max_width = 22,
+				can_grow = false,
+			},
+			{ key = "status", name = " Status", can_grow = false },
+		},
+		rows = rows,
+		tree = {
+			column_key = "icon",
+			children_key = "children",
+			default_expanded = true,
+			indent = "",
+			show_indicator = show_tree_indicator,
+			leaf_prefix = "",
+			is_expanded = function(row)
+				local issue = type(row) == "table" and row._issue or nil
+				local issue_key = type(issue) == "table" and tostring(issue.key or "") or ""
+				if issue_key == "" then
+					return true
+				end
+				return (state.collapsed_issue_keys or {})[issue_key] ~= true
+			end,
+		},
+		cell_hl = cell_hl,
+	})
+end
+
 ---@param row table
 ---@param col table
 ---@param ctx { text: string, padded: string, width: integer }
 ---@return table[]|nil
-local function cell_hl(row, col, ctx)
+function cell_hl(row, col, ctx)
 	local provider = state.provider
 	if provider and provider.cell_hl then
 		return provider.cell_hl(row, col, ctx)
@@ -256,67 +322,19 @@ function M.render(opts)
 		})
 	else
 		local issue_groups = state.issue_tree or {}
-		local rows = issues_to_rows(issue_groups)
-		local show_tree_indicator = should_show_indicator(issue_groups)
-		if state.is_loading then
-			table.insert(rows, {
-				icon = "",
-				name = "",
-				assignee = "",
-				reporter = "",
-				status = "",
-			})
-			table.insert(rows, {
-				icon = state.reload_spinner_frame or "⠋",
-				name = "Loading...",
-				assignee = "",
-				reporter = "",
-				status = "",
-			})
-		end
 
-		if state.is_loading ~= true and #rows == 0 then
+		if state.is_loading ~= true and #issue_groups == 0 then
 			table.insert(lines, "No issues found.")
 		else
-			local tbl_lines, tbl_map, tbl_spans = table_tree.render({
-				width = opts.width,
-				margin = 1,
-				columns = {
-					{ key = "icon", name = "", can_grow = false, align = "center" },
-					{ key = "name", name = "󰌷 Issue" },
-					{
-						key = "assignee",
-						name = string.format("%s Assignee", icons.general("user")),
-						max_width = 22,
-						can_grow = false,
-					},
-					{
-						key = "reporter",
-						name = string.format("%s Reporter", icons.general("user")),
-						max_width = 22,
-						can_grow = false,
-					},
-					{ key = "status", name = " Status", can_grow = false },
-				},
-				rows = rows,
-				tree = {
-					column_key = "icon",
-					children_key = "children",
-					default_expanded = true,
-					indent = "",
-					show_indicator = show_tree_indicator,
-					leaf_prefix = "",
-					is_expanded = function(row)
-						local issue = type(row) == "table" and row._issue or nil
-						local issue_key = type(issue) == "table" and tostring(issue.key or "") or ""
-						if issue_key == "" then
-							return true
-						end
-						return (state.collapsed_issue_keys or {})[issue_key] ~= true
-					end,
-				},
-				cell_hl = cell_hl,
-			})
+			local tbl_lines, tbl_spans, tbl_map
+			if provider and provider.render then
+				local result = provider.render(issue_groups, { width = opts.width })
+				tbl_lines = result.lines or {}
+				tbl_spans = result.spans or {}
+				tbl_map = result.line_map or {}
+			else
+				tbl_lines, tbl_map, tbl_spans = render_issue_table(opts, issue_groups)
+			end
 
 			local table_base = #lines
 			utils.append_block(lines, spans, { lines = tbl_lines, highlights = tbl_spans })

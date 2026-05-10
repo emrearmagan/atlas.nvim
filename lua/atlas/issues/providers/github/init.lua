@@ -17,6 +17,13 @@ function M.on_refresh()
 	-- nothing to clear globally; per-key caches expire naturally
 end
 
+---@param issue_groups table[]
+---@param opts { width: integer }
+---@return { lines: string[], spans: table[], line_map: table<integer, table> }
+function M.render(issue_groups, opts)
+	return require("atlas.issues.providers.github.ui.main").render(issue_groups, opts)
+end
+
 ---@param issue Issue
 ---@param is_child boolean
 function M.format_row(issue, is_child)
