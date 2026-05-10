@@ -1,0 +1,45 @@
+-- Example:
+--   require("atlas").setup({
+--     pulls = {
+--       providers = {
+--         gitlab = {
+--           base_url = "https://gitlab.com",
+--           token    = vim.env.GITLAB_TOKEN,
+--           cache_ttl = 300,
+--           views = {
+--             { name = "Assigned",  key = "1", scope = "assigned_to_me", state = "opened" },
+--             { name = "Created",   key = "2", scope = "created_by_me",  state = "opened" },
+--             { name = "Reviewing", key = "3", scope = "all",            state = "opened",
+--               extra_params = { reviewer_id = "Me" } },
+--           },
+--         },
+--       },
+--     },
+--   })
+--
+-- View options map directly to GitLab API query params on `GET /merge_requests`:
+--   scope:    "created_by_me" | "assigned_to_me" | "all"
+--   state:    "opened" | "closed" | "merged" | "all"
+--   labels, milestone, assignee_username, author_username, search
+--   order_by: "created_at" | "updated_at" | "title" | ...
+--   sort:     "asc" | "desc"
+--
+-- Anything not covered above can be passed via `extra_params = { key = "value", ... }`.
+
+---@class AtlasGitLabPullsViewConfig : AtlasPullsViewConfig
+---@field scope "created_by_me"|"assigned_to_me"|"all"|nil
+---@field state "opened"|"closed"|"merged"|"all"|nil
+---@field labels string|nil
+---@field milestone string|nil
+---@field assignee_username string|nil
+---@field author_username string|nil
+---@field search string|nil
+---@field sort "asc"|"desc"|nil
+---@field order_by "created_at"|"updated_at"|"title"|nil
+---@field extra_params table<string, string>|nil
+
+---@class AtlasGitLabPullsConfig
+---@field base_url string
+---@field token string
+---@field cache_ttl number|nil
+---@field views AtlasGitLabPullsViewConfig[]|nil

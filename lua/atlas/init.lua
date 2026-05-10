@@ -31,6 +31,8 @@ local function resolve_pulls_provider(provider_id)
 			id = "bitbucket"
 		elseif providers.github then
 			id = "github"
+		elseif providers.gitlab then
+			id = "gitlab"
 		else
 			id = "mock"
 		end
@@ -42,6 +44,8 @@ local function resolve_pulls_provider(provider_id)
 		return require("atlas.pulls.providers.bitbucket")
 	elseif id == "github" then
 		return require("atlas.pulls.providers.github")
+	elseif id == "gitlab" then
+		return require("atlas.pulls.providers.gitlab")
 	end
 
 	vim.notify(string.format("[Atlas] Unknown pulls provider: %s", id), vim.log.levels.ERROR)
@@ -59,6 +63,8 @@ local function resolve_issues_provider(provider_id)
 			id = "jira"
 		elseif providers.github then
 			id = "github"
+		elseif providers.gitlab then
+			id = "gitlab"
 		else
 			id = "mock"
 		end
@@ -70,6 +76,8 @@ local function resolve_issues_provider(provider_id)
 		return require("atlas.issues.providers.jira")
 	elseif id == "github" then
 		return require("atlas.issues.providers.github")
+	elseif id == "gitlab" then
+		return require("atlas.issues.providers.gitlab")
 	end
 
 	vim.notify(string.format("[Atlas] Unknown issues provider: %s", id), vim.log.levels.ERROR)
