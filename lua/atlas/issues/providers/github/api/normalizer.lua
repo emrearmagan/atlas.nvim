@@ -46,11 +46,12 @@ function M.normalize_user(raw_user)
 	if type(raw_user) ~= "table" then
 		return nil
 	end
-	local login = tostring(raw_user.login or "")
+	local login = safe_str(raw_user.login) or ""
 	if login == "" then
 		return nil
 	end
-	local display_name = tostring(raw_user.name or login)
+	local name = safe_str(raw_user.name) or ""
+	local display_name = name ~= "" and name or login
 	return {
 		account_id = login,
 		display_name = display_name,
