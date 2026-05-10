@@ -30,6 +30,44 @@ local function key_label(action_id, fallback)
 	return fallback
 end
 
+---@param view IssuesViewConfig|nil
+---@return string
+local function search_text(view)
+	if type(view) ~= "table" then
+		return ""
+	end
+
+	local provider_id = state.provider and state.provider.id or ""
+	if provider_id == "github" then
+		local search = tostring(view.search or "")
+		if search ~= "" and not search:lower():find("is:issue", 1, true) then
+			search = search .. " is:issue"
+		end
+		return search
+	end
+
+	local jql = tostring(view.jql or "")
+	if jql ~= "" then
+		return jql
+	end
+
+	return tostring(view.search or "")
+end
+
+---@param lines string[]
+---@param spans table[]
+---@param text string
+local function append_search_text(lines, spans, text)
+	if text == "" then
+		return
+	end
+
+	local line = string.format(" %s %s", icons.general("search"), text)
+	table.insert(lines, line)
+	table.insert(spans, { line = #lines - 1, start_col = 0, end_col = #line, hl_group = "AtlasTextMuted" })
+	table.insert(lines, "")
+end
+
 ---@param issue Issue
 ---@param is_child boolean|nil
 ---@return table
@@ -322,6 +360,7 @@ function M.render(opts)
 		})
 	else
 		local issue_groups = state.issue_tree or {}
+		append_search_text(lines, spans, search_text(active))
 
 		if state.is_loading ~= true and #issue_groups == 0 then
 			table.insert(lines, "No issues found.")

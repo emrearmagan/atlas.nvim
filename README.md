@@ -255,6 +255,49 @@ Examples:
 :AtlasJqlSearch summary ~ "login bug"
 ```
 
+### GitHub Issues
+
+<details>
+<summary><strong>Configuration</strong></summary>
+
+```lua
+return {
+  "emrearmagan/atlas.nvim",
+  config = function()
+    require("atlas").setup({
+      issues = {
+        providers = {
+          github = {
+            cache_ttl = 300,
+
+            ---@type AtlasGitHubIssuesViewConfig[]
+            views = {
+              {
+                name = "Assigned",
+                key = "1",
+                search = "assignee:@me is:open",
+              },
+              {
+                name = "Created",
+                key = "2",
+                search = "author:@me is:open",
+              },
+              {
+                name = "Mentions",
+                key = "3",
+                search = "mentions:@me is:open",
+              },
+            },
+          },
+        },
+      },
+    })
+  end,
+}
+```
+
+</details>
+
 ## Pulls
 
 - [x] Multiple views
