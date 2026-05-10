@@ -1,3 +1,5 @@
+--- Note: Complety AI generated. But its a pretty simple picker that just works. Dont feel like it needs refactoring (yet..)
+---
 ---@class AtlasMultiSelectOpts
 ---@field items table[] candidate items
 ---@field selected table[] current selection (returned in `on_done`)
@@ -37,8 +39,6 @@ local function without(list, k, key_fn)
 	return kept
 end
 
----Open a toggle-based multi-select picker.
----Re-prompts after each toggle so the user can pick multiple items in one session.
 ---@param opts AtlasMultiSelectOpts
 function M.open(opts)
 	if type(opts) ~= "table" then
