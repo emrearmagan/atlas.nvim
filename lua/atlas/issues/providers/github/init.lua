@@ -161,6 +161,13 @@ function M.search(on_done)
 	end)
 end
 
+---@param opts GitHubCreateIssueOpts
+---@param on_done fun(result: GitHubCreateIssueResult|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.create_issue(opts, on_done)
+	return require("atlas.issues.providers.github.api.issues").create_issue(opts, on_done)
+end
+
 ---@return AtlasGitHubIssuesViewConfig[]
 function M.views()
 	local cli = require("atlas.issues.providers.github.api.cli")

@@ -9,45 +9,37 @@ local function notify_error(msg)
 end
 
 ---@class AtlasCreateIssueChoice
----@field id "github"|"bitbucket"|"jira"
+---@field id "github"|"jira"
 ---@field label string
----@field kind "pulls"|"jira"
 
 ---@return AtlasCreateIssueChoice[]
 local function build_choices()
 	local config = require("atlas.config").options or {}
 	local choices = {}
 
-	local pulls_providers = (config.pulls and config.pulls.providers) or {}
-	if pulls_providers.github then
-		local gh = require("atlas.pulls.providers.github")
+	local issues_providers = (config.issues and config.issues.providers) or {}
+	if issues_providers.github then
+		local gh = require("atlas.issues.providers.github")
 		if type(gh.create_issue) == "function" then
-			table.insert(choices, { id = "github", label = "GitHub", kind = "pulls" })
-		end
-	end
-	if pulls_providers.bitbucket then
-		local bb = require("atlas.pulls.providers.bitbucket")
-		if type(bb.create_issue) == "function" then
-			table.insert(choices, { id = "bitbucket", label = "Bitbucket", kind = "pulls" })
+			table.insert(choices, { id = "github", label = "GitHub" })
 		end
 	end
 
-	local issues_providers = (config.issues and config.issues.providers) or {}
 	if issues_providers.jira then
-		table.insert(choices, { id = "jira", label = "Jira", kind = "jira" })
+		table.insert(choices, { id = "jira", label = "Jira" })
 	end
 
 	return choices
 end
 
----@param provider PullsProvider
 ---@param repo_slug string
-local function open_pulls_editor(provider, repo_slug)
+local function open_github_issue_editor(repo_slug)
 	local create_issue_ui = require("atlas.issues.create.github.issue")
+	local provider = require("atlas.issues.providers.github")
+	local issues_api = require("atlas.issues.providers.github.api.issues")
 
-	local pickers = {}
-	if provider.id == "github" then
-		local issues_api = require("atlas.pulls.providers.github.api.issues")
+	create_issue_ui.open({
+		repo_slug = repo_slug,
 		pickers = {
 			list_labels = function(cb)
 				issues_api.list_labels(repo_slug, cb)
@@ -58,12 +50,7 @@ local function open_pulls_editor(provider, repo_slug)
 			list_milestones = function(cb)
 				issues_api.list_milestones(repo_slug, cb)
 			end,
-		}
-	end
-
-	create_issue_ui.open({
-		repo_slug = repo_slug,
-		pickers = pickers,
+		},
 		on_submit = function(submit_opts, submit_done)
 			provider.create_issue({
 				repo_slug = submit_opts.repo_slug,
@@ -73,7 +60,7 @@ local function open_pulls_editor(provider, repo_slug)
 				assignees = submit_opts.assignees,
 				milestone = submit_opts.milestone,
 			}, function(result, err)
-				submit_done(result and { url = result.url, number = result.id } or nil, err)
+				submit_done(result and { url = result.url, number = result.number } or nil, err)
 			end)
 		end,
 	})
@@ -81,7 +68,7 @@ end
 
 ---@param choice AtlasCreateIssueChoice
 local function dispatch(choice)
-	if choice.kind == "jira" then
+	if choice.id == "jira" then
 		local actions = require("atlas.issues.providers.jira.actions")
 		actions.run("create_issue", {}, function(_, err)
 			if err then
@@ -121,19 +108,12 @@ local function dispatch(choice)
 		return
 	end
 
-	local provider
-	if choice.id == "github" then
-		provider = require("atlas.pulls.providers.github")
-	elseif choice.id == "bitbucket" then
-		provider = require("atlas.pulls.providers.bitbucket")
-	end
-
-	if type(provider) ~= "table" or type(provider.create_issue) ~= "function" then
-		notify_error("Provider unavailable or does not support issue creation: " .. choice.id)
+	if choice.id ~= "github" then
+		notify_error("Unsupported issue provider: " .. choice.id)
 		return
 	end
 
-	open_pulls_editor(provider, info.slug)
+	open_github_issue_editor(info.slug)
 end
 
 function M.start()

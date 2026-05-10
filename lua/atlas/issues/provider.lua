@@ -35,6 +35,7 @@
 ---@field run_action fun(action_id: string, ctx: table, on_done: fun(result: table|nil, err: string|nil))|nil
 ---@field open_actions fun(issue: Issue|nil, source: "main"|"panel"|nil, on_done: fun(result: table|nil, err: string|nil))|nil
 ---@field search fun(on_done: fun(result: table|nil, err: string|nil)|nil)|nil
+---@field create_issue (fun(opts: table, on_done: fun(result: table|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---
 --- Main UI Style
 ---@field format_row fun(issue: Issue, is_child: boolean): table|nil

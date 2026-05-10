@@ -480,7 +480,7 @@ local ACTIONS = {
 			end
 
 			local slug = repo_slug(ctx)
-			local issues_api = require("atlas.pulls.providers.github.api.issues")
+			local issues_api = require("atlas.issues.providers.github.api.issues")
 
 			footer.notify("loading", "Loading assignees...")
 			issues_api.list_assignees(slug, function(items, err)
@@ -554,7 +554,7 @@ local ACTIONS = {
 				return
 			end
 
-			local issues_api = require("atlas.pulls.providers.github.api.issues")
+			local issues_api = require("atlas.issues.providers.github.api.issues")
 			local create_issue_ui = require("atlas.issues.create.github.issue")
 
 			create_issue_ui.open({
