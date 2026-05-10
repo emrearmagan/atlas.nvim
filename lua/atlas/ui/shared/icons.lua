@@ -21,6 +21,7 @@ local ICONS = {
 		bell = "󰂚",
 		bell_unread = "󱅫",
 		dot = "●",
+		activity_more = "󰉺",
 	},
 
 	pulls = {
