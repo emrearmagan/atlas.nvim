@@ -15,7 +15,7 @@ function M.tabs()
 		{
 			key = "issues",
 			label = "Issues",
-			icon = icons.pulls("issue"),
+			icon = icons.issues("issue"),
 			mod = require("atlas.pulls.providers.github.ui.repo_panel.issues"),
 		},
 		{

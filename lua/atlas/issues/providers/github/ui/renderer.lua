@@ -10,7 +10,7 @@ local function state_icon(status_id)
 	if status_id == "closed" then
 		return icons.pulls_status("successful")
 	end
-	return icons.pulls("issue")
+	return icons.issues("issue")
 end
 
 ---@param status_id string|nil

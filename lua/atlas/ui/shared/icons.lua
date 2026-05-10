@@ -36,7 +36,6 @@ local ICONS = {
 		activity = "󱐋",
 		tag = "",
 		branch = "",
-		issue = "",
 
 		status = {
 			successful = "",
@@ -60,6 +59,7 @@ local ICONS = {
 	},
 
 	issues = {
+		issue = "",
 		type = {
 			epic = "",
 			story = "󰃀",

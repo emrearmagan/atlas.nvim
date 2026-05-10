@@ -20,7 +20,7 @@ local function state_icon_and_hl(status_id)
 	if status_id == "closed" then
 		return icons.pulls_status("successful"), "AtlasGHIssueClosed"
 	end
-	return icons.pulls("issue"), "AtlasGHIssueOpen"
+	return icons.issues("issue"), "AtlasGHIssueOpen"
 end
 
 ---@param status_id string|nil
