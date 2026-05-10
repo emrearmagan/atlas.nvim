@@ -81,6 +81,51 @@ local function assignees_display(issue)
 	return table.concat(parts), spans
 end
 
+---@param value any
+---@return number|nil
+local function connection_count(value)
+	if type(value) == "number" then
+		return value
+	end
+	if type(value) == "table" then
+		return tonumber(value.totalCount)
+	end
+	return nil
+end
+
+---@param milestone table|nil
+---@return string
+local function milestone_display(milestone)
+	if type(milestone) ~= "table" then
+		return ""
+	end
+
+	local title = tostring(milestone.title or "")
+	if title == "" then
+		return ""
+	end
+
+	local percent = tonumber(milestone.progressPercentage)
+	local open_count = connection_count(milestone.openIssues) or tonumber(milestone.open_issues)
+	local closed_count = connection_count(milestone.closedIssues) or tonumber(milestone.closed_issues)
+	local total = open_count and closed_count and (open_count + closed_count) or nil
+
+	if percent == nil and total and total > 0 then
+		percent = (closed_count / total) * 100
+	end
+
+	if percent ~= nil and total and total > 0 then
+		return string.format("%s %d%% (%d/%d)", title, math.floor(percent + 0.5), closed_count, total)
+	end
+	if percent ~= nil then
+		return string.format("%s %d%%", title, math.floor(percent + 0.5))
+	end
+	if total and total > 0 then
+		return string.format("%s %d/%d", title, closed_count, total)
+	end
+	return title
+end
+
 ---@param status_id string|nil
 ---@return string, string
 local function state_icon_and_hl(status_id)
@@ -121,6 +166,7 @@ function M.render_header(issue, width)
 
 	local reporter_name = type(issue.reporter) == "table" and issue.reporter.display_name or "Unknown"
 	local assignees_text, assignees_hl = assignees_display(issue)
+	local milestone_text = milestone_display(raw.milestone)
 	local user_icon = icons.general("user")
 
 	local rows = {
@@ -139,6 +185,15 @@ function M.render_header(issue, width)
 		table.insert(rows, {
 			k1 = "Opened:",
 			v1 = utils.relative_time_text(raw.created_at) or raw.created_at,
+			v1_hl = "AtlasTextMuted",
+			k2 = milestone_text ~= "" and "Milestone:" or "",
+			v2 = milestone_text,
+			v2_hl = milestone_text ~= "" and "AtlasTextMuted" or nil,
+		})
+	elseif milestone_text ~= "" then
+		table.insert(rows, {
+			k1 = "Milestone:",
+			v1 = milestone_text,
 			v1_hl = "AtlasTextMuted",
 			k2 = "",
 			v2 = "",
@@ -229,13 +284,6 @@ function M.chips(issue)
 		end
 	end
 
-	local milestone = type(raw.milestone) == "table" and raw.milestone or nil
-	if milestone and tostring(milestone.title or "") ~= "" then
-		table.insert(chips, {
-			label = string.format("%s %s", icons.pulls("activity"), milestone.title),
-			hl = "AtlasChipActive",
-		})
-	end
 	return chips
 end
 

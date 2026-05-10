@@ -29,6 +29,11 @@ fragment IssueFields on Issue {
   author { login ... on User { name } }
   assignees(first: 10) { nodes { login name } }
   labels(first: 20) { nodes { name color } }
+  milestone {
+    number title state description progressPercentage
+    openIssues: issues(states: OPEN) { totalCount }
+    closedIssues: issues(states: CLOSED) { totalCount }
+  }
   comments { totalCount }
 }
 ]]
@@ -38,21 +43,17 @@ query($owner: String!, $repo: String!, $number: Int!, $withRelationships: Boolea
   repository(owner: $owner, name: $repo) {
     issue(number: $number) {
       ...IssueFields
-      milestone { number title state description }
       reactionGroups { content reactors { totalCount } }
       parent @include(if: $withRelationships) {
         ...IssueFields
-        milestone { number title state description }
         reactionGroups { content reactors { totalCount } }
       }
       subIssues(first: 20) @include(if: $withRelationships) {
         nodes {
           ...IssueFields
-          milestone { number title state description }
           reactionGroups { content reactors { totalCount } }
           parent {
             ...IssueFields
-            milestone { number title state description }
             reactionGroups { content reactors { totalCount } }
           }
         }
@@ -68,6 +69,11 @@ fragment IssueFields on Issue {
   author { login ... on User { name } }
   assignees(first: 10) { nodes { login name } }
   labels(first: 20) { nodes { name color } }
+  milestone {
+    number title state description progressPercentage
+    openIssues: issues(states: OPEN) { totalCount }
+    closedIssues: issues(states: CLOSED) { totalCount }
+  }
   comments { totalCount }
 }
 ]]
@@ -86,6 +92,9 @@ fragment IssueFields on Issue {
 ---@field title string
 ---@field state string|nil
 ---@field description string|nil
+---@field progressPercentage number|nil
+---@field openIssues { totalCount: integer }|nil
+---@field closedIssues { totalCount: integer }|nil
 
 ---@class GitHubCreateIssueOpts
 ---@field repo_slug string
@@ -130,7 +139,7 @@ function M.search_issues(search, on_done, opts)
 	query = issue_search_query(query)
 
 	local with_relationships = relationships_enabled()
-	local cache_key = string.format("github_issues:search:%s:%d:relationships:%s", query, limit, tostring(with_relationships))
+	local cache_key = string.format("github_issues:search:v3:%s:%d:relationships:%s", query, limit, tostring(with_relationships))
 	if not opts.force_load then
 		local cached, ok = cli.get_cache(cache_key)
 		if ok then
@@ -181,7 +190,7 @@ function M.get_issue(key, on_done, opts)
 	end
 
 	local with_relationships = relationships_enabled()
-	local cache_key = string.format("github_issues:get:%s#%d:relationships:%s", slug, number, tostring(with_relationships))
+	local cache_key = string.format("github_issues:get:v2:%s#%d:relationships:%s", slug, number, tostring(with_relationships))
 	if not opts.force_load then
 		local cached, ok = cli.get_cache(cache_key)
 		if ok then
