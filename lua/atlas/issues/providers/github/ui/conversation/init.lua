@@ -406,11 +406,6 @@ function M.on_select(issue, refresh, opts)
 	state.reset()
 	state.issue = issue
 
-	local provider = get_provider()
-	if provider == nil then
-		return
-	end
-
 	local key = tostring(issue.key or "")
 
 	state.comments = "loading"
@@ -418,45 +413,22 @@ function M.on_select(issue, refresh, opts)
 
 	footer.notify("loading", string.format("Loading conversation for %s...", key))
 
-	local loading_done = false
-	local function finish_loading()
-		if loading_done or state.any_loading() then
-			return
-		end
-
-		loading_done = true
-		if type(state.comments) == "string" or type(state.timeline) == "string" then
-			footer.notify("error", string.format("Failed to load conversation for %s", key), 1600)
-			return
-		end
-
-		footer.notify("success", string.format("Conversation loaded for %s", key), 1200)
-	end
-
-	if type(provider.fetch_comments) == "function" then
-		track(provider.fetch_comments(key, { force_load = opts.force_refresh == true }, function(comments, err)
-			if err then
-				state.comments = err
-			else
-				state.comments = comments or {}
-			end
-			refresh()
-			finish_loading()
-		end))
-	else
-		state.comments = {}
-		finish_loading()
-	end
-
 	local timeline_api = require("atlas.issues.providers.github.api.timeline")
-	track(timeline_api.list(key, function(entries, err)
+	track(timeline_api.list_conversation(key, function(result, err)
 		if err then
+			state.comments = {}
 			state.timeline = err
 		else
-			state.timeline = entries or {}
+			result = type(result) == "table" and result or {}
+			state.comments = type(result.comments) == "table" and result.comments or {}
+			state.timeline = type(result.events) == "table" and result.events or {}
 		end
 		refresh()
-		finish_loading()
+		if err then
+			footer.notify("error", string.format("Failed to load conversation for %s", key), 1600)
+		else
+			footer.notify("success", string.format("Conversation loaded for %s", key), 1200)
+		end
 	end, { force_load = opts.force_refresh == true }))
 end
 

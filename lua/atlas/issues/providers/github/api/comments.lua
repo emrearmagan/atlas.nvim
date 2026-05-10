@@ -65,6 +65,7 @@ function M.add(key, body, on_done)
 				return
 			end
 			cli.delete_cache(string.format("github_issues:comments:%s#%d", slug, number))
+			cli.delete_cache(string.format("github_issues:conversation:%s#%d", slug, number))
 			on_done(normalizer.normalize_comment(result), nil)
 		end
 	)
@@ -98,6 +99,7 @@ function M.edit(key, comment_id, body, on_done)
 			local _, number = normalizer.parse_key(key)
 			if number ~= nil then
 				cli.delete_cache(string.format("github_issues:comments:%s#%d", slug, number))
+				cli.delete_cache(string.format("github_issues:conversation:%s#%d", slug, number))
 			end
 			on_done(normalizer.normalize_comment(result), nil)
 		end
@@ -126,6 +128,7 @@ function M.delete(key, comment_id, on_done)
 			end
 			if number ~= nil then
 				cli.delete_cache(string.format("github_issues:comments:%s#%d", slug, number))
+				cli.delete_cache(string.format("github_issues:conversation:%s#%d", slug, number))
 			end
 			on_done(true, nil)
 		end

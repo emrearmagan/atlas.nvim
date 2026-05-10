@@ -46,7 +46,11 @@ end
 ---@return string additional, string|nil content
 local function activity_text(entry)
 	local kind = tostring(entry.event or "")
-	if kind == "labeled" then
+	if kind == "commented" then
+		return "commented", nil
+	elseif kind == "created" then
+		return "created issue", nil
+	elseif kind == "labeled" then
 		return "added label", tostring(entry.label_name or "")
 	elseif kind == "unlabeled" then
 		return "removed label", tostring(entry.label_name or "")
@@ -97,6 +101,8 @@ local function label_hl(hex)
 end
 
 local EVENT_ICON = {
+	commented = icons.general("comment"),
+	created = icons.general("created"),
 	labeled = icons.pulls("activity"),
 	unlabeled = icons.pulls("activity"),
 	assigned = icons.general("user"),
@@ -204,6 +210,9 @@ function M.on_select(issue, refresh, opts)
 			footer.notify("error", string.format("Failed to load activity for %s", key), 1600)
 		else
 			state.activity = entries or {}
+			table.sort(state.activity, function(a, b)
+				return tostring(a.date or "") > tostring(b.date or "")
+			end)
 			footer.notify("success", string.format("Activity loaded for %s", key), 1200)
 		end
 		refresh()

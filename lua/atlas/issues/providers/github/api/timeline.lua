@@ -18,6 +18,12 @@ local logger = require("atlas.core.logger")
 ---@field source_title string|nil
 ---@field commit_id string|nil
 ---@field commit_url string|nil
+---@field comment_body string|nil
+---@field comment_url string|nil
+
+---@class GHIssueConversationTimeline
+---@field comments IssueComment[]
+---@field events GHIssueTimelineEntry[]
 
 ---@param value any
 ---@return any
@@ -46,7 +52,7 @@ local function normalize_event(raw)
 		return nil
 	end
 	local event = safe_str(raw.event) or ""
-	if event == "" or event == "commented" then
+	if event == "" then
 		return nil
 	end
 
@@ -60,7 +66,10 @@ local function normalize_event(raw)
 		date = date,
 	}
 
-	if event == "labeled" or event == "unlabeled" then
+	if event == "commented" then
+		entry.comment_body = safe_str(raw.body) or ""
+		entry.comment_url = safe_str(raw.html_url) or ""
+	elseif event == "labeled" or event == "unlabeled" then
 		local label = nilify(raw.label)
 		if type(label) == "table" then
 			entry.label_name = safe_str(label.name) or ""
@@ -96,6 +105,19 @@ local function normalize_event(raw)
 	end
 
 	return entry
+end
+
+---@param raw table
+---@return IssueComment|nil
+local function normalize_timeline_comment(raw)
+	local comment = {}
+	for key, value in pairs(raw) do
+		comment[key] = value
+	end
+	if nilify(comment.user) == nil then
+		comment.user = nilify(raw.actor)
+	end
+	return normalizer.normalize_comment(comment)
 end
 
 ---@param key string
@@ -136,6 +158,59 @@ function M.list(key, on_done, opts)
 			end
 			cli.set_cache(cache_key, entries)
 			on_done(entries, nil)
+		end
+	)
+end
+
+---@param key string
+---@param on_done fun(result: GHIssueConversationTimeline|nil, err: string|nil)
+---@param opts { force_load?: boolean }|nil
+---@return { cancel: fun() }|nil
+function M.list_conversation(key, on_done, opts)
+	opts = opts or {}
+	local slug, number = normalizer.parse_key(key)
+	if slug == "" or number == nil then
+		on_done(nil, "Invalid issue key")
+		return nil
+	end
+
+	local cache_key = string.format("github_issues:conversation:%s#%d", slug, number)
+	if not opts.force_load then
+		local cached, ok = cli.get_cache(cache_key)
+		if ok then
+			on_done(cached, nil)
+			return nil
+		end
+	end
+
+	logger.loginfo("GitHub fetch issue conversation timeline", { slug = slug, number = number })
+	return cli.gh(
+		{ "api", "--paginate", string.format("repos/%s/issues/%d/timeline", slug, number) },
+		function(result, err)
+			if err then
+				on_done(nil, err)
+				return
+			end
+
+			---@type GHIssueConversationTimeline
+			local conversation = { comments = {}, events = {} }
+			for _, raw in ipairs(type(result) == "table" and result or {}) do
+				local raw_event = type(raw) == "table" and safe_str(raw.event) or ""
+				if raw_event == "commented" then
+					local comment = normalize_timeline_comment(raw)
+					if comment then
+						table.insert(conversation.comments, comment)
+					end
+				else
+					local entry = normalize_event(raw)
+					if entry then
+						table.insert(conversation.events, entry)
+					end
+				end
+			end
+
+			cli.set_cache(cache_key, conversation)
+			on_done(conversation, nil)
 		end
 	)
 end
