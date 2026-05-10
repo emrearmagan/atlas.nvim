@@ -341,6 +341,79 @@ local ACTIONS = {
 		end,
 	},
 	{
+		id = "create_issue",
+		label = "Create Issue",
+		is_available = function()
+			return true, nil
+		end,
+		run = function(ctx, done)
+			ctx = ctx or {}
+
+			local function resolve_path()
+				if type(ctx.project_path) == "string" and ctx.project_path ~= "" then
+					return ctx.project_path
+				end
+				if has_issue(ctx) then
+					local p = issue_path(ctx.issue)
+					if p ~= "" then
+						return p
+					end
+				end
+				local ok_git, git = pcall(require, "atlas.core.git")
+				if ok_git then
+					local root = git.repo_root and git.repo_root(nil) or nil
+					if root then
+						local remote = git.remote_url and git.remote_url(root, "origin") or nil
+						local info = remote and git.parse_remote_url and git.parse_remote_url(remote) or nil
+						if info and info.provider == "gitlab" and info.slug and info.slug ~= "" then
+							return info.slug
+						end
+					end
+				end
+				return ""
+			end
+
+			local function open_editor(path)
+				local create_issue_ui = require("atlas.issues.create.gitlab.issue")
+				create_issue_ui.open({
+					project_path = path,
+					on_done = function(result, err)
+						if err then
+							done(nil, tostring(err))
+							return
+						end
+						if result and type(result.key) == "string" and result.key ~= "" then
+							require("atlas.issues.ui.main.controller").refresh_current_view()
+						end
+						done({
+							changed_issue_key = result and result.key or nil,
+							message = (result and result.url) or "Issue created",
+						}, nil)
+					end,
+				})
+			end
+
+			local resolved = resolve_path()
+			if resolved ~= "" then
+				open_editor(resolved)
+				return
+			end
+
+			vim.ui.input({ prompt = "Project (group/project): " }, function(input)
+				if input == nil then
+					done({ changed_issue_key = nil, message = "Cancelled" }, nil)
+					return
+				end
+				local path = vim.trim(tostring(input))
+				if path == "" then
+					done({ changed_issue_key = nil, message = "Cancelled" }, nil)
+					return
+				end
+				open_editor(path)
+			end)
+		end,
+	},
+	{
 		id = "browse_issue",
 		label = "Open Issue In Browser",
 		hidden = true,

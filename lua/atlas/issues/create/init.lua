@@ -9,7 +9,7 @@ local function notify_error(msg)
 end
 
 ---@class AtlasCreateIssueChoice
----@field id "github"|"jira"
+---@field id "github"|"jira"|"gitlab"
 ---@field label string
 
 ---@return AtlasCreateIssueChoice[]
@@ -22,6 +22,13 @@ local function build_choices()
 		local gh = require("atlas.issues.providers.github")
 		if type(gh.create_issue) == "function" then
 			table.insert(choices, { id = "github", label = "GitHub" })
+		end
+	end
+
+	if issues_providers.gitlab then
+		local gl = require("atlas.issues.providers.gitlab")
+		if type(gl.create_issue) == "function" then
+			table.insert(choices, { id = "gitlab", label = "GitLab" })
 		end
 	end
 
@@ -74,12 +81,17 @@ local function dispatch(choice)
 		return
 	end
 
-	if choice.id ~= "github" then
-		notify_error("Unsupported issue provider: " .. choice.id)
+	if choice.id == "github" then
+		require("atlas.issues.create.github.issue").open({ repo_slug = info.slug })
 		return
 	end
 
-	require("atlas.issues.create.github.issue").open({ repo_slug = info.slug })
+	if choice.id == "gitlab" then
+		require("atlas.issues.create.gitlab.issue").open({ project_path = info.slug })
+		return
+	end
+
+	notify_error("Unsupported issue provider: " .. choice.id)
 end
 
 function M.start()

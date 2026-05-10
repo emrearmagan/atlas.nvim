@@ -146,6 +146,13 @@ function M.search(on_done)
 	end)
 end
 
+---@param opts GitLabCreateIssueOpts
+---@param on_done fun(result: GitLabCreateIssueResult|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.create_issue(opts, on_done)
+	return require("atlas.issues.providers.gitlab.api.issues").create_issue(opts, on_done)
+end
+
 ---@return AtlasGitLabIssuesViewConfig[]
 function M.views()
 	local cfg = require("atlas.issues.providers.gitlab.api.service").gitlab_config()

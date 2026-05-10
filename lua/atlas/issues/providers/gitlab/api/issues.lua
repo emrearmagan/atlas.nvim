@@ -194,6 +194,82 @@ function M.set_assignee_ids(key, ids, on_done)
 	end)
 end
 
+---@class GitLabCreateIssueOpts
+---@field project_path string  -- "group/project"
+---@field title string
+---@field description string|nil
+---@field assignee_ids integer[]|nil
+---@field labels string[]|nil  -- list of label names - joined with comma for the API
+---@field milestone_id integer|nil
+---@field due_date string|nil  -- "YYYY-MM-DD"
+---@field confidential boolean|nil
+
+---@class GitLabCreateIssueResult
+---@field key string|nil  -- "group/project#iid"
+---@field iid integer|nil
+---@field url string|nil
+
+---@param opts GitLabCreateIssueOpts
+---@param on_done fun(result: GitLabCreateIssueResult|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.create_issue(opts, on_done)
+	if type(opts) ~= "table" then
+		on_done(nil, "Missing options")
+		return nil
+	end
+	local path = tostring(opts.project_path or "")
+	if path == "" then
+		on_done(nil, "Missing project_path")
+		return nil
+	end
+	local title = tostring(opts.title or "")
+	if vim.trim(title) == "" then
+		on_done(nil, "Title is required")
+		return nil
+	end
+
+	local payload = { title = title }
+	if type(opts.description) == "string" and opts.description ~= "" then
+		payload.description = opts.description
+	end
+	if type(opts.assignee_ids) == "table" and #opts.assignee_ids > 0 then
+		payload.assignee_ids = opts.assignee_ids
+	end
+	if type(opts.labels) == "table" and #opts.labels > 0 then
+		payload.labels = table.concat(opts.labels, ",")
+	end
+	if type(opts.milestone_id) == "number" then
+		payload.milestone_id = opts.milestone_id
+	end
+	if type(opts.due_date) == "string" and opts.due_date ~= "" then
+		payload.due_date = opts.due_date
+	end
+	if opts.confidential == true then
+		payload.confidential = true
+	end
+
+	local endpoint = string.format("/projects/%s/issues", service.url_encode(path))
+	logger.loginfo("GitLab create issue", { path = path, title = title })
+
+	return service.request("POST", endpoint, payload, function(result, err)
+		if err or type(result) ~= "table" then
+			on_done(nil, err or "Empty response")
+			return
+		end
+
+		local issue = normalizer.normalize_issue(result)
+		local iid = (issue and issue._raw and issue._raw.iid) or tonumber(result.iid)
+		local key = (issue and issue.key) or (iid and string.format("%s#%d", path, iid) or nil)
+		service.clear_memory_cache()
+
+		on_done({
+			key = key,
+			iid = iid,
+			url = (issue and issue.url) or (type(result.web_url) == "string" and result.web_url or nil),
+		}, nil)
+	end)
+end
+
 ---@param key string
 ---@param opts { force_load?: boolean }|nil
 ---@param on_done fun(description: string|nil, err: string|nil)
