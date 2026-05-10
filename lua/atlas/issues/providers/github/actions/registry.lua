@@ -30,6 +30,24 @@ local function issue_slug(issue)
 	return from_key
 end
 
+---@param ctx table
+---@return string|nil slug, string|nil err
+local function create_issue_slug(ctx)
+	local explicit = tostring(type(ctx) == "table" and ctx.repo_slug or "")
+	if explicit ~= "" then
+		return explicit, nil
+	end
+
+	if has_issue(ctx) then
+		local slug = issue_slug(ctx.issue)
+		if slug ~= "" then
+			return slug, nil
+		end
+	end
+
+	return nil, "Could not determine repository"
+end
+
 ---@return string
 local function current_search()
 	local state = require("atlas.issues.state")
@@ -317,6 +335,40 @@ local ACTIONS = {
 					end,
 				})
 			end)
+		end,
+	},
+	{
+		id = "create_issue",
+		label = "Create Issue",
+		is_available = function(ctx)
+			local slug, err = create_issue_slug(ctx or {})
+			return slug ~= nil and slug ~= "", err
+		end,
+			run = function(ctx, done)
+				local slug, slug_err = create_issue_slug(ctx or {})
+				if slug == nil or slug == "" then
+					done(nil, slug_err or "Could not determine repository")
+					return
+				end
+
+				local create_issue_ui = require("atlas.issues.create.github.issue")
+
+				create_issue_ui.open({
+					repo_slug = slug,
+					on_done = function(result, err)
+						if err then
+							done(nil, tostring(err))
+							return
+						end
+
+						local number = result and result.number
+						local key = number and string.format("%s#%s", slug, tostring(number)) or nil
+						done({
+							changed_issue_key = key,
+							message = result and result.url or "Issue created",
+						}, nil)
+					end,
+				})
 		end,
 	},
 	{

@@ -554,39 +554,17 @@ local ACTIONS = {
 				return
 			end
 
-			local issues_api = require("atlas.issues.providers.github.api.issues")
 			local create_issue_ui = require("atlas.issues.create.github.issue")
 
 			create_issue_ui.open({
 				repo_slug = slug,
-				pickers = {
-					list_labels = function(cb)
-						issues_api.list_labels(slug, cb)
-					end,
-					list_assignees = function(cb)
-						issues_api.list_assignees(slug, cb)
-					end,
-					list_milestones = function(cb)
-						issues_api.list_milestones(slug, cb)
-					end,
-				},
-				on_submit = function(submit_opts, submit_done)
-					issues_api.create_issue({
-						repo_slug = submit_opts.repo_slug,
-						title = submit_opts.title,
-						body = submit_opts.body,
-						labels = submit_opts.labels,
-						assignees = submit_opts.assignees,
-						milestone = submit_opts.milestone,
-					}, function(result, err)
-						submit_done(result and { url = result.url, number = result.number } or nil, err)
+				on_done = function(result, err)
+					if err then
+						done(nil, tostring(err))
+						return
+					end
 
-						if not err then
-							done({ changed_pr = false, message = result and result.url or "Issue created" }, nil)
-						else
-							done(nil, tostring(err))
-						end
-					end)
+					done({ changed_pr = false, message = result and result.url or "Issue created" }, nil)
 				end,
 			})
 		end,

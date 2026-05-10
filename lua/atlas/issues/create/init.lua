@@ -32,40 +32,6 @@ local function build_choices()
 	return choices
 end
 
----@param repo_slug string
-local function open_github_issue_editor(repo_slug)
-	local create_issue_ui = require("atlas.issues.create.github.issue")
-	local provider = require("atlas.issues.providers.github")
-	local issues_api = require("atlas.issues.providers.github.api.issues")
-
-	create_issue_ui.open({
-		repo_slug = repo_slug,
-		pickers = {
-			list_labels = function(cb)
-				issues_api.list_labels(repo_slug, cb)
-			end,
-			list_assignees = function(cb)
-				issues_api.list_assignees(repo_slug, cb)
-			end,
-			list_milestones = function(cb)
-				issues_api.list_milestones(repo_slug, cb)
-			end,
-		},
-		on_submit = function(submit_opts, submit_done)
-			provider.create_issue({
-				repo_slug = submit_opts.repo_slug,
-				title = submit_opts.title,
-				body = submit_opts.body,
-				labels = submit_opts.labels,
-				assignees = submit_opts.assignees,
-				milestone = submit_opts.milestone,
-			}, function(result, err)
-				submit_done(result and { url = result.url, number = result.number } or nil, err)
-			end)
-		end,
-	})
-end
-
 ---@param choice AtlasCreateIssueChoice
 local function dispatch(choice)
 	if choice.id == "jira" then
@@ -113,7 +79,7 @@ local function dispatch(choice)
 		return
 	end
 
-	open_github_issue_editor(info.slug)
+	require("atlas.issues.create.github.issue").open({ repo_slug = info.slug })
 end
 
 function M.start()
