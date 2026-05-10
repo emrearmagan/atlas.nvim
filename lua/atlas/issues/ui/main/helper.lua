@@ -80,7 +80,7 @@ function M.person_hl(name)
 end
 
 ---@param issues Issue[]
----@return table[]
+---@return IssuesGroup[]
 function M.build_issue_tree(issues)
 	local by_key = {}
 	for _, issue in ipairs(issues or {}) do

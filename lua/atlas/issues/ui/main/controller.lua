@@ -274,6 +274,7 @@ local function load_active_view(opts, on_done)
 			force_load = opts.force_load == true,
 			next_page_token = next_page_token,
 			max_results = remaining,
+			layout = target_view.layout or "plain",
 		}, function(page_issues, next_token, is_last, err)
 			active_issues_handle = nil
 
@@ -419,8 +420,9 @@ function M.refresh_issue(issue, on_done)
 		panel.on_select(current_issue, { force_refresh = true })
 	end
 
+	local active_view = type(state.active_view) == "table" and state.active_view or {}
 	local reload_handle = nil
-	reload_handle = provider.fetch_issue(issue_key, { force_load = true }, function(fetched_issue, err)
+	reload_handle = provider.fetch_issue(issue_key, { force_load = true, layout = active_view.layout or "plain" }, function(fetched_issue, err)
 		for i = #active_issue_reload_handles, 1, -1 do
 			if active_issue_reload_handles[i] == reload_handle then
 				table.remove(active_issue_reload_handles, i)

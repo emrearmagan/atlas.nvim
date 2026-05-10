@@ -117,15 +117,21 @@ local function issue_search_query(query)
 	return query
 end
 
+---@param opts { with_relationships?: boolean, layout?: "plain"|"compact" }|nil
 ---@return boolean
-local function relationships_enabled()
+local function relationships_enabled(opts)
+	opts = opts or {}
+	if opts.with_relationships == false or opts.layout == "compact" then
+		return false
+	end
+
 	local issues_cfg = require("atlas.config").options.issues or {}
 	return issues_cfg.with_relationships ~= false
 end
 
 ---@param search string
 ---@param on_done fun(issues: Issue[]|nil, err: string|nil)
----@param opts { force_load?: boolean, limit?: number }|nil
+---@param opts { force_load?: boolean, limit?: number, with_relationships?: boolean, layout?: "plain"|"compact" }|nil
 ---@return { cancel: fun() }|nil
 function M.search_issues(search, on_done, opts)
 	opts = opts or {}
@@ -138,7 +144,7 @@ function M.search_issues(search, on_done, opts)
 	end
 	query = issue_search_query(query)
 
-	local with_relationships = relationships_enabled()
+	local with_relationships = relationships_enabled(opts)
 	local cache_key = string.format("github_issues:search:v3:%s:%d:relationships:%s", query, limit, tostring(with_relationships))
 	if not opts.force_load then
 		local cached, ok = cli.get_cache(cache_key)
@@ -179,7 +185,7 @@ end
 
 ---@param key string
 ---@param on_done fun(issue: Issue|nil, err: string|nil)
----@param opts { force_load?: boolean }|nil
+---@param opts { force_load?: boolean, with_relationships?: boolean, layout?: "plain"|"compact" }|nil
 ---@return { cancel: fun() }|nil
 function M.get_issue(key, on_done, opts)
 	opts = opts or {}
@@ -189,7 +195,7 @@ function M.get_issue(key, on_done, opts)
 		return nil
 	end
 
-	local with_relationships = relationships_enabled()
+	local with_relationships = relationships_enabled(opts)
 	local cache_key = string.format("github_issues:get:v2:%s#%d:relationships:%s", slug, number, tostring(with_relationships))
 	if not opts.force_load then
 		local cached, ok = cli.get_cache(cache_key)

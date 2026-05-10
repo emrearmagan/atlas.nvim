@@ -21,7 +21,7 @@
 --------------------------------------------------------------------------------
 --  Issue
 --------------------------------------------------------------------------------
--- The shape covers the union of provider needs. Provider-specific extras live in `_raw`.
+-- TODO: This has been mainly started with Jira so its pretty much jira specific, it currently works with github as well but i should probably refactor this at some point.
 
 ---@class Issue
 ---@field key string
@@ -40,6 +40,14 @@
 ---@field parent Issue|nil
 ---@field url string|nil
 ---@field _raw any|nil
+
+--------------------------------------------------------------------------------
+-- Group
+--------------------------------------------------------------------------------
+
+---@class IssuesGroup
+---@field issue Issue
+---@field children Issue[]
 
 --------------------------------------------------------------------------------
 -- Type

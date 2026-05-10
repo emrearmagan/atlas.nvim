@@ -93,7 +93,7 @@ local function issue_to_row(issue, is_child)
 	return row_data
 end
 
----@param issue_groups table[]
+---@param issue_groups IssuesGroup[]
 ---@return table[]
 local function issues_to_rows(issue_groups)
 	local rows = {}
@@ -122,7 +122,7 @@ local function issues_to_rows(issue_groups)
 	return rows
 end
 
----@param issue_groups table[]
+---@param issue_groups IssuesGroup[]
 ---@return boolean
 local function should_show_indicator(issue_groups)
 	for _, group in ipairs(issue_groups or {}) do
@@ -137,7 +137,7 @@ end
 local cell_hl
 
 ---@param opts { width: integer }
----@param issue_groups table[]
+---@param issue_groups IssuesGroup[]
 ---@return string[], table<integer, table>, table[]
 local function render_issue_table(opts, issue_groups)
 	local rows = issues_to_rows(issue_groups)
@@ -200,11 +200,143 @@ local function render_issue_table(opts, issue_groups)
 	})
 end
 
+---@param issue Issue
+---@return string
+local function issue_project_label(issue)
+	local project = type(issue) == "table" and issue.project or nil
+	if type(project) == "table" then
+		local key = tostring(project.key or "")
+		if key ~= "" then
+			return key
+		end
+
+		local name = tostring(project.name or "")
+		if name ~= "" then
+			return name
+		end
+	end
+
+	local key = tostring(type(issue) == "table" and issue.key or "")
+	local prefix = key:match("^([A-Z][A-Z0-9]+)%-%d+$") or key:match("^([^%-]+)%-")
+	if prefix and prefix ~= "" then
+		return prefix
+	end
+
+	return "Issues"
+end
+
+---@return table[]
+local function compact_columns()
+	return {
+		{ key = "icon", name = "", can_grow = false, align = "center" },
+		{ key = "name", name = "Issue" },
+		{
+			key = "assignee",
+			name = string.format("%s Assignee", icons.general("user")),
+			max_width = 22,
+			can_grow = false,
+		},
+		{
+			key = "reporter",
+			name = string.format("%s Reporter", icons.general("user")),
+			max_width = 22,
+			can_grow = false,
+		},
+		{
+			key = "project",
+			name = string.format("%s Project", icons.pulls("repo")),
+			max_width = 24,
+			can_grow = false,
+		},
+		{ key = "status", name = " Status", can_grow = false },
+	}
+end
+
+---@return table
+local function compact_blank_row()
+	return { icon = "", name = "", assignee = "", reporter = "", project = "", status = "" }
+end
+
+---@param issue Issue
+---@return string
+local function issue_meta_text(issue)
+	local parts = {}
+	local type_name = type(issue.type) == "table" and tostring(issue.type.name or "") or ""
+	if type_name ~= "" then
+		table.insert(parts, type_name)
+	end
+	if type(issue.priority) == "string" and issue.priority ~= "" then
+		table.insert(parts, issue.priority)
+	end
+	local due = utils.format_date(issue.duedate)
+	if due ~= "" then
+		table.insert(parts, string.format("%s %s", icons.general("created"), due))
+	end
+	if type(issue.story_points) == "number" then
+		table.insert(parts, string.format("%s pts", tostring(issue.story_points)))
+	end
+	if #parts == 0 then
+		return tostring(issue.key or "")
+	end
+	return table.concat(parts, " • ")
+end
+
+---@param issues Issue[]|nil
+---@return table[]
+local function compact_rows(issues)
+	local rows = {}
+	for _, issue in ipairs(issues or {}) do
+		local row = issue_to_row(issue, false)
+		row.project = string.format("%s %s", icons.pulls("repo"), issue_project_label(issue))
+		row.children = nil
+		table.insert(rows, row)
+
+		local meta = compact_blank_row()
+		meta.kind = "meta"
+		meta.name = issue_meta_text(issue)
+		meta.separator = true
+		meta._item = { kind = "issue_meta", key = issue.key, _issue = issue }
+		table.insert(rows, meta)
+	end
+
+	return rows
+end
+
+---@param opts { width: integer }
+---@param issues Issue[]|nil
+---@return string[], table<integer, table>, table[]
+local function render_compact_table(opts, issues)
+	local rows = compact_rows(issues)
+	if state.is_loading then
+		table.insert(rows, compact_blank_row())
+		local loading = compact_blank_row()
+		loading.icon = state.reload_spinner_frame or "⠋"
+		loading.name = "Loading..."
+		table.insert(rows, loading)
+	end
+
+	return table_tree.render({
+		width = opts.width,
+		margin = 1,
+		columns = compact_columns(),
+		rows = rows,
+		cell_hl = cell_hl,
+	})
+end
+
 ---@param row table
 ---@param col table
 ---@param ctx { text: string, padded: string, width: integer }
 ---@return table[]|nil
 function cell_hl(row, col, ctx)
+	if row.kind == "meta" then
+		return { { start_col = 0, end_col = #ctx.padded, hl_group = "AtlasTextMuted" } }
+	end
+
+	if col.key == "project" then
+		return { { start_col = 0, end_col = #ctx.padded, hl_group = "AtlasTextMuted" } }
+	end
+
 	local provider = state.provider
 	if provider and provider.cell_hl then
 		return provider.cell_hl(row, col, ctx)
@@ -360,17 +492,28 @@ function M.render(opts)
 		})
 	else
 		local issue_groups = state.issue_tree or {}
+		local layout = type(active) == "table" and tostring(active.layout or "plain") or "plain"
+		if layout ~= "compact" then
+			layout = "plain"
+		end
+		local issues = state.issues or {}
 		append_search_text(lines, spans, search_text(active))
 
-		if state.is_loading ~= true and #issue_groups == 0 then
+		local has_rows = #issue_groups > 0
+		if layout == "compact" then
+			has_rows = #issues > 0
+		end
+		if state.is_loading ~= true and not has_rows then
 			table.insert(lines, "No issues found.")
 		else
 			local tbl_lines, tbl_spans, tbl_map
 			if provider and provider.render then
-				local result = provider.render(issue_groups, { width = opts.width })
+				local result = provider.render(issue_groups, layout, { width = opts.width })
 				tbl_lines = result.lines or {}
 				tbl_spans = result.spans or {}
 				tbl_map = result.line_map or {}
+			elseif layout == "compact" then
+				tbl_lines, tbl_map, tbl_spans = render_compact_table(opts, issues)
 			else
 				tbl_lines, tbl_map, tbl_spans = render_issue_table(opts, issue_groups)
 			end

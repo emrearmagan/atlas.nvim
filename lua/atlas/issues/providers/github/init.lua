@@ -17,11 +17,12 @@ function M.on_refresh()
 	-- nothing to clear globally; per-key caches expire naturally
 end
 
----@param issue_groups table[]
+---@param issue_groups IssuesGroup[]
+---@param layout "plain"|"compact"
 ---@param opts { width: integer }
----@return { lines: string[], spans: table[], line_map: table<integer, table> }
-function M.render(issue_groups, opts)
-	return require("atlas.issues.providers.github.ui.main").render(issue_groups, opts)
+---@return IssuesMainRenderResult
+function M.render(issue_groups, layout, opts)
+	return require("atlas.issues.providers.github.ui.main").render(issue_groups, layout, opts)
 end
 
 ---@param issue Issue
@@ -56,6 +57,7 @@ function M.fetch_issues(view, opts, on_done)
 
 	local issues_api = require("atlas.issues.providers.github.api.issues")
 	local limit = opts and opts.max_results or 50
+	local layout = tostring((view and view.layout) or (opts and opts.layout) or "plain")
 	return issues_api.search_issues(search, function(issues, err)
 		if err then
 			on_done({}, nil, true, err)
@@ -65,6 +67,7 @@ function M.fetch_issues(view, opts, on_done)
 	end, {
 		force_load = opts and opts.force_load == true or false,
 		limit = limit,
+		with_relationships = layout ~= "compact",
 	})
 end
 
@@ -73,7 +76,15 @@ end
 ---@param on_done fun(issue: Issue|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_issue(key, opts, on_done)
-	return require("atlas.issues.providers.github.api.issues").get_issue(key, on_done, opts)
+	opts = opts or {}
+	local api_opts = {}
+	for k, v in pairs(opts) do
+		api_opts[k] = v
+	end
+	if api_opts.layout == "compact" then
+		api_opts.with_relationships = false
+	end
+	return require("atlas.issues.providers.github.api.issues").get_issue(key, on_done, api_opts)
 end
 
 ---@param key string

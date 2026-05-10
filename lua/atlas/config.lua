@@ -19,6 +19,7 @@
 ---@class AtlasIssuesViewConfig
 ---@field name string
 ---@field key string|nil
+---@field layout "plain"|"compact"|nil
 
 ---@class AtlasPullsRepoConfig
 ---@field settings table<string, AtlasPullsRepoSettings>|nil

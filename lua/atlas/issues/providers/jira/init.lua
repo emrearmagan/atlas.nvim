@@ -40,8 +40,12 @@ function M.fetch_user(on_done)
 end
 
 ---@param config AtlasIssuesConfig
+---@param opts IssuesFetchOpts|nil
 ---@return boolean
-local function relationships_enabled(config)
+local function relationships_enabled(config, opts)
+	if opts and (opts.with_relationships == false or opts.layout == "compact") then
+		return false
+	end
 	return config.with_relationships ~= false
 end
 
@@ -50,7 +54,7 @@ end
 ---@param on_done fun(enriched: Issue[])
 local function enrich_with_parents(issues, opts, on_done)
 	local issues_cfg = require("atlas.config").options.issues or {}
-	if not relationships_enabled(issues_cfg) then
+	if not relationships_enabled(issues_cfg, opts) then
 		on_done(issues)
 		return
 	end
