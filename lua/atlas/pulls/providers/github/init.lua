@@ -636,7 +636,7 @@ end
 ---@param on_done fun(comment: PullsComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.reply_comment(pr, _parent_id, content, on_done)
-	-- GitHub issue comments have no threading — reply is just a new comment
+	-- GitHub issue comments have no threading - reply is just a new comment
 	return M.add_comment(pr, content, on_done)
 end
 

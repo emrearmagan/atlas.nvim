@@ -5,6 +5,7 @@ local icons = require("atlas.ui.shared.icons")
 local table_tree = require("atlas.ui.components.table_tree")
 local helper = require("atlas.issues.ui.main.helper")
 local conversation_state = require("atlas.issues.providers.github.ui.conversation.state")
+local activity_state = require("atlas.issues.providers.github.ui.activity.state")
 
 local function text_or(v, fallback)
 	if type(v) == "string" and v ~= "" then
@@ -184,7 +185,7 @@ end
 ---@param _issue Issue
 ---@return boolean
 function M.is_loading(_issue)
-	return conversation_state.any_loading()
+	return conversation_state.any_loading() or activity_state.any_loading()
 end
 
 ---@return IssuesPanelTab[]
@@ -195,6 +196,12 @@ function M.tabs()
 			label = "Conversation",
 			icon = icons.general("comment"),
 			mod = require("atlas.issues.providers.github.ui.conversation"),
+		},
+		{
+			key = "activity",
+			label = "Activity",
+			icon = icons.pulls("activity"),
+			mod = require("atlas.issues.providers.github.ui.activity"),
 		},
 	}
 end
