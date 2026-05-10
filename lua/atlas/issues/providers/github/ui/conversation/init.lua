@@ -357,6 +357,21 @@ function M.on_select(issue, refresh, opts)
 
 	footer.notify("loading", string.format("Loading conversation for %s...", key))
 
+	local loading_done = false
+	local function finish_loading()
+		if loading_done or state.any_loading() then
+			return
+		end
+
+		loading_done = true
+		if type(state.comments) == "string" or type(state.timeline) == "string" then
+			footer.notify("error", string.format("Failed to load conversation for %s", key), 1600)
+			return
+		end
+
+		footer.notify("success", string.format("Conversation loaded for %s", key), 1200)
+	end
+
 	if type(provider.fetch_comments) == "function" then
 		track(provider.fetch_comments(key, opts, function(comments, err)
 			if err then
@@ -365,9 +380,11 @@ function M.on_select(issue, refresh, opts)
 				state.comments = comments or {}
 			end
 			refresh()
+			finish_loading()
 		end))
 	else
 		state.comments = {}
+		finish_loading()
 	end
 
 	local timeline_api = require("atlas.issues.providers.github.api.timeline")
@@ -378,6 +395,7 @@ function M.on_select(issue, refresh, opts)
 			state.timeline = entries or {}
 		end
 		refresh()
+		finish_loading()
 	end, { force_load = opts.force_refresh == true }))
 end
 

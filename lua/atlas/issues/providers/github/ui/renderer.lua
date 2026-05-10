@@ -22,6 +22,15 @@ local function state_hl(status_id)
 	return "AtlasGHIssueOpen"
 end
 
+---@param status_id string|nil
+---@return string
+local function state_chip_hl(status_id)
+	if status_id == "closed" then
+		return "AtlasGHIssueClosedChip"
+	end
+	return "AtlasGHIssueOpenChip"
+end
+
 ---@param issue Issue
 ---@param is_child boolean
 ---@return table
@@ -88,7 +97,7 @@ function M.cell_hl(row, col, ctx)
 	end
 
 	if col.key == "status" then
-		return { { start_col = 0, end_col = #ctx.padded, hl_group = state_hl(issue.status_id) } }
+		return { { start_col = 0, end_col = #ctx.padded, hl_group = state_chip_hl(issue.status_id) } }
 	end
 
 	if col.key == "assignee" then

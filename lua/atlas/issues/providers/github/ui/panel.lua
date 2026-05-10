@@ -22,6 +22,15 @@ local function state_icon_and_hl(status_id)
 	return icons.pulls("issue"), "AtlasGHIssueOpen"
 end
 
+---@param status_id string|nil
+---@return string
+local function state_chip_hl(status_id)
+	if status_id == "closed" then
+		return "AtlasGHIssueClosedChip"
+	end
+	return "AtlasGHIssueOpenChip"
+end
+
 --------------------------------------------------------------------------------
 -- Header (full override)
 --------------------------------------------------------------------------------
@@ -36,6 +45,7 @@ function M.render_header(issue, width)
 	local title = text_or(issue.summary, "")
 	local status_label = text_or(issue.status, "Open")
 	local s_icon, s_hl = state_icon_and_hl(issue.status_id)
+	local status_hl = state_chip_hl(issue.status_id)
 	local key_label = slug ~= "" and string.format("%s#%d", slug, number) or string.format("#%d", number)
 
 	local first_line = string.format(" %s %s %s", s_icon, status_label, key_label)
@@ -105,7 +115,7 @@ function M.render_header(issue, width)
 		{ line = 0, line_hl_group = "AtlasPanelHeaderBg" },
 		{ line = 1, line_hl_group = "AtlasPanelHeaderBg" },
 		{ line = 0, start_col = 1, end_col = 1 + #s_icon, hl_group = s_hl },
-		{ line = 0, start_col = 1 + #s_icon + 1, end_col = 1 + #s_icon + 1 + #status_label, hl_group = s_hl },
+		{ line = 0, start_col = 1 + #s_icon + 1, end_col = 1 + #s_icon + 1 + #status_label, hl_group = status_hl },
 		{ line = 0, start_col = #first_line - #key_label, end_col = #first_line, hl_group = "AtlasGHIssueKey" },
 		{ line = 1, start_col = 1, end_col = #title_line, hl_group = "Normal" },
 	}
