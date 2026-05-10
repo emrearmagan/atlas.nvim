@@ -5,7 +5,7 @@
 
 # Atlas.nvim
 
-A Neovim plugin for managing GitHub/Bitbucket PRs and Jira issues without leaving your editor.
+A Neovim plugin for managing GitHub/Bitbucket/GitLab PRs and Jira/GitHub/GitLab issues without leaving your editor.
 
 > [!CAUTION]
 > **Still in early development, will have breaking changes!**
@@ -36,9 +36,12 @@ A Neovim plugin for managing GitHub/Bitbucket PRs and Jira issues without leavin
 - [Installation](#installation)
 - [Issues](#issues)
   - [Jira](#jira)
+  - [GitHub](#github-issues)
+  - [GitLab](#gitlab-issues)
 - [Pulls](#pulls)
   - [GitHub](#github)
   - [Bitbucket](#bitbucket)
+  - [GitLab](#gitlab)
 
 ## Installation
 
@@ -103,10 +106,13 @@ use {
 - Jira: Jira Cloud REST API v3 (`*.atlassian.net`)
 - Bitbucket: Bitbucket Cloud REST API 2.0 (`api.bitbucket.org`)
 - GitHub: GitHub CLI (`gh`) authenticated with `gh auth login`
+- GitLab: GitLab REST API v4 (`gitlab.com` or self-hosted), Personal Access Token with `api` scope
 
 > [!NOTE]
 > I have only tested this with my personal and work accounts. If you encounter any issues, please feel free to open an issue.
 > See: https://support.atlassian.com/atlassian-account/docs/manage-api-tokens-for-your-atlassian-account/
+>
+> I have also not tested with self-hosted GitLab instances, but in theory it should work. If it doesn't, feel free to open an issue. If it does work, please remove this note :)
 
 ## Commands
 
@@ -255,6 +261,102 @@ Examples:
 :AtlasJqlSearch summary ~ "login bug"
 ```
 
+### GitHub Issues
+
+<details>
+<summary><strong>Configuration</strong></summary>
+
+```lua
+return {
+  "emrearmagan/atlas.nvim",
+  config = function()
+    require("atlas").setup({
+      issues = {
+        providers = {
+          github = {
+            cache_ttl = 300,
+
+            ---@type AtlasGitHubIssuesViewConfig[]
+            views = {
+              {
+                name = "Assigned",
+                key = "1",
+                search = "assignee:@me is:open",
+              },
+              {
+                name = "Created",
+                key = "2",
+                search = "author:@me is:open",
+              },
+              {
+                name = "Mentions",
+                key = "3",
+                search = "mentions:@me is:open",
+              },
+            },
+          },
+        },
+      },
+    })
+  end,
+}
+```
+
+</details>
+
+### GitLab Issues
+
+<details>
+<summary><strong>Configuration</strong></summary>
+
+Auth uses a [Personal Access Token](https://docs.gitlab.com/ee/user/profile/personal_access_tokens.html) with the `api` scope. Set `base_url` to `https://gitlab.com` or your self-hosted instance.
+
+```lua
+return {
+  "emrearmagan/atlas.nvim",
+  config = function()
+    require("atlas").setup({
+      issues = {
+        providers = {
+          gitlab = {
+            base_url = "https://gitlab.com",
+            token = os.getenv("GITLAB_TOKEN") or "",
+            cache_ttl = 300,
+
+            ---@type AtlasGitLabIssuesViewConfig[]
+            views = {
+              {
+                name = "Assigned",
+                key = "1",
+                scope = "assigned_to_me",
+                state = "opened",
+              },
+              {
+                name = "Created",
+                key = "2",
+                scope = "created_by_me",
+                state = "opened",
+              },
+              {
+                name = "All open",
+                key = "3",
+                scope = "all",
+                state = "opened",
+                -- Anything not covered by the explicit fields below can be
+                -- passed via `extra_params`.
+                extra_params = { ["not[labels]"] = "wontfix" },
+              },
+            },
+          },
+        },
+      },
+    })
+  end,
+}
+```
+
+</details>
+
 ## Pulls
 
 - [x] Multiple views
@@ -383,6 +485,57 @@ return {
                   { workspace = "your-workspace", repo = "atlas" },
                   { workspace = "your-workspace", repo = "other-repo" },
                 },
+              },
+            },
+          },
+        },
+      },
+    })
+  end,
+}
+```
+
+</details>
+
+### GitLab
+
+<details>
+<summary><strong>Configuration</strong></summary>
+
+Auth uses a [Personal Access Token](https://docs.gitlab.com/ee/user/profile/personal_access_tokens.html) with the `api` scope. Set `base_url` to `https://gitlab.com` or your self-hosted instance.
+
+```lua
+return {
+  "emrearmagan/atlas.nvim",
+  config = function()
+    require("atlas").setup({
+      pulls = {
+        providers = {
+          gitlab = {
+            base_url = "https://gitlab.com",
+            token = os.getenv("GITLAB_TOKEN") or "",
+            cache_ttl = 300,
+
+            ---@type AtlasGitLabPullsViewConfig[]
+            views = {
+              {
+                name = "Assigned",
+                key = "1",
+                scope = "assigned_to_me",
+                state = "opened",
+              },
+              {
+                name = "Created",
+                key = "2",
+                scope = "created_by_me",
+                state = "opened",
+              },
+              {
+                name = "Reviewing",
+                key = "3",
+                scope = "all",
+                state = "opened",
+                extra_params = { reviewer_id = "Me" },
               },
             },
           },
