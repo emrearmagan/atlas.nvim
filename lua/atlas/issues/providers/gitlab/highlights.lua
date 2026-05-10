@@ -5,6 +5,8 @@ local groups = {
 	AtlasGLIssuesTheme = { fg = "#1e1e2e", bg = "#fc6d26", bold = true },
 	AtlasGLIssueOpen = { fg = "#89b4fa", bold = true },
 	AtlasGLIssueClosed = { fg = "#cba6f7", bold = true },
+	AtlasGLIssueOpenChip = { fg = "#1e1e2e", bg = "#89b4fa", bold = true },
+	AtlasGLIssueClosedChip = { fg = "#1e1e2e", bg = "#cba6f7", bold = true },
 	AtlasGLIssueKey = { fg = "#fc6d26", bold = true },
 }
 

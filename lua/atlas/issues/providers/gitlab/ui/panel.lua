@@ -2,57 +2,68 @@
 local M = {}
 
 local icons = require("atlas.ui.shared.icons")
-local table_tree = require("atlas.ui.components.table_tree")
+local utils = require("atlas.ui.shared.utils")
 local helper = require("atlas.issues.ui.main.helper")
 
-local function text_or(v, fallback)
-	if type(v) == "string" and v ~= "" then
-		return v
+---@param status_id string|nil
+---@return string
+local function state_chip_hl(status_id)
+	if status_id == "closed" then
+		return "AtlasGLIssueClosedChip"
 	end
-	return fallback
+	return "AtlasGLIssueOpenChip"
 end
 
----@param status_id string|nil
----@return string, string
-local function state_icon_and_hl(status_id)
-	if status_id == "closed" then
-		return icons.pulls_status("successful"), "AtlasGLIssueClosed"
+---@param milestone any
+---@return string
+local function milestone_display(milestone)
+	if type(milestone) ~= "table" then
+		return ""
 	end
-	return icons.pulls("issue"), "AtlasGLIssueOpen"
+	local title = tostring(milestone.title or "")
+	if title == "" then
+		return ""
+	end
+	return title
 end
 
 ---@param issue Issue
----@param width integer
----@return string[], table[]
-function M.render_header(issue, width)
+---@return IssuesPanelHeaderRow[]
+function M.header_rows(issue)
 	local raw = type(issue._raw) == "table" and issue._raw or {}
-	local iid = raw.iid or 0
-	local path = tostring(raw.project_path or "")
-	local title = text_or(issue.summary, "")
-	local status_label = text_or(issue.status, "Open")
-	local s_icon, s_hl = state_icon_and_hl(issue.status_id)
-	local key_label = path ~= "" and string.format("%s#%d", path, iid) or string.format("#%d", iid)
-
-	local first_line = string.format(" %s %s %s", s_icon, status_label, key_label)
-	local title_line = " " .. title
-
-	local assignee_name = type(issue.assignee) == "table" and issue.assignee.display_name or "Unassigned"
-	local reporter_name = type(issue.reporter) == "table" and issue.reporter.display_name or "Unknown"
 	local user_icon = icons.general("user")
+
+	local assignee_name = type(issue.assignee) == "table" and tostring(issue.assignee.display_name or "") or ""
+	local reporter_name = type(issue.reporter) == "table" and tostring(issue.reporter.display_name or "") or ""
+	if assignee_name == "" then
+		assignee_name = "Unassigned"
+	end
+	if reporter_name == "" then
+		reporter_name = "Unknown"
+	end
+
+	local milestone_text = milestone_display(raw.milestone)
 
 	local rows = {
 		{
-			k1 = "Author:",
-			v1 = string.format("%s %s", user_icon, reporter_name),
-			v1_hl = helper.person_hl(reporter_name),
-			k2 = "Assignee:",
-			v2 = string.format("%s %s", user_icon, assignee_name),
-			v2_hl = helper.person_hl(type(issue.assignee) == "table" and issue.assignee.display_name or nil),
+			k1 = "Status:",
+			v1 = tostring(issue.status or "Open"),
+			v1_hl = state_chip_hl(issue.status_id),
+			k2 = "Author:",
+			v2 = string.format("%s %s", user_icon, reporter_name),
+			v2_hl = helper.person_hl(reporter_name),
+		},
+		{
+			k1 = "Assignee:",
+			v1 = string.format("%s %s", user_icon, assignee_name),
+			v1_hl = helper.person_hl(type(issue.assignee) == "table" and issue.assignee.display_name or nil),
+			k2 = milestone_text ~= "" and "Milestone:" or "",
+			v2 = milestone_text,
+			v2_hl = milestone_text ~= "" and "AtlasTextMuted" or nil,
 		},
 	}
 
 	if raw.created_at and raw.created_at ~= "" then
-		local utils = require("atlas.ui.shared.utils")
 		table.insert(rows, {
 			k1 = "Opened:",
 			v1 = utils.relative_time_text(raw.created_at) or raw.created_at,
@@ -63,58 +74,7 @@ function M.render_header(issue, width)
 		})
 	end
 
-	local table_lines, _, table_spans = table_tree.render({
-		columns = {
-			{ key = "k1", name = "", can_grow = false },
-			{ key = "v1", name = "", can_grow = true },
-			{ key = "k2", name = "", can_grow = false },
-			{ key = "v2", name = "", can_grow = true, grow_last = true },
-		},
-		rows = rows,
-		width = width,
-		margin = 1,
-		show_header = false,
-		column_gap = 2,
-		fill = true,
-		cell_hl = function(row, col)
-			if col.key == "k1" or col.key == "k2" then
-				local label = col.key == "k1" and row.k1 or row.k2
-				return { { start_col = 0, end_col = #label, hl_group = "AtlasTextMuted" } }
-			end
-			if col.key == "v1" then
-				return { { start_col = 0, end_col = #row.v1, hl_group = row.v1_hl } }
-			end
-			if col.key == "v2" and row.v2 ~= "" then
-				return { { start_col = 0, end_col = #row.v2, hl_group = row.v2_hl } }
-			end
-		end,
-	})
-
-	local lines = { first_line, title_line, "" }
-	for _, l in ipairs(table_lines) do
-		table.insert(lines, l)
-	end
-	table.insert(lines, "")
-
-	local spans = {
-		{ line = 0, line_hl_group = "AtlasPanelHeaderBg" },
-		{ line = 1, line_hl_group = "AtlasPanelHeaderBg" },
-		{ line = 0, start_col = 1, end_col = 1 + #s_icon, hl_group = s_hl },
-		{ line = 0, start_col = 1 + #s_icon + 1, end_col = 1 + #s_icon + 1 + #status_label, hl_group = s_hl },
-		{ line = 0, start_col = #first_line - #key_label, end_col = #first_line, hl_group = "AtlasGLIssueKey" },
-		{ line = 1, start_col = 1, end_col = #title_line, hl_group = "Normal" },
-	}
-
-	for _, span in ipairs(table_spans) do
-		table.insert(spans, {
-			line = span.line + 3,
-			start_col = span.start_col,
-			end_col = span.end_col,
-			hl_group = span.hl_group,
-		})
-	end
-
-	return lines, spans
+	return rows
 end
 
 ---@param hex string|nil
@@ -146,16 +106,12 @@ function M.chips(issue)
 			table.insert(chips, { label = name, hl = label_hl(label.color) })
 		end
 	end
-
-	local milestone = type(raw.milestone) == "table" and raw.milestone or nil
-	if milestone and tostring(milestone.title or "") ~= "" then
-		table.insert(chips, {
-			label = string.format("%s %s", icons.pulls("activity"), milestone.title),
-			hl = "AtlasChipActive",
-		})
-	end
 	return chips
 end
+
+--------------------------------------------------------------------------------
+-- Lifecycle
+--------------------------------------------------------------------------------
 
 ---@param _issue Issue
 ---@return boolean
@@ -168,8 +124,6 @@ function M.is_loading(_issue)
 		or (type(history_state.any_loading) == "function" and history_state.any_loading())
 end
 
--- GitLab system notes are already human-readable strings ("added ~bug label",
--- "closed via merge request !42", etc.), so we just surface the body text.
 ---@param item IssueHistoryItem
 ---@return { label: string, content: string|nil }
 function M.format_history_item(item)
