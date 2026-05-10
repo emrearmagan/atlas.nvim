@@ -814,12 +814,21 @@ function M.activate(buf, refresh)
 	if buf == nil or refresh == nil then
 		return
 	end
+	if vim.api.nvim_buf_is_valid(buf) then
+		vim.api.nvim_set_option_value("filetype", "markdown", { buf = buf })
+		vim.api.nvim_set_option_value("syntax", "markdown", { buf = buf })
+	end
 	keymaps.setup(buf, refresh)
 end
 
 ---@param buf integer|nil
 function M.deactivate(buf)
 	if buf ~= nil then
+		if vim.api.nvim_buf_is_valid(buf) then
+			pcall(vim.treesitter.stop, buf)
+			vim.api.nvim_set_option_value("syntax", "OFF", { buf = buf })
+			vim.api.nvim_set_option_value("filetype", "", { buf = buf })
+		end
 		keymaps.teardown(buf)
 	end
 	cancel_all()
