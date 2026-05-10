@@ -58,8 +58,13 @@ function M.render(tab_items, get_tab_module)
 		local extra_rows = panel and panel.header_rows and panel.header_rows(issue) or nil
 		local extra_chips = panel and panel.chips and panel.chips(issue) or nil
 
-		-- Header
-		local h_lines, h_spans = header.render(issue, width, extra_rows)
+		-- Header (provider may fully override)
+		local h_lines, h_spans
+		if panel and type(panel.render_header) == "function" then
+			h_lines, h_spans = panel.render_header(issue, width)
+		else
+			h_lines, h_spans = header.render(issue, width, extra_rows)
+		end
 		utils.append_block(lines, spans, { lines = h_lines, highlights = h_spans })
 
 		-- Chips

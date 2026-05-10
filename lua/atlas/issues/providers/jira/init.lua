@@ -39,6 +39,72 @@ function M.fetch_user(on_done)
 	users_api.get_myself(on_done)
 end
 
+---@param config AtlasIssuesConfig
+---@return boolean
+local function parent_enrichment_enabled(config)
+	return config.fetch_parent_issues ~= false
+end
+
+---@param issues Issue[]
+---@param opts IssuesFetchOpts
+---@param on_done fun(enriched: Issue[])
+local function enrich_with_parents(issues, opts, on_done)
+	local issues_cfg = require("atlas.config").options.issues or {}
+	if not parent_enrichment_enabled(issues_cfg) then
+		on_done(issues)
+		return
+	end
+
+	local existing = {}
+	for _, issue in ipairs(issues or {}) do
+		if type(issue) == "table" and type(issue.key) == "string" and issue.key ~= "" then
+			existing[issue.key] = true
+		end
+	end
+
+	local missing = {}
+	local seen = {}
+	for _, issue in ipairs(issues or {}) do
+		if type(issue) == "table" and type(issue.parent) == "table" then
+			local pk = tostring(issue.parent.key or "")
+			if pk ~= "" and not existing[pk] and not seen[pk] then
+				seen[pk] = true
+				table.insert(missing, pk)
+			end
+		end
+	end
+
+	if #missing == 0 then
+		on_done(issues)
+		return
+	end
+
+	local escaped = {}
+	for _, key in ipairs(missing) do
+		table.insert(escaped, string.format('"%s"', key:gsub('"', '\\"')))
+	end
+	local parent_jql = "key in (" .. table.concat(escaped, ",") .. ")"
+
+	local issues_api = require("atlas.issues.providers.jira.api.issues")
+	issues_api.search_issues(parent_jql, function(page, err)
+		if err or page == nil then
+			on_done(issues)
+			return
+		end
+		for _, parent in ipairs(page.issues or {}) do
+			local pk = tostring(parent.key or "")
+			if pk ~= "" and not existing[pk] then
+				existing[pk] = true
+				table.insert(issues, parent)
+			end
+		end
+		on_done(issues)
+	end, {
+		force_load = opts and opts.force_load == true or false,
+		max_results = #missing,
+	})
+end
+
 ---@param view IssuesViewConfig
 ---@param opts IssuesFetchOpts
 ---@param on_done fun(issues: Issue[], next_page_token: string|nil, is_last: boolean, err: string|nil)
@@ -59,7 +125,9 @@ function M.fetch_issues(view, opts, on_done)
 			return
 		end
 
-		on_done(page.issues or {}, page.nextPageToken, page.isLast == true, nil)
+		enrich_with_parents(page.issues or {}, opts or {}, function(enriched)
+			on_done(enriched, page.nextPageToken, page.isLast == true, nil)
+		end)
 	end, {
 		force_load = opts and opts.force_load == true or false,
 		next_page_token = opts and opts.next_page_token or nil,
@@ -182,11 +250,9 @@ end
 ---@return AtlasJiraViewConfig[]
 function M.views()
 	local cfg = require("atlas.issues.providers.jira.api.service").jira_config()
-	local views = cfg.views or nil
-	if views ~= nil and #views > 0 then
-		return views
+	if cfg.views ~= nil then
+		return cfg.views
 	end
-
 	return {
 		{
 			name = "Issues",

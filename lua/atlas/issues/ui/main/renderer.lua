@@ -38,10 +38,11 @@ local function issue_to_row(issue, is_child)
 	local row_data
 	if provider and provider.format_row then
 		row_data = provider.format_row(issue, is_child == true)
-	else
+	end
+	if row_data == nil then
 		row_data = {
 			icon = "",
-			name = issue.key .. " " .. (issue.summary or ""),
+			name = (issue.key or "") .. " " .. (issue.summary or ""),
 			assignee = (type(issue.assignee) == "table" and issue.assignee.display_name) or "Unassigned",
 			reporter = (type(issue.reporter) == "table" and issue.reporter.display_name) or "Unknown",
 			status = string.format(" %s ", issue.status or ""),
@@ -112,75 +113,14 @@ end
 function M.issue_popup_content(issue)
 	local summary = issue.summary or ""
 	local title = string.format(" %s: %s", issue.key or "", summary)
-	local status_hl = helper.status_hl(issue.status_id)
-	local assignee_hl = helper.person_hl(type(issue.assignee) == "table" and issue.assignee.display_name or nil)
-	local reporter_hl = helper.person_hl(type(issue.reporter) == "table" and issue.reporter.display_name or nil)
-	local priority_hl = helper.priority_hl(issue.priority)
 	local parent_key = type(issue.parent) == "table" and issue.parent.key or nil
 	local parent_summary = type(issue.parent) == "table" and issue.parent.summary or nil
 
-	local lines = {
-		title,
-		"",
-		string.format(" Type:     %s", (type(issue.type) == "table" and issue.type.name) or "-"),
-		string.format(" Status:   %s", issue.status or "-"),
-		string.format(" Priority: %s", issue.priority or "-"),
-		string.format(
-			" Assignee: %s",
-			(type(issue.assignee) == "table" and issue.assignee.display_name) or "Unassigned"
-		),
-		string.format(" Reporter: %s", (type(issue.reporter) == "table" and issue.reporter.display_name) or "Unknown"),
-		string.format(" Due:      %s", issue.duedate or "-"),
-	}
-
-	if type(issue.story_points) == "number" then
-		table.insert(lines, string.format(" Points:   %s", tostring(issue.story_points)))
-	end
-
-	if type(parent_key) == "string" and parent_key ~= "" then
-		table.insert(lines, string.format(" Parent:   %s", parent_key))
-		if type(parent_summary) == "string" and parent_summary ~= "" then
-			table.insert(lines, string.format("           %s", parent_summary))
-		end
-	end
-
-	local content_width = 1
-	for _, line in ipairs(lines) do
-		content_width = math.max(content_width, vim.fn.strdisplaywidth(line))
-	end
-	lines[2] = " " .. ("━"):rep(content_width)
-
-	local row = {
-		type = 2,
-		status = 3,
-		priority = 4,
-		assignee = 5,
-		reporter = 6,
-		due = 7,
-	}
-	local next_row = 8
-
+	local lines = { title, "" }
 	local highlights = {
 		{ row = 0, col = 1, end_col = 1 + #(issue.key or ""), hl_group = helper.issue_hl(issue.key) },
 		{ row = 1, col = 0, end_col = -1, hl_group = "AtlasTextMuted" },
-		{ row = row.type, col = 1, end_col = 10, hl_group = "AtlasTextMuted" },
-		{ row = row.status, col = 1, end_col = 10, hl_group = "AtlasTextMuted" },
-		{ row = row.priority, col = 1, end_col = 10, hl_group = "AtlasTextMuted" },
-		{ row = row.assignee, col = 1, end_col = 10, hl_group = "AtlasTextMuted" },
-		{ row = row.reporter, col = 1, end_col = 10, hl_group = "AtlasTextMuted" },
-		{ row = row.due, col = 1, end_col = 10, hl_group = "AtlasTextMuted" },
-		{
-			row = row.type,
-			col = 11,
-			end_col = -1,
-			hl_group = helper.issue_type_hl(type(issue.type) == "table" and issue.type.name or nil),
-		},
-		{ row = row.status, col = 11, end_col = -1, hl_group = status_hl },
-		{ row = row.priority, col = 11, end_col = -1, hl_group = priority_hl },
-		{ row = row.assignee, col = 11, end_col = -1, hl_group = assignee_hl },
-		{ row = row.reporter, col = 11, end_col = -1, hl_group = reporter_hl },
 	}
-
 	if summary ~= "" then
 		table.insert(highlights, {
 			row = 0,
@@ -190,22 +130,54 @@ function M.issue_popup_content(issue)
 		})
 	end
 
-	if type(parent_key) == "string" and parent_key ~= "" then
-		row.parent = next_row
-		next_row = next_row + 1
-		table.insert(highlights, { row = row.parent, col = 1, end_col = 10, hl_group = "AtlasTextMuted" })
-		table.insert(highlights, { row = row.parent, col = 11, end_col = -1, hl_group = helper.issue_hl(parent_key) })
-
-		if type(parent_summary) == "string" and parent_summary ~= "" then
-			row.parent_summary = next_row
-			table.insert(highlights, {
-				row = row.parent_summary,
-				col = 11,
-				end_col = -1,
-				hl_group = "Comment",
-			})
+	---@param label string
+	---@param value string|nil
+	---@param value_hl string|nil
+	local function push(label, value, value_hl)
+		if value == nil or value == "" then
+			return
+		end
+		local row = #lines
+		table.insert(lines, string.format(" %-9s %s", label .. ":", value))
+		table.insert(highlights, { row = row, col = 1, end_col = 10, hl_group = "AtlasTextMuted" })
+		if value_hl ~= nil then
+			table.insert(highlights, { row = row, col = 11, end_col = -1, hl_group = value_hl })
 		end
 	end
+
+	local issue_type_name = type(issue.type) == "table" and issue.type.name or nil
+	push("Type", issue_type_name, helper.issue_type_hl(issue_type_name))
+	push("Status", issue.status, helper.status_hl(issue.status_id))
+	push("Priority", issue.priority, helper.priority_hl(issue.priority))
+
+	local assignee_name = type(issue.assignee) == "table" and issue.assignee.display_name or nil
+	push("Assignee", assignee_name or "Unassigned", helper.person_hl(assignee_name))
+
+	local reporter_name = type(issue.reporter) == "table" and issue.reporter.display_name or nil
+	if reporter_name then
+		push("Reporter", reporter_name, helper.person_hl(reporter_name))
+	end
+
+	push("Due", issue.duedate, "AtlasTextMuted")
+
+	if type(issue.story_points) == "number" then
+		push("Points", tostring(issue.story_points), "AtlasTextMuted")
+	end
+
+	if type(parent_key) == "string" and parent_key ~= "" then
+		push("Parent", parent_key, helper.issue_hl(parent_key))
+		if type(parent_summary) == "string" and parent_summary ~= "" then
+			local row = #lines
+			table.insert(lines, string.format("           %s", parent_summary))
+			table.insert(highlights, { row = row, col = 11, end_col = -1, hl_group = "Comment" })
+		end
+	end
+
+	local content_width = 1
+	for _, line in ipairs(lines) do
+		content_width = math.max(content_width, vim.fn.strdisplaywidth(line))
+	end
+	lines[2] = " " .. ("━"):rep(content_width)
 
 	return lines, highlights
 end

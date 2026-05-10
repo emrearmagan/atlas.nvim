@@ -57,6 +57,8 @@ local function resolve_issues_provider(provider_id)
 		local providers = config.options.issues and config.options.issues.providers or {}
 		if providers.jira then
 			id = "jira"
+		elseif providers.github then
+			id = "github"
 		else
 			id = "mock"
 		end
@@ -66,6 +68,8 @@ local function resolve_issues_provider(provider_id)
 		return require("atlas.issues.providers.mock")
 	elseif id == "jira" then
 		return require("atlas.issues.providers.jira")
+	elseif id == "github" then
+		return require("atlas.issues.providers.github")
 	end
 
 	vim.notify(string.format("[Atlas] Unknown issues provider: %s", id), vim.log.levels.ERROR)

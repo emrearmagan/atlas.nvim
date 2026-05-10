@@ -21,7 +21,7 @@
 --------------------------------------------------------------------------------
 --  Issue
 --------------------------------------------------------------------------------
---TODO: I should probably refactor when adding more providers since this is pretty Jira specific.
+-- The shape covers the union of provider needs. Provider-specific extras live in `_raw`.
 
 ---@class Issue
 ---@field key string
@@ -38,6 +38,8 @@
 ---@field story_points number|nil
 ---@field duedate string|nil
 ---@field parent Issue|nil
+---@field url string|nil
+---@field _raw any|nil
 
 --------------------------------------------------------------------------------
 -- Type
@@ -76,6 +78,7 @@
 ---@field updated string|nil
 ---@field parent_id string|number|nil
 ---@field children IssueComment[]|nil
+---@field reactions table<string, number>|nil
 
 --------------------------------------------------------------------------------
 -- History

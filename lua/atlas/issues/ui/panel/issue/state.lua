@@ -10,7 +10,7 @@ local M = {
 
 function M.reset()
 	M.current_issue = nil
-	M.current_tab = "overview"
+	M.current_tab = nil
 	M.line_map = {}
 end
 

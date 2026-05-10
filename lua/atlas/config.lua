@@ -5,7 +5,7 @@
 ---@alias AtlasKeymapValue string|string[]|false|nil
 
 ---@alias AtlasPullsProviderId "bitbucket"|"github"|"mock"
----@alias AtlasIssuesProviderId "jira"|"mock"
+---@alias AtlasIssuesProviderId "jira"|"github"|"mock"
 
 --------------------------------------------------------------------------------
 -- Pulls Provider Config
@@ -52,6 +52,7 @@
 
 ---@class AtlasIssuesProviders
 ---@field jira AtlasJiraIssuesConfig|nil
+---@field github AtlasGitHubIssuesConfig|nil
 
 ---@class AtlasPullsConfig
 ---@field repo_config AtlasPullsRepoConfig|nil
@@ -212,7 +213,7 @@ local function register_commands()
 	end, { desc = "Clear Atlas disk and memory cache" })
 
 	local pulls_providers = { "bitbucket", "github", "mock" }
-	local issues_providers = { "jira", "mock" }
+	local issues_providers = { "jira", "github", "mock" }
 
 	vim.api.nvim_create_user_command("AtlasPulls", function(opts)
 		local provider_id = opts.fargs[1] and opts.fargs[1]:lower() or nil

@@ -156,73 +156,6 @@ local function issues_config()
 	return (config.options and config.options.issues) or {}
 end
 
----@param issues Issue[]
----@param force_load boolean
----@param on_done fun(enriched: Issue[])
-local function fetch_parent_issues(issues, force_load, on_done)
-	local cfg = issues_config()
-	if cfg.fetch_parent_issues == false then
-		on_done(issues)
-		return
-	end
-
-	local provider = state.provider
-	if provider == nil or provider.fetch_issues == nil then
-		on_done(issues)
-		return
-	end
-
-	local existing_by_key = {}
-	for _, issue in ipairs(issues or {}) do
-		if type(issue) == "table" and type(issue.key) == "string" and issue.key ~= "" then
-			existing_by_key[issue.key] = true
-		end
-	end
-
-	local missing_parent_keys = {}
-	local pending = {}
-	for _, issue in ipairs(issues or {}) do
-		if type(issue) == "table" and type(issue.parent) == "table" then
-			local parent_key = tostring(issue.parent.key or "")
-			if parent_key ~= "" and not existing_by_key[parent_key] and not pending[parent_key] then
-				pending[parent_key] = true
-				table.insert(missing_parent_keys, parent_key)
-			end
-		end
-	end
-
-	if #missing_parent_keys == 0 then
-		on_done(issues)
-		return
-	end
-
-	local escaped = {}
-	for _, key in ipairs(missing_parent_keys) do
-		table.insert(escaped, string.format('"%s"', key:gsub('"', '\\"')))
-	end
-	local parent_jql = "key in (" .. table.concat(escaped, ",") .. ")"
-	local parent_view = { name = "__parent_enrichment__", jql = parent_jql }
-
-	provider.fetch_issues(parent_view, { force_load = force_load }, function(parent_issues, _, _, err)
-		if err ~= nil or parent_issues == nil then
-			on_done(issues)
-			return
-		end
-
-		for _, parent_issue in ipairs(parent_issues) do
-			if type(parent_issue) == "table" then
-				local pk = tostring(parent_issue.key or "")
-				if pk ~= "" and not existing_by_key[pk] then
-					existing_by_key[pk] = true
-					table.insert(issues, parent_issue)
-				end
-			end
-		end
-
-		on_done(issues)
-	end)
-end
-
 ---@param opts { force_load: boolean }|nil
 ---@param on_done fun()|nil
 local function load_active_view(opts, on_done)
@@ -311,21 +244,15 @@ local function load_active_view(opts, on_done)
 			return
 		end
 
-		fetch_parent_issues(issues, opts.force_load == true, function(enriched)
-			if is_stale_request() then
-				return
-			end
+		state.current_view = state.active_view
+		state.error = nil
+		state.issues = issues
+		state.issue_tree = helper.build_issue_tree(issues)
+		finish_loading()
 
-			state.current_view = state.active_view
-			state.error = nil
-			state.issues = enriched
-			state.issue_tree = helper.build_issue_tree(enriched)
-			finish_loading()
-
-			footer.notify("success", string.format("Loaded %d issues", #enriched), 1200)
-			render_if_active()
-			on_done()
-		end)
+		footer.notify("success", string.format("Loaded %d issues", #issues), 1200)
+		render_if_active()
+		on_done()
 	end
 
 	local configured_max = tonumber(issues_config().max_results)

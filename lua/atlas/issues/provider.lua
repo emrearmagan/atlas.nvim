@@ -49,6 +49,7 @@
 --------------------------------------------------------------------------------
 
 ---@class IssuesProviderPanel
+---@field render_header (fun(issue: Issue, width: integer): string[], table[])|nil
 ---@field header_rows (fun(issue: Issue): IssuesPanelHeaderRow[])|nil
 ---@field chips (fun(issue: Issue): IssuesPanelChip[])|nil
 ---@field tabs (fun(): IssuesPanelTab[])|nil

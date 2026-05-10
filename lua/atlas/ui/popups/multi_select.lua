@@ -63,7 +63,8 @@ function M.open(opts)
 			map[label] = item
 		end
 
-		vim.ui.select(choices, { prompt = prompt }, function(choice)
+		local prompt_with_count = string.format("%s (%d selected)", prompt, #selected)
+		vim.ui.select(choices, { prompt = prompt_with_count }, function(choice)
 			if choice == nil or choice == done_label then
 				if opts.on_done then
 					opts.on_done(selected)
