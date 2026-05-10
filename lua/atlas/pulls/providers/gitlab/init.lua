@@ -6,6 +6,7 @@ local M = {
 	name = "GitLab",
 	icon = icons.pulls_provider("gitlab", "provider"),
 	hl_group = "AtlasGitLabTheme",
+	panel = require("atlas.pulls.providers.gitlab.ui.panel"),
 }
 
 function M.setup()

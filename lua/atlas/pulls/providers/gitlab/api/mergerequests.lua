@@ -118,6 +118,14 @@ end
 ---@param on_done fun(description: string|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.get_description(pr, opts, on_done)
+	opts = opts or {}
+	if opts.force_refresh ~= true and pr.description ~= nil then
+		vim.schedule(function()
+			on_done(tostring(pr.description or ""), nil)
+		end)
+		return nil
+	end
+
 	return M.get_mr(pr, opts, function(mr, err)
 		if err or mr == nil then
 			on_done(nil, err)
@@ -419,12 +427,8 @@ end
 ---@param on_done fun(reviewers: PullsReviewer[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.get_reviewers(pr, opts, on_done)
-	return M.get_mr(pr, opts, function(mr, err)
-		if err or mr == nil then
-			on_done(nil, err)
-			return
-		end
-		local raw = type(mr._raw) == "table" and mr._raw or {}
+	opts = opts or {}
+	local function finish(raw)
 		local reviewers = {}
 		for _, r in ipairs(raw.reviewers or {}) do
 			if type(r) == "table" and type(r.username) == "string" then
@@ -436,6 +440,23 @@ function M.get_reviewers(pr, opts, on_done)
 			end
 		end
 		on_done(reviewers, nil)
+	end
+
+	local initial_raw = type(pr._raw) == "table" and pr._raw or {}
+	if opts.force_refresh ~= true and type(initial_raw.reviewers) == "table" then
+		vim.schedule(function()
+			finish(initial_raw)
+		end)
+		return nil
+	end
+
+	return M.get_mr(pr, opts, function(mr, err)
+		if err or mr == nil then
+			on_done(nil, err)
+			return
+		end
+		local raw = type(mr._raw) == "table" and mr._raw or {}
+		finish(raw)
 	end)
 end
 
