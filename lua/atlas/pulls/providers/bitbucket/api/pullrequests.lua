@@ -11,8 +11,8 @@ local state = require("atlas.pulls.providers.bitbucket.state")
 ---@param repo string
 ---@return string
 local function cache_key(workspace, repo, statuses)
-  local sorted = vim.deepcopy(statuses)
-  table.sort(sorted)
+	local sorted = vim.deepcopy(statuses)
+	table.sort(sorted)
 	return string.format("bitbucket:prs:%s/%s:%s", workspace, repo, table.concat(sorted, ","))
 end
 
@@ -170,7 +170,14 @@ function M.fetch_pullrequests(view_repos, opts, on_done)
 		local handle = fetch_pullrequests_single(
 			repo.workspace,
 			repo.repo,
-			{ user = user, token = token, cache_ttl = ttl, force = opts.force_load, pagelen = opts.pagelen, statuses = opts.statuses },
+			{
+				user = user,
+				token = token,
+				cache_ttl = ttl,
+				force = opts.force_load,
+				pagelen = opts.pagelen,
+				statuses = opts.statuses,
+			},
 			finish
 		)
 		if handle ~= nil then
@@ -496,6 +503,60 @@ function M.fetch_commit_status(statuses_url, opts, on_done)
 		local values = (result or {}).values or {}
 		local agg_status, first_url = M._aggregate_statuses(values)
 		on_done(agg_status, first_url, nil)
+	end)
+end
+
+---@param opts PullsCreatePROpts
+---@param on_done fun(result: PullsCreatePRResult|nil, err: string|nil)
+---@return { job_id: integer, cancel: fun() }|nil
+function M.create_pr(opts, on_done)
+	local slug = tostring(opts.repo_slug or "")
+	if slug == "" then
+		vim.schedule(function()
+			on_done(nil, "Missing repository slug")
+		end)
+		return nil
+	end
+
+	local workspace, repo = slug:match("^([^/]+)/(.+)$")
+	if workspace == nil or repo == nil then
+		vim.schedule(function()
+			on_done(nil, "Invalid repo slug; expected workspace/repo")
+		end)
+		return nil
+	end
+
+	local payload = {
+		title = opts.title,
+		description = opts.body or "",
+		source = { branch = { name = opts.head } },
+		destination = { branch = { name = opts.base } },
+		close_source_branch = true,
+		draft = opts.draft == true,
+	}
+
+	logger.loginfo(
+		"bitbucket.create_pr",
+		{ workspace = workspace, repo = repo, head = opts.head, base = opts.base, draft = opts.draft == true }
+	)
+
+	local endpoint = string.format("/repositories/%s/%s/pullrequests", workspace, repo)
+	return service.request("POST", endpoint, nil, vim.json.encode(payload), function(result, err)
+		if err then
+			on_done(nil, err)
+			return
+		end
+
+		local id = nil
+		local url = nil
+		if type(result) == "table" then
+			id = result.id
+			if type(result.links) == "table" and type(result.links.html) == "table" then
+				url = result.links.html.href
+			end
+		end
+
+		on_done({ id = id, url = url, message = "PR created" }, nil)
 	end)
 end
 

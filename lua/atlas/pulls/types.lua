@@ -211,3 +211,21 @@
 ---@field unread boolean
 ---@field url string|nil
 ---@field _raw any|nil
+
+--------------------------------------------------------------------------------
+-- PR creation
+--------------------------------------------------------------------------------
+
+---@class PullsCreatePROpts
+---@field repo_slug string
+---@field title string
+---@field body string
+---@field head string
+---@field base string
+---@field draft boolean|nil
+---@field repo_root string|nil
+
+---@class PullsCreatePRResult
+---@field id string|number|nil
+---@field url string|nil
+---@field message string|nil

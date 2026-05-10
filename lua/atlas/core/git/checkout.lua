@@ -1,21 +1,8 @@
 local M = {}
 
 local config = require("atlas.config")
+local git = require("atlas.core.git")
 local logger = require("atlas.core.logger")
-
-local function trim(s)
-	if type(s) ~= "string" then
-		return ""
-	end
-	return (s:gsub("^%s+", ""):gsub("%s+$", ""))
-end
-
----@param cmd string[]
----@param cwd string
----@param on_done fun(res: vim.SystemCompleted)
-local function run(cmd, cwd, on_done)
-	vim.system(cmd, { cwd = cwd, text = true }, on_done)
-end
 
 local function expand_home(path)
 	if type(path) ~= "string" then
@@ -140,8 +127,7 @@ function M.resolve_repo_path(repo_paths, repo_name, opts)
 	end
 
 	if require_git then
-		local res = vim.system({ "git", "-C", resolved, "rev-parse", "--is-inside-work-tree" }, { text = true }):wait()
-		if res.code ~= 0 then
+		if not git.is_inside_work_tree(resolved) then
 			return nil, string.format("mapped path is not a git repository: %s", resolved)
 		end
 	end
@@ -175,17 +161,9 @@ function M.fetch_pr_branches(pr, repo_path, on_done)
 	local src_branch = tostring((pr.source or {}).branch or "")
 	local dst_branch = tostring((pr.destination or {}).branch or "")
 
-	run({ "git", "fetch", "origin", src_branch, dst_branch }, repo_path, vim.schedule_wrap(function(res)
-		if res.code ~= 0 then
-			local ferr = trim(res.stderr)
-			if ferr == "" then
-				ferr = string.format("git fetch failed with code %d", res.code)
-			end
-			on_done(ferr)
-		else
-			on_done(nil)
-		end
-	end))
+	git.fetch_branches(repo_path, "origin", { src_branch, dst_branch }, function(ok, err)
+		on_done(ok and nil or err)
+	end)
 end
 
 ---@class CheckoutResult
@@ -217,8 +195,8 @@ function M.checkout_pr(pr, on_done)
 		return
 	end
 
-	run({ "git", "checkout", src_branch }, repo_path, function(checkout_res)
-		if checkout_res.code == 0 then
+	git.checkout_branch(repo_path, src_branch, function(ok)
+		if ok then
 			logger.loginfo("checkout.checkout_pr switched existing branch", {
 				pr_id = pr.id,
 				repo_path = repo_path,
@@ -228,34 +206,24 @@ function M.checkout_pr(pr, on_done)
 			return
 		end
 
-		run({ "git", "fetch", "origin", src_branch }, repo_path, function(fetch_res)
-			if fetch_res.code ~= 0 then
-				local ferr = trim(fetch_res.stderr)
-				if ferr == "" then
-					ferr = string.format("git fetch failed with code %d", fetch_res.code)
-				end
+		git.fetch_branches(repo_path, "origin", { src_branch }, function(fetch_ok, ferr)
+			if not fetch_ok then
 				logger.logerror("checkout.checkout_pr fetch failed", {
 					pr_id = pr.id,
 					repo_path = repo_path,
 					branch = src_branch,
-					code = fetch_res.code,
 					error = ferr,
 				})
 				on_done(nil, ferr)
 				return
 			end
 
-			run({ "git", "checkout", "-b", src_branch, "origin/" .. src_branch }, repo_path, function(create_res)
-				if create_res.code ~= 0 then
-					local cerr = trim(create_res.stderr)
-					if cerr == "" then
-						cerr = "git checkout branch failed"
-					end
+			git.checkout_remote_branch(repo_path, src_branch, "origin", function(create_ok, cerr)
+				if not create_ok then
 					logger.logerror("checkout.checkout_pr create branch failed", {
 						pr_id = pr.id,
 						repo_path = repo_path,
 						branch = src_branch,
-						code = create_res.code,
 						error = cerr,
 					})
 					on_done(nil, cerr)
