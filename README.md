@@ -152,7 +152,7 @@ return {
     require("atlas").setup({
       issues = {
         max_results = 100,
-        fetch_parent_issues = true,
+        with_relationships = true, -- Fetch parent/subissue relationships so issues can render as a tree.
         custom_actions = {}, -- See Custom Actions below.
 
         providers = {

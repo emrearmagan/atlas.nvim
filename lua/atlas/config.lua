@@ -72,7 +72,7 @@
 
 ---@class AtlasIssuesConfig
 ---@field max_results number|nil
----@field fetch_parent_issues boolean|nil
+---@field with_relationships boolean|nil
 ---@field custom_actions AtlasIssuesCustomAction[]|nil
 ---@field providers AtlasIssuesProviders|nil
 

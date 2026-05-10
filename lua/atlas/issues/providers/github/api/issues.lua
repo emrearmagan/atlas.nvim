@@ -5,13 +5,13 @@ local normalizer = require("atlas.issues.providers.github.api.normalizer")
 local logger = require("atlas.core.logger")
 
 local SEARCH_GQL = [[
-query($search: String!, $limit: Int!) {
+query($search: String!, $limit: Int!, $withRelationships: Boolean!) {
   search(query: $search, type: ISSUE, first: $limit) {
     nodes {
       ... on Issue {
         ...IssueFields
-        parent { ...IssueFields }
-        subIssues(first: 20) {
+        parent @include(if: $withRelationships) { ...IssueFields }
+        subIssues(first: 20) @include(if: $withRelationships) {
           nodes {
             ...IssueFields
             parent { ...IssueFields }
@@ -34,18 +34,18 @@ fragment IssueFields on Issue {
 ]]
 
 local DETAIL_GQL = [[
-query($owner: String!, $repo: String!, $number: Int!) {
+query($owner: String!, $repo: String!, $number: Int!, $withRelationships: Boolean!) {
   repository(owner: $owner, name: $repo) {
     issue(number: $number) {
       ...IssueFields
       milestone { number title state description }
       reactionGroups { content reactors { totalCount } }
-      parent {
+      parent @include(if: $withRelationships) {
         ...IssueFields
         milestone { number title state description }
         reactionGroups { content reactors { totalCount } }
       }
-      subIssues(first: 20) {
+      subIssues(first: 20) @include(if: $withRelationships) {
         nodes {
           ...IssueFields
           milestone { number title state description }
@@ -108,6 +108,12 @@ local function issue_search_query(query)
 	return query
 end
 
+---@return boolean
+local function relationships_enabled()
+	local issues_cfg = require("atlas.config").options.issues or {}
+	return issues_cfg.with_relationships ~= false
+end
+
 ---@param search string
 ---@param on_done fun(issues: Issue[]|nil, err: string|nil)
 ---@param opts { force_load?: boolean, limit?: number }|nil
@@ -123,7 +129,8 @@ function M.search_issues(search, on_done, opts)
 	end
 	query = issue_search_query(query)
 
-	local cache_key = string.format("github_issues:search:%s:%d", query, limit)
+	local with_relationships = relationships_enabled()
+	local cache_key = string.format("github_issues:search:%s:%d:relationships:%s", query, limit, tostring(with_relationships))
 	if not opts.force_load then
 		local cached, ok = cli.get_cache(cache_key)
 		if ok then
@@ -142,6 +149,8 @@ function M.search_issues(search, on_done, opts)
 		"search=" .. query,
 		"-F",
 		"limit=" .. tostring(limit),
+		"-F",
+		"withRelationships=" .. tostring(with_relationships),
 	}, function(result, err)
 		if err then
 			on_done(nil, err)
@@ -171,7 +180,8 @@ function M.get_issue(key, on_done, opts)
 		return nil
 	end
 
-	local cache_key = string.format("github_issues:get:%s#%d", slug, number)
+	local with_relationships = relationships_enabled()
+	local cache_key = string.format("github_issues:get:%s#%d:relationships:%s", slug, number, tostring(with_relationships))
 	if not opts.force_load then
 		local cached, ok = cli.get_cache(cache_key)
 		if ok then
@@ -198,6 +208,8 @@ function M.get_issue(key, on_done, opts)
 		"repo=" .. repo,
 		"-F",
 		"number=" .. tostring(number),
+		"-F",
+		"withRelationships=" .. tostring(with_relationships),
 	}, function(result, err)
 		if err or type(result) ~= "table" then
 			on_done(nil, err or "Empty response")

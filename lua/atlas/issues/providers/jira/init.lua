@@ -41,8 +41,8 @@ end
 
 ---@param config AtlasIssuesConfig
 ---@return boolean
-local function parent_enrichment_enabled(config)
-	return config.fetch_parent_issues ~= false
+local function relationships_enabled(config)
+	return config.with_relationships ~= false
 end
 
 ---@param issues Issue[]
@@ -50,7 +50,7 @@ end
 ---@param on_done fun(enriched: Issue[])
 local function enrich_with_parents(issues, opts, on_done)
 	local issues_cfg = require("atlas.config").options.issues or {}
-	if not parent_enrichment_enabled(issues_cfg) then
+	if not relationships_enabled(issues_cfg) then
 		on_done(issues)
 		return
 	end
