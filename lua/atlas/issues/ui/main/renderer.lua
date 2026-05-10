@@ -242,19 +242,13 @@ local function compact_columns()
 			max_width = 22,
 			can_grow = false,
 		},
-		{
-			key = "project",
-			name = string.format("%s Project", icons.pulls("repo")),
-			max_width = 24,
-			can_grow = false,
-		},
 		{ key = "status", name = " Status", can_grow = false },
 	}
 end
 
 ---@return table
 local function compact_blank_row()
-	return { icon = "", name = "", assignee = "", reporter = "", project = "", status = "" }
+	return { icon = "", name = "", assignee = "", reporter = "", status = "" }
 end
 
 ---@param issue Issue
@@ -287,7 +281,6 @@ local function compact_rows(issues)
 	local rows = {}
 	for _, issue in ipairs(issues or {}) do
 		local row = issue_to_row(issue, false)
-		row.project = string.format("%s %s", icons.pulls("repo"), issue_project_label(issue))
 		row.children = nil
 		table.insert(rows, row)
 
@@ -330,10 +323,6 @@ end
 ---@return table[]|nil
 function cell_hl(row, col, ctx)
 	if row.kind == "meta" then
-		return { { start_col = 0, end_col = #ctx.padded, hl_group = "AtlasTextMuted" } }
-	end
-
-	if col.key == "project" then
 		return { { start_col = 0, end_col = #ctx.padded, hl_group = "AtlasTextMuted" } }
 	end
 

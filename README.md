@@ -152,7 +152,7 @@ return {
     require("atlas").setup({
       issues = {
         max_results = 100,
-        with_relationships = true, -- Fetch parent/subissue relationships so issues can render as a tree.
+        with_relationships = true, -- Fetch parent/subissue relationships for plain issue tree views.
         custom_actions = {}, -- See Custom Actions below.
 
         providers = {
@@ -187,11 +187,13 @@ return {
               {
                 name = "My Board",
                 key = "M",
+                layout = "plain", -- "plain" or "compact"
                 jql = "project = KAN AND assignee = currentUser() ORDER BY updated DESC",
               },
               {
                 name = "Team Board",
                 key = "T",
+                layout = "compact", -- "plain" or "compact"
                 jql = "project = KAN ORDER BY updated DESC",
               },
             },
@@ -275,16 +277,19 @@ return {
               {
                 name = "Assigned",
                 key = "1",
+                layout = "plain", -- "plain" or "compact"
                 search = "assignee:@me is:open",
               },
               {
                 name = "Created",
                 key = "2",
+                layout = "compact", -- "plain" or "compact"
                 search = "author:@me is:open",
               },
               {
                 name = "Mentions",
                 key = "3",
+                layout = "plain", -- "plain" or "compact"
                 search = "mentions:@me is:open",
               },
             },

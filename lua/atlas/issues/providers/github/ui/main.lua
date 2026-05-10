@@ -4,8 +4,6 @@ local icons = require("atlas.ui.shared.icons")
 local state = require("atlas.issues.state")
 local utils = require("atlas.ui.shared.utils")
 
-local REPO_ICON = icons.pulls("repo")
-
 --- GitHub doesnt expose task list progress via the API, so we really have to parse the body to get it. This is pretty sad, but it is what it is.
 ---@param body string|nil
 ---@return string
@@ -91,15 +89,15 @@ local function compact_columns()
 			header_hl = "AtlasColumnHeader",
 		},
 		{
-			key = "repo",
-			name = string.format("%s Repo", REPO_ICON),
-			max_width = 28,
+			key = "reporter",
+			name = string.format("%s Reporter", icons.general("user")),
+			max_width = 22,
 			can_grow = false,
 			header_hl = "AtlasColumnHeader",
 		},
-		{ key = "status", name = " Status", can_grow = false, header_hl = "AtlasColumnHeader" },
 		{ key = "created", name = icons.general("created"), can_grow = false, header_hl = "AtlasColumnHeader" },
 		{ key = "updated", name = icons.general("updated"), can_grow = false, header_hl = "AtlasColumnHeader" },
+		{ key = "status", name = " Status", can_grow = false, header_hl = "AtlasColumnHeader" },
 	}
 end
 
@@ -169,22 +167,9 @@ local function rows(issue_groups, opts)
 	return out
 end
 
----@param issue Issue
----@return string
-local function issue_slug(issue)
-	local raw = type(issue._raw) == "table" and issue._raw or {}
-	local slug = tostring(raw.slug or "")
-	if slug ~= "" then
-		return slug
-	end
-
-	local key = tostring(issue.key or "")
-	return key:match("^([^#]+)#") or "GitHub"
-end
-
 ---@return table
 local function compact_blank_row()
-	return { icon = "", name = "", comments = "", tasks = "", assignee = "", repo = "", status = "", created = "", updated = "" }
+	return { icon = "", name = "", comments = "", tasks = "", assignee = "", reporter = "", created = "", updated = "", status = "" }
 end
 
 ---@param issue Issue
@@ -196,9 +181,6 @@ local function compact_issue_to_row(issue)
 	local key_label = number and string.format("#%s", tostring(number)) or tostring(issue.key or "")
 	row.name = string.format("%s %s", key_label, issue.summary or "")
 	row._compact_key_label = key_label
-	row.repo = string.format("%s %s", REPO_ICON, issue_slug(issue))
-	row.repo_hl = issue_slug(issue)
-	row.reporter = nil
 	row.created = utils.relative_time(raw.created_at)
 	row.updated = utils.relative_time(raw.updated_at)
 	row.children = nil
@@ -301,10 +283,6 @@ local function cell_hl(row, col, ctx)
 	end
 
 	if col.key == "created" or col.key == "updated" then
-		return { { start_col = 0, end_col = #ctx.padded, hl_group = "AtlasTextMuted" } }
-	end
-
-	if col.key == "repo" then
 		return { { start_col = 0, end_col = #ctx.padded, hl_group = "AtlasTextMuted" } }
 	end
 
