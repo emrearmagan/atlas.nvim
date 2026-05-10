@@ -10,8 +10,13 @@ GET {{gitlab_base_url}}/api/v4/user
 PRIVATE-TOKEN: {{GITLAB_TOKEN}}
 Accept: application/json
 
-### List issues - assigned to me, opened
+### List issues (assigned to me, opened)
 GET {{gitlab_base_url}}/api/v4/issues?scope=assigned_to_me&state=opened&per_page=20&order_by=updated_at&sort=desc
+PRIVATE-TOKEN: {{GITLAB_TOKEN}}
+Accept: application/json
+
+### Search issues across all projects
+GET {{gitlab_base_url}}/api/v4/issues?scope=all&search=test&per_page=20&order_by=updated_at&sort=desc
 PRIVATE-TOKEN: {{GITLAB_TOKEN}}
 Accept: application/json
 
