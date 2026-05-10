@@ -14,6 +14,73 @@ local function text_or(v, fallback)
 	return fallback
 end
 
+---@param text string
+---@param hl string|table[]|nil
+---@return table[]|nil
+local function value_hl_spans(text, hl)
+	if type(hl) == "table" then
+		return #hl > 0 and hl or nil
+	end
+	if type(hl) == "string" and hl ~= "" then
+		return { { start_col = 0, end_col = #text, hl_group = hl } }
+	end
+	return nil
+end
+
+---@param raw table
+---@return table[]
+local function assignee_nodes(raw)
+	local assignees = type(raw.assignees) == "table" and raw.assignees or {}
+	if type(assignees.nodes) == "table" then
+		return assignees.nodes
+	end
+	return assignees
+end
+
+---@param issue Issue
+---@return string, string|table[]
+local function assignees_display(issue)
+	local raw = type(issue._raw) == "table" and issue._raw or {}
+	local logins = {}
+	for _, node in ipairs(assignee_nodes(raw)) do
+		local login = type(node) == "table" and tostring(node.login or node.account_id or "") or ""
+		if login ~= "" then
+			table.insert(logins, login)
+		end
+	end
+
+	if #logins == 0 then
+		return "Unassigned", "AtlasTextMuted"
+	end
+
+	local parts = {}
+	local spans = {}
+	local cursor = 0
+	for i, login in ipairs(logins) do
+		local token = "@" .. login
+		table.insert(parts, token)
+		table.insert(spans, {
+			start_col = cursor,
+			end_col = cursor + #token,
+			hl_group = helper.person_hl(login),
+		})
+		cursor = cursor + #token
+
+		if i < #logins then
+			local sep = ", "
+			table.insert(parts, sep)
+			table.insert(spans, {
+				start_col = cursor,
+				end_col = cursor + #sep,
+				hl_group = "AtlasTextMuted",
+			})
+			cursor = cursor + #sep
+		end
+	end
+
+	return table.concat(parts), spans
+end
+
 ---@param status_id string|nil
 ---@return string, string
 local function state_icon_and_hl(status_id)
@@ -52,8 +119,8 @@ function M.render_header(issue, width)
 	local first_line = string.format(" %s %s %s", s_icon, status_label, key_label)
 	local title_line = " " .. title
 
-	local assignee_name = type(issue.assignee) == "table" and issue.assignee.display_name or "Unassigned"
 	local reporter_name = type(issue.reporter) == "table" and issue.reporter.display_name or "Unknown"
+	local assignees_text, assignees_hl = assignees_display(issue)
 	local user_icon = icons.general("user")
 
 	local rows = {
@@ -61,9 +128,9 @@ function M.render_header(issue, width)
 			k1 = "Author:",
 			v1 = string.format("%s %s", user_icon, reporter_name),
 			v1_hl = helper.person_hl(reporter_name),
-			k2 = "Assignee:",
-			v2 = string.format("%s %s", user_icon, assignee_name),
-			v2_hl = helper.person_hl(type(issue.assignee) == "table" and issue.assignee.display_name or nil),
+			k2 = "Assignees:",
+			v2 = assignees_text,
+			v2_hl = assignees_hl,
 		},
 	}
 
@@ -98,10 +165,10 @@ function M.render_header(issue, width)
 				return { { start_col = 0, end_col = #label, hl_group = "AtlasTextMuted" } }
 			end
 			if col.key == "v1" then
-				return { { start_col = 0, end_col = #row.v1, hl_group = row.v1_hl } }
+				return value_hl_spans(row.v1, row.v1_hl)
 			end
 			if col.key == "v2" and row.v2 ~= "" then
-				return { { start_col = 0, end_col = #row.v2, hl_group = row.v2_hl } }
+				return value_hl_spans(row.v2, row.v2_hl)
 			end
 		end,
 	})
