@@ -246,7 +246,7 @@ local function register_commands()
 	end, { desc = "Create a pull request from the current branch" })
 
 	vim.api.nvim_create_user_command("AtlasCreateIssue", function()
-		require("atlas.create_issue").start()
+		require("atlas.issues.create").start()
 	end, { desc = "Create an issue" })
 
 	if M.options.issues then
