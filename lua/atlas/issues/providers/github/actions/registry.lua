@@ -30,6 +30,18 @@ local function issue_slug(issue)
 	return from_key
 end
 
+---@param id string
+---@param ctx table
+---@param done fun(result: table|nil, err: string|nil)
+local function run_action(id, ctx, done)
+	local action = M.find(id)
+	if action == nil then
+		done(nil, string.format("Unknown action: %s", id))
+		return
+	end
+	action.run(ctx, done)
+end
+
 local ACTIONS = {
 	{
 		id = "close",
@@ -80,7 +92,36 @@ local ACTIONS = {
 		end,
 	},
 	{
-		id = "assignees",
+		id = "transition",
+		label = "Transition Issue",
+		hidden = true,
+		is_available = function(ctx)
+			if not has_issue(ctx) then
+				return false, "No issue selected"
+			end
+			return true, nil
+		end,
+		run = function(ctx, done)
+			local issue = ctx.issue
+			local key = tostring(issue.key or "")
+			local is_closed = tostring(issue.status_id or "") == "closed"
+			local action_id = is_closed and "reopen" or "close"
+			local verb = is_closed and "Reopen" or "Close"
+
+			vim.ui.input({
+				prompt = string.format("%s issue %s? [y/N]: ", verb, key),
+			}, function(input)
+				if input == nil or vim.trim(tostring(input)):lower() ~= "y" then
+					done({ changed_issue_key = nil, message = "Transition cancelled" }, nil)
+					return
+				end
+
+				run_action(action_id, ctx, done)
+			end)
+		end,
+	},
+	{
+		id = "assign",
 		label = "Edit Assignees",
 		is_available = function(ctx)
 			if not has_issue(ctx) then
