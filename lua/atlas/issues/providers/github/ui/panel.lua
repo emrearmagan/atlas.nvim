@@ -145,7 +145,7 @@ local function label_hl(hex)
 		return "AtlasChipActive"
 	end
 	local name = "AtlasGHIssueLabel_" .. clean
-	vim.api.nvim_set_hl(0, name, { bg = "#" .. clean, bold = true })
+	vim.api.nvim_set_hl(0, name, { fg = "#000000", bg = "#" .. clean, bold = true })
 	return name
 end
 

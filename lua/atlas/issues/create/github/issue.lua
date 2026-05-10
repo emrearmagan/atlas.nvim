@@ -100,7 +100,7 @@ local function label_hl(hex)
 	end
 
 	local name = string.format("AtlasGHLabel_%s", hex:lower())
-	vim.api.nvim_set_hl(0, name, { bg = "#" .. hex, bold = true })
+	vim.api.nvim_set_hl(0, name, { fg = "#000000", bg = "#" .. hex, bold = true })
 	return name
 end
 
