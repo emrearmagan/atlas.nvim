@@ -21,6 +21,7 @@ local ICONS = {
 		bell = "󰂚",
 		bell_unread = "󱅫",
 		dot = "●",
+		activity_more = "󰉺",
 	},
 
 	pulls = {
@@ -35,7 +36,6 @@ local ICONS = {
 		activity = "󱐋",
 		tag = "",
 		branch = "",
-		issue = "",
 
 		status = {
 			successful = "",
@@ -62,6 +62,7 @@ local ICONS = {
 	},
 
 	issues = {
+		issue = "",
 		type = {
 			epic = "",
 			story = "󰃀",

@@ -81,7 +81,7 @@ function M.register(buf, views)
 				desc = "Create issue",
 				index = 2,
 				callback = function()
-					actions.run_action("create_issue", nil, "main")
+					actions.run_action("create_issue", selected_issue(), "main")
 				end,
 			})
 		)

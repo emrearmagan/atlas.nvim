@@ -15,6 +15,8 @@ local keymaps = require("atlas.issues.providers.github.ui.conversation.keymaps")
 local PADDING_X = 1
 local PADDING = string.rep(" ", PADDING_X)
 local CONNECTOR = "│"
+local EVENT_COLLAPSE_KEEP = 2
+local EVENT_COLLAPSE_THRESHOLD = 5
 
 local REACTION_EMOJI = {
 	["+1"] = "👍", ["-1"] = "👎", laugh = "😄", hooray = "🎉",
@@ -95,10 +97,54 @@ end
 --------------------------------------------------------------------------------
 
 ---@class GHConvEntry
----@field type "comment"|"event"
+---@field type "comment"|"event"|"event_gap"
 ---@field timestamp string
 ---@field comment IssueComment|nil
 ---@field event GHIssueTimelineEntry|nil
+---@field count integer|nil
+
+---@param entries GHConvEntry[]
+---@param run GHConvEntry[]
+local function append_event_run(entries, run)
+	if #run <= EVENT_COLLAPSE_THRESHOLD then
+		for _, entry in ipairs(run) do
+			table.insert(entries, entry)
+		end
+		return
+	end
+
+	for i = 1, EVENT_COLLAPSE_KEEP do
+		table.insert(entries, run[i])
+	end
+	table.insert(entries, {
+		type = "event_gap",
+		timestamp = run[EVENT_COLLAPSE_KEEP].timestamp,
+		count = #run - (EVENT_COLLAPSE_KEEP * 2),
+	})
+	for i = #run - EVENT_COLLAPSE_KEEP + 1, #run do
+		table.insert(entries, run[i])
+	end
+end
+
+---@param entries GHConvEntry[]
+---@return GHConvEntry[]
+local function collapse_event_runs(entries)
+	local collapsed = {}
+	local run = {}
+
+	for _, entry in ipairs(entries) do
+		if entry.type == "event" then
+			table.insert(run, entry)
+		else
+			append_event_run(collapsed, run)
+			run = {}
+			table.insert(collapsed, entry)
+		end
+	end
+	append_event_run(collapsed, run)
+
+	return collapsed
+end
 
 ---@param comments IssueComment[]
 ---@param events GHIssueTimelineEntry[]
@@ -114,7 +160,7 @@ local function build_conversation(comments, events)
 	table.sort(entries, function(a, b)
 		return a.timestamp < b.timestamp
 	end)
-	return entries
+	return collapse_event_runs(entries)
 end
 
 --------------------------------------------------------------------------------
@@ -263,7 +309,7 @@ local EVENT_ICON = {
 	demilestoned = icons.pulls("activity"),
 	renamed = icons.general("edit"),
 	closed = icons.pulls_status("successful"),
-	reopened = icons.pulls("issue"),
+	reopened = icons.issues("issue"),
 	locked = icons.pulls_status("stopped"),
 	unlocked = icons.pulls_status("stopped"),
 	pinned = icons.pulls("activity"),
@@ -332,6 +378,21 @@ local function render_event(event, width)
 	return lines, spans
 end
 
+---@param count integer
+---@return string[], table[]
+local function render_event_gap(count)
+	local text = string.format(
+		"%s  ... %d more %s",
+		icons.general("activity_more"),
+		count,
+		count == 1 and "activity" or "activities"
+	)
+	local line = PADDING .. text
+	return { line }, {
+		{ line = 0, start_col = PADDING_X, end_col = PADDING_X + #text, hl_group = "AtlasTextMuted" },
+	}
+end
+
 --------------------------------------------------------------------------------
 -- Fetching
 --------------------------------------------------------------------------------
@@ -345,11 +406,6 @@ function M.on_select(issue, refresh, opts)
 	state.reset()
 	state.issue = issue
 
-	local provider = get_provider()
-	if provider == nil then
-		return
-	end
-
 	local key = tostring(issue.key or "")
 
 	state.comments = "loading"
@@ -357,27 +413,22 @@ function M.on_select(issue, refresh, opts)
 
 	footer.notify("loading", string.format("Loading conversation for %s...", key))
 
-	if type(provider.fetch_comments) == "function" then
-		track(provider.fetch_comments(key, opts, function(comments, err)
-			if err then
-				state.comments = err
-			else
-				state.comments = comments or {}
-			end
-			refresh()
-		end))
-	else
-		state.comments = {}
-	end
-
 	local timeline_api = require("atlas.issues.providers.github.api.timeline")
-	track(timeline_api.list(key, function(entries, err)
+	track(timeline_api.list_conversation(key, function(result, err)
 		if err then
+			state.comments = {}
 			state.timeline = err
 		else
-			state.timeline = entries or {}
+			result = type(result) == "table" and result or {}
+			state.comments = type(result.comments) == "table" and result.comments or {}
+			state.timeline = type(result.events) == "table" and result.events or {}
 		end
 		refresh()
+		if err then
+			footer.notify("error", string.format("Failed to load conversation for %s", key), 1600)
+		else
+			footer.notify("success", string.format("Conversation loaded for %s", key), 1200)
+		end
 	end, { force_load = opts.force_refresh == true }))
 end
 
@@ -474,6 +525,16 @@ function M.render(issue, width)
 			end
 			for local_lnum, data in pairs(c_map) do
 				line_map[offset + local_lnum] = data
+			end
+		elseif entry.type == "event_gap" then
+			local e_lines, e_spans = render_event_gap(entry.count or 0)
+			local offset = #lines
+			for _, l in ipairs(e_lines) do
+				table.insert(lines, l)
+			end
+			for _, s in ipairs(e_spans) do
+				s.line = s.line + offset
+				table.insert(spans, s)
 			end
 		else
 			local e_lines, e_spans = render_event(entry.event, width)

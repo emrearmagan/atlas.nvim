@@ -3,6 +3,7 @@ local M = {}
 local icons = require("atlas.ui.shared.icons")
 local utils = require("atlas.ui.shared.utils")
 local helper = require("atlas.issues.ui.main.helper")
+local state = require("atlas.issues.state")
 
 ---@param status_id string|nil
 ---@return string
@@ -10,7 +11,7 @@ local function state_icon(status_id)
 	if status_id == "closed" then
 		return icons.pulls_status("successful")
 	end
-	return icons.pulls("issue")
+	return icons.issues("issue")
 end
 
 ---@param status_id string|nil
@@ -20,6 +21,15 @@ local function state_hl(status_id)
 		return "AtlasGHIssueClosed"
 	end
 	return "AtlasGHIssueOpen"
+end
+
+---@param status_id string|nil
+---@return string
+local function state_chip_hl(status_id)
+	if status_id == "closed" then
+		return "AtlasGHIssueClosedChip"
+	end
+	return "AtlasGHIssueOpenChip"
 end
 
 ---@param issue Issue
@@ -34,7 +44,7 @@ function M.format_row(issue, is_child)
 	local key_label = slug ~= "" and string.format("%s#%d", slug, number) or string.format("#%d", number)
 	local s_icon = state_icon(issue.status_id)
 
-	local name = is_child and ("  " .. key_label .. "  " .. title) or (key_label .. "  " .. title)
+	local name = is_child and ("  " .. s_icon .. "  " .. key_label .. "  " .. title) or (key_label .. "  " .. title)
 
 	local assignee_name = type(issue.assignee) == "table" and issue.assignee.display_name or "Unassigned"
 	local reporter_name = type(issue.reporter) == "table" and issue.reporter.display_name or "Unknown"
@@ -44,7 +54,13 @@ function M.format_row(issue, is_child)
 		name = name,
 		assignee = string.format("%s %s", icons.general("user"), utils.shorten_name(assignee_name, 20)),
 		reporter = string.format("%s %s", icons.general("user"), utils.shorten_name(reporter_name, 20)),
-		status = string.format(" %s ", issue.status or ""),
+		status = (function()
+			local issue_key = tostring(issue.key or "")
+			if issue_key ~= "" and state.is_issue_reloading(issue_key) then
+				return string.format(" %s ", state.reload_spinner_frame or "⠋")
+			end
+			return string.format(" %s ", issue.status or "")
+		end)(),
 	}
 end
 
@@ -72,6 +88,15 @@ function M.cell_hl(row, col, ctx)
 
 	if col.key == "name" then
 		local spans = {}
+		local is_child = (tonumber(row._tv2_depth) or 0) > 0
+		if is_child then
+			local s_icon = state_icon(issue.status_id)
+			local is, ie = ctx.text:find(s_icon, 1, true)
+			if is and ie then
+				table.insert(spans, { start_col = is - 1, end_col = ie, hl_group = state_hl(issue.status_id) })
+			end
+		end
+
 		local raw = type(issue._raw) == "table" and issue._raw or {}
 		local number = raw.number or 0
 		local slug = tostring(raw.slug or "")
@@ -88,7 +113,10 @@ function M.cell_hl(row, col, ctx)
 	end
 
 	if col.key == "status" then
-		return { { start_col = 0, end_col = #ctx.padded, hl_group = state_hl(issue.status_id) } }
+		local issue_key = tostring(issue.key or "")
+		local hl_group = issue_key ~= "" and state.is_issue_reloading(issue_key) and "AtlasTextMuted"
+			or state_chip_hl(issue.status_id)
+		return { { start_col = 0, end_col = #ctx.padded, hl_group = hl_group } }
 	end
 
 	if col.key == "assignee" then

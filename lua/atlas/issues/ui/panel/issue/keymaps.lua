@@ -63,10 +63,10 @@ function M.register(buf)
 
 	table.insert(items, {
 		key = "r",
-		desc = "Refresh tab",
+		desc = "Refresh issue",
 		opts = { nowait = true, silent = true },
 		callback = function()
-			require("atlas.issues.ui.panel").on_select(nil, { force_refresh = true })
+			require("atlas.issues.ui.main.controller").refresh_issue(panel_state.current_issue)
 		end,
 	})
 

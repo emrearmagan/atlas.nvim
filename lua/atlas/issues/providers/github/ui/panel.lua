@@ -2,124 +2,145 @@
 local M = {}
 
 local icons = require("atlas.ui.shared.icons")
-local table_tree = require("atlas.ui.components.table_tree")
 local helper = require("atlas.issues.ui.main.helper")
 local conversation_state = require("atlas.issues.providers.github.ui.conversation.state")
+local activity_state = require("atlas.issues.providers.github.ui.activity.state")
 
-local function text_or(v, fallback)
-	if type(v) == "string" and v ~= "" then
-		return v
+---@param raw table
+---@return table[]
+local function assignee_nodes(raw)
+	local assignees = type(raw.assignees) == "table" and raw.assignees or {}
+	if type(assignees.nodes) == "table" then
+		return assignees.nodes
 	end
-	return fallback
+	return assignees
 end
 
----@param status_id string|nil
----@return string, string
-local function state_icon_and_hl(status_id)
-	if status_id == "closed" then
-		return icons.pulls_status("successful"), "AtlasGHIssueClosed"
+---@param raw table
+---@return string, string|table[]
+local function assignees_display(raw)
+	local logins = {}
+	for _, node in ipairs(assignee_nodes(raw)) do
+		local login = type(node) == "table" and tostring(node.login or node.account_id or "") or ""
+		if login ~= "" then
+			table.insert(logins, login)
+		end
 	end
-	return icons.pulls("issue"), "AtlasGHIssueOpen"
+
+	if #logins == 0 then
+		return "Unassigned", "AtlasTextMuted"
+	end
+
+	local parts = {}
+	local spans = {}
+	local cursor = 0
+	for i, login in ipairs(logins) do
+		local token = "@" .. login
+		table.insert(parts, token)
+		table.insert(spans, {
+			start_col = cursor,
+			end_col = cursor + #token,
+			hl_group = helper.person_hl(login),
+		})
+		cursor = cursor + #token
+
+		if i < #logins then
+			local sep = ", "
+			table.insert(parts, sep)
+			table.insert(spans, {
+				start_col = cursor,
+				end_col = cursor + #sep,
+				hl_group = "AtlasTextMuted",
+			})
+			cursor = cursor + #sep
+		end
+	end
+
+	return table.concat(parts), spans
+end
+
+---@param value any
+---@return number|nil
+local function connection_count(value)
+	if type(value) == "number" then
+		return value
+	end
+	if type(value) == "table" then
+		return tonumber(value.totalCount)
+	end
+	return nil
+end
+
+---@param milestone table|nil
+---@return string
+local function milestone_display(milestone)
+	if type(milestone) ~= "table" then
+		return ""
+	end
+
+	local title = tostring(milestone.title or "")
+	if title == "" then
+		return ""
+	end
+
+	local percent = tonumber(milestone.progressPercentage)
+	local open_count = connection_count(milestone.openIssues) or tonumber(milestone.open_issues)
+	local closed_count = connection_count(milestone.closedIssues) or tonumber(milestone.closed_issues)
+	local total = open_count and closed_count and (open_count + closed_count) or nil
+
+	if percent == nil and total and total > 0 then
+		percent = (closed_count / total) * 100
+	end
+
+	if percent ~= nil and total and total > 0 then
+		return string.format("%s %d%% (%d/%d)", title, math.floor(percent + 0.5), closed_count, total)
+	end
+	if percent ~= nil then
+		return string.format("%s %d%%", title, math.floor(percent + 0.5))
+	end
+	if total and total > 0 then
+		return string.format("%s %d/%d", title, closed_count, total)
+	end
+	return title
 end
 
 --------------------------------------------------------------------------------
--- Header (full override)
+-- Header rows
 --------------------------------------------------------------------------------
 
 ---@param issue Issue
----@param width integer
----@return string[], table[]
-function M.render_header(issue, width)
+---@return IssuesPanelHeaderRow[]
+function M.header_rows(issue)
 	local raw = type(issue._raw) == "table" and issue._raw or {}
-	local number = raw.number or 0
-	local slug = tostring(raw.slug or "")
-	local title = text_or(issue.summary, "")
-	local status_label = text_or(issue.status, "Open")
-	local s_icon, s_hl = state_icon_and_hl(issue.status_id)
-	local key_label = slug ~= "" and string.format("%s#%d", slug, number) or string.format("#%d", number)
-
-	local first_line = string.format(" %s %s %s", s_icon, status_label, key_label)
-	local title_line = " " .. title
-
-	local assignee_name = type(issue.assignee) == "table" and issue.assignee.display_name or "Unassigned"
-	local reporter_name = type(issue.reporter) == "table" and issue.reporter.display_name or "Unknown"
+	local milestone_text = milestone_display(raw.milestone)
+	local reporter_name = type(issue.reporter) == "table" and tostring(issue.reporter.display_name or "") or ""
+	local assignees_text, assignees_hl = assignees_display(raw)
 	local user_icon = icons.general("user")
+
+	if reporter_name == "" then
+		reporter_name = "Unknown"
+	end
 
 	local rows = {
 		{
-			k1 = "Author:",
-			v1 = string.format("%s %s", user_icon, reporter_name),
-			v1_hl = helper.person_hl(reporter_name),
-			k2 = "Assignee:",
-			v2 = string.format("%s %s", user_icon, assignee_name),
-			v2_hl = helper.person_hl(type(issue.assignee) == "table" and issue.assignee.display_name or nil),
+			k1 = "Status:",
+			v1 = tostring(issue.status or "Open"),
+			v1_hl = issue.status_id == "closed" and "AtlasGHIssueClosedChip" or "AtlasGHIssueOpenChip",
+			k2 = "Reporter:",
+			v2 = string.format("%s %s", user_icon, reporter_name),
+			v2_hl = helper.person_hl(reporter_name),
+		},
+		{
+			k1 = "Assignee:",
+			v1 = assignees_text,
+			v1_hl = assignees_hl,
+			k2 = milestone_text ~= "" and "Milestone:" or "",
+			v2 = milestone_text,
+			v2_hl = milestone_text ~= "" and "AtlasTextMuted" or nil,
 		},
 	}
 
-	if raw.created_at and raw.created_at ~= "" then
-		local utils = require("atlas.ui.shared.utils")
-		table.insert(rows, {
-			k1 = "Opened:",
-			v1 = utils.relative_time_text(raw.created_at) or raw.created_at,
-			v1_hl = "AtlasTextMuted",
-			k2 = "",
-			v2 = "",
-			v2_hl = nil,
-		})
-	end
-
-	local table_lines, _, table_spans = table_tree.render({
-		columns = {
-			{ key = "k1", name = "", can_grow = false },
-			{ key = "v1", name = "", can_grow = true },
-			{ key = "k2", name = "", can_grow = false },
-			{ key = "v2", name = "", can_grow = true, grow_last = true },
-		},
-		rows = rows,
-		width = width,
-		margin = 1,
-		show_header = false,
-		column_gap = 2,
-		fill = true,
-		cell_hl = function(row, col)
-			if col.key == "k1" or col.key == "k2" then
-				local label = col.key == "k1" and row.k1 or row.k2
-				return { { start_col = 0, end_col = #label, hl_group = "AtlasTextMuted" } }
-			end
-			if col.key == "v1" then
-				return { { start_col = 0, end_col = #row.v1, hl_group = row.v1_hl } }
-			end
-			if col.key == "v2" and row.v2 ~= "" then
-				return { { start_col = 0, end_col = #row.v2, hl_group = row.v2_hl } }
-			end
-		end,
-	})
-
-	local lines = { first_line, title_line, "" }
-	for _, l in ipairs(table_lines) do
-		table.insert(lines, l)
-	end
-	table.insert(lines, "")
-
-	local spans = {
-		{ line = 0, line_hl_group = "AtlasPanelHeaderBg" },
-		{ line = 1, line_hl_group = "AtlasPanelHeaderBg" },
-		{ line = 0, start_col = 1, end_col = 1 + #s_icon, hl_group = s_hl },
-		{ line = 0, start_col = 1 + #s_icon + 1, end_col = 1 + #s_icon + 1 + #status_label, hl_group = s_hl },
-		{ line = 0, start_col = #first_line - #key_label, end_col = #first_line, hl_group = "AtlasGHIssueKey" },
-		{ line = 1, start_col = 1, end_col = #title_line, hl_group = "Normal" },
-	}
-
-	for _, span in ipairs(table_spans) do
-		table.insert(spans, {
-			line = span.line + 3,
-			start_col = span.start_col,
-			end_col = span.end_col,
-			hl_group = span.hl_group,
-		})
-	end
-
-	return lines, spans
+	return rows
 end
 
 --------------------------------------------------------------------------------
@@ -134,13 +155,7 @@ local function label_hl(hex)
 		return "AtlasChipActive"
 	end
 	local name = "AtlasGHIssueLabel_" .. clean
-	local r = tonumber(clean:sub(1, 2), 16) or 0
-	local g = tonumber(clean:sub(3, 4), 16) or 0
-	local b = tonumber(clean:sub(5, 6), 16) or 0
-	-- Perceptual luminance; pick a contrasting fg so the label is readable.
-	local luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
-	local fg = luminance > 0.6 and "#1e1e2e" or "#ffffff"
-	vim.api.nvim_set_hl(0, name, { fg = fg, bg = "#" .. clean, bold = true })
+	vim.api.nvim_set_hl(0, name, { fg = "#000000", bg = "#" .. clean, bold = true })
 	return name
 end
 
@@ -157,24 +172,17 @@ function M.chips(issue)
 		end
 	end
 
-	local milestone = type(raw.milestone) == "table" and raw.milestone or nil
-	if milestone and tostring(milestone.title or "") ~= "" then
-		table.insert(chips, {
-			label = string.format("%s %s", icons.pulls("activity"), milestone.title),
-			hl = "AtlasChipActive",
-		})
-	end
 	return chips
 end
 
 --------------------------------------------------------------------------------
--- Loading + tabs
+-- Lifecycle
 --------------------------------------------------------------------------------
 
 ---@param _issue Issue
 ---@return boolean
 function M.is_loading(_issue)
-	return conversation_state.any_loading()
+	return conversation_state.any_loading() or activity_state.any_loading()
 end
 
 ---@return IssuesPanelTab[]
@@ -185,6 +193,12 @@ function M.tabs()
 			label = "Conversation",
 			icon = icons.general("comment"),
 			mod = require("atlas.issues.providers.github.ui.conversation"),
+		},
+		{
+			key = "activity",
+			label = "Activity",
+			icon = icons.pulls("activity"),
+			mod = require("atlas.issues.providers.github.ui.activity"),
 		},
 	}
 end

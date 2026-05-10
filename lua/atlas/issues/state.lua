@@ -5,7 +5,7 @@
 ---@field error string|nil
 ---@field current_user IssueUser|nil
 ---@field issues Issue[]|nil
----@field issue_tree table[]|nil
+---@field issue_tree IssuesGroup[]|nil
 ---@field line_map table<integer, table>
 ---@field collapsed_issue_keys table<string, boolean>
 ---@field provider IssuesProvider|nil

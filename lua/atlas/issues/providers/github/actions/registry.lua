@@ -30,6 +30,43 @@ local function issue_slug(issue)
 	return from_key
 end
 
+---@param ctx table
+---@return string|nil slug, string|nil err
+local function create_issue_slug(ctx)
+	local explicit = tostring(type(ctx) == "table" and ctx.repo_slug or "")
+	if explicit ~= "" then
+		return explicit, nil
+	end
+
+	if has_issue(ctx) then
+		local slug = issue_slug(ctx.issue)
+		if slug ~= "" then
+			return slug, nil
+		end
+	end
+
+	return nil, "Could not determine repository"
+end
+
+---@return string
+local function current_search()
+	local state = require("atlas.issues.state")
+	local view = state.active_view or state.current_view or {}
+	return tostring(view.search or "")
+end
+
+---@param id string
+---@param ctx table
+---@param done fun(result: table|nil, err: string|nil)
+local function run_action(id, ctx, done)
+	local action = M.find(id)
+	if action == nil then
+		done(nil, string.format("Unknown action: %s", id))
+		return
+	end
+	action.run(ctx, done)
+end
+
 local ACTIONS = {
 	{
 		id = "close",
@@ -80,7 +117,36 @@ local ACTIONS = {
 		end,
 	},
 	{
-		id = "assignees",
+		id = "transition",
+		label = "Transition Issue",
+		hidden = true,
+		is_available = function(ctx)
+			if not has_issue(ctx) then
+				return false, "No issue selected"
+			end
+			return true, nil
+		end,
+		run = function(ctx, done)
+			local issue = ctx.issue
+			local key = tostring(issue.key or "")
+			local is_closed = tostring(issue.status_id or "") == "closed"
+			local action_id = is_closed and "reopen" or "close"
+			local verb = is_closed and "Reopen" or "Close"
+
+			vim.ui.input({
+				prompt = string.format("%s issue %s? [y/N]: ", verb, key),
+			}, function(input)
+				if input == nil or vim.trim(tostring(input)):lower() ~= "y" then
+					done({ changed_issue_key = nil, message = "Transition cancelled" }, nil)
+					return
+				end
+
+				run_action(action_id, ctx, done)
+			end)
+		end,
+	},
+	{
+		id = "assign",
 		label = "Edit Assignees",
 		is_available = function(ctx)
 			if not has_issue(ctx) then
@@ -272,21 +338,56 @@ local ACTIONS = {
 		end,
 	},
 	{
+		id = "create_issue",
+		label = "Create Issue",
+		is_available = function(ctx)
+			local slug, err = create_issue_slug(ctx or {})
+			return slug ~= nil and slug ~= "", err
+		end,
+			run = function(ctx, done)
+				local slug, slug_err = create_issue_slug(ctx or {})
+				if slug == nil or slug == "" then
+					done(nil, slug_err or "Could not determine repository")
+					return
+				end
+
+				local create_issue_ui = require("atlas.issues.create.github.issue")
+
+				create_issue_ui.open({
+					repo_slug = slug,
+					on_done = function(result, err)
+						if err then
+							done(nil, tostring(err))
+							return
+						end
+
+						local number = result and result.number
+						local key = number and string.format("%s#%s", slug, tostring(number)) or nil
+						done({
+							changed_issue_key = key,
+							message = result and result.url or "Issue created",
+						}, nil)
+					end,
+				})
+		end,
+	},
+	{
 		id = "search",
 		label = "Search Issues",
 		is_available = function()
 			return true, nil
 		end,
 		run = function(_, done)
-			vim.ui.input({ prompt = "GitHub search (eg. is:issue assignee:@me): " }, function(input)
-				if input == nil or vim.trim(input) == "" then
+			vim.ui.input({ prompt = "GitHub search: ", default = current_search() }, function(input)
+				local search = input ~= nil and vim.trim(input) or ""
+				if search == "" then
 					done({ changed_issue_key = nil, message = "Cancelled" }, nil)
 					return
 				end
 				local search_view = {
-					name = string.format("Search (%s)", input),
+					name = string.format("Search (%s)", search),
 					key = "?",
-					search = input,
+					search = search,
 				}
 				require("atlas.issues.ui.main.controller").switch_view(search_view)
 				done({ changed_issue_key = nil, message = "Searching..." }, nil)

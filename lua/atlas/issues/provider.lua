@@ -1,4 +1,13 @@
 --------------------------------------------------------------------------------
+-- Main render result
+--------------------------------------------------------------------------------
+
+---@class IssuesMainRenderResult
+---@field lines string[]
+---@field spans table[]
+---@field line_map table<integer, table>
+
+--------------------------------------------------------------------------------
 -- Provider Interface
 --------------------------------------------------------------------------------
 
@@ -6,10 +15,13 @@
 ---@field force_load boolean|nil
 ---@field max_results number|nil
 ---@field next_page_token string|nil
+---@field layout "plain"|"compact"|nil
+---@field with_relationships boolean|nil
 
 ---@class IssuesViewConfig
 ---@field name string
 ---@field key string
+---@field layout "plain"|"compact"|nil
 
 ---@class IssuesProvider
 ---@field id string
@@ -35,8 +47,10 @@
 ---@field run_action fun(action_id: string, ctx: table, on_done: fun(result: table|nil, err: string|nil))|nil
 ---@field open_actions fun(issue: Issue|nil, source: "main"|"panel"|nil, on_done: fun(result: table|nil, err: string|nil))|nil
 ---@field search fun(on_done: fun(result: table|nil, err: string|nil)|nil)|nil
+---@field create_issue (fun(opts: table, on_done: fun(result: table|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---
 --- Main UI Style
+---@field render (fun(groups: IssuesGroup[], layout: "plain"|"compact", opts: { width: integer }): IssuesMainRenderResult)|nil
 ---@field format_row fun(issue: Issue, is_child: boolean): table|nil
 ---@field cell_hl fun(row: table, col: table, ctx: { text: string, padded: string, width: integer }): table[]|nil|nil
 ---
@@ -49,7 +63,6 @@
 --------------------------------------------------------------------------------
 
 ---@class IssuesProviderPanel
----@field render_header (fun(issue: Issue, width: integer): string[], table[])|nil
 ---@field header_rows (fun(issue: Issue): IssuesPanelHeaderRow[])|nil
 ---@field chips (fun(issue: Issue): IssuesPanelChip[])|nil
 ---@field tabs (fun(): IssuesPanelTab[])|nil
@@ -68,10 +81,10 @@
 ---@class IssuesPanelHeaderRow
 ---@field k1 string
 ---@field v1 string
----@field v1_hl string
+---@field v1_hl string|table[]|nil hl group name, or list of {start_col, end_col, hl_group} relative to the v1 cell
 ---@field k2 string
 ---@field v2 string
----@field v2_hl string
+---@field v2_hl string|table[]|nil hl group name, or list of {start_col, end_col, hl_group} relative to the v2 cell
 
 ---@class IssuesPanelChip
 ---@field label string

@@ -40,9 +40,13 @@ function M.fetch_user(on_done)
 end
 
 ---@param config AtlasIssuesConfig
+---@param opts IssuesFetchOpts|nil
 ---@return boolean
-local function parent_enrichment_enabled(config)
-	return config.fetch_parent_issues ~= false
+local function relationships_enabled(config, opts)
+	if opts and (opts.with_relationships == false or opts.layout == "compact") then
+		return false
+	end
+	return config.with_relationships ~= false
 end
 
 ---@param issues Issue[]
@@ -50,7 +54,7 @@ end
 ---@param on_done fun(enriched: Issue[])
 local function enrich_with_parents(issues, opts, on_done)
 	local issues_cfg = require("atlas.config").options.issues or {}
-	if not parent_enrichment_enabled(issues_cfg) then
+	if not relationships_enabled(issues_cfg, opts) then
 		on_done(issues)
 		return
 	end
@@ -240,7 +244,7 @@ end
 ---@param on_done fun(result: table|nil, err: string|nil)|nil
 function M.search(on_done)
 	local jira_actions = require("atlas.issues.providers.jira.actions")
-	jira_actions.run("search_query_issue", { issue = nil, source = "main" }, function(result, err)
+	jira_actions.run("search_issues", { issue = nil, source = "main" }, function(result, err)
 		if on_done ~= nil then
 			on_done(result, err)
 		end

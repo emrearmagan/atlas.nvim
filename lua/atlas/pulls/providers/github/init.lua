@@ -636,7 +636,7 @@ end
 ---@param on_done fun(comment: PullsComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.reply_comment(pr, _parent_id, content, on_done)
-	-- GitHub issue comments have no threading — reply is just a new comment
+	-- GitHub issue comments have no threading - reply is just a new comment
 	return M.add_comment(pr, content, on_done)
 end
 
@@ -1062,20 +1062,6 @@ end
 function M.create_pr(opts, on_done)
 	local pr_api = require("atlas.pulls.providers.github.api.pullrequests")
 	return pr_api.create_pr(opts, on_done)
-end
-
----@param opts PullsCreateIssueOpts
----@param on_done fun(result: PullsCreateIssueResult|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.create_issue(opts, on_done)
-	local issues_api = require("atlas.pulls.providers.github.api.issues")
-	return issues_api.create_issue(opts, function(result, err)
-		if err or result == nil then
-			on_done(nil, err)
-			return
-		end
-		on_done({ id = result.number, url = result.url, message = "Issue created" }, nil)
-	end)
 end
 
 return M

@@ -29,6 +29,16 @@ local function safe_table(value)
 	return value
 end
 
+---@param value any
+---@return table
+local function connection_nodes(value)
+	value = nilify(value)
+	if type(value) == "table" and type(value.nodes) == "table" then
+		return value.nodes
+	end
+	return safe_table(value)
+end
+
 ---@param raw_user table|nil
 ---@return IssueUser|nil
 function M.normalize_user(raw_user)
@@ -36,11 +46,12 @@ function M.normalize_user(raw_user)
 	if type(raw_user) ~= "table" then
 		return nil
 	end
-	local login = tostring(raw_user.login or "")
+	local login = safe_str(raw_user.login) or ""
 	if login == "" then
 		return nil
 	end
-	local display_name = tostring(raw_user.name or login)
+	local name = safe_str(raw_user.name) or ""
+	local display_name = name ~= "" and name or login
 	return {
 		account_id = login,
 		display_name = display_name,
@@ -164,8 +175,9 @@ function M.normalize_issue(raw, fallback_slug)
 	local status_name, status_id = normalize_state(raw.state)
 	local author = M.normalize_user(raw.author)
 
-	local labels = safe_table(raw.labels)
-	local assignees = safe_table(raw.assignees)
+	local labels = connection_nodes(raw.labels)
+	local assignees = connection_nodes(raw.assignees)
+	local parent = M.normalize_issue(nilify(raw.parent), fallback_slug)
 	local milestone = nilify(raw.milestone)
 	local body = safe_str(raw.body) or ""
 	local created_at = safe_str(raw.createdAt) or safe_str(raw.created_at) or ""
@@ -175,6 +187,7 @@ function M.normalize_issue(raw, fallback_slug)
 	local comments_field = nilify(raw.comments)
 	local comment_count = tonumber(raw.commentsCount)
 		or (type(comments_field) == "number" and comments_field)
+		or (type(comments_field) == "table" and tonumber(comments_field.totalCount))
 		or (type(comments_field) == "table" and #comments_field)
 		or 0
 
@@ -193,7 +206,7 @@ function M.normalize_issue(raw, fallback_slug)
 		reporter = author,
 		story_points = nil,
 		duedate = nil,
-		parent = nil,
+		parent = parent,
 		url = url ~= "" and url or nil,
 		_raw = {
 			number = number,
@@ -224,6 +237,40 @@ function M.normalize_issues(raw_list, fallback_slug)
 			table.insert(out, issue)
 		end
 	end
+	return out
+end
+
+---@param nodes table[]|nil
+---@return Issue[]
+function M.normalize_graphql_search_results(nodes)
+	local out = {}
+	local seen = {}
+
+	local function insert_issue(issue)
+		local key = type(issue) == "table" and tostring(issue.key or "") or ""
+		if key == "" or seen[key] then
+			return
+		end
+		seen[key] = true
+		table.insert(out, issue)
+	end
+
+	for _, raw in ipairs(nodes or {}) do
+		local issue = M.normalize_issue(raw, nil)
+		if type(issue) == "table" then
+			insert_issue(issue.parent)
+			insert_issue(issue)
+
+			for _, child_raw in ipairs(connection_nodes(raw.subIssues)) do
+				local child = M.normalize_issue(child_raw, nil)
+				if type(child) == "table" and child.parent == nil then
+					child.parent = issue
+				end
+				insert_issue(child)
+			end
+		end
+	end
+
 	return out
 end
 

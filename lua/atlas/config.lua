@@ -19,6 +19,7 @@
 ---@class AtlasIssuesViewConfig
 ---@field name string
 ---@field key string|nil
+---@field layout "plain"|"compact"|nil
 
 ---@class AtlasPullsRepoConfig
 ---@field settings table<string, AtlasPullsRepoSettings>|nil
@@ -74,7 +75,7 @@
 
 ---@class AtlasIssuesConfig
 ---@field max_results number|nil
----@field fetch_parent_issues boolean|nil
+---@field with_relationships boolean|nil
 ---@field custom_actions AtlasIssuesCustomAction[]|nil
 ---@field providers AtlasIssuesProviders|nil
 
@@ -248,7 +249,7 @@ local function register_commands()
 	end, { desc = "Create a pull request from the current branch" })
 
 	vim.api.nvim_create_user_command("AtlasCreateIssue", function()
-		require("atlas.create_issue").start()
+		require("atlas.issues.create").start()
 	end, { desc = "Create an issue" })
 
 	if M.options.issues then

@@ -57,7 +57,6 @@
 ---
 --- Features:
 ---@field create_pr (fun(opts: PullsCreatePROpts, on_done: fun(result: PullsCreatePRResult|nil, err: string|nil)): { cancel: fun() }|nil)|nil
----@field create_issue (fun(opts: PullsCreateIssueOpts, on_done: fun(result: PullsCreateIssueResult|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---
 --- Main list rendering
 ---@field render (fun(groups: PullsGroup[], layout: string, opts: { width: integer }): PullsMainRenderResult)|nil

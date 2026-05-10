@@ -33,14 +33,6 @@ local icons = require("atlas.ui.shared.icons")
 ---@field list_assignees fun(on_done: fun(items: CreateIssueAssignee[]|nil, err: string|nil))|nil
 ---@field list_milestones fun(on_done: fun(items: CreateIssueMilestone[]|nil, err: string|nil))|nil
 
----@class CreateIssueSubmitOpts
----@field repo_slug string
----@field title string
----@field body string
----@field labels string[]
----@field assignees string[]
----@field milestone integer|nil
-
 ---@class CreateIssueFields
 ---@field repo_slug string
 ---@field title string
@@ -55,7 +47,7 @@ local icons = require("atlas.ui.shared.icons")
 ---@field content_width integer
 ---@field is_submitting boolean
 ---@field pickers CreateIssuePickers
----@field on_submit fun(opts: CreateIssueSubmitOpts, on_done: fun(result: { url: string|nil, number: integer|nil }|nil, err: string|nil))|nil
+---@field on_done fun(result: GitHubIssueEditorResult|nil, err: string|nil)|nil
 
 local function notify(level, msg)
 	vim.notify("[Atlas] " .. tostring(msg), level)
@@ -76,6 +68,27 @@ end
 local function valid_buf(buf)
 	return buf ~= nil and vim.api.nvim_buf_is_valid(buf)
 end
+
+---@param repo_slug string
+---@return CreateIssuePickers
+local function default_pickers(repo_slug)
+	local issues_api = require("atlas.issues.providers.github.api.issues")
+	return {
+		list_labels = function(cb)
+			issues_api.list_labels(repo_slug, cb)
+		end,
+		list_assignees = function(cb)
+			issues_api.list_assignees(repo_slug, cb)
+		end,
+		list_milestones = function(cb)
+			issues_api.list_milestones(repo_slug, cb)
+		end,
+	}
+end
+
+---@class GitHubIssueEditorResult
+---@field url string|nil
+---@field number integer|nil
 
 ---@param assignees CreateIssueAssignee[]
 ---@return string
@@ -99,14 +112,8 @@ local function label_hl(hex)
 		return "AtlasTextMuted"
 	end
 
-	local r = tonumber(hex:sub(1, 2), 16) or 0
-	local g = tonumber(hex:sub(3, 4), 16) or 0
-	local b = tonumber(hex:sub(5, 6), 16) or 0
-	local luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
-	local fg = luminance > 0.6 and "#111827" or "#f9fafb"
-
 	local name = string.format("AtlasGHLabel_%s", hex:lower())
-	vim.api.nvim_set_hl(0, name, { fg = fg, bg = "#" .. hex, bold = true })
+	vim.api.nvim_set_hl(0, name, { fg = "#000000", bg = "#" .. hex, bold = true })
 	return name
 end
 
@@ -351,11 +358,6 @@ local function submit(issue_state)
 		return
 	end
 
-	if type(issue_state.on_submit) ~= "function" then
-		notify_error("Submit handler not configured")
-		return
-	end
-
 	local title = get_title(issue_state)
 	if title == "" then
 		notify_warn("Title is required")
@@ -375,7 +377,8 @@ local function submit(issue_state)
 	issue_state.is_submitting = true
 	spinner.start("Creating issue…")
 
-	issue_state.on_submit({
+	local issues_api = require("atlas.issues.providers.github.api.issues")
+	issues_api.create_issue({
 		repo_slug = issue_state.fields.repo_slug,
 		title = title,
 		body = get_body(issue_state),
@@ -389,6 +392,9 @@ local function submit(issue_state)
 
 			if err then
 				notify_error("Create issue failed: " .. tostring(err))
+				if type(issue_state.on_done) == "function" then
+					issue_state.on_done(nil, err)
+				end
 				return
 			end
 
@@ -400,30 +406,29 @@ local function submit(issue_state)
 				notify_info("Issue created")
 			end
 
+			if type(issue_state.on_done) == "function" then
+				issue_state.on_done(result, nil)
+			end
+
 			close(issue_state)
 		end)
 	end)
 end
 
----@class CreateIssueOpenOpts
+---@class GitHubIssueEditorOpts
 ---@field repo_slug string
----@field initial_title string|nil
----@field initial_body string|nil
----@field initial_labels CreateIssueLabel[]|nil
----@field initial_assignees CreateIssueAssignee[]|nil
----@field initial_milestone CreateIssueMilestone|nil
----@field pickers CreateIssuePickers
----@field on_submit fun(opts: CreateIssueSubmitOpts, on_done: fun(result: { url: string|nil, number: integer|nil }|nil, err: string|nil))
+---@field on_done fun(result: GitHubIssueEditorResult|nil, err: string|nil)|nil
 
----@param opts CreateIssueOpenOpts
+---@param opts GitHubIssueEditorOpts
 function M.open(opts)
 	if type(opts) ~= "table" then
 		notify_warn("create_issue.open: missing options")
 		return
 	end
 
-	if type(opts.on_submit) ~= "function" then
-		notify_error("create_issue.open: on_submit is required")
+	local repo_slug = tostring(opts.repo_slug or "")
+	if repo_slug == "" then
+		notify_error("create_issue.open: repo_slug is required")
 		return
 	end
 
@@ -433,18 +438,18 @@ function M.open(opts)
 	---@type CreateIssueState
 	local issue_state = {
 		fields = {
-			repo_slug = opts.repo_slug,
-			title = opts.initial_title or "",
-			body = opts.initial_body or "",
-			labels = type(opts.initial_labels) == "table" and opts.initial_labels or {},
-			assignees = type(opts.initial_assignees) == "table" and opts.initial_assignees or {},
-			milestone = opts.initial_milestone,
+			repo_slug = repo_slug,
+			title = "",
+			body = "",
+			labels = {},
+			assignees = {},
+			milestone = nil,
 		},
 		layout = {},
 		content_width = 80,
 		is_submitting = false,
-		pickers = type(opts.pickers) == "table" and opts.pickers or {},
-		on_submit = opts.on_submit,
+		pickers = default_pickers(repo_slug),
+		on_done = opts.on_done,
 	}
 
 	editor.open(issue_state, {

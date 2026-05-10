@@ -30,7 +30,7 @@ local function track(handle)
 end
 
 local ISSUE_ICON = {
-	open = { icon = icons.pulls("issue"), hl = "AtlasPROpen" },
+	open = { icon = icons.issues("issue"), hl = "AtlasPROpen" },
 	closed = { icon = icons.pulls_status("successful"), hl = "AtlasTextPositive" },
 }
 

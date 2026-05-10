@@ -5,7 +5,7 @@ local icons = require("atlas.ui.shared.icons")
 
 local SUBJECT_ICON = {
 	PullRequest = { icon = icons.pulls("pr"), hl = "AtlasPROpen" },
-	Issue = { icon = icons.pulls("issue"), hl = "AtlasPROpen" },
+	Issue = { icon = icons.issues("issue"), hl = "AtlasPROpen" },
 	CheckSuite = { icon = icons.pulls("tasks"), hl = "AtlasTextWarning" },
 }
 

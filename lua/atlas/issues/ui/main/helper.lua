@@ -18,6 +18,9 @@ function M.issue_type_hl(issue_type)
 	if lower == "task" or lower == "sub-task" or lower == "subtask" then
 		return "AtlasLogInfo"
 	end
+	if lower == "issue" then
+		return "AtlasGHIssueOpen"
+	end
 	return "AtlasTextMuted"
 end
 
@@ -33,6 +36,9 @@ function M.issue_hl(key)
 	local lower = tostring(key or ""):lower()
 	if lower == "" or lower == "none" then
 		return "LineNr"
+	end
+	if lower:find("#", 1, true) then
+		return "AtlasGHIssueKey"
 	end
 
 	return "AtlasJiraKey"
@@ -80,7 +86,7 @@ function M.person_hl(name)
 end
 
 ---@param issues Issue[]
----@return table[]
+---@return IssuesGroup[]
 function M.build_issue_tree(issues)
 	local by_key = {}
 	for _, issue in ipairs(issues or {}) do
