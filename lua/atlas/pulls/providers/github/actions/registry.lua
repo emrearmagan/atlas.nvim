@@ -555,7 +555,7 @@ local ACTIONS = {
 			end
 
 			local issues_api = require("atlas.pulls.providers.github.api.issues")
-			local create_issue_ui = require("atlas.pulls.create.issue")
+			local create_issue_ui = require("atlas.issues.create.github.issue")
 
 			create_issue_ui.open({
 				repo_slug = slug,
