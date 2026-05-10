@@ -1,3 +1,37 @@
+-- Example:
+--   require("atlas").setup({
+--     issues = {
+--       providers = {
+--         jira = {
+--           base_url = "https://your-domain.atlassian.net",
+--           email    = vim.env.JIRA_EMAIL,
+--           token    = vim.env.JIRA_TOKEN,
+--           cache_ttl = 300,
+--           views = {
+--             { name = "Open",       key = "1", jql = "assignee = currentUser() AND resolution = Unresolved ORDER BY updated DESC" },
+--             { name = "Reported",   key = "2", jql = "reporter = currentUser() AND resolution = Unresolved ORDER BY updated DESC" },
+--             { name = "Watching",   key = "3", jql = "watcher = currentUser() AND resolution = Unresolved ORDER BY updated DESC" },
+--             { name = "Sprint",     key = "4", jql = "sprint in openSprints() AND assignee = currentUser() ORDER BY rank" },
+--           },
+--
+--           -- Per-project custom field
+--           project_config = {
+--             story_points_field = "customfield_10016",
+--             KAN = {
+--               story_points_field = "customfield_10016",
+--               customfield_10038 = {
+--                 name    = "Team",
+--                 format  = function(v) return type(v) == "table" and v.value or nil end,
+--                 hl_group = "AtlasChipActive",
+--                 display  = "chip", -- "chip" | "table"
+--               },
+--             },
+--           },
+--         },
+--       },
+--     },
+--   })
+
 ---@class AtlasJiraViewConfig : AtlasIssuesViewConfig
 ---@field jql string
 

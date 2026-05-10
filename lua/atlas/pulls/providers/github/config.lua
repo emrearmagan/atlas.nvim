@@ -1,3 +1,21 @@
+-- Example:
+--   require("atlas").setup({
+--     pulls = {
+--       providers = {
+--         github = {
+--           cache_ttl = 300,
+--           views = {
+--             { name = "Assigned",  key = "1", search = "is:pr assignee:@me archived:false" },
+--             { name = "Authored",  key = "2", search = "is:pr author:@me archived:false" },
+--             { name = "Reviewing", key = "3", search = "is:pr review-requested:@me archived:false" },
+--             { name = "Reviewed",  key = "4", search = "is:pr reviewed-by:@me archived:false" },
+--             { name = "Mention",   key = "5", search = "is:pr mentions:@me archived:false" },
+--           },
+--         },
+--       },
+--     },
+--   })
+
 ---@class AtlasGitHubViewConfig : AtlasPullsViewConfig
 ---@field search string
 

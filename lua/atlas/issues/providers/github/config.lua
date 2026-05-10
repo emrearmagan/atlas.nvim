@@ -1,3 +1,20 @@
+-- Example:
+--   require("atlas").setup({
+--     issues = {
+--       providers = {
+--         github = {
+--           cache_ttl = 300,
+--           views = {
+--             { name = "Assigned", key = "1", search = "assignee:@me is:open" },
+--             { name = "Created",  key = "2", search = "author:@me is:open" },
+--             { name = "Mention",  key = "3", search = "mentions:@me is:open" },
+--             { name = "Updated",  key = "4", search = "involves:@me sort:updated-desc" },
+--           },
+--         },
+--       },
+--     },
+--   })
+
 ---@class AtlasGitHubIssuesViewConfig : AtlasIssuesViewConfig
 ---@field search string
 

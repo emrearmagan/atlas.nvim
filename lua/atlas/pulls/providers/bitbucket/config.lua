@@ -1,3 +1,39 @@
+-- Example:
+--   require("atlas").setup({
+--     pulls = {
+--       providers = {
+--         bitbucket = {
+--           user  = vim.env.BITBUCKET_USER,
+--           token = vim.env.BITBUCKET_TOKEN,
+--           cache_ttl = 300,
+--           views = {
+--             {
+--               name = "All",
+--               key  = "1",
+--               repos = {
+--                 { workspace = "acme", repo = "core" },
+--                 { workspace = "acme", repo = "web" },
+--               },
+--             },
+--             {
+--               name = "Reviewing",
+--               key  = "2",
+--               layout = "compact",
+--               repos = { { workspace = "acme", repo = "core" } },
+--               filter = function(pr, ctx)
+--                 if ctx.user == nil then return true end
+--                 for _, r in ipairs(pr._raw and pr._raw.reviewers or {}) do
+--                   if r.uuid == ctx.user.id then return true end
+--                 end
+--                 return false
+--               end,
+--             },
+--           },
+--         },
+--       },
+--     },
+--   })
+
 ---@class AtlasBitbucketRepoRef
 ---@field workspace string
 ---@field repo string
