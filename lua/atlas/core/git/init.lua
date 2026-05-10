@@ -119,9 +119,9 @@ function M.remote_url(root, remote)
 end
 
 ---@class AtlasGitRemoteInfo
----@field host string -- e.g. "github.com" / "bitbucket.org"
----@field provider "github"|"bitbucket"|"unknown"
----@field slug string -- "owner/repo" (without .git)
+---@field host string -- e.g. "github.com" / "bitbucket.org" / "gitlab.com"
+---@field provider "github"|"bitbucket"|"gitlab"|"unknown"
+---@field slug string -- "owner/repo" or nested "group/subgroup/repo" (without .git)
 ---@field owner string
 ---@field repo string
 ---@field url string -- original remote URL
@@ -160,6 +160,8 @@ function M.parse_remote_url(url)
 		provider = "github"
 	elseif host:find("bitbucket") then
 		provider = "bitbucket"
+	elseif host:find("gitlab") then
+		provider = "gitlab"
 	end
 
 	return {
@@ -256,17 +258,21 @@ function M.fetch_branches(root, remote, branches, on_done)
 		table.insert(cmd, branch)
 	end
 
-	run(cmd, root, vim.schedule_wrap(function(res)
-		if res.code ~= 0 then
-			local err = trim(res.stderr)
-			if err == "" then
-				err = string.format("git fetch failed with code %d", res.code)
+	run(
+		cmd,
+		root,
+		vim.schedule_wrap(function(res)
+			if res.code ~= 0 then
+				local err = trim(res.stderr)
+				if err == "" then
+					err = string.format("git fetch failed with code %d", res.code)
+				end
+				on_done(false, err)
+				return
 			end
-			on_done(false, err)
-			return
-		end
-		on_done(true, nil)
-	end))
+			on_done(true, nil)
+		end)
+	)
 end
 
 ---@param root string
