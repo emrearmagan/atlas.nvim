@@ -63,20 +63,35 @@ function M.get_version()
 	return _cached_version
 end
 
+---Convert UTC date components to a Unix epoch without relying on the system timezone
+---@param y integer @ year (e.g. 2026)
+---@param m integer @ month 1-12
+---@param d integer @ day 1-31
+---@param hh integer
+---@param mm integer
+---@param ss integer
+---@return integer
+local function utc_epoch(y, m, d, hh, mm, ss)
+	y = y - (m <= 2 and 1 or 0)
+	local era = math.floor(y / 400)
+	local yoe = y - era * 400
+	local doy = math.floor((153 * (m + (m > 2 and -3 or 9)) + 2) / 5) + d - 1
+	local doe = yoe * 365 + math.floor(yoe / 4) - math.floor(yoe / 100) + doy
+	local days = era * 146097 + doe - 719468
+	return days * 86400 + hh * 3600 + mm * 60 + ss
+end
+
 function M.relative_time(iso)
 	if type(iso) ~= "string" or iso == "" then
 		return "-"
 	end
 
-	local base = iso:match("^(%d%d%d%d%-%d%d%-%d%dT%d%d:%d%d:%d%d)")
-	if not base then
+	local y, mo, d, hh, mm, ss = iso:match("^(%d%d%d%d)%-(%d%d)%-(%d%d)T(%d%d):(%d%d):(%d%d)")
+	if not y then
 		return "-"
 	end
 
-	local then_epoch = vim.fn.strptime("%Y-%m-%dT%H:%M:%S", base)
-	if then_epoch <= 0 then
-		return "-"
-	end
+	local then_epoch = utc_epoch(tonumber(y), tonumber(mo), tonumber(d), tonumber(hh), tonumber(mm), tonumber(ss))
 
 	local delta = os.time() - then_epoch
 	if delta < 0 then

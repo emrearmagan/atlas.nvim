@@ -113,6 +113,7 @@ use {
 - `:AtlasIssues [provider]` - Open Atlas issues domain
 - `:AtlasPulls [provider]` - Open Atlas pulls domain
 - `:AtlasCreatePR` - Create a pull request from the current branch
+- `:AtlasCreateIssue` - Create an issue (GitHub / Jira)
 - `:AtlasJqlSearch {query}` - Search Jira issues with JQL
 - `:AtlasClearCache` - Clear Atlas disk and memory cache
 - `:AtlasLogs` - Toggle Atlas logs
@@ -265,7 +266,7 @@ Examples:
 - [x] Add custom actions to PRs
 - [x] Open PR diff in given command
 - [x] Switch between open, merged and closed PRs
-- [x] Show Github Issues
+- [x] Show and Create Github Issues (`:AtlasCreateIssue`)
 - [x] Show Notifications
 - [x] Create pull requests (`:AtlasCreatePR`)
 - [ ] Pagination for API results

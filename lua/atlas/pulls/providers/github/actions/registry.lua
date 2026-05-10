@@ -77,8 +77,11 @@ local ACTIONS = {
 
 					footer.notify("loading", "Merging PR...")
 					cli.gh({
-						"pr", "merge", tostring(pr.id),
-						"--repo", slug,
+						"pr",
+						"merge",
+						tostring(pr.id),
+						"--repo",
+						slug,
 						"--" .. strategy,
 						"--delete-branch",
 					}, function(_, err)
@@ -116,8 +119,11 @@ local ACTIONS = {
 
 			footer.notify("loading", "Approving PR...")
 			cli.gh({
-				"pr", "review", tostring(pr.id),
-				"--repo", repo_slug(ctx),
+				"pr",
+				"review",
+				tostring(pr.id),
+				"--repo",
+				repo_slug(ctx),
 				"--approve",
 			}, function(_, err)
 				if err then
@@ -163,10 +169,14 @@ local ACTIONS = {
 
 				footer.notify("loading", "Requesting changes...")
 				cli.gh({
-					"pr", "review", tostring(pr.id),
-					"--repo", repo_slug(ctx),
+					"pr",
+					"review",
+					tostring(pr.id),
+					"--repo",
+					repo_slug(ctx),
 					"--request-changes",
-					"--body", body,
+					"--body",
+					body,
 				}, function(_, err)
 					if err then
 						footer.notify("error", string.format("Request changes failed: %s", tostring(err)))
@@ -220,8 +230,11 @@ local ACTIONS = {
 
 				footer.notify("loading", "Closing PR...")
 				cli.gh({
-					"pr", "close", tostring(pr.id),
-					"--repo", repo_slug(ctx),
+					"pr",
+					"close",
+					tostring(pr.id),
+					"--repo",
+					repo_slug(ctx),
 				}, function(_, err)
 					if err then
 						footer.notify("error", string.format("Close failed: %s", tostring(err)))
@@ -260,8 +273,11 @@ local ACTIONS = {
 
 			footer.notify("loading", "Reopening PR...")
 			cli.gh({
-				"pr", "reopen", tostring(pr.id),
-				"--repo", repo_slug(ctx),
+				"pr",
+				"reopen",
+				tostring(pr.id),
+				"--repo",
+				repo_slug(ctx),
 			}, function(_, err)
 				if err then
 					footer.notify("error", string.format("Reopen failed: %s", tostring(err)))
@@ -298,8 +314,11 @@ local ACTIONS = {
 
 			footer.notify("loading", "Marking as ready...")
 			cli.gh({
-				"pr", "ready", tostring(pr.id),
-				"--repo", repo_slug(ctx),
+				"pr",
+				"ready",
+				tostring(pr.id),
+				"--repo",
+				repo_slug(ctx),
 			}, function(_, err)
 				if err then
 					footer.notify("error", string.format("Failed: %s", tostring(err)))
@@ -336,8 +355,11 @@ local ACTIONS = {
 
 			footer.notify("loading", "Converting to draft...")
 			cli.gh({
-				"pr", "ready", tostring(pr.id),
-				"--repo", repo_slug(ctx),
+				"pr",
+				"ready",
+				tostring(pr.id),
+				"--repo",
+				repo_slug(ctx),
 				"--undo",
 			}, function(_, err)
 				if err then
@@ -349,6 +371,62 @@ local ACTIONS = {
 				footer.notify("success", "PR converted to draft", 1200)
 				done({ changed_pr = true, message = "Converted to draft" }, nil)
 			end)
+		end,
+	},
+	{
+		id = "create_issue",
+		label = "Create issue",
+		is_available = function(ctx)
+			if not has_pr(ctx) or ctx.pr == nil then
+				return false, "No PR selected"
+			end
+			if repo_slug(ctx) == "" then
+				return false, "Missing repository info"
+			end
+			return true, nil
+		end,
+		run = function(ctx, done)
+			local slug = repo_slug(ctx)
+			if slug == "" then
+				done(nil, "Missing repository info")
+				return
+			end
+
+			local issues_api = require("atlas.pulls.providers.github.api.issues")
+			local create_issue_ui = require("atlas.pulls.ui.create_issue")
+
+			create_issue_ui.open({
+				repo_slug = slug,
+				pickers = {
+					list_labels = function(cb)
+						issues_api.list_labels(slug, cb)
+					end,
+					list_assignees = function(cb)
+						issues_api.list_assignees(slug, cb)
+					end,
+					list_milestones = function(cb)
+						issues_api.list_milestones(slug, cb)
+					end,
+				},
+				on_submit = function(submit_opts, submit_done)
+					issues_api.create_issue({
+						repo_slug = submit_opts.repo_slug,
+						title = submit_opts.title,
+						body = submit_opts.body,
+						labels = submit_opts.labels,
+						assignees = submit_opts.assignees,
+						milestone = submit_opts.milestone,
+					}, function(result, err)
+						submit_done(result and { url = result.url, number = result.number } or nil, err)
+
+						if not err then
+							done({ changed_pr = false, message = result and result.url or "Issue created" }, nil)
+						else
+							done(nil, tostring(err))
+						end
+					end)
+				end,
+			})
 		end,
 	},
 	{

@@ -199,6 +199,7 @@ local function register_commands()
 	pcall(vim.api.nvim_del_user_command, "AtlasLogs")
 	pcall(vim.api.nvim_del_user_command, "AtlasClearCache")
 	pcall(vim.api.nvim_del_user_command, "AtlasCreatePR")
+	pcall(vim.api.nvim_del_user_command, "AtlasCreateIssue")
 
 	vim.api.nvim_create_user_command("AtlasLogs", function()
 		require("atlas.ui.logs").toggle()
@@ -242,6 +243,10 @@ local function register_commands()
 	vim.api.nvim_create_user_command("AtlasCreatePR", function()
 		require("atlas.pulls.ui.create_pr").start()
 	end, { desc = "Create a pull request from the current branch" })
+
+	vim.api.nvim_create_user_command("AtlasCreateIssue", function()
+		require("atlas.create_issue").start()
+	end, { desc = "Create an issue" })
 
 	if M.options.issues then
 		if M.options.issues.providers and M.options.issues.providers.jira then
