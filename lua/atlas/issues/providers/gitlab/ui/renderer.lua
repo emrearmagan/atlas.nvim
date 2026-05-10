@@ -1,0 +1,107 @@
+local M = {}
+
+local icons = require("atlas.ui.shared.icons")
+local utils = require("atlas.ui.shared.utils")
+local helper = require("atlas.issues.ui.main.helper")
+
+---@param status_id string|nil
+---@return string
+local function state_icon(status_id)
+	if status_id == "closed" then
+		return icons.pulls_status("successful")
+	end
+	return icons.pulls("issue")
+end
+
+---@param status_id string|nil
+---@return string
+local function state_hl(status_id)
+	if status_id == "closed" then
+		return "AtlasGLIssueClosed"
+	end
+	return "AtlasGLIssueOpen"
+end
+
+---@param issue Issue
+---@param is_child boolean
+---@return table
+function M.format_row(issue, is_child)
+	local raw = type(issue._raw) == "table" and issue._raw or {}
+	local iid = raw.iid or 0
+	local title = issue.summary or ""
+	local path = tostring(raw.project_path or "")
+
+	local key_label = path ~= "" and string.format("%s#%d", path, iid) or string.format("#%d", iid)
+	local s_icon = state_icon(issue.status_id)
+
+	local name = is_child and ("  " .. key_label .. "  " .. title) or (key_label .. "  " .. title)
+
+	local assignee_name = type(issue.assignee) == "table" and issue.assignee.display_name or "Unassigned"
+	local reporter_name = type(issue.reporter) == "table" and issue.reporter.display_name or "Unknown"
+
+	return {
+		icon = is_child and "" or s_icon,
+		name = name,
+		assignee = string.format("%s %s", icons.general("user"), utils.shorten_name(assignee_name, 20)),
+		reporter = string.format("%s %s", icons.general("user"), utils.shorten_name(reporter_name, 20)),
+		status = string.format(" %s ", issue.status or ""),
+	}
+end
+
+---@param row table
+---@param col table
+---@param ctx { text: string, padded: string, width: integer }
+---@return table[]|nil
+function M.cell_hl(row, col, ctx)
+	local issue = row._issue
+	if type(issue) ~= "table" then
+		return nil
+	end
+
+	if col.key == "icon" then
+		local s = state_icon(issue.status_id)
+		if s == "" then
+			return nil
+		end
+		local ss, ee = ctx.text:find(s, 1, true)
+		if not ss or not ee then
+			return nil
+		end
+		return { { start_col = ss - 1, end_col = ee, hl_group = state_hl(issue.status_id) } }
+	end
+
+	if col.key == "name" then
+		local spans = {}
+		local raw = type(issue._raw) == "table" and issue._raw or {}
+		local iid = raw.iid or 0
+		local path = tostring(raw.project_path or "")
+		local key_label = path ~= "" and string.format("%s#%d", path, iid) or string.format("#%d", iid)
+		local s, e = ctx.text:find(key_label, 1, true)
+		if s and e then
+			table.insert(spans, { start_col = s - 1, end_col = e, hl_group = "AtlasGLIssueKey" })
+			local title_start = e + 2
+			if title_start <= #ctx.text then
+				table.insert(spans, { start_col = title_start - 1, end_col = #ctx.text, hl_group = "Normal" })
+			end
+		end
+		return #spans > 0 and spans or nil
+	end
+
+	if col.key == "status" then
+		return { { start_col = 0, end_col = #ctx.padded, hl_group = state_hl(issue.status_id) } }
+	end
+
+	if col.key == "assignee" then
+		local name = type(issue.assignee) == "table" and issue.assignee.display_name or nil
+		return { { start_col = 0, end_col = #ctx.padded, hl_group = helper.person_hl(name) } }
+	end
+
+	if col.key == "reporter" then
+		local name = type(issue.reporter) == "table" and issue.reporter.display_name or nil
+		return { { start_col = 0, end_col = #ctx.padded, hl_group = helper.person_hl(name) } }
+	end
+
+	return nil
+end
+
+return M
