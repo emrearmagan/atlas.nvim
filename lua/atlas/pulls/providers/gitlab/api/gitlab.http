@@ -1,63 +1,49 @@
-@gitlab_project = group%2Fproject
-@gitlab_iid = 1
+@gitlab_base_url = https://gitlab.com
+@gitlab_project = 82057321
+@gitlab_iid = 2
 
 ### Current user (GET /user)
-GET {{GITLAB_BASE_URL}}/api/v4/user
+GET {{gitlab_base_url}}/api/v4/user
 PRIVATE-TOKEN: {{GITLAB_TOKEN}}
 Accept: application/json
 
-### List MRs — assigned to me, opened
-GET {{GITLAB_BASE_URL}}/api/v4/merge_requests?scope=assigned_to_me&state=opened&per_page=20&order_by=updated_at&sort=desc
-PRIVATE-TOKEN: {{GITLAB_TOKEN}}
-Accept: application/json
-
-### List MRs — created by me, opened
-GET {{GITLAB_BASE_URL}}/api/v4/merge_requests?scope=created_by_me&state=opened&per_page=20&order_by=updated_at&sort=desc
-PRIVATE-TOKEN: {{GITLAB_TOKEN}}
-Accept: application/json
-
-### List MRs — reviewer is me
-GET {{GITLAB_BASE_URL}}/api/v4/merge_requests?scope=all&reviewer_id=Me&state=opened&per_page=20&order_by=updated_at&sort=desc
-PRIVATE-TOKEN: {{GITLAB_TOKEN}}
-Accept: application/json
-
-### Search MRs
-GET {{GITLAB_BASE_URL}}/api/v4/merge_requests?scope=all&search=login&per_page=20
+### List MRs - created by me, opened
+GET {{gitlab_base_url}}/api/v4/merge_requests?scope=created_by_me&state=opened&per_page=20&order_by=updated_at&sort=desc
 PRIVATE-TOKEN: {{GITLAB_TOKEN}}
 Accept: application/json
 
 ### Get MR detail
-GET {{GITLAB_BASE_URL}}/api/v4/projects/{{gitlab_project}}/merge_requests/{{gitlab_iid}}
+GET {{gitlab_base_url}}/api/v4/projects/{{gitlab_project}}/merge_requests/{{gitlab_iid}}
 PRIVATE-TOKEN: {{GITLAB_TOKEN}}
 Accept: application/json
 
 ### Get MR commits
-GET {{GITLAB_BASE_URL}}/api/v4/projects/{{gitlab_project}}/merge_requests/{{gitlab_iid}}/commits?per_page=100
+GET {{gitlab_base_url}}/api/v4/projects/{{gitlab_project}}/merge_requests/{{gitlab_iid}}/commits?per_page=100
 PRIVATE-TOKEN: {{GITLAB_TOKEN}}
 Accept: application/json
 
 ### Get MR changes (diff)
-GET {{GITLAB_BASE_URL}}/api/v4/projects/{{gitlab_project}}/merge_requests/{{gitlab_iid}}/changes
+GET {{gitlab_base_url}}/api/v4/projects/{{gitlab_project}}/merge_requests/{{gitlab_iid}}/changes
 PRIVATE-TOKEN: {{GITLAB_TOKEN}}
 Accept: application/json
 
 ### Get MR raw diff (unified text)
-GET {{GITLAB_BASE_URL}}/api/v4/projects/{{gitlab_project}}/merge_requests/{{gitlab_iid}}/raw_diffs
+GET {{gitlab_base_url}}/api/v4/projects/{{gitlab_project}}/merge_requests/{{gitlab_iid}}/raw_diffs
 PRIVATE-TOKEN: {{GITLAB_TOKEN}}
 Accept: text/plain
 
 ### Get MR pipelines
-GET {{GITLAB_BASE_URL}}/api/v4/projects/{{gitlab_project}}/merge_requests/{{gitlab_iid}}/pipelines
+GET {{gitlab_base_url}}/api/v4/projects/{{gitlab_project}}/merge_requests/{{gitlab_iid}}/pipelines
 PRIVATE-TOKEN: {{GITLAB_TOKEN}}
 Accept: application/json
 
-### Get MR notes (comments + system events)
-GET {{GITLAB_BASE_URL}}/api/v4/projects/{{gitlab_project}}/merge_requests/{{gitlab_iid}}/notes?per_page=100&sort=asc&order_by=created_at
+### Get MR notes (comments + events)
+GET {{gitlab_base_url}}/api/v4/projects/{{gitlab_project}}/merge_requests/{{gitlab_iid}}/notes?per_page=100&sort=asc&order_by=created_at
 PRIVATE-TOKEN: {{GITLAB_TOKEN}}
 Accept: application/json
 
 ### Add MR comment
-POST {{GITLAB_BASE_URL}}/api/v4/projects/{{gitlab_project}}/merge_requests/{{gitlab_iid}}/notes
+POST {{gitlab_base_url}}/api/v4/projects/{{gitlab_project}}/merge_requests/{{gitlab_iid}}/notes
 PRIVATE-TOKEN: {{GITLAB_TOKEN}}
 Content-Type: application/json
 Accept: application/json
@@ -67,22 +53,22 @@ Accept: application/json
 }
 
 ### Approve MR
-POST {{GITLAB_BASE_URL}}/api/v4/projects/{{gitlab_project}}/merge_requests/{{gitlab_iid}}/approve
+POST {{gitlab_base_url}}/api/v4/projects/{{gitlab_project}}/merge_requests/{{gitlab_iid}}/approve
 PRIVATE-TOKEN: {{GITLAB_TOKEN}}
 Accept: application/json
 
 ### Unapprove MR
-POST {{GITLAB_BASE_URL}}/api/v4/projects/{{gitlab_project}}/merge_requests/{{gitlab_iid}}/unapprove
+POST {{gitlab_base_url}}/api/v4/projects/{{gitlab_project}}/merge_requests/{{gitlab_iid}}/unapprove
 PRIVATE-TOKEN: {{GITLAB_TOKEN}}
 Accept: application/json
 
 ### Approval state
-GET {{GITLAB_BASE_URL}}/api/v4/projects/{{gitlab_project}}/merge_requests/{{gitlab_iid}}/approval_state
+GET {{gitlab_base_url}}/api/v4/projects/{{gitlab_project}}/merge_requests/{{gitlab_iid}}/approval_state
 PRIVATE-TOKEN: {{GITLAB_TOKEN}}
 Accept: application/json
 
 ### Merge MR
-PUT {{GITLAB_BASE_URL}}/api/v4/projects/{{gitlab_project}}/merge_requests/{{gitlab_iid}}/merge
+PUT {{gitlab_base_url}}/api/v4/projects/{{gitlab_project}}/merge_requests/{{gitlab_iid}}/merge
 PRIVATE-TOKEN: {{GITLAB_TOKEN}}
 Content-Type: application/json
 Accept: application/json
@@ -93,7 +79,7 @@ Accept: application/json
 }
 
 ### Close MR (state_event=close)
-PUT {{GITLAB_BASE_URL}}/api/v4/projects/{{gitlab_project}}/merge_requests/{{gitlab_iid}}
+PUT {{gitlab_base_url}}/api/v4/projects/{{gitlab_project}}/merge_requests/{{gitlab_iid}}
 PRIVATE-TOKEN: {{GITLAB_TOKEN}}
 Content-Type: application/json
 Accept: application/json
@@ -103,7 +89,7 @@ Accept: application/json
 }
 
 ### Reopen MR
-PUT {{GITLAB_BASE_URL}}/api/v4/projects/{{gitlab_project}}/merge_requests/{{gitlab_iid}}
+PUT {{gitlab_base_url}}/api/v4/projects/{{gitlab_project}}/merge_requests/{{gitlab_iid}}
 PRIVATE-TOKEN: {{GITLAB_TOKEN}}
 Content-Type: application/json
 Accept: application/json
@@ -113,7 +99,7 @@ Accept: application/json
 }
 
 ### Mark MR as draft
-PUT {{GITLAB_BASE_URL}}/api/v4/projects/{{gitlab_project}}/merge_requests/{{gitlab_iid}}
+PUT {{gitlab_base_url}}/api/v4/projects/{{gitlab_project}}/merge_requests/{{gitlab_iid}}
 PRIVATE-TOKEN: {{GITLAB_TOKEN}}
 Content-Type: application/json
 Accept: application/json
@@ -123,6 +109,6 @@ Accept: application/json
 }
 
 ### Project members (for reviewer/assignee pickers)
-GET {{GITLAB_BASE_URL}}/api/v4/projects/{{gitlab_project}}/members/all?per_page=100
+GET {{gitlab_base_url}}/api/v4/projects/{{gitlab_project}}/members/all?per_page=100
 PRIVATE-TOKEN: {{GITLAB_TOKEN}}
 Accept: application/json
