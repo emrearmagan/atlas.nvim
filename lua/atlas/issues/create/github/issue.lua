@@ -99,14 +99,8 @@ local function label_hl(hex)
 		return "AtlasTextMuted"
 	end
 
-	local r = tonumber(hex:sub(1, 2), 16) or 0
-	local g = tonumber(hex:sub(3, 4), 16) or 0
-	local b = tonumber(hex:sub(5, 6), 16) or 0
-	local luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
-	local fg = luminance > 0.6 and "#111827" or "#f9fafb"
-
 	local name = string.format("AtlasGHLabel_%s", hex:lower())
-	vim.api.nvim_set_hl(0, name, { fg = fg, bg = "#" .. hex, bold = true })
+	vim.api.nvim_set_hl(0, name, { bg = "#" .. hex, bold = true })
 	return name
 end
 

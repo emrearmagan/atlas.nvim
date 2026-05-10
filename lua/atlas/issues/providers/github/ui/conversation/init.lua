@@ -373,7 +373,7 @@ function M.on_select(issue, refresh, opts)
 	end
 
 	if type(provider.fetch_comments) == "function" then
-		track(provider.fetch_comments(key, opts, function(comments, err)
+		track(provider.fetch_comments(key, { force_load = opts.force_refresh == true }, function(comments, err)
 			if err then
 				state.comments = err
 			else

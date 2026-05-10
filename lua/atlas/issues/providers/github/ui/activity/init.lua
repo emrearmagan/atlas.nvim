@@ -84,6 +84,18 @@ local function activity_text(entry)
 	return kind ~= "" and kind or "updated issue", nil
 end
 
+---@param hex string|nil
+---@return string
+local function label_hl(hex)
+	local clean = tostring(hex or ""):lower():gsub("[^0-9a-f]", "")
+	if #clean ~= 6 then
+		return "AtlasChipActive"
+	end
+	local name = "AtlasGHIssueLabel_" .. clean
+	vim.api.nvim_set_hl(0, name, { bg = "#" .. clean, bold = true })
+	return name
+end
+
 local EVENT_ICON = {
 	labeled = icons.pulls("activity"),
 	unlabeled = icons.pulls("activity"),
@@ -148,7 +160,7 @@ local function content_hl(item, row)
 	local event = tostring(entry.event or "")
 	local hl = nil
 	if event == "labeled" or event == "unlabeled" then
-		hl = highlights.dynamic_for_bg(entry.label_name)
+		hl = label_hl(entry.label_color)
 	elseif event == "assigned" or event == "unassigned" then
 		hl = highlights.dynamic_for(entry.assignee_login)
 	elseif event == "milestoned" or event == "demilestoned" then

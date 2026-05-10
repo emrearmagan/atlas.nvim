@@ -145,13 +145,7 @@ local function label_hl(hex)
 		return "AtlasChipActive"
 	end
 	local name = "AtlasGHIssueLabel_" .. clean
-	local r = tonumber(clean:sub(1, 2), 16) or 0
-	local g = tonumber(clean:sub(3, 4), 16) or 0
-	local b = tonumber(clean:sub(5, 6), 16) or 0
-	-- Perceptual luminance; pick a contrasting fg so the label is readable.
-	local luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
-	local fg = luminance > 0.6 and "#1e1e2e" or "#ffffff"
-	vim.api.nvim_set_hl(0, name, { fg = fg, bg = "#" .. clean, bold = true })
+	vim.api.nvim_set_hl(0, name, { bg = "#" .. clean, bold = true })
 	return name
 end
 
