@@ -1,5 +1,6 @@
 local M = {}
 
+local footer = require("atlas.ui.components.footer")
 local help = require("atlas.ui.popups.help")
 local resolver = require("atlas.core.keymaps")
 local utils = require("atlas.ui.shared.utils")
@@ -26,6 +27,23 @@ local function remove_item(action_id)
 		return nil
 	end
 	return { key = (#keys == 1 and keys[1] or keys) }
+end
+
+---@param repo PullsRepo|nil
+---@return string|nil
+local function repo_url(repo)
+	if type(repo) ~= "table" then
+		return nil
+	end
+
+	local raw = type(repo._raw) == "table" and repo._raw or {}
+	local raw_links = type(raw.links) == "table" and raw.links or {}
+	local html_link = type(raw_links.html) == "table" and raw_links.html or {}
+	local url = tostring(repo.html_url or raw.html_url or raw.url or html_link.href or "")
+	if url ~= "" then
+		return url
+	end
+	return nil
 end
 
 ---@param buf integer
@@ -151,19 +169,24 @@ function M.open_current_line()
 
 	local lnum = vim.api.nvim_win_get_cursor(win)[1]
 	local entry = (panel_state.line_map or {})[lnum]
-	if not entry then
-		return false
-	end
+	local repo = panel_state.current_repo_details or panel_state.current_repo
 
 	local repo_panel = require("atlas.pulls.ui.panel.repo")
 	local tab_mod = repo_panel.get_tab_module(panel_state.current_tab)
-	if tab_mod and type(tab_mod.on_enter) == "function" then
-		local repo = panel_state.current_repo
-		if repo then
-			return tab_mod.on_enter(repo, entry) == true
+	if entry and tab_mod and type(tab_mod.on_enter) == "function" and repo then
+		if tab_mod.on_enter(repo, entry) == true then
+			return true
 		end
 	end
-	return false
+
+	local url = repo_url(repo)
+	if url == nil or url == "" then
+		footer.notify("warn", "No repository URL available")
+		return false
+	end
+	vim.ui.open(url)
+	footer.notify("info", "Opened repository in browser")
+	return true
 end
 
 ---@param buf integer

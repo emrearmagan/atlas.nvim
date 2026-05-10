@@ -4,6 +4,7 @@ local M = {}
 local icons = require("atlas.ui.shared.icons")
 local utils = require("atlas.ui.shared.utils")
 local box = require("atlas.ui.components.box")
+local helper = require("atlas.pulls.ui.main.helper")
 
 local MAX_HASH_LEN = 12
 
@@ -67,8 +68,62 @@ end
 
 ---@param pr PullRequest
 ---@return PullsPanelHeaderRow[]
-function M.header_rows(_)
-	return {}
+function M.header_rows(pr)
+	local raw = pr._raw or {}
+	local nodes = type(raw.assignees) == "table" and type(raw.assignees.nodes) == "table" and raw.assignees.nodes or {}
+
+	local logins = {}
+	for _, node in ipairs(nodes) do
+		local login = type(node) == "table" and tostring(node.login or "") or ""
+		if login ~= "" then
+			table.insert(logins, login)
+		end
+	end
+
+	local v1, v1_hl
+	if #logins == 0 then
+		v1 = "Unassigned"
+		v1_hl = "AtlasTextMuted"
+	else
+		local parts = {}
+		for _, login in ipairs(logins) do
+			table.insert(parts, "@" .. login)
+		end
+		v1 = table.concat(parts, ", ")
+
+		local spans = {}
+		local cursor = 0
+		for i, login in ipairs(logins) do
+			local token = "@" .. login
+			table.insert(spans, {
+				start_col = cursor,
+				end_col = cursor + #token,
+				hl_group = helper.author_hl(login),
+			})
+			cursor = cursor + #token
+			if i < #logins then
+				local sep = ", "
+				table.insert(spans, {
+					start_col = cursor,
+					end_col = cursor + #sep,
+					hl_group = "AtlasTextMuted",
+				})
+				cursor = cursor + #sep
+			end
+		end
+		v1_hl = spans
+	end
+
+	return {
+		{
+			k1 = "Assignees:",
+			v1 = v1,
+			v1_hl = v1_hl,
+			k2 = "",
+			v2 = "",
+			v2_hl = "AtlasTextMuted",
+		},
+	}
 end
 
 ---@param pr PullRequest
@@ -382,6 +437,7 @@ function M.tabs()
 			label = "Overview",
 			icon = icons.general("overview"),
 			mod = require("atlas.pulls.ui.panel.pr.tabs.overview"),
+			keymaps = require("atlas.pulls.providers.github.ui.overview_keymaps"),
 		},
 		{
 			key = "conversation",

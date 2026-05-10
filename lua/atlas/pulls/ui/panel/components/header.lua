@@ -116,9 +116,15 @@ function M.render(pr, width, extra_rows)
 				return { { start_col = 0, end_col = #label, hl_group = "AtlasTextMuted" } }
 			end
 			if col.key == "v1" then
+				if type(row.v1_hl) == "table" then
+					return row.v1_hl
+				end
 				return { { start_col = 0, end_col = #row.v1, hl_group = row.v1_hl } }
 			end
 			if col.key == "v2" then
+				if type(row.v2_hl) == "table" then
+					return row.v2_hl
+				end
 				return { { start_col = 0, end_col = #row.v2, hl_group = row.v2_hl } }
 			end
 			return nil
@@ -225,9 +231,15 @@ function M.render_repo(repo, width, extra_rows)
 					return { { start_col = 0, end_col = #label, hl_group = "AtlasTextMuted" } }
 				end
 				if col.key == "v1" then
+					if type(row.v1_hl) == "table" then
+						return row.v1_hl
+					end
 					return { { start_col = 0, end_col = #row.v1, hl_group = row.v1_hl } }
 				end
 				if col.key == "v2" then
+					if type(row.v2_hl) == "table" then
+						return row.v2_hl
+					end
 					return { { start_col = 0, end_col = #row.v2, hl_group = row.v2_hl } }
 				end
 				return nil

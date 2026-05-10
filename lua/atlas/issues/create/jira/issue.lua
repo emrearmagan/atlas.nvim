@@ -3,8 +3,8 @@ local M = {}
 
 local footer = require("atlas.ui.components.footer")
 local icons = require("atlas.ui.shared.icons")
-local issue_helper = require("atlas.issues.providers.jira.ui.issue.helper")
-local issue_layout = require("atlas.issues.providers.jira.ui.issue.layout")
+local editor = require("atlas.ui.popups.editor")
+local issue_helper = require("atlas.issues.create.jira.helper")
 local users_api = require("atlas.issues.providers.jira.api.users")
 local issues_api = require("atlas.issues.providers.jira.api.issues")
 local template_store = require("atlas.issues.providers.jira.templates")
@@ -77,8 +77,6 @@ local state = {
 	preview_fn = nil,
 }
 
-local ns = vim.api.nvim_create_namespace("atlas.jira.issue_editor")
-
 local function valid_win(win)
 	return win ~= nil and vim.api.nvim_win_is_valid(win)
 end
@@ -150,25 +148,12 @@ local function pick_default_issue_type(issue_types)
 	return issue_types[1]
 end
 
-local function update_meta_buffer(width)
-	if not valid_buf(state.layout.meta_buf) then
-		return
-	end
+local function meta_rows()
+	return issue_helper.meta_rows(state.fields, state.assignees, state.issue_types, state.spinner)
+end
 
-	local w = width or state.content_width
-	local lines, spans =
-		issue_helper.render_meta_lines(w, state.fields, state.assignees, state.issue_types, state.spinner)
-	vim.api.nvim_set_option_value("modifiable", true, { buf = state.layout.meta_buf })
-	vim.api.nvim_buf_set_lines(state.layout.meta_buf, 0, -1, false, lines)
-	vim.api.nvim_set_option_value("modifiable", false, { buf = state.layout.meta_buf })
-
-	vim.api.nvim_buf_clear_namespace(state.layout.meta_buf, ns, 0, -1)
-	for _, span in ipairs(spans) do
-		vim.api.nvim_buf_set_extmark(state.layout.meta_buf, ns, span.line, span.start_col, {
-			end_col = span.end_col,
-			hl_group = span.hl_group,
-		})
-	end
+local function render_meta()
+	editor.render_meta(state, meta_rows())
 end
 
 local function stop_loading_spinner_if_done()
@@ -205,7 +190,7 @@ local function close_ui()
 		state.spinner = nil
 	end
 
-	issue_layout.close(state.layout)
+	editor.close(state.layout)
 
 	state.layout = {
 		title_buf = nil,
@@ -490,7 +475,7 @@ local function show_assignee_picker()
 			else
 				state.fields.assignee = item.value
 			end
-			update_meta_buffer()
+			render_meta()
 		end,
 	})
 end
@@ -543,7 +528,7 @@ local function show_reporter_picker()
 		end,
 		on_select = function(item)
 			state.fields.reporter = item.value
-			update_meta_buffer()
+			render_meta()
 		end,
 	})
 end
@@ -611,7 +596,7 @@ local function show_issue_type_picker()
 		end,
 		on_select = function(item)
 			state.fields.issue_type = item.value
-			update_meta_buffer()
+			render_meta()
 		end,
 	})
 end
@@ -633,20 +618,78 @@ function M.open(on_submit, opts, editor_opts)
 	state.assignees = nil
 	state.issue_types = nil
 
-	issue_layout.open_layout(state)
+	local is_edit = type(state.fields.issue_key) == "string" and state.fields.issue_key ~= ""
+	local popup_title = is_edit and " Edit Issue " or " Create Issue "
+	local initial_desc = type(state.fields.description) == "string" and state.fields.description or ""
+
+	editor.open(state, {
+		title = popup_title,
+		min_height = 24,
+		meta_height = 2,
+		title_winbar = "Summary",
+		desc_winbar = "Description",
+		initial_title = tostring(state.fields.summary or ""),
+		initial_body = initial_desc,
+		close = confirm_close,
+		submit = submit_issue,
+		meta = meta_rows,
+		keymaps = {
+			{
+				key = "ga",
+				buffers = { "title", "desc" },
+				action = show_assignee_picker,
+				desc = "assignee",
+				show_in_footer = true,
+			},
+			{
+				key = "gr",
+				buffers = { "title", "desc" },
+				action = show_reporter_picker,
+				desc = "reporter",
+				show_in_footer = true,
+			},
+			{
+				key = "gt",
+				buffers = { "title", "desc" },
+				action = show_issue_type_picker,
+				desc = "issue type",
+				show_in_footer = true,
+			},
+			{
+				key = "gT",
+				buffers = { "title", "meta", "desc" },
+				action = open_templates_menu,
+				desc = "templates",
+				show_in_footer = true,
+			},
+			{
+				key = "m",
+				buffers = { "title", "meta", "desc" },
+				action = toggle_preview,
+				desc = "raw preview",
+				show_in_footer = true,
+			},
+			{
+				key = "<CR>",
+				buffers = { "meta" },
+				action = show_assignee_picker,
+				desc = "assignee",
+			},
+		},
+	})
 
 	state.assignees = "loading"
 	state.issue_types = "loading"
 	state.spinner = spinner.create({
 		on_tick = function()
 			if state.assignees == "loading" or state.issue_types == "loading" then
-				update_meta_buffer()
+				render_meta()
 			end
 		end,
 	})
 	state.spinner:start()
 
-	update_meta_buffer(state.content_width)
+	render_meta()
 
 	if state.fields.project ~= "" then
 		state.assignees_handle = users_api.get_assignable_users(
@@ -664,7 +707,7 @@ function M.open(on_submit, opts, editor_opts)
 
 				stop_loading_spinner_if_done()
 				vim.schedule(function()
-					update_meta_buffer()
+					render_meta()
 				end)
 			end
 		)
@@ -691,7 +734,7 @@ function M.open(on_submit, opts, editor_opts)
 
 			stop_loading_spinner_if_done()
 			vim.schedule(function()
-				update_meta_buffer()
+				render_meta()
 			end)
 		end)
 	else
@@ -699,20 +742,8 @@ function M.open(on_submit, opts, editor_opts)
 		state.issue_types = {}
 		stop_loading_spinner_if_done()
 		state.fields.issue_type = nil
-		update_meta_buffer(state.content_width)
+		render_meta()
 	end
-
-	issue_layout.setup(state, {
-		confirm_close = confirm_close,
-		toggle_preview = toggle_preview,
-		show_assignee_picker = show_assignee_picker,
-		show_reporter_picker = show_reporter_picker,
-		show_issue_type_picker = show_issue_type_picker,
-		open_templates_menu = open_templates_menu,
-		create_issue = submit_issue,
-	})
-
-	vim.api.nvim_set_current_win(state.layout.title_win)
 
 	vim.api.nvim_create_autocmd("WinClosed", {
 		pattern = tostring(state.layout.container_win),

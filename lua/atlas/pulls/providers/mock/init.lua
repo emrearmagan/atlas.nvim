@@ -361,6 +361,7 @@ function M.fetch_repo_details(repo, opts, on_done)
 			full_name = full_name ~= "" and full_name or tostring(repo.name or repo.id or "Mock Repository"),
 			owner = owner or "mock",
 			repo_name = repo_name or tostring(repo.name or "repo"),
+			html_url = tostring(repo.html_url or "https://github.com/emrearmagan/atlas.nvim"),
 			description = "Mock repository used for local panel development.",
 			size = 1024 * 1024 * 12,
 			default_branch = "main",

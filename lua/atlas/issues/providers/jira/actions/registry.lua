@@ -346,7 +346,7 @@ local ACTIONS = {
 			local issue_key = issue.key
 			local adf = require("atlas.issues.providers.jira.converted.adf")
 			local md_to_adf = require("atlas.issues.providers.jira.converted.markdown")
-			local issue_editor = require("atlas.issues.providers.jira.ui.issue")
+			local issue_editor = require("atlas.issues.create.jira.issue")
 
 			local function open_editor(initial_description)
 				issue_editor.open(function(fields, submit_done)
@@ -424,7 +424,7 @@ local ACTIONS = {
 		run = function(_, done)
 			local projects_api = require("atlas.issues.providers.jira.api.projects")
 			local md_to_adf = require("atlas.issues.providers.jira.converted.markdown")
-			local issue_editor = require("atlas.issues.providers.jira.ui.issue")
+			local issue_editor = require("atlas.issues.create.jira.issue")
 
 			local function run_create(project_key)
 				issue_editor.open(function(fields, submit_done)

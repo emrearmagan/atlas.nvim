@@ -81,9 +81,6 @@ function M.show_details(pr, buf)
 end
 
 ---@param pr PullRequest
----@param opts { source: "panel"|"main"|nil }|nil
----@param on_done fun(result: PullsActionResult|nil)|nil
----@param pr PullRequest
 ---@param source "main"|"panel"|nil
 ---@param on_done fun(result: PullsActionResult|nil)|nil
 function M.open_actions(pr, source, on_done)
@@ -140,6 +137,34 @@ function M.open_diff(pr)
 				if not cmd_ok then
 					error(cmd_err2)
 				end
+				return
+			end
+
+			if open_cmd == "CodeDiff" then
+				vim.cmd("tabnew")
+				local launcher_tab = vim.api.nvim_get_current_tabpage()
+				local launcher_buf = vim.api.nvim_get_current_buf()
+				vim.bo[launcher_buf].buflisted = false
+				vim.bo[launcher_buf].bufhidden = "wipe"
+				-- CodeDiff opens its own tab, so close the temporary one.
+				vim.api.nvim_create_autocmd("User", {
+					pattern = "CodeDiffOpen",
+					once = true,
+					callback = function()
+						vim.schedule(function()
+							if vim.api.nvim_tabpage_is_valid(launcher_tab) then
+								local tabnr = vim.api.nvim_tabpage_get_number(launcher_tab)
+								pcall(vim.cmd, tabnr .. "tabclose")
+							end
+							if vim.api.nvim_buf_is_valid(launcher_buf) then
+								pcall(vim.api.nvim_buf_delete, launcher_buf, { force = true })
+							end
+						end)
+					end,
+				})
+
+				vim.cmd("cd " .. repo_path)
+				vim.cmd(command)
 				return
 			end
 

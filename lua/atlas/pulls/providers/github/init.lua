@@ -855,7 +855,7 @@ function M.fetch_repo_details(repo, opts, on_done)
 		"view",
 		slug,
 		"--json",
-		"name,nameWithOwner,owner,description,defaultBranchRef,isPrivate,createdAt,diskUsage",
+		"name,nameWithOwner,owner,description,defaultBranchRef,isPrivate,createdAt,diskUsage,url",
 	}, function(result, err)
 		if err or type(result) ~= "table" then
 			on_done(nil, err or "Failed to fetch repo details")
@@ -871,6 +871,7 @@ function M.fetch_repo_details(repo, opts, on_done)
 			full_name = tostring(result.nameWithOwner or slug),
 			owner = owner_login,
 			repo_name = tostring(result.name or repo_name),
+			html_url = tostring(result.url or ""),
 			description = tostring(result.description or ""),
 			size = tonumber(result.diskUsage) or nil,
 			default_branch = type(result.defaultBranchRef) == "table" and tostring(result.defaultBranchRef.name or "")

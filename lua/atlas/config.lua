@@ -241,7 +241,7 @@ local function register_commands()
 	})
 
 	vim.api.nvim_create_user_command("AtlasCreatePR", function()
-		require("atlas.pulls.ui.create_pr").start()
+		require("atlas.pulls.create.pr").start()
 	end, { desc = "Create a pull request from the current branch" })
 
 	vim.api.nvim_create_user_command("AtlasCreateIssue", function()

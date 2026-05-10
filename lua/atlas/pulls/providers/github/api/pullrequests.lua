@@ -14,6 +14,7 @@ query($owner: String!, $repo: String!, $number: Int!) {
       reviewDecision
       labels(first: 10) { nodes { name color } }
       latestOpinionatedReviews(last: 10) { nodes { state } }
+      assignees(first: 10) { nodes { login } }
       author { login ... on User { name } }
       headRefName baseRefName headRefOid baseRefOid
       comments { totalCount }
@@ -36,6 +37,7 @@ query($search: String!, $limit: Int!) {
         additions deletions changedFiles
         labels(first: 10) { nodes { name color } }
         latestOpinionatedReviews(last: 10) { nodes { state } }
+        assignees(first: 10) { nodes { login } }
         author { login ... on User { name } }
         headRefName baseRefName headRefOid baseRefOid
         comments { totalCount }

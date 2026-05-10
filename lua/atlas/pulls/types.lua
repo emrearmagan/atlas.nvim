@@ -64,11 +64,13 @@
 ---@field name string
 ---@field owner string|nil
 ---@field repo_name string|nil
+---@field html_url string|nil
 
 ---@class PullsRepoDetails : PullsRepo
 ---@field full_name string|nil
 ---@field owner string|nil
 ---@field repo_name string|nil
+---@field html_url string|nil
 ---@field description string|nil
 ---@field size number|nil
 ---@field default_branch string|nil
@@ -226,6 +228,22 @@
 ---@field repo_root string|nil
 
 ---@class PullsCreatePRResult
+---@field id string|number|nil
+---@field url string|nil
+---@field message string|nil
+
+--------------------------------------------------------------------------------
+-- Issue creation
+--------------------------------------------------------------------------------
+---@class PullsCreateIssueOpts
+---@field repo_slug string
+---@field title string
+---@field body string|nil
+---@field labels string[]|nil
+---@field assignees string[]|nil
+---@field milestone integer|nil
+
+---@class PullsCreateIssueResult
 ---@field id string|number|nil
 ---@field url string|nil
 ---@field message string|nil

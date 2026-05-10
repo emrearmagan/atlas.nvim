@@ -58,19 +58,6 @@
 --- Features:
 ---@field create_pr (fun(opts: PullsCreatePROpts, on_done: fun(result: PullsCreatePRResult|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field create_issue (fun(opts: PullsCreateIssueOpts, on_done: fun(result: PullsCreateIssueResult|nil, err: string|nil)): { cancel: fun() }|nil)|nil
-
----@class PullsCreateIssueOpts
----@field repo_slug string
----@field title string
----@field body string|nil
----@field labels string[]|nil
----@field assignees string[]|nil
----@field milestone integer|nil
-
----@class PullsCreateIssueResult
----@field id string|number|nil
----@field url string|nil
----@field message string|nil
 ---
 --- Main list rendering
 ---@field render (fun(groups: PullsGroup[], layout: string, opts: { width: integer }): PullsMainRenderResult)|nil
@@ -91,6 +78,10 @@
 ---@field fetches (fun(pr: PullRequest, refresh: fun()))|nil
 ---@field is_loading (fun(pr: PullRequest, active_tab: string|nil): boolean)|nil
 
+---@class PullsProviderPanelKeymaps
+---@field register fun(buf: integer)
+---@field remove fun(buf: integer)
+
 ---@class PullsProviderRepoPanel
 ---@field header_rows (fun(repo: PullsRepo): PullsPanelHeaderRow[])|nil
 ---@field chips (fun(repo: PullsRepo): PullsPanelChip[])|nil
@@ -105,10 +96,10 @@
 ---@class PullsPanelHeaderRow
 ---@field k1 string
 ---@field v1 string
----@field v1_hl string
+---@field v1_hl string|table[] hl group name, or list of {start_col, end_col, hl_group} relative to the v1 cell
 ---@field k2 string
 ---@field v2 string
----@field v2_hl string
+---@field v2_hl string|table[] hl group name, or list of {start_col, end_col, hl_group} relative to the v2 cell
 
 ---@class PullsPanelChip
 ---@field label string
@@ -127,6 +118,7 @@
 ---@field label string
 ---@field icon string|nil
 ---@field mod PullsPanelTabModule
+---@field keymaps PullsProviderPanelKeymaps|nil provider-specific keymaps registered while this tab is active
 
 --------------------------------------------------------------------------------
 -- Repo panel types

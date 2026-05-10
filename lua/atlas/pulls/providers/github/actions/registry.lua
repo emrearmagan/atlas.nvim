@@ -4,6 +4,7 @@ local cli = require("atlas.pulls.providers.github.api.cli")
 local footer = require("atlas.ui.components.footer")
 local checkout = require("atlas.core.git.checkout")
 local logger = require("atlas.core.logger")
+local multi_select = require("atlas.ui.popups.multi_select")
 
 ---@class GitHubActionContext
 ---@field pr PullRequest|nil
@@ -374,6 +375,167 @@ local ACTIONS = {
 		end,
 	},
 	{
+		id = "add_reviewers",
+		label = "Add reviewers",
+		is_available = function(ctx)
+			if not has_pr(ctx) or ctx.pr == nil then
+				return false, "No PR selected"
+			end
+			if repo_slug(ctx) == "" then
+				return false, "Missing repository info"
+			end
+			return true, nil
+		end,
+		run = function(ctx, done)
+			local pr = ctx.pr
+			if pr == nil then
+				done(nil, "No PR selected")
+				return
+			end
+
+			local slug = repo_slug(ctx)
+
+			footer.notify("loading", "Loading reviewers...")
+			cli.gh({
+				"api",
+				"--paginate",
+				string.format("repos/%s/collaborators?per_page=100", slug),
+			}, function(result, err)
+				if err then
+					footer.notify("error", string.format("Failed to load reviewers: %s", tostring(err)))
+					done(nil, tostring(err))
+					return
+				end
+
+				local items = {}
+				if type(result) == "table" then
+					for _, raw in ipairs(result) do
+						if type(raw) == "table" and type(raw.login) == "string" then
+							table.insert(items, { login = raw.login })
+						end
+					end
+				end
+
+				if #items == 0 then
+					footer.notify("warn", "No reviewers available")
+					done({ changed_pr = false, message = "No reviewers available" }, nil)
+					return
+				end
+
+				multi_select.open({
+					items = items,
+					selected = {},
+					key = function(item)
+						return item.login
+					end,
+					format = function(item)
+						return "@" .. tostring(item.login)
+					end,
+					prompt = string.format("Add reviewers to PR #%s:", tostring(pr.id or "")),
+					on_done = function(selected)
+						if #selected == 0 then
+							done({ changed_pr = false, message = "No reviewers selected" }, nil)
+							return
+						end
+
+						local args = { "pr", "edit", tostring(pr.id), "--repo", slug }
+						for _, item in ipairs(selected) do
+							table.insert(args, "--add-reviewer")
+							table.insert(args, item.login)
+						end
+
+						footer.notify("loading", "Adding reviewers...")
+						cli.gh(args, function(_, edit_err)
+							if edit_err then
+								footer.notify("error", string.format("Add reviewers failed: %s", tostring(edit_err)))
+								done(nil, tostring(edit_err))
+								return
+							end
+
+							footer.notify("success", string.format("Added %d reviewer(s)", #selected), 1200)
+							done({ changed_pr = true, message = "Reviewers added" }, nil)
+						end)
+					end,
+				})
+			end)
+		end,
+	},
+	{
+		id = "add_assignees",
+		label = "Add assignees",
+		is_available = function(ctx)
+			if not has_pr(ctx) or ctx.pr == nil then
+				return false, "No PR selected"
+			end
+			if repo_slug(ctx) == "" then
+				return false, "Missing repository info"
+			end
+			return true, nil
+		end,
+		run = function(ctx, done)
+			local pr = ctx.pr
+			if pr == nil then
+				done(nil, "No PR selected")
+				return
+			end
+
+			local slug = repo_slug(ctx)
+			local issues_api = require("atlas.pulls.providers.github.api.issues")
+
+			footer.notify("loading", "Loading assignees...")
+			issues_api.list_assignees(slug, function(items, err)
+				if err then
+					footer.notify("error", string.format("Failed to load assignees: %s", tostring(err)))
+					done(nil, tostring(err))
+					return
+				end
+
+				items = type(items) == "table" and items or {}
+				if #items == 0 then
+					footer.notify("warn", "No assignees available")
+					done({ changed_pr = false, message = "No assignees available" }, nil)
+					return
+				end
+
+				multi_select.open({
+					items = items,
+					selected = {},
+					key = function(item)
+						return item.login
+					end,
+					format = function(item)
+						return string.format("@%s%s", item.login, item.name and (" — " .. item.name) or "")
+					end,
+					prompt = string.format("Add assignees to PR #%s:", tostring(pr.id or "")),
+					on_done = function(selected)
+						if #selected == 0 then
+							done({ changed_pr = false, message = "No assignees selected" }, nil)
+							return
+						end
+
+						local args = { "pr", "edit", tostring(pr.id), "--repo", slug }
+						for _, item in ipairs(selected) do
+							table.insert(args, "--add-assignee")
+							table.insert(args, item.login)
+						end
+
+						footer.notify("loading", "Adding assignees...")
+						cli.gh(args, function(_, edit_err)
+							if edit_err then
+								footer.notify("error", string.format("Add assignees failed: %s", tostring(edit_err)))
+								done(nil, tostring(edit_err))
+								return
+							end
+
+							footer.notify("success", string.format("Added %d assignee(s)", #selected), 1200)
+							done({ changed_pr = true, message = "Assignees added" }, nil)
+						end)
+					end,
+				})
+			end)
+		end,
+	},
+	{
 		id = "create_issue",
 		label = "Create issue",
 		is_available = function(ctx)
@@ -393,7 +555,7 @@ local ACTIONS = {
 			end
 
 			local issues_api = require("atlas.pulls.providers.github.api.issues")
-			local create_issue_ui = require("atlas.pulls.ui.create_issue")
+			local create_issue_ui = require("atlas.pulls.create.issue")
 
 			create_issue_ui.open({
 				repo_slug = slug,
