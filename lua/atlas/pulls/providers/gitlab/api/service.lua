@@ -137,6 +137,8 @@ function M.request(method, endpoint, data, on_done)
 		payload = encoded
 	end
 
+	logger.loginfo("GitLab pulls request", { method = method, endpoint = endpoint })
+
 	return http.curl_request(method, url, headers, payload, function(result, err)
 		if err then
 			logger.logerror("GitLab pulls request failed", {
