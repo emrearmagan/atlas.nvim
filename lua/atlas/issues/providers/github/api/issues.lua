@@ -4,8 +4,35 @@ local cli = require("atlas.issues.providers.github.api.cli")
 local normalizer = require("atlas.issues.providers.github.api.normalizer")
 local logger = require("atlas.core.logger")
 
-local SEARCH_JSON_FIELDS = "number,title,state,repository,author,assignees,labels,createdAt,updatedAt,closedAt,url,body,commentsCount"
-local DETAIL_JSON_FIELDS = "number,title,state,author,assignees,labels,createdAt,updatedAt,closedAt,url,body,comments,milestone,reactionGroups"
+local DETAIL_JSON_FIELDS =
+	"number,title,state,author,assignees,labels,createdAt,updatedAt,closedAt,url,body,comments,milestone,reactionGroups"
+
+local SEARCH_GQL = [[
+query($search: String!, $limit: Int!) {
+  search(query: $search, type: ISSUE, first: $limit) {
+    nodes {
+      ... on Issue {
+        number title state
+        createdAt updatedAt closedAt url body
+        repository { nameWithOwner }
+        author { login ... on User { name } }
+        assignees(first: 10) { nodes { login name } }
+        labels(first: 20) { nodes { name color } }
+        comments { totalCount }
+      }
+    }
+  }
+}
+]]
+
+---@param query string
+---@return string
+local function issue_search_query(query)
+	if not query:lower():find("is:issue", 1, true) then
+		query = query .. " is:issue"
+	end
+	return query
+end
 
 ---@param search string
 ---@param on_done fun(issues: Issue[]|nil, err: string|nil)
@@ -20,10 +47,7 @@ function M.search_issues(search, on_done, opts)
 		on_done({}, "Missing search query")
 		return nil
 	end
-	-- gh search issues also returns PRs by default; force-exclude them.
-	-- The literal "is:issue" search operator is also stripped because GitHub's
-	-- search API rejects it in some contexts.
-	query = query:gsub("%s*is:issue%s*", " "):gsub("^%s+", ""):gsub("%s+$", "")
+	query = issue_search_query(query)
 
 	local cache_key = string.format("github_issues:search:%s:%d", query, limit)
 	if not opts.force_load then
@@ -34,51 +58,28 @@ function M.search_issues(search, on_done, opts)
 		end
 	end
 
-	-- gh search issues silently quotes a multi-token query passed as one positional
-	-- arg (e.g. `assignee:@me is:open` becomes `assignee:"@me is:open"`). Split on
-	-- whitespace, but keep "quoted phrases" (with embedded quotes preserved verbatim
-	-- so e.g. `label:"good first issue"` becomes a single token).
-	local args = { "search", "issues" }
-	do
-		local i = 1
-		while i <= #query do
-			local c = query:sub(i, i)
-			if c:match("%s") then
-				i = i + 1
-			else
-				local token = {}
-				local in_quote = false
-				while i <= #query do
-					local cc = query:sub(i, i)
-					if cc == '"' then
-						in_quote = not in_quote
-						table.insert(token, cc)
-						i = i + 1
-					elseif cc:match("%s") and not in_quote then
-						break
-					else
-						table.insert(token, cc)
-						i = i + 1
-					end
-				end
-				table.insert(args, table.concat(token))
-			end
-		end
-	end
-	table.insert(args, "--include-prs=false")
-	table.insert(args, "--limit")
-	table.insert(args, tostring(limit))
-	table.insert(args, "--json")
-	table.insert(args, SEARCH_JSON_FIELDS)
-
-	logger.loginfo("GitHub issues search", { query = query, limit = limit, args = args })
-	return cli.gh(args, function(result, err)
+	logger.loginfo("GitHub GraphQL issues search", { query = query, limit = limit })
+	return cli.gh({
+		"api",
+		"graphql",
+		"-f",
+		"query=" .. vim.trim(SEARCH_GQL),
+		"-f",
+		"search=" .. query,
+		"-F",
+		"limit=" .. tostring(limit),
+	}, function(result, err)
 		if err then
 			on_done(nil, err)
 			return
 		end
-		local list = type(result) == "table" and result or {}
-		local issues = normalizer.normalize_issues(list, nil)
+
+		local nodes = type(result) == "table"
+				and type(result.data) == "table"
+				and type(result.data.search) == "table"
+				and result.data.search.nodes
+			or nil
+		local issues = normalizer.normalize_graphql_search_results(type(nodes) == "table" and nodes or {})
 		cli.set_cache(cache_key, issues)
 		on_done(issues, nil)
 	end)

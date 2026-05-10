@@ -1,6 +1,5 @@
 local M = {}
 
--- Reuse the pulls gh wrapper; only the gh binary call + json parse is shared.
 local pulls_cli = require("atlas.pulls.providers.github.api.cli")
 local cache = require("atlas.core.cache")
 

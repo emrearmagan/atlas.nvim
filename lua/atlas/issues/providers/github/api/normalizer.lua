@@ -29,6 +29,16 @@ local function safe_table(value)
 	return value
 end
 
+---@param value any
+---@return table
+local function connection_nodes(value)
+	value = nilify(value)
+	if type(value) == "table" and type(value.nodes) == "table" then
+		return value.nodes
+	end
+	return safe_table(value)
+end
+
 ---@param raw_user table|nil
 ---@return IssueUser|nil
 function M.normalize_user(raw_user)
@@ -164,8 +174,8 @@ function M.normalize_issue(raw, fallback_slug)
 	local status_name, status_id = normalize_state(raw.state)
 	local author = M.normalize_user(raw.author)
 
-	local labels = safe_table(raw.labels)
-	local assignees = safe_table(raw.assignees)
+	local labels = connection_nodes(raw.labels)
+	local assignees = connection_nodes(raw.assignees)
 	local milestone = nilify(raw.milestone)
 	local body = safe_str(raw.body) or ""
 	local created_at = safe_str(raw.createdAt) or safe_str(raw.created_at) or ""
@@ -175,6 +185,7 @@ function M.normalize_issue(raw, fallback_slug)
 	local comments_field = nilify(raw.comments)
 	local comment_count = tonumber(raw.commentsCount)
 		or (type(comments_field) == "number" and comments_field)
+		or (type(comments_field) == "table" and tonumber(comments_field.totalCount))
 		or (type(comments_field) == "table" and #comments_field)
 		or 0
 
@@ -225,6 +236,12 @@ function M.normalize_issues(raw_list, fallback_slug)
 		end
 	end
 	return out
+end
+
+---@param nodes table[]|nil
+---@return Issue[]
+function M.normalize_graphql_search_results(nodes)
+	return M.normalize_issues(nodes, nil)
 end
 
 ---@param key string
