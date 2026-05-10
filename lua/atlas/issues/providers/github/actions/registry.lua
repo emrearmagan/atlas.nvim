@@ -30,6 +30,13 @@ local function issue_slug(issue)
 	return from_key
 end
 
+---@return string
+local function current_search()
+	local state = require("atlas.issues.state")
+	local view = state.active_view or state.current_view or {}
+	return tostring(view.search or "")
+end
+
 ---@param id string
 ---@param ctx table
 ---@param done fun(result: table|nil, err: string|nil)
@@ -319,15 +326,16 @@ local ACTIONS = {
 			return true, nil
 		end,
 		run = function(_, done)
-			vim.ui.input({ prompt = "GitHub search (eg. is:issue assignee:@me): " }, function(input)
-				if input == nil or vim.trim(input) == "" then
+			vim.ui.input({ prompt = "GitHub search: ", default = current_search() }, function(input)
+				local search = input ~= nil and vim.trim(input) or ""
+				if search == "" then
 					done({ changed_issue_key = nil, message = "Cancelled" }, nil)
 					return
 				end
 				local search_view = {
-					name = string.format("Search (%s)", input),
+					name = string.format("Search (%s)", search),
 					key = "?",
-					search = input,
+					search = search,
 				}
 				require("atlas.issues.ui.main.controller").switch_view(search_view)
 				done({ changed_issue_key = nil, message = "Searching..." }, nil)
