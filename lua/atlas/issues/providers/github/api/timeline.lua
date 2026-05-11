@@ -134,7 +134,7 @@ function M.list(key, on_done, opts)
 
 	local cache_key = string.format("github_issues:timeline:%s#%d", slug, number)
 	if not opts.force_load then
-		local cached, ok = cli.get_cache(cache_key)
+		local cached, ok = cli.get_mem(cache_key)
 		if ok then
 			on_done(cached, nil)
 			return nil
@@ -156,7 +156,7 @@ function M.list(key, on_done, opts)
 					table.insert(entries, entry)
 				end
 			end
-			cli.set_cache(cache_key, entries)
+			cli.set_mem(cache_key, entries)
 			on_done(entries, nil)
 		end
 	)
@@ -176,7 +176,7 @@ function M.list_conversation(key, on_done, opts)
 
 	local cache_key = string.format("github_issues:conversation:%s#%d", slug, number)
 	if not opts.force_load then
-		local cached, ok = cli.get_cache(cache_key)
+		local cached, ok = cli.get_mem(cache_key)
 		if ok then
 			on_done(cached, nil)
 			return nil
@@ -209,7 +209,7 @@ function M.list_conversation(key, on_done, opts)
 				end
 			end
 
-			cli.set_cache(cache_key, conversation)
+			cli.set_mem(cache_key, conversation)
 			on_done(conversation, nil)
 		end
 	)

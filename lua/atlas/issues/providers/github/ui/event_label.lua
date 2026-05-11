@@ -77,6 +77,14 @@ function M.format(ctx)
 		return "reviewed", nil
 	elseif kind == "committed" then
 		return "added a commit", nil
+	elseif kind == "parent_issue_added" then
+		return "added a parent issue", nil
+	elseif kind == "parent_issue_removed" then
+		return "removed a parent issue", nil
+	elseif kind == "sub_issue_added" then
+		return "added a sub-issue", nil
+	elseif kind == "sub_issue_removed" then
+		return "removed a sub-issue", nil
 	end
 	return kind, nil
 end

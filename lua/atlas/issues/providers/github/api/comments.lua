@@ -18,7 +18,7 @@ function M.list(key, on_done, opts)
 
 	local cache_key = string.format("github_issues:comments:%s#%d", slug, number)
 	if not opts.force_load then
-		local cached, ok = cli.get_cache(cache_key)
+		local cached, ok = cli.get_mem(cache_key)
 		if ok then
 			on_done(cached, nil)
 			return nil
@@ -34,7 +34,7 @@ function M.list(key, on_done, opts)
 				return
 			end
 			local comments = normalizer.normalize_comments(type(result) == "table" and result or {})
-			cli.set_cache(cache_key, comments)
+			cli.set_mem(cache_key, comments)
 			on_done(comments, nil)
 		end
 	)

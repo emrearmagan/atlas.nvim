@@ -6,6 +6,26 @@ local helper = require("atlas.issues.ui.main.helper")
 local conversation_state = require("atlas.issues.providers.github.ui.conversation.state")
 local history_state = require("atlas.issues.ui.panel.issue.tabs.activity.state")
 
+local state = {
+	assignees = nil, ---@type table|nil
+	labels = nil, ---@type table|nil
+	milestone = nil, ---@type table|nil
+	sub_issues = nil, ---@type table|nil
+	body = nil, ---@type string|nil
+	parent = nil, ---@type Issue|nil
+	detail_loading = false,
+}
+
+local function reset_state()
+	state.assignees = nil
+	state.labels = nil
+	state.milestone = nil
+	state.sub_issues = nil
+	state.body = nil
+	state.parent = nil
+	state.detail_loading = false
+end
+
 ---@param body string|nil
 ---@return integer completed, integer total
 local function task_progress(body)
@@ -129,46 +149,80 @@ end
 ---@return IssuesPanelHeaderRow[]
 function M.header_rows(issue)
 	local raw = type(issue._raw) == "table" and issue._raw or {}
-	local milestone_text = milestone_display(raw.milestone)
-	local reporter_name = type(issue.reporter) == "table" and tostring(issue.reporter.display_name or "") or ""
-	local assignees_text, assignees_hl = assignees_display(raw)
-	local user_icon = icons.general("user")
 
+	local reporter_name = type(issue.reporter) == "table" and tostring(issue.reporter.display_name or "") or ""
 	if reporter_name == "" then
 		reporter_name = "Unknown"
 	end
 
-	local rows = {
-		{
-			k1 = "Status:",
-			v1 = tostring(issue.status or "Open"),
-			v1_hl = issue.status_id == "closed" and "AtlasGHIssueClosedChip" or "AtlasGHIssueOpenChip",
-			k2 = "Reporter:",
-			v2 = string.format("%s %s", user_icon, reporter_name),
-			v2_hl = helper.person_hl(reporter_name),
-		},
-		{
-			k1 = "Assignee:",
-			v1 = assignees_text,
-			v1_hl = assignees_hl,
-			k2 = milestone_text ~= "" and "Milestone:" or "",
-			v2 = milestone_text,
-			v2_hl = milestone_text ~= "" and "AtlasTextMuted" or nil,
-		},
+	local status_cell = {
+		k1 = "Status:",
+		v1 = tostring(issue.status or "Open"),
+		v1_hl = issue.status_id == "closed" and "AtlasGHIssueClosedChip" or "AtlasGHIssueOpenChip",
+
+		k2 = "Reporter:",
+		v2 = string.format("%s %s", icons.general("user"), reporter_name),
+		v2_hl = helper.person_hl(reporter_name),
 	}
 
-	local completed, total = task_progress(raw.body)
-	if total > 0 then
-		local tasks_text = string.format("%s %d/%d", icons.pulls("tasks"), completed, total)
-		local tasks_hl = completed == total and "AtlasTextPositive" or "AtlasTextWarning"
-		table.insert(rows, {
-			k1 = "Tasks:",
-			v1 = tasks_text,
-			v1_hl = tasks_hl,
-			k2 = "",
-			v2 = "",
-			v2_hl = nil,
+	local assignees_text, assignees_hl = assignees_display({ assignees = state.assignees or raw.assignees })
+
+	local right_cells = {}
+	local parent = state.parent or issue.parent
+	if type(parent) == "table" and parent.key then
+		local pkey = tostring(parent.key)
+		local title = tostring(parent.summary or "")
+		local text = title ~= "" and string.format("%s %s", pkey, title) or pkey
+		local hl = helper.issue_hl and helper.issue_hl(pkey) or "AtlasTextMuted"
+		table.insert(right_cells, { k = "Parent:", v = text, hl = hl })
+	end
+
+	local milestone_text = milestone_display(state.milestone or raw.milestone)
+	if milestone_text ~= "" then
+		table.insert(right_cells, { k = "Milestone:", v = milestone_text, hl = "AtlasTextMuted" })
+	end
+
+	local subs = type(state.sub_issues) == "table" and state.sub_issues or {}
+	if #subs > 0 then
+		local closed = 0
+		for _, s in ipairs(subs) do
+			if tostring(s.state or ""):upper() == "CLOSED" then
+				closed = closed + 1
+			end
+		end
+		table.insert(right_cells, {
+			k = "Sub-issues:",
+			v = string.format("%s %d/%d", icons.issues("issue"), closed, #subs),
+			hl = closed == #subs and "AtlasTextPositive" or "AtlasTextMuted",
 		})
+	end
+
+	local completed, total = task_progress(state.body or raw.body)
+	if total > 0 then
+		table.insert(right_cells, {
+			k = "Tasks:",
+			v = string.format("%s %d/%d", icons.pulls("tasks"), completed, total),
+			hl = completed == total and "AtlasTextPositive" or "AtlasTextWarning",
+		})
+	end
+
+	local function pop_right()
+		local c = table.remove(right_cells, 1)
+		if c == nil then
+			return "", "", nil
+		end
+		return c.k, c.v, c.hl
+	end
+
+	local rk, rv, rh = pop_right()
+	local rows = {
+		status_cell,
+		{ k1 = "Assignee:", v1 = assignees_text, v1_hl = assignees_hl, k2 = rk, v2 = rv, v2_hl = rh },
+	}
+
+	while #right_cells > 0 do
+		local k, v, hl = pop_right()
+		table.insert(rows, { k1 = "", v1 = "", v1_hl = nil, k2 = k, v2 = v, v2_hl = hl })
 	end
 
 	return rows
@@ -194,8 +248,14 @@ end
 ---@return IssuesPanelChip[]
 function M.chips(issue)
 	local chips = {}
+	if state.detail_loading then
+		local spinner = require("atlas.ui.components.spinner")
+		table.insert(chips, { label = spinner.with_text("Loading..."), hl = "AtlasTextMuted" })
+		return chips
+	end
+
 	local raw = type(issue._raw) == "table" and issue._raw or {}
-	local labels = type(raw.labels) == "table" and raw.labels or {}
+	local labels = state.labels or raw.labels or {}
 	for _, label in ipairs(labels) do
 		local name = tostring(label.name or "")
 		if name ~= "" then
@@ -213,7 +273,7 @@ end
 ---@param _issue Issue
 ---@return boolean
 function M.is_loading(_issue)
-	return conversation_state.any_loading() or history_state.any_loading()
+	return state.detail_loading or conversation_state.any_loading() or history_state.any_loading()
 end
 
 ---@param issue Issue
@@ -225,25 +285,21 @@ function M.fetches(issue, refresh, opts)
 		return
 	end
 
+	reset_state()
+	state.detail_loading = true
+
 	local issues_api = require("atlas.issues.providers.github.api.issues")
 	issues_api.get_issue(key, function(fresh, err)
-		if err or type(fresh) ~= "table" then
-			return
+		state.detail_loading = false
+		if not err and type(fresh) == "table" then
+			local fraw = fresh._raw or {}
+			state.assignees = fraw.assignees
+			state.labels = fraw.labels
+			state.milestone = fraw.milestone
+			state.sub_issues = fraw.sub_issues
+			state.body = fraw.body
+			state.parent = fresh.parent
 		end
-
-		local issues_state = require("atlas.issues.state")
-		for i, existing in ipairs(issues_state.issues or {}) do
-			if type(existing) == "table" and tostring(existing.key or "") == key then
-				issues_state.issues[i] = fresh
-				break
-			end
-		end
-
-		local panel_state = require("atlas.issues.ui.panel.issue.state")
-		if panel_state.current_issue and tostring(panel_state.current_issue.key or "") == key then
-			panel_state.current_issue = fresh
-		end
-
 		refresh()
 	end, { force_load = opts and opts.force_load == true or false })
 end

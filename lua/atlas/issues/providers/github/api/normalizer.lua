@@ -221,6 +221,7 @@ function M.normalize_issue(raw, fallback_slug)
 			comment_count = comment_count,
 			html_url = url,
 			reactions = normalize_reaction_groups(raw.reactionGroups),
+			sub_issues = connection_nodes(raw.subIssues),
 		},
 	}
 	return issue

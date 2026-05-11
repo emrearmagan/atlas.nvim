@@ -192,7 +192,7 @@ function M.get_issue(key, on_done, opts)
 	local with_relationships = relationships_enabled(opts)
 	local cache_key = string.format("github_issues:get:v2:%s#%d:relationships:%s", slug, number, tostring(with_relationships))
 	if not opts.force_load then
-		local cached, ok = cli.get_cache(cache_key)
+		local cached, ok = cli.get_mem(cache_key)
 		if ok then
 			on_done(cached, nil)
 			return nil
@@ -231,7 +231,7 @@ function M.get_issue(key, on_done, opts)
 			or nil
 		local issue = normalizer.normalize_issue(type(raw) == "table" and raw or {}, slug)
 		if issue then
-			cli.set_cache(cache_key, issue)
+			cli.set_mem(cache_key, issue)
 		end
 		on_done(issue, nil)
 	end)
