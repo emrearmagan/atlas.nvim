@@ -61,8 +61,13 @@ function M.gh(args, callback)
 	local cmd = vim.list_extend({ "gh" }, args)
 	logger.loginfo("GitHub CLI", { cmd = table.concat(cmd, " ") })
 
+	local cancelled = false
+
 	local handle = vim.system(cmd, { text = true }, function(res)
 		vim.schedule(function()
+			if cancelled then
+				return
+			end
 			if res.code ~= 0 then
 				local err = sanitize_error(res.stderr)
 				logger.logerror("GitHub CLI error", { code = res.code, err = err })
@@ -96,6 +101,7 @@ function M.gh(args, callback)
 	return {
 		job_id = pid,
 		cancel = function()
+			cancelled = true
 			pcall(function()
 				handle:kill(9)
 			end)
