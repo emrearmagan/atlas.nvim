@@ -509,6 +509,11 @@ function M.create_pr(opts, on_done)
 		table.insert(args, "--draft")
 	end
 
+	for _, reviewer in ipairs(opts.reviewers or {}) do
+		table.insert(args, "--reviewer")
+		table.insert(args, reviewer.provider_id)
+	end
+
 	logger.loginfo("github.create_pr", { slug = slug, head = opts.head, base = opts.base, draft = opts.draft == true })
 
 	return cli.gh(args, function(result, err)

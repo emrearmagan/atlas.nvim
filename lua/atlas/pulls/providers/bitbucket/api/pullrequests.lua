@@ -167,19 +167,14 @@ function M.fetch_pullrequests(view_repos, opts, on_done)
 	end
 
 	for _, repo in ipairs(view_repos) do
-		local handle = fetch_pullrequests_single(
-			repo.workspace,
-			repo.repo,
-			{
-				user = user,
-				token = token,
-				cache_ttl = ttl,
-				force = opts.force_load,
-				pagelen = opts.pagelen,
-				statuses = opts.statuses,
-			},
-			finish
-		)
+		local handle = fetch_pullrequests_single(repo.workspace, repo.repo, {
+			user = user,
+			token = token,
+			cache_ttl = ttl,
+			force = opts.force_load,
+			pagelen = opts.pagelen,
+			statuses = opts.statuses,
+		}, finish)
 		if handle ~= nil then
 			table.insert(handles, handle)
 		end
@@ -535,6 +530,14 @@ function M.create_pr(opts, on_done)
 		draft = opts.draft == true,
 	}
 
+	if opts.reviewers and #opts.reviewers > 0 then
+		local list = {}
+		for _, reviewer in ipairs(opts.reviewers) do
+			table.insert(list, { uuid = reviewer.provider_id })
+		end
+		payload.reviewers = list
+	end
+
 	logger.loginfo(
 		"bitbucket.create_pr",
 		{ workspace = workspace, repo = repo, head = opts.head, base = opts.base, draft = opts.draft == true }
@@ -557,6 +560,49 @@ function M.create_pr(opts, on_done)
 		end
 
 		on_done({ id = id, url = url, message = "PR created" }, nil)
+	end)
+end
+
+---@param opts { repo_slug: string }
+---@param on_done fun(reviewers: PullsCreatePRReviewer[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_default_reviewers(opts, on_done)
+	local slug = tostring(opts.repo_slug or "")
+	local workspace, repo = slug:match("^([^/]+)/(.+)$")
+	if workspace == nil or repo == nil then
+		vim.schedule(function()
+			on_done(nil, "Invalid repo slug; expected workspace/repo")
+		end)
+		return nil
+	end
+
+	local endpoint = string.format("/repositories/%s/%s/effective-default-reviewers", workspace, repo)
+	return service.request("GET", endpoint, nil, nil, function(result, err)
+		if err then
+			on_done(nil, err)
+			return
+		end
+
+		local items = {}
+		local values = type(result) == "table" and type(result.values) == "table" and result.values or {}
+		for _, entry in ipairs(values) do
+			local user = type(entry) == "table" and type(entry.user) == "table" and entry.user or nil
+			local uuid = user and tostring(user.uuid or "") or ""
+			if uuid ~= "" then
+				local nickname = tostring(user.nickname or "")
+				local display = tostring(user.display_name or "")
+				local label = nickname ~= "" and ("@" .. nickname)
+					or (display ~= "" and ("@" .. display) or ("@" .. uuid))
+				table.insert(items, {
+					label = label,
+					provider_id = uuid,
+					selected = true,
+					default = true,
+				})
+			end
+		end
+
+		on_done(items, nil)
 	end)
 end
 

@@ -331,4 +331,12 @@ function M.create_pr(opts, on_done)
 	return pr_api.create_pr(opts, on_done)
 end
 
+---@param opts { repo_slug: string, repo_root: string|nil, head: string, base: string }
+---@param on_done fun(reviewers: PullsCreatePRReviewer[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_default_reviewers(opts, on_done)
+	local pr_api = require("atlas.pulls.providers.bitbucket.api.pullrequests")
+	return pr_api.fetch_default_reviewers(opts, on_done)
+end
+
 return M

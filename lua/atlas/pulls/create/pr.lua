@@ -5,6 +5,7 @@ local git_branch = require("atlas.core.git")
 local config = require("atlas.config")
 local spinner = require("atlas.ui.popups.spinner")
 local pulls_helper = require("atlas.pulls.ui.main.helper")
+local multi_select = require("atlas.ui.popups.multi_select")
 
 local DEFAULT_GITHUB_PR_TEMPLATE = ".github/pull_request_template.md"
 
@@ -29,6 +30,7 @@ local DEFAULT_GITHUB_PR_TEMPLATE = ".github/pull_request_template.md"
 ---@field draft boolean
 ---@field commit_count integer
 ---@field available_bases string[]
+---@field reviewers PullsCreatePRReviewer[]|"loading"|string candidates with .selected toggled by user, or "loading", or an error message string
 
 ---@class CreatePRState
 ---@field fields CreatePRFields
@@ -133,6 +135,54 @@ local function load_provider(provider_id)
 end
 
 ---@param pr_state CreatePRState
+---@return string
+local function reviewers_value(pr_state)
+	local reviewers = pr_state.fields.reviewers
+	if reviewers == "loading" then
+		return require("atlas.ui.components.spinner").with_text("Loading...")
+	end
+	if type(reviewers) == "string" then
+		return "unavailable"
+	end
+
+	if #reviewers == 0 then
+		return "no reviewers available"
+	end
+
+	local selected = {}
+	for _, reviewer in ipairs(reviewers) do
+		if reviewer.selected then
+			table.insert(selected, reviewer)
+		end
+	end
+
+	if #selected == 0 then
+		return "no reviewers"
+	end
+
+	if #selected == #reviewers then
+		local all_default = true
+		for _, reviewer in ipairs(reviewers) do
+			if not reviewer.default then
+				all_default = false
+				break
+			end
+		end
+		return all_default and "all default reviewers" or "all reviewers"
+	end
+
+	if #selected > 2 then
+		return string.format("%d reviewers", #selected)
+	end
+
+	local labels = {}
+	for _, reviewer in ipairs(selected) do
+		table.insert(labels, reviewer.label)
+	end
+	return table.concat(labels, ", ")
+end
+
+---@param pr_state CreatePRState
 ---@return EditorPopupMetaRow[]
 local function meta_rows(pr_state)
 	local repo = tostring(pr_state.fields.repo_slug or "")
@@ -149,6 +199,7 @@ local function meta_rows(pr_state)
 	return {
 		{ "Repo:", { text = repo, hl = pulls_helper.repo_hl(repo) }, "Status:", { text = status, hl = status_hl } },
 		{ "Branch:", branch_value, "Commits:", commit_label },
+		{ "Reviewers:", reviewers_value(pr_state), "", "" },
 	}
 end
 
@@ -221,6 +272,99 @@ local function pick_base(pr_state, on_change)
 end
 
 ---@param pr_state CreatePRState
+---@param on_change fun()
+local function pick_reviewers(pr_state, on_change)
+	local reviewers = pr_state.fields.reviewers
+	if reviewers == "loading" then
+		return
+	end
+	if type(reviewers) == "string" then
+		notify_warn("Reviewers unavailable: " .. reviewers)
+		return
+	end
+	if #reviewers == 0 then
+		notify_warn("No reviewers available")
+		return
+	end
+
+	local selected = {}
+	for _, reviewer in ipairs(reviewers) do
+		if reviewer.selected then
+			table.insert(selected, reviewer)
+		end
+	end
+
+	local function sync_selection(current)
+		local lookup = {}
+		for _, r in ipairs(current) do
+			lookup[r.provider_id] = true
+		end
+		for _, r in ipairs(reviewers) do
+			r.selected = lookup[r.provider_id] == true
+		end
+		on_change()
+	end
+
+	multi_select.open({
+		items = reviewers,
+		selected = selected,
+		key = function(item)
+			return item.provider_id
+		end,
+		format = function(item)
+			return item.label
+		end,
+		prompt = "Reviewers:",
+		on_change = sync_selection,
+		on_done = sync_selection,
+	})
+end
+
+---@param pr_state CreatePRState
+---@param on_change fun()
+local function load_reviewers(pr_state, on_change)
+	local provider = pr_state.fields.provider
+	if provider == nil or provider.fetch_default_reviewers == nil then
+		pr_state.fields.reviewers = {}
+		return
+	end
+
+	pr_state.fields.reviewers = "loading"
+
+	local spinner_timer = vim.loop.new_timer()
+	if spinner_timer ~= nil then
+		spinner_timer:start(
+			100,
+			100,
+			vim.schedule_wrap(function()
+				if pr_state.fields.reviewers ~= "loading" then
+					spinner_timer:stop()
+					spinner_timer:close()
+					return
+				end
+				on_change()
+			end)
+		)
+	end
+
+	provider.fetch_default_reviewers({
+		repo_slug = pr_state.fields.repo_slug,
+		repo_root = pr_state.fields.repo_root,
+		head = pr_state.fields.head,
+		base = pr_state.fields.base,
+	}, function(reviewers, err)
+		vim.schedule(function()
+			if err then
+				pr_state.fields.reviewers = tostring(err)
+			else
+				pr_state.fields.reviewers = reviewers or {}
+			end
+			on_change()
+		end)
+	end)
+end
+
+---@param pr_state CreatePRState
 ---@param result PullsCreatePRResult
 local function on_success(pr_state, result)
 	pr_state.is_submitting = false
@@ -273,6 +417,15 @@ local function submit(pr_state)
 	pr_state.is_submitting = true
 	spinner.start("Creating pull request…")
 
+	local selected_reviewers = {}
+	if type(pr_state.fields.reviewers) == "table" then
+		for _, reviewer in ipairs(pr_state.fields.reviewers) do
+			if reviewer.selected then
+				table.insert(selected_reviewers, reviewer)
+			end
+		end
+	end
+
 	local function do_create()
 		spinner.start("Creating pull request…")
 		provider.create_pr({
@@ -283,6 +436,7 @@ local function submit(pr_state)
 			head = pr_state.fields.head,
 			base = pr_state.fields.base,
 			draft = pr_state.fields.draft,
+			reviewers = selected_reviewers,
 		}, function(result, err)
 			vim.schedule(function()
 				if err then
@@ -346,6 +500,7 @@ function M.open(opts)
 			draft = opts.draft,
 			commit_count = opts.commit_count,
 			available_bases = type(opts.available_bases) == "table" and opts.available_bases or { opts.base },
+			reviewers = "loading",
 		},
 		layout = {},
 		content_width = 80,
@@ -355,7 +510,7 @@ function M.open(opts)
 	editor.open(pr_state, {
 		title = " Create Pull Request ",
 		min_height = 20,
-		meta_height = 2,
+		meta_height = 3,
 		title_winbar = "Title",
 		desc_winbar = "Description",
 		initial_title = pr_state.fields.title,
@@ -393,13 +548,23 @@ function M.open(opts)
 					render_meta(pr_state)
 				end,
 			},
+			{
+				key = "gr",
+				mode = "n",
+				buffers = { "title", "desc" },
+				desc = "reviewers",
+				show_in_footer = true,
+				action = function()
+					pick_reviewers(pr_state, function()
+						render_meta(pr_state)
+					end)
+				end,
+			},
 		},
 	})
 
-	vim.schedule(function()
-		if vim.api.nvim_get_current_buf() == pr_state.layout.title_buf then
-			vim.cmd("startinsert!")
-		end
+	load_reviewers(pr_state, function()
+		render_meta(pr_state)
 	end)
 end
 

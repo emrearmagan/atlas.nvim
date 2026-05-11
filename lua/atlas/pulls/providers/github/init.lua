@@ -284,4 +284,46 @@ function M.create_pr(opts, on_done)
 	return require("atlas.pulls.providers.github.api.pullrequests").create_pr(opts, on_done)
 end
 
+---@param opts { repo_slug: string, repo_root: string|nil, head: string, base: string }
+---@param on_done fun(reviewers: PullsCreatePRReviewer[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_default_reviewers(opts, on_done)
+	local cli = require("atlas.pulls.providers.github.api.cli")
+	local slug = tostring(opts.repo_slug or "")
+	if slug == "" then
+		vim.schedule(function()
+			on_done(nil, "Missing repo slug")
+		end)
+		return nil
+	end
+
+	return cli.gh({
+		"api",
+		"--paginate",
+		string.format("repos/%s/collaborators?per_page=100", slug),
+	}, function(result, err)
+		if err then
+			on_done(nil, err)
+			return
+		end
+
+		local items = {}
+		if type(result) == "table" then
+			for _, raw in ipairs(result) do
+				local login = type(raw) == "table" and tostring(raw.login or "") or ""
+				if login ~= "" then
+					table.insert(items, {
+						label = "@" .. login,
+						provider_id = login,
+						selected = false,
+						default = false,
+					})
+				end
+			end
+		end
+
+		on_done(items, nil)
+	end)
+end
+
 return M
