@@ -4,27 +4,6 @@ local icons = require("atlas.ui.shared.icons")
 local state = require("atlas.issues.state")
 local utils = require("atlas.ui.shared.utils")
 
---- GitHub doesnt expose task list progress via the API, so we really have to parse the body to get it. This is pretty sad, but it is what it is.
----@param body string|nil
----@return string
-local function task_progress(body)
-	local completed = 0
-	local total = 0
-	for line in (tostring(body or "") .. "\n"):gmatch("(.-)\n") do
-		local mark = line:match("^%s*[-*+]%s+%[([xX%s])%]")
-		if mark ~= nil then
-			total = total + 1
-			if mark:lower() == "x" then
-				completed = completed + 1
-			end
-		end
-	end
-	if total == 0 then
-		return "-"
-	end
-	return string.format("%d/%d", completed, total)
-end
-
 ---@return table[]
 local function plain_columns()
 	return {
@@ -34,13 +13,6 @@ local function plain_columns()
 			key = "comments",
 			name = icons.general("comment"),
 			min_width = 2,
-			can_grow = false,
-			header_hl = "AtlasColumnHeader",
-		},
-		{
-			key = "tasks",
-			name = icons.pulls("tasks"),
-			min_width = 3,
 			can_grow = false,
 			header_hl = "AtlasColumnHeader",
 		},
@@ -75,13 +47,6 @@ local function compact_columns()
 			header_hl = "AtlasColumnHeader",
 		},
 		{
-			key = "tasks",
-			name = icons.pulls("tasks"),
-			min_width = 3,
-			can_grow = false,
-			header_hl = "AtlasColumnHeader",
-		},
-		{
 			key = "assignee",
 			name = string.format("%s Assignee", icons.general("user")),
 			max_width = 22,
@@ -109,7 +74,6 @@ local function issue_to_row(issue, is_child)
 	local raw = type(issue._raw) == "table" and issue._raw or {}
 	local row = renderer.format_row(issue, is_child)
 	row.comments = tostring(tonumber(raw.comment_count) or 0)
-	row.tasks = task_progress(raw.body)
 	row._item = { kind = "issue", key = issue.key, _issue = issue }
 	row._issue = issue
 	row.children = row.children or {}
@@ -134,7 +98,6 @@ local function rows(issue_groups, opts)
 				icon = "",
 				name = "",
 				comments = "",
-				tasks = "",
 				assignee = "",
 				reporter = "",
 				status = "",
@@ -148,7 +111,6 @@ local function rows(issue_groups, opts)
 			icon = "",
 			name = "",
 			comments = "",
-			tasks = "",
 			assignee = "",
 			reporter = "",
 			status = "",
@@ -157,7 +119,6 @@ local function rows(issue_groups, opts)
 			icon = opts.spinner or "⠋",
 			name = "Loading...",
 			comments = "",
-			tasks = "",
 			assignee = "",
 			reporter = "",
 			status = "",
@@ -169,7 +130,7 @@ end
 
 ---@return table
 local function compact_blank_row()
-	return { icon = "", name = "", comments = "", tasks = "", assignee = "", reporter = "", created = "", updated = "", status = "" }
+	return { icon = "", name = "", comments = "", assignee = "", reporter = "", created = "", updated = "", status = "" }
 end
 
 ---@param issue Issue
@@ -270,16 +231,6 @@ local function cell_hl(row, col, ctx)
 
 	if col.key == "comments" then
 		return { { start_col = 0, end_col = #ctx.padded, hl_group = "AtlasTextMuted" } }
-	end
-
-	if col.key == "tasks" then
-		local task_text = tostring(row.tasks or "")
-		local completed, total = task_text:match("^(%d+)/(%d+)$")
-		local hl = "AtlasTextMuted"
-		if completed and total then
-			hl = tonumber(completed) == tonumber(total) and "AtlasTextPositive" or "AtlasTextWarning"
-		end
-		return { { start_col = 0, end_col = #ctx.padded, hl_group = hl } }
 	end
 
 	if col.key == "created" or col.key == "updated" then

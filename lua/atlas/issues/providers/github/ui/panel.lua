@@ -6,6 +6,23 @@ local helper = require("atlas.issues.ui.main.helper")
 local conversation_state = require("atlas.issues.providers.github.ui.conversation.state")
 local activity_state = require("atlas.issues.providers.github.ui.activity.state")
 
+---@param body string|nil
+---@return integer completed, integer total
+local function task_progress(body)
+	local completed = 0
+	local total = 0
+	for line in (tostring(body or "") .. "\n"):gmatch("(.-)\n") do
+		local mark = line:match("^%s*[-*+]%s+%[([xX%s])%]")
+		if mark ~= nil then
+			total = total + 1
+			if mark:lower() == "x" then
+				completed = completed + 1
+			end
+		end
+	end
+	return completed, total
+end
+
 ---@param raw table
 ---@return table[]
 local function assignee_nodes(raw)
@@ -140,6 +157,20 @@ function M.header_rows(issue)
 		},
 	}
 
+	local completed, total = task_progress(raw.body)
+	if total > 0 then
+		local tasks_text = string.format("%s %d/%d", icons.pulls("tasks"), completed, total)
+		local tasks_hl = completed == total and "AtlasTextPositive" or "AtlasTextWarning"
+		table.insert(rows, {
+			k1 = "Tasks:",
+			v1 = tasks_text,
+			v1_hl = tasks_hl,
+			k2 = "",
+			v2 = "",
+			v2_hl = nil,
+		})
+	end
+
 	return rows
 end
 
@@ -183,6 +214,38 @@ end
 ---@return boolean
 function M.is_loading(_issue)
 	return conversation_state.any_loading() or activity_state.any_loading()
+end
+
+---@param issue Issue
+---@param refresh fun()
+---@param opts { force_load?: boolean }|nil
+function M.fetches(issue, refresh, opts)
+	local key = tostring(issue.key or "")
+	if key == "" then
+		return
+	end
+
+	local issues_api = require("atlas.issues.providers.github.api.issues")
+	issues_api.get_issue(key, function(fresh, err)
+		if err or type(fresh) ~= "table" then
+			return
+		end
+
+		local issues_state = require("atlas.issues.state")
+		for i, existing in ipairs(issues_state.issues or {}) do
+			if type(existing) == "table" and tostring(existing.key or "") == key then
+				issues_state.issues[i] = fresh
+				break
+			end
+		end
+
+		local panel_state = require("atlas.issues.ui.panel.issue.state")
+		if panel_state.current_issue and tostring(panel_state.current_issue.key or "") == key then
+			panel_state.current_issue = fresh
+		end
+
+		refresh()
+	end, { force_load = opts and opts.force_load == true or false })
 end
 
 ---@return IssuesPanelTab[]

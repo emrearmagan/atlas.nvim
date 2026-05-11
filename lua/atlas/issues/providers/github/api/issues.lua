@@ -24,16 +24,10 @@ query($search: String!, $limit: Int!, $withRelationships: Boolean!) {
 
 fragment IssueFields on Issue {
   number title state
-  createdAt updatedAt closedAt url body
+  createdAt updatedAt url
   repository { nameWithOwner }
   author { login ... on User { name } }
-  assignees(first: 10) { nodes { login name } }
-  labels(first: 20) { nodes { name color } }
-  milestone {
-    number title state description progressPercentage
-    openIssues: issues(states: OPEN) { totalCount }
-    closedIssues: issues(states: CLOSED) { totalCount }
-  }
+  assignees(first: 1) { nodes { login name } }
   comments { totalCount }
 }
 ]]
