@@ -15,6 +15,8 @@ local keymaps = require("atlas.pulls.providers.github.ui.conversation.keymaps")
 local PADDING_X = 1
 local PADDING = string.rep(" ", PADDING_X)
 local CONNECTOR = "│"
+local ACTIVITY_COLLAPSE_KEEP = 2
+local ACTIVITY_COLLAPSE_THRESHOLD = 5
 
 -- TODO: Consider nerd font icons for better terminal compatibility
 local REACTION_EMOJI = {
@@ -158,10 +160,54 @@ end
 --------------------------------------------------------------------------------
 
 ---@class GHTimelineEntry
----@field type "comment"|"activity"
+---@field type "comment"|"activity"|"activity_gap"
 ---@field timestamp string
 ---@field comment PullsComment|nil
 ---@field activity PullsActivityEntry|nil
+---@field count integer|nil
+
+---@param entries GHTimelineEntry[]
+---@param run GHTimelineEntry[]
+local function append_activity_run(entries, run)
+	if #run <= ACTIVITY_COLLAPSE_THRESHOLD then
+		for _, entry in ipairs(run) do
+			table.insert(entries, entry)
+		end
+		return
+	end
+
+	for i = 1, ACTIVITY_COLLAPSE_KEEP do
+		table.insert(entries, run[i])
+	end
+	table.insert(entries, {
+		type = "activity_gap",
+		timestamp = run[ACTIVITY_COLLAPSE_KEEP].timestamp,
+		count = #run - (ACTIVITY_COLLAPSE_KEEP * 2),
+	})
+	for i = #run - ACTIVITY_COLLAPSE_KEEP + 1, #run do
+		table.insert(entries, run[i])
+	end
+end
+
+---@param entries GHTimelineEntry[]
+---@return GHTimelineEntry[]
+local function collapse_activity_runs(entries)
+	local collapsed = {}
+	local run = {}
+
+	for _, entry in ipairs(entries) do
+		if entry.type == "activity" then
+			table.insert(run, entry)
+		else
+			append_activity_run(collapsed, run)
+			run = {}
+			table.insert(collapsed, entry)
+		end
+	end
+	append_activity_run(collapsed, run)
+
+	return collapsed
+end
 
 ---@param comments PullsComment[]
 ---@param activity PullsActivityEntry[]
@@ -191,7 +237,7 @@ local function build_timeline(comments, activity)
 		return a.timestamp < b.timestamp
 	end)
 
-	return entries
+	return collapse_activity_runs(entries)
 end
 
 --------------------------------------------------------------------------------
@@ -357,6 +403,21 @@ local function render_activity(entry, width)
 	return lines, spans
 end
 
+---@param count integer
+---@return string[], table[]
+local function render_activity_gap(count)
+	local text = string.format(
+		"%s  ... %d more %s",
+		icons.general("activity_more"),
+		count,
+		count == 1 and "activity" or "activities"
+	)
+	local line = PADDING .. text
+	return { line }, {
+		{ line = 0, start_col = PADDING_X, end_col = PADDING_X + #text, hl_group = "AtlasTextMuted" },
+	}
+end
+
 --------------------------------------------------------------------------------
 -- Fetching
 --------------------------------------------------------------------------------
@@ -478,6 +539,16 @@ function M.render(pr, width)
 				table.insert(spans, s)
 			end
 			line_map[offset + 1] = { kind = "activity", activity = entry.activity }
+		elseif entry.type == "activity_gap" then
+			local g_lines, g_spans = render_activity_gap(entry.count or 0)
+			local offset = #lines
+			for _, l in ipairs(g_lines) do
+				table.insert(lines, l)
+			end
+			for _, s in ipairs(g_spans) do
+				s.line = s.line + offset
+				table.insert(spans, s)
+			end
 		end
 	end
 
