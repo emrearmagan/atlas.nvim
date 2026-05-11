@@ -51,12 +51,15 @@ function M.on_select(pr, repo, refresh, opts)
 
 	local can_fetch_reviewers = type(provider.fetch_reviewers) == "function"
 	local can_fetch_description = type(provider.fetch_description) == "function"
+	local can_fetch_merge_checks = type(provider.fetch_merge_checks) == "function"
 	local should_fetch_reviewers = can_fetch_reviewers
 		and (force_refresh or state.reviewers == nil or state.reviewers == "loading")
 	local should_fetch_description = can_fetch_description
 		and (force_refresh or state.description == nil or state.description == "loading")
+	local should_fetch_merge_checks = can_fetch_merge_checks
+		and (force_refresh or state.merge_checks == nil or state.merge_checks == "loading")
 
-	if should_fetch_reviewers or should_fetch_description then
+	if should_fetch_reviewers or should_fetch_description or should_fetch_merge_checks then
 		cancel_all()
 	end
 
@@ -82,6 +85,18 @@ function M.on_select(pr, repo, refresh, opts)
 			else
 				state.reviewers = reviewers or {}
 				footer.notify("success", string.format("Reviewers loaded for #%s", pr_id), 1200)
+			end
+			refresh()
+		end))
+	end
+
+	if should_fetch_merge_checks then
+		state.merge_checks = "loading"
+		track(provider.fetch_merge_checks(pr, opts, function(checks, err)
+			if err then
+				state.merge_checks = err
+			else
+				state.merge_checks = checks or {}
 			end
 			refresh()
 		end))
@@ -348,6 +363,85 @@ local function render_description(pr, width, lines, spans)
 end
 
 
+--------------------------------------------------------------------------------
+-- Merge checks
+--------------------------------------------------------------------------------
+
+local MERGE_CHECK_STATE = {
+	successful = { icon = icons.pulls_status("successful"), hl = "AtlasTextPositive" },
+	failed = { icon = icons.pulls_status("failed"), hl = "AtlasLogError" },
+	inprogress = { icon = icons.pulls_status("inprogress"), hl = "AtlasTextMuted" },
+	warning = { icon = icons.pulls_status("inprogress"), hl = "AtlasTextWarning" },
+	muted = { icon = icons.pulls_status("inprogress"), hl = "AtlasTextMuted" },
+}
+
+---@param check PullsMergeCheck
+---@return BoxContentGroup
+local function render_merge_check_group(check)
+	local pair = MERGE_CHECK_STATE[check.state] or MERGE_CHECK_STATE.muted
+	local lines = {}
+	local spans = {}
+
+	local heading = string.format("%s %s", pair.icon, check.label)
+	table.insert(lines, heading)
+	table.insert(spans, { line = 0, start_col = 0, end_col = #pair.icon, hl_group = pair.hl })
+
+	for _, detail in ipairs(check.details or {}) do
+		local indent = "  "
+		local text = indent .. detail
+		table.insert(lines, text)
+		table.insert(spans, { line = #lines - 1, start_col = 0, end_col = #text, hl_group = "AtlasTextMuted" })
+	end
+
+	return { lines = lines, spans = spans }
+end
+
+---@param pr PullRequest
+---@param width integer
+---@param lines string[]
+---@param spans table[]
+local function render_merge_checks(pr, width, lines, spans) ---@diagnostic disable-line: unused-local
+	if state.merge_checks == nil then
+		return
+	end
+
+	utils.push(lines, spans, "Merge Checks", "AtlasColumnHeader", PADDING_X)
+
+	if state.merge_checks == "loading" then
+		local loading_text = spinner.with_text("Loading merge checks...")
+		utils.append_block(lines, spans, box.render(
+			{ { lines = { loading_text }, spans = { { line = 0, start_col = 0, end_col = #loading_text, hl_group = "AtlasTextMuted" } } } },
+			{ width = width, padding_x = PADDING_X }
+		))
+		table.insert(lines, "")
+		return
+	end
+
+	if type(state.merge_checks) == "string" then
+		local err_text = state.merge_checks --[[@as string]]
+		utils.append_block(lines, spans, box.render(
+			{ { lines = { err_text }, spans = { { line = 0, start_col = 0, end_col = #err_text, hl_group = "AtlasLogError" } } } },
+			{ width = width, padding_x = PADDING_X }
+		))
+		table.insert(lines, "")
+		return
+	end
+
+	local checks = state.merge_checks --[[@as PullsMergeCheck[] ]]
+	if #checks == 0 then
+		table.insert(lines, "")
+		return
+	end
+
+	local groups = {}
+	for _, check in ipairs(checks) do
+		table.insert(groups, render_merge_check_group(check))
+	end
+
+	utils.append_block(lines, spans, box.render(groups, { width = width, padding_x = PADDING_X }))
+	table.insert(lines, "")
+end
+
 ---@param pr PullRequest
 ---@param width integer
 ---@return string[], table[], table<integer, table>|nil
@@ -358,12 +452,7 @@ function M.render(pr, width)
 
 	render_description(pr, width, lines, spans)
 	render_reviewers(pr, width, lines, spans)
-
-	local provider = get_provider()
-	if provider and provider.panel and type(provider.panel.overview_extra_sections) == "function" then
-		provider.panel.overview_extra_sections(pr, width, lines, spans, line_map)
-	end
-
+	render_merge_checks(pr, width, lines, spans)
 	render_builds(pr, width, lines, spans, line_map)
 
 	return lines, spans, line_map

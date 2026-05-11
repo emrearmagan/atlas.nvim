@@ -231,6 +231,72 @@ function M.fetch_builds(pr, on_done)
 end
 
 ---@param pr PullRequest
+---@param _opts { force_refresh: boolean|nil }|nil
+---@param on_done fun(checks: PullsMergeCheck[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_merge_checks(pr, _opts, on_done)
+	local pullrequests = require("atlas.pulls.providers.github.api.pullrequests")
+	return pullrequests.get_merge_checks(pr, function(result, err)
+		if err or type(result) ~= "table" then
+			on_done(nil, err)
+			return
+		end
+
+		local checks = {}
+
+		local rd = tostring(result.review_decision or "")
+		if rd == "APPROVED" then
+			table.insert(checks, {
+				key = "reviews",
+				state = "successful",
+				label = "Reviews",
+				details = { "All required reviewers have approved." },
+			})
+		elseif rd == "CHANGES_REQUESTED" then
+			table.insert(checks, {
+				key = "reviews",
+				state = "failed",
+				label = "Reviews",
+				details = { "A reviewer has requested changes." },
+			})
+		elseif rd == "REVIEW_REQUIRED" then
+			table.insert(checks, {
+				key = "reviews",
+				state = "warning",
+				label = "Reviews",
+				details = { "At least one approving review is required." },
+			})
+		else
+			table.insert(checks, {
+				key = "reviews",
+				state = "muted",
+				label = "Reviews",
+				details = { "No review required" },
+			})
+		end
+
+		local mergeable = tostring(result.mergeable or "")
+		if mergeable == "MERGEABLE" then
+			table.insert(checks, {
+				key = "conflicts",
+				state = "successful",
+				label = "No conflicts with base branch",
+				details = { "Changes can be cleanly merged." },
+			})
+		elseif mergeable == "CONFLICTING" then
+			table.insert(checks, {
+				key = "conflicts",
+				state = "failed",
+				label = "This branch has conflicts that must be resolved",
+				details = { "Conflicting files must be resolved before merging." },
+			})
+		end
+
+		on_done(checks, nil)
+	end)
+end
+
+---@param pr PullRequest
 ---@param opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(entries: PullsDiffstatEntry[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
