@@ -679,6 +679,14 @@ function M.get_merge_checks_summary(pr, opts, on_done)
 		end
 
 		local checks = {}
+		if pr.state == "draft" then
+			table.insert(checks, {
+				key = "draft",
+				state = "warning",
+				label = "This pull request is still a work in progress",
+				details = { "Draft pull requests cannot be merged." },
+			})
+		end
 		if type(mc_result) == "table" then
 			table.insert(checks, reviews_check(mc_result))
 		end
