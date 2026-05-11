@@ -180,7 +180,13 @@ function M.get_description(pr, opts, on_done)
 	end
 
 	return cli.gh({
-		"pr", "view", tostring(pr.id), "--repo", repo_slug, "--json", "body",
+		"pr",
+		"view",
+		tostring(pr.id),
+		"--repo",
+		repo_slug,
+		"--json",
+		"body",
 	}, function(result, err)
 		if err or type(result) ~= "table" then
 			on_done(nil, err or "Failed to fetch description")
@@ -190,6 +196,42 @@ function M.get_description(pr, opts, on_done)
 		cli.set_cache(cache_key, body)
 		on_done(body, nil)
 	end)
+end
+
+---@return { login: string, state: "APPROVED"|"CHANGES_REQUESTED"|"COMMENTED" }[], string[]
+local function parse_reviews(result)
+	local states = {}
+	local order = {}
+	for _, review in ipairs(result.reviews or {}) do
+		local login = type(review.author) == "table" and tostring(review.author.login or "") or ""
+		local state = tostring(review.state or ""):upper()
+		if login ~= "" then
+			if state == "APPROVED" or state == "CHANGES_REQUESTED" then
+				if states[login] == nil then
+					table.insert(order, login)
+				end
+				states[login] = state
+			elseif state == "COMMENTED" and states[login] == nil then
+				table.insert(order, login)
+				states[login] = "COMMENTED"
+			end
+		end
+	end
+
+	local reviews = {}
+	for _, login in ipairs(order) do
+		table.insert(reviews, { login = login, state = states[login] })
+	end
+
+	local pending = {}
+	for _, req in ipairs(result.reviewRequests or {}) do
+		local login = type(req) == "table" and tostring(req.login or "") or ""
+		if login ~= "" and states[login] == nil then
+			table.insert(pending, login)
+		end
+	end
+
+	return reviews, pending
 end
 
 ---@param pr PullRequest
@@ -217,42 +259,33 @@ function M.get_reviewers(pr, opts, on_done)
 	end
 
 	return cli.gh({
-		"pr", "view", tostring(pr.id), "--repo", repo_slug, "--json", "latestReviews,reviewRequests",
+		"pr",
+		"view",
+		tostring(pr.id),
+		"--repo",
+		repo_slug,
+		"--json",
+		"reviews,reviewRequests",
 	}, function(result, err)
 		if err or type(result) ~= "table" then
 			on_done(nil, err or "Failed to fetch reviewers")
 			return
 		end
 
-		local reviewers = {}
-		for _, review in ipairs(result.latestReviews or {}) do
-			local login = type(review.author) == "table" and tostring(review.author.login or "") or ""
-			if login ~= "" then
-				local gh_state = tostring(review.state or ""):upper()
-				local decision = "pending"
-				if gh_state == "APPROVED" then
-					decision = "approved"
-				elseif gh_state == "CHANGES_REQUESTED" then
-					decision = "changes_requested"
-				end
-				table.insert(reviewers, { name = login, nickname = login, decision = decision })
-			end
-		end
+		local reviews, pending = parse_reviews(result)
 
-		for _, req in ipairs(result.reviewRequests or {}) do
-			local login = type(req) == "table" and tostring(req.login or "") or ""
-			if login ~= "" then
-				local already = false
-				for _, r in ipairs(reviewers) do
-					if r.name == login then
-						already = true
-						break
-					end
-				end
-				if not already then
-					table.insert(reviewers, { name = login, nickname = login, decision = "pending" })
-				end
+		local reviewers = {}
+		for _, r in ipairs(reviews) do
+			local decision = "pending"
+			if r.state == "APPROVED" then
+				decision = "approved"
+			elseif r.state == "CHANGES_REQUESTED" then
+				decision = "changes_requested"
 			end
+			table.insert(reviewers, { name = r.login, nickname = r.login, decision = decision })
+		end
+		for _, login in ipairs(pending) do
+			table.insert(reviewers, { name = login, nickname = login, decision = "pending" })
 		end
 
 		cli.set_cache(cache_key, reviewers)
@@ -261,7 +294,7 @@ function M.get_reviewers(pr, opts, on_done)
 end
 
 ---@param pr PullRequest
----@param on_done fun(result: { mergeable: string, merge_state: string, review_decision: string }|nil, err: string|nil)
+---@param on_done fun(result: { mergeable: string, merge_state: string, review_decision: string, review_requests: string[], latest_reviews: { login: string, state: string }[] }|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.get_merge_checks(pr, on_done)
 	local repo_slug = pr.repo_full_name or ""
@@ -279,16 +312,21 @@ function M.get_merge_checks(pr, on_done)
 		"--repo",
 		repo_slug,
 		"--json",
-		"mergeable,mergeStateStatus,reviewDecision",
+		"mergeable,mergeStateStatus,reviewDecision,reviewRequests,reviews",
 	}, function(result, err)
 		if err or type(result) ~= "table" then
 			on_done(nil, err or "Failed to fetch merge checks")
 			return
 		end
+
+		local latest_reviews, review_requests = parse_reviews(result)
+
 		on_done({
 			mergeable = tostring(result.mergeable or ""),
 			merge_state = tostring(result.mergeStateStatus or ""),
 			review_decision = tostring(result.reviewDecision or ""),
+			review_requests = review_requests,
+			latest_reviews = latest_reviews,
 		}, nil)
 	end)
 end
@@ -305,13 +343,6 @@ function M.get_builds(pr, on_done)
 		return nil
 	end
 
-	local cache_key = string.format("github:builds:%s:%s", repo_slug, tostring(pr.id))
-	local cached, ok = cli.get_cache(cache_key)
-	if ok then
-		on_done(cached, nil)
-		return nil
-	end
-
 	return cli.gh({
 		"pr",
 		"checks",
@@ -323,7 +354,6 @@ function M.get_builds(pr, on_done)
 	}, function(result, err)
 		if err then
 			if err:find("no checks") or err:find("no status checks") then
-				cli.set_cache(cache_key, {})
 				on_done({}, nil)
 				return
 			end
@@ -332,7 +362,6 @@ function M.get_builds(pr, on_done)
 		end
 
 		if type(result) ~= "table" then
-			cli.set_cache(cache_key, {})
 			on_done({}, nil)
 			return
 		end
@@ -355,7 +384,6 @@ function M.get_builds(pr, on_done)
 			})
 		end
 
-		cli.set_cache(cache_key, builds)
 		on_done(builds, nil)
 	end)
 end
@@ -478,18 +506,56 @@ function M.create_pr(opts, on_done)
 	end)
 end
 
----@param review_decision string
+---@param mc table  result from get_merge_checks
 ---@return PullsMergeCheck
-local function reviews_check(review_decision)
-	local rd = tostring(review_decision or "")
-	if rd == "APPROVED" then
-		return { key = "reviews", state = "successful", label = "Reviews", details = { "All required reviewers have approved." } }
-	elseif rd == "CHANGES_REQUESTED" then
-		return { key = "reviews", state = "failed", label = "Reviews", details = { "A reviewer has requested changes." } }
-	elseif rd == "REVIEW_REQUIRED" then
-		return { key = "reviews", state = "warning", label = "Reviews", details = { "At least one approving review is required." } }
+local function reviews_check(mc)
+	local rd = tostring(mc.review_decision or "")
+	local requests = mc.review_requests or {}
+	local reviews = mc.latest_reviews or {}
+
+	local approved, changes_requested = 0, 0
+	for _, r in ipairs(reviews) do
+		if r.state == "APPROVED" then
+			approved = approved + 1
+		elseif r.state == "CHANGES_REQUESTED" then
+			changes_requested = changes_requested + 1
+		end
 	end
-	return { key = "reviews", state = "muted", label = "Reviews", details = { "No review required" } }
+
+	if approved == 0 and changes_requested == 0 and #requests == 0 then
+		return { key = "reviews", state = "muted", label = "Reviews", details = { "No review required" } }
+	end
+
+	local details = {}
+	if approved > 0 then
+		table.insert(details, string.format("%d %s", approved, approved == 1 and "approval" or "approvals"))
+	end
+	if changes_requested > 0 then
+		table.insert(
+			details,
+			string.format(
+				"%d %s requested changes",
+				changes_requested,
+				changes_requested == 1 and "reviewer" or "reviewers"
+			)
+		)
+	end
+	if #requests > 0 then
+		table.insert(details, string.format("%d pending %s", #requests, #requests == 1 and "review" or "reviews"))
+	end
+
+	local state
+	if rd == "CHANGES_REQUESTED" or changes_requested > 0 then
+		state = "failed"
+	elseif #requests > 0 or rd == "REVIEW_REQUIRED" then
+		state = "warning"
+	elseif rd == "APPROVED" or approved > 0 then
+		state = "successful"
+	else
+		state = "muted"
+	end
+
+	return { key = "reviews", state = state, label = "Reviews", details = details }
 end
 
 ---@param mergeable string
@@ -497,9 +563,19 @@ end
 local function conflicts_check(mergeable)
 	local m = tostring(mergeable or "")
 	if m == "MERGEABLE" then
-		return { key = "conflicts", state = "successful", label = "No conflicts with base branch", details = { "Changes can be cleanly merged." } }
+		return {
+			key = "conflicts",
+			state = "successful",
+			label = "No conflicts with base branch",
+			details = { "Changes can be cleanly merged." },
+		}
 	elseif m == "CONFLICTING" then
-		return { key = "conflicts", state = "failed", label = "This branch has conflicts that must be resolved", details = { "Conflicting files must be resolved before merging." } }
+		return {
+			key = "conflicts",
+			state = "failed",
+			label = "This branch has conflicts that must be resolved",
+			details = { "Conflicting files must be resolved before merging." },
+		}
 	end
 	return nil
 end
@@ -514,10 +590,14 @@ local function builds_check(builds)
 	local total, pass, fail, ip, stop = #builds, 0, 0, 0, 0
 	for _, b in ipairs(builds) do
 		local s = tostring(b.state or ""):upper()
-		if s == "SUCCESSFUL" then pass = pass + 1
-		elseif s == "FAILED" then fail = fail + 1
-		elseif s == "INPROGRESS" then ip = ip + 1
-		elseif s == "STOPPED" then stop = stop + 1
+		if s == "SUCCESSFUL" then
+			pass = pass + 1
+		elseif s == "FAILED" then
+			fail = fail + 1
+		elseif s == "INPROGRESS" then
+			ip = ip + 1
+		elseif s == "STOPPED" then
+			stop = stop + 1
 		end
 	end
 
@@ -528,12 +608,16 @@ local function builds_check(builds)
 	elseif ip > 0 then
 		state = "inprogress"
 		detail = string.format("%d of %d in progress", ip, total)
-	elseif stop > 0 then
-		state = "warning"
-		detail = string.format("%d of %d stopped", stop, total)
-	elseif pass == total then
+	elseif pass > 0 then
 		state = "successful"
-		detail = string.format("%d/%d successful", pass, total)
+		if stop > 0 then
+			detail = string.format("%d/%d successful (%d skipped)", pass, total, stop)
+		else
+			detail = string.format("%d/%d successful", pass, total)
+		end
+	elseif stop == total then
+		state = "muted"
+		detail = string.format("All %d checks skipped", total)
 	else
 		state = "muted"
 		detail = string.format("%d of %d unknown", total - pass - fail - ip - stop, total)
@@ -563,7 +647,7 @@ function M.get_merge_checks_summary(pr, _opts, on_done)
 
 		local checks = {}
 		if type(mc_result) == "table" then
-			table.insert(checks, reviews_check(mc_result.review_decision))
+			table.insert(checks, reviews_check(mc_result))
 		end
 		local b = builds_check(builds_result)
 		if b then
@@ -599,8 +683,12 @@ function M.get_merge_checks_summary(pr, _opts, on_done)
 
 	return {
 		cancel = function()
-			if h_mc and h_mc.cancel then h_mc.cancel() end
-			if h_builds and h_builds.cancel then h_builds.cancel() end
+			if h_mc and h_mc.cancel then
+				h_mc.cancel()
+			end
+			if h_builds and h_builds.cancel then
+				h_builds.cancel()
+			end
 		end,
 	}
 end

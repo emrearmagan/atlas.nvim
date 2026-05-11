@@ -47,11 +47,11 @@ local function aggregate_build_status(builds)
 			has_success = true
 		end
 	end
-	if has_stopped then
-		return "stopped"
-	end
 	if has_success then
 		return "successful"
+	end
+	if has_stopped then
+		return "stopped"
 	end
 	return "unknown"
 end
