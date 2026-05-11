@@ -144,6 +144,14 @@ end
 
 ---@param pr PullRequest
 ---@param opts { force_refresh: boolean|nil }|nil
+---@param on_done fun(result: { comments: PullsComment[], events: PullsActivityEntry[] }|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_conversation(pr, opts, on_done)
+	return require("atlas.pulls.providers.github.api.activity").fetch_conversation(pr, opts, on_done)
+end
+
+---@param pr PullRequest
+---@param opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(comments: PullsComment[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_comments(pr, opts, on_done)

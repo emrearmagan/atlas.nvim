@@ -76,11 +76,60 @@ local function normalize_event(item)
 	return nil
 end
 
+---@param raw table
+---@return PullsComment
+local function normalize_comment(raw)
+	local user = type(raw.user) == "table" and raw.user or (type(raw.actor) == "table" and raw.actor or {})
+	local reactions = nil
+	if type(raw.reactions) == "table" then
+		reactions = {
+			["+1"] = tonumber(raw.reactions["+1"]) or 0,
+			["-1"] = tonumber(raw.reactions["-1"]) or 0,
+			laugh = tonumber(raw.reactions.laugh) or 0,
+			hooray = tonumber(raw.reactions.hooray) or 0,
+			confused = tonumber(raw.reactions.confused) or 0,
+			heart = tonumber(raw.reactions.heart) or 0,
+			rocket = tonumber(raw.reactions.rocket) or 0,
+			eyes = tonumber(raw.reactions.eyes) or 0,
+		}
+	end
+	return {
+		id = raw.id,
+		parent_id = nil,
+		author = {
+			name = tostring(user.login or ""),
+			nickname = tostring(user.login or ""),
+			id = tostring(user.id or ""),
+		},
+		content_raw = tostring(raw.body or ""),
+		created_on = tostring(raw.created_at or ""),
+		deleted = false,
+		inline = nil,
+		url = nil,
+		html_url = tostring(raw.html_url or ""),
+		reactions = reactions,
+	}
+end
+
 ---@param pr PullRequest
 ---@param opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(entries: PullsActivityEntry[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_activity(pr, opts, on_done)
+	return M.fetch_conversation(pr, opts, function(result, err)
+		if err or type(result) ~= "table" then
+			on_done(nil, err)
+			return
+		end
+		on_done(result.events or {}, nil)
+	end)
+end
+
+---@param pr PullRequest
+---@param opts { force_refresh: boolean|nil }|nil
+---@param on_done fun(result: { comments: PullsComment[], events: PullsActivityEntry[] }|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_conversation(pr, opts, on_done)
 	local repo_slug = pr.repo_full_name or ""
 	if repo_slug == "" then
 		vim.schedule(function()
@@ -89,7 +138,7 @@ function M.fetch_activity(pr, opts, on_done)
 		return nil
 	end
 
-	local cache_key = string.format("github:activity:%s:%s", repo_slug, tostring(pr.id))
+	local cache_key = string.format("github:conversation:%s:%s", repo_slug, tostring(pr.id))
 	opts = opts or {}
 
 	if not opts.force_refresh then
@@ -101,23 +150,28 @@ function M.fetch_activity(pr, opts, on_done)
 	end
 
 	return cli.gh(
-		{ "api", string.format("repos/%s/issues/%s/timeline", repo_slug, tostring(pr.id)) },
+		{ "api", "--paginate", string.format("repos/%s/issues/%s/timeline", repo_slug, tostring(pr.id)) },
 		function(result, err)
 			if err or type(result) ~= "table" then
-				on_done(nil, err or "Failed to fetch activity")
+				on_done(nil, err or "Failed to fetch conversation")
 				return
 			end
 
-			local entries = {}
+			local conversation = { comments = {}, events = {} }
 			for _, item in ipairs(result) do
-				local entry = normalize_event(item)
-				if entry then
-					table.insert(entries, entry)
+				local event_name = type(item) == "table" and tostring(item.event or "") or ""
+				if event_name == "commented" then
+					table.insert(conversation.comments, normalize_comment(item))
+				else
+					local entry = normalize_event(item)
+					if entry then
+						table.insert(conversation.events, entry)
+					end
 				end
 			end
 
-			cli.set_cache(cache_key, entries)
-			on_done(entries, nil)
+			cli.set_cache(cache_key, conversation)
+			on_done(conversation, nil)
 		end
 	)
 end
