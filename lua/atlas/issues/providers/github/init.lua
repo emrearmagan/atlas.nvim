@@ -146,6 +146,55 @@ function M.delete_comment(key, comment_id, on_done)
 	return require("atlas.issues.providers.github.api.comments").delete(key, comment_id, on_done)
 end
 
+---@param key string
+---@param opts IssuesFetchOpts|nil
+---@param on_done fun(entries: IssueHistoryEntry[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_history(key, opts, on_done)
+	local timeline = require("atlas.issues.providers.github.api.timeline")
+	return timeline.list(key, function(events, err)
+		if err or type(events) ~= "table" then
+			on_done(nil, err)
+			return
+		end
+
+		local entries = {}
+		for _, ev in ipairs(events) do
+			if ev.event ~= "commented" then
+				local item = { field = ev.event }
+				if ev.event == "labeled" then
+					item.to_string = ev.label_name
+				elseif ev.event == "unlabeled" then
+					item.from_string = ev.label_name
+				elseif ev.event == "assigned" then
+					item.to_string = ev.assignee_login
+				elseif ev.event == "unassigned" then
+					item.from_string = ev.assignee_login
+				elseif ev.event == "milestoned" then
+					item.to_string = ev.milestone_title
+				elseif ev.event == "demilestoned" then
+					item.from_string = ev.milestone_title
+				elseif ev.event == "renamed" then
+					item.from_string = ev.rename_from
+					item.to_string = ev.rename_to
+				elseif ev.event == "closed" or ev.event == "referenced" then
+					item.to_string = ev.commit_id
+				elseif ev.event == "cross-referenced" then
+					item.to_string = ev.source_title or ev.source_url
+				end
+				table.insert(entries, {
+					id = tostring(ev.date or ""),
+					created = ev.date,
+					author = ev.actor,
+					items = { item },
+				})
+			end
+		end
+
+		on_done(entries, nil)
+	end, { force_load = opts and opts.force_load == true or false })
+end
+
 ---@param action_id string
 ---@param ctx table
 ---@param on_done fun(result: table|nil, err: string|nil)

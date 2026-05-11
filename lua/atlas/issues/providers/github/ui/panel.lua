@@ -4,7 +4,7 @@ local M = {}
 local icons = require("atlas.ui.shared.icons")
 local helper = require("atlas.issues.ui.main.helper")
 local conversation_state = require("atlas.issues.providers.github.ui.conversation.state")
-local activity_state = require("atlas.issues.providers.github.ui.activity.state")
+local history_state = require("atlas.issues.ui.panel.issue.tabs.activity.state")
 
 ---@param body string|nil
 ---@return integer completed, integer total
@@ -213,7 +213,7 @@ end
 ---@param _issue Issue
 ---@return boolean
 function M.is_loading(_issue)
-	return conversation_state.any_loading() or activity_state.any_loading()
+	return conversation_state.any_loading() or history_state.any_loading()
 end
 
 ---@param issue Issue
@@ -261,9 +261,83 @@ function M.tabs()
 			key = "activity",
 			label = "Activity",
 			icon = icons.pulls("activity"),
-			mod = require("atlas.issues.providers.github.ui.activity"),
+			mod = require("atlas.issues.ui.panel.issue.tabs.activity"),
 		},
 	}
+end
+
+---@param item IssueHistoryItem
+---@return { label: string, content: string|nil }
+function M.format_history_item(item)
+	local field = item.field or ""
+	if field == "labeled" then
+		return { label = "added label", content = item.to_string }
+	elseif field == "unlabeled" then
+		return { label = "removed label", content = item.from_string }
+	elseif field == "assigned" then
+		return { label = "assigned", content = item.to_string }
+	elseif field == "unassigned" then
+		return { label = "unassigned", content = item.from_string }
+	elseif field == "milestoned" then
+		return { label = "added milestone", content = item.to_string }
+	elseif field == "demilestoned" then
+		return { label = "removed milestone", content = item.from_string }
+	elseif field == "renamed" then
+		return { label = "renamed", content = string.format("%s → %s", item.from_string or "", item.to_string or "") }
+	elseif field == "closed" then
+		return { label = "closed", content = item.to_string and ("commit " .. item.to_string) or nil }
+	elseif field == "reopened" then
+		return { label = "reopened", content = nil }
+	elseif field == "locked" then
+		return { label = "locked conversation", content = nil }
+	elseif field == "unlocked" then
+		return { label = "unlocked conversation", content = nil }
+	elseif field == "pinned" then
+		return { label = "pinned issue", content = nil }
+	elseif field == "unpinned" then
+		return { label = "unpinned issue", content = nil }
+	elseif field == "ready_for_review" then
+		return { label = "marked as ready for review", content = nil }
+	elseif field == "convert_to_draft" then
+		return { label = "marked as draft", content = nil }
+	elseif field == "head_ref_force_pushed" then
+		return { label = "force pushed", content = nil }
+	elseif field == "base_ref_force_pushed" then
+		return { label = "base force pushed", content = nil }
+	elseif field == "cross-referenced" then
+		return { label = "referenced", content = item.to_string }
+	elseif field == "referenced" then
+		return { label = "referenced", content = item.to_string and ("commit " .. item.to_string) or nil }
+	elseif field == "transferred" then
+		return { label = "transferred", content = nil }
+	elseif field == "marked_as_duplicate" then
+		return { label = "marked as duplicate", content = nil }
+	elseif field == "connected" then
+		return { label = "linked a pull request", content = nil }
+	elseif field == "disconnected" then
+		return { label = "unlinked a pull request", content = nil }
+	elseif field == "subscribed" then
+		return { label = "subscribed", content = nil }
+	elseif field == "unsubscribed" then
+		return { label = "unsubscribed", content = nil }
+	elseif field == "mentioned" then
+		return { label = "was mentioned", content = nil }
+	end
+	return { label = field, content = nil }
+end
+
+---@param item IssueHistoryItem
+---@param row string
+---@param row_index integer
+---@return table[]|nil
+function M.history_item_hl(item, row, row_index) ---@diagnostic disable-line: unused-local
+	local field = item.field or ""
+	if field == "closed" then
+		return { { start_col = 0, end_col = #row, hl_group = "AtlasGHIssueClosed" } }
+	elseif field == "reopened" then
+		return { { start_col = 0, end_col = #row, hl_group = "AtlasGHIssueOpen" } }
+	end
+	return { { start_col = 0, end_col = #row, hl_group = "AtlasTextMuted" } }
 end
 
 return M

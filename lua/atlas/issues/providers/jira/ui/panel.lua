@@ -7,7 +7,7 @@ local helper = require("atlas.issues.ui.main.helper")
 
 local overview_state = require("atlas.issues.ui.panel.issue.tabs.overview.state")
 local comments_state = require("atlas.issues.ui.panel.issue.tabs.comments.state")
-local history_state = require("atlas.issues.ui.panel.issue.tabs.history.state")
+local history_state = require("atlas.issues.ui.panel.issue.tabs.activity.state")
 
 --------------------------------------------------------------------------------
 -- Header rows
@@ -373,10 +373,10 @@ function M.tabs()
 			mod = require("atlas.issues.ui.panel.issue.tabs.comments"),
 		},
 		{
-			key = "history",
+			key = "activity",
 			label = "History",
 			icon = icons.pulls("activity"),
-			mod = require("atlas.issues.ui.panel.issue.tabs.history"),
+			mod = require("atlas.issues.ui.panel.issue.tabs.activity"),
 		},
 	}
 end

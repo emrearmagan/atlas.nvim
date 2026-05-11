@@ -296,6 +296,16 @@ local function event_label(event)
 		return string.format("referenced this from %s", event.source_title or event.source_url or ""), nil
 	elseif kind == "referenced" then
 		return event.commit_id and string.format("referenced commit %s", event.commit_id) or "referenced", nil
+	elseif kind == "connected" then
+		return "linked a pull request", nil
+	elseif kind == "disconnected" then
+		return "unlinked a pull request", nil
+	elseif kind == "subscribed" then
+		return "subscribed", nil
+	elseif kind == "unsubscribed" then
+		return "unsubscribed", nil
+	elseif kind == "mentioned" then
+		return "was mentioned", nil
 	end
 	return kind, nil
 end
