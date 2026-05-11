@@ -175,7 +175,6 @@ function M.views()
 		table.insert(out, {
 			name = "Pull Requests",
 			key = "1",
-
 			layout = "compact",
 			repos = {},
 		})
