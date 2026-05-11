@@ -161,32 +161,22 @@ function M.fetch_history(key, opts, on_done)
 		local entries = {}
 		for _, ev in ipairs(events) do
 			if ev.event ~= "commented" then
-				local item = { field = ev.event }
-				if ev.event == "labeled" then
-					item.to_string = ev.label_name
-				elseif ev.event == "unlabeled" then
-					item.from_string = ev.label_name
-				elseif ev.event == "assigned" then
-					item.to_string = ev.assignee_login
-				elseif ev.event == "unassigned" then
-					item.from_string = ev.assignee_login
-				elseif ev.event == "milestoned" then
-					item.to_string = ev.milestone_title
-				elseif ev.event == "demilestoned" then
-					item.from_string = ev.milestone_title
-				elseif ev.event == "renamed" then
-					item.from_string = ev.rename_from
-					item.to_string = ev.rename_to
-				elseif ev.event == "closed" or ev.event == "referenced" then
-					item.to_string = ev.commit_id
-				elseif ev.event == "cross-referenced" then
-					item.to_string = ev.source_title or ev.source_url
-				end
 				table.insert(entries, {
 					id = tostring(ev.date or ""),
 					created = ev.date,
 					author = ev.actor,
-					items = { item },
+					items = { {
+						field = ev.event,
+						label_name = ev.label_name,
+						label_color = ev.label_color,
+						assignee_login = ev.assignee_login,
+						milestone_title = ev.milestone_title,
+						rename_from = ev.rename_from,
+						rename_to = ev.rename_to,
+						commit_id = ev.commit_id,
+						source_title = ev.source_title,
+						source_url = ev.source_url,
+					} },
 				})
 			end
 		end
