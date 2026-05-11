@@ -21,7 +21,7 @@ function M.fetch_detail(repo, opts, on_done)
 	local cache_key = string.format("github:repo_details:%s", slug)
 
 	if not opts.force_load then
-		local cached, ok = cli.get_cache(cache_key)
+		local cached, ok = cli.get_mem(cache_key)
 		if ok then
 			on_done(cached, nil)
 			return nil
@@ -69,7 +69,7 @@ function M.fetch_detail(repo, opts, on_done)
 			if not readme_err and readme_result then
 				details.readme = tostring(readme_result)
 			end
-			cli.set_cache(cache_key, details)
+			cli.set_mem(cache_key, details)
 			on_done(details, nil)
 		end)
 	end)
@@ -90,7 +90,7 @@ function M.fetch_branches(repo, opts, on_done)
 
 	local cache_key = string.format("github:branches:%s", slug)
 	if not opts.force_load then
-		local cached, ok = cli.get_cache(cache_key)
+		local cached, ok = cli.get_mem(cache_key)
 		if ok then
 			on_done(cached, nil)
 			return nil
@@ -119,7 +119,7 @@ function M.fetch_branches(repo, opts, on_done)
 		end
 
 		local branches = { entries = entries }
-		cli.set_cache(cache_key, branches)
+		cli.set_mem(cache_key, branches)
 		on_done(branches, nil)
 	end)
 end
@@ -139,7 +139,7 @@ function M.fetch_tags(repo, opts, on_done)
 
 	local cache_key = string.format("github:tags:%s", slug)
 	if not opts.force_load then
-		local cached, ok = cli.get_cache(cache_key)
+		local cached, ok = cli.get_mem(cache_key)
 		if ok then
 			on_done(cached, nil)
 			return nil
@@ -168,7 +168,7 @@ function M.fetch_tags(repo, opts, on_done)
 		end
 
 		local tags = { entries = entries }
-		cli.set_cache(cache_key, tags)
+		cli.set_mem(cache_key, tags)
 		on_done(tags, nil)
 	end)
 end

@@ -114,7 +114,7 @@ function M.get_pr(owner, repo, number, on_done, opts)
 	local cache_key = string.format("github:pr:%s:%s", repo_slug, tostring(number))
 
 	if not opts.force_load then
-		local cached, ok = cli.get_cache(cache_key)
+		local cached, ok = cli.get_mem(cache_key)
 		if ok then
 			on_done(cached, nil)
 			return nil
@@ -150,7 +150,7 @@ function M.get_pr(owner, repo, number, on_done, opts)
 
 		pr_raw.repository = { name = repo, nameWithOwner = repo_slug }
 		local pr = normalizer.normalize_pr(pr_raw)
-		cli.set_cache(cache_key, pr)
+		cli.set_mem(cache_key, pr)
 		on_done(pr, nil)
 	end)
 end
@@ -172,7 +172,7 @@ function M.get_description(pr, opts, on_done)
 	opts = opts or {}
 
 	if not opts.force_refresh then
-		local cached, ok = cli.get_cache(cache_key)
+		local cached, ok = cli.get_mem(cache_key)
 		if ok then
 			on_done(cached, nil)
 			return nil
@@ -193,7 +193,7 @@ function M.get_description(pr, opts, on_done)
 			return
 		end
 		local body = tostring(result.body or "")
-		cli.set_cache(cache_key, body)
+		cli.set_mem(cache_key, body)
 		on_done(body, nil)
 	end)
 end
@@ -251,7 +251,7 @@ function M.get_reviewers(pr, opts, on_done)
 	opts = opts or {}
 
 	if not opts.force_refresh then
-		local cached, ok = cli.get_cache(cache_key)
+		local cached, ok = cli.get_mem(cache_key)
 		if ok then
 			on_done(cached, nil)
 			return nil
@@ -288,21 +288,33 @@ function M.get_reviewers(pr, opts, on_done)
 			table.insert(reviewers, { name = login, nickname = login, decision = "pending" })
 		end
 
-		cli.set_cache(cache_key, reviewers)
+		cli.set_mem(cache_key, reviewers)
 		on_done(reviewers, nil)
 	end)
 end
 
 ---@param pr PullRequest
+---@param opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(result: { mergeable: string, merge_state: string, review_decision: string, review_requests: string[], latest_reviews: { login: string, state: string }[] }|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.get_merge_checks(pr, on_done)
+function M.get_merge_checks(pr, opts, on_done)
 	local repo_slug = pr.repo_full_name or ""
 	if repo_slug == "" then
 		vim.schedule(function()
 			on_done(nil, "Missing repo")
 		end)
 		return nil
+	end
+
+	local cache_key = string.format("github:merge_checks:%s:%s", repo_slug, tostring(pr.id))
+	opts = opts or {}
+
+	if not opts.force_refresh then
+		local cached, ok = cli.get_mem(cache_key)
+		if ok then
+			on_done(cached, nil)
+			return nil
+		end
 	end
 
 	return cli.gh({
@@ -320,27 +332,40 @@ function M.get_merge_checks(pr, on_done)
 		end
 
 		local latest_reviews, review_requests = parse_reviews(result)
-
-		on_done({
+		local out = {
 			mergeable = tostring(result.mergeable or ""),
 			merge_state = tostring(result.mergeStateStatus or ""),
 			review_decision = tostring(result.reviewDecision or ""),
 			review_requests = review_requests,
 			latest_reviews = latest_reviews,
-		}, nil)
+		}
+		cli.set_mem(cache_key, out)
+		on_done(out, nil)
 	end)
 end
 
 ---@param pr PullRequest
+---@param opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(builds: PullsBuild[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.get_builds(pr, on_done)
+function M.get_builds(pr, opts, on_done)
 	local repo_slug = pr.repo_full_name or ""
 	if repo_slug == "" then
 		vim.schedule(function()
 			on_done(nil, "Missing repo")
 		end)
 		return nil
+	end
+
+	local cache_key = string.format("github:builds:%s:%s", repo_slug, tostring(pr.id))
+	opts = opts or {}
+
+	if not opts.force_refresh then
+		local cached, ok = cli.get_mem(cache_key)
+		if ok then
+			on_done(cached, nil)
+			return nil
+		end
 	end
 
 	return cli.gh({
@@ -354,6 +379,7 @@ function M.get_builds(pr, on_done)
 	}, function(result, err)
 		if err then
 			if err:find("no checks") or err:find("no status checks") then
+				cli.set_mem(cache_key, {})
 				on_done({}, nil)
 				return
 			end
@@ -362,6 +388,7 @@ function M.get_builds(pr, on_done)
 		end
 
 		if type(result) ~= "table" then
+			cli.set_mem(cache_key, {})
 			on_done({}, nil)
 			return
 		end
@@ -384,6 +411,7 @@ function M.get_builds(pr, on_done)
 			})
 		end
 
+		cli.set_mem(cache_key, builds)
 		on_done(builds, nil)
 	end)
 end
@@ -405,7 +433,7 @@ function M.get_diffstat(pr, opts, on_done)
 	opts = opts or {}
 
 	if not opts.force_refresh then
-		local cached, ok = cli.get_cache(cache_key)
+		local cached, ok = cli.get_mem(cache_key)
 		if ok then
 			on_done(cached, nil)
 			return nil
@@ -446,7 +474,7 @@ function M.get_diffstat(pr, opts, on_done)
 			})
 		end
 
-		cli.set_cache(cache_key, entries)
+		cli.set_mem(cache_key, entries)
 		on_done(entries, nil)
 	end)
 end
@@ -627,10 +655,10 @@ local function builds_check(builds)
 end
 
 ---@param pr PullRequest
----@param _opts { force_refresh: boolean|nil }|nil
+---@param opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(checks: PullsMergeCheck[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.get_merge_checks_summary(pr, _opts, on_done)
+function M.get_merge_checks_summary(pr, opts, on_done)
 	local mc_result, builds_result
 	local first_err
 	local pending = 2
@@ -663,7 +691,7 @@ function M.get_merge_checks_summary(pr, _opts, on_done)
 		on_done(checks, nil)
 	end
 
-	local h_mc = M.get_merge_checks(pr, function(result, err)
+	local h_mc = M.get_merge_checks(pr, opts, function(result, err)
 		if err then
 			first_err = first_err or err
 		else
@@ -672,7 +700,7 @@ function M.get_merge_checks_summary(pr, _opts, on_done)
 		finish()
 	end)
 
-	local h_builds = M.get_builds(pr, function(result, err)
+	local h_builds = M.get_builds(pr, opts, function(result, err)
 		if err then
 			first_err = first_err or err
 		else

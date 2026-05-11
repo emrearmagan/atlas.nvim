@@ -225,10 +225,6 @@ function M.is_loading(issue)
 end
 
 --------------------------------------------------------------------------------
--- Tabs
---------------------------------------------------------------------------------
-
---------------------------------------------------------------------------------
 -- History rendering
 --------------------------------------------------------------------------------
 
@@ -266,9 +262,7 @@ function M.format_history_item(item)
 	local has_from = from ~= nil and vim.trim(from) ~= ""
 	local has_to = to ~= nil and vim.trim(to) ~= ""
 
-	local action = (has_from and not has_to) and "deleted"
-		or (not has_from and has_to) and "added"
-		or "updated"
+	local action = (has_from and not has_to) and "deleted" or (not has_from and has_to) and "added" or "updated"
 	local label = string.format("%s %s", action, FIELD_LABELS[field] or field)
 
 	local content
@@ -277,8 +271,12 @@ function M.format_history_item(item)
 	elseif field == "description" then
 		local f = has_from and vim.trim(from:gsub("%s+", " ")) or ""
 		local t = has_to and vim.trim(to:gsub("%s+", " ")) or ""
-		if #f > 200 then f = f:sub(1, 197) .. "..." end
-		if #t > 200 then t = t:sub(1, 197) .. "..." end
+		if #f > 200 then
+			f = f:sub(1, 197) .. "..."
+		end
+		if #t > 200 then
+			t = t:sub(1, 197) .. "..."
+		end
 		content = (f ~= "" and t ~= "") and string.format("%s\n\n↓\n\n%s", f, t)
 			or (f ~= "" and f or (t ~= "" and t or nil))
 	elseif field == "assignee" then
@@ -309,7 +307,6 @@ end
 ---@param row_index integer
 ---@return table[]|nil
 function M.history_item_hl(item, row, row_index)
-	local helper = require("atlas.issues.ui.main.helper")
 	local field = item.field or ""
 
 	if field == "description" then
@@ -320,10 +317,13 @@ function M.history_item_hl(item, row, row_index)
 		return nil
 	end
 
-	local arrow_fields = { assignee = true, priority = true, issuetype = true, status = true, IssueParentAssociation = true }
+	local arrow_fields =
+		{ assignee = true, priority = true, issuetype = true, status = true, IssueParentAssociation = true }
 	if arrow_fields[field] then
 		local s, e = row:find(" -> ", 1, true)
-		if not s then return nil end
+		if not s then
+			return nil
+		end
 		if field == "assignee" then
 			return {
 				{ start_col = 0, end_col = s - 1, hl_group = helper.person_hl(item.from_string or item.from) },

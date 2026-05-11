@@ -189,7 +189,11 @@ function M.on_select(issue, refresh, opts)
 	opts = opts or {}
 	local force_refresh = opts.force_refresh == true
 	local same_issue = state.issue ~= nil and tostring(state.issue.key or "") == tostring(issue.key or "")
-	local should_fetch = force_refresh or not same_issue or state.activity == nil or state.activity == "loading" or type(state.activity) == "string"
+	local should_fetch = force_refresh
+		or not same_issue
+		or state.activity == nil
+		or state.activity == "loading"
+		or type(state.activity) == "string"
 
 	if not should_fetch then
 		return

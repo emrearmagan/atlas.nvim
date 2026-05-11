@@ -115,7 +115,7 @@ end
 ---@param on_done fun(builds: PullsBuild[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_builds(pr, on_done)
-	return require("atlas.pulls.providers.github.api.pullrequests").get_builds(pr, on_done)
+	return require("atlas.pulls.providers.github.api.pullrequests").get_builds(pr, nil, on_done)
 end
 
 ---@param pr PullRequest
@@ -148,14 +148,6 @@ end
 ---@return { cancel: fun() }|nil
 function M.fetch_conversation(pr, opts, on_done)
 	return require("atlas.pulls.providers.github.api.activity").fetch_conversation(pr, opts, on_done)
-end
-
----@param pr PullRequest
----@param opts { force_refresh: boolean|nil }|nil
----@param on_done fun(comments: PullsComment[]|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.fetch_comments(pr, opts, on_done)
-	return require("atlas.pulls.providers.github.api.comments").fetch_comments(pr, opts, on_done)
 end
 
 ---@param pr PullRequest

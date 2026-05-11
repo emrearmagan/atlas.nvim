@@ -15,17 +15,6 @@ function M.fetch_commits(pr, opts, on_done)
 		return nil
 	end
 
-	local cache_key = string.format("github:commits:%s:%s", repo_slug, tostring(pr.id))
-	opts = opts or {}
-
-	if not opts.force_refresh then
-		local cached, ok = cli.get_cache(cache_key)
-		if ok then
-			on_done(cached, nil)
-			return nil
-		end
-	end
-
 	return cli.gh({
 		"pr",
 		"view",
@@ -62,7 +51,6 @@ function M.fetch_commits(pr, opts, on_done)
 			})
 		end
 
-		cli.set_cache(cache_key, commits)
 		on_done(commits, nil)
 	end)
 end
@@ -78,17 +66,6 @@ function M.fetch_diff(pr, opts, on_done)
 			on_done(nil, "Missing repo")
 		end)
 		return nil
-	end
-
-	local cache_key = string.format("github:diff:%s:%s", repo_slug, tostring(pr.id))
-	opts = opts or {}
-
-	if not opts.force_refresh then
-		local cached, ok = cli.get_cache(cache_key)
-		if ok then
-			on_done(cached, nil)
-			return nil
-		end
 	end
 
 	return cli.gh({
@@ -107,7 +84,6 @@ function M.fetch_diff(pr, opts, on_done)
 		local diff_parser = require("atlas.core.git.diff_parser")
 		local files = diff_parser.parse(diff_text)
 
-		cli.set_cache(cache_key, files)
 		on_done(files, nil)
 	end)
 end

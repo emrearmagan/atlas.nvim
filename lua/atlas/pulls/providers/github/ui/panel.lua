@@ -207,7 +207,8 @@ end
 
 ---@param pr PullRequest
 ---@param refresh fun()
-function M.fetches(pr, refresh)
+---@param opts { force_refresh: boolean|nil }|nil
+function M.fetches(pr, refresh, opts)
 	cancel_panel_fetches()
 	reset_state()
 
@@ -216,6 +217,7 @@ function M.fetches(pr, refresh)
 
 	local owner = tostring(pr.workspace or "")
 	local repo = tostring(pr.repo or "")
+	local force = opts and opts.force_refresh == true
 
 	if owner ~= "" and repo ~= "" and pr.id ~= nil then
 		state.header_loading = true
@@ -229,18 +231,18 @@ function M.fetches(pr, refresh)
 				}
 			end
 			refresh()
-		end))
+		end, { force_load = force }))
 	end
 
 	overview_state.builds = "loading"
-	track_panel(pullrequests.get_builds(pr, function(builds, err)
+	track_panel(pullrequests.get_builds(pr, { force_refresh = force }, function(builds, err)
 		overview_state.builds = err and err or (builds or {})
 		refresh()
 	end))
 
 	local files_state = require("atlas.pulls.ui.panel.pr.tabs.files.state")
 	files_state.diffstat = "loading"
-	track_panel(pullrequests.get_diffstat(pr, nil, function(entries, err)
+	track_panel(pullrequests.get_diffstat(pr, { force_refresh = force }, function(entries, err)
 		files_state.diffstat = err and err or (entries or {})
 		refresh()
 	end))

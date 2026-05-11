@@ -37,7 +37,7 @@
 ---@field fetch_issue fun(issue_key: string, opts: IssuesFetchOpts|nil, on_done: fun(issue: Issue|nil, err: string|nil)): { cancel: fun() }|nil
 ---@field fetch_description fun(issue_key: string, opts: IssuesFetchOpts|nil, on_done: fun(raw: any, err: string|nil)): { cancel: fun() }|nil
 ---@field fetch_comments fun(issue_key: string, opts: IssuesFetchOpts|nil, on_done: fun(comments: IssueComment[]|nil, err: string|nil)): { cancel: fun() }|nil
----@field fetch_history fun(issue_key: string, opts: IssuesFetchOpts|nil, on_done: fun(entries: IssueHistoryEntry[]|nil, err: string|nil)): { cancel: fun() }|nil
+---@field fetch_history (fun(issue_key: string, opts: IssuesFetchOpts|nil, on_done: fun(entries: IssueHistoryEntry[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field add_comment (fun(issue_key: string, content: string, on_done: fun(comment: IssueComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field reply_comment (fun(issue_key: string, parent_id: string, content: string, on_done: fun(comment: IssueComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field edit_comment (fun(issue_key: string, comment_id: string, content: string, on_done: fun(comment: IssueComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil

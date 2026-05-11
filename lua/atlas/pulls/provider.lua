@@ -75,7 +75,7 @@
 ---@field header_rows (fun(pr: PullRequest): PullsPanelHeaderRow[])|nil
 ---@field chips (fun(pr: PullRequest): PullsPanelChip[])|nil
 ---@field tabs (fun(): PullsPanelTab[])|nil
----@field fetches (fun(pr: PullRequest, refresh: fun()))|nil
+---@field fetches (fun(pr: PullRequest, refresh: fun(), opts: { force_refresh: boolean|nil }|nil))|nil
 ---@field is_loading (fun(pr: PullRequest, active_tab: string|nil): boolean)|nil
 
 ---@class PullsProviderPanelKeymaps

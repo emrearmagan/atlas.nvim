@@ -116,7 +116,7 @@ end
 ---@param on_done fun(entries: PullsActivityEntry[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_activity(pr, opts, on_done)
-	return M.fetch_conversation(pr, opts, function(result, err)
+	return M.fetch_conversation(pr, nil, function(result, err)
 		if err or type(result) ~= "table" then
 			on_done(nil, err)
 			return
@@ -136,17 +136,6 @@ function M.fetch_conversation(pr, opts, on_done)
 			on_done(nil, "Missing repo")
 		end)
 		return nil
-	end
-
-	local cache_key = string.format("github:conversation:%s:%s", repo_slug, tostring(pr.id))
-	opts = opts or {}
-
-	if not opts.force_refresh then
-		local cached, ok = cli.get_cache(cache_key)
-		if ok then
-			on_done(cached, nil)
-			return nil
-		end
 	end
 
 	return cli.gh(
@@ -170,7 +159,6 @@ function M.fetch_conversation(pr, opts, on_done)
 				end
 			end
 
-			cli.set_cache(cache_key, conversation)
 			on_done(conversation, nil)
 		end
 	)

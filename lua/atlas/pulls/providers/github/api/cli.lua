@@ -40,6 +40,34 @@ function M.delete_cache(key)
 	cache.delete(key)
 end
 
+local memory = require("atlas.core.memory_cache")
+
+---@param key string
+---@return any|nil, boolean
+function M.get_mem(key)
+	local entry = memory.get(key)
+	if entry and entry.value ~= nil then
+		return entry.value, true
+	end
+	return nil, false
+end
+
+---@param key string
+---@param value any
+---@param ttl number|nil
+function M.set_mem(key, value, ttl)
+	memory.set(key, value, ttl)
+end
+
+---@param key string
+function M.delete_mem(key)
+	memory.delete(key)
+end
+
+function M.clear_mem()
+	memory.clear_all()
+end
+
 ---@param err string|nil
 ---@return string
 local function sanitize_error(err)

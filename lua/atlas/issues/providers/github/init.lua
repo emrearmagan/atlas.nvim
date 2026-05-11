@@ -146,16 +146,6 @@ function M.delete_comment(key, comment_id, on_done)
 	return require("atlas.issues.providers.github.api.comments").delete(key, comment_id, on_done)
 end
 
----@param _key string
----@param _opts IssuesFetchOpts|nil
----@param on_done fun(entries: IssueHistoryEntry[]|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.fetch_history(_key, _opts, on_done)
-	-- History is provided through the Conversation tab via timeline; the panel doesn't render a History tab.
-	on_done({}, nil)
-	return nil
-end
-
 ---@param action_id string
 ---@param ctx table
 ---@param on_done fun(result: table|nil, err: string|nil)
