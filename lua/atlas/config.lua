@@ -142,55 +142,6 @@ M.options = {
 }
 
 --------------------------------------------------------------------------------
--- Legacy config migration
---------------------------------------------------------------------------------
-
----@param opts table
----@return table
-local function migrate_legacy_config(opts)
-	local migrated = vim.deepcopy(opts)
-
-	local function warn(msg)
-		vim.schedule(function()
-			vim.notify("[Atlas] " .. msg, vim.log.levels.WARN)
-		end)
-	end
-
-	local legacy = false
-
-	if migrated.bitbucket and not migrated.pulls then
-		legacy = true
-		migrated.pulls = migrated.pulls or {}
-		migrated.pulls.providers = migrated.pulls.providers or {}
-		migrated.pulls.providers.bitbucket = migrated.bitbucket
-		migrated.bitbucket = nil
-	end
-
-	if migrated.jira and not migrated.issues then
-		legacy = true
-		migrated.issues = migrated.issues or {}
-		migrated.issues.providers = migrated.issues.providers or {}
-		migrated.issues.providers.jira = migrated.jira
-		migrated.jira = nil
-	end
-
-	if migrated.issues and migrated.issues.jira then
-		legacy = true
-		migrated.issues.providers = migrated.issues.providers or {}
-		if migrated.issues.providers.jira == nil then
-			migrated.issues.providers.jira = migrated.issues.jira
-		end
-		migrated.issues.jira = nil
-	end
-
-	if legacy then
-		warn("Legacy config detected. Please update your config - see the README for the new structure.")
-	end
-
-	return migrated
-end
-
---------------------------------------------------------------------------------
 -- Commands
 --------------------------------------------------------------------------------
 
@@ -275,7 +226,7 @@ end
 
 ---@param opts AtlasConfig|table|nil
 function M.setup(opts)
-	local resolved = migrate_legacy_config(opts or {})
+	local resolved = opts or {}
 	M.options = vim.tbl_deep_extend("force", M.options, resolved)
 	register_commands()
 end

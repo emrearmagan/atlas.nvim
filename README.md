@@ -36,6 +36,7 @@ A Neovim plugin for managing GitHub/Bitbucket PRs and Jira issues without leavin
 - [Installation](#installation)
 - [Issues](#issues)
   - [Jira](#jira)
+  - [GitHub](#github-issues)
 - [Pulls](#pulls)
   - [GitHub](#github)
   - [Bitbucket](#bitbucket)
@@ -48,7 +49,7 @@ A Neovim plugin for managing GitHub/Bitbucket PRs and Jira issues without leavin
 {
   "emrearmagan/atlas.nvim",
   dependencies = {
-    "MeanderingProgrammer/render-markdown.nvim", -- optional but recommended (Jira)
+    "MeanderingProgrammer/render-markdown.nvim", -- optional but recommended
     "sindrets/diffview.nvim", -- optional (PullRequest diff)
     "esmuellert/codediff.nvim", -- optional (PullRequest diff alternative)
   },

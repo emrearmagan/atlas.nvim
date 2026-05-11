@@ -16,18 +16,22 @@ local function label_hl(hex)
 	return name
 end
 
-local merge_checks = {
+local state = {
+	header_extras = nil, ---@type { assignees: table|nil, labels: table|nil }|nil
+	header_loading = false,
+	merge_checks_loading = false,
 	mergeable = nil, ---@type string|nil  "MERGEABLE"|"CONFLICTING"|"UNKNOWN"
 	merge_state = nil, ---@type string|nil "CLEAN"|"DIRTY"|"BLOCKED"|"BEHIND"|"UNSTABLE"|"HAS_HOOKS"|"DRAFT"|"UNKNOWN"
 	review_decision = nil, ---@type string|nil "APPROVED"|"CHANGES_REQUESTED"|"REVIEW_REQUIRED"|""
-	loading = false,
 }
 
-local function reset_merge_checks()
-	merge_checks.mergeable = nil
-	merge_checks.merge_state = nil
-	merge_checks.review_decision = nil
-	merge_checks.loading = false
+local function reset_state()
+	state.header_extras = nil
+	state.header_loading = false
+	state.merge_checks_loading = false
+	state.mergeable = nil
+	state.merge_state = nil
+	state.review_decision = nil
 end
 
 --------------------------------------------------------------------------------
@@ -68,9 +72,25 @@ end
 
 ---@param pr PullRequest
 ---@return PullsPanelHeaderRow[]
-function M.header_rows(pr)
-	local raw = pr._raw or {}
-	local nodes = type(raw.assignees) == "table" and type(raw.assignees.nodes) == "table" and raw.assignees.nodes or {}
+function M.header_rows(pr) ---@diagnostic disable-line: unused-local
+	local spinner = require("atlas.ui.components.spinner")
+
+	if state.header_loading and state.header_extras == nil then
+		return {
+			{
+				k1 = "Assignees:",
+				v1 = spinner.with_text("Loading..."),
+				v1_hl = "AtlasTextMuted",
+				k2 = "",
+				v2 = "",
+				v2_hl = "AtlasTextMuted",
+			},
+		}
+	end
+
+	local extras = state.header_extras or {}
+	local assignees = type(extras.assignees) == "table" and extras.assignees or {}
+	local nodes = type(assignees.nodes) == "table" and assignees.nodes or {}
 
 	local logins = {}
 	for _, node in ipairs(nodes) do
@@ -139,8 +159,9 @@ function M.chips(pr)
 		table.insert(chips, { label = hash, hl = "AtlasTabInactive" })
 	end
 
-	local raw = pr._raw or {}
-	local label_nodes = type(raw.labels) == "table" and type(raw.labels.nodes) == "table" and raw.labels.nodes or {}
+	local extras = state.header_extras or {}
+	local labels = type(extras.labels) == "table" and extras.labels or {}
+	local label_nodes = type(labels.nodes) == "table" and labels.nodes or {}
 	for _, lbl in ipairs(label_nodes) do
 		local name = tostring(lbl.name or "")
 		if name ~= "" then
@@ -198,39 +219,52 @@ end
 ---@param refresh fun()
 function M.fetches(pr, refresh)
 	cancel_panel_fetches()
-	reset_merge_checks()
+	reset_state()
 
 	local overview_state = require("atlas.pulls.ui.panel.pr.tabs.overview.state")
-	local provider = require("atlas.pulls.state").provider
 	local pullrequests = require("atlas.pulls.providers.github.api.pullrequests")
 
-	overview_state.builds = "loading"
-	if provider and type(provider.fetch_builds) == "function" then
-		track_panel(provider.fetch_builds(pr, function(builds, err)
-			overview_state.builds = err and err or (builds or {})
+	local owner = tostring(pr.workspace or "")
+	local repo = tostring(pr.repo or "")
+
+	if owner ~= "" and repo ~= "" and pr.id ~= nil then
+		state.header_loading = true
+		track_panel(pullrequests.get_pr(owner, repo, pr.id, function(fresh, err)
+			state.header_loading = false
+			if not err and type(fresh) == "table" then
+				local raw = fresh._raw or fresh
+				state.header_extras = {
+					assignees = raw.assignees,
+					labels = raw.labels,
+				}
+			end
 			refresh()
 		end))
 	end
 
-	merge_checks.loading = true
+	overview_state.builds = "loading"
+	track_panel(pullrequests.get_builds(pr, function(builds, err)
+		overview_state.builds = err and err or (builds or {})
+		refresh()
+	end))
+
+	state.merge_checks_loading = true
 	track_panel(pullrequests.get_merge_checks(pr, function(result, _)
-		merge_checks.loading = false
+		state.merge_checks_loading = false
 		if result then
-			merge_checks.mergeable = result.mergeable
-			merge_checks.merge_state = result.merge_state
-			merge_checks.review_decision = result.review_decision
+			state.mergeable = result.mergeable
+			state.merge_state = result.merge_state
+			state.review_decision = result.review_decision
 		end
 		refresh()
 	end))
 
 	local files_state = require("atlas.pulls.ui.panel.pr.tabs.files.state")
 	files_state.diffstat = "loading"
-	if provider and type(provider.fetch_diffstat) == "function" then
-		track_panel(provider.fetch_diffstat(pr, nil, function(entries, err)
-			files_state.diffstat = err and err or (entries or {})
-			refresh()
-		end))
-	end
+	track_panel(pullrequests.get_diffstat(pr, nil, function(entries, err)
+		files_state.diffstat = err and err or (entries or {})
+		refresh()
+	end))
 end
 
 ---@param pr PullRequest
@@ -242,8 +276,11 @@ function M.is_loading(pr, active_tab) ---@diagnostic disable-line: unused-local
 	local conversation_state = require("atlas.pulls.providers.github.ui.conversation.state")
 	local commits_state = require("atlas.pulls.ui.panel.pr.tabs.commits.state")
 	local files_state = require("atlas.pulls.ui.panel.pr.tabs.files.state")
+	if state.header_loading then
+		return true
+	end
 	if active_tab == "overview" then
-		return overview_state.any_loading() or merge_checks.loading
+		return overview_state.any_loading() or state.merge_checks_loading
 	elseif active_tab == "activity" then
 		return activity_state.any_loading()
 	elseif active_tab == "conversation" then
@@ -295,7 +332,12 @@ local function render_check_group(icon, icon_hl, label, details, detail_spans, d
 		local ds = detail_spans and detail_spans[di] or nil
 		if ds then
 			table.insert(spans, { line = lnum, start_col = #indent, end_col = #indent + ds.icon_len, hl_group = ds.hl })
-			table.insert(spans, { line = lnum, start_col = #indent + ds.icon_len, end_col = #lines[#lines], hl_group = "AtlasTextMuted" })
+			table.insert(spans, {
+				line = lnum,
+				start_col = #indent + ds.icon_len,
+				end_col = #lines[#lines],
+				hl_group = "AtlasTextMuted",
+			})
 		else
 			table.insert(spans, { line = lnum, start_col = 0, end_col = #lines[#lines], hl_group = "AtlasTextMuted" })
 		end
@@ -395,16 +437,23 @@ function M.overview_extra_sections(pr, width, lines, spans, line_map) ---@diagno
 	local spinner_mod = require("atlas.ui.components.spinner")
 	local builds = overview_state.builds
 
-	local has_merge_data = merge_checks.mergeable ~= nil or merge_checks.review_decision ~= nil
-	if not has_merge_data and not merge_checks.loading and builds == nil then
+	local has_merge_data = state.mergeable ~= nil or state.review_decision ~= nil
+	if not has_merge_data and not state.merge_checks_loading and builds == nil then
 		return
 	end
 
 	utils.push(lines, spans, "Merge Checks", "AtlasColumnHeader", PADDING_X)
 
+	local checks = {
+		loading = state.merge_checks_loading,
+		mergeable = state.mergeable,
+		merge_state = state.merge_state,
+		review_decision = state.review_decision,
+	}
+
 	local groups = {}
 	for _, item in ipairs(MERGE_CHECK_ITEMS) do
-		local icon, icon_hl, label, details, dspans, dlmap = item.render(merge_checks, builds, spinner_mod)
+		local icon, icon_hl, label, details, dspans, dlmap = item.render(checks, builds, spinner_mod)
 		if icon and icon_hl and label then
 			table.insert(groups, render_check_group(icon, icon_hl, label, details, dspans, dlmap))
 		end

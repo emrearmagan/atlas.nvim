@@ -26,7 +26,6 @@ query($owner: String!, $repo: String!, $number: Int!) {
 }
 ]]
 
---TODO: This query already fetched most of the stuff. I could probably extend it slightly and then in the overview page i could instantly show more details without having to fetch the PR again. Like reviewers, build status etc.
 local SEARCH_GQL = [[
 query($search: String!, $limit: Int!) {
   search(query: $search, type: ISSUE, first: $limit) {
@@ -34,12 +33,10 @@ query($search: String!, $limit: Int!) {
       ... on PullRequest {
         number title state isDraft
         createdAt updatedAt url
-        additions deletions changedFiles
-        labels(first: 10) { nodes { name color } }
+        additions deletions
         latestOpinionatedReviews(last: 10) { nodes { state } }
-        assignees(first: 10) { nodes { login } }
         author { login ... on User { name } }
-        headRefName baseRefName headRefOid baseRefOid
+        headRefName baseRefName
         comments { totalCount }
         repository { name nameWithOwner }
         commits(last: 1) {
@@ -188,6 +185,126 @@ function M.get_merge_checks(pr, on_done)
 			merge_state = tostring(result.mergeStateStatus or ""),
 			review_decision = tostring(result.reviewDecision or ""),
 		}, nil)
+	end)
+end
+
+---@param pr PullRequest
+---@param on_done fun(builds: PullsBuild[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.get_builds(pr, on_done)
+	local repo_slug = pr.repo_full_name or ""
+	if repo_slug == "" then
+		vim.schedule(function()
+			on_done(nil, "Missing repo")
+		end)
+		return nil
+	end
+
+	return cli.gh({
+		"pr",
+		"checks",
+		tostring(pr.id),
+		"--repo",
+		repo_slug,
+		"--json",
+		"name,state,bucket,link,workflow",
+	}, function(result, err)
+		if err then
+			if err:find("no checks") or err:find("no status checks") then
+				on_done({}, nil)
+				return
+			end
+			on_done(nil, err)
+			return
+		end
+
+		if type(result) ~= "table" then
+			on_done({}, nil)
+			return
+		end
+
+		local BUCKET_MAP = {
+			pass = "SUCCESSFUL",
+			fail = "FAILED",
+			pending = "INPROGRESS",
+			skipping = "STOPPED",
+			cancel = "STOPPED",
+		}
+
+		local builds = {}
+		for _, check in ipairs(result) do
+			table.insert(builds, {
+				name = tostring(check.name or ""),
+				state = BUCKET_MAP[tostring(check.bucket or "")] or "INPROGRESS",
+				url = check.link and tostring(check.link) or nil,
+				key = check.workflow and tostring(check.workflow) or nil,
+			})
+		end
+
+		on_done(builds, nil)
+	end)
+end
+
+---@param pr PullRequest
+---@param opts { force_refresh: boolean|nil }|nil
+---@param on_done fun(entries: PullsDiffstatEntry[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.get_diffstat(pr, opts, on_done)
+	local repo_slug = pr.repo_full_name or ""
+	if repo_slug == "" then
+		vim.schedule(function()
+			on_done(nil, "Missing repo")
+		end)
+		return nil
+	end
+
+	local cache_key = string.format("github:diffstat:%s:%s", repo_slug, tostring(pr.id))
+	opts = opts or {}
+
+	if not opts.force_refresh then
+		local cached, ok = cli.get_cache(cache_key)
+		if ok then
+			on_done(cached, nil)
+			return nil
+		end
+	end
+
+	return cli.gh({
+		"pr",
+		"view",
+		tostring(pr.id),
+		"--repo",
+		repo_slug,
+		"--json",
+		"files",
+	}, function(result, err)
+		if err or type(result) ~= "table" then
+			on_done(nil, err or "Failed to fetch files")
+			return
+		end
+
+		local entries = {}
+		for _, file in ipairs(result.files or {}) do
+			local additions = tonumber(file.additions) or 0
+			local deletions = tonumber(file.deletions) or 0
+			local status = "modified"
+			if additions > 0 and deletions == 0 then
+				status = "added"
+			elseif additions == 0 and deletions > 0 then
+				status = "removed"
+			end
+
+			table.insert(entries, {
+				status = status,
+				path = tostring(file.path or ""),
+				old_path = nil,
+				lines_added = additions,
+				lines_removed = deletions,
+			})
+		end
+
+		cli.set_cache(cache_key, entries)
+		on_done(entries, nil)
 	end)
 end
 
