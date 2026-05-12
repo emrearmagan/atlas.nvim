@@ -8,6 +8,10 @@ local M = {}
 ---@field toggle_all_folds? AtlasKeymapValue
 ---@field previous_panel_tab? AtlasKeymapValue
 ---@field next_panel_tab? AtlasKeymapValue
+---@field open_notifications? AtlasKeymapValue
+---@field notifications_mark_read? AtlasKeymapValue
+---@field notifications_mark_done? AtlasKeymapValue
+---@field notifications_refresh? AtlasKeymapValue
 
 ---@class AtlasPullsKeymaps
 ---@field refresh? AtlasKeymapValue
@@ -20,10 +24,6 @@ local M = {}
 ---@field checkout? AtlasKeymapValue
 ---@field show_details? AtlasKeymapValue
 ---@field search? AtlasKeymapValue
----@field open_notifications? AtlasKeymapValue
----@field notifications_mark_read? AtlasKeymapValue
----@field notifications_mark_done? AtlasKeymapValue
----@field notifications_refresh? AtlasKeymapValue
 ---@field pr_files_next_hunk? AtlasKeymapValue
 ---@field pr_files_previous_hunk? AtlasKeymapValue
 ---@field filter_status_open? AtlasKeymapValue
@@ -58,6 +58,10 @@ local M = {}
 ---| "ui.toggle_all_folds"
 ---| "ui.previous_panel_tab"
 ---| "ui.next_panel_tab"
+---| "ui.open_notifications"
+---| "ui.notifications_mark_read"
+---| "ui.notifications_mark_done"
+---| "ui.notifications_refresh"
 ---| "pulls.refresh"
 ---| "pulls.refresh_view"
 ---| "pulls.open_actions"
@@ -68,10 +72,6 @@ local M = {}
 ---| "pulls.checkout"
 ---| "pulls.show_details"
 ---| "pulls.search"
----| "pulls.open_notifications"
----| "pulls.notifications_mark_read"
----| "pulls.notifications_mark_done"
----| "pulls.notifications_refresh"
 ---| "pulls.pr_files_next_hunk"
 ---| "pulls.pr_files_previous_hunk"
 ---| "issues.refresh"
@@ -193,6 +193,7 @@ function M.validate()
 			"ui.toggle_all_folds",
 			"ui.previous_panel_tab",
 			"ui.next_panel_tab",
+			"ui.open_notifications",
 		}, { "j", "k", "gg", "G" }),
 		pulls = conflicts_for({
 			"pulls.refresh",
@@ -205,7 +206,6 @@ function M.validate()
 			"pulls.checkout",
 			"pulls.show_details",
 			"pulls.search",
-			"pulls.open_notifications",
 			"pulls.pr_files_next_hunk",
 			"pulls.pr_files_previous_hunk",
 			"pulls.filter_status_open",

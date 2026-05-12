@@ -246,10 +246,10 @@ function M.register(buf, views)
 	if state.provider and state.provider.fetch_notifications then
 		utils.insert_if(
 			items,
-			item("pulls.open_notifications", {
+			item("ui.open_notifications", {
 				desc = "Open notifications",
 				callback = function()
-					require("atlas.pulls.ui.notifications").open()
+					require("atlas.ui.notifications").open()
 				end,
 			})
 		)

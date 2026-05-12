@@ -87,6 +87,19 @@ function M.register(buf, views)
 		)
 	end
 
+	if state.provider and state.provider.fetch_notifications then
+		utils.insert_if(
+			items,
+			item("ui.open_notifications", {
+				desc = "Open notifications",
+				index = 3,
+				callback = function()
+					require("atlas.ui.notifications").open()
+				end,
+			})
+		)
+	end
+
 	if state.provider and state.provider.search then
 		utils.insert_if(
 			items,
@@ -310,6 +323,7 @@ function M.remove(buf)
 	utils.insert_if(items, item("issues.refresh", { key = "" }))
 	utils.insert_if(items, item("issues.refresh_view", { key = "" }))
 	utils.insert_if(items, item("issues.show_details", { key = "" }))
+	utils.insert_if(items, item("ui.open_notifications", { key = "" }))
 	utils.insert_if(items, item("ui.toggle_fold", { key = "" }))
 	utils.insert_if(items, item("ui.toggle_all_folds", { key = "" }))
 	table.insert(items, { key = "K" })

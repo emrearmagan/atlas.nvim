@@ -215,6 +215,29 @@ function M.create_issue(opts, on_done)
 	return require("atlas.issues.providers.github.api.issues").create_issue(opts, on_done)
 end
 
+---@param opts { force_load: boolean|nil }|nil
+---@param on_done fun(notifications: AtlasNotification[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_notifications(opts, on_done)
+	local notifications = require("atlas.pulls.providers.github.api.notifications")
+	local merged = vim.tbl_extend("force", { all = true, per_page = 100 }, opts or {})
+	return notifications.fetch(merged, on_done)
+end
+
+---@param id string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.mark_notification_read(id, on_done)
+	return require("atlas.pulls.providers.github.api.notifications").mark_read(id, on_done)
+end
+
+---@param id string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.mark_notification_done(id, on_done)
+	return require("atlas.pulls.providers.github.api.notifications").mark_done(id, on_done)
+end
+
 ---@return AtlasGitHubIssuesViewConfig[]
 function M.views()
 	local cli = require("atlas.issues.providers.github.api.cli")

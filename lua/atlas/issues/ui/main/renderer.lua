@@ -440,9 +440,22 @@ function M.render(opts)
 		})
 	end
 
-	local actions = {
-		{ label = string.format("Refresh (%s)", key_label("issues.refresh_view", "R")), hl_group = "AtlasTextMuted" },
-	}
+	local actions = {}
+
+	if state.provider and state.provider.fetch_notifications then
+		local notif_state = require("atlas.ui.notifications.state")
+		local count = notif_state.unread_count or 0
+		local bell_icon = count > 0 and icons.general("bell_unread") or icons.general("bell")
+		local bell_label = count > 0 and string.format("%s %d", bell_icon, count) or bell_icon
+		local bell_hl = count > 0 and "AtlasLogInfo" or "AtlasTextMuted"
+		table.insert(actions, { label = bell_label, hl_group = bell_hl })
+		table.insert(actions, { label = "|", hl_group = "AtlasTextMuted" })
+	end
+
+	table.insert(actions, {
+		label = string.format("Refresh (%s)", key_label("issues.refresh_view", "R")),
+		hl_group = "AtlasTextMuted",
+	})
 
 	local lines, spans = {}, {}
 	local line_map = {}

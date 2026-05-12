@@ -51,6 +51,12 @@ function M.init(provider)
 	local controller = require("atlas.issues.ui.main.controller")
 	local keymaps = require("atlas.issues.ui.main.keymaps")
 	state.provider = provider
+
+	local notifications = require("atlas.ui.notifications")
+	notifications.set_provider(provider)
+	notifications.set_refresh(function()
+		M.render()
+	end)
 	state.error = nil
 	state.issues = nil
 	state.issue_tree = nil
@@ -126,6 +132,13 @@ function M.init(provider)
 	ui_state.current_view = provider.id
 	M.render()
 	controller.switch_view(state.active_view)
+
+	if provider and provider.fetch_notifications then
+		local notifications_ui = require("atlas.ui.notifications")
+		notifications_ui.refresh_in_background({ force_load = false }, function()
+			M.render()
+		end)
+	end
 end
 
 return M
