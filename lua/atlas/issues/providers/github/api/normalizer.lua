@@ -208,6 +208,7 @@ function M.normalize_issue(raw, fallback_slug)
 		duedate = nil,
 		parent = parent,
 		url = url ~= "" and url or nil,
+		is_pinned = raw.isPinned == true,
 		_raw = {
 			number = number,
 			slug = slug,

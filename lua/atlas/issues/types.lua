@@ -39,6 +39,7 @@
 ---@field duedate string|nil
 ---@field parent Issue|nil
 ---@field url string|nil
+---@field is_pinned boolean|nil
 ---@field _raw any|nil
 
 --------------------------------------------------------------------------------

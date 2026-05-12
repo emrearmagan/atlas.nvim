@@ -63,7 +63,24 @@ function M.fetch_issues(view, opts, on_done)
 			on_done({}, nil, true, err)
 			return
 		end
-		on_done(issues or {}, nil, true, nil)
+
+		local pinned, rest = {}, {}
+		for _, issue in ipairs(issues or {}) do
+			if issue.is_pinned == true then
+				table.insert(pinned, issue)
+			else
+				table.insert(rest, issue)
+			end
+		end
+		local sorted = {}
+		for _, i in ipairs(pinned) do
+			table.insert(sorted, i)
+		end
+		for _, i in ipairs(rest) do
+			table.insert(sorted, i)
+		end
+
+		on_done(sorted, nil, true, nil)
 	end, {
 		force_load = opts and opts.force_load == true or false,
 		limit = limit,
@@ -165,18 +182,20 @@ function M.fetch_history(key, opts, on_done)
 					id = tostring(ev.date or ""),
 					created = ev.date,
 					author = ev.actor,
-					items = { {
-						field = ev.event,
-						label_name = ev.label_name,
-						label_color = ev.label_color,
-						assignee_login = ev.assignee_login,
-						milestone_title = ev.milestone_title,
-						rename_from = ev.rename_from,
-						rename_to = ev.rename_to,
-						commit_id = ev.commit_id,
-						source_title = ev.source_title,
-						source_url = ev.source_url,
-					} },
+					items = {
+						{
+							field = ev.event,
+							label_name = ev.label_name,
+							label_color = ev.label_color,
+							assignee_login = ev.assignee_login,
+							milestone_title = ev.milestone_title,
+							rename_from = ev.rename_from,
+							rename_to = ev.rename_to,
+							commit_id = ev.commit_id,
+							source_title = ev.source_title,
+							source_url = ev.source_url,
+						},
+					},
 				})
 			end
 		end
@@ -201,11 +220,15 @@ end
 
 ---@param on_done fun(result: table|nil, err: string|nil)|nil
 function M.search(on_done)
-	require("atlas.issues.providers.github.actions").run("search", { issue = nil, source = "main" }, function(result, err)
-		if on_done then
-			on_done(result, err)
+	require("atlas.issues.providers.github.actions").run(
+		"search",
+		{ issue = nil, source = "main" },
+		function(result, err)
+			if on_done then
+				on_done(result, err)
+			end
 		end
-	end)
+	)
 end
 
 ---@param opts GitHubCreateIssueOpts

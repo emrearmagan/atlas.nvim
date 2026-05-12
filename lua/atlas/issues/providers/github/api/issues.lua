@@ -23,7 +23,7 @@ query($search: String!, $limit: Int!, $withRelationships: Boolean!) {
 }
 
 fragment IssueFields on Issue {
-  number title state
+  number title state isPinned
   createdAt updatedAt url
   repository { nameWithOwner }
   author { login ... on User { name } }
@@ -57,7 +57,7 @@ query($owner: String!, $repo: String!, $number: Int!, $withRelationships: Boolea
 }
 
 fragment IssueFields on Issue {
-  number title state
+  number title state isPinned
   createdAt updatedAt closedAt url body
   repository { nameWithOwner }
   author { login ... on User { name } }

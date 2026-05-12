@@ -160,45 +160,6 @@ function M.register(buf, views)
 		})
 	)
 
-	table.insert(items, {
-		key = "o",
-		desc = "Open repo panel",
-		opts = { nowait = true, silent = true },
-		callback = function()
-			local pr = selected_pr()
-			if pr == nil then
-				footer.notify("warn", "No PR selected")
-				return
-			end
-
-			local layout = require("atlas.ui.layout")
-			local ui_state = require("atlas.ui.state")
-			local panel = require("atlas.pulls.ui.panel")
-			local panel_state = require("atlas.pulls.ui.panel.state")
-			local detail_open = layout.win_id("detail") ~= nil
-
-			if detail_open and panel_state.current_panel == "repo" then
-				layout.toggle_detail()
-				if ui_state.on_panel_close then
-					ui_state.on_panel_close()
-				end
-				return
-			end
-
-			panel_state.current_panel = "repo"
-
-			if not detail_open then
-				layout.toggle_detail()
-				if ui_state.on_panel_open then
-					ui_state.on_panel_open()
-				end
-				return
-			end
-
-			panel.on_select(pr, nil)
-		end,
-	})
-
 	utils.insert_if(
 		items,
 		item("pulls.open_diff", {
@@ -243,18 +204,6 @@ function M.register(buf, views)
 		)
 	end
 
-	if state.provider and state.provider.fetch_notifications then
-		utils.insert_if(
-			items,
-			item("ui.open_notifications", {
-				desc = "Open notifications",
-				callback = function()
-					require("atlas.ui.notifications").open()
-				end,
-			})
-		)
-	end
-
 	utils.insert_if(
 		items,
 		item("pulls.refresh", {
@@ -281,6 +230,47 @@ function M.register(buf, views)
 	)
 
 	help.register(provider_name, items, { index = 220, buffer = buf })
+
+	help.register("General", {
+		{
+			key = "o",
+			desc = "Open repo panel",
+			opts = { nowait = true, silent = true },
+			callback = function()
+				local pr = selected_pr()
+				if pr == nil then
+					footer.notify("warn", "No PR selected")
+					return
+				end
+
+				local layout = require("atlas.ui.layout")
+				local ui_state = require("atlas.ui.state")
+				local panel = require("atlas.pulls.ui.panel")
+				local panel_state = require("atlas.pulls.ui.panel.state")
+				local detail_open = layout.win_id("detail") ~= nil
+
+				if detail_open and panel_state.current_panel == "repo" then
+					layout.toggle_detail()
+					if ui_state.on_panel_close then
+						ui_state.on_panel_close()
+					end
+					return
+				end
+
+				panel_state.current_panel = "repo"
+
+				if not detail_open then
+					layout.toggle_detail()
+					if ui_state.on_panel_open then
+						ui_state.on_panel_open()
+					end
+					return
+				end
+
+				panel.on_select(pr, nil)
+			end,
+		},
+	}, { buffer = buf })
 end
 
 return M

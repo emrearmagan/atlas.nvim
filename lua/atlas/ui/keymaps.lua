@@ -133,6 +133,13 @@ function M.register(buf)
 		end,
 	}))
 
+	utils.insert_if(items, item("ui.open_notifications", {
+		desc = "Open notifications",
+		callback = function()
+			require("atlas.ui.notifications").open()
+		end,
+	}))
+
 	M.remove(buf)
 	help.register("General", items, { index = 210, buffer = buf })
 end
@@ -150,6 +157,7 @@ function M.remove(buf)
 	utils.insert_if(items, remove_item("ui.toggle_panel"))
 	utils.insert_if(items, remove_item("ui.next_panel_tab"))
 	utils.insert_if(items, remove_item("ui.previous_panel_tab"))
+	utils.insert_if(items, remove_item("ui.open_notifications"))
 
 	help.remove("General", items, { buffer = buf })
 end

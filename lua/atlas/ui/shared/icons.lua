@@ -20,6 +20,7 @@ local ICONS = {
 		info = "",
 		bell = "󰂚",
 		bell_unread = "󱅫",
+		pin = "󰐃",
 		dot = "●",
 		activity_more = "󰉺",
 	},

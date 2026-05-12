@@ -13,8 +13,8 @@ local function bootstrap_common()
 	require("atlas.ui.components.footer").setup()
 
 	require("atlas.ui.popups.help").register_command("Commands", {
-		{ name = "AtlasPulls", desc = "Open pulls domain" },
-		{ name = "AtlasIssues", desc = "Open issues domain" },
+		{ name = "AtlasPulls", desc = "Open pulls" },
+		{ name = "AtlasIssues", desc = "Open issues" },
 		{ name = "AtlasClearCache", desc = "Clear Atlas cache" },
 		{ name = "AtlasLogs", desc = "Open Atlas logs" },
 	}, { index = 999, buffer = require("atlas.ui.layout").buf_id("main") })

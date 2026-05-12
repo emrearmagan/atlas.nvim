@@ -570,18 +570,6 @@ local ACTIONS = {
 		end,
 	},
 	{
-		id = "notifications",
-		label = "Open notifications",
-		is_available = function(_)
-			return true, nil
-		end,
-		run = function(_, done)
-			local notifications_ui = require("atlas.pulls.ui.notifications")
-			notifications_ui.open()
-			done({ changed_pr = false, message = "Notifications opened" }, nil)
-		end,
-	},
-	{
 		id = "search",
 		label = "Search repositories",
 		is_available = function(_)
