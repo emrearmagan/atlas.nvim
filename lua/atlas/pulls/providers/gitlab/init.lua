@@ -76,6 +76,21 @@ function M.fetch_reviewers(pr, opts, on_done)
 	return require("atlas.pulls.providers.gitlab.api.mergerequests").get_reviewers(pr, opts, on_done)
 end
 
+---@param pr PullRequest
+---@param on_done fun(builds: PullsBuild[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_builds(pr, on_done)
+	return require("atlas.pulls.providers.gitlab.api.checks").get_builds(pr, nil, on_done)
+end
+
+---@param pr PullRequest
+---@param opts { force_refresh?: boolean }|nil
+---@param on_done fun(checks: PullsMergeCheck[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_merge_checks(pr, opts, on_done)
+	return require("atlas.pulls.providers.gitlab.api.checks").get_merge_checks(pr, opts, on_done)
+end
+
 ---@param pr PullRequest|nil
 ---@param source "main"|"panel"|nil
 ---@param on_done fun(result: PullsActionResult|nil)

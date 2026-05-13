@@ -520,6 +520,48 @@ end
 
 ---@param pr PullRequest
 ---@param opts { force_refresh?: boolean }|nil
+---@param on_done fun(by_username: table<string, string>|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.get_reviewer_states(pr, opts, on_done)
+	opts = opts or {}
+	local raw = type(pr._raw) == "table" and pr._raw or {}
+	local path = tostring(raw.project_path or pr.repo_full_name or "")
+	local iid = tonumber(raw.iid or pr.id)
+	if path == "" or iid == nil then
+		on_done(nil, "Invalid MR identifier")
+		return nil
+	end
+
+	local cache_key = string.format("gitlab_pulls:reviewer_states:%s!%d", path, iid)
+	if opts.force_refresh ~= true then
+		local cached, ok = service.get_memory_cache(cache_key)
+		if ok then
+			on_done(cached, nil)
+			return nil
+		end
+	end
+
+	local endpoint = string.format("/projects/%s/merge_requests/%d/reviewers", service.url_encode(path), iid)
+	return service.request("GET", endpoint, nil, function(result, err)
+		if err then
+			on_done(nil, err)
+			return
+		end
+
+		local by_username = {}
+		for _, item in ipairs(type(result) == "table" and result or {}) do
+			local user = type(item) == "table" and type(item.user) == "table" and item.user or nil
+			if user and type(user.username) == "string" and type(item.state) == "string" then
+				by_username[user.username] = item.state
+			end
+		end
+		service.set_memory_cache(cache_key, by_username)
+		on_done(by_username, nil)
+	end)
+end
+
+---@param pr PullRequest
+---@param opts { force_refresh?: boolean }|nil
 ---@param on_done fun(reviewers: PullsReviewer[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.get_reviewers(pr, opts, on_done)
@@ -527,18 +569,22 @@ function M.get_reviewers(pr, opts, on_done)
 
 	---@param raw table
 	local function build(raw)
-		M.get_approvals(pr, function(state, _)
-			local approved = {}
-			for _, login in ipairs(state and state.approved_by or {}) do
-				approved[login] = true
-			end
+		M.get_reviewer_states(pr, opts, function(states, _)
+			states = states or {}
 			local reviewers = {}
 			for _, r in ipairs(raw.reviewers or {}) do
 				if type(r) == "table" and type(r.username) == "string" then
+					local s = tostring(states[r.username] or ""):lower()
+					local decision = "pending"
+					if s == "approved" then
+						decision = "approved"
+					elseif s == "requested_changes" then
+						decision = "changes_requested"
+					end
 					table.insert(reviewers, {
 						name = r.username,
 						nickname = r.username,
-						decision = approved[r.username] and "approved" or "pending",
+						decision = decision,
 					})
 				end
 			end

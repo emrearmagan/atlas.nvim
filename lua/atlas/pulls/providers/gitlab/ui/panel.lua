@@ -134,16 +134,24 @@ function M.fetches(pr, refresh, opts)
 	cancel_panel_fetches()
 	reset_state()
 
+	local force = opts and opts.force_refresh == true
 	local raw = type(pr._raw) == "table" and pr._raw or {}
 	local project_path = tostring(raw.project_path or pr.repo_full_name or "")
-	if project_path == "" then
-		return
+
+	if project_path ~= "" then
+		state.header_loading = true
+		track_panel(mr_api.get_project_labels(project_path, { force_refresh = force }, function(by_name, _)
+			state.header_loading = false
+			state.labels_by_name = by_name or {}
+			refresh()
+		end))
 	end
 
-	state.header_loading = true
-	track_panel(mr_api.get_project_labels(project_path, { force_refresh = opts and opts.force_refresh == true }, function(by_name, _)
-		state.header_loading = false
-		state.labels_by_name = by_name or {}
+	local overview_state = require("atlas.pulls.ui.panel.pr.tabs.overview.state")
+	local checks = require("atlas.pulls.providers.gitlab.api.checks")
+	overview_state.builds = "loading"
+	track_panel(checks.get_builds(pr, { force_refresh = force }, function(builds, err)
+		overview_state.builds = err and err or (builds or {})
 		refresh()
 	end))
 end

@@ -130,6 +130,8 @@ function M.normalize_mr(raw)
 			project_id = tonumber(raw.project_id),
 			project_path = project_path,
 			merge_status = safe_str(raw.merge_status),
+			detailed_merge_status = safe_str(raw.detailed_merge_status),
+			blocking_discussions_resolved = nilify(raw.blocking_discussions_resolved),
 			has_conflicts = raw.has_conflicts == true,
 			draft = raw.draft == true or raw.work_in_progress == true,
 			labels = safe_table(raw.labels),
