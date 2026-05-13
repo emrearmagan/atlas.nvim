@@ -7,7 +7,7 @@ local editor = require("atlas.ui.popups.editor")
 local issue_helper = require("atlas.issues.create.jira.helper")
 local users_api = require("atlas.issues.providers.jira.api.users")
 local issues_api = require("atlas.issues.providers.jira.api.issues")
-local template_store = require("atlas.issues.providers.jira.templates")
+local template_store = require("atlas.issues.templates")
 local spinner = require("atlas.ui.components.spinner")
 local spinner_popup = require("atlas.ui.popups.spinner")
 local async_picker = require("atlas.ui.components.async_picker")
@@ -300,20 +300,48 @@ local function apply_template_from_picker()
 end
 
 local function save_description_as_template()
-	local markdown = get_active_markdown_description()
-	local jira_actions = require("atlas.issues.providers.jira.actions")
-	jira_actions.run("create_template", {
-		issue = nil,
-		source = nil,
-		description = markdown,
-	}, function(result, err)
-		if err then
-			footer.notify("error", tostring(err))
+	local markdown = vim.trim(get_active_markdown_description())
+	if markdown == "" then
+		footer.notify("warn", "Description is empty")
+		return
+	end
+
+	vim.ui.input({ prompt = "Template name: " }, function(input)
+		if input == nil then
 			return
 		end
-		if result and result.message and result.message ~= "" then
-			footer.notify("info", result.message, 1200)
+
+		local name = vim.trim(tostring(input))
+		if name == "" then
+			footer.notify("warn", "Template name is required")
+			return
 		end
+
+		local ok, write_err, existed, normalized_name = template_store.write(name, markdown, { overwrite = false })
+		if ok then
+			footer.notify("success", string.format("Created template %s", tostring(normalized_name or name)), 1200)
+			return
+		end
+
+		if existed then
+			vim.ui.input({
+				prompt = string.format('Template "%s" exists. Overwrite? [y/N]: ', tostring(normalized_name or name)),
+			}, function(confirm)
+				if confirm == nil or vim.trim(tostring(confirm)):lower() ~= "y" then
+					return
+				end
+				local overwrite_ok, overwrite_err, _, final_name =
+					template_store.write(name, markdown, { overwrite = true })
+				if not overwrite_ok then
+					footer.notify("error", overwrite_err or "Failed to overwrite template")
+					return
+				end
+				footer.notify("success", string.format("Updated template %s", tostring(final_name or normalized_name or name)), 1200)
+			end)
+			return
+		end
+
+		footer.notify("error", write_err or "Failed to create template")
 	end)
 end
 

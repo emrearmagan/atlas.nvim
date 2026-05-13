@@ -1,8 +1,8 @@
 local M = {}
 
-local templates_root = vim.fn.stdpath("data") .. "/atlas/jira/templates"
+local templates_root = vim.fn.stdpath("data") .. "/atlas/issues/templates"
 
----@class JiraTemplateInfo
+---@class IssueTemplateInfo
 ---@field name string
 ---@field path string
 
@@ -53,7 +53,7 @@ local function path_for_name(name)
 	return string.format("%s/%s.md", templates_root, normalized_name), normalized_name, nil
 end
 
----@return JiraTemplateInfo[]|nil
+---@return IssueTemplateInfo[]|nil
 ---@return string|nil
 function M.list()
 	local ok, ensure_err = ensure_templates_dir()
@@ -66,7 +66,7 @@ function M.list()
 		return a:lower() < b:lower()
 	end)
 
-	---@type JiraTemplateInfo[]
+	---@type IssueTemplateInfo[]
 	local templates = {}
 	for _, path in ipairs(paths) do
 		if vim.fn.filereadable(path) == 1 then
