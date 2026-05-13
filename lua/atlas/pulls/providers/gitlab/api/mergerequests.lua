@@ -25,13 +25,21 @@ end
 ---@return { cancel: fun() }|nil
 function M.list_mrs(view, opts, on_done)
 	opts = opts or {}
+	local per_page = math.max(1, math.min(100, tonumber(opts.pagelen) or 100))
+	local project = view.project ~= nil and tostring(view.project) ~= "" and view.project or nil
+	local group = view.group ~= nil and tostring(view.group) ~= "" and view.group or nil
+
 	local params = {
-		scope = view.scope or "assigned_to_me",
 		state = view.state or "opened",
-		per_page = tostring(opts.pagelen or 50),
+		per_page = tostring(per_page),
 		order_by = view.order_by or "updated_at",
 		sort = view.sort or "desc",
 	}
+	if project == nil and group == nil then
+		params.scope = view.scope or "assigned_to_me"
+	elseif view.scope then
+		params.scope = view.scope
+	end
 	if view.labels then
 		params.labels = view.labels
 	end
@@ -53,9 +61,18 @@ function M.list_mrs(view, opts, on_done)
 		end
 	end
 
-	local endpoint = "/merge_requests" .. build_query(params)
-	local cache_key = "gitlab_pulls:list:" .. endpoint
+	local endpoint
+	if project ~= nil then
+		endpoint =
+			string.format("/projects/%s/merge_requests%s", service.url_encode(tostring(project)), build_query(params))
+	elseif group ~= nil then
+		endpoint =
+			string.format("/groups/%s/merge_requests%s", service.url_encode(tostring(group)), build_query(params))
+	else
+		endpoint = "/merge_requests" .. build_query(params)
+	end
 
+	local cache_key = "gitlab_pulls:list:" .. endpoint
 	if not opts.force_load then
 		local cached, ok = service.get_memory_cache(cache_key)
 		if ok then
@@ -70,7 +87,7 @@ function M.list_mrs(view, opts, on_done)
 			on_done(nil, err)
 			return
 		end
-		local groups = normalizer.normalize_mrs_to_groups(type(result) == "table" and result or {})
+		local groups = normalizer.normalize_mrs_to_groups(result or {})
 		service.set_memory_cache(cache_key, groups)
 		on_done(groups, nil)
 	end)
@@ -234,21 +251,43 @@ function M.set_assignee_ids(pr, ids, on_done)
 end
 
 ---@param pr PullRequest
----@param on_done fun(approved: boolean|nil, err: string|nil)
+---@param on_done fun(state: {user_has_approved: boolean, approved_by: string[]}|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.get_approval_state(pr, on_done)
+function M.get_approvals(pr, on_done)
 	local path, iid = project_iid(pr)
 	if path == "" or iid == nil then
 		on_done(nil, "Invalid MR identifier")
 		return nil
 	end
 	local endpoint = string.format("/projects/%s/merge_requests/%d/approvals", service.url_encode(path), iid)
+
 	return service.request("GET", endpoint, nil, function(result, err)
 		if err or type(result) ~= "table" then
 			on_done(nil, err or "Failed to fetch approval state")
 			return
 		end
-		on_done(result.user_has_approved == true, nil)
+		local approved_by = {}
+		for _, entry in ipairs(result.approved_by or {}) do
+			local user = type(entry) == "table" and (entry.user or entry) or nil
+			local login = type(user) == "table" and tostring(user.username or "") or ""
+			if login ~= "" then
+				table.insert(approved_by, login)
+			end
+		end
+		on_done({ user_has_approved = result.user_has_approved == true, approved_by = approved_by }, nil)
+	end)
+end
+
+---@param pr PullRequest
+---@param on_done fun(approved: boolean|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.get_approval_state(pr, on_done)
+	return M.get_approvals(pr, function(state, err)
+		if err or state == nil then
+			on_done(nil, err)
+			return
+		end
+		on_done(state.user_has_approved, nil)
 	end)
 end
 
@@ -444,24 +483,32 @@ end
 ---@return { cancel: fun() }|nil
 function M.get_reviewers(pr, opts, on_done)
 	opts = opts or {}
-	local function finish(raw)
-		local reviewers = {}
-		for _, r in ipairs(raw.reviewers or {}) do
-			if type(r) == "table" and type(r.username) == "string" then
-				table.insert(reviewers, {
-					name = r.username,
-					nickname = r.username,
-					decision = "pending",
-				})
+
+	---@param raw table
+	local function build(raw)
+		M.get_approvals(pr, function(state, _)
+			local approved = {}
+			for _, login in ipairs(state and state.approved_by or {}) do
+				approved[login] = true
 			end
-		end
-		on_done(reviewers, nil)
+			local reviewers = {}
+			for _, r in ipairs(raw.reviewers or {}) do
+				if type(r) == "table" and type(r.username) == "string" then
+					table.insert(reviewers, {
+						name = r.username,
+						nickname = r.username,
+						decision = approved[r.username] and "approved" or "pending",
+					})
+				end
+			end
+			on_done(reviewers, nil)
+		end)
 	end
 
-	local initial_raw = type(pr._raw) == "table" and pr._raw or {}
-	if opts.force_refresh ~= true and type(initial_raw.reviewers) == "table" then
+	local cached = type(pr._raw) == "table" and pr._raw or {}
+	if opts.force_refresh ~= true and type(cached.reviewers) == "table" then
 		vim.schedule(function()
-			finish(initial_raw)
+			build(cached)
 		end)
 		return nil
 	end
@@ -471,8 +518,7 @@ function M.get_reviewers(pr, opts, on_done)
 			on_done(nil, err)
 			return
 		end
-		local raw = type(mr._raw) == "table" and mr._raw or {}
-		finish(raw)
+		build(type(mr._raw) == "table" and mr._raw or {})
 	end)
 end
 

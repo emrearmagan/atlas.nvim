@@ -30,6 +30,8 @@
 ---@class AtlasGitLabPullsViewConfig : AtlasPullsViewConfig
 ---@field scope "created_by_me"|"assigned_to_me"|"all"|nil
 ---@field state "opened"|"closed"|"merged"|"all"|nil
+---@field project string|number|nil
+---@field group string|number|nil
 ---@field labels string|nil
 ---@field milestone string|nil
 ---@field assignee_username string|nil
