@@ -101,12 +101,17 @@ function M.chips(pr)
 		return chips
 	end
 
+	local MAX_LABELS = 10
 	local raw = type(pr._raw) == "table" and pr._raw or {}
 	local labels = type(raw.labels) == "table" and raw.labels or {}
 	local by_name = state.labels_by_name or {}
+	local shown = 0
 	for _, entry in ipairs(labels) do
 		local name = type(entry) == "string" and entry or (type(entry) == "table" and entry.name) or nil
 		if type(name) == "string" and name ~= "" then
+			if shown >= MAX_LABELS then
+				break
+			end
 			local meta = by_name[name] or {}
 			local bg = type(meta.color) == "string" and meta.color:gsub("^#", "") or nil
 			local fg = type(meta.text_color) == "string" and meta.text_color:gsub("^#", "") or nil
@@ -122,7 +127,12 @@ function M.chips(pr)
 				vim.api.nvim_set_hl(0, hl, opts)
 			end
 			table.insert(chips, { label = name, hl = hl })
+			shown = shown + 1
 		end
+	end
+	local remaining = #labels - shown
+	if remaining > 0 then
+		table.insert(chips, { label = string.format("+%d more", remaining), hl = "AtlasTextMuted" })
 	end
 	return chips
 end
