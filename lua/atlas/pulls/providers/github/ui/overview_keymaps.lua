@@ -20,26 +20,26 @@ function M.register(buf)
 	local items = {
 		{
 			key = "gr",
-			desc = "Add reviewers",
+			desc = "Edit reviewers",
 			opts = { nowait = true },
 			callback = function()
 				local pr = panel_state.current_pr
 				if pr == nil then
 					return
 				end
-				run_action("add_reviewers", pr)
+				run_action("edit_reviewers", pr)
 			end,
 		},
 		{
 			key = "ga",
-			desc = "Add assignees",
+			desc = "Edit assignees",
 			opts = { nowait = true },
 			callback = function()
 				local pr = panel_state.current_pr
 				if pr == nil then
 					return
 				end
-				run_action("add_assignees", pr)
+				run_action("edit_assignees", pr)
 			end,
 		},
 	}

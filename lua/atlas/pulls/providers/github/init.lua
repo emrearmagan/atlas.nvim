@@ -152,18 +152,19 @@ end
 
 ---@param pr PullRequest
 ---@param opts { force_refresh: boolean|nil }|nil
----@param on_done fun(snapshot: PullsConversationSnapshot|nil, err: string|nil)
+---@param on_done fun(comments: PullsComment[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_conversation_snapshot(pr, opts, on_done)
-	return require("atlas.pulls.providers.github.api.conversation").fetch_snapshot(pr, opts, on_done)
+function M.fetch_comments(pr, opts, on_done)
+	return require("atlas.pulls.providers.github.api.comments").fetch_comments(pr, opts, on_done)
 end
 
 ---@param pr PullRequest
 ---@param content string
+---@param opts PullsAddCommentOpts|nil
 ---@param on_done fun(comment: PullsComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.add_comment(pr, content, on_done)
-	return require("atlas.pulls.providers.github.api.comments").add_comment(pr, content, on_done)
+function M.add_comment(pr, content, opts, on_done)
+	return require("atlas.pulls.providers.github.api.comments").add_comment(pr, content, opts, on_done)
 end
 
 ---@param pr PullRequest
@@ -176,12 +177,11 @@ function M.reply_comment(pr, parent, content, on_done)
 end
 
 ---@param pr PullRequest
----@param target PullsComment
----@param content string
+---@param comment PullsComment
 ---@param on_done fun(comment: PullsComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.edit_comment(pr, target, content, on_done)
-	return require("atlas.pulls.providers.github.api.comments").edit_comment(pr, target, content, on_done)
+function M.edit_comment(pr, comment, on_done)
+	return require("atlas.pulls.providers.github.api.comments").edit_comment(pr, comment, on_done)
 end
 
 ---@param pr PullRequest
