@@ -56,11 +56,24 @@ end
 ---@param hunk DiffHunk
 ---@param threads_by_anchor table<string, { side: string, line: integer, threads: table[] }>
 local function emit_hunk_with_comments(lines, spans, line_map, width, file_path, hunk, threads_by_anchor)
+	local total = 0
+	for _, anchor in pairs(threads_by_anchor) do
+		for _, t in ipairs(anchor.threads or {}) do
+			total = total + 1 + #(t.replies or {})
+		end
+	end
+
 	local cb_lines, cb_spans, cb_map = changes_block.render({
 		{ path = file_path, status = "modified", hunks = { hunk } },
 	}, {
 		max_width = width,
 		padding_x = PADDING_X,
+		hunk_footer = function()
+			if total == 0 then
+				return nil
+			end
+			return string.format("%d %s", total, total == 1 and "comment" or "comments")
+		end,
 	})
 
 	---@type table<integer, table[]>

@@ -102,7 +102,7 @@ function M.render(groups, opts)
 		local target_map = opts.line_map or line_map
 		local map_base = opts.line_map and (opts.line_offset or 0) or 0
 		for lnum, entry in pairs(group.line_map or {}) do
-			target_map[map_base + line_offset + lnum + 1] = entry
+			target_map[map_base + line_offset + lnum] = entry
 		end
 	end
 
