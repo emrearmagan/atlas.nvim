@@ -645,7 +645,7 @@ function M.add_comment(pr, refresh)
 				return
 			end
 			footer.notify("loading", "Adding comment...")
-			track(comments_api.add_comment(pr, text, function(comment, err)
+			track(comments_api.add_comment(pr, text, nil, function(comment, err)
 				if err then
 					footer.notify("error", "Add comment failed: " .. err)
 					return
@@ -686,7 +686,7 @@ function M.reply_comment(pr, entry, refresh)
 				return
 			end
 			footer.notify("loading", "Sending reply...")
-			track(comments_api.add_comment(pr, text, function(reply, err)
+			track(comments_api.add_comment(pr, text, { parent = comment }, function(reply, err)
 				if err then
 					footer.notify("error", "Reply failed: " .. err)
 					return
@@ -724,7 +724,8 @@ function M.edit_comment(pr, entry, refresh)
 				return
 			end
 			footer.notify("loading", "Editing comment...")
-			track(comments_api.edit_comment(pr, comment.id, text, function(_, err)
+			local updated = vim.tbl_extend("force", {}, comment, { content_raw = text })
+			track(comments_api.edit_comment(pr, updated, function(_, err)
 				if err then
 					footer.notify("error", "Edit failed: " .. err)
 					return
@@ -759,7 +760,7 @@ function M.delete_comment(pr, entry, refresh)
 			return
 		end
 		footer.notify("loading", "Deleting comment...")
-		track(comments_api.delete_comment(pr, comment.id, function(ok, err)
+		track(comments_api.delete_comment(pr, comment, function(ok, err)
 			if err then
 				footer.notify("error", "Delete failed: " .. err)
 				return

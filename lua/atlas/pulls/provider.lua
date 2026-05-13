@@ -43,10 +43,10 @@
 ---@field fetch_diff (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(files: DiffFile[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field fetch_commit_status (fun(pr: PullRequest, commit: PullsCommit, opts: { force_refresh: boolean|nil }|nil, on_done: fun(status: string|nil, url: string|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---
----@field add_comment (fun(pr: PullRequest, content: string, on_done: fun(comment: PullsComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
----@field reply_comment (fun(pr: PullRequest, parent_id: number, content: string, on_done: fun(comment: PullsComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
----@field edit_comment (fun(pr: PullRequest, comment_id: number, content: string, on_done: fun(comment: PullsComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
----@field delete_comment (fun(pr: PullRequest, comment_id: number, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field add_comment (fun(pr: PullRequest, content: string, opts: PullsAddCommentOpts|nil, on_done: fun(comment: PullsComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field reply_comment (fun(pr: PullRequest, parent: PullsComment, content: string, on_done: fun(comment: PullsComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field edit_comment (fun(pr: PullRequest, comment: PullsComment, on_done: fun(comment: PullsComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field delete_comment (fun(pr: PullRequest, target: PullsComment, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
 ---
 ---@field toggle_subscription (fun(pr: PullRequest, on_done: fun(is_subscribed: boolean|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---
@@ -73,6 +73,11 @@
 --------------------------------------------------------------------------------
 -- Provider Panel Interface
 --------------------------------------------------------------------------------
+
+---@class PullsAddCommentOpts
+---@field parent PullsComment|nil          -- reply to this comment
+---@field inline { path: string, side: "old"|"new"|nil, line: integer }|nil
+---@field is_task boolean|nil              -- create as task
 
 ---@class PullsProviderPanel
 ---@field header_rows (fun(pr: PullRequest): PullsPanelHeaderRow[])|nil

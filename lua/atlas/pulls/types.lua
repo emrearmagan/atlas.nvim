@@ -168,15 +168,18 @@
 --------------------------------------------------------------------------------
 
 ---@class PullsComment
----@field id number
----@field parent_id number|nil
+---@field id number|string
+---@field parent_id number|string|nil
 ---@field author {name: string, nickname: string|nil, id: string|nil}|nil
 ---@field content_raw string
 ---@field created_on string
----@field deleted boolean|nil
 ---@field inline {path: string, to: number|nil, from: number|nil}|nil
+---@field inline_hunk DiffHunk|nil           -- surrounding diff context for inline comments
+---@field is_task boolean|nil               -- true = render as task (checkbox)
+---@field state "RESOLVED"|"DELETED"|nil    -- nil = active/open
 ---@field url string|nil
 ---@field html_url string|nil
+---@field _raw any|nil
 
 --------------------------------------------------------------------------------
 -- Commit
@@ -191,35 +194,4 @@
 ---@field date string
 ---@field html_url string|nil
 ---@field statuses_url string|nil
-
---------------------------------------------------------------------------------
--- Conversation snapshot
---------------------------------------------------------------------------------
-
----@class PullsCommentThread
----@field root PullsComment
----@field replies PullsComment[]
-
----@class PullsFileThread
----@field path string
----@field side "old"|"new"|nil
----@field line integer|nil
----@field start_line integer|nil
----@field hunk DiffHunk|nil
----@field threads PullsCommentThread[]
-
----@class PullsTask
----@field id string|number
----@field comment_id string|number|nil
----@field content_raw string
----@field state "OPEN"|"RESOLVED"|string
----@field creator PullsAuthor|nil
----@field created_on string
----@field updated_on string|nil
----@field _raw any|nil
-
----@class PullsConversationSnapshot
----@field general PullsCommentThread[]
----@field file_threads PullsFileThread[]
----@field tasks PullsTask[]|nil
 

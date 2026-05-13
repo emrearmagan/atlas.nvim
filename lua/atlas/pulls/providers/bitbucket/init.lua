@@ -253,7 +253,7 @@ end
 
 ---@param pr PullRequest
 ---@param opts { force_refresh: boolean|nil }|nil
----@param on_done fun(files: PullsDiffFile[]|nil, err: string|nil)
+---@param on_done fun(files: DiffFile[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_diff(pr, opts, on_done)
 	local pr_api = require("atlas.pulls.providers.bitbucket.api.pullrequests")
@@ -276,51 +276,264 @@ function M.fetch_commit_status(pr, commit, opts, on_done)
 	return pr_api.fetch_commit_status(statuses_url, opts, on_done)
 end
 
+---@param comment PullsComment
+---@param files DiffFile[]|nil
+local function attach_hunk(comment, files)
+	if not comment.inline or not files then
+		return
+	end
+	local side = comment.inline.to ~= nil and "new" or "old"
+	local line = comment.inline.to or comment.inline.from
+	if line == nil then
+		return
+	end
+
+	local function find_hunk()
+		for _, file in ipairs(files) do
+			if file.path == comment.inline.path then
+				for _, hunk in ipairs(file.hunks or {}) do
+					local s = side == "old" and hunk.old_start or hunk.new_start
+					local c = side == "old" and hunk.old_count or hunk.new_count
+					if s and c and line >= s and line < s + c then
+						return hunk
+					end
+				end
+			end
+		end
+		return nil
+	end
+
+	comment.inline_hunk = find_hunk()
+end
+
+---@param task table
+---@return PullsComment
+local function task_to_comment(task)
+	return {
+		id = task.id,
+		parent_id = task.comment_id,
+		author = task.creator and {
+			name = task.creator.name,
+			nickname = task.creator.nickname or task.creator.username,
+			id = task.creator.id,
+		} or nil,
+		content_raw = tostring(task.content_raw or ""),
+		created_on = tostring(task.created_on or ""),
+		inline = nil,
+		inline_hunk = nil,
+		is_task = true,
+		state = tostring(task.state or "") == "RESOLVED" and "RESOLVED" or nil,
+		url = nil,
+		html_url = nil,
+		_raw = task,
+	}
+end
+
 ---@param pr PullRequest
 ---@param opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(comments: PullsComment[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_comments(pr, opts, on_done)
+	opts = opts or {}
 	local comments_api = require("atlas.pulls.providers.bitbucket.api.comments")
-	return comments_api.fetch_comments(pr, opts, on_done)
+	local pr_api = require("atlas.pulls.providers.bitbucket.api.pullrequests")
+
+	local handles = {}
+	local cancelled = false
+	local comments_result, tasks_result, diff_result
+	local first_err
+
+	local function finish()
+		if cancelled then
+			return
+		end
+		if comments_result == nil or tasks_result == nil or diff_result == nil then
+			return
+		end
+
+		local merged = {}
+		for _, c in ipairs(comments_result) do
+			attach_hunk(c, diff_result)
+			table.insert(merged, c)
+		end
+		local task_entries = tasks_result.entries or tasks_result
+		for _, t in ipairs(task_entries or {}) do
+			table.insert(merged, task_to_comment(t))
+		end
+		table.sort(merged, function(a, b)
+			return tostring(a.created_on or "") < tostring(b.created_on or "")
+		end)
+		on_done(merged, first_err)
+	end
+
+	local h1 = comments_api.fetch_comments(pr, opts, function(cs, err)
+		if err then
+			first_err = first_err or err
+			comments_result = {}
+		else
+			comments_result = cs or {}
+		end
+		finish()
+	end)
+	if h1 then
+		table.insert(handles, h1)
+	end
+
+	local h2 = comments_api.fetch_tasks(
+		tostring(pr.workspace or ""),
+		tostring(pr.repo or ""),
+		pr.id,
+		{ force_refresh = opts.force_refresh == true },
+		function(tasks, err)
+			if err then
+				first_err = first_err or err
+				tasks_result = { entries = {} }
+			else
+				tasks_result = tasks or { entries = {} }
+			end
+			finish()
+		end
+	)
+	if h2 then
+		table.insert(handles, h2)
+	end
+
+	--- Bitbucket does not include the hunks in the comments API like GitHub does, so we need to fetch the diff to be able to attach the hunks later.
+	local h3 = pr_api.fetch_diff(pr, { force_refresh = opts.force_refresh == true }, function(files, err)
+		if err then
+			first_err = first_err or err
+			diff_result = {}
+		else
+			diff_result = files or {}
+		end
+		finish()
+	end)
+	if h3 then
+		table.insert(handles, h3)
+	end
+
+	return {
+		cancel = function()
+			cancelled = true
+			for _, h in ipairs(handles) do
+				if h and h.cancel then
+					pcall(h.cancel)
+				end
+			end
+		end,
+	}
+end
+
+---@param inline { path: string, side: "old"|"new"|nil, line: integer }|nil
+---@return { from?: number, to?: number, path?: string }|nil
+local function inline_to_bitbucket(inline)
+	if inline == nil then
+		return nil
+	end
+	local out = { path = inline.path }
+	if inline.side == "old" then
+		out.from = inline.line
+	else
+		out.to = inline.line
+	end
+	return out
 end
 
 ---@param pr PullRequest
 ---@param content string
+---@param opts PullsAddCommentOpts|nil
 ---@param on_done fun(comment: PullsComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.add_comment(pr, content, on_done)
+function M.add_comment(pr, content, opts, on_done)
+	opts = opts or {}
 	local comments_api = require("atlas.pulls.providers.bitbucket.api.comments")
-	return comments_api.add_comment(pr, content, on_done)
+
+	if opts.is_task then
+		return comments_api.create_task(
+			tostring(pr.workspace or ""),
+			tostring(pr.repo or ""),
+			pr.id,
+			content,
+			{ comment_id = opts.parent and opts.parent.id or nil },
+			function(created, err)
+				if err or type(created) ~= "table" then
+					on_done(nil, err)
+					return
+				end
+				on_done(task_to_comment(created), nil)
+			end
+		)
+	end
+
+	local bb_opts = {
+		parent_id = opts.parent and opts.parent.id or nil,
+		inline = inline_to_bitbucket(opts.inline),
+	}
+	return comments_api.add_comment(pr, content, bb_opts, on_done)
 end
 
 ---@param pr PullRequest
----@param parent_id number
+---@param parent PullsComment
 ---@param content string
 ---@param on_done fun(comment: PullsComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.reply_comment(pr, parent_id, content, on_done)
-	local comments_api = require("atlas.pulls.providers.bitbucket.api.comments")
-	return comments_api.reply_comment(pr, parent_id, content, on_done)
+function M.reply_comment(pr, parent, content, on_done)
+	return M.add_comment(pr, content, { parent = parent }, on_done)
 end
 
 ---@param pr PullRequest
----@param comment_id number
----@param content string
+---@param comment PullsComment
 ---@param on_done fun(comment: PullsComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.edit_comment(pr, comment_id, content, on_done)
+function M.edit_comment(pr, comment, on_done)
 	local comments_api = require("atlas.pulls.providers.bitbucket.api.comments")
-	return comments_api.edit_comment(pr, comment_id, content, on_done)
+
+	if comment.is_task then
+		local raw = type(comment._raw) == "table" and comment._raw or {}
+		local task_url = tostring((raw.links or {}).self or "")
+		if task_url == "" then
+			vim.schedule(function()
+				on_done(nil, "Missing task URL")
+			end)
+			return nil
+		end
+		return comments_api.update_task(task_url, {
+			content_raw = comment.content_raw,
+			state = comment.state == "RESOLVED" and "RESOLVED" or "UNRESOLVED",
+		}, function(updated, err)
+			if err or type(updated) ~= "table" then
+				on_done(nil, err)
+				return
+			end
+			on_done(task_to_comment(updated), nil)
+		end)
+	end
+
+	return comments_api.edit_comment(pr, comment.id, comment.content_raw, nil, on_done)
 end
 
 ---@param pr PullRequest
----@param comment_id number
+---@param target PullsComment
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.delete_comment(pr, comment_id, on_done)
+function M.delete_comment(pr, target, on_done)
 	local comments_api = require("atlas.pulls.providers.bitbucket.api.comments")
-	return comments_api.delete_comment(pr, comment_id, on_done)
+
+	if target.is_task then
+		local raw = type(target._raw) == "table" and target._raw or {}
+		local task_url = tostring((raw.links or {}).self or "")
+		if task_url == "" then
+			vim.schedule(function()
+				on_done(false, "Missing task URL")
+			end)
+			return nil
+		end
+		return comments_api.delete_task(task_url, function(_, err)
+			on_done(err == nil, err)
+		end)
+	end
+
+	return comments_api.delete_comment(pr, target.id, on_done)
 end
 
 ---@param opts PullsCreatePROpts
