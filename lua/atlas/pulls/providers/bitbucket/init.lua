@@ -592,15 +592,9 @@ function M.edit_comment(pr, comment, on_done)
 			end)
 			return nil
 		end
-		local payload_state = comment.state == "RESOLVED" and "RESOLVED" or "UNRESOLVED"
-		require("atlas.core.logger").loginfo("Bitbucket edit_comment (task)", {
-			task_id = tostring(comment.id),
-			incoming_state = tostring(comment.state or "<nil>"),
-			payload_state = payload_state,
-		})
 		return comments_api.update_task(task_url, {
 			content_raw = comment.content_raw,
-			state = payload_state,
+			state = comment.state == "RESOLVED" and "RESOLVED" or "UNRESOLVED",
 		}, function(updated, err)
 			if err or type(updated) ~= "table" then
 				on_done(nil, err)

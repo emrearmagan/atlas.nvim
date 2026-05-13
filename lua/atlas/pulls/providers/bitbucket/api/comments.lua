@@ -2,7 +2,6 @@ local M = {}
 
 local service = require("atlas.pulls.providers.bitbucket.api.service")
 local api_utils = require("atlas.core.utils")
-local logger = require("atlas.core.logger")
 local as_table = api_utils.as_table
 
 ---@param user table|nil
@@ -354,28 +353,11 @@ function M.update_task(task_url, opts, on_done)
 	end
 
 	local body = vim.json.encode(payload)
-	logger.loginfo("Bitbucket update_task request", {
-		url = url,
-		body = body,
-		state = opts.state,
-		has_content = payload.content ~= nil,
-	})
-
 	return service.request("PUT", url, nil, body, function(result, err)
 		if err then
-			logger.logerror("Bitbucket update_task failed", { url = url, error = tostring(err) })
 			on_done(nil, err)
 			return
 		end
-
-		local raw = type(result) == "table" and result or {}
-		logger.loginfo("Bitbucket update_task response", {
-			url = url,
-			returned_state = tostring(raw.state or "<nil>"),
-			id = tostring(raw.id or "<nil>"),
-			resolved_on = tostring(raw.resolved_on or "<nil>"),
-			pending = tostring(raw.pending),
-		})
 
 		local normalized = normalize_tasks({ values = { result } })
 		local entries = (normalized or {}).entries or {}
