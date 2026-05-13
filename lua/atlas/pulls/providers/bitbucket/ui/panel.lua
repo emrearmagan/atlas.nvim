@@ -188,7 +188,7 @@ function M.tabs()
 		{
 			key = "files",
 			label = "Changes",
-			icon = icons.pulls("files"),
+			icon = icons.pulls("changes"),
 			mod = require("atlas.pulls.ui.panel.pr.tabs.files"),
 		},
 	}

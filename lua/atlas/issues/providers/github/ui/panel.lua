@@ -312,7 +312,7 @@ function M.tabs()
 		{
 			key = "conversation",
 			label = "Conversation",
-			icon = icons.general("comment"),
+			icon = icons.general("conversation"),
 			mod = require("atlas.issues.providers.github.ui.conversation"),
 		},
 		{

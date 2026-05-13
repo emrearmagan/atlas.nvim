@@ -33,7 +33,7 @@ function M.fetch_detail(repo, opts, on_done)
 		"view",
 		slug,
 		"--json",
-		"name,nameWithOwner,owner,description,defaultBranchRef,isPrivate,createdAt,diskUsage,url",
+		"name,nameWithOwner,owner,description,defaultBranchRef,isPrivate,createdAt,diskUsage,url,stargazerCount,forkCount,watchers",
 	}, function(result, err)
 		if err or type(result) ~= "table" then
 			on_done(nil, err or "Failed to fetch repo details")
@@ -57,6 +57,9 @@ function M.fetch_detail(repo, opts, on_done)
 			is_private = result.isPrivate == true,
 			created_on = tostring(result.createdAt or ""),
 			readme = nil,
+			stars = tonumber(result.stargazerCount) or nil,
+			forks = tonumber(result.forkCount) or nil,
+			watchers = type(result.watchers) == "table" and tonumber(result.watchers.totalCount) or nil,
 			_raw = result,
 		}
 

@@ -297,7 +297,7 @@ function M.tabs()
 		{
 			key = "conversation",
 			label = "Conversation",
-			icon = icons.general("comment"),
+			icon = icons.general("conversation"),
 			mod = require("atlas.pulls.providers.github.ui.conversation"),
 		},
 		{
@@ -321,7 +321,7 @@ function M.tabs()
 		{
 			key = "files",
 			label = "Changes",
-			icon = icons.pulls("files"),
+			icon = icons.pulls("changes"),
 			mod = require("atlas.pulls.ui.panel.pr.tabs.files"),
 		},
 	}

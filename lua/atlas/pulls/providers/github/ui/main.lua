@@ -184,7 +184,7 @@ local function compact_columns()
 		},
 		{
 			key = "diff",
-			name = icons.pulls("files"),
+			name = icons.pulls("changes"),
 			max_width = 15,
 			can_grow = false,
 			header_hl = "AtlasColumnHeader",
@@ -300,7 +300,7 @@ local function plain_columns()
 		},
 		{
 			key = "diff",
-			name = icons.pulls("files"),
+			name = icons.pulls("changes"),
 			max_width = 15,
 			can_grow = false,
 			header_hl = "AtlasColumnHeader",

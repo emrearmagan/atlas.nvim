@@ -25,6 +25,9 @@ local ICONS = {
 		pin = "󰐃",
 		dot = "●",
 		activity_more = "󰉺",
+		star = "",
+		fork = "",
+		watching = "",
 	},
 
 	pulls = {
@@ -35,7 +38,8 @@ local ICONS = {
 		tasks = "󰘽",
 		check = "",
 		commit = "󰜘",
-		files = "󱓉",
+		changes = "󱓉",
+		file = "",
 		activity = "󱐋",
 		tag = "",
 		branch = "",

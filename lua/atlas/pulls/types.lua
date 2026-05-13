@@ -78,6 +78,9 @@
 ---@field is_private boolean|nil
 ---@field created_on string|nil
 ---@field readme string|nil
+---@field stars number|nil
+---@field watchers number|nil
+---@field forks number|nil
 ---@field _raw table|nil
 
 ---@class PullsRepoBranch
