@@ -3,6 +3,7 @@ local M = {}
 local config = require("atlas.config")
 local http = require("atlas.core.http")
 local memory_cache = require("atlas.core.memory_cache")
+local cache = require("atlas.core.cache")
 local logger = require("atlas.core.logger")
 
 local API_PATH = "/api/v4"
@@ -75,6 +76,28 @@ end
 ---@param key string
 function M.delete_memory_cache(key)
 	memory_cache.delete(key)
+end
+
+---@param key string
+---@return any|nil, boolean
+function M.get_cache(key)
+	local entry = cache.get(key)
+	if entry and entry.value ~= nil then
+		return entry.value, true
+	end
+	return nil, false
+end
+
+---@param key string
+---@param value any
+---@param ttl number|nil
+function M.set_cache(key, value, ttl)
+	cache.set(key, value, ttl or M.cache_ttl())
+end
+
+---@param key string
+function M.delete_cache(key)
+	cache.delete(key)
 end
 
 ---@param str string

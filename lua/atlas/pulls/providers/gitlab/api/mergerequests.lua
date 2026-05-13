@@ -74,7 +74,7 @@ function M.list_mrs(view, opts, on_done)
 
 	local cache_key = "gitlab_pulls:list:" .. endpoint
 	if not opts.force_load then
-		local cached, ok = service.get_memory_cache(cache_key)
+		local cached, ok = service.get_cache(cache_key)
 		if ok then
 			on_done(cached, nil)
 			return nil
@@ -88,7 +88,7 @@ function M.list_mrs(view, opts, on_done)
 			return
 		end
 		local groups = normalizer.normalize_mrs_to_groups(result or {})
-		service.set_memory_cache(cache_key, groups)
+		service.set_cache(cache_key, groups)
 		on_done(groups, nil)
 	end)
 end
