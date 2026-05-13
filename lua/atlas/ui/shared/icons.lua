@@ -54,9 +54,6 @@ local ICONS = {
 			github = {
 				provider = "",
 			},
-			mock = {
-				provider = "󰙨",
-			},
 		},
 	},
 
@@ -82,9 +79,6 @@ local ICONS = {
 		providers = {
 			jira = {
 				provider = "󰌃",
-			},
-			mock = {
-				provider = "󰙨",
 			},
 		},
 	},
