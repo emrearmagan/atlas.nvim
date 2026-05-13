@@ -301,6 +301,73 @@ function M.fetch_commit_status(pr, commit, opts, on_done)
 	return pr_api.fetch_commit_status(statuses_url, opts, on_done)
 end
 
+local HUNK_WINDOW = 4
+
+---@param hunk DiffHunk
+---@param side "new"|"old"
+---@param line integer
+---@return DiffHunk
+local function window_around(hunk, side, line)
+	local anchor_idx
+	for i, dline in ipairs(hunk.lines or {}) do
+		local ln = side == "old" and dline.old_line or dline.new_line
+		if ln == line then
+			anchor_idx = i
+			break
+		end
+	end
+	if anchor_idx == nil then
+		return hunk
+	end
+
+	local first = math.max(1, anchor_idx - HUNK_WINDOW)
+	local last = math.min(#hunk.lines, anchor_idx + HUNK_WINDOW)
+	if first == 1 and last == #hunk.lines then
+		return hunk
+	end
+
+	local new_lines = {}
+	local additions, deletions = 0, 0
+	local old_start_line, new_start_line
+	for i = first, last do
+		local d = hunk.lines[i]
+		table.insert(new_lines, d)
+		if d.kind == "add" then
+			additions = additions + 1
+		elseif d.kind == "remove" then
+			deletions = deletions + 1
+		end
+		if old_start_line == nil and d.old_line ~= nil then
+			old_start_line = d.old_line
+		end
+		if new_start_line == nil and d.new_line ~= nil then
+			new_start_line = d.new_line
+		end
+	end
+
+	local old_count, new_count = 0, 0
+	for _, d in ipairs(new_lines) do
+		if d.kind == "context" or d.kind == "remove" then
+			old_count = old_count + 1
+		end
+		if d.kind == "context" or d.kind == "add" then
+			new_count = new_count + 1
+		end
+	end
+
+	return {
+		header = hunk.header,
+		context = hunk.context,
+		old_start = old_start_line or hunk.old_start,
+		old_count = old_count,
+		new_start = new_start_line or hunk.new_start,
+		new_count = new_count,
+		additions = additions,
+		deletions = deletions,
+		lines = new_lines,
+	}
+end
+
 ---@param comment PullsComment
 ---@param files DiffFile[]|nil
 local function attach_hunk(comment, files)
@@ -328,7 +395,10 @@ local function attach_hunk(comment, files)
 		return nil
 	end
 
-	comment.inline_hunk = find_hunk()
+	local hunk = find_hunk()
+	if hunk ~= nil then
+		comment.inline_hunk = window_around(hunk, side, line)
+	end
 end
 
 ---@param task table
