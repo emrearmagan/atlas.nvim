@@ -234,8 +234,24 @@ function M.set_assignee_ids(pr, ids, on_done)
 end
 
 ---@param pr PullRequest
----@param on_done fun(ok: boolean, err: string|nil)
+---@param on_done fun(approved: boolean|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
+function M.get_approval_state(pr, on_done)
+	local path, iid = project_iid(pr)
+	if path == "" or iid == nil then
+		on_done(nil, "Invalid MR identifier")
+		return nil
+	end
+	local endpoint = string.format("/projects/%s/merge_requests/%d/approvals", service.url_encode(path), iid)
+	return service.request("GET", endpoint, nil, function(result, err)
+		if err or type(result) ~= "table" then
+			on_done(nil, err or "Failed to fetch approval state")
+			return
+		end
+		on_done(result.user_has_approved == true, nil)
+	end)
+end
+
 function M.approve(pr, on_done)
 	local path, iid = project_iid(pr)
 	if path == "" or iid == nil then

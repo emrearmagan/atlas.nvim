@@ -97,8 +97,8 @@ local ACTIONS = {
 		end,
 	},
 	{
-		id = "approve",
-		label = "Approve MR",
+		id = "toggle_approval",
+		label = "Approve / Unapprove",
 		is_available = function(ctx)
 			if not is_open_or_draft(ctx) then
 				return false, "MR is not open"
@@ -107,38 +107,37 @@ local ACTIONS = {
 		end,
 		run = function(ctx, done)
 			local pr = ctx.pr
-			footer.notify("loading", string.format("Approving %s...", pr_label(pr)))
-			mr_api.approve(pr, function(ok, err)
-				if not ok then
-					footer.notify("error", err or "Approve failed")
-					done(nil, err or "Approve failed")
+			footer.notify("loading", string.format("Checking approval for %s...", pr_label(pr)))
+			mr_api.get_approval_state(pr, function(approved, err)
+				if err then
+					footer.notify("error", err)
+					done(nil, err)
 					return
 				end
-				footer.notify("success", string.format("Approved %s", pr_label(pr)), 1200)
-				done({ changed_pr = true, message = "Approved" }, nil)
-			end)
-		end,
-	},
-	{
-		id = "unapprove",
-		label = "Unapprove MR",
-		is_available = function(ctx)
-			if not is_open_or_draft(ctx) then
-				return false, "MR is not open"
-			end
-			return true, nil
-		end,
-		run = function(ctx, done)
-			local pr = ctx.pr
-			footer.notify("loading", string.format("Unapproving %s...", pr_label(pr)))
-			mr_api.unapprove(pr, function(ok, err)
-				if not ok then
-					footer.notify("error", err or "Unapprove failed")
-					done(nil, err or "Unapprove failed")
-					return
+
+				if approved then
+					footer.notify("loading", string.format("Unapproving %s...", pr_label(pr)))
+					mr_api.unapprove(pr, function(ok, unapprove_err)
+						if not ok then
+							footer.notify("error", unapprove_err or "Unapprove failed")
+							done(nil, unapprove_err or "Unapprove failed")
+							return
+						end
+						footer.notify("success", string.format("Unapproved %s", pr_label(pr)), 1200)
+						done({ changed_pr = true, message = "Unapproved" }, nil)
+					end)
+				else
+					footer.notify("loading", string.format("Approving %s...", pr_label(pr)))
+					mr_api.approve(pr, function(ok, approve_err)
+						if not ok then
+							footer.notify("error", approve_err or "Approve failed")
+							done(nil, approve_err or "Approve failed")
+							return
+						end
+						footer.notify("success", string.format("Approved %s", pr_label(pr)), 1200)
+						done({ changed_pr = true, message = "Approved" }, nil)
+					end)
 				end
-				footer.notify("success", string.format("Unapproved %s", pr_label(pr)), 1200)
-				done({ changed_pr = true, message = "Unapproved" }, nil)
 			end)
 		end,
 	},
