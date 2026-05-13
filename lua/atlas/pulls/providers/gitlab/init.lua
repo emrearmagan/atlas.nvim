@@ -25,9 +25,22 @@ end
 function M.fetch_pullrequests(view, opts, on_done)
 	---@cast view AtlasGitLabPullsViewConfig
 	local mr_api = require("atlas.pulls.providers.gitlab.api.mergerequests")
+	local pulls_state = require("atlas.pulls.state")
+
+	local f = pulls_state.status_filters or {}
+	local api_state = "opened"
+	if f.MERGED then
+		api_state = "merged"
+	elseif f.DECLINED then
+		api_state = "closed"
+	end
+
+	pulls_state.last_search_query = string.format("is:%s", api_state)
+
 	return mr_api.list_mrs(view, {
 		force_load = opts and opts.force_load == true or false,
 		pagelen = opts and opts.pagelen or 50,
+		state = api_state,
 	}, function(groups, err)
 		if err then
 			on_done({}, { err })
@@ -48,7 +61,7 @@ function M.fetch_pullrequest(pr, opts, on_done)
 end
 
 ---@param pr PullRequest
----@param opts { force_refresh: boolean|nil }|nil
+---@param opts { force_refresh?: boolean }|nil
 ---@param on_done fun(description: string|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_description(pr, opts, on_done)
@@ -56,7 +69,7 @@ function M.fetch_description(pr, opts, on_done)
 end
 
 ---@param pr PullRequest
----@param opts { force_refresh: boolean|nil }|nil
+---@param opts { force_refresh?: boolean }|nil
 ---@param on_done fun(reviewers: PullsReviewer[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_reviewers(pr, opts, on_done)

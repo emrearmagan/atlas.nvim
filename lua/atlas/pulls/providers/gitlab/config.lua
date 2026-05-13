@@ -19,7 +19,6 @@
 --
 -- View options map directly to GitLab API:
 --   scope:    "created_by_me" | "assigned_to_me" | "all"
---   state:    "opened" | "closed" | "merged" | "all"
 --   labels, milestone, assignee_username, author_username, search
 --   order_by: "created_at" | "updated_at" | "title" | ...
 --   sort:     "asc" | "desc"
@@ -29,7 +28,6 @@
 
 ---@class AtlasGitLabPullsViewConfig : AtlasPullsViewConfig
 ---@field scope "created_by_me"|"assigned_to_me"|"all"|nil
----@field state "opened"|"closed"|"merged"|"all"|nil
 ---@field project string|number|nil
 ---@field group string|number|nil
 ---@field labels string|nil

@@ -20,7 +20,7 @@ local function build_query(params)
 end
 
 ---@param view AtlasGitLabPullsViewConfig
----@param opts { force_load?: boolean, pagelen?: number }|nil
+---@param opts { force_load?: boolean, pagelen?: number, state?: "opened"|"closed"|"merged"|"all" }|nil
 ---@param on_done fun(groups: PullsGroup[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.list_mrs(view, opts, on_done)
@@ -30,7 +30,7 @@ function M.list_mrs(view, opts, on_done)
 	local group = view.group ~= nil and tostring(view.group) ~= "" and view.group or nil
 
 	local params = {
-		state = view.state or "opened",
+		state = opts.state or "opened",
 		per_page = tostring(per_page),
 		order_by = view.order_by or "updated_at",
 		sort = view.sort or "desc",

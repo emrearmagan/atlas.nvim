@@ -523,20 +523,24 @@ return {
                 name = "Assigned",
                 key = "1",
                 scope = "assigned_to_me",
-                state = "opened",
-              },
-              {
-                name = "Created",
-                key = "2",
-                scope = "created_by_me",
-                state = "opened",
               },
               {
                 name = "Reviewing",
                 key = "3",
                 scope = "all",
-                state = "opened",
                 extra_params = { reviewer_id = "Me" },
+              },
+              -- Single project
+              {
+                name = "GitLab",
+                key = "G",
+                project = "gitlab-org/gitlab",
+              },
+              -- Whole group, all projects under it
+              {
+                name = "GitLab Org",
+                key = "O",
+                group = "gitlab-org",
               },
             },
           },
