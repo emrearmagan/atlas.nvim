@@ -212,45 +212,6 @@ return {
 
 </details>
 
-<details>
-<summary><strong>Custom Actions</strong></summary>
-
-You can add custom issue actions under `issues.custom_actions`.
-
-Context type:
-
-```lua
----@class AtlasIssuesCustomActionContext
----@field issue Issue|nil
----@field user IssueUser|nil
-```
-
-Example:
-
-```lua
-issues = {
-  custom_actions = {
-    {
-      id = "copy_branch_name",
-      label = "Copy branch name",
-      ---@param issue Issue
-      ---@param ctx AtlasIssuesCustomActionContext
-      ---@param done fun(ok: boolean|nil, message: string|nil)
-      run = function(issue, ctx, done)
-        local branch = string.format("%s/%s", issue.key, issue.summary:lower():gsub("%s+", "-"))
-        vim.fn.setreg("+", branch)
-        done(true, "Copied: " .. branch)
-      end,
-    },
-  },
-  providers = {
-    jira = { },
-  },
-}
-```
-
-</details>
-
 ### GitHub Issues
 
 <details>
@@ -292,6 +253,44 @@ return {
       },
     })
   end,
+}
+```
+
+</details>
+
+### Custom Actions
+
+You can add custom issue actions under `issues.custom_actions`.
+
+<details>
+<summary><strong>Example</strong></summary>
+
+Context type:
+
+```lua
+---@class AtlasIssuesCustomActionContext
+---@field issue Issue|nil
+---@field user IssueUser|nil
+```
+
+Example:
+
+```lua
+issues = {
+  custom_actions = {
+    {
+      id = "copy_branch_name",
+      label = "Copy branch name",
+      ---@param issue Issue
+      ---@param ctx AtlasIssuesCustomActionContext
+      ---@param done fun(ok: boolean|nil, message: string|nil)
+      run = function(issue, ctx, done)
+        local branch = string.format("%s/%s", issue.key, issue.summary:lower():gsub("%s+", "-"))
+        vim.fn.setreg("+", branch)
+        done(true, "Copied: " .. branch)
+      end,
+    },
+  },
 }
 ```
 
@@ -441,9 +440,12 @@ return {
 
 </details>
 
-<summary><strong>Custom Actions</strong></summary>
+### Custom Actions
 
 You can add custom PR actions under `pulls.custom_actions`.
+
+<details>
+<summary><strong>Example</strong></summary>
 
 Context type:
 
@@ -490,12 +492,14 @@ pulls = {
     },
   },
   providers = {
-    bitbucket = { },
+    ...,
   },
 }
 ```
 
 ![CleanShot2026-03-31at20 08 06-ezgif com-video-to-gif-converter](https://github.com/user-attachments/assets/a8ca355b-09e2-428c-b3fb-3280fd161110)
+
+</details>
 
 ## Search
 
