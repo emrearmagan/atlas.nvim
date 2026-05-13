@@ -211,8 +211,8 @@ local function compact_columns()
 		{ key = "pr_icon", name = "", min_width = 1, can_grow = false, header_hl = "AtlasColumnHeader" },
 		{ key = "repo_pr", name = "PR", min_width = 42, header_hl = "AtlasColumnHeader" },
 		{
-			key = "comments",
-			name = icons.general("comment"),
+			key = "conversation",
+			name = icons.general("conversation"),
 			min_width = 2,
 			can_grow = false,
 			header_hl = "AtlasColumnHeader",
@@ -264,7 +264,7 @@ function M.build_compact_table(groups)
 				_pr_icon_str = icon,
 				_pr_icon_hl = icon_hl,
 				repo_pr = "#" .. id_str .. " " .. title,
-				comments = tostring(pr.comments_count or 0),
+				conversation = tostring(pr.comments_count or 0),
 				tasks = tostring(pr.tasks_count or 0),
 				status = state_label,
 				status_raw = state_str,
@@ -285,7 +285,7 @@ function M.build_compact_table(groups)
 				kind = "meta",
 				pr_icon = "",
 				repo_pr = src .. " → " .. dst,
-				comments = "",
+				conversation = "",
 				tasks = "",
 				status = "",
 				status_raw = "",
@@ -312,8 +312,8 @@ local function plain_columns()
 		{ key = "pr_icon", name = "", min_width = 1, can_grow = false, header_hl = "AtlasColumnHeader" },
 		{ key = "name", name = "PR", min_width = 42, header_hl = "AtlasColumnHeader" },
 		{
-			key = "comments",
-			name = icons.general("comment"),
+			key = "conversation",
+			name = icons.general("conversation"),
 			min_width = 2,
 			can_grow = false,
 			header_hl = "AtlasColumnHeader",
@@ -345,14 +345,14 @@ function M.build_plain_tree_table(groups)
 	for i, group in ipairs(groups or {}) do
 		local repo_label = group.repo.name or ""
 		if i > 1 then
-			table.insert(rows, { kind = "spacer", pr_icon = "", name = "", comments = "", tasks = "", status = "", status_raw = "", author = "", branch = "", created = "", updated = "" })
+			table.insert(rows, { kind = "spacer", pr_icon = "", name = "", conversation = "", tasks = "", status = "", status_raw = "", author = "", branch = "", created = "", updated = "" })
 		end
 		table.insert(rows, {
 			kind = "repo",
 			pr_icon = REPO_ICON,
 			name = repo_label,
 			repo_full_name = repo_label,
-			comments = "",
+			conversation = "",
 			tasks = "",
 			status = "",
 			status_raw = "",
@@ -381,7 +381,7 @@ function M.build_plain_tree_table(groups)
 				_pr_icon_str = icon,
 				_pr_icon_hl = icon_hl,
 				name = "#" .. id_str .. " " .. title,
-				comments = tostring(pr.comments_count or 0),
+				conversation = tostring(pr.comments_count or 0),
 				tasks = tostring(pr.tasks_count or 0),
 				status = "",
 				status_raw = state_str,
