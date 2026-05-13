@@ -115,7 +115,7 @@ end
 ---@param on_done fun(builds: PullsBuild[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_builds(pr, on_done)
-	return require("atlas.pulls.providers.github.api.pullrequests").get_builds(pr, nil, on_done)
+	return require("atlas.pulls.providers.github.api.checks").get_builds(pr, nil, on_done)
 end
 
 ---@param pr PullRequest
@@ -123,7 +123,7 @@ end
 ---@param on_done fun(checks: PullsMergeCheck[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_merge_checks(pr, opts, on_done)
-	return require("atlas.pulls.providers.github.api.pullrequests").get_merge_checks_summary(pr, opts, on_done)
+	return require("atlas.pulls.providers.github.api.checks").get_merge_checks_summary(pr, opts, on_done)
 end
 
 ---@param pr PullRequest
@@ -183,6 +183,34 @@ end
 ---@return { cancel: fun() }|nil
 function M.delete_comment(pr, comment_id, on_done)
 	return require("atlas.pulls.providers.github.api.comments").delete_comment(pr, comment_id, on_done)
+
+---@param pr PullRequest
+---@param on_done fun(is_subscribed: boolean|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.toggle_subscription(pr, on_done)
+	local raw = type(pr._raw) == "table" and pr._raw or {}
+	local node_id = tostring(raw.id or "")
+	if node_id == "" then
+		vim.schedule(function()
+			on_done(nil, "Missing PR node id")
+		end)
+		return nil
+	end
+	local next_state = pr.is_subscribed == true and "UNSUBSCRIBED" or "SUBSCRIBED"
+	local gql =
+		"mutation($id: ID!, $state: SubscriptionState!) { updateSubscription(input: { subscribableId: $id, state: $state }) { subscribable { ... on PullRequest { viewerSubscription } } } }"
+	local cli = require("atlas.pulls.providers.github.api.cli")
+	return cli.gh(
+		{ "api", "graphql", "-F", "id=" .. node_id, "-f", "state=" .. next_state, "-f", "query=" .. gql },
+		function(_, err)
+			if err then
+				on_done(nil, err)
+				return
+			end
+			pr.is_subscribed = (next_state == "SUBSCRIBED")
+			on_done(pr.is_subscribed, nil)
+		end
+	)
 end
 
 ---@param pr PullRequest
@@ -324,35 +352,6 @@ function M.fetch_default_reviewers(opts, on_done)
 
 		on_done(items, nil)
 	end)
-end
-
----@param pr PullRequest
----@param on_done fun(is_subscribed: boolean|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.toggle_subscription(pr, on_done)
-	local raw = type(pr._raw) == "table" and pr._raw or {}
-	local node_id = tostring(raw.id or "")
-	if node_id == "" then
-		vim.schedule(function()
-			on_done(nil, "Missing PR node id")
-		end)
-		return nil
-	end
-	local next_state = pr.is_subscribed == true and "UNSUBSCRIBED" or "SUBSCRIBED"
-	local gql =
-		"mutation($id: ID!, $state: SubscriptionState!) { updateSubscription(input: { subscribableId: $id, state: $state }) { subscribable { ... on PullRequest { viewerSubscription } } } }"
-	local cli = require("atlas.pulls.providers.github.api.cli")
-	return cli.gh(
-		{ "api", "graphql", "-F", "id=" .. node_id, "-f", "state=" .. next_state, "-f", "query=" .. gql },
-		function(_, err)
-			if err then
-				on_done(nil, err)
-				return
-			end
-			pr.is_subscribed = (next_state == "SUBSCRIBED")
-			on_done(pr.is_subscribed, nil)
-		end
-	)
 end
 
 return M

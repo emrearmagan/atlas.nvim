@@ -19,6 +19,7 @@ local ICONS = {
 		error = "",
 		info = "",
 		bell = "󰂚",
+		bell_no = "󰂛",
 		bell_unread = "󱅫",
 		pin = "󰐃",
 		dot = "●",

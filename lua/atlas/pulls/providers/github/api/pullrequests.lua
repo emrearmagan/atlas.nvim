@@ -13,6 +13,7 @@ query($owner: String!, $repo: String!, $number: Int!) {
       additions deletions changedFiles
       reviewDecision
       labels(first: 10) { nodes { name color } }
+      milestone { number title state }
       latestOpinionatedReviews(last: 10) { nodes { state } }
       assignees(first: 10) { nodes { login } }
       author { login ... on User { name } }
@@ -31,7 +32,7 @@ query($search: String!, $limit: Int!) {
   search(query: $search, type: ISSUE, first: $limit) {
     nodes {
       ... on PullRequest {
-        number title state isDraft
+        id number title state isDraft
         createdAt updatedAt url
         additions deletions
         latestOpinionatedReviews(last: 10) { nodes { state } }
@@ -295,129 +296,6 @@ end
 
 ---@param pr PullRequest
 ---@param opts { force_refresh: boolean|nil }|nil
----@param on_done fun(result: { mergeable: string, merge_state: string, review_decision: string, review_requests: string[], latest_reviews: { login: string, state: string }[] }|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.get_merge_checks(pr, opts, on_done)
-	local repo_slug = pr.repo_full_name or ""
-	if repo_slug == "" then
-		vim.schedule(function()
-			on_done(nil, "Missing repo")
-		end)
-		return nil
-	end
-
-	local cache_key = string.format("github:merge_checks:%s:%s", repo_slug, tostring(pr.id))
-	opts = opts or {}
-
-	if not opts.force_refresh then
-		local cached, ok = cli.get_mem(cache_key)
-		if ok then
-			on_done(cached, nil)
-			return nil
-		end
-	end
-
-	return cli.gh({
-		"pr",
-		"view",
-		tostring(pr.id),
-		"--repo",
-		repo_slug,
-		"--json",
-		"mergeable,mergeStateStatus,reviewDecision,reviewRequests,reviews",
-	}, function(result, err)
-		if err or type(result) ~= "table" then
-			on_done(nil, err or "Failed to fetch merge checks")
-			return
-		end
-
-		local latest_reviews, review_requests = parse_reviews(result)
-		local out = {
-			mergeable = tostring(result.mergeable or ""),
-			merge_state = tostring(result.mergeStateStatus or ""),
-			review_decision = tostring(result.reviewDecision or ""),
-			review_requests = review_requests,
-			latest_reviews = latest_reviews,
-		}
-		cli.set_mem(cache_key, out)
-		on_done(out, nil)
-	end)
-end
-
----@param pr PullRequest
----@param opts { force_refresh: boolean|nil }|nil
----@param on_done fun(builds: PullsBuild[]|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.get_builds(pr, opts, on_done)
-	local repo_slug = pr.repo_full_name or ""
-	if repo_slug == "" then
-		vim.schedule(function()
-			on_done(nil, "Missing repo")
-		end)
-		return nil
-	end
-
-	local cache_key = string.format("github:builds:%s:%s", repo_slug, tostring(pr.id))
-	opts = opts or {}
-
-	if not opts.force_refresh then
-		local cached, ok = cli.get_mem(cache_key)
-		if ok then
-			on_done(cached, nil)
-			return nil
-		end
-	end
-
-	return cli.gh({
-		"pr",
-		"checks",
-		tostring(pr.id),
-		"--repo",
-		repo_slug,
-		"--json",
-		"name,state,bucket,link,workflow",
-	}, function(result, err)
-		if err then
-			if err:find("no checks") or err:find("no status checks") then
-				cli.set_mem(cache_key, {})
-				on_done({}, nil)
-				return
-			end
-			on_done(nil, err)
-			return
-		end
-
-		if type(result) ~= "table" then
-			cli.set_mem(cache_key, {})
-			on_done({}, nil)
-			return
-		end
-
-		local BUCKET_MAP = {
-			pass = "SUCCESSFUL",
-			fail = "FAILED",
-			pending = "INPROGRESS",
-			skipping = "STOPPED",
-			cancel = "STOPPED",
-		}
-
-		local builds = {}
-		for _, check in ipairs(result) do
-			table.insert(builds, {
-				name = tostring(check.name or ""),
-				state = BUCKET_MAP[tostring(check.bucket or "")] or "INPROGRESS",
-				url = check.link and tostring(check.link) or nil,
-				key = check.workflow and tostring(check.workflow) or nil,
-			})
-		end
-
-		cli.set_mem(cache_key, builds)
-		on_done(builds, nil)
-	end)
-end
-
----@param pr PullRequest
----@param opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(entries: PullsDiffstatEntry[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.get_diffstat(pr, opts, on_done)
@@ -539,199 +417,73 @@ function M.create_pr(opts, on_done)
 	end)
 end
 
----@param mc table  result from get_merge_checks
----@return PullsMergeCheck
-local function reviews_check(mc)
-	local rd = tostring(mc.review_decision or "")
-	local requests = mc.review_requests or {}
-	local reviews = mc.latest_reviews or {}
-
-	local approved, changes_requested = 0, 0
-	for _, r in ipairs(reviews) do
-		if r.state == "APPROVED" then
-			approved = approved + 1
-		elseif r.state == "CHANGES_REQUESTED" then
-			changes_requested = changes_requested + 1
-		end
-	end
-
-	if approved == 0 and changes_requested == 0 and #requests == 0 then
-		return { key = "reviews", state = "muted", label = "Reviews", details = { "No review required" } }
-	end
-
-	local details = {}
-	if approved > 0 then
-		table.insert(details, string.format("%d %s", approved, approved == 1 and "approval" or "approvals"))
-	end
-	if changes_requested > 0 then
-		table.insert(
-			details,
-			string.format(
-				"%d %s requested changes",
-				changes_requested,
-				changes_requested == 1 and "reviewer" or "reviewers"
-			)
-		)
-	end
-	if #requests > 0 then
-		table.insert(details, string.format("%d pending %s", #requests, #requests == 1 and "review" or "reviews"))
-	end
-
-	local state
-	if rd == "CHANGES_REQUESTED" or changes_requested > 0 then
-		state = "failed"
-	elseif #requests > 0 or rd == "REVIEW_REQUIRED" then
-		state = "warning"
-	elseif rd == "APPROVED" or approved > 0 then
-		state = "successful"
-	else
-		state = "muted"
-	end
-
-	return { key = "reviews", state = state, label = "Reviews", details = details }
-end
-
----@param mergeable string
----@return PullsMergeCheck|nil
-local function conflicts_check(mergeable)
-	local m = tostring(mergeable or "")
-	if m == "MERGEABLE" then
-		return {
-			key = "conflicts",
-			state = "successful",
-			label = "No conflicts with base branch",
-			details = { "Changes can be cleanly merged." },
-		}
-	elseif m == "CONFLICTING" then
-		return {
-			key = "conflicts",
-			state = "failed",
-			label = "This branch has conflicts that must be resolved",
-			details = { "Conflicting files must be resolved before merging." },
-		}
-	end
-	return nil
-end
-
----@param builds PullsBuild[]
----@return PullsMergeCheck|nil
-local function builds_check(builds)
-	if type(builds) ~= "table" or #builds == 0 then
+---@param slug string
+---@param on_done fun(labels: table[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.list_labels(slug, on_done)
+	if type(slug) ~= "string" or slug == "" then
+		vim.schedule(function()
+			on_done(nil, "Missing repository slug")
+		end)
 		return nil
 	end
 
-	local total, pass, fail, ip, stop = #builds, 0, 0, 0, 0
-	for _, b in ipairs(builds) do
-		local s = tostring(b.state or ""):upper()
-		if s == "SUCCESSFUL" then
-			pass = pass + 1
-		elseif s == "FAILED" then
-			fail = fail + 1
-		elseif s == "INPROGRESS" then
-			ip = ip + 1
-		elseif s == "STOPPED" then
-			stop = stop + 1
+	return cli.gh({
+		"api",
+		"--paginate",
+		string.format("repos/%s/labels?per_page=100", slug),
+	}, function(result, err)
+		if err then
+			on_done(nil, err)
+			return
 		end
-	end
 
-	local state, detail
-	if fail > 0 then
-		state = "failed"
-		detail = string.format("%d of %d failed", fail, total)
-	elseif ip > 0 then
-		state = "inprogress"
-		detail = string.format("%d of %d in progress", ip, total)
-	elseif pass > 0 then
-		state = "successful"
-		if stop > 0 then
-			detail = string.format("%d/%d successful (%d skipped)", pass, total, stop)
-		else
-			detail = string.format("%d/%d successful", pass, total)
+		local list = {}
+		if type(result) == "table" then
+			for _, raw in ipairs(result) do
+				if type(raw) == "table" and type(raw.name) == "string" then
+					table.insert(list, {
+						name = raw.name,
+						color = type(raw.color) == "string" and raw.color or nil,
+						description = type(raw.description) == "string" and raw.description or nil,
+					})
+				end
+			end
 		end
-	elseif stop == total then
-		state = "muted"
-		detail = string.format("All %d checks skipped", total)
-	else
-		state = "muted"
-		detail = string.format("%d of %d unknown", total - pass - fail - ip - stop, total)
-	end
-
-	return { key = "builds", state = state, label = "Builds", details = { detail } }
+		on_done(list, nil)
+	end)
 end
 
----@param pr PullRequest
----@param opts { force_refresh: boolean|nil }|nil
----@param on_done fun(checks: PullsMergeCheck[]|nil, err: string|nil)
+---@param slug string
+---@param number integer|string
+---@param diff { add?: string[], remove?: string[] }
+---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.get_merge_checks_summary(pr, opts, on_done)
-	local mc_result, builds_result
-	local first_err
-	local pending = 2
-
-	local function finish()
-		pending = pending - 1
-		if pending > 0 then
-			return
-		end
-		if mc_result == nil and builds_result == nil then
-			on_done(nil, first_err or "Failed to fetch merge checks")
-			return
-		end
-
-		local checks = {}
-		if pr.state == "draft" then
-			table.insert(checks, {
-				key = "draft",
-				state = "warning",
-				label = "This pull request is still a work in progress",
-				details = { "Draft pull requests cannot be merged." },
-			})
-		end
-		if type(mc_result) == "table" then
-			table.insert(checks, reviews_check(mc_result))
-		end
-		local b = builds_check(builds_result)
-		if b then
-			table.insert(checks, b)
-		end
-		if type(mc_result) == "table" then
-			local c = conflicts_check(mc_result.mergeable)
-			if c then
-				table.insert(checks, c)
-			end
-		end
-
-		on_done(checks, nil)
+function M.update_labels(slug, number, diff, on_done)
+	local adds = type(diff) == "table" and diff.add or {}
+	local removes = type(diff) == "table" and diff.remove or {}
+	if #adds == 0 and #removes == 0 then
+		on_done(true, nil)
+		return nil
 	end
 
-	local h_mc = M.get_merge_checks(pr, opts, function(result, err)
-		if err then
-			first_err = first_err or err
-		else
-			mc_result = result
-		end
-		finish()
-	end)
+	local args = { "pr", "edit", tostring(number), "--repo", slug }
+	for _, v in ipairs(adds) do
+		table.insert(args, "--add-label")
+		table.insert(args, tostring(v))
+	end
+	for _, v in ipairs(removes) do
+		table.insert(args, "--remove-label")
+		table.insert(args, tostring(v))
+	end
 
-	local h_builds = M.get_builds(pr, opts, function(result, err)
+	return cli.gh(args, function(_, err)
 		if err then
-			first_err = first_err or err
-		else
-			builds_result = result
+			on_done(false, err)
+			return
 		end
-		finish()
+		on_done(true, nil)
 	end)
-
-	return {
-		cancel = function()
-			if h_mc and h_mc.cancel then
-				h_mc.cancel()
-			end
-			if h_builds and h_builds.cancel then
-				h_builds.cancel()
-			end
-		end,
-	}
 end
 
 return M

@@ -214,6 +214,7 @@ function M.fetches(pr, refresh, opts)
 
 	local overview_state = require("atlas.pulls.ui.panel.pr.tabs.overview.state")
 	local pullrequests = require("atlas.pulls.providers.github.api.pullrequests")
+	local checks = require("atlas.pulls.providers.github.api.checks")
 
 	local owner = tostring(pr.workspace or "")
 	local repo = tostring(pr.repo or "")
@@ -237,7 +238,7 @@ function M.fetches(pr, refresh, opts)
 	end
 
 	overview_state.builds = "loading"
-	track_panel(pullrequests.get_builds(pr, { force_refresh = force }, function(builds, err)
+	track_panel(checks.get_builds(pr, { force_refresh = force }, function(builds, err)
 		overview_state.builds = err and err or (builds or {})
 		refresh()
 	end))
