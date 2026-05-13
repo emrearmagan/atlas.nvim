@@ -375,8 +375,8 @@ local ACTIONS = {
 		end,
 	},
 	{
-		id = "add_reviewers",
-		label = "Add reviewers",
+		id = "edit_reviewers",
+		label = "Edit reviewers",
 		is_available = function(ctx)
 			if not has_pr(ctx) or ctx.pr == nil then
 				return false, "No PR selected"
@@ -416,47 +416,93 @@ local ACTIONS = {
 					return
 				end
 
-				multi_select.open({
-					items = items,
-					selected = {},
-					key = function(item)
-						return item.provider_id
-					end,
-					format = function(item)
-						return item.label
-					end,
-					prompt = string.format("Add reviewers to PR #%s:", tostring(pr.id or "")),
-					on_done = function(selected)
-						if #selected == 0 then
-							done({ changed_pr = false, message = "No reviewers selected" }, nil)
-							return
-						end
+				local pullrequests = require("atlas.pulls.providers.github.api.pullrequests")
+				pullrequests.get_reviewers(pr, nil, function(reviewers, r_err)
+					if r_err then
+						footer.notify("error", string.format("Failed to load reviewers: %s", tostring(r_err)))
+						done(nil, tostring(r_err))
+						return
+					end
 
-						local args = { "pr", "edit", tostring(pr.id), "--repo", slug }
-						for _, item in ipairs(selected) do
-							table.insert(args, "--add-reviewer")
-							table.insert(args, item.provider_id)
+					local original_set = {}
+					local original = {}
+					for _, r in ipairs(reviewers or {}) do
+						local login = tostring(r.nickname or r.name or "")
+						if login ~= "" and not original_set[login] then
+							original_set[login] = true
+							table.insert(original, { provider_id = login, label = "@" .. login })
 						end
+					end
 
-						footer.notify("loading", "Adding reviewers...")
-						cli.gh(args, function(_, edit_err)
-							if edit_err then
-								footer.notify("error", string.format("Add reviewers failed: %s", tostring(edit_err)))
-								done(nil, tostring(edit_err))
+					multi_select.open({
+						items = items,
+						selected = vim.deepcopy(original),
+						key = function(item)
+							return item.provider_id
+						end,
+						format = function(item)
+							return item.label
+						end,
+						prompt = string.format("Reviewers for PR #%s:", tostring(pr.id or "")),
+						on_done = function(selected)
+							local selected_set = {}
+							for _, it in ipairs(selected) do
+								selected_set[it.provider_id] = true
+							end
+
+							local adds, removes = {}, {}
+							for login in pairs(selected_set) do
+								if not original_set[login] then
+									table.insert(adds, login)
+								end
+							end
+							for login in pairs(original_set) do
+								if not selected_set[login] then
+									table.insert(removes, login)
+								end
+							end
+
+							if #adds == 0 and #removes == 0 then
+								done({ changed_pr = false, message = "No changes" }, nil)
 								return
 							end
 
-							footer.notify("success", string.format("Added %d reviewer(s)", #selected), 1200)
-							done({ changed_pr = true, message = "Reviewers added" }, nil)
-						end)
-					end,
-				})
+							local args = { "pr", "edit", tostring(pr.id), "--repo", slug }
+							for _, login in ipairs(adds) do
+								table.insert(args, "--add-reviewer")
+								table.insert(args, login)
+							end
+							for _, login in ipairs(removes) do
+								table.insert(args, "--remove-reviewer")
+								table.insert(args, login)
+							end
+
+							footer.notify(
+								"loading",
+								string.format("Updating reviewers on PR #%s...", tostring(pr.id or ""))
+							)
+							cli.gh(args, function(_, edit_err)
+								if edit_err then
+									footer.notify(
+										"error",
+										string.format("Update reviewers failed: %s", tostring(edit_err))
+									)
+									done(nil, tostring(edit_err))
+									return
+								end
+								local msg = string.format("+%d / -%d reviewer(s)", #adds, #removes)
+								footer.notify("success", msg, 1200)
+								done({ changed_pr = true, message = msg }, nil)
+							end)
+						end,
+					})
+				end)
 			end)
 		end,
 	},
 	{
-		id = "add_assignees",
-		label = "Add assignees",
+		id = "edit_assignees",
+		label = "Edit assignees",
 		is_available = function(ctx)
 			if not has_pr(ctx) or ctx.pr == nil then
 				return false, "No PR selected"
@@ -491,38 +537,79 @@ local ACTIONS = {
 					return
 				end
 
+				local raw = pr._raw or {}
+				local raw_assignees = type(raw.assignees) == "table" and raw.assignees or {}
+				local nodes = type(raw_assignees.nodes) == "table" and raw_assignees.nodes or {}
+				local original = {}
+				local original_set = {}
+				for _, node in ipairs(nodes) do
+					local login = type(node) == "table" and tostring(node.login or "") or ""
+					if login ~= "" and not original_set[login] then
+						original_set[login] = true
+						table.insert(original, { login = login, name = login })
+					end
+				end
+
 				multi_select.open({
 					items = items,
-					selected = {},
+					selected = vim.deepcopy(original),
 					key = function(item)
 						return item.login
 					end,
 					format = function(item)
-						return string.format("@%s%s", item.login, item.name and (" — " .. item.name) or "")
+						return string.format(
+							"@%s%s",
+							item.login,
+							item.name and item.name ~= item.login and (" — " .. item.name) or ""
+						)
 					end,
-					prompt = string.format("Add assignees to PR #%s:", tostring(pr.id or "")),
+					prompt = string.format("Assignees for PR #%s:", tostring(pr.id or "")),
 					on_done = function(selected)
-						if #selected == 0 then
-							done({ changed_pr = false, message = "No assignees selected" }, nil)
+						local selected_set = {}
+						for _, it in ipairs(selected) do
+							selected_set[it.login] = true
+						end
+
+						local adds, removes = {}, {}
+						for login in pairs(selected_set) do
+							if not original_set[login] then
+								table.insert(adds, login)
+							end
+						end
+						for login in pairs(original_set) do
+							if not selected_set[login] then
+								table.insert(removes, login)
+							end
+						end
+
+						if #adds == 0 and #removes == 0 then
+							done({ changed_pr = false, message = "No changes" }, nil)
 							return
 						end
 
 						local args = { "pr", "edit", tostring(pr.id), "--repo", slug }
-						for _, item in ipairs(selected) do
+						for _, login in ipairs(adds) do
 							table.insert(args, "--add-assignee")
-							table.insert(args, item.login)
+							table.insert(args, login)
+						end
+						for _, login in ipairs(removes) do
+							table.insert(args, "--remove-assignee")
+							table.insert(args, login)
 						end
 
-						footer.notify("loading", "Adding assignees...")
+						footer.notify(
+							"loading",
+							string.format("Updating assignees on PR #%s...", tostring(pr.id or ""))
+						)
 						cli.gh(args, function(_, edit_err)
 							if edit_err then
-								footer.notify("error", string.format("Add assignees failed: %s", tostring(edit_err)))
+								footer.notify("error", string.format("Update assignees failed: %s", tostring(edit_err)))
 								done(nil, tostring(edit_err))
 								return
 							end
-
-							footer.notify("success", string.format("Added %d assignee(s)", #selected), 1200)
-							done({ changed_pr = true, message = "Assignees added" }, nil)
+							local msg = string.format("+%d / -%d assignee(s)", #adds, #removes)
+							footer.notify("success", msg, 1200)
+							done({ changed_pr = true, message = msg }, nil)
 						end)
 					end,
 				})

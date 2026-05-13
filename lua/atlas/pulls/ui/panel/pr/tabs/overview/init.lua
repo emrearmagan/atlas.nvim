@@ -65,6 +65,36 @@ function M.on_select(pr, repo, refresh, opts)
 		cancel_all()
 	end
 
+	local pending = 0
+	local errors = 0
+	if should_fetch_description then
+		pending = pending + 1
+	end
+	if should_fetch_reviewers then
+		pending = pending + 1
+	end
+	if should_fetch_merge_checks then
+		pending = pending + 1
+	end
+
+	if pending > 0 then
+		footer.notify("loading", string.format("Loading overview for #%s...", pr_id))
+	end
+
+	local function complete(err)
+		if err then
+			errors = errors + 1
+		end
+		pending = pending - 1
+		if pending == 0 then
+			if errors > 0 then
+				footer.notify("error", string.format("Failed to load overview for #%s", pr_id))
+			else
+				footer.notify("success", string.format("Overview loaded for #%s", pr_id), 1200)
+			end
+		end
+	end
+
 	if should_fetch_description then
 		state.description = "loading"
 		track(provider.fetch_description(pr, opts, function(desc, err)
@@ -73,21 +103,20 @@ function M.on_select(pr, repo, refresh, opts)
 			else
 				state.description = desc or ""
 			end
+			complete(err)
 			refresh()
 		end))
 	end
 
 	if should_fetch_reviewers then
 		state.reviewers = "loading"
-		footer.notify("loading", string.format("Loading reviewers for #%s...", pr_id))
 		track(provider.fetch_reviewers(pr, opts, function(reviewers, err)
 			if err then
 				state.reviewers = err
-				footer.notify("error", string.format("Failed to load reviewers for #%s", pr_id))
 			else
 				state.reviewers = reviewers or {}
-				footer.notify("success", string.format("Reviewers loaded for #%s", pr_id), 1200)
 			end
+			complete(err)
 			refresh()
 		end))
 	end
@@ -100,6 +129,7 @@ function M.on_select(pr, repo, refresh, opts)
 			else
 				state.merge_checks = checks or {}
 			end
+			complete(err)
 			refresh()
 		end))
 	end
