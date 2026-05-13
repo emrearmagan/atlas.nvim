@@ -405,6 +405,12 @@ function M.toggle_task(pr, entry, refresh)
 	local is_resolved = comment.state == "RESOLVED"
 	local desired = vim.deepcopy(comment)
 	desired.state = is_resolved and nil or "RESOLVED"
+	require("atlas.core.logger").loginfo("toggle_task", {
+		task_id = tostring(comment.id),
+		entry_state = tostring(comment.state or "<nil>"),
+		is_resolved = is_resolved,
+		desired_state = tostring(desired.state or "<nil>"),
+	})
 	footer.notify("loading", is_resolved and "Reopening task..." or "Resolving task...")
 	track(provider.edit_comment(pr, desired, function(updated, err)
 		if err then
