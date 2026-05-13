@@ -2,6 +2,35 @@
 local M = {}
 
 local helper = require("atlas.pulls.ui.main.helper")
+local mr_api = require("atlas.pulls.providers.gitlab.api.mergerequests")
+local spinner = require("atlas.ui.components.spinner")
+
+local state = {
+	labels_by_name = nil, ---@type table<string, { color: string|nil, text_color: string|nil }>|nil
+	header_loading = false,
+}
+
+local function reset_state()
+	state.labels_by_name = nil
+	state.header_loading = false
+end
+
+---@type { cancel: fun() }[]
+local panel_in_flight = {}
+
+local function cancel_panel_fetches()
+	for _, handle in ipairs(panel_in_flight) do
+		handle.cancel()
+	end
+	panel_in_flight = {}
+end
+
+---@param handle { cancel: fun() }|nil
+local function track_panel(handle)
+	if handle then
+		table.insert(panel_in_flight, handle)
+	end
+end
 
 ---@param pr PullRequest
 ---@return PullsPanelHeaderRow[]
@@ -63,10 +92,69 @@ function M.header_rows(pr)
 	}
 end
 
+---@param pr PullRequest
+---@return PullsPanelChip[]
+function M.chips(pr)
+	local chips = {}
+	if state.header_loading and state.labels_by_name == nil then
+		table.insert(chips, { label = spinner.with_text("Loading labels"), hl = "AtlasTextMuted" })
+		return chips
+	end
+
+	local raw = type(pr._raw) == "table" and pr._raw or {}
+	local labels = type(raw.labels) == "table" and raw.labels or {}
+	local by_name = state.labels_by_name or {}
+	for _, entry in ipairs(labels) do
+		local name = type(entry) == "string" and entry or (type(entry) == "table" and entry.name) or nil
+		if type(name) == "string" and name ~= "" then
+			local meta = by_name[name] or {}
+			local bg = type(meta.color) == "string" and meta.color:gsub("^#", "") or nil
+			local fg = type(meta.text_color) == "string" and meta.text_color:gsub("^#", "") or nil
+			local hl = "AtlasTabInactive"
+			if type(bg) == "string" and bg:match("^%x%x%x%x%x%x$") then
+				hl = "AtlasGLLabel_" .. bg
+				local opts = { bg = "#" .. bg, bold = true }
+				if type(fg) == "string" and fg:match("^%x%x%x%x%x%x$") then
+					opts.fg = "#" .. fg
+				else
+					opts.fg = "#1e1e2e"
+				end
+				vim.api.nvim_set_hl(0, hl, opts)
+			end
+			table.insert(chips, { label = name, hl = hl })
+		end
+	end
+	return chips
+end
+
+---@param pr PullRequest
+---@param refresh fun()
+---@param opts { force_refresh: boolean|nil }|nil
+function M.fetches(pr, refresh, opts)
+	cancel_panel_fetches()
+	reset_state()
+
+	local raw = type(pr._raw) == "table" and pr._raw or {}
+	local project_path = tostring(raw.project_path or pr.repo_full_name or "")
+	if project_path == "" then
+		return
+	end
+
+	state.header_loading = true
+	track_panel(mr_api.get_project_labels(project_path, { force_refresh = opts and opts.force_refresh == true }, function(by_name, _)
+		state.header_loading = false
+		state.labels_by_name = by_name or {}
+		refresh()
+	end))
+end
+
 ---@param _pr PullRequest
 ---@param active_tab string|nil
 ---@return boolean
 function M.is_loading(_pr, active_tab)
+	if state.header_loading then
+		return true
+	end
 	if active_tab ~= nil and active_tab ~= "overview" then
 		return false
 	end

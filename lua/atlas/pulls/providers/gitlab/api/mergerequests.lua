@@ -93,6 +93,47 @@ function M.list_mrs(view, opts, on_done)
 	end)
 end
 
+---@param project_path string
+---@param opts { force_refresh?: boolean }|nil
+---@param on_done fun(by_name: table<string, { color: string|nil, text_color: string|nil }>|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.get_project_labels(project_path, opts, on_done)
+	opts = opts or {}
+	if project_path == nil or project_path == "" then
+		on_done(nil, "Missing project_path")
+		return nil
+	end
+	local cache_key = "gitlab_pulls:labels:" .. project_path
+	if not opts.force_refresh then
+		local cached, ok = service.get_memory_cache(cache_key)
+		if ok then
+			on_done(cached, nil)
+			return nil
+		end
+	end
+	local endpoint = string.format("/projects/%s/labels?per_page=100", service.url_encode(project_path))
+	return service.request("GET", endpoint, nil, function(result, err)
+		if err or type(result) ~= "table" then
+			on_done(nil, err or "Empty response")
+			return
+		end
+		local by_name = {}
+		for _, item in ipairs(result) do
+			if type(item) == "table" then
+				local name = type(item.name) == "string" and item.name or nil
+				if name then
+					by_name[name] = {
+						color = type(item.color) == "string" and item.color or nil,
+						text_color = type(item.text_color) == "string" and item.text_color or nil,
+					}
+				end
+			end
+		end
+		service.set_memory_cache(cache_key, by_name)
+		on_done(by_name, nil)
+	end)
+end
+
 ---@param pr PullRequest
 ---@param opts { force_load?: boolean, force_refresh?: boolean }|nil
 ---@param on_done fun(pr: PullRequest|nil, err: string|nil)
