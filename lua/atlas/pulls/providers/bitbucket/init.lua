@@ -48,6 +48,31 @@ function M.fetch_pullrequests(view, opts, on_done)
 		active_statuses = { "OPEN" }
 	end
 
+	local workspaces, repos = {}, {}
+	local seen_ws = {}
+	for _, ref in ipairs(view.repos or {}) do
+		local ws = tostring(ref.workspace or "")
+		if ws ~= "" and not seen_ws[ws] then
+			seen_ws[ws] = true
+			table.insert(workspaces, ws)
+		end
+		local repo = tostring(ref.repo or "")
+		if repo ~= "" then
+			table.insert(repos, repo)
+		end
+	end
+	local parts = {}
+	if #workspaces > 0 then
+		table.insert(parts, string.format("workspace:%s", table.concat(workspaces, ",")))
+	end
+	if #repos > 0 then
+		table.insert(parts, string.format("repo:%s", table.concat(repos, ",")))
+	end
+	for _, s in ipairs(active_statuses) do
+		table.insert(parts, string.format("is:%s", s:lower()))
+	end
+	pullrequest_state.last_search_query = table.concat(parts, " ")
+
 	return pr_api.fetch_pullrequests(view.repos or {}, {
 		force_load = opts.force_load == true,
 		pagelen = opts.pagelen,

@@ -87,7 +87,7 @@ function M.register(buf)
 
 	utils.insert_if(
 		items,
-		item("pulls.open_in_browser", {
+		item("ui.open_in_browser", {
 			desc = "Open in browser",
 			opts = { nowait = true, silent = true },
 			callback = function()
@@ -120,7 +120,7 @@ function M.register(buf)
 	if state.provider and state.provider.open_actions then
 		utils.insert_if(
 			items,
-			item("pulls.open_actions", {
+			item("ui.open_actions", {
 				desc = "Open PR actions",
 				callback = function()
 					local pr = panel_state.current_pr
@@ -314,8 +314,8 @@ function M.remove(buf)
 		{ key = "gx" },
 		{ key = "r" },
 	}
-	utils.insert_if(items, remove_item("pulls.open_actions"))
-	utils.insert_if(items, remove_item("pulls.open_in_browser"))
+	utils.insert_if(items, remove_item("ui.open_actions"))
+	utils.insert_if(items, remove_item("ui.open_in_browser"))
 	utils.insert_if(items, remove_item("pulls.open_diff"))
 	utils.insert_if(items, remove_item("pulls.checkout"))
 	help.remove("Panel", items, { buffer = buf })

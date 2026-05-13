@@ -81,7 +81,7 @@ function M.register(buf, views)
 	if state.provider and state.provider.open_actions then
 		utils.insert_if(
 			items,
-			item("pulls.open_actions", {
+			item("ui.open_actions", {
 				desc = "Open PR actions",
 				index = 1,
 				callback = function()
@@ -98,7 +98,7 @@ function M.register(buf, views)
 
 	utils.insert_if(
 		items,
-		item("pulls.open_in_browser", {
+		item("ui.open_in_browser", {
 			desc = "Open PR in browser",
 			opts = { nowait = true },
 			callback = function()
@@ -114,7 +114,7 @@ function M.register(buf, views)
 
 	utils.insert_if(
 		items,
-		item("pulls.copy_url", {
+		item("ui.copy_url", {
 			desc = "Copy PR URL",
 			opts = { nowait = true },
 			callback = function()
@@ -146,7 +146,7 @@ function M.register(buf, views)
 
 	utils.insert_if(
 		items,
-		item("pulls.show_details", {
+		item("ui.show_details", {
 			desc = "Show PR details",
 			opts = { nowait = true },
 			callback = function()
@@ -195,7 +195,7 @@ function M.register(buf, views)
 	if state.provider and state.provider.search then
 		utils.insert_if(
 			items,
-			item("pulls.search", {
+			item("ui.search", {
 				desc = "Search repositories",
 				callback = function()
 					actions.search()
@@ -206,7 +206,7 @@ function M.register(buf, views)
 
 	utils.insert_if(
 		items,
-		item("pulls.refresh", {
+		item("ui.refresh", {
 			desc = "Refetch selected PR",
 			callback = function()
 				local pr = selected_pr()
@@ -221,7 +221,7 @@ function M.register(buf, views)
 
 	utils.insert_if(
 		items,
-		item("pulls.refresh_view", {
+		item("ui.refresh_view", {
 			desc = "Refresh current view",
 			callback = function()
 				actions.refresh_view()

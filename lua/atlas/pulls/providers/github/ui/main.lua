@@ -389,16 +389,6 @@ function M.render(groups, layout, opts)
 	local lines = {}
 	local spans = {}
 
-	local gh_state = require("atlas.pulls.providers.github.state")
-	local search = gh_state.last_search_query
-	if type(search) == "string" and search ~= "" then
-		local search_icon = icons.general("search")
-		local text = string.format(" %s %s", search_icon, search)
-		table.insert(lines, text)
-		table.insert(spans, { line = #lines - 1, start_col = 0, end_col = #text, hl_group = "AtlasTextMuted" })
-		table.insert(lines, "")
-	end
-
 	local tbl_lines, tbl_map, tbl_spans
 
 	if layout == "plain" then

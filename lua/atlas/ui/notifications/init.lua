@@ -52,7 +52,7 @@ local function popup_keys()
 		mark_read = resolve_keys("ui.notifications_mark_read", "r"),
 		mark_done = resolve_keys("ui.notifications_mark_done", "d"),
 		refresh = resolve_keys("ui.notifications_refresh", "R"),
-		open_in_browser = resolve_keys("pulls.open_in_browser", "gx"),
+		open_in_browser = resolve_keys("ui.open_in_browser", "gx"),
 		close = resolve_keys("ui.close", "q"),
 	}
 end

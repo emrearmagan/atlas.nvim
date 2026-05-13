@@ -72,7 +72,7 @@ function M.register(buf)
 
 	local state = require("atlas.issues.state")
 	if state.provider and state.provider.open_actions then
-		utils.insert_if(items, item("issues.open_actions", {
+		utils.insert_if(items, item("ui.open_actions", {
 			desc = "Open issue actions",
 			callback = function()
 				local issue = panel_state.current_issue
@@ -84,7 +84,7 @@ function M.register(buf)
 		}))
 	end
 
-	utils.insert_if(items, item("issues.open_in_browser", {
+	utils.insert_if(items, item("ui.open_in_browser", {
 		desc = "Open issue in browser",
 		opts = { nowait = true },
 		callback = function()
@@ -227,8 +227,8 @@ function M.remove(buf)
 		{ key = "gx" },
 		{ key = "r" },
 	}
-	utils.insert_if(items, remove_item("issues.open_actions"))
-	utils.insert_if(items, remove_item("issues.open_in_browser"))
+	utils.insert_if(items, remove_item("ui.open_actions"))
+	utils.insert_if(items, remove_item("ui.open_in_browser"))
 	help.remove("Panel", items, { buffer = buf })
 
 	local general = {}
