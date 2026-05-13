@@ -21,10 +21,10 @@ local DEFAULT_TABS = {
 		mod = require("atlas.issues.ui.panel.issue.tabs.comments"),
 	},
 	{
-		key = "history",
-		label = "History",
+		key = "activity",
+		label = "Activity",
 		icon = icons.pulls("activity"),
-		mod = require("atlas.issues.ui.panel.issue.tabs.history"),
+		mod = require("atlas.issues.ui.panel.issue.tabs.activity"),
 	},
 }
 
@@ -186,7 +186,7 @@ local function reset_tab_data()
 
 	reset_state("atlas.issues.ui.panel.issue.tabs.overview.state")
 	reset_state("atlas.issues.ui.panel.issue.tabs.comments.state")
-	reset_state("atlas.issues.ui.panel.issue.tabs.history.state")
+	reset_state("atlas.issues.ui.panel.issue.tabs.activity.state")
 end
 
 --------------------------------------------------------------------------------

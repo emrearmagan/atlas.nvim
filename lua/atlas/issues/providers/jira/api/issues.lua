@@ -24,6 +24,7 @@ local function search_fields()
 		"priority",
 		"issuetype",
 		"duedate",
+		"watches",
 		story_points_field(),
 	}
 end

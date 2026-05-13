@@ -11,6 +11,7 @@
 ---@field reloading_pr_keys table<string, integer>
 ---@field reload_spinner_frame string
 ---@field status_filters table<string, boolean>
+---@field last_search_query string|nil
 local M = {
 	active_view = nil,
 	current_view = nil,
@@ -24,6 +25,7 @@ local M = {
 	reloading_pr_keys = {},
 	reload_spinner_frame = "⠋",
 	status_filters = { OPEN = true, MERGED = false, DECLINED = false },
+	last_search_query = nil,
 }
 
 ---@param repo_id string
@@ -54,6 +56,7 @@ function M.reset()
 	M.reloading_pr_keys = {}
 	M.reload_spinner_frame = "⠋"
 	M.status_filters = { OPEN = true, MERGED = false, DECLINED = false }
+	M.last_search_query = nil
 end
 
 return M

@@ -85,7 +85,6 @@ function M.render(_repo, width)
 	local thread_lines, thread_spans, thread_map = threads.render(to_items(repo), width, {
 		padding_x = PADDING_X,
 		mode = "linked",
-		right_text_align = "right",
 		content_max_lines = 1,
 		author_hl = function()
 			return "AtlasText"

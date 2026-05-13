@@ -41,6 +41,16 @@ function M.render(issue, width, extra_rows)
 	local type_key_line = string.format(" %s %s %s", type_icon, issue_type, key)
 	local title_line = " " .. title
 
+	local bell_icon, bell_hl
+	if issue.is_subscribed ~= nil then
+		bell_icon = issue.is_subscribed and icons.general("bell") or icons.general("bell_no")
+		bell_hl = issue.is_subscribed and "AtlasLogInfo" or "AtlasTextMuted"
+		local line_w = vim.api.nvim_strwidth(type_key_line)
+		local bell_w = vim.api.nvim_strwidth(bell_icon)
+		local pad = math.max(1, width - line_w - bell_w - 1)
+		type_key_line = type_key_line .. string.rep(" ", pad) .. bell_icon
+	end
+
 	local rows = {}
 	for _, row in ipairs(extra_rows or {}) do
 		table.insert(rows, row)
@@ -98,6 +108,15 @@ function M.render(issue, width, extra_rows)
 		},
 		{ line = 1, start_col = 1, end_col = #title_line, hl_group = "Normal" },
 	}
+
+	if bell_icon then
+		table.insert(spans, {
+			line = 0,
+			start_col = #type_key_line - #bell_icon,
+			end_col = #type_key_line,
+			hl_group = bell_hl,
+		})
+	end
 
 	if key ~= "" then
 		local ks = type_key_line:find(key, 1, true)

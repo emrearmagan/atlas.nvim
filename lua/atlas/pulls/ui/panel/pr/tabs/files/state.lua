@@ -1,8 +1,8 @@
 ---@class PullsFilesTabState
----@field diff PullsDiffFile[]|"loading"|string|nil
+---@field diff DiffFile[]|"loading"|string|nil
 ---@field diffstat PullsDiffstatEntry[]|"loading"|string|nil
 ---@field diffstat_collapsed boolean
----@field collapsed_hunks table<number, boolean>
+---@field collapsed_hunks table<string|number, boolean>
 local M = {
 	diff = nil,
 	diffstat = nil,

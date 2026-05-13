@@ -42,15 +42,17 @@ function M.format_row(issue, is_child)
 	local slug = tostring(raw.slug or "")
 
 	local key_label = slug ~= "" and string.format("%s#%d", slug, number) or string.format("#%d", number)
-	local s_icon = state_icon(issue.status_id)
+	local is_pinned = issue.is_pinned == true
+	local row_icon = is_pinned and icons.general("pin") or state_icon(issue.status_id)
 
-	local name = is_child and ("  " .. s_icon .. "  " .. key_label .. "  " .. title) or (key_label .. "  " .. title)
+	local name = is_child and ("  " .. row_icon .. "  " .. key_label .. "  " .. title)
+		or (key_label .. "  " .. title)
 
 	local assignee_name = type(issue.assignee) == "table" and issue.assignee.display_name or "Unassigned"
 	local reporter_name = type(issue.reporter) == "table" and issue.reporter.display_name or "Unknown"
 
 	return {
-		icon = is_child and "" or s_icon,
+		icon = is_child and "" or row_icon,
 		name = name,
 		assignee = string.format("%s %s", icons.general("user"), utils.shorten_name(assignee_name, 20)),
 		reporter = string.format("%s %s", icons.general("user"), utils.shorten_name(reporter_name, 20)),
@@ -75,7 +77,8 @@ function M.cell_hl(row, col, ctx)
 	end
 
 	if col.key == "icon" then
-		local s = state_icon(issue.status_id)
+		local is_pinned = issue.is_pinned == true
+		local s = is_pinned and icons.general("pin") or state_icon(issue.status_id)
 		if s == "" then
 			return nil
 		end
@@ -83,7 +86,8 @@ function M.cell_hl(row, col, ctx)
 		if not ss or not ee then
 			return nil
 		end
-		return { { start_col = ss - 1, end_col = ee, hl_group = state_hl(issue.status_id) } }
+		local hl = is_pinned and "AtlasTextWarning" or state_hl(issue.status_id)
+		return { { start_col = ss - 1, end_col = ee, hl_group = hl } }
 	end
 
 	if col.key == "name" then

@@ -9,7 +9,6 @@ local highlights = require("atlas.ui.shared.highlights")
 -------------------------------------------------------------------------------
 
 ---@alias AtlasThreadV2Mode "tree" | "linked"
----@alias AtlasThreadV2RightTextAlign "left" | "right"
 
 ---@class AtlasThreadV2Item
 ---@field icon string|nil                  Icon string rendered before author
@@ -26,7 +25,6 @@ local highlights = require("atlas.ui.shared.highlights")
 ---@class AtlasThreadV2RenderOpts
 ---@field padding_x integer|nil                                                                Horizontal padding (default 2)
 ---@field mode AtlasThreadV2Mode|nil                                                           Rendering mode (default "tree")
----@field right_text_align AtlasThreadV2RightTextAlign|nil                                      Right-text alignment (default "left")
 ---@field separator string|nil                                                                 Character for root separators (default "─")
 ---@field content_max_lines integer|nil                                                        Max visible content lines per item (nil = unlimited). Truncated with "…"
 ---@field author_hl fun(item: AtlasThreadV2Item, author: string): string|nil                   Returns hl group for author
@@ -225,25 +223,17 @@ local function render_header(lines, spans, line_map, item, depth, pfx, opts, wid
 	end
 
 	if right_text ~= "" then
-		if opts.right_text_align == "right" then
-			-- Right-align: fill space between current position and right edge,
-			-- accounting for horizontal padding on the right side.
-			-- Use display width (not byte length) because tree connectors like
-			-- ├─ / └─ / │ are multi-byte UTF-8 but only 1-2 columns wide.
-			local content_so_far = pfx.meta_prefix .. table.concat(parts, "")
-			local display_so_far = vim.api.nvim_strwidth(content_so_far)
-			local display_rt = vim.api.nvim_strwidth(right_text)
-			local right_edge = width - (tonumber(opts.padding_x) or 2)
-			local needed = math.max(2, right_edge - display_so_far - display_rt)
-			parts[#parts + 1] = string.rep(" ", needed) .. right_text
-			-- Byte offset for highlight spans
-			local rt_byte_start = #content_so_far + needed
-			col_markers[#col_markers + 1] = { rt_byte_start, rt_byte_start + #right_text, "AtlasTextMuted" }
-		else
-			parts[#parts + 1] = "  " .. right_text
-			local rt_start = cursor + 2
-			col_markers[#col_markers + 1] = { rt_start, rt_start + #right_text, "AtlasTextMuted" }
-		end
+		-- Snap right_text to the right edge of the row.
+		-- Use display width (not byte length) because tree connectors like
+		-- ├─ / └─ / │ are multi-byte UTF-8 but only 1-2 columns wide.
+		local content_so_far = pfx.meta_prefix .. table.concat(parts, "")
+		local display_so_far = vim.api.nvim_strwidth(content_so_far)
+		local display_rt = vim.api.nvim_strwidth(right_text)
+		local right_edge = width - (tonumber(opts.padding_x) or 2)
+		local needed = math.max(2, right_edge - display_so_far - display_rt)
+		parts[#parts + 1] = string.rep(" ", needed) .. right_text
+		local rt_byte_start = #content_so_far + needed
+		col_markers[#col_markers + 1] = { rt_byte_start, rt_byte_start + #right_text, "AtlasTextMuted" }
 	end
 
 	local full_line = pfx.meta_prefix .. table.concat(parts, "")
@@ -503,7 +493,6 @@ function M.render(items, width, opts)
 	local o = vim.tbl_extend("force", {
 		padding_x = 2,
 		mode = "tree",
-		right_text_align = "left",
 		separator = "─",
 		content_max_lines = nil,
 		author_hl = default_author_hl,

@@ -44,6 +44,16 @@ function M.render(pr, width, extra_rows)
 	local title_text = tostring(pr.title or "")
 	local title = string.format(" %s %s", id_text, title_text)
 
+	local bell_icon, bell_hl
+	if pr.is_subscribed ~= nil then
+		bell_icon = pr.is_subscribed and icons.general("bell") or icons.general("bell_no")
+		bell_hl = pr.is_subscribed and "AtlasLogInfo" or "AtlasTextMuted"
+		local title_w = vim.api.nvim_strwidth(title)
+		local bell_w = vim.api.nvim_strwidth(bell_icon)
+		local pad = math.max(1, width - title_w - bell_w - 1)
+		title = title .. string.rep(" ", pad) .. bell_icon
+	end
+
 	local author_icon = icons.general("user")
 	local by_prefix = string.format(" %s by @", author_icon)
 	local by_sep = " - "
@@ -143,6 +153,9 @@ function M.render(pr, width, extra_rows)
 	}
 
 	add_span(spans, lines, 0, 1, 1 + #id_text, "AtlasTextMuted")
+	if bell_icon then
+		add_span(spans, lines, 0, #title - #bell_icon, #title, bell_hl)
+	end
 
 	local author_start = #by_prefix - 1
 	local author_end = author_start + #("@" .. author_name)
@@ -209,7 +222,58 @@ function M.render_repo(repo, width, extra_rows)
 		"",
 	}
 
-	local rows = vim.deepcopy(extra_rows or {})
+	local rows = {}
+
+	local function icon_cell(icon, value, icon_hl)
+		local text = string.format("%s %s", icon, tostring(value))
+		local hl = {
+			{ start_col = 0, end_col = #icon, hl_group = icon_hl },
+			{ start_col = #icon, end_col = #text, hl_group = "AtlasTextMuted" },
+		}
+		return text, hl
+	end
+
+	local has_stars = tonumber(repo.stars) ~= nil
+	local has_forks = tonumber(repo.forks) ~= nil
+	local has_watchers = tonumber(repo.watchers) ~= nil
+
+	if has_stars or has_forks then
+		local v1, v1_hl
+		if has_stars then
+			v1, v1_hl = icon_cell(icons.general("star"), repo.stars, "AtlasTextWarning")
+		else
+			v1, v1_hl = "-", "AtlasTextMuted"
+		end
+		local v2, v2_hl
+		if has_forks then
+			v2, v2_hl = icon_cell(icons.general("fork"), repo.forks, "AtlasLogInfo")
+		else
+			v2, v2_hl = "-", "AtlasTextMuted"
+		end
+		table.insert(rows, {
+			k1 = "Stars:",
+			v1 = v1,
+			v1_hl = v1_hl,
+			k2 = "Forks:",
+			v2 = v2,
+			v2_hl = v2_hl,
+		})
+	end
+	if has_watchers then
+		local v1, v1_hl = icon_cell(icons.general("watching"), repo.watchers, "AtlasTextPositive")
+		table.insert(rows, {
+			k1 = "Watchers:",
+			v1 = v1,
+			v1_hl = v1_hl,
+			k2 = "",
+			v2 = "",
+			v2_hl = "AtlasTextMuted",
+		})
+	end
+
+	for _, row in ipairs(extra_rows or {}) do
+		table.insert(rows, row)
+	end
 
 	if #rows > 0 then
 		local tbl_lines, _, tbl_spans = table_tree.render({

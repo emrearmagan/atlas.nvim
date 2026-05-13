@@ -8,37 +8,31 @@ local M = {}
 ---@field toggle_all_folds? AtlasKeymapValue
 ---@field previous_panel_tab? AtlasKeymapValue
 ---@field next_panel_tab? AtlasKeymapValue
-
----@class AtlasPullsKeymaps
+---@field open_notifications? AtlasKeymapValue
+---@field notifications_mark_read? AtlasKeymapValue
+---@field notifications_mark_done? AtlasKeymapValue
+---@field notifications_refresh? AtlasKeymapValue
+---@field toggle_subscription? AtlasKeymapValue
 ---@field refresh? AtlasKeymapValue
 ---@field refresh_view? AtlasKeymapValue
 ---@field open_actions? AtlasKeymapValue
 ---@field open_in_browser? AtlasKeymapValue
 ---@field copy_url? AtlasKeymapValue
+---@field show_details? AtlasKeymapValue
+---@field search? AtlasKeymapValue
+
+---@class AtlasPullsKeymaps
 ---@field copy_id? AtlasKeymapValue
 ---@field open_diff? AtlasKeymapValue
 ---@field checkout? AtlasKeymapValue
----@field show_details? AtlasKeymapValue
----@field search? AtlasKeymapValue
----@field open_notifications? AtlasKeymapValue
----@field notifications_mark_read? AtlasKeymapValue
----@field notifications_mark_done? AtlasKeymapValue
----@field notifications_refresh? AtlasKeymapValue
----@field pr_files_next_hunk? AtlasKeymapValue
----@field pr_files_previous_hunk? AtlasKeymapValue
+---@field next_hunk? AtlasKeymapValue
+---@field previous_hunk? AtlasKeymapValue
 ---@field filter_status_open? AtlasKeymapValue
 ---@field filter_status_merged? AtlasKeymapValue
 ---@field filter_status_declined? AtlasKeymapValue
 
 ---@class AtlasIssuesKeymaps
----@field open_actions? AtlasKeymapValue
----@field open_in_browser? AtlasKeymapValue
----@field copy_url? AtlasKeymapValue
 ---@field copy_key? AtlasKeymapValue
----@field show_details? AtlasKeymapValue --TODO: Move to general ?
----@field search? AtlasKeymapValue
----@field refresh? AtlasKeymapValue --TODO: Move to general ?
----@field refresh_view? AtlasKeymapValue --TODO: Move to general ?
 ---@field transition_issue? AtlasKeymapValue
 ---@field change_assignee? AtlasKeymapValue
 ---@field change_reporter? AtlasKeymapValue
@@ -58,38 +52,32 @@ local M = {}
 ---| "ui.toggle_all_folds"
 ---| "ui.previous_panel_tab"
 ---| "ui.next_panel_tab"
----| "pulls.refresh"
----| "pulls.refresh_view"
----| "pulls.open_actions"
----| "pulls.open_in_browser"
----| "pulls.copy_url"
+---| "ui.open_notifications"
+---| "ui.notifications_mark_read"
+---| "ui.notifications_mark_done"
+---| "ui.notifications_refresh"
+---| "ui.toggle_subscription"
+---| "ui.refresh"
+---| "ui.refresh_view"
+---| "ui.open_actions"
+---| "ui.open_in_browser"
+---| "ui.copy_url"
+---| "ui.show_details"
+---| "ui.search"
 ---| "pulls.copy_id"
 ---| "pulls.open_diff"
 ---| "pulls.checkout"
----| "pulls.show_details"
----| "pulls.search"
----| "pulls.open_notifications"
----| "pulls.notifications_mark_read"
----| "pulls.notifications_mark_done"
----| "pulls.notifications_refresh"
----| "pulls.pr_files_next_hunk"
----| "pulls.pr_files_previous_hunk"
----| "issues.refresh"
----| "issues.refresh_view"
----| "issues.open_actions"
----| "issues.open_in_browser"
----| "issues.copy_url"
+---| "pulls.next_hunk"
+---| "pulls.previous_hunk"
+---| "pulls.filter_status_open"
+---| "pulls.filter_status_merged"
+---| "pulls.filter_status_declined"
 ---| "issues.copy_key"
----| "issues.show_details"
----| "issues.search"
 ---| "issues.transition_issue"
 ---| "issues.change_assignee"
 ---| "issues.change_reporter"
 ---| "issues.edit_issue"
 ---| "issues.create_issue"
----| "pulls.filter_status_open"
----| "pulls.filter_status_merged"
----| "pulls.filter_status_declined"
 
 ---@param value AtlasKeymapValue
 ---@return string[]|nil
@@ -193,34 +181,28 @@ function M.validate()
 			"ui.toggle_all_folds",
 			"ui.previous_panel_tab",
 			"ui.next_panel_tab",
+			"ui.open_notifications",
+			"ui.toggle_subscription",
+			"ui.refresh",
+			"ui.refresh_view",
+			"ui.open_actions",
+			"ui.open_in_browser",
+			"ui.copy_url",
+			"ui.show_details",
+			"ui.search",
 		}, { "j", "k", "gg", "G" }),
 		pulls = conflicts_for({
-			"pulls.refresh",
-			"pulls.refresh_view",
-			"pulls.open_actions",
-			"pulls.open_in_browser",
-			"pulls.copy_url",
 			"pulls.copy_id",
 			"pulls.open_diff",
 			"pulls.checkout",
-			"pulls.show_details",
-			"pulls.search",
-			"pulls.open_notifications",
-			"pulls.pr_files_next_hunk",
-			"pulls.pr_files_previous_hunk",
+			"pulls.next_hunk",
+			"pulls.previous_hunk",
 			"pulls.filter_status_open",
 			"pulls.filter_status_merged",
 			"pulls.filter_status_declined",
 		}, { "j", "k", "gg", "G" }),
 		issues = conflicts_for({
-			"issues.open_actions",
-			"issues.open_in_browser",
-			"issues.copy_url",
 			"issues.copy_key",
-			"issues.show_details",
-			"issues.search",
-			"issues.refresh",
-			"issues.refresh_view",
 			"issues.transition_issue",
 			"issues.change_assignee",
 			"issues.change_reporter",

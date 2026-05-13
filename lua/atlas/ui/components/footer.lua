@@ -114,7 +114,6 @@ local function notice_hl(level)
 end
 
 local ui_utils = require("atlas.ui.utils")
-local text_width = ui_utils.text_width
 
 ---@param list table[]|nil
 ---@return table[]
@@ -262,14 +261,14 @@ function M.render(opts)
 	local left_line, left_hls = build_segments_line(left_segments, 0)
 	local right_line, right_hls = build_segments_line(right_segments, 0)
 
-	local gap = width - text_width(left_line) - text_width(right_line)
+	local gap = width - ui_utils.text_width(left_line) - ui_utils.text_width(right_line)
 	if gap < 1 then
 		gap = 1
 	end
 
 	local line = left_line .. string.rep(" ", gap) .. right_line
-	if text_width(line) < width then
-		line = line .. string.rep(" ", width - text_width(line))
+	if ui_utils.text_width(line) < width then
+		line = line .. string.rep(" ", width - ui_utils.text_width(line))
 	end
 
 	local highlights = {}
@@ -298,11 +297,6 @@ function M.render(opts)
 		}, highlights),
 	}
 end
-
----@param lines string[]
----@param span table
----@return table|nil
-local clamp_span = ui_utils.clamp_span
 
 function M.refresh()
 	local layout = require("atlas.ui.layout")
@@ -343,7 +337,7 @@ function M.refresh()
 		if refresh_token ~= notice.token then
 			return
 		end
-		local clamped = clamp_span(block.lines, span)
+		local clamped = ui_utils.clamp_span(block.lines, span)
 		if clamped ~= nil then
 			vim.api.nvim_buf_set_extmark(buf, ns, clamped.line, clamped.start_col, {
 				end_row = clamped.line,

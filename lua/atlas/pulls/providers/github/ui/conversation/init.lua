@@ -15,11 +15,19 @@ local keymaps = require("atlas.pulls.providers.github.ui.conversation.keymaps")
 local PADDING_X = 1
 local PADDING = string.rep(" ", PADDING_X)
 local CONNECTOR = "│"
+local ACTIVITY_COLLAPSE_KEEP = 2
+local ACTIVITY_COLLAPSE_THRESHOLD = 5
 
 -- TODO: Consider nerd font icons for better terminal compatibility
 local REACTION_EMOJI = {
-	["+1"] = "👍", ["-1"] = "👎", laugh = "😄", hooray = "🎉",
-	confused = "😕", heart = "❤️", rocket = "🚀", eyes = "👀",
+	["+1"] = "👍",
+	["-1"] = "👎",
+	laugh = "😄",
+	hooray = "🎉",
+	confused = "😕",
+	heart = "❤️",
+	rocket = "🚀",
+	eyes = "👀",
 }
 
 local REACTION_KEYS = { "+1", "-1", "laugh", "hooray", "confused", "heart", "rocket", "eyes" }
@@ -27,7 +35,9 @@ local REACTION_KEYS = { "+1", "-1", "laugh", "hooray", "confused", "heart", "roc
 ---@param reactions table|nil
 ---@return string
 local function format_reactions(reactions)
-	if type(reactions) ~= "table" then return "" end
+	if type(reactions) ~= "table" then
+		return ""
+	end
 	local parts = {}
 	for _, key in ipairs(REACTION_KEYS) do
 		local count = tonumber(reactions[key]) or 0
@@ -36,18 +46,14 @@ local function format_reactions(reactions)
 			table.insert(parts, string.format("%s %d", emoji, count))
 		end
 	end
-	if #parts == 0 then return "" end
+	if #parts == 0 then
+		return ""
+	end
 	return table.concat(parts, "  ")
 end
 
 ---@type { cancel: fun() }[]
 local in_flight = {}
-
----@return PullsProvider|nil
-local function get_provider()
-	local pulls_state = require("atlas.pulls.state")
-	return pulls_state.provider
-end
 
 local function cancel_all()
 	for _, handle in ipairs(in_flight) do
@@ -149,6 +155,8 @@ local function activity_label(entry)
 		return "approved"
 	elseif kind == "changes_requested" then
 		return "requested changes"
+	elseif kind == "review" then
+		return "left a review"
 	end
 	return tostring(entry.content_raw or kind)
 end
@@ -158,10 +166,54 @@ end
 --------------------------------------------------------------------------------
 
 ---@class GHTimelineEntry
----@field type "comment"|"activity"
+---@field type "comment"|"activity"|"activity_gap"
 ---@field timestamp string
 ---@field comment PullsComment|nil
 ---@field activity PullsActivityEntry|nil
+---@field count integer|nil
+
+---@param entries GHTimelineEntry[]
+---@param run GHTimelineEntry[]
+local function append_activity_run(entries, run)
+	if #run <= ACTIVITY_COLLAPSE_THRESHOLD then
+		for _, entry in ipairs(run) do
+			table.insert(entries, entry)
+		end
+		return
+	end
+
+	for i = 1, ACTIVITY_COLLAPSE_KEEP do
+		table.insert(entries, run[i])
+	end
+	table.insert(entries, {
+		type = "activity_gap",
+		timestamp = run[ACTIVITY_COLLAPSE_KEEP].timestamp,
+		count = #run - (ACTIVITY_COLLAPSE_KEEP * 2),
+	})
+	for i = #run - ACTIVITY_COLLAPSE_KEEP + 1, #run do
+		table.insert(entries, run[i])
+	end
+end
+
+---@param entries GHTimelineEntry[]
+---@return GHTimelineEntry[]
+local function collapse_activity_runs(entries)
+	local collapsed = {}
+	local run = {}
+
+	for _, entry in ipairs(entries) do
+		if entry.type == "activity" then
+			table.insert(run, entry)
+		else
+			append_activity_run(collapsed, run)
+			run = {}
+			table.insert(collapsed, entry)
+		end
+	end
+	append_activity_run(collapsed, run)
+
+	return collapsed
+end
 
 ---@param comments PullsComment[]
 ---@param activity PullsActivityEntry[]
@@ -177,6 +229,10 @@ local function build_timeline(comments, activity)
 		})
 	end
 
+	local function is_review_kind(kind)
+		return kind == "approval" or kind == "changes_requested" or kind == "review"
+	end
+
 	for _, a in ipairs(activity) do
 		if a.kind ~= "comment" then
 			table.insert(entries, {
@@ -184,6 +240,30 @@ local function build_timeline(comments, activity)
 				timestamp = a.date or "",
 				activity = a,
 			})
+			-- A review (approve / request-changes / plain commented review) with a top-level body renders as a comment block right after the activity row.
+			if is_review_kind(a.kind) and type(a.content_raw) == "string" and a.content_raw ~= "" then
+				table.insert(entries, {
+					type = "comment",
+					timestamp = a.date or "",
+					comment = {
+						id = "review-" .. tostring(a.date or ""),
+						parent_id = nil,
+						author = a.actor and {
+							name = tostring(a.actor.name or a.actor.username or ""),
+							nickname = tostring(a.actor.nickname or a.actor.username or ""),
+							id = tostring(a.actor.id or ""),
+						} or nil,
+						content_raw = a.content_raw,
+						created_on = a.date or "",
+						inline = nil,
+						inline_hunk = nil,
+						is_task = nil,
+						state = nil,
+						url = nil,
+						html_url = nil,
+					},
+				})
+			end
 		end
 	end
 
@@ -191,7 +271,7 @@ local function build_timeline(comments, activity)
 		return a.timestamp < b.timestamp
 	end)
 
-	return entries
+	return collapse_activity_runs(entries)
 end
 
 --------------------------------------------------------------------------------
@@ -223,7 +303,10 @@ local function render_comment(comment, width)
 	table.insert(header_spans, { line = 0, start_col = col, end_col = col + #author, hl_group = author_hl })
 	col = col + #author + 2
 	local commented_text = "commented  " .. time_text
-	table.insert(header_spans, { line = 0, start_col = col, end_col = col + #commented_text, hl_group = "AtlasTextMuted" })
+	table.insert(
+		header_spans,
+		{ line = 0, start_col = col, end_col = col + #commented_text, hl_group = "AtlasTextMuted" }
+	)
 
 	local action_parts = { string.format("%s (c)", icons.general("reply")) }
 	if not is_deleted and is_own_comment(comment) then
@@ -239,7 +322,12 @@ local function render_comment(comment, width)
 	local header_line = header_left .. string.rep(" ", gap) .. actions_text
 
 	local actions_byte_start = #header_left + gap
-	table.insert(header_spans, { line = 0, start_col = actions_byte_start, end_col = actions_byte_start + #actions_text, hl_group = "AtlasTextMuted" })
+	table.insert(header_spans, {
+		line = 0,
+		start_col = actions_byte_start,
+		end_col = actions_byte_start + #actions_text,
+		hl_group = "AtlasTextMuted",
+	})
 
 	-- Content group
 	local content_lines = {}
@@ -270,7 +358,10 @@ local function render_comment(comment, width)
 	local reaction_text = format_reactions(comment.reactions)
 	if reaction_text ~= "" then
 		table.insert(content_lines, reaction_text)
-		table.insert(content_spans, { line = #content_lines - 1, start_col = 0, end_col = #reaction_text, hl_group = "AtlasTextMuted" })
+		table.insert(
+			content_spans,
+			{ line = #content_lines - 1, start_col = 0, end_col = #reaction_text, hl_group = "AtlasTextMuted" }
+		)
 	end
 
 	local groups = {
@@ -357,6 +448,21 @@ local function render_activity(entry, width)
 	return lines, spans
 end
 
+---@param count integer
+---@return string[], table[]
+local function render_activity_gap(count)
+	local text = string.format(
+		"%s  ... %d more %s",
+		icons.general("activity_more"),
+		count,
+		count == 1 and "activity" or "activities"
+	)
+	local line = PADDING .. text
+	return { line }, {
+		{ line = 0, start_col = PADDING_X, end_col = PADDING_X + #text, hl_group = "AtlasTextMuted" },
+	}
+end
+
 --------------------------------------------------------------------------------
 -- Fetching
 --------------------------------------------------------------------------------
@@ -369,39 +475,32 @@ function M.on_select(pr, repo, refresh, opts)
 	cancel_all()
 	state.reset()
 
-	local provider = get_provider()
-	if not provider then
-		return
-	end
-
 	local pr_id = tostring(pr.id or "")
+	local activity_api = require("atlas.pulls.providers.github.api.activity")
+	local pullrequests = require("atlas.pulls.providers.github.api.pullrequests")
 
-	if type(provider.fetch_comments) == "function" then
-		state.comments = "loading"
-		footer.notify("loading", string.format("Loading conversation for #%s...", pr_id))
-		track(provider.fetch_comments(pr, opts, function(comments, err)
-			if err then
-				state.comments = err
-				footer.notify("error", string.format("Failed to load comments for #%s", pr_id))
-			else
-				state.comments = comments or {}
-				footer.notify("success", string.format("Conversation loaded for #%s", pr_id), 1200)
-			end
-			refresh()
-		end))
-	end
+	state.comments = "loading"
+	state.activity = "loading"
+	footer.notify("loading", string.format("Loading conversation for #%s...", pr_id))
+	track(activity_api.fetch_conversation(pr, opts, function(result, err)
+		if err then
+			state.comments = err
+			state.activity = err
+			footer.notify("error", string.format("Failed to load conversation for #%s", pr_id))
+		else
+			result = type(result) == "table" and result or {}
+			state.comments = type(result.comments) == "table" and result.comments or {}
+			state.activity = type(result.events) == "table" and result.events or {}
+			footer.notify("success", string.format("Conversation loaded for #%s", pr_id), 1200)
+		end
+		refresh()
+	end))
 
-	if type(provider.fetch_activity) == "function" then
-		state.activity = "loading"
-		track(provider.fetch_activity(pr, opts, function(entries, err)
-			if err then
-				state.activity = err
-			else
-				state.activity = entries or {}
-			end
-			refresh()
-		end))
-	end
+	state.description = "loading"
+	track(pullrequests.get_description(pr, opts, function(desc, err)
+		state.description = err and "" or (desc or "")
+		refresh()
+	end))
 end
 
 --------------------------------------------------------------------------------
@@ -432,8 +531,14 @@ function M.render(pr, width)
 	local activity = activity_ready and state.activity or {}
 
 	local timeline = build_timeline(comments, activity)
+	local body = ""
+	if type(state.description) == "string" and state.description ~= "loading" then
+		body = state.description
+	elseif state.description == nil then
+		body = tostring(pr.description or "")
+	end
 
-	if #timeline == 0 then
+	if #timeline == 0 and body == "" then
 		utils.push(lines, spans, "No conversation yet.", "AtlasTextMuted", PADDING_X)
 		return lines, spans, line_map
 	end
@@ -449,8 +554,39 @@ function M.render(pr, width)
 		})
 	end
 
-	for i, entry in ipairs(timeline) do
-		if i > 1 then
+	if body ~= "" then
+		---@type PullsComment
+		local body_comment = {
+			id = "__body__",
+			parent_id = nil,
+			author = pr.author and {
+				name = pr.author.name or pr.author.username or "",
+				nickname = pr.author.nickname or pr.author.username or pr.author.name or "",
+				id = pr.author.id or "",
+			} or nil,
+			content_raw = body,
+			created_on = pr.created_on or "",
+			deleted = false,
+			inline = nil,
+			url = pr.link and pr.link.html or nil,
+			html_url = pr.link and pr.link.html or nil,
+		}
+		local c_lines, c_spans, c_map = render_comment(body_comment, width)
+		local offset = #lines
+		for _, l in ipairs(c_lines) do
+			table.insert(lines, l)
+		end
+		for _, s in ipairs(c_spans) do
+			s.line = s.line + offset
+			table.insert(spans, s)
+		end
+		for local_lnum, data in pairs(c_map) do
+			line_map[offset + local_lnum] = data
+		end
+	end
+
+	for _, entry in ipairs(timeline) do
+		if #lines > 0 then
 			add_connector()
 		end
 
@@ -478,6 +614,16 @@ function M.render(pr, width)
 				table.insert(spans, s)
 			end
 			line_map[offset + 1] = { kind = "activity", activity = entry.activity }
+		elseif entry.type == "activity_gap" then
+			local g_lines, g_spans = render_activity_gap(entry.count or 0)
+			local offset = #lines
+			for _, l in ipairs(g_lines) do
+				table.insert(lines, l)
+			end
+			for _, s in ipairs(g_spans) do
+				s.line = s.line + offset
+				table.insert(spans, s)
+			end
 		end
 	end
 
@@ -512,10 +658,7 @@ end
 ---@param pr PullRequest
 ---@param refresh fun()
 function M.add_comment(pr, refresh)
-	local provider = get_provider()
-	if not provider or type(provider.add_comment) ~= "function" then
-		return
-	end
+	local comments_api = require("atlas.pulls.providers.github.api.comments")
 
 	local completion = get_completion(pr)
 	md_editor.open({
@@ -529,7 +672,7 @@ function M.add_comment(pr, refresh)
 				return
 			end
 			footer.notify("loading", "Adding comment...")
-			track(provider.add_comment(pr, text, function(comment, err)
+			track(comments_api.add_comment(pr, text, nil, function(comment, err)
 				if err then
 					footer.notify("error", "Add comment failed: " .. err)
 					return
@@ -548,11 +691,7 @@ end
 ---@param entry table
 ---@param refresh fun()
 function M.reply_comment(pr, entry, refresh)
-	local provider = get_provider()
-	if not provider or type(provider.reply_comment) ~= "function" then
-		return
-	end
-
+	local comments_api = require("atlas.pulls.providers.github.api.comments")
 	local comment = entry.comment
 	if not comment then
 		return
@@ -574,7 +713,7 @@ function M.reply_comment(pr, entry, refresh)
 				return
 			end
 			footer.notify("loading", "Sending reply...")
-			track(provider.reply_comment(pr, comment.id, text, function(reply, err)
+			track(comments_api.add_comment(pr, text, { parent = comment }, function(reply, err)
 				if err then
 					footer.notify("error", "Reply failed: " .. err)
 					return
@@ -593,11 +732,7 @@ end
 ---@param entry table
 ---@param refresh fun()
 function M.edit_comment(pr, entry, refresh)
-	local provider = get_provider()
-	if not provider or type(provider.edit_comment) ~= "function" then
-		return
-	end
-
+	local comments_api = require("atlas.pulls.providers.github.api.comments")
 	local comment = entry.comment
 	if not comment or not is_own_comment(comment) then
 		return
@@ -616,7 +751,8 @@ function M.edit_comment(pr, entry, refresh)
 				return
 			end
 			footer.notify("loading", "Editing comment...")
-			track(provider.edit_comment(pr, comment.id, text, function(_, err)
+			local updated = vim.tbl_extend("force", {}, comment, { content_raw = text })
+			track(comments_api.edit_comment(pr, updated, function(_, err)
 				if err then
 					footer.notify("error", "Edit failed: " .. err)
 					return
@@ -639,11 +775,7 @@ end
 ---@param entry table
 ---@param refresh fun()
 function M.delete_comment(pr, entry, refresh)
-	local provider = get_provider()
-	if not provider or type(provider.delete_comment) ~= "function" then
-		return
-	end
-
+	local comments_api = require("atlas.pulls.providers.github.api.comments")
 	local comment = entry.comment
 	if not comment or not is_own_comment(comment) then
 		return
@@ -655,7 +787,7 @@ function M.delete_comment(pr, entry, refresh)
 			return
 		end
 		footer.notify("loading", "Deleting comment...")
-		track(provider.delete_comment(pr, comment.id, function(ok, err)
+		track(comments_api.delete_comment(pr, comment, function(ok, err)
 			if err then
 				footer.notify("error", "Delete failed: " .. err)
 				return
@@ -722,7 +854,11 @@ function M.add_reaction(pr, entry, refresh)
 				end
 			end
 
-			footer.notify("success", string.format("Reacted with %s", REACTION_EMOJI[selected.key] or selected.key), 1200)
+			footer.notify(
+				"success",
+				string.format("Reacted with %s", REACTION_EMOJI[selected.key] or selected.key),
+				1200
+			)
 			refresh()
 		end))
 	end)

@@ -211,8 +211,8 @@ local function compact_columns()
 		{ key = "pr_icon", name = "", min_width = 1, can_grow = false, header_hl = "AtlasColumnHeader" },
 		{ key = "repo_pr", name = "PR", min_width = 42, header_hl = "AtlasColumnHeader" },
 		{
-			key = "comments",
-			name = icons.general("comment"),
+			key = "conversation",
+			name = icons.general("conversation"),
 			min_width = 2,
 			can_grow = false,
 			header_hl = "AtlasColumnHeader",
@@ -264,7 +264,7 @@ function M.build_compact_table(groups)
 				_pr_icon_str = icon,
 				_pr_icon_hl = icon_hl,
 				repo_pr = "#" .. id_str .. " " .. title,
-				comments = tostring(pr.comments_count or 0),
+				conversation = tostring(pr.comments_count or 0),
 				tasks = tostring(pr.tasks_count or 0),
 				status = state_label,
 				status_raw = state_str,
@@ -285,7 +285,7 @@ function M.build_compact_table(groups)
 				kind = "meta",
 				pr_icon = "",
 				repo_pr = src .. " → " .. dst,
-				comments = "",
+				conversation = "",
 				tasks = "",
 				status = "",
 				status_raw = "",
@@ -312,8 +312,8 @@ local function plain_columns()
 		{ key = "pr_icon", name = "", min_width = 1, can_grow = false, header_hl = "AtlasColumnHeader" },
 		{ key = "name", name = "PR", min_width = 42, header_hl = "AtlasColumnHeader" },
 		{
-			key = "comments",
-			name = icons.general("comment"),
+			key = "conversation",
+			name = icons.general("conversation"),
 			min_width = 2,
 			can_grow = false,
 			header_hl = "AtlasColumnHeader",
@@ -345,14 +345,14 @@ function M.build_plain_tree_table(groups)
 	for i, group in ipairs(groups or {}) do
 		local repo_label = group.repo.name or ""
 		if i > 1 then
-			table.insert(rows, { kind = "spacer", pr_icon = "", name = "", comments = "", tasks = "", status = "", status_raw = "", author = "", branch = "", created = "", updated = "" })
+			table.insert(rows, { kind = "spacer", pr_icon = "", name = "", conversation = "", tasks = "", status = "", status_raw = "", author = "", branch = "", created = "", updated = "" })
 		end
 		table.insert(rows, {
 			kind = "repo",
 			pr_icon = REPO_ICON,
 			name = repo_label,
 			repo_full_name = repo_label,
-			comments = "",
+			conversation = "",
 			tasks = "",
 			status = "",
 			status_raw = "",
@@ -381,7 +381,7 @@ function M.build_plain_tree_table(groups)
 				_pr_icon_str = icon,
 				_pr_icon_hl = icon_hl,
 				name = "#" .. id_str .. " " .. title,
-				comments = tostring(pr.comments_count or 0),
+				conversation = tostring(pr.comments_count or 0),
 				tasks = tostring(pr.tasks_count or 0),
 				status = "",
 				status_raw = state_str,
@@ -402,7 +402,7 @@ end
 
 ---@param pr PullRequest
 ---@return string[], table[]
-function M.pr_popup_content(pr)
+local function generic_pr_popup_content(pr)
 	local id = tostring(pr.id or "")
 	local title = tostring(pr.title or "")
 	local author_name = tostring((pr.author and pr.author.name) or "Unknown")
@@ -456,6 +456,181 @@ function M.pr_popup_content(pr)
 	end
 
 	return lines, hl
+end
+
+---@param pr PullRequest
+---@return string[], table[]
+local function github_pr_popup_content(pr)
+	local raw = type(pr._raw) == "table" and pr._raw or {}
+	local id = tostring(pr.id or "")
+	local title = tostring(pr.title or "")
+	local author_name = tostring((pr.author and pr.author.name) or "Unknown")
+	local repo_name = tostring(pr.repo_full_name or "")
+
+	local state_str = tostring(pr.state or "-")
+	if raw.isDraft == true then
+		state_str = "draft"
+	end
+
+	local lines = { string.format(" #%s: %s", id, title), "" }
+	---@type table[]
+	local hl = {
+		{ row = 1, col = 0, end_col = -1, hl_group = "AtlasTextMuted" },
+	}
+	if id ~= "" then
+		table.insert(hl, { row = 0, col = 2, end_col = 2 + #id, hl_group = "AtlasTextMuted" })
+	end
+
+	---@param label string
+	---@param value string|nil
+	---@param value_hl string|nil
+	local function push(label, value, value_hl)
+		if value == nil or value == "" then
+			return
+		end
+		local row = #lines
+		table.insert(lines, string.format(" %-10s %s", label .. ":", value))
+		table.insert(hl, { row = row, col = 1, end_col = 11, hl_group = "AtlasTextMuted" })
+		if value_hl then
+			table.insert(hl, { row = row, col = 12, end_col = -1, hl_group = value_hl })
+		end
+	end
+
+	push("State", state_str, M.pr_state_hl(state_str))
+	push("Author", author_name, M.author_hl(author_name))
+	push("Repo", repo_name ~= "" and repo_name or nil, M.repo_hl(repo_name))
+	push(
+		"Branch",
+		string.format("%s → %s", tostring((pr.source or {}).branch or "?"), tostring((pr.destination or {}).branch or "?")),
+		"AtlasTextMuted"
+	)
+
+	local additions = tonumber(raw.additions) or 0
+	local deletions = tonumber(raw.deletions) or 0
+	local changed = tonumber(raw.changedFiles)
+	if changed or additions > 0 or deletions > 0 then
+		local add_str = string.format("+%d", additions)
+		local del_str = string.format("-%d", deletions)
+		local prefix = changed and string.format("%s ", tostring(changed)) or ""
+		local value = string.format("%s(%s, %s)", prefix, add_str, del_str)
+		local row = #lines
+		local line = string.format(" %-10s %s", "Files:", value)
+		table.insert(lines, line)
+		table.insert(hl, { row = row, col = 1, end_col = 11, hl_group = "AtlasTextMuted" })
+		-- 12 == col where value starts (` Files:     ` = 1 + 10 + 1)
+		local val_start = 12
+		if prefix ~= "" then
+			table.insert(hl, {
+				row = row,
+				col = val_start,
+				end_col = val_start + #prefix,
+				hl_group = "AtlasTextMuted",
+			})
+		end
+		local add_col = val_start + #prefix + 1 -- skip '('
+		local del_col = add_col + #add_str + 2 -- skip ", "
+		table.insert(hl, { row = row, col = add_col, end_col = add_col + #add_str, hl_group = "AtlasTextPositive" })
+		table.insert(hl, { row = row, col = del_col, end_col = del_col + #del_str, hl_group = "AtlasLogError" })
+	end
+
+	local decision = tostring(raw.reviewDecision or "")
+	if decision == "" or decision == "REVIEW_REQUIRED" then
+		-- reviewDecision is null on repos without enforced required-reviewers,
+		-- so fall back to scanning the latest opinionated reviews.
+		local approved, changes = 0, 0
+		for _, n in ipairs((raw.latestOpinionatedReviews and raw.latestOpinionatedReviews.nodes) or {}) do
+			local s = tostring(n.state or ""):upper()
+			if s == "APPROVED" then approved = approved + 1
+			elseif s == "CHANGES_REQUESTED" then changes = changes + 1
+			end
+		end
+		if changes > 0 then
+			decision = "CHANGES_REQUESTED"
+		elseif approved > 0 then
+			decision = "APPROVED"
+		end
+	end
+	if decision ~= "" and decision ~= "REVIEW_REQUIRED" then
+		local review_icon = decision == "APPROVED" and icons.pulls_status("successful")
+			or decision == "CHANGES_REQUESTED" and icons.pulls_status("failed")
+			or icons.pulls_status("inprogress")
+		local decision_hl = decision == "APPROVED" and "AtlasTextPositive"
+			or decision == "CHANGES_REQUESTED" and "AtlasTextWarning"
+			or "AtlasTextMuted"
+		push("Review", review_icon, decision_hl)
+	end
+
+	local rollup_ok, rollup_state = pcall(function()
+		return raw.commits.nodes[1].commit.statusCheckRollup.state
+	end)
+	if rollup_ok and type(rollup_state) == "string" then
+		local s = rollup_state:upper()
+		local ci_icon = (s == "SUCCESS") and icons.pulls_status("successful")
+			or (s == "FAILURE" or s == "ERROR") and icons.pulls_status("failed")
+			or icons.pulls_status("inprogress")
+		local ci_hl = (s == "SUCCESS") and "AtlasTextPositive"
+			or (s == "FAILURE" or s == "ERROR") and "AtlasLogError"
+			or "AtlasTextWarning"
+		push("CI", ci_icon, ci_hl)
+	end
+
+	local reviewer_names = {}
+	local seen_reviewer = {}
+	for _, n in ipairs((raw.latestOpinionatedReviews and raw.latestOpinionatedReviews.nodes) or {}) do
+		local login = type(n.author) == "table" and n.author.login or nil
+		if type(login) == "string" and login ~= "" and not seen_reviewer[login] then
+			seen_reviewer[login] = true
+			table.insert(reviewer_names, "@" .. login)
+		end
+	end
+	if #reviewer_names > 0 then
+		push("Reviewers", table.concat(reviewer_names, ", "), "AtlasTextMuted")
+	end
+
+	local labels = raw.labels and raw.labels.nodes or nil
+	if type(labels) == "table" and #labels > 0 then
+		local names = {}
+		for _, n in ipairs(labels) do
+			table.insert(names, tostring(n.name or ""))
+		end
+		push("Labels", table.concat(names, ", "), "AtlasTextMuted")
+	end
+
+	local milestone = raw.milestone
+	if type(milestone) == "table" and milestone.title then
+		push("Milestone", tostring(milestone.title), "AtlasTextMuted")
+	end
+
+	local assignees = raw.assignees and raw.assignees.nodes or nil
+	if type(assignees) == "table" and #assignees > 0 then
+		local logins = {}
+		for _, n in ipairs(assignees) do
+			table.insert(logins, "@" .. tostring(n.login or ""))
+		end
+		push("Assignees", table.concat(logins, ", "), M.author_hl(tostring(assignees[1].login or "")))
+	end
+
+	push("Conversation", tostring(pr.comments_count or 0), "AtlasTextMuted")
+	push("Updated", utils.relative_time(pr.updated_on), "AtlasTextMuted")
+
+	local content_width = 1
+	for _, line in ipairs(lines) do
+		content_width = math.max(content_width, vim.fn.strdisplaywidth(line))
+	end
+	lines[2] = " " .. ("━"):rep(content_width)
+
+	return lines, hl
+end
+
+---@param pr PullRequest
+---@return string[], table[]
+function M.pr_popup_content(pr)
+	local state = require("atlas.pulls.state")
+	local provider_id = state.provider and state.provider.id or ""
+	if provider_id == "github" then
+		return github_pr_popup_content(pr)
+	end
+	return generic_pr_popup_content(pr)
 end
 
 return M

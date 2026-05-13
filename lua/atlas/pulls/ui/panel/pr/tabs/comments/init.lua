@@ -1,26 +1,14 @@
 ---@class PullsCommentsTab : PullsPanelTabModule
 local M = {}
 
-local utils = require("atlas.ui.shared.utils")
-local icons = require("atlas.ui.shared.icons")
-local spinner = require("atlas.ui.components.spinner")
-local threads = require("atlas.ui.components.threadsv2")
-local helper = require("atlas.pulls.ui.main.helper")
-local core_utils = require("atlas.core.utils")
 local md_editor = require("atlas.ui.popups.markdown_editor")
 local footer = require("atlas.ui.components.footer")
+local renderer = require("atlas.pulls.ui.panel.pr.tabs.comments.renderer")
 local state = require("atlas.pulls.ui.panel.pr.tabs.comments.state")
-
-local PADDING_X = 1
+local keymaps = require("atlas.pulls.ui.panel.pr.tabs.comments.keymaps")
 
 ---@type { cancel: fun() }[]
 local in_flight = {}
-
----@return PullsProvider|nil
-local function get_provider()
-	local pulls_state = require("atlas.pulls.state")
-	return pulls_state.provider
-end
 
 local function cancel_all()
 	for _, handle in ipairs(in_flight) do
@@ -36,329 +24,91 @@ local function track(handle)
 	end
 end
 
----@param author {name: string, nickname: string|nil}|nil
----@return string
-local function author_name(author)
-	if author == nil then
-		return "Unknown"
-	end
-	if author.nickname and author.nickname ~= "" then
-		return author.nickname
-	end
-	if author.name and author.name ~= "" then
-		return author.name
-	end
-	return "Unknown"
+---@return PullsProvider|nil
+local function get_provider()
+	return require("atlas.pulls.state").provider
 end
 
----@param inline {path: string, to: number|nil, from: number|nil}|nil
----@return string
-local function file_label(inline)
-	if inline == nil then
-		return "PR"
-	end
-	local path = inline.path
-	local line = inline["to"] or inline["from"]
-	if path == "" then
-		return "PR"
-	end
-	if line ~= nil then
-		return string.format("%s:%d", path, line)
-	end
-	return path
-end
-
----@class PullsCommentFileGroup
----@field file string
----@field nodes PullsCommentTreeNode[]
-
----@class PullsCommentTreeNode
----@field comment PullsComment
----@field children PullsCommentTreeNode[]
-
----@param comments PullsComment[]
----@return PullsCommentTreeNode[]
-local function build_comment_tree(comments)
-	local by_id = {}
-	local roots = {}
-
-	for _, c in ipairs(comments) do
-		by_id[tonumber(c.id)] = { comment = c, children = {} }
-	end
-
-	for _, c in ipairs(comments) do
-		local node = by_id[tonumber(c.id)]
-		local parent_id = tonumber(c.parent_id)
-		if parent_id ~= nil and by_id[parent_id] ~= nil then
-			table.insert(by_id[parent_id].children, node)
-		else
-			table.insert(roots, node)
-		end
-	end
-
-	local function newest_in_tree(node)
-		local newest = node.comment.created_on or ""
-		for _, child in ipairs(node.children or {}) do
-			local child_newest = newest_in_tree(child)
-			if child_newest > newest then
-				newest = child_newest
-			end
-		end
-		return newest
-	end
-
-	table.sort(roots, function(a, b)
-		return newest_in_tree(a) > newest_in_tree(b)
-	end)
-
-	return roots
-end
-
----@param file string
----@param count integer
----@param pad integer
----@param max_width integer
----@return string line
----@return table[] spans
-local function render_file_header(file, count, pad, max_width)
-	local padding = string.rep(" ", pad)
-	local count_suffix = string.format(" (%d)", count)
-	local hdr_spans = {}
-
-	if file == "PR" then
-		local icon = icons.general("comment")
-		local label = "Conversation"
-		local line = padding .. icon .. " " .. label .. count_suffix
-		table.insert(hdr_spans, { line = 0, start_col = pad, end_col = #line, hl_group = "AtlasTextMuted" })
-		return line, hdr_spans
-	end
-
-	local icon = icons.pulls("files")
-	local prefix = padding .. icon .. " "
-	local available = max_width - vim.api.nvim_strwidth(prefix) - vim.api.nvim_strwidth(count_suffix)
-	if available < 1 then
-		available = 1
-	end
-	local file_text = utils.truncate(file, available, true)
-	local line = prefix .. file_text .. count_suffix
-	table.insert(hdr_spans, { line = 0, start_col = pad, end_col = #line, hl_group = "AtlasTextMuted" })
-	return line, hdr_spans
-end
-
----@param comment PullsComment
+---@param comment PullsComment|nil
 ---@return boolean
 local function is_own_comment(comment)
 	local current_user = require("atlas.pulls.state").current_user
-	if not current_user or not comment.author then
+	if not current_user or not comment or not comment.author then
 		return false
 	end
-	return comment.author.nickname == current_user.username or comment.author.name == current_user.name
+	local author_id = tostring(comment.author.id or "")
+	local user_id = tostring(current_user.id or "")
+	return author_id ~= "" and user_id ~= "" and author_id == user_id
 end
 
----@param value string|nil
----@return string
-local function comment_display_text(value)
-	return utils.strip_markup(value)
-end
-
----@param node PullsCommentTreeNode
----@param file string
----@return AtlasThreadV2Item
-local function to_thread_item(node, file)
-	local comment = node.comment
-	local is_deleted = comment.deleted == true
-	local text = is_deleted and "(deleted comment)" or comment_display_text(comment.content_raw)
-	if text == "" then
-		text = "(empty comment)"
+---@return AtlasMarkdownCompletionProvider|nil
+local function build_completion()
+	local provider = require("atlas.pulls.state").provider
+	local provider_id = provider and tostring(provider.id or "") or ""
+	if provider_id == "" then
+		return nil
 	end
-
-	local author = author_name(comment.author)
-	local children = {}
-	for _, child in ipairs(node.children or {}) do
-		table.insert(children, to_thread_item(child, file))
+	local ok, mod = pcall(require, string.format("atlas.pulls.providers.%s.completion.author", provider_id))
+	if not ok or type(mod) ~= "table" or type(mod.build_completion) ~= "function" then
+		return nil
 	end
-
-	local footer_items = {
-		string.format("%s (c)", icons.general("reply")),
-	}
-	if not is_deleted and is_own_comment(comment) then
-		table.insert(footer_items, string.format("%s (e)", icons.general("edit")))
-		table.insert(footer_items, string.format("%s (d)", icons.general("delete")))
-	end
-
-	return {
-		icon = icons.general("user"),
-		author = tostring(author),
-		right_text = utils.relative_time(comment.created_on),
-		content = text,
-		children = children,
-		footer_items = footer_items,
-		line_map = {
-			comment = comment,
-			entity_kind = "comment",
-			file = file,
-		},
-		meta = {
-			comment = comment,
-			author_hl_name = author,
-			is_deleted = is_deleted,
-		},
-	}
-end
-
----@param nodes PullsCommentTreeNode[]
----@return PullsCommentFileGroup[]
-local function group_nodes_by_file(nodes)
-	---@type table<string, PullsCommentFileGroup>
-	local by_file = {}
-	---@type PullsCommentFileGroup[]
-	local ordered = {}
-
-	for _, node in ipairs(nodes or {}) do
-		local file = file_label(node.comment.inline)
-		local group = by_file[file]
-		if group == nil then
-			group = { file = file, nodes = {} }
-			by_file[file] = group
-			table.insert(ordered, group)
-		end
-		table.insert(group.nodes, node)
-	end
-
-	return ordered
+	return mod.build_completion()
 end
 
 ---@param pr PullRequest
----@param repo PullsRepo|nil
+---@param opts { key: string, title: string, initial_text: string|nil, on_save: fun(text: string|nil) }
+local function open_md_editor(pr, opts)
+	md_editor.open({
+		key = opts.key,
+		title = opts.title,
+		width_ratio = 0.5,
+		height_ratio = 0.18,
+		initial_text = opts.initial_text,
+		completion = build_completion(),
+		on_save = opts.on_save,
+	})
+end
+
+-- -----------------------------------------------------------------------------
+-- Lifecycle
+-- -----------------------------------------------------------------------------
+
+---@param pr PullRequest
+---@param _repo PullsRepo|nil
 ---@param refresh fun()
 ---@param opts { force_refresh: boolean|nil }|nil
-function M.on_select(pr, repo, refresh, opts)
+function M.on_select(pr, _repo, refresh, opts)
 	cancel_all()
 	state.reset()
 
 	local provider = get_provider()
-	if not provider then
+	if provider == nil or type(provider.fetch_comments) ~= "function" then
+		state.comments = "Provider does not support comments"
+		refresh()
 		return
 	end
 
 	local pr_id = tostring(pr.id or "")
-	if type(provider.fetch_comments) == "function" then
-		state.comments = "loading"
-		footer.notify("loading", string.format("Loading comments for #%s...", pr_id))
-		track(provider.fetch_comments(pr, opts, function(comments, err)
-			if err then
-				state.comments = err
-				footer.notify("error", string.format("Failed to load comments for #%s", pr_id))
-			else
-				state.comments = comments or {}
-				footer.notify("success", string.format("Comments loaded for #%s", pr_id), 1200)
-			end
-			refresh()
-		end))
-	end
+	state.comments = "loading"
+	footer.notify("loading", string.format("Loading comments for #%s...", pr_id))
+
+	track(provider.fetch_comments(pr, opts, function(comments, err)
+		if err then
+			state.comments = err
+			footer.notify("error", string.format("Failed to load comments for #%s", pr_id))
+		else
+			state.comments = comments or {}
+			footer.notify("success", string.format("Comments loaded for #%s", pr_id), 1200)
+		end
+		refresh()
+	end))
 end
 
 ---@param pr PullRequest
 ---@param width integer
 ---@return string[], table[], table<integer, table>|nil
 function M.render(pr, width)
-	local lines = {}
-	local spans = {}
-	local line_map = {}
-	local max_width = math.max(20, width)
-
-	if state.comments == nil then
-		return lines, spans, line_map
-	end
-
-	-- Loading
-	if state.comments == "loading" then
-		utils.push(lines, spans, spinner.with_text("Loading comments..."), "AtlasTextMuted", PADDING_X)
-		return lines, spans, line_map
-	end
-
-	-- Error
-	if type(state.comments) == "string" then
-		utils.push(lines, spans, state.comments, "AtlasLogError", PADDING_X)
-		return lines, spans, line_map
-	end
-
-	-- Empty
-	local comment_entries = state.comments
-	if #comment_entries == 0 then
-		utils.push(lines, spans, "No comments yet.", "AtlasTextMuted", PADDING_X)
-		return lines, spans, line_map
-	end
-
-	local comment_nodes = build_comment_tree(comment_entries)
-	local file_groups = group_nodes_by_file(comment_nodes)
-
-	for group_index, group in ipairs(file_groups) do
-		local fh_line, fh_spans = render_file_header(group.file, #group.nodes, PADDING_X, max_width)
-		utils.append_block(lines, spans, { lines = { fh_line }, highlights = fh_spans })
-
-		local items = {}
-		for _, node in ipairs(group.nodes) do
-			table.insert(items, to_thread_item(node, group.file))
-		end
-
-		local item_lines, item_spans, item_map = threads.render(items, max_width, {
-			padding_x = PADDING_X,
-			separator = "",
-			additional_hl = function(item)
-				return "AtlasTextMuted"
-			end,
-			author_hl = function(item, author)
-				local meta = item and item.meta or nil
-				local author_hl_name = meta and meta.author_hl_name or ""
-				if type(author_hl_name) ~= "string" or vim.trim(author_hl_name) == "" then
-					author_hl_name = author
-				end
-				return helper.author_hl(author_hl_name)
-			end,
-			icon_hl_fn = function(item)
-				local meta = item and item.meta or nil
-				local author_hl_name = meta and meta.author_hl_name or ""
-				if type(author_hl_name) ~= "string" or vim.trim(author_hl_name) == "" then
-					author_hl_name = tostring(item.author or "")
-				end
-				return helper.author_hl(author_hl_name)
-			end,
-			content_hl = function(item, row)
-				local meta = item and item.meta or {}
-				if meta.is_deleted then
-					return {
-						{ start_col = 0, end_col = #row, hl_group = "AtlasTextMutedItalic" },
-					}
-				end
-				return nil
-			end,
-		})
-
-		local offset = #lines
-		utils.append_block(lines, spans, {
-			lines = item_lines,
-			highlights = item_spans,
-		})
-		for lnum, entry in pairs(item_map or {}) do
-			line_map[offset + lnum] = entry
-		end
-
-		if group_index < #file_groups then
-			local pad = string.rep(" ", PADDING_X)
-			local sep = pad .. string.rep("─", max_width - PADDING_X * 2)
-			table.insert(lines, sep)
-			table.insert(spans, {
-				line = #lines - 1,
-				start_col = 0,
-				end_col = #sep,
-				hl_group = "AtlasTextMuted",
-			})
-			table.insert(lines, "")
-		end
-	end
-
-	return lines, spans, line_map
+	return renderer.render(pr, width, state.comments)
 end
 
 ---@param _lnum integer
@@ -366,16 +116,114 @@ end
 ---@return boolean
 function M.is_selectable_line(_lnum, entry)
 	local k = entry.kind
-	return k == "header" or k == "content" or k == "thread_header" or k == "thread_content"
+	return k == "header"
+		or k == "content"
+		or k == "thread_header"
+		or k == "thread_content"
+		or k == "hunk_header"
+		or k == "hunk_line"
+		or k == "file_header"
 end
 
-local keymaps = require("atlas.pulls.ui.panel.pr.tabs.comments.keymaps")
+---@param _pr PullRequest
+---@param entry table
+function M.on_enter(_pr, entry)
+	if entry.kind == "hunk_header" and entry.hunk_key then
+		state.collapsed_hunks[entry.hunk_key] = not (state.collapsed_hunks[entry.hunk_key] == true)
+		return true
+	end
+
+	local comment = entry.comment
+	if comment ~= nil and entry.entity_kind == "comment" then
+		local url = tostring(comment.html_url or "")
+		if url ~= "" then
+			vim.ui.open(url)
+		end
+		return
+	end
+	local task = entry.task
+	if task ~= nil and entry.entity_kind == "task" then
+		local url = nil
+		if task._raw and task._raw.links then
+			url = tostring(task._raw.links.html or "")
+		end
+		if url and url ~= "" then
+			vim.ui.open(url)
+		end
+	end
+end
+
 function M.activate(buf, refresh)
 	if buf == nil or refresh == nil then
 		return
 	end
 	keymaps.setup(buf, refresh)
 end
+
+function M.deactivate(buf)
+	if buf ~= nil then
+		keymaps.teardown(buf)
+	end
+	cancel_all()
+end
+
+---@param fn fun(comments: PullsComment[])
+local function with_comments(fn)
+	local list = state.comments
+	if type(list) ~= "table" then
+		return
+	end
+	---@cast list PullsComment[]
+	fn(list)
+end
+
+---@param comment_id string|number
+---@param updater fun(comment: PullsComment)
+local function update_comment(comment_id, updater)
+	with_comments(function(list)
+		for _, c in ipairs(list) do
+			if tostring(c.id) == tostring(comment_id) then
+				updater(c)
+				return
+			end
+		end
+	end)
+end
+
+---@param comment_id string|number
+local function remove_comment(comment_id)
+	with_comments(function(list)
+		for i = #list, 1, -1 do
+			if tostring(list[i].id) == tostring(comment_id) then
+				table.remove(list, i)
+			end
+		end
+	end)
+end
+
+---@param comment PullsComment
+local function append_comment(comment)
+	with_comments(function(list)
+		table.insert(list, comment)
+	end)
+end
+
+---@param comment PullsComment
+local function upsert_comment(comment)
+	with_comments(function(list)
+		for i, existing in ipairs(list) do
+			if tostring(existing.id) == tostring(comment.id) then
+				list[i] = comment
+				return
+			end
+		end
+		table.insert(list, comment)
+	end)
+end
+
+-- -----------------------------------------------------------------------------
+-- Actions
+-- -----------------------------------------------------------------------------
 
 ---@param pr PullRequest
 ---@param refresh fun()
@@ -385,25 +233,21 @@ function M.add_comment(pr, refresh)
 		return
 	end
 
-	local completion = nil
-	md_editor.open({
+	open_md_editor(pr, {
 		key = "pr-comment-add",
 		title = " Add Comment ",
-		width_ratio = 0.5,
-		height_ratio = 0.18,
-		completion = completion,
 		on_save = function(text)
 			if not text or vim.trim(text) == "" then
 				return
 			end
 			footer.notify("loading", "Adding comment...")
-			track(provider.add_comment(pr, text, function(comment, err)
+			track(provider.add_comment(pr, text, nil, function(comment, err)
 				if err then
 					footer.notify("error", "Add comment failed: " .. err)
 					return
 				end
-				if type(comment) == "table" and type(state.comments) == "table" then
-					table.insert(state.comments, comment)
+				if comment then
+					append_comment(comment)
 				end
 				footer.notify("success", "Comment added", 1200)
 				refresh()
@@ -416,7 +260,6 @@ end
 ---@param entry table
 ---@param refresh fun()
 function M.reply_comment(pr, entry, refresh)
-	local footer = require("atlas.ui.components.footer")
 	local provider = get_provider()
 	if not provider or type(provider.reply_comment) ~= "function" then
 		return
@@ -427,29 +270,40 @@ function M.reply_comment(pr, entry, refresh)
 		return
 	end
 
-	local completion = nil
 	local author = comment.author or {}
-	local mention = tostring(author.nickname or author.name or "")
-	local initial_text = mention ~= "" and ("@" .. mention .. " ") or ""
-	md_editor.open({
+	local mention_id = tostring(author.id or "")
+	local mention_name = tostring(author.nickname or author.name or "")
+	local provider_id = provider and tostring(provider.id or "") or ""
+	local initial_text = ""
+
+	if provider_id == "bitbucket" and mention_id ~= "" then
+		-- bitbucket needs the account id
+		initial_text = "@{" .. mention_id .. "} "
+	elseif mention_name ~= "" then
+		initial_text = "@" .. mention_name .. " "
+	end
+
+	open_md_editor(pr, {
 		key = "pr-comment-reply-" .. tostring(comment.id),
 		title = " Reply to Comment ",
-		width_ratio = 0.5,
-		height_ratio = 0.18,
 		initial_text = initial_text,
-		completion = completion,
 		on_save = function(text)
 			if not text or vim.trim(text) == "" then
 				return
 			end
 			footer.notify("loading", "Sending reply...")
-			track(provider.reply_comment(pr, comment.id, text, function(reply, err)
+			track(provider.reply_comment(pr, comment, text, function(reply, err)
 				if err then
 					footer.notify("error", "Reply failed: " .. err)
 					return
 				end
-				if type(reply) == "table" and type(state.comments) == "table" then
-					table.insert(state.comments, reply)
+
+				if reply then
+					--- just in case you know
+					if reply.parent_id == nil then
+						reply.parent_id = comment.id
+					end
+					append_comment(reply)
 				end
 				footer.notify("success", "Reply added", 1200)
 				refresh()
@@ -462,41 +316,36 @@ end
 ---@param entry table
 ---@param refresh fun()
 function M.edit_comment(pr, entry, refresh)
-	local footer = require("atlas.ui.components.footer")
 	local provider = get_provider()
 	if not provider or type(provider.edit_comment) ~= "function" then
 		return
 	end
-
 	local comment = entry.comment
 	if not comment or not is_own_comment(comment) then
 		return
 	end
 
-	local completion = nil
-	md_editor.open({
+	open_md_editor(pr, {
 		key = "pr-comment-edit-" .. tostring(comment.id),
 		title = " Edit Comment ",
-		width_ratio = 0.5,
-		height_ratio = 0.18,
 		initial_text = comment.content_raw or "",
-		completion = completion,
 		on_save = function(text)
 			if not text or vim.trim(text) == "" then
 				return
 			end
 			footer.notify("loading", "Editing comment...")
-			track(provider.edit_comment(pr, comment.id, text, function(updated, err)
+			local desired = vim.tbl_extend("force", {}, comment, { content_raw = text })
+			track(provider.edit_comment(pr, desired, function(updated, err)
 				if err then
 					footer.notify("error", "Edit failed: " .. err)
 					return
 				end
-				local comments = core_utils.as_table(state.comments) or {}
-				for i, c in ipairs(comments) do
-					if c.id == comment.id then
-						comments[i].content_raw = text
-						break
-					end
+				if updated then
+					upsert_comment(updated)
+				else
+					update_comment(comment.id, function(c)
+						c.content_raw = text
+					end)
 				end
 				footer.notify("success", "Comment updated", 1200)
 				refresh()
@@ -513,7 +362,6 @@ function M.delete_comment(pr, entry, refresh)
 	if not provider or type(provider.delete_comment) ~= "function" then
 		return
 	end
-
 	local comment = entry.comment
 	if not comment or not is_own_comment(comment) then
 		return
@@ -525,19 +373,13 @@ function M.delete_comment(pr, entry, refresh)
 			return
 		end
 		footer.notify("loading", "Deleting comment...")
-		track(provider.delete_comment(pr, comment.id, function(ok, err)
+		track(provider.delete_comment(pr, comment, function(ok, err)
 			if err then
 				footer.notify("error", "Delete failed: " .. err)
 				return
 			end
 			if ok then
-				local comments = core_utils.as_table(state.comments) or {}
-				for i, c in ipairs(comments) do
-					if c.id == comment.id then
-						table.remove(comments, i)
-						break
-					end
-				end
+				remove_comment(comment.id)
 			end
 			footer.notify("success", "Comment deleted", 1200)
 			refresh()
@@ -545,11 +387,90 @@ function M.delete_comment(pr, entry, refresh)
 	end)
 end
 
-function M.deactivate(buf)
-	if buf ~= nil then
-		keymaps.teardown(buf)
+---@param pr PullRequest
+---@param entry table
+---@param refresh fun()
+function M.toggle_task(pr, entry, refresh)
+	local provider = get_provider()
+	local comment = entry and entry.comment
+	if comment == nil or not comment.is_task then
+		footer.notify("warn", "Not a task")
+		return
 	end
-	cancel_all()
+	if not provider or type(provider.edit_comment) ~= "function" then
+		footer.notify("error", "Provider does not support comment edits")
+		return
+	end
+
+	local is_resolved = comment.state == "RESOLVED"
+	local desired = vim.deepcopy(comment)
+	if is_resolved then
+		desired.state = nil
+	else
+		desired.state = "RESOLVED"
+	end
+	footer.notify("loading", is_resolved and "Reopening task..." or "Resolving task...")
+	track(provider.edit_comment(pr, desired, function(updated, err)
+		if err then
+			footer.notify("error", tostring(err))
+			return
+		end
+		if updated then
+			upsert_comment(updated)
+		else
+			update_comment(comment.id, function(c)
+				c.state = desired.state
+			end)
+		end
+		footer.notify("success", is_resolved and "Task reopened" or "Task resolved", 1200)
+		refresh()
+	end))
+end
+
+---@param pr PullRequest
+---@param refresh fun()
+function M.add_task(pr, refresh)
+	local provider = get_provider()
+	if not provider or type(provider.add_comment) ~= "function" then
+		footer.notify("error", "Provider does not support comments")
+		return
+	end
+
+	local panel_state = require("atlas.pulls.ui.panel.pr.state")
+	local win = require("atlas.ui.layout").win_id("detail")
+	local parent = nil
+	if win and vim.api.nvim_win_is_valid(win) then
+		local lnum = vim.api.nvim_win_get_cursor(win)[1]
+		local ent = (panel_state.line_map or {})[lnum]
+		if ent and ent.comment then
+			parent = ent.comment
+		end
+	end
+
+	local is_github = provider.id == "github"
+	local initial = is_github and "- [ ] " or ""
+
+	open_md_editor(pr, {
+		key = "pr-task-add-" .. tostring(pr.id or ""),
+		title = " Add Task ",
+		initial_text = initial,
+		on_save = function(text)
+			if not text or vim.trim(text) == "" then
+				footer.notify("warn", "Task cannot be empty")
+				return
+			end
+			footer.notify("loading", "Adding task...")
+			local opts = is_github and { parent = parent } or { parent = parent, is_task = true }
+			track(provider.add_comment(pr, text, opts, function(_, err)
+				if err then
+					footer.notify("error", tostring(err))
+					return
+				end
+				footer.notify("success", "Task added", 1200)
+				refresh()
+			end))
+		end,
+	})
 end
 
 return M

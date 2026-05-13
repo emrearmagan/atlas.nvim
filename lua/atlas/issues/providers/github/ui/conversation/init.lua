@@ -261,43 +261,11 @@ end
 ---@param event GHIssueTimelineEntry
 ---@return string label, string|nil hl_for_extra
 local function event_label(event)
-	local kind = event.event
-	if kind == "labeled" then
-		return string.format("added label: %s", event.label_name or ""), nil
-	elseif kind == "unlabeled" then
-		return string.format("removed label: %s", event.label_name or ""), nil
-	elseif kind == "assigned" then
-		return string.format("assigned %s", event.assignee_login or ""), nil
-	elseif kind == "unassigned" then
-		return string.format("unassigned %s", event.assignee_login or ""), nil
-	elseif kind == "milestoned" then
-		return string.format("added to milestone %s", event.milestone_title or ""), nil
-	elseif kind == "demilestoned" then
-		return string.format("removed from milestone %s", event.milestone_title or ""), nil
-	elseif kind == "renamed" then
-		return string.format("renamed: %s -> %s", event.rename_from or "", event.rename_to or ""), nil
-	elseif kind == "closed" then
-		return event.commit_id and string.format("closed via commit %s", event.commit_id) or "closed", nil
-	elseif kind == "reopened" then
-		return "reopened", nil
-	elseif kind == "locked" then
-		return "locked conversation", nil
-	elseif kind == "unlocked" then
-		return "unlocked conversation", nil
-	elseif kind == "pinned" then
-		return "pinned this issue", nil
-	elseif kind == "unpinned" then
-		return "unpinned this issue", nil
-	elseif kind == "transferred" then
-		return "transferred this issue", nil
-	elseif kind == "marked_as_duplicate" then
-		return "marked as duplicate", nil
-	elseif kind == "cross-referenced" then
-		return string.format("referenced this from %s", event.source_title or event.source_url or ""), nil
-	elseif kind == "referenced" then
-		return event.commit_id and string.format("referenced commit %s", event.commit_id) or "referenced", nil
+	local label, content = require("atlas.issues.providers.github.ui.event_label").format(event)
+	if content and content ~= "" then
+		return label .. ": " .. content, nil
 	end
-	return kind, nil
+	return label, nil
 end
 
 local EVENT_ICON = {

@@ -195,18 +195,20 @@ function M.close()
 	state.render_callback = nil
 end
 
---- When scrolling in the panel window the main view kinda break and this helps. I dont know why tho..
+--- When scrolling in the panel or notification window the main view kinda break and this helps. I dont know why tho..
 vim.api.nvim_create_autocmd("WinScrolled", {
 	group = resize_group,
 	callback = function()
 		if not M.is_open() then
 			return
 		end
-		if vim.api.nvim_get_current_tabpage() ~= state.tab_id then
-			return
-		end
-		if state.detail_win ~= nil and vim.v.event[tostring(state.detail_win)] ~= nil then
-			vim.cmd("redraw!")
+
+		local main_key = tostring(state.main_win or "")
+		for win_key, _ in pairs(vim.v.event) do
+			if win_key ~= "all" and win_key ~= main_key then
+				vim.cmd("redraw!")
+				return
+			end
 		end
 	end,
 })

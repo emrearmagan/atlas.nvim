@@ -1,9 +1,10 @@
 local M = {}
 
 ---@param provider IssuesProvider
-function M.init(provider)
+---@param opts? { initial_view?: IssuesViewConfig }
+function M.init(provider, opts)
 	local main = require("atlas.issues.ui.main")
-	main.init(provider)
+	main.init(provider, opts)
 end
 
 function M.render()

@@ -154,7 +154,7 @@ local function compact_columns()
 		{ key = "pr_icon", name = "", min_width = 1, can_grow = false, header_hl = "AtlasColumnHeader" },
 		{ key = "repo_pr", name = "PR", min_width = 42, header_hl = "AtlasColumnHeader" },
 		{
-			key = "comments",
+			key = "conversation",
 			name = icons.general("comment"),
 			min_width = 2,
 			can_grow = false,
@@ -184,7 +184,7 @@ local function compact_columns()
 		},
 		{
 			key = "diff",
-			name = icons.pulls("files"),
+			name = icons.pulls("changes"),
 			max_width = 15,
 			can_grow = false,
 			header_hl = "AtlasColumnHeader",
@@ -212,6 +212,7 @@ local function compact_rows(groups)
 			local diff_result = diff_blocks.render({
 				additions = tonumber(pr._raw and pr._raw.additions) or 0,
 				deletions = tonumber(pr._raw and pr._raw.deletions) or 0,
+				show_count = false,
 			})
 			local icon, icon_hl = pr_icon_and_hl(pr)
 			table.insert(rows, {
@@ -221,7 +222,7 @@ local function compact_rows(groups)
 				_pr_icon_str = icon,
 				_pr_icon_hl = icon_hl,
 				repo_pr = "#" .. id_str .. " " .. title,
-				comments = tostring(pr.comments_count or 0),
+				conversation = tostring(pr.comments_count or 0),
 				ci = ci,
 				ci_hl = ci_h,
 				review = review,
@@ -241,7 +242,7 @@ local function compact_rows(groups)
 				kind = "meta",
 				pr_icon = "",
 				repo_pr = src .. " → " .. dst,
-				comments = "",
+				conversation = "",
 				ci = "",
 				ci_hl = "",
 				review = "",
@@ -269,7 +270,7 @@ local function plain_columns()
 		{ key = "pr_icon", name = "", min_width = 1, can_grow = false, header_hl = "AtlasColumnHeader" },
 		{ key = "name", name = "PR", min_width = 42, header_hl = "AtlasColumnHeader" },
 		{
-			key = "comments",
+			key = "conversation",
 			name = icons.general("comment"),
 			min_width = 2,
 			can_grow = false,
@@ -299,7 +300,7 @@ local function plain_columns()
 		},
 		{
 			key = "diff",
-			name = icons.pulls("files"),
+			name = icons.pulls("changes"),
 			max_width = 15,
 			can_grow = false,
 			header_hl = "AtlasColumnHeader",
@@ -316,14 +317,14 @@ local function plain_rows(groups)
 	for i, group in ipairs(groups or {}) do
 		local repo_label = group.repo.name or ""
 		if i > 1 then
-			table.insert(rows, { kind = "spacer", pr_icon = "", name = "", comments = "", ci = "", ci_hl = "", review = "", review_hl = "", diff = "", diff_hl = nil, author = "", branch = "", created = "", updated = "" })
+			table.insert(rows, { kind = "spacer", pr_icon = "", name = "", conversation = "", ci = "", ci_hl = "", review = "", review_hl = "", diff = "", diff_hl = nil, author = "", branch = "", created = "", updated = "" })
 		end
 		table.insert(rows, {
 			kind = "repo",
 			pr_icon = REPO_ICON,
 			name = repo_label,
 			repo_full_name = repo_label,
-			comments = "",
+			conversation = "",
 			ci = "",
 			ci_hl = "",
 			review = "",
@@ -350,6 +351,7 @@ local function plain_rows(groups)
 			local diff_result = diff_blocks.render({
 				additions = tonumber(pr._raw and pr._raw.additions) or 0,
 				deletions = tonumber(pr._raw and pr._raw.deletions) or 0,
+				show_count = false,
 			})
 			table.insert(rows, {
 				kind = "pr",
@@ -358,7 +360,7 @@ local function plain_rows(groups)
 				_pr_icon_str = icon,
 				_pr_icon_hl = icon_hl,
 				name = "#" .. id_str .. " " .. title,
-				comments = tostring(pr.comments_count or 0),
+				conversation = tostring(pr.comments_count or 0),
 				ci = ci,
 				ci_hl = ci_h,
 				review = review,
@@ -386,16 +388,6 @@ end
 function M.render(groups, layout, opts)
 	local lines = {}
 	local spans = {}
-
-	local gh_state = require("atlas.pulls.providers.github.state")
-	local search = gh_state.last_search_query
-	if type(search) == "string" and search ~= "" then
-		local search_icon = icons.general("search")
-		local text = string.format(" %s %s", search_icon, search)
-		table.insert(lines, text)
-		table.insert(spans, { line = #lines - 1, start_col = 0, end_col = #text, hl_group = "AtlasTextMuted" })
-		table.insert(lines, "")
-	end
 
 	local tbl_lines, tbl_map, tbl_spans
 

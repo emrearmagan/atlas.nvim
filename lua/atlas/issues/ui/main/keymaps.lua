@@ -59,7 +59,7 @@ function M.register(buf, views)
 	if state.provider and state.provider.open_actions then
 		utils.insert_if(
 			items,
-			item("issues.open_actions", {
+			item("ui.open_actions", {
 				desc = "Open issue actions",
 				index = 1,
 				callback = function()
@@ -90,7 +90,7 @@ function M.register(buf, views)
 	if state.provider and state.provider.search then
 		utils.insert_if(
 			items,
-			item("issues.search", {
+			item("ui.search", {
 				desc = "Search issues",
 				index = 3,
 				callback = function()
@@ -102,7 +102,7 @@ function M.register(buf, views)
 
 	utils.insert_if(
 		items,
-		item("issues.show_details", {
+		item("ui.show_details", {
 			desc = "Show issue details",
 			index = 4,
 			opts = { nowait = true },
@@ -123,7 +123,7 @@ function M.register(buf, views)
 
 	utils.insert_if(
 		items,
-		item("issues.refresh", {
+		item("ui.refresh", {
 			desc = "Reload selected issue",
 			index = 5,
 			callback = function()
@@ -134,7 +134,7 @@ function M.register(buf, views)
 
 	utils.insert_if(
 		items,
-		item("issues.refresh_view", {
+		item("ui.refresh_view", {
 			desc = "Refresh current view",
 			index = 6,
 			callback = function()
@@ -184,7 +184,7 @@ function M.register(buf, views)
 
 	utils.insert_if(
 		items,
-		item("issues.copy_url", {
+		item("ui.copy_url", {
 			desc = "Copy issue URL",
 			index = 9,
 			opts = { nowait = true },
@@ -268,7 +268,7 @@ function M.register(buf, views)
 
 	utils.insert_if(
 		items,
-		item("issues.open_in_browser", {
+		item("ui.open_in_browser", {
 			desc = "Open issue in browser",
 			index = 14,
 			opts = { nowait = true },
@@ -297,19 +297,19 @@ function M.remove(buf)
 	local provider_name = state.provider and state.provider.name or "Issues"
 	local items = {}
 
-	utils.insert_if(items, item("issues.open_actions", { key = "" }))
+	utils.insert_if(items, item("ui.open_actions", { key = "" }))
 	utils.insert_if(items, item("issues.transition_issue", { key = "" }))
 	utils.insert_if(items, item("issues.change_assignee", { key = "" }))
 	utils.insert_if(items, item("issues.change_reporter", { key = "" }))
 	utils.insert_if(items, item("issues.edit_issue", { key = "" }))
 	utils.insert_if(items, item("issues.create_issue", { key = "" }))
-	utils.insert_if(items, item("issues.search", { key = "" }))
-	utils.insert_if(items, item("issues.open_in_browser", { key = "" }))
+	utils.insert_if(items, item("ui.search", { key = "" }))
+	utils.insert_if(items, item("ui.open_in_browser", { key = "" }))
 	utils.insert_if(items, item("issues.copy_key", { key = "" }))
-	utils.insert_if(items, item("issues.copy_url", { key = "" }))
-	utils.insert_if(items, item("issues.refresh", { key = "" }))
-	utils.insert_if(items, item("issues.refresh_view", { key = "" }))
-	utils.insert_if(items, item("issues.show_details", { key = "" }))
+	utils.insert_if(items, item("ui.copy_url", { key = "" }))
+	utils.insert_if(items, item("ui.refresh", { key = "" }))
+	utils.insert_if(items, item("ui.refresh_view", { key = "" }))
+	utils.insert_if(items, item("ui.show_details", { key = "" }))
 	utils.insert_if(items, item("ui.toggle_fold", { key = "" }))
 	utils.insert_if(items, item("ui.toggle_all_folds", { key = "" }))
 	table.insert(items, { key = "K" })

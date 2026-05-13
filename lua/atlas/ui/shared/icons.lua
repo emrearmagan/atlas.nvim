@@ -8,6 +8,7 @@ local ICONS = {
 		refresh = "󰑐",
 		overview = "󰈙",
 		comment = "",
+		conversation = "",
 		created = "󰃭",
 		updated = "󰥔",
 		user = "",
@@ -19,9 +20,14 @@ local ICONS = {
 		error = "",
 		info = "",
 		bell = "󰂚",
+		bell_no = "󰂛",
 		bell_unread = "󱅫",
+		pin = "󰐃",
 		dot = "●",
 		activity_more = "󰉺",
+		star = "",
+		fork = "",
+		watching = "",
 	},
 
 	pulls = {
@@ -32,7 +38,8 @@ local ICONS = {
 		tasks = "󰘽",
 		check = "",
 		commit = "󰜘",
-		files = "󰈔",
+		changes = "󱓉",
+		file = "",
 		activity = "󱐋",
 		tag = "",
 		branch = "",
@@ -54,9 +61,6 @@ local ICONS = {
 			},
 			gitlab = {
 				provider = "",
-			},
-			mock = {
-				provider = "󰙨",
 			},
 		},
 	},
@@ -86,9 +90,6 @@ local ICONS = {
 			},
 			gitlab = {
 				provider = "",
-			},
-			mock = {
-				provider = "󰙨",
 			},
 		},
 	},

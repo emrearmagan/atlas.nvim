@@ -48,10 +48,12 @@ local function normalize_comment(result)
 		author = actor(entry.user),
 		content_raw = tostring(content.raw or ""),
 		created_on = tostring(entry.created_on or ""),
-		deleted = entry.deleted == true,
 		inline = comment_inline(entry.inline),
+		is_task = nil,
+		state = entry.deleted == true and "DELETED" or nil,
 		url = tostring((as_table(links.self) or {}).href or ""),
 		html_url = tostring((as_table(links.html) or {}).href or ""),
+		_raw = entry,
 	}
 end
 
@@ -200,7 +202,7 @@ function M.add_comment(pr, content, opts, on_done)
 end
 
 ---@param pr PullRequest
----@param parent_id number
+---@param parent_id number|string
 ---@param content string
 ---@param opts? { inline?: { from?: number, to?: number, start_from?: number, start_to?: number, path?: string }|nil }
 ---@param on_done fun(comment: PullsComment|nil, err: string|nil)
@@ -231,7 +233,7 @@ function M.reply_comment(pr, parent_id, content, opts, on_done)
 end
 
 ---@param pr PullRequest
----@param comment_id number
+---@param comment_id number|string|string
 ---@param content string
 ---@param opts? { inline?: { from?: number, to?: number, start_from?: number, start_to?: number, path?: string }|nil }
 ---@param on_done fun(comment: PullsComment|nil, err: string|nil)
@@ -260,7 +262,7 @@ function M.edit_comment(pr, comment_id, content, opts, on_done)
 end
 
 ---@param pr PullRequest
----@param comment_id number
+---@param comment_id number|string|string
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.delete_comment(pr, comment_id, on_done)
@@ -281,16 +283,17 @@ function M.delete_comment(pr, comment_id, on_done)
 	end)
 end
 
----@param workspace string
----@param repo string
----@param pr_id string|number
----@param opts? { force_refresh?: boolean, pagelen?: number }
 ---@class BitbucketPRTasks
 ---@field entries BitbucketPRTask[]
 ---@field size number|nil
 ---@field page number|nil
 ---@field pagelen number|nil
 ---@field next string|nil
+
+---@param workspace string
+---@param repo string
+---@param pr_id string|number
+---@param opts? { force_refresh?: boolean, pagelen?: number }
 ---@param on_done fun(tasks: BitbucketPRTasks|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_tasks(workspace, repo, pr_id, opts, on_done)

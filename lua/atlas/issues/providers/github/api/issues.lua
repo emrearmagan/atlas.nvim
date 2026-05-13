@@ -23,17 +23,11 @@ query($search: String!, $limit: Int!, $withRelationships: Boolean!) {
 }
 
 fragment IssueFields on Issue {
-  number title state
-  createdAt updatedAt closedAt url body
+  number title state isPinned
+  createdAt updatedAt url
   repository { nameWithOwner }
   author { login ... on User { name } }
-  assignees(first: 10) { nodes { login name } }
-  labels(first: 20) { nodes { name color } }
-  milestone {
-    number title state description progressPercentage
-    openIssues: issues(states: OPEN) { totalCount }
-    closedIssues: issues(states: CLOSED) { totalCount }
-  }
+  assignees(first: 1) { nodes { login name } }
   comments { totalCount }
 }
 ]]
@@ -63,7 +57,7 @@ query($owner: String!, $repo: String!, $number: Int!, $withRelationships: Boolea
 }
 
 fragment IssueFields on Issue {
-  number title state
+  id number title state isPinned viewerSubscription
   createdAt updatedAt closedAt url body
   repository { nameWithOwner }
   author { login ... on User { name } }
@@ -198,7 +192,7 @@ function M.get_issue(key, on_done, opts)
 	local with_relationships = relationships_enabled(opts)
 	local cache_key = string.format("github_issues:get:v2:%s#%d:relationships:%s", slug, number, tostring(with_relationships))
 	if not opts.force_load then
-		local cached, ok = cli.get_cache(cache_key)
+		local cached, ok = cli.get_mem(cache_key)
 		if ok then
 			on_done(cached, nil)
 			return nil
@@ -237,7 +231,7 @@ function M.get_issue(key, on_done, opts)
 			or nil
 		local issue = normalizer.normalize_issue(type(raw) == "table" and raw or {}, slug)
 		if issue then
-			cli.set_cache(cache_key, issue)
+			cli.set_mem(cache_key, issue)
 		end
 		on_done(issue, nil)
 	end)

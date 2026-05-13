@@ -47,9 +47,13 @@ local spinner_component = require("atlas.ui.components.spinner")
 ---@field loading boolean
 ---@field err string|nil
 ---@field request_id integer
----@field debounce_timer userdata|nil
+---@field debounce_timer uv_timer_t|nil
 ---@field closed boolean
 ---@field spinner_instance SpinnerInstance|nil
+---@field _selectable_map table<integer, boolean>|nil
+---@field _line_count integer|nil
+---@field _line_to_item_index table<integer, integer>|nil
+---@field _item_index_to_line table<integer, integer>|nil
 ---@field signal { cancelled: boolean }|nil
 ---@field input_buf integer|nil
 ---@field input_win integer|nil

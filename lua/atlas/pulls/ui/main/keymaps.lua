@@ -81,7 +81,7 @@ function M.register(buf, views)
 	if state.provider and state.provider.open_actions then
 		utils.insert_if(
 			items,
-			item("pulls.open_actions", {
+			item("ui.open_actions", {
 				desc = "Open PR actions",
 				index = 1,
 				callback = function()
@@ -98,7 +98,7 @@ function M.register(buf, views)
 
 	utils.insert_if(
 		items,
-		item("pulls.open_in_browser", {
+		item("ui.open_in_browser", {
 			desc = "Open PR in browser",
 			opts = { nowait = true },
 			callback = function()
@@ -114,7 +114,7 @@ function M.register(buf, views)
 
 	utils.insert_if(
 		items,
-		item("pulls.copy_url", {
+		item("ui.copy_url", {
 			desc = "Copy PR URL",
 			opts = { nowait = true },
 			callback = function()
@@ -146,7 +146,7 @@ function M.register(buf, views)
 
 	utils.insert_if(
 		items,
-		item("pulls.show_details", {
+		item("ui.show_details", {
 			desc = "Show PR details",
 			opts = { nowait = true },
 			callback = function()
@@ -159,45 +159,6 @@ function M.register(buf, views)
 			end,
 		})
 	)
-
-	table.insert(items, {
-		key = "o",
-		desc = "Open repo panel",
-		opts = { nowait = true, silent = true },
-		callback = function()
-			local pr = selected_pr()
-			if pr == nil then
-				footer.notify("warn", "No PR selected")
-				return
-			end
-
-			local layout = require("atlas.ui.layout")
-			local ui_state = require("atlas.ui.state")
-			local panel = require("atlas.pulls.ui.panel")
-			local panel_state = require("atlas.pulls.ui.panel.state")
-			local detail_open = layout.win_id("detail") ~= nil
-
-			if detail_open and panel_state.current_panel == "repo" then
-				layout.toggle_detail()
-				if ui_state.on_panel_close then
-					ui_state.on_panel_close()
-				end
-				return
-			end
-
-			panel_state.current_panel = "repo"
-
-			if not detail_open then
-				layout.toggle_detail()
-				if ui_state.on_panel_open then
-					ui_state.on_panel_open()
-				end
-				return
-			end
-
-			panel.on_select(pr, nil)
-		end,
-	})
 
 	utils.insert_if(
 		items,
@@ -234,7 +195,7 @@ function M.register(buf, views)
 	if state.provider and state.provider.search then
 		utils.insert_if(
 			items,
-			item("pulls.search", {
+			item("ui.search", {
 				desc = "Search repositories",
 				callback = function()
 					actions.search()
@@ -243,21 +204,9 @@ function M.register(buf, views)
 		)
 	end
 
-	if state.provider and state.provider.fetch_notifications then
-		utils.insert_if(
-			items,
-			item("pulls.open_notifications", {
-				desc = "Open notifications",
-				callback = function()
-					require("atlas.pulls.ui.notifications").open()
-				end,
-			})
-		)
-	end
-
 	utils.insert_if(
 		items,
-		item("pulls.refresh", {
+		item("ui.refresh", {
 			desc = "Refetch selected PR",
 			callback = function()
 				local pr = selected_pr()
@@ -272,7 +221,7 @@ function M.register(buf, views)
 
 	utils.insert_if(
 		items,
-		item("pulls.refresh_view", {
+		item("ui.refresh_view", {
 			desc = "Refresh current view",
 			callback = function()
 				actions.refresh_view()
@@ -281,6 +230,47 @@ function M.register(buf, views)
 	)
 
 	help.register(provider_name, items, { index = 220, buffer = buf })
+
+	help.register("General", {
+		{
+			key = "o",
+			desc = "Open repo panel",
+			opts = { nowait = true, silent = true },
+			callback = function()
+				local pr = selected_pr()
+				if pr == nil then
+					footer.notify("warn", "No PR selected")
+					return
+				end
+
+				local layout = require("atlas.ui.layout")
+				local ui_state = require("atlas.ui.state")
+				local panel = require("atlas.pulls.ui.panel")
+				local panel_state = require("atlas.pulls.ui.panel.state")
+				local detail_open = layout.win_id("detail") ~= nil
+
+				if detail_open and panel_state.current_panel == "repo" then
+					layout.toggle_detail()
+					if ui_state.on_panel_close then
+						ui_state.on_panel_close()
+					end
+					return
+				end
+
+				panel_state.current_panel = "repo"
+
+				if not detail_open then
+					layout.toggle_detail()
+					if ui_state.on_panel_open then
+						ui_state.on_panel_open()
+					end
+					return
+				end
+
+				panel.on_select(pr, nil)
+			end,
+		},
+	}, { buffer = buf })
 end
 
 return M

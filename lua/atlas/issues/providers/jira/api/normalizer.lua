@@ -206,6 +206,8 @@ function M.normalize_issue(raw, sp_field)
 		story_points = sp_field and extract_story_points(fields[sp_field]) or nil,
 		duedate = fields.duedate,
 		parent = extract_parent(safe_get(fields, "parent")),
+		is_subscribed = safe_get(fields, "watches", "isWatching") == true,
+		_raw = raw,
 	}
 end
 
@@ -221,7 +223,6 @@ function M.normalize_issues(raw_issues, sp_field)
 end
 
 ---@param raw_comment table|nil
----@param raw_comment table
 ---@param issue_key string|nil
 ---@param base_url string|nil
 ---@return IssueComment|nil

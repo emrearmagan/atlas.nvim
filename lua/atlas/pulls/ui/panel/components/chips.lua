@@ -57,7 +57,7 @@ function M.render_repo(repo, opts)
 	local raw = repo._raw or {}
 	local chips = {
 		{
-			label = string.format("%s %s", icons.pulls("files"), utils.human_size(repo.size or raw.size)),
+			label = string.format("%s %s", icons.pulls("file"), utils.human_size(repo.size or raw.size)),
 			hl = "AtlasTabInactive",
 		},
 		{

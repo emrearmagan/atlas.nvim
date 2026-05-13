@@ -251,6 +251,62 @@ function M.search(on_done)
 	end)
 end
 
+---@param issue Issue
+---@param on_done fun(is_subscribed: boolean|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.toggle_subscription(issue, on_done)
+	local issue_key = tostring(issue.key or "")
+	if issue_key == "" then
+		vim.schedule(function()
+			on_done(nil, "Missing issue key")
+		end)
+		return nil
+	end
+
+	local service = require("atlas.issues.providers.jira.api.service")
+	if issue.is_subscribed ~= true then
+		return service.request("POST", "/issue/" .. issue_key .. "/watchers", nil, function(_, err)
+			if err then
+				on_done(nil, err)
+				return
+			end
+			issue.is_subscribed = true
+			on_done(true, nil)
+		end)
+	end
+
+	local function unsubscribe(account_id)
+		return service.request(
+			"DELETE",
+			string.format("/issue/%s/watchers?accountId=%s", issue_key, account_id),
+			nil,
+			function(_, err)
+				if err then
+					on_done(nil, err)
+					return
+				end
+				issue.is_subscribed = false
+				on_done(false, nil)
+			end
+		)
+	end
+
+	local issues_state = require("atlas.issues.state")
+	local current = issues_state.current_user
+	if current and tostring(current.account_id or "") ~= "" then
+		return unsubscribe(current.account_id)
+	end
+
+	local users_api = require("atlas.issues.providers.jira.api.users")
+	return users_api.get_myself(function(user, err)
+		if err or not user or user.account_id == "" then
+			on_done(nil, err or "Failed to fetch Jira user")
+			return
+		end
+		unsubscribe(user.account_id)
+	end)
+end
+
 ---@return AtlasJiraViewConfig[]
 function M.views()
 	local cfg = require("atlas.issues.providers.jira.api.service").jira_config()

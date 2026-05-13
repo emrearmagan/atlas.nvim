@@ -2,8 +2,6 @@
 local M = {}
 
 local icons = require("atlas.ui.shared.icons")
-local utils = require("atlas.ui.shared.utils")
-local box = require("atlas.ui.components.box")
 local helper = require("atlas.pulls.ui.main.helper")
 
 local MAX_HASH_LEN = 12
@@ -16,18 +14,14 @@ local function label_hl(hex)
 	return name
 end
 
-local merge_checks = {
-	mergeable = nil, ---@type string|nil  "MERGEABLE"|"CONFLICTING"|"UNKNOWN"
-	merge_state = nil, ---@type string|nil "CLEAN"|"DIRTY"|"BLOCKED"|"BEHIND"|"UNSTABLE"|"HAS_HOOKS"|"DRAFT"|"UNKNOWN"
-	review_decision = nil, ---@type string|nil "APPROVED"|"CHANGES_REQUESTED"|"REVIEW_REQUIRED"|""
-	loading = false,
+local state = {
+	header_extras = nil, ---@type { assignees: table|nil, labels: table|nil }|nil
+	header_loading = false,
 }
 
-local function reset_merge_checks()
-	merge_checks.mergeable = nil
-	merge_checks.merge_state = nil
-	merge_checks.review_decision = nil
-	merge_checks.loading = false
+local function reset_state()
+	state.header_extras = nil
+	state.header_loading = false
 end
 
 --------------------------------------------------------------------------------
@@ -53,11 +47,11 @@ local function aggregate_build_status(builds)
 			has_success = true
 		end
 	end
-	if has_stopped then
-		return "stopped"
-	end
 	if has_success then
 		return "successful"
+	end
+	if has_stopped then
+		return "stopped"
 	end
 	return "unknown"
 end
@@ -68,9 +62,25 @@ end
 
 ---@param pr PullRequest
 ---@return PullsPanelHeaderRow[]
-function M.header_rows(pr)
-	local raw = pr._raw or {}
-	local nodes = type(raw.assignees) == "table" and type(raw.assignees.nodes) == "table" and raw.assignees.nodes or {}
+function M.header_rows(pr) ---@diagnostic disable-line: unused-local
+	local spinner = require("atlas.ui.components.spinner")
+
+	if state.header_loading and state.header_extras == nil then
+		return {
+			{
+				k1 = "Assignees:",
+				v1 = spinner.with_text("Loading..."),
+				v1_hl = "AtlasTextMuted",
+				k2 = "",
+				v2 = "",
+				v2_hl = "AtlasTextMuted",
+			},
+		}
+	end
+
+	local extras = state.header_extras or {}
+	local assignees = type(extras.assignees) == "table" and extras.assignees or {}
+	local nodes = type(assignees.nodes) == "table" and assignees.nodes or {}
 
 	local logins = {}
 	for _, node in ipairs(nodes) do
@@ -139,8 +149,9 @@ function M.chips(pr)
 		table.insert(chips, { label = hash, hl = "AtlasTabInactive" })
 	end
 
-	local raw = pr._raw or {}
-	local label_nodes = type(raw.labels) == "table" and type(raw.labels.nodes) == "table" and raw.labels.nodes or {}
+	local extras = state.header_extras or {}
+	local labels = type(extras.labels) == "table" and extras.labels or {}
+	local label_nodes = type(labels.nodes) == "table" and labels.nodes or {}
 	for _, lbl in ipairs(label_nodes) do
 		local name = tostring(lbl.name or "")
 		if name ~= "" then
@@ -196,41 +207,48 @@ end
 
 ---@param pr PullRequest
 ---@param refresh fun()
-function M.fetches(pr, refresh)
+---@param opts { force_refresh: boolean|nil }|nil
+function M.fetches(pr, refresh, opts)
 	cancel_panel_fetches()
-	reset_merge_checks()
+	reset_state()
 
 	local overview_state = require("atlas.pulls.ui.panel.pr.tabs.overview.state")
-	local provider = require("atlas.pulls.state").provider
 	local pullrequests = require("atlas.pulls.providers.github.api.pullrequests")
+	local checks = require("atlas.pulls.providers.github.api.checks")
 
-	overview_state.builds = "loading"
-	if provider and type(provider.fetch_builds) == "function" then
-		track_panel(provider.fetch_builds(pr, function(builds, err)
-			overview_state.builds = err and err or (builds or {})
+	local owner = tostring(pr.workspace or "")
+	local repo = tostring(pr.repo or "")
+	local force = opts and opts.force_refresh == true
+
+	if owner ~= "" and repo ~= "" and pr.id ~= nil then
+		state.header_loading = true
+		track_panel(pullrequests.get_pr(owner, repo, pr.id, function(fresh, err)
+			state.header_loading = false
+			if not err and type(fresh) == "table" then
+				local raw = fresh._raw or fresh
+				state.header_extras = {
+					assignees = raw.assignees,
+					labels = raw.labels,
+				}
+				pr.is_subscribed = fresh.is_subscribed
+				pr._raw = fresh._raw
+			end
 			refresh()
-		end))
+		end, { force_load = force }))
 	end
 
-	merge_checks.loading = true
-	track_panel(pullrequests.get_merge_checks(pr, function(result, _)
-		merge_checks.loading = false
-		if result then
-			merge_checks.mergeable = result.mergeable
-			merge_checks.merge_state = result.merge_state
-			merge_checks.review_decision = result.review_decision
-		end
+	overview_state.builds = "loading"
+	track_panel(checks.get_builds(pr, { force_refresh = force }, function(builds, err)
+		overview_state.builds = err and err or (builds or {})
 		refresh()
 	end))
 
 	local files_state = require("atlas.pulls.ui.panel.pr.tabs.files.state")
 	files_state.diffstat = "loading"
-	if provider and type(provider.fetch_diffstat) == "function" then
-		track_panel(provider.fetch_diffstat(pr, nil, function(entries, err)
-			files_state.diffstat = err and err or (entries or {})
-			refresh()
-		end))
-	end
+	track_panel(pullrequests.get_diffstat(pr, { force_refresh = force }, function(entries, err)
+		files_state.diffstat = err and err or (entries or {})
+		refresh()
+	end))
 end
 
 ---@param pr PullRequest
@@ -240,189 +258,26 @@ function M.is_loading(pr, active_tab) ---@diagnostic disable-line: unused-local
 	local overview_state = require("atlas.pulls.ui.panel.pr.tabs.overview.state")
 	local activity_state = require("atlas.pulls.ui.panel.pr.tabs.activity.state")
 	local conversation_state = require("atlas.pulls.providers.github.ui.conversation.state")
+	local comments_state = require("atlas.pulls.ui.panel.pr.tabs.comments.state")
 	local commits_state = require("atlas.pulls.ui.panel.pr.tabs.commits.state")
 	local files_state = require("atlas.pulls.ui.panel.pr.tabs.files.state")
+	if state.header_loading then
+		return true
+	end
 	if active_tab == "overview" then
-		return overview_state.any_loading() or merge_checks.loading
+		return overview_state.any_loading()
 	elseif active_tab == "activity" then
 		return activity_state.any_loading()
 	elseif active_tab == "conversation" then
 		return conversation_state.any_loading()
+	elseif active_tab == "comments" then
+		return comments_state.any_loading()
 	elseif active_tab == "commits" then
 		return commits_state.any_loading()
 	elseif active_tab == "files" then
 		return files_state.any_loading()
 	end
 	return false
-end
-
---------------------------------------------------------------------------------
--- Merge checks
---------------------------------------------------------------------------------
-
-local PADDING_X = 1
-
-local BUILD_STATE_ICON = {
-	SUCCESSFUL = { icons.pulls_status("successful"), "AtlasTextPositive" },
-	SUCCESS = { icons.pulls_status("successful"), "AtlasTextPositive" },
-	FAILED = { icons.pulls_status("failed"), "AtlasLogError" },
-	FAILURE = { icons.pulls_status("failed"), "AtlasLogError" },
-	INPROGRESS = { icons.pulls_status("inprogress"), "AtlasTextWarning" },
-	STOPPED = { icons.pulls_status("inprogress"), "AtlasTextMuted" },
-}
-
----@param icon string
----@param icon_hl string
----@param label string
----@param details string[]|nil
----@return BoxContentGroup
-local function render_check_group(icon, icon_hl, label, details, detail_spans, detail_lmap)
-	local lines = {}
-	local spans = {}
-	local lmap = {}
-	local line_text = string.format("%s %s", icon, label)
-	table.insert(lines, line_text)
-	table.insert(spans, {
-		line = 0,
-		start_col = 0,
-		end_col = #icon,
-		hl_group = icon_hl,
-	})
-	for di, detail in ipairs(details or {}) do
-		local indent = "  "
-		table.insert(lines, indent .. detail)
-		local lnum = #lines - 1
-		local ds = detail_spans and detail_spans[di] or nil
-		if ds then
-			table.insert(spans, { line = lnum, start_col = #indent, end_col = #indent + ds.icon_len, hl_group = ds.hl })
-			table.insert(spans, { line = lnum, start_col = #indent + ds.icon_len, end_col = #lines[#lines], hl_group = "AtlasTextMuted" })
-		else
-			table.insert(spans, { line = lnum, start_col = 0, end_col = #lines[#lines], hl_group = "AtlasTextMuted" })
-		end
-		if detail_lmap and detail_lmap[di] then
-			lmap[lnum] = detail_lmap[di]
-		end
-	end
-	return { lines = lines, spans = spans, line_map = lmap }
-end
-
----@class MergeCheckItem
----@field key string
----@field render fun(checks: table, builds: PullsBuild[]|string|nil, spinner: table): string|nil, string|nil, string|nil, string[]|nil, table[]|nil, table<integer, table>|nil
-
----@type MergeCheckItem[]
-local MERGE_CHECK_ITEMS = {
-	{
-		key = "review",
-		render = function(checks, _, spinner)
-			local rd = checks.review_decision or ""
-			if checks.loading then
-				return icons.pulls_status("inprogress"),
-					"AtlasTextMuted",
-					"Reviews",
-					{ spinner.with_text("Loading...") }
-			elseif rd == "APPROVED" then
-				return icons.pulls_status("successful"),
-					"AtlasTextPositive",
-					"Reviews",
-					{ "All required reviewers have approved." }
-			elseif rd == "CHANGES_REQUESTED" then
-				return icons.pulls_status("failed"), "AtlasLogError", "Reviews", { "A reviewer has requested changes." }
-			elseif rd == "REVIEW_REQUIRED" then
-				return icons.pulls_status("inprogress"),
-					"AtlasTextWarning",
-					"Reviews",
-					{ "At least one approving review is required." }
-			else
-				return icons.pulls_status("inprogress"), "AtlasTextMuted", "Reviews", { "No review required" }
-			end
-		end,
-	},
-	{
-		key = "builds",
-		render = function(_, builds, spinner)
-			if builds == "loading" then
-				return icons.pulls_status("inprogress"), "AtlasTextMuted", "Builds", { spinner.with_text("Loading...") }
-			elseif type(builds) == "table" and #builds > 0 then
-				local details = {}
-				local detail_spans = {}
-				local detail_lmap = {}
-				for _, build in ipairs(builds) do
-					local s = tostring(build.state or ""):upper()
-					local p = BUILD_STATE_ICON[s] or BUILD_STATE_ICON.STOPPED
-					local detail = string.format("%s %s", p[1], tostring(build.name or ""))
-					table.insert(details, detail)
-					table.insert(detail_spans, { icon_len = #p[1], hl = p[2] })
-					detail_lmap[#details] = { kind = "build", build = build, url = tostring(build.url or "") }
-				end
-				local overall = aggregate_build_status(builds)
-				local pair = BUILD_STATE_ICON[overall:upper()] or BUILD_STATE_ICON.STOPPED
-				return pair[1], pair[2], "Builds", details, detail_spans, detail_lmap
-			end
-			return nil, nil, nil, nil
-		end,
-	},
-	{
-		key = "conflicts",
-		render = function(checks, _, _)
-			if checks.loading then
-				return nil, nil, nil, nil
-			end
-			local m = checks.mergeable or ""
-			if m == "MERGEABLE" then
-				return icons.pulls_status("successful"),
-					"AtlasTextPositive",
-					"No conflicts with base branch",
-					{ "Changes can be cleanly merged." }
-			elseif m == "CONFLICTING" then
-				return icons.pulls_status("failed"),
-					"AtlasLogError",
-					"This branch has conflicts that must be resolved",
-					{ "Conflicting files must be resolved before merging." }
-			end
-			return nil, nil, nil, nil
-		end,
-	},
-}
-
----@param pr PullRequest
----@param width integer
----@param lines string[]
----@param spans table[]
----@param line_map table<integer, table>|nil
-function M.overview_extra_sections(pr, width, lines, spans, line_map) ---@diagnostic disable-line: unused-local
-	local overview_state = require("atlas.pulls.ui.panel.pr.tabs.overview.state")
-	local spinner_mod = require("atlas.ui.components.spinner")
-	local builds = overview_state.builds
-
-	local has_merge_data = merge_checks.mergeable ~= nil or merge_checks.review_decision ~= nil
-	if not has_merge_data and not merge_checks.loading and builds == nil then
-		return
-	end
-
-	utils.push(lines, spans, "Merge Checks", "AtlasColumnHeader", PADDING_X)
-
-	local groups = {}
-	for _, item in ipairs(MERGE_CHECK_ITEMS) do
-		local icon, icon_hl, label, details, dspans, dlmap = item.render(merge_checks, builds, spinner_mod)
-		if icon and icon_hl and label then
-			table.insert(groups, render_check_group(icon, icon_hl, label, details, dspans, dlmap))
-		end
-	end
-
-	if #groups > 0 then
-		utils.append_block(
-			lines,
-			spans,
-			box.render(groups, {
-				width = width,
-				padding_x = PADDING_X,
-				line_map = line_map,
-				line_offset = line_map and #lines or nil,
-			})
-		)
-	end
-	table.insert(lines, "")
 end
 
 --------------------------------------------------------------------------------
@@ -442,8 +297,14 @@ function M.tabs()
 		{
 			key = "conversation",
 			label = "Conversation",
-			icon = icons.general("comment"),
+			icon = icons.general("conversation"),
 			mod = require("atlas.pulls.providers.github.ui.conversation"),
+		},
+		{
+			key = "comments",
+			label = "Comments",
+			icon = icons.general("comment"),
+			mod = require("atlas.pulls.ui.panel.pr.tabs.comments"),
 		},
 		{
 			key = "activity",
@@ -460,10 +321,11 @@ function M.tabs()
 		{
 			key = "files",
 			label = "Changes",
-			icon = icons.pulls("files"),
+			icon = icons.pulls("changes"),
 			mod = require("atlas.pulls.ui.panel.pr.tabs.files"),
 		},
 	}
 end
+
 
 return M

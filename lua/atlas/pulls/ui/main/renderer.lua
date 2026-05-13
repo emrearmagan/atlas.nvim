@@ -4,10 +4,24 @@ local resolver = require("atlas.core.keymaps")
 local state = require("atlas.pulls.state")
 local helper = require("atlas.pulls.ui.main.helper")
 local header = require("atlas.ui.components.header")
+local icons = require("atlas.ui.shared.icons")
 local navbar = require("atlas.ui.components.navbar")
 local table_tree = require("atlas.ui.components.table_tree")
 local utils = require("atlas.ui.shared.utils")
 local footer = require("atlas.ui.components.footer")
+
+---@param lines string[]
+---@param spans table[]
+local function append_search_text(lines, spans)
+	local text = tostring(state.last_search_query or "")
+	if text == "" then
+		return
+	end
+	local line = string.format(" %s %s", icons.general("search"), text)
+	table.insert(lines, line)
+	table.insert(spans, { line = #lines - 1, start_col = 0, end_col = #line, hl_group = "AtlasTextMuted" })
+	table.insert(lines, "")
+end
 
 ---@param table_lines string[]
 ---@param table_map table<integer, table>
@@ -31,7 +45,7 @@ end
 
 ---@return string
 local function refresh_key_display()
-	local keys = resolver.resolve("pulls.refresh_view")
+	local keys = resolver.resolve("ui.refresh_view")
 	if type(keys) == "table" and #keys > 0 then
 		return tostring(keys[1])
 	end
@@ -134,7 +148,7 @@ local function render_header(lines, spans, width)
 	table.insert(actions, { label = "|", hl_group = "AtlasTextMuted" })
 
 	if state.provider and state.provider.fetch_notifications then
-		local notif_state = require("atlas.pulls.ui.notifications.state")
+		local notif_state = require("atlas.ui.notifications.state")
 		local icons_mod = require("atlas.ui.shared.icons")
 		local count = notif_state.unread_count or 0
 		local bell_icon = count > 0 and icons_mod.general("bell_unread") or icons_mod.general("bell")
@@ -165,6 +179,8 @@ function M.render(opts)
 
 	render_header(lines, spans, opts.width)
 	table.insert(lines, "")
+
+	append_search_text(lines, spans)
 
 	if state.error then
 		local error_text = tostring(state.error or ""):gsub("[\r\n]+", " | ")

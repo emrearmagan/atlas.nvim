@@ -11,24 +11,26 @@ A Neovim plugin for managing GitHub/Bitbucket/GitLab PRs and Jira/GitHub/GitLab 
 > **Still in early development, will have breaking changes!**
 
 <table>
-	<tr>
-     <td width="50%">
-      <img src="https://github.com/user-attachments/assets/caa30d3c-6883-4f2e-bc12-81bb2127f798"><br/>
-      Github
-    </td>
-     <td width="50%">
-      <img src="https://github.com/user-attachments/assets/06299ffc-b15b-4e2c-8f11-95a8ddde3b04"><br/>
-      Bitbucket
-    </td>
-  </tr>
-  <tr>
-	<td width="50%">
-	    <img src="https://github.com/user-attachments/assets/23a15b90-283c-45e2-8964-02970ec3b21a"><br/>
-	</td>
-    <td width="50%">
-		<img alt="Edit/Create Issue" src="https://github.com/user-attachments/assets/76913fbf-1667-4f35-9962-d3c1b4619c7f" />
-    </td>
-  </tr>
+  <thead>
+    <tr>
+      <th width="50%" align="center">GitHub</th>
+      <th width="50%" align="center">Bitbucket</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td width="50%"><img alt="GitHub PRs" src="https://github.com/user-attachments/assets/caa30d3c-6883-4f2e-bc12-81bb2127f798"></td>
+      <td width="50%"><img alt="Bitbucket PRs" src="https://github.com/user-attachments/assets/06299ffc-b15b-4e2c-8f11-95a8ddde3b04"></td>
+    </tr>
+    <tr>
+      <th width="50%" align="center">Jira</th>
+      <th width="50%" align="center">Create / Edit Issue</th>
+    </tr>
+    <tr>
+      <td width="50%"><img alt="Jira" src="https://github.com/user-attachments/assets/23a15b90-283c-45e2-8964-02970ec3b21a"></td>
+      <td width="50%"><img alt="Edit/Create Issue" src="https://github.com/user-attachments/assets/76913fbf-1667-4f35-9962-d3c1b4619c7f"></td>
+    </tr>
+  </tbody>
 </table>
 
 ## Table of Contents
@@ -51,9 +53,9 @@ A Neovim plugin for managing GitHub/Bitbucket/GitLab PRs and Jira/GitHub/GitLab 
 {
   "emrearmagan/atlas.nvim",
   dependencies = {
-    "MeanderingProgrammer/render-markdown.nvim", -- optional but recommended (Jira)
-    "sindrets/diffview.nvim", -- optional (PullRequest diff)
-    "esmuellert/codediff.nvim", -- optional (PullRequest diff alternative)
+    "MeanderingProgrammer/render-markdown.nvim", -- optional but recommended
+    "esmuellert/codediff.nvim", -- optional (PullRequest diff)
+    "sindrets/diffview.nvim", -- optional (PullRequest diff - alternative)
   },
   config = function()
     require("atlas").setup({
@@ -65,7 +67,8 @@ A Neovim plugin for managing GitHub/Bitbucket/GitLab PRs and Jira/GitHub/GitLab 
       },
       issues = {
         providers = {
-          jira = { }, -- See configuration below
+          jira = { },   -- See configuration below
+          github = { }, -- See configuration below
         },
       },
     })
@@ -88,7 +91,8 @@ use {
       },
       issues = {
         providers = {
-          jira = { }, -- See configuration below
+          jira = { },   -- See configuration below
+          github = { }, -- See configuration below
         },
       },
     })
@@ -98,7 +102,6 @@ use {
 
 > [!tip]
 > It's a good idea to run `:checkhealth atlas` to see if everything is set up correctly.
-> Not ready to connect yet? Run `:AtlasIssues mock` or `:AtlasPulls mock` to explore the UI with some mock data.
 
 ## Requirements
 
@@ -120,30 +123,31 @@ use {
 - `:AtlasPulls [provider]` - Open Atlas pulls domain
 - `:AtlasCreatePR` - Create a pull request from the current branch
 - `:AtlasCreateIssue` - Create an issue (GitHub / Jira)
-- `:AtlasJqlSearch {query}` - Search Jira issues with JQL
+- `:AtlasSearch [provider]` - Pick a configured provider and prompt its search
 - `:AtlasClearCache` - Clear Atlas disk and memory cache
 - `:AtlasLogs` - Toggle Atlas logs
 
 ## Issues
+
+- [x] Create and edit issues
+- [x] View and edit issues as markdown -> ADF conversion for descriptions (experimental)
+- [x] Issue tabs: overview, comments, activity
+- [x] Manage and edit issues (e.g. transition, assign, edit reporter, edit title, delete)
+- [x] Comment workflows (create, reply, edit, delete)
+- [x] Search issues
+- [x] JQL support and completion
+- [x] Support for custom fields
+- [x] Subscribe / unsubscribe to issues
+- [x] Add custom actions to issues
+- [x] Create and edit issue templates
+- [ ] Save JQL queries as custom views
+- [ ] Save and filter issues
 
 ### Jira
 
 > [!NOTE]
 > If you're only looking for Jira support, check out https://github.com/letieu/jira.nvim. This plugin was the main inspiration for this project.  
 > Jira support is included here mainly because I wanted a single tool that works with both Atlassian products.
-
-- [x] Create and Edit issues
-- [x] View and edit issues as markdown -> ADF conversion for issue descriptions (experimental)
-- [x] Issue panel tabs: overview, comments, history
-- [x] Jira actions: transition, change assignee, change reporter, edit title
-- [x] Comment workflows (create, reply, edit, delete)
-- [x] Search issues
-- [x] JQL support and completion
-- [x] Support for custom fields
-- [x] Add custom actions to issues
-- [x] Create and edit issue templates
-- [ ] Save JQL queries as custom views
-- [ ] Save and filter issues
 
 > [!IMPORTANT]
 > The markdown editor for issue descriptions and comments is still experimental and may not work perfectly in all cases. You can toggle between markdown and ADF view in the overview tab to see the raw ADF content and how it translates to markdown. If you encounter any issues with the markdown editor, please open an issue with details.
@@ -193,13 +197,13 @@ return {
               {
                 name = "My Board",
                 key = "M",
-                layout = "plain", -- "plain" or "compact"
+                layout = "plain",
                 jql = "project = KAN AND assignee = currentUser() ORDER BY updated DESC",
               },
               {
                 name = "Team Board",
                 key = "T",
-                layout = "compact", -- "plain" or "compact"
+                layout = "compact",
                 jql = "project = KAN ORDER BY updated DESC",
               },
             },
@@ -252,17 +256,6 @@ issues = {
 
 </details>
 
-#### JQL Search Command
-
-Use `:AtlasJqlSearch` to run JQL directly from command mode. It also supports command-line completion while typing the query.
-
-Examples:
-
-```vim
-:AtlasJqlSearch project = KAN AND assignee = currentUser() ORDER BY updated DESC
-:AtlasJqlSearch summary ~ "login bug"
-```
-
 ### GitHub Issues
 
 <details>
@@ -283,19 +276,19 @@ return {
               {
                 name = "Assigned",
                 key = "1",
-                layout = "plain", -- "plain" or "compact"
+                layout = "plain",
                 search = "assignee:@me is:open",
               },
               {
                 name = "Created",
                 key = "2",
-                layout = "compact", -- "plain" or "compact"
+                layout = "compact",
                 search = "author:@me is:open",
               },
               {
                 name = "Mentions",
                 key = "3",
-                layout = "plain", -- "plain" or "compact"
+                layout = "plain",
                 search = "mentions:@me is:open",
               },
             },
@@ -365,15 +358,16 @@ return {
 
 - [x] Multiple views
 - [x] PR tabs: overview, activity, comments, commits, files
-- [x] PR actions: merge, approve, request changes
+- [x] PR actions: merge, approve, request changes, convert to draft, edit reviewers etc.
 - [x] Comment workflows (create, reply, edit, delete)
-- [x] Build/CI status with clickable links
-- [x] Diffstat summary in Changes tab
+- [x] Build/CI status
+- [x] Diffstat summary
+- [x] Checkout PR branch
 - [x] Add custom actions to PRs
 - [x] Open PR diff in given command
 - [x] Switch between open, merged and closed PRs
-- [x] Show and Create Github Issues (`:AtlasCreateIssue`)
-- [x] Show Notifications
+- [x] Subscribe / unsubscribe to PRs
+- [x] Show notifications
 - [x] Create pull requests (`:AtlasCreatePR`)
 - [ ] Pagination for API results
 
@@ -424,16 +418,19 @@ return {
               {
                 name = "My PRs",
                 key = "1",
+                layout = "plain",
                 search = "author:@me sort:updated-desc",
               },
               {
                 name = "Team",
                 key = "2",
+                layout = "compact",
                 search = "org:your-org sort:updated-desc",
               },
               {
                 name = "Repo",
                 key = "3",
+                layout = "plain",
                 search = "repo:your-org/your-repo",
               },
             },
@@ -469,7 +466,7 @@ return {
               {
                 name = "Me",
                 key = "M",
-                layout = "compact", -- "compact" or "plain"
+                layout = "compact",
                 repos = {
                   { workspace = "your-workspace", repo = "atlas" },
                 },
@@ -608,6 +605,32 @@ pulls = {
 
 ![CleanShot2026-03-31at20 08 06-ezgif com-video-to-gif-converter](https://github.com/user-attachments/assets/a8ca355b-09e2-428c-b3fb-3280fd161110)
 
+## Search
+
+Use `:AtlasSearch [provider]` to search configured providers.
+
+### Jira
+
+`:AtlasSearch jira` opens a JQL prompt with full completion (fields, operators, values).
+
+```
+project = KAN AND assignee = currentUser() ORDER BY updated DESC
+summary ~ "login bug"
+```
+
+### GitHub
+
+`:AtlasSearch github` opens a GitHub search prompt with completion (`is:`, `repo:`, `author:`, `label:` etc.).
+
+```
+is:pr is:open author:@me
+is:issue label:bug
+```
+
+### Bitbucket
+
+`:AtlasSearch bitbucket` asks for a workspace and a repository and opens the UI scoped to that repo.
+
 #### Keymaps
 
 Set an action to `false` to disable it, or set it to a list to add aliases.
@@ -623,16 +646,21 @@ require("atlas").setup({
       toggle_all_folds = "zA",
       previous_panel_tab = "<S-Tab>",
       next_panel_tab = "<Tab>",
-    },
-    issues = {
+      open_notifications = "N",
+      notifications_mark_read = "r",
+      notifications_mark_done = "d",
+      notifications_refresh = "R",
+      toggle_subscription = "gS",
+      refresh = "r",
+      refresh_view = "R",
       open_actions = "A",
       open_in_browser = "gx",
       copy_url = "Y",
-      copy_key = "y",
       show_details = "K",
       search = "?",
-      refresh = "r",
-      refresh_view = "R",
+    },
+    issues = {
+      copy_key = "y",
       transition_issue = "gs",
       change_assignee = "ga",
       change_reporter = "gr",
@@ -640,22 +668,11 @@ require("atlas").setup({
       create_issue = "c",
     },
     pulls = {
-      refresh = "r",
-      refresh_view = "R",
-      open_actions = "A",
-      open_in_browser = "gx",
-      copy_url = "Y",
       copy_id = "y",
       open_diff = "gd",
       checkout = "gc",
-      show_details = "K",
-      search = "?",
-      open_notifications = "N",
-      notifications_mark_read = "r",
-      notifications_mark_done = "d",
-      notifications_refresh = "R",
-      pr_files_next_hunk = "]h",
-      pr_files_previous_hunk = "[h",
+      next_hunk = "]h",
+      previous_hunk = "[h",
       filter_status_open = "gpo",
       filter_status_merged = "gpm",
       filter_status_declined = "gpd",

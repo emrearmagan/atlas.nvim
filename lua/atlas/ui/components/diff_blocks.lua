@@ -12,6 +12,7 @@ local BLOCK_COUNT = 5
 ---@field empty_hl? string
 ---@field add_text_hl? string
 ---@field del_text_hl? string
+---@field show_count? boolean    -- show "+N -N" after the blocks (default true)
 
 ---@class DiffBlocksResult
 ---@field text string
@@ -40,17 +41,11 @@ function M.render(opts)
 	local grey_count = BLOCK_COUNT - green_count - red_count
 
 	local blocks = string.rep(FILLED, green_count + red_count) .. string.rep(EMPTY, grey_count)
-	local add_str = "+" .. tostring(add)
-	local del_str = "-" .. tostring(del)
-	local text = blocks .. " " .. add_str .. " " .. del_str
+	local show_count = opts.show_count ~= false
 
 	local p_green = green_count * #FILLED
 	local p_red = (green_count + red_count) * #FILLED
 	local p_blocks = p_red + grey_count * #EMPTY
-	local p_add_s = p_blocks + 1
-	local p_add_e = p_add_s + #add_str
-	local p_del_s = p_add_e + 1
-	local p_del_e = p_del_s + #del_str
 
 	local highlights = {}
 	if p_green > 0 then
@@ -62,6 +57,20 @@ function M.render(opts)
 	if p_blocks > p_red then
 		highlights[#highlights + 1] = { start_col = p_red, end_col = p_blocks, hl_group = empty_hl }
 	end
+
+	if not show_count then
+		return { text = blocks, highlights = highlights }
+	end
+
+	local add_str = "+" .. tostring(add)
+	local del_str = "-" .. tostring(del)
+	local text = blocks .. " " .. add_str .. " " .. del_str
+
+	local p_add_s = p_blocks + 1
+	local p_add_e = p_add_s + #add_str
+	local p_del_s = p_add_e + 1
+	local p_del_e = p_del_s + #del_str
+
 	highlights[#highlights + 1] = { start_col = p_add_s, end_col = p_add_e, hl_group = add_text_hl }
 	highlights[#highlights + 1] = { start_col = p_del_s, end_col = p_del_e, hl_group = del_text_hl }
 

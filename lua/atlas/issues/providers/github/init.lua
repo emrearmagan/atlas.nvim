@@ -63,7 +63,24 @@ function M.fetch_issues(view, opts, on_done)
 			on_done({}, nil, true, err)
 			return
 		end
-		on_done(issues or {}, nil, true, nil)
+
+		local pinned, rest = {}, {}
+		for _, issue in ipairs(issues or {}) do
+			if issue.is_pinned == true then
+				table.insert(pinned, issue)
+			else
+				table.insert(rest, issue)
+			end
+		end
+		local sorted = {}
+		for _, i in ipairs(pinned) do
+			table.insert(sorted, i)
+		end
+		for _, i in ipairs(rest) do
+			table.insert(sorted, i)
+		end
+
+		on_done(sorted, nil, true, nil)
 	end, {
 		force_load = opts and opts.force_load == true or false,
 		limit = limit,
@@ -146,14 +163,45 @@ function M.delete_comment(key, comment_id, on_done)
 	return require("atlas.issues.providers.github.api.comments").delete(key, comment_id, on_done)
 end
 
----@param _key string
----@param _opts IssuesFetchOpts|nil
+---@param key string
+---@param opts IssuesFetchOpts|nil
 ---@param on_done fun(entries: IssueHistoryEntry[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_history(_key, _opts, on_done)
-	-- History is provided through the Conversation tab via timeline; the panel doesn't render a History tab.
-	on_done({}, nil)
-	return nil
+function M.fetch_history(key, opts, on_done)
+	local timeline = require("atlas.issues.providers.github.api.timeline")
+	return timeline.list(key, function(events, err)
+		if err or type(events) ~= "table" then
+			on_done(nil, err)
+			return
+		end
+
+		local entries = {}
+		for _, ev in ipairs(events) do
+			if ev.event ~= "commented" then
+				table.insert(entries, {
+					id = tostring(ev.date or ""),
+					created = ev.date,
+					author = ev.actor,
+					items = {
+						{
+							field = ev.event,
+							label_name = ev.label_name,
+							label_color = ev.label_color,
+							assignee_login = ev.assignee_login,
+							milestone_title = ev.milestone_title,
+							rename_from = ev.rename_from,
+							rename_to = ev.rename_to,
+							commit_id = ev.commit_id,
+							source_title = ev.source_title,
+							source_url = ev.source_url,
+						},
+					},
+				})
+			end
+		end
+
+		on_done(entries, nil)
+	end, { force_load = opts and opts.force_load == true or false })
 end
 
 ---@param action_id string
@@ -172,11 +220,15 @@ end
 
 ---@param on_done fun(result: table|nil, err: string|nil)|nil
 function M.search(on_done)
-	require("atlas.issues.providers.github.actions").run("search", { issue = nil, source = "main" }, function(result, err)
-		if on_done then
-			on_done(result, err)
+	require("atlas.issues.providers.github.actions").run(
+		"search",
+		{ issue = nil, source = "main" },
+		function(result, err)
+			if on_done then
+				on_done(result, err)
+			end
 		end
-	end)
+	)
 end
 
 ---@param opts GitHubCreateIssueOpts
@@ -184,6 +236,58 @@ end
 ---@return { cancel: fun() }|nil
 function M.create_issue(opts, on_done)
 	return require("atlas.issues.providers.github.api.issues").create_issue(opts, on_done)
+end
+
+---@param issue Issue
+---@param on_done fun(is_subscribed: boolean|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.toggle_subscription(issue, on_done)
+	local raw = type(issue._raw) == "table" and issue._raw or {}
+	local node_id = tostring(raw.node_id or "")
+	if node_id == "" then
+		vim.schedule(function()
+			on_done(nil, "Missing issue node id")
+		end)
+		return nil
+	end
+	local next_state = issue.is_subscribed == true and "UNSUBSCRIBED" or "SUBSCRIBED"
+	local gql =
+		"mutation($id: ID!, $state: SubscriptionState!) { updateSubscription(input: { subscribableId: $id, state: $state }) { subscribable { ... on Issue { viewerSubscription } } } }"
+	local cli = require("atlas.issues.providers.github.api.cli")
+	return cli.gh(
+		{ "api", "graphql", "-F", "id=" .. node_id, "-f", "state=" .. next_state, "-f", "query=" .. gql },
+		function(_, err)
+			if err then
+				on_done(nil, err)
+				return
+			end
+			issue.is_subscribed = (next_state == "SUBSCRIBED")
+			on_done(issue.is_subscribed, nil)
+		end
+	)
+end
+
+---@param opts { force_load: boolean|nil }|nil
+---@param on_done fun(notifications: AtlasNotification[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_notifications(opts, on_done)
+	local notifications = require("atlas.pulls.providers.github.api.notifications")
+	local merged = vim.tbl_extend("force", { all = true, per_page = 100 }, opts or {})
+	return notifications.fetch(merged, on_done)
+end
+
+---@param id string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.mark_notification_read(id, on_done)
+	return require("atlas.pulls.providers.github.api.notifications").mark_read(id, on_done)
+end
+
+---@param id string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.mark_notification_done(id, on_done)
+	return require("atlas.pulls.providers.github.api.notifications").mark_done(id, on_done)
 end
 
 ---@return AtlasGitHubIssuesViewConfig[]

@@ -208,7 +208,10 @@ function M.normalize_issue(raw, fallback_slug)
 		duedate = nil,
 		parent = parent,
 		url = url ~= "" and url or nil,
+		is_pinned = raw.isPinned == true,
+		is_subscribed = tostring(raw.viewerSubscription or "") == "SUBSCRIBED",
 		_raw = {
+			node_id = safe_str(raw.id),
 			number = number,
 			slug = slug,
 			body = body,
@@ -221,6 +224,7 @@ function M.normalize_issue(raw, fallback_slug)
 			comment_count = comment_count,
 			html_url = url,
 			reactions = normalize_reaction_groups(raw.reactionGroups),
+			sub_issues = connection_nodes(raw.subIssues),
 		},
 	}
 	return issue

@@ -35,17 +35,20 @@
 ---@field fetch_description (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(description: string|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field fetch_reviewers (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(reviewers: PullsReviewer[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field fetch_builds (fun(pr: PullRequest, on_done: fun(builds: PullsBuild[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field fetch_merge_checks (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(checks: PullsMergeCheck[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field fetch_diffstat (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(entries: PullsDiffstatEntry[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field fetch_activity (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(entries: PullsActivityEntry[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field fetch_comments (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(comments: PullsComment[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field fetch_commits (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(commits: PullsCommit[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
----@field fetch_diff (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(files: PullsDiffFile[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field fetch_diff (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(files: DiffFile[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field fetch_commit_status (fun(pr: PullRequest, commit: PullsCommit, opts: { force_refresh: boolean|nil }|nil, on_done: fun(status: string|nil, url: string|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---
----@field add_comment (fun(pr: PullRequest, content: string, on_done: fun(comment: PullsComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
----@field reply_comment (fun(pr: PullRequest, parent_id: number, content: string, on_done: fun(comment: PullsComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
----@field edit_comment (fun(pr: PullRequest, comment_id: number, content: string, on_done: fun(comment: PullsComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
----@field delete_comment (fun(pr: PullRequest, comment_id: number, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field add_comment (fun(pr: PullRequest, content: string, opts: PullsAddCommentOpts|nil, on_done: fun(comment: PullsComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field reply_comment (fun(pr: PullRequest, parent: PullsComment, content: string, on_done: fun(comment: PullsComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field edit_comment (fun(pr: PullRequest, comment: PullsComment, on_done: fun(comment: PullsComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field delete_comment (fun(pr: PullRequest, target: PullsComment, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
+---
+---@field toggle_subscription (fun(pr: PullRequest, on_done: fun(is_subscribed: boolean|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---
 ---@field views fun(): AtlasPullsViewConfig[]
 ---@field open_actions fun(pr: PullRequest|nil, source: "main"|"panel"|nil, on_done: fun(result: PullsActionResult|nil))|nil
@@ -57,6 +60,7 @@
 ---
 --- Features:
 ---@field create_pr (fun(opts: PullsCreatePROpts, on_done: fun(result: PullsCreatePRResult|nil, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field fetch_default_reviewers (fun(opts: { repo_slug: string, repo_root: string|nil, head: string, base: string }, on_done: fun(reviewers: PullsCreatePRReviewer[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---
 --- Main list rendering
 ---@field render (fun(groups: PullsGroup[], layout: string, opts: { width: integer }): PullsMainRenderResult)|nil
@@ -70,11 +74,16 @@
 -- Provider Panel Interface
 --------------------------------------------------------------------------------
 
+---@class PullsAddCommentOpts
+---@field parent PullsComment|nil          -- reply to this comment
+---@field inline { path: string, side: "old"|"new"|nil, line: integer }|nil
+---@field is_task boolean|nil              -- create as task
+
 ---@class PullsProviderPanel
 ---@field header_rows (fun(pr: PullRequest): PullsPanelHeaderRow[])|nil
 ---@field chips (fun(pr: PullRequest): PullsPanelChip[])|nil
 ---@field tabs (fun(): PullsPanelTab[])|nil
----@field fetches (fun(pr: PullRequest, refresh: fun()))|nil
+---@field fetches (fun(pr: PullRequest, refresh: fun(), opts: { force_refresh: boolean|nil }|nil))|nil
 ---@field is_loading (fun(pr: PullRequest, active_tab: string|nil): boolean)|nil
 
 ---@class PullsProviderPanelKeymaps
@@ -107,7 +116,7 @@
 ---@class PullsPanelTabModule
 ---@field render fun(pr: PullRequest, width: integer): string[], table[], table<integer, table>|nil
 ---@field on_select (fun(pr: PullRequest, repo: PullsRepo|nil, refresh: fun(), opts: { force_refresh: boolean|nil }|nil))|nil
----@field activate (fun(buf: integer|nil, refresh: fun|nil))|nil
+---@field activate (fun(buf: integer|nil, refresh: fun()|nil))|nil
 ---@field deactivate (fun(buf: integer|nil))|nil
 ---@field is_selectable_line (fun(lnum: integer, entry: table): boolean)|nil
 ---@field on_enter (fun(pr: PullRequest, entry: table): boolean|nil)|nil
@@ -126,7 +135,7 @@
 ---@class PullsRepoPanelTabModule
 ---@field render fun(repo: PullsRepo, width: integer): string[], table[], table<integer, table>|nil
 ---@field on_select (fun(pr: PullRequest|nil, repo: PullsRepo, refresh: fun(), opts: { force_refresh: boolean|nil }|nil))|nil
----@field activate (fun(buf: integer|nil, refresh: fun|nil))|nil
+---@field activate (fun(buf: integer|nil, refresh: fun()|nil))|nil
 ---@field deactivate (fun(buf: integer|nil))|nil
 ---@field is_selectable_line (fun(lnum: integer, entry: table): boolean)|nil
 ---@field on_enter (fun(repo: PullsRepo, entry: table): boolean|nil)|nil

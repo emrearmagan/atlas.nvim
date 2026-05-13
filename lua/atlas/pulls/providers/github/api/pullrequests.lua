@@ -8,12 +8,13 @@ local GET_PR_GQL = [[
 query($owner: String!, $repo: String!, $number: Int!) {
   repository(owner: $owner, name: $repo) {
     pullRequest(number: $number) {
-      number title state isDraft
+      id number title state isDraft viewerSubscription
       createdAt updatedAt url body
       additions deletions changedFiles
       reviewDecision
       labels(first: 10) { nodes { name color } }
-      latestOpinionatedReviews(last: 10) { nodes { state } }
+      milestone { number title state }
+      latestOpinionatedReviews(last: 10) { nodes { state author { login } } }
       assignees(first: 10) { nodes { login } }
       author { login ... on User { name } }
       headRefName baseRefName headRefOid baseRefOid
@@ -26,20 +27,17 @@ query($owner: String!, $repo: String!, $number: Int!) {
 }
 ]]
 
---TODO: This query already fetched most of the stuff. I could probably extend it slightly and then in the overview page i could instantly show more details without having to fetch the PR again. Like reviewers, build status etc.
 local SEARCH_GQL = [[
 query($search: String!, $limit: Int!) {
   search(query: $search, type: ISSUE, first: $limit) {
     nodes {
       ... on PullRequest {
-        number title state isDraft
+        id number title state isDraft
         createdAt updatedAt url
-        additions deletions changedFiles
-        labels(first: 10) { nodes { name color } }
+        additions deletions
         latestOpinionatedReviews(last: 10) { nodes { state } }
-        assignees(first: 10) { nodes { login } }
         author { login ... on User { name } }
-        headRefName baseRefName headRefOid baseRefOid
+        headRefName baseRefName
         comments { totalCount }
         repository { name nameWithOwner }
         commits(last: 1) {
@@ -117,7 +115,7 @@ function M.get_pr(owner, repo, number, on_done, opts)
 	local cache_key = string.format("github:pr:%s:%s", repo_slug, tostring(number))
 
 	if not opts.force_load then
-		local cached, ok = cli.get_cache(cache_key)
+		local cached, ok = cli.get_mem(cache_key)
 		if ok then
 			on_done(cached, nil)
 			return nil
@@ -153,21 +151,33 @@ function M.get_pr(owner, repo, number, on_done, opts)
 
 		pr_raw.repository = { name = repo, nameWithOwner = repo_slug }
 		local pr = normalizer.normalize_pr(pr_raw)
-		cli.set_cache(cache_key, pr)
+		cli.set_mem(cache_key, pr)
 		on_done(pr, nil)
 	end)
 end
 
 ---@param pr PullRequest
----@param on_done fun(result: { mergeable: string, merge_state: string, review_decision: string }|nil, err: string|nil)
+---@param opts { force_refresh: boolean|nil }|nil
+---@param on_done fun(description: string|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.get_merge_checks(pr, on_done)
+function M.get_description(pr, opts, on_done)
 	local repo_slug = pr.repo_full_name or ""
 	if repo_slug == "" then
 		vim.schedule(function()
 			on_done(nil, "Missing repo")
 		end)
 		return nil
+	end
+
+	local cache_key = string.format("github:desc:%s:%s", repo_slug, tostring(pr.id))
+	opts = opts or {}
+
+	if not opts.force_refresh then
+		local cached, ok = cli.get_mem(cache_key)
+		if ok then
+			on_done(cached, nil)
+			return nil
+		end
 	end
 
 	return cli.gh({
@@ -177,17 +187,173 @@ function M.get_merge_checks(pr, on_done)
 		"--repo",
 		repo_slug,
 		"--json",
-		"mergeable,mergeStateStatus,reviewDecision",
+		"body",
 	}, function(result, err)
 		if err or type(result) ~= "table" then
-			on_done(nil, err or "Failed to fetch merge checks")
+			on_done(nil, err or "Failed to fetch description")
 			return
 		end
-		on_done({
-			mergeable = tostring(result.mergeable or ""),
-			merge_state = tostring(result.mergeStateStatus or ""),
-			review_decision = tostring(result.reviewDecision or ""),
-		}, nil)
+		local body = tostring(result.body or "")
+		cli.set_mem(cache_key, body)
+		on_done(body, nil)
+	end)
+end
+
+---@return { login: string, state: "APPROVED"|"CHANGES_REQUESTED"|"COMMENTED" }[], string[]
+local function parse_reviews(result)
+	local states = {}
+	local order = {}
+	for _, review in ipairs(result.reviews or {}) do
+		local login = type(review.author) == "table" and tostring(review.author.login or "") or ""
+		local state = tostring(review.state or ""):upper()
+		if login ~= "" then
+			if state == "APPROVED" or state == "CHANGES_REQUESTED" then
+				if states[login] == nil then
+					table.insert(order, login)
+				end
+				states[login] = state
+			elseif state == "COMMENTED" and states[login] == nil then
+				table.insert(order, login)
+				states[login] = "COMMENTED"
+			end
+		end
+	end
+
+	local reviews = {}
+	for _, login in ipairs(order) do
+		table.insert(reviews, { login = login, state = states[login] })
+	end
+
+	local pending = {}
+	for _, req in ipairs(result.reviewRequests or {}) do
+		local login = type(req) == "table" and tostring(req.login or "") or ""
+		if login ~= "" and states[login] == nil then
+			table.insert(pending, login)
+		end
+	end
+
+	return reviews, pending
+end
+
+---@param pr PullRequest
+---@param opts { force_refresh: boolean|nil }|nil
+---@param on_done fun(reviewers: PullsReviewer[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.get_reviewers(pr, opts, on_done)
+	local repo_slug = pr.repo_full_name or ""
+	if repo_slug == "" then
+		vim.schedule(function()
+			on_done(nil, "Missing repo")
+		end)
+		return nil
+	end
+
+	local cache_key = string.format("github:reviewers:%s:%s", repo_slug, tostring(pr.id))
+	opts = opts or {}
+
+	if not opts.force_refresh then
+		local cached, ok = cli.get_mem(cache_key)
+		if ok then
+			on_done(cached, nil)
+			return nil
+		end
+	end
+
+	return cli.gh({
+		"pr",
+		"view",
+		tostring(pr.id),
+		"--repo",
+		repo_slug,
+		"--json",
+		"reviews,reviewRequests",
+	}, function(result, err)
+		if err or type(result) ~= "table" then
+			on_done(nil, err or "Failed to fetch reviewers")
+			return
+		end
+
+		local reviews, pending = parse_reviews(result)
+
+		local reviewers = {}
+		for _, r in ipairs(reviews) do
+			local decision = "pending"
+			if r.state == "APPROVED" then
+				decision = "approved"
+			elseif r.state == "CHANGES_REQUESTED" then
+				decision = "changes_requested"
+			end
+			table.insert(reviewers, { name = r.login, nickname = r.login, decision = decision })
+		end
+		for _, login in ipairs(pending) do
+			table.insert(reviewers, { name = login, nickname = login, decision = "pending" })
+		end
+
+		cli.set_mem(cache_key, reviewers)
+		on_done(reviewers, nil)
+	end)
+end
+
+---@param pr PullRequest
+---@param opts { force_refresh: boolean|nil }|nil
+---@param on_done fun(entries: PullsDiffstatEntry[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.get_diffstat(pr, opts, on_done)
+	local repo_slug = pr.repo_full_name or ""
+	if repo_slug == "" then
+		vim.schedule(function()
+			on_done(nil, "Missing repo")
+		end)
+		return nil
+	end
+
+	local cache_key = string.format("github:diffstat:%s:%s", repo_slug, tostring(pr.id))
+	opts = opts or {}
+
+	if not opts.force_refresh then
+		local cached, ok = cli.get_mem(cache_key)
+		if ok then
+			on_done(cached, nil)
+			return nil
+		end
+	end
+
+	return cli.gh({
+		"pr",
+		"view",
+		tostring(pr.id),
+		"--repo",
+		repo_slug,
+		"--json",
+		"files",
+	}, function(result, err)
+		if err or type(result) ~= "table" then
+			on_done(nil, err or "Failed to fetch files")
+			return
+		end
+
+		local entries = {}
+		for _, file in ipairs(result.files or {}) do
+			local additions = tonumber(file.additions) or 0
+			local deletions = tonumber(file.deletions) or 0
+			local status = "modified"
+			if additions > 0 and deletions == 0 then
+				status = "added"
+			elseif additions == 0 and deletions > 0 then
+				status = "removed"
+			end
+
+			table.insert(entries, {
+				status = status,
+				path = tostring(file.path or ""),
+				old_path = nil,
+				lines_added = additions,
+				lines_removed = deletions,
+			})
+		end
+
+		cli.set_mem(cache_key, entries)
+		on_done(entries, nil)
 	end)
 end
 
@@ -221,6 +387,11 @@ function M.create_pr(opts, on_done)
 		table.insert(args, "--draft")
 	end
 
+	for _, reviewer in ipairs(opts.reviewers or {}) do
+		table.insert(args, "--reviewer")
+		table.insert(args, reviewer.provider_id)
+	end
+
 	logger.loginfo("github.create_pr", { slug = slug, head = opts.head, base = opts.base, draft = opts.draft == true })
 
 	return cli.gh(args, function(result, err)
@@ -243,6 +414,75 @@ function M.create_pr(opts, on_done)
 		end
 
 		on_done({ id = id, url = url, message = "PR created" }, nil)
+	end)
+end
+
+---@param slug string
+---@param on_done fun(labels: table[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.list_labels(slug, on_done)
+	if type(slug) ~= "string" or slug == "" then
+		vim.schedule(function()
+			on_done(nil, "Missing repository slug")
+		end)
+		return nil
+	end
+
+	return cli.gh({
+		"api",
+		"--paginate",
+		string.format("repos/%s/labels?per_page=100", slug),
+	}, function(result, err)
+		if err then
+			on_done(nil, err)
+			return
+		end
+
+		local list = {}
+		if type(result) == "table" then
+			for _, raw in ipairs(result) do
+				if type(raw) == "table" and type(raw.name) == "string" then
+					table.insert(list, {
+						name = raw.name,
+						color = type(raw.color) == "string" and raw.color or nil,
+						description = type(raw.description) == "string" and raw.description or nil,
+					})
+				end
+			end
+		end
+		on_done(list, nil)
+	end)
+end
+
+---@param slug string
+---@param number integer|string
+---@param diff { add?: string[], remove?: string[] }
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.update_labels(slug, number, diff, on_done)
+	local adds = type(diff) == "table" and diff.add or {}
+	local removes = type(diff) == "table" and diff.remove or {}
+	if #adds == 0 and #removes == 0 then
+		on_done(true, nil)
+		return nil
+	end
+
+	local args = { "pr", "edit", tostring(number), "--repo", slug }
+	for _, v in ipairs(adds) do
+		table.insert(args, "--add-label")
+		table.insert(args, tostring(v))
+	end
+	for _, v in ipairs(removes) do
+		table.insert(args, "--remove-label")
+		table.insert(args, tostring(v))
+	end
+
+	return cli.gh(args, function(_, err)
+		if err then
+			on_done(false, err)
+			return
+		end
+		on_done(true, nil)
 	end)
 end
 

@@ -141,7 +141,7 @@ end
 function M.is_loading(pr, active_tab)
 	local overview_state = require("atlas.pulls.ui.panel.pr.tabs.overview.state")
 	local activity_state = require("atlas.pulls.ui.panel.pr.tabs.activity.state")
-	local bb_comments_state = require("atlas.pulls.providers.bitbucket.ui.panel.tabs.comments.state")
+	local comments_state = require("atlas.pulls.ui.panel.pr.tabs.comments.state")
 	local commits_state = require("atlas.pulls.ui.panel.pr.tabs.commits.state")
 	local files_state = require("atlas.pulls.ui.panel.pr.tabs.files.state")
 	if active_tab == "overview" then
@@ -149,7 +149,7 @@ function M.is_loading(pr, active_tab)
 	elseif active_tab == "activity" then
 		return activity_state.any_loading()
 	elseif active_tab == "comments" then
-		return bb_comments_state.any_loading()
+		return comments_state.any_loading()
 	elseif active_tab == "commits" then
 		return commits_state.any_loading()
 	elseif active_tab == "files" then
@@ -177,7 +177,7 @@ function M.tabs()
 			key = "comments",
 			label = "Comments",
 			icon = icons.general("comment"),
-			mod = require("atlas.pulls.providers.bitbucket.ui.panel.tabs.comments"),
+			mod = require("atlas.pulls.ui.panel.pr.tabs.comments"),
 		},
 		{
 			key = "commits",
@@ -188,7 +188,7 @@ function M.tabs()
 		{
 			key = "files",
 			label = "Changes",
-			icon = icons.pulls("files"),
+			icon = icons.pulls("changes"),
 			mod = require("atlas.pulls.ui.panel.pr.tabs.files"),
 		},
 	}

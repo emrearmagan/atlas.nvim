@@ -46,11 +46,18 @@ function M.render()
 end
 
 ---@param provider IssuesProvider
-function M.init(provider)
+---@param opts? { initial_view?: IssuesViewConfig }
+function M.init(provider, opts)
 	local state = require("atlas.issues.state")
 	local controller = require("atlas.issues.ui.main.controller")
 	local keymaps = require("atlas.issues.ui.main.keymaps")
 	state.provider = provider
+
+	local notifications = require("atlas.ui.notifications")
+	notifications.set_provider(provider)
+	notifications.set_refresh(function()
+		M.render()
+	end)
 	state.error = nil
 	state.issues = nil
 	state.issue_tree = nil
@@ -62,7 +69,7 @@ function M.init(provider)
 	end
 
 	local views = provider.views and provider.views() or {}
-	state.active_view = views[1]
+	state.active_view = (opts and opts.initial_view) or views[1]
 
 	footer.clear_items()
 
@@ -126,6 +133,13 @@ function M.init(provider)
 	ui_state.current_view = provider.id
 	M.render()
 	controller.switch_view(state.active_view)
+
+	if provider and provider.fetch_notifications then
+		local notifications_ui = require("atlas.ui.notifications")
+		notifications_ui.refresh_in_background({ force_load = false }, function()
+			M.render()
+		end)
+	end
 end
 
 return M

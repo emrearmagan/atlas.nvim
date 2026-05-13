@@ -335,7 +335,7 @@ end
 
 ---@param issue Issue
 ---@return string[], table[]
-function M.issue_popup_content(issue)
+local function generic_issue_popup_content(issue)
 	local summary = issue.summary or ""
 	local title = string.format(" %s: %s", issue.key or "", summary)
 	local parent_key = type(issue.parent) == "table" and issue.parent.key or nil
@@ -407,6 +407,216 @@ function M.issue_popup_content(issue)
 	return lines, highlights
 end
 
+---@param issue Issue
+---@return string[], table[]
+local function jira_issue_popup_content(issue)
+	local raw = type(issue._raw) == "table" and issue._raw or {}
+	local fields = type(raw.fields) == "table" and raw.fields or {}
+	local summary = issue.summary or ""
+	local key = issue.key or ""
+	local parent_key = type(issue.parent) == "table" and issue.parent.key or nil
+	local parent_summary = type(issue.parent) == "table" and issue.parent.summary or nil
+
+	local lines = { string.format(" %s: %s", key, summary), "" }
+	local highlights = {
+		{ row = 0, col = 1, end_col = 1 + #key, hl_group = helper.issue_hl(key) },
+		{ row = 1, col = 0, end_col = -1, hl_group = "AtlasTextMuted" },
+	}
+	if summary ~= "" then
+		table.insert(highlights, {
+			row = 0,
+			col = 3 + #key,
+			end_col = -1,
+			hl_group = helper.issue_title_hl(summary),
+		})
+	end
+
+	---@param label string
+	---@param value string|nil
+	---@param value_hl string|nil
+	local function push(label, value, value_hl)
+		if value == nil or value == "" then
+			return
+		end
+		local row = #lines
+		table.insert(lines, string.format(" %-10s %s", label .. ":", value))
+		table.insert(highlights, { row = row, col = 1, end_col = 11, hl_group = "AtlasTextMuted" })
+		if value_hl ~= nil then
+			table.insert(highlights, { row = row, col = 12, end_col = -1, hl_group = value_hl })
+		end
+	end
+
+	local issue_type_name = type(issue.type) == "table" and issue.type.name or nil
+	push("Type", issue_type_name, helper.issue_type_hl(issue_type_name))
+	push("Status", issue.status, helper.status_hl(issue.status_id))
+	push("Priority", issue.priority, helper.priority_hl(issue.priority))
+
+	local assignee_name = type(issue.assignee) == "table" and issue.assignee.display_name or nil
+	push("Assignee", assignee_name or "Unassigned", helper.person_hl(assignee_name))
+
+	local reporter_name = type(issue.reporter) == "table" and issue.reporter.display_name or nil
+	if reporter_name then
+		push("Reporter", reporter_name, helper.person_hl(reporter_name))
+	end
+
+	push("Due", issue.duedate, "AtlasTextMuted")
+
+	if type(issue.story_points) == "number" then
+		push("Points", tostring(issue.story_points), "AtlasTextMuted")
+	end
+
+	---@param list any
+	---@param field string|nil
+	---@return string[]
+	local function names(list, field)
+		local out = {}
+		if type(list) ~= "table" then
+			return out
+		end
+		for _, item in ipairs(list) do
+			if field == nil then
+				if type(item) == "string" and item ~= "" then
+					table.insert(out, item)
+				end
+			elseif type(item) == "table" then
+				local v = item[field]
+				if type(v) == "string" and v ~= "" then
+					table.insert(out, v)
+				end
+			end
+		end
+		return out
+	end
+
+	local labels = names(fields.labels)
+	if #labels > 0 then
+		push("Labels", table.concat(labels, ", "), "AtlasTextMuted")
+	end
+
+	local components = names(fields.components, "name")
+	if #components > 0 then
+		push("Components", table.concat(components, ", "), "AtlasTextMuted")
+	end
+
+	local fix_versions = names(fields.fixVersions, "name")
+	if #fix_versions > 0 then
+		push("Fix In", table.concat(fix_versions, ", "), "AtlasTextMuted")
+	end
+
+	local resolution = type(fields.resolution) == "table" and fields.resolution.name or nil
+	if type(resolution) == "string" then
+		push("Resolved", resolution, "AtlasTextMuted")
+	end
+
+	push("Updated", utils.relative_time(fields.updated), "AtlasTextMuted")
+
+	if type(parent_key) == "string" and parent_key ~= "" then
+		push("Parent", parent_key, helper.issue_hl(parent_key))
+		if type(parent_summary) == "string" and parent_summary ~= "" then
+			local row = #lines
+			table.insert(lines, string.format("            %s", parent_summary))
+			table.insert(highlights, { row = row, col = 12, end_col = -1, hl_group = "Comment" })
+		end
+	end
+
+	local content_width = 1
+	for _, line in ipairs(lines) do
+		content_width = math.max(content_width, vim.fn.strdisplaywidth(line))
+	end
+	lines[2] = " " .. ("━"):rep(content_width)
+
+	return lines, highlights
+end
+
+---@param issue Issue
+---@return string[], table[]
+local function github_issue_popup_content(issue)
+	local raw = type(issue._raw) == "table" and issue._raw or {}
+	local summary = issue.summary or ""
+	local key = issue.key or ""
+
+	local lines = { string.format(" %s: %s", key, summary), "" }
+	local highlights = {
+		{ row = 0, col = 1, end_col = 1 + #key, hl_group = helper.issue_hl(key) },
+		{ row = 1, col = 0, end_col = -1, hl_group = "AtlasTextMuted" },
+	}
+	if summary ~= "" then
+		table.insert(highlights, {
+			row = 0,
+			col = 3 + #key,
+			end_col = -1,
+			hl_group = helper.issue_title_hl(summary),
+		})
+	end
+
+	---@param label string
+	---@param value string|nil
+	---@param value_hl string|nil
+	local function push(label, value, value_hl)
+		if value == nil or value == "" then
+			return
+		end
+		local row = #lines
+		table.insert(lines, string.format(" %-10s %s", label .. ":", value))
+		table.insert(highlights, { row = row, col = 1, end_col = 11, hl_group = "AtlasTextMuted" })
+		if value_hl ~= nil then
+			table.insert(highlights, { row = row, col = 12, end_col = -1, hl_group = value_hl })
+		end
+	end
+
+	push("Status", issue.status, helper.status_hl(issue.status_id))
+
+	local reporter_name = type(issue.reporter) == "table" and issue.reporter.display_name or nil
+	push("Author", reporter_name, helper.person_hl(reporter_name))
+
+	local assignees = type(raw.assignees) == "table" and raw.assignees or {}
+	if #assignees > 0 then
+		local logins = {}
+		for _, a in ipairs(assignees) do
+			table.insert(logins, "@" .. tostring(a.login or ""))
+		end
+		push("Assignees", table.concat(logins, ", "), "AtlasTextMuted")
+	end
+
+	local labels = type(raw.labels) == "table" and raw.labels or {}
+	if #labels > 0 then
+		local names = {}
+		for _, l in ipairs(labels) do
+			table.insert(names, tostring(l.name or ""))
+		end
+		push("Labels", table.concat(names, ", "), "AtlasTextMuted")
+	end
+
+	local milestone = raw.milestone
+	if type(milestone) == "table" and milestone.title then
+		push("Milestone", tostring(milestone.title), "AtlasTextMuted")
+	end
+
+	push("Comments", tostring(tonumber(raw.comment_count) or 0), "AtlasTextMuted")
+	push("Updated", utils.relative_time(raw.updated_at), "AtlasTextMuted")
+
+	local content_width = 1
+	for _, line in ipairs(lines) do
+		content_width = math.max(content_width, vim.fn.strdisplaywidth(line))
+	end
+	lines[2] = " " .. ("━"):rep(content_width)
+
+	return lines, highlights
+end
+
+---@param issue Issue
+---@return string[], table[]
+function M.issue_popup_content(issue)
+	local provider_id = state.provider and state.provider.id or ""
+	if provider_id == "jira" then
+		return jira_issue_popup_content(issue)
+	end
+	if provider_id == "github" then
+		return github_issue_popup_content(issue)
+	end
+	return generic_issue_popup_content(issue)
+end
+
 ---@param opts { width: integer, height: integer }
 ---@return string[], table[], table<integer, table>
 function M.render(opts)
@@ -440,9 +650,22 @@ function M.render(opts)
 		})
 	end
 
-	local actions = {
-		{ label = string.format("Refresh (%s)", key_label("issues.refresh_view", "R")), hl_group = "AtlasTextMuted" },
-	}
+	local actions = {}
+
+	if state.provider and state.provider.fetch_notifications then
+		local notif_state = require("atlas.ui.notifications.state")
+		local count = notif_state.unread_count or 0
+		local bell_icon = count > 0 and icons.general("bell_unread") or icons.general("bell")
+		local bell_label = count > 0 and string.format("%s %d", bell_icon, count) or bell_icon
+		local bell_hl = count > 0 and "AtlasLogInfo" or "AtlasTextMuted"
+		table.insert(actions, { label = bell_label, hl_group = bell_hl })
+		table.insert(actions, { label = "|", hl_group = "AtlasTextMuted" })
+	end
+
+	table.insert(actions, {
+		label = string.format("Refresh (%s)", key_label("ui.refresh_view", "R")),
+		hl_group = "AtlasTextMuted",
+	})
 
 	local lines, spans = {}, {}
 	local line_map = {}

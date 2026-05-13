@@ -3,7 +3,6 @@ local M = {}
 local help = require("atlas.ui.popups.help")
 local resolver = require("atlas.core.keymaps")
 local utils = require("atlas.ui.shared.utils")
-local layout = require("atlas.ui.layout")
 
 ---@param action_id AtlasKeymapActionId|string
 ---@param map_item table
@@ -33,23 +32,20 @@ end
 ---@param refresh fun()
 function M.setup(buf, refresh)
 	local tab = require("atlas.pulls.ui.panel.pr.tabs.files")
-	local panel_state = require("atlas.pulls.ui.panel.pr.state")
-
-	local function cursor_entry()
-		local win = layout.win_id("detail")
-		if win == nil or not vim.api.nvim_win_is_valid(win) then
-			return nil
-		end
-		local lnum = vim.api.nvim_win_get_cursor(win)[1]
-		return (panel_state.line_map or {})[lnum]
-	end
 
 	local items = {}
 	utils.insert_if(items, item("ui.toggle_fold", {
 		desc = "Toggle hunk fold",
 		opts = { nowait = true, silent = true },
 		callback = function()
-			local entry = cursor_entry()
+			local layout = require("atlas.ui.layout")
+			local panel_state = require("atlas.pulls.ui.panel.pr.state")
+			local win = layout.win_id("detail")
+			if win == nil or not vim.api.nvim_win_is_valid(win) then
+				return
+			end
+			local lnum = vim.api.nvim_win_get_cursor(win)[1]
+			local entry = (panel_state.line_map or {})[lnum]
 			if entry then
 				tab.toggle_hunk(entry)
 				refresh()
@@ -65,14 +61,14 @@ function M.setup(buf, refresh)
 			end
 		end,
 	}))
-	utils.insert_if(items, item("pulls.pr_files_next_hunk", {
+	utils.insert_if(items, item("pulls.next_hunk", {
 		desc = "Next hunk",
 		opts = { nowait = true, silent = true },
 		callback = function()
 			tab.jump_hunk("next")
 		end,
 	}))
-	utils.insert_if(items, item("pulls.pr_files_previous_hunk", {
+	utils.insert_if(items, item("pulls.previous_hunk", {
 		desc = "Previous hunk",
 		opts = { nowait = true, silent = true },
 		callback = function()
@@ -88,8 +84,8 @@ function M.teardown(buf)
 	local items = {}
 	utils.insert_if(items, remove_item("ui.toggle_fold"))
 	utils.insert_if(items, remove_item("ui.toggle_all_folds"))
-	utils.insert_if(items, remove_item("pulls.pr_files_next_hunk"))
-	utils.insert_if(items, remove_item("pulls.pr_files_previous_hunk"))
+	utils.insert_if(items, remove_item("pulls.next_hunk"))
+	utils.insert_if(items, remove_item("pulls.previous_hunk"))
 	help.remove("Panel", items, { buffer = buf })
 end
 

@@ -44,6 +44,7 @@
 ---@field workspace string
 ---@field repo string
 ---@field repo_full_name string
+---@field is_subscribed boolean|nil
 ---@field _raw table|nil
 
 --------------------------------------------------------------------------------
@@ -77,6 +78,9 @@
 ---@field is_private boolean|nil
 ---@field created_on string|nil
 ---@field readme string|nil
+---@field stars number|nil
+---@field watchers number|nil
+---@field forks number|nil
 ---@field _raw table|nil
 
 ---@class PullsRepoBranch
@@ -128,6 +132,16 @@
 ---@field key string|nil
 
 --------------------------------------------------------------------------------
+-- Merge check
+--------------------------------------------------------------------------------
+
+---@class PullsMergeCheck
+---@field key string
+---@field state "successful"|"failed"|"inprogress"|"warning"|"muted"
+---@field label string
+---@field details string[]|nil
+
+--------------------------------------------------------------------------------
 -- Diffstat
 --------------------------------------------------------------------------------
 
@@ -143,7 +157,7 @@
 --------------------------------------------------------------------------------
 
 ---@class PullsActivityEntry
----@field kind "approval"|"changes_requested"|"comment"|"update"|string
+---@field kind "approval"|"changes_requested"|"comment"|"update"|"review"|string
 ---@field actor PullsAuthor|nil
 ---@field date string
 ---@field content_raw string|nil
@@ -157,15 +171,18 @@
 --------------------------------------------------------------------------------
 
 ---@class PullsComment
----@field id number
----@field parent_id number|nil
+---@field id number|string
+---@field parent_id number|string|nil
 ---@field author {name: string, nickname: string|nil, id: string|nil}|nil
 ---@field content_raw string
 ---@field created_on string
----@field deleted boolean|nil
 ---@field inline {path: string, to: number|nil, from: number|nil}|nil
+---@field inline_hunk DiffHunk|nil                       -- surrounding diff context for inline comments
+---@field is_task boolean|nil                            -- true = render as task (checkbox)
+---@field state "RESOLVED"|"DELETED"|"OUTDATED"|nil      -- nil = active/open
 ---@field url string|nil
 ---@field html_url string|nil
+---@field _raw any|nil
 
 --------------------------------------------------------------------------------
 -- Commit
@@ -180,54 +197,3 @@
 ---@field date string
 ---@field html_url string|nil
 ---@field statuses_url string|nil
-
---------------------------------------------------------------------------------
--- Diff
---------------------------------------------------------------------------------
-
----@class PullsDiffFile
----@field path string
----@field old_path string|nil
----@field status string
----@field hunks PullsDiffHunk[]
-
----@class PullsDiffHunk
----@field header string
----@field lines PullsDiffLine[]
-
----@class PullsDiffLine
----@field kind "add"|"remove"|"context"|"meta"
----@field text string
-
---------------------------------------------------------------------------------
--- Notification
---------------------------------------------------------------------------------
-
----@class AtlasNotification
----@field id string
----@field title string
----@field subtitle string|nil
----@field timestamp string|nil  -- ISO8601
----@field icon string|nil
----@field icon_hl string|nil
----@field unread boolean
----@field url string|nil
----@field _raw any|nil
-
---------------------------------------------------------------------------------
--- PR creation
---------------------------------------------------------------------------------
-
----@class PullsCreatePROpts
----@field repo_slug string
----@field title string
----@field body string
----@field head string
----@field base string
----@field draft boolean|nil
----@field repo_root string|nil
-
----@class PullsCreatePRResult
----@field id string|number|nil
----@field url string|nil
----@field message string|nil

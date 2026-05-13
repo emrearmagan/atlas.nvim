@@ -103,6 +103,19 @@ function M.register(buf)
 				M.open_current_line()
 			end,
 		},
+		{
+			key = "o",
+			desc = "Close repo panel",
+			opts = { nowait = true, silent = true },
+			callback = function()
+				local layout_mod = require("atlas.ui.layout")
+				local ui_st = require("atlas.ui.state")
+				layout_mod.toggle_detail()
+				if ui_st.on_panel_close then
+					ui_st.on_panel_close()
+				end
+			end,
+		},
 	}, { index = 211, buffer = buf })
 
 	local general = {}
@@ -198,6 +211,7 @@ function M.remove(buf)
 		{ key = "G" },
 		{ key = "r" },
 		{ key = "gx" },
+		{ key = "o" },
 	}
 
 	local general_items = {

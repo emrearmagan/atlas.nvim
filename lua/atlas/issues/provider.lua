@@ -37,17 +37,23 @@
 ---@field fetch_issue fun(issue_key: string, opts: IssuesFetchOpts|nil, on_done: fun(issue: Issue|nil, err: string|nil)): { cancel: fun() }|nil
 ---@field fetch_description fun(issue_key: string, opts: IssuesFetchOpts|nil, on_done: fun(raw: any, err: string|nil)): { cancel: fun() }|nil
 ---@field fetch_comments fun(issue_key: string, opts: IssuesFetchOpts|nil, on_done: fun(comments: IssueComment[]|nil, err: string|nil)): { cancel: fun() }|nil
----@field fetch_history fun(issue_key: string, opts: IssuesFetchOpts|nil, on_done: fun(entries: IssueHistoryEntry[]|nil, err: string|nil)): { cancel: fun() }|nil
+---@field fetch_history (fun(issue_key: string, opts: IssuesFetchOpts|nil, on_done: fun(entries: IssueHistoryEntry[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field add_comment (fun(issue_key: string, content: string, on_done: fun(comment: IssueComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field reply_comment (fun(issue_key: string, parent_id: string, content: string, on_done: fun(comment: IssueComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field edit_comment (fun(issue_key: string, comment_id: string, content: string, on_done: fun(comment: IssueComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field delete_comment (fun(issue_key: string, comment_id: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
+---
+---@field toggle_subscription (fun(issue: Issue, on_done: fun(is_subscribed: boolean|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---
 ---@field views fun(): IssuesViewConfig[]
 ---@field run_action fun(action_id: string, ctx: table, on_done: fun(result: table|nil, err: string|nil))|nil
 ---@field open_actions fun(issue: Issue|nil, source: "main"|"panel"|nil, on_done: fun(result: table|nil, err: string|nil))|nil
 ---@field search fun(on_done: fun(result: table|nil, err: string|nil)|nil)|nil
 ---@field create_issue (fun(opts: table, on_done: fun(result: table|nil, err: string|nil)): { cancel: fun() }|nil)|nil
+---
+---@field fetch_notifications (fun(opts: { force_load: boolean|nil }|nil, on_done: fun(notifications: AtlasNotification[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field mark_notification_read (fun(id: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field mark_notification_done (fun(id: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
 ---
 --- Main UI Style
 ---@field render (fun(groups: IssuesGroup[], layout: "plain"|"compact", opts: { width: integer }): IssuesMainRenderResult)|nil

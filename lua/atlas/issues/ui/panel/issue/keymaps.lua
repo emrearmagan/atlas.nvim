@@ -72,7 +72,7 @@ function M.register(buf)
 
 	local state = require("atlas.issues.state")
 	if state.provider and state.provider.open_actions then
-		utils.insert_if(items, item("issues.open_actions", {
+		utils.insert_if(items, item("ui.open_actions", {
 			desc = "Open issue actions",
 			callback = function()
 				local issue = panel_state.current_issue
@@ -84,7 +84,7 @@ function M.register(buf)
 		}))
 	end
 
-	utils.insert_if(items, item("issues.open_in_browser", {
+	utils.insert_if(items, item("ui.open_in_browser", {
 		desc = "Open issue in browser",
 		opts = { nowait = true },
 		callback = function()
@@ -93,6 +93,32 @@ function M.register(buf)
 				return
 			end
 			actions.open_in_browser(issue)
+		end,
+	}))
+
+	utils.insert_if(items, item("ui.toggle_subscription", {
+		desc = "Toggle subscription",
+		opts = { nowait = true, silent = true },
+		callback = function()
+			local issue = panel_state.current_issue
+			if issue == nil then
+				return
+			end
+			local provider = require("atlas.issues.state").provider
+			if provider == nil or type(provider.toggle_subscription) ~= "function" then
+				require("atlas.ui.components.footer").notify("warn", "Provider does not support subscription")
+				return
+			end
+			local footer = require("atlas.ui.components.footer")
+			footer.notify("loading", issue.is_subscribed and "Unsubscribing..." or "Subscribing...")
+			provider.toggle_subscription(issue, function(is_subscribed, err)
+				if err then
+					footer.notify("error", tostring(err))
+					return
+				end
+				footer.notify("success", is_subscribed and "Subscribed" or "Unsubscribed", 1200)
+				require("atlas.issues.ui.panel").render()
+			end)
 		end,
 	}))
 
@@ -201,8 +227,8 @@ function M.remove(buf)
 		{ key = "gx" },
 		{ key = "r" },
 	}
-	utils.insert_if(items, remove_item("issues.open_actions"))
-	utils.insert_if(items, remove_item("issues.open_in_browser"))
+	utils.insert_if(items, remove_item("ui.open_actions"))
+	utils.insert_if(items, remove_item("ui.open_in_browser"))
 	help.remove("Panel", items, { buffer = buf })
 
 	local general = {}

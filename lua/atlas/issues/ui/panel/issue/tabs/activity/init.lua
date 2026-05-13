@@ -1,4 +1,4 @@
----@class IssuesHistoryTab : IssuesPanelTabModule
+---@class IssuesActivityTab : IssuesPanelTabModule
 local M = {}
 
 local utils = require("atlas.ui.shared.utils")
@@ -7,7 +7,7 @@ local highlights = require("atlas.ui.shared.highlights")
 local spinner = require("atlas.ui.components.spinner")
 local threads = require("atlas.ui.components.threadsv2")
 local footer = require("atlas.ui.components.footer")
-local state = require("atlas.issues.ui.panel.issue.tabs.history.state")
+local state = require("atlas.issues.ui.panel.issue.tabs.activity.state")
 
 local PADDING_X = 1
 
@@ -116,9 +116,6 @@ end
 function M.render(issue, width)
 	local lines = {}
 	local spans = {}
-
-	local count_text = state.entries and tostring(#state.entries) or "..."
-	utils.push(lines, spans, string.format("History (%s)", count_text), "AtlasColumnHeader", PADDING_X)
 
 	if state.is_loading then
 		utils.push(lines, spans, spinner.with_text("Loading history..."), "AtlasTextMuted", PADDING_X)

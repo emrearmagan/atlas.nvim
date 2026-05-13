@@ -4,6 +4,7 @@ local M = {}
 local utils = require("atlas.ui.shared.utils")
 local spinner = require("atlas.ui.components.spinner")
 local diff_blocks = require("atlas.ui.components.diff_blocks")
+local changes_block = require("atlas.pulls.ui.components.changes_block")
 local table_view = require("atlas.ui.components.table_tree")
 local footer = require("atlas.ui.components.footer")
 local state = require("atlas.pulls.ui.panel.pr.tabs.files.state")
@@ -83,7 +84,6 @@ function M.on_select(pr, repo, refresh, opts)
 			refresh()
 		end))
 	end
-
 end
 
 --------------------------------------------------------------------------------
@@ -140,13 +140,13 @@ local function render_diffstat_summary(width, lines, spans, line_map)
 		local hdr_line = string.rep(" ", PADDING_X) .. hdr .. string.rep(" ", gap) .. diff_result.text
 		table.insert(lines, hdr_line)
 		local lnum = #lines - 1
-		table.insert(spans, { line = lnum, start_col = PADDING_X, end_col = PADDING_X + #hdr, hl_group = "AtlasColumnHeader" })
+		table.insert(spans, { line = lnum, start_col = PADDING_X, end_col = PADDING_X + #hdr, hl_group = "Normal" })
 		local diff_byte_start = PADDING_X + #hdr + gap
 		for _, hl in ipairs(diff_result.highlights) do
 			table.insert(spans, { line = lnum, start_col = diff_byte_start + hl.start_col, end_col = diff_byte_start + hl.end_col, hl_group = hl.hl_group })
 		end
 	else
-		push(lines, spans, hdr, "AtlasColumnHeader")
+		push(lines, spans, hdr, "Normal")
 	end
 	line_map[#lines] = { type = "diffstat_header" }
 
@@ -161,7 +161,13 @@ local function render_diffstat_summary(width, lines, spans, line_map)
 				path = diffstat_path(entry),
 				added = string.format("+%d", tonumber(entry.lines_added) or 0),
 				removed = string.format("-%d", tonumber(entry.lines_removed) or 0),
+				_entry = entry,
 			})
+		end
+
+		local row_base = #lines
+		for i, row in ipairs(rows) do
+			line_map[row_base + i] = { type = "diffstat_row", entry = row._entry }
 		end
 
 		local tbl_lines, _, tbl_spans = table_view.render({
@@ -226,52 +232,16 @@ function M.render(pr, width)
 		return lines, spans, line_map
 	end
 
-	local hunk_counter = 0
+	local cb_lines, cb_spans, cb_map = changes_block.render(files, {
+		max_width = max_width,
+		padding_x = PADDING_X,
+		collapsed_hunks = state.collapsed_hunks,
+	})
 
-	for _, file in ipairs(files) do
-		-- File path separator
-		local path_label = file.path
-		if file.status == "renamed" and file.old_path then
-			path_label = file.old_path .. " -> " .. file.path
-		end
-		local available = math.max(1, max_width - PADDING_X)
-		push(lines, spans, utils.truncate(path_label, available, false), "AtlasColumnHeader")
-
-		for _, hunk in ipairs(file.hunks) do
-			hunk_counter = hunk_counter + 1
-			local hunk_idx = hunk_counter
-			local is_collapsed = state.collapsed_hunks[hunk_idx] == true
-			local body_count = #hunk.lines
-
-			-- @@ header line
-			local display_header = is_collapsed and (hunk.header .. "  [+" .. body_count .. " lines]") or hunk.header
-			table.insert(lines, pad(display_header))
-			local buf_line = #lines
-			table.insert(spans, {
-				line = buf_line - 1,
-				start_col = PADDING_X,
-				end_col = PADDING_X + #display_header,
-				hl_group = "AtlasTextMuted",
-			})
-			line_map[buf_line] = { type = "hunk_header", hunk_idx = hunk_idx }
-
-			-- Body lines
-			if not is_collapsed then
-				for _, dl in ipairs(hunk.lines) do
-					local hl = nil
-					if dl.kind == "add" then
-						hl = "AtlasTextPositive"
-					elseif dl.kind == "remove" then
-						hl = "AtlasTextWarning"
-					elseif dl.kind == "meta" then
-						hl = "AtlasTextMuted"
-					end
-					push(lines, spans, dl.text, hl)
-				end
-			end
-		end
-
-		table.insert(lines, "")
+	local offset = #lines
+	utils.append_block(lines, spans, { lines = cb_lines, highlights = cb_spans })
+	for lnum, entry in pairs(cb_map or {}) do
+		line_map[offset + lnum] = entry
 	end
 
 	return lines, spans, line_map
@@ -285,8 +255,8 @@ function M.on_enter(_pr, entry)
 		state.diffstat_collapsed = not state.diffstat_collapsed
 		return true
 	end
-	if entry.type == "hunk_header" then
-		state.collapsed_hunks[entry.hunk_idx] = not state.collapsed_hunks[entry.hunk_idx]
+	if entry.kind == "hunk_header" and entry.hunk_key then
+		state.collapsed_hunks[entry.hunk_key] = not state.collapsed_hunks[entry.hunk_key]
 		return true
 	end
 end
@@ -295,8 +265,8 @@ end
 function M.toggle_hunk(entry)
 	if entry and entry.type == "diffstat_header" then
 		state.diffstat_collapsed = not state.diffstat_collapsed
-	elseif entry and entry.type == "hunk_header" then
-		state.collapsed_hunks[entry.hunk_idx] = not state.collapsed_hunks[entry.hunk_idx]
+	elseif entry and entry.kind == "hunk_header" and entry.hunk_key then
+		state.collapsed_hunks[entry.hunk_key] = not state.collapsed_hunks[entry.hunk_key]
 	end
 end
 
@@ -306,20 +276,21 @@ function M.toggle_all_hunks()
 		return false
 	end
 
-	local hunk_count = 0
+	---@type string[]
+	local keys = {}
 	for _, file in ipairs(state.diff) do
-		for _ in ipairs(file.hunks or {}) do
-			hunk_count = hunk_count + 1
+		for _, hunk in ipairs(file.hunks or {}) do
+			table.insert(keys, changes_block.hunk_key(file, hunk))
 		end
 	end
 
-	if hunk_count == 0 then
+	if #keys == 0 then
 		return false
 	end
 
 	local should_expand = false
-	for idx = 1, hunk_count do
-		if state.collapsed_hunks[idx] == true then
+	for _, k in ipairs(keys) do
+		if state.collapsed_hunks[k] == true then
 			should_expand = true
 			break
 		end
@@ -330,8 +301,8 @@ function M.toggle_all_hunks()
 		return true
 	end
 
-	for idx = 1, hunk_count do
-		state.collapsed_hunks[idx] = true
+	for _, k in ipairs(keys) do
+		state.collapsed_hunks[k] = true
 	end
 	return true
 end
@@ -357,7 +328,7 @@ function M.jump_hunk(direction)
 
 	for lnum = line + step, bound, step do
 		local entry = line_map[lnum]
-		if entry and entry.type == "hunk_header" then
+		if entry and entry.kind == "hunk_header" then
 			vim.api.nvim_win_set_cursor(win, { lnum, 0 })
 			return
 		end
