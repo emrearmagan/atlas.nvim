@@ -44,6 +44,16 @@ function M.render(pr, width, extra_rows)
 	local title_text = tostring(pr.title or "")
 	local title = string.format(" %s %s", id_text, title_text)
 
+	local bell_icon, bell_hl
+	if pr.is_subscribed ~= nil then
+		bell_icon = pr.is_subscribed and icons.general("bell") or icons.general("bell_no")
+		bell_hl = pr.is_subscribed and "AtlasLogInfo" or "AtlasTextMuted"
+		local title_w = vim.api.nvim_strwidth(title)
+		local bell_w = vim.api.nvim_strwidth(bell_icon)
+		local pad = math.max(1, width - title_w - bell_w - 1)
+		title = title .. string.rep(" ", pad) .. bell_icon
+	end
+
 	local author_icon = icons.general("user")
 	local by_prefix = string.format(" %s by @", author_icon)
 	local by_sep = " - "
@@ -143,6 +153,9 @@ function M.render(pr, width, extra_rows)
 	}
 
 	add_span(spans, lines, 0, 1, 1 + #id_text, "AtlasTextMuted")
+	if bell_icon then
+		add_span(spans, lines, 0, #title - #bell_icon, #title, bell_hl)
+	end
 
 	local author_start = #by_prefix - 1
 	local author_end = author_start + #("@" .. author_name)

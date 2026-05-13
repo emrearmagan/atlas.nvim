@@ -8,7 +8,7 @@ local GET_PR_GQL = [[
 query($owner: String!, $repo: String!, $number: Int!) {
   repository(owner: $owner, name: $repo) {
     pullRequest(number: $number) {
-      number title state isDraft
+      id number title state isDraft viewerSubscription
       createdAt updatedAt url body
       additions deletions changedFiles
       reviewDecision

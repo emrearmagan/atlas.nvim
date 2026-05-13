@@ -68,6 +68,7 @@ function M.normalize_pr(raw)
 		workspace = owner,
 		repo = repo_name,
 		repo_full_name = repo_full_name,
+		is_subscribed = tostring(raw.viewerSubscription or "") == "SUBSCRIBED",
 		_raw = raw,
 	}
 end

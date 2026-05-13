@@ -43,6 +43,8 @@
 ---@field edit_comment (fun(issue_key: string, comment_id: string, content: string, on_done: fun(comment: IssueComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field delete_comment (fun(issue_key: string, comment_id: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
 ---
+---@field toggle_subscription (fun(issue: Issue, on_done: fun(is_subscribed: boolean|nil, err: string|nil)): { cancel: fun() }|nil)|nil
+---
 ---@field views fun(): IssuesViewConfig[]
 ---@field run_action fun(action_id: string, ctx: table, on_done: fun(result: table|nil, err: string|nil))|nil
 ---@field open_actions fun(issue: Issue|nil, source: "main"|"panel"|nil, on_done: fun(result: table|nil, err: string|nil))|nil

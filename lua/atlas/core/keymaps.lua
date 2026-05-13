@@ -12,6 +12,7 @@ local M = {}
 ---@field notifications_mark_read? AtlasKeymapValue
 ---@field notifications_mark_done? AtlasKeymapValue
 ---@field notifications_refresh? AtlasKeymapValue
+---@field toggle_subscription? AtlasKeymapValue
 
 ---@class AtlasPullsKeymaps
 ---@field refresh? AtlasKeymapValue
@@ -62,6 +63,7 @@ local M = {}
 ---| "ui.notifications_mark_read"
 ---| "ui.notifications_mark_done"
 ---| "ui.notifications_refresh"
+---| "ui.toggle_subscription"
 ---| "pulls.refresh"
 ---| "pulls.refresh_view"
 ---| "pulls.open_actions"
@@ -194,6 +196,7 @@ function M.validate()
 			"ui.previous_panel_tab",
 			"ui.next_panel_tab",
 			"ui.open_notifications",
+			"ui.toggle_subscription",
 		}, { "j", "k", "gg", "G" }),
 		pulls = conflicts_for({
 			"pulls.refresh",

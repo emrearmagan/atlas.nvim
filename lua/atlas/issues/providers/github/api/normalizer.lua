@@ -209,7 +209,9 @@ function M.normalize_issue(raw, fallback_slug)
 		parent = parent,
 		url = url ~= "" and url or nil,
 		is_pinned = raw.isPinned == true,
+		is_subscribed = tostring(raw.viewerSubscription or "") == "SUBSCRIBED",
 		_raw = {
+			node_id = safe_str(raw.id),
 			number = number,
 			slug = slug,
 			body = body,

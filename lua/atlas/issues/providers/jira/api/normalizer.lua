@@ -206,6 +206,7 @@ function M.normalize_issue(raw, sp_field)
 		story_points = sp_field and extract_story_points(fields[sp_field]) or nil,
 		duedate = fields.duedate,
 		parent = extract_parent(safe_get(fields, "parent")),
+		is_subscribed = safe_get(fields, "watches", "isWatching") == true,
 	}
 end
 

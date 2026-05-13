@@ -40,6 +40,7 @@
 ---@field parent Issue|nil
 ---@field url string|nil
 ---@field is_pinned boolean|nil
+---@field is_subscribed boolean|nil
 ---@field _raw any|nil
 
 --------------------------------------------------------------------------------

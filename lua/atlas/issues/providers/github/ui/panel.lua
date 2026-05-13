@@ -299,6 +299,8 @@ function M.fetches(issue, refresh, opts)
 			state.sub_issues = fraw.sub_issues
 			state.body = fraw.body
 			state.parent = fresh.parent
+			issue.is_subscribed = fresh.is_subscribed
+			issue._raw = fresh._raw
 		end
 		refresh()
 	end, { force_load = opts and opts.force_load == true or false })

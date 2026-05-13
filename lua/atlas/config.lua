@@ -105,6 +105,7 @@ M.options = {
 			notifications_mark_read = "r",
 			notifications_mark_done = "d",
 			notifications_refresh = "R",
+			toggle_subscription = "gS",
 		},
 		pulls = {
 			refresh = "r",

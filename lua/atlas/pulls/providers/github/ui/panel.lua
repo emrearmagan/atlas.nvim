@@ -229,6 +229,8 @@ function M.fetches(pr, refresh, opts)
 					assignees = raw.assignees,
 					labels = raw.labels,
 				}
+				pr.is_subscribed = fresh.is_subscribed
+				pr._raw = fresh._raw
 			end
 			refresh()
 		end, { force_load = force }))
