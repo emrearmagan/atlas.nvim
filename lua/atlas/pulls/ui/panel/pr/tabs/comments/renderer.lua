@@ -10,6 +10,26 @@ local helper = require("atlas.pulls.ui.main.helper")
 
 local PADDING_X = 1
 
+---@param root PullsComment
+---@return boolean
+local function is_collapsed_state(root)
+	return root.state == "DELETED" or root.state == "RESOLVED" or root.state == "OUTDATED"
+end
+
+---@param root PullsComment
+---@param replies PullsComment[]
+---@param current_user PullsUser|nil
+---@return AtlasThreadV2Item
+local function build_thread_item(root, replies, current_user)
+	if #replies > 0 and is_collapsed_state(root) then
+		local item = items.comment_item(root, nil, current_user, true)
+		local label = string.format("%d %s", #replies, #replies == 1 and "reply" or "replies")
+		item.children = { items.summary_item(label) }
+		return item
+	end
+	return items.comment_item(root, replies, current_user, true)
+end
+
 ---@param lines string[]
 ---@param spans table[]
 ---@param line_map table<integer, table>
@@ -76,7 +96,7 @@ local function emit_hunk_with_comments(lines, spans, line_map, width, file_path,
 			if anchor then
 				local thread_items = {}
 				for _, t in ipairs(anchor.threads) do
-					table.insert(thread_items, items.comment_item(t.root, t.replies, anchor.current_user))
+					table.insert(thread_items, build_thread_item(t.root, t.replies, anchor.current_user))
 				end
 				emit_thread_box(lines, spans, line_map, thread_items, width)
 				threads_by_anchor[anchor_key] = nil
@@ -182,7 +202,7 @@ function M.render(pr, width, comments) ---@diagnostic disable-line: unused-local
 
 	---@param thread { root: PullsComment, replies: PullsComment[] }
 	local function thread_to_item(thread)
-		return items.comment_item(thread.root, thread.replies, current_user)
+		return build_thread_item(thread.root, thread.replies, current_user)
 	end
 
 	if #general_roots > 0 then

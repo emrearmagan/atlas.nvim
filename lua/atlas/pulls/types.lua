@@ -174,9 +174,9 @@
 ---@field content_raw string
 ---@field created_on string
 ---@field inline {path: string, to: number|nil, from: number|nil}|nil
----@field inline_hunk DiffHunk|nil           -- surrounding diff context for inline comments
----@field is_task boolean|nil               -- true = render as task (checkbox)
----@field state "RESOLVED"|"DELETED"|nil    -- nil = active/open
+---@field inline_hunk DiffHunk|nil                       -- surrounding diff context for inline comments
+---@field is_task boolean|nil                            -- true = render as task (checkbox)
+---@field state "RESOLVED"|"DELETED"|"OUTDATED"|nil      -- nil = active/open
 ---@field url string|nil
 ---@field html_url string|nil
 ---@field _raw any|nil

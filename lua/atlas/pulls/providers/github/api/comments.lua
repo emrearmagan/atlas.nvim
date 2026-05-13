@@ -27,22 +27,34 @@ local function parse_diff_hunk(diff_hunk)
 end
 
 ---@param raw table
+---@param thread_state {resolved: boolean, outdated: boolean}|nil
 ---@return PullsComment
-local function normalize_comment(raw)
+local function normalize_comment(raw, thread_state)
 	local user = raw.user or {}
 	local line = nilify(raw.line)
+	local original_line = nilify(raw.original_line)
 	local path = nilify(raw.path)
 
 	local inline, inline_hunk
 	if path ~= nil then
 		local side = raw.side == "LEFT" and "old" or "new"
+		local anchor = line or original_line
 		inline = {
 			path = tostring(path),
-			to = side == "new" and line or nil,
-			from = side == "old" and line or nil,
-			outdated = line == nil,
+			to = side == "new" and anchor or nil,
+			from = side == "old" and anchor or nil,
 		}
 		inline_hunk = parse_diff_hunk(raw.diff_hunk)
+	end
+
+	---@type "RESOLVED"|"OUTDATED"|nil
+	local state = nil
+	if thread_state ~= nil then
+		if thread_state.resolved then
+			state = "RESOLVED"
+		elseif thread_state.outdated then
+			state = "OUTDATED"
+		end
 	end
 
 	local reactions
@@ -72,9 +84,83 @@ local function normalize_comment(raw)
 		inline = inline,
 		inline_hunk = inline_hunk,
 		is_task = nil,
-		state = nil,
+		state = state,
 		url = nil,
 		html_url = tostring(raw.html_url or ""),
+		reactions = reactions,
+	}
+end
+
+local REVIEW_THREADS_QUERY = [[
+query($owner:String!,$name:String!,$number:Int!){
+  repository(owner:$owner,name:$name){
+    pullRequest(number:$number){
+      reviewThreads(first:100){
+        nodes{
+          isResolved
+          isOutdated
+          diffSide
+          path
+          line
+          originalLine
+          comments(first:100){
+            nodes{
+              databaseId
+              body
+              diffHunk
+              url
+              createdAt
+              author{login ... on User{databaseId} ... on Bot{databaseId}}
+              replyTo{databaseId}
+              reactionGroups{content users{totalCount}}
+            }
+          }
+        }
+      }
+    }
+  }
+}
+]]
+
+local REACTION_CONTENT_TO_KEY = {
+	THUMBS_UP = "+1",
+	THUMBS_DOWN = "-1",
+	LAUGH = "laugh",
+	HOORAY = "hooray",
+	CONFUSED = "confused",
+	HEART = "heart",
+	ROCKET = "rocket",
+	EYES = "eyes",
+}
+
+---@param gql_comment table
+---@param thread table thread node providing path/line/diffSide
+---@return table   REST-shaped raw comment that `normalize_comment` understands
+local function gql_to_raw(gql_comment, thread)
+	local author = nilify(gql_comment.author) or {}
+	local reply_to = nilify(gql_comment.replyTo)
+
+	local reactions = {}
+	for _, group in ipairs(gql_comment.reactionGroups or {}) do
+		local key = REACTION_CONTENT_TO_KEY[group.content or ""]
+		if key and group.users then
+			reactions[key] = tonumber(group.users.totalCount) or 0
+		end
+	end
+
+	return {
+		id = gql_comment.databaseId,
+		in_reply_to_id = reply_to and reply_to.databaseId or nil,
+		user = { login = author.login, id = author.databaseId },
+		body = gql_comment.body,
+		path = thread.path,
+		diff_hunk = gql_comment.diffHunk,
+		line = thread.line,
+		original_line = thread.originalLine,
+		side = thread.diffSide,
+		url = gql_comment.url,
+		html_url = gql_comment.url,
+		created_at = gql_comment.createdAt,
 		reactions = reactions,
 	}
 end
@@ -85,7 +171,8 @@ end
 ---@return { cancel: fun() }|nil
 function M.fetch_comments(pr, opts, on_done)
 	local repo_slug = pr.repo_full_name or ""
-	if repo_slug == "" then
+	local owner, name = tostring(repo_slug):match("^([^/]+)/([^/]+)$")
+	if owner == nil or name == nil then
 		vim.schedule(function()
 			on_done(nil, "Missing repo")
 		end)
@@ -94,19 +181,39 @@ function M.fetch_comments(pr, opts, on_done)
 
 	return cli.gh({
 		"api",
-		"--paginate",
-		string.format("repos/%s/pulls/%s/comments?per_page=100", repo_slug, tostring(pr.id)),
+		"graphql",
+		"-F",
+		"owner=" .. owner,
+		"-F",
+		"name=" .. name,
+		"-F",
+		string.format("number=%s", tostring(pr.id)),
+		"-f",
+		"query=" .. REVIEW_THREADS_QUERY,
 	}, function(result, err)
 		if err then
 			on_done(nil, err)
 			return
 		end
+
+		local threads = result
+			and result.data
+			and result.data.repository
+			and result.data.repository.pullRequest
+			and result.data.repository.pullRequest.reviewThreads
+			and result.data.repository.pullRequest.reviewThreads.nodes
+			or {}
+
+		---@type PullsComment[]
 		local out = {}
-		if type(result) == "table" then
-			for _, raw in ipairs(result) do
-				table.insert(out, normalize_comment(raw))
+		for _, thread in ipairs(threads) do
+			local thread_state = { resolved = thread.isResolved == true, outdated = thread.isOutdated == true }
+			local nodes = thread.comments and thread.comments.nodes or {}
+			for _, node in ipairs(nodes) do
+				table.insert(out, normalize_comment(gql_to_raw(node, thread), thread_state))
 			end
 		end
+
 		table.sort(out, function(a, b)
 			return tostring(a.created_on or "") < tostring(b.created_on or "")
 		end)
