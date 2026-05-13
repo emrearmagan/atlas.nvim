@@ -49,9 +49,6 @@ function M.register(buf)
 
 	table.insert(items, { key = "j", desc = "Next item", opts = { nowait = true, silent = true }, hidden = true, callback = function() nav.move_cursor("down") end })
 	table.insert(items, { key = "k", desc = "Previous item", opts = { nowait = true, silent = true }, hidden = true, callback = function() nav.move_cursor("up") end })
-	table.insert(items, { key = "gg", desc = "First item", opts = { nowait = true, silent = true }, hidden = true, callback = function() nav.focus_first() end })
-	table.insert(items, { key = "G", desc = "Last item", opts = { nowait = true, silent = true }, hidden = true, callback = function() nav.focus_last() end })
-
 	table.insert(items, {
 		key = "gx",
 		desc = "Open in browser",
@@ -222,8 +219,6 @@ function M.remove(buf)
 	local items = {
 		{ key = "j" },
 		{ key = "k" },
-		{ key = "gg" },
-		{ key = "G" },
 		{ key = "gx" },
 		{ key = "r" },
 	}

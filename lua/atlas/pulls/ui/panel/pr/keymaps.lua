@@ -66,25 +66,6 @@ function M.register(buf)
 			nav.move_cursor("up")
 		end,
 	})
-	table.insert(items, {
-		key = "gg",
-		desc = "First selectable item",
-		opts = { nowait = true, silent = true },
-		hidden = true,
-		callback = function()
-			nav.focus_first()
-		end,
-	})
-	table.insert(items, {
-		key = "G",
-		desc = "Last selectable item",
-		opts = { nowait = true, silent = true },
-		hidden = true,
-		callback = function()
-			nav.focus_last()
-		end,
-	})
-
 	utils.insert_if(
 		items,
 		item("ui.open_in_browser", {
