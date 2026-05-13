@@ -25,8 +25,8 @@ local M = {}
 ---@field checkout? AtlasKeymapValue
 ---@field show_details? AtlasKeymapValue
 ---@field search? AtlasKeymapValue
----@field pr_files_next_hunk? AtlasKeymapValue
----@field pr_files_previous_hunk? AtlasKeymapValue
+---@field next_hunk? AtlasKeymapValue
+---@field previous_hunk? AtlasKeymapValue
 ---@field filter_status_open? AtlasKeymapValue
 ---@field filter_status_merged? AtlasKeymapValue
 ---@field filter_status_declined? AtlasKeymapValue
@@ -74,8 +74,8 @@ local M = {}
 ---| "pulls.checkout"
 ---| "pulls.show_details"
 ---| "pulls.search"
----| "pulls.pr_files_next_hunk"
----| "pulls.pr_files_previous_hunk"
+---| "pulls.next_hunk"
+---| "pulls.previous_hunk"
 ---| "issues.refresh"
 ---| "issues.refresh_view"
 ---| "issues.open_actions"
@@ -209,8 +209,8 @@ function M.validate()
 			"pulls.checkout",
 			"pulls.show_details",
 			"pulls.search",
-			"pulls.pr_files_next_hunk",
-			"pulls.pr_files_previous_hunk",
+			"pulls.next_hunk",
+			"pulls.previous_hunk",
 			"pulls.filter_status_open",
 			"pulls.filter_status_merged",
 			"pulls.filter_status_declined",

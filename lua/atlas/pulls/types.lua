@@ -193,59 +193,33 @@
 ---@field statuses_url string|nil
 
 --------------------------------------------------------------------------------
--- Diff
+-- Conversation snapshot
 --------------------------------------------------------------------------------
 
----@class PullsDiffFile
+---@class PullsCommentThread
+---@field root PullsComment
+---@field replies PullsComment[]
+
+---@class PullsFileThread
 ---@field path string
----@field old_path string|nil
----@field status string
----@field hunks PullsDiffHunk[]
+---@field side "old"|"new"|nil
+---@field line integer|nil
+---@field start_line integer|nil
+---@field hunk DiffHunk|nil
+---@field threads PullsCommentThread[]
 
----@class PullsDiffHunk
----@field header string
----@field lines PullsDiffLine[]
-
----@class PullsDiffLine
----@field kind "add"|"remove"|"context"|"meta"
----@field text string
-
---------------------------------------------------------------------------------
--- Notification
---------------------------------------------------------------------------------
-
----@class AtlasNotification
----@field id string
----@field title string
----@field subtitle string|nil
----@field timestamp string|nil  -- ISO8601
----@field icon string|nil
----@field icon_hl string|nil
----@field unread boolean
----@field url string|nil
+---@class PullsTask
+---@field id string|number
+---@field comment_id string|number|nil
+---@field content_raw string
+---@field state "OPEN"|"RESOLVED"|string
+---@field creator PullsAuthor|nil
+---@field created_on string
+---@field updated_on string|nil
 ---@field _raw any|nil
 
---------------------------------------------------------------------------------
--- PR creation
---------------------------------------------------------------------------------
+---@class PullsConversationSnapshot
+---@field general PullsCommentThread[]
+---@field file_threads PullsFileThread[]
+---@field tasks PullsTask[]|nil
 
----@class PullsCreatePRReviewer
----@field label string
----@field provider_id string
----@field selected boolean|nil
----@field default boolean|nil
-
----@class PullsCreatePROpts
----@field repo_slug string
----@field title string
----@field body string
----@field head string
----@field base string
----@field draft boolean|nil
----@field repo_root string|nil
----@field reviewers PullsCreatePRReviewer[]|nil
-
----@class PullsCreatePRResult
----@field id string|number|nil
----@field url string|nil
----@field message string|nil

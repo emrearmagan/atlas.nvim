@@ -151,6 +151,14 @@ function M.fetch_conversation(pr, opts, on_done)
 end
 
 ---@param pr PullRequest
+---@param opts { force_refresh: boolean|nil }|nil
+---@param on_done fun(snapshot: PullsConversationSnapshot|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_conversation_snapshot(pr, opts, on_done)
+	return require("atlas.pulls.providers.github.api.conversation").fetch_snapshot(pr, opts, on_done)
+end
+
+---@param pr PullRequest
 ---@param content string
 ---@param on_done fun(comment: PullsComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
@@ -159,30 +167,30 @@ function M.add_comment(pr, content, on_done)
 end
 
 ---@param pr PullRequest
----@param _parent_id number|string
+---@param parent PullsComment
 ---@param content string
 ---@param on_done fun(comment: PullsComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.reply_comment(pr, _parent_id, content, on_done)
-	-- GitHub issue comments have no threading; reply is just a new comment
-	return M.add_comment(pr, content, on_done)
+function M.reply_comment(pr, parent, content, on_done)
+	return require("atlas.pulls.providers.github.api.comments").reply_comment(pr, parent, content, on_done)
 end
 
 ---@param pr PullRequest
----@param comment_id number|string
+---@param target PullsComment
 ---@param content string
 ---@param on_done fun(comment: PullsComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.edit_comment(pr, comment_id, content, on_done)
-	return require("atlas.pulls.providers.github.api.comments").edit_comment(pr, comment_id, content, on_done)
+function M.edit_comment(pr, target, content, on_done)
+	return require("atlas.pulls.providers.github.api.comments").edit_comment(pr, target, content, on_done)
 end
 
 ---@param pr PullRequest
----@param comment_id number|string
+---@param target PullsComment
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.delete_comment(pr, comment_id, on_done)
-	return require("atlas.pulls.providers.github.api.comments").delete_comment(pr, comment_id, on_done)
+function M.delete_comment(pr, target, on_done)
+	return require("atlas.pulls.providers.github.api.comments").delete_comment(pr, target, on_done)
+end
 
 ---@param pr PullRequest
 ---@param on_done fun(is_subscribed: boolean|nil, err: string|nil)
@@ -223,7 +231,7 @@ end
 
 ---@param pr PullRequest
 ---@param opts { force_refresh: boolean|nil }|nil
----@param on_done fun(files: PullsDiffFile[]|nil, err: string|nil)
+---@param on_done fun(files: DiffFile[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_diff(pr, opts, on_done)
 	return require("atlas.pulls.providers.github.api.commits").fetch_diff(pr, opts, on_done)

@@ -57,7 +57,7 @@ end
 
 ---@param pr PullRequest
 ---@param opts { force_refresh: boolean|nil }|nil
----@param on_done fun(files: PullsDiffFile[]|nil, err: string|nil)
+---@param on_done fun(files: DiffFile[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_diff(pr, opts, on_done)
 	local repo_slug = pr.repo_full_name or ""
