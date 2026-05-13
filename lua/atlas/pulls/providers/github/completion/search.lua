@@ -1,5 +1,16 @@
 local M = {}
 
+local prompt = require("atlas.search.prompt")
+local query_api = require("atlas.pulls.providers.github.completion.query")
+
+---@param arglead string
+---@param cmdline string
+---@param cursorpos integer
+---@return string[]
+local function complete(arglead, cmdline, cursorpos)
+	return query_api.complete_cmdline(arglead, cmdline, cursorpos)
+end
+
 ---@param query string
 ---@return "pulls"|"issues"
 local function route(query)
@@ -22,12 +33,12 @@ end
 
 ---@param default? string
 function M.open(default)
-	vim.ui.input({
-		prompt = "GitHub search: ",
+	prompt.open({
+		name = "AtlasGitHubSearch",
+		complete = complete,
+		on_submit = run,
 		default = default or "is:pr ",
-	}, function(input)
-		run(input ~= nil and tostring(input) or "")
-	end)
+	})
 end
 
 return M
