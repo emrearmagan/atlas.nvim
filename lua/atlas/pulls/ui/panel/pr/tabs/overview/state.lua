@@ -3,11 +3,13 @@
 ---@field builds PullsBuild[]|"loading"|string|nil
 ---@field description string|"loading"|nil
 ---@field merge_checks PullsMergeCheck[]|"loading"|string|nil
+---@field description_expanded boolean
 local M = {
 	reviewers = nil,
 	builds = nil,
 	description = nil,
 	merge_checks = nil,
+	description_expanded = false,
 }
 
 function M.reset()
@@ -15,6 +17,7 @@ function M.reset()
 	M.builds = nil
 	M.description = nil
 	M.merge_checks = nil
+	M.description_expanded = false
 end
 
 ---@return boolean

@@ -7,9 +7,11 @@ local spinner = require("atlas.ui.components.spinner")
 local box = require("atlas.ui.components.box")
 local footer = require("atlas.ui.components.footer")
 local state = require("atlas.pulls.ui.panel.pr.tabs.overview.state")
+local keymaps = require("atlas.pulls.ui.panel.pr.tabs.overview.keymaps")
 
 local PADDING_X = 1
 local PADDING = string.rep(" ", PADDING_X)
+local MAX_DESCRIPTION_LINES = 8
 
 ---@type { cancel: fun() }[]
 local in_flight = {}
@@ -135,10 +137,19 @@ local function render_reviewers(pr, width, lines, spans)
 			hl_group = "AtlasTextMuted",
 		})
 		local loading_text = spinner.with_text("Loading reviewers...")
-		utils.append_block(lines, spans, box.render(
-			{ { lines = { loading_text }, spans = { { line = 0, start_col = 0, end_col = #loading_text, hl_group = "AtlasTextMuted" } } } },
-			{ width = width, padding_x = PADDING_X }
-		))
+		utils.append_block(
+			lines,
+			spans,
+			box.render(
+				{
+					{
+						lines = { loading_text },
+						spans = { { line = 0, start_col = 0, end_col = #loading_text, hl_group = "AtlasTextMuted" } },
+					},
+				},
+				{ width = width, padding_x = PADDING_X }
+			)
+		)
 		table.insert(lines, "")
 		return
 	end
@@ -146,10 +157,19 @@ local function render_reviewers(pr, width, lines, spans)
 	if type(state.reviewers) == "string" then
 		utils.push(lines, spans, "Reviewers", "AtlasColumnHeader", PADDING_X)
 		local err_text = state.reviewers
-		utils.append_block(lines, spans, box.render(
-			{ { lines = { err_text }, spans = { { line = 0, start_col = 0, end_col = #err_text, hl_group = "AtlasLogError" } } } },
-			{ width = width, padding_x = PADDING_X }
-		))
+		utils.append_block(
+			lines,
+			spans,
+			box.render(
+				{
+					{
+						lines = { err_text },
+						spans = { { line = 0, start_col = 0, end_col = #err_text, hl_group = "AtlasLogError" } },
+					},
+				},
+				{ width = width, padding_x = PADDING_X }
+			)
+		)
 		table.insert(lines, "")
 		return
 	end
@@ -174,10 +194,19 @@ local function render_reviewers(pr, width, lines, spans)
 
 	if #decisions == 0 then
 		local empty_text = "no reviewers yet"
-		utils.append_block(lines, spans, box.render(
-			{ { lines = { empty_text }, spans = { { line = 0, start_col = 0, end_col = #empty_text, hl_group = "AtlasTextMuted" } } } },
-			{ width = width, padding_x = PADDING_X }
-		))
+		utils.append_block(
+			lines,
+			spans,
+			box.render(
+				{
+					{
+						lines = { empty_text },
+						spans = { { line = 0, start_col = 0, end_col = #empty_text, hl_group = "AtlasTextMuted" } },
+					},
+				},
+				{ width = width, padding_x = PADDING_X }
+			)
+		)
 		table.insert(lines, "")
 		return
 	end
@@ -224,10 +253,14 @@ local function render_reviewers(pr, width, lines, spans)
 		end
 	end
 
-	utils.append_block(lines, spans, box.render({ { lines = box_lines, spans = box_spans } }, {
-		width = width,
-		padding_x = PADDING_X,
-	}))
+	utils.append_block(
+		lines,
+		spans,
+		box.render({ { lines = box_lines, spans = box_spans } }, {
+			width = width,
+			padding_x = PADDING_X,
+		})
+	)
 	table.insert(lines, "")
 end
 
@@ -265,10 +298,19 @@ local function render_builds(pr, width, lines, spans, line_map)
 	if state.builds == "loading" then
 		utils.push(lines, spans, "Builds", "AtlasColumnHeader", PADDING_X)
 		local loading_text = spinner.with_text("Loading builds...")
-		utils.append_block(lines, spans, box.render(
-			{ { lines = { loading_text }, spans = { { line = 0, start_col = 0, end_col = #loading_text, hl_group = "AtlasTextMuted" } } } },
-			{ width = width, padding_x = PADDING_X }
-		))
+		utils.append_block(
+			lines,
+			spans,
+			box.render(
+				{
+					{
+						lines = { loading_text },
+						spans = { { line = 0, start_col = 0, end_col = #loading_text, hl_group = "AtlasTextMuted" } },
+					},
+				},
+				{ width = width, padding_x = PADDING_X }
+			)
+		)
 		table.insert(lines, "")
 		return
 	end
@@ -276,10 +318,19 @@ local function render_builds(pr, width, lines, spans, line_map)
 	if type(state.builds) == "string" then
 		utils.push(lines, spans, "Builds", "AtlasColumnHeader", PADDING_X)
 		local err_text = state.builds
-		utils.append_block(lines, spans, box.render(
-			{ { lines = { err_text }, spans = { { line = 0, start_col = 0, end_col = #err_text, hl_group = "AtlasLogError" } } } },
-			{ width = width, padding_x = PADDING_X }
-		))
+		utils.append_block(
+			lines,
+			spans,
+			box.render(
+				{
+					{
+						lines = { err_text },
+						spans = { { line = 0, start_col = 0, end_col = #err_text, hl_group = "AtlasLogError" } },
+					},
+				},
+				{ width = width, padding_x = PADDING_X }
+			)
+		)
 		table.insert(lines, "")
 		return
 	end
@@ -317,12 +368,16 @@ local function render_builds(pr, width, lines, spans, line_map)
 		end
 	end
 
-	utils.append_block(lines, spans, box.render({ { lines = box_lines, spans = box_spans, line_map = box_lmap } }, {
-		width = width,
-		padding_x = PADDING_X,
-		line_map = line_map,
-		line_offset = #lines,
-	}))
+	utils.append_block(
+		lines,
+		spans,
+		box.render({ { lines = box_lines, spans = box_spans, line_map = box_lmap } }, {
+			width = width,
+			padding_x = PADDING_X,
+			line_map = line_map,
+			line_offset = #lines,
+		})
+	)
 	table.insert(lines, "")
 end
 
@@ -356,12 +411,45 @@ local function render_description(pr, width, lines, spans)
 	while #desc_lines > 0 and vim.trim(desc_lines[#desc_lines]) == "" do
 		table.remove(desc_lines)
 	end
+
+	local truncated = false
+	if not state.description_expanded and #desc_lines > MAX_DESCRIPTION_LINES then
+		desc_lines = vim.list_slice(desc_lines, 1, MAX_DESCRIPTION_LINES)
+		truncated = true
+	end
+
 	for _, line in ipairs(desc_lines) do
 		table.insert(lines, PADDING .. line)
 	end
+
+	if truncated then
+		local keys = require("atlas.core.keymaps").resolve("ui.toggle_fold") or {}
+		local key = keys[1] or "za"
+		local prefix = "Press "
+		local suffix = " to expand"
+		local hint = prefix .. key .. suffix
+		local pad = math.max(0, math.floor((width - #hint) / 2))
+		local hint_line = string.rep(" ", pad) .. hint
+		table.insert(lines, "")
+		table.insert(lines, hint_line)
+		local line_idx = #lines - 1
+		local prefix_start = pad
+		local key_start = prefix_start + #prefix
+		local suffix_start = key_start + #key
+		local hint_end = suffix_start + #suffix
+		table.insert(
+			spans,
+			{ line = line_idx, start_col = prefix_start, end_col = key_start, hl_group = "AtlasTextMuted" }
+		)
+		table.insert(spans, { line = line_idx, start_col = key_start, end_col = suffix_start, hl_group = "Normal" })
+		table.insert(
+			spans,
+			{ line = line_idx, start_col = suffix_start, end_col = hint_end, hl_group = "AtlasTextMuted" }
+		)
+	end
+
 	table.insert(lines, "")
 end
-
 
 --------------------------------------------------------------------------------
 -- Merge checks
@@ -409,20 +497,38 @@ local function render_merge_checks(pr, width, lines, spans) ---@diagnostic disab
 
 	if state.merge_checks == "loading" then
 		local loading_text = spinner.with_text("Loading merge checks...")
-		utils.append_block(lines, spans, box.render(
-			{ { lines = { loading_text }, spans = { { line = 0, start_col = 0, end_col = #loading_text, hl_group = "AtlasTextMuted" } } } },
-			{ width = width, padding_x = PADDING_X }
-		))
+		utils.append_block(
+			lines,
+			spans,
+			box.render(
+				{
+					{
+						lines = { loading_text },
+						spans = { { line = 0, start_col = 0, end_col = #loading_text, hl_group = "AtlasTextMuted" } },
+					},
+				},
+				{ width = width, padding_x = PADDING_X }
+			)
+		)
 		table.insert(lines, "")
 		return
 	end
 
 	if type(state.merge_checks) == "string" then
 		local err_text = state.merge_checks --[[@as string]]
-		utils.append_block(lines, spans, box.render(
-			{ { lines = { err_text }, spans = { { line = 0, start_col = 0, end_col = #err_text, hl_group = "AtlasLogError" } } } },
-			{ width = width, padding_x = PADDING_X }
-		))
+		utils.append_block(
+			lines,
+			spans,
+			box.render(
+				{
+					{
+						lines = { err_text },
+						spans = { { line = 0, start_col = 0, end_col = #err_text, hl_group = "AtlasLogError" } },
+					},
+				},
+				{ width = width, padding_x = PADDING_X }
+			)
+		)
 		table.insert(lines, "")
 		return
 	end
@@ -475,18 +581,22 @@ function M.on_enter(_pr, entry)
 	end
 end
 
-function M.activate(buf)
+function M.activate(buf, refresh)
 	if not (buf and vim.api.nvim_buf_is_valid(buf)) then
 		return
 	end
 	vim.api.nvim_set_option_value("filetype", "markdown", { buf = buf })
 	vim.api.nvim_set_option_value("syntax", "markdown", { buf = buf })
+	if refresh ~= nil then
+		keymaps.setup(buf, refresh)
+	end
 end
 
 function M.deactivate(buf)
 	if not (buf and vim.api.nvim_buf_is_valid(buf)) then
 		return
 	end
+	keymaps.teardown(buf)
 	pcall(vim.treesitter.stop, buf)
 	vim.api.nvim_set_option_value("syntax", "OFF", { buf = buf })
 	vim.api.nvim_set_option_value("filetype", "", { buf = buf })

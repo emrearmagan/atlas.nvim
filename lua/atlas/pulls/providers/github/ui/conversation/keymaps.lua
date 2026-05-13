@@ -86,8 +86,7 @@ end
 ---@param buf integer
 function M.teardown(buf)
 	help.remove("Panel", {
-		{ key = "a" },
-		{ key = "i" },
+		{ key = { "a", "i" } },
 		{ key = "c" },
 		{ key = "e" },
 		{ key = "d" },
