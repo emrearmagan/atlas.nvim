@@ -2,6 +2,15 @@ local M = {}
 
 local cli = require("atlas.pulls.providers.github.api.cli")
 
+---@param value any
+---@return string
+local function body_text(value)
+	if value == nil or value == vim.NIL then
+		return ""
+	end
+	return tostring(value)
+end
+
 ---@param login string
 ---@return PullsAuthor|nil
 local function actor_from_login(login)
@@ -22,13 +31,19 @@ local function normalize_event(item)
 	local date = tostring(item.created_at or item.submitted_at or "")
 
 	if event == "commented" then
-		return { kind = "comment", actor = actor, date = date, content_raw = tostring(item.body or "") }
+		return { kind = "comment", actor = actor, date = date, content_raw = body_text(item.body) }
 	elseif event == "reviewed" then
 		local state_label = tostring(item.state or ""):lower()
 		local kind = state_label == "approved" and "approval"
 			or state_label == "changes_requested" and "changes_requested"
-			or "update"
-		return { kind = kind, actor = actor, date = date }
+			or "review"
+		local body = body_text(item.body)
+		return {
+			kind = kind,
+			actor = actor,
+			date = date,
+			content_raw = body ~= "" and body or nil,
+		}
 	elseif event == "closed" or event == "merged" or event == "reopened" then
 		return { kind = "update", actor = actor, date = date, content_raw = event }
 	elseif event == "head_ref_force_pushed" then
@@ -46,27 +61,28 @@ local function normalize_event(item)
 		}
 	elseif event == "base_ref_force_pushed" then
 		return { kind = "update", actor = actor, date = date, content_raw = "base branch force pushed" }
-	elseif event == "labeled" then
+	elseif event == "labeled" or event == "unlabeled" then
 		local label = type(item.label) == "table" and tostring(item.label.name or "") or ""
 		if label == "" then
 			return nil
 		end
-		return { kind = "update", actor = actor, date = date, content_raw = string.format("added label: %s", label) }
-	elseif event == "assigned" then
+		local verb = event == "labeled" and "added label" or "removed label"
+		return { kind = "update", actor = actor, date = date, content_raw = verb .. ": " .. label }
+	elseif event == "assigned" or event == "unassigned" then
 		local assignee = type(item.assignee) == "table" and tostring(item.assignee.login or "") or ""
 		if assignee == "" then
 			return nil
 		end
-		return { kind = "update", actor = actor, date = date, content_raw = string.format("assigned %s", assignee) }
+		local verb = event == "assigned" and "assigned" or "unassigned"
+		return { kind = "update", actor = actor, date = date, content_raw = verb .. " " .. assignee }
 	elseif event == "review_requested" then
-		local reviewer = type(item.requested_reviewer) == "table"
-				and tostring(item.requested_reviewer.login or "")
+		local reviewer = type(item.requested_reviewer) == "table" and tostring(item.requested_reviewer.login or "")
 			or ""
 		return {
 			kind = "update",
 			actor = actor,
 			date = date,
-			content_raw = reviewer ~= "" and string.format("requested review from %s", reviewer) or "requested review",
+			content_raw = reviewer ~= "" and ("requested review from " .. reviewer) or "requested review",
 		}
 	elseif event == "ready_for_review" then
 		return { kind = "update", actor = actor, date = date, content_raw = "marked as ready for review" }

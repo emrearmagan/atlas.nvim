@@ -127,9 +127,24 @@ local function to_thread_items(entries)
 		if kind == "approval" then
 			additional = "approved"
 			entry_icon = icons.pulls_status("successful")
+			local raw = tostring(e.content_raw or "")
+			if raw ~= "" then
+				content = raw
+			end
 		elseif kind == "changes_requested" then
 			additional = "requested changes"
 			entry_icon = icons.pulls_status("inprogress")
+			local raw = tostring(e.content_raw or "")
+			if raw ~= "" then
+				content = raw
+			end
+		elseif kind == "review" then
+			additional = "left a review"
+			entry_icon = icons.pulls("activity")
+			local raw = tostring(e.content_raw or "")
+			if raw ~= "" then
+				content = raw
+			end
 		elseif kind == "comment" then
 			additional = "commented"
 			local raw = utils.strip_markup(e.content_raw)
@@ -140,12 +155,9 @@ local function to_thread_items(entries)
 				content = "(deleted comment)"
 			end
 		elseif kind == "update" then
-			additional = update_additional(e)
+			local raw = type(e.content_raw) == "string" and e.content_raw ~= "" and e.content_raw or nil
+			additional = raw or update_additional(e)
 			entry_icon = icons.pulls("activity")
-			local raw = tostring(e.content_raw or "")
-			if raw ~= "" then
-				content = raw
-			end
 		end
 
 		items[#items + 1] = {
@@ -218,7 +230,10 @@ function M.on_select(pr, repo, refresh, opts)
 	end
 
 	local force_refresh = opts.force_refresh == true
-	local should_fetch = force_refresh or state.activity == nil or state.activity == "loading" or type(state.activity) == "string"
+	local should_fetch = force_refresh
+		or state.activity == nil
+		or state.activity == "loading"
+		or type(state.activity) == "string"
 
 	if should_fetch then
 		cancel_all()

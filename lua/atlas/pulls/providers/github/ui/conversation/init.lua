@@ -155,6 +155,8 @@ local function activity_label(entry)
 		return "approved"
 	elseif kind == "changes_requested" then
 		return "requested changes"
+	elseif kind == "review" then
+		return "left a review"
 	end
 	return tostring(entry.content_raw or kind)
 end
@@ -227,6 +229,10 @@ local function build_timeline(comments, activity)
 		})
 	end
 
+	local function is_review_kind(kind)
+		return kind == "approval" or kind == "changes_requested" or kind == "review"
+	end
+
 	for _, a in ipairs(activity) do
 		if a.kind ~= "comment" then
 			table.insert(entries, {
@@ -234,6 +240,30 @@ local function build_timeline(comments, activity)
 				timestamp = a.date or "",
 				activity = a,
 			})
+			-- A review (approve / request-changes / plain commented review) with a top-level body renders as a comment block right after the activity row.
+			if is_review_kind(a.kind) and type(a.content_raw) == "string" and a.content_raw ~= "" then
+				table.insert(entries, {
+					type = "comment",
+					timestamp = a.date or "",
+					comment = {
+						id = "review-" .. tostring(a.date or ""),
+						parent_id = nil,
+						author = a.actor and {
+							name = tostring(a.actor.name or a.actor.username or ""),
+							nickname = tostring(a.actor.nickname or a.actor.username or ""),
+							id = tostring(a.actor.id or ""),
+						} or nil,
+						content_raw = a.content_raw,
+						created_on = a.date or "",
+						inline = nil,
+						inline_hunk = nil,
+						is_task = nil,
+						state = nil,
+						url = nil,
+						html_url = nil,
+					},
+				})
+			end
 		end
 	end
 
@@ -292,15 +322,12 @@ local function render_comment(comment, width)
 	local header_line = header_left .. string.rep(" ", gap) .. actions_text
 
 	local actions_byte_start = #header_left + gap
-	table.insert(
-		header_spans,
-		{
-			line = 0,
-			start_col = actions_byte_start,
-			end_col = actions_byte_start + #actions_text,
-			hl_group = "AtlasTextMuted",
-		}
-	)
+	table.insert(header_spans, {
+		line = 0,
+		start_col = actions_byte_start,
+		end_col = actions_byte_start + #actions_text,
+		hl_group = "AtlasTextMuted",
+	})
 
 	-- Content group
 	local content_lines = {}

@@ -154,7 +154,7 @@
 --------------------------------------------------------------------------------
 
 ---@class PullsActivityEntry
----@field kind "approval"|"changes_requested"|"comment"|"update"|string
+---@field kind "approval"|"changes_requested"|"comment"|"update"|"review"|string
 ---@field actor PullsAuthor|nil
 ---@field date string
 ---@field content_raw string|nil
@@ -194,4 +194,3 @@
 ---@field date string
 ---@field html_url string|nil
 ---@field statuses_url string|nil
-
