@@ -845,20 +845,8 @@ local ACTIONS = {
 			return true, nil
 		end,
 		run = function(_, done)
-			vim.ui.input({ prompt = "Jira search: ", default = current_jql() }, function(input)
-				local jql = input ~= nil and vim.trim(tostring(input)) or ""
-				if jql == "" then
-					done({ changed_issue_key = nil, message = "Cancelled" }, nil)
-					return
-				end
-
-				local search_view = {
-					name = "Search (JQL)",
-					jql = jql,
-				}
-				require("atlas.issues.ui.main.controller").switch_view(search_view)
-				done({ changed_issue_key = nil, message = "Searching..." }, nil)
-			end)
+			require("atlas.issues.providers.jira.completion.search").open(current_jql())
+			done({ changed_issue_key = nil, message = "Searching..." }, nil)
 		end,
 	},
 	{

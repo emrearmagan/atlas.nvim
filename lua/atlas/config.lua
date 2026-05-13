@@ -149,7 +149,7 @@ M.options = {
 local function register_commands()
 	pcall(vim.api.nvim_del_user_command, "AtlasPulls")
 	pcall(vim.api.nvim_del_user_command, "AtlasIssues")
-	pcall(vim.api.nvim_del_user_command, "AtlasJqlSearch")
+	pcall(vim.api.nvim_del_user_command, "AtlasSearch")
 	pcall(vim.api.nvim_del_user_command, "AtlasLogs")
 	pcall(vim.api.nvim_del_user_command, "AtlasClearCache")
 	pcall(vim.api.nvim_del_user_command, "AtlasCreatePR")
@@ -202,23 +202,16 @@ local function register_commands()
 		require("atlas.issues.create").start()
 	end, { desc = "Create an issue" })
 
-	if M.options.issues then
-		if M.options.issues.providers and M.options.issues.providers.jira then
-			vim.api.nvim_create_user_command("AtlasJqlSearch", function(cmd_opts)
-				require("atlas.issues.providers.jira.completion.search").command(cmd_opts)
-			end, {
-				desc = "Search Jira issues with JQL",
-				nargs = "*",
-				complete = function(arglead, cmdline, cursorpos)
-					return require("atlas.issues.providers.jira.completion.search").complete(
-						arglead,
-						cmdline,
-						cursorpos
-					)
-				end,
-			})
-		end
-	end
+	vim.api.nvim_create_user_command("AtlasSearch", function(opts)
+		local provider_id = opts.fargs[1] and opts.fargs[1]:lower() or nil
+		require("atlas.search").run(provider_id)
+	end, {
+		desc = "Search across Atlas providers",
+		nargs = "?",
+		complete = function(arglead)
+			return require("atlas.search").complete(arglead)
+		end,
+	})
 end
 
 --------------------------------------------------------------------------------

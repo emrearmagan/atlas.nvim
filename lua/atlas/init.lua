@@ -15,6 +15,7 @@ local function bootstrap_common()
 	require("atlas.ui.popups.help").register_command("Commands", {
 		{ name = "AtlasPulls", desc = "Open pulls" },
 		{ name = "AtlasIssues", desc = "Open issues" },
+		{ name = "AtlasSearch", desc = "Search across providers" },
 		{ name = "AtlasClearCache", desc = "Clear Atlas cache" },
 		{ name = "AtlasLogs", desc = "Open Atlas logs" },
 	}, { index = 999, buffer = require("atlas.ui.layout").buf_id("main") })
@@ -62,7 +63,8 @@ end
 
 ---@param domain "pulls"|"issues"
 ---@param id string
-local function open_with_provider(domain, id)
+---@param opts? { initial_view?: table }
+local function open_with_provider(domain, id, opts)
 	local layout = require("atlas.ui.layout")
 
 	layout.ensure_open()
@@ -81,7 +83,7 @@ local function open_with_provider(domain, id)
 				panel.render()
 			end
 		end)
-		require("atlas.pulls").init(provider)
+		require("atlas.pulls").init(provider, opts)
 	else
 		local provider = load_issues_provider(id)
 		if provider == nil then
@@ -90,17 +92,18 @@ local function open_with_provider(domain, id)
 		layout.set_render_callback(function()
 			require("atlas.issues").render()
 		end)
-		require("atlas.issues").init(provider)
+		require("atlas.issues").init(provider, opts)
 	end
 end
 
 ---@param domain "pulls"|"issues"
 ---@param provider_id string|nil
-function M.open(domain, provider_id)
+---@param opts? { initial_view?: table }
+function M.open(domain, provider_id, opts)
 	logger.loginfo("Atlas open requested", { domain = domain, provider_id = provider_id })
 
 	if provider_id ~= nil and provider_id ~= "" then
-		open_with_provider(domain, provider_id)
+		open_with_provider(domain, provider_id, opts)
 		return
 	end
 
@@ -110,7 +113,7 @@ function M.open(domain, provider_id)
 		return
 	end
 	if #ids == 1 then
-		open_with_provider(domain, ids[1])
+		open_with_provider(domain, ids[1], opts)
 		return
 	end
 
@@ -123,7 +126,7 @@ function M.open(domain, provider_id)
 		if choice == nil then
 			return
 		end
-		open_with_provider(domain, choice)
+		open_with_provider(domain, choice, opts)
 	end)
 end
 

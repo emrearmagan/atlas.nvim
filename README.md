@@ -118,7 +118,7 @@ use {
 - `:AtlasPulls [provider]` - Open Atlas pulls domain
 - `:AtlasCreatePR` - Create a pull request from the current branch
 - `:AtlasCreateIssue` - Create an issue (GitHub / Jira)
-- `:AtlasJqlSearch {query}` - Search Jira issues with JQL
+- `:AtlasSearch [provider]` - Pick a configured provider and prompt its search
 - `:AtlasClearCache` - Clear Atlas disk and memory cache
 - `:AtlasLogs` - Toggle Atlas logs
 
@@ -250,17 +250,6 @@ issues = {
 ```
 
 </details>
-
-#### JQL Search Command
-
-Use `:AtlasJqlSearch` to run JQL directly from command mode. It also supports command-line completion while typing the query.
-
-Examples:
-
-```vim
-:AtlasJqlSearch project = KAN AND assignee = currentUser() ORDER BY updated DESC
-:AtlasJqlSearch summary ~ "login bug"
-```
 
 ### GitHub Issues
 
@@ -507,6 +496,32 @@ pulls = {
 ```
 
 ![CleanShot2026-03-31at20 08 06-ezgif com-video-to-gif-converter](https://github.com/user-attachments/assets/a8ca355b-09e2-428c-b3fb-3280fd161110)
+
+## Search
+
+Use `:AtlasSearch [provider]` to search configured providers.
+
+### Jira
+
+`:AtlasSearch jira` opens a JQL prompt with full completion (fields, operators, values).
+
+```
+project = KAN AND assignee = currentUser() ORDER BY updated DESC
+summary ~ "login bug"
+```
+
+### GitHub
+
+`:AtlasSearch github` opens a GitHub search prompt with completion (`is:`, `repo:`, `author:`, `label:` etc.).
+
+```
+is:pr is:open author:@me
+is:issue label:bug
+```
+
+### Bitbucket
+
+`:AtlasSearch bitbucket` asks for a workspace and a repository and opens the UI scoped to that repo.
 
 #### Keymaps
 

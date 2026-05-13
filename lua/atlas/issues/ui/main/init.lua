@@ -46,7 +46,8 @@ function M.render()
 end
 
 ---@param provider IssuesProvider
-function M.init(provider)
+---@param opts? { initial_view?: IssuesViewConfig }
+function M.init(provider, opts)
 	local state = require("atlas.issues.state")
 	local controller = require("atlas.issues.ui.main.controller")
 	local keymaps = require("atlas.issues.ui.main.keymaps")
@@ -68,7 +69,7 @@ function M.init(provider)
 	end
 
 	local views = provider.views and provider.views() or {}
-	state.active_view = views[1]
+	state.active_view = (opts and opts.initial_view) or views[1]
 
 	footer.clear_items()
 

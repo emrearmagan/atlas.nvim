@@ -378,20 +378,12 @@ local ACTIONS = {
 			return true, nil
 		end,
 		run = function(_, done)
-			vim.ui.input({ prompt = "GitHub search: ", default = current_search() }, function(input)
-				local search = input ~= nil and vim.trim(input) or ""
-				if search == "" then
-					done({ changed_issue_key = nil, message = "Cancelled" }, nil)
-					return
-				end
-				local search_view = {
-					name = string.format("Search (%s)", search),
-					key = "?",
-					search = search,
-				}
-				require("atlas.issues.ui.main.controller").switch_view(search_view)
-				done({ changed_issue_key = nil, message = "Searching..." }, nil)
-			end)
+			local default = vim.trim(current_search())
+			if default == "" or not default:find("is:issue") then
+				default = "is:issue " .. default
+			end
+			require("atlas.pulls.providers.github.completion.search").open(vim.trim(default) .. " ")
+			done({ changed_issue_key = nil, message = "Searching..." }, nil)
 		end,
 	},
 	{
