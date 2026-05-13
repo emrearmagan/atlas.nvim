@@ -403,9 +403,8 @@ function M.toggle_task(pr, entry, refresh)
 	end
 
 	local is_resolved = comment.state == "RESOLVED"
-	local desired = vim.tbl_extend("force", {}, comment, {
-		state = is_resolved and nil or "RESOLVED",
-	})
+	local desired = vim.deepcopy(comment)
+	desired.state = is_resolved and nil or "RESOLVED"
 	footer.notify("loading", is_resolved and "Reopening task..." or "Resolving task...")
 	track(provider.edit_comment(pr, desired, function(updated, err)
 		if err then
