@@ -222,7 +222,6 @@ function M.normalize_issues(raw_issues, sp_field)
 end
 
 ---@param raw_comment table|nil
----@param raw_comment table
 ---@param issue_key string|nil
 ---@param base_url string|nil
 ---@return IssueComment|nil

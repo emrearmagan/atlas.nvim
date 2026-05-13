@@ -3,7 +3,8 @@ local M = {}
 ---@param value any
 ---@return string
 local function one_line(value)
-	return tostring(value or ""):gsub("[\r\n]+", " | ")
+	local s = tostring(value or ""):gsub("[\r\n]+", " | ")
+	return s
 end
 
 ---@param method string

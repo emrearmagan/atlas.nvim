@@ -12,7 +12,8 @@ end
 ---@param s string
 ---@return string
 local function sanitize(s)
-	return tostring(s):gsub("\r", " "):gsub("\n", " "):gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+	local out = tostring(s):gsub("\r", " "):gsub("\n", " "):gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+	return out
 end
 
 ---@param value any

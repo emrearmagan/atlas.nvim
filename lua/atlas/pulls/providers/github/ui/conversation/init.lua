@@ -471,7 +471,7 @@ end
 ---@param repo PullsRepo|nil
 ---@param refresh fun()
 ---@param opts { force_refresh: boolean|nil }|nil
-function M.on_select(pr, _repo, refresh, opts)
+function M.on_select(pr, repo, refresh, opts)
 	cancel_all()
 	state.reset()
 
