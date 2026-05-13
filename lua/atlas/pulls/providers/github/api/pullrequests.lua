@@ -14,7 +14,7 @@ query($owner: String!, $repo: String!, $number: Int!) {
       reviewDecision
       labels(first: 10) { nodes { name color } }
       milestone { number title state }
-      latestOpinionatedReviews(last: 10) { nodes { state } }
+      latestOpinionatedReviews(last: 10) { nodes { state author { login } } }
       assignees(first: 10) { nodes { login } }
       author { login ... on User { name } }
       headRefName baseRefName headRefOid baseRefOid

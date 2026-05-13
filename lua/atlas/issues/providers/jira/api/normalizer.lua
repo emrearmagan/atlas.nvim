@@ -207,6 +207,7 @@ function M.normalize_issue(raw, sp_field)
 		duedate = fields.duedate,
 		parent = extract_parent(safe_get(fields, "parent")),
 		is_subscribed = safe_get(fields, "watches", "isWatching") == true,
+		_raw = raw,
 	}
 end
 
