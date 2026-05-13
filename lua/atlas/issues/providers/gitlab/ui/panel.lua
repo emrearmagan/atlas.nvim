@@ -118,7 +118,7 @@ end
 function M.is_loading(_issue)
 	local overview_state = require("atlas.issues.ui.panel.issue.tabs.overview.state")
 	local comments_state = require("atlas.issues.ui.panel.issue.tabs.comments.state")
-	local history_state = require("atlas.issues.ui.panel.issue.tabs.history.state")
+	local history_state = require("atlas.issues.ui.panel.issue.tabs.activity.state")
 	return overview_state.description_loading == true
 		or (type(comments_state.any_loading) == "function" and comments_state.any_loading())
 		or (type(history_state.any_loading) == "function" and history_state.any_loading())
@@ -150,7 +150,7 @@ function M.tabs()
 			key = "history",
 			label = "History",
 			icon = icons.pulls("activity"),
-			mod = require("atlas.issues.ui.panel.issue.tabs.history"),
+			mod = require("atlas.issues.ui.panel.issue.tabs.activity"),
 		},
 	}
 end
