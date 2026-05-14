@@ -235,19 +235,29 @@ local function render_thread(comments, collapsed, width)
 	push({ lines = cl, spans = cs }, { default = { kind = "comment", comment = root, thread_root = root, entity_kind = "comment" } })
 
 	if collapsed and #replies > 0 then
-		local label = string.format("↳ %d %s — press za to expand", #replies, #replies == 1 and "reply" or "replies")
+		local prefix = string.format("%s %d %s", icons.general("arrow_right"), #replies, #replies == 1 and "reply" or "replies")
+		local suffix = "  za to expand"
+		local label = prefix .. suffix
 		push({
 			lines = { label },
-			spans = { { line = 0, start_col = 0, end_col = #label, hl_group = "AtlasTextMuted" } },
+			spans = {
+				{ line = 0, start_col = 0, end_col = #prefix, hl_group = "AtlasLogInfo" },
+				{ line = 0, start_col = #prefix, end_col = #label, hl_group = "AtlasTextMuted" },
+			},
 		}, { default = { kind = "thread_toggle", thread_root = root, entity_kind = "thread_toggle" } })
 	elseif #replies > 0 then
 		local g, line_to_entry = build_reply_group(replies, root, inner)
 		push(g, { by_line = line_to_entry })
 		if #replies > 1 then
-			local label = "↑ press za to collapse"
+			local prefix = icons.general("arrow_up")
+			local suffix = "  za to collapse"
+			local label = prefix .. suffix
 			push({
 				lines = { label },
-				spans = { { line = 0, start_col = 0, end_col = #label, hl_group = "AtlasTextMuted" } },
+				spans = {
+					{ line = 0, start_col = 0, end_col = #prefix, hl_group = "AtlasLogInfo" },
+					{ line = 0, start_col = #prefix, end_col = #label, hl_group = "AtlasTextMuted" },
+				},
 			}, { default = { kind = "thread_toggle", thread_root = root, entity_kind = "thread_toggle" } })
 		end
 	end

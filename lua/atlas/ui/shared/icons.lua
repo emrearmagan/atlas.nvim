@@ -26,11 +26,13 @@ local ICONS = {
 		dot = "●",
 		activity_more = "󰉺",
 		star = "",
-		fork = "",
 		watching = "",
+		arrow_up = "",
+		arrow_right = "",
 	},
 
 	pulls = {
+		fork = "",
 		repo = "",
 		pr = "",
 		merged_pr = "",
