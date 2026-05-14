@@ -289,6 +289,29 @@ function M.create_pr(opts, on_done)
 	end)
 end
 
+---@param opts { force_load: boolean|nil }|nil
+---@param on_done fun(notifications: AtlasNotification[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_notifications(opts, on_done)
+	local notifications = require("atlas.pulls.providers.gitlab.api.notifications")
+	local merged = vim.tbl_extend("force", { state = "pending", per_page = 100 }, opts or {})
+	return notifications.fetch(merged, on_done)
+end
+
+---@param id string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.mark_notification_read(id, on_done)
+	return require("atlas.pulls.providers.gitlab.api.notifications").mark_read(id, on_done)
+end
+
+---@param id string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.mark_notification_done(id, on_done)
+	return require("atlas.pulls.providers.gitlab.api.notifications").mark_done(id, on_done)
+end
+
 ---@return AtlasGitLabPullsViewConfig[]
 function M.views()
 	local cfg = require("atlas.pulls.providers.gitlab.api.service").gitlab_config()
