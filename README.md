@@ -23,12 +23,12 @@ A Neovim plugin for managing GitHub/Bitbucket/GitLab PRs and Jira/GitHub/GitLab 
       <td width="50%"><img alt="Bitbucket PRs" src="https://github.com/user-attachments/assets/06299ffc-b15b-4e2c-8f11-95a8ddde3b04"></td>
     </tr>
     <tr>
+      <th width="50%" align="center">GitLab</th>
       <th width="50%" align="center">Jira</th>
-      <th width="50%" align="center">Create / Edit Issue</th>
     </tr>
     <tr>
+	  <td width="50%"><img alt="Jira" src="https://github.com/user-attachments/assets/81b4023b-7f36-47cf-aeaf-28f9c1ebeb76"></td>
       <td width="50%"><img alt="Jira" src="https://github.com/user-attachments/assets/23a15b90-283c-45e2-8964-02970ec3b21a"></td>
-      <td width="50%"><img alt="Edit/Create Issue" src="https://github.com/user-attachments/assets/76913fbf-1667-4f35-9962-d3c1b4619c7f"></td>
     </tr>
   </tbody>
 </table>
@@ -214,6 +214,7 @@ return {
   end,
 }
 ```
+<img alt="Edit/Create Issue" src="https://github.com/user-attachments/assets/76913fbf-1667-4f35-9962-d3c1b4619c7f">
 
 </details>
 
