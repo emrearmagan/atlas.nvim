@@ -35,7 +35,32 @@ function M.fetch_pullrequests(view, opts, on_done)
 		api_state = "closed"
 	end
 
-	pulls_state.last_search_query = string.format("is:%s", api_state)
+	local parts = { string.format("is:%s", api_state) }
+	if view.project then
+		table.insert(parts, string.format("project:%s", tostring(view.project)))
+	end
+	if view.group then
+		table.insert(parts, string.format("group:%s", tostring(view.group)))
+	end
+	if view.scope then
+		table.insert(parts, string.format("scope:%s", tostring(view.scope)))
+	end
+	if view.labels then
+		table.insert(parts, string.format("labels:%s", tostring(view.labels)))
+	end
+	if view.milestone then
+		table.insert(parts, string.format("milestone:%s", tostring(view.milestone)))
+	end
+	if view.author_username then
+		table.insert(parts, string.format("author:%s", tostring(view.author_username)))
+	end
+	if view.assignee_username then
+		table.insert(parts, string.format("assignee:%s", tostring(view.assignee_username)))
+	end
+	if view.search and view.search ~= "" then
+		table.insert(parts, tostring(view.search))
+	end
+	pulls_state.last_search_query = table.concat(parts, " ")
 
 	return mr_api.list_mrs(view, {
 		force_load = opts and opts.force_load == true or false,

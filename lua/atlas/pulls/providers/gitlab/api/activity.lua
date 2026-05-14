@@ -54,11 +54,15 @@ local function entry_from_note(note)
 	end
 	local first_line = body:match("([^\r\n]+)") or body
 	local kind = classify_system_note(body)
+	local content_raw = first_line
+	if kind == "approval" or kind == "changes_requested" then
+		content_raw = nil
+	end
 	return {
 		kind = kind,
 		actor = actor_from(note.author),
 		date = tostring(note.created_at or ""),
-		content_raw = (kind == "approval" or kind == "changes_requested") and nil or first_line,
+		content_raw = content_raw,
 	}
 end
 
