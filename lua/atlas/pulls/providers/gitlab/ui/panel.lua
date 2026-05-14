@@ -178,6 +178,10 @@ function M.is_loading(_pr, active_tab)
 		local activity_state = require("atlas.pulls.ui.panel.pr.tabs.activity.state")
 		return activity_state.any_loading()
 	end
+	if active_tab == "commits" then
+		local commits_state = require("atlas.pulls.ui.panel.pr.tabs.commits.state")
+		return commits_state.any_loading()
+	end
 	if active_tab ~= nil and active_tab ~= "overview" then
 		return false
 	end
@@ -200,6 +204,12 @@ function M.tabs()
 			label = "Activity",
 			icon = icons.pulls("activity"),
 			mod = require("atlas.pulls.ui.panel.pr.tabs.activity"),
+		},
+		{
+			key = "commits",
+			label = "Commits",
+			icon = icons.pulls("commit"),
+			mod = require("atlas.pulls.ui.panel.pr.tabs.commits"),
 		},
 	}
 end
