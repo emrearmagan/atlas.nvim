@@ -32,6 +32,27 @@ local function is_own_comment(comment)
 	return comment.author.nickname == current_user.username or comment.author.name == current_user.name
 end
 
+local COMPLETION_MODULES = {
+	github = "atlas.pulls.providers.github.completion.author",
+	gitlab = "atlas.pulls.providers.gitlab.completion.author",
+	bitbucket = "atlas.pulls.providers.bitbucket.completion.author",
+}
+
+---@return AtlasMarkdownCompletionProvider|nil
+local function build_completion()
+	local provider = get_provider()
+	local provider_id = provider and provider.id
+	local mod_path = provider_id and COMPLETION_MODULES[provider_id]
+	if not mod_path then
+		return nil
+	end
+	local ok, mod = pcall(require, mod_path)
+	if not ok or type(mod) ~= "table" or type(mod.build_completion) ~= "function" then
+		return nil
+	end
+	return mod.build_completion()
+end
+
 ---@param refresh fun()
 local function add_comment(refresh)
 	local provider = get_provider()
@@ -44,6 +65,7 @@ local function add_comment(refresh)
 		title = " Add Comment ",
 		width_ratio = 0.5,
 		height_ratio = 0.18,
+		completion = build_completion(),
 		on_save = function(text)
 			if not text or vim.trim(text) == "" then
 				return
@@ -86,6 +108,7 @@ local function reply_to_current(refresh)
 		width_ratio = 0.5,
 		height_ratio = 0.18,
 		initial_text = initial_text,
+		completion = build_completion(),
 		on_save = function(text)
 			if not text or vim.trim(text) == "" then
 				return
@@ -129,6 +152,7 @@ local function edit_current(refresh)
 		width_ratio = 0.5,
 		height_ratio = 0.18,
 		initial_text = comment.content_raw or "",
+		completion = build_completion(),
 		on_save = function(text)
 			if not text or vim.trim(text) == "" then
 				return
