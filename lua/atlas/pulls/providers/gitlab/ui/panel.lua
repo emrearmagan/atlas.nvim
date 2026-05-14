@@ -165,6 +165,7 @@ function M.fetches(pr, refresh, opts)
 		overview_state.builds = err and err or (builds or {})
 		refresh()
 	end))
+
 end
 
 ---@param _pr PullRequest
@@ -210,6 +211,12 @@ function M.tabs()
 			label = "Commits",
 			icon = icons.pulls("commit"),
 			mod = require("atlas.pulls.ui.panel.pr.tabs.commits"),
+		},
+		{
+			key = "files",
+			label = "Changes",
+			icon = icons.pulls("changes"),
+			mod = require("atlas.pulls.ui.panel.pr.tabs.files"),
 		},
 	}
 end

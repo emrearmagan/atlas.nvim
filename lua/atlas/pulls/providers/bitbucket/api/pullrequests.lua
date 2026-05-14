@@ -442,25 +442,13 @@ function M.fetch_diff(pr, opts, on_done)
 		return nil
 	end
 
-	local force = (opts or {}).force_refresh == true
-	local key = "bitbucket:pr:diff:" .. diff_url
-	if not force then
-		local cached, ok = service.get_cache(key)
-		if ok then
-			on_done(cached, nil)
-			return nil
-		end
-	end
-
 	local diff_parser = require("atlas.core.git.diff_parser")
 	return service.request_text("GET", diff_url, nil, nil, function(text, err)
 		if err then
 			on_done(nil, err)
 			return
 		end
-		local files = diff_parser.parse(text or "")
-		service.set_cache(key, files, service.cache_ttl())
-		on_done(files, nil)
+		on_done(diff_parser.parse(text or ""), nil)
 	end)
 end
 
