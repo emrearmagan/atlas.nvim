@@ -160,6 +160,77 @@ local function normalize_note(note, discussion_first_id, discussion_id, resolved
 	}
 end
 
+local GQL_DISCUSSIONS = [[
+	query ($fullPath: ID!, $iid: String!) {
+		project(fullPath: $fullPath) {
+			mergeRequest(iid: $iid) {
+				discussions {
+					nodes {
+						id
+						notes {
+							nodes {
+								id
+								body
+								system
+								resolved
+								createdAt
+								author { username name }
+								position { positionType newPath oldPath newLine oldLine }
+								awardEmoji { nodes { name } }
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+]]
+
+---@param gql_note table
+---@param first_id integer|nil
+---@param discussion_id string
+---@return PullsComment
+local function comment_from_gql(gql_note, first_id, discussion_id)
+	local note_id = tonumber(tostring(gql_note.id or ""):match("([^/]+)$") or "")
+	local author = type(gql_note.author) == "table" and gql_note.author or {}
+	local pos = type(gql_note.position) == "table" and gql_note.position or nil
+	local inline = nil
+	if pos and tostring(pos.positionType or "text") == "text" then
+		local new_line = tonumber(pos.newLine)
+		local old_line = tonumber(pos.oldLine)
+		local side = new_line and "new" or "old"
+		local line = new_line or old_line
+		local p = tostring(pos.newPath or pos.oldPath or "")
+		if p ~= "" and line ~= nil then
+			inline = { path = p, to = side == "new" and line or nil, from = side == "old" and line or nil }
+		end
+	end
+	local counts = {}
+	for _, e in ipairs(((gql_note.awardEmoji or {}).nodes or {})) do
+		local name = tostring(e.name or "")
+		if name ~= "" then
+			counts[name] = (counts[name] or 0) + 1
+		end
+	end
+	return {
+		id = note_id,
+		parent_id = (note_id ~= first_id) and first_id or nil,
+		author = type(author.username) == "string" and {
+			name = tostring(author.name or author.username),
+			nickname = author.username,
+			id = "",
+		} or nil,
+		content_raw = tostring(gql_note.body or ""),
+		created_on = tostring(gql_note.createdAt or ""),
+		inline = inline,
+		inline_hunk = nil,
+		is_task = nil,
+		state = gql_note.resolved == true and "RESOLVED" or nil,
+		reactions = counts,
+		_raw = { discussion_id = discussion_id },
+	}
+end
+
 ---@param pr PullRequest
 ---@param opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(comments: PullsComment[]|nil, err: string|nil)
@@ -183,24 +254,29 @@ function M.fetch_general_comments(pr, opts, on_done)
 		end
 	end
 
-	local endpoint =
-		string.format("/projects/%s/merge_requests/%d/discussions?per_page=100", service.url_encode(path), iid)
-	return service.request("GET", endpoint, nil, function(result, err)
+	return service.graphql(GQL_DISCUSSIONS, { fullPath = path, iid = tostring(iid) }, function(data, err)
 		if err then
 			on_done(nil, err)
 			return
 		end
+
+		local mr = data and data.project and data.project.mergeRequest or nil
 		local comments = {}
-		for _, discussion in ipairs(type(result) == "table" and result or {}) do
-			local notes = type(discussion.notes) == "table" and discussion.notes or {}
+
+		local function id_tail(gid)
+			return tostring(gid or ""):match("([^/]+)$") or ""
+		end
+
+		for _, d in ipairs((((mr or {}).discussions or {}).nodes or {})) do
+			local notes = ((d.notes or {}).nodes or {})
 			if #notes > 0 then
 				local first = notes[1]
 				if first.system ~= true and type(first.position) ~= "table" then
-					local resolved = first.resolved == true
-					local discussion_id = tostring(discussion.id or "")
-					for _, note in ipairs(notes) do
-						if note.system ~= true then
-							table.insert(comments, normalize_note(note, first.id, discussion_id, resolved, {}))
+					local first_id = tonumber(id_tail(first.id))
+					local discussion_id = id_tail(d.id)
+					for _, n in ipairs(notes) do
+						if n.system ~= true then
+							table.insert(comments, comment_from_gql(n, first_id, discussion_id))
 						end
 					end
 				end
@@ -453,6 +529,38 @@ function M.delete_comment(pr, comment, on_done)
 			return
 		end
 		bust_caches(path, iid)
+		on_done(true, nil)
+	end)
+end
+
+---@param pr PullRequest
+---@param comment PullsComment
+---@param key string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.add_reaction(pr, comment, key, on_done)
+	local path, iid = project_iid(pr)
+	if path == "" or iid == nil then
+		on_done(false, "Invalid MR identifier")
+		return nil
+	end
+	local note_id = tonumber(comment.id)
+	if note_id == nil then
+		on_done(false, "Invalid note id")
+		return nil
+	end
+	local endpoint = string.format(
+		"/projects/%s/merge_requests/%d/notes/%d/award_emoji?name=%s",
+		service.url_encode(path),
+		iid,
+		note_id,
+		service.url_encode(key)
+	)
+	return service.request("POST", endpoint, nil, function(_, err)
+		if err then
+			on_done(false, err)
+			return
+		end
 		on_done(true, nil)
 	end)
 end

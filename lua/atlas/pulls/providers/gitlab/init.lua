@@ -116,9 +116,11 @@ function M.fetch_activity(pr, opts, on_done)
 	return require("atlas.pulls.providers.gitlab.api.activity").fetch_activity(pr, opts, on_done)
 end
 
+local GITLAB_REACTION_OPTIONS = require("atlas.ui.shared.emojis").gitlab()
+
 ---@param pr PullRequest
 ---@param opts { force_refresh: boolean|nil }|nil
----@param on_done fun(result: { comments: PullsComment[], events: PullsActivityEntry[] }|nil, err: string|nil)
+---@param on_done fun(result: { comments: PullsComment[], events: PullsActivityEntry[], reaction_options: PullsReactionOption[]|nil }|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_conversation(pr, opts, on_done)
 	local activity_api = require("atlas.pulls.providers.gitlab.api.activity")
@@ -145,6 +147,7 @@ function M.fetch_conversation(pr, opts, on_done)
 		on_done({
 			comments = comments_result or {},
 			events = events_result or {},
+			reaction_options = GITLAB_REACTION_OPTIONS,
 		}, nil)
 	end
 
@@ -224,6 +227,15 @@ end
 ---@return { cancel: fun() }|nil
 function M.delete_comment(pr, target, on_done)
 	return require("atlas.pulls.providers.gitlab.api.comments").delete_comment(pr, target, on_done)
+end
+
+---@param pr PullRequest
+---@param comment PullsComment
+---@param key string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.add_reaction(pr, comment, key, on_done)
+	return require("atlas.pulls.providers.gitlab.api.comments").add_reaction(pr, comment, key, on_done)
 end
 
 ---@param pr PullRequest

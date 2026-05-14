@@ -41,20 +41,48 @@ local function is_own_comment(comment)
 	return comment.author.nickname == current_user.username or comment.author.name == current_user.name
 end
 
+local emojis = require("atlas.ui.shared.emojis")
+
 ---@param reactions table|nil
----@return string
+---@return string text, table[] spans
 local function format_reactions(reactions)
 	if type(reactions) ~= "table" then
-		return ""
+		return "", {}
 	end
-	local parts = {}
+	local emoji_by_key, order = {}, {}
 	for _, opt in ipairs(state.reaction_options or {}) do
-		local count = tonumber(reactions[opt.key]) or 0
-		if count > 0 then
-			table.insert(parts, string.format("%s %d", opt.emoji or opt.key, count))
+		emoji_by_key[opt.key] = opt.emoji
+		table.insert(order, opt.key)
+	end
+
+	-- Append any keys present on the comment but missing from the providers options
+	for key in pairs(reactions) do
+		if emoji_by_key[key] == nil then
+			emoji_by_key[key] = emojis.glyph(key)
+			table.insert(order, key)
 		end
 	end
-	return table.concat(parts, "  ")
+
+	local parts, spans = {}, {}
+	local col = 0
+	for _, key in ipairs(order) do
+		local count = tonumber(reactions[key]) or 0
+		if count > 0 then
+			if #parts > 0 then
+				col = col + 2
+			end
+			local icon = emoji_by_key[key]
+			local count_text = " " .. tostring(count)
+			table.insert(spans, { start_col = col, end_col = col + #icon, hl_group = "AtlasLogInfo" })
+			table.insert(
+				spans,
+				{ start_col = col + #icon, end_col = col + #icon + #count_text, hl_group = "AtlasTextMuted" }
+			)
+			col = col + #icon + #count_text
+			table.insert(parts, icon .. count_text)
+		end
+	end
+	return table.concat(parts, "  "), spans
 end
 
 ---@param lines string[]
@@ -154,15 +182,18 @@ local function build_content(comment, width)
 		end
 	end
 
-	local reactions = format_reactions(comment.reactions)
+	local reactions, reaction_spans = format_reactions(comment.reactions)
 	if reactions ~= "" then
 		table.insert(lines, reactions)
-		table.insert(spans, {
-			line = #lines - 1,
-			start_col = 0,
-			end_col = #reactions,
-			hl_group = "AtlasTextMuted",
-		})
+		local line_idx = #lines - 1
+		for _, s in ipairs(reaction_spans) do
+			table.insert(spans, {
+				line = line_idx,
+				start_col = s.start_col,
+				end_col = s.end_col,
+				hl_group = s.hl_group,
+			})
+		end
 	end
 	return lines, spans
 end
@@ -182,11 +213,14 @@ local function build_reply_group(replies, root, width)
 		local header_base = #lines
 		table.insert(lines, REPLY_INDENT .. hl)
 		for _, s in ipairs(hs) do
-			table.insert(spans, vim.tbl_extend("force", s, {
-				line = header_base,
-				start_col = s.start_col + #REPLY_INDENT,
-				end_col = s.end_col + #REPLY_INDENT,
-			}))
+			table.insert(
+				spans,
+				vim.tbl_extend("force", s, {
+					line = header_base,
+					start_col = s.start_col + #REPLY_INDENT,
+					end_col = s.end_col + #REPLY_INDENT,
+				})
+			)
 		end
 		line_to_entry[#lines] = { kind = "comment", comment = reply, thread_root = root, entity_kind = "comment" }
 		local content_base = #lines
@@ -195,11 +229,14 @@ local function build_reply_group(replies, root, width)
 			line_to_entry[#lines] = { kind = "comment", comment = reply, thread_root = root, entity_kind = "comment" }
 			for _, s in ipairs(cs) do
 				if s.line == li - 1 then
-					table.insert(spans, vim.tbl_extend("force", s, {
-						line = content_base + li - 1,
-						start_col = s.start_col + #REPLY_INDENT,
-						end_col = s.end_col + #REPLY_INDENT,
-					}))
+					table.insert(
+						spans,
+						vim.tbl_extend("force", s, {
+							line = content_base + li - 1,
+							start_col = s.start_col + #REPLY_INDENT,
+							end_col = s.end_col + #REPLY_INDENT,
+						})
+					)
 				end
 			end
 		end
@@ -231,11 +268,18 @@ local function render_thread(comments, collapsed, width)
 
 	local hl, hs = build_header(root, "commented", inner)
 	local cl, cs = build_content(root, inner)
-	push({ lines = { hl }, spans = hs }, { default = { kind = "comment", comment = root, thread_root = root, entity_kind = "comment" } })
-	push({ lines = cl, spans = cs }, { default = { kind = "comment", comment = root, thread_root = root, entity_kind = "comment" } })
+	push(
+		{ lines = { hl }, spans = hs },
+		{ default = { kind = "comment", comment = root, thread_root = root, entity_kind = "comment" } }
+	)
+	push(
+		{ lines = cl, spans = cs },
+		{ default = { kind = "comment", comment = root, thread_root = root, entity_kind = "comment" } }
+	)
 
 	if collapsed and #replies > 0 then
-		local prefix = string.format("%s %d %s", icons.general("arrow_right"), #replies, #replies == 1 and "reply" or "replies")
+		local prefix =
+			string.format("%s %d %s", icons.general("arrow_right"), #replies, #replies == 1 and "reply" or "replies")
 		local suffix = "  za to expand"
 		local label = prefix .. suffix
 		push({
@@ -504,7 +548,7 @@ end
 local function render_entry(entry, width)
 	if entry.type == "comment" then
 		local key = tostring(entry.comment.id)
-		if (#(entry.replies or {})) > 1 and state.collapsed[key] == nil then
+		if #(entry.replies or {}) > 1 and state.collapsed[key] == nil then
 			state.collapsed[key] = true
 		end
 		local thread = { entry.comment }

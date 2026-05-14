@@ -110,7 +110,7 @@ end
 
 ---@param value any
 ---@return string|nil
-local function extract_error_message(value)
+local function get_error_message(value)
 	if value == nil or value == vim.NIL then
 		return nil
 	end
@@ -133,6 +133,32 @@ local function extract_error_message(value)
 		end
 	end
 	return nil
+end
+
+---@param query string
+---@param variables table|nil
+---@param on_done fun(result: any, err: string|nil)
+---@return { job_id: integer, cancel: fun() }|nil
+function M.graphql(query, variables, on_done)
+	local _, auth_err = M.get_auth()
+	if auth_err then
+		on_done(nil, auth_err)
+		return nil
+	end
+	local url = M.base_url() .. "/api/graphql"
+	local headers = M.build_headers()
+	local payload = vim.fn.json_encode({ query = query, variables = variables or vim.empty_dict() })
+	return http.curl_request("POST", url, headers, payload, function(result, err)
+		if err then
+			on_done(nil, err)
+			return
+		end
+		if type(result) == "table" and type(result.errors) == "table" and #result.errors > 0 then
+			on_done(nil, tostring(result.errors[1].message or "GraphQL error"))
+			return
+		end
+		on_done(type(result) == "table" and result.data or nil, nil)
+	end)
 end
 
 ---@param method string
@@ -174,7 +200,7 @@ function M.request(method, endpoint, data, on_done)
 		end
 
 		if type(result) == "table" and not vim.islist(result) then
-			local msg = extract_error_message(result.message) or extract_error_message(result.error_description)
+			local msg = get_error_message(result.message) or get_error_message(result.error_description)
 			if msg == nil and result.error ~= nil and result.error ~= vim.NIL then
 				msg = tostring(result.error)
 			end

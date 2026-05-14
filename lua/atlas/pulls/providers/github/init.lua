@@ -141,17 +141,7 @@ function M.fetch_activity(pr, opts, on_done)
 	return require("atlas.pulls.providers.github.api.activity").fetch_activity(pr, opts, on_done)
 end
 
--- TODO: Consider nerd font icons
-local GITHUB_REACTION_OPTIONS = {
-	{ key = "+1", emoji = "👍", label = "+1" },
-	{ key = "-1", emoji = "👎", label = "-1" },
-	{ key = "laugh", emoji = "😄", label = "laugh" },
-	{ key = "hooray", emoji = "🎉", label = "hooray" },
-	{ key = "confused", emoji = "😕", label = "confused" },
-	{ key = "heart", emoji = "❤️", label = "heart" },
-	{ key = "rocket", emoji = "🚀", label = "rocket" },
-	{ key = "eyes", emoji = "👀", label = "eyes" },
-}
+local GITHUB_REACTION_OPTIONS = require("atlas.ui.shared.emojis").github()
 
 ---@param pr PullRequest
 ---@param opts { force_refresh: boolean|nil }|nil
