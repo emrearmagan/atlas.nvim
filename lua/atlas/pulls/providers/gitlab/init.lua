@@ -276,6 +276,40 @@ function M.open_actions(pr, source, on_done)
 	end)
 end
 
+---@param opts { repo_slug: string, repo_root: string|nil, head: string, base: string }
+---@param on_done fun(reviewers: PullsCreatePRReviewer[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_default_reviewers(opts, on_done)
+	local service = require("atlas.pulls.providers.gitlab.api.service")
+	local slug = tostring(opts.repo_slug or "")
+	if slug == "" then
+		vim.schedule(function()
+			on_done(nil, "Missing project slug")
+		end)
+		return nil
+	end
+	local endpoint = string.format("/projects/%s/members/all?per_page=100", service.url_encode(slug))
+	return service.request("GET", endpoint, nil, function(result, err)
+		if err then
+			on_done(nil, err)
+			return
+		end
+		local items = {}
+		for _, raw in ipairs(type(result) == "table" and result or {}) do
+			local login = type(raw) == "table" and tostring(raw.username or "") or ""
+			if login ~= "" then
+				table.insert(items, {
+					label = "@" .. login,
+					provider_id = login,
+					selected = false,
+					default = false,
+				})
+			end
+		end
+		on_done(items, nil)
+	end)
+end
+
 ---@param opts PullsCreatePROpts
 ---@param on_done fun(result: PullsCreatePRResult|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
