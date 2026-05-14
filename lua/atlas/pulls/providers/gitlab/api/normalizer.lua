@@ -142,7 +142,7 @@ function M.normalize_mr(raw)
 			merged_at = safe_str(raw.merged_at),
 			closed_at = safe_str(raw.closed_at),
 			sha = type(sha) == "string" and sha or nil,
-			pipeline = nilify(raw.pipeline),
+			pipeline = nilify(raw.head_pipeline) or nilify(raw.pipeline),
 		},
 	}
 end

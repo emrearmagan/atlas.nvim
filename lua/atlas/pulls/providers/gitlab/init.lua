@@ -8,6 +8,7 @@ local M = {
 	hl_group = "AtlasGitLabTheme",
 	panel = require("atlas.pulls.providers.gitlab.ui.panel"),
 	repo_panel = require("atlas.pulls.providers.gitlab.ui.repo_panel"),
+	render = require("atlas.pulls.providers.gitlab.ui.main").render,
 }
 
 function M.setup()

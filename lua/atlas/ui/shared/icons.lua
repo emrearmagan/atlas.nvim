@@ -38,6 +38,7 @@ local ICONS = {
 		merged_pr = "",
 		declined_pr = "",
 		tasks = "󰘽",
+		pipeline = "󰜎",
 		check = "",
 		commit = "󰜘",
 		changes = "󱓉",
