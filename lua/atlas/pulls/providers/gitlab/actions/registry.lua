@@ -440,6 +440,74 @@ local ACTIONS = {
 		end,
 	},
 	{
+		id = "search",
+		label = "Search projects",
+		is_available = function(_)
+			return true, nil
+		end,
+		run = function(_, done)
+			vim.ui.input({ prompt = "Search projects: " }, function(input)
+				if input == nil or vim.trim(input) == "" then
+					done({ changed_pr = false, message = "Search cancelled" }, nil)
+					return
+				end
+
+				local query = vim.trim(input)
+				footer.notify("loading", "Searching projects...")
+				local endpoint = string.format(
+					"/projects?search=%s&per_page=20&order_by=last_activity_at",
+					service.url_encode(query)
+				)
+				service.request("GET", endpoint, nil, function(result, err)
+					if err then
+						footer.notify("error", string.format("Search failed: %s", tostring(err)))
+						done(nil, tostring(err))
+						return
+					end
+
+					local list = {}
+					for _, item in ipairs(type(result) == "table" and result or {}) do
+						local full_path = tostring(item.path_with_namespace or "")
+						if full_path ~= "" then
+							table.insert(list, full_path)
+						end
+					end
+
+					if #list == 0 then
+						footer.notify("warn", "No projects found")
+						done({ changed_pr = false, message = "No projects found" }, nil)
+						return
+					end
+
+					footer.notify("info", string.format("Found %d projects", #list), 1200)
+
+					vim.ui.select(list, {
+						prompt = "Select project",
+						kind = "atlas_gitlab_project_select",
+					}, function(project)
+						if project == nil then
+							done({ changed_pr = false, message = "Selection cancelled" }, nil)
+							return
+						end
+
+						---@type AtlasGitLabPullsViewConfig
+						local search_view = {
+							name = "Search",
+							key = nil,
+							project = project,
+							scope = "all",
+						}
+
+						local controller = require("atlas.pulls.ui.main.controller")
+						footer.notify("success", string.format("Search view -> %s", project))
+						controller.switch_view(search_view)
+						done({ changed_pr = false, message = "Search view switched" }, nil)
+					end)
+				end)
+			end)
+		end,
+	},
+	{
 		id = "toggle_subscription",
 		label = "Toggle subscription",
 		is_available = function(ctx)

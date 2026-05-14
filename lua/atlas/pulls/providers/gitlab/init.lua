@@ -276,6 +276,11 @@ function M.open_actions(pr, source, on_done)
 	end)
 end
 
+function M.search()
+	local actions = require("atlas.pulls.providers.gitlab.actions")
+	actions.run("search", { source = "main" }, function() end)
+end
+
 ---@param opts { repo_slug: string, repo_root: string|nil, head: string, base: string }
 ---@param on_done fun(reviewers: PullsCreatePRReviewer[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
