@@ -4,6 +4,7 @@ local M = {}
 local helper = require("atlas.pulls.ui.main.helper")
 local mr_api = require("atlas.pulls.providers.gitlab.api.mergerequests")
 local spinner = require("atlas.ui.components.spinner")
+local icons = require("atlas.ui.shared.icons")
 
 local state = {
 	labels_by_name = nil, ---@type table<string, { color: string|nil, text_color: string|nil }>|nil
@@ -173,12 +174,34 @@ function M.is_loading(_pr, active_tab)
 	if state.header_loading then
 		return true
 	end
+	if active_tab == "activity" then
+		local activity_state = require("atlas.pulls.ui.panel.pr.tabs.activity.state")
+		return activity_state.any_loading()
+	end
 	if active_tab ~= nil and active_tab ~= "overview" then
 		return false
 	end
 
 	local overview_state = require("atlas.pulls.ui.panel.pr.tabs.overview.state")
 	return overview_state.any_loading()
+end
+
+---@return PullsPanelTab[]
+function M.tabs()
+	return {
+		{
+			key = "overview",
+			label = "Overview",
+			icon = icons.general("overview"),
+			mod = require("atlas.pulls.ui.panel.pr.tabs.overview"),
+		},
+		{
+			key = "activity",
+			label = "Activity",
+			icon = icons.pulls("activity"),
+			mod = require("atlas.pulls.ui.panel.pr.tabs.activity"),
+		},
+	}
 end
 
 return M

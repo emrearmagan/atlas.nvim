@@ -85,6 +85,14 @@ end
 
 ---@param pr PullRequest
 ---@param opts { force_refresh?: boolean }|nil
+---@param on_done fun(entries: PullsActivityEntry[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_activity(pr, opts, on_done)
+	return require("atlas.pulls.providers.gitlab.api.activity").fetch_activity(pr, opts, on_done)
+end
+
+---@param pr PullRequest
+---@param opts { force_refresh?: boolean }|nil
 ---@param on_done fun(checks: PullsMergeCheck[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_merge_checks(pr, opts, on_done)
