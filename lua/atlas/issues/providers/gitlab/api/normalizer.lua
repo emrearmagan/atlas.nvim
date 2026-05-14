@@ -124,6 +124,7 @@ function M.normalize_issue(raw)
 		duedate = safe_str(raw.due_date),
 		parent = nil,
 		url = web_url ~= "" and web_url or nil,
+		is_subscribed = type(raw.subscribed) == "boolean" and raw.subscribed or nil,
 		_raw = {
 			iid = iid,
 			project_id = tonumber(raw.project_id),

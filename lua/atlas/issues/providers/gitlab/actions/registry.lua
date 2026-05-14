@@ -456,6 +456,49 @@ local ACTIONS = {
 			done({ changed_issue_key = nil, message = "Copied issue URL" }, nil)
 		end,
 	},
+	{
+		id = "toggle_subscription",
+		label = "Toggle subscription",
+		is_available = function(ctx)
+			if not has_issue(ctx) then
+				return false, "No issue selected"
+			end
+			local raw = type(ctx.issue._raw) == "table" and ctx.issue._raw or {}
+			local iid = tonumber(raw.iid)
+			local path = tostring(raw.project_path or "")
+			if iid == nil or path == "" then
+				return false, "Invalid issue identifier"
+			end
+			return true, nil
+		end,
+		run = function(ctx, done)
+			local service = require("atlas.issues.providers.gitlab.api.service")
+			local issue = ctx.issue
+			local raw = type(issue._raw) == "table" and issue._raw or {}
+			local path = tostring(raw.project_path or "")
+			local iid = tonumber(raw.iid)
+			local action = issue.is_subscribed == true and "unsubscribe" or "subscribe"
+			local endpoint = string.format("/projects/%s/issues/%d/%s", service.url_encode(path), iid, action)
+			footer.notify("loading", issue.is_subscribed and "Unsubscribing..." or "Subscribing...")
+			service.request("POST", endpoint, nil, function(result, err)
+				if err then
+					footer.notify("error", tostring(err))
+					done(nil, tostring(err))
+					return
+				end
+				local subscribed = type(result) == "table" and result.subscribed
+				if type(subscribed) ~= "boolean" then
+					subscribed = action == "subscribe"
+				end
+				issue.is_subscribed = subscribed == true
+				footer.notify("success", issue.is_subscribed and "Subscribed" or "Unsubscribed", 1200)
+				done(
+					{ changed_issue_key = issue.key, message = issue.is_subscribed and "Subscribed" or "Unsubscribed" },
+					nil
+				)
+			end)
+		end,
+	},
 }
 
 ---@param ctx table

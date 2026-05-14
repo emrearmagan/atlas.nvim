@@ -107,8 +107,15 @@ local ACTIONS = {
 							return
 						end
 
-						footer.notify("success", string.format("Transitioned %s to %s", issue_key, selected.name or ""), 1200)
-						done({ changed_issue_key = issue_key, message = string.format("Transitioned to %s", selected.name or "") }, nil)
+						footer.notify(
+							"success",
+							string.format("Transitioned %s to %s", issue_key, selected.name or ""),
+							1200
+						)
+						done({
+							changed_issue_key = issue_key,
+							message = string.format("Transitioned to %s", selected.name or ""),
+						}, nil)
 					end)
 				end,
 				on_cancel = function()
@@ -130,7 +137,8 @@ local ACTIONS = {
 
 			local issue_key = issue.key
 			local issue_project_key = issue.project and issue.project.key or nil
-			local current_assignee_key = vim.trim(tostring(issue.assignee and issue.assignee.display_name or "")):lower()
+			local current_assignee_key = vim.trim(tostring(issue.assignee and issue.assignee.display_name or ""))
+				:lower()
 
 			local function to_picker_items(users)
 				local items = {}
@@ -219,8 +227,15 @@ local ACTIONS = {
 							return
 						end
 
-						footer.notify("success", string.format("Assigned %s to %s", issue_key, selected.display_name), 1200)
-						done({ changed_issue_key = issue_key, message = string.format("Assigned to %s", selected.display_name) }, nil)
+						footer.notify(
+							"success",
+							string.format("Assigned %s to %s", issue_key, selected.display_name),
+							1200
+						)
+						done({
+							changed_issue_key = issue_key,
+							message = string.format("Assigned to %s", selected.display_name),
+						}, nil)
 					end)
 				end,
 				on_cancel = function()
@@ -241,14 +256,18 @@ local ACTIONS = {
 			end
 
 			local issue_key = issue.key
-			local current_reporter_key = vim.trim(tostring(type(issue.reporter) == "table" and issue.reporter.display_name or "")):lower()
+			local current_reporter_key =
+				vim.trim(tostring(type(issue.reporter) == "table" and issue.reporter.display_name or "")):lower()
 
 			local function to_picker_items(users)
 				local items = {}
 				for _, user in ipairs(users or {}) do
 					local user_name = vim.trim(tostring(user.display_name or "")):lower()
 					if user_name ~= current_reporter_key then
-						table.insert(items, { id = user.account_id or "", label = user.display_name or "", value = user })
+						table.insert(
+							items,
+							{ id = user.account_id or "", label = user.display_name or "", value = user }
+						)
 					end
 				end
 				return items
@@ -287,8 +306,15 @@ local ACTIONS = {
 							return
 						end
 
-						footer.notify("success", string.format("Reporter for %s changed to %s", issue_key, selected.display_name), 1200)
-						done({ changed_issue_key = issue_key, message = string.format("Reporter changed to %s", selected.display_name) }, nil)
+						footer.notify(
+							"success",
+							string.format("Reporter for %s changed to %s", issue_key, selected.display_name),
+							1200
+						)
+						done({
+							changed_issue_key = issue_key,
+							message = string.format("Reporter changed to %s", selected.display_name),
+						}, nil)
 					end)
 				end,
 				on_cancel = function()
@@ -471,7 +497,10 @@ local ACTIONS = {
 						if result and result.key then
 							footer.notify("success", string.format("Created %s", result.key), 2000)
 							submit_done(true, nil)
-							done({ changed_issue_key = result.key, message = string.format("Created %s", result.key) }, nil)
+							done(
+								{ changed_issue_key = result.key, message = string.format("Created %s", result.key) },
+								nil
+							)
 							return
 						end
 
@@ -505,9 +534,20 @@ local ACTIONS = {
 					local project = item.value
 					local category_name = project.category and project.category.name or ""
 					if category_name ~= "" then
-						return string.format("%s %s - %s (%s)", icons.issues_provider("jira", "provider"), item.label, project.name, category_name)
+						return string.format(
+							"%s %s - %s (%s)",
+							icons.issues_provider("jira", "provider"),
+							item.label,
+							project.name,
+							category_name
+						)
 					end
-					return string.format("%s %s - %s", icons.issues_provider("jira", "provider"), item.label, project.name)
+					return string.format(
+						"%s %s - %s",
+						icons.issues_provider("jira", "provider"),
+						item.label,
+						project.name
+					)
 				end,
 				fetch = function(fetch_ctx, fetch_done)
 					if all_items then
@@ -519,7 +559,13 @@ local ACTIONS = {
 						local filtered = {}
 						for _, item in ipairs(all_items) do
 							local project = item.value
-							local haystack = (item.label .. " " .. (project.name or "") .. " " .. (project.category and project.category.name or "")):lower()
+							local haystack = (
+								item.label
+								.. " "
+								.. (project.name or "")
+								.. " "
+								.. (project.category and project.category.name or "")
+							):lower()
 							if haystack:find(query, 1, true) then
 								table.insert(filtered, item)
 							end
@@ -713,13 +759,22 @@ local ACTIONS = {
 								local ok, write_err, existed, normalized_name =
 									template_store.write(name, markdown, { overwrite = false })
 								if ok then
-									finish({ changed_issue_key = nil, message = string.format("Created template %s", tostring(normalized_name or name)) }, nil)
+									finish({
+										changed_issue_key = nil,
+										message = string.format(
+											"Created template %s",
+											tostring(normalized_name or name)
+										),
+									}, nil)
 									return
 								end
 
 								if existed then
 									vim.ui.input({
-										prompt = string.format('Template "%s" exists. Overwrite? [y/N]: ', tostring(normalized_name or name)),
+										prompt = string.format(
+											'Template "%s" exists. Overwrite? [y/N]: ',
+											tostring(normalized_name or name)
+										),
 									}, function(confirm)
 										if confirm == nil or vim.trim(tostring(confirm)):lower() ~= "y" then
 											finish({ changed_issue_key = nil, message = nil }, nil)
@@ -733,7 +788,13 @@ local ACTIONS = {
 											return
 										end
 
-										finish({ changed_issue_key = nil, message = string.format("Updated template %s", tostring(final_name or normalized_name or name)) }, nil)
+										finish({
+											changed_issue_key = nil,
+											message = string.format(
+												"Updated template %s",
+												tostring(final_name or normalized_name or name)
+											),
+										}, nil)
 									end)
 									return
 								end
@@ -816,7 +877,10 @@ local ACTIONS = {
 										end
 
 										editor_ctx.close()
-										finish({ changed_issue_key = nil, message = string.format("Deleted template %s", template_name) }, nil)
+										finish({
+											changed_issue_key = nil,
+											message = string.format("Deleted template %s", template_name),
+										}, nil)
 									end)
 								end,
 							},
@@ -828,7 +892,10 @@ local ACTIONS = {
 								return
 							end
 
-							finish({ changed_issue_key = nil, message = string.format("Updated template %s", template_name) }, nil)
+							finish({
+								changed_issue_key = nil,
+								message = string.format("Updated template %s", template_name),
+							}, nil)
 						end,
 						on_cancel = function()
 							finish({ changed_issue_key = nil, message = "Template edit cancelled" }, nil)
@@ -921,6 +988,69 @@ local ACTIONS = {
 			done({ changed_issue_key = nil, message = "Copied issue URL" }, nil)
 		end,
 	},
+	{
+		id = "toggle_subscription",
+		label = "Toggle subscription",
+		is_available = function(ctx)
+			if not has_issue_key(ctx) then
+				return false, "No issue selected"
+			end
+			return true, nil
+		end,
+		run = function(ctx, done)
+			local svc = require("atlas.issues.providers.jira.api.service")
+			local issue = ctx.issue
+			local issue_key = tostring(issue.key or "")
+			footer.notify("loading", issue.is_subscribed and "Unsubscribing..." or "Subscribing...")
+
+			local function finish(subscribed, err)
+				if err then
+					footer.notify("error", tostring(err))
+					done(nil, tostring(err))
+					return
+				end
+				issue.is_subscribed = subscribed == true
+				footer.notify("success", issue.is_subscribed and "Subscribed" or "Unsubscribed", 1200)
+				done(
+					{ changed_issue_key = issue.key, message = issue.is_subscribed and "Subscribed" or "Unsubscribed" },
+					nil
+				)
+			end
+
+			if issue.is_subscribed ~= true then
+				svc.request("POST", "/issue/" .. issue_key .. "/watchers", nil, function(_, err)
+					finish(err == nil and true or nil, err)
+				end)
+				return
+			end
+
+			local function unsubscribe(account_id)
+				svc.request(
+					"DELETE",
+					string.format("/issue/%s/watchers?accountId=%s", issue_key, account_id),
+					nil,
+					function(_, err)
+						finish(err == nil and false or nil, err)
+					end
+				)
+			end
+
+			local st = require("atlas.issues.state")
+			local current = st.current_user
+			if current and tostring(current.account_id or "") ~= "" then
+				unsubscribe(current.account_id)
+				return
+			end
+
+			require("atlas.issues.providers.jira.api.users").get_myself(function(user, err)
+				if err or not user or user.account_id == "" then
+					finish(nil, err or "Failed to fetch Jira user")
+					return
+				end
+				unsubscribe(user.account_id)
+			end)
+		end,
+	},
 }
 
 ---@param ctx table
@@ -964,7 +1094,10 @@ function M.available(ctx)
 								return
 							end
 							footer.notify("success", tostring(message or (item.label .. " done")))
-							done({ changed_issue_key = nil, message = tostring(message or (item.label .. " done")) }, nil)
+							done(
+								{ changed_issue_key = nil, message = tostring(message or (item.label .. " done")) },
+								nil
+							)
 						end)
 					end
 

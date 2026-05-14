@@ -139,13 +139,16 @@ end
 
 ---@param on_done fun(result: table|nil, err: string|nil)|nil
 function M.search(on_done)
-	require("atlas.issues.providers.gitlab.actions").run("search", { issue = nil, source = "main" }, function(result, err)
-		if on_done then
-			on_done(result, err)
+	require("atlas.issues.providers.gitlab.actions").run(
+		"search",
+		{ issue = nil, source = "main" },
+		function(result, err)
+			if on_done then
+				on_done(result, err)
+			end
 		end
-	end)
+	)
 end
-
 
 ---@param opts { force_load: boolean|nil }|nil
 ---@param on_done fun(notifications: AtlasNotification[]|nil, err: string|nil)

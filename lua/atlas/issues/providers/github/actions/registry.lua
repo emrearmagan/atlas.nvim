@@ -344,31 +344,31 @@ local ACTIONS = {
 			local slug, err = create_issue_slug(ctx or {})
 			return slug ~= nil and slug ~= "", err
 		end,
-			run = function(ctx, done)
-				local slug, slug_err = create_issue_slug(ctx or {})
-				if slug == nil or slug == "" then
-					done(nil, slug_err or "Could not determine repository")
-					return
-				end
+		run = function(ctx, done)
+			local slug, slug_err = create_issue_slug(ctx or {})
+			if slug == nil or slug == "" then
+				done(nil, slug_err or "Could not determine repository")
+				return
+			end
 
-				local create_issue_ui = require("atlas.issues.create.github.issue")
+			local create_issue_ui = require("atlas.issues.create.github.issue")
 
-				create_issue_ui.open({
-					repo_slug = slug,
-					on_done = function(result, err)
-						if err then
-							done(nil, tostring(err))
-							return
-						end
+			create_issue_ui.open({
+				repo_slug = slug,
+				on_done = function(result, err)
+					if err then
+						done(nil, tostring(err))
+						return
+					end
 
-						local number = result and result.number
-						local key = number and string.format("%s#%s", slug, tostring(number)) or nil
-						done({
-							changed_issue_key = key,
-							message = result and result.url or "Issue created",
-						}, nil)
-					end,
-				})
+					local number = result and result.number
+					local key = number and string.format("%s#%s", slug, tostring(number)) or nil
+					done({
+						changed_issue_key = key,
+						message = result and result.url or "Issue created",
+					}, nil)
+				end,
+			})
 		end,
 	},
 	{
@@ -416,6 +416,48 @@ local ACTIONS = {
 			vim.fn.setreg("+", key)
 			vim.fn.setreg('"', key)
 			done({ changed_issue_key = nil, message = "Copied issue key" }, nil)
+		end,
+	},
+	{
+		id = "toggle_subscription",
+		label = "Toggle subscription",
+		is_available = function(ctx)
+			if not has_issue(ctx) then
+				return false, "No issue selected"
+			end
+			local raw = type(ctx.issue._raw) == "table" and ctx.issue._raw or {}
+			if tostring(raw.node_id or "") == "" then
+				return false, "Missing issue node id"
+			end
+			return true, nil
+		end,
+		run = function(ctx, done)
+			local issue = ctx.issue
+			local raw = type(issue._raw) == "table" and issue._raw or {}
+			local node_id = tostring(raw.node_id or "")
+			local next_state = issue.is_subscribed == true and "UNSUBSCRIBED" or "SUBSCRIBED"
+			local gql =
+				"mutation($id: ID!, $state: SubscriptionState!) { updateSubscription(input: { subscribableId: $id, state: $state }) { subscribable { ... on Issue { viewerSubscription } } } }"
+			footer.notify("loading", issue.is_subscribed and "Unsubscribing..." or "Subscribing...")
+			require("atlas.issues.providers.github.api.cli").gh(
+				{ "api", "graphql", "-F", "id=" .. node_id, "-f", "state=" .. next_state, "-f", "query=" .. gql },
+				function(_, err)
+					if err then
+						footer.notify("error", tostring(err))
+						done(nil, tostring(err))
+						return
+					end
+					issue.is_subscribed = (next_state == "SUBSCRIBED")
+					footer.notify("success", issue.is_subscribed and "Subscribed" or "Unsubscribed", 1200)
+					done(
+						{
+							changed_issue_key = issue.key,
+							message = issue.is_subscribed and "Subscribed" or "Unsubscribed",
+						},
+						nil
+					)
+				end
+			)
 		end,
 	},
 	{
