@@ -106,111 +106,163 @@ function M.setup(buf, refresh)
 		},
 	}
 
-	utils.insert_if(items, from_action("ui.toggle_fold", {
-		desc = "Toggle hunk fold",
-		opts = { nowait = true, silent = true },
-		callback = function()
-			local state = require("atlas.pulls.ui.panel.pr.tabs.comments.state")
-			local entry = cursor_entry()
-			if entry == nil then
-				return
-			end
-			local key = entry.hunk_key
-			if key == nil then
-				local win = layout.win_id("detail")
-				local panel_state2 = require("atlas.pulls.ui.panel.pr.state")
-				local lnum = win and vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_cursor(win)[1] or 0
-				local map = panel_state2.line_map or {}
-				for ln = lnum, 1, -1 do
-					local e = map[ln]
-					if e and e.kind == "hunk_header" and e.hunk_key then
-						key = e.hunk_key
+	utils.insert_if(
+		items,
+		from_action("ui.toggle_fold", {
+			desc = "Toggle hunk / thread fold",
+			opts = { nowait = true, silent = true },
+			callback = function()
+				local state = require("atlas.pulls.ui.panel.pr.tabs.comments.state")
+				local entry = cursor_entry()
+				if entry == nil then
+					return
+				end
+
+				local function root_of(comment)
+					if type(comment) ~= "table" or comment.id == nil then
+						return nil
+					end
+					local comments = state.comments
+					if type(comments) ~= "table" then
+						return comment
+					end
+					local by_id = {}
+					for _, c in ipairs(comments) do
+						by_id[tostring(c.id)] = c
+					end
+					local current = comment
+					while current and current.parent_id ~= nil do
+						local parent = by_id[tostring(current.parent_id)]
+						if parent == nil then
+							break
+						end
+						current = parent
+					end
+					return current
+				end
+
+				local kind = entry.entity_kind or entry.kind
+				if kind == "comment" or kind == "comment_summary" then
+					local root = entry.thread_root or root_of(entry.comment)
+					if root and root.id ~= nil then
+						state.toggle_thread(root.id)
+						refresh()
+						return
+					end
+				end
+
+				-- Otherwise fall back to hunk fold.
+				local key = entry.hunk_key
+				if key == nil then
+					local win = layout.win_id("detail")
+					local panel_state2 = require("atlas.pulls.ui.panel.pr.state")
+					local lnum = win and vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_cursor(win)[1] or 0
+					local map = panel_state2.line_map or {}
+					for ln = lnum, 1, -1 do
+						local e = map[ln]
+						if e and e.kind == "hunk_header" and e.hunk_key then
+							key = e.hunk_key
+							break
+						end
+					end
+				end
+				if key ~= nil then
+					state.collapsed_hunks[key] = not (state.collapsed_hunks[key] == true)
+					refresh()
+				end
+			end,
+		})
+	)
+	utils.insert_if(
+		items,
+		from_action("ui.toggle_all_folds", {
+			desc = "Toggle all hunk folds",
+			opts = { nowait = true, silent = true },
+			callback = function()
+				local state = require("atlas.pulls.ui.panel.pr.tabs.comments.state")
+				local comments = state.comments
+				if type(comments) ~= "table" then
+					return
+				end
+				local keys = {}
+				for _, c in ipairs(comments) do
+					if c.inline and c.inline_hunk then
+						local h = c.inline_hunk
+						table.insert(
+							keys,
+							string.format(
+								"%s|%s|%s",
+								c.inline.path,
+								tostring(h.new_start or 0),
+								tostring(h.old_start or 0)
+							)
+						)
+					end
+				end
+				if #keys == 0 then
+					return
+				end
+				local any_open = false
+				for _, k in ipairs(keys) do
+					if state.collapsed_hunks[k] ~= true then
+						any_open = true
 						break
 					end
 				end
-			end
-			if key ~= nil then
-				state.collapsed_hunks[key] = not (state.collapsed_hunks[key] == true)
+				for _, k in ipairs(keys) do
+					state.collapsed_hunks[k] = any_open
+				end
 				refresh()
-			end
-		end,
-	}))
-	utils.insert_if(items, from_action("ui.toggle_all_folds", {
-		desc = "Toggle all hunk folds",
-		opts = { nowait = true, silent = true },
-		callback = function()
-			local state = require("atlas.pulls.ui.panel.pr.tabs.comments.state")
-			local comments = state.comments
-			if type(comments) ~= "table" then
-				return
-			end
-			local keys = {}
-			for _, c in ipairs(comments) do
-				if c.inline and c.inline_hunk then
-					local h = c.inline_hunk
-					table.insert(
-						keys,
-						string.format("%s|%s|%s", c.inline.path, tostring(h.new_start or 0), tostring(h.old_start or 0))
-					)
-				end
-			end
-			if #keys == 0 then
-				return
-			end
-			local any_open = false
-			for _, k in ipairs(keys) do
-				if state.collapsed_hunks[k] ~= true then
-					any_open = true
-					break
-				end
-			end
-			for _, k in ipairs(keys) do
-				state.collapsed_hunks[k] = any_open
-			end
-			refresh()
-		end,
-	}))
-	utils.insert_if(items, from_action("pulls.next_hunk", {
-		desc = "Next hunk",
-		opts = { nowait = true, silent = true },
-		callback = function()
-			local win = layout.win_id("detail")
-			if win == nil or not vim.api.nvim_win_is_valid(win) then
-				return
-			end
-			local panel_state2 = require("atlas.pulls.ui.panel.pr.state")
-			local map = panel_state2.line_map or {}
-			local lnum = vim.api.nvim_win_get_cursor(win)[1]
-			local last = vim.api.nvim_buf_line_count(vim.api.nvim_win_get_buf(win))
-			for ln = lnum + 1, last do
-				local e = map[ln]
-				if e and e.kind == "hunk_header" then
-					pcall(vim.api.nvim_win_set_cursor, win, { ln, 0 })
+			end,
+		})
+	)
+	utils.insert_if(
+		items,
+		from_action("pulls.next_hunk", {
+			desc = "Next hunk",
+			opts = { nowait = true, silent = true },
+			callback = function()
+				local win = layout.win_id("detail")
+				if win == nil or not vim.api.nvim_win_is_valid(win) then
 					return
 				end
-			end
-		end,
-	}))
-	utils.insert_if(items, from_action("pulls.previous_hunk", {
-		desc = "Previous hunk",
-		opts = { nowait = true, silent = true },
-		callback = function()
-			local win = layout.win_id("detail")
-			if win == nil or not vim.api.nvim_win_is_valid(win) then
-				return
-			end
-			local panel_state2 = require("atlas.pulls.ui.panel.pr.state")
-			local map = panel_state2.line_map or {}
-			local lnum = vim.api.nvim_win_get_cursor(win)[1]
-			for ln = lnum - 1, 1, -1 do
-				local e = map[ln]
-				if e and e.kind == "hunk_header" then
-					pcall(vim.api.nvim_win_set_cursor, win, { ln, 0 })
+				local panel_state2 = require("atlas.pulls.ui.panel.pr.state")
+				local map = panel_state2.line_map or {}
+				local lnum = vim.api.nvim_win_get_cursor(win)[1]
+				local last = vim.api.nvim_buf_line_count(vim.api.nvim_win_get_buf(win))
+				for ln = lnum + 1, last do
+					local e = map[ln]
+					if e and e.kind == "hunk_header" then
+						pcall(vim.api.nvim_win_set_cursor, win, { ln, 0 })
+						return
+					end
+				end
+			end,
+		})
+	)
+	utils.insert_if(
+		items,
+		from_action("pulls.previous_hunk", {
+			desc = "Previous hunk",
+			opts = { nowait = true, silent = true },
+			callback = function()
+				local win = layout.win_id("detail")
+				if win == nil or not vim.api.nvim_win_is_valid(win) then
 					return
 				end
-			end
-		end,
-	}))
+				local panel_state2 = require("atlas.pulls.ui.panel.pr.state")
+				local map = panel_state2.line_map or {}
+				local lnum = vim.api.nvim_win_get_cursor(win)[1]
+				for ln = lnum - 1, 1, -1 do
+					local e = map[ln]
+					if e and e.kind == "hunk_header" then
+						pcall(vim.api.nvim_win_set_cursor, win, { ln, 0 })
+						return
+					end
+				end
+			end,
+		})
+	)
 
 	help.register("Panel", items, { index = 212, buffer = buf })
 end

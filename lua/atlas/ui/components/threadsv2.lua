@@ -30,6 +30,7 @@ local highlights = require("atlas.ui.shared.highlights")
 ---@field author_hl fun(item: AtlasThreadV2Item, author: string): string|nil                   Returns hl group for author
 ---@field additional_hl fun(item: AtlasThreadV2Item, additional: string): string|nil            Returns hl group for additional text
 ---@field content_hl fun(item: AtlasThreadV2Item, row: string, row_index: integer): table[]|nil Returns segments for content
+---@field right_text_hl fun(item: AtlasThreadV2Item, text: string): string|table[]|nil          Returns hl group or {start_col,end_col,hl_group}[] segments for right_text
 ---@field icon_hl_fn fun(item: AtlasThreadV2Item): string|nil                                  Override icon highlight
 
 ---@class AtlasThreadV2Span
@@ -233,7 +234,19 @@ local function render_header(lines, spans, line_map, item, depth, pfx, opts, wid
 		local needed = math.max(2, right_edge - display_so_far - display_rt)
 		parts[#parts + 1] = string.rep(" ", needed) .. right_text
 		local rt_byte_start = #content_so_far + needed
-		col_markers[#col_markers + 1] = { rt_byte_start, rt_byte_start + #right_text, "AtlasTextMuted" }
+		local hl = opts.right_text_hl and opts.right_text_hl(item, right_text) or nil
+		if type(hl) == "table" then
+			for _, seg in ipairs(hl) do
+				col_markers[#col_markers + 1] = {
+					rt_byte_start + (tonumber(seg.start_col) or seg[1] or 0),
+					rt_byte_start + (tonumber(seg.end_col) or seg[2] or 0),
+					tostring(seg.hl_group or seg[3] or "AtlasTextMuted"),
+				}
+			end
+		else
+			local group = type(hl) == "string" and hl or "AtlasTextMuted"
+			col_markers[#col_markers + 1] = { rt_byte_start, rt_byte_start + #right_text, group }
+		end
 	end
 
 	local full_line = pfx.meta_prefix .. table.concat(parts, "")
