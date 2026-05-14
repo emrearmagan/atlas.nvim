@@ -125,6 +125,7 @@ function M.normalize_mr(raw)
 		workspace = workspace,
 		repo = repo,
 		repo_full_name = repo_full_name,
+		is_subscribed = type(raw.subscribed) == "boolean" and raw.subscribed or nil,
 		_raw = {
 			iid = iid,
 			project_id = tonumber(raw.project_id),

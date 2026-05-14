@@ -875,6 +875,46 @@ local ACTIONS = {
 			end)
 		end,
 	},
+	{
+		id = "toggle_subscription",
+		label = "Toggle subscription",
+		is_available = function(ctx)
+			if not has_pr(ctx) or ctx.pr == nil then
+				return false, "No PR selected"
+			end
+			local raw = type(ctx.pr._raw) == "table" and ctx.pr._raw or {}
+			if tostring(raw.id or "") == "" then
+				return false, "Missing PR node id"
+			end
+			return true, nil
+		end,
+		run = function(ctx, done)
+			local pr = ctx.pr
+			if pr == nil then
+				done(nil, "No PR selected")
+				return
+			end
+			local raw = type(pr._raw) == "table" and pr._raw or {}
+			local node_id = tostring(raw.id or "")
+			local next_state = pr.is_subscribed == true and "UNSUBSCRIBED" or "SUBSCRIBED"
+			local gql =
+				"mutation($id: ID!, $state: SubscriptionState!) { updateSubscription(input: { subscribableId: $id, state: $state }) { subscribable { ... on PullRequest { viewerSubscription } } } }"
+			footer.notify("loading", pr.is_subscribed and "Unsubscribing..." or "Subscribing...")
+			cli.gh(
+				{ "api", "graphql", "-F", "id=" .. node_id, "-f", "state=" .. next_state, "-f", "query=" .. gql },
+				function(_, err)
+					if err then
+						footer.notify("error", tostring(err))
+						done(nil, tostring(err))
+						return
+					end
+					pr.is_subscribed = (next_state == "SUBSCRIBED")
+					footer.notify("success", pr.is_subscribed and "Subscribed" or "Unsubscribed", 1200)
+					done({ changed_pr = true, message = pr.is_subscribed and "Subscribed" or "Unsubscribed" }, nil)
+				end
+			)
+		end,
+	},
 }
 
 ---@param ctx GitHubActionContext

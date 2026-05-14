@@ -80,6 +80,43 @@ function M.show_details(pr, buf)
 	})
 end
 
+local PROVIDER_ACTIONS_MODULES = {
+	github = "atlas.pulls.providers.github.actions",
+	gitlab = "atlas.pulls.providers.gitlab.actions",
+	bitbucket = "atlas.pulls.providers.bitbucket.actions",
+}
+
+---@param pr PullRequest
+---@param action_id string
+---@param source "main"|"panel"|nil
+---@param on_done fun(result: PullsActionResult|nil, err: string|nil)|nil
+function M.run_action(pr, action_id, source, on_done)
+	local p = provider()
+	local mod_path = p and PROVIDER_ACTIONS_MODULES[p.id]
+	if not mod_path then
+		if on_done then
+			on_done(nil, "Provider does not support actions")
+		end
+		return
+	end
+	local ok, mod = pcall(require, mod_path)
+	if not ok or type(mod) ~= "table" or type(mod.run) ~= "function" then
+		if on_done then
+			on_done(nil, "Provider actions module unavailable")
+		end
+		return
+	end
+	mod.run(action_id, { pr = pr, source = source }, function(result, err)
+		if result ~= nil and result.changed_pr then
+			local controller = require("atlas.pulls.ui.main.controller")
+			controller.refresh_pr(pr)
+		end
+		if on_done then
+			on_done(result, err)
+		end
+	end)
+end
+
 ---@param pr PullRequest
 ---@param source "main"|"panel"|nil
 ---@param on_done fun(result: PullsActionResult|nil)|nil

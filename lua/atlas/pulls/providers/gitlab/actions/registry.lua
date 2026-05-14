@@ -5,6 +5,7 @@ local footer = require("atlas.ui.components.footer")
 local multi_select = require("atlas.ui.popups.multi_select")
 local mr_api = require("atlas.pulls.providers.gitlab.api.mergerequests")
 local users_api = require("atlas.pulls.providers.gitlab.api.users")
+local service = require("atlas.pulls.providers.gitlab.api.service")
 
 ---@param ctx table
 ---@return boolean
@@ -435,6 +436,47 @@ local ACTIONS = {
 						end)
 					end,
 				})
+			end)
+		end,
+	},
+	{
+		id = "toggle_subscription",
+		label = "Toggle subscription",
+		is_available = function(ctx)
+			if not has_pr(ctx) then
+				return false, "No MR selected"
+			end
+			local path = project_path(ctx.pr)
+			if path == "" then
+				return false, "Missing project path"
+			end
+			return true, nil
+		end,
+		run = function(ctx, done)
+			local pr = ctx.pr
+			local path = project_path(pr)
+			local raw = type(pr._raw) == "table" and pr._raw or {}
+			local iid = tonumber(raw.iid or pr.id)
+			if iid == nil then
+				done(nil, "Invalid MR identifier")
+				return
+			end
+			local action = pr.is_subscribed == true and "unsubscribe" or "subscribe"
+			local endpoint = string.format("/projects/%s/merge_requests/%d/%s", service.url_encode(path), iid, action)
+			footer.notify("loading", pr.is_subscribed and "Unsubscribing..." or "Subscribing...")
+			service.request("POST", endpoint, nil, function(result, err)
+				if err then
+					footer.notify("error", tostring(err))
+					done(nil, tostring(err))
+					return
+				end
+				local subscribed = type(result) == "table" and result.subscribed
+				if type(subscribed) ~= "boolean" then
+					subscribed = action == "subscribe"
+				end
+				pr.is_subscribed = subscribed == true
+				footer.notify("success", pr.is_subscribed and "Subscribed" or "Unsubscribed", 1200)
+				done({ changed_pr = true, message = pr.is_subscribed and "Subscribed" or "Unsubscribed" }, nil)
 			end)
 		end,
 	},

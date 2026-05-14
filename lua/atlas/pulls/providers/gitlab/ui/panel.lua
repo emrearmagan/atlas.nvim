@@ -158,6 +158,14 @@ function M.fetches(pr, refresh, opts)
 		end))
 	end
 
+	track_panel(mr_api.get_mr(pr, { force_refresh = force }, function(fresh, err)
+		if not err and type(fresh) == "table" then
+			pr.is_subscribed = fresh.is_subscribed
+			pr._raw = fresh._raw
+		end
+		refresh()
+	end))
+
 	local overview_state = require("atlas.pulls.ui.panel.pr.tabs.overview.state")
 	local checks = require("atlas.pulls.providers.gitlab.api.checks")
 	overview_state.builds = "loading"
