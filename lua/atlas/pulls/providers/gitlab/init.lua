@@ -7,6 +7,7 @@ local M = {
 	icon = icons.pulls_provider("gitlab", "provider"),
 	hl_group = "AtlasGitLabTheme",
 	panel = require("atlas.pulls.providers.gitlab.ui.panel"),
+	repo_panel = require("atlas.pulls.providers.gitlab.ui.repo_panel"),
 }
 
 function M.setup()
@@ -279,6 +280,38 @@ end
 function M.search()
 	local actions = require("atlas.pulls.providers.gitlab.actions")
 	actions.run("search", { source = "main" }, function() end)
+end
+
+---@param repo PullsRepo
+---@param opts PullsFetchOpts
+---@param on_done fun(details: PullsRepoDetails|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_repo_details(repo, opts, on_done)
+	return require("atlas.pulls.providers.gitlab.api.repositories").fetch_detail(repo, opts, on_done)
+end
+
+---@param repo PullsRepoDetails
+---@param opts PullsFetchOpts
+---@param on_done fun(branches: PullsRepoBranches|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_repo_branches(repo, opts, on_done)
+	return require("atlas.pulls.providers.gitlab.api.repositories").fetch_branches(repo, opts, on_done)
+end
+
+---@param repo PullsRepoDetails
+---@param opts PullsFetchOpts
+---@param on_done fun(tags: PullsRepoTags|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_repo_tags(repo, opts, on_done)
+	return require("atlas.pulls.providers.gitlab.api.repositories").fetch_tags(repo, opts, on_done)
+end
+
+---@param repo PullsRepoDetails
+---@param branch PullsRepoBranch
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.delete_repo_branch(repo, branch, on_done)
+	return require("atlas.pulls.providers.gitlab.api.repositories").delete_branch(repo, branch, on_done)
 end
 
 ---@param opts { repo_slug: string, repo_root: string|nil, head: string, base: string }
