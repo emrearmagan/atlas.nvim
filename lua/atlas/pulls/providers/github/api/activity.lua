@@ -51,13 +51,11 @@ local function normalize_event(item)
 	elseif event == "committed" then
 		local author = type(item.author) == "table" and item.author or {}
 		local author_name = tostring(author.name or "")
-		local msg = tostring(item.message or ""):match("([^\n]+)") or ""
-		local sha = tostring(item.sha or ""):sub(1, 8)
 		return {
-			kind = "update",
+			kind = "committed",
 			actor = actor_from_login(author_name),
 			date = tostring(author.date or date),
-			content_raw = sha ~= "" and string.format("%s %s", sha, msg) or msg,
+			content_raw = "1 commit",
 		}
 	elseif event == "base_ref_force_pushed" then
 		return { kind = "update", actor = actor, date = date, content_raw = "base branch force pushed" }
@@ -174,6 +172,34 @@ function M.fetch_conversation(pr, opts, on_done)
 					end
 				end
 			end
+
+			-- Squash consecutive "committed" entries into "added N commits"
+			local squashed = {}
+			local run_start, run_count = nil, 0
+			local function flush()
+				if run_start ~= nil then
+					run_start.content_raw = string.format("added %d commit%s", run_count, run_count == 1 and "" or "s")
+					run_start.kind = "update"
+					table.insert(squashed, run_start)
+					run_start, run_count = nil, 0
+				end
+			end
+			for _, e in ipairs(conversation.events) do
+				if e.kind == "committed" then
+					if run_start == nil then
+						run_start = e
+						run_count = 1
+					else
+						run_count = run_count + 1
+						run_start.date = e.date or run_start.date
+					end
+				else
+					flush()
+					table.insert(squashed, e)
+				end
+			end
+			flush()
+			conversation.events = squashed
 
 			on_done(conversation, nil)
 		end
