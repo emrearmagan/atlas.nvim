@@ -13,6 +13,12 @@ function M.tabs()
 			mod = require("atlas.pulls.ui.panel.repo.tabs.overview"),
 		},
 		{
+			key = "issues",
+			label = "Issues",
+			icon = icons.issues("issue"),
+			mod = require("atlas.pulls.providers.gitlab.ui.repo_panel.issues"),
+		},
+		{
 			key = "branches",
 			label = "Branches",
 			icon = icons.pulls("branch"),
