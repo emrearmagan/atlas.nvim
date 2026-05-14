@@ -196,9 +196,9 @@ function M.build_footer_items(groups, current_user)
 			hl_group = "AtlasFooterText",
 		})
 	end
-	for _, name in ipairs(repo_names) do
+	if #repo_names > 0 then
 		table.insert(items, {
-			text = string.format("%s %s", REPO_ICON, name),
+			text = string.format("%s %s", REPO_ICON, table.concat(repo_names, ", ")),
 			hl_group = "AtlasFooterText",
 		})
 	end

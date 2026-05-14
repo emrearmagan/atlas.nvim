@@ -261,7 +261,14 @@ function M.render(opts)
 	local left_line, left_hls = build_segments_line(left_segments, 0)
 	local right_line, right_hls = build_segments_line(right_segments, 0)
 
-	local gap = width - ui_utils.text_width(left_line) - ui_utils.text_width(right_line)
+	local right_width = ui_utils.text_width(right_line)
+	local max_left = math.max(0, width - right_width - 2)
+	if ui_utils.text_width(left_line) > max_left then
+		local trimmed = vim.fn.strcharpart(left_line, 0, math.max(0, max_left - 1)) .. ".."
+		left_line = trimmed
+	end
+
+	local gap = width - ui_utils.text_width(left_line) - right_width
 	if gap < 1 then
 		gap = 1
 	end
