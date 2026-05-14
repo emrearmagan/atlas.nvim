@@ -117,6 +117,116 @@ function M.fetch_activity(pr, opts, on_done)
 end
 
 ---@param pr PullRequest
+---@param opts { force_refresh: boolean|nil }|nil
+---@param on_done fun(result: { comments: PullsComment[], events: PullsActivityEntry[] }|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_conversation(pr, opts, on_done)
+	local activity_api = require("atlas.pulls.providers.gitlab.api.activity")
+	local comments_api = require("atlas.pulls.providers.gitlab.api.comments")
+
+	local pending = 2
+	local events_result, comments_result
+	local first_err
+	local handles = {}
+	local cancelled = false
+
+	local function finish()
+		if cancelled then
+			return
+		end
+		pending = pending - 1
+		if pending > 0 then
+			return
+		end
+		if events_result == nil and comments_result == nil then
+			on_done(nil, first_err or "Failed to fetch conversation")
+			return
+		end
+		on_done({
+			comments = comments_result or {},
+			events = events_result or {},
+		}, nil)
+	end
+
+	local function track(h)
+		if h then
+			table.insert(handles, h)
+		end
+	end
+
+	track(activity_api.fetch_activity(pr, opts, function(entries, err)
+		if err then
+			first_err = first_err or err
+		else
+			events_result = entries or {}
+		end
+		finish()
+	end))
+
+	track(comments_api.fetch_general_comments(pr, opts, function(comments, err)
+		if err then
+			first_err = first_err or err
+		else
+			comments_result = comments or {}
+		end
+		finish()
+	end))
+
+	return {
+		cancel = function()
+			cancelled = true
+			for _, h in ipairs(handles) do
+				if h and h.cancel then
+					h.cancel()
+				end
+			end
+		end,
+	}
+end
+
+---@param pr PullRequest
+---@param opts { force_refresh?: boolean }|nil
+---@param on_done fun(comments: PullsComment[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_comments(pr, opts, on_done)
+	return require("atlas.pulls.providers.gitlab.api.comments").fetch_comments(pr, opts, on_done)
+end
+
+---@param pr PullRequest
+---@param content string
+---@param opts PullsAddCommentOpts|nil
+---@param on_done fun(comment: PullsComment|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.add_comment(pr, content, opts, on_done)
+	return require("atlas.pulls.providers.gitlab.api.comments").add_comment(pr, content, opts, on_done)
+end
+
+---@param pr PullRequest
+---@param parent PullsComment
+---@param content string
+---@param on_done fun(comment: PullsComment|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.reply_comment(pr, parent, content, on_done)
+	return require("atlas.pulls.providers.gitlab.api.comments").reply_comment(pr, parent, content, on_done)
+end
+
+---@param pr PullRequest
+---@param comment PullsComment
+---@param on_done fun(comment: PullsComment|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.edit_comment(pr, comment, on_done)
+	return require("atlas.pulls.providers.gitlab.api.comments").edit_comment(pr, comment, on_done)
+end
+
+---@param pr PullRequest
+---@param target PullsComment
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.delete_comment(pr, target, on_done)
+	return require("atlas.pulls.providers.gitlab.api.comments").delete_comment(pr, target, on_done)
+end
+
+---@param pr PullRequest
 ---@param opts { force_refresh?: boolean }|nil
 ---@param on_done fun(commits: PullsCommit[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil

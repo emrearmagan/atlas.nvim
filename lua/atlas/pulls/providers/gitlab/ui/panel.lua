@@ -179,6 +179,14 @@ function M.is_loading(_pr, active_tab)
 		local activity_state = require("atlas.pulls.ui.panel.pr.tabs.activity.state")
 		return activity_state.any_loading()
 	end
+	if active_tab == "conversation" then
+		local conversation_state = require("atlas.pulls.ui.panel.pr.tabs.conversation.state")
+		return conversation_state.any_loading()
+	end
+	if active_tab == "comments" then
+		local comments_state = require("atlas.pulls.ui.panel.pr.tabs.comments.state")
+		return comments_state.any_loading()
+	end
 	if active_tab == "commits" then
 		local commits_state = require("atlas.pulls.ui.panel.pr.tabs.commits.state")
 		return commits_state.any_loading()
@@ -199,6 +207,18 @@ function M.tabs()
 			label = "Overview",
 			icon = icons.general("overview"),
 			mod = require("atlas.pulls.ui.panel.pr.tabs.overview"),
+		},
+		{
+			key = "conversation",
+			label = "Conversation",
+			icon = icons.general("conversation"),
+			mod = require("atlas.pulls.ui.panel.pr.tabs.conversation"),
+		},
+		{
+			key = "comments",
+			label = "Comments",
+			icon = icons.general("comment"),
+			mod = require("atlas.pulls.ui.panel.pr.tabs.comments"),
 		},
 		{
 			key = "activity",

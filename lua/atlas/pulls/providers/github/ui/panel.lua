@@ -262,7 +262,7 @@ end
 function M.is_loading(pr, active_tab) ---@diagnostic disable-line: unused-local
 	local overview_state = require("atlas.pulls.ui.panel.pr.tabs.overview.state")
 	local activity_state = require("atlas.pulls.ui.panel.pr.tabs.activity.state")
-	local conversation_state = require("atlas.pulls.providers.github.ui.conversation.state")
+	local conversation_state = require("atlas.pulls.ui.panel.pr.tabs.conversation.state")
 	local comments_state = require("atlas.pulls.ui.panel.pr.tabs.comments.state")
 	local commits_state = require("atlas.pulls.ui.panel.pr.tabs.commits.state")
 	local files_state = require("atlas.pulls.ui.panel.pr.tabs.files.state")
@@ -303,7 +303,7 @@ function M.tabs()
 			key = "conversation",
 			label = "Conversation",
 			icon = icons.general("conversation"),
-			mod = require("atlas.pulls.providers.github.ui.conversation"),
+			mod = require("atlas.pulls.ui.panel.pr.tabs.conversation"),
 		},
 		{
 			key = "comments",
