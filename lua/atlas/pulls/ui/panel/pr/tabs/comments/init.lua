@@ -7,6 +7,26 @@ local renderer = require("atlas.pulls.ui.panel.pr.tabs.comments.renderer")
 local state = require("atlas.pulls.ui.panel.pr.tabs.comments.state")
 local keymaps = require("atlas.pulls.ui.panel.pr.tabs.comments.keymaps")
 
+local AUTHOR_COMPLETION_MODULES = {
+	github = "atlas.pulls.providers.github.completion.author",
+	gitlab = "atlas.pulls.providers.gitlab.completion.author",
+	bitbucket = "atlas.pulls.providers.bitbucket.completion.author",
+}
+
+---@return AtlasMarkdownCompletionProvider|nil
+local function author_completion()
+	local provider = require("atlas.pulls.state").provider
+	local mod_path = provider and AUTHOR_COMPLETION_MODULES[provider.id]
+	if not mod_path then
+		return nil
+	end
+	local ok, mod = pcall(require, mod_path)
+	if not ok or type(mod) ~= "table" or type(mod.build_completion) ~= "function" then
+		return nil
+	end
+	return mod.build_completion()
+end
+
 ---@type { cancel: fun() }[]
 local in_flight = {}
 
@@ -41,20 +61,6 @@ local function is_own_comment(comment)
 	return author_id ~= "" and user_id ~= "" and author_id == user_id
 end
 
----@return AtlasMarkdownCompletionProvider|nil
-local function build_completion()
-	local provider = require("atlas.pulls.state").provider
-	local provider_id = provider and tostring(provider.id or "") or ""
-	if provider_id == "" then
-		return nil
-	end
-	local ok, mod = pcall(require, string.format("atlas.pulls.providers.%s.completion.author", provider_id))
-	if not ok or type(mod) ~= "table" or type(mod.build_completion) ~= "function" then
-		return nil
-	end
-	return mod.build_completion()
-end
-
 ---@param pr PullRequest
 ---@param opts { key: string, title: string, initial_text: string|nil, on_save: fun(text: string|nil) }
 local function open_md_editor(pr, opts)
@@ -64,7 +70,7 @@ local function open_md_editor(pr, opts)
 		width_ratio = 0.5,
 		height_ratio = 0.18,
 		initial_text = opts.initial_text,
-		completion = build_completion(),
+		completion = author_completion(),
 		on_save = opts.on_save,
 	})
 end
