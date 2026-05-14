@@ -146,6 +146,29 @@ function M.search(on_done)
 	end)
 end
 
+
+---@param opts { force_load: boolean|nil }|nil
+---@param on_done fun(notifications: AtlasNotification[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_notifications(opts, on_done)
+	local notifications = require("atlas.pulls.providers.gitlab.api.notifications")
+	return notifications.fetch(opts or {}, on_done)
+end
+
+---@param id string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.mark_notification_read(id, on_done)
+	return require("atlas.pulls.providers.gitlab.api.notifications").mark_read(id, on_done)
+end
+
+---@param id string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.mark_notification_done(id, on_done)
+	return require("atlas.pulls.providers.gitlab.api.notifications").mark_done(id, on_done)
+end
+
 ---@param opts GitLabCreateIssueOpts
 ---@param on_done fun(result: GitLabCreateIssueResult|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
