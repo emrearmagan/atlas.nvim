@@ -1,6 +1,6 @@
 local M = {}
 
-local editor = require("atlas.ui.popups.editor")
+local form = require("atlas.ui.popups.form")
 local spinner = require("atlas.ui.popups.spinner")
 local multi_select = require("atlas.ui.popups.multi_select")
 local pulls_helper = require("atlas.pulls.ui.main.helper")
@@ -209,13 +209,13 @@ end
 
 ---@param issue_state CreateIssueState
 local function render_meta(issue_state)
-	editor.render_meta(issue_state, meta_rows(issue_state))
+	form.render_meta(issue_state, meta_rows(issue_state))
 end
 
 ---@param issue_state CreateIssueState
 local function close(issue_state)
 	spinner.stop()
-	editor.close(issue_state.layout)
+	form.close(issue_state.layout)
 end
 
 ---@param issue_state CreateIssueState
@@ -596,7 +596,7 @@ function M.open(opts)
 		on_done = opts.on_done,
 	}
 
-	editor.open(issue_state, {
+	form.open(issue_state, {
 		title = " Create Issue ",
 		min_height = 22,
 		meta_height = 3,

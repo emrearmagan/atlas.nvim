@@ -7,7 +7,7 @@ local highlights = require("atlas.ui.shared.highlights")
 local spinner = require("atlas.ui.components.spinner")
 local threads = require("atlas.ui.components.threadsv2")
 local footer = require("atlas.ui.components.footer")
-local md_editor = require("atlas.ui.popups.markdown_editor")
+local md_editor = require("atlas.ui.popups.editor")
 local state = require("atlas.issues.ui.panel.issue.tabs.comments.state")
 local keymaps = require("atlas.issues.ui.panel.issue.tabs.comments.keymaps")
 

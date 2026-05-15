@@ -1,6 +1,6 @@
 local M = {}
 
-local renderer = require("atlas.ui.popups.editor.renderer")
+local renderer = require("atlas.ui.popups.form.renderer")
 
 local function valid_win(win)
 	return win ~= nil and vim.api.nvim_win_is_valid(win)
@@ -327,5 +327,7 @@ function M.open(state, opts)
 	setup_default_keymaps(state, opts)
 	setup_custom_keymaps(state, opts.keymaps)
 end
+
+M.render_meta = renderer.render_meta
 
 return M
