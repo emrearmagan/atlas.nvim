@@ -24,7 +24,7 @@ function M.get_user(on_done)
 		end
 		on_done(user, nil)
 	end, {
-		action = "issues fetch user",
+		action = "Issues fetch user",
 	})
 end
 

@@ -89,7 +89,7 @@ function M.list_mrs(view, opts, on_done)
 		service.set_cache(cache_key, groups)
 		on_done(groups, nil)
 	end, {
-		action = "list MRs",
+		action = "List MRs",
 		endpoint = endpoint,
 	})
 end
@@ -133,7 +133,7 @@ function M.get_project_labels(project_path, opts, on_done)
 		service.set_memory_cache(cache_key, by_name)
 		on_done(by_name, nil)
 	end, {
-		action = "fetch project labels",
+		action = "Fetch project labels",
 		project_path = project_path,
 	})
 end
@@ -173,7 +173,7 @@ function M.get_mr(pr, opts, on_done)
 		end
 		on_done(mr, nil)
 	end, {
-		action = "get MR",
+		action = "Get MR",
 		project_path = path,
 		iid = iid,
 	})
@@ -238,7 +238,7 @@ function M.update_mr(pr, payload, on_done)
 		bust_caches(pr)
 		on_done(type(result) == "table" and mapper.to_pull_request(result) or nil, nil)
 	end, {
-		action = "update MR",
+		action = "Update MR",
 		project_path = path,
 		iid = iid,
 	})
@@ -522,7 +522,7 @@ function M.create_mr(opts, on_done)
 			url = (mr and mr.link and mr.link.html) or (type(result.web_url) == "string" and result.web_url or nil),
 		}, nil)
 	end, {
-		action = "create MR",
+		action = "Create MR",
 		path = path,
 		source = source,
 		target = target,

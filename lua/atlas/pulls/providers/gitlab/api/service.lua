@@ -152,7 +152,9 @@ function M.graphql(query, variables, on_done, ctx)
 	local payload = vim.fn.json_encode({ query = query, variables = variables or vim.empty_dict() })
 
 	local log = vim.tbl_extend("keep", { kind = "graphql", variables = variables }, ctx or {})
-	logger.loginfo("GitLab pulls graphql", log)
+	local message = log.action or "GitLab pulls graphql"
+	log.action = nil
+	logger.loginfo(message, log)
 
 	return http.curl_request("POST", url, headers, payload, function(result, err)
 		if err then
@@ -202,7 +204,9 @@ function M.request(method, endpoint, data, on_done, ctx)
 	end
 
 	local log = vim.tbl_extend("keep", { method = method, endpoint = endpoint }, ctx or {})
-	logger.loginfo("GitLab pulls request", log)
+	local message = log.action or "GitLab pulls request"
+	log.action = nil
+	logger.loginfo(message, log)
 
 	return http.curl_request(method, url, headers, payload, function(result, err)
 		if err then

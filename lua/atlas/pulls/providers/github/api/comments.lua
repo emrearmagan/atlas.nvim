@@ -132,7 +132,7 @@ function M.fetch_comments(pr, _opts, on_done) ---@diagnostic disable-line: unuse
 		end)
 		on_done(out, nil)
 	end, {
-		action = "fetch comments",
+		action = "Fetch comments",
 		repo = pr.repo_full_name,
 		number = pr.id,
 	})
@@ -189,7 +189,7 @@ function M.add_comment(pr, content, opts, on_done)
 			end
 			on_done(mapper.to_comment(result), nil)
 		end, {
-			action = "add comment",
+			action = "Add comment",
 			repo = pr.repo_full_name,
 			number = pr.id,
 			inline = true,
@@ -209,7 +209,7 @@ function M.add_comment(pr, content, opts, on_done)
 			on_done(mapper.to_comment(result), nil)
 		end,
 		{
-			action = "add comment",
+			action = "Add comment",
 			repo = pr.repo_full_name,
 			number = pr.id,
 			inline = false,
@@ -246,7 +246,7 @@ function M.edit_comment(pr, comment, on_done)
 				created_on = comment.created_on or pr.created_on or "",
 			}, nil)
 		end, {
-			action = "edit comment",
+			action = "Edit comment",
 			repo = pr.repo_full_name,
 			number = pr.id,
 			comment_id = comment.id,
@@ -264,7 +264,7 @@ function M.edit_comment(pr, comment, on_done)
 		end
 		on_done(mapper.to_comment(result), nil)
 	end, {
-		action = "edit comment",
+		action = "Edit comment",
 		repo = pr.repo_full_name,
 		number = pr.id,
 		comment_id = comment.id,
@@ -302,7 +302,7 @@ function M.delete_comment(pr, target, on_done)
 		end
 		on_done(true, nil)
 	end, {
-		action = "delete comment",
+		action = "Delete comment",
 		repo = pr.repo_full_name,
 		number = pr.id,
 		comment_id = target.id,
@@ -336,7 +336,7 @@ function M.reply_comment(pr, parent, content, on_done)
 				on_done(mapper.to_comment(result), nil)
 			end,
 			{
-				action = "reply comment",
+				action = "Reply comment",
 				repo = pr.repo_full_name,
 				number = pr.id,
 				parent_id = parent.id,

@@ -29,7 +29,7 @@ function M.get_transitions(issue_key, callback)
 
 		callback(transitions, nil)
 	end, {
-		action = "fetch transitions",
+		action = "Fetch transitions",
 		issue_key = issue_key,
 	})
 end
@@ -52,7 +52,7 @@ function M.transition_issue(issue_key, transition_id, callback)
 		end
 		callback(true, nil)
 	end, {
-		action = "transition issue",
+		action = "Transition issue",
 		issue_key = issue_key,
 		transition_id = id,
 	})

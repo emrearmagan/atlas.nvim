@@ -95,7 +95,7 @@ function M.get_projects(opts, callback)
 			local next_start = tonumber(result.startAt) or start_at
 			fetch_page(next_start + max_results)
 		end, {
-			action = "fetch projects",
+			action = "Fetch projects",
 			status = status,
 			query = query,
 			max_results = max_results,

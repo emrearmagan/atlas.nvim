@@ -38,7 +38,7 @@ function M.get_comments_page(issue_key, start_at, max_results, callback, opts)
 		service.set_memory_cache(cache_key, comments, PANEL_CACHE_TTL)
 		callback(comments, nil)
 	end, {
-		action = "fetch comments page",
+		action = "Fetch comments page",
 		issue_key = issue_key,
 		start_at = start,
 		max_results = size,
@@ -87,7 +87,7 @@ function M.add_comment(issue_key, comment, opts, callback)
 		local comments = normalizer.to_comments_list({ comments = { result } }, issue_key)
 		callback(comments[1], nil)
 	end, {
-		action = "add comment",
+		action = "Add comment",
 		issue_key = issue_key,
 	})
 end
@@ -126,7 +126,7 @@ function M.edit_comment(issue_key, comment_id, comment, callback)
 		local comments = normalizer.to_comments_list({ comments = { result } }, issue_key)
 		callback(comments[1], nil)
 	end, {
-		action = "edit comment",
+		action = "Edit comment",
 		issue_key = issue_key,
 		comment_id = id,
 	})
@@ -153,7 +153,7 @@ function M.delete_comment(issue_key, comment_id, callback)
 		service.clear_memory_cache()
 		callback(true, nil)
 	end, {
-		action = "delete comment",
+		action = "Delete comment",
 		issue_key = issue_key,
 		comment_id = id,
 	})

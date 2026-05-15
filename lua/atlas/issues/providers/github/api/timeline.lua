@@ -53,7 +53,7 @@ function M.list_conversation(key, on_done, opts)
 			on_done(conversation, nil)
 		end,
 		{
-			action = "fetch issue conversation timeline",
+			action = "Fetch issue conversation timeline",
 			slug = slug,
 			number = number,
 		}

@@ -206,7 +206,7 @@ function M.get_issue(key, on_done, opts)
 		end
 		on_done(issue, nil)
 	end, {
-		action = "fetch issue",
+		action = "Fetch issue",
 		slug = slug,
 		number = number,
 	})
@@ -232,7 +232,7 @@ function M.set_state(key, state, on_done)
 		cli.delete_cache(string.format("github_issues:get:%s#%d", slug, number))
 		on_done(true, nil)
 	end, {
-		action = "issue state change",
+		action = "Issue state change",
 		slug = slug,
 		number = number,
 		state = state,
@@ -286,7 +286,7 @@ end
 ---@return { cancel: fun() }|nil
 function M.update_assignees(key, diff, on_done)
 	return edit_issue_diff(key, diff, "--add-assignee", "--remove-assignee", on_done, {
-		action = "update issue assignees",
+		action = "Update issue assignees",
 		key = key,
 		add = diff and diff.add,
 		remove = diff and diff.remove,
@@ -299,7 +299,7 @@ end
 ---@return { cancel: fun() }|nil
 function M.update_labels(key, diff, on_done)
 	return edit_issue_diff(key, diff, "--add-label", "--remove-label", on_done, {
-		action = "update issue labels",
+		action = "Update issue labels",
 		key = key,
 		add = diff and diff.add,
 		remove = diff and diff.remove,
@@ -341,7 +341,7 @@ function M.list_labels(slug, on_done)
 		end
 		on_done(list, nil)
 	end, {
-		action = "fetch repo labels",
+		action = "Fetch repo labels",
 		slug = slug,
 	})
 end
@@ -378,7 +378,7 @@ function M.list_assignees(slug, on_done)
 		end
 		on_done(list, nil)
 	end, {
-		action = "fetch repo assignees",
+		action = "Fetch repo assignees",
 		slug = slug,
 	})
 end
@@ -428,7 +428,7 @@ function M.list_milestones(slug, on_done)
 		end
 		on_done(list, nil)
 	end, {
-		action = "fetch repo milestones",
+		action = "Fetch repo milestones",
 		slug = slug,
 	})
 end
@@ -513,7 +513,7 @@ function M.create_issue(opts, on_done)
 
 		on_done({ number = number, url = url }, nil)
 	end, {
-		action = "create issue",
+		action = "Create issue",
 		slug = slug,
 		labels = opts.labels,
 		assignees = opts.assignees,

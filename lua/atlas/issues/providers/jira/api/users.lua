@@ -36,7 +36,7 @@ function M.get_myself(callback)
 		cache.set(cache_key, user, service.cache_ttl())
 		callback(user, nil)
 	end, {
-		action = "fetch current user",
+		action = "Fetch current user",
 	})
 end
 
@@ -83,7 +83,7 @@ function M.get_assignable_users(opts, query, callback)
 
 		callback(users, nil)
 	end, {
-		action = "fetch assignable users",
+		action = "Fetch assignable users",
 		issue_key = issue_key,
 		project = project,
 		query = q,
@@ -164,7 +164,7 @@ function M.get_permissions_bulk(opts, callback)
 
 		callback(permissions, nil)
 	end, {
-		action = "fetch bulk permissions",
+		action = "Fetch bulk permissions",
 		permissions = permissions_list,
 		project_count = #project_ids,
 		issue_count = #issue_ids,
@@ -198,7 +198,7 @@ function M.assign_issue(issue_key, account_id, callback)
 
 		callback(true, nil)
 	end, {
-		action = "assign issue",
+		action = "Assign issue",
 		issue_key = issue_key,
 		unassign = normalized_account_id == nil,
 	})
@@ -236,7 +236,7 @@ function M.change_reporter(issue_key, account_id, callback)
 
 		callback(true, nil)
 	end, {
-		action = "change reporter",
+		action = "Change reporter",
 		issue_key = issue_key,
 	})
 end

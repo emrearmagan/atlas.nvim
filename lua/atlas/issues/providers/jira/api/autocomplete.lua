@@ -131,7 +131,7 @@ function M.get_data(on_done, opts)
 		cache.set(CACHE_KEY, normalized, service.cache_ttl())
 		on_done(normalized, nil)
 	end, {
-		action = "fetch jql autocomplete data",
+		action = "Fetch jql autocomplete data",
 	})
 end
 

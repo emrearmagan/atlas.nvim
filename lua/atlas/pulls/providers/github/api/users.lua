@@ -28,7 +28,7 @@ function M.fetch_user(on_done, opts)
 		cli.set_cache(cache_key, user)
 		on_done(user, nil)
 	end, {
-		action = "fetch current user",
+		action = "Fetch current user",
 	})
 end
 

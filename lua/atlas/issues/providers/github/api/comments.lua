@@ -36,7 +36,7 @@ function M.list(key, on_done, opts)
 			on_done(comments, nil)
 		end,
 		{
-			action = "fetch issue comments",
+			action = "Fetch issue comments",
 			slug = slug,
 			number = number,
 		}
@@ -72,7 +72,7 @@ function M.add(key, body, on_done)
 			on_done(normalizer.to_comment(result), nil)
 		end,
 		{
-			action = "add issue comment",
+			action = "Add issue comment",
 			slug = slug,
 			number = number,
 		}
@@ -112,7 +112,7 @@ function M.edit(key, comment_id, body, on_done)
 			on_done(normalizer.to_comment(result), nil)
 		end,
 		{
-			action = "edit issue comment",
+			action = "Edit issue comment",
 			slug = slug,
 			comment_id = comment_id,
 		}
@@ -146,7 +146,7 @@ function M.delete(key, comment_id, on_done)
 			on_done(true, nil)
 		end,
 		{
-			action = "delete issue comment",
+			action = "Delete issue comment",
 			slug = slug,
 			comment_id = comment_id,
 		}

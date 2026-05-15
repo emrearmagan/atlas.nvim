@@ -89,7 +89,7 @@ function M.search_issues(jql, on_done, opts)
 		})
 		on_done(page, nil)
 	end, {
-		action = "search issues",
+		action = "Search issues",
 		jql = jql,
 	})
 end
@@ -145,7 +145,7 @@ function M.search_issue(query, on_done, opts)
 		service.set_memory_cache(cache_key, items)
 		on_done(items, nil)
 	end, {
-		action = "issue picker search",
+		action = "Issue picker search",
 		query = q,
 	})
 end
@@ -169,7 +169,7 @@ function M.get_issue(issue_key, callback)
 
 		callback(normalizer.to_issue(result, story_points_field()), nil)
 	end, {
-		action = "fetch issue",
+		action = "Fetch issue",
 		issue_key = issue_key,
 	})
 end
@@ -211,7 +211,7 @@ function M.get_issue_history_page(issue_key, start_at, max_results, on_done, opt
 		service.set_memory_cache(cache_key, page, CACHE_TTL)
 		on_done(page, nil)
 	end, {
-		action = "fetch issue history page",
+		action = "Fetch issue history page",
 		issue_key = issue_key,
 		start_at = start,
 		max_results = size,
@@ -296,7 +296,7 @@ function M.get_issue_detail(issue_key, on_done, opts)
 		service.set_memory_cache(cache_key, detail, CACHE_TTL)
 		on_done(detail, nil)
 	end, {
-		action = "fetch issue detail",
+		action = "Fetch issue detail",
 		issue_key = issue_key,
 		fields = fields,
 	})
@@ -350,7 +350,7 @@ function M.get_custom_fields(issue_key, fields, on_done, opts)
 		service.set_memory_cache(cache_key, values, CACHE_TTL)
 		on_done(values, nil)
 	end, {
-		action = "fetch custom fields",
+		action = "Fetch custom fields",
 		issue_key = issue_key,
 		fields = fields,
 	})
@@ -414,7 +414,7 @@ function M.create_issue(fields, callback)
 			self = result.self,
 		}, nil)
 	end, {
-		action = "create issue",
+		action = "Create issue",
 		summary = fields.summary,
 	})
 end
@@ -449,7 +449,7 @@ function M.update_issue(issue_key, fields, callback)
 
 		callback(true, nil)
 	end, {
-		action = "update issue",
+		action = "Update issue",
 		issue_key = issue_key,
 	})
 end
@@ -477,7 +477,7 @@ function M.delete_issue(issue_key, callback)
 
 		callback(true, nil)
 	end, {
-		action = "delete issue",
+		action = "Delete issue",
 		issue_key = issue_key,
 	})
 end
@@ -531,7 +531,7 @@ function M.get_create_meta(project_key, callback)
 
 		callback(issue_types, nil)
 	end, {
-		action = "fetch create metadata",
+		action = "Fetch create metadata",
 		project_key = project_key,
 	})
 end

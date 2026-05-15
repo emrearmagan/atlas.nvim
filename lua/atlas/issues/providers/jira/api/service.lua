@@ -116,7 +116,9 @@ function M.request(method, endpoint, data, on_done, ctx)
 	end
 
 	local log = vim.tbl_extend("keep", { method = method, endpoint = endpoint }, ctx or {})
-	logger.loginfo("Jira request", log)
+	local message = log.action or "Jira request"
+	log.action = nil
+	logger.loginfo(message, log)
 	return http.curl_request(method, url, headers, payload, function(result, err)
 		if err then
 			logger.logerror("Jira request failed", {

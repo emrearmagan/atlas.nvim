@@ -99,7 +99,7 @@ function M.search_prs(search, on_done, opts)
 		logger.loginfo("GitHub GraphQL search complete", { count = #prs, groups = #groups })
 		on_done(groups, nil)
 	end, {
-		action = "search PRs",
+		action = "Search PRs",
 		search = search,
 		limit = limit,
 	})
@@ -154,7 +154,7 @@ function M.get_pr(owner, repo, number, on_done, opts)
 		cli.set_mem(cache_key, pr)
 		on_done(pr, nil)
 	end, {
-		action = "fetch PR",
+		action = "Fetch PR",
 		repo = repo_slug,
 		number = number,
 	})
@@ -201,7 +201,7 @@ function M.get_description(pr, opts, on_done)
 		cli.set_mem(cache_key, body)
 		on_done(body, nil)
 	end, {
-		action = "fetch PR description",
+		action = "Fetch PR description",
 		repo = repo_slug,
 		number = pr.id,
 	})
@@ -299,7 +299,7 @@ function M.get_reviewers(pr, opts, on_done)
 		cli.set_mem(cache_key, reviewers)
 		on_done(reviewers, nil)
 	end, {
-		action = "fetch PR reviewers",
+		action = "Fetch PR reviewers",
 		repo = repo_slug,
 		number = pr.id,
 	})
@@ -366,7 +366,7 @@ function M.get_diffstat(pr, opts, on_done)
 		cli.set_mem(cache_key, entries)
 		on_done(entries, nil)
 	end, {
-		action = "fetch PR diffstat",
+		action = "Fetch PR diffstat",
 		repo = repo_slug,
 		number = pr.id,
 	})
@@ -428,7 +428,7 @@ function M.create_pr(opts, on_done)
 
 		on_done({ id = id, url = url, message = "PR created" }, nil)
 	end, {
-		action = "create PR",
+		action = "Create PR",
 		slug = slug,
 		head = opts.head,
 		base = opts.base,
@@ -471,7 +471,7 @@ function M.list_labels(slug, on_done)
 		end
 		on_done(list, nil)
 	end, {
-		action = "list labels",
+		action = "List labels",
 		repo = slug,
 	})
 end
@@ -506,7 +506,7 @@ function M.update_labels(slug, number, diff, on_done)
 		end
 		on_done(true, nil)
 	end, {
-		action = "update PR labels",
+		action = "Update PR labels",
 		repo = slug,
 		number = number,
 		added = #adds,

@@ -128,7 +128,9 @@ function M.request(method, url, headers, body, callback, ctx)
 	end
 
 	local log = vim.tbl_extend("keep", { method = method, endpoint = full_url }, ctx or {})
-	logger.loginfo("Bitbucket request", log)
+	local message = log.action or "Bitbucket request"
+	log.action = nil
+	logger.loginfo(message, log)
 
 	return http.curl_request(method, full_url, request_headers, body, function(result, err)
 		if err then
@@ -191,7 +193,9 @@ function M.request_text(method, url, headers, body, callback, ctx)
 	end
 
 	local log = vim.tbl_extend("keep", { method = method, endpoint = full_url }, ctx or {})
-	logger.loginfo("Bitbucket request", log)
+	local message = log.action or "Bitbucket request"
+	log.action = nil
+	logger.loginfo(message, log)
 
 	return http.curl_text_request(method, full_url, request_headers, body, function(text, err)
 		if err then

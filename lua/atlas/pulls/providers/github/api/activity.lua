@@ -87,7 +87,7 @@ function M.fetch_conversation(pr, opts, on_done)
 			on_done(conversation, nil)
 		end,
 		{
-			action = "fetch conversation",
+			action = "Fetch conversation",
 			repo = pr.repo_full_name,
 			number = pr.id,
 		}

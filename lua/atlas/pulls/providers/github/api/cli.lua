@@ -91,7 +91,9 @@ function M.gh(args, callback, ctx)
 
 	local cmd = vim.list_extend({ "gh" }, args)
 	local log = vim.tbl_extend("keep", { cmd = table.concat(cmd, " ") }, ctx or {})
-	logger.loginfo("GitHub CLI", log)
+	local message = log.action or "GitHub CLI"
+	log.action = nil
+	logger.loginfo(message, log)
 
 	local cancelled = false
 

@@ -544,7 +544,7 @@ function M.create_pr(opts, on_done)
 
 		on_done({ id = id, url = url, message = "PR created" }, nil)
 	end, {
-		action = "bitbucket.create_pr",
+		action = "Create PR",
 		workspace = workspace,
 		repo = repo,
 		head = opts.head,
