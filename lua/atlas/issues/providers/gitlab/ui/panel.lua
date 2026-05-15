@@ -133,26 +133,7 @@ end
 
 ---@return IssuesPanelTab[]
 function M.tabs()
-	return {
-		{
-			key = "overview",
-			label = "Overview",
-			icon = icons.general("overview"),
-			mod = require("atlas.issues.ui.panel.issue.tabs.overview"),
-		},
-		{
-			key = "comments",
-			label = "Comments",
-			icon = icons.general("comment"),
-			mod = require("atlas.issues.ui.panel.issue.tabs.comments"),
-		},
-		{
-			key = "history",
-			label = "History",
-			icon = icons.pulls("activity"),
-			mod = require("atlas.issues.ui.panel.issue.tabs.activity"),
-		},
-	}
+	return {}
 end
 
 return M
