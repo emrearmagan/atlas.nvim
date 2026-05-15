@@ -306,16 +306,16 @@ function M.tabs()
 			mod = require("atlas.pulls.ui.panel.pr.tabs.conversation"),
 		},
 		{
-			key = "comments",
-			label = "Comments",
-			icon = icons.general("comment"),
-			mod = require("atlas.pulls.ui.panel.pr.tabs.comments"),
-		},
-		{
 			key = "activity",
 			label = "Activity",
 			icon = icons.pulls("activity"),
 			mod = require("atlas.pulls.ui.panel.pr.tabs.activity"),
+		},
+		{
+			key = "comments",
+			label = "Comments",
+			icon = icons.general("comment"),
+			mod = require("atlas.pulls.ui.panel.pr.tabs.comments"),
 		},
 		{
 			key = "commits",

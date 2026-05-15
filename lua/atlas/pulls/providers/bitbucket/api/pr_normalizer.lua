@@ -2,6 +2,68 @@ local M = {}
 local api_utils = require("atlas.core.utils")
 local as_table = api_utils.as_table
 
+---@param update table   raw bitbucket update payload
+---@return string
+local function describe_update(update)
+	local changes = as_table(update.changes) or {}
+	local keys = {}
+	for k, _ in pairs(changes) do
+		keys[#keys + 1] = k
+	end
+	table.sort(keys)
+
+	if #keys == 1 then
+		local key = keys[1]
+		if key == "description" then
+			return "updated description"
+		end
+		if key == "title" then
+			return "updated title"
+		end
+		if key == "draft" then
+			local val = changes.draft
+			if type(val) == "table" and val.new == false then
+				return "marked as ready"
+			end
+			return "marked as draft"
+		end
+		if key == "reviewers" then
+			local rev = as_table(changes.reviewers) or {}
+			local added = as_table(rev.added) or {}
+			if #added > 0 then
+				local names = {}
+				for _, r in ipairs(added) do
+					names[#names + 1] = r.display_name or r.nickname or "someone"
+				end
+				return "added reviewer: " .. table.concat(names, ", ")
+			end
+			local removed = as_table(rev.removed) or {}
+			if #removed > 0 then
+				local names = {}
+				for _, r in ipairs(removed) do
+					names[#names + 1] = r.display_name or r.nickname or "someone"
+				end
+				return "removed reviewer: " .. table.concat(names, ", ")
+			end
+			return "updated reviewers"
+		end
+	end
+
+	if #keys > 1 then
+		return "updated " .. table.concat(keys, ", ")
+	end
+
+	local source = as_table(update.source) or {}
+	local destination = as_table(update.destination) or {}
+	local src = tostring((source.branch or {}).name or "")
+	local dst = tostring((destination.branch or {}).name or "")
+	if src ~= "" and dst ~= "" then
+		return string.format("updated %s → %s", src, dst)
+	end
+
+	return "updated pull request"
+end
+
 ---@param bb_state string
 ---@param is_draft boolean
 ---@return "open"|"merged"|"declined"|"draft"
@@ -152,15 +214,11 @@ function M.pr_activity(result)
 		local comment = as_table(entry.comment)
 
 		if update ~= nil then
-			local source = as_table(update.source) or {}
-			local destination = as_table(update.destination) or {}
 			table.insert(entries, {
 				kind = "update",
 				date = tostring(update.date or ""),
 				actor = actor(update.author),
-				source_branch = tostring(((source.branch or {}).name or "")),
-				target_branch = tostring(((destination.branch or {}).name or "")),
-				changes = as_table(update.changes) or {},
+				content_raw = describe_update(update),
 			})
 		elseif approval ~= nil then
 			table.insert(entries, {

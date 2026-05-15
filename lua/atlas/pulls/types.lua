@@ -162,9 +162,7 @@
 ---@field date string
 ---@field content_raw string|nil
 ---@field deleted boolean|nil
----@field changes table|nil
----@field source_branch string|nil
----@field target_branch string|nil
+---@field always_render boolean|nil
 
 --------------------------------------------------------------------------------
 -- Comment

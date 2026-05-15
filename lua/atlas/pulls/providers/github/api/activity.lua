@@ -41,6 +41,7 @@ local function normalize_event(item)
 			actor = actor,
 			date = date,
 			content_raw = body ~= "" and body or nil,
+			always_render = body ~= "" or nil,
 		}
 	elseif event == "closed" or event == "merged" or event == "reopened" then
 		return { kind = "update", actor = actor, date = date, content_raw = event }
@@ -114,7 +115,7 @@ local function normalize_comment(raw)
 			id = tostring(user.id or ""),
 		},
 		content_raw = tostring(raw.body or ""),
-		created_on = tostring(raw.created_at or ""),
+		created_on = tostring(raw.created_at or raw.submitted_at or ""),
 		deleted = false,
 		inline = nil,
 		url = nil,
@@ -163,6 +164,11 @@ function M.fetch_conversation(pr, opts, on_done)
 				local event_name = type(item) == "table" and tostring(item.event or "") or ""
 				if event_name == "commented" then
 					table.insert(conversation.comments, normalize_comment(item))
+				elseif event_name == "reviewed" then
+					local entry = normalize_event(item)
+					if entry then
+						table.insert(conversation.events, entry)
+					end
 				else
 					local entry = normalize_event(item)
 					if entry then
