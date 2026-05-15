@@ -204,6 +204,12 @@ function M.add_reaction(pr, comment, key, on_done)
 		return nil
 	end
 	local cli = require("atlas.pulls.providers.github.api.cli")
+	local endpoint
+	if tostring(comment.id) == "__body__" then
+		endpoint = string.format("repos/%s/issues/%s/reactions", repo_slug, tostring(pr.id))
+	else
+		endpoint = string.format("repos/%s/issues/comments/%s/reactions", repo_slug, tostring(comment.id))
+	end
 	return cli.gh({
 		"api",
 		"-X",
