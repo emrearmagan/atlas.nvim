@@ -1,4 +1,5 @@
 local icons = require("atlas.ui.shared.icons")
+local GITLAB_REACTION_OPTIONS = require("atlas.ui.shared.emojis").gitlab()
 
 ---@class GitLabIssuesProvider : IssuesProvider
 local M = {
@@ -138,7 +139,7 @@ function M.fetch_conversation(issue, opts, on_done)
 		on_done({
 			comments = comments,
 			events = events_result or {},
-			reaction_options = nil,
+			reaction_options = GITLAB_REACTION_OPTIONS,
 		}, nil)
 	end
 
@@ -237,6 +238,20 @@ function M.delete_comment(issue, comment_id, on_done)
 	end
 	local key = tostring(issue.key or "")
 	return require("atlas.issues.providers.gitlab.api.notes").delete(key, comment_id, on_done)
+end
+
+---@param issue Issue
+---@param comment IssueComment
+---@param key string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.add_reaction(issue, comment, key, on_done)
+	if tostring(comment.id) == "__body__" then
+		on_done(false, "Reactions on the issue description are not supported on GitLab")
+		return nil
+	end
+	local issue_key = tostring(issue.key or "")
+	return require("atlas.issues.providers.gitlab.api.notes").add_reaction(issue_key, comment.id, key, on_done)
 end
 
 ---@param action_id string

@@ -172,4 +172,25 @@ function M.request(method, endpoint, data, on_done)
 	end)
 end
 
+---@param query string
+---@param variables table|nil
+---@param on_done fun(result: any, err: string|nil)
+---@return { job_id: integer, cancel: fun() }|nil
+function M.graphql(query, variables, on_done)
+	local url = M.base_url() .. "/api/graphql"
+	local headers = M.build_headers()
+	local payload = vim.fn.json_encode({ query = query, variables = variables or vim.empty_dict() })
+	return http.curl_request("POST", url, headers, payload, function(result, err)
+		if err then
+			on_done(nil, err)
+			return
+		end
+		if type(result) == "table" and type(result.errors) == "table" and #result.errors > 0 then
+			on_done(nil, tostring(result.errors[1].message or "GraphQL error"))
+			return
+		end
+		on_done(type(result) == "table" and result.data or nil, nil)
+	end)
+end
+
 return M

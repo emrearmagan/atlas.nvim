@@ -4,6 +4,37 @@ local service = require("atlas.issues.providers.gitlab.api.service")
 local normalizer = require("atlas.issues.providers.gitlab.api.mapper")
 local logger = require("atlas.core.logger")
 
+local GQL_DISCUSSIONS = [[
+	query ($fullPath: ID!, $iid: String!) {
+		project(fullPath: $fullPath) {
+			issue(iid: $iid) {
+				discussions {
+					nodes {
+						id
+						notes {
+							nodes {
+								id
+								body
+								system
+								createdAt
+								updatedAt
+								author { username name }
+								awardEmoji { nodes { name } }
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+]]
+
+---@param gid string|nil    full GraphQL gid like "gid://gitlab/Note/123"
+---@return string
+local function id_tail(gid)
+	return tostring(gid or ""):match("([^/]+)$") or ""
+end
+
 ---@param key string
 ---@param opts { force_load?: boolean }|nil
 ---@param on_done fun(discussions: table[]|nil, err: string|nil)
@@ -25,21 +56,17 @@ local function fetch_discussions(key, opts, on_done)
 		end
 	end
 
-	local endpoint = string.format(
-		"/projects/%s/issues/%d/discussions?per_page=100",
-		service.url_encode(path),
-		iid
-	)
-	logger.loginfo("GitLab fetch discussions", { path = path, iid = iid })
-
-	return service.request("GET", endpoint, nil, function(result, err)
+	logger.loginfo("GitLab fetch discussions (GQL)", { path = path, iid = iid })
+	return service.graphql(GQL_DISCUSSIONS, { fullPath = path, iid = tostring(iid) }, function(data, err)
 		if err then
 			on_done(nil, err)
 			return
 		end
-		local list = type(result) == "table" and result or {}
-		service.set_memory_cache(cache_key, list)
-		on_done(list, nil)
+		local nodes = data and data.project and data.project.issue
+			and data.project.issue.discussions and data.project.issue.discussions.nodes
+			or {}
+		service.set_memory_cache(cache_key, nodes)
+		on_done(nodes, nil)
 	end)
 end
 
@@ -55,8 +82,8 @@ function M.list_comments(key, opts, on_done)
 		end
 		local out = {}
 		for _, discussion in ipairs(discussions) do
-			local discussion_id = tostring(discussion.id or "")
-			local notes = type(discussion.notes) == "table" and discussion.notes or {}
+			local discussion_id = id_tail(discussion.id)
+			local notes = type(discussion.notes) == "table" and discussion.notes.nodes or {}
 			local first_id = nil
 			for _, raw in ipairs(notes) do
 				if raw.system ~= true then
@@ -86,7 +113,7 @@ function M.list_history(key, opts, on_done)
 		end
 		local out = {}
 		for _, discussion in ipairs(discussions) do
-			for _, raw in ipairs(type(discussion.notes) == "table" and discussion.notes or {}) do
+			for _, raw in ipairs(type(discussion.notes) == "table" and discussion.notes.nodes or {}) do
 				if raw.system == true then
 					local entry = normalizer.to_activity_from_note(raw)
 					if entry then
@@ -201,6 +228,34 @@ function M.delete(key, note_id, on_done)
 
 	local endpoint = string.format("/projects/%s/issues/%d/notes/%s", service.url_encode(path), iid, tostring(note_id))
 	return service.request("DELETE", endpoint, nil, function(_, err)
+		if err then
+			on_done(false, err)
+			return
+		end
+		service.delete_memory_cache(string.format("gitlab:discussions:%s#%d", path, iid))
+		on_done(true, nil)
+	end)
+end
+
+---@param key string
+---@param note_id string|number
+---@param name string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.add_reaction(key, note_id, name, on_done)
+	local path, iid = normalizer.parse_key(key)
+	if path == "" or iid == nil then
+		on_done(false, "Invalid issue key")
+		return nil
+	end
+	local endpoint = string.format(
+		"/projects/%s/issues/%d/notes/%s/award_emoji?name=%s",
+		service.url_encode(path),
+		iid,
+		tostring(note_id),
+		service.url_encode(name)
+	)
+	return service.request("POST", endpoint, nil, function(_, err)
 		if err then
 			on_done(false, err)
 			return
