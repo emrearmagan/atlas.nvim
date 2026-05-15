@@ -297,6 +297,24 @@ function M.edit_comment(pr, comment, on_done)
 		return nil
 	end
 
+	if tostring(comment.id) == "__body__" then
+		return cli.gh({
+			"pr", "edit", tostring(pr.id), "--repo", repo_slug, "--body", tostring(comment.content_raw or ""),
+		}, function(_, err)
+			if err then
+				on_done(nil, err)
+				return
+			end
+			on_done({
+				id = "__body__",
+				parent_id = nil,
+				author = comment.author,
+				content_raw = tostring(comment.content_raw or ""),
+				created_on = comment.created_on or pr.created_on or "",
+			}, nil)
+		end)
+	end
+
 	local endpoint = comment.inline ~= nil
 			and string.format("repos/%s/pulls/comments/%s", repo_slug, tostring(comment.id))
 		or string.format("repos/%s/issues/comments/%s", repo_slug, tostring(comment.id))
@@ -319,6 +337,13 @@ function M.delete_comment(pr, target, on_done)
 	if repo_slug == "" then
 		vim.schedule(function()
 			on_done(false, "Missing repo")
+		end)
+		return nil
+	end
+
+	if tostring(target.id) == "__body__" then
+		vim.schedule(function()
+			on_done(false, "Cannot delete the pull request description")
 		end)
 		return nil
 	end
