@@ -6,7 +6,7 @@ local utils = require("atlas.ui.shared.utils")
 local helper = require("atlas.issues.ui.main.helper")
 
 local overview_state = require("atlas.issues.providers.jira.ui.overview.state")
-local comments_state = require("atlas.issues.ui.panel.issue.tabs.comments.state")
+local conversation_state = require("atlas.issues.ui.panel.issue.tabs.conversation.state")
 local history_state = require("atlas.issues.ui.panel.issue.tabs.activity.state")
 
 --------------------------------------------------------------------------------
@@ -211,7 +211,7 @@ end
 ---@param issue Issue
 ---@return boolean
 function M.is_loading(issue)
-	return overview_state.description_loading or comments_state.any_loading() or history_state.any_loading()
+	return overview_state.description_loading or conversation_state.any_loading() or history_state.any_loading()
 end
 
 --------------------------------------------------------------------------------
@@ -357,10 +357,10 @@ function M.tabs()
 			mod = require("atlas.issues.providers.jira.ui.overview"),
 		},
 		{
-			key = "comments",
-			label = "Comments",
-			icon = icons.general("comment"),
-			mod = require("atlas.issues.ui.panel.issue.tabs.comments"),
+			key = "conversation",
+			label = "Conversation",
+			icon = icons.general("conversation"),
+			mod = require("atlas.issues.ui.panel.issue.tabs.conversation"),
 		},
 		{
 			key = "activity",

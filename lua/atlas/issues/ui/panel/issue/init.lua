@@ -141,7 +141,11 @@ local function dispatch_provider_fetches(issue, opts)
 	local state = require("atlas.issues.state")
 	local provider = state.provider
 	if provider and provider.panel and type(provider.panel.fetches) == "function" then
-		provider.panel.fetches(issue, make_refresh_callback(issue), { force_load = opts and opts.force_refresh == true })
+		provider.panel.fetches(
+			issue,
+			make_refresh_callback(issue),
+			{ force_load = opts and opts.force_refresh == true }
+		)
 	end
 end
 
@@ -163,7 +167,6 @@ local function reset_tab_data()
 	end
 
 	reset_state("atlas.issues.providers.jira.ui.overview.state")
-	reset_state("atlas.issues.ui.panel.issue.tabs.comments.state")
 	reset_state("atlas.issues.ui.panel.issue.tabs.activity.state")
 	reset_state("atlas.issues.ui.panel.issue.tabs.conversation.state")
 end
@@ -203,8 +206,16 @@ function M.on_select(issue, opts)
 
 	if not same_issue and issue ~= nil then
 		local old_key = panel_state.current_tab
-		if panel_state.current_tab == nil then
-			panel_state.current_tab = get_tabs()[1].key
+		local tabs = get_tabs()
+		local valid = false
+		for _, t in ipairs(tabs) do
+			if t.key == panel_state.current_tab then
+				valid = true
+				break
+			end
+		end
+		if not valid then
+			panel_state.current_tab = tabs[1] and tabs[1].key or nil
 		end
 		switch_tab_keymaps(old_key, panel_state.current_tab)
 		stop_spinner()

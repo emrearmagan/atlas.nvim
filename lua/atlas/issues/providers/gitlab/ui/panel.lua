@@ -116,9 +116,9 @@ end
 ---@param _issue Issue
 ---@return boolean
 function M.is_loading(_issue)
-	local comments_state = require("atlas.issues.ui.panel.issue.tabs.comments.state")
+	local conversation_state = require("atlas.issues.ui.panel.issue.tabs.conversation.state")
 	local history_state = require("atlas.issues.ui.panel.issue.tabs.activity.state")
-	return (type(comments_state.any_loading) == "function" and comments_state.any_loading())
+	return (type(conversation_state.any_loading) == "function" and conversation_state.any_loading())
 		or (type(history_state.any_loading) == "function" and history_state.any_loading())
 end
 

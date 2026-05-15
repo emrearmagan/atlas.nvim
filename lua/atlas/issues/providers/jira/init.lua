@@ -194,6 +194,33 @@ function M.edit_comment(issue, comment_id, content, on_done)
 end
 
 ---@param issue Issue
+---@param opts { force_refresh: boolean|nil }|nil
+---@param on_done fun(result: { comments: IssueComment[], events: IssueActivityEntry[], reaction_options: IssueReactionOption[]|nil }|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_conversation(issue, opts, on_done)
+	opts = opts or {}
+	local issue_key = tostring(issue and issue.key or "")
+	if issue_key == "" then
+		on_done(nil, "Invalid issue key")
+		return nil
+	end
+
+	local force = opts.force_refresh == true
+
+	return M.fetch_comments(issue_key, { force_load = force }, function(comments, err)
+		if err then
+			on_done(nil, err)
+			return
+		end
+		on_done({
+			comments = comments or {},
+			events = {},
+			reaction_options = nil,
+		}, nil)
+	end)
+end
+
+---@param issue Issue
 ---@param comment_id string
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
