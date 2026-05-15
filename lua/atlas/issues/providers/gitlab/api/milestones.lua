@@ -1,6 +1,7 @@
 local M = {}
 
 local service = require("atlas.issues.providers.gitlab.api.service")
+local logger = require("atlas.core.logger")
 
 ---@class GitLabMilestone
 ---@field id integer
@@ -17,6 +18,7 @@ function M.list(project_path, on_done)
 		on_done(nil, "Missing project path")
 		return nil
 	end
+	logger.loginfo("GitLab list milestones", { project = project_path })
 	local endpoint = string.format(
 		"/projects/%s/milestones?per_page=100&state=active",
 		service.url_encode(project_path)

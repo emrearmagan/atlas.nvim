@@ -97,6 +97,7 @@ function M.get_issue(key, opts, on_done)
 		end
 	end
 
+	logger.loginfo("GitLab fetch issue", { path = path, iid = iid })
 	local endpoint = string.format("/projects/%s/issues/%d", service.url_encode(path), iid)
 	return service.request("GET", endpoint, nil, function(result, err)
 		if err or type(result) ~= "table" then
@@ -121,6 +122,7 @@ function M.set_state(key, state_event, on_done)
 		on_done(false, "Invalid issue key")
 		return nil
 	end
+	logger.loginfo("GitLab issue state change", { path = path, iid = iid, state = state_event })
 	local endpoint = string.format("/projects/%s/issues/%d", service.url_encode(path), iid)
 	return service.request("PUT", endpoint, { state_event = state_event }, function(_, err)
 		if err then
@@ -155,6 +157,7 @@ function M.update_labels(key, diff, on_done)
 		return nil
 	end
 
+	logger.loginfo("GitLab update labels", { path = path, iid = iid, add = diff.add, remove = diff.remove })
 	local endpoint = string.format("/projects/%s/issues/%d", service.url_encode(path), iid)
 	return service.request("PUT", endpoint, payload, function(_, err)
 		if err then
@@ -183,6 +186,7 @@ function M.set_assignee_ids(key, ids, on_done)
 		payload = { assignee_ids = { 0 } }
 	end
 
+	logger.loginfo("GitLab set assignees", { path = path, iid = iid, ids = ids })
 	local endpoint = string.format("/projects/%s/issues/%d", service.url_encode(path), iid)
 	return service.request("PUT", endpoint, payload, function(_, err)
 		if err then
@@ -299,6 +303,7 @@ function M.search_issues_picker(query, opts, on_done)
 		order_by = "updated_at",
 		sort = "desc",
 	}
+	logger.loginfo("GitLab issue search picker", { query = query })
 	local endpoint = "/issues" .. build_query(params)
 
 	return service.request("GET", endpoint, nil, function(result, err)
