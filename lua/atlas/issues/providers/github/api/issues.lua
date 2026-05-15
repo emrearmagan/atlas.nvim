@@ -58,7 +58,7 @@ query($owner: String!, $repo: String!, $number: Int!, $withRelationships: Boolea
 
 fragment IssueFields on Issue {
   id number title state isPinned viewerSubscription
-  createdAt updatedAt closedAt url body
+  createdAt updatedAt closedAt url
   repository { nameWithOwner }
   author { login ... on User { name } }
   assignees(first: 10) { nodes { login name } }

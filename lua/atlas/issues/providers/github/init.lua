@@ -108,16 +108,24 @@ end
 ---@param opts IssuesFetchOpts|nil
 ---@param on_done fun(raw: any, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_description(key, opts, on_done)
-	-- GitHub stores body on the issue payload; refresh the issue and return body.
-	return require("atlas.issues.providers.github.api.issues").get_issue(key, function(issue, err)
-		if err or issue == nil then
+function M.fetch_description(key, opts, on_done) ---@diagnostic disable-line: unused-local
+	local normalizer = require("atlas.issues.providers.github.api.normalizer")
+	local slug, number = normalizer.parse_key(tostring(key or ""))
+	if slug == "" or number == nil then
+		on_done(nil, "Invalid issue key")
+		return nil
+	end
+	local cli = require("atlas.issues.providers.github.api.cli")
+	return cli.gh({
+		"api", string.format("repos/%s/issues/%d", slug, number), "--jq", ".body",
+	}, function(result, err)
+		if err then
 			on_done(nil, err)
 			return
 		end
-		local raw = type(issue._raw) == "table" and issue._raw or {}
-		on_done(tostring(raw.body or ""), nil)
-	end, opts)
+		local body = type(result) == "string" and result:gsub("\n$", "") or ""
+		on_done(body, nil)
+	end)
 end
 
 ---@param key string
@@ -171,7 +179,15 @@ function M.edit_comment(issue, comment_id, content, on_done)
 				return
 			end
 			cli.delete_cache(string.format("github_issues:get:%s#%d", slug, number))
-			on_done({ id = "__body__", body = content }, nil)
+			raw.body = content
+			on_done({
+				id = "__body__",
+				url = issue.url,
+				author = issue.reporter,
+				body = content,
+				created = raw.created_at or "",
+				reactions = raw.reactions,
+			}, nil)
 		end)
 	end
 	local key = tostring(issue.key or "")
@@ -206,27 +222,26 @@ function M.fetch_conversation(issue, opts, on_done)
 	end
 
 	local timeline = require("atlas.issues.providers.github.api.timeline")
-	return timeline.list_conversation(key, function(result, err)
-		if err or type(result) ~= "table" then
-			on_done(nil, err or "Failed to fetch conversation")
-			return
-		end
+	local event_label = require("atlas.issues.providers.github.ui.event_label")
 
-		local comments = type(result.comments) == "table" and result.comments or {}
-		local raw = type(issue._raw) == "table" and issue._raw or {}
-		local body = tostring(raw.body or "")
-		if body ~= "" then
-			table.insert(comments, 1, {
+	---@param description string
+	local function build(result, description)
+		local comments = {}
+		if description ~= "" then
+			local raw = type(issue._raw) == "table" and issue._raw or {}
+			table.insert(comments, {
 				id = "__body__",
 				url = issue.url,
 				author = issue.reporter,
-				body = body,
+				body = description,
 				created = raw.created_at or "",
 				reactions = raw.reactions,
 			})
 		end
+		for _, c in ipairs(type(result.comments) == "table" and result.comments or {}) do
+			table.insert(comments, c)
+		end
 
-		local event_label = require("atlas.issues.providers.github.ui.event_label")
 		local events = {}
 		for _, ev in ipairs(type(result.events) == "table" and result.events or {}) do
 			local label, content = event_label.format(ev)
@@ -235,13 +250,12 @@ function M.fetch_conversation(issue, opts, on_done)
 				content_raw = content_raw .. ": " .. content
 			end
 			---@type IssueActivityEntry
-			local entry = {
+			table.insert(events, {
 				kind = tostring(ev.event or ""),
 				actor = ev.actor,
 				date = ev.date,
 				content_raw = content_raw,
-			}
-			table.insert(events, entry)
+			})
 		end
 
 		on_done({
@@ -249,6 +263,23 @@ function M.fetch_conversation(issue, opts, on_done)
 			events = events,
 			reaction_options = GITHUB_REACTION_OPTIONS,
 		}, nil)
+	end
+
+	return timeline.list_conversation(key, function(result, err)
+		if err or type(result) ~= "table" then
+			on_done(nil, err or "Failed to fetch conversation")
+			return
+		end
+		local raw = type(issue._raw) == "table" and issue._raw or {}
+		local description = tostring(raw.body or "")
+		if description ~= "" then
+			build(result, description)
+			return
+		end
+
+		M.fetch_description(key, opts, function(desc, _)
+			build(result, tostring(desc or ""))
+		end)
 	end, { force_load = opts.force_refresh == true })
 end
 
