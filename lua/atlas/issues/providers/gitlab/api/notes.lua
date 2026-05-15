@@ -2,7 +2,6 @@ local M = {}
 
 local service = require("atlas.issues.providers.gitlab.api.service")
 local normalizer = require("atlas.issues.providers.gitlab.api.mapper")
-local logger = require("atlas.core.logger")
 
 local GQL_DISCUSSIONS = [[
 	query ($fullPath: ID!, $iid: String!) {
@@ -56,7 +55,6 @@ local function fetch_discussions(key, opts, on_done)
 		end
 	end
 
-	logger.loginfo("GitLab fetch discussions (GQL)", { path = path, iid = iid })
 	return service.graphql(GQL_DISCUSSIONS, { fullPath = path, iid = tostring(iid) }, function(data, err)
 		if err then
 			on_done(nil, err)
@@ -67,7 +65,11 @@ local function fetch_discussions(key, opts, on_done)
 			or {}
 		service.set_memory_cache(cache_key, nodes)
 		on_done(nodes, nil)
-	end)
+	end, {
+		action = "Fetch discussions (GQL)",
+		path = path,
+		iid = iid,
+	})
 end
 
 ---@param key string
@@ -141,7 +143,6 @@ function M.add(key, body, on_done)
 		return nil
 	end
 
-	logger.loginfo("GitLab add note", { path = path, iid = iid })
 	local endpoint = string.format("/projects/%s/issues/%d/notes", service.url_encode(path), iid)
 	return service.request("POST", endpoint, { body = body }, function(result, err)
 		if err or type(result) ~= "table" then
@@ -150,7 +151,11 @@ function M.add(key, body, on_done)
 		end
 		service.delete_memory_cache(string.format("gitlab:discussions:%s#%d", path, iid))
 		on_done(normalizer.to_comment_from_note(result), nil)
-	end)
+	end, {
+		action = "Add note",
+		path = path,
+		iid = iid,
+	})
 end
 
 ---@param key string
@@ -173,7 +178,6 @@ function M.reply_in_discussion(key, parent, body, on_done)
 		return M.add(key, body, on_done)
 	end
 
-	logger.loginfo("GitLab reply in discussion", { path = path, iid = iid, discussion_id = discussion_id })
 	local endpoint = string.format(
 		"/projects/%s/issues/%d/discussions/%s/notes",
 		service.url_encode(path),
@@ -187,7 +191,12 @@ function M.reply_in_discussion(key, parent, body, on_done)
 		end
 		service.delete_memory_cache(string.format("gitlab:discussions:%s#%d", path, iid))
 		on_done(normalizer.to_comment_from_note(result, parent.id, discussion_id), nil)
-	end)
+	end, {
+		action = "Reply in discussion",
+		path = path,
+		iid = iid,
+		discussion_id = discussion_id,
+	})
 end
 
 ---@param key string
@@ -206,7 +215,6 @@ function M.edit(key, note_id, body, on_done)
 		return nil
 	end
 
-	logger.loginfo("GitLab edit note", { path = path, iid = iid, note_id = tostring(note_id) })
 	local endpoint = string.format("/projects/%s/issues/%d/notes/%s", service.url_encode(path), iid, tostring(note_id))
 	return service.request("PUT", endpoint, { body = body }, function(result, err)
 		if err or type(result) ~= "table" then
@@ -215,7 +223,12 @@ function M.edit(key, note_id, body, on_done)
 		end
 		service.delete_memory_cache(string.format("gitlab:discussions:%s#%d", path, iid))
 		on_done(normalizer.to_comment_from_note(result), nil)
-	end)
+	end, {
+		action = "Edit note",
+		path = path,
+		iid = iid,
+		note_id = tostring(note_id),
+	})
 end
 
 ---@param key string
@@ -229,7 +242,6 @@ function M.delete(key, note_id, on_done)
 		return nil
 	end
 
-	logger.loginfo("GitLab delete note", { path = path, iid = iid, note_id = tostring(note_id) })
 	local endpoint = string.format("/projects/%s/issues/%d/notes/%s", service.url_encode(path), iid, tostring(note_id))
 	return service.request("DELETE", endpoint, nil, function(_, err)
 		if err then
@@ -238,7 +250,12 @@ function M.delete(key, note_id, on_done)
 		end
 		service.delete_memory_cache(string.format("gitlab:discussions:%s#%d", path, iid))
 		on_done(true, nil)
-	end)
+	end, {
+		action = "Delete note",
+		path = path,
+		iid = iid,
+		note_id = tostring(note_id),
+	})
 end
 
 ---@param key string
@@ -252,7 +269,6 @@ function M.add_reaction(key, note_id, name, on_done)
 		on_done(false, "Invalid issue key")
 		return nil
 	end
-	logger.loginfo("GitLab add reaction", { path = path, iid = iid, note_id = tostring(note_id), name = name })
 	local endpoint = string.format(
 		"/projects/%s/issues/%d/notes/%s/award_emoji?name=%s",
 		service.url_encode(path),
@@ -267,7 +283,13 @@ function M.add_reaction(key, note_id, name, on_done)
 		end
 		service.delete_memory_cache(string.format("gitlab:discussions:%s#%d", path, iid))
 		on_done(true, nil)
-	end)
+	end, {
+		action = "Add reaction",
+		path = path,
+		iid = iid,
+		note_id = tostring(note_id),
+		name = name,
+	})
 end
 
 return M

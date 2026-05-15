@@ -2,7 +2,6 @@ local M = {}
 
 local service = require("atlas.issues.providers.gitlab.api.service")
 local normalizer = require("atlas.issues.providers.gitlab.api.mapper")
-local logger = require("atlas.core.logger")
 
 ---@param params table<string, any>
 ---@return string
@@ -64,7 +63,6 @@ function M.list_issues(view, opts, on_done)
 		end
 	end
 
-	logger.loginfo("GitLab list issues", { endpoint = endpoint })
 	return service.request("GET", endpoint, nil, function(result, err)
 		if err then
 			on_done(nil, err)
@@ -73,7 +71,10 @@ function M.list_issues(view, opts, on_done)
 		local issues = normalizer.to_issues_list(type(result) == "table" and result or {})
 		service.set_memory_cache(cache_key, issues)
 		on_done(issues, nil)
-	end)
+	end, {
+		action = "List issues",
+		endpoint = endpoint,
+	})
 end
 
 ---@param key string
@@ -97,7 +98,6 @@ function M.get_issue(key, opts, on_done)
 		end
 	end
 
-	logger.loginfo("GitLab fetch issue", { path = path, iid = iid })
 	local endpoint = string.format("/projects/%s/issues/%d", service.url_encode(path), iid)
 	return service.request("GET", endpoint, nil, function(result, err)
 		if err or type(result) ~= "table" then
@@ -109,7 +109,11 @@ function M.get_issue(key, opts, on_done)
 			service.set_memory_cache(cache_key, issue)
 		end
 		on_done(issue, nil)
-	end)
+	end, {
+		action = "Fetch issue",
+		path = path,
+		iid = iid,
+	})
 end
 
 ---@param key string
@@ -122,7 +126,6 @@ function M.set_state(key, state_event, on_done)
 		on_done(false, "Invalid issue key")
 		return nil
 	end
-	logger.loginfo("GitLab issue state change", { path = path, iid = iid, state = state_event })
 	local endpoint = string.format("/projects/%s/issues/%d", service.url_encode(path), iid)
 	return service.request("PUT", endpoint, { state_event = state_event }, function(_, err)
 		if err then
@@ -131,7 +134,12 @@ function M.set_state(key, state_event, on_done)
 		end
 		service.delete_memory_cache(string.format("gitlab:issue:%s#%d", path, iid))
 		on_done(true, nil)
-	end)
+	end, {
+		action = "Issue state change",
+		path = path,
+		iid = iid,
+		state = state_event,
+	})
 end
 
 ---@param key string
@@ -157,7 +165,6 @@ function M.update_labels(key, diff, on_done)
 		return nil
 	end
 
-	logger.loginfo("GitLab update labels", { path = path, iid = iid, add = diff.add, remove = diff.remove })
 	local endpoint = string.format("/projects/%s/issues/%d", service.url_encode(path), iid)
 	return service.request("PUT", endpoint, payload, function(_, err)
 		if err then
@@ -166,7 +173,13 @@ function M.update_labels(key, diff, on_done)
 		end
 		service.delete_memory_cache(string.format("gitlab:issue:%s#%d", path, iid))
 		on_done(true, nil)
-	end)
+	end, {
+		action = "Update labels",
+		path = path,
+		iid = iid,
+		add = diff.add,
+		remove = diff.remove,
+	})
 end
 
 ---@param key string
@@ -186,7 +199,6 @@ function M.set_assignee_ids(key, ids, on_done)
 		payload = { assignee_ids = { 0 } }
 	end
 
-	logger.loginfo("GitLab set assignees", { path = path, iid = iid, ids = ids })
 	local endpoint = string.format("/projects/%s/issues/%d", service.url_encode(path), iid)
 	return service.request("PUT", endpoint, payload, function(_, err)
 		if err then
@@ -195,7 +207,12 @@ function M.set_assignee_ids(key, ids, on_done)
 		end
 		service.delete_memory_cache(string.format("gitlab:issue:%s#%d", path, iid))
 		on_done(true, nil)
-	end)
+	end, {
+		action = "Set assignees",
+		path = path,
+		iid = iid,
+		ids = ids,
+	})
 end
 
 ---@class GitLabCreateIssueOpts
@@ -253,7 +270,6 @@ function M.create_issue(opts, on_done)
 	end
 
 	local endpoint = string.format("/projects/%s/issues", service.url_encode(path))
-	logger.loginfo("GitLab create issue", { path = path, title = title })
 
 	return service.request("POST", endpoint, payload, function(result, err)
 		if err or type(result) ~= "table" then
@@ -271,7 +287,11 @@ function M.create_issue(opts, on_done)
 			iid = iid,
 			url = (issue and issue.url) or (type(result.web_url) == "string" and result.web_url or nil),
 		}, nil)
-	end)
+	end, {
+		action = "Create issue",
+		path = path,
+		title = title,
+	})
 end
 
 ---@param key string
@@ -303,7 +323,6 @@ function M.search_issues_picker(query, opts, on_done)
 		order_by = "updated_at",
 		sort = "desc",
 	}
-	logger.loginfo("GitLab issue search picker", { query = query })
 	local endpoint = "/issues" .. build_query(params)
 
 	return service.request("GET", endpoint, nil, function(result, err)
@@ -321,7 +340,10 @@ function M.search_issues_picker(query, opts, on_done)
 			})
 		end
 		on_done(items, nil)
-	end)
+	end, {
+		action = "Issue search picker",
+		query = query,
+	})
 end
 
 return M

@@ -2,7 +2,6 @@ local M = {}
 
 local service = require("atlas.issues.providers.gitlab.api.service")
 local normalizer = require("atlas.issues.providers.gitlab.api.mapper")
-local logger = require("atlas.core.logger")
 
 ---@param on_done fun(user: IssueUser|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
@@ -14,7 +13,6 @@ function M.get_user(on_done)
 		return nil
 	end
 
-	logger.loginfo("GitLab fetch user")
 	return service.request("GET", "/user", nil, function(result, err)
 		if err or type(result) ~= "table" then
 			on_done(nil, err or "Empty response")
@@ -25,7 +23,9 @@ function M.get_user(on_done)
 			service.set_memory_cache(cache_key, user)
 		end
 		on_done(user, nil)
-	end)
+	end, {
+		action = "Fetch user",
+	})
 end
 
 ---@param project_path string
@@ -43,7 +43,6 @@ function M.list_members(project_path, query, on_done)
 		endpoint = endpoint .. "&query=" .. service.url_encode(q)
 	end
 
-	logger.loginfo("GitLab list members", { project = project_path, query = q })
 	return service.request("GET", endpoint, nil, function(result, err)
 		if err or type(result) ~= "table" then
 			on_done(nil, err)
@@ -59,7 +58,11 @@ function M.list_members(project_path, query, on_done)
 			end
 		end
 		on_done(out, nil)
-	end)
+	end, {
+		action = "List members",
+		project = project_path,
+		query = q,
+	})
 end
 
 return M
