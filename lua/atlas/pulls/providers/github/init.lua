@@ -214,7 +214,7 @@ function M.add_reaction(pr, comment, key, on_done)
 		"api",
 		"-X",
 		"POST",
-		string.format("repos/%s/issues/comments/%s/reactions", repo_slug, tostring(comment.id)),
+		endpoint,
 		"-f",
 		"content=" .. key,
 	}, function(_, err)
