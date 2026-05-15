@@ -1,4 +1,5 @@
 local M = {}
+
 local api_utils = require("atlas.core.utils")
 local as_table = api_utils.as_table
 
@@ -124,7 +125,7 @@ end
 ---@param workspace string|nil
 ---@param repo string|nil
 ---@return PullRequest[]
-function M.pullrequests(result, workspace, repo)
+function M.to_pull_requests_list(result, workspace, repo)
 	local payload = as_table(result) or {}
 	local out = {}
 	local ws = tostring(workspace or "")
@@ -189,7 +190,6 @@ function M.pullrequests(result, workspace, repo)
 	return out
 end
 
-
 ---@param user table|nil
 ---@return {name: string, nickname: string|nil}
 local function actor(user)
@@ -203,7 +203,7 @@ end
 
 ---@param result table|nil
 ---@return PullsActivityEntry[]
-function M.pr_activity(result)
+function M.to_activities_list(result)
 	local payload = as_table(result) or {}
 	local entries = {}
 
@@ -246,7 +246,7 @@ end
 
 ---@param result table|nil
 ---@return PullsCommit[]
-function M.pr_commits(result)
+function M.to_commits_list(result)
 	local payload = as_table(result) or {}
 	local entries = {}
 
@@ -275,7 +275,7 @@ end
 
 ---@param prs PullRequest[]
 ---@return PullsGroup[]
-function M.pull_request_groups(prs)
+function M.to_pull_request_groups(prs)
 	---@type table<string, PullsGroup>
 	local by_repo = {}
 	---@type PullsGroup[]
@@ -301,6 +301,128 @@ function M.pull_request_groups(prs)
 	end
 
 	return ordered
+end
+
+---@param raw_inline table|nil
+---@return {path: string, to: number|nil, from: number|nil}|nil
+local function comment_inline(raw_inline)
+	local inline = as_table(raw_inline)
+	if inline == nil then
+		return nil
+	end
+	local path = tostring(inline.path or "")
+	local from = tonumber(inline["from"])
+	local to = tonumber(inline["to"])
+	if path == "" and from == nil and to == nil then
+		return nil
+	end
+	return { path = path, ["from"] = from, ["to"] = to }
+end
+
+---@param result table|nil
+---@return PullsComment|nil
+function M.to_comment(result)
+	local entry = as_table(result)
+	if entry == nil then
+		return nil
+	end
+	local content = as_table(entry.content) or {}
+	local links = as_table(entry.links) or {}
+	local parent = as_table(entry.parent)
+
+	return {
+		id = tonumber(entry.id) or 0,
+		parent_id = parent ~= nil and tonumber(parent.id) or nil,
+		author = actor(entry.user),
+		content_raw = tostring(content.raw or ""),
+		created_on = tostring(entry.created_on or ""),
+		inline = comment_inline(entry.inline),
+		is_task = nil,
+		state = entry.deleted == true and "DELETED" or nil,
+		url = tostring((as_table(links.self) or {}).href or ""),
+		html_url = tostring((as_table(links.html) or {}).href or ""),
+		_raw = entry,
+	}
+end
+
+---@param result table|nil
+---@return PullsComment[]
+function M.to_comments_list(result)
+	local payload = as_table(result) or {}
+	local entries = {}
+
+	for _, item in ipairs(payload.values or {}) do
+		local entry = M.to_comment(item)
+		if entry ~= nil then
+			table.insert(entries, entry)
+		end
+	end
+
+	return entries
+end
+
+---@param result table|nil
+---@return BitbucketPRTask[]
+function M.to_tasks_list(result)
+	local payload = as_table(result) or {}
+	local entries = {}
+
+	for _, item in ipairs(payload.values or {}) do
+		local task = as_table(item) or {}
+		local content = as_table(task.content) or {}
+		local links = as_table(task.links) or {}
+		local comment = as_table(task.comment)
+		local comment_links = as_table(comment and comment.links or nil) or {}
+
+		table.insert(entries, {
+			id = tonumber(task.id) or 0,
+			state = tostring(task.state or ""),
+			content_raw = tostring(content.raw or ""),
+			created_on = tostring(task.created_on or ""),
+			updated_on = tostring(task.updated_on or ""),
+			resolved_on = task.resolved_on ~= nil and tostring(task.resolved_on) or nil,
+			pending = task.pending == true,
+			creator = actor(task.creator),
+			comment_id = comment ~= nil and tonumber(comment.id) or nil,
+			links = {
+				self = tostring((as_table(links.self) or {}).href or ""),
+				html = tostring((as_table(links.html) or {}).href or ""),
+			},
+			comment_html = tostring((as_table(comment_links.html) or {}).href or ""),
+		})
+	end
+
+	return entries
+end
+
+---@param raw table|nil
+---@param fallback_workspace string|nil
+---@return PullsRepoDetails
+function M.to_repo_details(raw, fallback_workspace)
+	raw = type(raw) == "table" and raw or {}
+	local workspace_obj = type(raw.workspace) == "table" and raw.workspace or {}
+	local mainbranch = type(raw.mainbranch) == "table" and raw.mainbranch or {}
+	local links = as_table(raw.links) or {}
+	local html_link = as_table(links.html) or {}
+	local full_name = tostring(raw.full_name or raw.name or raw.slug or "")
+	local owner = tostring(workspace_obj.slug or fallback_workspace or "")
+	local repo_name = tostring(raw.slug or raw.name or "")
+
+	return {
+		id = full_name ~= "" and full_name or repo_name,
+		name = tostring(raw.name or repo_name or full_name),
+		full_name = full_name,
+		owner = owner,
+		repo_name = repo_name,
+		html_url = tostring(html_link.href or ""),
+		description = tostring(raw.description or ""),
+		size = tonumber(raw.size) or 0,
+		default_branch = tostring(mainbranch.name or ""),
+		is_private = raw.is_private == true,
+		created_on = tostring(raw.created_on or ""),
+		readme = nil,
+		_raw = raw,
+	}
 end
 
 return M

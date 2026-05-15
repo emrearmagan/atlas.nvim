@@ -1,7 +1,7 @@
 local M = {}
 
 local service = require("atlas.issues.providers.jira.api.service")
-local normalizer = require("atlas.issues.providers.jira.api.normalizer")
+local normalizer = require("atlas.issues.providers.jira.api.mapper")
 
 ---@class JiraProjectGroup
 ---@field category table|nil
@@ -80,7 +80,7 @@ function M.get_projects(opts, callback)
 			end
 
 			for _, raw in ipairs(result.values or {}) do
-				local project = normalizer.normalize_project(raw)
+				local project = normalizer.to_project(raw)
 				if project then
 					table.insert(projects, project)
 				end

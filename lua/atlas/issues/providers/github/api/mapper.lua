@@ -14,7 +14,7 @@ end
 
 ---@param raw_user table|nil
 ---@return IssueUser|nil
-function M.normalize_user(raw_user)
+function M.to_user(raw_user)
 	raw_user = json.nilify(raw_user)
 	if type(raw_user) ~= "table" then
 		return nil
@@ -36,7 +36,7 @@ end
 ---@return IssueUser|nil
 local function first_assignee(raw_assignees)
 	for _, raw in ipairs(json.safe_table(raw_assignees)) do
-		local user = M.normalize_user(raw)
+		local user = M.to_user(raw)
 		if user then
 			return user
 		end
@@ -123,7 +123,7 @@ end
 ---@param raw table
 ---@param fallback_slug string|nil
 ---@return Issue|nil
-function M.normalize_issue(raw, fallback_slug)
+function M.to_issue(raw, fallback_slug)
 	raw = json.nilify(raw)
 	if type(raw) ~= "table" then
 		return nil
@@ -146,11 +146,11 @@ function M.normalize_issue(raw, fallback_slug)
 	local key = slug ~= "" and string.format("%s#%d", slug, number) or string.format("#%d", number)
 	local title = json.safe_str(raw.title) or ""
 	local status_name, status_id = normalize_state(raw.state)
-	local author = M.normalize_user(raw.author)
+	local author = M.to_user(raw.author)
 
 	local labels = connection_nodes(raw.labels)
 	local assignees = connection_nodes(raw.assignees)
-	local parent = M.normalize_issue(json.nilify(raw.parent), fallback_slug)
+	local parent = M.to_issue(json.nilify(raw.parent), fallback_slug)
 	local milestone = json.nilify(raw.milestone)
 	local body = json.safe_str(raw.body) or ""
 	local created_at = json.safe_str(raw.createdAt) or json.safe_str(raw.created_at) or ""
@@ -206,10 +206,10 @@ end
 ---@param raw_list table[]|nil
 ---@param fallback_slug string|nil
 ---@return Issue[]
-function M.normalize_issues(raw_list, fallback_slug)
+function M.to_issues_list(raw_list, fallback_slug)
 	local out = {}
 	for _, raw in ipairs(raw_list or {}) do
-		local issue = M.normalize_issue(raw, fallback_slug)
+		local issue = M.to_issue(raw, fallback_slug)
 		if issue ~= nil then
 			table.insert(out, issue)
 		end
@@ -219,7 +219,7 @@ end
 
 ---@param nodes table[]|nil
 ---@return Issue[]
-function M.normalize_graphql_search_results(nodes)
+function M.to_search_results(nodes)
 	local out = {}
 	local seen = {}
 
@@ -233,13 +233,13 @@ function M.normalize_graphql_search_results(nodes)
 	end
 
 	for _, raw in ipairs(nodes or {}) do
-		local issue = M.normalize_issue(raw, nil)
+		local issue = M.to_issue(raw, nil)
 		if type(issue) == "table" then
 			insert_issue(issue.parent)
 			insert_issue(issue)
 
 			for _, child_raw in ipairs(connection_nodes(raw.subIssues)) do
-				local child = M.normalize_issue(child_raw, nil)
+				local child = M.to_issue(child_raw, nil)
 				if type(child) == "table" and child.parent == nil then
 					child.parent = issue
 				end
@@ -283,7 +283,7 @@ end
 
 ---@param raw table
 ---@return IssueComment|nil
-function M.normalize_comment(raw)
+function M.to_comment(raw)
 	raw = json.nilify(raw)
 	if type(raw) ~= "table" or json.nilify(raw.id) == nil then
 		return nil
@@ -317,15 +317,195 @@ end
 
 ---@param raw_list table[]|nil
 ---@return IssueComment[]
-function M.normalize_comments(raw_list)
+function M.to_comments_list(raw_list)
 	local out = {}
 	for _, raw in ipairs(raw_list or {}) do
-		local c = M.normalize_comment(raw)
+		local c = M.to_comment(raw)
 		if c ~= nil then
 			table.insert(out, c)
 		end
 	end
 	return out
+end
+
+--------------------------------------------------------------------------------
+-- Provider specific types
+--------------------------------------------------------------------------------
+
+---@param hex string|nil
+---@return string|nil
+local function label_hl_group(hex)
+	if type(hex) ~= "string" or hex == "" then
+		return nil
+	end
+	local clean = hex:lower():gsub("[^0-9a-f]", "")
+	if #clean ~= 6 then
+		return nil
+	end
+	local name = "AtlasGHIssueLabel_" .. clean
+	pcall(vim.api.nvim_set_hl, 0, name, { fg = "#" .. clean, bold = true })
+	return name
+end
+
+---@param raw table
+---@return IssueActivityEntry|nil
+function M.to_timeline_entry(raw)
+	raw = json.nilify(raw)
+	if type(raw) ~= "table" then
+		return nil
+	end
+	local event = json.safe_str(raw.event) or ""
+	if event == "" then
+		return nil
+	end
+
+	local actor = M.to_user(raw.actor) or M.to_user(raw.user)
+	local date = json.safe_str(raw.created_at) or ""
+
+	---@type IssueActivityEntry
+	local entry = { kind = event, actor = actor, date = date }
+
+	if event == "commented" then
+		local body = json.safe_str(raw.body) or ""
+		entry.label = "commented"
+		entry.body = body ~= "" and body or nil
+	elseif event == "labeled" or event == "unlabeled" then
+		local label = json.nilify(raw.label)
+		local name = type(label) == "table" and (json.safe_str(label.name) or "") or ""
+		local color = type(label) == "table" and (json.safe_str(label.color) or "") or ""
+		entry.label = event == "labeled" and "added label" or "removed label"
+		if name ~= "" then
+			entry.body = name
+			local hl = label_hl_group(color)
+			if hl then
+				entry.body_hl = function(row, _)
+					return { { start_col = 0, end_col = #row, hl_group = hl } }
+				end
+			end
+		end
+	elseif event == "assigned" or event == "unassigned" then
+		local assignee = json.nilify(raw.assignee)
+		local login = type(assignee) == "table" and (json.safe_str(assignee.login) or "") or ""
+		entry.label = event == "assigned" and "assigned" or "unassigned"
+		entry.body = login ~= "" and login or nil
+	elseif event == "milestoned" or event == "demilestoned" then
+		local milestone = json.nilify(raw.milestone)
+		local title = type(milestone) == "table" and (json.safe_str(milestone.title) or "") or ""
+		entry.label = event == "milestoned" and "added milestone" or "removed milestone"
+		entry.body = title ~= "" and title or nil
+	elseif event == "renamed" then
+		local rename = json.nilify(raw.rename)
+		local from = type(rename) == "table" and (json.safe_str(rename.from) or "") or ""
+		local to = type(rename) == "table" and (json.safe_str(rename.to) or "") or ""
+		entry.label = "renamed"
+		if from ~= "" or to ~= "" then
+			entry.body = from .. " → " .. to
+			entry.body_hl = function(row, _)
+				local s, e = row:find(" → ", 1, true)
+				if not s then
+					return nil
+				end
+				return {
+					{ start_col = 0, end_col = s - 1, hl_group = "AtlasTextWarning" },
+					{ start_col = e, end_col = #row, hl_group = "AtlasTextPositive" },
+				}
+			end
+		end
+	elseif event == "cross-referenced" then
+		local source = json.nilify(raw.source)
+		source = type(source) == "table" and source or {}
+		local issue = json.nilify(source.issue)
+		issue = type(issue) == "table" and issue or {}
+		local title = json.safe_str(issue.title) or ""
+		local url = json.safe_str(issue.html_url) or ""
+		entry.label = "referenced"
+		entry.body = title ~= "" and title or (url ~= "" and url or nil)
+	elseif event == "referenced" or event == "closed" then
+		local commit_id = json.safe_str(raw.commit_id)
+		local short = (commit_id and commit_id ~= "") and commit_id:sub(1, 8) or nil
+		entry.label = event == "closed" and "closed" or "referenced"
+		if short then
+			entry.body = "commit " .. short
+			entry.body_hl = function(row, _)
+				return { { start_col = 0, end_col = #row, hl_group = "AtlasTextMuted" } }
+			end
+		end
+	elseif event == "reopened" then
+		entry.label = "reopened"
+	elseif event == "locked" then
+		entry.label = "locked conversation"
+	elseif event == "unlocked" then
+		entry.label = "unlocked conversation"
+	elseif event == "pinned" then
+		entry.label = "pinned this issue"
+	elseif event == "unpinned" then
+		entry.label = "unpinned this issue"
+	elseif event == "transferred" then
+		entry.label = "transferred"
+	elseif event == "marked_as_duplicate" then
+		entry.label = "marked as duplicate"
+	elseif event == "ready_for_review" then
+		entry.label = "marked as ready for review"
+	elseif event == "convert_to_draft" then
+		entry.label = "marked as draft"
+	elseif event == "head_ref_force_pushed" then
+		entry.label = "force pushed"
+	elseif event == "base_ref_force_pushed" then
+		entry.label = "base branch force pushed"
+	elseif event == "review_requested" then
+		entry.label = "requested a review"
+	elseif event == "reviewed" then
+		entry.label = "reviewed"
+	elseif event == "committed" then
+		entry.label = "added a commit"
+	elseif event == "subscribed" then
+		entry.label = "subscribed"
+	elseif event == "unsubscribed" then
+		entry.label = "unsubscribed"
+	elseif event == "mentioned" then
+		entry.label = "was mentioned"
+	elseif event == "comment_deleted" then
+		entry.label = "deleted a comment"
+	elseif event == "connected" then
+		entry.label = "linked a pull request"
+	elseif event == "disconnected" then
+		entry.label = "unlinked a pull request"
+	elseif event == "parent_issue_added" then
+		entry.label = "added a parent issue"
+	elseif event == "parent_issue_removed" then
+		entry.label = "removed a parent issue"
+	elseif event == "sub_issue_added" then
+		entry.label = "added a sub-issue"
+	elseif event == "sub_issue_removed" then
+		entry.label = "removed a sub-issue"
+	elseif event == "added_to_project_v2" then
+		entry.label = "added to a project"
+	elseif event == "removed_from_project_v2" then
+		entry.label = "removed from a project"
+	elseif event == "project_v2_item_status_changed" then
+		entry.label = "changed project status"
+	elseif event == "blocking_added" then
+		entry.label = "added a blocker"
+	elseif event == "blocking_removed" then
+		entry.label = "removed a blocker"
+	else
+		entry.label = event
+	end
+
+	return entry
+end
+
+---@param raw table
+---@return IssueComment|nil
+function M.to_timeline_comment(raw)
+	local comment = {}
+	for key, value in pairs(raw) do
+		comment[key] = value
+	end
+	if json.nilify(comment.user) == nil then
+		comment.user = json.nilify(raw.actor)
+	end
+	return M.to_comment(comment)
 end
 
 return M

@@ -1,7 +1,7 @@
 local M = {}
 
 local service = require("atlas.pulls.providers.bitbucket.api.service")
-local pr_normalizer = require("atlas.pulls.providers.bitbucket.api.pr_normalizer")
+local mapper = require("atlas.pulls.providers.bitbucket.api.mapper")
 local cache = require("atlas.core.cache")
 local logger = require("atlas.core.logger")
 local http = require("atlas.core.http")
@@ -84,7 +84,7 @@ local function fetch_pullrequests_single(workspace, repo, opts, on_done)
 			return
 		end
 
-		local normalized = pr_normalizer.pullrequests(result, workspace, repo)
+		local normalized = mapper.to_pull_requests_list(result, workspace, repo)
 		cache.set(key, normalized, opts.cache_ttl)
 		logger.loginfo("Fetch success", {
 			workspace = workspace,
@@ -157,7 +157,7 @@ function M.fetch_pullrequests(view_repos, opts, on_done)
 				pr_count = #all_prs,
 				error_count = #errors,
 			})
-			local groups = pr_normalizer.pull_request_groups(all_prs)
+			local groups = mapper.to_pull_request_groups(all_prs)
 			if #errors > 0 then
 				on_done(groups, errors)
 			else
@@ -210,7 +210,7 @@ function M.fetch_pullrequest(workspace, repo, pr_id, opts, on_done)
 			return
 		end
 
-		local prs = pr_normalizer.pullrequests({ values = { result } }, workspace, repo)
+		local prs = mapper.to_pull_requests_list({ values = { result } }, workspace, repo)
 		if #prs == 0 then
 			on_done(nil, "Invalid pull request response")
 			return
@@ -349,7 +349,7 @@ function M.fetch_activity(pr, opts, on_done)
 			return
 		end
 
-		on_done(pr_normalizer.pr_activity(result), nil)
+		on_done(mapper.to_activities_list(result), nil)
 	end)
 end
 
@@ -424,7 +424,7 @@ function M.fetch_commits(pr, opts, on_done)
 			on_done(nil, err)
 			return
 		end
-		local commits = pr_normalizer.pr_commits(result)
+		local commits = mapper.to_commits_list(result)
 		service.set_cache(key, commits, service.cache_ttl())
 		on_done(commits, nil)
 	end)

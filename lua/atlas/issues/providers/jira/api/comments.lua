@@ -1,7 +1,7 @@
 local M = {}
 
 local service = require("atlas.issues.providers.jira.api.service")
-local normalizer = require("atlas.issues.providers.jira.api.normalizer")
+local normalizer = require("atlas.issues.providers.jira.api.mapper")
 local logger = require("atlas.core.logger")
 local markdown = require("atlas.issues.providers.jira.converted.markdown")
 
@@ -36,7 +36,7 @@ function M.get_comments_page(issue_key, start_at, max_results, callback, opts)
 			return
 		end
 
-		local comments = normalizer.normalize_comments(result, issue_key)
+		local comments = normalizer.to_comments_list(result, issue_key)
 		service.set_memory_cache(cache_key, comments, PANEL_CACHE_TTL)
 		callback(comments, nil)
 	end)
@@ -82,7 +82,7 @@ function M.add_comment(issue_key, comment, opts, callback)
 		end
 
 		service.clear_memory_cache()
-		local comments = normalizer.normalize_comments({ comments = { result } }, issue_key)
+		local comments = normalizer.to_comments_list({ comments = { result } }, issue_key)
 		callback(comments[1], nil)
 	end)
 end
@@ -119,7 +119,7 @@ function M.edit_comment(issue_key, comment_id, comment, callback)
 		end
 
 		service.clear_memory_cache()
-		local comments = normalizer.normalize_comments({ comments = { result } }, issue_key)
+		local comments = normalizer.to_comments_list({ comments = { result } }, issue_key)
 		callback(comments[1], nil)
 	end)
 end

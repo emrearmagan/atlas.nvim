@@ -33,29 +33,21 @@ local function get_provider()
 	return require("atlas.issues.state").provider
 end
 
----@param entries IssueHistoryEntry[]|nil
+---@param entries IssueActivityEntry[]|nil
 ---@return AtlasThreadV2Item[]
 local function to_thread_items(entries)
-	local provider = get_provider()
-	local fmt = provider and provider.panel and type(provider.panel.format_history_item) == "function"
-		and provider.panel.format_history_item or nil
-
 	local out = {}
 	for _, entry in ipairs(entries or {}) do
-		local author = entry.author and entry.author.display_name or "Unknown"
-		local timestamp = utils.relative_time_text(entry.created)
-
-		for _, item in ipairs(entry.items or {}) do
-			local formatted = fmt and fmt(item) or { label = item.field or "", content = nil }
-			table.insert(out, {
-				icon = icons.general("user"),
-				author = author,
-				right_text = timestamp,
-				additional = formatted.label,
-				content = formatted.content,
-				line_map = { kind = "history", history_entry = entry, history_item = item },
-			})
-		end
+		local author = entry.actor and entry.actor.display_name or "Unknown"
+		local timestamp = utils.relative_time_text(entry.date)
+		table.insert(out, {
+			icon = icons.general("user"),
+			author = author,
+			right_text = timestamp,
+			additional = entry.label,
+			content = entry.body,
+			line_map = { kind = "history", activity_entry = entry },
+		})
 	end
 	return out
 end
@@ -65,12 +57,11 @@ end
 ---@param row_index integer
 ---@return table[]|nil
 local function content_hl(item, row, row_index)
-	local history_item = item.line_map and item.line_map.history_item
-	if not history_item then return nil end
-	local provider = get_provider()
-	if provider and provider.panel and type(provider.panel.history_item_hl) == "function" then
-		return provider.panel.history_item_hl(history_item, row, row_index)
+	local entry = item.line_map and item.line_map.activity_entry
+	if not entry or type(entry.body_hl) ~= "function" then
+		return nil
 	end
+	return entry.body_hl(row, row_index)
 end
 
 ---@param issue Issue
@@ -79,7 +70,7 @@ end
 function M.on_select(issue, refresh, opts)
 	opts = opts or {}
 	local provider = get_provider()
-	if not provider or not provider.fetch_history then
+	if not provider or not provider.fetch_activity then
 		return
 	end
 
@@ -95,7 +86,7 @@ function M.on_select(issue, refresh, opts)
 	local issue_key = tostring(issue.key or "")
 	footer.notify("loading", string.format("Loading history for %s...", issue_key))
 
-	track(provider.fetch_history(issue_key, { force_load = force_refresh }, function(entries, err)
+	track(provider.fetch_activity(issue, { force_load = force_refresh }, function(entries, err)
 		state.is_loading = false
 
 		if err then

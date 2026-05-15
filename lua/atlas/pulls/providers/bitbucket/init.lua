@@ -451,7 +451,7 @@ function M.fetch_comments(pr, opts, on_done)
 			attach_hunk(c, diff_result)
 			table.insert(merged, c)
 		end
-		local task_entries = tasks_result.entries or tasks_result
+		local task_entries = tasks_result or {}
 		for _, t in ipairs(task_entries or {}) do
 			table.insert(merged, task_to_comment(t))
 		end

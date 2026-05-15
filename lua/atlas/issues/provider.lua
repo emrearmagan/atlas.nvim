@@ -35,8 +35,8 @@
 ---@field fetch_user fun(on_done: fun(user: IssueUser|nil, err: string|nil))
 ---@field fetch_issues fun(view: IssuesViewConfig, opts: IssuesFetchOpts, on_done: fun(issues: Issue[], next_page_token: string|nil, is_last: boolean, err: string|nil)): { cancel: fun() }|nil
 ---@field fetch_issue fun(issue_key: string, opts: IssuesFetchOpts|nil, on_done: fun(issue: Issue|nil, err: string|nil)): { cancel: fun() }|nil
----@field fetch_comments fun(issue_key: string, opts: IssuesFetchOpts|nil, on_done: fun(comments: IssueComment[]|nil, err: string|nil)): { cancel: fun() }|nil
----@field fetch_history (fun(issue_key: string, opts: IssuesFetchOpts|nil, on_done: fun(entries: IssueHistoryEntry[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field fetch_comments fun(issue: Issue, opts: IssuesFetchOpts|nil, on_done: fun(comments: IssueComment[]|nil, err: string|nil)): { cancel: fun() }|nil
+---@field fetch_activity (fun(issue: Issue, opts: IssuesFetchOpts|nil, on_done: fun(entries: IssueActivityEntry[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field fetch_conversation (fun(issue: Issue, opts: { force_refresh: boolean|nil }|nil, on_done: fun(result: { comments: IssueComment[], events: IssueActivityEntry[], reaction_options: IssueReactionOption[]|nil }|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field add_comment (fun(issue: Issue, content: string, on_done: fun(comment: IssueComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field reply_comment (fun(issue: Issue, parent_id: string, content: string, on_done: fun(comment: IssueComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
@@ -73,8 +73,6 @@
 ---@field tabs (fun(): IssuesPanelTab[])|nil
 ---@field fetches (fun(issue: Issue, refresh: fun(), opts: { force_load?: boolean }|nil))|nil
 ---@field is_loading (fun(issue: Issue): boolean)|nil
----@field format_history_item (fun(item: IssueHistoryItem): { label: string, content: string|nil })|nil
----@field history_item_hl (fun(item: IssueHistoryItem, row: string, row_index: integer): table[]|nil)|nil
 ---@field comment_completion (fun(): AtlasMarkdownCompletionProvider|nil)|nil
 ---@field resolve_comment_body (fun(body: string): string)|nil
 

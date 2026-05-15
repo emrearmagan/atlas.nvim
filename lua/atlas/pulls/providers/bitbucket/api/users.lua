@@ -45,6 +45,12 @@ function M.fetch_current_user(on_done)
 	end)
 end
 
+---@class BitbucketWorkspace
+---@field administrator boolean
+---@field slug string
+---@field uuid string
+---@field links_self string|nil
+
 ---@param on_done fun(workspaces: BitbucketWorkspace[]|nil, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.fetch_workspaces(on_done)

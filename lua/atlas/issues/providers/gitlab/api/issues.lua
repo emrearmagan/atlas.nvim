@@ -1,7 +1,7 @@
 local M = {}
 
 local service = require("atlas.issues.providers.gitlab.api.service")
-local normalizer = require("atlas.issues.providers.gitlab.api.normalizer")
+local normalizer = require("atlas.issues.providers.gitlab.api.mapper")
 local logger = require("atlas.core.logger")
 
 ---@param params table<string, any>
@@ -70,7 +70,7 @@ function M.list_issues(view, opts, on_done)
 			on_done(nil, err)
 			return
 		end
-		local issues = normalizer.normalize_issues(type(result) == "table" and result or {})
+		local issues = normalizer.to_issues_list(type(result) == "table" and result or {})
 		service.set_memory_cache(cache_key, issues)
 		on_done(issues, nil)
 	end)
@@ -103,7 +103,7 @@ function M.get_issue(key, opts, on_done)
 			on_done(nil, err or "Empty response")
 			return
 		end
-		local issue = normalizer.normalize_issue(result)
+		local issue = normalizer.to_issue(result)
 		if issue then
 			service.set_memory_cache(cache_key, issue)
 		end
@@ -257,7 +257,7 @@ function M.create_issue(opts, on_done)
 			return
 		end
 
-		local issue = normalizer.normalize_issue(result)
+		local issue = normalizer.to_issue(result)
 		local iid = (issue and issue._raw and issue._raw.iid) or tonumber(result.iid)
 		local key = (issue and issue.key) or (iid and string.format("%s#%d", path, iid) or nil)
 		service.clear_memory_cache()
@@ -306,7 +306,7 @@ function M.search_issues_picker(query, opts, on_done)
 			on_done(nil, err)
 			return
 		end
-		local issues = normalizer.normalize_issues(type(result) == "table" and result or {})
+		local issues = normalizer.to_issues_list(type(result) == "table" and result or {})
 		local items = {}
 		for _, issue in ipairs(issues) do
 			table.insert(items, {

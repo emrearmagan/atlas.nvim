@@ -1,7 +1,7 @@
 local M = {}
 
 local service = require("atlas.pulls.providers.gitlab.api.service")
-local normalizer = require("atlas.pulls.providers.gitlab.api.normalizer")
+local mapper = require("atlas.pulls.providers.gitlab.api.mapper")
 local logger = require("atlas.core.logger")
 
 ---@param params table<string, any>
@@ -87,7 +87,7 @@ function M.list_mrs(view, opts, on_done)
 			on_done(nil, err)
 			return
 		end
-		local groups = normalizer.normalize_mrs_to_groups(result or {})
+		local groups = mapper.to_pull_request_groups(result or {})
 		service.set_cache(cache_key, groups)
 		on_done(groups, nil)
 	end)
@@ -163,7 +163,7 @@ function M.get_mr(pr, opts, on_done)
 			on_done(nil, err or "Empty response")
 			return
 		end
-		local mr = normalizer.normalize_mr(result)
+		local mr = mapper.to_pull_request(result)
 		if mr then
 			service.set_memory_cache(cache_key, mr)
 		end
@@ -228,7 +228,7 @@ function M.update_mr(pr, payload, on_done)
 			return
 		end
 		bust_caches(pr)
-		on_done(type(result) == "table" and normalizer.normalize_mr(result) or nil, nil)
+		on_done(type(result) == "table" and mapper.to_pull_request(result) or nil, nil)
 	end)
 end
 
@@ -508,7 +508,7 @@ function M.create_mr(opts, on_done)
 			on_done(nil, err or "Empty response")
 			return
 		end
-		local mr = normalizer.normalize_mr(result)
+		local mr = mapper.to_pull_request(result)
 		local iid = (mr and mr._raw and mr._raw.iid) or tonumber(result.iid)
 		on_done({
 			iid = iid,

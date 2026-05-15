@@ -122,13 +122,6 @@ function M.is_loading(_issue)
 		or (type(history_state.any_loading) == "function" and history_state.any_loading())
 end
 
----@param item IssueHistoryItem
----@return { label: string, content: string|nil }
-function M.format_history_item(item)
-	local body = tostring(item.to_string or item.from_string or item.field or "")
-	return { label = body, content = nil }
-end
-
 ---@return IssuesPanelTab[]
 function M.tabs()
 	return {}

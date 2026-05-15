@@ -148,15 +148,15 @@ function M.fetch_issue(issue_key, opts, on_done)
 	return issues_api.get_issue(issue_key, on_done)
 end
 
----@param issue_key string
+---@param issue Issue
 ---@param opts IssuesFetchOpts|nil
 ---@param on_done fun(comments: IssueComment[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_comments(issue_key, opts, on_done)
+function M.fetch_comments(issue, opts, on_done)
 	local comments_api = require("atlas.issues.providers.jira.api.comments")
 	local COMMENTS_PAGE_SIZE = 100
 
-	return comments_api.get_comments_page(issue_key, 0, COMMENTS_PAGE_SIZE, on_done, {
+	return comments_api.get_comments_page(tostring(issue.key or ""), 0, COMMENTS_PAGE_SIZE, on_done, {
 		force_load = opts and opts.force_load or false,
 	})
 end
@@ -207,7 +207,7 @@ function M.fetch_conversation(issue, opts, on_done)
 
 	local force = opts.force_refresh == true
 
-	return M.fetch_comments(issue_key, { force_load = force }, function(comments, err)
+	return M.fetch_comments(issue, { force_load = force }, function(comments, err)
 		if err then
 			on_done(nil, err)
 			return
@@ -230,13 +230,13 @@ function M.delete_comment(issue, comment_id, on_done)
 	return comments_api.delete_comment(issue_key, comment_id, on_done)
 end
 
----@param issue_key string
+---@param issue Issue
 ---@param opts IssuesFetchOpts|nil
----@param on_done fun(entries: table[]|nil, err: string|nil)
+---@param on_done fun(entries: IssueActivityEntry[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_history(issue_key, opts, on_done)
+function M.fetch_activity(issue, opts, on_done)
 	local issues_api = require("atlas.issues.providers.jira.api.issues")
-	return issues_api.get_issue_history_page(issue_key, 0, 100, function(page, err)
+	return issues_api.get_issue_history_page(tostring(issue.key or ""), 0, 100, function(page, err)
 		if err or not page then
 			on_done(nil, err)
 			return

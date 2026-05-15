@@ -1,7 +1,7 @@
 local M = {}
 
 local cli = require("atlas.issues.providers.github.api.cli")
-local normalizer = require("atlas.issues.providers.github.api.normalizer")
+local normalizer = require("atlas.issues.providers.github.api.mapper")
 local logger = require("atlas.core.logger")
 
 local SEARCH_GQL = [[
@@ -72,36 +72,6 @@ fragment IssueFields on Issue {
 }
 ]]
 
----@class GitHubLabel
----@field name string
----@field color string|nil
----@field description string|nil
-
----@class GitHubAssignee
----@field login string
----@field name string|nil
-
----@class GitHubMilestone
----@field number integer
----@field title string
----@field state string|nil
----@field description string|nil
----@field progressPercentage number|nil
----@field openIssues { totalCount: integer }|nil
----@field closedIssues { totalCount: integer }|nil
-
----@class GitHubCreateIssueOpts
----@field repo_slug string
----@field title string
----@field body string|nil
----@field labels string[]|nil
----@field assignees string[]|nil
----@field milestone integer|nil
-
----@class GitHubCreateIssueResult
----@field number integer|nil
----@field url string|nil
-
 ---@param query string
 ---@return string
 local function issue_search_query(query)
@@ -171,7 +141,7 @@ function M.search_issues(search, on_done, opts)
 				and type(result.data.search) == "table"
 				and result.data.search.nodes
 			or nil
-		local issues = normalizer.normalize_graphql_search_results(type(nodes) == "table" and nodes or {})
+		local issues = normalizer.to_search_results(type(nodes) == "table" and nodes or {})
 		cli.set_cache(cache_key, issues)
 		on_done(issues, nil)
 	end)
@@ -229,7 +199,7 @@ function M.get_issue(key, on_done, opts)
 			and type(result.data.repository) == "table"
 			and result.data.repository.issue
 			or nil
-		local issue = normalizer.normalize_issue(type(raw) == "table" and raw or {}, slug)
+		local issue = normalizer.to_issue(type(raw) == "table" and raw or {}, slug)
 		if issue then
 			cli.set_mem(cache_key, issue)
 		end
@@ -317,7 +287,7 @@ function M.update_labels(key, diff, on_done)
 end
 
 ---@param slug string
----@param on_done fun(labels: GitHubLabel[]|nil, err: string|nil)
+---@param on_done fun(labels: { name: string, color: string|nil, description: string|nil }[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.list_labels(slug, on_done)
 	if type(slug) ~= "string" or slug == "" then
@@ -354,7 +324,7 @@ function M.list_labels(slug, on_done)
 end
 
 ---@param slug string
----@param on_done fun(assignees: GitHubAssignee[]|nil, err: string|nil)
+---@param on_done fun(assignees: IssueUser[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.list_assignees(slug, on_done)
 	if type(slug) ~= "string" or slug == "" then
@@ -377,17 +347,24 @@ function M.list_assignees(slug, on_done)
 		local list = {}
 		if type(result) == "table" then
 			for _, raw in ipairs(result) do
-				if type(raw) == "table" and type(raw.login) == "string" then
-					table.insert(list, {
-						login = raw.login,
-						name = type(raw.name) == "string" and raw.name or nil,
-					})
+				local user = normalizer.to_user(raw)
+				if user then
+					table.insert(list, user)
 				end
 			end
 		end
 		on_done(list, nil)
 	end)
 end
+
+---@class GitHubMilestone
+---@field number integer
+---@field title string
+---@field state string|nil
+---@field description string|nil
+---@field progressPercentage number|nil
+---@field openIssues { totalCount: integer }|nil
+---@field closedIssues { totalCount: integer }|nil
 
 ---@param slug string
 ---@param on_done fun(milestones: GitHubMilestone[]|nil, err: string|nil)
@@ -427,8 +404,16 @@ function M.list_milestones(slug, on_done)
 	end)
 end
 
+---@class GitHubCreateIssueOpts
+---@field repo_slug string
+---@field title string
+---@field body string|nil
+---@field labels string[]|nil
+---@field assignees string[]|nil
+---@field milestone integer|nil
+
 ---@param opts GitHubCreateIssueOpts
----@param on_done fun(result: GitHubCreateIssueResult|nil, err: string|nil)
+---@param on_done fun(result: { number: integer|nil, url: string|nil }|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.create_issue(opts, on_done)
 	local slug = tostring(opts.repo_slug or "")

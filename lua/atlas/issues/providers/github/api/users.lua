@@ -1,7 +1,7 @@
 local M = {}
 
 local cli = require("atlas.issues.providers.github.api.cli")
-local normalizer = require("atlas.issues.providers.github.api.normalizer")
+local normalizer = require("atlas.issues.providers.github.api.mapper")
 local logger = require("atlas.core.logger")
 
 ---@param on_done fun(user: IssueUser|nil, err: string|nil)
@@ -20,7 +20,7 @@ function M.get_user(on_done)
 			on_done(nil, err or "Empty response")
 			return
 		end
-		local user = normalizer.normalize_user(result)
+		local user = normalizer.to_user(result)
 		if user then
 			cli.set_cache(cache_key, user)
 		end
@@ -48,7 +48,7 @@ function M.get_assignable_users(slug, query, on_done)
 			end
 			local users = {}
 			for _, raw in ipairs(result) do
-				local user = normalizer.normalize_user(raw)
+				local user = normalizer.to_user(raw)
 				if user then
 					if q == "" or user.display_name:lower():find(q:lower(), 1, true) or user.account_id:lower():find(q:lower(), 1, true) then
 						table.insert(users, user)

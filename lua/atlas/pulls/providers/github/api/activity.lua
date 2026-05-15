@@ -1,144 +1,7 @@
 local M = {}
 
 local cli = require("atlas.pulls.providers.github.api.cli")
-local json = require("atlas.core.json")
-
----@param value any
----@return string
-local function body_text(value)
-	return json.safe_str(value) or ""
-end
-
----@param login string
----@return PullsAuthor|nil
-local function actor_from_login(login)
-	if login == nil or login == "" then
-		return nil
-	end
-	return { name = login, id = "", username = login, nickname = login }
-end
-
----@param item table
----@return PullsActivityEntry|nil
-local function normalize_event(item)
-	local event = tostring(item.event or "")
-	local actor_login = (type(item.actor) == "table" and tostring(item.actor.login or ""))
-		or (type(item.user) == "table" and tostring(item.user.login or ""))
-		or ""
-	local actor = actor_from_login(actor_login)
-	local date = tostring(item.created_at or item.submitted_at or "")
-
-	if event == "commented" then
-		local body = body_text(item.body)
-		return {
-			kind = "comment",
-			actor = actor,
-			date = date,
-			label = "commented",
-			body = body ~= "" and body or nil,
-		}
-	elseif event == "reviewed" then
-		local state_label = tostring(item.state or ""):lower()
-		local kind = state_label == "approved" and "approval"
-			or state_label == "changes_requested" and "changes_requested"
-			or "review"
-		local verb = kind == "approval" and "approved"
-			or kind == "changes_requested" and "requested changes"
-			or "left a review"
-		local body = body_text(item.body)
-		return {
-			kind = kind,
-			actor = actor,
-			date = date,
-			label = verb,
-			body = body ~= "" and body or nil,
-			always_render = body ~= "" or nil,
-		}
-	elseif event == "closed" or event == "merged" or event == "reopened" then
-		return { kind = event, actor = actor, date = date, label = event }
-	elseif event == "head_ref_force_pushed" then
-		return { kind = "force_pushed", actor = actor, date = date, label = "force pushed" }
-	elseif event == "committed" then
-		local author = type(item.author) == "table" and item.author or {}
-		local author_name = tostring(author.name or "")
-		return {
-			kind = "committed",
-			actor = actor_from_login(author_name),
-			date = tostring(author.date or date),
-			content_raw = "1 commit",
-		}
-	elseif event == "base_ref_force_pushed" then
-		return { kind = "force_pushed", actor = actor, date = date, label = "base branch force pushed" }
-	elseif event == "labeled" or event == "unlabeled" then
-		local label = type(item.label) == "table" and tostring(item.label.name or "") or ""
-		if label == "" then
-			return nil
-		end
-		local verb = event == "labeled" and "added label" or "removed label"
-		return { kind = event, actor = actor, date = date, label = verb .. ": " .. label }
-	elseif event == "assigned" or event == "unassigned" then
-		local assignee = type(item.assignee) == "table" and tostring(item.assignee.login or "") or ""
-		if assignee == "" then
-			return nil
-		end
-		local verb = event == "assigned" and "assigned" or "unassigned"
-		return { kind = event, actor = actor, date = date, label = verb .. " " .. assignee }
-	elseif event == "review_requested" then
-		local reviewer = type(item.requested_reviewer) == "table" and tostring(item.requested_reviewer.login or "")
-			or ""
-		return {
-			kind = "review_requested",
-			actor = actor,
-			date = date,
-			label = reviewer ~= "" and ("requested review from " .. reviewer) or "requested review",
-		}
-	elseif event == "ready_for_review" then
-		return {
-			kind = "ready_for_review",
-			actor = actor,
-			date = date,
-			label = "marked as ready for review",
-		}
-	elseif event == "convert_to_draft" then
-		return { kind = "convert_to_draft", actor = actor, date = date, label = "marked as draft" }
-	end
-	return nil
-end
-
----@param raw table
----@return PullsComment
-local function normalize_comment(raw)
-	local user = type(raw.user) == "table" and raw.user or (type(raw.actor) == "table" and raw.actor or {})
-	local reactions = nil
-	if type(raw.reactions) == "table" then
-		reactions = {
-			["+1"] = tonumber(raw.reactions["+1"]) or 0,
-			["-1"] = tonumber(raw.reactions["-1"]) or 0,
-			laugh = tonumber(raw.reactions.laugh) or 0,
-			hooray = tonumber(raw.reactions.hooray) or 0,
-			confused = tonumber(raw.reactions.confused) or 0,
-			heart = tonumber(raw.reactions.heart) or 0,
-			rocket = tonumber(raw.reactions.rocket) or 0,
-			eyes = tonumber(raw.reactions.eyes) or 0,
-		}
-	end
-	return {
-		id = raw.id,
-		parent_id = nil,
-		author = {
-			name = tostring(user.login or ""),
-			nickname = tostring(user.login or ""),
-			id = tostring(user.id or ""),
-		},
-		content_raw = tostring(raw.body or ""),
-		created_on = tostring(raw.created_at or raw.submitted_at or ""),
-		deleted = false,
-		inline = nil,
-		url = nil,
-		html_url = tostring(raw.html_url or ""),
-		reactions = reactions,
-	}
-end
+local mapper = require("atlas.pulls.providers.github.api.mapper")
 
 ---@param pr PullRequest
 ---@param opts { force_refresh: boolean|nil }|nil
@@ -179,14 +42,14 @@ function M.fetch_conversation(pr, opts, on_done)
 			for _, item in ipairs(result) do
 				local event_name = type(item) == "table" and tostring(item.event or "") or ""
 				if event_name == "commented" then
-					table.insert(conversation.comments, normalize_comment(item))
+					table.insert(conversation.comments, mapper.to_activity_comment(item))
 				elseif event_name == "reviewed" then
-					local entry = normalize_event(item)
+					local entry = mapper.to_activity(item)
 					if entry then
 						table.insert(conversation.events, entry)
 					end
 				else
-					local entry = normalize_event(item)
+					local entry = mapper.to_activity(item)
 					if entry then
 						table.insert(conversation.events, entry)
 					end

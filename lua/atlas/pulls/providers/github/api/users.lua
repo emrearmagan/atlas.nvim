@@ -1,7 +1,7 @@
 local M = {}
 
 local cli = require("atlas.pulls.providers.github.api.cli")
-local normalizer = require("atlas.pulls.providers.github.api.normalizer")
+local mapper = require("atlas.pulls.providers.github.api.mapper")
 local logger = require("atlas.core.logger")
 
 ---@param on_done fun(user: PullsUser|nil, err: string|nil)
@@ -27,7 +27,7 @@ function M.fetch_user(on_done, opts)
 			return
 		end
 
-		local user = normalizer.normalize_user(result)
+		local user = mapper.to_user(result)
 		cli.set_cache(cache_key, user)
 		on_done(user, nil)
 	end)

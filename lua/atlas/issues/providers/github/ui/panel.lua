@@ -324,33 +324,4 @@ function M.tabs()
 	}
 end
 
----@param item IssueHistoryItem
----@return { label: string, content: string|nil }
-function M.format_history_item(item)
-	local label, content = require("atlas.issues.providers.github.ui.event_label").format(item)
-	return { label = label, content = content }
-end
-
----@param item IssueHistoryItem
----@param row string
----@param row_index integer
----@return table[]|nil
-function M.history_item_hl(item, row, row_index) ---@diagnostic disable-line: unused-local
-	local highlights = require("atlas.ui.shared.highlights")
-	local field = item.field or ""
-	local hl
-	if field == "labeled" or field == "unlabeled" then
-		hl = label_hl(item.label_color)
-	elseif field == "assigned" or field == "unassigned" then
-		hl = highlights.dynamic_for(item.assignee_login)
-	elseif field == "milestoned" or field == "demilestoned" then
-		hl = highlights.dynamic_for(item.milestone_title)
-	elseif field == "closed" then
-		hl = "AtlasGHIssueClosed"
-	elseif field == "reopened" then
-		hl = "AtlasGHIssueOpen"
-	end
-	return { { start_col = 0, end_col = #row, hl_group = hl or "AtlasTextMuted" } }
-end
-
 return M

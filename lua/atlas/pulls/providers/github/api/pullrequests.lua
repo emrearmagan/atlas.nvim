@@ -1,7 +1,7 @@
 local M = {}
 
 local cli = require("atlas.pulls.providers.github.api.cli")
-local normalizer = require("atlas.pulls.providers.github.api.normalizer")
+local mapper = require("atlas.pulls.providers.github.api.mapper")
 local logger = require("atlas.core.logger")
 
 local GET_PR_GQL = [[
@@ -94,8 +94,8 @@ function M.search_prs(search, on_done, opts)
 			return
 		end
 
-		local prs = normalizer.normalize_graphql_search_results(nodes)
-		local groups = normalizer.group_by_repo(prs)
+		local prs = mapper.to_search_results_from_graphql(nodes)
+		local groups = mapper.to_pull_request_groups(prs)
 
 		cli.set_cache(cache_key, groups)
 		logger.loginfo("GitHub GraphQL search complete", { count = #prs, groups = #groups })
@@ -150,7 +150,7 @@ function M.get_pr(owner, repo, number, on_done, opts)
 		end
 
 		pr_raw.repository = { name = repo, nameWithOwner = repo_slug }
-		local pr = normalizer.normalize_pr(pr_raw)
+		local pr = mapper.to_pull_request(pr_raw)
 		cli.set_mem(cache_key, pr)
 		on_done(pr, nil)
 	end)

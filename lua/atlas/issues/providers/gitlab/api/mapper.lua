@@ -4,7 +4,7 @@ local json = require("atlas.core.json")
 
 ---@param raw_user table|nil
 ---@return IssueUser|nil
-function M.normalize_user(raw_user)
+function M.to_user(raw_user)
 	raw_user = json.nilify(raw_user)
 	if type(raw_user) ~= "table" then
 		return nil
@@ -24,7 +24,7 @@ end
 ---@return IssueUser|nil
 local function first_assignee(raw_assignees)
 	for _, raw in ipairs(json.safe_table(raw_assignees)) do
-		local user = M.normalize_user(raw)
+		local user = M.to_user(raw)
 		if user then
 			return user
 		end
@@ -44,7 +44,7 @@ end
 
 ---@param raw table
 ---@return Issue|nil
-function M.normalize_issue(raw)
+function M.to_issue(raw)
 	raw = json.nilify(raw)
 	if type(raw) ~= "table" then
 		return nil
@@ -92,7 +92,7 @@ function M.normalize_issue(raw)
 		type = nil,
 		priority = nil,
 		assignee = first_assignee(assignees),
-		reporter = M.normalize_user(raw.author),
+		reporter = M.to_user(raw.author),
 		story_points = tonumber(json.nilify(raw.weight)),
 		duedate = json.safe_str(raw.due_date),
 		parent = nil,
@@ -121,10 +121,10 @@ end
 
 ---@param raw_list table[]|nil
 ---@return Issue[]
-function M.normalize_issues(raw_list)
+function M.to_issues_list(raw_list)
 	local out = {}
 	for _, raw in ipairs(raw_list or {}) do
-		local issue = M.normalize_issue(raw)
+		local issue = M.to_issue(raw)
 		if issue ~= nil then
 			table.insert(out, issue)
 		end
@@ -141,6 +141,47 @@ function M.parse_key(key)
 		return path, tonumber(num)
 	end
 	return "", nil
+end
+
+---@param raw table
+---@return IssueComment|nil
+function M.to_comment_from_note(raw)
+	raw = json.nilify(raw)
+	if type(raw) ~= "table" or json.nilify(raw.id) == nil then
+		return nil
+	end
+	return {
+		id = tostring(raw.id),
+		self = nil,
+		url = nil,
+		author = M.to_user(raw.author),
+		body = json.safe_str(raw.body) or "",
+		_body = nil,
+		created = json.safe_str(raw.created_at) or "",
+		updated = json.safe_str(raw.updated_at),
+		parent_id = nil,
+		children = nil,
+		reactions = nil,
+	}
+end
+
+---@param raw table
+---@return IssueActivityEntry|nil
+function M.to_activity_from_note(raw)
+	raw = json.nilify(raw)
+	if type(raw) ~= "table" or json.nilify(raw.id) == nil then
+		return nil
+	end
+	local body = json.safe_str(raw.body) or ""
+	if body == "" then
+		return nil
+	end
+	return {
+		kind = "system",
+		actor = M.to_user(raw.author),
+		date = json.safe_str(raw.created_at),
+		label = body,
+	}
 end
 
 return M

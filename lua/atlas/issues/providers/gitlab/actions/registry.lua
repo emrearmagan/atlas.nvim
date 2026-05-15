@@ -7,7 +7,7 @@ local multi_select = require("atlas.ui.popups.multi_select")
 local issues_api = require("atlas.issues.providers.gitlab.api.issues")
 local users_api = require("atlas.issues.providers.gitlab.api.users")
 local labels_api = require("atlas.issues.providers.gitlab.api.labels")
-local normalizer = require("atlas.issues.providers.gitlab.api.normalizer")
+local normalizer = require("atlas.issues.providers.gitlab.api.mapper")
 
 ---@param ctx table
 ---@return boolean
@@ -142,14 +142,14 @@ local ACTIONS = {
 					items = members,
 					selected = vim.deepcopy(original),
 					key = function(item)
-						return tostring(item.id or "")
+						return tostring(item.id or item.account_id or "")
 					end,
 					format = function(item)
 						return string.format(
 							"%s %s (@%s)",
 							icons.general("user"),
-							item.name or item.username,
-							item.username
+							item.display_name or item.account_id or item.name or item.username,
+							item.account_id or item.username
 						)
 					end,
 					prompt = string.format("Assignees for %s", key),

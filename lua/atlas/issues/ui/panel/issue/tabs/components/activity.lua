@@ -7,7 +7,7 @@ local threads = require("atlas.ui.components.threadsv2")
 local helper = require("atlas.issues.ui.main.helper")
 
 local COLLAPSE_KEEP = 2
-local COLLAPSE_THRESHOLD = 5
+local COLLAPSE_THRESHOLD = 4
 
 ---@param actor IssueUser|nil
 ---@return string

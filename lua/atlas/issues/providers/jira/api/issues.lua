@@ -1,7 +1,7 @@
 local M = {}
 
 local service = require("atlas.issues.providers.jira.api.service")
-local normalizer = require("atlas.issues.providers.jira.api.normalizer")
+local normalizer = require("atlas.issues.providers.jira.api.mapper")
 local cache = require("atlas.core.cache")
 local logger = require("atlas.core.logger")
 
@@ -78,7 +78,7 @@ function M.search_issues(jql, on_done, opts)
 		end
 
 		local page = {
-			issues = normalizer.normalize_issues(result.issues or {}, story_points_field()),
+			issues = normalizer.to_issues_list(result.issues or {}, story_points_field()),
 			nextPageToken = result.nextPageToken,
 			isLast = result.isLast == true,
 		}
@@ -165,14 +165,14 @@ function M.get_issue(issue_key, callback)
 			return
 		end
 
-		callback(normalizer.normalize_issue(result, story_points_field()), nil)
+		callback(normalizer.to_issue(result, story_points_field()), nil)
 	end)
 end
 
 ---@param issue_key string
 ---@param start_at number|nil
 ---@param max_results number|nil
----@param on_done fun(page: { values: IssueHistoryEntry[], total: number, is_last: boolean }|nil, err: string|nil)
+---@param on_done fun(page: { values: IssueActivityEntry[], total: number, is_last: boolean }|nil, err: string|nil)
 ---@param opts { force_load?: boolean }|nil
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.get_issue_history_page(issue_key, start_at, max_results, on_done, opts)
@@ -208,7 +208,7 @@ function M.get_issue_history_page(issue_key, start_at, max_results, on_done, opt
 			return
 		end
 
-		local page = normalizer.normalize_issue_history_page(result, start, size)
+		local page = normalizer.to_history_page(result, start, size)
 		service.set_memory_cache(cache_key, page, CACHE_TTL)
 		on_done(page, nil)
 	end)
@@ -510,7 +510,7 @@ function M.get_create_meta(project_key, callback)
 
 		local issue_types = {}
 		for _, raw in ipairs(raw_types) do
-			local issue_type = normalizer.normalize_issue_type(raw)
+			local issue_type = normalizer.to_issue_type(raw)
 			if issue_type ~= nil then
 				table.insert(issue_types, issue_type)
 			end

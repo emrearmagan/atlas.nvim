@@ -1,7 +1,7 @@
 local M = {}
 
 local service = require("atlas.pulls.providers.gitlab.api.service")
-local normalizer = require("atlas.pulls.providers.gitlab.api.normalizer")
+local mapper = require("atlas.pulls.providers.gitlab.api.mapper")
 
 ---@param on_done fun(user: PullsUser|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
@@ -18,7 +18,7 @@ function M.fetch_user(on_done)
 			on_done(nil, err or "Empty response")
 			return
 		end
-		local user = normalizer.normalize_user(result)
+		local user = mapper.to_user(result)
 		if user then
 			service.set_memory_cache(cache_key, user)
 		end
@@ -26,14 +26,9 @@ function M.fetch_user(on_done)
 	end)
 end
 
----@class GitLabPullsMember
----@field id integer
----@field username string
----@field name string
-
 ---@param project_path string
 ---@param query string|nil
----@param on_done fun(users: GitLabPullsMember[]|nil, err: string|nil)
+---@param on_done fun(users: PullsUser[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.list_members(project_path, query, on_done)
 	if type(project_path) ~= "string" or project_path == "" then
@@ -53,12 +48,9 @@ function M.list_members(project_path, query, on_done)
 		end
 		local out = {}
 		for _, raw in ipairs(result) do
-			if type(raw) == "table" and tonumber(raw.id) and type(raw.username) == "string" then
-				table.insert(out, {
-					id = tonumber(raw.id),
-					username = raw.username,
-					name = type(raw.name) == "string" and raw.name or raw.username,
-				})
+			local user = mapper.to_user(raw)
+			if user then
+				table.insert(out, user)
 			end
 		end
 		on_done(out, nil)

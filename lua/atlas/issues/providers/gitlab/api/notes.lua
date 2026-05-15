@@ -1,52 +1,8 @@
 local M = {}
 
 local service = require("atlas.issues.providers.gitlab.api.service")
-local normalizer = require("atlas.issues.providers.gitlab.api.normalizer")
+local normalizer = require("atlas.issues.providers.gitlab.api.mapper")
 local logger = require("atlas.core.logger")
-local json = require("atlas.core.json")
-
----@param raw table
----@return IssueComment|nil
-local function normalize_note_as_comment(raw)
-	raw = json.nilify(raw)
-	if type(raw) ~= "table" or json.nilify(raw.id) == nil then
-		return nil
-	end
-	return {
-		id = tostring(raw.id),
-		self = nil,
-		url = nil,
-		author = normalizer.normalize_user(raw.author),
-		body = json.safe_str(raw.body) or "",
-		_body = nil,
-		created = json.safe_str(raw.created_at) or "",
-		updated = json.safe_str(raw.updated_at),
-		parent_id = nil,
-		children = nil,
-		reactions = nil,
-	}
-end
-
----@param raw table
----@return IssueHistoryEntry|nil
-local function normalize_note_as_event(raw)
-	raw = json.nilify(raw)
-	if type(raw) ~= "table" or json.nilify(raw.id) == nil then
-		return nil
-	end
-	local body = json.safe_str(raw.body) or ""
-	if body == "" then
-		return nil
-	end
-	return {
-		id = tostring(raw.id),
-		created = json.safe_str(raw.created_at),
-		author = normalizer.normalize_user(raw.author),
-		items = {
-			{ field = "system", to_string = body },
-		},
-	}
-end
 
 ---@param key string
 ---@param opts { force_load?: boolean }|nil
@@ -100,7 +56,7 @@ function M.list_comments(key, opts, on_done)
 		local out = {}
 		for _, raw in ipairs(notes) do
 			if raw.system ~= true then
-				local c = normalize_note_as_comment(raw)
+				local c = normalizer.to_comment_from_note(raw)
 				if c then
 					table.insert(out, c)
 				end
@@ -112,7 +68,7 @@ end
 
 ---@param key string
 ---@param opts { force_load?: boolean }|nil
----@param on_done fun(entries: IssueHistoryEntry[]|nil, err: string|nil)
+---@param on_done fun(entries: IssueActivityEntry[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.list_history(key, opts, on_done)
 	return fetch_notes(key, opts, function(notes, err)
@@ -123,7 +79,7 @@ function M.list_history(key, opts, on_done)
 		local out = {}
 		for _, raw in ipairs(notes) do
 			if raw.system == true then
-				local entry = normalize_note_as_event(raw)
+				local entry = normalizer.to_activity_from_note(raw)
 				if entry then
 					table.insert(out, entry)
 				end
@@ -155,7 +111,7 @@ function M.add(key, body, on_done)
 			return
 		end
 		service.delete_memory_cache(string.format("gitlab:notes:%s#%d", path, iid))
-		on_done(normalize_note_as_comment(result), nil)
+		on_done(normalizer.to_comment_from_note(result), nil)
 	end)
 end
 
@@ -182,7 +138,7 @@ function M.edit(key, note_id, body, on_done)
 			return
 		end
 		service.delete_memory_cache(string.format("gitlab:notes:%s#%d", path, iid))
-		on_done(normalize_note_as_comment(result), nil)
+		on_done(normalizer.to_comment_from_note(result), nil)
 	end)
 end
 
