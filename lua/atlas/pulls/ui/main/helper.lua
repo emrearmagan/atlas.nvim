@@ -97,7 +97,6 @@ function M.status_badge_hl(state_str)
 	return highlights.dynamic_for_bg("pr-state:" .. lower) or "AtlasTextMuted"
 end
 
-
 ---@param view AtlasPullsViewConfig|nil
 ---@return string
 function M.view_id(view)
@@ -143,7 +142,8 @@ function M.cell_hl(row, col, ctx)
 	end
 	if col.key == "pr_icon" then
 		local is_reloading = row.kind == "pr" and row._pr_reloading == true
-		local hl_group = is_reloading and "AtlasTextMuted" or (row.kind == "pr" and (row._pr_icon_hl or "AtlasPROpen") or "AtlasTextMuted")
+		local hl_group = is_reloading and "AtlasTextMuted"
+			or (row.kind == "pr" and (row._pr_icon_hl or "AtlasPROpen") or "AtlasTextMuted")
 		return { { start_col = 0, end_col = #ctx.padded, hl_group = hl_group } }
 	end
 	if col.key == "branch" then
@@ -254,7 +254,9 @@ function M.build_compact_table(groups)
 			local dst = (pr.destination and pr.destination.branch) or ""
 			local is_reloading = state.is_pr_reloading(pr.repo_full_name, pr.id)
 			local state_str = tostring(pr.state or "")
-			local state_label = state_str ~= "" and (" " .. state_str:sub(1, 1):upper() .. state_str:sub(2):lower() .. " ") or ""
+			local state_label = state_str ~= ""
+					and (" " .. state_str:sub(1, 1):upper() .. state_str:sub(2):lower() .. " ")
+				or ""
 			local author_display = utils.shorten_name(author_name, 20)
 			local icon, icon_hl = pr_icon_and_hl(pr)
 			table.insert(rows, {
@@ -345,7 +347,19 @@ function M.build_plain_tree_table(groups)
 	for i, group in ipairs(groups or {}) do
 		local repo_label = group.repo.name or ""
 		if i > 1 then
-			table.insert(rows, { kind = "spacer", pr_icon = "", name = "", conversation = "", tasks = "", status = "", status_raw = "", author = "", branch = "", created = "", updated = "" })
+			table.insert(rows, {
+				kind = "spacer",
+				pr_icon = "",
+				name = "",
+				conversation = "",
+				tasks = "",
+				status = "",
+				status_raw = "",
+				author = "",
+				branch = "",
+				created = "",
+				updated = "",
+			})
 		end
 		table.insert(rows, {
 			kind = "repo",
@@ -400,387 +414,26 @@ function M.build_plain_tree_table(groups)
 	}
 end
 
----@param pr PullRequest
----@return string[], table[]
-local function generic_pr_popup_content(pr)
-	local id = tostring(pr.id or "")
-	local title = tostring(pr.title or "")
-	local author_name = tostring((pr.author and pr.author.name) or "Unknown")
-	local repo_name = tostring(pr.repo_full_name or "")
-
-	local lines = {
-		string.format(" #%s: %s", id, title),
-		"",
-		string.format(" State:    %s", tostring(pr.state or "-")),
-		string.format(" Author:   %s", author_name),
-		string.format(" Repo:     %s", repo_name ~= "" and repo_name or "-"),
-		string.format(
-			" Branch:   %s -> %s",
-			tostring((pr.source or {}).branch or "?"),
-			tostring((pr.destination or {}).branch or "?")
-		),
-		string.format(" Comments: %s", tostring(pr.comments_count or 0)),
-		string.format(" Tasks:    %s", tostring(pr.tasks_count or 0)),
-		string.format(" Updated:  %s", utils.relative_time(pr.updated_on)),
-	}
-
-	local content_width = 1
-	for _, line in ipairs(lines) do
-		content_width = math.max(content_width, vim.fn.strdisplaywidth(line))
-	end
-	lines[2] = " " .. ("━"):rep(content_width)
-
-	local hl = {
-		{ row = 1, col = 0, end_col = -1, hl_group = "AtlasTextMuted" },
-		{ row = 2, col = 1, end_col = 10, hl_group = "AtlasTextMuted" },
-		{ row = 2, col = 11, end_col = -1, hl_group = M.pr_state_hl(pr.state) },
-		{ row = 3, col = 1, end_col = 10, hl_group = "AtlasTextMuted" },
-		{ row = 3, col = 11, end_col = -1, hl_group = M.author_hl(author_name) },
-		{ row = 4, col = 1, end_col = 10, hl_group = "AtlasTextMuted" },
-		{ row = 4, col = 11, end_col = -1, hl_group = M.repo_hl(repo_name) },
-		{ row = 5, col = 1, end_col = 10, hl_group = "AtlasTextMuted" },
-		{ row = 5, col = 11, end_col = -1, hl_group = "AtlasTextMuted" },
-		{ row = 6, col = 1, end_col = 10, hl_group = "AtlasTextMuted" },
-		{ row = 7, col = 1, end_col = 10, hl_group = "AtlasTextMuted" },
-		{ row = 8, col = 1, end_col = 10, hl_group = "AtlasTextMuted" },
-		{ row = 8, col = 11, end_col = -1, hl_group = "AtlasTextMuted" },
-	}
-
-	if id ~= "" then
-		table.insert(hl, {
-			row = 0,
-			col = 2,
-			end_col = 2 + #id,
-			hl_group = "AtlasTextMuted",
-		})
-	end
-
-	return lines, hl
-end
-
----@param pr PullRequest
----@return string[], table[]
-local function github_pr_popup_content(pr)
-	local raw = type(pr._raw) == "table" and pr._raw or {}
-	local id = tostring(pr.id or "")
-	local title = tostring(pr.title or "")
-	local author_name = tostring((pr.author and pr.author.name) or "Unknown")
-	local repo_name = tostring(pr.repo_full_name or "")
-
-	local state_str = tostring(pr.state or "-")
-	if raw.isDraft == true then
-		state_str = "draft"
-	end
-
-	local lines = { string.format(" #%s: %s", id, title), "" }
-	---@type table[]
-	local hl = {
-		{ row = 1, col = 0, end_col = -1, hl_group = "AtlasTextMuted" },
-	}
-	if id ~= "" then
-		table.insert(hl, { row = 0, col = 2, end_col = 2 + #id, hl_group = "AtlasTextMuted" })
-	end
-
-	---@param label string
-	---@param value string|nil
-	---@param value_hl string|nil
-	local function push(label, value, value_hl)
-		if value == nil or value == "" then
-			return
-		end
-		local row = #lines
-		table.insert(lines, string.format(" %-10s %s", label .. ":", value))
-		table.insert(hl, { row = row, col = 1, end_col = 11, hl_group = "AtlasTextMuted" })
-		if value_hl then
-			table.insert(hl, { row = row, col = 12, end_col = -1, hl_group = value_hl })
-		end
-	end
-
-	push("State", state_str, M.pr_state_hl(state_str))
-	push("Author", author_name, M.author_hl(author_name))
-	push("Repo", repo_name ~= "" and repo_name or nil, M.repo_hl(repo_name))
-	push(
-		"Branch",
-		string.format("%s → %s", tostring((pr.source or {}).branch or "?"), tostring((pr.destination or {}).branch or "?")),
-		"AtlasTextMuted"
-	)
-
-	local additions = tonumber(raw.additions) or 0
-	local deletions = tonumber(raw.deletions) or 0
-	local changed = tonumber(raw.changedFiles)
-	if changed or additions > 0 or deletions > 0 then
-		local add_str = string.format("+%d", additions)
-		local del_str = string.format("-%d", deletions)
-		local prefix = changed and string.format("%s ", tostring(changed)) or ""
-		local value = string.format("%s(%s, %s)", prefix, add_str, del_str)
-		local row = #lines
-		local line = string.format(" %-10s %s", "Files:", value)
-		table.insert(lines, line)
-		table.insert(hl, { row = row, col = 1, end_col = 11, hl_group = "AtlasTextMuted" })
-		-- 12 == col where value starts (` Files:     ` = 1 + 10 + 1)
-		local val_start = 12
-		if prefix ~= "" then
-			table.insert(hl, {
-				row = row,
-				col = val_start,
-				end_col = val_start + #prefix,
-				hl_group = "AtlasTextMuted",
-			})
-		end
-		local add_col = val_start + #prefix + 1 -- skip '('
-		local del_col = add_col + #add_str + 2 -- skip ", "
-		table.insert(hl, { row = row, col = add_col, end_col = add_col + #add_str, hl_group = "AtlasTextPositive" })
-		table.insert(hl, { row = row, col = del_col, end_col = del_col + #del_str, hl_group = "AtlasLogError" })
-	end
-
-	local decision = tostring(raw.reviewDecision or "")
-	if decision == "" or decision == "REVIEW_REQUIRED" then
-		-- reviewDecision is null on repos without enforced required-reviewers,
-		-- so fall back to scanning the latest opinionated reviews.
-		local approved, changes = 0, 0
-		for _, n in ipairs((raw.latestOpinionatedReviews and raw.latestOpinionatedReviews.nodes) or {}) do
-			local s = tostring(n.state or ""):upper()
-			if s == "APPROVED" then approved = approved + 1
-			elseif s == "CHANGES_REQUESTED" then changes = changes + 1
-			end
-		end
-		if changes > 0 then
-			decision = "CHANGES_REQUESTED"
-		elseif approved > 0 then
-			decision = "APPROVED"
-		end
-	end
-	if decision ~= "" and decision ~= "REVIEW_REQUIRED" then
-		local review_icon = decision == "APPROVED" and icons.pulls_status("successful")
-			or decision == "CHANGES_REQUESTED" and icons.pulls_status("failed")
-			or icons.pulls_status("inprogress")
-		local decision_hl = decision == "APPROVED" and "AtlasTextPositive"
-			or decision == "CHANGES_REQUESTED" and "AtlasTextWarning"
-			or "AtlasTextMuted"
-		push("Review", review_icon, decision_hl)
-	end
-
-	local rollup_ok, rollup_state = pcall(function()
-		return raw.commits.nodes[1].commit.statusCheckRollup.state
-	end)
-	if rollup_ok and type(rollup_state) == "string" then
-		local s = rollup_state:upper()
-		local ci_icon = (s == "SUCCESS") and icons.pulls_status("successful")
-			or (s == "FAILURE" or s == "ERROR") and icons.pulls_status("failed")
-			or icons.pulls_status("inprogress")
-		local ci_hl = (s == "SUCCESS") and "AtlasTextPositive"
-			or (s == "FAILURE" or s == "ERROR") and "AtlasLogError"
-			or "AtlasTextWarning"
-		push("CI", ci_icon, ci_hl)
-	end
-
-	local reviewer_names = {}
-	local seen_reviewer = {}
-	for _, n in ipairs((raw.latestOpinionatedReviews and raw.latestOpinionatedReviews.nodes) or {}) do
-		local login = type(n.author) == "table" and n.author.login or nil
-		if type(login) == "string" and login ~= "" and not seen_reviewer[login] then
-			seen_reviewer[login] = true
-			table.insert(reviewer_names, "@" .. login)
-		end
-	end
-	if #reviewer_names > 0 then
-		push("Reviewers", table.concat(reviewer_names, ", "), "AtlasTextMuted")
-	end
-
-	local labels = raw.labels and raw.labels.nodes or nil
-	if type(labels) == "table" and #labels > 0 then
-		local names = {}
-		for _, n in ipairs(labels) do
-			table.insert(names, tostring(n.name or ""))
-		end
-		push("Labels", table.concat(names, ", "), "AtlasTextMuted")
-	end
-
-	local milestone = raw.milestone
-	if type(milestone) == "table" and milestone.title then
-		push("Milestone", tostring(milestone.title), "AtlasTextMuted")
-	end
-
-	local assignees = raw.assignees and raw.assignees.nodes or nil
-	if type(assignees) == "table" and #assignees > 0 then
-		local logins = {}
-		for _, n in ipairs(assignees) do
-			table.insert(logins, "@" .. tostring(n.login or ""))
-		end
-		push("Assignees", table.concat(logins, ", "), M.author_hl(tostring(assignees[1].login or "")))
-	end
-
-	push("Conversation", tostring(pr.comments_count or 0), "AtlasTextMuted")
-	push("Updated", utils.relative_time(pr.updated_on), "AtlasTextMuted")
-
-	local content_width = 1
-	for _, line in ipairs(lines) do
-		content_width = math.max(content_width, vim.fn.strdisplaywidth(line))
-	end
-	lines[2] = " " .. ("━"):rep(content_width)
-
-	return lines, hl
-end
-
----@param pr PullRequest
----@return string[], table[]
-local function gitlab_pr_popup_content(pr)
-	local raw = type(pr._raw) == "table" and pr._raw or {}
-	local id = tostring(pr.id or "")
-	local title = tostring(pr.title or "")
-	local author_name = tostring((pr.author and pr.author.name) or "Unknown")
-	local repo_name = tostring(pr.repo_full_name or "")
-
-	local state_str = tostring(pr.state or "-")
-	if raw.draft == true then
-		state_str = "draft"
-	end
-
-	local lines = { string.format(" !%s: %s", id, title), "" }
-	---@type table[]
-	local hl = {
-		{ row = 1, col = 0, end_col = -1, hl_group = "AtlasTextMuted" },
-	}
-	if id ~= "" then
-		table.insert(hl, { row = 0, col = 2, end_col = 2 + #id, hl_group = "AtlasTextMuted" })
-	end
-
-	---@param label string
-	---@param value string|nil
-	---@param value_hl string|nil
-	local function push(label, value, value_hl)
-		if value == nil or value == "" then
-			return
-		end
-		local row = #lines
-		table.insert(lines, string.format(" %-10s %s", label .. ":", value))
-		table.insert(hl, { row = row, col = 1, end_col = 11, hl_group = "AtlasTextMuted" })
-		if value_hl then
-			table.insert(hl, { row = row, col = 12, end_col = -1, hl_group = value_hl })
-		end
-	end
-
-	push("State", state_str, M.pr_state_hl(state_str))
-	push("Author", author_name, M.author_hl(author_name))
-	push("Repo", repo_name ~= "" and repo_name or nil, M.repo_hl(repo_name))
-	push(
-		"Branch",
-		string.format("%s → %s", tostring((pr.source or {}).branch or "?"), tostring((pr.destination or {}).branch or "?")),
-		"AtlasTextMuted"
-	)
-
-	local pipeline = type(raw.head_pipeline) == "table" and raw.head_pipeline
-		or type(raw.pipeline) == "table" and raw.pipeline
-		or nil
-	if pipeline ~= nil then
-		local p_state = tostring(pipeline.status or ""):lower()
-		if p_state ~= "" then
-			local p_icon, p_hl
-			if p_state == "success" then
-				p_icon, p_hl = icons.pulls_status("successful"), "AtlasTextPositive"
-			elseif p_state == "failed" then
-				p_icon, p_hl = icons.pulls_status("failed"), "AtlasLogError"
-			elseif p_state == "canceled" or p_state == "skipped" then
-				p_icon, p_hl = icons.pulls_status("stopped"), "AtlasTextMuted"
-			else
-				p_icon, p_hl = icons.pulls_status("inprogress"), "AtlasTextWarning"
-			end
-			push("CI", string.format("%s %s", p_icon, p_state), p_hl)
-		end
-	end
-
-	local detailed = tostring(raw.detailed_merge_status or raw.merge_status or "")
-	if detailed ~= "" then
-		local readable = detailed:gsub("_", " ")
-		local mhl = "AtlasTextMuted"
-		if detailed == "mergeable" then
-			mhl = "AtlasTextPositive"
-		elseif detailed:find("conflict") or detailed:find("blocked") or detailed:find("must_pass") or detailed:find("policies_denied") or detailed == "need_rebase" then
-			mhl = "AtlasLogError"
-		elseif detailed == "not_approved" or detailed:find("running") or detailed == "checking" or detailed == "preparing" then
-			mhl = "AtlasTextWarning"
-		end
-		push("Status", readable, mhl)
-	end
-
-	local reviewers = type(raw.reviewers) == "table" and raw.reviewers or {}
-	if #reviewers > 0 then
-		local names = {}
-		for _, r in ipairs(reviewers) do
-			local nick = tostring(r.username or r.name or "")
-			if nick ~= "" then
-				table.insert(names, "@" .. nick)
-			end
-		end
-		if #names > 0 then
-			push("Reviewers", table.concat(names, ", "), "AtlasTextMuted")
-		end
-	end
-
-	local assignees = type(raw.assignees) == "table" and raw.assignees or {}
-	if #assignees > 0 then
-		local names = {}
-		for _, a in ipairs(assignees) do
-			local nick = tostring(a.username or a.name or "")
-			if nick ~= "" then
-				table.insert(names, "@" .. nick)
-			end
-		end
-		if #names > 0 then
-			push("Assignees", table.concat(names, ", "), M.author_hl(tostring(assignees[1].username or "")))
-		end
-	end
-
-	local labels = type(raw.labels) == "table" and raw.labels or {}
-	if #labels > 0 then
-		local names = {}
-		for _, l in ipairs(labels) do
-			if type(l) == "string" then
-				table.insert(names, l)
-			elseif type(l) == "table" and l.name then
-				table.insert(names, tostring(l.name))
-			end
-		end
-		if #names > 0 then
-			local display
-			if #names > 2 then
-				display = string.format("%s, %s +%d more", names[1], names[2], #names - 2)
-			else
-				display = table.concat(names, ", ")
-			end
-			push("Labels", display, "AtlasTextMuted")
-		end
-	end
-
-	local milestone = raw.milestone
-	if type(milestone) == "table" and milestone.title then
-		push("Milestone", tostring(milestone.title), "AtlasTextMuted")
-	end
-
-	push("Conversation", tostring(pr.comments_count or 0), "AtlasTextMuted")
-	push("Updated", utils.relative_time(pr.updated_on), "AtlasTextMuted")
-
-	local content_width = 1
-	for _, line in ipairs(lines) do
-		content_width = math.max(content_width, vim.fn.strdisplaywidth(line))
-	end
-	lines[2] = " " .. ("━"):rep(content_width)
-
-	return lines, hl
-end
+local POPUP_MODULES = {
+	github = "atlas.pulls.providers.github.ui.popup",
+	gitlab = "atlas.pulls.providers.gitlab.ui.popup",
+	bitbucket = "atlas.pulls.providers.bitbucket.ui.popup",
+}
 
 ---@param pr PullRequest
 ---@return string[], table[]
 function M.pr_popup_content(pr)
-	local state = require("atlas.pulls.state")
-	local provider_id = state.provider and state.provider.id or ""
-	if provider_id == "github" then
-		return github_pr_popup_content(pr)
+	local provider_id = state.provider and state.provider.id or nil
+	local mod_path = provider_id and POPUP_MODULES[provider_id] or POPUP_MODULES.bitbucket
+	local ok, mod = pcall(require, mod_path)
+	if not ok or type(mod) ~= "table" or type(mod.content) ~= "function" then
+		local fallback_ok, fallback = pcall(require, POPUP_MODULES.bitbucket)
+		if fallback_ok and type(fallback) == "table" and type(fallback.content) == "function" then
+			return fallback.content(pr)
+		end
+		return { "" }, {}
 	end
-	if provider_id == "gitlab" then
-		return gitlab_pr_popup_content(pr)
-	end
-	return generic_pr_popup_content(pr)
+	return mod.content(pr)
 end
 
 return M
