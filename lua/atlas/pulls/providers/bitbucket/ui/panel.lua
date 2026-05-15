@@ -141,14 +141,14 @@ end
 function M.is_loading(pr, active_tab)
 	local overview_state = require("atlas.pulls.ui.panel.pr.tabs.overview.state")
 	local activity_state = require("atlas.pulls.ui.panel.pr.tabs.activity.state")
-	local comments_state = require("atlas.pulls.ui.panel.pr.tabs.comments.state")
+	local comments_state = require("atlas.pulls.ui.panel.pr.tabs.review.state")
 	local commits_state = require("atlas.pulls.ui.panel.pr.tabs.commits.state")
 	local files_state = require("atlas.pulls.ui.panel.pr.tabs.files.state")
 	if active_tab == "overview" then
 		return overview_state.any_loading()
 	elseif active_tab == "activity" then
 		return activity_state.any_loading()
-	elseif active_tab == "comments" then
+	elseif active_tab == "review" then
 		return comments_state.any_loading()
 	elseif active_tab == "commits" then
 		return commits_state.any_loading()
@@ -174,10 +174,10 @@ function M.tabs()
 			mod = require("atlas.pulls.ui.panel.pr.tabs.activity"),
 		},
 		{
-			key = "comments",
-			label = "Comments",
-			icon = icons.general("comment"),
-			mod = require("atlas.pulls.ui.panel.pr.tabs.comments"),
+			key = "review",
+			label = "Review",
+			icon = icons.pulls("review"),
+			mod = require("atlas.pulls.ui.panel.pr.tabs.review"),
 		},
 		{
 			key = "commits",

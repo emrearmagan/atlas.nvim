@@ -3,9 +3,9 @@ local M = {}
 
 local md_editor = require("atlas.ui.popups.editor")
 local footer = require("atlas.ui.components.footer")
-local renderer = require("atlas.pulls.ui.panel.pr.tabs.comments.renderer")
-local state = require("atlas.pulls.ui.panel.pr.tabs.comments.state")
-local keymaps = require("atlas.pulls.ui.panel.pr.tabs.comments.keymaps")
+local renderer = require("atlas.pulls.ui.panel.pr.tabs.review.renderer")
+local state = require("atlas.pulls.ui.panel.pr.tabs.review.state")
+local keymaps = require("atlas.pulls.ui.panel.pr.tabs.review.keymaps")
 
 local AUTHOR_COMPLETION_MODULES = {
 	github = "atlas.pulls.providers.github.completion.author",

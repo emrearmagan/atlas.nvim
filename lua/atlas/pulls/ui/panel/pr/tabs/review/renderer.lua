@@ -5,9 +5,9 @@ local spinner = require("atlas.ui.components.spinner")
 local box = require("atlas.ui.components.box")
 local threads = require("atlas.ui.components.threadsv2")
 local changes_block = require("atlas.pulls.ui.components.changes_block")
-local items = require("atlas.pulls.ui.panel.pr.tabs.comments.items")
+local items = require("atlas.pulls.ui.panel.pr.tabs.review.items")
 local helper = require("atlas.pulls.ui.main.helper")
-local state = require("atlas.pulls.ui.panel.pr.tabs.comments.state")
+local state = require("atlas.pulls.ui.panel.pr.tabs.review.state")
 
 local PADDING_X = 1
 

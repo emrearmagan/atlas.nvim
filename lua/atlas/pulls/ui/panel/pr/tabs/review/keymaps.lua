@@ -21,7 +21,7 @@ end
 ---@param buf integer
 ---@param refresh fun()
 function M.setup(buf, refresh)
-	local tab = require("atlas.pulls.ui.panel.pr.tabs.comments")
+	local tab = require("atlas.pulls.ui.panel.pr.tabs.review")
 	local panel_state = require("atlas.pulls.ui.panel.pr.state")
 
 	local function cursor_entry()
@@ -112,7 +112,7 @@ function M.setup(buf, refresh)
 			desc = "Toggle hunk / thread fold",
 			opts = { nowait = true, silent = true },
 			callback = function()
-				local state = require("atlas.pulls.ui.panel.pr.tabs.comments.state")
+				local state = require("atlas.pulls.ui.panel.pr.tabs.review.state")
 				local entry = cursor_entry()
 				if entry == nil then
 					return
@@ -179,7 +179,7 @@ function M.setup(buf, refresh)
 			desc = "Toggle all hunk folds",
 			opts = { nowait = true, silent = true },
 			callback = function()
-				local state = require("atlas.pulls.ui.panel.pr.tabs.comments.state")
+				local state = require("atlas.pulls.ui.panel.pr.tabs.review.state")
 				local comments = state.comments
 				if type(comments) ~= "table" then
 					return

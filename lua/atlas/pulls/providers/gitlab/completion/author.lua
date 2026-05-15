@@ -3,7 +3,7 @@ local M = {}
 ---@return string[]
 local function collect_logins()
 	local panel_state = require("atlas.pulls.ui.panel.pr.state")
-	local comments_state = require("atlas.pulls.ui.panel.pr.tabs.comments.state")
+	local comments_state = require("atlas.pulls.ui.panel.pr.tabs.review.state")
 	local conversation_state = require("atlas.pulls.ui.panel.pr.tabs.conversation.state")
 
 	local seen, logins = {}, {}

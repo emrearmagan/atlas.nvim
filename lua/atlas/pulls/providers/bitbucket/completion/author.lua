@@ -7,7 +7,7 @@ local M = {}
 ---@return PullsAuthor[]
 local function collect_authors()
 	local panel_state = require("atlas.pulls.ui.panel.pr.state")
-	local comments_state = require("atlas.pulls.ui.panel.pr.tabs.comments.state")
+	local comments_state = require("atlas.pulls.ui.panel.pr.tabs.review.state")
 
 	local seen = {}
 	local function add(author)

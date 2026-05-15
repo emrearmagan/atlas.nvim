@@ -4,7 +4,6 @@ local M = {}
 local icons = require("atlas.ui.shared.icons")
 local helper = require("atlas.issues.ui.main.helper")
 local conversation_state = require("atlas.issues.ui.panel.issue.tabs.conversation.state")
-local history_state = require("atlas.issues.ui.panel.issue.tabs.activity.state")
 
 local state = {
 	assignees = nil, ---@type table|nil
@@ -273,7 +272,7 @@ end
 ---@param _issue Issue
 ---@return boolean
 function M.is_loading(_issue)
-	return state.detail_loading or conversation_state.any_loading() or history_state.any_loading()
+	return state.detail_loading or conversation_state.any_loading()
 end
 
 ---@param issue Issue
@@ -314,12 +313,6 @@ function M.tabs()
 			label = "Conversation",
 			icon = icons.general("conversation"),
 			mod = require("atlas.issues.ui.panel.issue.tabs.conversation"),
-		},
-		{
-			key = "activity",
-			label = "Activity",
-			icon = icons.pulls("activity"),
-			mod = require("atlas.issues.ui.panel.issue.tabs.activity"),
 		},
 	}
 end
