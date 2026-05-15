@@ -218,21 +218,24 @@ function M.pr_activity(result)
 				kind = "update",
 				date = tostring(update.date or ""),
 				actor = actor(update.author),
-				content_raw = describe_update(update),
+				label = describe_update(update),
 			})
 		elseif approval ~= nil then
 			table.insert(entries, {
 				kind = "approval",
 				date = tostring(approval.date or ""),
 				actor = actor(approval.user),
+				label = "approved",
 			})
 		elseif comment ~= nil then
 			local content = as_table(comment.content) or {}
+			local body = tostring(content.raw or "")
 			table.insert(entries, {
 				kind = "comment",
 				date = tostring(comment.created_on or ""),
 				actor = actor(comment.user),
-				content_raw = tostring(content.raw or ""),
+				label = "commented",
+				body = body ~= "" and body or nil,
 				deleted = comment.deleted == true,
 			})
 		end

@@ -254,7 +254,7 @@ function M.fetch_conversation(issue, opts, on_done)
 				kind = tostring(ev.event or ""),
 				actor = ev.actor,
 				date = ev.date,
-				content_raw = content_raw,
+				label = content_raw,
 			})
 		end
 

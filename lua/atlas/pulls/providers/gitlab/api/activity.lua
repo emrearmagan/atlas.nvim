@@ -65,7 +65,7 @@ local function entry_from_note(note)
 		kind = kind,
 		actor = actor_from(note.author),
 		date = tostring(note.created_at or ""),
-		content_raw = content_raw,
+		label = content_raw,
 	}
 end
 

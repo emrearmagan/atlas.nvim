@@ -117,7 +117,7 @@
 ---@field kind string
 ---@field actor IssueUser|nil
 ---@field date string|nil
----@field content_raw string|nil
+---@field label string|nil
 ---@field deleted boolean|nil
 ---@field always_render boolean|nil
 

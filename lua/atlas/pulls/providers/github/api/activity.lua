@@ -29,24 +29,35 @@ local function normalize_event(item)
 	local date = tostring(item.created_at or item.submitted_at or "")
 
 	if event == "commented" then
-		return { kind = "comment", actor = actor, date = date, content_raw = body_text(item.body) }
+		local body = body_text(item.body)
+		return {
+			kind = "comment",
+			actor = actor,
+			date = date,
+			label = "commented",
+			body = body ~= "" and body or nil,
+		}
 	elseif event == "reviewed" then
 		local state_label = tostring(item.state or ""):lower()
 		local kind = state_label == "approved" and "approval"
 			or state_label == "changes_requested" and "changes_requested"
 			or "review"
+		local verb = kind == "approval" and "approved"
+			or kind == "changes_requested" and "requested changes"
+			or "left a review"
 		local body = body_text(item.body)
 		return {
 			kind = kind,
 			actor = actor,
 			date = date,
-			content_raw = body ~= "" and body or nil,
+			label = verb,
+			body = body ~= "" and body or nil,
 			always_render = body ~= "" or nil,
 		}
 	elseif event == "closed" or event == "merged" or event == "reopened" then
-		return { kind = "update", actor = actor, date = date, content_raw = event }
+		return { kind = event, actor = actor, date = date, label = event }
 	elseif event == "head_ref_force_pushed" then
-		return { kind = "update", actor = actor, date = date, content_raw = "force pushed" }
+		return { kind = "force_pushed", actor = actor, date = date, label = "force pushed" }
 	elseif event == "committed" then
 		local author = type(item.author) == "table" and item.author or {}
 		local author_name = tostring(author.name or "")
@@ -57,34 +68,39 @@ local function normalize_event(item)
 			content_raw = "1 commit",
 		}
 	elseif event == "base_ref_force_pushed" then
-		return { kind = "update", actor = actor, date = date, content_raw = "base branch force pushed" }
+		return { kind = "force_pushed", actor = actor, date = date, label = "base branch force pushed" }
 	elseif event == "labeled" or event == "unlabeled" then
 		local label = type(item.label) == "table" and tostring(item.label.name or "") or ""
 		if label == "" then
 			return nil
 		end
 		local verb = event == "labeled" and "added label" or "removed label"
-		return { kind = "update", actor = actor, date = date, content_raw = verb .. ": " .. label }
+		return { kind = event, actor = actor, date = date, label = verb .. ": " .. label }
 	elseif event == "assigned" or event == "unassigned" then
 		local assignee = type(item.assignee) == "table" and tostring(item.assignee.login or "") or ""
 		if assignee == "" then
 			return nil
 		end
 		local verb = event == "assigned" and "assigned" or "unassigned"
-		return { kind = "update", actor = actor, date = date, content_raw = verb .. " " .. assignee }
+		return { kind = event, actor = actor, date = date, label = verb .. " " .. assignee }
 	elseif event == "review_requested" then
 		local reviewer = type(item.requested_reviewer) == "table" and tostring(item.requested_reviewer.login or "")
 			or ""
 		return {
-			kind = "update",
+			kind = "review_requested",
 			actor = actor,
 			date = date,
-			content_raw = reviewer ~= "" and ("requested review from " .. reviewer) or "requested review",
+			label = reviewer ~= "" and ("requested review from " .. reviewer) or "requested review",
 		}
 	elseif event == "ready_for_review" then
-		return { kind = "update", actor = actor, date = date, content_raw = "marked as ready for review" }
+		return {
+			kind = "ready_for_review",
+			actor = actor,
+			date = date,
+			label = "marked as ready for review",
+		}
 	elseif event == "convert_to_draft" then
-		return { kind = "update", actor = actor, date = date, content_raw = "marked as draft" }
+		return { kind = "convert_to_draft", actor = actor, date = date, label = "marked as draft" }
 	end
 	return nil
 end

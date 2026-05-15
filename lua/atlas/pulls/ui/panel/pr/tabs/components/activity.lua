@@ -23,53 +23,41 @@ local function actor_name(actor)
 	return "Unknown"
 end
 
+local EVENT = {
+	approval = { icon = icons.pulls_status("successful"), icon_hl = "AtlasTextPositive" },
+	changes_requested = { icon = icons.pulls_status("inprogress"), icon_hl = "AtlasTextWarning" },
+	review = { icon = icons.pulls("activity") },
+	comment = { icon = icons.general("user") },
+	closed = { icon = icons.pulls("declined_pr") },
+	merged = { icon = icons.pulls("merged_pr") },
+	reopened = { icon = icons.pulls("pr") },
+	committed = { icon = icons.pulls("commit") },
+	force_pushed = { icon = icons.general("edit") },
+	labeled = { icon = icons.pulls("tag") },
+	unlabeled = { icon = icons.pulls("tag") },
+	assigned = { icon = icons.general("user") },
+	unassigned = { icon = icons.general("user") },
+	review_requested = { icon = icons.general("user") },
+	ready_for_review = { icon = icons.pulls("pr") },
+	convert_to_draft = { icon = icons.pulls("activity") },
+	update = { icon = icons.pulls("activity") },
+}
+
 ---@param entry PullsActivityEntry
----@return { icon: string, icon_hl: string, additional: string|nil, content: string|nil }
+---@return { icon: string, icon_hl: string|nil, additional: string|nil, content: string|nil }
 function M.classify(entry)
-	local kind = entry.kind
-	local entry_icon = icons.general("user")
-	local icon_hl
-	local additional ---@type string|nil
-	local content ---@type string|nil
-
-	if kind == "approval" then
-		additional = "approved"
-		entry_icon = icons.pulls_status("successful")
-		icon_hl = "AtlasTextPositive"
-		local raw = tostring(entry.content_raw or "")
-		if raw ~= "" then
-			content = raw
-		end
-	elseif kind == "changes_requested" then
-		additional = "requested changes"
-		entry_icon = icons.pulls_status("inprogress")
-		icon_hl = "AtlasTextWarning"
-		local raw = tostring(entry.content_raw or "")
-		if raw ~= "" then
-			content = raw
-		end
-	elseif kind == "review" then
-		additional = "left a review"
-		entry_icon = icons.pulls("activity")
-		local raw = tostring(entry.content_raw or "")
-		if raw ~= "" then
-			content = raw
-		end
-	elseif kind == "comment" then
-		additional = "commented"
-		local raw = utils.strip_markup(entry.content_raw or "")
-		local first = raw:match("([^\n]+)") or raw
-		content = first ~= "" and first or "(empty comment)"
-		if entry.deleted == true then
-			content = "(deleted comment)"
-		end
-	elseif kind == "update" then
-		additional = type(entry.content_raw) == "string" and entry.content_raw ~= "" and entry.content_raw
-			or "updated pull request"
-		entry_icon = icons.pulls("activity")
+	local meta = EVENT[entry.kind] or { icon = icons.pulls("activity") }
+	local label = tostring(entry.label or "")
+	local body = entry.body
+	if entry.kind == "comment" and entry.deleted == true then
+		body = "(deleted comment)"
 	end
-
-	return { icon = entry_icon, icon_hl = icon_hl, additional = additional, content = content }
+	return {
+		icon = meta.icon,
+		icon_hl = meta.icon_hl,
+		additional = label ~= "" and label or entry.kind,
+		content = body,
+	}
 end
 
 ---@param entries PullsActivityEntry[]
@@ -124,12 +112,6 @@ local function content_hl(item, row, _row_index)
 	if entry.kind == "comment" and entry.deleted == true then
 		return {
 			{ start_col = 0, end_col = #row, hl_group = "AtlasTextMutedStrikethrough" },
-		}
-	end
-
-	if entry.kind == "update" then
-		return {
-			{ start_col = 0, end_col = #row, hl_group = "AtlasTextMuted" },
 		}
 	end
 

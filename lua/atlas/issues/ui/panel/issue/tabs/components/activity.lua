@@ -47,7 +47,7 @@ local EVENT_ICON = {
 ---@param entry IssueActivityEntry
 ---@return { icon: string, additional: string|nil, content: string|nil }
 function M.classify(entry)
-	local raw = tostring(entry.content_raw or "")
+	local raw = tostring(entry.label or "")
 	return {
 		icon = EVENT_ICON[entry.kind] or icons.pulls("activity"),
 		additional = raw ~= "" and raw or entry.kind,
