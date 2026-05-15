@@ -27,10 +27,12 @@ function M.get_myself(callback)
 			return
 		end
 
+		local account_id = tostring(result.accountId or "")
+		local display_name = tostring(result.displayName or "")
 		local user = {
-			account_id = tostring(result.accountId or ""),
-			display_name = tostring(result.displayName or ""),
-			email = tostring(result.emailAddress or ""),
+			account_id = account_id,
+			display_name = display_name,
+			mention = string.format("[@%s](atlas-mention:%s)", display_name, account_id),
 		}
 
 		cache.set(cache_key, user, service.cache_ttl())
@@ -73,10 +75,12 @@ function M.get_assignable_users(opts, query, callback)
 		local users = {}
 		for _, raw in ipairs(result) do
 			if type(raw) == "table" then
+				local account_id = tostring(raw.accountId or "")
+				local display_name = tostring(raw.displayName or "")
 				table.insert(users, {
-					account_id = tostring(raw.accountId or ""),
-					display_name = tostring(raw.displayName or ""),
-					email = tostring(raw.emailAddress or ""),
+					account_id = account_id,
+					display_name = display_name,
+					mention = string.format("[@%s](atlas-mention:%s)", display_name, account_id),
 				})
 			end
 		end

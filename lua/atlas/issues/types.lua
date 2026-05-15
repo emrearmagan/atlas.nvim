@@ -5,7 +5,7 @@
 ---@class IssueUser
 ---@field account_id string
 ---@field display_name string
----@field email string
+---@field mention string|nil
 
 --------------------------------------------------------------------------------
 -- Project

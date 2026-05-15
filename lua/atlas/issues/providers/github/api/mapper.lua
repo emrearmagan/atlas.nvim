@@ -28,7 +28,7 @@ function M.to_user(raw_user)
 	return {
 		account_id = login,
 		display_name = display_name,
-		email = "",
+		mention = "@" .. login,
 	}
 end
 
@@ -296,7 +296,7 @@ function M.to_comment(raw)
 			author = {
 				account_id = login,
 				display_name = login,
-				email = "",
+				mention = "@" .. login,
 			}
 		end
 	end

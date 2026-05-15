@@ -89,9 +89,8 @@ function M.reply(issue, entry, refresh)
 		return
 	end
 	local comment = entry.comment
-	local author = comment.author or {}
-	local mention = tostring(author.account_id or author.display_name or "")
-	local initial_text = mention ~= "" and ("@" .. mention .. " ") or ""
+	local mention = comment.author and comment.author.mention or ""
+	local initial_text = mention ~= "" and (mention .. " ") or ""
 
 	local parent_id = tostring((entry.thread_root and entry.thread_root.id) or comment.id)
 
