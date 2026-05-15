@@ -72,7 +72,7 @@ end
 ---@param subkey string|nil
 ---@return any
 local function safe_get(obj, key, subkey)
-	if not is_valid(obj) then
+	if not is_valid(obj) or type(obj) ~= "table" then
 		return nil
 	end
 	local val = obj[key]
@@ -97,7 +97,7 @@ end
 ---@param raw_status table|nil
 ---@return string|nil, string|nil, string|nil, string|nil
 local function extract_status(raw_status)
-	if not is_valid(raw_status) then
+	if not is_valid(raw_status) or type(raw_status) ~= "table" then
 		return nil, nil, nil, nil
 	end
 
@@ -137,7 +137,7 @@ end
 ---@param raw_parent table|nil
 ---@return Issue|nil
 local function extract_parent(raw_parent)
-	if not is_valid(raw_parent) or not raw_parent.key then
+	if not is_valid(raw_parent) or type(raw_parent) ~= "table" or not raw_parent.key then
 		return nil
 	end
 
@@ -340,8 +340,8 @@ local function activity_from_history_item(raw_item, actor, date)
 	if field == "Comment" then
 		body = nil
 	elseif field == "description" then
-		local f = has_from and vim.trim(from:gsub("%s+", " ")) or ""
-		local t = has_to and vim.trim(to:gsub("%s+", " ")) or ""
+		local f = (has_from and from) and vim.trim(from:gsub("%s+", " ")) or ""
+		local t = (has_to and to) and vim.trim(to:gsub("%s+", " ")) or ""
 		if #f > 200 then
 			f = f:sub(1, 197) .. "..."
 		end

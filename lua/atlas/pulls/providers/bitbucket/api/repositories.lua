@@ -33,10 +33,9 @@ end
 ---@param repo_name string
 ---@param ref string
 ---@param readme_path string|nil
----@param opts PullsFetchOpts
 ---@param on_done fun(readme: string|nil, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
-local function fetch_readme(owner, repo_name, ref, readme_path, opts, on_done)
+local function fetch_readme(owner, repo_name, ref, readme_path, on_done)
 	if owner == "" or repo_name == "" or ref == "" then
 		on_done(nil, nil)
 		return nil
@@ -152,7 +151,7 @@ function M.fetch_detail(repo, opts, on_done)
 		local readme_path = configured_readme_path(repo)
 		local ref = tostring(detail.default_branch or "")
 
-		current = fetch_readme(owner, repo_name, ref, readme_path, opts, function(readme, readme_err)
+		current = fetch_readme(owner, repo_name, ref, readme_path, function(readme, readme_err)
 			if cancelled then
 				return
 			end

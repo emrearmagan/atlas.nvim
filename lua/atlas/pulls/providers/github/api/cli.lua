@@ -74,7 +74,7 @@ local function sanitize_error(err)
 	if not err or err == "" then
 		return "Unknown error"
 	end
-	return err:gsub("\n", " "):gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+	return (err:gsub("\n", " "):gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", ""))
 end
 
 ---@param args string[]

@@ -10,7 +10,7 @@ local API_BASE = "https://api.bitbucket.org/2.0"
 ---@param err any
 ---@return string
 local function sanitize_error(err)
-	return tostring(err or ""):gsub("[\r\n]+", " | ")
+	return (tostring(err or ""):gsub("[\r\n]+", " | "))
 end
 
 ---@return string, string, string|nil

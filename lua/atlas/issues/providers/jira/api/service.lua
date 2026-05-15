@@ -11,7 +11,7 @@ local API_PATH = "/rest/api/3"
 function M.jira_config()
 	local opts = config.options
 	local issues = opts and opts.issues or nil
-	return (issues and issues.providers and issues.providers.jira) or (issues and issues.jira) or {}
+	return (issues and issues.providers and issues.providers.jira) or {}
 end
 
 ---@return string, string, string|nil
