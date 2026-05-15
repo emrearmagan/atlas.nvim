@@ -3,7 +3,7 @@ local M = {}
 
 local icons = require("atlas.ui.shared.icons")
 local helper = require("atlas.issues.ui.main.helper")
-local conversation_state = require("atlas.issues.providers.github.ui.conversation.state")
+local conversation_state = require("atlas.issues.ui.panel.issue.tabs.conversation.state")
 local history_state = require("atlas.issues.ui.panel.issue.tabs.activity.state")
 
 local state = {
@@ -313,7 +313,7 @@ function M.tabs()
 			key = "conversation",
 			label = "Conversation",
 			icon = icons.general("conversation"),
-			mod = require("atlas.issues.providers.github.ui.conversation"),
+			mod = require("atlas.issues.ui.panel.issue.tabs.conversation"),
 		},
 		{
 			key = "activity",

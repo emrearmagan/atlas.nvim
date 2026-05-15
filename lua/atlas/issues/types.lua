@@ -89,6 +89,7 @@
 ---@field parent_id string|number|nil
 ---@field children IssueComment[]|nil
 ---@field reactions table<string, number>|nil
+---@field deleted boolean|nil
 
 --------------------------------------------------------------------------------
 -- History
@@ -107,3 +108,20 @@
 ---@field created string|nil
 ---@field author IssueUser|nil
 ---@field items IssueHistoryItem[]
+
+--------------------------------------------------------------------------------
+-- Activity / reactions
+--------------------------------------------------------------------------------
+
+---@class IssueActivityEntry
+---@field kind string
+---@field actor IssueUser|nil
+---@field date string|nil
+---@field content_raw string|nil
+---@field deleted boolean|nil
+---@field always_render boolean|nil
+
+---@class IssueReactionOption
+---@field key string
+---@field emoji string
+---@field label string

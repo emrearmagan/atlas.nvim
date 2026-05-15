@@ -3,30 +3,8 @@ local M = {}
 local layout = require("atlas.ui.layout")
 local panel_state = require("atlas.issues.ui.panel.issue.state")
 local renderer = require("atlas.issues.ui.panel.issue.renderer")
-local icons = require("atlas.ui.shared.icons")
 
 local SPINNER_INTERVAL_MS = 100
-
-local DEFAULT_TABS = {
-	{
-		key = "overview",
-		label = "Overview",
-		icon = icons.general("overview"),
-		mod = require("atlas.issues.ui.panel.issue.tabs.overview"),
-	},
-	{
-		key = "comments",
-		label = "Comments",
-		icon = icons.general("comment"),
-		mod = require("atlas.issues.ui.panel.issue.tabs.comments"),
-	},
-	{
-		key = "activity",
-		label = "Activity",
-		icon = icons.pulls("activity"),
-		mod = require("atlas.issues.ui.panel.issue.tabs.activity"),
-	},
-}
 
 --------------------------------------------------------------------------------
 -- Loading spinner
@@ -94,11 +72,11 @@ local function get_tabs()
 	local provider = state.provider
 	if provider and provider.panel and provider.panel.tabs then
 		local tabs = provider.panel.tabs()
-		if type(tabs) == "table" and #tabs > 0 then
+		if type(tabs) == "table" then
 			return tabs
 		end
 	end
-	return DEFAULT_TABS
+	return {}
 end
 
 ---@param tab_key string
@@ -184,9 +162,10 @@ local function reset_tab_data()
 		end
 	end
 
-	reset_state("atlas.issues.ui.panel.issue.tabs.overview.state")
+	reset_state("atlas.issues.providers.jira.ui.overview.state")
 	reset_state("atlas.issues.ui.panel.issue.tabs.comments.state")
 	reset_state("atlas.issues.ui.panel.issue.tabs.activity.state")
+	reset_state("atlas.issues.ui.panel.issue.tabs.conversation.state")
 end
 
 --------------------------------------------------------------------------------

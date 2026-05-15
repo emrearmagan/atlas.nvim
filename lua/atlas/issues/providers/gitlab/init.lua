@@ -88,38 +88,42 @@ function M.fetch_history(key, opts, on_done)
 	return require("atlas.issues.providers.gitlab.api.notes").list_history(key, opts, on_done)
 end
 
----@param key string
+---@param issue Issue
 ---@param content string
 ---@param on_done fun(comment: IssueComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.add_comment(key, content, on_done)
+function M.add_comment(issue, content, on_done)
+	local key = tostring(issue.key or "")
 	return require("atlas.issues.providers.gitlab.api.notes").add(key, content, on_done)
 end
 
----@param key string
+---@param issue Issue
 ---@param _parent_id any
 ---@param content string
 ---@param on_done fun(comment: IssueComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.reply_comment(key, _parent_id, content, on_done)
+function M.reply_comment(issue, _parent_id, content, on_done)
 	-- GitLab supports threaded discussions, but for simplicity replies are flat new notes.
+	local key = tostring(issue.key or "")
 	return require("atlas.issues.providers.gitlab.api.notes").add(key, content, on_done)
 end
 
----@param key string
+---@param issue Issue
 ---@param comment_id string
 ---@param content string
 ---@param on_done fun(comment: IssueComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.edit_comment(key, comment_id, content, on_done)
+function M.edit_comment(issue, comment_id, content, on_done)
+	local key = tostring(issue.key or "")
 	return require("atlas.issues.providers.gitlab.api.notes").edit(key, comment_id, content, on_done)
 end
 
----@param key string
+---@param issue Issue
 ---@param comment_id string
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.delete_comment(key, comment_id, on_done)
+function M.delete_comment(issue, comment_id, on_done)
+	local key = tostring(issue.key or "")
 	return require("atlas.issues.providers.gitlab.api.notes").delete(key, comment_id, on_done)
 end
 

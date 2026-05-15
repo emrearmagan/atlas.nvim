@@ -276,7 +276,6 @@ function M.add_comment(issue, refresh)
 		return
 	end
 
-	local issue_key = tostring(issue.key or "")
 	md_editor.open({
 		key = "issue-comment-add",
 		title = " Add Comment ",
@@ -288,7 +287,7 @@ function M.add_comment(issue, refresh)
 				return
 			end
 			footer.notify("loading", "Adding comment...")
-			track(provider.add_comment(issue_key, text, function(comment, err)
+			track(provider.add_comment(issue, text, function(comment, err)
 				if err then
 					footer.notify("error", "Add comment failed: " .. err)
 					return
@@ -317,7 +316,6 @@ function M.reply_comment(issue, entry, refresh)
 		return
 	end
 
-	local issue_key = tostring(issue.key or "")
 	local parent_id = find_root_id(comment)
 
 	md_editor.open({
@@ -331,7 +329,7 @@ function M.reply_comment(issue, entry, refresh)
 				return
 			end
 			footer.notify("loading", "Sending reply...")
-			track(provider.reply_comment(issue_key, parent_id, text, function(reply, err)
+			track(provider.reply_comment(issue, parent_id, text, function(reply, err)
 				if err then
 					footer.notify("error", "Reply failed: " .. err)
 					return
@@ -360,8 +358,6 @@ function M.edit_comment(issue, entry, refresh)
 		return
 	end
 
-	local issue_key = tostring(issue.key or "")
-
 	md_editor.open({
 		key = "issue-comment-edit-" .. tostring(comment.id),
 		title = " Edit Comment ",
@@ -374,7 +370,7 @@ function M.edit_comment(issue, entry, refresh)
 				return
 			end
 			footer.notify("loading", "Editing comment...")
-			track(provider.edit_comment(issue_key, tostring(comment.id), text, function(updated, err)
+			track(provider.edit_comment(issue, tostring(comment.id), text, function(updated, err)
 				if err then
 					footer.notify("error", "Edit failed: " .. err)
 					return
@@ -412,15 +408,13 @@ function M.delete_comment(issue, entry, refresh)
 		return
 	end
 
-	local issue_key = tostring(issue.key or "")
-
 	vim.ui.input({ prompt = "Delete comment? [y/N]: " }, function(input)
 		local confirmed = input and vim.trim(input):lower()
 		if confirmed ~= "y" and confirmed ~= "yes" then
 			return
 		end
 		footer.notify("loading", "Deleting comment...")
-		track(provider.delete_comment(issue_key, tostring(comment.id), function(ok, err)
+		track(provider.delete_comment(issue, tostring(comment.id), function(ok, err)
 			if err then
 				footer.notify("error", "Delete failed: " .. err)
 				return

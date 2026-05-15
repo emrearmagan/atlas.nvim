@@ -161,40 +161,44 @@ function M.fetch_comments(issue_key, opts, on_done)
 	})
 end
 
----@param issue_key string
+---@param issue Issue
 ---@param content string
 ---@param on_done fun(comment: IssueComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.add_comment(issue_key, content, on_done)
+function M.add_comment(issue, content, on_done)
+	local issue_key = tostring(issue.key or "")
 	local comments_api = require("atlas.issues.providers.jira.api.comments")
 	return comments_api.add_comment(issue_key, content, on_done)
 end
 
----@param issue_key string
+---@param issue Issue
 ---@param parent_id string
 ---@param content string
 ---@param on_done fun(comment: IssueComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.reply_comment(issue_key, parent_id, content, on_done)
+function M.reply_comment(issue, parent_id, content, on_done)
+	local issue_key = tostring(issue.key or "")
 	local comments_api = require("atlas.issues.providers.jira.api.comments")
 	return comments_api.add_comment(issue_key, content, { parent_id = parent_id }, on_done)
 end
 
----@param issue_key string
+---@param issue Issue
 ---@param comment_id string
 ---@param content string
 ---@param on_done fun(comment: IssueComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.edit_comment(issue_key, comment_id, content, on_done)
+function M.edit_comment(issue, comment_id, content, on_done)
+	local issue_key = tostring(issue.key or "")
 	local comments_api = require("atlas.issues.providers.jira.api.comments")
 	return comments_api.edit_comment(issue_key, comment_id, content, on_done)
 end
 
----@param issue_key string
+---@param issue Issue
 ---@param comment_id string
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.delete_comment(issue_key, comment_id, on_done)
+function M.delete_comment(issue, comment_id, on_done)
+	local issue_key = tostring(issue.key or "")
 	local comments_api = require("atlas.issues.providers.jira.api.comments")
 	return comments_api.delete_comment(issue_key, comment_id, on_done)
 end

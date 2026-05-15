@@ -128,39 +128,163 @@ function M.fetch_comments(key, opts, on_done)
 	return require("atlas.issues.providers.github.api.comments").list(key, on_done, opts)
 end
 
----@param key string
+---@param issue Issue
 ---@param content string
 ---@param on_done fun(comment: IssueComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.add_comment(key, content, on_done)
+function M.add_comment(issue, content, on_done)
+	local key = tostring(issue.key or "")
 	return require("atlas.issues.providers.github.api.comments").add(key, content, on_done)
 end
 
----@param key string
+---@param issue Issue
 ---@param parent_id string
 ---@param content string
 ---@param on_done fun(comment: IssueComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.reply_comment(key, parent_id, content, on_done)
+function M.reply_comment(issue, parent_id, content, on_done)
 	-- GitHub issue comments are flat; reply is just a new comment.
+	local key = tostring(issue.key or "")
 	return require("atlas.issues.providers.github.api.comments").add(key, content, on_done)
 end
 
----@param key string
+---@param issue Issue
 ---@param comment_id string
 ---@param content string
 ---@param on_done fun(comment: IssueComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.edit_comment(key, comment_id, content, on_done)
+function M.edit_comment(issue, comment_id, content, on_done)
+	if tostring(comment_id) == "__body__" then
+		local raw = type(issue._raw) == "table" and issue._raw or {}
+		local slug = tostring(raw.slug or "")
+		local number = tonumber(raw.number)
+		if slug == "" or number == nil then
+			on_done(nil, "Invalid issue")
+			return nil
+		end
+		local cli = require("atlas.issues.providers.github.api.cli")
+		return cli.gh({
+			"issue", "edit", tostring(number), "--repo", slug, "--body", content,
+		}, function(_, err)
+			if err then
+				on_done(nil, err)
+				return
+			end
+			cli.delete_cache(string.format("github_issues:get:%s#%d", slug, number))
+			on_done({ id = "__body__", body = content }, nil)
+		end)
+	end
+	local key = tostring(issue.key or "")
 	return require("atlas.issues.providers.github.api.comments").edit(key, comment_id, content, on_done)
 end
 
----@param key string
+---@param issue Issue
 ---@param comment_id string
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.delete_comment(key, comment_id, on_done)
+function M.delete_comment(issue, comment_id, on_done)
+	if tostring(comment_id) == "__body__" then
+		on_done(false, "Cannot delete the issue description")
+		return nil
+	end
+	local key = tostring(issue.key or "")
 	return require("atlas.issues.providers.github.api.comments").delete(key, comment_id, on_done)
+end
+
+local GITHUB_REACTION_OPTIONS = require("atlas.ui.shared.emojis").github()
+
+---@param issue Issue
+---@param opts { force_refresh: boolean|nil }|nil
+---@param on_done fun(result: { comments: IssueComment[], events: IssueActivityEntry[], reaction_options: IssueReactionOption[]|nil }|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_conversation(issue, opts, on_done)
+	opts = opts or {}
+	local key = tostring(issue and issue.key or "")
+	if key == "" then
+		on_done(nil, "Invalid issue key")
+		return nil
+	end
+
+	local timeline = require("atlas.issues.providers.github.api.timeline")
+	return timeline.list_conversation(key, function(result, err)
+		if err or type(result) ~= "table" then
+			on_done(nil, err or "Failed to fetch conversation")
+			return
+		end
+
+		local comments = type(result.comments) == "table" and result.comments or {}
+		local raw = type(issue._raw) == "table" and issue._raw or {}
+		local body = tostring(raw.body or "")
+		if body ~= "" then
+			table.insert(comments, 1, {
+				id = "__body__",
+				url = issue.url,
+				author = issue.reporter,
+				body = body,
+				created = raw.created_at or "",
+				reactions = raw.reactions,
+			})
+		end
+
+		local event_label = require("atlas.issues.providers.github.ui.event_label")
+		local events = {}
+		for _, ev in ipairs(type(result.events) == "table" and result.events or {}) do
+			local label, content = event_label.format(ev)
+			local content_raw = label or tostring(ev.event or "")
+			if content and content ~= "" then
+				content_raw = content_raw .. ": " .. content
+			end
+			---@type IssueActivityEntry
+			local entry = {
+				kind = tostring(ev.event or ""),
+				actor = ev.actor,
+				date = ev.date,
+				content_raw = content_raw,
+			}
+			table.insert(events, entry)
+		end
+
+		on_done({
+			comments = comments,
+			events = events,
+			reaction_options = GITHUB_REACTION_OPTIONS,
+		}, nil)
+	end, { force_load = opts.force_refresh == true })
+end
+
+---@param issue Issue
+---@param comment IssueComment
+---@param key string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.add_reaction(issue, comment, key, on_done)
+	local raw = type(issue._raw) == "table" and issue._raw or {}
+	local slug = tostring(raw.slug or "")
+	local number = tonumber(raw.number)
+	if slug == "" then
+		on_done(false, "Invalid issue")
+		return nil
+	end
+
+	local endpoint
+	if tostring(comment.id) == "__body__" then
+		if number == nil then
+			on_done(false, "Invalid issue")
+			return nil
+		end
+		endpoint = string.format("repos/%s/issues/%d/reactions", slug, number)
+	else
+		endpoint = string.format("repos/%s/issues/comments/%s/reactions", slug, tostring(comment.id))
+	end
+
+	local cli = require("atlas.issues.providers.github.api.cli")
+	return cli.api("POST", endpoint, { content = key }, function(_, err)
+		if err then
+			on_done(false, err)
+			return
+		end
+		on_done(true, nil)
+	end)
 end
 
 ---@param key string
