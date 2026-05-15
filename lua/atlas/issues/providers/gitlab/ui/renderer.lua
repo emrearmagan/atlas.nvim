@@ -33,25 +33,31 @@ local function state_chip_hl(status_id)
 end
 
 ---@param issue Issue
+---@return string
+local function key_label(issue)
+	local raw = type(issue._raw) == "table" and issue._raw or {}
+	local iid = raw.iid or 0
+	local path = tostring(raw.project_path or "")
+	return path ~= "" and string.format("%s#%d", path, iid) or string.format("#%d", iid)
+end
+
+---@param issue Issue
 ---@param is_child boolean
 ---@return table
 function M.format_row(issue, is_child)
-	local raw = type(issue._raw) == "table" and issue._raw or {}
-	local iid = raw.iid or 0
 	local title = issue.summary or ""
-	local path = tostring(raw.project_path or "")
+	local label = key_label(issue)
 
-	local key_label = path ~= "" and string.format("%s#%d", path, iid) or string.format("#%d", iid)
-	local s_icon = state_icon(issue.status_id)
+	local row_icon = state_icon(issue.status_id)
 
-	local name = is_child and ("  " .. s_icon .. "  " .. key_label .. "  " .. title)
-		or (key_label .. "  " .. title)
+	local name = is_child and ("  " .. row_icon .. "  " .. label .. "  " .. title)
+		or (label .. "  " .. title)
 
 	local assignee_name = type(issue.assignee) == "table" and issue.assignee.display_name or "Unassigned"
 	local reporter_name = type(issue.reporter) == "table" and issue.reporter.display_name or "Unknown"
 
 	return {
-		icon = is_child and "" or s_icon,
+		icon = is_child and "" or row_icon,
 		name = name,
 		assignee = string.format("%s %s", icons.general("user"), utils.shorten_name(assignee_name, 20)),
 		reporter = string.format("%s %s", icons.general("user"), utils.shorten_name(reporter_name, 20)),
@@ -98,11 +104,8 @@ function M.cell_hl(row, col, ctx)
 			end
 		end
 
-		local raw = type(issue._raw) == "table" and issue._raw or {}
-		local iid = raw.iid or 0
-		local path = tostring(raw.project_path or "")
-		local key_label = path ~= "" and string.format("%s#%d", path, iid) or string.format("#%d", iid)
-		local s, e = ctx.text:find(key_label, 1, true)
+		local label = key_label(issue)
+		local s, e = ctx.text:find(label, 1, true)
 		if s and e then
 			table.insert(spans, { start_col = s - 1, end_col = e, hl_group = "AtlasGLIssueKey" })
 			local title_start = e + 2
