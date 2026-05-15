@@ -1,7 +1,7 @@
 ---@class PullsCommentsTab : PullsPanelTabModule
 local M = {}
 
-local md_editor = require("atlas.ui.popups.markdown_editor")
+local md_editor = require("atlas.ui.popups.editor")
 local footer = require("atlas.ui.components.footer")
 local renderer = require("atlas.pulls.ui.panel.pr.tabs.comments.renderer")
 local state = require("atlas.pulls.ui.panel.pr.tabs.comments.state")

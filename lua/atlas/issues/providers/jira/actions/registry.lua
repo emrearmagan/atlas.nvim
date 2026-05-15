@@ -22,7 +22,11 @@ end
 
 ---@return string
 local function current_jql()
-	local view = issues_state.active_view or issues_state.current_view or {}
+	local view = issues_state.active_view or issues_state.current_view
+	if type(view) ~= "table" then
+		return ""
+	end
+	---@cast view AtlasJiraViewConfig
 	return tostring(view.jql or "")
 end
 
@@ -168,7 +172,7 @@ local ACTIONS = {
 					end
 				end
 
-				if current_user_account_id then
+				if current_user_account_id and current_user then
 					if not seen_current_user then
 						current_user_item = {
 							id = current_user_account_id,
@@ -382,9 +386,10 @@ local ACTIONS = {
 
 			local function open_editor(initial_description)
 				issue_editor.open(function(fields, submit_done)
+					local desc = fields.description
 					local payload = {
 						summary = fields.summary,
-						description = fields.description and md_to_adf.to_adf(fields.description) or vim.NIL,
+						description = type(desc) == "string" and md_to_adf.to_adf(desc) or vim.NIL,
 					}
 
 					if fields.issue_type and fields.issue_type.id and fields.issue_type.id ~= "" then
@@ -479,8 +484,9 @@ local ACTIONS = {
 						return
 					end
 
-					if fields.description then
-						api_fields.description = md_to_adf.to_adf(fields.description)
+					local desc = fields.description
+					if type(desc) == "string" then
+						api_fields.description = md_to_adf.to_adf(desc)
 					end
 
 					if fields.assignee and fields.assignee.account_id then
@@ -709,7 +715,7 @@ local ACTIONS = {
 		end,
 		run = function(ctx, done)
 			local template_store = require("atlas.issues.templates")
-			local markdown_editor = require("atlas.ui.popups.markdown_editor")
+			local markdown_editor = require("atlas.ui.popups.editor")
 
 			local options = {
 				{ id = "create", label = "Create template" },

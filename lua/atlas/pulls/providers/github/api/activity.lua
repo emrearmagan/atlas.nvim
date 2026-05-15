@@ -1,14 +1,12 @@
 local M = {}
 
 local cli = require("atlas.pulls.providers.github.api.cli")
+local json = require("atlas.core.json")
 
 ---@param value any
 ---@return string
 local function body_text(value)
-	if value == nil or value == vim.NIL then
-		return ""
-	end
-	return tostring(value)
+	return json.safe_str(value) or ""
 end
 
 ---@param login string

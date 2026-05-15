@@ -68,10 +68,10 @@ function M.repo_hl(repo)
 	return highlights.dynamic_for(lower) or "AtlasTextMuted"
 end
 
----@param state string|nil
+---@param pr_state string|nil
 ---@return string
-function M.pr_state_hl(state)
-	local lower = tostring(state or ""):lower()
+function M.pr_state_hl(pr_state)
+	local lower = tostring(pr_state or ""):lower()
 	if lower == "open" then
 		return "AtlasPROpenChip"
 	end

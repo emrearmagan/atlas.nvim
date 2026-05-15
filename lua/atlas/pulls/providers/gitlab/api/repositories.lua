@@ -3,15 +3,8 @@ local M = {}
 local service = require("atlas.pulls.providers.gitlab.api.service")
 local http = require("atlas.core.http")
 local config = require("atlas.config")
+local json = require("atlas.core.json")
 
----@param value any
----@return string|nil
-local function safe_str(value)
-	if value == nil or value == vim.NIL then
-		return nil
-	end
-	return tostring(value)
-end
 
 ---@param repo PullsRepo
 ---@return string
@@ -75,8 +68,8 @@ function M.fetch_detail(repo, opts, on_done)
 			return
 		end
 
-		local name = safe_str(result.path) or tostring(repo.repo_name or repo.name or "")
-		local full_path = safe_str(result.path_with_namespace) or path
+		local name = json.safe_str(result.path) or tostring(repo.repo_name or repo.name or "")
+		local full_path = json.safe_str(result.path_with_namespace) or path
 		local owner = full_path:match("^(.-)/[^/]+$") or ""
 
 		---@type PullsRepoDetails
@@ -86,12 +79,12 @@ function M.fetch_detail(repo, opts, on_done)
 			full_name = full_path,
 			owner = owner,
 			repo_name = name,
-			html_url = safe_str(result.web_url) or "",
-			description = safe_str(result.description) or "",
+			html_url = json.safe_str(result.web_url) or "",
+			description = json.safe_str(result.description) or "",
 			size = type(result.statistics) == "table" and tonumber(result.statistics.repository_size) or nil,
-			default_branch = safe_str(result.default_branch) or "",
-			is_private = safe_str(result.visibility) == "private",
-			created_on = safe_str(result.created_at) or "",
+			default_branch = json.safe_str(result.default_branch) or "",
+			is_private = json.safe_str(result.visibility) == "private",
+			created_on = json.safe_str(result.created_at) or "",
 			readme = nil,
 			stars = tonumber(result.star_count) or nil,
 			forks = tonumber(result.forks_count) or nil,
@@ -159,11 +152,11 @@ function M.fetch_branches(repo, opts, on_done)
 		for _, branch in ipairs(result) do
 			local commit = type(branch.commit) == "table" and branch.commit or {}
 			table.insert(entries, {
-				name = safe_str(branch.name) or "",
-				hash = (safe_str(commit.short_id) or safe_str(commit.id) or ""):sub(1, 8),
-				date = safe_str(commit.committed_date) or "",
-				message = safe_str(commit.title) or "",
-				author = safe_str(commit.author_name) or "",
+				name = json.safe_str(branch.name) or "",
+				hash = (json.safe_str(commit.short_id) or json.safe_str(commit.id) or ""):sub(1, 8),
+				date = json.safe_str(commit.committed_date) or "",
+				message = json.safe_str(commit.title) or "",
+				author = json.safe_str(commit.author_name) or "",
 			})
 		end
 
@@ -208,11 +201,11 @@ function M.fetch_tags(repo, opts, on_done)
 		for _, tag in ipairs(result) do
 			local commit = type(tag.commit) == "table" and tag.commit or {}
 			table.insert(entries, {
-				name = safe_str(tag.name) or "",
-				hash = (safe_str(commit.short_id) or safe_str(commit.id) or ""):sub(1, 8),
-				date = safe_str(commit.committed_date) or "",
-				message = safe_str(tag.message) or safe_str(commit.title) or "",
-				author = safe_str(commit.author_name) or "",
+				name = json.safe_str(tag.name) or "",
+				hash = (json.safe_str(commit.short_id) or json.safe_str(commit.id) or ""):sub(1, 8),
+				date = json.safe_str(commit.committed_date) or "",
+				message = json.safe_str(tag.message) or json.safe_str(commit.title) or "",
+				author = json.safe_str(commit.author_name) or "",
 			})
 		end
 

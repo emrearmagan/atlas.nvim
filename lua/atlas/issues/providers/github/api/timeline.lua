@@ -25,39 +25,22 @@ local logger = require("atlas.core.logger")
 ---@field comments IssueComment[]
 ---@field events GHIssueTimelineEntry[]
 
----@param value any
----@return any
-local function nilify(value)
-	if value == nil or value == vim.NIL then
-		return nil
-	end
-	return value
-end
-
----@param value any
----@return string|nil
-local function safe_str(value)
-	value = nilify(value)
-	if value == nil then
-		return nil
-	end
-	return tostring(value)
-end
+local json = require("atlas.core.json")
 
 ---@param raw table
 ---@return GHIssueTimelineEntry|nil
 local function normalize_event(raw)
-	raw = nilify(raw)
+	raw = json.nilify(raw)
 	if type(raw) ~= "table" then
 		return nil
 	end
-	local event = safe_str(raw.event) or ""
+	local event = json.safe_str(raw.event) or ""
 	if event == "" then
 		return nil
 	end
 
 	local actor = normalizer.normalize_user(raw.actor) or normalizer.normalize_user(raw.user)
-	local date = safe_str(raw.created_at) or ""
+	local date = json.safe_str(raw.created_at) or ""
 
 	---@type GHIssueTimelineEntry
 	local entry = {
@@ -67,41 +50,41 @@ local function normalize_event(raw)
 	}
 
 	if event == "commented" then
-		entry.comment_body = safe_str(raw.body) or ""
-		entry.comment_url = safe_str(raw.html_url) or ""
+		entry.comment_body = json.safe_str(raw.body) or ""
+		entry.comment_url = json.safe_str(raw.html_url) or ""
 	elseif event == "labeled" or event == "unlabeled" then
-		local label = nilify(raw.label)
+		local label = json.nilify(raw.label)
 		if type(label) == "table" then
-			entry.label_name = safe_str(label.name) or ""
-			entry.label_color = safe_str(label.color) or ""
+			entry.label_name = json.safe_str(label.name) or ""
+			entry.label_color = json.safe_str(label.color) or ""
 		end
 	elseif event == "assigned" or event == "unassigned" then
-		local assignee = nilify(raw.assignee)
+		local assignee = json.nilify(raw.assignee)
 		if type(assignee) == "table" then
-			entry.assignee_login = safe_str(assignee.login) or ""
+			entry.assignee_login = json.safe_str(assignee.login) or ""
 		end
 	elseif event == "milestoned" or event == "demilestoned" then
-		local milestone = nilify(raw.milestone)
+		local milestone = json.nilify(raw.milestone)
 		if type(milestone) == "table" then
-			entry.milestone_title = safe_str(milestone.title) or ""
+			entry.milestone_title = json.safe_str(milestone.title) or ""
 		end
 	elseif event == "renamed" then
-		local rename = nilify(raw.rename)
+		local rename = json.nilify(raw.rename)
 		if type(rename) == "table" then
-			entry.rename_from = safe_str(rename.from) or ""
-			entry.rename_to = safe_str(rename.to) or ""
+			entry.rename_from = json.safe_str(rename.from) or ""
+			entry.rename_to = json.safe_str(rename.to) or ""
 		end
 	elseif event == "cross-referenced" then
-		local source = nilify(raw.source)
+		local source = json.nilify(raw.source)
 		source = type(source) == "table" and source or {}
-		local issue = nilify(source.issue)
+		local issue = json.nilify(source.issue)
 		issue = type(issue) == "table" and issue or {}
-		entry.source_url = safe_str(issue.html_url) or ""
-		entry.source_title = safe_str(issue.title) or ""
+		entry.source_url = json.safe_str(issue.html_url) or ""
+		entry.source_title = json.safe_str(issue.title) or ""
 	elseif event == "referenced" or event == "closed" then
-		local commit_id = safe_str(raw.commit_id)
+		local commit_id = json.safe_str(raw.commit_id)
 		entry.commit_id = (commit_id and commit_id ~= "") and commit_id:sub(1, 8) or nil
-		entry.commit_url = safe_str(raw.commit_url)
+		entry.commit_url = json.safe_str(raw.commit_url)
 	end
 
 	return entry
@@ -114,8 +97,8 @@ local function normalize_timeline_comment(raw)
 	for key, value in pairs(raw) do
 		comment[key] = value
 	end
-	if nilify(comment.user) == nil then
-		comment.user = nilify(raw.actor)
+	if json.nilify(comment.user) == nil then
+		comment.user = json.nilify(raw.actor)
 	end
 	return normalizer.normalize_comment(comment)
 end
@@ -195,7 +178,7 @@ function M.list_conversation(key, on_done, opts)
 			---@type GHIssueConversationTimeline
 			local conversation = { comments = {}, events = {} }
 			for _, raw in ipairs(type(result) == "table" and result or {}) do
-				local raw_event = type(raw) == "table" and safe_str(raw.event) or ""
+				local raw_event = type(raw) == "table" and json.safe_str(raw.event) or ""
 				if raw_event == "commented" then
 					local comment = normalize_timeline_comment(raw)
 					if comment then

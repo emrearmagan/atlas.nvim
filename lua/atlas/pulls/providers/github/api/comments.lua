@@ -2,13 +2,8 @@ local M = {}
 
 local cli = require("atlas.pulls.providers.github.api.cli")
 local diff_parser = require("atlas.core.git.diff_parser")
+local json = require("atlas.core.json")
 
-local function nilify(value)
-	if value == nil or value == vim.NIL then
-		return nil
-	end
-	return value
-end
 
 ---@param diff_hunk string|nil
 ---@return DiffHunk|nil
@@ -18,7 +13,7 @@ local function parse_diff_hunk(diff_hunk)
 	end
 	-- GitHub returns just the @@ snippet but the parser expects a full git-format so we simply wrap it because i am too lazy to rethink this
 	local synthetic = "diff --git a/x b/x\n--- a/x\n+++ b/x\n" .. diff_hunk .. "\n"
-	local files = diff_parser.parse(synthetic)
+	local files = diff_parser.parse(synthetic) ---@type DiffFile[]
 	if #files == 0 or #files[1].hunks == 0 then
 		return nil
 	end
@@ -31,9 +26,9 @@ end
 ---@return PullsComment
 local function normalize_comment(raw, thread_state)
 	local user = raw.user or {}
-	local line = nilify(raw.line)
-	local original_line = nilify(raw.original_line)
-	local path = nilify(raw.path)
+	local line = json.nilify(raw.line)
+	local original_line = json.nilify(raw.original_line)
+	local path = json.nilify(raw.path)
 
 	local inline, inline_hunk
 	if path ~= nil then
@@ -73,7 +68,7 @@ local function normalize_comment(raw, thread_state)
 
 	return {
 		id = raw.id,
-		parent_id = nilify(raw.in_reply_to_id),
+		parent_id = json.nilify(raw.in_reply_to_id),
 		author = {
 			name = tostring(user.login or ""),
 			nickname = tostring(user.login or ""),
@@ -137,8 +132,8 @@ local REACTION_CONTENT_TO_KEY = {
 ---@param thread table thread node providing path/line/diffSide
 ---@return table   REST-shaped raw comment that `normalize_comment` understands
 local function gql_to_raw(gql_comment, thread)
-	local author = nilify(gql_comment.author) or {}
-	local reply_to = nilify(gql_comment.replyTo)
+	local author = json.nilify(gql_comment.author) or {}
+	local reply_to = json.nilify(gql_comment.replyTo)
 
 	local reactions = {}
 	for _, group in ipairs(gql_comment.reactionGroups or {}) do
@@ -166,10 +161,10 @@ local function gql_to_raw(gql_comment, thread)
 end
 
 ---@param pr PullRequest
----@param opts { force_refresh: boolean|nil }|nil
+---@param _opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(comments: PullsComment[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_comments(pr, opts, on_done)
+function M.fetch_comments(pr, _opts, on_done) ---@diagnostic disable-line: unused-local
 	local repo_slug = pr.repo_full_name or ""
 	local owner, name = tostring(repo_slug):match("^([^/]+)/([^/]+)$")
 	if owner == nil or name == nil then

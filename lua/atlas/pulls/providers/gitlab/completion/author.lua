@@ -32,15 +32,19 @@ local function collect_logins()
 		end
 	end
 
-	if type(comments_state.comments) == "table" then
-		for _, c in ipairs(comments_state.comments) do
+	local cc = comments_state.comments
+	if type(cc) == "table" then
+		---@cast cc PullsComment[]
+		for _, c in ipairs(cc) do
 			if c.author then
 				add(c.author.nickname or c.author.name)
 			end
 		end
 	end
-	if type(conversation_state.comments) == "table" then
-		for _, c in ipairs(conversation_state.comments) do
+	local conv = conversation_state.comments
+	if type(conv) == "table" then
+		---@cast conv PullsComment[]
+		for _, c in ipairs(conv) do
 			if c.author then
 				add(c.author.nickname or c.author.name)
 			end
