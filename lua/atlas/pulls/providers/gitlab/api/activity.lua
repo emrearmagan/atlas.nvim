@@ -33,6 +33,9 @@ end
 ---@return "approval"|"changes_requested"|"update"
 local function classify_system_note(body)
 	local b = tostring(body or ""):lower()
+	if b:find("unapproved this merge request", 1, true) then
+		return "update"
+	end
 	if b:find("approved this merge request", 1, true) then
 		return "approval"
 	end
