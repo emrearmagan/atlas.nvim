@@ -131,7 +131,11 @@ function M.fetch_comments(pr, _opts, on_done) ---@diagnostic disable-line: unuse
 			return tostring(a.created_on or "") < tostring(b.created_on or "")
 		end)
 		on_done(out, nil)
-	end)
+	end, {
+		action = "fetch comments",
+		repo = pr.repo_full_name,
+		number = pr.id,
+	})
 end
 
 ---@param pr PullRequest
@@ -184,7 +188,12 @@ function M.add_comment(pr, content, opts, on_done)
 				return
 			end
 			on_done(mapper.to_comment(result), nil)
-		end)
+		end, {
+			action = "add comment",
+			repo = pr.repo_full_name,
+			number = pr.id,
+			inline = true,
+		})
 	end
 
 	-- GitHub has no native task concept like bitbuckett does opts.is_task is ignored.
@@ -198,7 +207,13 @@ function M.add_comment(pr, content, opts, on_done)
 				return
 			end
 			on_done(mapper.to_comment(result), nil)
-		end
+		end,
+		{
+			action = "add comment",
+			repo = pr.repo_full_name,
+			number = pr.id,
+			inline = false,
+		}
 	)
 end
 
@@ -230,7 +245,12 @@ function M.edit_comment(pr, comment, on_done)
 				content_raw = tostring(comment.content_raw or ""),
 				created_on = comment.created_on or pr.created_on or "",
 			}, nil)
-		end)
+		end, {
+			action = "edit comment",
+			repo = pr.repo_full_name,
+			number = pr.id,
+			comment_id = comment.id,
+		})
 	end
 
 	local endpoint = comment.inline ~= nil
@@ -243,7 +263,12 @@ function M.edit_comment(pr, comment, on_done)
 			return
 		end
 		on_done(mapper.to_comment(result), nil)
-	end)
+	end, {
+		action = "edit comment",
+		repo = pr.repo_full_name,
+		number = pr.id,
+		comment_id = comment.id,
+	})
 end
 
 ---@param pr PullRequest
@@ -276,7 +301,12 @@ function M.delete_comment(pr, target, on_done)
 			return
 		end
 		on_done(true, nil)
-	end)
+	end, {
+		action = "delete comment",
+		repo = pr.repo_full_name,
+		number = pr.id,
+		comment_id = target.id,
+	})
 end
 
 ---@param pr PullRequest
@@ -304,7 +334,13 @@ function M.reply_comment(pr, parent, content, on_done)
 					return
 				end
 				on_done(mapper.to_comment(result), nil)
-			end
+			end,
+			{
+				action = "reply comment",
+				repo = pr.repo_full_name,
+				number = pr.id,
+				parent_id = parent.id,
+			}
 		)
 	end
 

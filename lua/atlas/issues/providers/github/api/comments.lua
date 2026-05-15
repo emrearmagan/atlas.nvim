@@ -2,7 +2,6 @@ local M = {}
 
 local cli = require("atlas.issues.providers.github.api.cli")
 local normalizer = require("atlas.issues.providers.github.api.mapper")
-local logger = require("atlas.core.logger")
 
 ---@param key string
 ---@param on_done fun(comments: IssueComment[]|nil, err: string|nil)
@@ -25,7 +24,6 @@ function M.list(key, on_done, opts)
 		end
 	end
 
-	logger.loginfo("GitHub fetch issue comments", { slug = slug, number = number })
 	return cli.gh(
 		{ "api", "--paginate", string.format("repos/%s/issues/%d/comments", slug, number) },
 		function(result, err)
@@ -36,7 +34,12 @@ function M.list(key, on_done, opts)
 			local comments = normalizer.to_comments_list(type(result) == "table" and result or {})
 			cli.set_mem(cache_key, comments)
 			on_done(comments, nil)
-		end
+		end,
+		{
+			action = "fetch issue comments",
+			slug = slug,
+			number = number,
+		}
 	)
 end
 
@@ -67,7 +70,12 @@ function M.add(key, body, on_done)
 			cli.delete_cache(string.format("github_issues:comments:%s#%d", slug, number))
 			cli.delete_cache(string.format("github_issues:conversation:%s#%d", slug, number))
 			on_done(normalizer.to_comment(result), nil)
-		end
+		end,
+		{
+			action = "add issue comment",
+			slug = slug,
+			number = number,
+		}
 	)
 end
 
@@ -102,7 +110,12 @@ function M.edit(key, comment_id, body, on_done)
 				cli.delete_cache(string.format("github_issues:conversation:%s#%d", slug, number))
 			end
 			on_done(normalizer.to_comment(result), nil)
-		end
+		end,
+		{
+			action = "edit issue comment",
+			slug = slug,
+			comment_id = comment_id,
+		}
 	)
 end
 
@@ -131,7 +144,12 @@ function M.delete(key, comment_id, on_done)
 				cli.delete_cache(string.format("github_issues:conversation:%s#%d", slug, number))
 			end
 			on_done(true, nil)
-		end
+		end,
+		{
+			action = "delete issue comment",
+			slug = slug,
+			comment_id = comment_id,
+		}
 	)
 end
 

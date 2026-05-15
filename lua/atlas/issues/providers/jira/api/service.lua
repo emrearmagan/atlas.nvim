@@ -88,8 +88,9 @@ end
 ---@param endpoint string
 ---@param data table|nil
 ---@param on_done fun(result: table|nil, err: string|nil)
+---@param ctx table|nil   optional extra context merged into the request log line (e.g. { action, issue_key, ... })
 ---@return { job_id: integer, cancel: fun() }|nil
-function M.request(method, endpoint, data, on_done)
+function M.request(method, endpoint, data, on_done, ctx)
 	local _, _, auth_err = M.get_auth()
 	if auth_err then
 		logger.logerror("Jira auth missing", { error = auth_err })
@@ -114,6 +115,8 @@ function M.request(method, endpoint, data, on_done)
 		payload = encoded
 	end
 
+	local log = vim.tbl_extend("keep", { method = method, endpoint = endpoint }, ctx or {})
+	logger.loginfo("Jira request", log)
 	return http.curl_request(method, url, headers, payload, function(result, err)
 		if err then
 			logger.logerror("Jira request failed", {

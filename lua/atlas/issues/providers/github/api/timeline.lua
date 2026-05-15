@@ -2,7 +2,6 @@ local M = {}
 
 local cli = require("atlas.issues.providers.github.api.cli")
 local normalizer = require("atlas.issues.providers.github.api.mapper")
-local logger = require("atlas.core.logger")
 local json = require("atlas.core.json")
 
 ---@param key string
@@ -26,7 +25,6 @@ function M.list_conversation(key, on_done, opts)
 		end
 	end
 
-	logger.loginfo("GitHub fetch issue conversation timeline", { slug = slug, number = number })
 	return cli.gh(
 		{ "api", "--paginate", string.format("repos/%s/issues/%d/timeline", slug, number) },
 		function(result, err)
@@ -53,7 +51,12 @@ function M.list_conversation(key, on_done, opts)
 
 			cli.set_mem(cache_key, conversation)
 			on_done(conversation, nil)
-		end
+		end,
+		{
+			action = "fetch issue conversation timeline",
+			slug = slug,
+			number = number,
+		}
 	)
 end
 

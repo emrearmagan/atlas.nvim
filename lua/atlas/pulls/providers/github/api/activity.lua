@@ -85,7 +85,12 @@ function M.fetch_conversation(pr, opts, on_done)
 			conversation.events = squashed
 
 			on_done(conversation, nil)
-		end
+		end,
+		{
+			action = "fetch conversation",
+			repo = pr.repo_full_name,
+			number = pr.id,
+		}
 	)
 end
 

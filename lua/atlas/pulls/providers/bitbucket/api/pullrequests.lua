@@ -526,11 +526,6 @@ function M.create_pr(opts, on_done)
 		payload.reviewers = list
 	end
 
-	logger.loginfo(
-		"bitbucket.create_pr",
-		{ workspace = workspace, repo = repo, head = opts.head, base = opts.base, draft = opts.draft == true }
-	)
-
 	local endpoint = string.format("/repositories/%s/%s/pullrequests", workspace, repo)
 	return service.request("POST", endpoint, nil, vim.json.encode(payload), function(result, err)
 		if err then
@@ -548,7 +543,14 @@ function M.create_pr(opts, on_done)
 		end
 
 		on_done({ id = id, url = url, message = "PR created" }, nil)
-	end)
+	end, {
+		action = "bitbucket.create_pr",
+		workspace = workspace,
+		repo = repo,
+		head = opts.head,
+		base = opts.base,
+		draft = opts.draft == true,
+	})
 end
 
 ---@param opts { repo_slug: string }

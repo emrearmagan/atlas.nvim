@@ -82,11 +82,6 @@ function M.fetch_workspace_repositories(workspace, search, on_done)
 
 	local endpoint = string.format("/repositories/%s?%ssort=-updated_on&pagelen=50", workspace, query_prefix)
 
-	logger.loginfo("Bitbucket repo fetch start", {
-		workspace = workspace,
-		search = term,
-	})
-
 	return service.request("GET", endpoint, nil, nil, function(result, err)
 		if err then
 			logger.logerror("Bitbucket repo fetch failed", {
@@ -112,7 +107,11 @@ function M.fetch_workspace_repositories(workspace, search, on_done)
 		})
 
 		on_done(repositories, nil)
-	end)
+	end, {
+		action = "Bitbucket repo fetch",
+		workspace = workspace,
+		search = term,
+	})
 end
 
 ---@param repo PullsRepo

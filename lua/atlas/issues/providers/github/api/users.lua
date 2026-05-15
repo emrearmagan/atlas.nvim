@@ -2,7 +2,6 @@ local M = {}
 
 local cli = require("atlas.issues.providers.github.api.cli")
 local normalizer = require("atlas.issues.providers.github.api.mapper")
-local logger = require("atlas.core.logger")
 
 ---@param on_done fun(user: IssueUser|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
@@ -14,7 +13,6 @@ function M.get_user(on_done)
 		return nil
 	end
 
-	logger.loginfo("GitHub issues fetch user")
 	return cli.gh({ "api", "user" }, function(result, err)
 		if err or type(result) ~= "table" then
 			on_done(nil, err or "Empty response")
@@ -25,7 +23,9 @@ function M.get_user(on_done)
 			cli.set_cache(cache_key, user)
 		end
 		on_done(user, nil)
-	end)
+	end, {
+		action = "issues fetch user",
+	})
 end
 
 ---@param slug string

@@ -66,8 +66,6 @@ function M.search_prs(search, on_done, opts)
 		end
 	end
 
-	logger.loginfo("GitHub GraphQL search PRs", { search = search, limit = limit })
-
 	return cli.gh({
 		"api",
 		"graphql",
@@ -100,7 +98,11 @@ function M.search_prs(search, on_done, opts)
 		cli.set_cache(cache_key, groups)
 		logger.loginfo("GitHub GraphQL search complete", { count = #prs, groups = #groups })
 		on_done(groups, nil)
-	end)
+	end, {
+		action = "search PRs",
+		search = search,
+		limit = limit,
+	})
 end
 
 ---@param owner string
@@ -121,8 +123,6 @@ function M.get_pr(owner, repo, number, on_done, opts)
 			return nil
 		end
 	end
-
-	logger.loginfo("GitHub fetch PR", { repo = repo_slug, number = number })
 
 	return cli.gh({
 		"api",
@@ -153,7 +153,11 @@ function M.get_pr(owner, repo, number, on_done, opts)
 		local pr = mapper.to_pull_request(pr_raw)
 		cli.set_mem(cache_key, pr)
 		on_done(pr, nil)
-	end)
+	end, {
+		action = "fetch PR",
+		repo = repo_slug,
+		number = number,
+	})
 end
 
 ---@param pr PullRequest
@@ -196,7 +200,11 @@ function M.get_description(pr, opts, on_done)
 		local body = tostring(result.body or "")
 		cli.set_mem(cache_key, body)
 		on_done(body, nil)
-	end)
+	end, {
+		action = "fetch PR description",
+		repo = repo_slug,
+		number = pr.id,
+	})
 end
 
 ---@return { login: string, state: "APPROVED"|"CHANGES_REQUESTED"|"COMMENTED"|"DISMISSED" }[], string[]
@@ -290,7 +298,11 @@ function M.get_reviewers(pr, opts, on_done)
 
 		cli.set_mem(cache_key, reviewers)
 		on_done(reviewers, nil)
-	end)
+	end, {
+		action = "fetch PR reviewers",
+		repo = repo_slug,
+		number = pr.id,
+	})
 end
 
 ---@param pr PullRequest
@@ -353,7 +365,11 @@ function M.get_diffstat(pr, opts, on_done)
 
 		cli.set_mem(cache_key, entries)
 		on_done(entries, nil)
-	end)
+	end, {
+		action = "fetch PR diffstat",
+		repo = repo_slug,
+		number = pr.id,
+	})
 end
 
 ---@param opts PullsCreatePROpts
@@ -391,8 +407,6 @@ function M.create_pr(opts, on_done)
 		table.insert(args, reviewer.provider_id)
 	end
 
-	logger.loginfo("github.create_pr", { slug = slug, head = opts.head, base = opts.base, draft = opts.draft == true })
-
 	return cli.gh(args, function(result, err)
 		if err then
 			on_done(nil, err)
@@ -413,7 +427,13 @@ function M.create_pr(opts, on_done)
 		end
 
 		on_done({ id = id, url = url, message = "PR created" }, nil)
-	end)
+	end, {
+		action = "create PR",
+		slug = slug,
+		head = opts.head,
+		base = opts.base,
+		draft = opts.draft == true,
+	})
 end
 
 ---@param slug string
@@ -450,7 +470,10 @@ function M.list_labels(slug, on_done)
 			end
 		end
 		on_done(list, nil)
-	end)
+	end, {
+		action = "list labels",
+		repo = slug,
+	})
 end
 
 ---@param slug string
@@ -482,7 +505,13 @@ function M.update_labels(slug, number, diff, on_done)
 			return
 		end
 		on_done(true, nil)
-	end)
+	end, {
+		action = "update PR labels",
+		repo = slug,
+		number = number,
+		added = #adds,
+		removed = #removes,
+	})
 end
 
 return M
