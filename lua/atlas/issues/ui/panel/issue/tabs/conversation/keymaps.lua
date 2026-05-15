@@ -58,6 +58,11 @@ local function toggle_thread(refresh)
 	if not entry then
 		return
 	end
+	if entry.run_id ~= nil then
+		state.toggle_run(entry.run_id)
+		refresh()
+		return
+	end
 	local root = entry.thread_root or entry.comment
 	if not root then
 		return

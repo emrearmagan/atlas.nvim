@@ -396,9 +396,11 @@ local function render_entry(entry, width)
 		end
 		return render_thread(thread, state.is_collapsed(entry.comment.id), width)
 	elseif entry.type == "activity_run" then
+		local run_id = tostring(entry.timestamp or "")
 		return activity_component.render(entry.activities or {}, width, {
 			padding_x = PADDING_X,
-			squash = true,
+			squash = not state.is_run_expanded(run_id),
+			run_id = run_id,
 		})
 	end
 	return {}, {}, {}

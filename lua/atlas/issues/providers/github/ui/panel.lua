@@ -314,6 +314,12 @@ function M.tabs()
 			icon = icons.general("conversation"),
 			mod = require("atlas.issues.ui.panel.issue.tabs.conversation"),
 		},
+		{
+			key = "activity",
+			label = "Activity",
+			icon = icons.pulls("activity"),
+			mod = require("atlas.issues.ui.panel.issue.tabs.activity"),
+		},
 	}
 end
 

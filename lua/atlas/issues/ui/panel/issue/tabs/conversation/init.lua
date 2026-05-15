@@ -72,7 +72,7 @@ M.render = renderer.render
 ---@param _lnum integer
 ---@param entry table
 function M.is_selectable_line(_lnum, entry) ---@diagnostic disable-line: unused-local
-	return entry.kind == "comment" or entry.activity_entry ~= nil
+	return entry.kind == "comment" or entry.activity_entry ~= nil or entry.kind == "activity_gap"
 end
 
 ---@param _issue Issue

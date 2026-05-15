@@ -56,8 +56,9 @@ function M.classify(entry)
 end
 
 ---@param entries IssueActivityEntry[]
+---@param run_id string|nil
 ---@return AtlasThreadV2Item[]
-local function to_thread_items(entries)
+local function to_thread_items(entries, run_id)
 	local items = {}
 	for _, e in ipairs(entries) do
 		local classified = M.classify(e)
@@ -71,6 +72,7 @@ local function to_thread_items(entries)
 				kind = "activity",
 				activity_entry = e,
 				activity_actor = e.actor,
+				run_id = run_id,
 			},
 		}
 	end
@@ -98,7 +100,7 @@ end
 
 ---@param entries IssueActivityEntry[]
 ---@param width integer
----@param opts { padding_x: integer|nil, content_max_lines: integer|nil, squash: boolean|nil }|nil
+---@param opts { padding_x: integer|nil, content_max_lines: integer|nil, squash: boolean|nil, run_id: string|nil }|nil
 ---@return string[] lines, table[] spans, table<integer, table>|nil line_map
 function M.render(entries, width, opts)
 	opts = opts or {}
@@ -134,7 +136,7 @@ function M.render(entries, width, opts)
 
 	local function render_entry(entry)
 		separator()
-		append(threads.render(to_thread_items({ entry }), width, {
+		append(threads.render(to_thread_items({ entry }, opts.run_id), width, {
 			padding_x = padding_x,
 			content_max_lines = content_max_lines,
 			additional_hl = additional_hl,
@@ -154,7 +156,8 @@ function M.render(entries, width, opts)
 		local line = string.rep(" ", padding_x) .. text
 		append(
 			{ line },
-			{ { line = 0, start_col = padding_x, end_col = padding_x + #text, hl_group = "AtlasTextMuted" } }
+			{ { line = 0, start_col = padding_x, end_col = padding_x + #text, hl_group = "AtlasTextMuted" } },
+			opts.run_id and { [1] = { kind = "activity_gap", run_id = opts.run_id } } or nil
 		)
 	end
 
