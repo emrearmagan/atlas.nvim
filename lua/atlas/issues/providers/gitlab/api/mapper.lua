@@ -16,7 +16,6 @@ function M.to_user(raw_user)
 	return {
 		account_id = username,
 		display_name = json.safe_str(raw_user.name) or username,
-		mention = "@" .. username,
 	}
 end
 

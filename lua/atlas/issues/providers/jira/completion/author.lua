@@ -134,6 +134,7 @@ function M.build_completion()
 			end
 			return matches
 		end,
+		format_mention = resolve_mention,
 	}
 end
 

@@ -86,6 +86,10 @@ function M.build_completion()
 			end)
 			return matches
 		end,
+		format_mention = function(author)
+			local handle = tostring((author or {}).nickname or (author or {}).username or (author or {}).name or "")
+			return handle ~= "" and ("@" .. handle) or ""
+		end,
 	}
 end
 

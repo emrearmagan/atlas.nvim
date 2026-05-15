@@ -89,7 +89,11 @@ function M.reply(issue, entry, refresh)
 		return
 	end
 	local comment = entry.comment
-	local mention = comment.author and comment.author.mention or ""
+	local completion = get_completion()
+	local mention = ""
+	if completion and type(completion.format_mention) == "function" then
+		mention = completion.format_mention(comment.author) or ""
+	end
 	local initial_text = mention ~= "" and (mention .. " ") or ""
 
 	local parent_id = tostring((entry.thread_root and entry.thread_root.id) or comment.id)

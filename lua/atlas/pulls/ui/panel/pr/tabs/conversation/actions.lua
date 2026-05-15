@@ -94,9 +94,12 @@ function M.reply(pr, entry, refresh)
 		return
 	end
 	local comment = entry.comment
-	local author = comment.author or {}
-	local mention = tostring(author.nickname or author.name or "")
-	local initial_text = mention ~= "" and ("@" .. mention .. " ") or ""
+	local completion = author_completion()
+	local mention = ""
+	if completion and type(completion.format_mention) == "function" then
+		mention = completion.format_mention(comment.author) or ""
+	end
+	local initial_text = mention ~= "" and (mention .. " ") or ""
 
 	md_editor.open({
 		key = "pr-comment-reply-" .. tostring(comment.id),
@@ -104,7 +107,7 @@ function M.reply(pr, entry, refresh)
 		width_ratio = 0.5,
 		height_ratio = 0.18,
 		initial_text = initial_text,
-		completion = author_completion(),
+		completion = completion,
 		on_save = function(text)
 			if not text or vim.trim(text) == "" then
 				return

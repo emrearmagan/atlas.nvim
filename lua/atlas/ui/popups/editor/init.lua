@@ -8,6 +8,7 @@ local completion_provider_by_buf = {}
 ---@field trigger string|nil
 ---@field find_start fun(before: string, line: string, col: integer): integer|nil
 ---@field complete fun(base: string, line: string, col: integer): table[]|nil
+---@field format_mention (fun(author: IssueUser|PullsAuthor|nil): string)|nil
 
 ---@param findstart integer
 ---@param base string

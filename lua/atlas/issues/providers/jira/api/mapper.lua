@@ -131,7 +131,6 @@ local function normalize_issue_user(raw_user)
 	return {
 		account_id = account_id,
 		display_name = display_name,
-		mention = string.format("[@%s](atlas-mention:%s)", display_name, account_id),
 	}
 end
 
