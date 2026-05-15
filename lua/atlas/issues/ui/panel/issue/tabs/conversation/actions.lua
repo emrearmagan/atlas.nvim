@@ -96,7 +96,7 @@ function M.reply(issue, entry, refresh)
 	end
 	local initial_text = mention ~= "" and (mention .. " ") or ""
 
-	local parent_id = tostring((entry.thread_root and entry.thread_root.id) or comment.id)
+	local parent = entry.thread_root or comment
 
 	md_editor.open({
 		key = "issue-comment-reply-" .. tostring(comment.id),
@@ -110,7 +110,7 @@ function M.reply(issue, entry, refresh)
 				return
 			end
 			footer.notify("loading", "Sending reply...")
-			provider.reply_comment(issue, parent_id, text, function(reply, err)
+			provider.reply_comment(issue, parent, text, function(reply, err)
 				if err then
 					footer.notify("error", "Reply failed: " .. err)
 					return

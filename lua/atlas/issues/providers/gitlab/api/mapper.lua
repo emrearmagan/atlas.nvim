@@ -143,14 +143,21 @@ function M.parse_key(key)
 end
 
 ---@param raw table
+---@param first_id any|nil           -- id of the root note in this discussion; nil when raw is the root
+---@param discussion_id string|nil
 ---@return IssueComment|nil
-function M.to_comment_from_note(raw)
+function M.to_comment_from_note(raw, first_id, discussion_id)
 	raw = json.nilify(raw)
 	if type(raw) ~= "table" or json.nilify(raw.id) == nil then
 		return nil
 	end
+	local id = tostring(raw.id)
+	local parent_id = nil
+	if first_id ~= nil and tostring(first_id) ~= id then
+		parent_id = tostring(first_id)
+	end
 	return {
-		id = tostring(raw.id),
+		id = id,
 		self = nil,
 		url = nil,
 		author = M.to_user(raw.author),
@@ -158,9 +165,10 @@ function M.to_comment_from_note(raw)
 		_body = nil,
 		created = json.safe_str(raw.created_at) or "",
 		updated = json.safe_str(raw.updated_at),
-		parent_id = nil,
+		parent_id = parent_id,
 		children = nil,
 		reactions = nil,
+		_raw = discussion_id and { discussion_id = discussion_id } or nil,
 	}
 end
 

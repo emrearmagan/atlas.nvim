@@ -167,14 +167,25 @@ function M.add_comment(issue, content, on_done)
 end
 
 ---@param issue Issue
----@param _parent_id any
+---@param parent IssueComment
 ---@param content string
 ---@param on_done fun(comment: IssueComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.reply_comment(issue, _parent_id, content, on_done)
-	-- GitLab supports threaded discussions, but for simplicity replies are flat new notes.
+function M.reply_comment(issue, parent, content, on_done)
 	local key = tostring(issue.key or "")
-	return require("atlas.issues.providers.gitlab.api.notes").add(key, content, on_done)
+	local discussion_id = type(parent._raw) == "table" and tostring(parent._raw.discussion_id or "") or ""
+	local notes = require("atlas.issues.providers.gitlab.api.notes")
+	local parent_id = tostring(parent.id or "")
+	local function wrap(comment, err)
+		if comment ~= nil then
+			comment.parent_id = parent_id
+		end
+		on_done(comment, err)
+	end
+	if discussion_id ~= "" then
+		return notes.reply_in_discussion(key, discussion_id, content, wrap)
+	end
+	return notes.add(key, content, wrap)
 end
 
 ---@param issue Issue
