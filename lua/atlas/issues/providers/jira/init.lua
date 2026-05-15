@@ -150,15 +150,6 @@ end
 
 ---@param issue_key string
 ---@param opts IssuesFetchOpts|nil
----@param on_done fun(raw: any, err: string|nil)
----@return { cancel: fun() }|nil
-function M.fetch_description(issue_key, opts, on_done)
-	local issues_api = require("atlas.issues.providers.jira.api.issues")
-	return issues_api.get_issue_description(issue_key, on_done, opts)
-end
-
----@param issue_key string
----@param opts IssuesFetchOpts|nil
 ---@param on_done fun(comments: IssueComment[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_comments(issue_key, opts, on_done)

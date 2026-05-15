@@ -1,10 +1,12 @@
----@class IssuesOverviewTab : IssuesPanelTabModule
+---@class JiraIssuesOverviewTab : IssuesPanelTabModule
 local M = {}
 
 local utils = require("atlas.ui.shared.utils")
 local spinner = require("atlas.ui.components.spinner")
 local footer = require("atlas.ui.components.footer")
-local state = require("atlas.issues.ui.panel.issue.tabs.overview.state")
+local state = require("atlas.issues.providers.jira.ui.overview.state")
+local adf = require("atlas.issues.providers.jira.converted.adf")
+local issues_api = require("atlas.issues.providers.jira.api.issues")
 
 local PADDING_X = 1
 local PADDING = string.rep(" ", PADDING_X)
@@ -26,9 +28,16 @@ local function track(handle)
 	end
 end
 
----@return IssuesProvider|nil
-local function get_provider()
-	return require("atlas.issues.state").provider
+---@param raw any
+---@return string
+local function to_markdown(raw)
+	if raw == nil then
+		return ""
+	end
+	if type(raw) == "table" then
+		return adf.to_markdown(raw) or ""
+	end
+	return tostring(raw)
 end
 
 ---@param issue Issue
@@ -36,10 +45,6 @@ end
 ---@param opts { force_refresh: boolean|nil }|nil
 function M.on_select(issue, refresh, opts)
 	opts = opts or {}
-	local provider = get_provider()
-	if not provider or not provider.fetch_description then
-		return
-	end
 
 	local force_refresh = opts.force_refresh == true
 	if not force_refresh and not state.description_loading and state.raw_description ~= nil then
@@ -54,7 +59,7 @@ function M.on_select(issue, refresh, opts)
 	local issue_key = tostring(issue.key or "")
 	footer.notify("loading", string.format("Loading description for %s...", issue_key))
 
-	track(provider.fetch_description(issue_key, { force_load = force_refresh }, function(raw, err)
+	track(issues_api.get_issue_description(issue_key, function(raw, err)
 		state.description_loading = false
 
 		if err then
@@ -66,19 +71,11 @@ function M.on_select(issue, refresh, opts)
 		end
 
 		state.raw_description = raw
-
-		local panel = provider.panel
-		if raw ~= nil and panel and type(panel.convert_description) == "function" then
-			state.md_description = panel.convert_description(raw) or ""
-		elseif type(raw) == "string" then
-			state.md_description = raw
-		else
-			state.md_description = ""
-		end
+		state.md_description = to_markdown(raw)
 
 		footer.notify("success", string.format("Description loaded for %s", issue_key), 1200)
 		refresh()
-	end))
+	end, { force_load = force_refresh }))
 end
 
 --------------------------------------------------------------------------------

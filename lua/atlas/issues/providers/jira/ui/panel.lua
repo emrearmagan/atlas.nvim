@@ -5,7 +5,7 @@ local icons = require("atlas.ui.shared.icons")
 local utils = require("atlas.ui.shared.utils")
 local helper = require("atlas.issues.ui.main.helper")
 
-local overview_state = require("atlas.issues.ui.panel.issue.tabs.overview.state")
+local overview_state = require("atlas.issues.providers.jira.ui.overview.state")
 local comments_state = require("atlas.issues.ui.panel.issue.tabs.comments.state")
 local history_state = require("atlas.issues.ui.panel.issue.tabs.activity.state")
 
@@ -128,16 +128,6 @@ function M.chips(issue)
 	end
 
 	return chips
-end
-
----@param raw any
----@return string|nil
-function M.convert_description(raw)
-	if type(raw) ~= "table" then
-		return type(raw) == "string" and raw or nil
-	end
-	local adf = require("atlas.issues.providers.jira.converted.adf")
-	return adf.to_markdown(raw)
 end
 
 ---@return AtlasMarkdownCompletionProvider|nil
@@ -364,7 +354,7 @@ function M.tabs()
 			key = "overview",
 			label = "Overview",
 			icon = icons.general("overview"),
-			mod = require("atlas.issues.ui.panel.issue.tabs.overview"),
+			mod = require("atlas.issues.providers.jira.ui.overview"),
 		},
 		{
 			key = "comments",
