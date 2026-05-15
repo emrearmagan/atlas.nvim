@@ -120,8 +120,23 @@ function M.fetch_conversation(issue, opts, on_done)
 			on_done(nil, first_err)
 			return
 		end
+		local comments = {}
+		local raw = type(issue._raw) == "table" and issue._raw or {}
+		local description = tostring(raw.description or "")
+		if description ~= "" then
+			table.insert(comments, {
+				id = "__body__",
+				url = issue.url,
+				author = issue.reporter,
+				body = description,
+				created = raw.created_at or "",
+			})
+		end
+		for _, c in ipairs(comments_result or {}) do
+			table.insert(comments, c)
+		end
 		on_done({
-			comments = comments_result or {},
+			comments = comments,
 			events = events_result or {},
 			reaction_options = nil,
 		}, nil)
@@ -173,19 +188,7 @@ end
 ---@return { cancel: fun() }|nil
 function M.reply_comment(issue, parent, content, on_done)
 	local key = tostring(issue.key or "")
-	local discussion_id = type(parent._raw) == "table" and tostring(parent._raw.discussion_id or "") or ""
-	local notes = require("atlas.issues.providers.gitlab.api.notes")
-	local parent_id = tostring(parent.id or "")
-	local function wrap(comment, err)
-		if comment ~= nil then
-			comment.parent_id = parent_id
-		end
-		on_done(comment, err)
-	end
-	if discussion_id ~= "" then
-		return notes.reply_in_discussion(key, discussion_id, content, wrap)
-	end
-	return notes.add(key, content, wrap)
+	return require("atlas.issues.providers.gitlab.api.notes").reply_in_discussion(key, parent, content, on_done)
 end
 
 ---@param issue Issue
@@ -195,6 +198,31 @@ end
 ---@return { cancel: fun() }|nil
 function M.edit_comment(issue, comment_id, content, on_done)
 	local key = tostring(issue.key or "")
+	if tostring(comment_id) == "__body__" then
+		local raw = type(issue._raw) == "table" and issue._raw or {}
+		local project = tonumber(raw.project_id)
+		local iid = tonumber(raw.iid)
+		if project == nil or iid == nil then
+			on_done(nil, "Invalid issue")
+			return nil
+		end
+		local service = require("atlas.issues.providers.gitlab.api.service")
+		local endpoint = string.format("/projects/%d/issues/%d", project, iid)
+		return service.request("PUT", endpoint, { description = content }, function(_, err)
+			if err then
+				on_done(nil, err)
+				return
+			end
+			raw.description = content
+			on_done({
+				id = "__body__",
+				url = issue.url,
+				author = issue.reporter,
+				body = content,
+				created = raw.created_at or "",
+			}, nil)
+		end)
+	end
 	return require("atlas.issues.providers.gitlab.api.notes").edit(key, comment_id, content, on_done)
 end
 
@@ -203,6 +231,10 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.delete_comment(issue, comment_id, on_done)
+	if tostring(comment_id) == "__body__" then
+		on_done(false, "Cannot delete the issue description")
+		return nil
+	end
 	local key = tostring(issue.key or "")
 	return require("atlas.issues.providers.gitlab.api.notes").delete(key, comment_id, on_done)
 end
