@@ -89,6 +89,75 @@ function M.fetch_activity(issue, opts, on_done)
 end
 
 ---@param issue Issue
+---@param opts { force_refresh: boolean|nil }|nil
+---@param on_done fun(result: { comments: IssueComment[], events: IssueActivityEntry[], reaction_options: IssueReactionOption[]|nil }|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_conversation(issue, opts, on_done)
+	opts = opts or {}
+	local force = opts.force_refresh == true
+	local notes = require("atlas.issues.providers.gitlab.api.notes")
+	local key = tostring(issue.key or "")
+	if key == "" then
+		on_done(nil, "Invalid issue key")
+		return nil
+	end
+
+	local comments_result, events_result
+	local first_err
+	local pending = 2
+	local handles = {}
+	local cancelled = false
+
+	local function finish()
+		if cancelled then
+			return
+		end
+		pending = pending - 1
+		if pending > 0 then
+			return
+		end
+		if first_err and comments_result == nil and events_result == nil then
+			on_done(nil, first_err)
+			return
+		end
+		on_done({
+			comments = comments_result or {},
+			events = events_result or {},
+			reaction_options = nil,
+		}, nil)
+	end
+
+	table.insert(handles, notes.list_comments(key, { force_load = force }, function(comments, err)
+		if err then
+			first_err = first_err or err
+		else
+			comments_result = comments
+		end
+		finish()
+	end))
+
+	table.insert(handles, notes.list_history(key, { force_load = force }, function(events, err)
+		if err then
+			first_err = first_err or err
+		else
+			events_result = events
+		end
+		finish()
+	end))
+
+	return {
+		cancel = function()
+			cancelled = true
+			for _, h in ipairs(handles) do
+				if h and h.cancel then
+					pcall(h.cancel)
+				end
+			end
+		end,
+	}
+end
+
+---@param issue Issue
 ---@param content string
 ---@param on_done fun(comment: IssueComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
