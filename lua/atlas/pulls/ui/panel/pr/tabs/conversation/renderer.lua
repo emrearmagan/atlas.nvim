@@ -4,26 +4,20 @@ local utils = require("atlas.ui.shared.utils")
 local icons = require("atlas.ui.shared.icons")
 local spinner = require("atlas.ui.components.spinner")
 local box = require("atlas.ui.components.box")
+local comment_box = require("atlas.ui.components.comment_box")
+local emojis = require("atlas.ui.shared.emojis")
 local helper = require("atlas.pulls.ui.main.helper")
+local activity_component = require("atlas.pulls.ui.panel.pr.tabs.components.activity")
 local state = require("atlas.pulls.ui.panel.pr.tabs.conversation.state")
 
 local PADDING_X = 1
 local PADDING = string.rep(" ", PADDING_X)
 local CONNECTOR = "│"
 local REPLY_INDENT = "    "
-local ACTIVITY_COLLAPSE_KEEP = 2
-local ACTIVITY_COLLAPSE_THRESHOLD = 5
-
-local ACTIVITY_ICONS = {
-	approval = { icon = icons.pulls_status("successful"), hl = "AtlasTextPositive" },
-	changes_requested = { icon = icons.pulls_status("inprogress"), hl = "AtlasTextWarning" },
-	update = { icon = icons.pulls("activity"), hl = "AtlasTextMuted" },
-}
 
 -- Helpers
 
 ---@param author {name: string, nickname: string|nil}|nil
----@return string
 local function author_name(author)
 	if author == nil or author.name == nil or author.name == "" then
 		return "Unknown"
@@ -41,8 +35,6 @@ local function is_own_comment(comment)
 	return comment.author.nickname == current_user.username or comment.author.name == current_user.name
 end
 
-local emojis = require("atlas.ui.shared.emojis")
-
 ---@param reactions table|nil
 ---@return string text, table[] spans
 local function format_reactions(reactions)
@@ -54,8 +46,6 @@ local function format_reactions(reactions)
 		emoji_by_key[opt.key] = opt.emoji
 		table.insert(order, opt.key)
 	end
-
-	-- Append any keys present on the comment but missing from the providers options
 	for key in pairs(reactions) do
 		if emoji_by_key[key] == nil then
 			emoji_by_key[key] = emojis.glyph(key)
@@ -125,51 +115,18 @@ end
 ---@param comment PullsComment
 ---@param verb "commented"|"replied"
 ---@param width integer
----@return string header_line, table[] header_spans
-local function build_header(comment, verb, width)
+local function build_comment_sections(comment, verb, width)
 	local author = author_name(comment.author)
-	local author_hl = helper.author_hl(author)
-	local time_text = utils.relative_time(comment.created_on)
-	local user_icon = icons.general("user")
-
-	local left = user_icon .. "  " .. author .. "  " .. verb .. "  " .. time_text
-	local spans = {}
-	local col = 0
-	table.insert(spans, { line = 0, start_col = col, end_col = col + #user_icon, hl_group = author_hl })
-	col = col + #user_icon + 2
-	table.insert(spans, { line = 0, start_col = col, end_col = col + #author, hl_group = author_hl })
-	col = col + #author + 2
-	local rest = verb .. "  " .. time_text
-	table.insert(spans, { line = 0, start_col = col, end_col = col + #rest, hl_group = "AtlasTextMuted" })
-
 	local actions = { string.format("%s (c)", icons.general("reply")) }
 	if is_own_comment(comment) then
 		table.insert(actions, string.format("%s (e)", icons.general("edit")))
 		table.insert(actions, string.format("%s (d)", icons.general("delete")))
 	end
-	local actions_text = table.concat(actions, "  ")
 
-	local gap = math.max(2, width - vim.api.nvim_strwidth(left) - vim.api.nvim_strwidth(actions_text))
-	local line = left .. string.rep(" ", gap) .. actions_text
-	local actions_start = #left + gap
-	table.insert(spans, {
-		line = 0,
-		start_col = actions_start,
-		end_col = actions_start + #actions_text,
-		hl_group = "AtlasTextMuted",
-	})
-	return line, spans
-end
-
----@param comment PullsComment
----@param width integer
----@return string[] lines, table[] spans
-local function build_content(comment, width)
-	local lines, spans = {}, {}
+	local body_lines, body_hl = {}, nil
 	if comment.deleted == true then
-		local text = "(deleted comment)"
-		table.insert(lines, text)
-		table.insert(spans, { line = 0, start_col = 0, end_col = #text, hl_group = "AtlasTextMutedItalic" })
+		table.insert(body_lines, "(deleted comment)")
+		body_hl = "AtlasTextMutedItalic"
 	else
 		local raw = utils.strip_markup(comment.content_raw or "")
 		if raw == "" then
@@ -177,25 +134,29 @@ local function build_content(comment, width)
 		end
 		for _, line in ipairs(utils.sanitize_lines(raw)) do
 			for _, chunk in ipairs(utils.wrap_line(line, width)) do
-				table.insert(lines, chunk)
+				table.insert(body_lines, chunk)
 			end
 		end
 	end
 
-	local reactions, reaction_spans = format_reactions(comment.reactions)
-	if reactions ~= "" then
-		table.insert(lines, reactions)
-		local line_idx = #lines - 1
-		for _, s in ipairs(reaction_spans) do
-			table.insert(spans, {
-				line = line_idx,
-				start_col = s.start_col,
-				end_col = s.end_col,
-				hl_group = s.hl_group,
-			})
-		end
+	local rtext, rspans = format_reactions(comment.reactions)
+	local reactions = nil
+	if rtext ~= "" then
+		reactions = { text = rtext, spans = rspans }
 	end
-	return lines, spans
+
+	return comment_box.render({
+		author = author,
+		author_hl = helper.author_hl(author),
+		icon = icons.general("user"),
+		verb = verb,
+		timestamp = utils.relative_time(comment.created_on),
+		actions_text = table.concat(actions, "  "),
+		body_lines = body_lines,
+		body_hl = body_hl,
+		reactions = reactions,
+		width = width,
+	})
 end
 
 ---@param replies PullsComment[]
@@ -208,8 +169,9 @@ local function build_reply_group(replies, root, width)
 			table.insert(lines, "")
 			line_to_entry[#lines] = { kind = "comment", comment = reply, thread_root = root, entity_kind = "comment" }
 		end
-		local hl, hs = build_header(reply, "replied", width - #REPLY_INDENT)
-		local cl, cs = build_content(reply, width - #REPLY_INDENT)
+		local header, body = build_comment_sections(reply, "replied", width - #REPLY_INDENT)
+		local hl, hs = header.lines[1], header.spans
+		local cl, cs = body.lines, body.spans
 		local header_base = #lines
 		table.insert(lines, REPLY_INDENT .. hl)
 		for _, s in ipairs(hs) do
@@ -244,10 +206,9 @@ local function build_reply_group(replies, root, width)
 	return { lines = lines, spans = spans }, line_to_entry
 end
 
----@param comments PullsComment[]  comments[1] is root, the rest are replies
+---@param comments PullsComment[]
 ---@param collapsed boolean
 ---@param width integer
----@return string[], table[], table<integer, table>
 local function render_thread(comments, collapsed, width)
 	comments = comments or {}
 	if #comments == 0 then
@@ -266,14 +227,13 @@ local function render_thread(comments, collapsed, width)
 		table.insert(group_entries, meta)
 	end
 
-	local hl, hs = build_header(root, "commented", inner)
-	local cl, cs = build_content(root, inner)
+	local header, body = build_comment_sections(root, "commented", inner)
 	push(
-		{ lines = { hl }, spans = hs },
+		{ lines = header.lines, spans = header.spans },
 		{ default = { kind = "comment", comment = root, thread_root = root, entity_kind = "comment" } }
 	)
 	push(
-		{ lines = cl, spans = cs },
+		{ lines = body.lines, spans = body.spans },
 		{ default = { kind = "comment", comment = root, thread_root = root, entity_kind = "comment" } }
 	)
 
@@ -317,164 +277,20 @@ local function render_thread(comments, collapsed, width)
 		end
 		cursor = cursor + #group.lines
 		if gi < #groups then
-			cursor = cursor + 1 -- divider
+			cursor = cursor + 1
 		end
 	end
 	return block.lines, block.highlights, line_map
 end
 
--- Activity row
-
----@param entry PullsActivityEntry
-local function activity_label(entry)
-	local kind = entry.kind or ""
-	if kind == "approval" then
-		return "approved"
-	elseif kind == "changes_requested" then
-		return "requested changes"
-	elseif kind == "review" then
-		return "left a review"
-	end
-	return utils.strip_markup(entry.content_raw or kind)
-end
-
----@param entry PullsActivityEntry
----@param width integer
-local function render_activity(entry, width)
-	local lines, spans = {}, {}
-	local ai = ACTIVITY_ICONS[entry.kind or "update"] or ACTIVITY_ICONS.update
-	local actor = author_name(entry.actor)
-	local label = activity_label(entry)
-	local time_text = utils.relative_time(entry.date)
-
-	local icon_prefix = ai.icon .. "  "
-	local icon_width = vim.api.nvim_strwidth(icon_prefix)
-	local text = actor .. "  " .. label .. "  " .. time_text
-	local wrapped = utils.wrap_line(text, math.max(10, width - PADDING_X - icon_width))
-
-	local first = PADDING .. icon_prefix .. wrapped[1]
-	table.insert(lines, first)
-	local line_len = #first
-
-	local col = PADDING_X
-	table.insert(spans, { line = 0, start_col = col, end_col = math.min(col + #ai.icon, line_len), hl_group = ai.hl })
-	col = col + #icon_prefix
-	table.insert(
-		spans,
-		{ line = 0, start_col = col, end_col = math.min(col + #actor, line_len), hl_group = helper.author_hl(actor) }
-	)
-	col = col + #actor + 2
-	if col < line_len then
-		table.insert(
-			spans,
-			{ line = 0, start_col = col, end_col = math.min(col + #label, line_len), hl_group = "AtlasTextMuted" }
-		)
-		col = col + #label + 2
-	end
-	if col < line_len then
-		table.insert(
-			spans,
-			{ line = 0, start_col = col, end_col = math.min(col + #time_text, line_len), hl_group = "AtlasTextMuted" }
-		)
-	end
-
-	local continuation = string.rep(" ", PADDING_X + icon_width)
-	for i = 2, #wrapped do
-		local cont_line = continuation .. wrapped[i]
-		table.insert(lines, cont_line)
-		table.insert(spans, {
-			line = #lines - 1,
-			start_col = PADDING_X + icon_width,
-			end_col = #cont_line,
-			hl_group = "AtlasTextMuted",
-		})
-	end
-	return lines, spans
-end
-
----@param count integer
-local function render_activity_gap(count)
-	local text = string.format(
-		"%s  ... %d more %s",
-		icons.general("activity_more"),
-		count,
-		count == 1 and "activity" or "activities"
-	)
-	local line = PADDING .. text
-	return { line }, { { line = 0, start_col = PADDING_X, end_col = PADDING_X + #text, hl_group = "AtlasTextMuted" } }
-end
-
 -- Timeline
 
----@class ConversationTimelineEntry
----@field type "comment"|"activity"|"activity_gap"
+---@class PullsConversationTimelineEntry
+---@field type "comment"|"activity_run"
 ---@field timestamp string
 ---@field comment PullsComment|nil
 ---@field replies PullsComment[]|nil
----@field activity PullsActivityEntry|nil
----@field count integer|nil
-
----@param entries ConversationTimelineEntry[]
----@param run ConversationTimelineEntry[]
-local function append_activity_run(entries, run)
-	if #run <= ACTIVITY_COLLAPSE_THRESHOLD then
-		for _, entry in ipairs(run) do
-			table.insert(entries, entry)
-		end
-		return
-	end
-	for i = 1, ACTIVITY_COLLAPSE_KEEP do
-		table.insert(entries, run[i])
-	end
-	table.insert(entries, {
-		type = "activity_gap",
-		timestamp = run[ACTIVITY_COLLAPSE_KEEP].timestamp,
-		count = #run - (ACTIVITY_COLLAPSE_KEEP * 2),
-	})
-	for i = #run - ACTIVITY_COLLAPSE_KEEP + 1, #run do
-		table.insert(entries, run[i])
-	end
-end
-
----@param entries ConversationTimelineEntry[]
-local function collapse_activity_runs(entries)
-	local collapsed, run = {}, {}
-	for _, entry in ipairs(entries) do
-		if entry.type == "activity" then
-			table.insert(run, entry)
-		else
-			append_activity_run(collapsed, run)
-			run = {}
-			table.insert(collapsed, entry)
-		end
-	end
-	append_activity_run(collapsed, run)
-	return collapsed
-end
-
----@param actor PullsAuthor|nil
-local function author_table(actor)
-	if not actor then
-		return nil
-	end
-	return {
-		name = tostring(actor.name or actor.username or ""),
-		nickname = tostring(actor.nickname or actor.username or ""),
-		id = tostring(actor.id or ""),
-	}
-end
-
----@param a PullsActivityEntry
----@param prefix string
-local function synthetic_comment(a, prefix)
-	return {
-		id = prefix .. "-" .. tostring(a.date or ""),
-		parent_id = nil,
-		author = author_table(a.actor),
-		content_raw = a.content_raw or "",
-		created_on = a.date or "",
-	}
-end
+---@field activities PullsActivityEntry[]|nil
 
 ---@param comments PullsComment[]
 local function group_threads(comments)
@@ -487,9 +303,9 @@ local function group_threads(comments)
 	end
 	for _, c in ipairs(comments) do
 		if c.parent_id ~= nil then
-			local pid = tostring(c.parent_id)
-			if by_id[pid] then
-				table.insert(by_id[pid].replies, c)
+			local pkey = tostring(c.parent_id)
+			if by_id[pkey] then
+				table.insert(by_id[pkey].replies, c)
 			else
 				by_id[tostring(c.id)] = { root = c, replies = {} }
 				table.insert(order, tostring(c.id))
@@ -505,45 +321,68 @@ end
 
 ---@param comments PullsComment[]
 ---@param activity PullsActivityEntry[]
----@return ConversationTimelineEntry[]
+---@return PullsConversationTimelineEntry[]
 local function build_timeline(comments, activity)
-	local entries = {}
+	-- Build a sorted mixed list of comments and activity entries.
+	local mixed = {}
 	for _, t in ipairs(group_threads(comments)) do
-		table.insert(entries, {
-			type = "comment",
+		table.insert(mixed, {
+			kind = "comment",
 			timestamp = t.root.created_on or "",
 			comment = t.root,
 			replies = t.replies,
 		})
 	end
 	for _, a in ipairs(activity) do
-		if a.kind == "comment" then
-			table.insert(entries, {
-				type = "comment",
-				timestamp = a.date or "",
-				comment = synthetic_comment(a, "activity"),
-			})
-		else
-			table.insert(entries, { type = "activity", timestamp = a.date or "", activity = a })
-			local is_review = a.kind == "approval" or a.kind == "changes_requested" or a.kind == "review"
-			if is_review and type(a.content_raw) == "string" and a.content_raw ~= "" then
-				table.insert(entries, {
-					type = "comment",
-					timestamp = a.date or "",
-					comment = synthetic_comment(a, "review"),
-				})
-			end
+		table.insert(mixed, { kind = "activity", timestamp = a.date or "", activity = a })
+	end
+	table.sort(mixed, function(a, b)
+		local ta, tb = tostring(a.timestamp), tostring(b.timestamp)
+		if ta == tb then
+			-- When activity and comment share a timestamp (review body),
+			-- render the activity row first, then the comment under it.
+			return a.kind == "activity" and b.kind ~= "activity"
+		end
+		return ta < tb
+	end)
+
+	-- Collapse consecutive activities into a single activity_run entry.
+	local entries, run = {}, {}
+	local function flush_run()
+		if #run > 0 then
+			table.insert(entries, { type = "activity_run", timestamp = run[1].date or "", activities = run })
+			run = {}
 		end
 	end
-	table.sort(entries, function(a, b)
-		return a.timestamp < b.timestamp
-	end)
-	return collapse_activity_runs(entries)
+	for _, item in ipairs(mixed) do
+		if item.kind == "activity" then
+			if item.activity.always_render then
+				flush_run()
+				table.insert(entries, {
+					type = "activity_run",
+					timestamp = item.activity.date or "",
+					activities = { item.activity },
+				})
+			else
+				table.insert(run, item.activity)
+			end
+		else
+			flush_run()
+			table.insert(entries, {
+				type = "comment",
+				timestamp = item.timestamp,
+				comment = item.comment,
+				replies = item.replies,
+			})
+		end
+	end
+	flush_run()
+	return entries
 end
 
 -- Render
 
----@param entry ConversationTimelineEntry
+---@param entry PullsConversationTimelineEntry
 ---@param width integer
 local function render_entry(entry, width)
 	if entry.type == "comment" then
@@ -556,19 +395,18 @@ local function render_entry(entry, width)
 			table.insert(thread, r)
 		end
 		return render_thread(thread, state.is_collapsed(entry.comment.id), width)
-	elseif entry.type == "activity" then
-		local lines, spans = render_activity(entry.activity, width)
-		return lines, spans, { [1] = { kind = "activity", activity = entry.activity } }
-	elseif entry.type == "activity_gap" then
-		local lines, spans = render_activity_gap(entry.count or 0)
-		return lines, spans, {}
+	elseif entry.type == "activity_run" then
+		return activity_component.render(entry.activities or {}, width, {
+			padding_x = PADDING_X,
+			squash = true,
+		})
 	end
 	return {}, {}, {}
 end
 
----@param pr PullRequest
+---@param _pr PullRequest
 ---@param width integer
-function M.render(pr, width)
+function M.render(_pr, width) ---@diagnostic disable-line: unused-local
 	local lines, spans, line_map = {}, {}, {}
 
 	local comments_ready = type(state.comments) == "table"
@@ -582,7 +420,10 @@ function M.render(pr, width)
 	end
 
 	local comments = comments_ready and state.comments or {}
-	local entries = build_timeline(comments, activity_ready and state.activity or {})
+	local activity = activity_ready and state.activity or {}
+	---@cast comments PullsComment[]
+	---@cast activity PullsActivityEntry[]
+	local entries = build_timeline(comments, activity)
 
 	if #entries == 0 then
 		utils.push(lines, spans, "No conversation yet.", "AtlasTextMuted", PADDING_X)
