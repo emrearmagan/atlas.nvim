@@ -155,7 +155,7 @@ local function compact_columns()
 		{ key = "repo_pr", name = "PR", min_width = 42, header_hl = "AtlasColumnHeader" },
 		{
 			key = "conversation",
-			name = icons.general("comment"),
+			name = icons.general("conversation"),
 			min_width = 2,
 			can_grow = false,
 			header_hl = "AtlasColumnHeader",
@@ -271,7 +271,7 @@ local function plain_columns()
 		{ key = "name", name = "PR", min_width = 42, header_hl = "AtlasColumnHeader" },
 		{
 			key = "conversation",
-			name = icons.general("comment"),
+			name = icons.general("conversation"),
 			min_width = 2,
 			can_grow = false,
 			header_hl = "AtlasColumnHeader",
