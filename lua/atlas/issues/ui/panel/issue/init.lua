@@ -96,6 +96,13 @@ local function refresh_panel()
 	end
 end
 
+local function scroll_to_top()
+	local win = layout.win_id("detail")
+	if win and vim.api.nvim_win_is_valid(win) then
+		vim.api.nvim_win_set_cursor(win, { 1, 0 })
+	end
+end
+
 ---@param old_key string|nil
 ---@param new_key string|nil
 local function switch_tab_keymaps(old_key, new_key)
@@ -259,6 +266,7 @@ function M.next_tab()
 	end
 
 	M.render()
+	scroll_to_top()
 end
 
 function M.prev_tab()
