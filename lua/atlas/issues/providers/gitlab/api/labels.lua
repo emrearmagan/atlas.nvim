@@ -38,7 +38,10 @@ function M.list(project_path, on_done)
 			end
 		end
 		on_done(out, nil)
-	end)
+	end, {
+		action = "List labels",
+		project = project_path,
+	})
 end
 
 return M

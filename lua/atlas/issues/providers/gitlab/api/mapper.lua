@@ -142,25 +142,78 @@ function M.parse_key(key)
 	return "", nil
 end
 
+---@param raw any   GraphQL note id like "gid://gitlab/Note/123" or a plain int from REST
+---@return string
+local function note_id_tail(raw)
+	local s = tostring(raw or "")
+	return s:match("([^/]+)$") or s
+end
+
+---@param raw_user table|nil
+---@return IssueUser|nil
+local function gql_user(raw_user)
+	if type(raw_user) ~= "table" then
+		return nil
+	end
+	local username = json.safe_str(raw_user.username) or ""
+	if username == "" then
+		return nil
+	end
+	return {
+		account_id = username,
+		display_name = json.safe_str(raw_user.name) or username,
+		email = "",
+	}
+end
+
+---@param award_emoji table|nil   GraphQL connection { nodes = [{ name = "..." }, ...] }
+---@return table<string, integer>|nil
+local function gql_reactions(award_emoji)
+	if type(award_emoji) ~= "table" then
+		return nil
+	end
+	local nodes = type(award_emoji.nodes) == "table" and award_emoji.nodes or {}
+	if #nodes == 0 then
+		return nil
+	end
+	local out = {}
+	for _, e in ipairs(nodes) do
+		local name = tostring(e.name or "")
+		if name ~= "" then
+			out[name] = (out[name] or 0) + 1
+		end
+	end
+	return out
+end
+
 ---@param raw table
+---@param first_id any|nil           -- id of the root note in this discussion; nil when raw is the root
+---@param discussion_id string|nil
 ---@return IssueComment|nil
-function M.to_comment_from_note(raw)
+function M.to_comment_from_note(raw, first_id, discussion_id)
 	raw = json.nilify(raw)
 	if type(raw) ~= "table" or json.nilify(raw.id) == nil then
 		return nil
 	end
+	local id = note_id_tail(raw.id)
+	local parent_id = nil
+	if first_id ~= nil and tostring(first_id) ~= id then
+		parent_id = tostring(first_id)
+	end
+	local author = gql_user(raw.author) or M.to_user(raw.author)
 	return {
-		id = tostring(raw.id),
+		id = id,
 		self = nil,
 		url = nil,
-		author = M.to_user(raw.author),
+		author = author,
 		body = json.safe_str(raw.body) or "",
 		_body = nil,
-		created = json.safe_str(raw.created_at) or "",
-		updated = json.safe_str(raw.updated_at),
-		parent_id = nil,
+		created = json.safe_str(raw.createdAt) or json.safe_str(raw.created_at) or "",
+		updated = json.safe_str(raw.updatedAt) or json.safe_str(raw.updated_at),
+		parent_id = parent_id,
 		children = nil,
-		reactions = nil,
+		reactions = gql_reactions(raw.awardEmoji),
+		_raw = discussion_id and { discussion_id = discussion_id } or nil,
 	}
 end
 
@@ -177,8 +230,8 @@ function M.to_activity_from_note(raw)
 	end
 	return {
 		kind = "system",
-		actor = M.to_user(raw.author),
-		date = json.safe_str(raw.created_at),
+		actor = gql_user(raw.author) or M.to_user(raw.author),
+		date = json.safe_str(raw.createdAt) or json.safe_str(raw.created_at),
 		label = body,
 	}
 end

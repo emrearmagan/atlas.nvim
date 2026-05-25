@@ -146,11 +146,11 @@ function M.add_comment(issue, content, on_done)
 end
 
 ---@param issue Issue
----@param parent_id string
+---@param parent IssueComment
 ---@param content string
 ---@param on_done fun(comment: IssueComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.reply_comment(issue, parent_id, content, on_done)
+function M.reply_comment(issue, parent, content, on_done) ---@diagnostic disable-line: unused-local
 	-- GitHub issue comments are flat; reply is just a new comment.
 	local key = tostring(issue.key or "")
 	return require("atlas.issues.providers.github.api.comments").add(key, content, on_done)

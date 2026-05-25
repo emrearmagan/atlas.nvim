@@ -23,7 +23,9 @@ function M.get_user(on_done)
 			service.set_memory_cache(cache_key, user)
 		end
 		on_done(user, nil)
-	end)
+	end, {
+		action = "Fetch user",
+	})
 end
 
 ---@param project_path string
@@ -56,7 +58,11 @@ function M.list_members(project_path, query, on_done)
 			end
 		end
 		on_done(out, nil)
-	end)
+	end, {
+		action = "List members",
+		project = project_path,
+		query = q,
+	})
 end
 
 return M

@@ -1,4 +1,5 @@
 local icons = require("atlas.ui.shared.icons")
+local GITLAB_REACTION_OPTIONS = require("atlas.ui.shared.emojis").gitlab()
 
 ---@class GitLabIssuesProvider : IssuesProvider
 local M = {
@@ -89,6 +90,90 @@ function M.fetch_activity(issue, opts, on_done)
 end
 
 ---@param issue Issue
+---@param opts { force_refresh: boolean|nil }|nil
+---@param on_done fun(result: { comments: IssueComment[], events: IssueActivityEntry[], reaction_options: IssueReactionOption[]|nil }|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_conversation(issue, opts, on_done)
+	opts = opts or {}
+	local force = opts.force_refresh == true
+	local notes = require("atlas.issues.providers.gitlab.api.notes")
+	local key = tostring(issue.key or "")
+	if key == "" then
+		on_done(nil, "Invalid issue key")
+		return nil
+	end
+
+	local comments_result, events_result
+	local first_err
+	local pending = 2
+	local handles = {}
+	local cancelled = false
+
+	local function finish()
+		if cancelled then
+			return
+		end
+		pending = pending - 1
+		if pending > 0 then
+			return
+		end
+		if first_err and comments_result == nil and events_result == nil then
+			on_done(nil, first_err)
+			return
+		end
+		local comments = {}
+		local raw = type(issue._raw) == "table" and issue._raw or {}
+		local description = tostring(raw.description or "")
+		if description ~= "" then
+			table.insert(comments, {
+				id = "__body__",
+				url = issue.url,
+				author = issue.reporter,
+				body = description,
+				created = raw.created_at or "",
+			})
+		end
+		for _, c in ipairs(comments_result or {}) do
+			table.insert(comments, c)
+		end
+		on_done({
+			comments = comments,
+			events = events_result or {},
+			reaction_options = GITLAB_REACTION_OPTIONS,
+		}, nil)
+	end
+
+	table.insert(handles, notes.list_comments(key, { force_load = force }, function(comments, err)
+		if err then
+			first_err = first_err or err
+		else
+			comments_result = comments
+		end
+		finish()
+	end))
+
+	table.insert(handles, notes.list_history(key, { force_load = force }, function(events, err)
+		if err then
+			first_err = first_err or err
+		else
+			events_result = events
+		end
+		finish()
+	end))
+
+	return {
+		cancel = function()
+			cancelled = true
+			for _, h in ipairs(handles) do
+				if h and h.cancel then
+					pcall(h.cancel)
+				end
+			end
+		end,
+	}
+end
+
+---@param issue Issue
 ---@param content string
 ---@param on_done fun(comment: IssueComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
@@ -98,14 +183,13 @@ function M.add_comment(issue, content, on_done)
 end
 
 ---@param issue Issue
----@param _parent_id any
+---@param parent IssueComment
 ---@param content string
 ---@param on_done fun(comment: IssueComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.reply_comment(issue, _parent_id, content, on_done)
-	-- GitLab supports threaded discussions, but for simplicity replies are flat new notes.
+function M.reply_comment(issue, parent, content, on_done)
 	local key = tostring(issue.key or "")
-	return require("atlas.issues.providers.gitlab.api.notes").add(key, content, on_done)
+	return require("atlas.issues.providers.gitlab.api.notes").reply_in_discussion(key, parent, content, on_done)
 end
 
 ---@param issue Issue
@@ -115,6 +199,31 @@ end
 ---@return { cancel: fun() }|nil
 function M.edit_comment(issue, comment_id, content, on_done)
 	local key = tostring(issue.key or "")
+	if tostring(comment_id) == "__body__" then
+		local raw = type(issue._raw) == "table" and issue._raw or {}
+		local project = tonumber(raw.project_id)
+		local iid = tonumber(raw.iid)
+		if project == nil or iid == nil then
+			on_done(nil, "Invalid issue")
+			return nil
+		end
+		local service = require("atlas.issues.providers.gitlab.api.service")
+		local endpoint = string.format("/projects/%d/issues/%d", project, iid)
+		return service.request("PUT", endpoint, { description = content }, function(_, err)
+			if err then
+				on_done(nil, err)
+				return
+			end
+			raw.description = content
+			on_done({
+				id = "__body__",
+				url = issue.url,
+				author = issue.reporter,
+				body = content,
+				created = raw.created_at or "",
+			}, nil)
+		end)
+	end
 	return require("atlas.issues.providers.gitlab.api.notes").edit(key, comment_id, content, on_done)
 end
 
@@ -123,8 +232,26 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.delete_comment(issue, comment_id, on_done)
+	if tostring(comment_id) == "__body__" then
+		on_done(false, "Cannot delete the issue description")
+		return nil
+	end
 	local key = tostring(issue.key or "")
 	return require("atlas.issues.providers.gitlab.api.notes").delete(key, comment_id, on_done)
+end
+
+---@param issue Issue
+---@param comment IssueComment
+---@param key string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.add_reaction(issue, comment, key, on_done)
+	if tostring(comment.id) == "__body__" then
+		on_done(false, "Reactions on the issue description are not supported on GitLab")
+		return nil
+	end
+	local issue_key = tostring(issue.key or "")
+	return require("atlas.issues.providers.gitlab.api.notes").add_reaction(issue_key, comment.id, key, on_done)
 end
 
 ---@param action_id string
