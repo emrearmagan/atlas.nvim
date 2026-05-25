@@ -5,8 +5,8 @@ local icons = require("atlas.ui.shared.icons")
 local utils = require("atlas.ui.shared.utils")
 local helper = require("atlas.issues.ui.main.helper")
 
-local overview_state = require("atlas.issues.ui.panel.issue.tabs.overview.state")
-local comments_state = require("atlas.issues.ui.panel.issue.tabs.comments.state")
+local overview_state = require("atlas.issues.providers.jira.ui.overview.state")
+local conversation_state = require("atlas.issues.ui.panel.issue.tabs.conversation.state")
 local history_state = require("atlas.issues.ui.panel.issue.tabs.activity.state")
 
 --------------------------------------------------------------------------------
@@ -130,16 +130,6 @@ function M.chips(issue)
 	return chips
 end
 
----@param raw any
----@return string|nil
-function M.convert_description(raw)
-	if type(raw) ~= "table" then
-		return type(raw) == "string" and raw or nil
-	end
-	local adf = require("atlas.issues.providers.jira.converted.adf")
-	return adf.to_markdown(raw)
-end
-
 ---@return AtlasMarkdownCompletionProvider|nil
 function M.comment_completion()
 	local author = require("atlas.issues.providers.jira.completion.author")
@@ -221,136 +211,7 @@ end
 ---@param issue Issue
 ---@return boolean
 function M.is_loading(issue)
-	return overview_state.description_loading or comments_state.any_loading() or history_state.any_loading()
-end
-
---------------------------------------------------------------------------------
--- History rendering
---------------------------------------------------------------------------------
-
-local FIELD_LABELS = {
-	Comment = "a comment",
-	issuetype = "issue type",
-	timeoriginalestimate = "original estimate",
-	timeestimate = "remaining estimate",
-	timespent = "time spent",
-	WorklogId = "worklog",
-	IssueParentAssociation = "parent issue",
-}
-
----@param seconds string|nil
----@return string
-local function format_estimate(seconds)
-	if seconds == nil or seconds == "" then
-		return "0m"
-	end
-	local n = tonumber(seconds)
-	if n == nil then
-		return tostring(seconds)
-	end
-	local h = math.floor(n / 3600)
-	local m = math.floor((n % 3600) / 60)
-	return h > 0 and string.format("%dh %dm", h, m) or string.format("%dm", m)
-end
-
----@param item IssueHistoryItem
----@return { label: string, content: string|nil }
-function M.format_history_item(item)
-	local field = item.field or ""
-	local from = item.from_string or item.from
-	local to = item.to_string or item.to
-	local has_from = from ~= nil and vim.trim(from) ~= ""
-	local has_to = to ~= nil and vim.trim(to) ~= ""
-
-	local action = (has_from and not has_to) and "deleted" or (not has_from and has_to) and "added" or "updated"
-	local label = string.format("%s %s", action, FIELD_LABELS[field] or field)
-
-	local content
-	if field == "Comment" then
-		content = nil
-	elseif field == "description" then
-		local f = has_from and vim.trim(from:gsub("%s+", " ")) or ""
-		local t = has_to and vim.trim(to:gsub("%s+", " ")) or ""
-		if #f > 200 then
-			f = f:sub(1, 197) .. "..."
-		end
-		if #t > 200 then
-			t = t:sub(1, 197) .. "..."
-		end
-		content = (f ~= "" and t ~= "") and string.format("%s\n\n↓\n\n%s", f, t)
-			or (f ~= "" and f or (t ~= "" and t or nil))
-	elseif field == "assignee" then
-		content = string.format("%s -> %s", from or "Unassigned", to or "Unassigned")
-	elseif field == "priority" then
-		local fi = icons.issues_priority(from or "")
-		local ti = icons.issues_priority(to or "")
-		content = string.format("%s %s -> %s %s", fi, from or "", ti, to or "")
-	elseif field == "issuetype" then
-		local fi = icons.issues_type(from or "")
-		local ti = icons.issues_type(to or "")
-		content = string.format("%s %s -> %s %s", fi, from or "", ti, to or "")
-	elseif field == "timeoriginalestimate" or field == "timeestimate" or field == "timespent" then
-		content = string.format("%s -> %s", format_estimate(from), format_estimate(to))
-	elseif field == "IssueParentAssociation" then
-		local f = (from and vim.trim(from) ~= "") and from or "None"
-		local t = (to and vim.trim(to) ~= "") and to or "None"
-		content = string.format("%s -> %s", f, t)
-	elseif has_from or has_to then
-		content = string.format("%s -> %s", from or "", to or "")
-	end
-
-	return { label = label, content = content }
-end
-
----@param item IssueHistoryItem
----@param row string
----@param row_index integer
----@return table[]|nil
-function M.history_item_hl(item, row, row_index)
-	local field = item.field or ""
-
-	if field == "description" then
-		local from = item.from_string or item.from
-		if from ~= nil and vim.trim(from) ~= "" and row_index <= 1 then
-			return { { start_col = 0, end_col = #row, hl_group = "AtlasTextMutedStrikethrough" } }
-		end
-		return nil
-	end
-
-	local arrow_fields =
-		{ assignee = true, priority = true, issuetype = true, status = true, IssueParentAssociation = true }
-	if arrow_fields[field] then
-		local s, e = row:find(" -> ", 1, true)
-		if not s then
-			return nil
-		end
-		if field == "assignee" then
-			return {
-				{ start_col = 0, end_col = s - 1, hl_group = helper.person_hl(item.from_string or item.from) },
-				{ start_col = e, end_col = #row, hl_group = helper.person_hl(item.to_string or item.to) },
-			}
-		elseif field == "priority" then
-			return {
-				{ start_col = 0, end_col = s - 1, hl_group = helper.priority_hl(item.from_string or item.from) },
-				{ start_col = e, end_col = #row, hl_group = helper.priority_hl(item.to_string or item.to) },
-			}
-		elseif field == "issuetype" then
-			return {
-				{ start_col = 0, end_col = s - 1, hl_group = helper.issue_type_hl(item.from_string or item.from) },
-				{ start_col = e, end_col = #row, hl_group = helper.issue_type_hl(item.to_string or item.to) },
-			}
-		elseif field == "status" then
-			return {
-				{ start_col = 0, end_col = s - 1, hl_group = helper.status_hl(item.from) },
-				{ start_col = e, end_col = #row, hl_group = helper.status_hl(item.to) },
-			}
-		elseif field == "IssueParentAssociation" then
-			return {
-				{ start_col = 0, end_col = s - 1, hl_group = "AtlasJiraKey" },
-				{ start_col = e, end_col = #row, hl_group = "AtlasJiraKey" },
-			}
-		end
-	end
+	return overview_state.description_loading or conversation_state.any_loading() or history_state.any_loading()
 end
 
 --------------------------------------------------------------------------------
@@ -364,13 +225,13 @@ function M.tabs()
 			key = "overview",
 			label = "Overview",
 			icon = icons.general("overview"),
-			mod = require("atlas.issues.ui.panel.issue.tabs.overview"),
+			mod = require("atlas.issues.providers.jira.ui.overview"),
 		},
 		{
-			key = "comments",
-			label = "Comments",
-			icon = icons.general("comment"),
-			mod = require("atlas.issues.ui.panel.issue.tabs.comments"),
+			key = "conversation",
+			label = "Conversation",
+			icon = icons.general("conversation"),
+			mod = require("atlas.issues.ui.panel.issue.tabs.conversation"),
 		},
 		{
 			key = "activity",

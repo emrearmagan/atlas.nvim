@@ -3,8 +3,7 @@ local M = {}
 
 local icons = require("atlas.ui.shared.icons")
 local helper = require("atlas.issues.ui.main.helper")
-local conversation_state = require("atlas.issues.providers.github.ui.conversation.state")
-local history_state = require("atlas.issues.ui.panel.issue.tabs.activity.state")
+local conversation_state = require("atlas.issues.ui.panel.issue.tabs.conversation.state")
 
 local state = {
 	assignees = nil, ---@type table|nil
@@ -273,7 +272,7 @@ end
 ---@param _issue Issue
 ---@return boolean
 function M.is_loading(_issue)
-	return state.detail_loading or conversation_state.any_loading() or history_state.any_loading()
+	return state.detail_loading or conversation_state.any_loading()
 end
 
 ---@param issue Issue
@@ -313,7 +312,7 @@ function M.tabs()
 			key = "conversation",
 			label = "Conversation",
 			icon = icons.general("conversation"),
-			mod = require("atlas.issues.providers.github.ui.conversation"),
+			mod = require("atlas.issues.ui.panel.issue.tabs.conversation"),
 		},
 		{
 			key = "activity",
@@ -322,35 +321,6 @@ function M.tabs()
 			mod = require("atlas.issues.ui.panel.issue.tabs.activity"),
 		},
 	}
-end
-
----@param item IssueHistoryItem
----@return { label: string, content: string|nil }
-function M.format_history_item(item)
-	local label, content = require("atlas.issues.providers.github.ui.event_label").format(item)
-	return { label = label, content = content }
-end
-
----@param item IssueHistoryItem
----@param row string
----@param row_index integer
----@return table[]|nil
-function M.history_item_hl(item, row, row_index) ---@diagnostic disable-line: unused-local
-	local highlights = require("atlas.ui.shared.highlights")
-	local field = item.field or ""
-	local hl
-	if field == "labeled" or field == "unlabeled" then
-		hl = label_hl(item.label_color)
-	elseif field == "assigned" or field == "unassigned" then
-		hl = highlights.dynamic_for(item.assignee_login)
-	elseif field == "milestoned" or field == "demilestoned" then
-		hl = highlights.dynamic_for(item.milestone_title)
-	elseif field == "closed" then
-		hl = "AtlasGHIssueClosed"
-	elseif field == "reopened" then
-		hl = "AtlasGHIssueOpen"
-	end
-	return { { start_col = 0, end_col = #row, hl_group = hl or "AtlasTextMuted" } }
 end
 
 return M

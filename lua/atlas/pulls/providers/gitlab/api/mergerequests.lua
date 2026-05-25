@@ -1,8 +1,7 @@
 local M = {}
 
 local service = require("atlas.pulls.providers.gitlab.api.service")
-local normalizer = require("atlas.pulls.providers.gitlab.api.normalizer")
-local logger = require("atlas.core.logger")
+local mapper = require("atlas.pulls.providers.gitlab.api.mapper")
 
 ---@param params table<string, any>
 ---@return string
@@ -81,16 +80,18 @@ function M.list_mrs(view, opts, on_done)
 		end
 	end
 
-	logger.loginfo("GitLab list MRs", { endpoint = endpoint })
 	return service.request("GET", endpoint, nil, function(result, err)
 		if err then
 			on_done(nil, err)
 			return
 		end
-		local groups = normalizer.normalize_mrs_to_groups(result or {})
+		local groups = mapper.to_pull_request_groups(result or {})
 		service.set_cache(cache_key, groups)
 		on_done(groups, nil)
-	end)
+	end, {
+		action = "List MRs",
+		endpoint = endpoint,
+	})
 end
 
 ---@param project_path string
@@ -131,7 +132,10 @@ function M.get_project_labels(project_path, opts, on_done)
 		end
 		service.set_memory_cache(cache_key, by_name)
 		on_done(by_name, nil)
-	end)
+	end, {
+		action = "Fetch project labels",
+		project_path = project_path,
+	})
 end
 
 ---@param pr PullRequest
@@ -163,12 +167,16 @@ function M.get_mr(pr, opts, on_done)
 			on_done(nil, err or "Empty response")
 			return
 		end
-		local mr = normalizer.normalize_mr(result)
+		local mr = mapper.to_pull_request(result)
 		if mr then
 			service.set_memory_cache(cache_key, mr)
 		end
 		on_done(mr, nil)
-	end)
+	end, {
+		action = "Get MR",
+		project_path = path,
+		iid = iid,
+	})
 end
 
 ---@param pr PullRequest
@@ -228,8 +236,12 @@ function M.update_mr(pr, payload, on_done)
 			return
 		end
 		bust_caches(pr)
-		on_done(type(result) == "table" and normalizer.normalize_mr(result) or nil, nil)
-	end)
+		on_done(type(result) == "table" and mapper.to_pull_request(result) or nil, nil)
+	end, {
+		action = "Update MR",
+		project_path = path,
+		iid = iid,
+	})
 end
 
 ---@param pr PullRequest
@@ -496,26 +508,26 @@ function M.create_mr(opts, on_done)
 	end
 
 	local endpoint = string.format("/projects/%s/merge_requests", service.url_encode(path))
-	logger.loginfo("GitLab create MR", {
-		path = path,
-		source = source,
-		target = target,
-		draft = opts.draft == true,
-	})
 
 	return service.request("POST", endpoint, payload, function(result, err)
 		if err or type(result) ~= "table" then
 			on_done(nil, err or "Empty response")
 			return
 		end
-		local mr = normalizer.normalize_mr(result)
+		local mr = mapper.to_pull_request(result)
 		local iid = (mr and mr._raw and mr._raw.iid) or tonumber(result.iid)
 		on_done({
 			iid = iid,
 			id = iid,
 			url = (mr and mr.link and mr.link.html) or (type(result.web_url) == "string" and result.web_url or nil),
 		}, nil)
-	end)
+	end, {
+		action = "Create MR",
+		path = path,
+		source = source,
+		target = target,
+		draft = opts.draft == true,
+	})
 end
 
 ---@param pr PullRequest

@@ -6,7 +6,7 @@ local M = {}
 
 ---@return JiraMentionUser[]
 local function collect_users()
-	local comments_state = require("atlas.issues.ui.panel.issue.tabs.comments.state")
+	local conversation_state = require("atlas.issues.ui.panel.issue.tabs.conversation.state")
 	local panel_state = require("atlas.issues.ui.panel.issue.state")
 	local issues_state = require("atlas.issues.state")
 
@@ -36,8 +36,11 @@ local function collect_users()
 		add((issue or {}).assignee)
 		add((issue or {}).reporter)
 	end
-	for _, comment in ipairs(comments_state.comments or {}) do
-		add((comment or {}).author)
+	local conversation_comments = conversation_state.comments
+	if type(conversation_comments) == "table" then
+		for _, comment in ipairs(conversation_comments) do
+			add((comment or {}).author)
+		end
 	end
 
 	table.sort(users, function(a, b)
@@ -131,6 +134,7 @@ function M.build_completion()
 			end
 			return matches
 		end,
+		format_mention = resolve_mention,
 	}
 end
 

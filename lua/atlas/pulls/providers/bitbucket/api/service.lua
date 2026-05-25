@@ -10,7 +10,7 @@ local API_BASE = "https://api.bitbucket.org/2.0"
 ---@param err any
 ---@return string
 local function sanitize_error(err)
-	return tostring(err or ""):gsub("[\r\n]+", " | ")
+	return (tostring(err or ""):gsub("[\r\n]+", " | "))
 end
 
 ---@return string, string, string|nil
@@ -105,8 +105,9 @@ end
 ---@param headers table|nil Optional headers (will merge with auth headers)
 ---@param body string|nil Optional JSON body
 ---@param callback fun(result: table|nil, err: string|nil)
+---@param ctx table|nil
 ---@return { job_id: integer, cancel: fun() }|nil
-function M.request(method, url, headers, body, callback)
+function M.request(method, url, headers, body, callback, ctx)
 	local user, token, auth_err = M.get_auth()
 	if auth_err then
 		callback(nil, sanitize_error(auth_err))
@@ -126,10 +127,10 @@ function M.request(method, url, headers, body, callback)
 		full_url = M.url(url)
 	end
 
-	logger.loginfo("Bitbucket request", {
-		method = method,
-		url = full_url,
-	})
+	local log = vim.tbl_extend("keep", { method = method, endpoint = full_url }, ctx or {})
+	local message = log.action or "Bitbucket request"
+	log.action = nil
+	logger.loginfo(message, log)
 
 	return http.curl_request(method, full_url, request_headers, body, function(result, err)
 		if err then
@@ -169,8 +170,9 @@ end
 ---@param headers table|nil Optional headers (will merge with auth headers)
 ---@param body string|nil Optional body
 ---@param callback fun(text: string|nil, err: string|nil)
+---@param ctx table|nil
 ---@return { job_id: integer, cancel: fun() }|nil
-function M.request_text(method, url, headers, body, callback)
+function M.request_text(method, url, headers, body, callback, ctx)
 	local user, token, auth_err = M.get_auth()
 	if auth_err then
 		callback(nil, sanitize_error(auth_err))
@@ -190,10 +192,10 @@ function M.request_text(method, url, headers, body, callback)
 		full_url = M.url(url)
 	end
 
-	logger.loginfo("Bitbucket request", {
-		method = method,
-		url = full_url,
-	})
+	local log = vim.tbl_extend("keep", { method = method, endpoint = full_url }, ctx or {})
+	local message = log.action or "Bitbucket request"
+	log.action = nil
+	logger.loginfo(message, log)
 
 	return http.curl_text_request(method, full_url, request_headers, body, function(text, err)
 		if err then

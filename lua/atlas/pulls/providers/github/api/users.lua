@@ -1,8 +1,7 @@
 local M = {}
 
 local cli = require("atlas.pulls.providers.github.api.cli")
-local normalizer = require("atlas.pulls.providers.github.api.normalizer")
-local logger = require("atlas.core.logger")
+local mapper = require("atlas.pulls.providers.github.api.mapper")
 
 ---@param on_done fun(user: PullsUser|nil, err: string|nil)
 ---@param opts { force_load?: boolean }|nil
@@ -19,18 +18,18 @@ function M.fetch_user(on_done, opts)
 		end
 	end
 
-	logger.loginfo("GitHub fetch current user")
-
 	return cli.gh({ "api", "user" }, function(result, err)
 		if err or not result or type(result) ~= "table" then
 			on_done(nil, err or "Failed to fetch user")
 			return
 		end
 
-		local user = normalizer.normalize_user(result)
+		local user = mapper.to_user(result)
 		cli.set_cache(cache_key, user)
 		on_done(user, nil)
-	end)
+	end, {
+		action = "Fetch current user",
+	})
 end
 
 return M

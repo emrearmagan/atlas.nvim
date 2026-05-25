@@ -1,11 +1,11 @@
 ---@class PullsCommentsTab : PullsPanelTabModule
 local M = {}
 
-local md_editor = require("atlas.ui.popups.markdown_editor")
+local md_editor = require("atlas.ui.popups.editor")
 local footer = require("atlas.ui.components.footer")
-local renderer = require("atlas.pulls.ui.panel.pr.tabs.comments.renderer")
-local state = require("atlas.pulls.ui.panel.pr.tabs.comments.state")
-local keymaps = require("atlas.pulls.ui.panel.pr.tabs.comments.keymaps")
+local renderer = require("atlas.pulls.ui.panel.pr.tabs.review.renderer")
+local state = require("atlas.pulls.ui.panel.pr.tabs.review.state")
+local keymaps = require("atlas.pulls.ui.panel.pr.tabs.review.keymaps")
 
 local AUTHOR_COMPLETION_MODULES = {
 	github = "atlas.pulls.providers.github.completion.author",
@@ -276,18 +276,12 @@ function M.reply_comment(pr, entry, refresh)
 		return
 	end
 
-	local author = comment.author or {}
-	local mention_id = tostring(author.id or "")
-	local mention_name = tostring(author.nickname or author.name or "")
-	local provider_id = provider and tostring(provider.id or "") or ""
-	local initial_text = ""
-
-	if provider_id == "bitbucket" and mention_id ~= "" then
-		-- bitbucket needs the account id
-		initial_text = "@{" .. mention_id .. "} "
-	elseif mention_name ~= "" then
-		initial_text = "@" .. mention_name .. " "
+	local completion = author_completion()
+	local mention = ""
+	if completion and type(completion.format_mention) == "function" then
+		mention = completion.format_mention(comment.author) or ""
 	end
+	local initial_text = mention ~= "" and (mention .. " ") or ""
 
 	open_md_editor(pr, {
 		key = "pr-comment-reply-" .. tostring(comment.id),

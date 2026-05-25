@@ -2,6 +2,7 @@ local M = {}
 
 local service = require("atlas.issues.providers.jira.api.service")
 local cache = require("atlas.core.cache")
+local logger = require("atlas.core.logger")
 
 local CACHE_KEY = "jira:jql:autocompletedata"
 
@@ -114,6 +115,7 @@ function M.get_data(on_done, opts)
 	if not opts.force_load then
 		local cached, ok = M.get_cached_data()
 		if ok then
+			logger.loginfo("Jira autocomplete cache hit")
 			on_done(cached, nil)
 			return nil
 		end
@@ -128,7 +130,9 @@ function M.get_data(on_done, opts)
 		local normalized = normalize_payload(result)
 		cache.set(CACHE_KEY, normalized, service.cache_ttl())
 		on_done(normalized, nil)
-	end)
+	end, {
+		action = "Fetch jql autocomplete data",
+	})
 end
 
 return M

@@ -1,6 +1,6 @@
 local M = {}
 
-local editor = require("atlas.ui.popups.editor")
+local form = require("atlas.ui.popups.form")
 local spinner = require("atlas.ui.popups.spinner")
 local multi_select = require("atlas.ui.popups.multi_select")
 local pulls_helper = require("atlas.pulls.ui.main.helper")
@@ -21,17 +21,13 @@ local template_store = require("atlas.issues.templates")
 ---@field name string
 ---@field color string|nil
 
----@class CreateIssueAssignee
----@field login string
----@field name string|nil
-
 ---@class CreateIssueMilestone
 ---@field number integer
 ---@field title string
 
 ---@class CreateIssuePickers
 ---@field list_labels fun(on_done: fun(items: CreateIssueLabel[]|nil, err: string|nil))|nil
----@field list_assignees fun(on_done: fun(items: CreateIssueAssignee[]|nil, err: string|nil))|nil
+---@field list_assignees fun(on_done: fun(items: IssueUser[]|nil, err: string|nil))|nil
 ---@field list_milestones fun(on_done: fun(items: CreateIssueMilestone[]|nil, err: string|nil))|nil
 
 ---@class CreateIssueFields
@@ -39,7 +35,7 @@ local template_store = require("atlas.issues.templates")
 ---@field title string
 ---@field body string
 ---@field labels CreateIssueLabel[]
----@field assignees CreateIssueAssignee[]
+---@field assignees IssueUser[]
 ---@field milestone CreateIssueMilestone|nil
 
 ---@class CreateIssueState
@@ -91,7 +87,7 @@ end
 ---@field url string|nil
 ---@field number integer|nil
 
----@param assignees CreateIssueAssignee[]
+---@param assignees IssueUser[]
 ---@return string
 local function format_assignees(assignees)
 	if type(assignees) ~= "table" or #assignees == 0 then
@@ -100,7 +96,7 @@ local function format_assignees(assignees)
 
 	local parts = {}
 	for _, assignee in ipairs(assignees) do
-		table.insert(parts, "@" .. tostring(assignee.login or ""))
+		table.insert(parts, "@" .. tostring(assignee.account_id or ""))
 	end
 
 	return icons.general("user") .. " " .. table.concat(parts, ", ")
@@ -209,13 +205,13 @@ end
 
 ---@param issue_state CreateIssueState
 local function render_meta(issue_state)
-	editor.render_meta(issue_state, meta_rows(issue_state))
+	form.render_meta(issue_state, meta_rows(issue_state))
 end
 
 ---@param issue_state CreateIssueState
 local function close(issue_state)
 	spinner.stop()
-	editor.close(issue_state.layout)
+	form.close(issue_state.layout)
 end
 
 ---@param issue_state CreateIssueState
@@ -258,10 +254,14 @@ local function pick_assignees(issue_state)
 				items = items,
 				selected = issue_state.fields.assignees,
 				key = function(item)
-					return item.login
+					return item.account_id
 				end,
 				format = function(item)
-					return string.format("@%s%s", item.login, item.name and (" — " .. item.name) or "")
+					return string.format(
+						"@%s%s",
+						item.account_id,
+						item.display_name and item.display_name ~= item.account_id and (" — " .. item.display_name) or ""
+					)
 				end,
 				prompt = "Toggle assignees:",
 				on_done = function(selected)
@@ -515,7 +515,7 @@ local function submit(issue_state)
 
 	local assignee_logins = {}
 	for _, assignee in ipairs(issue_state.fields.assignees) do
-		table.insert(assignee_logins, assignee.login)
+		table.insert(assignee_logins, assignee.account_id)
 	end
 
 	issue_state.is_submitting = true
@@ -596,7 +596,7 @@ function M.open(opts)
 		on_done = opts.on_done,
 	}
 
-	editor.open(issue_state, {
+	form.open(issue_state, {
 		title = " Create Issue ",
 		min_height = 22,
 		meta_height = 3,

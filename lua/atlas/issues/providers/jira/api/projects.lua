@@ -1,7 +1,7 @@
 local M = {}
 
 local service = require("atlas.issues.providers.jira.api.service")
-local normalizer = require("atlas.issues.providers.jira.api.normalizer")
+local normalizer = require("atlas.issues.providers.jira.api.mapper")
 
 ---@class JiraProjectGroup
 ---@field category table|nil
@@ -80,7 +80,7 @@ function M.get_projects(opts, callback)
 			end
 
 			for _, raw in ipairs(result.values or {}) do
-				local project = normalizer.normalize_project(raw)
+				local project = normalizer.to_project(raw)
 				if project then
 					table.insert(projects, project)
 				end
@@ -94,7 +94,13 @@ function M.get_projects(opts, callback)
 
 			local next_start = tonumber(result.startAt) or start_at
 			fetch_page(next_start + max_results)
-		end)
+		end, {
+			action = "Fetch projects",
+			status = status,
+			query = query,
+			max_results = max_results,
+			start_at = start_at,
+		})
 	end
 
 	fetch_page(0)

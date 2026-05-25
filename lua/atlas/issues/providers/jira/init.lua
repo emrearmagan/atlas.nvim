@@ -148,73 +148,95 @@ function M.fetch_issue(issue_key, opts, on_done)
 	return issues_api.get_issue(issue_key, on_done)
 end
 
----@param issue_key string
----@param opts IssuesFetchOpts|nil
----@param on_done fun(raw: any, err: string|nil)
----@return { cancel: fun() }|nil
-function M.fetch_description(issue_key, opts, on_done)
-	local issues_api = require("atlas.issues.providers.jira.api.issues")
-	return issues_api.get_issue_description(issue_key, on_done, opts)
-end
-
----@param issue_key string
+---@param issue Issue
 ---@param opts IssuesFetchOpts|nil
 ---@param on_done fun(comments: IssueComment[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_comments(issue_key, opts, on_done)
+function M.fetch_comments(issue, opts, on_done)
 	local comments_api = require("atlas.issues.providers.jira.api.comments")
 	local COMMENTS_PAGE_SIZE = 100
 
-	return comments_api.get_comments_page(issue_key, 0, COMMENTS_PAGE_SIZE, on_done, {
+	return comments_api.get_comments_page(tostring(issue.key or ""), 0, COMMENTS_PAGE_SIZE, on_done, {
 		force_load = opts and opts.force_load or false,
 	})
 end
 
----@param issue_key string
+---@param issue Issue
 ---@param content string
 ---@param on_done fun(comment: IssueComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.add_comment(issue_key, content, on_done)
+function M.add_comment(issue, content, on_done)
+	local issue_key = tostring(issue.key or "")
 	local comments_api = require("atlas.issues.providers.jira.api.comments")
 	return comments_api.add_comment(issue_key, content, on_done)
 end
 
----@param issue_key string
+---@param issue Issue
 ---@param parent_id string
 ---@param content string
 ---@param on_done fun(comment: IssueComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.reply_comment(issue_key, parent_id, content, on_done)
+function M.reply_comment(issue, parent_id, content, on_done)
+	local issue_key = tostring(issue.key or "")
 	local comments_api = require("atlas.issues.providers.jira.api.comments")
 	return comments_api.add_comment(issue_key, content, { parent_id = parent_id }, on_done)
 end
 
----@param issue_key string
+---@param issue Issue
 ---@param comment_id string
 ---@param content string
 ---@param on_done fun(comment: IssueComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.edit_comment(issue_key, comment_id, content, on_done)
+function M.edit_comment(issue, comment_id, content, on_done)
+	local issue_key = tostring(issue.key or "")
 	local comments_api = require("atlas.issues.providers.jira.api.comments")
 	return comments_api.edit_comment(issue_key, comment_id, content, on_done)
 end
 
----@param issue_key string
+---@param issue Issue
+---@param opts { force_refresh: boolean|nil }|nil
+---@param on_done fun(result: { comments: IssueComment[], events: IssueActivityEntry[], reaction_options: IssueReactionOption[]|nil }|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_conversation(issue, opts, on_done)
+	opts = opts or {}
+	local issue_key = tostring(issue and issue.key or "")
+	if issue_key == "" then
+		on_done(nil, "Invalid issue key")
+		return nil
+	end
+
+	local force = opts.force_refresh == true
+
+	return M.fetch_comments(issue, { force_load = force }, function(comments, err)
+		if err then
+			on_done(nil, err)
+			return
+		end
+		on_done({
+			comments = comments or {},
+			events = {},
+			reaction_options = nil,
+		}, nil)
+	end)
+end
+
+---@param issue Issue
 ---@param comment_id string
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.delete_comment(issue_key, comment_id, on_done)
+function M.delete_comment(issue, comment_id, on_done)
+	local issue_key = tostring(issue.key or "")
 	local comments_api = require("atlas.issues.providers.jira.api.comments")
 	return comments_api.delete_comment(issue_key, comment_id, on_done)
 end
 
----@param issue_key string
+---@param issue Issue
 ---@param opts IssuesFetchOpts|nil
----@param on_done fun(entries: table[]|nil, err: string|nil)
+---@param on_done fun(entries: IssueActivityEntry[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_history(issue_key, opts, on_done)
+function M.fetch_activity(issue, opts, on_done)
 	local issues_api = require("atlas.issues.providers.jira.api.issues")
-	return issues_api.get_issue_history_page(issue_key, 0, 100, function(page, err)
+	return issues_api.get_issue_history_page(tostring(issue.key or ""), 0, 100, function(page, err)
 		if err or not page then
 			on_done(nil, err)
 			return

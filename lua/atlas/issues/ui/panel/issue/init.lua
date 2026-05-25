@@ -3,30 +3,8 @@ local M = {}
 local layout = require("atlas.ui.layout")
 local panel_state = require("atlas.issues.ui.panel.issue.state")
 local renderer = require("atlas.issues.ui.panel.issue.renderer")
-local icons = require("atlas.ui.shared.icons")
 
 local SPINNER_INTERVAL_MS = 100
-
-local DEFAULT_TABS = {
-	{
-		key = "overview",
-		label = "Overview",
-		icon = icons.general("overview"),
-		mod = require("atlas.issues.ui.panel.issue.tabs.overview"),
-	},
-	{
-		key = "comments",
-		label = "Comments",
-		icon = icons.general("comment"),
-		mod = require("atlas.issues.ui.panel.issue.tabs.comments"),
-	},
-	{
-		key = "activity",
-		label = "Activity",
-		icon = icons.pulls("activity"),
-		mod = require("atlas.issues.ui.panel.issue.tabs.activity"),
-	},
-}
 
 --------------------------------------------------------------------------------
 -- Loading spinner
@@ -94,11 +72,11 @@ local function get_tabs()
 	local provider = state.provider
 	if provider and provider.panel and provider.panel.tabs then
 		local tabs = provider.panel.tabs()
-		if type(tabs) == "table" and #tabs > 0 then
+		if type(tabs) == "table" then
 			return tabs
 		end
 	end
-	return DEFAULT_TABS
+	return {}
 end
 
 ---@param tab_key string
@@ -115,6 +93,13 @@ end
 local function refresh_panel()
 	if M.is_open() then
 		M.render()
+	end
+end
+
+local function scroll_to_top()
+	local win = layout.win_id("detail")
+	if win and vim.api.nvim_win_is_valid(win) then
+		vim.api.nvim_win_set_cursor(win, { 1, 0 })
 	end
 end
 
@@ -163,7 +148,11 @@ local function dispatch_provider_fetches(issue, opts)
 	local state = require("atlas.issues.state")
 	local provider = state.provider
 	if provider and provider.panel and type(provider.panel.fetches) == "function" then
-		provider.panel.fetches(issue, make_refresh_callback(issue), { force_load = opts and opts.force_refresh == true })
+		provider.panel.fetches(
+			issue,
+			make_refresh_callback(issue),
+			{ force_load = opts and opts.force_refresh == true }
+		)
 	end
 end
 
@@ -184,9 +173,9 @@ local function reset_tab_data()
 		end
 	end
 
-	reset_state("atlas.issues.ui.panel.issue.tabs.overview.state")
-	reset_state("atlas.issues.ui.panel.issue.tabs.comments.state")
+	reset_state("atlas.issues.providers.jira.ui.overview.state")
 	reset_state("atlas.issues.ui.panel.issue.tabs.activity.state")
+	reset_state("atlas.issues.ui.panel.issue.tabs.conversation.state")
 end
 
 --------------------------------------------------------------------------------
@@ -224,8 +213,16 @@ function M.on_select(issue, opts)
 
 	if not same_issue and issue ~= nil then
 		local old_key = panel_state.current_tab
-		if panel_state.current_tab == nil then
-			panel_state.current_tab = get_tabs()[1].key
+		local tabs = get_tabs()
+		local valid = false
+		for _, t in ipairs(tabs) do
+			if t.key == panel_state.current_tab then
+				valid = true
+				break
+			end
+		end
+		if not valid then
+			panel_state.current_tab = tabs[1] and tabs[1].key or nil
 		end
 		switch_tab_keymaps(old_key, panel_state.current_tab)
 		stop_spinner()
@@ -269,6 +266,7 @@ function M.next_tab()
 	end
 
 	M.render()
+	scroll_to_top()
 end
 
 function M.prev_tab()

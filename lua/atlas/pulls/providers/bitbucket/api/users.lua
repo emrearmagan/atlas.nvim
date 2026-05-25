@@ -22,7 +22,6 @@ function M.fetch_current_user(on_done)
 		return nil
 	end
 
-	logger.loginfo("Bitbucket current user fetch start")
 	return service.request("GET", "/user", nil, nil, function(result, err)
 		if err or not result then
 			on_done(nil, err or "No response from Bitbucket API")
@@ -42,8 +41,16 @@ function M.fetch_current_user(on_done)
 		})
 		cache.set(cachekey, current_user, 86400)
 		on_done(current_user, nil)
-	end)
+	end, {
+		action = "Bitbucket current user fetch",
+	})
 end
+
+---@class BitbucketWorkspace
+---@field administrator boolean
+---@field slug string
+---@field uuid string
+---@field links_self string|nil
 
 ---@param on_done fun(workspaces: BitbucketWorkspace[]|nil, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
@@ -59,7 +66,6 @@ function M.fetch_workspaces(on_done)
 		return nil
 	end
 
-	logger.loginfo("Bitbucket workspace fetch start")
 	return service.request("GET", "/user/workspaces", nil, nil, function(result, err)
 		if err or not result then
 			on_done(nil, err or "No response from Bitbucket API")
@@ -89,7 +95,9 @@ function M.fetch_workspaces(on_done)
 		memory_cache.set(workspace_cache_key, workspaces, ttl)
 
 		on_done(workspaces, nil)
-	end)
+	end, {
+		action = "Bitbucket workspace fetch",
+	})
 end
 
 return M

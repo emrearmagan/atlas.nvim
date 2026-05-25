@@ -5,7 +5,7 @@ local footer = require("atlas.ui.components.footer")
 local multi_select = require("atlas.ui.popups.multi_select")
 local issues_api = require("atlas.issues.providers.github.api.issues")
 local users_api = require("atlas.issues.providers.github.api.users")
-local normalizer = require("atlas.issues.providers.github.api.normalizer")
+local normalizer = require("atlas.issues.providers.github.api.mapper")
 
 ---@param ctx table
 ---@return boolean

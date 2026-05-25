@@ -138,23 +138,34 @@ end
 ---@param query string
 ---@param variables table|nil
 ---@param on_done fun(result: any, err: string|nil)
+---@param ctx table|nil
 ---@return { job_id: integer, cancel: fun() }|nil
-function M.graphql(query, variables, on_done)
+function M.graphql(query, variables, on_done, ctx)
 	local _, auth_err = M.get_auth()
 	if auth_err then
+		logger.logerror("GitLab pulls auth missing", { error = auth_err })
 		on_done(nil, auth_err)
 		return nil
 	end
 	local url = M.base_url() .. "/api/graphql"
 	local headers = M.build_headers()
 	local payload = vim.fn.json_encode({ query = query, variables = variables or vim.empty_dict() })
+
+	local log = vim.tbl_extend("keep", { kind = "graphql", variables = variables }, ctx or {})
+	local message = log.action or "GitLab pulls graphql"
+	log.action = nil
+	logger.loginfo(message, log)
+
 	return http.curl_request("POST", url, headers, payload, function(result, err)
 		if err then
+			logger.logerror("GitLab pulls graphql failed", { error = tostring(err) })
 			on_done(nil, err)
 			return
 		end
 		if type(result) == "table" and type(result.errors) == "table" and #result.errors > 0 then
-			on_done(nil, tostring(result.errors[1].message or "GraphQL error"))
+			local msg = tostring(result.errors[1].message or "GraphQL error")
+			logger.logerror("GitLab pulls graphql error", { error = msg })
+			on_done(nil, msg)
 			return
 		end
 		on_done(type(result) == "table" and result.data or nil, nil)
@@ -165,8 +176,9 @@ end
 ---@param endpoint string
 ---@param data table|nil
 ---@param on_done fun(result: any, err: string|nil)
+---@param ctx table|nil
 ---@return { job_id: integer, cancel: fun() }|nil
-function M.request(method, endpoint, data, on_done)
+function M.request(method, endpoint, data, on_done, ctx)
 	local _, auth_err = M.get_auth()
 	if auth_err then
 		logger.logerror("GitLab pulls auth missing", { error = auth_err })
@@ -180,13 +192,21 @@ function M.request(method, endpoint, data, on_done)
 	if type(data) == "table" then
 		local ok, encoded = pcall(vim.fn.json_encode, data)
 		if not ok then
+			logger.logerror("GitLab pulls payload encode failed", {
+				method = method,
+				endpoint = endpoint,
+				error = tostring(encoded),
+			})
 			on_done(nil, "Request payload is invalid")
 			return nil
 		end
 		payload = encoded
 	end
 
-	logger.loginfo("GitLab pulls request", { method = method, endpoint = endpoint })
+	local log = vim.tbl_extend("keep", { method = method, endpoint = endpoint }, ctx or {})
+	local message = log.action or "GitLab pulls request"
+	log.action = nil
+	logger.loginfo(message, log)
 
 	return http.curl_request(method, url, headers, payload, function(result, err)
 		if err then

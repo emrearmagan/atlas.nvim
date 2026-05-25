@@ -33,20 +33,26 @@ local function state_chip_hl(status_id)
 end
 
 ---@param issue Issue
+---@return string
+local function key_label(issue)
+	local raw = type(issue._raw) == "table" and issue._raw or {}
+	local number = raw.number or 0
+	local slug = tostring(raw.slug or "")
+	return slug ~= "" and string.format("%s#%d", slug, number) or string.format("#%d", number)
+end
+
+---@param issue Issue
 ---@param is_child boolean
 ---@return table
 function M.format_row(issue, is_child)
-	local raw = type(issue._raw) == "table" and issue._raw or {}
-	local number = raw.number or 0
 	local title = issue.summary or ""
-	local slug = tostring(raw.slug or "")
+	local label = key_label(issue)
 
-	local key_label = slug ~= "" and string.format("%s#%d", slug, number) or string.format("#%d", number)
 	local is_pinned = issue.is_pinned == true
 	local row_icon = is_pinned and icons.general("pin") or state_icon(issue.status_id)
 
-	local name = is_child and ("  " .. row_icon .. "  " .. key_label .. "  " .. title)
-		or (key_label .. "  " .. title)
+	local name = is_child and ("  " .. row_icon .. "  " .. label .. "  " .. title)
+		or (label .. "  " .. title)
 
 	local assignee_name = type(issue.assignee) == "table" and issue.assignee.display_name or "Unassigned"
 	local reporter_name = type(issue.reporter) == "table" and issue.reporter.display_name or "Unknown"
@@ -101,11 +107,8 @@ function M.cell_hl(row, col, ctx)
 			end
 		end
 
-		local raw = type(issue._raw) == "table" and issue._raw or {}
-		local number = raw.number or 0
-		local slug = tostring(raw.slug or "")
-		local key_label = slug ~= "" and string.format("%s#%d", slug, number) or string.format("#%d", number)
-		local s, e = ctx.text:find(key_label, 1, true)
+		local label = key_label(issue)
+		local s, e = ctx.text:find(label, 1, true)
 		if s and e then
 			table.insert(spans, { start_col = s - 1, end_col = e, hl_group = "AtlasGHIssueKey" })
 			local title_start = e + 2

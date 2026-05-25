@@ -1,7 +1,7 @@
 local M = {}
 
 local service = require("atlas.pulls.providers.bitbucket.api.service")
-local pr_normalizer = require("atlas.pulls.providers.bitbucket.api.pr_normalizer")
+local mapper = require("atlas.pulls.providers.bitbucket.api.mapper")
 local cache = require("atlas.core.cache")
 local logger = require("atlas.core.logger")
 local http = require("atlas.core.http")
@@ -18,7 +18,7 @@ end
 
 ---@param workspace string
 ---@param repo string
----@param opts { user: string, token: string, cache_ttl: number, force: boolean, pagelen: number|nil }
+---@param opts { user: string, token: string, cache_ttl: number, force: boolean, pagelen: number|nil, statuses: string[]|nil }
 ---@param on_done fun(prs: PullRequest[], err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
 local function fetch_pullrequests_single(workspace, repo, opts, on_done)
@@ -84,7 +84,7 @@ local function fetch_pullrequests_single(workspace, repo, opts, on_done)
 			return
 		end
 
-		local normalized = pr_normalizer.pullrequests(result, workspace, repo)
+		local normalized = mapper.to_pull_requests_list(result, workspace, repo)
 		cache.set(key, normalized, opts.cache_ttl)
 		logger.loginfo("Fetch success", {
 			workspace = workspace,
@@ -98,7 +98,7 @@ local function fetch_pullrequests_single(workspace, repo, opts, on_done)
 end
 
 ---@param view_repos AtlasBitbucketRepoRef[]
----@param opts { force_load: boolean, pagelen: number|nil }
+---@param opts { force_load: boolean, pagelen: number|nil, statuses: string[]|nil }
 ---@param on_done fun(groups: PullsGroup[], err: string[]|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_pullrequests(view_repos, opts, on_done)
@@ -157,7 +157,7 @@ function M.fetch_pullrequests(view_repos, opts, on_done)
 				pr_count = #all_prs,
 				error_count = #errors,
 			})
-			local groups = pr_normalizer.pull_request_groups(all_prs)
+			local groups = mapper.to_pull_request_groups(all_prs)
 			if #errors > 0 then
 				on_done(groups, errors)
 			else
@@ -210,7 +210,7 @@ function M.fetch_pullrequest(workspace, repo, pr_id, opts, on_done)
 			return
 		end
 
-		local prs = pr_normalizer.pullrequests({ values = { result } }, workspace, repo)
+		local prs = mapper.to_pull_requests_list({ values = { result } }, workspace, repo)
 		if #prs == 0 then
 			on_done(nil, "Invalid pull request response")
 			return
@@ -256,10 +256,10 @@ function M.request_changes(request_changes_url, on_done)
 end
 
 ---@param pr PullRequest
----@param opts { force_refresh: boolean|nil }|nil
+---@param _opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(reviewers: PullsReviewer[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_reviewers(pr, opts, on_done)
+function M.fetch_reviewers(pr, _opts, on_done)
 	local raw = pr._raw or {}
 	local self_url = tostring((raw.links or {}).self or "")
 	if self_url == "" then
@@ -332,10 +332,10 @@ function M.fetch_builds(pr, on_done)
 end
 
 ---@param pr PullRequest
----@param opts { force_refresh: boolean|nil }|nil
+---@param _opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(entries: PullsActivityEntry[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_activity(pr, opts, on_done)
+function M.fetch_activity(pr, _opts, on_done)
 	local raw = pr._raw or {}
 	local activity_url = tostring((raw.links or {}).activity or "")
 	if activity_url == "" then
@@ -349,15 +349,15 @@ function M.fetch_activity(pr, opts, on_done)
 			return
 		end
 
-		on_done(pr_normalizer.pr_activity(result), nil)
+		on_done(mapper.to_activities_list(result), nil)
 	end)
 end
 
 ---@param pr PullRequest
----@param opts { force_refresh: boolean|nil }|nil
+---@param _opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(entries: PullsDiffstatEntry[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_diffstat(pr, opts, on_done)
+function M.fetch_diffstat(pr, _opts, on_done)
 	local raw = pr._raw or {}
 	local diffstat_url = tostring((raw.links or {}).diffstat or "")
 	if diffstat_url == "" then
@@ -424,17 +424,17 @@ function M.fetch_commits(pr, opts, on_done)
 			on_done(nil, err)
 			return
 		end
-		local commits = pr_normalizer.pr_commits(result)
+		local commits = mapper.to_commits_list(result)
 		service.set_cache(key, commits, service.cache_ttl())
 		on_done(commits, nil)
 	end)
 end
 
 ---@param pr PullRequest
----@param opts { force_refresh: boolean|nil }|nil
+---@param _opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(files: DiffFile[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_diff(pr, opts, on_done)
+function M.fetch_diff(pr, _opts, on_done)
 	local raw = pr._raw or {}
 	local diff_url = tostring((raw.links or {}).diff or "")
 	if diff_url == "" then
@@ -526,11 +526,6 @@ function M.create_pr(opts, on_done)
 		payload.reviewers = list
 	end
 
-	logger.loginfo(
-		"bitbucket.create_pr",
-		{ workspace = workspace, repo = repo, head = opts.head, base = opts.base, draft = opts.draft == true }
-	)
-
 	local endpoint = string.format("/repositories/%s/%s/pullrequests", workspace, repo)
 	return service.request("POST", endpoint, nil, vim.json.encode(payload), function(result, err)
 		if err then
@@ -548,7 +543,14 @@ function M.create_pr(opts, on_done)
 		end
 
 		on_done({ id = id, url = url, message = "PR created" }, nil)
-	end)
+	end, {
+		action = "Create PR",
+		workspace = workspace,
+		repo = repo,
+		head = opts.head,
+		base = opts.base,
+		draft = opts.draft == true,
+	})
 end
 
 ---@param opts { repo_slug: string }
@@ -576,7 +578,7 @@ function M.fetch_default_reviewers(opts, on_done)
 		for _, entry in ipairs(values) do
 			local user = type(entry) == "table" and type(entry.user) == "table" and entry.user or nil
 			local uuid = user and tostring(user.uuid or "") or ""
-			if uuid ~= "" then
+			if user and uuid ~= "" then
 				local nickname = tostring(user.nickname or "")
 				local display = tostring(user.display_name or "")
 				local label = nickname ~= "" and ("@" .. nickname)

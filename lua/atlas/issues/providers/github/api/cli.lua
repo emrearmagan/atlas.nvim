@@ -68,13 +68,14 @@ local function sanitize_error(err)
 	if not err or err == "" then
 		return "Unknown error"
 	end
-	return err:gsub("\n", " "):gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+	return (err:gsub("\n", " "):gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", ""))
 end
 
 ---@param args string[]
 ---@param callback fun(result: any, err: string|nil)
+---@param ctx table|nil
 ---@return { job_id: integer, cancel: fun() }|nil
-function M.gh(args, callback)
+function M.gh(args, callback, ctx)
 	if vim.fn.executable("gh") ~= 1 then
 		vim.schedule(function()
 			callback(nil, "gh CLI not found. Install from https://cli.github.com")
@@ -83,7 +84,10 @@ function M.gh(args, callback)
 	end
 
 	local cmd = vim.list_extend({ "gh" }, args)
-	logger.loginfo("GitHub CLI", { cmd = table.concat(cmd, " ") })
+	local log = vim.tbl_extend("keep", { cmd = table.concat(cmd, " ") }, ctx or {})
+	local message = log.action or "GitHub CLI"
+	log.action = nil
+	logger.loginfo(message, log)
 
 	local cancelled = false
 
@@ -94,7 +98,7 @@ function M.gh(args, callback)
 			end
 			if res.code ~= 0 then
 				local err = sanitize_error(res.stderr)
-				logger.logerror("GitHub CLI error", { code = res.code, err = err })
+				logger.logerror("GitHub issues request failed", { code = res.code, err = err })
 				callback(nil, err)
 				return
 			end
@@ -137,23 +141,25 @@ end
 ---@param args string[]
 ---@param json_fields string[]
 ---@param callback fun(result: any, err: string|nil)
+---@param ctx table|nil
 ---@return { job_id: integer, cancel: fun() }|nil
-function M.gh_json(subcmd, args, json_fields, callback)
+function M.gh_json(subcmd, args, json_fields, callback, ctx)
 	local cmd_args = { subcmd }
 	vim.list_extend(cmd_args, args)
 	if #json_fields > 0 then
 		table.insert(cmd_args, "--json")
 		table.insert(cmd_args, table.concat(json_fields, ","))
 	end
-	return M.gh(cmd_args, callback)
+	return M.gh(cmd_args, callback, ctx)
 end
 
 ---@param method string
 ---@param endpoint string
 ---@param body table|nil
 ---@param callback fun(result: any, err: string|nil)
+---@param ctx table|nil
 ---@return { job_id: integer, cancel: fun() }|nil
-function M.api(method, endpoint, body, callback)
+function M.api(method, endpoint, body, callback, ctx)
 	local args = { "api", "-X", method, endpoint }
 
 	if body then
@@ -163,7 +169,7 @@ function M.api(method, endpoint, body, callback)
 		end
 	end
 
-	return M.gh(args, callback)
+	return M.gh(args, callback, ctx)
 end
 
 return M

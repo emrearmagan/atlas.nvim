@@ -1,6 +1,6 @@
 local M = {
 	issue = nil, ---@type Issue|nil
-	entries = nil, ---@type IssueHistoryEntry[]|nil
+	entries = nil, ---@type IssueActivityEntry[]|nil
 	is_loading = false,
 	line_map = {},
 }

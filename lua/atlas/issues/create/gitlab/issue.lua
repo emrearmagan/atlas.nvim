@@ -1,6 +1,6 @@
 local M = {}
 
-local editor = require("atlas.ui.popups.editor")
+local form = require("atlas.ui.popups.form")
 local spinner = require("atlas.ui.popups.spinner")
 local multi_select = require("atlas.ui.popups.multi_select")
 local pulls_helper = require("atlas.pulls.ui.main.helper")
@@ -21,18 +21,13 @@ local footer = require("atlas.ui.components.footer")
 ---@field name string
 ---@field color string|nil
 
----@class GitLabCreateIssueAssignee
----@field id integer
----@field username string
----@field name string|nil
-
 ---@class GitLabCreateIssueMilestone
 ---@field id integer
 ---@field title string
 
 ---@class GitLabCreateIssuePickers
 ---@field list_labels fun(on_done: fun(items: GitLabCreateIssueLabel[]|nil, err: string|nil))|nil
----@field list_assignees fun(on_done: fun(items: GitLabCreateIssueAssignee[]|nil, err: string|nil))|nil
+---@field list_assignees fun(on_done: fun(items: IssueUser[]|nil, err: string|nil))|nil
 ---@field list_milestones fun(on_done: fun(items: GitLabCreateIssueMilestone[]|nil, err: string|nil))|nil
 
 ---@class GitLabCreateIssueFields
@@ -40,7 +35,7 @@ local footer = require("atlas.ui.components.footer")
 ---@field title string
 ---@field body string
 ---@field labels GitLabCreateIssueLabel[]
----@field assignees GitLabCreateIssueAssignee[]
+---@field assignees IssueUser[]
 ---@field milestone GitLabCreateIssueMilestone|nil
 
 ---@class GitLabCreateIssueState
@@ -112,7 +107,7 @@ end
 ---@field key string|nil
 ---@field iid integer|nil
 
----@param assignees GitLabCreateIssueAssignee[]
+---@param assignees IssueUser[]
 ---@return string
 local function format_assignees(assignees)
 	if type(assignees) ~= "table" or #assignees == 0 then
@@ -121,7 +116,7 @@ local function format_assignees(assignees)
 
 	local parts = {}
 	for _, a in ipairs(assignees) do
-		table.insert(parts, "@" .. tostring(a.username or ""))
+		table.insert(parts, "@" .. tostring(a.account_id or ""))
 	end
 
 	return icons.general("user") .. " " .. table.concat(parts, ", ")
@@ -232,12 +227,12 @@ end
 
 ---@param issue_state GitLabCreateIssueState
 local function render_meta(issue_state)
-	editor.render_meta(issue_state, meta_rows(issue_state))
+	form.render_meta(issue_state, meta_rows(issue_state))
 end
 
 ---@param issue_state GitLabCreateIssueState
 local function close(issue_state)
-	editor.close(issue_state.layout)
+	form.close(issue_state.layout)
 	issue_state.layout = {}
 	issue_state.is_submitting = false
 end
@@ -279,10 +274,10 @@ local function pick_assignees(issue_state)
 				items = items,
 				selected = issue_state.fields.assignees,
 				key = function(item)
-					return tostring(item.id or "")
+					return tostring(item.id or item.account_id or "")
 				end,
 				format = function(item)
-					return string.format("%s %s (@%s)", icons.general("user"), item.name or item.username, item.username)
+					return string.format("%s %s (@%s)", icons.general("user"), item.display_name or item.account_id, item.account_id)
 				end,
 				prompt = "Toggle assignees:",
 				on_done = function(selected)
@@ -477,7 +472,7 @@ function M.open(opts)
 		on_done = opts.on_done,
 	}
 
-	editor.open(issue_state, {
+	form.open(issue_state, {
 		title = " Create Issue ",
 		min_height = 22,
 		meta_height = 3,

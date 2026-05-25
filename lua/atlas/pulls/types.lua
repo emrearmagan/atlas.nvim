@@ -157,14 +157,13 @@
 --------------------------------------------------------------------------------
 
 ---@class PullsActivityEntry
----@field kind "approval"|"changes_requested"|"comment"|"update"|"review"|string
+---@field kind string
 ---@field actor PullsAuthor|nil
 ---@field date string
----@field content_raw string|nil
+---@field label string|nil
+---@field body string|nil
 ---@field deleted boolean|nil
----@field changes table|nil
----@field source_branch string|nil
----@field target_branch string|nil
+---@field always_render boolean|nil
 
 --------------------------------------------------------------------------------
 -- Comment

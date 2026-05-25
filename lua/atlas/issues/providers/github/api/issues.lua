@@ -1,8 +1,7 @@
 local M = {}
 
 local cli = require("atlas.issues.providers.github.api.cli")
-local normalizer = require("atlas.issues.providers.github.api.normalizer")
-local logger = require("atlas.core.logger")
+local normalizer = require("atlas.issues.providers.github.api.mapper")
 
 local SEARCH_GQL = [[
 query($search: String!, $limit: Int!, $withRelationships: Boolean!) {
@@ -58,7 +57,7 @@ query($owner: String!, $repo: String!, $number: Int!, $withRelationships: Boolea
 
 fragment IssueFields on Issue {
   id number title state isPinned viewerSubscription
-  createdAt updatedAt closedAt url body
+  createdAt updatedAt closedAt url
   repository { nameWithOwner }
   author { login ... on User { name } }
   assignees(first: 10) { nodes { login name } }
@@ -71,36 +70,6 @@ fragment IssueFields on Issue {
   comments { totalCount }
 }
 ]]
-
----@class GitHubLabel
----@field name string
----@field color string|nil
----@field description string|nil
-
----@class GitHubAssignee
----@field login string
----@field name string|nil
-
----@class GitHubMilestone
----@field number integer
----@field title string
----@field state string|nil
----@field description string|nil
----@field progressPercentage number|nil
----@field openIssues { totalCount: integer }|nil
----@field closedIssues { totalCount: integer }|nil
-
----@class GitHubCreateIssueOpts
----@field repo_slug string
----@field title string
----@field body string|nil
----@field labels string[]|nil
----@field assignees string[]|nil
----@field milestone integer|nil
-
----@class GitHubCreateIssueResult
----@field number integer|nil
----@field url string|nil
 
 ---@param query string
 ---@return string
@@ -148,7 +117,6 @@ function M.search_issues(search, on_done, opts)
 		end
 	end
 
-	logger.loginfo("GitHub GraphQL issues search", { query = query, limit = limit })
 	return cli.gh({
 		"api",
 		"graphql",
@@ -171,10 +139,14 @@ function M.search_issues(search, on_done, opts)
 				and type(result.data.search) == "table"
 				and result.data.search.nodes
 			or nil
-		local issues = normalizer.normalize_graphql_search_results(type(nodes) == "table" and nodes or {})
+		local issues = normalizer.to_search_results(type(nodes) == "table" and nodes or {})
 		cli.set_cache(cache_key, issues)
 		on_done(issues, nil)
-	end)
+	end, {
+		action = "GraphQL issues search",
+		query = query,
+		limit = limit,
+	})
 end
 
 ---@param key string
@@ -205,7 +177,6 @@ function M.get_issue(key, on_done, opts)
 		return nil
 	end
 
-	logger.loginfo("GitHub fetch issue", { slug = slug, number = number })
 	return cli.gh({
 		"api",
 		"graphql",
@@ -229,12 +200,16 @@ function M.get_issue(key, on_done, opts)
 			and type(result.data.repository) == "table"
 			and result.data.repository.issue
 			or nil
-		local issue = normalizer.normalize_issue(type(raw) == "table" and raw or {}, slug)
+		local issue = normalizer.to_issue(type(raw) == "table" and raw or {}, slug)
 		if issue then
 			cli.set_mem(cache_key, issue)
 		end
 		on_done(issue, nil)
-	end)
+	end, {
+		action = "Fetch issue",
+		slug = slug,
+		number = number,
+	})
 end
 
 ---@param key string
@@ -249,7 +224,6 @@ function M.set_state(key, state, on_done)
 	end
 
 	local sub = state == "closed" and "close" or "reopen"
-	logger.loginfo("GitHub issue state change", { slug = slug, number = number, state = state })
 	return cli.gh({ "issue", sub, tostring(number), "--repo", slug }, function(_, err)
 		if err then
 			on_done(false, err)
@@ -257,7 +231,12 @@ function M.set_state(key, state, on_done)
 		end
 		cli.delete_cache(string.format("github_issues:get:%s#%d", slug, number))
 		on_done(true, nil)
-	end)
+	end, {
+		action = "Issue state change",
+		slug = slug,
+		number = number,
+		state = state,
+	})
 end
 
 ---@param key string
@@ -265,8 +244,9 @@ end
 ---@param add_flag string
 ---@param remove_flag string
 ---@param on_done fun(ok: boolean, err: string|nil)
+---@param ctx table|nil
 ---@return { cancel: fun() }|nil
-local function edit_issue_diff(key, diff, add_flag, remove_flag, on_done)
+local function edit_issue_diff(key, diff, add_flag, remove_flag, on_done, ctx)
 	local slug, number = normalizer.parse_key(key)
 	if slug == "" or number == nil then
 		on_done(false, "Invalid issue key")
@@ -297,7 +277,7 @@ local function edit_issue_diff(key, diff, add_flag, remove_flag, on_done)
 		end
 		cli.delete_cache(string.format("github_issues:get:%s#%d", slug, number))
 		on_done(true, nil)
-	end)
+	end, ctx)
 end
 
 ---@param key string
@@ -305,7 +285,12 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.update_assignees(key, diff, on_done)
-	return edit_issue_diff(key, diff, "--add-assignee", "--remove-assignee", on_done)
+	return edit_issue_diff(key, diff, "--add-assignee", "--remove-assignee", on_done, {
+		action = "Update issue assignees",
+		key = key,
+		add = diff and diff.add,
+		remove = diff and diff.remove,
+	})
 end
 
 ---@param key string
@@ -313,11 +298,16 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.update_labels(key, diff, on_done)
-	return edit_issue_diff(key, diff, "--add-label", "--remove-label", on_done)
+	return edit_issue_diff(key, diff, "--add-label", "--remove-label", on_done, {
+		action = "Update issue labels",
+		key = key,
+		add = diff and diff.add,
+		remove = diff and diff.remove,
+	})
 end
 
 ---@param slug string
----@param on_done fun(labels: GitHubLabel[]|nil, err: string|nil)
+---@param on_done fun(labels: { name: string, color: string|nil, description: string|nil }[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.list_labels(slug, on_done)
 	if type(slug) ~= "string" or slug == "" then
@@ -350,11 +340,14 @@ function M.list_labels(slug, on_done)
 			end
 		end
 		on_done(list, nil)
-	end)
+	end, {
+		action = "Fetch repo labels",
+		slug = slug,
+	})
 end
 
 ---@param slug string
----@param on_done fun(assignees: GitHubAssignee[]|nil, err: string|nil)
+---@param on_done fun(assignees: IssueUser[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.list_assignees(slug, on_done)
 	if type(slug) ~= "string" or slug == "" then
@@ -377,17 +370,27 @@ function M.list_assignees(slug, on_done)
 		local list = {}
 		if type(result) == "table" then
 			for _, raw in ipairs(result) do
-				if type(raw) == "table" and type(raw.login) == "string" then
-					table.insert(list, {
-						login = raw.login,
-						name = type(raw.name) == "string" and raw.name or nil,
-					})
+				local user = normalizer.to_user(raw)
+				if user then
+					table.insert(list, user)
 				end
 			end
 		end
 		on_done(list, nil)
-	end)
+	end, {
+		action = "Fetch repo assignees",
+		slug = slug,
+	})
 end
+
+---@class GitHubMilestone
+---@field number integer
+---@field title string
+---@field state string|nil
+---@field description string|nil
+---@field progressPercentage number|nil
+---@field openIssues { totalCount: integer }|nil
+---@field closedIssues { totalCount: integer }|nil
 
 ---@param slug string
 ---@param on_done fun(milestones: GitHubMilestone[]|nil, err: string|nil)
@@ -424,11 +427,22 @@ function M.list_milestones(slug, on_done)
 			end
 		end
 		on_done(list, nil)
-	end)
+	end, {
+		action = "Fetch repo milestones",
+		slug = slug,
+	})
 end
 
+---@class GitHubCreateIssueOpts
+---@field repo_slug string
+---@field title string
+---@field body string|nil
+---@field labels string[]|nil
+---@field assignees string[]|nil
+---@field milestone integer|nil
+
 ---@param opts GitHubCreateIssueOpts
----@param on_done fun(result: GitHubCreateIssueResult|nil, err: string|nil)
+---@param on_done fun(result: { number: integer|nil, url: string|nil }|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.create_issue(opts, on_done)
 	local slug = tostring(opts.repo_slug or "")
@@ -481,13 +495,6 @@ function M.create_issue(opts, on_done)
 		table.insert(args, tostring(opts.milestone))
 	end
 
-	logger.loginfo("github.create_issue", {
-		slug = slug,
-		labels = opts.labels,
-		assignees = opts.assignees,
-		milestone = opts.milestone,
-	})
-
 	return cli.gh(args, function(result, err)
 		if err then
 			on_done(nil, err)
@@ -505,7 +512,13 @@ function M.create_issue(opts, on_done)
 		end
 
 		on_done({ number = number, url = url }, nil)
-	end)
+	end, {
+		action = "Create issue",
+		slug = slug,
+		labels = opts.labels,
+		assignees = opts.assignees,
+		milestone = opts.milestone,
+	})
 end
 
 return M

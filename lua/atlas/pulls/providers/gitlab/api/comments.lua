@@ -2,8 +2,7 @@ local M = {}
 
 local service = require("atlas.pulls.providers.gitlab.api.service")
 local diff_parser = require("atlas.core.git.diff_parser")
-
-local HUNK_WINDOW = 4
+local mapper = require("atlas.pulls.providers.gitlab.api.mapper")
 
 ---@param pr PullRequest
 ---@return string project_path, integer|nil iid
@@ -12,52 +11,6 @@ local function project_iid(pr)
 	local path = tostring(raw.project_path or pr.repo_full_name or "")
 	local iid = tonumber(raw.iid or pr.id)
 	return path, iid
-end
-
----@param user any
-local function author_from(user)
-	if type(user) ~= "table" then
-		return nil
-	end
-	local username = tostring(user.username or "")
-	if username == "" then
-		return nil
-	end
-	return { name = tostring(user.name or username), nickname = username, id = tostring(user.id or "") }
-end
-
----@param hunk DiffHunk
----@param side "old"|"new"
----@param line integer
----@return DiffHunk|nil
-local function window_around(hunk, side, line)
-	local lines = hunk.lines or {}
-	local anchor_idx
-	for i, l in ipairs(lines) do
-		local target = side == "new" and l.new_line or l.old_line
-		if target == line then
-			anchor_idx = i
-			break
-		end
-	end
-	if not anchor_idx then
-		return hunk
-	end
-	local first = math.max(1, anchor_idx - HUNK_WINDOW)
-	local last = math.min(#lines, anchor_idx + HUNK_WINDOW)
-	local windowed = {}
-	for i = first, last do
-		table.insert(windowed, lines[i])
-	end
-	return {
-		header = hunk.header,
-		context = hunk.context,
-		old_start = hunk.old_start,
-		old_count = hunk.old_count,
-		new_start = hunk.new_start,
-		new_count = hunk.new_count,
-		lines = windowed,
-	}
 end
 
 ---@param files DiffFile[]
@@ -75,28 +28,6 @@ local function index_files(files)
 	return by_path
 end
 
----@param file DiffFile|nil
----@param side "old"|"new"
----@param line integer
----@return DiffHunk|nil
-local function find_hunk(file, side, line)
-	if file == nil or type(file.hunks) ~= "table" then
-		return nil
-	end
-	for _, h in ipairs(file.hunks) do
-		local start_, count
-		if side == "new" then
-			start_, count = h.new_start or 0, h.new_count or 0
-		else
-			start_, count = h.old_start or 0, h.old_count or 0
-		end
-		if line >= start_ and line <= start_ + count - 1 then
-			return window_around(h, side, line)
-		end
-	end
-	return nil
-end
-
 ---@param change table
 ---@return string
 local function rebuild_unified_diff(change)
@@ -108,56 +39,6 @@ local function rebuild_unified_diff(change)
 		header = header .. string.format("--- a/%s\n+++ b/%s\n", old_path, new_path)
 	end
 	return header .. body
-end
-
----@param note table
----@param discussion_first_id any
----@param discussion_id string|nil
----@param resolved boolean|nil
----@param files_by_path table<string, DiffFile>
----@return PullsComment
-local function normalize_note(note, discussion_first_id, discussion_id, resolved, files_by_path)
-	local position = type(note.position) == "table" and note.position or nil
-	local inline, inline_hunk
-	if position and tostring(position.position_type or "text") == "text" then
-		local new_line = tonumber(position.new_line)
-		local old_line = tonumber(position.old_line)
-		local side = new_line and "new" or "old"
-		local line = new_line or old_line
-		local path = tostring(position.new_path or position.old_path or "")
-		if path ~= "" and line ~= nil then
-			inline = {
-				path = path,
-				to = side == "new" and line or nil,
-				from = side == "old" and line or nil,
-			}
-			inline_hunk = find_hunk(files_by_path[path], side, line)
-		end
-	end
-
-	---@type "RESOLVED"|nil
-	local state = nil
-	if resolved == true then
-		state = "RESOLVED"
-	end
-
-	local raw_with_discussion = note
-	if type(discussion_id) == "string" and discussion_id ~= "" then
-		raw_with_discussion = vim.tbl_extend("force", {}, note, { discussion_id = discussion_id })
-	end
-
-	return {
-		id = note.id,
-		parent_id = (note.id ~= discussion_first_id) and discussion_first_id or nil,
-		author = author_from(note.author),
-		content_raw = tostring(note.body or ""),
-		created_on = tostring(note.created_at or ""),
-		inline = inline,
-		inline_hunk = inline_hunk,
-		is_task = nil,
-		state = state,
-		_raw = raw_with_discussion,
-	}
 end
 
 local GQL_DISCUSSIONS = [[
@@ -185,51 +66,6 @@ local GQL_DISCUSSIONS = [[
 		}
 	}
 ]]
-
----@param gql_note table
----@param first_id integer|nil
----@param discussion_id string
----@return PullsComment
-local function comment_from_gql(gql_note, first_id, discussion_id)
-	local note_id = tonumber(tostring(gql_note.id or ""):match("([^/]+)$") or "")
-	local author = type(gql_note.author) == "table" and gql_note.author or {}
-	local pos = type(gql_note.position) == "table" and gql_note.position or nil
-	local inline = nil
-	if pos and tostring(pos.positionType or "text") == "text" then
-		local new_line = tonumber(pos.newLine)
-		local old_line = tonumber(pos.oldLine)
-		local side = new_line and "new" or "old"
-		local line = new_line or old_line
-		local p = tostring(pos.newPath or pos.oldPath or "")
-		if p ~= "" and line ~= nil then
-			inline = { path = p, to = side == "new" and line or nil, from = side == "old" and line or nil }
-		end
-	end
-	local counts = {}
-	for _, e in ipairs(((gql_note.awardEmoji or {}).nodes or {})) do
-		local name = tostring(e.name or "")
-		if name ~= "" then
-			counts[name] = (counts[name] or 0) + 1
-		end
-	end
-	return {
-		id = note_id,
-		parent_id = (note_id ~= first_id) and first_id or nil,
-		author = type(author.username) == "string" and {
-			name = tostring(author.name or author.username),
-			nickname = author.username,
-			id = "",
-		} or nil,
-		content_raw = tostring(gql_note.body or ""),
-		created_on = tostring(gql_note.createdAt or ""),
-		inline = inline,
-		inline_hunk = nil,
-		is_task = nil,
-		state = gql_note.resolved == true and "RESOLVED" or nil,
-		reactions = counts,
-		_raw = { discussion_id = discussion_id },
-	}
-end
 
 ---@param pr PullRequest
 ---@param opts { force_refresh: boolean|nil }|nil
@@ -276,7 +112,7 @@ function M.fetch_general_comments(pr, opts, on_done)
 					local discussion_id = id_tail(d.id)
 					for _, n in ipairs(notes) do
 						if n.system ~= true then
-							table.insert(comments, comment_from_gql(n, first_id, discussion_id))
+							table.insert(comments, mapper.to_comment_from_gql(n, first_id, discussion_id))
 						end
 					end
 				end
@@ -355,7 +191,7 @@ function M.fetch_comments(pr, opts, on_done)
 						if note.system ~= true then
 							table.insert(
 								comments,
-								normalize_note(note, first.id, discussion_id, resolved, files_by_path)
+								mapper.to_comment(note, first.id, discussion_id, resolved, files_by_path)
 							)
 						end
 					end
@@ -460,7 +296,7 @@ function M.add_comment(pr, content, opts, on_done)
 		if parent and type(parent._raw) == "table" then
 			discussion_id = tostring(parent._raw.discussion_id or "")
 		end
-		on_done(normalize_note(result, first_id, discussion_id, false, {}), nil)
+		on_done(mapper.to_comment(result, first_id, discussion_id, false, {}), nil)
 	end)
 end
 
@@ -502,7 +338,7 @@ function M.edit_comment(pr, comment, on_done)
 		if type(comment._raw) == "table" then
 			discussion_id = tostring(comment._raw.discussion_id or "")
 		end
-		on_done(normalize_note(result, first_id, discussion_id, comment.state == "RESOLVED", {}), nil)
+		on_done(mapper.to_comment(result, first_id, discussion_id, comment.state == "RESOLVED", {}), nil)
 	end)
 end
 

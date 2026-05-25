@@ -3,7 +3,7 @@ local M = {}
 
 local footer = require("atlas.ui.components.footer")
 local icons = require("atlas.ui.shared.icons")
-local editor = require("atlas.ui.popups.editor")
+local form = require("atlas.ui.popups.form")
 local issue_helper = require("atlas.issues.create.jira.helper")
 local users_api = require("atlas.issues.providers.jira.api.users")
 local issues_api = require("atlas.issues.providers.jira.api.issues")
@@ -153,7 +153,7 @@ local function meta_rows()
 end
 
 local function render_meta()
-	editor.render_meta(state, meta_rows())
+	form.render_meta(state, meta_rows())
 end
 
 local function stop_loading_spinner_if_done()
@@ -190,7 +190,7 @@ local function close_ui()
 		state.spinner = nil
 	end
 
-	editor.close(state.layout)
+	form.close(state.layout)
 
 	state.layout = {
 		title_buf = nil,
@@ -650,7 +650,7 @@ function M.open(on_submit, opts, editor_opts)
 	local popup_title = is_edit and " Edit Issue " or " Create Issue "
 	local initial_desc = type(state.fields.description) == "string" and state.fields.description or ""
 
-	editor.open(state, {
+	form.open(state, {
 		title = popup_title,
 		min_height = 24,
 		meta_height = 2,

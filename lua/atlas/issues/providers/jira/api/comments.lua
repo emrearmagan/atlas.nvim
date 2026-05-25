@@ -1,8 +1,7 @@
 local M = {}
 
 local service = require("atlas.issues.providers.jira.api.service")
-local normalizer = require("atlas.issues.providers.jira.api.normalizer")
-local logger = require("atlas.core.logger")
+local normalizer = require("atlas.issues.providers.jira.api.mapper")
 local markdown = require("atlas.issues.providers.jira.converted.markdown")
 
 local PANEL_CACHE_TTL = 300
@@ -27,7 +26,6 @@ function M.get_comments_page(issue_key, start_at, max_results, callback, opts)
 		end
 	end
 
-	logger.loginfo("Jira fetch comments page", { issue_key = issue_key, start_at = start, max_results = size })
 	local endpoint = string.format("/issue/%s/comment?startAt=%d&maxResults=%d", issue_key, start, size)
 
 	return service.request("GET", endpoint, nil, function(result, err)
@@ -36,10 +34,15 @@ function M.get_comments_page(issue_key, start_at, max_results, callback, opts)
 			return
 		end
 
-		local comments = normalizer.normalize_comments(result, issue_key)
+		local comments = normalizer.to_comments_list(result, issue_key)
 		service.set_memory_cache(cache_key, comments, PANEL_CACHE_TTL)
 		callback(comments, nil)
-	end)
+	end, {
+		action = "Fetch comments page",
+		issue_key = issue_key,
+		start_at = start,
+		max_results = size,
+	})
 end
 
 ---@param issue_key string
@@ -63,7 +66,6 @@ function M.add_comment(issue_key, comment, opts, callback)
 		return nil
 	end
 
-	logger.loginfo("Jira add comment", { issue_key = issue_key })
 	local endpoint = string.format("/issue/%s/comment", issue_key)
 	local payload = { body = markdown.to_adf(body) }
 
@@ -82,9 +84,12 @@ function M.add_comment(issue_key, comment, opts, callback)
 		end
 
 		service.clear_memory_cache()
-		local comments = normalizer.normalize_comments({ comments = { result } }, issue_key)
+		local comments = normalizer.to_comments_list({ comments = { result } }, issue_key)
 		callback(comments[1], nil)
-	end)
+	end, {
+		action = "Add comment",
+		issue_key = issue_key,
+	})
 end
 
 ---@param issue_key string
@@ -109,7 +114,6 @@ function M.edit_comment(issue_key, comment_id, comment, callback)
 		return nil
 	end
 
-	logger.loginfo("Jira edit comment", { issue_key = issue_key, comment_id = id })
 	local endpoint = string.format("/issue/%s/comment/%s", issue_key, id)
 
 	return service.request("PUT", endpoint, { body = markdown.to_adf(body) }, function(result, err)
@@ -119,9 +123,13 @@ function M.edit_comment(issue_key, comment_id, comment, callback)
 		end
 
 		service.clear_memory_cache()
-		local comments = normalizer.normalize_comments({ comments = { result } }, issue_key)
+		local comments = normalizer.to_comments_list({ comments = { result } }, issue_key)
 		callback(comments[1], nil)
-	end)
+	end, {
+		action = "Edit comment",
+		issue_key = issue_key,
+		comment_id = id,
+	})
 end
 
 ---@param issue_key string
@@ -135,7 +143,6 @@ function M.delete_comment(issue_key, comment_id, callback)
 		return nil
 	end
 
-	logger.loginfo("Jira delete comment", { issue_key = issue_key, comment_id = id })
 	local endpoint = string.format("/issue/%s/comment/%s", issue_key, id)
 
 	return service.request("DELETE", endpoint, nil, function(_, err)
@@ -145,7 +152,11 @@ function M.delete_comment(issue_key, comment_id, callback)
 		end
 		service.clear_memory_cache()
 		callback(true, nil)
-	end)
+	end, {
+		action = "Delete comment",
+		issue_key = issue_key,
+		comment_id = id,
+	})
 end
 
 return M

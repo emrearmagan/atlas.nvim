@@ -5,7 +5,6 @@
 ---@class IssueUser
 ---@field account_id string
 ---@field display_name string
----@field email string
 
 --------------------------------------------------------------------------------
 -- Project
@@ -89,21 +88,34 @@
 ---@field parent_id string|number|nil
 ---@field children IssueComment[]|nil
 ---@field reactions table<string, number>|nil
+---@field deleted boolean|nil
 
 --------------------------------------------------------------------------------
 -- History
 --------------------------------------------------------------------------------
 
----@class IssueHistoryItem
----@field field string|nil
----@field field_type string|nil
----@field from string|nil
----@field from_string string|nil
----@field to string|nil
----@field to_string string|nil
+--------------------------------------------------------------------------------
+-- Activity / reactions
+--------------------------------------------------------------------------------
 
----@class IssueHistoryEntry
----@field id string
----@field created string|nil
----@field author IssueUser|nil
----@field items IssueHistoryItem[]
+---@class IssueActivityBodyHlSpan
+---@field start_col integer
+---@field end_col integer
+---@field hl_group string
+
+---@alias IssueActivityBodyHlFn fun(row: string, row_index: integer): IssueActivityBodyHlSpan[]|nil
+
+---@class IssueActivityEntry
+---@field kind string
+---@field actor IssueUser|nil
+---@field date string|nil
+---@field label string|nil
+---@field body string|nil
+---@field body_hl IssueActivityBodyHlFn|nil
+---@field deleted boolean|nil
+---@field always_render boolean|nil
+
+---@class IssueReactionOption
+---@field key string
+---@field emoji string
+---@field label string

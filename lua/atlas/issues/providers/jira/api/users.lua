@@ -2,7 +2,6 @@ local M = {}
 
 local service = require("atlas.issues.providers.jira.api.service")
 local cache = require("atlas.core.cache")
-local logger = require("atlas.core.logger")
 
 ---@param str string
 ---@return string
@@ -22,7 +21,6 @@ function M.get_myself(callback)
 		return nil
 	end
 
-	logger.loginfo("Jira fetch current user")
 	return service.request("GET", "/myself", nil, function(result, err)
 		if err or not result then
 			callback(nil, err or "Empty response")
@@ -32,12 +30,13 @@ function M.get_myself(callback)
 		local user = {
 			account_id = tostring(result.accountId or ""),
 			display_name = tostring(result.displayName or ""),
-			email = tostring(result.emailAddress or ""),
 		}
 
 		cache.set(cache_key, user, service.cache_ttl())
 		callback(user, nil)
-	end)
+	end, {
+		action = "Fetch current user",
+	})
 end
 
 ---@param opts { project: string|nil, issue_key: string|nil }
@@ -64,12 +63,6 @@ function M.get_assignable_users(opts, query, callback)
 	end
 	local endpoint = "/user/assignable/search?" .. table.concat(params, "&")
 
-	logger.loginfo("Jira fetch assignable users", {
-		issue_key = issue_key,
-		project = project,
-		query = q,
-	})
-
 	return service.request("GET", endpoint, nil, function(result, err)
 		if err ~= nil or type(result) ~= "table" then
 			callback(nil, err or "Empty response")
@@ -82,13 +75,17 @@ function M.get_assignable_users(opts, query, callback)
 				table.insert(users, {
 					account_id = tostring(raw.accountId or ""),
 					display_name = tostring(raw.displayName or ""),
-					email = tostring(raw.emailAddress or ""),
 				})
 			end
 		end
 
 		callback(users, nil)
-	end)
+	end, {
+		action = "Fetch assignable users",
+		issue_key = issue_key,
+		project = project,
+		query = q,
+	})
 end
 
 ---@param opts { permissions?: string[]|nil, project_ids?: integer[]|nil, issue_ids?: integer[]|nil, account_id?: string|nil }
@@ -142,13 +139,6 @@ function M.get_permissions_bulk(opts, callback)
 		payload.accountId = opts.account_id
 	end
 
-	logger.loginfo("Jira fetch bulk permissions", {
-		permissions = permissions_list,
-		project_count = #project_ids,
-		issue_count = #issue_ids,
-		account_id = opts.account_id,
-	})
-
 	return service.request("POST", "/permissions/check", payload, function(result, err)
 		if err ~= nil or type(result) ~= "table" then
 			callback(nil, err or "Empty response")
@@ -171,7 +161,13 @@ function M.get_permissions_bulk(opts, callback)
 		end
 
 		callback(permissions, nil)
-	end)
+	end, {
+		action = "Fetch bulk permissions",
+		permissions = permissions_list,
+		project_count = #project_ids,
+		issue_count = #issue_ids,
+		account_id = opts.account_id,
+	})
 end
 
 ---@param issue_key string
@@ -189,7 +185,6 @@ function M.assign_issue(issue_key, account_id, callback)
 		normalized_account_id = account_id
 	end
 
-	logger.loginfo("Jira assign issue", { issue_key = issue_key, unassign = normalized_account_id == nil })
 	local endpoint = string.format("/issue/%s/assignee", issue_key)
 	local payload = { accountId = normalized_account_id or vim.NIL }
 
@@ -200,7 +195,11 @@ function M.assign_issue(issue_key, account_id, callback)
 		end
 
 		callback(true, nil)
-	end)
+	end, {
+		action = "Assign issue",
+		issue_key = issue_key,
+		unassign = normalized_account_id == nil,
+	})
 end
 
 ---@param issue_key string
@@ -218,7 +217,6 @@ function M.change_reporter(issue_key, account_id, callback)
 		return nil
 	end
 
-	logger.loginfo("Jira change reporter", { issue_key = issue_key })
 	local endpoint = string.format("/issue/%s", issue_key)
 	local payload = {
 		fields = {
@@ -235,7 +233,10 @@ function M.change_reporter(issue_key, account_id, callback)
 		end
 
 		callback(true, nil)
-	end)
+	end, {
+		action = "Change reporter",
+		issue_key = issue_key,
+	})
 end
 
 return M

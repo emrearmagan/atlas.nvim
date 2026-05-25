@@ -1,8 +1,7 @@
 local M = {}
 
 local cli = require("atlas.issues.providers.github.api.cli")
-local normalizer = require("atlas.issues.providers.github.api.normalizer")
-local logger = require("atlas.core.logger")
+local normalizer = require("atlas.issues.providers.github.api.mapper")
 
 ---@param key string
 ---@param on_done fun(comments: IssueComment[]|nil, err: string|nil)
@@ -25,7 +24,6 @@ function M.list(key, on_done, opts)
 		end
 	end
 
-	logger.loginfo("GitHub fetch issue comments", { slug = slug, number = number })
 	return cli.gh(
 		{ "api", "--paginate", string.format("repos/%s/issues/%d/comments", slug, number) },
 		function(result, err)
@@ -33,10 +31,15 @@ function M.list(key, on_done, opts)
 				on_done(nil, err)
 				return
 			end
-			local comments = normalizer.normalize_comments(type(result) == "table" and result or {})
+			local comments = normalizer.to_comments_list(type(result) == "table" and result or {})
 			cli.set_mem(cache_key, comments)
 			on_done(comments, nil)
-		end
+		end,
+		{
+			action = "Fetch issue comments",
+			slug = slug,
+			number = number,
+		}
 	)
 end
 
@@ -66,8 +69,13 @@ function M.add(key, body, on_done)
 			end
 			cli.delete_cache(string.format("github_issues:comments:%s#%d", slug, number))
 			cli.delete_cache(string.format("github_issues:conversation:%s#%d", slug, number))
-			on_done(normalizer.normalize_comment(result), nil)
-		end
+			on_done(normalizer.to_comment(result), nil)
+		end,
+		{
+			action = "Add issue comment",
+			slug = slug,
+			number = number,
+		}
 	)
 end
 
@@ -101,8 +109,13 @@ function M.edit(key, comment_id, body, on_done)
 				cli.delete_cache(string.format("github_issues:comments:%s#%d", slug, number))
 				cli.delete_cache(string.format("github_issues:conversation:%s#%d", slug, number))
 			end
-			on_done(normalizer.normalize_comment(result), nil)
-		end
+			on_done(normalizer.to_comment(result), nil)
+		end,
+		{
+			action = "Edit issue comment",
+			slug = slug,
+			comment_id = comment_id,
+		}
 	)
 end
 
@@ -131,7 +144,12 @@ function M.delete(key, comment_id, on_done)
 				cli.delete_cache(string.format("github_issues:conversation:%s#%d", slug, number))
 			end
 			on_done(true, nil)
-		end
+		end,
+		{
+			action = "Delete issue comment",
+			slug = slug,
+			comment_id = comment_id,
+		}
 	)
 end
 

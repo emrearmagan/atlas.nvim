@@ -3,7 +3,7 @@ local M = {}
 ---@return string[]
 local function collect_logins()
 	local panel_state = require("atlas.pulls.ui.panel.pr.state")
-	local comments_state = require("atlas.pulls.ui.panel.pr.tabs.comments.state")
+	local comments_state = require("atlas.pulls.ui.panel.pr.tabs.review.state")
 	local conversation_state = require("atlas.pulls.ui.panel.pr.tabs.conversation.state")
 
 	local seen, logins = {}, {}
@@ -32,15 +32,19 @@ local function collect_logins()
 		end
 	end
 
-	if type(comments_state.comments) == "table" then
-		for _, c in ipairs(comments_state.comments) do
+	local cc = comments_state.comments
+	if type(cc) == "table" then
+		---@cast cc PullsComment[]
+		for _, c in ipairs(cc) do
 			if c.author then
 				add(c.author.nickname or c.author.name)
 			end
 		end
 	end
-	if type(conversation_state.comments) == "table" then
-		for _, c in ipairs(conversation_state.comments) do
+	local conv = conversation_state.comments
+	if type(conv) == "table" then
+		---@cast conv PullsComment[]
+		for _, c in ipairs(conv) do
 			if c.author then
 				add(c.author.nickname or c.author.name)
 			end
@@ -77,6 +81,10 @@ function M.build_completion()
 				return tostring(a.abbr or "") < tostring(b.abbr or "")
 			end)
 			return matches
+		end,
+		format_mention = function(author)
+			local handle = tostring((author or {}).nickname or (author or {}).username or (author or {}).name or "")
+			return handle ~= "" and ("@" .. handle) or ""
 		end,
 	}
 end

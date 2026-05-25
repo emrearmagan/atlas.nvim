@@ -13,8 +13,10 @@ local level_hl = {
 
 local LOGS_BUFFER_NAME = "atlas://logs"
 local LOGS_RENDER_WIDTH = 10000
+local REFRESH_INTERVAL_MS = 2000
 local logs_buf = nil
 local logs_win = nil
+local refresh_timer = nil
 
 ---@return integer|nil
 function M.win_id()
@@ -133,6 +135,35 @@ local function refresh_buffer()
 	end
 end
 
+local function stop_refresh_timer()
+	if refresh_timer ~= nil then
+		if not refresh_timer:is_closing() then
+			refresh_timer:stop()
+			refresh_timer:close()
+		end
+		refresh_timer = nil
+	end
+end
+
+local function start_refresh_timer()
+	stop_refresh_timer()
+	refresh_timer = vim.loop.new_timer()
+	if refresh_timer == nil then
+		return
+	end
+	refresh_timer:start(
+		REFRESH_INTERVAL_MS,
+		REFRESH_INTERVAL_MS,
+		vim.schedule_wrap(function()
+			if logs_win == nil or not vim.api.nvim_win_is_valid(logs_win) then
+				stop_refresh_timer()
+				return
+			end
+			refresh_buffer()
+		end)
+	)
+end
+
 local function move_cursor_to_last_line()
 	if logs_win == nil or not vim.api.nvim_win_is_valid(logs_win) then
 		return
@@ -157,6 +188,7 @@ function M.open()
 		vim.api.nvim_set_current_win(logs_win)
 		refresh_buffer()
 		move_cursor_to_last_line()
+		start_refresh_timer()
 		return
 	end
 
@@ -187,9 +219,11 @@ function M.open()
 	refresh_buffer()
 	move_cursor_to_last_line()
 	vim.api.nvim_set_current_win(logs_win)
+	start_refresh_timer()
 end
 
 function M.close()
+	stop_refresh_timer()
 	if logs_win ~= nil and vim.api.nvim_win_is_valid(logs_win) then
 		vim.api.nvim_win_close(logs_win, true)
 	end

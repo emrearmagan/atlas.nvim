@@ -116,43 +116,15 @@ end
 ---@param _issue Issue
 ---@return boolean
 function M.is_loading(_issue)
-	local overview_state = require("atlas.issues.ui.panel.issue.tabs.overview.state")
-	local comments_state = require("atlas.issues.ui.panel.issue.tabs.comments.state")
+	local conversation_state = require("atlas.issues.ui.panel.issue.tabs.conversation.state")
 	local history_state = require("atlas.issues.ui.panel.issue.tabs.activity.state")
-	return overview_state.description_loading == true
-		or (type(comments_state.any_loading) == "function" and comments_state.any_loading())
+	return (type(conversation_state.any_loading) == "function" and conversation_state.any_loading())
 		or (type(history_state.any_loading) == "function" and history_state.any_loading())
-end
-
----@param item IssueHistoryItem
----@return { label: string, content: string|nil }
-function M.format_history_item(item)
-	local body = tostring(item.to_string or item.from_string or item.field or "")
-	return { label = body, content = nil }
 end
 
 ---@return IssuesPanelTab[]
 function M.tabs()
-	return {
-		{
-			key = "overview",
-			label = "Overview",
-			icon = icons.general("overview"),
-			mod = require("atlas.issues.ui.panel.issue.tabs.overview"),
-		},
-		{
-			key = "comments",
-			label = "Comments",
-			icon = icons.general("comment"),
-			mod = require("atlas.issues.ui.panel.issue.tabs.comments"),
-		},
-		{
-			key = "history",
-			label = "History",
-			icon = icons.pulls("activity"),
-			mod = require("atlas.issues.ui.panel.issue.tabs.activity"),
-		},
-	}
+	return {}
 end
 
 return M

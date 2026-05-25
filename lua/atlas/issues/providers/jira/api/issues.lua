@@ -1,7 +1,7 @@
 local M = {}
 
 local service = require("atlas.issues.providers.jira.api.service")
-local normalizer = require("atlas.issues.providers.jira.api.normalizer")
+local normalizer = require("atlas.issues.providers.jira.api.mapper")
 local cache = require("atlas.core.cache")
 local logger = require("atlas.core.logger")
 
@@ -62,8 +62,6 @@ function M.search_issues(jql, on_done, opts)
 		end
 	end
 
-	logger.loginfo("Jira search issues", { jql = jql })
-
 	local data = {
 		jql = jql,
 		fields = search_fields(),
@@ -78,7 +76,7 @@ function M.search_issues(jql, on_done, opts)
 		end
 
 		local page = {
-			issues = normalizer.normalize_issues(result.issues or {}, story_points_field()),
+			issues = normalizer.to_issues_list(result.issues or {}, story_points_field()),
 			nextPageToken = result.nextPageToken,
 			isLast = result.isLast == true,
 		}
@@ -90,7 +88,10 @@ function M.search_issues(jql, on_done, opts)
 			is_last = page.isLast,
 		})
 		on_done(page, nil)
-	end)
+	end, {
+		action = "Search issues",
+		jql = jql,
+	})
 end
 
 ---@class JiraIssuePickerItem
@@ -116,7 +117,6 @@ function M.search_issue(query, on_done, opts)
 	end
 
 	local endpoint = "/issue/picker?query=" .. url_encode(q) .. "&showSubTasks=true&showSubTaskParent=true"
-	logger.loginfo("Jira issue picker search", { query = q })
 
 	return service.request("GET", endpoint, nil, function(result, err)
 		if err ~= nil or type(result) ~= "table" then
@@ -144,7 +144,10 @@ function M.search_issue(query, on_done, opts)
 
 		service.set_memory_cache(cache_key, items)
 		on_done(items, nil)
-	end)
+	end, {
+		action = "Issue picker search",
+		query = q,
+	})
 end
 
 ---@param issue_key string
@@ -156,7 +159,6 @@ function M.get_issue(issue_key, callback)
 		return nil
 	end
 
-	logger.loginfo("Jira fetch issue", { issue_key = issue_key })
 	local endpoint = string.format("/issue/%s?fields=%s", issue_key, table.concat(search_fields(), ","))
 
 	return service.request("GET", endpoint, nil, function(result, err)
@@ -165,14 +167,17 @@ function M.get_issue(issue_key, callback)
 			return
 		end
 
-		callback(normalizer.normalize_issue(result, story_points_field()), nil)
-	end)
+		callback(normalizer.to_issue(result, story_points_field()), nil)
+	end, {
+		action = "Fetch issue",
+		issue_key = issue_key,
+	})
 end
 
 ---@param issue_key string
 ---@param start_at number|nil
 ---@param max_results number|nil
----@param on_done fun(page: { values: IssueHistoryEntry[], total: number, is_last: boolean }|nil, err: string|nil)
+---@param on_done fun(page: { values: IssueActivityEntry[], total: number, is_last: boolean }|nil, err: string|nil)
 ---@param opts { force_load?: boolean }|nil
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.get_issue_history_page(issue_key, start_at, max_results, on_done, opts)
@@ -194,12 +199,6 @@ function M.get_issue_history_page(issue_key, start_at, max_results, on_done, opt
 		end
 	end
 
-	logger.loginfo("Jira fetch issue history page", {
-		issue_key = issue_key,
-		start_at = start,
-		max_results = size,
-	})
-
 	local endpoint = string.format("/issue/%s/changelog?startAt=%d&maxResults=%d", issue_key, start, size)
 
 	return service.request("GET", endpoint, nil, function(result, err)
@@ -208,10 +207,15 @@ function M.get_issue_history_page(issue_key, start_at, max_results, on_done, opt
 			return
 		end
 
-		local page = normalizer.normalize_issue_history_page(result, start, size)
+		local page = normalizer.to_history_page(result, start, size)
 		service.set_memory_cache(cache_key, page, CACHE_TTL)
 		on_done(page, nil)
-	end)
+	end, {
+		action = "Fetch issue history page",
+		issue_key = issue_key,
+		start_at = start,
+		max_results = size,
+	})
 end
 
 ---@class JiraIssueDetailResult
@@ -251,7 +255,6 @@ function M.get_issue_detail(issue_key, on_done, opts)
 		end
 	end
 
-	logger.loginfo("Jira fetch issue detail", { issue_key = issue_key, fields = fields })
 	local data = {
 		jql = "key = " .. issue_key,
 		fields = fields,
@@ -292,7 +295,11 @@ function M.get_issue_detail(issue_key, on_done, opts)
 
 		service.set_memory_cache(cache_key, detail, CACHE_TTL)
 		on_done(detail, nil)
-	end)
+	end, {
+		action = "Fetch issue detail",
+		issue_key = issue_key,
+		fields = fields,
+	})
 end
 
 ---@param issue_key string
@@ -324,8 +331,6 @@ function M.get_custom_fields(issue_key, fields, on_done, opts)
 		end
 	end
 
-	logger.loginfo("Jira fetch custom fields", { issue_key = issue_key, fields = fields })
-
 	return service.request("POST", "/search/jql", {
 		jql = "key = " .. issue_key,
 		fields = fields,
@@ -344,7 +349,11 @@ function M.get_custom_fields(issue_key, fields, on_done, opts)
 
 		service.set_memory_cache(cache_key, values, CACHE_TTL)
 		on_done(values, nil)
-	end)
+	end, {
+		action = "Fetch custom fields",
+		issue_key = issue_key,
+		fields = fields,
+	})
 end
 
 ---@param issue_key string
@@ -386,8 +395,6 @@ function M.create_issue(fields, callback)
 		return nil
 	end
 
-	logger.loginfo("Jira create issue", { summary = fields.summary })
-
 	local payload = { fields = fields }
 
 	return service.request("POST", "/issue", payload, function(result, err)
@@ -406,7 +413,10 @@ function M.create_issue(fields, callback)
 			id = result.id,
 			self = result.self,
 		}, nil)
-	end)
+	end, {
+		action = "Create issue",
+		summary = fields.summary,
+	})
 end
 
 ---@param issue_key string
@@ -428,7 +438,6 @@ function M.update_issue(issue_key, fields, callback)
 		return nil
 	end
 
-	logger.loginfo("Jira update issue", { issue_key = issue_key })
 	local endpoint = string.format("/issue/%s", issue_key)
 	local payload = { fields = fields }
 
@@ -439,7 +448,10 @@ function M.update_issue(issue_key, fields, callback)
 		end
 
 		callback(true, nil)
-	end)
+	end, {
+		action = "Update issue",
+		issue_key = issue_key,
+	})
 end
 
 ---@param issue_key string
@@ -455,7 +467,6 @@ function M.delete_issue(issue_key, callback)
 		return nil
 	end
 
-	logger.loginfo("Jira delete issue", { issue_key = issue_key })
 	local endpoint = string.format("/issue/%s", issue_key)
 
 	return service.request("DELETE", endpoint, nil, function(_, err)
@@ -465,7 +476,10 @@ function M.delete_issue(issue_key, callback)
 		end
 
 		callback(true, nil)
-	end)
+	end, {
+		action = "Delete issue",
+		issue_key = issue_key,
+	})
 end
 
 ---@param project_key string
@@ -479,7 +493,6 @@ function M.get_create_meta(project_key, callback)
 
 	local escaped_key = vim.fn.escape(project_key, "&=?")
 	local endpoint = string.format("/issue/createmeta?projectKeys=%s&expand=projects.issuetypes", escaped_key)
-	logger.loginfo("Jira fetch create metadata", { project_key = project_key })
 
 	return service.request("GET", endpoint, nil, function(result, err)
 		if err ~= nil or type(result) ~= "table" then
@@ -510,14 +523,17 @@ function M.get_create_meta(project_key, callback)
 
 		local issue_types = {}
 		for _, raw in ipairs(raw_types) do
-			local issue_type = normalizer.normalize_issue_type(raw)
+			local issue_type = normalizer.to_issue_type(raw)
 			if issue_type ~= nil then
 				table.insert(issue_types, issue_type)
 			end
 		end
 
 		callback(issue_types, nil)
-	end)
+	end, {
+		action = "Fetch create metadata",
+		project_key = project_key,
+	})
 end
 
 return M

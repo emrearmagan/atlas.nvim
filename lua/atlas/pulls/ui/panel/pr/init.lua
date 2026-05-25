@@ -113,6 +113,13 @@ local function refresh_panel()
 	end
 end
 
+local function scroll_to_top()
+	local win = layout.win_id("detail")
+	if win and vim.api.nvim_win_is_valid(win) then
+		vim.api.nvim_win_set_cursor(win, { 1, 0 })
+	end
+end
+
 local function activate_current_tab()
 	local buf = layout.buf_id("detail")
 	local tab = get_tab(panel_state.current_tab)
@@ -212,7 +219,7 @@ local function reset_pr_tab_data()
 	reset_state("atlas.pulls.ui.panel.pr.tabs.activity.state")
 	reset_state("atlas.pulls.ui.panel.pr.tabs.commits.state")
 	reset_state("atlas.pulls.ui.panel.pr.tabs.files.state")
-	reset_state("atlas.pulls.ui.panel.pr.tabs.comments.state")
+	reset_state("atlas.pulls.ui.panel.pr.tabs.review.state")
 end
 
 --------------------------------------------------------------------------------
@@ -303,6 +310,7 @@ function M.next_tab()
 	end
 
 	M.render()
+	scroll_to_top()
 end
 
 function M.prev_tab()
@@ -330,6 +338,7 @@ function M.prev_tab()
 	end
 
 	M.render()
+	scroll_to_top()
 end
 
 function M.close()

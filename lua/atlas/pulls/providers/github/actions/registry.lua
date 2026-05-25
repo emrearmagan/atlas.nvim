@@ -619,7 +619,7 @@ local ACTIONS = {
 					local login = type(node) == "table" and tostring(node.login or "") or ""
 					if login ~= "" and not original_set[login] then
 						original_set[login] = true
-						table.insert(original, { login = login, name = login })
+						table.insert(original, { account_id = login, display_name = login, email = "" })
 					end
 				end
 
@@ -627,20 +627,20 @@ local ACTIONS = {
 					items = items,
 					selected = vim.deepcopy(original),
 					key = function(item)
-						return item.login
+						return item.account_id
 					end,
 					format = function(item)
 						return string.format(
 							"@%s%s",
-							item.login,
-							item.name and item.name ~= item.login and (" — " .. item.name) or ""
+							item.account_id,
+							item.display_name and item.display_name ~= item.account_id and (" — " .. item.display_name) or ""
 						)
 					end,
 					prompt = string.format("Assignees for PR #%s:", tostring(pr.id or "")),
 					on_done = function(selected)
 						local selected_set = {}
 						for _, it in ipairs(selected) do
-							selected_set[it.login] = true
+							selected_set[it.account_id] = true
 						end
 
 						local adds, removes = {}, {}
