@@ -132,6 +132,32 @@ function M.register(buf)
 		})
 	)
 
+	utils.insert_if(items, item("ui.toggle_subscription", {
+		desc = "Toggle subscription",
+		opts = { nowait = true, silent = true },
+		callback = function()
+			local issue = panel_state.current_issue
+			if issue == nil then
+				return
+			end
+			local provider = require("atlas.issues.state").provider
+			if provider == nil or type(provider.toggle_subscription) ~= "function" then
+				require("atlas.ui.components.footer").notify("warn", "Provider does not support subscription")
+				return
+			end
+			local footer = require("atlas.ui.components.footer")
+			footer.notify("loading", issue.is_subscribed and "Unsubscribing..." or "Subscribing...")
+			provider.toggle_subscription(issue, function(is_subscribed, err)
+				if err then
+					footer.notify("error", tostring(err))
+					return
+				end
+				footer.notify("success", is_subscribed and "Subscribed" or "Unsubscribed", 1200)
+				require("atlas.issues.ui.panel").render()
+			end)
+		end,
+	}))
+
 	M.remove(buf)
 	help.register("Panel", items, { index = 211, buffer = buf })
 
