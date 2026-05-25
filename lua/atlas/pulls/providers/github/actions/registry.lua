@@ -100,8 +100,8 @@ local ACTIONS = {
 		end,
 	},
 	{
-		id = "approve",
-		label = "Approve",
+		id = "toggle_approval",
+		label = "Approve / Unapprove",
 		is_available = function(ctx)
 			if not has_pr(ctx) or ctx.pr == nil then
 				return false, "No PR selected"
@@ -118,23 +118,96 @@ local ACTIONS = {
 				return
 			end
 
-			footer.notify("loading", "Approving PR...")
+			local slug = repo_slug(ctx)
+			local owner, name = slug:match("^([^/]+)/(.+)$")
+			if not owner or not name then
+				done(nil, "Invalid repository slug")
+				return
+			end
+
+			footer.notify("loading", "Checking approval...")
+
+			local gql = [[
+				query($owner: String!, $name: String!, $number: Int!) {
+					repository(owner: $owner, name: $name) {
+						pullRequest(number: $number) {
+							viewerLatestReview {
+								databaseId
+								state
+							}
+						}
+					}
+				}
+			]]
+
 			cli.gh({
-				"pr",
-				"review",
-				tostring(pr.id),
-				"--repo",
-				repo_slug(ctx),
-				"--approve",
-			}, function(_, err)
+				"api",
+				"graphql",
+				"-f",
+				"owner=" .. owner,
+				"-f",
+				"name=" .. name,
+				"-F",
+				"number=" .. tostring(pr.id),
+				"-f",
+				"query=" .. gql,
+			}, function(result, err)
 				if err then
-					footer.notify("error", string.format("Approve failed: %s", tostring(err)))
+					footer.notify("error", tostring(err))
 					done(nil, tostring(err))
 					return
 				end
 
-				footer.notify("success", "PR approved", 1200)
-				done({ changed_pr = true, message = "Approved" }, nil)
+				local review = ((((result or {}).data or {}).repository or {}).pullRequest or {}).viewerLatestReview
+				local own_active_id = nil
+				local own_active_state = nil
+				if type(review) == "table" then
+					local state = tostring(review.state or ""):upper()
+					if state == "APPROVED" or state == "CHANGES_REQUESTED" then
+						own_active_id = review.databaseId
+						own_active_state = state
+					end
+				end
+
+				if own_active_id ~= nil then
+					local loading_msg = own_active_state == "APPROVED" and "Unapproving PR..."
+						or "Dismissing changes request..."
+					local success_msg = own_active_state == "APPROVED" and "PR unapproved"
+						or "Changes request dismissed"
+					footer.notify("loading", loading_msg)
+					cli.gh({
+						"api",
+						"-X",
+						"PUT",
+						string.format(
+							"repos/%s/pulls/%s/reviews/%s/dismissals",
+							slug,
+							tostring(pr.id),
+							tostring(own_active_id)
+						),
+						"-f",
+						"message=Dismissed by reviewer",
+					}, function(_, dismiss_err)
+						if dismiss_err then
+							footer.notify("error", string.format("Dismiss failed: %s", tostring(dismiss_err)))
+							done(nil, tostring(dismiss_err))
+							return
+						end
+						footer.notify("success", success_msg, 1200)
+						done({ changed_pr = true, message = success_msg }, nil)
+					end)
+				else
+					footer.notify("loading", "Approving PR...")
+					cli.gh({ "pr", "review", tostring(pr.id), "--repo", slug, "--approve" }, function(_, approve_err)
+						if approve_err then
+							footer.notify("error", string.format("Approve failed: %s", tostring(approve_err)))
+							done(nil, tostring(approve_err))
+							return
+						end
+						footer.notify("success", "PR approved", 1200)
+						done({ changed_pr = true, message = "Approved" }, nil)
+					end)
+				end
 			end)
 		end,
 	},
@@ -873,6 +946,46 @@ local ACTIONS = {
 					end)
 				end)
 			end)
+		end,
+	},
+	{
+		id = "toggle_subscription",
+		label = "Toggle subscription",
+		is_available = function(ctx)
+			if not has_pr(ctx) or ctx.pr == nil then
+				return false, "No PR selected"
+			end
+			local raw = type(ctx.pr._raw) == "table" and ctx.pr._raw or {}
+			if tostring(raw.id or "") == "" then
+				return false, "Missing PR node id"
+			end
+			return true, nil
+		end,
+		run = function(ctx, done)
+			local pr = ctx.pr
+			if pr == nil then
+				done(nil, "No PR selected")
+				return
+			end
+			local raw = type(pr._raw) == "table" and pr._raw or {}
+			local node_id = tostring(raw.id or "")
+			local next_state = pr.is_subscribed == true and "UNSUBSCRIBED" or "SUBSCRIBED"
+			local gql =
+				"mutation($id: ID!, $state: SubscriptionState!) { updateSubscription(input: { subscribableId: $id, state: $state }) { subscribable { ... on PullRequest { viewerSubscription } } } }"
+			footer.notify("loading", pr.is_subscribed and "Unsubscribing..." or "Subscribing...")
+			cli.gh(
+				{ "api", "graphql", "-F", "id=" .. node_id, "-f", "state=" .. next_state, "-f", "query=" .. gql },
+				function(_, err)
+					if err then
+						footer.notify("error", tostring(err))
+						done(nil, tostring(err))
+						return
+					end
+					pr.is_subscribed = (next_state == "SUBSCRIBED")
+					footer.notify("success", pr.is_subscribed and "Subscribed" or "Unsubscribed", 1200)
+					done({ changed_pr = true, message = pr.is_subscribed and "Subscribed" or "Unsubscribed" }, nil)
+				end
+			)
 		end,
 	},
 }

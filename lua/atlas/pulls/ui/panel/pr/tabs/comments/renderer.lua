@@ -7,24 +7,19 @@ local threads = require("atlas.ui.components.threadsv2")
 local changes_block = require("atlas.pulls.ui.components.changes_block")
 local items = require("atlas.pulls.ui.panel.pr.tabs.comments.items")
 local helper = require("atlas.pulls.ui.main.helper")
+local state = require("atlas.pulls.ui.panel.pr.tabs.comments.state")
 
 local PADDING_X = 1
-
----@param root PullsComment
----@return boolean
-local function is_collapsed_state(root)
-	return root.state == "DELETED" or root.state == "RESOLVED" or root.state == "OUTDATED"
-end
 
 ---@param root PullsComment
 ---@param replies PullsComment[]
 ---@param current_user PullsUser|nil
 ---@return AtlasThreadV2Item
 local function build_thread_item(root, replies, current_user)
-	if #replies > 0 and is_collapsed_state(root) then
+	if #replies > 0 and not state.is_thread_expanded(root.id) then
 		local item = items.comment_item(root, nil, current_user, true)
 		local label = string.format("%d %s", #replies, #replies == 1 and "reply" or "replies")
-		item.children = { items.summary_item(label) }
+		item.children = { items.summary_item(label, root) }
 		return item
 	end
 	return items.comment_item(root, replies, current_user, true)

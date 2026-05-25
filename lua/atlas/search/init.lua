@@ -3,6 +3,7 @@ local M = {}
 local PROVIDER_SEARCH_MODULE = {
 	jira = "atlas.issues.providers.jira.completion.search",
 	github = "atlas.pulls.providers.github.completion.search",
+	gitlab = "atlas.pulls.providers.gitlab.completion.search",
 	bitbucket = "atlas.pulls.providers.bitbucket.completion.search",
 }
 
@@ -12,7 +13,7 @@ local function configured_provider_ids(domain)
 	local config = require("atlas.config")
 	local cfg = config.options and config.options[domain] or nil
 	local providers = cfg and cfg.providers or {}
-	local order = domain == "pulls" and { "bitbucket", "github" } or { "jira", "github" }
+	local order = domain == "pulls" and { "bitbucket", "github", "gitlab" } or { "jira", "github" }
 	local ids = {}
 	for _, id in ipairs(order) do
 		if providers[id] then

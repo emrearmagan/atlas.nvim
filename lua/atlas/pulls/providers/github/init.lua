@@ -141,12 +141,83 @@ function M.fetch_activity(pr, opts, on_done)
 	return require("atlas.pulls.providers.github.api.activity").fetch_activity(pr, opts, on_done)
 end
 
+local GITHUB_REACTION_OPTIONS = require("atlas.ui.shared.emojis").github()
+
 ---@param pr PullRequest
 ---@param opts { force_refresh: boolean|nil }|nil
----@param on_done fun(result: { comments: PullsComment[], events: PullsActivityEntry[] }|nil, err: string|nil)
+---@param on_done fun(result: { comments: PullsComment[], events: PullsActivityEntry[], reaction_options: PullsReactionOption[]|nil }|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_conversation(pr, opts, on_done)
-	return require("atlas.pulls.providers.github.api.activity").fetch_conversation(pr, opts, on_done)
+	local activity_api = require("atlas.pulls.providers.github.api.activity")
+	local pullrequests = require("atlas.pulls.providers.github.api.pullrequests")
+
+	---@param description string
+	local function build(result, description)
+		local comments = type(result.comments) == "table" and result.comments or {}
+		if description ~= "" then
+			local author = pr.author
+			table.insert(comments, 1, {
+				id = "__body__",
+				parent_id = nil,
+				author = author and {
+					name = author.name or author.username or "",
+					nickname = author.nickname or author.username or author.name or "",
+					id = author.id or "",
+				} or nil,
+				content_raw = description,
+				created_on = pr.created_on or "",
+			})
+		end
+		on_done({
+			comments = comments,
+			events = type(result.events) == "table" and result.events or {},
+			reaction_options = GITHUB_REACTION_OPTIONS,
+		}, nil)
+	end
+
+	return activity_api.fetch_conversation(pr, opts, function(result, err)
+		if err or type(result) ~= "table" then
+			on_done(nil, err or "Failed to fetch conversation")
+			return
+		end
+		local description = tostring(pr.description or "")
+		if description ~= "" then
+			build(result, description)
+			return
+		end
+
+		pullrequests.get_description(pr, opts, function(desc, _)
+			build(result, tostring(desc or ""))
+		end)
+	end)
+end
+
+---@param pr PullRequest
+---@param comment PullsComment
+---@param key string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.add_reaction(pr, comment, key, on_done)
+	local repo_slug = pr.repo_full_name or ""
+	if repo_slug == "" then
+		on_done(false, "Missing repo")
+		return nil
+	end
+	local cli = require("atlas.pulls.providers.github.api.cli")
+	return cli.gh({
+		"api",
+		"-X",
+		"POST",
+		string.format("repos/%s/issues/comments/%s/reactions", repo_slug, tostring(comment.id)),
+		"-f",
+		"content=" .. key,
+	}, function(_, err)
+		if err then
+			on_done(false, err)
+		else
+			on_done(true, nil)
+		end
+	end)
 end
 
 ---@param pr PullRequest
@@ -189,35 +260,6 @@ end
 ---@return { cancel: fun() }|nil
 function M.delete_comment(pr, target, on_done)
 	return require("atlas.pulls.providers.github.api.comments").delete_comment(pr, target, on_done)
-end
-
----@param pr PullRequest
----@param on_done fun(is_subscribed: boolean|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.toggle_subscription(pr, on_done)
-	local raw = type(pr._raw) == "table" and pr._raw or {}
-	local node_id = tostring(raw.id or "")
-	if node_id == "" then
-		vim.schedule(function()
-			on_done(nil, "Missing PR node id")
-		end)
-		return nil
-	end
-	local next_state = pr.is_subscribed == true and "UNSUBSCRIBED" or "SUBSCRIBED"
-	local gql =
-		"mutation($id: ID!, $state: SubscriptionState!) { updateSubscription(input: { subscribableId: $id, state: $state }) { subscribable { ... on PullRequest { viewerSubscription } } } }"
-	local cli = require("atlas.pulls.providers.github.api.cli")
-	return cli.gh(
-		{ "api", "graphql", "-F", "id=" .. node_id, "-f", "state=" .. next_state, "-f", "query=" .. gql },
-		function(_, err)
-			if err then
-				on_done(nil, err)
-				return
-			end
-			pr.is_subscribed = (next_state == "SUBSCRIBED")
-			on_done(pr.is_subscribed, nil)
-		end
-	)
 end
 
 ---@param pr PullRequest

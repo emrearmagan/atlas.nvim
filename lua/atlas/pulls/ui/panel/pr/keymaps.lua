@@ -66,25 +66,6 @@ function M.register(buf)
 			nav.move_cursor("up")
 		end,
 	})
-	table.insert(items, {
-		key = "gg",
-		desc = "First selectable item",
-		opts = { nowait = true, silent = true },
-		hidden = true,
-		callback = function()
-			nav.focus_first()
-		end,
-	})
-	table.insert(items, {
-		key = "G",
-		desc = "Last selectable item",
-		opts = { nowait = true, silent = true },
-		hidden = true,
-		callback = function()
-			nav.focus_last()
-		end,
-	})
-
 	utils.insert_if(
 		items,
 		item("ui.open_in_browser", {
@@ -173,19 +154,7 @@ function M.register(buf)
 				if pr == nil then
 					return
 				end
-				local provider = require("atlas.pulls.state").provider
-				if provider == nil or type(provider.toggle_subscription) ~= "function" then
-					require("atlas.ui.components.footer").notify("warn", "Provider does not support subscription")
-					return
-				end
-				local footer = require("atlas.ui.components.footer")
-				footer.notify("loading", pr.is_subscribed and "Unsubscribing..." or "Subscribing...")
-				provider.toggle_subscription(pr, function(is_subscribed, err)
-					if err then
-						footer.notify("error", tostring(err))
-						return
-					end
-					footer.notify("success", is_subscribed and "Subscribed" or "Unsubscribed", 1200)
+				actions.run_action(pr, "toggle_subscription", "panel", function(_, _)
 					require("atlas.pulls.ui.panel").render()
 				end)
 			end,

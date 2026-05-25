@@ -246,7 +246,7 @@ function M.render_repo(repo, width, extra_rows)
 		end
 		local v2, v2_hl
 		if has_forks then
-			v2, v2_hl = icon_cell(icons.general("fork"), repo.forks, "AtlasLogInfo")
+			v2, v2_hl = icon_cell(icons.pulls("fork"), repo.forks, "AtlasLogInfo")
 		else
 			v2, v2_hl = "-", "AtlasTextMuted"
 		end

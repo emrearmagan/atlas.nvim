@@ -1,0 +1,132 @@
+@gitlab_base_url = https://gitlab.com
+@gitlab_project = 82057321
+@gitlab_iid = 1
+@gitlab_label = bug
+@gitlab_user_id = 1
+@gitlab_note_id = 1
+
+### Current user (GET /user)
+GET {{gitlab_base_url}}/api/v4/user
+PRIVATE-TOKEN: {{GITLAB_TOKEN}}
+Accept: application/json
+
+### List issues (assigned to me, opened)
+GET {{gitlab_base_url}}/api/v4/issues?scope=assigned_to_me&state=opened&per_page=20&order_by=updated_at&sort=desc
+PRIVATE-TOKEN: {{GITLAB_TOKEN}}
+Accept: application/json
+
+### Search issues across all projects
+GET {{gitlab_base_url}}/api/v4/issues?scope=all&search=test&per_page=20&order_by=updated_at&sort=desc
+PRIVATE-TOKEN: {{GITLAB_TOKEN}}
+Accept: application/json
+
+### Get issue
+GET {{gitlab_base_url}}/api/v4/projects/{{gitlab_project}}/issues/{{gitlab_iid}}
+PRIVATE-TOKEN: {{GITLAB_TOKEN}}
+Accept: application/json
+
+### Close issue
+PUT {{gitlab_base_url}}/api/v4/projects/{{gitlab_project}}/issues/{{gitlab_iid}}
+PRIVATE-TOKEN: {{GITLAB_TOKEN}}
+Content-Type: application/json
+Accept: application/json
+
+{
+  "state_event": "close"
+}
+
+### Reopen issue
+PUT {{gitlab_base_url}}/api/v4/projects/{{gitlab_project}}/issues/{{gitlab_iid}}
+PRIVATE-TOKEN: {{GITLAB_TOKEN}}
+Content-Type: application/json
+Accept: application/json
+
+{
+  "state_event": "reopen"
+}
+
+### Update labels (add/remove)
+PUT {{gitlab_base_url}}/api/v4/projects/{{gitlab_project}}/issues/{{gitlab_iid}}
+PRIVATE-TOKEN: {{GITLAB_TOKEN}}
+Content-Type: application/json
+Accept: application/json
+
+{
+  "add_labels": "bug,documentation",
+  "remove_labels": "wontfix"
+}
+
+### Replace assignees (use [0] to clear all)
+PUT {{gitlab_base_url}}/api/v4/projects/{{gitlab_project}}/issues/{{gitlab_iid}}
+PRIVATE-TOKEN: {{GITLAB_TOKEN}}
+Content-Type: application/json
+Accept: application/json
+
+{
+  "assignee_ids": [{{gitlab_user_id}}]
+}
+
+### Delete issue
+DELETE {{gitlab_base_url}}/api/v4/projects/{{gitlab_project}}/issues/{{gitlab_iid}}
+PRIVATE-TOKEN: {{GITLAB_TOKEN}}
+Accept: application/json
+
+### List project labels
+GET {{gitlab_base_url}}/api/v4/projects/{{gitlab_project}}/labels?per_page=100
+PRIVATE-TOKEN: {{GITLAB_TOKEN}}
+Accept: application/json
+
+### List project members
+GET {{gitlab_base_url}}/api/v4/projects/{{gitlab_project}}/members/all?per_page=100
+PRIVATE-TOKEN: {{GITLAB_TOKEN}}
+Accept: application/json
+
+### Search members by query (maybe use this instead for assignee/reviewer pickers ?)
+GET {{gitlab_base_url}}/api/v4/projects/{{gitlab_project}}/members/all?per_page=100&query=alice
+PRIVATE-TOKEN: {{GITLAB_TOKEN}}
+Accept: application/json
+
+### List notes (comments + events) on an issue
+GET {{gitlab_base_url}}/api/v4/projects/{{gitlab_project}}/issues/{{gitlab_iid}}/notes?per_page=100&sort=asc&order_by=created_at
+PRIVATE-TOKEN: {{GITLAB_TOKEN}}
+Accept: application/json
+
+### Add comment (note)
+POST {{gitlab_base_url}}/api/v4/projects/{{gitlab_project}}/issues/{{gitlab_iid}}/notes
+PRIVATE-TOKEN: {{GITLAB_TOKEN}}
+Content-Type: application/json
+Accept: application/json
+
+{
+  "body": "Sample comment from .http"
+}
+
+### Edit own comment
+PUT {{gitlab_base_url}}/api/v4/projects/{{gitlab_project}}/issues/{{gitlab_iid}}/notes/{{gitlab_note_id}}
+PRIVATE-TOKEN: {{GITLAB_TOKEN}}
+Content-Type: application/json
+Accept: application/json
+
+{
+  "body": "Updated body"
+}
+
+### Delete own comment
+DELETE {{gitlab_base_url}}/api/v4/projects/{{gitlab_project}}/issues/{{gitlab_iid}}/notes/{{gitlab_note_id}}
+PRIVATE-TOKEN: {{GITLAB_TOKEN}}
+Accept: application/json
+
+### Award emoji on issue (reactions)
+GET {{gitlab_base_url}}/api/v4/projects/{{gitlab_project}}/issues/{{gitlab_iid}}/award_emoji
+PRIVATE-TOKEN: {{GITLAB_TOKEN}}
+Accept: application/json
+
+### Resource label events (audit)
+GET {{gitlab_base_url}}/api/v4/projects/{{gitlab_project}}/issues/{{gitlab_iid}}/resource_label_events?per_page=100
+PRIVATE-TOKEN: {{GITLAB_TOKEN}}
+Accept: application/json
+
+### Resource state events
+GET {{gitlab_base_url}}/api/v4/projects/{{gitlab_project}}/issues/{{gitlab_iid}}/resource_state_events?per_page=100
+PRIVATE-TOKEN: {{GITLAB_TOKEN}}
+Accept: application/json

@@ -71,35 +71,34 @@ function M.rerun_all(slug, builds, on_done)
 	end
 end
 
----@return { login: string, state: "APPROVED"|"CHANGES_REQUESTED"|"COMMENTED" }[], string[]
+---@return { login: string, state: "APPROVED"|"CHANGES_REQUESTED"|"COMMENTED"|"DISMISSED" }[], string[]
 local function parse_reviews(result)
-	local states = {}
+	local latest = {}
 	local order = {}
 	for _, review in ipairs(result.reviews or {}) do
 		local login = type(review.author) == "table" and tostring(review.author.login or "") or ""
 		local state = tostring(review.state or ""):upper()
-		if login ~= "" then
-			if state == "APPROVED" or state == "CHANGES_REQUESTED" then
-				if states[login] == nil then
-					table.insert(order, login)
-				end
-				states[login] = state
-			elseif state == "COMMENTED" and states[login] == nil then
+		if login ~= "" and state ~= "PENDING" then
+			local at = tostring(review.submittedAt or "")
+			local prev = latest[login]
+			if prev == nil then
 				table.insert(order, login)
-				states[login] = "COMMENTED"
+				latest[login] = { state = state, at = at }
+			elseif at >= prev.at then
+				latest[login] = { state = state, at = at }
 			end
 		end
 	end
 
 	local reviews = {}
 	for _, login in ipairs(order) do
-		table.insert(reviews, { login = login, state = states[login] })
+		table.insert(reviews, { login = login, state = latest[login].state })
 	end
 
 	local pending = {}
 	for _, req in ipairs(result.reviewRequests or {}) do
 		local login = type(req) == "table" and tostring(req.login or "") or ""
-		if login ~= "" and states[login] == nil then
+		if login ~= "" and latest[login] == nil then
 			table.insert(pending, login)
 		end
 	end

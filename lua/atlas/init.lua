@@ -27,7 +27,7 @@ local function configured_provider_ids(domain)
 	local config = require("atlas.config")
 	local cfg = config.options and config.options[domain] or nil
 	local providers = cfg and cfg.providers or {}
-	local order = domain == "pulls" and { "bitbucket", "github" } or { "jira", "github" }
+	local order = domain == "pulls" and { "bitbucket", "github", "gitlab" } or { "jira", "github", "gitlab" }
 	local ids = {}
 	for _, id in ipairs(order) do
 		if providers[id] then
@@ -44,6 +44,8 @@ local function load_pulls_provider(id)
 		return require("atlas.pulls.providers.bitbucket")
 	elseif id == "github" then
 		return require("atlas.pulls.providers.github")
+	elseif id == "gitlab" then
+		return require("atlas.pulls.providers.gitlab")
 	end
 	vim.notify(string.format("[Atlas] Unknown pulls provider: %s", id), vim.log.levels.ERROR)
 	return nil
@@ -56,6 +58,8 @@ local function load_issues_provider(id)
 		return require("atlas.issues.providers.jira")
 	elseif id == "github" then
 		return require("atlas.issues.providers.github")
+	elseif id == "gitlab" then
+		return require("atlas.issues.providers.gitlab")
 	end
 	vim.notify(string.format("[Atlas] Unknown issues provider: %s", id), vim.log.levels.ERROR)
 	return nil

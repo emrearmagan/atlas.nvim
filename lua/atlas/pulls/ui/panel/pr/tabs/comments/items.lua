@@ -31,31 +31,33 @@ local function is_own_comment(comment, current_user)
 end
 
 ---@param comment PullsComment
----@return string|nil
+---@return string|nil text, string|nil hl
 local function root_marker(comment)
 	if comment.state == "DELETED" then
-		return icons.general("delete") .. " deleted"
+		return icons.general("delete") .. " deleted  ", "AtlasLogError"
 	end
 	if comment.state == "RESOLVED" then
-		return icons.general("success") .. " resolved"
+		return icons.general("success") .. " resolved  ", "AtlasTextPositive"
 	end
 	if comment.state == "OUTDATED" then
-		return icons.general("warning") .. " outdated"
+		return icons.general("warning") .. " outdated  ", "AtlasLogWarn"
 	end
-	return nil
+	return nil, nil
 end
 
 ---@param label string
+---@param root PullsComment|nil
 ---@return AtlasThreadV2Item
-function M.summary_item(label)
+function M.summary_item(label, root)
 	return {
 		icon = "",
 		author = label,
+		additional = "za to expand",
 		right_text = "",
 		content = nil,
 		children = {},
 		footer_items = {},
-		line_map = { entity_kind = "comment_summary" },
+		line_map = { entity_kind = "comment_summary", thread_root = root, comment = root },
 		meta = { is_summary = true },
 	}
 end
@@ -122,7 +124,10 @@ function M.comment_item(comment, replies, current_user, is_root)
 		table.insert(footer_items, string.format("%s (d)", icons.general("delete")))
 	end
 
-	local marker = is_root and root_marker(comment) or nil
+	local marker, marker_hl
+	if is_root then
+		marker, marker_hl = root_marker(comment)
+	end
 
 	return {
 		icon = icons.general("user"),
@@ -133,7 +138,12 @@ function M.comment_item(comment, replies, current_user, is_root)
 		children = children,
 		footer_items = footer_items,
 		line_map = { comment = comment, entity_kind = "comment" },
-		meta = { comment = comment, author_hl_name = author, is_deleted = is_deleted },
+		meta = {
+			comment = comment,
+			author_hl_name = author,
+			is_deleted = is_deleted,
+			right_text_hl = marker_hl,
+		},
 	}
 end
 
@@ -176,6 +186,10 @@ function M.threads_opts(helper, padding_x)
 				return { { start_col = 0, end_col = #row, hl_group = "AtlasTextMutedItalic" } }
 			end
 			return nil
+		end,
+		right_text_hl = function(item)
+			local meta = item and item.meta or {}
+			return meta.right_text_hl
 		end,
 	}
 end

@@ -116,7 +116,7 @@ local function build_pr_content(root, repo_slug, base, head)
 	return title, table.concat(commit_lines, "\n"), #commits
 end
 
----@param provider_id "github"|"bitbucket"
+---@param provider_id "github"|"bitbucket"|"gitlab"
 ---@return PullsProvider|nil, string|nil
 local function load_provider(provider_id)
 	local ok, mod
@@ -124,6 +124,8 @@ local function load_provider(provider_id)
 		ok, mod = pcall(require, "atlas.pulls.providers.github")
 	elseif provider_id == "bitbucket" then
 		ok, mod = pcall(require, "atlas.pulls.providers.bitbucket")
+	elseif provider_id == "gitlab" then
+		ok, mod = pcall(require, "atlas.pulls.providers.gitlab")
 	else
 		return nil, "Unsupported provider: " .. tostring(provider_id)
 	end

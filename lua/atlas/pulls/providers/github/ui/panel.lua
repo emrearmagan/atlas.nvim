@@ -149,15 +149,20 @@ function M.chips(pr)
 		table.insert(chips, { label = hash, hl = "AtlasTabInactive" })
 	end
 
-	local extras = state.header_extras or {}
-	local labels = type(extras.labels) == "table" and extras.labels or {}
-	local label_nodes = type(labels.nodes) == "table" and labels.nodes or {}
-	for _, lbl in ipairs(label_nodes) do
-		local name = tostring(lbl.name or "")
-		if name ~= "" then
-			local color = tostring(lbl.color or "")
-			local hl = color ~= "" and label_hl(color) or "AtlasTabInactive"
-			table.insert(chips, { label = name, hl = hl })
+	if state.header_loading and state.header_extras == nil then
+		local spinner = require("atlas.ui.components.spinner")
+		table.insert(chips, { label = spinner.with_text("Loading labels"), hl = "AtlasTextMuted" })
+	else
+		local extras = state.header_extras or {}
+		local labels = type(extras.labels) == "table" and extras.labels or {}
+		local label_nodes = type(labels.nodes) == "table" and labels.nodes or {}
+		for _, lbl in ipairs(label_nodes) do
+			local name = tostring(lbl.name or "")
+			if name ~= "" then
+				local color = tostring(lbl.color or "")
+				local hl = color ~= "" and label_hl(color) or "AtlasTabInactive"
+				table.insert(chips, { label = name, hl = hl })
+			end
 		end
 	end
 
@@ -257,7 +262,7 @@ end
 function M.is_loading(pr, active_tab) ---@diagnostic disable-line: unused-local
 	local overview_state = require("atlas.pulls.ui.panel.pr.tabs.overview.state")
 	local activity_state = require("atlas.pulls.ui.panel.pr.tabs.activity.state")
-	local conversation_state = require("atlas.pulls.providers.github.ui.conversation.state")
+	local conversation_state = require("atlas.pulls.ui.panel.pr.tabs.conversation.state")
 	local comments_state = require("atlas.pulls.ui.panel.pr.tabs.comments.state")
 	local commits_state = require("atlas.pulls.ui.panel.pr.tabs.commits.state")
 	local files_state = require("atlas.pulls.ui.panel.pr.tabs.files.state")
@@ -298,7 +303,7 @@ function M.tabs()
 			key = "conversation",
 			label = "Conversation",
 			icon = icons.general("conversation"),
-			mod = require("atlas.pulls.providers.github.ui.conversation"),
+			mod = require("atlas.pulls.ui.panel.pr.tabs.conversation"),
 		},
 		{
 			key = "comments",

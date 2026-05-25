@@ -393,6 +393,8 @@ function M.strip_markup(text)
 	local s = tostring(text or "")
 	s = s:gsub("\r\n", "\n")
 	s = s:gsub("<!%-%-.-%-%->", "")
+	-- Markdown links [text](url) → text
+	s = s:gsub("%[([^%]]*)%]%(([^)]*)%)", "%1")
 	return vim.trim(s)
 end
 
