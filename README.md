@@ -57,22 +57,22 @@ A Neovim plugin for managing GitHub/Bitbucket/GitLab PRs and Jira/GitHub/GitLab 
     "esmuellert/codediff.nvim", -- optional (PullRequest diff)
     "sindrets/diffview.nvim", -- optional (PullRequest diff - alternative)
   },
-  config = function()
-    require("atlas").setup({
-      pulls = {
-        providers = {
-          bitbucket = { }, -- See configuration below
-          github = { },    -- See configuration below
-        },
+  opts = {
+    pulls = {
+      providers = {
+        bitbucket = {}, -- See configuration below
+        github = {},    -- See configuration below
+        gitlab = {},    -- See configuration below
       },
-      issues = {
-        providers = {
-          jira = { },   -- See configuration below
-          github = { }, -- See configuration below
-        },
+    },
+    issues = {
+      providers = {
+        jira = {},   -- See configuration below
+        github = {}, -- See configuration below
+        gitlab = {}, -- See configuration below
       },
-    })
-  end,
+    },
+  },
 }
 ```
 
@@ -85,14 +85,16 @@ use {
     require("atlas").setup({
       pulls = {
         providers = {
-          bitbucket = { }, -- See configuration below
-          github = { },    -- See configuration below
+          bitbucket = {}, -- See configuration below
+          github = {},    -- See configuration below
+          gitlab = {},    -- See configuration below
         },
       },
       issues = {
         providers = {
-          jira = { },   -- See configuration below
-          github = { }, -- See configuration below
+          jira = {},   -- See configuration below
+          github = {}, -- See configuration below
+          gitlab = {}, -- See configuration below
         },
       },
     })
@@ -156,63 +158,56 @@ use {
 <summary><strong>Configuration</strong></summary>
 
 ```lua
-return {
-  "emrearmagan/atlas.nvim",
-  config = function()
-    require("atlas").setup({
-      issues = {
-        max_results = 100,
-        with_relationships = true, -- Fetch parent/subissue relationships for plain issue tree views.
-        custom_actions = {}, -- See Custom Actions below.
+issues = {
+  max_results = 100,
+  with_relationships = true, -- Fetch parent/subissue relationships for plain issue tree views.
+  custom_actions = {}, -- See Custom Actions below.
 
-        providers = {
-          jira = {
-            base_url = "https://your-site.atlassian.net",
-            email = "you@example.com",
-            --- See: https://support.atlassian.com/atlassian-account/docs/manage-api-tokens-for-your-atlassian-account/
-            token = "your_jira_api_token",
-            cache_ttl = 300,
+  providers = {
+    jira = {
+      base_url = "https://your-site.atlassian.net",
+      email = "you@example.com",
+      --- See: https://support.atlassian.com/atlassian-account/docs/manage-api-tokens-for-your-atlassian-account/
+      token = "your_jira_api_token",
+      cache_ttl = 300,
 
-            project_config = {
-              -- The Jira custom field ID used for story points. Defaults to "customfield_10016".
-              story_points_field = "customfield_10016",
+      project_config = {
+        -- The Jira custom field ID used for story points. Defaults to "customfield_10016".
+        story_points_field = "customfield_10016",
 
-              KAN = {
-                customfield_10003 = {
-                  name = "Approvers",
-                  format = function(value)
-                    if type(value) ~= "table" or #value == 0 then
-                      return nil -- nil hides the field
-	                    end
-	                    return table.concat(value, ", ")
-	                  end,
-                  hl_group = "AtlasChipActive",
-                  display = "chip", -- "chip" or "table"
-                },
-              },
-            },
-
-            ---@type AtlasJiraViewConfig[]
-            views = {
-              {
-                name = "My Board",
-                key = "M",
-                layout = "plain",
-                jql = "project = KAN AND assignee = currentUser() ORDER BY updated DESC",
-              },
-              {
-                name = "Team Board",
-                key = "T",
-                layout = "compact",
-                jql = "project = KAN ORDER BY updated DESC",
-              },
-            },
+        KAN = {
+          customfield_10003 = {
+            name = "Approvers",
+            format = function(value)
+              if type(value) ~= "table" or #value == 0 then
+                return nil -- nil hides the field
+              end
+              return table.concat(value, ", ")
+            end,
+            hl_group = "AtlasChipActive",
+            display = "chip", -- "chip" or "table"
           },
         },
       },
-    })
-  end,
-}
+
+      ---@type AtlasJiraViewConfig[]
+      views = {
+        {
+          name = "My Board",
+          key = "M",
+          layout = "plain",
+          jql = "project = KAN AND assignee = currentUser() ORDER BY updated DESC",
+        },
+        {
+          name = "Team Board",
+          key = "T",
+          layout = "compact",
+          jql = "project = KAN ORDER BY updated DESC",
+        },
+      },
+    },
+  },
+},
 ```
 <img alt="Edit/Create Issue" src="https://github.com/user-attachments/assets/76913fbf-1667-4f35-9962-d3c1b4619c7f">
 
@@ -224,42 +219,35 @@ return {
 <summary><strong>Configuration</strong></summary>
 
 ```lua
-return {
-  "emrearmagan/atlas.nvim",
-  config = function()
-    require("atlas").setup({
-      issues = {
-        providers = {
-          github = {
-            cache_ttl = 300,
+issues = {
+  providers = {
+    github = {
+      cache_ttl = 300,
 
-            ---@type AtlasGitHubIssuesViewConfig[]
-            views = {
-              {
-                name = "Assigned",
-                key = "1",
-                layout = "plain",
-                search = "assignee:@me is:open",
-              },
-              {
-                name = "Created",
-                key = "2",
-                layout = "compact",
-                search = "author:@me is:open",
-              },
-              {
-                name = "Mentions",
-                key = "3",
-                layout = "plain",
-                search = "mentions:@me is:open",
-              },
-            },
-          },
+      ---@type AtlasGitHubIssuesViewConfig[]
+      views = {
+        {
+          name = "Assigned",
+          key = "1",
+          layout = "plain",
+          search = "assignee:@me is:open",
+        },
+        {
+          name = "Created",
+          key = "2",
+          layout = "compact",
+          search = "author:@me is:open",
+        },
+        {
+          name = "Mentions",
+          key = "3",
+          layout = "plain",
+          search = "mentions:@me is:open",
         },
       },
-    })
-  end,
-}
+    },
+  },
+},
 ```
 
 </details>
@@ -272,46 +260,39 @@ return {
 Auth uses a [Personal Access Token](https://docs.gitlab.com/ee/user/profile/personal_access_tokens.html) with the `api` scope. Set `base_url` to `https://gitlab.com` or your self-hosted instance.
 
 ```lua
-return {
-  "emrearmagan/atlas.nvim",
-  config = function()
-    require("atlas").setup({
-      issues = {
-        providers = {
-          gitlab = {
-            base_url = "https://gitlab.com",
-            token = os.getenv("GITLAB_TOKEN") or "",
-            cache_ttl = 300,
+issues = {
+  providers = {
+    gitlab = {
+      base_url = "https://gitlab.com",
+      token = os.getenv("GITLAB_TOKEN") or "",
+      cache_ttl = 300,
 
-            ---@type AtlasGitLabIssuesViewConfig[]
-            views = {
-              {
-                name = "Assigned",
-                key = "1",
-                scope = "assigned_to_me",
-                state = "opened",
-              },
-              {
-                name = "Created",
-                key = "2",
-                scope = "created_by_me",
-                state = "opened",
-              },
-              {
-                name = "All open",
-                key = "3",
-                scope = "all",
-                state = "opened",
-                -- Anything not covered by the explicit fields below can be passed via `extra_params`.
-                extra_params = { ["not[labels]"] = "wontfix" },
-              },
-            },
-          },
+      ---@type AtlasGitLabIssuesViewConfig[]
+      views = {
+        {
+          name = "Assigned",
+          key = "1",
+          scope = "assigned_to_me",
+          state = "opened",
+        },
+        {
+          name = "Created",
+          key = "2",
+          scope = "created_by_me",
+          state = "opened",
+        },
+        {
+          name = "All open",
+          key = "3",
+          scope = "all",
+          state = "opened",
+          -- Anything not covered by the explicit fields below can be passed via `extra_params`.
+          extra_params = { ["not[labels]"] = "wontfix" },
         },
       },
-    })
-  end,
-}
+    },
+  },
+},
 ```
 
 </details>
@@ -374,28 +355,26 @@ issues = {
 ### Configuration
 
 ```lua
-require("atlas").setup({
-  pulls = {
-    diff = {
-      -- Command must support range input: origin/<destination>...origin/<source>
-      open_cmd = "DiffviewOpen", -- e.g. "DiffviewOpen" or "CodeDiff", defaults to nil.
-    },
-    repo_config = {
-      -- Maps `workspace/repo` to local paths. Used for checkout and custom actions.
-      paths = {
-        ["your-workspace/*"] = "~/code/repos/*",
-        ["your-workspace/atlas"] = "~/code/atlas",
-      },
-      settings = {
-        ["your-workspace/atlas"] = {
-          readme = "README.md", -- optional, defaults to README.md
-          pr_template = ".github/pull_request_template.md", -- optional, defaults to .github/pull_request_template.md
-        },
-      },
-    },
-    custom_actions = {}, -- See Custom Actions below.
+pulls = {
+  diff = {
+    -- Command must support range input: origin/<destination>...origin/<source>
+    open_cmd = "DiffviewOpen", -- e.g. "DiffviewOpen" or "CodeDiff", defaults to nil.
   },
-})
+  repo_config = {
+    -- Maps `workspace/repo` to local paths. Used for checkout and custom actions.
+    paths = {
+      ["your-workspace/*"] = "~/code/repos/*",
+      ["your-workspace/atlas"] = "~/code/atlas",
+    },
+    settings = {
+      ["your-workspace/atlas"] = {
+        readme = "README.md", -- optional, defaults to README.md
+        pr_template = ".github/pull_request_template.md", -- optional, defaults to .github/pull_request_template.md
+      },
+    },
+  },
+  custom_actions = {}, -- See Custom Actions below.
+},
 ```
 
 ### GitHub
@@ -404,42 +383,35 @@ require("atlas").setup({
 <summary><strong>Configuration</strong></summary>
 
 ```lua
-return {
-  "emrearmagan/atlas.nvim",
-  config = function()
-    require("atlas").setup({
-      pulls = {
-        providers = {
-          github = {
-            cache_ttl = 300,
+pulls = {
+  providers = {
+    github = {
+      cache_ttl = 300,
 
-            ---@type AtlasGitHubViewConfig[]
-            views = {
-              {
-                name = "My PRs",
-                key = "1",
-                layout = "plain",
-                search = "author:@me sort:updated-desc",
-              },
-              {
-                name = "Team",
-                key = "2",
-                layout = "compact",
-                search = "org:your-org sort:updated-desc",
-              },
-              {
-                name = "Repo",
-                key = "3",
-                layout = "plain",
-                search = "repo:your-org/your-repo",
-              },
-            },
-          },
+      ---@type AtlasGitHubViewConfig[]
+      views = {
+        {
+          name = "My PRs",
+          key = "1",
+          layout = "plain",
+          search = "author:@me sort:updated-desc",
+        },
+        {
+          name = "Team",
+          key = "2",
+          layout = "compact",
+          search = "org:your-org sort:updated-desc",
+        },
+        {
+          name = "Repo",
+          key = "3",
+          layout = "plain",
+          search = "repo:your-org/your-repo",
         },
       },
-    })
-  end,
-}
+    },
+  },
+},
 ```
 
 </details>
@@ -450,50 +422,43 @@ return {
 <summary><strong>Configuration</strong></summary>
 
 ```lua
-return {
-  "emrearmagan/atlas.nvim",
-  config = function()
-    require("atlas").setup({
-      pulls = {
-        providers = {
-          bitbucket = {
-            user = os.getenv("BITBUCKET_USER") or "",
-            token = os.getenv("BITBUCKET_TOKEN") or "",
-            cache_ttl = 300,
+pulls = {
+  providers = {
+    bitbucket = {
+      user = os.getenv("BITBUCKET_USER") or "",
+      token = os.getenv("BITBUCKET_TOKEN") or "",
+      cache_ttl = 300,
 
-            ---@type AtlasBitbucketViewConfig[]
-            views = {
-              {
-                name = "Me",
-                key = "M",
-                layout = "compact",
-                repos = {
-                  { workspace = "your-workspace", repo = "atlas" },
-                },
+      ---@type AtlasBitbucketViewConfig[]
+      views = {
+        {
+          name = "Me",
+          key = "M",
+          layout = "compact",
+          repos = {
+            { workspace = "your-workspace", repo = "atlas" },
+          },
 
-                ---@param pr PullRequest
-                ---@param ctx { user: PullsUser|nil }
-                filter = function(pr, ctx)
-                  local user = ctx.user
-                  return pr.author and user and pr.author.id == user.id
-                end,
-              },
-              {
-                name = "Team",
-                key = "1",
-                layout = "plain", -- "compact" or "plain"
-                repos = {
-                  { workspace = "your-workspace", repo = "atlas" },
-                  { workspace = "your-workspace", repo = "other-repo" },
-                },
-              },
-            },
+          ---@param pr PullRequest
+          ---@param ctx { user: PullsUser|nil }
+          filter = function(pr, ctx)
+            local user = ctx.user
+            return pr.author and user and pr.author.id == user.id
+          end,
+        },
+        {
+          name = "Team",
+          key = "1",
+          layout = "plain", -- "compact" or "plain"
+          repos = {
+            { workspace = "your-workspace", repo = "atlas" },
+            { workspace = "your-workspace", repo = "other-repo" },
           },
         },
       },
-    })
-  end,
-}
+    },
+  },
+},
 ```
 
 </details>
@@ -506,49 +471,42 @@ return {
 Auth uses a [Personal Access Token](https://docs.gitlab.com/ee/user/profile/personal_access_tokens.html) with the `api` scope. Set `base_url` to `https://gitlab.com` or your self-hosted instance.
 
 ```lua
-return {
-  "emrearmagan/atlas.nvim",
-  config = function()
-    require("atlas").setup({
-      pulls = {
-        providers = {
-          gitlab = {
-            base_url = "https://gitlab.com",
-            token = os.getenv("GITLAB_TOKEN") or "",
-            cache_ttl = 300,
+pulls = {
+  providers = {
+    gitlab = {
+      base_url = "https://gitlab.com",
+      token = os.getenv("GITLAB_TOKEN") or "",
+      cache_ttl = 300,
 
-            ---@type AtlasGitLabPullsViewConfig[]
-            views = {
-              {
-                name = "Assigned",
-                key = "1",
-                scope = "assigned_to_me",
-              },
-              {
-                name = "Reviewing",
-                key = "3",
-                scope = "all",
-                extra_params = { reviewer_id = "Me" },
-              },
-              -- Single project
-              {
-                name = "GitLab",
-                key = "G",
-                project = "gitlab-org/gitlab",
-              },
-              -- Whole group, all projects under it
-              {
-                name = "GitLab Org",
-                key = "O",
-                group = "gitlab-org",
-              },
-            },
-          },
+      ---@type AtlasGitLabPullsViewConfig[]
+      views = {
+        {
+          name = "Assigned",
+          key = "1",
+          scope = "assigned_to_me",
+        },
+        {
+          name = "Reviewing",
+          key = "3",
+          scope = "all",
+          extra_params = { reviewer_id = "Me" },
+        },
+        -- Single project
+        {
+          name = "GitLab",
+          key = "G",
+          project = "gitlab-org/gitlab",
+        },
+        -- Whole group, all projects under it
+        {
+          name = "GitLab Org",
+          key = "O",
+          group = "gitlab-org",
         },
       },
-    })
-  end,
-}
+    },
+  },
+},
 ```
 
 </details>
@@ -645,49 +603,47 @@ is:issue label:bug
 Set an action to `false` to disable it, or set it to a list to add aliases.
 
 ```lua
-require("atlas").setup({
-  keymaps = {
-    ui = {
-      help = "g?",
-      close = "q", -- false would disable it
-      toggle_panel = "p", -- { "p", "k" } would add aliases
-      toggle_fold = "za",
-      toggle_all_folds = "zA",
-      previous_panel_tab = "<S-Tab>",
-      next_panel_tab = "<Tab>",
-      open_notifications = "N",
-      notifications_mark_read = "r",
-      notifications_mark_done = "d",
-      notifications_refresh = "R",
-      toggle_subscription = "gS",
-      refresh = "r",
-      refresh_view = "R",
-      open_actions = "A",
-      open_in_browser = "gx",
-      copy_url = "Y",
-      show_details = "K",
-      search = "?",
-    },
-    issues = {
-      copy_key = "y",
-      transition_issue = "gs",
-      change_assignee = "ga",
-      change_reporter = "gr",
-      edit_issue = "ge",
-      create_issue = "c",
-    },
-    pulls = {
-      copy_id = "y",
-      open_diff = "gd",
-      checkout = "gc",
-      next_hunk = "]h",
-      previous_hunk = "[h",
-      filter_status_open = "gpo",
-      filter_status_merged = "gpm",
-      filter_status_declined = "gpd",
-    },
+keymaps = {
+  ui = {
+    help = "g?",
+    close = "q", -- false would disable it
+    toggle_panel = "p", -- { "p", "k" } would add aliases
+    toggle_fold = "za",
+    toggle_all_folds = "zA",
+    previous_panel_tab = "<S-Tab>",
+    next_panel_tab = "<Tab>",
+    open_notifications = "N",
+    notifications_mark_read = "r",
+    notifications_mark_done = "d",
+    notifications_refresh = "R",
+    toggle_subscription = "gS",
+    refresh = "r",
+    refresh_view = "R",
+    open_actions = "A",
+    open_in_browser = "gx",
+    copy_url = "Y",
+    show_details = "K",
+    search = "?",
   },
-})
+  issues = {
+    copy_key = "y",
+    transition_issue = "gs",
+    change_assignee = "ga",
+    change_reporter = "gr",
+    edit_issue = "ge",
+    create_issue = "c",
+  },
+  pulls = {
+    copy_id = "y",
+    open_diff = "gd",
+    checkout = "gc",
+    next_hunk = "]h",
+    previous_hunk = "[h",
+    filter_status_open = "gpo",
+    filter_status_merged = "gpm",
+    filter_status_declined = "gpd",
+  },
+},
 ```
 
 ## Contributors ✨
