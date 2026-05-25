@@ -2,6 +2,7 @@
 *.swp
 *.swo
 *~
+doc/tags
 
 # Lua
 luac.out
