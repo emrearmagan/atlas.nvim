@@ -2,6 +2,7 @@ local M = {}
 
 local service = require("atlas.issues.providers.jira.api.service")
 local cache = require("atlas.core.cache")
+local config = require("atlas.issues.providers.jira.api.config")
 
 ---@param str string
 ---@return string
@@ -14,7 +15,7 @@ end
 ---@param callback fun(user: IssueUser|nil, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.get_myself(callback)
-	local cache_key = "jira:myself:" .. (service.jira_config().email or "")
+	local cache_key = "jira:myself:" .. (config.jira_config().email or "")
 	local cached = cache.get(cache_key)
 	if cached and cached.value then
 		callback(cached.value, nil)

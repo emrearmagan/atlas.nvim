@@ -6,6 +6,8 @@
 --           base_url = "https://your-domain.atlassian.net",
 --           email    = vim.env.JIRA_EMAIL,
 --           token    = vim.env.JIRA_TOKEN,
+--           api_version = "3",
+--           auth_method = "basic", -- "basic" | "bearer"
 --           cache_ttl = 300,
 --           views = {
 --             { name = "Open",       key = "1", jql = "assignee = currentUser() AND resolution = Unresolved ORDER BY updated DESC" },
@@ -49,6 +51,8 @@
 ---@field base_url string
 ---@field email string
 ---@field token string
+---@field api_version string|nil
+---@field auth_method "basic"|"bearer"|nil
 ---@field cache_ttl number|nil
 ---@field views AtlasJiraViewConfig[]|nil
 ---@field project_config AtlasJiraProjectConfig|nil

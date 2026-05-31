@@ -2,6 +2,7 @@ local M = {}
 
 local service = require("atlas.issues.providers.jira.api.service")
 local normalizer = require("atlas.issues.providers.jira.api.mapper")
+local config = require("atlas.issues.providers.jira.api.config")
 
 ---@class JiraProjectGroup
 ---@field category table|nil
@@ -58,9 +59,14 @@ function M.get_projects(opts, callback)
 		if cancelled then
 			return
 		end
-
+    local jira_config = config.jira_config()
+    local path = "/project/search"
+    if jira_config.api_version and jira_config.api_version:match("^2") then
+      path = "/project"
+    end
 		local endpoint = string.format(
-			"/project/search?maxResults=%d&startAt=%d&status=%s",
+			"%s?maxResults=%d&startAt=%d&status=%s",
+      path,
 			max_results,
 			start_at,
 			vim.fn.escape(status, "&=?")

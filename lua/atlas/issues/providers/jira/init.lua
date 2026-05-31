@@ -331,7 +331,7 @@ end
 
 ---@return AtlasJiraViewConfig[]
 function M.views()
-	local cfg = require("atlas.issues.providers.jira.api.service").jira_config()
+	local cfg = require("atlas.issues.providers.jira.api.config").jira_config()
 	if cfg.views ~= nil then
 		return cfg.views
 	end

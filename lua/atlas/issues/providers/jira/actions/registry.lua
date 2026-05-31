@@ -7,7 +7,7 @@ local issues_api = require("atlas.issues.providers.jira.api.issues")
 local transitions_api = require("atlas.issues.providers.jira.api.transitions")
 local users_api = require("atlas.issues.providers.jira.api.users")
 local issues_state = require("atlas.issues.state")
-local service = require("atlas.issues.providers.jira.api.service")
+local config = require("atlas.issues.providers.jira.api.config")
 
 ---@param ctx table
 ---@return boolean
@@ -934,7 +934,7 @@ local ACTIONS = {
 				return
 			end
 
-			local base_url = tostring(service.jira_config().base_url or ""):gsub("/$", "")
+			local base_url = tostring(config.jira_config().base_url or ""):gsub("/$", "")
 			local issue_key = tostring(issue.key or "")
 			if base_url == "" or issue_key == "" then
 				done(nil, "No URL found for issue")
@@ -980,7 +980,7 @@ local ACTIONS = {
 				return
 			end
 
-			local base_url = tostring(service.jira_config().base_url or ""):gsub("/$", "")
+			local base_url = tostring(config.jira_config().base_url or ""):gsub("/$", "")
 			local issue_key = tostring(issue.key or "")
 			local url = (base_url ~= "" and issue_key ~= "") and string.format("%s/browse/%s", base_url, issue_key)
 				or ""

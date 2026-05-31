@@ -259,8 +259,8 @@ end
 ---@param issue_key string|nil
 ---@return IssueComment[]
 function M.to_comments_list(raw, issue_key)
-	local service = require("atlas.issues.providers.jira.api.service")
-	local base_url = tostring(service.jira_config().base_url or ""):gsub("/$", "")
+	local config = require("atlas.issues.providers.jira.api.config")
+	local base_url = tostring(config.jira_config().base_url or ""):gsub("/$", "")
 	local comments = {}
 	for _, raw_comment in ipairs((type(raw) == "table" and raw.comments) or {}) do
 		local comment = normalize_comment(raw_comment, issue_key, base_url)

@@ -8,7 +8,7 @@ local logger = require("atlas.core.logger")
 local CACHE_TTL = 300
 
 local function story_points_field()
-	local cfg = service.jira_config()
+	local cfg = require("atlas.issues.providers.jira.api.config").jira_config()
 	local project_config = cfg.project_config or {}
 	return tostring(project_config.story_points_field or "customfield_10016")
 end
