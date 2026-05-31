@@ -122,7 +122,10 @@ local function normalize_issue_user(raw_user)
 		return nil
 	end
 
-	local account_id = raw_user.accountId and tostring(raw_user.accountId) or ""
+	-- Replace accountId with name to support Jira server instances
+	local account_id = raw_user.accountId and tostring(raw_user.accountId)
+		or raw_user.name and tostring(raw_user.name)
+		or ""
 	local display_name = raw_user.displayName and tostring(raw_user.displayName) or ""
 	if account_id == "" or display_name == "" then
 		return nil
