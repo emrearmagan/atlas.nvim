@@ -386,10 +386,15 @@ local ACTIONS = {
 
 			local function open_editor(initial_description)
 				issue_editor.open(function(fields, submit_done)
+					local api_version = tostring(config.jira_config().api_version or "3")
+					local is_v2 = api_version:match("^2")
+
 					local desc = fields.description
 					local payload = {
 						summary = fields.summary,
-						description = type(desc) == "string" and md_to_adf.to_adf(desc) or vim.NIL,
+						description = type(desc) == "string"
+							and (is_v2 and desc or md_to_adf.to_adf(desc))
+							or vim.NIL,
 					}
 
 					if fields.issue_type and fields.issue_type.id and fields.issue_type.id ~= "" then
@@ -397,7 +402,9 @@ local ACTIONS = {
 					end
 
 					if fields.assignee and fields.assignee.account_id then
-						payload.assignee = { id = fields.assignee.account_id }
+						payload.assignee = is_v2
+							and { name = fields.assignee.account_id }
+							or { id = fields.assignee.account_id }
 					else
 						payload.assignee = vim.NIL
 					end
@@ -447,6 +454,10 @@ local ACTIONS = {
 				if type(description) == "table" then
 					open_editor(adf.to_markdown(description))
 					return
+        elseif type(description) == "string" then
+          -- Description is a sting in Jira server API
+          open_editor(description)
+          return
 				end
 				open_editor("")
 			end)
@@ -484,13 +495,18 @@ local ACTIONS = {
 						return
 					end
 
+					local api_version = tostring(config.jira_config().api_version or "3")
+					local is_v2 = api_version:match("^2")
+
 					local desc = fields.description
 					if type(desc) == "string" then
-						api_fields.description = md_to_adf.to_adf(desc)
+						api_fields.description = is_v2 and desc or md_to_adf.to_adf(desc)
 					end
 
 					if fields.assignee and fields.assignee.account_id then
-						api_fields.assignee = { id = fields.assignee.account_id }
+						api_fields.assignee = is_v2
+							and { name = fields.assignee.account_id }
+							or { id = fields.assignee.account_id }
 					end
 
 					issues_api.create_issue(api_fields, function(result, err)

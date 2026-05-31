@@ -54,8 +54,16 @@ function M.get_assignable_users(opts, query, callback)
 		return nil
 	end
 
+  local api_version = tostring(config.jira_config().api_version or "3")
+  local is_v2 = api_version:match("^2")
+
 	local q = tostring(query or "")
-	local params = { "query=" .. url_encode(q) }
+  local params = {}
+  if is_v2 then
+    table.insert(params, "username=" .. url_encode(q))
+  else
+    table.insert(params, "query=" .. url_encode(q))
+  end
 	if issue_key ~= "" then
 		table.insert(params, "issueKey=" .. url_encode(issue_key))
 	end
@@ -73,8 +81,12 @@ function M.get_assignable_users(opts, query, callback)
 		local users = {}
 		for _, raw in ipairs(result) do
 			if type(raw) == "table" then
+        local account_id = tostring(raw.accountId or "")
+        if is_v2 then
+          account_id = tostring(raw.name or "")
+        end
 				table.insert(users, {
-					account_id = tostring(raw.accountId or ""),
+					account_id = account_id,
 					display_name = tostring(raw.displayName or ""),
 				})
 			end
