@@ -142,6 +142,21 @@ function M.get_permissions_bulk(opts, callback)
 
 	return service.request("POST", "/permissions/check", payload, function(result, err)
 		if err ~= nil or type(result) ~= "table" then
+			-- Handle 404 as a fallback since Jira server API don't have bulk permissions endpoint
+			if err and err:find("HTTP 404", 1, true) == 1 then
+				local fallback = {}
+				for _, key in ipairs(permissions_list) do
+					fallback[key] = {}
+					for _, pid in ipairs(project_ids) do
+						fallback[key][pid] = true
+					end
+					for _, iid in ipairs(issue_ids) do
+						fallback[key][iid] = true
+					end
+				end
+				callback(fallback, nil)
+				return
+			end
 			callback(nil, err or "Empty response")
 			return
 		end
