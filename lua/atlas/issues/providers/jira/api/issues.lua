@@ -37,6 +37,44 @@ local function url_encode(str)
 	end))
 end
 
+-- Tries /search/jql first; on HTTP 404 falls back to /search (older Jira API versions)
+---@param data table
+---@param on_done fun(result: table|nil, err: string|nil)
+---@param ctx table|nil
+---@return { job_id: integer, cancel: fun() }|nil
+local function search_jql_request(data, on_done, ctx)
+	local retried = false
+	local function attempt(endpoint)
+		local payload = data
+		if endpoint == "/search" then
+			payload = vim.deepcopy(data)
+			payload.startAt = tonumber(payload.nextPageToken) or 0
+			payload.nextPageToken = nil
+		end
+
+		return service.request("POST", endpoint, payload, function(result, err)
+			if not retried and err and err:find("HTTP 404", 1, true) == 1 then
+				retried = true
+				logger.loginfo("Jira /search/jql returned 404, retrying with /search")
+				return attempt("/search")
+			end
+
+			if result and endpoint == "/search" then
+        -- Old /search endpoint use offset-based pagination instead of token-based
+				local start_at = tonumber(result.startAt) or 0
+				local max_results = tonumber(result.maxResults) or #(result.issues or {})
+				local total = tonumber(result.total) or 0
+				local next_start = start_at + max_results
+				result.isLast = next_start >= total
+				result.nextPageToken = result.isLast and nil or tostring(next_start)
+			end
+
+			on_done(result, err)
+		end, ctx)
+	end
+	return attempt("/search/jql")
+end
+
 ---@class JiraIssueSearchPage
 ---@field issues Issue[]
 ---@field nextPageToken string|nil
@@ -69,7 +107,7 @@ function M.search_issues(jql, on_done, opts)
 		maxResults = page_size,
 	}
 
-	return service.request("POST", "/search/jql", data, function(result, err)
+	return search_jql_request(data, function(result, err)
 		if err or not result then
 			on_done(nil, err or "Empty response")
 			return
@@ -261,7 +299,7 @@ function M.get_issue_detail(issue_key, on_done, opts)
 		maxResults = 1,
 	}
 
-	return service.request("POST", "/search/jql", data, function(result, err)
+	return search_jql_request(data, function(result, err)
 		if err or not result then
 			logger.logerror("Jira detail fetch failed", {
 				issue_key = issue_key,
@@ -331,11 +369,13 @@ function M.get_custom_fields(issue_key, fields, on_done, opts)
 		end
 	end
 
-	return service.request("POST", "/search/jql", {
+	local data = {
 		jql = "key = " .. issue_key,
 		fields = fields,
 		maxResults = 1,
-	}, function(result, err)
+	}
+
+	return search_jql_request(data, function(result, err)
 		if err or not result then
 			on_done(nil, err or "Empty response")
 			return
