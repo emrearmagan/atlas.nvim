@@ -392,9 +392,7 @@ local ACTIONS = {
 					local desc = fields.description
 					local payload = {
 						summary = fields.summary,
-						description = type(desc) == "string"
-							and (is_v2 and desc or md_to_adf.to_adf(desc))
-							or vim.NIL,
+						description = type(desc) == "string" and (is_v2 and desc or md_to_adf.to_adf(desc)) or vim.NIL,
 					}
 
 					if fields.issue_type and fields.issue_type.id and fields.issue_type.id ~= "" then
@@ -402,8 +400,7 @@ local ACTIONS = {
 					end
 
 					if fields.assignee and fields.assignee.account_id then
-						payload.assignee = is_v2
-							and { name = fields.assignee.account_id }
+						payload.assignee = is_v2 and { name = fields.assignee.account_id }
 							or { id = fields.assignee.account_id }
 					else
 						payload.assignee = vim.NIL
@@ -454,10 +451,10 @@ local ACTIONS = {
 				if type(description) == "table" then
 					open_editor(adf.to_markdown(description))
 					return
-        elseif type(description) == "string" then
-          -- Description is a sting in Jira server API
-          open_editor(description)
-          return
+				elseif type(description) == "string" then
+					-- Description is a sting in Jira server API
+					open_editor(description)
+					return
 				end
 				open_editor("")
 			end)
@@ -504,8 +501,7 @@ local ACTIONS = {
 					end
 
 					if fields.assignee and fields.assignee.account_id then
-						api_fields.assignee = is_v2
-							and { name = fields.assignee.account_id }
+						api_fields.assignee = is_v2 and { name = fields.assignee.account_id }
 							or { id = fields.assignee.account_id }
 					end
 
@@ -1047,9 +1043,14 @@ local ACTIONS = {
 			end
 
 			local function unsubscribe(account_id)
+				local param_name = "accountId"
+				if config.jira_config().api_version:match("^2") then
+					param_name = "username"
+				end
+
 				svc.request(
 					"DELETE",
-					string.format("/issue/%s/watchers?accountId=%s", issue_key, account_id),
+					string.format("/issue/%s/watchers?%s=%s", issue_key, param_name, account_id),
 					nil,
 					function(_, err)
 						finish(err == nil and false or nil, err)

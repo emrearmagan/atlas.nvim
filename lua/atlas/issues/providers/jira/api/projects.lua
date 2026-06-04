@@ -60,8 +60,7 @@ function M.get_projects(opts, callback)
 			return
 		end
 		local jira_config = config.jira_config()
-		local api_version = tostring(jira_config.api_version or "")
-		local is_v2 = api_version:match("^2")
+		local is_v2 = jira_config.api_version:match("^2")
 		local path = is_v2 and "/project" or "/project/search"
 		local endpoint
 		if is_v2 then

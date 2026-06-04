@@ -29,9 +29,14 @@ function M.get_myself(callback)
 		end
 
 		local user = {
-			account_id = tostring(result.accountId or ""),
 			display_name = tostring(result.displayName or ""),
 		}
+		-- Jira cloud uses `accountId` while Jira server uses `name`
+		if config.jira_config().api_version:match("^2") then
+			user.name = tostring(result.name or "")
+		else
+			user.account_id = tostring(result.accountId or "")
+		end
 
 		cache.set(cache_key, user, service.cache_ttl())
 		callback(user, nil)
@@ -54,16 +59,16 @@ function M.get_assignable_users(opts, query, callback)
 		return nil
 	end
 
-  local api_version = tostring(config.jira_config().api_version or "3")
-  local is_v2 = api_version:match("^2")
+	local api_version = tostring(config.jira_config().api_version or "3")
+	local is_v2 = api_version:match("^2")
 
 	local q = tostring(query or "")
-  local params = {}
-  if is_v2 then
-    table.insert(params, "username=" .. url_encode(q))
-  else
-    table.insert(params, "query=" .. url_encode(q))
-  end
+	local params = {}
+	if is_v2 then
+		table.insert(params, "username=" .. url_encode(q))
+	else
+		table.insert(params, "query=" .. url_encode(q))
+	end
 	if issue_key ~= "" then
 		table.insert(params, "issueKey=" .. url_encode(issue_key))
 	end
@@ -81,14 +86,13 @@ function M.get_assignable_users(opts, query, callback)
 		local users = {}
 		for _, raw in ipairs(result) do
 			if type(raw) == "table" then
-        local account_id = tostring(raw.accountId or "")
-        if is_v2 then
-          account_id = tostring(raw.name or "")
-        end
-				table.insert(users, {
-					account_id = account_id,
-					display_name = tostring(raw.displayName or ""),
-				})
+				local user = { display_name = tostring(raw.displayName or "") }
+				if is_v2 then
+					user.account_id = tostring(raw.name or "")
+				else
+					user.account_id = tostring(raw.accountId or "")
+				end
+				table.insert(users, user)
 			end
 		end
 
@@ -214,7 +218,12 @@ function M.assign_issue(issue_key, account_id, callback)
 	end
 
 	local endpoint = string.format("/issue/%s/assignee", issue_key)
-	local payload = { accountId = normalized_account_id or vim.NIL }
+	local payload = {}
+	if config.jira_config().api_version:match("^2") then
+		payload.name = normalized_account_id or vim.NIL
+	else
+		payload.accountId = normalized_account_id or vim.NIL
+	end
 
 	return service.request("PUT", endpoint, payload, function(_, err)
 		if err ~= nil then
@@ -246,13 +255,12 @@ function M.change_reporter(issue_key, account_id, callback)
 	end
 
 	local endpoint = string.format("/issue/%s", issue_key)
-	local payload = {
-		fields = {
-			reporter = {
-				accountId = account_id,
-			},
-		},
-	}
+	local payload = { fields = { reporter = {} } }
+	if config.jira_config().api_version:match("^2") then
+		payload.fields.reporter.name = account_id
+	else
+		payload.fields.reporter.accountId = account_id
+	end
 
 	return service.request("PUT", endpoint, payload, function(_, err)
 		if err ~= nil then
