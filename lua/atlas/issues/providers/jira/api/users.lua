@@ -33,7 +33,7 @@ function M.get_myself(callback)
 		}
 		-- Jira cloud uses `accountId` while Jira server uses `name`
 		if config.jira_config().api_version:match("^2") then
-			user.name = tostring(result.name or "")
+			user.account_id = tostring(result.name or "")
 		else
 			user.account_id = tostring(result.accountId or "")
 		end

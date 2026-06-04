@@ -249,8 +249,13 @@ local function normalize_comment(raw_comment, issue_key, base_url)
 		self = raw_comment.self and tostring(raw_comment.self) or nil,
 		url = url,
 		author = normalize_issue_user(raw_comment.author),
-		body = adf.to_markdown(type(raw_comment.body) == "table" and raw_comment.body or nil),
-		_body = type(raw_comment.body) == "table" and raw_comment.body or nil,
+		-- Jira cloud returns body as ADF, while Jira server returns it as string
+		body = type(raw_comment.body) == "table" and adf.to_markdown(raw_comment.body)
+			or type(raw_comment.body) == "string" and raw_comment.body
+			or nil,
+		_body = type(raw_comment.body) == "table" and raw_comment.body
+			or type(raw_comment.body) == "string" and raw_comment.body
+			or nil,
 		created = raw_comment.created and tostring(raw_comment.created) or nil,
 		updated = raw_comment.updated and tostring(raw_comment.updated) or nil,
 		parent_id = parent_id,
