@@ -4,12 +4,12 @@ local service = require("atlas.issues.providers.jira.api.service")
 local normalizer = require("atlas.issues.providers.jira.api.mapper")
 local cache = require("atlas.core.cache")
 local logger = require("atlas.core.logger")
+local config = require("atlas.issues.providers.jira.api.config")
 
 local CACHE_TTL = 300
 
 local function story_points_field()
-	local cfg = require("atlas.issues.providers.jira.api.config").jira_config()
-	local project_config = cfg.project_config or {}
+	local project_config = config.jira_config().project_config or {}
 	return tostring(project_config.story_points_field or "customfield_10016")
 end
 
@@ -37,30 +37,20 @@ local function url_encode(str)
 	end))
 end
 
--- Tries /search/jql first; on HTTP 404 falls back to /search (older Jira API versions)
 ---@param data table
 ---@param on_done fun(result: table|nil, err: string|nil)
 ---@param ctx table|nil
 ---@return { job_id: integer, cancel: fun() }|nil
 local function search_jql_request(data, on_done, ctx)
-	local retried = false
-	local function attempt(endpoint)
-		local payload = data
-		if endpoint == "/search" then
-			payload = vim.deepcopy(data)
-			payload.startAt = tonumber(payload.nextPageToken) or 0
-			payload.nextPageToken = nil
-		end
+	local is_v2 = config.jira_config().api_version:match("^2")
 
-		return service.request("POST", endpoint, payload, function(result, err)
-			if not retried and err and err:find("HTTP 404", 1, true) == 1 then
-				retried = true
-				logger.loginfo("Jira /search/jql returned 404, retrying with /search")
-				return attempt("/search")
-			end
+	if is_v2 then
+		local payload = vim.deepcopy(data)
+		payload.startAt = tonumber(payload.nextPageToken) or 0
+		payload.nextPageToken = nil
 
-			if result and endpoint == "/search" then
-        -- Old /search endpoint use offset-based pagination instead of token-based
+		return service.request("POST", "/search", payload, function(result, err)
+			if result then
 				local start_at = tonumber(result.startAt) or 0
 				local max_results = tonumber(result.maxResults) or #(result.issues or {})
 				local total = tonumber(result.total) or 0
@@ -68,11 +58,13 @@ local function search_jql_request(data, on_done, ctx)
 				result.isLast = next_start >= total
 				result.nextPageToken = result.isLast and nil or tostring(next_start)
 			end
-
+			on_done(result, err)
+		end, ctx)
+	else
+		return service.request("POST", "/search/jql", data, function(result, err)
 			on_done(result, err)
 		end, ctx)
 	end
-	return attempt("/search/jql")
 end
 
 ---@class JiraIssueSearchPage
@@ -237,7 +229,14 @@ function M.get_issue_history_page(issue_key, start_at, max_results, on_done, opt
 		end
 	end
 
-	local endpoint = string.format("/issue/%s/changelog?startAt=%d&maxResults=%d", issue_key, start, size)
+	local is_v2 = config.jira_config().api_version:match("^2")
+
+	local endpoint
+	if is_v2 then
+		endpoint = string.format("/issue/%s?expand=changelog", issue_key)
+	else
+		endpoint = string.format("/issue/%s/changelog?startAt=%d&maxResults=%d", issue_key, start, size)
+	end
 
 	return service.request("GET", endpoint, nil, function(result, err)
 		if err or not result then
@@ -245,7 +244,15 @@ function M.get_issue_history_page(issue_key, start_at, max_results, on_done, opt
 			return
 		end
 
-		local page = normalizer.to_history_page(result, start, size)
+		local raw = result
+		if is_v2 then
+			raw = type(result.changelog) == "table" and result.changelog or { values = {} }
+			if raw.values == nil and raw.histories ~= nil then
+				raw.values = raw.histories
+			end
+		end
+
+		local page = normalizer.to_history_page(raw, start, size)
 		service.set_memory_cache(cache_key, page, CACHE_TTL)
 		on_done(page, nil)
 	end, {
