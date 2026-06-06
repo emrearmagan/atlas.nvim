@@ -47,6 +47,7 @@
 ---@field toggle_subscription (fun(issue: Issue, on_done: fun(is_subscribed: boolean|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---
 ---@field views fun(): IssuesViewConfig[]
+---@field bookmark_query_field string|nil
 ---@field run_action fun(action_id: string, ctx: table, on_done: fun(result: table|nil, err: string|nil))|nil
 ---@field open_actions fun(issue: Issue|nil, source: "main"|"panel"|nil, on_done: fun(result: table|nil, err: string|nil))|nil
 ---@field search fun(on_done: fun(result: table|nil, err: string|nil)|nil)|nil

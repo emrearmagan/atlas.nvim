@@ -31,11 +31,32 @@ local function sorted_items(items)
 	for name, value in pairs(items or {}) do
 		table.insert(out, { name = tostring(name), value = value })
 	end
-	table.sort(out, function(a, b) return a.name:lower() < b.name:lower() end)
+	table.sort(out, function(a, b)
+		return a.name:lower() < b.name:lower()
+	end)
 	return out
 end
 
 M.sorted_items = sorted_items
+
+---@generic V
+---@param views V[]
+---@param queries { key?: string, label?: string, items?: table }|nil
+---@param default_key string
+---@param default_label string
+---@return V[]
+function M.append_to_views(views, queries, default_key, default_label)
+	local bookmarks_view = M.build_view(queries, default_key, default_label)
+	if bookmarks_view == nil then
+		return views
+	end
+	local out = {}
+	for _, v in ipairs(views) do
+		table.insert(out, v)
+	end
+	table.insert(out, bookmarks_view)
+	return out
+end
 
 ---@param value any
 ---@return string
@@ -101,7 +122,9 @@ function M.render(lines, spans, line_map, items_table, width)
 	local name_w = 0
 	for _, item in ipairs(items) do
 		local w = ui_utils.text_width(item.name)
-		if w > name_w then name_w = w end
+		if w > name_w then
+			name_w = w
+		end
 	end
 	local prefix_w = left_indent + arrow_w + 2 + name_w + gap
 	local preview_w = math.max(width - prefix_w - left_indent, 10)
@@ -112,13 +135,7 @@ function M.render(lines, spans, line_map, items_table, width)
 		local preview = preview_text(item.value)
 		preview = utils.truncate(preview, preview_w, false)
 
-		local row = string.format(" %s  %s%s%s%s",
-			arrow,
-			item.name,
-			name_pad,
-			string.rep(" ", gap),
-			preview
-		)
+		local row = string.format(" %s  %s%s%s%s", arrow, item.name, name_pad, string.rep(" ", gap), preview)
 		table.insert(lines, row)
 
 		local lnum = #lines - 1

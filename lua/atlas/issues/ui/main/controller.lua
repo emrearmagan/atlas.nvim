@@ -379,11 +379,8 @@ function M.run_bookmark(name, value)
 	end
 	local view = { name = name, layout = "compact" }
 	if type(value) == "string" then
-		if (provider.id or "") == "jira" then
-			view.jql = value
-		else
-			view.search = value
-		end
+		local field = provider.bookmark_query_field or "search"
+		view[field] = value
 	elseif type(value) == "table" then
 		for k, v in pairs(value) do
 			view[k] = v

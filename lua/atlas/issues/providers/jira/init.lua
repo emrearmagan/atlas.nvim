@@ -7,6 +7,7 @@ local M = {
 	icon = icons.issues_provider("jira", "provider"),
 	hl_group = "AtlasJiraTheme",
 	panel = require("atlas.issues.providers.jira.ui.panel"),
+	bookmark_query_field = "jql",
 }
 
 function M.setup()
@@ -339,16 +340,7 @@ function M.views()
 			jql = "assignee = currentUser() AND resolution = Unresolved ORDER BY updated DESC",
 		},
 	}
-	local bookmarks_view = require("atlas.ui.shared.bookmarks_view").build_view(cfg.bookmarks, "J", "JQL")
-	if bookmarks_view ~= nil then
-		local copy = {}
-		for _, v in ipairs(views) do
-			table.insert(copy, v)
-		end
-		table.insert(copy, bookmarks_view)
-		return copy
-	end
-	return views
+	return require("atlas.ui.shared.bookmarks_view").append_to_views(views, cfg.bookmarks, "J", "JQL")
 end
 
 return M

@@ -404,16 +404,7 @@ function M.views()
 		{ name = "Assigned", key = "1", scope = "assigned_to_me", state = "opened" },
 		{ name = "Created", key = "2", scope = "created_by_me", state = "opened" },
 	}
-	local bookmarks_view = require("atlas.ui.shared.bookmarks_view").build_view(cfg.bookmarks, "S", "Search")
-	if bookmarks_view ~= nil then
-		local copy = {}
-		for _, v in ipairs(views) do
-			table.insert(copy, v)
-		end
-		table.insert(copy, bookmarks_view)
-		return copy
-	end
-	return views
+	return require("atlas.ui.shared.bookmarks_view").append_to_views(views, cfg.bookmarks, "S", "Search")
 end
 
 return M

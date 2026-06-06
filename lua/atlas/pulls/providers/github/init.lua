@@ -332,16 +332,7 @@ function M.views()
 	local views = (type(cfg.views) == "table" and #cfg.views > 0) and cfg.views or {
 		{ name = "Me", key = "1", search = "involves:@me", layout = "compact" },
 	}
-	local bookmarks_view = require("atlas.ui.shared.bookmarks_view").build_view(cfg.bookmarks, "S", "Search")
-	if bookmarks_view ~= nil then
-		local copy = {}
-		for _, v in ipairs(views) do
-			table.insert(copy, v)
-		end
-		table.insert(copy, bookmarks_view)
-		return copy
-	end
-	return views
+	return require("atlas.ui.shared.bookmarks_view").append_to_views(views, cfg.bookmarks, "S", "Search")
 end
 
 ---@param opts { force_load: boolean|nil }|nil

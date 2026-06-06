@@ -7,6 +7,7 @@ local M = {
 	icon = icons.pulls_provider("github", "provider"),
 	hl_group = "AtlasGHIssuesTheme",
 	panel = require("atlas.issues.providers.github.ui.panel"),
+	bookmark_query_field = "search",
 }
 
 function M.setup()
@@ -384,16 +385,7 @@ function M.views()
 			search = "assignee:@me is:open",
 		},
 	}
-	local bookmarks_view = require("atlas.ui.shared.bookmarks_view").build_view(cfg.bookmarks, "S", "Search")
-	if bookmarks_view ~= nil then
-		local copy = {}
-		for _, v in ipairs(views) do
-			table.insert(copy, v)
-		end
-		table.insert(copy, bookmarks_view)
-		return copy
-	end
-	return views
+	return require("atlas.ui.shared.bookmarks_view").append_to_views(views, cfg.bookmarks, "S", "Search")
 end
 
 return M
