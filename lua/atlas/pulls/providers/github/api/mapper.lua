@@ -9,6 +9,35 @@ local function body_text(value)
 	return json.safe_str(value) or ""
 end
 
+local REACTION_CONTENT_TO_KEY = {
+	THUMBS_UP = "+1",
+	THUMBS_DOWN = "-1",
+	LAUGH = "laugh",
+	HOORAY = "hooray",
+	CONFUSED = "confused",
+	HEART = "heart",
+	ROCKET = "rocket",
+	EYES = "eyes",
+}
+
+---@param groups any
+---@return table<string, integer>|nil
+local function normalize_reaction_groups(groups)
+	if type(groups) ~= "table" or #groups == 0 then
+		return nil
+	end
+	local out
+	for _, g in ipairs(groups) do
+		local key = REACTION_CONTENT_TO_KEY[tostring(g.content or "")]
+		local count = type(g.reactors) == "table" and tonumber(g.reactors.totalCount) or 0
+		if key and count > 0 then
+			out = out or {}
+			out[key] = count
+		end
+	end
+	return out
+end
+
 ---@param login string
 ---@return PullsAuthor|nil
 local function actor_from_login(login)
@@ -100,6 +129,7 @@ function M.to_pull_request(raw)
 		repo = repo_name,
 		repo_full_name = repo_full_name,
 		is_subscribed = tostring(raw.viewerSubscription or "") == "SUBSCRIBED",
+		reactions = normalize_reaction_groups(raw.reactionGroups),
 		_raw = raw,
 	}
 end

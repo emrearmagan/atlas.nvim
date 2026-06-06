@@ -10,6 +10,7 @@ query($owner: String!, $repo: String!, $number: Int!) {
     pullRequest(number: $number) {
       id number title state isDraft viewerSubscription
       createdAt updatedAt url body
+      reactionGroups { content reactors { totalCount } }
       additions deletions changedFiles
       reviewDecision
       labels(first: 10) { nodes { name color } }
@@ -35,6 +36,7 @@ query($search: String!, $limit: Int!) {
         id number title state isDraft
         createdAt updatedAt url
         additions deletions
+        reactionGroups { content reactors { totalCount } }
         latestOpinionatedReviews(last: 10) { nodes { state } }
         author { login ... on User { name } }
         headRefName baseRefName

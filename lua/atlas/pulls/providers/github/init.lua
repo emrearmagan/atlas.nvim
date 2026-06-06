@@ -166,6 +166,7 @@ function M.fetch_conversation(pr, opts, on_done)
 				} or nil,
 				content_raw = description,
 				created_on = pr.created_on or "",
+				reactions = pr.reactions,
 			})
 		end
 		on_done({
