@@ -386,13 +386,13 @@ local ACTIONS = {
 
 			local function open_editor(initial_description)
 				issue_editor.open(function(fields, submit_done)
-					local api_version = tostring(config.jira_config().api_version or "3")
-					local is_v2 = api_version:match("^2")
+					local is_server = config.jira_config().api_type == "server"
 
 					local desc = fields.description
 					local payload = {
 						summary = fields.summary,
-						description = type(desc) == "string" and (is_v2 and desc or md_to_adf.to_adf(desc)) or vim.NIL,
+						description = type(desc) == "string" and (is_server and desc or md_to_adf.to_adf(desc))
+							or vim.NIL,
 					}
 
 					if fields.issue_type and fields.issue_type.id and fields.issue_type.id ~= "" then
@@ -400,7 +400,7 @@ local ACTIONS = {
 					end
 
 					if fields.assignee and fields.assignee.account_id then
-						payload.assignee = is_v2 and { name = fields.assignee.account_id }
+						payload.assignee = is_server and { name = fields.assignee.account_id }
 							or { id = fields.assignee.account_id }
 					else
 						payload.assignee = vim.NIL
@@ -492,16 +492,15 @@ local ACTIONS = {
 						return
 					end
 
-					local api_version = tostring(config.jira_config().api_version or "3")
-					local is_v2 = api_version:match("^2")
+					local is_server = config.jira_config().api_type == "server"
 
 					local desc = fields.description
 					if type(desc) == "string" then
-						api_fields.description = is_v2 and desc or md_to_adf.to_adf(desc)
+						api_fields.description = is_server and desc or md_to_adf.to_adf(desc)
 					end
 
 					if fields.assignee and fields.assignee.account_id then
-						api_fields.assignee = is_v2 and { name = fields.assignee.account_id }
+						api_fields.assignee = is_server and { name = fields.assignee.account_id }
 							or { id = fields.assignee.account_id }
 					end
 
@@ -1044,7 +1043,7 @@ local ACTIONS = {
 
 			local function unsubscribe(account_id)
 				local param_name = "accountId"
-				if config.jira_config().api_version:match("^2") then
+				if config.jira_config().api_type == "server" then
 					param_name = "username"
 				end
 

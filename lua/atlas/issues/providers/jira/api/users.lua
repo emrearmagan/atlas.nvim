@@ -32,7 +32,7 @@ function M.get_myself(callback)
 			display_name = tostring(result.displayName or ""),
 		}
 		-- Jira cloud uses `accountId` while Jira server uses `name`
-		if config.jira_config().api_version:match("^2") then
+		if config.jira_config().api_type == "server" then
 			user.account_id = tostring(result.name or "")
 		else
 			user.account_id = tostring(result.accountId or "")
@@ -59,12 +59,11 @@ function M.get_assignable_users(opts, query, callback)
 		return nil
 	end
 
-	local api_version = tostring(config.jira_config().api_version or "3")
-	local is_v2 = api_version:match("^2")
+	local is_server = config.jira_config().api_type == "server"
 
 	local q = tostring(query or "")
 	local params = {}
-	if is_v2 then
+	if is_server then
 		table.insert(params, "username=" .. url_encode(q))
 	else
 		table.insert(params, "query=" .. url_encode(q))
@@ -87,7 +86,7 @@ function M.get_assignable_users(opts, query, callback)
 		for _, raw in ipairs(result) do
 			if type(raw) == "table" then
 				local user = { display_name = tostring(raw.displayName or "") }
-				if is_v2 then
+				if is_server then
 					user.account_id = tostring(raw.name or "")
 				else
 					user.account_id = tostring(raw.accountId or "")
@@ -219,7 +218,7 @@ function M.assign_issue(issue_key, account_id, callback)
 
 	local endpoint = string.format("/issue/%s/assignee", issue_key)
 	local payload = {}
-	if config.jira_config().api_version:match("^2") then
+	if config.jira_config().api_type == "server" then
 		payload.name = normalized_account_id or vim.NIL
 	else
 		payload.accountId = normalized_account_id or vim.NIL
@@ -256,7 +255,7 @@ function M.change_reporter(issue_key, account_id, callback)
 
 	local endpoint = string.format("/issue/%s", issue_key)
 	local payload = { fields = { reporter = {} } }
-	if config.jira_config().api_version:match("^2") then
+	if config.jira_config().api_type == "server" then
 		payload.fields.reporter.name = account_id
 	else
 		payload.fields.reporter.accountId = account_id

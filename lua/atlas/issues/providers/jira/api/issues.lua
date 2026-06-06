@@ -42,9 +42,7 @@ end
 ---@param ctx table|nil
 ---@return { job_id: integer, cancel: fun() }|nil
 local function search_jql_request(data, on_done, ctx)
-	local is_v2 = config.jira_config().api_version:match("^2")
-
-	if is_v2 then
+	if config.jira_config().api_type == "server" then
 		local payload = vim.deepcopy(data)
 		payload.startAt = tonumber(payload.nextPageToken) or 0
 		payload.nextPageToken = nil
@@ -229,10 +227,10 @@ function M.get_issue_history_page(issue_key, start_at, max_results, on_done, opt
 		end
 	end
 
-	local is_v2 = config.jira_config().api_version:match("^2")
+	local is_server = config.jira_config().api_type == "server"
 
 	local endpoint
-	if is_v2 then
+	if is_server then
 		endpoint = string.format("/issue/%s?expand=changelog", issue_key)
 	else
 		endpoint = string.format("/issue/%s/changelog?startAt=%d&maxResults=%d", issue_key, start, size)
@@ -245,7 +243,7 @@ function M.get_issue_history_page(issue_key, start_at, max_results, on_done, opt
 		end
 
 		local raw = result
-		if is_v2 then
+		if is_server then
 			raw = type(result.changelog) == "table" and result.changelog or { values = {} }
 			if raw.values == nil and raw.histories ~= nil then
 				raw.values = raw.histories

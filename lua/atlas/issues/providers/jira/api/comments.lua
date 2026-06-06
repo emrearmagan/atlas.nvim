@@ -69,7 +69,7 @@ function M.add_comment(issue_key, comment, opts, callback)
 
 	local endpoint = string.format("/issue/%s/comment", issue_key)
 	local payload = { body = "" }
-	if config.jira_config().api_version:match("^3") then
+	if config.jira_config().api_type == "cloud" then
 		payload.body = markdown.to_adf(body)
 	else
 		payload.body = body
@@ -122,7 +122,7 @@ function M.edit_comment(issue_key, comment_id, comment, callback)
 
 	local endpoint = string.format("/issue/%s/comment/%s", issue_key, id)
 	local payload = { body = "" }
-	if config.jira_config().api_version:match("^3") then
+	if config.jira_config().api_type == "cloud" then
 		payload.body = markdown.to_adf(body)
 	else
 		payload.body = body

@@ -13,7 +13,9 @@ function M.get_auth()
 	local token = jira.token
 
 	if not base_url or base_url == "" or not email or email == "" or not token or token == "" then
-		return "", "", "Missing Jira credentials in config (issues.providers.jira.base_url, issues.providers.jira.email, issues.providers.jira.token)"
+		return "",
+			"",
+			"Missing Jira credentials in config (issues.providers.jira.base_url, issues.providers.jira.email, issues.providers.jira.token)"
 	end
 
 	return base_url, email, nil
@@ -24,12 +26,12 @@ function M.build_headers()
 	local jira = config.jira_config()
 	local email = jira.email or ""
 	local token = jira.token or ""
-  local auth_header = "Basic " .. vim.base64.encode(string.format("%s:%s", email, token))
-  if jira.auth_method == "bearer" then
-    auth_header = "Bearer " .. token
-  end
+	local auth_header = "Basic " .. vim.base64.encode(string.format("%s:%s", email, token))
+	if jira.auth_method == "bearer" then
+		auth_header = "Bearer " .. token
+	end
 	return {
-    authorization = auth_header,
+		authorization = auth_header,
 		["Content-Type"] = "application/json",
 		Accept = "application/json",
 	}
@@ -42,7 +44,10 @@ end
 
 ---@return string
 function M.api_path()
-	local version = config.jira_config().api_version or "3"
+	local version = "3"
+	if config.jira_config().api_type == "server" then
+		version = "2"
+	end
 	return "/rest/api/" .. version
 end
 

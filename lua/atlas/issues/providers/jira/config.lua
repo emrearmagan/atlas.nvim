@@ -6,7 +6,7 @@
 --           base_url = "https://your-domain.atlassian.net",
 --           email    = vim.env.JIRA_EMAIL,
 --           token    = vim.env.JIRA_TOKEN,
---           api_version = "3",
+--           api_type = "cloud",
 --           auth_method = "basic", -- "basic" | "bearer"
 --           cache_ttl = 300,
 --           views = {
@@ -51,7 +51,7 @@
 ---@field base_url string
 ---@field email string
 ---@field token string
----@field api_version string|nil
+---@field api_type string|nil
 ---@field auth_method "basic"|"bearer"|nil
 ---@field cache_ttl number|nil
 ---@field views AtlasJiraViewConfig[]|nil

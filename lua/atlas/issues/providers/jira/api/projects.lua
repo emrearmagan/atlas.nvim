@@ -59,11 +59,10 @@ function M.get_projects(opts, callback)
 		if cancelled then
 			return
 		end
-		local jira_config = config.jira_config()
-		local is_v2 = jira_config.api_version:match("^2")
-		local path = is_v2 and "/project" or "/project/search"
+		local is_server = config.jira_config().api_type == "server"
+		local path = is_server and "/project" or "/project/search"
 		local endpoint
-		if is_v2 then
+		if is_server then
 			endpoint = path
 		else
 			endpoint = string.format(

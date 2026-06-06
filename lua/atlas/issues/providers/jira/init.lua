@@ -301,7 +301,7 @@ function M.toggle_subscription(issue, on_done)
 	local function unsubscribe(account_id)
 		local jira_config = config.jira_config()
 		local user_param = "accountId=" .. account_id
-		if jira_config.api_version:match("^2") then
+		if jira_config.api_type == "server" then
 			user_param = "username=" .. account_id
 		end
 		return service.request(
