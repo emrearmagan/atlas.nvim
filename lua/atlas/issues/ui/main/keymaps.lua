@@ -56,6 +56,18 @@ function M.register(buf, views)
 		end
 	end
 
+	table.insert(items, {
+		key = "<CR>",
+		desc = "Run bookmark",
+		callback = function()
+			local navigation = require("atlas.ui.navigation")
+			local node = navigation.current_item()
+			if type(node) == "table" and node.kind == "bookmark" then
+				controller.run_bookmark(node.name, node.value)
+			end
+		end,
+	})
+
 	if state.provider and state.provider.open_actions then
 		utils.insert_if(
 			items,

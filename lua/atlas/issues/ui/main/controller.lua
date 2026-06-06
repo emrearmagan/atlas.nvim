@@ -178,6 +178,23 @@ local function load_active_view(opts, on_done)
 		return
 	end
 
+	if target_view._kind == "bookmarks" then
+		cancel_active_requests()
+		spinner.stop()
+		if refresh_status_spinner:is_running() then
+			refresh_status_spinner:stop()
+		end
+		state.is_loading = false
+		state.error = nil
+		state.issues = nil
+		state.issue_tree = nil
+		state.current_view = state.active_view
+		state.line_map = {}
+		render_if_active()
+		on_done()
+		return
+	end
+
 	local target_view_id = view_id(target_view)
 	local token = next_request_token()
 	state.latest_request_tokens[target_view_id] = token
@@ -350,6 +367,55 @@ function M.switch_view(view)
 	state.active_view = view
 	load_active_view({ force_load = false }, function()
 		navigation.focus_first_item()
+	end)
+end
+
+---@param name string
+---@param value any
+function M.run_bookmark(name, value)
+	local provider = state.provider
+	if provider == nil then
+		return
+	end
+	local view = { name = name, layout = "compact" }
+	if type(value) == "string" then
+		if (provider.id or "") == "jira" then
+			view.jql = value
+		else
+			view.search = value
+		end
+	elseif type(value) == "table" then
+		for k, v in pairs(value) do
+			view[k] = v
+		end
+	end
+
+	cancel_active_requests()
+	state.is_loading = true
+	state.error = nil
+	state.issues = nil
+	state.issue_tree = nil
+	state.current_view = view
+	footer.notify("loading", "Running query...")
+	render_if_active()
+
+	active_issues_handle = provider.fetch_issues(view, {
+		force_load = false,
+		max_results = tonumber((config.options and config.options.issues or {}).max_results) or 100,
+		layout = view.layout,
+	}, function(issues, _, _, err)
+		active_issues_handle = nil
+		state.is_loading = false
+		if err then
+			state.error = tostring(err)
+			footer.notify("error", string.format("Query failed: %s", state.error))
+		else
+			state.error = nil
+			state.issues = issues or {}
+			state.issue_tree = helper.build_issue_tree(issues or {})
+			footer.notify("success", string.format("Loaded %d issues", #(issues or {})), 1200)
+		end
+		render_if_active()
 	end)
 end
 

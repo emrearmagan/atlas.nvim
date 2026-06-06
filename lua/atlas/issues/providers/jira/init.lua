@@ -332,16 +332,23 @@ end
 ---@return AtlasJiraViewConfig[]
 function M.views()
 	local cfg = require("atlas.issues.providers.jira.api.service").jira_config()
-	if cfg.views ~= nil then
-		return cfg.views
-	end
-	return {
+	local views = cfg.views or {
 		{
 			name = "Issues",
 			key = "1",
 			jql = "assignee = currentUser() AND resolution = Unresolved ORDER BY updated DESC",
 		},
 	}
+	local bookmarks_view = require("atlas.ui.shared.bookmarks_view").build_view(cfg.bookmarks, "J", "JQL")
+	if bookmarks_view ~= nil then
+		local copy = {}
+		for _, v in ipairs(views) do
+			table.insert(copy, v)
+		end
+		table.insert(copy, bookmarks_view)
+		return copy
+	end
+	return views
 end
 
 return M

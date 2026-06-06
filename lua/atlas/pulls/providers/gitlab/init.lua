@@ -400,23 +400,20 @@ end
 ---@return AtlasGitLabPullsViewConfig[]
 function M.views()
 	local cfg = require("atlas.pulls.providers.gitlab.api.service").gitlab_config()
-	if cfg.views ~= nil then
-		return cfg.views
-	end
-	return {
-		{
-			name = "Assigned",
-			key = "1",
-			scope = "assigned_to_me",
-			state = "opened",
-		},
-		{
-			name = "Created",
-			key = "2",
-			scope = "created_by_me",
-			state = "opened",
-		},
+	local views = cfg.views or {
+		{ name = "Assigned", key = "1", scope = "assigned_to_me", state = "opened" },
+		{ name = "Created", key = "2", scope = "created_by_me", state = "opened" },
 	}
+	local bookmarks_view = require("atlas.ui.shared.bookmarks_view").build_view(cfg.bookmarks, "S", "Search")
+	if bookmarks_view ~= nil then
+		local copy = {}
+		for _, v in ipairs(views) do
+			table.insert(copy, v)
+		end
+		table.insert(copy, bookmarks_view)
+		return copy
+	end
+	return views
 end
 
 return M

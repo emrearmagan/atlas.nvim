@@ -13,6 +13,14 @@
 --             { name = "Watching",   key = "3", jql = "watcher = currentUser() AND resolution = Unresolved ORDER BY updated DESC" },
 --             { name = "Sprint",     key = "4", jql = "sprint in openSprints() AND assignee = currentUser() ORDER BY rank" },
 --           },
+--           bookmarks = {
+--             -- key   = "J",   -- default
+--             -- label = "JQL", -- default
+--             items = {
+--               ["Backlog"]     = "project = KAN AND statusCategory != Done AND (sprint IS EMPTY OR sprint NOT IN openSprints()) ORDER BY Rank ASC",
+--               ["Next sprint"] = "project = KAN AND sprint in futureSprints() ORDER BY Rank ASC",
+--             },
+--           },
 --
 --           -- Per-project custom field
 --           project_config = {
@@ -45,10 +53,16 @@
 ---@field story_points_field string|nil
 ---[project_key] AtlasJiraCustomFieldConfig
 
+---@class AtlasJiraBookmarksConfig
+---@field key string|nil    -- default "J"
+---@field label string|nil  -- default "JQL"
+---@field items table<string, string>|nil
+
 ---@class AtlasJiraIssuesConfig
 ---@field base_url string
 ---@field email string
 ---@field token string
 ---@field cache_ttl number|nil
 ---@field views AtlasJiraViewConfig[]|nil
+---@field bookmarks AtlasJiraBookmarksConfig|nil
 ---@field project_config AtlasJiraProjectConfig|nil

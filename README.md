@@ -154,7 +154,6 @@ use {
 - [x] Subscribe / unsubscribe to issues
 - [x] Add custom actions to issues
 - [x] Create and edit issue templates
-- [ ] Save JQL queries as custom views
 - [ ] Save and filter issues
 
 ### Jira
@@ -217,6 +216,16 @@ issues = {
           jql = "project = KAN ORDER BY updated DESC",
         },
       },
+
+      bookmarks = {
+        -- key   = "J",   -- default
+        -- label = "JQL", -- default
+        items = {
+          ["Backlog"]     = "project = KAN AND statusCategory != Done AND (sprint IS EMPTY OR sprint NOT IN openSprints()) ORDER BY Rank ASC",
+          ["Next sprint"] = "project = KAN AND sprint in futureSprints() ORDER BY Rank ASC",
+          ["My open"]     = "assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC",
+        },
+      },
     },
   },
 },
@@ -257,6 +266,15 @@ issues = {
           search = "mentions:@me is:open",
         },
       },
+
+      bookmarks = {
+        -- key   = "S",      -- default
+        -- label = "Search", -- default
+        items = {
+          ["Bugs"]            = "is:issue is:open label:bug",
+          ["Recently closed"] = "is:issue is:closed author:@me sort:updated-desc",
+        },
+      },
     },
   },
 },
@@ -276,7 +294,7 @@ issues = {
   providers = {
     gitlab = {
       base_url = "https://gitlab.com",
-      token = os.getenv("GITLAB_TOKEN") or "",
+      token = vim.env.GITLAB_TOKEN,
       cache_ttl = 300,
 
       ---@type AtlasGitLabIssuesViewConfig[]
@@ -300,6 +318,16 @@ issues = {
           state = "opened",
           -- Anything not covered by the explicit fields below can be passed via `extra_params`.
           extra_params = { ["not[labels]"] = "wontfix" },
+        },
+      },
+
+      bookmarks = {
+        -- key   = "S",      -- default
+        -- label = "Search", -- default
+        items = {
+          ["No labels"] = { scope = "all", state = "opened",
+                            extra_params = { ["not[labels]"] = "*" } },
+          ["Closed"]    = { scope = "created_by_me", state = "closed" },
         },
       },
     },
@@ -421,6 +449,16 @@ pulls = {
           search = "repo:your-org/your-repo",
         },
       },
+
+      bookmarks = {
+        -- key   = "S",      -- default
+        -- label = "Search", -- default
+        items = {
+          ["Drafts"]           = "is:pr is:draft author:@me",
+          ["Recently merged"]  = "is:pr is:merged author:@me sort:updated-desc",
+          ["Review requested"] = "is:pr is:open review-requested:@me",
+        },
+      },
     },
   },
 },
@@ -437,8 +475,8 @@ pulls = {
 pulls = {
   providers = {
     bitbucket = {
-      user = os.getenv("BITBUCKET_USER") or "",
-      token = os.getenv("BITBUCKET_TOKEN") or "",
+      user = vim.env.BITBUCKET_USER,
+      token = vim.env.BITBUCKET_TOKEN,
       cache_ttl = 300,
 
       ---@type AtlasBitbucketViewConfig[]
@@ -487,7 +525,7 @@ pulls = {
   providers = {
     gitlab = {
       base_url = "https://gitlab.com",
-      token = os.getenv("GITLAB_TOKEN") or "",
+      token = vim.env.GITLAB_TOKEN,
       cache_ttl = 300,
 
       ---@type AtlasGitLabPullsViewConfig[]
@@ -514,6 +552,15 @@ pulls = {
           name = "GitLab Org",
           key = "O",
           group = "gitlab-org",
+        },
+      },
+
+      bookmarks = {
+        -- key   = "S",      -- default
+        -- label = "Search", -- default
+        items = {
+          ["Reviewing"]    = { scope = "all", extra_params = { reviewer_id = "Me" } },
+          ["Merged by me"] = { scope = "all", state = "merged", author_username = "me" },
         },
       },
     },

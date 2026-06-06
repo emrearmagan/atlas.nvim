@@ -702,6 +702,32 @@ function M.render(opts)
 				{ line = 0, start_col = 0, end_col = #err_text, hl_group = "AtlasLogError" },
 			},
 		})
+	elseif type(active) == "table" and active._kind == "bookmarks" then
+		append_search_text(lines, spans, search_text(state.current_view))
+		require("atlas.ui.shared.bookmarks_view").render(lines, spans, line_map, active._bookmarks or {}, opts.width)
+
+		local issues = state.issues or {}
+		local issue_groups = state.issue_tree or {}
+		if state.is_loading then
+			table.insert(lines, "")
+			table.insert(lines, "Loading...")
+		elseif #issues > 0 or #issue_groups > 0 then
+			table.insert(lines, "")
+			local tbl_lines, tbl_spans, tbl_map
+			if provider and provider.render then
+				local result = provider.render(issue_groups, "plain", { width = opts.width })
+				tbl_lines = result.lines or {}
+				tbl_spans = result.spans or {}
+				tbl_map = result.line_map or {}
+			else
+				tbl_lines, tbl_map, tbl_spans = render_issue_table(opts, issue_groups)
+			end
+			local table_base = #lines
+			utils.append_block(lines, spans, { lines = tbl_lines, highlights = tbl_spans })
+			for lnum, node in pairs(tbl_map) do
+				line_map[table_base + lnum] = node
+			end
+		end
 	else
 		local issue_groups = state.issue_tree or {}
 		local layout = type(active) == "table" and tostring(active.layout or "plain") or "plain"

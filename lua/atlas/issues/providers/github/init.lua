@@ -376,17 +376,24 @@ end
 ---@return AtlasGitHubIssuesViewConfig[]
 function M.views()
 	local cli = require("atlas.issues.providers.github.api.cli")
-	local views = cli.github_config().views
-	if views ~= nil then
-		return views
-	end
-	return {
+	local cfg = cli.github_config()
+	local views = cfg.views or {
 		{
 			name = "Assigned",
 			key = "1",
 			search = "assignee:@me is:open",
 		},
 	}
+	local bookmarks_view = require("atlas.ui.shared.bookmarks_view").build_view(cfg.bookmarks, "S", "Search")
+	if bookmarks_view ~= nil then
+		local copy = {}
+		for _, v in ipairs(views) do
+			table.insert(copy, v)
+		end
+		table.insert(copy, bookmarks_view)
+		return copy
+	end
+	return views
 end
 
 return M
