@@ -4,42 +4,52 @@ local config = require("atlas.config")
 local git = require("atlas.core.git")
 local logger = require("atlas.core.logger")
 
-local function expand_home(path)
-	if type(path) ~= "string" then
-		return path
+local LUA_PATTERN_SPECIALS = "[%^%$%(%)%%%.%[%]%+%-%?]"
+
+local function star_count(s)
+	local _, n = s:gsub("%*", "")
+	return n
+end
+
+-- Split "workspace/seg" → ws, seg. Returns nil if the key has extra slashes.
+local function split_key(key)
+	if type(key) ~= "string" then
+		return nil, nil
 	end
-	if path:sub(1, 2) == "~/" then
-		local home = vim.env.HOME or vim.fn.expand("~")
-		return home .. path:sub(2)
-	end
-	return path
+	return key:match("^([^/]+)/([^/]+)$")
 end
 
 local function normalize_path(path)
-	return vim.fn.fnamemodify(expand_home(path), ":p")
-end
-
-local function wildcard_count(value)
-	if type(value) ~= "string" then
-		return 0
+	if path:sub(1, 2) == "~/" then
+		path = (vim.env.HOME or vim.fn.expand("~")) .. path:sub(2)
 	end
-	local _, count = value:gsub("%*", "")
-	return count
+	return vim.fn.fnamemodify(path, ":p")
 end
 
-local function split_repo(full_repo_name)
-	if type(full_repo_name) ~= "string" then
-		return nil, nil
+-- Turn a seg like "proj-*-v*" into a Lua pattern with one capture per `*`.
+local function seg_to_pattern(seg)
+	local escaped = seg:gsub(LUA_PATTERN_SPECIALS, "%%%0"):gsub("%*", "([^/]+)")
+	return "^" .. escaped .. "$"
+end
+
+-- Replace each `*` in `value` with the next capture from `captures`.
+local function apply_captures(value, captures)
+	local idx = 0
+	return (value:gsub("%*", function()
+		idx = idx + 1
+		return captures[idx] or ""
+	end))
+end
+
+-- Pattern specificity: fewer `*` wins, then longer literal text, then alphabetical key.
+local function more_specific(a, b)
+	if a.stars ~= b.stars then
+		return a.stars < b.stars
 	end
-	return full_repo_name:match("^([^/]+)/([^/]+)$")
-end
-
-local function is_exact_key(key)
-	return type(key) == "string" and key:match("^[^/]+/[^/*]+$") ~= nil
-end
-
-local function is_wildcard_key(key)
-	return type(key) == "string" and key:match("^[^/]+/%*$") ~= nil
+	if a.lit ~= b.lit then
+		return a.lit > b.lit
+	end
+	return a.key < b.key
 end
 
 ---@param repo_paths table<string, string>|nil
@@ -53,34 +63,16 @@ function M.validate_repo_paths(repo_paths)
 		return false, "repo_paths must be a table<string,string>"
 	end
 
-	local wildcard_workspace_seen = {}
-
 	for key, value in pairs(repo_paths) do
 		if type(key) ~= "string" or type(value) ~= "string" then
 			return false, "repo_paths keys and values must be strings"
 		end
-
-		local exact = is_exact_key(key)
-		local wildcard = is_wildcard_key(key)
-		if not exact and not wildcard then
-			return false, string.format("invalid key '%s' (expected workspace/repo or workspace/*)", key)
+		local _, seg = split_key(key)
+		if seg == nil then
+			return false, string.format("invalid key '%s' (expected workspace/repo or workspace/<pattern with *>)", key)
 		end
-
-		local wc = wildcard_count(value)
-		if exact and wc ~= 0 then
-			return false, string.format("exact key '%s' must map to non-wildcard path", key)
-		end
-
-		if wildcard then
-			if wc ~= 1 then
-				return false, string.format("wildcard key '%s' must map to path with exactly one '*'", key)
-			end
-
-			local workspace = key:match("^([^/]+)/%*$")
-			if wildcard_workspace_seen[workspace] then
-				return false, string.format("multiple wildcard mappings for workspace '%s' are not allowed", workspace)
-			end
-			wildcard_workspace_seen[workspace] = true
+		if star_count(seg) ~= star_count(value) then
+			return false, string.format("wildcard parity mismatch for '%s' → '%s'", key, value)
 		end
 	end
 
@@ -94,44 +86,54 @@ end
 ---@return string|nil err
 function M.resolve_repo_path(repo_paths, repo_name, opts)
 	opts = opts or {}
-	local require_git = opts.require_git ~= false
-	local require_existing = opts.require_existing ~= false
 
 	local ok, err = M.validate_repo_paths(repo_paths)
 	if not ok then
 		return nil, err
 	end
 
-	local workspace, repo = split_repo(repo_name)
-	if not workspace or not repo then
+	local workspace, repo = repo_name:match("^([^/]+)/([^/]+)$")
+	if not workspace then
 		return nil, "invalid repository identifier (expected workspace/repo)"
 	end
 
-	local resolved = nil
-	local exact = repo_paths[repo_name]
-	if type(exact) == "string" and exact ~= "" then
-		resolved = normalize_path(exact)
-	else
-		local wildcard = repo_paths[workspace .. "/*"]
-		if type(wildcard) == "string" and wildcard ~= "" then
-			resolved = normalize_path((wildcard:gsub("%*", repo, 1)))
+	-- Exact match wins over any wildcard.
+	---@type string|nil
+	local resolved = repo_paths[repo_name]
+	if type(resolved) ~= "string" or resolved == "" then
+		local best
+		for key, value in pairs(repo_paths) do
+			local ws, seg = split_key(key)
+			if ws == workspace and seg and seg:find("*", 1, true) and type(value) == "string" and value ~= "" then
+				local captures = { repo:match(seg_to_pattern(seg)) }
+				if captures[1] then
+					local stars = star_count(seg)
+					local candidate = {
+						key = key,
+						stars = stars,
+						lit = #seg - stars,
+						value = apply_captures(value, captures),
+					}
+					if not best or more_specific(candidate, best) then
+						best = candidate
+					end
+				end
+			end
 		end
+		resolved = best and best.value or nil
 	end
 
 	if type(resolved) ~= "string" or resolved == "" then
 		return nil, string.format("no repo_paths mapping for '%s'", repo_name)
 	end
+	resolved = normalize_path(resolved)
 
-	if require_existing and vim.fn.isdirectory(resolved) ~= 1 then
+	if opts.require_existing ~= false and vim.fn.isdirectory(resolved) ~= 1 then
 		return nil, string.format("mapped path does not exist: %s", resolved)
 	end
-
-	if require_git then
-		if not git.is_inside_work_tree(resolved) then
-			return nil, string.format("mapped path is not a git repository: %s", resolved)
-		end
+	if opts.require_git ~= false and not git.is_inside_work_tree(resolved) then
+		return nil, string.format("mapped path is not a git repository: %s", resolved)
 	end
-
 	return resolved, nil
 end
 
@@ -150,7 +152,7 @@ function M.resolve_repo_path_for_pr(pr, opts)
 	end
 
 	local pulls_cfg = (config.options.pulls or {})
-	local mapping = ((pulls_cfg.repo_config or {}).paths) or {}
+	local mapping = (pulls_cfg.repo_config or {}).paths or {}
 	return M.resolve_repo_path(mapping, repo_id, opts)
 end
 
@@ -161,7 +163,18 @@ function M.fetch_pr_branches(pr, repo_path, on_done)
 	local src_branch = tostring((pr.source or {}).branch or "")
 	local dst_branch = tostring((pr.destination or {}).branch or "")
 
-	git.fetch_branches(repo_path, "origin", { src_branch, dst_branch }, function(ok, err)
+	local refs = { dst_branch }
+	local pr_id = tostring(pr.id or "")
+	-- GitHub exposes every PR (including those from forks) under refs/pull/<N>/head
+	-- on the base repo's origin. Fetching by branch name fails for fork PRs because
+	-- the branch lives on the contributor's fork, not on origin.
+	if pr.provider == "github" and pr_id ~= "" and src_branch ~= "" then
+		table.insert(refs, string.format("+refs/pull/%s/head:refs/remotes/origin/%s", pr_id, src_branch))
+	else
+		table.insert(refs, src_branch)
+	end
+
+	git.fetch_branches(repo_path, "origin", refs, function(ok, err)
 		on_done(ok and nil or err)
 	end)
 end
@@ -206,7 +219,13 @@ function M.checkout_pr(pr, on_done)
 			return
 		end
 
-		git.fetch_branches(repo_path, "origin", { src_branch }, function(fetch_ok, ferr)
+		local fetch_refs = { src_branch }
+		local pr_id = tostring(pr.id or "")
+		if pr.provider == "github" and pr_id ~= "" then
+			fetch_refs = { string.format("+refs/pull/%s/head:refs/remotes/origin/%s", pr_id, src_branch) }
+		end
+
+		git.fetch_branches(repo_path, "origin", fetch_refs, function(fetch_ok, ferr)
 			if not fetch_ok then
 				logger.logerror("checkout.checkout_pr fetch failed", {
 					pr_id = pr.id,
