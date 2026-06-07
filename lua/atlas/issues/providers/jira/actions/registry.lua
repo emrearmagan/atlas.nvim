@@ -504,26 +504,66 @@ local ACTIONS = {
 							or { id = fields.assignee.account_id }
 					end
 
-					issues_api.create_issue(api_fields, function(result, err)
-						if err then
-							submit_done(false, err)
-							done(nil, err)
-							return
-						end
+					local raw_desc = desc
+					local function commit_create(payload, was_retry)
+						issues_api.create_issue(payload, function(result, err)
+							if err then
+								if
+									not was_retry
+									and type(raw_desc) == "string"
+									and err:find("Field 'description' cannot be set", 1, true)
+								then
+									local retry = vim.deepcopy(payload)
+									retry.description = nil
+									commit_create(retry, true)
+									return
+								end
+								submit_done(false, err)
+								done(nil, err)
+								return
+							end
 
-						if result and result.key then
-							footer.notify("success", string.format("Created %s", result.key), 2000)
-							submit_done(true, nil)
-							done(
-								{ changed_issue_key = result.key, message = string.format("Created %s", result.key) },
-								nil
-							)
-							return
-						end
+							if result and result.key then
+								if was_retry and type(raw_desc) == "string" then
+									local update = { description = raw_desc }
+									issues_api.update_issue(result.key, update, function(ok)
+										if ok then
+											footer.notify("success", string.format("Created %s", result.key), 2000)
+											submit_done(true, nil)
+											done(
+												{ changed_issue_key = result.key, message = "Created " .. result.key },
+												nil
+											)
+										else
+											footer.notify("warn", "Issue created but failed to set description", 3000)
+											submit_done(true, "Description not set")
+											done(
+												{ changed_issue_key = result.key, message = "Created " .. result.key },
+												nil
+											)
+										end
+									end)
+									return
+								end
 
-						submit_done(false, "Invalid response")
-						done(nil, "Invalid response")
-					end)
+								footer.notify("success", string.format("Created %s", result.key), 2000)
+								submit_done(true, nil)
+								done(
+									{
+										changed_issue_key = result.key,
+										message = string.format("Created %s", result.key),
+									},
+									nil
+								)
+								return
+							end
+
+							submit_done(false, "Invalid response")
+							done(nil, "Invalid response")
+						end)
+					end
+
+					commit_create(api_fields, false)
 				end, {
 					summary = "",
 					description = nil,
