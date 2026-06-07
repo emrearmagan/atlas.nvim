@@ -11,7 +11,7 @@ local function star_count(s)
 	return n
 end
 
--- Split "workspace/seg" → ws, seg. Returns nil if the key has extra slashes.
+-- Split "workspace/seg" -> ws, seg. Returns nil if the key has extra slashes.
 local function split_key(key)
 	if type(key) ~= "string" then
 		return nil, nil
@@ -166,8 +166,8 @@ function M.fetch_pr_branches(pr, repo_path, on_done)
 	local refs = { dst_branch }
 	local pr_id = tostring(pr.id or "")
 	-- GitHub exposes every PR (including those from forks) under refs/pull/<N>/head
-	-- on the base repo's origin. Fetching by branch name fails for fork PRs because
-	-- the branch lives on the contributor's fork, not on origin.
+	-- on the base repo's origin. Fetching by branch name fails for fork PRs because the branch lives on the contributor's fork, not on origin.
+	-- TODO: Should probably check for the other providers as well...
 	if pr.provider == "github" and pr_id ~= "" and src_branch ~= "" then
 		table.insert(refs, string.format("+refs/pull/%s/head:refs/remotes/origin/%s", pr_id, src_branch))
 	else
