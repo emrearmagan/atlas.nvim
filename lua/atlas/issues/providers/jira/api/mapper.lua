@@ -122,7 +122,10 @@ local function normalize_issue_user(raw_user)
 		return nil
 	end
 
-	local account_id = raw_user.accountId and tostring(raw_user.accountId) or ""
+	-- Replace accountId with name to support Jira server instances
+	local account_id = raw_user.accountId and tostring(raw_user.accountId)
+		or raw_user.name and tostring(raw_user.name)
+		or ""
 	local display_name = raw_user.displayName and tostring(raw_user.displayName) or ""
 	if account_id == "" or display_name == "" then
 		return nil
@@ -246,8 +249,13 @@ local function normalize_comment(raw_comment, issue_key, base_url)
 		self = raw_comment.self and tostring(raw_comment.self) or nil,
 		url = url,
 		author = normalize_issue_user(raw_comment.author),
-		body = adf.to_markdown(type(raw_comment.body) == "table" and raw_comment.body or nil),
-		_body = type(raw_comment.body) == "table" and raw_comment.body or nil,
+		-- Jira cloud returns body as ADF, while Jira server returns it as string
+		body = type(raw_comment.body) == "table" and adf.to_markdown(raw_comment.body)
+			or type(raw_comment.body) == "string" and raw_comment.body
+			or nil,
+		_body = type(raw_comment.body) == "table" and raw_comment.body
+			or type(raw_comment.body) == "string" and raw_comment.body
+			or nil,
 		created = raw_comment.created and tostring(raw_comment.created) or nil,
 		updated = raw_comment.updated and tostring(raw_comment.updated) or nil,
 		parent_id = parent_id,
@@ -259,8 +267,8 @@ end
 ---@param issue_key string|nil
 ---@return IssueComment[]
 function M.to_comments_list(raw, issue_key)
-	local service = require("atlas.issues.providers.jira.api.service")
-	local base_url = tostring(service.jira_config().base_url or ""):gsub("/$", "")
+	local config = require("atlas.issues.providers.jira.api.config")
+	local base_url = tostring(config.jira_config().base_url or ""):gsub("/$", "")
 	local comments = {}
 	for _, raw_comment in ipairs((type(raw) == "table" and raw.comments) or {}) do
 		local comment = normalize_comment(raw_comment, issue_key, base_url)

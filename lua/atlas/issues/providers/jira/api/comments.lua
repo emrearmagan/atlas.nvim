@@ -3,6 +3,7 @@ local M = {}
 local service = require("atlas.issues.providers.jira.api.service")
 local normalizer = require("atlas.issues.providers.jira.api.mapper")
 local markdown = require("atlas.issues.providers.jira.converted.markdown")
+local config = require("atlas.issues.providers.jira.api.config")
 
 local PANEL_CACHE_TTL = 300
 
@@ -67,7 +68,12 @@ function M.add_comment(issue_key, comment, opts, callback)
 	end
 
 	local endpoint = string.format("/issue/%s/comment", issue_key)
-	local payload = { body = markdown.to_adf(body) }
+	local payload = { body = "" }
+	if config.jira_config().api_type == "cloud" then
+		payload.body = markdown.to_adf(body)
+	else
+		payload.body = body
+	end
 
 	local parent_id = opts and opts.parent_id or nil
 	if parent_id ~= nil then
@@ -115,8 +121,14 @@ function M.edit_comment(issue_key, comment_id, comment, callback)
 	end
 
 	local endpoint = string.format("/issue/%s/comment/%s", issue_key, id)
+	local payload = { body = "" }
+	if config.jira_config().api_type == "cloud" then
+		payload.body = markdown.to_adf(body)
+	else
+		payload.body = body
+	end
 
-	return service.request("PUT", endpoint, { body = markdown.to_adf(body) }, function(result, err)
+	return service.request("PUT", endpoint, payload, function(result, err)
 		if err or not result then
 			callback(nil, err or "Empty response")
 			return

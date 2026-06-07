@@ -1,4 +1,5 @@
 local icons = require("atlas.ui.shared.icons")
+local config = require("atlas.issues.providers.jira.api.config")
 
 ---@class JiraProvider : IssuesProvider
 local M = {
@@ -299,9 +300,14 @@ function M.toggle_subscription(issue, on_done)
 	end
 
 	local function unsubscribe(account_id)
+		local jira_config = config.jira_config()
+		local user_param = "accountId=" .. account_id
+		if jira_config.api_type == "server" then
+			user_param = "username=" .. account_id
+		end
 		return service.request(
 			"DELETE",
-			string.format("/issue/%s/watchers?accountId=%s", issue_key, account_id),
+			string.format("/issue/%s/watchers?%s", issue_key, user_param),
 			nil,
 			function(_, err)
 				if err then
@@ -332,7 +338,7 @@ end
 
 ---@return AtlasJiraViewConfig[]
 function M.views()
-	local cfg = require("atlas.issues.providers.jira.api.service").jira_config()
+	local cfg = require("atlas.issues.providers.jira.api.config").jira_config()
 	local views = cfg.views or {
 		{
 			name = "Issues",

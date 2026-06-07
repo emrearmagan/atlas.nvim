@@ -4,12 +4,12 @@ local service = require("atlas.issues.providers.jira.api.service")
 local normalizer = require("atlas.issues.providers.jira.api.mapper")
 local cache = require("atlas.core.cache")
 local logger = require("atlas.core.logger")
+local config = require("atlas.issues.providers.jira.api.config")
 
 local CACHE_TTL = 300
 
 local function story_points_field()
-	local cfg = service.jira_config()
-	local project_config = cfg.project_config or {}
+	local project_config = config.jira_config().project_config or {}
 	return tostring(project_config.story_points_field or "customfield_10016")
 end
 
@@ -35,6 +35,34 @@ local function url_encode(str)
 	return (str:gsub("([^%w%-_.~])", function(c)
 		return string.format("%%%02X", string.byte(c))
 	end))
+end
+
+---@param data table
+---@param on_done fun(result: table|nil, err: string|nil)
+---@param ctx table|nil
+---@return { job_id: integer, cancel: fun() }|nil
+local function search_jql_request(data, on_done, ctx)
+	if config.jira_config().api_type == "server" then
+		local payload = vim.deepcopy(data)
+		payload.startAt = tonumber(payload.nextPageToken) or 0
+		payload.nextPageToken = nil
+
+		return service.request("POST", "/search", payload, function(result, err)
+			if result then
+				local start_at = tonumber(result.startAt) or 0
+				local max_results = tonumber(result.maxResults) or #(result.issues or {})
+				local total = tonumber(result.total) or 0
+				local next_start = start_at + max_results
+				result.isLast = next_start >= total
+				result.nextPageToken = result.isLast and nil or tostring(next_start)
+			end
+			on_done(result, err)
+		end, ctx)
+	else
+		return service.request("POST", "/search/jql", data, function(result, err)
+			on_done(result, err)
+		end, ctx)
+	end
 end
 
 ---@class JiraIssueSearchPage
@@ -69,7 +97,7 @@ function M.search_issues(jql, on_done, opts)
 		maxResults = page_size,
 	}
 
-	return service.request("POST", "/search/jql", data, function(result, err)
+	return search_jql_request(data, function(result, err)
 		if err or not result then
 			on_done(nil, err or "Empty response")
 			return
@@ -199,7 +227,14 @@ function M.get_issue_history_page(issue_key, start_at, max_results, on_done, opt
 		end
 	end
 
-	local endpoint = string.format("/issue/%s/changelog?startAt=%d&maxResults=%d", issue_key, start, size)
+	local is_server = config.jira_config().api_type == "server"
+
+	local endpoint
+	if is_server then
+		endpoint = string.format("/issue/%s?expand=changelog", issue_key)
+	else
+		endpoint = string.format("/issue/%s/changelog?startAt=%d&maxResults=%d", issue_key, start, size)
+	end
 
 	return service.request("GET", endpoint, nil, function(result, err)
 		if err or not result then
@@ -207,7 +242,15 @@ function M.get_issue_history_page(issue_key, start_at, max_results, on_done, opt
 			return
 		end
 
-		local page = normalizer.to_history_page(result, start, size)
+		local raw = result
+		if is_server then
+			raw = type(result.changelog) == "table" and result.changelog or { values = {} }
+			if raw.values == nil and raw.histories ~= nil then
+				raw.values = raw.histories
+			end
+		end
+
+		local page = normalizer.to_history_page(raw, start, size)
 		service.set_memory_cache(cache_key, page, CACHE_TTL)
 		on_done(page, nil)
 	end, {
@@ -261,7 +304,7 @@ function M.get_issue_detail(issue_key, on_done, opts)
 		maxResults = 1,
 	}
 
-	return service.request("POST", "/search/jql", data, function(result, err)
+	return search_jql_request(data, function(result, err)
 		if err or not result then
 			logger.logerror("Jira detail fetch failed", {
 				issue_key = issue_key,
@@ -331,11 +374,13 @@ function M.get_custom_fields(issue_key, fields, on_done, opts)
 		end
 	end
 
-	return service.request("POST", "/search/jql", {
+	local data = {
 		jql = "key = " .. issue_key,
 		fields = fields,
 		maxResults = 1,
-	}, function(result, err)
+	}
+
+	return search_jql_request(data, function(result, err)
 		if err or not result then
 			on_done(nil, err or "Empty response")
 			return
@@ -492,6 +537,30 @@ function M.get_create_meta(project_key, callback)
 	end
 
 	local escaped_key = vim.fn.escape(project_key, "&=?")
+
+	if config.jira_config().api_type == "server" then
+		local endpoint = string.format("/issue/createmeta/%s/issuetypes", escaped_key)
+		return service.request("GET", endpoint, nil, function(result, err)
+			if err ~= nil or type(result) ~= "table" then
+				callback(nil, err or "Empty response")
+				return
+			end
+
+			local raw_types = type(result.values) == "table" and result.values or {}
+			local issue_types = {}
+			for _, raw in ipairs(raw_types) do
+				local issue_type = normalizer.to_issue_type(raw)
+				if issue_type ~= nil then
+					table.insert(issue_types, issue_type)
+				end
+			end
+			callback(issue_types, nil)
+		end, {
+			action = "Fetch create metadata",
+			project_key = project_key,
+		})
+	end
+
 	local endpoint = string.format("/issue/createmeta?projectKeys=%s&expand=projects.issuetypes", escaped_key)
 
 	return service.request("GET", endpoint, nil, function(result, err)

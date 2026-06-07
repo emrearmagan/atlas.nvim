@@ -51,7 +51,7 @@ function M.header_rows(issue)
 
 	local project_key = issue.project and issue.project.key or nil
 	if project_key then
-		local jira_cfg = require("atlas.issues.providers.jira.api.service").jira_config()
+		local jira_cfg = require("atlas.issues.providers.jira.api.config").jira_config()
 		local project_config = jira_cfg and jira_cfg.project_config and jira_cfg.project_config[project_key] or nil
 		if project_config then
 			if overview_state.custom_fields_loading then
@@ -154,7 +154,7 @@ function M.fetches(issue, refresh, opts)
 	local issue_key = tostring(issue.key or "")
 	local project_key = issue.project and issue.project.key or nil
 
-	local jira_cfg = require("atlas.issues.providers.jira.api.service").jira_config()
+	local jira_cfg = require("atlas.issues.providers.jira.api.config").jira_config()
 	local project_config = jira_cfg and jira_cfg.project_config and project_key and jira_cfg.project_config[project_key]
 		or nil
 

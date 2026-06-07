@@ -2,6 +2,7 @@ local M = {}
 
 local service = require("atlas.issues.providers.jira.api.service")
 local normalizer = require("atlas.issues.providers.jira.api.mapper")
+local config = require("atlas.issues.providers.jira.api.config")
 
 ---@class JiraProjectGroup
 ---@field category table|nil
@@ -58,15 +59,22 @@ function M.get_projects(opts, callback)
 		if cancelled then
 			return
 		end
-
-		local endpoint = string.format(
-			"/project/search?maxResults=%d&startAt=%d&status=%s",
-			max_results,
-			start_at,
-			vim.fn.escape(status, "&=?")
-		)
-		if query ~= "" then
-			endpoint = endpoint .. "&query=" .. vim.fn.escape(query, "&=?")
+		local is_server = config.jira_config().api_type == "server"
+		local path = is_server and "/project" or "/project/search"
+		local endpoint
+		if is_server then
+			endpoint = path
+		else
+			endpoint = string.format(
+				"%s?maxResults=%d&startAt=%d&status=%s",
+				path,
+				max_results,
+				start_at,
+				vim.fn.escape(status, "&=?")
+			)
+			if query ~= "" then
+				endpoint = endpoint .. "&query=" .. vim.fn.escape(query, "&=?")
+			end
 		end
 
 		active_handle = service.request("GET", endpoint, nil, function(result, err)
@@ -79,7 +87,19 @@ function M.get_projects(opts, callback)
 				return
 			end
 
-			for _, raw in ipairs(result.values or {}) do
+			-- Handle differences in response structure between API versions
+			local normalized = result
+			if path == "/project" then
+				local items = type(result) == "table" and result or {}
+				normalized = {
+					values = items,
+					isLast = true,
+					startAt = 0,
+					maxResults = #items,
+				}
+			end
+
+			for _, raw in ipairs(normalized.values or {}) do
 				local project = normalizer.to_project(raw)
 				if project then
 					table.insert(projects, project)
@@ -87,12 +107,12 @@ function M.get_projects(opts, callback)
 			end
 
 			pages_loaded = pages_loaded + 1
-			if result.isLast == true or pages_loaded >= total_pages then
+			if normalized.isLast == true or pages_loaded >= total_pages then
 				callback(build_groups(projects), nil)
 				return
 			end
 
-			local next_start = tonumber(result.startAt) or start_at
+			local next_start = tonumber(normalized.startAt) or start_at
 			fetch_page(next_start + max_results)
 		end, {
 			action = "Fetch projects",

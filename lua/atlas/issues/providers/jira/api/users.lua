@@ -2,6 +2,7 @@ local M = {}
 
 local service = require("atlas.issues.providers.jira.api.service")
 local cache = require("atlas.core.cache")
+local config = require("atlas.issues.providers.jira.api.config")
 
 ---@param str string
 ---@return string
@@ -14,7 +15,7 @@ end
 ---@param callback fun(user: IssueUser|nil, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.get_myself(callback)
-	local cache_key = "jira:myself:" .. (service.jira_config().email or "")
+	local cache_key = "jira:myself:" .. (config.jira_config().email or "")
 	local cached = cache.get(cache_key)
 	if cached and cached.value then
 		callback(cached.value, nil)
@@ -28,9 +29,14 @@ function M.get_myself(callback)
 		end
 
 		local user = {
-			account_id = tostring(result.accountId or ""),
 			display_name = tostring(result.displayName or ""),
 		}
+		-- Jira cloud uses `accountId` while Jira server uses `name`
+		if config.jira_config().api_type == "server" then
+			user.account_id = tostring(result.name or "")
+		else
+			user.account_id = tostring(result.accountId or "")
+		end
 
 		cache.set(cache_key, user, service.cache_ttl())
 		callback(user, nil)
@@ -53,8 +59,15 @@ function M.get_assignable_users(opts, query, callback)
 		return nil
 	end
 
+	local is_server = config.jira_config().api_type == "server"
+
 	local q = tostring(query or "")
-	local params = { "query=" .. url_encode(q) }
+	local params = {}
+	if is_server then
+		table.insert(params, "username=" .. url_encode(q))
+	else
+		table.insert(params, "query=" .. url_encode(q))
+	end
 	if issue_key ~= "" then
 		table.insert(params, "issueKey=" .. url_encode(issue_key))
 	end
@@ -72,10 +85,13 @@ function M.get_assignable_users(opts, query, callback)
 		local users = {}
 		for _, raw in ipairs(result) do
 			if type(raw) == "table" then
-				table.insert(users, {
-					account_id = tostring(raw.accountId or ""),
-					display_name = tostring(raw.displayName or ""),
-				})
+				local user = { display_name = tostring(raw.displayName or "") }
+				if is_server then
+					user.account_id = tostring(raw.name or "")
+				else
+					user.account_id = tostring(raw.accountId or "")
+				end
+				table.insert(users, user)
 			end
 		end
 
@@ -141,6 +157,21 @@ function M.get_permissions_bulk(opts, callback)
 
 	return service.request("POST", "/permissions/check", payload, function(result, err)
 		if err ~= nil or type(result) ~= "table" then
+			-- Handle 404 as a fallback since Jira server API don't have bulk permissions endpoint
+			if err and err:find("HTTP 404", 1, true) == 1 then
+				local fallback = {}
+				for _, key in ipairs(permissions_list) do
+					fallback[key] = {}
+					for _, pid in ipairs(project_ids) do
+						fallback[key][pid] = true
+					end
+					for _, iid in ipairs(issue_ids) do
+						fallback[key][iid] = true
+					end
+				end
+				callback(fallback, nil)
+				return
+			end
 			callback(nil, err or "Empty response")
 			return
 		end
@@ -186,7 +217,12 @@ function M.assign_issue(issue_key, account_id, callback)
 	end
 
 	local endpoint = string.format("/issue/%s/assignee", issue_key)
-	local payload = { accountId = normalized_account_id or vim.NIL }
+	local payload = {}
+	if config.jira_config().api_type == "server" then
+		payload.name = normalized_account_id or vim.NIL
+	else
+		payload.accountId = normalized_account_id or vim.NIL
+	end
 
 	return service.request("PUT", endpoint, payload, function(_, err)
 		if err ~= nil then
@@ -218,13 +254,12 @@ function M.change_reporter(issue_key, account_id, callback)
 	end
 
 	local endpoint = string.format("/issue/%s", issue_key)
-	local payload = {
-		fields = {
-			reporter = {
-				accountId = account_id,
-			},
-		},
-	}
+	local payload = { fields = { reporter = {} } }
+	if config.jira_config().api_type == "server" then
+		payload.fields.reporter.name = account_id
+	else
+		payload.fields.reporter.accountId = account_id
+	end
 
 	return service.request("PUT", endpoint, payload, function(_, err)
 		if err ~= nil then

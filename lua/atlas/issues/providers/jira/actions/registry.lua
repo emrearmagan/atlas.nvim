@@ -7,7 +7,7 @@ local issues_api = require("atlas.issues.providers.jira.api.issues")
 local transitions_api = require("atlas.issues.providers.jira.api.transitions")
 local users_api = require("atlas.issues.providers.jira.api.users")
 local issues_state = require("atlas.issues.state")
-local service = require("atlas.issues.providers.jira.api.service")
+local config = require("atlas.issues.providers.jira.api.config")
 
 ---@param ctx table
 ---@return boolean
@@ -386,10 +386,13 @@ local ACTIONS = {
 
 			local function open_editor(initial_description)
 				issue_editor.open(function(fields, submit_done)
+					local is_server = config.jira_config().api_type == "server"
+
 					local desc = fields.description
 					local payload = {
 						summary = fields.summary,
-						description = type(desc) == "string" and md_to_adf.to_adf(desc) or vim.NIL,
+						description = type(desc) == "string" and (is_server and desc or md_to_adf.to_adf(desc))
+							or vim.NIL,
 					}
 
 					if fields.issue_type and fields.issue_type.id and fields.issue_type.id ~= "" then
@@ -397,7 +400,8 @@ local ACTIONS = {
 					end
 
 					if fields.assignee and fields.assignee.account_id then
-						payload.assignee = { id = fields.assignee.account_id }
+						payload.assignee = is_server and { name = fields.assignee.account_id }
+							or { id = fields.assignee.account_id }
 					else
 						payload.assignee = vim.NIL
 					end
@@ -447,6 +451,10 @@ local ACTIONS = {
 				if type(description) == "table" then
 					open_editor(adf.to_markdown(description))
 					return
+				elseif type(description) == "string" then
+					-- Description is a sting in Jira server API
+					open_editor(description)
+					return
 				end
 				open_editor("")
 			end)
@@ -484,35 +492,78 @@ local ACTIONS = {
 						return
 					end
 
+					local is_server = config.jira_config().api_type == "server"
+
 					local desc = fields.description
 					if type(desc) == "string" then
-						api_fields.description = md_to_adf.to_adf(desc)
+						api_fields.description = is_server and desc or md_to_adf.to_adf(desc)
 					end
 
 					if fields.assignee and fields.assignee.account_id then
-						api_fields.assignee = { id = fields.assignee.account_id }
+						api_fields.assignee = is_server and { name = fields.assignee.account_id }
+							or { id = fields.assignee.account_id }
 					end
 
-					issues_api.create_issue(api_fields, function(result, err)
-						if err then
-							submit_done(false, err)
-							done(nil, err)
-							return
-						end
+					local raw_desc = desc
+					local function commit_create(payload, was_retry)
+						issues_api.create_issue(payload, function(result, err)
+							if err then
+								if
+									not was_retry
+									and type(raw_desc) == "string"
+									and err:find("Field 'description' cannot be set", 1, true)
+								then
+									local retry = vim.deepcopy(payload)
+									retry.description = nil
+									commit_create(retry, true)
+									return
+								end
+								submit_done(false, err)
+								done(nil, err)
+								return
+							end
 
-						if result and result.key then
-							footer.notify("success", string.format("Created %s", result.key), 2000)
-							submit_done(true, nil)
-							done(
-								{ changed_issue_key = result.key, message = string.format("Created %s", result.key) },
-								nil
-							)
-							return
-						end
+							if result and result.key then
+								if was_retry and type(raw_desc) == "string" then
+									local update = { description = raw_desc }
+									issues_api.update_issue(result.key, update, function(ok)
+										if ok then
+											footer.notify("success", string.format("Created %s", result.key), 2000)
+											submit_done(true, nil)
+											done(
+												{ changed_issue_key = result.key, message = "Created " .. result.key },
+												nil
+											)
+										else
+											footer.notify("warn", "Issue created but failed to set description", 3000)
+											submit_done(true, "Description not set")
+											done(
+												{ changed_issue_key = result.key, message = "Created " .. result.key },
+												nil
+											)
+										end
+									end)
+									return
+								end
 
-						submit_done(false, "Invalid response")
-						done(nil, "Invalid response")
-					end)
+								footer.notify("success", string.format("Created %s", result.key), 2000)
+								submit_done(true, nil)
+								done(
+									{
+										changed_issue_key = result.key,
+										message = string.format("Created %s", result.key),
+									},
+									nil
+								)
+								return
+							end
+
+							submit_done(false, "Invalid response")
+							done(nil, "Invalid response")
+						end)
+					end
+
+					commit_create(api_fields, false)
 				end, {
 					summary = "",
 					description = nil,
@@ -934,7 +985,7 @@ local ACTIONS = {
 				return
 			end
 
-			local base_url = tostring(service.jira_config().base_url or ""):gsub("/$", "")
+			local base_url = tostring(config.jira_config().base_url or ""):gsub("/$", "")
 			local issue_key = tostring(issue.key or "")
 			if base_url == "" or issue_key == "" then
 				done(nil, "No URL found for issue")
@@ -980,7 +1031,7 @@ local ACTIONS = {
 				return
 			end
 
-			local base_url = tostring(service.jira_config().base_url or ""):gsub("/$", "")
+			local base_url = tostring(config.jira_config().base_url or ""):gsub("/$", "")
 			local issue_key = tostring(issue.key or "")
 			local url = (base_url ~= "" and issue_key ~= "") and string.format("%s/browse/%s", base_url, issue_key)
 				or ""
@@ -1031,9 +1082,14 @@ local ACTIONS = {
 			end
 
 			local function unsubscribe(account_id)
+				local param_name = "accountId"
+				if config.jira_config().api_type == "server" then
+					param_name = "username"
+				end
+
 				svc.request(
 					"DELETE",
-					string.format("/issue/%s/watchers?accountId=%s", issue_key, account_id),
+					string.format("/issue/%s/watchers?%s=%s", issue_key, param_name, account_id),
 					nil,
 					function(_, err)
 						finish(err == nil and false or nil, err)

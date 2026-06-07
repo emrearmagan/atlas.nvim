@@ -1,28 +1,21 @@
 local M = {}
 
-local config = require("atlas.config")
+local config = require("atlas.issues.providers.jira.api.config")
 local http = require("atlas.core.http")
 local memory_cache = require("atlas.core.memory_cache")
 local logger = require("atlas.core.logger")
 
-local API_PATH = "/rest/api/3"
-
----@return AtlasJiraIssuesConfig
-function M.jira_config()
-	local opts = config.options
-	local issues = opts and opts.issues or nil
-	return (issues and issues.providers and issues.providers.jira) or {}
-end
-
 ---@return string, string, string|nil
 function M.get_auth()
-	local jira = M.jira_config()
+	local jira = config.jira_config()
 	local base_url = jira.base_url
 	local email = jira.email
 	local token = jira.token
 
 	if not base_url or base_url == "" or not email or email == "" or not token or token == "" then
-		return "", "", "Missing Jira credentials in config (issues.providers.jira.base_url, issues.providers.jira.email, issues.providers.jira.token)"
+		return "",
+			"",
+			"Missing Jira credentials in config (issues.providers.jira.base_url, issues.providers.jira.email, issues.providers.jira.token)"
 	end
 
 	return base_url, email, nil
@@ -30,12 +23,15 @@ end
 
 ---@return table<string, string>
 function M.build_headers()
-	local jira = M.jira_config()
+	local jira = config.jira_config()
 	local email = jira.email or ""
 	local token = jira.token or ""
-	local auth = vim.base64.encode(string.format("%s:%s", email, token))
+	local auth_header = "Basic " .. vim.base64.encode(string.format("%s:%s", email, token))
+	if jira.auth_method == "bearer" then
+		auth_header = "Bearer " .. token
+	end
 	return {
-		Authorization = "Basic " .. auth,
+		authorization = auth_header,
 		["Content-Type"] = "application/json",
 		Accept = "application/json",
 	}
@@ -43,18 +39,27 @@ end
 
 ---@return string
 function M.base_url()
-	return tostring(M.jira_config().base_url or "")
+	return tostring(config.jira_config().base_url or "")
+end
+
+---@return string
+function M.api_path()
+	local version = "3"
+	if config.jira_config().api_type == "server" then
+		version = "2"
+	end
+	return "/rest/api/" .. version
 end
 
 ---@param endpoint string
 ---@return string
 function M.url(endpoint)
-	return M.base_url() .. API_PATH .. endpoint
+	return M.base_url() .. M.api_path() .. endpoint
 end
 
 ---@return number
 function M.cache_ttl()
-	return tonumber(M.jira_config().cache_ttl) or 300
+	return tonumber(config.jira_config().cache_ttl) or 300
 end
 
 function M.clear_memory_cache()
