@@ -505,6 +505,8 @@ local ACTIONS = {
 					end
 
 					local raw_desc = desc
+					-- Jira Server workaround: some configs omit `description` from the create screen.
+					-- See: https://support.atlassian.com/jira/kb/can-not-create-issue-via-rest-api-field-xxx-cannot-be-set-it-is-not-on-the-appropriate-screen-or-unknown-when-using-workflow-property-jirapermissioncreateclonedenied/
 					local function commit_create(payload, was_retry)
 						issues_api.create_issue(payload, function(result, err)
 							if err then
