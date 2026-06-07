@@ -694,21 +694,22 @@ function M.render(opts)
 
 	table.insert(lines, "")
 
-	if state.error then
-		local err_text = "Error: " .. state.error
-		utils.append_block(lines, spans, {
-			lines = { err_text },
-			highlights = {
-				{ line = 0, start_col = 0, end_col = #err_text, hl_group = "AtlasLogError" },
-			},
-		})
-	elseif type(active) == "table" and active._kind == "bookmarks" then
+	if type(active) == "table" and active._kind == "bookmarks" then
 		append_search_text(lines, spans, search_text(state.current_view))
 		require("atlas.ui.shared.bookmarks_view").render(lines, spans, line_map, active._bookmarks or {}, opts.width)
 
 		local issues = state.issues or {}
 		local issue_groups = state.issue_tree or {}
-		if state.is_loading then
+		if state.error then
+			local err_text = "Error: " .. state.error
+			table.insert(lines, "")
+			utils.append_block(lines, spans, {
+				lines = { err_text },
+				highlights = {
+					{ line = 0, start_col = 0, end_col = #err_text, hl_group = "AtlasLogError" },
+				},
+			})
+		elseif state.is_loading then
 			table.insert(lines, "")
 			table.insert(lines, "Loading...")
 		elseif #issues > 0 or #issue_groups > 0 then
@@ -728,6 +729,15 @@ function M.render(opts)
 				line_map[table_base + lnum] = node
 			end
 		end
+	elseif state.error then
+		append_search_text(lines, spans, search_text(active))
+		local err_text = "Error: " .. state.error
+		utils.append_block(lines, spans, {
+			lines = { err_text },
+			highlights = {
+				{ line = 0, start_col = 0, end_col = #err_text, hl_group = "AtlasLogError" },
+			},
+		})
 	else
 		local issue_groups = state.issue_tree or {}
 		local layout = type(active) == "table" and tostring(active.layout or "plain") or "plain"

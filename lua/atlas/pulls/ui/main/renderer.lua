@@ -185,7 +185,17 @@ function M.render(opts)
 		append_search_text(lines, spans)
 		require("atlas.ui.shared.bookmarks_view").render(lines, spans, line_map, active._bookmarks or {}, opts.width)
 
-		if state.is_loading then
+		if state.error then
+			local error_text = tostring(state.error or ""):gsub("[\r\n]+", " | ")
+			local err_line = "Error: " .. error_text
+			table.insert(lines, "")
+			utils.append_block(lines, spans, {
+				lines = { err_line },
+				highlights = {
+					{ line = 0, start_col = 0, end_col = #err_line, hl_group = "AtlasLogError" },
+				},
+			})
+		elseif state.is_loading then
 			table.insert(lines, "")
 			table.insert(lines, "Loading...")
 		elseif state.pulls and #state.pulls > 0 then

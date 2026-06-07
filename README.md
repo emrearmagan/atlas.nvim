@@ -220,8 +220,8 @@ issues = {
       },
 
       bookmarks = {
-        -- key   = "J",   -- default
-        -- label = "JQL", -- default
+        key   = "J",   -- default
+        label = "JQL", -- default
         items = {
           ["Backlog"]     = "project = KAN AND statusCategory != Done AND (sprint IS EMPTY OR sprint NOT IN openSprints()) ORDER BY Rank ASC",
           ["Next sprint"] = "project = KAN AND sprint in futureSprints() ORDER BY Rank ASC",
@@ -271,8 +271,8 @@ issues = {
       },
 
       bookmarks = {
-        -- key   = "S",      -- default
-        -- label = "Search", -- default
+        key   = "S",      -- default
+        label = "Search", -- default
         items = {
           ["Bugs"]            = "is:issue is:open label:bug",
           ["Recently closed"] = "is:issue is:closed author:@me sort:updated-desc",
@@ -325,8 +325,8 @@ issues = {
       },
 
       bookmarks = {
-        -- key   = "S",      -- default
-        -- label = "Search", -- default
+        key   = "S",      -- default
+        label = "Search", -- default
         items = {
           ["No labels"] = { scope = "all", state = "opened",
                             extra_params = { ["not[labels]"] = "*" } },
@@ -454,8 +454,8 @@ pulls = {
       },
 
       bookmarks = {
-        -- key   = "S",      -- default
-        -- label = "Search", -- default
+        key   = "S",      -- default
+        label = "Search", -- default
         items = {
           ["Drafts"]           = "is:pr is:draft author:@me",
           ["Recently merged"]  = "is:pr is:merged author:@me sort:updated-desc",
@@ -559,8 +559,8 @@ pulls = {
       },
 
       bookmarks = {
-        -- key   = "S",      -- default
-        -- label = "Search", -- default
+        key   = "S",      -- default
+        label = "Search", -- default
         items = {
           ["Reviewing"]    = { scope = "all", extra_params = { reviewer_id = "Me" } },
           ["Merged by me"] = { scope = "all", state = "merged", author_username = "me" },
