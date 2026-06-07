@@ -537,6 +537,30 @@ function M.get_create_meta(project_key, callback)
 	end
 
 	local escaped_key = vim.fn.escape(project_key, "&=?")
+
+	if config.jira_config().api_type == "server" then
+		local endpoint = string.format("/issue/createmeta/%s/issuetypes", escaped_key)
+		return service.request("GET", endpoint, nil, function(result, err)
+			if err ~= nil or type(result) ~= "table" then
+				callback(nil, err or "Empty response")
+				return
+			end
+
+			local raw_types = type(result.values) == "table" and result.values or {}
+			local issue_types = {}
+			for _, raw in ipairs(raw_types) do
+				local issue_type = normalizer.to_issue_type(raw)
+				if issue_type ~= nil then
+					table.insert(issue_types, issue_type)
+				end
+			end
+			callback(issue_types, nil)
+		end, {
+			action = "Fetch create metadata",
+			project_key = project_key,
+		})
+	end
+
 	local endpoint = string.format("/issue/createmeta?projectKeys=%s&expand=projects.issuetypes", escaped_key)
 
 	return service.request("GET", endpoint, nil, function(result, err)
