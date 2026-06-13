@@ -74,7 +74,7 @@ function M.list_issues(view, opts, on_done)
 	if needs_user then
 		return require("atlas.issues.providers.gitea.api.users").get_user(function(user, err)
 			local login = (not err and user) and tostring(user.account_id or "") or ""
-			local user_param = ""
+			local user_param = nil
 			if login ~= "" then
 				if filter.assigned then
 					user_param = "assignee=" .. login
@@ -84,7 +84,21 @@ function M.list_issues(view, opts, on_done)
 					user_param = "mentioned_by=" .. login
 				end
 			end
-			fetch_by_slug(slug, state, user_param ~= "" and user_param or nil, limit, opts, on_done)
+			fetch_by_slug(slug, state, user_param, limit, opts, function(issues, fetch_err)
+				-- Forgejo may ignore assignee filter for admins — postfilter client-side
+				if not fetch_err and filter.assigned and login ~= "" then
+					local filtered = {}
+					for _, issue in ipairs(issues) do
+						local a = type(issue.assignee) == "table" and issue.assignee or nil
+						if a and tostring(a.account_id or "") == login then
+							table.insert(filtered, issue)
+						end
+					end
+					on_done(filtered, nil)
+				else
+					on_done(issues, fetch_err)
+				end
+			end)
 		end)
 	end
 
