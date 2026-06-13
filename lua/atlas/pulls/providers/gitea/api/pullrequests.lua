@@ -195,4 +195,54 @@ function M.get_diffstat(pr, opts, on_done)
 	})
 end
 
+---@param opts PullsCreatePROpts
+---@param on_done fun(result: PullsCreatePRResult|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.create_pr(opts, on_done)
+	local slug = tostring(opts.repo_slug or "")
+	if slug == "" then
+		vim.schedule(function()
+			on_done(nil, "Missing repository slug")
+		end)
+		return nil
+	end
+
+	local payload = {
+		title = tostring(opts.title or ""),
+		body = tostring(opts.body or ""),
+		head = tostring(opts.head or ""),
+		base = tostring(opts.base or ""),
+	}
+	if opts.draft then
+		payload.draft = true
+	end
+
+	local reviewers = {}
+	for _, r in ipairs(opts.reviewers or {}) do
+		local id = tostring(r.provider_id or "")
+		if id ~= "" then
+			table.insert(reviewers, id)
+		end
+	end
+	if #reviewers > 0 then
+		payload.reviewers = reviewers
+	end
+
+	local endpoint = string.format("/repos/%s/pulls", slug)
+	local body = vim.json.encode(payload)
+	return cli.api("POST", endpoint, body, function(result, err)
+		if err then
+			on_done(nil, err)
+			return
+		end
+		local url = nil
+		local id = nil
+		if type(result) == "table" then
+			url = type(result.html_url) == "string" and result.html_url or nil
+			id = tonumber(result.number)
+		end
+		on_done({ id = id, url = url }, nil)
+	end, { action = "Create PR", slug = slug })
+end
+
 return M
