@@ -192,6 +192,13 @@ function M.open_actions(pr, source, on_done)
 	end)
 end
 
+---@param opts PullsCreatePROpts
+---@param on_done fun(result: PullsCreatePRResult|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.create_pr(opts, on_done)
+	return require("atlas.pulls.providers.gitea.api.pullrequests").create_pr(opts, on_done)
+end
+
 ---@return AtlasGiteaPullsViewConfig[]
 function M.views()
 	local cfg = gitea_config()
