@@ -1,0 +1,19 @@
+local M = {}
+
+---@type table<string, table>
+local groups = {
+	AtlasGiteaIssuesTheme = { bg = "#161b22", fg = "#f0f6fc", bold = true },
+	AtlasGiteaIssueOpen = { fg = "#a6e3a1", bold = true },
+	AtlasGiteaIssueClosed = { fg = "#a371f7", bold = true },
+	AtlasGiteaIssueOpenChip = { fg = "#1e1e2e", bg = "#a6e3a1", bold = true },
+	AtlasGiteaIssueClosedChip = { fg = "#1e1e2e", bg = "#a371f7", bold = true },
+	AtlasGiteaIssueKey = { fg = "#58a6ff", bold = true },
+}
+
+function M.setup()
+	for name, opts in pairs(groups) do
+		vim.api.nvim_set_hl(0, name, opts)
+	end
+end
+
+return M
