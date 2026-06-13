@@ -3,42 +3,19 @@ local M = {}
 local cli = require("atlas.issues.providers.gitea.api.cli")
 local mapper = require("atlas.issues.providers.gitea.api.mapper")
 
----@param view AtlasGiteaIssuesViewConfig
----@param opts { force_load?: boolean, max_results?: number }|nil
+---@param slug string
+---@param state string
+---@param user_param string|nil  e.g. "assignee=login" or "created_by=login"
+---@param limit integer
+---@param opts { force_load?: boolean }
 ---@param on_done fun(issues: Issue[], err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.list_issues(view, opts, on_done)
-	opts = opts or {}
-	local limit = math.max(1, tonumber(opts.max_results) or 50)
-	local filter = type(view.filter) == "table" and view.filter or {}
-	local state = tostring(filter.state or "open")
-	local slug = tostring(view.repo or "")
-
-	-- Determine endpoint
-	local endpoint
-	local cache_key_parts = { "gitea_issues:list" }
-	if filter.assigned then
-		endpoint = string.format("/user/issues?type=issues&state=%s&assigned=true&limit=%d&page=1", state, limit)
-		table.insert(cache_key_parts, "assigned")
-	elseif filter.created then
-		endpoint = string.format("/user/issues?type=issues&state=%s&created=true&limit=%d&page=1", state, limit)
-		table.insert(cache_key_parts, "created")
-	elseif filter.mentioned then
-		endpoint = string.format("/user/issues?type=issues&state=%s&mentioned=true&limit=%d&page=1", state, limit)
-		table.insert(cache_key_parts, "mentioned")
-	else
-		if slug == "" then
-			vim.schedule(function()
-				on_done({}, "Configure repo in gitea view config (e.g. repo = \"owner/repo\")")
-			end)
-			return nil
-		end
-		endpoint = string.format("/repos/%s/issues?state=%s&type=issues&limit=%d&page=1", slug, state, limit)
-		table.insert(cache_key_parts, "repo:" .. slug)
+local function fetch_by_slug(slug, state, user_param, limit, opts, on_done)
+	local endpoint = string.format("/repos/%s/issues?type=issues&state=%s&limit=%d&page=1", slug, state, limit)
+	if user_param and user_param ~= "" then
+		endpoint = endpoint .. "&" .. user_param
 	end
-
-	table.insert(cache_key_parts, state)
-	local cache_key = table.concat(cache_key_parts, ":")
+	local cache_key = string.format("gitea_issues:list:%s:%s:%s", slug, state, user_param or "all")
 
 	if not opts.force_load then
 		local cached, ok = cli.get_cache(cache_key)
@@ -56,10 +33,62 @@ function M.list_issues(view, opts, on_done)
 		local issues = mapper.to_issues_list(type(result) == "table" and result or {}, slug)
 		cli.set_cache(cache_key, issues)
 		on_done(issues, nil)
-	end, {
-		action = "Gitea list issues",
-		endpoint = endpoint,
-	})
+	end, { action = "Gitea list issues", endpoint = endpoint })
+end
+
+---@param view AtlasGiteaIssuesViewConfig
+---@param opts { force_load?: boolean, max_results?: number }|nil
+---@param on_done fun(issues: Issue[], err: string|nil)
+---@return { cancel: fun() }|nil
+function M.list_issues(view, opts, on_done)
+	opts = opts or {}
+	local limit = math.max(1, tonumber(opts.max_results) or 50)
+	local filter = type(view.filter) == "table" and view.filter or {}
+	local state = tostring(filter.state or "open")
+	local slug = tostring(view.repo or "")
+
+	-- Auto-detect slug from git remote when not explicitly configured
+	if slug == "" then
+		local git = require("atlas.core.git")
+		local root = git.repo_root()
+		if root then
+			local url = git.remote_url(root)
+			if url then
+				local info = git.parse_remote_url(url)
+				if info then
+					slug = info.slug
+				end
+			end
+		end
+	end
+
+	if slug == "" then
+		vim.schedule(function()
+			on_done({}, 'Cannot detect repository. Open a file inside a git repo, or set repo = "owner/repo" in view config.')
+		end)
+		return nil
+	end
+
+	-- assigned/created/mentioned need the current user's login → fetch user first
+	local needs_user = filter.assigned or filter.created or filter.mentioned
+	if needs_user then
+		return require("atlas.issues.providers.gitea.api.users").get_user(function(user, err)
+			local login = (not err and user) and tostring(user.account_id or "") or ""
+			local user_param = ""
+			if login ~= "" then
+				if filter.assigned then
+					user_param = "assignee=" .. login
+				elseif filter.created then
+					user_param = "created_by=" .. login
+				elseif filter.mentioned then
+					user_param = "mentioned_by=" .. login
+				end
+			end
+			fetch_by_slug(slug, state, user_param ~= "" and user_param or nil, limit, opts, on_done)
+		end)
+	end
+
+	return fetch_by_slug(slug, state, nil, limit, opts, on_done)
 end
 
 ---@param key string
