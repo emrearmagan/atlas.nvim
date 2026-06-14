@@ -202,14 +202,21 @@ local ACTIONS = {
 		id = "create_issue",
 		label = "Create Issue",
 		is_available = function(ctx)
-			-- Need a slug either from ctx.repo_slug or from existing issue
 			local slug = tostring(type(ctx) == "table" and ctx.repo_slug or "")
-			if slug ~= "" then
-				return true, nil
-			end
+			if slug ~= "" then return true, nil end
 			if has_issue(ctx) then
 				local s = issue_slug(ctx.issue)
-				return s ~= "", "Could not determine repository"
+				if s ~= "" then return true, nil end
+			end
+			-- Fall back to git remote detection
+			local git = require("atlas.core.git")
+			local root = git.repo_root()
+			if root then
+				local url = git.remote_url(root)
+				if url then
+					local info = git.parse_remote_url(url)
+					if info and info.slug ~= "" then return true, nil end
+				end
 			end
 			return false, "No repository context"
 		end,
@@ -219,30 +226,33 @@ local ACTIONS = {
 				slug = issue_slug(ctx.issue)
 			end
 			if slug == "" then
+				local git = require("atlas.core.git")
+				local root = git.repo_root()
+				if root then
+					local url = git.remote_url(root)
+					if url then
+						local info = git.parse_remote_url(url)
+						if info then slug = info.slug end
+					end
+				end
+			end
+			if slug == "" then
 				done(nil, "Could not determine repository")
 				return
 			end
 
-			vim.ui.input({ prompt = "Issue title: " }, function(title)
-				if title == nil or vim.trim(title) == "" then
-					done({ changed_issue_key = nil, message = "Create cancelled" }, nil)
-					return
-				end
-
-				footer.notify("loading", "Creating issue...")
-				issues_api.create_issue({ repo_slug = slug, title = vim.trim(title) }, function(result, err)
+			require("atlas.issues.create.gitea.issue").open({
+				repo_slug = slug,
+				on_done = function(result, err)
 					if err then
-						footer.notify("error", err)
 						done(nil, err)
 						return
 					end
 					local number = result and result.number
 					local new_key = number and string.format("%s#%s", slug, tostring(number)) or nil
-					local msg = result and result.url or "Issue created"
-					footer.notify("success", msg, 1200)
-					done({ changed_issue_key = new_key, message = msg }, nil)
-				end)
-			end)
+					done({ changed_issue_key = new_key, message = result and result.url or "Issue created" }, nil)
+				end,
+			})
 		end,
 	},
 	{
