@@ -53,6 +53,16 @@
       "contributions": [
         "code"
       ]
+    },
+    {
+      "login": "niklastreml",
+      "name": "Niklas Treml",
+      "avatar_url": "https://avatars.githubusercontent.com/u/27763017?v=4",
+      "profile": "https://github.com/niklastreml",
+      "contributions": [
+        "code",
+        "bug"
+      ]
     }
   ]
 }
