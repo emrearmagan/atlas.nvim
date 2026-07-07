@@ -32,9 +32,7 @@ local ACTIONS = {
 			if not has_pr(ctx) or ctx.pr == nil then
 				return false, "No PR selected"
 			end
-			local raw = ctx.pr._raw or {}
-			local merge_url = tostring((raw.links or {}).merge or "")
-			if merge_url == "" then
+			if not pullrequests.has_action(ctx.pr, "merge") then
 				return false, "No merge URL available"
 			end
 			return true, nil
@@ -43,14 +41,6 @@ local ACTIONS = {
 			local pr = ctx.pr
 			if pr == nil then
 				done(nil, "No PR selected")
-				return
-			end
-
-			local raw = pr._raw or {}
-			local merge_url = tostring((raw.links or {}).merge or "")
-
-			if merge_url == "" then
-				done(nil, "No merge URL available")
 				return
 			end
 
@@ -70,7 +60,7 @@ local ACTIONS = {
 				end
 
 				footer.notify("loading", "Starting Merge...")
-				pullrequests.merge(merge_url, {}, function(_, err)
+				pullrequests.merge(pr, {}, function(_, err)
 					if err ~= nil then
 						footer.notify("error", string.format("Merge failed: %s", tostring(err)))
 						done(nil, tostring(err))
@@ -90,9 +80,7 @@ local ACTIONS = {
 			if not has_pr(ctx) or ctx.pr == nil then
 				return false, "No PR selected"
 			end
-			local raw = ctx.pr._raw or {}
-			local link = tostring((raw.links or {}).approve or "")
-			if link == "" then
+			if not pullrequests.has_action(ctx.pr, "approve") then
 				return false, "No approve URL available"
 			end
 			return true, nil
@@ -104,15 +92,8 @@ local ACTIONS = {
 				return
 			end
 
-			local raw = pr._raw or {}
-			local approve_url = tostring((raw.links or {}).approve or "")
-			if approve_url == "" then
-				done(nil, "No approve URL available")
-				return
-			end
-
 			footer.notify("loading", "Approving PR...")
-			pullrequests.approve(approve_url, function(_, err)
+			pullrequests.approve(pr, function(_, err)
 				if err ~= nil then
 					footer.notify("error", string.format("Approve failed: %s", tostring(err)))
 					done(nil, tostring(err))
@@ -131,8 +112,7 @@ local ACTIONS = {
 			if not has_pr(ctx) or ctx.pr == nil then
 				return false, "No PR selected"
 			end
-			local raw = ctx.pr._raw or {}
-			if tostring((raw.links or {}).request_changes or "") == "" then
+			if not pullrequests.has_action(ctx.pr, "request_changes") then
 				return false, "No request changes URL available"
 			end
 			return true, nil
@@ -144,15 +124,8 @@ local ACTIONS = {
 				return
 			end
 
-			local raw = pr._raw or {}
-			local request_changes_url = tostring((raw.links or {}).request_changes or "")
-			if request_changes_url == "" then
-				done(nil, "No request changes URL available")
-				return
-			end
-
 			footer.notify("loading", "Requesting changes...")
-			pullrequests.request_changes(request_changes_url, function(_, err)
+			pullrequests.request_changes(pr, function(_, err)
 				if err ~= nil then
 					footer.notify("error", string.format("Request changes failed: %s", tostring(err)))
 					done(nil, tostring(err))
