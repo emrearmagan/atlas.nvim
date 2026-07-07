@@ -7,6 +7,38 @@ local logger = require("atlas.core.logger")
 local http = require("atlas.core.http")
 local state = require("atlas.pulls.providers.bitbucket.state")
 
+---@param link any
+---@return string
+local function link_href(link)
+	if type(link) == "string" then
+		return link
+	end
+	if type(link) == "table" then
+		return tostring(link.href or "")
+	end
+	return ""
+end
+
+---@param pr PullRequest
+---@param key string
+---@return string
+local function pr_link(pr, key)
+	local raw = type(pr._raw) == "table" and pr._raw or {}
+	local links = type(raw.links) == "table" and raw.links or {}
+	local link = links[key]
+	if link == nil and key == "request_changes" then
+		link = links["request-changes"]
+	end
+	return link_href(link)
+end
+
+---@param pr PullRequest
+---@param action "merge"|"approve"|"request_changes"
+---@return boolean
+function M.has_action(pr, action)
+	return pr_link(pr, action) ~= ""
+end
+
 ---@param workspace string
 ---@param repo string
 ---@return string
@@ -220,11 +252,16 @@ function M.fetch_pullrequest(workspace, repo, pr_id, opts, on_done)
 	end)
 end
 
----@param merge_url string
+---@param pr PullRequest
 ---@param opts { message?: string, close_source_branch?: boolean, merge_strategy?: string }|nil
 ---@param on_done fun(result: table|nil, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
-function M.merge(merge_url, opts, on_done)
+function M.merge(pr, opts, on_done)
+	local merge_url = pr_link(pr, "merge")
+	if merge_url == "" then
+		on_done(nil, "No merge URL available")
+		return nil
+	end
 	opts = opts or {}
 	local payload = {}
 	if opts.close_source_branch ~= nil then
@@ -241,17 +278,27 @@ function M.merge(merge_url, opts, on_done)
 	return service.request("POST", merge_url, nil, body, on_done)
 end
 
----@param approve_url string
+---@param pr PullRequest
 ---@param on_done fun(result: table|nil, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
-function M.approve(approve_url, on_done)
+function M.approve(pr, on_done)
+	local approve_url = pr_link(pr, "approve")
+	if approve_url == "" then
+		on_done(nil, "No approve URL available")
+		return nil
+	end
 	return service.request("POST", approve_url, nil, nil, on_done)
 end
 
----@param request_changes_url string
+---@param pr PullRequest
 ---@param on_done fun(result: table|nil, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
-function M.request_changes(request_changes_url, on_done)
+function M.request_changes(pr, on_done)
+	local request_changes_url = pr_link(pr, "request_changes")
+	if request_changes_url == "" then
+		on_done(nil, "No request changes URL available")
+		return nil
+	end
 	return service.request("POST", request_changes_url, nil, nil, on_done)
 end
 
