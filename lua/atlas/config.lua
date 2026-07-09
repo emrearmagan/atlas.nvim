@@ -199,12 +199,12 @@ local function register_commands()
 
 	vim.api.nvim_create_user_command("AtlasSearch", function(opts)
 		local provider_id = opts.fargs[1] and opts.fargs[1]:lower() or nil
-		require("atlas.search").run(provider_id)
+		require("atlas.commands.search").run(provider_id)
 	end, {
 		desc = "Search across Atlas providers",
 		nargs = "?",
 		complete = function(arglead)
-			return require("atlas.search").complete(arglead)
+			return require("atlas.commands.search").complete(arglead)
 		end,
 	})
 end
