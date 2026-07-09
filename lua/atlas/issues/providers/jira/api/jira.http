@@ -54,6 +54,11 @@ GET {{JIRA_BASE_URL}}/rest/api/3/jql/autocompletedata
 Authorization: Basic {{JIRA_EMAIL}}:{{JIRA_TOKEN}}
 Accept: application/json
 
+### Get custom fields
+GET {{JIRA_BASE_URL}}/rest/api/3/field/search?type=custom&startAt=0&maxResults=100
+Authorization: Basic {{JIRA_EMAIL}}:{{JIRA_TOKEN}}
+Accept: application/json
+
 ### Get issue details
 GET {{JIRA_BASE_URL}}/rest/api/3/issue/{{jira_issue_key}}
 Authorization: Basic {{JIRA_EMAIL}}:{{JIRA_TOKEN}}
