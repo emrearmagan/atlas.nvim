@@ -59,45 +59,6 @@ end
 
 local ACTIONS = {
 	{
-		id = "merge",
-		label = "Merge MR",
-		is_available = function(ctx)
-			if not has_pr(ctx) then
-				return false, "No MR selected"
-			end
-			if ctx.pr.state == "draft" then
-				return false, "MR is a draft"
-			end
-			if ctx.pr.state ~= "open" then
-				return false, "MR is not open"
-			end
-			return true, nil
-		end,
-		run = function(ctx, done)
-			local pr = ctx.pr
-			vim.ui.input({ prompt = string.format("Merge %s? Squash? [n/y]: ", pr_label(pr)) }, function(input)
-				if input == nil then
-					done({ changed_pr = false, message = "Merge cancelled" }, nil)
-					return
-				end
-				local squash = vim.trim(tostring(input)):lower() == "y"
-				footer.notify("loading", string.format("Merging %s...", pr_label(pr)))
-				mr_api.merge(pr, {
-					squash = squash,
-					should_remove_source_branch = true,
-				}, function(ok, err)
-					if not ok then
-						footer.notify("error", err or "Merge failed")
-						done(nil, err or "Merge failed")
-						return
-					end
-					footer.notify("success", string.format("Merged %s", pr_label(pr)), 1500)
-					done({ changed_pr = true, message = "Merged" }, nil)
-				end)
-			end)
-		end,
-	},
-	{
 		id = "toggle_approval",
 		label = "Approve / Unapprove",
 		is_available = function(ctx)
@@ -139,6 +100,45 @@ local ACTIONS = {
 						done({ changed_pr = true, message = "Approved" }, nil)
 					end)
 				end
+			end)
+		end,
+	},
+	{
+		id = "merge",
+		label = "Merge MR",
+		is_available = function(ctx)
+			if not has_pr(ctx) then
+				return false, "No MR selected"
+			end
+			if ctx.pr.state == "draft" then
+				return false, "MR is a draft"
+			end
+			if ctx.pr.state ~= "open" then
+				return false, "MR is not open"
+			end
+			return true, nil
+		end,
+		run = function(ctx, done)
+			local pr = ctx.pr
+			vim.ui.input({ prompt = string.format("Merge %s? Squash? [n/y]: ", pr_label(pr)) }, function(input)
+				if input == nil then
+					done({ changed_pr = false, message = "Merge cancelled" }, nil)
+					return
+				end
+				local squash = vim.trim(tostring(input)):lower() == "y"
+				footer.notify("loading", string.format("Merging %s...", pr_label(pr)))
+				mr_api.merge(pr, {
+					squash = squash,
+					should_remove_source_branch = true,
+				}, function(ok, err)
+					if not ok then
+						footer.notify("error", err or "Merge failed")
+						done(nil, err or "Merge failed")
+						return
+					end
+					footer.notify("success", string.format("Merged %s", pr_label(pr)), 1500)
+					done({ changed_pr = true, message = "Merged" }, nil)
+				end)
 			end)
 		end,
 	},
@@ -297,7 +297,12 @@ local ACTIONS = {
 						return tostring(item.id or "")
 					end,
 					format = function(item)
-						return string.format("%s %s (@%s)", icons.general("user"), item.name or item.username, item.username)
+						return string.format(
+							"%s %s (@%s)",
+							icons.general("user"),
+							item.name or item.username,
+							item.username
+						)
 					end,
 					prompt = string.format("Reviewers for %s", pr_label(pr)),
 					on_done = function(selected)
@@ -392,7 +397,12 @@ local ACTIONS = {
 						return tostring(item.id or "")
 					end,
 					format = function(item)
-						return string.format("%s %s (@%s)", icons.general("user"), item.name or item.username, item.username)
+						return string.format(
+							"%s %s (@%s)",
+							icons.general("user"),
+							item.name or item.username,
+							item.username
+						)
 					end,
 					prompt = string.format("Assignees for %s", pr_label(pr)),
 					on_done = function(selected)

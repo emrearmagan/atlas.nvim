@@ -26,54 +26,6 @@ end
 ---@type BitbucketActionDef[]
 local ACTIONS = {
 	{
-		id = "merge",
-		label = "Merge",
-		is_available = function(ctx)
-			if not has_pr(ctx) or ctx.pr == nil then
-				return false, "No PR selected"
-			end
-			if not pullrequests.has_action(ctx.pr, "merge") then
-				return false, "No merge URL available"
-			end
-			return true, nil
-		end,
-		run = function(ctx, done)
-			local pr = ctx.pr
-			if pr == nil then
-				done(nil, "No PR selected")
-				return
-			end
-
-			vim.ui.input({
-				prompt = string.format("Confirm merge PR #%s? [y/N]: ", tostring(pr.id or "")),
-			}, function(input)
-				if input == nil then
-					done({ changed_pr = false, message = "Merge cancelled" }, nil)
-					return
-				end
-
-				local normalized = vim.trim(tostring(input)):lower()
-				if normalized ~= "y" and normalized ~= "yes" then
-					footer.notify("info", "Merge cancelled")
-					done({ changed_pr = false, message = "Merge cancelled" }, nil)
-					return
-				end
-
-				footer.notify("loading", "Starting Merge...")
-				pullrequests.merge(pr, {}, function(_, err)
-					if err ~= nil then
-						footer.notify("error", string.format("Merge failed: %s", tostring(err)))
-						done(nil, tostring(err))
-						return
-					end
-
-					footer.notify("success", "Merge succeeded", 1200)
-					done({ changed_pr = true, message = "Merged" }, nil)
-				end)
-			end)
-		end,
-	},
-	{
 		id = "approve",
 		label = "Approve",
 		is_available = function(ctx)
@@ -134,6 +86,54 @@ local ACTIONS = {
 
 				footer.notify("success", "Changes requested", 1200)
 				done({ changed_pr = true, message = "Changes requested" }, nil)
+			end)
+		end,
+	},
+	{
+		id = "merge",
+		label = "Merge",
+		is_available = function(ctx)
+			if not has_pr(ctx) or ctx.pr == nil then
+				return false, "No PR selected"
+			end
+			if not pullrequests.has_action(ctx.pr, "merge") then
+				return false, "No merge URL available"
+			end
+			return true, nil
+		end,
+		run = function(ctx, done)
+			local pr = ctx.pr
+			if pr == nil then
+				done(nil, "No PR selected")
+				return
+			end
+
+			vim.ui.input({
+				prompt = string.format("Confirm merge PR #%s? [y/N]: ", tostring(pr.id or "")),
+			}, function(input)
+				if input == nil then
+					done({ changed_pr = false, message = "Merge cancelled" }, nil)
+					return
+				end
+
+				local normalized = vim.trim(tostring(input)):lower()
+				if normalized ~= "y" and normalized ~= "yes" then
+					footer.notify("info", "Merge cancelled")
+					done({ changed_pr = false, message = "Merge cancelled" }, nil)
+					return
+				end
+
+				footer.notify("loading", "Starting Merge...")
+				pullrequests.merge(pr, {}, function(_, err)
+					if err ~= nil then
+						footer.notify("error", string.format("Merge failed: %s", tostring(err)))
+						done(nil, tostring(err))
+						return
+					end
+
+					footer.notify("success", "Merge succeeded", 1200)
+					done({ changed_pr = true, message = "Merged" }, nil)
+				end)
 			end)
 		end,
 	},
@@ -217,7 +217,10 @@ local ACTIONS = {
 								}
 
 								local controller = require("atlas.pulls.ui.main.controller")
-								footer.notify("success", string.format("Search view -> %s", tostring(repo.full_name or repo.name)))
+								footer.notify(
+									"success",
+									string.format("Search view -> %s", tostring(repo.full_name or repo.name))
+								)
 								controller.switch_view(search_view)
 								done({ changed_pr = false, message = "Search view switched" }, nil)
 							end)
