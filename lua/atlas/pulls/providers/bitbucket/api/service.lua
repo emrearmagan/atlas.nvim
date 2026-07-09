@@ -28,12 +28,13 @@ end
 
 ---@param user string
 ---@param token string
+---@param has_body boolean|nil
 ---@return table<string, string>
-function M.build_headers(user, token)
+function M.build_headers(user, token, has_body)
 	local auth = vim.base64.encode(string.format("%s:%s", user or "", token or ""))
 	return {
 		Authorization = "Basic " .. auth,
-		["Content-Type"] = "application/json",
+		["Content-Type"] = has_body and "application/json" or nil,
 		Accept = "application/json",
 	}
 end
@@ -114,7 +115,7 @@ function M.request(method, url, headers, body, callback, ctx)
 		return nil
 	end
 
-	local request_headers = M.build_headers(user, token)
+	local request_headers = M.build_headers(user, token, body ~= nil)
 	if headers then
 		for k, v in pairs(headers) do
 			request_headers[k] = v
@@ -179,7 +180,7 @@ function M.request_text(method, url, headers, body, callback, ctx)
 		return nil
 	end
 
-	local request_headers = M.build_headers(user, token)
+	local request_headers = M.build_headers(user, token, body ~= nil)
 	if headers then
 		for k, v in pairs(headers) do
 			request_headers[k] = v
