@@ -20,39 +20,58 @@ local function check_executable(bin, required, label)
 end
 
 ---@param section_path string[]
----@param user_key string
----@param token_key string
----@param label string
-local function check_credentials(section_path, user_key, token_key, label)
-	local opts = config.options
+---@return any
+local function get_section(section_path)
+	local node = config.options ---@type any
 	for _, key in ipairs(section_path) do
-		opts = type(opts) == "table" and opts[key] or nil
+		if type(node) ~= "table" then
+			return nil
+		end
+		node = node[key]
 	end
-
-	if type(opts) ~= "table" then
-		vim.health.warn(string.format("%s not configured", label))
-		return
-	end
-
-	local user = opts[user_key]
-	local token = opts[token_key]
-	if user and user ~= "" and token and token ~= "" then
-		vim.health.ok(string.format("%s credentials configured", label))
-		return
-	end
-
-	vim.health.warn(string.format("%s credentials missing (%s and/or %s)", label, user_key, token_key))
+	return node
 end
 
-local function check_bitbucket()
-	local pulls = config.options and config.options.pulls or nil
-	local bb = pulls and pulls.providers and pulls.providers.bitbucket or nil
-	if not bb then
-		vim.health.info("Bitbucket not configured")
-		return
+---@param section table
+---@param keys string[]
+---@param label string
+local function check_credentials(section, keys, label)
+	local missing = {}
+	for _, key in ipairs(keys) do
+		local v = section[key]
+		if v == nil or v == "" then
+			table.insert(missing, key)
+		end
 	end
 
-	check_credentials({ "pulls", "providers", "bitbucket" }, "user", "token", "Bitbucket")
+	if #missing == 0 then
+		vim.health.ok(string.format("%s credentials configured", label))
+	else
+		vim.health.warn(string.format("%s credentials missing: %s", label, table.concat(missing, ", ")))
+	end
+end
+
+---@param url any
+---@param label string
+local function check_https_url(url, label)
+	local s = tostring(url or "")
+	if s == "" then
+		vim.health.warn(string.format("%s is empty", label))
+	elseif not s:match("^https://") then
+		vim.health.warn(string.format("%s should start with https:// (current: %s)", label, s))
+	else
+		vim.health.ok(string.format("%s looks valid", label))
+	end
+end
+
+---@param views any
+---@param label string
+local function check_views(views, label)
+	if type(views) ~= "table" or #views == 0 then
+		vim.health.warn(string.format("%s: no views configured", label))
+	else
+		vim.health.ok(string.format("%s: %d view(s) configured", label, #views))
+	end
 end
 
 local function check_pulls()
@@ -83,10 +102,21 @@ local function check_pulls()
 	end
 end
 
+local function check_bitbucket()
+	local bb = get_section({ "pulls", "providers", "bitbucket" })
+	if not bb then
+		vim.health.info("Bitbucket not configured")
+		return
+	end
+
+	check_credentials(bb, { "user", "token" }, "Bitbucket")
+	check_views(bb.views, "Bitbucket pulls")
+end
+
 local function check_github()
-	local pulls = config.options and config.options.pulls or nil
-	local gh = pulls and pulls.providers and pulls.providers.github or nil
-	if not gh then
+	local gh_pulls = get_section({ "pulls", "providers", "github" })
+	local gh_issues = get_section({ "issues", "providers", "github" })
+	if not gh_pulls and not gh_issues then
 		vim.health.info("GitHub not configured")
 		return
 	end
@@ -104,32 +134,44 @@ local function check_github()
 	end
 	vim.health.ok("gh authenticated")
 
-	local views = gh.views or {}
-	if #views == 0 then
-		vim.health.warn("No GitHub views configured")
-	else
-		vim.health.ok(string.format("%d view(s) configured", #views))
+	if gh_pulls then
+		check_views(gh_pulls.views, "GitHub pulls")
+	end
+	if gh_issues then
+		check_views(gh_issues.views, "GitHub issues")
+	end
+end
+
+local function check_gitlab()
+	local gl_pulls = get_section({ "pulls", "providers", "gitlab" })
+	local gl_issues = get_section({ "issues", "providers", "gitlab" })
+	if not gl_pulls and not gl_issues then
+		vim.health.info("GitLab not configured")
+		return
+	end
+
+	if gl_pulls then
+		check_credentials(gl_pulls, { "base_url", "token" }, "GitLab pulls")
+		check_https_url(gl_pulls.base_url, "pulls.providers.gitlab.base_url")
+		check_views(gl_pulls.views, "GitLab pulls")
+	end
+	if gl_issues then
+		check_credentials(gl_issues, { "base_url", "token" }, "GitLab issues")
+		check_https_url(gl_issues.base_url, "issues.providers.gitlab.base_url")
+		check_views(gl_issues.views, "GitLab issues")
 	end
 end
 
 local function check_jira()
-	local issues = config.options and config.options.issues or nil
-	local jira = issues and issues.providers and issues.providers.jira or nil
+	local jira = get_section({ "issues", "providers", "jira" })
 	if not jira then
 		vim.health.info("Jira not configured")
 		return
 	end
 
-	check_credentials({ "issues", "providers", "jira" }, "email", "token", "Jira")
-
-	local base_url = tostring(jira.base_url or "")
-	if base_url == "" then
-		vim.health.warn("issues.providers.jira.base_url is empty")
-	elseif not base_url:match("^https://") then
-		vim.health.warn(string.format("issues.providers.jira.base_url should start with https:// (current: %s)", base_url))
-	else
-		vim.health.ok("issues.providers.jira.base_url looks valid")
-	end
+	check_credentials(jira, { "email", "token" }, "Jira")
+	check_https_url(jira.base_url, "issues.providers.jira.base_url")
+	check_views(jira.views, "Jira")
 end
 
 local function validate_keymaps()
@@ -166,6 +208,7 @@ function M.check()
 		vim.health.ok("Neovim version compatible")
 	end
 	check_executable("git", true, "Git")
+	check_executable("curl", true, "curl")
 
 	vim.health.start("Pulls")
 	check_pulls()
@@ -175,6 +218,9 @@ function M.check()
 
 	vim.health.start("GitHub")
 	check_github()
+
+	vim.health.start("GitLab")
+	check_gitlab()
 
 	vim.health.start("Jira")
 	check_jira()

@@ -166,6 +166,7 @@ function M.fetch_conversation(pr, opts, on_done)
 				} or nil,
 				content_raw = description,
 				created_on = pr.created_on or "",
+				reactions = pr.reactions,
 			})
 		end
 		on_done({
@@ -328,13 +329,11 @@ function M.search()
 end
 
 function M.views()
-	local views = github_config().views
-	if type(views) == "table" and #views > 0 then
-		return views
-	end
-	return {
+	local cfg = github_config()
+	local views = (type(cfg.views) == "table" and #cfg.views > 0) and cfg.views or {
 		{ name = "Me", key = "1", search = "involves:@me", layout = "compact" },
 	}
+	return require("atlas.ui.shared.bookmarks_view").append_to_views(views, cfg.bookmarks, "S", "Search")
 end
 
 ---@param opts { force_load: boolean|nil }|nil

@@ -7,6 +7,7 @@ local M = {
 	icon = icons.pulls_provider("github", "provider"),
 	hl_group = "AtlasGHIssuesTheme",
 	panel = require("atlas.issues.providers.github.ui.panel"),
+	bookmark_query_field = "search",
 }
 
 function M.setup()
@@ -376,17 +377,15 @@ end
 ---@return AtlasGitHubIssuesViewConfig[]
 function M.views()
 	local cli = require("atlas.issues.providers.github.api.cli")
-	local views = cli.github_config().views
-	if views ~= nil then
-		return views
-	end
-	return {
+	local cfg = cli.github_config()
+	local views = cfg.views or {
 		{
 			name = "Assigned",
 			key = "1",
 			search = "assignee:@me is:open",
 		},
 	}
+	return require("atlas.ui.shared.bookmarks_view").append_to_views(views, cfg.bookmarks, "S", "Search")
 end
 
 return M

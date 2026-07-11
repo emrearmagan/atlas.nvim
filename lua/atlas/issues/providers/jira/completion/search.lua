@@ -1,6 +1,6 @@
 local M = {}
 
-local prompt = require("atlas.search.prompt")
+local prompt = require("atlas.commands.search.prompt")
 local jql_api = require("atlas.issues.providers.jira.completion.jql")
 
 local autocomplete_fetch_started = false

@@ -8,6 +8,7 @@ local M = {
 	icon = icons.issues_provider("jira", "provider"),
 	hl_group = "AtlasJiraTheme",
 	panel = require("atlas.issues.providers.jira.ui.panel"),
+	bookmark_query_field = "jql",
 }
 
 function M.setup()
@@ -338,16 +339,14 @@ end
 ---@return AtlasJiraViewConfig[]
 function M.views()
 	local cfg = require("atlas.issues.providers.jira.api.config").jira_config()
-	if cfg.views ~= nil then
-		return cfg.views
-	end
-	return {
+	local views = cfg.views or {
 		{
 			name = "Issues",
 			key = "1",
 			jql = "assignee = currentUser() AND resolution = Unresolved ORDER BY updated DESC",
 		},
 	}
+	return require("atlas.ui.shared.bookmarks_view").append_to_views(views, cfg.bookmarks, "J", "JQL")
 end
 
 return M

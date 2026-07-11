@@ -400,23 +400,11 @@ end
 ---@return AtlasGitLabPullsViewConfig[]
 function M.views()
 	local cfg = require("atlas.pulls.providers.gitlab.api.service").gitlab_config()
-	if cfg.views ~= nil then
-		return cfg.views
-	end
-	return {
-		{
-			name = "Assigned",
-			key = "1",
-			scope = "assigned_to_me",
-			state = "opened",
-		},
-		{
-			name = "Created",
-			key = "2",
-			scope = "created_by_me",
-			state = "opened",
-		},
+	local views = cfg.views or {
+		{ name = "Assigned", key = "1", scope = "assigned_to_me", state = "opened" },
+		{ name = "Created", key = "2", scope = "created_by_me", state = "opened" },
 	}
+	return require("atlas.ui.shared.bookmarks_view").append_to_views(views, cfg.bookmarks, "S", "Search")
 end
 
 return M

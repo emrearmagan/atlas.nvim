@@ -180,6 +180,43 @@ function M.render(opts)
 	render_header(lines, spans, opts.width)
 	table.insert(lines, "")
 
+	local active = state.active_view
+	if type(active) == "table" and active._kind == "bookmarks" then
+		append_search_text(lines, spans)
+		require("atlas.ui.shared.bookmarks_view").render(lines, spans, line_map, active._bookmarks or {}, opts.width)
+
+		if state.error then
+			local error_text = tostring(state.error or ""):gsub("[\r\n]+", " | ")
+			local err_line = "Error: " .. error_text
+			table.insert(lines, "")
+			utils.append_block(lines, spans, {
+				lines = { err_line },
+				highlights = {
+					{ line = 0, start_col = 0, end_col = #err_line, hl_group = "AtlasLogError" },
+				},
+			})
+		elseif state.is_loading then
+			table.insert(lines, "")
+			table.insert(lines, "Loading...")
+		elseif state.pulls and #state.pulls > 0 then
+			table.insert(lines, "")
+			local body_lines, body_spans, body_map
+			if state.provider and state.provider.render then
+				local result = state.provider.render(state.pulls, "plain", { width = opts.width })
+				body_lines, body_spans, body_map = result.lines, result.spans, result.line_map
+			else
+				body_lines, body_spans, body_map = build_plain_singleline_content(opts, state.pulls)
+			end
+			local body_base = #lines
+			utils.append_block(lines, spans, { lines = body_lines, highlights = body_spans })
+			for lnum, node in pairs(body_map) do
+				line_map[body_base + lnum] = node
+			end
+		end
+
+		return lines, spans, line_map
+	end
+
 	append_search_text(lines, spans)
 
 	if state.error then

@@ -83,6 +83,21 @@ local function map_state(bb_state, is_draft)
 	return "open"
 end
 
+---@param links table|nil
+---@param key string
+---@return string
+local function link_href(links, key)
+	links = as_table(links) or {}
+	local link = links[key]
+	if link == nil and key == "request_changes" then
+		link = links["request-changes"]
+	end
+	if type(link) == "string" then
+		return link
+	end
+	return tostring((as_table(link) or {}).href or "")
+end
+
 ---@param raw table
 ---@return PullRequest
 local function to_pull_request(raw)
@@ -90,6 +105,7 @@ local function to_pull_request(raw)
 	local repo = tostring(raw.repo or "")
 	local repo_full_name = tostring(raw.repo_full_name or string.format("%s/%s", workspace, repo))
 	local author = raw.author or {}
+	local links = raw.links or {}
 	return {
 		id = raw.id,
 		title = tostring(raw.title or ""),
@@ -112,7 +128,7 @@ local function to_pull_request(raw)
 		tasks_count = tonumber(raw.tasks) or 0,
 		created_on = tostring(raw.created_on or ""),
 		updated_on = tostring(raw.updated_on or ""),
-		link = { html = tostring((raw.links or {}).html or "") },
+		link = { html = tostring(links.html or "") },
 		provider = "bitbucket",
 		workspace = workspace,
 		repo = repo,
@@ -157,17 +173,17 @@ function M.to_pull_requests_list(result, workspace, repo)
 			is_draft = pr.draft == true,
 			state = tostring(pr.state or ""),
 			links = {
-				html = tostring((as_table(links.html) or {}).href or ""),
-				self = tostring((as_table(links.self) or {}).href or ""),
-				merge = tostring((as_table(links.merge) or {}).href or ""),
-				commits = tostring((as_table(links.commits) or {}).href or ""),
-				approve = tostring((as_table(links.approve) or {}).href or ""),
-				request_changes = tostring((as_table(links["request-changes"]) or {}).href or ""),
-				diff = tostring((as_table(links.diff) or {}).href or ""),
-				diffstat = tostring((as_table(links.diffstat) or {}).href or ""),
-				comments = tostring((as_table(links.comments) or {}).href or ""),
-				activity = tostring((as_table(links.activity) or {}).href or ""),
-				statuses = tostring((as_table(links.statuses) or {}).href or ""),
+				html = link_href(links, "html"),
+				self = link_href(links, "self"),
+				merge = link_href(links, "merge"),
+				commits = link_href(links, "commits"),
+				approve = link_href(links, "approve"),
+				request_changes = link_href(links, "request_changes"),
+				diff = link_href(links, "diff"),
+				diffstat = link_href(links, "diffstat"),
+				comments = link_href(links, "comments"),
+				activity = link_href(links, "activity"),
+				statuses = link_href(links, "statuses"),
 			},
 			destination = {
 				branch = tostring(destination_branch.name or ""),

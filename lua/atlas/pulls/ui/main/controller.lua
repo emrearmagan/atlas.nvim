@@ -145,6 +145,19 @@ local function load_active_view(opts, on_done)
 		return
 	end
 
+	if target_view._kind == "bookmarks" then
+		cancel_active_requests()
+		spinner.stop()
+		state.is_loading = false
+		state.error = nil
+		state.pulls = nil
+		state.last_search_query = nil
+		state.current_view = state.active_view
+		render_if_active()
+		on_done()
+		return
+	end
+
 	local target_view_id = helper.view_id(target_view)
 	local token = next_request_token()
 	state.latest_request_tokens[target_view_id] = token
@@ -339,6 +352,47 @@ function M.switch_view(view)
 	state.active_view = view
 	load_active_view({ force_load = false }, function()
 		navigation.focus_first_item()
+	end)
+end
+
+---@param name string
+---@param value any
+function M.run_bookmark(name, value)
+	local provider = state.provider
+	if provider == nil then
+		return
+	end
+	local view = { name = name, layout = "compact" }
+	if type(value) == "string" then
+		view.search = value
+	elseif type(value) == "table" then
+		for k, v in pairs(value) do
+			view[k] = v
+		end
+	end
+
+	cancel_active_requests()
+	state.is_loading = true
+	state.error = nil
+	state.pulls = nil
+	footer.notify("loading", "Running query...")
+	render_if_active()
+
+	active_pullrequests_handle = provider.fetch_pullrequests(view, { force_load = false }, function(groups, err)
+		active_pullrequests_handle = nil
+		state.is_loading = false
+		local first_err = type(err) == "table" and err[1] or err
+		if first_err and (groups == nil or #groups == 0) then
+			state.error = tostring(first_err)
+			state.pulls = {}
+			footer.notify("error", string.format("Query failed: %s", state.error))
+		else
+			state.error = nil
+			state.pulls = groups or {}
+			footer.notify("success", "Pull requests loaded", 1200)
+		end
+		footer.set_items(helper.build_footer_items(state.pulls, state.current_user))
+		render_if_active()
 	end)
 end
 

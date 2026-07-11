@@ -26,16 +26,14 @@ end
 ---@type BitbucketActionDef[]
 local ACTIONS = {
 	{
-		id = "merge",
-		label = "Merge",
+		id = "approve",
+		label = "Approve",
 		is_available = function(ctx)
 			if not has_pr(ctx) or ctx.pr == nil then
 				return false, "No PR selected"
 			end
-			local raw = ctx.pr._raw or {}
-			local merge_url = tostring((raw.links or {}).merge or "")
-			if merge_url == "" then
-				return false, "No merge URL available"
+			if not pullrequests.has_action(ctx.pr, "approve") then
+				return false, "No approve URL available"
 			end
 			return true, nil
 		end,
@@ -46,11 +44,67 @@ local ACTIONS = {
 				return
 			end
 
-			local raw = pr._raw or {}
-			local merge_url = tostring((raw.links or {}).merge or "")
+			footer.notify("loading", "Approving PR...")
+			pullrequests.approve(pr, function(_, err)
+				if err ~= nil then
+					footer.notify("error", string.format("Approve failed: %s", tostring(err)))
+					done(nil, tostring(err))
+					return
+				end
 
-			if merge_url == "" then
-				done(nil, "No merge URL available")
+				footer.notify("success", "PR approved", 1200)
+				done({ changed_pr = true, message = "Approved" }, nil)
+			end)
+		end,
+	},
+	{
+		id = "request_changes",
+		label = "Request changes",
+		is_available = function(ctx)
+			if not has_pr(ctx) or ctx.pr == nil then
+				return false, "No PR selected"
+			end
+			if not pullrequests.has_action(ctx.pr, "request_changes") then
+				return false, "No request changes URL available"
+			end
+			return true, nil
+		end,
+		run = function(ctx, done)
+			local pr = ctx.pr
+			if pr == nil then
+				done(nil, "No PR selected")
+				return
+			end
+
+			footer.notify("loading", "Requesting changes...")
+			pullrequests.request_changes(pr, function(_, err)
+				if err ~= nil then
+					footer.notify("error", string.format("Request changes failed: %s", tostring(err)))
+					done(nil, tostring(err))
+					return
+				end
+
+				footer.notify("success", "Changes requested", 1200)
+				done({ changed_pr = true, message = "Changes requested" }, nil)
+			end)
+		end,
+	},
+	{
+		id = "merge",
+		label = "Merge",
+		is_available = function(ctx)
+			if not has_pr(ctx) or ctx.pr == nil then
+				return false, "No PR selected"
+			end
+			if not pullrequests.has_action(ctx.pr, "merge") then
+				return false, "No merge URL available"
+			end
+			return true, nil
+		end,
+		run = function(ctx, done)
+			local pr = ctx.pr
+			if pr == nil then
+				done(nil, "No PR selected")
 				return
 			end
 
@@ -70,7 +124,7 @@ local ACTIONS = {
 				end
 
 				footer.notify("loading", "Starting Merge...")
-				pullrequests.merge(merge_url, {}, function(_, err)
+				pullrequests.merge(pr, {}, function(_, err)
 					if err ~= nil then
 						footer.notify("error", string.format("Merge failed: %s", tostring(err)))
 						done(nil, tostring(err))
@@ -80,87 +134,6 @@ local ACTIONS = {
 					footer.notify("success", "Merge succeeded", 1200)
 					done({ changed_pr = true, message = "Merged" }, nil)
 				end)
-			end)
-		end,
-	},
-	{
-		id = "approve",
-		label = "Approve",
-		is_available = function(ctx)
-			if not has_pr(ctx) or ctx.pr == nil then
-				return false, "No PR selected"
-			end
-			local raw = ctx.pr._raw or {}
-			local link = tostring((raw.links or {}).approve or "")
-			if link == "" then
-				return false, "No approve URL available"
-			end
-			return true, nil
-		end,
-		run = function(ctx, done)
-			local pr = ctx.pr
-			if pr == nil then
-				done(nil, "No PR selected")
-				return
-			end
-
-			local raw = pr._raw or {}
-			local approve_url = tostring((raw.links or {}).approve or "")
-			if approve_url == "" then
-				done(nil, "No approve URL available")
-				return
-			end
-
-			footer.notify("loading", "Approving PR...")
-			pullrequests.approve(approve_url, function(_, err)
-				if err ~= nil then
-					footer.notify("error", string.format("Approve failed: %s", tostring(err)))
-					done(nil, tostring(err))
-					return
-				end
-
-				footer.notify("success", "PR approved", 1200)
-				done({ changed_pr = true, message = "Approved" }, nil)
-			end)
-		end,
-	},
-	{
-		id = "request_changes",
-		label = "Request changes",
-		is_available = function(ctx)
-			if not has_pr(ctx) or ctx.pr == nil then
-				return false, "No PR selected"
-			end
-			local raw = ctx.pr._raw or {}
-			if tostring((raw.links or {}).request_changes or "") == "" then
-				return false, "No request changes URL available"
-			end
-			return true, nil
-		end,
-		run = function(ctx, done)
-			local pr = ctx.pr
-			if pr == nil then
-				done(nil, "No PR selected")
-				return
-			end
-
-			local raw = pr._raw or {}
-			local request_changes_url = tostring((raw.links or {}).request_changes or "")
-			if request_changes_url == "" then
-				done(nil, "No request changes URL available")
-				return
-			end
-
-			footer.notify("loading", "Requesting changes...")
-			pullrequests.request_changes(request_changes_url, function(_, err)
-				if err ~= nil then
-					footer.notify("error", string.format("Request changes failed: %s", tostring(err)))
-					done(nil, tostring(err))
-					return
-				end
-
-				footer.notify("success", "Changes requested", 1200)
-				done({ changed_pr = true, message = "Changes requested" }, nil)
 			end)
 		end,
 	},
@@ -244,7 +217,10 @@ local ACTIONS = {
 								}
 
 								local controller = require("atlas.pulls.ui.main.controller")
-								footer.notify("success", string.format("Search view -> %s", tostring(repo.full_name or repo.name)))
+								footer.notify(
+									"success",
+									string.format("Search view -> %s", tostring(repo.full_name or repo.name))
+								)
 								controller.switch_view(search_view)
 								done({ changed_pr = false, message = "Search view switched" }, nil)
 							end)

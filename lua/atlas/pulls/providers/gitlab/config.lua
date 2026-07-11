@@ -12,6 +12,14 @@
 --             { name = "Reviewing", key = "3", scope = "all",            state = "opened",
 --               extra_params = { reviewer_id = "Me" } },
 --           },
+--           bookmarks = {
+--             -- key   = "S",      -- default
+--             -- label = "Search", -- default
+--             items = {
+--               ["Reviewing"]   = { scope = "all", extra_params = { reviewer_id = "Me" } },
+--               ["Merged by me"] = { scope = "all", author_username = "me" },
+--             },
+--           },
 --         },
 --       },
 --     },
@@ -26,7 +34,7 @@
 -- Anything not covered above can be passed via `extra_params = { key = "value", ... }`.
 -- TODO: It should work in theory, but i have not tested it yet...
 
----@class AtlasGitLabPullsViewConfig : AtlasPullsViewConfig
+---@class AtlasGitLabPullsSearchConfig
 ---@field scope "created_by_me"|"assigned_to_me"|"all"|nil
 ---@field project string|number|nil
 ---@field group string|number|nil
@@ -39,8 +47,16 @@
 ---@field order_by "created_at"|"updated_at"|"title"|nil
 ---@field extra_params table<string, string>|nil
 
+---@class AtlasGitLabPullsViewConfig : AtlasPullsViewConfig, AtlasGitLabPullsSearchConfig
+
+---@class AtlasGitLabPullsBookmarksConfig
+---@field key string|nil    -- default "S"
+---@field label string|nil  -- default "Search"
+---@field items table<string, AtlasGitLabPullsSearchConfig>|nil
+
 ---@class AtlasGitLabPullsConfig
 ---@field base_url string
 ---@field token string
 ---@field cache_ttl number|nil
 ---@field views AtlasGitLabPullsViewConfig[]|nil
+---@field bookmarks AtlasGitLabPullsBookmarksConfig|nil

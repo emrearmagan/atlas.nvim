@@ -31,75 +31,6 @@ end
 ---@type GitHubActionDef[]
 local ACTIONS = {
 	{
-		id = "merge",
-		label = "Merge",
-		is_available = function(ctx)
-			if not has_pr(ctx) or ctx.pr == nil then
-				return false, "No PR selected"
-			end
-			if repo_slug(ctx) == "" then
-				return false, "Missing repository info"
-			end
-			return true, nil
-		end,
-		run = function(ctx, done)
-			local pr = ctx.pr
-			if pr == nil then
-				done(nil, "No PR selected")
-				return
-			end
-
-			local slug = repo_slug(ctx)
-			local strategies = { "merge", "squash", "rebase" }
-
-			vim.ui.select(strategies, {
-				prompt = string.format("Merge strategy for PR #%s:", tostring(pr.id or "")),
-				kind = "atlas_github_merge_strategy",
-			}, function(strategy)
-				if strategy == nil then
-					done({ changed_pr = false, message = "Merge cancelled" }, nil)
-					return
-				end
-
-				vim.ui.input({
-					prompt = string.format("Confirm %s merge PR #%s? [y/N]: ", strategy, tostring(pr.id or "")),
-				}, function(input)
-					if input == nil then
-						done({ changed_pr = false, message = "Merge cancelled" }, nil)
-						return
-					end
-
-					local normalized = vim.trim(tostring(input)):lower()
-					if normalized ~= "y" and normalized ~= "yes" then
-						footer.notify("info", "Merge cancelled")
-						done({ changed_pr = false, message = "Merge cancelled" }, nil)
-						return
-					end
-
-					footer.notify("loading", "Merging PR...")
-					cli.gh({
-						"pr",
-						"merge",
-						tostring(pr.id),
-						"--repo",
-						slug,
-						"--" .. strategy,
-						"--delete-branch",
-					}, function(_, err)
-						if err then
-							footer.notify("error", string.format("Merge failed: %s", tostring(err)))
-							done(nil, tostring(err))
-							return
-						end
-
-						footer.notify("success", "Merge succeeded", 1200)
-						done({ changed_pr = true, message = "Merged" }, nil)
-					end)
-				end)
-			end)
-		end,
-	},
-	{
 		id = "toggle_approval",
 		label = "Approve / Unapprove",
 		is_available = function(ctx)
@@ -260,6 +191,75 @@ local ACTIONS = {
 
 					footer.notify("success", "Changes requested", 1200)
 					done({ changed_pr = true, message = "Changes requested" }, nil)
+				end)
+			end)
+		end,
+	},
+	{
+		id = "merge",
+		label = "Merge",
+		is_available = function(ctx)
+			if not has_pr(ctx) or ctx.pr == nil then
+				return false, "No PR selected"
+			end
+			if repo_slug(ctx) == "" then
+				return false, "Missing repository info"
+			end
+			return true, nil
+		end,
+		run = function(ctx, done)
+			local pr = ctx.pr
+			if pr == nil then
+				done(nil, "No PR selected")
+				return
+			end
+
+			local slug = repo_slug(ctx)
+			local strategies = { "merge", "squash", "rebase" }
+
+			vim.ui.select(strategies, {
+				prompt = string.format("Merge strategy for PR #%s:", tostring(pr.id or "")),
+				kind = "atlas_github_merge_strategy",
+			}, function(strategy)
+				if strategy == nil then
+					done({ changed_pr = false, message = "Merge cancelled" }, nil)
+					return
+				end
+
+				vim.ui.input({
+					prompt = string.format("Confirm %s merge PR #%s? [y/N]: ", strategy, tostring(pr.id or "")),
+				}, function(input)
+					if input == nil then
+						done({ changed_pr = false, message = "Merge cancelled" }, nil)
+						return
+					end
+
+					local normalized = vim.trim(tostring(input)):lower()
+					if normalized ~= "y" and normalized ~= "yes" then
+						footer.notify("info", "Merge cancelled")
+						done({ changed_pr = false, message = "Merge cancelled" }, nil)
+						return
+					end
+
+					footer.notify("loading", "Merging PR...")
+					cli.gh({
+						"pr",
+						"merge",
+						tostring(pr.id),
+						"--repo",
+						slug,
+						"--" .. strategy,
+						"--delete-branch",
+					}, function(_, err)
+						if err then
+							footer.notify("error", string.format("Merge failed: %s", tostring(err)))
+							done(nil, tostring(err))
+							return
+						end
+
+						footer.notify("success", "Merge succeeded", 1200)
+						done({ changed_pr = true, message = "Merged" }, nil)
+					end)
 				end)
 			end)
 		end,
@@ -633,7 +633,10 @@ local ACTIONS = {
 						return string.format(
 							"@%s%s",
 							item.account_id,
-							item.display_name and item.display_name ~= item.account_id and (" — " .. item.display_name) or ""
+							item.display_name
+									and item.display_name ~= item.account_id
+									and (" — " .. item.display_name)
+								or ""
 						)
 					end,
 					prompt = string.format("Assignees for PR #%s:", tostring(pr.id or "")),

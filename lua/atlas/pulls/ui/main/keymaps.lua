@@ -59,6 +59,18 @@ function M.register(buf, views)
 		end
 	end
 
+	table.insert(items, {
+		key = "<CR>",
+		desc = "Run bookmark",
+		callback = function()
+			local navigation = require("atlas.ui.navigation")
+			local node = navigation.current_item()
+			if type(node) == "table" and node.kind == "bookmark" then
+				require("atlas.pulls.ui.main.controller").run_bookmark(node.name, node.value)
+			end
+		end,
+	})
+
 	local STATUS_TOGGLES = {
 		{ status = "OPEN", action_id = "pulls.filter_status_open" },
 		{ status = "MERGED", action_id = "pulls.filter_status_merged" },

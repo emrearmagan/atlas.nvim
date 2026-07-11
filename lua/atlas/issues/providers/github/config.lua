@@ -10,6 +10,14 @@
 --             { name = "Mention",  key = "3", search = "mentions:@me is:open" },
 --             { name = "Updated",  key = "4", search = "involves:@me sort:updated-desc" },
 --           },
+--           bookmarks = {
+--             -- key   = "S",      -- default
+--             -- label = "Search", -- default
+--             items = {
+--               ["Bugs"]       = "is:issue is:open label:bug",
+--               ["Recently closed"] = "is:issue is:closed author:@me sort:updated-desc",
+--             },
+--           },
 --         },
 --       },
 --     },
@@ -18,6 +26,12 @@
 ---@class AtlasGitHubIssuesViewConfig : AtlasIssuesViewConfig
 ---@field search string
 
+---@class AtlasGitHubIssuesBookmarksConfig
+---@field key string|nil    -- default "S"
+---@field label string|nil  -- default "Search"
+---@field items table<string, string>|nil
+
 ---@class AtlasGitHubIssuesConfig
 ---@field cache_ttl number|nil
 ---@field views AtlasGitHubIssuesViewConfig[]|nil
+---@field bookmarks AtlasGitHubIssuesBookmarksConfig|nil

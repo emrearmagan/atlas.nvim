@@ -170,9 +170,71 @@ local function conflicts_for(action_ids, builtins)
 	return conflicts
 end
 
+---@param section_path string[]
+---@return { key?: string, label?: string, items?: table }|nil
+local function get_bookmarks(section_path)
+	local node = require("atlas.config").options ---@type any
+	for _, key in ipairs(section_path) do
+		if type(node) ~= "table" then
+			return nil
+		end
+		node = node[key]
+	end
+	if type(node) ~= "table" then
+		return nil
+	end
+	return node.bookmarks
+end
+
+---@param section_path string[]
+---@param default_bookmarks_key string
+---@return table<string, string[]>
+local function view_key_conflicts(section_path, default_bookmarks_key)
+	local node = require("atlas.config").options ---@type any
+	for _, key in ipairs(section_path) do
+		if type(node) ~= "table" then
+			return {}
+		end
+		node = node[key]
+	end
+	if type(node) ~= "table" then
+		return {}
+	end
+
+	---@type table<string, table<string, true>>
+	local seen = {}
+	for _, view in ipairs(node.views or {}) do
+		local key = type(view) == "table" and view.key or nil
+		if type(key) == "string" and key ~= "" then
+			seen[key] = seen[key] or {}
+			seen[key][tostring(view.name or "<view>")] = true
+		end
+	end
+
+	local bookmarks = get_bookmarks(section_path)
+	if type(bookmarks) == "table" and type(bookmarks.items) == "table" and next(bookmarks.items) ~= nil then
+		local bk = tostring(bookmarks.key or default_bookmarks_key)
+		if bk ~= "" then
+			seen[bk] = seen[bk] or {}
+			seen[bk][tostring(bookmarks.label or default_bookmarks_key) .. " (bookmarks)"] = true
+		end
+	end
+
+	---@type table<string, string[]>
+	local conflicts = {}
+	for key, names in pairs(seen) do
+		local list = vim.tbl_keys(names)
+		table.sort(list)
+		if #list > 1 then
+			conflicts[key] = list
+		end
+	end
+	return conflicts
+end
+
 ---@return table<string, table<string, string[]>>
 function M.validate()
-	return {
+	local result = {
 		ui = conflicts_for({
 			"ui.help",
 			"ui.close",
@@ -210,6 +272,23 @@ function M.validate()
 			"issues.create_issue",
 		}, { "j", "k", "gg", "G" }),
 	}
+
+	local provider_contexts = {
+		{ "jira views", { "issues", "providers", "jira" }, "J" },
+		{ "github issues views", { "issues", "providers", "github" }, "S" },
+		{ "gitlab issues views", { "issues", "providers", "gitlab" }, "S" },
+		{ "github pulls views", { "pulls", "providers", "github" }, "S" },
+		{ "gitlab pulls views", { "pulls", "providers", "gitlab" }, "S" },
+		{ "bitbucket pulls views", { "pulls", "providers", "bitbucket" }, "" },
+	}
+	for _, ctx in ipairs(provider_contexts) do
+		local conflicts = view_key_conflicts(ctx[2], ctx[3])
+		if next(conflicts) ~= nil then
+			result[ctx[1]] = conflicts
+		end
+	end
+
+	return result
 end
 
 return M
