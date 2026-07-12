@@ -8,11 +8,7 @@ local utils = require("atlas.ui.shared.utils")
 ---@param name string|nil
 ---@return string, string
 local function type_icon(name)
-	local lower = tostring(name or ""):lower()
-	if lower == "sub-task" then
-		lower = "subtask"
-	end
-	return icons.issues_type(lower)
+	return icons.issues_type(name)
 end
 
 ---@param name string|nil
