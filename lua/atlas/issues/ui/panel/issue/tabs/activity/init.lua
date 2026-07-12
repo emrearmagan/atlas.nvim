@@ -40,8 +40,10 @@ local function to_thread_items(entries)
 	for _, entry in ipairs(entries or {}) do
 		local author = entry.actor and entry.actor.display_name or "Unknown"
 		local timestamp = utils.relative_time_text(entry.date)
+		local user_icon, user_icon_hl = icons.general("user")
 		table.insert(out, {
-			icon = icons.general("user"),
+			icon = user_icon,
+			icon_hl = user_icon_hl,
 			author = author,
 			right_text = timestamp,
 			additional = entry.label,

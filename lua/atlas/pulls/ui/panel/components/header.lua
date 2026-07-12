@@ -46,15 +46,19 @@ function M.render(pr, width, extra_rows)
 
 	local bell_icon, bell_hl
 	if pr.is_subscribed ~= nil then
-		bell_icon = pr.is_subscribed and icons.general("bell") or icons.general("bell_no")
-		bell_hl = pr.is_subscribed and "AtlasLogInfo" or "AtlasTextMuted"
+		if pr.is_subscribed then
+			bell_icon = icons.general("bell")
+			bell_hl = "AtlasLogInfo"
+		else
+			bell_icon, bell_hl = icons.general("bell_no")
+		end
 		local title_w = vim.api.nvim_strwidth(title)
 		local bell_w = vim.api.nvim_strwidth(bell_icon)
 		local pad = math.max(1, width - title_w - bell_w - 1)
 		title = title .. string.rep(" ", pad) .. bell_icon
 	end
 
-	local author_icon = icons.general("user")
+	local author_icon, author_icon_hl = icons.general("user")
 	local by_prefix = string.format(" %s by @", author_icon)
 	local by_sep = " - "
 	local byline = by_prefix .. author_name .. by_sep .. created_text
@@ -156,6 +160,7 @@ function M.render(pr, width, extra_rows)
 	if bell_icon then
 		add_span(spans, lines, 0, #title - #bell_icon, #title, bell_hl)
 	end
+	add_span(spans, lines, 1, 1, 1 + #author_icon, author_icon_hl)
 
 	local author_start = #by_prefix - 1
 	local author_end = author_start + #("@" .. author_name)
@@ -208,10 +213,10 @@ end
 function M.render_repo(repo, width, extra_rows)
 	local full_name = repo_full_name(repo)
 	local workspace = repo_workspace(repo)
-	local created_text = utils.relative_time_text(tostring(repo.created_on or ((repo._raw or {}).created_on) or ""))
+	local created_text = utils.relative_time_text(tostring(repo.created_on or (repo._raw or {}).created_on or ""))
 
 	local title = string.format(" %s", full_name)
-	local author_icon = icons.general("user")
+	local author_icon, author_icon_hl = icons.general("user")
 	local by_prefix = string.format(" %s by @", author_icon)
 	local by_sep = " - "
 	local byline = by_prefix .. workspace .. by_sep .. created_text
@@ -240,13 +245,15 @@ function M.render_repo(repo, width, extra_rows)
 	if has_stars or has_forks then
 		local v1, v1_hl
 		if has_stars then
-			v1, v1_hl = icon_cell(icons.general("star"), repo.stars, "AtlasTextWarning")
+			local star_icon, star_hl = icons.general("star")
+			v1, v1_hl = icon_cell(star_icon, repo.stars, star_hl)
 		else
 			v1, v1_hl = "-", "AtlasTextMuted"
 		end
 		local v2, v2_hl
 		if has_forks then
-			v2, v2_hl = icon_cell(icons.pulls("fork"), repo.forks, "AtlasLogInfo")
+			local fork_icon, fork_hl = icons.pulls("fork")
+			v2, v2_hl = icon_cell(fork_icon, repo.forks, fork_hl)
 		else
 			v2, v2_hl = "-", "AtlasTextMuted"
 		end
@@ -260,7 +267,8 @@ function M.render_repo(repo, width, extra_rows)
 		})
 	end
 	if has_watchers then
-		local v1, v1_hl = icon_cell(icons.general("watching"), repo.watchers, "AtlasTextPositive")
+		local watching_icon, watching_hl = icons.general("watching")
+		local v1, v1_hl = icon_cell(watching_icon, repo.watchers, watching_hl)
 		table.insert(rows, {
 			k1 = "Watchers:",
 			v1 = v1,
@@ -321,6 +329,7 @@ function M.render_repo(repo, width, extra_rows)
 		}
 
 		add_span(spans, lines, 0, 1, 1 + #full_name, highlights.dynamic_for(full_name) or "AtlasTextMuted")
+		add_span(spans, lines, 1, 1, 1 + #author_icon, author_icon_hl)
 
 		local owner_start = #by_prefix - 1
 		local owner_end = owner_start + #("@" .. workspace)
@@ -347,6 +356,7 @@ function M.render_repo(repo, width, extra_rows)
 		{ line = 1, line_hl_group = "AtlasPanelHeaderBg" },
 	}
 	add_span(spans, lines, 0, 1, 1 + #full_name, highlights.dynamic_for(full_name) or "AtlasTextMuted")
+	add_span(spans, lines, 1, 1, 1 + #author_icon, author_icon_hl)
 	local owner_start = #by_prefix - 1
 	local owner_end = owner_start + #("@" .. workspace)
 	add_span(spans, lines, 1, owner_start, owner_end, helper.author_hl(workspace))

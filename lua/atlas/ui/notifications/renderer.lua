@@ -27,8 +27,11 @@ function M.render(notifications, width)
 	end
 
 	for i, n in ipairs(notifications) do
-		local dot = n.unread and icons.general("dot") or " "
-		local dot_hl = n.unread and "AtlasLogInfo" or "AtlasTextMuted"
+		local dot, dot_hl = " ", "AtlasTextMuted"
+		if n.unread then
+			dot = icons.general("dot")
+			dot_hl = "AtlasLogInfo"
+		end
 
 		local type_icon = n.icon or ""
 		local type_hl = n.icon_hl or "AtlasTextMuted"

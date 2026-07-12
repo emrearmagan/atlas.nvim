@@ -1,11 +1,12 @@
 local icons = require("atlas.ui.shared.icons")
+local provider_icon, provider_hl = icons.pulls_provider("gitlab", "provider")
 
 ---@class GitLabPullsProvider : PullsProvider
 local M = {
 	id = "gitlab",
 	name = "GitLab",
-	icon = icons.pulls_provider("gitlab", "provider"),
-	hl_group = "AtlasGitLabTheme",
+	icon = provider_icon,
+	hl_group = provider_hl,
 	panel = require("atlas.pulls.providers.gitlab.ui.panel"),
 	repo_panel = require("atlas.pulls.providers.gitlab.ui.repo_panel"),
 	render = require("atlas.pulls.providers.gitlab.ui.main").render,

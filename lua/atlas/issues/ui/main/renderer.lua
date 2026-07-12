@@ -371,9 +371,11 @@ local function generic_issue_popup_content(issue)
 	end
 
 	local issue_type_name = type(issue.type) == "table" and issue.type.name or nil
-	push("Type", issue_type_name, helper.issue_type_hl(issue_type_name))
+	local _, issue_type_hl = icons.issues_type(issue_type_name)
+	local _, priority_hl = icons.issues_priority(issue.priority)
+	push("Type", issue_type_name, issue_type_hl)
 	push("Status", issue.status, helper.status_hl(issue.status_id))
-	push("Priority", issue.priority, helper.priority_hl(issue.priority))
+	push("Priority", issue.priority, priority_hl)
 
 	local assignee_name = type(issue.assignee) == "table" and issue.assignee.display_name or nil
 	push("Assignee", assignee_name or "Unassigned", helper.person_hl(assignee_name))
@@ -447,9 +449,11 @@ local function jira_issue_popup_content(issue)
 	end
 
 	local issue_type_name = type(issue.type) == "table" and issue.type.name or nil
-	push("Type", issue_type_name, helper.issue_type_hl(issue_type_name))
+	local _, issue_type_hl = icons.issues_type(issue_type_name)
+	local _, priority_hl = icons.issues_priority(issue.priority)
+	push("Type", issue_type_name, issue_type_hl)
 	push("Status", issue.status, helper.status_hl(issue.status_id))
-	push("Priority", issue.priority, helper.priority_hl(issue.priority))
+	push("Priority", issue.priority, priority_hl)
 
 	local assignee_name = type(issue.assignee) == "table" and issue.assignee.display_name or nil
 	push("Assignee", assignee_name or "Unassigned", helper.person_hl(assignee_name))
@@ -655,9 +659,13 @@ function M.render(opts)
 	if state.provider and state.provider.fetch_notifications then
 		local notif_state = require("atlas.ui.notifications.state")
 		local count = notif_state.unread_count or 0
-		local bell_icon = count > 0 and icons.general("bell_unread") or icons.general("bell")
+		local bell_icon, bell_hl
+		if count > 0 then
+			bell_icon, bell_hl = icons.general("bell_unread")
+		else
+			bell_icon, bell_hl = icons.general("bell")
+		end
 		local bell_label = count > 0 and string.format("%s %d", bell_icon, count) or bell_icon
-		local bell_hl = count > 0 and "AtlasLogInfo" or "AtlasTextMuted"
 		table.insert(actions, { label = bell_label, hl_group = bell_hl })
 		table.insert(actions, { label = "|", hl_group = "AtlasTextMuted" })
 	end

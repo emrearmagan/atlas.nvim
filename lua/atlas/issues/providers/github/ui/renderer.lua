@@ -6,21 +6,12 @@ local helper = require("atlas.issues.ui.main.helper")
 local state = require("atlas.issues.state")
 
 ---@param status_id string|nil
----@return string
+---@return string, string
 local function state_icon(status_id)
 	if status_id == "closed" then
-		return icons.pulls_status("successful")
+		return icons.pulls_status("successful"), "AtlasGHIssueClosed"
 	end
-	return icons.issues("issue")
-end
-
----@param status_id string|nil
----@return string
-local function state_hl(status_id)
-	if status_id == "closed" then
-		return "AtlasGHIssueClosed"
-	end
-	return "AtlasGHIssueOpen"
+	return icons.issues("issue"), "AtlasGHIssueOpen"
 end
 
 ---@param status_id string|nil
@@ -84,7 +75,12 @@ function M.cell_hl(row, col, ctx)
 
 	if col.key == "icon" then
 		local is_pinned = issue.is_pinned == true
-		local s = is_pinned and icons.general("pin") or state_icon(issue.status_id)
+		local s, icon_hl
+		if is_pinned then
+			s, icon_hl = icons.general("pin")
+		else
+			s, icon_hl = state_icon(issue.status_id)
+		end
 		if s == "" then
 			return nil
 		end
@@ -92,18 +88,17 @@ function M.cell_hl(row, col, ctx)
 		if not ss or not ee then
 			return nil
 		end
-		local hl = is_pinned and "AtlasTextWarning" or state_hl(issue.status_id)
-		return { { start_col = ss - 1, end_col = ee, hl_group = hl } }
+		return { { start_col = ss - 1, end_col = ee, hl_group = icon_hl } }
 	end
 
 	if col.key == "name" then
 		local spans = {}
 		local is_child = (tonumber(row._tv2_depth) or 0) > 0
 		if is_child then
-			local s_icon = state_icon(issue.status_id)
+			local s_icon, s_icon_hl = state_icon(issue.status_id)
 			local is, ie = ctx.text:find(s_icon, 1, true)
 			if is and ie then
-				table.insert(spans, { start_col = is - 1, end_col = ie, hl_group = state_hl(issue.status_id) })
+				table.insert(spans, { start_col = is - 1, end_col = ie, hl_group = s_icon_hl })
 			end
 		end
 

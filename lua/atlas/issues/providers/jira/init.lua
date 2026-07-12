@@ -1,12 +1,13 @@
 local icons = require("atlas.ui.shared.icons")
 local config = require("atlas.issues.providers.jira.api.config")
+local provider_icon, provider_hl = icons.issues_provider("jira", "provider")
 
 ---@class JiraProvider : IssuesProvider
 local M = {
 	id = "jira",
 	name = "Jira",
-	icon = icons.issues_provider("jira", "provider"),
-	hl_group = "AtlasJiraTheme",
+	icon = provider_icon,
+	hl_group = provider_hl,
 	panel = require("atlas.issues.providers.jira.ui.panel"),
 	bookmark_query_field = "jql",
 }

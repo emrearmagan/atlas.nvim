@@ -380,7 +380,7 @@ local function render_builds(pr, width, lines, spans, line_map)
 
 	for _, entry in ipairs(entries) do
 		local s = tostring(entry.state or "UNKNOWN")
-		local icon = icons.pulls_status(s:lower())
+		local icon, icon_hl = icons.pulls_status(s:lower())
 		local name = tostring(entry.name or entry.key or "Build")
 		local text = string.format("%s %s (%s)", icon, name, status_label(s))
 		local wrapped = utils.wrap_line(text, box_inner)
@@ -395,6 +395,14 @@ local function render_builds(pr, width, lines, spans, line_map)
 				end_col = #chunk,
 				hl_group = hl,
 			})
+			if i == 1 then
+				table.insert(box_spans, {
+					line = #box_lines - 1,
+					start_col = 0,
+					end_col = #icon,
+					hl_group = icon_hl,
+				})
+			end
 		end
 	end
 

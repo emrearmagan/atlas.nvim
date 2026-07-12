@@ -187,6 +187,10 @@ issues = {
       project_config = {
         -- The Jira custom field ID used for story points. Defaults to "customfield_10016".
         story_points_field = "customfield_10016",
+        issue_types = {
+          ["Maintenance"] = { icon = "", hl_group = "AtlasTextWarning" },
+          ["Infrastructure"] = { icon = "󰒋", hl_group = "AtlasLogInfo" },
+        },
 
         KAN = {
           customfield_10003 = {
@@ -228,6 +232,7 @@ issues = {
           ["My open"]     = "assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC",
         },
       },
+
     },
   },
 },

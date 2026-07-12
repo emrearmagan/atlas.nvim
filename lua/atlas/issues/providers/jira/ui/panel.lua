@@ -18,7 +18,7 @@ local history_state = require("atlas.issues.ui.panel.issue.tabs.activity.state")
 function M.header_rows(issue)
 	local user_icon = icons.general("user")
 	local priority = tostring(issue.priority or "-")
-	local priority_icon = icons.issues_priority(priority)
+	local priority_icon, priority_hl = icons.issues_priority(priority)
 	local priority_text = priority_icon ~= "" and string.format("%s %s", priority_icon, priority) or priority
 	local assignee_name = type(issue.assignee) == "table" and tostring(issue.assignee.display_name or "") or ""
 	local reporter_name = type(issue.reporter) == "table" and tostring(issue.reporter.display_name or "") or ""
@@ -37,7 +37,7 @@ function M.header_rows(issue)
 			v1_hl = helper.status_hl(issue.status_id),
 			k2 = "Priority:",
 			v2 = priority_text,
-			v2_hl = helper.priority_hl(issue.priority),
+			v2_hl = priority_hl,
 		},
 		{
 			k1 = "Assignee:",
@@ -220,23 +220,29 @@ end
 
 ---@return IssuesPanelTab[]
 function M.tabs()
+	local overview_icon, overview_hl = icons.general("overview")
+	local conversation_icon, conversation_hl = icons.general("conversation")
+	local activity_icon, activity_hl = icons.pulls("activity")
 	return {
 		{
 			key = "overview",
 			label = "Overview",
-			icon = icons.general("overview"),
+			icon = overview_icon,
+			icon_hl = overview_hl,
 			mod = require("atlas.issues.providers.jira.ui.overview"),
 		},
 		{
 			key = "conversation",
 			label = "Conversation",
-			icon = icons.general("conversation"),
+			icon = conversation_icon,
+			icon_hl = conversation_hl,
 			mod = require("atlas.issues.ui.panel.issue.tabs.conversation"),
 		},
 		{
 			key = "activity",
 			label = "History",
-			icon = icons.pulls("activity"),
+			icon = activity_icon,
+			icon_hl = activity_hl,
 			mod = require("atlas.issues.ui.panel.issue.tabs.activity"),
 		},
 	}

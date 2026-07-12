@@ -6,7 +6,7 @@ local icons = require("atlas.ui.shared.icons")
 local utils = require("atlas.ui.shared.utils")
 
 ---@param name string|nil
----@return string
+---@return string, string
 local function type_icon(name)
 	local lower = tostring(name or ""):lower()
 	if lower == "sub-task" then
@@ -16,7 +16,7 @@ local function type_icon(name)
 end
 
 ---@param name string|nil
----@return string
+---@return string, string
 local function priority_icon(name)
 	return icons.issues_priority(name)
 end
@@ -82,13 +82,13 @@ function M.cell_hl(row, col, ctx)
 		local issue_type_name = type(issue) == "table" and type(issue.type) == "table" and issue.type.name or nil
 
 		if is_child and type(issue) == "table" then
-			local issue_icon = type_icon(issue_type_name)
+			local issue_icon, issue_icon_hl = type_icon(issue_type_name)
 			local is, ie = ctx.text:find(issue_icon, 1, true)
 			if is and ie then
 				table.insert(spans_for_cell, {
 					start_col = is - 1,
 					end_col = ie,
-					hl_group = helper.issue_type_hl(issue_type_name),
+					hl_group = issue_icon_hl,
 				})
 			end
 		end
@@ -114,13 +114,13 @@ function M.cell_hl(row, col, ctx)
 		end
 
 		if type(issue) == "table" and type(issue.priority) == "string" and issue.priority ~= "" then
-			local p_icon = priority_icon(issue.priority)
+			local p_icon, p_icon_hl = priority_icon(issue.priority)
 			local ps, pe = ctx.text:find(p_icon, 1, true)
 			if ps and pe then
 				table.insert(spans_for_cell, {
 					start_col = ps - 1,
 					end_col = pe,
-					hl_group = helper.priority_hl(issue.priority),
+					hl_group = p_icon_hl,
 				})
 			end
 		end
@@ -140,7 +140,7 @@ function M.cell_hl(row, col, ctx)
 
 	if col.key == "icon" then
 		local issue_type_name = type(issue) == "table" and type(issue.type) == "table" and issue.type.name or nil
-		local t_icon = type_icon(issue_type_name)
+		local t_icon, t_icon_hl = type_icon(issue_type_name)
 		if t_icon == "" then
 			return nil
 		end
@@ -149,7 +149,7 @@ function M.cell_hl(row, col, ctx)
 			return nil
 		end
 		return {
-			{ start_col = s - 1, end_col = e, hl_group = helper.issue_type_hl(issue_type_name) },
+			{ start_col = s - 1, end_col = e, hl_group = t_icon_hl },
 		}
 	end
 
@@ -165,7 +165,13 @@ function M.cell_hl(row, col, ctx)
 
 	if col.key == "reporter" then
 		return {
-			{ start_col = 0, end_col = #ctx.padded, hl_group = helper.person_hl(type(issue) == "table" and type(issue.reporter) == "table" and issue.reporter.display_name or nil) },
+			{
+				start_col = 0,
+				end_col = #ctx.padded,
+				hl_group = helper.person_hl(
+					type(issue) == "table" and type(issue.reporter) == "table" and issue.reporter.display_name or nil
+				),
+			},
 		}
 	end
 

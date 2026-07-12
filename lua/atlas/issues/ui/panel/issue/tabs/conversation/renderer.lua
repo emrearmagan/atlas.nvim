@@ -150,11 +150,13 @@ local function build_comment_sections(comment, verb, width)
 	if rtext ~= "" then
 		reactions = { text = rtext, spans = rspans }
 	end
+	local user_icon, user_icon_hl = icons.general("user")
 
 	return comment_box.render({
 		author = author,
 		author_hl = helper.person_hl(author),
-		icon = icons.general("user"),
+		icon = user_icon,
+		icon_hl = user_icon_hl,
 		verb = verb,
 		timestamp = utils.relative_time(comment.created),
 		actions_text = table.concat(actions, "  "),

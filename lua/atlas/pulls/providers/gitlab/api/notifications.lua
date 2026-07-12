@@ -4,7 +4,7 @@ local service = require("atlas.pulls.providers.gitlab.api.service")
 local icons = require("atlas.ui.shared.icons")
 
 local TARGET_ICON = {
-	MergeRequest = { icon = icons.pulls("pr"), hl = "AtlasPROpen" },
+	MergeRequest = { icons.pulls("pr") },
 	Issue = { icon = icons.issues("issue"), hl = "AtlasPROpen" },
 }
 local FALLBACK_ICON = { icon = icons.general("info"), hl = "AtlasTextMuted" }
@@ -43,8 +43,8 @@ local function normalize(raw)
 		title = tostring(target.title or raw.body or ""),
 		subtitle = table.concat(subtitle_parts, "  ·  "),
 		timestamp = tostring(raw.updated_at or raw.created_at or ""),
-		icon = icon_def.icon,
-		icon_hl = icon_def.hl,
+		icon = icon_def.icon or icon_def[1],
+		icon_hl = icon_def.hl or icon_def[2],
 		unread = tostring(raw.state or "") == "pending",
 		url = type(raw.target_url) == "string" and raw.target_url or nil,
 		_raw = raw,

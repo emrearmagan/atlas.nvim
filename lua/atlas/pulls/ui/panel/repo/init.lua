@@ -5,23 +5,30 @@ local panel_state = require("atlas.pulls.ui.panel.repo.state")
 local renderer = require("atlas.pulls.ui.panel.repo.renderer")
 local icons = require("atlas.ui.shared.icons")
 
+local overview_icon, overview_icon_hl = icons.general("overview")
+local branch_icon, branch_icon_hl = icons.pulls("branch")
+local tag_icon, tag_icon_hl = icons.pulls("tag")
+
 local DEFAULT_TABS = {
 	{
 		key = "overview",
 		label = "Overview",
-		icon = icons.general("overview"),
+		icon = overview_icon,
+		icon_hl = overview_icon_hl,
 		mod = require("atlas.pulls.ui.panel.repo.tabs.overview"),
 	},
 	{
 		key = "branches",
 		label = "Branches",
-		icon = icons.pulls("branch"),
+		icon = branch_icon,
+		icon_hl = branch_icon_hl,
 		mod = require("atlas.pulls.ui.panel.repo.tabs.branches"),
 	},
 	{
 		key = "tags",
 		label = "Tags",
-		icon = icons.pulls("tag"),
+		icon = tag_icon,
+		icon_hl = tag_icon_hl,
 		mod = require("atlas.pulls.ui.panel.repo.tabs.tags"),
 	},
 }

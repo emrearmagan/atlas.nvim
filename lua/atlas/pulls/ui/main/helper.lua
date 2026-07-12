@@ -5,31 +5,25 @@ local icons = require("atlas.ui.shared.icons")
 local utils = require("atlas.ui.shared.utils")
 local state = require("atlas.pulls.state")
 
-local PR_ICON = icons.pulls("pr")
-local MERGED_PR_ICON = icons.pulls("merged_pr")
-local DECLINED_PR_ICON = icons.pulls("declined_pr")
+local PR_ICON, PR_ICON_HL = icons.pulls("pr")
+local MERGED_PR_ICON, MERGED_PR_ICON_HL = icons.pulls("merged_pr")
+local DECLINED_PR_ICON, DECLINED_PR_ICON_HL = icons.pulls("declined_pr")
 local REPO_ICON = icons.pulls("repo")
 local TASKS_ICON = icons.pulls("tasks")
 
 local PR_STATE_ICON = {
-	open = PR_ICON,
-	draft = PR_ICON,
-	merged = MERGED_PR_ICON,
-	declined = DECLINED_PR_ICON,
-}
-
-local PR_STATE_ICON_HL = {
-	open = "AtlasPROpen",
-	draft = "AtlasPRDraft",
-	merged = "AtlasPRMerged",
-	declined = "AtlasPRDeclined",
+	open = { PR_ICON, PR_ICON_HL },
+	draft = { PR_ICON, "AtlasPRDraft" },
+	merged = { MERGED_PR_ICON, MERGED_PR_ICON_HL },
+	declined = { DECLINED_PR_ICON, DECLINED_PR_ICON_HL },
 }
 
 ---@param pr PullRequest
 ---@return string, string
 local function pr_icon_and_hl(pr)
 	local s = tostring(pr.state or ""):lower()
-	return PR_STATE_ICON[s] or PR_ICON, PR_STATE_ICON_HL[s] or "AtlasPROpen"
+	local style = PR_STATE_ICON[s] or PR_STATE_ICON.open
+	return style[1], style[2]
 end
 
 ---@param pr PullRequest
@@ -529,12 +523,16 @@ local function github_pr_popup_content(pr)
 		end
 	end
 	if decision ~= "" and decision ~= "REVIEW_REQUIRED" then
-		local review_icon = decision == "APPROVED" and icons.pulls_status("successful")
-			or decision == "CHANGES_REQUESTED" and icons.pulls_status("failed")
-			or icons.pulls_status("inprogress")
-		local decision_hl = decision == "APPROVED" and "AtlasTextPositive"
-			or decision == "CHANGES_REQUESTED" and "AtlasTextWarning"
-			or "AtlasTextMuted"
+		local review_icon, decision_hl
+		if decision == "APPROVED" then
+			review_icon, decision_hl = icons.pulls_status("successful")
+		elseif decision == "CHANGES_REQUESTED" then
+			review_icon = icons.pulls_status("failed")
+			decision_hl = "AtlasTextWarning"
+		else
+			review_icon = icons.pulls_status("inprogress")
+			decision_hl = "AtlasTextMuted"
+		end
 		push("Review", review_icon, decision_hl)
 	end
 
@@ -543,12 +541,14 @@ local function github_pr_popup_content(pr)
 	end)
 	if rollup_ok and type(rollup_state) == "string" then
 		local s = rollup_state:upper()
-		local ci_icon = (s == "SUCCESS") and icons.pulls_status("successful")
-			or (s == "FAILURE" or s == "ERROR") and icons.pulls_status("failed")
-			or icons.pulls_status("inprogress")
-		local ci_hl = (s == "SUCCESS") and "AtlasTextPositive"
-			or (s == "FAILURE" or s == "ERROR") and "AtlasLogError"
-			or "AtlasTextWarning"
+		local ci_icon, ci_hl
+		if s == "SUCCESS" then
+			ci_icon, ci_hl = icons.pulls_status("successful")
+		elseif s == "FAILURE" or s == "ERROR" then
+			ci_icon, ci_hl = icons.pulls_status("failed")
+		else
+			ci_icon, ci_hl = icons.pulls_status("inprogress")
+		end
 		push("CI", ci_icon, ci_hl)
 	end
 

@@ -48,9 +48,13 @@ local function to_items(repo)
 		local msg = branch.message and tostring(branch.message:match("^[^\n\r]*") or "") or nil
 		if msg == "" then msg = nil end
 		local author = branch.author and tostring(branch.author) or nil
-		if author == "" then author = nil end
+		if author == "" then
+			author = nil
+		end
+		local branch_icon, branch_icon_hl = icons.pulls("branch")
 		table.insert(items, {
-			icon = icons.pulls("branch"),
+			icon = branch_icon,
+			icon_hl = branch_icon_hl,
 			author = tostring(branch.name or ""),
 			additional = author,
 			right_text = branch.date and utils.relative_time_text(branch.date) or nil,

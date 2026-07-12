@@ -307,17 +307,21 @@ end
 
 ---@return IssuesPanelTab[]
 function M.tabs()
+	local conversation_icon, conversation_hl = icons.general("conversation")
+	local activity_icon, activity_hl = icons.pulls("activity")
 	return {
 		{
 			key = "conversation",
 			label = "Conversation",
-			icon = icons.general("conversation"),
+			icon = conversation_icon,
+			icon_hl = conversation_hl,
 			mod = require("atlas.issues.ui.panel.issue.tabs.conversation"),
 		},
 		{
 			key = "activity",
 			label = "Activity",
-			icon = icons.pulls("activity"),
+			icon = activity_icon,
+			icon_hl = activity_hl,
 			mod = require("atlas.issues.ui.panel.issue.tabs.activity"),
 		},
 	}

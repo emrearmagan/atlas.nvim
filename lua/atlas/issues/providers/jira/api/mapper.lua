@@ -375,15 +375,15 @@ local function activity_from_history_item(raw_item, actor, date)
 		body = string.format("%s -> %s", from or "Unassigned", to or "Unassigned")
 		body_hl = arrow_hl(helper.person_hl(from), helper.person_hl(to))
 	elseif field == "priority" then
-		local fi = icons.issues_priority(from or "")
-		local ti = icons.issues_priority(to or "")
+		local fi, fi_hl = icons.issues_priority(from or "")
+		local ti, ti_hl = icons.issues_priority(to or "")
 		body = string.format("%s %s -> %s %s", fi, from or "", ti, to or "")
-		body_hl = arrow_hl(helper.priority_hl(from), helper.priority_hl(to))
+		body_hl = arrow_hl(fi_hl, ti_hl)
 	elseif field == "issuetype" then
-		local fi = icons.issues_type(from or "")
-		local ti = icons.issues_type(to or "")
+		local fi, fi_hl = icons.issues_type(from or "")
+		local ti, ti_hl = icons.issues_type(to or "")
 		body = string.format("%s %s -> %s %s", fi, from or "", ti, to or "")
-		body_hl = arrow_hl(helper.issue_type_hl(from), helper.issue_type_hl(to))
+		body_hl = arrow_hl(fi_hl, ti_hl)
 	elseif field == "status" then
 		body = string.format("%s -> %s", from or "", to or "")
 		body_hl =

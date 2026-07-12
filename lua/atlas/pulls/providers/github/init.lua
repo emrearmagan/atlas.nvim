@@ -1,12 +1,13 @@
 local icons = require("atlas.ui.shared.icons")
 local main_ui = require("atlas.pulls.providers.github.ui.main")
+local provider_icon, provider_hl = icons.pulls_provider("github", "provider")
 
 ---@class GitHubProvider : PullsProvider
 local M = {
 	id = "github",
 	name = "GitHub",
-	icon = icons.pulls_provider("github", "provider"),
-	hl_group = "AtlasGitHubTheme",
+	icon = provider_icon,
+	hl_group = provider_hl,
 	render = main_ui.render,
 	panel = require("atlas.pulls.providers.github.ui.panel"),
 	repo_panel = require("atlas.pulls.providers.github.ui.repo_panel"),

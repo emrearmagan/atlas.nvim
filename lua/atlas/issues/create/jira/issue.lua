@@ -583,7 +583,8 @@ local function show_issue_type_picker()
 		debounce_ms = 0,
 		identifier = "jira_issue_types:" .. (state.fields.project or ""),
 		format_item = function(item)
-			return string.format("%s %s", icons.issues_type(item.label), item.label)
+			local icon, icon_hl = icons.issues_type(item.label)
+			return string.format("%s %s", icon, item.label), icon_hl
 		end,
 		fetch = function(ctx, fetch_done)
 			local function do_filter()

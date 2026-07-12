@@ -1,12 +1,13 @@
 local icons = require("atlas.ui.shared.icons")
 local config = require("atlas.config")
+local provider_icon, provider_hl = icons.pulls_provider("bitbucket", "provider")
 
 ---@class BitbucketProvider : PullsProvider
 local M = {
 	id = "bitbucket",
 	name = "Bitbucket",
-	icon = icons.pulls_provider("bitbucket", "provider"),
-	hl_group = "AtlasBitbucketTheme",
+	icon = provider_icon,
+	hl_group = provider_hl,
 	panel = require("atlas.pulls.providers.bitbucket.ui.panel"),
 }
 

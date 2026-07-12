@@ -7,59 +7,42 @@ local icons = require("atlas.ui.shared.icons")
 local utils = require("atlas.ui.shared.utils")
 local state = require("atlas.pulls.state")
 
-local PR_ICON = icons.pulls("pr")
-local MERGED_PR_ICON = icons.pulls("merged_pr")
-local DECLINED_PR_ICON = icons.pulls("declined_pr")
+local PR_ICON, PR_ICON_HL = icons.pulls("pr")
+local MERGED_PR_ICON, MERGED_PR_ICON_HL = icons.pulls("merged_pr")
+local DECLINED_PR_ICON, DECLINED_PR_ICON_HL = icons.pulls("declined_pr")
 local REPO_ICON = icons.pulls("repo")
 
 local PR_STATE_ICON = {
-	open = PR_ICON,
-	draft = PR_ICON,
-	merged = MERGED_PR_ICON,
-	declined = DECLINED_PR_ICON,
-}
-
-local PR_STATE_ICON_HL = {
-	open = "AtlasPROpen",
-	draft = "AtlasPRDraft",
-	merged = "AtlasPRMerged",
-	declined = "AtlasPRDeclined",
+	open = { PR_ICON, PR_ICON_HL },
+	draft = { PR_ICON, "AtlasPRDraft" },
+	merged = { MERGED_PR_ICON, MERGED_PR_ICON_HL },
+	declined = { DECLINED_PR_ICON, DECLINED_PR_ICON_HL },
 }
 
 ---@param pr PullRequest
 ---@return string, string
 local function pr_icon_and_hl(pr)
 	local s = tostring(pr.state or ""):lower()
-	return PR_STATE_ICON[s] or PR_ICON, PR_STATE_ICON_HL[s] or "AtlasPROpen"
+	local style = PR_STATE_ICON[s] or PR_STATE_ICON.open
+	return style[1], style[2]
 end
 
 local CI_ICON = {
-	SUCCESS = icons.pulls_status("successful"),
-	FAILURE = icons.pulls_status("failed"),
-	ERROR = icons.pulls_status("failed"),
-	PENDING = icons.pulls_status("inprogress"),
-	EXPECTED = icons.pulls_status("inprogress"),
-}
-
-local CI_HL = {
-	SUCCESS = "AtlasTextPositive",
-	FAILURE = "AtlasLogError",
-	ERROR = "AtlasLogError",
-	PENDING = "AtlasTextWarning",
-	EXPECTED = "AtlasTextWarning",
+	SUCCESS = { icons.pulls_status("successful") },
+	FAILURE = { icons.pulls_status("failed") },
+	ERROR = { icons.pulls_status("failed") },
+	PENDING = { icons.pulls_status("inprogress") },
+	EXPECTED = { icons.pulls_status("inprogress") },
 }
 
 local REVIEW_ICON = {
-	APPROVED = icons.pulls_status("successful"),
-	CHANGES_REQUESTED = icons.pulls_status("inprogress"),
-	REVIEW_REQUIRED = icons.pulls_status("inprogress"),
+	APPROVED = { icons.pulls_status("successful") },
+	CHANGES_REQUESTED = { icons.pulls_status("inprogress") },
+	REVIEW_REQUIRED = { icons.pulls_status("inprogress") },
 }
 
-local REVIEW_HL = {
-	APPROVED = "AtlasTextPositive",
-	CHANGES_REQUESTED = "AtlasTextWarning",
-	REVIEW_REQUIRED = "AtlasTextMuted",
-}
+REVIEW_ICON.CHANGES_REQUESTED[2] = "AtlasTextWarning"
+REVIEW_ICON.REVIEW_REQUIRED[2] = "AtlasTextMuted"
 
 ---@param pr PullRequest
 ---@return string, string
@@ -68,10 +51,16 @@ local function ci_icon_and_hl(pr)
 		return pr._raw.commits.nodes[1].commit.statusCheckRollup.state
 	end)
 	if not ok or type(rollup_state) ~= "string" then
-		return icons.pulls_status("inprogress"), "AtlasTextMuted"
+		local icon = icons.pulls_status("inprogress")
+		return icon, "AtlasTextMuted"
 	end
 	local s = rollup_state:upper()
-	return CI_ICON[s] or icons.pulls_status("inprogress"), CI_HL[s] or "AtlasTextMuted"
+	local style = CI_ICON[s]
+	if not style then
+		local icon = icons.pulls_status("inprogress")
+		return icon, "AtlasTextMuted"
+	end
+	return style[1], style[2]
 end
 
 ---@param pr PullRequest
@@ -81,7 +70,7 @@ local function review_icon_and_hl(pr)
 		return pr._raw.latestOpinionatedReviews.nodes
 	end)
 	if not ok or type(nodes) ~= "table" then
-		return REVIEW_ICON.REVIEW_REQUIRED, REVIEW_HL.REVIEW_REQUIRED
+		return REVIEW_ICON.REVIEW_REQUIRED[1], REVIEW_ICON.REVIEW_REQUIRED[2]
 	end
 	local approved, changes = 0, 0
 	for _, node in ipairs(nodes) do
@@ -91,12 +80,12 @@ local function review_icon_and_hl(pr)
 		end
 	end
 	if changes > 0 then
-		return REVIEW_ICON.CHANGES_REQUESTED, REVIEW_HL.CHANGES_REQUESTED
+		return REVIEW_ICON.CHANGES_REQUESTED[1], REVIEW_ICON.CHANGES_REQUESTED[2]
 	end
 	if approved > 0 then
-		return REVIEW_ICON.APPROVED, REVIEW_HL.APPROVED
+		return REVIEW_ICON.APPROVED[1], REVIEW_ICON.APPROVED[2]
 	end
-	return REVIEW_ICON.REVIEW_REQUIRED, REVIEW_HL.REVIEW_REQUIRED
+	return REVIEW_ICON.REVIEW_REQUIRED[1], REVIEW_ICON.REVIEW_REQUIRED[2]
 end
 
 ---@param row table
@@ -317,7 +306,25 @@ local function plain_rows(groups)
 	for i, group in ipairs(groups or {}) do
 		local repo_label = group.repo.name or ""
 		if i > 1 then
-			table.insert(rows, { kind = "spacer", pr_icon = "", name = "", conversation = "", ci = "", ci_hl = "", review = "", review_hl = "", diff = "", diff_hl = nil, author = "", branch = "", created = "", updated = "" })
+			table.insert(
+				rows,
+				{
+					kind = "spacer",
+					pr_icon = "",
+					name = "",
+					conversation = "",
+					ci = "",
+					ci_hl = "",
+					review = "",
+					review_hl = "",
+					diff = "",
+					diff_hl = nil,
+					author = "",
+					branch = "",
+					created = "",
+					updated = "",
+				}
+			)
 		end
 		table.insert(rows, {
 			kind = "repo",

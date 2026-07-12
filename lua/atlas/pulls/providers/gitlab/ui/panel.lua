@@ -173,7 +173,6 @@ function M.fetches(pr, refresh, opts)
 		overview_state.builds = err and err or (builds or {})
 		refresh()
 	end))
-
 end
 
 ---@param _pr PullRequest
@@ -205,35 +204,45 @@ end
 
 ---@return PullsPanelTab[]
 function M.tabs()
+	local overview_icon, overview_hl = icons.general("overview")
+	local conversation_icon, conversation_hl = icons.general("conversation")
+	local review_icon, review_hl = icons.pulls("review")
+	local commit_icon, commit_hl = icons.pulls("commit")
+	local changes_icon, changes_hl = icons.pulls("changes")
 	return {
 		{
 			key = "overview",
 			label = "Overview",
-			icon = icons.general("overview"),
+			icon = overview_icon,
+			icon_hl = overview_hl,
 			mod = require("atlas.pulls.ui.panel.pr.tabs.overview"),
 		},
 		{
 			key = "conversation",
 			label = "Conversation",
-			icon = icons.general("conversation"),
+			icon = conversation_icon,
+			icon_hl = conversation_hl,
 			mod = require("atlas.pulls.ui.panel.pr.tabs.conversation"),
 		},
 		{
 			key = "review",
 			label = "Review",
-			icon = icons.pulls("review"),
+			icon = review_icon,
+			icon_hl = review_hl,
 			mod = require("atlas.pulls.ui.panel.pr.tabs.review"),
 		},
 		{
 			key = "commits",
 			label = "Commits",
-			icon = icons.pulls("commit"),
+			icon = commit_icon,
+			icon_hl = commit_hl,
 			mod = require("atlas.pulls.ui.panel.pr.tabs.commits"),
 		},
 		{
 			key = "files",
 			label = "Changes",
-			icon = icons.pulls("changes"),
+			icon = changes_icon,
+			icon_hl = changes_hl,
 			mod = require("atlas.pulls.ui.panel.pr.tabs.files"),
 		},
 	}

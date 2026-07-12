@@ -2,7 +2,6 @@ local M = {}
 
 local utils = require("atlas.ui.shared.utils")
 local icons = require("atlas.ui.shared.icons")
-local highlights = require("atlas.ui.shared.highlights")
 local threads = require("atlas.ui.components.threadsv2")
 local helper = require("atlas.issues.ui.main.helper")
 
@@ -25,31 +24,33 @@ local function actor_name(actor)
 end
 
 local EVENT_ICON = {
-	labeled = icons.pulls("activity"),
-	unlabeled = icons.pulls("activity"),
-	assigned = icons.general("user"),
-	unassigned = icons.general("user"),
-	milestoned = icons.pulls("activity"),
-	demilestoned = icons.pulls("activity"),
-	renamed = icons.general("edit"),
-	closed = icons.pulls_status("successful"),
-	reopened = icons.issues("issue"),
-	locked = icons.pulls_status("stopped"),
-	unlocked = icons.pulls_status("stopped"),
-	pinned = icons.pulls("activity"),
-	unpinned = icons.pulls("activity"),
-	transferred = icons.pulls("activity"),
-	marked_as_duplicate = icons.pulls("activity"),
-	["cross-referenced"] = icons.pulls("activity"),
-	referenced = icons.pulls("activity"),
+	labeled = { icons.pulls("activity") },
+	unlabeled = { icons.pulls("activity") },
+	assigned = { icons.general("user") },
+	unassigned = { icons.general("user") },
+	milestoned = { icons.pulls("activity") },
+	demilestoned = { icons.pulls("activity") },
+	renamed = { icons.general("edit") },
+	closed = { icons.pulls_status("successful") },
+	reopened = { icons.issues("issue") },
+	locked = { icons.pulls_status("stopped") },
+	unlocked = { icons.pulls_status("stopped") },
+	pinned = { icons.pulls("activity") },
+	unpinned = { icons.pulls("activity") },
+	transferred = { icons.pulls("activity") },
+	marked_as_duplicate = { icons.pulls("activity") },
+	["cross-referenced"] = { icons.pulls("activity") },
+	referenced = { icons.pulls("activity") },
 }
 
 ---@param entry IssueActivityEntry
----@return { icon: string, additional: string|nil, content: string|nil }
+---@return { icon: string, icon_hl: string, additional: string|nil, content: string|nil }
 function M.classify(entry)
 	local raw = tostring(entry.label or "")
+	local style = EVENT_ICON[entry.kind] or { icons.pulls("activity") }
 	return {
-		icon = EVENT_ICON[entry.kind] or icons.pulls("activity"),
+		icon = style[1],
+		icon_hl = style[2],
 		additional = raw ~= "" and raw or entry.kind,
 		content = nil,
 	}
@@ -64,6 +65,7 @@ local function to_thread_items(entries, run_id)
 		local classified = M.classify(e)
 		items[#items + 1] = {
 			icon = classified.icon,
+			icon_hl = classified.icon_hl,
 			author = actor_name(e.actor),
 			right_text = utils.relative_time(e.date),
 			additional = classified.additional,
@@ -84,12 +86,6 @@ end
 ---@return string|nil
 local function additional_hl(_item, _text)
 	return "AtlasTextMuted"
-end
-
----@param item AtlasThreadV2Item
-local function icon_hl_fn(item)
-	local author = vim.trim(tostring(item.author or "")):lower()
-	return highlights.dynamic_for(author) or "AtlasTextMuted"
 end
 
 ---@param item AtlasThreadV2Item
@@ -140,7 +136,6 @@ function M.render(entries, width, opts)
 			padding_x = padding_x,
 			content_max_lines = content_max_lines,
 			additional_hl = additional_hl,
-			icon_hl_fn = icon_hl_fn,
 			author_hl = author_hl,
 		}))
 	end

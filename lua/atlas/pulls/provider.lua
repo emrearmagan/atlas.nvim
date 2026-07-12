@@ -125,6 +125,7 @@
 ---@field key string
 ---@field label string
 ---@field icon string|nil
+---@field icon_hl string|nil
 ---@field mod PullsPanelTabModule
 ---@field keymaps PullsProviderPanelKeymaps|nil provider-specific keymaps registered while this tab is active
 
@@ -145,4 +146,5 @@
 ---@field key string
 ---@field label string
 ---@field icon string|nil
+---@field icon_hl string|nil
 ---@field mod PullsRepoPanelTabModule

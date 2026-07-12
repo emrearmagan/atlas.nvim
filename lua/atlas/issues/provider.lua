@@ -107,4 +107,5 @@
 ---@field key string
 ---@field label string
 ---@field icon string|nil
+---@field icon_hl string|nil
 ---@field mod IssuesPanelTabModule

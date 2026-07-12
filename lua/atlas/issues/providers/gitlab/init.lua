@@ -1,12 +1,13 @@
 local icons = require("atlas.ui.shared.icons")
 local GITLAB_REACTION_OPTIONS = require("atlas.ui.shared.emojis").gitlab()
+local provider_icon, provider_hl = icons.issues_provider("gitlab", "provider")
 
 ---@class GitLabIssuesProvider : IssuesProvider
 local M = {
 	id = "gitlab",
 	name = "GitLab",
-	icon = icons.issues_provider("gitlab", "provider"),
-	hl_group = "AtlasGLIssuesTheme",
+	icon = provider_icon,
+	hl_group = provider_hl,
 	panel = require("atlas.issues.providers.gitlab.ui.panel"),
 }
 

@@ -34,13 +34,16 @@ end
 ---@return string|nil text, string|nil hl
 local function root_marker(comment)
 	if comment.state == "DELETED" then
-		return icons.general("delete") .. " deleted  ", "AtlasLogError"
+		local icon, icon_hl = icons.general("delete")
+		return icon .. " deleted  ", icon_hl
 	end
 	if comment.state == "RESOLVED" then
-		return icons.general("success") .. " resolved  ", "AtlasTextPositive"
+		local icon, icon_hl = icons.general("success")
+		return icon .. " resolved  ", icon_hl
 	end
 	if comment.state == "OUTDATED" then
-		return icons.general("warning") .. " outdated  ", "AtlasLogWarn"
+		local icon, icon_hl = icons.general("warning")
+		return icon .. " outdated  ", icon_hl
 	end
 	return nil, nil
 end
@@ -128,9 +131,11 @@ function M.comment_item(comment, replies, current_user, is_root)
 	if is_root then
 		marker, marker_hl = root_marker(comment)
 	end
+	local user_icon, user_icon_hl = icons.general("user")
 
 	return {
-		icon = icons.general("user"),
+		icon = user_icon,
+		icon_hl = user_icon_hl,
 		author = tostring(author),
 		additional = utils.relative_time(comment.created_on),
 		right_text = marker,

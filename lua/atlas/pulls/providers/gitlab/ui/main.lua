@@ -6,60 +6,57 @@ local icons = require("atlas.ui.shared.icons")
 local utils = require("atlas.ui.shared.utils")
 local state = require("atlas.pulls.state")
 
-local PR_ICON = icons.pulls("pr")
-local MERGED_PR_ICON = icons.pulls("merged_pr")
-local DECLINED_PR_ICON = icons.pulls("declined_pr")
+local PR_ICON, PR_ICON_HL = icons.pulls("pr")
+local MERGED_PR_ICON, MERGED_PR_ICON_HL = icons.pulls("merged_pr")
+local DECLINED_PR_ICON, DECLINED_PR_ICON_HL = icons.pulls("declined_pr")
 local REPO_ICON = icons.pulls("repo")
 
 local PR_STATE_ICON = {
-	open = PR_ICON,
-	draft = PR_ICON,
-	merged = MERGED_PR_ICON,
-	declined = DECLINED_PR_ICON,
-}
-
-local PR_STATE_ICON_HL = {
-	open = "AtlasPROpen",
-	draft = "AtlasPRDraft",
-	merged = "AtlasPRMerged",
-	declined = "AtlasPRDeclined",
+	open = { PR_ICON, PR_ICON_HL },
+	draft = { PR_ICON, "AtlasPRDraft" },
+	merged = { MERGED_PR_ICON, MERGED_PR_ICON_HL },
+	declined = { DECLINED_PR_ICON, DECLINED_PR_ICON_HL },
 }
 
 ---@param pr PullRequest
 ---@return string, string
 local function pr_icon_and_hl(pr)
 	local s = tostring(pr.state or ""):lower()
-	return PR_STATE_ICON[s] or PR_ICON, PR_STATE_ICON_HL[s] or "AtlasPROpen"
+	local style = PR_STATE_ICON[s] or PR_STATE_ICON.open
+	return style[1], style[2]
 end
 
-local SUCCESS = icons.pulls_status("successful")
-local FAILED = icons.pulls_status("failed")
-local INPROGRESS = icons.pulls_status("inprogress")
-local STOPPED = icons.pulls_status("stopped")
+local SUCCESS = { icons.pulls_status("successful") }
+local FAILED = { icons.pulls_status("failed") }
+local INPROGRESS = { icons.pulls_status("inprogress") }
+local MUTED = { icons.pulls_status("inprogress") }
+local STOPPED = { icons.pulls_status("stopped") }
+
+MUTED[2] = "AtlasTextMuted"
 
 local STATUS = {
-	mergeable = { icon = SUCCESS, hl = "AtlasTextPositive" },
-	checking = { icon = INPROGRESS, hl = "AtlasTextWarning" },
-	unchecked = { icon = INPROGRESS, hl = "AtlasTextMuted" },
-	ci_must_pass = { icon = FAILED, hl = "AtlasLogError" },
-	ci_still_running = { icon = INPROGRESS, hl = "AtlasTextWarning" },
-	discussions_not_resolved = { icon = FAILED, hl = "AtlasLogError" },
-	draft_status = { icon = STOPPED, hl = "AtlasTextMuted" },
-	not_approved = { icon = INPROGRESS, hl = "AtlasTextWarning" },
-	not_open = { icon = STOPPED, hl = "AtlasTextMuted" },
-	blocked_status = { icon = FAILED, hl = "AtlasLogError" },
-	merge_request_blocked = { icon = FAILED, hl = "AtlasLogError" },
-	conflict = { icon = FAILED, hl = "AtlasLogError" },
-	need_rebase = { icon = FAILED, hl = "AtlasLogError" },
-	preparing = { icon = INPROGRESS, hl = "AtlasTextWarning" },
-	requested_changes = { icon = FAILED, hl = "AtlasLogError" },
-	status_checks_must_pass = { icon = FAILED, hl = "AtlasLogError" },
-	security_policy_violations = { icon = FAILED, hl = "AtlasLogError" },
-	jira_association_missing = { icon = FAILED, hl = "AtlasLogError" },
-	external_status_checks = { icon = INPROGRESS, hl = "AtlasTextWarning" },
-	approvals_syncing = { icon = INPROGRESS, hl = "AtlasTextMuted" },
-	commits_status = { icon = INPROGRESS, hl = "AtlasTextMuted" },
-	policies_denied = { icon = FAILED, hl = "AtlasLogError" },
+	mergeable = SUCCESS,
+	checking = INPROGRESS,
+	unchecked = MUTED,
+	ci_must_pass = FAILED,
+	ci_still_running = INPROGRESS,
+	discussions_not_resolved = FAILED,
+	draft_status = STOPPED,
+	not_approved = INPROGRESS,
+	not_open = STOPPED,
+	blocked_status = FAILED,
+	merge_request_blocked = FAILED,
+	conflict = FAILED,
+	need_rebase = FAILED,
+	preparing = INPROGRESS,
+	requested_changes = FAILED,
+	status_checks_must_pass = FAILED,
+	security_policy_violations = FAILED,
+	jira_association_missing = FAILED,
+	external_status_checks = INPROGRESS,
+	approvals_syncing = MUTED,
+	commits_status = MUTED,
+	policies_denied = FAILED,
 }
 
 ---@param pr PullRequest
@@ -72,9 +69,9 @@ local function ci_icon_and_hl(pr)
 	end
 	local entry = STATUS[s]
 	if entry then
-		return entry.icon, entry.hl
+		return entry[1], entry[2]
 	end
-	return INPROGRESS, "AtlasTextMuted"
+	return MUTED[1], MUTED[2]
 end
 
 ---@param row table

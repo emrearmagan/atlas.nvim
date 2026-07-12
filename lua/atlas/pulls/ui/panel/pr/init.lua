@@ -4,6 +4,7 @@ local layout = require("atlas.ui.layout")
 local panel_state = require("atlas.pulls.ui.panel.pr.state")
 local renderer = require("atlas.pulls.ui.panel.pr.renderer")
 local icons = require("atlas.ui.shared.icons")
+local overview_icon, overview_icon_hl = icons.general("overview")
 
 local SPINNER_INTERVAL_MS = 100
 
@@ -11,7 +12,8 @@ local DEFAULT_TABS = {
 	{
 		key = "overview",
 		label = "Overview",
-		icon = icons.general("overview"),
+		icon = overview_icon,
+		icon_hl = overview_icon_hl,
 		mod = require("atlas.pulls.ui.panel.pr.tabs.overview"),
 	},
 }

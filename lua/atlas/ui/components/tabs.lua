@@ -4,6 +4,7 @@ local M = {}
 ---@field key string
 ---@field label string
 ---@field icon? string
+---@field icon_hl? string
 
 ---@param items AtlasTabItem[]
 ---@param active_tab string
@@ -40,6 +41,14 @@ function M.render(items, active_tab, width, opts)
 				start_col = col,
 				end_col = col + #part,
 				hl_group = hl,
+			})
+		end
+		if icon ~= "" and type(tab.icon_hl) == "string" and tab.icon_hl ~= "" then
+			table.insert(spans, {
+				line = 0,
+				start_col = col,
+				end_col = col + #tab.icon,
+				hl_group = tab.icon_hl,
 			})
 		end
 		col = col + #part

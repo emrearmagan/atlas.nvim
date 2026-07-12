@@ -38,8 +38,10 @@ local function to_items(repo)
 		elseif author_str then
 			content = author_str
 		end
+		local tag_icon, tag_icon_hl = icons.pulls("tag")
 		table.insert(items, {
-			icon = icons.pulls("tag"),
+			icon = tag_icon,
+			icon_hl = tag_icon_hl,
 			author = tostring(tag.name or ""),
 			additional = tag.hash and tostring(tag.hash):sub(1, 8) or nil,
 			right_text = tag.date and utils.relative_time_text(tag.date) or nil,

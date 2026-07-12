@@ -590,23 +590,14 @@ local ACTIONS = {
 				debounce_ms = 0,
 				identifier = "jira_creatable_projects",
 				format_item = function(item)
+					local provider_icon, provider_hl = icons.issues_provider("jira", "provider")
 					local project = item.value
 					local category_name = project.category and project.category.name or ""
 					if category_name ~= "" then
-						return string.format(
-							"%s %s - %s (%s)",
-							icons.issues_provider("jira", "provider"),
-							item.label,
-							project.name,
-							category_name
-						)
+						return string.format("%s %s - %s (%s)", provider_icon, item.label, project.name, category_name),
+							provider_hl
 					end
-					return string.format(
-						"%s %s - %s",
-						icons.issues_provider("jira", "provider"),
-						item.label,
-						project.name
-					)
+					return string.format("%s %s - %s", provider_icon, item.label, project.name), provider_hl
 				end,
 				fetch = function(fetch_ctx, fetch_done)
 					if all_items then
@@ -711,7 +702,8 @@ local ACTIONS = {
 				cache_ttl_ms = 30000,
 				fetch_on_open = true,
 				format_item = function(item)
-					return string.format("%s %s", icons.issues_provider("jira", "provider"), tostring(item.label or ""))
+					local provider_icon, provider_hl = icons.issues_provider("jira", "provider")
+					return string.format("%s %s", provider_icon, tostring(item.label or "")), provider_hl
 				end,
 				fetch = function(fetch_ctx, fetch_done)
 					local query = vim.trim(fetch_ctx.query)

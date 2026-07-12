@@ -80,7 +80,8 @@ local function to_thread_item(commit, width)
 	end
 
 	-- Truncate message to leave room for hash + icon + gaps
-	local icon_width = vim.api.nvim_strwidth(icons.pulls("commit")) + 1
+	local commit_icon, commit_icon_hl = icons.pulls("commit")
+	local icon_width = vim.api.nvim_strwidth(commit_icon) + 1
 	local hash_width = #hash + 2
 	local max_msg = width - PADDING_X - icon_width - hash_width
 	if max_msg > 0 and vim.api.nvim_strwidth(message) > max_msg then
@@ -88,8 +89,8 @@ local function to_thread_item(commit, width)
 	end
 
 	return {
-		icon = icons.pulls("commit"),
-		icon_hl = "AtlasTextMuted",
+		icon = commit_icon,
+		icon_hl = commit_icon_hl,
 		author = message,
 		right_text = hash,
 		content = content,
