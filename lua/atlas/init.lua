@@ -95,6 +95,10 @@ local function open_with_provider(domain, id, opts)
 		end
 		layout.set_render_callback(function()
 			require("atlas.issues").render()
+			local panel = require("atlas.issues.ui.panel")
+			if panel.is_open() then
+				panel.render()
+			end
 		end)
 		require("atlas.issues").init(provider, opts)
 	end
