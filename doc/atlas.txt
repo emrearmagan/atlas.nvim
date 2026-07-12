@@ -110,6 +110,10 @@ by default.
         Open a search prompt for the given provider. See |atlas-search|
         for the query syntax per provider.
 
+                                                                   *:AtlasOpen*
+:AtlasOpen <target>
+	Open a provider URL, Jira key, owner/repo#number, or PR/issue number.
+
                                                              *:AtlasClearCache*
 :AtlasClearCache
         Clear both disk and in-memory caches. Useful when stale data is
@@ -340,17 +344,22 @@ for how to create one). Views are saved JQL queries.
             ["My open"]     = "assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC",
           },
         },
+
       },
     },
   }
 <
 
-Custom fields per project, including the story points field:
+Global Jira display settings and custom fields grouped by project key:
 >lua
   jira = {
     project_config = {
-      -- Default story points field. Defaults to "customfield_10016".
+      -- Global story points field. Defaults to "customfield_10016".
       story_points_field = "customfield_10016",
+      issue_types = {
+        ["Maintenance"] = { icon = "", hl_group = "AtlasTextWarning" },
+        ["Infrastructure"] = { icon = "󰒋", hl_group = "AtlasLogInfo" },
+      },
 
       KAN = {
         customfield_10003 = {

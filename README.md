@@ -138,6 +138,7 @@ use {
 - `:AtlasCreatePR` - Create a pull request from the current branch
 - `:AtlasCreateIssue` - Create an issue (GitHub / Jira)
 - `:AtlasSearch [provider]` - Pick a configured provider and prompt its search
+- `:AtlasOpen <target>` - Open a provider URL, Jira key, repository reference, or PR/issue number
 - `:AtlasClearCache` - Clear Atlas disk and memory cache
 - `:AtlasLogs` - Toggle Atlas logs
 
@@ -642,6 +643,8 @@ pulls = {
 ## Search
 
 Use `:AtlasSearch [provider]` to search configured providers.
+
+Use `:AtlasOpen <target>` with a provider URL, Jira key, `owner/repo#number`, or PR/issue number.
 
 ### Jira
 

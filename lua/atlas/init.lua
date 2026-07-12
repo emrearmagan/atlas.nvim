@@ -16,6 +16,7 @@ local function bootstrap_common()
 		{ name = "AtlasPulls", desc = "Open pulls" },
 		{ name = "AtlasIssues", desc = "Open issues" },
 		{ name = "AtlasSearch", desc = "Search across providers" },
+		{ name = "AtlasOpen", desc = "Open URL or reference" },
 		{ name = "AtlasClearCache", desc = "Clear Atlas cache" },
 		{ name = "AtlasLogs", desc = "Open Atlas logs" },
 	}, { index = 999, buffer = require("atlas.ui.layout").buf_id("main") })

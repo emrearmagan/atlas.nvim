@@ -145,6 +145,7 @@ local function register_commands()
 	pcall(vim.api.nvim_del_user_command, "AtlasPulls")
 	pcall(vim.api.nvim_del_user_command, "AtlasIssues")
 	pcall(vim.api.nvim_del_user_command, "AtlasSearch")
+	pcall(vim.api.nvim_del_user_command, "AtlasOpen")
 	pcall(vim.api.nvim_del_user_command, "AtlasLogs")
 	pcall(vim.api.nvim_del_user_command, "AtlasClearCache")
 	pcall(vim.api.nvim_del_user_command, "AtlasCreatePR")
@@ -206,6 +207,13 @@ local function register_commands()
 		complete = function(arglead)
 			return require("atlas.commands.search").complete(arglead)
 		end,
+	})
+
+	vim.api.nvim_create_user_command("AtlasOpen", function(opts)
+		require("atlas.commands.open").open(opts.args)
+	end, {
+		desc = "Open a provider URL or reference",
+		nargs = 1,
 	})
 end
 
