@@ -17,8 +17,15 @@ function M.setup()
 end
 
 ---@param on_done fun(user: PullsUser|nil, err: string|nil)
+---@return { cancel: fun() }|nil
 function M.fetch_user(on_done)
-	require("atlas.pulls.providers.gitlab.api.users").fetch_user(on_done)
+	return require("atlas.pulls.providers.gitlab.api.users").fetch_user(on_done)
+end
+
+---@param context AtlasPullsCommentCompletionContext
+---@return AtlasMarkdownCompletionProvider|nil
+function M.comment_completion(context)
+	return require("atlas.pulls.providers.gitlab.completion.author").build_completion(context)
 end
 
 ---@param view AtlasPullsViewConfig
@@ -401,10 +408,11 @@ end
 ---@return AtlasGitLabPullsViewConfig[]
 function M.views()
 	local cfg = require("atlas.pulls.providers.gitlab.api.service").gitlab_config()
-	local views = cfg.views or {
-		{ name = "Assigned", key = "1", scope = "assigned_to_me", state = "opened" },
-		{ name = "Created", key = "2", scope = "created_by_me", state = "opened" },
-	}
+	local views = cfg.views
+		or {
+			{ name = "Assigned", key = "1", scope = "assigned_to_me", state = "opened" },
+			{ name = "Created", key = "2", scope = "created_by_me", state = "opened" },
+		}
 	return require("atlas.ui.shared.bookmarks_view").append_to_views(views, cfg.bookmarks, "S", "Search")
 end
 

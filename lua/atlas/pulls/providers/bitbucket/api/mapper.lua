@@ -345,6 +345,13 @@ function M.to_comment(result)
 	local content = as_table(entry.content) or {}
 	local links = as_table(entry.links) or {}
 	local parent = as_table(entry.parent)
+	local resolution = as_table(entry.resolution)
+	local is_resolved = resolution ~= nil
+		and (resolution.resolved == true or tostring(resolution.type or resolution.state or ""):upper() == "RESOLVED")
+	local state = entry.deleted == true and "DELETED"
+		or (entry.pending == true and "PENDING")
+		or (is_resolved and "RESOLVED")
+		or nil
 
 	return {
 		id = tonumber(entry.id) or 0,
@@ -354,7 +361,7 @@ function M.to_comment(result)
 		created_on = tostring(entry.created_on or ""),
 		inline = comment_inline(entry.inline),
 		is_task = nil,
-		state = entry.deleted == true and "DELETED" or nil,
+		state = state,
 		url = tostring((as_table(links.self) or {}).href or ""),
 		html_url = tostring((as_table(links.html) or {}).href or ""),
 		_raw = entry,

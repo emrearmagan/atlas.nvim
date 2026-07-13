@@ -3,8 +3,7 @@ local M = {}
 
 local utils = require("atlas.ui.shared.utils")
 local spinner = require("atlas.ui.components.spinner")
-local diff_blocks = require("atlas.ui.components.diff_blocks")
-local changes_block = require("atlas.pulls.ui.components.changes_block")
+local diff_renderer = require("atlas.pulls.diff.renderer")
 local table_view = require("atlas.ui.components.table_tree")
 local footer = require("atlas.ui.components.footer")
 local state = require("atlas.pulls.ui.panel.pr.tabs.files.state")
@@ -57,10 +56,10 @@ local function push(lines, spans, text, hl_group)
 end
 
 ---@param pr PullRequest
----@param repo PullsRepo|nil
+---@param _repo PullsRepo|nil
 ---@param refresh fun()
 ---@param opts { force_refresh: boolean|nil }|nil
-function M.on_select(pr, repo, refresh, opts)
+function M.on_select(pr, _repo, refresh, opts)
 	cancel_all()
 	state.reset()
 
@@ -113,7 +112,7 @@ end
 ---@param spans table[]
 ---@param line_map table<integer, table>
 local function render_diffstat_summary(width, lines, spans, line_map)
-	if not (type(state.diffstat) == "table") then
+	if type(state.diffstat) ~= "table" then
 		return
 	end
 
@@ -131,20 +130,31 @@ local function render_diffstat_summary(width, lines, spans, line_map)
 	local collapsed = state.diffstat_collapsed
 	local indicator = collapsed and "▸" or "▾"
 	local hdr = string.format("%s Files changed (%d)", indicator, #entries)
-	local diff_result = diff_blocks.render({ additions = total_add, deletions = total_del })
+	local add_text = "+" .. tostring(total_add)
+	local del_text = "-" .. tostring(total_del)
+	local diff_text = total_add + total_del > 0 and (add_text .. " " .. del_text) or ""
 
-	if diff_result.text ~= "" then
+	if diff_text ~= "" then
 		local hdr_w = vim.fn.strdisplaywidth(hdr)
-		local diff_w = vim.fn.strdisplaywidth(diff_result.text)
+		local diff_w = vim.fn.strdisplaywidth(diff_text)
 		local gap = math.max(1, width - PADDING_X - hdr_w - diff_w)
-		local hdr_line = string.rep(" ", PADDING_X) .. hdr .. string.rep(" ", gap) .. diff_result.text
+		local hdr_line = string.rep(" ", PADDING_X) .. hdr .. string.rep(" ", gap) .. diff_text
 		table.insert(lines, hdr_line)
 		local lnum = #lines - 1
 		table.insert(spans, { line = lnum, start_col = PADDING_X, end_col = PADDING_X + #hdr, hl_group = "Normal" })
-		local diff_byte_start = PADDING_X + #hdr + gap
-		for _, hl in ipairs(diff_result.highlights) do
-			table.insert(spans, { line = lnum, start_col = diff_byte_start + hl.start_col, end_col = diff_byte_start + hl.end_col, hl_group = hl.hl_group })
-		end
+		local diff_start = PADDING_X + #hdr + gap
+		table.insert(spans, {
+			line = lnum,
+			start_col = diff_start,
+			end_col = diff_start + #add_text,
+			hl_group = "AtlasTextPositive",
+		})
+		table.insert(spans, {
+			line = lnum,
+			start_col = diff_start + #add_text + 1,
+			end_col = diff_start + #diff_text,
+			hl_group = "AtlasLogError",
+		})
 	else
 		push(lines, spans, hdr, "Normal")
 	end
@@ -184,10 +194,18 @@ local function render_diffstat_summary(width, lines, spans, line_map)
 			},
 			rows = rows,
 			cell_hl = function(row, col)
-				if col.key == "marker" then return row.marker_hl end
-				if col.key == "path" then return "AtlasTextMuted" end
-				if col.key == "added" then return "AtlasTextPositive" end
-				if col.key == "removed" then return "AtlasLogError" end
+				if col.key == "marker" then
+					return row.marker_hl
+				end
+				if col.key == "path" then
+					return "AtlasTextMuted"
+				end
+				if col.key == "added" then
+					return "AtlasTextPositive"
+				end
+				if col.key == "removed" then
+					return "AtlasLogError"
+				end
 			end,
 		})
 
@@ -201,10 +219,10 @@ end
 -- Render
 --------------------------------------------------------------------------------
 
----@param pr PullRequest
+---@param _pr PullRequest
 ---@param width integer
 ---@return string[], table[], table<integer, table>|nil
-function M.render(pr, width)
+function M.render(_pr, width)
 	local lines = {}
 	local spans = {}
 	local line_map = {}
@@ -232,7 +250,7 @@ function M.render(pr, width)
 		return lines, spans, line_map
 	end
 
-	local cb_lines, cb_spans, cb_map = changes_block.render(files, {
+	local cb_lines, cb_spans, cb_map = diff_renderer.hunks(files, {
 		max_width = max_width,
 		padding_x = PADDING_X,
 		collapsed_hunks = state.collapsed_hunks,
@@ -280,7 +298,7 @@ function M.toggle_all_hunks()
 	local keys = {}
 	for _, file in ipairs(state.diff) do
 		for _, hunk in ipairs(file.hunks or {}) do
-			table.insert(keys, changes_block.hunk_key(file, hunk))
+			table.insert(keys, diff_renderer.hunk_key(file, hunk))
 		end
 	end
 

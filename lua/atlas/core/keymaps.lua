@@ -21,12 +21,21 @@ local M = {}
 ---@field show_details? AtlasKeymapValue
 ---@field search? AtlasKeymapValue
 
+---@class AtlasPullsReviewKeymaps
+---@field next_hunk? AtlasKeymapValue
+---@field previous_hunk? AtlasKeymapValue
+---@field next_file? AtlasKeymapValue
+---@field previous_file? AtlasKeymapValue
+---@field toggle_file_reviewed? AtlasKeymapValue
+---@field next_comment? AtlasKeymapValue
+---@field previous_comment? AtlasKeymapValue
+---@field view_thread? AtlasKeymapValue
+
 ---@class AtlasPullsKeymaps
 ---@field copy_id? AtlasKeymapValue
 ---@field open_diff? AtlasKeymapValue
 ---@field checkout? AtlasKeymapValue
----@field next_hunk? AtlasKeymapValue
----@field previous_hunk? AtlasKeymapValue
+---@field review? AtlasPullsReviewKeymaps
 ---@field filter_status_open? AtlasKeymapValue
 ---@field filter_status_merged? AtlasKeymapValue
 ---@field filter_status_declined? AtlasKeymapValue
@@ -67,8 +76,14 @@ local M = {}
 ---| "pulls.copy_id"
 ---| "pulls.open_diff"
 ---| "pulls.checkout"
----| "pulls.next_hunk"
----| "pulls.previous_hunk"
+---| "pulls.review.next_hunk"
+---| "pulls.review.previous_hunk"
+---| "pulls.review.next_file"
+---| "pulls.review.previous_file"
+---| "pulls.review.toggle_file_reviewed"
+---| "pulls.review.next_comment"
+---| "pulls.review.previous_comment"
+---| "pulls.review.view_thread"
 ---| "pulls.filter_status_open"
 ---| "pulls.filter_status_merged"
 ---| "pulls.filter_status_declined"
@@ -114,22 +129,14 @@ end
 ---@param action_id AtlasKeymapActionId|string
 ---@return AtlasKeymapValue
 local function from_config(action_id)
-	local group, key = tostring(action_id):match("^([^.]+)%.([^.]+)$")
-	if group == nil or key == nil then
-		return nil
+	local value = require("atlas.config").options.keymaps
+	for key in tostring(action_id):gmatch("[^.]+") do
+		if type(value) ~= "table" then
+			return nil
+		end
+		value = value[key]
 	end
-
-	local keymaps = require("atlas.config").options.keymaps
-	if type(keymaps) ~= "table" then
-		return nil
-	end
-
-	local section = keymaps[group]
-	if type(section) ~= "table" then
-		return nil
-	end
-
-	return section[key]
+	return value
 end
 
 ---@param action_id AtlasKeymapActionId|string
@@ -257,8 +264,14 @@ function M.validate()
 			"pulls.copy_id",
 			"pulls.open_diff",
 			"pulls.checkout",
-			"pulls.next_hunk",
-			"pulls.previous_hunk",
+			"pulls.review.next_hunk",
+			"pulls.review.previous_hunk",
+			"pulls.review.next_file",
+			"pulls.review.previous_file",
+			"pulls.review.toggle_file_reviewed",
+			"pulls.review.next_comment",
+			"pulls.review.previous_comment",
+			"pulls.review.view_thread",
 			"pulls.filter_status_open",
 			"pulls.filter_status_merged",
 			"pulls.filter_status_declined",

@@ -2,7 +2,6 @@ local M = {}
 
 local helper = require("atlas.pulls.ui.main.helper")
 local table_tree = require("atlas.ui.components.table_tree")
-local diff_blocks = require("atlas.ui.components.diff_blocks")
 local icons = require("atlas.ui.shared.icons")
 local utils = require("atlas.ui.shared.utils")
 local state = require("atlas.pulls.state")
@@ -11,6 +10,24 @@ local PR_ICON, PR_ICON_HL = icons.pulls("pr")
 local MERGED_PR_ICON, MERGED_PR_ICON_HL = icons.pulls("merged_pr")
 local DECLINED_PR_ICON, DECLINED_PR_ICON_HL = icons.pulls("declined_pr")
 local REPO_ICON = icons.pulls("repo")
+
+---@param additions number
+---@param deletions number
+---@return string, table[]
+local function diff_stats(additions, deletions)
+	if additions + deletions == 0 then
+		return "", {}
+	end
+
+	local add_text = "+" .. tostring(additions)
+	local del_text = "-" .. tostring(deletions)
+	local text = add_text .. " " .. del_text
+	return text,
+		{
+			{ start_col = 0, end_col = #add_text, hl_group = "AtlasTextPositive" },
+			{ start_col = #add_text + 1, end_col = #text, hl_group = "AtlasLogError" },
+		}
+end
 
 local PR_STATE_ICON = {
 	open = { PR_ICON, PR_ICON_HL },
@@ -75,8 +92,10 @@ local function review_icon_and_hl(pr)
 	local approved, changes = 0, 0
 	for _, node in ipairs(nodes) do
 		local s = tostring(node.state or ""):upper()
-		if s == "APPROVED" then approved = approved + 1
-		elseif s == "CHANGES_REQUESTED" then changes = changes + 1
+		if s == "APPROVED" then
+			approved = approved + 1
+		elseif s == "CHANGES_REQUESTED" then
+			changes = changes + 1
 		end
 	end
 	if changes > 0 then
@@ -198,11 +217,8 @@ local function compact_rows(groups)
 			local is_reloading = state.is_pr_reloading(pr.repo_full_name, pr.id)
 			local ci, ci_h = ci_icon_and_hl(pr)
 			local review, review_h = review_icon_and_hl(pr)
-			local diff_result = diff_blocks.render({
-				additions = tonumber(pr._raw and pr._raw.additions) or 0,
-				deletions = tonumber(pr._raw and pr._raw.deletions) or 0,
-				show_count = false,
-			})
+			local diff_text, diff_highlights =
+				diff_stats(tonumber(pr._raw and pr._raw.additions) or 0, tonumber(pr._raw and pr._raw.deletions) or 0)
 			local icon, icon_hl = pr_icon_and_hl(pr)
 			table.insert(rows, {
 				kind = "pr",
@@ -216,8 +232,8 @@ local function compact_rows(groups)
 				ci_hl = ci_h,
 				review = review,
 				review_hl = review_h,
-				diff = diff_result.text,
-				diff_hl = diff_result.highlights,
+				diff = diff_text,
+				diff_hl = diff_highlights,
 				author = string.format("%s %s", icons.general("user"), utils.shorten_name(author_name, 20)),
 				author_hl = author_name,
 				branch = utils.truncate(src .. " → " .. dst, 28),
@@ -306,25 +322,22 @@ local function plain_rows(groups)
 	for i, group in ipairs(groups or {}) do
 		local repo_label = group.repo.name or ""
 		if i > 1 then
-			table.insert(
-				rows,
-				{
-					kind = "spacer",
-					pr_icon = "",
-					name = "",
-					conversation = "",
-					ci = "",
-					ci_hl = "",
-					review = "",
-					review_hl = "",
-					diff = "",
-					diff_hl = nil,
-					author = "",
-					branch = "",
-					created = "",
-					updated = "",
-				}
-			)
+			table.insert(rows, {
+				kind = "spacer",
+				pr_icon = "",
+				name = "",
+				conversation = "",
+				ci = "",
+				ci_hl = "",
+				review = "",
+				review_hl = "",
+				diff = "",
+				diff_hl = nil,
+				author = "",
+				branch = "",
+				created = "",
+				updated = "",
+			})
 		end
 		table.insert(rows, {
 			kind = "repo",
@@ -355,11 +368,8 @@ local function plain_rows(groups)
 			local _, icon_hl = pr_icon_and_hl(pr)
 			local ci, ci_h = ci_icon_and_hl(pr)
 			local review, review_h = review_icon_and_hl(pr)
-			local diff_result = diff_blocks.render({
-				additions = tonumber(pr._raw and pr._raw.additions) or 0,
-				deletions = tonumber(pr._raw and pr._raw.deletions) or 0,
-				show_count = false,
-			})
+			local diff_text, diff_highlights =
+				diff_stats(tonumber(pr._raw and pr._raw.additions) or 0, tonumber(pr._raw and pr._raw.deletions) or 0)
 			table.insert(rows, {
 				kind = "pr",
 				pr_icon = icon,
@@ -372,8 +382,8 @@ local function plain_rows(groups)
 				ci_hl = ci_h,
 				review = review,
 				review_hl = review_h,
-				diff = diff_result.text,
-				diff_hl = diff_result.highlights,
+				diff = diff_text,
+				diff_hl = diff_highlights,
 				author = string.format("%s %s", icons.general("user"), utils.shorten_name(author_name, 20)),
 				author_hl = author_name,
 				branch = utils.truncate(src .. " → " .. dst, 28),

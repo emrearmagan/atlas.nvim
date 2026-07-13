@@ -69,6 +69,7 @@ function M.open(opts)
 		footer.notify("warn", "Missing editor key")
 		return nil, nil
 	end
+	local source_win = vim.api.nvim_get_current_win()
 
 	local buf = vim.api.nvim_create_buf(false, true)
 	vim.api.nvim_set_option_value("buftype", "nofile", { buf = buf })
@@ -124,6 +125,7 @@ function M.open(opts)
 		title_pos = "center",
 		footer = footer_text,
 		footer_pos = "center",
+		zindex = 260,
 	})
 	vim.api.nvim_set_option_value(
 		"winhighlight",
@@ -133,6 +135,9 @@ function M.open(opts)
 
 	vim.api.nvim_set_option_value("number", false, { win = win })
 	vim.api.nvim_set_option_value("relativenumber", false, { win = win })
+	vim.api.nvim_set_option_value("diff", false, { win = win })
+	vim.api.nvim_set_option_value("scrollbind", false, { win = win })
+	vim.api.nvim_set_option_value("cursorbind", false, { win = win })
 	vim.api.nvim_set_option_value("wrap", true, { win = win })
 	vim.api.nvim_set_option_value("cursorline", false, { win = win })
 
@@ -202,6 +207,9 @@ function M.open(opts)
 	local function close_editor()
 		if vim.api.nvim_win_is_valid(win) then
 			vim.api.nvim_win_close(win, true)
+		end
+		if vim.api.nvim_win_is_valid(source_win) then
+			vim.api.nvim_set_current_win(source_win)
 		end
 	end
 

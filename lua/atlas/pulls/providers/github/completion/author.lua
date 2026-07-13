@@ -1,10 +1,8 @@
 local M = {}
 
+---@param context AtlasPullsCommentCompletionContext
 ---@return string[]
-local function collect_logins()
-	local panel_state = require("atlas.pulls.ui.panel.pr.state")
-	local comments_state = require("atlas.pulls.ui.panel.pr.tabs.review.state")
-
+local function collect_logins(context)
 	local seen = {}
 	local logins = {}
 	local function add(login)
@@ -15,13 +13,12 @@ local function collect_logins()
 		end
 	end
 
-	local pr = panel_state.current_pr
+	local pr = context.pr
 	if pr and pr.author then
 		add(pr.author.nickname or pr.author.name)
 	end
 
-	local overview_state = require("atlas.pulls.ui.panel.pr.tabs.overview.state")
-	local reviewers = overview_state.reviewers
+	local reviewers = context.reviewers or {}
 	if type(reviewers) == "table" then
 		---@cast reviewers PullsReviewer[]
 		for _, r in ipairs(reviewers) do
@@ -39,19 +36,16 @@ local function collect_logins()
 		end
 	end
 
-	local comments = comments_state.comments
-	if type(comments) == "table" then
-		---@cast comments PullsComment[]
-		for _, c in ipairs(comments) do
-			add(c.author and (c.author.nickname or c.author.name))
-		end
+	for _, c in ipairs(context.comments) do
+		add(c.author and (c.author.nickname or c.author.name))
 	end
 
 	return logins
 end
 
+---@param context AtlasPullsCommentCompletionContext
 ---@return AtlasMarkdownCompletionProvider|nil
-function M.build_completion()
+function M.build_completion(context)
 	return {
 		trigger = "@",
 		find_start = function(before)
@@ -64,7 +58,7 @@ function M.build_completion()
 		complete = function(base)
 			local query = vim.trim(tostring(base or "")):gsub("^@", ""):lower()
 			local matches = {}
-			for _, login in ipairs(collect_logins()) do
+			for _, login in ipairs(collect_logins(context)) do
 				if query == "" or login:lower():find(query, 1, true) == 1 then
 					table.insert(matches, {
 						word = "@" .. login,

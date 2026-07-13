@@ -3,7 +3,6 @@ local M = {}
 local icons = require("atlas.ui.shared.icons")
 local highlights = require("atlas.ui.shared.highlights")
 local table_tree = require("atlas.ui.components.table_tree")
-local diff_blocks = require("atlas.ui.components.diff_blocks")
 local utils = require("atlas.ui.shared.utils")
 local helper = require("atlas.pulls.ui.main.helper")
 
@@ -64,19 +63,21 @@ function M.render(pr, width, extra_rows)
 	local byline = by_prefix .. author_name .. by_sep .. created_text
 
 	local files_state = require("atlas.pulls.ui.panel.pr.tabs.files.state")
-	local diff_result = nil
+	local diff_text, diff_add_text, diff_del_text
 	if type(files_state.diffstat) == "table" and #files_state.diffstat > 0 then
 		local total_add, total_del = 0, 0
 		for _, entry in ipairs(files_state.diffstat) do
 			total_add = total_add + (tonumber(entry.lines_added) or 0)
 			total_del = total_del + (tonumber(entry.lines_removed) or 0)
 		end
-		diff_result = diff_blocks.render({ additions = total_add, deletions = total_del })
-		if diff_result and diff_result.text ~= "" then
+		if total_add + total_del > 0 then
+			diff_add_text = "+" .. tostring(total_add)
+			diff_del_text = "-" .. tostring(total_del)
+			diff_text = diff_add_text .. " " .. diff_del_text
 			local byline_w = vim.api.nvim_strwidth(byline)
-			local diff_w = vim.api.nvim_strwidth(diff_result.text)
+			local diff_w = vim.api.nvim_strwidth(diff_text)
 			local gap = math.max(2, width - byline_w - diff_w)
-			byline = byline .. string.rep(" ", gap) .. diff_result.text
+			byline = byline .. string.rep(" ", gap) .. diff_text
 		end
 	end
 
@@ -124,7 +125,7 @@ function M.render(pr, width, extra_rows)
 			{ key = "v2", name = "", can_grow = true, grow_last = true },
 		},
 		rows = rows,
-		cell_hl = function(row, col, ctx)
+		cell_hl = function(row, col, _ctx)
 			if col.key == "k1" or col.key == "k2" then
 				local label = col.key == "k1" and row.k1 or row.k2
 				return { { start_col = 0, end_col = #label, hl_group = "AtlasTextMuted" } }
@@ -170,11 +171,11 @@ function M.render(pr, width, extra_rows)
 	local ts_end = ts_start + #created_text
 	add_span(spans, lines, 1, ts_start, ts_end, "AtlasTextMuted")
 
-	if diff_result and diff_result.text ~= "" then
-		local diff_byte_start = #byline - #diff_result.text
-		for _, hl in ipairs(diff_result.highlights) do
-			add_span(spans, lines, 1, diff_byte_start + hl.start_col, diff_byte_start + hl.end_col, hl.hl_group)
-		end
+	if diff_text and diff_add_text and diff_del_text then
+		local diff_start = #byline - #diff_text
+		local diff_del_start = diff_start + #diff_add_text + 1
+		add_span(spans, lines, 1, diff_start, diff_start + #diff_add_text, "AtlasTextPositive")
+		add_span(spans, lines, 1, diff_del_start, diff_del_start + #diff_del_text, "AtlasLogError")
 	end
 
 	for _, span in ipairs(tbl_spans) do

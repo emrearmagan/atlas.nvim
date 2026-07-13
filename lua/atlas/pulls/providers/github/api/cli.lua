@@ -97,8 +97,6 @@ function M.gh(args, callback, ctx)
 
 	local cancelled = false
 
-	local cancelled = false
-
 	local handle = vim.system(cmd, { text = true }, function(res)
 		vim.schedule(function()
 			if cancelled then

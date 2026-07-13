@@ -4,11 +4,9 @@ local M = {}
 -- (e.g. "@{<account_id>}"), not display names. We best-effort resolve them
 -- using users known in the current PR detail (author/reviewers/participants).
 --
+---@param context AtlasPullsCommentCompletionContext
 ---@return PullsAuthor[]
-local function collect_authors()
-	local panel_state = require("atlas.pulls.ui.panel.pr.state")
-	local comments_state = require("atlas.pulls.ui.panel.pr.tabs.review.state")
-
+local function collect_authors(context)
 	local seen = {}
 	local function add(author)
 		if type(author) ~= "table" then
@@ -25,13 +23,12 @@ local function collect_authors()
 		}
 	end
 
-	local pr = panel_state.current_pr
+	local pr = context.pr
 	if pr then
 		add(pr.author)
 	end
 
-	local overview_state = require("atlas.pulls.ui.panel.pr.tabs.overview.state")
-	local reviewers = overview_state.reviewers
+	local reviewers = context.reviewers or {}
 	if type(reviewers) == "table" then
 		---@cast reviewers PullsReviewer[]
 		for _, r in ipairs(reviewers) do
@@ -39,12 +36,8 @@ local function collect_authors()
 		end
 	end
 
-	local comments = comments_state.comments
-	if type(comments) == "table" then
-		---@cast comments PullsComment[]
-		for _, c in ipairs(comments) do
-			add(c.author)
-		end
+	for _, c in ipairs(context.comments) do
+		add(c.author)
 	end
 
 	return vim.tbl_values(seen)
@@ -88,7 +81,7 @@ function M.resolve(text, authors)
 		return raw
 	end
 
-	local mention_map = build_map(authors or collect_authors())
+	local mention_map = build_map(authors)
 	return (
 		raw:gsub("@{([^}]+)}", function(id)
 			local name = mention_map[id]
@@ -100,9 +93,10 @@ function M.resolve(text, authors)
 	)
 end
 
+---@param context AtlasPullsCommentCompletionContext
 ---@return AtlasMarkdownCompletionProvider|nil
-function M.build_completion()
-	local mention_map = build_map(collect_authors())
+function M.build_completion(context)
+	local mention_map = build_map(collect_authors(context))
 	return {
 		trigger = "@",
 		find_start = function(before)

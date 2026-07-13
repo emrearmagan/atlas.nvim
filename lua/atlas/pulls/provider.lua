@@ -15,6 +15,12 @@
 ---@field force_load boolean|nil
 ---@field pagelen number|nil
 
+---@class AtlasPullsCommentCompletionContext
+---@field pr PullRequest
+---@field comments PullsComment[]
+---@field reviewers PullsReviewer[]|nil
+---@field conversation PullsComment[]|nil
+
 ---@class PullsProvider
 ---@field id string
 ---@field name string
@@ -25,10 +31,12 @@
 ---@field setup fun()|nil
 ---
 --- Core data methods:
----@field fetch_user fun(on_done: fun(user: PullsUser|nil, err: string|nil))
+---@field fetch_user fun(on_done: fun(user: PullsUser|nil, err: string|nil)): { cancel: fun() }|nil
+---@field comment_completion (fun(context: AtlasPullsCommentCompletionContext): AtlasMarkdownCompletionProvider|nil)|nil
 ---@field fetch_conversation (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(result: { comments: PullsComment[], events: PullsActivityEntry[], reaction_options: PullsReactionOption[]|nil }|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field fetch_pullrequests fun(view: AtlasPullsViewConfig, opts: PullsFetchOpts, on_done: fun(groups: PullsGroup[], err: string[]|nil)): { cancel: fun() }|nil
 ---@field fetch_pullrequest fun(pr: PullRequest, opts: PullsFetchOpts, on_done: fun(pr: PullRequest|nil, err: string|nil)): { cancel: fun() }|nil
+---@field find_pullrequest_for_commit (fun(remote: AtlasGitRemoteInfo, commit: string, on_done: fun(pr: PullRequest|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field fetch_repo_details (fun(repo: PullsRepo, opts: PullsFetchOpts, on_done: fun(repo: PullsRepoDetails|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field fetch_repo_branches (fun(repo: PullsRepoDetails, opts: PullsFetchOpts, on_done: fun(branches: PullsRepoBranches|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field fetch_repo_tags (fun(repo: PullsRepoDetails, opts: PullsFetchOpts, on_done: fun(tags: PullsRepoTags|nil, err: string|nil)): { cancel: fun() }|nil)|nil
@@ -45,6 +53,7 @@
 ---@field fetch_commit_status (fun(pr: PullRequest, commit: PullsCommit, opts: { force_refresh: boolean|nil }|nil, on_done: fun(status: string|nil, url: string|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---
 ---@field add_comment (fun(pr: PullRequest, content: string, opts: PullsAddCommentOpts|nil, on_done: fun(comment: PullsComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field add_task (fun(pr: PullRequest, content: string, parent: PullsComment|nil, on_done: fun(comment: PullsComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field reply_comment (fun(pr: PullRequest, parent: PullsComment, content: string, on_done: fun(comment: PullsComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field edit_comment (fun(pr: PullRequest, comment: PullsComment, on_done: fun(comment: PullsComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field delete_comment (fun(pr: PullRequest, target: PullsComment, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil

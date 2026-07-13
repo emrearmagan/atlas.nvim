@@ -24,16 +24,23 @@ local function github_config()
 end
 
 ---@param on_done fun(user: PullsUser|nil, err: string|nil)
+---@return { cancel: fun() }|nil
 function M.fetch_user(on_done)
 	local users_api = require("atlas.pulls.providers.github.api.users")
 	local state = require("atlas.pulls.providers.github.state")
 
-	users_api.fetch_user(function(user, err)
+	return users_api.fetch_user(function(user, err)
 		if user then
 			state.current_user = user
 		end
 		on_done(user, err)
 	end)
+end
+
+---@param context AtlasPullsCommentCompletionContext
+---@return AtlasMarkdownCompletionProvider|nil
+function M.comment_completion(context)
+	return require("atlas.pulls.providers.github.completion.author").build_completion(context)
 end
 
 ---@param view AtlasPullsViewConfig
@@ -93,6 +100,19 @@ function M.fetch_pullrequest(pr, opts, on_done)
 		return nil
 	end
 	return pr_api.get_pr(owner, repo, pr.id, on_done, { force_load = opts.force_load == true })
+end
+
+---@param remote AtlasGitRemoteInfo
+---@param commit string
+---@param on_done fun(pr: PullRequest|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.find_pullrequest_for_commit(remote, commit, on_done)
+	return require("atlas.pulls.providers.github.api.pullrequests").find_for_commit(
+		remote.owner,
+		remote.repo,
+		commit,
+		on_done
+	)
 end
 
 ---@param pr PullRequest
@@ -246,6 +266,18 @@ function M.add_comment(pr, content, opts, on_done)
 end
 
 ---@param pr PullRequest
+---@param content string
+---@param parent PullsComment|nil
+---@param on_done fun(comment: PullsComment|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.add_task(pr, content, parent, on_done)
+	if not content:match("^%s*[-*+]%s+%[[ xX]%]") then
+		content = "- [ ] " .. content
+	end
+	return M.add_comment(pr, content, { parent = parent }, on_done)
+end
+
+---@param pr PullRequest
 ---@param parent PullsComment
 ---@param content string
 ---@param on_done fun(comment: PullsComment|nil, err: string|nil)
@@ -331,9 +363,10 @@ end
 
 function M.views()
 	local cfg = github_config()
-	local views = (type(cfg.views) == "table" and #cfg.views > 0) and cfg.views or {
-		{ name = "Me", key = "1", search = "involves:@me", layout = "compact" },
-	}
+	local views = (type(cfg.views) == "table" and #cfg.views > 0) and cfg.views
+		or {
+			{ name = "Me", key = "1", search = "involves:@me", layout = "compact" },
+		}
 	return require("atlas.ui.shared.bookmarks_view").append_to_views(views, cfg.bookmarks, "S", "Search")
 end
 

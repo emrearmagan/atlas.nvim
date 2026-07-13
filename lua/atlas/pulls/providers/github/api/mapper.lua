@@ -134,6 +134,36 @@ function M.to_pull_request(raw)
 	}
 end
 
+---@param raw table REST pull request response.
+---@return PullRequest
+function M.to_pull_request_from_rest(raw)
+	local base = type(raw.base) == "table" and raw.base or {}
+	local head = type(raw.head) == "table" and raw.head or {}
+	local repository = type(base.repo) == "table" and base.repo or {}
+	local pr = M.to_pull_request({
+		number = raw.number,
+		title = raw.title,
+		body = raw.body,
+		state = (raw.merged == true or json.nilify(raw.merged_at) ~= nil) and "MERGED" or raw.state,
+		isDraft = raw.draft,
+		author = raw.user,
+		headRefName = head.ref,
+		headRefOid = head.sha,
+		baseRefName = base.ref,
+		baseRefOid = base.sha,
+		commentsCount = raw.comments,
+		createdAt = raw.created_at,
+		updatedAt = raw.updated_at,
+		url = raw.html_url,
+		repository = {
+			name = repository.name,
+			nameWithOwner = repository.full_name,
+		},
+	})
+	pr._raw = raw
+	return pr
+end
+
 ---@param raw table (search/issues API item)
 ---@return PullRequest
 function M.to_pull_request_from_search(raw)
@@ -383,7 +413,7 @@ function M.to_activity_comment(raw)
 end
 
 ---@param raw table
----@param thread_state {resolved: boolean, outdated: boolean}|nil
+---@param thread_state {pending: boolean|nil, resolved: boolean, outdated: boolean}|nil
 ---@return PullsComment
 function M.to_comment(raw, thread_state)
 	local user = raw.user or {}
@@ -403,10 +433,12 @@ function M.to_comment(raw, thread_state)
 		inline_hunk = parse_diff_hunk(raw.diff_hunk)
 	end
 
-	---@type "RESOLVED"|"OUTDATED"|nil
+	---@type "PENDING"|"RESOLVED"|"OUTDATED"|nil
 	local state = nil
 	if thread_state ~= nil then
-		if thread_state.resolved then
+		if thread_state.pending then
+			state = "PENDING"
+		elseif thread_state.resolved then
 			state = "RESOLVED"
 		elseif thread_state.outdated then
 			state = "OUTDATED"

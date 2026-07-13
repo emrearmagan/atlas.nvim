@@ -41,15 +41,11 @@ end
 ---@param id string
 ---@return PullsProvider|nil
 local function load_pulls_provider(id)
-	if id == "bitbucket" then
-		return require("atlas.pulls.providers.bitbucket")
-	elseif id == "github" then
-		return require("atlas.pulls.providers.github")
-	elseif id == "gitlab" then
-		return require("atlas.pulls.providers.gitlab")
-	end
+	local provider = require("atlas.pulls.providers").get(id)
+	if not provider then
 	vim.notify(string.format("[Atlas] Unknown pulls provider: %s", id), vim.log.levels.ERROR)
-	return nil
+	end
+	return provider
 end
 
 ---@param id string

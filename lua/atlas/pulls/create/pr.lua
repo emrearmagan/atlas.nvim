@@ -119,17 +119,13 @@ end
 ---@param provider_id "github"|"bitbucket"|"gitlab"
 ---@return PullsProvider|nil, string|nil
 local function load_provider(provider_id)
-	local ok, mod
-	if provider_id == "github" then
-		ok, mod = pcall(require, "atlas.pulls.providers.github")
-	elseif provider_id == "bitbucket" then
-		ok, mod = pcall(require, "atlas.pulls.providers.bitbucket")
-	elseif provider_id == "gitlab" then
-		ok, mod = pcall(require, "atlas.pulls.providers.gitlab")
-	else
+	local ok, mod = pcall(function()
+		return require("atlas.pulls.providers").get(provider_id)
+	end)
+
+	if ok and mod == nil then
 		return nil, "Unsupported provider: " .. tostring(provider_id)
 	end
-
 	if not ok or type(mod) ~= "table" then
 		return nil, "Failed to load provider: " .. tostring(provider_id)
 	end

@@ -7,6 +7,33 @@ local function trim(s)
 	return (s:gsub("^%s+", ""):gsub("%s+$", ""))
 end
 
+---@param args string[] Arguments after `git`.
+---@param opts vim.SystemOpts|nil
+---@param on_done fun(res: vim.SystemCompleted)
+---@return { cancel: fun() }
+function M.run(args, opts, on_done)
+	local cancelled = false
+	local finished = false
+	local handle = vim.system(vim.list_extend({ "git" }, args), opts or {}, function(res)
+		vim.schedule(function()
+			if cancelled then
+				return
+			end
+			finished = true
+			on_done(res)
+		end)
+	end)
+	return {
+		cancel = function()
+			if cancelled or finished then
+				return
+			end
+			cancelled = true
+			pcall(handle.kill, handle, 9)
+		end,
+	}
+end
+
 ---@param cmd string[]
 ---@param cwd string
 ---@param on_done fun(res: vim.SystemCompleted)

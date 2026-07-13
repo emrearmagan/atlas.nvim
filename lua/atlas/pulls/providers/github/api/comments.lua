@@ -10,21 +10,22 @@ query($owner:String!,$name:String!,$number:Int!){
     pullRequest(number:$number){
       reviewThreads(first:100){
         nodes{
-          isResolved
-          isOutdated
-          diffSide
-          path
-          line
-          originalLine
+		  isResolved
+		  isOutdated
+		  diffSide
+		  path
+		  line
+		  originalLine
           comments(first:100){
             nodes{
-              databaseId
-              body
+			  databaseId
+			  body
               diffHunk
               url
               createdAt
               author{login ... on User{databaseId} ... on Bot{databaseId}}
-              replyTo{databaseId}
+			  replyTo{databaseId}
+			  pullRequestReview{state}
               reactionGroups{content users{totalCount}}
             }
           }
@@ -110,20 +111,29 @@ function M.fetch_comments(pr, _opts, on_done) ---@diagnostic disable-line: unuse
 		end
 
 		local threads = result
-			and result.data
-			and result.data.repository
-			and result.data.repository.pullRequest
-			and result.data.repository.pullRequest.reviewThreads
-			and result.data.repository.pullRequest.reviewThreads.nodes
+				and result.data
+				and result.data.repository
+				and result.data.repository.pullRequest
+				and result.data.repository.pullRequest.reviewThreads
+				and result.data.repository.pullRequest.reviewThreads.nodes
 			or {}
 
 		---@type PullsComment[]
 		local out = {}
 		for _, thread in ipairs(threads) do
-			local thread_state = { resolved = thread.isResolved == true, outdated = thread.isOutdated == true }
 			local nodes = thread.comments and thread.comments.nodes or {}
-			for _, node in ipairs(nodes) do
-				table.insert(out, mapper.to_comment(gql_to_raw(node, thread), thread_state))
+			for index, node in ipairs(nodes) do
+				local review = type(node.pullRequestReview) == "table" and node.pullRequestReview or {}
+				local thread_state = {
+					pending = review.state == "PENDING",
+					resolved = thread.isResolved == true,
+					outdated = thread.isOutdated == true,
+				}
+				local comment = mapper.to_comment(gql_to_raw(node, thread), thread_state)
+				if index > 1 and comment.parent_id == nil and nodes[1] then
+					comment.parent_id = nodes[1].databaseId
+				end
+				table.insert(out, comment)
 			end
 		end
 
@@ -196,7 +206,7 @@ function M.add_comment(pr, content, opts, on_done)
 		})
 	end
 
-	-- GitHub has no native task concept like bitbuckett does opts.is_task is ignored.
+	-- GitHub has no native task concept, so opts.is_task is ignored.
 	return cli.api(
 		"POST",
 		string.format("repos/%s/issues/%s/comments", repo_slug, tostring(pr.id)),
@@ -232,7 +242,13 @@ function M.edit_comment(pr, comment, on_done)
 
 	if tostring(comment.id) == "__body__" then
 		return cli.gh({
-			"pr", "edit", tostring(pr.id), "--repo", repo_slug, "--body", tostring(comment.content_raw or ""),
+			"pr",
+			"edit",
+			tostring(pr.id),
+			"--repo",
+			repo_slug,
+			"--body",
+			tostring(comment.content_raw or ""),
 		}, function(_, err)
 			if err then
 				on_done(nil, err)
@@ -262,7 +278,9 @@ function M.edit_comment(pr, comment, on_done)
 			on_done(nil, err or "Failed to edit comment")
 			return
 		end
-		on_done(mapper.to_comment(result), nil)
+		local updated = mapper.to_comment(result)
+		updated.state = comment.state
+		on_done(updated, nil)
 	end, {
 		action = "Edit comment",
 		repo = pr.repo_full_name,
@@ -333,7 +351,11 @@ function M.reply_comment(pr, parent, content, on_done)
 					on_done(nil, err or "Failed to reply")
 					return
 				end
-				on_done(mapper.to_comment(result), nil)
+				local reply = mapper.to_comment(result)
+				if parent.state == "PENDING" then
+					reply.state = "PENDING"
+				end
+				on_done(reply, nil)
 			end,
 			{
 				action = "Reply comment",

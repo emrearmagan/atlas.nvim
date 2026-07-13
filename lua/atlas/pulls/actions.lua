@@ -2,6 +2,7 @@ local M = {}
 
 local footer = require("atlas.ui.components.footer")
 local checkout = require("atlas.core.git.checkout")
+local git = require("atlas.core.git")
 local logger = require("atlas.core.logger")
 
 ---@class PullsActionResult
@@ -15,18 +16,19 @@ end
 
 ---@param pr PullRequest
 ---@return string|nil open_cmd
----@return string|nil command
+---@return string|nil base_revision
+---@return string|nil head_revision
 ---@return string|nil err
 local function diff_open_command(pr)
 	local config = require("atlas.config")
 	local pulls_cfg = config.options.pulls or {}
 	local cmd = vim.trim(tostring((pulls_cfg.diff or {}).open_cmd or ""))
 	if cmd == "" then
-		return nil, nil, "diff.open_cmd is not configured"
+		return nil, nil, nil, "diff.open_cmd is not configured"
 	end
 
 	if vim.fn.exists(":" .. cmd) ~= 2 then
-		return nil, nil, string.format("diff.open_cmd command not found: %s", cmd)
+		return nil, nil, nil, string.format("diff.open_cmd command not found: %s", cmd)
 	end
 
 	local src = tostring((pr.source or {}).branch or "")

@@ -18,11 +18,15 @@ local M = {}
 ---@field deletions integer
 ---@field lines DiffLine[]
 
+---@alias DiffFileStatus "added"|"deleted"|"modified"|"renamed"|"type_changed"|"unknown"
+
 ---@class DiffFile
 ---@field path string                   -- display path (new path, or old path for deletions)
 ---@field old_path string|nil           -- only set for renames
----@field status "added"|"deleted"|"modified"|"renamed"
+---@field status DiffFileStatus
 ---@field hunks DiffHunk[]
+---@field additions integer|nil         -- optional total when supplied without hunks
+---@field deletions integer|nil          -- optional total when supplied without hunks
 
 --------------------------------------------------------------------------------
 -- Helpers
@@ -33,6 +37,9 @@ local M = {}
 local function split_lines(raw)
 	local out = {}
 	raw = raw:gsub("\r\n", "\n")
+	if raw:sub(-1) == "\n" then
+		raw = raw:sub(1, -2)
+	end
 	for line in (raw .. "\n"):gmatch("(.-)\n") do
 		table.insert(out, line)
 	end
@@ -48,8 +55,9 @@ local function finalise_file(file)
 		file.status = "deleted"
 	end
 
-	-- Rename: both sides set and differ
-	if file.old_path and file.old_path ~= file.path and file.status == "modified" then
+	if file.old_path == file.path then
+		file.old_path = nil
+	elseif file.old_path and file.status == "modified" then
 		file.status = "renamed"
 	end
 end
@@ -92,7 +100,7 @@ end
 --     }
 
 ---Parse a raw unified diff string into a structured representation.
----All git-internal lines (diff --git, index, mode, --- a/, +++ b/) are removedd here
+---All git-internal lines (diff --git, index, mode, --- a/, +++ b/) are removed here.
 ---@param raw string
 ---@return DiffFile[]
 function M.parse(raw)
@@ -218,30 +226,23 @@ function M.parse(raw)
 			end
 			entry.kind = kind
 			table.insert(cur_hunk.lines, entry)
-		elseif cur_file then
-			-- Lines inside a file block but before the first hunk (index, mode
-			-- change lines, binary notice, etc.) — intentionally dropped.
-		else
+		elseif not cur_file and #files == 0 then
 			-- Lines before any "diff --git" (shouldn't happen with Bitbucket, but
 			-- guard against truncated/non-standard responses by attaching them to
 			-- a synthetic file entry so nothing is silently lost).
-			if #files == 0 and cur_file == nil then
-				cur_file = { path = "(unknown)", old_path = nil, status = "modified", hunks = {} }
-				cur_hunk = {
-					header = "",
-					context = "",
-					old_start = 0,
-					old_count = 0,
-					new_start = 0,
-					new_count = 0,
-					additions = 0,
-					deletions = 0,
-					lines = {},
-				}
-			end
-			if cur_hunk then
-				table.insert(cur_hunk.lines, { text = line, kind = "context", content = line })
-			end
+			cur_file = { path = "(unknown)", old_path = nil, status = "modified", hunks = {} }
+			cur_hunk = {
+				header = "",
+				context = "",
+				old_start = 0,
+				old_count = 0,
+				new_start = 0,
+				new_count = 0,
+				additions = 0,
+				deletions = 0,
+				lines = {},
+			}
+			table.insert(cur_hunk.lines, { text = line, kind = "context", content = line })
 		end
 	end
 

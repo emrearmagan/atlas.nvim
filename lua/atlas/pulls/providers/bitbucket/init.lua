@@ -25,9 +25,16 @@ local function bb_config()
 end
 
 ---@param on_done fun(user: PullsUser|nil, err: string|nil)
+---@return { cancel: fun() }|nil
 function M.fetch_user(on_done)
 	local users_api = require("atlas.pulls.providers.bitbucket.api.users")
-	users_api.fetch_current_user(on_done)
+	return users_api.fetch_current_user(on_done)
+end
+
+---@param context AtlasPullsCommentCompletionContext
+---@return AtlasMarkdownCompletionProvider|nil
+function M.comment_completion(context)
+	return require("atlas.pulls.providers.bitbucket.completion.author").build_completion(context)
 end
 
 ---@param view AtlasPullsViewConfig
@@ -109,7 +116,7 @@ end
 ---@param opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(description: string|nil, err: string|nil)
 ---@return nil
-function M.fetch_description(pr, opts, on_done)
+function M.fetch_description(pr, _opts, on_done)
 	vim.schedule(function()
 		on_done(tostring(pr.description or ""), nil)
 	end)
@@ -133,6 +140,19 @@ function M.fetch_pullrequest(pr, opts, on_done)
 	return pr_api.fetch_pullrequest(workspace, repo, pr.id, {
 		force_load = opts.force_load == true,
 	}, on_done)
+end
+
+---@param remote AtlasGitRemoteInfo
+---@param commit string
+---@param on_done fun(pr: PullRequest|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.find_pullrequest_for_commit(remote, commit, on_done)
+	return require("atlas.pulls.providers.bitbucket.api.pullrequests").find_for_commit(
+		remote.owner,
+		remote.repo,
+		commit,
+		on_done
+	)
 end
 
 ---@param repo PullsRepo
@@ -291,7 +311,7 @@ end
 ---@param opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(status: string|nil, url: string|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_commit_status(pr, commit, opts, on_done)
+function M.fetch_commit_status(_pr, commit, opts, on_done)
 	local statuses_url = tostring(commit.statuses_url or "")
 	if statuses_url == "" then
 		on_done("unknown", nil, nil)
@@ -405,6 +425,10 @@ end
 ---@param task table
 ---@return PullsComment
 local function task_to_comment(task)
+	local links = type(task.links) == "table" and task.links or {}
+	local function href(link)
+		return type(link) == "table" and tostring(link.href or "") or tostring(link or "")
+	end
 	return {
 		id = task.id,
 		parent_id = task.comment_id,
@@ -418,9 +442,9 @@ local function task_to_comment(task)
 		inline = nil,
 		inline_hunk = nil,
 		is_task = true,
-		state = tostring(task.state or "") == "RESOLVED" and "RESOLVED" or nil,
-		url = nil,
-		html_url = nil,
+		state = task.pending == true and "PENDING" or (tostring(task.state or "") == "RESOLVED" and "RESOLVED" or nil),
+		url = href(links.self),
+		html_url = href(links.html),
 		_raw = task,
 	}
 end
@@ -452,8 +476,7 @@ function M.fetch_comments(pr, opts, on_done)
 			attach_hunk(c, diff_result)
 			table.insert(merged, c)
 		end
-		local task_entries = tasks_result or {}
-		for _, t in ipairs(task_entries or {}) do
+		for _, t in ipairs(tasks_result) do
 			table.insert(merged, task_to_comment(t))
 		end
 		table.sort(merged, function(a, b)
@@ -482,10 +505,9 @@ function M.fetch_comments(pr, opts, on_done)
 		{ force_refresh = opts.force_refresh == true },
 		function(tasks, err)
 			if err then
-				first_err = first_err or err
-				tasks_result = { entries = {} }
+				tasks_result = {}
 			else
-				tasks_result = tasks or { entries = {} }
+				tasks_result = tasks or {}
 			end
 			finish()
 		end
@@ -494,14 +516,9 @@ function M.fetch_comments(pr, opts, on_done)
 		table.insert(handles, h2)
 	end
 
-	--- Bitbucket does not include the hunks in the comments API like GitHub does, so we need to fetch the diff to be able to attach the hunks later.
+	-- Bitbucket does not include hunks in its comments API, so fetch the diff to attach them.
 	local h3 = pr_api.fetch_diff(pr, { force_refresh = opts.force_refresh == true }, function(files, err)
-		if err then
-			first_err = first_err or err
-			diff_result = {}
-		else
-			diff_result = files or {}
-		end
+		diff_result = err and {} or (files or {})
 		finish()
 	end)
 	if h3 then
@@ -566,6 +583,15 @@ function M.add_comment(pr, content, opts, on_done)
 		inline = inline_to_bitbucket(opts.inline),
 	}
 	return comments_api.add_comment(pr, content, bb_opts, on_done)
+end
+
+---@param pr PullRequest
+---@param content string
+---@param parent PullsComment|nil
+---@param on_done fun(comment: PullsComment|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.add_task(pr, content, parent, on_done)
+	return M.add_comment(pr, content, { parent = parent, is_task = true }, on_done)
 end
 
 ---@param pr PullRequest
