@@ -129,6 +129,33 @@ local function fetch_pullrequests_single(workspace, repo, opts, on_done)
 	end)
 end
 
+---@param workspace string
+---@param repo string
+---@param commit string
+---@param on_done fun(pr: PullRequest|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.find_for_commit(workspace, repo, commit, on_done)
+	local endpoint = string.format("/repositories/%s/%s/commit/%s/pullrequests", workspace, repo, commit)
+	return service.request("GET", endpoint, nil, nil, function(result, err)
+		if err then
+			on_done(nil, err)
+			return
+		end
+		local candidates = mapper.to_pull_requests_list(result, workspace, repo)
+		for _, pr in ipairs(candidates) do
+			if pr.state == "open" then
+				on_done(pr, nil)
+				return
+			end
+		end
+		if candidates[1] then
+			on_done(candidates[1], nil)
+			return
+		end
+		on_done(nil, "No Bitbucket pull request found for " .. commit:sub(1, 7))
+	end)
+end
+
 ---@param view_repos AtlasBitbucketRepoRef[]
 ---@param opts { force_load: boolean, pagelen: number|nil, statuses: string[]|nil }
 ---@param on_done fun(groups: PullsGroup[], err: string[]|nil)

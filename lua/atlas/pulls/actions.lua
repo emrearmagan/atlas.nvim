@@ -2,7 +2,6 @@ local M = {}
 
 local footer = require("atlas.ui.components.footer")
 local checkout = require("atlas.core.git.checkout")
-local git = require("atlas.core.git")
 local logger = require("atlas.core.logger")
 
 ---@class PullsActionResult
@@ -34,13 +33,11 @@ local function diff_open_command(pr)
 	local src = tostring((pr.source or {}).branch or "")
 	local dst = tostring((pr.destination or {}).branch or "")
 	if src == "" or dst == "" then
-		return nil, nil, "PR branch refs are missing"
+		return nil, nil, nil, "PR branch refs are missing"
 	end
 
-	local range = "origin/" .. dst .. "...origin/" .. src
-	return cmd, cmd .. " " .. range, nil
+	return cmd, "origin/" .. dst, "origin/" .. src, nil
 end
-
 ---@param pr PullRequest
 function M.copy_id(pr)
 	vim.fn.setreg("+", tostring(pr.id))
@@ -217,7 +214,6 @@ function M.open_diff(pr)
 			footer.notify("error", string.format("%s failed: %s", open_cmd, tostring(err)))
 			return
 		end
-
 		footer.notify("success", "Opened PR diff", 1200)
 	end)
 end

@@ -51,6 +51,34 @@ query($search: String!, $limit: Int!) {
 }
 ]]
 
+---@param owner string
+---@param repo string
+---@param commit string
+---@param on_done fun(pr: PullRequest|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.find_for_commit(owner, repo, commit, on_done)
+	local repo_slug = string.format("%s/%s", owner, repo)
+	local endpoint = string.format("repos/%s/commits/%s/pulls", repo_slug, commit)
+	return cli.gh({ "api", endpoint, "-H", "Accept: application/vnd.github+json" }, function(result, err)
+		if err then
+			on_done(nil, err)
+			return
+		end
+		if type(result) ~= "table" or #result == 0 then
+			on_done(nil, "No GitHub pull request found for " .. commit:sub(1, 7))
+			return
+		end
+		local selected = result[1]
+		for _, candidate in ipairs(result) do
+			if tostring(candidate.state):lower() == "open" then
+				selected = candidate
+				break
+			end
+		end
+		on_done(mapper.to_pull_request_from_rest(selected), nil)
+	end, { action = "Find PR for commit", repo = repo_slug, revision = commit })
+end
+
 ---@param search string
 ---@param on_done fun(groups: PullsGroup[], err: string[]|nil)
 ---@param opts { force_load?: boolean, limit?: number }|nil
