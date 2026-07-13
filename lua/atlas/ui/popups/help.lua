@@ -1,5 +1,7 @@
 local M = {}
 
+local utils = require("atlas.ui.shared.utils")
+
 ---@class AtlasHelpKeyItem
 ---@field key string|string[]
 ---@field desc string
@@ -59,6 +61,13 @@ end
 local DEFAULT_INDEX = 100
 local KEY_SEPARATOR = " / "
 local ITEM_MARKER = " ▸ "
+local MAX_COLUMNS = 4
+
+---@param value string
+---@return integer
+local function display_width(value)
+	return vim.fn.strdisplaywidth(value)
+end
 
 ---@param opts AtlasHelpGroupOpts?
 ---@param source string
@@ -276,21 +285,14 @@ local function build_render_items(valid_groups)
 	local render_items = {}
 
 	for i, group in ipairs(valid_groups) do
-		local max_left = 0
-		for _, item in ipairs(group.items) do
-			local left = group_item_left(group, item)
-			if #left > max_left then
-				max_left = #left
-			end
-		end
-
 		table.insert(render_items, { type = "header", text = group.name })
-		for _, item in ipairs(group.items) do
+		for item_index, item in ipairs(group.items) do
 			table.insert(render_items, {
 				type = "item",
 				left = group_item_left(group, item),
 				right = item.desc,
-				max_left = max_left,
+				group_index = i,
+				item_index = item_index,
 			})
 		end
 
@@ -300,6 +302,49 @@ local function build_render_items(valid_groups)
 	end
 
 	return render_items
+end
+
+---@param render_items table[]
+---@param num_cols integer
+---@return table<integer, table<integer, integer>>
+local function column_key_widths(render_items, num_cols)
+	local widths = {}
+	for _, item in ipairs(render_items) do
+		if item.type == "item" then
+			local column = ((item.item_index - 1) % num_cols) + 1
+			widths[item.group_index] = widths[item.group_index] or {}
+			widths[item.group_index][column] = math.max(widths[item.group_index][column] or 0, display_width(item.left))
+		end
+	end
+	return widths
+end
+
+---@param render_items table[]
+---@param max_width integer
+---@return integer num_cols
+---@return integer col_width
+---@return table<integer, table<integer, integer>> key_widths
+local function columns_for(render_items, max_width)
+	for num_cols = MAX_COLUMNS, 2, -1 do
+		local col_width = math.max(1, math.floor(max_width / num_cols))
+		local key_widths = column_key_widths(render_items, num_cols)
+		local fits = true
+		for _, item in ipairs(render_items) do
+			if item.type == "item" then
+				local column = ((item.item_index - 1) % num_cols) + 1
+				local key_width = key_widths[item.group_index][column]
+				local item_width = 2 + key_width + display_width(ITEM_MARKER .. item.right)
+				if item_width > col_width then
+					fits = false
+					break
+				end
+			end
+		end
+		if fits then
+			return num_cols, col_width, key_widths
+		end
+	end
+	return 1, math.max(1, max_width), column_key_widths(render_items, 1)
 end
 
 ---@param highlights table[]
@@ -331,8 +376,8 @@ local function get_layout(bufnr, max_width)
 	local highlights = {}
 	local height = 1
 
-	local num_cols = 4
-	local col_width = math.floor(max_width / num_cols)
+	local render_items = build_render_items(valid_groups)
+	local num_cols, col_width, key_widths = columns_for(render_items, max_width)
 
 	local current_line = ""
 	local line_idx = 1
@@ -355,7 +400,7 @@ local function get_layout(bufnr, max_width)
 		col_idx = 0
 	end
 
-	for _, render_item in ipairs(build_render_items(valid_groups)) do
+	for _, render_item in ipairs(render_items) do
 		if render_item.type == "empty" then
 			flush_line()
 			add_empty_line()
@@ -373,27 +418,39 @@ local function get_layout(bufnr, max_width)
 				flush_line()
 			end
 
+			local column = col_idx + 1
+			local max_left = key_widths[render_item.group_index][column]
+			local content_width = math.max(1, col_width - 2)
+			local marker_width = display_width(ITEM_MARKER)
+			local left_limit = math.max(1, content_width - marker_width - 1)
 			local left_str = render_item.left
-			local right_str = ITEM_MARKER .. render_item.right
-
-			local right_pad = render_item.max_left - #left_str
+			if display_width(left_str) > left_limit then
+				left_str = utils.truncate(left_str, left_limit)
+			end
+			local left_width = display_width(left_str)
+			local aligned_left_width = math.max(left_width, math.min(max_left, left_limit))
+			local right_pad = aligned_left_width - left_width
 			local padded_left = left_str .. string.rep(" ", right_pad)
 
-			local display_str = string.format("%s%s", padded_left, right_str)
-			local pad_len = col_width - #display_str - 2
-			if pad_len < 0 then
-				pad_len = 1
+			local description_width = content_width - aligned_left_width - marker_width
+			local right_str = ""
+			if description_width > 0 then
+				right_str = ITEM_MARKER .. utils.truncate(render_item.right, description_width)
 			end
+			local display_str = padded_left .. right_str
+			local pad_len = math.max(0, content_width - display_width(display_str))
 
 			local start_col = #current_line + 2
 			add_highlight(highlights, "Special", line_idx, start_col, start_col + #left_str)
-			add_highlight(
-				highlights,
-				"Comment",
-				line_idx,
-				start_col + #padded_left,
-				start_col + #padded_left + #right_str
-			)
+			if right_str ~= "" then
+				add_highlight(
+					highlights,
+					"Comment",
+					line_idx,
+					start_col + #padded_left,
+					start_col + #padded_left + #right_str
+				)
+			end
 
 			current_line = current_line .. "  " .. padded_left .. right_str .. string.rep(" ", pad_len)
 			col_idx = col_idx + 1
@@ -476,6 +533,9 @@ function M.show(opts)
 	})
 
 	vim.api.nvim_set_option_value("winhl", "Normal:NormalFloat", { win = win_id })
+	vim.api.nvim_set_option_value("diff", false, { win = win_id })
+	vim.api.nvim_set_option_value("scrollbind", false, { win = win_id })
+	vim.api.nvim_set_option_value("cursorbind", false, { win = win_id })
 
 	state.ui.visible = true
 	state.ui.win_id = win_id
@@ -486,7 +546,7 @@ function M.show(opts)
 	vim.keymap.set("n", "<ESC>", cleanup_ui, { buffer = buf_id, nowait = true, silent = true })
 
 	local ns = vim.api.nvim_create_namespace("atlas_help_autoclose")
-	vim.on_key(function(key)
+	vim.on_key(function(_key)
 		if not state.ui.visible then
 			return
 		end
