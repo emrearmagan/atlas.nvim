@@ -1,3 +1,5 @@
+local utils = require("atlas.ui.shared.utils")
+
 local M = {}
 
 ---@class AtlasTabItem
@@ -60,17 +62,16 @@ function M.render(items, active_tab, width, opts)
 	end
 
 	if vim.api.nvim_strwidth(line) > available then
-		local strcharpart = vim.fn.strcharpart
-		local strchars = vim.fn.strchars
-		local nchars = strchars(line)
-		for i = nchars - 1, 0, -1 do
-			local head = strcharpart(line, 0, i)
-			if vim.api.nvim_strwidth(head) <= available - 1 then
-				line = head .. "…"
-				break
-			end
+		line = utils.truncate(line, available)
+	end
+	local visible_spans = {}
+	for _, span in ipairs(spans) do
+		span.end_col = math.min(span.end_col, #line)
+		if span.start_col < span.end_col then
+			table.insert(visible_spans, span)
 		end
 	end
+	spans = visible_spans
 
 	local lines = { padding .. line }
 	if padding_x > 0 then

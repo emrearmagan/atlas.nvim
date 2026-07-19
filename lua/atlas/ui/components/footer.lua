@@ -249,8 +249,10 @@ function M.render(opts)
 	local right_width = ui_utils.text_width(right_line)
 	local max_left = math.max(0, width - right_width - 2)
 	if ui_utils.text_width(left_line) > max_left then
-		local trimmed = vim.fn.strcharpart(left_line, 0, math.max(0, max_left - 1)) .. ".."
-		left_line = trimmed
+		left_line = utils.truncate(left_line, max_left)
+	end
+	for _, hl in ipairs(left_hls) do
+		hl.end_col = math.min(hl.end_col, #left_line)
 	end
 
 	local gap = width - ui_utils.text_width(left_line) - right_width
@@ -265,7 +267,9 @@ function M.render(opts)
 
 	local highlights = {}
 	for _, hl in ipairs(left_hls) do
-		table.insert(highlights, hl)
+		if hl.start_col < hl.end_col then
+			table.insert(highlights, hl)
+		end
 	end
 	local right_offset = #left_line + gap
 	for _, hl in ipairs(right_hls) do
