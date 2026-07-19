@@ -11,7 +11,7 @@ local COLLAPSE_THRESHOLD = 4
 ---@param actor IssueUser|nil
 ---@return string
 local function actor_name(actor)
-	if type(actor) ~= "table" then
+	if actor == nil then
 		return "Unknown"
 	end
 	if actor.display_name and actor.display_name ~= "" then

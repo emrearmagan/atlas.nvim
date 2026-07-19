@@ -110,7 +110,7 @@ end
 ---@param assignees IssueUser[]
 ---@return string
 local function format_assignees(assignees)
-	if type(assignees) ~= "table" or #assignees == 0 then
+	if #assignees == 0 then
 		return icons.general("user") .. " Unassigned"
 	end
 
@@ -142,7 +142,7 @@ end
 ---@param milestone GitLabCreateIssueMilestone|nil
 ---@return string
 local function format_milestone(milestone)
-	if type(milestone) ~= "table" then
+	if milestone == nil then
 		return "None"
 	end
 	return tostring(milestone.title or "")
@@ -151,7 +151,7 @@ end
 ---@param labels GitLabCreateIssueLabel[]
 ---@return EditorPopupMetaCell
 local function labels_cell(labels)
-	if type(labels) ~= "table" or #labels == 0 then
+	if #labels == 0 then
 		return { text = "None", hl = "AtlasTextMuted" }
 	end
 
@@ -255,7 +255,7 @@ end
 
 ---@param issue_state GitLabCreateIssueState
 local function pick_assignees(issue_state)
-	if type(issue_state.pickers.list_assignees) ~= "function" then
+	if not issue_state.pickers.list_assignees then
 		notify_warn("Assignee picker not available")
 		return
 	end
@@ -277,7 +277,12 @@ local function pick_assignees(issue_state)
 					return tostring(item.id or item.account_id or "")
 				end,
 				format = function(item)
-					return string.format("%s %s (@%s)", icons.general("user"), item.display_name or item.account_id, item.account_id)
+					return string.format(
+						"%s %s (@%s)",
+						icons.general("user"),
+						item.display_name or item.account_id,
+						item.account_id
+					)
 				end,
 				prompt = "Toggle assignees:",
 				on_done = function(selected)
@@ -291,7 +296,7 @@ end
 
 ---@param issue_state GitLabCreateIssueState
 local function pick_labels(issue_state)
-	if type(issue_state.pickers.list_labels) ~= "function" then
+	if not issue_state.pickers.list_labels then
 		notify_warn("Label picker not available")
 		return
 	end
@@ -327,7 +332,7 @@ end
 
 ---@param issue_state GitLabCreateIssueState
 local function pick_milestone(issue_state)
-	if type(issue_state.pickers.list_milestones) ~= "function" then
+	if not issue_state.pickers.list_milestones then
 		notify_warn("Milestone picker not available")
 		return
 	end
@@ -390,7 +395,7 @@ local function submit(issue_state)
 	end
 
 	issue_state.is_submitting = true
-	spinner.start("Creating issue…")
+	spinner.start("Creating issue..")
 
 	local issues_api = require("atlas.issues.providers.gitlab.api.issues")
 	issues_api.create_issue({
@@ -407,7 +412,7 @@ local function submit(issue_state)
 
 			if err then
 				notify_error("Create issue failed: " .. tostring(err))
-				if type(issue_state.on_done) == "function" then
+				if issue_state.on_done then
 					issue_state.on_done(nil, err)
 				end
 				return
@@ -421,7 +426,7 @@ local function submit(issue_state)
 				notify_info("Issue created")
 			end
 
-			if type(issue_state.on_done) == "function" then
+			if issue_state.on_done then
 				issue_state.on_done({
 					url = url,
 					key = result and result.key or nil,

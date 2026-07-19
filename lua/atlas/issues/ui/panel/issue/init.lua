@@ -27,7 +27,7 @@ local function is_loading()
 	end
 	local state = require("atlas.issues.state")
 	local provider = state.provider
-	if provider and provider.panel and type(provider.panel.is_loading) == "function" then
+	if provider and provider.panel and provider.panel.is_loading then
 		return provider.panel.is_loading(issue)
 	end
 	return false
@@ -113,14 +113,14 @@ local function switch_tab_keymaps(old_key, new_key)
 
 	if old_key then
 		local old_mod = get_tab_module(old_key)
-		if old_mod and type(old_mod.deactivate) == "function" and old_key ~= new_key then
+		if old_mod and old_mod.deactivate and old_key ~= new_key then
 			old_mod.deactivate(buf)
 		end
 	end
 
 	if new_key then
 		local new_mod = get_tab_module(new_key)
-		if new_mod and type(new_mod.activate) == "function" and old_key ~= new_key then
+		if new_mod and new_mod.activate and old_key ~= new_key then
 			new_mod.activate(buf, refresh_panel)
 		end
 	end
@@ -147,7 +147,7 @@ end
 local function dispatch_provider_fetches(issue, opts)
 	local state = require("atlas.issues.state")
 	local provider = state.provider
-	if provider and provider.panel and type(provider.panel.fetches) == "function" then
+	if provider and provider.panel and provider.panel.fetches then
 		provider.panel.fetches(
 			issue,
 			make_refresh_callback(issue),
@@ -160,7 +160,7 @@ end
 ---@param opts { force_refresh: boolean|nil }|nil
 local function notify_tab(issue, opts)
 	local tab_mod = get_tab_module(panel_state.current_tab)
-	if tab_mod and type(tab_mod.on_select) == "function" then
+	if tab_mod and tab_mod.on_select then
 		tab_mod.on_select(issue, make_refresh_callback(issue), opts)
 	end
 end
@@ -306,7 +306,7 @@ function M.activate() end
 
 function M.deactivate()
 	local tab_mod = get_tab_module(panel_state.current_tab)
-	if tab_mod and type(tab_mod.deactivate) == "function" then
+	if tab_mod and tab_mod.deactivate then
 		tab_mod.deactivate()
 	end
 end

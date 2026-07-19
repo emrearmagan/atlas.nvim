@@ -39,7 +39,7 @@ function M.on_select(issue, refresh, opts)
 	opts = opts or {}
 
 	local provider = get_provider()
-	if not provider or type(provider.fetch_conversation) ~= "function" then
+	if not provider or not provider.fetch_conversation then
 		state.comments = {}
 		state.activity = {}
 		refresh()
@@ -57,10 +57,10 @@ function M.on_select(issue, refresh, opts)
 			state.activity = err
 			footer.notify("error", string.format("Failed to load conversation for %s", key))
 		else
-			result = type(result) == "table" and result or {}
-			state.comments = type(result.comments) == "table" and result.comments or {}
-			state.activity = type(result.events) == "table" and result.events or {}
-			state.reaction_options = type(result.reaction_options) == "table" and result.reaction_options or {}
+			result = result or {}
+			state.comments = result.comments or {}
+			state.activity = result.events or {}
+			state.reaction_options = result.reaction_options or {}
 			footer.notify("success", string.format("Conversation loaded for %s", key), 1200)
 		end
 		refresh()

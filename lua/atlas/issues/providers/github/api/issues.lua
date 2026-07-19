@@ -108,7 +108,8 @@ function M.search_issues(search, on_done, opts)
 	query = issue_search_query(query)
 
 	local with_relationships = relationships_enabled(opts)
-	local cache_key = string.format("github_issues:search:v3:%s:%d:relationships:%s", query, limit, tostring(with_relationships))
+	local cache_key =
+		string.format("github_issues:search:v3:%s:%d:relationships:%s", query, limit, tostring(with_relationships))
 	if not opts.force_load then
 		local cached, ok = cli.get_cache(cache_key)
 		if ok then
@@ -162,7 +163,8 @@ function M.get_issue(key, on_done, opts)
 	end
 
 	local with_relationships = relationships_enabled(opts)
-	local cache_key = string.format("github_issues:get:v2:%s#%d:relationships:%s", slug, number, tostring(with_relationships))
+	local cache_key =
+		string.format("github_issues:get:v2:%s#%d:relationships:%s", slug, number, tostring(with_relationships))
 	if not opts.force_load then
 		local cached, ok = cli.get_mem(cache_key)
 		if ok then
@@ -197,8 +199,8 @@ function M.get_issue(key, on_done, opts)
 		end
 
 		local raw = type(result.data) == "table"
-			and type(result.data.repository) == "table"
-			and result.data.repository.issue
+				and type(result.data.repository) == "table"
+				and result.data.repository.issue
 			or nil
 		local issue = normalizer.to_issue(type(raw) == "table" and raw or {}, slug)
 		if issue then
@@ -253,8 +255,8 @@ local function edit_issue_diff(key, diff, add_flag, remove_flag, on_done, ctx)
 		return nil
 	end
 
-	local adds = type(diff) == "table" and diff.add or {}
-	local removes = type(diff) == "table" and diff.remove or {}
+	local adds = diff.add or {}
+	local removes = diff.remove or {}
 	if #adds == 0 and #removes == 0 then
 		on_done(true, nil)
 		return nil

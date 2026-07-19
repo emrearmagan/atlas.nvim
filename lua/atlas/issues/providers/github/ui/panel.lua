@@ -110,7 +110,7 @@ end
 ---@param milestone table|nil
 ---@return string
 local function milestone_display(milestone)
-	if type(milestone) ~= "table" then
+	if milestone == nil then
 		return ""
 	end
 
@@ -147,9 +147,9 @@ end
 ---@param issue Issue
 ---@return IssuesPanelHeaderRow[]
 function M.header_rows(issue)
-	local raw = type(issue._raw) == "table" and issue._raw or {}
+	local raw = issue._raw or {}
 
-	local reporter_name = type(issue.reporter) == "table" and tostring(issue.reporter.display_name or "") or ""
+	local reporter_name = issue.reporter and tostring(issue.reporter.display_name or "") or ""
 	if reporter_name == "" then
 		reporter_name = "Unknown"
 	end
@@ -168,7 +168,7 @@ function M.header_rows(issue)
 
 	local right_cells = {}
 	local parent = state.parent or issue.parent
-	if type(parent) == "table" and parent.key then
+	if parent and parent.key then
 		local pkey = tostring(parent.key)
 		local title = tostring(parent.summary or "")
 		local text = title ~= "" and string.format("%s %s", pkey, title) or pkey
@@ -253,7 +253,7 @@ function M.chips(issue)
 		return chips
 	end
 
-	local raw = type(issue._raw) == "table" and issue._raw or {}
+	local raw = issue._raw or {}
 	local labels = state.labels or raw.labels or {}
 	for _, label in ipairs(labels) do
 		local name = tostring(label.name or "")

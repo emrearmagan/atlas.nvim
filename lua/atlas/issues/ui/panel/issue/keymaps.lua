@@ -9,7 +9,7 @@ local actions = require("atlas.issues.actions")
 ---@return IssuesPanelTabModule|nil
 local function current_tab_mod()
 	local provider = require("atlas.issues.state").provider
-	if provider and provider.panel and type(provider.panel.tabs) == "function" then
+	if provider and provider.panel and provider.panel.tabs then
 		for _, tab in ipairs(provider.panel.tabs() or {}) do
 			if tab.key == panel_state.current_tab then
 				return tab.mod
@@ -132,31 +132,34 @@ function M.register(buf)
 		})
 	)
 
-	utils.insert_if(items, item("ui.toggle_subscription", {
-		desc = "Toggle subscription",
-		opts = { nowait = true, silent = true },
-		callback = function()
-			local issue = panel_state.current_issue
-			if issue == nil then
-				return
-			end
-			local provider = require("atlas.issues.state").provider
-			if provider == nil or type(provider.toggle_subscription) ~= "function" then
-				require("atlas.ui.components.footer").notify("warn", "Provider does not support subscription")
-				return
-			end
-			local footer = require("atlas.ui.components.footer")
-			footer.notify("loading", issue.is_subscribed and "Unsubscribing..." or "Subscribing...")
-			provider.toggle_subscription(issue, function(is_subscribed, err)
-				if err then
-					footer.notify("error", tostring(err))
+	utils.insert_if(
+		items,
+		item("ui.toggle_subscription", {
+			desc = "Toggle subscription",
+			opts = { nowait = true, silent = true },
+			callback = function()
+				local issue = panel_state.current_issue
+				if issue == nil then
 					return
 				end
-				footer.notify("success", is_subscribed and "Subscribed" or "Unsubscribed", 1200)
-				require("atlas.issues.ui.panel").render()
-			end)
-		end,
-	}))
+				local provider = require("atlas.issues.state").provider
+				if provider == nil or not provider.toggle_subscription then
+					require("atlas.ui.components.footer").notify("warn", "Provider does not support subscription")
+					return
+				end
+				local footer = require("atlas.ui.components.footer")
+				footer.notify("loading", issue.is_subscribed and "Unsubscribing..." or "Subscribing...")
+				provider.toggle_subscription(issue, function(is_subscribed, err)
+					if err then
+						footer.notify("error", tostring(err))
+						return
+					end
+					footer.notify("success", is_subscribed and "Subscribed" or "Unsubscribed", 1200)
+					require("atlas.issues.ui.panel").render()
+				end)
+			end,
+		})
+	)
 
 	M.remove(buf)
 	help.register("Panel", items, { index = 211, buffer = buf })
@@ -263,7 +266,7 @@ function M.open_current_line()
 	end
 
 	local tab_mod = current_tab_mod()
-	if tab_mod and type(tab_mod.on_enter) == "function" then
+	if tab_mod and tab_mod.on_enter then
 		tab_mod.on_enter(issue, entry)
 	end
 end

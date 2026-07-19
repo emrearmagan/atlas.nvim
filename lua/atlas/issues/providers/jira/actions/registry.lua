@@ -12,7 +12,7 @@ local config = require("atlas.issues.providers.jira.api.config")
 ---@param ctx table
 ---@return boolean
 local function has_issue_key(ctx)
-	local issue = type(ctx) == "table" and ctx.issue or nil
+	local issue = ctx.issue
 	if type(issue) ~= "table" then
 		return false
 	end
@@ -550,13 +550,10 @@ local ACTIONS = {
 
 								footer.notify("success", string.format("Created %s", result.key), 2000)
 								submit_done(true, nil)
-								done(
-									{
-										changed_issue_key = result.key,
-										message = string.format("Created %s", result.key),
-									},
-									nil
-								)
+								done({
+									changed_issue_key = result.key,
+									message = string.format("Created %s", result.key),
+								}, nil)
 								return
 							end
 

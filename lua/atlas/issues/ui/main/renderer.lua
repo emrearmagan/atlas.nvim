@@ -81,8 +81,8 @@ local function issue_to_row(issue, is_child)
 		row_data = {
 			icon = "",
 			name = (issue.key or "") .. " " .. (issue.summary or ""),
-			assignee = (type(issue.assignee) == "table" and issue.assignee.display_name) or "Unassigned",
-			reporter = (type(issue.reporter) == "table" and issue.reporter.display_name) or "Unknown",
+			assignee = (issue.assignee and issue.assignee.display_name) or "Unassigned",
+			reporter = (issue.reporter and issue.reporter.display_name) or "Unknown",
 			status = string.format(" %s ", issue.status or ""),
 		}
 	end
@@ -126,8 +126,7 @@ end
 ---@return boolean
 local function should_show_indicator(issue_groups)
 	for _, group in ipairs(issue_groups or {}) do
-		local children = type(group) == "table" and group.children or nil
-		if type(children) == "table" and #children > 0 then
+		if #(group.children or {}) > 0 then
 			return true
 		end
 	end
@@ -188,8 +187,8 @@ local function render_issue_table(opts, issue_groups)
 			show_indicator = show_tree_indicator,
 			leaf_prefix = "",
 			is_expanded = function(row)
-				local issue = type(row) == "table" and row._issue or nil
-				local issue_key = type(issue) == "table" and tostring(issue.key or "") or ""
+				local issue = row._issue
+				local issue_key = issue and tostring(issue.key or "") or ""
 				if issue_key == "" then
 					return true
 				end
@@ -198,31 +197,6 @@ local function render_issue_table(opts, issue_groups)
 		},
 		cell_hl = cell_hl,
 	})
-end
-
----@param issue Issue
----@return string
-local function issue_project_label(issue)
-	local project = type(issue) == "table" and issue.project or nil
-	if type(project) == "table" then
-		local key = tostring(project.key or "")
-		if key ~= "" then
-			return key
-		end
-
-		local name = tostring(project.name or "")
-		if name ~= "" then
-			return name
-		end
-	end
-
-	local key = tostring(type(issue) == "table" and issue.key or "")
-	local prefix = key:match("^([A-Z][A-Z0-9]+)%-%d+$") or key:match("^([^%-]+)%-")
-	if prefix and prefix ~= "" then
-		return prefix
-	end
-
-	return "Issues"
 end
 
 ---@return table[]
@@ -255,18 +229,18 @@ end
 ---@return string
 local function issue_meta_text(issue)
 	local parts = {}
-	local type_name = type(issue.type) == "table" and tostring(issue.type.name or "") or ""
+	local type_name = issue.type and tostring(issue.type.name or "") or ""
 	if type_name ~= "" then
 		table.insert(parts, type_name)
 	end
-	if type(issue.priority) == "string" and issue.priority ~= "" then
+	if issue.priority and issue.priority ~= "" then
 		table.insert(parts, issue.priority)
 	end
 	local due = utils.format_date(issue.duedate)
 	if due ~= "" then
 		table.insert(parts, string.format("%s %s", icons.general("created"), due))
 	end
-	if type(issue.story_points) == "number" then
+	if issue.story_points ~= nil then
 		table.insert(parts, string.format("%s pts", tostring(issue.story_points)))
 	end
 	if #parts == 0 then
@@ -338,8 +312,8 @@ end
 local function generic_issue_popup_content(issue)
 	local summary = issue.summary or ""
 	local title = string.format(" %s: %s", issue.key or "", summary)
-	local parent_key = type(issue.parent) == "table" and issue.parent.key or nil
-	local parent_summary = type(issue.parent) == "table" and issue.parent.summary or nil
+	local parent_key = issue.parent and issue.parent.key or nil
+	local parent_summary = issue.parent and issue.parent.summary or nil
 
 	local lines = { title, "" }
 	local highlights = {
@@ -370,30 +344,30 @@ local function generic_issue_popup_content(issue)
 		end
 	end
 
-	local issue_type_name = type(issue.type) == "table" and issue.type.name or nil
+	local issue_type_name = issue.type and issue.type.name or nil
 	local _, issue_type_hl = icons.issues_type(issue_type_name)
 	local _, priority_hl = icons.issues_priority(issue.priority)
 	push("Type", issue_type_name, issue_type_hl)
 	push("Status", issue.status, helper.status_hl(issue.status_id))
 	push("Priority", issue.priority, priority_hl)
 
-	local assignee_name = type(issue.assignee) == "table" and issue.assignee.display_name or nil
+	local assignee_name = issue.assignee and issue.assignee.display_name or nil
 	push("Assignee", assignee_name or "Unassigned", helper.person_hl(assignee_name))
 
-	local reporter_name = type(issue.reporter) == "table" and issue.reporter.display_name or nil
+	local reporter_name = issue.reporter and issue.reporter.display_name or nil
 	if reporter_name then
 		push("Reporter", reporter_name, helper.person_hl(reporter_name))
 	end
 
 	push("Due", issue.duedate, "AtlasTextMuted")
 
-	if type(issue.story_points) == "number" then
+	if issue.story_points ~= nil then
 		push("Points", tostring(issue.story_points), "AtlasTextMuted")
 	end
 
-	if type(parent_key) == "string" and parent_key ~= "" then
+	if parent_key and parent_key ~= "" then
 		push("Parent", parent_key, helper.issue_hl(parent_key))
-		if type(parent_summary) == "string" and parent_summary ~= "" then
+		if parent_summary and parent_summary ~= "" then
 			local row = #lines
 			table.insert(lines, string.format("           %s", parent_summary))
 			table.insert(highlights, { row = row, col = 11, end_col = -1, hl_group = "Comment" })

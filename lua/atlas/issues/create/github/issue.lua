@@ -90,7 +90,7 @@ end
 ---@param assignees IssueUser[]
 ---@return string
 local function format_assignees(assignees)
-	if type(assignees) ~= "table" or #assignees == 0 then
+	if #assignees == 0 then
 		return icons.general("user") .. " Unassigned"
 	end
 
@@ -105,7 +105,7 @@ end
 ---@param hex string|nil
 ---@return string
 local function label_hl(hex)
-	if type(hex) ~= "string" or not hex:match("^%x%x%x%x%x%x$") then
+	if hex == nil or not hex:match("^%x%x%x%x%x%x$") then
 		return "AtlasTextMuted"
 	end
 
@@ -117,7 +117,7 @@ end
 ---@param milestone CreateIssueMilestone|nil
 ---@return string
 local function format_milestone(milestone)
-	if type(milestone) ~= "table" then
+	if milestone == nil then
 		return "None"
 	end
 
@@ -127,7 +127,7 @@ end
 ---@param labels CreateIssueLabel[]
 ---@return EditorPopupMetaCell
 local function labels_cell(labels)
-	if type(labels) ~= "table" or #labels == 0 then
+	if #labels == 0 then
 		return { text = "None", hl = "AtlasTextMuted" }
 	end
 
@@ -232,12 +232,12 @@ end
 
 ---@param issue_state CreateIssueState
 local function pick_assignees(issue_state)
-	if type(issue_state.pickers.list_assignees) ~= "function" then
+	if not issue_state.pickers.list_assignees then
 		notify_warn("Assignee picker is not available")
 		return
 	end
 
-	spinner.start("Loading assignees…")
+	spinner.start("Loading assignees..")
 	issue_state.pickers.list_assignees(function(items, err)
 		vim.schedule(function()
 			spinner.stop()
@@ -260,7 +260,8 @@ local function pick_assignees(issue_state)
 					return string.format(
 						"@%s%s",
 						item.account_id,
-						item.display_name and item.display_name ~= item.account_id and (" — " .. item.display_name) or ""
+						item.display_name and item.display_name ~= item.account_id and (" — " .. item.display_name)
+							or ""
 					)
 				end,
 				prompt = "Toggle assignees:",
@@ -275,12 +276,12 @@ end
 
 ---@param issue_state CreateIssueState
 local function pick_labels(issue_state)
-	if type(issue_state.pickers.list_labels) ~= "function" then
+	if not issue_state.pickers.list_labels then
 		notify_warn("Label picker is not available")
 		return
 	end
 
-	spinner.start("Loading labels…")
+	spinner.start("Loading labels..")
 	issue_state.pickers.list_labels(function(items, err)
 		vim.schedule(function()
 			spinner.stop()
@@ -314,12 +315,12 @@ end
 
 ---@param issue_state CreateIssueState
 local function pick_milestone(issue_state)
-	if type(issue_state.pickers.list_milestones) ~= "function" then
+	if not issue_state.pickers.list_milestones then
 		notify_warn("Milestone picker is not available")
 		return
 	end
 
-	spinner.start("Loading milestones…")
+	spinner.start("Loading milestones..")
 	issue_state.pickers.list_milestones(function(items, err)
 		vim.schedule(function()
 			spinner.stop()
@@ -519,7 +520,7 @@ local function submit(issue_state)
 	end
 
 	issue_state.is_submitting = true
-	spinner.start("Creating issue…")
+	spinner.start("Creating issue..")
 
 	local issues_api = require("atlas.issues.providers.github.api.issues")
 	issues_api.create_issue({
@@ -536,7 +537,7 @@ local function submit(issue_state)
 
 			if err then
 				notify_error("Create issue failed: " .. tostring(err))
-				if type(issue_state.on_done) == "function" then
+				if issue_state.on_done then
 					issue_state.on_done(nil, err)
 				end
 				return
@@ -550,7 +551,7 @@ local function submit(issue_state)
 				notify_info("Issue created")
 			end
 
-			if type(issue_state.on_done) == "function" then
+			if issue_state.on_done then
 				issue_state.on_done(result, nil)
 			end
 

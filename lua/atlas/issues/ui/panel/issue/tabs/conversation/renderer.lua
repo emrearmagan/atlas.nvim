@@ -19,7 +19,7 @@ local REPLY_INDENT = "    "
 
 ---@param author IssueUser|nil
 local function author_name(author)
-	if type(author) ~= "table" then
+	if author == nil then
 		return "Unknown"
 	end
 	if author.display_name and author.display_name ~= "" then
@@ -44,7 +44,7 @@ end
 ---@param reactions table|nil
 ---@return string text, table[] spans
 local function format_reactions(reactions)
-	if type(reactions) ~= "table" then
+	if reactions == nil then
 		return "", {}
 	end
 	local emoji_by_key, order = {}, {}

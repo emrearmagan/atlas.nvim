@@ -60,13 +60,13 @@ end
 ---@return table[]|nil
 local function content_hl(item, row, row_index)
 	local entry = item.line_map and item.line_map.activity_entry
-	if not entry or type(entry.body_hl) ~= "function" then
+	if not entry or not entry.body_hl then
 		return nil
 	end
 	return entry.body_hl(row, row_index)
 end
 
----@param issue Issue
+---@param _issue Issue
 ---@param refresh fun()
 ---@param opts { force_refresh: boolean|nil }|nil
 function M.on_select(issue, refresh, opts)
@@ -106,7 +106,7 @@ end
 ---@param issue Issue
 ---@param width integer
 ---@return string[], table[], table<integer, table>|nil
-function M.render(issue, width)
+function M.render(_issue, width)
 	local lines = {}
 	local spans = {}
 

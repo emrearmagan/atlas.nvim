@@ -21,7 +21,7 @@ end
 ---@param is_child boolean
 ---@return table
 function M.format_row(issue, is_child)
-	local issue_type_name = type(issue.type) == "table" and issue.type.name or nil
+	local issue_type_name = issue.type and issue.type.name or nil
 	local t_icon = type_icon(issue_type_name)
 	local icon = is_child and "" or t_icon
 	local title = is_child and (t_icon .. " " .. issue.key .. " " .. issue.summary)
@@ -51,9 +51,13 @@ function M.format_row(issue, is_child)
 		assignee = string.format(
 			"%s %s",
 			icons.general("user"),
-			utils.shorten_name((type(issue.assignee) == "table" and issue.assignee.display_name) or "Unassigned", 20)
+			utils.shorten_name((issue.assignee and issue.assignee.display_name) or "Unassigned", 20)
 		),
-		reporter = string.format("%s %s", icons.general("user"), utils.shorten_name((type(issue.reporter) == "table" and issue.reporter.display_name) or "Unknown", 20)),
+		reporter = string.format(
+			"%s %s",
+			icons.general("user"),
+			utils.shorten_name((issue.reporter and issue.reporter.display_name) or "Unknown", 20)
+		),
 		status = (function()
 			local issue_key = tostring(issue.key or "")
 			local is_reloading = issue_key ~= "" and (tonumber((state.reloading_issue_keys or {})[issue_key]) or 0) > 0
@@ -71,13 +75,16 @@ end
 ---@return table[]|nil
 function M.cell_hl(row, col, ctx)
 	local issue = row._issue
+	if issue == nil then
+		return nil
+	end
 
 	if col.key == "name" then
 		local spans_for_cell = {}
 		local is_child = (tonumber(row._tv2_depth) or 0) > 0
-		local issue_type_name = type(issue) == "table" and type(issue.type) == "table" and issue.type.name or nil
+		local issue_type_name = issue.type and issue.type.name or nil
 
-		if is_child and type(issue) == "table" then
+		if is_child then
 			local issue_icon, issue_icon_hl = type_icon(issue_type_name)
 			local is, ie = ctx.text:find(issue_icon, 1, true)
 			if is and ie then
@@ -89,7 +96,7 @@ function M.cell_hl(row, col, ctx)
 			end
 		end
 
-		if type(issue) == "table" and type(issue.key) == "string" and issue.key ~= "" then
+		if issue.key ~= "" then
 			local s, e = ctx.text:find(issue.key, 1, true)
 			if s and e then
 				local title_start = e + 2
@@ -109,7 +116,7 @@ function M.cell_hl(row, col, ctx)
 			end
 		end
 
-		if type(issue) == "table" and type(issue.priority) == "string" and issue.priority ~= "" then
+		if issue.priority and issue.priority ~= "" then
 			local p_icon, p_icon_hl = priority_icon(issue.priority)
 			local ps, pe = ctx.text:find(p_icon, 1, true)
 			if ps and pe then
@@ -125,17 +132,16 @@ function M.cell_hl(row, col, ctx)
 	end
 
 	if col.key == "status" then
-		local issue_key = type(issue) == "table" and tostring(issue.key or "") or ""
+		local issue_key = tostring(issue.key or "")
 		local is_reloading = issue_key ~= "" and (tonumber((state.reloading_issue_keys or {})[issue_key]) or 0) > 0
-		local hl_group = is_reloading and "AtlasTextMuted"
-			or helper.status_hl(type(issue) == "table" and issue.status_id or nil)
+		local hl_group = is_reloading and "AtlasTextMuted" or helper.status_hl(issue.status_id)
 		return {
 			{ start_col = 0, end_col = #ctx.padded, hl_group = hl_group },
 		}
 	end
 
 	if col.key == "icon" then
-		local issue_type_name = type(issue) == "table" and type(issue.type) == "table" and issue.type.name or nil
+		local issue_type_name = issue.type and issue.type.name or nil
 		local t_icon, t_icon_hl = type_icon(issue_type_name)
 		if t_icon == "" then
 			return nil
@@ -150,10 +156,7 @@ function M.cell_hl(row, col, ctx)
 	end
 
 	if col.key == "assignee" then
-		local assignee_name = nil
-		if type(issue) == "table" and type(issue.assignee) == "table" then
-			assignee_name = issue.assignee.display_name
-		end
+		local assignee_name = issue.assignee and issue.assignee.display_name or nil
 		return {
 			{ start_col = 0, end_col = #ctx.padded, hl_group = helper.person_hl(assignee_name) },
 		}
@@ -164,9 +167,7 @@ function M.cell_hl(row, col, ctx)
 			{
 				start_col = 0,
 				end_col = #ctx.padded,
-				hl_group = helper.person_hl(
-					type(issue) == "table" and type(issue.reporter) == "table" and issue.reporter.display_name or nil
-				),
+				hl_group = helper.person_hl(issue.reporter and issue.reporter.display_name or nil),
 			},
 		}
 	end
