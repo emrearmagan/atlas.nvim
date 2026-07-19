@@ -62,7 +62,7 @@ end
 
 ---@param pr PullRequest
 ---@return PullsPanelHeaderRow[]
-function M.header_rows(pr) ---@diagnostic disable-line: unused-local
+function M.header_rows(_pr)
 	local spinner = require("atlas.ui.components.spinner")
 
 	if state.header_loading and state.header_extras == nil then
@@ -223,7 +223,7 @@ function M.fetches(pr, refresh, opts)
 		track_panel(pullrequests.get_pr(owner, repo, pr.id, function(fresh, err)
 			state.header_loading = false
 			if not err and type(fresh) == "table" then
-				local raw = fresh._raw or fresh
+				local raw = fresh._raw
 				state.header_extras = {
 					assignees = raw.assignees,
 					labels = raw.labels,
@@ -252,7 +252,7 @@ end
 ---@param pr PullRequest
 ---@param active_tab string|nil
 ---@return boolean
-function M.is_loading(pr, active_tab) ---@diagnostic disable-line: unused-local
+function M.is_loading(_pr, active_tab)
 	local overview_state = require("atlas.pulls.ui.panel.pr.tabs.overview.state")
 	local conversation_state = require("atlas.pulls.ui.panel.pr.tabs.conversation.state")
 	local comments_state = require("atlas.pulls.ui.panel.pr.tabs.review.state")

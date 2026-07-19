@@ -111,7 +111,7 @@ local function pr_from_target(target)
 		workspace = owner,
 		repo = repo,
 		repo_full_name = full_name,
-		_raw = target.provider == "gitlab" and { project_path = target.project_path, iid = number } or nil,
+		_raw = target.provider == "gitlab" and { project_path = target.project_path, iid = number } or {},
 	}
 end
 

@@ -7,7 +7,7 @@ local helper = require("atlas.pulls.ui.main.helper")
 ---@param pr PullRequest
 ---@return string[], table[]
 function M.content(pr)
-	local raw = type(pr._raw) == "table" and pr._raw or {}
+	local raw = pr._raw
 	local id = tostring(pr.id or "")
 	local title = tostring(pr.title or "")
 	local author_name = tostring((pr.author and pr.author.name) or "Unknown")

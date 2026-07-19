@@ -26,7 +26,7 @@ local function collect_logins(context)
 		end
 	end
 
-	if pr and type(pr._raw) == "table" then
+	if pr then
 		local raw_assignees = type(pr._raw.assignees) == "table" and pr._raw.assignees or {}
 		local nodes = type(raw_assignees.nodes) == "table" and raw_assignees.nodes or {}
 		for _, node in ipairs(nodes) do

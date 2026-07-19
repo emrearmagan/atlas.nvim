@@ -66,6 +66,8 @@ end
 ---@param raw table
 ---@return PullRequest
 function M.to_pull_request(raw)
+	-- GitHub GraphQL calls this `id`; REST calls the same value `node_id`.
+	raw.node_id = raw.node_id or (type(raw.id) == "string" and raw.id or nil)
 	local author_login = ""
 	local author_name = ""
 	local author_id = ""

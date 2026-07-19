@@ -7,18 +7,16 @@ local mr_api = require("atlas.pulls.providers.gitlab.api.mergerequests")
 local users_api = require("atlas.pulls.providers.gitlab.api.users")
 local service = require("atlas.pulls.providers.gitlab.api.service")
 
----@param ctx table
+---@param ctx GitLabPullsActionContext
 ---@return boolean
 local function has_pr(ctx)
-	return type(ctx) == "table" and type(ctx.pr) == "table"
+	return ctx.pr ~= nil
 end
 
 ---@param pr PullRequest
 ---@return string
 local function project_path(pr)
-	local raw = type(pr._raw) == "table" and pr._raw or {}
-	local path = tostring(raw.project_path or pr.repo_full_name or "")
-	return path
+	return pr.repo_full_name
 end
 
 ---@param pr PullRequest
@@ -279,7 +277,7 @@ local ACTIONS = {
 					return
 				end
 
-				local raw = pr._raw or {}
+				local raw = pr._raw
 				local original = {}
 				local original_set = {}
 				for _, r in ipairs(raw.reviewers or {}) do
@@ -379,7 +377,7 @@ local ACTIONS = {
 					return
 				end
 
-				local raw = pr._raw or {}
+				local raw = pr._raw
 				local original = {}
 				local original_set = {}
 				for _, a in ipairs(raw.assignees or {}) do
@@ -533,8 +531,7 @@ local ACTIONS = {
 		run = function(ctx, done)
 			local pr = ctx.pr
 			local path = project_path(pr)
-			local raw = type(pr._raw) == "table" and pr._raw or {}
-			local iid = tonumber(raw.iid or pr.id)
+			local iid = tonumber(pr.id)
 			if iid == nil then
 				done(nil, "Invalid MR identifier")
 				return

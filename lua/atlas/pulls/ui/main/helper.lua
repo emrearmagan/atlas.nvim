@@ -39,7 +39,7 @@ end
 ---@param name string|nil
 ---@return string
 function M.author_hl(name)
-	if type(name) ~= "string" then
+	if name == nil then
 		return "AtlasTextMutedItalic"
 	end
 	local lower = vim.trim(name):lower()
@@ -52,7 +52,7 @@ end
 ---@param repo string|nil
 ---@return string
 function M.repo_hl(repo)
-	if type(repo) ~= "string" then
+	if repo == nil then
 		return "AtlasTextMutedItalic"
 	end
 	local lower = vim.trim(repo):lower()

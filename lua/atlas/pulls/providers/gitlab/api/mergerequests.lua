@@ -144,9 +144,8 @@ end
 ---@return { cancel: fun() }|nil
 function M.get_mr(pr, opts, on_done)
 	opts = opts or {}
-	local raw = type(pr._raw) == "table" and pr._raw or {}
-	local path = tostring(raw.project_path or pr.repo_full_name or "")
-	local iid = tonumber(raw.iid or pr.id)
+	local path = pr.repo_full_name
+	local iid = tonumber(pr.id)
 	if path == "" or iid == nil then
 		on_done(nil, "Invalid MR identifier")
 		return nil
@@ -204,10 +203,7 @@ end
 ---@param pr PullRequest
 ---@return string project_path, integer|nil iid
 local function project_iid(pr)
-	local raw = type(pr._raw) == "table" and pr._raw or {}
-	local path = tostring(raw.project_path or pr.repo_full_name or "")
-	local iid = tonumber(raw.iid or pr.id)
-	return path, iid
+	return pr.repo_full_name, tonumber(pr.id)
 end
 
 ---@param pr PullRequest
@@ -515,7 +511,7 @@ function M.create_mr(opts, on_done)
 			return
 		end
 		local mr = mapper.to_pull_request(result)
-		local iid = (mr and mr._raw and mr._raw.iid) or tonumber(result.iid)
+		local iid = (mr and tonumber(mr.id)) or tonumber(result.iid)
 		on_done({
 			iid = iid,
 			id = iid,
@@ -536,9 +532,8 @@ end
 ---@return { cancel: fun() }|nil
 function M.get_reviewer_states(pr, opts, on_done)
 	opts = opts or {}
-	local raw = type(pr._raw) == "table" and pr._raw or {}
-	local path = tostring(raw.project_path or pr.repo_full_name or "")
-	local iid = tonumber(raw.iid or pr.id)
+	local path = pr.repo_full_name
+	local iid = tonumber(pr.id)
 	if path == "" or iid == nil then
 		on_done(nil, "Invalid MR identifier")
 		return nil
@@ -604,7 +599,7 @@ function M.get_reviewers(pr, opts, on_done)
 		end)
 	end
 
-	local cached = type(pr._raw) == "table" and pr._raw or {}
+	local cached = pr._raw
 	if opts.force_refresh ~= true and type(cached.reviewers) == "table" then
 		vim.schedule(function()
 			build(cached)
@@ -617,7 +612,7 @@ function M.get_reviewers(pr, opts, on_done)
 			on_done(nil, err)
 			return
 		end
-		build(type(mr._raw) == "table" and mr._raw or {})
+		build(mr._raw)
 	end)
 end
 

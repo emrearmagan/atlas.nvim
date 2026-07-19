@@ -512,8 +512,8 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.update_labels(slug, number, diff, on_done)
-	local adds = type(diff) == "table" and diff.add or {}
-	local removes = type(diff) == "table" and diff.remove or {}
+	local adds = diff.add or {}
+	local removes = diff.remove or {}
 	if #adds == 0 and #removes == 0 then
 		on_done(true, nil)
 		return nil

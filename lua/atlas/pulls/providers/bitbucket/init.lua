@@ -176,7 +176,7 @@ end
 ---@return { cancel: fun() }|nil
 function M.fetch_repo_branches(repo, opts, on_done)
 	local repositories_api = require("atlas.pulls.providers.bitbucket.api.repositories")
-	local raw = type(repo._raw) == "table" and repo._raw or {}
+	local raw = repo._raw or {}
 	local links = type(raw.links) == "table" and raw.links or {}
 	local branches = type(links.branches) == "table" and links.branches or {}
 	local branches_url = tostring(branches.href or "")
@@ -189,7 +189,7 @@ end
 ---@return { cancel: fun() }|nil
 function M.fetch_repo_tags(repo, opts, on_done)
 	local repositories_api = require("atlas.pulls.providers.bitbucket.api.repositories")
-	local raw = type(repo._raw) == "table" and repo._raw or {}
+	local raw = repo._raw or {}
 	local links = type(raw.links) == "table" and raw.links or {}
 	local tags = type(links.tags) == "table" and links.tags or {}
 	local tags_url = tostring(tags.href or "")
@@ -467,7 +467,6 @@ function M.fetch_comments(pr, opts, on_done)
 	local handles = {}
 	local cancelled = false
 	local comments_result, tasks_result, diff_result
-	local first_err
 
 	local function finish()
 		if cancelled then
@@ -493,7 +492,6 @@ function M.fetch_comments(pr, opts, on_done)
 
 	local h1 = comments_api.fetch_comments(pr, opts, function(cs, err)
 		if err then
-			comments_err = err
 			comments_result = {}
 		else
 			comments_result = cs or {}
@@ -524,7 +522,6 @@ function M.fetch_comments(pr, opts, on_done)
 
 	-- Bitbucket does not include hunks in its comments API, so fetch the diff to attach them.
 	local h3 = pr_api.fetch_diff(pr, { force_refresh = opts.force_refresh == true }, function(files, err)
-		first_err = first_err or err
 		diff_result = err and {} or (files or {})
 		finish()
 	end)

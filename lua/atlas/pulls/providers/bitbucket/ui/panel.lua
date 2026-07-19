@@ -36,7 +36,7 @@ end
 ---@param pr PullRequest
 ---@return PullsPanelHeaderRow[]
 function M.header_rows(pr)
-	local raw = pr._raw or {}
+	local raw = pr._raw
 	local rows = {}
 
 	if raw.close_source_branch ~= nil then
@@ -117,7 +117,7 @@ function M.fetches(pr, refresh)
 	overview_state.builds = "loading"
 
 	local provider = require("atlas.pulls.state").provider
-	if provider and type(provider.fetch_builds) == "function" then
+	if provider and provider.fetch_builds then
 		track_panel(provider.fetch_builds(pr, function(builds, err)
 			overview_state.builds = err and err or (builds or {})
 			refresh()
@@ -126,7 +126,7 @@ function M.fetches(pr, refresh)
 
 	local files_state = require("atlas.pulls.ui.panel.pr.tabs.files.state")
 	files_state.diffstat = "loading"
-	if provider and type(provider.fetch_diffstat) == "function" then
+	if provider and provider.fetch_diffstat then
 		track_panel(provider.fetch_diffstat(pr, nil, function(entries, err)
 			files_state.diffstat = err and err or (entries or {})
 			refresh()
@@ -137,7 +137,7 @@ end
 ---@param pr PullRequest
 ---@param active_tab string|nil
 ---@return boolean
-function M.is_loading(pr, active_tab)
+function M.is_loading(_pr, active_tab)
 	local overview_state = require("atlas.pulls.ui.panel.pr.tabs.overview.state")
 	local activity_state = require("atlas.pulls.ui.panel.pr.tabs.activity.state")
 	local comments_state = require("atlas.pulls.ui.panel.pr.tabs.review.state")

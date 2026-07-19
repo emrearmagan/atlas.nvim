@@ -218,7 +218,7 @@ local function compact_rows(groups)
 			local ci, ci_h = ci_icon_and_hl(pr)
 			local review, review_h = review_icon_and_hl(pr)
 			local diff_text, diff_highlights =
-				diff_stats(tonumber(pr._raw and pr._raw.additions) or 0, tonumber(pr._raw and pr._raw.deletions) or 0)
+				diff_stats(tonumber(pr._raw.additions) or 0, tonumber(pr._raw.deletions) or 0)
 			local icon, icon_hl = pr_icon_and_hl(pr)
 			table.insert(rows, {
 				kind = "pr",
@@ -369,7 +369,7 @@ local function plain_rows(groups)
 			local ci, ci_h = ci_icon_and_hl(pr)
 			local review, review_h = review_icon_and_hl(pr)
 			local diff_text, diff_highlights =
-				diff_stats(tonumber(pr._raw and pr._raw.additions) or 0, tonumber(pr._raw and pr._raw.deletions) or 0)
+				diff_stats(tonumber(pr._raw.additions) or 0, tonumber(pr._raw.deletions) or 0)
 			table.insert(rows, {
 				kind = "pr",
 				pr_icon = icon,

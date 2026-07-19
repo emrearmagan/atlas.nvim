@@ -17,7 +17,7 @@ local function collect_logins(context)
 		add(pr.author.nickname or pr.author.name)
 	end
 
-	if pr and type(pr._raw) == "table" then
+	if pr then
 		for _, list in ipairs({ pr._raw.assignees, pr._raw.reviewers }) do
 			if type(list) == "table" then
 				for _, u in ipairs(list) do

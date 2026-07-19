@@ -23,7 +23,7 @@ end
 ---@param key string
 ---@return string
 local function pr_link(pr, key)
-	local raw = type(pr._raw) == "table" and pr._raw or {}
+	local raw = pr._raw
 	local links = type(raw.links) == "table" and raw.links or {}
 	local link = links[key]
 	if link == nil and key == "request_changes" then
@@ -334,7 +334,7 @@ end
 ---@param on_done fun(reviewers: PullsReviewer[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_reviewers(pr, _opts, on_done)
-	local raw = pr._raw or {}
+	local raw = pr._raw
 	local self_url = tostring((raw.links or {}).self or "")
 	if self_url == "" then
 		on_done(nil, "No PR self link available")
@@ -376,7 +376,7 @@ end
 ---@param on_done fun(builds: PullsBuild[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_builds(pr, on_done)
-	local raw = pr._raw or {}
+	local raw = pr._raw
 	local statuses_url = tostring((raw.links or {}).statuses or "")
 	if statuses_url == "" then
 		on_done({}, nil)
@@ -410,7 +410,7 @@ end
 ---@param on_done fun(entries: PullsActivityEntry[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_activity(pr, _opts, on_done)
-	local raw = pr._raw or {}
+	local raw = pr._raw
 	local activity_url = tostring((raw.links or {}).activity or "")
 	if activity_url == "" then
 		on_done({}, nil)
@@ -432,7 +432,7 @@ end
 ---@param on_done fun(entries: PullsDiffstatEntry[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_diffstat(pr, _opts, on_done)
-	local raw = pr._raw or {}
+	local raw = pr._raw
 	local diffstat_url = tostring((raw.links or {}).diffstat or "")
 	if diffstat_url == "" then
 		on_done({}, nil)
@@ -474,7 +474,7 @@ end
 ---@param on_done fun(commits: PullsCommit[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_commits(pr, opts, on_done)
-	local raw = pr._raw or {}
+	local raw = pr._raw
 	local commits_url = tostring((raw.links or {}).commits or "")
 	if commits_url == "" then
 		on_done({}, nil)
@@ -509,7 +509,7 @@ end
 ---@param on_done fun(files: DiffFile[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_diff(pr, _opts, on_done)
-	local raw = pr._raw or {}
+	local raw = pr._raw
 	local diff_url = tostring((raw.links or {}).diff or "")
 	if diff_url == "" then
 		on_done({}, nil)

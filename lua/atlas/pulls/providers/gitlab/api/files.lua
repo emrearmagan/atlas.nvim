@@ -5,10 +5,7 @@ local service = require("atlas.pulls.providers.gitlab.api.service")
 ---@param pr PullRequest
 ---@return string project_path, integer|nil iid
 local function project_iid(pr)
-	local raw = type(pr._raw) == "table" and pr._raw or {}
-	local path = tostring(raw.project_path or pr.repo_full_name or "")
-	local iid = tonumber(raw.iid or pr.id)
-	return path, iid
+	return pr.repo_full_name, tonumber(pr.id)
 end
 
 ---@param change table
@@ -33,8 +30,7 @@ end
 ---@param opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(files: DiffFile[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_diff(pr, opts, on_done)
-	opts = opts or {}
+function M.fetch_diff(pr, _opts, on_done)
 	local path, iid = project_iid(pr)
 	if path == "" or iid == nil then
 		vim.schedule(function()

@@ -46,7 +46,7 @@
 ---@field repo_full_name string
 ---@field is_subscribed boolean|nil
 ---@field reactions table<string, integer>|nil
----@field _raw table|nil
+---@field _raw table
 
 --------------------------------------------------------------------------------
 -- User (current authenticated user)

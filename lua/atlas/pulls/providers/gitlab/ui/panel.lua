@@ -36,7 +36,7 @@ end
 ---@param pr PullRequest
 ---@return PullsPanelHeaderRow[]
 function M.header_rows(pr)
-	local raw = pr._raw or {}
+	local raw = pr._raw
 	local assignees = type(raw.assignees) == "table" and raw.assignees or {}
 
 	local logins = {}
@@ -103,7 +103,7 @@ function M.chips(pr)
 	end
 
 	local MAX_LABELS = 10
-	local raw = type(pr._raw) == "table" and pr._raw or {}
+	local raw = pr._raw
 	local labels = type(raw.labels) == "table" and raw.labels or {}
 	local by_name = state.labels_by_name or {}
 	local shown = 0
@@ -146,8 +146,7 @@ function M.fetches(pr, refresh, opts)
 	reset_state()
 
 	local force = opts and opts.force_refresh == true
-	local raw = type(pr._raw) == "table" and pr._raw or {}
-	local project_path = tostring(raw.project_path or pr.repo_full_name or "")
+	local project_path = pr.repo_full_name
 
 	if project_path ~= "" then
 		state.header_loading = true

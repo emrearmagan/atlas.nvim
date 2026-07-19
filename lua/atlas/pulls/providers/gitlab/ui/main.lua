@@ -62,7 +62,7 @@ local STATUS = {
 ---@param pr PullRequest
 ---@return string, string
 local function ci_icon_and_hl(pr)
-	local raw = type(pr._raw) == "table" and pr._raw or {}
+	local raw = pr._raw
 	local s = tostring(raw.detailed_merge_status or raw.merge_status or ""):lower()
 	if s == "" then
 		return "", "AtlasTextMuted"
