@@ -54,18 +54,16 @@ end
 ---@return string, table[]
 function M.render_repo(repo, opts)
 	opts = opts or {}
-	local raw = repo._raw or {}
 	local chips = {
 		{
-			label = string.format("%s %s", icons.pulls("file"), utils.human_size(repo.size or raw.size)),
+			label = string.format("%s %s", icons.pulls("file"), utils.human_size(repo.size)),
 			hl = "AtlasTabInactive",
 		},
 		{
 			label = string.format("%s %s", icons.pulls("branch"), tostring(repo.default_branch or "-")),
 			hl = "AtlasBitbucketPRMerged",
 		},
-		(repo.is_private == true or raw.is_private == true)
-			and { label = "private", hl = "AtlasBitbucketPRDraft" }
+		repo.is_private == true and { label = "private", hl = "AtlasBitbucketPRDraft" }
 			or { label = "public", hl = "AtlasTextPositive" },
 	}
 

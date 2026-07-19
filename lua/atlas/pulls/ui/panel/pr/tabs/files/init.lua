@@ -3,7 +3,7 @@ local M = {}
 
 local utils = require("atlas.ui.shared.utils")
 local spinner = require("atlas.ui.components.spinner")
-local diff_renderer = require("atlas.pulls.diff.renderer")
+local diff = require("atlas.ui.components.diff_hunks")
 local table_view = require("atlas.ui.components.table_tree")
 local footer = require("atlas.ui.components.footer")
 local state = require("atlas.pulls.ui.panel.pr.tabs.files.state")
@@ -69,7 +69,7 @@ function M.on_select(pr, _repo, refresh, opts)
 	end
 
 	local pr_id = tostring(pr.id or "")
-	if type(provider.fetch_diff) == "function" then
+	if provider.fetch_diff then
 		state.diff = "loading"
 		footer.notify("loading", string.format("Loading changes for #%s...", pr_id))
 		track(provider.fetch_diff(pr, opts, function(files, err)
@@ -250,7 +250,7 @@ function M.render(_pr, width)
 		return lines, spans, line_map
 	end
 
-	local cb_lines, cb_spans, cb_map = diff_renderer.hunks(files, {
+	local cb_lines, cb_spans, cb_map = diff.hunks(files, {
 		max_width = max_width,
 		padding_x = PADDING_X,
 		collapsed_hunks = state.collapsed_hunks,
@@ -298,7 +298,7 @@ function M.toggle_all_hunks()
 	local keys = {}
 	for _, file in ipairs(state.diff) do
 		for _, hunk in ipairs(file.hunks or {}) do
-			table.insert(keys, diff_renderer.hunk_key(file, hunk))
+			table.insert(keys, diff.hunk_key(file, hunk))
 		end
 	end
 

@@ -34,13 +34,13 @@ end
 ---@param _repo PullsRepo|nil
 ---@param refresh fun()
 ---@param opts { force_refresh: boolean|nil }|nil
-function M.on_select(pr, _repo, refresh, opts) ---@diagnostic disable-line: unused-local
+function M.on_select(pr, _repo, refresh, opts)
 	cancel_all()
 	state.reset()
 	opts = opts or {}
 
 	local provider = get_provider()
-	if not provider or type(provider.fetch_conversation) ~= "function" then
+	if not provider or not provider.fetch_conversation then
 		state.comments = {}
 		state.activity = {}
 		refresh()
@@ -72,13 +72,13 @@ M.render = renderer.render
 
 ---@param _lnum integer
 ---@param entry table
-function M.is_selectable_line(_lnum, entry) ---@diagnostic disable-line: unused-local
+function M.is_selectable_line(_lnum, entry)
 	return entry.kind == "comment" or entry.activity_entry ~= nil or entry.kind == "activity_gap"
 end
 
 ---@param _pr PullRequest
 ---@param entry table
-function M.on_enter(_pr, entry) ---@diagnostic disable-line: unused-local
+function M.on_enter(_pr, entry)
 	if not entry or entry.kind ~= "comment" or not entry.comment then
 		return
 	end

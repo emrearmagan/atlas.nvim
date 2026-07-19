@@ -9,7 +9,7 @@ local actions = require("atlas.pulls.actions")
 ---@return PullsPanelTabModule|nil
 local function current_tab_mod()
 	local provider = require("atlas.pulls.state").provider
-	if provider and provider.panel and type(provider.panel.tabs) == "function" then
+	if provider and provider.panel and provider.panel.tabs then
 		for _, tab in ipairs(provider.panel.tabs() or {}) do
 			if tab.key == panel_state.current_tab then
 				return tab.mod
@@ -267,7 +267,7 @@ function M.open_current_line()
 	end
 
 	local tab_mod = current_tab_mod()
-	if tab_mod and type(tab_mod.on_enter) == "function" then
+	if tab_mod and tab_mod.on_enter then
 		return tab_mod.on_enter(pr, entry) == true
 	end
 	return false

@@ -214,7 +214,7 @@ end
 function M.render_repo(repo, width, extra_rows)
 	local full_name = repo_full_name(repo)
 	local workspace = repo_workspace(repo)
-	local created_text = utils.relative_time_text(tostring(repo.created_on or (repo._raw or {}).created_on or ""))
+	local created_text = utils.relative_time_text(tostring(repo.created_on or ""))
 
 	local title = string.format(" %s", full_name)
 	local author_icon, author_icon_hl = icons.general("user")

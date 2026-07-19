@@ -20,7 +20,7 @@ end
 ---@return PullsPanelTabModule|nil
 local function current_tab_mod()
 	local provider = require("atlas.pulls.state").provider
-	if provider and provider.panel and type(provider.panel.tabs) == "function" then
+	if provider and provider.panel and provider.panel.tabs then
 		for _, tab in ipairs(provider.panel.tabs() or {}) do
 			if tab.key == panel_state.current_tab then
 				return tab.mod
@@ -40,7 +40,7 @@ local function is_selectable(lnum)
 	end
 
 	local tab_mod = current_tab_mod()
-	if tab_mod and type(tab_mod.is_selectable_line) == "function" then
+	if tab_mod and tab_mod.is_selectable_line then
 		return tab_mod.is_selectable_line(lnum, entry)
 	end
 

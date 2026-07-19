@@ -20,10 +20,7 @@ end
 ---@return PullsRepoPanelTabModule|nil
 local function current_tab_mod()
 	local repo_panel = require("atlas.pulls.ui.panel.repo")
-	if type(repo_panel.get_tab_module) == "function" then
-		return repo_panel.get_tab_module(panel_state.current_tab)
-	end
-	return nil
+	return repo_panel.get_tab_module(panel_state.current_tab)
 end
 
 ---@param lnum integer
@@ -36,7 +33,7 @@ local function is_selectable(lnum)
 	end
 
 	local tab_mod = current_tab_mod()
-	if tab_mod and type(tab_mod.is_selectable_line) == "function" then
+	if tab_mod and tab_mod.is_selectable_line then
 		return tab_mod.is_selectable_line(lnum, entry)
 	end
 

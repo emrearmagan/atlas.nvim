@@ -148,6 +148,7 @@
 ---@field on_select (fun(pr: PullRequest|nil, repo: PullsRepo, refresh: fun(), opts: { force_refresh: boolean|nil }|nil))|nil
 ---@field activate (fun(buf: integer|nil, refresh: fun()|nil))|nil
 ---@field deactivate (fun(buf: integer|nil))|nil
+---@field is_loading (fun(): boolean)|nil
 ---@field is_selectable_line (fun(lnum: integer, entry: table): boolean)|nil
 ---@field on_enter (fun(repo: PullsRepo, entry: table): boolean|nil)|nil
 ---@field delete_current_branch (fun(refresh: fun()))|nil

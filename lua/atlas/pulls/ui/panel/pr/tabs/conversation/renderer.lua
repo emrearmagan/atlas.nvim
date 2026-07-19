@@ -38,7 +38,7 @@ end
 ---@param reactions table|nil
 ---@return string text, table[] spans
 local function format_reactions(reactions)
-	if type(reactions) ~= "table" then
+	if reactions == nil then
 		return "", {}
 	end
 	local emoji_by_key, order = {}, {}
@@ -410,7 +410,7 @@ end
 
 ---@param _pr PullRequest
 ---@param width integer
-function M.render(_pr, width) ---@diagnostic disable-line: unused-local
+function M.render(_pr, width)
 	local lines, spans, line_map = {}, {}, {}
 
 	local comments_ready = type(state.comments) == "table"

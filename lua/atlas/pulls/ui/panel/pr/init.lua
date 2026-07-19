@@ -1,6 +1,7 @@
 local M = {}
 
 local layout = require("atlas.ui.layout")
+local root_panel_state = require("atlas.pulls.ui.panel.state")
 local panel_state = require("atlas.pulls.ui.panel.pr.state")
 local renderer = require("atlas.pulls.ui.panel.pr.renderer")
 local icons = require("atlas.ui.shared.icons")
@@ -39,7 +40,7 @@ local function is_loading()
 	end
 	local state = require("atlas.pulls.state")
 	local provider = state.provider
-	if provider and provider.panel and type(provider.panel.is_loading) == "function" then
+	if provider and provider.panel and provider.panel.is_loading then
 		return provider.panel.is_loading(pr, panel_state.current_tab)
 	end
 	return false
@@ -128,10 +129,10 @@ local function activate_current_tab()
 	if tab == nil then
 		return
 	end
-	if tab.mod and type(tab.mod.activate) == "function" then
+	if tab.mod.activate then
 		tab.mod.activate(buf, refresh_panel)
 	end
-	if buf ~= nil and vim.api.nvim_buf_is_valid(buf) and tab.keymaps and type(tab.keymaps.register) == "function" then
+	if buf ~= nil and vim.api.nvim_buf_is_valid(buf) and tab.keymaps then
 		tab.keymaps.register(buf)
 	end
 end
@@ -147,10 +148,10 @@ local function switch_tab_keymaps(old_key, new_key)
 	if old_key and old_key ~= new_key then
 		local old_tab = get_tab(old_key)
 		if old_tab then
-			if old_tab.keymaps and type(old_tab.keymaps.remove) == "function" then
+			if old_tab.keymaps then
 				old_tab.keymaps.remove(buf)
 			end
-			if old_tab.mod and type(old_tab.mod.deactivate) == "function" then
+			if old_tab.mod.deactivate then
 				old_tab.mod.deactivate(buf)
 			end
 		end
@@ -159,10 +160,10 @@ local function switch_tab_keymaps(old_key, new_key)
 	if new_key and old_key ~= new_key then
 		local new_tab = get_tab(new_key)
 		if new_tab then
-			if new_tab.mod and type(new_tab.mod.activate) == "function" then
+			if new_tab.mod.activate then
 				new_tab.mod.activate(buf, refresh_panel)
 			end
-			if new_tab.keymaps and type(new_tab.keymaps.register) == "function" then
+			if new_tab.keymaps then
 				new_tab.keymaps.register(buf)
 			end
 		end
@@ -194,7 +195,7 @@ end
 local function dispatch_provider_fetches(pr, opts)
 	local state = require("atlas.pulls.state")
 	local provider = state.provider
-	if provider and provider.panel and type(provider.panel.fetches) == "function" then
+	if provider and provider.panel and provider.panel.fetches then
 		provider.panel.fetches(pr, make_refresh_callback(pr), opts)
 	end
 end
@@ -204,7 +205,7 @@ end
 ---@param opts { force_refresh: boolean|nil }|nil
 local function notify_tab(pr, repo, opts)
 	local tab_mod = get_tab_module(panel_state.current_tab)
-	if tab_mod and type(tab_mod.on_select) == "function" then
+	if tab_mod and tab_mod.on_select then
 		tab_mod.on_select(pr, repo, make_refresh_callback(pr), opts)
 	end
 end
@@ -230,7 +231,7 @@ end
 
 ---@return boolean
 function M.is_open()
-	return layout.win_id("detail") ~= nil
+	return root_panel_state.current_panel == "pr" and layout.win_id("detail") ~= nil
 end
 
 function M.render()
@@ -352,11 +353,8 @@ end
 function M.activate() end
 
 function M.deactivate()
-	local buf = layout.buf_id("detail")
-	local tab_mod = get_tab_module(panel_state.current_tab)
-	if tab_mod and type(tab_mod.deactivate) == "function" then
-		tab_mod.deactivate(buf)
-	end
+	switch_tab_keymaps(panel_state.current_tab, nil)
+	stop_spinner()
 end
 
 return M

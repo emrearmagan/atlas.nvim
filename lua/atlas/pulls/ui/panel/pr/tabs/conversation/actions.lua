@@ -13,7 +13,7 @@ end
 ---@return AtlasMarkdownCompletionProvider|nil
 local function author_completion(pr)
 	local provider = get_provider()
-	if not provider or type(provider.comment_completion) ~= "function" then
+	if not provider or not provider.comment_completion then
 		return nil
 	end
 	local comments = require("atlas.pulls.ui.panel.pr.tabs.review.state").comments
@@ -50,7 +50,7 @@ end
 ---@param refresh fun()
 function M.add(pr, refresh)
 	local provider = get_provider()
-	if not provider or type(provider.add_comment) ~= "function" then
+	if not provider or not provider.add_comment then
 		return
 	end
 	md_editor.open({
@@ -89,13 +89,13 @@ function M.reply(pr, entry, refresh)
 		return
 	end
 	local provider = get_provider()
-	if not provider or type(provider.reply_comment) ~= "function" then
+	if not provider or not provider.reply_comment then
 		return
 	end
 	local comment = entry.comment
 	local completion = author_completion(pr)
 	local mention = ""
-	if completion and type(completion.format_mention) == "function" then
+	if completion and completion.format_mention then
 		mention = completion.format_mention(comment.author) or ""
 	end
 	local initial_text = mention ~= "" and (mention .. " ") or ""
@@ -142,7 +142,7 @@ function M.edit(pr, entry, refresh)
 		return
 	end
 	local provider = get_provider()
-	if not provider or type(provider.edit_comment) ~= "function" then
+	if not provider or not provider.edit_comment then
 		return
 	end
 
@@ -192,7 +192,7 @@ function M.delete(pr, entry, refresh)
 		return
 	end
 	local provider = get_provider()
-	if not provider or type(provider.delete_comment) ~= "function" then
+	if not provider or not provider.delete_comment then
 		return
 	end
 
@@ -231,7 +231,7 @@ function M.react(pr, entry, refresh)
 		return
 	end
 	local provider = get_provider()
-	if not provider or type(provider.add_reaction) ~= "function" then
+	if not provider or not provider.add_reaction then
 		footer.notify("warn", "Provider does not support reactions")
 		return
 	end
