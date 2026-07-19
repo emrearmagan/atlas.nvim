@@ -82,14 +82,20 @@ local function check_pulls()
 	end
 
 	local repo_paths = (pulls.repo_config or {}).paths or {}
+	if vim.tbl_isempty(repo_paths) and vim.tbl_isempty(pulls.providers or {}) then
+		vim.health.info("Pulls not configured")
+		return
+	end
 	if vim.tbl_isempty(repo_paths) then
 		vim.health.warn("pulls.repo_config.paths is empty")
 	else
-		vim.health.ok(string.format(
-			"pulls.repo_config.paths configured (%d mapping%s)",
-			vim.tbl_count(repo_paths),
-			vim.tbl_count(repo_paths) == 1 and "" or "s"
-		))
+		vim.health.ok(
+			string.format(
+				"pulls.repo_config.paths configured (%d mapping%s)",
+				vim.tbl_count(repo_paths),
+				vim.tbl_count(repo_paths) == 1 and "" or "s"
+			)
+		)
 	end
 
 	local diff_cmd = tostring((pulls.diff or {}).open_cmd or "")

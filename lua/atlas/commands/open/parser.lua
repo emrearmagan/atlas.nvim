@@ -121,7 +121,7 @@ end
 ---@param project_path string|nil
 ---@return string|nil, string|nil
 local function split_project(project_path)
-	if type(project_path) ~= "string" then
+	if project_path == nil then
 		return nil, nil
 	end
 	local owner, repo = project_path:match("^(.+)/([^/]+)$")

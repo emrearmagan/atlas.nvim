@@ -25,7 +25,7 @@ local function to_text(value)
 	return sanitize(vim.inspect(value))
 end
 
----@param context table|nil
+---@param context any
 ---@return string
 local function context_suffix(context)
 	if context == nil then
