@@ -83,6 +83,7 @@ local function ensure_footer()
 	end
 end
 
+---@param fn fun()|nil
 function M.set_render_callback(fn)
 	state.render_callback = fn
 end
@@ -220,7 +221,7 @@ vim.api.nvim_create_autocmd({ "VimResized", "WinResized" }, {
 			return
 		end
 		M.reflow()
-		if type(state.render_callback) == "function" then
+		if state.render_callback then
 			state.render_callback()
 		end
 	end,
@@ -236,7 +237,7 @@ vim.api.nvim_create_autocmd("TabEnter", {
 			return
 		end
 		M.reflow()
-		if type(state.render_callback) == "function" then
+		if state.render_callback then
 			state.render_callback()
 		end
 	end,

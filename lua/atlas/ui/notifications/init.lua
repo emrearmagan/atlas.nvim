@@ -171,9 +171,9 @@ local function render_header(width)
 	local provider_hl = provider and provider.hl_group or "Title"
 	local bell = icons.general("bell")
 	local title = string.format("  %s  Notifications  (%s)  ", bell, provider_name)
-	local count_label = ""
+	local count_label
 	if state.is_loading then
-		count_label = "loading…"
+		count_label = "loading.."
 	elseif state.error then
 		count_label = "error"
 	else

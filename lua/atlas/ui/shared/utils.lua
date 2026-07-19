@@ -168,7 +168,7 @@ end
 ---@param iso string|nil
 ---@return string
 function M.format_date(iso)
-	if type(iso) ~= "string" or iso == "" then
+	if iso == nil or iso == "" then
 		return ""
 	end
 
@@ -263,7 +263,7 @@ end
 ---@param text string|nil
 ---@return string[]
 function M.sanitize_lines(text)
-	if type(text) ~= "string" or text == "" then
+	if text == nil or text == "" then
 		return { "-" }
 	end
 
@@ -322,7 +322,7 @@ end
 ---@param max_width integer
 ---@return string
 function M.shorten_name(name, max_width)
-	if type(name) ~= "string" then
+	if name == nil then
 		return ""
 	end
 	if strwidth(name) <= max_width then

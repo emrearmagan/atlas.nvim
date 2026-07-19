@@ -26,12 +26,12 @@ local highlights = require("atlas.ui.shared.highlights")
 ---@field padding_x integer|nil                                                                Horizontal padding (default 2)
 ---@field mode AtlasThreadV2Mode|nil                                                           Rendering mode (default "tree")
 ---@field separator string|nil                                                                 Character for root separators (default "─")
----@field content_max_lines integer|nil                                                        Max visible content lines per item (nil = unlimited). Truncated with "…"
+---@field content_max_lines integer|nil                                                        Max visible content lines per item (nil = unlimited). Truncated with ".."
 ---@field author_hl fun(item: AtlasThreadV2Item, author: string): string|nil                   Returns hl group for author
 ---@field additional_hl fun(item: AtlasThreadV2Item, additional: string): string|nil            Returns hl group for additional text
 ---@field content_hl fun(item: AtlasThreadV2Item, row: string, row_index: integer): table[]|nil Returns segments for content
 ---@field right_text_hl fun(item: AtlasThreadV2Item, text: string): string|table[]|nil          Returns hl group or {start_col,end_col,hl_group}[] segments for right_text
----@field icon_hl_fn fun(item: AtlasThreadV2Item): string|nil                                  Override icon highlight
+---@field icon_hl_fn (fun(item: AtlasThreadV2Item): string|nil)|nil                            Override icon highlight
 
 ---@class AtlasThreadV2Span
 ---@field line integer    0-indexed line number
@@ -96,7 +96,7 @@ end
 ---@param author string
 ---@return string
 local function default_author_hl(_, author)
-	if type(author) ~= "string" or author == "" then
+	if author == "" then
 		return "AtlasTextMutedItalic"
 	end
 
@@ -177,7 +177,7 @@ local function render_header(lines, spans, line_map, item, depth, pfx, opts, wid
 		parts[#parts + 1] = icon .. " "
 		cursor = cursor + #icon + 1
 		local hl = item.icon_hl
-		if type(opts.icon_hl_fn) == "function" then
+		if opts.icon_hl_fn then
 			hl = opts.icon_hl_fn(item) or hl
 		end
 		if hl then
@@ -327,8 +327,7 @@ local function render_content(lines, spans, line_map, item, depth, pfx, opts, wi
 
 	-- Ellipsis indicator when content was truncated
 	if truncated then
-		local ellipsis = "…"
-		local full_line = pfx.body_prefix .. ellipsis
+		local full_line = pfx.body_prefix .. ".."
 		lines[#lines + 1] = full_line
 		map_line(line_map, #lines, make_line_map(item, "content_truncated", depth))
 
