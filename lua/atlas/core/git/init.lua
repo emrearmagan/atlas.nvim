@@ -279,27 +279,24 @@ end
 ---@param remote string
 ---@param branches string[]
 ---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }
 function M.fetch_branches(root, remote, branches, on_done)
-	local cmd = { "git", "fetch", remote }
+	local args = { "fetch", remote }
 	for _, branch in ipairs(branches) do
-		table.insert(cmd, branch)
+		table.insert(args, branch)
 	end
 
-	run(
-		cmd,
-		root,
-		vim.schedule_wrap(function(res)
-			if res.code ~= 0 then
-				local err = trim(res.stderr)
-				if err == "" then
-					err = string.format("git fetch failed with code %d", res.code)
-				end
-				on_done(false, err)
-				return
+	return M.run(args, { cwd = root, text = true }, function(res)
+		if res.code ~= 0 then
+			local err = trim(res.stderr)
+			if err == "" then
+				err = string.format("git fetch failed with code %d", res.code)
 			end
-			on_done(true, nil)
-		end)
-	)
+			on_done(false, err)
+			return
+		end
+		on_done(true, nil)
+	end)
 end
 
 ---@param root string
@@ -324,7 +321,15 @@ end
 ---@param remote string
 ---@param on_done fun(ok: boolean, err: string|nil)
 function M.checkout_remote_branch(root, branch, remote, on_done)
-	run({ "git", "checkout", "-b", branch, remote .. "/" .. branch }, root, function(res)
+	return M.checkout_new_branch(root, branch, remote .. "/" .. branch, on_done)
+end
+
+---@param root string
+---@param branch string
+---@param start_point string
+---@param on_done fun(ok: boolean, err: string|nil)
+function M.checkout_new_branch(root, branch, start_point, on_done)
+	run({ "git", "checkout", "-b", branch, start_point }, root, function(res)
 		if res.code ~= 0 then
 			local err = trim(res.stderr)
 			if err == "" then

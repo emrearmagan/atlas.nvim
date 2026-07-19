@@ -39,7 +39,7 @@ query($search: String!, $limit: Int!) {
         reactionGroups { content reactors { totalCount } }
         latestOpinionatedReviews(last: 10) { nodes { state } }
         author { login ... on User { name } }
-        headRefName baseRefName
+        headRefName baseRefName headRefOid baseRefOid
         comments { totalCount }
         repository { name nameWithOwner }
         commits(last: 1) {

@@ -253,7 +253,7 @@ end
 ---@param pr_state CreatePRState
 local function pick_base(pr_state, on_change)
 	local choices = pr_state.fields.available_bases
-	if type(choices) ~= "table" or #choices == 0 then
+	if #choices == 0 then
 		notify_warn("No base branches available")
 		return
 	end
@@ -397,7 +397,7 @@ local function submit(pr_state)
 
 	local body = get_body(pr_state)
 	local provider = pr_state.fields.provider
-	if type(provider) ~= "table" or type(provider.create_pr) ~= "function" then
+	if not provider or not provider.create_pr then
 		notify_error("Provider does not support PR creation")
 		return
 	end
@@ -413,7 +413,7 @@ local function submit(pr_state)
 	end
 
 	pr_state.is_submitting = true
-	spinner.start("Creating pull request…")
+	spinner.start("Creating pull request..")
 
 	local selected_reviewers = {}
 	if type(pr_state.fields.reviewers) == "table" then
@@ -425,7 +425,7 @@ local function submit(pr_state)
 	end
 
 	local function do_create()
-		spinner.start("Creating pull request…")
+		spinner.start("Creating pull request..")
 		provider.create_pr({
 			repo_slug = pr_state.fields.repo_slug,
 			repo_root = pr_state.fields.repo_root,
@@ -455,7 +455,7 @@ local function submit(pr_state)
 		return
 	end
 
-	spinner.start("Pushing " .. pr_state.fields.head .. " to origin…")
+	spinner.start("Pushing " .. pr_state.fields.head .. " to origin..")
 	git_branch.push_branch(pr_state.fields.repo_root, pr_state.fields.head, "origin", function(ok, push_err)
 		if not ok then
 			pr_state.is_submitting = false
@@ -497,7 +497,7 @@ function M.open(opts)
 			body = opts.initial_body,
 			draft = opts.draft,
 			commit_count = opts.commit_count,
-			available_bases = type(opts.available_bases) == "table" and opts.available_bases or { opts.base },
+			available_bases = opts.available_bases or { opts.base },
 			reviewers = "loading",
 		},
 		layout = {},
@@ -600,7 +600,7 @@ function M.start()
 		notify_error(provider_err or "Provider unavailable")
 		return
 	end
-	if type(provider.create_pr) ~= "function" then
+	if not provider.create_pr then
 		notify_error("Provider " .. info.provider .. " does not support PR creation")
 		return
 	end

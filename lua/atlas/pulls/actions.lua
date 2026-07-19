@@ -30,13 +30,8 @@ local function diff_open_command(pr)
 		return nil, nil, nil, string.format("diff.open_cmd command not found: %s", cmd)
 	end
 
-	local src = tostring((pr.source or {}).branch or "")
-	local dst = tostring((pr.destination or {}).branch or "")
-	if src == "" or dst == "" then
-		return nil, nil, nil, "PR branch refs are missing"
-	end
-
-	return cmd, "origin/" .. dst, "origin/" .. src, nil
+	local base, head, err = checkout.pr_diff_revisions(pr)
+	return cmd, base, head, err
 end
 ---@param pr PullRequest
 function M.copy_id(pr)
@@ -144,15 +139,14 @@ function M.open_diff(pr)
 		return
 	end
 
-	local open_cmd, command, cmd_err = diff_open_command(pr)
-	if cmd_err or not open_cmd or not command then
+	local open_cmd, base_revision, head_revision, cmd_err = diff_open_command(pr)
+	if cmd_err or not open_cmd or not base_revision or not head_revision then
 		local level = cmd_err == "PR branch refs are missing" and "warn" or "error"
 		footer.notify(level, tostring(cmd_err))
 		return
 	end
 
-	local repo_path = vim.fn.fnameescape(resolved_path)
-
+	local range = base_revision .. "..." .. head_revision
 	footer.notify("loading", "Fetching remote branches...")
 	checkout.fetch_pr_branches(pr, resolved_path, function(fetch_err)
 		if fetch_err then
@@ -161,17 +155,17 @@ function M.open_diff(pr)
 			return
 		end
 
+		local command = open_cmd .. " " .. range
+		local repo_path = vim.fn.fnameescape(resolved_path)
 		logger.loginfo("actions.open_diff", { pr_id = pr.id, repo_path = resolved_path, command = command })
 		local ok, err = pcall(function()
 			if open_cmd == "DiffviewOpen" then
 				local prev_path = vim.fn.fnameescape(vim.fn.getcwd())
 				vim.cmd("cd " .. repo_path)
-				local cmd_ok, cmd_err2 = pcall(function()
-					vim.cmd(command)
-				end)
+				local cmd_ok, command_err = pcall(vim.cmd, command)
 				vim.cmd("cd " .. prev_path)
 				if not cmd_ok then
-					error(cmd_err2)
+					error(command_err)
 				end
 				return
 			end
@@ -180,32 +174,45 @@ function M.open_diff(pr)
 				vim.cmd("tabnew")
 				local launcher_tab = vim.api.nvim_get_current_tabpage()
 				local launcher_buf = vim.api.nvim_get_current_buf()
+				local autocmd_id
+				local function cleanup()
+					if autocmd_id then
+						pcall(vim.api.nvim_del_autocmd, autocmd_id)
+						autocmd_id = nil
+					end
+					if vim.api.nvim_tabpage_is_valid(launcher_tab) then
+						local tabnr = vim.api.nvim_tabpage_get_number(launcher_tab)
+						pcall(vim.cmd, tabnr .. "tabclose")
+					end
+					if vim.api.nvim_buf_is_valid(launcher_buf) then
+						pcall(vim.api.nvim_buf_delete, launcher_buf, { force = true })
+					end
+				end
+
 				vim.bo[launcher_buf].buflisted = false
 				vim.bo[launcher_buf].bufhidden = "wipe"
 				-- CodeDiff opens its own tab, so close the temporary one.
-				vim.api.nvim_create_autocmd("User", {
+				autocmd_id = vim.api.nvim_create_autocmd("User", {
 					pattern = "CodeDiffOpen",
 					once = true,
 					callback = function()
-						vim.schedule(function()
-							if vim.api.nvim_tabpage_is_valid(launcher_tab) then
-								local tabnr = vim.api.nvim_tabpage_get_number(launcher_tab)
-								pcall(vim.cmd, tabnr .. "tabclose")
-							end
-							if vim.api.nvim_buf_is_valid(launcher_buf) then
-								pcall(vim.api.nvim_buf_delete, launcher_buf, { force = true })
-							end
-						end)
+						vim.schedule(cleanup)
 					end,
 				})
 
-				vim.cmd("cd " .. repo_path)
-				vim.cmd(command)
+				local command_ok, command_err = pcall(function()
+					vim.cmd("tcd " .. repo_path)
+					vim.cmd(command)
+				end)
+				if not command_ok then
+					cleanup()
+					error(command_err)
+				end
 				return
 			end
 
 			vim.cmd("tabnew")
-			vim.cmd("cd " .. repo_path)
+			vim.cmd("tcd " .. repo_path)
 			vim.cmd(command)
 		end)
 

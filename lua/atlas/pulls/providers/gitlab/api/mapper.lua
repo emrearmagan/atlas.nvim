@@ -79,6 +79,7 @@ function M.to_pull_request(raw)
 	local source_branch = json.safe_str(raw.source_branch) or ""
 	local target_branch = json.safe_str(raw.target_branch) or ""
 	local sha = json.nilify(raw.sha)
+	local local_ref = string.format("refs/atlas/pulls/%d/head", iid)
 
 	---@type PullRequest
 	return {
@@ -87,7 +88,12 @@ function M.to_pull_request(raw)
 		description = json.safe_str(raw.description) or "",
 		state = normalize_state(raw),
 		author = normalize_author(raw.author),
-		source = { branch = source_branch, commit_hash = "" },
+		source = {
+			branch = source_branch,
+			commit_hash = type(sha) == "string" and sha or "",
+			fetch_ref = string.format("+refs/merge-requests/%d/head:%s", iid, local_ref),
+			local_ref = local_ref,
+		},
 		destination = { branch = target_branch, commit_hash = "" },
 		comments_count = tonumber(raw.user_notes_count) or 0,
 		tasks_count = 0,

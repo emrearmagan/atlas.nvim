@@ -98,6 +98,31 @@ local function link_href(links, key)
 	return tostring((as_table(link) or {}).href or "")
 end
 
+---@param repository table|nil
+---@return string
+local function clone_url(repository)
+	repository = as_table(repository) or {}
+	local links = as_table(repository.links) or {}
+	local https_url, ssh_url
+	for _, raw in ipairs(as_table(links.clone) or {}) do
+		local clone = as_table(raw) or {}
+		local href = tostring(clone.href or "")
+		if clone.name == "https" then
+			https_url = href
+		elseif clone.name == "ssh" then
+			ssh_url = href
+		end
+	end
+	if https_url and https_url ~= "" then
+		return https_url
+	end
+	if ssh_url and ssh_url ~= "" then
+		return ssh_url
+	end
+	local full_name = tostring(repository.full_name or "")
+	return full_name ~= "" and string.format("https://bitbucket.org/%s.git", full_name) or ""
+end
+
 ---@param raw table
 ---@return PullRequest
 local function to_pull_request(raw)
@@ -106,6 +131,13 @@ local function to_pull_request(raw)
 	local repo_full_name = tostring(raw.repo_full_name or string.format("%s/%s", workspace, repo))
 	local author = raw.author or {}
 	local links = raw.links or {}
+	local source = raw.source or {}
+	local source_repo_full_name = tostring(source.repo_full_name or "")
+	local source_branch = source_repo_full_name ~= "" and tostring(source.branch or "") or ""
+	local source_is_fork = source_branch ~= ""
+		and source_repo_full_name ~= ""
+		and source_repo_full_name ~= repo_full_name
+	local local_ref = source_is_fork and string.format("refs/atlas/pulls/%s/head", tostring(raw.id)) or nil
 	return {
 		id = raw.id,
 		title = tostring(raw.title or ""),
@@ -117,8 +149,11 @@ local function to_pull_request(raw)
 			username = tostring(author.nickname or ""),
 		},
 		source = {
-			branch = tostring((raw.source or {}).branch or ""),
-			commit_hash = tostring((raw.source or {}).commit_hash or ""),
+			branch = source_branch,
+			commit_hash = tostring(source.commit_hash or ""),
+			fetch_remote = source_is_fork and source.clone_url or nil,
+			fetch_ref = local_ref and string.format("+refs/heads/%s:%s", source_branch, local_ref) or nil,
+			local_ref = local_ref,
 		},
 		destination = {
 			branch = tostring((raw.destination or {}).branch or ""),
@@ -155,6 +190,7 @@ function M.to_pull_requests_list(result, workspace, repo)
 		local destination = as_table(pr.destination) or {}
 		local source_branch = as_table(source.branch) or {}
 		local source_commit = as_table(source.commit) or {}
+		local source_repository = as_table(source.repository) or {}
 		local destination_branch = as_table(destination.branch) or {}
 		local destination_commit = as_table(destination.commit) or {}
 		local repo_full_name = (ws ~= "" and rp ~= "") and string.format("%s/%s", ws, rp) or ""
@@ -192,6 +228,8 @@ function M.to_pull_requests_list(result, workspace, repo)
 			source = {
 				branch = tostring(source_branch.name or ""),
 				commit_hash = tostring(source_commit.hash or ""),
+				repo_full_name = tostring(source_repository.full_name or ""),
+				clone_url = clone_url(source_repository),
 			},
 			close_source_branch = pr.close_source_branch == true,
 			created_on = tostring(pr.created_on or ""),

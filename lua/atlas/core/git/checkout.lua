@@ -142,7 +142,7 @@ end
 ---@return string|nil repo_path
 ---@return string|nil err
 function M.resolve_repo_path_for_pr(pr, opts)
-	if type(pr) ~= "table" then
+	if pr == nil then
 		return nil, "no PR selected"
 	end
 
@@ -157,26 +157,100 @@ function M.resolve_repo_path_for_pr(pr, opts)
 end
 
 ---@param pr PullRequest
+---@return string|nil base_revision
+---@return string|nil head_revision
+---@return string|nil err
+function M.pr_diff_revisions(pr)
+	local source = tostring(pr.source.local_ref or "")
+	local destination = tostring(pr.destination.local_ref or "")
+	if source == "" then
+		local branch = tostring(pr.source.branch or "")
+		source = branch ~= "" and "origin/" .. branch or ""
+	end
+	if destination == "" then
+		local branch = tostring(pr.destination.branch or "")
+		destination = branch ~= "" and "origin/" .. branch or ""
+	end
+	if source == "" or destination == "" then
+		return nil, nil, "PR branch refs are missing"
+	end
+	return destination, source, nil
+end
+
+---@param ref PullsRef
+---@return string remote
+---@return string fetch_ref
+local function fetch_target(ref)
+	local remote = tostring(ref.fetch_remote or "")
+	local fetch_ref = tostring(ref.fetch_ref or "")
+	return remote ~= "" and remote or "origin", fetch_ref ~= "" and fetch_ref or tostring(ref.branch or "")
+end
+
+---@param pr PullRequest
 ---@param repo_path string
 ---@param on_done fun(err: string|nil)
+---@return { cancel: fun() }
 function M.fetch_pr_branches(pr, repo_path, on_done)
-	local src_branch = tostring((pr.source or {}).branch or "")
-	local dst_branch = tostring((pr.destination or {}).branch or "")
-
-	local refs = { dst_branch }
-	local pr_id = tostring(pr.id or "")
-	-- GitHub exposes every PR (including those from forks) under refs/pull/<N>/head
-	-- on the base repo's origin. Fetching by branch name fails for fork PRs because the branch lives on the contributor's fork, not on origin.
-	-- TODO: Should probably check for the other providers as well...
-	if pr.provider == "github" and pr_id ~= "" and src_branch ~= "" then
-		table.insert(refs, string.format("+refs/pull/%s/head:refs/remotes/origin/%s", pr_id, src_branch))
-	else
-		table.insert(refs, src_branch)
+	local base_remote, base_ref = fetch_target(pr.destination)
+	local head_remote, head_ref = fetch_target(pr.source)
+	if base_ref == "" or head_ref == "" then
+		local cancelled = false
+		vim.schedule(function()
+			if not cancelled then
+				on_done("PR branch refs are missing")
+			end
+		end)
+		return {
+			cancel = function()
+				cancelled = true
+			end,
+		}
 	end
 
-	git.fetch_branches(repo_path, "origin", refs, function(ok, err)
-		on_done(ok and nil or err)
+	if base_remote == head_remote then
+		local refs = { base_ref }
+		if head_ref ~= base_ref then
+			table.insert(refs, head_ref)
+		end
+		return git.fetch_branches(repo_path, base_remote, refs, function(ok, err)
+			if ok then
+				on_done(nil)
+			else
+				on_done(err or "Failed to fetch pull request refs")
+			end
+		end)
+	end
+
+	local cancelled = false
+	local current
+	current = git.fetch_branches(repo_path, base_remote, { base_ref }, function(ok, err)
+		current = nil
+		if cancelled then
+			return
+		end
+		if not ok then
+			on_done(err or "Failed to fetch pull request base ref")
+			return
+		end
+		current = git.fetch_branches(repo_path, head_remote, { head_ref }, function(head_ok, head_err)
+			current = nil
+			if not cancelled then
+				if head_ok then
+					on_done(nil)
+				else
+					on_done(head_err or "Failed to fetch pull request head ref")
+				end
+			end
+		end)
 	end)
+	return {
+		cancel = function()
+			cancelled = true
+			if current then
+				current.cancel()
+			end
+		end,
+	}
 end
 
 ---@class CheckoutResult
@@ -188,7 +262,7 @@ end
 function M.checkout_pr(pr, on_done)
 	on_done = on_done or function() end
 
-	if type(pr) ~= "table" then
+	if pr == nil then
 		on_done(nil, "no PR selected")
 		return
 	end
@@ -219,14 +293,8 @@ function M.checkout_pr(pr, on_done)
 			return
 		end
 
-		local fetch_refs = { src_branch }
-		local pr_id = tostring(pr.id or "")
-		if pr.provider == "github" and pr_id ~= "" then
-			fetch_refs = { string.format("+refs/pull/%s/head:refs/remotes/origin/%s", pr_id, src_branch) }
-		end
-
-		git.fetch_branches(repo_path, "origin", fetch_refs, function(fetch_ok, ferr)
-			if not fetch_ok then
+		M.fetch_pr_branches(pr, repo_path, function(ferr)
+			if ferr then
 				logger.logerror("checkout.checkout_pr fetch failed", {
 					pr_id = pr.id,
 					repo_path = repo_path,
@@ -237,7 +305,12 @@ function M.checkout_pr(pr, on_done)
 				return
 			end
 
-			git.checkout_remote_branch(repo_path, src_branch, "origin", function(create_ok, cerr)
+			local _, start_point, revision_err = M.pr_diff_revisions(pr)
+			if not start_point then
+				on_done(nil, revision_err)
+				return
+			end
+			git.checkout_new_branch(repo_path, src_branch, start_point, function(create_ok, cerr)
 				if not create_ok then
 					logger.logerror("checkout.checkout_pr create branch failed", {
 						pr_id = pr.id,
