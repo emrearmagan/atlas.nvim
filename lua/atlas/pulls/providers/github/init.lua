@@ -17,6 +17,12 @@ function M.setup()
 	require("atlas.pulls.providers.github.highlights").setup()
 end
 
+---@param pr PullRequest
+---@return string[], table[]
+function M.pr_popup_content(pr)
+	return require("atlas.pulls.providers.github.ui.popup").content(pr)
+end
+
 ---@return AtlasGitHubConfig
 local function github_config()
 	local config = require("atlas.config")

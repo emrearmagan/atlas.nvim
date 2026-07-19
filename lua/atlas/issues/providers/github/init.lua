@@ -40,6 +40,12 @@ function M.cell_hl(row, col, ctx)
 	return require("atlas.issues.providers.github.ui.renderer").cell_hl(row, col, ctx)
 end
 
+---@param issue Issue
+---@return string[], table[]
+function M.issue_popup_content(issue)
+	return require("atlas.issues.providers.github.ui.renderer").issue_popup_content(issue)
+end
+
 ---@param on_done fun(user: IssueUser|nil, err: string|nil)
 function M.fetch_user(on_done)
 	require("atlas.issues.providers.github.api.users").get_user(on_done)

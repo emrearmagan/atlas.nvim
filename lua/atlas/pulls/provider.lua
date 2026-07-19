@@ -73,6 +73,7 @@
 ---
 --- Main list rendering
 ---@field render (fun(groups: PullsGroup[], layout: string, opts: { width: integer }): PullsMainRenderResult)|nil
+---@field pr_popup_content (fun(pr: PullRequest): string[], table[])|nil
 ---
 ---@field panel PullsProviderPanel|nil
 ---@field repo_panel PullsProviderRepoPanel|nil

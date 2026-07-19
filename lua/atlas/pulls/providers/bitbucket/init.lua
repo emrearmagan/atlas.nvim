@@ -15,6 +15,12 @@ function M.setup()
 	require("atlas.pulls.providers.bitbucket.highlights").setup()
 end
 
+---@param pr PullRequest
+---@return string[], table[]
+function M.pr_popup_content(pr)
+	return require("atlas.pulls.providers.bitbucket.ui.popup").content(pr)
+end
+
 ---@return AtlasBitbucketConfig|nil
 local function bb_config()
 	return config.options

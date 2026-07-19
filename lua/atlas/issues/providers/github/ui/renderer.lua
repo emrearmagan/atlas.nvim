@@ -134,4 +134,80 @@ function M.cell_hl(row, col, ctx)
 	return nil
 end
 
+---@param issue Issue
+---@return string[], table[]
+function M.issue_popup_content(issue)
+	local raw = issue._raw or {}
+	local summary = issue.summary or ""
+	local key = issue.key or ""
+
+	local lines = { string.format(" %s: %s", key, summary), "" }
+	local highlights = {
+		{ row = 0, col = 1, end_col = 1 + #key, hl_group = helper.issue_hl(key) },
+		{ row = 1, col = 0, end_col = -1, hl_group = "AtlasTextMuted" },
+	}
+	if summary ~= "" then
+		table.insert(highlights, {
+			row = 0,
+			col = 3 + #key,
+			end_col = -1,
+			hl_group = helper.issue_title_hl(summary),
+		})
+	end
+
+	---@param label string
+	---@param value string|nil
+	---@param value_hl string|nil
+	local function push(label, value, value_hl)
+		if value == nil or value == "" then
+			return
+		end
+		local row = #lines
+		table.insert(lines, string.format(" %-10s %s", label .. ":", value))
+		table.insert(highlights, { row = row, col = 1, end_col = 11, hl_group = "AtlasTextMuted" })
+		if value_hl ~= nil then
+			table.insert(highlights, { row = row, col = 12, end_col = -1, hl_group = value_hl })
+		end
+	end
+
+	push("Status", issue.status, helper.status_hl(issue.status_id))
+
+	local reporter_name = issue.reporter and issue.reporter.display_name or nil
+	push("Author", reporter_name, helper.person_hl(reporter_name))
+
+	local assignees = type(raw.assignees) == "table" and raw.assignees or {}
+	if #assignees > 0 then
+		local logins = {}
+		for _, a in ipairs(assignees) do
+			table.insert(logins, "@" .. tostring(a.login or ""))
+		end
+		push("Assignees", table.concat(logins, ", "), "AtlasTextMuted")
+	end
+
+	local labels = type(raw.labels) == "table" and raw.labels or {}
+	if #labels > 0 then
+		local names = {}
+		for _, l in ipairs(labels) do
+			table.insert(names, tostring(l.name or ""))
+		end
+		push("Labels", table.concat(names, ", "), "AtlasTextMuted")
+	end
+
+	local milestone = raw.milestone
+	if type(milestone) == "table" and milestone.title then
+		push("Milestone", tostring(milestone.title), "AtlasTextMuted")
+	end
+
+	push("Comments", tostring(tonumber(raw.comment_count) or 0), "AtlasTextMuted")
+	push("Updated", utils.relative_time(raw.updated_at), "AtlasTextMuted")
+
+	local content_width = 1
+	for _, line in ipairs(lines) do
+		content_width = math.max(content_width, vim.fn.strdisplaywidth(line))
+	end
+	lines[2] = " " .. ("━"):rep(content_width)
+
+	return lines, highlights
+end
+
 return M

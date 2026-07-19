@@ -16,6 +16,12 @@ function M.setup()
 	require("atlas.pulls.providers.gitlab.highlights").setup()
 end
 
+---@param pr PullRequest
+---@return string[], table[]
+function M.pr_popup_content(pr)
+	return require("atlas.pulls.providers.gitlab.ui.popup").content(pr)
+end
+
 ---@param on_done fun(user: PullsUser|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_user(on_done)
