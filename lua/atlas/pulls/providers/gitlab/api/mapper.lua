@@ -1,5 +1,6 @@
 local M = {}
 
+local diff_parser = require("atlas.core.git.diff_parser")
 local json = require("atlas.core.json")
 
 ---@param raw any
@@ -211,8 +212,6 @@ local function classify_system_note(body)
 	return "update"
 end
 
-local HUNK_WINDOW = 4
-
 ---@param user any
 local function author_from(user)
 	if type(user) ~= "table" then
@@ -223,40 +222,6 @@ local function author_from(user)
 		return nil
 	end
 	return { name = tostring(user.name or username), nickname = username, id = tostring(user.id or "") }
-end
-
----@param hunk DiffHunk
----@param side "old"|"new"
----@param line integer
----@return DiffHunk|nil
-local function window_around(hunk, side, line)
-	local lines = hunk.lines or {}
-	local anchor_idx
-	for i, l in ipairs(lines) do
-		local target = side == "new" and l.new_line or l.old_line
-		if target == line then
-			anchor_idx = i
-			break
-		end
-	end
-	if not anchor_idx then
-		return hunk
-	end
-	local first = math.max(1, anchor_idx - HUNK_WINDOW)
-	local last = math.min(#lines, anchor_idx + HUNK_WINDOW)
-	local windowed = {}
-	for i = first, last do
-		table.insert(windowed, lines[i])
-	end
-	return {
-		header = hunk.header,
-		context = hunk.context,
-		old_start = hunk.old_start,
-		old_count = hunk.old_count,
-		new_start = hunk.new_start,
-		new_count = hunk.new_count,
-		lines = windowed,
-	}
 end
 
 ---@param file DiffFile|nil
@@ -275,7 +240,7 @@ local function find_hunk(file, side, line)
 			start_, count = h.old_start or 0, h.old_count or 0
 		end
 		if line >= start_ and line <= start_ + count - 1 then
-			return window_around(h, side, line)
+			return diff_parser.window_hunk(h, side, line, 4)
 		end
 	end
 	return nil

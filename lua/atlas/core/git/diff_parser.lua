@@ -250,4 +250,82 @@ function M.parse(raw)
 	return files
 end
 
+---Return a clipped hunk centered on one old/new line, with a header and counts
+---that describe the clipped lines rather than the original hunk.
+---@param hunk DiffHunk
+---@param side "old"|"new"
+---@param line integer
+---@param context_lines integer|nil
+---@return DiffHunk
+function M.window_hunk(hunk, side, line, context_lines)
+	local anchor
+	for index, diff_line in ipairs(hunk.lines) do
+		if (side == "old" and diff_line.old_line == line) or (side == "new" and diff_line.new_line == line) then
+			anchor = index
+			break
+		end
+	end
+	if anchor == nil then
+		return hunk
+	end
+
+	local context = math.max(0, context_lines or 4)
+	local first = math.max(1, anchor - context)
+	local last = math.min(#hunk.lines, anchor + context)
+	if first == 1 and last == #hunk.lines then
+		return hunk
+	end
+
+	local old_start, new_start = hunk.old_start, hunk.new_start
+	for index = 1, first - 1 do
+		local diff_line = hunk.lines[index]
+		if diff_line.kind == "context" or diff_line.kind == "remove" then
+			old_start = old_start + 1
+		end
+		if diff_line.kind == "context" or diff_line.kind == "add" then
+			new_start = new_start + 1
+		end
+	end
+
+	local lines = {}
+	local old_count, new_count, additions, deletions = 0, 0, 0, 0
+	for index = first, last do
+		local diff_line = hunk.lines[index]
+		table.insert(lines, diff_line)
+		if diff_line.kind == "context" or diff_line.kind == "remove" then
+			old_count = old_count + 1
+		end
+		if diff_line.kind == "context" or diff_line.kind == "add" then
+			new_count = new_count + 1
+		end
+		if diff_line.kind == "add" then
+			additions = additions + 1
+		elseif diff_line.kind == "remove" then
+			deletions = deletions + 1
+		end
+	end
+	if old_count == 0 then
+		old_start = math.max(0, old_start - 1)
+	end
+	if new_count == 0 then
+		new_start = math.max(0, new_start - 1)
+	end
+
+	local header = string.format("@@ -%d,%d +%d,%d @@", old_start, old_count, new_start, new_count)
+	if hunk.context ~= "" then
+		header = header .. " " .. hunk.context
+	end
+	return {
+		header = header,
+		context = hunk.context,
+		old_start = old_start,
+		old_count = old_count,
+		new_start = new_start,
+		new_count = new_count,
+		additions = additions,
+		deletions = deletions,
+		lines = lines,
+	}
+end
+
 return M
