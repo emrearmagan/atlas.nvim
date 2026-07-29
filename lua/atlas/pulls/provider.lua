@@ -98,7 +98,6 @@
 ---@field parent PullsComment|nil          -- reply to this comment
 ---@field inline PullsInlineCommentPosition|nil
 ---@field pending boolean|nil              -- add the comment to a pending review
----@field is_task boolean|nil              -- create as a task
 
 ---@class PullsProviderPanel
 ---@field header_rows (fun(pr: PullRequest): PullsPanelHeaderRow[])|nil

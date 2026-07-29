@@ -3,36 +3,61 @@ local M = {}
 
 local md_editor = require("atlas.ui.popups.editor")
 local footer = require("atlas.ui.components.footer")
+local panel_state = require("atlas.pulls.ui.panel.pr.state")
 local renderer = require("atlas.pulls.ui.panel.pr.tabs.review.renderer")
 local state = require("atlas.pulls.ui.panel.pr.tabs.review.state")
 local keymaps = require("atlas.pulls.ui.panel.pr.tabs.review.keymaps")
-
-local AUTHOR_COMPLETION_MODULES = {
-	github = "atlas.pulls.providers.github.completion.author",
-	gitlab = "atlas.pulls.providers.gitlab.completion.author",
-	bitbucket = "atlas.pulls.providers.bitbucket.completion.author",
-}
+local review_actions = require("atlas.pulls.actions.review")
 
 ---@return AtlasMarkdownCompletionProvider|nil
 local function author_completion()
 	local provider = require("atlas.pulls.state").provider
-	local mod_path = provider and AUTHOR_COMPLETION_MODULES[provider.id]
-	if not mod_path then
+	local comments = state.comments
+	local pr = require("atlas.pulls.ui.panel.pr.state").current_pr
+	if not provider or not pr or type(comments) ~= "table" or not provider.comment_completion then
 		return nil
 	end
-	local ok, mod = pcall(require, mod_path)
-	if not ok or type(mod) ~= "table" or type(mod.build_completion) ~= "function" then
-		return nil
-	end
-	return mod.build_completion()
+	---@cast comments PullsComment[]
+	local reviewers = require("atlas.pulls.ui.panel.pr.tabs.overview.state").reviewers
+	local conversation = require("atlas.pulls.ui.panel.pr.tabs.conversation.state").comments
+	return provider.comment_completion({
+		pr = pr,
+		comments = comments,
+		reviewers = type(reviewers) == "table" and reviewers or nil,
+		conversation = type(conversation) == "table" and conversation or nil,
+	})
 end
 
 ---@type { cancel: fun() }[]
 local in_flight = {}
+local tab_active = false
+local generation = 0
+
+---@return integer
+local function invalidate()
+	generation = generation + 1
+	return generation
+end
+
+---@param expected_generation integer
+---@param pr PullRequest
+---@return boolean
+local function is_current(expected_generation, pr)
+	return tab_active and generation == expected_generation and panel_state.current_pr == pr
+end
+
+---@param expected_generation integer
+---@param pr PullRequest
+---@param key "comments"|"tasks"
+---@param items PullsComment[]
+---@return boolean
+local function is_current_list(expected_generation, pr, key, items)
+	return is_current(expected_generation, pr) and state[key] == items
+end
 
 local function cancel_all()
 	for _, handle in ipairs(in_flight) do
-		handle.cancel()
+		pcall(handle.cancel)
 	end
 	in_flight = {}
 end
@@ -49,21 +74,8 @@ local function get_provider()
 	return require("atlas.pulls.state").provider
 end
 
----@param comment PullsComment|nil
----@return boolean
-local function is_own_comment(comment)
-	local current_user = require("atlas.pulls.state").current_user
-	if not current_user or not comment or not comment.author then
-		return false
-	end
-	local author_id = tostring(comment.author.id or "")
-	local user_id = tostring(current_user.id or "")
-	return author_id ~= "" and user_id ~= "" and author_id == user_id
-end
-
----@param pr PullRequest
 ---@param opts { key: string, title: string, initial_text: string|nil, on_save: fun(text: string|nil) }
-local function open_md_editor(pr, opts)
+local function open_md_editor(opts)
 	md_editor.open({
 		key = opts.key,
 		title = opts.title,
@@ -84,37 +96,76 @@ end
 ---@param refresh fun()
 ---@param opts { force_refresh: boolean|nil }|nil
 function M.on_select(pr, _repo, refresh, opts)
+	local request_generation = invalidate()
 	cancel_all()
 	state.reset()
 
 	local provider = get_provider()
-	if provider == nil or type(provider.fetch_comments) ~= "function" then
-		state.comments = "Provider does not support comments"
+	if provider == nil then
+		state.comments = "Pull request provider is not available"
 		refresh()
 		return
 	end
 
 	local pr_id = tostring(pr.id or "")
 	state.comments = "loading"
-	footer.notify("loading", string.format("Loading comments for #%s...", pr_id))
+	state.tasks = provider.fetch_tasks and "loading" or nil
+	footer.notify("loading", string.format("Loading review for #%s...", pr_id))
 
-	track(provider.fetch_comments(pr, opts, function(comments, err)
+	local pending = provider.fetch_tasks and 2 or 1
+	local comments_error, tasks_error
+	local function complete()
+		pending = pending - 1
+		refresh()
+		if pending > 0 then
+			return
+		end
+		if comments_error then
+			footer.notify("error", string.format("Failed to load comments for #%s: %s", pr_id, comments_error))
+		elseif tasks_error then
+			footer.notify("warn", string.format("Failed to load review items for #%s: %s", pr_id, tasks_error))
+		else
+			footer.notify("success", string.format("Review loaded for #%s", pr_id), 1200)
+		end
+	end
+
+	local comments_handle = provider.fetch_comments(pr, opts, function(comments, err)
+		if not is_current(request_generation, pr) then
+			return
+		end
 		if err then
-			state.comments = err
-			footer.notify("error", string.format("Failed to load comments for #%s", pr_id))
+			comments_error = tostring(err)
+			state.comments = comments_error
 		else
 			state.comments = comments or {}
-			footer.notify("success", string.format("Comments loaded for #%s", pr_id), 1200)
 		end
-		refresh()
-	end))
+		complete()
+	end)
+	track(comments_handle)
+
+	local fetch_tasks = provider.fetch_tasks
+	if fetch_tasks then
+		local tasks_handle = fetch_tasks(pr, opts, function(tasks, err)
+			if not is_current(request_generation, pr) then
+				return
+			end
+			if err then
+				tasks_error = tostring(err)
+				state.tasks = tasks_error
+			else
+				state.tasks = tasks or {}
+			end
+			complete()
+		end)
+		track(tasks_handle)
+	end
 end
 
 ---@param pr PullRequest
 ---@param width integer
 ---@return string[], table[], table<integer, table>|nil
 function M.render(pr, width)
-	return renderer.render(pr, width, state.comments)
+	return renderer.render(pr, width, state.comments, state.tasks)
 end
 
 ---@param _lnum integer
@@ -135,336 +186,190 @@ end
 ---@param entry table
 function M.on_enter(_pr, entry)
 	if entry.kind == "hunk_header" and entry.hunk_key then
-		state.collapsed_hunks[entry.hunk_key] = not (state.collapsed_hunks[entry.hunk_key] == true)
+		state.collapsed_hunks[entry.hunk_key] = state.collapsed_hunks[entry.hunk_key] ~= true
 		return true
 	end
 
 	local comment = entry.comment
-	if comment ~= nil and entry.entity_kind == "comment" then
-		local url = tostring(comment.html_url or "")
+	if comment ~= nil and (entry.entity_kind == "comment" or entry.entity_kind == "task") then
+		local url = tostring(comment.html_url or comment.url or "")
 		if url ~= "" then
 			vim.ui.open(url)
+			return true
 		end
+	end
+end
+
+---@param _pr PullRequest
+---@param entry table|nil
+---@param buf integer
+function M.show_details(_pr, entry, buf)
+	local task = entry and entry.entity_kind == "task" and entry.comment or nil
+	if task == nil then
 		return
 	end
-	local task = entry.task
-	if task ~= nil and entry.entity_kind == "task" then
-		local url = nil
-		if task._raw and task._raw.links then
-			url = tostring(task._raw.links.html or "")
-		end
-		if url and url ~= "" then
-			vim.ui.open(url)
+
+	local utils = require("atlas.ui.shared.utils")
+	local content = utils.task_text(task.content_raw)
+	local empty = string.format("(empty %s)", (task.task_label or "task"):lower())
+	local lines = vim.split(content ~= "" and content or empty, "\n", { plain = true })
+	lines[1] = (task.state == "RESOLVED" and "[x] " or "[ ] ") .. lines[1]
+
+	local author = task.author
+	local author_name = "Unknown"
+	if author then
+		if author.nickname and author.nickname ~= "" then
+			author_name = author.nickname
+		elseif author.name and author.name ~= "" then
+			author_name = author.name
 		end
 	end
+	table.insert(lines, "")
+	table.insert(lines, string.format("by @%s  %s", author_name, utils.relative_time(task.created_on)))
+	require("atlas.ui.popups.info").show({ lines = lines, source_buf = buf })
 end
 
 function M.activate(buf, refresh)
 	if buf == nil or refresh == nil then
 		return
 	end
+	tab_active = true
 	keymaps.setup(buf, refresh)
 end
 
 function M.deactivate(buf)
+	tab_active = false
+	invalidate()
 	if buf ~= nil then
 		keymaps.teardown(buf)
 	end
 	cancel_all()
 end
 
----@param fn fun(comments: PullsComment[])
-local function with_comments(fn)
-	local list = state.comments
-	if type(list) ~= "table" then
-		return
+---@param pr PullRequest
+---@param refresh fun()
+---@param key "comments"|"tasks"
+---@return AtlasReviewCommentActionContext|nil
+local function action_context(pr, refresh, key)
+	local provider = get_provider()
+	local items = state[key]
+	if not provider or type(items) ~= "table" then
+		return nil
 	end
-	---@cast list PullsComment[]
-	fn(list)
-end
-
----@param comment_id string|number
----@param updater fun(comment: PullsComment)
-local function update_comment(comment_id, updater)
-	with_comments(function(list)
-		for _, c in ipairs(list) do
-			if tostring(c.id) == tostring(comment_id) then
-				updater(c)
-				return
-			end
-		end
-	end)
-end
-
----@param comment_id string|number
-local function remove_comment(comment_id)
-	with_comments(function(list)
-		for i = #list, 1, -1 do
-			if tostring(list[i].id) == tostring(comment_id) then
-				table.remove(list, i)
-			end
-		end
-	end)
-end
-
----@param comment PullsComment
-local function append_comment(comment)
-	with_comments(function(list)
-		table.insert(list, comment)
-	end)
-end
-
----@param comment PullsComment
-local function upsert_comment(comment)
-	with_comments(function(list)
-		for i, existing in ipairs(list) do
-			if tostring(existing.id) == tostring(comment.id) then
-				list[i] = comment
-				return
-			end
-		end
-		table.insert(list, comment)
-	end)
+	---@cast items PullsComment[]
+	local context_generation = generation
+	return {
+		provider = provider,
+		pr = pr,
+		current_user = require("atlas.pulls.state").current_user,
+		items = items,
+		completion = author_completion(),
+		active = function()
+			return is_current_list(context_generation, pr, key, items)
+		end,
+		track = track,
+		refresh = refresh,
+	}
 end
 
 -- -----------------------------------------------------------------------------
 -- Actions
 -- -----------------------------------------------------------------------------
 
+---@param action AtlasReviewCommentAction
 ---@param pr PullRequest
+---@param entry table
 ---@param refresh fun()
-function M.add_comment(pr, refresh)
-	local provider = get_provider()
-	if not provider or type(provider.add_comment) ~= "function" then
-		return
+local function run_comment_action(action, pr, entry, refresh)
+	local comment = entry and entry.comment
+	local context = comment and action_context(pr, refresh, comment.is_task and "tasks" or "comments") or nil
+	if comment and context then
+		review_actions.run(context, action, comment)
 	end
-
-	open_md_editor(pr, {
-		key = "pr-comment-add",
-		title = " Add Comment ",
-		on_save = function(text)
-			if not text or vim.trim(text) == "" then
-				return
-			end
-			footer.notify("loading", "Adding comment...")
-			track(provider.add_comment(pr, text, nil, function(comment, err)
-				if err then
-					footer.notify("error", "Add comment failed: " .. err)
-					return
-				end
-				if comment then
-					append_comment(comment)
-				end
-				footer.notify("success", "Comment added", 1200)
-				refresh()
-			end))
-		end,
-	})
 end
 
 ---@param pr PullRequest
 ---@param entry table
 ---@param refresh fun()
 function M.reply_comment(pr, entry, refresh)
-	local provider = get_provider()
-	if not provider or type(provider.reply_comment) ~= "function" then
-		return
-	end
-
-	local comment = entry.comment
-	if not comment then
-		return
-	end
-
-	local completion = author_completion()
-	local mention = ""
-	if completion and type(completion.format_mention) == "function" then
-		mention = completion.format_mention(comment.author) or ""
-	end
-	local initial_text = mention ~= "" and (mention .. " ") or ""
-
-	open_md_editor(pr, {
-		key = "pr-comment-reply-" .. tostring(comment.id),
-		title = " Reply to Comment ",
-		initial_text = initial_text,
-		on_save = function(text)
-			if not text or vim.trim(text) == "" then
-				return
-			end
-			footer.notify("loading", "Sending reply...")
-			track(provider.reply_comment(pr, comment, text, function(reply, err)
-				if err then
-					footer.notify("error", "Reply failed: " .. err)
-					return
-				end
-
-				if reply then
-					--- just in case you know
-					if reply.parent_id == nil then
-						reply.parent_id = comment.id
-					end
-					append_comment(reply)
-				end
-				footer.notify("success", "Reply added", 1200)
-				refresh()
-			end))
-		end,
-	})
+	run_comment_action("reply", pr, entry, refresh)
 end
 
 ---@param pr PullRequest
 ---@param entry table
 ---@param refresh fun()
 function M.edit_comment(pr, entry, refresh)
-	local provider = get_provider()
-	if not provider or type(provider.edit_comment) ~= "function" then
-		return
-	end
-	local comment = entry.comment
-	if not comment or not is_own_comment(comment) then
-		return
-	end
-
-	open_md_editor(pr, {
-		key = "pr-comment-edit-" .. tostring(comment.id),
-		title = " Edit Comment ",
-		initial_text = comment.content_raw or "",
-		on_save = function(text)
-			if not text or vim.trim(text) == "" then
-				return
-			end
-			footer.notify("loading", "Editing comment...")
-			local desired = vim.tbl_extend("force", {}, comment, { content_raw = text })
-			track(provider.edit_comment(pr, desired, function(updated, err)
-				if err then
-					footer.notify("error", "Edit failed: " .. err)
-					return
-				end
-				if updated then
-					upsert_comment(updated)
-				else
-					update_comment(comment.id, function(c)
-						c.content_raw = text
-					end)
-				end
-				footer.notify("success", "Comment updated", 1200)
-				refresh()
-			end))
-		end,
-	})
+	run_comment_action("edit", pr, entry, refresh)
 end
 
 ---@param pr PullRequest
 ---@param entry table
 ---@param refresh fun()
 function M.delete_comment(pr, entry, refresh)
-	local provider = get_provider()
-	if not provider or type(provider.delete_comment) ~= "function" then
-		return
-	end
-	local comment = entry.comment
-	if not comment or not is_own_comment(comment) then
-		return
-	end
-
-	vim.ui.input({ prompt = "Delete comment? [y/N]: " }, function(input)
-		local confirmed = input and vim.trim(input):lower()
-		if confirmed ~= "y" and confirmed ~= "yes" then
-			return
-		end
-		footer.notify("loading", "Deleting comment...")
-		track(provider.delete_comment(pr, comment, function(ok, err)
-			if err then
-				footer.notify("error", "Delete failed: " .. err)
-				return
-			end
-			if ok then
-				remove_comment(comment.id)
-			end
-			footer.notify("success", "Comment deleted", 1200)
-			refresh()
-		end))
-	end)
+	run_comment_action("delete", pr, entry, refresh)
 end
 
 ---@param pr PullRequest
 ---@param entry table
 ---@param refresh fun()
-function M.toggle_task(pr, entry, refresh)
-	local provider = get_provider()
+function M.toggle_resolved(pr, entry, refresh)
 	local comment = entry and entry.comment
-	if comment == nil or not comment.is_task then
-		footer.notify("warn", "Not a task")
-		return
-	end
-	if not provider or type(provider.edit_comment) ~= "function" then
-		footer.notify("error", "Provider does not support comment edits")
-		return
-	end
-
-	local is_resolved = comment.state == "RESOLVED"
-	local desired = vim.deepcopy(comment)
-	if is_resolved then
-		desired.state = nil
-	else
-		desired.state = "RESOLVED"
-	end
-	footer.notify("loading", is_resolved and "Reopening task..." or "Resolving task...")
-	track(provider.edit_comment(pr, desired, function(updated, err)
-		if err then
-			footer.notify("error", tostring(err))
-			return
-		end
-		if updated then
-			upsert_comment(updated)
-		else
-			update_comment(comment.id, function(c)
-				c.state = desired.state
-			end)
-		end
-		footer.notify("success", is_resolved and "Task reopened" or "Task resolved", 1200)
-		refresh()
-	end))
+	local action = comment and comment.is_task and "toggle_task" or "toggle_resolved"
+	local target = action == "toggle_resolved" and entry and entry.thread_root or comment
+	run_comment_action(action, pr, { comment = target }, refresh)
 end
 
 ---@param pr PullRequest
 ---@param refresh fun()
 function M.add_task(pr, refresh)
 	local provider = get_provider()
-	if not provider or type(provider.add_comment) ~= "function" then
-		footer.notify("error", "Provider does not support comments")
+	if not provider or not provider.add_task then
+		footer.notify("error", "Provider does not support tasks")
+		return
+	end
+	local add_task = provider.add_task
+	local tasks = state.tasks
+	if type(tasks) ~= "table" then
+		return
+	end
+	---@cast tasks PullsComment[]
+	local context_generation = generation
+	if not is_current_list(context_generation, pr, "tasks", tasks) then
 		return
 	end
 
-	local panel_state = require("atlas.pulls.ui.panel.pr.state")
 	local win = require("atlas.ui.layout").win_id("detail")
 	local parent = nil
 	if win and vim.api.nvim_win_is_valid(win) then
 		local lnum = vim.api.nvim_win_get_cursor(win)[1]
 		local ent = (panel_state.line_map or {})[lnum]
-		if ent and ent.comment then
+		if ent and ent.comment and not ent.comment.is_task then
 			parent = ent.comment
 		end
 	end
 
-	local is_github = provider.id == "github"
-	local initial = is_github and "- [ ] " or ""
-
-	open_md_editor(pr, {
+	open_md_editor({
 		key = "pr-task-add-" .. tostring(pr.id or ""),
 		title = " Add Task ",
-		initial_text = initial,
 		on_save = function(text)
+			if not is_current_list(context_generation, pr, "tasks", tasks) then
+				return
+			end
 			if not text or vim.trim(text) == "" then
 				footer.notify("warn", "Task cannot be empty")
 				return
 			end
 			footer.notify("loading", "Adding task...")
-			local opts = is_github and { parent = parent } or { parent = parent, is_task = true }
-			track(provider.add_comment(pr, text, opts, function(_, err)
+			track(add_task(pr, text, parent, function(task, err)
+				if not is_current_list(context_generation, pr, "tasks", tasks) then
+					return
+				end
 				if err then
 					footer.notify("error", tostring(err))
 					return
+				end
+				if task then
+					table.insert(tasks, task)
 				end
 				footer.notify("success", "Task added", 1200)
 				refresh()

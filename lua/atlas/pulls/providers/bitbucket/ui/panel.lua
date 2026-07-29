@@ -173,18 +173,18 @@ function M.tabs()
 			mod = require("atlas.pulls.ui.panel.pr.tabs.overview"),
 		},
 		{
-			key = "activity",
-			label = "Activity",
-			icon = activity_icon,
-			icon_hl = activity_hl,
-			mod = require("atlas.pulls.ui.panel.pr.tabs.activity"),
-		},
-		{
 			key = "review",
 			label = "Review",
 			icon = review_icon,
 			icon_hl = review_hl,
 			mod = require("atlas.pulls.ui.panel.pr.tabs.review"),
+		},
+		{
+			key = "activity",
+			label = "Activity",
+			icon = activity_icon,
+			icon_hl = activity_hl,
+			mod = require("atlas.pulls.ui.panel.pr.tabs.activity"),
 		},
 		{
 			key = "commits",

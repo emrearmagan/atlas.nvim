@@ -399,4 +399,10 @@ function M.strip_markup(text)
 	return vim.trim(s)
 end
 
+---@param text string|nil
+---@return string
+function M.task_text(text)
+	return (M.strip_markup(text):gsub("^%s*[-*+]?%s*%[[xX ]%]%s*", "", 1))
+end
+
 return M

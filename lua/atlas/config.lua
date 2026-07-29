@@ -120,8 +120,11 @@ M.options = {
 			copy_id = "y",
 			open_diff = "gd",
 			checkout = "gc",
-			next_hunk = "]h",
-			previous_hunk = "[h",
+			review = {
+				next_hunk = "]h",
+				previous_hunk = "[h",
+				toggle_resolved = "x",
+			},
 			filter_status_open = "gpo",
 			filter_status_merged = "gpm",
 			filter_status_declined = "gpd",

@@ -383,29 +383,20 @@ function M.fetch_comments(pr, opts, on_done)
 
 	local handles = {}
 	local cancelled = false
-	local comments_result, tasks_result, diff_result
+	local comments_result, diff_result
 	local comments_err
 
 	local function finish()
 		if cancelled then
 			return
 		end
-		if comments_result == nil or tasks_result == nil or diff_result == nil then
+		if comments_result == nil or diff_result == nil then
 			return
 		end
-
-		local merged = {}
 		for _, c in ipairs(comments_result) do
 			attach_hunk(c, diff_result)
-			table.insert(merged, c)
 		end
-		for _, task in ipairs(tasks_result) do
-			table.insert(merged, task)
-		end
-		table.sort(merged, function(a, b)
-			return tostring(a.created_on or "") < tostring(b.created_on or "")
-		end)
-		on_done(merged, comments_err)
+		on_done(comments_result, comments_err)
 	end
 
 	local h1 = comments_api.fetch_comments(pr, opts, function(cs, err)
@@ -421,21 +412,13 @@ function M.fetch_comments(pr, opts, on_done)
 		table.insert(handles, h1)
 	end
 
-	local h2 = M.fetch_tasks(pr, opts, function(tasks)
-		tasks_result = tasks or {}
+	-- Bitbucket does not include hunks in its comments API, so fetch the diff to attach them.
+	local h2 = pr_api.fetch_diff(pr, { force_refresh = opts.force_refresh == true }, function(files, err)
+		diff_result = err and {} or (files or {})
 		finish()
 	end)
 	if h2 then
 		table.insert(handles, h2)
-	end
-
-	-- Bitbucket does not include hunks in its comments API, so fetch the diff to attach them.
-	local h3 = pr_api.fetch_diff(pr, { force_refresh = opts.force_refresh == true }, function(files, err)
-		diff_result = err and {} or (files or {})
-		finish()
-	end)
-	if h3 then
-		table.insert(handles, h3)
 	end
 
 	return {
@@ -501,9 +484,6 @@ end
 ---@return { cancel: fun() }|nil
 function M.add_comment(pr, content, opts, on_done)
 	opts = opts or {}
-	if opts.is_task then
-		return M.add_task(pr, content, opts.parent, on_done)
-	end
 	local comments_api = require("atlas.pulls.providers.bitbucket.api.comments")
 
 	local bb_opts = {
@@ -555,9 +535,6 @@ end
 ---@param on_done fun(comment: PullsComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.edit_comment(pr, comment, on_done)
-	if comment.is_task then
-		return M.edit_task(pr, comment, on_done)
-	end
 	return require("atlas.pulls.providers.bitbucket.api.comments").edit_comment(
 		pr,
 		comment.id,
@@ -598,9 +575,6 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.delete_comment(pr, target, on_done)
-	if target.is_task then
-		return M.delete_task(pr, target, on_done)
-	end
 	return require("atlas.pulls.providers.bitbucket.api.comments").delete_comment(pr, target.id, on_done)
 end
 

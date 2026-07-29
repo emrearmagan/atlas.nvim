@@ -128,7 +128,6 @@ function M.open(opts)
 		title_pos = opts.title_pos or "center",
 		footer = footer_text,
 		footer_pos = "center",
-		zindex = 260,
 	})
 	vim.api.nvim_set_option_value(
 		"winhighlight",
