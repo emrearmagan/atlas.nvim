@@ -181,18 +181,20 @@
 ---@class PullsComment
 ---@field id number|string
 ---@field parent_id number|string|nil
----@field author {name: string, nickname: string|nil, id: string|nil}|nil
+---@field author PullsAuthor|nil
 ---@field content_raw string
 ---@field created_on string
 ---@field inline {path: string, to: number|nil, from: number|nil}|nil
 ---@field inline_hunk DiffHunk|nil                       -- surrounding diff context for inline comments
 ---@field is_task boolean|nil                            -- true = render as task (checkbox)
+---@field task_label string|nil                          -- display name override; defaults to "Task"
 ---@field state "PENDING"|"RESOLVED"|"DELETED"|"OUTDATED"|nil -- nil = active/open
+---@field can_resolve boolean|nil                        -- false when the provider cannot resolve this thread yet
 ---@field deleted boolean|nil
 ---@field reactions table<string, integer>|nil
 ---@field url string|nil
 ---@field html_url string|nil
----@field _raw any|nil
+---@field _raw table|nil
 
 --------------------------------------------------------------------------------
 -- Commit

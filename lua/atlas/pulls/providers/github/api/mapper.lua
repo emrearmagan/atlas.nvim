@@ -140,36 +140,6 @@ function M.to_pull_request(raw)
 	}
 end
 
----@param raw table REST pull request response.
----@return PullRequest
-function M.to_pull_request_from_rest(raw)
-	local base = type(raw.base) == "table" and raw.base or {}
-	local head = type(raw.head) == "table" and raw.head or {}
-	local repository = type(base.repo) == "table" and base.repo or {}
-	local pr = M.to_pull_request({
-		number = raw.number,
-		title = raw.title,
-		body = raw.body,
-		state = (raw.merged == true or json.nilify(raw.merged_at) ~= nil) and "MERGED" or raw.state,
-		isDraft = raw.draft,
-		author = raw.user,
-		headRefName = head.ref,
-		headRefOid = head.sha,
-		baseRefName = base.ref,
-		baseRefOid = base.sha,
-		commentsCount = raw.comments,
-		createdAt = raw.created_at,
-		updatedAt = raw.updated_at,
-		url = raw.html_url,
-		repository = {
-			name = repository.name,
-			nameWithOwner = repository.full_name,
-		},
-	})
-	pr._raw = raw
-	return pr
-end
-
 ---@param raw table (search/issues API item)
 ---@return PullRequest
 function M.to_pull_request_from_search(raw)
@@ -406,6 +376,7 @@ function M.to_activity_comment(raw)
 		author = {
 			name = tostring(user.login or ""),
 			nickname = tostring(user.login or ""),
+			username = tostring(user.login or ""),
 			id = tostring(user.id or ""),
 		},
 		content_raw = tostring(raw.body or ""),
@@ -423,6 +394,7 @@ end
 ---@return PullsComment
 function M.to_comment(raw, thread_state)
 	local user = raw.user or {}
+	local body = tostring(raw.body or "")
 	local line = json.nilify(raw.line)
 	local original_line = json.nilify(raw.original_line)
 	local path = json.nilify(raw.path)
@@ -471,9 +443,10 @@ function M.to_comment(raw, thread_state)
 		author = {
 			name = tostring(user.login or ""),
 			nickname = tostring(user.login or ""),
+			username = tostring(user.login or ""),
 			id = tostring(user.id or ""),
 		},
-		content_raw = tostring(raw.body or ""),
+		content_raw = body,
 		created_on = tostring(raw.created_at or ""),
 		inline = inline,
 		inline_hunk = inline_hunk,

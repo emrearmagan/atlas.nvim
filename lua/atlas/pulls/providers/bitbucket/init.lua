@@ -149,19 +149,6 @@ function M.fetch_pullrequest(pr, opts, on_done)
 	}, on_done)
 end
 
----@param remote AtlasGitRemoteInfo
----@param commit string
----@param on_done fun(pr: PullRequest|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.find_pullrequest_for_commit(remote, commit, on_done)
-	return require("atlas.pulls.providers.bitbucket.api.pullrequests").find_for_commit(
-		remote.owner,
-		remote.repo,
-		commit,
-		on_done
-	)
-end
-
 ---@param repo PullsRepo
 ---@param opts PullsFetchOpts
 ---@param on_done fun(repo: PullsRepoDetails|nil, err: string|nil)

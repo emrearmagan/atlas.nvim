@@ -212,24 +212,12 @@ local function classify_system_note(body)
 	return "update"
 end
 
----@param user any
-local function author_from(user)
-	if type(user) ~= "table" then
-		return nil
-	end
-	local username = tostring(user.username or "")
-	if username == "" then
-		return nil
-	end
-	return { name = tostring(user.name or username), nickname = username, id = tostring(user.id or "") }
-end
-
 ---@param file DiffFile|nil
 ---@param side "old"|"new"
 ---@param line integer
 ---@return DiffHunk|nil
 local function find_hunk(file, side, line)
-	if file == nil or type(file.hunks) ~= "table" then
+	if file == nil then
 		return nil
 	end
 	for _, h in ipairs(file.hunks) do
@@ -278,14 +266,14 @@ function M.to_comment(note, discussion_first_id, discussion_id, resolved, files_
 	end
 
 	local raw_with_discussion = note
-	if type(discussion_id) == "string" and discussion_id ~= "" then
+	if discussion_id ~= nil and discussion_id ~= "" then
 		raw_with_discussion = vim.tbl_extend("force", {}, note, { discussion_id = discussion_id })
 	end
 
 	return {
 		id = note.id,
 		parent_id = (note.id ~= discussion_first_id) and discussion_first_id or nil,
-		author = author_from(note.author),
+		author = actor_from(note.author),
 		content_raw = tostring(note.body or ""),
 		created_on = tostring(note.created_at or ""),
 		inline = inline,
@@ -328,6 +316,7 @@ function M.to_comment_from_gql(gql_note, first_id, discussion_id)
 		author = type(author.username) == "string" and {
 			name = tostring(author.name or author.username),
 			nickname = author.username,
+			username = author.username,
 			id = "",
 		} or nil,
 		content_raw = tostring(gql_note.body or ""),

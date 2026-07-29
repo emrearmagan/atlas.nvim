@@ -108,19 +108,6 @@ function M.fetch_pullrequest(pr, opts, on_done)
 	return pr_api.get_pr(owner, repo, pr.id, on_done, { force_load = opts.force_load == true })
 end
 
----@param remote AtlasGitRemoteInfo
----@param commit string
----@param on_done fun(pr: PullRequest|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.find_pullrequest_for_commit(remote, commit, on_done)
-	return require("atlas.pulls.providers.github.api.pullrequests").find_for_commit(
-		remote.owner,
-		remote.repo,
-		commit,
-		on_done
-	)
-end
-
 ---@param pr PullRequest
 ---@param opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(description: string|nil, err: string|nil)
@@ -182,15 +169,10 @@ function M.fetch_conversation(pr, opts, on_done)
 	local function build(result, description)
 		local comments = type(result.comments) == "table" and result.comments or {}
 		if description ~= "" then
-			local author = pr.author
 			table.insert(comments, 1, {
 				id = "__body__",
 				parent_id = nil,
-				author = author and {
-					name = author.name or author.username or "",
-					nickname = author.nickname or author.username or author.name or "",
-					id = author.id or "",
-				} or nil,
+				author = pr.author,
 				content_raw = description,
 				created_on = pr.created_on or "",
 				reactions = pr.reactions,
@@ -263,24 +245,20 @@ function M.fetch_comments(pr, opts, on_done)
 end
 
 ---@param pr PullRequest
+---@param opts { force_refresh: boolean|nil }|nil
+---@param on_done fun(tasks: PullsComment[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_tasks(pr, opts, on_done)
+	return require("atlas.pulls.providers.github.api.comments").fetch_tasks(pr, opts, on_done)
+end
+
+---@param pr PullRequest
 ---@param content string
 ---@param opts PullsAddCommentOpts|nil
 ---@param on_done fun(comment: PullsComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.add_comment(pr, content, opts, on_done)
 	return require("atlas.pulls.providers.github.api.comments").add_comment(pr, content, opts, on_done)
-end
-
----@param pr PullRequest
----@param content string
----@param parent PullsComment|nil
----@param on_done fun(comment: PullsComment|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.add_task(pr, content, parent, on_done)
-	if not content:match("^%s*[-*+]%s+%[[ xX]%]") then
-		content = "- [ ] " .. content
-	end
-	return M.add_comment(pr, content, { parent = parent }, on_done)
 end
 
 ---@param pr PullRequest
@@ -306,6 +284,15 @@ end
 ---@return { cancel: fun() }|nil
 function M.delete_comment(pr, target, on_done)
 	return require("atlas.pulls.providers.github.api.comments").delete_comment(pr, target, on_done)
+end
+
+---@param pr PullRequest
+---@param root PullsComment
+---@param resolved boolean
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.set_thread_resolved(pr, root, resolved, on_done)
+	return require("atlas.pulls.providers.github.api.comments").set_thread_resolved(pr, root, resolved, on_done)
 end
 
 ---@param pr PullRequest

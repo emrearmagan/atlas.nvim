@@ -36,7 +36,6 @@
 ---@field fetch_conversation (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(result: { comments: PullsComment[], events: PullsActivityEntry[], reaction_options: PullsReactionOption[]|nil }|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field fetch_pullrequests fun(view: AtlasPullsViewConfig, opts: PullsFetchOpts, on_done: fun(groups: PullsGroup[], err: string[]|nil)): { cancel: fun() }|nil
 ---@field fetch_pullrequest fun(pr: PullRequest, opts: PullsFetchOpts, on_done: fun(pr: PullRequest|nil, err: string|nil)): { cancel: fun() }|nil
----@field find_pullrequest_for_commit (fun(remote: AtlasGitRemoteInfo, commit: string, on_done: fun(pr: PullRequest|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field fetch_repo_details (fun(repo: PullsRepo, opts: PullsFetchOpts, on_done: fun(repo: PullsRepoDetails|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field fetch_repo_branches (fun(repo: PullsRepoDetails, opts: PullsFetchOpts, on_done: fun(branches: PullsRepoBranches|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field fetch_repo_tags (fun(repo: PullsRepoDetails, opts: PullsFetchOpts, on_done: fun(tags: PullsRepoTags|nil, err: string|nil)): { cancel: fun() }|nil)|nil
@@ -47,7 +46,8 @@
 ---@field fetch_merge_checks (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(checks: PullsMergeCheck[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field fetch_diffstat (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(entries: PullsDiffstatEntry[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field fetch_activity (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(entries: PullsActivityEntry[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
----@field fetch_comments (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(comments: PullsComment[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field fetch_comments fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(comments: PullsComment[]|nil, err: string|nil)): { cancel: fun() }|nil
+---@field fetch_tasks (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(tasks: PullsComment[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field fetch_commits (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(commits: PullsCommit[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field fetch_diff (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(files: DiffFile[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field fetch_commit_status (fun(pr: PullRequest, commit: PullsCommit, opts: { force_refresh: boolean|nil }|nil, on_done: fun(status: string|nil, url: string|nil, err: string|nil)): { cancel: fun() }|nil)|nil
@@ -57,6 +57,9 @@
 ---@field reply_comment (fun(pr: PullRequest, parent: PullsComment, content: string, on_done: fun(comment: PullsComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field edit_comment (fun(pr: PullRequest, comment: PullsComment, on_done: fun(comment: PullsComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field delete_comment (fun(pr: PullRequest, target: PullsComment, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field edit_task (fun(pr: PullRequest, task: PullsComment, on_done: fun(task: PullsComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field delete_task (fun(pr: PullRequest, task: PullsComment, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field set_thread_resolved (fun(pr: PullRequest, root: PullsComment, resolved: boolean, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field add_reaction (fun(pr: PullRequest, comment: PullsComment, key: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
 ---
 ---@field views fun(): AtlasPullsViewConfig[]
@@ -84,10 +87,18 @@
 -- Provider Panel Interface
 --------------------------------------------------------------------------------
 
+---@class PullsInlineCommentPosition
+---@field path string
+---@field old_path string|nil
+---@field side "old"|"new"
+---@field line integer
+---@field commit_hash string|nil
+
 ---@class PullsAddCommentOpts
 ---@field parent PullsComment|nil          -- reply to this comment
----@field inline { path: string, side: "old"|"new"|nil, line: integer }|nil
----@field is_task boolean|nil              -- create as task
+---@field inline PullsInlineCommentPosition|nil
+---@field pending boolean|nil              -- add the comment to a pending review
+---@field is_task boolean|nil              -- create as a task
 
 ---@class PullsProviderPanel
 ---@field header_rows (fun(pr: PullRequest): PullsPanelHeaderRow[])|nil

@@ -245,12 +245,14 @@ function M.to_pull_requests_list(result, workspace, repo)
 end
 
 ---@param user table|nil
----@return {name: string, nickname: string|nil}
+---@return PullsAuthor
 local function actor(user)
 	local u = as_table(user) or {}
+	local username = tostring(u.nickname or u.username or "")
 	return {
 		name = tostring(u.display_name or "Unknown"),
-		nickname = tostring(u.nickname or ""),
+		nickname = username ~= "" and username or nil,
+		username = username,
 		id = tostring(u.account_id or ""),
 	}
 end
