@@ -386,11 +386,9 @@ function M.to_comment(result)
 	local links = as_table(entry.links) or {}
 	local parent = as_table(entry.parent)
 	local resolution = as_table(entry.resolution)
-	local is_resolved = resolution ~= nil
-		and (resolution.resolved == true or tostring(resolution.type or resolution.state or ""):upper() == "RESOLVED")
 	local state = entry.deleted == true and "DELETED"
 		or (entry.pending == true and "PENDING")
-		or (is_resolved and "RESOLVED")
+		or (resolution ~= nil and "RESOLVED")
 		or nil
 
 	return {

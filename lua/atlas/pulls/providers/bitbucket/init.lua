@@ -330,7 +330,7 @@ local function attach_hunk(comment, files)
 
 	local function find_hunk()
 		for _, file in ipairs(files) do
-			if file.path == comment.inline.path then
+			if file.path == comment.inline.path or file.old_path == comment.inline.path then
 				for _, hunk in ipairs(file.hunks or {}) do
 					local s = side == "old" and hunk.old_start or hunk.new_start
 					local c = side == "old" and hunk.old_count or hunk.new_count
@@ -359,11 +359,7 @@ local function task_to_comment(task)
 	return {
 		id = task.id,
 		parent_id = task.comment_id,
-		author = task.creator and {
-			name = task.creator.name,
-			nickname = task.creator.nickname or task.creator.username,
-			id = task.creator.id,
-		} or nil,
+		author = task.creator,
 		content_raw = tostring(task.content_raw or ""),
 		created_on = tostring(task.created_on or ""),
 		inline = nil,
@@ -388,6 +384,7 @@ function M.fetch_comments(pr, opts, on_done)
 	local handles = {}
 	local cancelled = false
 	local comments_result, tasks_result, diff_result
+	local comments_err
 
 	local function finish()
 		if cancelled then
@@ -402,17 +399,18 @@ function M.fetch_comments(pr, opts, on_done)
 			attach_hunk(c, diff_result)
 			table.insert(merged, c)
 		end
-		for _, t in ipairs(tasks_result) do
-			table.insert(merged, task_to_comment(t))
+		for _, task in ipairs(tasks_result) do
+			table.insert(merged, task)
 		end
 		table.sort(merged, function(a, b)
 			return tostring(a.created_on or "") < tostring(b.created_on or "")
 		end)
-		on_done(merged, nil)
+		on_done(merged, comments_err)
 	end
 
 	local h1 = comments_api.fetch_comments(pr, opts, function(cs, err)
 		if err then
+			comments_err = err
 			comments_result = {}
 		else
 			comments_result = cs or {}
@@ -423,20 +421,10 @@ function M.fetch_comments(pr, opts, on_done)
 		table.insert(handles, h1)
 	end
 
-	local h2 = comments_api.fetch_tasks(
-		tostring(pr.workspace or ""),
-		tostring(pr.repo or ""),
-		pr.id,
-		{ force_refresh = opts.force_refresh == true },
-		function(tasks, err)
-			if err then
-				tasks_result = {}
-			else
-				tasks_result = tasks or {}
-			end
-			finish()
-		end
-	)
+	local h2 = M.fetch_tasks(pr, opts, function(tasks)
+		tasks_result = tasks or {}
+		finish()
+	end)
 	if h2 then
 		table.insert(handles, h2)
 	end
@@ -462,6 +450,35 @@ function M.fetch_comments(pr, opts, on_done)
 	}
 end
 
+---@param pr PullRequest
+---@param opts { force_refresh: boolean|nil }|nil
+---@param on_done fun(tasks: PullsComment[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_tasks(pr, opts, on_done)
+	opts = opts or {}
+	return require("atlas.pulls.providers.bitbucket.api.comments").fetch_tasks(
+		tostring(pr.workspace or ""),
+		tostring(pr.repo or ""),
+		pr.id,
+		{ force_refresh = opts.force_refresh == true },
+		function(tasks, err)
+			if err then
+				on_done(nil, err)
+				return
+			end
+
+			local result = {}
+			for _, task in ipairs(tasks or {}) do
+				table.insert(result, task_to_comment(task))
+			end
+			table.sort(result, function(a, b)
+				return tostring(a.created_on or "") < tostring(b.created_on or "")
+			end)
+			on_done(result, nil)
+		end
+	)
+end
+
 ---@param inline { path: string, side: "old"|"new"|nil, line: integer }|nil
 ---@return { from?: number, to?: number, path?: string }|nil
 local function inline_to_bitbucket(inline)
@@ -484,29 +501,18 @@ end
 ---@return { cancel: fun() }|nil
 function M.add_comment(pr, content, opts, on_done)
 	opts = opts or {}
+	if opts.is_task then
+		return M.add_task(pr, content, opts.parent, on_done)
+	end
 	local comments_api = require("atlas.pulls.providers.bitbucket.api.comments")
 
-	if opts.is_task then
-		return comments_api.create_task(
-			tostring(pr.workspace or ""),
-			tostring(pr.repo or ""),
-			pr.id,
-			content,
-			{ comment_id = opts.parent and opts.parent.id or nil },
-			function(created, err)
-				if err or type(created) ~= "table" then
-					on_done(nil, err)
-					return
-				end
-				on_done(task_to_comment(created), nil)
-			end
-		)
-	end
-
 	local bb_opts = {
-		parent_id = opts.parent and opts.parent.id or nil,
 		inline = inline_to_bitbucket(opts.inline),
+		pending = opts.pending == true or (opts.parent ~= nil and opts.parent.state == "PENDING"),
 	}
+	if opts.parent then
+		return comments_api.reply_comment(pr, opts.parent.parent_id or opts.parent.id, content, bb_opts, on_done)
+	end
 	return comments_api.add_comment(pr, content, bb_opts, on_done)
 end
 
@@ -516,7 +522,23 @@ end
 ---@param on_done fun(comment: PullsComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.add_task(pr, content, parent, on_done)
-	return M.add_comment(pr, content, { parent = parent, is_task = true }, on_done)
+	return require("atlas.pulls.providers.bitbucket.api.comments").create_task(
+		tostring(pr.workspace or ""),
+		tostring(pr.repo or ""),
+		pr.id,
+		content,
+		{
+			comment_id = parent and parent.id or nil,
+			pending = parent ~= nil and parent.state == "PENDING",
+		},
+		function(created, err)
+			if err or not created then
+				on_done(nil, err or "Bitbucket did not return the created task")
+				return
+			end
+			on_done(task_to_comment(created), nil)
+		end
+	)
 end
 
 ---@param pr PullRequest
@@ -533,30 +555,42 @@ end
 ---@param on_done fun(comment: PullsComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.edit_comment(pr, comment, on_done)
-	local comments_api = require("atlas.pulls.providers.bitbucket.api.comments")
-
 	if comment.is_task then
-		local raw = type(comment._raw) == "table" and comment._raw or {}
-		local task_url = tostring((raw.links or {}).self or "")
-		if task_url == "" then
-			vim.schedule(function()
-				on_done(nil, "Missing task URL")
-			end)
-			return nil
-		end
-		return comments_api.update_task(task_url, {
-			content_raw = comment.content_raw,
-			state = comment.state == "RESOLVED" and "RESOLVED" or "UNRESOLVED",
-		}, function(updated, err)
-			if err or type(updated) ~= "table" then
-				on_done(nil, err)
-				return
-			end
-			on_done(task_to_comment(updated), nil)
+		return M.edit_task(pr, comment, on_done)
+	end
+	return require("atlas.pulls.providers.bitbucket.api.comments").edit_comment(
+		pr,
+		comment.id,
+		comment.content_raw,
+		nil,
+		on_done
+	)
+end
+
+---@param _pr PullRequest
+---@param task PullsComment
+---@param on_done fun(task: PullsComment|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.edit_task(_pr, task, on_done)
+	local raw = task._raw or {}
+	local task_url = tostring((raw.links or {}).self or "")
+	if task_url == "" then
+		vim.schedule(function()
+			on_done(nil, "Missing task URL")
 		end)
+		return nil
 	end
 
-	return comments_api.edit_comment(pr, comment.id, comment.content_raw, nil, on_done)
+	return require("atlas.pulls.providers.bitbucket.api.comments").update_task(task_url, {
+		content_raw = task.content_raw,
+		state = task.state == "RESOLVED" and "RESOLVED" or "UNRESOLVED",
+	}, function(updated, err)
+		if err or not updated then
+			on_done(nil, err or "Bitbucket did not return the updated task")
+			return
+		end
+		on_done(task_to_comment(updated), nil)
+	end)
 end
 
 ---@param pr PullRequest
@@ -564,23 +598,39 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.delete_comment(pr, target, on_done)
-	local comments_api = require("atlas.pulls.providers.bitbucket.api.comments")
-
 	if target.is_task then
-		local raw = type(target._raw) == "table" and target._raw or {}
-		local task_url = tostring((raw.links or {}).self or "")
-		if task_url == "" then
-			vim.schedule(function()
-				on_done(false, "Missing task URL")
-			end)
-			return nil
-		end
-		return comments_api.delete_task(task_url, function(_, err)
-			on_done(err == nil, err)
+		return M.delete_task(pr, target, on_done)
+	end
+	return require("atlas.pulls.providers.bitbucket.api.comments").delete_comment(pr, target.id, on_done)
+end
+
+---@param _pr PullRequest
+---@param task PullsComment
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.delete_task(_pr, task, on_done)
+	local raw = task._raw or {}
+	local task_url = tostring((raw.links or {}).self or "")
+	if task_url == "" then
+		vim.schedule(function()
+			on_done(false, "Missing task URL")
 		end)
+		return nil
 	end
 
-	return comments_api.delete_comment(pr, target.id, on_done)
+	return require("atlas.pulls.providers.bitbucket.api.comments").delete_task(task_url, function(_, err)
+		on_done(err == nil, err)
+	end)
+end
+
+---@param pr PullRequest
+---@param root PullsComment
+---@param resolved boolean
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.set_thread_resolved(pr, root, resolved, on_done)
+	local root_id = root.parent_id or root.id
+	return require("atlas.pulls.providers.bitbucket.api.comments").set_thread_resolved(pr, root_id, resolved, on_done)
 end
 
 ---@param opts PullsCreatePROpts
