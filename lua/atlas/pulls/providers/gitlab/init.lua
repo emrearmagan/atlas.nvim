@@ -246,6 +246,15 @@ function M.delete_comment(pr, target, on_done)
 end
 
 ---@param pr PullRequest
+---@param root PullsComment
+---@param resolved boolean
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.set_thread_resolved(pr, root, resolved, on_done)
+	return require("atlas.pulls.providers.gitlab.api.comments").set_thread_resolved(pr, root, resolved, on_done)
+end
+
+---@param pr PullRequest
 ---@param comment PullsComment
 ---@param key string
 ---@param on_done fun(ok: boolean, err: string|nil)

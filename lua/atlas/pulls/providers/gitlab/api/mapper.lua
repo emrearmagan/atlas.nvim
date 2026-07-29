@@ -122,6 +122,7 @@ function M.to_pull_request(raw)
 			merged_at = json.safe_str(raw.merged_at),
 			closed_at = json.safe_str(raw.closed_at),
 			sha = type(sha) == "string" and sha or nil,
+			diff_refs = json.nilify(raw.diff_refs),
 			pipeline = json.nilify(raw.head_pipeline) or json.nilify(raw.pipeline),
 		},
 	}
@@ -280,8 +281,28 @@ function M.to_comment(note, discussion_first_id, discussion_id, resolved, files_
 		inline_hunk = inline_hunk,
 		is_task = nil,
 		state = state,
+		can_resolve = note.resolvable == false and false or nil,
 		_raw = raw_with_discussion,
 	}
+end
+
+---@param draft table
+---@param discussion_first_id number|string|nil
+---@param files_by_path table<string, DiffFile>
+---@return PullsComment
+function M.to_draft_comment(draft, discussion_first_id, files_by_path)
+	local discussion_id = type(draft.discussion_id) == "string" and draft.discussion_id or ""
+	local note = vim.tbl_extend("force", {}, draft, {
+		id = "draft:" .. tostring(draft.id or ""),
+		body = tostring(draft.note or ""),
+	})
+	local comment = M.to_comment(note, discussion_first_id, discussion_id, false, files_by_path)
+	if draft.author_id ~= nil and draft.author_id ~= vim.NIL then
+		comment.author = { name = "You", nickname = nil, username = "", id = tostring(draft.author_id) }
+	end
+	comment.state = "PENDING"
+	comment._raw = vim.tbl_extend("force", {}, draft, { draft_note_id = draft.id })
+	return comment
 end
 
 ---@param gql_note table
