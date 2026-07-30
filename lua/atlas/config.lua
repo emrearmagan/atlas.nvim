@@ -192,6 +192,7 @@ local function register_commands()
 	pcall(vim.api.nvim_del_user_command, "AtlasCreatePR")
 	pcall(vim.api.nvim_del_user_command, "AtlasCreateIssue")
 	pcall(vim.api.nvim_del_user_command, "AtlasDiff")
+	pcall(vim.api.nvim_del_user_command, "AtlasNotes")
 
 	vim.api.nvim_create_user_command("AtlasLogs", function()
 		require("atlas.ui.logs").toggle()
@@ -245,6 +246,15 @@ local function register_commands()
 	end, {
 		desc = "Open the Atlas diff viewer",
 		nargs = 1,
+	})
+
+	vim.api.nvim_create_user_command("AtlasNotes", function(opts)
+		require("atlas.pulls.notes.ui").open({
+			target = opts.args ~= "" and opts.args or nil,
+		})
+	end, {
+		desc = "Open local review notes",
+		nargs = "?",
 	})
 
 	vim.api.nvim_create_user_command("AtlasSearch", function(opts)

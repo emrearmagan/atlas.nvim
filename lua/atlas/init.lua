@@ -15,6 +15,7 @@ local function bootstrap_common()
 	require("atlas.ui.popups.help").register_command("Commands", {
 		{ name = "AtlasPulls", desc = "Open pulls" },
 		{ name = "AtlasIssues", desc = "Open issues" },
+		{ name = "AtlasNotes", desc = "Manage local review notes" },
 		{ name = "AtlasSearch", desc = "Search across providers" },
 		{ name = "AtlasOpen", desc = "Open URL or reference" },
 		{ name = "AtlasClearCache", desc = "Clear Atlas cache" },
@@ -43,7 +44,7 @@ end
 local function load_pulls_provider(id)
 	local provider = require("atlas.pulls.providers").get(id)
 	if not provider then
-	vim.notify(string.format("[Atlas] Unknown pulls provider: %s", id), vim.log.levels.ERROR)
+		vim.notify(string.format("[Atlas] Unknown pulls provider: %s", id), vim.log.levels.ERROR)
 	end
 	return provider
 end
