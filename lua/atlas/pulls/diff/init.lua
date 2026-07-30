@@ -6,7 +6,7 @@ local logger = require("atlas.core.logger")
 ---@param requested AtlasPullsDiffOpenCommand|nil
 ---@return AtlasPullsDiffOpenCommand|nil open_cmd
 ---@return string|nil err
-local function diff_open_command(requested)
+local function configured_command(requested)
 	local config = require("atlas.config")
 	local pulls_cfg = config.options.pulls or {}
 	local cmd = vim.trim(tostring(requested or (pulls_cfg.diff or {}).open_cmd or ""))
@@ -16,7 +16,6 @@ local function diff_open_command(requested)
 	if cmd ~= "AtlasDiff" and cmd ~= "DiffviewOpen" and cmd ~= "CodeDiff" then
 		return nil, "Unsupported diff.open_cmd: " .. cmd
 	end
-
 	if vim.fn.exists(":" .. cmd) ~= 2 then
 		return nil, string.format("diff.open_cmd command not found: %s", cmd)
 	end
@@ -24,6 +23,7 @@ local function diff_open_command(requested)
 	---@cast cmd AtlasPullsDiffOpenCommand
 	return cmd, nil
 end
+
 ---@class PullsDiffOpenOptions
 ---@field git_root string
 ---@field base_revision string
@@ -43,16 +43,15 @@ end
 ---@param range string
 ---@return string|nil err
 local function open_diffview(repo_path, range)
+	local escaped_path = vim.fn.fnameescape(repo_path)
 	local previous_path = vim.fn.fnameescape(vim.fn.getcwd())
-	local ok, err = pcall(function()
-		vim.cmd("cd " .. vim.fn.fnameescape(repo_path))
-		local opened, open_err = pcall(vim.cmd, "DiffviewOpen " .. range)
-		vim.cmd("cd " .. previous_path)
-		if not opened then
-			error(open_err)
-		end
-	end)
-	return not ok and tostring(err) or nil
+	vim.cmd("cd " .. escaped_path)
+	local ok, err = pcall(vim.cmd, "DiffviewOpen " .. range)
+	vim.cmd("cd " .. previous_path)
+	if not ok then
+		return tostring(err)
+	end
+	return nil
 end
 
 ---@param repo_path string
@@ -173,7 +172,7 @@ end
 ---@param loading_target AtlasLoadingTarget|nil
 ---@return { cancel: fun() }|nil
 function M.open(opts, on_done, loading_target)
-	local open_cmd, command_err = diff_open_command(opts.open_cmd)
+	local open_cmd, command_err = configured_command(opts.open_cmd)
 	if not open_cmd then
 		if on_done then
 			on_done(command_err)
@@ -318,7 +317,7 @@ function M.open(opts, on_done, loading_target)
 			end
 			return
 		end
-		view:update("Opening diff...")
+
 		if open_cmd == "CodeDiff" then
 			local restart = reload(prepared_review, prepared_base, prepared_head)
 			local launch_done = false
