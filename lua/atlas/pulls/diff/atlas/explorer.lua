@@ -16,6 +16,7 @@ local STATUS_MARKERS = {
 }
 
 local comment_icon, comment_icon_hl = icons.general("comment")
+local note_icon, note_icon_hl = icons.general("pin")
 local folder_closed_icon, folder_closed_icon_hl = icons.general("folder_closed")
 local folder_open_icon, folder_open_icon_hl = icons.general("folder_open")
 
@@ -263,6 +264,12 @@ function M.render(session, annotated_paths)
 
 	local unreviewed, reviewed = grouped_indices(session)
 	annotated_paths = annotated_paths or {}
+	local noted_paths = {}
+	for _, note in ipairs((session.notes and session.notes.items) or {}) do
+		if note.head_sha == session.range.head_revision then
+			noted_paths[note.file_path] = true
+		end
+	end
 	---@param text string
 	---@param spacing boolean|nil
 	local function add_header(text, spacing)
@@ -288,6 +295,7 @@ function M.render(session, annotated_paths)
 		local parent = directory(file.path)
 		local status, status_highlight = status_marker(file.status)
 		local has_comments = annotated_paths[file.path] or (file.old_path and annotated_paths[file.old_path])
+		local has_notes = file.status ~= "deleted" and noted_paths[file.path]
 		local devicon, devicon_hl = web_icon(basename(file.path))
 		local stats = stat_parts(file)
 		local stats_texts = {}
@@ -299,6 +307,9 @@ function M.render(session, annotated_paths)
 		local prefix_parts = {}
 		if has_comments then
 			table.insert(prefix_parts, { text = comment_icon, hl_group = comment_icon_hl })
+		end
+		if has_notes then
+			table.insert(prefix_parts, { text = note_icon, hl_group = note_icon_hl })
 		end
 		table.insert(prefix_parts, { text = status, hl_group = status_highlight })
 		if devicon then

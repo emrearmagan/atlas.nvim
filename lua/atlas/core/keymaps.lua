@@ -32,9 +32,12 @@ local M = {}
 ---@field toggle_commits? AtlasKeymapValue
 ---@field next_comment? AtlasKeymapValue
 ---@field previous_comment? AtlasKeymapValue
+---@field next_note? AtlasKeymapValue
+---@field previous_note? AtlasKeymapValue
 ---@field view_thread? AtlasKeymapValue
 ---@field add_pending_comment? AtlasKeymapValue
 ---@field add_comment? AtlasKeymapValue
+---@field add_note? AtlasKeymapValue
 ---@field toggle_resolved? AtlasKeymapValue
 
 ---@class AtlasPullsKeymaps
@@ -92,9 +95,12 @@ local M = {}
 ---| "pulls.review.toggle_commits"
 ---| "pulls.review.next_comment"
 ---| "pulls.review.previous_comment"
+---| "pulls.review.next_note"
+---| "pulls.review.previous_note"
 ---| "pulls.review.view_thread"
 ---| "pulls.review.add_pending_comment"
 ---| "pulls.review.add_comment"
+---| "pulls.review.add_note"
 ---| "pulls.review.toggle_resolved"
 ---| "pulls.filter_status_open"
 ---| "pulls.filter_status_merged"
@@ -286,9 +292,12 @@ function M.validate()
 			"pulls.review.toggle_commits",
 			"pulls.review.next_comment",
 			"pulls.review.previous_comment",
+			"pulls.review.next_note",
+			"pulls.review.previous_note",
 			"pulls.review.view_thread",
 			"pulls.review.add_pending_comment",
 			"pulls.review.add_comment",
+			"pulls.review.add_note",
 			"pulls.review.toggle_resolved",
 			"pulls.filter_status_open",
 			"pulls.filter_status_merged",

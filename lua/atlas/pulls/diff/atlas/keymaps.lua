@@ -49,6 +49,8 @@ end
 ---@field select_file fun(index: integer)
 ---@field refresh fun()
 ---@field open_item fun(buf: integer)
+---@field add_note fun(buf: integer)
+---@field jump_note fun(direction: 1|-1)
 ---@field show_commit fun()
 
 ---@param session AtlasNativeDiffSession
@@ -194,7 +196,7 @@ function M.register(session, actions)
 			add(
 				review_actions,
 				item("ui.refresh", {
-					desc = "Refresh comments and tasks",
+					desc = "Refresh review",
 					index = 1,
 					callback = run(actions.refresh),
 					opts = { silent = true, nowait = true },
@@ -216,7 +218,7 @@ function M.register(session, actions)
 			add(
 				review_actions,
 				item("pulls.review.view_thread", {
-					desc = "Open comment thread",
+					desc = "Open comment or note",
 					index = 3,
 					callback = run(function()
 						actions.open_item(buf)
@@ -224,6 +226,43 @@ function M.register(session, actions)
 					opts = { silent = true, nowait = true },
 				})
 			)
+			if buf == session.right.buf then
+				add(
+					review_actions,
+					item("pulls.review.add_note", {
+						desc = "Add local note",
+						index = 4,
+						callback = run(function()
+							actions.add_note(buf)
+						end),
+						opts = { silent = true, nowait = true },
+					})
+				)
+			end
+			local note_navigation = {}
+			add(
+				note_navigation,
+				item("pulls.review.previous_note", {
+					desc = "Previous local note",
+					index = 7,
+					callback = run(function()
+						actions.jump_note(-1)
+					end),
+					opts = { silent = true, nowait = true },
+				})
+			)
+			add(
+				note_navigation,
+				item("pulls.review.next_note", {
+					desc = "Next local note",
+					index = 8,
+					callback = run(function()
+						actions.jump_note(1)
+					end),
+					opts = { silent = true, nowait = true },
+				})
+			)
+			help.register("Navigation", note_navigation, { index = 120, buffer = buf })
 		end
 		help.register("General", general_actions, { index = 90, buffer = buf })
 		help.register("Review", review_actions, { index = 110, buffer = buf })

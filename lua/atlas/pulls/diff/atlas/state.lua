@@ -43,6 +43,7 @@ local M = {}
 ---@field review AtlasReviewState|nil
 ---@field review_context AtlasPreparedReviewContext|nil
 ---@field review_view AtlasReviewView
+---@field notes AtlasDiffNotesState|nil
 ---@field reload fun(target: AtlasLoadingTarget|nil)
 ---@field refresh_ui fun()
 ---@field closing boolean

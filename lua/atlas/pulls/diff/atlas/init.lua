@@ -8,6 +8,7 @@ local keymaps = require("atlas.pulls.diff.atlas.keymaps")
 local renderer = require("atlas.pulls.diff.atlas.renderer")
 local state = require("atlas.pulls.diff.atlas.state")
 local comments = require("atlas.pulls.diff.shared.comments")
+local notes = require("atlas.pulls.diff.atlas.notes")
 local close
 local reload_session
 local toggle_compact
@@ -163,6 +164,7 @@ local function refresh_ui(session)
 	render_explorer(session)
 	commits.render(session)
 	footer.render(session)
+	notes.render(session)
 end
 
 ---@param session AtlasNativeDiffSession
@@ -224,6 +226,7 @@ local function dispose_session(session)
 	cancel_job(session)
 	footer.dispose(session)
 	comments.detach(session)
+	notes.detach(session)
 	state.remove(session.tabpage)
 	return true
 end
@@ -505,11 +508,32 @@ local function register_keymaps(session)
 		end,
 		refresh = function()
 			comments.reload(session)
+			notes.reload(session)
 		end,
 		open_item = function(buf)
-			if not comments.open_at_cursor(session, buf) then
-				footer.notify(session, "info", "No comment at cursor")
+			local has_comments = comments.has_at_cursor(session, buf)
+			local has_notes = notes.has_at_cursor(session, buf)
+			if has_comments and has_notes then
+				vim.ui.select({ "Comment thread", "Local notes" }, { prompt = "Open review item:" }, function(choice)
+					if choice == "Comment thread" then
+						comments.open_at_cursor(session, buf)
+					elseif choice == "Local notes" then
+						notes.open_at_cursor(session, buf)
+					end
+				end)
+			elseif has_comments then
+				comments.open_at_cursor(session, buf)
+			elseif has_notes then
+				notes.open_at_cursor(session, buf)
+			else
+				footer.notify(session, "info", "No comment or note at cursor")
 			end
+		end,
+		add_note = function(buf)
+			notes.add_at_cursor(session, buf)
+		end,
+		jump_note = function(direction)
+			notes.jump(session, direction)
 		end,
 		show_commit = function()
 			commits.show_details(session)
@@ -614,6 +638,7 @@ local function create_session(open_options, options)
 					return explorer.task_at_cursor(session)
 				end,
 			},
+			notes = nil,
 			reload = open_options.reload,
 			refresh_ui = function() end,
 			closing = false,
@@ -682,6 +707,7 @@ local function initialize_session(session)
 		render_explorer(session)
 		local review = session.review_context
 		if review then
+			notes.attach(session, review)
 			comments.attach(session, review)
 		end
 
