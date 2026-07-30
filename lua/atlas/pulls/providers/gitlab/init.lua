@@ -399,10 +399,11 @@ function M.fetch_default_reviewers(opts, on_done)
 		local items = {}
 		for _, raw in ipairs(type(result) == "table" and result or {}) do
 			local login = type(raw) == "table" and tostring(raw.username or "") or ""
-			if login ~= "" then
+			local id = type(raw) == "table" and tonumber(raw.id) or nil
+			if login ~= "" and id ~= nil then
 				table.insert(items, {
 					label = "@" .. login,
-					provider_id = login,
+					provider_id = tostring(id),
 					selected = false,
 					default = false,
 				})
@@ -417,6 +418,14 @@ end
 ---@return { cancel: fun() }|nil
 function M.create_pr(opts, on_done)
 	local mr_api = require("atlas.pulls.providers.gitlab.api.mergerequests")
+	local reviewer_ids = {}
+	for _, reviewer in ipairs(opts.reviewers or {}) do
+		local id = tonumber(reviewer.provider_id)
+		if id ~= nil then
+			table.insert(reviewer_ids, id)
+		end
+	end
+
 	return mr_api.create_mr({
 		project_path = opts.repo_slug,
 		source_branch = opts.head,
@@ -424,6 +433,7 @@ function M.create_pr(opts, on_done)
 		title = opts.title,
 		description = opts.body,
 		draft = opts.draft == true,
+		reviewer_ids = reviewer_ids,
 	}, function(result, err)
 		if err or result == nil then
 			on_done(nil, err)
