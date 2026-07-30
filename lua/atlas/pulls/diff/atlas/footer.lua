@@ -54,8 +54,24 @@ local function total_stats(session)
 end
 
 ---@param session AtlasNativeDiffSession
+---@return integer|nil comments, integer tasks, string task_label
+local function review_counts(session)
+	if not session.review or not session.review.pr then
+		return nil, 0, "Task"
+	end
+	local tasks = session.review.tasks
+	local task_label = tasks[1] and tasks[1].task_label or "Task"
+	return #session.review.comments, #tasks, task_label
+end
+
+---@param session AtlasNativeDiffSession
 ---@return string
 local function identity(session)
+	local configured_review = session.review_context
+	local pr = session.review and session.review.pr or (configured_review and configured_review.pr)
+	if pr then
+		return string.format("PR #%s · %s", tostring(pr.id), tostring(pr.title))
+	end
 	return string.format(
 		"%s...%s",
 		tostring(session.range.base_revision):sub(1, 8),
@@ -75,11 +91,16 @@ end
 ---@return table[]
 local function segments(session, width)
 	local additions, deletions = total_stats(session)
+	local comments, tasks, task_label = review_counts(session)
+	local comments_text = comments and string.format("comments %d", comments) or ""
+	local tasks_text = tasks > 0 and string.format("%ss %d", task_label:lower(), tasks) or ""
 	local add_text = string.format("+%d", additions)
 	local delete_text = string.format("-%d", deletions)
 	local result = { { text = identity(session), hl_group = "AtlasFooterText" } }
 	local optional = {
 		{ text = session.footer.notice.text, hl_group = session.footer.notice.hl_group },
+		{ text = comments_text, hl_group = "AtlasTextMuted" },
+		{ text = tasks_text, hl_group = "AtlasTextMuted" },
 	}
 	local remaining = math.max(0, width - segment_width(add_text) - segment_width(delete_text) - 1)
 	for _, item in ipairs(optional) do

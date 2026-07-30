@@ -1,6 +1,7 @@
 local M = {}
 
 local diff = require("atlas.ui.components.diff_hunks")
+local icons = require("atlas.ui.shared.icons")
 local utils = require("atlas.ui.shared.utils")
 
 local namespace = vim.api.nvim_create_namespace("atlas_native_diff_panel")
@@ -13,6 +14,8 @@ local STATUS_MARKERS = {
 	type_changed = { "T", "DiagnosticWarn" },
 	unknown = { "?", "AtlasTextMuted" },
 }
+
+local comment_icon, comment_icon_hl = icons.general("comment")
 
 ---@class AtlasDiffExplorerOptions
 ---@field grouped boolean
@@ -56,6 +59,26 @@ function M.filter(files, options)
 		end
 		return true
 	end, files)
+end
+
+---@param author { name: string, nickname: string|nil }|nil
+---@return string
+local function author_name(author)
+	if author == nil then
+		return "Unknown"
+	end
+	if author.nickname and author.nickname ~= "" then
+		return author.nickname
+	end
+	return author.name ~= "" and author.name or "Unknown"
+end
+
+---@param task PullsComment
+---@param plural boolean
+---@return string
+local function task_label(task, plural)
+	local label = task.task_label or "Task"
+	return plural and (label .. "s") or label
 end
 
 ---@param status DiffFileStatus
@@ -202,7 +225,8 @@ local function write(session, lines, highlights)
 end
 
 ---@param session AtlasNativeDiffSession
-function M.render(session)
+---@param annotated_paths? table<string, boolean>
+function M.render(session, annotated_paths)
 	local buf = session.panel.buf
 	if not vim.api.nvim_buf_is_valid(buf) then
 		return
@@ -215,7 +239,9 @@ function M.render(session)
 	session.panel_items = {}
 
 	local unreviewed, reviewed = grouped_indices(session)
+	annotated_paths = annotated_paths or {}
 	local folder_icon, folder_icon_hl = web_icon("")
+
 	---@param text string
 	local function add_header(text)
 		table.insert(lines, text)
@@ -230,6 +256,7 @@ function M.render(session)
 		local label = file_label(file)
 		local parent = directory(file.path)
 		local status, status_highlight = status_marker(file.status)
+		local has_comments = annotated_paths[file.path] or (file.old_path and annotated_paths[file.old_path])
 		local devicon, devicon_hl = web_icon(basename(file.path))
 		local stats = stat_parts(file)
 		local stats_texts = {}
@@ -239,6 +266,9 @@ function M.render(session)
 		local suffix = table.concat(stats_texts, " ")
 
 		local prefix_parts = {}
+		if has_comments then
+			table.insert(prefix_parts, { text = comment_icon, hl_group = comment_icon_hl })
+		end
 		table.insert(prefix_parts, { text = status, hl_group = status_highlight })
 		if devicon then
 			table.insert(prefix_parts, { text = devicon, hl_group = devicon_hl or "AtlasTextMuted" })
@@ -321,9 +351,31 @@ function M.render(session)
 	end
 
 	add_section("Files", unreviewed)
-	if #reviewed > 0 then
+	if session.review_context or #reviewed > 0 then
 		table.insert(lines, "")
 		add_section("Reviewed", reviewed)
+	end
+
+	local tasks = (session.review and session.review.tasks) or {}
+	if #tasks > 0 then
+		table.insert(lines, "")
+		add_header(string.format("%s (%d)", task_label(tasks[1], true), #tasks))
+		for _, task in ipairs(tasks) do
+			local checkbox = task.state == "RESOLVED" and "[x]" or "[ ]"
+			local content = utils.task_text(task.content_display or task.content_raw):match("[^\n]*") or ""
+			if content == "" then
+				content = string.format("(empty %s)", task_label(task, false):lower())
+			end
+			local text = checkbox .. " " .. utils.truncate(content, math.max(1, width - #checkbox - 1))
+			table.insert(lines, text)
+			session.panel_items[#lines] = { kind = "task", comment = task }
+			table.insert(highlights, {
+				#lines - 1,
+				0,
+				#checkbox,
+				task.state == "RESOLVED" and "AtlasTextPositive" or "AtlasTextMuted",
+			})
+		end
 	end
 
 	write(session, lines, highlights)
@@ -337,7 +389,7 @@ function M.render(session)
 end
 
 ---@param session AtlasNativeDiffSession
----@return AtlasNativeDiffPanelItem|nil
+---@return { kind: "file", index: integer }|{ kind: "folder", path: string }|{ kind: "task", comment: PullsComment }|nil
 local function item_at_cursor(session)
 	if vim.api.nvim_get_current_buf() ~= session.panel.buf then
 		return nil
@@ -350,6 +402,13 @@ end
 function M.file_at_cursor(session)
 	local item = item_at_cursor(session)
 	return item and item.kind == "file" and item.index or nil
+end
+
+---@param session AtlasNativeDiffSession
+---@return PullsComment|nil
+function M.task_at_cursor(session)
+	local item = item_at_cursor(session)
+	return item and item.kind == "task" and item.comment or nil
 end
 
 ---@param session AtlasNativeDiffSession
@@ -432,6 +491,24 @@ function M.show_path(session)
 	if not item then
 		return
 	end
+	if item.kind == "task" then
+		local task = item.comment
+		local content = utils.task_text(task.content_display or task.content_raw)
+		local empty = string.format("(empty %s)", task_label(task, false):lower())
+		local lines = vim.split(content ~= "" and content or empty, "\n", { plain = true })
+		table.insert(lines, "")
+		table.insert(lines, string.format("by @%s  %s", author_name(task.author), utils.relative_time(task.created_on)))
+		local width = math.max(1, math.min(100, vim.o.columns - 4))
+		vim.lsp.util.open_floating_preview(lines, "markdown", {
+			border = "rounded",
+			focusable = false,
+			max_width = width,
+			wrap_at = width,
+			title = string.format(" %s ", task_label(task, false)),
+		})
+		return
+	end
+
 	local path
 	if item.kind == "folder" then
 		path = vim.fs.joinpath(session.range.root, item.path)

@@ -32,6 +32,8 @@ local M = {}
 ---@field next_comment? AtlasKeymapValue
 ---@field previous_comment? AtlasKeymapValue
 ---@field view_thread? AtlasKeymapValue
+---@field add_pending_comment? AtlasKeymapValue
+---@field add_comment? AtlasKeymapValue
 ---@field toggle_resolved? AtlasKeymapValue
 
 ---@class AtlasPullsKeymaps
@@ -89,6 +91,8 @@ local M = {}
 ---| "pulls.review.next_comment"
 ---| "pulls.review.previous_comment"
 ---| "pulls.review.view_thread"
+---| "pulls.review.add_pending_comment"
+---| "pulls.review.add_comment"
 ---| "pulls.review.toggle_resolved"
 ---| "pulls.filter_status_open"
 ---| "pulls.filter_status_merged"
@@ -280,6 +284,8 @@ function M.validate()
 			"pulls.review.next_comment",
 			"pulls.review.previous_comment",
 			"pulls.review.view_thread",
+			"pulls.review.add_pending_comment",
+			"pulls.review.add_comment",
 			"pulls.review.toggle_resolved",
 			"pulls.filter_status_open",
 			"pulls.filter_status_merged",

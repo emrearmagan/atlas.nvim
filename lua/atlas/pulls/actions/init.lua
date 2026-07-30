@@ -135,8 +135,11 @@ end
 ---@field git_root string
 ---@field base_revision string
 ---@field head_revision string
----@field fetch_branches (fun(on_done: fun(err: string|nil)): { cancel: fun() }|nil)|nil
+---@field review AtlasReviewOpenContext|nil
+---@field fetch_branches (fun(pr: PullRequest|nil, on_done: fun(err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field open_cmd AtlasPullsDiffOpenCommand|nil
+---@field force_refresh boolean|nil
+---@field refresh_pull_request boolean|nil
 
 ---@param repo_path string
 ---@param range string
@@ -229,12 +232,9 @@ function M.open_diff_range(opts, on_done)
 		return nil
 	end
 
-	local range = base .. "..." .. head
-	local command = open_cmd .. " " .. range
-	logger.loginfo("actions.open_diff", { repo_path = root, command = command })
-
+	local review = open_cmd == "AtlasDiff" and opts.review or nil
 	local loading = require("atlas.ui.components.loading")
-	local fetch_request
+	local prepare_request
 	local launch_request
 	local completed = false
 	local cancelled = false
@@ -244,9 +244,9 @@ function M.open_diff_range(opts, on_done)
 			return
 		end
 		cancelled = true
-		if fetch_request then
-			pcall(fetch_request.cancel)
-			fetch_request = nil
+		if prepare_request then
+			pcall(prepare_request.cancel)
+			prepare_request = nil
 		end
 		if launch_request then
 			pcall(launch_request.cancel)
@@ -257,6 +257,7 @@ function M.open_diff_range(opts, on_done)
 		end
 	end
 	view = loading.open("Preparing diff...", cancel)
+	local operation = { cancel = cancel }
 
 	---@param err string|nil
 	local function complete(err)
@@ -264,7 +265,7 @@ function M.open_diff_range(opts, on_done)
 			return
 		end
 		completed = true
-		fetch_request = nil
+		prepare_request = nil
 		launch_request = nil
 		if on_done then
 			on_done(err)
@@ -277,32 +278,45 @@ function M.open_diff_range(opts, on_done)
 		complete(err)
 	end
 
-	local function launch()
-		if cancelled or completed then
-			return
+	---@param prepared_review AtlasPreparedReviewContext|nil
+	---@param prepared_base string
+	---@param prepared_head string
+	---@return fun()
+	local function reload(prepared_review, prepared_base, prepared_head)
+		return function()
+			M.open_diff_range({
+				git_root = root,
+				base_revision = prepared_base,
+				head_revision = prepared_head,
+				review = prepared_review,
+				fetch_branches = opts.fetch_branches,
+				open_cmd = open_cmd,
+				force_refresh = true,
+				refresh_pull_request = true,
+			}, function(reload_err)
+				if reload_err then
+					vim.notify("[Atlas Review] Unable to reload diff: " .. reload_err, vim.log.levels.ERROR)
+				end
+			end)
 		end
+	end
+
+	---@param prepared_review AtlasPreparedReviewContext|nil
+	---@param prepared_base string
+	---@param prepared_head string
+	local function launch(prepared_review, prepared_base, prepared_head)
+		local range = prepared_base .. "..." .. prepared_head
+		logger.loginfo("actions.open_diff", { repo_path = root, command = open_cmd .. " " .. range })
+
 		if open_cmd == "AtlasDiff" then
+			local restart = reload(prepared_review, prepared_base, prepared_head)
 			local explorer = require("atlas.pulls.diff.atlas.explorer")
 			local explorer_options = explorer.options()
-			local function reload()
-				M.open_diff_range({
-					git_root = root,
-					base_revision = base,
-					head_revision = head,
-					fetch_branches = opts.fetch_branches,
-					open_cmd = "AtlasDiff",
-				}, function(err)
-					if err then
-						vim.notify("[Atlas Diff] Unable to reload diff: " .. err, vim.log.levels.ERROR)
-					end
-				end)
-			end
-			-- The callback may finish before prepare() returns its request handle.
 			local finished = false
-			local request = require("atlas.pulls.diff.atlas.git").prepare({
+			local handle = require("atlas.pulls.diff.atlas.git").prepare({
 				git_root = root,
-				base_revision = base,
-				head_revision = head,
+				base_revision = prepared_base,
+				head_revision = prepared_head,
 				filter = function(files)
 					return explorer.filter(files, explorer_options)
 				end,
@@ -323,7 +337,8 @@ function M.open_diff_range(opts, on_done)
 				local ok, open_err = pcall(require("atlas.pulls.diff.atlas").open, {
 					diff = prepared,
 					explorer = explorer_options,
-					reload = reload,
+					review = prepared_review,
+					reload = restart,
 				})
 				if not ok then
 					open_err = tostring(open_err)
@@ -331,9 +346,9 @@ function M.open_diff_range(opts, on_done)
 				complete(open_err)
 			end)
 			if finished or cancelled then
-				request.cancel()
+				handle.cancel()
 			else
-				launch_request = request
+				launch_request = handle
 			end
 			return
 		end
@@ -349,45 +364,56 @@ function M.open_diff_range(opts, on_done)
 		view:finish()
 		complete(open_diffview(root, range))
 	end
-	local function start_launch()
-		local ok, err = pcall(launch)
-		if not ok then
-			fail(tostring(err))
-		end
-	end
 
-	if not opts.fetch_branches then
-		start_launch()
-		return { cancel = cancel }
-	end
-
-	view:update("Fetching remote branches...")
-	local fetch_done = false
-	local ok, request = pcall(opts.fetch_branches, function(err)
-		fetch_done = true
-		fetch_request = nil
-		if cancelled or completed then
+	-- Preparation may finish before run() returns its request handle.
+	local preparation_done = false
+	local ok, handle = pcall(require("atlas.pulls.diff.shared.prepare").run, {
+		review = review,
+		fetch_branches = opts.fetch_branches,
+		force_refresh = opts.force_refresh,
+		refresh_pull_request = opts.refresh_pull_request,
+		on_progress = function(message)
+			view:update(message)
+		end,
+	}, function(result, err)
+		preparation_done = true
+		prepare_request = nil
+		if cancelled then
 			return
 		end
-		if err then
-			view:finish()
-			complete(tostring(err))
+		if not result then
+			fail(tostring(err or "Unable to prepare diff"))
 			return
 		end
-		start_launch()
+		local launched, launch_err = pcall(function()
+			local prepared_base, prepared_head = base, head
+			if opts.refresh_pull_request and result.review then
+				local revision_err
+				prepared_base, prepared_head, revision_err = checkout.pr_diff_revisions(result.review.pr)
+				if not prepared_base or not prepared_head then
+					fail(tostring(revision_err or "Unable to refresh pull request revisions"))
+					return
+				end
+			end
+			launch(result.review, prepared_base, prepared_head)
+		end)
+		if not launched then
+			fail(tostring(launch_err))
+		end
 	end)
 	if not ok then
 		view:finish()
-		complete(tostring(request))
-	elseif fetch_done or completed or cancelled then
-		if request then
-			pcall(request.cancel)
+		complete(tostring(handle))
+		return nil
+	end
+	if preparation_done or completed or cancelled then
+		if handle then
+			pcall(handle.cancel)
 		end
 	else
-		fetch_request = request
+		prepare_request = handle
 	end
-
-	return { cancel = cancel }
+	return operation
 end
 
 ---@param range string
@@ -427,13 +453,25 @@ function M.open_diff(pr)
 		return
 	end
 
+	local review_provider = provider()
+
+	---@param current_pr PullRequest|nil
+	---@param on_done fun(err: string|nil)
+	---@return { cancel: fun() }
+	local function fetch_branches(current_pr, on_done)
+		return checkout.fetch_pr_branches(current_pr or pr, resolved_path, on_done)
+	end
+
 	M.open_diff_range({
 		git_root = resolved_path,
 		base_revision = base_revision,
 		head_revision = head_revision,
-		fetch_branches = function(on_done)
-			return checkout.fetch_pr_branches(pr, resolved_path, on_done)
-		end,
+		review = review_provider and {
+			provider = review_provider,
+			pr = pr,
+			current_user = require("atlas.pulls.state").current_user,
+		} or nil,
+		fetch_branches = fetch_branches,
 	}, function(err)
 		if err then
 			logger.logerror("actions.open_diff failed", { pr_id = pr.id, error = tostring(err) })
@@ -443,6 +481,7 @@ function M.open_diff(pr)
 		footer.notify("success", "Opened PR diff", 1200)
 	end)
 end
+
 ---@param pr PullRequest
 function M.checkout(pr)
 	footer.notify("loading", string.format("Checking out PR #%s", tostring(pr.id or "")))

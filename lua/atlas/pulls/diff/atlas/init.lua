@@ -6,6 +6,7 @@ local git = require("atlas.pulls.diff.atlas.git")
 local keymaps = require("atlas.pulls.diff.atlas.keymaps")
 local renderer = require("atlas.pulls.diff.atlas.renderer")
 local state = require("atlas.pulls.diff.atlas.state")
+local comments = require("atlas.pulls.diff.shared.comments")
 local close
 local reload_session
 local toggle_compact
@@ -164,11 +165,12 @@ end
 
 ---@param session AtlasNativeDiffSession
 local function render_explorer(session)
-	explorer.render(session)
+	explorer.render(session, comments.annotated_paths(session.review))
 end
 
 ---@param session AtlasNativeDiffSession
 local function refresh_ui(session)
+	comments.render(session)
 	render_explorer(session)
 	footer.render(session)
 end
@@ -424,6 +426,14 @@ local function register_keymaps(session)
 		select_file = function(index)
 			select_file(session, index)
 		end,
+		refresh = function()
+			comments.reload(session)
+		end,
+		open_item = function(buf)
+			if not comments.open_at_cursor(session, buf) then
+				footer.notify(session, "info", "No comment at cursor")
+			end
+		end,
 	})
 end
 
@@ -481,6 +491,22 @@ local function create_session(open_options, options)
 			footer = footer.new(footer_buf, footer_win),
 			job = nil,
 			document = open_options.diff.document,
+			review = nil,
+			review_context = open_options.review,
+			review_view = {
+				notify = function(level, message, duration)
+					footer.notify(session, level, message, duration)
+				end,
+				register_keymaps = function(actions)
+					keymaps.register_review(session, actions)
+				end,
+				unregister_keymaps = function()
+					keymaps.unregister_review(session)
+				end,
+				task_at_cursor = function()
+					return explorer.task_at_cursor(session)
+				end,
+			},
 			reload = open_options.reload,
 			refresh_ui = function() end,
 			closing = false,
@@ -547,6 +573,11 @@ local function initialize_session(session)
 		configure_content_window(session, right_win)
 		render_file(session)
 		render_explorer(session)
+		local review = session.review_context
+		if review then
+			comments.attach(session, review)
+		end
+
 		focus_first_hunk(session)
 		footer.reflow(session)
 	end)
@@ -691,6 +722,7 @@ close = function(session)
 	session.closing = true
 	cancel_job(session)
 	footer.dispose(session)
+	comments.detach(session)
 	state.remove(session.tabpage)
 	if vim.api.nvim_tabpage_is_valid(session.tabpage) then
 		local tabnr = vim.api.nvim_tabpage_get_number(session.tabpage)

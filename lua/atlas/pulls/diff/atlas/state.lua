@@ -14,6 +14,7 @@ local M = {}
 ---@alias AtlasNativeDiffPanelItem
 ---| { kind: "file", index: integer }
 ---| { kind: "folder", path: string }
+---| { kind: "task", comment: PullsComment }
 
 ---@class AtlasNativeDiffSession
 ---@field tabpage integer
@@ -35,6 +36,9 @@ local M = {}
 ---@field footer AtlasNativeDiffFooter
 ---@field job { cancel: fun() }|nil
 ---@field document AtlasNativeDiffDocument
+---@field review AtlasReviewState|nil
+---@field review_context AtlasPreparedReviewContext|nil
+---@field review_view AtlasReviewView
 ---@field reload fun()
 ---@field refresh_ui fun()
 ---@field closing boolean
@@ -42,6 +46,7 @@ local M = {}
 ---@class AtlasNativeDiffOpenOptions
 ---@field diff AtlasPreparedDiff
 ---@field explorer AtlasDiffExplorerOptions
+---@field review AtlasPreparedReviewContext|nil
 ---@field reload fun()
 
 ---@type table<integer, AtlasNativeDiffSession>

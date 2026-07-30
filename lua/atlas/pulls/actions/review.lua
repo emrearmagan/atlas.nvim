@@ -31,7 +31,7 @@ end
 ---@field items PullsComment[]
 ---@field completion AtlasMarkdownCompletionProvider|nil
 ---@field active (fun(): boolean)|nil
----@field track fun(handle: { cancel: fun() }|nil)
+---@field track fun(handle: { cancel: fun() }|nil): fun()
 ---@field refresh fun()
 ---@field notify fun(level: "loading"|"success"|"warn"|"error", message: string, duration: integer|nil)|nil
 
@@ -118,6 +118,28 @@ local function active(context)
 end
 
 ---@param context AtlasReviewCommentActionContext
+---@param start fun(done: fun(...)): { cancel: fun() }|nil
+---@param done fun(...)
+local function run_request(context, start, done)
+	local finished = false
+	local release
+	local function complete(...)
+		if finished then
+			return
+		end
+		finished = true
+		if release then
+			release()
+		end
+		done(...)
+	end
+	release = context.track(start(complete))
+	if finished then
+		release()
+	end
+end
+
+---@param context AtlasReviewCommentActionContext
 ---@param inline PullsInlineCommentPosition|nil
 ---@param opts AtlasReviewAddOptions|nil
 ---@return boolean handled
@@ -141,22 +163,22 @@ function M.add(context, inline, opts)
 				return
 			end
 			notify(context, "loading", "Adding comment...", nil)
-			context.track(
-				provider.add_comment(context.pr, text, { inline = inline, pending = pending }, function(created, err)
-					if not active(context) then
-						return
-					end
-					if err then
-						notify(context, "error", "Add comment failed: " .. err, nil)
-						return
-					end
-					if created then
-						table.insert(context.items, created)
-					end
-					notify(context, "success", "Comment added", 1200)
-					context.refresh()
-				end)
-			)
+			run_request(context, function(done)
+				return provider.add_comment(context.pr, text, { inline = inline, pending = pending }, done)
+			end, function(created, err)
+				if not active(context) then
+					return
+				end
+				if err then
+					notify(context, "error", "Add comment failed: " .. err, nil)
+					return
+				end
+				if created then
+					table.insert(context.items, created)
+				end
+				notify(context, "success", "Comment added", 1200)
+				context.refresh()
+			end)
 		end,
 	})
 	return true
@@ -219,7 +241,9 @@ local function reply(context, comment)
 				return
 			end
 			notify(context, "loading", "Sending reply...", nil)
-			context.track(provider.reply_comment(context.pr, comment, text, function(created, err)
+			run_request(context, function(done)
+				return provider.reply_comment(context.pr, comment, text, done)
+			end, function(created, err)
 				if not active(context) then
 					return
 				end
@@ -235,7 +259,7 @@ local function reply(context, comment)
 				end
 				notify(context, "success", "Reply added", 1200)
 				context.refresh()
-			end))
+			end)
 		end,
 	})
 	return true
@@ -262,7 +286,9 @@ local function edit(context, comment)
 			end
 			notify(context, "loading", comment.is_task and "Editing task..." or "Editing comment...", nil)
 			local desired = vim.tbl_extend("force", {}, comment, { content_raw = text })
-			context.track(update(context.pr, desired, function(updated, err)
+			run_request(context, function(done)
+				return update(context.pr, desired, done)
+			end, function(updated, err)
 				if not active(context) then
 					return
 				end
@@ -273,7 +299,7 @@ local function edit(context, comment)
 				notify(context, "success", comment.is_task and "Task updated" or "Comment updated", 1200)
 				upsert_comment(context, vim.tbl_extend("keep", updated or {}, desired))
 				context.refresh()
-			end))
+			end)
 		end,
 	})
 	return true
@@ -299,7 +325,9 @@ local function delete(context, comment)
 			return
 		end
 		notify(context, "loading", comment.is_task and "Deleting task..." or "Deleting comment...", nil)
-		context.track(remove(context.pr, comment, function(ok, err)
+		run_request(context, function(done)
+			return remove(context.pr, comment, done)
+		end, function(ok, err)
 			if not active(context) then
 				return
 			end
@@ -314,7 +342,7 @@ local function delete(context, comment)
 			notify(context, "success", comment.is_task and "Task deleted" or "Comment deleted", 1200)
 			remove_comment(context, comment)
 			context.refresh()
-		end))
+		end)
 	end)
 	return true
 end
@@ -345,7 +373,9 @@ local function toggle_task(context, comment)
 		desired.state = "RESOLVED"
 	end
 	notify(context, "loading", is_resolved and "Reopening task..." or "Resolving task...", nil)
-	context.track(update(context.pr, desired, function(updated, err)
+	run_request(context, function(done)
+		return update(context.pr, desired, done)
+	end, function(updated, err)
 		if not active(context) then
 			return
 		end
@@ -356,7 +386,7 @@ local function toggle_task(context, comment)
 		notify(context, "success", is_resolved and "Task reopened" or "Task resolved", 1200)
 		upsert_comment(context, vim.tbl_extend("keep", updated or {}, desired))
 		context.refresh()
-	end))
+	end)
 	return true
 end
 
@@ -371,7 +401,9 @@ local function toggle_resolved(context, comment)
 
 	local resolved = comment.state ~= "RESOLVED"
 	notify(context, "loading", resolved and "Resolving thread..." or "Reopening thread...", nil)
-	context.track(provider.set_thread_resolved(context.pr, comment, resolved, function(ok, err)
+	run_request(context, function(done)
+		return provider.set_thread_resolved(context.pr, comment, resolved, done)
+	end, function(ok, err)
 		if not active(context) then
 			return
 		end
@@ -382,7 +414,7 @@ local function toggle_resolved(context, comment)
 		notify(context, "success", resolved and "Thread resolved" or "Thread reopened", 1200)
 		comment.state = resolved and "RESOLVED" or nil
 		context.refresh()
-	end))
+	end)
 	return true
 end
 
