@@ -34,6 +34,14 @@ function M.comment_completion(context)
 	return require("atlas.pulls.providers.gitlab.completion.author").build_completion(context)
 end
 
+---@param pr PullRequest
+---@param opts { force_refresh: boolean|nil }|nil
+---@param on_done fun(context: { authors: PullsAuthor[] }|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_review_context(pr, opts, on_done)
+	return require("atlas.pulls.providers.gitlab.api.mergerequests").get_review_context(pr, opts, on_done)
+end
+
 ---@param view AtlasPullsViewConfig
 ---@param opts PullsFetchOpts
 ---@param on_done fun(groups: PullsGroup[], err: string[]|nil)

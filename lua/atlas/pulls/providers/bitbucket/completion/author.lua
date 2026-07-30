@@ -35,9 +35,12 @@ local function collect_authors(context)
 	end
 
 	local pr = context.pr
+	for _, author in ipairs((context.review_context or {}).authors or {}) do
+		add(author)
+	end
 	if pr then
 		add(pr.author)
-		for _, participant in ipairs((pr._raw or {}).participants or {}) do
+		for _, participant in ipairs(pr._raw.participants or {}) do
 			add(type(participant) == "table" and participant.user or nil)
 		end
 	end

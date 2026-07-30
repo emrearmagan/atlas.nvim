@@ -179,6 +179,51 @@ function M.get_mr(pr, opts, on_done)
 end
 
 ---@param pr PullRequest
+---@param _opts { force_refresh: boolean|nil }|nil
+---@param on_done fun(context: { authors: PullsAuthor[] }|nil, err: string|nil)
+---@return nil
+function M.get_review_context(pr, _opts, on_done)
+	local authors = {}
+	local seen = {}
+	---@param author PullsAuthor|nil
+	local function add(author)
+		if author == nil then
+			return
+		end
+		local key = tostring(author.id or "")
+		if key == "" then
+			key = tostring(author.username or author.nickname or author.name or "")
+		end
+		if key == "" or seen[key] then
+			return
+		end
+		seen[key] = true
+		table.insert(authors, author)
+	end
+
+	add(pr.author)
+	local raw = pr._raw
+	for _, list in ipairs({ raw.assignees or {}, raw.reviewers or {} }) do
+		for _, user in ipairs(list) do
+			if type(user) == "table" then
+				local username = tostring(user.username or "")
+				local name = tostring(user.name or username)
+				local id = tostring(user.id or "")
+				if id ~= "" or username ~= "" or name ~= "" then
+					add({
+						id = id,
+						name = name,
+						username = username,
+						nickname = username ~= "" and username or nil,
+					})
+				end
+			end
+		end
+	end
+	on_done({ authors = authors }, nil)
+end
+
+---@param pr PullRequest
 ---@param opts { force_refresh?: boolean }|nil
 ---@param on_done fun(description: string|nil, err: string|nil)
 ---@return { cancel: fun() }|nil

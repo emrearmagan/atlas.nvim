@@ -307,6 +307,98 @@ function M.get_reviewers(pr, opts, on_done)
 	})
 end
 
+---@param raw table|nil
+---@return PullsAuthor|nil
+local function review_author(raw)
+	if type(raw) ~= "table" then
+		return nil
+	end
+	local login = tostring(raw.login or "")
+	if login == "" then
+		return nil
+	end
+	return {
+		id = tostring(raw.id or login),
+		name = tostring(raw.name or login),
+		username = login,
+		nickname = login,
+	}
+end
+
+---@param pr PullRequest
+---@param opts { force_refresh: boolean|nil }|nil
+---@param on_done fun(context: { authors: PullsAuthor[] }|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.get_review_context(pr, opts, on_done)
+	local repo_slug = pr.repo_full_name or ""
+	if repo_slug == "" then
+		vim.schedule(function()
+			on_done(nil, "Missing repo")
+		end)
+		return nil
+	end
+
+	local cache_key = string.format("github:review-context:%s:%s", repo_slug, tostring(pr.id))
+	opts = opts or {}
+	if not opts.force_refresh then
+		local cached, ok = cli.get_mem(cache_key)
+		if ok then
+			on_done(cached, nil)
+			return nil
+		end
+	end
+
+	return cli.gh({
+		"pr",
+		"view",
+		tostring(pr.id),
+		"--repo",
+		repo_slug,
+		"--json",
+		"assignees,reviews,reviewRequests",
+	}, function(result, err)
+		if err or type(result) ~= "table" then
+			on_done(nil, err or "Failed to fetch review context")
+			return
+		end
+
+		local authors = {}
+		local seen = {}
+		---@param author PullsAuthor|nil
+		local function add(author)
+			if author == nil then
+				return
+			end
+			local key = tostring(author.username or author.nickname or author.name or ""):lower()
+			if key == "" or seen[key] then
+				return
+			end
+			seen[key] = true
+			table.insert(authors, author)
+		end
+
+		add(pr.author)
+		for _, raw in ipairs(result.assignees or {}) do
+			add(review_author(raw))
+		end
+		for _, raw in ipairs(result.reviews or {}) do
+			add(review_author(type(raw) == "table" and raw.author or nil))
+		end
+		for _, raw in ipairs(result.reviewRequests or {}) do
+			local requested = type(raw) == "table" and (raw.requestedReviewer or raw) or nil
+			add(review_author(requested))
+		end
+
+		local context = { authors = authors }
+		cli.set_mem(cache_key, context)
+		on_done(context, nil)
+	end, {
+		action = "Fetch PR review context",
+		repo = repo_slug,
+		number = pr.id,
+	})
+end
+
 ---@param pr PullRequest
 ---@param opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(entries: PullsDiffstatEntry[]|nil, err: string|nil)

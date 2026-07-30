@@ -14,6 +14,9 @@ local function collect_logins(context)
 	end
 
 	local pr = context.pr
+	for _, author in ipairs((context.review_context or {}).authors or {}) do
+		add(author.nickname or author.username or author.name)
+	end
 	if pr and pr.author then
 		add(pr.author.nickname or pr.author.name)
 	end
