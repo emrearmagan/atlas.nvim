@@ -165,6 +165,16 @@ function M.fetches(pr, refresh, opts)
 		refresh()
 	end))
 
+	local provider = require("atlas.pulls.state").provider
+	local panel_state = require("atlas.pulls.ui.panel.pr.state")
+	panel_state.diffstat = "loading"
+	if provider and provider.fetch_diffstat then
+		track_panel(provider.fetch_diffstat(pr, { force_refresh = force }, function(entries, err)
+			panel_state.diffstat = err and err or (entries or {})
+			refresh()
+		end))
+	end
+
 	local overview_state = require("atlas.pulls.ui.panel.pr.tabs.overview.state")
 	local checks = require("atlas.pulls.providers.gitlab.api.checks")
 	overview_state.builds = "loading"

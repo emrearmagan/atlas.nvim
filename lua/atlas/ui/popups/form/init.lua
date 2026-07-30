@@ -331,9 +331,6 @@ function M.open(state, opts)
 				vim.schedule(function()
 					pcall(vim.api.nvim_del_augroup_by_id, augroup)
 				end)
-				if opts.on_closed then
-					opts.on_closed()
-				end
 			end
 		end,
 	})

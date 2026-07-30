@@ -69,9 +69,24 @@ local function cancel_all()
 end
 
 ---@param handle { cancel: fun() }|nil
+---@return fun()
 local function track(handle)
-	if handle then
-		table.insert(in_flight, handle)
+	if not handle then
+		return function() end
+	end
+	table.insert(in_flight, handle)
+	local tracked = true
+	return function()
+		if not tracked then
+			return
+		end
+		tracked = false
+		for index, candidate in ipairs(in_flight) do
+			if candidate == handle then
+				table.remove(in_flight, index)
+				break
+			end
+		end
 	end
 end
 

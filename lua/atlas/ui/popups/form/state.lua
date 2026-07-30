@@ -44,7 +44,6 @@
 ---@field initial_body string
 ---@field close fun()
 ---@field submit fun()
----@field on_closed fun()|nil
 ---@field keymaps AtlasFormKeymap[]|nil
 ---@field meta fun(): AtlasFormMetaRow[]
 

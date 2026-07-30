@@ -289,6 +289,38 @@ end
 
 ---@param pr PullRequest
 ---@param opts { force_refresh?: boolean }|nil
+---@param on_done fun(entries: PullsDiffstatEntry[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_diffstat(pr, opts, on_done)
+	return M.fetch_diff(pr, opts, function(files, err)
+		if not files then
+			on_done(nil, err)
+			return
+		end
+		local entries = {}
+		for _, file in ipairs(files) do
+			local additions, deletions = file.additions, file.deletions
+			if additions == nil and deletions == nil then
+				additions, deletions = 0, 0
+				for _, hunk in ipairs(file.hunks) do
+					additions = additions + hunk.additions
+					deletions = deletions + hunk.deletions
+				end
+			end
+			table.insert(entries, {
+				status = file.status,
+				path = file.path,
+				old_path = file.old_path,
+				lines_added = additions or 0,
+				lines_removed = deletions or 0,
+			})
+		end
+		on_done(entries, nil)
+	end)
+end
+
+---@param pr PullRequest
+---@param opts { force_refresh?: boolean }|nil
 ---@param on_done fun(checks: PullsMergeCheck[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_merge_checks(pr, opts, on_done)
