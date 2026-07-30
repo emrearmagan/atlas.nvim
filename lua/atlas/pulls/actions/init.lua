@@ -13,25 +13,21 @@ local function provider()
 	return require("atlas.pulls.state").provider
 end
 
----@param pr PullRequest
 ---@return string|nil open_cmd
----@return string|nil base_revision
----@return string|nil head_revision
 ---@return string|nil err
-local function diff_open_command(pr)
+local function diff_open_command()
 	local config = require("atlas.config")
 	local pulls_cfg = config.options.pulls or {}
 	local cmd = vim.trim(tostring((pulls_cfg.diff or {}).open_cmd or ""))
 	if cmd == "" then
-		return nil, nil, nil, "diff.open_cmd is not configured"
+		return nil, "diff.open_cmd is not configured"
 	end
 
 	if vim.fn.exists(":" .. cmd) ~= 2 then
-		return nil, nil, nil, string.format("diff.open_cmd command not found: %s", cmd)
+		return nil, string.format("diff.open_cmd command not found: %s", cmd)
 	end
 
-	local base, head, err = checkout.pr_diff_revisions(pr)
-	return cmd, base, head, err
+	return cmd, nil
 end
 ---@param pr PullRequest
 function M.copy_id(pr)
@@ -130,6 +126,215 @@ function M.open_actions(pr, source, on_done)
 	end)
 end
 
+---@class PullsDiffRangeOpenOptions
+---@field git_root string
+---@field base_revision string
+---@field head_revision string
+---@field fetch_branches (fun(on_done: fun(err: string|nil)): { cancel: fun() }|nil)|nil
+
+---@param repo_path string
+---@param range string
+---@return string|nil err
+local function open_diffview(repo_path, range)
+	local previous_path = vim.fn.fnameescape(vim.fn.getcwd())
+	local ok, err = pcall(function()
+		vim.cmd("cd " .. vim.fn.fnameescape(repo_path))
+		local opened, open_err = pcall(vim.cmd, "DiffviewOpen " .. range)
+		vim.cmd("cd " .. previous_path)
+		if not opened then
+			error(open_err)
+		end
+	end)
+	return not ok and tostring(err) or nil
+end
+
+---@param open_cmd string
+---@param repo_path string
+---@param range string
+---@return string|nil err
+local function open_external_diff(open_cmd, repo_path, range)
+	local tabpage
+	local ok, err = pcall(function()
+		vim.cmd("tabnew")
+		tabpage = vim.api.nvim_get_current_tabpage()
+		vim.cmd("tcd " .. vim.fn.fnameescape(repo_path))
+		vim.cmd(open_cmd .. " " .. range)
+	end)
+	if not ok and tabpage and vim.api.nvim_tabpage_is_valid(tabpage) then
+		pcall(vim.cmd, vim.api.nvim_tabpage_get_number(tabpage) .. "tabclose")
+	end
+	return not ok and tostring(err) or nil
+end
+
+---@param repo_path string
+---@param range string
+---@param view AtlasLoadingView
+---@param on_done fun(err: string|nil)
+---@return { cancel: fun() }
+local function open_codediff(repo_path, range, view, on_done)
+	local finished = false
+	local autocmd_id
+	local function finish(err)
+		if finished then
+			return
+		end
+		finished = true
+		if autocmd_id then
+			pcall(vim.api.nvim_del_autocmd, autocmd_id)
+			autocmd_id = nil
+		end
+		view:finish()
+		on_done(err)
+	end
+
+	-- CodeDiff opens its own tab, so close the temporary one afterwards.
+	autocmd_id = vim.api.nvim_create_autocmd("User", {
+		pattern = "CodeDiffOpen",
+		once = true,
+		callback = function()
+			vim.schedule(function()
+				finish(nil)
+			end)
+		end,
+	})
+	local ok, err = pcall(vim.api.nvim_win_call, view.win, function()
+		vim.cmd("tcd " .. vim.fn.fnameescape(repo_path))
+		vim.cmd("CodeDiff " .. range)
+	end)
+	if not ok then
+		finish(tostring(err))
+	end
+
+	return {
+		cancel = function()
+			if finished then
+				return
+			end
+			finished = true
+			if autocmd_id then
+				pcall(vim.api.nvim_del_autocmd, autocmd_id)
+				autocmd_id = nil
+			end
+		end,
+	}
+end
+
+---@param opts PullsDiffRangeOpenOptions
+---@param on_done fun(err: string|nil)|nil
+---@return { cancel: fun() }|nil
+function M.open_diff_range(opts, on_done)
+	local open_cmd, command_err = diff_open_command()
+	if not open_cmd then
+		if on_done then
+			on_done(command_err)
+		end
+		return nil
+	end
+
+	local root = vim.trim(tostring(opts.git_root or ""))
+	local base = vim.trim(tostring(opts.base_revision or ""))
+	local head = vim.trim(tostring(opts.head_revision or ""))
+	if root == "" or base == "" or head == "" then
+		if on_done then
+			on_done("Repository path, base revision, and head revision are required")
+		end
+		return nil
+	end
+
+	local range = base .. "..." .. head
+	local command = open_cmd .. " " .. range
+	logger.loginfo("actions.open_diff", { repo_path = root, command = command })
+
+	local loading = require("atlas.ui.components.loading")
+	local fetch_request
+	local launch_request
+	local completed = false
+	local cancelled = false
+	local view
+	local function cancel()
+		if cancelled or completed then
+			return
+		end
+		cancelled = true
+		if fetch_request then
+			pcall(fetch_request.cancel)
+			fetch_request = nil
+		end
+		if launch_request then
+			pcall(launch_request.cancel)
+			launch_request = nil
+		end
+		if view then
+			view:finish()
+		end
+	end
+	view = loading.open("Preparing diff...", cancel)
+
+	---@param err string|nil
+	local function complete(err)
+		if completed or cancelled then
+			return
+		end
+		completed = true
+		fetch_request = nil
+		launch_request = nil
+		if on_done then
+			on_done(err)
+		end
+	end
+
+	local function launch()
+		if cancelled or completed then
+			return
+		end
+		view:update("Opening diff...")
+		if open_cmd == "CodeDiff" then
+			launch_request = open_codediff(root, range, view, function(err)
+				launch_request = nil
+				complete(err)
+			end)
+			return
+		end
+
+		local err
+		if open_cmd == "DiffviewOpen" then
+			err = open_diffview(root, range)
+			view:finish()
+		else
+			view:finish()
+			err = open_external_diff(open_cmd, root, range)
+		end
+		complete(err)
+	end
+
+	if not opts.fetch_branches then
+		launch()
+		return { cancel = cancel }
+	end
+
+	view:update("Fetching remote branches...")
+	local ok, request = pcall(opts.fetch_branches, function(err)
+		fetch_request = nil
+		if cancelled or completed then
+			return
+		end
+		if err then
+			view:finish()
+			complete(tostring(err))
+			return
+		end
+		launch()
+	end)
+	if not ok then
+		view:finish()
+		complete(tostring(request))
+	else
+		fetch_request = request
+	end
+
+	return { cancel = cancel }
+end
+
 ---@param pr PullRequest
 function M.open_diff(pr)
 	local resolved_path, resolve_err =
@@ -139,92 +344,29 @@ function M.open_diff(pr)
 		return
 	end
 
-	local open_cmd, base_revision, head_revision, cmd_err = diff_open_command(pr)
-	if cmd_err or not open_cmd or not base_revision or not head_revision then
-		local level = cmd_err == "PR branch refs are missing" and "warn" or "error"
-		footer.notify(level, tostring(cmd_err))
+	local base_revision, head_revision, revision_err = checkout.pr_diff_revisions(pr)
+	if not base_revision or not head_revision then
+		local level = revision_err == "PR branch refs are missing" and "warn" or "error"
+		footer.notify(level, tostring(revision_err))
 		return
 	end
 
-	local range = base_revision .. "..." .. head_revision
-	footer.notify("loading", "Fetching remote branches...")
-	checkout.fetch_pr_branches(pr, resolved_path, function(fetch_err)
-		if fetch_err then
-			logger.logerror("actions.open_diff fetch failed", { pr_id = pr.id, error = tostring(fetch_err) })
-			footer.notify("error", "Fetch failed: " .. tostring(fetch_err))
-			return
-		end
-
-		local command = open_cmd .. " " .. range
-		local repo_path = vim.fn.fnameescape(resolved_path)
-		logger.loginfo("actions.open_diff", { pr_id = pr.id, repo_path = resolved_path, command = command })
-		local ok, err = pcall(function()
-			if open_cmd == "DiffviewOpen" then
-				local prev_path = vim.fn.fnameescape(vim.fn.getcwd())
-				vim.cmd("cd " .. repo_path)
-				local cmd_ok, command_err = pcall(vim.cmd, command)
-				vim.cmd("cd " .. prev_path)
-				if not cmd_ok then
-					error(command_err)
-				end
-				return
-			end
-
-			if open_cmd == "CodeDiff" then
-				vim.cmd("tabnew")
-				local launcher_tab = vim.api.nvim_get_current_tabpage()
-				local launcher_buf = vim.api.nvim_get_current_buf()
-				local autocmd_id
-				local function cleanup()
-					if autocmd_id then
-						pcall(vim.api.nvim_del_autocmd, autocmd_id)
-						autocmd_id = nil
-					end
-					if vim.api.nvim_tabpage_is_valid(launcher_tab) then
-						local tabnr = vim.api.nvim_tabpage_get_number(launcher_tab)
-						pcall(vim.cmd, tabnr .. "tabclose")
-					end
-					if vim.api.nvim_buf_is_valid(launcher_buf) then
-						pcall(vim.api.nvim_buf_delete, launcher_buf, { force = true })
-					end
-				end
-
-				vim.bo[launcher_buf].buflisted = false
-				vim.bo[launcher_buf].bufhidden = "wipe"
-				-- CodeDiff opens its own tab, so close the temporary one.
-				autocmd_id = vim.api.nvim_create_autocmd("User", {
-					pattern = "CodeDiffOpen",
-					once = true,
-					callback = function()
-						vim.schedule(cleanup)
-					end,
-				})
-
-				local command_ok, command_err = pcall(function()
-					vim.cmd("tcd " .. repo_path)
-					vim.cmd(command)
-				end)
-				if not command_ok then
-					cleanup()
-					error(command_err)
-				end
-				return
-			end
-
-			vim.cmd("tabnew")
-			vim.cmd("tcd " .. repo_path)
-			vim.cmd(command)
-		end)
-
-		if not ok then
-			logger.logerror("actions.open_diff failed", { pr_id = pr.id, command = command, error = tostring(err) })
-			footer.notify("error", string.format("%s failed: %s", open_cmd, tostring(err)))
+	M.open_diff_range({
+		git_root = resolved_path,
+		base_revision = base_revision,
+		head_revision = head_revision,
+		fetch_branches = function(on_done)
+			return checkout.fetch_pr_branches(pr, resolved_path, on_done)
+		end,
+	}, function(err)
+		if err then
+			logger.logerror("actions.open_diff failed", { pr_id = pr.id, error = tostring(err) })
+			footer.notify("error", "Unable to open diff: " .. tostring(err))
 			return
 		end
 		footer.notify("success", "Opened PR diff", 1200)
 	end)
 end
-
 ---@param pr PullRequest
 function M.checkout(pr)
 	footer.notify("loading", string.format("Checking out PR #%s", tostring(pr.id or "")))
