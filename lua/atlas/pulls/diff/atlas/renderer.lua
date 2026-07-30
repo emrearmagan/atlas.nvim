@@ -3,6 +3,16 @@ local M = {}
 local namespace = vim.api.nvim_create_namespace("atlas_native_diff")
 local CONTEXT_LINES = 3
 
+---@class AtlasDiffFileRenderOptions
+---@field layout "side-by-side"|"inline"
+---@field compact boolean
+---@field left { buf: integer, win: integer|nil }
+---@field right { buf: integer, win: integer|nil }
+
+---@class AtlasDiffVisibleRange
+---@field first integer
+---@field last integer
+
 ---@param buf integer
 ---@param first integer
 ---@param count integer
@@ -20,13 +30,16 @@ end
 
 -- Keep each hunk and a little context open in compact mode.
 ---@param hunks DiffHunk[]
+---@param side "old"|"new"
 ---@param line_count integer
----@return { first: integer, last: integer }[]
-local function visible_ranges(hunks, line_count)
+---@return AtlasDiffVisibleRange[]
+local function visible_ranges(hunks, side, line_count)
 	local ranges = {}
 	for _, hunk in ipairs(hunks) do
-		local first = math.max(1, math.min(line_count, hunk.new_start))
-		local last = hunk.new_count > 0 and hunk.new_start + hunk.new_count - 1 or first
+		local start = side == "old" and hunk.old_start or hunk.new_start
+		local count = side == "old" and hunk.old_count or hunk.new_count
+		local first = math.max(1, math.min(line_count, start))
+		local last = count > 0 and start + count - 1 or first
 		table.insert(ranges, {
 			first = math.max(1, first - CONTEXT_LINES),
 			last = math.min(line_count, math.max(first, last + CONTEXT_LINES)),
@@ -35,7 +48,6 @@ local function visible_ranges(hunks, line_count)
 	table.sort(ranges, function(left, right)
 		return left.first < right.first
 	end)
-
 	local merged = {}
 	for _, range in ipairs(ranges) do
 		local previous = merged[#merged]
@@ -48,43 +60,53 @@ local function visible_ranges(hunks, line_count)
 	return merged
 end
 
----@param win integer
----@param ranges { first: integer, last: integer }[]
+---@param win integer|nil
+---@param ranges AtlasDiffVisibleRange[]
 ---@param line_count integer
-local function apply_folds(win, ranges, line_count)
-	if not vim.api.nvim_win_is_valid(win) then
+---@param compact boolean
+local function apply_folds(win, ranges, line_count, compact)
+	if not win or not vim.api.nvim_win_is_valid(win) then
 		return
 	end
 	vim.api.nvim_win_call(win, function()
+		local view = vim.fn.winsaveview()
 		vim.wo[win][0].foldmethod = "manual"
 		vim.cmd("silent! normal! zE")
-		local next_line = 1
-		for _, range in ipairs(ranges) do
-			if next_line < range.first then
-				vim.cmd(string.format("silent! %d,%dfold", next_line, range.first - 1))
+		if compact then
+			local next_line = 1
+			for _, range in ipairs(ranges) do
+				if next_line < range.first then
+					vim.cmd(string.format("silent! %d,%dfold", next_line, range.first - 1))
+				end
+				next_line = range.last + 1
 			end
-			next_line = range.last + 1
+			if next_line <= line_count then
+				vim.cmd(string.format("silent! %d,%dfold", next_line, line_count))
+			end
 		end
-		if next_line <= line_count then
-			vim.cmd(string.format("silent! %d,%dfold", next_line, line_count))
-		end
-		vim.wo[win][0].foldenable = true
+		vim.wo[win][0].foldenable = compact
 		vim.wo[win][0].foldlevel = 0
+		pcall(vim.fn.winrestview, view)
 	end)
 end
 
 ---@param document AtlasNativeDiffDocument
----@param buf integer
----@param win integer
-function M.file(document, buf, win)
-	vim.api.nvim_buf_clear_namespace(buf, namespace, 0, -1)
+---@param opts AtlasDiffFileRenderOptions
+function M.file(document, opts)
+	local left_buf = opts.left.buf
+	local right_buf = opts.right.buf
+	vim.api.nvim_buf_clear_namespace(left_buf, namespace, 0, -1)
+	vim.api.nvim_buf_clear_namespace(right_buf, namespace, 0, -1)
 	local hunks = document.file.hunks
 	if not document.binary then
 		for _, hunk in ipairs(hunks) do
-			if hunk.new_count > 0 then
-				highlight_lines(buf, hunk.new_start, hunk.new_count, "AtlasDiffAddLine")
-			end
 			if hunk.old_count > 0 then
+				highlight_lines(left_buf, hunk.old_start, hunk.old_count, "AtlasDiffRemoveLine")
+			end
+			if hunk.new_count > 0 then
+				highlight_lines(right_buf, hunk.new_start, hunk.new_count, "AtlasDiffAddLine")
+			end
+			if opts.layout == "inline" and hunk.old_count > 0 then
 				local virtual_lines = {}
 				for line = hunk.old_start, hunk.old_start + hunk.old_count - 1 do
 					table.insert(virtual_lines, {
@@ -92,7 +114,7 @@ function M.file(document, buf, win)
 						{ document.old.lines[line] or "", "AtlasDiffRemoveLine" },
 					})
 				end
-				local line_count = vim.api.nvim_buf_line_count(buf)
+				local line_count = vim.api.nvim_buf_line_count(right_buf)
 				local anchor, above
 				if hunk.new_count > 0 then
 					anchor, above = math.max(0, hunk.new_start - 1), true
@@ -101,7 +123,7 @@ function M.file(document, buf, win)
 				else
 					anchor, above = math.max(0, line_count - 1), false
 				end
-				vim.api.nvim_buf_set_extmark(buf, namespace, anchor, 0, {
+				vim.api.nvim_buf_set_extmark(right_buf, namespace, anchor, 0, {
 					virt_lines = virtual_lines,
 					virt_lines_above = above,
 					virt_lines_leftcol = true,
@@ -111,16 +133,11 @@ function M.file(document, buf, win)
 		end
 	end
 
-	local options = vim.wo[win][0]
-	options.foldcolumn = "0"
-	options.signcolumn = "no"
-	local line_count = vim.api.nvim_buf_line_count(buf)
-	if document.binary or #hunks == 0 then
-		apply_folds(win, {}, line_count)
-		vim.wo[win][0].foldenable = false
-		return
-	end
-	apply_folds(win, visible_ranges(hunks, line_count), line_count)
+	local compact = opts.compact and not document.binary and #hunks > 0
+	local left_count = vim.api.nvim_buf_line_count(left_buf)
+	local right_count = vim.api.nvim_buf_line_count(right_buf)
+	apply_folds(opts.left.win, visible_ranges(hunks, "old", left_count), left_count, compact)
+	apply_folds(opts.right.win, visible_ranges(hunks, "new", right_count), right_count, compact)
 end
 
 return M

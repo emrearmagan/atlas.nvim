@@ -29,10 +29,20 @@
 ---@field readme string|nil
 ---@field pr_template string|nil
 
+---@class AtlasPullsDiffExplorerConfig
+---@field grouped boolean|nil
+---@field hidden boolean|nil
+---@field width integer|nil
+---@field initial_focus "explorer"|"diff"|nil
+---@field ignore string[]|nil
+
 ---@alias AtlasPullsDiffOpenCommand "AtlasDiff"|"DiffviewOpen"|"CodeDiff"
 
 ---@class AtlasPullsDiffConfig
 ---@field open_cmd AtlasPullsDiffOpenCommand|nil
+---@field layout "side-by-side"|"inline"|nil
+---@field compact boolean|nil
+---@field explorer AtlasPullsDiffExplorerConfig|nil
 
 ---@class AtlasPullsCustomActionContext
 ---@field repo_path string|nil
@@ -97,6 +107,15 @@ M.options = {
 	pulls = {
 		diff = {
 			open_cmd = "AtlasDiff",
+			layout = "side-by-side",
+			compact = true,
+			explorer = {
+				grouped = true,
+				hidden = false,
+				width = 40,
+				initial_focus = "explorer",
+				ignore = { ".git/**", ".jj/**" },
+			},
 		},
 	},
 	issues = nil,
@@ -127,8 +146,13 @@ M.options = {
 			open_diff = "gd",
 			checkout = "gc",
 			review = {
+				toggle_layout = "t",
+				toggle_compact = "f",
 				next_hunk = "]h",
 				previous_hunk = "[h",
+				next_file = { "]f", "<Tab>" },
+				previous_file = { "[f", "<S-Tab>" },
+				toggle_file_reviewed = "-",
 				toggle_resolved = "x",
 			},
 			filter_status_open = "gpo",

@@ -244,7 +244,10 @@ local function setup_keymaps(state, opts)
 		for _, name in ipairs(keymap.buffers or {}) do
 			local buf = buffer_for(state, name)
 			if valid_buf(buf) then
-				set_keymap(buf, keymap.mode or "n", keymap.key, keymap.action, keymap.desc)
+				local keys = type(keymap.key) == "table" and keymap.key or { keymap.key }
+				for _, key in ipairs(keys) do
+					set_keymap(buf, keymap.mode or "n", key, keymap.action, keymap.desc)
+				end
 			end
 		end
 	end

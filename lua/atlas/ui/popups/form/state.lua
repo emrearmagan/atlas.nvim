@@ -17,7 +17,7 @@
 ---@field closing boolean|nil
 
 ---@class AtlasFormKeymap
----@field key string
+---@field key string|string[]
 ---@field mode string|string[]|nil
 ---@field buffers AtlasFormBufferName[]
 ---@field action fun()

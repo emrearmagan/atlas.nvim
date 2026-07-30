@@ -282,12 +282,30 @@ function M.open_diff_range(opts, on_done)
 			return
 		end
 		if open_cmd == "AtlasDiff" then
+			local explorer = require("atlas.pulls.diff.atlas.explorer")
+			local explorer_options = explorer.options()
+			local function reload()
+				M.open_diff_range({
+					git_root = root,
+					base_revision = base,
+					head_revision = head,
+					fetch_branches = opts.fetch_branches,
+					open_cmd = "AtlasDiff",
+				}, function(err)
+					if err then
+						vim.notify("[Atlas Diff] Unable to reload diff: " .. err, vim.log.levels.ERROR)
+					end
+				end)
+			end
 			-- The callback may finish before prepare() returns its request handle.
 			local finished = false
 			local request = require("atlas.pulls.diff.atlas.git").prepare({
 				git_root = root,
 				base_revision = base,
 				head_revision = head,
+				filter = function(files)
+					return explorer.filter(files, explorer_options)
+				end,
 				on_progress = function(message)
 					view:update(message)
 				end,
@@ -304,6 +322,8 @@ function M.open_diff_range(opts, on_done)
 				view:finish()
 				local ok, open_err = pcall(require("atlas.pulls.diff.atlas").open, {
 					diff = prepared,
+					explorer = explorer_options,
+					reload = reload,
 				})
 				if not ok then
 					open_err = tostring(open_err)

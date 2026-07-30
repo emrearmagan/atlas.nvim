@@ -178,7 +178,8 @@ end
 local function footer_segments(opts)
 	local items = { { key = "<C-s>", desc = "submit" } }
 	for _, keymap in ipairs(opts.keymaps or {}) do
-		table.insert(items, { key = keymap.key, desc = keymap.desc })
+		local key = type(keymap.key) == "table" and table.concat(keymap.key, " / ") or keymap.key
+		table.insert(items, { key = key, desc = keymap.desc })
 	end
 	table.insert(items, { key = "q", desc = "close" })
 

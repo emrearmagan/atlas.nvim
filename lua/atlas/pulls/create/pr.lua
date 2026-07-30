@@ -2,6 +2,7 @@ local M = {}
 
 local form = require("atlas.ui.popups.form")
 local git_branch = require("atlas.core.git")
+local keymaps = require("atlas.core.keymaps")
 local config = require("atlas.config")
 local spinner = require("atlas.ui.popups.spinner")
 local pulls_helper = require("atlas.pulls.ui.main.helper")
@@ -223,6 +224,25 @@ local function refresh_commits(pr_state)
 		pr_state.fields.head
 	) or {}
 	form.render_context(pr_state, commit_context(pr_state))
+end
+
+---@param pr_state CreatePRState
+local function preview_diff(pr_state)
+	local base, head, err =
+		git_branch.diff_revisions(pr_state.fields.repo_root, pr_state.fields.base, pr_state.fields.head)
+	if not base or not head then
+		notify_error(err or "Unable to resolve diff revisions")
+		return
+	end
+	require("atlas.pulls.actions").open_diff_range({
+		git_root = pr_state.fields.repo_root,
+		base_revision = base,
+		head_revision = head,
+	}, function(open_err)
+		if open_err then
+			notify_error("Unable to open diff: " .. tostring(open_err))
+		end
+	end)
 end
 
 ---@param pr_state CreatePRState
@@ -521,6 +541,57 @@ function M.open(opts)
 		settings_changed = false,
 	}
 
+	local form_keymaps = {
+		{
+			key = "gb",
+			mode = "n",
+			buffers = { "editor", "context" },
+			desc = "base",
+			action = function()
+				pick_base(pr_state, function()
+					pr_state.settings_changed = true
+					refresh_commits(pr_state)
+					render_meta(pr_state)
+				end)
+			end,
+		},
+		{
+			key = "gD",
+			mode = "n",
+			buffers = { "editor", "context" },
+			desc = "toggle draft",
+			action = function()
+				pr_state.fields.draft = not pr_state.fields.draft
+				pr_state.settings_changed = true
+				render_meta(pr_state)
+			end,
+		},
+		{
+			key = "gr",
+			mode = "n",
+			buffers = { "editor", "context" },
+			desc = "reviewers",
+			action = function()
+				pick_reviewers(pr_state, function()
+					pr_state.settings_changed = true
+					render_meta(pr_state)
+				end)
+			end,
+		},
+	}
+	local diff_keys = keymaps.resolve("pulls.open_diff")
+	if diff_keys then
+		table.insert(form_keymaps, {
+			key = #diff_keys == 1 and diff_keys[1] or diff_keys,
+			mode = "n",
+			buffers = { "editor", "context" },
+			desc = "preview diff",
+			action = function()
+				preview_diff(pr_state)
+			end,
+		})
+	end
+
 	form.open(pr_state, {
 		context_title = "Commits",
 		context = function()
@@ -539,44 +610,7 @@ function M.open(opts)
 		meta = function()
 			return meta_rows(pr_state)
 		end,
-		keymaps = {
-			{
-				key = "gb",
-				mode = "n",
-				buffers = { "editor", "context" },
-				desc = "base",
-				action = function()
-					pick_base(pr_state, function()
-						pr_state.settings_changed = true
-						refresh_commits(pr_state)
-						render_meta(pr_state)
-					end)
-				end,
-			},
-			{
-				key = "gd",
-				mode = "n",
-				buffers = { "editor", "context" },
-				desc = "toggle draft",
-				action = function()
-					pr_state.fields.draft = not pr_state.fields.draft
-					pr_state.settings_changed = true
-					render_meta(pr_state)
-				end,
-			},
-			{
-				key = "gr",
-				mode = "n",
-				buffers = { "editor", "context" },
-				desc = "reviewers",
-				action = function()
-					pick_reviewers(pr_state, function()
-						pr_state.settings_changed = true
-						render_meta(pr_state)
-					end)
-				end,
-			},
-		},
+		keymaps = form_keymaps,
 	})
 
 	load_reviewers(pr_state, function()

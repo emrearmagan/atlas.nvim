@@ -26,6 +26,7 @@ local core_git = require("atlas.core.git")
 ---@field git_root string
 ---@field base_revision string
 ---@field head_revision string
+---@field filter (fun(files: DiffFile[]): DiffFile[])|nil
 ---@field on_progress (fun(message: string))|nil
 
 ---@class AtlasDiffGitOperation
@@ -544,6 +545,14 @@ function M.prepare(options, on_done)
 	resolve_range(op, options.git_root, options.base_revision, options.head_revision, function(range)
 		progress("Loading changed files...")
 		list_files(op, range, function(files)
+			if options.filter then
+				local ok, filtered = pcall(options.filter, files)
+				if not ok then
+					op:finish(nil, "Unable to filter changed files: " .. tostring(filtered))
+					return
+				end
+				files = filtered
+			end
 			if #files == 0 then
 				op:finish(nil, "The range has no visible changed files")
 				return

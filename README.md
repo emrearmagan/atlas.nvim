@@ -53,6 +53,7 @@ A Neovim plugin for managing GitHub/Bitbucket/GitLab PRs and Jira/GitHub/GitLab 
 {
   "emrearmagan/atlas.nvim",
   dependencies = {
+    "nvim-tree/nvim-web-devicons", -- optional but recommended
     "MeanderingProgrammer/render-markdown.nvim", -- optional but recommended
     "esmuellert/codediff.nvim", -- optional (PullRequest diff)
     "sindrets/diffview.nvim", -- optional (PullRequest diff - alternative)
@@ -406,11 +407,19 @@ issues = {
 ```lua
 pulls = {
   diff = {
-    -- Command must support range input: origin/<destination>...origin/<source>
-    open_cmd = "DiffviewOpen", -- e.g. "DiffviewOpen" or "CodeDiff", defaults to nil.
+    open_cmd = "AtlasDiff", -- "AtlasDiff", "DiffviewOpen", or "CodeDiff"
+    layout = "side-by-side", -- "side-by-side" or "inline"
+    compact = true, -- Show changed hunks with surrounding context
+    explorer = {
+      grouped = true,
+      hidden = false,
+      width = 40,
+      initial_focus = "explorer", -- "explorer" or "diff"
+      ignore = { ".git/**", ".jj/**" },
+    },
   },
   repo_config = {
-    -- Maps `workspace/repo` to local paths. Used for checkout and custom actions.
+    -- Maps `workspace/repo` to local paths. Used for checkout, diffs, and custom actions.
     paths = {
       ["your-workspace/*"] = "~/code/repos/*",
       ["your-workspace/atlas"] = "~/code/atlas",
@@ -707,8 +716,16 @@ keymaps = {
     copy_id = "y",
     open_diff = "gd",
     checkout = "gc",
-    next_hunk = "]h",
-    previous_hunk = "[h",
+    review = {
+      toggle_layout = "t",
+      toggle_compact = "f",
+      next_hunk = "]h",
+      previous_hunk = "[h",
+      next_file = { "]f", "<Tab>" },
+      previous_file = { "[f", "<S-Tab>" },
+      toggle_file_reviewed = "-",
+      toggle_resolved = "x",
+    },
     filter_status_open = "gpo",
     filter_status_merged = "gpm",
     filter_status_declined = "gpd",
