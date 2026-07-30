@@ -10,6 +10,7 @@ local USAGE = [[
 Usage:
   atlas-notes add --target <url-or-ref> --file <path> --line <number>
                   --body <text> --head <sha>
+                  [--repo <checkout>]
                   [--type issue|suggestion|note|praise]
   atlas-notes list [--target <url-or-ref>]
 ]]
@@ -58,6 +59,26 @@ local function target(value)
 	return result
 end
 
+---@param options table<string, string>
+---@param head_sha string
+---@param file_path string
+---@param line integer
+---@return string, string
+local function note_line_hash(options, head_sha, file_path, line)
+	local repo = vim.fs.normalize(vim.fn.fnamemodify(options.repo or vim.fn.getcwd(), ":p"))
+	local result = vim.system({ "git", "show", head_sha .. ":" .. file_path }, { cwd = repo, text = true }):wait()
+	if result.code ~= 0 then
+		fail("unable to read the note location from " .. repo)
+	end
+	local content = tostring(result.stdout or ""):gsub("\r\n", "\n"):gsub("\n$", "")
+	local lines = vim.split(content, "\n", { plain = true })
+	local line_hash = notes.hash_line(lines[line])
+	if not line_hash then
+		fail("note line is outside " .. file_path)
+	end
+	return line_hash, repo
+end
+
 local command = arg[1]
 if not command or command == "help" or command == "--help" or command == "-h" then
 	io.stdout:write(USAGE)
@@ -66,11 +87,21 @@ end
 
 local options = parse_options()
 if command == "add" then
-	local note, err = notes.add(target(required(options, "target")), {
-		file_path = required(options, "file"),
-		line = tonumber(required(options, "line")),
+	local file_path = required(options, "file")
+	local line = tonumber(required(options, "line"))
+	if not line or line < 1 or line % 1 ~= 0 then
+		fail("--line must be a positive integer")
+	end
+	local head_sha = required(options, "head")
+	local line_hash, repo_path = note_line_hash(options, head_sha, file_path, line)
+	local note_target = target(required(options, "target"))
+	note_target.repo_path = repo_path
+	local note, err = notes.add(note_target, {
+		file_path = file_path,
+		line = line,
 		body = required(options, "body"),
-		head_sha = required(options, "head"),
+		head_sha = head_sha,
+		line_hash = line_hash,
 		type = options.type,
 	})
 	if not note then

@@ -161,10 +161,10 @@ end
 ---@param session AtlasNativeDiffSession
 local function refresh_ui(session)
 	comments.render(session)
+	notes.render(session)
 	render_explorer(session)
 	commits.render(session)
 	footer.render(session)
-	notes.render(session)
 end
 
 ---@param session AtlasNativeDiffSession

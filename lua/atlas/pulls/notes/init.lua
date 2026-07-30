@@ -21,6 +21,7 @@ M.types = { "issue", "suggestion", "note", "praise" }
 ---@field body string
 ---@field type AtlasNoteType|nil
 ---@field head_sha string
+---@field line_hash string|nil
 
 ---@class AtlasNote: AtlasNoteInput
 ---@field id string
@@ -40,6 +41,20 @@ M.types = { "issue", "suggestion", "note", "praise" }
 ---@return string
 local function text(value)
 	return vim.trim(tostring(value or ""))
+end
+
+---@param line string|nil
+---@return string|nil
+function M.hash_line(line)
+	return type(line) == "string" and vim.fn.sha256(line) or nil
+end
+
+---@param note AtlasNote
+---@param line string
+---@param head_sha string
+---@return boolean
+function M.is_outdated(note, line, head_sha)
+	return note.head_sha ~= head_sha and (not note.line_hash or note.line_hash ~= M.hash_line(line))
 end
 
 ---@param value table
@@ -136,6 +151,7 @@ local function normalize_note(value)
 	if head_sha == "" then
 		return nil, "A head commit is required"
 	end
+	local line_hash = text(value.line_hash)
 	local id = text(value.id)
 	local created_at = text(value.created_at)
 	local updated_at = text(value.updated_at)
@@ -149,6 +165,7 @@ local function normalize_note(value)
 		body = value.body,
 		type = note_type,
 		head_sha = head_sha,
+		line_hash = line_hash ~= "" and line_hash or nil,
 		created_at = created_at,
 		updated_at = updated_at ~= "" and updated_at or nil,
 	},
@@ -340,6 +357,7 @@ function M.update(target, id, patch)
 					body = patch.body or note.body,
 					type = patch.type or note.type,
 					head_sha = note.head_sha,
+					line_hash = note.line_hash,
 					created_at = note.created_at,
 					updated_at = now(),
 				}

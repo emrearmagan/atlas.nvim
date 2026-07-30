@@ -266,9 +266,7 @@ function M.render(session, annotated_paths)
 	annotated_paths = annotated_paths or {}
 	local noted_paths = {}
 	for _, note in ipairs((session.notes and session.notes.items) or {}) do
-		if note.head_sha == session.range.head_revision then
-			noted_paths[note.file_path] = true
-		end
+		noted_paths[note.file_path] = true
 	end
 	---@param text string
 	---@param spacing boolean|nil

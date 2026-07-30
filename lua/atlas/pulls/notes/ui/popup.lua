@@ -15,6 +15,7 @@ local current_win
 ---@class AtlasNotesUIPopupOptions
 ---@field target AtlasNoteTarget
 ---@field notes AtlasNote[]
+---@field outdated table<string, boolean>|nil
 ---@field on_change fun(change: AtlasNotesUIChange)
 ---@field notify fun(level: "success"|"error", message: string)
 
@@ -33,6 +34,7 @@ function M.open(opts)
 		actions = true,
 		boxed = false,
 		padding_x = 1,
+		outdated = opts.outdated,
 	})
 	local height = math.max(1, math.min(#lines, vim.o.lines - 6))
 	local buf = vim.api.nvim_create_buf(false, true)

@@ -21,15 +21,85 @@ local function clear(buf)
 	end
 end
 
----@param note AtlasNote
----@param head_revision string
----@param line_count integer
----@return integer|nil
-local function anchor_line(note, head_revision, line_count)
-	if note.head_sha ~= head_revision or note.line < 1 or note.line > line_count then
-		return nil
+---@param session AtlasNativeDiffSession
+---@param level "loading"|"success"|"error"
+---@param message string
+local function notify(session, level, message)
+	footer.notify(session, level, message, level == "success" and 1200 or nil)
+end
+
+---@param session AtlasNativeDiffSession
+---@param index integer
+---@return boolean
+local function delete_at(session, index)
+	local state = session.notes
+	if not state then
+		return false
 	end
-	return note.line
+	local deleted, err = store.delete(state.target, state.items[index].id)
+	if not deleted then
+		notify(session, "error", err or "Unable to delete local note")
+		return false
+	end
+	table.remove(state.items, index)
+	return true
+end
+
+---@param session AtlasNativeDiffSession
+local function prune_deleted_files(session)
+	local state = session.notes
+	if not state then
+		return
+	end
+	local deleted = {}
+	for _, file in ipairs(session.files) do
+		if file.status == "deleted" then
+			deleted[file.path] = true
+		elseif file.status == "renamed" and file.old_path then
+			deleted[file.old_path] = true
+		end
+	end
+	for index = #state.items, 1, -1 do
+		if deleted[state.items[index].file_path] then
+			delete_at(session, index)
+		end
+	end
+end
+
+---@param session AtlasNativeDiffSession
+local function prune_lines(session)
+	local state = session.notes
+	local document = session.document
+	if not state or not document then
+		return
+	end
+	for index = #state.items, 1, -1 do
+		local note = state.items[index]
+		if
+			note.file_path == document.new.path
+			and (document.binary or document.file.status == "deleted" or note.line > #document.new.lines)
+		then
+			delete_at(session, index)
+		end
+	end
+end
+
+---@param session AtlasNativeDiffSession
+---@return AtlasNote[], table<string, boolean>
+local function visible_notes(session)
+	local state = session.notes
+	local document = session.document
+	if not state or not document or document.binary or document.file.status == "deleted" then
+		return {}, {}
+	end
+	local items, outdated = {}, {}
+	for _, note in ipairs(state.items) do
+		if note.file_path == document.new.path and note.line <= #document.new.lines then
+			table.insert(items, note)
+			outdated[note.id] = store.is_outdated(note, document.new.lines[note.line], session.range.head_revision)
+		end
+	end
+	return items, outdated
 end
 
 ---@param session AtlasNativeDiffSession
@@ -38,28 +108,30 @@ function M.render(session)
 	clear(session.right.buf)
 	local state = session.notes
 	local document = session.document
-	if not state or not document or document.binary or not vim.api.nvim_buf_is_valid(session.right.buf) then
+	if not state or not document or not vim.api.nvim_buf_is_valid(session.right.buf) then
+		return
+	end
+	prune_lines(session)
+	if document.binary then
 		return
 	end
 
 	local grouped = {}
-	local line_count = vim.api.nvim_buf_line_count(session.right.buf)
-	for _, note in ipairs(state.items) do
-		if note.file_path == document.new.path then
-			local line = anchor_line(note, session.range.head_revision, line_count)
-			if line then
-				grouped[line] = grouped[line] or {}
-				table.insert(grouped[line], note)
-			end
-		end
+	local items, outdated = visible_notes(session)
+	for _, note in ipairs(items) do
+		grouped[note.line] = grouped[note.line] or {}
+		table.insert(grouped[note.line], note)
 	end
 
 	local width = session.right.win
 			and vim.api.nvim_win_is_valid(session.right.win)
 			and vim.api.nvim_win_get_width(session.right.win)
 		or vim.o.columns
-	for line, items in pairs(grouped) do
-		local lines, spans = note_renderer.render_cards(items, width)
+	for line, notes in pairs(grouped) do
+		local lines, spans = note_renderer.render_cards(notes, width, {
+			outdated = outdated,
+			collapse_outdated = true,
+		})
 		local virtual_lines = utils.virtual_lines(lines, spans)
 		local sign, sign_hl = note_renderer.type_style("note")
 		vim.api.nvim_buf_set_extmark(session.right.buf, namespace, line - 1, 0, {
@@ -110,33 +182,22 @@ local function remove(state, id)
 end
 
 ---@param session AtlasNativeDiffSession
----@param level "loading"|"success"|"error"
----@param message string
-local function notify(session, level, message)
-	footer.notify(session, level, message, level == "success" and 1200 or nil)
-end
-
----@param session AtlasNativeDiffSession
 ---@param buf integer
----@return AtlasNote[]
+---@return AtlasNote[], table<string, boolean>
 local function notes_at_cursor(session, buf)
-	local state = session.notes
-	local document = session.document
-	if not state or not document or buf ~= session.right.buf then
-		return {}
+	if not session.notes or not session.document or buf ~= session.right.buf then
+		return {}, {}
 	end
 	local line = vim.api.nvim_win_get_cursor(0)[1]
-	local line_count = vim.api.nvim_buf_line_count(session.right.buf)
-	local items = {}
-	for _, note in ipairs(state.items) do
-		if
-			note.file_path == document.new.path
-			and anchor_line(note, session.range.head_revision, line_count) == line
-		then
+	local visible, outdated = visible_notes(session)
+	local items, selected_outdated = {}, {}
+	for _, note in ipairs(visible) do
+		if note.line == line then
 			table.insert(items, note)
+			selected_outdated[note.id] = outdated[note.id]
 		end
 	end
-	return items
+	return items, selected_outdated
 end
 
 ---@param session AtlasNativeDiffSession
@@ -150,7 +211,7 @@ end
 ---@param buf integer
 function M.open_at_cursor(session, buf)
 	local state = session.notes
-	local items = notes_at_cursor(session, buf)
+	local items, outdated = notes_at_cursor(session, buf)
 	if not state or #items == 0 then
 		return
 	end
@@ -158,6 +219,7 @@ function M.open_at_cursor(session, buf)
 	note_popup.open({
 		target = state.target,
 		notes = items,
+		outdated = outdated,
 		notify = function(level, message)
 			notify(session, level, message)
 		end,
@@ -185,12 +247,14 @@ function M.add_at_cursor(session, buf)
 		footer.notify(session, "warn", "Local notes require a text file on the new side")
 		return
 	end
+	local line = vim.api.nvim_win_get_cursor(0)[1]
 	note_editor.create(state.target, {
 		file_path = document.new.path,
-		line = vim.api.nvim_win_get_cursor(0)[1],
+		line = line,
 		body = "",
 		type = "note",
 		head_sha = session.range.head_revision,
+		line_hash = store.hash_line(document.new.lines[line]),
 	}, function(saved, err)
 		if not saved then
 			notify(session, "error", err or "Unable to save local note")
@@ -212,13 +276,12 @@ function M.jump(session, direction)
 		return
 	end
 
-	local line_count = vim.api.nvim_buf_line_count(session.right.buf)
 	local seen, lines = {}, {}
-	for _, note in ipairs(state.items) do
-		local line = anchor_line(note, session.range.head_revision, line_count)
-		if line and note.file_path == document.new.path and not seen[line] then
-			seen[line] = true
-			table.insert(lines, line)
+	local visible = visible_notes(session)
+	for _, note in ipairs(visible) do
+		if not seen[note.line] then
+			seen[note.line] = true
+			table.insert(lines, note.line)
 		end
 	end
 	table.sort(lines)
@@ -261,6 +324,7 @@ function M.reload(session)
 		return
 	end
 	state.items = items
+	prune_deleted_files(session)
 	session.refresh_ui()
 end
 

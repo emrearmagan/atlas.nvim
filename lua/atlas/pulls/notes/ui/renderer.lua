@@ -16,6 +16,8 @@ local M = {}
 ---@field actions boolean|nil
 ---@field boxed boolean|nil
 ---@field padding_x integer|nil
+---@field outdated table<string, boolean>|nil
+---@field collapse_outdated boolean|nil
 
 ---@class AtlasNotesUIManagerRenderOptions
 ---@field documents AtlasNotesUIManagerDocument[]
@@ -109,7 +111,11 @@ end
 local function note_item(note, width, padding_x, opts)
 	local timestamp = utils.relative_time(note.updated_at or note.created_at)
 	local author = string.format("Note [%s]", type_label(note.type))
+	local outdated = opts.outdated and opts.outdated[note.id]
 	local location = string.format("%s:%d", note.file_path, note.line)
+	if outdated then
+		location = "outdated · " .. location
+	end
 	local right_width = timestamp ~= "" and vim.api.nvim_strwidth(timestamp) + 2 or 0
 	local available = width - padding_x - vim.api.nvim_strwidth(author) - right_width - 4
 	if vim.api.nvim_strwidth(location) > available then
@@ -119,12 +125,16 @@ local function note_item(note, width, padding_x, opts)
 	if opts.actions then
 		footer_items = { "e edit", "d delete" }
 	end
+	local content = utils.strip_markup(note.body)
+	if outdated and opts.collapse_outdated then
+		content = nil
+	end
 	return {
 		icon = "",
 		author = author,
 		additional = location,
 		right_text = timestamp,
-		content = utils.strip_markup(note.body),
+		content = content,
 		children = {},
 		footer_items = footer_items,
 		line_map = { entity_kind = "note", note = note },
