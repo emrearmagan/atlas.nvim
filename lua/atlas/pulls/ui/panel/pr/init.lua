@@ -221,8 +221,8 @@ local function reset_pr_tab_data()
 	reset_state("atlas.pulls.ui.panel.pr.tabs.overview.state")
 	reset_state("atlas.pulls.ui.panel.pr.tabs.activity.state")
 	reset_state("atlas.pulls.ui.panel.pr.tabs.commits.state")
-	reset_state("atlas.pulls.ui.panel.pr.tabs.files.state")
 	reset_state("atlas.pulls.ui.panel.pr.tabs.review.state")
+	panel_state.diffstat = nil
 end
 
 --------------------------------------------------------------------------------

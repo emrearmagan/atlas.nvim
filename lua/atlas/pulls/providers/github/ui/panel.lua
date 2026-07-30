@@ -241,10 +241,10 @@ function M.fetches(pr, refresh, opts)
 		refresh()
 	end))
 
-	local files_state = require("atlas.pulls.ui.panel.pr.tabs.files.state")
-	files_state.diffstat = "loading"
+	local panel_state = require("atlas.pulls.ui.panel.pr.state")
+	panel_state.diffstat = "loading"
 	track_panel(pullrequests.get_diffstat(pr, { force_refresh = force }, function(entries, err)
-		files_state.diffstat = err and err or (entries or {})
+		panel_state.diffstat = err and err or (entries or {})
 		refresh()
 	end))
 end
@@ -257,7 +257,6 @@ function M.is_loading(_pr, active_tab)
 	local conversation_state = require("atlas.pulls.ui.panel.pr.tabs.conversation.state")
 	local comments_state = require("atlas.pulls.ui.panel.pr.tabs.review.state")
 	local commits_state = require("atlas.pulls.ui.panel.pr.tabs.commits.state")
-	local files_state = require("atlas.pulls.ui.panel.pr.tabs.files.state")
 	if state.header_loading then
 		return true
 	end
@@ -269,8 +268,6 @@ function M.is_loading(_pr, active_tab)
 		return comments_state.any_loading()
 	elseif active_tab == "commits" then
 		return commits_state.any_loading()
-	elseif active_tab == "files" then
-		return files_state.any_loading()
 	end
 	return false
 end
@@ -285,7 +282,6 @@ function M.tabs()
 	local conversation_icon, conversation_hl = icons.general("conversation")
 	local review_icon, review_hl = icons.pulls("review")
 	local commit_icon, commit_hl = icons.pulls("commit")
-	local changes_icon, changes_hl = icons.pulls("changes")
 	return {
 		{
 			key = "overview",
@@ -315,13 +311,6 @@ function M.tabs()
 			icon = commit_icon,
 			icon_hl = commit_hl,
 			mod = require("atlas.pulls.ui.panel.pr.tabs.commits"),
-		},
-		{
-			key = "files",
-			label = "Changes",
-			icon = changes_icon,
-			icon_hl = changes_hl,
-			mod = require("atlas.pulls.ui.panel.pr.tabs.files"),
 		},
 	}
 end

@@ -62,11 +62,11 @@ function M.render(pr, width, extra_rows)
 	local by_sep = " - "
 	local byline = by_prefix .. author_name .. by_sep .. created_text
 
-	local files_state = require("atlas.pulls.ui.panel.pr.tabs.files.state")
+	local panel_state = require("atlas.pulls.ui.panel.pr.state")
 	local diff_text, diff_add_text, diff_del_text
-	if type(files_state.diffstat) == "table" and #files_state.diffstat > 0 then
+	if type(panel_state.diffstat) == "table" and #panel_state.diffstat > 0 then
 		local total_add, total_del = 0, 0
-		for _, entry in ipairs(files_state.diffstat) do
+		for _, entry in ipairs(panel_state.diffstat) do
 			total_add = total_add + (tonumber(entry.lines_added) or 0)
 			total_del = total_del + (tonumber(entry.lines_removed) or 0)
 		end
