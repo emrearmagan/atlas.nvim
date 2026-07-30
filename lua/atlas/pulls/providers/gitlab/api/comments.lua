@@ -7,10 +7,7 @@ local mapper = require("atlas.pulls.providers.gitlab.api.mapper")
 ---@param pr PullRequest
 ---@return string project_path, integer|nil iid
 local function project_iid(pr)
-	local raw = type(pr._raw) == "table" and pr._raw or {}
-	local path = tostring(raw.project_path or pr.repo_full_name or "")
-	local iid = tonumber(raw.iid or pr.id)
-	return path, iid
+	return pr.repo_full_name, tonumber(pr.id)
 end
 
 ---@param files DiffFile[]
@@ -18,10 +15,10 @@ end
 local function index_files(files)
 	local by_path = {}
 	for _, f in ipairs(files or {}) do
-		if type(f.path) == "string" and f.path ~= "" then
+		if f.path ~= "" then
 			by_path[f.path] = f
 		end
-		if type(f.old_path) == "string" and f.old_path ~= "" and by_path[f.old_path] == nil then
+		if f.old_path and f.old_path ~= "" and by_path[f.old_path] == nil then
 			by_path[f.old_path] = f
 		end
 	end
@@ -457,7 +454,7 @@ function M.add_comment(pr, content, opts, on_done)
 		on_done(nil, "Invalid MR identifier")
 		return nil
 	end
-	if type(content) ~= "string" or vim.trim(content) == "" then
+	if vim.trim(content) == "" then
 		on_done(nil, "Empty body")
 		return nil
 	end
@@ -488,7 +485,7 @@ function M.add_comment(pr, content, opts, on_done)
 	end
 
 	local endpoint
-	if parent and type(parent._raw) == "table" then
+	if parent and parent._raw then
 		local discussion_id = tostring(parent._raw.discussion_id or "")
 		if discussion_id ~= "" then
 			endpoint = string.format(
@@ -509,7 +506,7 @@ function M.add_comment(pr, content, opts, on_done)
 		bust_caches(path, iid)
 		local first_id = parent and (parent.parent_id or parent.id) or result.id
 		local discussion_id
-		if parent and type(parent._raw) == "table" then
+		if parent and parent._raw then
 			discussion_id = tostring(parent._raw.discussion_id or "")
 		end
 		on_done(inherit_thread_context(mapper.to_comment(result, first_id, discussion_id, false, {}), parent), nil)

@@ -50,7 +50,7 @@ local function split_path(raw_path)
 	return "", path, path
 end
 
----@param raw table
+---@param raw any Decoded API value.
 ---@return PullRequest|nil
 function M.to_pull_request(raw)
 	raw = json.nilify(raw)
@@ -161,7 +161,7 @@ function M.to_pull_request_groups(raw_list)
 	return groups
 end
 
----@param raw table|nil
+---@param raw any Decoded API value.
 ---@return PullsUser|nil
 function M.to_user(raw)
 	raw = json.nilify(raw)
