@@ -28,14 +28,21 @@ A Neovim plugin for managing GitHub/Bitbucket/GitLab PRs and Jira/GitHub/GitLab 
   - [Using lazy.nvim](#using-lazynvim)
   - [Using packer.nvim](#using-packernvim)
 - [Requirements](#requirements)
+- [Commands](#commands)
 - [Pulls](#pulls)
-  - [GitHub](#github)
-  - [Bitbucket](#bitbucket)
-  - [GitLab](#gitlab)
+  - [Configuration](#configuration)
+    - [GitHub](#github)
+    - [Bitbucket](#bitbucket)
+    - [GitLab](#gitlab)
+  - [Review Pulls](#review-pulls)
+  - [Create Pulls](#create-pulls)
 - [Issues](#issues)
-  - [Jira](#jira)
-  - [GitHub](#github-issues)
-  - [GitLab](#gitlab-issues)
+  - [Configuration](#configuration)
+    - [Jira](#jira)
+    - [GitHub](#github-issues)
+    - [GitLab](#gitlab-issues)
+  - [Create Issues](#create-issues)
+- [Keymaps](#keymaps)
 
 ## Installation
 
@@ -131,7 +138,7 @@ use {
 - `:AtlasDiff <base>...<head>` - Open the native diff viewer
 - `:AtlasNotes` - Inspect local review notes across pull requests
 - `:AtlasCreatePR` - Create a pull request from the current branch
-- `:AtlasCreateIssue` - Create an issue (GitHub / Jira)
+- `:AtlasCreateIssue` - Create an issue (GitHub / GitLab / Jira)
 - `:AtlasSearch [provider]` - Pick a configured provider and prompt its search
 - `:AtlasOpen <target>` - Open a provider URL, Jira key, repository reference, or PR/issue number
 - `:AtlasClearCache` - Clear Atlas disk and memory cache
@@ -139,21 +146,25 @@ use {
 
 ## Pulls
 
-- [x] Multiple views
-- [x] PR tabs: overview, activity/conversation, review, and commits
-- [x] PR actions: merge, approve, request changes, convert to draft, edit reviewers etc.
-- [x] Comment workflows (create, reply, edit, delete)
-- [x] Build/CI status
-- [x] Diffstat summary
-- [x] Checkout PR branch
-- [x] Add custom actions to PRs
-- [x] Open PR diff in given command
-- [x] Switch between open, merged and closed PRs
-- [x] Subscribe / unsubscribe to PRs
-- [x] Show notifications
-- [x] Create pull requests (`:AtlasCreatePR`)
-- [x] Native PR diff with inline threads, provider tasks/checklists, and local notes
-- [ ] Pagination for API results
+Use `:AtlasPulls [provider]` to browse and manage pull requests from GitHub, Bitbucket, and GitLab.
+
+- [x] Multiple configurable views, provider search, and bookmarks
+- [x] Repository overview, branches, and tags
+- [x] Pull request tabs for overview, activity/conversation, review, and commits
+- [x] Pull request actions such as merge, approve, request changes, draft/ready, and reviewer management
+- [x] Comment workflows including create, reply, edit, delete, reactions, resolve, and reopen
+- [x] Pending comments, inline threads, provider tasks, and GitHub checklists
+- [x] Build/CI status and merge checks
+- [x] Commits and diffstat summaries
+- [x] Checkout pull request branches
+- [x] Add custom actions to pull requests
+- [x] Open pull request diffs in AtlasDiff, CodeDiff, or Diffview
+- [x] Native reviews with inline threads, provider tasks/checklists, and private local notes
+- [x] Switch between open, merged, and closed pull requests
+- [x] Subscribe or unsubscribe to pull requests
+- [x] View and manage provider notifications
+- [x] Create pull requests with `:AtlasCreatePR`, including draft state, templates, commits, diffstat, and reviewer selection where supported
+- [ ] Complete pagination across providers and API results
 
 ### Configuration
 
@@ -164,11 +175,11 @@ pulls = {
     open_cmd = "AtlasDiff", -- default; can be replaced with "DiffviewOpen" / "CodeDiff".
     layout = "side-by-side", -- "side-by-side" or "inline" for AtlasDiff.
     compact = true, -- Start with only changed hunks and surrounding context visible.
-		explorer = {
-			grouped = true, -- Group changed files by directory.
-			hidden = false,
-			show_commits = true, -- Initially show commits below changed files.
-			width = 40,
+    explorer = {
+      grouped = true, -- Group changed files by directory.
+      hidden = false,
+      show_commits = true, -- Initially show commits below changed files.
+      width = 40,
       initial_focus = "explorer", -- "explorer" or "diff".
       ignore = { ".git/**", ".jj/**" },
     },
@@ -190,7 +201,7 @@ pulls = {
 },
 ```
 
-### GitHub
+#### GitHub
 
 <details>
 <summary><strong>Configuration</strong></summary>
@@ -241,7 +252,7 @@ pulls = {
 
 </details>
 
-### Bitbucket
+#### Bitbucket
 
 <details>
 <summary><strong>Configuration</strong></summary>
@@ -290,7 +301,7 @@ pulls = {
 
 </details>
 
-### GitLab
+#### GitLab
 
 <details>
 <summary><strong>Configuration</strong></summary>
@@ -349,7 +360,7 @@ pulls = {
 
 </details>
 
-### Custom Actions
+#### Custom Actions
 
 You can add custom PR actions under `pulls.custom_actions`.
 
@@ -410,22 +421,73 @@ pulls = {
 
 </details>
 
+### Review Pulls
+
+Press the configured `pulls.open_diff` key (`gd` by default) on a pull request to start a review. 
+
+<p align="center">
+  <img alt="AtlasDiff review" src="https://github.com/user-attachments/assets/caa30d3c-6883-4f2e-bc12-81bb2127f798">
+</p>
+
+- See pending, resolved, and outdated provider threads at their diff locations.
+- Review provider tasks and GitHub checklists alongside the comments they belong to.
+- Add, reply to, edit, delete, resolve, or reopen comments when supported.
+
+> [!NOTE]
+> **Alternative viewers:** CodeDiff can display Atlas comment and task overlays, but the integration relies on CodeDiff internals and may break after upstream changes. I used it from my dotfiles for a while before moving it into Atlas. Diffview remains available as a plain diff viewer without Atlas review overlays since i dont use that plugin.
+
+#### Local notes
+
+Local notes let you leave something on a diff without posting it to the pull request. Each note is attached to a file and line and can be an `ISSUE`, `SUGGESTION`, `NOTE`, or `PRAISE`. If that line changes, Atlas shows the note as outdated. If the location no longer exists, Atlas removes it. `:AtlasNotes` lists your notes across all pull requests.
+
+For scripts, use `bin/atlas-notes`. Notes added there appear in AtlasDiff and `:AtlasNotes`:
+
+```sh
+./bin/atlas-notes add \
+  --target https://github.com/owner/repository/pull/123 \
+  --file lua/review_queue.lua --line 19 \
+  --head "$(git rev-parse HEAD)" \
+  --type suggestion --body "Should this be a bool?"
+```
+
+### Create Pulls
+
+Run `:AtlasCreatePR` on the branch you want to submit. The current branch is used as the source and the repository's default branch as the target. The title and description start with the configured pull request template when one exists; otherwise Atlas uses the branch commits.
+
+Before creating the pull request, you can change the target branch, reviewers, and draft state. The commits and diffstat are shown below the editor, and the diff can be previewed from there.
+
+<p align="center">
+  <img alt="Create pull request" src="https://github.com/user-attachments/assets/caa30d3c-6883-4f2e-bc12-81bb2127f798">
+</p>
+
 ## Issues
 
-- [x] Create and edit issues
-- [x] View and edit issues as markdown -> ADF conversion for descriptions (experimental)
-- [x] Issue tabs: overview, comments, activity
-- [x] Manage and edit issues (e.g. transition, assign, edit reporter, edit title, delete)
-- [x] Comment workflows (create, reply, edit, delete)
-- [x] Search issues
-- [x] JQL support and completion
-- [x] Support for custom fields
-- [x] Subscribe / unsubscribe to issues
-- [x] Add custom actions to issues
-- [x] Create and edit issue templates
-- [ ] Save and filter issues
+Use `:AtlasIssues [provider]` to browse and manage Jira, GitHub, and GitLab issues.
 
-### Jira
+- [x] Multiple configurable views, provider search, and bookmarks
+- [x] Issue overview, conversation, and activity
+- [x] Create GitHub, GitLab, and Jira issues with `:AtlasCreateIssue`
+- [x] Edit issue descriptions and provider-specific fields
+- [x] Comment workflows including create, reply, edit, delete, and reactions
+- [x] Provider actions for status, assignees, reporters, labels, subscriptions, and deletion
+- [x] Parent and subissue relationships
+- [x] Jira JQL completion, custom fields, and Markdown/ADF descriptions
+- [x] Reusable issue templates
+- [x] Add custom actions to issues
+- [x] View and manage provider notifications
+- [ ] Save searches and filters from the UI
+
+### Issue Configuration
+
+```lua
+issues = {
+  max_results = 100,
+  with_relationships = true, -- Fetch parent/subissue relationships for plain issue tree views.
+  custom_actions = {}, -- See Custom Actions below.
+}
+```
+
+#### Jira
 
 > [!NOTE]
 > If you're only looking for Jira support, check out https://github.com/letieu/jira.nvim. This plugin was the main inspiration for this project.
@@ -439,10 +501,6 @@ pulls = {
 
 ```lua
 issues = {
-  max_results = 100,
-  with_relationships = true, -- Fetch parent/subissue relationships for plain issue tree views.
-  custom_actions = {}, -- See Custom Actions below.
-
   providers = {
     jira = {
       base_url = "https://your-site.atlassian.net",
@@ -512,7 +570,7 @@ issues = {
 
 </details>
 
-### GitHub Issues
+#### GitHub Issues
 
 <details>
 <summary><strong>Configuration</strong></summary>
@@ -560,7 +618,7 @@ issues = {
 
 </details>
 
-### GitLab Issues
+#### GitLab Issues
 
 <details>
 <summary><strong>Configuration</strong></summary>
@@ -615,7 +673,7 @@ issues = {
 
 </details>
 
-### Custom Actions
+#### Custom Actions
 
 You can add custom issue actions under `issues.custom_actions`.
 
@@ -653,35 +711,17 @@ issues = {
 
 </details>
 
-## Search
+### Create Issues
 
-Use `:AtlasSearch [provider]` to search configured providers.
+`:AtlasCreateIssue` opens the creation flow for the configured issue providers. GitHub and GitLab use the current repository, while Jira uses the configured instance. The forms support Markdown descriptions and provider-specific fields such as labels, assignees, milestones, and Jira issue types.
 
-Use `:AtlasOpen <target>` with a provider URL, Jira key, `owner/repo#number`, or PR/issue number.
+GitHub, GitLab, and Jira can apply a saved Markdown template or save the current description as a new one. Templates are shared between providers and stored under Neovim's data directory.
 
-### Jira
+<p align="center">
+  <img alt="Create issue" src="https://github.com/user-attachments/assets/76913fbf-1667-4f35-9962-d3c1b4619c7f">
+</p>
 
-`:AtlasSearch jira` opens a JQL prompt with full completion (fields, operators, values).
-
-```
-project = KAN AND assignee = currentUser() ORDER BY updated DESC
-summary ~ "login bug"
-```
-
-### GitHub
-
-`:AtlasSearch github` opens a GitHub search prompt with completion (`is:`, `repo:`, `author:`, `label:` etc.).
-
-```
-is:pr is:open author:@me
-is:issue label:bug
-```
-
-### Bitbucket
-
-`:AtlasSearch bitbucket` asks for a workspace and a repository and opens the UI scoped to that repo.
-
-#### Keymaps
+## Keymaps
 
 Set an action to `false` to disable it, or set it to a list to add aliases.
 
