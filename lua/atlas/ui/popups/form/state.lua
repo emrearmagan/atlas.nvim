@@ -12,6 +12,7 @@
 ---@field footer_win integer|nil
 ---@field title_label string|nil
 ---@field body_label string|nil
+---@field meta_height integer|nil
 ---@field placeholder_buf integer|nil
 ---@field augroup integer|nil
 ---@field closing boolean|nil

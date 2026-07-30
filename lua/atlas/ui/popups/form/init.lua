@@ -240,6 +240,14 @@ local function setup_keymaps(state, opts)
 		end
 	end
 
+	local editor_buf = buffer_for(state, "editor")
+	if valid_buf(editor_buf) then
+		set_keymap(editor_buf, "n", "gg", function()
+			vim.cmd("normal! gg")
+			renderer.reveal_meta(state.layout)
+		end, "Go to first line")
+	end
+
 	for _, keymap in ipairs(opts.keymaps or {}) do
 		for _, name in ipairs(keymap.buffers or {}) do
 			local buf = buffer_for(state, name)

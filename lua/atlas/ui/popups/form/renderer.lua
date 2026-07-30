@@ -65,6 +65,21 @@ local function table_rows(rows)
 	return columns, items
 end
 
+---@param layout AtlasFormLayout
+function M.reveal_meta(layout)
+	local win = layout.editor_win
+	if not win or not vim.api.nvim_win_is_valid(win) then
+		return
+	end
+	vim.api.nvim_win_call(win, function()
+		local view = vim.fn.winsaveview()
+		if view.topline == 1 then
+			view.topfill = layout.meta_height or 0
+			vim.fn.winrestview(view)
+		end
+	end)
+end
+
 ---@param state { layout: AtlasFormLayout, content_width: integer }
 ---@param rows AtlasFormMetaRow[]
 function M.render_meta(state, rows)
@@ -149,15 +164,8 @@ function M.render_meta(state, rows)
 		virt_lines_leftcol = true,
 		right_gravity = false,
 	})
-
-	if win and vim.api.nvim_win_is_valid(win) then
-		vim.api.nvim_win_call(win, function()
-			-- Virtual lines above line 1 need topfill to remain visible.
-			if vim.fn.winsaveview().topline == 1 then
-				vim.fn.winrestview({ topfill = #top_lines })
-			end
-		end)
-	end
+	layout.meta_height = #top_lines
+	M.reveal_meta(layout)
 end
 
 ---@param state { layout: AtlasFormLayout }
