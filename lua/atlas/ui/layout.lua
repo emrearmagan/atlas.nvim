@@ -67,20 +67,6 @@ local function ensure_footer()
 		state.footer_win = win_util.create(state.main_win, "botright split", buf, win_util.apply_footer_opts)
 	end
 	pcall(vim.api.nvim_win_set_height, state.footer_win, 1)
-	local logs_win = require("atlas.ui.logs").win_id()
-	if logs_win == nil then
-		pcall(function()
-			vim.api.nvim_win_call(state.footer_win, function()
-				vim.cmd("wincmd J")
-			end)
-		end)
-	else
-		pcall(function()
-			vim.api.nvim_win_call(logs_win, function()
-				vim.cmd("wincmd J")
-			end)
-		end)
-	end
 end
 
 ---@param fn fun()|nil

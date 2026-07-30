@@ -65,23 +65,16 @@ function M.register(buf)
 			nav.move_cursor("up")
 		end,
 	})
-	table.insert(items, {
-		key = "gx",
-		desc = "Open in browser",
-		opts = { nowait = true, silent = true },
-		callback = function()
-			M.open_current_line()
-		end,
-	})
-
-	table.insert(items, {
-		key = "r",
-		desc = "Refresh issue",
-		opts = { nowait = true, silent = true },
-		callback = function()
-			require("atlas.issues.ui.main.controller").refresh_issue(panel_state.current_issue)
-		end,
-	})
+	utils.insert_if(
+		items,
+		item("ui.refresh", {
+			desc = "Refresh issue",
+			opts = { nowait = true, silent = true },
+			callback = function()
+				require("atlas.issues.ui.main.controller").refresh_issue(panel_state.current_issue)
+			end,
+		})
+	)
 
 	local state = require("atlas.issues.state")
 	if state.provider and state.provider.open_actions then
@@ -106,6 +99,9 @@ function M.register(buf)
 			desc = "Open issue in browser",
 			opts = { nowait = true },
 			callback = function()
+				if M.open_current_line() then
+					return
+				end
 				local issue = panel_state.current_issue
 				if issue == nil then
 					return
@@ -132,39 +128,8 @@ function M.register(buf)
 		})
 	)
 
-	utils.insert_if(
-		items,
-		item("ui.toggle_subscription", {
-			desc = "Toggle subscription",
-			opts = { nowait = true, silent = true },
-			callback = function()
-				local issue = panel_state.current_issue
-				if issue == nil then
-					return
-				end
-				local provider = require("atlas.issues.state").provider
-				if provider == nil or not provider.toggle_subscription then
-					require("atlas.ui.components.footer").notify("warn", "Provider does not support subscription")
-					return
-				end
-				local footer = require("atlas.ui.components.footer")
-				footer.notify("loading", issue.is_subscribed and "Unsubscribing..." or "Subscribing...")
-				provider.toggle_subscription(issue, function(is_subscribed, err)
-					if err then
-						footer.notify("error", tostring(err))
-						return
-					end
-					footer.notify("success", is_subscribed and "Subscribed" or "Unsubscribed", 1200)
-					require("atlas.issues.ui.panel").render()
-				end)
-			end,
-		})
-	)
-
 	M.remove(buf)
-	help.register("Panel", items, { index = 211, buffer = buf })
-
-	local general = {}
+	local general = items
 
 	utils.insert_if(
 		general,
@@ -251,39 +216,38 @@ function M.register(buf)
 	help.register("General", general, { index = 300, buffer = buf })
 end
 
+---@return boolean
 function M.open_current_line()
 	local layout = require("atlas.ui.layout")
 	local win = layout.win_id("detail")
 	if win == nil or not vim.api.nvim_win_is_valid(win) then
-		return
+		return false
 	end
 
 	local lnum = vim.api.nvim_win_get_cursor(win)[1]
 	local entry = (panel_state.line_map or {})[lnum]
 	local issue = panel_state.current_issue
 	if not entry or not issue then
-		return
+		return false
 	end
 
 	local tab_mod = current_tab_mod()
 	if tab_mod and tab_mod.on_enter then
-		tab_mod.on_enter(issue, entry)
+		return tab_mod.on_enter(issue, entry) == true
 	end
+	return false
 end
 
 ---@param buf integer
 function M.remove(buf)
-	local items = {
+	local general = {
 		{ key = "j" },
 		{ key = "k" },
-		{ key = "gx" },
-		{ key = "r" },
 	}
-	utils.insert_if(items, remove_item("ui.open_actions"))
-	utils.insert_if(items, remove_item("ui.open_in_browser"))
-	help.remove("Panel", items, { buffer = buf })
-
-	local general = {}
+	utils.insert_if(general, remove_item("ui.refresh"))
+	utils.insert_if(general, remove_item("ui.open_actions"))
+	utils.insert_if(general, remove_item("ui.open_in_browser"))
+	utils.insert_if(general, remove_item("ui.toggle_subscription"))
 	utils.insert_if(general, remove_item("ui.next_panel_tab"))
 	utils.insert_if(general, remove_item("ui.previous_panel_tab"))
 	utils.insert_if(general, remove_item("ui.help"))
