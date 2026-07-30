@@ -7,16 +7,6 @@ local pulls_helper = require("atlas.pulls.ui.main.helper")
 local icons = require("atlas.ui.shared.icons")
 local template_store = require("atlas.issues.templates")
 
----@class CreateIssueLayout
----@field container_buf integer|nil
----@field container_win integer|nil
----@field title_buf integer|nil
----@field title_win integer|nil
----@field meta_buf integer|nil
----@field meta_win integer|nil
----@field desc_buf integer|nil
----@field desc_win integer|nil
-
 ---@class CreateIssueLabel
 ---@field name string
 ---@field color string|nil
@@ -32,15 +22,13 @@ local template_store = require("atlas.issues.templates")
 
 ---@class CreateIssueFields
 ---@field repo_slug string
----@field title string
----@field body string
 ---@field labels CreateIssueLabel[]
 ---@field assignees IssueUser[]
 ---@field milestone CreateIssueMilestone|nil
 
 ---@class CreateIssueState
 ---@field fields CreateIssueFields
----@field layout CreateIssueLayout
+---@field layout AtlasFormLayout
 ---@field content_width integer
 ---@field is_submitting boolean
 ---@field pickers CreateIssuePickers
@@ -60,10 +48,6 @@ end
 
 local function notify_error(msg)
 	notify(vim.log.levels.ERROR, msg)
-end
-
-local function valid_buf(buf)
-	return buf ~= nil and vim.api.nvim_buf_is_valid(buf)
 end
 
 ---@param repo_slug string
@@ -125,7 +109,7 @@ local function format_milestone(milestone)
 end
 
 ---@param labels CreateIssueLabel[]
----@return EditorPopupMetaCell
+---@return AtlasFormMetaCell
 local function labels_cell(labels)
 	if #labels == 0 then
 		return { text = "None", hl = "AtlasTextMuted" }
@@ -161,7 +145,7 @@ local function labels_cell(labels)
 end
 
 ---@param issue_state CreateIssueState
----@return EditorPopupMetaRow[]
+---@return AtlasFormMetaRow[]
 local function meta_rows(issue_state)
 	local repo = tostring(issue_state.fields.repo_slug or "")
 	local assignees = issue_state.fields.assignees
@@ -186,21 +170,12 @@ end
 
 ---@param issue_state CreateIssueState
 local function get_title(issue_state)
-	if not valid_buf(issue_state.layout.title_buf) then
-		return ""
-	end
-
-	local lines = vim.api.nvim_buf_get_lines(issue_state.layout.title_buf, 0, -1, false)
-	return vim.trim(table.concat(lines, " "))
+	return vim.trim(form.get_title(issue_state.layout))
 end
 
 ---@param issue_state CreateIssueState
 local function get_body(issue_state)
-	if not valid_buf(issue_state.layout.desc_buf) then
-		return ""
-	end
-
-	return table.concat(vim.api.nvim_buf_get_lines(issue_state.layout.desc_buf, 0, -1, false), "\n")
+	return form.get_body(issue_state.layout)
 end
 
 ---@param issue_state CreateIssueState
@@ -357,12 +332,7 @@ end
 ---@param issue_state CreateIssueState
 ---@param content string
 local function set_body(issue_state, content)
-	if not valid_buf(issue_state.layout.desc_buf) then
-		return false
-	end
-	local lines = vim.split(tostring(content or ""), "\n", { plain = true })
-	vim.api.nvim_buf_set_lines(issue_state.layout.desc_buf, 0, -1, false, lines)
-	return true
+	return form.set_body(issue_state.layout, content)
 end
 
 ---@param issue_state CreateIssueState
@@ -584,8 +554,6 @@ function M.open(opts)
 	local issue_state = {
 		fields = {
 			repo_slug = repo_slug,
-			title = "",
-			body = "",
 			labels = {},
 			assignees = {},
 			milestone = nil,
@@ -598,13 +566,10 @@ function M.open(opts)
 	}
 
 	form.open(issue_state, {
-		title = " Create Issue ",
-		min_height = 22,
-		meta_height = 3,
-		title_winbar = "Title",
-		desc_winbar = "Description",
-		initial_title = issue_state.fields.title,
-		initial_body = issue_state.fields.body,
+		title_label = "Title",
+		body_label = "Description",
+		initial_title = "",
+		initial_body = "",
 		close = function()
 			confirm_close(issue_state)
 		end,
@@ -618,9 +583,8 @@ function M.open(opts)
 			{
 				key = "ga",
 				mode = "n",
-				buffers = { "title", "desc" },
+				buffers = { "editor" },
 				desc = "assignees",
-				show_in_footer = true,
 				action = function()
 					pick_assignees(issue_state)
 				end,
@@ -628,9 +592,8 @@ function M.open(opts)
 			{
 				key = "gl",
 				mode = "n",
-				buffers = { "title", "desc" },
+				buffers = { "editor" },
 				desc = "labels",
-				show_in_footer = true,
 				action = function()
 					pick_labels(issue_state)
 				end,
@@ -638,9 +601,8 @@ function M.open(opts)
 			{
 				key = "gm",
 				mode = "n",
-				buffers = { "title", "desc" },
+				buffers = { "editor" },
 				desc = "milestone",
-				show_in_footer = true,
 				action = function()
 					pick_milestone(issue_state)
 				end,
@@ -648,9 +610,8 @@ function M.open(opts)
 			{
 				key = "gt",
 				mode = "n",
-				buffers = { "title", "desc" },
+				buffers = { "editor" },
 				desc = "templates",
-				show_in_footer = true,
 				action = function()
 					open_templates_menu(issue_state)
 				end,
@@ -659,7 +620,7 @@ function M.open(opts)
 	})
 
 	vim.schedule(function()
-		if vim.api.nvim_get_current_buf() == issue_state.layout.title_buf then
+		if vim.api.nvim_get_current_buf() == issue_state.layout.editor_buf then
 			vim.cmd("startinsert!")
 		end
 	end)

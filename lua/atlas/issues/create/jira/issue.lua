@@ -1,7 +1,6 @@
 --TODO: Currently hardcoded to jira
 local M = {}
 
-local footer = require("atlas.ui.components.footer")
 local icons = require("atlas.ui.shared.icons")
 local form = require("atlas.ui.popups.form")
 local issue_helper = require("atlas.issues.create.jira.helper")
@@ -12,6 +11,20 @@ local spinner = require("atlas.ui.components.spinner")
 local spinner_popup = require("atlas.ui.popups.spinner")
 local async_picker = require("atlas.ui.components.async_picker")
 
+local levels = {
+	info = vim.log.levels.INFO,
+	success = vim.log.levels.INFO,
+	warn = vim.log.levels.WARN,
+	error = vim.log.levels.ERROR,
+}
+
+---@param kind "info"|"success"|"warn"|"error"
+---@param message string
+---@param duration integer|nil
+local function notify(kind, message, duration)
+	vim.notify("[Atlas] " .. tostring(message), levels[kind], { timeout = duration })
+end
+
 ---@class IssueEditorFields
 ---@field summary string
 ---@field description table|string|nil
@@ -21,20 +34,12 @@ local async_picker = require("atlas.ui.components.async_picker")
 ---@field issue_key string|nil
 ---@field issue_type IssueType|nil
 
----@class IssueWindows
----@field title_buf integer|nil
----@field title_win integer|nil
----@field meta_buf integer|nil
----@field meta_win integer|nil
----@field desc_buf integer|nil
----@field desc_win integer|nil
----@field container_win integer|nil
----@field container_buf integer|nil
-
 ---@class IssueState
----@field layout IssueWindows
+---@field layout AtlasFormLayout
 ---@field preview_mode boolean
 ---@field original_markdown string
+---@field initial_summary string
+---@field initial_description string
 ---@field fields IssueEditorFields
 ---@field assignees IssueUser[]|"loading"|nil
 ---@field issue_types IssueType[]|"loading"|nil
@@ -46,18 +51,11 @@ local async_picker = require("atlas.ui.components.async_picker")
 ---@field preview_fn (fun(markdown: string): string)|nil
 
 local state = {
-	layout = {
-		title_buf = nil,
-		title_win = nil,
-		meta_buf = nil,
-		meta_win = nil,
-		desc_buf = nil,
-		desc_win = nil,
-		container_win = nil,
-		container_buf = nil,
-	},
+	layout = {},
 	preview_mode = false,
 	original_markdown = "",
+	initial_summary = "",
+	initial_description = "",
 	fields = {
 		summary = "",
 		description = nil,
@@ -86,19 +84,11 @@ local function valid_buf(buf)
 end
 
 local function get_title()
-	if not valid_buf(state.layout.title_buf) then
-		return ""
-	end
-	local lines = vim.api.nvim_buf_get_lines(state.layout.title_buf, 0, -1, false)
-	return table.concat(lines, " ")
+	return form.get_title(state.layout)
 end
 
 local function get_description()
-	if not valid_buf(state.layout.desc_buf) then
-		return ""
-	end
-	local lines = vim.api.nvim_buf_get_lines(state.layout.desc_buf, 0, -1, false)
-	return table.concat(lines, "\n")
+	return form.get_body(state.layout)
 end
 
 ---@return string
@@ -112,19 +102,14 @@ end
 ---@param markdown string
 ---@return boolean
 local function set_description_markdown(markdown)
-	if not valid_buf(state.layout.desc_buf) then
+	if not valid_buf(state.layout.editor_buf) then
 		return false
 	end
 
 	local text = tostring(markdown or "")
-	local lines = vim.split(text, "\n", { plain = true })
-	if #lines == 0 then
-		lines = { "" }
-	end
-
-	vim.api.nvim_set_option_value("modifiable", true, { buf = state.layout.desc_buf })
-	vim.api.nvim_buf_set_lines(state.layout.desc_buf, 0, -1, false, lines)
-	vim.api.nvim_set_option_value("filetype", "markdown", { buf = state.layout.desc_buf })
+	vim.api.nvim_set_option_value("modifiable", true, { buf = state.layout.editor_buf })
+	form.set_body(state.layout, text)
+	vim.api.nvim_set_option_value("filetype", "markdown", { buf = state.layout.editor_buf })
 
 	state.preview_mode = false
 	state.original_markdown = text
@@ -132,9 +117,8 @@ local function set_description_markdown(markdown)
 end
 
 local function is_modified()
-	local title = vim.trim(get_title())
-	local desc = vim.trim(get_description())
-	return title ~= "" or desc ~= ""
+	return vim.trim(get_title()) ~= vim.trim(state.initial_summary)
+		or get_active_markdown_description() ~= state.initial_description
 end
 
 ---@param issue_types IssueType[]
@@ -192,18 +176,11 @@ local function close_ui()
 
 	form.close(state.layout)
 
-	state.layout = {
-		title_buf = nil,
-		title_win = nil,
-		meta_buf = nil,
-		meta_win = nil,
-		desc_buf = nil,
-		desc_win = nil,
-		container_win = nil,
-		container_buf = nil,
-	}
+	state.layout = {}
 	state.preview_mode = false
 	state.original_markdown = ""
+	state.initial_summary = ""
+	state.initial_description = ""
 	state.fields = {
 		summary = "",
 		description = nil,
@@ -244,12 +221,12 @@ end
 local function apply_template_from_picker()
 	local templates, list_err = template_store.list()
 	if list_err then
-		footer.notify("error", list_err)
+		notify("error", list_err)
 		return
 	end
 
 	if templates == nil or #templates == 0 then
-		footer.notify("warn", "No templates found")
+		notify("warn", "No templates found")
 		return
 	end
 
@@ -266,22 +243,22 @@ local function apply_template_from_picker()
 
 		local template_name = tostring(selected.name or "")
 		if template_name == "" then
-			footer.notify("warn", "Invalid template selected")
+			notify("warn", "Invalid template selected")
 			return
 		end
 
 		local template_content, read_err = template_store.read(template_name)
 		if read_err then
-			footer.notify("error", read_err)
+			notify("error", read_err)
 			return
 		end
 
 		local function apply_selected_template()
 			if not set_description_markdown(template_content or "") then
-				footer.notify("error", "Issue description buffer is not available")
+				notify("error", "Issue description buffer is not available")
 				return
 			end
-			footer.notify("success", string.format("Applied template: %s", template_name), 1200)
+			notify("success", string.format("Applied template: %s", template_name), 1200)
 		end
 
 		if vim.trim(get_active_markdown_description()) == "" then
@@ -302,7 +279,7 @@ end
 local function save_description_as_template()
 	local markdown = vim.trim(get_active_markdown_description())
 	if markdown == "" then
-		footer.notify("warn", "Description is empty")
+		notify("warn", "Description is empty")
 		return
 	end
 
@@ -313,13 +290,13 @@ local function save_description_as_template()
 
 		local name = vim.trim(tostring(input))
 		if name == "" then
-			footer.notify("warn", "Template name is required")
+			notify("warn", "Template name is required")
 			return
 		end
 
 		local ok, write_err, existed, normalized_name = template_store.write(name, markdown, { overwrite = false })
 		if ok then
-			footer.notify("success", string.format("Created template %s", tostring(normalized_name or name)), 1200)
+			notify("success", string.format("Created template %s", tostring(normalized_name or name)), 1200)
 			return
 		end
 
@@ -333,15 +310,19 @@ local function save_description_as_template()
 				local overwrite_ok, overwrite_err, _, final_name =
 					template_store.write(name, markdown, { overwrite = true })
 				if not overwrite_ok then
-					footer.notify("error", overwrite_err or "Failed to overwrite template")
+					notify("error", overwrite_err or "Failed to overwrite template")
 					return
 				end
-				footer.notify("success", string.format("Updated template %s", tostring(final_name or normalized_name or name)), 1200)
+				notify(
+					"success",
+					string.format("Updated template %s", tostring(final_name or normalized_name or name)),
+					1200
+				)
 			end)
 			return
 		end
 
-		footer.notify("error", write_err or "Failed to create template")
+		notify("error", write_err or "Failed to create template")
 	end)
 end
 
@@ -375,7 +356,7 @@ local function submit_issue()
 	local desc = state.preview_mode and state.original_markdown or get_description()
 
 	if title == "" then
-		footer.notify("warn", "Title is required")
+		notify("warn", "Title is required")
 		return
 	end
 
@@ -401,39 +382,37 @@ local function submit_issue()
 			end
 
 			if err and err ~= "" then
-				footer.notify("error", err)
+				notify("error", err)
 			end
 		end)
 	end)
 end
 
 local function toggle_preview()
-	if not valid_buf(state.layout.desc_buf) or not valid_win(state.layout.desc_win) then
+	if not valid_buf(state.layout.editor_buf) or not valid_win(state.layout.editor_win) then
 		return
 	end
 
 	if not state.preview_fn then
-		footer.notify("warn", "Preview not available")
+		notify("warn", "Preview not available")
 		return
 	end
 
 	if state.preview_mode then
-		vim.api.nvim_set_option_value("modifiable", true, { buf = state.layout.desc_buf })
-		local lines = vim.split(state.original_markdown, "\n", { plain = true })
-		vim.api.nvim_buf_set_lines(state.layout.desc_buf, 0, -1, false, lines)
-		vim.api.nvim_set_option_value("filetype", "markdown", { buf = state.layout.desc_buf })
+		vim.api.nvim_set_option_value("modifiable", true, { buf = state.layout.editor_buf })
+		form.set_body(state.layout, state.original_markdown)
+		vim.api.nvim_set_option_value("filetype", "markdown", { buf = state.layout.editor_buf })
 		state.preview_mode = false
-		footer.notify("info", "Editing markdown")
+		notify("info", "Editing markdown")
 	else
 		state.original_markdown = get_description()
 		local preview = state.preview_fn(state.original_markdown)
-		local lines = vim.split(preview, "\n", { plain = true })
-		vim.api.nvim_set_option_value("modifiable", true, { buf = state.layout.desc_buf })
-		vim.api.nvim_buf_set_lines(state.layout.desc_buf, 0, -1, false, lines)
-		vim.api.nvim_set_option_value("modifiable", false, { buf = state.layout.desc_buf })
-		vim.api.nvim_set_option_value("filetype", "json", { buf = state.layout.desc_buf })
+		vim.api.nvim_set_option_value("modifiable", true, { buf = state.layout.editor_buf })
+		form.set_body(state.layout, preview)
+		vim.api.nvim_set_option_value("modifiable", false, { buf = state.layout.editor_buf })
+		vim.api.nvim_set_option_value("filetype", "json", { buf = state.layout.editor_buf })
 		state.preview_mode = true
-		footer.notify("info", "Preview (read-only)")
+		notify("info", "Preview (read-only)")
 	end
 end
 
@@ -634,7 +613,7 @@ end
 ---@param opts IssueEditorFields
 ---@param editor_opts { preview_fn?: fun(markdown: string): string }|nil
 function M.open(on_submit, opts, editor_opts)
-	if valid_win(state.layout.container_win) then
+	if valid_win(state.layout.editor_win) then
 		close_ui()
 	end
 
@@ -647,16 +626,13 @@ function M.open(on_submit, opts, editor_opts)
 	state.assignees = nil
 	state.issue_types = nil
 
-	local is_edit = type(state.fields.issue_key) == "string" and state.fields.issue_key ~= ""
-	local popup_title = is_edit and " Edit Issue " or " Create Issue "
 	local initial_desc = type(state.fields.description) == "string" and state.fields.description or ""
+	state.initial_summary = tostring(state.fields.summary or "")
+	state.initial_description = initial_desc
 
 	form.open(state, {
-		title = popup_title,
-		min_height = 24,
-		meta_height = 2,
-		title_winbar = "Summary",
-		desc_winbar = "Description",
+		title_label = "Summary",
+		body_label = "Description",
 		initial_title = tostring(state.fields.summary or ""),
 		initial_body = initial_desc,
 		close = confirm_close,
@@ -665,44 +641,33 @@ function M.open(on_submit, opts, editor_opts)
 		keymaps = {
 			{
 				key = "ga",
-				buffers = { "title", "desc" },
+				buffers = { "editor" },
 				action = show_assignee_picker,
 				desc = "assignee",
-				show_in_footer = true,
 			},
 			{
 				key = "gr",
-				buffers = { "title", "desc" },
+				buffers = { "editor" },
 				action = show_reporter_picker,
 				desc = "reporter",
-				show_in_footer = true,
 			},
 			{
 				key = "gt",
-				buffers = { "title", "desc" },
+				buffers = { "editor" },
 				action = show_issue_type_picker,
 				desc = "issue type",
-				show_in_footer = true,
 			},
 			{
 				key = "gT",
-				buffers = { "title", "meta", "desc" },
+				buffers = { "editor" },
 				action = open_templates_menu,
 				desc = "templates",
-				show_in_footer = true,
 			},
 			{
 				key = "m",
-				buffers = { "title", "meta", "desc" },
+				buffers = { "editor" },
 				action = toggle_preview,
 				desc = "raw preview",
-				show_in_footer = true,
-			},
-			{
-				key = "<CR>",
-				buffers = { "meta" },
-				action = show_assignee_picker,
-				desc = "assignee",
 			},
 		},
 	})
@@ -728,7 +693,7 @@ function M.open(on_submit, opts, editor_opts)
 				state.assignees_handle = nil
 
 				if err then
-					footer.notify("warn", "Failed to load assignees: " .. err, 2000)
+					notify("warn", "Failed to load assignees: " .. err, 2000)
 					state.assignees = {}
 				else
 					state.assignees = users or {}
@@ -745,7 +710,7 @@ function M.open(on_submit, opts, editor_opts)
 			state.issue_types_handle = nil
 
 			if err then
-				footer.notify("warn", "Failed to load issue types: " .. err, 2000)
+				notify("warn", "Failed to load issue types: " .. err, 2000)
 				state.issue_types = {}
 				state.fields.issue_type = nil
 			else
@@ -775,7 +740,7 @@ function M.open(on_submit, opts, editor_opts)
 	end
 
 	vim.api.nvim_create_autocmd("WinClosed", {
-		pattern = tostring(state.layout.container_win),
+		pattern = tostring(state.layout.editor_win),
 		once = true,
 		callback = function()
 			close_ui()

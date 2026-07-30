@@ -470,6 +470,9 @@ local ACTIONS = {
 			local projects_api = require("atlas.issues.providers.jira.api.projects")
 			local md_to_adf = require("atlas.issues.providers.jira.converted.markdown")
 			local issue_editor = require("atlas.issues.create.jira.issue")
+			local function notify_create(message, level, duration)
+				vim.notify("[Atlas] " .. message, level, { timeout = duration })
+			end
 
 			local function run_create(project_key)
 				issue_editor.open(function(fields, submit_done)
@@ -530,14 +533,22 @@ local ACTIONS = {
 									local update = { description = raw_desc }
 									issues_api.update_issue(result.key, update, function(ok)
 										if ok then
-											footer.notify("success", string.format("Created %s", result.key), 2000)
+											notify_create(
+												string.format("Created %s", result.key),
+												vim.log.levels.INFO,
+												2000
+											)
 											submit_done(true, nil)
 											done(
 												{ changed_issue_key = result.key, message = "Created " .. result.key },
 												nil
 											)
 										else
-											footer.notify("warn", "Issue created but failed to set description", 3000)
+											notify_create(
+												"Issue created but failed to set description",
+												vim.log.levels.WARN,
+												3000
+											)
 											submit_done(true, "Description not set")
 											done(
 												{ changed_issue_key = result.key, message = "Created " .. result.key },
@@ -548,7 +559,7 @@ local ACTIONS = {
 									return
 								end
 
-								footer.notify("success", string.format("Created %s", result.key), 2000)
+								notify_create(string.format("Created %s", result.key), vim.log.levels.INFO, 2000)
 								submit_done(true, nil)
 								done({
 									changed_issue_key = result.key,
@@ -678,7 +689,7 @@ local ACTIONS = {
 					run_create(item.value.key)
 				end,
 				on_cancel = function()
-					footer.notify("info", "Create issue cancelled", 1200)
+					notify_create("Create issue cancelled", vim.log.levels.INFO, 1200)
 					done({ changed_issue_key = nil, message = "Create issue cancelled" }, nil)
 				end,
 			})

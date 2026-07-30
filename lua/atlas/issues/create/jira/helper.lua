@@ -15,7 +15,8 @@ local function get_assignee_display(fields, assignees, spinner_instance)
 	end
 
 	if fields.assignee then
-		return icons.general("user") .. " " .. fields.assignee.display_name, helper.person_hl(fields.assignee.display_name)
+		return icons.general("user") .. " " .. fields.assignee.display_name,
+			helper.person_hl(fields.assignee.display_name)
 	end
 
 	return icons.general("user") .. " Unassigned", helper.person_hl(nil)
@@ -46,7 +47,7 @@ end
 ---@param assignees IssueUser[]|"loading"|nil
 ---@param issue_types IssueType[]|"loading"|nil
 ---@param spinner_instance SpinnerInstance|nil
----@return EditorPopupMetaRow[]
+---@return AtlasFormMetaRow[]
 function M.meta_rows(fields, assignees, issue_types, spinner_instance)
 	local user_icon, user_icon_hl = icons.general("user")
 	local provider_icon, provider_hl = icons.issues_provider("jira", "provider")

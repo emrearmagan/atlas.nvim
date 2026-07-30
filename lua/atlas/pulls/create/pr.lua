@@ -9,34 +9,25 @@ local multi_select = require("atlas.ui.popups.multi_select")
 
 local DEFAULT_GITHUB_PR_TEMPLATE = ".github/pull_request_template.md"
 
----@class CreatePRLayout
----@field container_buf integer|nil
----@field container_win integer|nil
----@field title_buf integer|nil
----@field title_win integer|nil
----@field meta_buf integer|nil
----@field meta_win integer|nil
----@field desc_buf integer|nil
----@field desc_win integer|nil
-
 ---@class CreatePRFields
 ---@field repo_slug string         -- "owner/repo"
 ---@field repo_root string         -- absolute path to local repo
 ---@field provider PullsProvider|nil
 ---@field head string              -- source branch
 ---@field base string              -- destination branch
----@field title string
----@field body string
 ---@field draft boolean
 ---@field commit_count integer
+---@field commits { hash: string, subject: string }[]
+---@field diffstat string[]
 ---@field available_bases string[]
 ---@field reviewers PullsCreatePRReviewer[]|"loading"|string candidates with .selected toggled by user, or "loading", or an error message string
 
 ---@class CreatePRState
 ---@field fields CreatePRFields
----@field layout CreatePRLayout
+---@field layout AtlasFormLayout
 ---@field content_width integer
 ---@field is_submitting boolean
+---@field settings_changed boolean
 
 local function notify(level, msg)
 	vim.notify("[Atlas] " .. tostring(msg), level)
@@ -98,14 +89,17 @@ end
 ---@return string title
 ---@return string body
 ---@return integer commit_count
+---@return { hash: string, subject: string }[] commits
+---@return string[] diffstat
 local function build_pr_content(root, repo_slug, base, head)
 	local commits = git_branch.commits_for_range(root, git_branch.commit_range(root, base, head))
+	local diffstat = git_branch.diff_stat(root, base, head) or {}
 	local latest_commit = commits[#commits]
 	local title = latest_commit and latest_commit.subject or ""
 
 	local template = trim(read_configured_pr_template(root, repo_slug))
 	if template ~= "" then
-		return title, template, #commits
+		return title, template, #commits, commits, diffstat
 	end
 
 	local commit_lines = {}
@@ -113,7 +107,7 @@ local function build_pr_content(root, repo_slug, base, head)
 		table.insert(commit_lines, string.format("- `%s` %s", commit.hash, commit.subject))
 	end
 
-	return title, table.concat(commit_lines, "\n"), #commits
+	return title, table.concat(commit_lines, "\n"), #commits, commits, diffstat
 end
 
 ---@param provider_id "github"|"bitbucket"|"gitlab"
@@ -181,7 +175,7 @@ local function reviewers_value(pr_state)
 end
 
 ---@param pr_state CreatePRState
----@return EditorPopupMetaRow[]
+---@return AtlasFormMetaRow[]
 local function meta_rows(pr_state)
 	local repo = tostring(pr_state.fields.repo_slug or "")
 	local head = tostring(pr_state.fields.head or "")
@@ -201,25 +195,44 @@ local function meta_rows(pr_state)
 	}
 end
 
-local function valid_buf(buf)
-	return buf ~= nil and vim.api.nvim_buf_is_valid(buf)
+---@param pr_state CreatePRState
+---@return string[]
+local function commit_context(pr_state)
+	local lines = {}
+	for _, commit in ipairs(pr_state.fields.commits) do
+		table.insert(lines, string.format("%s  %s", commit.hash, commit.subject))
+	end
+	if #lines == 0 then
+		table.insert(lines, "No commits")
+	end
+	if #pr_state.fields.diffstat > 0 then
+		table.insert(lines, "")
+		vim.list_extend(lines, pr_state.fields.diffstat)
+	end
+	return lines
+end
+
+---@param pr_state CreatePRState
+local function refresh_commits(pr_state)
+	local range = git_branch.commit_range(pr_state.fields.repo_root, pr_state.fields.base, pr_state.fields.head)
+	pr_state.fields.commits = git_branch.commits_for_range(pr_state.fields.repo_root, range)
+	pr_state.fields.commit_count = #pr_state.fields.commits
+	pr_state.fields.diffstat = git_branch.diff_stat(
+		pr_state.fields.repo_root,
+		pr_state.fields.base,
+		pr_state.fields.head
+	) or {}
+	form.render_context(pr_state, commit_context(pr_state))
 end
 
 ---@param pr_state CreatePRState
 local function get_title(pr_state)
-	if not valid_buf(pr_state.layout.title_buf) then
-		return ""
-	end
-	local lines = vim.api.nvim_buf_get_lines(pr_state.layout.title_buf, 0, -1, false)
-	return vim.trim(table.concat(lines, " "))
+	return vim.trim(form.get_title(pr_state.layout))
 end
 
 ---@param pr_state CreatePRState
 local function get_body(pr_state)
-	if not valid_buf(pr_state.layout.desc_buf) then
-		return ""
-	end
-	return table.concat(vim.api.nvim_buf_get_lines(pr_state.layout.desc_buf, 0, -1, false), "\n")
+	return form.get_body(pr_state.layout)
 end
 
 ---@param pr_state CreatePRState
@@ -237,7 +250,7 @@ end
 local function confirm_close(pr_state)
 	local title = get_title(pr_state)
 	local body = get_body(pr_state)
-	if title == "" and body == "" then
+	if not pr_state.settings_changed and title == "" and body == "" then
 		close(pr_state)
 		return
 	end
@@ -478,6 +491,8 @@ end
 ---@field initial_body string
 ---@field draft boolean
 ---@field commit_count integer
+---@field commits { hash: string, subject: string }[]|nil
+---@field diffstat string[]|nil
 
 ---@param opts CreatePROpenOpts
 function M.open(opts)
@@ -493,26 +508,28 @@ function M.open(opts)
 			repo_root = opts.repo_root,
 			head = opts.head,
 			base = opts.base,
-			title = opts.initial_title,
-			body = opts.initial_body,
 			draft = opts.draft,
 			commit_count = opts.commit_count,
+			commits = opts.commits or {},
+			diffstat = opts.diffstat or {},
 			available_bases = opts.available_bases or { opts.base },
 			reviewers = "loading",
 		},
 		layout = {},
 		content_width = 80,
 		is_submitting = false,
+		settings_changed = false,
 	}
 
 	form.open(pr_state, {
-		title = " Create Pull Request ",
-		min_height = 20,
-		meta_height = 3,
-		title_winbar = "Title",
-		desc_winbar = "Description",
-		initial_title = pr_state.fields.title,
-		initial_body = pr_state.fields.body,
+		context_title = "Commits",
+		context = function()
+			return commit_context(pr_state)
+		end,
+		title_label = "Title",
+		body_label = "Description",
+		initial_title = opts.initial_title,
+		initial_body = opts.initial_body,
 		close = function()
 			confirm_close(pr_state)
 		end,
@@ -526,11 +543,12 @@ function M.open(opts)
 			{
 				key = "gb",
 				mode = "n",
-				buffers = { "title", "desc" },
+				buffers = { "editor", "context" },
 				desc = "base",
-				show_in_footer = true,
 				action = function()
 					pick_base(pr_state, function()
+						pr_state.settings_changed = true
+						refresh_commits(pr_state)
 						render_meta(pr_state)
 					end)
 				end,
@@ -538,22 +556,22 @@ function M.open(opts)
 			{
 				key = "gd",
 				mode = "n",
-				buffers = { "title", "desc" },
+				buffers = { "editor", "context" },
 				desc = "toggle draft",
-				show_in_footer = true,
 				action = function()
 					pr_state.fields.draft = not pr_state.fields.draft
+					pr_state.settings_changed = true
 					render_meta(pr_state)
 				end,
 			},
 			{
 				key = "gr",
 				mode = "n",
-				buffers = { "title", "desc" },
+				buffers = { "editor", "context" },
 				desc = "reviewers",
-				show_in_footer = true,
 				action = function()
 					pick_reviewers(pr_state, function()
+						pr_state.settings_changed = true
 						render_meta(pr_state)
 					end)
 				end,
@@ -622,7 +640,7 @@ function M.start()
 		end
 	end
 
-	local default_title, default_body, commit_count = build_pr_content(root, info.slug, base, head)
+	local default_title, default_body, commit_count, commits, diffstat = build_pr_content(root, info.slug, base, head)
 
 	M.open({
 		provider = provider,
@@ -635,6 +653,8 @@ function M.start()
 		initial_body = default_body,
 		draft = false,
 		commit_count = commit_count,
+		commits = commits,
+		diffstat = diffstat,
 	})
 end
 
