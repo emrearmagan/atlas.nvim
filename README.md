@@ -10,40 +10,32 @@ A Neovim plugin for managing GitHub/Bitbucket/GitLab PRs and Jira/GitHub/GitLab 
 > [!CAUTION]
 > **Still in early development, will have breaking changes!**
 
-<table>
-  <thead>
-    <tr>
-      <th width="50%" align="center">GitHub</th>
-      <th width="50%" align="center">Bitbucket</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td width="50%"><img alt="GitHub PRs" src="https://github.com/user-attachments/assets/caa30d3c-6883-4f2e-bc12-81bb2127f798"></td>
-      <td width="50%"><img alt="Bitbucket PRs" src="https://github.com/user-attachments/assets/06299ffc-b15b-4e2c-8f11-95a8ddde3b04"></td>
-    </tr>
-    <tr>
-      <th width="50%" align="center">GitLab</th>
-      <th width="50%" align="center">Jira</th>
-    </tr>
-    <tr>
-	  <td width="50%"><img alt="Jira" src="https://github.com/user-attachments/assets/81b4023b-7f36-47cf-aeaf-28f9c1ebeb76"></td>
-      <td width="50%"><img alt="Jira" src="https://github.com/user-attachments/assets/23a15b90-283c-45e2-8964-02970ec3b21a"></td>
-    </tr>
-  </tbody>
-</table>
+<p>
+  <img alt="GitHub" src="https://img.shields.io/badge/GitHub-181717?style=flat-square&logo=github&logoColor=white">
+  <img alt="Bitbucket" src="https://img.shields.io/badge/Bitbucket-0052CC?style=flat-square&logo=bitbucket&logoColor=white">
+  <img alt="GitLab" src="https://img.shields.io/badge/GitLab-FC6D26?style=flat-square&logo=gitlab&logoColor=white">
+  <img alt="Jira" src="https://img.shields.io/badge/Jira-0052CC?style=flat-square&logo=jira&logoColor=white">
+</p>
+
+<p align="center">
+  <img width="49%" alt="Atlas UI" src="https://github.com/user-attachments/assets/caa30d3c-6883-4f2e-bc12-81bb2127f798">
+  <img width="49%" alt="AtlasDiff" src="https://github.com/user-attachments/assets/caa30d3c-6883-4f2e-bc12-81bb2127f798">
+</p>
 
 ## Table of Contents
 
 - [Installation](#installation)
-- [Issues](#issues)
-  - [Jira](#jira)
-  - [GitHub](#github-issues)
-  - [GitLab](#gitlab-issues)
+  - [Using lazy.nvim](#using-lazynvim)
+  - [Using packer.nvim](#using-packernvim)
+- [Requirements](#requirements)
 - [Pulls](#pulls)
   - [GitHub](#github)
   - [Bitbucket](#bitbucket)
   - [GitLab](#gitlab)
+- [Issues](#issues)
+  - [Jira](#jira)
+  - [GitHub](#github-issues)
+  - [GitLab](#gitlab-issues)
 
 ## Installation
 
@@ -145,6 +137,279 @@ use {
 - `:AtlasClearCache` - Clear Atlas disk and memory cache
 - `:AtlasLogs` - Toggle Atlas logs
 
+## Pulls
+
+- [x] Multiple views
+- [x] PR tabs: overview, activity/conversation, review, and commits
+- [x] PR actions: merge, approve, request changes, convert to draft, edit reviewers etc.
+- [x] Comment workflows (create, reply, edit, delete)
+- [x] Build/CI status
+- [x] Diffstat summary
+- [x] Checkout PR branch
+- [x] Add custom actions to PRs
+- [x] Open PR diff in given command
+- [x] Switch between open, merged and closed PRs
+- [x] Subscribe / unsubscribe to PRs
+- [x] Show notifications
+- [x] Create pull requests (`:AtlasCreatePR`)
+- [x] Native PR diff with inline threads, provider tasks/checklists, and local notes
+- [ ] Pagination for API results
+
+### Configuration
+
+```lua
+pulls = {
+  diff = {
+    -- Command must support explicit <base>...<head> Git revisions.
+    open_cmd = "AtlasDiff", -- default; can be replaced with "DiffviewOpen" / "CodeDiff".
+    layout = "side-by-side", -- "side-by-side" or "inline" for AtlasDiff.
+    compact = true, -- Start with only changed hunks and surrounding context visible.
+		explorer = {
+			grouped = true, -- Group changed files by directory.
+			hidden = false,
+			show_commits = true, -- Initially show commits below changed files.
+			width = 40,
+      initial_focus = "explorer", -- "explorer" or "diff".
+      ignore = { ".git/**", ".jj/**" },
+    },
+  },
+  repo_config = {
+    -- Maps `workspace/repo` to local paths. Used for checkout, diffs, and custom actions.
+    paths = {
+      ["your-workspace/*"] = "~/code/repos/*",
+      ["your-workspace/atlas"] = "~/code/atlas",
+    },
+    settings = {
+      ["your-workspace/atlas"] = {
+        readme = "README.md", -- optional, defaults to README.md
+        pr_template = ".github/pull_request_template.md", -- optional, defaults to .github/pull_request_template.md
+      },
+    },
+  },
+  custom_actions = {}, -- See Custom Actions below.
+},
+```
+
+### GitHub
+
+<details>
+<summary><strong>Configuration</strong></summary>
+
+```lua
+pulls = {
+  providers = {
+    github = {
+      cache_ttl = 300,
+
+      ---@type AtlasGitHubViewConfig[]
+      views = {
+        {
+          name = "My PRs",
+          key = "1",
+          layout = "plain",
+          search = "author:@me sort:updated-desc",
+        },
+        {
+          name = "Team",
+          key = "2",
+          layout = "compact",
+          search = "org:your-org sort:updated-desc",
+        },
+        {
+          name = "Repo",
+          key = "3",
+          layout = "plain",
+          search = "repo:your-org/your-repo",
+        },
+      },
+
+      bookmarks = {
+        key   = "S",      -- default
+        label = "Search", -- default
+        items = {
+          ["Drafts"]           = "is:pr is:draft author:@me",
+          ["Recently merged"]  = "is:pr is:merged author:@me sort:updated-desc",
+          ["Review requested"] = "is:pr is:open review-requested:@me",
+        },
+      },
+    },
+  },
+},
+```
+
+<img alt="GitHub pull requests" src="https://github.com/user-attachments/assets/caa30d3c-6883-4f2e-bc12-81bb2127f798">
+
+</details>
+
+### Bitbucket
+
+<details>
+<summary><strong>Configuration</strong></summary>
+
+```lua
+pulls = {
+  providers = {
+    bitbucket = {
+      user = vim.env.BITBUCKET_USER,
+      token = vim.env.BITBUCKET_TOKEN,
+      cache_ttl = 300,
+
+      ---@type AtlasBitbucketViewConfig[]
+      views = {
+        {
+          name = "Me",
+          key = "M",
+          layout = "compact",
+          repos = {
+            { workspace = "your-workspace", repo = "atlas" },
+          },
+
+          ---@param pr PullRequest
+          ---@param ctx { user: PullsUser|nil }
+          filter = function(pr, ctx)
+            local user = ctx.user
+            return pr.author and user and pr.author.id == user.id
+          end,
+        },
+        {
+          name = "Team",
+          key = "1",
+          layout = "plain", -- "compact" or "plain"
+          repos = {
+            { workspace = "your-workspace", repo = "atlas" },
+            { workspace = "your-workspace", repo = "other-repo" },
+          },
+        },
+      },
+    },
+  },
+},
+```
+
+<img alt="Bitbucket pull requests" src="https://github.com/user-attachments/assets/06299ffc-b15b-4e2c-8f11-95a8ddde3b04">
+
+</details>
+
+### GitLab
+
+<details>
+<summary><strong>Configuration</strong></summary>
+
+Auth uses a [Personal Access Token](https://docs.gitlab.com/ee/user/profile/personal_access_tokens.html) with the `api` scope. Set `base_url` to `https://gitlab.com` or your self-hosted instance.
+
+```lua
+pulls = {
+  providers = {
+    gitlab = {
+      base_url = "https://gitlab.com",
+      token = vim.env.GITLAB_TOKEN,
+      cache_ttl = 300,
+
+      ---@type AtlasGitLabPullsViewConfig[]
+      views = {
+        {
+          name = "Assigned",
+          key = "1",
+          scope = "assigned_to_me",
+        },
+        {
+          name = "Reviewing",
+          key = "3",
+          scope = "all",
+          extra_params = { reviewer_id = "Me" },
+        },
+        -- Single project
+        {
+          name = "GitLab",
+          key = "G",
+          project = "gitlab-org/gitlab",
+        },
+        -- Whole group, all projects under it
+        {
+          name = "GitLab Org",
+          key = "O",
+          group = "gitlab-org",
+        },
+      },
+
+      bookmarks = {
+        key   = "S",      -- default
+        label = "Search", -- default
+        items = {
+          ["Reviewing"]    = { scope = "all", extra_params = { reviewer_id = "Me" } },
+          ["Merged by me"] = { scope = "all", state = "merged", author_username = "me" },
+        },
+      },
+    },
+  },
+},
+```
+
+<img alt="GitLab pull requests" src="https://github.com/user-attachments/assets/81b4023b-7f36-47cf-aeaf-28f9c1ebeb76">
+
+</details>
+
+### Custom Actions
+
+You can add custom PR actions under `pulls.custom_actions`.
+
+<details>
+<summary><strong>Example</strong></summary>
+
+Context type:
+
+```lua
+---@class AtlasPullsCustomActionContext
+---@field repo_path string|nil
+---@field pr PullRequest
+```
+
+Example:
+
+```lua
+pulls = {
+  repo_config = {
+    paths = {
+      ["your-workspace/*"] = "~/code/repos/*",
+    },
+    settings = {},
+  },
+  custom_actions = {
+    {
+      id = "open_tmux_window",
+      label = "Open repo in tmux window",
+      confirmation = true, -- present a confirmation prompt before running the action
+      ---@param pr PullRequest
+      ---@param ctx AtlasPullsCustomActionContext
+      ---@param done fun(ok: boolean|nil, message: string|nil)
+      run = function(_, ctx, done)
+        if not ctx.repo_path then
+          done(false, "No repo path")
+          return
+        end
+
+        vim.system({ "tmux", "new-window", "-c", ctx.repo_path }, { text = true }, function(res)
+          vim.schedule(function()
+            if res.code ~= 0 then
+              done(false, "Failed to open tmux window")
+              return
+            end
+            done(true, "Opened tmux window")
+          end)
+        end)
+      end,
+    },
+  },
+  providers = {
+    ...,
+  },
+}
+```
+
+![CleanShot2026-03-31at20 08 06-ezgif com-video-to-gif-converter](https://github.com/user-attachments/assets/a8ca355b-09e2-428c-b3fb-3280fd161110)
+
+</details>
+
 ## Issues
 
 - [x] Create and edit issues
@@ -163,7 +428,7 @@ use {
 ### Jira
 
 > [!NOTE]
-> If you're only looking for Jira support, check out https://github.com/letieu/jira.nvim. This plugin was the main inspiration for this project.  
+> If you're only looking for Jira support, check out https://github.com/letieu/jira.nvim. This plugin was the main inspiration for this project.
 > Jira support is included here mainly because I wanted a single tool that works with both Atlassian products.
 
 > [!IMPORTANT]
@@ -242,6 +507,8 @@ issues = {
 ```
 
 <img alt="Edit/Create Issue" src="https://github.com/user-attachments/assets/76913fbf-1667-4f35-9962-d3c1b4619c7f">
+
+<img alt="Jira issues" src="https://github.com/user-attachments/assets/23a15b90-283c-45e2-8964-02970ec3b21a">
 
 </details>
 
@@ -383,273 +650,6 @@ issues = {
   },
 }
 ```
-
-</details>
-
-## Pulls
-
-- [x] Multiple views
-- [x] PR tabs: overview, activity/conversation, review, and commits
-- [x] PR actions: merge, approve, request changes, convert to draft, edit reviewers etc.
-- [x] Comment workflows (create, reply, edit, delete)
-- [x] Build/CI status
-- [x] Diffstat summary
-- [x] Checkout PR branch
-- [x] Add custom actions to PRs
-- [x] Open PR diff in given command
-- [x] Switch between open, merged and closed PRs
-- [x] Subscribe / unsubscribe to PRs
-- [x] Show notifications
-- [x] Create pull requests (`:AtlasCreatePR`)
-- [x] Native PR diff with inline threads, provider tasks/checklists, and local notes
-- [ ] Pagination for API results
-
-### Configuration
-
-```lua
-pulls = {
-  diff = {
-    -- Command must support explicit <base>...<head> Git revisions.
-    open_cmd = "AtlasDiff", -- default; can be replaced with "DiffviewOpen" / "CodeDiff".
-    layout = "side-by-side", -- "side-by-side" or "inline" for AtlasDiff.
-    compact = true, -- Start with only changed hunks and surrounding context visible.
-    explorer = {
-			grouped = true, -- Group changed files by directory.
-      hidden = false,
-			show_commits = true, -- Initially show commits below changed files.
-      width = 40,
-      initial_focus = "explorer", -- "explorer" or "diff".
-      ignore = { ".git/**", ".jj/**" },
-    },
-  },
-  repo_config = {
-    -- Maps `workspace/repo` to local paths. Used for checkout, diffs, and custom actions.
-    paths = {
-      ["your-workspace/*"] = "~/code/repos/*",
-      ["your-workspace/atlas"] = "~/code/atlas",
-    },
-    settings = {
-      ["your-workspace/atlas"] = {
-        readme = "README.md", -- optional, defaults to README.md
-        pr_template = ".github/pull_request_template.md", -- optional, defaults to .github/pull_request_template.md
-      },
-    },
-  },
-  custom_actions = {}, -- See Custom Actions below.
-},
-```
-
-### GitHub
-
-<details>
-<summary><strong>Configuration</strong></summary>
-
-```lua
-pulls = {
-  providers = {
-    github = {
-      cache_ttl = 300,
-
-      ---@type AtlasGitHubViewConfig[]
-      views = {
-        {
-          name = "My PRs",
-          key = "1",
-          layout = "plain",
-          search = "author:@me sort:updated-desc",
-        },
-        {
-          name = "Team",
-          key = "2",
-          layout = "compact",
-          search = "org:your-org sort:updated-desc",
-        },
-        {
-          name = "Repo",
-          key = "3",
-          layout = "plain",
-          search = "repo:your-org/your-repo",
-        },
-      },
-
-      bookmarks = {
-        key   = "S",      -- default
-        label = "Search", -- default
-        items = {
-          ["Drafts"]           = "is:pr is:draft author:@me",
-          ["Recently merged"]  = "is:pr is:merged author:@me sort:updated-desc",
-          ["Review requested"] = "is:pr is:open review-requested:@me",
-        },
-      },
-    },
-  },
-},
-```
-
-</details>
-
-### Bitbucket
-
-<details>
-<summary><strong>Configuration</strong></summary>
-
-```lua
-pulls = {
-  providers = {
-    bitbucket = {
-      user = vim.env.BITBUCKET_USER,
-      token = vim.env.BITBUCKET_TOKEN,
-      cache_ttl = 300,
-
-      ---@type AtlasBitbucketViewConfig[]
-      views = {
-        {
-          name = "Me",
-          key = "M",
-          layout = "compact",
-          repos = {
-            { workspace = "your-workspace", repo = "atlas" },
-          },
-
-          ---@param pr PullRequest
-          ---@param ctx { user: PullsUser|nil }
-          filter = function(pr, ctx)
-            local user = ctx.user
-            return pr.author and user and pr.author.id == user.id
-          end,
-        },
-        {
-          name = "Team",
-          key = "1",
-          layout = "plain", -- "compact" or "plain"
-          repos = {
-            { workspace = "your-workspace", repo = "atlas" },
-            { workspace = "your-workspace", repo = "other-repo" },
-          },
-        },
-      },
-    },
-  },
-},
-```
-
-</details>
-
-### GitLab
-
-<details>
-<summary><strong>Configuration</strong></summary>
-
-Auth uses a [Personal Access Token](https://docs.gitlab.com/ee/user/profile/personal_access_tokens.html) with the `api` scope. Set `base_url` to `https://gitlab.com` or your self-hosted instance.
-
-```lua
-pulls = {
-  providers = {
-    gitlab = {
-      base_url = "https://gitlab.com",
-      token = vim.env.GITLAB_TOKEN,
-      cache_ttl = 300,
-
-      ---@type AtlasGitLabPullsViewConfig[]
-      views = {
-        {
-          name = "Assigned",
-          key = "1",
-          scope = "assigned_to_me",
-        },
-        {
-          name = "Reviewing",
-          key = "3",
-          scope = "all",
-          extra_params = { reviewer_id = "Me" },
-        },
-        -- Single project
-        {
-          name = "GitLab",
-          key = "G",
-          project = "gitlab-org/gitlab",
-        },
-        -- Whole group, all projects under it
-        {
-          name = "GitLab Org",
-          key = "O",
-          group = "gitlab-org",
-        },
-      },
-
-      bookmarks = {
-        key   = "S",      -- default
-        label = "Search", -- default
-        items = {
-          ["Reviewing"]    = { scope = "all", extra_params = { reviewer_id = "Me" } },
-          ["Merged by me"] = { scope = "all", state = "merged", author_username = "me" },
-        },
-      },
-    },
-  },
-},
-```
-
-</details>
-
-### Custom Actions
-
-You can add custom PR actions under `pulls.custom_actions`.
-
-<details>
-<summary><strong>Example</strong></summary>
-
-Context type:
-
-```lua
----@class AtlasPullsCustomActionContext
----@field repo_path string|nil
----@field pr PullRequest
-```
-
-Example:
-
-```lua
-pulls = {
-  repo_config = {
-    paths = {
-      ["your-workspace/*"] = "~/code/repos/*",
-    },
-    settings = {},
-  },
-  custom_actions = {
-    {
-      id = "open_tmux_window",
-      label = "Open repo in tmux window",
-      confirmation = true, -- present a confirmation prompt before running the action
-      ---@param pr PullRequest
-      ---@param ctx AtlasPullsCustomActionContext
-      ---@param done fun(ok: boolean|nil, message: string|nil)
-      run = function(_, ctx, done)
-        if not ctx.repo_path then
-          done(false, "No repo path")
-          return
-        end
-
-        vim.system({ "tmux", "new-window", "-c", ctx.repo_path }, { text = true }, function(res)
-          vim.schedule(function()
-            if res.code ~= 0 then
-              done(false, "Failed to open tmux window")
-              return
-            end
-            done(true, "Opened tmux window")
-          end)
-        end)
-      end,
-    },
-  },
-  providers = {
-    ...,
-  },
-}
-```
-
-![CleanShot2026-03-31at20 08 06-ezgif com-video-to-gif-converter](https://github.com/user-attachments/assets/a8ca355b-09e2-428c-b3fb-3280fd161110)
 
 </details>
 
