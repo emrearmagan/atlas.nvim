@@ -1,0 +1,96 @@
+#!/usr/bin/env -S nvim --clean --headless -l
+-- luacheck: globals vim
+
+local script = vim.uv.fs_realpath(arg[0]) or arg[0]
+vim.opt.runtimepath:prepend(vim.fs.dirname(vim.fs.dirname(script)))
+
+local notes = require("atlas.pulls.notes")
+
+local USAGE = [[
+Usage:
+  atlas-notes add --target <url-or-ref> --file <path> --line <number>
+                  --body <text> --head <sha>
+                  [--type issue|suggestion|note|praise]
+  atlas-notes list [--target <url-or-ref>]
+]]
+
+---@param message string
+---@return never
+local function fail(message)
+	io.stderr:write("atlas-notes: " .. message .. "\n")
+	os.exit(1)
+end
+
+---@return table<string, string>
+local function parse_options()
+	local result = {}
+	local index = 2
+	while index <= #arg do
+		local name = tostring(arg[index]):match("^%-%-([%w-]+)$")
+		local value = arg[index + 1]
+		if not name or value == nil then
+			fail("expected --name value arguments")
+		end
+		result[name] = tostring(value)
+		index = index + 2
+	end
+	return result
+end
+
+---@param options table<string, string>
+---@param name string
+---@return string
+local function required(options, name)
+	local value = options[name]
+	if not value or value == "" then
+		fail("missing required option: --" .. name)
+	end
+	return value
+end
+
+---@param value string
+---@return AtlasNoteTarget
+local function target(value)
+	local result, err = notes.resolve_target(value)
+	if not result then
+		fail(err or "invalid pull request target")
+	end
+	return result
+end
+
+local command = arg[1]
+if not command or command == "help" or command == "--help" or command == "-h" then
+	io.stdout:write(USAGE)
+	os.exit(0)
+end
+
+local options = parse_options()
+if command == "add" then
+	local note, err = notes.add(target(required(options, "target")), {
+		file_path = required(options, "file"),
+		line = tonumber(required(options, "line")),
+		body = required(options, "body"),
+		head_sha = required(options, "head"),
+		type = options.type,
+	})
+	if not note then
+		fail(err or "unable to add note")
+	end
+	io.stdout:write(vim.json.encode(note) .. "\n")
+elseif command == "list" then
+	local value, err
+	if options.target then
+		local note_target = target(options.target)
+		local items
+		items, err = notes.list(note_target)
+		value = items and { target = note_target, notes = items } or nil
+	else
+		value, err = notes.documents()
+	end
+	if not value then
+		fail(err or "unable to list notes")
+	end
+	io.stdout:write(vim.json.encode(value) .. "\n")
+else
+	fail("unknown command: " .. tostring(command) .. "\n\n" .. USAGE)
+end
