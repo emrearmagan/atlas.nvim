@@ -108,9 +108,7 @@ local function open_md_editor(opts)
 	})
 end
 
--- -----------------------------------------------------------------------------
 -- Lifecycle
--- -----------------------------------------------------------------------------
 
 ---@param pr PullRequest
 ---@param _repo PullsRepo|nil
@@ -297,9 +295,7 @@ local function action_context(pr, refresh, key)
 	}
 end
 
--- -----------------------------------------------------------------------------
 -- Actions
--- -----------------------------------------------------------------------------
 
 ---@param action AtlasReviewCommentAction
 ---@param pr PullRequest

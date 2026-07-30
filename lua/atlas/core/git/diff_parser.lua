@@ -28,9 +28,7 @@ local M = {}
 ---@field additions integer|nil         -- optional total when supplied without hunks
 ---@field deletions integer|nil          -- optional total when supplied without hunks
 
---------------------------------------------------------------------------------
 -- Helpers
---------------------------------------------------------------------------------
 
 ---@param raw string
 ---@return string[]
@@ -62,9 +60,7 @@ local function finalise_file(file)
 	end
 end
 
---------------------------------------------------------------------------------
 -- Public
---------------------------------------------------------------------------------
 
 -- Example
 --   raw unified diff:

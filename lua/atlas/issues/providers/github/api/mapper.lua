@@ -326,9 +326,7 @@ function M.to_comments_list(raw_list)
 	return out
 end
 
---------------------------------------------------------------------------------
 -- Provider specific types
---------------------------------------------------------------------------------
 
 ---@param hex string|nil
 ---@return string|nil

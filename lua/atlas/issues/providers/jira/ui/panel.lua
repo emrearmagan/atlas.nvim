@@ -9,9 +9,7 @@ local overview_state = require("atlas.issues.providers.jira.ui.overview.state")
 local conversation_state = require("atlas.issues.ui.panel.issue.tabs.conversation.state")
 local history_state = require("atlas.issues.ui.panel.issue.tabs.activity.state")
 
---------------------------------------------------------------------------------
 -- Header rows
---------------------------------------------------------------------------------
 
 ---@param issue Issue
 ---@return IssuesPanelHeaderRow[]
@@ -84,9 +82,7 @@ function M.header_rows(issue)
 	return rows
 end
 
---------------------------------------------------------------------------------
 -- Chips
---------------------------------------------------------------------------------
 
 ---@param issue Issue
 ---@return IssuesPanelChip[]
@@ -143,9 +139,7 @@ function M.resolve_comment_body(body)
 	return author.resolve(body)
 end
 
---------------------------------------------------------------------------------
 -- Fetches
---------------------------------------------------------------------------------
 
 ---@param issue Issue
 ---@param refresh fun()
@@ -214,9 +208,7 @@ function M.is_loading(issue)
 	return overview_state.description_loading or conversation_state.any_loading() or history_state.any_loading()
 end
 
---------------------------------------------------------------------------------
 -- Tabs
---------------------------------------------------------------------------------
 
 ---@return IssuesPanelTab[]
 function M.tabs()

@@ -4,9 +4,7 @@ local M = {}
 local utils = require("atlas.ui.shared.utils")
 local highlights = require("atlas.ui.shared.highlights")
 
--------------------------------------------------------------------------------
 -- Types
--------------------------------------------------------------------------------
 
 ---@alias AtlasThreadV2Mode "tree" | "linked"
 
@@ -44,9 +42,7 @@ local highlights = require("atlas.ui.shared.highlights")
 ---@field item AtlasThreadV2Item
 ---@field [string] any
 
--------------------------------------------------------------------------------
 -- Internal helpers
--------------------------------------------------------------------------------
 
 ---@param item AtlasThreadV2Item
 ---@param part string
@@ -113,9 +109,7 @@ local function noop_hl()
 	return nil
 end
 
--------------------------------------------------------------------------------
 -- Prefix computation
--------------------------------------------------------------------------------
 
 ---@class ThreadV2Prefixes
 ---@field pad string            Left padding
@@ -151,9 +145,7 @@ local function compute_prefixes(depth, branch_prefix, is_last, padding_x)
 	}
 end
 
--------------------------------------------------------------------------------
 -- Header rendering
--------------------------------------------------------------------------------
 
 ---@param lines string[]
 ---@param spans AtlasThreadV2Span[]
@@ -264,9 +256,7 @@ local function render_header(lines, spans, line_map, item, depth, pfx, opts, wid
 	end
 end
 
--------------------------------------------------------------------------------
 -- Content rendering
--------------------------------------------------------------------------------
 
 ---@param lines string[]
 ---@param spans AtlasThreadV2Span[]
@@ -338,9 +328,7 @@ local function render_content(lines, spans, line_map, item, depth, pfx, opts, wi
 	end
 end
 
--------------------------------------------------------------------------------
 -- Footer rendering
--------------------------------------------------------------------------------
 
 ---@param lines string[]
 ---@param spans AtlasThreadV2Span[]
@@ -366,9 +354,7 @@ local function render_footer(lines, spans, line_map, item, depth, pfx, has_child
 	span(spans, #lines - 1, 0, #full_line, "AtlasTextMuted")
 end
 
--------------------------------------------------------------------------------
 -- Blank / separator lines
--------------------------------------------------------------------------------
 
 ---@param lines string[]
 ---@param spans AtlasThreadV2Span[]
@@ -389,9 +375,7 @@ local function separator_line(width, padding_x, sep_char)
 	return string.rep(" ", padding_x) .. string.rep(sep_char, content_width)
 end
 
--------------------------------------------------------------------------------
 -- Recursive item renderer — TREE mode
--------------------------------------------------------------------------------
 
 ---@param lines string[]
 ---@param spans AtlasThreadV2Span[]
@@ -427,13 +411,11 @@ local function render_tree(lines, spans, line_map, item, depth, branch_prefix, i
 	end
 end
 
--------------------------------------------------------------------------------
 -- Recursive item renderer — LINKED mode
 --
 -- In linked mode, children are rendered under the parent with │ connectors,
 -- but the last child's continuation line leads into a blank gap before the
 -- next root item starts fresh.
--------------------------------------------------------------------------------
 
 ---@param lines string[]
 ---@param spans AtlasThreadV2Span[]
@@ -490,9 +472,7 @@ local function render_linked(lines, spans, line_map, item, depth, branch_prefix,
 	end
 end
 
--------------------------------------------------------------------------------
 -- Public API
--------------------------------------------------------------------------------
 
 ---Render a list of threaded items into lines, highlight spans, and a line map.
 ---

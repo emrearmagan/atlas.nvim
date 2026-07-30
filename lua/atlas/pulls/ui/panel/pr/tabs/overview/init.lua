@@ -135,9 +135,7 @@ function M.on_select(pr, _repo, refresh, opts)
 	end
 end
 
---------------------------------------------------------------------------------
 -- Reviewers
---------------------------------------------------------------------------------
 
 local DECISION_GROUPS = { "approved", "changes_requested", "pending" }
 
@@ -285,9 +283,7 @@ local function render_reviewers(_pr, width, lines, spans)
 	table.insert(lines, "")
 end
 
---------------------------------------------------------------------------------
 -- Builds
---------------------------------------------------------------------------------
 
 local BUILD_HL = {
 	SUCCESSFUL = "AtlasBuildLinkSuccess",
@@ -404,9 +400,7 @@ local function render_builds(_pr, width, lines, spans, line_map)
 	table.insert(lines, "")
 end
 
---------------------------------------------------------------------------------
 -- Description
---------------------------------------------------------------------------------
 
 ---@param pr PullRequest
 ---@param width integer
@@ -472,9 +466,7 @@ local function render_description(pr, width, lines, spans)
 	table.insert(lines, "")
 end
 
---------------------------------------------------------------------------------
 -- Merge checks
---------------------------------------------------------------------------------
 
 local MERGE_CHECK_STATE = {
 	successful = { icon = icons.pulls_status("successful"), hl = "AtlasTextPositive" },

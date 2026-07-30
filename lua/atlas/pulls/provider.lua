@@ -29,6 +29,10 @@
 ---@field icon string
 ---@field hl_group string
 ---
+--- Main list rendering:
+---@field render (fun(groups: PullsGroup[], layout: string, opts: { width: integer }): PullsMainRenderResult)|nil
+---@field pr_popup_content (fun(pr: PullRequest): string[], table[])|nil
+---
 --- Lifecycle:
 ---@field setup fun()|nil
 ---
@@ -77,14 +81,8 @@
 ---@field create_pr (fun(opts: PullsCreatePROpts, on_done: fun(result: PullsCreatePRResult|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field fetch_default_reviewers (fun(opts: { repo_slug: string, repo_root: string|nil, head: string, base: string }, on_done: fun(reviewers: PullsCreatePRReviewer[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---
---- Main list rendering
----@field render (fun(groups: PullsGroup[], layout: string, opts: { width: integer }): PullsMainRenderResult)|nil
----@field pr_popup_content (fun(pr: PullRequest): string[], table[])|nil
----
 ---@field panel PullsProviderPanel|nil
 ---@field repo_panel PullsProviderRepoPanel|nil
----
----@field health fun()|nil
 
 --------------------------------------------------------------------------------
 -- Provider Panel Interface

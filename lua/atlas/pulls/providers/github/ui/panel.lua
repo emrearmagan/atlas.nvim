@@ -24,9 +24,7 @@ local function reset_state()
 	state.header_loading = false
 end
 
---------------------------------------------------------------------------------
 -- Helpers
---------------------------------------------------------------------------------
 
 ---@param builds PullsBuild[]
 ---@return string
@@ -56,9 +54,7 @@ local function aggregate_build_status(builds)
 	return "unknown"
 end
 
---------------------------------------------------------------------------------
 -- Panel
---------------------------------------------------------------------------------
 
 ---@param pr PullRequest
 ---@return PullsPanelHeaderRow[]
@@ -272,9 +268,7 @@ function M.is_loading(_pr, active_tab)
 	return false
 end
 
---------------------------------------------------------------------------------
 -- Tabs
---------------------------------------------------------------------------------
 
 ---@return PullsPanelTab[]
 function M.tabs()

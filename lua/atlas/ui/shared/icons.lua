@@ -117,9 +117,7 @@ local function get(style, fallback)
 	return style.icon, style.hl_group
 end
 
---------------------------------------------------------------------------------
 -- General
---------------------------------------------------------------------------------
 
 ---@param name string
 ---@return string, string
@@ -127,9 +125,7 @@ function M.general(name)
 	return get(ICONS.general[name])
 end
 
---------------------------------------------------------------------------------
 -- Pulls
---------------------------------------------------------------------------------
 
 ---@param name string
 ---@return string, string
@@ -151,9 +147,7 @@ function M.pulls_provider(provider_id, name)
 	return get(provider and provider[name], ICONS.pulls[name] or ICONS.general[name])
 end
 
---------------------------------------------------------------------------------
 -- Issues
---------------------------------------------------------------------------------
 
 ---@param name string
 ---@return string, string
@@ -200,9 +194,7 @@ function M.issues_provider(provider_id, name)
 	return get(provider and provider[name], ICONS.issues[name] or ICONS.pulls[name] or ICONS.general[name])
 end
 
---------------------------------------------------------------------------------
 -- Fallback
---------------------------------------------------------------------------------
 
 ---@return string, string
 function M.fallback()

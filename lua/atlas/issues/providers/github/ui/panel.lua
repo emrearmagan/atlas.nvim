@@ -140,9 +140,7 @@ local function milestone_display(milestone)
 	return title
 end
 
---------------------------------------------------------------------------------
 -- Header rows
---------------------------------------------------------------------------------
 
 ---@param issue Issue
 ---@return IssuesPanelHeaderRow[]
@@ -227,9 +225,7 @@ function M.header_rows(issue)
 	return rows
 end
 
---------------------------------------------------------------------------------
 -- Chips: labels
---------------------------------------------------------------------------------
 
 ---@param hex string|nil
 ---@return string
@@ -265,9 +261,7 @@ function M.chips(issue)
 	return chips
 end
 
---------------------------------------------------------------------------------
 -- Lifecycle
---------------------------------------------------------------------------------
 
 ---@param _issue Issue
 ---@return boolean

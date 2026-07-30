@@ -36,9 +36,7 @@ local core_git = require("atlas.core.git")
 ---@field cancel fun()
 ---@field finish fun(self: AtlasDiffGitOperation, result: any, err: string|nil)
 
---------------------------------------------------------------------------------
 -- Git requests
---------------------------------------------------------------------------------
 
 ---@param value string|nil
 ---@return string
@@ -120,9 +118,7 @@ local function run_git(op, args, opts, on_exit)
 	end)
 end
 
---------------------------------------------------------------------------------
 -- Changed files
---------------------------------------------------------------------------------
 
 -- Git uses NUL separators because paths may contain tabs or newlines.
 ---@param output string
@@ -291,9 +287,7 @@ local function diff_hunks(old_lines, new_lines, old_content, new_content, binary
 	return result, nil
 end
 
---------------------------------------------------------------------------------
 -- Range and files
---------------------------------------------------------------------------------
 
 ---@param op AtlasDiffGitOperation
 ---@param cwd string
@@ -398,9 +392,7 @@ local function list_files(op, range, on_done)
 	)
 end
 
---------------------------------------------------------------------------------
 -- Documents
---------------------------------------------------------------------------------
 
 ---@param op AtlasDiffGitOperation
 ---@param root string
@@ -524,9 +516,7 @@ function M.document(range, file, on_done)
 	return op
 end
 
---------------------------------------------------------------------------------
 -- Preparation
---------------------------------------------------------------------------------
 
 ---@param options AtlasDiffPrepareOptions
 ---@param on_done fun(result: AtlasPreparedDiff|nil, err: string|nil)

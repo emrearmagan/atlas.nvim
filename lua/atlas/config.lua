@@ -1,15 +1,11 @@
---------------------------------------------------------------------------------
 -- Keymaps
---------------------------------------------------------------------------------
 
 ---@alias AtlasKeymapValue string|string[]|false|nil
 
 ---@alias AtlasPullsProviderId "bitbucket"|"github"|"gitlab"
 ---@alias AtlasIssuesProviderId "jira"|"github"|"gitlab"
 
---------------------------------------------------------------------------------
 -- Pulls Provider Config
---------------------------------------------------------------------------------
 
 ---@class AtlasPullsViewConfig
 ---@field name string
@@ -56,9 +52,7 @@
 ---@field confirmation boolean|nil
 ---@field run fun(pr: PullRequest, ctx: AtlasPullsCustomActionContext, done: fun(ok: boolean|nil, message: string|nil))
 
---------------------------------------------------------------------------------
 -- Configs
---------------------------------------------------------------------------------
 
 ---@class AtlasPullsProviders
 ---@field bitbucket AtlasBitbucketConfig|nil
@@ -92,9 +86,7 @@
 ---@field custom_actions AtlasIssuesCustomAction[]|nil
 ---@field providers AtlasIssuesProviders|nil
 
---------------------------------------------------------------------------------
 -- Config
---------------------------------------------------------------------------------
 
 ---@class AtlasConfig
 ---@field pulls AtlasPullsConfig|nil
@@ -181,9 +173,7 @@ M.options = {
 	},
 }
 
---------------------------------------------------------------------------------
 -- Commands
---------------------------------------------------------------------------------
 
 local function register_commands()
 	pcall(vim.api.nvim_del_user_command, "AtlasPulls")
@@ -279,9 +269,7 @@ local function register_commands()
 	})
 end
 
---------------------------------------------------------------------------------
 -- Setup
---------------------------------------------------------------------------------
 
 ---@param opts AtlasConfig|table|nil
 function M.setup(opts)

@@ -6,9 +6,7 @@ local renderer = require("atlas.issues.ui.panel.issue.renderer")
 
 local SPINNER_INTERVAL_MS = 100
 
---------------------------------------------------------------------------------
 -- Loading spinner
---------------------------------------------------------------------------------
 
 local spinner_timer = nil
 
@@ -62,9 +60,7 @@ local function update_spinner()
 	end
 end
 
---------------------------------------------------------------------------------
 -- Helper
---------------------------------------------------------------------------------
 
 ---@return IssuesPanelTab[]
 local function get_tabs()
@@ -178,9 +174,7 @@ local function reset_tab_data()
 	reset_state("atlas.issues.ui.panel.issue.tabs.conversation.state")
 end
 
---------------------------------------------------------------------------------
 -- Public API
---------------------------------------------------------------------------------
 
 ---@return boolean
 function M.is_open()
