@@ -1,4 +1,4 @@
-*atlas.txt*  Pull requests and issues from Neovim   Last change: 2026 May 16
+*atlas.txt*  Pull requests and issues from Neovim   Last change: 2026 Jul 31
 
 Author: Emre Armagan
 License: MIT
@@ -12,15 +12,21 @@ CONTENTS                                                       *atlas-contents*
   4. Commands ............................... |atlas-commands|
   5. Health ................................. |atlas-health|
   6. Pulls .................................. |atlas-pulls|
+       Configuration ........................ |atlas-pulls-configuration|
        GitHub ............................... |atlas-pulls-github|
        Bitbucket ............................ |atlas-pulls-bitbucket|
        GitLab ............................... |atlas-pulls-gitlab|
        Custom actions ....................... |atlas-pulls-custom-actions|
+       Review pulls ......................... |atlas-pulls-review|
+       Local notes .......................... |atlas-pulls-notes|
+       Create pulls ......................... |atlas-pulls-create|
   7. Issues ................................. |atlas-issues|
+       Configuration ........................ |atlas-issues-configuration|
        Jira ................................. |atlas-issues-jira|
        GitHub ............................... |atlas-issues-github|
        GitLab ............................... |atlas-issues-gitlab|
        Custom actions ....................... |atlas-issues-custom-actions|
+       Create issues ........................ |atlas-issues-create|
   8. Search ................................. |atlas-search|
   9. Keymaps ................................ |atlas-keymaps|
 
@@ -37,8 +43,8 @@ Jira from inside Neovim.
   - `git` and `curl` on `$PATH`
   - For GitHub: the `gh` CLI, authenticated via `gh auth login`
   - For Bitbucket: Bitbucket Cloud API token (`api.bitbucket.org`)
-  - For GitLab: Personal Access Token with the `api` scope
-  - For Jira: Jira Cloud REST API v3 (`*.atlassian.net`), API token
+  - For GitLab: REST API v4 and a Personal Access Token with the `api` scope
+  - For Jira: Cloud REST API v3 or Server REST API v2
 
 Run `:checkhealth atlas` after configuring providers to see what's wired
 up and what's missing. See |atlas-health|.
@@ -51,7 +57,8 @@ With lazy.nvim:
   {
     "emrearmagan/atlas.nvim",
     dependencies = {
-      "MeanderingProgrammer/render-markdown.nvim", -- optional
+      "nvim-tree/nvim-web-devicons",              -- optional, recommended
+      "MeanderingProgrammer/render-markdown.nvim", -- optional, recommended
       "esmuellert/codediff.nvim",                  -- optional, PR diffs
       "sindrets/diffview.nvim",                    -- optional, PR diffs
     },
@@ -88,22 +95,31 @@ by default.
 
                                                                   *:AtlasPulls*
 :AtlasPulls [provider]
-        Open the pulls panel. Without an argument it uses the first
-        configured pulls provider. With an argument (`github`, `bitbucket`,
-        `gitlab`) it opens that provider directly.
+        Open the pulls panel. With an argument (`github`, `bitbucket`,
+        `gitlab`) it opens that provider directly. Without one, Atlas opens
+        the only configured provider or asks you to choose.
+
+                                                                   *:AtlasDiff*
+:AtlasDiff <base>...<head>
+        Open the native diff viewer for an explicit Git range.
+
+                                                                  *:AtlasNotes*
+:AtlasNotes
+        Open the local-notes manager across all pull requests.
 
                                                                  *:AtlasIssues*
 :AtlasIssues [provider]
-        Open the issues panel. Argument is one of `jira`, `github`, `gitlab`.
+        Open the issues panel. With an argument (`jira`, `github`, `gitlab`)
+        it opens that provider directly. Without one, Atlas opens the only
+        configured provider or asks you to choose.
 
                                                                *:AtlasCreatePR*
 :AtlasCreatePR
-        Start the create-PR flow for the current branch. The plugin reads
-        the branch's upstream remote to figure out the provider.
+        Start the create-PR flow for the current branch.
 
                                                             *:AtlasCreateIssue*
 :AtlasCreateIssue
-        Start the create-issue flow. Currently supports GitHub and Jira.
+        Start the create-issue flow for GitHub, GitLab, or Jira.
 
                                                                  *:AtlasSearch*
 :AtlasSearch [provider]
@@ -112,7 +128,7 @@ by default.
 
                                                                    *:AtlasOpen*
 :AtlasOpen <target>
-	Open a provider URL, Jira key, owner/repo#number, or PR/issue number.
+        Open a provider URL, Jira key, owner/repo#number, or PR/issue number.
 
                                                              *:AtlasClearCache*
 :AtlasClearCache
@@ -138,18 +154,35 @@ Run `:checkhealth atlas` to verify your setup. It reports on:
 6. PULLS                                                          *atlas-pulls*
 
 Two-pane layout: PRs grouped by view on the left, detail tabs (overview,
-conversation, review, commits, files) on the right.
+conversation, review, and commits) on the right.
+
+Atlas supports configurable views and bookmarks, comments and review threads,
+build and merge checks, commits and diffstats, provider notifications, and
+pull request actions. GitHub and GitLab also expose repository issues
+alongside the repository overview, branches, and tags.
+
+PULLS CONFIGURATION                              *atlas-pulls-configuration*
 
 Shared config that applies to all pulls providers:
 >lua
   require("atlas").setup({
     pulls = {
       diff = {
-        -- Command must accept a range: origin/<dest>...origin/<src>
-        open_cmd = "DiffviewOpen", -- or "CodeDiff"
+        -- Command must accept explicit <base>...<head> Git revisions.
+        open_cmd = "AtlasDiff", -- default; or "DiffviewOpen" / "CodeDiff"
+        layout = "side-by-side", -- "side-by-side" or "inline" for AtlasDiff
+        compact = true, -- initially show hunks plus surrounding context
+        explorer = {
+          grouped = true, -- group changed files by directory
+          hidden = false,
+          show_commits = true, -- initially show commits below changed files
+          width = 40,
+          initial_focus = "explorer", -- "explorer" or "diff"
+          ignore = { ".git/**", ".jj/**" },
+        },
       },
       repo_config = {
-        -- Map `workspace/repo` -> local path for checkout / actions.
+        -- Map `workspace/repo` -> local path for checkout / diffs / actions.
         paths = {
           ["your-workspace/*"]    = "~/code/repos/*",
           ["your-workspace/atlas"] = "~/code/atlas",
@@ -306,28 +339,90 @@ menu (default `A`).
   }
 <
 
+------------------------------------------------------------------------------
+REVIEW PULLS                                             *atlas-pulls-review*
+
+Press the configured `pulls.open_diff` key (`gd` by default) on a pull request
+to start a review. AtlasDiff places pending, resolved, and outdated threads at
+their diff locations. Provider tasks and GitHub checklists are shown with the
+comments they belong to. Supported providers allow comments to be added,
+replied to, edited, deleted, resolved, or reopened from the diff.
+
+CodeDiff can display the same Atlas comment and task overlays. This
+integration uses CodeDiff internals and may need updates when CodeDiff
+changes. Diffview is also supported as a plain diff viewer without Atlas
+review overlays.
+
+LOCAL NOTES                                               *atlas-pulls-notes*
+
+Notes are private comments on a file and line. They are never sent to the pull
+request provider and may be marked as `ISSUE`, `SUGGESTION`, `NOTE`, or
+`PRAISE`. Atlas marks a note as outdated when its source line changes and
+removes it when the location no longer exists. Use `:AtlasNotes` to inspect,
+edit, or delete notes across pull requests.
+
+The `bin/atlas-notes` script uses the same storage as Atlas, so scripts and
+external tools can add notes:
+>sh
+  ./bin/atlas-notes add \
+    --target https://github.com/owner/repository/pull/123 \
+    --file lua/review_queue.lua --line 19 \
+    --head "$(git rev-parse HEAD)" \
+    --type suggestion --body "Should this be a bool?"
+<
+
+CREATE PULLS                                              *atlas-pulls-create*
+
+Run `:AtlasCreatePR` from the branch you want to submit. Atlas uses the
+current branch as the source and the repository's default branch as the
+target. The latest commit supplies the initial title. A configured pull
+request template supplies the description; without one, Atlas builds it from
+the branch commits.
+
+The creation view lets you change the target branch, reviewers, and draft
+state. It also shows the commits and diffstat and can preview the diff before
+submitting.
+
 ==============================================================================
 7. ISSUES                                                        *atlas-issues*
 
 Same layout as |atlas-pulls|: list on the left, detail tabs (overview,
 conversation, activity) on the right.
 
-------------------------------------------------------------------------------
-JIRA                                                       *atlas-issues-jira*
+Atlas supports configurable views and bookmarks, comments, provider fields and
+actions, parent and subissue relationships, notifications, custom actions, and
+issue creation. Jira also supports JQL completion, project-specific fields,
+and Markdown/ADF descriptions.
 
-Auth is email + API token (Jira Cloud only - see
-https://support.atlassian.com/atlassian-account/docs/manage-api-tokens-for-your-atlassian-account/
-for how to create one). Views are saved JQL queries.
+ISSUES CONFIGURATION                            *atlas-issues-configuration*
 
+Shared config that applies to all issue providers:
 >lua
   issues = {
     max_results = 100,
-    with_relationships = true, -- fetch parents for plain tree views
+    with_relationships = true, -- fetch parent/subissue relationships
+    custom_actions = {}, -- see |atlas-issues-custom-actions|
+  }
+<
+
+------------------------------------------------------------------------------
+JIRA                                                       *atlas-issues-jira*
+
+Jira Cloud uses REST API v3 and Jira Server uses REST API v2. Cloud auth
+normally uses an email and API token (see
+https://support.atlassian.com/atlassian-account/docs/manage-api-tokens-for-your-atlassian-account/
+for how to create one). Server instances may use basic or bearer auth. Views
+are saved JQL queries.
+
+>lua
+  issues = {
     providers = {
       jira = {
         base_url  = "https://your-site.atlassian.net",
         email     = "you@example.com",
         token     = "your_jira_api_token",
+        auth_method = "basic", -- "basic" or "bearer"
+        api_type  = "cloud", -- "cloud" (v3) or "server" (v2)
         cache_ttl = 300,
         views = {
           { name = "My Board",  key = "M", layout = "plain",
@@ -344,34 +439,37 @@ for how to create one). Views are saved JQL queries.
             ["My open"]     = "assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC",
           },
         },
-
       },
     },
   }
 <
 
-Global Jira display settings and custom fields grouped by project key:
+Jira display settings and custom fields are grouped by project key:
 >lua
-  jira = {
-    project_config = {
-      -- Global story points field. Defaults to "customfield_10016".
-      story_points_field = "customfield_10016",
-      issue_types = {
-        ["Maintenance"] = { icon = "", hl_group = "AtlasTextWarning" },
-        ["Infrastructure"] = { icon = "󰒋", hl_group = "AtlasLogInfo" },
-      },
+  issues = {
+    providers = {
+      jira = {
+        project_config = {
+          -- Global story points field. Defaults to "customfield_10016".
+          story_points_field = "customfield_10016",
+          issue_types = {
+            ["Maintenance"] = { icon = "", hl_group = "AtlasTextWarning" },
+            ["Infrastructure"] = { icon = "󰒋", hl_group = "AtlasLogInfo" },
+          },
 
-      KAN = {
-        customfield_10003 = {
-          name   = "Approvers",
-          format = function(value)
-            if type(value) ~= "table" or #value == 0 then
-              return nil -- nil hides the field
-            end
-            return table.concat(value, ", ")
-          end,
-          hl_group = "AtlasChipActive",
-          display  = "chip", -- "chip" or "table"
+          KAN = {
+            customfield_10003 = {
+              name   = "Approvers",
+              format = function(value)
+                if type(value) ~= "table" or #value == 0 then
+                  return nil -- nil hides the field
+                end
+                return table.concat(value, ", ")
+              end,
+              hl_group = "AtlasChipActive",
+              display  = "chip", -- "chip" or "table"
+            },
+          },
         },
       },
     },
@@ -453,6 +551,18 @@ Same shape as |atlas-pulls-custom-actions|. Context:
   ---@field user IssueUser|nil
 <
 
+------------------------------------------------------------------------------
+CREATE ISSUES                                             *atlas-issues-create*
+
+`:AtlasCreateIssue` creates GitHub or GitLab issues in the current repository,
+or Jira issues in the configured instance. The editor supports Markdown
+descriptions and provider fields such as labels, assignees, milestones, and
+Jira issue types.
+
+All three providers can apply a saved Markdown template or save the current
+description as a new template. Templates are shared between providers and
+stored under Neovim's data directory.
+
 ==============================================================================
 8. SEARCH                                                        *atlas-search*
 
@@ -473,7 +583,7 @@ BITBUCKET - asks for a workspace and a repository, then opens the panel
 scoped to that repo. There's no equivalent of a free-form search; this is
 a Bitbucket API limitation.
 
-GITLAB - same shape as the configured views (scope + state + extra_params).
+GITLAB - asks for a project, then opens the pulls panel scoped to it.
 
 ==============================================================================
 9. KEYMAPS                                                      *atlas-keymaps*
@@ -519,8 +629,25 @@ Defaults live under `keymaps` in `setup()`. Each entry accepts:
         copy_id                = "y",
         open_diff              = "gd",
         checkout               = "gc",
-        next_hunk              = "]h",
-        previous_hunk          = "[h",
+        review = {
+          toggle_layout        = "t",
+          toggle_compact       = "f",
+          next_hunk            = "]h",
+          previous_hunk        = "[h",
+          next_file            = { "]f", "<Tab>" },
+          previous_file        = { "[f", "<S-Tab>" },
+          toggle_file_reviewed = "-",
+          toggle_commits       = "gC",
+          next_comment         = "]c",
+          previous_comment     = "[c",
+          next_note            = "]n",
+          previous_note        = "[n",
+          view_thread          = "K",
+          add_pending_comment  = "c",
+          add_comment          = "C",
+          add_note             = "n",
+          toggle_resolved      = "x",
+        },
         filter_status_open     = "gpo",
         filter_status_merged   = "gpm",
         filter_status_declined = "gpd",

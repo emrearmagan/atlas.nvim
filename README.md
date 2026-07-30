@@ -120,6 +120,7 @@ use {
 ## Requirements
 
 - Neovim: `0.10+`
+- `git` and `curl` on `$PATH`
 - Jira: Jira Cloud REST API v3 (`*.atlassian.net`) or Jira Server REST API v2
 - Bitbucket: Bitbucket Cloud REST API 2.0 (`api.bitbucket.org`)
 - GitHub: GitHub CLI (`gh`) authenticated with `gh auth login`
@@ -452,7 +453,7 @@ For scripts, use `bin/atlas-notes`. Notes added there appear in AtlasDiff and `:
 
 ### Create Pulls
 
-Run `:AtlasCreatePR` on the branch you want to submit. The current branch is used as the source and the repository's default branch as the target. The title and description start with the configured pull request template when one exists; otherwise Atlas uses the branch commits.
+Run `:AtlasCreatePR` on the branch you want to submit. The current branch is used as the source and the repository's default branch as the target. The latest commit supplies the initial title. A configured pull request template supplies the description; without one, Atlas builds it from the branch commits.
 
 Before creating the pull request, you can change the target branch, reviewers, and draft state. The commits and diffstat are shown below the editor, and the diff can be previewed from there.
 
