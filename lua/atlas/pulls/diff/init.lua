@@ -57,12 +57,21 @@ end
 
 ---@param repo_path string
 ---@param range string
+---@param review AtlasPreparedReviewContext|nil
 ---@param view AtlasLoadingView
+---@param reload fun()|nil
 ---@param on_done fun(err: string|nil)
 ---@return { cancel: fun() }
-local function open_codediff(repo_path, range, view, on_done)
+local function open_codediff(repo_path, range, review, view, reload, on_done)
+	local known_tabs = {}
+	for _, tabpage in ipairs(vim.api.nvim_list_tabpages()) do
+		known_tabs[tabpage] = true
+	end
 	local finished = false
+	local cancelled = false
+	local opened_tabpage
 	local autocmd_id
+
 	local function finish(err)
 		if finished then
 			return
@@ -72,6 +81,9 @@ local function open_codediff(repo_path, range, view, on_done)
 			pcall(vim.api.nvim_del_autocmd, autocmd_id)
 			autocmd_id = nil
 		end
+		if cancelled then
+			return
+		end
 		view:finish()
 		on_done(err)
 	end
@@ -79,30 +91,78 @@ local function open_codediff(repo_path, range, view, on_done)
 	-- CodeDiff opens its own tab, so close the temporary one.
 	autocmd_id = vim.api.nvim_create_autocmd("User", {
 		pattern = "CodeDiffOpen",
-		once = true,
-		callback = function()
-			vim.schedule(function()
+		callback = function(args)
+			local tabpage = args.data and args.data.tabpage
+			if not tabpage or known_tabs[tabpage] then
+				return
+			end
+			local lifecycle_ok, lifecycle = pcall(require, "codediff.ui.lifecycle")
+			local session = lifecycle_ok and lifecycle.get_session(tabpage) or nil
+			if not session then
+				return
+			end
+			local explorer = session.explorer or lifecycle.get_explorer(tabpage)
+			local actual_root = tostring(session.git_root or (explorer and explorer.git_root) or ""):gsub("/+$", "")
+			local expected_root = tostring(repo_path):gsub("/+$", "")
+			local expected_head = review and tostring(review.pr.source.commit_hash or ""):lower() or ""
+			local actual_head =
+				tostring((explorer and explorer.target_revision) or session.modified_revision or ""):lower()
+			if
+				actual_root ~= expected_root
+				or (
+					expected_head ~= ""
+					and actual_head ~= ""
+					and expected_head ~= actual_head
+					and actual_head:sub(1, #expected_head) ~= expected_head
+				)
+			then
+				return
+			end
+			opened_tabpage = tabpage
+			if cancelled then
+				pcall(lifecycle.close, tabpage)
 				finish(nil)
+				return
+			end
+			local attach_err
+			if review then
+				local ok, review_err = pcall(function()
+					return require("atlas.pulls.diff.codediff").attach(review, tabpage, { reload = reload })
+				end)
+				if not ok then
+					attach_err = tostring(review_err)
+				elseif review_err then
+					attach_err = review_err
+				end
+			end
+			vim.schedule(function()
+				finish(attach_err and "Unable to attach review to CodeDiff: " .. attach_err or nil)
 			end)
 		end,
 	})
 	local ok, err = pcall(vim.api.nvim_win_call, view.win, function()
-		vim.cmd("tcd " .. vim.fn.fnameescape(repo_path))
-		vim.cmd("CodeDiff " .. range)
+		vim.cmd("CodeDiff --repo " .. vim.fn.fnameescape(repo_path) .. " " .. range)
 	end)
 	if not ok then
 		finish(tostring(err))
 	end
-
+	vim.defer_fn(function()
+		if not finished then
+			finish("CodeDiff did not open; check CodeDiff notifications for details")
+		end
+	end, 15000)
 	return {
 		cancel = function()
-			if finished then
+			if finished or cancelled then
 				return
 			end
-			finished = true
-			if autocmd_id then
-				pcall(vim.api.nvim_del_autocmd, autocmd_id)
-				autocmd_id = nil
+			cancelled = true
+			if opened_tabpage then
+				local ok, lifecycle = pcall(require, "codediff.ui.lifecycle")
+				if ok then
+					pcall(lifecycle.close, opened_tabpage)
+				end
+				finish(nil)
 			end
 		end,
 	}
@@ -131,7 +191,7 @@ function M.open(opts, on_done, loading_target)
 		return nil
 	end
 
-	local review = open_cmd == "AtlasDiff" and opts.review or nil
+	local review = open_cmd ~= "DiffviewOpen" and opts.review or nil
 	local loading = require("atlas.ui.components.loading")
 	local prepare_request
 	local launch_request
@@ -260,10 +320,18 @@ function M.open(opts, on_done, loading_target)
 		end
 		view:update("Opening diff...")
 		if open_cmd == "CodeDiff" then
-			launch_request = open_codediff(root, range, view, function(err)
+			local restart = reload(prepared_review, prepared_base, prepared_head)
+			local launch_done = false
+			local handle = open_codediff(root, range, prepared_review, view, restart, function(err)
+				launch_done = true
 				launch_request = nil
 				complete(err)
 			end)
+			if launch_done or cancelled then
+				handle.cancel()
+			else
+				launch_request = handle
+			end
 			return
 		end
 
