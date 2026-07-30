@@ -136,6 +136,8 @@ use {
 
 - `:AtlasIssues [provider]` - Open Atlas issues domain
 - `:AtlasPulls [provider]` - Open Atlas pulls domain
+- `:AtlasDiff <base>...<head>` - Open the native diff viewer
+- `:AtlasNotes` - Inspect local review notes across pull requests
 - `:AtlasCreatePR` - Create a pull request from the current branch
 - `:AtlasCreateIssue` - Create an issue (GitHub / Jira)
 - `:AtlasSearch [provider]` - Pick a configured provider and prompt its search
@@ -234,7 +236,6 @@ issues = {
           ["My open"]     = "assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC",
         },
       },
-
     },
   },
 },
@@ -388,7 +389,7 @@ issues = {
 ## Pulls
 
 - [x] Multiple views
-- [x] PR tabs: overview, activity, comments, commits, files
+- [x] PR tabs: overview, activity/conversation, review, and commits
 - [x] PR actions: merge, approve, request changes, convert to draft, edit reviewers etc.
 - [x] Comment workflows (create, reply, edit, delete)
 - [x] Build/CI status
@@ -400,6 +401,7 @@ issues = {
 - [x] Subscribe / unsubscribe to PRs
 - [x] Show notifications
 - [x] Create pull requests (`:AtlasCreatePR`)
+- [x] Native PR diff with inline threads, provider tasks/checklists, and local notes
 - [ ] Pagination for API results
 
 ### Configuration
@@ -407,14 +409,16 @@ issues = {
 ```lua
 pulls = {
   diff = {
-    open_cmd = "AtlasDiff", -- "AtlasDiff", "DiffviewOpen", or "CodeDiff"
-    layout = "side-by-side", -- "side-by-side" or "inline"
-    compact = true, -- Show changed hunks with surrounding context
+    -- Command must support explicit <base>...<head> Git revisions.
+    open_cmd = "AtlasDiff", -- default; can be replaced with "DiffviewOpen" / "CodeDiff".
+    layout = "side-by-side", -- "side-by-side" or "inline" for AtlasDiff.
+    compact = true, -- Start with only changed hunks and surrounding context visible.
     explorer = {
-      grouped = true,
+			grouped = true, -- Group changed files by directory.
       hidden = false,
+			show_commits = true, -- Initially show commits below changed files.
       width = 40,
-      initial_focus = "explorer", -- "explorer" or "diff"
+      initial_focus = "explorer", -- "explorer" or "diff".
       ignore = { ".git/**", ".jj/**" },
     },
   },
@@ -724,6 +728,15 @@ keymaps = {
       next_file = { "]f", "<Tab>" },
       previous_file = { "[f", "<S-Tab>" },
       toggle_file_reviewed = "-",
+      toggle_commits = "gC",
+      next_comment = "]c",
+      previous_comment = "[c",
+      next_note = "]n",
+      previous_note = "[n",
+      view_thread = "K",
+      add_pending_comment = "c",
+      add_comment = "C",
+      add_note = "n",
       toggle_resolved = "x",
     },
     filter_status_open = "gpo",
