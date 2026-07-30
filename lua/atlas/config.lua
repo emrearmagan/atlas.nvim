@@ -29,8 +29,10 @@
 ---@field readme string|nil
 ---@field pr_template string|nil
 
+---@alias AtlasPullsDiffOpenCommand "AtlasDiff"|"DiffviewOpen"|"CodeDiff"
+
 ---@class AtlasPullsDiffConfig
----@field open_cmd "DiffviewOpen"|"CodeDiff"|string|nil
+---@field open_cmd AtlasPullsDiffOpenCommand|nil
 
 ---@class AtlasPullsCustomActionContext
 ---@field repo_path string|nil
@@ -92,7 +94,11 @@ local M = {}
 
 ---@type AtlasConfig
 M.options = {
-	pulls = nil,
+	pulls = {
+		diff = {
+			open_cmd = "AtlasDiff",
+		},
+	},
 	issues = nil,
 	keymaps = {
 		ui = {
@@ -153,6 +159,7 @@ local function register_commands()
 	pcall(vim.api.nvim_del_user_command, "AtlasClearCache")
 	pcall(vim.api.nvim_del_user_command, "AtlasCreatePR")
 	pcall(vim.api.nvim_del_user_command, "AtlasCreateIssue")
+	pcall(vim.api.nvim_del_user_command, "AtlasDiff")
 
 	vim.api.nvim_create_user_command("AtlasLogs", function()
 		require("atlas.ui.logs").toggle()
@@ -200,6 +207,13 @@ local function register_commands()
 	vim.api.nvim_create_user_command("AtlasCreateIssue", function()
 		require("atlas.issues.create").start()
 	end, { desc = "Create an issue" })
+
+	vim.api.nvim_create_user_command("AtlasDiff", function(opts)
+		require("atlas.pulls.actions").open_atlas_diff(opts.args)
+	end, {
+		desc = "Open the Atlas diff viewer",
+		nargs = 1,
+	})
 
 	vim.api.nvim_create_user_command("AtlasSearch", function(opts)
 		local provider_id = opts.fargs[1] and opts.fargs[1]:lower() or nil

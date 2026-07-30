@@ -13,20 +13,25 @@ local function provider()
 	return require("atlas.pulls.state").provider
 end
 
----@return string|nil open_cmd
+---@param requested AtlasPullsDiffOpenCommand|nil
+---@return AtlasPullsDiffOpenCommand|nil open_cmd
 ---@return string|nil err
-local function diff_open_command()
+local function diff_open_command(requested)
 	local config = require("atlas.config")
 	local pulls_cfg = config.options.pulls or {}
-	local cmd = vim.trim(tostring((pulls_cfg.diff or {}).open_cmd or ""))
+	local cmd = vim.trim(tostring(requested or (pulls_cfg.diff or {}).open_cmd or ""))
 	if cmd == "" then
 		return nil, "diff.open_cmd is not configured"
+	end
+	if cmd ~= "AtlasDiff" and cmd ~= "DiffviewOpen" and cmd ~= "CodeDiff" then
+		return nil, "Unsupported diff.open_cmd: " .. cmd
 	end
 
 	if vim.fn.exists(":" .. cmd) ~= 2 then
 		return nil, string.format("diff.open_cmd command not found: %s", cmd)
 	end
 
+	---@cast cmd AtlasPullsDiffOpenCommand
 	return cmd, nil
 end
 ---@param pr PullRequest
@@ -131,6 +136,7 @@ end
 ---@field base_revision string
 ---@field head_revision string
 ---@field fetch_branches (fun(on_done: fun(err: string|nil)): { cancel: fun() }|nil)|nil
+---@field open_cmd AtlasPullsDiffOpenCommand|nil
 
 ---@param repo_path string
 ---@param range string
@@ -145,24 +151,6 @@ local function open_diffview(repo_path, range)
 			error(open_err)
 		end
 	end)
-	return not ok and tostring(err) or nil
-end
-
----@param open_cmd string
----@param repo_path string
----@param range string
----@return string|nil err
-local function open_external_diff(open_cmd, repo_path, range)
-	local tabpage
-	local ok, err = pcall(function()
-		vim.cmd("tabnew")
-		tabpage = vim.api.nvim_get_current_tabpage()
-		vim.cmd("tcd " .. vim.fn.fnameescape(repo_path))
-		vim.cmd(open_cmd .. " " .. range)
-	end)
-	if not ok and tabpage and vim.api.nvim_tabpage_is_valid(tabpage) then
-		pcall(vim.cmd, vim.api.nvim_tabpage_get_number(tabpage) .. "tabclose")
-	end
 	return not ok and tostring(err) or nil
 end
 
@@ -187,7 +175,7 @@ local function open_codediff(repo_path, range, view, on_done)
 		on_done(err)
 	end
 
-	-- CodeDiff opens its own tab, so close the temporary one afterwards.
+	-- CodeDiff opens its own tab, so close the temporary one.
 	autocmd_id = vim.api.nvim_create_autocmd("User", {
 		pattern = "CodeDiffOpen",
 		once = true,
@@ -223,7 +211,7 @@ end
 ---@param on_done fun(err: string|nil)|nil
 ---@return { cancel: fun() }|nil
 function M.open_diff_range(opts, on_done)
-	local open_cmd, command_err = diff_open_command()
+	local open_cmd, command_err = diff_open_command(opts.open_cmd)
 	if not open_cmd then
 		if on_done then
 			on_done(command_err)
@@ -231,7 +219,7 @@ function M.open_diff_range(opts, on_done)
 		return nil
 	end
 
-	local root = vim.trim(tostring(opts.git_root or ""))
+	local root = tostring(opts.git_root or "")
 	local base = vim.trim(tostring(opts.base_revision or ""))
 	local head = vim.trim(tostring(opts.head_revision or ""))
 	if root == "" or base == "" or head == "" then
@@ -283,8 +271,50 @@ function M.open_diff_range(opts, on_done)
 		end
 	end
 
+	---@param err string
+	local function fail(err)
+		view:finish()
+		complete(err)
+	end
+
 	local function launch()
 		if cancelled or completed then
+			return
+		end
+		if open_cmd == "AtlasDiff" then
+			-- The callback may finish before prepare() returns its request handle.
+			local finished = false
+			local request = require("atlas.pulls.diff.atlas.git").prepare({
+				git_root = root,
+				base_revision = base,
+				head_revision = head,
+				on_progress = function(message)
+					view:update(message)
+				end,
+			}, function(prepared, err)
+				finished = true
+				launch_request = nil
+				if cancelled then
+					return
+				end
+				if not prepared then
+					fail(tostring(err or "Unable to prepare diff"))
+					return
+				end
+				view:finish()
+				local ok, open_err = pcall(require("atlas.pulls.diff.atlas").open, {
+					diff = prepared,
+				})
+				if not ok then
+					open_err = tostring(open_err)
+				end
+				complete(open_err)
+			end)
+			if finished or cancelled then
+				request.cancel()
+			else
+				launch_request = request
+			end
 			return
 		end
 		view:update("Opening diff...")
@@ -296,24 +326,25 @@ function M.open_diff_range(opts, on_done)
 			return
 		end
 
-		local err
-		if open_cmd == "DiffviewOpen" then
-			err = open_diffview(root, range)
-			view:finish()
-		else
-			view:finish()
-			err = open_external_diff(open_cmd, root, range)
+		view:finish()
+		complete(open_diffview(root, range))
+	end
+	local function start_launch()
+		local ok, err = pcall(launch)
+		if not ok then
+			fail(tostring(err))
 		end
-		complete(err)
 	end
 
 	if not opts.fetch_branches then
-		launch()
+		start_launch()
 		return { cancel = cancel }
 	end
 
 	view:update("Fetching remote branches...")
+	local fetch_done = false
 	local ok, request = pcall(opts.fetch_branches, function(err)
+		fetch_done = true
 		fetch_request = nil
 		if cancelled or completed then
 			return
@@ -323,16 +354,41 @@ function M.open_diff_range(opts, on_done)
 			complete(tostring(err))
 			return
 		end
-		launch()
+		start_launch()
 	end)
 	if not ok then
 		view:finish()
 		complete(tostring(request))
+	elseif fetch_done or completed or cancelled then
+		if request then
+			pcall(request.cancel)
+		end
 	else
 		fetch_request = request
 	end
 
 	return { cancel = cancel }
+end
+
+---@param range string
+function M.open_atlas_diff(range)
+	local separator = range:find("...", 1, true)
+	local base = separator and vim.trim(range:sub(1, separator - 1)) or ""
+	local head = separator and vim.trim(range:sub(separator + 3)) or ""
+	if base == "" or head == "" then
+		vim.notify("[AtlasDiff] Expected an explicit base...head range", vim.log.levels.ERROR)
+		return
+	end
+	M.open_diff_range({
+		git_root = vim.fn.getcwd(),
+		base_revision = base,
+		head_revision = head,
+		open_cmd = "AtlasDiff",
+	}, function(err)
+		if err then
+			vim.notify("[AtlasDiff] " .. err, vim.log.levels.ERROR)
+		end
+	end)
 end
 
 ---@param pr PullRequest
