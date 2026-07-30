@@ -16,7 +16,14 @@ function M.register(buf, actions)
 	help.register("Notes", {
 		{ key = "K", desc = "Show note details", index = 1, callback = actions.details, opts = { nowait = true } },
 		{ key = "e", desc = "Edit note", index = 2, callback = actions.edit, opts = { nowait = true } },
-		{ key = "d", desc = "Delete note", index = 3, callback = actions.delete, opts = { nowait = true } },
+		{
+			key = "d",
+			mode = { "n", "x" },
+			desc = "Delete selected notes",
+			index = 3,
+			callback = actions.delete,
+			opts = { nowait = true },
+		},
 	}, { buffer = buf, index = 100 })
 	local view = {
 		{ key = "R", desc = "Reload notes", index = 4, callback = actions.refresh, opts = { nowait = true } },

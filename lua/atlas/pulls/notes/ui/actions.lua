@@ -25,6 +25,34 @@ local function selected_item(state)
 end
 
 ---@param state AtlasNotesUIState
+---@return { target: AtlasNoteTarget, note: AtlasNote }[]
+local function selected_notes(state)
+	if not valid_window(state) or vim.api.nvim_get_current_buf() ~= state.buf then
+		return {}
+	end
+	local first = vim.api.nvim_win_get_cursor(state.win)[1]
+	local last = first
+	local mode = vim.fn.mode()
+	if mode == "v" or mode == "V" or mode == "\22" then
+		first = vim.fn.line("v")
+		if first > last then
+			first, last = last, first
+		end
+		vim.cmd.normal({ args = { vim.keycode("<Esc>") }, bang = true })
+	end
+
+	local selected = {}
+	for line = first, last do
+		local item = state.line_map[line]
+		local note = item and item.note or nil
+		if note then
+			table.insert(selected, { target = item.target, note = note })
+		end
+	end
+	return selected
+end
+
+---@param state AtlasNotesUIState
 ---@param refresh fun()
 ---@return AtlasNotesUIActions
 function M.new(state, refresh)
@@ -46,23 +74,26 @@ function M.new(state, refresh)
 	end
 
 	local function delete_note()
-		local selected = selected_item(state)
-		local note = selected and selected.note or nil
-		if not selected or not note then
+		local selected = selected_notes(state)
+		if #selected == 0 then
 			notify("Select a note to delete", vim.log.levels.WARN)
 			return
 		end
-		vim.ui.input({ prompt = "Delete note? [y/N]: " }, function(answer)
+		local prompt = #selected == 1 and "Delete note? [y/N]: " or string.format("Delete %d notes? [y/N]: ", #selected)
+		vim.ui.input({ prompt = prompt }, function(answer)
 			answer = vim.trim(tostring(answer or "")):lower()
 			if answer ~= "y" and answer ~= "yes" then
 				return
 			end
-			local deleted, err = notes.delete(selected.target, note.id)
-			if not deleted then
-				notify(err or "Unable to delete note", vim.log.levels.ERROR)
-				return
+			for _, item in ipairs(selected) do
+				local deleted, err = notes.delete(item.target, item.note.id)
+				if not deleted then
+					notify(err or "Unable to delete note", vim.log.levels.ERROR)
+					refresh()
+					return
+				end
 			end
-			notify("Note deleted")
+			notify(#selected == 1 and "Note deleted" or string.format("%d notes deleted", #selected))
 			refresh()
 		end)
 	end

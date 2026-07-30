@@ -6,9 +6,11 @@ local note_editor = require("atlas.pulls.notes.ui.editor")
 local note_popup = require("atlas.pulls.notes.ui.popup")
 local note_renderer = require("atlas.pulls.notes.ui.renderer")
 local store = require("atlas.pulls.notes")
+local icons = require("atlas.ui.shared.icons")
 local utils = require("atlas.ui.shared.utils")
 
 local namespace = vim.api.nvim_create_namespace("atlas_diff_notes")
+local note_icon, note_icon_hl = icons.general("pin")
 
 ---@class AtlasDiffNotesState
 ---@field target AtlasNoteTarget
@@ -133,12 +135,11 @@ function M.render(session)
 			collapse_outdated = true,
 		})
 		local virtual_lines = utils.virtual_lines(lines, spans)
-		local sign, sign_hl = note_renderer.type_style("note")
 		vim.api.nvim_buf_set_extmark(session.right.buf, namespace, line - 1, 0, {
 			virt_lines = virtual_lines,
 			virt_lines_leftcol = true,
-			sign_text = sign,
-			sign_hl_group = sign_hl,
+			sign_text = note_icon,
+			sign_hl_group = note_icon_hl,
 			priority = 1080,
 		})
 

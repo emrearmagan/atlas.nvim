@@ -82,8 +82,6 @@ end
 function M.details_lines(note, target)
 	local label = target and notes.target_label(target) or "Unknown pull request"
 	local lines = {
-		"# " .. M.note_label(note),
-		"",
 		string.format("**%s** · `%s:%d` · `%s`", type_label(note.type), note.file_path, note.line, label),
 	}
 	if target then
