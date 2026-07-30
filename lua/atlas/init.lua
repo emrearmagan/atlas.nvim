@@ -15,6 +15,7 @@ local function bootstrap_common()
 	require("atlas.ui.popups.help").register_command("Commands", {
 		{ name = "AtlasPulls", desc = "Open pulls" },
 		{ name = "AtlasIssues", desc = "Open issues" },
+		{ name = "AtlasDiff", desc = "Open native diff" },
 		{ name = "AtlasNotes", desc = "Manage local review notes" },
 		{ name = "AtlasSearch", desc = "Search across providers" },
 		{ name = "AtlasOpen", desc = "Open URL or reference" },

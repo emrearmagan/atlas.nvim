@@ -132,9 +132,7 @@ function M.open_diff(pr)
 	}, function(err, level)
 		if err then
 			footer.notify(level or "error", "Unable to open diff: " .. tostring(err))
-			return
 		end
-		footer.notify("success", "Opened PR diff", 1200)
 	end)
 end
 

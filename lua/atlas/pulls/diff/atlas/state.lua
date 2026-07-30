@@ -52,7 +52,7 @@ local M = {}
 ---@field diff AtlasPreparedDiff
 ---@field explorer AtlasDiffExplorerOptions
 ---@field review AtlasPreparedReviewContext|nil
----@field commits PullsCommit[]|nil
+---@field commits PullsCommit[]
 ---@field reload fun(target: AtlasLoadingTarget|nil)
 ---@field target AtlasLoadingTarget|nil
 

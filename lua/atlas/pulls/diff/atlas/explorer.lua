@@ -204,7 +204,6 @@ function M.configure_window(session, win)
 	options.winfixwidth = true
 	options.wrap = false
 	options.winbar = ""
-	vim.api.nvim_win_set_width(win, M.width(session))
 end
 
 ---@param session AtlasNativeDiffSession
