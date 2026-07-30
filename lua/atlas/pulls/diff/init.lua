@@ -201,9 +201,10 @@ function M.open(opts, on_done, loading_target)
 	end
 
 	---@param prepared_review AtlasPreparedReviewContext|nil
+	---@param commits PullsCommit[]
 	---@param prepared_base string
 	---@param prepared_head string
-	local function launch(prepared_review, prepared_base, prepared_head)
+	local function launch(prepared_review, commits, prepared_base, prepared_head)
 		local range = prepared_base .. "..." .. prepared_head
 		logger.loginfo("diff.open", { repo_path = root, command = open_cmd .. " " .. range })
 
@@ -241,6 +242,7 @@ function M.open(opts, on_done, loading_target)
 					diff = prepared,
 					explorer = explorer_options,
 					review = prepared_review,
+					commits = commits,
 					reload = restart,
 					target = target,
 				})
@@ -276,6 +278,7 @@ function M.open(opts, on_done, loading_target)
 		fetch_branches = opts.fetch_branches,
 		force_refresh = opts.force_refresh,
 		refresh_pull_request = opts.refresh_pull_request,
+		include_commits = open_cmd == "AtlasDiff",
 		on_progress = function(message)
 			view:update(message)
 		end,
@@ -299,7 +302,7 @@ function M.open(opts, on_done, loading_target)
 					return
 				end
 			end
-			launch(result.review, prepared_base, prepared_head)
+			launch(result.review, result.commits, prepared_base, prepared_head)
 		end)
 		if not launched then
 			fail(tostring(launch_err))

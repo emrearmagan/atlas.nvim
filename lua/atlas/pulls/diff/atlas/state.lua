@@ -31,6 +31,10 @@ local M = {}
 ---@field collapsed_folders table<string, boolean>
 ---@field panel_items table<integer, AtlasNativeDiffPanelItem>
 ---@field panel AtlasNativeDiffWindow
+---@field commits PullsCommit[]
+---@field commit_items table<integer, PullsCommit>
+---@field commits_panel AtlasNativeDiffWindow
+---@field commits_visible boolean
 ---@field left AtlasNativeDiffWindow
 ---@field right AtlasNativeDiffWindow
 ---@field footer AtlasNativeDiffFooter
@@ -47,6 +51,7 @@ local M = {}
 ---@field diff AtlasPreparedDiff
 ---@field explorer AtlasDiffExplorerOptions
 ---@field review AtlasPreparedReviewContext|nil
+---@field commits PullsCommit[]|nil
 ---@field reload fun(target: AtlasLoadingTarget|nil)
 ---@field target AtlasLoadingTarget|nil
 

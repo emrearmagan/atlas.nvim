@@ -10,6 +10,8 @@ local ICONS = {
 
 	general = {
 		search = { icon = "", hl_group = "AtlasTextMuted" },
+		folder_closed = { icon = "", hl_group = "AtlasLogInfo" },
+		folder_open = { icon = "", hl_group = "AtlasLogInfo" },
 		refresh = { icon = "󰑐", hl_group = "AtlasTextMuted" },
 		overview = { icon = "󰈙", hl_group = "AtlasTextMuted" },
 		comment = { icon = "", hl_group = "AtlasTextMuted" },

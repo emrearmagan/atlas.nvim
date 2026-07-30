@@ -1,5 +1,6 @@
 local M = {}
 
+local commits = require("atlas.pulls.diff.atlas.commits")
 local explorer = require("atlas.pulls.diff.atlas.explorer")
 local footer = require("atlas.pulls.diff.atlas.footer")
 local git = require("atlas.pulls.diff.atlas.git")
@@ -160,6 +161,7 @@ end
 local function refresh_ui(session)
 	comments.render(session)
 	render_explorer(session)
+	commits.render(session)
 	footer.render(session)
 end
 
@@ -230,6 +232,7 @@ end
 local function delete_session_buffers(session)
 	for _, buf in ipairs({
 		session.panel.buf,
+		session.commits_panel.buf,
 		session.left.buf,
 		session.right.buf,
 		session.footer.buf,
@@ -237,6 +240,39 @@ local function delete_session_buffers(session)
 		if vim.api.nvim_buf_is_valid(buf) then
 			pcall(vim.api.nvim_buf_delete, buf, { force = true })
 		end
+	end
+end
+
+---@param session AtlasNativeDiffSession
+local function open_commits_panel(session)
+	local panel_win = session.panel.win
+	if
+		not session.commits_visible
+		or #session.commits == 0
+		or not panel_win
+		or not vim.api.nvim_win_is_valid(panel_win)
+		or (session.commits_panel.win and vim.api.nvim_win_is_valid(session.commits_panel.win))
+	then
+		return
+	end
+	local height = math.max(1, math.floor(vim.api.nvim_win_get_height(panel_win) * 0.3))
+	local commits_win = vim.api.nvim_win_call(panel_win, function()
+		vim.cmd("belowright " .. height .. "split")
+		return vim.api.nvim_get_current_win()
+	end)
+	session.commits_panel.win = commits_win
+	vim.api.nvim_win_set_buf(commits_win, session.commits_panel.buf)
+	explorer.configure_window(session, commits_win)
+	vim.wo[commits_win].winfixheight = true
+	commits.render(session)
+end
+
+---@param session AtlasNativeDiffSession
+local function close_commits_panel(session)
+	local win = session.commits_panel.win
+	session.commits_panel.win = nil
+	if win and vim.api.nvim_win_is_valid(win) then
+		vim.api.nvim_win_close(win, true)
 	end
 end
 
@@ -394,6 +430,7 @@ end
 local function toggle_panel(session)
 	local panel_win = session.panel.win
 	if panel_win and vim.api.nvim_win_is_valid(panel_win) then
+		close_commits_panel(session)
 		session.panel.win = nil
 		vim.api.nvim_win_close(panel_win, true)
 		footer.reflow(session)
@@ -406,6 +443,27 @@ local function toggle_panel(session)
 	session.panel.win = split_window(anchor_win, session.panel.buf, "left", explorer.width(session))
 	explorer.configure_window(session, session.panel.win)
 	render_explorer(session)
+	open_commits_panel(session)
+	footer.reflow(session)
+end
+
+---@param session AtlasNativeDiffSession
+local function toggle_commits(session)
+	if #session.commits == 0 then
+		footer.notify(session, "info", "No commits available")
+		return
+	end
+	if not session.panel.win or not vim.api.nvim_win_is_valid(session.panel.win) then
+		session.commits_visible = true
+		toggle_panel(session)
+		return
+	end
+	session.commits_visible = not session.commits_visible
+	if not session.commits_visible then
+		close_commits_panel(session)
+	else
+		open_commits_panel(session)
+	end
 	footer.reflow(session)
 end
 
@@ -439,6 +497,9 @@ local function register_keymaps(session)
 		toggle_panel = function()
 			toggle_panel(session)
 		end,
+		toggle_commits = function()
+			toggle_commits(session)
+		end,
 		select_file = function(index)
 			select_file(session, index)
 		end,
@@ -449,6 +510,9 @@ local function register_keymaps(session)
 			if not comments.open_at_cursor(session, buf) then
 				footer.notify(session, "info", "No comment at cursor")
 			end
+		end,
+		show_commit = function()
+			commits.show_details(session)
 		end,
 	})
 end
@@ -482,10 +546,12 @@ local function create_session(open_options, options)
 		local right_buf = create_buffer(nil, "nowrite")
 		local left_buf = create_buffer(nil, "nowrite")
 		local panel_buf = create_buffer(string.format("atlas-diff://%d/files", tabpage))
+		local commits_buf = create_buffer(string.format("atlas-diff://%d/commits", tabpage))
 		local footer_buf = create_buffer(string.format("atlas-diff://%d/footer", tabpage))
 		vim.bo[panel_buf].filetype = "atlas-diff-files"
+		vim.bo[commits_buf].filetype = "atlas-diff-commits"
 		vim.bo[footer_buf].filetype = "atlas-footer"
-		vim.list_extend(created_buffers, { right_buf, left_buf, panel_buf, footer_buf })
+		vim.list_extend(created_buffers, { right_buf, left_buf, panel_buf, commits_buf, footer_buf })
 
 		vim.api.nvim_win_set_buf(right_win, right_buf)
 		if vim.api.nvim_buf_is_valid(launcher_buf) then
@@ -523,6 +589,10 @@ local function create_session(open_options, options)
 			collapsed_folders = {},
 			panel_items = {},
 			panel = { buf = panel_buf, win = panel_win },
+			commits = vim.deepcopy(open_options.commits or {}),
+			commit_items = {},
+			commits_panel = { buf = commits_buf, win = nil },
+			commits_visible = options.explorer.show_commits and #(open_options.commits or {}) > 0,
 			left = { buf = left_buf, win = nil },
 			right = { buf = right_buf, win = right_win },
 			footer = footer.new(footer_buf, footer_win),
@@ -617,6 +687,7 @@ local function initialize_session(session)
 
 		focus_first_hunk(session)
 		footer.reflow(session)
+		open_commits_panel(session)
 	end)
 	if not ok then
 		return tostring(err)
@@ -828,8 +899,13 @@ vim.api.nvim_create_autocmd("WinClosed", {
 		vim.schedule(function()
 			for _, session in pairs(state.all()) do
 				if not session.closing then
-					if closed_win == session.panel.win then
+					if closed_win == session.commits_panel.win then
+						session.commits_panel.win = nil
+						session.commits_visible = false
+						footer.reflow(session)
+					elseif closed_win == session.panel.win then
 						session.panel.win = nil
+						close_commits_panel(session)
 						footer.reflow(session)
 					elseif closed_win == session.footer.win then
 						session.footer.win = nil

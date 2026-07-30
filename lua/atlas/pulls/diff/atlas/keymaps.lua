@@ -45,9 +45,11 @@ end
 ---@field navigate_file fun(direction: 1|-1)
 ---@field toggle_file_reviewed fun()
 ---@field toggle_panel fun()
+---@field toggle_commits fun()
 ---@field select_file fun(index: integer)
 ---@field refresh fun()
 ---@field open_item fun(buf: integer)
+---@field show_commit fun()
 
 ---@param session AtlasNativeDiffSession
 ---@param actions AtlasDiffKeymapActions
@@ -101,7 +103,13 @@ function M.register(session, actions)
 			opts = { silent = true, nowait = true },
 		})
 	)
-	for _, buf in ipairs({ session.panel.buf, session.left.buf, session.right.buf, session.footer.buf }) do
+	for _, buf in ipairs({
+		session.panel.buf,
+		session.commits_panel.buf,
+		session.left.buf,
+		session.right.buf,
+		session.footer.buf,
+	}) do
 		local general_actions = {}
 		add(
 			general_actions,
@@ -136,16 +144,38 @@ function M.register(session, actions)
 			general_actions,
 			item("ui.refresh_view", {
 				desc = review_enabled and "Reload pull request diff" or "Reload diff",
-				index = 4,
+				index = 5,
 				callback = run(actions.reload),
 				opts = { silent = true, nowait = true },
 			})
 		)
+		if #session.commits > 0 then
+			add(
+				general_actions,
+				item("pulls.review.toggle_commits", {
+					desc = "Toggle commits",
+					index = 4,
+					callback = run(actions.toggle_commits),
+					opts = { silent = true, nowait = true },
+				})
+			)
+		end
+		if buf == session.commits_panel.buf then
+			add(
+				general_actions,
+				item("ui.show_details", {
+					desc = "Show details",
+					index = 8,
+					callback = run(actions.show_commit),
+					opts = { silent = true, nowait = true },
+				})
+			)
+		end
 		add(
 			general_actions,
 			item("pulls.review.toggle_compact", {
 				desc = "Toggle full / compact",
-				index = 5,
+				index = 6,
 				callback = run(actions.toggle_compact),
 				opts = { silent = true, nowait = true },
 			})
@@ -154,7 +184,7 @@ function M.register(session, actions)
 			general_actions,
 			item("pulls.review.toggle_layout", {
 				desc = "Toggle side-by-side / inline",
-				index = 6,
+				index = 7,
 				callback = run(actions.toggle_layout),
 				opts = { silent = true, nowait = true },
 			})
@@ -171,7 +201,7 @@ function M.register(session, actions)
 				})
 			)
 		end
-		if review_enabled then
+		if review_enabled and buf ~= session.commits_panel.buf then
 			add(
 				review_actions,
 				item("pulls.review.toggle_file_reviewed", {

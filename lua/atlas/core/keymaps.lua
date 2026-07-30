@@ -29,6 +29,7 @@ local M = {}
 ---@field next_file? AtlasKeymapValue
 ---@field previous_file? AtlasKeymapValue
 ---@field toggle_file_reviewed? AtlasKeymapValue
+---@field toggle_commits? AtlasKeymapValue
 ---@field next_comment? AtlasKeymapValue
 ---@field previous_comment? AtlasKeymapValue
 ---@field view_thread? AtlasKeymapValue
@@ -88,6 +89,7 @@ local M = {}
 ---| "pulls.review.next_file"
 ---| "pulls.review.previous_file"
 ---| "pulls.review.toggle_file_reviewed"
+---| "pulls.review.toggle_commits"
 ---| "pulls.review.next_comment"
 ---| "pulls.review.previous_comment"
 ---| "pulls.review.view_thread"
@@ -281,6 +283,7 @@ function M.validate()
 			"pulls.review.next_file",
 			"pulls.review.previous_file",
 			"pulls.review.toggle_file_reviewed",
+			"pulls.review.toggle_commits",
 			"pulls.review.next_comment",
 			"pulls.review.previous_comment",
 			"pulls.review.view_thread",

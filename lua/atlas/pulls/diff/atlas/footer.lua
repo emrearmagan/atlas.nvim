@@ -94,6 +94,7 @@ local function segments(session, width)
 	local comments, tasks, task_label = review_counts(session)
 	local comments_text = comments and string.format("comments %d", comments) or ""
 	local tasks_text = tasks > 0 and string.format("%ss %d", task_label:lower(), tasks) or ""
+	local commits_text = #session.commits > 0 and string.format("commits %d", #session.commits) or ""
 	local add_text = string.format("+%d", additions)
 	local delete_text = string.format("-%d", deletions)
 	local result = { { text = identity(session), hl_group = "AtlasFooterText" } }
@@ -101,6 +102,7 @@ local function segments(session, width)
 		{ text = session.footer.notice.text, hl_group = session.footer.notice.hl_group },
 		{ text = comments_text, hl_group = "AtlasTextMuted" },
 		{ text = tasks_text, hl_group = "AtlasTextMuted" },
+		{ text = commits_text, hl_group = "AtlasTextMuted" },
 	}
 	local remaining = math.max(0, width - segment_width(add_text) - segment_width(delete_text) - 1)
 	for _, item in ipairs(optional) do
@@ -181,11 +183,13 @@ function M.reflow(session)
 	if not footer.win or not vim.api.nvim_win_is_valid(footer.win) then
 		return
 	end
-	pcall(function()
-		vim.api.nvim_win_call(footer.win, function()
-			vim.cmd("wincmd J")
+	if vim.api.nvim_win_get_position(footer.win)[2] > 0 then
+		pcall(function()
+			vim.api.nvim_win_call(footer.win, function()
+				vim.cmd("wincmd J")
+			end)
 		end)
-	end)
+	end
 	pcall(vim.api.nvim_win_set_height, footer.win, 1)
 	M.render(session)
 end

@@ -16,10 +16,13 @@ local STATUS_MARKERS = {
 }
 
 local comment_icon, comment_icon_hl = icons.general("comment")
+local folder_closed_icon, folder_closed_icon_hl = icons.general("folder_closed")
+local folder_open_icon, folder_open_icon_hl = icons.general("folder_open")
 
 ---@class AtlasDiffExplorerOptions
 ---@field grouped boolean
 ---@field hidden boolean
+---@field show_commits boolean
 ---@field width integer
 ---@field initial_focus "explorer"|"diff"
 ---@field ignore string[]
@@ -31,6 +34,7 @@ function M.options()
 	return {
 		grouped = config.grouped == true,
 		hidden = config.hidden == true,
+		show_commits = config.show_commits ~= false,
 		width = math.max(20, math.floor(tonumber(config.width) or 40)),
 		initial_focus = config.initial_focus == "diff" and "diff" or "explorer",
 		ignore = config.ignore or {},
@@ -205,12 +209,17 @@ end
 ---@param session AtlasNativeDiffSession
 function M.configure(session)
 	M.configure_window(session, session.panel.win)
+	M.configure_window(session, session.commits_panel.win)
 end
+
+---@alias AtlasDiffExplorerVirtualLine { [1]: string, [2]: string }[]
 
 ---@param session AtlasNativeDiffSession
 ---@param lines string[]
 ---@param highlights { [1]: integer, [2]: integer, [3]: integer, [4]: string }[]
-local function write(session, lines, highlights)
+---@param headers table<integer, AtlasDiffExplorerVirtualLine[]>
+---@param first_header AtlasDiffExplorerVirtualLine
+local function write(session, lines, highlights, headers, first_header)
 	local buf = session.panel.buf
 	vim.bo[buf].modifiable = true
 	vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
@@ -220,6 +229,18 @@ local function write(session, lines, highlights)
 		vim.api.nvim_buf_set_extmark(buf, namespace, highlight[1], highlight[2], {
 			end_col = highlight[3],
 			hl_group = highlight[4],
+		})
+	end
+	vim.api.nvim_buf_set_extmark(buf, namespace, 0, 0, {
+		virt_text = first_header,
+		virt_text_pos = "overlay",
+	})
+	local line_count = vim.api.nvim_buf_line_count(buf)
+	for row, virtual_lines in pairs(headers) do
+		local above = #lines == 0 or row < #lines
+		vim.api.nvim_buf_set_extmark(buf, namespace, above and row or line_count - 1, 0, {
+			virt_lines = virtual_lines,
+			virt_lines_above = above,
 		})
 	end
 end
@@ -235,17 +256,27 @@ function M.render(session, annotated_paths)
 			and vim.api.nvim_win_is_valid(session.panel.win)
 			and vim.api.nvim_win_get_width(session.panel.win)
 		or M.width(session)
-	local lines, highlights = {}, {}
+	-- Keep the first extmark heading visible at the top.
+	local lines, highlights, headers = { "" }, {}, {}
+	local first_header
 	session.panel_items = {}
 
 	local unreviewed, reviewed = grouped_indices(session)
 	annotated_paths = annotated_paths or {}
-	local folder_icon, folder_icon_hl = web_icon("")
-
 	---@param text string
-	local function add_header(text)
-		table.insert(lines, text)
-		table.insert(highlights, { #lines - 1, 0, #text, "AtlasLogInfo" })
+	---@param spacing boolean|nil
+	local function add_header(text, spacing)
+		if not first_header then
+			first_header = { { text, "AtlasLogInfo" } }
+			return
+		end
+		local row = #lines
+		local virtual_lines = headers[row] or {}
+		if spacing then
+			table.insert(virtual_lines, { { " ", "Normal" } })
+		end
+		table.insert(virtual_lines, { { text, "AtlasLogInfo" } })
+		headers[row] = virtual_lines
 	end
 
 	---@param file_index integer
@@ -313,22 +344,23 @@ function M.render(session, annotated_paths)
 
 	---@param parent string
 	local function add_folder(parent)
-		local icon = folder_icon or ""
-		local prefix = icon ~= "" and (icon .. " ") or ""
+		local collapsed = session.collapsed_folders[parent] == true
+		local icon = collapsed and folder_closed_icon or folder_open_icon
+		local icon_hl = collapsed and folder_closed_icon_hl or folder_open_icon_hl
+		local prefix = icon .. " "
 		local label = utils.truncate(parent .. "/", math.max(1, width - vim.fn.strdisplaywidth(prefix)))
 		local text = prefix .. label
 		table.insert(lines, text)
 		session.panel_items[#lines] = { kind = "folder", path = parent }
-		if icon ~= "" then
-			table.insert(highlights, { #lines - 1, 0, #icon, folder_icon_hl or "AtlasTextMuted" })
-		end
+		table.insert(highlights, { #lines - 1, 0, #icon, icon_hl })
 		table.insert(highlights, { #lines - 1, #prefix, #text, "AtlasLogInfo" })
 	end
 
 	---@param title string
 	---@param indices integer[]
-	local function add_section(title, indices)
-		add_header(string.format("%s (%d)", title, #indices))
+	---@param spacing boolean|nil
+	local function add_section(title, indices, spacing)
+		add_header(string.format("%s (%d)", title, #indices), spacing)
 		if not session.explorer.grouped then
 			for _, index in ipairs(indices) do
 				add_file(index, 2, true)
@@ -352,14 +384,12 @@ function M.render(session, annotated_paths)
 
 	add_section("Files", unreviewed)
 	if session.review_context or #reviewed > 0 then
-		table.insert(lines, "")
-		add_section("Reviewed", reviewed)
+		add_section("Reviewed", reviewed, true)
 	end
 
 	local tasks = (session.review and session.review.tasks) or {}
 	if #tasks > 0 then
-		table.insert(lines, "")
-		add_header(string.format("%s (%d)", task_label(tasks[1], true), #tasks))
+		add_header(string.format("%s (%d)", task_label(tasks[1], true), #tasks), true)
 		for _, task in ipairs(tasks) do
 			local checkbox = task.state == "RESOLVED" and "[x]" or "[ ]"
 			local content = utils.task_text(task.content_display or task.content_raw):match("[^\n]*") or ""
@@ -378,13 +408,19 @@ function M.render(session, annotated_paths)
 		end
 	end
 
-	write(session, lines, highlights)
+	write(session, lines, highlights, headers, first_header)
 	local selected_line = M.line_for_file(session, session.pending_index or session.selected_index)
 	if selected_line then
 		vim.api.nvim_buf_set_extmark(buf, namespace, selected_line - 1, 0, {
 			line_hl_group = "Visual",
 			priority = 10,
 		})
+		if session.panel.win and vim.api.nvim_win_is_valid(session.panel.win) then
+			local cursor = vim.api.nvim_win_get_cursor(session.panel.win)
+			if cursor[1] == 1 then
+				vim.api.nvim_win_set_cursor(session.panel.win, { selected_line, 0 })
+			end
+		end
 	end
 end
 

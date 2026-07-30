@@ -32,6 +32,7 @@
 ---@class AtlasPullsDiffExplorerConfig
 ---@field grouped boolean|nil
 ---@field hidden boolean|nil
+---@field show_commits boolean|nil
 ---@field width integer|nil
 ---@field initial_focus "explorer"|"diff"|nil
 ---@field ignore string[]|nil
@@ -112,6 +113,7 @@ M.options = {
 			explorer = {
 				grouped = true,
 				hidden = false,
+				show_commits = true,
 				width = 40,
 				initial_focus = "explorer",
 				ignore = { ".git/**", ".jj/**" },
@@ -153,6 +155,7 @@ M.options = {
 				next_file = { "]f", "<Tab>" },
 				previous_file = { "[f", "<S-Tab>" },
 				toggle_file_reviewed = "-",
+				toggle_commits = "gC",
 				next_comment = "]c",
 				previous_comment = "[c",
 				view_thread = "K",

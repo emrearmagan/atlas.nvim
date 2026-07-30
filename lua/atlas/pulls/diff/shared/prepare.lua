@@ -17,12 +17,14 @@ local M = {}
 
 ---@class AtlasReviewPreparation
 ---@field review AtlasPreparedReviewContext|nil
+---@field commits PullsCommit[]
 
 ---@class AtlasReviewPrepareOptions
 ---@field review AtlasReviewOpenContext|nil
 ---@field fetch_branches (fun(pr: PullRequest|nil, on_done: fun(err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field force_refresh boolean|nil
 ---@field refresh_pull_request boolean|nil
+---@field include_commits boolean|nil
 ---@field on_progress (fun(message: string))|nil
 
 ---@class AtlasReviewFetch
@@ -111,17 +113,19 @@ function M.run(options, on_done)
 
 	local function prepare_review()
 		if not review then
-			finish({ review = nil }, nil)
+			finish({ review = nil, commits = {} }, nil)
 			return
 		end
 
 		local provider = review.provider
+		local fetch_commits = options.include_commits and provider.fetch_commits or nil
 		local previous = review.initial_review or {}
 		local values = {
 			current_user = review.current_user,
 			review_context = review.review_context,
 			comments = vim.deepcopy(previous.comments or {}),
 			tasks = vim.deepcopy(previous.tasks or {}),
+			commits = {},
 		}
 		local fetch_opts = options.force_refresh == true and { force_refresh = true } or {}
 		---@type AtlasReviewFetch[]
@@ -158,6 +162,17 @@ function M.run(options, on_done)
 				end,
 			})
 		end
+		if fetch_commits then
+			table.insert(fetches, {
+				label = "commits",
+				start = function(done)
+					return fetch_commits(review.pr, fetch_opts, done)
+				end,
+				apply = function(value)
+					values.commits = value or {}
+				end,
+			})
+		end
 		if not values.current_user then
 			table.insert(fetches, {
 				label = "current user",
@@ -184,10 +199,11 @@ function M.run(options, on_done)
 					warnings = vim.deepcopy(warnings),
 				},
 			}
-			finish({ review = prepared }, nil)
+			finish({ review = prepared, commits = vim.deepcopy(values.commits) }, nil)
 		end
 
-		progress(options.force_refresh and "Refreshing review..." or "Loading review...")
+		local label = fetch_commits and "review and commits" or "review"
+		progress((options.force_refresh and "Refreshing " or "Loading ") .. label .. "...")
 		local pending = #fetches
 		for _, fetch in ipairs(fetches) do
 			local function fetched(value, err)
