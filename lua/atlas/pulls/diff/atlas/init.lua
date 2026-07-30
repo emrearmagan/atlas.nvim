@@ -94,23 +94,11 @@ end
 local function set_buffer(buf, lines, path)
 	vim.bo[buf].readonly = false
 	vim.bo[buf].modifiable = true
-	-- Fire normal read events so file plugins can attach to the synthetic buffer.
-	local ok, err = pcall(function()
-		if path ~= "" then
-			vim.api.nvim_exec_autocmds("BufReadPre", { buffer = buf, modeline = false })
-		end
-		vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-		set_filetype(buf, path)
-	end)
+	vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+	set_filetype(buf, path)
 	vim.bo[buf].modifiable = false
 	vim.bo[buf].modified = false
 	vim.bo[buf].readonly = vim.bo[buf].buftype == "nowrite"
-	if ok and path ~= "" then
-		ok, err = pcall(vim.api.nvim_exec_autocmds, "BufReadPost", { buffer = buf, modeline = false })
-	end
-	if not ok then
-		error(err, 0)
-	end
 end
 
 ---@param session AtlasNativeDiffSession
@@ -221,6 +209,34 @@ local function cancel_job(session)
 	session.job = nil
 	if job then
 		pcall(job.cancel)
+	end
+end
+
+---@param session AtlasNativeDiffSession
+---@return boolean
+local function dispose_session(session)
+	if session.closing then
+		return false
+	end
+	session.closing = true
+	cancel_job(session)
+	footer.dispose(session)
+	comments.detach(session)
+	state.remove(session.tabpage)
+	return true
+end
+
+---@param session AtlasNativeDiffSession
+local function delete_session_buffers(session)
+	for _, buf in ipairs({
+		session.panel.buf,
+		session.left.buf,
+		session.right.buf,
+		session.footer.buf,
+	}) do
+		if vim.api.nvim_buf_is_valid(buf) then
+			pcall(vim.api.nvim_buf_delete, buf, { force = true })
+		end
 	end
 end
 
@@ -445,12 +461,22 @@ local function create_session(open_options, options)
 	local tabpage
 	local created_buffers = {}
 	local ok, err = pcall(function()
-		vim.cmd("tabnew")
-		tabpage = vim.api.nvim_get_current_tabpage()
-		local right_win = vim.api.nvim_get_current_win()
-		local number = vim.wo[right_win].number
-		local relativenumber = vim.wo[right_win].relativenumber
-		local launcher_buf = vim.api.nvim_get_current_buf()
+		local target = open_options.target
+		local right_win, launcher_buf
+		local number, relativenumber
+		if target then
+			tabpage, right_win, launcher_buf = target.tabpage, target.win, target.buf
+			number, relativenumber = target.number, target.relativenumber
+			vim.api.nvim_set_current_tabpage(tabpage)
+			vim.api.nvim_set_current_win(right_win)
+		else
+			vim.cmd("tabnew")
+			tabpage = vim.api.nvim_get_current_tabpage()
+			right_win = vim.api.nvim_get_current_win()
+			launcher_buf = vim.api.nvim_get_current_buf()
+			number = vim.wo[right_win].number
+			relativenumber = vim.wo[right_win].relativenumber
+		end
 		table.insert(created_buffers, launcher_buf)
 
 		local right_buf = create_buffer(nil, "nowrite")
@@ -462,13 +488,24 @@ local function create_session(open_options, options)
 		vim.list_extend(created_buffers, { right_buf, left_buf, panel_buf, footer_buf })
 
 		vim.api.nvim_win_set_buf(right_win, right_buf)
-		vim.api.nvim_buf_delete(launcher_buf, { force = true })
+		if vim.api.nvim_buf_is_valid(launcher_buf) then
+			vim.api.nvim_buf_delete(launcher_buf, { force = true })
+		end
 		local panel_win
 		if not options.explorer.hidden then
 			local panel_width = math.min(options.explorer.width, math.max(20, vim.o.columns - 40))
 			panel_win = split_window(right_win, panel_buf, "left", panel_width)
 		end
 		local footer_win = split_window(right_win, footer_buf, "below", 1)
+		if target then
+			for name, value in pairs({
+				statuscolumn = target.statuscolumn,
+				statusline = target.statusline,
+				winbar = target.winbar,
+			}) do
+				vim.api.nvim_set_option_value(name, value, { win = right_win, scope = "local" })
+			end
+		end
 
 		---@type AtlasNativeDiffSession
 		session = {
@@ -608,14 +645,55 @@ function M.open(options)
 end
 
 ---@param session AtlasNativeDiffSession
+---@return AtlasLoadingTarget|nil
+local function replace_with_loading(session)
+	local tabpage = session.tabpage
+	local win = session.right.win
+	if
+		session.closing
+		or state.get(tabpage) ~= session
+		or not vim.api.nvim_tabpage_is_valid(tabpage)
+		or not win
+		or not vim.api.nvim_win_is_valid(win)
+	then
+		return nil
+	end
+
+	local statuscolumn = vim.wo[win].statuscolumn
+	local statusline = vim.wo[win].statusline
+	local winbar = vim.wo[win].winbar
+	local buf = vim.api.nvim_create_buf(false, true)
+	dispose_session(session)
+	vim.api.nvim_set_current_tabpage(tabpage)
+	vim.api.nvim_set_current_win(win)
+	vim.api.nvim_win_set_buf(win, buf)
+	for _, other in ipairs(vim.api.nvim_tabpage_list_wins(tabpage)) do
+		if other ~= win then
+			pcall(vim.api.nvim_win_close, other, true)
+		end
+	end
+	delete_session_buffers(session)
+	return {
+		tabpage = tabpage,
+		buf = buf,
+		win = win,
+		number = session.number,
+		relativenumber = session.relativenumber,
+		statuscolumn = statuscolumn,
+		statusline = statusline,
+		winbar = winbar,
+	}
+end
+
+---@param session AtlasNativeDiffSession
 ---@return nil
 reload_session = function(session)
 	local reload = session.reload
-	if session.closing or state.get(session.tabpage) ~= session then
+	local target = replace_with_loading(session)
+	if not target then
 		return
 	end
-	close(session)
-	vim.schedule(reload)
+	reload(target)
 end
 
 ---@param session AtlasNativeDiffSession
@@ -716,23 +794,14 @@ end
 ---@param session AtlasNativeDiffSession
 ---@return nil
 close = function(session)
-	if session.closing then
+	if not dispose_session(session) then
 		return
 	end
-	session.closing = true
-	cancel_job(session)
-	footer.dispose(session)
-	comments.detach(session)
-	state.remove(session.tabpage)
 	if vim.api.nvim_tabpage_is_valid(session.tabpage) then
 		local tabnr = vim.api.nvim_tabpage_get_number(session.tabpage)
 		pcall(vim.cmd, tabnr .. "tabclose")
 	end
-	for _, buf in ipairs({ session.panel.buf, session.left.buf, session.right.buf, session.footer.buf }) do
-		if vim.api.nvim_buf_is_valid(buf) then
-			pcall(vim.api.nvim_buf_delete, buf, { force = true })
-		end
-	end
+	delete_session_buffers(session)
 end
 
 local autocmd_group = vim.api.nvim_create_augroup("AtlasNativeDiff", { clear = true })
@@ -749,6 +818,27 @@ vim.api.nvim_create_autocmd("TabClosed", {
 		for _, session in ipairs(closed) do
 			close(session)
 		end
+	end,
+})
+
+vim.api.nvim_create_autocmd("WinClosed", {
+	group = autocmd_group,
+	callback = function(args)
+		local closed_win = tonumber(args.match)
+		vim.schedule(function()
+			for _, session in pairs(state.all()) do
+				if not session.closing then
+					if closed_win == session.panel.win then
+						session.panel.win = nil
+						footer.reflow(session)
+					elseif closed_win == session.footer.win then
+						session.footer.win = nil
+					elseif closed_win == session.left.win or closed_win == session.right.win then
+						close(session)
+					end
+				end
+			end
+		end)
 	end,
 })
 

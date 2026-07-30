@@ -39,7 +39,7 @@ local M = {}
 ---@field review AtlasReviewState|nil
 ---@field review_context AtlasPreparedReviewContext|nil
 ---@field review_view AtlasReviewView
----@field reload fun()
+---@field reload fun(target: AtlasLoadingTarget|nil)
 ---@field refresh_ui fun()
 ---@field closing boolean
 
@@ -47,7 +47,8 @@ local M = {}
 ---@field diff AtlasPreparedDiff
 ---@field explorer AtlasDiffExplorerOptions
 ---@field review AtlasPreparedReviewContext|nil
----@field reload fun()
+---@field reload fun(target: AtlasLoadingTarget|nil)
+---@field target AtlasLoadingTarget|nil
 
 ---@type table<integer, AtlasNativeDiffSession>
 local sessions = {}

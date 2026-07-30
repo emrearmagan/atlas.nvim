@@ -110,8 +110,9 @@ end
 
 ---@param opts PullsDiffOpenOptions
 ---@param on_done fun(err: string|nil)|nil
+---@param loading_target AtlasLoadingTarget|nil
 ---@return { cancel: fun() }|nil
-function M.open(opts, on_done)
+function M.open(opts, on_done, loading_target)
 	local open_cmd, command_err = diff_open_command(opts.open_cmd)
 	if not open_cmd then
 		if on_done then
@@ -154,7 +155,7 @@ function M.open(opts, on_done)
 			view:finish()
 		end
 	end
-	view = loading.open("Preparing diff...", cancel)
+	view = loading.open("Preparing diff...", cancel, loading_target)
 	local operation = { cancel = cancel }
 
 	---@param err string|nil
@@ -179,9 +180,9 @@ function M.open(opts, on_done)
 	---@param prepared_review AtlasPreparedReviewContext|nil
 	---@param prepared_base string
 	---@param prepared_head string
-	---@return fun()
+	---@return fun(target: AtlasLoadingTarget|nil)
 	local function reload(prepared_review, prepared_base, prepared_head)
-		return function()
+		return function(target)
 			M.open({
 				git_root = root,
 				base_revision = prepared_base,
@@ -195,7 +196,7 @@ function M.open(opts, on_done)
 				if reload_err then
 					vim.notify("[Atlas Review] Unable to reload diff: " .. reload_err, vim.log.levels.ERROR)
 				end
-			end)
+			end, target)
 		end
 	end
 
@@ -231,12 +232,17 @@ function M.open(opts, on_done)
 					fail(tostring(err or "Unable to prepare diff"))
 					return
 				end
-				view:finish()
+				local target = view:handoff()
+				if not target then
+					complete("The diff loading view was closed")
+					return
+				end
 				local ok, open_err = pcall(require("atlas.pulls.diff.atlas").open, {
 					diff = prepared,
 					explorer = explorer_options,
 					review = prepared_review,
 					reload = restart,
+					target = target,
 				})
 				if not ok then
 					open_err = tostring(open_err)

@@ -484,6 +484,7 @@ local function cleanup_ui()
 	state.ui.visible = false
 	state.ui.win_id = nil
 	state.ui.buf_id = nil
+	state.ui.target_bufnr = nil
 	state.ui.autocmds = {}
 	state.ui.on_key_ns = nil
 end
@@ -542,6 +543,7 @@ function M.show(opts)
 	state.ui.buf_id = buf_id
 	state.ui.target_bufnr = bufnr
 
+	vim.bo[buf_id].modifiable = false
 	vim.keymap.set("n", "q", cleanup_ui, { buffer = buf_id, nowait = true, silent = true })
 	vim.keymap.set("n", "<ESC>", cleanup_ui, { buffer = buf_id, nowait = true, silent = true })
 

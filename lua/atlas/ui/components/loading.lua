@@ -45,6 +45,16 @@ function M.render(buf, win, text, hl_group)
 	})
 end
 
+---@class AtlasLoadingTarget
+---@field tabpage integer
+---@field buf integer
+---@field win integer
+---@field number boolean
+---@field relativenumber boolean
+---@field statuscolumn string
+---@field statusline string
+---@field winbar string
+
 ---@class AtlasLoadingView
 ---@field tabpage integer
 ---@field buf integer
@@ -54,15 +64,34 @@ end
 ---@field update fun(self: AtlasLoadingView, message: string)
 ---@field finish fun(self: AtlasLoadingView)
 ---@field cancel fun(self: AtlasLoadingView)
+---@field handoff fun(self: AtlasLoadingView): AtlasLoadingTarget|nil
 
 ---@param message string
 ---@param on_cancel fun()|nil
+---@param target AtlasLoadingTarget|nil
 ---@return AtlasLoadingView
-function M.open(message, on_cancel)
-	vim.cmd("tabnew")
-	local tabpage = vim.api.nvim_get_current_tabpage()
-	local win = vim.api.nvim_get_current_win()
-	local buf = vim.api.nvim_get_current_buf()
+function M.open(message, on_cancel, target)
+	local tabpage, win, buf
+	local number, relativenumber
+	local statuscolumn, statusline, winbar
+	if target then
+		tabpage, win, buf = target.tabpage, target.win, target.buf
+		number, relativenumber = target.number, target.relativenumber
+		statuscolumn, statusline, winbar = target.statuscolumn, target.statusline, target.winbar
+		vim.api.nvim_set_current_tabpage(tabpage)
+		vim.api.nvim_set_current_win(win)
+	else
+		local source_win = vim.api.nvim_get_current_win()
+		number = vim.wo[source_win].number
+		relativenumber = vim.wo[source_win].relativenumber
+		statuscolumn = vim.wo[source_win].statuscolumn
+		statusline = vim.wo[source_win].statusline
+		winbar = vim.wo[source_win].winbar
+		vim.cmd("tabnew")
+		tabpage = vim.api.nvim_get_current_tabpage()
+		win = vim.api.nvim_get_current_win()
+		buf = vim.api.nvim_get_current_buf()
+	end
 	vim.bo[buf].bufhidden = "wipe"
 	vim.bo[buf].buflisted = false
 	vim.bo[buf].buftype = "nofile"
@@ -123,6 +152,24 @@ function M.open(message, on_cancel)
 			on_cancel()
 		end
 	end
+	local function handoff()
+		if view.closed or not vim.api.nvim_tabpage_is_valid(tabpage) or not vim.api.nvim_win_is_valid(win) then
+			return nil
+		end
+		view.closed = true
+		indicator:stop()
+		delete_group()
+		return {
+			tabpage = tabpage,
+			buf = buf,
+			win = win,
+			number = number,
+			relativenumber = relativenumber,
+			statuscolumn = statuscolumn,
+			statusline = statusline,
+			winbar = winbar,
+		}
+	end
 	view.update = function(_, next_message)
 		view.message = next_message
 		draw()
@@ -133,6 +180,7 @@ function M.open(message, on_cancel)
 	view.cancel = function()
 		close(true)
 	end
+	view.handoff = handoff
 
 	indicator = spinner.create({ on_tick = draw })
 	vim.keymap.set("n", "q", view.cancel, { buffer = buf, silent = true, nowait = true, desc = "Cancel" })
