@@ -6,6 +6,12 @@ local templates_root = vim.fn.stdpath("data") .. "/atlas/issues/templates"
 ---@field name string
 ---@field path string
 
+---@class AtlasIssueTemplateContext
+---@field get_description fun(): string
+---@field set_description fun(description: string): boolean
+---@field picker_kind string
+---@field menu_kind string
+
 ---@param name string|nil
 ---@return string|nil
 ---@return string|nil
@@ -155,6 +161,141 @@ function M.delete(name)
 	end
 
 	return true, nil, normalized_name
+end
+
+local levels = {
+	info = vim.log.levels.INFO,
+	warn = vim.log.levels.WARN,
+	error = vim.log.levels.ERROR,
+}
+
+---@param level "info"|"warn"|"error"
+---@param message string
+local function notify(level, message)
+	vim.notify("[Atlas] " .. message, levels[level])
+end
+
+---@param context AtlasIssueTemplateContext
+local function apply_template(context)
+	local templates, err = M.list()
+	if err then
+		notify("error", err)
+		return
+	end
+	if templates == nil or #templates == 0 then
+		notify("warn", "No templates found")
+		return
+	end
+
+	vim.ui.select(templates, {
+		prompt = "Apply template",
+		kind = context.picker_kind,
+		format_item = function(template)
+			return template.name
+		end,
+	}, function(template)
+		if template == nil then
+			return
+		end
+
+		local content, read_err = M.read(template.name)
+		if read_err then
+			notify("error", read_err)
+			return
+		end
+
+		local function replace()
+			if not context.set_description(content or "") then
+				notify("error", "Issue description buffer is not available")
+				return
+			end
+			notify("info", "Applied template: " .. template.name)
+		end
+
+		if vim.trim(context.get_description()) == "" then
+			replace()
+			return
+		end
+
+		vim.ui.input({ prompt = "Description is not empty. Replace with template? [y/N]: " }, function(input)
+			if vim.trim(input or ""):lower() == "y" then
+				replace()
+			end
+		end)
+	end)
+end
+
+---@param context AtlasIssueTemplateContext
+local function save_template(context)
+	local description = vim.trim(context.get_description())
+	if description == "" then
+		notify("warn", "Description is empty")
+		return
+	end
+
+	vim.ui.input({ prompt = "Template name: " }, function(input)
+		if input == nil then
+			return
+		end
+
+		local name = vim.trim(input)
+		if name == "" then
+			notify("warn", "Template name is required")
+			return
+		end
+
+		local ok, write_err, existed, normalized_name = M.write(name, description, { overwrite = false })
+		local display_name = normalized_name or name
+		if ok then
+			notify("info", "Created template " .. display_name)
+			return
+		end
+		if not existed then
+			notify("error", write_err or "Failed to create template")
+			return
+		end
+
+		vim.ui.input(
+			{ prompt = string.format('Template "%s" exists. Overwrite? [y/N]: ', display_name) },
+			function(confirm)
+				if vim.trim(confirm or ""):lower() ~= "y" then
+					return
+				end
+
+				local overwrite_ok, overwrite_err, _, final_name = M.write(name, description, { overwrite = true })
+				if not overwrite_ok then
+					notify("error", overwrite_err or "Failed to overwrite template")
+					return
+				end
+				notify("info", "Updated template " .. (final_name or display_name))
+			end
+		)
+	end)
+end
+
+---@param context AtlasIssueTemplateContext
+function M.open(context)
+	local actions = {
+		{ id = "apply", label = "Apply template" },
+		{ id = "save", label = "Save current description as template" },
+	}
+
+	vim.ui.select(actions, {
+		prompt = "Issue templates",
+		kind = context.menu_kind,
+		format_item = function(action)
+			return action.label
+		end,
+	}, function(action)
+		if action == nil then
+			return
+		end
+		if action.id == "apply" then
+			apply_template(context)
+		else
+			save_template(context)
+		end
+	end)
 end
 
 return M

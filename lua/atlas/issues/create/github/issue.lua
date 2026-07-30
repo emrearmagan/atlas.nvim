@@ -5,7 +5,7 @@ local spinner = require("atlas.ui.popups.spinner")
 local multi_select = require("atlas.ui.popups.multi_select")
 local pulls_helper = require("atlas.pulls.ui.main.helper")
 local icons = require("atlas.ui.shared.icons")
-local template_store = require("atlas.issues.templates")
+local templates = require("atlas.issues.templates")
 
 ---@class CreateIssueLabel
 ---@field name string
@@ -330,144 +330,6 @@ local function pick_milestone(issue_state)
 end
 
 ---@param issue_state CreateIssueState
----@param content string
-local function set_body(issue_state, content)
-	return form.set_body(issue_state.layout, content)
-end
-
----@param issue_state CreateIssueState
-local function apply_template_from_picker(issue_state)
-	local templates, list_err = template_store.list()
-	if list_err then
-		notify_error(list_err)
-		return
-	end
-
-	if templates == nil or #templates == 0 then
-		notify_warn("No templates found")
-		return
-	end
-
-	vim.ui.select(templates, {
-		prompt = "Apply template",
-		kind = "atlas_github_templates",
-		format_item = function(item)
-			return tostring((item and item.name) or "")
-		end,
-	}, function(selected)
-		if selected == nil then
-			return
-		end
-
-		local template_name = tostring(selected.name or "")
-		if template_name == "" then
-			notify_warn("Invalid template selected")
-			return
-		end
-
-		local content, read_err = template_store.read(template_name)
-		if read_err then
-			notify_error(read_err)
-			return
-		end
-
-		local function apply()
-			if not set_body(issue_state, content or "") then
-				notify_error("Issue body buffer is not available")
-				return
-			end
-			notify_info(string.format("Applied template: %s", template_name))
-		end
-
-		if vim.trim(get_body(issue_state)) == "" then
-			apply()
-			return
-		end
-
-		vim.ui.input({
-			prompt = "Description is not empty. Replace with template? [y/N]: ",
-		}, function(input)
-			if input and vim.trim(tostring(input)):lower() == "y" then
-				apply()
-			end
-		end)
-	end)
-end
-
----@param issue_state CreateIssueState
-local function save_body_as_template(issue_state)
-	local body = vim.trim(get_body(issue_state))
-	if body == "" then
-		notify_warn("Description is empty")
-		return
-	end
-
-	vim.ui.input({ prompt = "Template name: " }, function(input)
-		if input == nil then
-			return
-		end
-
-		local name = vim.trim(tostring(input))
-		if name == "" then
-			notify_warn("Template name is required")
-			return
-		end
-
-		local ok, write_err, existed, normalized_name = template_store.write(name, body, { overwrite = false })
-		if ok then
-			notify_info(string.format("Created template %s", tostring(normalized_name or name)))
-			return
-		end
-
-		if existed then
-			vim.ui.input({
-				prompt = string.format('Template "%s" exists. Overwrite? [y/N]: ', tostring(normalized_name or name)),
-			}, function(confirm)
-				if confirm == nil or vim.trim(tostring(confirm)):lower() ~= "y" then
-					return
-				end
-				local overwrite_ok, overwrite_err, _, final_name =
-					template_store.write(name, body, { overwrite = true })
-				if not overwrite_ok then
-					notify_error(overwrite_err or "Failed to overwrite template")
-					return
-				end
-				notify_info(string.format("Updated template %s", tostring(final_name or normalized_name or name)))
-			end)
-			return
-		end
-
-		notify_error(write_err or "Failed to create template")
-	end)
-end
-
----@param issue_state CreateIssueState
-local function open_templates_menu(issue_state)
-	local items = {
-		{ id = "apply", label = "Apply template" },
-		{ id = "save", label = "Save current description as template" },
-	}
-
-	vim.ui.select(items, {
-		prompt = "Issue templates",
-		kind = "atlas_github_templates_menu",
-		format_item = function(item)
-			return tostring((item and item.label) or "")
-		end,
-	}, function(selected)
-		if selected == nil then
-			return
-		end
-
-		if selected.id == "apply" then
-			apply_template_from_picker(issue_state)
-			return
-		end
-		save_body_as_template(issue_state)
-	end)
-end
-
----@param issue_state CreateIssueState
 local function submit(issue_state)
 	if issue_state.is_submitting then
 		return
@@ -613,7 +475,16 @@ function M.open(opts)
 				buffers = { "editor" },
 				desc = "templates",
 				action = function()
-					open_templates_menu(issue_state)
+					templates.open({
+						get_description = function()
+							return get_body(issue_state)
+						end,
+						set_description = function(description)
+							return form.set_body(issue_state.layout, description)
+						end,
+						picker_kind = "atlas_github_templates",
+						menu_kind = "atlas_github_templates_menu",
+					})
 				end,
 			},
 		},

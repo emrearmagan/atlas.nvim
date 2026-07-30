@@ -5,6 +5,7 @@ local spinner = require("atlas.ui.popups.spinner")
 local multi_select = require("atlas.ui.popups.multi_select")
 local pulls_helper = require("atlas.pulls.ui.main.helper")
 local icons = require("atlas.ui.shared.icons")
+local templates = require("atlas.issues.templates")
 
 ---@class GitLabCreateIssueLabel
 ---@field name string
@@ -491,6 +492,24 @@ function M.open(opts)
 				desc = "milestone",
 				action = function()
 					pick_milestone(issue_state)
+				end,
+			},
+			{
+				key = "gt",
+				mode = "n",
+				buffers = { "editor" },
+				desc = "templates",
+				action = function()
+					templates.open({
+						get_description = function()
+							return get_body(issue_state)
+						end,
+						set_description = function(description)
+							return form.set_body(issue_state.layout, description)
+						end,
+						picker_kind = "atlas_gitlab_templates",
+						menu_kind = "atlas_gitlab_templates_menu",
+					})
 				end,
 			},
 		},
