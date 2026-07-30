@@ -120,7 +120,7 @@ use {
 ## Requirements
 
 - Neovim: `0.10+`
-- Jira: Jira Cloud REST API v3 (`*.atlassian.net`)
+- Jira: Jira Cloud REST API v3 (`*.atlassian.net`) or Jira Server REST API v2
 - Bitbucket: Bitbucket Cloud REST API 2.0 (`api.bitbucket.org`)
 - GitHub: GitHub CLI (`gh`) authenticated with `gh auth login`
 - GitLab: GitLab REST API v4 (`gitlab.com` or self-hosted), Personal Access Token with `api` scope
@@ -149,7 +149,7 @@ use {
 Use `:AtlasPulls [provider]` to browse and manage pull requests from GitHub, Bitbucket, and GitLab.
 
 - [x] Multiple configurable views, provider search, and bookmarks
-- [x] Repository overview, branches, and tags
+- [x] Repository overview, branches, tags, and GitHub/GitLab repository issues
 - [x] Pull request tabs for overview, activity/conversation, review, and commits
 - [x] Pull request actions such as merge, approve, request changes, draft/ready, and reviewer management
 - [x] Comment workflows including create, reply, edit, delete, reactions, resolve, and reopen
