@@ -183,6 +183,7 @@
 ---@field parent_id number|string|nil
 ---@field author PullsAuthor|nil
 ---@field content_raw string
+---@field content_display string|nil
 ---@field created_on string
 ---@field inline {path: string, to: number|nil, from: number|nil}|nil
 ---@field inline_hunk DiffHunk|nil                       -- surrounding diff context for inline comments

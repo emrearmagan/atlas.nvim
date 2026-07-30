@@ -13,16 +13,22 @@ local review_actions = require("atlas.pulls.actions.review")
 local function author_completion()
 	local provider = require("atlas.pulls.state").provider
 	local comments = state.comments
+	local tasks = state.tasks
 	local pr = require("atlas.pulls.ui.panel.pr.state").current_pr
-	if not provider or not pr or type(comments) ~= "table" or not provider.comment_completion then
+	if
+		not provider
+		or not pr
+		or not provider.comment_completion
+		or (type(comments) ~= "table" and type(tasks) ~= "table")
+	then
 		return nil
 	end
-	---@cast comments PullsComment[]
 	local reviewers = require("atlas.pulls.ui.panel.pr.tabs.overview.state").reviewers
 	local conversation = require("atlas.pulls.ui.panel.pr.tabs.conversation.state").comments
 	return provider.comment_completion({
 		pr = pr,
-		comments = comments,
+		comments = type(comments) == "table" and comments or {},
+		tasks = type(tasks) == "table" and tasks or nil,
 		reviewers = type(reviewers) == "table" and reviewers or nil,
 		conversation = type(conversation) == "table" and conversation or nil,
 	})
@@ -165,6 +171,10 @@ end
 ---@param width integer
 ---@return string[], table[], table<integer, table>|nil
 function M.render(pr, width)
+	local completion = author_completion()
+	if completion and completion.resolve_items then
+		completion.resolve_items()
+	end
 	return renderer.render(pr, width, state.comments, state.tasks)
 end
 
@@ -210,7 +220,7 @@ function M.show_details(_pr, entry, buf)
 	end
 
 	local utils = require("atlas.ui.shared.utils")
-	local content = utils.task_text(task.content_raw)
+	local content = utils.task_text(task.content_display or task.content_raw)
 	local empty = string.format("(empty %s)", (task.task_label or "task"):lower())
 	local lines = vim.split(content ~= "" and content or empty, "\n", { plain = true })
 	lines[1] = (task.state == "RESOLVED" and "[x] " or "[ ] ") .. lines[1]

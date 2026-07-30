@@ -234,6 +234,7 @@ function M.to_pull_requests_list(result, workspace, repo)
 			close_source_branch = pr.close_source_branch == true,
 			created_on = tostring(pr.created_on or ""),
 			updated_on = tostring(pr.updated_on or ""),
+			participants = as_table(pr.participants) or {},
 			workspace = ws,
 			repo = rp,
 			repo_full_name = repo_full_name,

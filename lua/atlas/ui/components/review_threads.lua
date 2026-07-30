@@ -91,7 +91,7 @@ local function comment_item(comment, opts, is_root)
 
 	if comment.is_task then
 		local checkbox = is_resolved and "[x]" or "[ ]"
-		local title = utils.task_text(comment.content_raw)
+		local title = utils.task_text(comment.content_display or comment.content_raw)
 		if title == "" then
 			title = "(empty task)"
 		end
@@ -136,7 +136,8 @@ local function comment_item(comment, opts, is_root)
 		}
 	end
 
-	local text = is_deleted and "(deleted comment)" or utils.strip_markup(comment.content_raw or "")
+	local text = is_deleted and "(deleted comment)"
+		or utils.strip_markup(comment.content_display or comment.content_raw or "")
 	if text == "" then
 		text = "(empty comment)"
 	end
@@ -265,8 +266,24 @@ end
 ---@field children AtlasReviewThreadNode[]
 
 ---@param comments PullsComment[]
+---@param tasks? PullsComment[]
 ---@return AtlasReviewThreadNode[]
-function M.group_comments(comments)
+function M.group_comments(comments, tasks)
+	if tasks ~= nil then
+		local comment_ids = {}
+		local review_items = vim.list_extend({}, comments or {})
+		for _, comment in ipairs(comments or {}) do
+			comment_ids[tostring(comment.id)] = true
+		end
+		for _, task in ipairs(tasks) do
+			local parent_id = task.parent_id and tostring(task.parent_id) or nil
+			if parent_id and comment_ids[parent_id] then
+				table.insert(review_items, task)
+			end
+		end
+		comments = review_items
+	end
+
 	local nodes, by_id = {}, {}
 	for _, comment in ipairs(comments or {}) do
 		local node = { comment = comment, children = {} }

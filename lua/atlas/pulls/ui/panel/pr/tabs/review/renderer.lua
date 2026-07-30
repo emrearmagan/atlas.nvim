@@ -94,7 +94,7 @@ local function emit_tasks(lines, spans, line_map, tasks, width, current_user)
 			table.insert(actions, string.format("%s (d)", icons.general("delete")))
 		end
 
-		local title = utils.task_text(task.content_raw)
+		local title = utils.task_text(task.content_display or task.content_raw)
 		local newline = title:find("\n", 1, true)
 		title = newline and title:sub(1, newline - 1) or title
 		if title == "" then
@@ -153,26 +153,6 @@ local function emit_tasks(lines, spans, line_map, tasks, width, current_user)
 			})
 		end
 	end
-end
-
----@param comments PullsComment[]
----@param tasks PullsComment[]
----@return PullsComment[]
-local function attach_tasks(comments, tasks)
-	local comment_ids = {}
-	local review_items = vim.list_extend({}, comments)
-
-	for _, comment in ipairs(comments) do
-		comment_ids[tostring(comment.id)] = true
-	end
-	for _, task in ipairs(tasks) do
-		local parent_id = task.parent_id and tostring(task.parent_id) or nil
-		if parent_id and comment_ids[parent_id] then
-			table.insert(review_items, task)
-		end
-	end
-
-	return review_items
 end
 
 ---@param lines string[]
@@ -296,10 +276,6 @@ function M.render(_pr, width, comments, tasks)
 	local line_map = {}
 	local max_width = math.max(1, width)
 	local current_user = require("atlas.pulls.state").current_user
-	local review_items = comments
-	if type(comments) == "table" and type(tasks) == "table" then
-		review_items = attach_tasks(comments, tasks)
-	end
 
 	if tasks == "loading" then
 		utils.push(lines, spans, spinner.with_text("Loading tasks..."), "AtlasTextMuted", PADDING_X)
@@ -321,27 +297,27 @@ function M.render(_pr, width, comments, tasks)
 		table.insert(lines, "")
 	end
 
-	if review_items == nil then
+	if comments == nil then
 		return lines, spans, line_map
 	end
 
-	if review_items == "loading" then
+	if comments == "loading" then
 		utils.push(lines, spans, spinner.with_text("Loading comments..."), "AtlasTextMuted", PADDING_X)
 		return lines, spans, line_map
 	end
 
-	if type(review_items) == "string" then
-		utils.push(lines, spans, review_items, "AtlasLogError", PADDING_X)
+	if type(comments) == "string" then
+		utils.push(lines, spans, comments, "AtlasLogError", PADDING_X)
 		return lines, spans, line_map
 	end
 
-	---@cast review_items PullsComment[]
-	if #review_items == 0 then
+	---@cast comments PullsComment[]
+	if #comments == 0 then
 		utils.push(lines, spans, "No comments yet.", "AtlasTextMuted", PADDING_X)
 		return lines, spans, line_map
 	end
 
-	local roots = review_threads.group_comments(review_items)
+	local roots = review_threads.group_comments(comments, type(tasks) == "table" and tasks or nil)
 
 	---@class CommentsHunkBucket
 	---@field hunk DiffHunk

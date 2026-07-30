@@ -18,6 +18,7 @@
 ---@class AtlasPullsCommentCompletionContext
 ---@field pr PullRequest
 ---@field comments PullsComment[]
+---@field tasks PullsComment[]|nil
 ---@field reviewers PullsReviewer[]|nil
 ---@field conversation PullsComment[]|nil
 
