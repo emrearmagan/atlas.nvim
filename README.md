@@ -338,12 +338,60 @@ pulls = {
 
 </details>
 
-#### Custom Actions
+<a id="review-pulls"></a>
+<details>
+<summary><strong>Review Pulls</strong></summary>
+
+Press the configured `pulls.open_diff` key (`gd` by default) on a pull request to start a review. 
+
+<p align="center">
+  <img alt="AtlasDiff review" src="https://github.com/user-attachments/assets/47e1f9c6-38a5-4bac-90fd-46ae69b7dffc">
+</p>
+
+- See pending, resolved, and outdated provider threads at their diff locations.
+- Review provider tasks and GitHub checklists alongside the comments they belong to.
+- Add, reply to, edit, delete, resolve, or reopen comments when supported.
+
+> [!NOTE]
+> **Alternative viewers:** CodeDiff can display Atlas comment and task overlays, but the integration relies on CodeDiff internals and may break after upstream changes. I used it from my dotfiles for a while before moving it into Atlas. Diffview remains available as a plain diff viewer without Atlas review overlays since i dont use that plugin.
+
+#### Local notes
+
+Local notes let you leave something on a diff without posting it to the pull request. Each note is attached to a file and line and can be an `ISSUE`, `SUGGESTION`, `NOTE`, or `PRAISE`. If that line changes, Atlas shows the note as outdated. If the location no longer exists, Atlas removes it. `:AtlasNotes` lists your notes across all pull requests.
+
+For scripts, use `bin/atlas-notes`. Notes added there appear in AtlasDiff and `:AtlasNotes`:
+
+```sh
+./bin/atlas-notes add \
+  --target https://github.com/owner/repository/pull/123 \
+  --file lua/review_queue.lua --line 19 \
+  --context "local item = queue[index]" \
+  --type suggestion --body "Should this be a bool?"
+```
+
+My dotfiles include a [Pi extension that wraps this script](https://github.com/emrearmagan/dotfiles/blob/main/config/pi/extensions/atlas-notes.ts) so review agents can list and add notes.
+
+</details>
+
+<a id="create-pulls"></a>
+<details>
+<summary><strong>Create Pulls</strong></summary>
+
+Run `:AtlasCreatePR` on the branch you want to submit. The current branch is used as the source and the repository's default branch as the target. The latest commit supplies the initial title. A configured pull request template supplies the description; without one, Atlas builds it from the branch commits.
+
+Before creating the pull request, you can change the target branch, reviewers, and draft state. The commits and diffstat are shown below the editor, and the diff can be previewed from there.
+
+<p align="center">
+  <img alt="Create pull request" src="https://github.com/user-attachments/assets/bac9afe8-042b-4b0c-8037-86f828694b13">
+</p>
+
+</details>
+
+<a id="custom-actions"></a>
+<details>
+<summary><strong>Custom Actions</strong></summary>
 
 You can add custom PR actions under `pulls.custom_actions`.
-
-<details>
-<summary><strong>Example</strong></summary>
 
 Context type:
 
@@ -398,47 +446,6 @@ pulls = {
 ![CleanShot2026-03-31at20 08 06-ezgif com-video-to-gif-converter](https://github.com/user-attachments/assets/a8ca355b-09e2-428c-b3fb-3280fd161110)
 
 </details>
-
-### Review Pulls
-
-Press the configured `pulls.open_diff` key (`gd` by default) on a pull request to start a review. 
-
-<p align="center">
-  <img alt="AtlasDiff review" src="https://github.com/user-attachments/assets/47e1f9c6-38a5-4bac-90fd-46ae69b7dffc">
-</p>
-
-- See pending, resolved, and outdated provider threads at their diff locations.
-- Review provider tasks and GitHub checklists alongside the comments they belong to.
-- Add, reply to, edit, delete, resolve, or reopen comments when supported.
-
-> [!NOTE]
-> **Alternative viewers:** CodeDiff can display Atlas comment and task overlays, but the integration relies on CodeDiff internals and may break after upstream changes. I used it from my dotfiles for a while before moving it into Atlas. Diffview remains available as a plain diff viewer without Atlas review overlays since i dont use that plugin.
-
-#### Local notes
-
-Local notes let you leave something on a diff without posting it to the pull request. Each note is attached to a file and line and can be an `ISSUE`, `SUGGESTION`, `NOTE`, or `PRAISE`. If that line changes, Atlas shows the note as outdated. If the location no longer exists, Atlas removes it. `:AtlasNotes` lists your notes across all pull requests.
-
-For scripts, use `bin/atlas-notes`. Notes added there appear in AtlasDiff and `:AtlasNotes`:
-
-```sh
-./bin/atlas-notes add \
-  --target https://github.com/owner/repository/pull/123 \
-  --file lua/review_queue.lua --line 19 \
-  --context "local item = queue[index]" \
-  --type suggestion --body "Should this be a bool?"
-```
-
-My dotfiles include a [Pi extension that wraps this script](https://github.com/emrearmagan/dotfiles/blob/main/config/pi/extensions/atlas-notes.ts) so review agents can list and add notes.
-
-### Create Pulls
-
-Run `:AtlasCreatePR` on the branch you want to submit. The current branch is used as the source and the repository's default branch as the target. The latest commit supplies the initial title. A configured pull request template supplies the description; without one, Atlas builds it from the branch commits.
-
-Before creating the pull request, you can change the target branch, reviewers, and draft state. The commits and diffstat are shown below the editor, and the diff can be previewed from there.
-
-<p align="center">
-  <img alt="Create pull request" src="https://github.com/user-attachments/assets/bac9afe8-042b-4b0c-8037-86f828694b13">
-</p>
 
 ## Issues
 
@@ -635,12 +642,25 @@ issues = {
 
 </details>
 
-#### Custom Actions
+<a id="create-issues"></a>
+<details>
+<summary><strong>Create Issues</strong></summary>
+
+`:AtlasCreateIssue` opens the creation flow for the configured issue providers. GitHub and GitLab use the current repository, while Jira uses the configured instance. The forms support Markdown descriptions and provider-specific fields such as labels, assignees, milestones, and Jira issue types.
+
+GitHub, GitLab, and Jira can apply a saved Markdown template or save the current description as a new one. Templates are shared between providers and stored under Neovim's data directory.
+
+<p align="center">
+  <img alt="Create issue" src="https://github.com/user-attachments/assets/b10962ee-d76f-4b79-982e-4d328b0a5153">
+</p>
+
+</details>
+
+<a id="issue-custom-actions"></a>
+<details>
+<summary><strong>Custom Actions</strong></summary>
 
 You can add custom issue actions under `issues.custom_actions`.
-
-<details>
-<summary><strong>Example</strong></summary>
 
 Context type:
 
@@ -672,16 +692,6 @@ issues = {
 ```
 
 </details>
-
-### Create Issues
-
-`:AtlasCreateIssue` opens the creation flow for the configured issue providers. GitHub and GitLab use the current repository, while Jira uses the configured instance. The forms support Markdown descriptions and provider-specific fields such as labels, assignees, milestones, and Jira issue types.
-
-GitHub, GitLab, and Jira can apply a saved Markdown template or save the current description as a new one. Templates are shared between providers and stored under Neovim's data directory.
-
-<p align="center">
-  <img alt="Create issue" src="https://github.com/user-attachments/assets/b10962ee-d76f-4b79-982e-4d328b0a5153">
-</p>
 
 ## Keymaps
 
