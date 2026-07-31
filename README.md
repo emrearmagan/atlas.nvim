@@ -149,24 +149,6 @@ use {
 
 Use `:AtlasPulls [provider]` to browse and manage pull requests from GitHub, Bitbucket, and GitLab.
 
-- [x] Multiple configurable views, provider search, and bookmarks
-- [x] Repository overview, branches, tags, and GitHub/GitLab repository issues
-- [x] Pull request tabs for overview, activity/conversation, review, and commits
-- [x] Pull request actions such as merge, approve, request changes, draft/ready, and reviewer management
-- [x] Comment workflows including create, reply, edit, delete, reactions, resolve, and reopen
-- [x] Pending comments, inline threads, provider tasks, and GitHub checklists
-- [x] Build/CI status and merge checks
-- [x] Commits and diffstat summaries
-- [x] Checkout pull request branches
-- [x] Add custom actions to pull requests
-- [x] Open pull request diffs in AtlasDiff, CodeDiff, or Diffview
-- [x] Native reviews with inline threads, provider tasks/checklists, and private local notes
-- [x] Switch between open, merged, and closed pull requests
-- [x] Subscribe or unsubscribe to pull requests
-- [x] View and manage provider notifications
-- [x] Create pull requests with `:AtlasCreatePR`, including draft state, templates, commits, diffstat, and reviewer selection where supported
-- [ ] Complete pagination across providers and API results
-
 ### Configuration
 
 ```lua
@@ -202,10 +184,9 @@ pulls = {
 },
 ```
 
-#### GitHub
-
+<a id="github"></a>
 <details>
-<summary><strong>Configuration</strong></summary>
+<summary><strong>GitHub</strong></summary>
 
 ```lua
 pulls = {
@@ -253,10 +234,9 @@ pulls = {
 
 </details>
 
-#### Bitbucket
-
+<a id="bitbucket"></a>
 <details>
-<summary><strong>Configuration</strong></summary>
+<summary><strong>Bitbucket</strong></summary>
 
 ```lua
 pulls = {
@@ -302,10 +282,9 @@ pulls = {
 
 </details>
 
-#### GitLab
-
+<a id="gitlab"></a>
 <details>
-<summary><strong>Configuration</strong></summary>
+<summary><strong>GitLab</strong></summary>
 
 Auth uses a [Personal Access Token](https://docs.gitlab.com/ee/user/profile/personal_access_tokens.html) with the `api` scope. Set `base_url` to `https://gitlab.com` or your self-hosted instance.
 
@@ -467,19 +446,6 @@ Before creating the pull request, you can change the target branch, reviewers, a
 
 Use `:AtlasIssues [provider]` to browse and manage Jira, GitHub, and GitLab issues.
 
-- [x] Multiple configurable views, provider search, and bookmarks
-- [x] Issue overview, conversation, and activity
-- [x] Create GitHub, GitLab, and Jira issues with `:AtlasCreateIssue`
-- [x] Edit issue descriptions and provider-specific fields
-- [x] Comment workflows including create, reply, edit, delete, and reactions
-- [x] Provider actions for status, assignees, reporters, labels, subscriptions, and deletion
-- [x] Parent and subissue relationships
-- [x] Jira JQL completion, custom fields, and Markdown/ADF descriptions
-- [x] Reusable issue templates
-- [x] Add custom actions to issues
-- [x] View and manage provider notifications
-- [ ] Save searches and filters from the UI
-
 ### Issue Configuration
 
 ```lua
@@ -490,7 +456,9 @@ issues = {
 }
 ```
 
-#### Jira
+<a id="jira"></a>
+<details>
+<summary><strong>Jira</strong></summary>
 
 > [!NOTE]
 > If you're only looking for Jira support, check out https://github.com/letieu/jira.nvim. This plugin was the main inspiration for this project.
@@ -498,9 +466,6 @@ issues = {
 
 > [!IMPORTANT]
 > The markdown editor for issue descriptions and comments is still experimental and may not work perfectly in all cases. You can toggle between markdown and ADF view in the overview tab to see the raw ADF content and how it translates to markdown. If you encounter any issues with the markdown editor, please open an issue with details.
-
-<details>
-<summary><strong>Configuration</strong></summary>
 
 ```lua
 issues = {
@@ -573,10 +538,9 @@ issues = {
 
 </details>
 
-#### GitHub Issues
-
+<a id="github-issues"></a>
 <details>
-<summary><strong>Configuration</strong></summary>
+<summary><strong>GitHub Issues</strong></summary>
 
 ```lua
 issues = {
@@ -621,10 +585,9 @@ issues = {
 
 </details>
 
-#### GitLab Issues
-
+<a id="gitlab-issues"></a>
 <details>
-<summary><strong>Configuration</strong></summary>
+<summary><strong>GitLab Issues</strong></summary>
 
 Auth uses a [Personal Access Token](https://docs.gitlab.com/ee/user/profile/personal_access_tokens.html) with the `api` scope. Set `base_url` to `https://gitlab.com` or your self-hosted instance.
 
