@@ -48,20 +48,11 @@ end
 
 ---@param issue_key string
 ---@param comment string
----@param opts { parent_id?: string|number }|fun(comment: IssueComment|nil, err: string|nil)|nil
----@param callback fun(comment: IssueComment|nil, err: string|nil)|nil
+---@param opts { parent_id?: string|number }|nil
+---@param callback fun(comment: IssueComment|nil, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.add_comment(issue_key, comment, opts, callback)
-	if type(opts) == "function" then
-		callback = opts
-		opts = nil
-	end
-
-	if type(callback) ~= "function" then
-		return nil
-	end
-
-	local body = type(comment) == "string" and comment or ""
+	local body = comment
 	if vim.trim(body) == "" then
 		callback(nil, "Comment cannot be empty")
 		return nil

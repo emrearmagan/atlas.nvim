@@ -1,27 +1,35 @@
 local M = {}
 
 local layout = require("atlas.ui.layout")
+local root_panel_state = require("atlas.pulls.ui.panel.state")
 local panel_state = require("atlas.pulls.ui.panel.repo.state")
 local renderer = require("atlas.pulls.ui.panel.repo.renderer")
 local icons = require("atlas.ui.shared.icons")
+
+local overview_icon, overview_icon_hl = icons.general("overview")
+local branch_icon, branch_icon_hl = icons.pulls("branch")
+local tag_icon, tag_icon_hl = icons.pulls("tag")
 
 local DEFAULT_TABS = {
 	{
 		key = "overview",
 		label = "Overview",
-		icon = icons.general("overview"),
+		icon = overview_icon,
+		icon_hl = overview_icon_hl,
 		mod = require("atlas.pulls.ui.panel.repo.tabs.overview"),
 	},
 	{
 		key = "branches",
 		label = "Branches",
-		icon = icons.pulls("branch"),
+		icon = branch_icon,
+		icon_hl = branch_icon_hl,
 		mod = require("atlas.pulls.ui.panel.repo.tabs.branches"),
 	},
 	{
 		key = "tags",
 		label = "Tags",
-		icon = icons.pulls("tag"),
+		icon = tag_icon,
+		icon_hl = tag_icon_hl,
 		mod = require("atlas.pulls.ui.panel.repo.tabs.tags"),
 	},
 }
@@ -67,7 +75,7 @@ M.get_tab_module = get_tab_module
 ---@return boolean
 local function is_tab_loading()
 	local tab_mod = get_tab_module(panel_state.current_tab)
-	if tab_mod and type(tab_mod.is_loading) == "function" then
+	if tab_mod and tab_mod.is_loading then
 		return tab_mod.is_loading()
 	end
 	return false
@@ -123,7 +131,7 @@ end
 
 local function activate_current_tab()
 	local tab_mod = get_tab_module(panel_state.current_tab)
-	if tab_mod and type(tab_mod.activate) == "function" then
+	if tab_mod and tab_mod.activate then
 		local buf = layout.buf_id("detail")
 		if buf ~= nil and vim.api.nvim_buf_is_valid(buf) then
 			tab_mod.activate(buf, refresh_panel)
@@ -140,13 +148,13 @@ local function switch_tab_keymaps(old_key, new_key)
 	end
 	if old_key then
 		local old_mod = get_tab_module(old_key)
-		if old_mod and type(old_mod.deactivate) == "function" and old_key ~= new_key then
+		if old_mod and old_mod.deactivate and old_key ~= new_key then
 			old_mod.deactivate(buf)
 		end
 	end
 	if new_key then
 		local new_mod = get_tab_module(new_key)
-		if new_mod and type(new_mod.activate) == "function" and old_key ~= new_key then
+		if new_mod and new_mod.activate and old_key ~= new_key then
 			new_mod.activate(buf, refresh_panel)
 		end
 	end
@@ -156,13 +164,13 @@ end
 ---@param opts { force_refresh: boolean|nil }|nil
 local function notify_tab(repo, opts)
 	local tab_mod = get_tab_module(panel_state.current_tab)
-	if tab_mod and type(tab_mod.on_select) == "function" then
+	if tab_mod and tab_mod.on_select then
 		tab_mod.on_select(nil, repo, refresh_panel, opts)
 	end
 end
 
 function M.is_open()
-	return layout.win_id("detail") ~= nil
+	return root_panel_state.current_panel == "repo" and layout.win_id("detail") ~= nil
 end
 
 function M.render()
@@ -194,7 +202,7 @@ function M.on_select(repo, opts)
 	activate_current_tab()
 
 	local should_fetch = opts.force_refresh == true or type(panel_state.current_repo_details) ~= "table"
-	if provider and type(provider.fetch_repo_details) == "function" and should_fetch then
+	if provider and provider.fetch_repo_details and should_fetch then
 		local repo_key = tostring(panel_state.current_repo.id or "")
 		stop_request()
 		panel_state.current_repo_details = "loading"
@@ -277,16 +285,16 @@ function M.close()
 	panel_state.reset()
 end
 
-function M.activate()
-end
+function M.activate() end
 
 function M.deactivate()
 	stop_request()
 	stop_spinner()
 
+	local buf = layout.buf_id("detail")
 	local tab_mod = get_tab_module(panel_state.current_tab)
-	if tab_mod and type(tab_mod.deactivate) == "function" then
-		tab_mod.deactivate()
+	if tab_mod and tab_mod.deactivate then
+		tab_mod.deactivate(buf)
 	end
 	panel_state.reset()
 end

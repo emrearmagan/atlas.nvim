@@ -6,21 +6,12 @@ local helper = require("atlas.issues.ui.main.helper")
 local state = require("atlas.issues.state")
 
 ---@param status_id string|nil
----@return string
+---@return string, string
 local function state_icon(status_id)
 	if status_id == "closed" then
-		return icons.pulls_status("successful")
+		return icons.pulls_status("successful"), "AtlasGLIssueClosed"
 	end
-	return icons.issues("issue")
-end
-
----@param status_id string|nil
----@return string
-local function state_hl(status_id)
-	if status_id == "closed" then
-		return "AtlasGLIssueClosed"
-	end
-	return "AtlasGLIssueOpen"
+	return icons.issues("issue"), "AtlasGLIssueOpen"
 end
 
 ---@param status_id string|nil
@@ -35,7 +26,7 @@ end
 ---@param issue Issue
 ---@return string
 local function key_label(issue)
-	local raw = type(issue._raw) == "table" and issue._raw or {}
+	local raw = issue._raw or {}
 	local iid = raw.iid or 0
 	local path = tostring(raw.project_path or "")
 	return path ~= "" and string.format("%s#%d", path, iid) or string.format("#%d", iid)
@@ -50,11 +41,10 @@ function M.format_row(issue, is_child)
 
 	local row_icon = state_icon(issue.status_id)
 
-	local name = is_child and ("  " .. row_icon .. "  " .. label .. "  " .. title)
-		or (label .. "  " .. title)
+	local name = is_child and ("  " .. row_icon .. "  " .. label .. "  " .. title) or (label .. "  " .. title)
 
-	local assignee_name = type(issue.assignee) == "table" and issue.assignee.display_name or "Unassigned"
-	local reporter_name = type(issue.reporter) == "table" and issue.reporter.display_name or "Unknown"
+	local assignee_name = issue.assignee and issue.assignee.display_name or "Unassigned"
+	local reporter_name = issue.reporter and issue.reporter.display_name or "Unknown"
 
 	return {
 		icon = is_child and "" or row_icon,
@@ -77,12 +67,12 @@ end
 ---@return table[]|nil
 function M.cell_hl(row, col, ctx)
 	local issue = row._issue
-	if type(issue) ~= "table" then
+	if issue == nil then
 		return nil
 	end
 
 	if col.key == "icon" then
-		local s = state_icon(issue.status_id)
+		local s, icon_hl = state_icon(issue.status_id)
 		if s == "" then
 			return nil
 		end
@@ -90,17 +80,17 @@ function M.cell_hl(row, col, ctx)
 		if not ss or not ee then
 			return nil
 		end
-		return { { start_col = ss - 1, end_col = ee, hl_group = state_hl(issue.status_id) } }
+		return { { start_col = ss - 1, end_col = ee, hl_group = icon_hl } }
 	end
 
 	if col.key == "name" then
 		local spans = {}
 		local is_child = (tonumber(row._tv2_depth) or 0) > 0
 		if is_child then
-			local s_icon = state_icon(issue.status_id)
+			local s_icon, s_icon_hl = state_icon(issue.status_id)
 			local is, ie = ctx.text:find(s_icon, 1, true)
 			if is and ie then
-				table.insert(spans, { start_col = is - 1, end_col = ie, hl_group = state_hl(issue.status_id) })
+				table.insert(spans, { start_col = is - 1, end_col = ie, hl_group = s_icon_hl })
 			end
 		end
 
@@ -124,12 +114,12 @@ function M.cell_hl(row, col, ctx)
 	end
 
 	if col.key == "assignee" then
-		local name = type(issue.assignee) == "table" and issue.assignee.display_name or nil
+		local name = issue.assignee and issue.assignee.display_name or nil
 		return { { start_col = 0, end_col = #ctx.padded, hl_group = helper.person_hl(name) } }
 	end
 
 	if col.key == "reporter" then
-		local name = type(issue.reporter) == "table" and issue.reporter.display_name or nil
+		local name = issue.reporter and issue.reporter.display_name or nil
 		return { { start_col = 0, end_col = #ctx.padded, hl_group = helper.person_hl(name) } }
 	end
 

@@ -19,7 +19,13 @@ local function apply_spans(buf, spans)
 			vim.api.nvim_buf_set_extmark(buf, ns, span.line, 0, {
 				line_hl_group = span.line_hl_group,
 			})
-		elseif type(span) == "table" and span.line ~= nil and span.start_col ~= nil and span.end_col ~= nil and span.hl_group ~= nil then
+		elseif
+			type(span) == "table"
+			and span.line ~= nil
+			and span.start_col ~= nil
+			and span.end_col ~= nil
+			and span.hl_group ~= nil
+		then
 			vim.api.nvim_buf_set_extmark(buf, ns, span.line, span.start_col, {
 				end_row = span.line,
 				end_col = span.end_col,
@@ -30,7 +36,7 @@ local function apply_spans(buf, spans)
 end
 
 ---@param tab_items PullsRepoPanelTab[]
----@param get_tab_module fun(key: string): table|nil
+---@param get_tab_module fun(key: string): PullsRepoPanelTabModule|nil
 function M.render(tab_items, get_tab_module)
 	local buf = layout.buf_id("detail")
 	local win = layout.win_id("detail")
@@ -73,13 +79,14 @@ function M.render(tab_items, get_tab_module)
 		end
 		table.insert(lines, "")
 
-		local tab_lines, tab_spans = panel_tabs.render(tab_items, panel_state.current_tab, { width = width, padding_x = PADDING_X })
+		local tab_lines, tab_spans =
+			panel_tabs.render(tab_items, panel_state.current_tab, { width = width, padding_x = PADDING_X })
 		utils.append_block(lines, spans, { lines = tab_lines, highlights = tab_spans })
 		table.insert(lines, "")
 
 		local tab_mod = get_tab_module(panel_state.current_tab)
 		local content_offset = #lines
-		if tab_mod and type(tab_mod.render) == "function" then
+		if tab_mod then
 			local tab_lines_c, tab_spans_c, tab_line_map = tab_mod.render(repo, width)
 			utils.append_block(lines, spans, { lines = tab_lines_c, highlights = tab_spans_c })
 			local adjusted = {}

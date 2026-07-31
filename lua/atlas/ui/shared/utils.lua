@@ -168,7 +168,7 @@ end
 ---@param iso string|nil
 ---@return string
 function M.format_date(iso)
-	if type(iso) ~= "string" or iso == "" then
+	if iso == nil or iso == "" then
 		return ""
 	end
 
@@ -263,7 +263,7 @@ end
 ---@param text string|nil
 ---@return string[]
 function M.sanitize_lines(text)
-	if type(text) ~= "string" or text == "" then
+	if text == nil or text == "" then
 		return { "-" }
 	end
 
@@ -280,6 +280,39 @@ function M.sanitize_lines(text)
 	return out
 end
 
+---@param lines string[]
+---@param spans { line: integer, start_col: integer, end_col: integer, hl_group: string }[]
+---@return [string, string][][]
+function M.virtual_lines(lines, spans)
+	local starts = {}
+	for _, span in ipairs(spans or {}) do
+		starts[span.line + 1] = starts[span.line + 1] or {}
+		table.insert(starts[span.line + 1], span)
+	end
+	local result = {}
+	for index, line in ipairs(lines) do
+		local line_spans = starts[index] or {}
+		table.sort(line_spans, function(left, right)
+			return left.start_col < right.start_col
+		end)
+		local chunks, col = {}, 0
+		for _, span in ipairs(line_spans) do
+			if span.start_col >= col then
+				if span.start_col > col then
+					table.insert(chunks, { line:sub(col + 1, span.start_col), "Normal" })
+				end
+				table.insert(chunks, { line:sub(span.start_col + 1, span.end_col), span.hl_group })
+				col = span.end_col
+			end
+		end
+		if col < #line then
+			table.insert(chunks, { line:sub(col + 1), "Normal" })
+		end
+		result[index] = chunks
+	end
+	return result
+end
+
 local strwidth = vim.api.nvim_strwidth
 local strcharpart = vim.fn.strcharpart
 local strchars = vim.fn.strchars
@@ -289,39 +322,40 @@ local strchars = vim.fn.strchars
 ---@param from_start? boolean
 ---@return string
 function M.truncate(str, max_dw, from_start)
-	local ellipsis = "…"
 	if max_dw < 1 then
-		return ellipsis
+		return ""
 	end
 	if strwidth(str) <= max_dw then
 		return str
 	end
+	local marker = max_dw == 1 and "." or ".."
+	local available = max_dw - strwidth(marker)
 
 	local nchars = strchars(str)
 	if from_start then
 		for i = 1, nchars do
 			local tail = strcharpart(str, i)
-			if strwidth(tail) <= max_dw - 1 then
-				return ellipsis .. tail
+			if strwidth(tail) <= available then
+				return marker .. tail
 			end
 		end
-		return ellipsis
+		return marker
 	end
 
 	for i = nchars - 1, 0, -1 do
 		local head = strcharpart(str, 0, i)
-		if strwidth(head) <= max_dw - 1 then
-			return head .. ellipsis
+		if strwidth(head) <= available then
+			return head .. marker
 		end
 	end
-	return ellipsis
+	return marker
 end
 
 ---@param name string|nil
 ---@param max_width integer
 ---@return string
 function M.shorten_name(name, max_width)
-	if type(name) ~= "string" then
+	if name == nil then
 		return ""
 	end
 	if strwidth(name) <= max_width then
@@ -396,6 +430,12 @@ function M.strip_markup(text)
 	-- Markdown links [text](url) → text
 	s = s:gsub("%[([^%]]*)%]%(([^)]*)%)", "%1")
 	return vim.trim(s)
+end
+
+---@param text string|nil
+---@return string
+function M.task_text(text)
+	return (M.strip_markup(text):gsub("^%s*[-*+]?%s*%[[xX ]%]%s*", "", 1))
 end
 
 return M

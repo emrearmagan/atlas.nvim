@@ -37,10 +37,10 @@ local function track(handle)
 end
 
 ---@param pr PullRequest
----@param repo PullsRepo|nil
+---@param _repo PullsRepo|nil
 ---@param refresh fun()
 ---@param opts { force_refresh: boolean|nil }|nil
-function M.on_select(pr, repo, refresh, opts)
+function M.on_select(pr, _repo, refresh, opts)
 	opts = opts or {}
 
 	local provider = get_provider()
@@ -51,9 +51,9 @@ function M.on_select(pr, repo, refresh, opts)
 	local force_refresh = opts.force_refresh == true
 	local pr_id = tostring(pr.id or "")
 
-	local can_fetch_reviewers = type(provider.fetch_reviewers) == "function"
-	local can_fetch_description = type(provider.fetch_description) == "function"
-	local can_fetch_merge_checks = type(provider.fetch_merge_checks) == "function"
+	local can_fetch_reviewers = provider.fetch_reviewers ~= nil
+	local can_fetch_description = provider.fetch_description ~= nil
+	local can_fetch_merge_checks = provider.fetch_merge_checks ~= nil
 	local should_fetch_reviewers = can_fetch_reviewers
 		and (force_refresh or state.reviewers == nil or state.reviewers == "loading")
 	local should_fetch_description = can_fetch_description
@@ -135,9 +135,7 @@ function M.on_select(pr, repo, refresh, opts)
 	end
 end
 
---------------------------------------------------------------------------------
 -- Reviewers
---------------------------------------------------------------------------------
 
 local DECISION_GROUPS = { "approved", "changes_requested", "pending" }
 
@@ -147,11 +145,11 @@ local DECISION_ICONS = {
 	pending = { icon = icons.pulls_status("inprogress"), hl = "AtlasTextMuted" },
 }
 
----@param pr PullRequest
+---@param _pr PullRequest
 ---@param width integer
 ---@param lines string[]
 ---@param spans table[]
-local function render_reviewers(pr, width, lines, spans)
+local function render_reviewers(_pr, width, lines, spans)
 	if state.reviewers == nil then
 		return
 	end
@@ -170,15 +168,12 @@ local function render_reviewers(pr, width, lines, spans)
 		utils.append_block(
 			lines,
 			spans,
-			box.render(
+			box.render({
 				{
-					{
-						lines = { loading_text },
-						spans = { { line = 0, start_col = 0, end_col = #loading_text, hl_group = "AtlasTextMuted" } },
-					},
+					lines = { loading_text },
+					spans = { { line = 0, start_col = 0, end_col = #loading_text, hl_group = "AtlasTextMuted" } },
 				},
-				{ width = width, padding_x = PADDING_X }
-			)
+			}, { width = width, padding_x = PADDING_X })
 		)
 		table.insert(lines, "")
 		return
@@ -190,15 +185,12 @@ local function render_reviewers(pr, width, lines, spans)
 		utils.append_block(
 			lines,
 			spans,
-			box.render(
+			box.render({
 				{
-					{
-						lines = { err_text },
-						spans = { { line = 0, start_col = 0, end_col = #err_text, hl_group = "AtlasLogError" } },
-					},
+					lines = { err_text },
+					spans = { { line = 0, start_col = 0, end_col = #err_text, hl_group = "AtlasLogError" } },
 				},
-				{ width = width, padding_x = PADDING_X }
-			)
+			}, { width = width, padding_x = PADDING_X })
 		)
 		table.insert(lines, "")
 		return
@@ -227,15 +219,12 @@ local function render_reviewers(pr, width, lines, spans)
 		utils.append_block(
 			lines,
 			spans,
-			box.render(
+			box.render({
 				{
-					{
-						lines = { empty_text },
-						spans = { { line = 0, start_col = 0, end_col = #empty_text, hl_group = "AtlasTextMuted" } },
-					},
+					lines = { empty_text },
+					spans = { { line = 0, start_col = 0, end_col = #empty_text, hl_group = "AtlasTextMuted" } },
 				},
-				{ width = width, padding_x = PADDING_X }
-			)
+			}, { width = width, padding_x = PADDING_X })
 		)
 		table.insert(lines, "")
 		return
@@ -294,9 +283,7 @@ local function render_reviewers(pr, width, lines, spans)
 	table.insert(lines, "")
 end
 
---------------------------------------------------------------------------------
 -- Builds
---------------------------------------------------------------------------------
 
 local BUILD_HL = {
 	SUCCESSFUL = "AtlasBuildLinkSuccess",
@@ -315,12 +302,12 @@ local function status_label(status)
 	return s:sub(1, 1):upper() .. s:sub(2)
 end
 
----@param pr PullRequest
+---@param _pr PullRequest
 ---@param width integer
 ---@param lines string[]
 ---@param spans table[]
 ---@param line_map table<integer, table>
-local function render_builds(pr, width, lines, spans, line_map)
+local function render_builds(_pr, width, lines, spans, line_map)
 	if state.builds == nil then
 		return
 	end
@@ -331,15 +318,12 @@ local function render_builds(pr, width, lines, spans, line_map)
 		utils.append_block(
 			lines,
 			spans,
-			box.render(
+			box.render({
 				{
-					{
-						lines = { loading_text },
-						spans = { { line = 0, start_col = 0, end_col = #loading_text, hl_group = "AtlasTextMuted" } },
-					},
+					lines = { loading_text },
+					spans = { { line = 0, start_col = 0, end_col = #loading_text, hl_group = "AtlasTextMuted" } },
 				},
-				{ width = width, padding_x = PADDING_X }
-			)
+			}, { width = width, padding_x = PADDING_X })
 		)
 		table.insert(lines, "")
 		return
@@ -351,15 +335,12 @@ local function render_builds(pr, width, lines, spans, line_map)
 		utils.append_block(
 			lines,
 			spans,
-			box.render(
+			box.render({
 				{
-					{
-						lines = { err_text },
-						spans = { { line = 0, start_col = 0, end_col = #err_text, hl_group = "AtlasLogError" } },
-					},
+					lines = { err_text },
+					spans = { { line = 0, start_col = 0, end_col = #err_text, hl_group = "AtlasLogError" } },
 				},
-				{ width = width, padding_x = PADDING_X }
-			)
+			}, { width = width, padding_x = PADDING_X })
 		)
 		table.insert(lines, "")
 		return
@@ -380,7 +361,7 @@ local function render_builds(pr, width, lines, spans, line_map)
 
 	for _, entry in ipairs(entries) do
 		local s = tostring(entry.state or "UNKNOWN")
-		local icon = icons.pulls_status(s:lower())
+		local icon, icon_hl = icons.pulls_status(s:lower())
 		local name = tostring(entry.name or entry.key or "Build")
 		local text = string.format("%s %s (%s)", icon, name, status_label(s))
 		local wrapped = utils.wrap_line(text, box_inner)
@@ -395,6 +376,14 @@ local function render_builds(pr, width, lines, spans, line_map)
 				end_col = #chunk,
 				hl_group = hl,
 			})
+			if i == 1 then
+				table.insert(box_spans, {
+					line = #box_lines - 1,
+					start_col = 0,
+					end_col = #icon,
+					hl_group = icon_hl,
+				})
+			end
 		end
 	end
 
@@ -411,17 +400,13 @@ local function render_builds(pr, width, lines, spans, line_map)
 	table.insert(lines, "")
 end
 
---------------------------------------------------------------------------------
 -- Description
---------------------------------------------------------------------------------
 
 ---@param pr PullRequest
 ---@param width integer
 ---@param lines string[]
 ---@param spans table[]
 local function render_description(pr, width, lines, spans)
-	local content_width = math.max(10, width - (PADDING_X * 2))
-
 	utils.push(lines, spans, "Description", "AtlasColumnHeader", PADDING_X)
 
 	if state.description == "loading" then
@@ -481,9 +466,7 @@ local function render_description(pr, width, lines, spans)
 	table.insert(lines, "")
 end
 
---------------------------------------------------------------------------------
 -- Merge checks
---------------------------------------------------------------------------------
 
 local MERGE_CHECK_STATE = {
 	successful = { icon = icons.pulls_status("successful"), hl = "AtlasTextPositive" },
@@ -514,11 +497,11 @@ local function render_merge_check_group(check)
 	return { lines = lines, spans = spans }
 end
 
----@param pr PullRequest
+---@param _pr PullRequest
 ---@param width integer
 ---@param lines string[]
 ---@param spans table[]
-local function render_merge_checks(pr, width, lines, spans) ---@diagnostic disable-line: unused-local
+local function render_merge_checks(_pr, width, lines, spans)
 	if state.merge_checks == nil then
 		return
 	end
@@ -530,15 +513,12 @@ local function render_merge_checks(pr, width, lines, spans) ---@diagnostic disab
 		utils.append_block(
 			lines,
 			spans,
-			box.render(
+			box.render({
 				{
-					{
-						lines = { loading_text },
-						spans = { { line = 0, start_col = 0, end_col = #loading_text, hl_group = "AtlasTextMuted" } },
-					},
+					lines = { loading_text },
+					spans = { { line = 0, start_col = 0, end_col = #loading_text, hl_group = "AtlasTextMuted" } },
 				},
-				{ width = width, padding_x = PADDING_X }
-			)
+			}, { width = width, padding_x = PADDING_X })
 		)
 		table.insert(lines, "")
 		return
@@ -549,15 +529,12 @@ local function render_merge_checks(pr, width, lines, spans) ---@diagnostic disab
 		utils.append_block(
 			lines,
 			spans,
-			box.render(
+			box.render({
 				{
-					{
-						lines = { err_text },
-						spans = { { line = 0, start_col = 0, end_col = #err_text, hl_group = "AtlasLogError" } },
-					},
+					lines = { err_text },
+					spans = { { line = 0, start_col = 0, end_col = #err_text, hl_group = "AtlasLogError" } },
 				},
-				{ width = width, padding_x = PADDING_X }
-			)
+			}, { width = width, padding_x = PADDING_X })
 		)
 		table.insert(lines, "")
 		return

@@ -304,7 +304,7 @@ function M.get_description(key, opts, on_done)
 			on_done(nil, err)
 			return
 		end
-		local raw = type(issue._raw) == "table" and issue._raw or {}
+		local raw = issue._raw or {}
 		on_done(tostring(raw.description or ""), nil)
 	end)
 end

@@ -2,6 +2,7 @@ local M = {}
 
 local form = require("atlas.ui.popups.form")
 local git_branch = require("atlas.core.git")
+local keymaps = require("atlas.core.keymaps")
 local config = require("atlas.config")
 local spinner = require("atlas.ui.popups.spinner")
 local pulls_helper = require("atlas.pulls.ui.main.helper")
@@ -9,34 +10,25 @@ local multi_select = require("atlas.ui.popups.multi_select")
 
 local DEFAULT_GITHUB_PR_TEMPLATE = ".github/pull_request_template.md"
 
----@class CreatePRLayout
----@field container_buf integer|nil
----@field container_win integer|nil
----@field title_buf integer|nil
----@field title_win integer|nil
----@field meta_buf integer|nil
----@field meta_win integer|nil
----@field desc_buf integer|nil
----@field desc_win integer|nil
-
 ---@class CreatePRFields
 ---@field repo_slug string         -- "owner/repo"
 ---@field repo_root string         -- absolute path to local repo
 ---@field provider PullsProvider|nil
 ---@field head string              -- source branch
 ---@field base string              -- destination branch
----@field title string
----@field body string
 ---@field draft boolean
 ---@field commit_count integer
+---@field commits { hash: string, subject: string }[]
+---@field diffstat string[]
 ---@field available_bases string[]
 ---@field reviewers PullsCreatePRReviewer[]|"loading"|string candidates with .selected toggled by user, or "loading", or an error message string
 
 ---@class CreatePRState
 ---@field fields CreatePRFields
----@field layout CreatePRLayout
+---@field layout AtlasFormLayout
 ---@field content_width integer
 ---@field is_submitting boolean
+---@field settings_changed boolean
 
 local function notify(level, msg)
 	vim.notify("[Atlas] " .. tostring(msg), level)
@@ -98,14 +90,17 @@ end
 ---@return string title
 ---@return string body
 ---@return integer commit_count
+---@return { hash: string, subject: string }[] commits
+---@return string[] diffstat
 local function build_pr_content(root, repo_slug, base, head)
 	local commits = git_branch.commits_for_range(root, git_branch.commit_range(root, base, head))
+	local diffstat = git_branch.diff_stat(root, base, head) or {}
 	local latest_commit = commits[#commits]
 	local title = latest_commit and latest_commit.subject or ""
 
 	local template = trim(read_configured_pr_template(root, repo_slug))
 	if template ~= "" then
-		return title, template, #commits
+		return title, template, #commits, commits, diffstat
 	end
 
 	local commit_lines = {}
@@ -113,23 +108,19 @@ local function build_pr_content(root, repo_slug, base, head)
 		table.insert(commit_lines, string.format("- `%s` %s", commit.hash, commit.subject))
 	end
 
-	return title, table.concat(commit_lines, "\n"), #commits
+	return title, table.concat(commit_lines, "\n"), #commits, commits, diffstat
 end
 
 ---@param provider_id "github"|"bitbucket"|"gitlab"
 ---@return PullsProvider|nil, string|nil
 local function load_provider(provider_id)
-	local ok, mod
-	if provider_id == "github" then
-		ok, mod = pcall(require, "atlas.pulls.providers.github")
-	elseif provider_id == "bitbucket" then
-		ok, mod = pcall(require, "atlas.pulls.providers.bitbucket")
-	elseif provider_id == "gitlab" then
-		ok, mod = pcall(require, "atlas.pulls.providers.gitlab")
-	else
+	local ok, mod = pcall(function()
+		return require("atlas.pulls.providers").get(provider_id)
+	end)
+
+	if ok and mod == nil then
 		return nil, "Unsupported provider: " .. tostring(provider_id)
 	end
-
 	if not ok or type(mod) ~= "table" then
 		return nil, "Failed to load provider: " .. tostring(provider_id)
 	end
@@ -185,7 +176,7 @@ local function reviewers_value(pr_state)
 end
 
 ---@param pr_state CreatePRState
----@return EditorPopupMetaRow[]
+---@return AtlasFormMetaRow[]
 local function meta_rows(pr_state)
 	local repo = tostring(pr_state.fields.repo_slug or "")
 	local head = tostring(pr_state.fields.head or "")
@@ -205,25 +196,63 @@ local function meta_rows(pr_state)
 	}
 end
 
-local function valid_buf(buf)
-	return buf ~= nil and vim.api.nvim_buf_is_valid(buf)
+---@param pr_state CreatePRState
+---@return string[]
+local function commit_context(pr_state)
+	local lines = {}
+	for _, commit in ipairs(pr_state.fields.commits) do
+		table.insert(lines, string.format("%s  %s", commit.hash, commit.subject))
+	end
+	if #lines == 0 then
+		table.insert(lines, "No commits")
+	end
+	if #pr_state.fields.diffstat > 0 then
+		table.insert(lines, "")
+		vim.list_extend(lines, pr_state.fields.diffstat)
+	end
+	return lines
+end
+
+---@param pr_state CreatePRState
+local function refresh_commits(pr_state)
+	local range = git_branch.commit_range(pr_state.fields.repo_root, pr_state.fields.base, pr_state.fields.head)
+	pr_state.fields.commits = git_branch.commits_for_range(pr_state.fields.repo_root, range)
+	pr_state.fields.commit_count = #pr_state.fields.commits
+	pr_state.fields.diffstat = git_branch.diff_stat(
+		pr_state.fields.repo_root,
+		pr_state.fields.base,
+		pr_state.fields.head
+	) or {}
+	form.render_context(pr_state, commit_context(pr_state))
+end
+
+---@param pr_state CreatePRState
+local function preview_diff(pr_state)
+	local base, head, err =
+		git_branch.diff_revisions(pr_state.fields.repo_root, pr_state.fields.base, pr_state.fields.head)
+	if not base or not head then
+		notify_error(err or "Unable to resolve diff revisions")
+		return
+	end
+	require("atlas.pulls.actions").open_diff_range({
+		git_root = pr_state.fields.repo_root,
+		base_revision = base,
+		head_revision = head,
+	}, function(open_err)
+		if open_err then
+			notify_error("Unable to open diff: " .. tostring(open_err))
+		end
+	end)
 end
 
 ---@param pr_state CreatePRState
 local function get_title(pr_state)
-	if not valid_buf(pr_state.layout.title_buf) then
-		return ""
-	end
-	local lines = vim.api.nvim_buf_get_lines(pr_state.layout.title_buf, 0, -1, false)
-	return vim.trim(table.concat(lines, " "))
+	return vim.trim(form.get_title(pr_state.layout))
 end
 
 ---@param pr_state CreatePRState
 local function get_body(pr_state)
-	if not valid_buf(pr_state.layout.desc_buf) then
-		return ""
-	end
-	return table.concat(vim.api.nvim_buf_get_lines(pr_state.layout.desc_buf, 0, -1, false), "\n")
+	return form.get_body(pr_state.layout)
 end
 
 ---@param pr_state CreatePRState
@@ -241,7 +270,7 @@ end
 local function confirm_close(pr_state)
 	local title = get_title(pr_state)
 	local body = get_body(pr_state)
-	if title == "" and body == "" then
+	if not pr_state.settings_changed and title == "" and body == "" then
 		close(pr_state)
 		return
 	end
@@ -257,7 +286,7 @@ end
 ---@param pr_state CreatePRState
 local function pick_base(pr_state, on_change)
 	local choices = pr_state.fields.available_bases
-	if type(choices) ~= "table" or #choices == 0 then
+	if #choices == 0 then
 		notify_warn("No base branches available")
 		return
 	end
@@ -401,7 +430,7 @@ local function submit(pr_state)
 
 	local body = get_body(pr_state)
 	local provider = pr_state.fields.provider
-	if type(provider) ~= "table" or type(provider.create_pr) ~= "function" then
+	if not provider or not provider.create_pr then
 		notify_error("Provider does not support PR creation")
 		return
 	end
@@ -417,7 +446,7 @@ local function submit(pr_state)
 	end
 
 	pr_state.is_submitting = true
-	spinner.start("Creating pull request…")
+	spinner.start("Creating pull request..")
 
 	local selected_reviewers = {}
 	if type(pr_state.fields.reviewers) == "table" then
@@ -429,7 +458,7 @@ local function submit(pr_state)
 	end
 
 	local function do_create()
-		spinner.start("Creating pull request…")
+		spinner.start("Creating pull request..")
 		provider.create_pr({
 			repo_slug = pr_state.fields.repo_slug,
 			repo_root = pr_state.fields.repo_root,
@@ -459,7 +488,7 @@ local function submit(pr_state)
 		return
 	end
 
-	spinner.start("Pushing " .. pr_state.fields.head .. " to origin…")
+	spinner.start("Pushing " .. pr_state.fields.head .. " to origin..")
 	git_branch.push_branch(pr_state.fields.repo_root, pr_state.fields.head, "origin", function(ok, push_err)
 		if not ok then
 			pr_state.is_submitting = false
@@ -482,6 +511,8 @@ end
 ---@field initial_body string
 ---@field draft boolean
 ---@field commit_count integer
+---@field commits { hash: string, subject: string }[]|nil
+---@field diffstat string[]|nil
 
 ---@param opts CreatePROpenOpts
 function M.open(opts)
@@ -497,26 +528,79 @@ function M.open(opts)
 			repo_root = opts.repo_root,
 			head = opts.head,
 			base = opts.base,
-			title = opts.initial_title,
-			body = opts.initial_body,
 			draft = opts.draft,
 			commit_count = opts.commit_count,
-			available_bases = type(opts.available_bases) == "table" and opts.available_bases or { opts.base },
+			commits = opts.commits or {},
+			diffstat = opts.diffstat or {},
+			available_bases = opts.available_bases or { opts.base },
 			reviewers = "loading",
 		},
 		layout = {},
 		content_width = 80,
 		is_submitting = false,
+		settings_changed = false,
 	}
 
+	local form_keymaps = {
+		{
+			key = "gb",
+			mode = "n",
+			buffers = { "editor", "context" },
+			desc = "base",
+			action = function()
+				pick_base(pr_state, function()
+					pr_state.settings_changed = true
+					refresh_commits(pr_state)
+					render_meta(pr_state)
+				end)
+			end,
+		},
+		{
+			key = "gD",
+			mode = "n",
+			buffers = { "editor", "context" },
+			desc = "toggle draft",
+			action = function()
+				pr_state.fields.draft = not pr_state.fields.draft
+				pr_state.settings_changed = true
+				render_meta(pr_state)
+			end,
+		},
+		{
+			key = "gr",
+			mode = "n",
+			buffers = { "editor", "context" },
+			desc = "reviewers",
+			action = function()
+				pick_reviewers(pr_state, function()
+					pr_state.settings_changed = true
+					render_meta(pr_state)
+				end)
+			end,
+		},
+	}
+	local diff_keys = keymaps.resolve("pulls.open_diff")
+	if diff_keys then
+		table.insert(form_keymaps, {
+			key = #diff_keys == 1 and diff_keys[1] or diff_keys,
+			mode = "n",
+			buffers = { "editor", "context" },
+			desc = "preview diff",
+			action = function()
+				preview_diff(pr_state)
+			end,
+		})
+	end
+
 	form.open(pr_state, {
-		title = " Create Pull Request ",
-		min_height = 20,
-		meta_height = 3,
-		title_winbar = "Title",
-		desc_winbar = "Description",
-		initial_title = pr_state.fields.title,
-		initial_body = pr_state.fields.body,
+		context_title = "Commits",
+		context = function()
+			return commit_context(pr_state)
+		end,
+		title_label = "Title",
+		body_label = "Description",
+		initial_title = opts.initial_title,
+		initial_body = opts.initial_body,
 		close = function()
 			confirm_close(pr_state)
 		end,
@@ -526,43 +610,7 @@ function M.open(opts)
 		meta = function()
 			return meta_rows(pr_state)
 		end,
-		keymaps = {
-			{
-				key = "gb",
-				mode = "n",
-				buffers = { "title", "desc" },
-				desc = "base",
-				show_in_footer = true,
-				action = function()
-					pick_base(pr_state, function()
-						render_meta(pr_state)
-					end)
-				end,
-			},
-			{
-				key = "gd",
-				mode = "n",
-				buffers = { "title", "desc" },
-				desc = "toggle draft",
-				show_in_footer = true,
-				action = function()
-					pr_state.fields.draft = not pr_state.fields.draft
-					render_meta(pr_state)
-				end,
-			},
-			{
-				key = "gr",
-				mode = "n",
-				buffers = { "title", "desc" },
-				desc = "reviewers",
-				show_in_footer = true,
-				action = function()
-					pick_reviewers(pr_state, function()
-						render_meta(pr_state)
-					end)
-				end,
-			},
-		},
+		keymaps = form_keymaps,
 	})
 
 	load_reviewers(pr_state, function()
@@ -604,7 +652,7 @@ function M.start()
 		notify_error(provider_err or "Provider unavailable")
 		return
 	end
-	if type(provider.create_pr) ~= "function" then
+	if not provider.create_pr then
 		notify_error("Provider " .. info.provider .. " does not support PR creation")
 		return
 	end
@@ -626,7 +674,7 @@ function M.start()
 		end
 	end
 
-	local default_title, default_body, commit_count = build_pr_content(root, info.slug, base, head)
+	local default_title, default_body, commit_count, commits, diffstat = build_pr_content(root, info.slug, base, head)
 
 	M.open({
 		provider = provider,
@@ -639,6 +687,8 @@ function M.start()
 		initial_body = default_body,
 		draft = false,
 		commit_count = commit_count,
+		commits = commits,
+		diffstat = diffstat,
 	})
 end
 

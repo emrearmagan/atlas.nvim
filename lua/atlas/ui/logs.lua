@@ -18,14 +18,6 @@ local logs_buf = nil
 local logs_win = nil
 local refresh_timer = nil
 
----@return integer|nil
-function M.win_id()
-	if logs_win ~= nil and vim.api.nvim_win_is_valid(logs_win) then
-		return logs_win
-	end
-	return nil
-end
-
 ---@param line string
 ---@return table
 local function parse_log_line(line)
@@ -192,12 +184,8 @@ function M.open()
 		return
 	end
 
-	local layout = require("atlas.ui.layout")
-	local anchor = layout.win_id("footer") or vim.api.nvim_get_current_win()
-	vim.api.nvim_win_call(anchor, function()
-		vim.cmd("belowright 12split")
-		logs_win = vim.api.nvim_get_current_win()
-	end)
+	vim.cmd("botright 12split")
+	logs_win = vim.api.nvim_get_current_win()
 
 	vim.api.nvim_win_set_buf(logs_win, buf)
 	vim.api.nvim_set_option_value("number", false, { win = logs_win })

@@ -80,7 +80,8 @@ local function to_thread_item(commit, width)
 	end
 
 	-- Truncate message to leave room for hash + icon + gaps
-	local icon_width = vim.api.nvim_strwidth(icons.pulls("commit")) + 1
+	local commit_icon, commit_icon_hl = icons.pulls("commit")
+	local icon_width = vim.api.nvim_strwidth(commit_icon) + 1
 	local hash_width = #hash + 2
 	local max_msg = width - PADDING_X - icon_width - hash_width
 	if max_msg > 0 and vim.api.nvim_strwidth(message) > max_msg then
@@ -88,8 +89,8 @@ local function to_thread_item(commit, width)
 	end
 
 	return {
-		icon = icons.pulls("commit"),
-		icon_hl = "AtlasTextMuted",
+		icon = commit_icon,
+		icon_hl = commit_icon_hl,
 		author = message,
 		right_text = hash,
 		content = content,
@@ -104,10 +105,10 @@ local function to_thread_item(commit, width)
 end
 
 ---@param pr PullRequest
----@param repo PullsRepo|nil
+---@param _repo PullsRepo|nil
 ---@param refresh fun()
 ---@param opts { force_refresh: boolean|nil }|nil
-function M.on_select(pr, repo, refresh, opts)
+function M.on_select(pr, _repo, refresh, opts)
 	opts = opts or {}
 
 	local provider = get_provider()
@@ -116,14 +117,17 @@ function M.on_select(pr, repo, refresh, opts)
 	end
 
 	local force_refresh = opts.force_refresh == true
-	local should_fetch = force_refresh or state.commits == nil or state.commits == "loading" or type(state.commits) == "string"
+	local should_fetch = force_refresh
+		or state.commits == nil
+		or state.commits == "loading"
+		or type(state.commits) == "string"
 
 	if should_fetch then
 		cancel_all()
 		state.reset()
 	end
 
-	if should_fetch and type(provider.fetch_commits) == "function" then
+	if should_fetch and provider.fetch_commits then
 		local pr_id = tostring(pr.id or "")
 		state.commits = "loading"
 		footer.notify("loading", string.format("Loading commits for #%s...", pr_id))
@@ -139,7 +143,7 @@ function M.on_select(pr, repo, refresh, opts)
 			footer.notify("success", string.format("Commits loaded for #%s", pr_id), 1200)
 
 			-- Fetch build statuses for the first N commits
-			if type(provider.fetch_commit_status) == "function" and type(state.commits) == "table" then
+			if provider.fetch_commit_status and type(state.commits) == "table" then
 				local count = math.min(MAX_STATUS_COMMITS, #state.commits)
 				for i = 1, count do
 					local commit = state.commits[i]
@@ -164,10 +168,10 @@ function M.on_select(pr, repo, refresh, opts)
 	end
 end
 
----@param pr PullRequest
+---@param _pr PullRequest
 ---@param width integer
 ---@return string[], table[], table<integer, table>|nil
-function M.render(pr, width)
+function M.render(_pr, width)
 	local lines = {}
 	local spans = {}
 	local line_map = {}

@@ -7,7 +7,7 @@ local helper = require("atlas.pulls.ui.main.helper")
 ---@param pr PullRequest
 ---@return string[], table[]
 function M.content(pr)
-	local raw = type(pr._raw) == "table" and pr._raw or {}
+	local raw = pr._raw
 	local id = tostring(pr.id or "")
 	local title = tostring(pr.title or "")
 	local author_name = tostring((pr.author and pr.author.name) or "Unknown")
@@ -72,12 +72,16 @@ function M.content(pr)
 		end
 	end
 	if decision ~= "" and decision ~= "REVIEW_REQUIRED" then
-		local review_icon = decision == "APPROVED" and icons.pulls_status("successful")
-			or decision == "CHANGES_REQUESTED" and icons.pulls_status("failed")
-			or icons.pulls_status("inprogress")
-		local decision_hl = decision == "APPROVED" and "AtlasTextPositive"
-			or decision == "CHANGES_REQUESTED" and "AtlasTextWarning"
-			or "AtlasTextMuted"
+		local review_icon, decision_hl
+		if decision == "APPROVED" then
+			review_icon, decision_hl = icons.pulls_status("successful")
+		elseif decision == "CHANGES_REQUESTED" then
+			review_icon = icons.pulls_status("failed")
+			decision_hl = "AtlasTextWarning"
+		else
+			review_icon = icons.pulls_status("inprogress")
+			decision_hl = "AtlasTextMuted"
+		end
 		table.insert(rows, { "Review", review_icon, decision_hl })
 	end
 
@@ -86,12 +90,14 @@ function M.content(pr)
 	end)
 	if rollup_ok and type(rollup_state) == "string" then
 		local s = rollup_state:upper()
-		local ci_icon = (s == "SUCCESS") and icons.pulls_status("successful")
-			or (s == "FAILURE" or s == "ERROR") and icons.pulls_status("failed")
-			or icons.pulls_status("inprogress")
-		local ci_hl = (s == "SUCCESS") and "AtlasTextPositive"
-			or (s == "FAILURE" or s == "ERROR") and "AtlasLogError"
-			or "AtlasTextWarning"
+		local ci_icon, ci_hl
+		if s == "SUCCESS" then
+			ci_icon, ci_hl = icons.pulls_status("successful")
+		elseif s == "FAILURE" or s == "ERROR" then
+			ci_icon, ci_hl = icons.pulls_status("failed")
+		else
+			ci_icon, ci_hl = icons.pulls_status("inprogress")
+		end
 		table.insert(rows, { "CI", ci_icon, ci_hl })
 	end
 

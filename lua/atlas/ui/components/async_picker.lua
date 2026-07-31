@@ -28,7 +28,7 @@ local spinner_component = require("atlas.ui.components.spinner")
 ---@field fetch_on_open boolean|nil          -- default true; fire fetch immediately with initial query
 ---@field spinner any
 ---@field fetch AsyncPickerFetchFn
----@field format_item fun(item: AsyncPickerItem): string|nil
+---@field format_item fun(item: AsyncPickerItem): string|nil, string|nil
 ---@field on_select fun(item: AsyncPickerItem)
 ---@field on_cancel fun()|nil
 
@@ -132,10 +132,12 @@ local function render_results(state, opts)
 		end
 
 		local label = sanitize_line(item.label or "")
+		local label_hl = nil
 		if opts.format_item then
-			local ok, formatted = pcall(opts.format_item, item)
+			local ok, formatted, formatted_hl = pcall(opts.format_item, item)
 			if ok and type(formatted) == "string" then
 				label = sanitize_line(formatted)
+				label_hl = type(formatted_hl) == "string" and formatted_hl or nil
 			end
 		end
 
@@ -150,6 +152,14 @@ local function render_results(state, opts)
 		item_index_to_line[item_idx] = #lines
 		line_to_item_index[#lines] = item_idx
 		count = count + 1
+		if label_hl then
+			table.insert(highlights, {
+				line = #lines - 1,
+				start_col = 2,
+				end_col = 2 + #label,
+				hl = label_hl,
+			})
+		end
 
 		if secondary ~= "" then
 			local label_end = 2 + #label

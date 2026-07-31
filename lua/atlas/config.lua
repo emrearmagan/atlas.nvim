@@ -1,15 +1,11 @@
---------------------------------------------------------------------------------
 -- Keymaps
---------------------------------------------------------------------------------
 
 ---@alias AtlasKeymapValue string|string[]|false|nil
 
 ---@alias AtlasPullsProviderId "bitbucket"|"github"|"gitlab"
 ---@alias AtlasIssuesProviderId "jira"|"github"|"gitlab"
 
---------------------------------------------------------------------------------
 -- Pulls Provider Config
---------------------------------------------------------------------------------
 
 ---@class AtlasPullsViewConfig
 ---@field name string
@@ -29,8 +25,21 @@
 ---@field readme string|nil
 ---@field pr_template string|nil
 
+---@class AtlasPullsDiffExplorerConfig
+---@field grouped boolean|nil
+---@field hidden boolean|nil
+---@field show_commits boolean|nil
+---@field width integer|nil
+---@field initial_focus "explorer"|"diff"|nil
+---@field ignore string[]|nil
+
+---@alias AtlasPullsDiffOpenCommand "AtlasDiff"|"DiffviewOpen"|"CodeDiff"
+
 ---@class AtlasPullsDiffConfig
----@field open_cmd "DiffviewOpen"|"CodeDiff"|string|nil
+---@field open_cmd AtlasPullsDiffOpenCommand|nil
+---@field layout "side-by-side"|"inline"|nil
+---@field compact boolean|nil
+---@field explorer AtlasPullsDiffExplorerConfig|nil
 
 ---@class AtlasPullsCustomActionContext
 ---@field repo_path string|nil
@@ -43,9 +52,7 @@
 ---@field confirmation boolean|nil
 ---@field run fun(pr: PullRequest, ctx: AtlasPullsCustomActionContext, done: fun(ok: boolean|nil, message: string|nil))
 
---------------------------------------------------------------------------------
 -- Configs
---------------------------------------------------------------------------------
 
 ---@class AtlasPullsProviders
 ---@field bitbucket AtlasBitbucketConfig|nil
@@ -79,9 +86,7 @@
 ---@field custom_actions AtlasIssuesCustomAction[]|nil
 ---@field providers AtlasIssuesProviders|nil
 
---------------------------------------------------------------------------------
 -- Config
---------------------------------------------------------------------------------
 
 ---@class AtlasConfig
 ---@field pulls AtlasPullsConfig|nil
@@ -92,7 +97,21 @@ local M = {}
 
 ---@type AtlasConfig
 M.options = {
-	pulls = nil,
+	pulls = {
+		diff = {
+			open_cmd = "AtlasDiff",
+			layout = "side-by-side",
+			compact = true,
+			explorer = {
+				grouped = true,
+				hidden = false,
+				show_commits = true,
+				width = 40,
+				initial_focus = "explorer",
+				ignore = { ".git/**", ".jj/**" },
+			},
+		},
+	},
 	issues = nil,
 	keymaps = {
 		ui = {
@@ -120,8 +139,25 @@ M.options = {
 			copy_id = "y",
 			open_diff = "gd",
 			checkout = "gc",
-			next_hunk = "]h",
-			previous_hunk = "[h",
+			review = {
+				toggle_layout = "t",
+				toggle_compact = "f",
+				next_hunk = "]h",
+				previous_hunk = "[h",
+				next_file = { "]f", "<Tab>" },
+				previous_file = { "[f", "<S-Tab>" },
+				toggle_file_reviewed = "-",
+				toggle_commits = "gC",
+				next_comment = "]c",
+				previous_comment = "[c",
+				next_note = "]n",
+				previous_note = "[n",
+				view_thread = "K",
+				add_pending_comment = "c",
+				add_comment = "C",
+				add_note = "n",
+				toggle_resolved = "x",
+			},
 			filter_status_open = "gpo",
 			filter_status_merged = "gpm",
 			filter_status_declined = "gpd",
@@ -137,18 +173,19 @@ M.options = {
 	},
 }
 
---------------------------------------------------------------------------------
 -- Commands
---------------------------------------------------------------------------------
 
 local function register_commands()
 	pcall(vim.api.nvim_del_user_command, "AtlasPulls")
 	pcall(vim.api.nvim_del_user_command, "AtlasIssues")
 	pcall(vim.api.nvim_del_user_command, "AtlasSearch")
+	pcall(vim.api.nvim_del_user_command, "AtlasOpen")
 	pcall(vim.api.nvim_del_user_command, "AtlasLogs")
 	pcall(vim.api.nvim_del_user_command, "AtlasClearCache")
 	pcall(vim.api.nvim_del_user_command, "AtlasCreatePR")
 	pcall(vim.api.nvim_del_user_command, "AtlasCreateIssue")
+	pcall(vim.api.nvim_del_user_command, "AtlasDiff")
+	pcall(vim.api.nvim_del_user_command, "AtlasNotes")
 
 	vim.api.nvim_create_user_command("AtlasLogs", function()
 		require("atlas.ui.logs").toggle()
@@ -197,6 +234,22 @@ local function register_commands()
 		require("atlas.issues.create").start()
 	end, { desc = "Create an issue" })
 
+	vim.api.nvim_create_user_command("AtlasDiff", function(opts)
+		require("atlas.pulls.actions").open_atlas_diff(opts.args)
+	end, {
+		desc = "Open a Git range or pull request in AtlasDiff",
+		nargs = 1,
+	})
+
+	vim.api.nvim_create_user_command("AtlasNotes", function(opts)
+		require("atlas.pulls.notes.ui").open({
+			target = opts.args ~= "" and opts.args or nil,
+		})
+	end, {
+		desc = "Open local review notes",
+		nargs = "?",
+	})
+
 	vim.api.nvim_create_user_command("AtlasSearch", function(opts)
 		local provider_id = opts.fargs[1] and opts.fargs[1]:lower() or nil
 		require("atlas.commands.search").run(provider_id)
@@ -207,11 +260,16 @@ local function register_commands()
 			return require("atlas.commands.search").complete(arglead)
 		end,
 	})
+
+	vim.api.nvim_create_user_command("AtlasOpen", function(opts)
+		require("atlas.commands.open").open(opts.args)
+	end, {
+		desc = "Open a provider URL or reference",
+		nargs = 1,
+	})
 end
 
---------------------------------------------------------------------------------
 -- Setup
---------------------------------------------------------------------------------
 
 ---@param opts AtlasConfig|table|nil
 function M.setup(opts)

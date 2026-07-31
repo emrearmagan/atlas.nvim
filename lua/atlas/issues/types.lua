@@ -40,7 +40,7 @@
 ---@field url string|nil
 ---@field is_pinned boolean|nil
 ---@field is_subscribed boolean|nil
----@field _raw any|nil
+---@field _raw table|nil
 
 --------------------------------------------------------------------------------
 -- Group
@@ -89,6 +89,7 @@
 ---@field children IssueComment[]|nil
 ---@field reactions table<string, number>|nil
 ---@field deleted boolean|nil
+---@field _raw table|nil
 
 --------------------------------------------------------------------------------
 -- History

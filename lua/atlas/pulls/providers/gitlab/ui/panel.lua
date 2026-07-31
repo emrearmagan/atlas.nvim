@@ -36,7 +36,7 @@ end
 ---@param pr PullRequest
 ---@return PullsPanelHeaderRow[]
 function M.header_rows(pr)
-	local raw = pr._raw or {}
+	local raw = pr._raw
 	local assignees = type(raw.assignees) == "table" and raw.assignees or {}
 
 	local logins = {}
@@ -103,7 +103,7 @@ function M.chips(pr)
 	end
 
 	local MAX_LABELS = 10
-	local raw = type(pr._raw) == "table" and pr._raw or {}
+	local raw = pr._raw
 	local labels = type(raw.labels) == "table" and raw.labels or {}
 	local by_name = state.labels_by_name or {}
 	local shown = 0
@@ -146,8 +146,7 @@ function M.fetches(pr, refresh, opts)
 	reset_state()
 
 	local force = opts and opts.force_refresh == true
-	local raw = type(pr._raw) == "table" and pr._raw or {}
-	local project_path = tostring(raw.project_path or pr.repo_full_name or "")
+	local project_path = pr.repo_full_name
 
 	if project_path ~= "" then
 		state.header_loading = true
@@ -166,6 +165,16 @@ function M.fetches(pr, refresh, opts)
 		refresh()
 	end))
 
+	local provider = require("atlas.pulls.state").provider
+	local panel_state = require("atlas.pulls.ui.panel.pr.state")
+	panel_state.diffstat = "loading"
+	if provider and provider.fetch_diffstat then
+		track_panel(provider.fetch_diffstat(pr, { force_refresh = force }, function(entries, err)
+			panel_state.diffstat = err and err or (entries or {})
+			refresh()
+		end))
+	end
+
 	local overview_state = require("atlas.pulls.ui.panel.pr.tabs.overview.state")
 	local checks = require("atlas.pulls.providers.gitlab.api.checks")
 	overview_state.builds = "loading"
@@ -173,7 +182,6 @@ function M.fetches(pr, refresh, opts)
 		overview_state.builds = err and err or (builds or {})
 		refresh()
 	end))
-
 end
 
 ---@param _pr PullRequest
@@ -205,36 +213,38 @@ end
 
 ---@return PullsPanelTab[]
 function M.tabs()
+	local overview_icon, overview_hl = icons.general("overview")
+	local conversation_icon, conversation_hl = icons.general("conversation")
+	local review_icon, review_hl = icons.pulls("review")
+	local commit_icon, commit_hl = icons.pulls("commit")
 	return {
 		{
 			key = "overview",
 			label = "Overview",
-			icon = icons.general("overview"),
+			icon = overview_icon,
+			icon_hl = overview_hl,
 			mod = require("atlas.pulls.ui.panel.pr.tabs.overview"),
 		},
 		{
 			key = "conversation",
 			label = "Conversation",
-			icon = icons.general("conversation"),
+			icon = conversation_icon,
+			icon_hl = conversation_hl,
 			mod = require("atlas.pulls.ui.panel.pr.tabs.conversation"),
 		},
 		{
 			key = "review",
 			label = "Review",
-			icon = icons.pulls("review"),
+			icon = review_icon,
+			icon_hl = review_hl,
 			mod = require("atlas.pulls.ui.panel.pr.tabs.review"),
 		},
 		{
 			key = "commits",
 			label = "Commits",
-			icon = icons.pulls("commit"),
+			icon = commit_icon,
+			icon_hl = commit_hl,
 			mod = require("atlas.pulls.ui.panel.pr.tabs.commits"),
-		},
-		{
-			key = "files",
-			label = "Changes",
-			icon = icons.pulls("changes"),
-			mod = require("atlas.pulls.ui.panel.pr.tabs.files"),
 		},
 	}
 end

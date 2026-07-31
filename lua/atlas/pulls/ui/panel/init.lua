@@ -31,12 +31,8 @@ end
 function M.on_select(pr, repo, opts)
 	local target_panel = active_panel()
 	local prev_panel = inactive_panel()
-	if type(prev_panel.deactivate) == "function" then
-		prev_panel.deactivate()
-	end
-	if type(target_panel.activate) == "function" then
-		target_panel.activate()
-	end
+	prev_panel.deactivate()
+	target_panel.activate()
 	local detail_buf = require("atlas.ui.layout").buf_id("detail")
 	if detail_buf ~= nil and vim.api.nvim_buf_is_valid(detail_buf) then
 		require("atlas.pulls.ui.panel.keymaps").register(detail_buf)
@@ -58,9 +54,6 @@ end
 
 function M.close()
 	local panel = active_panel()
-	if type(panel.deactivate) == "function" then
-		panel.deactivate()
-	end
 	local result = panel.close()
 	panel_state.reset()
 	return result

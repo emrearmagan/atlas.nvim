@@ -2,64 +2,64 @@ local M = {}
 
 local helper = require("atlas.pulls.ui.main.helper")
 local table_tree = require("atlas.ui.components.table_tree")
-local diff_blocks = require("atlas.ui.components.diff_blocks")
 local icons = require("atlas.ui.shared.icons")
 local utils = require("atlas.ui.shared.utils")
 local state = require("atlas.pulls.state")
 
-local PR_ICON = icons.pulls("pr")
-local MERGED_PR_ICON = icons.pulls("merged_pr")
-local DECLINED_PR_ICON = icons.pulls("declined_pr")
+local PR_ICON, PR_ICON_HL = icons.pulls("pr")
+local MERGED_PR_ICON, MERGED_PR_ICON_HL = icons.pulls("merged_pr")
+local DECLINED_PR_ICON, DECLINED_PR_ICON_HL = icons.pulls("declined_pr")
 local REPO_ICON = icons.pulls("repo")
 
-local PR_STATE_ICON = {
-	open = PR_ICON,
-	draft = PR_ICON,
-	merged = MERGED_PR_ICON,
-	declined = DECLINED_PR_ICON,
-}
+---@param additions number
+---@param deletions number
+---@return string, table[]
+local function diff_stats(additions, deletions)
+	if additions + deletions == 0 then
+		return "", {}
+	end
 
-local PR_STATE_ICON_HL = {
-	open = "AtlasPROpen",
-	draft = "AtlasPRDraft",
-	merged = "AtlasPRMerged",
-	declined = "AtlasPRDeclined",
+	local add_text = "+" .. tostring(additions)
+	local del_text = "-" .. tostring(deletions)
+	local text = add_text .. " " .. del_text
+	return text,
+		{
+			{ start_col = 0, end_col = #add_text, hl_group = "AtlasTextPositive" },
+			{ start_col = #add_text + 1, end_col = #text, hl_group = "AtlasLogError" },
+		}
+end
+
+local PR_STATE_ICON = {
+	open = { PR_ICON, PR_ICON_HL },
+	draft = { PR_ICON, "AtlasPRDraft" },
+	merged = { MERGED_PR_ICON, MERGED_PR_ICON_HL },
+	declined = { DECLINED_PR_ICON, DECLINED_PR_ICON_HL },
 }
 
 ---@param pr PullRequest
 ---@return string, string
 local function pr_icon_and_hl(pr)
 	local s = tostring(pr.state or ""):lower()
-	return PR_STATE_ICON[s] or PR_ICON, PR_STATE_ICON_HL[s] or "AtlasPROpen"
+	local style = PR_STATE_ICON[s] or PR_STATE_ICON.open
+	return style[1], style[2]
 end
 
 local CI_ICON = {
-	SUCCESS = icons.pulls_status("successful"),
-	FAILURE = icons.pulls_status("failed"),
-	ERROR = icons.pulls_status("failed"),
-	PENDING = icons.pulls_status("inprogress"),
-	EXPECTED = icons.pulls_status("inprogress"),
-}
-
-local CI_HL = {
-	SUCCESS = "AtlasTextPositive",
-	FAILURE = "AtlasLogError",
-	ERROR = "AtlasLogError",
-	PENDING = "AtlasTextWarning",
-	EXPECTED = "AtlasTextWarning",
+	SUCCESS = { icons.pulls_status("successful") },
+	FAILURE = { icons.pulls_status("failed") },
+	ERROR = { icons.pulls_status("failed") },
+	PENDING = { icons.pulls_status("inprogress") },
+	EXPECTED = { icons.pulls_status("inprogress") },
 }
 
 local REVIEW_ICON = {
-	APPROVED = icons.pulls_status("successful"),
-	CHANGES_REQUESTED = icons.pulls_status("inprogress"),
-	REVIEW_REQUIRED = icons.pulls_status("inprogress"),
+	APPROVED = { icons.pulls_status("successful") },
+	CHANGES_REQUESTED = { icons.pulls_status("inprogress") },
+	REVIEW_REQUIRED = { icons.pulls_status("inprogress") },
 }
 
-local REVIEW_HL = {
-	APPROVED = "AtlasTextPositive",
-	CHANGES_REQUESTED = "AtlasTextWarning",
-	REVIEW_REQUIRED = "AtlasTextMuted",
-}
+REVIEW_ICON.CHANGES_REQUESTED[2] = "AtlasTextWarning"
+REVIEW_ICON.REVIEW_REQUIRED[2] = "AtlasTextMuted"
 
 ---@param pr PullRequest
 ---@return string, string
@@ -68,10 +68,16 @@ local function ci_icon_and_hl(pr)
 		return pr._raw.commits.nodes[1].commit.statusCheckRollup.state
 	end)
 	if not ok or type(rollup_state) ~= "string" then
-		return icons.pulls_status("inprogress"), "AtlasTextMuted"
+		local icon = icons.pulls_status("inprogress")
+		return icon, "AtlasTextMuted"
 	end
 	local s = rollup_state:upper()
-	return CI_ICON[s] or icons.pulls_status("inprogress"), CI_HL[s] or "AtlasTextMuted"
+	local style = CI_ICON[s]
+	if not style then
+		local icon = icons.pulls_status("inprogress")
+		return icon, "AtlasTextMuted"
+	end
+	return style[1], style[2]
 end
 
 ---@param pr PullRequest
@@ -81,22 +87,24 @@ local function review_icon_and_hl(pr)
 		return pr._raw.latestOpinionatedReviews.nodes
 	end)
 	if not ok or type(nodes) ~= "table" then
-		return REVIEW_ICON.REVIEW_REQUIRED, REVIEW_HL.REVIEW_REQUIRED
+		return REVIEW_ICON.REVIEW_REQUIRED[1], REVIEW_ICON.REVIEW_REQUIRED[2]
 	end
 	local approved, changes = 0, 0
 	for _, node in ipairs(nodes) do
 		local s = tostring(node.state or ""):upper()
-		if s == "APPROVED" then approved = approved + 1
-		elseif s == "CHANGES_REQUESTED" then changes = changes + 1
+		if s == "APPROVED" then
+			approved = approved + 1
+		elseif s == "CHANGES_REQUESTED" then
+			changes = changes + 1
 		end
 	end
 	if changes > 0 then
-		return REVIEW_ICON.CHANGES_REQUESTED, REVIEW_HL.CHANGES_REQUESTED
+		return REVIEW_ICON.CHANGES_REQUESTED[1], REVIEW_ICON.CHANGES_REQUESTED[2]
 	end
 	if approved > 0 then
-		return REVIEW_ICON.APPROVED, REVIEW_HL.APPROVED
+		return REVIEW_ICON.APPROVED[1], REVIEW_ICON.APPROVED[2]
 	end
-	return REVIEW_ICON.REVIEW_REQUIRED, REVIEW_HL.REVIEW_REQUIRED
+	return REVIEW_ICON.REVIEW_REQUIRED[1], REVIEW_ICON.REVIEW_REQUIRED[2]
 end
 
 ---@param row table
@@ -209,11 +217,8 @@ local function compact_rows(groups)
 			local is_reloading = state.is_pr_reloading(pr.repo_full_name, pr.id)
 			local ci, ci_h = ci_icon_and_hl(pr)
 			local review, review_h = review_icon_and_hl(pr)
-			local diff_result = diff_blocks.render({
-				additions = tonumber(pr._raw and pr._raw.additions) or 0,
-				deletions = tonumber(pr._raw and pr._raw.deletions) or 0,
-				show_count = false,
-			})
+			local diff_text, diff_highlights =
+				diff_stats(tonumber(pr._raw.additions) or 0, tonumber(pr._raw.deletions) or 0)
 			local icon, icon_hl = pr_icon_and_hl(pr)
 			table.insert(rows, {
 				kind = "pr",
@@ -227,8 +232,8 @@ local function compact_rows(groups)
 				ci_hl = ci_h,
 				review = review,
 				review_hl = review_h,
-				diff = diff_result.text,
-				diff_hl = diff_result.highlights,
+				diff = diff_text,
+				diff_hl = diff_highlights,
 				author = string.format("%s %s", icons.general("user"), utils.shorten_name(author_name, 20)),
 				author_hl = author_name,
 				branch = utils.truncate(src .. " → " .. dst, 28),
@@ -317,7 +322,22 @@ local function plain_rows(groups)
 	for i, group in ipairs(groups or {}) do
 		local repo_label = group.repo.name or ""
 		if i > 1 then
-			table.insert(rows, { kind = "spacer", pr_icon = "", name = "", conversation = "", ci = "", ci_hl = "", review = "", review_hl = "", diff = "", diff_hl = nil, author = "", branch = "", created = "", updated = "" })
+			table.insert(rows, {
+				kind = "spacer",
+				pr_icon = "",
+				name = "",
+				conversation = "",
+				ci = "",
+				ci_hl = "",
+				review = "",
+				review_hl = "",
+				diff = "",
+				diff_hl = nil,
+				author = "",
+				branch = "",
+				created = "",
+				updated = "",
+			})
 		end
 		table.insert(rows, {
 			kind = "repo",
@@ -348,11 +368,8 @@ local function plain_rows(groups)
 			local _, icon_hl = pr_icon_and_hl(pr)
 			local ci, ci_h = ci_icon_and_hl(pr)
 			local review, review_h = review_icon_and_hl(pr)
-			local diff_result = diff_blocks.render({
-				additions = tonumber(pr._raw and pr._raw.additions) or 0,
-				deletions = tonumber(pr._raw and pr._raw.deletions) or 0,
-				show_count = false,
-			})
+			local diff_text, diff_highlights =
+				diff_stats(tonumber(pr._raw.additions) or 0, tonumber(pr._raw.deletions) or 0)
 			table.insert(rows, {
 				kind = "pr",
 				pr_icon = icon,
@@ -365,8 +382,8 @@ local function plain_rows(groups)
 				ci_hl = ci_h,
 				review = review,
 				review_hl = review_h,
-				diff = diff_result.text,
-				diff_hl = diff_result.highlights,
+				diff = diff_text,
+				diff_hl = diff_highlights,
 				author = string.format("%s %s", icons.general("user"), utils.shorten_name(author_name, 20)),
 				author_hl = author_name,
 				branch = utils.truncate(src .. " → " .. dst, 28),

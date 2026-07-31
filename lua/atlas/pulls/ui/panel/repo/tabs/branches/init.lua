@@ -46,11 +46,17 @@ local function to_items(repo)
 	local items = {}
 	for _, branch in ipairs((state.branches or {}).entries or {}) do
 		local msg = branch.message and tostring(branch.message:match("^[^\n\r]*") or "") or nil
-		if msg == "" then msg = nil end
+		if msg == "" then
+			msg = nil
+		end
 		local author = branch.author and tostring(branch.author) or nil
-		if author == "" then author = nil end
+		if author == "" then
+			author = nil
+		end
+		local branch_icon, branch_icon_hl = icons.pulls("branch")
 		table.insert(items, {
-			icon = icons.pulls("branch"),
+			icon = branch_icon,
+			icon_hl = branch_icon_hl,
 			author = tostring(branch.name or ""),
 			additional = author,
 			right_text = branch.date and utils.relative_time_text(branch.date) or nil,
@@ -137,7 +143,10 @@ function M.on_select(_pr, repo, refresh, opts)
 	local prev_name = state.repo and state.repo.full_name or ""
 	local next_name = tostring(detail.full_name or "")
 	local repo_label = next_name ~= "" and next_name or tostring(repo.name or repo.id or "")
-	local should_fetch = opts.force_refresh == true or state.branches == nil or state.branches == "loading" or prev_name ~= next_name
+	local should_fetch = opts.force_refresh == true
+		or state.branches == nil
+		or state.branches == "loading"
+		or prev_name ~= next_name
 	state.repo = detail
 	if not should_fetch then
 		refresh()
@@ -150,7 +159,7 @@ function M.on_select(_pr, repo, refresh, opts)
 	refresh()
 
 	local provider = require("atlas.pulls.state").provider
-	if provider == nil or type(provider.fetch_repo_branches) ~= "function" then
+	if provider == nil or not provider.fetch_repo_branches then
 		state.branches = { entries = {} }
 		footer.notify("error", "Branch listing is not supported by this provider")
 		refresh()
@@ -200,7 +209,7 @@ end
 ---@param refresh fun()
 function M.delete_current_branch(refresh)
 	local provider = require("atlas.pulls.state").provider
-	if provider == nil or type(provider.delete_repo_branch) ~= "function" then
+	if provider == nil or not provider.delete_repo_branch then
 		footer.notify("error", "Branch deletion is not supported by this provider")
 		return
 	end

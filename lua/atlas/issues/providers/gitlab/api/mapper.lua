@@ -2,7 +2,7 @@ local M = {}
 
 local json = require("atlas.core.json")
 
----@param raw_user table|nil
+---@param raw_user any Decoded API value.
 ---@return IssueUser|nil
 function M.to_user(raw_user)
 	raw_user = json.nilify(raw_user)
@@ -41,7 +41,7 @@ local function normalize_state(state)
 	return "Open", "open"
 end
 
----@param raw table
+---@param raw any Decoded API value.
 ---@return Issue|nil
 function M.to_issue(raw)
 	raw = json.nilify(raw)
@@ -149,7 +149,7 @@ local function note_id_tail(raw)
 	return s:match("([^/]+)$") or s
 end
 
----@param raw_user table|nil
+---@param raw_user any Decoded API value.
 ---@return IssueUser|nil
 local function gql_user(raw_user)
 	if type(raw_user) ~= "table" then
@@ -166,7 +166,7 @@ local function gql_user(raw_user)
 	}
 end
 
----@param award_emoji table|nil   GraphQL connection { nodes = [{ name = "..." }, ...] }
+---@param award_emoji any GraphQL connection { nodes = [{ name = "..." }, ...] }.
 ---@return table<string, integer>|nil
 local function gql_reactions(award_emoji)
 	if type(award_emoji) ~= "table" then
@@ -186,7 +186,7 @@ local function gql_reactions(award_emoji)
 	return out
 end
 
----@param raw table
+---@param raw any Decoded API value.
 ---@param first_id any|nil           -- id of the root note in this discussion; nil when raw is the root
 ---@param discussion_id string|nil
 ---@return IssueComment|nil
@@ -217,7 +217,7 @@ function M.to_comment_from_note(raw, first_id, discussion_id)
 	}
 end
 
----@param raw table
+---@param raw any Decoded API value.
 ---@return IssueActivityEntry|nil
 function M.to_activity_from_note(raw)
 	raw = json.nilify(raw)

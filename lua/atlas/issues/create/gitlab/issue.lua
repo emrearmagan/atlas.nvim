@@ -5,17 +5,7 @@ local spinner = require("atlas.ui.popups.spinner")
 local multi_select = require("atlas.ui.popups.multi_select")
 local pulls_helper = require("atlas.pulls.ui.main.helper")
 local icons = require("atlas.ui.shared.icons")
-local footer = require("atlas.ui.components.footer")
-
----@class GitLabCreateIssueLayout
----@field container_buf integer|nil
----@field container_win integer|nil
----@field title_buf integer|nil
----@field title_win integer|nil
----@field meta_buf integer|nil
----@field meta_win integer|nil
----@field desc_buf integer|nil
----@field desc_win integer|nil
+local templates = require("atlas.issues.templates")
 
 ---@class GitLabCreateIssueLabel
 ---@field name string
@@ -32,34 +22,28 @@ local footer = require("atlas.ui.components.footer")
 
 ---@class GitLabCreateIssueFields
 ---@field project_path string
----@field title string
----@field body string
 ---@field labels GitLabCreateIssueLabel[]
 ---@field assignees IssueUser[]
 ---@field milestone GitLabCreateIssueMilestone|nil
 
 ---@class GitLabCreateIssueState
 ---@field fields GitLabCreateIssueFields
----@field layout GitLabCreateIssueLayout
+---@field layout AtlasFormLayout
 ---@field content_width integer
 ---@field is_submitting boolean
 ---@field pickers GitLabCreateIssuePickers
 ---@field on_done fun(result: GitLabIssueEditorResult|nil, err: string|nil)|nil
 
 local function notify_info(msg, duration)
-	footer.notify("info", tostring(msg), duration or 1200)
+	vim.notify("[Atlas] " .. tostring(msg), vim.log.levels.INFO, { timeout = duration or 1200 })
 end
 
 local function notify_warn(msg, duration)
-	footer.notify("warn", tostring(msg), duration or 1500)
+	vim.notify("[Atlas] " .. tostring(msg), vim.log.levels.WARN, { timeout = duration or 1500 })
 end
 
 local function notify_error(msg)
-	footer.notify("error", tostring(msg))
-end
-
-local function valid_buf(buf)
-	return buf ~= nil and vim.api.nvim_buf_is_valid(buf)
+	vim.notify("[Atlas] " .. tostring(msg), vim.log.levels.ERROR)
 end
 
 ---@param project_path string
@@ -110,7 +94,7 @@ end
 ---@param assignees IssueUser[]
 ---@return string
 local function format_assignees(assignees)
-	if type(assignees) ~= "table" or #assignees == 0 then
+	if #assignees == 0 then
 		return icons.general("user") .. " Unassigned"
 	end
 
@@ -142,16 +126,16 @@ end
 ---@param milestone GitLabCreateIssueMilestone|nil
 ---@return string
 local function format_milestone(milestone)
-	if type(milestone) ~= "table" then
+	if milestone == nil then
 		return "None"
 	end
 	return tostring(milestone.title or "")
 end
 
 ---@param labels GitLabCreateIssueLabel[]
----@return EditorPopupMetaCell
+---@return AtlasFormMetaCell
 local function labels_cell(labels)
-	if type(labels) ~= "table" or #labels == 0 then
+	if #labels == 0 then
 		return { text = "None", hl = "AtlasTextMuted" }
 	end
 
@@ -185,7 +169,7 @@ local function labels_cell(labels)
 end
 
 ---@param issue_state GitLabCreateIssueState
----@return EditorPopupMetaRow[]
+---@return AtlasFormMetaRow[]
 local function meta_rows(issue_state)
 	local repo = tostring(issue_state.fields.project_path or "")
 	local assignees = issue_state.fields.assignees
@@ -210,19 +194,12 @@ end
 
 ---@param issue_state GitLabCreateIssueState
 local function get_title(issue_state)
-	if not valid_buf(issue_state.layout.title_buf) then
-		return ""
-	end
-	local lines = vim.api.nvim_buf_get_lines(issue_state.layout.title_buf, 0, -1, false)
-	return vim.trim(table.concat(lines, " "))
+	return vim.trim(form.get_title(issue_state.layout))
 end
 
 ---@param issue_state GitLabCreateIssueState
 local function get_body(issue_state)
-	if not valid_buf(issue_state.layout.desc_buf) then
-		return ""
-	end
-	return table.concat(vim.api.nvim_buf_get_lines(issue_state.layout.desc_buf, 0, -1, false), "\n")
+	return form.get_body(issue_state.layout)
 end
 
 ---@param issue_state GitLabCreateIssueState
@@ -255,7 +232,7 @@ end
 
 ---@param issue_state GitLabCreateIssueState
 local function pick_assignees(issue_state)
-	if type(issue_state.pickers.list_assignees) ~= "function" then
+	if not issue_state.pickers.list_assignees then
 		notify_warn("Assignee picker not available")
 		return
 	end
@@ -277,7 +254,12 @@ local function pick_assignees(issue_state)
 					return tostring(item.id or item.account_id or "")
 				end,
 				format = function(item)
-					return string.format("%s %s (@%s)", icons.general("user"), item.display_name or item.account_id, item.account_id)
+					return string.format(
+						"%s %s (@%s)",
+						icons.general("user"),
+						item.display_name or item.account_id,
+						item.account_id
+					)
 				end,
 				prompt = "Toggle assignees:",
 				on_done = function(selected)
@@ -291,7 +273,7 @@ end
 
 ---@param issue_state GitLabCreateIssueState
 local function pick_labels(issue_state)
-	if type(issue_state.pickers.list_labels) ~= "function" then
+	if not issue_state.pickers.list_labels then
 		notify_warn("Label picker not available")
 		return
 	end
@@ -327,7 +309,7 @@ end
 
 ---@param issue_state GitLabCreateIssueState
 local function pick_milestone(issue_state)
-	if type(issue_state.pickers.list_milestones) ~= "function" then
+	if not issue_state.pickers.list_milestones then
 		notify_warn("Milestone picker not available")
 		return
 	end
@@ -390,7 +372,7 @@ local function submit(issue_state)
 	end
 
 	issue_state.is_submitting = true
-	spinner.start("Creating issue…")
+	spinner.start("Creating issue..")
 
 	local issues_api = require("atlas.issues.providers.gitlab.api.issues")
 	issues_api.create_issue({
@@ -407,7 +389,7 @@ local function submit(issue_state)
 
 			if err then
 				notify_error("Create issue failed: " .. tostring(err))
-				if type(issue_state.on_done) == "function" then
+				if issue_state.on_done then
 					issue_state.on_done(nil, err)
 				end
 				return
@@ -421,7 +403,7 @@ local function submit(issue_state)
 				notify_info("Issue created")
 			end
 
-			if type(issue_state.on_done) == "function" then
+			if issue_state.on_done then
 				issue_state.on_done({
 					url = url,
 					key = result and result.key or nil,
@@ -459,8 +441,6 @@ function M.open(opts)
 	local issue_state = {
 		fields = {
 			project_path = project_path,
-			title = "",
-			body = "",
 			labels = {},
 			assignees = {},
 			milestone = nil,
@@ -473,13 +453,10 @@ function M.open(opts)
 	}
 
 	form.open(issue_state, {
-		title = " Create Issue ",
-		min_height = 22,
-		meta_height = 3,
-		title_winbar = "Title",
-		desc_winbar = "Description",
-		initial_title = issue_state.fields.title,
-		initial_body = issue_state.fields.body,
+		title_label = "Title",
+		body_label = "Description",
+		initial_title = "",
+		initial_body = "",
 		close = function()
 			confirm_close(issue_state)
 		end,
@@ -493,9 +470,8 @@ function M.open(opts)
 			{
 				key = "ga",
 				mode = "n",
-				buffers = { "title", "desc" },
+				buffers = { "editor" },
 				desc = "assignees",
-				show_in_footer = true,
 				action = function()
 					pick_assignees(issue_state)
 				end,
@@ -503,9 +479,8 @@ function M.open(opts)
 			{
 				key = "gl",
 				mode = "n",
-				buffers = { "title", "desc" },
+				buffers = { "editor" },
 				desc = "labels",
-				show_in_footer = true,
 				action = function()
 					pick_labels(issue_state)
 				end,
@@ -513,18 +488,35 @@ function M.open(opts)
 			{
 				key = "gm",
 				mode = "n",
-				buffers = { "title", "desc" },
+				buffers = { "editor" },
 				desc = "milestone",
-				show_in_footer = true,
 				action = function()
 					pick_milestone(issue_state)
+				end,
+			},
+			{
+				key = "gt",
+				mode = "n",
+				buffers = { "editor" },
+				desc = "templates",
+				action = function()
+					templates.open({
+						get_description = function()
+							return get_body(issue_state)
+						end,
+						set_description = function(description)
+							return form.set_body(issue_state.layout, description)
+						end,
+						picker_kind = "atlas_gitlab_templates",
+						menu_kind = "atlas_gitlab_templates_menu",
+					})
 				end,
 			},
 		},
 	})
 
 	vim.schedule(function()
-		if vim.api.nvim_get_current_buf() == issue_state.layout.title_buf then
+		if vim.api.nvim_get_current_buf() == issue_state.layout.editor_buf then
 			vim.cmd("startinsert!")
 		end
 	end)

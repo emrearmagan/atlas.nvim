@@ -91,26 +91,10 @@ local function notice_icon(level)
 		return icons.general("info")
 	end
 	if level == "loading" then
-		return "" -- spinner will be used instead of a static icon for loading state
+		return "", "AtlasLogInfo" -- spinner will be used instead of a static icon for loading state
 	end
 
-	return ""
-end
-
-local function notice_hl(level)
-	if level == "success" then
-		return "AtlasTextPositive"
-	end
-	if level == "warn" then
-		return "AtlasLogWarn"
-	end
-	if level == "error" then
-		return "AtlasLogError"
-	end
-	if level == "info" then
-		return "AtlasLogInfo"
-	end
-	return "AtlasTextMuted"
+	return "", "AtlasTextMuted"
 end
 
 local ui_utils = require("atlas.ui.utils")
@@ -210,7 +194,8 @@ function M.notify(level, text, duration_ms)
 	stop_loading()
 
 	if level == "loading" then
-		notice.hl_group = notice_hl("info")
+		local _, icon_hl = notice_icon(level)
+		notice.hl_group = icon_hl
 		loading.text = message
 
 		start_loading(token)
@@ -219,9 +204,9 @@ function M.notify(level, text, duration_ms)
 		return
 	end
 
-	local icon = notice_icon(level)
+	local icon, icon_hl = notice_icon(level)
 	notice.text = icon ~= "" and string.format("%s %s", icon, message) or message
-	notice.hl_group = notice_hl(level)
+	notice.hl_group = icon_hl
 
 	M.refresh()
 
@@ -264,8 +249,10 @@ function M.render(opts)
 	local right_width = ui_utils.text_width(right_line)
 	local max_left = math.max(0, width - right_width - 2)
 	if ui_utils.text_width(left_line) > max_left then
-		local trimmed = vim.fn.strcharpart(left_line, 0, math.max(0, max_left - 1)) .. ".."
-		left_line = trimmed
+		left_line = utils.truncate(left_line, max_left)
+	end
+	for _, hl in ipairs(left_hls) do
+		hl.end_col = math.min(hl.end_col, #left_line)
 	end
 
 	local gap = width - ui_utils.text_width(left_line) - right_width
@@ -280,7 +267,9 @@ function M.render(opts)
 
 	local highlights = {}
 	for _, hl in ipairs(left_hls) do
-		table.insert(highlights, hl)
+		if hl.start_col < hl.end_col then
+			table.insert(highlights, hl)
+		end
 	end
 	local right_offset = #left_line + gap
 	for _, hl in ipairs(right_hls) do

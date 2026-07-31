@@ -5,10 +5,7 @@ local service = require("atlas.pulls.providers.gitlab.api.service")
 ---@param pr PullRequest
 ---@return string project_path, integer|nil iid
 local function project_iid(pr)
-	local raw = type(pr._raw) == "table" and pr._raw or {}
-	local path = tostring(raw.project_path or pr.repo_full_name or "")
-	local iid = tonumber(raw.iid or pr.id)
-	return path, iid
+	return pr.repo_full_name, tonumber(pr.id)
 end
 
 ---@param pr PullRequest

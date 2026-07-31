@@ -7,6 +7,33 @@ local function trim(s)
 	return (s:gsub("^%s+", ""):gsub("%s+$", ""))
 end
 
+---@param args string[] Arguments after `git`.
+---@param opts vim.SystemOpts|nil
+---@param on_done fun(res: vim.SystemCompleted)
+---@return { cancel: fun() }
+function M.run(args, opts, on_done)
+	local cancelled = false
+	local finished = false
+	local handle = vim.system(vim.list_extend({ "git" }, args), opts or {}, function(res)
+		vim.schedule(function()
+			if cancelled then
+				return
+			end
+			finished = true
+			on_done(res)
+		end)
+	end)
+	return {
+		cancel = function()
+			if cancelled or finished then
+				return
+			end
+			cancelled = true
+			pcall(handle.kill, handle, 9)
+		end,
+	}
+end
+
 ---@param cmd string[]
 ---@param cwd string
 ---@param on_done fun(res: vim.SystemCompleted)
@@ -69,16 +96,36 @@ end
 ---@param root string
 ---@param base string
 ---@param head string
+---@return string|nil base_revision
+---@return string|nil head_revision
+---@return string|nil err
+function M.diff_revisions(root, base, head)
+	base = trim(base)
+	head = trim(head)
+	if base == "" or head == "" then
+		return nil, nil, "Base and head branches are required"
+	end
+
+	local base_revision = base
+	local remote_base = base:match("^origin/") and base or "origin/" .. base
+	if M.rev_exists(root, remote_base) then
+		base_revision = remote_base
+	elseif not M.rev_exists(root, base) then
+		return nil, nil, "Base branch not found: " .. base
+	end
+	if not M.rev_exists(root, head) then
+		return nil, nil, "Head branch not found: " .. head
+	end
+	return base_revision, head, nil
+end
+
+---@param root string
+---@param base string
+---@param head string
 ---@return string
 function M.commit_range(root, base, head)
-	local remote_base = "origin/" .. base
-	if M.rev_exists(root, remote_base) then
-		return remote_base .. ".." .. head
-	end
-	if M.rev_exists(root, base) then
-		return base .. ".." .. head
-	end
-	return head
+	local base_revision, head_revision = M.diff_revisions(root, base, head)
+	return base_revision and (base_revision .. ".." .. head_revision) or head
 end
 
 ---@param root string
@@ -100,6 +147,31 @@ function M.commits_for_range(root, range)
 		end
 	end
 	return commits
+end
+
+---@param root string
+---@param base string
+---@param head string
+---@return string[]|nil lines
+---@return string|nil err
+function M.diff_stat(root, base, head)
+	local base_revision, head_revision, revision_err = M.diff_revisions(root, base, head)
+	if not base_revision or not head_revision then
+		return nil, revision_err
+	end
+	local range = base_revision .. "..." .. head_revision
+	local res = vim.system({ "git", "-C", root, "diff", "--find-renames", "--stat", range, "--" }, { text = true })
+		:wait()
+	if res.code ~= 0 then
+		local err = trim(res.stderr)
+		return nil, err ~= "" and err or "Failed to load diff statistics"
+	end
+
+	local lines = {}
+	for line in tostring(res.stdout or ""):gmatch("[^\r\n]+") do
+		table.insert(lines, line)
+	end
+	return lines, nil
 end
 
 ---@param root string
@@ -252,27 +324,24 @@ end
 ---@param remote string
 ---@param branches string[]
 ---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }
 function M.fetch_branches(root, remote, branches, on_done)
-	local cmd = { "git", "fetch", remote }
+	local args = { "fetch", remote }
 	for _, branch in ipairs(branches) do
-		table.insert(cmd, branch)
+		table.insert(args, branch)
 	end
 
-	run(
-		cmd,
-		root,
-		vim.schedule_wrap(function(res)
-			if res.code ~= 0 then
-				local err = trim(res.stderr)
-				if err == "" then
-					err = string.format("git fetch failed with code %d", res.code)
-				end
-				on_done(false, err)
-				return
+	return M.run(args, { cwd = root, text = true }, function(res)
+		if res.code ~= 0 then
+			local err = trim(res.stderr)
+			if err == "" then
+				err = string.format("git fetch failed with code %d", res.code)
 			end
-			on_done(true, nil)
-		end)
-	)
+			on_done(false, err)
+			return
+		end
+		on_done(true, nil)
+	end)
 end
 
 ---@param root string
@@ -297,7 +366,15 @@ end
 ---@param remote string
 ---@param on_done fun(ok: boolean, err: string|nil)
 function M.checkout_remote_branch(root, branch, remote, on_done)
-	run({ "git", "checkout", "-b", branch, remote .. "/" .. branch }, root, function(res)
+	return M.checkout_new_branch(root, branch, remote .. "/" .. branch, on_done)
+end
+
+---@param root string
+---@param branch string
+---@param start_point string
+---@param on_done fun(ok: boolean, err: string|nil)
+function M.checkout_new_branch(root, branch, start_point, on_done)
+	run({ "git", "checkout", "-b", branch, start_point }, root, function(res)
 		if res.code ~= 0 then
 			local err = trim(res.stderr)
 			if err == "" then

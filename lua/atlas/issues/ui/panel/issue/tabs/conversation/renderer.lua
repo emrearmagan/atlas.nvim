@@ -19,7 +19,7 @@ local REPLY_INDENT = "    "
 
 ---@param author IssueUser|nil
 local function author_name(author)
-	if type(author) ~= "table" then
+	if author == nil then
 		return "Unknown"
 	end
 	if author.display_name and author.display_name ~= "" then
@@ -44,7 +44,7 @@ end
 ---@param reactions table|nil
 ---@return string text, table[] spans
 local function format_reactions(reactions)
-	if type(reactions) ~= "table" then
+	if reactions == nil then
 		return "", {}
 	end
 	local emoji_by_key, order = {}, {}
@@ -150,11 +150,13 @@ local function build_comment_sections(comment, verb, width)
 	if rtext ~= "" then
 		reactions = { text = rtext, spans = rspans }
 	end
+	local user_icon, user_icon_hl = icons.general("user")
 
 	return comment_box.render({
 		author = author,
 		author_hl = helper.person_hl(author),
-		icon = icons.general("user"),
+		icon = user_icon,
+		icon_hl = user_icon_hl,
 		verb = verb,
 		timestamp = utils.relative_time(comment.created),
 		actions_text = table.concat(actions, "  "),

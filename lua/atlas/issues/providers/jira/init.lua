@@ -1,12 +1,13 @@
 local icons = require("atlas.ui.shared.icons")
 local config = require("atlas.issues.providers.jira.api.config")
+local provider_icon, provider_hl = icons.issues_provider("jira", "provider")
 
 ---@class JiraProvider : IssuesProvider
 local M = {
 	id = "jira",
 	name = "Jira",
-	icon = icons.issues_provider("jira", "provider"),
-	hl_group = "AtlasJiraTheme",
+	icon = provider_icon,
+	hl_group = provider_hl,
 	panel = require("atlas.issues.providers.jira.ui.panel"),
 	bookmark_query_field = "jql",
 }
@@ -35,20 +36,26 @@ function M.cell_hl(row, col, ctx)
 	return require("atlas.issues.providers.jira.ui.renderer").cell_hl(row, col, ctx)
 end
 
+---@param issue Issue
+---@return string[], table[]
+function M.issue_popup_content(issue)
+	return require("atlas.issues.providers.jira.ui.renderer").issue_popup_content(issue)
+end
+
 ---@param on_done fun(user: IssueUser|nil, err: string|nil)
 function M.fetch_user(on_done)
 	local users_api = require("atlas.issues.providers.jira.api.users")
 	users_api.get_myself(on_done)
 end
 
----@param config AtlasIssuesConfig
+---@param issues_config AtlasIssuesConfig
 ---@param opts IssuesFetchOpts|nil
 ---@return boolean
-local function relationships_enabled(config, opts)
+local function relationships_enabled(issues_config, opts)
 	if opts and (opts.with_relationships == false or opts.layout == "compact") then
 		return false
 	end
-	return config.with_relationships ~= false
+	return issues_config.with_relationships ~= false
 end
 
 ---@param issues Issue[]
@@ -63,7 +70,7 @@ local function enrich_with_parents(issues, opts, on_done)
 
 	local existing = {}
 	for _, issue in ipairs(issues or {}) do
-		if type(issue) == "table" and type(issue.key) == "string" and issue.key ~= "" then
+		if issue.key ~= "" then
 			existing[issue.key] = true
 		end
 	end
@@ -71,7 +78,7 @@ local function enrich_with_parents(issues, opts, on_done)
 	local missing = {}
 	local seen = {}
 	for _, issue in ipairs(issues or {}) do
-		if type(issue) == "table" and type(issue.parent) == "table" then
+		if issue.parent then
 			local pk = tostring(issue.parent.key or "")
 			if pk ~= "" and not existing[pk] and not seen[pk] then
 				seen[pk] = true
@@ -145,7 +152,7 @@ end
 ---@param opts IssuesFetchOpts|nil
 ---@param on_done fun(issue: Issue|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_issue(issue_key, opts, on_done)
+function M.fetch_issue(issue_key, _opts, on_done)
 	local issues_api = require("atlas.issues.providers.jira.api.issues")
 	return issues_api.get_issue(issue_key, on_done)
 end
@@ -170,7 +177,7 @@ end
 function M.add_comment(issue, content, on_done)
 	local issue_key = tostring(issue.key or "")
 	local comments_api = require("atlas.issues.providers.jira.api.comments")
-	return comments_api.add_comment(issue_key, content, on_done)
+	return comments_api.add_comment(issue_key, content, nil, on_done)
 end
 
 ---@param issue Issue
@@ -339,13 +346,14 @@ end
 ---@return AtlasJiraViewConfig[]
 function M.views()
 	local cfg = require("atlas.issues.providers.jira.api.config").jira_config()
-	local views = cfg.views or {
-		{
-			name = "Issues",
-			key = "1",
-			jql = "assignee = currentUser() AND resolution = Unresolved ORDER BY updated DESC",
-		},
-	}
+	local views = cfg.views
+		or {
+			{
+				name = "Issues",
+				key = "1",
+				jql = "assignee = currentUser() AND resolution = Unresolved ORDER BY updated DESC",
+			},
+		}
 	return require("atlas.ui.shared.bookmarks_view").append_to_views(views, cfg.bookmarks, "J", "JQL")
 end
 

@@ -1,215 +1,204 @@
 local M = {}
 
+---@class AtlasIconStyle
+---@field icon string
+---@field hl_group string
+
+---@type table
 local ICONS = {
-	fallback = "•",
+	fallback = { icon = "•", hl_group = "AtlasTextMuted" },
 
 	general = {
-		search = "",
-		refresh = "󰑐",
-		overview = "󰈙",
-		comment = "",
-		conversation = "",
-		created = "󰃭",
-		updated = "󰥔",
-		user = "",
-		reply = "",
-		edit = "",
-		delete = "󰆴",
-		success = "",
-		warning = "",
-		error = "",
-		info = "",
-		bell = "󰂚",
-		bell_no = "󰂛",
-		bell_unread = "󱅫",
-		pin = "󰐃",
-		dot = "●",
-		activity_more = "󰉺",
-		star = "",
-		watching = "",
-		arrow_up = "",
-		arrow_right = "",
+		search = { icon = "", hl_group = "AtlasTextMuted" },
+		folder_closed = { icon = "", hl_group = "AtlasLogInfo" },
+		folder_open = { icon = "", hl_group = "AtlasLogInfo" },
+		refresh = { icon = "󰑐", hl_group = "AtlasTextMuted" },
+		overview = { icon = "󰈙", hl_group = "AtlasTextMuted" },
+		comment = { icon = "", hl_group = "AtlasTextMuted" },
+		conversation = { icon = "", hl_group = "AtlasTextMuted" },
+		created = { icon = "󰃭", hl_group = "AtlasTextMuted" },
+		updated = { icon = "󰥔", hl_group = "AtlasTextMuted" },
+		user = { icon = "", hl_group = "AtlasTextMuted" },
+		reply = { icon = "", hl_group = "AtlasLogInfo" },
+		edit = { icon = "", hl_group = "AtlasLogInfo" },
+		delete = { icon = "󰆴", hl_group = "AtlasLogError" },
+		success = { icon = "", hl_group = "AtlasTextPositive" },
+		warning = { icon = "", hl_group = "AtlasLogWarn" },
+		error = { icon = "", hl_group = "AtlasLogError" },
+		info = { icon = "", hl_group = "AtlasLogInfo" },
+		bell = { icon = "󰂚", hl_group = "AtlasTextMuted" },
+		bell_no = { icon = "󰂛", hl_group = "AtlasTextMuted" },
+		bell_unread = { icon = "󱅫", hl_group = "AtlasLogInfo" },
+		pin = { icon = "󰐃", hl_group = "AtlasTextWarning" },
+		dot = { icon = "●", hl_group = "AtlasTextMuted" },
+		activity_more = { icon = "󰉺", hl_group = "AtlasTextMuted" },
+		star = { icon = "", hl_group = "AtlasTextWarning" },
+		watching = { icon = "", hl_group = "AtlasTextPositive" },
+		arrow_up = { icon = "", hl_group = "AtlasTextMuted" },
+		arrow_right = { icon = "", hl_group = "AtlasTextMuted" },
 	},
 
 	pulls = {
-		fork = "",
-		repo = "",
-		pr = "",
-		merged_pr = "",
-		declined_pr = "",
-		tasks = "󰘽",
-		pipeline = "󰜎",
-		check = "",
-		commit = "󰜘",
-		changes = "󱓉",
-		file = "",
-		activity = "󱐋",
-		tag = "",
-		branch = "",
-		review = "",
+		fork = { icon = "", hl_group = "AtlasLogInfo" },
+		repo = { icon = "", hl_group = "AtlasTextMuted" },
+		pr = { icon = "", hl_group = "AtlasPROpen" },
+		merged_pr = { icon = "", hl_group = "AtlasPRMerged" },
+		declined_pr = { icon = "", hl_group = "AtlasPRDeclined" },
+		tasks = { icon = "󰘽", hl_group = "AtlasTextWarning" },
+		pipeline = { icon = "󰜎", hl_group = "AtlasTextWarning" },
+		check = { icon = "", hl_group = "AtlasLogInfo" },
+		commit = { icon = "󰜘", hl_group = "AtlasTextMuted" },
+		changes = { icon = "󱓉", hl_group = "AtlasTextMuted" },
+		file = { icon = "", hl_group = "AtlasTextMuted" },
+		activity = { icon = "󱐋", hl_group = "AtlasTextMuted" },
+		tag = { icon = "", hl_group = "AtlasTextWarning" },
+		branch = { icon = "", hl_group = "AtlasLogInfo" },
+		review = { icon = "", hl_group = "AtlasTextMuted" },
 
 		status = {
-			successful = "",
-			failed = "",
-			inprogress = "󰦖",
-			stopped = "",
-			unknown = "",
+			successful = { icon = "", hl_group = "AtlasTextPositive" },
+			failed = { icon = "", hl_group = "AtlasLogError" },
+			inprogress = { icon = "󰦖", hl_group = "AtlasTextWarning" },
+			stopped = { icon = "", hl_group = "AtlasTextMuted" },
+			unknown = { icon = "", hl_group = "AtlasTextMuted" },
 		},
 
 		providers = {
 			bitbucket = {
-				provider = "",
+				provider = { icon = "", hl_group = "AtlasBitbucketTheme" },
 			},
 			github = {
-				provider = "",
+				provider = { icon = "", hl_group = "AtlasGitHubTheme" },
 			},
 			gitlab = {
-				provider = "",
+				provider = { icon = "", hl_group = "AtlasGitLabTheme" },
 			},
 		},
 	},
 
 	issues = {
-		issue = "",
+		issue = { icon = "", hl_group = "AtlasGHIssueOpen" },
 		type = {
-			epic = "",
-			story = "󰃀",
-			task = "",
-			bug = "",
-			subtask = "󰩊",
+			epic = { icon = "", hl_group = "AtlasJiraEpic" },
+			story = { icon = "󰃀", hl_group = "AtlasTextPositive" },
+			task = { icon = "", hl_group = "AtlasLogInfo" },
+			bug = { icon = "", hl_group = "AtlasLogError" },
+			subtask = { icon = "󰩊", hl_group = "AtlasLogInfo" },
 		},
 
 		priority = {
-			highest = "",
-			blocker = "",
-			high = "",
-			medium = "",
-			low = "",
-			lowest = "",
+			highest = { icon = "", hl_group = "AtlasLogError" },
+			blocker = { icon = "", hl_group = "AtlasLogError" },
+			high = { icon = "", hl_group = "AtlasLogError" },
+			medium = { icon = "", hl_group = "AtlasTextWarning" },
+			low = { icon = "", hl_group = "AtlasTextPositive" },
+			lowest = { icon = "", hl_group = "AtlasTextPositive" },
 		},
 
 		providers = {
 			jira = {
-				provider = "󰌃",
+				provider = { icon = "󰌃", hl_group = "AtlasJiraTheme" },
+			},
+			github = {
+				provider = { icon = "", hl_group = "AtlasGHIssuesTheme" },
 			},
 			gitlab = {
-				provider = "",
+				provider = { icon = "", hl_group = "AtlasGLIssuesTheme" },
 			},
 		},
 	},
 }
 
---------------------------------------------------------------------------------
--- General
---------------------------------------------------------------------------------
-
----@param name string
----@return string
-function M.general(name)
-	return ICONS.general[name] or ICONS.fallback
+---@param style AtlasIconStyle|nil
+---@param fallback AtlasIconStyle|nil
+---@return string, string
+local function get(style, fallback)
+	style = style or fallback or ICONS.fallback
+	return style.icon, style.hl_group
 end
 
---------------------------------------------------------------------------------
--- Pulls
---------------------------------------------------------------------------------
+-- General
 
 ---@param name string
----@return string
+---@return string, string
+function M.general(name)
+	return get(ICONS.general[name])
+end
+
+-- Pulls
+
+---@param name string
+---@return string, string
 function M.pulls(name)
-	local pull_icon = ICONS.pulls[name]
-	if type(pull_icon) == "string" then
-		return pull_icon
-	end
-
-	local general_icon = ICONS.general[name]
-	if type(general_icon) == "string" then
-		return general_icon
-	end
-
-	return ICONS.fallback
+	return get(ICONS.pulls[name], ICONS.general[name])
 end
 
 ---@param status string
----@return string
+---@return string, string
 function M.pulls_status(status)
-	local tbl = ICONS.pulls.status
-	if tbl and tbl[status] then
-		return tbl[status]
-	end
-	return ICONS.fallback
+	return get(ICONS.pulls.status[status])
 end
 
 ---@param provider_id AtlasPullsProviderId
 ---@param name string
----@return string
+---@return string, string
 function M.pulls_provider(provider_id, name)
-	local provider = (ICONS.pulls.providers or {})[provider_id]
-	if provider and provider[name] then
-		return provider[name]
-	end
-	return M.pulls(name)
+	local provider = ICONS.pulls.providers[provider_id]
+	return get(provider and provider[name], ICONS.pulls[name] or ICONS.general[name])
 end
 
---------------------------------------------------------------------------------
 -- Issues
---------------------------------------------------------------------------------
 
 ---@param name string
----@return string
+---@return string, string
 function M.issues(name)
-	local issue_icon = ICONS.issues[name]
-	if type(issue_icon) == "string" then
-		return issue_icon
-	end
-
-	local general_icon = ICONS.general[name]
-	if type(general_icon) == "string" then
-		return general_icon
-	end
-
-	return ICONS.fallback
+	return get(ICONS.issues[name], ICONS.general[name])
 end
 
----@param name string
----@return string
+---@param name string|nil
+---@return string, string
 function M.issues_type(name)
-	local lower = tostring(name or ""):lower()
-	local tbl = ICONS.issues.type
-	if tbl and tbl[lower] then
-		return tbl[lower]
+	local key = tostring(name or "")
+	local default = ICONS.issues.type[key:lower()]
+	local options = require("atlas.config").options or {}
+	local jira = (((options.issues or {}).providers or {}).jira or {})
+	local configured = ((jira.project_config or {}).issue_types or {})[key]
+
+	if configured then
+		return configured.icon or (default and default.icon) or "",
+			configured.hl_group or (default and default.hl_group) or "AtlasTextMuted"
 	end
-	return ""
+	if default then
+		return get(default)
+	end
+	local hl_group =
+		require("atlas.ui.shared.highlights").dynamic_for(key ~= "" and ("jira-issue-type:" .. key:lower()) or nil)
+	return "", hl_group or "AtlasTextMuted"
 end
 
----@param name string
----@return string
+---@param name string|nil
+---@return string, string
 function M.issues_priority(name)
-	local lower = tostring(name or ""):lower()
-	local tbl = ICONS.issues.priority
-	if tbl and tbl[lower] then
-		return tbl[lower]
+	local style = ICONS.issues.priority[tostring(name or ""):lower()]
+	if style then
+		return get(style)
 	end
-	return ""
+	return "", "AtlasTextMuted"
 end
 
 ---@param provider_id AtlasIssuesProviderId
 ---@param name string
----@return string
+---@return string, string
 function M.issues_provider(provider_id, name)
-	local provider = (ICONS.issues.providers or {})[provider_id]
-	if provider and provider[name] then
-		return provider[name]
-	end
-	return M.issues(name)
+	local provider = ICONS.issues.providers[provider_id]
+	return get(provider and provider[name], ICONS.issues[name] or ICONS.pulls[name] or ICONS.general[name])
 end
 
---------------------------------------------------------------------------------
 -- Fallback
---------------------------------------------------------------------------------
 
----@return string
+---@return string, string
 function M.fallback()
-	return ICONS.fallback
+	return get(ICONS.fallback)
 end
 
 return M

@@ -17,11 +17,11 @@ local groups = {
 	AtlasBuildLinkInProgress = { fg = "#f9e2af", bold = true, underline = true },
 	AtlasBuildLinkMuted = { fg = "#7f849c", underline = true },
 
-	AtlasDiffContext = { fg = "#cdd6f4" },
-	AtlasDiffAddLine = { bg = "#1e2a1e" },
-	AtlasDiffRemoveLine = { bg = "#2a1e1e" },
-	AtlasDiffAddMarker = { fg = "#a6da95", bg = "#1e2a1e", bold = true },
-	AtlasDiffRemoveMarker = { fg = "#f38ba8", bg = "#2a1e1e", bold = true },
+	AtlasDiffContext = { link = "Normal" },
+	AtlasDiffAddLine = { link = "DiffAdd" },
+	AtlasDiffRemoveLine = { link = "DiffDelete" },
+	AtlasDiffAddMarker = { link = "DiffAdd" },
+	AtlasDiffRemoveMarker = { link = "DiffDelete" },
 }
 
 function M.setup()

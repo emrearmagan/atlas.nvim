@@ -1,0 +1,125 @@
+local editor = require("atlas.pulls.notes.ui.editor")
+local notes = require("atlas.pulls.notes")
+
+local M = {}
+
+---@param message string
+---@param level integer|nil
+local function notify(message, level)
+	vim.notify("[Atlas Notes] " .. message, level or vim.log.levels.INFO)
+end
+
+---@param state AtlasNotesUIState
+---@return boolean
+local function valid_window(state)
+	return state.win ~= nil and vim.api.nvim_win_is_valid(state.win)
+end
+
+---@param state AtlasNotesUIState
+---@return AtlasNotesUIItem|nil
+local function selected_item(state)
+	if not valid_window(state) or vim.api.nvim_get_current_buf() ~= state.buf then
+		return nil
+	end
+	return state.line_map[vim.api.nvim_win_get_cursor(state.win)[1]]
+end
+
+---@param state AtlasNotesUIState
+---@return { target: AtlasNoteTarget, note: AtlasNote }[]
+local function selected_notes(state)
+	if not valid_window(state) or vim.api.nvim_get_current_buf() ~= state.buf then
+		return {}
+	end
+	local first = vim.api.nvim_win_get_cursor(state.win)[1]
+	local last = first
+	local mode = vim.fn.mode()
+	if mode == "v" or mode == "V" or mode == "\22" then
+		first = vim.fn.line("v")
+		if first > last then
+			first, last = last, first
+		end
+		vim.cmd.normal({ args = { vim.keycode("<Esc>") }, bang = true })
+	end
+
+	local selected = {}
+	for line = first, last do
+		local item = state.line_map[line]
+		local note = item and item.note or nil
+		if note then
+			table.insert(selected, { target = item.target, note = note })
+		end
+	end
+	return selected
+end
+
+---@param state AtlasNotesUIState
+---@param refresh fun()
+---@return AtlasNotesUIActions
+function M.new(state, refresh)
+	local function edit_note()
+		local selected = selected_item(state)
+		local note = selected and selected.note or nil
+		if not selected or not note then
+			notify("Select a note to edit", vim.log.levels.WARN)
+			return
+		end
+		editor.edit(selected.target, note, function(updated, err)
+			if not updated then
+				notify(err or "Unable to update note", vim.log.levels.ERROR)
+				return
+			end
+			notify("Note updated")
+			refresh()
+		end)
+	end
+
+	local function delete_note()
+		local selected = selected_notes(state)
+		if #selected == 0 then
+			notify("Select a note to delete", vim.log.levels.WARN)
+			return
+		end
+		local prompt = #selected == 1 and "Delete note? [y/N]: " or string.format("Delete %d notes? [y/N]: ", #selected)
+		vim.ui.input({ prompt = prompt }, function(answer)
+			answer = vim.trim(tostring(answer or "")):lower()
+			if answer ~= "y" and answer ~= "yes" then
+				return
+			end
+			for _, item in ipairs(selected) do
+				local deleted, err = notes.delete(item.target, item.note.id)
+				if not deleted then
+					notify(err or "Unable to delete note", vim.log.levels.ERROR)
+					refresh()
+					return
+				end
+			end
+			notify(#selected == 1 and "Note deleted" or string.format("%d notes deleted", #selected))
+			refresh()
+		end)
+	end
+
+	local function show_details()
+		local selected = selected_item(state)
+		local note = selected and selected.note or nil
+		if not selected or not note then
+			return
+		end
+		editor.details(note, selected.target, state.buf)
+	end
+
+	local function close()
+		if valid_window(state) then
+			vim.api.nvim_win_close(state.win, true)
+		end
+	end
+
+	return {
+		details = show_details,
+		edit = edit_note,
+		delete = delete_note,
+		refresh = refresh,
+		close = close,
+	}
+end
+
+return M

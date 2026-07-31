@@ -9,7 +9,7 @@ local actions = require("atlas.pulls.actions")
 ---@return PullsPanelTabModule|nil
 local function current_tab_mod()
 	local provider = require("atlas.pulls.state").provider
-	if provider and provider.panel and type(provider.panel.tabs) == "function" then
+	if provider and provider.panel and provider.panel.tabs then
 		for _, tab in ipairs(provider.panel.tabs() or {}) do
 			if tab.key == panel_state.current_tab then
 				return tab.mod
@@ -84,18 +84,20 @@ function M.register(buf)
 		})
 	)
 
-	table.insert(items, {
-		key = "r",
-		desc = "Refresh tab",
-		opts = { nowait = true, silent = true },
-		callback = function()
-			local pr = panel_state.current_pr
-			local repo = panel_state.current_repo
-			if pr then
-				require("atlas.pulls.ui.panel").on_select(pr, repo, { force_refresh = true })
-			end
-		end,
-	})
+	utils.insert_if(
+		items,
+		item("ui.refresh", {
+			desc = "Refresh tab",
+			opts = { nowait = true, silent = true },
+			callback = function()
+				local pr = panel_state.current_pr
+				local repo = panel_state.current_repo
+				if pr then
+					require("atlas.pulls.ui.panel").on_select(pr, repo, { force_refresh = true })
+				end
+			end,
+		})
+	)
 
 	local state = require("atlas.pulls.state")
 	if state.provider and state.provider.open_actions then
@@ -162,9 +164,7 @@ function M.register(buf)
 	)
 
 	M.remove(buf)
-	help.register("Panel", items, { index = 211, buffer = buf })
-
-	local general = {}
+	local general = items
 
 	utils.insert_if(
 		general,
@@ -267,7 +267,7 @@ function M.open_current_line()
 	end
 
 	local tab_mod = current_tab_mod()
-	if tab_mod and type(tab_mod.on_enter) == "function" then
+	if tab_mod and tab_mod.on_enter then
 		return tab_mod.on_enter(pr, entry) == true
 	end
 	return false
@@ -275,21 +275,16 @@ end
 
 ---@param buf integer
 function M.remove(buf)
-	local items = {
+	local general = {
 		{ key = "j" },
 		{ key = "k" },
-		{ key = "gg" },
-		{ key = "G" },
-		{ key = "gx" },
-		{ key = "r" },
 	}
-	utils.insert_if(items, remove_item("ui.open_actions"))
-	utils.insert_if(items, remove_item("ui.open_in_browser"))
-	utils.insert_if(items, remove_item("pulls.open_diff"))
-	utils.insert_if(items, remove_item("pulls.checkout"))
-	help.remove("Panel", items, { buffer = buf })
-
-	local general = {}
+	utils.insert_if(general, remove_item("ui.refresh"))
+	utils.insert_if(general, remove_item("ui.open_actions"))
+	utils.insert_if(general, remove_item("ui.open_in_browser"))
+	utils.insert_if(general, remove_item("pulls.open_diff"))
+	utils.insert_if(general, remove_item("pulls.checkout"))
+	utils.insert_if(general, remove_item("ui.toggle_subscription"))
 	utils.insert_if(general, remove_item("ui.next_panel_tab"))
 	utils.insert_if(general, remove_item("ui.previous_panel_tab"))
 	utils.insert_if(general, remove_item("ui.help"))

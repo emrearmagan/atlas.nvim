@@ -12,7 +12,7 @@ local config = require("atlas.issues.providers.jira.api.config")
 ---@param ctx table
 ---@return boolean
 local function has_issue_key(ctx)
-	local issue = type(ctx) == "table" and ctx.issue or nil
+	local issue = ctx.issue
 	if type(issue) ~= "table" then
 		return false
 	end
@@ -470,6 +470,9 @@ local ACTIONS = {
 			local projects_api = require("atlas.issues.providers.jira.api.projects")
 			local md_to_adf = require("atlas.issues.providers.jira.converted.markdown")
 			local issue_editor = require("atlas.issues.create.jira.issue")
+			local function notify_create(message, level, duration)
+				vim.notify("[Atlas] " .. message, level, { timeout = duration })
+			end
 
 			local function run_create(project_key)
 				issue_editor.open(function(fields, submit_done)
@@ -530,14 +533,22 @@ local ACTIONS = {
 									local update = { description = raw_desc }
 									issues_api.update_issue(result.key, update, function(ok)
 										if ok then
-											footer.notify("success", string.format("Created %s", result.key), 2000)
+											notify_create(
+												string.format("Created %s", result.key),
+												vim.log.levels.INFO,
+												2000
+											)
 											submit_done(true, nil)
 											done(
 												{ changed_issue_key = result.key, message = "Created " .. result.key },
 												nil
 											)
 										else
-											footer.notify("warn", "Issue created but failed to set description", 3000)
+											notify_create(
+												"Issue created but failed to set description",
+												vim.log.levels.WARN,
+												3000
+											)
 											submit_done(true, "Description not set")
 											done(
 												{ changed_issue_key = result.key, message = "Created " .. result.key },
@@ -548,15 +559,12 @@ local ACTIONS = {
 									return
 								end
 
-								footer.notify("success", string.format("Created %s", result.key), 2000)
+								notify_create(string.format("Created %s", result.key), vim.log.levels.INFO, 2000)
 								submit_done(true, nil)
-								done(
-									{
-										changed_issue_key = result.key,
-										message = string.format("Created %s", result.key),
-									},
-									nil
-								)
+								done({
+									changed_issue_key = result.key,
+									message = string.format("Created %s", result.key),
+								}, nil)
 								return
 							end
 
@@ -590,23 +598,14 @@ local ACTIONS = {
 				debounce_ms = 0,
 				identifier = "jira_creatable_projects",
 				format_item = function(item)
+					local provider_icon, provider_hl = icons.issues_provider("jira", "provider")
 					local project = item.value
 					local category_name = project.category and project.category.name or ""
 					if category_name ~= "" then
-						return string.format(
-							"%s %s - %s (%s)",
-							icons.issues_provider("jira", "provider"),
-							item.label,
-							project.name,
-							category_name
-						)
+						return string.format("%s %s - %s (%s)", provider_icon, item.label, project.name, category_name),
+							provider_hl
 					end
-					return string.format(
-						"%s %s - %s",
-						icons.issues_provider("jira", "provider"),
-						item.label,
-						project.name
-					)
+					return string.format("%s %s - %s", provider_icon, item.label, project.name), provider_hl
 				end,
 				fetch = function(fetch_ctx, fetch_done)
 					if all_items then
@@ -690,7 +689,7 @@ local ACTIONS = {
 					run_create(item.value.key)
 				end,
 				on_cancel = function()
-					footer.notify("info", "Create issue cancelled", 1200)
+					notify_create("Create issue cancelled", vim.log.levels.INFO, 1200)
 					done({ changed_issue_key = nil, message = "Create issue cancelled" }, nil)
 				end,
 			})
@@ -711,7 +710,8 @@ local ACTIONS = {
 				cache_ttl_ms = 30000,
 				fetch_on_open = true,
 				format_item = function(item)
-					return string.format("%s %s", icons.issues_provider("jira", "provider"), tostring(item.label or ""))
+					local provider_icon, provider_hl = icons.issues_provider("jira", "provider")
+					return string.format("%s %s", provider_icon, tostring(item.label or "")), provider_hl
 				end,
 				fetch = function(fetch_ctx, fetch_done)
 					local query = vim.trim(fetch_ctx.query)

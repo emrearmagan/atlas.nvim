@@ -1,11 +1,12 @@
 local icons = require("atlas.ui.shared.icons")
+local provider_icon, provider_hl = icons.pulls_provider("gitlab", "provider")
 
 ---@class GitLabPullsProvider : PullsProvider
 local M = {
 	id = "gitlab",
 	name = "GitLab",
-	icon = icons.pulls_provider("gitlab", "provider"),
-	hl_group = "AtlasGitLabTheme",
+	icon = provider_icon,
+	hl_group = provider_hl,
 	panel = require("atlas.pulls.providers.gitlab.ui.panel"),
 	repo_panel = require("atlas.pulls.providers.gitlab.ui.repo_panel"),
 	render = require("atlas.pulls.providers.gitlab.ui.main").render,
@@ -15,9 +16,30 @@ function M.setup()
 	require("atlas.pulls.providers.gitlab.highlights").setup()
 end
 
+---@param pr PullRequest
+---@return string[], table[]
+function M.pr_popup_content(pr)
+	return require("atlas.pulls.providers.gitlab.ui.popup").content(pr)
+end
+
 ---@param on_done fun(user: PullsUser|nil, err: string|nil)
+---@return { cancel: fun() }|nil
 function M.fetch_user(on_done)
-	require("atlas.pulls.providers.gitlab.api.users").fetch_user(on_done)
+	return require("atlas.pulls.providers.gitlab.api.users").fetch_user(on_done)
+end
+
+---@param context AtlasPullsCommentCompletionContext
+---@return AtlasMarkdownCompletionProvider|nil
+function M.comment_completion(context)
+	return require("atlas.pulls.providers.gitlab.completion.author").build_completion(context)
+end
+
+---@param pr PullRequest
+---@param opts { force_refresh: boolean|nil }|nil
+---@param on_done fun(context: { authors: PullsAuthor[] }|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_review_context(pr, opts, on_done)
+	return require("atlas.pulls.providers.gitlab.api.mergerequests").get_review_context(pr, opts, on_done)
 end
 
 ---@param view AtlasPullsViewConfig
@@ -232,6 +254,15 @@ function M.delete_comment(pr, target, on_done)
 end
 
 ---@param pr PullRequest
+---@param root PullsComment
+---@param resolved boolean
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.set_thread_resolved(pr, root, resolved, on_done)
+	return require("atlas.pulls.providers.gitlab.api.comments").set_thread_resolved(pr, root, resolved, on_done)
+end
+
+---@param pr PullRequest
 ---@param comment PullsComment
 ---@param key string
 ---@param on_done fun(ok: boolean, err: string|nil)
@@ -254,6 +285,38 @@ end
 ---@return { cancel: fun() }|nil
 function M.fetch_diff(pr, opts, on_done)
 	return require("atlas.pulls.providers.gitlab.api.files").fetch_diff(pr, opts, on_done)
+end
+
+---@param pr PullRequest
+---@param opts { force_refresh?: boolean }|nil
+---@param on_done fun(entries: PullsDiffstatEntry[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_diffstat(pr, opts, on_done)
+	return M.fetch_diff(pr, opts, function(files, err)
+		if not files then
+			on_done(nil, err)
+			return
+		end
+		local entries = {}
+		for _, file in ipairs(files) do
+			local additions, deletions = file.additions, file.deletions
+			if additions == nil and deletions == nil then
+				additions, deletions = 0, 0
+				for _, hunk in ipairs(file.hunks) do
+					additions = additions + hunk.additions
+					deletions = deletions + hunk.deletions
+				end
+			end
+			table.insert(entries, {
+				status = file.status,
+				path = file.path,
+				old_path = file.old_path,
+				lines_added = additions or 0,
+				lines_removed = deletions or 0,
+			})
+		end
+		on_done(entries, nil)
+	end)
 end
 
 ---@param pr PullRequest
@@ -336,10 +399,11 @@ function M.fetch_default_reviewers(opts, on_done)
 		local items = {}
 		for _, raw in ipairs(type(result) == "table" and result or {}) do
 			local login = type(raw) == "table" and tostring(raw.username or "") or ""
-			if login ~= "" then
+			local id = type(raw) == "table" and tonumber(raw.id) or nil
+			if login ~= "" and id ~= nil then
 				table.insert(items, {
 					label = "@" .. login,
-					provider_id = login,
+					provider_id = tostring(id),
 					selected = false,
 					default = false,
 				})
@@ -354,6 +418,14 @@ end
 ---@return { cancel: fun() }|nil
 function M.create_pr(opts, on_done)
 	local mr_api = require("atlas.pulls.providers.gitlab.api.mergerequests")
+	local reviewer_ids = {}
+	for _, reviewer in ipairs(opts.reviewers or {}) do
+		local id = tonumber(reviewer.provider_id)
+		if id ~= nil then
+			table.insert(reviewer_ids, id)
+		end
+	end
+
 	return mr_api.create_mr({
 		project_path = opts.repo_slug,
 		source_branch = opts.head,
@@ -361,6 +433,7 @@ function M.create_pr(opts, on_done)
 		title = opts.title,
 		description = opts.body,
 		draft = opts.draft == true,
+		reviewer_ids = reviewer_ids,
 	}, function(result, err)
 		if err or result == nil then
 			on_done(nil, err)
@@ -400,10 +473,11 @@ end
 ---@return AtlasGitLabPullsViewConfig[]
 function M.views()
 	local cfg = require("atlas.pulls.providers.gitlab.api.service").gitlab_config()
-	local views = cfg.views or {
-		{ name = "Assigned", key = "1", scope = "assigned_to_me", state = "opened" },
-		{ name = "Created", key = "2", scope = "created_by_me", state = "opened" },
-	}
+	local views = cfg.views
+		or {
+			{ name = "Assigned", key = "1", scope = "assigned_to_me", state = "opened" },
+			{ name = "Created", key = "2", scope = "created_by_me", state = "opened" },
+		}
 	return require("atlas.ui.shared.bookmarks_view").append_to_views(views, cfg.bookmarks, "S", "Search")
 end
 

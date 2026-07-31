@@ -15,7 +15,10 @@ local function bootstrap_common()
 	require("atlas.ui.popups.help").register_command("Commands", {
 		{ name = "AtlasPulls", desc = "Open pulls" },
 		{ name = "AtlasIssues", desc = "Open issues" },
+		{ name = "AtlasDiff", desc = "Open native diff or pull request" },
+		{ name = "AtlasNotes", desc = "Manage local review notes" },
 		{ name = "AtlasSearch", desc = "Search across providers" },
+		{ name = "AtlasOpen", desc = "Open URL or reference" },
 		{ name = "AtlasClearCache", desc = "Clear Atlas cache" },
 		{ name = "AtlasLogs", desc = "Open Atlas logs" },
 	}, { index = 999, buffer = require("atlas.ui.layout").buf_id("main") })
@@ -40,15 +43,11 @@ end
 ---@param id string
 ---@return PullsProvider|nil
 local function load_pulls_provider(id)
-	if id == "bitbucket" then
-		return require("atlas.pulls.providers.bitbucket")
-	elseif id == "github" then
-		return require("atlas.pulls.providers.github")
-	elseif id == "gitlab" then
-		return require("atlas.pulls.providers.gitlab")
+	local provider = require("atlas.pulls.providers").get(id)
+	if not provider then
+		vim.notify(string.format("[Atlas] Unknown pulls provider: %s", id), vim.log.levels.ERROR)
 	end
-	vim.notify(string.format("[Atlas] Unknown pulls provider: %s", id), vim.log.levels.ERROR)
-	return nil
+	return provider
 end
 
 ---@param id string
@@ -95,6 +94,10 @@ local function open_with_provider(domain, id, opts)
 		end
 		layout.set_render_callback(function()
 			require("atlas.issues").render()
+			local panel = require("atlas.issues.ui.panel")
+			if panel.is_open() then
+				panel.render()
+			end
 		end)
 		require("atlas.issues").init(provider, opts)
 	end

@@ -1,11 +1,12 @@
 local icons = require("atlas.ui.shared.icons")
+local provider_icon, provider_hl = icons.issues_provider("github", "provider")
 
 ---@class GitHubIssuesProvider : IssuesProvider
 local M = {
 	id = "github",
 	name = "GitHub",
-	icon = icons.pulls_provider("github", "provider"),
-	hl_group = "AtlasGHIssuesTheme",
+	icon = provider_icon,
+	hl_group = provider_hl,
 	panel = require("atlas.issues.providers.github.ui.panel"),
 	bookmark_query_field = "search",
 }
@@ -37,6 +38,12 @@ end
 ---@param ctx { text: string, padded: string, width: integer }
 function M.cell_hl(row, col, ctx)
 	return require("atlas.issues.providers.github.ui.renderer").cell_hl(row, col, ctx)
+end
+
+---@param issue Issue
+---@return string[], table[]
+function M.issue_popup_content(issue)
+	return require("atlas.issues.providers.github.ui.renderer").issue_popup_content(issue)
 end
 
 ---@param on_done fun(user: IssueUser|nil, err: string|nil)
@@ -109,7 +116,7 @@ end
 ---@param opts IssuesFetchOpts|nil
 ---@param on_done fun(raw: any, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_description(key, opts, on_done) ---@diagnostic disable-line: unused-local
+function M.fetch_description(key, _opts, on_done)
 	local normalizer = require("atlas.issues.providers.github.api.mapper")
 	local slug, number = normalizer.parse_key(tostring(key or ""))
 	if slug == "" or number == nil then
@@ -118,7 +125,10 @@ function M.fetch_description(key, opts, on_done) ---@diagnostic disable-line: un
 	end
 	local cli = require("atlas.issues.providers.github.api.cli")
 	return cli.gh({
-		"api", string.format("repos/%s/issues/%d", slug, number), "--jq", ".body",
+		"api",
+		string.format("repos/%s/issues/%d", slug, number),
+		"--jq",
+		".body",
 	}, function(result, err)
 		if err then
 			on_done(nil, err)
@@ -151,7 +161,7 @@ end
 ---@param content string
 ---@param on_done fun(comment: IssueComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.reply_comment(issue, parent, content, on_done) ---@diagnostic disable-line: unused-local
+function M.reply_comment(issue, _parent, content, on_done)
 	-- GitHub issue comments are flat; reply is just a new comment.
 	local key = tostring(issue.key or "")
 	return require("atlas.issues.providers.github.api.comments").add(key, content, on_done)
@@ -164,7 +174,7 @@ end
 ---@return { cancel: fun() }|nil
 function M.edit_comment(issue, comment_id, content, on_done)
 	if tostring(comment_id) == "__body__" then
-		local raw = type(issue._raw) == "table" and issue._raw or {}
+		local raw = issue._raw or {}
 		local slug = tostring(raw.slug or "")
 		local number = tonumber(raw.number)
 		if slug == "" or number == nil then
@@ -173,7 +183,13 @@ function M.edit_comment(issue, comment_id, content, on_done)
 		end
 		local cli = require("atlas.issues.providers.github.api.cli")
 		return cli.gh({
-			"issue", "edit", tostring(number), "--repo", slug, "--body", content,
+			"issue",
+			"edit",
+			tostring(number),
+			"--repo",
+			slug,
+			"--body",
+			content,
 		}, function(_, err)
 			if err then
 				on_done(nil, err)
@@ -228,7 +244,7 @@ function M.fetch_conversation(issue, opts, on_done)
 	local function build(result, description)
 		local comments = {}
 		if description ~= "" then
-			local raw = type(issue._raw) == "table" and issue._raw or {}
+			local raw = issue._raw or {}
 			table.insert(comments, {
 				id = "__body__",
 				url = issue.url,
@@ -254,7 +270,7 @@ function M.fetch_conversation(issue, opts, on_done)
 			on_done(nil, err or "Failed to fetch conversation")
 			return
 		end
-		local raw = type(issue._raw) == "table" and issue._raw or {}
+		local raw = issue._raw or {}
 		local description = tostring(raw.body or "")
 		if description ~= "" then
 			build(result, description)
@@ -273,7 +289,7 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.add_reaction(issue, comment, key, on_done)
-	local raw = type(issue._raw) == "table" and issue._raw or {}
+	local raw = issue._raw or {}
 	local slug = tostring(raw.slug or "")
 	local number = tonumber(raw.number)
 	if slug == "" then

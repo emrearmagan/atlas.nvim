@@ -4,6 +4,7 @@
   "workspace.maxPreload": 10000,
   "workspace.preloadFileSize": 1000,
   "workspace.library": [
+    "./lua",
     "$VIMRUNTIME/lua",
     "$VIMRUNTIME/lua/vim/lsp",
     "${3rd}/luv/library",

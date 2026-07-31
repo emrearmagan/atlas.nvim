@@ -30,11 +30,11 @@ end
 ---@param issue Issue
 ---@return IssuesPanelHeaderRow[]
 function M.header_rows(issue)
-	local raw = type(issue._raw) == "table" and issue._raw or {}
+	local raw = issue._raw or {}
 	local user_icon = icons.general("user")
 
-	local assignee_name = type(issue.assignee) == "table" and tostring(issue.assignee.display_name or "") or ""
-	local reporter_name = type(issue.reporter) == "table" and tostring(issue.reporter.display_name or "") or ""
+	local assignee_name = issue.assignee and tostring(issue.assignee.display_name or "") or ""
+	local reporter_name = issue.reporter and tostring(issue.reporter.display_name or "") or ""
 	if assignee_name == "" then
 		assignee_name = "Unassigned"
 	end
@@ -56,7 +56,7 @@ function M.header_rows(issue)
 		{
 			k1 = "Assignee:",
 			v1 = string.format("%s %s", user_icon, assignee_name),
-			v1_hl = helper.person_hl(type(issue.assignee) == "table" and issue.assignee.display_name or nil),
+			v1_hl = helper.person_hl(issue.assignee and issue.assignee.display_name or nil),
 			k2 = milestone_text ~= "" and "Milestone:" or "",
 			v2 = milestone_text,
 			v2_hl = milestone_text ~= "" and "AtlasTextMuted" or nil,
@@ -98,7 +98,7 @@ end
 ---@return IssuesPanelChip[]
 function M.chips(issue)
 	local chips = {}
-	local raw = type(issue._raw) == "table" and issue._raw or {}
+	local raw = issue._raw or {}
 	local labels = type(raw.labels) == "table" and raw.labels or {}
 	for _, label in ipairs(labels) do
 		local name = tostring(label.name or "")
@@ -109,32 +109,33 @@ function M.chips(issue)
 	return chips
 end
 
---------------------------------------------------------------------------------
 -- Lifecycle
---------------------------------------------------------------------------------
 
 ---@param _issue Issue
 ---@return boolean
 function M.is_loading(_issue)
 	local conversation_state = require("atlas.issues.ui.panel.issue.tabs.conversation.state")
 	local history_state = require("atlas.issues.ui.panel.issue.tabs.activity.state")
-	return (type(conversation_state.any_loading) == "function" and conversation_state.any_loading())
-		or (type(history_state.any_loading) == "function" and history_state.any_loading())
+	return conversation_state.any_loading() or history_state.any_loading()
 end
 
 ---@return IssuesPanelTab[]
 function M.tabs()
+	local conversation_icon, conversation_hl = icons.general("conversation")
+	local activity_icon, activity_hl = icons.pulls("activity")
 	return {
 		{
 			key = "conversation",
 			label = "Conversation",
-			icon = icons.general("conversation"),
+			icon = conversation_icon,
+			icon_hl = conversation_hl,
 			mod = require("atlas.issues.ui.panel.issue.tabs.conversation"),
 		},
 		{
 			key = "activity",
 			label = "Activity",
-			icon = icons.pulls("activity"),
+			icon = activity_icon,
+			icon_hl = activity_hl,
 			mod = require("atlas.issues.ui.panel.issue.tabs.activity"),
 		},
 	}

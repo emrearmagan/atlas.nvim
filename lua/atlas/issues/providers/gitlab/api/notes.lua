@@ -60,8 +60,11 @@ local function fetch_discussions(key, opts, on_done)
 			on_done(nil, err)
 			return
 		end
-		local nodes = data and data.project and data.project.issue
-			and data.project.issue.discussions and data.project.issue.discussions.nodes
+		local nodes = data
+				and data.project
+				and data.project.issue
+				and data.project.issue.discussions
+				and data.project.issue.discussions.nodes
 			or {}
 		service.set_memory_cache(cache_key, nodes)
 		on_done(nodes, nil)
@@ -173,17 +176,13 @@ function M.reply_in_discussion(key, parent, body, on_done)
 		on_done(nil, "Comment cannot be empty")
 		return nil
 	end
-	local discussion_id = type(parent._raw) == "table" and tostring(parent._raw.discussion_id or "") or ""
+	local discussion_id = parent._raw and tostring(parent._raw.discussion_id or "") or ""
 	if discussion_id == "" then
 		return M.add(key, body, on_done)
 	end
 
-	local endpoint = string.format(
-		"/projects/%s/issues/%d/discussions/%s/notes",
-		service.url_encode(path),
-		iid,
-		discussion_id
-	)
+	local endpoint =
+		string.format("/projects/%s/issues/%d/discussions/%s/notes", service.url_encode(path), iid, discussion_id)
 	return service.request("POST", endpoint, { body = body }, function(result, err)
 		if err or type(result) ~= "table" then
 			on_done(nil, err or "Empty response")

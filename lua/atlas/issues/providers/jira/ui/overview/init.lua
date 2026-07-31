@@ -78,9 +78,7 @@ function M.on_select(issue, refresh, opts)
 	end, { force_load = force_refresh }))
 end
 
---------------------------------------------------------------------------------
 -- Render
---------------------------------------------------------------------------------
 
 ---@param issue Issue
 ---@param width integer

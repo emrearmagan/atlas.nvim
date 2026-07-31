@@ -49,7 +49,7 @@ local function row_is_expanded(row, has_children, tree)
 	if not has_children then
 		return false
 	end
-	if type(tree.is_expanded) == "function" then
+	if tree.is_expanded then
 		return tree.is_expanded(row) == true
 	end
 	if row[tree.expanded_field] ~= nil then

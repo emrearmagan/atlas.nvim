@@ -33,10 +33,10 @@ local function track(handle)
 end
 
 ---@param pr PullRequest
----@param repo PullsRepo|nil
+---@param _repo PullsRepo|nil
 ---@param refresh fun()
 ---@param opts { force_refresh: boolean|nil }|nil
-function M.on_select(pr, repo, refresh, opts) ---@diagnostic disable-line: unused-local
+function M.on_select(pr, _repo, refresh, opts)
 	opts = opts or {}
 
 	local provider = get_provider()
@@ -56,7 +56,7 @@ function M.on_select(pr, repo, refresh, opts) ---@diagnostic disable-line: unuse
 	end
 
 	local pr_id = tostring(pr.id or "")
-	if should_fetch and type(provider.fetch_activity) == "function" then
+	if should_fetch and provider.fetch_activity then
 		state.activity = "loading"
 		footer.notify("loading", string.format("Loading activity for #%s...", pr_id))
 		track(provider.fetch_activity(pr, opts, function(entries, err)
@@ -72,10 +72,10 @@ function M.on_select(pr, repo, refresh, opts) ---@diagnostic disable-line: unuse
 	end
 end
 
----@param pr PullRequest
+---@param _pr PullRequest
 ---@param width integer
 ---@return string[], table[], table<integer, table>|nil
-function M.render(pr, width) ---@diagnostic disable-line: unused-local
+function M.render(_pr, width)
 	local lines = {}
 	local spans = {}
 	local line_map = {}
@@ -115,7 +115,7 @@ end
 ---@param _lnum integer
 ---@param entry table
 ---@return boolean
-function M.is_selectable_line(_lnum, entry) ---@diagnostic disable-line: unused-local
+function M.is_selectable_line(_lnum, entry)
 	local k = entry.kind
 	return k == "header" or k == "content"
 end

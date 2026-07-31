@@ -71,7 +71,7 @@ function M.create(opts)
 			self.interval_ms,
 			vim.schedule_wrap(function()
 				self.frame_index = (self.frame_index % #FRAMES) + 1
-				if type(self.on_tick) == "function" then
+				if self.on_tick then
 					self.on_tick(self:current_frame())
 				end
 			end)

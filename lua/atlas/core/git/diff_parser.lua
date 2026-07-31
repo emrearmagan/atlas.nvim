@@ -18,21 +18,26 @@ local M = {}
 ---@field deletions integer
 ---@field lines DiffLine[]
 
+---@alias DiffFileStatus "added"|"deleted"|"modified"|"renamed"|"type_changed"|"unknown"
+
 ---@class DiffFile
 ---@field path string                   -- display path (new path, or old path for deletions)
 ---@field old_path string|nil           -- only set for renames
----@field status "added"|"deleted"|"modified"|"renamed"
+---@field status DiffFileStatus
 ---@field hunks DiffHunk[]
+---@field additions integer|nil         -- optional total when supplied without hunks
+---@field deletions integer|nil          -- optional total when supplied without hunks
 
---------------------------------------------------------------------------------
 -- Helpers
---------------------------------------------------------------------------------
 
 ---@param raw string
 ---@return string[]
 local function split_lines(raw)
 	local out = {}
 	raw = raw:gsub("\r\n", "\n")
+	if raw:sub(-1) == "\n" then
+		raw = raw:sub(1, -2)
+	end
 	for line in (raw .. "\n"):gmatch("(.-)\n") do
 		table.insert(out, line)
 	end
@@ -48,15 +53,14 @@ local function finalise_file(file)
 		file.status = "deleted"
 	end
 
-	-- Rename: both sides set and differ
-	if file.old_path and file.old_path ~= file.path and file.status == "modified" then
+	if file.old_path == file.path then
+		file.old_path = nil
+	elseif file.old_path and file.status == "modified" then
 		file.status = "renamed"
 	end
 end
 
---------------------------------------------------------------------------------
 -- Public
---------------------------------------------------------------------------------
 
 -- Example
 --   raw unified diff:
@@ -92,7 +96,7 @@ end
 --     }
 
 ---Parse a raw unified diff string into a structured representation.
----All git-internal lines (diff --git, index, mode, --- a/, +++ b/) are removedd here
+---All git-internal lines (diff --git, index, mode, --- a/, +++ b/) are removed here.
 ---@param raw string
 ---@return DiffFile[]
 function M.parse(raw)
@@ -218,35 +222,106 @@ function M.parse(raw)
 			end
 			entry.kind = kind
 			table.insert(cur_hunk.lines, entry)
-		elseif cur_file then
-			-- Lines inside a file block but before the first hunk (index, mode
-			-- change lines, binary notice, etc.) — intentionally dropped.
-		else
+		elseif not cur_file and #files == 0 then
 			-- Lines before any "diff --git" (shouldn't happen with Bitbucket, but
 			-- guard against truncated/non-standard responses by attaching them to
 			-- a synthetic file entry so nothing is silently lost).
-			if #files == 0 and cur_file == nil then
-				cur_file = { path = "(unknown)", old_path = nil, status = "modified", hunks = {} }
-				cur_hunk = {
-					header = "",
-					context = "",
-					old_start = 0,
-					old_count = 0,
-					new_start = 0,
-					new_count = 0,
-					additions = 0,
-					deletions = 0,
-					lines = {},
-				}
-			end
-			if cur_hunk then
-				table.insert(cur_hunk.lines, { text = line, kind = "context", content = line })
-			end
+			cur_file = { path = "(unknown)", old_path = nil, status = "modified", hunks = {} }
+			cur_hunk = {
+				header = "",
+				context = "",
+				old_start = 0,
+				old_count = 0,
+				new_start = 0,
+				new_count = 0,
+				additions = 0,
+				deletions = 0,
+				lines = {},
+			}
+			table.insert(cur_hunk.lines, { text = line, kind = "context", content = line })
 		end
 	end
 
 	flush_file()
 	return files
+end
+
+---Return a clipped hunk centered on one old/new line, with a header and counts
+---that describe the clipped lines rather than the original hunk.
+---@param hunk DiffHunk
+---@param side "old"|"new"
+---@param line integer
+---@param context_lines integer|nil
+---@return DiffHunk
+function M.window_hunk(hunk, side, line, context_lines)
+	local anchor
+	for index, diff_line in ipairs(hunk.lines) do
+		if (side == "old" and diff_line.old_line == line) or (side == "new" and diff_line.new_line == line) then
+			anchor = index
+			break
+		end
+	end
+	if anchor == nil then
+		return hunk
+	end
+
+	local context = math.max(0, context_lines or 4)
+	local first = math.max(1, anchor - context)
+	local last = math.min(#hunk.lines, anchor + context)
+	if first == 1 and last == #hunk.lines then
+		return hunk
+	end
+
+	local old_start, new_start = hunk.old_start, hunk.new_start
+	for index = 1, first - 1 do
+		local diff_line = hunk.lines[index]
+		if diff_line.kind == "context" or diff_line.kind == "remove" then
+			old_start = old_start + 1
+		end
+		if diff_line.kind == "context" or diff_line.kind == "add" then
+			new_start = new_start + 1
+		end
+	end
+
+	local lines = {}
+	local old_count, new_count, additions, deletions = 0, 0, 0, 0
+	for index = first, last do
+		local diff_line = hunk.lines[index]
+		table.insert(lines, diff_line)
+		if diff_line.kind == "context" or diff_line.kind == "remove" then
+			old_count = old_count + 1
+		end
+		if diff_line.kind == "context" or diff_line.kind == "add" then
+			new_count = new_count + 1
+		end
+		if diff_line.kind == "add" then
+			additions = additions + 1
+		elseif diff_line.kind == "remove" then
+			deletions = deletions + 1
+		end
+	end
+	if old_count == 0 then
+		old_start = math.max(0, old_start - 1)
+	end
+	if new_count == 0 then
+		new_start = math.max(0, new_start - 1)
+	end
+
+	local header = string.format("@@ -%d,%d +%d,%d @@", old_start, old_count, new_start, new_count)
+	if hunk.context ~= "" then
+		header = header .. " " .. hunk.context
+	end
+	return {
+		header = header,
+		context = hunk.context,
+		old_start = old_start,
+		old_count = old_count,
+		new_start = new_start,
+		new_count = new_count,
+		additions = additions,
+		deletions = deletions,
+		lines = lines,
+	}
 end
 
 return M

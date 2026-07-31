@@ -18,7 +18,7 @@ end
 ---@return AtlasMarkdownCompletionProvider|nil
 local function get_completion()
 	local panel = get_panel()
-	if panel and type(panel.comment_completion) == "function" then
+	if panel and panel.comment_completion then
 		return panel.comment_completion()
 	end
 	return nil
@@ -48,7 +48,7 @@ end
 ---@param refresh fun()
 function M.add(issue, refresh)
 	local provider = get_provider()
-	if not provider or type(provider.add_comment) ~= "function" then
+	if not provider or not provider.add_comment then
 		return
 	end
 	md_editor.open({
@@ -67,8 +67,10 @@ function M.add(issue, refresh)
 					footer.notify("error", "Add comment failed: " .. err)
 					return
 				end
-				if type(comment) == "table" then
-					with_comments(function(list) table.insert(list, comment) end)
+				if comment then
+					with_comments(function(list)
+						table.insert(list, comment)
+					end)
 				end
 				footer.notify("success", "Comment added", 1200)
 				refresh()
@@ -85,13 +87,13 @@ function M.reply(issue, entry, refresh)
 		return
 	end
 	local provider = get_provider()
-	if not provider or type(provider.reply_comment) ~= "function" then
+	if not provider or not provider.reply_comment then
 		return
 	end
 	local comment = entry.comment
 	local completion = get_completion()
 	local mention = ""
-	if completion and type(completion.format_mention) == "function" then
+	if completion and completion.format_mention then
 		mention = completion.format_mention(comment.author) or ""
 	end
 	local initial_text = mention ~= "" and (mention .. " ") or ""
@@ -115,8 +117,10 @@ function M.reply(issue, entry, refresh)
 					footer.notify("error", "Reply failed: " .. err)
 					return
 				end
-				if type(reply) == "table" then
-					with_comments(function(list) table.insert(list, reply) end)
+				if reply then
+					with_comments(function(list)
+						table.insert(list, reply)
+					end)
 				end
 				footer.notify("success", "Reply added", 1200)
 				refresh()
@@ -142,7 +146,7 @@ function M.edit(issue, entry, refresh)
 		return
 	end
 
-	if type(provider.edit_comment) ~= "function" then
+	if not provider.edit_comment then
 		return
 	end
 	md_editor.open({
@@ -165,7 +169,7 @@ function M.edit(issue, entry, refresh)
 				with_comments(function(list)
 					for i, c in ipairs(list) do
 						if tostring(c.id) == tostring(comment.id) then
-							if type(updated) == "table" then
+							if updated then
 								list[i] = updated
 							else
 								c.body = text
@@ -194,7 +198,7 @@ function M.delete(issue, entry, refresh)
 		return
 	end
 	local provider = get_provider()
-	if not provider or type(provider.delete_comment) ~= "function" then
+	if not provider or not provider.delete_comment then
 		return
 	end
 
@@ -233,7 +237,7 @@ function M.react(issue, entry, refresh)
 		return
 	end
 	local provider = get_provider()
-	if not provider or type(provider.add_reaction) ~= "function" then
+	if not provider or not provider.add_reaction then
 		footer.notify("warn", "Provider does not support reactions")
 		return
 	end
@@ -252,7 +256,9 @@ function M.react(issue, entry, refresh)
 	end
 	vim.ui.select(choices, {
 		prompt = "Add reaction",
-		format_item = function(item) return item.label end,
+		format_item = function(item)
+			return item.label
+		end,
 	}, function(selected)
 		if selected == nil then
 			return

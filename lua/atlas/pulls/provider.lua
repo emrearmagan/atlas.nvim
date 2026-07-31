@@ -15,17 +15,31 @@
 ---@field force_load boolean|nil
 ---@field pagelen number|nil
 
+---@class AtlasPullsCommentCompletionContext
+---@field pr PullRequest
+---@field comments PullsComment[]
+---@field tasks PullsComment[]|nil
+---@field reviewers PullsReviewer[]|nil
+---@field conversation PullsComment[]|nil
+---@field review_context { authors: PullsAuthor[] }|nil
+
 ---@class PullsProvider
 ---@field id string
 ---@field name string
 ---@field icon string
 ---@field hl_group string
 ---
+--- Main list rendering:
+---@field render (fun(groups: PullsGroup[], layout: string, opts: { width: integer }): PullsMainRenderResult)|nil
+---@field pr_popup_content (fun(pr: PullRequest): string[], table[])|nil
+---
 --- Lifecycle:
 ---@field setup fun()|nil
 ---
 --- Core data methods:
----@field fetch_user fun(on_done: fun(user: PullsUser|nil, err: string|nil))
+---@field fetch_user fun(on_done: fun(user: PullsUser|nil, err: string|nil)): { cancel: fun() }|nil
+---@field comment_completion (fun(context: AtlasPullsCommentCompletionContext): AtlasMarkdownCompletionProvider|nil)|nil
+---@field fetch_review_context (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(context: { authors: PullsAuthor[] }|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field fetch_conversation (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(result: { comments: PullsComment[], events: PullsActivityEntry[], reaction_options: PullsReactionOption[]|nil }|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field fetch_pullrequests fun(view: AtlasPullsViewConfig, opts: PullsFetchOpts, on_done: fun(groups: PullsGroup[], err: string[]|nil)): { cancel: fun() }|nil
 ---@field fetch_pullrequest fun(pr: PullRequest, opts: PullsFetchOpts, on_done: fun(pr: PullRequest|nil, err: string|nil)): { cancel: fun() }|nil
@@ -39,15 +53,20 @@
 ---@field fetch_merge_checks (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(checks: PullsMergeCheck[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field fetch_diffstat (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(entries: PullsDiffstatEntry[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field fetch_activity (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(entries: PullsActivityEntry[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
----@field fetch_comments (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(comments: PullsComment[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field fetch_comments fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(comments: PullsComment[]|nil, err: string|nil)): { cancel: fun() }|nil
+---@field fetch_tasks (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(tasks: PullsComment[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field fetch_commits (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(commits: PullsCommit[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field fetch_diff (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(files: DiffFile[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field fetch_commit_status (fun(pr: PullRequest, commit: PullsCommit, opts: { force_refresh: boolean|nil }|nil, on_done: fun(status: string|nil, url: string|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---
 ---@field add_comment (fun(pr: PullRequest, content: string, opts: PullsAddCommentOpts|nil, on_done: fun(comment: PullsComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field add_task (fun(pr: PullRequest, content: string, parent: PullsComment|nil, on_done: fun(comment: PullsComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field reply_comment (fun(pr: PullRequest, parent: PullsComment, content: string, on_done: fun(comment: PullsComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field edit_comment (fun(pr: PullRequest, comment: PullsComment, on_done: fun(comment: PullsComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field delete_comment (fun(pr: PullRequest, target: PullsComment, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field edit_task (fun(pr: PullRequest, task: PullsComment, on_done: fun(task: PullsComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field delete_task (fun(pr: PullRequest, task: PullsComment, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field set_thread_resolved (fun(pr: PullRequest, root: PullsComment, resolved: boolean, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field add_reaction (fun(pr: PullRequest, comment: PullsComment, key: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
 ---
 ---@field views fun(): AtlasPullsViewConfig[]
@@ -62,22 +81,24 @@
 ---@field create_pr (fun(opts: PullsCreatePROpts, on_done: fun(result: PullsCreatePRResult|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field fetch_default_reviewers (fun(opts: { repo_slug: string, repo_root: string|nil, head: string, base: string }, on_done: fun(reviewers: PullsCreatePRReviewer[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---
---- Main list rendering
----@field render (fun(groups: PullsGroup[], layout: string, opts: { width: integer }): PullsMainRenderResult)|nil
----
 ---@field panel PullsProviderPanel|nil
 ---@field repo_panel PullsProviderRepoPanel|nil
----
----@field health fun()|nil
 
 --------------------------------------------------------------------------------
 -- Provider Panel Interface
 --------------------------------------------------------------------------------
 
+---@class PullsInlineCommentPosition
+---@field path string
+---@field old_path string|nil
+---@field side "old"|"new"
+---@field line integer
+---@field commit_hash string|nil
+
 ---@class PullsAddCommentOpts
 ---@field parent PullsComment|nil          -- reply to this comment
----@field inline { path: string, side: "old"|"new"|nil, line: integer }|nil
----@field is_task boolean|nil              -- create as task
+---@field inline PullsInlineCommentPosition|nil
+---@field pending boolean|nil              -- add the comment to a pending review
 
 ---@class PullsProviderPanel
 ---@field header_rows (fun(pr: PullRequest): PullsPanelHeaderRow[])|nil
@@ -125,6 +146,7 @@
 ---@field key string
 ---@field label string
 ---@field icon string|nil
+---@field icon_hl string|nil
 ---@field mod PullsPanelTabModule
 ---@field keymaps PullsProviderPanelKeymaps|nil provider-specific keymaps registered while this tab is active
 
@@ -137,6 +159,7 @@
 ---@field on_select (fun(pr: PullRequest|nil, repo: PullsRepo, refresh: fun(), opts: { force_refresh: boolean|nil }|nil))|nil
 ---@field activate (fun(buf: integer|nil, refresh: fun()|nil))|nil
 ---@field deactivate (fun(buf: integer|nil))|nil
+---@field is_loading (fun(): boolean)|nil
 ---@field is_selectable_line (fun(lnum: integer, entry: table): boolean)|nil
 ---@field on_enter (fun(repo: PullsRepo, entry: table): boolean|nil)|nil
 ---@field delete_current_branch (fun(refresh: fun()))|nil
@@ -145,4 +168,5 @@
 ---@field key string
 ---@field label string
 ---@field icon string|nil
+---@field icon_hl string|nil
 ---@field mod PullsRepoPanelTabModule

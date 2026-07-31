@@ -33,9 +33,9 @@ function M.render(issue, width, extra_rows)
 	local key = text_or(issue.key, "")
 	local title = text_or(issue.summary, "")
 
-	local type_icon = icons.issues_type(issue_type)
+	local type_icon, type_icon_hl = icons.issues_type(issue_type)
 	if type_icon == "" then
-		type_icon = icons.issues("issue")
+		type_icon, type_icon_hl = icons.issues("issue")
 	end
 
 	local type_key_line = string.format(" %s %s %s", type_icon, issue_type, key)
@@ -43,8 +43,12 @@ function M.render(issue, width, extra_rows)
 
 	local bell_icon, bell_hl
 	if issue.is_subscribed ~= nil then
-		bell_icon = issue.is_subscribed and icons.general("bell") or icons.general("bell_no")
-		bell_hl = issue.is_subscribed and "AtlasLogInfo" or "AtlasTextMuted"
+		if issue.is_subscribed then
+			bell_icon = icons.general("bell")
+			bell_hl = "AtlasLogInfo"
+		else
+			bell_icon, bell_hl = icons.general("bell_no")
+		end
 		local line_w = vim.api.nvim_strwidth(type_key_line)
 		local bell_w = vim.api.nvim_strwidth(bell_icon)
 		local pad = math.max(1, width - line_w - bell_w - 1)
@@ -104,7 +108,7 @@ function M.render(issue, width, extra_rows)
 			line = 0,
 			start_col = 1,
 			end_col = #(string.format("%s %s", type_icon, issue_type)) + 1,
-			hl_group = helper.issue_type_hl(issue_type),
+			hl_group = type_icon_hl,
 		},
 		{ line = 1, start_col = 1, end_col = #title_line, hl_group = "Normal" },
 	}

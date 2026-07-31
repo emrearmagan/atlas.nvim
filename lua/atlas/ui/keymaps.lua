@@ -86,6 +86,10 @@ function M.register(buf)
 			if help.is_open() then
 				return
 			end
+			local ui_state = require("atlas.ui.state")
+			if ui_state.on_panel_close then
+				ui_state.on_panel_close()
+			end
 			require("atlas.ui.layout").close()
 		end,
 	}))

@@ -1,12 +1,13 @@
 local icons = require("atlas.ui.shared.icons")
 local main_ui = require("atlas.pulls.providers.github.ui.main")
+local provider_icon, provider_hl = icons.pulls_provider("github", "provider")
 
 ---@class GitHubProvider : PullsProvider
 local M = {
 	id = "github",
 	name = "GitHub",
-	icon = icons.pulls_provider("github", "provider"),
-	hl_group = "AtlasGitHubTheme",
+	icon = provider_icon,
+	hl_group = provider_hl,
 	render = main_ui.render,
 	panel = require("atlas.pulls.providers.github.ui.panel"),
 	repo_panel = require("atlas.pulls.providers.github.ui.repo_panel"),
@@ -16,6 +17,12 @@ function M.setup()
 	require("atlas.pulls.providers.github.highlights").setup()
 end
 
+---@param pr PullRequest
+---@return string[], table[]
+function M.pr_popup_content(pr)
+	return require("atlas.pulls.providers.github.ui.popup").content(pr)
+end
+
 ---@return AtlasGitHubConfig
 local function github_config()
 	local config = require("atlas.config")
@@ -23,16 +30,31 @@ local function github_config()
 end
 
 ---@param on_done fun(user: PullsUser|nil, err: string|nil)
+---@return { cancel: fun() }|nil
 function M.fetch_user(on_done)
 	local users_api = require("atlas.pulls.providers.github.api.users")
 	local state = require("atlas.pulls.providers.github.state")
 
-	users_api.fetch_user(function(user, err)
+	return users_api.fetch_user(function(user, err)
 		if user then
 			state.current_user = user
 		end
 		on_done(user, err)
 	end)
+end
+
+---@param context AtlasPullsCommentCompletionContext
+---@return AtlasMarkdownCompletionProvider|nil
+function M.comment_completion(context)
+	return require("atlas.pulls.providers.github.completion.author").build_completion(context)
+end
+
+---@param pr PullRequest
+---@param opts { force_refresh: boolean|nil }|nil
+---@param on_done fun(context: { authors: PullsAuthor[] }|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_review_context(pr, opts, on_done)
+	return require("atlas.pulls.providers.github.api.pullrequests").get_review_context(pr, opts, on_done)
 end
 
 ---@param view AtlasPullsViewConfig
@@ -155,15 +177,10 @@ function M.fetch_conversation(pr, opts, on_done)
 	local function build(result, description)
 		local comments = type(result.comments) == "table" and result.comments or {}
 		if description ~= "" then
-			local author = pr.author
 			table.insert(comments, 1, {
 				id = "__body__",
 				parent_id = nil,
-				author = author and {
-					name = author.name or author.username or "",
-					nickname = author.nickname or author.username or author.name or "",
-					id = author.id or "",
-				} or nil,
+				author = pr.author,
 				content_raw = description,
 				created_on = pr.created_on or "",
 				reactions = pr.reactions,
@@ -236,6 +253,14 @@ function M.fetch_comments(pr, opts, on_done)
 end
 
 ---@param pr PullRequest
+---@param opts { force_refresh: boolean|nil }|nil
+---@param on_done fun(tasks: PullsComment[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_tasks(pr, opts, on_done)
+	return require("atlas.pulls.providers.github.api.comments").fetch_tasks(pr, opts, on_done)
+end
+
+---@param pr PullRequest
 ---@param content string
 ---@param opts PullsAddCommentOpts|nil
 ---@param on_done fun(comment: PullsComment|nil, err: string|nil)
@@ -267,6 +292,15 @@ end
 ---@return { cancel: fun() }|nil
 function M.delete_comment(pr, target, on_done)
 	return require("atlas.pulls.providers.github.api.comments").delete_comment(pr, target, on_done)
+end
+
+---@param pr PullRequest
+---@param root PullsComment
+---@param resolved boolean
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.set_thread_resolved(pr, root, resolved, on_done)
+	return require("atlas.pulls.providers.github.api.comments").set_thread_resolved(pr, root, resolved, on_done)
 end
 
 ---@param pr PullRequest
@@ -330,9 +364,10 @@ end
 
 function M.views()
 	local cfg = github_config()
-	local views = (type(cfg.views) == "table" and #cfg.views > 0) and cfg.views or {
-		{ name = "Me", key = "1", search = "involves:@me", layout = "compact" },
-	}
+	local views = (type(cfg.views) == "table" and #cfg.views > 0) and cfg.views
+		or {
+			{ name = "Me", key = "1", search = "involves:@me", layout = "compact" },
+		}
 	return require("atlas.ui.shared.bookmarks_view").append_to_views(views, cfg.bookmarks, "S", "Search")
 end
 

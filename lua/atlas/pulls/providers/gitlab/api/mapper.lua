@@ -1,5 +1,6 @@
 local M = {}
 
+local diff_parser = require("atlas.core.git.diff_parser")
 local json = require("atlas.core.json")
 
 ---@param raw any
@@ -49,7 +50,7 @@ local function split_path(raw_path)
 	return "", path, path
 end
 
----@param raw table
+---@param raw any Decoded API value.
 ---@return PullRequest|nil
 function M.to_pull_request(raw)
 	raw = json.nilify(raw)
@@ -79,6 +80,7 @@ function M.to_pull_request(raw)
 	local source_branch = json.safe_str(raw.source_branch) or ""
 	local target_branch = json.safe_str(raw.target_branch) or ""
 	local sha = json.nilify(raw.sha)
+	local local_ref = string.format("refs/atlas/pulls/%d/head", iid)
 
 	---@type PullRequest
 	return {
@@ -87,7 +89,12 @@ function M.to_pull_request(raw)
 		description = json.safe_str(raw.description) or "",
 		state = normalize_state(raw),
 		author = normalize_author(raw.author),
-		source = { branch = source_branch, commit_hash = "" },
+		source = {
+			branch = source_branch,
+			commit_hash = type(sha) == "string" and sha or "",
+			fetch_ref = string.format("+refs/merge-requests/%d/head:%s", iid, local_ref),
+			local_ref = local_ref,
+		},
 		destination = { branch = target_branch, commit_hash = "" },
 		comments_count = tonumber(raw.user_notes_count) or 0,
 		tasks_count = 0,
@@ -115,6 +122,7 @@ function M.to_pull_request(raw)
 			merged_at = json.safe_str(raw.merged_at),
 			closed_at = json.safe_str(raw.closed_at),
 			sha = type(sha) == "string" and sha or nil,
+			diff_refs = json.nilify(raw.diff_refs),
 			pipeline = json.nilify(raw.head_pipeline) or json.nilify(raw.pipeline),
 		},
 	}
@@ -153,7 +161,7 @@ function M.to_pull_request_groups(raw_list)
 	return groups
 end
 
----@param raw table|nil
+---@param raw any Decoded API value.
 ---@return PullsUser|nil
 function M.to_user(raw)
 	raw = json.nilify(raw)
@@ -205,60 +213,12 @@ local function classify_system_note(body)
 	return "update"
 end
 
-local HUNK_WINDOW = 4
-
----@param user any
-local function author_from(user)
-	if type(user) ~= "table" then
-		return nil
-	end
-	local username = tostring(user.username or "")
-	if username == "" then
-		return nil
-	end
-	return { name = tostring(user.name or username), nickname = username, id = tostring(user.id or "") }
-end
-
----@param hunk DiffHunk
----@param side "old"|"new"
----@param line integer
----@return DiffHunk|nil
-local function window_around(hunk, side, line)
-	local lines = hunk.lines or {}
-	local anchor_idx
-	for i, l in ipairs(lines) do
-		local target = side == "new" and l.new_line or l.old_line
-		if target == line then
-			anchor_idx = i
-			break
-		end
-	end
-	if not anchor_idx then
-		return hunk
-	end
-	local first = math.max(1, anchor_idx - HUNK_WINDOW)
-	local last = math.min(#lines, anchor_idx + HUNK_WINDOW)
-	local windowed = {}
-	for i = first, last do
-		table.insert(windowed, lines[i])
-	end
-	return {
-		header = hunk.header,
-		context = hunk.context,
-		old_start = hunk.old_start,
-		old_count = hunk.old_count,
-		new_start = hunk.new_start,
-		new_count = hunk.new_count,
-		lines = windowed,
-	}
-end
-
 ---@param file DiffFile|nil
 ---@param side "old"|"new"
 ---@param line integer
 ---@return DiffHunk|nil
 local function find_hunk(file, side, line)
-	if file == nil or type(file.hunks) ~= "table" then
+	if file == nil then
 		return nil
 	end
 	for _, h in ipairs(file.hunks) do
@@ -269,7 +229,7 @@ local function find_hunk(file, side, line)
 			start_, count = h.old_start or 0, h.old_count or 0
 		end
 		if line >= start_ and line <= start_ + count - 1 then
-			return window_around(h, side, line)
+			return diff_parser.window_hunk(h, side, line, 4)
 		end
 	end
 	return nil
@@ -307,22 +267,42 @@ function M.to_comment(note, discussion_first_id, discussion_id, resolved, files_
 	end
 
 	local raw_with_discussion = note
-	if type(discussion_id) == "string" and discussion_id ~= "" then
+	if discussion_id ~= nil and discussion_id ~= "" then
 		raw_with_discussion = vim.tbl_extend("force", {}, note, { discussion_id = discussion_id })
 	end
 
 	return {
 		id = note.id,
 		parent_id = (note.id ~= discussion_first_id) and discussion_first_id or nil,
-		author = author_from(note.author),
+		author = actor_from(note.author),
 		content_raw = tostring(note.body or ""),
 		created_on = tostring(note.created_at or ""),
 		inline = inline,
 		inline_hunk = inline_hunk,
 		is_task = nil,
 		state = state,
+		can_resolve = note.resolvable == false and false or nil,
 		_raw = raw_with_discussion,
 	}
+end
+
+---@param draft table
+---@param discussion_first_id number|string|nil
+---@param files_by_path table<string, DiffFile>
+---@return PullsComment
+function M.to_draft_comment(draft, discussion_first_id, files_by_path)
+	local discussion_id = type(draft.discussion_id) == "string" and draft.discussion_id or ""
+	local note = vim.tbl_extend("force", {}, draft, {
+		id = "draft:" .. tostring(draft.id or ""),
+		body = tostring(draft.note or ""),
+	})
+	local comment = M.to_comment(note, discussion_first_id, discussion_id, false, files_by_path)
+	if draft.author_id ~= nil and draft.author_id ~= vim.NIL then
+		comment.author = { name = "You", nickname = nil, username = "", id = tostring(draft.author_id) }
+	end
+	comment.state = "PENDING"
+	comment._raw = vim.tbl_extend("force", {}, draft, { draft_note_id = draft.id })
+	return comment
 end
 
 ---@param gql_note table
@@ -357,6 +337,7 @@ function M.to_comment_from_gql(gql_note, first_id, discussion_id)
 		author = type(author.username) == "string" and {
 			name = tostring(author.name or author.username),
 			nickname = author.username,
+			username = author.username,
 			id = "",
 		} or nil,
 		content_raw = tostring(gql_note.body or ""),

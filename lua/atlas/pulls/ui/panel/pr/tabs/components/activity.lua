@@ -2,7 +2,6 @@ local M = {}
 
 local utils = require("atlas.ui.shared.utils")
 local icons = require("atlas.ui.shared.icons")
-local highlights = require("atlas.ui.shared.highlights")
 local threads = require("atlas.ui.components.threadsv2")
 
 local COLLAPSE_KEEP = 2
@@ -24,37 +23,37 @@ local function actor_name(actor)
 end
 
 local EVENT = {
-	approval = { icon = icons.pulls_status("successful"), icon_hl = "AtlasTextPositive" },
-	changes_requested = { icon = icons.pulls_status("inprogress"), icon_hl = "AtlasTextWarning" },
-	review = { icon = icons.pulls("activity") },
-	comment = { icon = icons.general("user") },
-	closed = { icon = icons.pulls("declined_pr") },
-	merged = { icon = icons.pulls("merged_pr") },
-	reopened = { icon = icons.pulls("pr") },
-	committed = { icon = icons.pulls("commit") },
-	force_pushed = { icon = icons.general("edit") },
-	labeled = { icon = icons.pulls("tag") },
-	unlabeled = { icon = icons.pulls("tag") },
-	assigned = { icon = icons.general("user") },
-	unassigned = { icon = icons.general("user") },
-	review_requested = { icon = icons.general("user") },
-	ready_for_review = { icon = icons.pulls("pr") },
-	convert_to_draft = { icon = icons.pulls("activity") },
-	update = { icon = icons.pulls("activity") },
+	approval = { icons.pulls_status("successful") },
+	changes_requested = { icons.pulls_status("inprogress") },
+	review = { icons.pulls("activity") },
+	comment = { icons.general("user") },
+	closed = { icons.pulls("declined_pr") },
+	merged = { icons.pulls("merged_pr") },
+	reopened = { icons.pulls("pr") },
+	committed = { icons.pulls("commit") },
+	force_pushed = { icons.general("edit") },
+	labeled = { icons.pulls("tag") },
+	unlabeled = { icons.pulls("tag") },
+	assigned = { icons.general("user") },
+	unassigned = { icons.general("user") },
+	review_requested = { icons.general("user") },
+	ready_for_review = { icons.pulls("pr") },
+	convert_to_draft = { icons.pulls("activity") },
+	update = { icons.pulls("activity") },
 }
 
 ---@param entry PullsActivityEntry
 ---@return { icon: string, icon_hl: string|nil, additional: string|nil, content: string|nil }
 function M.classify(entry)
-	local meta = EVENT[entry.kind] or { icon = icons.pulls("activity") }
+	local meta = EVENT[entry.kind] or { icons.pulls("activity") }
 	local label = tostring(entry.label or "")
 	local body = entry.body
 	if entry.kind == "comment" and entry.deleted == true then
 		body = "(deleted comment)"
 	end
 	return {
-		icon = meta.icon,
-		icon_hl = meta.icon_hl,
+		icon = meta[1],
+		icon_hl = meta[2],
 		additional = label ~= "" and label or entry.kind,
 		content = body,
 	}
@@ -69,6 +68,7 @@ local function to_thread_items(entries, run_id)
 		local classified = M.classify(e)
 		items[#items + 1] = {
 			icon = classified.icon,
+			icon_hl = classified.icon_hl,
 			author = actor_name(e.actor),
 			right_text = utils.relative_time(e.date),
 			additional = classified.additional,
@@ -121,18 +121,6 @@ local function content_hl(item, row, _row_index)
 end
 
 ---@param item AtlasThreadV2Item
-local function icon_hl_fn(item)
-	local entry = item.line_map and item.line_map.activity_entry
-	if entry and entry.kind == "approval" then
-		return "AtlasTextPositive"
-	end
-	if entry and entry.kind == "changes_requested" then
-		return "AtlasTextWarning"
-	end
-	local author = vim.trim(tostring(item.author or "")):lower()
-	return highlights.dynamic_for(author) or "AtlasTextMuted"
-end
-
 ---Render a list of activities.
 ---@param entries PullsActivityEntry[]
 ---@param width integer
@@ -177,7 +165,6 @@ function M.render(entries, width, opts)
 			content_max_lines = content_max_lines,
 			additional_hl = additional_hl,
 			content_hl = content_hl,
-			icon_hl_fn = icon_hl_fn,
 		}))
 	end
 

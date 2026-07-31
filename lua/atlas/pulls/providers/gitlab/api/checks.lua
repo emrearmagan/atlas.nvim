@@ -6,10 +6,7 @@ local mr_api = require("atlas.pulls.providers.gitlab.api.mergerequests")
 ---@param pr PullRequest
 ---@return string project_path, integer|nil iid
 local function project_iid(pr)
-	local raw = type(pr._raw) == "table" and pr._raw or {}
-	local path = tostring(raw.project_path or pr.repo_full_name or "")
-	local iid = tonumber(raw.iid or pr.id)
-	return path, iid
+	return pr.repo_full_name, tonumber(pr.id)
 end
 
 ---@param status string|nil
@@ -254,8 +251,8 @@ function M.get_merge_checks(pr, opts, on_done)
 	local h_mr = mr_api.get_mr(pr, { force_refresh = opts.force_refresh == true }, function(fresh, err)
 		if err then
 			first_err = first_err or err
-		elseif type(fresh) == "table" then
-			mr_raw = type(fresh._raw) == "table" and fresh._raw or {}
+		elseif fresh then
+			mr_raw = fresh._raw
 		end
 		finish()
 	end)

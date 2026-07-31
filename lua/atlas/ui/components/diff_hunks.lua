@@ -1,8 +1,9 @@
+-- Structured diff hunk rendering shared by pull request UIs.
 local M = {}
 
 local utils = require("atlas.ui.shared.utils")
 
----@class ChangesBlockOpts
+---@class AtlasDiffHunkRenderOptions
 ---@field max_width integer
 ---@field padding_x integer|nil                       default 1
 ---@field collapsed_hunks table<string, boolean>|nil  key = path|new_start|old_start
@@ -19,7 +20,10 @@ end
 
 ---@param file DiffFile
 ---@return integer additions, integer deletions
-local function file_stats(file)
+function M.file_stats(file)
+	if file.additions ~= nil or file.deletions ~= nil then
+		return file.additions or 0, file.deletions or 0
+	end
 	local a, d = 0, 0
 	for _, hunk in ipairs(file.hunks or {}) do
 		a = a + (hunk.additions or 0)
@@ -34,7 +38,7 @@ end
 ---@param padding_x integer
 ---@param max_width integer
 local function emit_file_header(lines, spans, file, padding_x, max_width)
-	local additions, deletions = file_stats(file)
+	local additions, deletions = M.file_stats(file)
 
 	local label = file.path
 	if file.status == "renamed" and file.old_path then
@@ -102,11 +106,11 @@ end
 ---@param file DiffFile
 ---@param hunk DiffHunk
 ---@param is_collapsed boolean
----@param opts ChangesBlockOpts
+---@param opts AtlasDiffHunkRenderOptions
 local function render_hunk(lines, spans, line_map, file, hunk, is_collapsed, opts)
 	local padding_x = opts.padding_x or DEFAULT_PADDING
 	local pad = string.rep(" ", padding_x)
-	local inner = math.max(20, opts.max_width - (padding_x * 2))
+	local inner = math.max(1, opts.max_width - (padding_x * 2))
 	local key = M.hunk_key(file, hunk)
 
 	---@param row string
@@ -195,9 +199,9 @@ local function render_hunk(lines, spans, line_map, file, hunk, is_collapsed, opt
 end
 
 ---@param files DiffFile[]
----@param opts ChangesBlockOpts
+---@param opts AtlasDiffHunkRenderOptions
 ---@return string[], table[], table<integer, table>
-function M.render(files, opts)
+function M.hunks(files, opts)
 	local padding_x = opts.padding_x or DEFAULT_PADDING
 	local lines = {}
 	local spans = {}

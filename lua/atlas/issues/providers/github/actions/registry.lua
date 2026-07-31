@@ -10,7 +10,7 @@ local normalizer = require("atlas.issues.providers.github.api.mapper")
 ---@param ctx table
 ---@return boolean
 local function has_issue(ctx)
-	local issue = type(ctx) == "table" and ctx.issue or nil
+	local issue = ctx.issue
 	if type(issue) ~= "table" then
 		return false
 	end
@@ -21,7 +21,7 @@ end
 ---@param issue Issue
 ---@return string
 local function issue_slug(issue)
-	local raw = type(issue._raw) == "table" and issue._raw or {}
+	local raw = issue._raw or {}
 	local slug = tostring(raw.slug or "")
 	if slug ~= "" then
 		return slug
@@ -33,7 +33,7 @@ end
 ---@param ctx table
 ---@return string|nil slug, string|nil err
 local function create_issue_slug(ctx)
-	local explicit = tostring(type(ctx) == "table" and ctx.repo_slug or "")
+	local explicit = tostring(ctx.repo_slug or "")
 	if explicit ~= "" then
 		return explicit, nil
 	end
@@ -425,7 +425,7 @@ local ACTIONS = {
 			if not has_issue(ctx) then
 				return false, "No issue selected"
 			end
-			local raw = type(ctx.issue._raw) == "table" and ctx.issue._raw or {}
+			local raw = ctx.issue._raw or {}
 			if tostring(raw.node_id or "") == "" then
 				return false, "Missing issue node id"
 			end
@@ -433,7 +433,7 @@ local ACTIONS = {
 		end,
 		run = function(ctx, done)
 			local issue = ctx.issue
-			local raw = type(issue._raw) == "table" and issue._raw or {}
+			local raw = issue._raw or {}
 			local node_id = tostring(raw.node_id or "")
 			local next_state = issue.is_subscribed == true and "UNSUBSCRIBED" or "SUBSCRIBED"
 			local gql =
@@ -449,13 +449,10 @@ local ACTIONS = {
 					end
 					issue.is_subscribed = (next_state == "SUBSCRIBED")
 					footer.notify("success", issue.is_subscribed and "Subscribed" or "Unsubscribed", 1200)
-					done(
-						{
-							changed_issue_key = issue.key,
-							message = issue.is_subscribed and "Subscribed" or "Unsubscribed",
-						},
-						nil
-					)
+					done({
+						changed_issue_key = issue.key,
+						message = issue.is_subscribed and "Subscribed" or "Unsubscribed",
+					}, nil)
 				end
 			)
 		end,

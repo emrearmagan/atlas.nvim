@@ -12,7 +12,7 @@ local normalizer = require("atlas.issues.providers.gitlab.api.mapper")
 ---@param ctx table
 ---@return boolean
 local function has_issue(ctx)
-	local issue = type(ctx) == "table" and ctx.issue or nil
+	local issue = ctx.issue
 	if type(issue) ~= "table" then
 		return false
 	end
@@ -23,7 +23,7 @@ end
 ---@param issue Issue
 ---@return string
 local function issue_path(issue)
-	local raw = type(issue._raw) == "table" and issue._raw or {}
+	local raw = issue._raw or {}
 	local path = tostring(raw.project_path or "")
 	if path ~= "" then
 		return path
@@ -463,7 +463,7 @@ local ACTIONS = {
 			if not has_issue(ctx) then
 				return false, "No issue selected"
 			end
-			local raw = type(ctx.issue._raw) == "table" and ctx.issue._raw or {}
+			local raw = ctx.issue._raw or {}
 			local iid = tonumber(raw.iid)
 			local path = tostring(raw.project_path or "")
 			if iid == nil or path == "" then
@@ -474,7 +474,7 @@ local ACTIONS = {
 		run = function(ctx, done)
 			local service = require("atlas.issues.providers.gitlab.api.service")
 			local issue = ctx.issue
-			local raw = type(issue._raw) == "table" and issue._raw or {}
+			local raw = issue._raw or {}
 			local path = tostring(raw.project_path or "")
 			local iid = tonumber(raw.iid)
 			local action = issue.is_subscribed == true and "unsubscribe" or "subscribe"

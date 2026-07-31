@@ -27,9 +27,13 @@ local function to_items(repo)
 	local items = {}
 	for _, tag in ipairs((state.tags or {}).entries or {}) do
 		local first_line = tag.message and tostring(tag.message:match("^[^\n\r]*") or "") or nil
-		if first_line == "" then first_line = nil end
+		if first_line == "" then
+			first_line = nil
+		end
 		local author_str = tag.author and tostring(tag.author) or nil
-		if author_str == "" then author_str = nil end
+		if author_str == "" then
+			author_str = nil
+		end
 		local content = nil
 		if author_str and first_line then
 			content = author_str .. " · " .. first_line
@@ -38,8 +42,10 @@ local function to_items(repo)
 		elseif author_str then
 			content = author_str
 		end
+		local tag_icon, tag_icon_hl = icons.pulls("tag")
 		table.insert(items, {
-			icon = icons.pulls("tag"),
+			icon = tag_icon,
+			icon_hl = tag_icon_hl,
 			author = tostring(tag.name or ""),
 			additional = tag.hash and tostring(tag.hash):sub(1, 8) or nil,
 			right_text = tag.date and utils.relative_time_text(tag.date) or nil,
@@ -126,7 +132,10 @@ function M.on_select(_pr, repo, refresh, opts)
 	local prev_name = state.repo and state.repo.full_name or ""
 	local next_name = tostring(detail.full_name or "")
 	local repo_label = next_name ~= "" and next_name or tostring(repo.name or repo.id or "")
-	local should_fetch = opts.force_refresh == true or state.tags == nil or state.tags == "loading" or prev_name ~= next_name
+	local should_fetch = opts.force_refresh == true
+		or state.tags == nil
+		or state.tags == "loading"
+		or prev_name ~= next_name
 	state.repo = detail
 	if not should_fetch then
 		refresh()
@@ -139,7 +148,7 @@ function M.on_select(_pr, repo, refresh, opts)
 	refresh()
 
 	local provider = require("atlas.pulls.state").provider
-	if provider == nil or type(provider.fetch_repo_tags) ~= "function" then
+	if provider == nil or not provider.fetch_repo_tags then
 		state.tags = { entries = {} }
 		footer.notify("error", "Tag listing is not supported by this provider")
 		refresh()

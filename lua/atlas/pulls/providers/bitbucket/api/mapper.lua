@@ -98,6 +98,31 @@ local function link_href(links, key)
 	return tostring((as_table(link) or {}).href or "")
 end
 
+---@param repository table|nil
+---@return string
+local function clone_url(repository)
+	repository = as_table(repository) or {}
+	local links = as_table(repository.links) or {}
+	local https_url, ssh_url
+	for _, raw in ipairs(as_table(links.clone) or {}) do
+		local clone = as_table(raw) or {}
+		local href = tostring(clone.href or "")
+		if clone.name == "https" then
+			https_url = href
+		elseif clone.name == "ssh" then
+			ssh_url = href
+		end
+	end
+	if https_url and https_url ~= "" then
+		return https_url
+	end
+	if ssh_url and ssh_url ~= "" then
+		return ssh_url
+	end
+	local full_name = tostring(repository.full_name or "")
+	return full_name ~= "" and string.format("https://bitbucket.org/%s.git", full_name) or ""
+end
+
 ---@param raw table
 ---@return PullRequest
 local function to_pull_request(raw)
@@ -106,6 +131,13 @@ local function to_pull_request(raw)
 	local repo_full_name = tostring(raw.repo_full_name or string.format("%s/%s", workspace, repo))
 	local author = raw.author or {}
 	local links = raw.links or {}
+	local source = raw.source or {}
+	local source_repo_full_name = tostring(source.repo_full_name or "")
+	local source_branch = source_repo_full_name ~= "" and tostring(source.branch or "") or ""
+	local source_is_fork = source_branch ~= ""
+		and source_repo_full_name ~= ""
+		and source_repo_full_name ~= repo_full_name
+	local local_ref = source_is_fork and string.format("refs/atlas/pulls/%s/head", tostring(raw.id)) or nil
 	return {
 		id = raw.id,
 		title = tostring(raw.title or ""),
@@ -117,8 +149,11 @@ local function to_pull_request(raw)
 			username = tostring(author.nickname or ""),
 		},
 		source = {
-			branch = tostring((raw.source or {}).branch or ""),
-			commit_hash = tostring((raw.source or {}).commit_hash or ""),
+			branch = source_branch,
+			commit_hash = tostring(source.commit_hash or ""),
+			fetch_remote = source_is_fork and source.clone_url or nil,
+			fetch_ref = local_ref and string.format("+refs/heads/%s:%s", source_branch, local_ref) or nil,
+			local_ref = local_ref,
 		},
 		destination = {
 			branch = tostring((raw.destination or {}).branch or ""),
@@ -155,6 +190,7 @@ function M.to_pull_requests_list(result, workspace, repo)
 		local destination = as_table(pr.destination) or {}
 		local source_branch = as_table(source.branch) or {}
 		local source_commit = as_table(source.commit) or {}
+		local source_repository = as_table(source.repository) or {}
 		local destination_branch = as_table(destination.branch) or {}
 		local destination_commit = as_table(destination.commit) or {}
 		local repo_full_name = (ws ~= "" and rp ~= "") and string.format("%s/%s", ws, rp) or ""
@@ -192,10 +228,13 @@ function M.to_pull_requests_list(result, workspace, repo)
 			source = {
 				branch = tostring(source_branch.name or ""),
 				commit_hash = tostring(source_commit.hash or ""),
+				repo_full_name = tostring(source_repository.full_name or ""),
+				clone_url = clone_url(source_repository),
 			},
 			close_source_branch = pr.close_source_branch == true,
 			created_on = tostring(pr.created_on or ""),
 			updated_on = tostring(pr.updated_on or ""),
+			participants = as_table(pr.participants) or {},
 			workspace = ws,
 			repo = rp,
 			repo_full_name = repo_full_name,
@@ -207,12 +246,14 @@ function M.to_pull_requests_list(result, workspace, repo)
 end
 
 ---@param user table|nil
----@return {name: string, nickname: string|nil}
+---@return PullsAuthor
 local function actor(user)
 	local u = as_table(user) or {}
+	local username = tostring(u.nickname or u.username or "")
 	return {
 		name = tostring(u.display_name or "Unknown"),
-		nickname = tostring(u.nickname or ""),
+		nickname = username ~= "" and username or nil,
+		username = username,
 		id = tostring(u.account_id or ""),
 	}
 end
@@ -345,6 +386,11 @@ function M.to_comment(result)
 	local content = as_table(entry.content) or {}
 	local links = as_table(entry.links) or {}
 	local parent = as_table(entry.parent)
+	local resolution = as_table(entry.resolution)
+	local state = entry.deleted == true and "DELETED"
+		or (entry.pending == true and "PENDING")
+		or (resolution ~= nil and "RESOLVED")
+		or nil
 
 	return {
 		id = tonumber(entry.id) or 0,
@@ -354,7 +400,7 @@ function M.to_comment(result)
 		created_on = tostring(entry.created_on or ""),
 		inline = comment_inline(entry.inline),
 		is_task = nil,
-		state = entry.deleted == true and "DELETED" or nil,
+		state = state,
 		url = tostring((as_table(links.self) or {}).href or ""),
 		html_url = tostring((as_table(links.html) or {}).href or ""),
 		_raw = entry,

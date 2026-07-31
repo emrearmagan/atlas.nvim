@@ -610,7 +610,7 @@ local ACTIONS = {
 					return
 				end
 
-				local raw = pr._raw or {}
+				local raw = pr._raw
 				local raw_assignees = type(raw.assignees) == "table" and raw.assignees or {}
 				local nodes = type(raw_assignees.nodes) == "table" and raw_assignees.nodes or {}
 				local original = {}
@@ -731,7 +731,7 @@ local ACTIONS = {
 					return
 				end
 
-				local raw = pr._raw or {}
+				local raw = pr._raw
 				local raw_labels = raw.labels
 				if type(raw_labels) == "table" and type(raw_labels.nodes) == "table" then
 					raw_labels = raw_labels.nodes
@@ -958,8 +958,8 @@ local ACTIONS = {
 			if not has_pr(ctx) or ctx.pr == nil then
 				return false, "No PR selected"
 			end
-			local raw = type(ctx.pr._raw) == "table" and ctx.pr._raw or {}
-			if tostring(raw.id or "") == "" then
+			local raw = ctx.pr._raw
+			if tostring(raw.node_id or "") == "" then
 				return false, "Missing PR node id"
 			end
 			return true, nil
@@ -970,8 +970,8 @@ local ACTIONS = {
 				done(nil, "No PR selected")
 				return
 			end
-			local raw = type(pr._raw) == "table" and pr._raw or {}
-			local node_id = tostring(raw.id or "")
+			local raw = pr._raw
+			local node_id = tostring(raw.node_id or "")
 			local next_state = pr.is_subscribed == true and "UNSUBSCRIBED" or "SUBSCRIBED"
 			local gql =
 				"mutation($id: ID!, $state: SubscriptionState!) { updateSubscription(input: { subscribableId: $id, state: $state }) { subscribable { ... on PullRequest { viewerSubscription } } } }"

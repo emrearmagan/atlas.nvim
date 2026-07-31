@@ -29,6 +29,12 @@
 ---@field icon string
 ---@field hl_group string
 ---
+--- Main list rendering:
+---@field render (fun(groups: IssuesGroup[], layout: "plain"|"compact", opts: { width: integer }): IssuesMainRenderResult)|nil
+---@field format_row (fun(issue: Issue, is_child: boolean): table|nil)|nil
+---@field cell_hl (fun(row: table, col: table, ctx: { text: string, padded: string, width: integer }): table[]|nil)|nil
+---@field issue_popup_content (fun(issue: Issue): string[], table[])|nil
+---
 ---@field setup fun()|nil
 ---@field on_refresh fun()|nil
 ---
@@ -57,14 +63,7 @@
 ---@field mark_notification_read (fun(id: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field mark_notification_done (fun(id: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
 ---
---- Main UI Style
----@field render (fun(groups: IssuesGroup[], layout: "plain"|"compact", opts: { width: integer }): IssuesMainRenderResult)|nil
----@field format_row fun(issue: Issue, is_child: boolean): table|nil
----@field cell_hl fun(row: table, col: table, ctx: { text: string, padded: string, width: integer }): table[]|nil|nil
----
 ---@field panel IssuesProviderPanel|nil
----
----@field health fun()|nil
 
 --------------------------------------------------------------------------------
 -- Panel interface
@@ -107,4 +106,5 @@
 ---@field key string
 ---@field label string
 ---@field icon string|nil
+---@field icon_hl string|nil
 ---@field mod IssuesPanelTabModule

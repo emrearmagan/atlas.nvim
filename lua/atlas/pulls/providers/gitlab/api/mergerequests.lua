@@ -144,9 +144,8 @@ end
 ---@return { cancel: fun() }|nil
 function M.get_mr(pr, opts, on_done)
 	opts = opts or {}
-	local raw = type(pr._raw) == "table" and pr._raw or {}
-	local path = tostring(raw.project_path or pr.repo_full_name or "")
-	local iid = tonumber(raw.iid or pr.id)
+	local path = pr.repo_full_name
+	local iid = tonumber(pr.id)
 	if path == "" or iid == nil then
 		on_done(nil, "Invalid MR identifier")
 		return nil
@@ -180,6 +179,51 @@ function M.get_mr(pr, opts, on_done)
 end
 
 ---@param pr PullRequest
+---@param _opts { force_refresh: boolean|nil }|nil
+---@param on_done fun(context: { authors: PullsAuthor[] }|nil, err: string|nil)
+---@return nil
+function M.get_review_context(pr, _opts, on_done)
+	local authors = {}
+	local seen = {}
+	---@param author PullsAuthor|nil
+	local function add(author)
+		if author == nil then
+			return
+		end
+		local key = tostring(author.id or "")
+		if key == "" then
+			key = tostring(author.username or author.nickname or author.name or "")
+		end
+		if key == "" or seen[key] then
+			return
+		end
+		seen[key] = true
+		table.insert(authors, author)
+	end
+
+	add(pr.author)
+	local raw = pr._raw
+	for _, list in ipairs({ raw.assignees or {}, raw.reviewers or {} }) do
+		for _, user in ipairs(list) do
+			if type(user) == "table" then
+				local username = tostring(user.username or "")
+				local name = tostring(user.name or username)
+				local id = tostring(user.id or "")
+				if id ~= "" or username ~= "" or name ~= "" then
+					add({
+						id = id,
+						name = name,
+						username = username,
+						nickname = username ~= "" and username or nil,
+					})
+				end
+			end
+		end
+	end
+	on_done({ authors = authors }, nil)
+end
+
+---@param pr PullRequest
 ---@param opts { force_refresh?: boolean }|nil
 ---@param on_done fun(description: string|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
@@ -204,10 +248,7 @@ end
 ---@param pr PullRequest
 ---@return string project_path, integer|nil iid
 local function project_iid(pr)
-	local raw = type(pr._raw) == "table" and pr._raw or {}
-	local path = tostring(raw.project_path or pr.repo_full_name or "")
-	local iid = tonumber(raw.iid or pr.id)
-	return path, iid
+	return pr.repo_full_name, tonumber(pr.id)
 end
 
 ---@param pr PullRequest
@@ -515,7 +556,7 @@ function M.create_mr(opts, on_done)
 			return
 		end
 		local mr = mapper.to_pull_request(result)
-		local iid = (mr and mr._raw and mr._raw.iid) or tonumber(result.iid)
+		local iid = (mr and tonumber(mr.id)) or tonumber(result.iid)
 		on_done({
 			iid = iid,
 			id = iid,
@@ -536,9 +577,8 @@ end
 ---@return { cancel: fun() }|nil
 function M.get_reviewer_states(pr, opts, on_done)
 	opts = opts or {}
-	local raw = type(pr._raw) == "table" and pr._raw or {}
-	local path = tostring(raw.project_path or pr.repo_full_name or "")
-	local iid = tonumber(raw.iid or pr.id)
+	local path = pr.repo_full_name
+	local iid = tonumber(pr.id)
 	if path == "" or iid == nil then
 		on_done(nil, "Invalid MR identifier")
 		return nil
@@ -604,7 +644,7 @@ function M.get_reviewers(pr, opts, on_done)
 		end)
 	end
 
-	local cached = type(pr._raw) == "table" and pr._raw or {}
+	local cached = pr._raw
 	if opts.force_refresh ~= true and type(cached.reviewers) == "table" then
 		vim.schedule(function()
 			build(cached)
@@ -617,7 +657,7 @@ function M.get_reviewers(pr, opts, on_done)
 			on_done(nil, err)
 			return
 		end
-		build(type(mr._raw) == "table" and mr._raw or {})
+		build(mr._raw)
 	end)
 end
 

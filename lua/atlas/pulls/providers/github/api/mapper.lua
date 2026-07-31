@@ -66,6 +66,10 @@ end
 ---@param raw table
 ---@return PullRequest
 function M.to_pull_request(raw)
+	-- GitHub GraphQL calls this `id`; REST calls the same value `node_id`.
+	raw.node_id = raw.node_id or (type(raw.id) == "string" and raw.id or nil)
+	local number = tostring(raw.number or "")
+	local local_ref = number ~= "" and string.format("refs/atlas/pulls/%s/head", number) or nil
 	local author_login = ""
 	local author_name = ""
 	local author_id = ""
@@ -97,7 +101,7 @@ function M.to_pull_request(raw)
 	end
 
 	return {
-		id = tostring(raw.number or ""),
+		id = number,
 		title = tostring(raw.title or ""),
 		description = tostring(raw.body or ""),
 		state = state,
@@ -110,6 +114,8 @@ function M.to_pull_request(raw)
 		source = {
 			branch = tostring(raw.headRefName or ""),
 			commit_hash = tostring(raw.headRefOid or ""),
+			fetch_ref = local_ref and string.format("+refs/pull/%s/head:%s", number, local_ref) or nil,
+			local_ref = local_ref,
 		},
 		destination = {
 			branch = tostring(raw.baseRefName or ""),
@@ -370,6 +376,7 @@ function M.to_activity_comment(raw)
 		author = {
 			name = tostring(user.login or ""),
 			nickname = tostring(user.login or ""),
+			username = tostring(user.login or ""),
 			id = tostring(user.id or ""),
 		},
 		content_raw = tostring(raw.body or ""),
@@ -383,10 +390,11 @@ function M.to_activity_comment(raw)
 end
 
 ---@param raw table
----@param thread_state {resolved: boolean, outdated: boolean}|nil
+---@param thread_state {pending: boolean|nil, resolved: boolean, outdated: boolean}|nil
 ---@return PullsComment
 function M.to_comment(raw, thread_state)
 	local user = raw.user or {}
+	local body = tostring(raw.body or "")
 	local line = json.nilify(raw.line)
 	local original_line = json.nilify(raw.original_line)
 	local path = json.nilify(raw.path)
@@ -403,10 +411,12 @@ function M.to_comment(raw, thread_state)
 		inline_hunk = parse_diff_hunk(raw.diff_hunk)
 	end
 
-	---@type "RESOLVED"|"OUTDATED"|nil
+	---@type "PENDING"|"RESOLVED"|"OUTDATED"|nil
 	local state = nil
 	if thread_state ~= nil then
-		if thread_state.resolved then
+		if thread_state.pending then
+			state = "PENDING"
+		elseif thread_state.resolved then
 			state = "RESOLVED"
 		elseif thread_state.outdated then
 			state = "OUTDATED"
@@ -433,9 +443,10 @@ function M.to_comment(raw, thread_state)
 		author = {
 			name = tostring(user.login or ""),
 			nickname = tostring(user.login or ""),
+			username = tostring(user.login or ""),
 			id = tostring(user.id or ""),
 		},
-		content_raw = tostring(raw.body or ""),
+		content_raw = body,
 		created_on = tostring(raw.created_at or ""),
 		inline = inline,
 		inline_hunk = inline_hunk,

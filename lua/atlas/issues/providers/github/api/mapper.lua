@@ -12,7 +12,7 @@ local function connection_nodes(value)
 	return json.safe_table(value)
 end
 
----@param raw_user table|nil
+---@param raw_user any Decoded API value.
 ---@return IssueUser|nil
 function M.to_user(raw_user)
 	raw_user = json.nilify(raw_user)
@@ -95,7 +95,7 @@ local function normalize_reaction_groups(raw_groups)
 	return any and out or nil
 end
 
----@param raw_repo table|nil
+---@param raw_repo any Decoded API value.
 ---@param fallback_slug string|nil
 ---@return string slug, string owner, string repo
 local function extract_repo(raw_repo, fallback_slug)
@@ -119,7 +119,7 @@ local function extract_repo(raw_repo, fallback_slug)
 	return slug, owner_part or "", repo_part or ""
 end
 
----@param raw table
+---@param raw any Decoded API value.
 ---@param fallback_slug string|nil
 ---@return Issue|nil
 function M.to_issue(raw, fallback_slug)
@@ -280,7 +280,7 @@ local function normalize_reactions(raw_reactions)
 	return any and out or nil
 end
 
----@param raw table
+---@param raw any Decoded API value.
 ---@return IssueComment|nil
 function M.to_comment(raw)
 	raw = json.nilify(raw)
@@ -326,14 +326,12 @@ function M.to_comments_list(raw_list)
 	return out
 end
 
---------------------------------------------------------------------------------
 -- Provider specific types
---------------------------------------------------------------------------------
 
 ---@param hex string|nil
 ---@return string|nil
 local function label_hl_group(hex)
-	if type(hex) ~= "string" or hex == "" then
+	if hex == nil or hex == "" then
 		return nil
 	end
 	local clean = hex:lower():gsub("[^0-9a-f]", "")
@@ -345,7 +343,7 @@ local function label_hl_group(hex)
 	return name
 end
 
----@param raw table
+---@param raw any Decoded API value.
 ---@return IssueActivityEntry|nil
 function M.to_timeline_entry(raw)
 	raw = json.nilify(raw)

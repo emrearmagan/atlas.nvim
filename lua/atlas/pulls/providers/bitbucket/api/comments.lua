@@ -3,8 +3,61 @@ local M = {}
 local service = require("atlas.pulls.providers.bitbucket.api.service")
 local mapper = require("atlas.pulls.providers.bitbucket.api.mapper")
 
+---@param url string
+---@param on_done fun(result: { values: table[] }|nil, err: string|nil)
+---@return { cancel: fun() }
+local function fetch_all_values(url, on_done)
+	local values = {}
+	local current
+	local cancelled = false
+
+	local function fetch_page(page_url)
+		if cancelled then
+			return
+		end
+
+		current = service.request("GET", page_url, nil, nil, function(result, err)
+			if cancelled then
+				return
+			end
+			if err then
+				on_done(nil, err)
+				return
+			end
+
+			for _, value in ipairs(result.values or {}) do
+				table.insert(values, value)
+			end
+			local next_url = type(result.next) == "string" and result.next or ""
+			if next_url == "" then
+				on_done({ values = values }, nil)
+				return
+			end
+			fetch_page(next_url)
+		end)
+	end
+
+	fetch_page(url)
+	return {
+		cancel = function()
+			cancelled = true
+			if current and current.cancel then
+				current.cancel()
+			end
+		end,
+	}
+end
+
+---@param workspace string
+---@param repo string
+---@param pr_id string|number
+---@return string
+local function task_cache_key(workspace, repo, pr_id)
+	return string.format("bitbucket:pr:tasks:%s/%s/%s", tostring(workspace), tostring(repo), tostring(pr_id))
+end
+
 ---@param raw_content string
----@param opts? { parent_id?: number|string|nil, inline?: { from?: number, to?: number, start_from?: number, start_to?: number, path?: string }|nil }
+---@param opts? { parent_id?: number|string|nil, inline?: { from?: number, to?: number, start_from?: number, start_to?: number, path?: string }|nil, pending?: boolean|nil }
 ---@return string
 local function encode_comment_payload(raw_content, opts)
 	opts = opts or {}
@@ -15,8 +68,11 @@ local function encode_comment_payload(raw_content, opts)
 	if opts.parent_id ~= nil then
 		payload.parent = { id = tonumber(opts.parent_id) or opts.parent_id }
 	end
+	if opts.pending then
+		payload.pending = true
+	end
 
-	if type(opts.inline) == "table" then
+	if opts.inline then
 		payload.inline = {
 			from = opts.inline.from,
 			to = opts.inline.to,
@@ -34,7 +90,7 @@ end
 ---@param on_done fun(comments: PullsComment[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_comments(pr, opts, on_done)
-	local raw = pr._raw or {}
+	local raw = pr._raw
 	local comments_url = tostring((raw.links or {}).comments or "")
 	if comments_url == "" then
 		on_done({}, nil)
@@ -53,7 +109,7 @@ function M.fetch_comments(pr, opts, on_done)
 		end
 	end
 
-	return service.request("GET", url, nil, nil, function(result, err)
+	return fetch_all_values(url, function(result, err)
 		if err then
 			on_done(nil, err)
 			return
@@ -66,43 +122,44 @@ end
 
 ---@param pr PullRequest
 ---@param content string
----@param opts? { inline?: { from?: number, to?: number, start_from?: number, start_to?: number, path?: string }|nil }
+---@param opts? { inline?: { from?: number, to?: number, start_from?: number, start_to?: number, path?: string }|nil, pending?: boolean|nil }
 ---@param on_done fun(comment: PullsComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.add_comment(pr, content, opts, on_done)
-	if type(opts) == "function" and on_done == nil then
-		on_done = opts
-		opts = nil
-	end
-	local raw = pr._raw or {}
+	local raw = pr._raw
 	local comments_url = tostring((raw.links or {}).comments or "")
 	if comments_url == "" then
 		on_done(nil, "No comments URL available")
 		return nil
 	end
 
-	local body = encode_comment_payload(content, { inline = opts and opts.inline or nil })
+	local body = encode_comment_payload(content, {
+		inline = opts and opts.inline or nil,
+		pending = opts and opts.pending or nil,
+	})
 	return service.request("POST", comments_url, nil, body, function(result, err)
 		if err then
 			on_done(nil, err)
 			return
 		end
-		on_done(mapper.to_comment(result), nil)
+		service.clear_cache()
+		local comment = mapper.to_comment(result)
+		if comment == nil then
+			on_done(nil, "Bitbucket did not return the created comment")
+			return
+		end
+		on_done(comment, nil)
 	end)
 end
 
 ---@param pr PullRequest
 ---@param parent_id number|string
 ---@param content string
----@param opts? { inline?: { from?: number, to?: number, start_from?: number, start_to?: number, path?: string }|nil }
+---@param opts? { inline?: { from?: number, to?: number, start_from?: number, start_to?: number, path?: string }|nil, pending?: boolean|nil }
 ---@param on_done fun(comment: PullsComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.reply_comment(pr, parent_id, content, opts, on_done)
-	if type(opts) == "function" and on_done == nil then
-		on_done = opts
-		opts = nil
-	end
-	local raw = pr._raw or {}
+	local raw = pr._raw
 	local comments_url = tostring((raw.links or {}).comments or "")
 	if comments_url == "" then
 		on_done(nil, "No comments URL available")
@@ -112,28 +169,31 @@ function M.reply_comment(pr, parent_id, content, opts, on_done)
 	local body = encode_comment_payload(content, {
 		parent_id = parent_id,
 		inline = opts and opts.inline or nil,
+		pending = opts and opts.pending or nil,
 	})
 	return service.request("POST", comments_url, nil, body, function(result, err)
 		if err then
 			on_done(nil, err)
 			return
 		end
-		on_done(mapper.to_comment(result), nil)
+		service.clear_cache()
+		local comment = mapper.to_comment(result)
+		if comment == nil then
+			on_done(nil, "Bitbucket did not return the created reply")
+			return
+		end
+		on_done(comment, nil)
 	end)
 end
 
 ---@param pr PullRequest
----@param comment_id number|string|string
+---@param comment_id number|string
 ---@param content string
 ---@param opts? { inline?: { from?: number, to?: number, start_from?: number, start_to?: number, path?: string }|nil }
 ---@param on_done fun(comment: PullsComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.edit_comment(pr, comment_id, content, opts, on_done)
-	if type(opts) == "function" and on_done == nil then
-		on_done = opts
-		opts = nil
-	end
-	local raw = pr._raw or {}
+	local raw = pr._raw
 	local comments_url = tostring((raw.links or {}).comments or "")
 	if comments_url == "" then
 		on_done(nil, "No comments URL available")
@@ -147,16 +207,22 @@ function M.edit_comment(pr, comment_id, content, opts, on_done)
 			on_done(nil, err)
 			return
 		end
-		on_done(mapper.to_comment(result), nil)
+		service.clear_cache()
+		local comment = mapper.to_comment(result)
+		if comment == nil then
+			on_done(nil, "Bitbucket did not return the updated comment")
+			return
+		end
+		on_done(comment, nil)
 	end)
 end
 
 ---@param pr PullRequest
----@param comment_id number|string|string
+---@param comment_id number|string
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.delete_comment(pr, comment_id, on_done)
-	local raw = pr._raw or {}
+	local raw = pr._raw
 	local comments_url = tostring((raw.links or {}).comments or "")
 	if comments_url == "" then
 		on_done(false, "No comments URL available")
@@ -169,7 +235,30 @@ function M.delete_comment(pr, comment_id, on_done)
 			on_done(false, err)
 			return
 		end
+		service.clear_cache()
 		on_done(true, nil)
+	end)
+end
+
+---@param pr PullRequest
+---@param comment_id number|string
+---@param resolved boolean
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.set_thread_resolved(pr, comment_id, resolved, on_done)
+	local raw = pr._raw
+	local comments_url = tostring((raw.links or {}).comments or "")
+	if comments_url == "" then
+		on_done(false, "No comments URL available")
+		return nil
+	end
+
+	local url = string.format("%s/%s/resolve", comments_url, tostring(comment_id))
+	return service.request_text(resolved and "POST" or "DELETE", url, nil, nil, function(_, err)
+		if not err then
+			service.clear_cache()
+		end
+		on_done(err == nil, err)
 	end)
 end
 
@@ -181,7 +270,7 @@ end
 ---@field updated_on string
 ---@field resolved_on string|nil
 ---@field pending boolean|nil
----@field creator {name: string, nickname: string|nil, id: string|nil}
+---@field creator PullsAuthor
 ---@field comment_id number|nil
 ---@field links {self: string, html: string}
 ---@field comment_html string
@@ -189,7 +278,7 @@ end
 ---@param workspace string
 ---@param repo string
 ---@param pr_id string|number
----@param opts? { force_refresh?: boolean, pagelen?: number }
+---@param opts? { force_refresh?: boolean }
 ---@param on_done fun(tasks: BitbucketPRTask[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_tasks(workspace, repo, pr_id, opts, on_done)
@@ -205,8 +294,8 @@ function M.fetch_tasks(workspace, repo, pr_id, opts, on_done)
 
 	local endpoint = string.format("/repositories/%s/%s/pullrequests/%s/tasks", ws, rp, id)
 	local sep = endpoint:find("?") and "&" or "?"
-	local url = string.format("%s%spagelen=%d", endpoint, sep, tonumber(opts.pagelen) or 100)
-	local key = string.format("bitbucket:pr:tasks:%s/%s/%s:%d", ws, rp, id, tonumber(opts.pagelen) or 100)
+	local url = string.format("%s%spagelen=100", endpoint, sep)
+	local key = task_cache_key(ws, rp, id)
 	if opts.force_refresh ~= true then
 		local cached, ok = service.get_cache(key)
 		if ok then
@@ -215,7 +304,7 @@ function M.fetch_tasks(workspace, repo, pr_id, opts, on_done)
 		end
 	end
 
-	return service.request("GET", url, nil, nil, function(result, err)
+	return fetch_all_values(url, function(result, err)
 		if err then
 			on_done(nil, err)
 			return
@@ -241,10 +330,10 @@ function M.update_task(task_url, opts, on_done)
 	end
 
 	local payload = {}
-	if type(opts.content_raw) == "string" and opts.content_raw ~= "" then
+	if opts.content_raw ~= nil and opts.content_raw ~= "" then
 		payload.content = { raw = opts.content_raw }
 	end
-	if type(opts.state) == "string" and opts.state ~= "" then
+	if opts.state ~= nil and opts.state ~= "" then
 		payload.state = opts.state
 	end
 
@@ -255,6 +344,7 @@ function M.update_task(task_url, opts, on_done)
 			return
 		end
 
+		service.clear_cache()
 		local entries = mapper.to_tasks_list({ values = { result } })
 		on_done(entries[1] or nil, nil)
 	end)
@@ -270,14 +360,19 @@ function M.delete_task(task_url, on_done)
 		return nil
 	end
 
-	return service.request("DELETE", url, nil, nil, on_done)
+	return service.request("DELETE", url, nil, nil, function(result, err)
+		if not err then
+			service.clear_cache()
+		end
+		on_done(result, err)
+	end)
 end
 
 ---@param workspace string
 ---@param repo string
 ---@param pr_id string|number
 ---@param raw string
----@param opts? { comment_id?: number|string|nil }
+---@param opts? { comment_id?: number|string|nil, pending?: boolean|nil }
 ---@param on_done fun(task: BitbucketPRTask|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.create_task(workspace, repo, pr_id, raw, opts, on_done)
@@ -295,6 +390,9 @@ function M.create_task(workspace, repo, pr_id, raw, opts, on_done)
 	local payload = {
 		content = { raw = tostring(raw or "") },
 	}
+	if opts.pending then
+		payload.pending = true
+	end
 	if opts.comment_id ~= nil and tostring(opts.comment_id) ~= "" then
 		payload.comment = { id = tonumber(opts.comment_id) or opts.comment_id }
 	end
@@ -306,6 +404,7 @@ function M.create_task(workspace, repo, pr_id, raw, opts, on_done)
 			return
 		end
 
+		service.clear_cache()
 		local entries = mapper.to_tasks_list({ values = { result } })
 		on_done(entries[1] or nil, nil)
 	end)

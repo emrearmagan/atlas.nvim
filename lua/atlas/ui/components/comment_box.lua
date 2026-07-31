@@ -12,6 +12,7 @@ local M = {}
 ---@field author string
 ---@field author_hl string|nil
 ---@field icon string|nil
+---@field icon_hl string|nil
 ---@field verb string|nil
 ---@field timestamp string|nil
 ---@field actions_text string|nil
@@ -39,7 +40,7 @@ local function render_header(opts)
 	local col = 0
 	if icon ~= "" then
 		table.insert(left_parts, icon)
-		table.insert(spans, { line = 0, start_col = col, end_col = col + #icon, hl_group = author_hl })
+		table.insert(spans, { line = 0, start_col = col, end_col = col + #icon, hl_group = opts.icon_hl or author_hl })
 		col = col + #icon
 		table.insert(left_parts, "  ")
 		col = col + 2

@@ -1,12 +1,13 @@
 local icons = require("atlas.ui.shared.icons")
 local GITLAB_REACTION_OPTIONS = require("atlas.ui.shared.emojis").gitlab()
+local provider_icon, provider_hl = icons.issues_provider("gitlab", "provider")
 
 ---@class GitLabIssuesProvider : IssuesProvider
 local M = {
 	id = "gitlab",
 	name = "GitLab",
-	icon = icons.issues_provider("gitlab", "provider"),
-	hl_group = "AtlasGLIssuesTheme",
+	icon = provider_icon,
+	hl_group = provider_hl,
 	panel = require("atlas.issues.providers.gitlab.ui.panel"),
 }
 
@@ -122,7 +123,7 @@ function M.fetch_conversation(issue, opts, on_done)
 			return
 		end
 		local comments = {}
-		local raw = type(issue._raw) == "table" and issue._raw or {}
+		local raw = issue._raw or {}
 		local description = tostring(raw.description or "")
 		if description ~= "" then
 			table.insert(comments, {
@@ -143,23 +144,29 @@ function M.fetch_conversation(issue, opts, on_done)
 		}, nil)
 	end
 
-	table.insert(handles, notes.list_comments(key, { force_load = force }, function(comments, err)
-		if err then
-			first_err = first_err or err
-		else
-			comments_result = comments
-		end
-		finish()
-	end))
+	table.insert(
+		handles,
+		notes.list_comments(key, { force_load = force }, function(comments, err)
+			if err then
+				first_err = first_err or err
+			else
+				comments_result = comments
+			end
+			finish()
+		end)
+	)
 
-	table.insert(handles, notes.list_history(key, { force_load = force }, function(events, err)
-		if err then
-			first_err = first_err or err
-		else
-			events_result = events
-		end
-		finish()
-	end))
+	table.insert(
+		handles,
+		notes.list_history(key, { force_load = force }, function(events, err)
+			if err then
+				first_err = first_err or err
+			else
+				events_result = events
+			end
+			finish()
+		end)
+	)
 
 	return {
 		cancel = function()
@@ -200,7 +207,7 @@ end
 function M.edit_comment(issue, comment_id, content, on_done)
 	local key = tostring(issue.key or "")
 	if tostring(comment_id) == "__body__" then
-		local raw = type(issue._raw) == "table" and issue._raw or {}
+		local raw = issue._raw or {}
 		local project = tonumber(raw.project_id)
 		local iid = tonumber(raw.iid)
 		if project == nil or iid == nil then
@@ -313,10 +320,11 @@ end
 ---@return AtlasGitLabIssuesViewConfig[]
 function M.views()
 	local cfg = require("atlas.issues.providers.gitlab.api.service").gitlab_config()
-	local views = cfg.views or {
-		{ name = "Assigned", key = "1", scope = "assigned_to_me", state = "opened" },
-		{ name = "Created", key = "2", scope = "created_by_me", state = "opened" },
-	}
+	local views = cfg.views
+		or {
+			{ name = "Assigned", key = "1", scope = "assigned_to_me", state = "opened" },
+			{ name = "Created", key = "2", scope = "created_by_me", state = "opened" },
+		}
 	return require("atlas.ui.shared.bookmarks_view").append_to_views(views, cfg.bookmarks, "S", "Search")
 end
 

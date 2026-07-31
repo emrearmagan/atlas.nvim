@@ -1,67 +1,93 @@
 local M = {}
 
--- Bitbucket comment/activity text often contains mentions as account IDs
--- (e.g. "@{<account_id>}"), not display names. We best-effort resolve them
--- using users known in the current PR detail (author/reviewers/participants).
---
+---@param context AtlasPullsCommentCompletionContext
 ---@return PullsAuthor[]
-local function collect_authors()
-	local panel_state = require("atlas.pulls.ui.panel.pr.state")
-	local comments_state = require("atlas.pulls.ui.panel.pr.tabs.review.state")
-
-	local seen = {}
+local function collect_authors(context)
+	local authors = {}
+	local handles = {}
 	local function add(author)
 		if type(author) ~= "table" then
 			return
 		end
 		local id = tostring(author.id or "")
-		if id == "" or seen[id] then
+		if id == "" then
+			id = tostring(author.account_id or "")
+		end
+		if id == "" or authors[id] then
 			return
 		end
-		seen[id] = {
+		local username = tostring(author.nickname or "")
+		if username == "" then
+			username = tostring(author.username or "")
+		end
+		local name = tostring(author.name or "")
+		if name == "" then
+			name = tostring(author.display_name or username)
+		end
+		authors[id] = {
 			id = id,
-			name = tostring(author.name or ""),
-			username = tostring(author.nickname or author.username or ""),
+			name = name,
+			username = username,
 		}
+		if username ~= "" then
+			handles[username:lower()] = true
+		end
 	end
 
-	local pr = panel_state.current_pr
+	local pr = context.pr
+	for _, author in ipairs((context.review_context or {}).authors or {}) do
+		add(author)
+	end
 	if pr then
 		add(pr.author)
+		for _, participant in ipairs(pr._raw.participants or {}) do
+			add(type(participant) == "table" and participant.user or nil)
+		end
 	end
-
-	local overview_state = require("atlas.pulls.ui.panel.pr.tabs.overview.state")
-	local reviewers = overview_state.reviewers
-	if type(reviewers) == "table" then
-		---@cast reviewers PullsReviewer[]
-		for _, r in ipairs(reviewers) do
-			add({ id = r.nickname or r.name, name = r.name, nickname = r.nickname })
+	for _, items in ipairs({ context.comments or {}, context.tasks or {}, context.conversation or {} }) do
+		for _, item in ipairs(items) do
+			add(item.author)
+		end
+	end
+	for _, reviewer in ipairs(context.reviewers or {}) do
+		local handle = tostring(reviewer.nickname or "")
+		if handle == "" then
+			handle = tostring(reviewer.name or "")
+		end
+		if handle ~= "" and not handles[handle:lower()] then
+			add({ id = handle, name = reviewer.name, nickname = reviewer.nickname })
 		end
 	end
 
-	local comments = comments_state.comments
-	if type(comments) == "table" then
-		---@cast comments PullsComment[]
-		for _, c in ipairs(comments) do
-			add(c.author)
-		end
-	end
-
-	return vim.tbl_values(seen)
+	return vim.tbl_values(authors)
 end
 
 ---@param authors PullsAuthor[]
 ---@return table<string, string>
 local function build_map(authors)
-	local map = {}
-	for _, author in ipairs(authors or {}) do
+	local mentions = {}
+	for _, author in ipairs(authors) do
 		local id = tostring(author.id or "")
-		local name = tostring(author.name or author.username or "")
+		local name = tostring(author.name or "")
+		if name == "" then
+			name = tostring(author.username or "")
+		end
 		if id ~= "" and name ~= "" then
-			map[id] = name
+			mentions[id] = name
 		end
 	end
-	return map
+	return mentions
+end
+
+---@param text string
+---@param mentions table<string, string>
+---@return string
+local function resolve(text, mentions)
+	return (
+		tostring(text or ""):gsub("@{([^}]+)}", function(id)
+			return mentions[id] and ("@" .. mentions[id]) or ("@{" .. id .. "}")
+		end)
+	)
 end
 
 ---@param mention_map table<string, string>
@@ -79,32 +105,19 @@ local function to_mentions(mention_map)
 	return users
 end
 
----@param text string
----@param authors PullsAuthor[]
----@return string
-function M.resolve(text, authors)
-	local raw = tostring(text or "")
-	if raw:find("@{", 1, true) == nil then
-		return raw
-	end
-
-	local mention_map = build_map(authors or collect_authors())
-	return (
-		raw:gsub("@{([^}]+)}", function(id)
-			local name = mention_map[id]
-			if name and name ~= "" then
-				return "@" .. name
-			end
-			return "@{" .. id .. "}"
-		end)
-	)
-end
-
+---@param context AtlasPullsCommentCompletionContext
 ---@return AtlasMarkdownCompletionProvider|nil
-function M.build_completion()
-	local mention_map = build_map(collect_authors())
+function M.build_completion(context)
+	local mention_map = build_map(collect_authors(context))
 	return {
 		trigger = "@",
+		resolve_items = function()
+			for _, items in ipairs({ context.comments or {}, context.tasks or {} }) do
+				for _, item in ipairs(items) do
+					item.content_display = resolve(item.content_raw, mention_map)
+				end
+			end
+		end,
 		find_start = function(before)
 			local start_after_at = tostring(before or ""):match(".*@()[-%w_]*$")
 			if start_after_at == nil then
@@ -135,7 +148,13 @@ function M.build_completion()
 			if id ~= "" then
 				return "@{" .. id .. "}"
 			end
-			local name = tostring((author or {}).nickname or (author or {}).username or (author or {}).name or "")
+			local name = tostring((author or {}).nickname or "")
+			if name == "" then
+				name = tostring((author or {}).username or "")
+			end
+			if name == "" then
+				name = tostring((author or {}).name or "")
+			end
 			return name ~= "" and ("@" .. name) or ""
 		end,
 	}

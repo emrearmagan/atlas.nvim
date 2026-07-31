@@ -24,11 +24,14 @@
 --             },
 --           },
 --
---           -- Per-project custom field
+--           -- Global Jira display settings and per-project custom fields
 --           project_config = {
 --             story_points_field = "customfield_10016",
+--             issue_types = {
+--               ["Maintenance"] = { icon = "", hl_group = "AtlasTextWarning" },
+--               ["Infrastructure"] = { icon = "󰒋", hl_group = "AtlasLogInfo" },
+--             },
 --             KAN = {
---               story_points_field = "customfield_10016",
 --               customfield_10038 = {
 --                 name    = "Team",
 --                 format  = function(v) return type(v) == "table" and v.value or nil end,
@@ -51,9 +54,18 @@
 ---@field hl_group string|nil
 ---@field display "chip"|"table"|nil
 
+---@class AtlasJiraIssueTypeConfig
+---@field icon string|nil
+---@field hl_group string|nil
+
+---@alias AtlasJiraIssueTypesConfig table<string, AtlasJiraIssueTypeConfig>
+
+---@alias AtlasJiraProjectFieldsConfig table<string, AtlasJiraCustomFieldConfig>
+
 ---@class AtlasJiraProjectConfig
 ---@field story_points_field string|nil
----[project_key] AtlasJiraCustomFieldConfig
+---@field issue_types AtlasJiraIssueTypesConfig|nil
+---@field [string] AtlasJiraProjectFieldsConfig
 
 ---@class AtlasJiraBookmarksConfig
 ---@field key string|nil    -- default "J"

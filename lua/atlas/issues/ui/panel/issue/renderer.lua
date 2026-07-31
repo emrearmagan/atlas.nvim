@@ -77,14 +77,15 @@ function M.render(tab_items, get_tab_module)
 		table.insert(lines, "")
 
 		-- Tab bar
-		local tab_lines, tab_spans = panel_tabs.render(tab_items, panel_state.current_tab, { width = width, padding_x = PADDING_X })
+		local tab_lines, tab_spans =
+			panel_tabs.render(tab_items, panel_state.current_tab, { width = width, padding_x = PADDING_X })
 		utils.append_block(lines, spans, { lines = tab_lines, highlights = tab_spans })
 		table.insert(lines, "")
 
 		-- Tab content
 		local tab_mod = get_tab_module(panel_state.current_tab)
 		local content_offset = #lines
-		if tab_mod and type(tab_mod.render) == "function" then
+		if tab_mod and tab_mod.render then
 			local tab_lines_c, tab_spans_c, tab_line_map = tab_mod.render(issue, width)
 			utils.append_block(lines, spans, { lines = tab_lines_c, highlights = tab_spans_c })
 

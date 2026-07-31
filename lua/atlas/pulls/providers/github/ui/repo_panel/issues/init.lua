@@ -10,7 +10,7 @@ local repo_panel_state = require("atlas.pulls.ui.panel.repo.state")
 
 local PADDING_X = 1
 local PADDING = string.rep(" ", PADDING_X)
-local COMMENT_ICON = icons.general("comment")
+local COMMENT_ICON, COMMENT_ICON_HL = icons.general("comment")
 
 ---@type { cancel: fun() }[]
 local in_flight = {}
@@ -162,7 +162,10 @@ function M.render(_repo, width)
 
 		if right ~= "" then
 			local right_start = #line1 - #right - 1
-			table.insert(spans, { line = lnum1, start_col = right_start, end_col = right_start + #right, hl_group = "AtlasTextMuted" })
+			table.insert(
+				spans,
+				{ line = lnum1, start_col = right_start, end_col = right_start + #right, hl_group = COMMENT_ICON_HL }
+			)
 		end
 
 		local indent = PADDING .. "  "

@@ -10,40 +10,39 @@ A Neovim plugin for managing GitHub/Bitbucket/GitLab PRs and Jira/GitHub/GitLab 
 > [!CAUTION]
 > **Still in early development, will have breaking changes!**
 
-<table>
-  <thead>
-    <tr>
-      <th width="50%" align="center">GitHub</th>
-      <th width="50%" align="center">Bitbucket</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td width="50%"><img alt="GitHub PRs" src="https://github.com/user-attachments/assets/caa30d3c-6883-4f2e-bc12-81bb2127f798"></td>
-      <td width="50%"><img alt="Bitbucket PRs" src="https://github.com/user-attachments/assets/06299ffc-b15b-4e2c-8f11-95a8ddde3b04"></td>
-    </tr>
-    <tr>
-      <th width="50%" align="center">GitLab</th>
-      <th width="50%" align="center">Jira</th>
-    </tr>
-    <tr>
-	  <td width="50%"><img alt="Jira" src="https://github.com/user-attachments/assets/81b4023b-7f36-47cf-aeaf-28f9c1ebeb76"></td>
-      <td width="50%"><img alt="Jira" src="https://github.com/user-attachments/assets/23a15b90-283c-45e2-8964-02970ec3b21a"></td>
-    </tr>
-  </tbody>
-</table>
+<p>
+  <img alt="GitHub" src="https://img.shields.io/badge/GitHub-181717?style=flat-square&logo=github&logoColor=white">
+  <img alt="Bitbucket" src="https://img.shields.io/badge/Bitbucket-0052CC?style=flat-square&logo=bitbucket&logoColor=white">
+  <img alt="GitLab" src="https://img.shields.io/badge/GitLab-FC6D26?style=flat-square&logo=gitlab&logoColor=white">
+  <img alt="Jira" src="https://img.shields.io/badge/Jira-0052CC?style=flat-square&logo=jira&logoColor=white">
+</p>
+
+<p align="center">
+  <img width="49%" alt="AtlasDiff" src="https://github.com/user-attachments/assets/47e1f9c6-38a5-4bac-90fd-46ae69b7dffc">
+  <img width="49%" alt="Atlas UI" src="https://github.com/user-attachments/assets/9716c643-bae0-427b-a2bd-f5a809dca6cc">
+</p>
 
 ## Table of Contents
 
 - [Installation](#installation)
-- [Issues](#issues)
-  - [Jira](#jira)
-  - [GitHub](#github-issues)
-  - [GitLab](#gitlab-issues)
+  - [Using lazy.nvim](#using-lazynvim)
+  - [Using packer.nvim](#using-packernvim)
+- [Requirements](#requirements)
+- [Commands](#commands)
 - [Pulls](#pulls)
-  - [GitHub](#github)
-  - [Bitbucket](#bitbucket)
-  - [GitLab](#gitlab)
+  - [Configuration](#pulls-configuration)
+    - [GitHub](#github)
+    - [Bitbucket](#bitbucket)
+    - [GitLab](#gitlab)
+  - [Review Pulls](#review-pulls)
+  - [Create Pulls](#create-pulls)
+- [Issues](#issues)
+  - [Configuration](#issue-configuration)
+    - [Jira](#jira)
+    - [GitHub](#github-issues)
+    - [GitLab](#gitlab-issues)
+  - [Create Issues](#create-issues)
+- [Keymaps](#keymaps)
 
 ## Installation
 
@@ -53,6 +52,7 @@ A Neovim plugin for managing GitHub/Bitbucket/GitLab PRs and Jira/GitHub/GitLab 
 {
   "emrearmagan/atlas.nvim",
   dependencies = {
+    "nvim-tree/nvim-web-devicons", -- optional but recommended
     "MeanderingProgrammer/render-markdown.nvim", -- optional but recommended
     "esmuellert/codediff.nvim", -- optional (PullRequest diff)
     "sindrets/diffview.nvim", -- optional (PullRequest diff - alternative)
@@ -120,7 +120,8 @@ use {
 ## Requirements
 
 - Neovim: `0.10+`
-- Jira: Jira Cloud REST API v3 (`*.atlassian.net`)
+- `git` and `curl` on `$PATH`
+- Jira: Jira Cloud REST API v3 (`*.atlassian.net`) or Jira Server REST API v2
 - Bitbucket: Bitbucket Cloud REST API 2.0 (`api.bitbucket.org`)
 - GitHub: GitHub CLI (`gh`) authenticated with `gh auth login`
 - GitLab: GitLab REST API v4 (`gitlab.com` or self-hosted), Personal Access Token with `api` scope
@@ -135,276 +136,39 @@ use {
 
 - `:AtlasIssues [provider]` - Open Atlas issues domain
 - `:AtlasPulls [provider]` - Open Atlas pulls domain
+- `:AtlasDiff <base>...<head>` or `:AtlasDiff <pull-request-url>` - Open a local Git range or pull request review
+- `:AtlasNotes` - Inspect local review notes across pull requests
 - `:AtlasCreatePR` - Create a pull request from the current branch
-- `:AtlasCreateIssue` - Create an issue (GitHub / Jira)
+- `:AtlasCreateIssue` - Create an issue (GitHub / GitLab / Jira)
 - `:AtlasSearch [provider]` - Pick a configured provider and prompt its search
+- `:AtlasOpen <target>` - Open a provider URL, Jira key, repository reference, or PR/issue number
 - `:AtlasClearCache` - Clear Atlas disk and memory cache
 - `:AtlasLogs` - Toggle Atlas logs
 
-## Issues
-
-- [x] Create and edit issues
-- [x] View and edit issues as markdown -> ADF conversion for descriptions (experimental)
-- [x] Issue tabs: overview, comments, activity
-- [x] Manage and edit issues (e.g. transition, assign, edit reporter, edit title, delete)
-- [x] Comment workflows (create, reply, edit, delete)
-- [x] Search issues
-- [x] JQL support and completion
-- [x] Support for custom fields
-- [x] Subscribe / unsubscribe to issues
-- [x] Add custom actions to issues
-- [x] Create and edit issue templates
-- [ ] Save and filter issues
-
-### Jira
-
-> [!NOTE]
-> If you're only looking for Jira support, check out https://github.com/letieu/jira.nvim. This plugin was the main inspiration for this project.  
-> Jira support is included here mainly because I wanted a single tool that works with both Atlassian products.
-
-> [!IMPORTANT]
-> The markdown editor for issue descriptions and comments is still experimental and may not work perfectly in all cases. You can toggle between markdown and ADF view in the overview tab to see the raw ADF content and how it translates to markdown. If you encounter any issues with the markdown editor, please open an issue with details.
-
-<details>
-<summary><strong>Configuration</strong></summary>
-
-```lua
-issues = {
-  max_results = 100,
-  with_relationships = true, -- Fetch parent/subissue relationships for plain issue tree views.
-  custom_actions = {}, -- See Custom Actions below.
-
-  providers = {
-    jira = {
-      base_url = "https://your-site.atlassian.net",
-      email = "you@example.com",
-      --- See: https://support.atlassian.com/atlassian-account/docs/manage-api-tokens-for-your-atlassian-account/
-      token = "your_jira_api_token",
-      auth_method = "basic", -- "basic" or "bearer", defaults to "basic". If using bearer, set `token` to your API token.
-      api_type = "cloud", -- either "cloud" or "server", defaults to "cloud". Cloud API is v3, server API is v2
-      cache_ttl = 300,
-
-      project_config = {
-        -- The Jira custom field ID used for story points. Defaults to "customfield_10016".
-        story_points_field = "customfield_10016",
-
-        KAN = {
-          customfield_10003 = {
-            name = "Approvers",
-            format = function(value)
-              if type(value) ~= "table" or #value == 0 then
-                return nil -- nil hides the field
-              end
-              return table.concat(value, ", ")
-            end,
-            hl_group = "AtlasChipActive",
-            display = "chip", -- "chip" or "table"
-          },
-        },
-      },
-
-      ---@type AtlasJiraViewConfig[]
-      views = {
-        {
-          name = "My Board",
-          key = "M",
-          layout = "plain",
-          jql = "project = KAN AND assignee = currentUser() ORDER BY updated DESC",
-        },
-        {
-          name = "Team Board",
-          key = "T",
-          layout = "compact",
-          jql = "project = KAN ORDER BY updated DESC",
-        },
-      },
-
-      bookmarks = {
-        key   = "J",   -- default
-        label = "JQL", -- default
-        items = {
-          ["Backlog"]     = "project = KAN AND statusCategory != Done AND (sprint IS EMPTY OR sprint NOT IN openSprints()) ORDER BY Rank ASC",
-          ["Next sprint"] = "project = KAN AND sprint in futureSprints() ORDER BY Rank ASC",
-          ["My open"]     = "assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC",
-        },
-      },
-    },
-  },
-},
-```
-
-<img alt="Edit/Create Issue" src="https://github.com/user-attachments/assets/76913fbf-1667-4f35-9962-d3c1b4619c7f">
-
-</details>
-
-### GitHub Issues
-
-<details>
-<summary><strong>Configuration</strong></summary>
-
-```lua
-issues = {
-  providers = {
-    github = {
-      cache_ttl = 300,
-
-      ---@type AtlasGitHubIssuesViewConfig[]
-      views = {
-        {
-          name = "Assigned",
-          key = "1",
-          layout = "plain",
-          search = "assignee:@me is:open",
-        },
-        {
-          name = "Created",
-          key = "2",
-          layout = "compact",
-          search = "author:@me is:open",
-        },
-        {
-          name = "Mentions",
-          key = "3",
-          layout = "plain",
-          search = "mentions:@me is:open",
-        },
-      },
-
-      bookmarks = {
-        key   = "S",      -- default
-        label = "Search", -- default
-        items = {
-          ["Bugs"]            = "is:issue is:open label:bug",
-          ["Recently closed"] = "is:issue is:closed author:@me sort:updated-desc",
-        },
-      },
-    },
-  },
-},
-```
-
-</details>
-
-### GitLab Issues
-
-<details>
-<summary><strong>Configuration</strong></summary>
-
-Auth uses a [Personal Access Token](https://docs.gitlab.com/ee/user/profile/personal_access_tokens.html) with the `api` scope. Set `base_url` to `https://gitlab.com` or your self-hosted instance.
-
-```lua
-issues = {
-  providers = {
-    gitlab = {
-      base_url = "https://gitlab.com",
-      token = vim.env.GITLAB_TOKEN,
-      cache_ttl = 300,
-
-      ---@type AtlasGitLabIssuesViewConfig[]
-      views = {
-        {
-          name = "Assigned",
-          key = "1",
-          scope = "assigned_to_me",
-          state = "opened",
-        },
-        {
-          name = "Created",
-          key = "2",
-          scope = "created_by_me",
-          state = "opened",
-        },
-        {
-          name = "All open",
-          key = "3",
-          scope = "all",
-          state = "opened",
-          -- Anything not covered by the explicit fields below can be passed via `extra_params`.
-          extra_params = { ["not[labels]"] = "wontfix" },
-        },
-      },
-
-      bookmarks = {
-        key   = "S",      -- default
-        label = "Search", -- default
-        items = {
-          ["No labels"] = { scope = "all", state = "opened",
-                            extra_params = { ["not[labels]"] = "*" } },
-          ["Closed"]    = { scope = "created_by_me", state = "closed" },
-        },
-      },
-    },
-  },
-},
-```
-
-</details>
-
-### Custom Actions
-
-You can add custom issue actions under `issues.custom_actions`.
-
-<details>
-<summary><strong>Example</strong></summary>
-
-Context type:
-
-```lua
----@class AtlasIssuesCustomActionContext
----@field issue Issue|nil
----@field user IssueUser|nil
-```
-
-Example:
-
-```lua
-issues = {
-  custom_actions = {
-    {
-      id = "copy_branch_name",
-      label = "Copy branch name",
-      ---@param issue Issue
-      ---@param ctx AtlasIssuesCustomActionContext
-      ---@param done fun(ok: boolean|nil, message: string|nil)
-      run = function(issue, ctx, done)
-        local branch = string.format("%s/%s", issue.key, issue.summary:lower():gsub("%s+", "-"))
-        vim.fn.setreg("+", branch)
-        done(true, "Copied: " .. branch)
-      end,
-    },
-  },
-}
-```
-
-</details>
-
 ## Pulls
 
-- [x] Multiple views
-- [x] PR tabs: overview, activity, comments, commits, files
-- [x] PR actions: merge, approve, request changes, convert to draft, edit reviewers etc.
-- [x] Comment workflows (create, reply, edit, delete)
-- [x] Build/CI status
-- [x] Diffstat summary
-- [x] Checkout PR branch
-- [x] Add custom actions to PRs
-- [x] Open PR diff in given command
-- [x] Switch between open, merged and closed PRs
-- [x] Subscribe / unsubscribe to PRs
-- [x] Show notifications
-- [x] Create pull requests (`:AtlasCreatePR`)
-- [ ] Pagination for API results
+Use `:AtlasPulls [provider]` to browse and manage pull requests from GitHub, Bitbucket, and GitLab.
 
-### Configuration
+### Pulls Configuration
 
 ```lua
 pulls = {
   diff = {
-    -- Command must support range input: origin/<destination>...origin/<source>
-    open_cmd = "DiffviewOpen", -- e.g. "DiffviewOpen" or "CodeDiff", defaults to nil.
+    -- Command must support explicit <base>...<head> Git revisions.
+    open_cmd = "AtlasDiff", -- default; can be replaced with "DiffviewOpen" / "CodeDiff".
+    layout = "side-by-side", -- "side-by-side" or "inline" for AtlasDiff.
+    compact = true, -- Start with only changed hunks and surrounding context visible.
+    explorer = {
+      grouped = true, -- Group changed files by directory.
+      hidden = false,
+      show_commits = true, -- Initially show commits below changed files.
+      width = 40,
+      initial_focus = "explorer", -- "explorer" or "diff".
+      ignore = { ".git/**", ".jj/**" },
+    },
   },
   repo_config = {
-    -- Maps `workspace/repo` to local paths. Used for checkout and custom actions.
+    -- Maps `workspace/repo` to local paths. Used for checkout, diffs, and custom actions.
     paths = {
       ["your-workspace/*"] = "~/code/repos/*",
       ["your-workspace/atlas"] = "~/code/atlas",
@@ -420,7 +184,7 @@ pulls = {
 },
 ```
 
-### GitHub
+#### GitHub
 
 <details>
 <summary><strong>Configuration</strong></summary>
@@ -467,9 +231,11 @@ pulls = {
 },
 ```
 
+<img alt="GitHub pull requests" src="https://github.com/user-attachments/assets/9716c643-bae0-427b-a2bd-f5a809dca6cc">
+
 </details>
 
-### Bitbucket
+#### Bitbucket
 
 <details>
 <summary><strong>Configuration</strong></summary>
@@ -514,9 +280,11 @@ pulls = {
 },
 ```
 
+<img alt="Bitbucket pull requests" src="https://github.com/user-attachments/assets/bcdd0c9c-e15f-4e82-81fd-cde38aa68a2d">
+
 </details>
 
-### GitLab
+#### GitLab
 
 <details>
 <summary><strong>Configuration</strong></summary>
@@ -571,14 +339,67 @@ pulls = {
 },
 ```
 
+<img alt="GitLab pull requests" src="https://github.com/user-attachments/assets/128fe916-e733-4abb-9c5c-5244684f3c41">
+
+</details>
+
+### Review Pulls
+
+<details>
+<summary><strong>Details</strong></summary>
+
+Press the configured `pulls.open_diff` key (`gd` by default) on a pull request to start a review.
+
+<p align="center">
+  <img alt="AtlasDiff review" src="https://github.com/user-attachments/assets/47e1f9c6-38a5-4bac-90fd-46ae69b7dffc">
+</p>
+
+- See pending, resolved, and outdated provider threads at their diff locations.
+- Review provider tasks and GitHub checklists alongside the comments they belong to.
+- Add, reply to, edit, delete, resolve, or reopen comments when supported.
+
+> [!NOTE]
+> **Alternative viewers:** CodeDiff can display Atlas comment and task overlays, but the integration relies on CodeDiff internals and may break after upstream changes. I used it from my dotfiles for a while before moving it into Atlas. Diffview remains available as a plain diff viewer without Atlas review overlays since i dont use that plugin.
+
+#### Local notes
+
+Local notes let you leave something on a diff without posting it to the pull request. Each note is attached to a file and line and can be an `ISSUE`, `SUGGESTION`, `NOTE`, or `PRAISE`. If that line changes, Atlas shows the note as outdated. If the location no longer exists, Atlas removes it. `:AtlasNotes` lists your notes across all pull requests.
+
+For scripts, use `bin/atlas-notes`. Notes added there appear in AtlasDiff and `:AtlasNotes`:
+
+```sh
+./bin/atlas-notes add \
+  --target https://github.com/owner/repository/pull/123 \
+  --file lua/review_queue.lua --line 19 \
+  --context "local item = queue[index]" \
+  --type suggestion --body "Should this be a bool?"
+```
+
+My dotfiles include a [Pi extension that wraps this script](https://github.com/emrearmagan/dotfiles/blob/main/config/pi/extensions/atlas-notes.ts) so review agents can list and add notes.
+
+</details>
+
+### Create Pulls
+
+<details>
+<summary><strong>Details</strong></summary>
+
+Run `:AtlasCreatePR` on the branch you want to submit. The current branch is used as the source and the repository's default branch as the target. The latest commit supplies the initial title. A configured pull request template supplies the description; without one, Atlas builds it from the branch commits.
+
+Before creating the pull request, you can change the target branch, reviewers, and draft state. The commits and diffstat are shown below the editor, and the diff can be previewed from there.
+
+<p align="center">
+  <img alt="Create pull request" src="https://github.com/user-attachments/assets/bac9afe8-042b-4b0c-8037-86f828694b13">
+</p>
+
 </details>
 
 ### Custom Actions
 
-You can add custom PR actions under `pulls.custom_actions`.
-
 <details>
 <summary><strong>Example</strong></summary>
+
+You can add custom PR actions under `pulls.custom_actions`.
 
 Context type:
 
@@ -634,33 +455,258 @@ pulls = {
 
 </details>
 
-## Search
+## Issues
 
-Use `:AtlasSearch [provider]` to search configured providers.
+Use `:AtlasIssues [provider]` to browse and manage Jira, GitHub, and GitLab issues.
 
-### Jira
+### Issue Configuration
 
-`:AtlasSearch jira` opens a JQL prompt with full completion (fields, operators, values).
-
-```
-project = KAN AND assignee = currentUser() ORDER BY updated DESC
-summary ~ "login bug"
-```
-
-### GitHub
-
-`:AtlasSearch github` opens a GitHub search prompt with completion (`is:`, `repo:`, `author:`, `label:` etc.).
-
-```
-is:pr is:open author:@me
-is:issue label:bug
+```lua
+issues = {
+  max_results = 100,
+  with_relationships = true, -- Fetch parent/subissue relationships for plain issue tree views.
+  custom_actions = {}, -- See Custom Actions below.
+}
 ```
 
-### Bitbucket
+#### Jira
 
-`:AtlasSearch bitbucket` asks for a workspace and a repository and opens the UI scoped to that repo.
+<details>
+<summary><strong>Configuration</strong></summary>
 
-#### Keymaps
+> [!NOTE]
+> If you're only looking for Jira support, check out https://github.com/letieu/jira.nvim. This plugin was the main inspiration for this project.
+> Jira support is included here mainly because I wanted a single tool that works with both Atlassian products.
+
+> [!IMPORTANT]
+> The markdown editor for issue descriptions and comments is still experimental and may not work perfectly in all cases. You can toggle between markdown and ADF view in the overview tab to see the raw ADF content and how it translates to markdown. If you encounter any issues with the markdown editor, please open an issue with details.
+
+```lua
+issues = {
+  providers = {
+    jira = {
+      base_url = "https://your-site.atlassian.net",
+      email = "you@example.com",
+      --- See: https://support.atlassian.com/atlassian-account/docs/manage-api-tokens-for-your-atlassian-account/
+      token = "your_jira_api_token",
+      auth_method = "basic", -- "basic" or "bearer", defaults to "basic". If using bearer, set `token` to your API token.
+      api_type = "cloud", -- either "cloud" or "server", defaults to "cloud". Cloud API is v3, server API is v2
+      cache_ttl = 300,
+
+      project_config = {
+        -- The Jira custom field ID used for story points. Defaults to "customfield_10016".
+        story_points_field = "customfield_10016",
+        issue_types = {
+          ["Maintenance"] = { icon = "", hl_group = "AtlasTextWarning" },
+          ["Infrastructure"] = { icon = "󰒋", hl_group = "AtlasLogInfo" },
+        },
+
+        KAN = {
+          customfield_10003 = {
+            name = "Approvers",
+            format = function(value)
+              if type(value) ~= "table" or #value == 0 then
+                return nil -- nil hides the field
+              end
+              return table.concat(value, ", ")
+            end,
+            hl_group = "AtlasChipActive",
+            display = "chip", -- "chip" or "table"
+          },
+        },
+      },
+
+      ---@type AtlasJiraViewConfig[]
+      views = {
+        {
+          name = "My Board",
+          key = "M",
+          layout = "plain",
+          jql = "project = KAN AND assignee = currentUser() ORDER BY updated DESC",
+        },
+        {
+          name = "Team Board",
+          key = "T",
+          layout = "compact",
+          jql = "project = KAN ORDER BY updated DESC",
+        },
+      },
+
+      bookmarks = {
+        key   = "J",   -- default
+        label = "JQL", -- default
+        items = {
+          ["Backlog"]     = "project = KAN AND statusCategory != Done AND (sprint IS EMPTY OR sprint NOT IN openSprints()) ORDER BY Rank ASC",
+          ["Next sprint"] = "project = KAN AND sprint in futureSprints() ORDER BY Rank ASC",
+          ["My open"]     = "assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC",
+        },
+      },
+    },
+  },
+},
+```
+
+<img alt="Jira issues" src="https://github.com/user-attachments/assets/4cb40f1f-0b18-4fb1-82ae-6bc57fc8a7c5">
+
+</details>
+
+#### GitHub Issues
+
+<details>
+<summary><strong>Configuration</strong></summary>
+
+```lua
+issues = {
+  providers = {
+    github = {
+      cache_ttl = 300,
+
+      ---@type AtlasGitHubIssuesViewConfig[]
+      views = {
+        {
+          name = "Assigned",
+          key = "1",
+          layout = "plain",
+          search = "assignee:@me is:open",
+        },
+        {
+          name = "Created",
+          key = "2",
+          layout = "compact",
+          search = "author:@me is:open",
+        },
+        {
+          name = "Mentions",
+          key = "3",
+          layout = "plain",
+          search = "mentions:@me is:open",
+        },
+      },
+
+      bookmarks = {
+        key   = "S",      -- default
+        label = "Search", -- default
+        items = {
+          ["Bugs"]            = "is:issue is:open label:bug",
+          ["Recently closed"] = "is:issue is:closed author:@me sort:updated-desc",
+        },
+      },
+    },
+  },
+},
+```
+
+</details>
+
+#### GitLab Issues
+
+<details>
+<summary><strong>Configuration</strong></summary>
+
+Auth uses a [Personal Access Token](https://docs.gitlab.com/ee/user/profile/personal_access_tokens.html) with the `api` scope. Set `base_url` to `https://gitlab.com` or your self-hosted instance.
+
+```lua
+issues = {
+  providers = {
+    gitlab = {
+      base_url = "https://gitlab.com",
+      token = vim.env.GITLAB_TOKEN,
+      cache_ttl = 300,
+
+      ---@type AtlasGitLabIssuesViewConfig[]
+      views = {
+        {
+          name = "Assigned",
+          key = "1",
+          scope = "assigned_to_me",
+          state = "opened",
+        },
+        {
+          name = "Created",
+          key = "2",
+          scope = "created_by_me",
+          state = "opened",
+        },
+        {
+          name = "All open",
+          key = "3",
+          scope = "all",
+          state = "opened",
+          -- Anything not covered by the explicit fields below can be passed via `extra_params`.
+          extra_params = { ["not[labels]"] = "wontfix" },
+        },
+      },
+
+      bookmarks = {
+        key   = "S",      -- default
+        label = "Search", -- default
+        items = {
+          ["No labels"] = { scope = "all", state = "opened",
+                            extra_params = { ["not[labels]"] = "*" } },
+          ["Closed"]    = { scope = "created_by_me", state = "closed" },
+        },
+      },
+    },
+  },
+},
+```
+
+</details>
+
+### Create Issues
+
+<details>
+<summary><strong>Details</strong></summary>
+
+`:AtlasCreateIssue` opens the creation flow for the configured issue providers. GitHub and GitLab use the current repository, while Jira uses the configured instance. The forms support Markdown descriptions and provider-specific fields such as labels, assignees, milestones, and Jira issue types.
+
+GitHub, GitLab, and Jira can apply a saved Markdown template or save the current description as a new one. Templates are shared between providers and stored under Neovim's data directory.
+
+<p align="center">
+  <img alt="Create issue" src="https://github.com/user-attachments/assets/b10962ee-d76f-4b79-982e-4d328b0a5153">
+</p>
+
+</details>
+
+### Custom Actions
+
+<details>
+<summary><strong>Example</strong></summary>
+
+You can add custom issue actions under `issues.custom_actions`.
+
+Context type:
+
+```lua
+---@class AtlasIssuesCustomActionContext
+---@field issue Issue|nil
+---@field user IssueUser|nil
+```
+
+Example:
+
+```lua
+issues = {
+  custom_actions = {
+    {
+      id = "copy_branch_name",
+      label = "Copy branch name",
+      ---@param issue Issue
+      ---@param ctx AtlasIssuesCustomActionContext
+      ---@param done fun(ok: boolean|nil, message: string|nil)
+      run = function(issue, ctx, done)
+        local branch = string.format("%s/%s", issue.key, issue.summary:lower():gsub("%s+", "-"))
+        vim.fn.setreg("+", branch)
+        done(true, "Copied: " .. branch)
+      end,
+    },
+  },
+}
+```
+
+</details>
+
+## Keymaps
 
 Set an action to `false` to disable it, or set it to a list to add aliases.
 
@@ -699,8 +745,25 @@ keymaps = {
     copy_id = "y",
     open_diff = "gd",
     checkout = "gc",
-    next_hunk = "]h",
-    previous_hunk = "[h",
+    review = {
+      toggle_layout = "t",
+      toggle_compact = "f",
+      next_hunk = "]h",
+      previous_hunk = "[h",
+      next_file = { "]f", "<Tab>" },
+      previous_file = { "[f", "<S-Tab>" },
+      toggle_file_reviewed = "-",
+      toggle_commits = "gC",
+      next_comment = "]c",
+      previous_comment = "[c",
+      next_note = "]n",
+      previous_note = "[n",
+      view_thread = "K",
+      add_pending_comment = "c",
+      add_comment = "C",
+      add_note = "n",
+      toggle_resolved = "x",
+    },
     filter_status_open = "gpo",
     filter_status_merged = "gpm",
     filter_status_declined = "gpd",

@@ -9,6 +9,7 @@ local completion_provider_by_buf = {}
 ---@field find_start fun(before: string, line: string, col: integer): integer|nil
 ---@field complete fun(base: string, line: string, col: integer): table[]|nil
 ---@field format_mention (fun(author: IssueUser|PullsAuthor|nil): string)|nil
+---@field resolve_items (fun(): nil)|nil
 
 ---@param findstart integer
 ---@param base string
@@ -49,6 +50,7 @@ end
 ---@class AtlasMarkdownEditorOptions
 ---@field key string
 ---@field title string|nil
+---@field title_pos "left"|"center"|"right"|nil
 ---@field initial_text string|nil
 ---@field width_ratio number|nil
 ---@field height_ratio number|nil
@@ -69,6 +71,7 @@ function M.open(opts)
 		footer.notify("warn", "Missing editor key")
 		return nil, nil
 	end
+	local source_win = vim.api.nvim_get_current_win()
 
 	local buf = vim.api.nvim_create_buf(false, true)
 	vim.api.nvim_set_option_value("buftype", "nofile", { buf = buf })
@@ -92,14 +95,16 @@ function M.open(opts)
 	local min_width = 80
 	local min_height = 12
 
-	local width = math.max(math.floor(vim.o.columns * width_ratio), min_width)
-	local height = math.max(math.floor(vim.o.lines * height_ratio), min_height)
+	local available_width = math.max(1, vim.o.columns - 2)
+	local available_height = math.max(1, vim.o.lines - 4)
+	local width = math.min(math.max(math.floor(vim.o.columns * width_ratio), min_width), available_width)
+	local height = math.min(math.max(math.floor(vim.o.lines * height_ratio), min_height), available_height)
 	local row = math.floor((vim.o.lines - height) / 2)
 	local col = math.floor((vim.o.columns - width) / 2)
 	local footer_items = { "q quit", "<C-s> save+close" }
-	for _, action in ipairs(type(opts.actions) == "table" and opts.actions or {}) do
-		local action_key = action and action.key or nil
-		local description = action and action.description or nil
+	for _, action in ipairs(opts.actions or {}) do
+		local action_key = action.key
+		local description = action.description
 		if
 			type(action_key) == "string"
 			and action_key ~= ""
@@ -121,7 +126,7 @@ function M.open(opts)
 		row = row,
 		col = col,
 		title = opts.title,
-		title_pos = "center",
+		title_pos = opts.title_pos or "center",
 		footer = footer_text,
 		footer_pos = "center",
 	})
@@ -133,6 +138,9 @@ function M.open(opts)
 
 	vim.api.nvim_set_option_value("number", false, { win = win })
 	vim.api.nvim_set_option_value("relativenumber", false, { win = win })
+	vim.api.nvim_set_option_value("diff", false, { win = win })
+	vim.api.nvim_set_option_value("scrollbind", false, { win = win })
+	vim.api.nvim_set_option_value("cursorbind", false, { win = win })
 	vim.api.nvim_set_option_value("wrap", true, { win = win })
 	vim.api.nvim_set_option_value("cursorline", false, { win = win })
 
@@ -203,6 +211,9 @@ function M.open(opts)
 		if vim.api.nvim_win_is_valid(win) then
 			vim.api.nvim_win_close(win, true)
 		end
+		if vim.api.nvim_win_is_valid(source_win) then
+			vim.api.nvim_set_current_win(source_win)
+		end
 	end
 
 	local function get_text()
@@ -210,14 +221,7 @@ function M.open(opts)
 	end
 
 	vim.keymap.set("n", "q", function()
-		if type(opts.on_cancel) == "function" then
-			opts.on_cancel()
-		end
-		close_editor()
-	end, { buffer = buf, silent = true, nowait = true })
-
-	vim.keymap.set("n", "<Esc>", function()
-		if type(opts.on_cancel) == "function" then
+		if opts.on_cancel then
 			opts.on_cancel()
 		end
 		close_editor()
@@ -226,7 +230,7 @@ function M.open(opts)
 	local function save_and_close()
 		local body = get_text()
 
-		if type(opts.on_save) == "function" then
+		if opts.on_save then
 			opts.on_save(body)
 		end
 
@@ -239,24 +243,18 @@ function M.open(opts)
 		save_and_close()
 	end, { buffer = buf, silent = true, nowait = true })
 
-	for _, action in ipairs(type(opts.actions) == "table" and opts.actions or {}) do
-		if type(action) == "table" and type(action.callback) == "function" then
-			local action_key = action.key
-			local action_mode = action.mode or "n"
-			if type(action_key) == "string" or type(action_key) == "table" then
-				vim.keymap.set(action_mode, action_key, function()
-					local ok, err = pcall(action.callback, {
-						buf = buf,
-						win = win,
-						close = close_editor,
-						get_text = get_text,
-					})
-					if not ok then
-						footer.notify("error", tostring(err or "Markdown action failed"))
-					end
-				end, { buffer = buf, silent = true, nowait = true, desc = action.description })
+	for _, action in ipairs(opts.actions or {}) do
+		vim.keymap.set(action.mode or "n", action.key, function()
+			local ok, err = pcall(action.callback, {
+				buf = buf,
+				win = win,
+				close = close_editor,
+				get_text = get_text,
+			})
+			if not ok then
+				footer.notify("error", tostring(err or "Markdown action failed"))
 			end
-		end
+		end, { buffer = buf, silent = true, nowait = true, desc = action.description })
 	end
 
 	return buf, win

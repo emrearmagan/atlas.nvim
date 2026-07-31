@@ -88,7 +88,7 @@ end
 
 ---@param msg string|nil
 function M.start(msg)
-	current_msg = (type(msg) == "string" and msg ~= "") and msg or "Loading..."
+	current_msg = (msg ~= nil and msg ~= "") and msg or "Loading..."
 	ensure_spinner()
 
 	local b = ensure_buf()

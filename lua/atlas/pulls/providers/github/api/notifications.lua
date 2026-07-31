@@ -5,9 +5,9 @@ local icons = require("atlas.ui.shared.icons")
 local logger = require("atlas.core.logger")
 
 local SUBJECT_ICON = {
-	PullRequest = { icon = icons.pulls("pr"), hl = "AtlasPROpen" },
+	PullRequest = { icons.pulls("pr") },
 	Issue = { icon = icons.issues("issue"), hl = "AtlasPROpen" },
-	CheckSuite = { icon = icons.pulls("tasks"), hl = "AtlasTextWarning" },
+	CheckSuite = { icons.pulls("tasks") },
 }
 
 local FALLBACK_ICON = { icon = icons.general("info"), hl = "AtlasTextMuted" }
@@ -60,8 +60,8 @@ local function normalize(raw)
 		title = raw_title,
 		subtitle = table.concat(subtitle_parts, "  ·  "),
 		timestamp = updated_at ~= "" and updated_at or nil,
-		icon = icon_def.icon,
-		icon_hl = icon_def.hl,
+		icon = icon_def.icon or icon_def[1],
+		icon_hl = icon_def.hl or icon_def[2],
 		unread = raw.unread == true,
 		url = html_url,
 		_raw = raw,

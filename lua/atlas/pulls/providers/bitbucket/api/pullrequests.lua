@@ -23,7 +23,7 @@ end
 ---@param key string
 ---@return string
 local function pr_link(pr, key)
-	local raw = type(pr._raw) == "table" and pr._raw or {}
+	local raw = pr._raw
 	local links = type(raw.links) == "table" and raw.links or {}
 	local link = links[key]
 	if link == nil and key == "request_changes" then
@@ -253,6 +253,49 @@ function M.fetch_pullrequest(workspace, repo, pr_id, opts, on_done)
 end
 
 ---@param pr PullRequest
+---@param _opts { force_refresh: boolean|nil }|nil
+---@param on_done fun(context: { authors: PullsAuthor[] }|nil, err: string|nil)
+---@return nil
+function M.fetch_review_context(pr, _opts, on_done)
+	local authors = {}
+	local seen = {}
+	---@param author PullsAuthor|nil
+	local function add(author)
+		if author == nil then
+			return
+		end
+		local key = tostring(author.id or "")
+		if key == "" then
+			key = tostring(author.username or author.nickname or author.name or "")
+		end
+		if key == "" or seen[key] then
+			return
+		end
+		seen[key] = true
+		table.insert(authors, author)
+	end
+
+	add(pr.author)
+	for _, participant in ipairs(pr._raw.participants or {}) do
+		local user = type(participant) == "table" and participant.user or nil
+		if type(user) == "table" then
+			local id = tostring(user.account_id or user.id or "")
+			local username = tostring(user.nickname or user.username or "")
+			local name = tostring(user.display_name or user.name or username)
+			if id ~= "" or username ~= "" or name ~= "" then
+				add({
+					id = id,
+					name = name,
+					username = username,
+					nickname = username ~= "" and username or nil,
+				})
+			end
+		end
+	end
+	on_done({ authors = authors }, nil)
+end
+
+---@param pr PullRequest
 ---@param opts { message?: string, close_source_branch?: boolean, merge_strategy?: string }|nil
 ---@param on_done fun(result: table|nil, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
@@ -307,7 +350,7 @@ end
 ---@param on_done fun(reviewers: PullsReviewer[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_reviewers(pr, _opts, on_done)
-	local raw = pr._raw or {}
+	local raw = pr._raw
 	local self_url = tostring((raw.links or {}).self or "")
 	if self_url == "" then
 		on_done(nil, "No PR self link available")
@@ -349,7 +392,7 @@ end
 ---@param on_done fun(builds: PullsBuild[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_builds(pr, on_done)
-	local raw = pr._raw or {}
+	local raw = pr._raw
 	local statuses_url = tostring((raw.links or {}).statuses or "")
 	if statuses_url == "" then
 		on_done({}, nil)
@@ -383,7 +426,7 @@ end
 ---@param on_done fun(entries: PullsActivityEntry[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_activity(pr, _opts, on_done)
-	local raw = pr._raw or {}
+	local raw = pr._raw
 	local activity_url = tostring((raw.links or {}).activity or "")
 	if activity_url == "" then
 		on_done({}, nil)
@@ -405,7 +448,7 @@ end
 ---@param on_done fun(entries: PullsDiffstatEntry[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_diffstat(pr, _opts, on_done)
-	local raw = pr._raw or {}
+	local raw = pr._raw
 	local diffstat_url = tostring((raw.links or {}).diffstat or "")
 	if diffstat_url == "" then
 		on_done({}, nil)
@@ -447,7 +490,7 @@ end
 ---@param on_done fun(commits: PullsCommit[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_commits(pr, opts, on_done)
-	local raw = pr._raw or {}
+	local raw = pr._raw
 	local commits_url = tostring((raw.links or {}).commits or "")
 	if commits_url == "" then
 		on_done({}, nil)
@@ -482,7 +525,7 @@ end
 ---@param on_done fun(files: DiffFile[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_diff(pr, _opts, on_done)
-	local raw = pr._raw or {}
+	local raw = pr._raw
 	local diff_url = tostring((raw.links or {}).diff or "")
 	if diff_url == "" then
 		on_done({}, nil)

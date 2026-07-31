@@ -1,5 +1,12 @@
 local M = {}
 
+---@param win integer
+---@param name string
+---@param value boolean|string
+local function set_option(win, name, value)
+	vim.api.nvim_set_option_value(name, value, { win = win, scope = "local" })
+end
+
 ---@param win integer|nil
 ---@return boolean
 function M.valid(win)
@@ -26,55 +33,51 @@ end
 
 ---@param win integer
 function M.apply_main_opts(win)
-	vim.api.nvim_set_option_value("number", false, { win = win })
-	vim.api.nvim_set_option_value("relativenumber", false, { win = win })
-	vim.api.nvim_set_option_value("signcolumn", "no", { win = win })
-	vim.api.nvim_set_option_value("statuscolumn", "", { win = win })
-	vim.api.nvim_set_option_value("foldcolumn", "0", { win = win })
-	vim.api.nvim_set_option_value("wrap", false, { win = win })
-	vim.api.nvim_set_option_value("cursorline", true, { win = win })
-	vim.api.nvim_set_option_value("scrollbind", false, { win = win })
-	vim.api.nvim_set_option_value("cursorbind", false, { win = win })
-	vim.api.nvim_set_option_value("diff", false, { win = win })
-	vim.api.nvim_set_option_value("winbar", " ", { win = win })
-	vim.api.nvim_set_option_value("statusline", " ", { win = win })
-	vim.api.nvim_set_option_value(
-		"winhighlight",
-		"Normal:Normal,NormalFloat:Normal,FloatBorder:FloatBorder,CursorLine:CursorLine",
-		{ win = win }
-	)
+	set_option(win, "number", false)
+	set_option(win, "relativenumber", false)
+	set_option(win, "signcolumn", "no")
+	set_option(win, "statuscolumn", "")
+	set_option(win, "foldcolumn", "0")
+	set_option(win, "wrap", false)
+	set_option(win, "cursorline", true)
+	set_option(win, "scrollbind", false)
+	set_option(win, "cursorbind", false)
+	set_option(win, "diff", false)
+	set_option(win, "winbar", " ")
+	set_option(win, "statusline", " ")
+	set_option(win, "winhighlight", "Normal:Normal,NormalFloat:Normal,FloatBorder:FloatBorder,CursorLine:CursorLine")
 end
 
 ---@param win integer
 function M.apply_footer_opts(win)
-	vim.api.nvim_set_option_value("number", false, { win = win })
-	vim.api.nvim_set_option_value("relativenumber", false, { win = win })
-	vim.api.nvim_set_option_value("signcolumn", "no", { win = win })
-	vim.api.nvim_set_option_value("statuscolumn", "", { win = win })
-	vim.api.nvim_set_option_value("foldcolumn", "0", { win = win })
-	vim.api.nvim_set_option_value("wrap", false, { win = win })
-	vim.api.nvim_set_option_value("cursorline", false, { win = win })
-	vim.api.nvim_set_option_value("winbar", " ", { win = win })
-	vim.api.nvim_set_option_value("statusline", " ", { win = win })
-	vim.api.nvim_set_option_value("winfixheight", true, { win = win })
+	set_option(win, "number", false)
+	set_option(win, "relativenumber", false)
+	set_option(win, "signcolumn", "no")
+	set_option(win, "statuscolumn", "")
+	set_option(win, "foldcolumn", "0")
+	set_option(win, "wrap", false)
+	set_option(win, "cursorline", false)
+	set_option(win, "winbar", " ")
+	set_option(win, "statusline", " ")
+	set_option(win, "winfixheight", true)
 end
 
 ---@param win integer
 function M.apply_detail_opts(win)
-	vim.api.nvim_set_option_value("number", false, { win = win })
-	vim.api.nvim_set_option_value("relativenumber", false, { win = win })
-	vim.api.nvim_set_option_value("signcolumn", "no", { win = win })
-	vim.api.nvim_set_option_value("statuscolumn", "", { win = win })
-	vim.api.nvim_set_option_value("foldcolumn", "0", { win = win })
-	vim.api.nvim_set_option_value("wrap", true, { win = win })
-	vim.api.nvim_set_option_value("breakindent", true, { win = win })
-	vim.api.nvim_set_option_value("cursorline", true, { win = win })
-	vim.api.nvim_set_option_value("scrollbind", false, { win = win })
-	vim.api.nvim_set_option_value("cursorbind", false, { win = win })
-	vim.api.nvim_set_option_value("diff", false, { win = win })
-	vim.api.nvim_set_option_value("winbar", " ", { win = win })
-	vim.api.nvim_set_option_value("statusline", " ", { win = win })
-	vim.api.nvim_set_option_value("winfixwidth", false, { win = win })
+	set_option(win, "number", false)
+	set_option(win, "relativenumber", false)
+	set_option(win, "signcolumn", "no")
+	set_option(win, "statuscolumn", "")
+	set_option(win, "foldcolumn", "0")
+	set_option(win, "wrap", true)
+	set_option(win, "breakindent", true)
+	set_option(win, "cursorline", true)
+	set_option(win, "scrollbind", false)
+	set_option(win, "cursorbind", false)
+	set_option(win, "diff", false)
+	set_option(win, "winbar", " ")
+	set_option(win, "statusline", " ")
+	set_option(win, "winfixwidth", false)
 end
 
 return M

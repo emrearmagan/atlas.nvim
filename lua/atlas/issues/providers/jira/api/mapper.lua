@@ -1,7 +1,7 @@
 local M = {}
 local adf = require("atlas.issues.providers.jira.converted.adf")
 
----@param raw_project table|nil
+---@param raw_project any Decoded API value.
 ---@return IssueProject|nil
 function M.to_project(raw_project)
 	if type(raw_project) ~= "table" then
@@ -40,7 +40,7 @@ function M.to_project(raw_project)
 	}
 end
 
----@param raw_type table|nil
+---@param raw_type any Decoded API value.
 ---@return IssueType|nil
 function M.to_issue_type(raw_type)
 	if type(raw_type) ~= "table" then
@@ -67,7 +67,7 @@ local function is_valid(value)
 	return value ~= nil and type(value) ~= "userdata"
 end
 
----@param obj table|nil
+---@param obj any Decoded API value.
 ---@param key string
 ---@param subkey string|nil
 ---@return any
@@ -94,7 +94,7 @@ local function to_string_or_nil(value)
 	return tostring(value)
 end
 
----@param raw_status table|nil
+---@param raw_status any Decoded API value.
 ---@return string|nil, string|nil, string|nil, string|nil
 local function extract_status(raw_status)
 	if not is_valid(raw_status) or type(raw_status) ~= "table" then
@@ -115,7 +115,7 @@ local function extract_status(raw_status)
 	return name, id, category, color
 end
 
----@param raw_user table|nil
+---@param raw_user any Decoded API value.
 ---@return IssueUser|nil
 local function normalize_issue_user(raw_user)
 	if type(raw_user) ~= "table" then
@@ -137,7 +137,7 @@ local function normalize_issue_user(raw_user)
 	}
 end
 
----@param raw_parent table|nil
+---@param raw_parent any Decoded API value.
 ---@return Issue|nil
 local function extract_parent(raw_parent)
 	if not is_valid(raw_parent) or type(raw_parent) ~= "table" or not raw_parent.key then
@@ -206,7 +206,7 @@ function M.to_issue(raw, sp_field)
 		assignee = normalize_issue_user(safe_get(fields, "assignee")),
 		reporter = normalize_issue_user(safe_get(fields, "reporter")),
 		story_points = sp_field and extract_story_points(fields[sp_field]) or nil,
-		duedate = fields.duedate,
+		duedate = to_string_or_nil(fields.duedate),
 		parent = extract_parent(safe_get(fields, "parent")),
 		is_subscribed = safe_get(fields, "watches", "isWatching") == true,
 		_raw = raw,
@@ -224,7 +224,7 @@ function M.to_issues_list(raw_issues, sp_field)
 	return out
 end
 
----@param raw_comment table|nil
+---@param raw_comment any Decoded API value.
 ---@param issue_key string|nil
 ---@param base_url string|nil
 ---@return IssueComment|nil
@@ -263,7 +263,7 @@ local function normalize_comment(raw_comment, issue_key, base_url)
 	}
 end
 
----@param raw table|nil
+---@param raw any Decoded API value.
 ---@param issue_key string|nil
 ---@return IssueComment[]
 function M.to_comments_list(raw, issue_key)
@@ -375,15 +375,15 @@ local function activity_from_history_item(raw_item, actor, date)
 		body = string.format("%s -> %s", from or "Unassigned", to or "Unassigned")
 		body_hl = arrow_hl(helper.person_hl(from), helper.person_hl(to))
 	elseif field == "priority" then
-		local fi = icons.issues_priority(from or "")
-		local ti = icons.issues_priority(to or "")
+		local fi, fi_hl = icons.issues_priority(from or "")
+		local ti, ti_hl = icons.issues_priority(to or "")
 		body = string.format("%s %s -> %s %s", fi, from or "", ti, to or "")
-		body_hl = arrow_hl(helper.priority_hl(from), helper.priority_hl(to))
+		body_hl = arrow_hl(fi_hl, ti_hl)
 	elseif field == "issuetype" then
-		local fi = icons.issues_type(from or "")
-		local ti = icons.issues_type(to or "")
+		local fi, fi_hl = icons.issues_type(from or "")
+		local ti, ti_hl = icons.issues_type(to or "")
 		body = string.format("%s %s -> %s %s", fi, from or "", ti, to or "")
-		body_hl = arrow_hl(helper.issue_type_hl(from), helper.issue_type_hl(to))
+		body_hl = arrow_hl(fi_hl, ti_hl)
 	elseif field == "status" then
 		body = string.format("%s -> %s", from or "", to or "")
 		body_hl =
@@ -410,7 +410,7 @@ local function activity_from_history_item(raw_item, actor, date)
 	}
 end
 
----@param raw table|nil
+---@param raw any Decoded API value.
 ---@param fallback_start_at number|nil
 ---@param fallback_max_results number|nil
 ---@return { start_at: number, max_results: number, total: number, is_last: boolean, values: IssueActivityEntry[] }

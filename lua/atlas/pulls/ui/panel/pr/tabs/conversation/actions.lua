@@ -4,29 +4,26 @@ local md_editor = require("atlas.ui.popups.editor")
 local footer = require("atlas.ui.components.footer")
 local state = require("atlas.pulls.ui.panel.pr.tabs.conversation.state")
 
-local AUTHOR_COMPLETION_MODULES = {
-	github = "atlas.pulls.providers.github.completion.author",
-	gitlab = "atlas.pulls.providers.gitlab.completion.author",
-	bitbucket = "atlas.pulls.providers.bitbucket.completion.author",
-}
-
 ---@return PullsProvider|nil
 local function get_provider()
 	return require("atlas.pulls.state").provider
 end
 
+---@param pr PullRequest
 ---@return AtlasMarkdownCompletionProvider|nil
-local function author_completion()
+local function author_completion(pr)
 	local provider = get_provider()
-	local mod_path = provider and AUTHOR_COMPLETION_MODULES[provider.id]
-	if not mod_path then
+	if not provider or not provider.comment_completion then
 		return nil
 	end
-	local ok, mod = pcall(require, mod_path)
-	if not ok or type(mod) ~= "table" or type(mod.build_completion) ~= "function" then
-		return nil
-	end
-	return mod.build_completion()
+	local comments = require("atlas.pulls.ui.panel.pr.tabs.review.state").comments
+	local reviewers = require("atlas.pulls.ui.panel.pr.tabs.overview.state").reviewers
+	return provider.comment_completion({
+		pr = pr,
+		comments = type(comments) == "table" and comments or {},
+		reviewers = type(reviewers) == "table" and reviewers or nil,
+		conversation = type(state.comments) == "table" and state.comments or nil,
+	})
 end
 
 ---@param fn fun(list: PullsComment[])
@@ -53,7 +50,7 @@ end
 ---@param refresh fun()
 function M.add(pr, refresh)
 	local provider = get_provider()
-	if not provider or type(provider.add_comment) ~= "function" then
+	if not provider or not provider.add_comment then
 		return
 	end
 	md_editor.open({
@@ -61,7 +58,7 @@ function M.add(pr, refresh)
 		title = " Add Comment ",
 		width_ratio = 0.5,
 		height_ratio = 0.18,
-		completion = author_completion(),
+		completion = author_completion(pr),
 		on_save = function(text)
 			if not text or vim.trim(text) == "" then
 				return
@@ -73,7 +70,9 @@ function M.add(pr, refresh)
 					return
 				end
 				if type(comment) == "table" then
-					with_comments(function(list) table.insert(list, comment) end)
+					with_comments(function(list)
+						table.insert(list, comment)
+					end)
 				end
 				footer.notify("success", "Comment added", 1200)
 				refresh()
@@ -90,13 +89,13 @@ function M.reply(pr, entry, refresh)
 		return
 	end
 	local provider = get_provider()
-	if not provider or type(provider.reply_comment) ~= "function" then
+	if not provider or not provider.reply_comment then
 		return
 	end
 	local comment = entry.comment
-	local completion = author_completion()
+	local completion = author_completion(pr)
 	local mention = ""
-	if completion and type(completion.format_mention) == "function" then
+	if completion and completion.format_mention then
 		mention = completion.format_mention(comment.author) or ""
 	end
 	local initial_text = mention ~= "" and (mention .. " ") or ""
@@ -119,7 +118,9 @@ function M.reply(pr, entry, refresh)
 					return
 				end
 				if type(reply) == "table" then
-					with_comments(function(list) table.insert(list, reply) end)
+					with_comments(function(list)
+						table.insert(list, reply)
+					end)
 				end
 				footer.notify("success", "Reply added", 1200)
 				refresh()
@@ -141,7 +142,7 @@ function M.edit(pr, entry, refresh)
 		return
 	end
 	local provider = get_provider()
-	if not provider or type(provider.edit_comment) ~= "function" then
+	if not provider or not provider.edit_comment then
 		return
 	end
 
@@ -151,7 +152,7 @@ function M.edit(pr, entry, refresh)
 		width_ratio = 0.5,
 		height_ratio = 0.18,
 		initial_text = comment.content_raw or "",
-		completion = author_completion(),
+		completion = author_completion(pr),
 		on_save = function(text)
 			if not text or vim.trim(text) == "" then
 				return
@@ -191,7 +192,7 @@ function M.delete(pr, entry, refresh)
 		return
 	end
 	local provider = get_provider()
-	if not provider or type(provider.delete_comment) ~= "function" then
+	if not provider or not provider.delete_comment then
 		return
 	end
 
@@ -230,7 +231,7 @@ function M.react(pr, entry, refresh)
 		return
 	end
 	local provider = get_provider()
-	if not provider or type(provider.add_reaction) ~= "function" then
+	if not provider or not provider.add_reaction then
 		footer.notify("warn", "Provider does not support reactions")
 		return
 	end
@@ -249,7 +250,9 @@ function M.react(pr, entry, refresh)
 	end
 	vim.ui.select(choices, {
 		prompt = "Add reaction",
-		format_item = function(item) return item.label end,
+		format_item = function(item)
+			return item.label
+		end,
 	}, function(selected)
 		if selected == nil then
 			return

@@ -7,7 +7,7 @@ local helper = require("atlas.pulls.ui.main.helper")
 ---@param pr PullRequest
 ---@return string[], table[]
 function M.content(pr)
-	local raw = type(pr._raw) == "table" and pr._raw or {}
+	local raw = pr._raw
 	local id = tostring(pr.id or "")
 	local title = tostring(pr.title or "")
 	local author_name = tostring((pr.author and pr.author.name) or "Unknown")
@@ -42,13 +42,13 @@ function M.content(pr)
 		if p_state ~= "" then
 			local p_icon, p_hl
 			if p_state == "success" then
-				p_icon, p_hl = icons.pulls_status("successful"), "AtlasTextPositive"
+				p_icon, p_hl = icons.pulls_status("successful")
 			elseif p_state == "failed" then
-				p_icon, p_hl = icons.pulls_status("failed"), "AtlasLogError"
+				p_icon, p_hl = icons.pulls_status("failed")
 			elseif p_state == "canceled" or p_state == "skipped" then
-				p_icon, p_hl = icons.pulls_status("stopped"), "AtlasTextMuted"
+				p_icon, p_hl = icons.pulls_status("stopped")
 			else
-				p_icon, p_hl = icons.pulls_status("inprogress"), "AtlasTextWarning"
+				p_icon, p_hl = icons.pulls_status("inprogress")
 			end
 			table.insert(rows, { "CI", string.format("%s %s", p_icon, p_state), p_hl })
 		end

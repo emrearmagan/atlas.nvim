@@ -63,12 +63,12 @@ end
 ---@param issue_key string|nil
 ---@return boolean
 function M.toggle_issue_collapsed(issue_key)
-	local key = type(issue_key) == "string" and issue_key or ""
+	local key = issue_key or ""
 	if key == "" then
 		return false
 	end
 
-	M.collapsed_issue_keys[key] = not (M.collapsed_issue_keys[key] == true)
+	M.collapsed_issue_keys[key] = M.collapsed_issue_keys[key] ~= true
 	return true
 end
 
@@ -89,10 +89,8 @@ end
 function M.toggle_all_issues_collapsed()
 	local foldable_keys = {}
 	for _, group in ipairs(M.issue_tree or {}) do
-		local issue = type(group) == "table" and group.issue or nil
-		local children = type(group) == "table" and group.children or nil
-		local key = type(issue) == "table" and tostring(issue.key or "") or ""
-		if key ~= "" and type(children) == "table" and #children > 0 then
+		local key = tostring(group.issue.key or "")
+		if key ~= "" and #group.children > 0 then
 			table.insert(foldable_keys, key)
 		end
 	end

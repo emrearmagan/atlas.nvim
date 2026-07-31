@@ -71,7 +71,7 @@ end
 ---@return table
 local function issue_to_row(issue, is_child)
 	local renderer = require("atlas.issues.providers.github.ui.renderer")
-	local raw = type(issue._raw) == "table" and issue._raw or {}
+	local raw = issue._raw or {}
 	local row = renderer.format_row(issue, is_child)
 	row.comments = tostring(tonumber(raw.comment_count) or 0)
 	row._item = { kind = "issue", key = issue.key, _issue = issue }
@@ -136,7 +136,7 @@ end
 ---@param issue Issue
 ---@return table
 local function compact_issue_to_row(issue)
-	local raw = type(issue._raw) == "table" and issue._raw or {}
+	local raw = issue._raw or {}
 	local row = issue_to_row(issue, false)
 	local number = tonumber(raw.number) or tostring(issue.key or ""):match("#(%d+)$")
 	local key_label = number and string.format("#%s", tostring(number)) or tostring(issue.key or "")
@@ -179,8 +179,7 @@ end
 ---@return boolean
 local function should_show_indicator(issue_groups)
 	for _, group in ipairs(issue_groups or {}) do
-		local children = type(group) == "table" and group.children or nil
-		if type(children) == "table" and #children > 0 then
+		if #(group.children or {}) > 0 then
 			return true
 		end
 	end
@@ -245,9 +244,7 @@ end
 local function flatten_issue_groups(issue_groups)
 	local issues = {}
 	for _, group in ipairs(issue_groups or {}) do
-		if type(group.issue) == "table" then
-			table.insert(issues, group.issue)
-		end
+		table.insert(issues, group.issue)
 		for _, child in ipairs(group.children or {}) do
 			table.insert(issues, child)
 		end
@@ -267,9 +264,9 @@ function M.render(issue_groups, layout, opts)
 	opts = opts or {}
 
 	local table_tree = require("atlas.ui.components.table_tree")
-	local table_data = nil
+	local table_data
 	if layout == "compact" then
-		local issues = type(state.issues) == "table" and state.issues or flatten_issue_groups(issue_groups)
+		local issues = state.issues or flatten_issue_groups(issue_groups)
 		table_data = M.build_compact_table(issues, {
 			loading = state.is_loading == true,
 			spinner = state.reload_spinner_frame,
@@ -298,8 +295,8 @@ function M.render(issue_groups, layout, opts)
 			show_indicator = should_show_indicator(issue_groups),
 			leaf_prefix = "",
 			is_expanded = function(row)
-				local issue = type(row) == "table" and row._issue or nil
-				local issue_key = type(issue) == "table" and tostring(issue.key or "") or ""
+				local issue = row._issue
+				local issue_key = issue and tostring(issue.key or "") or ""
 				if issue_key == "" then
 					return true
 				end

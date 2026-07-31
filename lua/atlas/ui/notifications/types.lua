@@ -7,6 +7,6 @@
 ---@field icon_hl string|nil
 ---@field unread boolean
 ---@field url string|nil
----@field _raw any|nil
+---@field _raw table|nil
 
 return {}
