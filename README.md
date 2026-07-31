@@ -451,6 +451,8 @@ For scripts, use `bin/atlas-notes`. Notes added there appear in AtlasDiff and `:
   --type suggestion --body "Should this be a bool?"
 ```
 
+My dotfiles include a [Pi extension that wraps this script](https://github.com/emrearmagan/dotfiles/blob/main/config/pi/extensions/atlas-notes.ts) so review agents can list and add notes.
+
 ### Create Pulls
 
 Run `:AtlasCreatePR` on the branch you want to submit. The current branch is used as the source and the repository's default branch as the target. The latest commit supplies the initial title. A configured pull request template supplies the description; without one, Atlas builds it from the branch commits.
