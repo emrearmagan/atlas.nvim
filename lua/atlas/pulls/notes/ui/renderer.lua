@@ -87,9 +87,6 @@ function M.details_lines(note, target)
 	if target then
 		table.insert(lines, "")
 		table.insert(lines, "Target: `" .. target.ref .. "`")
-		if target.repo_path then
-			table.insert(lines, "Checkout: `" .. target.repo_path .. "`")
-		end
 	end
 	table.insert(lines, "")
 	vim.list_extend(lines, vim.split(note.body, "\n", { plain = true }))

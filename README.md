@@ -447,7 +447,7 @@ For scripts, use `bin/atlas-notes`. Notes added there appear in AtlasDiff and `:
 ./bin/atlas-notes add \
   --target https://github.com/owner/repository/pull/123 \
   --file lua/review_queue.lua --line 19 \
-  --head "$(git rev-parse HEAD)" \
+  --context "local item = queue[index]" \
   --type suggestion --body "Should this be a bool?"
 ```
 

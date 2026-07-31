@@ -13,19 +13,21 @@ M.types = { "issue", "suggestion", "note", "praise" }
 ---@field repository string
 ---@field id string
 ---@field url string|nil
----@field repo_path string|nil
 
 ---@class AtlasNoteInput
 ---@field file_path string
 ---@field line integer
 ---@field body string
 ---@field type AtlasNoteType|nil
----@field head_sha string
----@field line_hash string|nil
+---@field context string|nil
 
----@class AtlasNote: AtlasNoteInput
+---@class AtlasNote
 ---@field id string
+---@field file_path string
+---@field line integer
+---@field body string
 ---@field type AtlasNoteType
+---@field context_hash string|nil
 ---@field created_at string
 ---@field updated_at string|nil
 
@@ -43,18 +45,17 @@ local function text(value)
 	return vim.trim(tostring(value or ""))
 end
 
----@param line string|nil
+---@param context string|nil
 ---@return string|nil
-function M.hash_line(line)
-	return type(line) == "string" and vim.fn.sha256(line) or nil
+function M.hash_context(context)
+	return type(context) == "string" and vim.fn.sha256(context) or nil
 end
 
 ---@param note AtlasNote
----@param line string
----@param head_sha string
+---@param context string|nil
 ---@return boolean
-function M.is_outdated(note, line, head_sha)
-	return note.head_sha ~= head_sha and (not note.line_hash or note.line_hash ~= M.hash_line(line))
+function M.is_outdated(note, context)
+	return not note.context_hash or note.context_hash ~= M.hash_context(context)
 end
 
 ---@param value table
@@ -74,7 +75,6 @@ local function normalize_target(value)
 		repository = repository:lower()
 	end
 	local url = text(value.url)
-	local repo_path = text(value.repo_path)
 	return {
 		ref = string.format("%s:%s/%s/pr/%s", provider, host, repository, id),
 		provider = provider,
@@ -82,7 +82,6 @@ local function normalize_target(value)
 		repository = repository,
 		id = id,
 		url = url ~= "" and url or nil,
-		repo_path = repo_path ~= "" and vim.fs.normalize(repo_path) or nil,
 	},
 		nil
 end
@@ -92,7 +91,6 @@ end
 ---@return AtlasNoteTarget
 local function merge_target(target, current)
 	target.url = current.url or target.url
-	target.repo_path = current.repo_path or target.repo_path
 	return target
 end
 
@@ -147,11 +145,7 @@ local function normalize_note(value)
 	if not note_type then
 		return nil, type_error
 	end
-	local head_sha = text(value.head_sha)
-	if head_sha == "" then
-		return nil, "A head commit is required"
-	end
-	local line_hash = text(value.line_hash)
+	local context_hash = text(value.context_hash or value.line_hash)
 	local id = text(value.id)
 	local created_at = text(value.created_at)
 	local updated_at = text(value.updated_at)
@@ -164,8 +158,7 @@ local function normalize_note(value)
 		line = line,
 		body = value.body,
 		type = note_type,
-		head_sha = head_sha,
-		line_hash = line_hash ~= "" and line_hash or nil,
+		context_hash = context_hash ~= "" and context_hash or nil,
 		created_at = created_at,
 		updated_at = updated_at ~= "" and updated_at or nil,
 	},
@@ -277,9 +270,8 @@ function M.resolve_target(value)
 end
 
 ---@param pr PullRequest
----@param repo_path string|nil
 ---@return AtlasNoteTarget|nil, string|nil
-function M.target_for_pull_request(pr, repo_path)
+function M.target_for_pull_request(pr)
 	local url = pr.link.html
 	return normalize_target({
 		provider = pr.provider,
@@ -287,7 +279,6 @@ function M.target_for_pull_request(pr, repo_path)
 		repository = pr.repo_full_name,
 		id = pr.id,
 		url = url,
-		repo_path = repo_path,
 	})
 end
 
@@ -328,10 +319,12 @@ end
 ---@param input AtlasNoteInput
 ---@return AtlasNote|nil, string|nil
 function M.add(target, input)
+	local context_hash = M.hash_context(input.context)
 	return change(target, function(document)
 		local timestamp = now()
 		local note, note_error = normalize_note(vim.tbl_extend("force", input, {
 			id = "note_" .. vim.fn.sha256(timestamp .. tostring(vim.uv.hrtime())):sub(1, 16),
+			context_hash = context_hash,
 			created_at = timestamp,
 		}))
 		if not note then
@@ -356,8 +349,7 @@ function M.update(target, id, patch)
 					line = note.line,
 					body = patch.body or note.body,
 					type = patch.type or note.type,
-					head_sha = note.head_sha,
-					line_hash = note.line_hash,
+					context_hash = note.context_hash,
 					created_at = note.created_at,
 					updated_at = now(),
 				}

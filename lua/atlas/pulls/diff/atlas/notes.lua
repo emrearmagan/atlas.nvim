@@ -98,7 +98,7 @@ local function visible_notes(session)
 	for _, note in ipairs(state.items) do
 		if note.file_path == document.new.path and note.line <= #document.new.lines then
 			table.insert(items, note)
-			outdated[note.id] = store.is_outdated(note, document.new.lines[note.line], session.range.head_revision)
+			outdated[note.id] = store.is_outdated(note, document.new.lines[note.line])
 		end
 	end
 	return items, outdated
@@ -254,8 +254,7 @@ function M.add_at_cursor(session, buf)
 		line = line,
 		body = "",
 		type = "note",
-		head_sha = session.range.head_revision,
-		line_hash = store.hash_line(document.new.lines[line]),
+		context = document.new.lines[line],
 	}, function(saved, err)
 		if not saved then
 			notify(session, "error", err or "Unable to save local note")
@@ -335,7 +334,7 @@ function M.attach(session, review)
 	if session.notes then
 		return
 	end
-	local target, target_error = store.target_for_pull_request(review.pr, session.range.root)
+	local target, target_error = store.target_for_pull_request(review.pr)
 	if not target then
 		footer.notify(session, "error", target_error or "Unable to load local notes")
 		return

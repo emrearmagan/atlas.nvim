@@ -361,13 +361,12 @@ request provider and may be marked as `ISSUE`, `SUGGESTION`, `NOTE`, or
 removes it when the location no longer exists. Use `:AtlasNotes` to inspect,
 edit, or delete notes across pull requests.
 
-The `bin/atlas-notes` script uses the same storage as Atlas, so scripts and
-external tools can add notes:
+The `bin/atlas-notes` script uses the same storage as Atlas:
 >sh
   ./bin/atlas-notes add \
     --target https://github.com/owner/repository/pull/123 \
     --file lua/review_queue.lua --line 19 \
-    --head "$(git rev-parse HEAD)" \
+    --context "local item = queue[index]" \
     --type suggestion --body "Should this be a bool?"
 <
 
