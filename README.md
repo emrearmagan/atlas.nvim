@@ -473,9 +473,10 @@ issues = {
 }
 ```
 
-<a id="jira"></a>
+#### Jira
+
 <details>
-<summary><strong>Jira</strong></summary>
+<summary><strong>Configuration</strong></summary>
 
 > [!NOTE]
 > If you're only looking for Jira support, check out https://github.com/letieu/jira.nvim. This plugin was the main inspiration for this project.
@@ -553,9 +554,10 @@ issues = {
 
 </details>
 
-<a id="github-issues"></a>
+#### GitHub Issues
+
 <details>
-<summary><strong>GitHub Issues</strong></summary>
+<summary><strong>Configuration</strong></summary>
 
 ```lua
 issues = {
@@ -600,9 +602,10 @@ issues = {
 
 </details>
 
-<a id="gitlab-issues"></a>
+#### GitLab Issues
+
 <details>
-<summary><strong>GitLab Issues</strong></summary>
+<summary><strong>Configuration</strong></summary>
 
 Auth uses a [Personal Access Token](https://docs.gitlab.com/ee/user/profile/personal_access_tokens.html) with the `api` scope. Set `base_url` to `https://gitlab.com` or your self-hosted instance.
 
@@ -654,9 +657,10 @@ issues = {
 
 </details>
 
-<a id="create-issues"></a>
+### Create Issues
+
 <details>
-<summary><strong>Create Issues</strong></summary>
+<summary><strong>Details</strong></summary>
 
 `:AtlasCreateIssue` opens the creation flow for the configured issue providers. GitHub and GitLab use the current repository, while Jira uses the configured instance. The forms support Markdown descriptions and provider-specific fields such as labels, assignees, milestones, and Jira issue types.
 
@@ -668,9 +672,10 @@ GitHub, GitLab, and Jira can apply a saved Markdown template or save the current
 
 </details>
 
-<a id="issue-custom-actions"></a>
+### Custom Actions
+
 <details>
-<summary><strong>Custom Actions</strong></summary>
+<summary><strong>Example</strong></summary>
 
 You can add custom issue actions under `issues.custom_actions`.
 
