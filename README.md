@@ -186,6 +186,9 @@ pulls = {
 
 #### GitHub
 
+<details>
+<summary><strong>Configuration</strong></summary>
+
 ```lua
 pulls = {
   providers = {
@@ -230,7 +233,12 @@ pulls = {
 <img alt="GitHub pull requests" src="https://github.com/user-attachments/assets/9716c643-bae0-427b-a2bd-f5a809dca6cc">
 
 
+</details>
+
 #### Bitbucket
+
+<details>
+<summary><strong>Configuration</strong></summary>
 
 ```lua
 pulls = {
@@ -275,7 +283,12 @@ pulls = {
 <img alt="Bitbucket pull requests" src="https://github.com/user-attachments/assets/bcdd0c9c-e15f-4e82-81fd-cde38aa68a2d">
 
 
+</details>
+
 #### GitLab
+
+<details>
+<summary><strong>Configuration</strong></summary>
 
 Auth uses a [Personal Access Token](https://docs.gitlab.com/ee/user/profile/personal_access_tokens.html) with the `api` scope. Set `base_url` to `https://gitlab.com` or your self-hosted instance.
 
@@ -329,7 +342,12 @@ pulls = {
 <img alt="GitLab pull requests" src="https://github.com/user-attachments/assets/128fe916-e733-4abb-9c5c-5244684f3c41">
 
 
+</details>
+
 ### Review Pulls
+
+<details>
+<summary><strong>Details</strong></summary>
 
 Press the configured `pulls.open_diff` key (`gd` by default) on a pull request to start a review. 
 
@@ -361,7 +379,12 @@ For scripts, use `bin/atlas-notes`. Notes added there appear in AtlasDiff and `:
 My dotfiles include a [Pi extension that wraps this script](https://github.com/emrearmagan/dotfiles/blob/main/config/pi/extensions/atlas-notes.ts) so review agents can list and add notes.
 
 
+</details>
+
 ### Create Pulls
+
+<details>
+<summary><strong>Details</strong></summary>
 
 Run `:AtlasCreatePR` on the branch you want to submit. The current branch is used as the source and the repository's default branch as the target. The latest commit supplies the initial title. A configured pull request template supplies the description; without one, Atlas builds it from the branch commits.
 
@@ -372,7 +395,12 @@ Before creating the pull request, you can change the target branch, reviewers, a
 </p>
 
 
+</details>
+
 ### Custom Actions
+
+<details>
+<summary><strong>Example</strong></summary>
 
 You can add custom PR actions under `pulls.custom_actions`.
 
@@ -428,6 +456,8 @@ pulls = {
 
 ![CleanShot2026-03-31at20 08 06-ezgif com-video-to-gif-converter](https://github.com/user-attachments/assets/a8ca355b-09e2-428c-b3fb-3280fd161110)
 
+
+</details>
 
 ## Issues
 
