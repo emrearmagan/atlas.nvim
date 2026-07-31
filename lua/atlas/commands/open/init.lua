@@ -90,32 +90,6 @@ local function repo_from_target(target)
 end
 
 ---@param target AtlasOpenTarget
----@return PullRequest
-local function pr_from_target(target)
-	local owner, repo, full_name = repo_identity(target)
-	local number = assert(target.number, "PR target missing number")
-	return {
-		id = number,
-		title = "#" .. tostring(number),
-		description = "",
-		state = "open",
-		author = { name = "", id = "", username = "" },
-		source = { branch = "", commit_hash = "" },
-		destination = { branch = "", commit_hash = "" },
-		comments_count = 0,
-		tasks_count = 0,
-		created_on = "",
-		updated_on = "",
-		link = { html = target.url },
-		provider = target.provider,
-		workspace = owner,
-		repo = repo,
-		repo_full_name = full_name,
-		_raw = target.provider == "gitlab" and { project_path = target.project_path, iid = number } or {},
-	}
-end
-
----@param target AtlasOpenTarget
 ---@return string|nil
 local function issue_key(target)
 	if target.issue_key then
@@ -215,7 +189,7 @@ local function open_pr(target, on_error)
 	fetch_and_open(
 		target,
 		"fetch_pullrequest",
-		pr_from_target(target),
+		resolver.pull_request_from_target(target),
 		"Pull request #" .. tostring(target.number),
 		function(pr)
 			require("atlas.pulls.ui.panel.state").current_panel = "pr"

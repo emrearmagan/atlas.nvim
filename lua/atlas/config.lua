@@ -237,7 +237,7 @@ local function register_commands()
 	vim.api.nvim_create_user_command("AtlasDiff", function(opts)
 		require("atlas.pulls.actions").open_atlas_diff(opts.args)
 	end, {
-		desc = "Open the Atlas diff viewer",
+		desc = "Open a Git range or pull request in AtlasDiff",
 		nargs = 1,
 	})
 

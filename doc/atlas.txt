@@ -101,7 +101,9 @@ by default.
 
                                                                    *:AtlasDiff*
 :AtlasDiff <base>...<head>
-        Open the native diff viewer for an explicit Git range.
+:AtlasDiff <pull-request-url>
+        Open an explicit Git range or load a pull request review from the
+        current checkout.
 
                                                                   *:AtlasNotes*
 :AtlasNotes

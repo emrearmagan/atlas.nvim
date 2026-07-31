@@ -116,9 +116,9 @@ function M.open_diff_range(opts, on_done)
 	return require("atlas.pulls.diff").open(opts, on_done)
 end
 
----@param range string
-function M.open_atlas_diff(range)
-	require("atlas.pulls.diff").open_range(range)
+---@param value string
+function M.open_atlas_diff(value)
+	require("atlas.pulls.diff").open_argument(value)
 end
 
 ---@param pr PullRequest

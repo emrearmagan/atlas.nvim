@@ -26,8 +26,8 @@ end
 
 ---@class PullsDiffOpenOptions
 ---@field git_root string
----@field base_revision string
----@field head_revision string
+---@field base_revision string|nil
+---@field head_revision string|nil
 ---@field review AtlasReviewOpenContext|nil
 ---@field fetch_branches (fun(pr: PullRequest|nil, on_done: fun(err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field open_cmd AtlasPullsDiffOpenCommand|nil
@@ -183,7 +183,8 @@ function M.open(opts, on_done, loading_target)
 	local root = tostring(opts.git_root or "")
 	local base = vim.trim(tostring(opts.base_revision or ""))
 	local head = vim.trim(tostring(opts.head_revision or ""))
-	if root == "" or base == "" or head == "" then
+	local resolves_range = opts.refresh_pull_request and opts.review ~= nil
+	if root == "" or (not resolves_range and (base == "" or head == "")) then
 		if on_done then
 			on_done("Repository path, base revision, and head revision are required")
 		end
@@ -390,6 +391,63 @@ function M.open(opts, on_done, loading_target)
 	return operation
 end
 
+---@param value string
+---@return { cancel: fun() }|nil
+function M.open_pull_request(value)
+	local parser = require("atlas.commands.open.parser")
+	local resolver = require("atlas.commands.open.resolver")
+	local target, target_err = parser.parse(value)
+	if not target then
+		vim.notify("[AtlasDiff] " .. tostring(target_err or "Invalid pull request URL"), vim.log.levels.ERROR)
+		return nil
+	end
+	if target.domain ~= "pulls" or target.entity ~= "pr" then
+		vim.notify("[AtlasDiff] Expected a pull request URL", vim.log.levels.ERROR)
+		return nil
+	end
+	if not resolver.provider_configured(target) then
+		vim.notify("[AtlasDiff] Pull request provider is not configured: " .. target.provider, vim.log.levels.ERROR)
+		return nil
+	end
+
+	---@type PullsProvider|nil
+	local provider = resolver.load_provider(target)
+	if not provider then
+		vim.notify("[AtlasDiff] Unable to load pull request provider: " .. target.provider, vim.log.levels.ERROR)
+		return nil
+	end
+
+	local root, root_err = require("atlas.core.git").repo_root(vim.fn.getcwd())
+	if not root then
+		vim.notify("[AtlasDiff] " .. tostring(root_err or "Not in a git repository"), vim.log.levels.ERROR)
+		return nil
+	end
+
+	local pr = resolver.pull_request_from_target(target)
+	---@param current_pr PullRequest|nil
+	---@param done fun(err: string|nil)
+	---@return { cancel: fun() }
+	local function fetch_branches(current_pr, done)
+		return checkout.fetch_pr_branches(current_pr or pr, root, done)
+	end
+
+	return M.open({
+		git_root = root,
+		review = {
+			provider = provider,
+			pr = pr,
+			current_user = nil,
+		},
+		fetch_branches = fetch_branches,
+		open_cmd = "AtlasDiff",
+		refresh_pull_request = true,
+	}, function(err)
+		if err then
+			vim.notify("[AtlasDiff] " .. err, vim.log.levels.ERROR)
+		end
+	end)
+end
+
 ---@param range string
 function M.open_range(range)
 	local separator = range:find("...", 1, true)
@@ -409,6 +467,15 @@ function M.open_range(range)
 			vim.notify("[AtlasDiff] " .. err, vim.log.levels.ERROR)
 		end
 	end)
+end
+
+---@param value string
+function M.open_argument(value)
+	if value:find("...", 1, true) then
+		M.open_range(value)
+		return
+	end
+	M.open_pull_request(value)
 end
 
 ---@param context PullsDiffPRContext

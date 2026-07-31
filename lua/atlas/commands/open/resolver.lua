@@ -38,6 +38,34 @@ function M.load_provider(target)
 end
 
 ---@param target AtlasOpenTarget
+---@return PullRequest
+function M.pull_request_from_target(target)
+	local owner = tostring(target.owner or target.workspace or "")
+	local repo = tostring(target.repo or "")
+	local full_name = target.project_path or (owner ~= "" and owner .. "/" .. repo or repo)
+	local number = assert(target.number, "PR target missing number")
+	return {
+		id = number,
+		title = "#" .. tostring(number),
+		description = "",
+		state = "open",
+		author = { name = "", id = "", username = "" },
+		source = { branch = "", commit_hash = "" },
+		destination = { branch = "", commit_hash = "" },
+		comments_count = 0,
+		tasks_count = 0,
+		created_on = "",
+		updated_on = "",
+		link = { html = target.url },
+		provider = target.provider,
+		workspace = owner,
+		repo = repo,
+		repo_full_name = full_name,
+		_raw = target.provider == "gitlab" and { project_path = target.project_path, iid = number } or {},
+	}
+end
+
+---@param target AtlasOpenTarget
 ---@return string
 function M.base_url(target)
 	local options = M.provider_options(target.domain, target.provider) or {}

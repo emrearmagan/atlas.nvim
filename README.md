@@ -136,7 +136,7 @@ use {
 
 - `:AtlasIssues [provider]` - Open Atlas issues domain
 - `:AtlasPulls [provider]` - Open Atlas pulls domain
-- `:AtlasDiff <base>...<head>` - Open the native diff viewer
+- `:AtlasDiff <base>...<head>` or `:AtlasDiff <pull-request-url>` - Open a local Git range or pull request review
 - `:AtlasNotes` - Inspect local review notes across pull requests
 - `:AtlasCreatePR` - Create a pull request from the current branch
 - `:AtlasCreateIssue` - Create an issue (GitHub / GitLab / Jira)
