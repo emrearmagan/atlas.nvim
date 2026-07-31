@@ -342,6 +342,28 @@ function M.register_review(session, actions)
 	for _, buf in ipairs({ session.panel.buf, session.left.buf, session.right.buf }) do
 		local review_actions = {}
 		local navigation = {}
+		if actions.toggle_approval then
+			add(
+				review_actions,
+				item("pulls.review.toggle_approval", {
+					desc = "Approve / unapprove",
+					index = 8,
+					callback = run(actions.toggle_approval),
+					opts = { silent = true, nowait = true },
+				})
+			)
+		end
+		if actions.request_changes then
+			add(
+				review_actions,
+				item("pulls.review.request_changes", {
+					desc = "Request changes",
+					index = 9,
+					callback = run(actions.request_changes),
+					opts = { silent = true, nowait = true },
+				})
+			)
+		end
 		if actions.submit_review then
 			add(
 				review_actions,
@@ -463,12 +485,16 @@ function M.register_review(session, actions)
 end
 
 local REVIEW_PANEL_ACTIONS = {
+	"pulls.review.toggle_approval",
+	"pulls.review.request_changes",
 	"pulls.review.submit_review",
 	"pulls.review.toggle_resolved",
 	"ui.open_in_browser",
 }
 
 local REVIEW_CONTENT_ACTIONS = {
+	"pulls.review.toggle_approval",
+	"pulls.review.request_changes",
 	"pulls.review.submit_review",
 	"pulls.review.toggle_resolved",
 	"pulls.review.add_pending_comment",

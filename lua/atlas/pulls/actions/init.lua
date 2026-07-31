@@ -61,11 +61,23 @@ local PROVIDER_ACTIONS_MODULES = {
 
 ---@param pr PullRequest
 ---@param action_id string
+---@return boolean
+function M.is_action_available(pr, action_id)
+	local mod_path = PROVIDER_ACTIONS_MODULES[pr.provider]
+	if not mod_path then
+		return false
+	end
+	local registry = require(mod_path .. ".registry")
+	local action = registry.find(action_id)
+	return action ~= nil and action.is_available({ pr = pr, source = nil }) == true
+end
+
+---@param pr PullRequest
+---@param action_id string
 ---@param source "main"|"panel"|nil
 ---@param on_done fun(result: PullsActionResult|nil, err: string|nil)|nil
 function M.run_action(pr, action_id, source, on_done)
-	local p = provider()
-	local mod_path = p and PROVIDER_ACTIONS_MODULES[p.id]
+	local mod_path = PROVIDER_ACTIONS_MODULES[pr.provider]
 	if not mod_path then
 		if on_done then
 			on_done(nil, "Provider does not support actions")
@@ -80,7 +92,7 @@ function M.run_action(pr, action_id, source, on_done)
 		return
 	end
 	mod.run(action_id, { pr = pr, source = source }, function(result, err)
-		if result ~= nil and result.changed_pr then
+		if source ~= nil and result ~= nil and result.changed_pr then
 			local controller = require("atlas.pulls.ui.main.controller")
 			controller.refresh_pr(pr)
 		end

@@ -636,6 +636,8 @@ Defaults live under `keymaps` in `setup()`. Each entry accepts:
         open_diff              = "gd",
         checkout               = "gc",
         review = {
+          toggle_approval       = "ga",
+          request_changes       = "gr",
           submit_review         = "gs",
           open_file             = { "<CR>", "l" },
           toggle_layout        = "t",

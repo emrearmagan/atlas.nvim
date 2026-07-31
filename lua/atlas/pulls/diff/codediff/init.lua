@@ -330,12 +330,20 @@ local function add_help_item(items, key, desc, index)
 	table.insert(items, { key = key, desc = desc, index = index })
 end
 
+---@type { field: "toggle_approval"|"request_changes"|"submit_review",
+---  id: AtlasKeymapActionId, desc: string, index: integer }[]
+local PULL_REVIEW_ACTIONS = {
+	{ field = "toggle_approval", id = "pulls.review.toggle_approval", desc = "Approve / unapprove", index = 8 },
+	{ field = "request_changes", id = "pulls.review.request_changes", desc = "Request changes", index = 9 },
+	{ field = "submit_review", id = "pulls.review.submit_review", desc = "Submit review", index = 10 },
+}
+
 ---@param view table<string, string|string[]|false>
 ---@param reloadable boolean
 ---@param include_comments boolean
----@param include_submit boolean
+---@param actions AtlasReviewKeymapActions
 ---@return AtlasCodeDiffHelpGroup[]
-local function help_groups(view, reloadable, include_comments, include_submit)
+local function help_groups(view, reloadable, include_comments, actions)
 	local reserved = reserved_keys(view)
 	local general = {}
 	add_help_item(general, help_keys(view), "Toggle Atlas help", 10)
@@ -346,13 +354,14 @@ local function help_groups(view, reloadable, include_comments, include_submit)
 	add_help_item(general, review_keys("ui.open_in_browser", reserved), "Open pull request in browser", 30)
 
 	local groups = { { name = "General", items = general, index = 90 } }
-	if not include_comments and not include_submit then
-		return groups
-	end
-
 	local review = {}
-	if include_submit then
-		add_help_item(review, review_keys("pulls.review.submit_review", reserved), "Submit review", 10)
+	for _, action in ipairs(PULL_REVIEW_ACTIONS) do
+		if actions[action.field] then
+			add_help_item(review, review_keys(action.id, reserved), action.desc, action.index)
+		end
+	end
+	if not include_comments and #review == 0 then
+		return groups
 	end
 	if include_comments then
 		add_help_item(review, review_keys("pulls.review.view_thread", reserved), "Open comment thread", 20)
@@ -419,9 +428,7 @@ local function map_help(entry, buf, active, view, include_comments)
 	if not help_buf or not vim.api.nvim_buf_is_valid(help_buf) then
 		help_buf = vim.api.nvim_create_buf(false, true)
 		entry.help_buffers[scope] = help_buf
-		for _, group in
-			ipairs(help_groups(view, entry.reload ~= nil, include_comments, entry.actions.submit_review ~= nil))
-		do
+		for _, group in ipairs(help_groups(view, entry.reload ~= nil, include_comments, entry.actions)) do
 			help.register(group.name, group.items, { buffer = help_buf, index = group.index })
 		end
 	end
@@ -450,8 +457,11 @@ local function map_review(entry)
 	for _, buf in ipairs({ facade.left.buf, facade.right.buf }) do
 		if vim.api.nvim_buf_is_valid(buf) and not entry.mapped[buf] then
 			map_help(entry, buf, actions.active, view, true)
-			if actions.submit_review then
-				map(entry, buf, "pulls.review.submit_review", "Submit review", actions.submit_review, reserved)
+			for _, action in ipairs(PULL_REVIEW_ACTIONS) do
+				local callback = actions[action.field]
+				if callback then
+					map(entry, buf, action.id, action.desc, callback, reserved)
+				end
 			end
 			map(entry, buf, "pulls.review.toggle_resolved", "Toggle resolved", function()
 				actions.toggle_resolved(buf)
@@ -503,16 +513,11 @@ local function map_review(entry)
 			return vim.api.nvim_get_current_tabpage() == entry.tabpage
 		end
 		map_help(entry, explorer_buf, active, explorer_keymaps, false)
-		if actions.submit_review then
-			map(
-				entry,
-				explorer_buf,
-				"pulls.review.submit_review",
-				"Submit review",
-				actions.submit_review,
-				explorer_reserved,
-				active
-			)
+		for _, action in ipairs(PULL_REVIEW_ACTIONS) do
+			local callback = actions[action.field]
+			if callback then
+				map(entry, explorer_buf, action.id, action.desc, callback, explorer_reserved, active)
+			end
 		end
 		map(entry, explorer_buf, "ui.refresh", "Refresh review comments", function()
 			comments.reload(facade)

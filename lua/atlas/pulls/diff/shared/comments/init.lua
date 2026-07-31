@@ -13,6 +13,8 @@ local comment_threads = require("atlas.ui.components.review_threads")
 
 ---@class AtlasReviewKeymapActions
 ---@field active fun(): boolean
+---@field toggle_approval (fun())|nil
+---@field request_changes (fun())|nil
 ---@field submit_review (fun())|nil
 ---@field toggle_task (fun())|nil
 ---@field toggle_resolved fun(buf: integer)
@@ -675,10 +677,30 @@ local function register_keymaps(session, state)
 			actions.submit(context)
 		end
 	end
+	local toggle_approval
+	if state.pr and actions.can_toggle_approval(state.pr) then
+		toggle_approval = function()
+			local context = action_context(session, state, nil)
+			if context then
+				actions.toggle_approval(context)
+			end
+		end
+	end
+	local request_changes
+	if state.pr and actions.can_request_changes(state.pr) then
+		request_changes = function()
+			local context = action_context(session, state, nil)
+			if context then
+				actions.request_changes(context)
+			end
+		end
+	end
 	session.review_view.register_keymaps({
 		active = function()
 			return active(session, state)
 		end,
+		toggle_approval = toggle_approval,
+		request_changes = request_changes,
 		submit_review = submit_review,
 		toggle_task = toggle_task,
 		toggle_resolved = function(buf)

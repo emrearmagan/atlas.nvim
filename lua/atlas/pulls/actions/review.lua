@@ -2,6 +2,7 @@ local M = {}
 
 local editor = require("atlas.ui.popups.editor")
 local footer = require("atlas.ui.components.footer")
+local pull_actions = require("atlas.pulls.actions")
 
 ---@alias AtlasReviewCommentAction "reply"|"edit"|"delete"|"toggle_task"|"toggle_resolved"
 
@@ -124,6 +125,29 @@ function M.can_submit(provider)
 	return provider ~= nil and provider.submit_review ~= nil
 end
 
+---@param pr PullRequest
+---@return string|nil
+local function approval_action(pr)
+	if pull_actions.is_action_available(pr, "toggle_approval") then
+		return "toggle_approval"
+	end
+	if pull_actions.is_action_available(pr, "approve") then
+		return "approve"
+	end
+end
+
+---@param pr PullRequest
+---@return boolean
+function M.can_toggle_approval(pr)
+	return approval_action(pr) ~= nil
+end
+
+---@param pr PullRequest
+---@return boolean
+function M.can_request_changes(pr)
+	return pull_actions.is_action_available(pr, "request_changes")
+end
+
 ---@param context AtlasReviewCommentActionContext
 ---@param start fun(done: fun(...)): { cancel: fun() }|nil
 ---@param done fun(...)
@@ -181,6 +205,57 @@ function M.submit(context)
 		end,
 	})
 	return true
+end
+
+---@param context AtlasReviewCommentActionContext
+function M.toggle_approval(context)
+	local action_id = approval_action(context.pr)
+	if not active(context) or not action_id then
+		return
+	end
+	notify(context, "loading", "Updating approval...", nil)
+	pull_actions.run_action(context.pr, action_id, nil, function(result, err)
+		if not active(context) then
+			return
+		end
+		if err then
+			notify(context, "error", "Approval failed: " .. tostring(err), nil)
+			return
+		end
+		notify(context, "success", tostring((result or {}).message or "Approval updated"), 1200)
+		if context.reload then
+			context.reload()
+		else
+			context.refresh()
+		end
+	end)
+end
+
+---@param context AtlasReviewCommentActionContext
+function M.request_changes(context)
+	if not active(context) or not M.can_request_changes(context.pr) then
+		return
+	end
+	notify(context, "loading", "Requesting changes...", nil)
+	pull_actions.run_action(context.pr, "request_changes", nil, function(result, err)
+		if not active(context) then
+			return
+		end
+		if err then
+			notify(context, "error", "Request changes failed: " .. tostring(err), nil)
+			return
+		end
+		if result and not result.changed_pr then
+			notify(context, "info", tostring(result.message or "Request changes cancelled"), 1200)
+			return
+		end
+		notify(context, "success", tostring((result or {}).message or "Changes requested"), 1200)
+		if context.reload then
+			context.reload()
+		else
+			context.refresh()
+		end
+	end)
 end
 
 ---@param context AtlasReviewCommentActionContext
