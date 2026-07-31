@@ -269,9 +269,10 @@ function M.register(session, actions)
 		help.register("Navigation", navigation, { index = 120, buffer = buf })
 	end
 
-	local explorer_actions = {
-		{
-			key = { "<CR>", "l" },
+	local explorer_actions = {}
+	add(
+		explorer_actions,
+		item("pulls.review.open_file", {
 			desc = "Open changed file",
 			index = 1,
 			callback = run(function()
@@ -281,8 +282,8 @@ function M.register(session, actions)
 				end
 			end),
 			opts = { silent = true, nowait = true },
-		},
-	}
+		})
+	)
 	add(
 		explorer_actions,
 		item("ui.show_details", {

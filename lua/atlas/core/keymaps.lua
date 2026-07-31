@@ -23,6 +23,7 @@ local M = {}
 
 ---@class AtlasPullsReviewKeymaps
 ---@field submit_review? AtlasKeymapValue
+---@field open_file? AtlasKeymapValue
 ---@field toggle_layout? AtlasKeymapValue
 ---@field toggle_compact? AtlasKeymapValue
 ---@field next_hunk? AtlasKeymapValue
@@ -87,6 +88,7 @@ local M = {}
 ---| "pulls.open_diff"
 ---| "pulls.checkout"
 ---| "pulls.review.submit_review"
+---| "pulls.review.open_file"
 ---| "pulls.review.toggle_layout"
 ---| "pulls.review.toggle_compact"
 ---| "pulls.review.next_hunk"
@@ -285,6 +287,7 @@ function M.validate()
 			"pulls.open_diff",
 			"pulls.checkout",
 			"pulls.review.submit_review",
+			"pulls.review.open_file",
 			"pulls.review.toggle_layout",
 			"pulls.review.toggle_compact",
 			"pulls.review.next_hunk",

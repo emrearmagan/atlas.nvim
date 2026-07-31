@@ -141,6 +141,7 @@ M.options = {
 			checkout = "gc",
 			review = {
 				submit_review = "gs",
+				open_file = { "<CR>", "l" },
 				toggle_layout = "t",
 				toggle_compact = "f",
 				next_hunk = "]h",
