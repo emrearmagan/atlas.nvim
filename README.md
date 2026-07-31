@@ -18,8 +18,8 @@ A Neovim plugin for managing GitHub/Bitbucket/GitLab PRs and Jira/GitHub/GitLab 
 </p>
 
 <p align="center">
-  <img width="49%" alt="Atlas UI" src="https://github.com/user-attachments/assets/caa30d3c-6883-4f2e-bc12-81bb2127f798">
-  <img width="49%" alt="AtlasDiff" src="https://github.com/user-attachments/assets/caa30d3c-6883-4f2e-bc12-81bb2127f798">
+  <img width="49%" alt="AtlasDiff" src="https://github.com/user-attachments/assets/47e1f9c6-38a5-4bac-90fd-46ae69b7dffc">
+  <img width="49%" alt="Atlas UI" src="https://github.com/user-attachments/assets/9716c643-bae0-427b-a2bd-f5a809dca6cc">
 </p>
 
 ## Table of Contents
@@ -229,8 +229,7 @@ pulls = {
   },
 },
 ```
-
-<img alt="GitHub pull requests" src="https://github.com/user-attachments/assets/caa30d3c-6883-4f2e-bc12-81bb2127f798">
+<img alt="GitHub pull requests" src="https://github.com/user-attachments/assets/9716c643-bae0-427b-a2bd-f5a809dca6cc">
 
 </details>
 
@@ -278,7 +277,7 @@ pulls = {
 },
 ```
 
-<img alt="Bitbucket pull requests" src="https://github.com/user-attachments/assets/06299ffc-b15b-4e2c-8f11-95a8ddde3b04">
+<img alt="Bitbucket pull requests" src="https://github.com/user-attachments/assets/bcdd0c9c-e15f-4e82-81fd-cde38aa68a2d">
 
 </details>
 
@@ -335,8 +334,7 @@ pulls = {
   },
 },
 ```
-
-<img alt="GitLab pull requests" src="https://github.com/user-attachments/assets/81b4023b-7f36-47cf-aeaf-28f9c1ebeb76">
+<img alt="GitLab pull requests" src="https://github.com/user-attachments/assets/128fe916-e733-4abb-9c5c-5244684f3c41">
 
 </details>
 
@@ -406,7 +404,7 @@ pulls = {
 Press the configured `pulls.open_diff` key (`gd` by default) on a pull request to start a review. 
 
 <p align="center">
-  <img alt="AtlasDiff review" src="https://github.com/user-attachments/assets/caa30d3c-6883-4f2e-bc12-81bb2127f798">
+  <img alt="AtlasDiff review" src="https://github.com/user-attachments/assets/47e1f9c6-38a5-4bac-90fd-46ae69b7dffc">
 </p>
 
 - See pending, resolved, and outdated provider threads at their diff locations.
@@ -439,7 +437,7 @@ Run `:AtlasCreatePR` on the branch you want to submit. The current branch is use
 Before creating the pull request, you can change the target branch, reviewers, and draft state. The commits and diffstat are shown below the editor, and the diff can be previewed from there.
 
 <p align="center">
-  <img alt="Create pull request" src="https://github.com/user-attachments/assets/caa30d3c-6883-4f2e-bc12-81bb2127f798">
+  <img alt="Create pull request" src="https://github.com/user-attachments/assets/bac9afe8-042b-4b0c-8037-86f828694b13">
 </p>
 
 ## Issues
@@ -532,9 +530,7 @@ issues = {
 },
 ```
 
-<img alt="Edit/Create Issue" src="https://github.com/user-attachments/assets/76913fbf-1667-4f35-9962-d3c1b4619c7f">
-
-<img alt="Jira issues" src="https://github.com/user-attachments/assets/23a15b90-283c-45e2-8964-02970ec3b21a">
+<img alt="Jira issues" src="https://github.com/user-attachments/assets/4cb40f1f-0b18-4fb1-82ae-6bc57fc8a7c5">
 
 </details>
 
@@ -684,7 +680,7 @@ issues = {
 GitHub, GitLab, and Jira can apply a saved Markdown template or save the current description as a new one. Templates are shared between providers and stored under Neovim's data directory.
 
 <p align="center">
-  <img alt="Create issue" src="https://github.com/user-attachments/assets/76913fbf-1667-4f35-9962-d3c1b4619c7f">
+  <img alt="Create issue" src="https://github.com/user-attachments/assets/b10962ee-d76f-4b79-982e-4d328b0a5153">
 </p>
 
 ## Keymaps
