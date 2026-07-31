@@ -30,14 +30,14 @@ A Neovim plugin for managing GitHub/Bitbucket/GitLab PRs and Jira/GitHub/GitLab 
 - [Requirements](#requirements)
 - [Commands](#commands)
 - [Pulls](#pulls)
-  - [Configuration](#configuration)
+  - [Configuration](#pulls-configuration)
     - [GitHub](#github)
     - [Bitbucket](#bitbucket)
     - [GitLab](#gitlab)
   - [Review Pulls](#review-pulls)
   - [Create Pulls](#create-pulls)
 - [Issues](#issues)
-  - [Configuration](#configuration)
+  - [Configuration](#issue-configuration)
     - [Jira](#jira)
     - [GitHub](#github-issues)
     - [GitLab](#gitlab-issues)
@@ -149,7 +149,7 @@ use {
 
 Use `:AtlasPulls [provider]` to browse and manage pull requests from GitHub, Bitbucket, and GitLab.
 
-### Configuration
+### Pulls Configuration
 
 ```lua
 pulls = {
@@ -230,8 +230,8 @@ pulls = {
   },
 },
 ```
-<img alt="GitHub pull requests" src="https://github.com/user-attachments/assets/9716c643-bae0-427b-a2bd-f5a809dca6cc">
 
+<img alt="GitHub pull requests" src="https://github.com/user-attachments/assets/9716c643-bae0-427b-a2bd-f5a809dca6cc">
 
 </details>
 
@@ -281,7 +281,6 @@ pulls = {
 ```
 
 <img alt="Bitbucket pull requests" src="https://github.com/user-attachments/assets/bcdd0c9c-e15f-4e82-81fd-cde38aa68a2d">
-
 
 </details>
 
@@ -339,8 +338,8 @@ pulls = {
   },
 },
 ```
-<img alt="GitLab pull requests" src="https://github.com/user-attachments/assets/128fe916-e733-4abb-9c5c-5244684f3c41">
 
+<img alt="GitLab pull requests" src="https://github.com/user-attachments/assets/128fe916-e733-4abb-9c5c-5244684f3c41">
 
 </details>
 
@@ -349,7 +348,7 @@ pulls = {
 <details>
 <summary><strong>Details</strong></summary>
 
-Press the configured `pulls.open_diff` key (`gd` by default) on a pull request to start a review. 
+Press the configured `pulls.open_diff` key (`gd` by default) on a pull request to start a review.
 
 <p align="center">
   <img alt="AtlasDiff review" src="https://github.com/user-attachments/assets/47e1f9c6-38a5-4bac-90fd-46ae69b7dffc">
@@ -378,7 +377,6 @@ For scripts, use `bin/atlas-notes`. Notes added there appear in AtlasDiff and `:
 
 My dotfiles include a [Pi extension that wraps this script](https://github.com/emrearmagan/dotfiles/blob/main/config/pi/extensions/atlas-notes.ts) so review agents can list and add notes.
 
-
 </details>
 
 ### Create Pulls
@@ -393,7 +391,6 @@ Before creating the pull request, you can change the target branch, reviewers, a
 <p align="center">
   <img alt="Create pull request" src="https://github.com/user-attachments/assets/bac9afe8-042b-4b0c-8037-86f828694b13">
 </p>
-
 
 </details>
 
@@ -455,7 +452,6 @@ pulls = {
 ```
 
 ![CleanShot2026-03-31at20 08 06-ezgif com-video-to-gif-converter](https://github.com/user-attachments/assets/a8ca355b-09e2-428c-b3fb-3280fd161110)
-
 
 </details>
 
