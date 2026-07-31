@@ -403,6 +403,14 @@ function M.approve(pr, on_done)
 end
 
 ---@param pr PullRequest
+---@param body string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.submit_review(pr, body, on_done)
+	return require("atlas.pulls.providers.gitlab.api.comments").publish_review(pr, nil, body, on_done)
+end
+
+---@param pr PullRequest
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.unapprove(pr, on_done)

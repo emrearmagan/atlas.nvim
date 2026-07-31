@@ -703,15 +703,15 @@ local ACTIONS = {
 		end,
 		run = function(_, done)
 			async_picker.open({
-				title = "Search Query",
-				prompt = "Search tickets",
+				title = "Search Issues",
+				prompt = "Issue name or key",
 				debounce_ms = 200,
 				identifier = "jira_issue_picker_search",
 				cache_ttl_ms = 30000,
 				fetch_on_open = true,
 				format_item = function(item)
-					local provider_icon, provider_hl = icons.issues_provider("jira", "provider")
-					return string.format("%s %s", provider_icon, tostring(item.label or "")), provider_hl
+					local provider_icon = icons.issues_provider("jira", "provider")
+					return string.format("%s %s", provider_icon, tostring(item.label or "")), "AtlasJiraKey"
 				end,
 				fetch = function(fetch_ctx, fetch_done)
 					local query = vim.trim(fetch_ctx.query)

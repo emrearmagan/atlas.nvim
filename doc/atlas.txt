@@ -102,8 +102,9 @@ by default.
                                                                    *:AtlasDiff*
 :AtlasDiff <base>...<head>
 :AtlasDiff <pull-request-url>
-        Open an explicit Git range or load a pull request review from the
-        current checkout.
+        Open an explicit Git range or load a pull request review. Pull request
+        URLs use a matching current checkout or the configured
+        `pulls.repo_config.paths` mapping.
 
                                                                   *:AtlasNotes*
 :AtlasNotes
@@ -170,9 +171,11 @@ Shared config that applies to all pulls providers:
   require("atlas").setup({
     pulls = {
       diff = {
-        -- Command must accept explicit <base>...<head> Git revisions.
-        open_cmd = "AtlasDiff", -- default; or "DiffviewOpen" / "CodeDiff"
-        layout = "side-by-side", -- "side-by-side" or "inline" for AtlasDiff
+        -- Any command that accepts explicit <base>...<head> Git revisions.
+        open_cmd = "AtlasDiff", -- default; e.g. "DiffviewOpen" or "CodeDiff"
+
+        -- AtlasDiff options; external viewers use their own configuration.
+        layout = "inline", -- "inline" or "side-by-side"
         compact = true, -- initially show hunks plus surrounding context
         explorer = {
           grouped = true, -- group changed files by directory
@@ -349,6 +352,8 @@ to start a review. AtlasDiff places pending, resolved, and outdated threads at
 their diff locations. Provider tasks and GitHub checklists are shown with the
 comments they belong to. Supported providers allow comments to be added,
 replied to, edited, deleted, resolved, or reopened from the diff.
+Pending comments can be submitted with an optional review summary when
+supported by the provider.
 
 CodeDiff can display the same Atlas comment and task overlays. This
 integration uses CodeDiff internals and may need updates when CodeDiff
@@ -631,6 +636,7 @@ Defaults live under `keymaps` in `setup()`. Each entry accepts:
         open_diff              = "gd",
         checkout               = "gc",
         review = {
+          submit_review         = "gs",
           toggle_layout        = "t",
           toggle_compact       = "f",
           next_hunk            = "]h",

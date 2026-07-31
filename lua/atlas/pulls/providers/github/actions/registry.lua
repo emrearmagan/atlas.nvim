@@ -1,6 +1,7 @@
 local M = {}
 
 local cli = require("atlas.pulls.providers.github.api.cli")
+local comments = require("atlas.pulls.providers.github.api.comments")
 local footer = require("atlas.ui.components.footer")
 local checkout = require("atlas.core.git.checkout")
 local logger = require("atlas.core.logger")
@@ -129,8 +130,8 @@ local ACTIONS = {
 					end)
 				else
 					footer.notify("loading", "Approving PR...")
-					cli.gh({ "pr", "review", tostring(pr.id), "--repo", slug, "--approve" }, function(_, approve_err)
-						if approve_err then
+					comments.approve_review(pr, function(ok, approve_err)
+						if not ok then
 							footer.notify("error", string.format("Approve failed: %s", tostring(approve_err)))
 							done(nil, tostring(approve_err))
 							return
@@ -173,17 +174,8 @@ local ACTIONS = {
 				end
 
 				footer.notify("loading", "Requesting changes...")
-				cli.gh({
-					"pr",
-					"review",
-					tostring(pr.id),
-					"--repo",
-					repo_slug(ctx),
-					"--request-changes",
-					"--body",
-					body,
-				}, function(_, err)
-					if err then
+				comments.request_changes_review(pr, body, function(ok, err)
+					if not ok then
 						footer.notify("error", string.format("Request changes failed: %s", tostring(err)))
 						done(nil, tostring(err))
 						return

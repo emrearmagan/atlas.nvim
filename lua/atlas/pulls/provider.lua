@@ -67,6 +67,7 @@
 ---@field edit_task (fun(pr: PullRequest, task: PullsComment, on_done: fun(task: PullsComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field delete_task (fun(pr: PullRequest, task: PullsComment, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field set_thread_resolved (fun(pr: PullRequest, root: PullsComment, resolved: boolean, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field submit_review (fun(pr: PullRequest, body: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field add_reaction (fun(pr: PullRequest, comment: PullsComment, key: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
 ---
 ---@field views fun(): AtlasPullsViewConfig[]
@@ -91,8 +92,8 @@
 ---@class PullsInlineCommentPosition
 ---@field path string
 ---@field old_path string|nil
----@field side "old"|"new"
----@field line integer
+---@field from integer|nil
+---@field to integer|nil
 ---@field commit_hash string|nil
 
 ---@class PullsAddCommentOpts

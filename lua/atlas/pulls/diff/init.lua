@@ -1,10 +1,11 @@
 local M = {}
 
+local git = require("atlas.core.git")
 local checkout = require("atlas.core.git.checkout")
 local logger = require("atlas.core.logger")
 
----@param requested AtlasPullsDiffOpenCommand|nil
----@return AtlasPullsDiffOpenCommand|nil open_cmd
+---@param requested AtlasPullsDiffOpenCommand|string|nil
+---@return AtlasPullsDiffOpenCommand|string|nil open_cmd
 ---@return string|nil err
 local function configured_command(requested)
 	local config = require("atlas.config")
@@ -13,14 +14,10 @@ local function configured_command(requested)
 	if cmd == "" then
 		return nil, "diff.open_cmd is not configured"
 	end
-	if cmd ~= "AtlasDiff" and cmd ~= "DiffviewOpen" and cmd ~= "CodeDiff" then
-		return nil, "Unsupported diff.open_cmd: " .. cmd
-	end
 	if vim.fn.exists(":" .. cmd) ~= 2 then
 		return nil, string.format("diff.open_cmd command not found: %s", cmd)
 	end
 
-	---@cast cmd AtlasPullsDiffOpenCommand
 	return cmd, nil
 end
 
@@ -30,7 +27,7 @@ end
 ---@field head_revision string|nil
 ---@field review AtlasReviewOpenContext|nil
 ---@field fetch_branches (fun(pr: PullRequest|nil, on_done: fun(err: string|nil)): { cancel: fun() }|nil)|nil
----@field open_cmd AtlasPullsDiffOpenCommand|nil
+---@field open_cmd AtlasPullsDiffOpenCommand|string|nil
 ---@field force_refresh boolean|nil
 ---@field refresh_pull_request boolean|nil
 
@@ -46,12 +43,30 @@ local function open_diffview(repo_path, range)
 	local escaped_path = vim.fn.fnameescape(repo_path)
 	local previous_path = vim.fn.fnameescape(vim.fn.getcwd())
 	vim.cmd("cd " .. escaped_path)
-	local ok, err = pcall(vim.cmd, "DiffviewOpen " .. range)
+	local ok, err = pcall(vim.api.nvim_cmd, { cmd = "DiffviewOpen", args = { range } }, {})
 	vim.cmd("cd " .. previous_path)
 	if not ok then
 		return tostring(err)
 	end
 	return nil
+end
+
+---@param open_cmd string
+---@param repo_path string
+---@param range string
+---@return string|nil err
+local function open_external_diff(open_cmd, repo_path, range)
+	local tabpage
+	local ok, err = pcall(function()
+		vim.cmd("tabnew")
+		tabpage = vim.api.nvim_get_current_tabpage()
+		vim.cmd("tcd " .. vim.fn.fnameescape(repo_path))
+		vim.api.nvim_cmd({ cmd = open_cmd, args = { range } }, {})
+	end)
+	if not ok and tabpage and vim.api.nvim_tabpage_is_valid(tabpage) then
+		pcall(vim.cmd, vim.api.nvim_tabpage_get_number(tabpage) .. "tabclose")
+	end
+	return not ok and tostring(err) or nil
 end
 
 ---@param repo_path string
@@ -140,7 +155,7 @@ local function open_codediff(repo_path, range, review, view, reload, on_done)
 		end,
 	})
 	local ok, err = pcall(vim.api.nvim_win_call, view.win, function()
-		vim.cmd("CodeDiff --repo " .. vim.fn.fnameescape(repo_path) .. " " .. range)
+		vim.api.nvim_cmd({ cmd = "CodeDiff", args = { "--repo", repo_path, range } }, {})
 	end)
 	if not ok then
 		finish(tostring(err))
@@ -191,7 +206,7 @@ function M.open(opts, on_done, loading_target)
 		return nil
 	end
 
-	local review = open_cmd ~= "DiffviewOpen" and opts.review or nil
+	local review = (open_cmd == "AtlasDiff" or open_cmd == "CodeDiff") and opts.review or nil
 	local loading = require("atlas.ui.components.loading")
 	local prepare_request
 	local launch_request
@@ -335,8 +350,14 @@ function M.open(opts, on_done, loading_target)
 			return
 		end
 
+		local err
+		if open_cmd == "DiffviewOpen" then
+			err = open_diffview(root, range)
+		else
+			err = open_external_diff(open_cmd, root, range)
+		end
 		view:finish()
-		complete(open_diffview(root, range))
+		complete(err)
 	end
 
 	-- Preparation may finish before run() returns its request handle.
@@ -417,13 +438,30 @@ function M.open_pull_request(value)
 		return nil
 	end
 
-	local root, root_err = require("atlas.core.git").repo_root(vim.fn.getcwd())
+	local pr = resolver.pull_request_from_target(target)
+	local cwd = vim.fn.getcwd()
+	local current = resolver.local_repository(cwd)
+	local root
+	if
+		current
+		and current.provider == target.provider
+		and current.host:lower() == target.host:lower()
+		and current.slug:lower() == pr.repo_full_name:lower()
+	then
+		root = git.repo_root(cwd)
+	end
+	local root_err
 	if not root then
-		vim.notify("[AtlasDiff] " .. tostring(root_err or "Not in a git repository"), vim.log.levels.ERROR)
+		root, root_err = checkout.resolve_repo_path_for_pr(pr, {
+			require_git = true,
+			require_existing = true,
+		})
+	end
+	if not root then
+		vim.notify("[AtlasDiff] " .. tostring(root_err or "Local repo not found"), vim.log.levels.ERROR)
 		return nil
 	end
 
-	local pr = resolver.pull_request_from_target(target)
 	---@param current_pr PullRequest|nil
 	---@param done fun(err: string|nil)
 	---@return { cancel: fun() }

@@ -13,6 +13,7 @@ local comment_threads = require("atlas.ui.components.review_threads")
 
 ---@class AtlasReviewKeymapActions
 ---@field active fun(): boolean
+---@field submit_review (fun())|nil
 ---@field toggle_task (fun())|nil
 ---@field toggle_resolved fun(buf: integer)
 ---@field add_comment fun(buf: integer, pending: boolean)
@@ -268,20 +269,34 @@ local function inline_position(session, buf)
 	local line = vim.api.nvim_win_get_cursor(0)[1]
 	for _, hunk in ipairs(document.file.hunks) do
 		for _, diff_line in ipairs(hunk.lines) do
-			local anchored = side == "LEFT" and diff_line.kind == "remove" and diff_line.old_line == line
-				or side == "RIGHT" and diff_line.kind == "add" and diff_line.new_line == line
-			if anchored then
+			if side == "LEFT" and diff_line.old_line == line then
 				return {
 					path = document.new.path,
 					old_path = document.old.path,
-					side = side == "LEFT" and "old" or "new",
-					line = line,
+					from = line,
+					commit_hash = session.range.head_revision,
+				}
+			end
+			if side == "RIGHT" and diff_line.new_line == line then
+				return {
+					path = document.new.path,
+					old_path = document.old.path,
+					to = line,
 					commit_hash = session.range.head_revision,
 				}
 			end
 		end
 	end
-	return nil
+
+	-- Context lines need a position in both file versions.
+	local other_line = opposite_line(session, side, line)
+	return {
+		path = document.new.path,
+		old_path = document.old.path,
+		from = side == "LEFT" and line or other_line,
+		to = side == "RIGHT" and line or other_line,
+		commit_hash = session.range.head_revision,
+	}
 end
 
 ---@param session AtlasReviewSession
@@ -458,6 +473,11 @@ local function action_context(session, state, comment, after_refresh)
 				end
 			end
 		end,
+		reload = function()
+			if active(session, state) then
+				reload_review(session, state)
+			end
+		end,
 		notify = function(level, message, duration)
 			if not active(session, state) then
 				return
@@ -625,7 +645,7 @@ local function add_inline_comment(session, state, buf, pending)
 	end
 	local inline = inline_position(session, buf)
 	if not inline then
-		view_notify(session, "info", "Comments can only be added to changed lines")
+		view_notify(session, "info", "Unable to comment on this line")
 		return
 	end
 	actions.add(context, inline, { pending = pending })
@@ -644,10 +664,22 @@ local function register_keymaps(session, state)
 			toggle_task_at_cursor(session, state)
 		end
 	end
+	local submit_review
+	if actions.can_submit(state.provider) then
+		submit_review = function()
+			local context = action_context(session, state, nil)
+			if not context then
+				view_notify(session, "warn", "Review is not ready")
+				return
+			end
+			actions.submit(context)
+		end
+	end
 	session.review_view.register_keymaps({
 		active = function()
 			return active(session, state)
 		end,
+		submit_review = submit_review,
 		toggle_task = toggle_task,
 		toggle_resolved = function(buf)
 			toggle_resolved_at_cursor(session, state, buf)

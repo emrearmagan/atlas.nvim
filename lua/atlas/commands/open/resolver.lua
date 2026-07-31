@@ -179,10 +179,11 @@ local function configured_repositories()
 	return found
 end
 
+---@param cwd string|nil
 ---@return AtlasGitRemoteInfo|nil
-function M.local_repository()
+function M.local_repository(cwd)
 	local git = require("atlas.core.git")
-	local root = git.repo_root()
+	local root = git.repo_root(cwd)
 	local remote_url = root and git.remote_url(root, "origin") or nil
 	local info = remote_url and git.parse_remote_url(remote_url) or nil
 	if info and info.provider == "unknown" then

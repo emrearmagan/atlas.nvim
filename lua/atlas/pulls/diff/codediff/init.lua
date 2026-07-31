@@ -53,6 +53,7 @@ local READY_RETRIES = 80
 
 ---@class AtlasCodeDiffKeymaps
 ---@field view? table<string, string|string[]|false>
+---@field explorer? table<string, string|string[]|false>
 
 ---@class AtlasCodeDiffReview
 ---@field tabpage integer
@@ -332,8 +333,9 @@ end
 ---@param view table<string, string|string[]|false>
 ---@param reloadable boolean
 ---@param include_comments boolean
+---@param include_submit boolean
 ---@return AtlasCodeDiffHelpGroup[]
-local function help_groups(view, reloadable, include_comments)
+local function help_groups(view, reloadable, include_comments, include_submit)
 	local reserved = reserved_keys(view)
 	local general = {}
 	add_help_item(general, help_keys(view), "Toggle Atlas help", 10)
@@ -344,23 +346,31 @@ local function help_groups(view, reloadable, include_comments)
 	add_help_item(general, review_keys("ui.open_in_browser", reserved), "Open pull request in browser", 30)
 
 	local groups = { { name = "General", items = general, index = 90 } }
-	if not include_comments then
+	if not include_comments and not include_submit then
 		return groups
 	end
 
-	local navigation = {}
-	add_help_item(navigation, review_keys("pulls.review.previous_comment", reserved), "Previous comment", 10)
-	add_help_item(navigation, review_keys("pulls.review.next_comment", reserved), "Next comment", 11)
-
 	local review = {}
-	add_help_item(review, review_keys("pulls.review.view_thread", reserved), "Open comment thread", 10)
-	add_help_item(review, review_keys("pulls.review.toggle_resolved", reserved), "Toggle resolved", 11)
-	add_help_item(review, review_keys("pulls.review.add_pending_comment", reserved), "Add pending comment", 20)
-	add_help_item(review, review_keys("pulls.review.add_comment", reserved), "Add comment", 21)
-	add_help_item(review, review_keys("ui.toggle_fold", reserved), "Toggle review thread", 30)
-	add_help_item(review, review_keys("ui.toggle_all_folds", reserved), "Toggle all review threads", 31)
-	table.insert(groups, { name = "Review", items = review, index = 110 })
-	table.insert(groups, { name = "Navigation", items = navigation, index = 120 })
+	if include_submit then
+		add_help_item(review, review_keys("pulls.review.submit_review", reserved), "Submit review", 10)
+	end
+	if include_comments then
+		add_help_item(review, review_keys("pulls.review.view_thread", reserved), "Open comment thread", 20)
+		add_help_item(review, review_keys("pulls.review.toggle_resolved", reserved), "Toggle resolved", 21)
+		add_help_item(review, review_keys("pulls.review.add_pending_comment", reserved), "Add pending comment", 30)
+		add_help_item(review, review_keys("pulls.review.add_comment", reserved), "Add comment", 31)
+		add_help_item(review, review_keys("ui.toggle_fold", reserved), "Toggle review thread", 40)
+		add_help_item(review, review_keys("ui.toggle_all_folds", reserved), "Toggle all review threads", 41)
+	end
+	if #review > 0 then
+		table.insert(groups, { name = "Review", items = review, index = 110 })
+	end
+	if include_comments then
+		local navigation = {}
+		add_help_item(navigation, review_keys("pulls.review.previous_comment", reserved), "Previous comment", 10)
+		add_help_item(navigation, review_keys("pulls.review.next_comment", reserved), "Next comment", 11)
+		table.insert(groups, { name = "Navigation", items = navigation, index = 120 })
+	end
 	return groups
 end
 
@@ -409,7 +419,9 @@ local function map_help(entry, buf, active, view, include_comments)
 	if not help_buf or not vim.api.nvim_buf_is_valid(help_buf) then
 		help_buf = vim.api.nvim_create_buf(false, true)
 		entry.help_buffers[scope] = help_buf
-		for _, group in ipairs(help_groups(view, entry.reload ~= nil, include_comments)) do
+		for _, group in
+			ipairs(help_groups(view, entry.reload ~= nil, include_comments, entry.actions.submit_review ~= nil))
+		do
 			help.register(group.name, group.items, { buffer = help_buf, index = group.index })
 		end
 	end
@@ -438,6 +450,9 @@ local function map_review(entry)
 	for _, buf in ipairs({ facade.left.buf, facade.right.buf }) do
 		if vim.api.nvim_buf_is_valid(buf) and not entry.mapped[buf] then
 			map_help(entry, buf, actions.active, view, true)
+			if actions.submit_review then
+				map(entry, buf, "pulls.review.submit_review", "Submit review", actions.submit_review, reserved)
+			end
 			map(entry, buf, "pulls.review.toggle_resolved", "Toggle resolved", function()
 				actions.toggle_resolved(buf)
 			end, reserved)
@@ -482,17 +497,30 @@ local function map_review(entry)
 	local explorer = raw and (raw.explorer or entry.lifecycle.get_explorer(entry.tabpage))
 	local explorer_buf = explorer and explorer.bufnr
 	if explorer_buf and vim.api.nvim_buf_is_valid(explorer_buf) and not entry.mapped[explorer_buf] then
+		local explorer_keymaps = vim.list_extend(vim.tbl_values(view), vim.tbl_values(configured.explorer or {}))
+		local explorer_reserved = reserved_keys(explorer_keymaps)
 		local function active()
 			return vim.api.nvim_get_current_tabpage() == entry.tabpage
 		end
-		map_help(entry, explorer_buf, active, view, false)
+		map_help(entry, explorer_buf, active, explorer_keymaps, false)
+		if actions.submit_review then
+			map(
+				entry,
+				explorer_buf,
+				"pulls.review.submit_review",
+				"Submit review",
+				actions.submit_review,
+				explorer_reserved,
+				active
+			)
+		end
 		map(entry, explorer_buf, "ui.refresh", "Refresh review comments", function()
 			comments.reload(facade)
-		end, reserved, active)
+		end, explorer_reserved, active)
 		if entry.reload then
 			map(entry, explorer_buf, "ui.refresh_view", "Reload pull request diff", function()
 				reload(entry)
-			end, reserved, active)
+			end, explorer_reserved, active)
 		end
 		map(
 			entry,
@@ -500,7 +528,7 @@ local function map_review(entry)
 			"ui.open_in_browser",
 			"Open pull request in browser",
 			actions.open_in_browser,
-			reserved,
+			explorer_reserved,
 			active
 		)
 	end

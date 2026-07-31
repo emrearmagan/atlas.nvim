@@ -184,6 +184,212 @@ local function remember_pending_review(pr, review)
 end
 
 ---@param pr PullRequest
+---@return string|nil
+local function pending_review_id(pr)
+	for _, review in ipairs(json.safe_table(pr._raw.reviews).nodes or {}) do
+		if review.state == "PENDING" and tostring(review.id or "") ~= "" then
+			return tostring(review.id)
+		end
+	end
+	return nil
+end
+
+local SUBMIT_REVIEW_MUTATION = [[
+mutation($reviewId:ID!,$event:PullRequestReviewEvent!,$body:String){
+  submitPullRequestReview(input:{pullRequestReviewId:$reviewId,event:$event,body:$body}){
+    pullRequestReview{id state}
+  }
+}
+]]
+
+---@param pr PullRequest
+---@param review_id string
+---@param event string
+---@param body string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+local function submit_pending_review(pr, review_id, event, body, on_done)
+	return cli.gh({
+		"api",
+		"graphql",
+		"-f",
+		"reviewId=" .. review_id,
+		"-f",
+		"event=" .. event,
+		"-f",
+		"body=" .. body,
+		"-f",
+		"query=" .. SUBMIT_REVIEW_MUTATION,
+	}, function(result, err)
+		if err then
+			on_done(false, err)
+			return
+		end
+		local review = (((result or {}).data or {}).submitPullRequestReview or {}).pullRequestReview
+		if type(review) ~= "table" or tostring(review.id or "") == "" then
+			on_done(false, "GitHub did not return the submitted review")
+			return
+		end
+		pr._raw.reviews = nil
+		on_done(true, nil)
+	end, {
+		action = "Submit review",
+		repo = pr.repo_full_name,
+		number = pr.id,
+	})
+end
+
+local CREATE_REVIEW_MUTATION = [[
+mutation($pullRequestId:ID!,$event:PullRequestReviewEvent!,$body:String){
+  addPullRequestReview(input:{pullRequestId:$pullRequestId,event:$event,body:$body}){
+    pullRequestReview{id state}
+  }
+}
+]]
+
+---@param pr PullRequest
+---@param pull_request_id string
+---@param event string
+---@param body string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+local function create_review(pr, pull_request_id, event, body, on_done)
+	return cli.gh({
+		"api",
+		"graphql",
+		"-f",
+		"pullRequestId=" .. pull_request_id,
+		"-f",
+		"event=" .. event,
+		"-f",
+		"body=" .. body,
+		"-f",
+		"query=" .. CREATE_REVIEW_MUTATION,
+	}, function(result, err)
+		if err then
+			on_done(false, err)
+			return
+		end
+		local review = (((result or {}).data or {}).addPullRequestReview or {}).pullRequestReview
+		if type(review) ~= "table" or tostring(review.id or "") == "" then
+			on_done(false, "GitHub did not return the submitted review")
+			return
+		end
+		pr._raw.reviews = nil
+		on_done(true, nil)
+	end, {
+		action = "Submit review",
+		repo = pr.repo_full_name,
+		number = pr.id,
+	})
+end
+
+local PENDING_REVIEW_QUERY = [[
+query($owner:String!,$name:String!,$number:Int!){
+  repository(owner:$owner,name:$name){
+    pullRequest(number:$number){
+      id
+      reviews(first:1,states:[PENDING]){nodes{id state}}
+    }
+  }
+}
+]]
+
+---@param pr PullRequest
+---@param event "COMMENT"|"APPROVE"|"REQUEST_CHANGES"
+---@param body string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+local function finish_review(pr, event, body, on_done)
+	local known_review = pending_review_id(pr)
+	if known_review then
+		return submit_pending_review(pr, known_review, event, body, on_done)
+	end
+
+	local owner, name = pr.repo_full_name:match("^([^/]+)/([^/]+)$")
+	if owner == nil or name == nil then
+		vim.schedule(function()
+			on_done(false, "Missing repo")
+		end)
+		return nil
+	end
+
+	local cancelled = false
+	local current = cli.gh({
+		"api",
+		"graphql",
+		"-f",
+		"owner=" .. owner,
+		"-f",
+		"name=" .. name,
+		"-F",
+		"number=" .. tostring(pr.id),
+		"-f",
+		"query=" .. PENDING_REVIEW_QUERY,
+	}, function(result, err)
+		if cancelled then
+			return
+		end
+		if err then
+			on_done(false, err)
+			return
+		end
+		local pull_request = (((result or {}).data or {}).repository or {}).pullRequest
+		if type(pull_request) ~= "table" or tostring(pull_request.id or "") == "" then
+			on_done(false, "GitHub did not return the pull request")
+			return
+		end
+		local review_id
+		for _, review in ipairs(json.safe_table(pull_request.reviews).nodes or {}) do
+			if review.state == "PENDING" and tostring(review.id or "") ~= "" then
+				review_id = tostring(review.id)
+				break
+			end
+		end
+		current = review_id and submit_pending_review(pr, review_id, event, body, on_done)
+			or create_review(pr, tostring(pull_request.id), event, body, on_done)
+		if cancelled and current then
+			current.cancel()
+		end
+	end, {
+		action = "Find pending review",
+		repo = pr.repo_full_name,
+		number = pr.id,
+	})
+	return {
+		cancel = function()
+			cancelled = true
+			if current then
+				current.cancel()
+			end
+		end,
+	}
+end
+
+---@param pr PullRequest
+---@param body string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.submit_review(pr, body, on_done)
+	return finish_review(pr, "COMMENT", body, on_done)
+end
+
+---@param pr PullRequest
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.approve_review(pr, on_done)
+	return finish_review(pr, "APPROVE", "", on_done)
+end
+
+---@param pr PullRequest
+---@param body string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.request_changes_review(pr, body, on_done)
+	return finish_review(pr, "REQUEST_CHANGES", body, on_done)
+end
+
+---@param pr PullRequest
 ---@param _opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(comments: PullsComment[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
@@ -319,7 +525,8 @@ end
 ---@param on_done fun(comment: PullsComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 local function add_review_thread(pr, content, inline, review_id, on_done)
-	local side = inline.side == "old" and "LEFT" or "RIGHT"
+	local side = inline.to and "RIGHT" or "LEFT"
+	local line = inline.to or inline.from
 	local query = ([[
 mutation($reviewId:ID!,$path:String!,$body:String!,$line:Int!,$side:DiffSide!){
   addPullRequestReviewThread(input:{
@@ -352,7 +559,7 @@ mutation($reviewId:ID!,$path:String!,$body:String!,$line:Int!,$side:DiffSide!){
 		"-f",
 		"side=" .. side,
 		"-F",
-		"line=" .. tostring(inline.line),
+		"line=" .. tostring(line),
 	}
 	vim.list_extend(args, { "-f", "reviewId=" .. review_id })
 	vim.list_extend(args, { "-f", "query=" .. query })
@@ -378,9 +585,9 @@ mutation($reviewId:ID!,$path:String!,$body:String!,$line:Int!,$side:DiffSide!){
 		thread.path = thread.path or inline.path
 		thread.diffSide = thread.diffSide or side
 		if side == "LEFT" then
-			thread.originalLine = thread.originalLine or inline.line
+			thread.originalLine = thread.originalLine or line
 		else
-			thread.line = thread.line or inline.line
+			thread.line = thread.line or line
 		end
 		local review = json.safe_table(node.pullRequestReview)
 		remember_pending_review(pr, review)
@@ -404,6 +611,8 @@ end
 ---@return { cancel: fun() }|nil
 local function add_published_inline_comment(pr, content, inline, on_done)
 	local commit_id = tostring(inline.commit_hash or pr.source.commit_hash or "")
+	local side = inline.to and "RIGHT" or "LEFT"
+	local line = inline.to or inline.from
 	if commit_id == "" then
 		vim.schedule(function()
 			on_done(nil, "Missing source commit hash")
@@ -423,9 +632,9 @@ local function add_published_inline_comment(pr, content, inline, on_done)
 		"-f",
 		"path=" .. inline.path,
 		"-f",
-		"side=" .. (inline.side == "old" and "LEFT" or "RIGHT"),
+		"side=" .. side,
 		"-F",
-		"line=" .. tostring(inline.line),
+		"line=" .. tostring(line),
 	}, function(result, err)
 		if err or type(result) ~= "table" then
 			on_done(nil, err or "Failed to create inline comment")

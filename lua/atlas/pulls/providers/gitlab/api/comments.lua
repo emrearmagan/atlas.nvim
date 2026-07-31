@@ -320,6 +320,39 @@ local function bust_caches(path, iid)
 	service.delete_memory_cache(string.format("gitlab_pulls:general_comments:%s!%d", path, iid))
 end
 
+---@param pr PullRequest
+---@param reviewer_state "reviewed"|"requested_changes"|nil
+---@param body string|nil
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.publish_review(pr, reviewer_state, body, on_done)
+	local path, iid = project_iid(pr)
+	if path == "" or iid == nil then
+		on_done(false, "Invalid MR identifier")
+		return nil
+	end
+
+	local payload
+	if body and vim.trim(body) ~= "" then
+		payload = { note = body }
+	end
+	if reviewer_state then
+		payload = payload or {}
+		payload.reviewer_state = reviewer_state
+	end
+
+	local endpoint =
+		string.format("/projects/%s/merge_requests/%d/draft_notes/bulk_publish", service.url_encode(path), iid)
+	return service.request("POST", endpoint, payload, function(_, err)
+		if err then
+			on_done(false, err)
+			return
+		end
+		bust_caches(path, iid)
+		on_done(true, nil)
+	end)
+end
+
 ---@param comment PullsComment
 ---@param parent PullsComment|nil
 ---@return PullsComment
@@ -381,8 +414,9 @@ local function add_inline_comment(pr, path, iid, content, inline, pending, on_do
 			start_sha = refs.start_sha,
 			old_path = inline.old_path or inline.path,
 			new_path = inline.path,
+			old_line = inline.from,
+			new_line = inline.to,
 		}
-		position[inline.side == "old" and "old_line" or "new_line"] = inline.line
 		local resource = pending and "draft_notes" or "discussions"
 		local endpoint = string.format("/projects/%s/merge_requests/%d/%s", service.url_encode(path), iid, resource)
 		local payload = pending and { note = content, position = position } or { body = content, position = position }

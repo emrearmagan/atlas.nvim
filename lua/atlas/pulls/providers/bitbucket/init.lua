@@ -470,17 +470,17 @@ function M.fetch_tasks(pr, opts, on_done)
 	)
 end
 
----@param inline { path: string, side: "old"|"new"|nil, line: integer }|nil
+---@param inline PullsInlineCommentPosition|nil
 ---@return { from?: number, to?: number, path?: string }|nil
 local function inline_to_bitbucket(inline)
 	if inline == nil then
 		return nil
 	end
 	local out = { path = inline.path }
-	if inline.side == "old" then
-		out.from = inline.line
+	if inline.to then
+		out.to = inline.to
 	else
-		out.to = inline.line
+		out.from = inline.from
 	end
 	return out
 end
@@ -613,6 +613,14 @@ end
 function M.set_thread_resolved(pr, root, resolved, on_done)
 	local root_id = root.parent_id or root.id
 	return require("atlas.pulls.providers.bitbucket.api.comments").set_thread_resolved(pr, root_id, resolved, on_done)
+end
+
+---@param pr PullRequest
+---@param body string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.submit_review(pr, body, on_done)
+	return require("atlas.pulls.providers.bitbucket.api.pullrequests").submit_review(pr, body, on_done)
 end
 
 ---@param opts PullsCreatePROpts

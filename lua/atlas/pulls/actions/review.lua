@@ -33,6 +33,7 @@ end
 ---@field active (fun(): boolean)|nil
 ---@field track fun(handle: { cancel: fun() }|nil): fun()
 ---@field refresh fun()
+---@field reload (fun())|nil
 ---@field notify fun(level: "loading"|"success"|"warn"|"error", message: string, duration: integer|nil)|nil
 
 ---@class AtlasReviewAddOptions
@@ -117,6 +118,12 @@ local function active(context)
 	return context.active == nil or context.active()
 end
 
+---@param provider PullsProvider|nil
+---@return boolean
+function M.can_submit(provider)
+	return provider ~= nil and provider.submit_review ~= nil
+end
+
 ---@param context AtlasReviewCommentActionContext
 ---@param start fun(done: fun(...)): { cancel: fun() }|nil
 ---@param done fun(...)
@@ -140,6 +147,43 @@ local function run_request(context, start, done)
 end
 
 ---@param context AtlasReviewCommentActionContext
+---@return boolean handled
+function M.submit(context)
+	local provider = context.provider
+	if not active(context) or not M.can_submit(provider) then
+		return false
+	end
+	open_editor(context, {
+		key = "pr-review-submit-" .. tostring(context.pr.id),
+		title = " Submit Review ",
+		on_save = function(body)
+			if not active(context) then
+				return
+			end
+			notify(context, "loading", "Submitting review...", nil)
+			run_request(context, function(done)
+				return provider.submit_review(context.pr, body, done)
+			end, function(ok, err)
+				if not active(context) then
+					return
+				end
+				if err or not ok then
+					notify(context, "error", "Submit review failed: " .. tostring(err or "Unknown error"), nil)
+					return
+				end
+				notify(context, "success", "Review submitted", 1200)
+				if context.reload then
+					context.reload()
+				else
+					context.refresh()
+				end
+			end)
+		end,
+	})
+	return true
+end
+
+---@param context AtlasReviewCommentActionContext
 ---@param inline PullsInlineCommentPosition|nil
 ---@param opts AtlasReviewAddOptions|nil
 ---@return boolean handled
@@ -153,7 +197,7 @@ function M.add(context, inline, opts)
 
 	local key = string.format("pr-comment-add-%s-%s", tostring(context.pr.id or ""), pending and "pending" or "now")
 	if inline then
-		key = string.format("%s-%s-%d", key, inline.side, inline.line)
+		key = string.format("%s-%s-%s", key, tostring(inline.from or ""), tostring(inline.to or ""))
 	end
 	open_editor(context, {
 		key = key,

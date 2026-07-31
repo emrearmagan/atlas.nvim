@@ -154,9 +154,11 @@ Use `:AtlasPulls [provider]` to browse and manage pull requests from GitHub, Bit
 ```lua
 pulls = {
   diff = {
-    -- Command must support explicit <base>...<head> Git revisions.
-    open_cmd = "AtlasDiff", -- default; can be replaced with "DiffviewOpen" / "CodeDiff".
-    layout = "side-by-side", -- "side-by-side" or "inline" for AtlasDiff.
+    -- Any command that accepts explicit <base>...<head> Git revisions.
+    open_cmd = "AtlasDiff", -- default; for example "DiffviewOpen" or "CodeDiff".
+
+    -- AtlasDiff options; external viewers use their own configuration.
+    layout = "inline", -- "inline" or "side-by-side".
     compact = true, -- Start with only changed hunks and surrounding context visible.
     explorer = {
       grouped = true, -- Group changed files by directory.
@@ -357,6 +359,7 @@ Press the configured `pulls.open_diff` key (`gd` by default) on a pull request t
 - See pending, resolved, and outdated provider threads at their diff locations.
 - Review provider tasks and GitHub checklists alongside the comments they belong to.
 - Add, reply to, edit, delete, resolve, or reopen comments when supported.
+- Submit pending comments with an optional review summary when supported.
 
 > [!NOTE]
 > **Alternative viewers:** CodeDiff can display Atlas comment and task overlays, but the integration relies on CodeDiff internals and may break after upstream changes. I used it from my dotfiles for a while before moving it into Atlas. Diffview remains available as a plain diff viewer without Atlas review overlays since i dont use that plugin.
@@ -746,6 +749,7 @@ keymaps = {
     open_diff = "gd",
     checkout = "gc",
     review = {
+      submit_review = "gs",
       toggle_layout = "t",
       toggle_compact = "f",
       next_hunk = "]h",

@@ -36,7 +36,7 @@
 ---@alias AtlasPullsDiffOpenCommand "AtlasDiff"|"DiffviewOpen"|"CodeDiff"
 
 ---@class AtlasPullsDiffConfig
----@field open_cmd AtlasPullsDiffOpenCommand|nil
+---@field open_cmd AtlasPullsDiffOpenCommand|string|nil
 ---@field layout "side-by-side"|"inline"|nil
 ---@field compact boolean|nil
 ---@field explorer AtlasPullsDiffExplorerConfig|nil
@@ -100,7 +100,7 @@ M.options = {
 	pulls = {
 		diff = {
 			open_cmd = "AtlasDiff",
-			layout = "side-by-side",
+			layout = "inline",
 			compact = true,
 			explorer = {
 				grouped = true,
@@ -140,6 +140,7 @@ M.options = {
 			open_diff = "gd",
 			checkout = "gc",
 			review = {
+				submit_review = "gs",
 				toggle_layout = "t",
 				toggle_compact = "f",
 				next_hunk = "]h",

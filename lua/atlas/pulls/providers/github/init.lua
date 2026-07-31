@@ -270,6 +270,14 @@ function M.add_comment(pr, content, opts, on_done)
 end
 
 ---@param pr PullRequest
+---@param body string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.submit_review(pr, body, on_done)
+	return require("atlas.pulls.providers.github.api.comments").submit_review(pr, body, on_done)
+end
+
+---@param pr PullRequest
 ---@param parent PullsComment
 ---@param content string
 ---@param on_done fun(comment: PullsComment|nil, err: string|nil)
