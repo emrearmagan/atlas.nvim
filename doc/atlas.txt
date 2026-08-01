@@ -603,6 +603,10 @@ Defaults live under `keymaps` in `setup()`. Each entry accepts:
   require("atlas").setup({
     keymaps = {
       ui = {
+        next_item               = "j",
+        previous_item           = "k",
+        first_item              = "gg",
+        last_item               = "G",
         help                    = "g?",    -- { "g?", "<leader>?" } for aliases
         close                   = "q",
         toggle_panel            = "p",
@@ -635,6 +639,7 @@ Defaults live under `keymaps` in `setup()`. Each entry accepts:
         copy_id                = "y",
         open_diff              = "gd",
         checkout               = "gc",
+        open_file              = { "<CR>", "l" },
         review = {
           toggle_approval       = "ga",
           request_changes       = "gr",
