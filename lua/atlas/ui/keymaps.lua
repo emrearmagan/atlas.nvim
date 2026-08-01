@@ -36,40 +36,39 @@ end
 
 ---@param buf integer
 function M.register(buf)
-	local items = {
-		{
-			key = "j",
-			desc = "Next item",
-			hidden = true,
-			callback = function()
-				require("atlas.ui.navigation").move_cursor("down")
-			end,
-		},
-		{
-			key = "k",
-			desc = "Previous item",
-			hidden = true,
-			callback = function()
-				require("atlas.ui.navigation").move_cursor("up")
-			end,
-		},
-		{
-			key = "gg",
-			desc = "Go to first item",
-			hidden = true,
-			callback = function()
-				require("atlas.ui.navigation").focus_first_item()
-			end,
-		},
-		{
-			key = "G",
-			desc = "Go to last item",
-			hidden = true,
-			callback = function()
-				require("atlas.ui.navigation").focus_last_item()
-			end,
-		},
-	}
+	local items = {}
+
+	utils.insert_if(items, item("ui.next_item", {
+		desc = "Next item",
+		hidden = true,
+		callback = function()
+			require("atlas.ui.navigation").move_cursor("down")
+		end,
+	}))
+
+	utils.insert_if(items, item("ui.previous_item", {
+		desc = "Previous item",
+		hidden = true,
+		callback = function()
+			require("atlas.ui.navigation").move_cursor("up")
+		end,
+	}))
+
+	utils.insert_if(items, item("ui.first_item", {
+		desc = "Go to first item",
+		hidden = true,
+		callback = function()
+			require("atlas.ui.navigation").focus_first_item()
+		end,
+	}))
+
+	utils.insert_if(items, item("ui.last_item", {
+		desc = "Go to last item",
+		hidden = true,
+		callback = function()
+			require("atlas.ui.navigation").focus_last_item()
+		end,
+	}))
 
 	utils.insert_if(items, item("ui.help", {
 		desc = "Toggle this help popup",
@@ -150,12 +149,11 @@ end
 
 ---@param buf integer
 function M.remove(buf)
-	local items = {
-		{ key = "j" },
-		{ key = "k" },
-		{ key = "gg" },
-		{ key = "G" },
-	}
+	local items = {}
+	utils.insert_if(items, remove_item("ui.next_item"))
+	utils.insert_if(items, remove_item("ui.previous_item"))
+	utils.insert_if(items, remove_item("ui.first_item"))
+	utils.insert_if(items, remove_item("ui.last_item"))
 	utils.insert_if(items, remove_item("ui.help"))
 	utils.insert_if(items, remove_item("ui.close"))
 	utils.insert_if(items, remove_item("ui.toggle_panel"))

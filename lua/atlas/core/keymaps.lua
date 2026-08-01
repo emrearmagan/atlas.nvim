@@ -1,6 +1,10 @@
 local M = {}
 
 ---@class AtlasUIKeymaps
+---@field next_item? AtlasKeymapValue
+---@field previous_item? AtlasKeymapValue
+---@field first_item? AtlasKeymapValue
+---@field last_item? AtlasKeymapValue
 ---@field help? AtlasKeymapValue
 ---@field close? AtlasKeymapValue
 ---@field toggle_panel? AtlasKeymapValue
@@ -67,6 +71,10 @@ local M = {}
 ---@field issues? AtlasIssuesKeymaps
 
 ---@alias AtlasKeymapActionId
+---| "ui.next_item"
+---| "ui.previous_item"
+---| "ui.first_item"
+---| "ui.last_item"
 ---| "ui.help"
 ---| "ui.close"
 ---| "ui.toggle_panel"
@@ -171,24 +179,35 @@ function M.resolve(action_id)
 	return normalize(from_config(action_id))
 end
 
+-- Navigation is bound in every Atlas buffer, so these participate in the
+-- conflict check for every section.
+---@type AtlasKeymapActionId[]
+local NAV_ACTIONS = {
+	"ui.next_item",
+	"ui.previous_item",
+	"ui.first_item",
+	"ui.last_item",
+}
+
 ---@param action_ids AtlasKeymapActionId[]
----@param builtins string[]
 ---@return table<string, string[]>
-local function conflicts_for(action_ids, builtins)
+local function conflicts_for(action_ids)
 	---@type table<string, table<string, true>>
 	local seen_by_key = {}
-	for _, action_id in ipairs(action_ids) do
-		local keys = M.resolve(action_id) or {}
-		for _, key in ipairs(keys) do
-			seen_by_key[key] = seen_by_key[key] or {}
-			seen_by_key[key][action_id] = true
+
+	---@param ids AtlasKeymapActionId[]
+	local function collect(ids)
+		for _, action_id in ipairs(ids) do
+			local keys = M.resolve(action_id) or {}
+			for _, key in ipairs(keys) do
+				seen_by_key[key] = seen_by_key[key] or {}
+				seen_by_key[key][action_id] = true
+			end
 		end
 	end
 
-	for _, key in ipairs(builtins) do
-		seen_by_key[key] = seen_by_key[key] or {}
-		seen_by_key[key]["builtin:" .. key] = true
-	end
+	collect(NAV_ACTIONS)
+	collect(action_ids)
 
 	---@type table<string, string[]>
 	local conflicts = {}
@@ -285,7 +304,7 @@ function M.validate()
 			"ui.copy_url",
 			"ui.show_details",
 			"ui.search",
-		}, { "j", "k", "gg", "G" }),
+		}),
 		pulls = conflicts_for({
 			"pulls.copy_id",
 			"pulls.open_diff",
@@ -314,7 +333,7 @@ function M.validate()
 			"pulls.filter_status_open",
 			"pulls.filter_status_merged",
 			"pulls.filter_status_declined",
-		}, { "j", "k", "gg", "G" }),
+		}),
 		issues = conflicts_for({
 			"issues.copy_key",
 			"issues.transition_issue",
@@ -322,7 +341,7 @@ function M.validate()
 			"issues.change_reporter",
 			"issues.edit_issue",
 			"issues.create_issue",
-		}, { "j", "k", "gg", "G" }),
+		}),
 	}
 
 	local provider_contexts = {
