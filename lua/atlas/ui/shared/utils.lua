@@ -1,8 +1,78 @@
-local M = {}
+local M = {
+	window = {},
+	buffer = {},
+	tab = {},
+}
 
 local _cached_version = nil
 
 ---@alias AtlasUIHighlight { line: integer, start_col: integer, end_col: integer, hl_group: string }|{ line: integer, line_hl_group: string }
+
+-- Window
+
+---@param win integer|nil
+---@return boolean
+function M.window.valid(win)
+	return win ~= nil and vim.api.nvim_win_is_valid(win)
+end
+
+---@param anchor integer
+---@param split_cmd string
+---@param buf integer
+---@param apply_opts fun(win: integer)
+---@return integer
+function M.window.create(anchor, split_cmd, buf, apply_opts)
+	local prev = vim.api.nvim_get_current_win()
+	vim.api.nvim_set_current_win(anchor)
+	vim.cmd(split_cmd)
+	local win = vim.api.nvim_get_current_win()
+	vim.api.nvim_win_set_buf(win, buf)
+	apply_opts(win)
+	if M.window.valid(prev) then
+		vim.api.nvim_set_current_win(prev)
+	end
+	return win
+end
+
+-- Buffer
+
+---@param buf integer|nil
+---@return boolean
+function M.buffer.valid(buf)
+	return buf ~= nil and vim.api.nvim_buf_is_valid(buf)
+end
+
+---@param name string
+---@param filetype string
+---@return integer
+function M.buffer.create(name, filetype)
+	local buf = vim.api.nvim_create_buf(false, true)
+	vim.api.nvim_buf_set_name(buf, name)
+	vim.api.nvim_set_option_value("buflisted", false, { buf = buf })
+	vim.api.nvim_set_option_value("buftype", "nofile", { buf = buf })
+	vim.api.nvim_set_option_value("swapfile", false, { buf = buf })
+	vim.api.nvim_set_option_value("bufhidden", "hide", { buf = buf })
+	vim.api.nvim_set_option_value("filetype", filetype, { buf = buf })
+	vim.api.nvim_set_option_value("syntax", "OFF", { buf = buf })
+	pcall(vim.treesitter.stop, buf)
+	vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
+	return buf
+end
+
+---@param buf integer|nil
+function M.buffer.delete(buf)
+	if M.buffer.valid(buf) then
+		pcall(vim.api.nvim_buf_delete, buf, { force = true })
+	end
+end
+
+-- Tab
+
+---@param tab integer|nil
+---@return boolean
+function M.tab.valid(tab)
+	return tab ~= nil and vim.api.nvim_tabpage_is_valid(tab)
+end
 
 ---@param lines string[]
 ---@param spans AtlasUIHighlight[]

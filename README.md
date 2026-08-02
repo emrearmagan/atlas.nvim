@@ -41,6 +41,7 @@ A Neovim plugin for managing GitHub/Bitbucket/GitLab PRs and Jira/GitHub/GitLab 
     - [GitLab](#gitlab-issues)
 - [Features](#features)
   - [Review Pull Requests](#review-pull-requests)
+  - [View Pipelines](#view-pipelines)
   - [Create Pull Requests](#create-pull-requests)
   - [Create Issues](#create-issues)
   - [Notifications](#notifications)
@@ -585,6 +586,13 @@ For scripts, use `bin/atlas-notes`. Notes added there appear in AtlasDiff and `:
 ```
 
 My dotfiles include a [Pi extension that wraps this script](https://github.com/emrearmagan/dotfiles/blob/main/config/pi/extensions/atlas-notes.ts) so review agents can list and add notes.
+
+### View Pipelines
+
+View pipelines and their jobs, inspect their status, and read job logs directly in Atlas. Retry failed pipelines or jobs and cancel work that is still running.
+
+<!-- TODO: Replace with the final Pipelines screenshot. -->
+<img width="100%" alt="View pipelines" src="https://placehold.co/1200x675?text=View+Pipelines">
 
 ### Create Pull Requests
 

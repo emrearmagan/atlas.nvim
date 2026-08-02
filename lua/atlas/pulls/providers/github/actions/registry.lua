@@ -798,64 +798,6 @@ local ACTIONS = {
 		end,
 	},
 	{
-		id = "rerun_checks",
-		label = "Re-run CI checks",
-		is_available = function(ctx)
-			if not has_pr(ctx) or ctx.pr == nil then
-				return false, "No PR selected"
-			end
-			if repo_slug(ctx) == "" then
-				return false, "Missing repository info"
-			end
-			return true, nil
-		end,
-		run = function(ctx, done)
-			local pr = ctx.pr
-			if pr == nil then
-				done(nil, "No PR selected")
-				return
-			end
-			local slug = repo_slug(ctx)
-			local checks_api = require("atlas.pulls.providers.github.api.checks")
-
-			footer.notify("loading", "Re-running checks...")
-			checks_api.get_builds(pr, { force_refresh = true }, function(builds, err)
-				if err then
-					footer.notify("error", string.format("Failed to load checks: %s", tostring(err)))
-					done(nil, tostring(err))
-					return
-				end
-
-				checks_api.rerun_all(slug, builds or {}, function(stats)
-					if stats.triggered == 0 and stats.skipped == 0 and #stats.errors == 0 then
-						footer.notify("info", "No checks to re-run")
-						done({ changed_pr = false, message = "No checks to re-run" }, nil)
-						return
-					end
-
-					local parts = {}
-					if stats.triggered > 0 then
-						table.insert(parts, string.format("%d re-run", stats.triggered))
-					end
-					if stats.skipped > 0 then
-						table.insert(parts, string.format("%d skipped", stats.skipped))
-					end
-					if #stats.errors > 0 then
-						table.insert(parts, string.format("%d failed", #stats.errors))
-					end
-
-					local msg = table.concat(parts, ", ")
-					if #stats.errors > 0 then
-						footer.notify("warn", msg)
-					else
-						footer.notify("success", msg, 1500)
-					end
-					done({ changed_pr = true, message = msg }, nil)
-				end)
-			end)
-		end,
-	},
-	{
 		id = "create_issue",
 		label = "Create issue",
 		is_available = function(ctx)
@@ -1011,6 +953,17 @@ function M.available(ctx)
 
 	if has_pr(ctx) then
 		local shared_actions = require("atlas.pulls.actions")
+		local provider = require("atlas.pulls.providers.github")
+		table.insert(out, {
+			id = "open_pipelines",
+			label = "Open Pipelines",
+			is_available = function()
+				return true, nil
+			end,
+			run = function(action_ctx, done)
+				shared_actions.open_pipelines(action_ctx.pr, done)
+			end,
+		})
 		table.insert(out, {
 			id = "open_diff",
 			label = "Open diff",

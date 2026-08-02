@@ -133,10 +133,29 @@ function M.fetch_reviewers(pr, opts, on_done)
 end
 
 ---@param pr PullRequest
----@param on_done fun(builds: PullsBuild[]|nil, err: string|nil)
+---@param opts { force_refresh: boolean|nil }|nil
+---@param on_done fun(pipelines: PullsPipeline[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_builds(pr, on_done)
-	return require("atlas.pulls.providers.github.api.checks").get_builds(pr, nil, on_done)
+function M.fetch_pipelines(pr, opts, on_done)
+	return require("atlas.pulls.providers.github.api.checks").get_pipelines(pr, opts, on_done)
+end
+
+---@param pr PullRequest
+---@param pipeline PullsPipeline
+---@param opts { force_refresh: boolean|nil }|nil
+---@param on_done fun(pipeline: PullsPipeline|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_pipeline_details(pr, pipeline, opts, on_done)
+	return require("atlas.pulls.providers.github.api.checks").get_pipeline_details(pr, pipeline, opts, on_done)
+end
+
+---@param pr PullRequest
+---@param pipeline PullsPipeline
+---@param job PullsPipelineJob
+---@param on_done fun(log: string|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_pipeline_job_log(pr, pipeline, job, on_done)
+	return require("atlas.pulls.providers.github.api.checks").get_pipeline_job_log(pr, pipeline, job, on_done)
 end
 
 ---@param pr PullRequest

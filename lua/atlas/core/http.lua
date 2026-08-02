@@ -12,9 +12,14 @@ end
 ---@param headers table<string, string>
 ---@param data? string
 ---@param callback fun(body?: string, status?: integer|nil, err?: string)
+---@param follow_redirects? boolean
 ---@return { job_id: integer, cancel: fun() }
-local function curl_fetch(method, url, headers, data, callback)
-	local args = { "curl", "-sS", "-X", method }
+local function curl_fetch(method, url, headers, data, callback, follow_redirects)
+	local args = { "curl", "-sS" }
+	if follow_redirects then
+		table.insert(args, "-L")
+	end
+	vim.list_extend(args, { "-X", method })
 
 	for key, value in pairs(headers or {}) do
 		table.insert(args, "-H")
@@ -166,7 +171,7 @@ function M.curl_text_request(method, url, headers, data, callback)
 		end
 
 		callback(body or "", nil)
-	end)
+	end, true)
 end
 
 return M

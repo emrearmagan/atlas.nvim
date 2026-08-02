@@ -125,14 +125,39 @@
 ---@field decision "approved"|"changes_requested"|"pending"
 
 --------------------------------------------------------------------------------
--- Build
+-- Pipeline
 --------------------------------------------------------------------------------
 
----@class PullsBuild
+---@class PullsPipeline
 ---@field name string
 ---@field state string
+---@field provider_state string|nil
 ---@field url string|nil
 ---@field key string|nil
+---@field provider_id string|nil
+---@field commit_hash string|nil
+---@field jobs PullsPipelineJob[]
+
+---@class PullsPipelineJob
+---@field id string|integer
+---@field name string
+---@field state string
+---@field provider_state string|nil
+---@field url string|nil
+---@field stage string|nil
+---@field started_at string|nil
+---@field completed_at string|nil
+---@field duration number|nil Seconds
+---@field steps PullsPipelineStep[]|nil
+
+---@class PullsPipelineStep
+---@field id string|integer
+---@field name string
+---@field state string
+---@field provider_state string|nil
+---@field started_at string|nil
+---@field completed_at string|nil
+---@field duration number|nil Seconds
 
 --------------------------------------------------------------------------------
 -- Merge check

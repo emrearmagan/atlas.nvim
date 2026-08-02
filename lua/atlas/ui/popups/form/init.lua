@@ -1,20 +1,12 @@
 local M = {}
 
 local renderer = require("atlas.ui.popups.form.renderer")
+local utils = require("atlas.ui.shared.utils")
+local valid_buf = utils.buffer.valid
+local valid_tab = utils.tab.valid
+local valid_win = utils.window.valid
 
 local next_id = 0
-
-local function valid_win(win)
-	return win ~= nil and vim.api.nvim_win_is_valid(win)
-end
-
-local function valid_buf(buf)
-	return buf ~= nil and vim.api.nvim_buf_is_valid(buf)
-end
-
-local function valid_tab(tab)
-	return tab ~= nil and vim.api.nvim_tabpage_is_valid(tab)
-end
 
 ---@param buf integer|nil
 ---@param on_quit fun()

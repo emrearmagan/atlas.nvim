@@ -615,9 +615,20 @@ function M.available(ctx)
 		end
 	end
 
-	-- Shared actions (from atlas.pulls.actions): open_diff, checkout
+	-- Shared actions
 	if has_pr(ctx) then
 		local shared_actions = require("atlas.pulls.actions")
+		local provider = require("atlas.pulls.providers.gitlab")
+		table.insert(out, {
+			id = "open_pipelines",
+			label = "Open Pipelines",
+			is_available = function()
+				return true, nil
+			end,
+			run = function(action_ctx, done)
+				shared_actions.open_pipelines(action_ctx.pr, done)
+			end,
+		})
 		table.insert(out, {
 			id = "open_diff",
 			label = "Open diff",

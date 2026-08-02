@@ -420,39 +420,6 @@ function M.fetch_reviewers(pr, _opts, on_done)
 end
 
 ---@param pr PullRequest
----@param on_done fun(builds: PullsBuild[]|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.fetch_builds(pr, on_done)
-	local raw = pr._raw
-	local statuses_url = tostring((raw.links or {}).statuses or "")
-	if statuses_url == "" then
-		on_done({}, nil)
-		return nil
-	end
-
-	return service.request("GET", statuses_url, nil, nil, function(result, err)
-		if err then
-			on_done(nil, err)
-			return
-		end
-
-		---@type PullsBuild[]
-		local builds = {}
-		for _, item in ipairs((result or {}).values or {}) do
-			local b = type(item) == "table" and item or {}
-			table.insert(builds, {
-				name = tostring(b.name or b.key or ""),
-				state = tostring(b.state or ""):upper(),
-				url = tostring(b.url or ""),
-				key = tostring(b.key or ""),
-			})
-		end
-
-		on_done(builds, nil)
-	end)
-end
-
----@param pr PullRequest
 ---@param _opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(entries: PullsActivityEntry[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
@@ -573,43 +540,6 @@ function M.fetch_diff(pr, _opts, on_done)
 	end)
 end
 
----@param statuses_url string
----@param opts { force_refresh: boolean|nil }|nil
----@param on_done fun(status: string|nil, url: string|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.fetch_commit_status(statuses_url, opts, on_done)
-	if type(statuses_url) ~= "string" or statuses_url == "" then
-		on_done("unknown", nil, nil)
-		return nil
-	end
-
-	local force = (opts or {}).force_refresh == true
-	local sep = statuses_url:find("?") and "&" or "?"
-	local url = string.format("%s%spagelen=%d", statuses_url, sep, 30)
-	local key = "bitbucket:commit:statuses:" .. url
-	if not force then
-		local cached, ok = service.get_cache(key)
-		if ok then
-			local entries = (cached or {}).values or cached or {}
-			local agg_status, first_url = M._aggregate_statuses(entries)
-			on_done(agg_status, first_url, nil)
-			return nil
-		end
-	end
-
-	return service.request("GET", url, nil, nil, function(result, err)
-		if err then
-			on_done(nil, nil, err)
-			return
-		end
-
-		service.set_cache(key, result, service.cache_ttl())
-		local values = (result or {}).values or {}
-		local agg_status, first_url = M._aggregate_statuses(values)
-		on_done(agg_status, first_url, nil)
-	end)
-end
-
 ---@param opts PullsCreatePROpts
 ---@param on_done fun(result: PullsCreatePRResult|nil, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
@@ -715,50 +645,6 @@ function M.fetch_default_reviewers(opts, on_done)
 
 		on_done(items, nil)
 	end)
-end
-
----@param values table[]
----@return string status
----@return string|nil url
-function M._aggregate_statuses(values)
-	if #values == 0 then
-		return "unknown", nil
-	end
-
-	local has_failed = false
-	local has_inprogress = false
-	local has_stopped = false
-	local has_success = false
-	local first_url = nil
-
-	for _, item in ipairs(values) do
-		local s = tostring(item.state or ""):upper()
-		if not first_url and item.url and item.url ~= "" then
-			first_url = tostring(item.url)
-		end
-		if s == "FAILED" then
-			has_failed = true
-		elseif s == "INPROGRESS" then
-			has_inprogress = true
-		elseif s == "STOPPED" then
-			has_stopped = true
-		elseif s == "SUCCESSFUL" then
-			has_success = true
-		end
-	end
-
-	local status = "unknown"
-	if has_failed then
-		status = "failed"
-	elseif has_inprogress then
-		status = "inprogress"
-	elseif has_stopped then
-		status = "stopped"
-	elseif has_success then
-		status = "successful"
-	end
-
-	return status, first_url
 end
 
 return M
