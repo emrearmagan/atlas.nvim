@@ -43,6 +43,7 @@ A Neovim plugin for managing GitHub/Bitbucket/GitLab PRs and Jira/GitHub/GitLab 
     - [GitLab](#gitlab-issues)
   - [Create Issues](#create-issues)
 - [Keymaps](#keymaps)
+- [Contributing](#contributing)
 
 ## Installation
 
@@ -774,6 +775,10 @@ keymaps = {
   },
 },
 ```
+
+## Contributing
+
+Contributions are welcome! If you'd like to contribute, please open an [issue](https://github.com/emrearmagan/atlas.nvim/issues) or [pull request](https://github.com/emrearmagan/atlas.nvim/pulls) on GitHub. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Contributors ✨
 

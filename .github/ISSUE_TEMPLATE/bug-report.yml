@@ -1,0 +1,56 @@
+name: Bug report
+description: Report a reproducible problem with Atlas.nvim
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a problem. Please provide clear reproduction steps.
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Before submitting
+      options:
+        - label: I have read the documentation and confirmed this is not expected behavior.
+          required: true
+        - label: I have searched both open and closed issues for an existing report.
+          required: true
+
+  - type: input
+    id: atlas-version
+    attributes:
+      label: Atlas.nvim version
+      description: Provide the tag or commit SHA you have installed.
+      placeholder: 0.4.0 or ab8e4eb
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction-steps
+    attributes:
+      label: Reproduction steps
+      description: List the exact commands and actions needed to reproduce the problem.
+      placeholder: |
+        1. Open the repository in Neovim.
+        2. Run `:Atlas`.
+        3. Select ...
+        4. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected behavior
+      description: Explain what you expected Atlas to do.
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or additional context
+      description: Add relevant logs, screenshots, or other details. Remove credentials and private repository data first.
