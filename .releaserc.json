@@ -6,7 +6,17 @@
       "@semantic-release/commit-analyzer",
       {
         "preset": "conventionalcommits",
-        "presetConfig": {}
+        "presetConfig": {},
+        "releaseRules": [
+          {
+            "breaking": true,
+            "release": "minor"
+          },
+          {
+            "type": "feat",
+            "release": "patch"
+          }
+        ]
       }
     ],
     [
