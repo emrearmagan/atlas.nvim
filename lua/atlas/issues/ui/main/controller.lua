@@ -485,47 +485,51 @@ function M.refresh_issue(issue, on_done)
 
 	local active_view = type(state.active_view) == "table" and state.active_view or {}
 	local reload_handle = nil
-	reload_handle = provider.fetch_issue(issue_key, { force_load = true, layout = active_view.layout or "plain" }, function(fetched_issue, err)
-		for i = #active_issue_reload_handles, 1, -1 do
-			if active_issue_reload_handles[i] == reload_handle then
-				table.remove(active_issue_reload_handles, i)
-				break
+	reload_handle = provider.fetch_issue(
+		issue_key,
+		{ force_load = true, layout = active_view.layout or "plain" },
+		function(fetched_issue, err)
+			for i = #active_issue_reload_handles, 1, -1 do
+				if active_issue_reload_handles[i] == reload_handle then
+					table.remove(active_issue_reload_handles, i)
+					break
+				end
 			end
-		end
 
-		if err ~= nil or fetched_issue == nil then
+			if err ~= nil or fetched_issue == nil then
+				end_issue_reload(issue_key)
+				footer.notify("error", tostring(err or "Failed to reload issue"))
+				on_done()
+				return
+			end
+
+			local issues = state.issues or {}
+			local replaced = false
+			for i, existing in ipairs(issues) do
+				if type(existing) == "table" and existing.key == issue_key then
+					issues[i] = fetched_issue
+					replaced = true
+					break
+				end
+			end
+
+			if not replaced then
+				table.insert(issues, fetched_issue)
+			end
+
+			state.issues = issues
+			state.issue_tree = helper.build_issue_tree(issues)
 			end_issue_reload(issue_key)
-			footer.notify("error", tostring(err or "Failed to reload issue"))
-			on_done()
-			return
-		end
 
-		local issues = state.issues or {}
-		local replaced = false
-		for i, existing in ipairs(issues) do
-			if type(existing) == "table" and existing.key == issue_key then
-				issues[i] = fetched_issue
-				replaced = true
-				break
+			if panel.is_open() then
+				panel.on_select(fetched_issue)
 			end
+
+			render_if_active()
+			footer.notify("success", string.format("Reloaded %s", issue_key), 1200)
+			on_done()
 		end
-
-		if not replaced then
-			table.insert(issues, fetched_issue)
-		end
-
-		state.issues = issues
-		state.issue_tree = helper.build_issue_tree(issues)
-		end_issue_reload(issue_key)
-
-		if panel.is_open() then
-			panel.on_select(fetched_issue)
-		end
-
-		render_if_active()
-		footer.notify("success", string.format("Reloaded %s", issue_key), 1200)
-		on_done()
-	end)
+	)
 	table.insert(active_issue_reload_handles, reload_handle)
 end
 

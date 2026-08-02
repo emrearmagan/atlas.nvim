@@ -97,8 +97,14 @@ function M.render(issue, width)
 
 	table.insert(lines, header_line)
 	local hline = #lines - 1
-	table.insert(spans, { line = hline, start_col = PADDING_X, end_col = PADDING_X + #label, hl_group = "AtlasTextMuted" })
-	table.insert(spans, { line = hline, start_col = #header_line - #chip, end_col = #header_line, hl_group = "AtlasChipActive" })
+	table.insert(
+		spans,
+		{ line = hline, start_col = PADDING_X, end_col = PADDING_X + #label, hl_group = "AtlasTextMuted" }
+	)
+	table.insert(
+		spans,
+		{ line = hline, start_col = #header_line - #chip, end_col = #header_line, hl_group = "AtlasChipActive" }
+	)
 
 	-- Description content
 	if state.description_loading then

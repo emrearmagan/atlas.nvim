@@ -101,12 +101,16 @@ local function render_header(lines, spans, width)
 	local title = state.provider and state.provider.name or "Atlas"
 	local hl_group = state.provider and state.provider.hl_group or "Title"
 
-	utils.append_block(lines, spans, header.render({
-		width = width,
-		icon = icon,
-		title = title,
-		hl_group = hl_group,
-	}))
+	utils.append_block(
+		lines,
+		spans,
+		header.render({
+			width = width,
+			icon = icon,
+			title = title,
+			hl_group = hl_group,
+		})
+	)
 
 	local views = state.provider and state.provider.views and state.provider.views() or {}
 	local nav_source = {}
@@ -167,12 +171,16 @@ local function render_header(lines, spans, width)
 		hl_group = "AtlasTextMuted",
 	})
 
-	utils.append_block(lines, spans, navbar.render({
-		width = width,
-		items = nav_items,
-		actions = actions,
-		active_hl = state.provider and state.provider.hl_group or "Title",
-	}))
+	utils.append_block(
+		lines,
+		spans,
+		navbar.render({
+			width = width,
+			items = nav_items,
+			actions = actions,
+			active_hl = state.provider and state.provider.hl_group or "Title",
+		})
+	)
 end
 
 ---@param opts { width: integer, height: integer }

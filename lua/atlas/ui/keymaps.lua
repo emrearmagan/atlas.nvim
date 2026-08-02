@@ -71,78 +71,96 @@ function M.register(buf)
 		},
 	}
 
-	utils.insert_if(items, item("ui.help", {
-		desc = "Toggle this help popup",
-		opts = { nowait = true, silent = true },
-		callback = function()
-			help.toggle({ buffer = buf })
-		end,
-	}))
+	utils.insert_if(
+		items,
+		item("ui.help", {
+			desc = "Toggle this help popup",
+			opts = { nowait = true, silent = true },
+			callback = function()
+				help.toggle({ buffer = buf })
+			end,
+		})
+	)
 
-	utils.insert_if(items, item("ui.close", {
-		desc = "Close Atlas window",
-		opts = { nowait = true, silent = true },
-		callback = function()
-			if help.is_open() then
-				return
-			end
-			local ui_state = require("atlas.ui.state")
-			if ui_state.on_panel_close then
-				ui_state.on_panel_close()
-			end
-			require("atlas.ui.layout").close()
-		end,
-	}))
-
-	utils.insert_if(items, item("ui.toggle_panel", {
-		desc = "Toggle detail panel",
-		callback = function()
-			local layout_mod = require("atlas.ui.layout")
-			local ui_st = require("atlas.ui.state")
-			local was_open = layout_mod.win_id("detail") ~= nil
-			layout_mod.toggle_detail()
-			if was_open then
-				if ui_st.on_panel_close then
-					ui_st.on_panel_close()
+	utils.insert_if(
+		items,
+		item("ui.close", {
+			desc = "Close Atlas window",
+			opts = { nowait = true, silent = true },
+			callback = function()
+				if help.is_open() then
+					return
 				end
-			else
-				if ui_st.on_panel_open then
-					ui_st.on_panel_open()
+				local ui_state = require("atlas.ui.state")
+				if ui_state.on_panel_close then
+					ui_state.on_panel_close()
 				end
-			end
-		end,
-	}))
+				require("atlas.ui.layout").close()
+			end,
+		})
+	)
 
-	utils.insert_if(items, item("ui.next_panel_tab", {
-		desc = "Next panel tab",
-		opts = { nowait = true },
-		callback = function()
-			local layout_mod = require("atlas.ui.layout")
-			local ui_st = require("atlas.ui.state")
-			if layout_mod.win_id("detail") ~= nil and ui_st.on_panel_next_tab then
-				ui_st.on_panel_next_tab()
-			end
-		end,
-	}))
+	utils.insert_if(
+		items,
+		item("ui.toggle_panel", {
+			desc = "Toggle detail panel",
+			callback = function()
+				local layout_mod = require("atlas.ui.layout")
+				local ui_st = require("atlas.ui.state")
+				local was_open = layout_mod.win_id("detail") ~= nil
+				layout_mod.toggle_detail()
+				if was_open then
+					if ui_st.on_panel_close then
+						ui_st.on_panel_close()
+					end
+				else
+					if ui_st.on_panel_open then
+						ui_st.on_panel_open()
+					end
+				end
+			end,
+		})
+	)
 
-	utils.insert_if(items, item("ui.previous_panel_tab", {
-		desc = "Previous panel tab",
-		opts = { nowait = true },
-		callback = function()
-			local layout_mod = require("atlas.ui.layout")
-			local ui_st = require("atlas.ui.state")
-			if layout_mod.win_id("detail") ~= nil and ui_st.on_panel_prev_tab then
-				ui_st.on_panel_prev_tab()
-			end
-		end,
-	}))
+	utils.insert_if(
+		items,
+		item("ui.next_panel_tab", {
+			desc = "Next panel tab",
+			opts = { nowait = true },
+			callback = function()
+				local layout_mod = require("atlas.ui.layout")
+				local ui_st = require("atlas.ui.state")
+				if layout_mod.win_id("detail") ~= nil and ui_st.on_panel_next_tab then
+					ui_st.on_panel_next_tab()
+				end
+			end,
+		})
+	)
 
-	utils.insert_if(items, item("ui.open_notifications", {
-		desc = "Open notifications",
-		callback = function()
-			require("atlas.ui.notifications").open()
-		end,
-	}))
+	utils.insert_if(
+		items,
+		item("ui.previous_panel_tab", {
+			desc = "Previous panel tab",
+			opts = { nowait = true },
+			callback = function()
+				local layout_mod = require("atlas.ui.layout")
+				local ui_st = require("atlas.ui.state")
+				if layout_mod.win_id("detail") ~= nil and ui_st.on_panel_prev_tab then
+					ui_st.on_panel_prev_tab()
+				end
+			end,
+		})
+	)
+
+	utils.insert_if(
+		items,
+		item("ui.open_notifications", {
+			desc = "Open notifications",
+			callback = function()
+				require("atlas.ui.notifications").open()
+			end,
+		})
+	)
 
 	M.remove(buf)
 	help.register("General", items, { index = 210, buffer = buf })

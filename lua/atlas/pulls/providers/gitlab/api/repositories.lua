@@ -5,7 +5,6 @@ local http = require("atlas.core.http")
 local config = require("atlas.config")
 local json = require("atlas.core.json")
 
-
 ---@param repo PullsRepo
 ---@return string
 local function configured_readme_path(repo)
@@ -101,12 +100,14 @@ function M.fetch_detail(repo, opts, on_done)
 		end
 
 		local readme_path = configured_readme_path(repo)
-		local readme_url = service.url(string.format(
-			"/projects/%d/repository/files/%s/raw?ref=%s",
-			project_id,
-			service.url_encode(readme_path),
-			service.url_encode(default_branch)
-		))
+		local readme_url = service.url(
+			string.format(
+				"/projects/%d/repository/files/%s/raw?ref=%s",
+				project_id,
+				service.url_encode(readme_path),
+				service.url_encode(default_branch)
+			)
+		)
 		http.curl_text_request("GET", readme_url, service.build_headers(), nil, function(body, _)
 			if type(body) == "string" and body ~= "" then
 				details.readme = body
@@ -140,8 +141,7 @@ function M.fetch_branches(repo, opts, on_done)
 		end
 	end
 
-	local endpoint =
-		string.format("/projects/%s/repository/branches?per_page=100", service.url_encode(path))
+	local endpoint = string.format("/projects/%s/repository/branches?per_page=100", service.url_encode(path))
 	return service.request("GET", endpoint, nil, function(result, err)
 		if err or type(result) ~= "table" then
 			on_done(nil, err or "Failed to fetch branches")
@@ -189,8 +189,7 @@ function M.fetch_tags(repo, opts, on_done)
 		end
 	end
 
-	local endpoint =
-		string.format("/projects/%s/repository/tags?per_page=100", service.url_encode(path))
+	local endpoint = string.format("/projects/%s/repository/tags?per_page=100", service.url_encode(path))
 	return service.request("GET", endpoint, nil, function(result, err)
 		if err or type(result) ~= "table" then
 			on_done(nil, err or "Failed to fetch tags")
@@ -229,11 +228,8 @@ function M.delete_branch(repo, branch, on_done)
 		return nil
 	end
 
-	local endpoint = string.format(
-		"/projects/%s/repository/branches/%s",
-		service.url_encode(path),
-		service.url_encode(name)
-	)
+	local endpoint =
+		string.format("/projects/%s/repository/branches/%s", service.url_encode(path), service.url_encode(name))
 	return service.request("DELETE", endpoint, nil, function(_, err)
 		if err then
 			on_done(false, err)

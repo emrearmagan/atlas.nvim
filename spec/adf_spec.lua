@@ -521,7 +521,6 @@ describe("adf to markdown", function()
 			local result = adf.to_markdown(doc)
 			assert.equals("| A | B |\n| --- | --- |\n| 1 | 2 |", result)
 		end)
-
 	end)
 
 	describe("unknown nodes", function()
