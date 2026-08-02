@@ -2,8 +2,10 @@ local M = {}
 
 local _cached_version = nil
 
+---@alias AtlasUIHighlight { line: integer, start_col: integer, end_col: integer, hl_group: string }|{ line: integer, line_hl_group: string }
+
 ---@param lines string[]
----@param spans table[]
+---@param spans AtlasUIHighlight[]
 ---@param text string
 ---@param hl_group string|nil
 ---@param padding integer|nil
@@ -21,13 +23,16 @@ function M.push(lines, spans, text, hl_group, padding)
 	end
 end
 
+---@param lines string[]
+---@param spans AtlasUIHighlight[]
+---@param block { lines: string[], highlights: AtlasUIHighlight[]|nil }
 function M.append_block(lines, spans, block)
 	local base = #lines
 	for _, line in ipairs(block.lines or {}) do
 		table.insert(lines, line)
 	end
 	for _, span in ipairs(block.highlights or {}) do
-		if type(span) == "table" and span.line_hl_group ~= nil then
+		if span.line_hl_group ~= nil then
 			table.insert(spans, {
 				line = base + span.line,
 				line_hl_group = span.line_hl_group,
@@ -293,7 +298,8 @@ function M.virtual_lines(lines, spans)
 	for index, line in ipairs(lines) do
 		local line_spans = starts[index] or {}
 		table.sort(line_spans, function(left, right)
-			return left.start_col < right.start_col
+			return left.start_col == right.start_col and left.end_col < right.end_col
+				or left.start_col < right.start_col
 		end)
 		local chunks, col = {}, 0
 		for _, span in ipairs(line_spans) do

@@ -5,6 +5,7 @@ local md_editor = require("atlas.ui.popups.editor")
 local footer = require("atlas.ui.components.footer")
 local panel_state = require("atlas.pulls.ui.panel.pr.state")
 local renderer = require("atlas.pulls.ui.panel.pr.tabs.review.renderer")
+local review_threads = require("atlas.ui.components.review_threads")
 local state = require("atlas.pulls.ui.panel.pr.tabs.review.state")
 local keymaps = require("atlas.pulls.ui.panel.pr.tabs.review.keymaps")
 local review_actions = require("atlas.pulls.actions.review")
@@ -95,7 +96,7 @@ local function get_provider()
 	return require("atlas.pulls.state").provider
 end
 
----@param opts { key: string, title: string, initial_text: string|nil, on_save: fun(text: string|nil) }
+---@param opts { key: string, title: string, initial_text: string|nil, preview: AtlasMarkdownEditorPreview|nil, on_save: fun(text: string|nil) }
 local function open_md_editor(opts)
 	md_editor.open({
 		key = opts.key,
@@ -104,6 +105,7 @@ local function open_md_editor(opts)
 		height_ratio = 0.18,
 		initial_text = opts.initial_text,
 		completion = author_completion(),
+		preview = opts.preview,
 		on_save = opts.on_save,
 	})
 end
@@ -368,10 +370,15 @@ function M.add_task(pr, refresh)
 			parent = ent.comment
 		end
 	end
+	local preview
+	if parent then
+		preview = review_threads.render_comment(parent, math.max(math.floor(vim.o.columns * 0.5), 80))
+	end
 
 	open_md_editor({
 		key = "pr-task-add-" .. tostring(pr.id or ""),
 		title = " Add Task ",
+		preview = preview,
 		on_save = function(text)
 			if not is_current_list(context_generation, pr, "tasks", tasks) then
 				return

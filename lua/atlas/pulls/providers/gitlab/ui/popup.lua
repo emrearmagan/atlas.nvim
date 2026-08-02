@@ -5,7 +5,7 @@ local utils = require("atlas.ui.shared.utils")
 local helper = require("atlas.pulls.ui.main.helper")
 
 ---@param pr PullRequest
----@return string[], table[]
+---@return string[], AtlasUIHighlight[]
 function M.content(pr)
 	local raw = pr._raw
 	local id = tostring(pr.id or "")
@@ -142,12 +142,10 @@ function M.content(pr)
 
 	-- Build lines + hl inline (no shared scaffolding).
 	local lines = { string.format(" !%s: %s", id, title), "" }
-	---@type table[]
-	local hl = {
-		{ row = 1, col = 0, end_col = -1, hl_group = "AtlasTextMuted" },
-	}
+	---@type AtlasUIHighlight[]
+	local hl = {}
 	if id ~= "" then
-		table.insert(hl, { row = 0, col = 2, end_col = 2 + #id, hl_group = "AtlasTextMuted" })
+		table.insert(hl, { line = 0, start_col = 2, end_col = 2 + #id, hl_group = "AtlasTextMuted" })
 	end
 
 	for _, r in ipairs(rows) do
@@ -159,17 +157,17 @@ function M.content(pr)
 			end
 			local value = table.concat(value_parts)
 			if value ~= "" then
-				local row = #lines
+				local line = #lines
 				table.insert(lines, string.format(" %-10s %s", label .. ":", value))
-				table.insert(hl, { row = row, col = 1, end_col = 11, hl_group = "AtlasTextMuted" })
+				table.insert(hl, { line = line, start_col = 1, end_col = 11, hl_group = "AtlasTextMuted" })
 				local cursor = 12
 				for _, seg in ipairs(r.segments) do
 					local text = seg.text or seg[1] or ""
 					local seg_hl = seg.hl or seg[2]
 					if seg_hl and text ~= "" then
 						table.insert(hl, {
-							row = row,
-							col = cursor,
+							line = line,
+							start_col = cursor,
 							end_col = cursor + #text,
 							hl_group = seg_hl,
 						})
@@ -181,11 +179,16 @@ function M.content(pr)
 			local value = r.value or r[2]
 			local value_hl = r.value_hl or r[3]
 			if value ~= nil and value ~= "" then
-				local row = #lines
+				local line = #lines
 				table.insert(lines, string.format(" %-10s %s", label .. ":", value))
-				table.insert(hl, { row = row, col = 1, end_col = 11, hl_group = "AtlasTextMuted" })
+				table.insert(hl, { line = line, start_col = 1, end_col = 11, hl_group = "AtlasTextMuted" })
 				if value_hl then
-					table.insert(hl, { row = row, col = 12, end_col = -1, hl_group = value_hl })
+					table.insert(hl, {
+						line = line,
+						start_col = 12,
+						end_col = #lines[line + 1],
+						hl_group = value_hl,
+					})
 				end
 			end
 		end
@@ -196,6 +199,7 @@ function M.content(pr)
 		content_width = math.max(content_width, vim.fn.strdisplaywidth(line))
 	end
 	lines[2] = " " .. ("━"):rep(content_width)
+	table.insert(hl, { line = 1, start_col = 0, end_col = #lines[2], hl_group = "AtlasTextMuted" })
 
 	return lines, hl
 end

@@ -37,7 +37,7 @@ function M.cell_hl(row, col, ctx)
 end
 
 ---@param issue Issue
----@return string[], table[]
+---@return string[], AtlasUIHighlight[]
 function M.issue_popup_content(issue)
 	return require("atlas.issues.providers.jira.ui.renderer").issue_popup_content(issue)
 end

@@ -95,6 +95,8 @@
 
 local M = {}
 
+local notify = require("atlas.core.notify")
+
 ---@type AtlasConfig
 M.options = {
 	pulls = {
@@ -140,7 +142,11 @@ M.options = {
 			open_diff = "gd",
 			checkout = "gc",
 			review = {
+				toggle_approval = "ga",
+				request_changes = "gr",
 				submit_review = "gs",
+				open_file = { "<CR>", "l" },
+				toggle_explorer_grouping = "T",
 				toggle_layout = "t",
 				toggle_compact = "f",
 				next_hunk = "]h",
@@ -195,7 +201,7 @@ local function register_commands()
 	vim.api.nvim_create_user_command("AtlasClearCache", function()
 		require("atlas.core.cache").clear_all()
 		require("atlas.core.memory_cache").clear_all()
-		vim.notify("Atlas cache cleared", vim.log.levels.INFO)
+		notify.info("Cache cleared")
 	end, { desc = "Clear Atlas disk and memory cache" })
 
 	local pulls_providers = { "bitbucket", "github", "gitlab" }

@@ -6,7 +6,7 @@ local footer = require("atlas.ui.components.footer")
 
 ---@alias BitbucketActionId
 ---| "merge"
----| "approve"
+---| "toggle_approval"
 ---| "request_changes"
 ---| "search"
 
@@ -27,7 +27,8 @@ function M.run(id, ctx, on_done)
 	if not available then
 		local err = tostring(available_err or string.format("Action is not available: %s", tostring(id)))
 		logger.logwarn("bitbucket.action.unavailable", { action_id = tostring(id), source = ctx.source, error = err })
-		footer.notify("warn", err)
+		local notify = ctx.notify or footer.notify
+		notify("warn", err)
 		on_done(nil, err)
 		return
 	end

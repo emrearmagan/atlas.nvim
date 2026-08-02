@@ -1,6 +1,7 @@
 local M = {}
 
 local logger = require("atlas.core.logger")
+local notify = require("atlas.core.notify")
 
 ---@param opts AtlasConfig|nil
 function M.setup(opts)
@@ -45,7 +46,7 @@ end
 local function load_pulls_provider(id)
 	local provider = require("atlas.pulls.providers").get(id)
 	if not provider then
-		vim.notify(string.format("[Atlas] Unknown pulls provider: %s", id), vim.log.levels.ERROR)
+		notify.error(string.format("Unknown pulls provider: %s", id))
 	end
 	return provider
 end
@@ -60,7 +61,7 @@ local function load_issues_provider(id)
 	elseif id == "gitlab" then
 		return require("atlas.issues.providers.gitlab")
 	end
-	vim.notify(string.format("[Atlas] Unknown issues provider: %s", id), vim.log.levels.ERROR)
+	notify.error(string.format("Unknown issues provider: %s", id))
 	return nil
 end
 
@@ -116,7 +117,7 @@ function M.open(domain, provider_id, opts)
 
 	local ids = configured_provider_ids(domain)
 	if #ids == 0 then
-		vim.notify(string.format("[Atlas] No %s providers configured", domain), vim.log.levels.ERROR)
+		notify.error(string.format("No %s providers configured", domain))
 		return
 	end
 	if #ids == 1 then

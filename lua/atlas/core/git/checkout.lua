@@ -161,29 +161,44 @@ end
 ---@return string|nil head_revision
 ---@return string|nil err
 function M.pr_diff_revisions(pr)
-	local source = tostring(pr.source.local_ref or "")
-	local destination = tostring(pr.destination.local_ref or "")
-	if source == "" then
-		local branch = tostring(pr.source.branch or "")
-		source = branch ~= "" and "origin/" .. branch or ""
+	local id = tostring(pr.id or "")
+	if id == "" then
+		return nil, nil, "Pull request ID is missing"
 	end
-	if destination == "" then
-		local branch = tostring(pr.destination.branch or "")
-		destination = branch ~= "" and "origin/" .. branch or ""
-	end
-	if source == "" or destination == "" then
-		return nil, nil, "PR branch refs are missing"
-	end
-	return destination, source, nil
+	-- Stable refs let one cached repository hold several PRs without checking out branches.
+	local prefix = "refs/atlas/pulls/" .. id
+	return prefix .. "/base", prefix .. "/head", nil
 end
 
 ---@param ref PullsRef
+---@param local_ref string
 ---@return string remote
----@return string fetch_ref
-local function fetch_target(ref)
+---@return string refspec
+local function fetch_target(ref, local_ref)
 	local remote = tostring(ref.fetch_remote or "")
-	local fetch_ref = tostring(ref.fetch_ref or "")
-	return remote ~= "" and remote or "origin", fetch_ref ~= "" and fetch_ref or tostring(ref.branch or "")
+	local source = tostring(ref.fetch_ref or "")
+	if source == "" then
+		local branch = tostring(ref.branch or "")
+		source = branch ~= "" and "refs/heads/" .. branch or ""
+	end
+	return remote ~= "" and remote or "origin", source ~= "" and "+" .. source .. ":" .. local_ref or ""
+end
+
+---@param on_done fun(err: string|nil)
+---@param message string|nil
+---@return { cancel: fun() }
+local function schedule_error(on_done, message)
+	local cancelled = false
+	vim.schedule(function()
+		if not cancelled then
+			on_done(message)
+		end
+	end)
+	return {
+		cancel = function()
+			cancelled = true
+		end,
+	}
 end
 
 ---@param pr PullRequest
@@ -191,28 +206,18 @@ end
 ---@param on_done fun(err: string|nil)
 ---@return { cancel: fun() }
 function M.fetch_pr_branches(pr, repo_path, on_done)
-	local base_remote, base_ref = fetch_target(pr.destination)
-	local head_remote, head_ref = fetch_target(pr.source)
+	local base_revision, head_revision, revision_err = M.pr_diff_revisions(pr)
+	if not base_revision or not head_revision then
+		return schedule_error(on_done, revision_err)
+	end
+	local base_remote, base_ref = fetch_target(pr.destination, base_revision)
+	local head_remote, head_ref = fetch_target(pr.source, head_revision)
 	if base_ref == "" or head_ref == "" then
-		local cancelled = false
-		vim.schedule(function()
-			if not cancelled then
-				on_done("PR branch refs are missing")
-			end
-		end)
-		return {
-			cancel = function()
-				cancelled = true
-			end,
-		}
+		return schedule_error(on_done, "PR branch refs are missing")
 	end
 
 	if base_remote == head_remote then
-		local refs = { base_ref }
-		if head_ref ~= base_ref then
-			table.insert(refs, head_ref)
-		end
-		return git.fetch_branches(repo_path, base_remote, refs, function(ok, err)
+		return git.fetch_refs(repo_path, base_remote, { base_ref, head_ref }, function(ok, err)
 			if ok then
 				on_done(nil)
 			else
@@ -223,7 +228,7 @@ function M.fetch_pr_branches(pr, repo_path, on_done)
 
 	local cancelled = false
 	local current
-	current = git.fetch_branches(repo_path, base_remote, { base_ref }, function(ok, err)
+	current = git.fetch_refs(repo_path, base_remote, { base_ref }, function(ok, err)
 		current = nil
 		if cancelled then
 			return
@@ -232,7 +237,7 @@ function M.fetch_pr_branches(pr, repo_path, on_done)
 			on_done(err or "Failed to fetch pull request base ref")
 			return
 		end
-		current = git.fetch_branches(repo_path, head_remote, { head_ref }, function(head_ok, head_err)
+		current = git.fetch_refs(repo_path, head_remote, { head_ref }, function(head_ok, head_err)
 			current = nil
 			if not cancelled then
 				if head_ok then
@@ -251,6 +256,116 @@ function M.fetch_pr_branches(pr, repo_path, on_done)
 			end
 		end,
 	}
+end
+
+---@param pr PullRequest
+---@return string|nil cache_path
+---@return string|nil clone_url
+local function cached_pr_repository(pr)
+	local target = require("atlas.commands.open.parser").parse(pr.link.html)
+	if not target or target.domain ~= "pulls" or target.entity ~= "pr" then
+		return nil, nil
+	end
+	local repository = pr.repo_full_name
+	local base_url = require("atlas.commands.open.resolver").base_url(target):gsub("/+$", "")
+	local cache_path = vim.fs.joinpath(vim.fn.stdpath("cache"), "atlas", "repos", target.host, repository)
+	return cache_path, string.format("%s/%s.git", base_url, repository)
+end
+
+local PR_CACHE_MAX_AGE = 7 * 24 * 60 * 60
+
+local function clean_pr_cache()
+	local root = vim.fs.joinpath(vim.fn.stdpath("cache"), "atlas", "repos")
+	for _, git_dir in ipairs(vim.fs.find(".git", { path = root, type = "directory", limit = math.huge })) do
+		local last_fetch = vim.uv.fs_stat(vim.fs.joinpath(git_dir, "FETCH_HEAD")) or vim.uv.fs_stat(git_dir)
+		if last_fetch and os.time() - last_fetch.mtime.sec > PR_CACHE_MAX_AGE then
+			vim.fn.delete(vim.fs.dirname(git_dir), "rf")
+		end
+	end
+end
+
+---@param pr PullRequest
+---@param repo_path string|nil
+---@param on_progress fun(message: string)
+---@param on_done fun(repo_path: string|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.ensure_pr_repository(pr, repo_path, on_progress, on_done)
+	local cached = repo_path == nil
+	local current
+	local cancelled = false
+	local handle = {
+		cancel = function()
+			cancelled = true
+			if current then
+				current.cancel()
+			end
+		end,
+	}
+
+	---@param path string
+	local function fetch(path)
+		on_progress("Fetching pull request refs...")
+		current = M.fetch_pr_branches(pr, path, function(err)
+			current = nil
+			if cancelled then
+				return
+			end
+			if err then
+				on_done(nil, err)
+				return
+			end
+			if cached then
+				clean_pr_cache()
+			end
+			on_done(path, nil)
+		end)
+	end
+
+	if repo_path then
+		fetch(repo_path)
+		return handle
+	end
+
+	local path, clone_url = cached_pr_repository(pr)
+	if not path or not clone_url then
+		on_done(nil, "Unable to determine the pull request repository")
+		return nil
+	end
+	if git.is_inside_work_tree(path) then
+		fetch(path)
+		return handle
+	end
+
+	if vim.fn.isdirectory(path) == 1 then
+		vim.fn.delete(path, "rf")
+	end
+	vim.fn.mkdir(vim.fs.dirname(path), "p")
+	on_progress("Cloning repository...")
+	-- TODO: use provider auth when Git credentials are unavailable.
+	-- Leave the cache without a checkout; Git loads trees and blobs when a diff needs them.
+	current = git.run({
+		"clone",
+		"--filter=tree:0",
+		"--no-checkout",
+		"--single-branch",
+		"--no-tags",
+		clone_url,
+		path,
+	}, { text = true }, function(result)
+		current = nil
+		if cancelled then
+			return
+		end
+		if result.code ~= 0 then
+			vim.fn.delete(path, "rf")
+			local err = vim.trim(tostring(result.stderr or ""))
+			on_done(nil, err ~= "" and err or "Unable to clone pull request repository")
+			return
+		end
+		fetch(path)
+	end)
+
+	return handle
 end
 
 ---@class CheckoutResult

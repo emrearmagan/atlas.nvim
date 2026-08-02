@@ -1,6 +1,7 @@
 local M = {}
 
 local comments = require("atlas.pulls.diff.shared.comments")
+local notify = require("atlas.core.notify")
 local overlay = require("atlas.pulls.diff.shared.comments.overlay")
 local resolver = require("atlas.core.keymaps")
 
@@ -59,7 +60,7 @@ local READY_RETRIES = 80
 ---@field tabpage integer
 ---@field lifecycle AtlasCodeDiffLifecycle
 ---@field context AtlasPreparedReviewContext
----@field reload fun()|nil
+---@field reload (fun(target: AtlasLoadingTarget|nil))|nil
 ---@field facade AtlasReviewSession|nil
 ---@field actions AtlasReviewKeymapActions|nil
 ---@field mapped table<integer, table<string, table|false>>
@@ -72,7 +73,7 @@ local READY_RETRIES = 80
 ---@field closed boolean
 
 ---@class AtlasCodeDiffAttachOptions
----@field reload fun()|nil
+---@field reload (fun(target: AtlasLoadingTarget|nil))|nil
 
 ---@class AtlasCodeDiffHelpGroup
 ---@field name string
@@ -312,6 +313,9 @@ end
 ---@return string[]
 local function help_keys(view)
 	local reserved = reserved_keys(view)
+	if not resolver.resolve("ui.help") then
+		return {}
+	end
 	local result = review_keys("ui.help", reserved)
 	if #result == 0 and not reserved[vim.keycode("?")] then
 		table.insert(result, "?")
@@ -330,12 +334,20 @@ local function add_help_item(items, key, desc, index)
 	table.insert(items, { key = key, desc = desc, index = index })
 end
 
+---@type { field: "toggle_approval"|"request_changes"|"submit_review",
+---  id: AtlasKeymapActionId, desc: string, index: integer }[]
+local PULL_REVIEW_ACTIONS = {
+	{ field = "toggle_approval", id = "pulls.review.toggle_approval", desc = "Approve / unapprove", index = 8 },
+	{ field = "request_changes", id = "pulls.review.request_changes", desc = "Request changes", index = 9 },
+	{ field = "submit_review", id = "pulls.review.submit_review", desc = "Submit review", index = 10 },
+}
+
 ---@param view table<string, string|string[]|false>
 ---@param reloadable boolean
 ---@param include_comments boolean
----@param include_submit boolean
+---@param actions AtlasReviewKeymapActions
 ---@return AtlasCodeDiffHelpGroup[]
-local function help_groups(view, reloadable, include_comments, include_submit)
+local function help_groups(view, reloadable, include_comments, actions)
 	local reserved = reserved_keys(view)
 	local general = {}
 	add_help_item(general, help_keys(view), "Toggle Atlas help", 10)
@@ -346,13 +358,14 @@ local function help_groups(view, reloadable, include_comments, include_submit)
 	add_help_item(general, review_keys("ui.open_in_browser", reserved), "Open pull request in browser", 30)
 
 	local groups = { { name = "General", items = general, index = 90 } }
-	if not include_comments and not include_submit then
-		return groups
-	end
-
 	local review = {}
-	if include_submit then
-		add_help_item(review, review_keys("pulls.review.submit_review", reserved), "Submit review", 10)
+	for _, action in ipairs(PULL_REVIEW_ACTIONS) do
+		if actions[action.field] then
+			add_help_item(review, review_keys(action.id, reserved), action.desc, action.index)
+		end
+	end
+	if not include_comments and #review == 0 then
+		return groups
 	end
 	if include_comments then
 		add_help_item(review, review_keys("pulls.review.view_thread", reserved), "Open comment thread", 20)
@@ -380,24 +393,21 @@ local function reload(entry)
 		return
 	end
 	local callback = entry.reload
-	local reuse_tab = #vim.api.nvim_list_tabpages() == 1
+	vim.cmd("tabnew")
+	local win = vim.api.nvim_get_current_win()
+	local target = {
+		tabpage = vim.api.nvim_get_current_tabpage(),
+		buf = vim.api.nvim_get_current_buf(),
+		win = win,
+		number = vim.wo[win].number,
+		relativenumber = vim.wo[win].relativenumber,
+		statuscolumn = vim.wo[win].statuscolumn,
+		statusline = vim.wo[win].statusline,
+		winbar = vim.wo[win].winbar,
+	}
 	if not entry.lifecycle.close(entry.tabpage) then
+		vim.cmd("tabclose")
 		return
-	end
-	---@type AtlasLoadingTarget|nil
-	local target
-	if reuse_tab then
-		local win = vim.api.nvim_get_current_win()
-		target = {
-			tabpage = vim.api.nvim_get_current_tabpage(),
-			buf = vim.api.nvim_get_current_buf(),
-			win = win,
-			number = vim.wo[win].number,
-			relativenumber = vim.wo[win].relativenumber,
-			statuscolumn = vim.wo[win].statuscolumn,
-			statusline = vim.wo[win].statusline,
-			winbar = vim.wo[win].winbar,
-		}
 	end
 	vim.schedule(function()
 		callback(target)
@@ -419,9 +429,7 @@ local function map_help(entry, buf, active, view, include_comments)
 	if not help_buf or not vim.api.nvim_buf_is_valid(help_buf) then
 		help_buf = vim.api.nvim_create_buf(false, true)
 		entry.help_buffers[scope] = help_buf
-		for _, group in
-			ipairs(help_groups(view, entry.reload ~= nil, include_comments, entry.actions.submit_review ~= nil))
-		do
+		for _, group in ipairs(help_groups(view, entry.reload ~= nil, include_comments, entry.actions)) do
 			help.register(group.name, group.items, { buffer = help_buf, index = group.index })
 		end
 	end
@@ -450,8 +458,11 @@ local function map_review(entry)
 	for _, buf in ipairs({ facade.left.buf, facade.right.buf }) do
 		if vim.api.nvim_buf_is_valid(buf) and not entry.mapped[buf] then
 			map_help(entry, buf, actions.active, view, true)
-			if actions.submit_review then
-				map(entry, buf, "pulls.review.submit_review", "Submit review", actions.submit_review, reserved)
+			for _, action in ipairs(PULL_REVIEW_ACTIONS) do
+				local callback = actions[action.field]
+				if callback then
+					map(entry, buf, action.id, action.desc, callback, reserved)
+				end
 			end
 			map(entry, buf, "pulls.review.toggle_resolved", "Toggle resolved", function()
 				actions.toggle_resolved(buf)
@@ -503,16 +514,11 @@ local function map_review(entry)
 			return vim.api.nvim_get_current_tabpage() == entry.tabpage
 		end
 		map_help(entry, explorer_buf, active, explorer_keymaps, false)
-		if actions.submit_review then
-			map(
-				entry,
-				explorer_buf,
-				"pulls.review.submit_review",
-				"Submit review",
-				actions.submit_review,
-				explorer_reserved,
-				active
-			)
+		for _, action in ipairs(PULL_REVIEW_ACTIONS) do
+			local callback = actions[action.field]
+			if callback then
+				map(entry, explorer_buf, action.id, action.desc, callback, explorer_reserved, active)
+			end
 		end
 		map(entry, explorer_buf, "ui.refresh", "Refresh review comments", function()
 			comments.reload(facade)
@@ -648,7 +654,7 @@ local function sync(entry)
 			local notify_level = level == "error" and vim.log.levels.ERROR
 				or level == "warn" and vim.log.levels.WARN
 				or vim.log.levels.INFO
-			vim.notify("[Atlas Review] " .. message, notify_level)
+			notify.show(notify_level, message)
 		end,
 		register_keymaps = function(actions)
 			entry.actions = actions
@@ -666,7 +672,7 @@ local function sync(entry)
 		local ok, err = pcall(comments.attach, facade, context)
 		if not ok then
 			comments.detach(facade)
-			vim.notify("[Atlas Review] Unable to load comments: " .. tostring(err), vim.log.levels.ERROR)
+			notify.error("Unable to load comments: " .. tostring(err))
 		else
 			entry.attached = true
 		end

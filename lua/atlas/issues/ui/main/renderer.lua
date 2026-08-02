@@ -308,7 +308,7 @@ function cell_hl(row, col, ctx)
 end
 
 ---@param issue Issue
----@return string[], table[]
+---@return string[], AtlasUIHighlight[]
 local function generic_issue_popup_content(issue)
 	local summary = issue.summary or ""
 	local title = string.format(" %s: %s", issue.key or "", summary)
@@ -316,15 +316,15 @@ local function generic_issue_popup_content(issue)
 	local parent_summary = issue.parent and issue.parent.summary or nil
 
 	local lines = { title, "" }
+	---@type AtlasUIHighlight[]
 	local highlights = {
-		{ row = 0, col = 1, end_col = 1 + #(issue.key or ""), hl_group = helper.issue_hl(issue.key) },
-		{ row = 1, col = 0, end_col = -1, hl_group = "AtlasTextMuted" },
+		{ line = 0, start_col = 1, end_col = 1 + #(issue.key or ""), hl_group = helper.issue_hl(issue.key) },
 	}
 	if summary ~= "" then
 		table.insert(highlights, {
-			row = 0,
-			col = 3 + #(issue.key or ""),
-			end_col = -1,
+			line = 0,
+			start_col = 3 + #(issue.key or ""),
+			end_col = #lines[1],
 			hl_group = helper.issue_title_hl(summary),
 		})
 	end
@@ -336,11 +336,16 @@ local function generic_issue_popup_content(issue)
 		if value == nil or value == "" then
 			return
 		end
-		local row = #lines
+		local line = #lines
 		table.insert(lines, string.format(" %-9s %s", label .. ":", value))
-		table.insert(highlights, { row = row, col = 1, end_col = 10, hl_group = "AtlasTextMuted" })
+		table.insert(highlights, { line = line, start_col = 1, end_col = 10, hl_group = "AtlasTextMuted" })
 		if value_hl ~= nil then
-			table.insert(highlights, { row = row, col = 11, end_col = -1, hl_group = value_hl })
+			table.insert(highlights, {
+				line = line,
+				start_col = 11,
+				end_col = #lines[line + 1],
+				hl_group = value_hl,
+			})
 		end
 	end
 
@@ -368,9 +373,14 @@ local function generic_issue_popup_content(issue)
 	if parent_key and parent_key ~= "" then
 		push("Parent", parent_key, helper.issue_hl(parent_key))
 		if parent_summary and parent_summary ~= "" then
-			local row = #lines
+			local line = #lines
 			table.insert(lines, string.format("           %s", parent_summary))
-			table.insert(highlights, { row = row, col = 11, end_col = -1, hl_group = "Comment" })
+			table.insert(highlights, {
+				line = line,
+				start_col = 11,
+				end_col = #lines[line + 1],
+				hl_group = "Comment",
+			})
 		end
 	end
 
@@ -379,12 +389,13 @@ local function generic_issue_popup_content(issue)
 		content_width = math.max(content_width, vim.fn.strdisplaywidth(line))
 	end
 	lines[2] = " " .. ("━"):rep(content_width)
+	table.insert(highlights, { line = 1, start_col = 0, end_col = #lines[2], hl_group = "AtlasTextMuted" })
 
 	return lines, highlights
 end
 
 ---@param issue Issue
----@return string[], table[]
+---@return string[], AtlasUIHighlight[]
 function M.issue_popup_content(issue)
 	local provider = state.provider
 	if provider and provider.issue_popup_content then

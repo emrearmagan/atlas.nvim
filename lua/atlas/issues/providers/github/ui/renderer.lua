@@ -134,22 +134,22 @@ function M.cell_hl(row, col, ctx)
 end
 
 ---@param issue Issue
----@return string[], table[]
+---@return string[], AtlasUIHighlight[]
 function M.issue_popup_content(issue)
 	local raw = issue._raw or {}
 	local summary = issue.summary or ""
 	local key = issue.key or ""
 
 	local lines = { string.format(" %s: %s", key, summary), "" }
+	---@type AtlasUIHighlight[]
 	local highlights = {
-		{ row = 0, col = 1, end_col = 1 + #key, hl_group = helper.issue_hl(key) },
-		{ row = 1, col = 0, end_col = -1, hl_group = "AtlasTextMuted" },
+		{ line = 0, start_col = 1, end_col = 1 + #key, hl_group = helper.issue_hl(key) },
 	}
 	if summary ~= "" then
 		table.insert(highlights, {
-			row = 0,
-			col = 3 + #key,
-			end_col = -1,
+			line = 0,
+			start_col = 3 + #key,
+			end_col = #lines[1],
 			hl_group = helper.issue_title_hl(summary),
 		})
 	end
@@ -161,11 +161,16 @@ function M.issue_popup_content(issue)
 		if value == nil or value == "" then
 			return
 		end
-		local row = #lines
+		local line = #lines
 		table.insert(lines, string.format(" %-10s %s", label .. ":", value))
-		table.insert(highlights, { row = row, col = 1, end_col = 11, hl_group = "AtlasTextMuted" })
+		table.insert(highlights, { line = line, start_col = 1, end_col = 11, hl_group = "AtlasTextMuted" })
 		if value_hl ~= nil then
-			table.insert(highlights, { row = row, col = 12, end_col = -1, hl_group = value_hl })
+			table.insert(highlights, {
+				line = line,
+				start_col = 12,
+				end_col = #lines[line + 1],
+				hl_group = value_hl,
+			})
 		end
 	end
 
@@ -205,6 +210,7 @@ function M.issue_popup_content(issue)
 		content_width = math.max(content_width, vim.fn.strdisplaywidth(line))
 	end
 	lines[2] = " " .. ("━"):rep(content_width)
+	table.insert(highlights, { line = 1, start_col = 0, end_col = #lines[2], hl_group = "AtlasTextMuted" })
 
 	return lines, highlights
 end

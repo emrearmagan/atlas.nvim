@@ -2,6 +2,7 @@ local notes = require("atlas.pulls.notes")
 local popup_editor = require("atlas.ui.popups.editor")
 local info = require("atlas.ui.popups.info")
 local renderer = require("atlas.pulls.notes.ui.renderer")
+local code_preview = require("atlas.ui.components.code_preview")
 
 local M = {}
 
@@ -10,12 +11,20 @@ local M = {}
 ---@param line integer
 ---@param initial_text string
 ---@param key string
+---@param context AtlasNoteContext|nil
 ---@param on_save fun(body: string, note_type: AtlasNoteType)
-local function open_body_editor(note_type, file_path, line, initial_text, key, on_save)
-	note_type = vim.tbl_contains(notes.types, note_type) and note_type or "note"
+local function open_body_editor(note_type, file_path, line, initial_text, key, context, on_save)
+	note_type = note_type or "note"
 	local function window_title()
 		return " " .. renderer.note_title(note_type, file_path, line) .. " "
 	end
+	local preview = context
+		and code_preview.render({
+			file_path = file_path,
+			lines = context.lines,
+			start_line = context.start_line,
+			anchor_line = line,
+		})
 	popup_editor.open({
 		key = key,
 		title = window_title(),
@@ -23,14 +32,15 @@ local function open_body_editor(note_type, file_path, line, initial_text, key, o
 		initial_text = initial_text,
 		width_ratio = 0.5,
 		height_ratio = 0.18,
+		preview = preview,
 		actions = {
 			{
 				key = "!",
 				description = "type",
-				callback = function(context)
+				callback = function(editor_context)
 					local index = vim.fn.index(notes.types, note_type)
 					note_type = notes.types[(index + 1) % #notes.types + 1]
-					vim.api.nvim_win_set_config(context.win, { title = window_title(), title_pos = "left" })
+					vim.api.nvim_win_set_config(editor_context.win, { title = window_title(), title_pos = "left" })
 				end,
 			},
 		},
@@ -50,6 +60,7 @@ function M.create(target, input, on_done)
 		input.line,
 		input.body or "",
 		"atlas-note-create",
+		input.context,
 		function(body, note_type)
 			input.body = body
 			input.type = note_type
@@ -68,6 +79,7 @@ function M.edit(target, note, on_done)
 		note.line,
 		note.body,
 		"atlas-note-edit-" .. note.id,
+		note.context,
 		function(body, selected)
 			on_done(notes.update(target, note.id, {
 				body = body,
@@ -81,8 +93,10 @@ end
 ---@param target AtlasNoteTarget
 ---@param source_buf integer
 function M.details(note, target, source_buf)
+	local lines, highlights = renderer.render_details(note, target)
 	info.show({
-		lines = renderer.details_lines(note, target),
+		lines = lines,
+		highlights = highlights,
 		source_buf = source_buf,
 	})
 end

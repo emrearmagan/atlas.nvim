@@ -1,14 +1,14 @@
 local M = {}
 
+local resolver = require("atlas.commands.open.resolver")
 local form = require("atlas.ui.popups.form")
 local git_branch = require("atlas.core.git")
 local keymaps = require("atlas.core.keymaps")
-local config = require("atlas.config")
+local description = require("atlas.pulls.create.description")
 local spinner = require("atlas.ui.popups.spinner")
 local pulls_helper = require("atlas.pulls.ui.main.helper")
 local multi_select = require("atlas.ui.popups.multi_select")
-
-local DEFAULT_GITHUB_PR_TEMPLATE = ".github/pull_request_template.md"
+local notify = require("atlas.core.notify")
 
 ---@class CreatePRFields
 ---@field repo_slug string         -- "owner/repo"
@@ -29,87 +29,7 @@ local DEFAULT_GITHUB_PR_TEMPLATE = ".github/pull_request_template.md"
 ---@field content_width integer
 ---@field is_submitting boolean
 ---@field settings_changed boolean
-
-local function notify(level, msg)
-	vim.notify("[Atlas] " .. tostring(msg), level)
-end
-
-local function notify_info(msg)
-	notify(vim.log.levels.INFO, msg)
-end
-
-local function notify_warn(msg)
-	notify(vim.log.levels.WARN, msg)
-end
-
-local function notify_error(msg)
-	notify(vim.log.levels.ERROR, msg)
-end
-
-local function trim(value)
-	if type(value) ~= "string" then
-		return ""
-	end
-	return vim.trim(value)
-end
-
----@param root string
----@param repo_slug string
----@return string
-local function read_configured_pr_template(root, repo_slug)
-	local pulls = (config.options or {}).pulls or {}
-	local repo_config = pulls.repo_config or {}
-	local settings = repo_config.settings or {}
-	local repo_settings = settings[repo_slug]
-	if type(repo_settings) ~= "table" then
-		repo_settings = {}
-	end
-
-	local template_path = type(repo_settings.pr_template) == "string" and trim(repo_settings.pr_template)
-		or DEFAULT_GITHUB_PR_TEMPLATE
-	if template_path == "" then
-		return ""
-	end
-
-	local path = root .. "/" .. template_path
-	if vim.fn.filereadable(path) ~= 1 then
-		return ""
-	end
-
-	local ok, lines = pcall(vim.fn.readfile, path)
-	if not ok or type(lines) ~= "table" then
-		return ""
-	end
-	return table.concat(lines, "\n")
-end
-
----@param root string
----@param repo_slug string
----@param base string
----@param head string
----@return string title
----@return string body
----@return integer commit_count
----@return { hash: string, subject: string }[] commits
----@return string[] diffstat
-local function build_pr_content(root, repo_slug, base, head)
-	local commits = git_branch.commits_for_range(root, git_branch.commit_range(root, base, head))
-	local diffstat = git_branch.diff_stat(root, base, head) or {}
-	local latest_commit = commits[#commits]
-	local title = latest_commit and latest_commit.subject or ""
-
-	local template = trim(read_configured_pr_template(root, repo_slug))
-	if template ~= "" then
-		return title, template, #commits, commits, diffstat
-	end
-
-	local commit_lines = {}
-	for _, commit in ipairs(commits) do
-		table.insert(commit_lines, string.format("- `%s` %s", commit.hash, commit.subject))
-	end
-
-	return title, table.concat(commit_lines, "\n"), #commits, commits, diffstat
-end
+---@field initial_body string
 
 ---@param provider_id "github"|"bitbucket"|"gitlab"
 ---@return PullsProvider|nil, string|nil
@@ -215,14 +135,24 @@ end
 
 ---@param pr_state CreatePRState
 local function refresh_commits(pr_state)
-	local range = git_branch.commit_range(pr_state.fields.repo_root, pr_state.fields.base, pr_state.fields.head)
-	pr_state.fields.commits = git_branch.commits_for_range(pr_state.fields.repo_root, range)
-	pr_state.fields.commit_count = #pr_state.fields.commits
-	pr_state.fields.diffstat = git_branch.diff_stat(
+	local replace_body = form.get_body(pr_state.layout) == pr_state.initial_body
+	local content, err = description.build(
 		pr_state.fields.repo_root,
+		pr_state.fields.repo_slug,
 		pr_state.fields.base,
 		pr_state.fields.head
-	) or {}
+	)
+	if not content then
+		notify.error(err or "Unable to build pull request description")
+		return
+	end
+	pr_state.fields.commits = content.commits
+	pr_state.fields.commit_count = #content.commits
+	pr_state.fields.diffstat = content.diffstat
+	if replace_body then
+		pr_state.initial_body = content.body
+		form.set_body(pr_state.layout, content.body)
+	end
 	form.render_context(pr_state, commit_context(pr_state))
 end
 
@@ -231,7 +161,7 @@ local function preview_diff(pr_state)
 	local base, head, err =
 		git_branch.diff_revisions(pr_state.fields.repo_root, pr_state.fields.base, pr_state.fields.head)
 	if not base or not head then
-		notify_error(err or "Unable to resolve diff revisions")
+		notify.error(err or "Unable to resolve diff revisions")
 		return
 	end
 	require("atlas.pulls.actions").open_diff_range({
@@ -240,7 +170,7 @@ local function preview_diff(pr_state)
 		head_revision = head,
 	}, function(open_err)
 		if open_err then
-			notify_error("Unable to open diff: " .. tostring(open_err))
+			notify.error("Unable to open diff: " .. tostring(open_err))
 		end
 	end)
 end
@@ -287,7 +217,7 @@ end
 local function pick_base(pr_state, on_change)
 	local choices = pr_state.fields.available_bases
 	if #choices == 0 then
-		notify_warn("No base branches available")
+		notify.warn("No base branches available")
 		return
 	end
 
@@ -310,11 +240,11 @@ local function pick_reviewers(pr_state, on_change)
 		return
 	end
 	if type(reviewers) == "string" then
-		notify_warn("Reviewers unavailable: " .. reviewers)
+		notify.warn("Reviewers unavailable: " .. reviewers)
 		return
 	end
 	if #reviewers == 0 then
-		notify_warn("No reviewers available")
+		notify.warn("No reviewers available")
 		return
 	end
 
@@ -399,15 +329,14 @@ end
 ---@param result PullsCreatePRResult
 local function on_success(pr_state, result)
 	pr_state.is_submitting = false
-	spinner.stop()
 	close(pr_state)
 
 	local url = result and result.url or nil
 	if type(url) == "string" and url ~= "" then
-		notify_info("PR created: " .. url)
+		notify.info("PR created: " .. url)
 		pcall(vim.fn.setreg, "+", url)
 	else
-		notify_info("PR created")
+		notify.info("PR created")
 	end
 
 	-- Refresh the main pulls UI (if open) so the new PR shows up.
@@ -424,29 +353,28 @@ local function submit(pr_state)
 
 	local title = get_title(pr_state)
 	if title == "" then
-		notify_warn("Title is required")
+		notify.warn("Title is required")
 		return
 	end
 
 	local body = get_body(pr_state)
 	local provider = pr_state.fields.provider
 	if not provider or not provider.create_pr then
-		notify_error("Provider does not support PR creation")
+		notify.error("Provider does not support PR creation")
 		return
 	end
 
 	if pr_state.fields.head == "" or pr_state.fields.base == "" then
-		notify_warn("Head and base branches are required")
+		notify.warn("Head and base branches are required")
 		return
 	end
 
 	if pr_state.fields.head == pr_state.fields.base then
-		notify_warn("Head and base branches must differ")
+		notify.warn("Head and base branches must differ")
 		return
 	end
 
 	pr_state.is_submitting = true
-	spinner.start("Creating pull request..")
 
 	local selected_reviewers = {}
 	if type(pr_state.fields.reviewers) == "table" then
@@ -473,7 +401,7 @@ local function submit(pr_state)
 				if err then
 					pr_state.is_submitting = false
 					spinner.stop()
-					notify_error("Create PR failed: " .. tostring(err))
+					notify.error("Create PR failed: " .. tostring(err))
 					return
 				end
 				on_success(pr_state, result or {})
@@ -493,7 +421,7 @@ local function submit(pr_state)
 		if not ok then
 			pr_state.is_submitting = false
 			spinner.stop()
-			notify_error("git push failed: " .. tostring(push_err or ""))
+			notify.error("git push failed: " .. tostring(push_err or ""))
 			return
 		end
 		do_create()
@@ -539,6 +467,7 @@ function M.open(opts)
 		content_width = 80,
 		is_submitting = false,
 		settings_changed = false,
+		initial_body = opts.initial_body,
 	}
 
 	local form_keymaps = {
@@ -621,46 +550,36 @@ end
 function M.start()
 	local root, root_err = git_branch.repo_root(nil)
 	if not root then
-		notify_error(root_err or "Not in a git repository")
+		notify.error(root_err or "Not in a git repository")
 		return
 	end
 
 	local head, head_err = git_branch.current_branch(root)
 	if not head then
-		notify_error(head_err or "Could not detect current branch")
+		notify.error(head_err or "Could not detect current branch")
 		return
 	end
 
-	local remote_url, remote_err = git_branch.remote_url(root, "origin")
-	if not remote_url then
-		notify_error(remote_err or "No origin remote configured")
-		return
-	end
-
-	local info, parse_err = git_branch.parse_remote_url(remote_url)
+	local info = resolver.local_repository(root)
 	if not info then
-		notify_error(parse_err or "Could not parse remote URL")
-		return
-	end
-	if info.provider == "unknown" then
-		notify_error("Unsupported remote host: " .. info.host)
+		notify.error("Could not resolve the origin repository")
 		return
 	end
 
 	local provider, provider_err = load_provider(info.provider)
 	if not provider then
-		notify_error(provider_err or "Provider unavailable")
+		notify.error(provider_err or "Provider unavailable")
 		return
 	end
 	if not provider.create_pr then
-		notify_error("Provider " .. info.provider .. " does not support PR creation")
+		notify.error("Provider " .. info.provider .. " does not support PR creation")
 		return
 	end
 
 	local base = git_branch.default_branch(root, "origin") or "main"
 
 	if head == base then
-		notify_warn(string.format("HEAD '%s' is the default branch — switch to a feature branch first", head))
+		notify.warn(string.format("HEAD '%s' is the default branch — switch to a feature branch first", head))
 		return
 	end
 
@@ -674,7 +593,11 @@ function M.start()
 		end
 	end
 
-	local default_title, default_body, commit_count, commits, diffstat = build_pr_content(root, info.slug, base, head)
+	local initial, description_err = description.build(root, info.slug, base, head)
+	if not initial then
+		notify.error(description_err or "Unable to build pull request description")
+		return
+	end
 
 	M.open({
 		provider = provider,
@@ -683,12 +606,12 @@ function M.start()
 		head = head,
 		base = base,
 		available_bases = available_bases,
-		initial_title = default_title,
-		initial_body = default_body,
+		initial_title = initial.title,
+		initial_body = initial.body,
 		draft = false,
-		commit_count = commit_count,
-		commits = commits,
-		diffstat = diffstat,
+		commit_count = #initial.commits,
+		commits = initial.commits,
+		diffstat = initial.diffstat,
 	})
 end
 

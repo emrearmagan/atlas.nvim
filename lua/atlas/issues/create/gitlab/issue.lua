@@ -3,6 +3,7 @@ local M = {}
 local form = require("atlas.ui.popups.form")
 local spinner = require("atlas.ui.popups.spinner")
 local multi_select = require("atlas.ui.popups.multi_select")
+local notify = require("atlas.core.notify")
 local pulls_helper = require("atlas.pulls.ui.main.helper")
 local icons = require("atlas.ui.shared.icons")
 local templates = require("atlas.issues.templates")
@@ -33,18 +34,6 @@ local templates = require("atlas.issues.templates")
 ---@field is_submitting boolean
 ---@field pickers GitLabCreateIssuePickers
 ---@field on_done fun(result: GitLabIssueEditorResult|nil, err: string|nil)|nil
-
-local function notify_info(msg, duration)
-	vim.notify("[Atlas] " .. tostring(msg), vim.log.levels.INFO, { timeout = duration or 1200 })
-end
-
-local function notify_warn(msg, duration)
-	vim.notify("[Atlas] " .. tostring(msg), vim.log.levels.WARN, { timeout = duration or 1500 })
-end
-
-local function notify_error(msg)
-	vim.notify("[Atlas] " .. tostring(msg), vim.log.levels.ERROR)
-end
 
 ---@param project_path string
 ---@return GitLabCreateIssuePickers
@@ -233,18 +222,18 @@ end
 ---@param issue_state GitLabCreateIssueState
 local function pick_assignees(issue_state)
 	if not issue_state.pickers.list_assignees then
-		notify_warn("Assignee picker not available")
+		notify.warn("Assignee picker not available", { timeout = 1500 })
 		return
 	end
 
 	issue_state.pickers.list_assignees(function(items, err)
 		vim.schedule(function()
 			if err then
-				notify_error("Load members failed: " .. tostring(err))
+				notify.error("Load members failed: " .. tostring(err))
 				return
 			end
 			if type(items) ~= "table" or #items == 0 then
-				notify_warn("No assignable members")
+				notify.warn("No assignable members", { timeout = 1500 })
 				return
 			end
 			multi_select.open({
@@ -274,18 +263,18 @@ end
 ---@param issue_state GitLabCreateIssueState
 local function pick_labels(issue_state)
 	if not issue_state.pickers.list_labels then
-		notify_warn("Label picker not available")
+		notify.warn("Label picker not available", { timeout = 1500 })
 		return
 	end
 
 	issue_state.pickers.list_labels(function(items, err)
 		vim.schedule(function()
 			if err then
-				notify_error("Load labels failed: " .. tostring(err))
+				notify.error("Load labels failed: " .. tostring(err))
 				return
 			end
 			if type(items) ~= "table" or #items == 0 then
-				notify_warn("No labels available")
+				notify.warn("No labels available", { timeout = 1500 })
 				return
 			end
 			multi_select.open({
@@ -310,14 +299,14 @@ end
 ---@param issue_state GitLabCreateIssueState
 local function pick_milestone(issue_state)
 	if not issue_state.pickers.list_milestones then
-		notify_warn("Milestone picker not available")
+		notify.warn("Milestone picker not available", { timeout = 1500 })
 		return
 	end
 
 	issue_state.pickers.list_milestones(function(items, err)
 		vim.schedule(function()
 			if err then
-				notify_error("Load milestones failed: " .. tostring(err))
+				notify.error("Load milestones failed: " .. tostring(err))
 				return
 			end
 
@@ -354,7 +343,7 @@ local function submit(issue_state)
 
 	local title = get_title(issue_state)
 	if title == "" then
-		notify_warn("Title is required")
+		notify.warn("Title is required", { timeout = 1500 })
 		return
 	end
 
@@ -388,7 +377,7 @@ local function submit(issue_state)
 			spinner.stop()
 
 			if err then
-				notify_error("Create issue failed: " .. tostring(err))
+				notify.error("Create issue failed: " .. tostring(err))
 				if issue_state.on_done then
 					issue_state.on_done(nil, err)
 				end
@@ -397,10 +386,10 @@ local function submit(issue_state)
 
 			local url = result and result.url or nil
 			if type(url) == "string" and url ~= "" then
-				notify_info("Issue created: " .. url)
+				notify.info("Issue created: " .. url, { timeout = 1200 })
 				pcall(vim.fn.setreg, "+", url)
 			else
-				notify_info("Issue created")
+				notify.info("Issue created", { timeout = 1200 })
 			end
 
 			if issue_state.on_done then
@@ -423,13 +412,13 @@ end
 ---@param opts GitLabIssueEditorOpts
 function M.open(opts)
 	if type(opts) ~= "table" then
-		notify_warn("create_issue.open: missing options")
+		notify.warn("create_issue.open: missing options", { timeout = 1500 })
 		return
 	end
 
 	local project_path = tostring(opts.project_path or "")
 	if project_path == "" then
-		notify_error("create_issue.open: project_path is required")
+		notify.error("create_issue.open: project_path is required")
 		return
 	end
 

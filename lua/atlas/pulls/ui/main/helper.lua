@@ -409,7 +409,7 @@ function M.build_plain_tree_table(groups)
 end
 
 ---@param pr PullRequest
----@return string[], table[]
+---@return string[], AtlasUIHighlight[]
 function M.pr_popup_content(pr)
 	local provider = state.provider
 	if provider and provider.pr_popup_content then

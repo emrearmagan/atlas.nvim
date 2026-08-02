@@ -6,7 +6,8 @@ local footer = require("atlas.ui.components.footer")
 
 ---@class GitLabPullsActionContext
 ---@field pr PullRequest|nil
----@field source "main"|"panel"|nil
+---@field source "main"|"panel"|"diff"|nil
+---@field notify fun(level: "loading"|"success"|"info"|"warn"|"error", message: string, duration: integer|nil)|nil
 
 ---@param id string
 ---@param ctx GitLabPullsActionContext
@@ -23,7 +24,8 @@ function M.run(id, ctx, on_done)
 	local available, available_err = action.is_available(ctx)
 	if not available then
 		local err = tostring(available_err or string.format("Action is not available: %s", tostring(id)))
-		footer.notify("warn", err)
+		local notify = ctx.notify or footer.notify
+		notify("warn", err)
 		on_done(nil, err)
 		return
 	end

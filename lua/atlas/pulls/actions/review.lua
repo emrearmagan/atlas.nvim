@@ -2,6 +2,8 @@ local M = {}
 
 local editor = require("atlas.ui.popups.editor")
 local footer = require("atlas.ui.components.footer")
+local pull_actions = require("atlas.pulls.actions")
+local review_threads = require("atlas.ui.components.review_threads")
 
 ---@alias AtlasReviewCommentAction "reply"|"edit"|"delete"|"toggle_task"|"toggle_resolved"
 
@@ -34,10 +36,11 @@ end
 ---@field track fun(handle: { cancel: fun() }|nil): fun()
 ---@field refresh fun()
 ---@field reload (fun())|nil
----@field notify fun(level: "loading"|"success"|"warn"|"error", message: string, duration: integer|nil)|nil
+---@field notify fun(level: "loading"|"success"|"info"|"warn"|"error", message: string, duration: integer|nil)|nil
 
 ---@class AtlasReviewAddOptions
 ---@field pending boolean|nil
+---@field preview AtlasMarkdownEditorPreview|nil
 
 ---@param provider PullsProvider
 ---@param pr PullRequest
@@ -101,7 +104,7 @@ local function open_editor(context, opts)
 end
 
 ---@param context AtlasReviewCommentActionContext
----@param level "loading"|"success"|"warn"|"error"
+---@param level "loading"|"success"|"info"|"warn"|"error"
 ---@param message string
 ---@param duration integer|nil
 local function notify(context, level, message, duration)
@@ -122,6 +125,41 @@ end
 ---@return boolean
 function M.can_submit(provider)
 	return provider ~= nil and provider.submit_review ~= nil
+end
+
+---@param pr PullRequest
+---@return boolean
+function M.can_toggle_approval(pr)
+	return pull_actions.is_action_available(pr, "toggle_approval")
+end
+
+---@param context AtlasReviewCommentActionContext
+---@param action_id string
+local function run_pull_action(context, action_id)
+	pull_actions.run_action(context.pr, action_id, {
+		source = "diff",
+		current_user = context.current_user,
+		notify = context.notify,
+	}, function(result, err)
+		if not active(context) or err or not result then
+			return
+		end
+		if not result.changed_pr then
+			notify(context, "info", tostring(result.message or "Action cancelled"), 1200)
+			return
+		end
+		if context.reload then
+			context.reload()
+		else
+			context.refresh()
+		end
+	end)
+end
+
+---@param pr PullRequest
+---@return boolean
+function M.can_request_changes(pr)
+	return pull_actions.is_action_available(pr, "request_changes")
 end
 
 ---@param context AtlasReviewCommentActionContext
@@ -184,6 +222,22 @@ function M.submit(context)
 end
 
 ---@param context AtlasReviewCommentActionContext
+function M.toggle_approval(context)
+	if not active(context) or not M.can_toggle_approval(context.pr) then
+		return
+	end
+	run_pull_action(context, "toggle_approval")
+end
+
+---@param context AtlasReviewCommentActionContext
+function M.request_changes(context)
+	if not active(context) or not M.can_request_changes(context.pr) then
+		return
+	end
+	run_pull_action(context, "request_changes")
+end
+
+---@param context AtlasReviewCommentActionContext
 ---@param inline PullsInlineCommentPosition|nil
 ---@param opts AtlasReviewAddOptions|nil
 ---@return boolean handled
@@ -202,6 +256,7 @@ function M.add(context, inline, opts)
 	open_editor(context, {
 		key = key,
 		title = pending and " Add Pending Comment " or (inline and " Add Inline Comment " or " Add Comment "),
+		preview = opts.preview,
 		on_save = function(text)
 			if not active(context) or not text or vim.trim(text) == "" then
 				return
@@ -274,12 +329,12 @@ local function reply(context, comment)
 	if completion and completion.format_mention then
 		mention = completion.format_mention(comment.author) or ""
 	end
-
 	open_editor(context, {
 		key = "pr-comment-reply-" .. tostring(comment.id),
 		title = " Reply to Comment ",
 		initial_text = mention ~= "" and (mention .. " ") or "",
 		completion = completion,
+		preview = review_threads.render_comment(comment, math.max(math.floor(vim.o.columns * 0.5), 80)),
 		on_save = function(text)
 			if not active(context) or not text or vim.trim(text) == "" then
 				return

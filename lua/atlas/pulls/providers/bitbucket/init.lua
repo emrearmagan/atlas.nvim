@@ -17,7 +17,7 @@ function M.setup()
 end
 
 ---@param pr PullRequest
----@return string[], table[]
+---@return string[], AtlasUIHighlight[]
 function M.pr_popup_content(pr)
 	return require("atlas.pulls.providers.bitbucket.ui.popup").content(pr)
 end
@@ -274,6 +274,7 @@ function M.open_actions(pr, source, on_done)
 	local ctx = {
 		pr = pr,
 		source = source,
+		current_user = require("atlas.pulls.state").current_user,
 	}
 
 	actions.open(ctx, function(result, _)

@@ -1,5 +1,7 @@
 local M = {}
 
+local notify = require("atlas.core.notify")
+
 local PROVIDER_SEARCH_MODULE = {
 	jira = "atlas.issues.providers.jira.completion.search",
 	github = "atlas.pulls.providers.github.completion.search",
@@ -44,7 +46,7 @@ end
 local function dispatch(provider_id)
 	local module_path = PROVIDER_SEARCH_MODULE[provider_id]
 	if module_path == nil then
-		vim.notify(string.format("[Atlas] Search not supported for %s", provider_id), vim.log.levels.ERROR)
+		notify.error(string.format("Search not supported for %s", provider_id))
 		return
 	end
 	require(module_path).open()
@@ -55,13 +57,13 @@ function M.run(provider_id)
 	local ids = unique_provider_ids()
 
 	if #ids == 0 then
-		vim.notify("[Atlas] No providers configured", vim.log.levels.ERROR)
+		notify.error("No providers configured")
 		return
 	end
 
 	if provider_id ~= nil and provider_id ~= "" then
 		if not vim.tbl_contains(ids, provider_id) then
-			vim.notify(string.format("[Atlas] Provider not configured: %s", provider_id), vim.log.levels.ERROR)
+			notify.error(string.format("Provider not configured: %s", provider_id))
 			return
 		end
 		dispatch(provider_id)

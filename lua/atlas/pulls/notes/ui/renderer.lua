@@ -1,4 +1,5 @@
 local box = require("atlas.ui.components.box")
+local code_preview = require("atlas.ui.components.code_preview")
 local icons = require("atlas.ui.shared.icons")
 local notes = require("atlas.pulls.notes")
 local table_tree = require("atlas.ui.components.table_tree")
@@ -17,7 +18,6 @@ local M = {}
 ---@field boxed boolean|nil
 ---@field padding_x integer|nil
 ---@field outdated table<string, boolean>|nil
----@field collapse_outdated boolean|nil
 
 ---@class AtlasNotesUIManagerRenderOptions
 ---@field documents AtlasNotesUIManagerDocument[]
@@ -27,12 +27,6 @@ local M = {}
 ---@class AtlasNotesUIManagerDocument
 ---@field target AtlasNoteTarget
 ---@field notes AtlasNote[]
-
----@class AtlasNotesUISpan
----@field line integer
----@field start_col integer
----@field end_col integer
----@field hl_group string
 
 ---@param value string|nil
 ---@return string
@@ -77,25 +71,41 @@ function M.note_title(note_type, file_path, line)
 end
 
 ---@param note AtlasNote
----@param target AtlasNoteTarget|nil
----@return string[]
-function M.details_lines(note, target)
-	local label = target and notes.target_label(target) or "Unknown pull request"
-	local lines = {
-		string.format("**%s** · `%s:%d` · `%s`", type_label(note.type), note.file_path, note.line, label),
+---@param target AtlasNoteTarget
+---@return string[], AtlasUIHighlight[]
+function M.render_details(note, target)
+	local label = notes.target_label(target)
+	local note_type = type_label(note.type)
+	local location = string.format("%s:%d", note.file_path, note.line)
+	local lines = { string.format("%s · %s · %s", note_type, location, label), "", "Target: " .. target.ref }
+	local spans = {
+		{ line = 0, start_col = 0, end_col = #note_type, hl_group = select(2, M.type_style(note.type)) },
+		{ line = 0, start_col = #note_type, end_col = #lines[1], hl_group = "AtlasTextMuted" },
+		{ line = 2, start_col = 0, end_col = 7, hl_group = "AtlasTextMuted" },
 	}
-	if target then
+	if note.context then
 		table.insert(lines, "")
-		table.insert(lines, "Target: `" .. target.ref .. "`")
+		utils.append_block(
+			lines,
+			spans,
+			code_preview.render({
+				file_path = note.file_path,
+				lines = note.context.lines,
+				start_line = note.context.start_line,
+				anchor_line = note.line,
+			})
+		)
 	end
 	table.insert(lines, "")
 	vim.list_extend(lines, vim.split(note.body, "\n", { plain = true }))
 	table.insert(lines, "")
-	table.insert(lines, "Created: `" .. note.created_at .. "`")
+	table.insert(lines, "Created: " .. note.created_at)
+	table.insert(spans, { line = #lines - 1, start_col = 0, end_col = 8, hl_group = "AtlasTextMuted" })
 	if note.updated_at then
-		table.insert(lines, "Updated: `" .. note.updated_at .. "`")
+		table.insert(lines, "Updated: " .. note.updated_at)
+		table.insert(spans, { line = #lines - 1, start_col = 0, end_col = 8, hl_group = "AtlasTextMuted" })
 	end
-	return lines
+	return lines, spans
 end
 
 ---@param note AtlasNote
@@ -121,9 +131,6 @@ local function note_item(note, width, padding_x, opts)
 		footer_items = { "e edit", "d delete" }
 	end
 	local content = utils.strip_markup(note.body)
-	if outdated and opts.collapse_outdated then
-		content = nil
-	end
 	return {
 		icon = "",
 		author = author,
@@ -142,7 +149,7 @@ end
 ---@param items AtlasNote[]
 ---@param width integer
 ---@param opts AtlasNotesUIRenderOptions|nil
----@return string[], AtlasNotesUISpan[], table<integer, table>
+---@return string[], AtlasUIHighlight[], table<integer, table>
 function M.render_cards(items, width, opts)
 	opts = opts or {}
 	width = math.max(6, width)
@@ -194,7 +201,7 @@ local function cell_highlight(row, column)
 end
 
 ---@param opts AtlasNotesUIManagerRenderOptions
----@return string[], table<integer, AtlasNotesUIItem>, AtlasNotesUISpan[]
+---@return string[], table<integer, AtlasNotesUIItem>, AtlasUIHighlight[]
 function M.render_manager(opts)
 	local rows = {}
 	for index, document in ipairs(opts.documents) do

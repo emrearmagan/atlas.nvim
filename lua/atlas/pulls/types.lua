@@ -16,8 +16,7 @@
 ---@field branch string
 ---@field commit_hash string
 ---@field fetch_remote string|nil Git remote name or URL used to fetch this ref.
----@field fetch_ref string|nil Ref or refspec passed to `git fetch`.
----@field local_ref string|nil Local revision available after the fetch.
+---@field fetch_ref string|nil Remote ref used instead of `refs/heads/<branch>`.
 
 --------------------------------------------------------------------------------
 -- Links

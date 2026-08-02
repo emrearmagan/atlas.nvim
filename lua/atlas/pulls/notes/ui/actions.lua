@@ -1,13 +1,8 @@
 local editor = require("atlas.pulls.notes.ui.editor")
 local notes = require("atlas.pulls.notes")
+local notify = require("atlas.core.notify")
 
 local M = {}
-
----@param message string
----@param level integer|nil
-local function notify(message, level)
-	vim.notify("[Atlas Notes] " .. message, level or vim.log.levels.INFO)
-end
 
 ---@param state AtlasNotesUIState
 ---@return boolean
@@ -60,15 +55,15 @@ function M.new(state, refresh)
 		local selected = selected_item(state)
 		local note = selected and selected.note or nil
 		if not selected or not note then
-			notify("Select a note to edit", vim.log.levels.WARN)
+			notify.warn("Select a note to edit")
 			return
 		end
 		editor.edit(selected.target, note, function(updated, err)
 			if not updated then
-				notify(err or "Unable to update note", vim.log.levels.ERROR)
+				notify.error(err or "Unable to update note")
 				return
 			end
-			notify("Note updated")
+			notify.info("Note updated")
 			refresh()
 		end)
 	end
@@ -76,7 +71,7 @@ function M.new(state, refresh)
 	local function delete_note()
 		local selected = selected_notes(state)
 		if #selected == 0 then
-			notify("Select a note to delete", vim.log.levels.WARN)
+			notify.warn("Select a note to delete")
 			return
 		end
 		local prompt = #selected == 1 and "Delete note? [y/N]: " or string.format("Delete %d notes? [y/N]: ", #selected)
@@ -88,12 +83,12 @@ function M.new(state, refresh)
 			for _, item in ipairs(selected) do
 				local deleted, err = notes.delete(item.target, item.note.id)
 				if not deleted then
-					notify(err or "Unable to delete note", vim.log.levels.ERROR)
+					notify.error(err or "Unable to delete note")
 					refresh()
 					return
 				end
 			end
-			notify(#selected == 1 and "Note deleted" or string.format("%d notes deleted", #selected))
+			notify.info(#selected == 1 and "Note deleted" or string.format("%d notes deleted", #selected))
 			refresh()
 		end)
 	end

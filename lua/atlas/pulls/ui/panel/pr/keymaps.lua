@@ -156,7 +156,7 @@ function M.register(buf)
 				if pr == nil then
 					return
 				end
-				actions.run_action(pr, "toggle_subscription", "panel", function(_, _)
+				actions.run_action(pr, "toggle_subscription", { source = "panel" }, function(_, _)
 					require("atlas.pulls.ui.panel").render()
 				end)
 			end,

@@ -18,7 +18,7 @@ function M.setup()
 end
 
 ---@param pr PullRequest
----@return string[], table[]
+---@return string[], AtlasUIHighlight[]
 function M.pr_popup_content(pr)
 	return require("atlas.pulls.providers.github.ui.popup").content(pr)
 end

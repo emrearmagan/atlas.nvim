@@ -269,9 +269,10 @@ function M.register(session, actions)
 		help.register("Navigation", navigation, { index = 120, buffer = buf })
 	end
 
-	local explorer_actions = {
-		{
-			key = { "<CR>", "l" },
+	local explorer_actions = {}
+	add(
+		explorer_actions,
+		item("pulls.review.open_file", {
 			desc = "Open changed file",
 			index = 1,
 			callback = run(function()
@@ -281,8 +282,8 @@ function M.register(session, actions)
 				end
 			end),
 			opts = { silent = true, nowait = true },
-		},
-	}
+		})
+	)
 	add(
 		explorer_actions,
 		item("ui.show_details", {
@@ -294,36 +295,45 @@ function M.register(session, actions)
 			opts = { silent = true, nowait = true },
 		})
 	)
-	if session.explorer.grouped then
-		add(
-			explorer_actions,
-			item("ui.toggle_fold", {
-				desc = "Toggle folder",
-				index = 3,
-				callback = run(function()
-					explorer.toggle_folder(session)
-				end),
-				opts = { silent = true, nowait = true },
-			})
-		)
-		add(
-			explorer_actions,
-			item("ui.toggle_all_folds", {
-				desc = "Toggle all folders",
-				index = 4,
-				callback = run(function()
-					explorer.toggle_all_folders(session)
-				end),
-				opts = { silent = true, nowait = true },
-			})
-		)
-	end
+	add(
+		explorer_actions,
+		item("pulls.review.toggle_explorer_grouping", {
+			desc = "Toggle grouped / plain files",
+			index = 3,
+			callback = run(function()
+				explorer.toggle_grouping(session)
+			end),
+			opts = { silent = true, nowait = true },
+		})
+	)
+	add(
+		explorer_actions,
+		item("ui.toggle_fold", {
+			desc = "Toggle folder",
+			index = 4,
+			callback = run(function()
+				explorer.toggle_folder(session)
+			end),
+			opts = { silent = true, nowait = true },
+		})
+	)
+	add(
+		explorer_actions,
+		item("ui.toggle_all_folds", {
+			desc = "Toggle all folders",
+			index = 5,
+			callback = run(function()
+				explorer.toggle_all_folders(session)
+			end),
+			opts = { silent = true, nowait = true },
+		})
+	)
 	if not review_enabled then
 		add(
 			explorer_actions,
 			item("pulls.review.toggle_file_reviewed", {
 				desc = "Toggle file reviewed",
-				index = 5,
+				index = 6,
 				callback = run(actions.toggle_file_reviewed),
 				opts = { silent = true, nowait = true },
 			})
@@ -341,6 +351,28 @@ function M.register_review(session, actions)
 	for _, buf in ipairs({ session.panel.buf, session.left.buf, session.right.buf }) do
 		local review_actions = {}
 		local navigation = {}
+		if actions.toggle_approval then
+			add(
+				review_actions,
+				item("pulls.review.toggle_approval", {
+					desc = "Approve / unapprove",
+					index = 8,
+					callback = run(actions.toggle_approval),
+					opts = { silent = true, nowait = true },
+				})
+			)
+		end
+		if actions.request_changes then
+			add(
+				review_actions,
+				item("pulls.review.request_changes", {
+					desc = "Request changes",
+					index = 9,
+					callback = run(actions.request_changes),
+					opts = { silent = true, nowait = true },
+				})
+			)
+		end
 		if actions.submit_review then
 			add(
 				review_actions,
@@ -462,12 +494,16 @@ function M.register_review(session, actions)
 end
 
 local REVIEW_PANEL_ACTIONS = {
+	"pulls.review.toggle_approval",
+	"pulls.review.request_changes",
 	"pulls.review.submit_review",
 	"pulls.review.toggle_resolved",
 	"ui.open_in_browser",
 }
 
 local REVIEW_CONTENT_ACTIONS = {
+	"pulls.review.toggle_approval",
+	"pulls.review.request_changes",
 	"pulls.review.submit_review",
 	"pulls.review.toggle_resolved",
 	"pulls.review.add_pending_comment",
