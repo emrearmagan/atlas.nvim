@@ -591,9 +591,6 @@ My dotfiles include a [Pi extension that wraps this script](https://github.com/e
 
 View pipelines and their jobs, inspect their status, and read job logs directly in Atlas. Retry failed pipelines or jobs and cancel work that is still running.
 
-<!-- TODO: Replace with the final Pipelines screenshot. -->
-<img width="100%" alt="View pipelines" src="https://placehold.co/1200x675?text=View+Pipelines">
-
 ### Create Pull Requests
 
 <img align="right" width="54%" hspace="16" vspace="8" alt="Create pull request" src="https://github.com/user-attachments/assets/d6335c66-35f7-4495-b83a-53819d7ec7d5">

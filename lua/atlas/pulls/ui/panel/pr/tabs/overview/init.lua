@@ -538,23 +538,50 @@ local MERGE_CHECK_PRIORITY = {
 }
 
 ---@param check PullsMergeCheck
+---@param width integer
 ---@return BoxContentGroup
-local function render_merge_check_group(check)
+local function render_merge_check_group(check, width)
 	local pair = MERGE_CHECK_STATE[check.state] or MERGE_CHECK_STATE.muted
 	local lines = {}
 	local spans = {}
+	local content_width = math.max(2, width - (PADDING_X * 2) - 3)
 
-	local heading = string.format("%s %s", pair.icon, check.label)
-	table.insert(lines, heading)
-	table.insert(spans, { line = 0, start_col = 0, end_col = #pair.icon, hl_group = pair.hl })
+	local icon_prefix = pair.icon .. " "
+	local icon_width = vim.api.nvim_strwidth(icon_prefix)
+	local title_width = math.max(2, content_width - icon_width)
+	local title_lines = utils.wrap_line(check.label, title_width)
+	for index, title in ipairs(title_lines) do
+		local prefix = index == 1 and icon_prefix or string.rep(" ", icon_width)
+		table.insert(lines, prefix .. title)
+		if index == 1 then
+			table.insert(spans, { line = #lines - 1, start_col = 0, end_col = #pair.icon, hl_group = pair.hl })
+		end
+	end
 
 	for _, detail in ipairs(check.details or {}) do
 		local indent = "  "
-		local text = indent .. detail
-		table.insert(lines, text)
-		table.insert(spans, { line = #lines - 1, start_col = 0, end_col = #text, hl_group = "AtlasTextMuted" })
+		local detail_width = math.max(2, content_width - vim.api.nvim_strwidth(indent))
+		for _, detail_line in ipairs(utils.wrap_line(detail, detail_width)) do
+			local text = indent .. detail_line
+			table.insert(lines, text)
+			table.insert(spans, { line = #lines - 1, start_col = 0, end_col = #text, hl_group = "AtlasTextMuted" })
+		end
 	end
 
+	return { lines = lines, spans = spans }
+end
+
+---@param text string
+---@param hl_group string
+---@param width integer
+---@return BoxContentGroup
+local function render_merge_check_message_group(text, hl_group, width)
+	local content_width = math.max(2, width - (PADDING_X * 2) - 3)
+	local lines = utils.wrap_line(text, content_width)
+	local spans = {}
+	for index, line in ipairs(lines) do
+		table.insert(spans, { line = index - 1, start_col = 0, end_col = #line, hl_group = hl_group })
+	end
 	return { lines = lines, spans = spans }
 end
 
@@ -574,12 +601,10 @@ local function render_merge_checks(_pr, width, lines, spans)
 		utils.append_block(
 			lines,
 			spans,
-			box.render({
-				{
-					lines = { loading_text },
-					spans = { { line = 0, start_col = 0, end_col = #loading_text, hl_group = "AtlasTextMuted" } },
-				},
-			}, { width = width, padding_x = PADDING_X })
+			box.render(
+				{ render_merge_check_message_group(loading_text, "AtlasTextMuted", width) },
+				{ width = width, padding_x = PADDING_X }
+			)
 		)
 		table.insert(lines, "")
 		return
@@ -590,12 +615,10 @@ local function render_merge_checks(_pr, width, lines, spans)
 		utils.append_block(
 			lines,
 			spans,
-			box.render({
-				{
-					lines = { err_text },
-					spans = { { line = 0, start_col = 0, end_col = #err_text, hl_group = "AtlasLogError" } },
-				},
-			}, { width = width, padding_x = PADDING_X })
+			box.render(
+				{ render_merge_check_message_group(err_text, "AtlasLogError", width) },
+				{ width = width, padding_x = PADDING_X }
+			)
 		)
 		table.insert(lines, "")
 		return
@@ -613,7 +636,7 @@ local function render_merge_checks(_pr, width, lines, spans)
 
 	local groups = {}
 	for _, check in ipairs(checks) do
-		table.insert(groups, render_merge_check_group(check))
+		table.insert(groups, render_merge_check_group(check, width))
 	end
 
 	utils.append_block(lines, spans, box.render(groups, { width = width, padding_x = PADDING_X }))
