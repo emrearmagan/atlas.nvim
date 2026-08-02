@@ -589,7 +589,11 @@ My dotfiles include a [Pi extension that wraps this script](https://github.com/e
 
 ### View Pipelines
 
+<img align="left" width="54%" hspace="16" vspace="8" alt="View pipelines" src="https://github.com/user-attachments/assets/c625c4e8-b1ad-4772-b46b-24718ba6fbb7">
+
 View pipelines and their jobs, inspect their status, and read job logs directly in Atlas. Retry failed pipelines or jobs and cancel work that is still running.
+
+<br clear="both">
 
 ### Create Pull Requests
 
