@@ -953,7 +953,6 @@ function M.available(ctx)
 
 	if has_pr(ctx) then
 		local shared_actions = require("atlas.pulls.actions")
-		local provider = require("atlas.pulls.providers.github")
 		table.insert(out, {
 			id = "open_pipelines",
 			label = "Open Pipelines",

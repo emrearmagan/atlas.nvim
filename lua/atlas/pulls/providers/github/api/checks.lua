@@ -396,7 +396,7 @@ function M.get_pipeline_job_log(pr, _pipeline, job, on_done)
 	end
 
 	local endpoint = string.format("repos/%s/actions/jobs/%d/logs", repo_slug, job_id)
-	return cli.gh_text({ "api", "--allow-escape-sequences", endpoint }, on_done, {
+	return cli.gh_text({ "api", endpoint }, on_done, {
 		action = "Fetch workflow job log",
 		repo = repo_slug,
 		job_id = job_id,

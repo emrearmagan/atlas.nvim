@@ -373,7 +373,7 @@ local function render_pipelines(_pr, width, lines, spans, line_map)
 			url = tostring(pipeline.url or ""),
 			children = {},
 		}
-		for _, job in ipairs(pipeline.jobs) do
+		for _, job in ipairs(pipeline.jobs or {}) do
 			local job_state = tostring(job.state or "UNKNOWN"):upper()
 			local job_icon, job_icon_hl = icons.pulls_status(job_state:lower())
 			table.insert(row.children, {

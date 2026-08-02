@@ -312,7 +312,6 @@ function M.available(ctx)
 	-- Add shared actions
 	if has_pr(ctx) then
 		local shared_actions = require("atlas.pulls.actions")
-		local provider = require("atlas.pulls.providers.bitbucket")
 		table.insert(out, {
 			id = "open_pipelines",
 			label = "Open Pipelines",

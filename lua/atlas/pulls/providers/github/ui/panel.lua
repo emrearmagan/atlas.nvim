@@ -205,10 +205,15 @@ function M.fetches(pr, refresh, opts)
 	end
 
 	overview_state.pipelines = "loading"
-	track_panel(provider.fetch_pipelines(pr, { force_refresh = force }, function(pipelines, err)
-		overview_state.pipelines = err and err or (pipelines or {})
+	if provider and type(provider.fetch_pipelines) == "function" then
+		track_panel(provider.fetch_pipelines(pr, { force_refresh = force }, function(pipelines, err)
+			overview_state.pipelines = err and err or (pipelines or {})
+			refresh()
+		end))
+	else
+		overview_state.pipelines = {}
 		refresh()
-	end))
+	end
 
 	local panel_state = require("atlas.pulls.ui.panel.pr.state")
 	panel_state.diffstat = "loading"
