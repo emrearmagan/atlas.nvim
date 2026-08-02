@@ -9,7 +9,9 @@ local logger = require("atlas.core.logger")
 
 ---@class BitbucketActionContext
 ---@field pr PullRequest|nil
----@field source "main"|"panel"|nil
+---@field source "main"|"panel"|"diff"|nil
+---@field current_user PullsUser|nil
+---@field notify fun(level: "loading"|"success"|"info"|"warn"|"error", message: string, duration: integer|nil)|nil
 
 ---@class BitbucketActionDef
 ---@field id BitbucketActionId|string
@@ -23,11 +25,33 @@ local function has_pr(ctx)
 	return ctx.pr ~= nil and ctx.pr.id ~= nil
 end
 
+---@param pr PullRequest
+---@param current_user PullsUser
+---@return boolean
+local function is_approved(pr, current_user)
+	for _, participant in ipairs(pr._raw.participants or {}) do
+		local user = participant.user or {}
+		if tostring(user.account_id or user.uuid or "") == current_user.id then
+			return participant.approved == true or participant.state == "approved"
+		end
+	end
+	return false
+end
+
+---@param ctx BitbucketActionContext
+---@param level "loading"|"success"|"warn"|"error"|"info"
+---@param message string
+---@param duration integer|nil
+local function notify(ctx, level, message, duration)
+	local callback = ctx.notify or footer.notify
+	callback(level, message, duration)
+end
+
 ---@type BitbucketActionDef[]
 local ACTIONS = {
 	{
-		id = "approve",
-		label = "Approve",
+		id = "toggle_approval",
+		label = "Approve / Unapprove",
 		is_available = function(ctx)
 			if not has_pr(ctx) or ctx.pr == nil then
 				return false, "No PR selected"
@@ -43,17 +67,36 @@ local ACTIONS = {
 				done(nil, "No PR selected")
 				return
 			end
+			if ctx.current_user == nil then
+				notify(ctx, "error", "Current user is unavailable")
+				done(nil, "Current user is unavailable")
+				return
+			end
 
-			footer.notify("loading", "Approving PR...")
-			pullrequests.approve(pr, function(_, err)
-				if err ~= nil then
-					footer.notify("error", string.format("Approve failed: %s", tostring(err)))
-					done(nil, tostring(err))
+			notify(ctx, "loading", "Checking approval...")
+			pullrequests.fetch_pullrequest(pr.workspace, pr.repo, pr.id, { force_load = true }, function(fresh_pr, err)
+				if not fresh_pr then
+					local message = tostring(err or "Unable to load pull request")
+					notify(ctx, "error", message)
+					done(nil, message)
 					return
 				end
 
-				footer.notify("success", "PR approved", 1200)
-				done({ changed_pr = true, message = "Approved" }, nil)
+				local approved = is_approved(fresh_pr, ctx.current_user)
+				local update = approved and pullrequests.unapprove or pullrequests.approve
+				notify(ctx, "loading", approved and "Unapproving PR..." or "Approving PR...")
+				update(fresh_pr, function(_, update_err)
+					if update_err ~= nil then
+						local action = approved and "Unapprove" or "Approve"
+						notify(ctx, "error", string.format("%s failed: %s", action, tostring(update_err)))
+						done(nil, tostring(update_err))
+						return
+					end
+
+					local message = approved and "Unapproved" or "Approved"
+					notify(ctx, "success", "PR " .. message:lower(), 1200)
+					done({ changed_pr = true, message = message }, nil)
+				end)
 			end)
 		end,
 	},
@@ -76,15 +119,15 @@ local ACTIONS = {
 				return
 			end
 
-			footer.notify("loading", "Requesting changes...")
+			notify(ctx, "loading", "Requesting changes...")
 			pullrequests.request_changes(pr, function(_, err)
 				if err ~= nil then
-					footer.notify("error", string.format("Request changes failed: %s", tostring(err)))
+					notify(ctx, "error", string.format("Request changes failed: %s", tostring(err)))
 					done(nil, tostring(err))
 					return
 				end
 
-				footer.notify("success", "Changes requested", 1200)
+				notify(ctx, "success", "Changes requested", 1200)
 				done({ changed_pr = true, message = "Changes requested" }, nil)
 			end)
 		end,

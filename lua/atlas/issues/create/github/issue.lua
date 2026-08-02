@@ -3,6 +3,7 @@ local M = {}
 local form = require("atlas.ui.popups.form")
 local spinner = require("atlas.ui.popups.spinner")
 local multi_select = require("atlas.ui.popups.multi_select")
+local notify = require("atlas.core.notify")
 local pulls_helper = require("atlas.pulls.ui.main.helper")
 local icons = require("atlas.ui.shared.icons")
 local templates = require("atlas.issues.templates")
@@ -33,22 +34,6 @@ local templates = require("atlas.issues.templates")
 ---@field is_submitting boolean
 ---@field pickers CreateIssuePickers
 ---@field on_done fun(result: GitHubIssueEditorResult|nil, err: string|nil)|nil
-
-local function notify(level, msg)
-	vim.notify("[Atlas] " .. tostring(msg), level)
-end
-
-local function notify_info(msg)
-	notify(vim.log.levels.INFO, msg)
-end
-
-local function notify_warn(msg)
-	notify(vim.log.levels.WARN, msg)
-end
-
-local function notify_error(msg)
-	notify(vim.log.levels.ERROR, msg)
-end
 
 ---@param repo_slug string
 ---@return CreateIssuePickers
@@ -208,7 +193,7 @@ end
 ---@param issue_state CreateIssueState
 local function pick_assignees(issue_state)
 	if not issue_state.pickers.list_assignees then
-		notify_warn("Assignee picker is not available")
+		notify.warn("Assignee picker is not available")
 		return
 	end
 
@@ -217,11 +202,11 @@ local function pick_assignees(issue_state)
 		vim.schedule(function()
 			spinner.stop()
 			if err then
-				notify_error("Failed to load assignees: " .. tostring(err))
+				notify.error("Failed to load assignees: " .. tostring(err))
 				return
 			end
 			if type(items) ~= "table" or #items == 0 then
-				notify_warn("No assignees available")
+				notify.warn("No assignees available")
 				return
 			end
 
@@ -252,7 +237,7 @@ end
 ---@param issue_state CreateIssueState
 local function pick_labels(issue_state)
 	if not issue_state.pickers.list_labels then
-		notify_warn("Label picker is not available")
+		notify.warn("Label picker is not available")
 		return
 	end
 
@@ -261,11 +246,11 @@ local function pick_labels(issue_state)
 		vim.schedule(function()
 			spinner.stop()
 			if err then
-				notify_error("Failed to load labels: " .. tostring(err))
+				notify.error("Failed to load labels: " .. tostring(err))
 				return
 			end
 			if type(items) ~= "table" or #items == 0 then
-				notify_warn("No labels available")
+				notify.warn("No labels available")
 				return
 			end
 
@@ -291,7 +276,7 @@ end
 ---@param issue_state CreateIssueState
 local function pick_milestone(issue_state)
 	if not issue_state.pickers.list_milestones then
-		notify_warn("Milestone picker is not available")
+		notify.warn("Milestone picker is not available")
 		return
 	end
 
@@ -300,7 +285,7 @@ local function pick_milestone(issue_state)
 		vim.schedule(function()
 			spinner.stop()
 			if err then
-				notify_error("Failed to load milestones: " .. tostring(err))
+				notify.error("Failed to load milestones: " .. tostring(err))
 				return
 			end
 
@@ -337,7 +322,7 @@ local function submit(issue_state)
 
 	local title = get_title(issue_state)
 	if title == "" then
-		notify_warn("Title is required")
+		notify.warn("Title is required")
 		return
 	end
 
@@ -368,7 +353,7 @@ local function submit(issue_state)
 			spinner.stop()
 
 			if err then
-				notify_error("Create issue failed: " .. tostring(err))
+				notify.error("Create issue failed: " .. tostring(err))
 				if issue_state.on_done then
 					issue_state.on_done(nil, err)
 				end
@@ -377,10 +362,10 @@ local function submit(issue_state)
 
 			local url = result and result.url or nil
 			if type(url) == "string" and url ~= "" then
-				notify_info("Issue created: " .. url)
+				notify.info("Issue created: " .. url)
 				pcall(vim.fn.setreg, "+", url)
 			else
-				notify_info("Issue created")
+				notify.info("Issue created")
 			end
 
 			if issue_state.on_done then
@@ -399,13 +384,13 @@ end
 ---@param opts GitHubIssueEditorOpts
 function M.open(opts)
 	if type(opts) ~= "table" then
-		notify_warn("create_issue.open: missing options")
+		notify.warn("create_issue.open: missing options")
 		return
 	end
 
 	local repo_slug = tostring(opts.repo_slug or "")
 	if repo_slug == "" then
-		notify_error("create_issue.open: repo_slug is required")
+		notify.error("create_issue.open: repo_slug is required")
 		return
 	end
 

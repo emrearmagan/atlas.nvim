@@ -78,37 +78,16 @@ function M.is_open(owner)
 	return state.owner == owner and valid_win(state.win) and valid_buf(state.buf)
 end
 
----@param lines string[]
----@return integer
-local function max_line_width(lines)
-	local width = 1
-	for _, line in ipairs(lines) do
-		width = math.max(width, vim.fn.strdisplaywidth(line))
-	end
-	return width
-end
-
 ---@param buf integer
----@param lines string[]
 ---@param spans AtlasThreadV2Span[]
-local function apply_spans(buf, lines, spans)
+local function apply_spans(buf, spans)
 	vim.api.nvim_buf_clear_namespace(buf, namespace, 0, -1)
 	for _, span in ipairs(spans) do
-		local line = tonumber(span.line)
-		local start_col = tonumber(span.start_col)
-		local end_col = tonumber(span.end_col)
-		if line and start_col and end_col and line >= 0 and line < #lines then
-			local line_length = #lines[line + 1]
-			start_col = math.max(0, math.min(start_col, line_length))
-			end_col = math.max(start_col, math.min(end_col, line_length))
-			if end_col > start_col then
-				vim.api.nvim_buf_set_extmark(buf, namespace, line, start_col, {
-					end_row = line,
-					end_col = end_col,
-					hl_group = span.hl_group,
-				})
-			end
-		end
+		vim.api.nvim_buf_set_extmark(buf, namespace, span.line, span.start_col, {
+			end_row = span.line,
+			end_col = span.end_col,
+			hl_group = span.hl_group,
+		})
 	end
 end
 
@@ -126,17 +105,6 @@ local function popup_content(opts)
 		padding_x = 1,
 		toggle_resolved_key = toggle_key,
 	})
-	width = math.max(1, math.min(max_line_width(lines), available_width))
-	if width < math.min(100, available_width) then
-		lines, spans, line_map = threads.render_threads(opts.nodes, width, {
-			expanded = function()
-				return true
-			end,
-			can_action = opts.can_action,
-			padding_x = 1,
-			toggle_resolved_key = toggle_key,
-		})
-	end
 
 	local height = math.max(1, math.min(#lines, math.max(vim.o.lines - 6, 1)))
 	local row = math.max(0, math.floor((vim.o.lines - height) / 2) - 1)
@@ -166,7 +134,7 @@ function M.open(opts)
 	vim.api.nvim_set_option_value("filetype", "atlas-review-thread", { buf = buf })
 	vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
 	vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
-	apply_spans(buf, lines, spans)
+	apply_spans(buf, spans)
 
 	local title = opts.title or " Review thread "
 	local win = vim.api.nvim_open_win(buf, true, {
@@ -256,7 +224,7 @@ function M.open(opts)
 				vim.api.nvim_set_option_value("modifiable", true, { buf = buf })
 				vim.api.nvim_buf_set_lines(buf, 0, -1, false, updated_lines)
 				vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
-				apply_spans(buf, updated_lines, updated_spans)
+				apply_spans(buf, updated_spans)
 				state.line_map = updated_map
 				vim.api.nvim_win_set_config(win, {
 					relative = "editor",

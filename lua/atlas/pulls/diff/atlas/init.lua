@@ -5,6 +5,7 @@ local explorer = require("atlas.pulls.diff.atlas.explorer")
 local footer = require("atlas.pulls.diff.atlas.footer")
 local git = require("atlas.pulls.diff.atlas.git")
 local keymaps = require("atlas.pulls.diff.atlas.keymaps")
+local notify = require("atlas.core.notify")
 local renderer = require("atlas.pulls.diff.atlas.renderer")
 local state = require("atlas.pulls.diff.atlas.state")
 local comments = require("atlas.pulls.diff.shared.comments")
@@ -258,7 +259,7 @@ local function open_commits_panel(session)
 	then
 		return
 	end
-	local height = math.max(1, math.floor(vim.api.nvim_win_get_height(panel_win) * 0.3))
+	local height = math.max(1, math.floor(vim.api.nvim_win_get_height(panel_win) * 0.2))
 	local commits_win = vim.api.nvim_win_call(panel_win, function()
 		vim.cmd("belowright " .. height .. "split")
 		return vim.api.nvim_get_current_win()
@@ -800,7 +801,7 @@ toggle_layout = function(session)
 		return
 	end
 	if not session.right.win or not vim.api.nvim_win_is_valid(session.right.win) then
-		vim.notify("[Atlas Diff] The diff layout changed unexpectedly; closing the view", vim.log.levels.WARN)
+		notify.warn("The diff layout changed unexpectedly; closing the view")
 		close(session)
 		return
 	end
@@ -871,7 +872,7 @@ toggle_compact = function(session)
 		return
 	end
 	if not session.right.win or not vim.api.nvim_win_is_valid(session.right.win) then
-		vim.notify("[Atlas Diff] The diff layout changed unexpectedly; closing the view", vim.log.levels.WARN)
+		notify.warn("The diff layout changed unexpectedly; closing the view")
 		close(session)
 		return
 	end

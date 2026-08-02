@@ -147,7 +147,6 @@ function M.fetch_pullrequests(view_repos, opts, on_done)
 	local user, token, auth_err = service.get_auth()
 	if auth_err then
 		logger.logerror("Bitbucket auth missing", { error = auth_err })
-		vim.notify("Atlas Bitbucket: " .. auth_err, vim.log.levels.ERROR)
 		on_done({}, { tostring(auth_err) })
 		return nil
 	end
@@ -331,6 +330,18 @@ function M.approve(pr, on_done)
 		return nil
 	end
 	return service.request("POST", approve_url, nil, nil, on_done)
+end
+
+---@param pr PullRequest
+---@param on_done fun(result: table|nil, err: string|nil)
+---@return { job_id: integer, cancel: fun() }|nil
+function M.unapprove(pr, on_done)
+	local approve_url = pr_link(pr, "approve")
+	if approve_url == "" then
+		on_done(nil, "No approve URL available")
+		return nil
+	end
+	return service.request("DELETE", approve_url, nil, nil, on_done)
 end
 
 ---@param pr PullRequest

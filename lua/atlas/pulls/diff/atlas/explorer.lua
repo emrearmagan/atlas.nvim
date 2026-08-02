@@ -488,6 +488,20 @@ function M.toggle_folder(session)
 end
 
 ---@param session AtlasNativeDiffSession
+---@return boolean grouped
+function M.toggle_grouping(session)
+	local file_index = M.file_at_cursor(session) or session.pending_index or session.selected_index
+	session.explorer.grouped = not session.explorer.grouped
+	session.refresh_ui()
+
+	local line = M.line_for_file(session, file_index)
+	if line and session.panel.win and vim.api.nvim_win_is_valid(session.panel.win) then
+		vim.api.nvim_win_set_cursor(session.panel.win, { line, 0 })
+	end
+	return session.explorer.grouped
+end
+
+---@param session AtlasNativeDiffSession
 ---@return boolean
 function M.toggle_all_folders(session)
 	if not session.explorer.grouped then

@@ -59,30 +59,46 @@ local PROVIDER_ACTIONS_MODULES = {
 	bitbucket = "atlas.pulls.providers.bitbucket.actions",
 }
 
+---@class PullsRunActionOptions
+---@field source "main"|"panel"|"diff"|nil
+---@field current_user PullsUser|nil
+---@field notify fun(level: "loading"|"success"|"info"|"warn"|"error", message: string, duration: integer|nil)|nil
+
 ---@param pr PullRequest
 ---@param action_id string
----@param source "main"|"panel"|nil
+---@return boolean
+function M.is_action_available(pr, action_id)
+	local mod_path = PROVIDER_ACTIONS_MODULES[pr.provider]
+	if not mod_path then
+		return false
+	end
+	local registry = require(mod_path .. ".registry")
+	local action = registry.find(action_id)
+	return action ~= nil and action.is_available({ pr = pr, source = nil }) == true
+end
+
+---@param pr PullRequest
+---@param action_id string
+---@param opts PullsRunActionOptions|nil
 ---@param on_done fun(result: PullsActionResult|nil, err: string|nil)|nil
-function M.run_action(pr, action_id, source, on_done)
-	local p = provider()
-	local mod_path = p and PROVIDER_ACTIONS_MODULES[p.id]
+function M.run_action(pr, action_id, opts, on_done)
+	opts = opts or {}
+	local mod_path = PROVIDER_ACTIONS_MODULES[pr.provider]
 	if not mod_path then
 		if on_done then
 			on_done(nil, "Provider does not support actions")
 		end
 		return
 	end
-	local ok, mod = pcall(require, mod_path)
-	if not ok or type(mod) ~= "table" or type(mod.run) ~= "function" then
-		if on_done then
-			on_done(nil, "Provider actions module unavailable")
-		end
-		return
-	end
-	mod.run(action_id, { pr = pr, source = source }, function(result, err)
-		if result ~= nil and result.changed_pr then
-			local controller = require("atlas.pulls.ui.main.controller")
-			controller.refresh_pr(pr)
+	local mod = require(mod_path)
+	mod.run(action_id, {
+		pr = pr,
+		source = opts.source,
+		current_user = opts.current_user,
+		notify = opts.notify,
+	}, function(result, err)
+		if opts.source ~= nil and opts.source ~= "diff" and result ~= nil and result.changed_pr then
+			require("atlas.pulls.ui.main.controller").refresh_pr(pr)
 		end
 		if on_done then
 			on_done(result, err)
@@ -113,7 +129,7 @@ end
 ---@param on_done fun(err: string|nil)|nil
 ---@return { cancel: fun() }|nil
 function M.open_diff_range(opts, on_done)
-	return require("atlas.pulls.diff").open(opts, on_done)
+	return require("atlas.pulls.diff").open_range(opts, on_done)
 end
 
 ---@param value string

@@ -1,6 +1,7 @@
 local actions = require("atlas.pulls.notes.ui.actions")
 local keymaps = require("atlas.pulls.notes.ui.keymaps")
 local notes = require("atlas.pulls.notes")
+local notify = require("atlas.core.notify")
 local renderer = require("atlas.pulls.notes.ui.renderer")
 
 local M = {}
@@ -26,12 +27,6 @@ local state = {
 	documents = {},
 	line_map = {},
 }
-
----@param message string
----@param level integer|nil
-local function notify(message, level)
-	vim.notify("[Atlas Notes] " .. message, level or vim.log.levels.INFO)
-end
 
 ---@return boolean
 local function valid_buffer()
@@ -110,12 +105,14 @@ local function refresh()
 		local target = state.target_filter
 		local items
 		items, err = notes.list(target)
-		documents = items and #items > 0 and { { target = target, notes = items } } or (items and {} or nil)
+		if items then
+			documents = #items > 0 and { { target = target, notes = items } } or {}
+		end
 	else
 		documents, err = notes.documents()
 	end
 	if not documents then
-		notify(err or "Unable to read notes", vim.log.levels.ERROR)
+		notify.error(err or "Unable to read notes")
 		return
 	end
 	state.documents = documents
@@ -157,7 +154,7 @@ function M.open(opts)
 		target, err = notes.resolve_target(opts.target)
 	end
 	if err then
-		notify(err, vim.log.levels.ERROR)
+		notify.error(err)
 		return
 	end
 

@@ -2,6 +2,7 @@ local M = {}
 
 local md_editor = require("atlas.ui.popups.editor")
 local footer = require("atlas.ui.components.footer")
+local renderer = require("atlas.issues.ui.panel.issue.tabs.conversation.renderer")
 local state = require("atlas.issues.ui.panel.issue.tabs.conversation.state")
 
 ---@return IssuesProvider|nil
@@ -99,14 +100,14 @@ function M.reply(issue, entry, refresh)
 	local initial_text = mention ~= "" and (mention .. " ") or ""
 
 	local parent = entry.thread_root or comment
-
 	md_editor.open({
 		key = "issue-comment-reply-" .. tostring(comment.id),
 		title = " Reply to Comment ",
 		width_ratio = 0.5,
 		height_ratio = 0.18,
 		initial_text = initial_text,
-		completion = get_completion(),
+		completion = completion,
+		preview = renderer.render_comment(comment, math.max(math.floor(vim.o.columns * 0.5), 80)),
 		on_save = function(text)
 			if not text or vim.trim(text) == "" then
 				return

@@ -29,8 +29,8 @@ end
 
 local function max_line_width(lines)
 	local width = 1
-	for _, line in ipairs(lines or {}) do
-		width = math.max(width, vim.fn.strdisplaywidth(tostring(line or "")))
+	for _, line in ipairs(lines) do
+		width = math.max(width, vim.fn.strdisplaywidth(line))
 	end
 	return width
 end
@@ -67,33 +67,22 @@ local function ensure_buf()
 	return buf
 end
 
-local function apply_highlights(target_buf, lines, highlights)
+---@param target_buf integer
+---@param highlights AtlasUIHighlight[]
+local function apply_highlights(target_buf, highlights)
 	vim.api.nvim_buf_clear_namespace(target_buf, ns, 0, -1)
 
-	for _, h in ipairs(highlights or {}) do
-		local row = tonumber(h.row)
-		local start_col = tonumber(h.col or h.start_col)
-		local end_col = tonumber(h.end_col)
-		local hl_group = h.hl_group or h.hl
-
-		if row ~= nil and start_col ~= nil and end_col ~= nil and type(hl_group) == "string" then
-			if row >= 0 and row < #lines then
-				local line_len = #lines[row + 1]
-				if end_col == -1 then
-					end_col = line_len
-				end
-
-				start_col = math.max(0, math.min(start_col, line_len))
-				end_col = math.max(start_col, math.min(end_col, line_len))
-
-				if end_col > start_col then
-					vim.api.nvim_buf_set_extmark(target_buf, ns, row, start_col, {
-						end_row = row,
-						end_col = end_col,
-						hl_group = hl_group,
-					})
-				end
-			end
+	for _, highlight in ipairs(highlights) do
+		if highlight.line_hl_group then
+			vim.api.nvim_buf_set_extmark(target_buf, ns, highlight.line, 0, {
+				line_hl_group = highlight.line_hl_group,
+			})
+		else
+			vim.api.nvim_buf_set_extmark(target_buf, ns, highlight.line, highlight.start_col, {
+				end_row = highlight.line,
+				end_col = highlight.end_col,
+				hl_group = highlight.hl_group,
+			})
 		end
 	end
 end
@@ -103,7 +92,7 @@ function M.close()
 	delete_buf()
 end
 
----@param opts { lines: string[], highlights?: table[], source_buf?: integer }
+---@param opts { lines: string[], highlights: AtlasUIHighlight[]|nil, source_buf: integer|nil }
 function M.show(opts)
 	opts = opts or {}
 	local lines = opts.lines or {}
@@ -122,7 +111,7 @@ function M.show(opts)
 	vim.api.nvim_set_option_value("modifiable", true, { buf = target_buf })
 	vim.api.nvim_buf_set_lines(target_buf, 0, -1, false, lines)
 	vim.api.nvim_set_option_value("modifiable", false, { buf = target_buf })
-	apply_highlights(target_buf, lines, opts.highlights)
+	apply_highlights(target_buf, opts.highlights or {})
 
 	win = vim.api.nvim_open_win(target_buf, false, popup_config(lines))
 	vim.api.nvim_set_option_value(

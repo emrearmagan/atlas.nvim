@@ -423,4 +423,12 @@ function M.render_threads(nodes, width, opts)
 	return threadsv2.render(rendered, width, threads_opts(opts.padding_x or 1))
 end
 
+---@param comment PullsComment
+---@param width integer
+---@return AtlasMarkdownEditorPreview
+function M.render_comment(comment, width)
+	local lines, spans = M.render_threads({ { comment = comment, children = {} } }, width, { padding_x = 1 })
+	return { lines = lines, highlights = spans }
+end
+
 return M

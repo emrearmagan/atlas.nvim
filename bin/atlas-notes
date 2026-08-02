@@ -18,8 +18,8 @@ Options:
   --file <path>          Repository-relative file path.
   --line <number>        1-based line number in the pull request head.
   --body <text>          Note text.
-  --context <source>     Source line Atlas hashes to detect an outdated note.
-                         Without it, the note is always outdated.
+  --context <source>     Source line saved for previews and used to detect an
+                         outdated note. Without it, the note is always outdated.
   --type <type>          Note type: issue, suggestion, note, or praise.
                          Defaults to note.
 ]]
@@ -82,11 +82,12 @@ if command == "add" then
 		fail("--line must be a positive integer")
 	end
 	local note_target = target(required(options, "target"))
+	local context = options.context
 	local note, err = notes.add(note_target, {
 		file_path = file_path,
 		line = line,
 		body = required(options, "body"),
-		context = options.context,
+		context = context and { start_line = line, lines = { context } } or nil,
 		type = options.type,
 	})
 	if not note then

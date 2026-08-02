@@ -9,7 +9,8 @@ local multi_select = require("atlas.ui.popups.multi_select")
 
 ---@class GitHubActionContext
 ---@field pr PullRequest|nil
----@field source "main"|"panel"|nil
+---@field source "main"|"panel"|"diff"|nil
+---@field notify fun(level: "loading"|"success"|"info"|"warn"|"error", message: string, duration: integer|nil)|nil
 
 ---@class GitHubActionDef
 ---@field id GitHubActionId|string
@@ -27,6 +28,15 @@ end
 ---@return string
 local function repo_slug(ctx)
 	return tostring((ctx.pr or {}).repo_full_name or "")
+end
+
+---@param ctx GitHubActionContext
+---@param level "loading"|"success"|"warn"|"error"|"info"
+---@param message string
+---@param duration integer|nil
+local function notify(ctx, level, message, duration)
+	local callback = ctx.notify or footer.notify
+	callback(level, message, duration)
 end
 
 ---@type GitHubActionDef[]
@@ -57,7 +67,7 @@ local ACTIONS = {
 				return
 			end
 
-			footer.notify("loading", "Checking approval...")
+			notify(ctx, "loading", "Checking approval...")
 
 			local gql = [[
 				query($owner: String!, $name: String!, $number: Int!) {
@@ -85,7 +95,7 @@ local ACTIONS = {
 				"query=" .. gql,
 			}, function(result, err)
 				if err then
-					footer.notify("error", tostring(err))
+					notify(ctx, "error", tostring(err))
 					done(nil, tostring(err))
 					return
 				end
@@ -106,7 +116,7 @@ local ACTIONS = {
 						or "Dismissing changes request..."
 					local success_msg = own_active_state == "APPROVED" and "PR unapproved"
 						or "Changes request dismissed"
-					footer.notify("loading", loading_msg)
+					notify(ctx, "loading", loading_msg)
 					cli.gh({
 						"api",
 						"-X",
@@ -121,22 +131,22 @@ local ACTIONS = {
 						"message=Dismissed by reviewer",
 					}, function(_, dismiss_err)
 						if dismiss_err then
-							footer.notify("error", string.format("Dismiss failed: %s", tostring(dismiss_err)))
+							notify(ctx, "error", string.format("Dismiss failed: %s", tostring(dismiss_err)))
 							done(nil, tostring(dismiss_err))
 							return
 						end
-						footer.notify("success", success_msg, 1200)
+						notify(ctx, "success", success_msg, 1200)
 						done({ changed_pr = true, message = success_msg }, nil)
 					end)
 				else
-					footer.notify("loading", "Approving PR...")
+					notify(ctx, "loading", "Approving PR...")
 					comments.approve_review(pr, function(ok, approve_err)
 						if not ok then
-							footer.notify("error", string.format("Approve failed: %s", tostring(approve_err)))
+							notify(ctx, "error", string.format("Approve failed: %s", tostring(approve_err)))
 							done(nil, tostring(approve_err))
 							return
 						end
-						footer.notify("success", "PR approved", 1200)
+						notify(ctx, "success", "PR approved", 1200)
 						done({ changed_pr = true, message = "Approved" }, nil)
 					end)
 				end
@@ -173,15 +183,15 @@ local ACTIONS = {
 					body = "Changes requested"
 				end
 
-				footer.notify("loading", "Requesting changes...")
+				notify(ctx, "loading", "Requesting changes...")
 				comments.request_changes_review(pr, body, function(ok, err)
 					if not ok then
-						footer.notify("error", string.format("Request changes failed: %s", tostring(err)))
+						notify(ctx, "error", string.format("Request changes failed: %s", tostring(err)))
 						done(nil, tostring(err))
 						return
 					end
 
-					footer.notify("success", "Changes requested", 1200)
+					notify(ctx, "success", "Changes requested", 1200)
 					done({ changed_pr = true, message = "Changes requested" }, nil)
 				end)
 			end)

@@ -4,6 +4,7 @@ local icons = require("atlas.ui.shared.icons")
 local footer = require("atlas.ui.components.footer")
 local async_picker = require("atlas.ui.components.async_picker")
 local issues_api = require("atlas.issues.providers.jira.api.issues")
+local notify = require("atlas.core.notify")
 local transitions_api = require("atlas.issues.providers.jira.api.transitions")
 local users_api = require("atlas.issues.providers.jira.api.users")
 local issues_state = require("atlas.issues.state")
@@ -470,10 +471,6 @@ local ACTIONS = {
 			local projects_api = require("atlas.issues.providers.jira.api.projects")
 			local md_to_adf = require("atlas.issues.providers.jira.converted.markdown")
 			local issue_editor = require("atlas.issues.create.jira.issue")
-			local function notify_create(message, level, duration)
-				vim.notify("[Atlas] " .. message, level, { timeout = duration })
-			end
-
 			local function run_create(project_key)
 				issue_editor.open(function(fields, submit_done)
 					local issue_type = fields.issue_type
@@ -533,21 +530,16 @@ local ACTIONS = {
 									local update = { description = raw_desc }
 									issues_api.update_issue(result.key, update, function(ok)
 										if ok then
-											notify_create(
-												string.format("Created %s", result.key),
-												vim.log.levels.INFO,
-												2000
-											)
+											notify.info(string.format("Created %s", result.key), { timeout = 2000 })
 											submit_done(true, nil)
 											done(
 												{ changed_issue_key = result.key, message = "Created " .. result.key },
 												nil
 											)
 										else
-											notify_create(
+											notify.warn(
 												"Issue created but failed to set description",
-												vim.log.levels.WARN,
-												3000
+												{ timeout = 3000 }
 											)
 											submit_done(true, "Description not set")
 											done(
@@ -559,7 +551,7 @@ local ACTIONS = {
 									return
 								end
 
-								notify_create(string.format("Created %s", result.key), vim.log.levels.INFO, 2000)
+								notify.info(string.format("Created %s", result.key), { timeout = 2000 })
 								submit_done(true, nil)
 								done({
 									changed_issue_key = result.key,
@@ -689,7 +681,7 @@ local ACTIONS = {
 					run_create(item.value.key)
 				end,
 				on_cancel = function()
-					notify_create("Create issue cancelled", vim.log.levels.INFO, 1200)
+					notify.info("Create issue cancelled", { timeout = 1200 })
 					done({ changed_issue_key = nil, message = "Create issue cancelled" }, nil)
 				end,
 			})

@@ -124,15 +124,6 @@ function M.register(buf, views)
 		})
 	)
 
-	table.insert(items, {
-		key = "K",
-		desc = "Show issue details",
-		index = 4,
-		callback = function()
-			controller.show_issue_details(buf)
-		end,
-	})
-
 	utils.insert_if(
 		items,
 		item("ui.refresh", {
@@ -324,7 +315,6 @@ function M.remove(buf)
 	utils.insert_if(items, item("ui.show_details", { key = "" }))
 	utils.insert_if(items, item("ui.toggle_fold", { key = "" }))
 	utils.insert_if(items, item("ui.toggle_all_folds", { key = "" }))
-	table.insert(items, { key = "K" })
 
 	help.remove(provider_name, items, { buffer = buf })
 end

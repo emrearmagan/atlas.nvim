@@ -82,8 +82,6 @@ function M.open(message, on_cancel, target)
 		vim.api.nvim_set_current_win(win)
 	else
 		local source_win = vim.api.nvim_get_current_win()
-		number = vim.wo[source_win].number
-		relativenumber = vim.wo[source_win].relativenumber
 		statuscolumn = vim.wo[source_win].statuscolumn
 		statusline = vim.wo[source_win].statusline
 		winbar = vim.wo[source_win].winbar
@@ -91,6 +89,8 @@ function M.open(message, on_cancel, target)
 		tabpage = vim.api.nvim_get_current_tabpage()
 		win = vim.api.nvim_get_current_win()
 		buf = vim.api.nvim_get_current_buf()
+		number = vim.wo[win].number
+		relativenumber = vim.wo[win].relativenumber
 	end
 	vim.bo[buf].bufhidden = "wipe"
 	vim.bo[buf].buflisted = false

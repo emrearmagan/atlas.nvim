@@ -55,6 +55,15 @@ local function is_open_or_draft(ctx)
 	return has_pr(ctx) and (ctx.pr.state == "open" or ctx.pr.state == "draft")
 end
 
+---@param ctx GitLabPullsActionContext
+---@param level "loading"|"success"|"warn"|"error"|"info"
+---@param message string
+---@param duration integer|nil
+local function notify(ctx, level, message, duration)
+	local callback = ctx.notify or footer.notify
+	callback(level, message, duration)
+end
+
 local ACTIONS = {
 	{
 		id = "toggle_approval",
@@ -67,37 +76,73 @@ local ACTIONS = {
 		end,
 		run = function(ctx, done)
 			local pr = ctx.pr
-			footer.notify("loading", string.format("Checking approval for %s...", pr_label(pr)))
+			notify(ctx, "loading", string.format("Checking approval for %s...", pr_label(pr)))
 			mr_api.get_approval_state(pr, function(approved, err)
 				if err then
-					footer.notify("error", err)
+					notify(ctx, "error", err)
 					done(nil, err)
 					return
 				end
 
 				if approved then
-					footer.notify("loading", string.format("Unapproving %s...", pr_label(pr)))
+					notify(ctx, "loading", string.format("Unapproving %s...", pr_label(pr)))
 					mr_api.unapprove(pr, function(ok, unapprove_err)
 						if not ok then
-							footer.notify("error", unapprove_err or "Unapprove failed")
+							notify(ctx, "error", unapprove_err or "Unapprove failed")
 							done(nil, unapprove_err or "Unapprove failed")
 							return
 						end
-						footer.notify("success", string.format("Unapproved %s", pr_label(pr)), 1200)
+						notify(ctx, "success", string.format("Unapproved %s", pr_label(pr)), 1200)
 						done({ changed_pr = true, message = "Unapproved" }, nil)
 					end)
 				else
-					footer.notify("loading", string.format("Approving %s...", pr_label(pr)))
+					notify(ctx, "loading", string.format("Approving %s...", pr_label(pr)))
 					mr_api.approve(pr, function(ok, approve_err)
 						if not ok then
-							footer.notify("error", approve_err or "Approve failed")
+							notify(ctx, "error", approve_err or "Approve failed")
 							done(nil, approve_err or "Approve failed")
 							return
 						end
-						footer.notify("success", string.format("Approved %s", pr_label(pr)), 1200)
+						notify(ctx, "success", string.format("Approved %s", pr_label(pr)), 1200)
 						done({ changed_pr = true, message = "Approved" }, nil)
 					end)
 				end
+			end)
+		end,
+	},
+	{
+		id = "request_changes",
+		label = "Request changes",
+		is_available = function(ctx)
+			if not is_open_or_draft(ctx) then
+				return false, "MR is not open"
+			end
+			return true, nil
+		end,
+		run = function(ctx, done)
+			local pr = ctx.pr
+			vim.ui.input({ prompt = "Reason for requesting changes: " }, function(input)
+				if input == nil then
+					done({ changed_pr = false, message = "Cancelled" }, nil)
+					return
+				end
+
+				local body = vim.trim(input)
+				if body == "" then
+					body = "Changes requested"
+				end
+
+				notify(ctx, "loading", "Requesting changes...")
+				mr_api.request_changes(pr, body, function(ok, err)
+					if not ok then
+						notify(ctx, "error", "Request changes failed: " .. tostring(err))
+						done(nil, tostring(err))
+						return
+					end
+
+					notify(ctx, "success", "Changes requested", 1200)
+					done({ changed_pr = true, message = "Changes requested" }, nil)
+				end)
 			end)
 		end,
 	},
