@@ -1,5 +1,6 @@
 local M = {}
 
+local notify = require("atlas.core.notify")
 local templates_root = vim.fn.stdpath("data") .. "/atlas/issues/templates"
 
 ---@class IssueTemplateInfo
@@ -163,27 +164,15 @@ function M.delete(name)
 	return true, nil, normalized_name
 end
 
-local levels = {
-	info = vim.log.levels.INFO,
-	warn = vim.log.levels.WARN,
-	error = vim.log.levels.ERROR,
-}
-
----@param level "info"|"warn"|"error"
----@param message string
-local function notify(level, message)
-	vim.notify("[Atlas] " .. message, levels[level])
-end
-
 ---@param context AtlasIssueTemplateContext
 local function apply_template(context)
 	local templates, err = M.list()
 	if err then
-		notify("error", err)
+		notify.error(err)
 		return
 	end
 	if templates == nil or #templates == 0 then
-		notify("warn", "No templates found")
+		notify.warn("No templates found")
 		return
 	end
 
@@ -200,16 +189,16 @@ local function apply_template(context)
 
 		local content, read_err = M.read(template.name)
 		if read_err then
-			notify("error", read_err)
+			notify.error(read_err)
 			return
 		end
 
 		local function replace()
 			if not context.set_description(content or "") then
-				notify("error", "Issue description buffer is not available")
+				notify.error("Issue description buffer is not available")
 				return
 			end
-			notify("info", "Applied template: " .. template.name)
+			notify.info("Applied template: " .. template.name)
 		end
 
 		if vim.trim(context.get_description()) == "" then
@@ -229,7 +218,7 @@ end
 local function save_template(context)
 	local description = vim.trim(context.get_description())
 	if description == "" then
-		notify("warn", "Description is empty")
+		notify.warn("Description is empty")
 		return
 	end
 
@@ -240,18 +229,18 @@ local function save_template(context)
 
 		local name = vim.trim(input)
 		if name == "" then
-			notify("warn", "Template name is required")
+			notify.warn("Template name is required")
 			return
 		end
 
 		local ok, write_err, existed, normalized_name = M.write(name, description, { overwrite = false })
 		local display_name = normalized_name or name
 		if ok then
-			notify("info", "Created template " .. display_name)
+			notify.info("Created template " .. display_name)
 			return
 		end
 		if not existed then
-			notify("error", write_err or "Failed to create template")
+			notify.error(write_err or "Failed to create template")
 			return
 		end
 
@@ -264,10 +253,10 @@ local function save_template(context)
 
 				local overwrite_ok, overwrite_err, _, final_name = M.write(name, description, { overwrite = true })
 				if not overwrite_ok then
-					notify("error", overwrite_err or "Failed to overwrite template")
+					notify.error(overwrite_err or "Failed to overwrite template")
 					return
 				end
-				notify("info", "Updated template " .. (final_name or display_name))
+				notify.info("Updated template " .. (final_name or display_name))
 			end
 		)
 	end)

@@ -1,0 +1,48 @@
+name: Create Release
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Semantic release
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    concurrency:
+      group: semantic-release-main
+      cancel-in-progress: false
+    steps:
+      - name: Check out the tested commit and tags
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Create tag and GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          npx --yes \
+            --package semantic-release@25.0.8 \
+            --package conventional-changelog-conventionalcommits@9.3.1 \
+            semantic-release

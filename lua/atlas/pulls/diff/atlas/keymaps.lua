@@ -295,36 +295,45 @@ function M.register(session, actions)
 			opts = { silent = true, nowait = true },
 		})
 	)
-	if session.explorer.grouped then
-		add(
-			explorer_actions,
-			item("ui.toggle_fold", {
-				desc = "Toggle folder",
-				index = 3,
-				callback = run(function()
-					explorer.toggle_folder(session)
-				end),
-				opts = { silent = true, nowait = true },
-			})
-		)
-		add(
-			explorer_actions,
-			item("ui.toggle_all_folds", {
-				desc = "Toggle all folders",
-				index = 4,
-				callback = run(function()
-					explorer.toggle_all_folders(session)
-				end),
-				opts = { silent = true, nowait = true },
-			})
-		)
-	end
+	add(
+		explorer_actions,
+		item("pulls.review.toggle_explorer_grouping", {
+			desc = "Toggle grouped / plain files",
+			index = 3,
+			callback = run(function()
+				explorer.toggle_grouping(session)
+			end),
+			opts = { silent = true, nowait = true },
+		})
+	)
+	add(
+		explorer_actions,
+		item("ui.toggle_fold", {
+			desc = "Toggle folder",
+			index = 4,
+			callback = run(function()
+				explorer.toggle_folder(session)
+			end),
+			opts = { silent = true, nowait = true },
+		})
+	)
+	add(
+		explorer_actions,
+		item("ui.toggle_all_folds", {
+			desc = "Toggle all folders",
+			index = 5,
+			callback = run(function()
+				explorer.toggle_all_folders(session)
+			end),
+			opts = { silent = true, nowait = true },
+		})
+	)
 	if not review_enabled then
 		add(
 			explorer_actions,
 			item("pulls.review.toggle_file_reviewed", {
 				desc = "Toggle file reviewed",
-				index = 5,
+				index = 6,
 				callback = run(actions.toggle_file_reviewed),
 				opts = { silent = true, nowait = true },
 			})

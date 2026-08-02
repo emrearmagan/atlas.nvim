@@ -2,6 +2,7 @@ local M = {}
 
 local md_editor = require("atlas.ui.popups.editor")
 local footer = require("atlas.ui.components.footer")
+local renderer = require("atlas.pulls.ui.panel.pr.tabs.conversation.renderer")
 local state = require("atlas.pulls.ui.panel.pr.tabs.conversation.state")
 
 ---@return PullsProvider|nil
@@ -99,7 +100,6 @@ function M.reply(pr, entry, refresh)
 		mention = completion.format_mention(comment.author) or ""
 	end
 	local initial_text = mention ~= "" and (mention .. " ") or ""
-
 	md_editor.open({
 		key = "pr-comment-reply-" .. tostring(comment.id),
 		title = " Reply to Comment ",
@@ -107,6 +107,7 @@ function M.reply(pr, entry, refresh)
 		height_ratio = 0.18,
 		initial_text = initial_text,
 		completion = completion,
+		preview = renderer.render_comment(comment, math.max(math.floor(vim.o.columns * 0.5), 80)),
 		on_save = function(text)
 			if not text or vim.trim(text) == "" then
 				return

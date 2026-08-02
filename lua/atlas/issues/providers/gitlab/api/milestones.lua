@@ -17,10 +17,8 @@ function M.list(project_path, on_done)
 		on_done(nil, "Missing project path")
 		return nil
 	end
-	local endpoint = string.format(
-		"/projects/%s/milestones?per_page=100&state=active",
-		service.url_encode(project_path)
-	)
+	local endpoint =
+		string.format("/projects/%s/milestones?per_page=100&state=active", service.url_encode(project_path))
 	return service.request("GET", endpoint, nil, function(result, err)
 		if err or type(result) ~= "table" then
 			on_done(nil, err)

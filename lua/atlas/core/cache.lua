@@ -4,7 +4,8 @@ local M = {}
 ---@field value any
 ---@field expires_at number | nil
 
-local cache_root = vim.fn.stdpath("cache") .. "/atlas/cache"
+local atlas_cache_root = vim.fn.stdpath("cache") .. "/atlas"
+local cache_root = atlas_cache_root .. "/cache"
 local PRUNE_INTERVAL_SEC = 300
 local last_prune_at = 0
 
@@ -143,8 +144,8 @@ function M.delete(key)
 end
 
 function M.clear_all()
-	if vim.fn.isdirectory(cache_root) == 1 then
-		pcall(vim.fn.delete, cache_root, "rf")
+	if vim.fn.isdirectory(atlas_cache_root) == 1 then
+		pcall(vim.fn.delete, atlas_cache_root, "rf")
 	end
 end
 

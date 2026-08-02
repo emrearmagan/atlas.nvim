@@ -32,14 +32,17 @@ end
 ---@param refresh fun()
 function M.setup(buf, refresh)
 	local items = {}
-	utils.insert_if(items, item("ui.toggle_fold", {
-		desc = "Toggle description",
-		opts = { nowait = true, silent = true },
-		callback = function()
-			state.description_expanded = not state.description_expanded
-			refresh()
-		end,
-	}))
+	utils.insert_if(
+		items,
+		item("ui.toggle_fold", {
+			desc = "Toggle description",
+			opts = { nowait = true, silent = true },
+			callback = function()
+				state.description_expanded = not state.description_expanded
+				refresh()
+			end,
+		})
+	)
 	help.register("Panel", items, { index = 212, buffer = buf })
 end
 

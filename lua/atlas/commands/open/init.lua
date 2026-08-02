@@ -1,14 +1,9 @@
 local M = {}
 
+local notify = require("atlas.core.notify")
 local parser = require("atlas.commands.open.parser")
 local resolver = require("atlas.commands.open.resolver")
 local request_id = 0
-
----@param message string
----@param level integer|nil
-local function notify(message, level)
-	vim.notify("[Atlas] " .. message, level or vim.log.levels.INFO)
-end
 
 ---@param domain "pulls"|"issues"
 ---@return PullsProvider|IssuesProvider|nil
@@ -62,7 +57,7 @@ local function activate(target)
 	})
 	local provider = current_provider(target.domain)
 	if provider == nil then
-		notify("Failed to load provider: " .. target.provider, vim.log.levels.ERROR)
+		notify.error("Failed to load provider: " .. target.provider)
 	end
 	return provider
 end
@@ -136,7 +131,7 @@ local function fetch_and_open(target, method, argument, label, on_success, on_er
 		if on_error then
 			on_error(message)
 		else
-			notify(message, vim.log.levels.ERROR)
+			notify.error(message)
 		end
 		return
 	end
@@ -150,7 +145,7 @@ local function fetch_and_open(target, method, argument, label, on_success, on_er
 			if on_error then
 				on_error(message)
 			else
-				notify("Failed to open " .. label:lower() .. ": " .. message, vim.log.levels.ERROR)
+				notify.error("Failed to open " .. label:lower() .. ": " .. message)
 			end
 			return
 		end
@@ -160,7 +155,7 @@ local function fetch_and_open(target, method, argument, label, on_success, on_er
 			end
 			return
 		end
-		notify(string.format("Opening %s %s...", provider.name or target.provider, label:lower()))
+		notify.info(string.format("Opening %s %s...", provider.name or target.provider, label:lower()))
 		ensure_detail_open()
 		on_success(result)
 	end)
@@ -174,7 +169,7 @@ local function open_issue(target, on_error)
 		if on_error then
 			on_error("could not determine issue key")
 		else
-			notify("Could not determine issue key", vim.log.levels.ERROR)
+			notify.error("Could not determine issue key")
 		end
 		return
 	end
@@ -217,7 +212,7 @@ local function open_number_for_repo(number, info, on_error)
 	elseif on_error then
 		on_error("provider not configured")
 	else
-		notify("Provider not configured for repository: " .. info.provider, vim.log.levels.ERROR)
+		notify.error("Provider not configured for repository: " .. info.provider)
 	end
 end
 
@@ -252,7 +247,7 @@ local function try_repositories(choices, number)
 		end
 		local choice = choices[index]
 		if choice == nil then
-			notify("Reference not found in any configured provider", vim.log.levels.ERROR)
+			notify.error("Reference not found in any configured provider")
 			return
 		end
 		open_number_for_repo(number, choice, function()
@@ -273,7 +268,7 @@ local function open_number(number, repo_slug)
 
 	local choices = resolver.configured_repositories(repo_slug)
 	if #choices == 0 then
-		notify("Could not determine a configured repository; use owner/repo#number or a full URL", vim.log.levels.ERROR)
+		notify.error("Could not determine a configured repository; use owner/repo#number or a full URL")
 		return
 	end
 	if repo_slug then
@@ -294,16 +289,13 @@ local openers = {
 ---@param target AtlasOpenTarget
 local function open_target(target)
 	if not resolver.provider_configured(target) then
-		notify(
-			string.format("Provider not configured for %s: %s", target.domain, target.provider),
-			vim.log.levels.ERROR
-		)
+		notify.error(string.format("Provider not configured for %s: %s", target.domain, target.provider))
 		return
 	end
 
 	local opener = openers[target.entity]
 	if opener == nil then
-		notify("Unsupported Atlas URL entity: " .. tostring(target.entity), vim.log.levels.ERROR)
+		notify.error("Unsupported Atlas URL entity: " .. tostring(target.entity))
 		return
 	end
 	opener(target)
@@ -314,7 +306,7 @@ function M.open(url)
 	request_id = request_id + 1
 	local reference = parser.parse_reference(url)
 	if reference then
-		notify("Resolving " .. tostring(url) .. "...")
+		notify.info("Resolving " .. tostring(url) .. "...")
 		if reference.issue_key then
 			local target = {
 				provider = "jira",
@@ -335,10 +327,10 @@ function M.open(url)
 
 	local target, err = parser.parse(url)
 	if target == nil then
-		notify(err or "Unsupported Atlas URL", vim.log.levels.ERROR)
+		notify.error(err or "Unsupported Atlas URL")
 		return
 	end
-	notify("Resolving " .. tostring(url) .. "...")
+	notify.info("Resolving " .. tostring(url) .. "...")
 	open_target(target)
 end
 

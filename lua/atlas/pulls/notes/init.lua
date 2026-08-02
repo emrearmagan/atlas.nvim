@@ -14,12 +14,16 @@ M.types = { "issue", "suggestion", "note", "praise" }
 ---@field id string
 ---@field url string|nil
 
+---@class AtlasNoteContext
+---@field start_line integer
+---@field lines string[]
+
 ---@class AtlasNoteInput
 ---@field file_path string
 ---@field line integer
 ---@field body string
 ---@field type AtlasNoteType|nil
----@field context string|nil
+---@field context AtlasNoteContext|nil
 
 ---@class AtlasNote
 ---@field id string
@@ -27,7 +31,7 @@ M.types = { "issue", "suggestion", "note", "praise" }
 ---@field line integer
 ---@field body string
 ---@field type AtlasNoteType
----@field context_hash string|nil
+---@field context AtlasNoteContext|nil
 ---@field created_at string
 ---@field updated_at string|nil
 
@@ -45,17 +49,15 @@ local function text(value)
 	return vim.trim(tostring(value or ""))
 end
 
----@param context string|nil
----@return string|nil
-function M.hash_context(context)
-	return type(context) == "string" and vim.fn.sha256(context) or nil
-end
-
 ---@param note AtlasNote
----@param context string|nil
+---@param line string|nil
 ---@return boolean
-function M.is_outdated(note, context)
-	return not note.context_hash or note.context_hash ~= M.hash_context(context)
+function M.is_outdated(note, line)
+	if not note.context then
+		return true
+	end
+	local anchor = note.context.lines[note.line - note.context.start_line + 1]
+	return anchor ~= line
 end
 
 ---@param value table
@@ -145,7 +147,18 @@ local function normalize_note(value)
 	if not note_type then
 		return nil, type_error
 	end
-	local context_hash = text(value.context_hash or value.line_hash)
+	local context = value.context
+	if context ~= nil then
+		if type(context) ~= "table" then
+			return nil, "Invalid note context"
+		end
+		local start_line = tonumber(context.start_line)
+		local lines = context.lines
+		if not start_line or type(lines) ~= "table" or type(lines[line - start_line + 1]) ~= "string" then
+			return nil, "Invalid note context"
+		end
+		context = { start_line = start_line, lines = lines }
+	end
 	local id = text(value.id)
 	local created_at = text(value.created_at)
 	local updated_at = text(value.updated_at)
@@ -158,7 +171,7 @@ local function normalize_note(value)
 		line = line,
 		body = value.body,
 		type = note_type,
-		context_hash = context_hash ~= "" and context_hash or nil,
+		context = context,
 		created_at = created_at,
 		updated_at = updated_at ~= "" and updated_at or nil,
 	},
@@ -319,12 +332,10 @@ end
 ---@param input AtlasNoteInput
 ---@return AtlasNote|nil, string|nil
 function M.add(target, input)
-	local context_hash = M.hash_context(input.context)
 	return change(target, function(document)
 		local timestamp = now()
 		local note, note_error = normalize_note(vim.tbl_extend("force", input, {
 			id = "note_" .. vim.fn.sha256(timestamp .. tostring(vim.uv.hrtime())):sub(1, 16),
-			context_hash = context_hash,
 			created_at = timestamp,
 		}))
 		if not note then
@@ -349,7 +360,7 @@ function M.update(target, id, patch)
 					line = note.line,
 					body = patch.body or note.body,
 					type = patch.type or note.type,
-					context_hash = note.context_hash,
+					context = note.context,
 					created_at = note.created_at,
 					updated_at = now(),
 				}

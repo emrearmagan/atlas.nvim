@@ -99,7 +99,11 @@ function M.init(provider, opts)
 		end
 		local navigation = require("atlas.ui.navigation")
 		local current = navigation.current_item()
-		if type(current) == "table" and (current.kind == "pr" or current.kind == "pr_meta") and type(current.pr) == "table" then
+		if
+			type(current) == "table"
+			and (current.kind == "pr" or current.kind == "pr_meta")
+			and type(current.pr) == "table"
+		then
 			panel.on_select(current.pr, current.repo)
 		end
 	end

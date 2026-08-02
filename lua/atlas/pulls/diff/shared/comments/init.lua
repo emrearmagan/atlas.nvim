@@ -2,6 +2,7 @@ local M = {}
 
 local actions = require("atlas.pulls.actions.review")
 local anchoring = require("atlas.pulls.diff.shared.comments.anchor")
+local code_preview = require("atlas.ui.components.code_preview")
 local overlay = require("atlas.pulls.diff.shared.comments.overlay")
 local comment_threads = require("atlas.ui.components.review_threads")
 
@@ -299,6 +300,31 @@ local function inline_position(session, buf)
 		to = side == "RIGHT" and line or other_line,
 		commit_hash = session.range.head_revision,
 	}
+end
+
+---@param session AtlasReviewSession
+---@param buf integer
+---@return AtlasMarkdownEditorPreview|nil
+local function inline_preview(session, buf)
+	local document = session.document
+	local _, side = buffer_context(session, buf)
+	if not document or not side or document.binary then
+		return nil
+	end
+
+	local line = vim.api.nvim_win_get_cursor(0)[1]
+	local source = side == "LEFT" and document.old or document.new
+	local start_line = math.max(1, line - 2)
+	local lines = {}
+	for index = start_line, math.min(#source.lines, line + 2) do
+		table.insert(lines, source.lines[index])
+	end
+	return code_preview.render({
+		file_path = source.path,
+		lines = lines,
+		start_line = start_line,
+		anchor_line = line,
+	})
 end
 
 ---@param session AtlasReviewSession
@@ -650,7 +676,7 @@ local function add_inline_comment(session, state, buf, pending)
 		view_notify(session, "info", "Unable to comment on this line")
 		return
 	end
-	actions.add(context, inline, { pending = pending })
+	actions.add(context, inline, { pending = pending, preview = inline_preview(session, buf) })
 end
 
 ---@param session AtlasReviewSession
@@ -738,9 +764,6 @@ local function apply_prepared(session, state, context)
 	state.provider = context.provider
 	state.pr = context.pr
 	local initial = context.initial_review
-	if not initial then
-		error("Review context is not prepared")
-	end
 	state.comments = vim.deepcopy(initial.comments)
 	state.tasks = vim.deepcopy(initial.tasks)
 	local completion = context.provider.comment_completion
@@ -771,36 +794,23 @@ reload_review = function(session, state)
 	local generation = state.generation
 	state.loading = true
 	session.refresh_ui()
-	local handle = require("atlas.pulls.diff.shared.prepare").run({
-		review = {
-			provider = state.provider,
-			pr = state.pr,
-			current_user = state.current_user,
-			review_context = state.review_context,
-			initial_review = {
-				comments = state.comments,
-				tasks = state.tasks,
-				warnings = {},
-			},
+	view_notify(session, "loading", "Refreshing review...")
+	local handle = require("atlas.pulls.diff.shared.review").load({
+		provider = state.provider,
+		pr = state.pr,
+		current_user = state.current_user,
+		review_context = state.review_context,
+		initial_review = {
+			comments = state.comments,
+			tasks = state.tasks,
+			warnings = {},
 		},
-		force_refresh = true,
-		on_progress = function(message)
-			if active(session, state) and state.generation == generation then
-				view_notify(session, "loading", message)
-			end
-		end,
-	}, function(result, err)
+	}, { force_refresh = true }, function(result)
 		if not active(session, state) or state.generation ~= generation then
 			return
 		end
-		if not result or not result.review then
-			state.loading = false
-			session.refresh_ui()
-			view_notify(session, "error", "Failed to refresh review: " .. tostring(err or "Unknown error"))
-			return
-		end
-		local warnings = result.review.initial_review and result.review.initial_review.warnings or {}
-		apply_prepared(session, state, result.review)
+		local warnings = result.initial_review.warnings
+		apply_prepared(session, state, result)
 		if #warnings == 0 then
 			view_notify(session, "success", "Review refreshed", 1200)
 		end

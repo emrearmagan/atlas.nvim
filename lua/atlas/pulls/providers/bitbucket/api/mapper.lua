@@ -137,7 +137,6 @@ local function to_pull_request(raw)
 	local source_is_fork = source_branch ~= ""
 		and source_repo_full_name ~= ""
 		and source_repo_full_name ~= repo_full_name
-	local local_ref = source_is_fork and string.format("refs/atlas/pulls/%s/head", tostring(raw.id)) or nil
 	return {
 		id = raw.id,
 		title = tostring(raw.title or ""),
@@ -152,8 +151,6 @@ local function to_pull_request(raw)
 			branch = source_branch,
 			commit_hash = tostring(source.commit_hash or ""),
 			fetch_remote = source_is_fork and source.clone_url or nil,
-			fetch_ref = local_ref and string.format("+refs/heads/%s:%s", source_branch, local_ref) or nil,
-			local_ref = local_ref,
 		},
 		destination = {
 			branch = tostring((raw.destination or {}).branch or ""),

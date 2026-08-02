@@ -48,21 +48,19 @@ local function delete_at(session, index)
 end
 
 ---@param session AtlasNativeDiffSession
-local function prune_deleted_files(session)
+local function prune_missing_files(session)
 	local state = session.notes
 	if not state then
 		return
 	end
-	local deleted = {}
+	local files = {}
 	for _, file in ipairs(session.files) do
-		if file.status == "deleted" then
-			deleted[file.path] = true
-		elseif file.status == "renamed" and file.old_path then
-			deleted[file.old_path] = true
+		if file.status ~= "deleted" then
+			files[file.path] = true
 		end
 	end
 	for index = #state.items, 1, -1 do
-		if deleted[state.items[index].file_path] then
+		if not files[state.items[index].file_path] then
 			delete_at(session, index)
 		end
 	end
@@ -132,7 +130,6 @@ function M.render(session)
 	for line, notes in pairs(grouped) do
 		local lines, spans = note_renderer.render_cards(notes, width, {
 			outdated = outdated,
-			collapse_outdated = true,
 		})
 		local virtual_lines = utils.virtual_lines(lines, spans)
 		vim.api.nvim_buf_set_extmark(session.right.buf, namespace, line - 1, 0, {
@@ -249,12 +246,17 @@ function M.add_at_cursor(session, buf)
 		return
 	end
 	local line = vim.api.nvim_win_get_cursor(0)[1]
+	local context_start_line = math.max(1, line - 2)
+	local context_lines = {}
+	for index = context_start_line, math.min(#document.new.lines, line + 2) do
+		table.insert(context_lines, document.new.lines[index])
+	end
 	note_editor.create(state.target, {
 		file_path = document.new.path,
 		line = line,
 		body = "",
 		type = "note",
-		context = document.new.lines[line],
+		context = { start_line = context_start_line, lines = context_lines },
 	}, function(saved, err)
 		if not saved then
 			notify(session, "error", err or "Unable to save local note")
@@ -324,7 +326,7 @@ function M.reload(session)
 		return
 	end
 	state.items = items
-	prune_deleted_files(session)
+	prune_missing_files(session)
 	session.refresh_ui()
 end
 

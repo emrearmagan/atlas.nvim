@@ -4,7 +4,7 @@ local utils = require("atlas.ui.shared.utils")
 local helper = require("atlas.pulls.ui.main.helper")
 
 ---@param pr PullRequest
----@return string[], table[]
+---@return string[], AtlasUIHighlight[]
 function M.content(pr)
 	local id = tostring(pr.id or "")
 	local title = tostring(pr.title or "")
@@ -34,25 +34,25 @@ function M.content(pr)
 	lines[2] = " " .. ("━"):rep(content_width)
 
 	local hl = {
-		{ row = 1, col = 0, end_col = -1, hl_group = "AtlasTextMuted" },
-		{ row = 2, col = 1, end_col = 10, hl_group = "AtlasTextMuted" },
-		{ row = 2, col = 11, end_col = -1, hl_group = helper.pr_state_hl(pr.state) },
-		{ row = 3, col = 1, end_col = 10, hl_group = "AtlasTextMuted" },
-		{ row = 3, col = 11, end_col = -1, hl_group = helper.author_hl(author_name) },
-		{ row = 4, col = 1, end_col = 10, hl_group = "AtlasTextMuted" },
-		{ row = 4, col = 11, end_col = -1, hl_group = helper.repo_hl(repo_name) },
-		{ row = 5, col = 1, end_col = 10, hl_group = "AtlasTextMuted" },
-		{ row = 5, col = 11, end_col = -1, hl_group = "AtlasTextMuted" },
-		{ row = 6, col = 1, end_col = 10, hl_group = "AtlasTextMuted" },
-		{ row = 7, col = 1, end_col = 10, hl_group = "AtlasTextMuted" },
-		{ row = 8, col = 1, end_col = 10, hl_group = "AtlasTextMuted" },
-		{ row = 8, col = 11, end_col = -1, hl_group = "AtlasTextMuted" },
+		{ line = 1, start_col = 0, end_col = #lines[2], hl_group = "AtlasTextMuted" },
+		{ line = 2, start_col = 1, end_col = 10, hl_group = "AtlasTextMuted" },
+		{ line = 2, start_col = 11, end_col = #lines[3], hl_group = helper.pr_state_hl(pr.state) },
+		{ line = 3, start_col = 1, end_col = 10, hl_group = "AtlasTextMuted" },
+		{ line = 3, start_col = 11, end_col = #lines[4], hl_group = helper.author_hl(author_name) },
+		{ line = 4, start_col = 1, end_col = 10, hl_group = "AtlasTextMuted" },
+		{ line = 4, start_col = 11, end_col = #lines[5], hl_group = helper.repo_hl(repo_name) },
+		{ line = 5, start_col = 1, end_col = 10, hl_group = "AtlasTextMuted" },
+		{ line = 5, start_col = 11, end_col = #lines[6], hl_group = "AtlasTextMuted" },
+		{ line = 6, start_col = 1, end_col = 10, hl_group = "AtlasTextMuted" },
+		{ line = 7, start_col = 1, end_col = 10, hl_group = "AtlasTextMuted" },
+		{ line = 8, start_col = 1, end_col = 10, hl_group = "AtlasTextMuted" },
+		{ line = 8, start_col = 11, end_col = #lines[9], hl_group = "AtlasTextMuted" },
 	}
 
 	if id ~= "" then
 		table.insert(hl, {
-			row = 0,
-			col = 2,
+			line = 0,
+			start_col = 2,
 			end_col = 2 + #id,
 			hl_group = "AtlasTextMuted",
 		})

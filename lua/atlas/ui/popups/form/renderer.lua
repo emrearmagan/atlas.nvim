@@ -160,7 +160,10 @@ function M.render_meta(state, rows)
 		right_gravity = false,
 	})
 	vim.api.nvim_buf_set_extmark(buf, NS, 0, 0, {
-		virt_lines = { { { layout.body_label or "Description", "AtlasLogInfo" } } },
+		virt_lines = {
+			{ { "", "Normal" } },
+			{ { layout.body_label or "Description", "AtlasLogInfo" } },
+		},
 		virt_lines_leftcol = true,
 		right_gravity = false,
 	})

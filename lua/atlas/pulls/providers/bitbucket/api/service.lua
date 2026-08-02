@@ -15,7 +15,12 @@ end
 
 ---@return string, string, string|nil
 function M.get_auth()
-	local bb = (config.options and config.options.pulls and config.options.pulls.providers and config.options.pulls.providers.bitbucket) or {}
+	local bb = (
+		config.options
+		and config.options.pulls
+		and config.options.pulls.providers
+		and config.options.pulls.providers.bitbucket
+	) or {}
 	local user = tostring(bb.user or "")
 	local token = tostring(bb.token or "")
 
@@ -55,7 +60,10 @@ end
 
 ---@return number
 function M.cache_ttl()
-	local bb = config.options and config.options.pulls and config.options.pulls.providers and config.options.pulls.providers.bitbucket
+	local bb = config.options
+		and config.options.pulls
+		and config.options.pulls.providers
+		and config.options.pulls.providers.bitbucket
 	return ((bb and bb.cache_ttl) or 300)
 end
 

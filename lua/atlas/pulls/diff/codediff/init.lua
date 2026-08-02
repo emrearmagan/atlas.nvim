@@ -1,6 +1,7 @@
 local M = {}
 
 local comments = require("atlas.pulls.diff.shared.comments")
+local notify = require("atlas.core.notify")
 local overlay = require("atlas.pulls.diff.shared.comments.overlay")
 local resolver = require("atlas.core.keymaps")
 
@@ -59,7 +60,7 @@ local READY_RETRIES = 80
 ---@field tabpage integer
 ---@field lifecycle AtlasCodeDiffLifecycle
 ---@field context AtlasPreparedReviewContext
----@field reload fun()|nil
+---@field reload (fun(target: AtlasLoadingTarget|nil))|nil
 ---@field facade AtlasReviewSession|nil
 ---@field actions AtlasReviewKeymapActions|nil
 ---@field mapped table<integer, table<string, table|false>>
@@ -72,7 +73,7 @@ local READY_RETRIES = 80
 ---@field closed boolean
 
 ---@class AtlasCodeDiffAttachOptions
----@field reload fun()|nil
+---@field reload (fun(target: AtlasLoadingTarget|nil))|nil
 
 ---@class AtlasCodeDiffHelpGroup
 ---@field name string
@@ -312,6 +313,9 @@ end
 ---@return string[]
 local function help_keys(view)
 	local reserved = reserved_keys(view)
+	if not resolver.resolve("ui.help") then
+		return {}
+	end
 	local result = review_keys("ui.help", reserved)
 	if #result == 0 and not reserved[vim.keycode("?")] then
 		table.insert(result, "?")
@@ -389,24 +393,21 @@ local function reload(entry)
 		return
 	end
 	local callback = entry.reload
-	local reuse_tab = #vim.api.nvim_list_tabpages() == 1
+	vim.cmd("tabnew")
+	local win = vim.api.nvim_get_current_win()
+	local target = {
+		tabpage = vim.api.nvim_get_current_tabpage(),
+		buf = vim.api.nvim_get_current_buf(),
+		win = win,
+		number = vim.wo[win].number,
+		relativenumber = vim.wo[win].relativenumber,
+		statuscolumn = vim.wo[win].statuscolumn,
+		statusline = vim.wo[win].statusline,
+		winbar = vim.wo[win].winbar,
+	}
 	if not entry.lifecycle.close(entry.tabpage) then
+		vim.cmd("tabclose")
 		return
-	end
-	---@type AtlasLoadingTarget|nil
-	local target
-	if reuse_tab then
-		local win = vim.api.nvim_get_current_win()
-		target = {
-			tabpage = vim.api.nvim_get_current_tabpage(),
-			buf = vim.api.nvim_get_current_buf(),
-			win = win,
-			number = vim.wo[win].number,
-			relativenumber = vim.wo[win].relativenumber,
-			statuscolumn = vim.wo[win].statuscolumn,
-			statusline = vim.wo[win].statusline,
-			winbar = vim.wo[win].winbar,
-		}
 	end
 	vim.schedule(function()
 		callback(target)
@@ -653,7 +654,7 @@ local function sync(entry)
 			local notify_level = level == "error" and vim.log.levels.ERROR
 				or level == "warn" and vim.log.levels.WARN
 				or vim.log.levels.INFO
-			vim.notify("[Atlas Review] " .. message, notify_level)
+			notify.show(notify_level, message)
 		end,
 		register_keymaps = function(actions)
 			entry.actions = actions
@@ -671,7 +672,7 @@ local function sync(entry)
 		local ok, err = pcall(comments.attach, facade, context)
 		if not ok then
 			comments.detach(facade)
-			vim.notify("[Atlas Review] Unable to load comments: " .. tostring(err), vim.log.levels.ERROR)
+			notify.error("Unable to load comments: " .. tostring(err))
 		else
 			entry.attached = true
 		end

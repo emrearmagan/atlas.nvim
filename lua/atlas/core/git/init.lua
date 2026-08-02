@@ -122,10 +122,14 @@ end
 ---@param root string
 ---@param base string
 ---@param head string
----@return string
+---@return string|nil range
+---@return string|nil err
 function M.commit_range(root, base, head)
-	local base_revision, head_revision = M.diff_revisions(root, base, head)
-	return base_revision and (base_revision .. ".." .. head_revision) or head
+	local base_revision, head_revision, err = M.diff_revisions(root, base, head)
+	if not base_revision or not head_revision then
+		return nil, err
+	end
+	return base_revision .. ".." .. head_revision
 end
 
 ---@param root string
@@ -322,13 +326,13 @@ end
 
 ---@param root string
 ---@param remote string
----@param branches string[]
+---@param refs string[]
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }
-function M.fetch_branches(root, remote, branches, on_done)
-	local args = { "fetch", remote }
-	for _, branch in ipairs(branches) do
-		table.insert(args, branch)
+function M.fetch_refs(root, remote, refs, on_done)
+	local args = { "fetch", "--no-tags", remote }
+	for _, ref in ipairs(refs) do
+		table.insert(args, ref)
 	end
 
 	return M.run(args, { cwd = root, text = true }, function(res)

@@ -1,4 +1,4 @@
-*atlas.txt*  Pull requests and issues from Neovim   Last change: 2026 Jul 31
+*atlas.txt*  Pull requests and issues from Neovim   Last change: 2026 Aug 01
 
 Author: Emre Armagan
 License: MIT
@@ -7,28 +7,28 @@ License: MIT
 CONTENTS                                                       *atlas-contents*
 
   1. Introduction ........................... |atlas-introduction|
-  2. Requirements ........................... |atlas-requirements|
-  3. Installation ........................... |atlas-installation|
+  2. Installation ........................... |atlas-installation|
+  3. Requirements ........................... |atlas-requirements|
   4. Commands ............................... |atlas-commands|
-  5. Health ................................. |atlas-health|
-  6. Pulls .................................. |atlas-pulls|
+  5. Pulls .................................. |atlas-pulls|
        Configuration ........................ |atlas-pulls-configuration|
        GitHub ............................... |atlas-pulls-github|
        Bitbucket ............................ |atlas-pulls-bitbucket|
        GitLab ............................... |atlas-pulls-gitlab|
-       Custom actions ....................... |atlas-pulls-custom-actions|
-       Review pulls ......................... |atlas-pulls-review|
-       Local notes .......................... |atlas-pulls-notes|
-       Create pulls ......................... |atlas-pulls-create|
-  7. Issues ................................. |atlas-issues|
+  6. Issues ................................. |atlas-issues|
        Configuration ........................ |atlas-issues-configuration|
        Jira ................................. |atlas-issues-jira|
        GitHub ............................... |atlas-issues-github|
        GitLab ............................... |atlas-issues-gitlab|
-       Custom actions ....................... |atlas-issues-custom-actions|
-       Create issues ........................ |atlas-issues-create|
-  8. Search ................................. |atlas-search|
-  9. Keymaps ................................ |atlas-keymaps|
+  7. Features ............................... |atlas-features|
+       Review pull requests ................. |atlas-review-pull-requests|
+         Local notes ........................ |atlas-local-notes|
+       Create pull requests ................. |atlas-create-pull-requests|
+       Create issues ........................ |atlas-create-issues|
+       Notifications ........................ |atlas-notifications|
+       Bookmarks ............................ |atlas-bookmarks|
+       Custom actions ....................... |atlas-custom-actions|
+  8. Keymaps ................................ |atlas-keymaps|
 
 ==============================================================================
 1. INTRODUCTION                              *atlas* *atlas.nvim* *atlas-introduction*
@@ -37,20 +37,7 @@ Atlas manages pull requests and issues across GitHub, Bitbucket, GitLab and
 Jira from inside Neovim.
 
 ==============================================================================
-2. REQUIREMENTS                                            *atlas-requirements*
-
-  - Neovim 0.10+
-  - `git` and `curl` on `$PATH`
-  - For GitHub: the `gh` CLI, authenticated via `gh auth login`
-  - For Bitbucket: Bitbucket Cloud API token (`api.bitbucket.org`)
-  - For GitLab: REST API v4 and a Personal Access Token with the `api` scope
-  - For Jira: Cloud REST API v3 or Server REST API v2
-
-Run `:checkhealth atlas` after configuring providers to see what's wired
-up and what's missing. See |atlas-health|.
-
-==============================================================================
-3. INSTALLATION                                            *atlas-installation*
+2. INSTALLATION                                            *atlas-installation*
 
 With lazy.nvim:
 >lua
@@ -91,6 +78,19 @@ Only the providers you list in `setup()` are loaded. No provider is enabled
 by default.
 
 ==============================================================================
+3. REQUIREMENTS                                            *atlas-requirements*
+
+  - Neovim 0.10+
+  - `git` and `curl` on `$PATH`
+  - For GitHub: the `gh` CLI, authenticated via `gh auth login`
+  - For Bitbucket: Bitbucket Cloud API token (`api.bitbucket.org`)
+  - For GitLab: REST API v4 and a Personal Access Token with the `api` scope
+  - For Jira: Cloud REST API v3 or Server REST API v2
+
+Run `:checkhealth atlas` after configuring providers to see what's wired
+up and what's missing.
+
+==============================================================================
 4. COMMANDS                                                    *atlas-commands*
 
                                                                   *:AtlasPulls*
@@ -102,9 +102,7 @@ by default.
                                                                    *:AtlasDiff*
 :AtlasDiff <base>...<head>
 :AtlasDiff <pull-request-url>
-        Open an explicit Git range or load a pull request review. Pull request
-        URLs use a matching current checkout or the configured
-        `pulls.repo_config.paths` mapping.
+	Open an explicit Git range or pull request review.
 
                                                                   *:AtlasNotes*
 :AtlasNotes
@@ -126,12 +124,12 @@ by default.
 
                                                                  *:AtlasSearch*
 :AtlasSearch [provider]
-        Open a search prompt for the given provider. See |atlas-search|
-        for the query syntax per provider.
+	Pick a configured provider and open its search prompt.
 
                                                                    *:AtlasOpen*
 :AtlasOpen <target>
-        Open a provider URL, Jira key, owner/repo#number, or PR/issue number.
+        Open a provider URL, Jira key, repository reference, or PR/issue
+        number.
 
                                                              *:AtlasClearCache*
 :AtlasClearCache
@@ -144,17 +142,7 @@ by default.
         open. Helpful for debugging API calls.
 
 ==============================================================================
-5. HEALTH                                                        *atlas-health*
-
-Run `:checkhealth atlas` to verify your setup. It reports on:
-
-  - Neovim version and required binaries (`git`, `curl`)
-  - Each configured provider's credentials and view list
-  - For GitHub: `gh` CLI presence and `gh auth status`
-  - Keymap conflicts (see |atlas-keymaps|)
-
-==============================================================================
-6. PULLS                                                          *atlas-pulls*
+5. PULLS                                                          *atlas-pulls*
 
 Two-pane layout: PRs grouped by view on the left, detail tabs (overview,
 conversation, review, and commits) on the right.
@@ -194,6 +182,7 @@ Shared config that applies to all pulls providers:
         },
         settings = {
           ["your-workspace/atlas"] = {
+            -- Optional; these are the default values.
             readme      = "README.md",
             pr_template = ".github/pull_request_template.md",
           },
@@ -288,6 +277,7 @@ GITLAB PULLS                                              *atlas-pulls-gitlab*
 Auth uses a Personal Access Token with the `api` scope. Set `base_url` to
 `https://gitlab.com` for the SaaS or your self-hosted URL. Views can be
 scoped to assigned/created/all, to a single project, or to a whole group.
+Self-hosted GitLab has not been tested yet.
 
 >lua
   pulls = {
@@ -306,6 +296,8 @@ scoped to assigned/created/all, to a single project, or to a whole group.
           { name = "GitLab Org", key = "O", group = "gitlab-org" },
         },
         bookmarks = {
+          -- key   = "S",      -- default
+          -- label = "Search", -- default
           items = {
             ["Reviewing"]    = { scope = "all", extra_params = { reviewer_id = "Me" } },
             ["Merged by me"] = { scope = "all", state = "merged", author_username = "me" },
@@ -318,79 +310,8 @@ scoped to assigned/created/all, to a single project, or to a whole group.
 `extra_params` is passed through to the MR list endpoint. Use it for
 anything not covered by the explicit view fields.
 
-------------------------------------------------------------------------------
-PULLS CUSTOM ACTIONS                            *atlas-pulls-custom-actions*
-
-Register actions under `pulls.custom_actions`. They show up in the action
-menu (default `A`).
-
->lua
-  ---@class AtlasPullsCustomActionContext
-  ---@field repo_path string|nil
-  ---@field pr PullRequest
-
-  pulls = {
-    custom_actions = {
-      {
-        id           = "my_action",
-        label        = "My action",
-        confirmation = true, -- optional
-        run = function(pr, ctx, done)
-          -- ...
-          done(true, "Done")
-        end,
-      },
-    },
-  }
-<
-
-------------------------------------------------------------------------------
-REVIEW PULLS                                             *atlas-pulls-review*
-
-Press the configured `pulls.open_diff` key (`gd` by default) on a pull request
-to start a review. AtlasDiff places pending, resolved, and outdated threads at
-their diff locations. Provider tasks and GitHub checklists are shown with the
-comments they belong to. Supported providers allow comments to be added,
-replied to, edited, deleted, resolved, or reopened from the diff.
-Pending comments can be submitted with an optional review summary when
-supported by the provider.
-
-CodeDiff can display the same Atlas comment and task overlays. This
-integration uses CodeDiff internals and may need updates when CodeDiff
-changes. Diffview is also supported as a plain diff viewer without Atlas
-review overlays.
-
-LOCAL NOTES                                               *atlas-pulls-notes*
-
-Notes are private comments on a file and line. They are never sent to the pull
-request provider and may be marked as `ISSUE`, `SUGGESTION`, `NOTE`, or
-`PRAISE`. Atlas marks a note as outdated when its source line changes and
-removes it when the location no longer exists. Use `:AtlasNotes` to inspect,
-edit, or delete notes across pull requests.
-
-The `bin/atlas-notes` script uses the same storage as Atlas:
->sh
-  ./bin/atlas-notes add \
-    --target https://github.com/owner/repository/pull/123 \
-    --file lua/review_queue.lua --line 19 \
-    --context "local item = queue[index]" \
-    --type suggestion --body "Should this be a bool?"
-<
-
-CREATE PULLS                                              *atlas-pulls-create*
-
-Run `:AtlasCreatePR` from the branch you want to submit. Atlas uses the
-current branch as the source and the repository's default branch as the
-target. The latest commit supplies the initial title. A configured pull
-request template supplies the description; without one, Atlas builds it from
-the branch commits.
-
-The creation view lets you change the target branch, reviewers, and draft
-state. It also shows the commits and diffstat and can preview the diff before
-submitting.
-
 ==============================================================================
-7. ISSUES                                                        *atlas-issues*
+6. ISSUES                                                        *atlas-issues*
 
 Same layout as |atlas-pulls|: list on the left, detail tabs (overview,
 conversation, activity) on the right.
@@ -420,6 +341,9 @@ https://support.atlassian.com/atlassian-account/docs/manage-api-tokens-for-your-
 for how to create one). Server instances may use basic or bearer auth. Views
 are saved JQL queries.
 
+The Markdown editor for Jira descriptions and comments is experimental. The
+overview tab can toggle between Markdown and ADF to inspect the conversion.
+
 >lua
   issues = {
     providers = {
@@ -427,8 +351,8 @@ are saved JQL queries.
         base_url  = "https://your-site.atlassian.net",
         email     = "you@example.com",
         token     = "your_jira_api_token",
-        auth_method = "basic", -- "basic" or "bearer"
-        api_type  = "cloud", -- "cloud" (v3) or "server" (v2)
+        auth_method = "basic", -- "basic" or "bearer", defaults to "basic"
+        api_type  = "cloud", -- "cloud" (v3) or "server" (v2), defaults to "cloud"
         cache_ttl = 300,
         views = {
           { name = "My Board",  key = "M", layout = "plain",
@@ -502,6 +426,8 @@ issue search expression.
             search = "mentions:@me is:open" },
         },
         bookmarks = {
+          -- key   = "S",      -- default
+          -- label = "Search", -- default
           items = {
             ["Bugs"]            = "is:issue is:open label:bug",
             ["Recently closed"] = "is:issue is:closed author:@me sort:updated-desc",
@@ -536,6 +462,8 @@ Same auth model as |atlas-pulls-gitlab|. Views take a `scope`
             extra_params = { ["not[labels]"] = "wontfix" } },
         },
         bookmarks = {
+          -- key   = "S",      -- default
+          -- label = "Search", -- default
           items = {
             ["No labels"] = { scope = "all", state = "opened",
                               extra_params = { ["not[labels]"] = "*" } },
@@ -547,52 +475,160 @@ Same auth model as |atlas-pulls-gitlab|. Views take a `scope`
   }
 <
 
-------------------------------------------------------------------------------
-ISSUES CUSTOM ACTIONS                          *atlas-issues-custom-actions*
+==============================================================================
+7. FEATURES                                                     *atlas-features*
 
-Same shape as |atlas-pulls-custom-actions|. Context:
->lua
-  ---@class AtlasIssuesCustomActionContext
-  ---@field issue Issue|nil
-  ---@field user IssueUser|nil
+Atlas keeps the pull request and issue workflows you use throughout the day
+inside Neovim.
+
+REVIEW PULL REQUESTS                         *atlas-review-pull-requests*
+                                                     *atlas-pulls-review*
+
+Press the configured `pulls.open_diff` key (`gd` by default) on a pull request
+to start a review.
+
+  - See pending, resolved, and outdated provider threads at their diff
+    locations.
+  - Review provider tasks and GitHub checklists alongside the comments they
+    belong to.
+  - Add, reply to, edit, delete, resolve, or reopen comments when supported.
+  - Submit pending comments with an optional review summary when supported.
+
+CodeDiff can display Atlas comment and task overlays, but the integration
+relies on CodeDiff internals and may break after upstream changes. Diffview
+remains available as a plain diff viewer without Atlas review overlays.
+
+LOCAL NOTES                                      *atlas-local-notes*
+                                                   *atlas-pulls-notes*
+
+Local notes let you leave something on a diff without posting it to the pull
+request. Each note is attached to a file and line and can be an `ISSUE`,
+`SUGGESTION`, `NOTE`, or `PRAISE`. If that line changes, Atlas shows the note
+as outdated. If the location no longer exists, Atlas removes it. `:AtlasNotes`
+lists your notes across all pull requests.
+
+For scripts, use `bin/atlas-notes`. Notes added there appear in AtlasDiff and
+`:AtlasNotes`:
+>sh
+  ./bin/atlas-notes add \
+    --target https://github.com/owner/repository/pull/123 \
+    --file lua/review_queue.lua --line 19 \
+    --context "local item = queue[index]" \
+    --type suggestion --body "Should this be a bool?"
 <
 
+An example Pi integration is available here:
+https://github.com/emrearmagan/dotfiles/blob/main/config/pi/extensions/atlas-notes.ts
+
 ------------------------------------------------------------------------------
-CREATE ISSUES                                             *atlas-issues-create*
+CREATE PULL REQUESTS                         *atlas-create-pull-requests*
+                                                    *atlas-pulls-create*
 
-`:AtlasCreateIssue` creates GitHub or GitLab issues in the current repository,
-or Jira issues in the configured instance. The editor supports Markdown
-descriptions and provider fields such as labels, assignees, milestones, and
-Jira issue types.
+`:AtlasCreatePR` opens the pull request form for the current branch. The
+newest commit supplies the title. Atlas first reads the configured
+`pr_template`, or `.github/pull_request_template.md` by default.
 
-All three providers can apply a saved Markdown template or save the current
-description as a new template. Templates are shared between providers and
+Without a template, Atlas groups conventional commits into sections,
+recognizes leading Jira keys such as `[JIRA-123]`, links commit hashes and
+issue references, collects references under Related, and appends the
+diffstat. If no commits use a conventional prefix, it uses a linked plain
+commit list instead.
+
+Edit the title and description, choose the target branch and reviewers, set
+the draft state, or preview commits and diffstat before submitting.
+
+------------------------------------------------------------------------------
+CREATE ISSUES                                      *atlas-create-issues*
+                                                    *atlas-issues-create*
+
+`:AtlasCreateIssue` opens the creation flow for the configured issue
+providers. GitHub and GitLab use the current repository, while Jira uses the
+configured instance. The forms support Markdown descriptions and
+provider-specific fields such as labels, assignees, milestones, and Jira
+issue types.
+
+GitHub, GitLab, and Jira can apply a saved Markdown template or save the
+current description as a new one. Templates are shared between providers and
 stored under Neovim's data directory.
 
-==============================================================================
-8. SEARCH                                                        *atlas-search*
+------------------------------------------------------------------------------
+NOTIFICATIONS                                              *atlas-notifications*
 
-`:AtlasSearch [provider]` opens a search prompt for the given provider.
+Open GitHub and GitLab notifications inside Atlas, refresh them, open the
+related item, and mark notifications as read or done without leaving Neovim.
 
-JIRA - JQL prompt with completion for fields, operators and values:
->
-    project = KAN AND assignee = currentUser() ORDER BY updated DESC
-    summary ~ "login bug"
+------------------------------------------------------------------------------
+BOOKMARKS                                                      *atlas-bookmarks*
+
+Turn frequently used GitHub and GitLab searches or Jira JQL into named
+shortcuts. Use bookmarks for review queues, recurring project views, and the
+searches you return to throughout the day. Bookmarks appear alongside your
+configured views.
+
+------------------------------------------------------------------------------
+CUSTOM ACTIONS                                    *atlas-custom-actions*
+                       *atlas-pulls-custom-actions* *atlas-issues-custom-actions*
+
+Add project-specific actions to pull requests and issues. Custom actions
+receive the current item and provider context, making it possible to call
+local scripts, open repositories in tmux, copy branch names, or connect Atlas
+to your own tooling. They appear in the action menu (default `A`).
+
+>lua
+  pulls = {
+    repo_config = {
+      paths = {
+        ["your-workspace/*"] = "~/code/repos/*",
+      },
+      settings = {},
+    },
+    custom_actions = {
+      {
+        id = "open_tmux_window",
+        label = "Open repo in tmux window",
+        confirmation = true,
+        ---@param pr PullRequest
+        ---@param ctx AtlasPullsCustomActionContext
+        ---@param done fun(ok: boolean|nil, message: string|nil)
+        run = function(_, ctx, done)
+          if not ctx.repo_path then
+            done(false, "No repo path")
+            return
+          end
+
+          vim.system({ "tmux", "new-window", "-c", ctx.repo_path }, { text = true }, function(res)
+            vim.schedule(function()
+              if res.code ~= 0 then
+                done(false, "Failed to open tmux window")
+                return
+              end
+              done(true, "Opened tmux window")
+            end)
+          end)
+        end,
+      },
+    },
+  },
+  issues = {
+    custom_actions = {
+      {
+        id = "copy_branch_name",
+        label = "Copy branch name",
+        ---@param issue Issue
+        ---@param ctx AtlasIssuesCustomActionContext
+        ---@param done fun(ok: boolean|nil, message: string|nil)
+        run = function(issue, ctx, done)
+          local branch = string.format("%s/%s", issue.key, issue.summary:lower():gsub("%s+", "-"))
+          vim.fn.setreg("+", branch)
+          done(true, "Copied: " .. branch)
+        end,
+      },
+    },
+  }
 <
-GITHUB - GitHub query string, with completion for the common qualifiers
-(`is:`, `repo:`, `author:`, `label:`, etc.):
->
-    is:pr is:open author:@me
-    is:issue label:bug
-<
-BITBUCKET - asks for a workspace and a repository, then opens the panel
-scoped to that repo. There's no equivalent of a free-form search; this is
-a Bitbucket API limitation.
-
-GITLAB - asks for a project, then opens the pulls panel scoped to it.
 
 ==============================================================================
-9. KEYMAPS                                                      *atlas-keymaps*
+8. KEYMAPS                                                      *atlas-keymaps*
 
 Defaults live under `keymaps` in `setup()`. Each entry accepts:
   - a string -> single key
@@ -645,6 +681,7 @@ Defaults live under `keymaps` in `setup()`. Each entry accepts:
           request_changes       = "gr",
           submit_review         = "gs",
           open_file             = { "<CR>", "l" },
+          toggle_explorer_grouping = "T",
           toggle_layout        = "t",
           toggle_compact       = "f",
           next_hunk            = "]h",

@@ -45,17 +45,23 @@ function M.transition_issue(issue_key, transition_id, callback)
 		return nil
 	end
 
-	return service.request("POST", string.format("/issue/%s/transitions", issue_key), { transition = { id = id } }, function(_, err)
-		if err then
-			callback(false, err)
-			return
-		end
-		callback(true, nil)
-	end, {
-		action = "Transition issue",
-		issue_key = issue_key,
-		transition_id = id,
-	})
+	return service.request(
+		"POST",
+		string.format("/issue/%s/transitions", issue_key),
+		{ transition = { id = id } },
+		function(_, err)
+			if err then
+				callback(false, err)
+				return
+			end
+			callback(true, nil)
+		end,
+		{
+			action = "Transition issue",
+			issue_key = issue_key,
+			transition_id = id,
+		}
+	)
 end
 
 return M

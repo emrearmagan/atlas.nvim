@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+      - dev
+
+permissions:
+  contents: read
+
+jobs:
+  run-tests:
+    runs-on: ubuntu-latest
+    env:
+      LUA_PATH: "lua/?.lua;lua/?/init.lua;;"
+    steps:
+      - name: Validate main PR source
+        if: ${{ github.event_name == 'pull_request' && github.base_ref == 'main' }}
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+        run: |
+          if [[ "$HEAD_REPOSITORY" != "$GITHUB_REPOSITORY" ]]; then
+            echo "::error::Pull requests from forks must target dev."
+            exit 1
+          fi
+
+          case "$HEAD_REF" in
+            dev|hotfix/*) ;;
+            *)
+              echo "::error::Pull requests to main must come from dev or hotfix/*."
+              exit 1
+              ;;
+          esac
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Run Busted
+        uses: lunarmodules/busted@v2
+
+  stylua:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Check formatting
+        uses: JohnnyMorganz/stylua-action@v5
+        with:
+          token: ${{ github.token }}
+          version: v2.5.2
+          args: --check lua spec

@@ -1,12 +1,6 @@
 local M = {}
 
-local function notify(level, msg)
-	vim.notify("[Atlas] " .. tostring(msg), level)
-end
-
-local function notify_error(msg)
-	notify(vim.log.levels.ERROR, msg)
-end
+local notify = require("atlas.core.notify")
 
 ---@class AtlasCreateIssueChoice
 ---@field id "github"|"jira"|"gitlab"
@@ -45,7 +39,7 @@ local function dispatch(choice)
 		local actions = require("atlas.issues.providers.jira.actions")
 		actions.run("create_issue", {}, function(_, err)
 			if err then
-				notify_error("Jira create issue failed: " .. tostring(err))
+				notify.error("Jira create issue failed: " .. tostring(err))
 			end
 		end)
 		return
@@ -54,24 +48,24 @@ local function dispatch(choice)
 	local git_branch = require("atlas.core.git")
 	local root, root_err = git_branch.repo_root(nil)
 	if not root then
-		notify_error(root_err or "Not in a git repository")
+		notify.error(root_err or "Not in a git repository")
 		return
 	end
 
 	local remote_url, remote_err = git_branch.remote_url(root, "origin")
 	if not remote_url then
-		notify_error(remote_err or "No origin remote configured")
+		notify.error(remote_err or "No origin remote configured")
 		return
 	end
 
 	local info, parse_err = git_branch.parse_remote_url(remote_url)
 	if not info then
-		notify_error(parse_err or "Could not parse remote URL")
+		notify.error(parse_err or "Could not parse remote URL")
 		return
 	end
 
 	if info.provider ~= choice.id then
-		notify_error(
+		notify.error(
 			string.format(
 				"Current repo is on %s but you picked %s; switch into the right clone first",
 				info.provider,
@@ -91,14 +85,14 @@ local function dispatch(choice)
 		return
 	end
 
-	notify_error("Unsupported issue provider: " .. choice.id)
+	notify.error("Unsupported issue provider: " .. choice.id)
 end
 
 function M.start()
 	local choices = build_choices()
 
 	if #choices == 0 then
-		notify_error("No issue-capable provider is configured")
+		notify.error("No issue-capable provider is configured")
 		return
 	end
 
