@@ -1,0 +1,63 @@
+name: Feature request
+description: Suggest an improvement or new capability for Atlas.nvim
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve Atlas.nvim. Describe the problem before proposing a solution so the use case is clear.
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Before submitting
+      options:
+        - label: I have read the documentation and confirmed this functionality is not already available.
+          required: true
+        - label: I have searched both open and closed issues for an existing request.
+          required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case
+      description: Describe the workflow limitation or problem this feature would address.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected behavior
+      description: Explain how you would expect the feature to work from a user's perspective.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed-solution
+    attributes:
+      label: Proposed solution
+      description: Describe your preferred solution, if you have one.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Describe workarounds or alternative designs you considered.
+
+  - type: textarea
+    id: example-config
+    attributes:
+      label: Configuration or API example
+      description: Show what the configuration or usage could look like, when relevant.
+      render: lua
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context
+      description: Add screenshots, links, or any other relevant context.
