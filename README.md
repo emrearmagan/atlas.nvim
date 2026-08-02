@@ -737,7 +737,6 @@ keymaps = {
     copy_id = "y",
     open_diff = "gd",
     checkout = "gc",
-    open_file = { "<CR>", "l" },
     review = {
       toggle_approval = "ga",
       request_changes = "gr",
