@@ -1,6 +1,6 @@
 @gitlab_base_url = https://gitlab.com
-@gitlab_project = 82057321
-@gitlab_iid = 2
+@gitlab_project = 84998732
+@gitlab_iid = 1
 
 ### Current user (GET /user)
 GET {{gitlab_base_url}}/api/v4/user

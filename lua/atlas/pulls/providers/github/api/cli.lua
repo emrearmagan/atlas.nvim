@@ -78,10 +78,11 @@ local function sanitize_error(err)
 end
 
 ---@param args string[]
+---@param parse_json boolean
 ---@param callback fun(result: any, err: string|nil)
 ---@param ctx table|nil
 ---@return { job_id: integer, cancel: fun() }|nil
-function M.gh(args, callback, ctx)
+local function run(args, parse_json, callback, ctx)
 	if vim.fn.executable("gh") ~= 1 then
 		vim.schedule(function()
 			callback(nil, "gh CLI not found. Install from https://cli.github.com")
@@ -109,18 +110,23 @@ function M.gh(args, callback, ctx)
 				return
 			end
 
-			local stdout = vim.trim(res.stdout or "")
+			local stdout = res.stdout or ""
+			if parse_json then
+				stdout = vim.trim(stdout)
+			end
 			if stdout == "" then
 				callback(nil, nil)
 				return
 			end
 
-			local ok, parsed = pcall(vim.json.decode, stdout)
-			if ok then
-				callback(parsed, nil)
-			else
-				callback(stdout, nil)
+			if parse_json then
+				local ok, parsed = pcall(vim.json.decode, stdout)
+				if ok then
+					callback(parsed, nil)
+					return
+				end
 			end
+			callback(stdout, nil)
 		end)
 	end)
 
@@ -141,6 +147,22 @@ function M.gh(args, callback, ctx)
 			end)
 		end,
 	}
+end
+
+---@param args string[]
+---@param callback fun(result: any, err: string|nil)
+---@param ctx table|nil
+---@return { job_id: integer, cancel: fun() }|nil
+function M.gh(args, callback, ctx)
+	return run(args, true, callback, ctx)
+end
+
+---@param args string[]
+---@param callback fun(result: string|nil, err: string|nil)
+---@param ctx table|nil
+---@return { job_id: integer, cancel: fun() }|nil
+function M.gh_text(args, callback, ctx)
+	return run(args, false, callback, ctx)
 end
 
 ---@param subcmd string

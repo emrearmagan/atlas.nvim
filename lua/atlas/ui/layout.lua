@@ -1,8 +1,9 @@
 local M = {}
 
 local footer = require("atlas.ui.components.footer")
-local buf_util = require("atlas.ui.shared.buffer")
-local win_util = require("atlas.ui.shared.window")
+local utils = require("atlas.ui.shared.utils")
+local buf_util = utils.buffer
+local win_util = utils.window
 
 local state = {
 	main_win = nil,
@@ -17,6 +18,52 @@ local state = {
 }
 
 local resize_group = vim.api.nvim_create_augroup("AtlasUILayoutResize", { clear = true })
+
+---@param win integer
+---@param name string
+---@param value boolean|string
+local function set_window_option(win, name, value)
+	vim.api.nvim_set_option_value(name, value, { win = win, scope = "local" })
+end
+
+---@param win integer
+local function apply_main_opts(win)
+	set_window_option(win, "number", false)
+	set_window_option(win, "relativenumber", false)
+	set_window_option(win, "signcolumn", "no")
+	set_window_option(win, "statuscolumn", "")
+	set_window_option(win, "foldcolumn", "0")
+	set_window_option(win, "wrap", false)
+	set_window_option(win, "cursorline", true)
+	set_window_option(win, "scrollbind", false)
+	set_window_option(win, "cursorbind", false)
+	set_window_option(win, "diff", false)
+	set_window_option(win, "winbar", " ")
+	set_window_option(win, "statusline", " ")
+	set_window_option(
+		win,
+		"winhighlight",
+		"Normal:Normal,NormalFloat:Normal,FloatBorder:FloatBorder,CursorLine:CursorLine"
+	)
+end
+
+---@param win integer
+local function apply_detail_opts(win)
+	set_window_option(win, "number", false)
+	set_window_option(win, "relativenumber", false)
+	set_window_option(win, "signcolumn", "no")
+	set_window_option(win, "statuscolumn", "")
+	set_window_option(win, "foldcolumn", "0")
+	set_window_option(win, "wrap", true)
+	set_window_option(win, "breakindent", true)
+	set_window_option(win, "cursorline", true)
+	set_window_option(win, "scrollbind", false)
+	set_window_option(win, "cursorbind", false)
+	set_window_option(win, "diff", false)
+	set_window_option(win, "winbar", " ")
+	set_window_option(win, "statusline", " ")
+	set_window_option(win, "winfixwidth", false)
+end
 
 local function ensure_buf(buf_field, name, filetype)
 	local existing = state[buf_field]
@@ -42,7 +89,7 @@ local function ensure_main()
 	if tab_buf ~= main_buf and buf_util.valid(tab_buf) then
 		pcall(vim.api.nvim_buf_delete, tab_buf, { force = true })
 	end
-	win_util.apply_main_opts(state.main_win)
+	apply_main_opts(state.main_win)
 
 	vim.api.nvim_create_autocmd("WinClosed", {
 		group = resize_group,
@@ -64,7 +111,7 @@ local function ensure_footer()
 	if win_util.valid(state.footer_win) then
 		vim.api.nvim_win_set_buf(state.footer_win, buf)
 	else
-		state.footer_win = win_util.create(state.main_win, "botright split", buf, win_util.apply_footer_opts)
+		state.footer_win = win_util.create(state.main_win, "botright split", buf, footer.apply_opts)
 	end
 	pcall(vim.api.nvim_win_set_height, state.footer_win, 1)
 end
@@ -108,8 +155,7 @@ function M.toggle_detail()
 		return
 	end
 	state.detail_buf = ensure_buf("detail_buf", "AtlasDetail", "")
-	state.detail_win =
-		win_util.create(state.main_win, "rightbelow vsplit", state.detail_buf, win_util.apply_detail_opts)
+	state.detail_win = win_util.create(state.main_win, "rightbelow vsplit", state.detail_buf, apply_detail_opts)
 	pcall(vim.api.nvim_win_set_width, state.detail_win, math.max(math.floor(vim.o.columns * 0.45), 40))
 
 	if win_util.valid(state.main_win) then

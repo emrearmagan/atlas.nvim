@@ -313,6 +313,16 @@ function M.available(ctx)
 	if has_pr(ctx) then
 		local shared_actions = require("atlas.pulls.actions")
 		table.insert(out, {
+			id = "open_pipelines",
+			label = "Open Pipelines",
+			is_available = function()
+				return true, nil
+			end,
+			run = function(action_ctx, done)
+				shared_actions.open_pipelines(action_ctx.pr, done)
+			end,
+		})
+		table.insert(out, {
 			id = "open_diff",
 			label = "Open diff",
 			is_available = function()

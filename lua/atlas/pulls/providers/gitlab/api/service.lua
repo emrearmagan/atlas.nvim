@@ -234,4 +234,36 @@ function M.request(method, endpoint, data, on_done, ctx)
 	end)
 end
 
+---@param method string
+---@param endpoint string
+---@param on_done fun(result: string|nil, err: string|nil)
+---@param ctx table|nil
+---@return { job_id: integer, cancel: fun() }|nil
+function M.request_text(method, endpoint, on_done, ctx)
+	local _, auth_err = M.get_auth()
+	if auth_err then
+		logger.logerror("GitLab pulls auth missing", { error = auth_err })
+		on_done(nil, auth_err)
+		return nil
+	end
+
+	local log = vim.tbl_extend("keep", { method = method, endpoint = endpoint }, ctx or {})
+	local message = log.action or "GitLab pulls request"
+	log.action = nil
+	logger.loginfo(message, log)
+
+	return http.curl_text_request(method, M.url(endpoint), M.build_headers(), nil, function(result, err)
+		if err then
+			logger.logerror("GitLab pulls request failed", {
+				method = method,
+				endpoint = endpoint,
+				error = tostring(err),
+			})
+			on_done(nil, err)
+			return
+		end
+		on_done(result, nil)
+	end)
+end
+
 return M

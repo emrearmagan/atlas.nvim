@@ -53,6 +53,25 @@ function M.show_details(pr, buf)
 	})
 end
 
+---@param pr PullRequest
+---@param on_done fun(result: PullsActionResult|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.open_pipelines(pr, on_done)
+	local p = provider()
+	if p == nil or type(p.fetch_pipelines) ~= "function" then
+		local err = "Pipelines are not supported by this provider"
+		footer.notify("warn", err)
+		on_done(nil, err)
+		return nil
+	end
+
+	require("atlas.pulls.ui.pipelines").open(pr)
+	local message = "Opened Pipelines"
+	footer.notify("success", message, 1200)
+	on_done({ changed_pr = false, message = message }, nil)
+	return nil
+end
+
 local PROVIDER_ACTIONS_MODULES = {
 	github = "atlas.pulls.providers.github.actions",
 	gitlab = "atlas.pulls.providers.gitlab.actions",

@@ -23,6 +23,7 @@ CONTENTS                                                       *atlas-contents*
   7. Features ............................... |atlas-features|
        Review pull requests ................. |atlas-review-pull-requests|
          Local notes ........................ |atlas-local-notes|
+       View pipelines ....................... |atlas-view-pipelines|
        Create pull requests ................. |atlas-create-pull-requests|
        Create issues ........................ |atlas-create-issues|
        Notifications ........................ |atlas-notifications|
@@ -519,6 +520,14 @@ For scripts, use `bin/atlas-notes`. Notes added there appear in AtlasDiff and
 
 An example Pi integration is available here:
 https://github.com/emrearmagan/dotfiles/blob/main/config/pi/extensions/atlas-notes.ts
+
+------------------------------------------------------------------------------
+VIEW PIPELINES                                  *atlas-view-pipelines*
+                                                  *atlas-pulls-pipelines*
+
+View pipelines and their jobs, inspect their status, and read job logs
+directly in Atlas. Retry failed pipelines or jobs and cancel work that is
+still running.
 
 ------------------------------------------------------------------------------
 CREATE PULL REQUESTS                         *atlas-create-pull-requests*

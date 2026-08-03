@@ -2,36 +2,9 @@
 local M = {}
 
 local icons = require("atlas.ui.shared.icons")
+local providers = require("atlas.pulls.providers")
 
 local MAX_HASH_LEN = 12
-
----@param builds PullsBuild[]
----@return string
-local function aggregate_build_status(builds)
-	local has_success = false
-	local has_stopped = false
-	for _, b in ipairs(builds) do
-		local s = tostring(b.state or ""):upper()
-		if s == "FAILED" then
-			return "failed"
-		end
-		if s == "INPROGRESS" then
-			return "inprogress"
-		end
-		if s == "STOPPED" then
-			has_stopped = true
-		elseif s == "SUCCESSFUL" then
-			has_success = true
-		end
-	end
-	if has_stopped then
-		return "stopped"
-	end
-	if has_success then
-		return "successful"
-	end
-	return "unknown"
-end
 
 ---@param pr PullRequest
 ---@return PullsPanelHeaderRow[]
@@ -74,10 +47,10 @@ function M.chips(pr)
 	end
 
 	local spinner = require("atlas.ui.components.spinner")
-	if overview_state.builds == "loading" then
-		table.insert(chips, { label = spinner.with_text("Loading builds"), hl = "AtlasTextMuted" })
-	elseif type(overview_state.builds) == "table" and #overview_state.builds > 0 then
-		local status = aggregate_build_status(overview_state.builds)
+	if overview_state.pipelines == "loading" then
+		table.insert(chips, { label = spinner.with_text("Loading pipelines"), hl = "AtlasTextMuted" })
+	elseif type(overview_state.pipelines) == "table" and #overview_state.pipelines > 0 then
+		local status = providers.aggregate_pipeline_state(overview_state.pipelines):lower()
 		if status ~= "unknown" then
 			local icon, icon_hl = icons.pulls_status(status)
 			local label = status:sub(1, 1):upper() .. status:sub(2)
@@ -114,12 +87,12 @@ function M.fetches(pr, refresh)
 	cancel_panel_fetches()
 
 	local overview_state = require("atlas.pulls.ui.panel.pr.tabs.overview.state")
-	overview_state.builds = "loading"
+	overview_state.pipelines = "loading"
 
 	local provider = require("atlas.pulls.state").provider
-	if provider and provider.fetch_builds then
-		track_panel(provider.fetch_builds(pr, function(builds, err)
-			overview_state.builds = err and err or (builds or {})
+	if provider and provider.fetch_pipelines then
+		track_panel(provider.fetch_pipelines(pr, nil, function(pipelines, err)
+			overview_state.pipelines = err and err or (pipelines or {})
 			refresh()
 		end))
 	end

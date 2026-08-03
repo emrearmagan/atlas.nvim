@@ -1,5 +1,6 @@
 local M = {}
 
+local providers = require("atlas.pulls.providers")
 local cli = require("atlas.pulls.providers.github.api.cli")
 
 ---@param url string|nil
@@ -13,62 +14,101 @@ function M.parse_run_id(url)
 	return id and tonumber(id) or nil
 end
 
----@param slug string
----@param run_id integer
+---@param value string|integer|nil
+---@return integer|nil
+local function parse_job_id(value)
+	local raw = tostring(value or "")
+	local id = raw:match("^%d+$") or raw:match("/job/(%d+)")
+	return id and tonumber(id) or nil
+end
+
+---@param started_at string|nil
+---@param completed_at string|nil
+---@return number|nil
+local function duration(started_at, completed_at)
+	local started = vim.fn.strptime("%Y-%m-%dT%H:%M:%SZ", tostring(started_at or ""))
+	local completed = vim.fn.strptime("%Y-%m-%dT%H:%M:%SZ", tostring(completed_at or ""))
+	if started <= 0 or completed < started then
+		return nil
+	end
+	return completed - started
+end
+
+local CONCLUSION_STATE = {
+	action_required = "FAILED",
+	cancelled = "STOPPED",
+	failure = "FAILED",
+	neutral = "SUCCESSFUL",
+	skipped = "STOPPED",
+	stale = "STOPPED",
+	success = "SUCCESSFUL",
+	timed_out = "FAILED",
+}
+
+---@param status string|nil
+---@param conclusion string|nil
+---@return string
+local function detail_state(status, conclusion)
+	if tostring(status or ""):lower() ~= "completed" then
+		return "INPROGRESS"
+	end
+	return CONCLUSION_STATE[tostring(conclusion or ""):lower()] or "UNKNOWN"
+end
+
+---@param pr PullRequest
+---@param endpoint string
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.rerun_run(slug, run_id, on_done)
-	local endpoint = string.format("repos/%s/actions/runs/%d/rerun", slug, run_id)
-	return cli.gh({ "api", "-X", "POST", endpoint }, function(_, err)
-		if err then
-			on_done(false, err)
-			return
-		end
-		on_done(true, nil)
+local function post_pipeline_action(pr, endpoint, on_done)
+	local repo_slug = tostring(pr.repo_full_name or "")
+	if repo_slug == "" then
+		on_done(false, "Missing repo")
+		return nil
+	end
+	return cli.gh({ "api", "-X", "POST", string.format("repos/%s/%s", repo_slug, endpoint) }, function(_, err)
+		on_done(err == nil, err)
 	end)
 end
 
----Re-runs each unique Actions workflow run referenced by builds. Skips builds
----without a parsable run_id (external CI).
----@param slug string
----@param builds PullsBuild[]
----@param on_done fun(stats: { triggered: integer, skipped: integer, errors: string[] })
-function M.rerun_all(slug, builds, on_done)
-	local seen = {}
-	local run_ids = {}
-	local skipped = 0
-	for _, b in ipairs(builds or {}) do
-		local run_id = M.parse_run_id(b.url)
-		if run_id and not seen[run_id] then
-			seen[run_id] = true
-			table.insert(run_ids, run_id)
-		elseif not run_id then
-			skipped = skipped + 1
-		end
+---@param pr PullRequest
+---@param pipeline PullsPipeline
+---@param failed_only boolean
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.rerun_pipeline(pr, pipeline, failed_only, on_done)
+	local run_id = tonumber(pipeline.provider_id) or M.parse_run_id(pipeline.url)
+	if not run_id then
+		on_done(false, "Missing workflow run ID")
+		return nil
 	end
+	local action = failed_only and "rerun-failed-jobs" or "rerun"
+	return post_pipeline_action(pr, string.format("actions/runs/%d/%s", run_id, action), on_done)
+end
 
-	if #run_ids == 0 then
-		on_done({ triggered = 0, skipped = skipped, errors = {} })
-		return
+---@param pr PullRequest
+---@param pipeline PullsPipeline
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.cancel_pipeline(pr, pipeline, on_done)
+	local run_id = tonumber(pipeline.provider_id) or M.parse_run_id(pipeline.url)
+	if not run_id then
+		on_done(false, "Missing workflow run ID")
+		return nil
 	end
+	return post_pipeline_action(pr, string.format("actions/runs/%d/cancel", run_id), on_done)
+end
 
-	local remaining = #run_ids
-	local triggered = 0
-	local errors = {}
-
-	for _, run_id in ipairs(run_ids) do
-		M.rerun_run(slug, run_id, function(ok, err)
-			if ok then
-				triggered = triggered + 1
-			else
-				table.insert(errors, tostring(err))
-			end
-			remaining = remaining - 1
-			if remaining == 0 then
-				on_done({ triggered = triggered, skipped = skipped, errors = errors })
-			end
-		end)
+---@param pr PullRequest
+---@param job PullsPipelineJob
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.rerun_pipeline_job(pr, job, on_done)
+	local job_id = parse_job_id(job.id) or parse_job_id(job.url)
+	if not job_id then
+		on_done(false, "Missing workflow job ID")
+		return nil
 	end
+	return post_pipeline_action(pr, string.format("actions/jobs/%d/rerun", job_id), on_done)
 end
 
 ---@return { login: string, state: "APPROVED"|"CHANGES_REQUESTED"|"COMMENTED"|"DISMISSED" }[], string[]
@@ -159,9 +199,9 @@ end
 
 ---@param pr PullRequest
 ---@param opts { force_refresh: boolean|nil }|nil
----@param on_done fun(builds: PullsBuild[]|nil, err: string|nil)
+---@param on_done fun(pipelines: PullsPipeline[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.get_builds(pr, opts, on_done)
+function M.get_pipelines(pr, opts, on_done)
 	local repo_slug = pr.repo_full_name or ""
 	if repo_slug == "" then
 		vim.schedule(function()
@@ -170,7 +210,7 @@ function M.get_builds(pr, opts, on_done)
 		return nil
 	end
 
-	local cache_key = string.format("github:builds:%s:%s", repo_slug, tostring(pr.id))
+	local cache_key = string.format("github:pipelines:%s:%s", repo_slug, tostring(pr.id))
 	opts = opts or {}
 
 	if not opts.force_refresh then
@@ -188,7 +228,7 @@ function M.get_builds(pr, opts, on_done)
 		"--repo",
 		repo_slug,
 		"--json",
-		"name,state,bucket,link,workflow",
+		"name,state,bucket,link,workflow,startedAt,completedAt",
 	}, function(result, err)
 		if err then
 			if err:find("no checks") or err:find("no status checks") then
@@ -214,19 +254,153 @@ function M.get_builds(pr, opts, on_done)
 			cancel = "STOPPED",
 		}
 
-		local builds = {}
-		for _, check in ipairs(result) do
-			table.insert(builds, {
-				name = tostring(check.name or ""),
-				state = BUCKET_MAP[tostring(check.bucket or "")] or "INPROGRESS",
-				url = check.link and tostring(check.link) or nil,
-				key = check.workflow and tostring(check.workflow) or nil,
-			})
+		local pipelines = {}
+		local pipelines_by_id = {}
+		local commit_hash = tostring((pr.source or {}).commit_hash or "")
+		for index, check in ipairs(result) do
+			local url = check.link and tostring(check.link) or nil
+			local run_id = M.parse_run_id(url)
+			local state = BUCKET_MAP[tostring(check.bucket or "")] or "INPROGRESS"
+			if run_id then
+				local id = tostring(run_id)
+				local pipeline = pipelines_by_id[id]
+				if pipeline == nil then
+					local workflow = tostring(check.workflow or "")
+					pipeline = {
+						name = workflow ~= "" and workflow or "GitHub Actions",
+						state = "UNKNOWN",
+						url = url and url:match("^(.-/actions/runs/%d+)") or nil,
+						key = workflow ~= "" and workflow or id,
+						provider_id = id,
+						commit_hash = commit_hash,
+						jobs = {},
+					}
+					pipelines_by_id[id] = pipeline
+					table.insert(pipelines, pipeline)
+				end
+				table.insert(pipeline.jobs, {
+					id = parse_job_id(url) or url or string.format("%s:%d", id, #pipeline.jobs + 1),
+					name = tostring(check.name or "Job"),
+					state = state,
+					url = url,
+					started_at = check.startedAt,
+					completed_at = check.completedAt,
+					duration = duration(check.startedAt, check.completedAt),
+				})
+			else
+				table.insert(pipelines, {
+					name = tostring(check.name or "External check"),
+					state = state,
+					url = url,
+					key = check.workflow and tostring(check.workflow) or nil,
+					commit_hash = commit_hash,
+					jobs = {},
+				})
+			end
 		end
 
-		cli.set_mem(cache_key, builds)
-		on_done(builds, nil)
+		for _, pipeline in ipairs(pipelines) do
+			if #pipeline.jobs > 0 then
+				pipeline.state = providers.aggregate_pipeline_state(pipeline.jobs)
+			end
+		end
+
+		cli.set_mem(cache_key, pipelines)
+		on_done(pipelines, nil)
 	end)
+end
+
+---@param pr PullRequest
+---@param pipeline PullsPipeline
+---@param _opts { force_refresh: boolean|nil }|nil
+---@param on_done fun(pipeline: PullsPipeline|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.get_pipeline_details(pr, pipeline, _opts, on_done)
+	local repo_slug = tostring(pr.repo_full_name or "")
+	local run_id = tonumber(pipeline.provider_id) or M.parse_run_id(pipeline.url)
+	if run_id == nil then
+		on_done(pipeline, nil)
+		return nil
+	end
+	if repo_slug == "" then
+		on_done(nil, "Missing repo")
+		return nil
+	end
+
+	local endpoint = string.format("repos/%s/actions/runs/%d/jobs?per_page=100", repo_slug, run_id)
+	return cli.gh({ "api", endpoint }, function(result, err)
+		if err then
+			on_done(nil, err)
+			return
+		end
+
+		local existing_jobs = {}
+		for _, job in ipairs(pipeline.jobs or {}) do
+			existing_jobs[tostring(job.id)] = job
+		end
+
+		local jobs = {}
+		for _, raw_job in ipairs(type(result) == "table" and result.jobs or {}) do
+			local job_id = raw_job.id or ""
+			local job = existing_jobs[tostring(job_id)] or {}
+			job.id = job_id
+			job.name = tostring(raw_job.name or "Job")
+			job.state = detail_state(raw_job.status, raw_job.conclusion)
+			job.provider_state = tostring(raw_job.conclusion or raw_job.status or "")
+			job.url = type(raw_job.html_url) == "string" and raw_job.html_url or nil
+			job.started_at = raw_job.started_at
+			job.completed_at = raw_job.completed_at
+			job.duration = duration(raw_job.started_at, raw_job.completed_at)
+			job.steps = {}
+			for _, raw_step in ipairs(type(raw_job.steps) == "table" and raw_job.steps or {}) do
+				table.insert(job.steps, {
+					id = string.format("%s:%s", tostring(job_id), tostring(raw_step.number or #job.steps + 1)),
+					name = tostring(raw_step.name or "Step"),
+					state = detail_state(raw_step.status, raw_step.conclusion),
+					provider_state = tostring(raw_step.conclusion or raw_step.status or ""),
+					started_at = raw_step.started_at,
+					completed_at = raw_step.completed_at,
+					duration = duration(raw_step.started_at, raw_step.completed_at),
+				})
+			end
+			table.insert(jobs, job)
+		end
+
+		pipeline.jobs = jobs
+		on_done(pipeline, nil)
+	end, {
+		action = "Fetch pipeline details",
+		repo = repo_slug,
+		run_id = run_id,
+	})
+end
+
+---@param pr PullRequest
+---@param _pipeline PullsPipeline
+---@param job PullsPipelineJob
+---@param on_done fun(log: string|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.get_pipeline_job_log(pr, _pipeline, job, on_done)
+	local repo_slug = tostring(pr.repo_full_name or "")
+	local job_id = parse_job_id(job.id) or parse_job_id(job.url)
+	if repo_slug == "" or job_id == nil then
+		vim.schedule(function()
+			on_done(nil, repo_slug == "" and "Missing repo" or "Missing workflow job ID")
+		end)
+		return nil
+	end
+
+	if tostring(job.state or ""):upper() == "INPROGRESS" then
+		on_done("Job is still in progress", nil)
+		return nil
+	end
+
+	local endpoint = string.format("repos/%s/actions/jobs/%d/logs", repo_slug, job_id)
+	return cli.gh_text({ "api", endpoint }, on_done, {
+		action = "Fetch workflow job log",
+		repo = repo_slug,
+		job_id = job_id,
+	})
 end
 
 ---@param mc table  result from get_merge_checks
@@ -303,58 +477,12 @@ local function conflicts_check(mergeable)
 	return nil
 end
 
----@param builds PullsBuild[]
----@return PullsMergeCheck|nil
-local function builds_check(builds)
-	if type(builds) ~= "table" or #builds == 0 then
-		return nil
-	end
-
-	local total, pass, fail, ip, stop = #builds, 0, 0, 0, 0
-	for _, b in ipairs(builds) do
-		local s = tostring(b.state or ""):upper()
-		if s == "SUCCESSFUL" then
-			pass = pass + 1
-		elseif s == "FAILED" then
-			fail = fail + 1
-		elseif s == "INPROGRESS" then
-			ip = ip + 1
-		elseif s == "STOPPED" then
-			stop = stop + 1
-		end
-	end
-
-	local state, detail
-	if fail > 0 then
-		state = "failed"
-		detail = string.format("%d of %d failed", fail, total)
-	elseif ip > 0 then
-		state = "inprogress"
-		detail = string.format("%d of %d in progress", ip, total)
-	elseif pass > 0 then
-		state = "successful"
-		if stop > 0 then
-			detail = string.format("%d/%d successful (%d skipped)", pass, total, stop)
-		else
-			detail = string.format("%d/%d successful", pass, total)
-		end
-	elseif stop == total then
-		state = "muted"
-		detail = string.format("All %d checks skipped", total)
-	else
-		state = "muted"
-		detail = string.format("%d of %d unknown", total - pass - fail - ip - stop, total)
-	end
-
-	return { key = "builds", state = state, label = "Builds", details = { detail } }
-end
-
 ---@param pr PullRequest
 ---@param opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(checks: PullsMergeCheck[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.get_merge_checks_summary(pr, opts, on_done)
-	local mc_result, builds_result
+	local mc_result, pipelines_result
 	local first_err
 	local pending = 2
 
@@ -363,7 +491,7 @@ function M.get_merge_checks_summary(pr, opts, on_done)
 		if pending > 0 then
 			return
 		end
-		if mc_result == nil and builds_result == nil then
+		if mc_result == nil and pipelines_result == nil then
 			on_done(nil, first_err or "Failed to fetch merge checks")
 			return
 		end
@@ -380,9 +508,16 @@ function M.get_merge_checks_summary(pr, opts, on_done)
 		if type(mc_result) == "table" then
 			table.insert(checks, reviews_check(mc_result))
 		end
-		local b = builds_check(builds_result)
+		local b = providers.pipelines_check(pipelines_result, "Pipelines")
 		if b then
 			table.insert(checks, b)
+		elseif type(mc_result) == "table" and mc_result.merge_state == "UNSTABLE" then
+			table.insert(checks, {
+				key = "pipelines",
+				state = "warning",
+				label = "Pipelines have not passed",
+				details = { "A pipeline may be pending, failing, or require action." },
+			})
 		end
 		if type(mc_result) == "table" then
 			local c = conflicts_check(mc_result.mergeable)
@@ -403,11 +538,11 @@ function M.get_merge_checks_summary(pr, opts, on_done)
 		finish()
 	end)
 
-	local h_builds = M.get_builds(pr, opts, function(result, err)
+	local h_pipelines = M.get_pipelines(pr, opts, function(result, err)
 		if err then
 			first_err = first_err or err
 		else
-			builds_result = result
+			pipelines_result = result
 		end
 		finish()
 	end)
@@ -417,8 +552,8 @@ function M.get_merge_checks_summary(pr, opts, on_done)
 			if h_mc and h_mc.cancel then
 				h_mc.cancel()
 			end
-			if h_builds and h_builds.cancel then
-				h_builds.cancel()
+			if h_pipelines and h_pipelines.cancel then
+				h_pipelines.cancel()
 			end
 		end,
 	}
