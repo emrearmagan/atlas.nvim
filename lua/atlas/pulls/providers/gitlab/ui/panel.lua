@@ -177,9 +177,9 @@ function M.fetches(pr, refresh, opts)
 
 	local overview_state = require("atlas.pulls.ui.panel.pr.tabs.overview.state")
 	local checks = require("atlas.pulls.providers.gitlab.api.checks")
-	overview_state.builds = "loading"
-	track_panel(checks.get_builds(pr, { force_refresh = force }, function(builds, err)
-		overview_state.builds = err and err or (builds or {})
+	overview_state.pipelines = "loading"
+	track_panel(checks.get_pipelines(pr, { force_refresh = force }, function(pipelines, err)
+		overview_state.pipelines = err and err or (pipelines or {})
 		refresh()
 	end))
 end

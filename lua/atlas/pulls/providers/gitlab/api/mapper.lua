@@ -303,25 +303,43 @@ function M.to_draft_comment(draft, discussion_first_id, files_by_path)
 	return comment
 end
 
+local function gql_author(author)
+	return type(author.username) == "string"
+			and {
+				name = tostring(author.name or author.username),
+				nickname = author.username,
+				username = author.username,
+				id = "",
+			}
+		or nil
+end
+
+local function gql_inline_position(gql_note)
+	local pos = type(gql_note.position) == "table" and gql_note.position or nil
+	if not pos or tostring(pos.positionType or "text") ~= "text" then
+		return nil
+	end
+	local new_line = tonumber(pos.newLine)
+	local old_line = tonumber(pos.oldLine)
+	local side = new_line and "new" or "old"
+	local line = new_line or old_line
+	local path = tostring(pos.newPath or pos.oldPath or "")
+	if path == "" or line == nil then
+		return nil
+	end
+	return {
+		path = path,
+		line = line,
+		inline = { path = path, to = side == "new" and line or nil, from = side == "old" and line or nil },
+	}
+end
+
 ---@param gql_note table
 ---@param first_id integer|nil
 ---@param discussion_id string
 ---@return PullsComment
 function M.to_comment_from_gql(gql_note, first_id, discussion_id)
 	local note_id = tonumber(tostring(gql_note.id or ""):match("([^/]+)$") or "")
-	local author = type(gql_note.author) == "table" and gql_note.author or {}
-	local pos = type(gql_note.position) == "table" and gql_note.position or nil
-	local inline = nil
-	if pos and tostring(pos.positionType or "text") == "text" then
-		local new_line = tonumber(pos.newLine)
-		local old_line = tonumber(pos.oldLine)
-		local side = new_line and "new" or "old"
-		local line = new_line or old_line
-		local p = tostring(pos.newPath or pos.oldPath or "")
-		if p ~= "" and line ~= nil then
-			inline = { path = p, to = side == "new" and line or nil, from = side == "old" and line or nil }
-		end
-	end
 	local counts = {}
 	for _, e in ipairs(((gql_note.awardEmoji or {}).nodes or {})) do
 		local name = tostring(e.name or "")
@@ -329,18 +347,14 @@ function M.to_comment_from_gql(gql_note, first_id, discussion_id)
 			counts[name] = (counts[name] or 0) + 1
 		end
 	end
+	local position = gql_inline_position(gql_note)
 	return {
 		id = note_id,
 		parent_id = (note_id ~= first_id) and first_id or nil,
-		author = type(author.username) == "string" and {
-			name = tostring(author.name or author.username),
-			nickname = author.username,
-			username = author.username,
-			id = "",
-		} or nil,
+		author = gql_author(type(gql_note.author) == "table" and gql_note.author or {}),
 		content_raw = tostring(gql_note.body or ""),
 		created_on = tostring(gql_note.createdAt or ""),
-		inline = inline,
+		inline = position and position.inline or nil,
 		inline_hunk = nil,
 		is_task = nil,
 		state = gql_note.resolved == true and "RESOLVED" or nil,
@@ -349,11 +363,45 @@ function M.to_comment_from_gql(gql_note, first_id, discussion_id)
 	}
 end
 
+local function rest_inline_position(note)
+	local pos = type(note.position) == "table" and note.position or nil
+	if not pos or tostring(pos.position_type or "text") ~= "text" then
+		return nil
+	end
+	local new_line = tonumber(pos.new_line)
+	local old_line = tonumber(pos.old_line)
+	local line = new_line or old_line
+	local path = tostring(pos.new_path or pos.old_path or "")
+	if path == "" or line == nil then
+		return nil
+	end
+	return { path = path, line = line }
+end
+
+---@param note table
+---@return PullsActivityEntry|nil
+function M.to_inline_thread_activity(note)
+	if note.system == true then
+		return nil
+	end
+	local position = rest_inline_position(note)
+	if not position then
+		return nil
+	end
+	return {
+		kind = "comment",
+		actor = actor_from(note.author),
+		date = tostring(note.created_at or ""),
+		label = string.format("started a review thread on %s:%d", position.path, position.line),
+		_raw = { gitlab_inline_thread_activity = true },
+	}
+end
+
 ---@param note table
 ---@return PullsActivityEntry|nil
 function M.to_activity(note)
 	if note.system ~= true then
-		return nil
+		return M.to_inline_thread_activity(note)
 	end
 	local body = tostring(note.body or "")
 	if body == "" then

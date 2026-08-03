@@ -56,14 +56,10 @@ describe("repo_paths", function()
 
 		it("prefers more specific wildcard", function()
 			-- "ws/proj-*" is more specific (longer literal) than "ws/*".
-			local path = checkout.resolve_repo_path(
-				{
-					["ws/*"] = "~/code/*",
-					["ws/proj-*"] = "~/work/proj-*",
-				},
-				"ws/proj-foo",
-				{ require_git = false, require_existing = false }
-			)
+			local path = checkout.resolve_repo_path({
+				["ws/*"] = "~/code/*",
+				["ws/proj-*"] = "~/work/proj-*",
+			}, "ws/proj-foo", { require_git = false, require_existing = false })
 			assert.is_truthy(path:find("/work/proj%-foo$"))
 		end)
 

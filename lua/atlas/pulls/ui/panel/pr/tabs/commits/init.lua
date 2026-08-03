@@ -71,12 +71,12 @@ local function to_thread_item(commit, width)
 	local when = utils.relative_time(commit.date)
 	local content = author .. " · " .. when
 
-	-- Build status
-	local build_state = state.status_by_hash[commit.hash]
-	if build_state == "loading" then
-		content = content .. " · " .. icons.pulls_status("inprogress") .. " builds"
-	elseif build_state ~= nil and build_state ~= "unknown" then
-		content = content .. " · " .. icons.pulls_status(build_state) .. " " .. status_label(build_state)
+	-- Pipeline status
+	local pipeline_state = state.status_by_hash[commit.hash]
+	if pipeline_state == "loading" then
+		content = content .. " · " .. icons.pulls_status("inprogress") .. " pipelines"
+	elseif pipeline_state ~= nil and pipeline_state ~= "unknown" then
+		content = content .. " · " .. icons.pulls_status(pipeline_state) .. " " .. status_label(pipeline_state)
 	end
 
 	-- Truncate message to leave room for hash + icon + gaps
@@ -95,11 +95,11 @@ local function to_thread_item(commit, width)
 		right_text = hash,
 		content = content,
 		meta = {
-			build_state = build_state,
+			pipeline_state = pipeline_state,
 		},
 		line_map = {
 			commit = commit,
-			build_url = state.url_by_hash[commit.hash],
+			pipeline_url = state.url_by_hash[commit.hash],
 		},
 	}
 end
@@ -142,7 +142,7 @@ function M.on_select(pr, _repo, refresh, opts)
 			state.commits = commits or {}
 			footer.notify("success", string.format("Commits loaded for #%s", pr_id), 1200)
 
-			-- Fetch build statuses for the first N commits
+			-- Fetch pipeline statuses for the first N commits
 			if provider.fetch_commit_status and type(state.commits) == "table" then
 				local count = math.min(MAX_STATUS_COMMITS, #state.commits)
 				for i = 1, count do
@@ -213,16 +213,16 @@ function M.render(_pr, width)
 		end,
 		content_hl = function(item, row, _)
 			local out = { { start_col = 0, end_col = #row, hl_group = "AtlasTextMuted" } }
-			local build_state = type(item.meta) == "table" and tostring(item.meta.build_state or "") or ""
+			local pipeline_state = type(item.meta) == "table" and tostring(item.meta.pipeline_state or "") or ""
 
-			if build_state ~= "" and build_state ~= "unknown" and build_state ~= "loading" then
-				local marker = icons.pulls_status(build_state) .. " " .. status_label(build_state)
+			if pipeline_state ~= "" and pipeline_state ~= "unknown" and pipeline_state ~= "loading" then
+				local marker = icons.pulls_status(pipeline_state) .. " " .. status_label(pipeline_state)
 				local start_col, end_col = row:find(marker, 1, true)
 				if start_col ~= nil and end_col ~= nil then
 					table.insert(out, {
 						start_col = start_col - 1,
 						end_col = end_col,
-						hl_group = status_hl(build_state),
+						hl_group = status_hl(pipeline_state),
 					})
 				end
 			end
@@ -250,7 +250,7 @@ end
 ---@param entry table
 ---@return boolean|nil
 function M.on_enter(_pr, entry)
-	local url = entry.build_url
+	local url = entry.pipeline_url
 	if url and url ~= "" then
 		vim.ui.open(url)
 		return true

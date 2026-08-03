@@ -23,6 +23,7 @@ CONTENTS                                                       *atlas-contents*
   7. Features ............................... |atlas-features|
        Review pull requests ................. |atlas-review-pull-requests|
          Local notes ........................ |atlas-local-notes|
+       View pipelines ....................... |atlas-view-pipelines|
        Create pull requests ................. |atlas-create-pull-requests|
        Create issues ........................ |atlas-create-issues|
        Notifications ........................ |atlas-notifications|
@@ -521,6 +522,14 @@ An example Pi integration is available here:
 https://github.com/emrearmagan/dotfiles/blob/main/config/pi/extensions/atlas-notes.ts
 
 ------------------------------------------------------------------------------
+VIEW PIPELINES                                  *atlas-view-pipelines*
+                                                  *atlas-pulls-pipelines*
+
+View pipelines and their jobs, inspect their status, and read job logs
+directly in Atlas. Retry failed pipelines or jobs and cancel work that is
+still running.
+
+------------------------------------------------------------------------------
 CREATE PULL REQUESTS                         *atlas-create-pull-requests*
                                                     *atlas-pulls-create*
 
@@ -639,6 +648,10 @@ Defaults live under `keymaps` in `setup()`. Each entry accepts:
   require("atlas").setup({
     keymaps = {
       ui = {
+        next_item               = "j",
+        previous_item           = "k",
+        first_item              = "gg",
+        last_item               = "G",
         help                    = "g?",    -- { "g?", "<leader>?" } for aliases
         close                   = "q",
         toggle_panel            = "p",

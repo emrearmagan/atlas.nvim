@@ -39,25 +39,26 @@ function M.get_assignable_users(slug, query, on_done)
 	end
 
 	local q = vim.trim(tostring(query or ""))
-	return cli.gh(
-		{ "api", "--paginate", string.format("repos/%s/assignees?per_page=100", slug) },
-		function(result, err)
-			if err or type(result) ~= "table" then
-				on_done(nil, err)
-				return
-			end
-			local users = {}
-			for _, raw in ipairs(result) do
-				local user = normalizer.to_user(raw)
-				if user then
-					if q == "" or user.display_name:lower():find(q:lower(), 1, true) or user.account_id:lower():find(q:lower(), 1, true) then
-						table.insert(users, user)
-					end
+	return cli.gh({ "api", "--paginate", string.format("repos/%s/assignees?per_page=100", slug) }, function(result, err)
+		if err or type(result) ~= "table" then
+			on_done(nil, err)
+			return
+		end
+		local users = {}
+		for _, raw in ipairs(result) do
+			local user = normalizer.to_user(raw)
+			if user then
+				if
+					q == ""
+					or user.display_name:lower():find(q:lower(), 1, true)
+					or user.account_id:lower():find(q:lower(), 1, true)
+				then
+					table.insert(users, user)
 				end
 			end
-			on_done(users, nil)
 		end
-	)
+		on_done(users, nil)
+	end)
 end
 
 return M

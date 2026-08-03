@@ -47,24 +47,28 @@ function M.register(buf)
 	local items = {}
 	local nav = require("atlas.issues.ui.panel.issue.navigation")
 
-	table.insert(items, {
-		key = "j",
-		desc = "Next item",
-		opts = { nowait = true, silent = true },
-		hidden = true,
-		callback = function()
-			nav.move_cursor("down")
-		end,
-	})
-	table.insert(items, {
-		key = "k",
-		desc = "Previous item",
-		opts = { nowait = true, silent = true },
-		hidden = true,
-		callback = function()
-			nav.move_cursor("up")
-		end,
-	})
+	utils.insert_if(
+		items,
+		item("ui.next_item", {
+			desc = "Next item",
+			opts = { nowait = true, silent = true },
+			hidden = true,
+			callback = function()
+				nav.move_cursor("down")
+			end,
+		})
+	)
+	utils.insert_if(
+		items,
+		item("ui.previous_item", {
+			desc = "Previous item",
+			opts = { nowait = true, silent = true },
+			hidden = true,
+			callback = function()
+				nav.move_cursor("up")
+			end,
+		})
+	)
 	utils.insert_if(
 		items,
 		item("ui.refresh", {
@@ -240,10 +244,9 @@ end
 
 ---@param buf integer
 function M.remove(buf)
-	local general = {
-		{ key = "j" },
-		{ key = "k" },
-	}
+	local general = {}
+	utils.insert_if(general, remove_item("ui.next_item"))
+	utils.insert_if(general, remove_item("ui.previous_item"))
 	utils.insert_if(general, remove_item("ui.refresh"))
 	utils.insert_if(general, remove_item("ui.open_actions"))
 	utils.insert_if(general, remove_item("ui.open_in_browser"))

@@ -6,7 +6,6 @@ local diff = require("atlas.ui.components.diff_hunks")
 local spinner = require("atlas.ui.components.spinner")
 local text_utils = require("atlas.ui.shared.utils")
 local ui_utils = require("atlas.ui.utils")
-local window = require("atlas.ui.shared.window")
 
 local namespace = vim.api.nvim_create_namespace("atlas_native_diff_footer")
 
@@ -136,7 +135,7 @@ function M.configure(session)
 	if not footer.win or not vim.api.nvim_win_is_valid(footer.win) then
 		return
 	end
-	window.apply_footer_opts(footer.win)
+	component.apply_opts(footer.win)
 	local scope = { win = footer.win, scope = "local" }
 	vim.api.nvim_set_option_value("winbar", "", scope)
 	vim.api.nvim_set_option_value("diff", false, scope)

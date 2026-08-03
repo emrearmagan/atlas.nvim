@@ -241,11 +241,29 @@ function M.fetch_reviewers(pr, opts, on_done)
 end
 
 ---@param pr PullRequest
----@param on_done fun(builds: PullsBuild[]|nil, err: string|nil)
+---@param opts { force_refresh: boolean|nil }|nil
+---@param on_done fun(pipelines: PullsPipeline[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_builds(pr, on_done)
-	local pr_api = require("atlas.pulls.providers.bitbucket.api.pullrequests")
-	return pr_api.fetch_builds(pr, on_done)
+function M.fetch_pipelines(pr, opts, on_done)
+	return require("atlas.pulls.providers.bitbucket.api.pipelines").fetch_pipelines(pr, opts, on_done)
+end
+
+---@param _pr PullRequest
+---@param pipeline PullsPipeline
+---@param _opts { force_refresh: boolean|nil }|nil
+---@param on_done fun(pipeline: PullsPipeline|nil, err: string|nil)
+---@return nil
+function M.fetch_pipeline_details(_pr, pipeline, _opts, on_done)
+	on_done(pipeline, nil)
+end
+
+---@param pr PullRequest
+---@param pipeline PullsPipeline
+---@param job PullsPipelineJob
+---@param on_done fun(log: string|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_pipeline_job_log(pr, pipeline, job, on_done)
+	return require("atlas.pulls.providers.bitbucket.api.pipelines").fetch_pipeline_job_log(pr, pipeline, job, on_done)
 end
 
 ---@param pr PullRequest
@@ -321,8 +339,7 @@ function M.fetch_commit_status(_pr, commit, opts, on_done)
 		return nil
 	end
 
-	local pr_api = require("atlas.pulls.providers.bitbucket.api.pullrequests")
-	return pr_api.fetch_commit_status(statuses_url, opts, on_done)
+	return require("atlas.pulls.providers.bitbucket.api.pipelines").fetch_commit_status(statuses_url, opts, on_done)
 end
 
 ---@param comment PullsComment

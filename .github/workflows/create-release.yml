@@ -3,7 +3,7 @@ name: Create Release
 on:
   workflow_run:
     workflows:
-      - Tests
+      - CI
     types:
       - completed
     branches:
@@ -44,5 +44,5 @@ jobs:
         run: |
           npx --yes \
             --package semantic-release@25.0.8 \
-            --package conventional-changelog-conventionalcommits@10.2.1 \
+            --package conventional-changelog-conventionalcommits@9.3.1 \
             semantic-release

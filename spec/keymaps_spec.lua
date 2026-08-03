@@ -36,6 +36,8 @@ local default_keymaps = {
 	},
 }
 
+local shipped_keymaps = deep_copy(config.options.keymaps)
+
 describe("atlas keymaps resolver", function()
 	before_each(function()
 		config.options.keymaps = deep_copy(default_keymaps)
@@ -90,5 +92,42 @@ describe("atlas keymaps resolver", function()
 		config.options.keymaps.ui.toggle_fold = false
 		assert.is_nil(keymaps.resolve("ui.toggle_fold"))
 		assert.is_nil(keymaps.resolve("jira.does_not_exist"))
+	end)
+end)
+
+describe("atlas navigation keymaps", function()
+	before_each(function()
+		config.options.keymaps = deep_copy(shipped_keymaps)
+	end)
+
+	it("keeps the historical hardcoded defaults", function()
+		assert.are.same({ "j" }, keymaps.resolve("ui.next_item"))
+		assert.are.same({ "k" }, keymaps.resolve("ui.previous_item"))
+		assert.are.same({ "gg" }, keymaps.resolve("ui.first_item"))
+		assert.are.same({ "G" }, keymaps.resolve("ui.last_item"))
+	end)
+
+	it("supports remapping and disabling navigation keys", function()
+		config.options.keymaps.ui.next_item = ";"
+		config.options.keymaps.ui.previous_item = false
+
+		assert.are.same({ ";" }, keymaps.resolve("ui.next_item"))
+		assert.is_nil(keymaps.resolve("ui.previous_item"))
+	end)
+
+	it("reports no conflicts for the shipped defaults", function()
+		for section, conflicts in pairs(keymaps.validate()) do
+			assert.are.same({}, conflicts, string.format("unexpected conflicts in %s", section))
+		end
+	end)
+
+	it("detects conflicts against remapped navigation keys", function()
+		-- "r" is already taken by ui.refresh, so the validator must flag the clash
+		-- rather than checking against the old hardcoded "j".
+		config.options.keymaps.ui.next_item = "r"
+
+		local ui_conflicts = keymaps.validate().ui
+		assert.are.same({ "ui.next_item", "ui.refresh" }, ui_conflicts["r"])
+		assert.is_nil(ui_conflicts["j"])
 	end)
 end)

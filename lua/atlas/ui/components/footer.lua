@@ -6,6 +6,27 @@ local spinner = require("atlas.ui.components.spinner")
 local resolver = require("atlas.core.keymaps")
 local ns = vim.api.nvim_create_namespace("atlas.footer")
 
+---@param win integer
+---@param name string
+---@param value boolean|string
+local function set_window_option(win, name, value)
+	vim.api.nvim_set_option_value(name, value, { win = win, scope = "local" })
+end
+
+---@param win integer
+function M.apply_opts(win)
+	set_window_option(win, "number", false)
+	set_window_option(win, "relativenumber", false)
+	set_window_option(win, "signcolumn", "no")
+	set_window_option(win, "statuscolumn", "")
+	set_window_option(win, "foldcolumn", "0")
+	set_window_option(win, "wrap", false)
+	set_window_option(win, "cursorline", false)
+	set_window_option(win, "winbar", " ")
+	set_window_option(win, "statusline", " ")
+	set_window_option(win, "winfixheight", true)
+end
+
 ---@class AtlasFooterNotice
 ---@field text string
 ---@field hl_group string

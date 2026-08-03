@@ -49,42 +49,6 @@ function M.register(buf)
 	local nav = require("atlas.pulls.ui.panel.repo.navigation")
 	local general = {
 		{
-			key = "j",
-			desc = "Next selectable item",
-			opts = { nowait = true, silent = true },
-			hidden = true,
-			callback = function()
-				nav.move_cursor("down")
-			end,
-		},
-		{
-			key = "k",
-			desc = "Previous selectable item",
-			opts = { nowait = true, silent = true },
-			hidden = true,
-			callback = function()
-				nav.move_cursor("up")
-			end,
-		},
-		{
-			key = "gg",
-			desc = "First selectable item",
-			opts = { nowait = true, silent = true },
-			hidden = true,
-			callback = function()
-				nav.focus_first()
-			end,
-		},
-		{
-			key = "G",
-			desc = "Last selectable item",
-			opts = { nowait = true, silent = true },
-			hidden = true,
-			callback = function()
-				nav.focus_last()
-			end,
-		},
-		{
 			key = "o",
 			desc = "Close repo panel",
 			opts = { nowait = true, silent = true },
@@ -98,6 +62,54 @@ function M.register(buf)
 			end,
 		},
 	}
+
+	utils.insert_if(
+		general,
+		item("ui.next_item", {
+			desc = "Next selectable item",
+			opts = { nowait = true, silent = true },
+			hidden = true,
+			callback = function()
+				nav.move_cursor("down")
+			end,
+		})
+	)
+
+	utils.insert_if(
+		general,
+		item("ui.previous_item", {
+			desc = "Previous selectable item",
+			opts = { nowait = true, silent = true },
+			hidden = true,
+			callback = function()
+				nav.move_cursor("up")
+			end,
+		})
+	)
+
+	utils.insert_if(
+		general,
+		item("ui.first_item", {
+			desc = "First selectable item",
+			opts = { nowait = true, silent = true },
+			hidden = true,
+			callback = function()
+				nav.focus_first()
+			end,
+		})
+	)
+
+	utils.insert_if(
+		general,
+		item("ui.last_item", {
+			desc = "Last selectable item",
+			opts = { nowait = true, silent = true },
+			hidden = true,
+			callback = function()
+				nav.focus_last()
+			end,
+		})
+	)
 
 	utils.insert_if(
 		general,
@@ -219,13 +231,13 @@ end
 ---@param buf integer
 function M.remove(buf)
 	local general_items = {
-		{ key = "j" },
-		{ key = "k" },
-		{ key = "gg" },
-		{ key = "G" },
 		{ key = "o" },
 	}
 
+	utils.insert_if(general_items, remove_item("ui.next_item"))
+	utils.insert_if(general_items, remove_item("ui.previous_item"))
+	utils.insert_if(general_items, remove_item("ui.first_item"))
+	utils.insert_if(general_items, remove_item("ui.last_item"))
 	utils.insert_if(general_items, remove_item("ui.refresh"))
 	utils.insert_if(general_items, remove_item("ui.open_in_browser"))
 	utils.insert_if(general_items, remove_item("ui.next_panel_tab"))

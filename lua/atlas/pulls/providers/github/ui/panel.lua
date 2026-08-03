@@ -3,6 +3,7 @@ local M = {}
 
 local icons = require("atlas.ui.shared.icons")
 local helper = require("atlas.pulls.ui.main.helper")
+local providers = require("atlas.pulls.providers")
 
 local MAX_HASH_LEN = 12
 
@@ -25,34 +26,6 @@ local function reset_state()
 end
 
 -- Helpers
-
----@param builds PullsBuild[]
----@return string
-local function aggregate_build_status(builds)
-	local has_success = false
-	local has_stopped = false
-	for _, b in ipairs(builds) do
-		local s = tostring(b.state or ""):upper()
-		if s == "FAILED" then
-			return "failed"
-		end
-		if s == "INPROGRESS" then
-			return "inprogress"
-		end
-		if s == "STOPPED" then
-			has_stopped = true
-		elseif s == "SUCCESSFUL" then
-			has_success = true
-		end
-	end
-	if has_success then
-		return "successful"
-	end
-	if has_stopped then
-		return "stopped"
-	end
-	return "unknown"
-end
 
 -- Panel
 
@@ -164,11 +137,11 @@ function M.chips(pr)
 
 	local overview_state = require("atlas.pulls.ui.panel.pr.tabs.overview.state")
 	local spinner = require("atlas.ui.components.spinner")
-	if overview_state.builds == "loading" then
-		table.insert(chips, { label = spinner.with_text("Loading checks"), hl = "AtlasTextMuted" })
-	elseif type(overview_state.builds) == "table" and #overview_state.builds > 0 then
-		local builds = overview_state.builds --[[@as PullsBuild[] ]]
-		local status = aggregate_build_status(builds)
+	if overview_state.pipelines == "loading" then
+		table.insert(chips, { label = spinner.with_text("Loading pipelines"), hl = "AtlasTextMuted" })
+	elseif type(overview_state.pipelines) == "table" and #overview_state.pipelines > 0 then
+		local pipelines = overview_state.pipelines --[[@as PullsPipeline[] ]]
+		local status = providers.aggregate_pipeline_state(pipelines):lower()
 		if status ~= "unknown" then
 			local icon, icon_hl = icons.pulls_status(status)
 			local label = status:sub(1, 1):upper() .. status:sub(2)
@@ -208,7 +181,7 @@ function M.fetches(pr, refresh, opts)
 
 	local overview_state = require("atlas.pulls.ui.panel.pr.tabs.overview.state")
 	local pullrequests = require("atlas.pulls.providers.github.api.pullrequests")
-	local checks = require("atlas.pulls.providers.github.api.checks")
+	local provider = require("atlas.pulls.state").provider
 
 	local owner = tostring(pr.workspace or "")
 	local repo = tostring(pr.repo or "")
@@ -231,11 +204,16 @@ function M.fetches(pr, refresh, opts)
 		end, { force_load = force }))
 	end
 
-	overview_state.builds = "loading"
-	track_panel(checks.get_builds(pr, { force_refresh = force }, function(builds, err)
-		overview_state.builds = err and err or (builds or {})
+	overview_state.pipelines = "loading"
+	if provider and type(provider.fetch_pipelines) == "function" then
+		track_panel(provider.fetch_pipelines(pr, { force_refresh = force }, function(pipelines, err)
+			overview_state.pipelines = err and err or (pipelines or {})
+			refresh()
+		end))
+	else
+		overview_state.pipelines = {}
 		refresh()
-	end))
+	end
 
 	local panel_state = require("atlas.pulls.ui.panel.pr.state")
 	panel_state.diffstat = "loading"

@@ -158,7 +158,10 @@ function M.render(_repo, width)
 		local lnum1 = #lines - 1
 		line_map[#lines] = { kind = "issue", issue = issue, url = tostring(issue.url or "") }
 
-		table.insert(spans, { line = lnum1, start_col = PADDING_X, end_col = PADDING_X + #icon, hl_group = icon_entry.hl })
+		table.insert(
+			spans,
+			{ line = lnum1, start_col = PADDING_X, end_col = PADDING_X + #icon, hl_group = icon_entry.hl }
+		)
 
 		if right ~= "" then
 			local right_start = #line1 - #right - 1
@@ -177,7 +180,10 @@ function M.render(_repo, width)
 			local chip = " " .. it.name .. " "
 			local chip_start = #line2
 			line2 = line2 .. chip .. " "
-			table.insert(lnum2_spans, { start_col = chip_start, end_col = chip_start + #chip, hl_group = type_hl(it.color) })
+			table.insert(
+				lnum2_spans,
+				{ start_col = chip_start, end_col = chip_start + #chip, hl_group = type_hl(it.color) }
+			)
 		end
 
 		local meta_parts = { "#" .. number }
@@ -195,7 +201,10 @@ function M.render(_repo, width)
 		local lnum2 = #lines - 1
 		table.insert(lnum2_spans, { start_col = meta_start, end_col = #line2, hl_group = "AtlasTextMuted" })
 		for _, sp in ipairs(lnum2_spans) do
-			table.insert(spans, { line = lnum2, start_col = sp.start_col, end_col = sp.end_col, hl_group = sp.hl_group })
+			table.insert(
+				spans,
+				{ line = lnum2, start_col = sp.start_col, end_col = sp.end_col, hl_group = sp.hl_group }
+			)
 		end
 
 		if i < #issues then
@@ -249,11 +258,16 @@ local function fetch_issues(slug, refresh)
 	local gql_state = state.filter == "open" and "OPEN" or "CLOSED"
 
 	track(cli.gh({
-		"api", "graphql",
-		"-f", "query=" .. vim.trim(ISSUES_GQL),
-		"-f", "owner=" .. owner,
-		"-f", "repo=" .. repo_name,
-		"-f", "states=" .. gql_state,
+		"api",
+		"graphql",
+		"-f",
+		"query=" .. vim.trim(ISSUES_GQL),
+		"-f",
+		"owner=" .. owner,
+		"-f",
+		"repo=" .. repo_name,
+		"-f",
+		"states=" .. gql_state,
 	}, function(result, err)
 		if err then
 			state.issues = tostring(err)
@@ -263,9 +277,10 @@ local function fetch_issues(slug, refresh)
 		end
 
 		local repo_data = type(result) == "table"
-			and type(result.data) == "table"
-			and type(result.data.repository) == "table"
-			and result.data.repository or nil
+				and type(result.data) == "table"
+				and type(result.data.repository) == "table"
+				and result.data.repository
+			or nil
 
 		if not repo_data then
 			state.issues = {}
@@ -278,8 +293,10 @@ local function fetch_issues(slug, refresh)
 			closed = type(repo_data.closed) == "table" and (tonumber(repo_data.closed.totalCount) or 0) or 0,
 		}
 
-		local nodes = type(repo_data.issues) == "table" and type(repo_data.issues.nodes) == "table"
-			and repo_data.issues.nodes or {}
+		local nodes = type(repo_data.issues) == "table"
+				and type(repo_data.issues.nodes) == "table"
+				and repo_data.issues.nodes
+			or {}
 
 		local issues = {}
 		for _, raw in ipairs(nodes) do
@@ -292,8 +309,8 @@ local function fetch_issues(slug, refresh)
 					color = tostring(raw.issueType.color or "GRAY"),
 				}
 			end
-			local label_nodes = type(raw.labels) == "table" and type(raw.labels.nodes) == "table"
-				and raw.labels.nodes or {}
+			local label_nodes = type(raw.labels) == "table" and type(raw.labels.nodes) == "table" and raw.labels.nodes
+				or {}
 
 			table.insert(issues, {
 				number = raw.number,

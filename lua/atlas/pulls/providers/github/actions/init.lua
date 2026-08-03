@@ -16,7 +16,6 @@ local footer = require("atlas.ui.components.footer")
 ---| "edit_assignees"
 ---| "create_issue"
 ---| "labels"
----| "rerun_checks"
 ---| "search"
 
 ---@param id GitHubActionId|string

@@ -38,6 +38,10 @@ local function rebuild_unified_diff(change)
 	return header .. body
 end
 
+local function id_tail(gid)
+	return tostring(gid or ""):match("([^/]+)$") or ""
+end
+
 local GQL_DISCUSSIONS = [[
 	query ($fullPath: ID!, $iid: String!) {
 		project(fullPath: $fullPath) {
@@ -95,10 +99,6 @@ function M.fetch_general_comments(pr, opts, on_done)
 
 		local mr = data and data.project and data.project.mergeRequest or nil
 		local comments = {}
-
-		local function id_tail(gid)
-			return tostring(gid or ""):match("([^/]+)$") or ""
-		end
 
 		for _, d in ipairs((((mr or {}).discussions or {}).nodes or {})) do
 			local notes = ((d.notes or {}).nodes or {})
@@ -318,6 +318,40 @@ end
 local function bust_caches(path, iid)
 	service.delete_memory_cache(string.format("gitlab_pulls:comments:%s!%d", path, iid))
 	service.delete_memory_cache(string.format("gitlab_pulls:general_comments:%s!%d", path, iid))
+	service.delete_memory_cache(string.format("gitlab_pulls:activity:%s!%d", path, iid))
+end
+
+---@param pr PullRequest
+---@param reviewer_state "reviewed"|"requested_changes"|nil
+---@param body string|nil
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.publish_review(pr, reviewer_state, body, on_done)
+	local path, iid = project_iid(pr)
+	if path == "" or iid == nil then
+		on_done(false, "Invalid MR identifier")
+		return nil
+	end
+
+	local payload
+	if body and vim.trim(body) ~= "" then
+		payload = { note = body }
+	end
+	if reviewer_state then
+		payload = payload or {}
+		payload.reviewer_state = reviewer_state
+	end
+
+	local endpoint =
+		string.format("/projects/%s/merge_requests/%d/draft_notes/bulk_publish", service.url_encode(path), iid)
+	return service.request("POST", endpoint, payload, function(_, err)
+		if err then
+			on_done(false, err)
+			return
+		end
+		bust_caches(path, iid)
+		on_done(true, nil)
+	end)
 end
 
 ---@param pr PullRequest
