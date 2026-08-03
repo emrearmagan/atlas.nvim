@@ -1,7 +1,7 @@
 local M = {}
 
 local anchoring = require("atlas.pulls.diff.shared.comments.anchor")
-local footer = require("atlas.pulls.diff.atlas.footer")
+local statusline = require("atlas.pulls.diff.atlas.statusline")
 local note_editor = require("atlas.pulls.notes.ui.editor")
 local note_popup = require("atlas.pulls.notes.ui.popup")
 local note_renderer = require("atlas.pulls.notes.ui.renderer")
@@ -27,7 +27,7 @@ end
 ---@param level "loading"|"success"|"error"
 ---@param message string
 local function notify(session, level, message)
-	footer.notify(session, level, message, level == "success" and 1200 or nil)
+	statusline.notify(session, level, message, level == "success" and 1200 or nil)
 end
 
 ---@param session AtlasNativeDiffSession
@@ -238,11 +238,11 @@ function M.add_at_cursor(session, buf)
 	local state = session.notes
 	local document = session.document
 	if not state or not document or buf ~= session.right.buf then
-		footer.notify(session, "warn", "Local notes can only be added to the new file")
+		statusline.notify(session, "warn", "Local notes can only be added to the new file")
 		return
 	end
 	if document.binary or document.file.status == "deleted" then
-		footer.notify(session, "warn", "Local notes require a text file on the new side")
+		statusline.notify(session, "warn", "Local notes require a text file on the new side")
 		return
 	end
 	local line = vim.api.nvim_win_get_cursor(0)[1]
@@ -288,7 +288,7 @@ function M.jump(session, direction)
 	end
 	table.sort(lines)
 	if #lines == 0 then
-		footer.notify(session, "info", "No local notes in this file", 1200)
+		statusline.notify(session, "info", "No local notes in this file", 1200)
 		return
 	end
 
@@ -322,7 +322,7 @@ function M.reload(session)
 	end
 	local items, err = store.list(state.target)
 	if not items then
-		footer.notify(session, "error", err or "Unable to load local notes")
+		statusline.notify(session, "error", err or "Unable to load local notes")
 		return
 	end
 	state.items = items
@@ -338,7 +338,7 @@ function M.attach(session, review)
 	end
 	local target, target_error = store.target_for_pull_request(review.pr)
 	if not target then
-		footer.notify(session, "error", target_error or "Unable to load local notes")
+		statusline.notify(session, "error", target_error or "Unable to load local notes")
 		return
 	end
 	---@type AtlasDiffNotesState

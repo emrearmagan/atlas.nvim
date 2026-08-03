@@ -4,7 +4,7 @@ local M = {}
 local state = require("atlas.pulls.ui.panel.pr.tabs.conversation.state")
 local renderer = require("atlas.pulls.ui.panel.pr.tabs.conversation.renderer")
 local keymaps = require("atlas.pulls.ui.panel.pr.tabs.conversation.keymaps")
-local footer = require("atlas.ui.components.footer")
+local statusline = require("atlas.ui.statusline")
 
 ---@return PullsProvider|nil
 local function get_provider()
@@ -50,19 +50,19 @@ function M.on_select(pr, _repo, refresh, opts)
 	local id = tostring(pr.id or "")
 	state.comments = "loading"
 	state.activity = "loading"
-	footer.notify("loading", string.format("Loading conversation for #%s...", id))
+	statusline.notify("loading", string.format("Loading conversation for #%s...", id))
 
 	track(provider.fetch_conversation(pr, opts, function(result, err)
 		if err then
 			state.comments = err
 			state.activity = err
-			footer.notify("error", string.format("Failed to load conversation for #%s", id))
+			statusline.notify("error", string.format("Failed to load conversation for #%s", id))
 		else
 			result = type(result) == "table" and result or {}
 			state.comments = type(result.comments) == "table" and result.comments or {}
 			state.activity = type(result.events) == "table" and result.events or {}
 			state.reaction_options = type(result.reaction_options) == "table" and result.reaction_options or {}
-			footer.notify("success", string.format("Conversation loaded for #%s", id), 1200)
+			statusline.notify("success", string.format("Conversation loaded for #%s", id), 1200)
 		end
 		refresh()
 	end))

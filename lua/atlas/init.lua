@@ -11,7 +11,6 @@ end
 
 local function bootstrap_common()
 	require("atlas.ui.shared.highlights").setup()
-	require("atlas.ui.components.footer").setup()
 
 	require("atlas.ui.popups.help").register_command("Commands", {
 		{ name = "AtlasPulls", desc = "Open pulls" },
@@ -73,7 +72,6 @@ local function open_with_provider(domain, id, opts)
 
 	layout.ensure_open()
 	bootstrap_common()
-	layout.open()
 
 	if domain == "pulls" then
 		local provider = load_pulls_provider(id)

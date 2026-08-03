@@ -1,6 +1,6 @@
 local M = {}
 
-local footer = require("atlas.ui.components.footer")
+local statusline = require("atlas.ui.statusline")
 local utils = require("atlas.ui.shared.utils")
 
 local completion_provider_by_buf = {}
@@ -129,7 +129,7 @@ function M.open(opts)
 
 	local key = tostring(opts.key or "")
 	if key == "" then
-		footer.notify("warn", "Missing editor key")
+		statusline.notify("warn", "Missing editor key")
 		return nil, nil
 	end
 	local source_win = vim.api.nvim_get_current_win()
@@ -374,7 +374,7 @@ function M.open(opts)
 				get_text = get_text,
 			})
 			if not ok then
-				footer.notify("error", tostring(err or "Markdown action failed"))
+				statusline.notify("error", tostring(err or "Markdown action failed"))
 			end
 		end, { buffer = buf, silent = true, nowait = true, desc = action.description })
 	end

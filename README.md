@@ -28,6 +28,7 @@ A Neovim plugin for managing GitHub/Bitbucket/GitLab PRs and Jira/GitHub/GitLab 
   - [Using lazy.nvim](#using-lazynvim)
   - [Using packer.nvim](#using-packernvim)
 - [Requirements](#requirements)
+- [Configuration](#configuration)
 - [Commands](#commands)
 - [Pulls](#pulls)
   - [Configuration](#pulls-configuration)
@@ -63,28 +64,8 @@ A Neovim plugin for managing GitHub/Bitbucket/GitLab PRs and Jira/GitHub/GitLab 
     "esmuellert/codediff.nvim", -- optional (PullRequest diff)
     "sindrets/diffview.nvim", -- optional (PullRequest diff - alternative)
   },
-  opts = {
-    pulls = {
-      providers = {
-        ---@type AtlasBitbucketConfig
-        bitbucket = {}, -- See configuration below
-        ---@type AtlasGitHubConfig
-        github = {},    -- See configuration below
-        ---@type AtlasGitLabPullsConfig
-        gitlab = {},    -- See configuration below
-      },
-    },
-    issues = {
-      providers = {
-        ---@type AtlasJiraIssuesConfig
-        jira = {},   -- See configuration below
-        ---@type AtlasGitHubIssuesConfig
-        github = {}, -- See configuration below
-        ---@type AtlasGitLabIssuesConfig
-        gitlab = {}, -- See configuration below
-      },
-    },
-  },
+  -- See Configuration below
+  opts = {},
 }
 ```
 
@@ -94,28 +75,8 @@ A Neovim plugin for managing GitHub/Bitbucket/GitLab PRs and Jira/GitHub/GitLab 
 use {
   "emrearmagan/atlas.nvim",
   config = function()
-    require("atlas").setup({
-      pulls = {
-        providers = {
-          ---@type AtlasBitbucketConfig
-          bitbucket = {}, -- See configuration below
-          ---@type AtlasGitHubConfig
-          github = {},    -- See configuration below
-          ---@type AtlasGitLabPullsConfig
-          gitlab = {},    -- See configuration below
-        },
-      },
-      issues = {
-        providers = {
-          ---@type AtlasJiraIssuesConfig
-          jira = {},   -- See configuration below
-          ---@type AtlasGitHubIssuesConfig
-          github = {}, -- See configuration below
-          ---@type AtlasGitLabIssuesConfig
-          gitlab = {}, -- See configuration below
-        },
-      },
-    })
+    -- See Configuration below
+    require("atlas").setup({})
   end
 }
 ```
@@ -137,6 +98,40 @@ use {
 > See: https://support.atlassian.com/atlassian-account/docs/manage-api-tokens-for-your-atlassian-account/
 >
 > I have also not tested with self-hosted GitLab instances, but in theory it should work. If it doesn't, feel free to open an issue. If it does work, please remove this note :)
+
+## Configuration
+
+```lua
+{
+  -- Too lazy to manage a statusline per split? Same. Make it global.
+  global_statusline = true,
+
+  pulls = {
+    -- See Pulls Configuration below.
+    providers = {
+      ---@type AtlasBitbucketConfig
+      bitbucket = {},
+      ---@type AtlasGitHubConfig
+      github = {},
+      ---@type AtlasGitLabPullsConfig
+      gitlab = {},
+    },
+  },
+  issues = {
+    -- See Issue Configuration below.
+    providers = {
+      ---@type AtlasJiraIssuesConfig
+      jira = {},
+      ---@type AtlasGitHubIssuesConfig
+      github = {},
+      ---@type AtlasGitLabIssuesConfig
+      gitlab = {},
+    },
+  },
+}
+```
+
+Set `global_statusline = false` to leave Neovim's `laststatus` option unchanged.
 
 ## Commands
 

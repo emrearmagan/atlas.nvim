@@ -1,6 +1,9 @@
 local M = {}
 
+local keymaps = require("atlas.core.keymaps")
+local help = require("atlas.ui.popups.help")
 local renderer = require("atlas.ui.popups.form.renderer")
+local statusline = require("atlas.ui.statusline")
 local utils = require("atlas.ui.shared.utils")
 local valid_buf = utils.buffer.valid
 local valid_tab = utils.tab.valid
@@ -28,7 +31,7 @@ end
 
 ---@param layout AtlasFormLayout
 local function delete_buffers(layout)
-	for _, name in ipairs({ "editor", "context", "footer" }) do
+	for _, name in ipairs({ "editor", "context" }) do
 		local buf = layout[name .. "_buf"]
 		if valid_buf(buf) then
 			pcall(vim.api.nvim_buf_delete, buf, { force = true })
@@ -42,6 +45,7 @@ function M.close(layout)
 		return
 	end
 	layout.closing = true
+	statusline.clear_notice()
 	local return_to_source = valid_tab(layout.tab) and vim.api.nvim_get_current_tabpage() == layout.tab
 
 	if layout.augroup then
@@ -90,7 +94,7 @@ end
 
 ---@param win integer
 ---@param buf integer
----@param opts { wrap?: boolean, winbar?: string, fixed_height?: boolean, fixed_width?: boolean }
+---@param opts { wrap?: boolean, winbar?: string, fixed_height?: boolean }
 local function configure_window(win, buf, opts)
 	vim.api.nvim_win_set_buf(win, buf)
 	vim.api.nvim_set_option_value("number", false, { win = win })
@@ -101,44 +105,9 @@ local function configure_window(win, buf, opts)
 	vim.api.nvim_set_option_value("cursorline", false, { win = win })
 	vim.api.nvim_set_option_value("foldenable", false, { win = win })
 	vim.api.nvim_set_option_value("wrap", opts.wrap == true, { win = win })
-	vim.api.nvim_set_option_value("statusline", "%#Normal# ", { win = win })
+	statusline.attach(win)
 	vim.api.nvim_set_option_value("winfixheight", opts.fixed_height == true, { win = win })
-	vim.api.nvim_set_option_value("winfixwidth", opts.fixed_width == true, { win = win })
 	vim.api.nvim_set_option_value("winbar", opts.winbar or "", { win = win })
-end
-
-local function footer_config()
-	return {
-		relative = "editor",
-		row = math.max(0, vim.o.lines - math.max(vim.o.cmdheight, 1) - 1),
-		col = 0,
-		width = math.max(1, vim.o.columns),
-		height = 1,
-		style = "minimal",
-		focusable = false,
-		border = "none",
-		zindex = 60,
-	}
-end
-
----@param layout AtlasFormLayout
-local function open_footer(layout)
-	layout.footer_win = vim.api.nvim_open_win(layout.footer_buf, false, footer_config())
-	configure_window(layout.footer_win, layout.footer_buf, {})
-	vim.api.nvim_set_option_value("winbar", "", { win = layout.footer_win })
-	vim.api.nvim_set_option_value("statusline", "", { win = layout.footer_win })
-	vim.api.nvim_set_option_value(
-		"winhighlight",
-		"Normal:AtlasFooterBackground,NormalNC:AtlasFooterBackground,EndOfBuffer:AtlasFooterBackground",
-		{ win = layout.footer_win }
-	)
-end
-
----@param layout AtlasFormLayout
-local function reflow_footer(layout)
-	if valid_win(layout.footer_win) then
-		vim.api.nvim_win_set_config(layout.footer_win, footer_config())
-	end
 end
 
 ---@param parent integer
@@ -173,24 +142,11 @@ local function open_context(layout, parent, opts)
 end
 
 ---@param layout AtlasFormLayout
-local function render_separator(layout)
-	if not valid_win(layout.editor_win) then
-		return
-	end
-	local statusline = "%#Normal# "
-	if valid_win(layout.context_win) then
-		statusline = "%#AtlasBorder#" .. string.rep("─", vim.api.nvim_win_get_width(layout.editor_win))
-	end
-	vim.api.nvim_set_option_value("statusline", statusline, { win = layout.editor_win })
-end
-
----@param layout AtlasFormLayout
 ---@param opts AtlasFormOpenOpts
 local function build_layout(layout, opts)
 	layout.editor_win = vim.api.nvim_get_current_win()
 	configure_window(layout.editor_win, layout.editor_buf, { wrap = true })
 	open_context(layout, layout.editor_win, opts)
-	render_separator(layout)
 end
 
 ---@param state { layout: AtlasFormLayout }
@@ -200,57 +156,98 @@ local function buffer_for(state, name)
 	return state.layout[name .. "_buf"]
 end
 
----@param buf integer
----@param mode string|string[]
----@param lhs string
----@param rhs function
----@param desc string
-local function set_keymap(buf, mode, lhs, rhs, desc)
-	vim.keymap.set(mode, lhs, rhs, { buffer = buf, silent = true, nowait = true, desc = desc })
-end
-
----@param opts AtlasFormOpenOpts
----@param buf integer
-local function setup_default_keymaps(opts, buf)
-	local function submit()
-		vim.cmd("stopinsert")
-		opts.submit()
+---@param keymap AtlasFormKeymap
+---@param name AtlasFormBufferName
+---@return boolean
+local function applies_to(keymap, name)
+	for _, target in ipairs(keymap.buffers) do
+		if target == name then
+			return true
+		end
 	end
-
-	set_keymap(buf, "n", "q", opts.close, "Close")
-	set_keymap(buf, { "n", "i" }, "<C-s>", submit, "Submit")
+	return false
 end
 
 ---@param state { layout: AtlasFormLayout }
 ---@param opts AtlasFormOpenOpts
-local function setup_keymaps(state, opts)
-	for _, name in ipairs({ "editor", "context" }) do
-		local buf = buffer_for(state, name)
-		if valid_buf(buf) then
-			setup_buffer_quit_cmd(buf, opts.close)
-			setup_default_keymaps(opts, buf)
-		end
-	end
+---@param name AtlasFormBufferName
+---@param buf integer
+local function setup_keymaps(state, opts, name, buf)
+	local items = {
+		{
+			key = "<C-s>",
+			mode = { "n", "i" },
+			desc = "Submit",
+			callback = function()
+				vim.cmd("stopinsert")
+				opts.submit()
+			end,
+			opts = { silent = true, nowait = true },
+		},
+		{
+			key = "q",
+			desc = "Close",
+			callback = opts.close,
+			opts = { silent = true, nowait = true },
+		},
+	}
 
-	local editor_buf = buffer_for(state, "editor")
-	if valid_buf(editor_buf) then
-		set_keymap(editor_buf, "n", "gg", function()
-			vim.cmd("normal! gg")
-			renderer.reveal_meta(state.layout)
-		end, "Go to first line")
+	if name == "editor" then
+		items[#items + 1] = {
+			key = "gg",
+			desc = "Go to first line",
+			callback = function()
+				vim.cmd("normal! gg")
+				renderer.reveal_meta(state.layout)
+			end,
+			opts = { silent = true, nowait = true },
+		}
 	end
 
 	for _, keymap in ipairs(opts.keymaps or {}) do
-		for _, name in ipairs(keymap.buffers or {}) do
-			local buf = buffer_for(state, name)
-			if valid_buf(buf) then
-				local keys = type(keymap.key) == "table" and keymap.key or { keymap.key }
-				for _, key in ipairs(keys) do
-					set_keymap(buf, keymap.mode or "n", key, keymap.action, keymap.desc)
-				end
-			end
+		if applies_to(keymap, name) then
+			items[#items + 1] = {
+				key = keymap.key,
+				mode = keymap.mode,
+				desc = keymap.desc,
+				callback = keymap.action,
+				opts = { silent = true, nowait = true },
+			}
 		end
 	end
+
+	local help_keys = keymaps.resolve("ui.help")
+	if help_keys then
+		items[#items + 1] = {
+			key = #help_keys == 1 and help_keys[1] or help_keys,
+			desc = "Toggle help",
+			callback = function()
+				help.toggle({ buffer = buf })
+			end,
+			opts = { silent = true, nowait = true },
+		}
+	end
+
+	setup_buffer_quit_cmd(buf, opts.close)
+	help.register("Form", items, { buffer = buf, index = 100 })
+end
+
+---@param opts AtlasFormOpenOpts
+---@return AtlasStatuslineSegment[]
+local function build_statusline_items(opts)
+	local items = {
+		{ text = "<C-s> submit", hl_group = "AtlasFooterText" },
+	}
+	for _, keymap in ipairs(opts.keymaps or {}) do
+		local key = type(keymap.key) == "table" and table.concat(keymap.key, " / ") or keymap.key
+		items[#items + 1] = {
+			text = string.format("%s %s", key, keymap.desc),
+			hl_group = "AtlasFooterText",
+			priority = 10,
+		}
+	end
+	items[#items + 1] = { text = "q close", hl_group = "AtlasFooterText" }
+	return items
 end
 
 ---@param state { layout: AtlasFormLayout }
@@ -271,11 +268,11 @@ function M.open(state, opts)
 	layout.source_win = vim.api.nvim_get_current_win()
 	layout.title_label = opts.title_label
 	layout.body_label = opts.body_label
+	statusline.clear_notice()
 
 	next_id = next_id + 1
 	local prefix = string.format("atlas://create/%d", next_id)
 	layout.editor_buf = create_buffer(prefix .. "/form.md", "markdown")
-	layout.footer_buf = create_buffer(prefix .. "/footer", nil)
 	if opts.context then
 		layout.context_buf = create_buffer(prefix .. "/context", nil)
 	end
@@ -286,7 +283,6 @@ function M.open(state, opts)
 		table.insert(lines, "")
 	end
 	set_lines(layout.editor_buf, lines, true)
-	set_lines(layout.footer_buf, { "" }, false)
 	if layout.context_buf then
 		set_lines(layout.context_buf, { "" }, false)
 	end
@@ -295,8 +291,8 @@ function M.open(state, opts)
 	layout.tab = vim.api.nvim_get_current_tabpage()
 	layout.placeholder_buf = vim.api.nvim_get_current_buf()
 
+	statusline.set_items(build_statusline_items(opts))
 	build_layout(layout, opts)
-	open_footer(layout)
 	state.content_width = valid_win(layout.editor_win) and vim.api.nvim_win_get_width(layout.editor_win) or 80
 
 	if valid_buf(layout.placeholder_buf) and layout.placeholder_buf ~= layout.editor_buf then
@@ -305,18 +301,19 @@ function M.open(state, opts)
 	layout.placeholder_buf = nil
 
 	render(state, opts)
-	setup_keymaps(state, opts)
-	renderer.render_footer(layout, opts)
+	for _, name in ipairs({ "editor", "context" }) do
+		local buf = buffer_for(state, name)
+		if valid_buf(buf) then
+			setup_keymaps(state, opts, name, buf)
+		end
+	end
 
 	layout.augroup = vim.api.nvim_create_augroup("AtlasForm" .. next_id, { clear = true })
 	vim.api.nvim_create_autocmd({ "VimResized", "WinResized" }, {
 		group = layout.augroup,
 		callback = function()
 			if valid_tab(layout.tab) then
-				reflow_footer(layout)
-				render_separator(layout)
 				render(state, opts)
-				renderer.render_footer(layout, opts)
 			end
 		end,
 	})
@@ -325,6 +322,7 @@ function M.open(state, opts)
 		callback = function()
 			if not layout.closing and not valid_tab(layout.tab) then
 				layout.closing = true
+				statusline.clear_notice()
 				delete_buffers(layout)
 				local augroup = layout.augroup
 				layout.augroup = nil
@@ -341,6 +339,8 @@ end
 
 M.render_meta = renderer.render_meta
 M.render_context = renderer.render_context
+M.notify = statusline.notify
+M.clear_notice = statusline.clear_notice
 
 ---@param layout AtlasFormLayout
 ---@return string

@@ -164,7 +164,7 @@ end
 ---@param groups PullsGroup[]|nil
 ---@param current_user PullsUser|nil
 ---@return table[]
-function M.build_footer_items(groups, current_user)
+function M.build_statusline_items(groups, current_user)
 	local repos = groups or {}
 	local pr_count = 0
 	local repo_names = {}
@@ -180,7 +180,7 @@ function M.build_footer_items(groups, current_user)
 	local items = {
 		{
 			text = string.format("%s %d PR%s", PR_ICON, pr_count, pr_count == 1 and "" or "s"),
-			hl_group = "AtlasLogInfo",
+			hl_group = "AtlasFooterInfo",
 		},
 	}
 	local user_name = tostring((current_user or {}).username or (current_user or {}).name or "")
@@ -188,12 +188,16 @@ function M.build_footer_items(groups, current_user)
 		table.insert(items, {
 			text = string.format("%s @%s", icons.general("user"), user_name),
 			hl_group = "AtlasFooterText",
+			priority = 50,
+			min_width = 8,
 		})
 	end
 	if #repo_names > 0 then
 		table.insert(items, {
 			text = string.format("%s %s", REPO_ICON, table.concat(repo_names, ", ")),
 			hl_group = "AtlasFooterText",
+			priority = 10,
+			min_width = 8,
 		})
 	end
 	return items

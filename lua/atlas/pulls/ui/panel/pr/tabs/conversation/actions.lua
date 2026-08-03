@@ -1,7 +1,7 @@
 local M = {}
 
 local md_editor = require("atlas.ui.popups.editor")
-local footer = require("atlas.ui.components.footer")
+local statusline = require("atlas.ui.statusline")
 local renderer = require("atlas.pulls.ui.panel.pr.tabs.conversation.renderer")
 local state = require("atlas.pulls.ui.panel.pr.tabs.conversation.state")
 
@@ -64,10 +64,10 @@ function M.add(pr, refresh)
 			if not text or vim.trim(text) == "" then
 				return
 			end
-			footer.notify("loading", "Adding comment...")
+			statusline.notify("loading", "Adding comment...")
 			provider.add_comment(pr, text, nil, function(comment, err)
 				if err then
-					footer.notify("error", "Add comment failed: " .. err)
+					statusline.notify("error", "Add comment failed: " .. err)
 					return
 				end
 				if type(comment) == "table" then
@@ -75,7 +75,7 @@ function M.add(pr, refresh)
 						table.insert(list, comment)
 					end)
 				end
-				footer.notify("success", "Comment added", 1200)
+				statusline.notify("success", "Comment added", 1200)
 				refresh()
 			end)
 		end,
@@ -112,10 +112,10 @@ function M.reply(pr, entry, refresh)
 			if not text or vim.trim(text) == "" then
 				return
 			end
-			footer.notify("loading", "Sending reply...")
+			statusline.notify("loading", "Sending reply...")
 			provider.reply_comment(pr, comment, text, function(reply, err)
 				if err then
-					footer.notify("error", "Reply failed: " .. err)
+					statusline.notify("error", "Reply failed: " .. err)
 					return
 				end
 				if type(reply) == "table" then
@@ -123,7 +123,7 @@ function M.reply(pr, entry, refresh)
 						table.insert(list, reply)
 					end)
 				end
-				footer.notify("success", "Reply added", 1200)
+				statusline.notify("success", "Reply added", 1200)
 				refresh()
 			end)
 		end,
@@ -139,7 +139,7 @@ function M.edit(pr, entry, refresh)
 	end
 	local comment = entry.comment
 	if not is_own_comment(comment) then
-		footer.notify("warn", "You can only edit your own comments")
+		statusline.notify("warn", "You can only edit your own comments")
 		return
 	end
 	local provider = get_provider()
@@ -158,11 +158,11 @@ function M.edit(pr, entry, refresh)
 			if not text or vim.trim(text) == "" then
 				return
 			end
-			footer.notify("loading", "Editing comment...")
+			statusline.notify("loading", "Editing comment...")
 			local updated = vim.tbl_extend("force", {}, comment, { content_raw = text })
 			provider.edit_comment(pr, updated, function(_, err)
 				if err then
-					footer.notify("error", "Edit failed: " .. err)
+					statusline.notify("error", "Edit failed: " .. err)
 					return
 				end
 				with_comments(function(list)
@@ -173,7 +173,7 @@ function M.edit(pr, entry, refresh)
 						end
 					end
 				end)
-				footer.notify("success", "Comment updated", 1200)
+				statusline.notify("success", "Comment updated", 1200)
 				refresh()
 			end)
 		end,
@@ -189,7 +189,7 @@ function M.delete(pr, entry, refresh)
 	end
 	local comment = entry.comment
 	if not is_own_comment(comment) then
-		footer.notify("warn", "You can only delete your own comments")
+		statusline.notify("warn", "You can only delete your own comments")
 		return
 	end
 	local provider = get_provider()
@@ -202,10 +202,10 @@ function M.delete(pr, entry, refresh)
 		if confirmed ~= "y" and confirmed ~= "yes" then
 			return
 		end
-		footer.notify("loading", "Deleting comment...")
+		statusline.notify("loading", "Deleting comment...")
 		provider.delete_comment(pr, comment, function(ok, err)
 			if err then
-				footer.notify("error", "Delete failed: " .. err)
+				statusline.notify("error", "Delete failed: " .. err)
 				return
 			end
 			if ok then
@@ -218,7 +218,7 @@ function M.delete(pr, entry, refresh)
 					end
 				end)
 			end
-			footer.notify("success", "Comment deleted", 1200)
+			statusline.notify("success", "Comment deleted", 1200)
 			refresh()
 		end)
 	end)
@@ -233,12 +233,12 @@ function M.react(pr, entry, refresh)
 	end
 	local provider = get_provider()
 	if not provider or not provider.add_reaction then
-		footer.notify("warn", "Provider does not support reactions")
+		statusline.notify("warn", "Provider does not support reactions")
 		return
 	end
 	local options = state.reaction_options or {}
 	if #options == 0 then
-		footer.notify("warn", "No reactions available for this provider")
+		statusline.notify("warn", "No reactions available for this provider")
 		return
 	end
 	local comment = entry.comment
@@ -258,10 +258,10 @@ function M.react(pr, entry, refresh)
 		if selected == nil then
 			return
 		end
-		footer.notify("loading", "Adding reaction...")
+		statusline.notify("loading", "Adding reaction...")
 		provider.add_reaction(pr, comment, selected.key, function(ok, err)
 			if err then
-				footer.notify("error", "Reaction failed: " .. tostring(err))
+				statusline.notify("error", "Reaction failed: " .. tostring(err))
 				return
 			end
 			if ok then
@@ -275,7 +275,7 @@ function M.react(pr, entry, refresh)
 					end
 				end)
 			end
-			footer.notify("success", "Reaction added", 1200)
+			statusline.notify("success", "Reaction added", 1200)
 			refresh()
 		end)
 	end)

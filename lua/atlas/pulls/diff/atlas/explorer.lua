@@ -1,6 +1,7 @@
 local M = {}
 
 local diff = require("atlas.ui.components.diff_hunks")
+local statusline = require("atlas.pulls.diff.atlas.statusline")
 local icons = require("atlas.ui.shared.icons")
 local utils = require("atlas.ui.shared.utils")
 
@@ -199,11 +200,11 @@ function M.configure_window(session, win)
 	options.signcolumn = "no"
 	options.spell = false
 	options.statuscolumn = ""
-	options.statusline = " "
 	options.winhighlight = ""
 	options.winfixwidth = true
 	options.wrap = false
 	options.winbar = ""
+	statusline.attach(win)
 end
 
 ---@param session AtlasNativeDiffSession
