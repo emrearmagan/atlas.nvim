@@ -2,7 +2,7 @@
 local M = {}
 
 local md_editor = require("atlas.ui.popups.editor")
-local footer = require("atlas.ui.components.footer")
+local statusline = require("atlas.ui.statusline")
 local panel_state = require("atlas.pulls.ui.panel.pr.state")
 local renderer = require("atlas.pulls.ui.panel.pr.tabs.review.renderer")
 local review_threads = require("atlas.ui.components.review_threads")
@@ -131,7 +131,7 @@ function M.on_select(pr, _repo, refresh, opts)
 	local pr_id = tostring(pr.id or "")
 	state.comments = "loading"
 	state.tasks = provider.fetch_tasks and "loading" or nil
-	footer.notify("loading", string.format("Loading review for #%s...", pr_id))
+	statusline.notify("loading", string.format("Loading review for #%s...", pr_id))
 
 	local pending = provider.fetch_tasks and 2 or 1
 	local comments_error, tasks_error
@@ -142,11 +142,11 @@ function M.on_select(pr, _repo, refresh, opts)
 			return
 		end
 		if comments_error then
-			footer.notify("error", string.format("Failed to load comments for #%s: %s", pr_id, comments_error))
+			statusline.notify("error", string.format("Failed to load comments for #%s: %s", pr_id, comments_error))
 		elseif tasks_error then
-			footer.notify("warn", string.format("Failed to load review items for #%s: %s", pr_id, tasks_error))
+			statusline.notify("warn", string.format("Failed to load review items for #%s: %s", pr_id, tasks_error))
 		else
-			footer.notify("success", string.format("Review loaded for #%s", pr_id), 1200)
+			statusline.notify("success", string.format("Review loaded for #%s", pr_id), 1200)
 		end
 	end
 
@@ -347,7 +347,7 @@ end
 function M.add_task(pr, refresh)
 	local provider = get_provider()
 	if not provider or not provider.add_task then
-		footer.notify("error", "Provider does not support tasks")
+		statusline.notify("error", "Provider does not support tasks")
 		return
 	end
 	local add_task = provider.add_task
@@ -384,22 +384,22 @@ function M.add_task(pr, refresh)
 				return
 			end
 			if not text or vim.trim(text) == "" then
-				footer.notify("warn", "Task cannot be empty")
+				statusline.notify("warn", "Task cannot be empty")
 				return
 			end
-			footer.notify("loading", "Adding task...")
+			statusline.notify("loading", "Adding task...")
 			track(add_task(pr, text, parent, function(task, err)
 				if not is_current_list(context_generation, pr, "tasks", tasks) then
 					return
 				end
 				if err then
-					footer.notify("error", tostring(err))
+					statusline.notify("error", tostring(err))
 					return
 				end
 				if task then
 					table.insert(tasks, task)
 				end
-				footer.notify("success", "Task added", 1200)
+				statusline.notify("success", "Task added", 1200)
 				refresh()
 			end))
 		end,

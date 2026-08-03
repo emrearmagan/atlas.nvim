@@ -1,6 +1,6 @@
 local M = {}
 
-local footer = require("atlas.ui.components.footer")
+local statusline = require("atlas.ui.statusline")
 local utils = require("atlas.ui.shared.utils")
 local buf_util = utils.buffer
 local win_util = utils.window
@@ -10,8 +10,6 @@ local state = {
 	main_buf = nil,
 	tab_id = nil,
 	prev_win = nil,
-	footer_win = nil,
-	footer_buf = nil,
 	detail_win = nil,
 	detail_buf = nil,
 	render_callback = nil,
@@ -39,7 +37,7 @@ local function apply_main_opts(win)
 	set_window_option(win, "cursorbind", false)
 	set_window_option(win, "diff", false)
 	set_window_option(win, "winbar", " ")
-	set_window_option(win, "statusline", " ")
+	statusline.attach(win)
 	set_window_option(
 		win,
 		"winhighlight",
@@ -61,7 +59,7 @@ local function apply_detail_opts(win)
 	set_window_option(win, "cursorbind", false)
 	set_window_option(win, "diff", false)
 	set_window_option(win, "winbar", " ")
-	set_window_option(win, "statusline", " ")
+	statusline.attach(win)
 	set_window_option(win, "winfixwidth", false)
 end
 
@@ -103,19 +101,6 @@ local function ensure_main()
 	})
 end
 
-local function ensure_footer()
-	if not win_util.valid(state.main_win) then
-		return
-	end
-	local buf = ensure_buf("footer_buf", "AtlasFooter", "atlas-footer")
-	if win_util.valid(state.footer_win) then
-		vim.api.nvim_win_set_buf(state.footer_win, buf)
-	else
-		state.footer_win = win_util.create(state.main_win, "botright split", buf, footer.apply_opts)
-	end
-	pcall(vim.api.nvim_win_set_height, state.footer_win, 1)
-end
-
 ---@param fn fun()|nil
 function M.set_render_callback(fn)
 	state.render_callback = fn
@@ -125,7 +110,7 @@ function M.is_open()
 	return win_util.valid(state.main_win)
 end
 
----@param pane "main"|"footer"|"detail"
+---@param pane "main"|"detail"
 ---@return integer|nil
 function M.win_id(pane)
 	local key = pane .. "_win"
@@ -135,7 +120,7 @@ function M.win_id(pane)
 	return nil
 end
 
----@param pane "main"|"footer"|"detail"
+---@param pane "main"|"detail"
 ---@return integer|nil
 function M.buf_id(pane)
 	local key = pane .. "_buf"
@@ -154,7 +139,7 @@ function M.toggle_detail()
 		state.detail_win = nil
 		return
 	end
-	state.detail_buf = ensure_buf("detail_buf", "AtlasDetail", "")
+	state.detail_buf = ensure_buf("detail_buf", "AtlasDetail", "atlas-detail")
 	state.detail_win = win_util.create(state.main_win, "rightbelow vsplit", state.detail_buf, apply_detail_opts)
 	pcall(vim.api.nvim_win_set_width, state.detail_win, math.max(math.floor(vim.o.columns * 0.45), 40))
 
@@ -169,21 +154,13 @@ function M.reflow()
 	if not M.is_open() then
 		return
 	end
-	ensure_footer()
 	if win_util.valid(state.detail_win) then
 		pcall(vim.api.nvim_win_set_width, state.detail_win, math.max(math.floor(vim.o.columns * 0.45), 40))
 	end
-	footer.refresh()
-end
-
-function M.open()
-	M.ensure_open()
-	footer.refresh()
 end
 
 function M.ensure_open()
 	ensure_main()
-	ensure_footer()
 	local keymaps = require("atlas.ui.keymaps")
 	if state.main_buf ~= nil and buf_util.valid(state.main_buf) then
 		keymaps.register(state.main_buf)
@@ -194,11 +171,7 @@ function M.close()
 	if win_util.valid(state.detail_win) then
 		vim.api.nvim_win_close(state.detail_win, true)
 	end
-	if win_util.valid(state.footer_win) then
-		vim.api.nvim_win_close(state.footer_win, true)
-	end
 	state.detail_win = nil
-	state.footer_win = nil
 	if win_util.valid(state.main_win) then
 		local keymaps = require("atlas.ui.keymaps")
 		if state.main_buf ~= nil and buf_util.valid(state.main_buf) then
@@ -214,13 +187,12 @@ function M.close()
 		pcall(vim.cmd, "tabclose")
 	end
 	buf_util.delete(state.detail_buf)
-	buf_util.delete(state.footer_buf)
 	buf_util.delete(state.main_buf)
 	state.main_win = nil
 	state.main_buf = nil
 	state.tab_id = nil
 	state.detail_buf = nil
-	state.footer_buf = nil
+	statusline.reset()
 	if win_util.valid(state.prev_win) then
 		vim.api.nvim_set_current_win(state.prev_win)
 	end

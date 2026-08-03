@@ -1,4 +1,4 @@
-*atlas.txt*  Pull requests and issues from Neovim   Last change: 2026 Aug 01
+*atlas.txt*  Pull requests and issues from Neovim   Last change: 2026 Aug 02
 
 Author: Emre Armagan
 License: MIT
@@ -9,18 +9,19 @@ CONTENTS                                                       *atlas-contents*
   1. Introduction ........................... |atlas-introduction|
   2. Installation ........................... |atlas-installation|
   3. Requirements ........................... |atlas-requirements|
-  4. Commands ............................... |atlas-commands|
-  5. Pulls .................................. |atlas-pulls|
+  4. Configuration .......................... |atlas-configuration|
+  5. Commands ............................... |atlas-commands|
+  6. Pulls .................................. |atlas-pulls|
        Configuration ........................ |atlas-pulls-configuration|
        GitHub ............................... |atlas-pulls-github|
        Bitbucket ............................ |atlas-pulls-bitbucket|
        GitLab ............................... |atlas-pulls-gitlab|
-  6. Issues ................................. |atlas-issues|
+  7. Issues ................................. |atlas-issues|
        Configuration ........................ |atlas-issues-configuration|
        Jira ................................. |atlas-issues-jira|
        GitHub ............................... |atlas-issues-github|
        GitLab ............................... |atlas-issues-gitlab|
-  7. Features ............................... |atlas-features|
+  8. Features ............................... |atlas-features|
        Review pull requests ................. |atlas-review-pull-requests|
          Local notes ........................ |atlas-local-notes|
        View pipelines ....................... |atlas-view-pipelines|
@@ -29,7 +30,7 @@ CONTENTS                                                       *atlas-contents*
        Notifications ........................ |atlas-notifications|
        Bookmarks ............................ |atlas-bookmarks|
        Custom actions ....................... |atlas-custom-actions|
-  8. Keymaps ................................ |atlas-keymaps|
+  9. Keymaps ................................ |atlas-keymaps|
 
 ==============================================================================
 1. INTRODUCTION                              *atlas* *atlas.nvim* *atlas-introduction*
@@ -50,33 +51,20 @@ With lazy.nvim:
       "esmuellert/codediff.nvim",                  -- optional, PR diffs
       "sindrets/diffview.nvim",                    -- optional, PR diffs
     },
-    opts = {
-      pulls = {
-        providers = {
-          github = {},    -- see |atlas-pulls-github|
-          bitbucket = {}, -- see |atlas-pulls-bitbucket|
-          gitlab = {},    -- see |atlas-pulls-gitlab|
-        },
-      },
-      issues = {
-        providers = {
-          jira = {},   -- see |atlas-issues-jira|
-          github = {}, -- see |atlas-issues-github|
-          gitlab = {}, -- see |atlas-issues-gitlab|
-        },
-      },
-    },
+    -- See |atlas-configuration|.
+    opts = {},
   }
 <
 With packer.nvim:
 >lua
   use {
     "emrearmagan/atlas.nvim",
-    config = function() require("atlas").setup({ ... }) end,
+    config = function()
+      -- See |atlas-configuration|.
+      require("atlas").setup({})
+    end,
   }
 <
-Only the providers you list in `setup()` are loaded. No provider is enabled
-by default.
 
 ==============================================================================
 3. REQUIREMENTS                                            *atlas-requirements*
@@ -92,7 +80,39 @@ Run `:checkhealth atlas` after configuring providers to see what's wired
 up and what's missing.
 
 ==============================================================================
-4. COMMANDS                                                    *atlas-commands*
+4. CONFIGURATION                                          *atlas-configuration*
+
+>lua
+  require("atlas").setup({
+    -- Use one statusline across all windows.
+    global_statusline = true,
+
+    pulls = {
+      -- See |atlas-pulls-configuration|.
+      providers = {
+        bitbucket = {}, -- see |atlas-pulls-bitbucket|
+        github = {},    -- see |atlas-pulls-github|
+        gitlab = {},    -- see |atlas-pulls-gitlab|
+      },
+    },
+    issues = {
+      -- See |atlas-issues-configuration|.
+      providers = {
+        jira = {},   -- see |atlas-issues-jira|
+        github = {}, -- see |atlas-issues-github|
+        gitlab = {}, -- see |atlas-issues-gitlab|
+      },
+    },
+  })
+<
+Only the providers listed in `setup()` are loaded. No provider is enabled by
+default.
+
+Set `global_statusline = false` to leave Neovim's `laststatus` option
+unchanged.
+
+==============================================================================
+5. COMMANDS                                                    *atlas-commands*
 
                                                                   *:AtlasPulls*
 :AtlasPulls [provider]
@@ -129,7 +149,7 @@ up and what's missing.
 
                                                                    *:AtlasOpen*
 :AtlasOpen <target>
-        Open a provider URL, Jira key, repository reference, or PR/issue
+        Open a provider URL, Jira key, `owner/repo#number`, or PR/issue
         number.
 
                                                              *:AtlasClearCache*
@@ -143,7 +163,7 @@ up and what's missing.
         open. Helpful for debugging API calls.
 
 ==============================================================================
-5. PULLS                                                          *atlas-pulls*
+6. PULLS                                                          *atlas-pulls*
 
 Two-pane layout: PRs grouped by view on the left, detail tabs (overview,
 conversation, review, and commits) on the right.
@@ -312,7 +332,7 @@ Self-hosted GitLab has not been tested yet.
 anything not covered by the explicit view fields.
 
 ==============================================================================
-6. ISSUES                                                        *atlas-issues*
+7. ISSUES                                                        *atlas-issues*
 
 Same layout as |atlas-pulls|: list on the left, detail tabs (overview,
 conversation, activity) on the right.
@@ -477,7 +497,7 @@ Same auth model as |atlas-pulls-gitlab|. Views take a `scope`
 <
 
 ==============================================================================
-7. FEATURES                                                     *atlas-features*
+8. FEATURES                                                     *atlas-features*
 
 Atlas keeps the pull request and issue workflows you use throughout the day
 inside Neovim.
@@ -637,7 +657,7 @@ to your own tooling. They appear in the action menu (default `A`).
 <
 
 ==============================================================================
-8. KEYMAPS                                                      *atlas-keymaps*
+9. KEYMAPS                                                      *atlas-keymaps*
 
 Defaults live under `keymaps` in `setup()`. Each entry accepts:
   - a string -> single key

@@ -1,7 +1,7 @@
 local M = {}
 
 local editor = require("atlas.ui.popups.editor")
-local footer = require("atlas.ui.components.footer")
+local statusline = require("atlas.ui.statusline")
 local pull_actions = require("atlas.pulls.actions")
 local review_threads = require("atlas.ui.components.review_threads")
 
@@ -112,7 +112,7 @@ local function notify(context, level, message, duration)
 		context.notify(level, message, duration)
 		return
 	end
-	footer.notify(level, message, duration)
+	statusline.notify(level, message, duration)
 end
 
 ---@param context AtlasReviewCommentActionContext

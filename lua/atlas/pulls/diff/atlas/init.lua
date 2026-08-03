@@ -2,7 +2,7 @@ local M = {}
 
 local commits = require("atlas.pulls.diff.atlas.commits")
 local explorer = require("atlas.pulls.diff.atlas.explorer")
-local footer = require("atlas.pulls.diff.atlas.footer")
+local statusline = require("atlas.pulls.diff.atlas.statusline")
 local git = require("atlas.pulls.diff.atlas.git")
 local keymaps = require("atlas.pulls.diff.atlas.keymaps")
 local notify = require("atlas.core.notify")
@@ -165,7 +165,7 @@ local function refresh_ui(session)
 	notes.render(session)
 	render_explorer(session)
 	commits.render(session)
-	footer.render(session)
+	statusline.update(session)
 end
 
 ---@param session AtlasNativeDiffSession
@@ -191,6 +191,7 @@ local function configure_content_window(session, win)
 	options.scrollbind = false
 	options.wrap = false
 	options.winhighlight = ""
+	statusline.attach(win)
 end
 
 ---@param session AtlasNativeDiffSession
@@ -225,7 +226,7 @@ local function dispose_session(session)
 	end
 	session.closing = true
 	cancel_job(session)
-	footer.dispose(session)
+	statusline.dispose(session)
 	comments.detach(session)
 	notes.detach(session)
 	state.remove(session.tabpage)
@@ -239,7 +240,6 @@ local function delete_session_buffers(session)
 		session.commits_panel.buf,
 		session.left.buf,
 		session.right.buf,
-		session.footer.buf,
 	}) do
 		if vim.api.nvim_buf_is_valid(buf) then
 			pcall(vim.api.nvim_buf_delete, buf, { force = true })
@@ -298,7 +298,7 @@ local function select_file(session, index)
 		end
 		session.job = nil
 		if not document then
-			footer.notify(session, "error", tostring(err or "Unable to load file diff"))
+			statusline.notify(session, "error", tostring(err or "Unable to load file diff"))
 			session.pending_index = nil
 			render_explorer(session)
 			return
@@ -385,7 +385,7 @@ end
 local function navigate_hunk(session, direction)
 	local document = session.document
 	if #document.file.hunks == 0 then
-		footer.notify(session, "info", "No diff hunks in this file")
+		statusline.notify(session, "info", "No diff hunks in this file")
 		return
 	end
 	local current_buf = vim.api.nvim_get_current_buf()
@@ -437,7 +437,6 @@ local function toggle_panel(session)
 		close_commits_panel(session)
 		session.panel.win = nil
 		vim.api.nvim_win_close(panel_win, true)
-		footer.reflow(session)
 		return
 	end
 	local anchor_win = session.layout == "side-by-side" and session.left.win or session.right.win
@@ -448,13 +447,12 @@ local function toggle_panel(session)
 	explorer.configure_window(session, session.panel.win)
 	render_explorer(session)
 	open_commits_panel(session)
-	footer.reflow(session)
 end
 
 ---@param session AtlasNativeDiffSession
 local function toggle_commits(session)
 	if #session.commits == 0 then
-		footer.notify(session, "info", "No commits available")
+		statusline.notify(session, "info", "No commits available")
 		return
 	end
 	if not session.panel.win or not vim.api.nvim_win_is_valid(session.panel.win) then
@@ -468,7 +466,6 @@ local function toggle_commits(session)
 	else
 		open_commits_panel(session)
 	end
-	footer.reflow(session)
 end
 
 ---@param session AtlasNativeDiffSession
@@ -527,7 +524,7 @@ local function register_keymaps(session)
 			elseif has_notes then
 				notes.open_at_cursor(session, buf)
 			else
-				footer.notify(session, "info", "No comment or note at cursor")
+				statusline.notify(session, "info", "No comment or note at cursor")
 			end
 		end,
 		add_note = function(buf)
@@ -572,11 +569,9 @@ local function create_session(open_options, options)
 		local left_buf = create_buffer(nil, "nowrite")
 		local panel_buf = create_buffer(string.format("atlas-diff://%d/files", tabpage))
 		local commits_buf = create_buffer(string.format("atlas-diff://%d/commits", tabpage))
-		local footer_buf = create_buffer(string.format("atlas-diff://%d/footer", tabpage))
 		vim.bo[panel_buf].filetype = "atlas-diff-files"
 		vim.bo[commits_buf].filetype = "atlas-diff-commits"
-		vim.bo[footer_buf].filetype = "atlas-footer"
-		vim.list_extend(created_buffers, { right_buf, left_buf, panel_buf, commits_buf, footer_buf })
+		vim.list_extend(created_buffers, { right_buf, left_buf, panel_buf, commits_buf })
 
 		vim.api.nvim_win_set_buf(right_win, right_buf)
 		if vim.api.nvim_buf_is_valid(launcher_buf) then
@@ -587,7 +582,6 @@ local function create_session(open_options, options)
 			local panel_width = math.min(options.explorer.width, math.max(20, vim.o.columns - 40))
 			panel_win = split_window(right_win, panel_buf, "left", panel_width)
 		end
-		local footer_win = split_window(right_win, footer_buf, "below", 1)
 		if target then
 			for name, value in pairs({
 				statuscolumn = target.statuscolumn,
@@ -620,14 +614,14 @@ local function create_session(open_options, options)
 			commits_visible = options.explorer.show_commits and #(open_options.commits or {}) > 0,
 			left = { buf = left_buf, win = nil },
 			right = { buf = right_buf, win = right_win },
-			footer = footer.new(footer_buf, footer_win),
+			statusline = statusline.new(),
 			job = nil,
 			document = open_options.diff.document,
 			review = nil,
 			review_context = open_options.review,
 			review_view = {
 				notify = function(level, message, duration)
-					footer.notify(session, level, message, duration)
+					statusline.notify(session, level, message, duration)
 				end,
 				register_keymaps = function(actions)
 					keymaps.register_review(session, actions)
@@ -652,7 +646,6 @@ local function create_session(open_options, options)
 		state.add(session)
 
 		explorer.configure(session)
-		footer.configure(session)
 		register_keymaps(session)
 		local focus_win = options.explorer.initial_focus == "explorer" and panel_win or nil
 		vim.api.nvim_set_current_win(focus_win or right_win)
@@ -713,7 +706,7 @@ local function initialize_session(session)
 		end
 
 		focus_first_hunk(session)
-		footer.reflow(session)
+		statusline.update(session)
 		open_commits_panel(session)
 	end)
 	if not ok then
@@ -758,7 +751,7 @@ local function replace_with_loading(session)
 	end
 
 	local statuscolumn = vim.wo[win].statuscolumn
-	local statusline = vim.wo[win].statusline
+	local window_statusline = vim.wo[win].statusline
 	local winbar = vim.wo[win].winbar
 	local buf = vim.api.nvim_create_buf(false, true)
 	dispose_session(session)
@@ -778,7 +771,7 @@ local function replace_with_loading(session)
 		number = session.number,
 		relativenumber = session.relativenumber,
 		statuscolumn = statuscolumn,
-		statusline = statusline,
+		statusline = window_statusline,
 		winbar = winbar,
 	}
 end
@@ -820,7 +813,6 @@ toggle_layout = function(session)
 		end
 		render_file(session)
 		session.refresh_ui()
-		footer.reflow(session)
 	end
 
 	if session.layout == "side-by-side" then
@@ -838,7 +830,7 @@ toggle_layout = function(session)
 		end)
 		restore_focus()
 		if not ok then
-			footer.notify(session, "error", "Unable to switch diff layout: " .. tostring(err))
+			statusline.notify(session, "error", "Unable to switch diff layout: " .. tostring(err))
 		end
 		return
 	end
@@ -860,7 +852,7 @@ toggle_layout = function(session)
 		end
 		session.left.win = nil
 		pcall(render_layout)
-		footer.notify(session, "error", "Unable to switch diff layout: " .. tostring(err))
+		statusline.notify(session, "error", "Unable to switch diff layout: " .. tostring(err))
 	end
 	restore_focus()
 end
@@ -878,7 +870,7 @@ toggle_compact = function(session)
 	end
 	local document = session.document
 	if not session.compact and (document.binary or #document.file.hunks == 0) then
-		footer.notify(session, "info", "This file has no textual diff hunks")
+		statusline.notify(session, "info", "This file has no textual diff hunks")
 		return
 	end
 	session.compact = not session.compact
@@ -929,13 +921,9 @@ vim.api.nvim_create_autocmd("WinClosed", {
 					if closed_win == session.commits_panel.win then
 						session.commits_panel.win = nil
 						session.commits_visible = false
-						footer.reflow(session)
 					elseif closed_win == session.panel.win then
 						session.panel.win = nil
 						close_commits_panel(session)
-						footer.reflow(session)
-					elseif closed_win == session.footer.win then
-						session.footer.win = nil
 					elseif closed_win == session.left.win or closed_win == session.right.win then
 						close(session)
 					end
@@ -958,10 +946,8 @@ local function resize_current_view()
 	if session.left.win then
 		configure_content_window(session, session.left.win)
 	end
-	footer.configure(session)
 	render_file(session)
 	session.refresh_ui()
-	footer.reflow(session)
 end
 
 vim.api.nvim_create_autocmd({ "WinResized", "TabEnter" }, {

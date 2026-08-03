@@ -1,7 +1,7 @@
 local M = {}
 
 local icons = require("atlas.ui.shared.icons")
-local footer = require("atlas.ui.components.footer")
+local statusline = require("atlas.ui.statusline")
 local async_picker = require("atlas.ui.components.async_picker")
 local issues_api = require("atlas.issues.providers.jira.api.issues")
 local notify = require("atlas.core.notify")
@@ -104,15 +104,15 @@ local ACTIONS = {
 				end,
 				on_select = function(item)
 					local selected = item.value
-					footer.notify("loading", string.format("Transitioning %s...", issue_key))
+					statusline.notify("loading", string.format("Transitioning %s...", issue_key))
 					transitions_api.transition_issue(issue_key, selected.id, function(ok, err)
 						if not ok then
-							footer.notify("error", err or "Transition failed")
+							statusline.notify("error", err or "Transition failed")
 							done(nil, err or "Transition failed")
 							return
 						end
 
-						footer.notify(
+						statusline.notify(
 							"success",
 							string.format("Transitioned %s to %s", issue_key, selected.name or ""),
 							1200
@@ -218,21 +218,21 @@ local ACTIONS = {
 				end,
 				on_select = function(item)
 					local selected = item.value
-					footer.notify("loading", string.format("Assigning %s...", issue_key))
+					statusline.notify("loading", string.format("Assigning %s...", issue_key))
 					users_api.assign_issue(issue_key, selected.account_id, function(ok, err)
 						if not ok then
-							footer.notify("error", err or "Assign failed")
+							statusline.notify("error", err or "Assign failed")
 							done(nil, err or "Assign failed")
 							return
 						end
 
 						if selected.account_id == nil then
-							footer.notify("success", string.format("Unassigned %s", issue_key), 1200)
+							statusline.notify("success", string.format("Unassigned %s", issue_key), 1200)
 							done({ changed_issue_key = issue_key, message = "Unassigned" }, nil)
 							return
 						end
 
-						footer.notify(
+						statusline.notify(
 							"success",
 							string.format("Assigned %s to %s", issue_key, selected.display_name),
 							1200
@@ -303,15 +303,15 @@ local ACTIONS = {
 				end,
 				on_select = function(item)
 					local selected = item.value
-					footer.notify("loading", string.format("Changing reporter for %s...", issue_key))
+					statusline.notify("loading", string.format("Changing reporter for %s...", issue_key))
 					users_api.change_reporter(issue_key, selected.account_id, function(ok, err)
 						if not ok then
-							footer.notify("error", err or "Reporter change failed")
+							statusline.notify("error", err or "Reporter change failed")
 							done(nil, err or "Reporter change failed")
 							return
 						end
 
-						footer.notify(
+						statusline.notify(
 							"success",
 							string.format("Reporter for %s changed to %s", issue_key, selected.display_name),
 							1200
@@ -353,15 +353,15 @@ local ACTIONS = {
 					return
 				end
 
-				footer.notify("loading", string.format("Deleting %s...", issue_key))
+				statusline.notify("loading", string.format("Deleting %s...", issue_key))
 				issues_api.delete_issue(issue_key, function(ok, err)
 					if not ok then
-						footer.notify("error", err or "Delete failed")
+						statusline.notify("error", err or "Delete failed")
 						done(nil, err or "Delete failed")
 						return
 					end
 
-					footer.notify("success", string.format("Deleted %s", issue_key), 1200)
+					statusline.notify("success", string.format("Deleted %s", issue_key), 1200)
 					require("atlas.issues.ui.main.controller").refresh_current_view(function()
 						done({ changed_issue_key = nil, message = string.format("Deleted %s", issue_key) }, nil)
 					end)
@@ -407,7 +407,7 @@ local ACTIONS = {
 						payload.assignee = vim.NIL
 					end
 
-					footer.notify("loading", string.format("Updating issue %s...", issue_key))
+					statusline.notify("loading", string.format("Updating issue %s...", issue_key))
 					issues_api.update_issue(issue_key, payload, function(ok, err)
 						if not ok then
 							submit_done(false, err or "Failed to update issue")
@@ -415,9 +415,10 @@ local ACTIONS = {
 							return
 						end
 
-						footer.notify("success", string.format("Updated %s", issue_key), 1200)
 						submit_done(true, nil)
-						done({ changed_issue_key = issue_key, message = "Issue updated" }, nil)
+						vim.schedule(function()
+							done({ changed_issue_key = issue_key, message = "Issue updated" }, nil)
+						end)
 					end)
 				end, {
 					summary = tostring(issue.summary or ""),
@@ -440,15 +441,15 @@ local ACTIONS = {
 				return
 			end
 
-			footer.notify("loading", string.format("Loading description for %s...", issue_key))
+			statusline.notify("loading", string.format("Loading description for %s...", issue_key))
 			issues_api.get_issue_description(issue_key, function(description, err)
 				if err then
-					footer.notify("warn", string.format("Failed loading description for %s", issue_key), 1200)
+					statusline.notify("warn", string.format("Failed loading description for %s", issue_key), 1200)
 					open_editor("")
 					return
 				end
 
-				footer.notify("success", string.format("Loaded description for %s", issue_key), 1200)
+				statusline.notify("success", string.format("Loaded description for %s", issue_key), 1200)
 				if type(description) == "table" then
 					open_editor(adf.to_markdown(description))
 					return
@@ -1052,16 +1053,16 @@ local ACTIONS = {
 			local svc = require("atlas.issues.providers.jira.api.service")
 			local issue = ctx.issue
 			local issue_key = tostring(issue.key or "")
-			footer.notify("loading", issue.is_subscribed and "Unsubscribing..." or "Subscribing...")
+			statusline.notify("loading", issue.is_subscribed and "Unsubscribing..." or "Subscribing...")
 
 			local function finish(subscribed, err)
 				if err then
-					footer.notify("error", tostring(err))
+					statusline.notify("error", tostring(err))
 					done(nil, tostring(err))
 					return
 				end
 				issue.is_subscribed = subscribed == true
-				footer.notify("success", issue.is_subscribed and "Subscribed" or "Unsubscribed", 1200)
+				statusline.notify("success", issue.is_subscribed and "Subscribed" or "Unsubscribed", 1200)
 				done(
 					{ changed_issue_key = issue.key, message = issue.is_subscribed and "Subscribed" or "Unsubscribed" },
 					nil
@@ -1134,7 +1135,7 @@ function M.available(ctx)
 					return true, nil
 				end,
 				run = function(action_ctx, done)
-					footer.notify("loading", string.format("Running %s...", tostring(item.label)))
+					statusline.notify("loading", string.format("Running %s...", tostring(item.label)))
 
 					local done_called = false
 					local function custom_done(ok, message)
@@ -1145,11 +1146,11 @@ function M.available(ctx)
 
 						vim.schedule(function()
 							if ok == false then
-								footer.notify("error", tostring(message or (item.label .. " failed")))
+								statusline.notify("error", tostring(message or (item.label .. " failed")))
 								done(nil, tostring(message or (item.label .. " failed")))
 								return
 							end
-							footer.notify("success", tostring(message or (item.label .. " done")))
+							statusline.notify("success", tostring(message or (item.label .. " done")))
 							done(
 								{ changed_issue_key = nil, message = tostring(message or (item.label .. " done")) },
 								nil

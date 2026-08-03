@@ -6,7 +6,7 @@ local header = require("atlas.ui.components.header")
 local navbar = require("atlas.ui.components.navbar")
 local table_tree = require("atlas.ui.components.table_tree")
 local utils = require("atlas.ui.shared.utils")
-local footer = require("atlas.ui.components.footer")
+local statusline = require("atlas.ui.statusline")
 local helper = require("atlas.issues.ui.main.helper")
 local icons = require("atlas.ui.shared.icons")
 
@@ -411,6 +411,20 @@ function M.render(opts)
 	local provider_icon = provider and provider.icon or "•"
 	local provider_name = provider and provider.name or "Issues"
 	local provider_hl = provider and provider.hl_group or "Title"
+	local issue_count = #(state.issues or {})
+	local statusline_items = {
+		{ text = string.format("%d issues", issue_count), hl_group = "AtlasFooterText" },
+	}
+	local user_name = (state.current_user and state.current_user.display_name) or ""
+	if user_name ~= "" then
+		statusline_items[#statusline_items + 1] = {
+			text = "| @" .. user_name,
+			hl_group = "AtlasFooterText",
+			priority = 50,
+			min_width = 8,
+		}
+	end
+	statusline.set_items(statusline_items)
 
 	local views = provider and provider.views and provider.views() or {}
 	local active = state.active_view
@@ -563,17 +577,6 @@ function M.render(opts)
 			for lnum, node in pairs(tbl_map) do
 				line_map[table_base + lnum] = node
 			end
-
-			local issue_count = #(state.issues or {})
-			local user_name = (state.current_user and state.current_user.display_name) or ""
-			local footer_items = {
-				{ text = string.format("%d issues", issue_count), hl_group = provider_hl },
-			}
-			if user_name ~= "" then
-				table.insert(footer_items, { text = "|", hl_group = "AtlasFooterText" })
-				table.insert(footer_items, { text = "@" .. user_name, hl_group = "AtlasFooterText" })
-			end
-			footer.set_items(footer_items)
 		end
 	end
 

@@ -1,6 +1,6 @@
 local M = {}
 
-local footer = require("atlas.ui.components.footer")
+local statusline = require("atlas.ui.statusline")
 local checkout = require("atlas.core.git.checkout")
 
 ---@class PullsActionResult
@@ -15,29 +15,29 @@ end
 ---@param pr PullRequest
 function M.copy_id(pr)
 	vim.fn.setreg("+", tostring(pr.id))
-	footer.notify("success", string.format("Copied #%s to clipboard", tostring(pr.id)), 1200)
+	statusline.notify("success", string.format("Copied #%s to clipboard", tostring(pr.id)), 1200)
 end
 
 ---@param pr PullRequest
 function M.copy_url(pr)
 	local url = pr.link and pr.link.html
 	if url == nil or url == "" then
-		footer.notify("warn", "No URL available")
+		statusline.notify("warn", "No URL available")
 		return
 	end
 	vim.fn.setreg("+", url)
-	footer.notify("success", "Copied URL to clipboard", 1200)
+	statusline.notify("success", "Copied URL to clipboard", 1200)
 end
 
 ---@param pr PullRequest
 function M.open_in_browser(pr)
 	local url = pr.link and pr.link.html
 	if url == nil or url == "" then
-		footer.notify("warn", "No URL available")
+		statusline.notify("warn", "No URL available")
 		return
 	end
 	vim.ui.open(url)
-	footer.notify("info", "Opened in browser")
+	statusline.notify("info", "Opened in browser")
 end
 
 ---@param pr PullRequest
@@ -60,14 +60,14 @@ function M.open_pipelines(pr, on_done)
 	local p = provider()
 	if p == nil or type(p.fetch_pipelines) ~= "function" then
 		local err = "Pipelines are not supported by this provider"
-		footer.notify("warn", err)
+		statusline.notify("warn", err)
 		on_done(nil, err)
 		return nil
 	end
 
 	require("atlas.pulls.ui.pipelines").open(pr)
 	local message = "Opened Pipelines"
-	footer.notify("success", message, 1200)
+	statusline.notify("success", message, 1200)
 	on_done({ changed_pr = false, message = message }, nil)
 	return nil
 end
@@ -166,21 +166,21 @@ function M.open_diff(pr)
 		current_user = pulls_state.current_user,
 	}, function(err, level)
 		if err then
-			footer.notify(level or "error", "Unable to open diff: " .. tostring(err))
+			statusline.notify(level or "error", "Unable to open diff: " .. tostring(err))
 		end
 	end)
 end
 
 ---@param pr PullRequest
 function M.checkout(pr)
-	footer.notify("loading", string.format("Checking out PR #%s", tostring(pr.id or "")))
+	statusline.notify("loading", string.format("Checking out PR #%s", tostring(pr.id or "")))
 	checkout.checkout_pr(pr, function(_, err)
 		vim.schedule(function()
 			if err then
-				footer.notify("error", string.format("Checkout failed: %s", tostring(err)))
+				statusline.notify("error", string.format("Checkout failed: %s", tostring(err)))
 				return
 			end
-			footer.notify("success", string.format("Checked out PR #%s", tostring(pr.id or "")))
+			statusline.notify("success", string.format("Checked out PR #%s", tostring(pr.id or "")))
 		end)
 	end)
 end

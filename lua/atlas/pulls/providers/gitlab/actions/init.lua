@@ -2,7 +2,7 @@ local M = {}
 
 local registry = require("atlas.pulls.providers.gitlab.actions.registry")
 local logger = require("atlas.core.logger")
-local footer = require("atlas.ui.components.footer")
+local statusline = require("atlas.ui.statusline")
 
 ---@class GitLabPullsActionContext
 ---@field pr PullRequest|nil
@@ -24,7 +24,7 @@ function M.run(id, ctx, on_done)
 	local available, available_err = action.is_available(ctx)
 	if not available then
 		local err = tostring(available_err or string.format("Action is not available: %s", tostring(id)))
-		local notify = ctx.notify or footer.notify
+		local notify = ctx.notify or statusline.notify
 		notify("warn", err)
 		on_done(nil, err)
 		return

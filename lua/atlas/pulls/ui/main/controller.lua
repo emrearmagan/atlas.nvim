@@ -1,7 +1,6 @@
 local M = {}
 
-local footer = require("atlas.ui.components.footer")
-local spinner = require("atlas.ui.popups.spinner")
+local statusline = require("atlas.ui.statusline")
 local status_spinner = require("atlas.ui.components.spinner")
 local state = require("atlas.pulls.state")
 local layout = require("atlas.ui.layout")
@@ -140,14 +139,13 @@ local function load_active_view(opts, on_done)
 
 	local target_view = state.active_view
 	if target_view == nil then
-		footer.notify("error", "No active view selected")
+		statusline.notify("error", "No active view selected")
 		on_done()
 		return
 	end
 
 	if target_view._kind == "bookmarks" then
 		cancel_active_requests()
-		spinner.stop()
 		state.is_loading = false
 		state.error = nil
 		state.pulls = nil
@@ -165,8 +163,7 @@ local function load_active_view(opts, on_done)
 
 	state.is_loading = true
 	state.error = nil
-	footer.notify("loading", "Loading pull requests...")
-	spinner.start("Loading pull requests...")
+	statusline.notify("loading", "Loading pull requests...")
 	render_if_active()
 
 	---@return boolean
@@ -202,20 +199,18 @@ local function load_active_view(opts, on_done)
 			if has_groups then
 				state.error = nil
 				state.pulls = groups
-				footer.notify("warn", string.format("Some repositories failed: %s", tostring(first_err)))
+				statusline.notify("warn", string.format("Some repositories failed: %s", tostring(first_err)))
 			else
 				state.error = tostring(first_err)
 				state.pulls = {}
-				footer.notify("error", string.format("Failed to fetch pull requests: %s", tostring(first_err)))
+				statusline.notify("error", string.format("Failed to fetch pull requests: %s", tostring(first_err)))
 			end
 		else
 			state.error = nil
 			state.pulls = groups or {}
-			footer.notify("success", "Pull requests loaded", 1200)
+			statusline.notify("success", "Pull requests loaded", 1200)
 		end
 
-		footer.set_items(helper.build_footer_items(state.pulls, state.current_user))
-		spinner.stop()
 		render_if_active()
 		on_done()
 	end
@@ -240,9 +235,8 @@ local function load_active_view(opts, on_done)
 				return
 			end
 			if user_err then
-				footer.notify("warn", string.format("Failed to fetch current user: %s", tostring(user_err)))
+				statusline.notify("warn", string.format("Failed to fetch current user: %s", tostring(user_err)))
 			else
-				footer.set_items(helper.build_footer_items(state.pulls or {}, state.current_user))
 				render_if_active()
 			end
 			fetch_pull_requests()
@@ -268,14 +262,14 @@ function M.refresh_pr(pr, on_done)
 	on_done = on_done or function() end
 
 	if pr == nil or pr.id == nil then
-		footer.notify("warn", "No PR selected")
+		statusline.notify("warn", "No PR selected")
 		on_done()
 		return
 	end
 
 	local provider = state.provider
 	if provider == nil or provider.fetch_pullrequest == nil then
-		footer.notify("warn", "Provider does not support single PR refresh")
+		statusline.notify("warn", "Provider does not support single PR refresh")
 		on_done()
 		return
 	end
@@ -283,7 +277,7 @@ function M.refresh_pr(pr, on_done)
 	local pr_id = pr.id
 	local repo_id = tostring(pr.repo_full_name or "")
 
-	footer.notify("loading", string.format("Reloading PR #%s...", tostring(pr_id)))
+	statusline.notify("loading", string.format("Reloading PR #%s...", tostring(pr_id)))
 	begin_pr_reload(repo_id, pr_id)
 
 	local panel = require("atlas.pulls.ui.panel")
@@ -312,7 +306,7 @@ function M.refresh_pr(pr, on_done)
 
 		if err ~= nil or fetched_pr == nil then
 			end_pr_reload(repo_id, pr_id)
-			footer.notify("error", tostring(err or "Failed to reload PR"))
+			statusline.notify("error", tostring(err or "Failed to reload PR"))
 			on_done()
 			return
 		end
@@ -341,7 +335,7 @@ function M.refresh_pr(pr, on_done)
 			panel.on_select(fetched_pr, nil)
 		end
 
-		footer.notify("success", string.format("Reloaded PR #%s", tostring(pr_id)), 1200)
+		statusline.notify("success", string.format("Reloaded PR #%s", tostring(pr_id)), 1200)
 		on_done()
 	end)
 	table.insert(active_pr_reload_handles, reload_handle)
@@ -375,7 +369,7 @@ function M.run_bookmark(name, value)
 	state.is_loading = true
 	state.error = nil
 	state.pulls = nil
-	footer.notify("loading", "Running query...")
+	statusline.notify("loading", "Running query...")
 	render_if_active()
 
 	active_pullrequests_handle = provider.fetch_pullrequests(view, { force_load = false }, function(groups, err)
@@ -385,13 +379,12 @@ function M.run_bookmark(name, value)
 		if first_err and (groups == nil or #groups == 0) then
 			state.error = tostring(first_err)
 			state.pulls = {}
-			footer.notify("error", string.format("Query failed: %s", state.error))
+			statusline.notify("error", string.format("Query failed: %s", state.error))
 		else
 			state.error = nil
 			state.pulls = groups or {}
-			footer.notify("success", "Pull requests loaded", 1200)
+			statusline.notify("success", "Pull requests loaded", 1200)
 		end
-		footer.set_items(helper.build_footer_items(state.pulls, state.current_user))
 		render_if_active()
 	end)
 end
@@ -406,7 +399,7 @@ function M.toggle_status_filter(status)
 		end
 	end
 	if state.status_filters[status] and active_count <= 1 then
-		footer.notify("warn", "At least one status filter must remain active")
+		statusline.notify("warn", "At least one status filter must remain active")
 		return
 	end
 

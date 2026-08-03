@@ -3,7 +3,7 @@ local M = {}
 
 local utils = require("atlas.ui.shared.utils")
 local spinner = require("atlas.ui.components.spinner")
-local footer = require("atlas.ui.components.footer")
+local statusline = require("atlas.ui.statusline")
 local state = require("atlas.issues.providers.jira.ui.overview.state")
 local adf = require("atlas.issues.providers.jira.converted.adf")
 local issues_api = require("atlas.issues.providers.jira.api.issues")
@@ -57,7 +57,7 @@ function M.on_select(issue, refresh, opts)
 	state.md_description = nil
 
 	local issue_key = tostring(issue.key or "")
-	footer.notify("loading", string.format("Loading description for %s...", issue_key))
+	statusline.notify("loading", string.format("Loading description for %s...", issue_key))
 
 	track(issues_api.get_issue_description(issue_key, function(raw, err)
 		state.description_loading = false
@@ -65,7 +65,7 @@ function M.on_select(issue, refresh, opts)
 		if err then
 			state.raw_description = nil
 			state.md_description = nil
-			footer.notify("error", string.format("Failed to load description for %s", issue_key))
+			statusline.notify("error", string.format("Failed to load description for %s", issue_key))
 			refresh()
 			return
 		end
@@ -73,7 +73,7 @@ function M.on_select(issue, refresh, opts)
 		state.raw_description = raw
 		state.md_description = to_markdown(raw)
 
-		footer.notify("success", string.format("Description loaded for %s", issue_key), 1200)
+		statusline.notify("success", string.format("Description loaded for %s", issue_key), 1200)
 		refresh()
 	end, { force_load = force_refresh }))
 end
@@ -172,7 +172,7 @@ function M.deactivate(buf)
 	cancel_all()
 	if state.description_loading then
 		state.description_loading = false
-		footer.notify("info", "", 0)
+		statusline.clear_notice()
 	end
 end
 

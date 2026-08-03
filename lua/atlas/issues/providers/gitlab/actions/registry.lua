@@ -1,7 +1,7 @@
 local M = {}
 
 local icons = require("atlas.ui.shared.icons")
-local footer = require("atlas.ui.components.footer")
+local statusline = require("atlas.ui.statusline")
 local async_picker = require("atlas.ui.components.async_picker")
 local multi_select = require("atlas.ui.popups.multi_select")
 local issues_api = require("atlas.issues.providers.gitlab.api.issues")
@@ -44,14 +44,14 @@ local ACTIONS = {
 		end,
 		run = function(ctx, done)
 			local key = tostring(ctx.issue.key or "")
-			footer.notify("loading", string.format("Closing %s...", key))
+			statusline.notify("loading", string.format("Closing %s...", key))
 			issues_api.set_state(key, "close", function(ok, err)
 				if not ok then
-					footer.notify("error", err or "Close failed")
+					statusline.notify("error", err or "Close failed")
 					done(nil, err or "Close failed")
 					return
 				end
-				footer.notify("success", string.format("Closed %s", key), 1200)
+				statusline.notify("success", string.format("Closed %s", key), 1200)
 				done({ changed_issue_key = key, message = "Closed" }, nil)
 			end)
 		end,
@@ -67,14 +67,14 @@ local ACTIONS = {
 		end,
 		run = function(ctx, done)
 			local key = tostring(ctx.issue.key or "")
-			footer.notify("loading", string.format("Reopening %s...", key))
+			statusline.notify("loading", string.format("Reopening %s...", key))
 			issues_api.set_state(key, "reopen", function(ok, err)
 				if not ok then
-					footer.notify("error", err or "Reopen failed")
+					statusline.notify("error", err or "Reopen failed")
 					done(nil, err or "Reopen failed")
 					return
 				end
-				footer.notify("success", string.format("Reopened %s", key), 1200)
+				statusline.notify("success", string.format("Reopened %s", key), 1200)
 				done({ changed_issue_key = key, message = "Reopened" }, nil)
 			end)
 		end,
@@ -87,15 +87,15 @@ local ACTIONS = {
 			local key = tostring(ctx.issue.key or "")
 			local target = ctx.issue.status_id == "closed" and "reopen" or "close"
 			local label = target == "close" and "Closing" or "Reopening"
-			footer.notify("loading", string.format("%s %s...", label, key))
+			statusline.notify("loading", string.format("%s %s...", label, key))
 			issues_api.set_state(key, target, function(ok, err)
 				if not ok then
-					footer.notify("error", err or (label .. " failed"))
+					statusline.notify("error", err or (label .. " failed"))
 					done(nil, err or (label .. " failed"))
 					return
 				end
 				local msg = target == "close" and "Closed" or "Reopened"
-				footer.notify("success", string.format("%s %s", msg, key), 1200)
+				statusline.notify("success", string.format("%s %s", msg, key), 1200)
 				done({ changed_issue_key = key, message = msg }, nil)
 			end)
 		end,
@@ -113,14 +113,14 @@ local ACTIONS = {
 				return
 			end
 
-			footer.notify("loading", "Loading members...")
+			statusline.notify("loading", "Loading members...")
 			users_api.list_members(path, "", function(members, err)
 				if err or members == nil then
-					footer.notify("error", err or "Failed to load members")
+					statusline.notify("error", err or "Failed to load members")
 					done(nil, err or "Failed to load members")
 					return
 				end
-				footer.notify("info", "", 0)
+				statusline.clear_notice()
 
 				if #members == 0 then
 					done(nil, "No assignable members")
@@ -181,15 +181,15 @@ local ACTIONS = {
 							return
 						end
 
-						footer.notify("loading", string.format("Updating assignees on %s...", key))
+						statusline.notify("loading", string.format("Updating assignees on %s...", key))
 						issues_api.set_assignee_ids(key, final_ids, function(ok, set_err)
 							if not ok then
-								footer.notify("error", set_err or "Failed")
+								statusline.notify("error", set_err or "Failed")
 								done(nil, set_err or "Failed")
 								return
 							end
 							local msg = string.format("%d assignee(s)", #final_ids)
-							footer.notify("success", msg, 1200)
+							statusline.notify("success", msg, 1200)
 							done({ changed_issue_key = key, message = msg }, nil)
 						end)
 					end,
@@ -210,14 +210,14 @@ local ACTIONS = {
 				return
 			end
 
-			footer.notify("loading", "Loading labels...")
+			statusline.notify("loading", "Loading labels...")
 			labels_api.list(path, function(labels, err)
 				if err or labels == nil then
-					footer.notify("error", err or "Failed to load labels")
+					statusline.notify("error", err or "Failed to load labels")
 					done(nil, err or "Failed to load labels")
 					return
 				end
-				footer.notify("info", "", 0)
+				statusline.clear_notice()
 				if #labels == 0 then
 					done(nil, "No labels available")
 					return
@@ -264,15 +264,15 @@ local ACTIONS = {
 							return
 						end
 
-						footer.notify("loading", string.format("Updating labels on %s...", key))
+						statusline.notify("loading", string.format("Updating labels on %s...", key))
 						issues_api.update_labels(key, { add = adds, remove = removes }, function(ok, set_err)
 							if not ok then
-								footer.notify("error", set_err or "Failed")
+								statusline.notify("error", set_err or "Failed")
 								done(nil, set_err or "Failed")
 								return
 							end
 							local msg = string.format("+%d / -%d label(s)", #adds, #removes)
-							footer.notify("success", msg, 1200)
+							statusline.notify("success", msg, 1200)
 							done({ changed_issue_key = key, message = msg }, nil)
 						end)
 					end,
@@ -479,10 +479,10 @@ local ACTIONS = {
 			local iid = tonumber(raw.iid)
 			local action = issue.is_subscribed == true and "unsubscribe" or "subscribe"
 			local endpoint = string.format("/projects/%s/issues/%d/%s", service.url_encode(path), iid, action)
-			footer.notify("loading", issue.is_subscribed and "Unsubscribing..." or "Subscribing...")
+			statusline.notify("loading", issue.is_subscribed and "Unsubscribing..." or "Subscribing...")
 			service.request("POST", endpoint, nil, function(result, err)
 				if err then
-					footer.notify("error", tostring(err))
+					statusline.notify("error", tostring(err))
 					done(nil, tostring(err))
 					return
 				end
@@ -491,7 +491,7 @@ local ACTIONS = {
 					subscribed = action == "subscribe"
 				end
 				issue.is_subscribed = subscribed == true
-				footer.notify("success", issue.is_subscribed and "Subscribed" or "Unsubscribed", 1200)
+				statusline.notify("success", issue.is_subscribed and "Subscribed" or "Unsubscribed", 1200)
 				done(
 					{ changed_issue_key = issue.key, message = issue.is_subscribed and "Subscribed" or "Unsubscribed" },
 					nil
@@ -530,7 +530,7 @@ function M.available(ctx)
 					return true, nil
 				end,
 				run = function(action_ctx, done)
-					footer.notify("loading", string.format("Running %s...", tostring(item.label)))
+					statusline.notify("loading", string.format("Running %s...", tostring(item.label)))
 
 					local done_called = false
 					local function custom_done(ok, message)
@@ -541,11 +541,11 @@ function M.available(ctx)
 
 						vim.schedule(function()
 							if ok == false then
-								footer.notify("error", tostring(message or (item.label .. " failed")))
+								statusline.notify("error", tostring(message or (item.label .. " failed")))
 								done(nil, tostring(message or (item.label .. " failed")))
 								return
 							end
-							footer.notify("success", tostring(message or (item.label .. " done")))
+							statusline.notify("success", tostring(message or (item.label .. " done")))
 							done({
 								changed_issue_key = action_ctx.issue and action_ctx.issue.key or nil,
 								message = tostring(message or (item.label .. " done")),

@@ -2,7 +2,7 @@ local M = {}
 
 local registry = require("atlas.pulls.providers.github.actions.registry")
 local logger = require("atlas.core.logger")
-local footer = require("atlas.ui.components.footer")
+local statusline = require("atlas.ui.statusline")
 
 ---@alias GitHubActionId
 ---| "merge"
@@ -35,7 +35,7 @@ function M.run(id, ctx, on_done)
 	if not available then
 		local err = tostring(available_err or string.format("Action is not available: %s", tostring(id)))
 		logger.logwarn("github.action.unavailable", { action_id = tostring(id), source = ctx.source, error = err })
-		local notify = ctx.notify or footer.notify
+		local notify = ctx.notify or statusline.notify
 		notify("warn", err)
 		on_done(nil, err)
 		return

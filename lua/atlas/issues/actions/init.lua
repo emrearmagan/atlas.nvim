@@ -1,6 +1,6 @@
 local M = {}
 
-local footer = require("atlas.ui.components.footer")
+local statusline = require("atlas.ui.statusline")
 
 ---@return IssuesProvider|nil
 local function provider()
@@ -19,7 +19,7 @@ function M.run_action(action_id, issue, source, on_done)
 
 	p.run_action(action_id, { issue = issue, source = source }, function(result, err)
 		if err ~= nil then
-			footer.notify("error", tostring(err))
+			statusline.notify("error", tostring(err))
 			if on_done then
 				on_done(nil)
 			end
@@ -27,7 +27,7 @@ function M.run_action(action_id, issue, source, on_done)
 		end
 
 		if result ~= nil and result.message ~= nil and result.message ~= "" then
-			footer.notify("info", tostring(result.message), 1200)
+			statusline.notify("info", tostring(result.message), 1200)
 		end
 
 		if result ~= nil and result.changed_issue_key ~= nil and result.changed_issue_key ~= "" then
@@ -51,7 +51,7 @@ function M.open_actions(issue, source, on_done)
 
 	p.open_actions(issue, source, function(result, err)
 		if err ~= nil then
-			footer.notify("error", tostring(err))
+			statusline.notify("error", tostring(err))
 			if on_done then
 				on_done(nil)
 			end
@@ -63,7 +63,7 @@ function M.open_actions(issue, source, on_done)
 		end
 
 		if result ~= nil and result.message ~= nil and result.message ~= "" then
-			footer.notify("info", tostring(result.message), 1200)
+			statusline.notify("info", tostring(result.message), 1200)
 		end
 
 		if on_done then
@@ -81,7 +81,7 @@ function M.search(on_done)
 
 	p.search(function(result, err)
 		if err ~= nil then
-			footer.notify("error", tostring(err))
+			statusline.notify("error", tostring(err))
 			if on_done then
 				on_done(nil)
 			end
@@ -89,7 +89,7 @@ function M.search(on_done)
 		end
 
 		if result ~= nil and result.message ~= nil and result.message ~= "" then
-			footer.notify("info", tostring(result.message), 1200)
+			statusline.notify("info", tostring(result.message), 1200)
 		end
 
 		if result ~= nil and result.changed_issue_key ~= nil and result.changed_issue_key ~= "" then
