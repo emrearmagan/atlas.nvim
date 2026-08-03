@@ -1,6 +1,6 @@
 local M = {}
 
-local notify = require("atlas.core.notify")
+local statusline = require("atlas.ui.statusline")
 
 ---@class PullsPipelineActionContext
 ---@field pr PullRequest
@@ -31,7 +31,7 @@ function M.open(provider, ctx, on_select)
 		end
 	end
 	if #available == 0 then
-		notify.warn("No pipeline actions available")
+		statusline.notify("warn", "No pipeline actions available")
 		return
 	end
 

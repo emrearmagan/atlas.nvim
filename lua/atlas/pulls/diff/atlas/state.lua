@@ -37,7 +37,7 @@ local M = {}
 ---@field commits_visible boolean
 ---@field left AtlasNativeDiffWindow
 ---@field right AtlasNativeDiffWindow
----@field footer AtlasNativeDiffFooter
+---@field statusline AtlasNativeDiffStatusline
 ---@field job { cancel: fun() }|nil
 ---@field document AtlasNativeDiffDocument
 ---@field review AtlasReviewState|nil

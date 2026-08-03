@@ -110,7 +110,6 @@ function M.register(session, actions)
 		session.commits_panel.buf,
 		session.left.buf,
 		session.right.buf,
-		session.footer.buf,
 	}) do
 		local general_actions = {}
 		add(

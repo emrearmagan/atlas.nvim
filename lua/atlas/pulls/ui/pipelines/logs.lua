@@ -1,5 +1,7 @@
 local M = {}
 
+local keymaps = require("atlas.pulls.ui.pipelines.keymaps")
+local statusline = require("atlas.ui.statusline")
 local icons = require("atlas.ui.shared.icons")
 local spinner = require("atlas.ui.components.spinner")
 local utils = require("atlas.ui.shared.utils")
@@ -423,6 +425,7 @@ local function configure_window(win)
 	vim.api.nvim_set_option_value("wrap", false, { win = win })
 	vim.api.nvim_set_option_value("cursorline", false, { win = win })
 	vim.api.nvim_set_option_value("winbar", " Job Log ", { win = win })
+	statusline.attach(win)
 end
 
 ---@param pr PullRequest
@@ -454,18 +457,20 @@ function M.open(pr, provider, selection)
 		utils.buffer.delete(placeholder_buf)
 	end
 
-	vim.keymap.set("n", "r", function()
-		fetch_log(session)
-	end, { buffer = session.buf, silent = true, nowait = true, desc = "Refresh job log" })
-	vim.keymap.set("n", "gx", function()
-		local url = session.job.url or session.pipeline.url
-		if type(url) == "string" and url ~= "" then
-			vim.ui.open(url)
-		end
-	end, { buffer = session.buf, silent = true, nowait = true, desc = "Open job in browser" })
-	vim.keymap.set("n", "q", function()
-		vim.cmd("tabclose")
-	end, { buffer = session.buf, silent = true, nowait = true, desc = "Close job log" })
+	keymaps.setup_job_log(session.buf, {
+		refresh = function()
+			fetch_log(session)
+		end,
+		open_url = function()
+			local url = session.job.url or session.pipeline.url
+			if type(url) == "string" and url ~= "" then
+				vim.ui.open(url)
+			end
+		end,
+		close = function()
+			vim.cmd("tabclose")
+		end,
+	})
 
 	vim.api.nvim_create_autocmd("BufWipeout", {
 		buffer = session.buf,
