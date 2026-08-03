@@ -1,6 +1,6 @@
 local M = {}
 
-local footer = require("atlas.ui.components.footer")
+local statusline = require("atlas.ui.statusline")
 local icons = require("atlas.ui.shared.icons")
 local resolver = require("atlas.core.keymaps")
 local renderer = require("atlas.ui.notifications.renderer")
@@ -294,7 +294,7 @@ local function load(force_load)
 		state.is_loading = false
 		if err then
 			state.error = tostring(err)
-			footer.notify("error", string.format("Failed to fetch notifications: %s", tostring(err)))
+			statusline.notify("error", string.format("Failed to fetch notifications: %s", tostring(err)))
 		else
 			state.error = nil
 			state.set_notifications(notifications)
@@ -313,15 +313,15 @@ end
 
 local function open_in_browser(notification)
 	if notification == nil or not notification.url or notification.url == "" then
-		footer.notify("warn", "Notification has no URL")
+		statusline.notify("warn", "Notification has no URL")
 		return
 	end
 	local ok, err = pcall(vim.ui.open, notification.url)
 	if not ok then
-		footer.notify("error", string.format("Failed to open URL: %s", tostring(err)))
+		statusline.notify("error", string.format("Failed to open URL: %s", tostring(err)))
 		return
 	end
-	footer.notify("info", "Opened in browser")
+	statusline.notify("info", "Opened in browser")
 end
 
 local function mark_read(notification)
@@ -329,24 +329,24 @@ local function mark_read(notification)
 		return
 	end
 	if not notification.unread then
-		footer.notify("info", "Already read")
+		statusline.notify("info", "Already read")
 		return
 	end
 
 	local provider = current_provider
 	if provider == nil or provider.mark_notification_read == nil then
-		footer.notify("warn", "Provider does not support marking as read")
+		statusline.notify("warn", "Provider does not support marking as read")
 		return
 	end
 
-	footer.notify("loading", "Marking as read...")
+	statusline.notify("loading", "Marking as read...")
 	provider.mark_notification_read(notification.id, function(ok, err)
 		if not ok then
-			footer.notify("error", string.format("Failed to mark as read: %s", tostring(err)))
+			statusline.notify("error", string.format("Failed to mark as read: %s", tostring(err)))
 			return
 		end
 		state.mark_local_read(notification.id)
-		footer.notify("success", "Marked as read", 1200)
+		statusline.notify("success", "Marked as read", 1200)
 		rerender()
 		refresh_main()
 	end)
@@ -358,18 +358,18 @@ local function mark_done(notification)
 	end
 	local provider = current_provider
 	if provider == nil or provider.mark_notification_done == nil then
-		footer.notify("warn", "Provider does not support marking as done")
+		statusline.notify("warn", "Provider does not support marking as done")
 		return
 	end
 
-	footer.notify("loading", "Marking as done...")
+	statusline.notify("loading", "Marking as done...")
 	provider.mark_notification_done(notification.id, function(ok, err)
 		if not ok then
-			footer.notify("error", string.format("Failed to mark as done: %s", tostring(err)))
+			statusline.notify("error", string.format("Failed to mark as done: %s", tostring(err)))
 			return
 		end
 		state.remove_local(notification.id)
-		footer.notify("success", "Marked as done", 1200)
+		statusline.notify("success", "Marked as done", 1200)
 		rerender()
 		refresh_main()
 	end)
@@ -439,11 +439,11 @@ function M.open()
 
 	local provider = current_provider
 	if provider == nil then
-		footer.notify("warn", "No active provider")
+		statusline.notify("warn", "No active provider")
 		return
 	end
 	if provider.fetch_notifications == nil then
-		footer.notify("warn", string.format("%s does not support notifications", provider.name or "Provider"))
+		statusline.notify("warn", string.format("%s does not support notifications", provider.name or "Provider"))
 		return
 	end
 

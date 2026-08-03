@@ -6,7 +6,7 @@ local icons = require("atlas.ui.shared.icons")
 local spinner = require("atlas.ui.components.spinner")
 local box = require("atlas.ui.components.box")
 local table_tree = require("atlas.ui.components.table_tree")
-local footer = require("atlas.ui.components.footer")
+local statusline = require("atlas.ui.statusline")
 local state = require("atlas.pulls.ui.panel.pr.tabs.overview.state")
 local keymaps = require("atlas.pulls.ui.panel.pr.tabs.overview.keymaps")
 
@@ -79,7 +79,7 @@ function M.on_select(pr, _repo, refresh, opts)
 	end
 
 	if pending > 0 then
-		footer.notify("loading", string.format("Loading overview for #%s...", pr_id))
+		statusline.notify("loading", string.format("Loading overview for #%s...", pr_id))
 	end
 
 	local function complete(err)
@@ -89,9 +89,9 @@ function M.on_select(pr, _repo, refresh, opts)
 		pending = pending - 1
 		if pending == 0 then
 			if errors > 0 then
-				footer.notify("error", string.format("Failed to load overview for #%s", pr_id))
+				statusline.notify("error", string.format("Failed to load overview for #%s", pr_id))
 			else
-				footer.notify("success", string.format("Overview loaded for #%s", pr_id), 1200)
+				statusline.notify("success", string.format("Overview loaded for #%s", pr_id), 1200)
 			end
 		end
 	end

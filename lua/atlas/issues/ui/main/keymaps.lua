@@ -1,6 +1,6 @@
 local M = {}
 
-local footer = require("atlas.ui.components.footer")
+local statusline = require("atlas.ui.statusline")
 local resolver = require("atlas.core.keymaps")
 local utils = require("atlas.ui.shared.utils")
 local actions = require("atlas.issues.actions")
@@ -77,7 +77,7 @@ function M.register(buf, views)
 				callback = function()
 					local issue = selected_issue()
 					if issue == nil then
-						footer.notify("warn", "No issue selected")
+						statusline.notify("warn", "No issue selected")
 						return
 					end
 					actions.open_actions(issue, "main")
@@ -177,7 +177,7 @@ function M.register(buf, views)
 			callback = function()
 				local issue = selected_issue()
 				if issue == nil then
-					footer.notify("warn", "No issue selected")
+					statusline.notify("warn", "No issue selected")
 					return
 				end
 				actions.copy_key(issue)
@@ -194,7 +194,7 @@ function M.register(buf, views)
 			callback = function()
 				local issue = selected_issue()
 				if issue == nil then
-					footer.notify("warn", "No issue selected")
+					statusline.notify("warn", "No issue selected")
 					return
 				end
 				actions.copy_url(issue)
@@ -212,7 +212,7 @@ function M.register(buf, views)
 				callback = function()
 					local issue = selected_issue()
 					if issue == nil then
-						footer.notify("warn", "No issue selected")
+						statusline.notify("warn", "No issue selected")
 						return
 					end
 					actions.run_action("transition", issue, "main")
@@ -228,7 +228,7 @@ function M.register(buf, views)
 				callback = function()
 					local issue = selected_issue()
 					if issue == nil then
-						footer.notify("warn", "No issue selected")
+						statusline.notify("warn", "No issue selected")
 						return
 					end
 					actions.run_action("assign", issue, "main")
@@ -244,7 +244,7 @@ function M.register(buf, views)
 				callback = function()
 					local issue = selected_issue()
 					if issue == nil then
-						footer.notify("warn", "No issue selected")
+						statusline.notify("warn", "No issue selected")
 						return
 					end
 					actions.run_action("reporter", issue, "main")
@@ -260,7 +260,7 @@ function M.register(buf, views)
 				callback = function()
 					local issue = selected_issue()
 					if issue == nil then
-						footer.notify("warn", "No issue selected")
+						statusline.notify("warn", "No issue selected")
 						return
 					end
 					actions.run_action("edit_issue", issue, "main")
@@ -278,7 +278,7 @@ function M.register(buf, views)
 			callback = function()
 				local issue = selected_issue()
 				if issue == nil then
-					footer.notify("warn", "No issue selected")
+					statusline.notify("warn", "No issue selected")
 					return
 				end
 				actions.open_in_browser(issue)

@@ -1,6 +1,6 @@
 local M = {}
 
-local footer = require("atlas.ui.components.footer")
+local statusline = require("atlas.ui.statusline")
 local resolver = require("atlas.core.keymaps")
 local utils = require("atlas.ui.shared.utils")
 local actions = require("atlas.pulls.actions")
@@ -99,7 +99,7 @@ function M.register(buf, views)
 				callback = function()
 					local pr = selected_pr()
 					if pr == nil then
-						footer.notify("warn", "No PR selected")
+						statusline.notify("warn", "No PR selected")
 						return
 					end
 					actions.open_actions(pr, "main")
@@ -116,7 +116,7 @@ function M.register(buf, views)
 			callback = function()
 				local pr = selected_pr()
 				if pr == nil then
-					footer.notify("warn", "No PR selected")
+					statusline.notify("warn", "No PR selected")
 					return
 				end
 				actions.open_in_browser(pr)
@@ -132,7 +132,7 @@ function M.register(buf, views)
 			callback = function()
 				local pr = selected_pr()
 				if pr == nil then
-					footer.notify("warn", "No PR selected")
+					statusline.notify("warn", "No PR selected")
 					return
 				end
 				actions.copy_url(pr)
@@ -148,7 +148,7 @@ function M.register(buf, views)
 			callback = function()
 				local pr = selected_pr()
 				if pr == nil then
-					footer.notify("warn", "No PR selected")
+					statusline.notify("warn", "No PR selected")
 					return
 				end
 				actions.copy_id(pr)
@@ -164,7 +164,7 @@ function M.register(buf, views)
 			callback = function()
 				local pr = selected_pr()
 				if pr == nil then
-					footer.notify("warn", "No PR selected")
+					statusline.notify("warn", "No PR selected")
 					return
 				end
 				actions.show_details(pr, buf)
@@ -180,7 +180,7 @@ function M.register(buf, views)
 			callback = function()
 				local pr = selected_pr()
 				if pr == nil then
-					footer.notify("warn", "No PR selected")
+					statusline.notify("warn", "No PR selected")
 					return
 				end
 				actions.open_diff(pr)
@@ -196,7 +196,7 @@ function M.register(buf, views)
 			callback = function()
 				local pr = selected_pr()
 				if pr == nil then
-					footer.notify("warn", "No PR selected")
+					statusline.notify("warn", "No PR selected")
 					return
 				end
 				actions.checkout(pr)
@@ -223,7 +223,7 @@ function M.register(buf, views)
 			callback = function()
 				local pr = selected_pr()
 				if pr == nil then
-					footer.notify("warn", "No PR selected")
+					statusline.notify("warn", "No PR selected")
 					return
 				end
 				actions.refresh(pr)
@@ -251,7 +251,7 @@ function M.register(buf, views)
 			callback = function()
 				local pr = selected_pr()
 				if pr == nil then
-					footer.notify("warn", "No PR selected")
+					statusline.notify("warn", "No PR selected")
 					return
 				end
 

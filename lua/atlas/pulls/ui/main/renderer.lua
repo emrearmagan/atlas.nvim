@@ -8,7 +8,7 @@ local icons = require("atlas.ui.shared.icons")
 local navbar = require("atlas.ui.components.navbar")
 local table_tree = require("atlas.ui.components.table_tree")
 local utils = require("atlas.ui.shared.utils")
-local footer = require("atlas.ui.components.footer")
+local statusline = require("atlas.ui.statusline")
 
 ---@param lines string[]
 ---@param spans table[]
@@ -188,6 +188,7 @@ end
 function M.render(opts)
 	local lines, spans = {}, {}
 	local line_map = {}
+	statusline.set_items(helper.build_statusline_items(state.pulls, state.current_user))
 
 	render_header(lines, spans, opts.width)
 	table.insert(lines, "")
@@ -261,8 +262,6 @@ function M.render(opts)
 		for lnum, node in pairs(body_map) do
 			line_map[body_base + lnum] = node
 		end
-
-		footer.set_items(helper.build_footer_items(groups, state.current_user))
 	end
 
 	return lines, spans, line_map

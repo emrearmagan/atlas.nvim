@@ -89,6 +89,7 @@
 -- Config
 
 ---@class AtlasConfig
+---@field global_statusline boolean|nil Set one statusline across all windows (default: true)
 ---@field pulls AtlasPullsConfig|nil
 ---@field issues AtlasIssuesConfig|nil
 ---@field keymaps AtlasKeymapsConfig|nil  -- see core/keymaps.lua for type
@@ -99,6 +100,7 @@ local notify = require("atlas.core.notify")
 
 ---@type AtlasConfig
 M.options = {
+	global_statusline = true,
 	pulls = {
 		diff = {
 			open_cmd = "AtlasDiff",
@@ -286,6 +288,9 @@ end
 function M.setup(opts)
 	local resolved = opts or {}
 	M.options = vim.tbl_deep_extend("force", M.options, resolved)
+	if M.options.global_statusline ~= false then
+		vim.opt.laststatus = 3
+	end
 	register_commands()
 end
 

@@ -49,7 +49,11 @@ local groups = {
 	AtlasLogError = { fg = "#f38ba8", bold = true },
 
 	AtlasFooterBackground = { bg = "#202635" },
-	AtlasFooterText = { fg = "#7f849c" },
+	AtlasFooterText = { fg = "#7f849c", bg = "#202635" },
+	AtlasFooterInfo = { fg = "#89b4fa", bg = "#202635", bold = true },
+	AtlasFooterWarning = { fg = "#f9e2af", bg = "#202635", bold = true },
+	AtlasFooterError = { fg = "#f38ba8", bg = "#202635", bold = true },
+	AtlasFooterSuccess = { fg = "#a6da95", bg = "#202635", bold = true },
 
 	AtlasChipActive = { fg = "#1e1e2e", bg = "#89b4fa", bold = true },
 }

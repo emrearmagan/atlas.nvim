@@ -2,7 +2,7 @@ local M = {}
 
 local layout = require("atlas.ui.layout")
 local ui_state = require("atlas.ui.state")
-local footer = require("atlas.ui.components.footer")
+local statusline = require("atlas.ui.statusline")
 local ns = vim.api.nvim_create_namespace("atlas.ui")
 
 ---@param buf integer
@@ -41,8 +41,6 @@ function M.render()
 	vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines or {})
 	apply_spans(buf, spans)
 	vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
-
-	footer.refresh()
 end
 
 ---@param provider IssuesProvider
@@ -71,7 +69,7 @@ function M.init(provider, opts)
 	local views = provider.views and provider.views() or {}
 	state.active_view = (opts and opts.initial_view) or views[1]
 
-	footer.clear_items()
+	statusline.clear_items()
 
 	local buf = layout.buf_id("main")
 	if buf ~= nil and vim.api.nvim_buf_is_valid(buf) then

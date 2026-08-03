@@ -4,7 +4,7 @@ local M = {}
 local utils = require("atlas.ui.shared.utils")
 local icons = require("atlas.ui.shared.icons")
 local spinner = require("atlas.ui.components.spinner")
-local footer = require("atlas.ui.components.footer")
+local statusline = require("atlas.ui.statusline")
 local state = require("atlas.pulls.providers.github.ui.repo_panel.issues.state")
 local repo_panel_state = require("atlas.pulls.ui.panel.repo.state")
 
@@ -271,7 +271,7 @@ local function fetch_issues(slug, refresh)
 	}, function(result, err)
 		if err then
 			state.issues = tostring(err)
-			footer.notify("error", string.format("Failed to load issues for %s", slug))
+			statusline.notify("error", string.format("Failed to load issues for %s", slug))
 			refresh()
 			return
 		end
@@ -326,7 +326,7 @@ local function fetch_issues(slug, refresh)
 		end
 
 		state.issues = issues
-		footer.notify("success", string.format("Issues loaded for %s", slug), 1200)
+		statusline.notify("success", string.format("Issues loaded for %s", slug), 1200)
 		refresh()
 	end))
 end
@@ -371,7 +371,7 @@ function M.on_select(_pr, repo, refresh, opts)
 		return
 	end
 
-	footer.notify("loading", string.format("Loading issues for %s...", slug))
+	statusline.notify("loading", string.format("Loading issues for %s...", slug))
 	fetch_issues(slug, refresh)
 end
 
