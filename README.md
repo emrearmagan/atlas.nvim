@@ -701,6 +701,10 @@ Set an action to `false` to disable it, or set it to a list to add aliases.
 ```lua
 keymaps = {
   ui = {
+    next_item = "j",
+    previous_item = "k",
+    first_item = "gg",
+    last_item = "G",
     help = "g?", -- { "g?", "<leader>?" } would add aliases
     close = "q", -- false would disable it
     toggle_panel = "p",

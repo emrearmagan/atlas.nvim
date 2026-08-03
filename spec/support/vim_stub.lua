@@ -32,6 +32,15 @@ _G.vim = {
 		return tostring(v)
 	end,
 
+	-- vim.tbl_keys(t) -> list of the table's keys
+	tbl_keys = function(t)
+		local keys = {}
+		for k in pairs(t) do
+			table.insert(keys, k)
+		end
+		return keys
+	end,
+
 	env = { HOME = os.getenv("HOME") or "" },
 
 	fn = {
