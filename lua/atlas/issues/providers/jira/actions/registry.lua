@@ -415,9 +415,10 @@ local ACTIONS = {
 							return
 						end
 
-						statusline.notify("success", string.format("Updated %s", issue_key), 1200)
 						submit_done(true, nil)
-						done({ changed_issue_key = issue_key, message = "Issue updated" }, nil)
+						vim.schedule(function()
+							done({ changed_issue_key = issue_key, message = "Issue updated" }, nil)
+						end)
 					end)
 				end, {
 					summary = tostring(issue.summary or ""),

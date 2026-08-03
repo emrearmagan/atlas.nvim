@@ -8,8 +8,6 @@
 ---@field editor_win integer|nil
 ---@field context_buf integer|nil
 ---@field context_win integer|nil
----@field footer_buf integer|nil
----@field footer_win integer|nil
 ---@field title_label string|nil
 ---@field body_label string|nil
 ---@field meta_height integer|nil

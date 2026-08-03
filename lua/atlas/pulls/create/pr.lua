@@ -5,7 +5,6 @@ local form = require("atlas.ui.popups.form")
 local git_branch = require("atlas.core.git")
 local keymaps = require("atlas.core.keymaps")
 local description = require("atlas.pulls.create.description")
-local spinner = require("atlas.ui.popups.spinner")
 local pulls_helper = require("atlas.pulls.ui.main.helper")
 local multi_select = require("atlas.ui.popups.multi_select")
 local notify = require("atlas.core.notify")
@@ -143,7 +142,7 @@ local function refresh_commits(pr_state)
 		pr_state.fields.head
 	)
 	if not content then
-		notify.error(err or "Unable to build pull request description")
+		form.notify("error", err or "Unable to build pull request description")
 		return
 	end
 	pr_state.fields.commits = content.commits
@@ -161,7 +160,7 @@ local function preview_diff(pr_state)
 	local base, head, err =
 		git_branch.diff_revisions(pr_state.fields.repo_root, pr_state.fields.base, pr_state.fields.head)
 	if not base or not head then
-		notify.error(err or "Unable to resolve diff revisions")
+		form.notify("error", err or "Unable to resolve diff revisions")
 		return
 	end
 	require("atlas.pulls.actions").open_diff_range({
@@ -170,7 +169,7 @@ local function preview_diff(pr_state)
 		head_revision = head,
 	}, function(open_err)
 		if open_err then
-			notify.error("Unable to open diff: " .. tostring(open_err))
+			form.notify("error", "Unable to open diff: " .. tostring(open_err))
 		end
 	end)
 end
@@ -192,7 +191,6 @@ end
 
 ---@param pr_state CreatePRState
 local function close(pr_state)
-	spinner.stop()
 	form.close(pr_state.layout)
 end
 
@@ -217,7 +215,7 @@ end
 local function pick_base(pr_state, on_change)
 	local choices = pr_state.fields.available_bases
 	if #choices == 0 then
-		notify.warn("No base branches available")
+		form.notify("warn", "No base branches available")
 		return
 	end
 
@@ -240,11 +238,11 @@ local function pick_reviewers(pr_state, on_change)
 		return
 	end
 	if type(reviewers) == "string" then
-		notify.warn("Reviewers unavailable: " .. reviewers)
+		form.notify("warn", "Reviewers unavailable: " .. reviewers)
 		return
 	end
 	if #reviewers == 0 then
-		notify.warn("No reviewers available")
+		form.notify("warn", "No reviewers available")
 		return
 	end
 
@@ -353,24 +351,24 @@ local function submit(pr_state)
 
 	local title = get_title(pr_state)
 	if title == "" then
-		notify.warn("Title is required")
+		form.notify("warn", "Title is required")
 		return
 	end
 
 	local body = get_body(pr_state)
 	local provider = pr_state.fields.provider
 	if not provider or not provider.create_pr then
-		notify.error("Provider does not support PR creation")
+		form.notify("error", "Provider does not support PR creation")
 		return
 	end
 
 	if pr_state.fields.head == "" or pr_state.fields.base == "" then
-		notify.warn("Head and base branches are required")
+		form.notify("warn", "Head and base branches are required")
 		return
 	end
 
 	if pr_state.fields.head == pr_state.fields.base then
-		notify.warn("Head and base branches must differ")
+		form.notify("warn", "Head and base branches must differ")
 		return
 	end
 
@@ -386,7 +384,7 @@ local function submit(pr_state)
 	end
 
 	local function do_create()
-		spinner.start("Creating pull request..")
+		form.notify("loading", "Creating pull request...")
 		provider.create_pr({
 			repo_slug = pr_state.fields.repo_slug,
 			repo_root = pr_state.fields.repo_root,
@@ -400,8 +398,7 @@ local function submit(pr_state)
 			vim.schedule(function()
 				if err then
 					pr_state.is_submitting = false
-					spinner.stop()
-					notify.error("Create PR failed: " .. tostring(err))
+					form.notify("error", "Create PR failed: " .. tostring(err))
 					return
 				end
 				on_success(pr_state, result or {})
@@ -416,12 +413,11 @@ local function submit(pr_state)
 		return
 	end
 
-	spinner.start("Pushing " .. pr_state.fields.head .. " to origin..")
+	form.notify("loading", "Pushing " .. pr_state.fields.head .. " to origin...")
 	git_branch.push_branch(pr_state.fields.repo_root, pr_state.fields.head, "origin", function(ok, push_err)
 		if not ok then
 			pr_state.is_submitting = false
-			spinner.stop()
-			notify.error("git push failed: " .. tostring(push_err or ""))
+			form.notify("error", "git push failed: " .. tostring(push_err or ""))
 			return
 		end
 		do_create()
