@@ -163,7 +163,6 @@ function M.notify(session, level, message, duration)
 		current.spinner = spinner.create({
 			on_tick = function(frame)
 				if session.closing or current.notice.token ~= token then
-					stop_spinner(current)
 					return
 				end
 				current.notice.text = string.format("%s %s", frame, message)

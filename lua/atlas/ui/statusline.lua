@@ -211,7 +211,6 @@ local function start_loading(token, message)
 		interval_ms = 120,
 		on_tick = function(frame)
 			if notice.token ~= token then
-				stop_loading()
 				return
 			end
 
