@@ -794,6 +794,9 @@ Thanks go to these wonderful people ([emoji key](https://allcontributors.org/emo
       <td align="center" valign="top" width="14.28%"><a href="https://github.com/niklastreml"><img src="https://avatars.githubusercontent.com/u/27763017?v=4?s=100" width="100px;" alt="Niklas Treml"/><br /><sub><b>Niklas Treml</b></sub></a><br /><a href="#code-niklastreml" title="Code">💻</a> <a href="#bug-niklastreml" title="Bug reports">🐛</a></td>
       <td align="center" valign="top" width="14.28%"><a href="https://github.com/TheNoeTrevino"><img src="https://avatars.githubusercontent.com/u/144077737?v=4?s=100" width="100px;" alt="Noe Trevino"/><br /><sub><b>Noe Trevino</b></sub></a><br /><a href="#code-TheNoeTrevino" title="Code">💻</a></td>
     </tr>
+    <tr>
+      <td align="center" valign="top" width="14.28%"><a href="https://nuagir.com"><img src="https://avatars.githubusercontent.com/u/35815402?v=4?s=100" width="100px;" alt="Jean-Frederic Mainville"/><br /><sub><b>Jean-Frederic Mainville</b></sub></a><br /><a href="#code-jfmainville" title="Code">💻</a></td>
+    </tr>
   </tbody>
 </table>
 
