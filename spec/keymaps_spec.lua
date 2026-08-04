@@ -131,3 +131,35 @@ describe("atlas navigation keymaps", function()
 		assert.is_nil(ui_conflicts["j"])
 	end)
 end)
+
+describe("atlas pulls review delete_comment keymap", function()
+	before_each(function()
+		config.options.keymaps = deep_copy(shipped_keymaps)
+	end)
+
+	it("resolves the shipped default to dd", function()
+		assert.are.same({ "dd" }, keymaps.resolve("pulls.review.delete_comment"))
+	end)
+
+	it("supports remapping and disabling delete_comment", function()
+		config.options.keymaps.pulls.review.delete_comment = "gD"
+		assert.are.same({ "gD" }, keymaps.resolve("pulls.review.delete_comment"))
+
+		config.options.keymaps.pulls.review.delete_comment = false
+		assert.is_nil(keymaps.resolve("pulls.review.delete_comment"))
+	end)
+
+	it("does not conflict with the other shipped pulls.review keys", function()
+		local pulls_conflicts = keymaps.validate().pulls
+		assert.are.same({}, pulls_conflicts)
+	end)
+
+	it("detects a conflict when remapped onto an existing pulls.review key", function()
+		-- "C" is already taken by add_comment, so remapping delete_comment onto it
+		-- must be flagged rather than silently shadowing add_comment.
+		config.options.keymaps.pulls.review.delete_comment = "C"
+
+		local pulls_conflicts = keymaps.validate().pulls
+		assert.are.same({ "pulls.review.add_comment", "pulls.review.delete_comment" }, pulls_conflicts["C"])
+	end)
+end)

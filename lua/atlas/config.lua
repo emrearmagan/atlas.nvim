@@ -168,6 +168,7 @@ M.options = {
 				view_thread = "K",
 				add_pending_comment = "c",
 				add_comment = "C",
+				delete_comment = "dd",
 				add_note = "n",
 				toggle_resolved = "x",
 			},
