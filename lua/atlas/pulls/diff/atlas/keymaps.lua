@@ -431,9 +431,20 @@ function M.register_review(session, actions)
 			)
 			add(
 				review_actions,
+				item("pulls.review.delete_comment", {
+					desc = "Delete comment at cursor",
+					index = 14,
+					callback = run(function()
+						actions.delete_comment(buf)
+					end),
+					opts = { silent = true, nowait = true },
+				})
+			)
+			add(
+				review_actions,
 				item("ui.toggle_fold", {
 					desc = "Toggle review thread",
-					index = 14,
+					index = 15,
 					callback = run(function()
 						if not actions.toggle_thread(buf) then
 							pcall(vim.cmd.normal, { "za", bang = true })
@@ -446,7 +457,7 @@ function M.register_review(session, actions)
 				review_actions,
 				item("ui.toggle_all_folds", {
 					desc = "Toggle all review threads",
-					index = 15,
+					index = 16,
 					callback = run(function()
 						if not actions.toggle_all_threads() then
 							pcall(vim.cmd.normal, { "zA", bang = true })
@@ -482,7 +493,7 @@ function M.register_review(session, actions)
 			review_actions,
 			item("ui.open_in_browser", {
 				desc = "Open pull request in browser",
-				index = 16,
+				index = 17,
 				callback = run(actions.open_in_browser),
 				opts = { silent = true, nowait = true },
 			})
@@ -507,6 +518,7 @@ local REVIEW_CONTENT_ACTIONS = {
 	"pulls.review.toggle_resolved",
 	"pulls.review.add_pending_comment",
 	"pulls.review.add_comment",
+	"pulls.review.delete_comment",
 	"ui.toggle_fold",
 	"ui.toggle_all_folds",
 	"ui.open_in_browser",
