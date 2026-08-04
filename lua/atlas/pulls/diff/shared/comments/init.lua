@@ -20,6 +20,7 @@ local comment_threads = require("atlas.ui.components.review_threads")
 ---@field toggle_task (fun())|nil
 ---@field toggle_resolved fun(buf: integer)
 ---@field add_comment fun(buf: integer, pending: boolean)
+---@field delete_comment fun(buf: integer)
 ---@field toggle_thread fun(buf: integer): boolean
 ---@field toggle_all_threads fun(): boolean
 ---@field jump_comment fun(buf: integer, direction: 1|-1)
@@ -681,6 +682,31 @@ end
 
 ---@param session AtlasReviewSession
 ---@param state AtlasReviewState
+---@param buf integer
+local function delete_comment_at_cursor(session, state, buf)
+	local threads = threads_at_cursor(session, state, buf)
+	if #threads == 0 then
+		view_notify(session, "info", "No comment at cursor")
+		return
+	end
+	if #threads > 1 then
+		open_thread(session, state, buf)
+		return
+	end
+
+	local comment = threads[1].comment
+	if not can_action(state, "delete", comment) then
+		view_notify(session, "info", "This comment cannot be deleted")
+		return
+	end
+	local context = action_context(session, state, comment)
+	if context then
+		actions.run(context, "delete", comment)
+	end
+end
+
+---@param session AtlasReviewSession
+---@param state AtlasReviewState
 local function register_keymaps(session, state)
 	if state.keymaps_registered then
 		return
@@ -734,6 +760,9 @@ local function register_keymaps(session, state)
 		end,
 		add_comment = function(buf, pending)
 			add_inline_comment(session, state, buf, pending)
+		end,
+		delete_comment = function(buf)
+			delete_comment_at_cursor(session, state, buf)
 		end,
 		toggle_thread = function(buf)
 			return toggle_at_cursor(session, state, buf)
