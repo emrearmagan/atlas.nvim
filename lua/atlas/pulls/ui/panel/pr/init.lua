@@ -38,8 +38,9 @@ local function is_loading()
 	end
 	local state = require("atlas.pulls.state")
 	local provider = state.provider
-	if provider and provider.panel and provider.panel.is_loading then
-		return provider.panel.is_loading(pr, panel_state.current_tab)
+	local panel = provider and provider.capabilities.ui and provider.capabilities.ui.panel
+	if panel and panel.is_loading then
+		return panel.is_loading(pr, panel_state.current_tab)
 	end
 	return false
 end
@@ -79,8 +80,9 @@ end
 local function get_tabs()
 	local state = require("atlas.pulls.state")
 	local provider = state.provider
-	if provider and provider.panel and provider.panel.tabs then
-		local tabs = provider.panel.tabs()
+	local panel = provider and provider.capabilities.ui and provider.capabilities.ui.panel
+	if panel and panel.tabs then
+		local tabs = panel.tabs()
 		if type(tabs) == "table" and #tabs > 0 then
 			return tabs
 		end
@@ -191,8 +193,9 @@ end
 local function dispatch_provider_fetches(pr, opts)
 	local state = require("atlas.pulls.state")
 	local provider = state.provider
-	if provider and provider.panel and provider.panel.fetches then
-		provider.panel.fetches(pr, make_refresh_callback(pr), opts)
+	local panel = provider and provider.capabilities.ui and provider.capabilities.ui.panel
+	if panel and panel.fetches then
+		panel.fetches(pr, make_refresh_callback(pr), opts)
 	end
 end
 
@@ -204,21 +207,6 @@ local function notify_tab(pr, repo, opts)
 	if tab_mod and tab_mod.on_select then
 		tab_mod.on_select(pr, repo, make_refresh_callback(pr), opts)
 	end
-end
-
-local function reset_pr_tab_data()
-	local function reset_state(mod_path)
-		local ok, mod = pcall(require, mod_path)
-		if ok and type(mod) == "table" and type(mod.reset) == "function" then
-			mod.reset()
-		end
-	end
-
-	reset_state("atlas.pulls.ui.panel.pr.tabs.overview.state")
-	reset_state("atlas.pulls.ui.panel.pr.tabs.activity.state")
-	reset_state("atlas.pulls.ui.panel.pr.tabs.commits.state")
-	reset_state("atlas.pulls.ui.panel.pr.tabs.review.state")
-	panel_state.diffstat = nil
 end
 
 -- Public API
@@ -268,7 +256,11 @@ function M.on_select(pr, repo, opts)
 	end
 
 	if context_changed or opts.force_refresh == true then
-		reset_pr_tab_data()
+		require("atlas.pulls.ui.panel.pr.tabs.overview.state").reset()
+		require("atlas.pulls.ui.panel.pr.tabs.activity.state").reset()
+		require("atlas.pulls.ui.panel.pr.tabs.commits.state").reset()
+		require("atlas.pulls.ui.panel.pr.tabs.review.state").reset()
+		panel_state.diffstat = nil
 	end
 
 	if should_fetch then

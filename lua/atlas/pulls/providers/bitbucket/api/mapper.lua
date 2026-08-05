@@ -123,6 +123,69 @@ local function clone_url(repository)
 	return full_name ~= "" and string.format("https://bitbucket.org/%s.git", full_name) or ""
 end
 
+---@param item table
+---@param workspace string
+---@param repo string
+---@return table
+local function normalize_pull(item, workspace, repo)
+	local pr = as_table(item) or {}
+	local author = as_table(pr.author) or {}
+	local links = as_table(pr.links) or {}
+	local source = as_table(pr.source) or {}
+	local destination = as_table(pr.destination) or {}
+	local source_branch = as_table(source.branch) or {}
+	local source_commit = as_table(source.commit) or {}
+	local source_repository = as_table(source.repository) or {}
+	local destination_branch = as_table(destination.branch) or {}
+	local destination_commit = as_table(destination.commit) or {}
+	local repo_full_name = (workspace ~= "" and repo ~= "") and string.format("%s/%s", workspace, repo) or ""
+
+	return {
+		id = tonumber(pr.id) or 0,
+		title = tostring(pr.title or ""),
+		description = tostring(pr.description or ""),
+		comments = tonumber(pr.comment_count) or 0,
+		tasks = tonumber(pr.task_count) or 0,
+		author = {
+			name = tostring(author.display_name or ""),
+			account_id = tostring(author.account_id or ""),
+			nickname = tostring(author.nickname or ""),
+		},
+		is_draft = pr.draft == true,
+		state = tostring(pr.state or ""),
+		links = {
+			html = link_href(links, "html"),
+			self = link_href(links, "self"),
+			merge = link_href(links, "merge"),
+			commits = link_href(links, "commits"),
+			approve = link_href(links, "approve"),
+			request_changes = link_href(links, "request_changes"),
+			diff = link_href(links, "diff"),
+			diffstat = link_href(links, "diffstat"),
+			comments = link_href(links, "comments"),
+			activity = link_href(links, "activity"),
+			statuses = link_href(links, "statuses"),
+		},
+		destination = {
+			branch = tostring(destination_branch.name or ""),
+			commit_hash = tostring(destination_commit.hash or ""),
+		},
+		source = {
+			branch = tostring(source_branch.name or ""),
+			commit_hash = tostring(source_commit.hash or ""),
+			repo_full_name = tostring(source_repository.full_name or ""),
+			clone_url = clone_url(source_repository),
+		},
+		close_source_branch = pr.close_source_branch == true,
+		created_on = tostring(pr.created_on or ""),
+		updated_on = tostring(pr.updated_on or ""),
+		participants = as_table(pr.participants) or {},
+		workspace = workspace,
+		repo = repo,
+		repo_full_name = repo_full_name,
+	}
+end
+
 ---@param raw table
 ---@return PullRequest
 local function to_pull_request(raw)
@@ -180,63 +243,7 @@ function M.to_pull_requests_list(result, workspace, repo)
 	local rp = tostring(repo or "")
 
 	for _, item in ipairs(payload.values or {}) do
-		local pr = as_table(item) or {}
-		local author = as_table(pr.author) or {}
-		local links = as_table(pr.links) or {}
-		local source = as_table(pr.source) or {}
-		local destination = as_table(pr.destination) or {}
-		local source_branch = as_table(source.branch) or {}
-		local source_commit = as_table(source.commit) or {}
-		local source_repository = as_table(source.repository) or {}
-		local destination_branch = as_table(destination.branch) or {}
-		local destination_commit = as_table(destination.commit) or {}
-		local repo_full_name = (ws ~= "" and rp ~= "") and string.format("%s/%s", ws, rp) or ""
-
-		local raw = {
-			id = tonumber(pr.id) or 0,
-			title = tostring(pr.title or ""),
-			description = tostring(pr.description or ""),
-			comments = tonumber(pr.comment_count) or 0,
-			tasks = tonumber(pr.task_count) or 0,
-			author = {
-				name = tostring(author.display_name or ""),
-				account_id = tostring(author.account_id or ""),
-				nickname = tostring(author.nickname or ""),
-			},
-			is_draft = pr.draft == true,
-			state = tostring(pr.state or ""),
-			links = {
-				html = link_href(links, "html"),
-				self = link_href(links, "self"),
-				merge = link_href(links, "merge"),
-				commits = link_href(links, "commits"),
-				approve = link_href(links, "approve"),
-				request_changes = link_href(links, "request_changes"),
-				diff = link_href(links, "diff"),
-				diffstat = link_href(links, "diffstat"),
-				comments = link_href(links, "comments"),
-				activity = link_href(links, "activity"),
-				statuses = link_href(links, "statuses"),
-			},
-			destination = {
-				branch = tostring(destination_branch.name or ""),
-				commit_hash = tostring(destination_commit.hash or ""),
-			},
-			source = {
-				branch = tostring(source_branch.name or ""),
-				commit_hash = tostring(source_commit.hash or ""),
-				repo_full_name = tostring(source_repository.full_name or ""),
-				clone_url = clone_url(source_repository),
-			},
-			close_source_branch = pr.close_source_branch == true,
-			created_on = tostring(pr.created_on or ""),
-			updated_on = tostring(pr.updated_on or ""),
-			participants = as_table(pr.participants) or {},
-			workspace = ws,
-			repo = rp,
-			repo_full_name = repo_full_name,
-		}
-		table.insert(out, to_pull_request(raw))
+		table.insert(out, to_pull_request(normalize_pull(item, ws, rp)))
 	end
 
 	return out
@@ -330,35 +337,26 @@ end
 ---@param prs PullRequest[]
 ---@return PullsGroup[]
 function M.to_pull_request_groups(prs)
-	---@type table<string, PullsGroup>
 	local by_repo = {}
-	---@type PullsGroup[]
-	local ordered = {}
-
+	local groups = {}
 	for _, pr in ipairs(prs or {}) do
-		local rid = pr.repo_full_name or ""
-		local group = by_repo[rid]
-		if group == nil then
+		local key = pr.repo_full_name or ""
+		local group = by_repo[key]
+		if not group then
 			group = {
-				repo = {
-					id = rid,
-					name = pr.repo_full_name or rid,
-					owner = pr.workspace,
-					repo_name = pr.repo,
-				},
+				repo = { id = key, name = key, owner = pr.workspace, repo_name = pr.repo },
 				prs = {},
 			}
-			by_repo[rid] = group
-			table.insert(ordered, group)
+			by_repo[key] = group
+			table.insert(groups, group)
 		end
 		table.insert(group.prs, pr)
 	end
-
-	return ordered
+	return groups
 end
 
 ---@param raw_inline table|nil
----@return {path: string, to: number|nil, from: number|nil}|nil
+---@return PullsInlineCommentPosition|nil
 local function comment_inline(raw_inline)
 	local inline = as_table(raw_inline)
 	if inline == nil then
@@ -367,10 +365,10 @@ local function comment_inline(raw_inline)
 	local path = tostring(inline.path or "")
 	local from = tonumber(inline["from"])
 	local to = tonumber(inline["to"])
-	if path == "" and from == nil and to == nil then
+	if path == "" or (from == nil and to == nil) then
 		return nil
 	end
-	return { path = path, ["from"] = from, ["to"] = to }
+	return { path = path, from = from, to = to }
 end
 
 ---@param result table|nil
@@ -387,6 +385,7 @@ function M.to_comment(result)
 	local state = entry.deleted == true and "DELETED"
 		or (entry.pending == true and "PENDING")
 		or (resolution ~= nil and "RESOLVED")
+		or (type(entry.inline) == "table" and entry.inline.outdated == true and "OUTDATED")
 		or nil
 
 	return {
@@ -421,7 +420,7 @@ function M.to_comments_list(result)
 end
 
 ---@param result table|nil
----@return BitbucketPRTask[]
+---@return PullsComment[]
 function M.to_tasks_list(result)
 	local payload = as_table(result) or {}
 	local entries = {}
@@ -431,23 +430,20 @@ function M.to_tasks_list(result)
 		local content = as_table(task.content) or {}
 		local links = as_table(task.links) or {}
 		local comment = as_table(task.comment)
-		local comment_links = as_table(comment and comment.links or nil) or {}
 
 		table.insert(entries, {
 			id = tonumber(task.id) or 0,
-			state = tostring(task.state or ""),
+			parent_id = comment ~= nil and tonumber(comment.id) or nil,
+			author = actor(task.creator),
 			content_raw = tostring(content.raw or ""),
 			created_on = tostring(task.created_on or ""),
-			updated_on = tostring(task.updated_on or ""),
-			resolved_on = task.resolved_on ~= nil and tostring(task.resolved_on) or nil,
-			pending = task.pending == true,
-			creator = actor(task.creator),
-			comment_id = comment ~= nil and tonumber(comment.id) or nil,
-			links = {
-				self = tostring((as_table(links.self) or {}).href or ""),
-				html = tostring((as_table(links.html) or {}).href or ""),
-			},
-			comment_html = tostring((as_table(comment_links.html) or {}).href or ""),
+			is_task = true,
+			state = task.pending == true and "PENDING"
+				or (tostring(task.state or "") == "RESOLVED" and "RESOLVED")
+				or nil,
+			url = tostring((as_table(links.self) or {}).href or ""),
+			html_url = tostring((as_table(links.html) or {}).href or ""),
+			_raw = task,
 		})
 	end
 

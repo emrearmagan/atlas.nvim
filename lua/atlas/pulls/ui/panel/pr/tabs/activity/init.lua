@@ -43,6 +43,7 @@ function M.on_select(pr, _repo, refresh, opts)
 	if not provider then
 		return
 	end
+	local core = provider.capabilities.core
 
 	local force_refresh = opts.force_refresh == true
 	local should_fetch = force_refresh
@@ -56,10 +57,10 @@ function M.on_select(pr, _repo, refresh, opts)
 	end
 
 	local pr_id = tostring(pr.id or "")
-	if should_fetch and provider.fetch_activity then
+	if should_fetch and core.fetch_activity then
 		state.activity = "loading"
 		statusline.notify("loading", string.format("Loading activity for #%s...", pr_id))
-		track(provider.fetch_activity(pr, opts, function(entries, err)
+		track(core.fetch_activity(pr, opts, function(entries, err)
 			if err then
 				state.activity = err
 				statusline.notify("error", string.format("Failed to load activity for #%s", pr_id))

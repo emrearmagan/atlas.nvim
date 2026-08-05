@@ -45,7 +45,7 @@
 --     },
 --   })
 
----@class AtlasJiraViewConfig : AtlasIssuesViewConfig
+---@class AtlasJiraViewConfig : IssuesViewConfig
 ---@field jql string
 
 ---@class AtlasJiraCustomFieldConfig

@@ -2,7 +2,7 @@
 local M = {}
 
 local icons = require("atlas.ui.shared.icons")
-local helper = require("atlas.pulls.ui.main.helper")
+local header = require("atlas.pulls.ui.panel.components.header")
 local providers = require("atlas.pulls.providers")
 
 local MAX_HASH_LEN = 12
@@ -29,7 +29,7 @@ end
 
 -- Panel
 
----@param pr PullRequest
+---@param _pr PullRequest
 ---@return PullsPanelHeaderRow[]
 function M.header_rows(_pr)
 	local spinner = require("atlas.ui.components.spinner")
@@ -59,50 +59,7 @@ function M.header_rows(_pr)
 		end
 	end
 
-	local v1, v1_hl
-	if #logins == 0 then
-		v1 = "Unassigned"
-		v1_hl = "AtlasTextMuted"
-	else
-		local parts = {}
-		for _, login in ipairs(logins) do
-			table.insert(parts, "@" .. login)
-		end
-		v1 = table.concat(parts, ", ")
-
-		local spans = {}
-		local cursor = 0
-		for i, login in ipairs(logins) do
-			local token = "@" .. login
-			table.insert(spans, {
-				start_col = cursor,
-				end_col = cursor + #token,
-				hl_group = helper.author_hl(login),
-			})
-			cursor = cursor + #token
-			if i < #logins then
-				local sep = ", "
-				table.insert(spans, {
-					start_col = cursor,
-					end_col = cursor + #sep,
-					hl_group = "AtlasTextMuted",
-				})
-				cursor = cursor + #sep
-			end
-		end
-		v1_hl = spans
-	end
-
-	return {
-		{
-			k1 = "Assignees:",
-			v1 = v1,
-			v1_hl = v1_hl,
-			k2 = "",
-			v2 = "",
-			v2_hl = "AtlasTextMuted",
-		},
-	}
+	return { header.assignee_row(logins) }
 end
 
 ---@param pr PullRequest
@@ -182,6 +139,7 @@ function M.fetches(pr, refresh, opts)
 	local overview_state = require("atlas.pulls.ui.panel.pr.tabs.overview.state")
 	local pullrequests = require("atlas.pulls.providers.github.api.pullrequests")
 	local provider = require("atlas.pulls.state").provider
+	local pipelines = provider and provider.capabilities.pipelines
 
 	local owner = tostring(pr.workspace or "")
 	local repo = tostring(pr.repo or "")
@@ -205,9 +163,9 @@ function M.fetches(pr, refresh, opts)
 	end
 
 	overview_state.pipelines = "loading"
-	if provider and type(provider.fetch_pipelines) == "function" then
-		track_panel(provider.fetch_pipelines(pr, { force_refresh = force }, function(pipelines, err)
-			overview_state.pipelines = err and err or (pipelines or {})
+	if pipelines then
+		track_panel(pipelines.fetch(pr, { force_refresh = force }, function(items, err)
+			overview_state.pipelines = err and err or (items or {})
 			refresh()
 		end))
 	else
@@ -223,7 +181,7 @@ function M.fetches(pr, refresh, opts)
 	end))
 end
 
----@param pr PullRequest
+---@param _pr PullRequest
 ---@param active_tab string|nil
 ---@return boolean
 function M.is_loading(_pr, active_tab)

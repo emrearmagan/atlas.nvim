@@ -222,7 +222,7 @@ local function pick_assignees(issue_state)
 							or ""
 					)
 				end,
-				prompt = "Toggle assignees:",
+				prompt = "Assignees",
 				on_done = function(selected)
 					issue_state.fields.assignees = selected or {}
 					render_meta(issue_state)
@@ -261,7 +261,7 @@ local function pick_labels(issue_state)
 				format = function(item)
 					return tostring(item.name)
 				end,
-				prompt = "Toggle labels:",
+				prompt = "Labels",
 				on_done = function(selected)
 					issue_state.fields.labels = selected or {}
 					render_meta(issue_state)

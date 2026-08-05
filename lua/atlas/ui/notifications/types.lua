@@ -9,4 +9,9 @@
 ---@field url string|nil
 ---@field _raw table|nil
 
+---@class AtlasNotificationsCapability
+---@field fetch fun(opts: { force_load: boolean|nil }|nil, on_done: fun(notifications: AtlasNotification[]|nil, err: string|nil)): { cancel: fun() }|nil
+---@field mark_read fun(id: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil
+---@field mark_done fun(id: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil
+
 return {}

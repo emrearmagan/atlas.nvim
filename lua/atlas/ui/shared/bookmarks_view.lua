@@ -37,8 +37,6 @@ local function sorted_items(items)
 	return out
 end
 
-M.sorted_items = sorted_items
-
 ---@generic V
 ---@param views V[]
 ---@param queries { key?: string, label?: string, items?: table }|nil
@@ -50,10 +48,7 @@ function M.append_to_views(views, queries, default_key, default_label)
 	if bookmarks_view == nil then
 		return views
 	end
-	local out = {}
-	for _, v in ipairs(views) do
-		table.insert(out, v)
-	end
+	local out = vim.list_extend({}, views)
 	table.insert(out, bookmarks_view)
 	return out
 end

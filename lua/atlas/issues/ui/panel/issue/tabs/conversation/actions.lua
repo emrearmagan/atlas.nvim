@@ -10,17 +10,17 @@ local function get_provider()
 	return require("atlas.issues.state").provider
 end
 
----@return IssuesProviderPanel|nil
-local function get_panel()
+---@return IssuesCommentsCapability|nil
+local function get_comments()
 	local provider = get_provider()
-	return provider and provider.panel or nil
+	return provider and provider.capabilities.comments or nil
 end
 
 ---@return AtlasMarkdownCompletionProvider|nil
 local function get_completion()
-	local panel = get_panel()
-	if panel and panel.comment_completion then
-		return panel.comment_completion()
+	local comments = get_comments()
+	if comments and comments.comment_completion then
+		return comments.comment_completion()
 	end
 	return nil
 end
@@ -48,8 +48,8 @@ end
 ---@param issue Issue
 ---@param refresh fun()
 function M.add(issue, refresh)
-	local provider = get_provider()
-	if not provider or not provider.add_comment then
+	local comments = get_comments()
+	if not comments or not comments.add_comment then
 		return
 	end
 	md_editor.open({
@@ -63,7 +63,7 @@ function M.add(issue, refresh)
 				return
 			end
 			statusline.notify("loading", "Adding comment...")
-			provider.add_comment(issue, text, function(comment, err)
+			comments.add_comment(issue, text, function(comment, err)
 				if err then
 					statusline.notify("error", "Add comment failed: " .. err)
 					return
@@ -87,8 +87,8 @@ function M.reply(issue, entry, refresh)
 	if not entry or entry.kind ~= "comment" or not entry.comment then
 		return
 	end
-	local provider = get_provider()
-	if not provider or not provider.reply_comment then
+	local comments = get_comments()
+	if not comments or not comments.add_comment then
 		return
 	end
 	local comment = entry.comment
@@ -113,7 +113,7 @@ function M.reply(issue, entry, refresh)
 				return
 			end
 			statusline.notify("loading", "Sending reply...")
-			provider.reply_comment(issue, parent, text, function(reply, err)
+			local function done(reply, err)
 				if err then
 					statusline.notify("error", "Reply failed: " .. err)
 					return
@@ -125,7 +125,12 @@ function M.reply(issue, entry, refresh)
 				end
 				statusline.notify("success", "Reply added", 1200)
 				refresh()
-			end)
+			end
+			if comments.reply_comment then
+				comments.reply_comment(issue, parent, text, done)
+			else
+				comments.add_comment(issue, text, done)
+			end
 		end,
 	})
 end
@@ -142,12 +147,8 @@ function M.edit(issue, entry, refresh)
 		statusline.notify("warn", "You can only edit your own comments")
 		return
 	end
-	local provider = get_provider()
-	if not provider then
-		return
-	end
-
-	if not provider.edit_comment then
+	local comments = get_comments()
+	if not comments or not comments.edit_comment then
 		return
 	end
 	md_editor.open({
@@ -162,7 +163,7 @@ function M.edit(issue, entry, refresh)
 				return
 			end
 			statusline.notify("loading", "Editing comment...")
-			provider.edit_comment(issue, tostring(comment.id), text, function(updated, err)
+			comments.edit_comment(issue, tostring(comment.id), text, function(updated, err)
 				if err then
 					statusline.notify("error", "Edit failed: " .. err)
 					return
@@ -198,8 +199,8 @@ function M.delete(issue, entry, refresh)
 		statusline.notify("warn", "You can only delete your own comments")
 		return
 	end
-	local provider = get_provider()
-	if not provider or not provider.delete_comment then
+	local comments = get_comments()
+	if not comments or not comments.delete_comment then
 		return
 	end
 
@@ -209,7 +210,7 @@ function M.delete(issue, entry, refresh)
 			return
 		end
 		statusline.notify("loading", "Deleting comment...")
-		provider.delete_comment(issue, tostring(comment.id), function(ok, err)
+		comments.delete_comment(issue, tostring(comment.id), function(ok, err)
 			if err then
 				statusline.notify("error", "Delete failed: " .. err)
 				return
@@ -237,8 +238,8 @@ function M.react(issue, entry, refresh)
 	if not entry or entry.kind ~= "comment" or not entry.comment then
 		return
 	end
-	local provider = get_provider()
-	if not provider or not provider.add_reaction then
+	local comments = get_comments()
+	if not comments or not comments.add_reaction then
 		statusline.notify("warn", "Provider does not support reactions")
 		return
 	end
@@ -265,7 +266,7 @@ function M.react(issue, entry, refresh)
 			return
 		end
 		statusline.notify("loading", "Adding reaction...")
-		provider.add_reaction(issue, comment, selected.key, function(ok, err)
+		comments.add_reaction(issue, comment, selected.key, function(ok, err)
 			if err then
 				statusline.notify("error", "Reaction failed: " .. tostring(err))
 				return

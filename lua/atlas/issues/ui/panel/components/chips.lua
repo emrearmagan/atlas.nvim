@@ -1,7 +1,5 @@
 local M = {}
 
-local helper = require("atlas.issues.ui.main.helper")
-
 ---@param chips IssuesPanelChip[]
 ---@param opts { padding_x?: integer }|nil
 ---@return string, table[]
@@ -30,10 +28,9 @@ local function render_chips(chips, opts)
 	return line, spans
 end
 
----@param issue Issue
 ---@param opts { padding_x?: integer, extra_chips?: IssuesPanelChip[] }|nil
 ---@return string, table[]
-function M.render(issue, opts)
+function M.render(opts)
 	opts = opts or {}
 	local chips = {}
 

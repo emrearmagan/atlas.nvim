@@ -1,8 +1,12 @@
 local M = {}
 
+local providers = require("atlas.providers")
+
 ---@class AtlasIconStyle
 ---@field icon string
 ---@field hl_group string
+
+local progress_icon = "󰦖"
 
 ---@type table
 local ICONS = {
@@ -22,6 +26,7 @@ local ICONS = {
 		reply = { icon = "", hl_group = "AtlasLogInfo" },
 		edit = { icon = "", hl_group = "AtlasLogInfo" },
 		delete = { icon = "󰆴", hl_group = "AtlasLogError" },
+		progress = { icon = progress_icon, hl_group = "AtlasTextMuted" },
 		success = { icon = "", hl_group = "AtlasTextPositive" },
 		warning = { icon = "", hl_group = "AtlasLogWarn" },
 		error = { icon = "", hl_group = "AtlasLogError" },
@@ -58,21 +63,9 @@ local ICONS = {
 		status = {
 			successful = { icon = "", hl_group = "AtlasTextPositive" },
 			failed = { icon = "", hl_group = "AtlasLogError" },
-			inprogress = { icon = "󰦖", hl_group = "AtlasTextWarning" },
+			inprogress = { icon = progress_icon, hl_group = "AtlasTextWarning" },
 			stopped = { icon = "󰓛", hl_group = "AtlasTextMuted" },
 			unknown = { icon = "", hl_group = "AtlasTextMuted" },
-		},
-
-		providers = {
-			bitbucket = {
-				provider = { icon = "", hl_group = "AtlasBitbucketTheme" },
-			},
-			github = {
-				provider = { icon = "", hl_group = "AtlasGitHubTheme" },
-			},
-			gitlab = {
-				provider = { icon = "", hl_group = "AtlasGitLabTheme" },
-			},
 		},
 	},
 
@@ -93,18 +86,6 @@ local ICONS = {
 			medium = { icon = "", hl_group = "AtlasTextWarning" },
 			low = { icon = "", hl_group = "AtlasTextPositive" },
 			lowest = { icon = "", hl_group = "AtlasTextPositive" },
-		},
-
-		providers = {
-			jira = {
-				provider = { icon = "󰌃", hl_group = "AtlasJiraTheme" },
-			},
-			github = {
-				provider = { icon = "", hl_group = "AtlasGHIssuesTheme" },
-			},
-			gitlab = {
-				provider = { icon = "", hl_group = "AtlasGLIssuesTheme" },
-			},
 		},
 	},
 }
@@ -143,8 +124,12 @@ end
 ---@param name string
 ---@return string, string
 function M.pulls_provider(provider_id, name)
-	local provider = ICONS.pulls.providers[provider_id]
-	return get(provider and provider[name], ICONS.pulls[name] or ICONS.general[name])
+	local domain = providers.domain(provider_id, "pulls")
+	local style = nil
+	if name == "provider" and domain then
+		style = domain.icon
+	end
+	return get(style, ICONS.pulls[name] or ICONS.general[name])
 end
 
 -- Issues
@@ -190,8 +175,12 @@ end
 ---@param name string
 ---@return string, string
 function M.issues_provider(provider_id, name)
-	local provider = ICONS.issues.providers[provider_id]
-	return get(provider and provider[name], ICONS.issues[name] or ICONS.pulls[name] or ICONS.general[name])
+	local domain = providers.domain(provider_id, "issues")
+	local style = nil
+	if name == "provider" and domain then
+		style = domain.icon
+	end
+	return get(style, ICONS.issues[name] or ICONS.pulls[name] or ICONS.general[name])
 end
 
 -- Fallback

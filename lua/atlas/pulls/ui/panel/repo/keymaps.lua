@@ -53,12 +53,7 @@ function M.register(buf)
 			desc = "Close repo panel",
 			opts = { nowait = true, silent = true },
 			callback = function()
-				local layout_mod = require("atlas.ui.layout")
-				local ui_st = require("atlas.ui.state")
-				layout_mod.toggle_detail()
-				if ui_st.on_panel_close then
-					ui_st.on_panel_close()
-				end
+				require("atlas.ui.layout").toggle_detail()
 			end,
 		},
 	}
@@ -183,12 +178,7 @@ function M.register(buf)
 				if help.is_open() then
 					return
 				end
-				local layout_mod = require("atlas.ui.layout")
-				local ui_st = require("atlas.ui.state")
-				layout_mod.toggle_detail()
-				if ui_st.on_panel_close then
-					ui_st.on_panel_close()
-				end
+				require("atlas.ui.layout").toggle_detail()
 			end,
 		})
 	)

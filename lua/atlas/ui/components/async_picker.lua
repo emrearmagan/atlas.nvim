@@ -2,6 +2,7 @@
 local M = {}
 
 local spinner_component = require("atlas.ui.components.spinner")
+local statusline = require("atlas.ui.statusline")
 
 ---@class AsyncPickerItem
 ---@field id string
@@ -47,7 +48,7 @@ local spinner_component = require("atlas.ui.components.spinner")
 ---@field loading boolean
 ---@field err string|nil
 ---@field request_id integer
----@field debounce_timer uv_timer_t|nil
+---@field debounce_timer uv.uv_timer_t|nil
 ---@field closed boolean
 ---@field spinner_instance SpinnerInstance|nil
 ---@field _selectable_map table<integer, boolean>|nil
@@ -567,6 +568,7 @@ end
 ---@param opts AsyncPickerOptions
 ---@return AsyncPickerHandle
 function M.open(opts)
+	local source_win = vim.api.nvim_get_current_win()
 	local title = opts.title or "Search"
 	local prompt = opts.prompt or "Query"
 
@@ -616,6 +618,7 @@ function M.open(opts)
 		"Normal:NormalFloat,NormalNC:NormalFloat,FloatBorder:FloatBorder",
 		{ win = input_win }
 	)
+	statusline.inherit(input_win, source_win)
 
 	-- Open results window
 	local results_win = vim.api.nvim_open_win(results_buf, false, {
@@ -635,6 +638,7 @@ function M.open(opts)
 		{ win = results_win }
 	)
 	vim.api.nvim_set_option_value("cursorline", true, { win = results_win })
+	statusline.inherit(results_win, input_win)
 
 	-- Initialize state
 	---@type AsyncPickerState

@@ -43,9 +43,8 @@ end
 ---@param pr PullRequest
 ---@param buf integer
 function M.show_details(pr, buf)
-	local helper = require("atlas.pulls.ui.main.helper")
 	local info_popup = require("atlas.ui.popups.info")
-	local lines, highlights = helper.pr_popup_content(pr)
+	local lines, highlights = require("atlas.pulls.ui.popup").content(pr)
 	info_popup.show({
 		lines = lines,
 		highlights = highlights,
@@ -58,7 +57,7 @@ end
 ---@return { cancel: fun() }|nil
 function M.open_pipelines(pr, on_done)
 	local p = provider()
-	if p == nil or type(p.fetch_pipelines) ~= "function" then
+	if p == nil or p.capabilities.pipelines == nil then
 		local err = "Pipelines are not supported by this provider"
 		statusline.notify("warn", err)
 		on_done(nil, err)
@@ -72,12 +71,6 @@ function M.open_pipelines(pr, on_done)
 	return nil
 end
 
-local PROVIDER_ACTIONS_MODULES = {
-	github = "atlas.pulls.providers.github.actions",
-	gitlab = "atlas.pulls.providers.gitlab.actions",
-	bitbucket = "atlas.pulls.providers.bitbucket.actions",
-}
-
 ---@class PullsRunActionOptions
 ---@field source "main"|"panel"|"diff"|nil
 ---@field current_user PullsUser|nil
@@ -87,13 +80,12 @@ local PROVIDER_ACTIONS_MODULES = {
 ---@param action_id string
 ---@return boolean
 function M.is_action_available(pr, action_id)
-	local mod_path = PROVIDER_ACTIONS_MODULES[pr.provider]
-	if not mod_path then
+	local provider_module = require("atlas.providers").load(pr.provider, "pulls")
+	local actions = provider_module and provider_module.capabilities.actions
+	if actions == nil then
 		return false
 	end
-	local registry = require(mod_path .. ".registry")
-	local action = registry.find(action_id)
-	return action ~= nil and action.is_available({ pr = pr, source = nil }) == true
+	return actions.is_available(action_id, { pr = pr, source = nil })
 end
 
 ---@param pr PullRequest
@@ -102,15 +94,15 @@ end
 ---@param on_done fun(result: PullsActionResult|nil, err: string|nil)|nil
 function M.run_action(pr, action_id, opts, on_done)
 	opts = opts or {}
-	local mod_path = PROVIDER_ACTIONS_MODULES[pr.provider]
-	if not mod_path then
+	local provider_module = require("atlas.providers").load(pr.provider, "pulls")
+	local actions = provider_module and provider_module.capabilities.actions
+	if not actions then
 		if on_done then
 			on_done(nil, "Provider does not support actions")
 		end
 		return
 	end
-	local mod = require(mod_path)
-	mod.run(action_id, {
+	actions.run(action_id, {
 		pr = pr,
 		source = opts.source,
 		current_user = opts.current_user,
@@ -130,18 +122,22 @@ end
 ---@param on_done fun(result: PullsActionResult|nil)|nil
 function M.open_actions(pr, source, on_done)
 	local p = provider()
-	if not p or not p.open_actions then
+	local actions = p and p.capabilities.actions
+	if not actions then
 		return
 	end
-	p.open_actions(pr, source, function(result)
-		if result ~= nil and result.changed_pr then
-			local controller = require("atlas.pulls.ui.main.controller")
-			controller.refresh_pr(pr)
+	actions.open(
+		{ pr = pr, source = source, current_user = require("atlas.pulls.state").current_user },
+		function(result)
+			if result ~= nil and result.changed_pr then
+				local controller = require("atlas.pulls.ui.main.controller")
+				controller.refresh_pr(pr)
+			end
+			if on_done then
+				on_done(result)
+			end
 		end
-		if on_done then
-			on_done(result)
-		end
-	end)
+	)
 end
 
 ---@param opts PullsDiffOpenOptions
@@ -198,10 +194,11 @@ end
 
 function M.search()
 	local p = provider()
-	if not p or not p.search then
+	local search = p and p.capabilities.search
+	if not search then
 		return
 	end
-	p.search()
+	search()
 end
 
 return M

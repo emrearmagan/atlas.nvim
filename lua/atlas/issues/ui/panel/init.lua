@@ -27,7 +27,6 @@ function M.prev_tab()
 end
 
 function M.close()
-	issue_panel.deactivate()
 	local result = issue_panel.close()
 	require("atlas.issues.ui.panel.state").reset()
 	return result

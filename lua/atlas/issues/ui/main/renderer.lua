@@ -46,7 +46,9 @@ local function search_text(view)
 		return search
 	end
 
-	local jql = tostring(view.jql or "")
+	local jira_view = view
+	---@cast jira_view AtlasJiraViewConfig
+	local jql = tostring(jira_view.jql or "")
 	if jql ~= "" then
 		return jql
 	end
@@ -74,8 +76,9 @@ end
 local function issue_to_row(issue, is_child)
 	local provider = state.provider
 	local row_data
-	if provider and provider.format_row then
-		row_data = provider.format_row(issue, is_child == true)
+	local ui = provider and provider.capabilities.ui
+	if ui and ui.format_row then
+		row_data = ui.format_row(issue, is_child == true)
 	end
 	if row_data == nil then
 		row_data = {
@@ -301,8 +304,9 @@ function cell_hl(row, col, ctx)
 	end
 
 	local provider = state.provider
-	if provider and provider.cell_hl then
-		return provider.cell_hl(row, col, ctx)
+	local ui = provider and provider.capabilities.ui
+	if ui and ui.cell_hl then
+		return ui.cell_hl(row, col, ctx)
 	end
 	return nil
 end
@@ -398,8 +402,9 @@ end
 ---@return string[], AtlasUIHighlight[]
 function M.issue_popup_content(issue)
 	local provider = state.provider
-	if provider and provider.issue_popup_content then
-		return provider.issue_popup_content(issue)
+	local ui = provider and provider.capabilities.ui
+	if ui and ui.issue_popup_content then
+		return ui.issue_popup_content(issue)
 	end
 	return generic_issue_popup_content(issue)
 end
@@ -426,7 +431,7 @@ function M.render(opts)
 	end
 	statusline.set_items(statusline_items)
 
-	local views = provider and provider.views and provider.views() or {}
+	local views = provider and provider.capabilities.core.views() or {}
 	local active = state.active_view
 	local active_id = view_id(active)
 
@@ -453,7 +458,7 @@ function M.render(opts)
 
 	local actions = {}
 
-	if state.provider and state.provider.fetch_notifications then
+	if provider and provider.capabilities.notifications then
 		local notif_state = require("atlas.ui.notifications.state")
 		local count = notif_state.unread_count or 0
 		local bell_icon, bell_hl
@@ -520,8 +525,9 @@ function M.render(opts)
 		elseif #issues > 0 or #issue_groups > 0 then
 			table.insert(lines, "")
 			local tbl_lines, tbl_spans, tbl_map
-			if provider and provider.render then
-				local result = provider.render(issue_groups, "plain", { width = opts.width })
+			local ui = provider and provider.capabilities.ui
+			if ui and ui.render then
+				local result = ui.render(issue_groups, "plain", { width = opts.width })
 				tbl_lines = result.lines or {}
 				tbl_spans = result.spans or {}
 				tbl_map = result.line_map or {}
@@ -560,8 +566,9 @@ function M.render(opts)
 			table.insert(lines, "No issues found.")
 		else
 			local tbl_lines, tbl_spans, tbl_map
-			if provider and provider.render then
-				local result = provider.render(issue_groups, layout, { width = opts.width })
+			local ui = provider and provider.capabilities.ui
+			if ui and ui.render then
+				local result = ui.render(issue_groups, layout, { width = opts.width })
 				tbl_lines = result.lines or {}
 				tbl_spans = result.spans or {}
 				tbl_map = result.line_map or {}

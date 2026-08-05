@@ -184,13 +184,6 @@ local function compact_columns()
 			header_hl = "AtlasColumnHeader",
 		},
 		{
-			key = "repo",
-			name = string.format("%s Repo", REPO_ICON),
-			min_width = 5,
-			can_grow = false,
-			header_hl = "AtlasColumnHeader",
-		},
-		{
 			key = "diff",
 			name = icons.pulls("changes"),
 			max_width = 15,
@@ -212,8 +205,6 @@ local function compact_rows(groups)
 			local id_str = tostring(pr.id or "")
 			local title = tostring(pr.title or "")
 			local author_name = (pr.author and pr.author.name) and pr.author.name or ""
-			local src = (pr.source and pr.source.branch) or ""
-			local dst = (pr.destination and pr.destination.branch) or ""
 			local is_reloading = state.is_pr_reloading(pr.repo_full_name, pr.id)
 			local ci, ci_h = ci_icon_and_hl(pr)
 			local review, review_h = review_icon_and_hl(pr)
@@ -236,9 +227,6 @@ local function compact_rows(groups)
 				diff_hl = diff_highlights,
 				author = string.format("%s %s", icons.general("user"), utils.shorten_name(author_name, 20)),
 				author_hl = author_name,
-				branch = utils.truncate(src .. " → " .. dst, 28),
-				repo = string.format("%s %s", REPO_ICON, repo_label),
-				repo_hl = repo_label,
 				created = utils.relative_time(pr.created_on),
 				updated = utils.relative_time(pr.updated_on),
 				_item = { kind = "pr", id = pr.id, repo = group.repo, pr = pr },
@@ -246,7 +234,7 @@ local function compact_rows(groups)
 			table.insert(rows, {
 				kind = "meta",
 				pr_icon = "",
-				repo_pr = src .. " → " .. dst,
+				repo_pr = string.format("%s %s", REPO_ICON, repo_label),
 				conversation = "",
 				ci = "",
 				ci_hl = "",
@@ -255,8 +243,6 @@ local function compact_rows(groups)
 				diff = "",
 				diff_hl = nil,
 				author = "",
-				branch = "",
-				repo = "",
 				created = "",
 				updated = "",
 				separator = true,
@@ -297,13 +283,6 @@ local function plain_columns()
 			header_hl = "AtlasColumnHeader",
 		},
 		{
-			key = "branch",
-			name = string.format("%s Branch", icons.pulls("branch")),
-			max_width = 28,
-			can_grow = false,
-			header_hl = "AtlasColumnHeader",
-		},
-		{
 			key = "diff",
 			name = icons.pulls("changes"),
 			max_width = 15,
@@ -334,7 +313,6 @@ local function plain_rows(groups)
 				diff = "",
 				diff_hl = nil,
 				author = "",
-				branch = "",
 				created = "",
 				updated = "",
 			})
@@ -352,7 +330,6 @@ local function plain_rows(groups)
 			diff = "",
 			diff_hl = nil,
 			author = "",
-			branch = "",
 			created = "",
 			updated = "",
 			separator = true,
@@ -362,8 +339,6 @@ local function plain_rows(groups)
 			local id_str = tostring(pr.id or "")
 			local title = tostring(pr.title or "")
 			local author_name = (pr.author and pr.author.name) and pr.author.name or ""
-			local src = (pr.source and pr.source.branch) or ""
-			local dst = (pr.destination and pr.destination.branch) or ""
 			local icon = pr_icon_or_spinner(pr)
 			local _, icon_hl = pr_icon_and_hl(pr)
 			local ci, ci_h = ci_icon_and_hl(pr)
@@ -386,7 +361,6 @@ local function plain_rows(groups)
 				diff_hl = diff_highlights,
 				author = string.format("%s %s", icons.general("user"), utils.shorten_name(author_name, 20)),
 				author_hl = author_name,
-				branch = utils.truncate(src .. " → " .. dst, 28),
 				created = utils.relative_time(pr.created_on),
 				updated = utils.relative_time(pr.updated_on),
 				_item = { kind = "pr", id = pr.id, repo = group.repo, pr = pr },

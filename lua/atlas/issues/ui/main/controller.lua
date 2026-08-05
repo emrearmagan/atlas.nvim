@@ -140,7 +140,7 @@ local function get_current_user(on_done)
 		return
 	end
 
-	provider.fetch_user(function(user, err)
+	provider.capabilities.core.fetch_user(function(user, err)
 		if err ~= nil then
 			on_done(tostring(err))
 			return
@@ -283,7 +283,7 @@ local function load_active_view(opts, on_done)
 			return
 		end
 
-		active_issues_handle = provider.fetch_issues(target_view, {
+		active_issues_handle = provider.capabilities.core.fetch_issues(target_view, {
 			force_load = opts.force_load == true,
 			next_page_token = next_page_token,
 			max_results = remaining,
@@ -346,8 +346,9 @@ end
 ---@param on_done fun()|nil
 function M.refresh_current_view(on_done)
 	local provider = state.provider
-	if provider and provider.on_refresh then
-		provider.on_refresh()
+	local refresh = provider and provider.capabilities.core.refresh
+	if refresh then
+		refresh()
 	end
 
 	load_active_view({ force_load = true }, function()
@@ -375,8 +376,7 @@ function M.run_bookmark(name, value)
 	end
 	local view = { name = name, layout = "compact" }
 	if type(value) == "string" then
-		local field = provider.bookmark_query_field or "search"
-		view[field] = value
+		view.search = value
 	elseif type(value) == "table" then
 		for k, v in pairs(value) do
 			view[k] = v
@@ -392,7 +392,7 @@ function M.run_bookmark(name, value)
 	statusline.notify("loading", "Running query...")
 	render_if_active()
 
-	active_issues_handle = provider.fetch_issues(view, {
+	active_issues_handle = provider.capabilities.core.fetch_issues(view, {
 		force_load = false,
 		max_results = tonumber((config.options and config.options.issues or {}).max_results) or 100,
 		layout = view.layout,
@@ -481,7 +481,7 @@ function M.refresh_issue(issue, on_done)
 
 	local active_view = type(state.active_view) == "table" and state.active_view or {}
 	local reload_handle = nil
-	reload_handle = provider.fetch_issue(
+	reload_handle = provider.capabilities.core.fetch_issue(
 		issue_key,
 		{ force_load = true, layout = active_view.layout or "plain" },
 		function(fetched_issue, err)
@@ -565,6 +565,12 @@ function M.refresh_current_issue(on_done)
 
 	local issue = type(node._issue) == "table" and node._issue or nil
 	M.refresh_issue(issue, on_done)
+end
+
+function M.dispose()
+	state.latest_request_tokens = {}
+	state.is_loading = false
+	cancel_active_requests()
 end
 
 return M

@@ -2,34 +2,16 @@ local M = {}
 
 local config = require("atlas.config")
 local keymaps = require("atlas.core.keymaps")
+local providers = require("atlas.providers")
 
 ---@param bin string
----@param required boolean
 ---@param label string
-local function check_executable(bin, required, label)
+local function check_executable(bin, label)
 	if vim.fn.executable(bin) == 1 then
 		vim.health.ok(string.format("%s found: %s", label, bin))
 		return
 	end
-
-	if required then
-		vim.health.error(string.format("%s missing: %s", label, bin))
-	else
-		vim.health.warn(string.format("%s not found: %s", label, bin))
-	end
-end
-
----@param section_path string[]
----@return any
-local function get_section(section_path)
-	local node = config.options ---@type any
-	for _, key in ipairs(section_path) do
-		if type(node) ~= "table" then
-			return nil
-		end
-		node = node[key]
-	end
-	return node
+	vim.health.error(string.format("%s missing: %s", label, bin))
 end
 
 ---@param section table
@@ -109,20 +91,20 @@ local function check_pulls()
 end
 
 local function check_bitbucket()
-	local bb = get_section({ "pulls", "providers", "bitbucket" })
-	if not bb then
+	local bitbucket = providers.options("bitbucket", "pulls")
+	if bitbucket == nil then
 		vim.health.info("Bitbucket not configured")
 		return
 	end
 
-	check_credentials(bb, { "user", "token" }, "Bitbucket")
-	check_views(bb.views, "Bitbucket pulls")
+	check_credentials(bitbucket, { "user", "token" }, "Bitbucket")
+	check_views(bitbucket.views, "Bitbucket pulls")
 end
 
 local function check_github()
-	local gh_pulls = get_section({ "pulls", "providers", "github" })
-	local gh_issues = get_section({ "issues", "providers", "github" })
-	if not gh_pulls and not gh_issues then
+	local pulls = providers.options("github", "pulls")
+	local issues = providers.options("github", "issues")
+	if pulls == nil and issues == nil then
 		vim.health.info("GitHub not configured")
 		return
 	end
@@ -133,44 +115,43 @@ local function check_github()
 	end
 	vim.health.ok("gh CLI found")
 
-	local res = vim.system({ "gh", "auth", "status" }, { text = true }):wait()
-	if res.code ~= 0 then
+	if vim.system({ "gh", "auth", "status" }, { text = true }):wait().code ~= 0 then
 		vim.health.error("gh not authenticated", { "Run: gh auth login" })
 		return
 	end
 	vim.health.ok("gh authenticated")
 
-	if gh_pulls then
-		check_views(gh_pulls.views, "GitHub pulls")
+	if pulls then
+		check_views(pulls.views, "GitHub pulls")
 	end
-	if gh_issues then
-		check_views(gh_issues.views, "GitHub issues")
+	if issues then
+		check_views(issues.views, "GitHub issues")
 	end
 end
 
 local function check_gitlab()
-	local gl_pulls = get_section({ "pulls", "providers", "gitlab" })
-	local gl_issues = get_section({ "issues", "providers", "gitlab" })
-	if not gl_pulls and not gl_issues then
+	local pulls = providers.options("gitlab", "pulls")
+	local issues = providers.options("gitlab", "issues")
+	if pulls == nil and issues == nil then
 		vim.health.info("GitLab not configured")
 		return
 	end
 
-	if gl_pulls then
-		check_credentials(gl_pulls, { "base_url", "token" }, "GitLab pulls")
-		check_https_url(gl_pulls.base_url, "pulls.providers.gitlab.base_url")
-		check_views(gl_pulls.views, "GitLab pulls")
+	if pulls then
+		check_credentials(pulls, { "base_url", "token" }, "GitLab pulls")
+		check_https_url(pulls.base_url, "pulls.providers.gitlab.base_url")
+		check_views(pulls.views, "GitLab pulls")
 	end
-	if gl_issues then
-		check_credentials(gl_issues, { "base_url", "token" }, "GitLab issues")
-		check_https_url(gl_issues.base_url, "issues.providers.gitlab.base_url")
-		check_views(gl_issues.views, "GitLab issues")
+	if issues then
+		check_credentials(issues, { "base_url", "token" }, "GitLab issues")
+		check_https_url(issues.base_url, "issues.providers.gitlab.base_url")
+		check_views(issues.views, "GitLab issues")
 	end
 end
 
 local function check_jira()
-	local jira = get_section({ "issues", "providers", "jira" })
-	if not jira then
+	local jira = providers.options("jira", "issues")
+	if jira == nil then
 		vim.health.info("Jira not configured")
 		return
 	end
@@ -213,8 +194,8 @@ function M.check()
 	else
 		vim.health.ok("Neovim version compatible")
 	end
-	check_executable("git", true, "Git")
-	check_executable("curl", true, "curl")
+	check_executable("git", "Git")
+	check_executable("curl", "curl")
 
 	vim.health.start("Pulls")
 	check_pulls()

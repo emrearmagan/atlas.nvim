@@ -25,8 +25,9 @@ local function is_loading()
 	end
 	local state = require("atlas.issues.state")
 	local provider = state.provider
-	if provider and provider.panel and provider.panel.is_loading then
-		return provider.panel.is_loading(issue)
+	local panel = provider and provider.capabilities.ui and provider.capabilities.ui.panel
+	if panel and panel.is_loading then
+		return panel.is_loading(issue)
 	end
 	return false
 end
@@ -66,8 +67,9 @@ end
 local function get_tabs()
 	local state = require("atlas.issues.state")
 	local provider = state.provider
-	if provider and provider.panel and provider.panel.tabs then
-		local tabs = provider.panel.tabs()
+	local panel = provider and provider.capabilities.ui and provider.capabilities.ui.panel
+	if panel and panel.tabs then
+		local tabs = panel.tabs()
 		if type(tabs) == "table" then
 			return tabs
 		end
@@ -143,12 +145,9 @@ end
 local function dispatch_provider_fetches(issue, opts)
 	local state = require("atlas.issues.state")
 	local provider = state.provider
-	if provider and provider.panel and provider.panel.fetches then
-		provider.panel.fetches(
-			issue,
-			make_refresh_callback(issue),
-			{ force_load = opts and opts.force_refresh == true }
-		)
+	local panel = provider and provider.capabilities.ui and provider.capabilities.ui.panel
+	if panel and panel.fetches then
+		panel.fetches(issue, make_refresh_callback(issue), { force_load = opts and opts.force_refresh == true })
 	end
 end
 
@@ -159,19 +158,6 @@ local function notify_tab(issue, opts)
 	if tab_mod and tab_mod.on_select then
 		tab_mod.on_select(issue, make_refresh_callback(issue), opts)
 	end
-end
-
-local function reset_tab_data()
-	local function reset_state(mod_path)
-		local ok, mod = pcall(require, mod_path)
-		if ok and type(mod) == "table" and type(mod.reset) == "function" then
-			mod.reset()
-		end
-	end
-
-	reset_state("atlas.issues.providers.jira.ui.overview.state")
-	reset_state("atlas.issues.ui.panel.issue.tabs.activity.state")
-	reset_state("atlas.issues.ui.panel.issue.tabs.conversation.state")
 end
 
 -- Public API
@@ -225,7 +211,9 @@ function M.on_select(issue, opts)
 	end
 
 	if context_changed then
-		reset_tab_data()
+		require("atlas.issues.providers.jira.ui.overview.state").reset()
+		require("atlas.issues.ui.panel.issue.tabs.activity.state").reset()
+		require("atlas.issues.ui.panel.issue.tabs.conversation.state").reset()
 	end
 
 	if should_fetch then

@@ -1,14 +1,10 @@
 local M = {}
 
----@alias AtlasNativeDiffLayout "side-by-side"|"inline"
-
----@class AtlasNativeDiffWindow
----@field buf integer
----@field win integer|nil
-
 ---@class AtlasNativeDiffSessionOptions
----@field layout AtlasNativeDiffLayout
+---@field layout AtlasReviewLayout
 ---@field compact boolean
+---@field compact_context_lines integer
+---@field show_review_panel boolean
 ---@field explorer AtlasDiffExplorerOptions
 
 ---@alias AtlasNativeDiffPanelItem
@@ -16,37 +12,37 @@ local M = {}
 ---| { kind: "folder", path: string }
 ---| { kind: "task", comment: PullsComment }
 
----@class AtlasNativeDiffSession
----@field tabpage integer
+---@class AtlasNativeDiffSession: AtlasReviewSession
+---@field lifecycle AtlasNativeDiffLifecycle
 ---@field range AtlasNativeDiffRange
 ---@field files DiffFile[]
 ---@field selected_index integer
 ---@field pending_index integer|nil
----@field layout AtlasNativeDiffLayout
 ---@field compact boolean
+---@field compact_context_lines integer
 ---@field number boolean
 ---@field relativenumber boolean
 ---@field explorer AtlasDiffExplorerOptions
 ---@field reviewed_files table<string, boolean>
 ---@field collapsed_folders table<string, boolean>
 ---@field panel_items table<integer, AtlasNativeDiffPanelItem>
----@field panel AtlasNativeDiffWindow
+---@field panel AtlasReviewWindow
 ---@field commits PullsCommit[]
 ---@field commit_items table<integer, PullsCommit>
----@field commits_panel AtlasNativeDiffWindow
+---@field commits_panel AtlasReviewWindow
 ---@field commits_visible boolean
----@field left AtlasNativeDiffWindow
----@field right AtlasNativeDiffWindow
 ---@field statusline AtlasNativeDiffStatusline
 ---@field job { cancel: fun() }|nil
 ---@field document AtlasNativeDiffDocument
----@field review AtlasReviewState|nil
 ---@field review_context AtlasPreparedReviewContext|nil
----@field review_view AtlasReviewView
----@field notes AtlasDiffNotesState|nil
+---@field review_attached boolean
+---@field review_panel AtlasReviewPanel|nil
 ---@field reload fun(target: AtlasLoadingTarget|nil)
----@field refresh_ui fun()
----@field closing boolean
+
+---@class AtlasNativeDiffLifecycle
+---@field session_id string
+---@field opened boolean
+---@field closed boolean
 
 ---@class AtlasNativeDiffOpenOptions
 ---@field diff AtlasPreparedDiff

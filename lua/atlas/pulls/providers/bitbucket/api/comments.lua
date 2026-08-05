@@ -3,51 +3,6 @@ local M = {}
 local service = require("atlas.pulls.providers.bitbucket.api.service")
 local mapper = require("atlas.pulls.providers.bitbucket.api.mapper")
 
----@param url string
----@param on_done fun(result: { values: table[] }|nil, err: string|nil)
----@return { cancel: fun() }
-local function fetch_all_values(url, on_done)
-	local values = {}
-	local current
-	local cancelled = false
-
-	local function fetch_page(page_url)
-		if cancelled then
-			return
-		end
-
-		current = service.request("GET", page_url, nil, nil, function(result, err)
-			if cancelled then
-				return
-			end
-			if err then
-				on_done(nil, err)
-				return
-			end
-
-			for _, value in ipairs(result.values or {}) do
-				table.insert(values, value)
-			end
-			local next_url = type(result.next) == "string" and result.next or ""
-			if next_url == "" then
-				on_done({ values = values }, nil)
-				return
-			end
-			fetch_page(next_url)
-		end)
-	end
-
-	fetch_page(url)
-	return {
-		cancel = function()
-			cancelled = true
-			if current and current.cancel then
-				current.cancel()
-			end
-		end,
-	}
-end
-
 ---@param workspace string
 ---@param repo string
 ---@param pr_id string|number
@@ -109,7 +64,7 @@ function M.fetch_comments(pr, opts, on_done)
 		end
 	end
 
-	return fetch_all_values(url, function(result, err)
+	return service.fetch_all_values(url, function(result, err)
 		if err then
 			on_done(nil, err)
 			return
@@ -122,7 +77,7 @@ end
 
 ---@param pr PullRequest
 ---@param content string
----@param opts? { inline?: { from?: number, to?: number, start_from?: number, start_to?: number, path?: string }|nil, pending?: boolean|nil }
+---@param opts PullsAddCommentOpts|nil
 ---@param on_done fun(comment: PullsComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.add_comment(pr, content, opts, on_done)
@@ -133,9 +88,11 @@ function M.add_comment(pr, content, opts, on_done)
 		return nil
 	end
 
+	local parent = opts and opts.parent or nil
 	local body = encode_comment_payload(content, {
+		parent_id = parent and (parent.parent_id or parent.id) or nil,
 		inline = opts and opts.inline or nil,
-		pending = opts and opts.pending or nil,
+		pending = (opts and opts.pending == true) or (parent ~= nil and parent.state == "PENDING"),
 	})
 	return service.request("POST", comments_url, nil, body, function(result, err)
 		if err then
@@ -153,12 +110,10 @@ function M.add_comment(pr, content, opts, on_done)
 end
 
 ---@param pr PullRequest
----@param parent_id number|string
----@param content string
----@param opts? { inline?: { from?: number, to?: number, start_from?: number, start_to?: number, path?: string }|nil, pending?: boolean|nil }
+---@param comment PullsComment
 ---@param on_done fun(comment: PullsComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.reply_comment(pr, parent_id, content, opts, on_done)
+function M.edit_comment(pr, comment, on_done)
 	local raw = pr._raw
 	local comments_url = tostring((raw.links or {}).comments or "")
 	if comments_url == "" then
@@ -166,62 +121,28 @@ function M.reply_comment(pr, parent_id, content, opts, on_done)
 		return nil
 	end
 
-	local body = encode_comment_payload(content, {
-		parent_id = parent_id,
-		inline = opts and opts.inline or nil,
-		pending = opts and opts.pending or nil,
-	})
-	return service.request("POST", comments_url, nil, body, function(result, err)
-		if err then
-			on_done(nil, err)
-			return
-		end
-		service.clear_cache()
-		local comment = mapper.to_comment(result)
-		if comment == nil then
-			on_done(nil, "Bitbucket did not return the created reply")
-			return
-		end
-		on_done(comment, nil)
-	end)
-end
-
----@param pr PullRequest
----@param comment_id number|string
----@param content string
----@param opts? { inline?: { from?: number, to?: number, start_from?: number, start_to?: number, path?: string }|nil }
----@param on_done fun(comment: PullsComment|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.edit_comment(pr, comment_id, content, opts, on_done)
-	local raw = pr._raw
-	local comments_url = tostring((raw.links or {}).comments or "")
-	if comments_url == "" then
-		on_done(nil, "No comments URL available")
-		return nil
-	end
-
-	local url = comments_url .. "/" .. tostring(comment_id)
-	local body = encode_comment_payload(content, { inline = opts and opts.inline or nil })
+	local url = comments_url .. "/" .. tostring(comment.id)
+	local body = encode_comment_payload(comment.content_raw)
 	return service.request("PUT", url, nil, body, function(result, err)
 		if err then
 			on_done(nil, err)
 			return
 		end
 		service.clear_cache()
-		local comment = mapper.to_comment(result)
-		if comment == nil then
+		local updated = mapper.to_comment(result)
+		if updated == nil then
 			on_done(nil, "Bitbucket did not return the updated comment")
 			return
 		end
-		on_done(comment, nil)
+		on_done(updated, nil)
 	end)
 end
 
 ---@param pr PullRequest
----@param comment_id number|string
+---@param comment PullsComment
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.delete_comment(pr, comment_id, on_done)
+function M.delete_comment(pr, comment, on_done)
 	local raw = pr._raw
 	local comments_url = tostring((raw.links or {}).comments or "")
 	if comments_url == "" then
@@ -229,7 +150,7 @@ function M.delete_comment(pr, comment_id, on_done)
 		return nil
 	end
 
-	local url = comments_url .. "/" .. tostring(comment_id)
+	local url = comments_url .. "/" .. tostring(comment.id)
 	return service.request("DELETE", url, nil, nil, function(_, err)
 		if err then
 			on_done(false, err)
@@ -262,24 +183,11 @@ function M.set_thread_resolved(pr, comment_id, resolved, on_done)
 	end)
 end
 
----@class BitbucketPRTask
----@field id number
----@field state string
----@field content_raw string
----@field created_on string
----@field updated_on string
----@field resolved_on string|nil
----@field pending boolean|nil
----@field creator PullsAuthor
----@field comment_id number|nil
----@field links {self: string, html: string}
----@field comment_html string
-
 ---@param workspace string
 ---@param repo string
 ---@param pr_id string|number
 ---@param opts? { force_refresh?: boolean }
----@param on_done fun(tasks: BitbucketPRTask[]|nil, err: string|nil)
+---@param on_done fun(tasks: PullsComment[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_tasks(workspace, repo, pr_id, opts, on_done)
 	opts = opts or {}
@@ -304,7 +212,7 @@ function M.fetch_tasks(workspace, repo, pr_id, opts, on_done)
 		end
 	end
 
-	return fetch_all_values(url, function(result, err)
+	return service.fetch_all_values(url, function(result, err)
 		if err then
 			on_done(nil, err)
 			return
@@ -318,7 +226,7 @@ end
 
 ---@param task_url string
 ---@param opts { state?: "RESOLVED"|"UNRESOLVED"|string, content_raw?: string }|nil
----@param on_done fun(task: BitbucketPRTask|nil, err: string|nil)
+---@param on_done fun(task: PullsComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.update_task(task_url, opts, on_done)
 	opts = opts or {}
@@ -373,7 +281,7 @@ end
 ---@param pr_id string|number
 ---@param raw string
 ---@param opts? { comment_id?: number|string|nil, pending?: boolean|nil }
----@param on_done fun(task: BitbucketPRTask|nil, err: string|nil)
+---@param on_done fun(task: PullsComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.create_task(workspace, repo, pr_id, raw, opts, on_done)
 	opts = opts or {}

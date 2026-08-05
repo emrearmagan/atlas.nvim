@@ -1,8 +1,9 @@
 local M = {}
 
-local cli = require("atlas.pulls.providers.github.api.cli")
+local cli = require("atlas.providers.github.client").pulls
 local json = require("atlas.core.json")
 local mapper = require("atlas.pulls.providers.github.api.mapper")
+local github_mapping = require("atlas.providers.github.mapping")
 
 local REVIEW_QUERY = [[
 query($owner:String!,$name:String!,$number:Int!,$endCursor:String){
@@ -51,17 +52,6 @@ createdAt
 author { login ... on User { databaseId } ... on Bot { databaseId } }
 pullRequestReview { id state commit { oid } }
 ]]
-
-local REACTION_CONTENT_TO_KEY = {
-	THUMBS_UP = "+1",
-	THUMBS_DOWN = "-1",
-	LAUGH = "laugh",
-	HOORAY = "hooray",
-	CONFUSED = "confused",
-	HEART = "heart",
-	ROCKET = "rocket",
-	EYES = "eyes",
-}
 
 ---@param line string
 ---@return string|nil
@@ -119,14 +109,6 @@ local function gql_to_raw(gql_comment, thread)
 	local author = json.nilify(gql_comment.author) or {}
 	local reply_to = json.nilify(gql_comment.replyTo)
 
-	local reactions = {}
-	for _, group in ipairs(json.nilify(gql_comment.reactionGroups) or {}) do
-		local key = REACTION_CONTENT_TO_KEY[group.content or ""]
-		if key and group.users then
-			reactions[key] = tonumber(group.users.totalCount) or 0
-		end
-	end
-
 	return {
 		id = gql_comment.databaseId,
 		in_reply_to_id = reply_to and reply_to.databaseId or nil,
@@ -140,7 +122,7 @@ local function gql_to_raw(gql_comment, thread)
 		url = gql_comment.url,
 		html_url = gql_comment.url,
 		created_at = gql_comment.createdAt,
-		reactions = reactions,
+		reactions = github_mapping.reaction_groups(gql_comment.reactionGroups),
 	}
 end
 
@@ -675,12 +657,12 @@ function M.add_comment(pr, content, opts, on_done)
 		local raw = pr._raw
 		local reviews = json.safe_table(raw.reviews).nodes or {}
 		local pending_review = reviews[1]
-		local pending_review_id = tostring((pending_review or {}).id or "")
+		local review_id = tostring((pending_review or {}).id or "")
 		local commit_oid = tostring(opts.inline.commit_hash or pr.source.commit_hash or "")
 		local pending_commit = tostring(((pending_review or {}).commit or {}).oid or "")
 		if
 			opts.pending
-			and pending_review_id ~= ""
+			and review_id ~= ""
 			and commit_oid ~= ""
 			and pending_commit ~= ""
 			and commit_oid ~= pending_commit
@@ -691,13 +673,19 @@ function M.add_comment(pr, content, opts, on_done)
 			return nil
 		end
 		if not opts.pending then
+			if review_id ~= "" then
+				vim.schedule(function()
+					on_done(nil, "Submit the pending review first")
+				end)
+				return nil
+			end
 			return add_published_inline_comment(pr, content, opts.inline, on_done)
 		end
-		if pending_review_id ~= "" then
-			return add_review_thread(pr, content, opts.inline, pending_review_id, on_done)
+		if review_id ~= "" then
+			return add_review_thread(pr, content, opts.inline, review_id, on_done)
 		end
 
-		local pull_request_id = tostring(raw.node_id or "")
+		local pull_request_id = github_mapping.node_id(raw) or ""
 		if pull_request_id == "" then
 			vim.schedule(function()
 				on_done(nil, "Missing pull request node id")
@@ -960,6 +948,7 @@ function M.reply_comment(pr, parent, content, on_done)
 					local created = mapper.to_comment(result)
 					created.parent_id = root_id
 					created.inline_hunk = created.inline_hunk or parent.inline_hunk
+					created.state = parent.state
 					created.can_resolve = false
 					on_done(created, nil)
 				end,

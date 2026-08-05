@@ -439,7 +439,7 @@ local ACTIONS = {
 			local gql =
 				"mutation($id: ID!, $state: SubscriptionState!) { updateSubscription(input: { subscribableId: $id, state: $state }) { subscribable { ... on Issue { viewerSubscription } } } }"
 			statusline.notify("loading", issue.is_subscribed and "Unsubscribing..." or "Subscribing...")
-			require("atlas.issues.providers.github.api.cli").gh(
+			require("atlas.providers.github.client").issues.gh(
 				{ "api", "graphql", "-F", "id=" .. node_id, "-f", "state=" .. next_state, "-f", "query=" .. gql },
 				function(_, err)
 					if err then

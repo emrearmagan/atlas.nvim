@@ -39,7 +39,8 @@ function M.on_select(issue, refresh, opts)
 	opts = opts or {}
 
 	local provider = get_provider()
-	if not provider or not provider.fetch_conversation then
+	local comments = provider and provider.capabilities.comments
+	if not comments or not comments.fetch_conversation then
 		state.comments = {}
 		state.activity = {}
 		refresh()
@@ -51,7 +52,7 @@ function M.on_select(issue, refresh, opts)
 	state.activity = "loading"
 	statusline.notify("loading", string.format("Loading conversation for %s...", key))
 
-	track(provider.fetch_conversation(issue, opts, function(result, err)
+	track(comments.fetch_conversation(issue, opts, function(result, err)
 		if err then
 			state.comments = err
 			state.activity = err

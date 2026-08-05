@@ -5,7 +5,7 @@ local statusline = require("atlas.ui.statusline")
 local multi_select = require("atlas.ui.popups.multi_select")
 local mr_api = require("atlas.pulls.providers.gitlab.api.mergerequests")
 local users_api = require("atlas.pulls.providers.gitlab.api.users")
-local service = require("atlas.pulls.providers.gitlab.api.service")
+local service = require("atlas.providers.gitlab.client").pulls
 
 ---@param ctx GitLabPullsActionContext
 ---@return boolean

@@ -9,8 +9,9 @@ local actions = require("atlas.pulls.actions")
 ---@return PullsPanelTabModule|nil
 local function current_tab_mod()
 	local provider = require("atlas.pulls.state").provider
-	if provider and provider.panel and provider.panel.tabs then
-		for _, tab in ipairs(provider.panel.tabs() or {}) do
+	local panel = provider and provider.capabilities.ui and provider.capabilities.ui.panel
+	if panel and panel.tabs then
+		for _, tab in ipairs(panel.tabs() or {}) do
 			if tab.key == panel_state.current_tab then
 				return tab.mod
 			end
@@ -104,7 +105,7 @@ function M.register(buf)
 	)
 
 	local state = require("atlas.pulls.state")
-	if state.provider and state.provider.open_actions then
+	if state.provider and state.provider.capabilities.actions then
 		utils.insert_if(
 			items,
 			item("ui.open_actions", {
@@ -150,22 +151,24 @@ function M.register(buf)
 		})
 	)
 
-	utils.insert_if(
-		items,
-		item("ui.toggle_subscription", {
-			desc = "Toggle subscription",
-			opts = { nowait = true, silent = true },
-			callback = function()
-				local pr = panel_state.current_pr
-				if pr == nil then
-					return
-				end
-				actions.run_action(pr, "toggle_subscription", { source = "panel" }, function(_, _)
-					require("atlas.pulls.ui.panel").render()
-				end)
-			end,
-		})
-	)
+	if panel_state.current_pr and actions.is_action_available(panel_state.current_pr, "toggle_subscription") then
+		utils.insert_if(
+			items,
+			item("ui.toggle_subscription", {
+				desc = "Toggle subscription",
+				opts = { nowait = true, silent = true },
+				callback = function()
+					local pr = panel_state.current_pr
+					if pr == nil then
+						return
+					end
+					actions.run_action(pr, "toggle_subscription", { source = "panel" }, function(_, _)
+						require("atlas.pulls.ui.panel").render()
+					end)
+				end,
+			})
+		)
+	end
 
 	M.remove(buf)
 	local general = items
@@ -220,11 +223,7 @@ function M.register(buf)
 				local ui_st = require("atlas.ui.state")
 				local was_open = layout_mod.win_id("detail") ~= nil
 				layout_mod.toggle_detail()
-				if was_open then
-					if ui_st.on_panel_close then
-						ui_st.on_panel_close()
-					end
-				else
+				if not was_open then
 					if ui_st.on_panel_open then
 						ui_st.on_panel_open()
 					end
@@ -242,12 +241,7 @@ function M.register(buf)
 				if help.is_open() then
 					return
 				end
-				local layout_mod = require("atlas.ui.layout")
-				local ui_st = require("atlas.ui.state")
-				layout_mod.toggle_detail()
-				if ui_st.on_panel_close then
-					ui_st.on_panel_close()
-				end
+				require("atlas.ui.layout").toggle_detail()
 			end,
 		})
 	)

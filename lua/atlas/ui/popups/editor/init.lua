@@ -76,7 +76,7 @@ function _G.__atlas_markdown_complete(findstart, base)
 end
 
 ---@class AtlasMarkdownEditorAction
----@field key string|string[]
+---@field key string
 ---@field description string|nil
 ---@field callback fun(ctx: { buf: integer, win: integer, close: fun(), get_text: fun(): string })
 ---@field mode string|string[]|nil
@@ -218,6 +218,7 @@ function M.open(opts)
 	vim.api.nvim_set_option_value("cursorbind", false, { win = win })
 	vim.api.nvim_set_option_value("wrap", true, { win = win })
 	vim.api.nvim_set_option_value("cursorline", false, { win = win })
+	statusline.inherit(win, source_win)
 	local function reveal_preview()
 		vim.api.nvim_win_call(win, function()
 			vim.fn.winrestview({ topline = 1, topfill = preview_height })

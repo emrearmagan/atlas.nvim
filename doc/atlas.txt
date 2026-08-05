@@ -1,4 +1,4 @@
-*atlas.txt*  Pull requests and issues from Neovim   Last change: 2026 Aug 02
+*atlas.txt*  Pull requests and issues from Neovim   Last change: 2026 Aug 04
 
 Author: Emre Armagan
 License: MIT
@@ -30,7 +30,8 @@ CONTENTS                                                       *atlas-contents*
        Notifications ........................ |atlas-notifications|
        Bookmarks ............................ |atlas-bookmarks|
        Custom actions ....................... |atlas-custom-actions|
-  9. Keymaps ................................ |atlas-keymaps|
+  9. Events ................................. |atlas-events|
+ 10. Keymaps ................................ |atlas-keymaps|
 
 ==============================================================================
 1. INTRODUCTION                              *atlas* *atlas.nvim* *atlas-introduction*
@@ -49,7 +50,7 @@ With lazy.nvim:
       "nvim-tree/nvim-web-devicons",              -- optional, recommended
       "MeanderingProgrammer/render-markdown.nvim", -- optional, recommended
       "esmuellert/codediff.nvim",                  -- optional, PR diffs
-      "sindrets/diffview.nvim",                    -- optional, PR diffs
+      "sindrets/diffview.nvim", -- optional; or "dlyongemallo/diffview-plus.nvim"
     },
     -- See |atlas-configuration|.
     opts = {},
@@ -145,7 +146,7 @@ unchanged.
 
                                                                  *:AtlasSearch*
 :AtlasSearch [provider]
-	Pick a configured provider and open its search prompt.
+	Search configured pull-request and issue providers.
 
                                                                    *:AtlasOpen*
 :AtlasOpen <target>
@@ -186,10 +187,12 @@ Shared config that applies to all pulls providers:
         -- AtlasDiff options; external viewers use their own configuration.
         layout = "inline", -- "inline" or "side-by-side"
         compact = true, -- initially show hunks plus surrounding context
+        compact_context_lines = 3, -- context lines around hunks in compact mode
+        show_review_panel = false, -- set true to show comments and notes initially
         explorer = {
           grouped = true, -- group changed files by directory
           hidden = false,
-          show_commits = true, -- initially show commits below changed files
+          show_commits = false, -- set true to show commits below changed files initially
           width = 40,
           initial_focus = "explorer", -- "explorer" or "diff"
           ignore = { ".git/**", ".jj/**" },
@@ -513,23 +516,24 @@ to start a review.
   - Review provider tasks and GitHub checklists alongside the comments they
     belong to.
   - Add, reply to, edit, delete, resolve, or reopen comments when supported.
+  - Browse provider comments and local notes in AtlasDiff's bottom list; use
+    `za` to expand an item.
   - Submit pending comments with an optional review summary when supported.
 
-CodeDiff can display Atlas comment and task overlays, but the integration
-relies on CodeDiff internals and may break after upstream changes. Diffview
-remains available as a plain diff viewer without Atlas review overlays.
+CodeDiff, sindrets/diffview.nvim, and dlyongemallo/diffview-plus.nvim can
+display Atlas comment, task, and local-note overlays, but their integrations
+rely on plugin internals and may break after upstream changes.
 
 LOCAL NOTES                                      *atlas-local-notes*
                                                    *atlas-pulls-notes*
 
 Local notes let you leave something on a diff without posting it to the pull
 request. Each note is attached to a file and line and can be an `ISSUE`,
-`SUGGESTION`, `NOTE`, or `PRAISE`. If that line changes, Atlas shows the note
-as outdated. If the location no longer exists, Atlas removes it. `:AtlasNotes`
-lists your notes across all pull requests.
+`SUGGESTION`, `NOTE`, or `PRAISE`. Diff views mark notes as outdated when their
+saved line changes.
 
-For scripts, use `bin/atlas-notes`. Notes added there appear in AtlasDiff and
-`:AtlasNotes`:
+For scripts, use `bin/atlas-notes`. Notes added there appear in AtlasDiff,
+CodeDiff, Diffview, Diffview-plus, and `:AtlasNotes`:
 >sh
   ./bin/atlas-notes add \
     --target https://github.com/owner/repository/pull/123 \
@@ -657,7 +661,22 @@ to your own tooling. They appear in the action menu (default `A`).
 <
 
 ==============================================================================
-9. KEYMAPS                                                      *atlas-keymaps*
+9. EVENTS                                                        *atlas-events*
+
+Atlas emits these `User` events after setup or cleanup completes:
+
+  AtlasUIClosed
+      The main pulls/issues dashboard closed.
+
+  AtlasDiffOpened, AtlasDiffClosed
+      The native AtlasDiff view opened or closed.
+
+  AtlasReviewAttached, AtlasReviewDetached
+      Atlas review overlays attached to or detached from AtlasDiff, CodeDiff,
+      or Diffview.
+
+==============================================================================
+10. KEYMAPS                                                     *atlas-keymaps*
 
 Defaults live under `keymaps` in `setup()`. Each entry accepts:
   - a string -> single key
@@ -688,12 +707,12 @@ Defaults live under `keymaps` in `setup()`. Each entry accepts:
         refresh_view            = "R",
         open_actions            = "A",
         open_in_browser         = "gx",
+        copy_id                 = "y",
         copy_url                = "Y",
         show_details            = "K",
         search                  = "?",
       },
       issues = {
-        copy_key         = "y",
         transition_issue = "gs",
         change_assignee  = "ga",
         change_reporter  = "gr",
@@ -701,30 +720,32 @@ Defaults live under `keymaps` in `setup()`. Each entry accepts:
         create_issue     = "c",
       },
       pulls = {
-        copy_id                = "y",
         open_diff              = "gd",
         checkout               = "gc",
         review = {
           toggle_approval       = "ga",
           request_changes       = "gr",
           submit_review         = "gs",
-          open_file             = { "<CR>", "l" },
+          open_file             = "<CR>",
           toggle_explorer_grouping = "T",
           toggle_layout        = "t",
-          toggle_compact       = "f",
+          toggle_compact       = "u",
           next_hunk            = "]h",
           previous_hunk        = "[h",
           next_file            = { "]f", "<Tab>" },
           previous_file        = { "[f", "<S-Tab>" },
           toggle_file_reviewed = "-",
           toggle_commits       = "gC",
+          toggle_review_panel  = "gR",
           next_comment         = "]c",
           previous_comment     = "[c",
           next_note            = "]n",
           previous_note        = "[n",
           view_thread          = "K",
-          add_pending_comment  = "c",
-          add_comment          = "C",
+          edit_comment         = "e",
+          add_task             = "T",
+          add_comment          = "c",
+          submit_comment       = "C",
           delete_comment       = "dd",
           add_note             = "n",
           toggle_resolved      = "x",

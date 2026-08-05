@@ -472,7 +472,7 @@ local ACTIONS = {
 			return true, nil
 		end,
 		run = function(ctx, done)
-			local service = require("atlas.issues.providers.gitlab.api.service")
+			local service = require("atlas.providers.gitlab.client").issues
 			local issue = ctx.issue
 			local raw = issue._raw or {}
 			local path = tostring(raw.project_path or "")

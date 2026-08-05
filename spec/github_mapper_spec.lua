@@ -27,24 +27,16 @@ describe("normalize_pr author.name", function()
 		assert.are.equal("Octo Cat", pr.author.name)
 	end)
 
-	it("falls back to login when author.name is nil", function()
-		local raw = base_raw()
-		raw.author.name = nil
-		local pr = normalizer.to_pull_request(raw)
-		assert.are.equal("octocat", pr.author.name)
-	end)
-
-	it("falls back to login when author.name is vim.NIL", function()
-		local raw = base_raw()
-		raw.author.name = vim.NIL
-		local pr = normalizer.to_pull_request(raw)
-		assert.are.equal("octocat", pr.author.name)
-	end)
-
-	it("falls back to login when author.name is an empty string", function()
-		local raw = base_raw()
-		raw.author.name = ""
-		local pr = normalizer.to_pull_request(raw)
-		assert.are.equal("octocat", pr.author.name)
+	it("falls back to login when author.name is missing", function()
+		for _, case in ipairs({
+			{ label = "nil" },
+			{ label = "vim.NIL", value = vim.NIL },
+			{ label = "empty string", value = "" },
+		}) do
+			local raw = base_raw()
+			raw.author.name = case.value
+			local pr = normalizer.to_pull_request(raw)
+			assert.are.equal("octocat", pr.author.name, case.label)
+		end
 	end)
 end)

@@ -1,6 +1,6 @@
--- Structured diff hunk rendering shared by pull request UIs.
 local M = {}
 
+local code_preview = require("atlas.ui.components.code_preview")
 local utils = require("atlas.ui.shared.utils")
 
 ---@class AtlasDiffHunkRenderOptions
@@ -11,7 +11,7 @@ local utils = require("atlas.ui.shared.utils")
 
 local DEFAULT_PADDING = 1
 
----@param file DiffFile
+---@param file { path: string }
 ---@param hunk DiffHunk
 ---@return string
 function M.hunk_key(file, hunk)
@@ -92,14 +92,6 @@ local function body_count(hunk)
 	return n
 end
 
----@param hunk DiffHunk
----@return integer
-local function gutter_width(hunk)
-	local max_num =
-		math.max((hunk.old_start or 0) + (hunk.old_count or 0), (hunk.new_start or 0) + (hunk.new_count or 0))
-	return math.max(2, #tostring(max_num))
-end
-
 ---@param lines string[]
 ---@param spans table[]
 ---@param line_map table<integer, table>
@@ -125,7 +117,7 @@ local function render_hunk(lines, spans, line_map, file, hunk, is_collapsed, opt
 		table.insert(lines, text)
 		local lnum = #lines - 1
 		if hl_full then
-			table.insert(spans, { line = lnum, start_col = #pad, end_col = #text, hl_group = hl_full })
+			table.insert(spans, { line = lnum, line_hl_group = hl_full })
 		end
 		for _, seg in ipairs(segments or {}) do
 			table.insert(spans, { line = lnum, start_col = #pad + seg[1], end_col = #pad + seg[2], hl_group = seg[3] })
@@ -148,30 +140,48 @@ local function render_hunk(lines, spans, line_map, file, hunk, is_collapsed, opt
 
 	-- Body
 	if not is_collapsed then
-		local gw = gutter_width(hunk)
+		local last_line =
+			math.max((hunk.old_start or 0) + (hunk.old_count or 0), (hunk.new_start or 0) + (hunk.new_count or 0))
+		local number_width = math.max(2, #tostring(last_line))
+		local source_lines, prefixes = {}, {}
+		for _, dl in ipairs(hunk.lines or {}) do
+			if dl.kind ~= "meta" then
+				local line = dl.new_line or dl.old_line or 0
+				table.insert(source_lines, dl.content or dl.text or "")
+				table.insert(prefixes, string.format("%" .. number_width .. "d  ", line))
+			end
+		end
+		local preview = code_preview.render({
+			file_path = file.path,
+			lines = source_lines,
+			start_line = 1,
+			anchor_line = nil,
+			prefixes = prefixes,
+		})
+		local preview_spans = {}
+		for _, span in ipairs(preview.highlights) do
+			if span.hl_group then
+				preview_spans[span.line + 1] = preview_spans[span.line + 1] or {}
+				table.insert(preview_spans[span.line + 1], { span.start_col, span.end_col, span.hl_group })
+			end
+		end
+		local preview_index = 0
 		for _, dl in ipairs(hunk.lines or {}) do
 			if dl.kind == "meta" then
 				local text = dl.content or dl.text or ""
 				push(" " .. text, nil, { { 0, #(" " .. text), "AtlasTextMuted" } })
 			else
-				local num = dl.new_line or dl.old_line or 0
-				local num_str = num > 0 and tostring(num) or ""
-				num_str = string.rep(" ", gw - #num_str) .. num_str
-				local marker = dl.kind == "add" and "+" or (dl.kind == "remove" and "-" or " ")
-				local content = dl.content or dl.text or ""
-				local prefix = " " .. num_str .. " " .. marker .. " "
-				local text = prefix .. content
+				preview_index = preview_index + 1
+				local text = preview.lines[preview_index]
+				local highlights = preview_spans[preview_index]
 
 				local body_lnum
 				if dl.kind == "add" then
-					body_lnum = push(text, "AtlasDiffAddLine", { { 0, #prefix, "AtlasDiffAddMarker" } })
+					body_lnum = push(text, "AtlasDiffAddLine", highlights)
 				elseif dl.kind == "remove" then
-					body_lnum = push(text, "AtlasDiffRemoveLine", { { 0, #prefix, "AtlasDiffRemoveMarker" } })
+					body_lnum = push(text, "AtlasDiffRemoveLine", highlights)
 				else
-					body_lnum = push(text, nil, {
-						{ 0, #prefix, "AtlasTextMuted" },
-						{ #prefix, #text, "AtlasDiffContext" },
-					})
+					body_lnum = push(text, nil, highlights)
 				end
 				line_map[body_lnum + 1] = {
 					kind = "hunk_line",

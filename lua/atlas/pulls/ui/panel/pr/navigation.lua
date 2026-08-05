@@ -20,8 +20,9 @@ end
 ---@return PullsPanelTabModule|nil
 local function current_tab_mod()
 	local provider = require("atlas.pulls.state").provider
-	if provider and provider.panel and provider.panel.tabs then
-		for _, tab in ipairs(provider.panel.tabs() or {}) do
+	local panel = provider and provider.capabilities.ui and provider.capabilities.ui.panel
+	if panel and panel.tabs then
+		for _, tab in ipairs(panel.tabs() or {}) do
 			if tab.key == panel_state.current_tab then
 				return tab.mod
 			end

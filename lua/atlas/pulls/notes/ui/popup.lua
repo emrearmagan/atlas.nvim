@@ -1,6 +1,7 @@
 local editor = require("atlas.pulls.notes.ui.editor")
 local notes = require("atlas.pulls.notes")
 local renderer = require("atlas.pulls.notes.ui.renderer")
+local statusline = require("atlas.ui.statusline")
 
 local M = {}
 
@@ -29,6 +30,7 @@ end
 ---@param opts AtlasNotesUIPopupOptions
 function M.open(opts)
 	M.close()
+	local source_win = vim.api.nvim_get_current_win()
 	local width = math.max(1, math.min(100, vim.o.columns - 4))
 	local lines, spans, line_map = renderer.render_cards(opts.notes, width, {
 		actions = true,
@@ -69,6 +71,7 @@ function M.open(opts)
 	)
 	vim.api.nvim_set_option_value("cursorline", true, { win = win })
 	vim.api.nvim_set_option_value("wrap", false, { win = win })
+	statusline.inherit(win, source_win)
 
 	local function selected_note()
 		local item = line_map[vim.api.nvim_win_get_cursor(win)[1]]

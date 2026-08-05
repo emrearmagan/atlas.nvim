@@ -245,9 +245,6 @@ function M.get_issue_history_page(issue_key, start_at, max_results, on_done, opt
 		local raw = result
 		if is_server then
 			raw = type(result.changelog) == "table" and result.changelog or { values = {} }
-			if raw.values == nil and raw.histories ~= nil then
-				raw.values = raw.histories
-			end
 		end
 
 		local page = normalizer.to_history_page(raw, start, size)

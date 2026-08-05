@@ -66,8 +66,7 @@ function M.render(tab_items, get_tab_module)
 	else
 		local state = require("atlas.pulls.state")
 		local provider = state.provider
-
-		local panel = provider and provider.panel or nil
+		local panel = provider and provider.capabilities.ui and provider.capabilities.ui.panel
 		local extra_rows = panel and panel.header_rows and panel.header_rows(pr) or nil
 		local extra_chips = panel and panel.chips and panel.chips(pr) or nil
 

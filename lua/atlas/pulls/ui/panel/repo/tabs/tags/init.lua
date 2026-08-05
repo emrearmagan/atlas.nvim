@@ -148,14 +148,15 @@ function M.on_select(_pr, repo, refresh, opts)
 	refresh()
 
 	local provider = require("atlas.pulls.state").provider
-	if provider == nil or not provider.fetch_repo_tags then
+	local repository = provider and provider.capabilities.repository
+	if repository == nil then
 		state.tags = { entries = {} }
 		statusline.notify("error", "Tag listing is not supported by this provider")
 		refresh()
 		return
 	end
 
-	request = provider.fetch_repo_tags(detail, {
+	request = repository.fetch_tags(detail, {
 		force_load = opts.force_load == true or opts.force_refresh == true,
 		pagelen = opts.pagelen,
 	}, function(tags, err)

@@ -250,7 +250,7 @@ local function build_statusline_items(opts)
 	return items
 end
 
----@param state { layout: AtlasFormLayout }
+---@param state { layout: AtlasFormLayout, content_width: integer }
 ---@param opts AtlasFormOpenOpts
 local function render(state, opts)
 	renderer.render_meta(state, opts.meta())

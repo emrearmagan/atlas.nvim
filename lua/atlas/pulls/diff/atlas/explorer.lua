@@ -16,7 +16,7 @@ local STATUS_MARKERS = {
 	unknown = { "?", "AtlasTextMuted" },
 }
 
-local comment_icon, comment_icon_hl = icons.general("comment")
+local comment_icon = icons.general("comment")
 local note_icon, note_icon_hl = icons.general("pin")
 local folder_closed_icon, folder_closed_icon_hl = icons.general("folder_closed")
 local folder_open_icon, folder_open_icon_hl = icons.general("folder_open")
@@ -36,7 +36,7 @@ function M.options()
 	return {
 		grouped = config.grouped == true,
 		hidden = config.hidden == true,
-		show_commits = config.show_commits ~= false,
+		show_commits = config.show_commits == true,
 		width = math.max(20, math.floor(tonumber(config.width) or 40)),
 		initial_focus = config.initial_focus == "diff" and "diff" or "explorer",
 		ignore = config.ignore or {},
@@ -145,6 +145,75 @@ local function stat_parts(file)
 	return parts
 end
 
+---@class AtlasDiffExplorerTree
+---@field name string
+---@field path string
+---@field folders table<string, AtlasDiffExplorerTree>
+---@field files integer[]
+
+---@param files DiffFile[]
+---@param indices integer[]
+---@return AtlasDiffExplorerTree
+local function build_tree(files, indices)
+	local root = { name = "", path = "", folders = {}, files = {} }
+	for _, index in ipairs(indices) do
+		local parts = vim.split(files[index].path, "/", { plain = true })
+		local node = root
+		for part_index = 1, #parts - 1 do
+			local name = parts[part_index]
+			if not node.folders[name] then
+				local path = node.path == "" and name or (node.path .. "/" .. name)
+				node.folders[name] = { name = name, path = path, folders = {}, files = {} }
+			end
+			node = node.folders[name]
+		end
+		table.insert(node.files, index)
+	end
+	return root
+end
+
+---@param node AtlasDiffExplorerTree
+---@return AtlasDiffExplorerTree[]
+local function sorted_folders(node)
+	local folders = {}
+	for _, folder in pairs(node.folders) do
+		table.insert(folders, folder)
+	end
+	table.sort(folders, function(left, right)
+		return left.name < right.name
+	end)
+	return folders
+end
+
+---@param node AtlasDiffExplorerTree
+---@param files DiffFile[]
+---@return integer[]
+local function sorted_files(node, files)
+	local indices = {}
+	for _, index in ipairs(node.files) do
+		table.insert(indices, index)
+	end
+	table.sort(indices, function(left, right)
+		return files[left].path < files[right].path
+	end)
+	return indices
+end
+
+---@param node AtlasDiffExplorerTree
+---@return AtlasDiffExplorerTree node, string label
+local function compact_folder(node)
+	local label = node.name
+	while #node.files == 0 do
+		local folders = sorted_folders(node)
+		if #folders ~= 1 then
+			break
+		end
+		node = folders[1]
+		label = label .. "/" .. node.name
+	end
+	return node, label
+end
+
 ---@param session AtlasNativeDiffSession
 ---@return integer[], integer[]
 local function grouped_indices(session)
@@ -159,8 +228,20 @@ end
 ---@return integer[]
 function M.ordered_indices(session)
 	local unreviewed, reviewed = grouped_indices(session)
-	vim.list_extend(unreviewed, reviewed)
-	return unreviewed
+	if not session.explorer.grouped then
+		vim.list_extend(unreviewed, reviewed)
+		return unreviewed
+	end
+	local ordered = {}
+	local function append(node)
+		for _, folder in ipairs(sorted_folders(node)) do
+			append(folder)
+		end
+		vim.list_extend(ordered, sorted_files(node, session.files))
+	end
+	append(build_tree(session.files, unreviewed))
+	append(build_tree(session.files, reviewed))
+	return ordered
 end
 
 ---@param session AtlasNativeDiffSession
@@ -168,8 +249,9 @@ end
 function M.reveal_file(session, file_index)
 	local file = session.files[file_index]
 	local parent = file and directory(file.path) or nil
-	if parent then
+	while parent do
 		session.collapsed_folders[parent] = nil
+		parent = directory(parent)
 	end
 end
 
@@ -285,31 +367,33 @@ function M.render(session, annotated_paths)
 	end
 
 	---@param file_index integer
-	---@param indent integer
+	---@param branch string
 	---@param show_directory boolean
-	local function add_file(file_index, indent, show_directory)
+	local function add_file(file_index, branch, show_directory)
 		local file = session.files[file_index]
 		local label = file_label(file)
 		local parent = directory(file.path)
 		local status, status_highlight = status_marker(file.status)
 		local has_comments = annotated_paths[file.path] or (file.old_path and annotated_paths[file.old_path])
-		local has_notes = file.status ~= "deleted" and noted_paths[file.path]
+		local has_notes = file.status ~= "deleted"
+			and (noted_paths[file.path] or (file.old_path and noted_paths[file.old_path]))
 		local devicon, devicon_hl = web_icon(basename(file.path))
-		local stats = stat_parts(file)
-		local stats_texts = {}
-		for _, part in ipairs(stats) do
-			table.insert(stats_texts, part.text)
+		local status_part = { text = status, hl_group = status_highlight }
+		local suffix_parts = stat_parts(file)
+		table.insert(suffix_parts, status_part)
+		local suffix_texts = {}
+		for _, part in ipairs(suffix_parts) do
+			table.insert(suffix_texts, part.text)
 		end
-		local suffix = table.concat(stats_texts, " ")
+		local suffix = table.concat(suffix_texts, " ")
 
 		local prefix_parts = {}
 		if has_comments then
-			table.insert(prefix_parts, { text = comment_icon, hl_group = comment_icon_hl })
+			table.insert(prefix_parts, { text = comment_icon, hl_group = "AtlasLogInfo" })
 		end
 		if has_notes then
 			table.insert(prefix_parts, { text = note_icon, hl_group = note_icon_hl })
 		end
-		table.insert(prefix_parts, { text = status, hl_group = status_highlight })
 		if devicon then
 			table.insert(prefix_parts, { text = devicon, hl_group = devicon_hl or "AtlasTextMuted" })
 		end
@@ -317,15 +401,24 @@ function M.render(session, annotated_paths)
 		for _, part in ipairs(prefix_parts) do
 			table.insert(prefix_texts, part.text)
 		end
-		local prefix = table.concat(prefix_texts, " ") .. " "
+		local prefix = #prefix_texts > 0 and (table.concat(prefix_texts, " ") .. " ") or ""
+		local available = math.max(1, width - vim.fn.strdisplaywidth(branch) - vim.fn.strdisplaywidth(prefix) - 1)
+		if vim.fn.strdisplaywidth(label .. " " .. suffix) > available then
+			suffix_parts = { status_part }
+			suffix = status
+		end
+		if vim.fn.strdisplaywidth(label .. " " .. suffix) > available then
+			suffix_parts = {}
+			suffix = ""
+		end
 		local suffix_width = suffix ~= "" and vim.fn.strdisplaywidth(suffix) + 1 or 0
-		local content_width = math.max(1, width - indent - vim.fn.strdisplaywidth(prefix) - suffix_width - 1)
+		local content_width = math.max(1, available - suffix_width)
 		local display_label = utils.truncate(label, content_width)
 		local path_width = content_width - vim.fn.strdisplaywidth(display_label) - 1
 		local display_path = show_directory and parent and path_width > 2 and utils.truncate(parent .. "/", path_width)
 			or ""
 		local content = display_label .. (display_path ~= "" and " " .. display_path or "")
-		local left = string.rep(" ", indent) .. prefix .. content
+		local left = branch .. prefix .. content
 		local padding = suffix ~= ""
 				and math.max(1, width - vim.fn.strdisplaywidth(left) - vim.fn.strdisplaywidth(suffix) - 1)
 			or 0
@@ -334,7 +427,8 @@ function M.render(session, annotated_paths)
 		local line = #lines
 		session.panel_items[line] = { kind = "file", index = file_index }
 
-		local col = indent
+		table.insert(highlights, { line - 1, 0, #branch, "AtlasTextMuted" })
+		local col = #branch
 		for _, part in ipairs(prefix_parts) do
 			table.insert(highlights, { line - 1, col, col + #part.text, part.hl_group })
 			col = col + #part.text + 1
@@ -345,24 +439,31 @@ function M.render(session, annotated_paths)
 			table.insert(highlights, { line - 1, path_start, path_start + #display_path, "AtlasTextMuted" })
 		end
 		local stat_col = #left + padding
-		for _, part in ipairs(stats) do
+		for _, part in ipairs(suffix_parts) do
 			table.insert(highlights, { line - 1, stat_col, stat_col + #part.text, part.hl_group })
 			stat_col = stat_col + #part.text + 1
 		end
 	end
 
-	---@param parent string
-	local function add_folder(parent)
-		local collapsed = session.collapsed_folders[parent] == true
+	---@param node AtlasDiffExplorerTree
+	---@param label string
+	---@param branch string
+	---@return boolean collapsed
+	local function add_folder(node, label, branch)
+		local collapsed = session.collapsed_folders[node.path] == true
 		local icon = collapsed and folder_closed_icon or folder_open_icon
 		local icon_hl = collapsed and folder_closed_icon_hl or folder_open_icon_hl
-		local prefix = icon .. " "
-		local label = utils.truncate(parent .. "/", math.max(1, width - vim.fn.strdisplaywidth(prefix)))
-		local text = prefix .. label
+		local available = width - vim.fn.strdisplaywidth(branch) - vim.fn.strdisplaywidth(icon) - 1
+		label = utils.truncate(label, math.max(1, available))
+		local text = branch .. icon .. " " .. label
 		table.insert(lines, text)
-		session.panel_items[#lines] = { kind = "folder", path = parent }
-		table.insert(highlights, { #lines - 1, 0, #icon, icon_hl })
-		table.insert(highlights, { #lines - 1, #prefix, #text, "AtlasLogInfo" })
+		session.panel_items[#lines] = { kind = "folder", path = node.path }
+		table.insert(highlights, { #lines - 1, 0, #branch, "AtlasTextMuted" })
+		local icon_start = #branch
+		table.insert(highlights, { #lines - 1, icon_start, icon_start + #icon, icon_hl })
+		local label_start = icon_start + #icon + 1
+		table.insert(highlights, { #lines - 1, label_start, #text, "AtlasLogInfo" })
+		return collapsed
 	end
 
 	---@param title string
@@ -372,23 +473,31 @@ function M.render(session, annotated_paths)
 		add_header(string.format("%s (%d)", title, #indices), spacing)
 		if not session.explorer.grouped then
 			for _, index in ipairs(indices) do
-				add_file(index, 2, true)
+				add_file(index, "  ", true)
 			end
 			return
 		end
-		local active_directory
-		for _, index in ipairs(indices) do
-			local parent = directory(session.files[index].path)
-			if parent ~= active_directory then
-				active_directory = parent
-				if parent then
-					add_folder(parent)
+
+		local function add_tree(node, prefix)
+			local folders = sorted_folders(node)
+			local files = sorted_files(node, session.files)
+			local total = #folders + #files
+			local entry = 0
+			for _, folder in ipairs(folders) do
+				entry = entry + 1
+				local displayed, label = compact_folder(folder)
+				local last = entry == total
+				local collapsed = add_folder(displayed, label, prefix .. (last and "└ " or "├ "))
+				if not collapsed then
+					add_tree(displayed, prefix .. (last and "  " or "│ "))
 				end
 			end
-			if not parent or not session.collapsed_folders[parent] then
-				add_file(index, 2, false)
+			for _, index in ipairs(files) do
+				entry = entry + 1
+				add_file(index, prefix .. (entry == total and "└ " or "├ "), false)
 			end
 		end
+		add_tree(build_tree(session.files, indices), "")
 	end
 
 	add_section("Files", unreviewed)
@@ -511,16 +620,17 @@ function M.toggle_all_folders(session)
 	local folders = {}
 	for _, file in ipairs(session.files) do
 		local parent = directory(file.path)
-		if parent then
+		while parent do
 			folders[parent] = true
+			parent = directory(parent)
 		end
 	end
 	if next(folders) == nil then
 		return false
 	end
 	local collapse = false
-	for parent in pairs(folders) do
-		if not session.collapsed_folders[parent] then
+	for _, item in pairs(session.panel_items) do
+		if item.kind == "folder" and not session.collapsed_folders[item.path] then
 			collapse = true
 			break
 		end

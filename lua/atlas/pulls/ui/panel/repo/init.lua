@@ -50,8 +50,9 @@ end
 local function get_tabs()
 	local state = require("atlas.pulls.state")
 	local provider = state.provider
-	if provider and provider.repo_panel and provider.repo_panel.tabs then
-		local tabs = provider.repo_panel.tabs()
+	local repo_panel = provider and provider.capabilities.ui and provider.capabilities.ui.repo_panel
+	if repo_panel and repo_panel.tabs then
+		local tabs = repo_panel.tabs()
 		if type(tabs) == "table" and #tabs > 0 then
 			return tabs
 		end
@@ -183,6 +184,7 @@ function M.on_select(repo, opts)
 	opts = opts or {}
 	local state = require("atlas.pulls.state")
 	local provider = state.provider
+	local repository = provider and provider.capabilities.repository
 	local same_repo = repo ~= nil
 		and panel_state.current_repo ~= nil
 		and tostring(panel_state.current_repo.id) == tostring(repo.id)
@@ -202,12 +204,12 @@ function M.on_select(repo, opts)
 	activate_current_tab()
 
 	local should_fetch = opts.force_refresh == true or type(panel_state.current_repo_details) ~= "table"
-	if provider and provider.fetch_repo_details and should_fetch then
+	if repository and repository.fetch_details and should_fetch then
 		local repo_key = tostring(panel_state.current_repo.id or "")
 		stop_request()
 		panel_state.current_repo_details = "loading"
 		update_spinner()
-		detail_request = provider.fetch_repo_details(panel_state.current_repo, {
+		detail_request = repository.fetch_details(panel_state.current_repo, {
 			force_load = opts.force_refresh == true,
 		}, function(details, err)
 			detail_request = nil

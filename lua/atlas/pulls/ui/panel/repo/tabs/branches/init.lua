@@ -159,14 +159,15 @@ function M.on_select(_pr, repo, refresh, opts)
 	refresh()
 
 	local provider = require("atlas.pulls.state").provider
-	if provider == nil or not provider.fetch_repo_branches then
+	local repository = provider and provider.capabilities.repository
+	if repository == nil then
 		state.branches = { entries = {} }
 		statusline.notify("error", "Branch listing is not supported by this provider")
 		refresh()
 		return
 	end
 
-	request = provider.fetch_repo_branches(detail, {
+	request = repository.fetch_branches(detail, {
 		force_load = opts.force_load == true or opts.force_refresh == true,
 		pagelen = opts.pagelen,
 	}, function(branches, err)
@@ -209,7 +210,8 @@ end
 ---@param refresh fun()
 function M.delete_current_branch(refresh)
 	local provider = require("atlas.pulls.state").provider
-	if provider == nil or not provider.delete_repo_branch then
+	local repository = provider and provider.capabilities.repository
+	if repository == nil or not repository.delete_branch then
 		statusline.notify("error", "Branch deletion is not supported by this provider")
 		return
 	end
@@ -239,7 +241,7 @@ function M.delete_current_branch(refresh)
 		end
 
 		statusline.notify("loading", string.format("Deleting branch %s...", branch_name))
-		delete_request = provider.delete_repo_branch(repo, branch, function(ok, err)
+		delete_request = repository.delete_branch(repo, branch, function(ok, err)
 			delete_request = nil
 			if err ~= nil then
 				statusline.notify("error", "Delete branch failed: " .. tostring(err))

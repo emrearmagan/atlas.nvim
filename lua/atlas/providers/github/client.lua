@@ -1,0 +1,160 @@
+local M = {}
+
+local cache = require("atlas.core.cache")
+local config = require("atlas.config")
+local logger = require("atlas.core.logger")
+local memory = require("atlas.core.memory_cache")
+
+local DEFAULT_CACHE_TTL = 300
+
+---@param store table
+---@param key string
+---@return any|nil, boolean
+local function get_cached(store, key)
+	local entry = store.get(key)
+	if entry and entry.value ~= nil then
+		return entry.value, true
+	end
+	return nil, false
+end
+
+---@param err string|nil
+---@return string
+local function sanitize_error(err)
+	if not err or err == "" then
+		return "Unknown error"
+	end
+	return (err:gsub("\n", " "):gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", ""))
+end
+
+---@param domain "pulls"|"issues"
+---@return table
+local function new(domain)
+	local client = {}
+
+	function client.github_config()
+		local options = config.options or {}
+		local provider_options = (options[domain] or {}).providers or {}
+		return provider_options.github or {}
+	end
+
+	function client.cache_ttl()
+		return tonumber(client.github_config().cache_ttl) or DEFAULT_CACHE_TTL
+	end
+
+	function client.get_cache(key)
+		return get_cached(cache, key)
+	end
+
+	function client.set_cache(key, value, ttl)
+		cache.set(key, value, ttl or client.cache_ttl())
+	end
+
+	function client.delete_cache(key)
+		cache.delete(key)
+	end
+
+	function client.get_mem(key)
+		return get_cached(memory, key)
+	end
+
+	function client.set_mem(key, value, ttl)
+		memory.set(key, value, ttl)
+	end
+
+	---@param args string[]
+	---@param parse_json boolean
+	---@param callback fun(result: any, err: string|nil)
+	---@param ctx table|nil
+	---@return { job_id: integer, cancel: fun() }|nil
+	local function run(args, parse_json, callback, ctx)
+		if vim.fn.executable("gh") ~= 1 then
+			vim.schedule(function()
+				callback(nil, "gh CLI not found. Install from https://cli.github.com")
+			end)
+			return nil
+		end
+
+		local cmd = vim.list_extend({ "gh" }, args)
+		local log = vim.tbl_extend("keep", { cmd = table.concat(cmd, " ") }, ctx or {})
+		local message = log.action or "GitHub CLI"
+		log.action = nil
+		logger.loginfo(message, log)
+
+		local cancelled = false
+		local handle = vim.system(cmd, { text = true }, function(result)
+			vim.schedule(function()
+				if cancelled then
+					return
+				end
+				if result.code ~= 0 then
+					local err = sanitize_error(result.stderr)
+					logger.logerror("GitHub CLI error", { code = result.code, err = err })
+					callback(nil, err)
+					return
+				end
+
+				local stdout = result.stdout or ""
+				if parse_json then
+					stdout = vim.trim(stdout)
+				end
+				if stdout == "" then
+					callback(nil, nil)
+					return
+				end
+
+				if parse_json then
+					local ok, parsed = pcall(vim.json.decode, stdout)
+					if ok then
+						callback(parsed, nil)
+						return
+					end
+				end
+				callback(stdout, nil)
+			end)
+		end)
+
+		if not handle then
+			vim.schedule(function()
+				callback(nil, "Failed to start gh process")
+			end)
+			return nil
+		end
+
+		return {
+			job_id = handle.pid,
+			cancel = function()
+				cancelled = true
+				pcall(function()
+					handle:kill(9)
+				end)
+			end,
+		}
+	end
+
+	function client.gh(args, callback, ctx)
+		return run(args, true, callback, ctx)
+	end
+
+	function client.gh_text(args, callback, ctx)
+		return run(args, false, callback, ctx)
+	end
+
+	function client.api(method, endpoint, body, callback, ctx)
+		local args = { "api", "-X", method, endpoint }
+		if body then
+			for key, value in pairs(body) do
+				table.insert(args, "-f")
+				table.insert(args, string.format("%s=%s", key, tostring(value)))
+			end
+		end
+		return client.gh(args, callback, ctx)
+	end
+
+	return client
+end
+
+M.issues = new("issues")
+M.pulls = new("pulls")
+
+return M
