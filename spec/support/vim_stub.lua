@@ -49,6 +49,15 @@ _G.vim = {
 
 	env = { HOME = os.getenv("HOME") or "" },
 
+	api = {
+		nvim_create_namespace = function(_)
+			return 1
+		end,
+		nvim_strwidth = function(value)
+			return #tostring(value or "")
+		end,
+	},
+
 	fn = {
 		expand = function(x)
 			if x == "~" then
@@ -64,6 +73,16 @@ _G.vim = {
 		end,
 		stdpath = function(_)
 			return "/tmp"
+		end,
+		strcharpart = function(value, start, length)
+			local first = (tonumber(start) or 0) + 1
+			if length == nil then
+				return value:sub(first)
+			end
+			return value:sub(first, first + length - 1)
+		end,
+		strchars = function(value)
+			return #tostring(value or "")
 		end,
 		writefile = function(_, _, _)
 			return 0

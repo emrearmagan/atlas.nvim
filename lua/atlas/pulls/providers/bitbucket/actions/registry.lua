@@ -29,10 +29,30 @@ end
 ---@param current_user PullsUser
 ---@return boolean
 local function is_approved(pr, current_user)
-	for _, participant in ipairs(pr._raw.participants or {}) do
-		local user = participant.user or {}
-		if tostring(user.account_id or user.uuid or "") == current_user.id then
-			return participant.approved == true or participant.state == "approved"
+	local current_ids = {}
+	for _, key in ipairs({ "id", "account_id", "uuid", "slug", "username", "nickname" }) do
+		local value = tostring(current_user[key] or "")
+		if value ~= "" then
+			current_ids[value] = true
+		end
+	end
+
+	local raw = type(pr._raw) == "table" and pr._raw or {}
+	for _, entries in ipairs({ raw.participants or {}, raw.reviewers or {} }) do
+		for _, participant in ipairs(entries) do
+			local user = type(participant.user) == "table" and participant.user or participant
+			local matches = false
+			for _, key in ipairs({ "id", "account_id", "uuid", "name", "slug" }) do
+				local value = tostring(user[key] or "")
+				if value ~= "" and current_ids[value] then
+					matches = true
+					break
+				end
+			end
+			if matches then
+				local status = tostring(participant.status or participant.state or ""):upper()
+				return participant.approved == true or status == "APPROVED"
+			end
 		end
 	end
 	return false

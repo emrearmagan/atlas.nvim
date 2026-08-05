@@ -67,6 +67,50 @@ describe("Atlas target resolver", function()
 		)
 	end)
 
+	it("resolves configured Bitbucket Server URLs", function()
+		config.options.pulls.providers.bitbucket = {
+			api_type = "server",
+			base_url = "https://bitbucket.example.com",
+		}
+
+		local target =
+			assert(resolver.resolve("https://bitbucket.example.com/projects/ATLAS/repos/atlas.nvim/pull-requests/12"))
+		assert.are.equal("pr", target.entity)
+		assert.are.equal("ATLAS", target.workspace)
+		assert.are.equal("atlas.nvim", target.repo)
+		assert.are.equal(12, target.number)
+
+		config.options.pulls.providers.bitbucket.base_url = "https://bitbucket.example.com/context"
+		local repo = assert(resolver.resolve("https://bitbucket.example.com/context/projects/ATLAS/repos/atlas.nvim"))
+		assert.are.equal("repo", repo.entity)
+		assert.are.equal("ATLAS", repo.workspace)
+		assert.are.equal("atlas.nvim", repo.repo)
+	end)
+
+	it("normalizes Bitbucket Server clone URLs and dedicated SSH ports", function()
+		config.options.pulls.providers.bitbucket = {
+			api_type = "server",
+			base_url = "https://scm.example.com/bitbucket",
+		}
+
+		local git = require("atlas.core.git")
+		local https_info = assert(git.parse_remote_url("https://scm.example.com/bitbucket/scm/ATLAS/atlas.nvim.git"))
+		local https_target = resolver.target(https_info, "pulls", "pr", 12)
+		assert.are.equal("bitbucket", https_info.provider)
+		assert.are.equal(
+			"https://scm.example.com/bitbucket/projects/ATLAS/repos/atlas.nvim/pull-requests/12",
+			https_target.url
+		)
+
+		local ssh_info = assert(git.parse_remote_url("ssh://git@scm.example.com:7999/ATLAS/atlas.nvim.git"))
+		local ssh_target = resolver.target(ssh_info, "pulls", "pr", 13)
+		assert.are.equal("bitbucket", ssh_info.provider)
+		assert.are.equal(
+			"https://scm.example.com/bitbucket/projects/ATLAS/repos/atlas.nvim/pull-requests/13",
+			ssh_target.url
+		)
+	end)
+
 	it("discovers repositories from configured provider views", function()
 		config.options.pulls.providers.github.views = { { name = "GitHub", search = "repo:owner/github is:open" } }
 		config.options.pulls.providers.gitlab.views = { { name = "GitLab", project = "owner/gitlab" } }

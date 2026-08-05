@@ -158,6 +158,12 @@ local function url_host(url)
 	return tostring(url or ""):lower():match("^https?://([^/]+)")
 end
 
+---@param host string|nil
+---@return string
+local function hostname(host)
+	return (tostring(host or ""):lower():gsub(":%d+$", ""))
+end
+
 ---@param provider AtlasProviderId
 ---@return string
 local function provider_host(provider)
@@ -189,9 +195,24 @@ function M.provider_for_host(host)
 		end
 	end
 
+	-- Git remotes commonly use a dedicated SSH port while base_url points at
+	-- the provider's HTTPS port. Fall back to comparing just the hostname.
+	local remote_hostname = hostname(host)
+	for _, provider in ipairs(providers.list()) do
+		for domain in pairs(provider.domains) do
+			local configured_host = url_host((providers.options(provider.id, domain) or {}).base_url)
+			if configured_host and hostname(configured_host) == remote_hostname then
+				return provider.id
+			end
+		end
+	end
+
 	for _, provider in ipairs(providers.list()) do
 		local default_host = provider.default_host
-		if default_host and (host == default_host or host:find(provider.id, 1, true)) then
+		if
+			default_host
+			and (remote_hostname == hostname(default_host) or remote_hostname:find(provider.id, 1, true))
+		then
 			return provider.id
 		end
 	end
