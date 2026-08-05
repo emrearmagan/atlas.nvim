@@ -51,23 +51,12 @@ local function total_stats(session)
 end
 
 ---@param session AtlasNativeDiffSession
----@return integer|nil comments, integer tasks, string task_label
-local function review_counts(session)
-	if not session.review or not session.review.pr then
-		return nil, 0, "Task"
-	end
-	local tasks = session.review.tasks
-	local task_label = tasks[1] and tasks[1].task_label or "Task"
-	return #session.review.comments, #tasks, task_label
-end
-
----@param session AtlasNativeDiffSession
 ---@return string
 local function identity(session)
 	local configured_review = session.review_context
 	local pr = session.review and session.review.pr or (configured_review and configured_review.pr)
 	if pr then
-		return string.format("PR #%s · %s", tostring(pr.id), tostring(pr.title))
+		return string.format("#%s %s", tostring(pr.id), tostring(pr.title))
 	end
 	return string.format(
 		"%s...%s",
@@ -80,34 +69,26 @@ end
 ---@return AtlasStatuslineSegment[]
 local function segments(session)
 	local additions, deletions = total_stats(session)
-	local comments, tasks, task_label = review_counts(session)
+	local review = session.review
 	local result = {
 		{ text = identity(session), hl_group = "AtlasFooterText", priority = 40, min_width = 12 },
 	}
-
-	if comments then
+	if review then
 		result[#result + 1] = {
-			text = string.format("comments %d", comments),
+			text = string.format("comments %d", #review.comments),
 			hl_group = "AtlasFooterText",
 			align = "right",
 			priority = 30,
 		}
-	end
-	if tasks > 0 then
-		result[#result + 1] = {
-			text = string.format("%ss %d", task_label:lower(), tasks),
-			hl_group = "AtlasFooterText",
-			align = "right",
-			priority = 20,
-		}
-	end
-	if #session.commits > 0 then
-		result[#result + 1] = {
-			text = string.format("commits %d", #session.commits),
-			hl_group = "AtlasFooterText",
-			align = "right",
-			priority = 10,
-		}
+		if #review.tasks > 0 then
+			local label = review.tasks[1].task_label or "Task"
+			result[#result + 1] = {
+				text = string.format("%ss %d", label:lower(), #review.tasks),
+				hl_group = "AtlasFooterText",
+				align = "right",
+				priority = 20,
+			}
+		end
 	end
 	result[#result + 1] = {
 		text = string.format("+%d", additions),

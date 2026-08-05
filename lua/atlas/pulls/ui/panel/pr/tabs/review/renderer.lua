@@ -103,8 +103,13 @@ local function emit_tasks(lines, spans, line_map, tasks, width, current_user)
 
 		local checkbox = resolved and "[x]" or "[ ]"
 		local timestamp = utils.relative_time(task.created_on)
+		local marker, marker_hl = review_threads.status_marker(task)
+		local title_suffix = timestamp
+		if marker ~= "" then
+			title_suffix = title_suffix ~= "" and (title_suffix .. "  " .. marker) or marker
+		end
 		local title_prefix = padding .. checkbox .. " "
-		local title_line = task_row(title_prefix, title, timestamp, width)
+		local title_line = task_row(title_prefix, title, title_suffix, width)
 		table.insert(lines, title_line)
 		line_map[#lines] = { kind = "header", comment = task, entity_kind = "task" }
 		table.insert(spans, {
@@ -113,13 +118,21 @@ local function emit_tasks(lines, spans, line_map, tasks, width, current_user)
 			end_col = #padding + #checkbox,
 			hl_group = resolved and "AtlasTextPositive" or "AtlasTextMuted",
 		})
-		if timestamp ~= "" then
+		if title_suffix ~= "" then
 			table.insert(spans, {
 				line = #lines - 1,
-				start_col = #title_line - #timestamp,
+				start_col = #title_line - #title_suffix,
 				end_col = #title_line,
 				hl_group = "AtlasTextMuted",
 			})
+			if marker ~= "" then
+				table.insert(spans, {
+					line = #lines - 1,
+					start_col = #title_line - #marker,
+					end_col = #title_line,
+					hl_group = marker_hl,
+				})
+			end
 		end
 
 		local creator = author_name(task.author)
@@ -162,17 +175,20 @@ end
 ---@param width integer
 ---@param current_user PullsUser|nil
 local function emit_thread_box(lines, spans, line_map, nodes, width, current_user)
-	local inner = math.max(1, width - (PADDING_X * 2) - 2)
+	local inner = math.max(1, width - (PADDING_X * 2) - 4)
 	local toggle_keys = keymaps.resolve("pulls.review.toggle_resolved")
-	local t_lines, t_spans, t_map = review_threads.render_threads(nodes, inner, {
+	local provider = require("atlas.pulls.state").provider
+	local comments = provider and provider.capabilities.comments
+	local t_lines, t_spans, t_map = review_threads.render(nodes, inner, {
 		expanded = function(root)
 			return state.is_thread_expanded(root)
 		end,
 		can_action = function(action, comment)
-			return review_actions.is_available(action, comment, current_user, require("atlas.pulls.state").provider)
+			return review_actions.is_available(action, comment, current_user, provider)
 		end,
-		padding_x = PADDING_X,
+		padding_x = 0,
 		toggle_resolved_key = toggle_keys and table.concat(toggle_keys, " / ") or nil,
+		reaction_options = comments and comments.reaction_options,
 	})
 	local mark_line = #lines
 	local result = box.render({ { lines = t_lines, spans = t_spans, line_map = t_map } }, {
@@ -190,7 +206,7 @@ end
 ---@param width integer
 ---@param file_path string
 ---@param hunk DiffHunk
----@param threads_by_anchor table<string, { side: string, line: integer, threads: table[] }>
+---@param threads_by_anchor table<string, { threads: AtlasReviewThreadNode[], current_user: PullsUser|nil }>
 ---@return boolean collapsed
 local function emit_hunk_with_comments(lines, spans, line_map, width, file_path, hunk, threads_by_anchor)
 	local collapsed = state.collapsed_hunks[diff.hunk_key({ path = file_path }, hunk)] == true
@@ -237,12 +253,8 @@ local function emit_hunk_with_comments(lines, spans, line_map, width, file_path,
 		table.insert(lines, text)
 		local out_line = #lines - 1
 		for _, s in ipairs(spans_by_cb_line[i - 1] or {}) do
-			table.insert(spans, {
-				line = out_line,
-				start_col = s.start_col,
-				end_col = s.end_col,
-				hl_group = s.hl_group,
-			})
+			s.line = out_line
+			table.insert(spans, s)
 		end
 		local entry = cb_map and cb_map[i] or nil
 		if entry then
@@ -265,7 +277,7 @@ local function emit_hunk_with_comments(lines, spans, line_map, width, file_path,
 	return collapsed
 end
 
----@param pr PullRequest
+---@param _pr PullRequest
 ---@param width integer
 ---@param comments PullsComment[]|"loading"|string|nil
 ---@param tasks PullsComment[]|"loading"|string|nil
@@ -321,13 +333,7 @@ function M.render(_pr, width, comments, tasks)
 
 	---@class CommentsHunkBucket
 	---@field hunk DiffHunk
-	---@field threads_by_anchor table<string, CommentsThreadAnchor>
-
-	---@class CommentsThreadAnchor
-	---@field side string
-	---@field line integer
-	---@field threads table[]
-	---@field current_user PullsUser|nil
+	---@field threads_by_anchor table<string, { threads: AtlasReviewThreadNode[], current_user: PullsUser|nil }>
 
 	local general_roots = {}
 	---@type table<string, { path: string, hunks: table<string, CommentsHunkBucket>, hunk_order: string[] }>
@@ -365,7 +371,7 @@ function M.render(_pr, width, comments, tasks)
 			local akey = string.format("%s:%s", side, tostring(line or ""))
 			local anchor = hb.threads_by_anchor[akey]
 			if anchor == nil then
-				anchor = { side = side, line = line, threads = {}, current_user = current_user }
+				anchor = { threads = {}, current_user = current_user }
 				hb.threads_by_anchor[akey] = anchor
 			end
 			table.insert(anchor.threads, thread)

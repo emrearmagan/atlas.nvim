@@ -40,7 +40,8 @@ function M.on_select(pr, _repo, refresh, opts)
 	opts = opts or {}
 
 	local provider = get_provider()
-	if not provider or not provider.fetch_conversation then
+	local comments = provider and provider.capabilities.comments
+	if not comments or not comments.fetch_conversation then
 		state.comments = {}
 		state.activity = {}
 		refresh()
@@ -52,7 +53,7 @@ function M.on_select(pr, _repo, refresh, opts)
 	state.activity = "loading"
 	statusline.notify("loading", string.format("Loading conversation for #%s...", id))
 
-	track(provider.fetch_conversation(pr, opts, function(result, err)
+	track(comments.fetch_conversation(pr, opts, function(result, err)
 		if err then
 			state.comments = err
 			state.activity = err
@@ -61,7 +62,6 @@ function M.on_select(pr, _repo, refresh, opts)
 			result = type(result) == "table" and result or {}
 			state.comments = type(result.comments) == "table" and result.comments or {}
 			state.activity = type(result.events) == "table" and result.events or {}
-			state.reaction_options = type(result.reaction_options) == "table" and result.reaction_options or {}
 			statusline.notify("success", string.format("Conversation loaded for #%s", id), 1200)
 		end
 		refresh()
@@ -73,13 +73,13 @@ M.render = renderer.render
 ---@param _lnum integer
 ---@param entry table
 function M.is_selectable_line(_lnum, entry)
-	return entry.kind == "comment" or entry.activity_entry ~= nil or entry.kind == "activity_gap"
+	return entry.entity_kind == "comment" or entry.activity_entry ~= nil or entry.kind == "activity_gap"
 end
 
 ---@param _pr PullRequest
 ---@param entry table
 function M.on_enter(_pr, entry)
-	if not entry or entry.kind ~= "comment" or not entry.comment then
+	if not entry or entry.entity_kind ~= "comment" or not entry.comment then
 		return
 	end
 	local url = tostring(entry.comment.html_url or "")

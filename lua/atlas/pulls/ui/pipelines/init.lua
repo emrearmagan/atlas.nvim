@@ -158,27 +158,27 @@ local function fetch_pipeline_details(session, pipelines, force_refresh, on_done
 		on_done(pipelines, nil)
 		return
 	end
+	local capability = session.provider and session.provider.capabilities.pipelines
+	if not capability or not capability.fetch_details then
+		on_done(pipelines, nil)
+		return
+	end
 
 	local pending = #pipelines
 	local details = {}
 	local first_err
 	for index, pipeline in ipairs(pipelines) do
-		session.provider.fetch_pipeline_details(
-			session.pr,
-			pipeline,
-			{ force_refresh = force_refresh },
-			function(result, err)
-				if session.closed then
-					return
-				end
-				details[index] = result or pipeline
-				first_err = first_err or err
-				pending = pending - 1
-				if pending == 0 then
-					on_done(details, first_err)
-				end
+		capability.fetch_details(session.pr, pipeline, { force_refresh = force_refresh }, function(result, err)
+			if session.closed then
+				return
 			end
-		)
+			details[index] = result or pipeline
+			first_err = first_err or err
+			pending = pending - 1
+			if pending == 0 then
+				on_done(details, first_err)
+			end
+		end)
 	end
 end
 
@@ -234,7 +234,8 @@ local function reload_pipelines(session, delay_ms, force_refresh)
 		return
 	end
 	local provider = session.provider
-	if not (provider and type(provider.fetch_pipelines) == "function") then
+	local pipelines_capability = provider and provider.capabilities.pipelines
+	if not pipelines_capability then
 		statusline.notify("warn", "Pipeline refresh is not supported by this provider")
 		return
 	end
@@ -245,7 +246,7 @@ local function reload_pipelines(session, delay_ms, force_refresh)
 		if session.closed then
 			return
 		end
-		provider.fetch_pipelines(session.pr, { force_refresh = force_refresh ~= false }, function(pipelines, err)
+		pipelines_capability.fetch(session.pr, { force_refresh = force_refresh ~= false }, function(pipelines, err)
 			if session.closed then
 				return
 			end

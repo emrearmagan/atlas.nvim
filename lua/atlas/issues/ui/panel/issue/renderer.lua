@@ -54,7 +54,7 @@ function M.render(tab_items, get_tab_module)
 	else
 		local state = require("atlas.issues.state")
 		local provider = state.provider
-		local panel = provider and provider.panel or nil
+		local panel = provider and provider.capabilities.ui and provider.capabilities.ui.panel
 		local extra_rows = panel and panel.header_rows and panel.header_rows(issue) or nil
 		local extra_chips = panel and panel.chips and panel.chips(issue) or nil
 
@@ -63,7 +63,7 @@ function M.render(tab_items, get_tab_module)
 		utils.append_block(lines, spans, { lines = h_lines, highlights = h_spans })
 
 		-- Chips
-		local chip_line, chip_spans = chips.render(issue, { extra_chips = extra_chips })
+		local chip_line, chip_spans = chips.render({ extra_chips = extra_chips })
 		table.insert(lines, chip_line)
 		local chip_base = #lines - 1
 		for _, span in ipairs(chip_spans) do

@@ -94,6 +94,18 @@ function M.rev_exists(root, rev)
 end
 
 ---@param root string
+---@param revision string
+---@return string|nil
+function M.resolve_revision(root, revision)
+	local res = vim.system(
+		{ "git", "-C", root, "rev-parse", "--verify", "--end-of-options", revision .. "^{commit}" },
+		{ text = true }
+	):wait()
+	local hash = trim(res.stdout)
+	return res.code == 0 and hash ~= "" and hash or nil
+end
+
+---@param root string
 ---@param base string
 ---@param head string
 ---@return string|nil base_revision
@@ -196,7 +208,7 @@ end
 
 ---@class AtlasGitRemoteInfo
 ---@field host string -- e.g. "github.com" / "bitbucket.org" / "gitlab.com"
----@field provider "github"|"bitbucket"|"gitlab"|"unknown"
+---@field provider string
 ---@field slug string -- "owner/repo" or nested "group/subgroup/repo" (without .git)
 ---@field owner string
 ---@field repo string
@@ -231,14 +243,7 @@ function M.parse_remote_url(url)
 		return nil, string.format("Could not parse owner/repo from: %s", url)
 	end
 
-	local provider = "unknown"
-	if host:find("github") then
-		provider = "github"
-	elseif host:find("bitbucket") then
-		provider = "bitbucket"
-	elseif host:find("gitlab") then
-		provider = "gitlab"
-	end
+	local provider = require("atlas.providers.resolve").provider_for_host(host) or "unknown"
 
 	return {
 		host = host,
@@ -249,6 +254,15 @@ function M.parse_remote_url(url)
 		url = url,
 	},
 		nil
+end
+
+---@param cwd string|nil
+---@return AtlasGitRemoteInfo|nil
+function M.local_repository(cwd)
+	local root = M.repo_root(cwd)
+	local remote_url = root and M.remote_url(root, "origin") or nil
+	local info = remote_url and M.parse_remote_url(remote_url) or nil
+	return info and info.provider ~= "unknown" and info or nil
 end
 
 ---@param root string
@@ -331,9 +345,7 @@ end
 ---@return { cancel: fun() }
 function M.fetch_refs(root, remote, refs, on_done)
 	local args = { "fetch", "--no-tags", remote }
-	for _, ref in ipairs(refs) do
-		table.insert(args, ref)
-	end
+	vim.list_extend(args, refs)
 
 	return M.run(args, { cwd = root, text = true }, function(res)
 		if res.code ~= 0 then
@@ -363,14 +375,6 @@ function M.checkout_branch(root, branch, on_done)
 		end
 		on_done(true, nil)
 	end)
-end
-
----@param root string
----@param branch string
----@param remote string
----@param on_done fun(ok: boolean, err: string|nil)
-function M.checkout_remote_branch(root, branch, remote, on_done)
-	return M.checkout_new_branch(root, branch, remote .. "/" .. branch, on_done)
 end
 
 ---@param root string

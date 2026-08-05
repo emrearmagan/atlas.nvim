@@ -382,7 +382,8 @@ local function fetch_log(session)
 	render(session)
 	start_spinner(session)
 
-	if not (session.provider and type(session.provider.fetch_pipeline_job_log) == "function") then
+	local pipelines = session.provider and session.provider.capabilities.pipelines
+	if not pipelines or not pipelines.fetch_job_log then
 		stop_spinner(session)
 		session.status = "error"
 		session.error = "Job logs are not supported by this provider"
@@ -390,23 +391,18 @@ local function fetch_log(session)
 		return
 	end
 
-	session.request = session.provider.fetch_pipeline_job_log(
-		session.pr,
-		session.pipeline,
-		session.job,
-		function(log, err)
-			session.request = nil
-			stop_spinner(session)
-			if err then
-				session.status = "error"
-				session.error = "Failed to load job logs: " .. tostring(err)
-			else
-				session.status = "loaded"
-				session.log = tostring(log or "")
-			end
-			render(session)
+	session.request = pipelines.fetch_job_log(session.pr, session.pipeline, session.job, function(log, err)
+		session.request = nil
+		stop_spinner(session)
+		if err then
+			session.status = "error"
+			session.error = "Failed to load job logs: " .. tostring(err)
+		else
+			session.status = "loaded"
+			session.log = tostring(log or "")
 		end
-	)
+		render(session)
+	end)
 end
 
 ---@param session PullsPipelineLogSession

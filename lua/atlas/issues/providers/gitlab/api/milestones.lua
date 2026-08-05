@@ -1,6 +1,6 @@
 local M = {}
 
-local service = require("atlas.issues.providers.gitlab.api.service")
+local service = require("atlas.providers.gitlab.client").issues
 
 ---@class GitLabMilestone
 ---@field id integer

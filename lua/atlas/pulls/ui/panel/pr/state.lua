@@ -1,7 +1,7 @@
 ---@class PullsPanelState
 ---@field current_pr PullRequest|nil
 ---@field current_repo PullsRepo|nil
----@field current_tab string
+---@field current_tab string|nil
 ---@field line_map table<integer, table>
 ---@field diffstat PullsDiffstatEntry[]|"loading"|string|nil
 local M = {

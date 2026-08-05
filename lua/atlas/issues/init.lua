@@ -12,4 +12,9 @@ function M.render()
 	main.render()
 end
 
+function M.dispose()
+	require("atlas.issues.ui.main.controller").dispose()
+	require("atlas.issues.ui.panel").close()
+end
+
 return M

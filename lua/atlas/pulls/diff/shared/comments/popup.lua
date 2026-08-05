@@ -1,6 +1,7 @@
 local M = {}
 
 local threads = require("atlas.ui.components.review_threads")
+local statusline = require("atlas.ui.statusline")
 
 local namespace = vim.api.nvim_create_namespace("atlas.review.thread_popup")
 
@@ -9,6 +10,7 @@ local namespace = vim.api.nvim_create_namespace("atlas.review.thread_popup")
 ---@field owner string
 ---@field title? string
 ---@field toggle_resolved_keys? string[]
+---@field reaction_options? PullsReactionOption[]
 ---@field can_action fun(action: AtlasReviewCommentAction, comment: PullsComment): boolean
 ---@field on_action fun(action: AtlasReviewCommentAction, comment: PullsComment, close: fun())
 
@@ -97,13 +99,14 @@ local function popup_content(opts)
 	local available_width = math.max(vim.o.columns - 4, 1)
 	local width = math.min(100, available_width)
 	local toggle_key = opts.toggle_resolved_keys and table.concat(opts.toggle_resolved_keys, " / ") or nil
-	local lines, spans, line_map = threads.render_threads(opts.nodes, width, {
+	local lines, spans, line_map = threads.render(opts.nodes, width, {
 		expanded = function()
 			return true
 		end,
 		can_action = opts.can_action,
 		padding_x = 1,
 		toggle_resolved_key = toggle_key,
+		reaction_options = opts.reaction_options,
 	})
 
 	local height = math.max(1, math.min(#lines, math.max(vim.o.lines - 6, 1)))
@@ -121,6 +124,7 @@ function M.open(opts)
 	})
 
 	M.close()
+	local source_win = vim.api.nvim_get_current_win()
 
 	local lines, spans, line_map, width, height, row, col = popup_content(opts)
 	if #lines == 0 then
@@ -161,6 +165,7 @@ function M.open(opts)
 	vim.api.nvim_set_option_value("scrollbind", false, { win = win })
 	vim.api.nvim_set_option_value("cursorbind", false, { win = win })
 	vim.api.nvim_set_option_value("wrap", false, { win = win })
+	statusline.inherit(win, source_win)
 
 	state.buf = buf
 	state.win = win

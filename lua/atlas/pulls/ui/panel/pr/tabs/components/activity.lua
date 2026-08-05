@@ -120,7 +120,6 @@ local function content_hl(item, row, _row_index)
 	return nil
 end
 
----@param item AtlasThreadV2Item
 ---Render a list of activities.
 ---@param entries PullsActivityEntry[]
 ---@param width integer

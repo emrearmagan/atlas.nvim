@@ -29,6 +29,8 @@ local M = {}
 ---@return { cancel: fun() }
 function M.load(review, options, on_done)
 	local provider = review.provider
+	local core = provider.capabilities.core
+	local reviews = provider.capabilities.reviews
 	local previous = review.initial_review or {}
 	local values = {
 		current_user = review.current_user,
@@ -37,37 +39,40 @@ function M.load(review, options, on_done)
 		tasks = previous.tasks or {},
 	}
 	local fetch_opts = options.force_refresh and { force_refresh = true } or {}
+	---@type AtlasReviewFetch[]
 	local fetches = {}
 
 	---@param label string
-	---@param start AtlasReviewFetch.start
-	---@param apply AtlasReviewFetch.apply
+	---@param start fun(done: fun(value: any, err: string|nil)): { cancel: fun() }|nil
+	---@param apply fun(value: any)
 	local function add(label, start, apply)
 		table.insert(fetches, { label = label, start = start, apply = apply })
 	end
 
-	if provider.fetch_review_context then
+	if reviews and reviews.fetch_review_context then
 		add("review context", function(done)
-			return provider.fetch_review_context(review.pr, fetch_opts, done)
+			return reviews.fetch_review_context(review.pr, fetch_opts, done)
 		end, function(value)
 			values.review_context = value or values.review_context
 		end)
 	end
-	add("comments", function(done)
-		return provider.fetch_comments(review.pr, fetch_opts, done)
-	end, function(value)
-		values.comments = value or {}
-	end)
-	if provider.fetch_tasks then
+	if reviews then
+		add("comments", function(done)
+			return reviews.fetch_comments(review.pr, fetch_opts, done)
+		end, function(value)
+			values.comments = value or {}
+		end)
+	end
+	if reviews and reviews.fetch_tasks then
 		add("tasks", function(done)
-			return provider.fetch_tasks(review.pr, fetch_opts, done)
+			return reviews.fetch_tasks(review.pr, fetch_opts, done)
 		end, function(value)
 			values.tasks = value or {}
 		end)
 	end
 	if not values.current_user then
 		add("current user", function(done)
-			return provider.fetch_user(done)
+			return core.fetch_user(done)
 		end, function(value)
 			values.current_user = value or values.current_user
 		end)

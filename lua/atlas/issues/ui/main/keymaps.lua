@@ -39,6 +39,7 @@ function M.register(buf, views)
 	local controller = require("atlas.issues.ui.main.controller")
 	local state = require("atlas.issues.state")
 	local provider_name = state.provider and state.provider.name or "Issues"
+	local capabilities = state.provider and state.provider.capabilities or {}
 
 	local items = {}
 
@@ -68,7 +69,7 @@ function M.register(buf, views)
 		end,
 	})
 
-	if state.provider and state.provider.open_actions then
+	if capabilities.actions then
 		utils.insert_if(
 			items,
 			item("ui.open_actions", {
@@ -86,7 +87,7 @@ function M.register(buf, views)
 		)
 	end
 
-	if state.provider and state.provider.run_action then
+	if capabilities.actions then
 		utils.insert_if(
 			items,
 			item("issues.create_issue", {
@@ -99,7 +100,7 @@ function M.register(buf, views)
 		)
 	end
 
-	if state.provider and state.provider.search then
+	if capabilities.search then
 		utils.insert_if(
 			items,
 			item("ui.search", {
@@ -170,7 +171,7 @@ function M.register(buf, views)
 
 	utils.insert_if(
 		items,
-		item("issues.copy_key", {
+		item("ui.copy_id", {
 			desc = "Copy issue key",
 			index = 9,
 			opts = { nowait = true },
@@ -203,7 +204,7 @@ function M.register(buf, views)
 	)
 
 	-- g* keys grouped together
-	if state.provider and state.provider.run_action then
+	if capabilities.actions then
 		utils.insert_if(
 			items,
 			item("issues.transition_issue", {
@@ -308,7 +309,7 @@ function M.remove(buf)
 	utils.insert_if(items, item("issues.create_issue", { key = "" }))
 	utils.insert_if(items, item("ui.search", { key = "" }))
 	utils.insert_if(items, item("ui.open_in_browser", { key = "" }))
-	utils.insert_if(items, item("issues.copy_key", { key = "" }))
+	utils.insert_if(items, item("ui.copy_id", { key = "" }))
 	utils.insert_if(items, item("ui.copy_url", { key = "" }))
 	utils.insert_if(items, item("ui.refresh", { key = "" }))
 	utils.insert_if(items, item("ui.refresh_view", { key = "" }))

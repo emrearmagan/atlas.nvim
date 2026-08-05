@@ -1,6 +1,6 @@
 local M = {}
 
-local service = require("atlas.pulls.providers.gitlab.api.service")
+local service = require("atlas.providers.gitlab.client").pulls
 local icons = require("atlas.ui.shared.icons")
 
 local TARGET_ICON = {

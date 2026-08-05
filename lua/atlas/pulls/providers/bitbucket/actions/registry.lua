@@ -74,7 +74,7 @@ local ACTIONS = {
 			end
 
 			notify(ctx, "loading", "Checking approval...")
-			pullrequests.fetch_pullrequest(pr.workspace, pr.repo, pr.id, { force_load = true }, function(fresh_pr, err)
+			pullrequests.fetch_pullrequest(pr, { force_load = true }, function(fresh_pr, err)
 				if not fresh_pr then
 					local message = tostring(err or "Unable to load pull request")
 					notify(ctx, "error", message)

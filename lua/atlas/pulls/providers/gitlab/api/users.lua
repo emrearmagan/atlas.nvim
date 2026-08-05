@@ -1,6 +1,6 @@
 local M = {}
 
-local service = require("atlas.pulls.providers.gitlab.api.service")
+local service = require("atlas.providers.gitlab.client").pulls
 local mapper = require("atlas.pulls.providers.gitlab.api.mapper")
 
 ---@param on_done fun(user: PullsUser|nil, err: string|nil)

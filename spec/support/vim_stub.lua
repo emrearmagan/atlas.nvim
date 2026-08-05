@@ -32,6 +32,12 @@ _G.vim = {
 		return tostring(v)
 	end,
 
+	api = {
+		nvim_create_namespace = function()
+			return 1
+		end,
+	},
+
 	-- vim.tbl_keys(t) -> list of the table's keys
 	tbl_keys = function(t)
 		local keys = {}

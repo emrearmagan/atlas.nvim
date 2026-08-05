@@ -4,7 +4,6 @@ local service = require("atlas.pulls.providers.bitbucket.api.service")
 local mapper = require("atlas.pulls.providers.bitbucket.api.mapper")
 local cache = require("atlas.core.cache")
 local logger = require("atlas.core.logger")
-local http = require("atlas.core.http")
 local state = require("atlas.pulls.providers.bitbucket.state")
 
 ---@param link any
@@ -50,7 +49,7 @@ end
 
 ---@param workspace string
 ---@param repo string
----@param opts { user: string, token: string, cache_ttl: number, force: boolean, pagelen: number|nil, statuses: string[]|nil }
+---@param opts { cache_ttl: number, force: boolean, pagelen: number|nil, statuses: string[]|nil }
 ---@param on_done fun(prs: PullRequest[], err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
 local function fetch_pullrequests_single(workspace, repo, opts, on_done)
@@ -65,11 +64,6 @@ local function fetch_pullrequests_single(workspace, repo, opts, on_done)
 		end
 	end
 
-	logger.loginfo("Fetching pull requests", {
-		workspace = workspace,
-		repo = repo,
-	})
-
 	local statuses = opts.statuses or { state.pr_state }
 	local state_params = {}
 	for _, s in ipairs(statuses) do
@@ -82,37 +76,9 @@ local function fetch_pullrequests_single(workspace, repo, opts, on_done)
 		table.concat(state_params, "&"),
 		tonumber(opts.pagelen) or 50
 	)
-	local user, token, _ = service.get_auth()
-	local headers = service.build_headers(user, token)
-
-	return http.curl_request("GET", service.url(endpoint), headers, nil, function(result, err)
+	return service.request("GET", endpoint, nil, nil, function(result, err)
 		if err then
-			logger.logerror("Bitbucket PR fetch failed", {
-				workspace = workspace,
-				repo = repo,
-				error = err,
-			})
 			on_done({}, err)
-			return
-		end
-
-		if type(result) ~= "table" then
-			logger.logerror("Bitbucket PR fetch invalid response", {
-				workspace = workspace,
-				repo = repo,
-			})
-			on_done({}, "Bitbucket response is not a JSON object")
-			return
-		end
-
-		local api_err = service.api_error_message(result)
-		if api_err then
-			logger.logerror("Bitbucket PR fetch API error", {
-				workspace = workspace,
-				repo = repo,
-				error = api_err,
-			})
-			on_done({}, api_err)
 			return
 		end
 
@@ -126,7 +92,7 @@ local function fetch_pullrequests_single(workspace, repo, opts, on_done)
 		})
 
 		on_done(normalized, nil)
-	end)
+	end, { action = "Fetching pull requests", workspace = workspace, repo = repo })
 end
 
 ---@param view_repos AtlasBitbucketRepoRef[]
@@ -144,7 +110,7 @@ function M.fetch_pullrequests(view_repos, opts, on_done)
 	})
 
 	local ttl = service.cache_ttl()
-	local user, token, auth_err = service.get_auth()
+	local _, _, auth_err = service.get_auth()
 	if auth_err then
 		logger.logerror("Bitbucket auth missing", { error = auth_err })
 		on_done({}, { tostring(auth_err) })
@@ -199,8 +165,6 @@ function M.fetch_pullrequests(view_repos, opts, on_done)
 
 	for _, repo in ipairs(view_repos) do
 		local handle = fetch_pullrequests_single(repo.workspace, repo.repo, {
-			user = user,
-			token = token,
 			cache_ttl = ttl,
 			force = opts.force_load,
 			pagelen = opts.pagelen,
@@ -216,16 +180,19 @@ function M.fetch_pullrequests(view_repos, opts, on_done)
 	}
 end
 
----@param workspace string
----@param repo string
----@param pr_id string|number
+---@param pr PullRequestRef
 ---@param opts? { force_load?: boolean }
 ---@param on_done fun(detail: PullRequest|nil, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
-function M.fetch_pullrequest(workspace, repo, pr_id, opts, on_done)
+function M.fetch_pullrequest(pr, opts, on_done)
 	opts = opts or {}
+	local workspace, repo = pr.repo_full_name:match("^([^/]+)/(.+)$")
+	if workspace == nil or repo == nil then
+		on_done(nil, "PR missing workspace/repo info")
+		return nil
+	end
 
-	local key = string.format("bitbucket:pr:detail:%s/%s/%s", workspace, repo, tostring(pr_id))
+	local key = string.format("bitbucket:pr:detail:%s/%s/%s", workspace, repo, tostring(pr.id))
 	if opts.force_load ~= true then
 		local cached, ok = service.get_cache(key)
 		if ok then
@@ -234,7 +201,7 @@ function M.fetch_pullrequest(workspace, repo, pr_id, opts, on_done)
 		end
 	end
 
-	local endpoint = string.format("/repositories/%s/%s/pullrequests/%s", workspace, repo, tostring(pr_id))
+	local endpoint = string.format("/repositories/%s/%s/pullrequests/%s", workspace, repo, tostring(pr.id))
 	return service.request("GET", endpoint, nil, nil, function(result, err)
 		if err then
 			on_done(nil, err)
@@ -431,7 +398,7 @@ function M.fetch_activity(pr, _opts, on_done)
 		return nil
 	end
 
-	return service.request("GET", activity_url, nil, nil, function(result, err)
+	return service.fetch_all_values(activity_url, function(result, err)
 		if err then
 			on_done(nil, err)
 			return

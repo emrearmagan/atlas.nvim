@@ -1,7 +1,7 @@
 local M = {}
 
 local providers = require("atlas.pulls.providers")
-local cli = require("atlas.pulls.providers.github.api.cli")
+local cli = require("atlas.providers.github.client").pulls
 
 ---@param url string|nil
 ---@return integer|nil
@@ -257,7 +257,7 @@ function M.get_pipelines(pr, opts, on_done)
 		local pipelines = {}
 		local pipelines_by_id = {}
 		local commit_hash = tostring((pr.source or {}).commit_hash or "")
-		for index, check in ipairs(result) do
+		for _, check in ipairs(result) do
 			local url = check.link and tostring(check.link) or nil
 			local run_id = M.parse_run_id(url)
 			local state = BUCKET_MAP[tostring(check.bucket or "")] or "INPROGRESS"

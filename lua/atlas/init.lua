@@ -2,6 +2,7 @@ local M = {}
 
 local logger = require("atlas.core.logger")
 local notify = require("atlas.core.notify")
+local providers = require("atlas.providers")
 
 ---@param opts AtlasConfig|nil
 function M.setup(opts)
@@ -27,41 +28,20 @@ end
 ---@param domain "pulls"|"issues"
 ---@return string[]
 local function configured_provider_ids(domain)
-	local config = require("atlas.config")
-	local cfg = config.options and config.options[domain] or nil
-	local providers = cfg and cfg.providers or {}
-	local order = domain == "pulls" and { "bitbucket", "github", "gitlab" } or { "jira", "github", "gitlab" }
-	local ids = {}
-	for _, id in ipairs(order) do
-		if providers[id] then
-			table.insert(ids, id)
-		end
-	end
-	return ids
+	return vim.tbl_map(function(provider)
+		return provider.id
+	end, providers.configured(domain))
 end
 
+---@param domain "pulls"|"issues"
 ---@param id string
----@return PullsProvider|nil
-local function load_pulls_provider(id)
-	local provider = require("atlas.pulls.providers").get(id)
+---@return PullsProvider|IssuesProvider|nil
+local function load_provider(domain, id)
+	local provider = providers.load(id, domain)
 	if not provider then
-		notify.error(string.format("Unknown pulls provider: %s", id))
+		notify.error(string.format("Unknown %s provider: %s", domain, id))
 	end
 	return provider
-end
-
----@param id string
----@return IssuesProvider|nil
-local function load_issues_provider(id)
-	if id == "jira" then
-		return require("atlas.issues.providers.jira")
-	elseif id == "github" then
-		return require("atlas.issues.providers.github")
-	elseif id == "gitlab" then
-		return require("atlas.issues.providers.gitlab")
-	end
-	notify.error(string.format("Unknown issues provider: %s", id))
-	return nil
 end
 
 ---@param domain "pulls"|"issues"
@@ -72,12 +52,16 @@ local function open_with_provider(domain, id, opts)
 
 	layout.ensure_open()
 	bootstrap_common()
+	local provider = load_provider(domain, id)
+	if provider == nil then
+		return
+	end
 
 	if domain == "pulls" then
-		local provider = load_pulls_provider(id)
-		if provider == nil then
-			return
-		end
+		---@cast provider PullsProvider
+		layout.set_context(function()
+			require("atlas.pulls").dispose()
+		end, { domain = domain, provider = provider.id })
 		layout.set_render_callback(function()
 			require("atlas.pulls").render()
 			local panel = require("atlas.pulls.ui.panel")
@@ -87,10 +71,10 @@ local function open_with_provider(domain, id, opts)
 		end)
 		require("atlas.pulls").init(provider, opts)
 	else
-		local provider = load_issues_provider(id)
-		if provider == nil then
-			return
-		end
+		---@cast provider IssuesProvider
+		layout.set_context(function()
+			require("atlas.issues").dispose()
+		end, { domain = domain, provider = provider.id })
 		layout.set_render_callback(function()
 			require("atlas.issues").render()
 			local panel = require("atlas.issues.ui.panel")
@@ -126,7 +110,8 @@ function M.open(domain, provider_id, opts)
 	vim.ui.select(ids, {
 		prompt = string.format("Select provider:"),
 		format_item = function(id)
-			return id:sub(1, 1):upper() .. id:sub(2)
+			local provider = providers[id]
+			return provider and provider.name or id
 		end,
 	}, function(choice)
 		if choice == nil then

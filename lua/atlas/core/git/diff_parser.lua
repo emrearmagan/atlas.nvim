@@ -265,7 +265,7 @@ function M.window_hunk(hunk, side, line, context_lines)
 		return hunk
 	end
 
-	local context = math.max(0, context_lines or 4)
+	local context = math.max(0, context_lines or 3)
 	local first = math.max(1, anchor - context)
 	local last = math.min(#hunk.lines, anchor + context)
 	if first == 1 and last == #hunk.lines then
@@ -322,6 +322,24 @@ function M.window_hunk(hunk, side, line, context_lines)
 		deletions = deletions,
 		lines = lines,
 	}
+end
+
+---@param file DiffFile|nil
+---@param side "old"|"new"
+---@param line integer
+---@return DiffHunk|nil
+function M.find_hunk(file, side, line)
+	if not file then
+		return nil
+	end
+	for _, hunk in ipairs(file.hunks or {}) do
+		local start = side == "old" and hunk.old_start or hunk.new_start
+		local count = side == "old" and hunk.old_count or hunk.new_count
+		if line >= start and line < start + count then
+			return M.window_hunk(hunk, side, line)
+		end
+	end
+	return nil
 end
 
 return M

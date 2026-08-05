@@ -53,8 +53,10 @@ local function popup_config(lines)
 	}
 end
 
+---@return integer
 local function ensure_buf()
 	if valid_buf(buf) then
+		---@cast buf integer
 		return buf
 	end
 

@@ -1,6 +1,5 @@
 local M = {}
 
-local resolver = require("atlas.commands.open.resolver")
 local form = require("atlas.ui.popups.form")
 local git_branch = require("atlas.core.git")
 local keymaps = require("atlas.core.keymaps")
@@ -30,20 +29,15 @@ local notify = require("atlas.core.notify")
 ---@field settings_changed boolean
 ---@field initial_body string
 
----@param provider_id "github"|"bitbucket"|"gitlab"
+---@param provider_id string
 ---@return PullsProvider|nil, string|nil
 local function load_provider(provider_id)
-	local ok, mod = pcall(function()
-		return require("atlas.pulls.providers").get(provider_id)
-	end)
-
-	if ok and mod == nil then
+	local provider = require("atlas.providers").load(provider_id, "pulls")
+	if provider == nil then
 		return nil, "Unsupported provider: " .. tostring(provider_id)
 	end
-	if not ok or type(mod) ~= "table" then
-		return nil, "Failed to load provider: " .. tostring(provider_id)
-	end
-	return mod, nil
+	---@cast provider PullsProvider
+	return provider, nil
 end
 
 ---@param pr_state CreatePRState
@@ -87,10 +81,9 @@ local function reviewers_value(pr_state)
 		return string.format("%d reviewers", #selected)
 	end
 
-	local labels = {}
-	for _, reviewer in ipairs(selected) do
-		table.insert(labels, reviewer.label)
-	end
+	local labels = vim.tbl_map(function(reviewer)
+		return reviewer.label
+	end, selected)
 	return table.concat(labels, ", ")
 end
 
@@ -118,10 +111,9 @@ end
 ---@param pr_state CreatePRState
 ---@return string[]
 local function commit_context(pr_state)
-	local lines = {}
-	for _, commit in ipairs(pr_state.fields.commits) do
-		table.insert(lines, string.format("%s  %s", commit.hash, commit.subject))
-	end
+	local lines = vim.tbl_map(function(commit)
+		return string.format("%s  %s", commit.hash, commit.subject)
+	end, pr_state.fields.commits)
 	if #lines == 0 then
 		table.insert(lines, "No commits")
 	end
@@ -283,7 +275,8 @@ end
 ---@param on_change fun()
 local function load_reviewers(pr_state, on_change)
 	local provider = pr_state.fields.provider
-	if provider == nil or provider.fetch_default_reviewers == nil then
+	local create = provider and provider.capabilities.create
+	if create == nil or create.fetch_default_reviewers == nil then
 		pr_state.fields.reviewers = {}
 		return
 	end
@@ -306,7 +299,7 @@ local function load_reviewers(pr_state, on_change)
 		)
 	end
 
-	provider.fetch_default_reviewers({
+	create.fetch_default_reviewers({
 		repo_slug = pr_state.fields.repo_slug,
 		repo_root = pr_state.fields.repo_root,
 		head = pr_state.fields.head,
@@ -357,7 +350,8 @@ local function submit(pr_state)
 
 	local body = get_body(pr_state)
 	local provider = pr_state.fields.provider
-	if not provider or not provider.create_pr then
+	local create = provider and provider.capabilities.create
+	if not create then
 		form.notify("error", "Provider does not support PR creation")
 		return
 	end
@@ -385,7 +379,7 @@ local function submit(pr_state)
 
 	local function do_create()
 		form.notify("loading", "Creating pull request...")
-		provider.create_pr({
+		create.create_pr({
 			repo_slug = pr_state.fields.repo_slug,
 			repo_root = pr_state.fields.repo_root,
 			title = title,
@@ -556,7 +550,7 @@ function M.start()
 		return
 	end
 
-	local info = resolver.local_repository(root)
+	local info = git_branch.local_repository(root)
 	if not info then
 		notify.error("Could not resolve the origin repository")
 		return
@@ -567,7 +561,7 @@ function M.start()
 		notify.error(provider_err or "Provider unavailable")
 		return
 	end
-	if not provider.create_pr then
+	if not provider.capabilities.create then
 		notify.error("Provider " .. info.provider .. " does not support PR creation")
 		return
 	end

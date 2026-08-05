@@ -48,6 +48,7 @@ A Neovim plugin for managing GitHub/Bitbucket/GitLab PRs and Jira/GitHub/GitLab 
   - [Notifications](#notifications)
   - [Bookmarks](#bookmarks)
   - [Custom Actions](#custom-actions)
+- [Events](#events)
 - [Keymaps](#keymaps)
 - [Contributing](#contributing)
 
@@ -62,7 +63,7 @@ A Neovim plugin for managing GitHub/Bitbucket/GitLab PRs and Jira/GitHub/GitLab 
     "nvim-tree/nvim-web-devicons", -- optional but recommended
     "MeanderingProgrammer/render-markdown.nvim", -- optional but recommended
     "esmuellert/codediff.nvim", -- optional (PullRequest diff)
-    "sindrets/diffview.nvim", -- optional (PullRequest diff - alternative)
+    "sindrets/diffview.nvim", -- optional; or "dlyongemallo/diffview-plus.nvim"
   },
   -- See Configuration below
   opts = {},
@@ -141,7 +142,7 @@ Set `global_statusline = false` to leave Neovim's `laststatus` option unchanged.
 - `:AtlasNotes` - Inspect local review notes across pull requests
 - `:AtlasCreatePR` - Create a pull request from the current branch
 - `:AtlasCreateIssue` - Create an issue (GitHub / GitLab / Jira)
-- `:AtlasSearch [provider]` - Pick a configured provider and prompt its search
+- `:AtlasSearch [provider]` - Search configured pull-request and issue providers
 - `:AtlasOpen <target>` - Open a provider URL, Jira key, repository reference, or PR/issue number
 - `:AtlasClearCache` - Clear Atlas disk and memory cache
 - `:AtlasLogs` - Toggle Atlas logs
@@ -161,10 +162,12 @@ pulls = {
     -- AtlasDiff options; external viewers use their own configuration.
     layout = "inline", -- "inline" or "side-by-side".
     compact = true, -- Start with only changed hunks and surrounding context visible.
+    compact_context_lines = 3, -- Context lines shown around hunks in compact mode.
+    show_review_panel = false, -- Set true to show comments and notes when AtlasDiff opens.
     explorer = {
       grouped = true, -- Group changed files by directory.
       hidden = false,
-      show_commits = true, -- Initially show commits below changed files.
+      show_commits = false, -- Set true to show commits below changed files initially.
       width = 40,
       initial_focus = "explorer", -- "explorer" or "diff".
       ignore = { ".git/**", ".jj/**" },
@@ -557,20 +560,21 @@ Press the configured `pulls.open_diff` key (`gd` by default) on a pull request t
 - See pending, resolved, and outdated provider threads at their diff locations.
 - Review provider tasks and GitHub checklists alongside the comments they belong to.
 - Add, reply to, edit, delete, resolve, or reopen comments when supported.
+- Browse provider comments and local notes in AtlasDiff's bottom list; use `za` to expand an item.
 - Submit pending comments with an optional review summary when supported.
 
 > [!NOTE]
-> **Alternative viewers:** CodeDiff can display Atlas comment and task overlays, but the integration relies on CodeDiff internals and may break after upstream changes. I used it from my dotfiles for a while before moving it into Atlas. Diffview remains available as a plain diff viewer without Atlas review overlays since i dont use that plugin.
+> **Alternative viewers:** CodeDiff, [Diffview](https://github.com/sindrets/diffview.nvim), and [Diffview-plus](https://github.com/dlyongemallo/diffview-plus.nvim) can display Atlas comment, task, and local-note overlays, but their integrations rely on plugin internals and may break after upstream changes.
 
 #### Local notes
 
 <img align="left" width="54%" hspace="16" vspace="8" alt="Local review notes" src="https://github.com/user-attachments/assets/8652d731-b57f-45f8-896e-d62d0ec8d7f4">
 
-Local notes let you leave something on a diff without posting it to the pull request. Each note is attached to a file and line and can be an `ISSUE`, `SUGGESTION`, `NOTE`, or `PRAISE`. If that line changes, Atlas shows the note as outdated. If the location no longer exists, Atlas removes it. `:AtlasNotes` lists your notes across all pull requests.
+Local notes let you leave something on a diff without posting it to the pull request. Each note is attached to a file and line and can be an `ISSUE`, `SUGGESTION`, `NOTE`, or `PRAISE`. Diff views mark notes as outdated when their saved line changes.
 
 <br clear="both">
 
-For scripts, use `bin/atlas-notes`. Notes added there appear in AtlasDiff and `:AtlasNotes`:
+For scripts, use `bin/atlas-notes`. Notes added there appear in AtlasDiff, CodeDiff, Diffview, Diffview-plus, and `:AtlasNotes`:
 
 ```sh
 ./bin/atlas-notes add \
@@ -698,6 +702,14 @@ issues = {
 
 </details>
 
+## Events
+
+Atlas emits these `User` events after the corresponding cleanup or setup has completed:
+
+- `AtlasUIClosed` for the main pulls/issues dashboard.
+- `AtlasDiffOpened` and `AtlasDiffClosed` for the native AtlasDiff view.
+- `AtlasReviewAttached` and `AtlasReviewDetached` for Atlas review overlays in AtlasDiff, CodeDiff, and Diffview.
+
 ## Keymaps
 
 Set an action to `false` to disable it, or set it to a list to add aliases.
@@ -725,12 +737,12 @@ keymaps = {
     refresh_view = "R",
     open_actions = "A",
     open_in_browser = "gx",
+    copy_id = "y",
     copy_url = "Y",
     show_details = "K",
     search = "?",
   },
   issues = {
-    copy_key = "y",
     transition_issue = "gs",
     change_assignee = "ga",
     change_reporter = "gr",
@@ -738,30 +750,33 @@ keymaps = {
     create_issue = "c",
   },
   pulls = {
-    copy_id = "y",
     open_diff = "gd",
     checkout = "gc",
     review = {
       toggle_approval = "ga",
       request_changes = "gr",
       submit_review = "gs",
-      open_file = { "<CR>", "l" },
+      open_file = "<CR>",
       toggle_explorer_grouping = "T",
       toggle_layout = "t",
-      toggle_compact = "f",
+      toggle_compact = "u",
       next_hunk = "]h",
       previous_hunk = "[h",
       next_file = { "]f", "<Tab>" },
       previous_file = { "[f", "<S-Tab>" },
       toggle_file_reviewed = "-",
       toggle_commits = "gC",
+      toggle_review_panel = "gR",
       next_comment = "]c",
       previous_comment = "[c",
       next_note = "]n",
       previous_note = "[n",
       view_thread = "K",
-      add_pending_comment = "c",
-      add_comment = "C",
+      edit_comment = "e",
+      add_task = "T",
+      add_comment = "c",
+      submit_comment = "C",
+      delete_comment = "dd",
       add_note = "n",
       toggle_resolved = "x",
     },

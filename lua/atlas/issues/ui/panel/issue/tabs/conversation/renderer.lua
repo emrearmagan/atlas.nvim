@@ -18,6 +18,7 @@ local REPLY_INDENT = "    "
 -- Helpers
 
 ---@param author IssueUser|nil
+---@return string
 local function author_name(author)
 	if author == nil then
 		return "Unknown"

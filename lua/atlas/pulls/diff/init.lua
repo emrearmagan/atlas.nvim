@@ -28,19 +28,32 @@ end
 ---@field head_revision string
 ---@field open_cmd AtlasPullsDiffOpenCommand|string|nil
 
----@param repo_path string
+---@param opts PullsDiffLaunchOptions
 ---@param range string
 ---@param view AtlasLoadingView
 ---@return string|nil err
-local function open_diffview(repo_path, range, view)
-	local ok, err = pcall(vim.api.nvim_win_call, view.win, function()
-		vim.cmd("tcd " .. vim.fn.fnameescape(repo_path))
+local function open_diffview(opts, range, view)
+	local ok, result = pcall(vim.api.nvim_win_call, view.win, function()
+		vim.cmd("tcd " .. vim.fn.fnameescape(opts.git_root))
 		vim.api.nvim_cmd({ cmd = "DiffviewOpen", args = { range } }, {})
+		if not opts.review then
+			return nil
+		end
+		local diffview = require("diffview.lib").get_current_view()
+		if not diffview then
+			return "Diffview session is unavailable"
+		end
+		return require("atlas.pulls.diff.diffview").attach(opts.review, diffview, {
+			root = opts.git_root,
+			base_revision = opts.base_revision,
+			head_revision = opts.head_revision,
+			reload = opts.reload,
+		})
 	end)
 	if not ok then
-		return tostring(err)
+		return tostring(result)
 	end
-	return nil
+	return result and "Unable to attach review to Diffview: " .. result or nil
 end
 
 ---@param open_cmd string
@@ -61,14 +74,12 @@ local function open_external_diff(open_cmd, repo_path, range)
 	return not ok and tostring(err) or nil
 end
 
----@param repo_path string
+---@param opts PullsDiffLaunchOptions
 ---@param range string
----@param review AtlasPreparedReviewContext|nil
 ---@param view AtlasLoadingView
----@param reload (fun(target: AtlasLoadingTarget|nil))|nil
 ---@param on_done fun(err: string|nil)
 ---@return { cancel: fun() }
-local function open_codediff(repo_path, range, review, view, reload, on_done)
+local function open_codediff(opts, range, view, on_done)
 	local finished = false
 	local cancelled = false
 	local opened_tabpage
@@ -110,14 +121,17 @@ local function open_codediff(repo_path, range, review, view, reload, on_done)
 				return
 			end
 			local attach_err
-			if review then
-				local ok, review_err = pcall(function()
-					return require("atlas.pulls.diff.codediff").attach(review, tabpage, { reload = reload })
-				end)
-				if not ok then
-					attach_err = tostring(review_err)
-				elseif review_err then
-					attach_err = review_err
+			if opts.review then
+				local attached, result = pcall(require("atlas.pulls.diff.codediff").attach, opts.review, tabpage, {
+					root = opts.git_root,
+					base_revision = opts.base_revision,
+					head_revision = opts.head_revision,
+					reload = opts.reload,
+				})
+				if attached then
+					attach_err = result
+				else
+					attach_err = tostring(result)
 				end
 			end
 			vim.schedule(function()
@@ -126,7 +140,7 @@ local function open_codediff(repo_path, range, review, view, reload, on_done)
 		end,
 	})
 	local ok, err = pcall(vim.api.nvim_win_call, view.win, function()
-		vim.api.nvim_cmd({ cmd = "CodeDiff", args = { "--repo", repo_path, range } }, {})
+		vim.api.nvim_cmd({ cmd = "CodeDiff", args = { "--repo", opts.git_root, range } }, {})
 	end)
 	if not ok then
 		finish(tostring(err))
@@ -158,9 +172,9 @@ end
 ---@return string|nil
 local function repository_path(pr)
 	local cwd = vim.fn.getcwd()
-	local resolver = require("atlas.commands.open.resolver")
-	local current = resolver.local_repository(cwd)
-	local target = require("atlas.commands.open.parser").parse(pr.link.html)
+	local resolver = require("atlas.providers.resolve")
+	local current = git.local_repository(cwd)
+	local target = resolver.resolve(pr.link.html)
 	if
 		current
 		and target
@@ -240,12 +254,12 @@ local function launch_diff(opts, view, on_done)
 	end
 
 	if opts.open_cmd == "CodeDiff" then
-		return open_codediff(opts.git_root, range, opts.review, view, opts.reload, on_done)
+		return open_codediff(opts, range, view, on_done)
 	end
 
 	local err
 	if opts.open_cmd == "DiffviewOpen" then
-		err = open_diffview(opts.git_root, range, view)
+		err = open_diffview(opts, range, view)
 	else
 		err = open_external_diff(opts.open_cmd, opts.git_root, range)
 	end
@@ -321,7 +335,12 @@ local function start_range(opts, on_done, loading_target)
 	return { cancel = cancel }
 end
 
----@param context AtlasReviewOpenContext
+---@class AtlasDiffStartContext
+---@field provider PullsProvider
+---@field pr PullRequestRef
+---@field current_user PullsUser|nil
+
+---@param context AtlasDiffStartContext
 ---@param requested AtlasPullsDiffOpenCommand|string|nil
 ---@param refresh boolean
 ---@param on_done fun(err: string|nil)|nil
@@ -417,30 +436,27 @@ local function start_pr(context, requested, refresh, on_done, loading_target)
 	---@param head string
 	local function load_commits(review, root, base, head)
 		context = review
-		if open_cmd ~= "AtlasDiff" or not context.provider.fetch_commits then
+		local core = context.provider.capabilities.core
+		if open_cmd ~= "AtlasDiff" or not core.fetch_commits then
 			launch(review, {}, root, base, head)
 			return
 		end
 		view:update(refresh and "Refreshing commits..." or "Loading commits...")
-		current = context.provider.fetch_commits(
-			context.pr,
-			refresh and { force_refresh = true } or {},
-			function(commits, err)
-				later(function()
-					if err then
-						table.insert(review.initial_review.warnings, "Unable to load commits: " .. tostring(err))
-					end
-					launch(review, commits or {}, root, base, head)
-				end)
-			end
-		)
+		current = core.fetch_commits(context.pr, refresh and { force_refresh = true } or {}, function(commits, err)
+			later(function()
+				if err then
+					table.insert(review.initial_review.warnings, "Unable to load commits: " .. tostring(err))
+				end
+				launch(review, commits or {}, root, base, head)
+			end)
+		end)
 	end
 
 	---@param root string
 	---@param base string
 	---@param head string
 	local function load_review(root, base, head)
-		if open_cmd ~= "AtlasDiff" and open_cmd ~= "CodeDiff" then
+		if open_cmd ~= "AtlasDiff" and open_cmd ~= "CodeDiff" and open_cmd ~= "DiffviewOpen" then
 			launch(nil, {}, root, base, head)
 			return
 		end
@@ -451,6 +467,7 @@ local function start_pr(context, requested, refresh, on_done, loading_target)
 	end
 
 	local function load_repository()
+		---@cast context AtlasReviewOpenContext
 		current = checkout.ensure_pr_repository(context.pr, repository_path(context.pr), function(message)
 			view:update(message)
 		end, function(root, err)
@@ -464,23 +481,32 @@ local function start_pr(context, requested, refresh, on_done, loading_target)
 					fail(tostring(revision_err or "Unable to resolve pull request revisions"))
 					return
 				end
-				load_review(root, base, head)
+				local head_hash = git.resolve_revision(root, head)
+				if not head_hash then
+					fail("Unable to resolve pull request head")
+					return
+				end
+				load_review(root, base, head_hash)
 			end)
 		end)
 	end
 
 	if refresh then
 		view:update("Refreshing pull request...")
-		current = context.provider.fetch_pullrequest(context.pr, { force_load = true }, function(pr, err)
-			later(function()
-				if not pr then
-					fail(tostring(err or "Unable to refresh pull request"))
-					return
-				end
-				context.pr = pr
-				load_repository()
-			end)
-		end)
+		current = context.provider.capabilities.core.fetch_pullrequest(
+			context.pr,
+			{ force_load = true },
+			function(pr, err)
+				later(function()
+					if not pr then
+						fail(tostring(err or "Unable to refresh pull request"))
+						return
+					end
+					context.pr = pr
+					load_repository()
+				end)
+			end
+		)
 	else
 		load_repository()
 	end
@@ -490,9 +516,9 @@ end
 ---@param value string
 ---@return { cancel: fun() }|nil
 local function open_pull_request(value)
-	local parser = require("atlas.commands.open.parser")
-	local resolver = require("atlas.commands.open.resolver")
-	local target, target_err = parser.parse(value)
+	local providers = require("atlas.providers")
+	local resolver = require("atlas.providers.resolve")
+	local target, target_err = resolver.resolve(value)
 	if not target then
 		notify.error(target_err or "Invalid pull request URL")
 		return nil
@@ -501,19 +527,19 @@ local function open_pull_request(value)
 		notify.error("Expected a pull request URL")
 		return nil
 	end
-	if not resolver.provider_configured(target) then
+	if not resolver.configured(target) then
 		notify.error("Pull request provider is not configured: " .. target.provider)
 		return nil
 	end
 
 	---@type PullsProvider|nil
-	local provider = resolver.load_provider(target)
+	local provider = providers.load(target.provider, target.domain)
 	if not provider then
 		notify.error("Unable to load pull request provider: " .. target.provider)
 		return nil
 	end
 
-	local pr = resolver.pull_request_from_target(target)
+	local pr = resolver.pull_request_ref(target)
 	return start_pr(
 		{
 			provider = provider,

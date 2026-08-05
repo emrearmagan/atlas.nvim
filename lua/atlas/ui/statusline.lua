@@ -7,6 +7,7 @@ local utils = require("atlas.ui.shared.utils")
 
 local BACKGROUND_HL = "AtlasFooterBackground"
 local EXPRESSION = "%!v:lua.require'atlas.ui.statusline'.current()"
+local DIFF_EXPRESSION = "%!v:lua.require'atlas.pulls.diff.atlas.statusline'.current()"
 
 ---@class AtlasStatuslineSegment
 ---@field text string
@@ -60,7 +61,7 @@ end
 ---@param segment AtlasStatuslineSegment
 ---@return integer
 local function segment_width(segment)
-	return segment.text == "" and 0 or vim.api.nvim_strwidth(segment.text) + 2
+	return segment.text == "" and 0 or vim.api.nvim_strwidth(segment.text) + 1
 end
 
 ---@param segments AtlasStatuslineSegment[]
@@ -133,7 +134,7 @@ local function render_segment(segment)
 	end
 
 	local text = segment.text:gsub("%%", "%%%%")
-	return string.format("%%#%s# %s %%#%s#", segment.hl_group or "AtlasFooterText", text, BACKGROUND_HL)
+	return string.format("%%#%s# %s%%#%s#", segment.hl_group or "AtlasFooterText", text, BACKGROUND_HL)
 end
 
 ---@param output string[]
@@ -249,6 +250,22 @@ end
 ---@param win integer
 function M.attach(win)
 	vim.api.nvim_set_option_value("statusline", EXPRESSION, { win = win, scope = "local" })
+end
+
+---@param target_win integer
+---@param source_win integer
+function M.inherit(target_win, source_win)
+	if
+		vim.o.laststatus ~= 3
+		or not vim.api.nvim_win_is_valid(source_win)
+		or not vim.api.nvim_win_is_valid(target_win)
+	then
+		return
+	end
+	local source_statusline = vim.wo[source_win].statusline
+	if source_statusline == EXPRESSION or source_statusline == DIFF_EXPRESSION then
+		vim.api.nvim_set_option_value("statusline", source_statusline, { win = target_win, scope = "local" })
+	end
 end
 
 function M.clear_items()

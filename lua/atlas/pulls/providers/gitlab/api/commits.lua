@@ -1,6 +1,6 @@
 local M = {}
 
-local service = require("atlas.pulls.providers.gitlab.api.service")
+local service = require("atlas.providers.gitlab.client").pulls
 
 ---@param pr PullRequest
 ---@return string project_path, integer|nil iid

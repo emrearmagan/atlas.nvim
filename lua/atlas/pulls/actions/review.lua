@@ -7,23 +7,35 @@ local review_threads = require("atlas.ui.components.review_threads")
 
 ---@alias AtlasReviewCommentAction "reply"|"edit"|"delete"|"toggle_task"|"toggle_resolved"
 
+---@param provider PullsProvider|nil
 ---@param action AtlasReviewCommentAction
 ---@param comment PullsComment
----@return string
-local function action_method(action, comment)
+---@return function|nil
+local function action_handler(provider, action, comment)
+	if not provider then
+		return nil
+	end
+	local comments = provider.capabilities.comments
+	local reviews = provider.capabilities.reviews
 	if action == "edit" then
-		return comment.is_task and "edit_task" or "edit_comment"
+		if comment.is_task then
+			return reviews and reviews.edit_task
+		end
+		return comments and comments.edit_comment
 	end
 	if action == "delete" then
-		return comment.is_task and "delete_task" or "delete_comment"
+		if comment.is_task then
+			return reviews and reviews.delete_task
+		end
+		return comments and comments.delete_comment
 	end
 	if action == "toggle_task" then
-		return "edit_task"
+		return reviews and reviews.edit_task
 	end
 	if action == "reply" then
-		return "reply_comment"
+		return comments and comments.add_comment
 	end
-	return "set_thread_resolved"
+	return reviews and reviews.set_thread_resolved
 end
 
 ---@class AtlasReviewCommentActionContext
@@ -47,10 +59,11 @@ end
 ---@param comments PullsComment[]
 ---@return AtlasMarkdownCompletionProvider|nil
 local function author_completion(provider, pr, comments)
-	if not provider.comment_completion then
+	local capability = provider.capabilities.comments
+	if not capability or not capability.comment_completion then
 		return nil
 	end
-	return provider.comment_completion({ pr = pr, comments = comments })
+	return capability.comment_completion({ pr = pr, comments = comments })
 end
 
 ---@param comment PullsComment
@@ -88,8 +101,7 @@ function M.is_available(action, comment, current_user, provider)
 	if (action == "edit" or action == "delete") and not is_own_comment(comment, current_user) then
 		return false
 	end
-	local method = action_method(action, comment)
-	return provider ~= nil and provider[method] ~= nil
+	return action_handler(provider, action, comment) ~= nil
 end
 
 ---@param context AtlasReviewCommentActionContext
@@ -124,7 +136,8 @@ end
 ---@param provider PullsProvider|nil
 ---@return boolean
 function M.can_submit(provider)
-	return provider ~= nil and provider.submit_review ~= nil
+	local reviews = provider and provider.capabilities.reviews
+	return reviews ~= nil and reviews.submit_review ~= nil
 end
 
 ---@param pr PullRequest
@@ -191,6 +204,8 @@ function M.submit(context)
 	if not active(context) or not M.can_submit(provider) then
 		return false
 	end
+	local submit_review = provider.capabilities.reviews.submit_review
+	---@cast submit_review function
 	open_editor(context, {
 		key = "pr-review-submit-" .. tostring(context.pr.id),
 		title = " Submit Review ",
@@ -200,7 +215,7 @@ function M.submit(context)
 			end
 			notify(context, "loading", "Submitting review...", nil)
 			run_request(context, function(done)
-				return provider.submit_review(context.pr, body, done)
+				return submit_review(context.pr, body, done)
 			end, function(ok, err)
 				if not active(context) then
 					return
@@ -243,7 +258,9 @@ end
 ---@return boolean handled
 function M.add(context, inline, opts)
 	local provider = context.provider
-	if not active(context) or not provider.add_comment then
+	local comments = provider.capabilities.comments
+	local add_comment = comments and comments.add_comment
+	if not active(context) or not add_comment then
 		return false
 	end
 	opts = opts or {}
@@ -263,7 +280,7 @@ function M.add(context, inline, opts)
 			end
 			notify(context, "loading", "Adding comment...", nil)
 			run_request(context, function(done)
-				return provider.add_comment(context.pr, text, { inline = inline, pending = pending }, done)
+				return add_comment(context.pr, text, { inline = inline, pending = pending }, done)
 			end, function(created, err)
 				if not active(context) then
 					return
@@ -323,6 +340,8 @@ local function reply(context, comment)
 	if not active(context) or not M.is_available("reply", comment, context.current_user, provider) then
 		return false
 	end
+	local add_comment = action_handler(provider, "reply", comment)
+	---@cast add_comment function
 
 	local completion = context.completion or author_completion(provider, context.pr, context.items)
 	local mention = ""
@@ -341,7 +360,10 @@ local function reply(context, comment)
 			end
 			notify(context, "loading", "Sending reply...", nil)
 			run_request(context, function(done)
-				return provider.reply_comment(context.pr, comment, text, done)
+				return add_comment(context.pr, text, {
+					parent = comment,
+					pending = comment.state == "PENDING",
+				}, done)
 			end, function(created, err)
 				if not active(context) then
 					return
@@ -372,7 +394,7 @@ local function edit(context, comment)
 	if not active(context) or not M.is_available("edit", comment, context.current_user, provider) then
 		return false
 	end
-	local update = comment.is_task and provider.edit_task or provider.edit_comment
+	local update = action_handler(provider, "edit", comment)
 	---@cast update function
 
 	open_editor(context, {
@@ -386,6 +408,9 @@ local function edit(context, comment)
 			notify(context, "loading", comment.is_task and "Editing task..." or "Editing comment...", nil)
 			local desired = vim.tbl_extend("force", {}, comment, { content_raw = text })
 			run_request(context, function(done)
+				if comment.is_task then
+					return update(desired, done)
+				end
 				return update(context.pr, desired, done)
 			end, function(updated, err)
 				if not active(context) then
@@ -412,7 +437,7 @@ local function delete(context, comment)
 	if not active(context) or not M.is_available("delete", comment, context.current_user, provider) then
 		return false
 	end
-	local remove = comment.is_task and provider.delete_task or provider.delete_comment
+	local remove = action_handler(provider, "delete", comment)
 	---@cast remove function
 
 	vim.ui.input({ prompt = comment.is_task and "Delete task? [y/N]: " or "Delete comment? [y/N]: " }, function(input)
@@ -425,6 +450,9 @@ local function delete(context, comment)
 		end
 		notify(context, "loading", comment.is_task and "Deleting task..." or "Deleting comment...", nil)
 		run_request(context, function(done)
+			if comment.is_task then
+				return remove(comment, done)
+			end
 			return remove(context.pr, comment, done)
 		end, function(ok, err)
 			if not active(context) then
@@ -461,7 +489,7 @@ local function toggle_task(context, comment)
 	if not M.is_available("toggle_task", comment, context.current_user, provider) then
 		return false
 	end
-	local update = provider.edit_task
+	local update = action_handler(provider, "toggle_task", comment)
 	---@cast update function
 
 	local is_resolved = comment.state == "RESOLVED"
@@ -473,7 +501,7 @@ local function toggle_task(context, comment)
 	end
 	notify(context, "loading", is_resolved and "Reopening task..." or "Resolving task...", nil)
 	run_request(context, function(done)
-		return update(context.pr, desired, done)
+		return update(desired, done)
 	end, function(updated, err)
 		if not active(context) then
 			return
@@ -499,9 +527,11 @@ local function toggle_resolved(context, comment)
 	end
 
 	local resolved = comment.state ~= "RESOLVED"
+	local set_resolved = action_handler(provider, "toggle_resolved", comment)
+	---@cast set_resolved function
 	notify(context, "loading", resolved and "Resolving thread..." or "Reopening thread...", nil)
 	run_request(context, function(done)
-		return provider.set_thread_resolved(context.pr, comment, resolved, done)
+		return set_resolved(context.pr, comment, resolved, done)
 	end, function(ok, err)
 		if not active(context) then
 			return

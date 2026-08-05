@@ -11,6 +11,14 @@ local statusline = require("atlas.ui.statusline")
 
 ---@param id string
 ---@param ctx GitLabPullsActionContext
+---@return boolean
+function M.is_available(id, ctx)
+	local action = registry.find(id)
+	return action ~= nil and action.is_available(ctx) == true
+end
+
+---@param id string
+---@param ctx GitLabPullsActionContext
 ---@param on_done fun(result: PullsActionResult|nil, err: string|nil)
 function M.run(id, ctx, on_done)
 	local action = registry.find(id)

@@ -90,24 +90,27 @@ function M.fetches(pr, refresh)
 	overview_state.pipelines = "loading"
 
 	local provider = require("atlas.pulls.state").provider
-	if provider and provider.fetch_pipelines then
-		track_panel(provider.fetch_pipelines(pr, nil, function(pipelines, err)
+	local capabilities = provider and provider.capabilities
+	if capabilities and capabilities.pipelines then
+		track_panel(capabilities.pipelines.fetch(pr, nil, function(pipelines, err)
 			overview_state.pipelines = err and err or (pipelines or {})
 			refresh()
 		end))
+	else
+		overview_state.pipelines = {}
 	end
 
 	local panel_state = require("atlas.pulls.ui.panel.pr.state")
 	panel_state.diffstat = "loading"
-	if provider and provider.fetch_diffstat then
-		track_panel(provider.fetch_diffstat(pr, nil, function(entries, err)
+	if capabilities and capabilities.core.fetch_diffstat then
+		track_panel(capabilities.core.fetch_diffstat(pr, nil, function(entries, err)
 			panel_state.diffstat = err and err or (entries or {})
 			refresh()
 		end))
 	end
 end
 
----@param pr PullRequest
+---@param _pr PullRequest
 ---@param active_tab string|nil
 ---@return boolean
 function M.is_loading(_pr, active_tab)

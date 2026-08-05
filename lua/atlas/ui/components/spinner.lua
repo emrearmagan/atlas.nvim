@@ -26,7 +26,7 @@ end
 ---@class SpinnerInstance
 ---@field frame_index integer
 ---@field interval_ms integer
----@field timer uv_timer_t|nil
+---@field timer uv.uv_timer_t|nil
 ---@field on_tick fun(frame: string)|nil
 ---@field current_frame fun(self: SpinnerInstance): string
 ---@field text fun(self: SpinnerInstance, text?: string): string

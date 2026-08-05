@@ -1,55 +1,7 @@
-local icons = require("atlas.ui.shared.icons")
-local provider_icon, provider_hl = icons.issues_provider("github", "provider")
-
 ---@class GitHubIssuesProvider : IssuesProvider
-local M = {
-	id = "github",
-	name = "GitHub",
-	icon = provider_icon,
-	hl_group = provider_hl,
-	panel = require("atlas.issues.providers.github.ui.panel"),
-	bookmark_query_field = "search",
-}
+local M = {}
 
-function M.setup()
-	require("atlas.issues.providers.github.highlights").setup()
-end
-
-function M.on_refresh()
-	-- nothing to clear globally; per-key caches expire naturally
-end
-
----@param issue_groups IssuesGroup[]
----@param layout "plain"|"compact"
----@param opts { width: integer }
----@return IssuesMainRenderResult
-function M.render(issue_groups, layout, opts)
-	return require("atlas.issues.providers.github.ui.main").render(issue_groups, layout, opts)
-end
-
----@param issue Issue
----@param is_child boolean
-function M.format_row(issue, is_child)
-	return require("atlas.issues.providers.github.ui.renderer").format_row(issue, is_child)
-end
-
----@param row table
----@param col table
----@param ctx { text: string, padded: string, width: integer }
-function M.cell_hl(row, col, ctx)
-	return require("atlas.issues.providers.github.ui.renderer").cell_hl(row, col, ctx)
-end
-
----@param issue Issue
----@return string[], AtlasUIHighlight[]
-function M.issue_popup_content(issue)
-	return require("atlas.issues.providers.github.ui.renderer").issue_popup_content(issue)
-end
-
----@param on_done fun(user: IssueUser|nil, err: string|nil)
-function M.fetch_user(on_done)
-	require("atlas.issues.providers.github.api.users").get_user(on_done)
-end
+local resolver = require("atlas.providers.resolve")
 
 ---@param view IssuesViewConfig
 ---@param opts IssuesFetchOpts
@@ -80,13 +32,8 @@ function M.fetch_issues(view, opts, on_done)
 				table.insert(rest, issue)
 			end
 		end
-		local sorted = {}
-		for _, i in ipairs(pinned) do
-			table.insert(sorted, i)
-		end
-		for _, i in ipairs(rest) do
-			table.insert(sorted, i)
-		end
+		local sorted = vim.list_extend({}, pinned)
+		vim.list_extend(sorted, rest)
 
 		on_done(sorted, nil, true, nil)
 	end, {
@@ -113,17 +60,16 @@ function M.fetch_issue(key, opts, on_done)
 end
 
 ---@param key string
----@param opts IssuesFetchOpts|nil
 ---@param on_done fun(raw: any, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_description(key, _opts, on_done)
+local function fetch_description(key, on_done)
 	local normalizer = require("atlas.issues.providers.github.api.mapper")
 	local slug, number = normalizer.parse_key(tostring(key or ""))
 	if slug == "" or number == nil then
 		on_done(nil, "Invalid issue key")
 		return nil
 	end
-	local cli = require("atlas.issues.providers.github.api.cli")
+	local cli = require("atlas.providers.github.client").issues
 	return cli.gh({
 		"api",
 		string.format("repos/%s/issues/%d", slug, number),
@@ -140,29 +86,10 @@ function M.fetch_description(key, _opts, on_done)
 end
 
 ---@param issue Issue
----@param opts IssuesFetchOpts|nil
----@param on_done fun(comments: IssueComment[]|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.fetch_comments(issue, opts, on_done)
-	return require("atlas.issues.providers.github.api.comments").list(tostring(issue.key or ""), on_done, opts)
-end
-
----@param issue Issue
 ---@param content string
 ---@param on_done fun(comment: IssueComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.add_comment(issue, content, on_done)
-	local key = tostring(issue.key or "")
-	return require("atlas.issues.providers.github.api.comments").add(key, content, on_done)
-end
-
----@param issue Issue
----@param parent IssueComment
----@param content string
----@param on_done fun(comment: IssueComment|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.reply_comment(issue, _parent, content, on_done)
-	-- GitHub issue comments are flat; reply is just a new comment.
 	local key = tostring(issue.key or "")
 	return require("atlas.issues.providers.github.api.comments").add(key, content, on_done)
 end
@@ -181,7 +108,7 @@ function M.edit_comment(issue, comment_id, content, on_done)
 			on_done(nil, "Invalid issue")
 			return nil
 		end
-		local cli = require("atlas.issues.providers.github.api.cli")
+		local cli = require("atlas.providers.github.client").issues
 		return cli.gh({
 			"issue",
 			"edit",
@@ -254,13 +181,11 @@ function M.fetch_conversation(issue, opts, on_done)
 				reactions = raw.reactions,
 			})
 		end
-		for _, c in ipairs(type(result.comments) == "table" and result.comments or {}) do
-			table.insert(comments, c)
-		end
+		vim.list_extend(comments, type(result.comments) == "table" and result.comments or {})
 
 		on_done({
 			comments = comments,
-			events = type(result.events) == "table" and result.events or {},
+			events = result.events or {},
 			reaction_options = GITHUB_REACTION_OPTIONS,
 		}, nil)
 	end
@@ -277,7 +202,7 @@ function M.fetch_conversation(issue, opts, on_done)
 			return
 		end
 
-		M.fetch_description(key, opts, function(desc, _)
+		fetch_description(key, function(desc, _)
 			build(result, tostring(desc or ""))
 		end)
 	end, { force_load = opts.force_refresh == true })
@@ -308,7 +233,7 @@ function M.add_reaction(issue, comment, key, on_done)
 		endpoint = string.format("repos/%s/issues/comments/%s/reactions", slug, tostring(comment.id))
 	end
 
-	local cli = require("atlas.issues.providers.github.api.cli")
+	local cli = require("atlas.providers.github.client").issues
 	return cli.api("POST", endpoint, { content = key }, function(_, err)
 		if err then
 			on_done(false, err)
@@ -318,7 +243,7 @@ function M.add_reaction(issue, comment, key, on_done)
 	end)
 end
 
----@param key string
+---@param issue Issue
 ---@param opts IssuesFetchOpts|nil
 ---@param on_done fun(entries: IssueActivityEntry[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
@@ -329,26 +254,12 @@ function M.fetch_activity(issue, opts, on_done)
 			on_done(nil, err)
 			return
 		end
-		on_done(type(result.events) == "table" and result.events or {}, nil)
+		on_done(result.events, nil)
 	end, { force_load = opts and opts.force_load == true or false })
 end
 
----@param action_id string
----@param ctx table
----@param on_done fun(result: table|nil, err: string|nil)
-function M.run_action(action_id, ctx, on_done)
-	require("atlas.issues.providers.github.actions").run(action_id, ctx, on_done)
-end
-
----@param issue Issue|nil
----@param source "main"|"panel"|nil
----@param on_done fun(result: table|nil, err: string|nil)
-function M.open_actions(issue, source, on_done)
-	require("atlas.issues.providers.github.actions").open({ issue = issue, source = source }, on_done)
-end
-
 ---@param on_done fun(result: table|nil, err: string|nil)|nil
-function M.search(on_done)
+local function search(on_done)
 	require("atlas.issues.providers.github.actions").run(
 		"search",
 		{ issue = nil, source = "main" },
@@ -360,11 +271,12 @@ function M.search(on_done)
 	)
 end
 
----@param opts GitHubCreateIssueOpts
----@param on_done fun(result: { number: integer|nil, url: string|nil }|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.create_issue(opts, on_done)
-	return require("atlas.issues.providers.github.api.issues").create_issue(opts, on_done)
+local function create_issue()
+	require("atlas.issues.create").from_repository(
+		"github",
+		require("atlas.issues.create.github.issue").open,
+		"repo_slug"
+	)
 end
 
 ---@param opts { force_load: boolean|nil }|nil
@@ -392,7 +304,7 @@ end
 
 ---@return AtlasGitHubIssuesViewConfig[]
 function M.views()
-	local cli = require("atlas.issues.providers.github.api.cli")
+	local cli = require("atlas.providers.github.client").issues
 	local cfg = cli.github_config()
 	local views = cfg.views or {
 		{
@@ -404,4 +316,127 @@ function M.views()
 	return require("atlas.ui.shared.bookmarks_view").append_to_views(views, cfg.bookmarks, "S", "Search")
 end
 
-return M
+local renderer = require("atlas.issues.providers.github.ui.renderer")
+
+---@param value string
+---@param parsed AtlasParsedUrl|nil
+---@return AtlasTarget|nil, string|nil
+function M.resolve(value, parsed)
+	if parsed == nil or parsed.host ~= "github.com" then
+		return nil, nil
+	end
+
+	local owner, repo, number, tail = parsed.path:match("^/([^/]+)/([^/]+)/issues/(%d+)(.*)$")
+	if owner then
+		if not resolver.valid_tail(tail) then
+			return nil, "Unsupported GitHub issue URL"
+		end
+		return {
+			provider = "github",
+			domain = "issues",
+			entity = "issue",
+			url = value,
+			host = parsed.host,
+			owner = owner,
+			repo = repo,
+			number = tonumber(number),
+		}
+	end
+
+	return nil, "Unsupported GitHub URL. Expected a repository, issue, or pull request URL"
+end
+
+---@param target AtlasTarget
+---@return AtlasIssuesViewConfig
+function M.search_view(target)
+	return {
+		name = "Search",
+		layout = "compact",
+		search = string.format(
+			"repo:%s/%s %s is:issue",
+			target.owner,
+			target.repo,
+			target.number and tostring(target.number) or ""
+		),
+	}
+end
+
+---@param target AtlasTarget
+---@return string|nil
+function M.issue_key(target)
+	if target.owner and target.repo and target.number then
+		return string.format("%s/%s#%d", target.owner, target.repo, target.number)
+	end
+end
+
+---@param info AtlasGitRemoteInfo
+---@param domain AtlasDomain
+---@param entity AtlasEntity
+---@param number integer
+---@param base_url string
+---@return AtlasTarget
+function M.target(info, domain, entity, number, base_url)
+	local owner, repo = info.slug:match("^(.+)/([^/]+)$")
+	return {
+		provider = "github",
+		domain = domain,
+		entity = entity,
+		host = info.host,
+		owner = owner,
+		repo = repo,
+		number = number,
+		url = string.format("%s/%s/%s/%s/%d", base_url, owner, repo, entity == "pr" and "pull" or "issues", number),
+	}
+end
+
+---@param options table
+---@return string[]
+function M.repositories(options)
+	local result = {}
+	for _, view in ipairs(options.views or {}) do
+		for slug in tostring(view.search or ""):gmatch("repo:([%w._/-]+)") do
+			table.insert(result, slug)
+		end
+	end
+	return result
+end
+
+return {
+	resolve = M.resolve,
+	search_view = M.search_view,
+	issue_key = M.issue_key,
+	target = M.target,
+	repositories = M.repositories,
+	capabilities = {
+		core = {
+			fetch_user = require("atlas.issues.providers.github.api.users").get_user,
+			fetch_issues = M.fetch_issues,
+			fetch_issue = M.fetch_issue,
+			views = M.views,
+		},
+		comments = {
+			fetch_activity = M.fetch_activity,
+			fetch_conversation = M.fetch_conversation,
+			add_comment = M.add_comment,
+			edit_comment = M.edit_comment,
+			delete_comment = M.delete_comment,
+			add_reaction = M.add_reaction,
+		},
+		notifications = {
+			fetch = M.fetch_notifications,
+			mark_read = M.mark_notification_read,
+			mark_done = M.mark_notification_done,
+		},
+		search = search,
+		create_issue = create_issue,
+		actions = require("atlas.issues.providers.github.actions"),
+		ui = {
+			setup = require("atlas.issues.providers.github.highlights").setup,
+			render = require("atlas.issues.providers.github.ui.main").render,
+			format_row = renderer.format_row,
+			cell_hl = renderer.cell_hl,
+			issue_popup_content = renderer.issue_popup_content,
+			panel = require("atlas.issues.providers.github.ui.panel"),
+		},
+	},
+}

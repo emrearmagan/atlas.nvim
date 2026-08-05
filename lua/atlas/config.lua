@@ -2,9 +2,6 @@
 
 ---@alias AtlasKeymapValue string|string[]|false|nil
 
----@alias AtlasPullsProviderId "bitbucket"|"github"|"gitlab"
----@alias AtlasIssuesProviderId "jira"|"github"|"gitlab"
-
 -- Pulls Provider Config
 
 ---@class AtlasPullsViewConfig
@@ -16,6 +13,7 @@
 ---@field name string
 ---@field key string|nil
 ---@field layout "plain"|"compact"|nil
+---@field search string|nil
 
 ---@class AtlasPullsRepoConfig
 ---@field settings table<string, AtlasPullsRepoSettings>|nil
@@ -39,6 +37,8 @@
 ---@field open_cmd AtlasPullsDiffOpenCommand|string|nil
 ---@field layout "side-by-side"|"inline"|nil
 ---@field compact boolean|nil
+---@field compact_context_lines integer|nil
+---@field show_review_panel boolean|nil
 ---@field explorer AtlasPullsDiffExplorerConfig|nil
 
 ---@class AtlasPullsCustomActionContext
@@ -54,15 +54,8 @@
 
 -- Configs
 
----@class AtlasPullsProviders
----@field bitbucket AtlasBitbucketConfig|nil
----@field github AtlasGitHubConfig|nil
----@field gitlab AtlasGitLabPullsConfig|nil
-
----@class AtlasIssuesProviders
----@field jira AtlasJiraIssuesConfig|nil
----@field github AtlasGitHubIssuesConfig|nil
----@field gitlab AtlasGitLabIssuesConfig|nil
+---@alias AtlasPullsProviders table<string, AtlasBitbucketConfig|AtlasGitHubConfig|AtlasGitLabPullsConfig|table>
+---@alias AtlasIssuesProviders table<string, AtlasJiraIssuesConfig|AtlasGitHubIssuesConfig|AtlasGitLabIssuesConfig|table>
 
 ---@class AtlasPullsConfig
 ---@field repo_config AtlasPullsRepoConfig|nil
@@ -106,10 +99,12 @@ M.options = {
 			open_cmd = "AtlasDiff",
 			layout = "inline",
 			compact = true,
+			compact_context_lines = 3,
+			show_review_panel = false,
 			explorer = {
 				grouped = true,
 				hidden = false,
-				show_commits = true,
+				show_commits = false,
 				width = 40,
 				initial_focus = "explorer",
 				ignore = { ".git/**", ".jj/**" },
@@ -139,35 +134,38 @@ M.options = {
 			refresh_view = "R",
 			open_actions = "A",
 			open_in_browser = "gx",
+			copy_id = "y",
 			copy_url = "Y",
 			show_details = "K",
 			search = "?",
 		},
 		pulls = {
-			copy_id = "y",
 			open_diff = "gd",
 			checkout = "gc",
 			review = {
 				toggle_approval = "ga",
 				request_changes = "gr",
 				submit_review = "gs",
-				open_file = { "<CR>", "l" },
+				open_file = "<CR>",
 				toggle_explorer_grouping = "T",
 				toggle_layout = "t",
-				toggle_compact = "f",
+				toggle_compact = "u",
 				next_hunk = "]h",
 				previous_hunk = "[h",
 				next_file = { "]f", "<Tab>" },
 				previous_file = { "[f", "<S-Tab>" },
 				toggle_file_reviewed = "-",
 				toggle_commits = "gC",
+				toggle_review_panel = "gR",
 				next_comment = "]c",
 				previous_comment = "[c",
 				next_note = "]n",
 				previous_note = "[n",
 				view_thread = "K",
-				add_pending_comment = "c",
-				add_comment = "C",
+				edit_comment = "e",
+				add_task = "T",
+				add_comment = "c",
+				submit_comment = "C",
 				delete_comment = "dd",
 				add_note = "n",
 				toggle_resolved = "x",
@@ -177,7 +175,6 @@ M.options = {
 			filter_status_declined = "gpd",
 		},
 		issues = {
-			copy_key = "y",
 			transition_issue = "gs",
 			change_assignee = "ga",
 			change_reporter = "gr",
@@ -211,9 +208,6 @@ local function register_commands()
 		notify.info("Cache cleared")
 	end, { desc = "Clear Atlas disk and memory cache" })
 
-	local pulls_providers = { "bitbucket", "github", "gitlab" }
-	local issues_providers = { "jira", "github", "gitlab" }
-
 	vim.api.nvim_create_user_command("AtlasPulls", function(opts)
 		local provider_id = opts.fargs[1] and opts.fargs[1]:lower() or nil
 		require("atlas").open("pulls", provider_id)
@@ -223,7 +217,7 @@ local function register_commands()
 		complete = function(arglead)
 			return vim.tbl_filter(function(p)
 				return p:find(arglead, 1, true) == 1
-			end, pulls_providers)
+			end, require("atlas.providers").ids("pulls"))
 		end,
 	})
 
@@ -236,7 +230,7 @@ local function register_commands()
 		complete = function(arglead)
 			return vim.tbl_filter(function(p)
 				return p:find(arglead, 1, true) == 1
-			end, issues_providers)
+			end, require("atlas.providers").ids("issues"))
 		end,
 	})
 

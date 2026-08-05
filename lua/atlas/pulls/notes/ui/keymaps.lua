@@ -4,6 +4,7 @@ local resolver = require("atlas.core.keymaps")
 local M = {}
 
 ---@class AtlasNotesUIActions
+---@field toggle fun()
 ---@field details fun()
 ---@field edit fun()
 ---@field delete fun()
@@ -13,7 +14,7 @@ local M = {}
 ---@param buf integer
 ---@param actions AtlasNotesUIActions
 function M.register(buf, actions)
-	help.register("Notes", {
+	local note_actions = {
 		{ key = "K", desc = "Show note details", index = 1, callback = actions.details, opts = { nowait = true } },
 		{ key = "e", desc = "Edit note", index = 2, callback = actions.edit, opts = { nowait = true } },
 		{
@@ -24,17 +25,28 @@ function M.register(buf, actions)
 			callback = actions.delete,
 			opts = { nowait = true },
 		},
-	}, { buffer = buf, index = 100 })
+	}
+	local fold_keys = resolver.resolve("ui.toggle_fold")
+	if fold_keys then
+		table.insert(note_actions, {
+			key = #fold_keys == 1 and fold_keys[1] or fold_keys,
+			desc = "Expand / collapse",
+			index = 4,
+			callback = actions.toggle,
+			opts = { nowait = true, silent = true },
+		})
+	end
+	help.register("Notes", note_actions, { buffer = buf, index = 100 })
 	local view = {
-		{ key = "R", desc = "Reload notes", index = 4, callback = actions.refresh, opts = { nowait = true } },
-		{ key = "q", desc = "Close notes", index = 6, callback = actions.close, opts = { nowait = true } },
+		{ key = "R", desc = "Reload notes", index = 5, callback = actions.refresh, opts = { nowait = true } },
+		{ key = "q", desc = "Close notes", index = 7, callback = actions.close, opts = { nowait = true } },
 	}
 	local help_keys = resolver.resolve("ui.help")
 	if help_keys then
 		table.insert(view, {
 			key = #help_keys == 1 and help_keys[1] or help_keys,
 			desc = "Toggle help",
-			index = 5,
+			index = 6,
 			callback = function()
 				help.toggle({ buffer = buf })
 			end,

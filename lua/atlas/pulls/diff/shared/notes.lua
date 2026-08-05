@@ -1,18 +1,15 @@
 local M = {}
 
-local anchoring = require("atlas.pulls.diff.shared.comments.anchor")
-local statusline = require("atlas.pulls.diff.atlas.statusline")
+local position = require("atlas.pulls.diff.shared.position")
 local note_editor = require("atlas.pulls.notes.ui.editor")
 local note_popup = require("atlas.pulls.notes.ui.popup")
 local note_renderer = require("atlas.pulls.notes.ui.renderer")
 local store = require("atlas.pulls.notes")
-local icons = require("atlas.ui.shared.icons")
 local utils = require("atlas.ui.shared.utils")
 
 local namespace = vim.api.nvim_create_namespace("atlas_diff_notes")
-local note_icon, note_icon_hl = icons.general("pin")
 
----@class AtlasDiffNotesState
+---@class AtlasReviewNotesState
 ---@field target AtlasNoteTarget
 ---@field items AtlasNote[]
 
@@ -23,78 +20,41 @@ local function clear(buf)
 	end
 end
 
----@param session AtlasNativeDiffSession
----@param level "loading"|"success"|"error"
+---@param session AtlasReviewSession
+function M.clear(session)
+	clear(session.left.buf)
+	clear(session.right.buf)
+end
+
+---@param session AtlasReviewSession
+---@param level "loading"|"success"|"warn"|"error"|"info"
 ---@param message string
-local function notify(session, level, message)
-	statusline.notify(session, level, message, level == "success" and 1200 or nil)
+---@param duration integer|nil
+local function notify(session, level, message, duration)
+	session.review_view.notify(level, message, duration or (level == "success" and 1200 or nil))
 end
 
----@param session AtlasNativeDiffSession
----@param index integer
----@return boolean
-local function delete_at(session, index)
-	local state = session.notes
-	if not state then
-		return false
-	end
-	local deleted, err = store.delete(state.target, state.items[index].id)
-	if not deleted then
-		notify(session, "error", err or "Unable to delete local note")
-		return false
-	end
-	table.remove(state.items, index)
-	return true
+---@param note AtlasNote
+---@param document AtlasReviewDocument
+---@return integer
+local function anchor_line(note, document)
+	return math.min(note.line, math.max(1, #document.new.lines))
 end
 
----@param session AtlasNativeDiffSession
-local function prune_missing_files(session)
-	local state = session.notes
-	if not state then
-		return
-	end
-	local files = {}
-	for _, file in ipairs(session.files) do
-		if file.status ~= "deleted" then
-			files[file.path] = true
-		end
-	end
-	for index = #state.items, 1, -1 do
-		if not files[state.items[index].file_path] then
-			delete_at(session, index)
-		end
-	end
-end
-
----@param session AtlasNativeDiffSession
-local function prune_lines(session)
-	local state = session.notes
-	local document = session.document
-	if not state or not document then
-		return
-	end
-	for index = #state.items, 1, -1 do
-		local note = state.items[index]
-		if
-			note.file_path == document.new.path
-			and (document.binary or document.file.status == "deleted" or note.line > #document.new.lines)
-		then
-			delete_at(session, index)
-		end
-	end
-end
-
----@param session AtlasNativeDiffSession
+---@param session AtlasReviewSession
 ---@return AtlasNote[], table<string, boolean>
 local function visible_notes(session)
 	local state = session.notes
 	local document = session.document
-	if not state or not document or document.binary or document.file.status == "deleted" then
+	if not state or not document or document.binary or document.status == "deleted" then
 		return {}, {}
 	end
 	local items, outdated = {}, {}
 	for _, note in ipairs(state.items) do
-		if note.file_path == document.new.path and note.line <= #document.new.lines then
+		if
+			note.file_path == document.new.path
+			or (document.status == "renamed" and note.file_path == document.old.path)
+		then
 			table.insert(items, note)
 			outdated[note.id] = store.is_outdated(note, document.new.lines[note.line])
 		end
@@ -102,25 +62,21 @@ local function visible_notes(session)
 	return items, outdated
 end
 
----@param session AtlasNativeDiffSession
+---@param session AtlasReviewSession
 function M.render(session)
-	clear(session.left.buf)
-	clear(session.right.buf)
+	M.clear(session)
 	local state = session.notes
 	local document = session.document
 	if not state or not document or not vim.api.nvim_buf_is_valid(session.right.buf) then
-		return
-	end
-	prune_lines(session)
-	if document.binary then
 		return
 	end
 
 	local grouped = {}
 	local items, outdated = visible_notes(session)
 	for _, note in ipairs(items) do
-		grouped[note.line] = grouped[note.line] or {}
-		table.insert(grouped[note.line], note)
+		local line = anchor_line(note, document)
+		grouped[line] = grouped[line] or {}
+		table.insert(grouped[line], note)
 	end
 
 	local width = session.right.win
@@ -135,14 +91,13 @@ function M.render(session)
 		vim.api.nvim_buf_set_extmark(session.right.buf, namespace, line - 1, 0, {
 			virt_lines = virtual_lines,
 			virt_lines_leftcol = true,
-			sign_text = note_icon,
-			sign_hl_group = note_icon_hl,
+			number_hl_group = "CursorLineNr",
 			priority = 1080,
 		})
 
 		if session.layout == "side-by-side" then
 			local target, above =
-				anchoring.opposite_line(document, "RIGHT", line, vim.api.nvim_buf_line_count(session.left.buf))
+				position.opposite_line(document, "RIGHT", line, vim.api.nvim_buf_line_count(session.left.buf))
 			local padding = {}
 			for _ = 1, #virtual_lines do
 				table.insert(padding, { { "", "Normal" } })
@@ -157,7 +112,7 @@ function M.render(session)
 	end
 end
 
----@param state AtlasDiffNotesState
+---@param state AtlasReviewNotesState
 ---@param note AtlasNote
 local function upsert(state, note)
 	for index, existing in ipairs(state.items) do
@@ -169,7 +124,7 @@ local function upsert(state, note)
 	table.insert(state.items, note)
 end
 
----@param state AtlasDiffNotesState
+---@param state AtlasReviewNotesState
 ---@param id string
 local function remove(state, id)
 	for index = #state.items, 1, -1 do
@@ -179,7 +134,7 @@ local function remove(state, id)
 	end
 end
 
----@param session AtlasNativeDiffSession
+---@param session AtlasReviewSession
 ---@param buf integer
 ---@return AtlasNote[], table<string, boolean>
 local function notes_at_cursor(session, buf)
@@ -190,7 +145,7 @@ local function notes_at_cursor(session, buf)
 	local visible, outdated = visible_notes(session)
 	local items, selected_outdated = {}, {}
 	for _, note in ipairs(visible) do
-		if note.line == line then
+		if anchor_line(note, session.document) == line then
 			table.insert(items, note)
 			selected_outdated[note.id] = outdated[note.id]
 		end
@@ -198,14 +153,14 @@ local function notes_at_cursor(session, buf)
 	return items, selected_outdated
 end
 
----@param session AtlasNativeDiffSession
+---@param session AtlasReviewSession
 ---@param buf integer
 ---@return boolean
 function M.has_at_cursor(session, buf)
 	return #notes_at_cursor(session, buf) > 0
 end
 
----@param session AtlasNativeDiffSession
+---@param session AtlasReviewSession
 ---@param buf integer
 function M.open_at_cursor(session, buf)
 	local state = session.notes
@@ -213,7 +168,6 @@ function M.open_at_cursor(session, buf)
 	if not state or #items == 0 then
 		return
 	end
-
 	note_popup.open({
 		target = state.target,
 		notes = items,
@@ -232,17 +186,17 @@ function M.open_at_cursor(session, buf)
 	})
 end
 
----@param session AtlasNativeDiffSession
+---@param session AtlasReviewSession
 ---@param buf integer
 function M.add_at_cursor(session, buf)
 	local state = session.notes
 	local document = session.document
 	if not state or not document or buf ~= session.right.buf then
-		statusline.notify(session, "warn", "Local notes can only be added to the new file")
+		notify(session, "warn", "Local notes can only be added to the new file")
 		return
 	end
-	if document.binary or document.file.status == "deleted" then
-		statusline.notify(session, "warn", "Local notes require a text file on the new side")
+	if document.binary or document.status == "deleted" then
+		notify(session, "warn", "Local notes require a text file on the new side")
 		return
 	end
 	local line = vim.api.nvim_win_get_cursor(0)[1]
@@ -268,7 +222,7 @@ function M.add_at_cursor(session, buf)
 	end)
 end
 
----@param session AtlasNativeDiffSession
+---@param session AtlasReviewSession
 ---@param direction 1|-1
 function M.jump(session, direction)
 	local state = session.notes
@@ -281,14 +235,15 @@ function M.jump(session, direction)
 	local seen, lines = {}, {}
 	local visible = visible_notes(session)
 	for _, note in ipairs(visible) do
-		if not seen[note.line] then
-			seen[note.line] = true
-			table.insert(lines, note.line)
+		local line = anchor_line(note, document)
+		if not seen[line] then
+			seen[line] = true
+			table.insert(lines, line)
 		end
 	end
 	table.sort(lines)
 	if #lines == 0 then
-		statusline.notify(session, "info", "No local notes in this file", 1200)
+		notify(session, "info", "No local notes in this file", 1200)
 		return
 	end
 
@@ -314,7 +269,7 @@ function M.jump(session, direction)
 	vim.cmd.normal({ "zvzz", bang = true })
 end
 
----@param session AtlasNativeDiffSession
+---@param session AtlasReviewSession
 function M.reload(session)
 	local state = session.notes
 	if not state then
@@ -322,15 +277,14 @@ function M.reload(session)
 	end
 	local items, err = store.list(state.target)
 	if not items then
-		statusline.notify(session, "error", err or "Unable to load local notes")
+		notify(session, "error", err or "Unable to load local notes")
 		return
 	end
 	state.items = items
-	prune_missing_files(session)
 	session.refresh_ui()
 end
 
----@param session AtlasNativeDiffSession
+---@param session AtlasReviewSession
 ---@param review AtlasPreparedReviewContext
 function M.attach(session, review)
 	if session.notes then
@@ -338,10 +292,10 @@ function M.attach(session, review)
 	end
 	local target, target_error = store.target_for_pull_request(review.pr)
 	if not target then
-		statusline.notify(session, "error", target_error or "Unable to load local notes")
+		notify(session, "error", target_error or "Unable to load local notes")
 		return
 	end
-	---@type AtlasDiffNotesState
+	---@type AtlasReviewNotesState
 	local state = {
 		target = target,
 		items = {},
@@ -350,7 +304,7 @@ function M.attach(session, review)
 	M.reload(session)
 end
 
----@param session AtlasNativeDiffSession
+---@param session AtlasReviewSession
 function M.detach(session)
 	local state = session.notes
 	if not state then
@@ -358,8 +312,7 @@ function M.detach(session)
 	end
 	session.notes = nil
 	note_popup.close()
-	clear(session.left.buf)
-	clear(session.right.buf)
+	M.clear(session)
 end
 
 return M

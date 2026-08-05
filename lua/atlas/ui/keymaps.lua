@@ -102,10 +102,6 @@ function M.register(buf)
 				if help.is_open() then
 					return
 				end
-				local ui_state = require("atlas.ui.state")
-				if ui_state.on_panel_close then
-					ui_state.on_panel_close()
-				end
 				require("atlas.ui.layout").close()
 			end,
 		})
@@ -120,11 +116,7 @@ function M.register(buf)
 				local ui_st = require("atlas.ui.state")
 				local was_open = layout_mod.win_id("detail") ~= nil
 				layout_mod.toggle_detail()
-				if was_open then
-					if ui_st.on_panel_close then
-						ui_st.on_panel_close()
-					end
-				else
+				if not was_open then
 					if ui_st.on_panel_open then
 						ui_st.on_panel_open()
 					end

@@ -29,8 +29,11 @@
 -- Pull Request
 --------------------------------------------------------------------------------
 
----@class PullRequest
+---@class PullRequestRef
 ---@field id string|number
+---@field repo_full_name string
+
+---@class PullRequest : PullRequestRef
 ---@field title string
 ---@field description string
 ---@field state "open"|"merged"|"declined"|"draft"
@@ -45,7 +48,6 @@
 ---@field provider string
 ---@field workspace string
 ---@field repo string
----@field repo_full_name string
 ---@field is_subscribed boolean|nil
 ---@field reactions table<string, integer>|nil
 ---@field _raw table
@@ -69,29 +71,27 @@
 ---@field owner string|nil
 ---@field repo_name string|nil
 ---@field html_url string|nil
+---@field full_name string|nil
+---@field workspace string|nil
+---@field created_on string|nil
+---@field stars number|nil
+---@field watchers number|nil
+---@field forks number|nil
 
 ---@class PullsRepoDetails : PullsRepo
----@field full_name string|nil
----@field owner string|nil
----@field repo_name string|nil
----@field html_url string|nil
 ---@field description string|nil
 ---@field size number|nil
 ---@field default_branch string|nil
 ---@field is_private boolean|nil
----@field created_on string|nil
 ---@field readme string|nil
----@field stars number|nil
----@field watchers number|nil
----@field forks number|nil
 ---@field _raw table|nil
 
 ---@class PullsRepoBranch
 ---@field name string
 ---@field hash string
----@field date string
----@field message string
----@field author string
+---@field date string|nil
+---@field message string|nil
+---@field author string|nil
 ---@field api_url string|nil
 
 ---@class PullsRepoBranches
@@ -100,9 +100,9 @@
 ---@class PullsRepoTag
 ---@field name string
 ---@field hash string
----@field date string
----@field message string
----@field author string
+---@field date string|nil
+---@field message string|nil
+---@field author string|nil
 
 ---@class PullsRepoTags
 ---@field entries PullsRepoTag[]
@@ -202,6 +202,13 @@
 ---@field emoji string       -- display glyph
 ---@field label string|nil   -- optional label
 
+---@class PullsInlineCommentPosition
+---@field path string
+---@field old_path string|nil
+---@field from integer|nil
+---@field to integer|nil
+---@field commit_hash string|nil
+
 ---@class PullsComment
 ---@field id number|string
 ---@field parent_id number|string|nil
@@ -209,7 +216,7 @@
 ---@field content_raw string
 ---@field content_display string|nil
 ---@field created_on string
----@field inline {path: string, to: number|nil, from: number|nil}|nil
+---@field inline PullsInlineCommentPosition|nil
 ---@field inline_hunk DiffHunk|nil                       -- surrounding diff context for inline comments
 ---@field is_task boolean|nil                            -- true = render as task (checkbox)
 ---@field task_label string|nil                          -- display name override; defaults to "Task"

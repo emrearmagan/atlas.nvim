@@ -112,7 +112,7 @@ local function render_header(lines, spans, width)
 		})
 	)
 
-	local views = state.provider and state.provider.views and state.provider.views() or {}
+	local views = state.provider and state.provider.capabilities.core.views() or {}
 	local nav_source = {}
 	for _, v in ipairs(views or {}) do
 		table.insert(nav_source, v)
@@ -151,7 +151,7 @@ local function render_header(lines, spans, width)
 
 	table.insert(actions, { label = "|", hl_group = "AtlasTextMuted" })
 
-	if state.provider and state.provider.fetch_notifications then
+	if state.provider and state.provider.capabilities.notifications then
 		local notif_state = require("atlas.ui.notifications.state")
 		local icons_mod = require("atlas.ui.shared.icons")
 		local count = notif_state.unread_count or 0
@@ -214,8 +214,9 @@ function M.render(opts)
 		elseif state.pulls and #state.pulls > 0 then
 			table.insert(lines, "")
 			local body_lines, body_spans, body_map
-			if state.provider and state.provider.render then
-				local result = state.provider.render(state.pulls, "plain", { width = opts.width })
+			local ui = state.provider and state.provider.capabilities.ui
+			if ui and ui.render then
+				local result = ui.render(state.pulls, "plain", { width = opts.width })
 				body_lines, body_spans, body_map = result.lines, result.spans, result.line_map
 			else
 				body_lines, body_spans, body_map = build_plain_singleline_content(opts, state.pulls)
@@ -248,8 +249,9 @@ function M.render(opts)
 		local groups = state.pulls or {}
 		local body_lines, body_spans, body_map
 
-		if state.provider and state.provider.render then
-			local result = state.provider.render(groups, layout, { width = opts.width })
+		local ui = state.provider and state.provider.capabilities.ui
+		if ui and ui.render then
+			local result = ui.render(groups, layout, { width = opts.width })
 			body_lines, body_spans, body_map = result.lines, result.spans, result.line_map
 		elseif layout == "plain" then
 			body_lines, body_spans, body_map = build_plain_singleline_content(opts, groups)

@@ -1,8 +1,7 @@
 local M = {}
 
-local cli = require("atlas.pulls.providers.github.api.cli")
+local cli = require("atlas.providers.github.client").pulls
 local icons = require("atlas.ui.shared.icons")
-local logger = require("atlas.core.logger")
 
 local SUBJECT_ICON = {
 	PullRequest = { icons.pulls("pr") },

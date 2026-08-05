@@ -90,7 +90,7 @@ function M.register(buf, views)
 		)
 	end
 
-	if state.provider and state.provider.open_actions then
+	if state.provider and state.provider.capabilities.actions then
 		utils.insert_if(
 			items,
 			item("ui.open_actions", {
@@ -142,7 +142,7 @@ function M.register(buf, views)
 
 	utils.insert_if(
 		items,
-		item("pulls.copy_id", {
+		item("ui.copy_id", {
 			desc = "Copy PR ID",
 			opts = { nowait = true },
 			callback = function()
@@ -204,7 +204,7 @@ function M.register(buf, views)
 		})
 	)
 
-	if state.provider and state.provider.search then
+	if state.provider and state.provider.capabilities.search then
 		utils.insert_if(
 			items,
 			item("ui.search", {
@@ -263,9 +263,6 @@ function M.register(buf, views)
 
 				if detail_open and panel_state.current_panel == "repo" then
 					layout.toggle_detail()
-					if ui_state.on_panel_close then
-						ui_state.on_panel_close()
-					end
 					return
 				end
 

@@ -7,6 +7,16 @@ local config = require("atlas.issues.providers.jira.api.config")
 
 local PANEL_CACHE_TTL = 300
 
+---@param raw table
+---@param issue_key string
+---@return IssueComment[]
+local function map_comments(raw, issue_key)
+	return normalizer.to_comments_list(raw, {
+		issue_key = issue_key,
+		base_url = service.base_url(),
+	})
+end
+
 ---@param issue_key string
 ---@param start_at number|nil
 ---@param max_results number|nil
@@ -35,7 +45,7 @@ function M.get_comments_page(issue_key, start_at, max_results, callback, opts)
 			return
 		end
 
-		local comments = normalizer.to_comments_list(result, issue_key)
+		local comments = map_comments(result, issue_key)
 		service.set_memory_cache(cache_key, comments, PANEL_CACHE_TTL)
 		callback(comments, nil)
 	end, {
@@ -81,7 +91,7 @@ function M.add_comment(issue_key, comment, opts, callback)
 		end
 
 		service.clear_memory_cache()
-		local comments = normalizer.to_comments_list({ comments = { result } }, issue_key)
+		local comments = map_comments({ comments = { result } }, issue_key)
 		callback(comments[1], nil)
 	end, {
 		action = "Add comment",
@@ -126,7 +136,7 @@ function M.edit_comment(issue_key, comment_id, comment, callback)
 		end
 
 		service.clear_memory_cache()
-		local comments = normalizer.to_comments_list({ comments = { result } }, issue_key)
+		local comments = map_comments({ comments = { result } }, issue_key)
 		callback(comments[1], nil)
 	end, {
 		action = "Edit comment",

@@ -61,11 +61,12 @@ function M.init(provider, opts)
 	end)
 
 	require("atlas.pulls.ui.highlights").setup()
-	if provider.setup then
-		provider.setup()
+	local ui = provider.capabilities.ui
+	if ui and ui.setup then
+		ui.setup()
 	end
 
-	local views = provider and provider.views and provider.views() or {}
+	local views = provider.capabilities.core.views()
 	state.active_view = (opts and opts.initial_view) or views[1]
 
 	statusline.clear_items()
@@ -131,7 +132,7 @@ function M.init(provider, opts)
 	M.render()
 	controller.switch_view(state.active_view)
 
-	if provider and provider.fetch_notifications then
+	if provider.capabilities.notifications then
 		local notifications_ui = require("atlas.ui.notifications")
 		notifications_ui.refresh_in_background({ force_load = false }, function()
 			M.render()

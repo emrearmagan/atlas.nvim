@@ -1,11 +1,12 @@
 local M = {}
 
-local cli = require("atlas.pulls.providers.github.api.cli")
+local cli = require("atlas.providers.github.client").pulls
 local comments = require("atlas.pulls.providers.github.api.comments")
 local statusline = require("atlas.ui.statusline")
 local checkout = require("atlas.core.git.checkout")
 local logger = require("atlas.core.logger")
 local multi_select = require("atlas.ui.popups.multi_select")
+local github_mapping = require("atlas.providers.github.mapping")
 
 ---@class GitHubActionContext
 ---@field pr PullRequest|nil
@@ -471,8 +472,8 @@ local ACTIONS = {
 			local slug = repo_slug(ctx)
 
 			statusline.notify("loading", "Loading reviewers...")
-			local provider = require("atlas.pulls.providers.github")
-			provider.fetch_default_reviewers({
+			local provider = require("atlas.providers").load(pr.provider, "pulls")
+			provider.capabilities.create.fetch_default_reviewers({
 				repo_slug = slug,
 				repo_root = nil,
 				head = pr.source and pr.source.branch or "",
@@ -906,7 +907,7 @@ local ACTIONS = {
 				return false, "No PR selected"
 			end
 			local raw = ctx.pr._raw
-			if tostring(raw.node_id or "") == "" then
+			if github_mapping.node_id(raw) == nil then
 				return false, "Missing PR node id"
 			end
 			return true, nil
@@ -918,7 +919,7 @@ local ACTIONS = {
 				return
 			end
 			local raw = pr._raw
-			local node_id = tostring(raw.node_id or "")
+			local node_id = github_mapping.node_id(raw) or ""
 			local next_state = pr.is_subscribed == true and "UNSUBSCRIBED" or "SUBSCRIBED"
 			local gql =
 				"mutation($id: ID!, $state: SubscriptionState!) { updateSubscription(input: { subscribableId: $id, state: $state }) { subscribable { ... on PullRequest { viewerSubscription } } } }"

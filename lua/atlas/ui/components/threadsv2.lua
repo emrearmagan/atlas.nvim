@@ -16,6 +16,7 @@ local highlights = require("atlas.ui.shared.highlights")
 ---@field right_text string|nil             Right-aligned text (e.g. timestamp, hash)
 ---@field content string|nil               Body text (may contain newlines)
 ---@field footer_items string[]|nil        Action labels shown in the footer row
+---@field footer_highlights { start_col: integer, end_col: integer, hl_group: string }[]|nil
 ---@field children AtlasThreadV2Item[]|nil Nested replies
 ---@field meta table|nil                   Arbitrary metadata passed through
 ---@field line_map table|nil               Extra fields merged into every line-map entry
@@ -25,10 +26,10 @@ local highlights = require("atlas.ui.shared.highlights")
 ---@field mode AtlasThreadV2Mode|nil                                                           Rendering mode (default "tree")
 ---@field separator string|nil                                                                 Character for root separators (default "─")
 ---@field content_max_lines integer|nil                                                        Max visible content lines per item (nil = unlimited). Truncated with ".."
----@field author_hl fun(item: AtlasThreadV2Item, author: string): string|nil                   Returns hl group for author
----@field additional_hl fun(item: AtlasThreadV2Item, additional: string): string|nil            Returns hl group for additional text
----@field content_hl fun(item: AtlasThreadV2Item, row: string, row_index: integer): table[]|nil Returns segments for content
----@field right_text_hl fun(item: AtlasThreadV2Item, text: string): string|table[]|nil          Returns hl group or {start_col,end_col,hl_group}[] segments for right_text
+---@field author_hl? fun(item: AtlasThreadV2Item, author: string): string|nil                   Returns hl group for author
+---@field additional_hl? fun(item: AtlasThreadV2Item, additional: string): string|table[]|nil    Returns a group or highlighted segments
+---@field content_hl? fun(item: AtlasThreadV2Item, row: string, row_index: integer): table[]|nil Returns segments for content
+---@field right_text_hl? fun(item: AtlasThreadV2Item, text: string): string|table[]|nil          Returns hl group or {start_col,end_col,hl_group}[] segments for right_text
 ---@field icon_hl_fn (fun(item: AtlasThreadV2Item): string|nil)|nil                            Override icon highlight
 
 ---@class AtlasThreadV2Span
@@ -185,7 +186,7 @@ local function render_header(lines, spans, line_map, item, depth, pfx, opts, wid
 	local author_start = cursor
 	parts[#parts + 1] = author
 	cursor = cursor + #author
-	local author_hl_val = opts.author_hl(item, author)
+	local author_hl_val = (opts.author_hl or default_author_hl)(item, author)
 	if type(author_hl_val) == "string" and author_hl_val ~= "" then
 		col_markers[#col_markers + 1] = { author_start, cursor, author_hl_val }
 	end
@@ -209,8 +210,19 @@ local function render_header(lines, spans, line_map, item, depth, pfx, opts, wid
 		cursor = cursor + 2
 		local add_start = cursor
 		cursor = cursor + #additional
-		local add_hl = opts.additional_hl(item, additional)
-		if type(add_hl) == "string" and add_hl ~= "" then
+		local add_hl = (opts.additional_hl or noop_hl)(item, additional)
+		if type(add_hl) == "table" then
+			for _, seg in ipairs(add_hl) do
+				local end_col = math.min(seg.end_col, #additional)
+				if seg.start_col < end_col then
+					col_markers[#col_markers + 1] = {
+						add_start + seg.start_col,
+						add_start + end_col,
+						seg.hl_group,
+					}
+				end
+			end
+		elseif type(add_hl) == "string" and add_hl ~= "" then
 			col_markers[#col_markers + 1] = { add_start, cursor, add_hl }
 		end
 	end
@@ -230,9 +242,9 @@ local function render_header(lines, spans, line_map, item, depth, pfx, opts, wid
 		if type(hl) == "table" then
 			for _, seg in ipairs(hl) do
 				col_markers[#col_markers + 1] = {
-					rt_byte_start + (tonumber(seg.start_col) or seg[1] or 0),
-					rt_byte_start + (tonumber(seg.end_col) or seg[2] or 0),
-					tostring(seg.hl_group or seg[3] or "AtlasTextMuted"),
+					rt_byte_start + seg.start_col,
+					rt_byte_start + seg.end_col,
+					seg.hl_group,
 				}
 			end
 		else
@@ -288,7 +300,6 @@ local function render_content(lines, spans, line_map, item, depth, pfx, opts, wi
 	local row_index = 0
 	for src_index = 1, visible_count do
 		local row = content_lines[src_index]
-		-- Soft-wrap long lines to fit within the available width
 		local wrapped = utils.wrap_line(row, content_max_dw)
 		for _, wrap_row in ipairs(wrapped) do
 			row_index = row_index + 1
@@ -300,7 +311,7 @@ local function render_content(lines, spans, line_map, item, depth, pfx, opts, wi
 				span(spans, #lines - 1, 0, #pfx.body_prefix, "AtlasTextMuted")
 			end
 
-			local segments = opts.content_hl(item, wrap_row, row_index)
+			local segments = (opts.content_hl or noop_hl)(item, wrap_row, row_index)
 			if segments then
 				for _, seg in ipairs(segments) do
 					span(
@@ -348,10 +359,20 @@ local function render_footer(lines, spans, line_map, item, depth, pfx, has_child
 		footer_prefix = pfx.pad .. "│ "
 	end
 
-	local full_line = footer_prefix .. table.concat(footer_items, "   ")
+	local footer_text = table.concat(footer_items, "   ")
+	local full_line = footer_prefix .. footer_text
 	lines[#lines + 1] = full_line
 	map_line(line_map, #lines, make_line_map(item, "footer", depth))
 	span(spans, #lines - 1, 0, #full_line, "AtlasTextMuted")
+	for _, highlight in ipairs(item.footer_highlights or {}) do
+		span(
+			spans,
+			#lines - 1,
+			#footer_prefix + highlight.start_col,
+			#footer_prefix + highlight.end_col,
+			highlight.hl_group
+		)
+	end
 end
 
 -- Blank / separator lines

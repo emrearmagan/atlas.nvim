@@ -115,7 +115,7 @@ local function get_current_user(on_done)
 		on_done("no provider")
 		return
 	end
-	provider.fetch_user(function(user, err)
+	provider.capabilities.core.fetch_user(function(user, err)
 		if err ~= nil then
 			on_done(tostring(err))
 			return
@@ -136,6 +136,7 @@ local function load_active_view(opts, on_done)
 		on_done()
 		return
 	end
+	local core = provider.capabilities.core
 
 	local target_view = state.active_view
 	if target_view == nil then
@@ -219,7 +220,7 @@ local function load_active_view(opts, on_done)
 		if is_stale_request() then
 			return
 		end
-		active_pullrequests_handle = provider.fetch_pullrequests(
+		active_pullrequests_handle = core.fetch_pullrequests(
 			target_view,
 			{ force_load = opts.force_load == true },
 			function(groups, err)
@@ -268,7 +269,8 @@ function M.refresh_pr(pr, on_done)
 	end
 
 	local provider = state.provider
-	if provider == nil or provider.fetch_pullrequest == nil then
+	local core = provider and provider.capabilities.core
+	if core == nil or core.fetch_pullrequest == nil then
 		statusline.notify("warn", "Provider does not support single PR refresh")
 		on_done()
 		return
@@ -296,7 +298,7 @@ function M.refresh_pr(pr, on_done)
 	end
 
 	local reload_handle = nil
-	reload_handle = provider.fetch_pullrequest(pr, { force_load = true }, function(fetched_pr, err)
+	reload_handle = core.fetch_pullrequest(pr, { force_load = true }, function(fetched_pr, err)
 		for i = #active_pr_reload_handles, 1, -1 do
 			if active_pr_reload_handles[i] == reload_handle then
 				table.remove(active_pr_reload_handles, i)
@@ -356,6 +358,7 @@ function M.run_bookmark(name, value)
 	if provider == nil then
 		return
 	end
+	local core = provider.capabilities.core
 	local view = { name = name, layout = "compact" }
 	if type(value) == "string" then
 		view.search = value
@@ -372,7 +375,7 @@ function M.run_bookmark(name, value)
 	statusline.notify("loading", "Running query...")
 	render_if_active()
 
-	active_pullrequests_handle = provider.fetch_pullrequests(view, { force_load = false }, function(groups, err)
+	active_pullrequests_handle = core.fetch_pullrequests(view, { force_load = false }, function(groups, err)
 		active_pullrequests_handle = nil
 		state.is_loading = false
 		local first_err = type(err) == "table" and err[1] or err
@@ -407,6 +410,12 @@ function M.toggle_status_filter(status)
 	load_active_view({ force_load = true }, function()
 		navigation.focus_first_item()
 	end)
+end
+
+function M.dispose()
+	state.latest_request_tokens = {}
+	state.is_loading = false
+	cancel_active_requests()
 end
 
 return M
