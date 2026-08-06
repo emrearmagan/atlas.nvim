@@ -74,7 +74,7 @@ function M.from_line(document, side, line)
 	local source = side == "LEFT" and document.old or document.new
 	local other = side == "LEFT" and document.new or document.old
 	if document.binary then
-		return nil, "Comments require a text file"
+		return nil
 	end
 	if line < 1 or line > #source.lines then
 		return nil, "The selected line is outside the file"

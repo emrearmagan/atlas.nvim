@@ -261,19 +261,18 @@ end
 ---@param start_line integer|nil
 ---@param end_line integer|nil
 ---@return PullsInlineCommentPosition|nil
----@return string|nil
 local function inline_position(session, buf, start_line, end_line)
 	local document = session.document
 	local _, side = buffer_context(session, buf)
 	if not document or not side then
-		return nil, "This buffer is not part of the diff"
+		return nil
 	end
 	start_line, end_line = selected_range(start_line, end_line)
-	local inline, err = position.from_range(document, side, start_line, end_line)
+	local inline = position.from_range(document, side, start_line, end_line)
 	if inline then
 		inline.commit_hash = session.head_revision
 	end
-	return inline, err
+	return inline
 end
 
 ---@param session AtlasReviewSession
@@ -666,9 +665,8 @@ local function add_inline(session, state, buf, pending, start_line, end_line, ki
 		return
 	end
 	start_line, end_line = selected_range(start_line, end_line)
-	local inline, err = inline_position(session, buf, start_line, end_line)
+	local inline = inline_position(session, buf, start_line, end_line)
 	if not inline then
-		view_notify(session, "info", err or "Unable to comment on this line")
 		return
 	end
 

@@ -230,7 +230,8 @@ local function sync(entry)
 	local status = FILE_STATUSES[tostring(current.status or ""):sub(1, 1)] or "modified"
 	local old_lines = buffer_lines(layout.a)
 	local new_lines = buffer_lines(layout.b)
-	local binary = layout.a.file.binary == true or layout.b.file.binary == true
+	local binary = (status ~= "added" and layout.a.file.binary == true)
+		or (status ~= "deleted" and layout.b.file.binary == true)
 	local changes = binary and {} or line_changes(old_lines, new_lines)
 	local previous = entry.session
 	local buffers_changed = not previous
