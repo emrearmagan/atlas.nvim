@@ -527,13 +527,6 @@ function M.render(session, annotated_paths)
 	end
 
 	write(session, lines, highlights, headers, first_header)
-	local selected_line = M.line_for_file(session, session.pending_index or session.selected_index)
-	if selected_line then
-		vim.api.nvim_buf_set_extmark(buf, namespace, selected_line - 1, 0, {
-			line_hl_group = "Visual",
-			priority = 10,
-		})
-	end
 end
 
 ---@param session AtlasNativeDiffSession
