@@ -57,6 +57,7 @@ local M = {}
 ---@class AtlasPullsKeymaps
 ---@field open_diff? AtlasKeymapValue
 ---@field checkout? AtlasKeymapValue
+---@field edit_title? AtlasKeymapValue
 ---@field review? AtlasPullsReviewKeymaps
 ---@field filter_status_open? AtlasKeymapValue
 ---@field filter_status_merged? AtlasKeymapValue
@@ -101,6 +102,7 @@ local M = {}
 ---| "ui.search"
 ---| "pulls.open_diff"
 ---| "pulls.checkout"
+---| "pulls.edit_title"
 ---| "pulls.review.toggle_approval"
 ---| "pulls.review.request_changes"
 ---| "pulls.review.submit_review"

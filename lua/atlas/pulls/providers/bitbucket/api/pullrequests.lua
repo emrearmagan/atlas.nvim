@@ -219,6 +219,28 @@ function M.fetch_pullrequest(pr, opts, on_done)
 end
 
 ---@param pr PullRequest
+---@param title string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { job_id: integer, cancel: fun() }|nil
+function M.update_title(pr, title, on_done)
+	local url = pr_link(pr, "self")
+	if url == "" then
+		on_done(false, "No pull request URL available")
+		return nil
+	end
+
+	local body = vim.json.encode({ title = title })
+	return service.request("PUT", url, nil, body, function(_, err)
+		if err then
+			on_done(false, err)
+			return
+		end
+		service.clear_cache()
+		on_done(true, nil)
+	end)
+end
+
+---@param pr PullRequest
 ---@param _opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(context: { authors: PullsAuthor[] }|nil, err: string|nil)
 ---@return nil

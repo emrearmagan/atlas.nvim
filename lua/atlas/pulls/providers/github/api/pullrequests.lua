@@ -3,6 +3,7 @@ local M = {}
 local cli = require("atlas.providers.github.client").pulls
 local mapper = require("atlas.pulls.providers.github.api.mapper")
 local logger = require("atlas.core.logger")
+local memory_cache = require("atlas.core.memory_cache")
 
 local GET_PR_GQL = [[
 query($owner: String!, $repo: String!, $number: Int!) {
@@ -204,6 +205,41 @@ function M.get_description(pr, opts, on_done)
 		on_done(body, nil)
 	end, {
 		action = "Fetch PR description",
+		repo = repo_slug,
+		number = pr.id,
+	})
+end
+
+---@param pr PullRequest
+---@param title string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.update_title(pr, title, on_done)
+	local repo_slug = pr.repo_full_name or ""
+	if repo_slug == "" then
+		vim.schedule(function()
+			on_done(false, "Missing repo")
+		end)
+		return nil
+	end
+
+	return cli.gh({
+		"pr",
+		"edit",
+		tostring(pr.id),
+		"--repo",
+		repo_slug,
+		"--title",
+		title,
+	}, function(_, err)
+		if err then
+			on_done(false, err)
+			return
+		end
+		memory_cache.delete(string.format("github:pr:%s:%s", repo_slug, tostring(pr.id)))
+		on_done(true, nil)
+	end, {
+		action = "Update PR title",
 		repo = repo_slug,
 		number = pr.id,
 	})

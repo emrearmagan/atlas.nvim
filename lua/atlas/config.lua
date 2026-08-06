@@ -142,6 +142,7 @@ M.options = {
 		pulls = {
 			open_diff = "gd",
 			checkout = "gc",
+			edit_title = "T",
 			review = {
 				toggle_approval = "ga",
 				request_changes = "gr",

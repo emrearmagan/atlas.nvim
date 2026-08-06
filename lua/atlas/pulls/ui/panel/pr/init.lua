@@ -153,6 +153,7 @@ local function switch_tab_keymaps(old_key, new_key)
 				old_tab.mod.deactivate(buf)
 			end
 		end
+		require("atlas.pulls.ui.panel.pr.keymaps").register(buf)
 	end
 
 	if new_key and old_key ~= new_key then
