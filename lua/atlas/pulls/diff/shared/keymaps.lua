@@ -87,16 +87,16 @@ function M.groups(session, actions, buf, opts)
 	end
 
 	if include_actions and content then
-		local function add_comment(action, desc, index, pending)
+		local function add_range_action(action, desc, index, callback)
 			add(review, action, desc, index, function()
 				if vim.fn.mode() == "n" then
-					actions.add_comment(buf, pending)
+					callback()
 					return
 				end
 				local start_line = vim.fn.line("v")
 				local end_line = vim.api.nvim_win_get_cursor(0)[1]
 				vim.cmd.normal({ args = { vim.keycode("<Esc>") }, bang = true })
-				actions.add_comment(buf, pending, start_line, end_line)
+				callback(start_line, end_line)
 			end, { "n", "x" })
 		end
 		add(review, "pulls.review.view_thread", "Open comment or note", 20, function()
@@ -105,13 +105,25 @@ function M.groups(session, actions, buf, opts)
 		add(review, "pulls.review.toggle_resolved", "Toggle resolved", 21, function()
 			actions.toggle_resolved(buf)
 		end)
-		add_comment("pulls.review.add_comment", "Add pending comment", 30, true)
-		add_comment("pulls.review.submit_comment", "Submit comment", 31, false)
-		add(review, "pulls.review.delete_comment", "Delete comment at cursor", 32, function()
+		add_range_action("pulls.review.add_comment", "Add pending comment", 30, function(start_line, end_line)
+			actions.add_comment(buf, true, start_line, end_line)
+		end)
+		add_range_action("pulls.review.submit_comment", "Submit comment", 31, function(start_line, end_line)
+			actions.add_comment(buf, false, start_line, end_line)
+		end)
+		if new_side and actions.add_suggestion then
+			add_range_action("pulls.review.add_suggestion", "Add pending suggestion", 32, function(start_line, end_line)
+				actions.add_suggestion(buf, true, start_line, end_line)
+			end)
+			add_range_action("pulls.review.submit_suggestion", "Submit suggestion", 33, function(start_line, end_line)
+				actions.add_suggestion(buf, false, start_line, end_line)
+			end)
+		end
+		add(review, "pulls.review.delete_comment", "Delete comment at cursor", 34, function()
 			actions.delete_comment(buf)
 		end)
 		if new_side then
-			add(review, "pulls.review.add_note", "Add local note", 33, function()
+			add(review, "pulls.review.add_note", "Add local note", 35, function()
 				notes.add_at_cursor(session, buf)
 			end)
 		end

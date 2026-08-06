@@ -50,6 +50,8 @@ local M = {}
 ---@field add_task? AtlasKeymapValue
 ---@field add_comment? AtlasKeymapValue
 ---@field submit_comment? AtlasKeymapValue
+---@field add_suggestion? AtlasKeymapValue
+---@field submit_suggestion? AtlasKeymapValue
 ---@field delete_comment? AtlasKeymapValue
 ---@field add_note? AtlasKeymapValue
 ---@field toggle_resolved? AtlasKeymapValue
@@ -126,6 +128,8 @@ local M = {}
 ---| "pulls.review.add_task"
 ---| "pulls.review.add_comment"
 ---| "pulls.review.submit_comment"
+---| "pulls.review.add_suggestion"
+---| "pulls.review.submit_suggestion"
 ---| "pulls.review.delete_comment"
 ---| "pulls.review.add_note"
 ---| "pulls.review.toggle_resolved"
@@ -340,6 +344,8 @@ function M.validate()
 			"pulls.review.view_thread",
 			"pulls.review.add_comment",
 			"pulls.review.submit_comment",
+			"pulls.review.add_suggestion",
+			"pulls.review.submit_suggestion",
 			"pulls.review.delete_comment",
 			"pulls.review.add_note",
 			"pulls.review.toggle_resolved",

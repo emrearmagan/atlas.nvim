@@ -247,6 +247,15 @@ local function buffer_context(session, buf)
 	return nil, nil
 end
 
+---@param start_line integer|nil
+---@param end_line integer|nil
+---@return integer, integer
+local function selected_range(start_line, end_line)
+	local cursor_line = vim.api.nvim_win_get_cursor(0)[1]
+	start_line, end_line = start_line or cursor_line, end_line or cursor_line
+	return math.min(start_line, end_line), math.max(start_line, end_line)
+end
+
 ---@param session AtlasReviewSession
 ---@param buf integer
 ---@param start_line integer|nil
@@ -259,8 +268,8 @@ local function inline_position(session, buf, start_line, end_line)
 	if not document or not side then
 		return nil, "This buffer is not part of the diff"
 	end
-	local cursor_line = vim.api.nvim_win_get_cursor(0)[1]
-	local inline, err = position.from_range(document, side, start_line or cursor_line, end_line or cursor_line)
+	start_line, end_line = selected_range(start_line, end_line)
+	local inline, err = position.from_range(document, side, start_line, end_line)
 	if inline then
 		inline.commit_hash = session.head_revision
 	end
@@ -279,9 +288,7 @@ local function inline_preview(session, buf, selected_start, selected_end)
 		return nil
 	end
 
-	local line = vim.api.nvim_win_get_cursor(0)[1]
-	selected_start, selected_end = selected_start or line, selected_end or line
-	selected_start, selected_end = math.min(selected_start, selected_end), math.max(selected_start, selected_end)
+	selected_start, selected_end = selected_range(selected_start, selected_end)
 	local source = side == "LEFT" and document.old or document.new
 	local start_line = math.max(1, selected_start - 2)
 	local lines = {}
@@ -647,18 +654,39 @@ end
 ---@param pending boolean
 ---@param start_line integer|nil
 ---@param end_line integer|nil
-local function add_inline_comment(session, state, buf, pending, start_line, end_line)
+---@param kind "comment"|"suggestion"
+local function add_inline(session, state, buf, pending, start_line, end_line, kind)
 	local context = action_context(session, state, nil)
 	if not context then
 		view_notify(session, "warn", "Review is not ready")
 		return
 	end
+	if kind == "suggestion" and buf ~= session.right.buf then
+		view_notify(session, "info", "Suggestions are only available on the new side of the diff")
+		return
+	end
+	start_line, end_line = selected_range(start_line, end_line)
 	local inline, err = inline_position(session, buf, start_line, end_line)
 	if not inline then
 		view_notify(session, "info", err or "Unable to comment on this line")
 		return
 	end
-	actions.add(context, inline, { pending = pending, preview = inline_preview(session, buf, start_line, end_line) })
+
+	---@type AtlasReviewAddOptions
+	local opts = { pending = pending, preview = inline_preview(session, buf, start_line, end_line) }
+	if kind == "suggestion" then
+		local lines = {}
+		for line = start_line, end_line do
+			table.insert(lines, session.document.new.lines[line])
+		end
+		local fence = "suggestion"
+		if context.provider.id == "gitlab" then
+			fence = string.format("suggestion:-%d+0", #lines - 1)
+		end
+		opts.initial_text = string.format("\n```%s\n%s\n```", fence, table.concat(lines, "\n"))
+		opts.kind = "suggestion"
+	end
+	actions.add(context, inline, opts)
 end
 
 ---@param session AtlasReviewSession
@@ -737,7 +765,10 @@ local function register_keymaps(session, state)
 			toggle_resolved_at_cursor(session, state, buf)
 		end,
 		add_comment = function(buf, pending, start_line, end_line)
-			add_inline_comment(session, state, buf, pending, start_line, end_line)
+			add_inline(session, state, buf, pending, start_line, end_line, "comment")
+		end,
+		add_suggestion = function(buf, pending, start_line, end_line)
+			add_inline(session, state, buf, pending, start_line, end_line, "suggestion")
 		end,
 		delete_comment = function(buf)
 			delete_comment_at_cursor(session, state, buf)

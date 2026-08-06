@@ -34,6 +34,7 @@
 ---@field toggle_task (fun())|nil
 ---@field toggle_resolved fun(buf: integer)
 ---@field add_comment fun(buf: integer, pending: boolean, start_line?: integer, end_line?: integer)
+---@field add_suggestion (fun(buf: integer, pending: boolean, start_line?: integer, end_line?: integer))|nil
 ---@field delete_comment fun(buf: integer)
 ---@field toggle_thread fun(buf: integer): boolean
 ---@field toggle_all_threads fun(): boolean

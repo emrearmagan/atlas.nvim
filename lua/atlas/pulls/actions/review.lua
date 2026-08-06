@@ -53,6 +53,8 @@ end
 ---@class AtlasReviewAddOptions
 ---@field pending boolean|nil
 ---@field preview AtlasMarkdownEditorPreview|nil
+---@field initial_text string|nil
+---@field kind "comment"|"suggestion"|nil
 
 ---@param provider PullsProvider
 ---@param pr PullRequest
@@ -265,8 +267,11 @@ function M.add(context, inline, opts)
 	end
 	opts = opts or {}
 	local pending = opts.pending == true
+	local suggestion = opts.kind == "suggestion"
+	local noun = suggestion and "suggestion" or "comment"
 
-	local key = string.format("pr-comment-add-%s-%s", tostring(context.pr.id or ""), pending and "pending" or "now")
+	local key =
+		string.format("pr-comment-add-%s-%s-%s", tostring(context.pr.id or ""), pending and "pending" or "now", noun)
 	if inline then
 		key = string.format(
 			"%s-%s-%s-%s-%s",
@@ -277,15 +282,26 @@ function M.add(context, inline, opts)
 			tostring(inline.to or "")
 		)
 	end
+	local title
+	if suggestion then
+		title = pending and " Add Pending Suggestion " or " Add Suggestion "
+	elseif pending then
+		title = " Add Pending Comment "
+	elseif inline then
+		title = " Add Inline Comment "
+	else
+		title = " Add Comment "
+	end
 	open_editor(context, {
 		key = key,
-		title = pending and " Add Pending Comment " or (inline and " Add Inline Comment " or " Add Comment "),
+		title = title,
+		initial_text = opts.initial_text,
 		preview = opts.preview,
 		on_save = function(text)
 			if not active(context) or not text or vim.trim(text) == "" then
 				return
 			end
-			notify(context, "loading", "Adding comment...", nil)
+			notify(context, "loading", "Adding " .. noun .. "...", nil)
 			run_request(context, function(done)
 				return add_comment(context.pr, text, { inline = inline, pending = pending }, done)
 			end, function(created, err)
@@ -293,13 +309,13 @@ function M.add(context, inline, opts)
 					return
 				end
 				if err then
-					notify(context, "error", "Add comment failed: " .. err, nil)
+					notify(context, "error", "Add " .. noun .. " failed: " .. err, nil)
 					return
 				end
 				if created then
 					table.insert(context.items, created)
 				end
-				notify(context, "success", "Comment added", 1200)
+				notify(context, "success", suggestion and "Suggestion added" or "Comment added", 1200)
 				context.refresh()
 			end)
 		end,
