@@ -84,6 +84,14 @@ function M.setup(buf, refresh)
 			end,
 		},
 		{
+			key = "T",
+			desc = "Edit PR title",
+			opts = { nowait = true, silent = true },
+			callback = function()
+				dispatch_simple(refresh, actions.edit_title)
+			end,
+		},
+		{
 			key = "c",
 			desc = "Reply to comment",
 			opts = { nowait = true, silent = true },
@@ -136,6 +144,7 @@ end
 function M.teardown(buf)
 	local items = {
 		{ key = { "a", "i" } },
+		{ key = "T" },
 		{ key = "c" },
 		{ key = "e" },
 		{ key = "d" },

@@ -354,6 +354,7 @@ return {
 			fetch_activity = activity_api.fetch_activity,
 			fetch_commits = commits_api.fetch_commits,
 			fetch_diff = files_api.fetch_diff,
+			update_title = mergerequests_api.set_title,
 			views = views,
 		},
 		comments = {
