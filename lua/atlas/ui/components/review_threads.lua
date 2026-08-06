@@ -1,10 +1,13 @@
 local M = {}
 
 local threadsv2 = require("atlas.ui.components.threadsv2")
+local code_preview = require("atlas.ui.components.code_preview")
 local emojis = require("atlas.ui.shared.emojis")
 local highlights = require("atlas.ui.shared.highlights")
 local icons = require("atlas.ui.shared.icons")
 local utils = require("atlas.ui.shared.utils")
+
+local SUGGESTION_PATTERN = "^(.-)```suggestion[^\n]*\n(.-)\n```(.*)$"
 
 ---@param author { name: string, nickname: string|nil }|nil
 ---@return string
@@ -79,6 +82,36 @@ local function can_action(opts, action, comment)
 end
 
 ---@param comment PullsComment
+---@return string|nil, AtlasMarkdownEditorPreview|nil
+local function suggestion_content(comment)
+	if not comment.inline then
+		return nil, nil
+	end
+	local raw = tostring(comment.content_raw or ""):gsub("\r\n", "\n")
+	local before, replacement, after = raw:match(SUGGESTION_PATTERN)
+	if replacement == nil then
+		return nil, nil
+	end
+
+	local prose = utils.strip_markup(before)
+	local trailing = utils.strip_markup(after)
+	if trailing ~= "" then
+		prose = prose ~= "" and (prose .. "\n\n" .. trailing) or trailing
+	end
+	local content = prose ~= "" and (prose .. "\n\nSuggestion") or "Suggestion"
+	local lines = vim.split(replacement, "\n", { plain = true })
+	if #lines == 0 then
+		lines = { "" }
+	end
+	return content,
+		code_preview.render({
+			file_path = comment.inline.path,
+			lines = lines,
+			start_line = comment.inline.start_to or comment.inline.to or 1,
+		})
+end
+
+---@param comment PullsComment
 ---@param opts AtlasReviewThreadRenderOptions
 ---@param is_root? boolean
 ---@return AtlasThreadV2Item
@@ -135,8 +168,13 @@ local function comment_item(comment, opts, is_root)
 		}
 	end
 
-	local text = is_deleted and "(deleted comment)"
-		or utils.strip_markup(comment.content_display or comment.content_raw or "")
+	local text, content_block
+	if is_deleted then
+		text = "(deleted comment)"
+	else
+		text, content_block = suggestion_content(comment)
+		text = text or utils.strip_markup(comment.content_display or comment.content_raw or "")
+	end
 	if text == "" then
 		text = "(empty comment)"
 	end
@@ -165,6 +203,7 @@ local function comment_item(comment, opts, is_root)
 		additional = utils.relative_time(comment.created_on),
 		right_text = marker,
 		content = text,
+		content_block = content_block,
 		children = {},
 		footer_items = footer_items,
 		footer_highlights = reaction_highlights,
@@ -173,6 +212,7 @@ local function comment_item(comment, opts, is_root)
 			comment = comment,
 			author_hl_name = author,
 			is_deleted = is_deleted,
+			is_suggestion = content_block ~= nil,
 			right_text_hl = marker_hl,
 		},
 	}
@@ -200,6 +240,9 @@ local function threads_opts(padding_x)
 		content_hl = function(item, row)
 			local meta = item and item.meta or {}
 			local segments = {}
+			if meta.is_suggestion and row == "Suggestion" then
+				table.insert(segments, { start_col = 0, end_col = #row, hl_group = "AtlasTextMuted" })
+			end
 			if meta.is_task == true then
 				local checkbox_start, checkbox_end = row:find("%[[ xX]%]")
 				if checkbox_start then
@@ -371,6 +414,7 @@ local function build_item(node, opts, is_root, root)
 	if is_root and not node.comment.is_task and not opts.expanded(node.comment) then
 		item.additional = nil
 		item.content = nil
+		item.content_block = nil
 		item.footer_items = {}
 		item.children = {}
 		if not collapsed_by_default(node.comment) and #node.children > 0 then
@@ -457,6 +501,7 @@ function M.render_compact(node, width, expanded, location)
 	item.meta.additional_hl = metadata_hl
 	if not expanded then
 		item.content = nil
+		item.content_block = nil
 		item.children = {}
 		item.footer_items = {}
 		item.footer_highlights = {}
