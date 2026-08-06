@@ -1,12 +1,9 @@
 local M = {}
 
-local footer = require("atlas.ui.components.footer")
 local table_tree = require("atlas.ui.components.table_tree")
 local text_utils = require("atlas.ui.shared.utils")
-local ui_utils = require("atlas.ui.utils")
 
 local NS = vim.api.nvim_create_namespace("atlas.editor.meta")
-local FOOTER_NS = vim.api.nvim_create_namespace("atlas.editor.footer")
 
 local function valid_buf(buf)
 	return buf ~= nil and vim.api.nvim_buf_is_valid(buf)
@@ -182,52 +179,6 @@ function M.render_context(state, lines)
 	vim.api.nvim_set_option_value("modifiable", true, { buf = buf })
 	vim.api.nvim_buf_set_lines(buf, 0, -1, false, #lines > 0 and lines or { "" })
 	vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
-end
-
----@param opts AtlasFormOpenOpts
----@return table[]
-local function footer_segments(opts)
-	local items = { { key = "<C-s>", desc = "submit" } }
-	for _, keymap in ipairs(opts.keymaps or {}) do
-		local key = type(keymap.key) == "table" and table.concat(keymap.key, " / ") or keymap.key
-		table.insert(items, { key = key, desc = keymap.desc })
-	end
-	table.insert(items, { key = "q", desc = "close" })
-
-	local segments = {}
-	for _, item in ipairs(items) do
-		table.insert(segments, { text = item.key, hl_group = "AtlasTextWarning" })
-		table.insert(segments, { text = item.desc, hl_group = "AtlasFooterText" })
-	end
-	return segments
-end
-
----@param layout AtlasFormLayout
----@param opts AtlasFormOpenOpts
-function M.render_footer(layout, opts)
-	local buf = layout.footer_buf
-	local win = layout.footer_win
-	if not valid_buf(buf) or not win or not vim.api.nvim_win_is_valid(win) then
-		return
-	end
-
-	local block = footer.render({
-		width = vim.api.nvim_win_get_width(win),
-		segments = footer_segments(opts),
-	})
-	vim.api.nvim_set_option_value("modifiable", true, { buf = buf })
-	vim.api.nvim_buf_set_lines(buf, 0, -1, false, block.lines)
-	vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
-	vim.api.nvim_buf_clear_namespace(buf, FOOTER_NS, 0, -1)
-	for _, span in ipairs(block.highlights) do
-		local clamped = ui_utils.clamp_span(block.lines, span)
-		if clamped then
-			vim.api.nvim_buf_set_extmark(buf, FOOTER_NS, clamped.line, clamped.start_col, {
-				end_col = clamped.end_col,
-				hl_group = clamped.hl_group,
-			})
-		end
-	end
 end
 
 return M

@@ -18,9 +18,15 @@ local M = {}
 
 local config = require("atlas.config")
 local git = require("atlas.core.git")
-local resolver = require("atlas.commands.open.resolver")
 
 local DEFAULT_PR_TEMPLATE = ".github/pull_request_template.md"
+
+local URL_PATHS = {
+	github = { issue = "/issues/", commit = "/commit/" },
+	gitlab = { issue = "/-/issues/", commit = "/-/commit/" },
+	bitbucket = { issue = "/issues/", commit = "/commits/" },
+	jira = { issue = "/browse/" },
+}
 
 local COMMIT_CATEGORIES = {
 	feat = "features",
@@ -69,6 +75,7 @@ local SECTIONS = {
 ---@field provider AtlasPullsProviderId|"unknown"|nil
 ---@field repo_url string|nil
 ---@field jira_url string|nil
+---@field urls { issue: string|nil, commit: string|nil }
 
 ---@param root string
 ---@param repo_slug string
@@ -112,23 +119,24 @@ end
 ---@return string|nil
 local function jira_url()
 	local issues = config.options.issues or {}
-	local providers = issues.providers or {}
-	local jira = providers.jira or {}
+	local configured_providers = issues.providers or {}
+	local jira = configured_providers.jira or {}
 	local base_url = vim.trim(jira.base_url or ""):gsub("/+$", "")
 	if base_url == "" then
 		return nil
 	end
-	return base_url .. "/browse"
+	return base_url .. URL_PATHS.jira.issue:gsub("/+$", "")
 end
 
 ---@param root string
 ---@return PullsCreateDescriptionLinks
 local function links(root)
-	local remote = resolver.local_repository(root)
+	local remote = git.local_repository(root)
 	return {
 		provider = remote and remote.provider or nil,
 		repo_url = remote and string.format("https://%s/%s", remote.host, remote.slug) or nil,
 		jira_url = jira_url(),
+		urls = (remote and URL_PATHS[remote.provider]) or {},
 	}
 end
 
@@ -143,7 +151,7 @@ local function add_links(text, context)
 	end
 
 	if context.repo_url then
-		local issue_path = context.provider == "gitlab" and "/-/issues/" or "/issues/"
+		local issue_path = context.urls.issue or "/issues/"
 		text = text:gsub("%[?#(%d+)%]?", function(number)
 			return string.format("[#%s](%s%s%s)", number, context.repo_url, issue_path, number)
 		end)
@@ -159,8 +167,7 @@ local function commit_link(hash, context)
 	if context.repo_url == nil then
 		return "`" .. hash .. "`"
 	end
-	local path = context.provider == "gitlab" and "/-/commit/"
-		or (context.provider == "bitbucket" and "/commits/" or "/commit/")
+	local path = context.urls.commit or "/commit/"
 	return string.format("[`%s`](%s%s%s)", hash, context.repo_url, path, hash)
 end
 
@@ -169,13 +176,9 @@ end
 ---@param context PullsCreateDescriptionLinks
 ---@return string
 local function plain_commits(commits, diffstat, context)
-	local lines = {}
-	for _, commit in ipairs(commits) do
-		table.insert(
-			lines,
-			string.format("- %s %s", commit_link(commit.hash, context), add_links(commit.subject, context))
-		)
-	end
+	local lines = vim.tbl_map(function(commit)
+		return string.format("- %s %s", commit_link(commit.hash, context), add_links(commit.subject, context))
+	end, commits)
 	if #lines > 0 and #diffstat > 0 then
 		table.insert(lines, "")
 	end
@@ -210,7 +213,7 @@ local function related(context, head, commits)
 			end
 		end
 		if context.repo_url then
-			local issue_path = context.provider == "gitlab" and "/-/issues/" or "/issues/"
+			local issue_path = context.urls.issue or "/issues/"
 			for number in text:gmatch("#(%d+)") do
 				add("#" .. number, context.repo_url .. issue_path .. number)
 			end

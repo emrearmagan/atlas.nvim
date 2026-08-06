@@ -4,7 +4,7 @@ local M = {}
 local state = require("atlas.issues.ui.panel.issue.tabs.conversation.state")
 local renderer = require("atlas.issues.ui.panel.issue.tabs.conversation.renderer")
 local keymaps = require("atlas.issues.ui.panel.issue.tabs.conversation.keymaps")
-local footer = require("atlas.ui.components.footer")
+local statusline = require("atlas.ui.statusline")
 
 ---@return IssuesProvider|nil
 local function get_provider()
@@ -39,7 +39,8 @@ function M.on_select(issue, refresh, opts)
 	opts = opts or {}
 
 	local provider = get_provider()
-	if not provider or not provider.fetch_conversation then
+	local comments = provider and provider.capabilities.comments
+	if not comments or not comments.fetch_conversation then
 		state.comments = {}
 		state.activity = {}
 		refresh()
@@ -49,19 +50,19 @@ function M.on_select(issue, refresh, opts)
 	local key = tostring(issue.key or "")
 	state.comments = "loading"
 	state.activity = "loading"
-	footer.notify("loading", string.format("Loading conversation for %s...", key))
+	statusline.notify("loading", string.format("Loading conversation for %s...", key))
 
-	track(provider.fetch_conversation(issue, opts, function(result, err)
+	track(comments.fetch_conversation(issue, opts, function(result, err)
 		if err then
 			state.comments = err
 			state.activity = err
-			footer.notify("error", string.format("Failed to load conversation for %s", key))
+			statusline.notify("error", string.format("Failed to load conversation for %s", key))
 		else
 			result = result or {}
 			state.comments = result.comments or {}
 			state.activity = result.events or {}
 			state.reaction_options = result.reaction_options or {}
-			footer.notify("success", string.format("Conversation loaded for %s", key), 1200)
+			statusline.notify("success", string.format("Conversation loaded for %s", key), 1200)
 		end
 		refresh()
 	end))

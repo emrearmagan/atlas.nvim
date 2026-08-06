@@ -7,19 +7,13 @@ local core_git = require("atlas.core.git")
 ---@field base_revision string Immutable merge-base commit hash.
 ---@field head_revision string Immutable commit hash.
 
----@class AtlasNativeDiffDocumentSide
----@field path string
----@field lines string[]
-
----@class AtlasNativeDiffDocument
----@field file DiffFile
----@field old AtlasNativeDiffDocumentSide
----@field new AtlasNativeDiffDocumentSide
----@field binary boolean
+---@class AtlasNativeDiffDocument: AtlasReviewDocument
+---@field changes DiffHunk[]
 
 ---@class AtlasPreparedDiff
 ---@field range AtlasNativeDiffRange
 ---@field files DiffFile[]
+---@field file_paths table<string, string> Head path keyed by current and old file paths.
 ---@field document AtlasNativeDiffDocument
 
 ---@class AtlasDiffPrepareOptions
@@ -482,12 +476,11 @@ local function load_document(op, range, file, on_done)
 			op:finish(nil, hunk_error)
 			return
 		end
-		local document_file = vim.deepcopy(file)
-		document_file.hunks = hunks
 		on_done({
-			file = document_file,
+			status = file.status,
 			old = { path = old_path, lines = old_lines },
 			new = { path = file.path, lines = new_lines },
+			changes = hunks,
 			binary = binary,
 		})
 	end
@@ -535,6 +528,13 @@ function M.prepare(options, on_done)
 	resolve_range(op, options.git_root, options.base_revision, options.head_revision, function(range)
 		progress("Loading changed files...")
 		list_files(op, range, function(files)
+			local file_paths = {}
+			for _, file in ipairs(files) do
+				file_paths[file.path] = file.path
+				if file.old_path then
+					file_paths[file.old_path] = file.path
+				end
+			end
 			if options.filter then
 				local ok, filtered = pcall(options.filter, files)
 				if not ok then
@@ -550,7 +550,7 @@ function M.prepare(options, on_done)
 
 			progress("Loading diff...")
 			load_document(op, range, files[1], function(document)
-				op:finish({ range = range, files = files, document = document }, nil)
+				op:finish({ range = range, files = files, file_paths = file_paths, document = document }, nil)
 			end)
 		end)
 	end)

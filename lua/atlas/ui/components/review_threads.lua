@@ -1,6 +1,7 @@
 local M = {}
 
 local threadsv2 = require("atlas.ui.components.threadsv2")
+local emojis = require("atlas.ui.shared.emojis")
 local highlights = require("atlas.ui.shared.highlights")
 local icons = require("atlas.ui.shared.icons")
 local utils = require("atlas.ui.shared.utils")
@@ -31,25 +32,21 @@ local function author_hl(name)
 end
 
 ---@param comment PullsComment
----@return string|nil text, string|nil hl
-local function root_marker(comment)
+---@return string text, string hl
+function M.status_marker(comment)
 	if comment.state == "DELETED" then
-		local icon, icon_hl = icons.general("delete")
-		return icon .. " deleted  ", icon_hl
+		return icons.general("delete")
 	end
 	if comment.state == "RESOLVED" then
-		local icon, icon_hl = icons.general("success")
-		return icon .. " resolved  ", icon_hl
+		return icons.general("success")
 	end
 	if comment.state == "OUTDATED" then
-		local icon, icon_hl = icons.general("warning")
-		return icon .. " outdated  ", icon_hl
+		return icons.general("progress")
 	end
 	if comment.state == "PENDING" then
-		local icon, icon_hl = icons.general("warning")
-		return icon .. " pending  ", icon_hl
+		return icons.pulls_status("inprogress")
 	end
-	return nil, nil
+	return "", "AtlasTextMuted"
 end
 
 ---@param label string
@@ -117,12 +114,13 @@ local function comment_item(comment, opts, is_root)
 		end
 
 		local user_icon, user_icon_hl = icons.general("user")
+		local marker, marker_hl = M.status_marker(comment)
 		return {
 			icon = user_icon,
 			icon_hl = user_icon_hl,
 			author = creator,
 			additional = additional,
-			right_text = "",
+			right_text = marker,
 			content = string.format("%s %s", checkbox, title),
 			footer_items = footer_items,
 			children = {},
@@ -132,6 +130,7 @@ local function comment_item(comment, opts, is_root)
 				author_hl_name = creator,
 				is_task = true,
 				is_resolved = is_resolved,
+				right_text_hl = marker_hl,
 			},
 		}
 	end
@@ -144,29 +143,18 @@ local function comment_item(comment, opts, is_root)
 
 	local author = author_name(comment.author)
 	local footer_items = {}
-	if is_root and opts.toggle_resolved_key and can_action(opts, "toggle_resolved", comment) then
-		table.insert(
-			footer_items,
-			string.format(
-				"%s (%s)",
-				is_resolved and icons.general("refresh") or icons.general("success"),
-				opts.toggle_resolved_key
-			)
-		)
-	end
-	if can_action(opts, "reply", comment) then
-		table.insert(footer_items, string.format("%s (c)", icons.general("reply")))
-	end
-	if can_action(opts, "edit", comment) then
-		table.insert(footer_items, string.format("%s (e)", icons.general("edit")))
-	end
-	if can_action(opts, "delete", comment) then
-		table.insert(footer_items, string.format("%s (d)", icons.general("delete")))
+	local reaction_highlights
+	if opts.show_reactions ~= false then
+		local reactions
+		reactions, reaction_highlights = emojis.format(comment.reactions, opts.reaction_options)
+		if reactions ~= "" then
+			table.insert(footer_items, reactions)
+		end
 	end
 
 	local marker, marker_hl
 	if is_root then
-		marker, marker_hl = root_marker(comment)
+		marker, marker_hl = M.status_marker(comment)
 	end
 	local user_icon, user_icon_hl = icons.general("user")
 
@@ -179,6 +167,7 @@ local function comment_item(comment, opts, is_root)
 		content = text,
 		children = {},
 		footer_items = footer_items,
+		footer_highlights = reaction_highlights,
 		line_map = { comment = comment, entity_kind = "comment" },
 		meta = {
 			comment = comment,
@@ -195,8 +184,8 @@ local function threads_opts(padding_x)
 	return {
 		padding_x = padding_x,
 		separator = "─",
-		additional_hl = function(_item)
-			return "AtlasTextMuted"
+		additional_hl = function(item)
+			return item.meta.additional_hl or "AtlasTextMuted"
 		end,
 		author_hl = function(item, author)
 			local meta = item and item.meta or nil
@@ -210,23 +199,20 @@ local function threads_opts(padding_x)
 		end,
 		content_hl = function(item, row)
 			local meta = item and item.meta or {}
+			local segments = {}
 			if meta.is_task == true then
-				local checkbox = row:match("^%[[ xX]%]")
-				if checkbox then
-					return {
-						{
-							start_col = 0,
-							end_col = #checkbox,
-							hl_group = meta.is_resolved and "AtlasTextPositive" or "AtlasTextMuted",
-						},
-					}
+				local checkbox_start, checkbox_end = row:find("%[[ xX]%]")
+				if checkbox_start then
+					table.insert(segments, {
+						start_col = checkbox_start - 1,
+						end_col = checkbox_end,
+						hl_group = meta.is_resolved and "AtlasTextPositive" or "AtlasTextMuted",
+					})
 				end
-				return nil
+			elseif meta.is_deleted then
+				table.insert(segments, { start_col = 0, end_col = #row, hl_group = "AtlasTextMutedItalic" })
 			end
-			if meta.is_deleted then
-				return { { start_col = 0, end_col = #row, hl_group = "AtlasTextMutedItalic" } }
-			end
-			return nil
+			return #segments > 0 and segments or nil
 		end,
 		right_text_hl = function(item)
 			local meta = item and item.meta or {}
@@ -406,12 +392,14 @@ end
 ---@field can_action? fun(action: AtlasReviewCommentAction, comment: PullsComment): boolean
 ---@field padding_x? integer
 ---@field toggle_resolved_key? string
+---@field reaction_options? PullsReactionOption[]
+---@field show_reactions? boolean
 
 ---@param nodes AtlasReviewThreadNode[]
 ---@param width integer
 ---@param opts AtlasReviewThreadRenderOptions|nil
 ---@return string[], table[], table<integer, table>
-function M.render_threads(nodes, width, opts)
+function M.render(nodes, width, opts)
 	opts = opts or {}
 	opts.expanded = opts.expanded or function()
 		return true
@@ -423,11 +411,65 @@ function M.render_threads(nodes, width, opts)
 	return threadsv2.render(rendered, width, threads_opts(opts.padding_x or 1))
 end
 
+---@param node AtlasReviewThreadNode
+---@param width integer
+---@param expanded boolean
+---@param location string
+---@return string[], AtlasUIHighlight[], table<integer, table>
+function M.render_compact(node, width, expanded, location)
+	local item = build_item(node, {
+		expanded = function()
+			return true
+		end,
+	}, true, nil)
+
+	local comment = node.comment
+	local replies = descendant_count(node)
+	local marker, marker_hl = M.status_marker(comment)
+	local fields = {
+		{ text = location, hl = "Normal" },
+		{
+			text = replies > 0 and string.format("%d %s", replies, replies == 1 and "reply" or "replies") or "",
+			hl = "AtlasTextMuted",
+		},
+		{ text = utils.relative_time(comment.created_on), hl = "AtlasTextMuted" },
+		{ text = marker, hl = marker_hl },
+	}
+	local metadata, metadata_hl = "", {}
+	for _, field in ipairs(fields) do
+		if field.text ~= "" then
+			if metadata ~= "" then
+				metadata = metadata .. "  "
+			end
+			local start_col = #metadata
+			metadata = metadata .. field.text
+			table.insert(metadata_hl, { start_col = start_col, end_col = #metadata, hl_group = field.hl })
+		end
+	end
+
+	local expander, expander_hl = icons.general(expanded and "arrow_up" or "arrow_right")
+	item.icon = expander
+	item.icon_hl = expander_hl
+	item.author = "@" .. author_name(comment.author)
+	item.additional = metadata
+	item.right_text = ""
+	item.line_map.tree_key = M.comment_key(comment)
+	item.meta.additional_hl = metadata_hl
+	if not expanded then
+		item.content = nil
+		item.children = {}
+		item.footer_items = {}
+		item.footer_highlights = {}
+	end
+
+	return threadsv2.render({ item }, width, threads_opts(0))
+end
+
 ---@param comment PullsComment
 ---@param width integer
 ---@return AtlasMarkdownEditorPreview
 function M.render_comment(comment, width)
-	local lines, spans = M.render_threads({ { comment = comment, children = {} } }, width, { padding_x = 1 })
+	local lines, spans = M.render({ { comment = comment, children = {} } }, width, { padding_x = 1 })
 	return { lines = lines, highlights = spans }
 end
 

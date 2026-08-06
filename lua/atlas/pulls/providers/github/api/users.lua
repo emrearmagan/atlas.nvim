@@ -1,6 +1,6 @@
 local M = {}
 
-local cli = require("atlas.pulls.providers.github.api.cli")
+local cli = require("atlas.providers.github.client").pulls
 local mapper = require("atlas.pulls.providers.github.api.mapper")
 
 ---@param on_done fun(user: PullsUser|nil, err: string|nil)

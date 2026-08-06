@@ -1,51 +1,63 @@
-local icons = require("atlas.ui.shared.icons")
-local config = require("atlas.issues.providers.jira.api.config")
-local provider_icon, provider_hl = icons.issues_provider("jira", "provider")
-
 ---@class JiraProvider : IssuesProvider
-local M = {
-	id = "jira",
-	name = "Jira",
-	icon = provider_icon,
-	hl_group = provider_hl,
-	panel = require("atlas.issues.providers.jira.ui.panel"),
-	bookmark_query_field = "jql",
-}
+local M = {}
 
-function M.setup()
-	require("atlas.issues.providers.jira.highlights").setup()
+local resolver = require("atlas.providers.resolve")
+
+---@param value string
+---@param parsed AtlasParsedUrl|nil
+---@return AtlasTarget|nil, string|nil
+local function resolve_target(value, parsed)
+	local reference = value:upper():match("^([A-Z][A-Z0-9_]*%-%d+)$")
+	if reference then
+		local base_url = resolver.base_url({ provider = "jira", domain = "issues", host = "" })
+		return {
+			provider = "jira",
+			domain = "issues",
+			entity = "issue",
+			host = base_url:match("^https?://([^/]+)") or "",
+			issue_key = reference,
+			url = base_url .. "/browse/" .. reference,
+		}
+	end
+
+	if parsed == nil then
+		return nil, nil
+	end
+	local path = resolver.path_for_base(parsed, resolver.configured_base("issues", "jira"))
+	if path == nil then
+		return nil, nil
+	end
+
+	local issue_key, tail = path:match("^/browse/([A-Z][A-Z0-9_]*%-%d+)(.*)$")
+	if issue_key == nil or not resolver.valid_tail(tail) then
+		return nil, "Unsupported Jira URL. Expected a /browse/KEY issue URL"
+	end
+
+	return {
+		provider = "jira",
+		domain = "issues",
+		entity = "issue",
+		url = value,
+		host = parsed.host,
+		issue_key = issue_key,
+	}
+end
+
+---@param target AtlasTarget
+---@return AtlasIssuesViewConfig
+local function search_view(target)
+	return { name = "Search", layout = "compact", jql = "key = " .. target.issue_key }
+end
+
+---@param target AtlasTarget
+---@return string|nil
+local function target_issue_key(target)
+	return target.issue_key
 end
 
 function M.on_refresh()
 	local service = require("atlas.issues.providers.jira.api.service")
 	service.clear_memory_cache()
-end
-
----@param issue Issue
----@param is_child boolean
----@return table
-function M.format_row(issue, is_child)
-	return require("atlas.issues.providers.jira.ui.renderer").format_row(issue, is_child)
-end
-
----@param row table
----@param col table
----@param ctx { text: string, padded: string, width: integer }
----@return table[]|nil
-function M.cell_hl(row, col, ctx)
-	return require("atlas.issues.providers.jira.ui.renderer").cell_hl(row, col, ctx)
-end
-
----@param issue Issue
----@return string[], AtlasUIHighlight[]
-function M.issue_popup_content(issue)
-	return require("atlas.issues.providers.jira.ui.renderer").issue_popup_content(issue)
-end
-
----@param on_done fun(user: IssueUser|nil, err: string|nil)
-function M.fetch_user(on_done)
-	local users_api = require("atlas.issues.providers.jira.api.users")
-	users_api.get_myself(on_done)
 end
 
 ---@param issues_config AtlasIssuesConfig
@@ -126,7 +138,7 @@ function M.fetch_issues(view, opts, on_done)
 	local issues_api = require("atlas.issues.providers.jira.api.issues")
 	---@cast view AtlasJiraViewConfig
 
-	local jql = tostring(view and view.jql or "")
+	local jql = tostring(view and (view.jql or view.search) or "")
 	if jql == "" then
 		on_done({}, nil, true, "Missing Jira view JQL")
 		return nil
@@ -149,7 +161,7 @@ function M.fetch_issues(view, opts, on_done)
 end
 
 ---@param issue_key string
----@param opts IssuesFetchOpts|nil
+---@param _opts IssuesFetchOpts|nil
 ---@param on_done fun(issue: Issue|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_issue(issue_key, _opts, on_done)
@@ -161,7 +173,7 @@ end
 ---@param opts IssuesFetchOpts|nil
 ---@param on_done fun(comments: IssueComment[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_comments(issue, opts, on_done)
+local function fetch_comments(issue, opts, on_done)
 	local comments_api = require("atlas.issues.providers.jira.api.comments")
 	local COMMENTS_PAGE_SIZE = 100
 
@@ -216,7 +228,7 @@ function M.fetch_conversation(issue, opts, on_done)
 
 	local force = opts.force_refresh == true
 
-	return M.fetch_comments(issue, { force_load = force }, function(comments, err)
+	return fetch_comments(issue, { force_load = force }, function(comments, err)
 		if err then
 			on_done(nil, err)
 			return
@@ -256,24 +268,8 @@ function M.fetch_activity(issue, opts, on_done)
 	})
 end
 
----@param action_id string
----@param ctx table
----@param on_done fun(result: table|nil, err: string|nil)
-function M.run_action(action_id, ctx, on_done)
-	local jira_actions = require("atlas.issues.providers.jira.actions")
-	jira_actions.run(action_id, ctx, on_done)
-end
-
----@param issue Issue|nil
----@param source "main"|"panel"|nil
----@param on_done fun(result: table|nil, err: string|nil)
-function M.open_actions(issue, source, on_done)
-	local jira_actions = require("atlas.issues.providers.jira.actions")
-	jira_actions.open({ issue = issue, source = source }, on_done)
-end
-
 ---@param on_done fun(result: table|nil, err: string|nil)|nil
-function M.search(on_done)
+local function search(on_done)
 	local jira_actions = require("atlas.issues.providers.jira.actions")
 	jira_actions.run("search_issues", { issue = nil, source = "main" }, function(result, err)
 		if on_done ~= nil then
@@ -282,64 +278,11 @@ function M.search(on_done)
 	end)
 end
 
----@param issue Issue
----@param on_done fun(is_subscribed: boolean|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.toggle_subscription(issue, on_done)
-	local issue_key = tostring(issue.key or "")
-	if issue_key == "" then
-		vim.schedule(function()
-			on_done(nil, "Missing issue key")
-		end)
-		return nil
-	end
-
-	local service = require("atlas.issues.providers.jira.api.service")
-	if issue.is_subscribed ~= true then
-		return service.request("POST", "/issue/" .. issue_key .. "/watchers", nil, function(_, err)
-			if err then
-				on_done(nil, err)
-				return
-			end
-			issue.is_subscribed = true
-			on_done(true, nil)
-		end)
-	end
-
-	local function unsubscribe(account_id)
-		local jira_config = config.jira_config()
-		local user_param = "accountId=" .. account_id
-		if jira_config.api_type == "server" then
-			user_param = "username=" .. account_id
+local function create_issue()
+	require("atlas.issues.providers.jira.actions").run("create_issue", {}, function(_, err)
+		if err then
+			require("atlas.core.notify").error("Jira create issue failed: " .. tostring(err))
 		end
-		return service.request(
-			"DELETE",
-			string.format("/issue/%s/watchers?%s", issue_key, user_param),
-			nil,
-			function(_, err)
-				if err then
-					on_done(nil, err)
-					return
-				end
-				issue.is_subscribed = false
-				on_done(false, nil)
-			end
-		)
-	end
-
-	local issues_state = require("atlas.issues.state")
-	local current = issues_state.current_user
-	if current and tostring(current.account_id or "") ~= "" then
-		return unsubscribe(current.account_id)
-	end
-
-	local users_api = require("atlas.issues.providers.jira.api.users")
-	return users_api.get_myself(function(user, err)
-		if err or not user or user.account_id == "" then
-			on_done(nil, err or "Failed to fetch Jira user")
-			return
-		end
-		unsubscribe(user.account_id)
 	end)
 end
 
@@ -357,4 +300,40 @@ function M.views()
 	return require("atlas.ui.shared.bookmarks_view").append_to_views(views, cfg.bookmarks, "J", "JQL")
 end
 
-return M
+local renderer = require("atlas.issues.providers.jira.ui.renderer")
+
+return {
+	resolve = resolve_target,
+	search_view = search_view,
+	issue_key = target_issue_key,
+	capabilities = {
+		core = {
+			fetch_user = require("atlas.issues.providers.jira.api.users").get_myself,
+			fetch_issues = M.fetch_issues,
+			fetch_issue = M.fetch_issue,
+			views = M.views,
+			refresh = M.on_refresh,
+		},
+		comments = {
+			fetch_activity = M.fetch_activity,
+			fetch_conversation = M.fetch_conversation,
+			add_comment = M.add_comment,
+			reply_comment = M.reply_comment,
+			edit_comment = M.edit_comment,
+			delete_comment = M.delete_comment,
+			comment_completion = function()
+				return require("atlas.issues.providers.jira.completion.author").build_completion()
+			end,
+		},
+		search = search,
+		create_issue = create_issue,
+		actions = require("atlas.issues.providers.jira.actions"),
+		ui = {
+			setup = require("atlas.issues.providers.jira.highlights").setup,
+			format_row = renderer.format_row,
+			cell_hl = renderer.cell_hl,
+			issue_popup_content = renderer.issue_popup_content,
+			panel = require("atlas.issues.providers.jira.ui.panel"),
+		},
+	},
+}

@@ -439,12 +439,4 @@ function M.render(opts)
 	return lines, line_map, spans
 end
 
----Expose flatten for tests or custom pipelines.
----@param rows table[]
----@param tree TableTreeTreeOpts|nil
----@return table[]
-function M.flatten(rows, tree)
-	return flatten(rows, resolve_tree(tree))
-end
-
 return M

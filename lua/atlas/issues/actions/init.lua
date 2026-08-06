@@ -1,6 +1,6 @@
 local M = {}
 
-local footer = require("atlas.ui.components.footer")
+local statusline = require("atlas.ui.statusline")
 
 ---@return IssuesProvider|nil
 local function provider()
@@ -13,13 +13,14 @@ end
 ---@param on_done fun(result: table|nil)|nil
 function M.run_action(action_id, issue, source, on_done)
 	local p = provider()
-	if not p or not p.run_action then
+	local actions = p and p.capabilities.actions
+	if not actions then
 		return
 	end
 
-	p.run_action(action_id, { issue = issue, source = source }, function(result, err)
+	actions.run(action_id, { issue = issue, source = source }, function(result, err)
 		if err ~= nil then
-			footer.notify("error", tostring(err))
+			statusline.notify("error", tostring(err))
 			if on_done then
 				on_done(nil)
 			end
@@ -27,7 +28,7 @@ function M.run_action(action_id, issue, source, on_done)
 		end
 
 		if result ~= nil and result.message ~= nil and result.message ~= "" then
-			footer.notify("info", tostring(result.message), 1200)
+			statusline.notify("info", tostring(result.message), 1200)
 		end
 
 		if result ~= nil and result.changed_issue_key ~= nil and result.changed_issue_key ~= "" then
@@ -45,13 +46,14 @@ end
 ---@param on_done fun(result: table|nil)|nil
 function M.open_actions(issue, source, on_done)
 	local p = provider()
-	if not p or not p.open_actions then
+	local actions = p and p.capabilities.actions
+	if not actions then
 		return
 	end
 
-	p.open_actions(issue, source, function(result, err)
+	actions.open({ issue = issue, source = source }, function(result, err)
 		if err ~= nil then
-			footer.notify("error", tostring(err))
+			statusline.notify("error", tostring(err))
 			if on_done then
 				on_done(nil)
 			end
@@ -63,7 +65,7 @@ function M.open_actions(issue, source, on_done)
 		end
 
 		if result ~= nil and result.message ~= nil and result.message ~= "" then
-			footer.notify("info", tostring(result.message), 1200)
+			statusline.notify("info", tostring(result.message), 1200)
 		end
 
 		if on_done then
@@ -75,13 +77,14 @@ end
 ---@param on_done fun(result: table|nil)|nil
 function M.search(on_done)
 	local p = provider()
-	if not p or not p.search then
+	local search = p and p.capabilities.search
+	if not search then
 		return
 	end
 
-	p.search(function(result, err)
+	search(function(result, err)
 		if err ~= nil then
-			footer.notify("error", tostring(err))
+			statusline.notify("error", tostring(err))
 			if on_done then
 				on_done(nil)
 			end
@@ -89,7 +92,7 @@ function M.search(on_done)
 		end
 
 		if result ~= nil and result.message ~= nil and result.message ~= "" then
-			footer.notify("info", tostring(result.message), 1200)
+			statusline.notify("info", tostring(result.message), 1200)
 		end
 
 		if result ~= nil and result.changed_issue_key ~= nil and result.changed_issue_key ~= "" then

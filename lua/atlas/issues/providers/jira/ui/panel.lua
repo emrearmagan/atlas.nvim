@@ -126,19 +126,6 @@ function M.chips(issue)
 	return chips
 end
 
----@return AtlasMarkdownCompletionProvider|nil
-function M.comment_completion()
-	local author = require("atlas.issues.providers.jira.completion.author")
-	return author.build_completion()
-end
-
----@param body string
----@return string
-function M.resolve_comment_body(body)
-	local author = require("atlas.issues.providers.jira.completion.author")
-	return author.resolve(body)
-end
-
 -- Fetches
 
 ---@param issue Issue

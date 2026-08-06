@@ -1,6 +1,6 @@
 local M = {}
 
-local notify = require("atlas.core.notify")
+local statusline = require("atlas.ui.statusline")
 
 ---@class PullsPipelineActionContext
 ---@field pr PullRequest
@@ -14,24 +14,20 @@ local notify = require("atlas.core.notify")
 ---@field is_available fun(ctx: PullsPipelineActionContext): boolean, string|nil
 ---@field run fun(ctx: PullsPipelineActionContext, done: fun(err: string|nil))
 
-local PROVIDER_ACTIONS = {
-	bitbucket = require("atlas.pulls.providers.bitbucket.actions.pipelines"),
-	github = require("atlas.pulls.providers.github.actions.pipelines"),
-	gitlab = require("atlas.pulls.providers.gitlab.actions.pipelines"),
-}
-
 ---@param provider PullsProvider|nil
 ---@param ctx PullsPipelineActionContext
 ---@param on_select fun(action: PullsPipelineAction)
 function M.open(provider, ctx, on_select)
 	local available = {}
-	for _, action in ipairs(PROVIDER_ACTIONS[(provider or {}).id] or {}) do
+	local pipelines = provider and provider.capabilities.pipelines
+	local actions = (pipelines and pipelines.actions) or {}
+	for _, action in ipairs(actions) do
 		if action.is_available(ctx) then
 			table.insert(available, action)
 		end
 	end
 	if #available == 0 then
-		notify.warn("No pipeline actions available")
+		statusline.notify("warn", "No pipeline actions available")
 		return
 	end
 

@@ -1,17 +1,17 @@
 local M = {}
 
-local footer = require("atlas.ui.components.footer")
+local statusline = require("atlas.ui.statusline")
 local icons = require("atlas.ui.shared.icons")
 local resolver = require("atlas.core.keymaps")
 local renderer = require("atlas.ui.notifications.renderer")
 local state = require("atlas.ui.notifications.state")
 
----@type table|nil
+---@type PullsProvider|IssuesProvider|nil
 local current_provider = nil
 ---@type fun()|nil
 local current_refresh = nil
 
----@param provider table
+---@param provider PullsProvider|IssuesProvider
 function M.set_provider(provider)
 	if current_provider ~= provider then
 		state.reset()
@@ -122,13 +122,8 @@ end
 ---@param body_map table<integer, table>
 ---@return table<integer, table>
 local function flush(target_buf, header_lines, header_spans, body_lines, body_spans, body_map)
-	local all_lines = {}
-	for _, l in ipairs(header_lines) do
-		table.insert(all_lines, l)
-	end
-	for _, l in ipairs(body_lines) do
-		table.insert(all_lines, l)
-	end
+	local all_lines = vim.list_extend({}, header_lines)
+	vim.list_extend(all_lines, body_lines)
 
 	vim.api.nvim_set_option_value("modifiable", true, { buf = target_buf })
 	vim.api.nvim_buf_set_lines(target_buf, 0, -1, false, all_lines)
@@ -277,24 +272,26 @@ end
 ---@param force_load boolean
 local function load(force_load)
 	local provider = current_provider
-	if provider == nil or provider.fetch_notifications == nil then
+	if provider == nil or provider.capabilities.notifications == nil then
 		state.is_loading = false
 		state.error = "Active provider does not support notifications"
 		rerender()
 		return
 	end
+	local notifications_api = provider.capabilities.notifications
+	---@cast notifications_api AtlasNotificationsCapability
 
 	cancel_active()
 	state.is_loading = true
 	state.error = nil
 	rerender()
 
-	active_handle = provider.fetch_notifications({ force_load = force_load }, function(notifications, err)
+	active_handle = notifications_api.fetch({ force_load = force_load }, function(notifications, err)
 		active_handle = nil
 		state.is_loading = false
 		if err then
 			state.error = tostring(err)
-			footer.notify("error", string.format("Failed to fetch notifications: %s", tostring(err)))
+			statusline.notify("error", string.format("Failed to fetch notifications: %s", tostring(err)))
 		else
 			state.error = nil
 			state.set_notifications(notifications)
@@ -313,15 +310,15 @@ end
 
 local function open_in_browser(notification)
 	if notification == nil or not notification.url or notification.url == "" then
-		footer.notify("warn", "Notification has no URL")
+		statusline.notify("warn", "Notification has no URL")
 		return
 	end
 	local ok, err = pcall(vim.ui.open, notification.url)
 	if not ok then
-		footer.notify("error", string.format("Failed to open URL: %s", tostring(err)))
+		statusline.notify("error", string.format("Failed to open URL: %s", tostring(err)))
 		return
 	end
-	footer.notify("info", "Opened in browser")
+	statusline.notify("info", "Opened in browser")
 end
 
 local function mark_read(notification)
@@ -329,24 +326,25 @@ local function mark_read(notification)
 		return
 	end
 	if not notification.unread then
-		footer.notify("info", "Already read")
+		statusline.notify("info", "Already read")
 		return
 	end
 
 	local provider = current_provider
-	if provider == nil or provider.mark_notification_read == nil then
-		footer.notify("warn", "Provider does not support marking as read")
+	local notifications = provider and provider.capabilities.notifications
+	if notifications == nil then
+		statusline.notify("warn", "Provider does not support marking as read")
 		return
 	end
 
-	footer.notify("loading", "Marking as read...")
-	provider.mark_notification_read(notification.id, function(ok, err)
+	statusline.notify("loading", "Marking as read...")
+	notifications.mark_read(notification.id, function(ok, err)
 		if not ok then
-			footer.notify("error", string.format("Failed to mark as read: %s", tostring(err)))
+			statusline.notify("error", string.format("Failed to mark as read: %s", tostring(err)))
 			return
 		end
 		state.mark_local_read(notification.id)
-		footer.notify("success", "Marked as read", 1200)
+		statusline.notify("success", "Marked as read", 1200)
 		rerender()
 		refresh_main()
 	end)
@@ -357,19 +355,20 @@ local function mark_done(notification)
 		return
 	end
 	local provider = current_provider
-	if provider == nil or provider.mark_notification_done == nil then
-		footer.notify("warn", "Provider does not support marking as done")
+	local notifications = provider and provider.capabilities.notifications
+	if notifications == nil then
+		statusline.notify("warn", "Provider does not support marking as done")
 		return
 	end
 
-	footer.notify("loading", "Marking as done...")
-	provider.mark_notification_done(notification.id, function(ok, err)
+	statusline.notify("loading", "Marking as done...")
+	notifications.mark_done(notification.id, function(ok, err)
 		if not ok then
-			footer.notify("error", string.format("Failed to mark as done: %s", tostring(err)))
+			statusline.notify("error", string.format("Failed to mark as done: %s", tostring(err)))
 			return
 		end
 		state.remove_local(notification.id)
-		footer.notify("success", "Marked as done", 1200)
+		statusline.notify("success", "Marked as done", 1200)
 		rerender()
 		refresh_main()
 	end)
@@ -439,14 +438,15 @@ function M.open()
 
 	local provider = current_provider
 	if provider == nil then
-		footer.notify("warn", "No active provider")
+		statusline.notify("warn", "No active provider")
 		return
 	end
-	if provider.fetch_notifications == nil then
-		footer.notify("warn", string.format("%s does not support notifications", provider.name or "Provider"))
+	if provider.capabilities.notifications == nil then
+		statusline.notify("warn", string.format("%s does not support notifications", provider.name or "Provider"))
 		return
 	end
 
+	local source_win = vim.api.nvim_get_current_win()
 	local target_buf = ensure_buf()
 	local width, height, row, col = compute_geometry()
 
@@ -471,6 +471,7 @@ function M.open()
 	)
 	vim.api.nvim_set_option_value("cursorline", true, { win = win })
 	vim.api.nvim_set_option_value("wrap", false, { win = win })
+	statusline.inherit(win, source_win)
 
 	vim.api.nvim_create_autocmd("WinClosed", {
 		pattern = tostring(win),
@@ -500,12 +501,14 @@ function M.refresh_in_background(opts, on_done)
 	on_done = on_done or function() end
 
 	local provider = current_provider
-	if provider == nil or provider.fetch_notifications == nil then
+	if provider == nil or provider.capabilities.notifications == nil then
 		on_done(0, "Provider has no notification support")
 		return
 	end
+	local notifications_api = provider.capabilities.notifications
+	---@cast notifications_api AtlasNotificationsCapability
 
-	provider.fetch_notifications({ force_load = opts.force_load == true }, function(notifications, err)
+	notifications_api.fetch({ force_load = opts.force_load == true }, function(notifications, err)
 		if err then
 			on_done(state.unread_count, tostring(err))
 			return
@@ -523,7 +526,5 @@ end
 function M.unread_count()
 	return state.unread_count or 0
 end
-
-M.state = state
 
 return M

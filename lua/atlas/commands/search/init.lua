@@ -1,99 +1,95 @@
 local M = {}
 
 local notify = require("atlas.core.notify")
+local providers = require("atlas.providers")
 
-local PROVIDER_SEARCH_MODULE = {
-	jira = "atlas.issues.providers.jira.completion.search",
-	github = "atlas.pulls.providers.github.completion.search",
-	gitlab = "atlas.pulls.providers.gitlab.completion.search",
-	bitbucket = "atlas.pulls.providers.bitbucket.completion.search",
+local domain_labels = {
+	pulls = "Pull Requests",
+	issues = "Issues",
 }
 
----@param domain "pulls"|"issues"
----@return string[]
-local function configured_provider_ids(domain)
-	local config = require("atlas.config")
-	local cfg = config.options and config.options[domain] or nil
-	local providers = cfg and cfg.providers or {}
-	local order = domain == "pulls" and { "bitbucket", "github", "gitlab" } or { "jira", "github" }
-	local ids = {}
-	for _, id in ipairs(order) do
-		if providers[id] then
-			table.insert(ids, id)
-		end
-	end
-	return ids
-end
+---@class AtlasSearchEntry
+---@field id AtlasProviderId
+---@field label string
+---@field open fun()
 
----@return string[]
-local function unique_provider_ids()
-	local seen = {}
-	---@type string[]
-	local ids = {}
-
-	for _, domain in ipairs({ "issues", "pulls" }) do
-		for _, id in ipairs(configured_provider_ids(domain)) do
-			if not seen[id] then
-				seen[id] = true
-				table.insert(ids, id)
+---@return AtlasSearchEntry[]
+local function configured_searches()
+	local entries = {}
+	for _, provider_config in ipairs(providers.list()) do
+		for _, domain in ipairs({ "pulls", "issues" }) do
+			if provider_config.domains[domain] and providers.options(provider_config.id, domain) then
+				local provider = assert(providers.load(provider_config.id, domain))
+				local search = provider.capabilities.search
+				if search then
+					table.insert(entries, {
+						id = provider_config.id,
+						label = provider_config.name .. " " .. domain_labels[domain],
+						open = search,
+					})
+				end
 			end
 		end
 	end
-	return ids
+	return entries
 end
 
----@param provider_id string
-local function dispatch(provider_id)
-	local module_path = PROVIDER_SEARCH_MODULE[provider_id]
-	if module_path == nil then
-		notify.error(string.format("Search not supported for %s", provider_id))
-		return
-	end
-	require(module_path).open()
-end
-
----@param provider_id string|nil
-function M.run(provider_id)
-	local ids = unique_provider_ids()
-
-	if #ids == 0 then
-		notify.error("No providers configured")
+---@param entries AtlasSearchEntry[]
+---@param prompt string
+local function choose(entries, prompt)
+	if #entries == 1 then
+		entries[1].open()
 		return
 	end
 
-	if provider_id ~= nil and provider_id ~= "" then
-		if not vim.tbl_contains(ids, provider_id) then
-			notify.error(string.format("Provider not configured: %s", provider_id))
-			return
-		end
-		dispatch(provider_id)
-		return
-	end
-
-	if #ids == 1 then
-		dispatch(ids[1])
-		return
-	end
-
-	vim.ui.select(ids, {
-		prompt = "Search in:",
-		format_item = function(id)
-			return id:sub(1, 1):upper() .. id:sub(2)
+	vim.ui.select(entries, {
+		prompt = prompt,
+		format_item = function(entry)
+			return entry.label
 		end,
-	}, function(choice)
-		if choice == nil then
+	}, function(entry)
+		if entry then
+			entry.open()
+		end
+	end)
+end
+
+---@param provider_id AtlasProviderId|nil
+function M.run(provider_id)
+	local entries = configured_searches()
+	if provider_id then
+		local matches = {}
+		for _, entry in ipairs(entries) do
+			if entry.id == provider_id then
+				table.insert(matches, entry)
+			end
+		end
+		if #matches == 0 then
+			notify.error("No configured search for provider: " .. provider_id)
 			return
 		end
-		dispatch(choice)
-	end)
+		choose(matches, "Search " .. providers[provider_id].name .. " in:")
+		return
+	end
+
+	if #entries == 0 then
+		notify.error("No searchable providers configured")
+		return
+	end
+	choose(entries, "Search in:")
 end
 
 ---@param arglead string
 ---@return string[]
 function M.complete(arglead)
-	return vim.tbl_filter(function(p)
-		return p:find(arglead, 1, true) == 1
-	end, unique_provider_ids())
+	local result, seen = {}, {}
+	for _, entry in ipairs(configured_searches()) do
+		if not seen[entry.id] and entry.id:find(arglead, 1, true) == 1 then
+			seen[entry.id] = true
+			table.insert(result, entry.id)
+		end
+	end
+	return result
 end
 
 return M

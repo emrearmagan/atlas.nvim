@@ -1,7 +1,6 @@
 local M = {}
 
 local form = require("atlas.ui.popups.form")
-local spinner = require("atlas.ui.popups.spinner")
 local multi_select = require("atlas.ui.popups.multi_select")
 local notify = require("atlas.core.notify")
 local pulls_helper = require("atlas.pulls.ui.main.helper")
@@ -170,7 +169,6 @@ end
 
 ---@param issue_state CreateIssueState
 local function close(issue_state)
-	spinner.stop()
 	form.close(issue_state.layout)
 end
 
@@ -193,22 +191,22 @@ end
 ---@param issue_state CreateIssueState
 local function pick_assignees(issue_state)
 	if not issue_state.pickers.list_assignees then
-		notify.warn("Assignee picker is not available")
+		form.notify("warn", "Assignee picker is not available")
 		return
 	end
 
-	spinner.start("Loading assignees..")
+	form.notify("loading", "Loading assignees...")
 	issue_state.pickers.list_assignees(function(items, err)
 		vim.schedule(function()
-			spinner.stop()
 			if err then
-				notify.error("Failed to load assignees: " .. tostring(err))
+				form.notify("error", "Failed to load assignees: " .. tostring(err))
 				return
 			end
 			if type(items) ~= "table" or #items == 0 then
-				notify.warn("No assignees available")
+				form.notify("warn", "No assignees available")
 				return
 			end
+			form.clear_notice()
 
 			multi_select.open({
 				items = items,
@@ -224,7 +222,7 @@ local function pick_assignees(issue_state)
 							or ""
 					)
 				end,
-				prompt = "Toggle assignees:",
+				prompt = "Assignees",
 				on_done = function(selected)
 					issue_state.fields.assignees = selected or {}
 					render_meta(issue_state)
@@ -237,22 +235,22 @@ end
 ---@param issue_state CreateIssueState
 local function pick_labels(issue_state)
 	if not issue_state.pickers.list_labels then
-		notify.warn("Label picker is not available")
+		form.notify("warn", "Label picker is not available")
 		return
 	end
 
-	spinner.start("Loading labels..")
+	form.notify("loading", "Loading labels...")
 	issue_state.pickers.list_labels(function(items, err)
 		vim.schedule(function()
-			spinner.stop()
 			if err then
-				notify.error("Failed to load labels: " .. tostring(err))
+				form.notify("error", "Failed to load labels: " .. tostring(err))
 				return
 			end
 			if type(items) ~= "table" or #items == 0 then
-				notify.warn("No labels available")
+				form.notify("warn", "No labels available")
 				return
 			end
+			form.clear_notice()
 
 			multi_select.open({
 				items = items,
@@ -263,7 +261,7 @@ local function pick_labels(issue_state)
 				format = function(item)
 					return tostring(item.name)
 				end,
-				prompt = "Toggle labels:",
+				prompt = "Labels",
 				on_done = function(selected)
 					issue_state.fields.labels = selected or {}
 					render_meta(issue_state)
@@ -276,18 +274,18 @@ end
 ---@param issue_state CreateIssueState
 local function pick_milestone(issue_state)
 	if not issue_state.pickers.list_milestones then
-		notify.warn("Milestone picker is not available")
+		form.notify("warn", "Milestone picker is not available")
 		return
 	end
 
-	spinner.start("Loading milestones..")
+	form.notify("loading", "Loading milestones...")
 	issue_state.pickers.list_milestones(function(items, err)
 		vim.schedule(function()
-			spinner.stop()
 			if err then
-				notify.error("Failed to load milestones: " .. tostring(err))
+				form.notify("error", "Failed to load milestones: " .. tostring(err))
 				return
 			end
+			form.clear_notice()
 
 			items = type(items) == "table" and items or {}
 
@@ -322,7 +320,7 @@ local function submit(issue_state)
 
 	local title = get_title(issue_state)
 	if title == "" then
-		notify.warn("Title is required")
+		form.notify("warn", "Title is required")
 		return
 	end
 
@@ -337,7 +335,7 @@ local function submit(issue_state)
 	end
 
 	issue_state.is_submitting = true
-	spinner.start("Creating issue..")
+	form.notify("loading", "Creating issue...")
 
 	local issues_api = require("atlas.issues.providers.github.api.issues")
 	issues_api.create_issue({
@@ -350,10 +348,9 @@ local function submit(issue_state)
 	}, function(result, err)
 		vim.schedule(function()
 			issue_state.is_submitting = false
-			spinner.stop()
 
 			if err then
-				notify.error("Create issue failed: " .. tostring(err))
+				form.notify("error", "Create issue failed: " .. tostring(err))
 				if issue_state.on_done then
 					issue_state.on_done(nil, err)
 				end
@@ -361,11 +358,10 @@ local function submit(issue_state)
 			end
 
 			local url = result and result.url or nil
+			local message = "Issue created"
 			if type(url) == "string" and url ~= "" then
-				notify.info("Issue created: " .. url)
+				message = message .. ": " .. url
 				pcall(vim.fn.setreg, "+", url)
-			else
-				notify.info("Issue created")
 			end
 
 			if issue_state.on_done then
@@ -373,6 +369,7 @@ local function submit(issue_state)
 			end
 
 			close(issue_state)
+			notify.info(message)
 		end)
 	end)
 end

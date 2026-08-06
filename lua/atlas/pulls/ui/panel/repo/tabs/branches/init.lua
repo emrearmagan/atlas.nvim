@@ -5,7 +5,7 @@ local utils = require("atlas.ui.shared.utils")
 local icons = require("atlas.ui.shared.icons")
 local layout = require("atlas.ui.layout")
 local spinner = require("atlas.ui.components.spinner")
-local footer = require("atlas.ui.components.footer")
+local statusline = require("atlas.ui.statusline")
 local threads = require("atlas.ui.components.threadsv2")
 local state = require("atlas.pulls.ui.panel.repo.tabs.branches.state")
 local repo_panel_state = require("atlas.pulls.ui.panel.repo.state")
@@ -155,18 +155,19 @@ function M.on_select(_pr, repo, refresh, opts)
 
 	stop_request()
 	state.branches = "loading"
-	footer.notify("loading", string.format("Loading branches for %s...", repo_label))
+	statusline.notify("loading", string.format("Loading branches for %s...", repo_label))
 	refresh()
 
 	local provider = require("atlas.pulls.state").provider
-	if provider == nil or not provider.fetch_repo_branches then
+	local repository = provider and provider.capabilities.repository
+	if repository == nil then
 		state.branches = { entries = {} }
-		footer.notify("error", "Branch listing is not supported by this provider")
+		statusline.notify("error", "Branch listing is not supported by this provider")
 		refresh()
 		return
 	end
 
-	request = provider.fetch_repo_branches(detail, {
+	request = repository.fetch_branches(detail, {
 		force_load = opts.force_load == true or opts.force_refresh == true,
 		pagelen = opts.pagelen,
 	}, function(branches, err)
@@ -178,10 +179,10 @@ function M.on_select(_pr, repo, refresh, opts)
 		state.repo = active_detail
 		if err then
 			state.branches = { entries = {} }
-			footer.notify("error", string.format("Failed to load branches for %s", repo_label))
+			statusline.notify("error", string.format("Failed to load branches for %s", repo_label))
 		else
 			state.branches = branches or { entries = {} }
-			footer.notify("success", string.format("Branches loaded for %s", repo_label), 1200)
+			statusline.notify("success", string.format("Branches loaded for %s", repo_label), 1200)
 		end
 		refresh()
 	end)
@@ -209,8 +210,9 @@ end
 ---@param refresh fun()
 function M.delete_current_branch(refresh)
 	local provider = require("atlas.pulls.state").provider
-	if provider == nil or not provider.delete_repo_branch then
-		footer.notify("error", "Branch deletion is not supported by this provider")
+	local repository = provider and provider.capabilities.repository
+	if repository == nil or not repository.delete_branch then
+		statusline.notify("error", "Branch deletion is not supported by this provider")
 		return
 	end
 
@@ -218,17 +220,17 @@ function M.delete_current_branch(refresh)
 	local branch = entry and entry.item and entry.item.obj and entry.item.obj.branch
 	local repo = state.repo
 	if type(repo) ~= "table" or type(branch) ~= "table" then
-		footer.notify("warn", "No branch selected")
+		statusline.notify("warn", "No branch selected")
 		return
 	end
 
 	local branch_name = tostring(branch.name or "")
 	if branch_name == "" then
-		footer.notify("warn", "Branch name is missing")
+		statusline.notify("warn", "Branch name is missing")
 		return
 	end
 	if branch_name == tostring(repo.default_branch or "") then
-		footer.notify("warn", "Refusing to delete the default branch")
+		statusline.notify("warn", "Refusing to delete the default branch")
 		return
 	end
 
@@ -238,11 +240,11 @@ function M.delete_current_branch(refresh)
 			return
 		end
 
-		footer.notify("loading", string.format("Deleting branch %s...", branch_name))
-		delete_request = provider.delete_repo_branch(repo, branch, function(ok, err)
+		statusline.notify("loading", string.format("Deleting branch %s...", branch_name))
+		delete_request = repository.delete_branch(repo, branch, function(ok, err)
 			delete_request = nil
 			if err ~= nil then
-				footer.notify("error", "Delete branch failed: " .. tostring(err))
+				statusline.notify("error", "Delete branch failed: " .. tostring(err))
 				return
 			end
 
@@ -258,7 +260,7 @@ function M.delete_current_branch(refresh)
 				state.branches = { entries = entries }
 			end
 
-			footer.notify("success", string.format("Deleted branch %s", branch_name), 1200)
+			statusline.notify("success", string.format("Deleted branch %s", branch_name), 1200)
 			refresh()
 		end)
 	end)

@@ -51,4 +51,23 @@ function M.setup_pipelines(buf, title, actions)
 	help.register(title, items, { buffer = buf, index = 100 })
 end
 
+---@param buf integer
+---@param actions { close: fun(), refresh: fun(), open_url: fun() }
+function M.setup_job_log(buf, actions)
+	local items = {}
+	add_help_action(items, "ui.refresh", actions.refresh, "Refresh job log", 1)
+	add_help_action(items, "ui.open_in_browser", actions.open_url, "Open job in browser", 2)
+	add_help_action(items, "ui.help", function()
+		help.toggle({ buffer = buf })
+	end, "Toggle help", 3)
+	table.insert(items, {
+		key = "q",
+		desc = "Close job log",
+		index = 4,
+		callback = actions.close,
+		opts = { silent = true, nowait = true },
+	})
+	help.register("Job Log", items, { buffer = buf, index = 100 })
+end
+
 return M

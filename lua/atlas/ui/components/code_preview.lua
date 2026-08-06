@@ -5,6 +5,7 @@ local M = {}
 ---@field lines string[]
 ---@field start_line integer
 ---@field anchor_line integer|nil
+---@field prefixes string[]|nil
 
 ---@param opts AtlasCodePreviewOptions
 ---@return AtlasMarkdownEditorPreview
@@ -14,12 +15,13 @@ function M.render(opts)
 	local lines, prefixes, highlights = {}, {}, {}
 	for index, source in ipairs(opts.lines) do
 		local line_number = opts.start_line + index - 1
-		local prefix = string.format("%" .. number_width .. "d  ", line_number)
+		local prefix = opts.prefixes and opts.prefixes[index]
+			or string.format("%" .. number_width .. "d  ", line_number)
 		prefixes[index] = #prefix
 		table.insert(lines, prefix .. source)
 		table.insert(highlights, {
 			line = index - 1,
-			line_hl_group = line_number == opts.anchor_line and "CursorLine" or "AtlasFooterBackground",
+			line_hl_group = "AtlasFooterBackground",
 		})
 		table.insert(highlights, {
 			line = index - 1,
@@ -44,7 +46,7 @@ function M.render(opts)
 			return {}
 		end
 
-		local highlights = {}
+		local syntax_highlights = {}
 		for id, node in query:iter_captures(tree:root(), source) do
 			local capture = query.captures[id]
 			if capture and capture:sub(1, 1) ~= "_" and capture ~= "spell" and capture ~= "nospell" then
@@ -53,7 +55,7 @@ function M.render(opts)
 					local from = row == start_row and start_col or 0
 					local to = row == end_row and end_col or #(opts.lines[row + 1] or "")
 					if to > from then
-						table.insert(highlights, {
+						table.insert(syntax_highlights, {
 							line = row,
 							start_col = prefixes[row + 1] + from,
 							end_col = prefixes[row + 1] + to,
@@ -63,7 +65,7 @@ function M.render(opts)
 				end
 			end
 		end
-		return highlights
+		return syntax_highlights
 	end)
 	if ok then
 		vim.list_extend(highlights, syntax)

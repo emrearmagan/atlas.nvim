@@ -5,7 +5,7 @@ local utils = require("atlas.ui.shared.utils")
 local icons = require("atlas.ui.shared.icons")
 local spinner = require("atlas.ui.components.spinner")
 local threads = require("atlas.ui.components.threadsv2")
-local footer = require("atlas.ui.components.footer")
+local statusline = require("atlas.ui.statusline")
 local state = require("atlas.pulls.ui.panel.pr.tabs.commits.state")
 
 local PADDING_X = 1
@@ -115,6 +115,8 @@ function M.on_select(pr, _repo, refresh, opts)
 	if not provider then
 		return
 	end
+	local core = provider.capabilities.core
+	local pipelines = provider.capabilities.pipelines
 
 	local force_refresh = opts.force_refresh == true
 	local should_fetch = force_refresh
@@ -127,30 +129,30 @@ function M.on_select(pr, _repo, refresh, opts)
 		state.reset()
 	end
 
-	if should_fetch and provider.fetch_commits then
+	if should_fetch and core.fetch_commits then
 		local pr_id = tostring(pr.id or "")
 		state.commits = "loading"
-		footer.notify("loading", string.format("Loading commits for #%s...", pr_id))
-		track(provider.fetch_commits(pr, opts, function(commits, err)
+		statusline.notify("loading", string.format("Loading commits for #%s...", pr_id))
+		track(core.fetch_commits(pr, opts, function(commits, err)
 			if err then
 				state.commits = err
-				footer.notify("error", string.format("Failed to load commits for #%s", pr_id))
+				statusline.notify("error", string.format("Failed to load commits for #%s", pr_id))
 				refresh()
 				return
 			end
 
 			state.commits = commits or {}
-			footer.notify("success", string.format("Commits loaded for #%s", pr_id), 1200)
+			statusline.notify("success", string.format("Commits loaded for #%s", pr_id), 1200)
 
 			-- Fetch pipeline statuses for the first N commits
-			if provider.fetch_commit_status and type(state.commits) == "table" then
+			if pipelines and pipelines.fetch_commit_status and type(state.commits) == "table" then
 				local count = math.min(MAX_STATUS_COMMITS, #state.commits)
 				for i = 1, count do
 					local commit = state.commits[i]
 					local hash = tostring(commit.hash or "")
 					if hash ~= "" then
 						state.status_by_hash[hash] = "loading"
-						track(provider.fetch_commit_status(pr, commit, opts, function(status, url, status_err)
+						track(pipelines.fetch_commit_status(commit, opts, function(status, url, status_err)
 							if status_err then
 								state.status_by_hash[hash] = "unknown"
 							else

@@ -1,7 +1,6 @@
 local M = {}
 
 local form = require("atlas.ui.popups.form")
-local spinner = require("atlas.ui.popups.spinner")
 local multi_select = require("atlas.ui.popups.multi_select")
 local notify = require("atlas.core.notify")
 local pulls_helper = require("atlas.pulls.ui.main.helper")
@@ -222,20 +221,22 @@ end
 ---@param issue_state GitLabCreateIssueState
 local function pick_assignees(issue_state)
 	if not issue_state.pickers.list_assignees then
-		notify.warn("Assignee picker not available", { timeout = 1500 })
+		form.notify("warn", "Assignee picker not available", 1500)
 		return
 	end
 
+	form.notify("loading", "Loading assignees...")
 	issue_state.pickers.list_assignees(function(items, err)
 		vim.schedule(function()
 			if err then
-				notify.error("Load members failed: " .. tostring(err))
+				form.notify("error", "Load members failed: " .. tostring(err))
 				return
 			end
 			if type(items) ~= "table" or #items == 0 then
-				notify.warn("No assignable members", { timeout = 1500 })
+				form.notify("warn", "No assignable members", 1500)
 				return
 			end
+			form.clear_notice()
 			multi_select.open({
 				items = items,
 				selected = issue_state.fields.assignees,
@@ -250,7 +251,7 @@ local function pick_assignees(issue_state)
 						item.account_id
 					)
 				end,
-				prompt = "Toggle assignees:",
+				prompt = "Assignees",
 				on_done = function(selected)
 					issue_state.fields.assignees = selected or {}
 					render_meta(issue_state)
@@ -263,20 +264,22 @@ end
 ---@param issue_state GitLabCreateIssueState
 local function pick_labels(issue_state)
 	if not issue_state.pickers.list_labels then
-		notify.warn("Label picker not available", { timeout = 1500 })
+		form.notify("warn", "Label picker not available", 1500)
 		return
 	end
 
+	form.notify("loading", "Loading labels...")
 	issue_state.pickers.list_labels(function(items, err)
 		vim.schedule(function()
 			if err then
-				notify.error("Load labels failed: " .. tostring(err))
+				form.notify("error", "Load labels failed: " .. tostring(err))
 				return
 			end
 			if type(items) ~= "table" or #items == 0 then
-				notify.warn("No labels available", { timeout = 1500 })
+				form.notify("warn", "No labels available", 1500)
 				return
 			end
+			form.clear_notice()
 			multi_select.open({
 				items = items,
 				selected = issue_state.fields.labels,
@@ -286,7 +289,7 @@ local function pick_labels(issue_state)
 				format = function(item)
 					return tostring(item.name or "")
 				end,
-				prompt = "Toggle labels:",
+				prompt = "Labels",
 				on_done = function(selected)
 					issue_state.fields.labels = selected or {}
 					render_meta(issue_state)
@@ -299,16 +302,18 @@ end
 ---@param issue_state GitLabCreateIssueState
 local function pick_milestone(issue_state)
 	if not issue_state.pickers.list_milestones then
-		notify.warn("Milestone picker not available", { timeout = 1500 })
+		form.notify("warn", "Milestone picker not available", 1500)
 		return
 	end
 
+	form.notify("loading", "Loading milestones...")
 	issue_state.pickers.list_milestones(function(items, err)
 		vim.schedule(function()
 			if err then
-				notify.error("Load milestones failed: " .. tostring(err))
+				form.notify("error", "Load milestones failed: " .. tostring(err))
 				return
 			end
+			form.clear_notice()
 
 			local choices = { "None" }
 			local map = {}
@@ -343,7 +348,7 @@ local function submit(issue_state)
 
 	local title = get_title(issue_state)
 	if title == "" then
-		notify.warn("Title is required", { timeout = 1500 })
+		form.notify("warn", "Title is required", 1500)
 		return
 	end
 
@@ -361,7 +366,7 @@ local function submit(issue_state)
 	end
 
 	issue_state.is_submitting = true
-	spinner.start("Creating issue..")
+	form.notify("loading", "Creating issue...")
 
 	local issues_api = require("atlas.issues.providers.gitlab.api.issues")
 	issues_api.create_issue({
@@ -374,10 +379,9 @@ local function submit(issue_state)
 	}, function(result, err)
 		vim.schedule(function()
 			issue_state.is_submitting = false
-			spinner.stop()
 
 			if err then
-				notify.error("Create issue failed: " .. tostring(err))
+				form.notify("error", "Create issue failed: " .. tostring(err))
 				if issue_state.on_done then
 					issue_state.on_done(nil, err)
 				end
@@ -385,11 +389,10 @@ local function submit(issue_state)
 			end
 
 			local url = result and result.url or nil
+			local message = "Issue created"
 			if type(url) == "string" and url ~= "" then
-				notify.info("Issue created: " .. url, { timeout = 1200 })
+				message = message .. ": " .. url
 				pcall(vim.fn.setreg, "+", url)
-			else
-				notify.info("Issue created", { timeout = 1200 })
 			end
 
 			if issue_state.on_done then
@@ -401,6 +404,7 @@ local function submit(issue_state)
 			end
 
 			close(issue_state)
+			notify.info(message, { timeout = 1200 })
 		end)
 	end)
 end

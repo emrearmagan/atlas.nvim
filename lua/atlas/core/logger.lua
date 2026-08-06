@@ -36,18 +36,14 @@ local function context_suffix(context)
 		return " | " .. to_text(context)
 	end
 
-	local keys = {}
-	for k, _ in pairs(context) do
-		table.insert(keys, k)
-	end
+	local keys = vim.tbl_keys(context)
 	table.sort(keys, function(a, b)
 		return tostring(a) < tostring(b)
 	end)
 
-	local parts = {}
-	for _, key in ipairs(keys) do
-		table.insert(parts, string.format("%s=%s", tostring(key), to_text(context[key])))
-	end
+	local parts = vim.tbl_map(function(key)
+		return string.format("%s=%s", tostring(key), to_text(context[key]))
+	end, keys)
 
 	if #parts == 0 then
 		return ""
@@ -111,12 +107,6 @@ local function write(level, message, context)
 	end
 
 	do_write()
-end
-
----@param message any
----@param context table|nil
-function M.logdebug(message, context)
-	write("DEBUG", message, context)
 end
 
 ---@param message any

@@ -1,11 +1,5 @@
 local M = {}
 
-local MODULES = {
-	github = "atlas.pulls.providers.github",
-	bitbucket = "atlas.pulls.providers.bitbucket",
-	gitlab = "atlas.pulls.providers.gitlab",
-}
-
 local PIPELINE_STATE_PRIORITY = {
 	UNKNOWN = 0,
 	STOPPED = 1,
@@ -72,13 +66,6 @@ function M.pipelines_check(items, label)
 		label = label,
 		details = { string.format("%d of %d %s", counts[state], #items, PIPELINE_STATE_LABEL[state]) },
 	}
-end
-
----@param id string
----@return PullsProvider|nil
-function M.get(id)
-	local path = MODULES[id]
-	return path and require(path) or nil
 end
 
 return M

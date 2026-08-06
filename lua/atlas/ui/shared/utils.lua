@@ -98,9 +98,7 @@ end
 ---@param block { lines: string[], highlights: AtlasUIHighlight[]|nil }
 function M.append_block(lines, spans, block)
 	local base = #lines
-	for _, line in ipairs(block.lines or {}) do
-		table.insert(lines, line)
-	end
+	vim.list_extend(lines, block.lines or {})
 	for _, span in ipairs(block.highlights or {}) do
 		if span.line_hl_group ~= nil then
 			table.insert(spans, {

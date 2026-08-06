@@ -12,4 +12,9 @@ function M.render()
 	main.render()
 end
 
+function M.dispose()
+	require("atlas.pulls.ui.main.controller").dispose()
+	require("atlas.pulls.ui.panel").close()
+end
+
 return M

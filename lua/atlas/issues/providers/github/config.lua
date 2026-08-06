@@ -23,7 +23,7 @@
 --     },
 --   })
 
----@class AtlasGitHubIssuesViewConfig : AtlasIssuesViewConfig
+---@class AtlasGitHubIssuesViewConfig : IssuesViewConfig
 ---@field search string
 
 ---@class AtlasGitHubIssuesBookmarksConfig

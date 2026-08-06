@@ -1,11 +1,9 @@
 local M = {}
 
-local resolver = require("atlas.commands.open.resolver")
 local form = require("atlas.ui.popups.form")
 local git_branch = require("atlas.core.git")
 local keymaps = require("atlas.core.keymaps")
 local description = require("atlas.pulls.create.description")
-local spinner = require("atlas.ui.popups.spinner")
 local pulls_helper = require("atlas.pulls.ui.main.helper")
 local multi_select = require("atlas.ui.popups.multi_select")
 local notify = require("atlas.core.notify")
@@ -31,20 +29,15 @@ local notify = require("atlas.core.notify")
 ---@field settings_changed boolean
 ---@field initial_body string
 
----@param provider_id "github"|"bitbucket"|"gitlab"
+---@param provider_id string
 ---@return PullsProvider|nil, string|nil
 local function load_provider(provider_id)
-	local ok, mod = pcall(function()
-		return require("atlas.pulls.providers").get(provider_id)
-	end)
-
-	if ok and mod == nil then
+	local provider = require("atlas.providers").load(provider_id, "pulls")
+	if provider == nil then
 		return nil, "Unsupported provider: " .. tostring(provider_id)
 	end
-	if not ok or type(mod) ~= "table" then
-		return nil, "Failed to load provider: " .. tostring(provider_id)
-	end
-	return mod, nil
+	---@cast provider PullsProvider
+	return provider, nil
 end
 
 ---@param pr_state CreatePRState
@@ -88,10 +81,9 @@ local function reviewers_value(pr_state)
 		return string.format("%d reviewers", #selected)
 	end
 
-	local labels = {}
-	for _, reviewer in ipairs(selected) do
-		table.insert(labels, reviewer.label)
-	end
+	local labels = vim.tbl_map(function(reviewer)
+		return reviewer.label
+	end, selected)
 	return table.concat(labels, ", ")
 end
 
@@ -119,10 +111,9 @@ end
 ---@param pr_state CreatePRState
 ---@return string[]
 local function commit_context(pr_state)
-	local lines = {}
-	for _, commit in ipairs(pr_state.fields.commits) do
-		table.insert(lines, string.format("%s  %s", commit.hash, commit.subject))
-	end
+	local lines = vim.tbl_map(function(commit)
+		return string.format("%s  %s", commit.hash, commit.subject)
+	end, pr_state.fields.commits)
 	if #lines == 0 then
 		table.insert(lines, "No commits")
 	end
@@ -143,7 +134,7 @@ local function refresh_commits(pr_state)
 		pr_state.fields.head
 	)
 	if not content then
-		notify.error(err or "Unable to build pull request description")
+		form.notify("error", err or "Unable to build pull request description")
 		return
 	end
 	pr_state.fields.commits = content.commits
@@ -161,7 +152,7 @@ local function preview_diff(pr_state)
 	local base, head, err =
 		git_branch.diff_revisions(pr_state.fields.repo_root, pr_state.fields.base, pr_state.fields.head)
 	if not base or not head then
-		notify.error(err or "Unable to resolve diff revisions")
+		form.notify("error", err or "Unable to resolve diff revisions")
 		return
 	end
 	require("atlas.pulls.actions").open_diff_range({
@@ -170,7 +161,7 @@ local function preview_diff(pr_state)
 		head_revision = head,
 	}, function(open_err)
 		if open_err then
-			notify.error("Unable to open diff: " .. tostring(open_err))
+			form.notify("error", "Unable to open diff: " .. tostring(open_err))
 		end
 	end)
 end
@@ -192,7 +183,6 @@ end
 
 ---@param pr_state CreatePRState
 local function close(pr_state)
-	spinner.stop()
 	form.close(pr_state.layout)
 end
 
@@ -217,7 +207,7 @@ end
 local function pick_base(pr_state, on_change)
 	local choices = pr_state.fields.available_bases
 	if #choices == 0 then
-		notify.warn("No base branches available")
+		form.notify("warn", "No base branches available")
 		return
 	end
 
@@ -240,11 +230,11 @@ local function pick_reviewers(pr_state, on_change)
 		return
 	end
 	if type(reviewers) == "string" then
-		notify.warn("Reviewers unavailable: " .. reviewers)
+		form.notify("warn", "Reviewers unavailable: " .. reviewers)
 		return
 	end
 	if #reviewers == 0 then
-		notify.warn("No reviewers available")
+		form.notify("warn", "No reviewers available")
 		return
 	end
 
@@ -285,7 +275,8 @@ end
 ---@param on_change fun()
 local function load_reviewers(pr_state, on_change)
 	local provider = pr_state.fields.provider
-	if provider == nil or provider.fetch_default_reviewers == nil then
+	local create = provider and provider.capabilities.create
+	if create == nil or create.fetch_default_reviewers == nil then
 		pr_state.fields.reviewers = {}
 		return
 	end
@@ -308,7 +299,7 @@ local function load_reviewers(pr_state, on_change)
 		)
 	end
 
-	provider.fetch_default_reviewers({
+	create.fetch_default_reviewers({
 		repo_slug = pr_state.fields.repo_slug,
 		repo_root = pr_state.fields.repo_root,
 		head = pr_state.fields.head,
@@ -353,24 +344,25 @@ local function submit(pr_state)
 
 	local title = get_title(pr_state)
 	if title == "" then
-		notify.warn("Title is required")
+		form.notify("warn", "Title is required")
 		return
 	end
 
 	local body = get_body(pr_state)
 	local provider = pr_state.fields.provider
-	if not provider or not provider.create_pr then
-		notify.error("Provider does not support PR creation")
+	local create = provider and provider.capabilities.create
+	if not create then
+		form.notify("error", "Provider does not support PR creation")
 		return
 	end
 
 	if pr_state.fields.head == "" or pr_state.fields.base == "" then
-		notify.warn("Head and base branches are required")
+		form.notify("warn", "Head and base branches are required")
 		return
 	end
 
 	if pr_state.fields.head == pr_state.fields.base then
-		notify.warn("Head and base branches must differ")
+		form.notify("warn", "Head and base branches must differ")
 		return
 	end
 
@@ -386,8 +378,8 @@ local function submit(pr_state)
 	end
 
 	local function do_create()
-		spinner.start("Creating pull request..")
-		provider.create_pr({
+		form.notify("loading", "Creating pull request...")
+		create.create_pr({
 			repo_slug = pr_state.fields.repo_slug,
 			repo_root = pr_state.fields.repo_root,
 			title = title,
@@ -400,8 +392,7 @@ local function submit(pr_state)
 			vim.schedule(function()
 				if err then
 					pr_state.is_submitting = false
-					spinner.stop()
-					notify.error("Create PR failed: " .. tostring(err))
+					form.notify("error", "Create PR failed: " .. tostring(err))
 					return
 				end
 				on_success(pr_state, result or {})
@@ -416,12 +407,11 @@ local function submit(pr_state)
 		return
 	end
 
-	spinner.start("Pushing " .. pr_state.fields.head .. " to origin..")
+	form.notify("loading", "Pushing " .. pr_state.fields.head .. " to origin...")
 	git_branch.push_branch(pr_state.fields.repo_root, pr_state.fields.head, "origin", function(ok, push_err)
 		if not ok then
 			pr_state.is_submitting = false
-			spinner.stop()
-			notify.error("git push failed: " .. tostring(push_err or ""))
+			form.notify("error", "git push failed: " .. tostring(push_err or ""))
 			return
 		end
 		do_create()
@@ -560,7 +550,7 @@ function M.start()
 		return
 	end
 
-	local info = resolver.local_repository(root)
+	local info = git_branch.local_repository(root)
 	if not info then
 		notify.error("Could not resolve the origin repository")
 		return
@@ -571,7 +561,7 @@ function M.start()
 		notify.error(provider_err or "Provider unavailable")
 		return
 	end
-	if not provider.create_pr then
+	if not provider.capabilities.create then
 		notify.error("Provider " .. info.provider .. " does not support PR creation")
 		return
 	end

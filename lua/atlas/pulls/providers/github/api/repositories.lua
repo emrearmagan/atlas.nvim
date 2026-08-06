@@ -1,6 +1,6 @@
 local M = {}
 
-local cli = require("atlas.pulls.providers.github.api.cli")
+local cli = require("atlas.providers.github.client").pulls
 
 ---@param repo PullsRepo
 ---@param opts PullsFetchOpts

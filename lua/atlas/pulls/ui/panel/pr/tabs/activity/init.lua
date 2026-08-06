@@ -3,7 +3,7 @@ local M = {}
 
 local utils = require("atlas.ui.shared.utils")
 local spinner = require("atlas.ui.components.spinner")
-local footer = require("atlas.ui.components.footer")
+local statusline = require("atlas.ui.statusline")
 local activity_component = require("atlas.pulls.ui.panel.pr.tabs.components.activity")
 local state = require("atlas.pulls.ui.panel.pr.tabs.activity.state")
 
@@ -43,6 +43,7 @@ function M.on_select(pr, _repo, refresh, opts)
 	if not provider then
 		return
 	end
+	local core = provider.capabilities.core
 
 	local force_refresh = opts.force_refresh == true
 	local should_fetch = force_refresh
@@ -56,16 +57,16 @@ function M.on_select(pr, _repo, refresh, opts)
 	end
 
 	local pr_id = tostring(pr.id or "")
-	if should_fetch and provider.fetch_activity then
+	if should_fetch and core.fetch_activity then
 		state.activity = "loading"
-		footer.notify("loading", string.format("Loading activity for #%s...", pr_id))
-		track(provider.fetch_activity(pr, opts, function(entries, err)
+		statusline.notify("loading", string.format("Loading activity for #%s...", pr_id))
+		track(core.fetch_activity(pr, opts, function(entries, err)
 			if err then
 				state.activity = err
-				footer.notify("error", string.format("Failed to load activity for #%s", pr_id))
+				statusline.notify("error", string.format("Failed to load activity for #%s", pr_id))
 			else
 				state.activity = entries or {}
-				footer.notify("success", string.format("Activity loaded for #%s", pr_id), 1200)
+				statusline.notify("success", string.format("Activity loaded for #%s", pr_id), 1200)
 			end
 			refresh()
 		end))

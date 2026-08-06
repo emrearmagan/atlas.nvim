@@ -1,6 +1,6 @@
 local M = {}
 
-local cli = require("atlas.pulls.providers.github.api.cli")
+local cli = require("atlas.providers.github.client").pulls
 local mapper = require("atlas.pulls.providers.github.api.mapper")
 
 ---@param pr PullRequest
@@ -8,7 +8,7 @@ local mapper = require("atlas.pulls.providers.github.api.mapper")
 ---@param on_done fun(entries: PullsActivityEntry[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_activity(pr, opts, on_done)
-	return M.fetch_conversation(pr, nil, function(result, err)
+	return M.fetch_conversation(pr, opts, function(result, err)
 		if err or type(result) ~= "table" then
 			on_done(nil, err)
 			return
@@ -31,7 +31,7 @@ function M.fetch_conversation(pr, opts, on_done)
 	end
 
 	return cli.gh(
-		{ "api", "--paginate", string.format("repos/%s/issues/%s/timeline", repo_slug, tostring(pr.id)) },
+		{ "api", "--paginate", "--slurp", string.format("repos/%s/issues/%s/timeline", repo_slug, tostring(pr.id)) },
 		function(result, err)
 			if err or type(result) ~= "table" then
 				on_done(nil, err or "Failed to fetch conversation")
@@ -39,19 +39,16 @@ function M.fetch_conversation(pr, opts, on_done)
 			end
 
 			local conversation = { comments = {}, events = {} }
-			for _, item in ipairs(result) do
-				local event_name = type(item) == "table" and tostring(item.event or "") or ""
-				if event_name == "commented" then
-					table.insert(conversation.comments, mapper.to_activity_comment(item))
-				elseif event_name == "reviewed" then
-					local entry = mapper.to_activity(item)
-					if entry then
-						table.insert(conversation.events, entry)
-					end
-				else
-					local entry = mapper.to_activity(item)
-					if entry then
-						table.insert(conversation.events, entry)
+			for _, page in ipairs(result) do
+				for _, item in ipairs(page) do
+					local event_name = type(item) == "table" and tostring(item.event or "") or ""
+					if event_name == "commented" then
+						table.insert(conversation.comments, mapper.to_activity_comment(item))
+					else
+						local entry = mapper.to_activity(item)
+						if entry then
+							table.insert(conversation.events, entry)
+						end
 					end
 				end
 			end

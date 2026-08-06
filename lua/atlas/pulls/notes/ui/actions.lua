@@ -36,11 +36,13 @@ local function selected_notes(state)
 		vim.cmd.normal({ args = { vim.keycode("<Esc>") }, bang = true })
 	end
 
-	local selected = {}
+	local selected, seen = {}, {}
 	for line = first, last do
 		local item = state.line_map[line]
 		local note = item and item.note or nil
-		if note then
+		local key = note and item.tree_key or nil
+		if note and not seen[key] then
+			seen[key] = true
 			table.insert(selected, { target = item.target, note = note })
 		end
 	end
@@ -49,16 +51,26 @@ end
 
 ---@param state AtlasNotesUIState
 ---@param refresh fun()
+---@param render fun()
 ---@return AtlasNotesUIActions
-function M.new(state, refresh)
+function M.new(state, refresh, render)
+	local function toggle()
+		local selected = selected_item(state)
+		local key = selected and selected.tree_key or nil
+		if not key then
+			return
+		end
+		state.expanded[key] = not state.expanded[key]
+		render()
+	end
+
 	local function edit_note()
 		local selected = selected_item(state)
-		local note = selected and selected.note or nil
-		if not selected or not note then
+		if not selected or not selected.note then
 			notify.warn("Select a note to edit")
 			return
 		end
-		editor.edit(selected.target, note, function(updated, err)
+		editor.edit(selected.target, selected.note, function(updated, err)
 			if not updated then
 				notify.error(err or "Unable to update note")
 				return
@@ -95,11 +107,10 @@ function M.new(state, refresh)
 
 	local function show_details()
 		local selected = selected_item(state)
-		local note = selected and selected.note or nil
-		if not selected or not note then
+		if not selected or not selected.note then
 			return
 		end
-		editor.details(note, selected.target, state.buf)
+		editor.details(selected.note, selected.target, state.buf)
 	end
 
 	local function close()
@@ -109,6 +120,7 @@ function M.new(state, refresh)
 	end
 
 	return {
+		toggle = toggle,
 		details = show_details,
 		edit = edit_note,
 		delete = delete_note,

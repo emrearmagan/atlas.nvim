@@ -1,15 +1,12 @@
---TODO: Currently hardcoded to jira
 local M = {}
 
 local icons = require("atlas.ui.shared.icons")
 local form = require("atlas.ui.popups.form")
 local issue_helper = require("atlas.issues.create.jira.helper")
-local notify = require("atlas.core.notify")
 local users_api = require("atlas.issues.providers.jira.api.users")
 local issues_api = require("atlas.issues.providers.jira.api.issues")
 local templates = require("atlas.issues.templates")
 local spinner = require("atlas.ui.components.spinner")
-local spinner_popup = require("atlas.ui.popups.spinner")
 local async_picker = require("atlas.ui.components.async_picker")
 
 ---@class IssueEditorFields
@@ -154,7 +151,6 @@ end
 
 local function close_ui()
 	cancel_pending_requests()
-	spinner_popup.stop()
 
 	if state.spinner then
 		state.spinner:stop()
@@ -210,7 +206,7 @@ local function submit_issue()
 	local desc = state.preview_mode and state.original_markdown or get_description()
 
 	if title == "" then
-		notify.warn("Title is required")
+		form.notify("warn", "Title is required")
 		return
 	end
 
@@ -224,20 +220,19 @@ local function submit_issue()
 	end
 
 	local is_edit = type(state.fields.issue_key) == "string" and state.fields.issue_key ~= ""
-	spinner_popup.start(is_edit and "Saving issue..." or "Creating issue...")
+	form.notify("loading", is_edit and "Saving issue..." or "Creating issue...")
 
 	on_submit(fields, function(ok, err)
 		vim.schedule(function()
-			spinner_popup.stop()
-
 			if ok then
 				close_ui()
 				return
 			end
 
-			if err and err ~= "" then
-				notify.error(err)
-			end
+			form.notify(
+				"error",
+				err and err ~= "" and err or (is_edit and "Save issue failed" or "Create issue failed")
+			)
 		end)
 	end)
 end
@@ -248,7 +243,7 @@ local function toggle_preview()
 	end
 
 	if not state.preview_fn then
-		notify.warn("Preview not available")
+		form.notify("warn", "Preview not available")
 		return
 	end
 
@@ -257,7 +252,7 @@ local function toggle_preview()
 		form.set_body(state.layout, state.original_markdown)
 		vim.api.nvim_set_option_value("filetype", "markdown", { buf = state.layout.editor_buf })
 		state.preview_mode = false
-		notify.info("Editing markdown")
+		form.notify("info", "Editing markdown")
 	else
 		state.original_markdown = get_description()
 		local preview = state.preview_fn(state.original_markdown)
@@ -266,7 +261,7 @@ local function toggle_preview()
 		vim.api.nvim_set_option_value("modifiable", false, { buf = state.layout.editor_buf })
 		vim.api.nvim_set_option_value("filetype", "json", { buf = state.layout.editor_buf })
 		state.preview_mode = true
-		notify.info("Preview (read-only)")
+		form.notify("info", "Preview (read-only)")
 	end
 end
 
@@ -554,7 +549,7 @@ function M.open(on_submit, opts, editor_opts)
 				state.assignees_handle = nil
 
 				if err then
-					notify.warn("Failed to load assignees: " .. err, { timeout = 2000 })
+					form.notify("warn", "Failed to load assignees: " .. err, 2000)
 					state.assignees = {}
 				else
 					state.assignees = users or {}
@@ -571,7 +566,7 @@ function M.open(on_submit, opts, editor_opts)
 			state.issue_types_handle = nil
 
 			if err then
-				notify.warn("Failed to load issue types: " .. err, { timeout = 2000 })
+				form.notify("warn", "Failed to load issue types: " .. err, 2000)
 				state.issue_types = {}
 				state.fields.issue_type = nil
 			else

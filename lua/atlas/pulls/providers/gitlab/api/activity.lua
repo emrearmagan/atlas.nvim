@@ -1,6 +1,6 @@
 local M = {}
 
-local service = require("atlas.pulls.providers.gitlab.api.service")
+local service = require("atlas.providers.gitlab.client").pulls
 local mapper = require("atlas.pulls.providers.gitlab.api.mapper")
 
 ---@param pr PullRequest
@@ -90,7 +90,7 @@ function M.fetch_activity(pr, opts, on_done)
 		service.url_encode(path),
 		iid
 	)
-	return service.request("GET", endpoint, nil, function(result, err)
+	return service.fetch_all_pages(endpoint, function(result, err)
 		if err then
 			on_done(nil, err)
 			return

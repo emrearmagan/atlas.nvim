@@ -1,11 +1,12 @@
 local M = {}
 
-local cli = require("atlas.pulls.providers.github.api.cli")
+local cli = require("atlas.providers.github.client").pulls
 local comments = require("atlas.pulls.providers.github.api.comments")
-local footer = require("atlas.ui.components.footer")
+local statusline = require("atlas.ui.statusline")
 local checkout = require("atlas.core.git.checkout")
 local logger = require("atlas.core.logger")
 local multi_select = require("atlas.ui.popups.multi_select")
+local github_mapping = require("atlas.providers.github.mapping")
 
 ---@class GitHubActionContext
 ---@field pr PullRequest|nil
@@ -35,7 +36,7 @@ end
 ---@param message string
 ---@param duration integer|nil
 local function notify(ctx, level, message, duration)
-	local callback = ctx.notify or footer.notify
+	local callback = ctx.notify or statusline.notify
 	callback(level, message, duration)
 end
 
@@ -238,12 +239,12 @@ local ACTIONS = {
 
 					local normalized = vim.trim(tostring(input)):lower()
 					if normalized ~= "y" and normalized ~= "yes" then
-						footer.notify("info", "Merge cancelled")
+						statusline.notify("info", "Merge cancelled")
 						done({ changed_pr = false, message = "Merge cancelled" }, nil)
 						return
 					end
 
-					footer.notify("loading", "Merging PR...")
+					statusline.notify("loading", "Merging PR...")
 					cli.gh({
 						"pr",
 						"merge",
@@ -254,12 +255,12 @@ local ACTIONS = {
 						"--delete-branch",
 					}, function(_, err)
 						if err then
-							footer.notify("error", string.format("Merge failed: %s", tostring(err)))
+							statusline.notify("error", string.format("Merge failed: %s", tostring(err)))
 							done(nil, tostring(err))
 							return
 						end
 
-						footer.notify("success", "Merge succeeded", 1200)
+						statusline.notify("success", "Merge succeeded", 1200)
 						done({ changed_pr = true, message = "Merged" }, nil)
 					end)
 				end)
@@ -299,12 +300,12 @@ local ACTIONS = {
 
 				local normalized = vim.trim(tostring(input)):lower()
 				if normalized ~= "y" and normalized ~= "yes" then
-					footer.notify("info", "Close cancelled")
+					statusline.notify("info", "Close cancelled")
 					done({ changed_pr = false, message = "Close cancelled" }, nil)
 					return
 				end
 
-				footer.notify("loading", "Closing PR...")
+				statusline.notify("loading", "Closing PR...")
 				cli.gh({
 					"pr",
 					"close",
@@ -313,12 +314,12 @@ local ACTIONS = {
 					repo_slug(ctx),
 				}, function(_, err)
 					if err then
-						footer.notify("error", string.format("Close failed: %s", tostring(err)))
+						statusline.notify("error", string.format("Close failed: %s", tostring(err)))
 						done(nil, tostring(err))
 						return
 					end
 
-					footer.notify("success", "PR closed", 1200)
+					statusline.notify("success", "PR closed", 1200)
 					done({ changed_pr = true, message = "Closed" }, nil)
 				end)
 			end)
@@ -347,7 +348,7 @@ local ACTIONS = {
 				return
 			end
 
-			footer.notify("loading", "Reopening PR...")
+			statusline.notify("loading", "Reopening PR...")
 			cli.gh({
 				"pr",
 				"reopen",
@@ -356,12 +357,12 @@ local ACTIONS = {
 				repo_slug(ctx),
 			}, function(_, err)
 				if err then
-					footer.notify("error", string.format("Reopen failed: %s", tostring(err)))
+					statusline.notify("error", string.format("Reopen failed: %s", tostring(err)))
 					done(nil, tostring(err))
 					return
 				end
 
-				footer.notify("success", "PR reopened", 1200)
+				statusline.notify("success", "PR reopened", 1200)
 				done({ changed_pr = true, message = "Reopened" }, nil)
 			end)
 		end,
@@ -388,7 +389,7 @@ local ACTIONS = {
 				return
 			end
 
-			footer.notify("loading", "Marking as ready...")
+			statusline.notify("loading", "Marking as ready...")
 			cli.gh({
 				"pr",
 				"ready",
@@ -397,12 +398,12 @@ local ACTIONS = {
 				repo_slug(ctx),
 			}, function(_, err)
 				if err then
-					footer.notify("error", string.format("Failed: %s", tostring(err)))
+					statusline.notify("error", string.format("Failed: %s", tostring(err)))
 					done(nil, tostring(err))
 					return
 				end
 
-				footer.notify("success", "PR marked as ready for review", 1200)
+				statusline.notify("success", "PR marked as ready for review", 1200)
 				done({ changed_pr = true, message = "Ready for review" }, nil)
 			end)
 		end,
@@ -429,7 +430,7 @@ local ACTIONS = {
 				return
 			end
 
-			footer.notify("loading", "Converting to draft...")
+			statusline.notify("loading", "Converting to draft...")
 			cli.gh({
 				"pr",
 				"ready",
@@ -439,12 +440,12 @@ local ACTIONS = {
 				"--undo",
 			}, function(_, err)
 				if err then
-					footer.notify("error", string.format("Failed: %s", tostring(err)))
+					statusline.notify("error", string.format("Failed: %s", tostring(err)))
 					done(nil, tostring(err))
 					return
 				end
 
-				footer.notify("success", "PR converted to draft", 1200)
+				statusline.notify("success", "PR converted to draft", 1200)
 				done({ changed_pr = true, message = "Converted to draft" }, nil)
 			end)
 		end,
@@ -470,23 +471,23 @@ local ACTIONS = {
 
 			local slug = repo_slug(ctx)
 
-			footer.notify("loading", "Loading reviewers...")
-			local provider = require("atlas.pulls.providers.github")
-			provider.fetch_default_reviewers({
+			statusline.notify("loading", "Loading reviewers...")
+			local provider = require("atlas.providers").load(pr.provider, "pulls")
+			provider.capabilities.create.fetch_default_reviewers({
 				repo_slug = slug,
 				repo_root = nil,
 				head = pr.source and pr.source.branch or "",
 				base = pr.destination and pr.destination.branch or "",
 			}, function(items, err)
 				if err then
-					footer.notify("error", string.format("Failed to load reviewers: %s", tostring(err)))
+					statusline.notify("error", string.format("Failed to load reviewers: %s", tostring(err)))
 					done(nil, tostring(err))
 					return
 				end
 
 				items = items or {}
 				if #items == 0 then
-					footer.notify("warn", "No reviewers available")
+					statusline.notify("warn", "No reviewers available")
 					done({ changed_pr = false, message = "No reviewers available" }, nil)
 					return
 				end
@@ -494,7 +495,7 @@ local ACTIONS = {
 				local pullrequests = require("atlas.pulls.providers.github.api.pullrequests")
 				pullrequests.get_reviewers(pr, nil, function(reviewers, r_err)
 					if r_err then
-						footer.notify("error", string.format("Failed to load reviewers: %s", tostring(r_err)))
+						statusline.notify("error", string.format("Failed to load reviewers: %s", tostring(r_err)))
 						done(nil, tostring(r_err))
 						return
 					end
@@ -552,13 +553,13 @@ local ACTIONS = {
 								table.insert(args, login)
 							end
 
-							footer.notify(
+							statusline.notify(
 								"loading",
 								string.format("Updating reviewers on PR #%s...", tostring(pr.id or ""))
 							)
 							cli.gh(args, function(_, edit_err)
 								if edit_err then
-									footer.notify(
+									statusline.notify(
 										"error",
 										string.format("Update reviewers failed: %s", tostring(edit_err))
 									)
@@ -566,7 +567,7 @@ local ACTIONS = {
 									return
 								end
 								local msg = string.format("+%d / -%d reviewer(s)", #adds, #removes)
-								footer.notify("success", msg, 1200)
+								statusline.notify("success", msg, 1200)
 								done({ changed_pr = true, message = msg }, nil)
 							end)
 						end,
@@ -597,17 +598,17 @@ local ACTIONS = {
 			local slug = repo_slug(ctx)
 			local issues_api = require("atlas.issues.providers.github.api.issues")
 
-			footer.notify("loading", "Loading assignees...")
+			statusline.notify("loading", "Loading assignees...")
 			issues_api.list_assignees(slug, function(items, err)
 				if err then
-					footer.notify("error", string.format("Failed to load assignees: %s", tostring(err)))
+					statusline.notify("error", string.format("Failed to load assignees: %s", tostring(err)))
 					done(nil, tostring(err))
 					return
 				end
 
 				items = type(items) == "table" and items or {}
 				if #items == 0 then
-					footer.notify("warn", "No assignees available")
+					statusline.notify("warn", "No assignees available")
 					done({ changed_pr = false, message = "No assignees available" }, nil)
 					return
 				end
@@ -675,18 +676,21 @@ local ACTIONS = {
 							table.insert(args, login)
 						end
 
-						footer.notify(
+						statusline.notify(
 							"loading",
 							string.format("Updating assignees on PR #%s...", tostring(pr.id or ""))
 						)
 						cli.gh(args, function(_, edit_err)
 							if edit_err then
-								footer.notify("error", string.format("Update assignees failed: %s", tostring(edit_err)))
+								statusline.notify(
+									"error",
+									string.format("Update assignees failed: %s", tostring(edit_err))
+								)
 								done(nil, tostring(edit_err))
 								return
 							end
 							local msg = string.format("+%d / -%d assignee(s)", #adds, #removes)
-							footer.notify("success", msg, 1200)
+							statusline.notify("success", msg, 1200)
 							done({ changed_pr = true, message = msg }, nil)
 						end)
 					end,
@@ -715,10 +719,10 @@ local ACTIONS = {
 			local slug = repo_slug(ctx)
 			local pullrequests = require("atlas.pulls.providers.github.api.pullrequests")
 
-			footer.notify("loading", "Loading labels...")
+			statusline.notify("loading", "Loading labels...")
 			pullrequests.list_labels(slug, function(labels, err)
 				if err or labels == nil then
-					footer.notify("error", err or "Failed to load labels")
+					statusline.notify("error", err or "Failed to load labels")
 					done(nil, err or "Failed to load labels")
 					return
 				end
@@ -781,15 +785,15 @@ local ACTIONS = {
 							return
 						end
 
-						footer.notify("loading", string.format("Updating labels on #%s...", tostring(pr.id or "")))
+						statusline.notify("loading", string.format("Updating labels on #%s...", tostring(pr.id or "")))
 						pullrequests.update_labels(slug, pr.id, { add = adds, remove = removes }, function(ok, set_err)
 							if not ok then
-								footer.notify("error", set_err or "Failed")
+								statusline.notify("error", set_err or "Failed")
 								done(nil, set_err or "Failed")
 								return
 							end
 							local msg = string.format("+%d / -%d label(s)", #adds, #removes)
-							footer.notify("success", msg, 1200)
+							statusline.notify("success", msg, 1200)
 							done({ changed_pr = true, message = msg }, nil)
 						end)
 					end,
@@ -845,10 +849,10 @@ local ACTIONS = {
 				end
 
 				local query = vim.trim(input)
-				footer.notify("loading", "Searching repositories...")
+				statusline.notify("loading", "Searching repositories...")
 				cli.gh({ "search", "repos", query, "--json", "fullName", "--limit", "20" }, function(result, err)
 					if err then
-						footer.notify("error", string.format("Search failed: %s", tostring(err)))
+						statusline.notify("error", string.format("Search failed: %s", tostring(err)))
 						done(nil, tostring(err))
 						return
 					end
@@ -862,12 +866,12 @@ local ACTIONS = {
 					end
 
 					if #list == 0 then
-						footer.notify("warn", "No repositories found")
+						statusline.notify("warn", "No repositories found")
 						done({ changed_pr = false, message = "No repositories found" }, nil)
 						return
 					end
 
-					footer.notify("info", string.format("Found %d repositories", #list), 1200)
+					statusline.notify("info", string.format("Found %d repositories", #list), 1200)
 
 					vim.ui.select(list, {
 						prompt = "Select repository",
@@ -887,7 +891,7 @@ local ACTIONS = {
 						}
 
 						local controller = require("atlas.pulls.ui.main.controller")
-						footer.notify("success", string.format("Search view -> %s", repo))
+						statusline.notify("success", string.format("Search view -> %s", repo))
 						controller.switch_view(search_view)
 						done({ changed_pr = false, message = "Search view switched" }, nil)
 					end)
@@ -903,7 +907,7 @@ local ACTIONS = {
 				return false, "No PR selected"
 			end
 			local raw = ctx.pr._raw
-			if tostring(raw.node_id or "") == "" then
+			if github_mapping.node_id(raw) == nil then
 				return false, "Missing PR node id"
 			end
 			return true, nil
@@ -915,21 +919,21 @@ local ACTIONS = {
 				return
 			end
 			local raw = pr._raw
-			local node_id = tostring(raw.node_id or "")
+			local node_id = github_mapping.node_id(raw) or ""
 			local next_state = pr.is_subscribed == true and "UNSUBSCRIBED" or "SUBSCRIBED"
 			local gql =
 				"mutation($id: ID!, $state: SubscriptionState!) { updateSubscription(input: { subscribableId: $id, state: $state }) { subscribable { ... on PullRequest { viewerSubscription } } } }"
-			footer.notify("loading", pr.is_subscribed and "Unsubscribing..." or "Subscribing...")
+			statusline.notify("loading", pr.is_subscribed and "Unsubscribing..." or "Subscribing...")
 			cli.gh(
 				{ "api", "graphql", "-F", "id=" .. node_id, "-f", "state=" .. next_state, "-f", "query=" .. gql },
 				function(_, err)
 					if err then
-						footer.notify("error", tostring(err))
+						statusline.notify("error", tostring(err))
 						done(nil, tostring(err))
 						return
 					end
 					pr.is_subscribed = (next_state == "SUBSCRIBED")
-					footer.notify("success", pr.is_subscribed and "Subscribed" or "Unsubscribed", 1200)
+					statusline.notify("success", pr.is_subscribed and "Subscribed" or "Unsubscribed", 1200)
 					done({ changed_pr = true, message = pr.is_subscribed and "Subscribed" or "Unsubscribed" }, nil)
 				end
 			)
@@ -999,7 +1003,7 @@ function M.available(ctx)
 					return true, nil
 				end,
 				run = function(action_ctx, done)
-					footer.notify("loading", string.format("Running %s...", tostring(item.label)))
+					statusline.notify("loading", string.format("Running %s...", tostring(item.label)))
 
 					local done_called = false
 					local function custom_done(ok, message)
@@ -1010,12 +1014,12 @@ function M.available(ctx)
 
 						vim.schedule(function()
 							if ok == false then
-								footer.notify("error", tostring(message or (item.label .. " failed")))
+								statusline.notify("error", tostring(message or (item.label .. " failed")))
 								logger.logerror(string.format("Custom action failed: %s", tostring(message)))
 								done(nil, tostring(message or (item.label .. " failed")))
 								return
 							end
-							footer.notify("success", tostring(message or (item.label .. " done")))
+							statusline.notify("success", tostring(message or (item.label .. " done")))
 							done({ changed_pr = false, message = tostring(message or (item.label .. " done")) }, nil)
 						end)
 					end

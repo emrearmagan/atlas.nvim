@@ -6,7 +6,7 @@ local icons = require("atlas.ui.shared.icons")
 local spinner = require("atlas.ui.components.spinner")
 local box = require("atlas.ui.components.box")
 local table_tree = require("atlas.ui.components.table_tree")
-local footer = require("atlas.ui.components.footer")
+local statusline = require("atlas.ui.statusline")
 local state = require("atlas.pulls.ui.panel.pr.tabs.overview.state")
 local keymaps = require("atlas.pulls.ui.panel.pr.tabs.overview.keymaps")
 
@@ -48,13 +48,14 @@ function M.on_select(pr, _repo, refresh, opts)
 	if not provider then
 		return
 	end
+	local core = provider.capabilities.core
 
 	local force_refresh = opts.force_refresh == true
 	local pr_id = tostring(pr.id or "")
 
-	local can_fetch_reviewers = provider.fetch_reviewers ~= nil
-	local can_fetch_description = provider.fetch_description ~= nil
-	local can_fetch_merge_checks = provider.fetch_merge_checks ~= nil
+	local can_fetch_reviewers = core.fetch_reviewers ~= nil
+	local can_fetch_description = core.fetch_description ~= nil
+	local can_fetch_merge_checks = core.fetch_merge_checks ~= nil
 	local should_fetch_reviewers = can_fetch_reviewers
 		and (force_refresh or state.reviewers == nil or state.reviewers == "loading")
 	local should_fetch_description = can_fetch_description
@@ -79,7 +80,7 @@ function M.on_select(pr, _repo, refresh, opts)
 	end
 
 	if pending > 0 then
-		footer.notify("loading", string.format("Loading overview for #%s...", pr_id))
+		statusline.notify("loading", string.format("Loading overview for #%s...", pr_id))
 	end
 
 	local function complete(err)
@@ -89,16 +90,16 @@ function M.on_select(pr, _repo, refresh, opts)
 		pending = pending - 1
 		if pending == 0 then
 			if errors > 0 then
-				footer.notify("error", string.format("Failed to load overview for #%s", pr_id))
+				statusline.notify("error", string.format("Failed to load overview for #%s", pr_id))
 			else
-				footer.notify("success", string.format("Overview loaded for #%s", pr_id), 1200)
+				statusline.notify("success", string.format("Overview loaded for #%s", pr_id), 1200)
 			end
 		end
 	end
 
 	if should_fetch_description then
 		state.description = "loading"
-		track(provider.fetch_description(pr, opts, function(desc, err)
+		track(core.fetch_description(pr, opts, function(desc, err)
 			if err then
 				state.description = nil
 			else
@@ -111,7 +112,7 @@ function M.on_select(pr, _repo, refresh, opts)
 
 	if should_fetch_reviewers then
 		state.reviewers = "loading"
-		track(provider.fetch_reviewers(pr, opts, function(reviewers, err)
+		track(core.fetch_reviewers(pr, opts, function(reviewers, err)
 			if err then
 				state.reviewers = err
 			else
@@ -124,7 +125,7 @@ function M.on_select(pr, _repo, refresh, opts)
 
 	if should_fetch_merge_checks then
 		state.merge_checks = "loading"
-		track(provider.fetch_merge_checks(pr, opts, function(checks, err)
+		track(core.fetch_merge_checks(pr, opts, function(checks, err)
 			if err then
 				state.merge_checks = err
 			else
@@ -142,7 +143,7 @@ local DECISION_GROUPS = { "approved", "changes_requested", "pending" }
 
 local DECISION_ICONS = {
 	approved = { icon = icons.pulls_status("successful"), hl = "AtlasTextPositive" },
-	changes_requested = { icon = icons.pulls_status("failed"), hl = "AtlasTextWarning" },
+	changes_requested = { icon = icons.pulls_status("failed"), hl = "AtlasLogError" },
 	pending = { icon = icons.pulls_status("inprogress"), hl = "AtlasTextMuted" },
 }
 
@@ -293,14 +294,17 @@ local PIPELINE_HL = {
 	STOPPED = "AtlasPipelineLinkMuted",
 }
 
+local PIPELINE_STATUS_LABEL = {
+	SUCCESSFUL = "Passed",
+	FAILED = "Failed",
+	INPROGRESS = "Running",
+	STOPPED = "Stopped",
+}
+
 ---@param status string
 ---@return string
 local function status_label(status)
-	local s = tostring(status or ""):lower()
-	if s == "" then
-		return "Unknown"
-	end
-	return s:sub(1, 1):upper() .. s:sub(2)
+	return PIPELINE_STATUS_LABEL[tostring(status or ""):upper()] or "Unknown"
 end
 
 ---@param _pr PullRequest
@@ -361,12 +365,10 @@ local function render_pipelines(_pr, width, lines, spans, line_map)
 			table.insert(rows, { kind = "separator" })
 		end
 		local state_value = tostring(pipeline.state or "UNKNOWN"):upper()
-		local icon, icon_hl = icons.pulls_status(state_value:lower())
+		local icon = icons.pulls_status(state_value:lower())
 		local row = {
-			icon = icon,
-			label = string.format("%s %s", icon, tostring(pipeline.name or pipeline.key or "Pipeline")),
-			status = string.format("(%s)", status_label(state_value)),
-			icon_hl = icon_hl,
+			label = tostring(pipeline.name or pipeline.key or "Pipeline"),
+			status = string.format("%s %s", icon, status_label(state_value)),
 			status_hl = PIPELINE_HL[state_value] or "AtlasPipelineLinkMuted",
 			kind = "pipeline",
 			pipeline = pipeline,
@@ -375,12 +377,10 @@ local function render_pipelines(_pr, width, lines, spans, line_map)
 		}
 		for _, job in ipairs(pipeline.jobs or {}) do
 			local job_state = tostring(job.state or "UNKNOWN"):upper()
-			local job_icon, job_icon_hl = icons.pulls_status(job_state:lower())
+			local job_icon = icons.pulls_status(job_state:lower())
 			table.insert(row.children, {
-				icon = job_icon,
-				label = string.format("%s %s", job_icon, tostring(job.name or "Job")),
-				status = string.format("(%s)", status_label(job_state)),
-				icon_hl = job_icon_hl,
+				label = tostring(job.name or "Job"),
+				status = string.format("%s %s", job_icon, status_label(job_state)),
 				status_hl = PIPELINE_HL[job_state] or "AtlasPipelineLinkMuted",
 				kind = "pipeline",
 				pipeline = pipeline,
@@ -408,24 +408,14 @@ local function render_pipelines(_pr, width, lines, spans, line_map)
 				return state.is_pipeline_expanded(row.pipeline)
 			end,
 		},
-		cell_hl = function(row, column, context)
+		cell_hl = function(row, column, _context)
 			if row.kind == "separator" then
 				return nil
 			end
 			if column.key == "status" then
 				return row.status_hl
 			end
-			local icon_start, icon_end = context.text:find(row.icon, 1, true)
-			if not icon_start then
-				return nil
-			end
-			return {
-				{
-					start_col = icon_start - 1,
-					end_col = icon_end,
-					hl_group = row.icon_hl,
-				},
-			}
+			return nil
 		end,
 	})
 

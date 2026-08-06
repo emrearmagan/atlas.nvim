@@ -1,6 +1,6 @@
 local M = {}
 
-local cli = require("atlas.issues.providers.github.api.cli")
+local cli = require("atlas.providers.github.client").issues
 local normalizer = require("atlas.issues.providers.github.api.mapper")
 
 ---@param key string

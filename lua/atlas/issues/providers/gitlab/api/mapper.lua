@@ -13,9 +13,10 @@ function M.to_user(raw_user)
 	if username == "" then
 		return nil
 	end
+	local name = json.safe_str(raw_user.name) or ""
 	return {
 		account_id = username,
-		display_name = json.safe_str(raw_user.name) or username,
+		display_name = name ~= "" and name or username,
 	}
 end
 
@@ -149,41 +150,20 @@ local function note_id_tail(raw)
 	return s:match("([^/]+)$") or s
 end
 
----@param raw_user any Decoded API value.
----@return IssueUser|nil
-local function gql_user(raw_user)
-	if type(raw_user) ~= "table" then
-		return nil
-	end
-	local username = json.safe_str(raw_user.username) or ""
-	if username == "" then
-		return nil
-	end
-	return {
-		account_id = username,
-		display_name = json.safe_str(raw_user.name) or username,
-		email = "",
-	}
-end
-
----@param award_emoji any GraphQL connection { nodes = [{ name = "..." }, ...] }.
+---@param raw table
 ---@return table<string, integer>|nil
-local function gql_reactions(award_emoji)
-	if type(award_emoji) ~= "table" then
-		return nil
-	end
-	local nodes = type(award_emoji.nodes) == "table" and award_emoji.nodes or {}
-	if #nodes == 0 then
-		return nil
-	end
-	local out = {}
-	for _, e in ipairs(nodes) do
-		local name = tostring(e.name or "")
-		if name ~= "" then
-			out[name] = (out[name] or 0) + 1
+local function reaction_counts(raw)
+	local award_emoji = json.safe_table(raw.awardEmoji)
+	local values = type(award_emoji.nodes) == "table" and award_emoji.nodes or raw.award_emoji
+	local reactions
+	for _, reaction in ipairs(json.safe_table(values)) do
+		local name = type(reaction) == "table" and json.safe_str(reaction.name) or nil
+		if name and name ~= "" then
+			reactions = reactions or {}
+			reactions[name] = (reactions[name] or 0) + 1
 		end
 	end
-	return out
+	return reactions
 end
 
 ---@param raw any Decoded API value.
@@ -200,19 +180,17 @@ function M.to_comment_from_note(raw, first_id, discussion_id)
 	if first_id ~= nil and tostring(first_id) ~= id then
 		parent_id = tostring(first_id)
 	end
-	local author = gql_user(raw.author) or M.to_user(raw.author)
 	return {
 		id = id,
 		self = nil,
 		url = nil,
-		author = author,
+		author = M.to_user(raw.author),
 		body = json.safe_str(raw.body) or "",
-		_body = nil,
 		created = json.safe_str(raw.createdAt) or json.safe_str(raw.created_at) or "",
 		updated = json.safe_str(raw.updatedAt) or json.safe_str(raw.updated_at),
 		parent_id = parent_id,
 		children = nil,
-		reactions = gql_reactions(raw.awardEmoji),
+		reactions = reaction_counts(raw),
 		_raw = discussion_id and { discussion_id = discussion_id } or nil,
 	}
 end
@@ -230,7 +208,7 @@ function M.to_activity_from_note(raw)
 	end
 	return {
 		kind = "system",
-		actor = gql_user(raw.author) or M.to_user(raw.author),
+		actor = M.to_user(raw.author),
 		date = json.safe_str(raw.createdAt) or json.safe_str(raw.created_at),
 		label = body,
 	}

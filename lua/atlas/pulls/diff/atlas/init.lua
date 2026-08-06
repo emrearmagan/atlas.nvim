@@ -1,18 +1,54 @@
 local M = {}
 
 local commits = require("atlas.pulls.diff.atlas.commits")
+local diff = require("atlas.ui.components.diff_hunks")
 local explorer = require("atlas.pulls.diff.atlas.explorer")
-local footer = require("atlas.pulls.diff.atlas.footer")
+local statusline = require("atlas.pulls.diff.atlas.statusline")
 local git = require("atlas.pulls.diff.atlas.git")
 local keymaps = require("atlas.pulls.diff.atlas.keymaps")
 local notify = require("atlas.core.notify")
 local renderer = require("atlas.pulls.diff.atlas.renderer")
 local state = require("atlas.pulls.diff.atlas.state")
 local comments = require("atlas.pulls.diff.shared.comments")
-local notes = require("atlas.pulls.diff.atlas.notes")
+local events = require("atlas.core.events")
+local notes = require("atlas.pulls.diff.shared.notes")
+local position = require("atlas.pulls.diff.shared.position")
+local review_panel = require("atlas.pulls.diff.shared.review_panel")
+local review_threads = require("atlas.ui.components.review_threads")
 local close
 local reload_session
 local toggle_compact
+
+---@param session AtlasNativeDiffSession
+---@param reason string|nil
+---@return table
+local function event_data(session, reason)
+	local data = {
+		version = 1,
+		session_id = session.lifecycle.session_id,
+		viewer = "atlas",
+		tabpage = session.tabpage,
+		root = session.range.root,
+		base_revision = session.range.base_revision,
+		head_revision = session.head_revision,
+	}
+	if reason then
+		data.reason = reason
+	end
+	return data
+end
+
+---@param lifecycle AtlasNativeDiffLifecycle
+---@param data table
+---@param reason string
+local function diff_closed(lifecycle, data, reason)
+	if not lifecycle.opened or lifecycle.closed then
+		return
+	end
+	lifecycle.closed = true
+	data.reason = reason
+	events.emit("AtlasDiffClosed", data)
+end
 local toggle_layout
 
 ---@param name string|nil
@@ -141,7 +177,7 @@ end
 ---@return boolean
 local function compact_active(session)
 	local document = session.document
-	return session.compact and not document.binary and #document.file.hunks > 0
+	return session.compact and not document.binary and #document.changes > 0
 end
 
 ---@param session AtlasNativeDiffSession
@@ -149,6 +185,7 @@ local function render_file(session)
 	renderer.file(session.document, {
 		layout = session.layout,
 		compact = session.compact,
+		compact_context_lines = session.compact_context_lines,
 		left = session.left,
 		right = session.right,
 	})
@@ -160,12 +197,36 @@ local function render_explorer(session)
 end
 
 ---@param session AtlasNativeDiffSession
+local function reflow_review_panel(session)
+	local panel = session.review_panel
+	if not panel or not panel.win or not vim.api.nvim_win_is_valid(panel.win) then
+		return
+	end
+	if vim.api.nvim_win_get_position(panel.win)[2] > 0 then
+		vim.api.nvim_win_call(panel.win, function()
+			vim.cmd("wincmd J")
+		end)
+	end
+	vim.api.nvim_win_set_height(panel.win, math.min(16, math.max(4, vim.o.lines - 8)))
+end
+
+---@param session AtlasNativeDiffSession
 local function refresh_ui(session)
-	comments.render(session)
+	local deleted_comments = comments.render(session, { inline_deleted_lines = true })
+	if session.layout == "inline" then
+		renderer.inline_deleted_lines(session.document, session.right.buf, deleted_comments)
+	end
 	notes.render(session)
+	local review = session.review
+	local note_state = session.notes
+	review_panel.render(session.review_panel, {
+		comments = review and review.comments or {},
+		notes = note_state and note_state.items or {},
+		note_target = note_state and note_state.target or nil,
+	})
 	render_explorer(session)
 	commits.render(session)
-	footer.render(session)
+	statusline.update(session)
 end
 
 ---@param session AtlasNativeDiffSession
@@ -185,12 +246,29 @@ local function configure_content_window(session, win)
 	options.list = false
 	options.number = session.number
 	options.relativenumber = session.relativenumber
-	options.signcolumn = "yes:1"
 	options.spell = false
 	options.diff = false
 	options.scrollbind = false
 	options.wrap = false
 	options.winhighlight = ""
+	local file = session.files[session.selected_index]
+	local path = win == session.left.win and session.document.old.path or session.document.new.path
+	local additions, deletions = diff.file_stats(file)
+	local marker = file.status == "unknown" and "?" or file.status:sub(1, 1):upper()
+	local marker_hl = file.status == "added" and "AtlasTextPositive"
+		or file.status == "deleted" and "AtlasLogError"
+		or file.status == "renamed" and "AtlasLogInfo"
+		or file.status == "unknown" and "AtlasTextMuted"
+		or "AtlasTextWarning"
+	options.winbar = string.format(
+		"%%#Normal# %s %%=%%#AtlasTextPositive#+%d %%#AtlasLogError#-%d %%#%s#%s ",
+		path:gsub("%%", "%%%%"),
+		additions,
+		deletions,
+		marker_hl,
+		marker
+	)
+	statusline.attach(win)
 end
 
 ---@param session AtlasNativeDiffSession
@@ -199,7 +277,7 @@ local function focus_first_hunk(session)
 	if not session.right.win or not vim.api.nvim_win_is_valid(session.right.win) then
 		return
 	end
-	local first = document.file.hunks[1]
+	local first = document.changes[1]
 	local right_line = first and math.max(1, math.min(#document.new.lines, first.new_start)) or 1
 	vim.api.nvim_win_set_cursor(session.right.win, { right_line, 0 })
 	if session.left.win and vim.api.nvim_win_is_valid(session.left.win) then
@@ -218,29 +296,37 @@ local function cancel_job(session)
 end
 
 ---@param session AtlasNativeDiffSession
+---@param reason string|nil
 ---@return boolean
-local function dispose_session(session)
+local function dispose_session(session, reason)
 	if session.closing then
 		return false
 	end
 	session.closing = true
 	cancel_job(session)
-	footer.dispose(session)
+	statusline.dispose(session)
 	comments.detach(session)
 	notes.detach(session)
+	if session.review_attached then
+		session.review_attached = false
+		events.emit("AtlasReviewDetached", event_data(session, reason))
+	end
 	state.remove(session.tabpage)
 	return true
 end
 
 ---@param session AtlasNativeDiffSession
 local function delete_session_buffers(session)
-	for _, buf in ipairs({
+	local buffers = {
 		session.panel.buf,
 		session.commits_panel.buf,
 		session.left.buf,
 		session.right.buf,
-		session.footer.buf,
-	}) do
+	}
+	if session.review_panel then
+		table.insert(buffers, session.review_panel.buf)
+	end
+	for _, buf in ipairs(buffers) do
 		if vim.api.nvim_buf_is_valid(buf) then
 			pcall(vim.api.nvim_buf_delete, buf, { force = true })
 		end
@@ -282,7 +368,8 @@ end
 
 ---@param session AtlasNativeDiffSession
 ---@param index integer
-local function select_file(session, index)
+---@param on_loaded (fun(document: AtlasNativeDiffDocument))|nil
+local function select_file(session, index, on_loaded)
 	if session.closing or not session.files[index] then
 		return
 	end
@@ -298,7 +385,7 @@ local function select_file(session, index)
 		end
 		session.job = nil
 		if not document then
-			footer.notify(session, "error", tostring(err or "Unable to load file diff"))
+			statusline.notify(session, "error", tostring(err or "Unable to load file diff"))
 			session.pending_index = nil
 			render_explorer(session)
 			return
@@ -314,6 +401,109 @@ local function select_file(session, index)
 		render_file(session)
 		focus_first_hunk(session)
 		session.refresh_ui()
+		if on_loaded then
+			on_loaded(document)
+		end
+	end)
+end
+
+---@param session AtlasNativeDiffSession
+---@param path string
+---@return integer|nil
+local function file_index(session, path)
+	for index, file in ipairs(session.files) do
+		if file.path == path or file.old_path == path then
+			return index
+		end
+	end
+	return nil
+end
+
+---@param session AtlasNativeDiffSession
+---@param index integer
+---@param callback fun(document: AtlasNativeDiffDocument)
+local function with_file(session, index, callback)
+	if index == session.selected_index and not session.pending_index then
+		callback(session.document)
+		return
+	end
+	select_file(session, index, callback)
+end
+
+---@param win integer
+---@param line integer
+---@param focus_diff boolean
+local function reveal_line(win, line, focus_diff)
+	vim.api.nvim_win_set_cursor(win, { line, 0 })
+	vim.api.nvim_win_call(win, function()
+		pcall(vim.cmd.normal, { "zvzz", bang = true })
+	end)
+	if focus_diff then
+		vim.api.nvim_set_current_win(win)
+	end
+end
+
+---@param session AtlasNativeDiffSession
+---@param comment PullsComment
+---@param focus_diff boolean
+local function jump_to_comment(session, comment, focus_diff)
+	local inline = comment.inline
+	if not inline then
+		statusline.notify(session, "info", "This comment is not attached to the diff")
+		return
+	end
+	local index = file_index(session, inline.path) or (inline.old_path and file_index(session, inline.old_path))
+	if not index then
+		statusline.notify(session, "info", "This comment's file is no longer in the diff")
+		return
+	end
+	if session.review then
+		session.review.expanded_threads[review_threads.comment_key(comment)] = true
+	end
+	with_file(session, index, function(document)
+		local side, line = position.location(inline)
+		if not side or not line then
+			statusline.notify(session, "info", "This comment no longer has a diff position")
+			return
+		end
+		local win = side == "LEFT" and session.left.win or session.right.win
+		if side == "LEFT" and session.layout == "inline" then
+			win = session.right.win
+			line = position.opposite_line(document, "LEFT", line, vim.api.nvim_buf_line_count(session.right.buf))
+		end
+		if not win or not vim.api.nvim_win_is_valid(win) then
+			return
+		end
+		if line < 1 then
+			statusline.notify(session, "info", "This comment's diff position is outdated")
+			return
+		end
+		line = math.min(line, vim.api.nvim_buf_line_count(vim.api.nvim_win_get_buf(win)))
+		session.refresh_ui()
+		reveal_line(win, line, focus_diff)
+	end)
+end
+
+---@param session AtlasNativeDiffSession
+---@param note AtlasNote
+---@param focus_diff boolean
+local function jump_to_note(session, note, focus_diff)
+	local index = file_index(session, note.file_path)
+	if not index then
+		statusline.notify(session, "info", "This note's file is no longer in the diff")
+		return
+	end
+	with_file(session, index, function(document)
+		if document.binary or document.status == "deleted" then
+			statusline.notify(session, "info", "This note's file is no longer in the diff")
+			return
+		end
+		local line = math.min(note.line, math.max(1, #document.new.lines))
+		local win = session.right.win
+		if not win or not vim.api.nvim_win_is_valid(win) then
+			return
+		end
+		reveal_line(win, line, focus_diff)
 	end)
 end
 
@@ -321,8 +511,16 @@ end
 ---@param index integer
 ---@return integer|nil
 local function next_unreviewed_file(session, index)
-	for offset = 1, #session.files - 1 do
-		local candidate = ((index - 1 + offset) % #session.files) + 1
+	local order = explorer.ordered_indices(session)
+	local order_position = 1
+	for current, ordered_index in ipairs(order) do
+		if ordered_index == index then
+			order_position = current
+			break
+		end
+	end
+	for offset = 1, #order - 1 do
+		local candidate = order[((order_position - 1 + offset) % #order) + 1]
 		if not session.reviewed_files[session.files[candidate].path] then
 			return candidate
 		end
@@ -342,9 +540,9 @@ local function toggle_file_reviewed(session)
 		return
 	end
 	local reviewed = not session.reviewed_files[file.path]
+	local next_index = reviewed and next_unreviewed_file(session, index) or nil
 	session.reviewed_files[file.path] = reviewed
 	if reviewed then
-		local next_index = next_unreviewed_file(session, index)
 		if next_index then
 			select_file(session, next_index)
 			local next_line = explorer.line_for_file(session, next_index)
@@ -369,23 +567,23 @@ local function navigate_file(session, direction)
 		return
 	end
 	local current = session.pending_index or session.selected_index
-	local position = 1
-	for index, file_index in ipairs(order) do
-		if file_index == current then
-			position = index
+	local order_position = 1
+	for index, ordered_index in ipairs(order) do
+		if ordered_index == current then
+			order_position = index
 			break
 		end
 	end
-	position = ((position - 1 + direction) % #order) + 1
-	select_file(session, order[position])
+	order_position = ((order_position - 1 + direction) % #order) + 1
+	select_file(session, order[order_position])
 end
 
 ---@param session AtlasNativeDiffSession
 ---@param direction 1|-1
 local function navigate_hunk(session, direction)
 	local document = session.document
-	if #document.file.hunks == 0 then
-		footer.notify(session, "info", "No diff hunks in this file")
+	if #document.changes == 0 then
+		statusline.notify(session, "info", "No diff hunks in this file")
 		return
 	end
 	local current_buf = vim.api.nvim_get_current_buf()
@@ -397,7 +595,7 @@ local function navigate_hunk(session, direction)
 	local target_buf = use_left and session.left.buf or session.right.buf
 	local line_count = vim.api.nvim_buf_line_count(target_buf)
 	local seen, lines = {}, {}
-	for _, hunk in ipairs(document.file.hunks) do
+	for _, hunk in ipairs(document.changes) do
 		local start = use_left and hunk.old_start or hunk.new_start
 		local line = math.max(1, math.min(line_count, start))
 		if not seen[line] then
@@ -437,7 +635,6 @@ local function toggle_panel(session)
 		close_commits_panel(session)
 		session.panel.win = nil
 		vim.api.nvim_win_close(panel_win, true)
-		footer.reflow(session)
 		return
 	end
 	local anchor_win = session.layout == "side-by-side" and session.left.win or session.right.win
@@ -448,13 +645,32 @@ local function toggle_panel(session)
 	explorer.configure_window(session, session.panel.win)
 	render_explorer(session)
 	open_commits_panel(session)
-	footer.reflow(session)
+end
+
+---@param session AtlasNativeDiffSession
+local function toggle_review_panel(session)
+	local panel = session.review_panel
+	if not panel then
+		return
+	end
+	if panel.win and vim.api.nvim_win_is_valid(panel.win) then
+		vim.api.nvim_win_close(panel.win, true)
+		return
+	end
+	if not session.right.win or not vim.api.nvim_win_is_valid(session.right.win) then
+		return
+	end
+	panel.win = split_window(session.right.win, panel.buf, "below", 16)
+	review_panel.configure(panel)
+	statusline.attach(panel.win)
+	reflow_review_panel(session)
+	review_panel.render(panel)
 end
 
 ---@param session AtlasNativeDiffSession
 local function toggle_commits(session)
 	if #session.commits == 0 then
-		footer.notify(session, "info", "No commits available")
+		statusline.notify(session, "info", "No commits available")
 		return
 	end
 	if not session.panel.win or not vim.api.nvim_win_is_valid(session.panel.win) then
@@ -468,7 +684,6 @@ local function toggle_commits(session)
 	else
 		open_commits_panel(session)
 	end
-	footer.reflow(session)
 end
 
 ---@param session AtlasNativeDiffSession
@@ -504,37 +719,11 @@ local function register_keymaps(session)
 		toggle_commits = function()
 			toggle_commits(session)
 		end,
+		toggle_review_panel = function()
+			toggle_review_panel(session)
+		end,
 		select_file = function(index)
 			select_file(session, index)
-		end,
-		refresh = function()
-			comments.reload(session)
-			notes.reload(session)
-		end,
-		open_item = function(buf)
-			local has_comments = comments.has_at_cursor(session, buf)
-			local has_notes = notes.has_at_cursor(session, buf)
-			if has_comments and has_notes then
-				vim.ui.select({ "Comment thread", "Local notes" }, { prompt = "Open review item:" }, function(choice)
-					if choice == "Comment thread" then
-						comments.open_at_cursor(session, buf)
-					elseif choice == "Local notes" then
-						notes.open_at_cursor(session, buf)
-					end
-				end)
-			elseif has_comments then
-				comments.open_at_cursor(session, buf)
-			elseif has_notes then
-				notes.open_at_cursor(session, buf)
-			else
-				footer.notify(session, "info", "No comment or note at cursor")
-			end
-		end,
-		add_note = function(buf)
-			notes.add_at_cursor(session, buf)
-		end,
-		jump_note = function(direction)
-			notes.jump(session, direction)
 		end,
 		show_commit = function()
 			commits.show_details(session)
@@ -548,9 +737,11 @@ end
 local function create_session(open_options, options)
 	local session
 	local tabpage
+	local target = open_options.target
 	local created_buffers = {}
 	local ok, err = pcall(function()
-		local target = open_options.target
+		local lifecycle = target and target.diff_lifecycle
+			or { session_id = events.new_id("atlas"), opened = false, closed = false }
 		local right_win, launcher_buf
 		local number, relativenumber
 		if target then
@@ -572,11 +763,14 @@ local function create_session(open_options, options)
 		local left_buf = create_buffer(nil, "nowrite")
 		local panel_buf = create_buffer(string.format("atlas-diff://%d/files", tabpage))
 		local commits_buf = create_buffer(string.format("atlas-diff://%d/commits", tabpage))
-		local footer_buf = create_buffer(string.format("atlas-diff://%d/footer", tabpage))
+		local review_buf = open_options.review and create_buffer(string.format("atlas-diff://%d/review", tabpage))
+			or nil
 		vim.bo[panel_buf].filetype = "atlas-diff-files"
 		vim.bo[commits_buf].filetype = "atlas-diff-commits"
-		vim.bo[footer_buf].filetype = "atlas-footer"
-		vim.list_extend(created_buffers, { right_buf, left_buf, panel_buf, commits_buf, footer_buf })
+		vim.list_extend(created_buffers, { right_buf, left_buf, panel_buf, commits_buf })
+		if review_buf then
+			table.insert(created_buffers, review_buf)
+		end
 
 		vim.api.nvim_win_set_buf(right_win, right_buf)
 		if vim.api.nvim_buf_is_valid(launcher_buf) then
@@ -587,7 +781,8 @@ local function create_session(open_options, options)
 			local panel_width = math.min(options.explorer.width, math.max(20, vim.o.columns - 40))
 			panel_win = split_window(right_win, panel_buf, "left", panel_width)
 		end
-		local footer_win = split_window(right_win, footer_buf, "below", 1)
+		local review_win = review_buf and options.show_review_panel and split_window(right_win, review_buf, "below", 16)
+			or nil
 		if target then
 			for name, value in pairs({
 				statuscolumn = target.statuscolumn,
@@ -602,11 +797,13 @@ local function create_session(open_options, options)
 		session = {
 			tabpage = tabpage,
 			range = open_options.diff.range,
+			head_revision = open_options.diff.range.head_revision,
 			files = open_options.diff.files,
 			selected_index = 1,
 			pending_index = nil,
 			layout = options.layout,
 			compact = options.compact,
+			compact_context_lines = options.compact_context_lines,
 			number = number,
 			relativenumber = relativenumber,
 			explorer = options.explorer,
@@ -620,40 +817,58 @@ local function create_session(open_options, options)
 			commits_visible = options.explorer.show_commits and #(open_options.commits or {}) > 0,
 			left = { buf = left_buf, win = nil },
 			right = { buf = right_buf, win = right_win },
-			footer = footer.new(footer_buf, footer_win),
+			statusline = statusline.new(),
 			job = nil,
 			document = open_options.diff.document,
 			review = nil,
+			review_attached = false,
 			review_context = open_options.review,
 			review_view = {
 				notify = function(level, message, duration)
-					footer.notify(session, level, message, duration)
+					statusline.notify(session, level, message, duration)
 				end,
 				register_keymaps = function(actions)
 					keymaps.register_review(session, actions)
-				end,
-				unregister_keymaps = function()
-					keymaps.unregister_review(session)
 				end,
 				task_at_cursor = function()
 					return explorer.task_at_cursor(session)
 				end,
 			},
 			notes = nil,
+			review_panel = review_buf and review_panel.new(review_buf, review_win, {
+				on_close = function()
+					toggle_review_panel(session)
+				end,
+				on_select = function(item, focus_diff)
+					if item.kind == "note" then
+						jump_to_note(session, item.note, focus_diff)
+					else
+						jump_to_comment(session, item.comment, focus_diff)
+					end
+				end,
+				on_refresh = function()
+					comments.reload(session)
+					notes.reload(session)
+				end,
+			}) or nil,
 			reload = open_options.reload,
-			refresh_ui = function() end,
+			refresh_ui = function()
+				if not session.closing then
+					refresh_ui(session)
+				end
+			end,
 			closing = false,
+			lifecycle = lifecycle,
 		}
-		session.refresh_ui = function()
-			if not session.closing then
-				refresh_ui(session)
-			end
-		end
 		state.add(session)
 
 		explorer.configure(session)
-		footer.configure(session)
+		review_panel.configure(session.review_panel)
+		if session.review_panel and session.review_panel.win then
+			statusline.attach(session.review_panel.win)
+		end
 		register_keymaps(session)
+		review_panel.register_keymaps(session.review_panel)
 		local focus_win = options.explorer.initial_focus == "explorer" and panel_win or nil
 		vim.api.nvim_set_current_win(focus_win or right_win)
 	end)
@@ -662,7 +877,7 @@ local function create_session(open_options, options)
 		return session, nil
 	end
 	if session then
-		close(session)
+		close(session, "initialization_failed")
 	else
 		if tabpage and vim.api.nvim_tabpage_is_valid(tabpage) then
 			pcall(vim.cmd, vim.api.nvim_tabpage_get_number(tabpage) .. "tabclose")
@@ -671,6 +886,9 @@ local function create_session(open_options, options)
 			if vim.api.nvim_buf_is_valid(buf) then
 				pcall(vim.api.nvim_buf_delete, buf, { force = true })
 			end
+		end
+		if target and target.on_abandon then
+			target.on_abandon("initialization_failed")
 		end
 	end
 	return nil, tostring(err)
@@ -683,6 +901,8 @@ local function session_options(explorer_options)
 	return {
 		layout = config.layout == "inline" and "inline" or "side-by-side",
 		compact = config.compact ~= false,
+		compact_context_lines = config.compact_context_lines or 3,
+		show_review_panel = config.show_review_panel == true,
 		explorer = explorer_options,
 	}
 end
@@ -704,6 +924,7 @@ local function initialize_session(session)
 			configure_content_window(session, session.left.win)
 		end
 		configure_content_window(session, right_win)
+		reflow_review_panel(session)
 		render_file(session)
 		render_explorer(session)
 		local review = session.review_context
@@ -713,7 +934,7 @@ local function initialize_session(session)
 		end
 
 		focus_first_hunk(session)
-		footer.reflow(session)
+		statusline.update(session)
 		open_commits_panel(session)
 	end)
 	if not ok then
@@ -736,8 +957,15 @@ function M.open(options)
 	end
 	local initialize_err = initialize_session(session)
 	if initialize_err then
-		close(session)
 		return "Unable to initialize diff view: " .. initialize_err
+	end
+	if not session.lifecycle.opened then
+		session.lifecycle.opened = true
+		events.emit("AtlasDiffOpened", event_data(session))
+	end
+	if session.review then
+		session.review_attached = true
+		events.emit("AtlasReviewAttached", event_data(session))
 	end
 	return nil
 end
@@ -758,10 +986,12 @@ local function replace_with_loading(session)
 	end
 
 	local statuscolumn = vim.wo[win].statuscolumn
-	local statusline = vim.wo[win].statusline
+	local window_statusline = vim.wo[win].statusline
 	local winbar = vim.wo[win].winbar
+	local lifecycle = session.lifecycle
+	local lifecycle_data = event_data(session)
 	local buf = vim.api.nvim_create_buf(false, true)
-	dispose_session(session)
+	dispose_session(session, "reload")
 	vim.api.nvim_set_current_tabpage(tabpage)
 	vim.api.nvim_set_current_win(win)
 	vim.api.nvim_win_set_buf(win, buf)
@@ -778,8 +1008,12 @@ local function replace_with_loading(session)
 		number = session.number,
 		relativenumber = session.relativenumber,
 		statuscolumn = statuscolumn,
-		statusline = statusline,
+		statusline = window_statusline,
 		winbar = winbar,
+		diff_lifecycle = lifecycle,
+		on_abandon = function(reason)
+			diff_closed(lifecycle, lifecycle_data, reason)
+		end,
 	}
 end
 
@@ -802,7 +1036,7 @@ toggle_layout = function(session)
 	end
 	if not session.right.win or not vim.api.nvim_win_is_valid(session.right.win) then
 		notify.warn("The diff layout changed unexpectedly; closing the view")
-		close(session)
+		close(session, "layout_error")
 		return
 	end
 	local current_win = vim.api.nvim_get_current_win()
@@ -820,7 +1054,6 @@ toggle_layout = function(session)
 		end
 		render_file(session)
 		session.refresh_ui()
-		footer.reflow(session)
 	end
 
 	if session.layout == "side-by-side" then
@@ -838,7 +1071,7 @@ toggle_layout = function(session)
 		end)
 		restore_focus()
 		if not ok then
-			footer.notify(session, "error", "Unable to switch diff layout: " .. tostring(err))
+			statusline.notify(session, "error", "Unable to switch diff layout: " .. tostring(err))
 		end
 		return
 	end
@@ -860,7 +1093,7 @@ toggle_layout = function(session)
 		end
 		session.left.win = nil
 		pcall(render_layout)
-		footer.notify(session, "error", "Unable to switch diff layout: " .. tostring(err))
+		statusline.notify(session, "error", "Unable to switch diff layout: " .. tostring(err))
 	end
 	restore_focus()
 end
@@ -873,12 +1106,12 @@ toggle_compact = function(session)
 	end
 	if not session.right.win or not vim.api.nvim_win_is_valid(session.right.win) then
 		notify.warn("The diff layout changed unexpectedly; closing the view")
-		close(session)
+		close(session, "layout_error")
 		return
 	end
 	local document = session.document
-	if not session.compact and (document.binary or #document.file.hunks == 0) then
-		footer.notify(session, "info", "This file has no textual diff hunks")
+	if not session.compact and (document.binary or #document.changes == 0) then
+		statusline.notify(session, "info", "This file has no textual diff hunks")
 		return
 	end
 	session.compact = not session.compact
@@ -887,12 +1120,15 @@ toggle_compact = function(session)
 		configure_content_window(session, session.left.win)
 	end
 	render_file(session)
+	session.refresh_ui()
 end
 
 ---@param session AtlasNativeDiffSession
+---@param reason string|nil
 ---@return nil
-close = function(session)
-	if not dispose_session(session) then
+close = function(session, reason)
+	reason = reason or "user_close"
+	if not dispose_session(session, reason) then
 		return
 	end
 	if vim.api.nvim_tabpage_is_valid(session.tabpage) then
@@ -900,6 +1136,7 @@ close = function(session)
 		pcall(vim.cmd, tabnr .. "tabclose")
 	end
 	delete_session_buffers(session)
+	diff_closed(session.lifecycle, event_data(session), reason)
 end
 
 local autocmd_group = vim.api.nvim_create_augroup("AtlasNativeDiff", { clear = true })
@@ -914,7 +1151,7 @@ vim.api.nvim_create_autocmd("TabClosed", {
 			end
 		end
 		for _, session in ipairs(closed) do
-			close(session)
+			close(session, "tab_closed")
 		end
 	end,
 })
@@ -929,15 +1166,13 @@ vim.api.nvim_create_autocmd("WinClosed", {
 					if closed_win == session.commits_panel.win then
 						session.commits_panel.win = nil
 						session.commits_visible = false
-						footer.reflow(session)
 					elseif closed_win == session.panel.win then
 						session.panel.win = nil
 						close_commits_panel(session)
-						footer.reflow(session)
-					elseif closed_win == session.footer.win then
-						session.footer.win = nil
+					elseif session.review_panel and closed_win == session.review_panel.win then
+						session.review_panel.win = nil
 					elseif closed_win == session.left.win or closed_win == session.right.win then
-						close(session)
+						close(session, "window_closed")
 					end
 				end
 			end
@@ -958,10 +1193,9 @@ local function resize_current_view()
 	if session.left.win then
 		configure_content_window(session, session.left.win)
 	end
-	footer.configure(session)
+	reflow_review_panel(session)
 	render_file(session)
 	session.refresh_ui()
-	footer.reflow(session)
 end
 
 vim.api.nvim_create_autocmd({ "WinResized", "TabEnter" }, {

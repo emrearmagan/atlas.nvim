@@ -24,8 +24,9 @@ function M.setup(buf, refresh)
 	local tab = require("atlas.pulls.ui.panel.pr.tabs.review")
 	local panel_state = require("atlas.pulls.ui.panel.pr.state")
 	local provider = require("atlas.pulls.state").provider
-	local edit_description = provider and provider.edit_task and "Edit comment / task" or "Edit comment"
-	local delete_description = provider and provider.delete_task and "Delete comment / task" or "Delete comment"
+	local reviews = provider and provider.capabilities.reviews
+	local edit_description = reviews and reviews.edit_task and "Edit comment / task" or "Edit comment"
+	local delete_description = reviews and reviews.delete_task and "Delete comment / task" or "Delete comment"
 
 	local function cursor_entry()
 		local win = layout.win_id("detail")
@@ -36,9 +37,10 @@ function M.setup(buf, refresh)
 		return (panel_state.line_map or {})[lnum]
 	end
 
-	local items = {
-		{
-			key = "c",
+	local items = {}
+	utils.insert_if(
+		items,
+		from_action("pulls.review.submit_comment", {
 			desc = "Reply to comment",
 			opts = { nowait = true, silent = true },
 			callback = function()
@@ -48,9 +50,11 @@ function M.setup(buf, refresh)
 					tab.reply_comment(pr, entry, refresh)
 				end
 			end,
-		},
-		{
-			key = "e",
+		})
+	)
+	utils.insert_if(
+		items,
+		from_action("pulls.review.edit_comment", {
 			desc = edit_description,
 			opts = { nowait = true, silent = true },
 			callback = function()
@@ -60,9 +64,26 @@ function M.setup(buf, refresh)
 					tab.edit_comment(pr, entry, refresh)
 				end
 			end,
-		},
-		{
-			key = "d",
+		})
+	)
+	if reviews and reviews.add_task then
+		utils.insert_if(
+			items,
+			from_action("pulls.review.add_task", {
+				desc = "Add task",
+				opts = { nowait = true, silent = true },
+				callback = function()
+					local pr = panel_state.current_pr
+					if pr then
+						tab.add_task(pr, refresh)
+					end
+				end,
+			})
+		)
+	end
+	utils.insert_if(
+		items,
+		from_action("pulls.review.delete_comment", {
 			desc = delete_description,
 			opts = { nowait = true, silent = true },
 			callback = function()
@@ -72,21 +93,8 @@ function M.setup(buf, refresh)
 					tab.delete_comment(pr, entry, refresh)
 				end
 			end,
-		},
-	}
-	if provider and provider.add_task then
-		table.insert(items, {
-			key = "T",
-			desc = "Add task",
-			opts = { nowait = true, silent = true },
-			callback = function()
-				local pr = panel_state.current_pr
-				if pr then
-					tab.add_task(pr, refresh)
-				end
-			end,
 		})
-	end
+	)
 	utils.insert_if(
 		items,
 		from_action("pulls.review.toggle_resolved", {
@@ -252,12 +260,11 @@ end
 
 ---@param buf integer
 function M.teardown(buf)
-	local items = {
-		{ key = "c" },
-		{ key = "e" },
-		{ key = "d" },
-		{ key = "T" },
-	}
+	local items = {}
+	utils.insert_if(items, remove_item("pulls.review.submit_comment"))
+	utils.insert_if(items, remove_item("pulls.review.edit_comment"))
+	utils.insert_if(items, remove_item("pulls.review.add_task"))
+	utils.insert_if(items, remove_item("pulls.review.delete_comment"))
 	utils.insert_if(items, remove_item("pulls.review.toggle_resolved"))
 	utils.insert_if(items, remove_item("ui.toggle_fold"))
 	utils.insert_if(items, remove_item("ui.toggle_all_folds"))

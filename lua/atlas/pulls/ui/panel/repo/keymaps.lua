@@ -1,6 +1,6 @@
 local M = {}
 
-local footer = require("atlas.ui.components.footer")
+local statusline = require("atlas.ui.statusline")
 local help = require("atlas.ui.popups.help")
 local resolver = require("atlas.core.keymaps")
 local utils = require("atlas.ui.shared.utils")
@@ -53,12 +53,7 @@ function M.register(buf)
 			desc = "Close repo panel",
 			opts = { nowait = true, silent = true },
 			callback = function()
-				local layout_mod = require("atlas.ui.layout")
-				local ui_st = require("atlas.ui.state")
-				layout_mod.toggle_detail()
-				if ui_st.on_panel_close then
-					ui_st.on_panel_close()
-				end
+				require("atlas.ui.layout").toggle_detail()
 			end,
 		},
 	}
@@ -183,12 +178,7 @@ function M.register(buf)
 				if help.is_open() then
 					return
 				end
-				local layout_mod = require("atlas.ui.layout")
-				local ui_st = require("atlas.ui.state")
-				layout_mod.toggle_detail()
-				if ui_st.on_panel_close then
-					ui_st.on_panel_close()
-				end
+				require("atlas.ui.layout").toggle_detail()
 			end,
 		})
 	)
@@ -220,11 +210,11 @@ function M.open_current_line()
 
 	local url = repo_url(repo)
 	if url == nil or url == "" then
-		footer.notify("warn", "No repository URL available")
+		statusline.notify("warn", "No repository URL available")
 		return false
 	end
 	vim.ui.open(url)
-	footer.notify("info", "Opened repository in browser")
+	statusline.notify("info", "Opened repository in browser")
 	return true
 end
 

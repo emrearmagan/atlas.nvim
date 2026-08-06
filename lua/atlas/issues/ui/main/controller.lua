@@ -1,8 +1,7 @@
 local M = {}
 
 local config = require("atlas.config")
-local footer = require("atlas.ui.components.footer")
-local spinner = require("atlas.ui.popups.spinner")
+local statusline = require("atlas.ui.statusline")
 local status_spinner = require("atlas.ui.components.spinner")
 local state = require("atlas.issues.state")
 local layout = require("atlas.ui.layout")
@@ -141,7 +140,7 @@ local function get_current_user(on_done)
 		return
 	end
 
-	provider.fetch_user(function(user, err)
+	provider.capabilities.core.fetch_user(function(user, err)
 		if err ~= nil then
 			on_done(tostring(err))
 			return
@@ -172,7 +171,7 @@ local function load_active_view(opts, on_done)
 	if target_view == nil then
 		state.is_loading = false
 		state.error = "No issues views configured"
-		footer.notify("error", state.error)
+		statusline.notify("error", state.error)
 		render_if_active()
 		on_done()
 		return
@@ -180,7 +179,6 @@ local function load_active_view(opts, on_done)
 
 	if target_view._kind == "bookmarks" then
 		cancel_active_requests()
-		spinner.stop()
 		if refresh_status_spinner:is_running() then
 			refresh_status_spinner:stop()
 		end
@@ -205,8 +203,7 @@ local function load_active_view(opts, on_done)
 	state.issues = nil
 	state.issue_tree = nil
 	state.line_map = {}
-	footer.notify("loading", "Loading issues...")
-	spinner.start("Loading issues...")
+	statusline.notify("loading", "Loading issues...")
 	if not refresh_status_spinner:is_running() then
 		refresh_status_spinner:start()
 	end
@@ -229,7 +226,6 @@ local function load_active_view(opts, on_done)
 		if not has_reloading_issues() then
 			refresh_status_spinner:stop()
 		end
-		spinner.stop()
 	end
 
 	local function finalize_fetch_failure(err, issues)
@@ -244,12 +240,12 @@ local function load_active_view(opts, on_done)
 			state.error = nil
 			state.issues = issues
 			state.issue_tree = helper.build_issue_tree(issues)
-			footer.notify("warn", string.format("Stopped at %d issues: %s", #issues, tostring(err)))
+			statusline.notify("warn", string.format("Stopped at %d issues: %s", #issues, tostring(err)))
 		else
 			state.error = tostring(err)
 			state.issues = nil
 			state.issue_tree = nil
-			footer.notify("error", string.format("Failed to fetch issues: %s", tostring(err)))
+			statusline.notify("error", string.format("Failed to fetch issues: %s", tostring(err)))
 		end
 
 		render_if_active()
@@ -267,7 +263,7 @@ local function load_active_view(opts, on_done)
 		state.issue_tree = helper.build_issue_tree(issues)
 		finish_loading()
 
-		footer.notify("success", string.format("Loaded %d issues", #issues), 1200)
+		statusline.notify("success", string.format("Loaded %d issues", #issues), 1200)
 		render_if_active()
 		on_done()
 	end
@@ -287,7 +283,7 @@ local function load_active_view(opts, on_done)
 			return
 		end
 
-		active_issues_handle = provider.fetch_issues(target_view, {
+		active_issues_handle = provider.capabilities.core.fetch_issues(target_view, {
 			force_load = opts.force_load == true,
 			next_page_token = next_page_token,
 			max_results = remaining,
@@ -337,7 +333,7 @@ local function load_active_view(opts, on_done)
 				return
 			end
 			if user_err then
-				footer.notify("warn", string.format("Failed to fetch current user: %s", tostring(user_err)))
+				statusline.notify("warn", string.format("Failed to fetch current user: %s", tostring(user_err)))
 				return
 			end
 			render_if_active()
@@ -350,8 +346,9 @@ end
 ---@param on_done fun()|nil
 function M.refresh_current_view(on_done)
 	local provider = state.provider
-	if provider and provider.on_refresh then
-		provider.on_refresh()
+	local refresh = provider and provider.capabilities.core.refresh
+	if refresh then
+		refresh()
 	end
 
 	load_active_view({ force_load = true }, function()
@@ -379,8 +376,7 @@ function M.run_bookmark(name, value)
 	end
 	local view = { name = name, layout = "compact" }
 	if type(value) == "string" then
-		local field = provider.bookmark_query_field or "search"
-		view[field] = value
+		view.search = value
 	elseif type(value) == "table" then
 		for k, v in pairs(value) do
 			view[k] = v
@@ -393,10 +389,10 @@ function M.run_bookmark(name, value)
 	state.issues = nil
 	state.issue_tree = nil
 	state.current_view = view
-	footer.notify("loading", "Running query...")
+	statusline.notify("loading", "Running query...")
 	render_if_active()
 
-	active_issues_handle = provider.fetch_issues(view, {
+	active_issues_handle = provider.capabilities.core.fetch_issues(view, {
 		force_load = false,
 		max_results = tonumber((config.options and config.options.issues or {}).max_results) or 100,
 		layout = view.layout,
@@ -405,12 +401,12 @@ function M.run_bookmark(name, value)
 		state.is_loading = false
 		if err then
 			state.error = tostring(err)
-			footer.notify("error", string.format("Query failed: %s", state.error))
+			statusline.notify("error", string.format("Query failed: %s", state.error))
 		else
 			state.error = nil
 			state.issues = issues or {}
 			state.issue_tree = helper.build_issue_tree(issues or {})
-			footer.notify("success", string.format("Loaded %d issues", #(issues or {})), 1200)
+			statusline.notify("success", string.format("Loaded %d issues", #(issues or {})), 1200)
 		end
 		render_if_active()
 	end)
@@ -420,13 +416,13 @@ end
 function M.show_issue_details(source_buf)
 	local node = navigation.current_item()
 	if type(node) ~= "table" or node.kind ~= "issue" then
-		footer.notify("warn", "No issue selected")
+		statusline.notify("warn", "No issue selected")
 		return
 	end
 
 	local issue = type(node._issue) == "table" and node._issue or nil
 	if issue == nil then
-		footer.notify("warn", "Issue payload missing on line")
+		statusline.notify("warn", "Issue payload missing on line")
 		return
 	end
 
@@ -442,13 +438,13 @@ end
 function M.open_actions()
 	local node = navigation.current_item()
 	if type(node) ~= "table" or node.kind ~= "issue" then
-		footer.notify("warn", "No issue selected")
+		statusline.notify("warn", "No issue selected")
 		return
 	end
 
 	local issue = type(node._issue) == "table" and node._issue or nil
 	if issue == nil then
-		footer.notify("warn", "Issue payload missing on line")
+		statusline.notify("warn", "Issue payload missing on line")
 		return
 	end
 
@@ -464,7 +460,7 @@ function M.refresh_issue(issue, on_done)
 	local current_issue = type(issue) == "table" and issue or nil
 	local issue_key = current_issue and tostring(current_issue.key or "") or (type(issue) == "string" and issue or "")
 	if issue_key == "" then
-		footer.notify("warn", "Issue key missing")
+		statusline.notify("warn", "Issue key missing")
 		on_done()
 		return
 	end
@@ -475,7 +471,7 @@ function M.refresh_issue(issue, on_done)
 		return
 	end
 
-	footer.notify("loading", string.format("Reloading %s...", issue_key))
+	statusline.notify("loading", string.format("Reloading %s...", issue_key))
 	begin_issue_reload(issue_key)
 
 	local panel = require("atlas.issues.ui.panel")
@@ -485,7 +481,7 @@ function M.refresh_issue(issue, on_done)
 
 	local active_view = type(state.active_view) == "table" and state.active_view or {}
 	local reload_handle = nil
-	reload_handle = provider.fetch_issue(
+	reload_handle = provider.capabilities.core.fetch_issue(
 		issue_key,
 		{ force_load = true, layout = active_view.layout or "plain" },
 		function(fetched_issue, err)
@@ -498,7 +494,7 @@ function M.refresh_issue(issue, on_done)
 
 			if err ~= nil or fetched_issue == nil then
 				end_issue_reload(issue_key)
-				footer.notify("error", tostring(err or "Failed to reload issue"))
+				statusline.notify("error", tostring(err or "Failed to reload issue"))
 				on_done()
 				return
 			end
@@ -526,7 +522,7 @@ function M.refresh_issue(issue, on_done)
 			end
 
 			render_if_active()
-			footer.notify("success", string.format("Reloaded %s", issue_key), 1200)
+			statusline.notify("success", string.format("Reloaded %s", issue_key), 1200)
 			on_done()
 		end
 	)
@@ -560,7 +556,7 @@ end
 function M.refresh_current_issue(on_done)
 	local node = navigation.current_item()
 	if type(node) ~= "table" or node.kind ~= "issue" then
-		footer.notify("warn", "No issue selected")
+		statusline.notify("warn", "No issue selected")
 		if on_done then
 			on_done()
 		end
@@ -569,6 +565,12 @@ function M.refresh_current_issue(on_done)
 
 	local issue = type(node._issue) == "table" and node._issue or nil
 	M.refresh_issue(issue, on_done)
+end
+
+function M.dispose()
+	state.latest_request_tokens = {}
+	state.is_loading = false
+	cancel_active_requests()
 end
 
 return M

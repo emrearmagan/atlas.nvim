@@ -28,6 +28,7 @@ A Neovim plugin for managing GitHub/Bitbucket/GitLab PRs and Jira/GitHub/GitLab 
   - [Using lazy.nvim](#using-lazynvim)
   - [Using packer.nvim](#using-packernvim)
 - [Requirements](#requirements)
+- [Configuration](#configuration)
 - [Commands](#commands)
 - [Pulls](#pulls)
   - [Configuration](#pulls-configuration)
@@ -47,6 +48,7 @@ A Neovim plugin for managing GitHub/Bitbucket/GitLab PRs and Jira/GitHub/GitLab 
   - [Notifications](#notifications)
   - [Bookmarks](#bookmarks)
   - [Custom Actions](#custom-actions)
+- [Events](#events)
 - [Keymaps](#keymaps)
 - [Contributing](#contributing)
 
@@ -61,30 +63,10 @@ A Neovim plugin for managing GitHub/Bitbucket/GitLab PRs and Jira/GitHub/GitLab 
     "nvim-tree/nvim-web-devicons", -- optional but recommended
     "MeanderingProgrammer/render-markdown.nvim", -- optional but recommended
     "esmuellert/codediff.nvim", -- optional (PullRequest diff)
-    "sindrets/diffview.nvim", -- optional (PullRequest diff - alternative)
+    "sindrets/diffview.nvim", -- optional; or "dlyongemallo/diffview-plus.nvim"
   },
-  opts = {
-    pulls = {
-      providers = {
-        ---@type AtlasBitbucketConfig
-        bitbucket = {}, -- See configuration below
-        ---@type AtlasGitHubConfig
-        github = {},    -- See configuration below
-        ---@type AtlasGitLabPullsConfig
-        gitlab = {},    -- See configuration below
-      },
-    },
-    issues = {
-      providers = {
-        ---@type AtlasJiraIssuesConfig
-        jira = {},   -- See configuration below
-        ---@type AtlasGitHubIssuesConfig
-        github = {}, -- See configuration below
-        ---@type AtlasGitLabIssuesConfig
-        gitlab = {}, -- See configuration below
-      },
-    },
-  },
+  -- See Configuration below
+  opts = {},
 }
 ```
 
@@ -94,28 +76,8 @@ A Neovim plugin for managing GitHub/Bitbucket/GitLab PRs and Jira/GitHub/GitLab 
 use {
   "emrearmagan/atlas.nvim",
   config = function()
-    require("atlas").setup({
-      pulls = {
-        providers = {
-          ---@type AtlasBitbucketConfig
-          bitbucket = {}, -- See configuration below
-          ---@type AtlasGitHubConfig
-          github = {},    -- See configuration below
-          ---@type AtlasGitLabPullsConfig
-          gitlab = {},    -- See configuration below
-        },
-      },
-      issues = {
-        providers = {
-          ---@type AtlasJiraIssuesConfig
-          jira = {},   -- See configuration below
-          ---@type AtlasGitHubIssuesConfig
-          github = {}, -- See configuration below
-          ---@type AtlasGitLabIssuesConfig
-          gitlab = {}, -- See configuration below
-        },
-      },
-    })
+    -- See Configuration below
+    require("atlas").setup({})
   end
 }
 ```
@@ -138,6 +100,40 @@ use {
 >
 > I have also not tested with self-hosted GitLab instances, but in theory it should work. If it doesn't, feel free to open an issue. If it does work, please remove this note :)
 
+## Configuration
+
+```lua
+{
+  -- Too lazy to manage a statusline per split? Same. Make it global.
+  global_statusline = true,
+
+  pulls = {
+    -- See Pulls Configuration below.
+    providers = {
+      ---@type AtlasBitbucketConfig
+      bitbucket = {},
+      ---@type AtlasGitHubConfig
+      github = {},
+      ---@type AtlasGitLabPullsConfig
+      gitlab = {},
+    },
+  },
+  issues = {
+    -- See Issue Configuration below.
+    providers = {
+      ---@type AtlasJiraIssuesConfig
+      jira = {},
+      ---@type AtlasGitHubIssuesConfig
+      github = {},
+      ---@type AtlasGitLabIssuesConfig
+      gitlab = {},
+    },
+  },
+}
+```
+
+Set `global_statusline = false` to leave Neovim's `laststatus` option unchanged.
+
 ## Commands
 
 - `:AtlasIssues [provider]` - Open Atlas issues domain
@@ -146,7 +142,7 @@ use {
 - `:AtlasNotes` - Inspect local review notes across pull requests
 - `:AtlasCreatePR` - Create a pull request from the current branch
 - `:AtlasCreateIssue` - Create an issue (GitHub / GitLab / Jira)
-- `:AtlasSearch [provider]` - Pick a configured provider and prompt its search
+- `:AtlasSearch [provider]` - Search configured pull-request and issue providers
 - `:AtlasOpen <target>` - Open a provider URL, Jira key, repository reference, or PR/issue number
 - `:AtlasClearCache` - Clear Atlas disk and memory cache
 - `:AtlasLogs` - Toggle Atlas logs
@@ -166,10 +162,12 @@ pulls = {
     -- AtlasDiff options; external viewers use their own configuration.
     layout = "inline", -- "inline" or "side-by-side".
     compact = true, -- Start with only changed hunks and surrounding context visible.
+    compact_context_lines = 3, -- Context lines shown around hunks in compact mode.
+    show_review_panel = false, -- Set true to show comments and notes when AtlasDiff opens.
     explorer = {
       grouped = true, -- Group changed files by directory.
       hidden = false,
-      show_commits = true, -- Initially show commits below changed files.
+      show_commits = false, -- Set true to show commits below changed files initially.
       width = 40,
       initial_focus = "explorer", -- "explorer" or "diff".
       ignore = { ".git/**", ".jj/**" },
@@ -562,20 +560,21 @@ Press the configured `pulls.open_diff` key (`gd` by default) on a pull request t
 - See pending, resolved, and outdated provider threads at their diff locations.
 - Review provider tasks and GitHub checklists alongside the comments they belong to.
 - Add, reply to, edit, delete, resolve, or reopen comments when supported.
+- Browse provider comments and local notes in AtlasDiff's bottom list; use `za` to expand an item.
 - Submit pending comments with an optional review summary when supported.
 
 > [!NOTE]
-> **Alternative viewers:** CodeDiff can display Atlas comment and task overlays, but the integration relies on CodeDiff internals and may break after upstream changes. I used it from my dotfiles for a while before moving it into Atlas. Diffview remains available as a plain diff viewer without Atlas review overlays since i dont use that plugin.
+> **Alternative viewers:** CodeDiff, [Diffview](https://github.com/sindrets/diffview.nvim), and [Diffview-plus](https://github.com/dlyongemallo/diffview-plus.nvim) can display Atlas comment, task, and local-note overlays, but their integrations rely on plugin internals and may break after upstream changes.
 
 #### Local notes
 
 <img align="left" width="54%" hspace="16" vspace="8" alt="Local review notes" src="https://github.com/user-attachments/assets/8652d731-b57f-45f8-896e-d62d0ec8d7f4">
 
-Local notes let you leave something on a diff without posting it to the pull request. Each note is attached to a file and line and can be an `ISSUE`, `SUGGESTION`, `NOTE`, or `PRAISE`. If that line changes, Atlas shows the note as outdated. If the location no longer exists, Atlas removes it. `:AtlasNotes` lists your notes across all pull requests.
+Local notes let you leave something on a diff without posting it to the pull request. Each note is attached to a file and line and can be an `ISSUE`, `SUGGESTION`, `NOTE`, or `PRAISE`. Diff views mark notes as outdated when their saved line changes.
 
 <br clear="both">
 
-For scripts, use `bin/atlas-notes`. Notes added there appear in AtlasDiff and `:AtlasNotes`:
+For scripts, use `bin/atlas-notes`. Notes added there appear in AtlasDiff, CodeDiff, Diffview, Diffview-plus, and `:AtlasNotes`:
 
 ```sh
 ./bin/atlas-notes add \
@@ -703,6 +702,14 @@ issues = {
 
 </details>
 
+## Events
+
+Atlas emits these `User` events after the corresponding cleanup or setup has completed:
+
+- `AtlasUIClosed` for the main pulls/issues dashboard.
+- `AtlasDiffOpened` and `AtlasDiffClosed` for the native AtlasDiff view.
+- `AtlasReviewAttached` and `AtlasReviewDetached` for Atlas review overlays in AtlasDiff, CodeDiff, and Diffview.
+
 ## Keymaps
 
 Set an action to `false` to disable it, or set it to a list to add aliases.
@@ -730,12 +737,12 @@ keymaps = {
     refresh_view = "R",
     open_actions = "A",
     open_in_browser = "gx",
+    copy_id = "y",
     copy_url = "Y",
     show_details = "K",
     search = "?",
   },
   issues = {
-    copy_key = "y",
     transition_issue = "gs",
     change_assignee = "ga",
     change_reporter = "gr",
@@ -743,30 +750,33 @@ keymaps = {
     create_issue = "c",
   },
   pulls = {
-    copy_id = "y",
     open_diff = "gd",
     checkout = "gc",
     review = {
       toggle_approval = "ga",
       request_changes = "gr",
       submit_review = "gs",
-      open_file = { "<CR>", "l" },
+      open_file = "<CR>",
       toggle_explorer_grouping = "T",
       toggle_layout = "t",
-      toggle_compact = "f",
+      toggle_compact = "u",
       next_hunk = "]h",
       previous_hunk = "[h",
       next_file = { "]f", "<Tab>" },
       previous_file = { "[f", "<S-Tab>" },
       toggle_file_reviewed = "-",
       toggle_commits = "gC",
+      toggle_review_panel = "gR",
       next_comment = "]c",
       previous_comment = "[c",
       next_note = "]n",
       previous_note = "[n",
       view_thread = "K",
-      add_pending_comment = "c",
-      add_comment = "C",
+      edit_comment = "e",
+      add_task = "T",
+      add_comment = "c",
+      submit_comment = "C",
+      delete_comment = "dd",
       add_note = "n",
       toggle_resolved = "x",
     },
@@ -798,6 +808,9 @@ Thanks go to these wonderful people ([emoji key](https://allcontributors.org/emo
       <td align="center" valign="top" width="14.28%"><a href="https://github.com/xamcost"><img src="https://avatars.githubusercontent.com/u/24434420?v=4?s=100" width="100px;" alt="Xamcost"/><br /><sub><b>Xamcost</b></sub></a><br /><a href="#code-xamcost" title="Code">💻</a></td>
       <td align="center" valign="top" width="14.28%"><a href="https://github.com/niklastreml"><img src="https://avatars.githubusercontent.com/u/27763017?v=4?s=100" width="100px;" alt="Niklas Treml"/><br /><sub><b>Niklas Treml</b></sub></a><br /><a href="#code-niklastreml" title="Code">💻</a> <a href="#bug-niklastreml" title="Bug reports">🐛</a></td>
       <td align="center" valign="top" width="14.28%"><a href="https://github.com/TheNoeTrevino"><img src="https://avatars.githubusercontent.com/u/144077737?v=4?s=100" width="100px;" alt="Noe Trevino"/><br /><sub><b>Noe Trevino</b></sub></a><br /><a href="#code-TheNoeTrevino" title="Code">💻</a></td>
+    </tr>
+    <tr>
+      <td align="center" valign="top" width="14.28%"><a href="https://nuagir.com"><img src="https://avatars.githubusercontent.com/u/35815402?v=4?s=100" width="100px;" alt="Jean-Frederic Mainville"/><br /><sub><b>Jean-Frederic Mainville</b></sub></a><br /><a href="#code-jfmainville" title="Code">💻</a></td>
     </tr>
   </tbody>
 </table>

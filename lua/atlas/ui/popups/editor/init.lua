@@ -1,6 +1,6 @@
 local M = {}
 
-local footer = require("atlas.ui.components.footer")
+local statusline = require("atlas.ui.statusline")
 local utils = require("atlas.ui.shared.utils")
 
 local completion_provider_by_buf = {}
@@ -76,7 +76,7 @@ function _G.__atlas_markdown_complete(findstart, base)
 end
 
 ---@class AtlasMarkdownEditorAction
----@field key string|string[]
+---@field key string
 ---@field description string|nil
 ---@field callback fun(ctx: { buf: integer, win: integer, close: fun(), get_text: fun(): string })
 ---@field mode string|string[]|nil
@@ -129,7 +129,7 @@ function M.open(opts)
 
 	local key = tostring(opts.key or "")
 	if key == "" then
-		footer.notify("warn", "Missing editor key")
+		statusline.notify("warn", "Missing editor key")
 		return nil, nil
 	end
 	local source_win = vim.api.nvim_get_current_win()
@@ -218,6 +218,7 @@ function M.open(opts)
 	vim.api.nvim_set_option_value("cursorbind", false, { win = win })
 	vim.api.nvim_set_option_value("wrap", true, { win = win })
 	vim.api.nvim_set_option_value("cursorline", false, { win = win })
+	statusline.inherit(win, source_win)
 	local function reveal_preview()
 		vim.api.nvim_win_call(win, function()
 			vim.fn.winrestview({ topline = 1, topfill = preview_height })
@@ -374,7 +375,7 @@ function M.open(opts)
 				get_text = get_text,
 			})
 			if not ok then
-				footer.notify("error", tostring(err or "Markdown action failed"))
+				statusline.notify("error", tostring(err or "Markdown action failed"))
 			end
 		end, { buffer = buf, silent = true, nowait = true, desc = action.description })
 	end

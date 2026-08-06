@@ -4,7 +4,7 @@ local M = {}
 local utils = require("atlas.ui.shared.utils")
 local icons = require("atlas.ui.shared.icons")
 local spinner = require("atlas.ui.components.spinner")
-local footer = require("atlas.ui.components.footer")
+local statusline = require("atlas.ui.statusline")
 local threads = require("atlas.ui.components.threadsv2")
 local state = require("atlas.pulls.ui.panel.repo.tabs.tags.state")
 local repo_panel_state = require("atlas.pulls.ui.panel.repo.state")
@@ -144,18 +144,19 @@ function M.on_select(_pr, repo, refresh, opts)
 
 	stop_request()
 	state.tags = "loading"
-	footer.notify("loading", string.format("Loading tags for %s...", repo_label))
+	statusline.notify("loading", string.format("Loading tags for %s...", repo_label))
 	refresh()
 
 	local provider = require("atlas.pulls.state").provider
-	if provider == nil or not provider.fetch_repo_tags then
+	local repository = provider and provider.capabilities.repository
+	if repository == nil then
 		state.tags = { entries = {} }
-		footer.notify("error", "Tag listing is not supported by this provider")
+		statusline.notify("error", "Tag listing is not supported by this provider")
 		refresh()
 		return
 	end
 
-	request = provider.fetch_repo_tags(detail, {
+	request = repository.fetch_tags(detail, {
 		force_load = opts.force_load == true or opts.force_refresh == true,
 		pagelen = opts.pagelen,
 	}, function(tags, err)
@@ -167,10 +168,10 @@ function M.on_select(_pr, repo, refresh, opts)
 		state.repo = active_detail
 		if err then
 			state.tags = { entries = {} }
-			footer.notify("error", string.format("Failed to load tags for %s", repo_label))
+			statusline.notify("error", string.format("Failed to load tags for %s", repo_label))
 		else
 			state.tags = tags or { entries = {} }
-			footer.notify("success", string.format("Tags loaded for %s", repo_label), 1200)
+			statusline.notify("success", string.format("Tags loaded for %s", repo_label), 1200)
 		end
 		refresh()
 	end)

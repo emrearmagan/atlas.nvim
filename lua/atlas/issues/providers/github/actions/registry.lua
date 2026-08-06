@@ -1,7 +1,7 @@
 local M = {}
 
 local icons = require("atlas.ui.shared.icons")
-local footer = require("atlas.ui.components.footer")
+local statusline = require("atlas.ui.statusline")
 local multi_select = require("atlas.ui.popups.multi_select")
 local issues_api = require("atlas.issues.providers.github.api.issues")
 local users_api = require("atlas.issues.providers.github.api.users")
@@ -80,14 +80,14 @@ local ACTIONS = {
 		run = function(ctx, done)
 			local issue = ctx.issue
 			local key = tostring(issue.key or "")
-			footer.notify("loading", string.format("Closing %s...", key))
+			statusline.notify("loading", string.format("Closing %s...", key))
 			issues_api.set_state(key, "closed", function(ok, err)
 				if not ok then
-					footer.notify("error", err or "Close failed")
+					statusline.notify("error", err or "Close failed")
 					done(nil, err or "Close failed")
 					return
 				end
-				footer.notify("success", string.format("Closed %s", key), 1200)
+				statusline.notify("success", string.format("Closed %s", key), 1200)
 				done({ changed_issue_key = key, message = "Closed" }, nil)
 			end)
 		end,
@@ -104,14 +104,14 @@ local ACTIONS = {
 		run = function(ctx, done)
 			local issue = ctx.issue
 			local key = tostring(issue.key or "")
-			footer.notify("loading", string.format("Reopening %s...", key))
+			statusline.notify("loading", string.format("Reopening %s...", key))
 			issues_api.set_state(key, "open", function(ok, err)
 				if not ok then
-					footer.notify("error", err or "Reopen failed")
+					statusline.notify("error", err or "Reopen failed")
 					done(nil, err or "Reopen failed")
 					return
 				end
-				footer.notify("success", string.format("Reopened %s", key), 1200)
+				statusline.notify("success", string.format("Reopened %s", key), 1200)
 				done({ changed_issue_key = key, message = "Reopened" }, nil)
 			end)
 		end,
@@ -163,14 +163,14 @@ local ACTIONS = {
 				return
 			end
 
-			footer.notify("loading", "Loading users...")
+			statusline.notify("loading", "Loading users...")
 			users_api.get_assignable_users(slug, "", function(users, err)
 				if err or users == nil then
-					footer.notify("error", err or "Failed to load users")
+					statusline.notify("error", err or "Failed to load users")
 					done(nil, err or "Failed to load users")
 					return
 				end
-				footer.notify("info", "", 0)
+				statusline.clear_notice()
 
 				local items = {}
 				for _, u in ipairs(users) do
@@ -225,15 +225,15 @@ local ACTIONS = {
 							return
 						end
 
-						footer.notify("loading", string.format("Updating assignees on %s...", key))
+						statusline.notify("loading", string.format("Updating assignees on %s...", key))
 						issues_api.update_assignees(key, { add = adds, remove = removes }, function(ok, set_err)
 							if not ok then
-								footer.notify("error", set_err or "Failed")
+								statusline.notify("error", set_err or "Failed")
 								done(nil, set_err or "Failed")
 								return
 							end
 							local msg = string.format("+%d / -%d assignee(s)", #adds, #removes)
-							footer.notify("success", msg, 1200)
+							statusline.notify("success", msg, 1200)
 							done({ changed_issue_key = key, message = msg }, nil)
 						end)
 					end,
@@ -259,14 +259,14 @@ local ACTIONS = {
 				return
 			end
 
-			footer.notify("loading", "Loading labels...")
+			statusline.notify("loading", "Loading labels...")
 			issues_api.list_labels(slug, function(labels, err)
 				if err or labels == nil then
-					footer.notify("error", err or "Failed to load labels")
+					statusline.notify("error", err or "Failed to load labels")
 					done(nil, err or "Failed to load labels")
 					return
 				end
-				footer.notify("info", "", 0)
+				statusline.clear_notice()
 
 				local items = {}
 				for _, label in ipairs(labels) do
@@ -321,15 +321,15 @@ local ACTIONS = {
 							return
 						end
 
-						footer.notify("loading", string.format("Updating labels on %s...", key))
+						statusline.notify("loading", string.format("Updating labels on %s...", key))
 						issues_api.update_labels(key, { add = adds, remove = removes }, function(ok, set_err)
 							if not ok then
-								footer.notify("error", set_err or "Failed")
+								statusline.notify("error", set_err or "Failed")
 								done(nil, set_err or "Failed")
 								return
 							end
 							local msg = string.format("+%d / -%d label(s)", #adds, #removes)
-							footer.notify("success", msg, 1200)
+							statusline.notify("success", msg, 1200)
 							done({ changed_issue_key = key, message = msg }, nil)
 						end)
 					end,
@@ -438,17 +438,17 @@ local ACTIONS = {
 			local next_state = issue.is_subscribed == true and "UNSUBSCRIBED" or "SUBSCRIBED"
 			local gql =
 				"mutation($id: ID!, $state: SubscriptionState!) { updateSubscription(input: { subscribableId: $id, state: $state }) { subscribable { ... on Issue { viewerSubscription } } } }"
-			footer.notify("loading", issue.is_subscribed and "Unsubscribing..." or "Subscribing...")
-			require("atlas.issues.providers.github.api.cli").gh(
+			statusline.notify("loading", issue.is_subscribed and "Unsubscribing..." or "Subscribing...")
+			require("atlas.providers.github.client").issues.gh(
 				{ "api", "graphql", "-F", "id=" .. node_id, "-f", "state=" .. next_state, "-f", "query=" .. gql },
 				function(_, err)
 					if err then
-						footer.notify("error", tostring(err))
+						statusline.notify("error", tostring(err))
 						done(nil, tostring(err))
 						return
 					end
 					issue.is_subscribed = (next_state == "SUBSCRIBED")
-					footer.notify("success", issue.is_subscribed and "Subscribed" or "Unsubscribed", 1200)
+					statusline.notify("success", issue.is_subscribed and "Subscribed" or "Unsubscribed", 1200)
 					done({
 						changed_issue_key = issue.key,
 						message = issue.is_subscribed and "Subscribed" or "Unsubscribed",
@@ -506,7 +506,7 @@ function M.available(ctx)
 					return true, nil
 				end,
 				run = function(action_ctx, done)
-					footer.notify("loading", string.format("Running %s...", tostring(item.label)))
+					statusline.notify("loading", string.format("Running %s...", tostring(item.label)))
 
 					local done_called = false
 					local function custom_done(ok, message)
@@ -517,11 +517,11 @@ function M.available(ctx)
 
 						vim.schedule(function()
 							if ok == false then
-								footer.notify("error", tostring(message or (item.label .. " failed")))
+								statusline.notify("error", tostring(message or (item.label .. " failed")))
 								done(nil, tostring(message or (item.label .. " failed")))
 								return
 							end
-							footer.notify("success", tostring(message or (item.label .. " done")))
+							statusline.notify("success", tostring(message or (item.label .. " done")))
 							done({
 								changed_issue_key = action_ctx.issue and action_ctx.issue.key or nil,
 								message = tostring(message or (item.label .. " done")),

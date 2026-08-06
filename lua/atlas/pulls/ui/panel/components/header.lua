@@ -6,6 +6,52 @@ local table_tree = require("atlas.ui.components.table_tree")
 local utils = require("atlas.ui.shared.utils")
 local helper = require("atlas.pulls.ui.main.helper")
 
+---@param logins string[]
+---@return PullsPanelHeaderRow
+function M.assignee_row(logins)
+	if #logins == 0 then
+		return {
+			k1 = "Assignees:",
+			v1 = "Unassigned",
+			v1_hl = "AtlasTextMuted",
+			k2 = "",
+			v2 = "",
+			v2_hl = "AtlasTextMuted",
+		}
+	end
+
+	local parts = {}
+	local spans = {}
+	local cursor = 0
+	for i, login in ipairs(logins) do
+		local token = "@" .. login
+		table.insert(parts, token)
+		table.insert(spans, {
+			start_col = cursor,
+			end_col = cursor + #token,
+			hl_group = helper.author_hl(login),
+		})
+		cursor = cursor + #token
+		if i < #logins then
+			table.insert(spans, {
+				start_col = cursor,
+				end_col = cursor + 2,
+				hl_group = "AtlasTextMuted",
+			})
+			cursor = cursor + 2
+		end
+	end
+
+	return {
+		k1 = "Assignees:",
+		v1 = table.concat(parts, ", "),
+		v1_hl = spans,
+		k2 = "",
+		v2 = "",
+		v2_hl = "AtlasTextMuted",
+	}
+end
+
 ---@param spans table[]
 ---@param lines string[]
 ---@param line integer

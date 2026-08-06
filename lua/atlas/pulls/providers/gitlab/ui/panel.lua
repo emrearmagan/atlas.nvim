@@ -1,7 +1,7 @@
 ---@class GitLabPullsProviderPanel : PullsProviderPanel
 local M = {}
 
-local helper = require("atlas.pulls.ui.main.helper")
+local header = require("atlas.pulls.ui.panel.components.header")
 local mr_api = require("atlas.pulls.providers.gitlab.api.mergerequests")
 local spinner = require("atlas.ui.components.spinner")
 local icons = require("atlas.ui.shared.icons")
@@ -47,50 +47,7 @@ function M.header_rows(pr)
 		end
 	end
 
-	local v1, v1_hl
-	if #logins == 0 then
-		v1 = "Unassigned"
-		v1_hl = "AtlasTextMuted"
-	else
-		local parts = {}
-		for _, login in ipairs(logins) do
-			table.insert(parts, "@" .. login)
-		end
-		v1 = table.concat(parts, ", ")
-
-		local spans = {}
-		local cursor = 0
-		for i, login in ipairs(logins) do
-			local token = "@" .. login
-			table.insert(spans, {
-				start_col = cursor,
-				end_col = cursor + #token,
-				hl_group = helper.author_hl(login),
-			})
-			cursor = cursor + #token
-			if i < #logins then
-				local sep = ", "
-				table.insert(spans, {
-					start_col = cursor,
-					end_col = cursor + #sep,
-					hl_group = "AtlasTextMuted",
-				})
-				cursor = cursor + #sep
-			end
-		end
-		v1_hl = spans
-	end
-
-	return {
-		{
-			k1 = "Assignees:",
-			v1 = v1,
-			v1_hl = v1_hl,
-			k2 = "",
-			v2 = "",
-			v2_hl = "AtlasTextMuted",
-		},
-	}
+	return { header.assignee_row(logins) }
 end
 
 ---@param pr PullRequest
@@ -166,10 +123,11 @@ function M.fetches(pr, refresh, opts)
 	end))
 
 	local provider = require("atlas.pulls.state").provider
+	local core = provider and provider.capabilities.core
 	local panel_state = require("atlas.pulls.ui.panel.pr.state")
 	panel_state.diffstat = "loading"
-	if provider and provider.fetch_diffstat then
-		track_panel(provider.fetch_diffstat(pr, { force_refresh = force }, function(entries, err)
+	if core and core.fetch_diffstat then
+		track_panel(core.fetch_diffstat(pr, { force_refresh = force }, function(entries, err)
 			panel_state.diffstat = err and err or (entries or {})
 			refresh()
 		end))

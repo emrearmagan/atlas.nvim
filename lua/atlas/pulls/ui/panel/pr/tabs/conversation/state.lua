@@ -3,13 +3,11 @@
 ---@field activity PullsActivityEntry[]|"loading"|string|nil
 ---@field collapsed table<string, boolean>
 ---@field expanded_runs table<string, boolean>
----@field reaction_options PullsReactionOption[]
 local M = {
 	comments = nil,
 	activity = nil,
 	collapsed = {},
 	expanded_runs = {},
-	reaction_options = {},
 }
 
 function M.reset()
@@ -17,7 +15,6 @@ function M.reset()
 	M.activity = nil
 	M.collapsed = {}
 	M.expanded_runs = {}
-	M.reaction_options = {}
 end
 
 ---@param run_id any

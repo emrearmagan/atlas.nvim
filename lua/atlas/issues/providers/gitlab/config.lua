@@ -46,7 +46,7 @@
 ---@field order_by "created_at"|"updated_at"|"priority"|"due_date"|"label_priority"|"milestone_due"|"popularity"|"weight"|"title"|nil
 ---@field extra_params table<string, string>|nil
 
----@class AtlasGitLabIssuesViewConfig : AtlasIssuesViewConfig, AtlasGitLabIssuesSearchConfig
+---@class AtlasGitLabIssuesViewConfig : IssuesViewConfig, AtlasGitLabIssuesSearchConfig
 
 ---@class AtlasGitLabIssuesBookmarksConfig
 ---@field key string|nil    -- default "S"

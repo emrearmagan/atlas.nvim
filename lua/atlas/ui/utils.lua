@@ -54,29 +54,4 @@ function M.pad_aligned(text, width, align)
 	return M.pad_right(text, width)
 end
 
----@param lines string[]
----@param span table
----@return table|nil
-function M.clamp_span(lines, span)
-	local line = tonumber(span.line) or 0
-	local text = lines[line + 1]
-	if text == nil then
-		return nil
-	end
-
-	local line_len = #text
-	local start_col = math.max(0, math.min(tonumber(span.start_col) or 0, line_len))
-	local end_col = math.max(start_col, math.min(tonumber(span.end_col) or line_len, line_len))
-	if end_col <= start_col then
-		return nil
-	end
-
-	return {
-		line = line,
-		start_col = start_col,
-		end_col = end_col,
-		hl_group = span.hl_group,
-	}
-end
-
 return M

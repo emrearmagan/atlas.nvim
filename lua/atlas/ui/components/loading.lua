@@ -54,6 +54,8 @@ end
 ---@field statuscolumn string
 ---@field statusline string
 ---@field winbar string
+---@field diff_lifecycle AtlasNativeDiffLifecycle|nil
+---@field on_abandon (fun(reason: string))|nil
 
 ---@class AtlasLoadingView
 ---@field tabpage integer
@@ -73,11 +75,13 @@ end
 function M.open(message, on_cancel, target)
 	local tabpage, win, buf
 	local number, relativenumber
-	local statuscolumn, statusline, winbar
+	local statuscolumn, statusline, winbar, diff_lifecycle, on_abandon
 	if target then
 		tabpage, win, buf = target.tabpage, target.win, target.buf
 		number, relativenumber = target.number, target.relativenumber
 		statuscolumn, statusline, winbar = target.statuscolumn, target.statusline, target.winbar
+		diff_lifecycle = target.diff_lifecycle
+		on_abandon = target.on_abandon
 		vim.api.nvim_set_current_tabpage(tabpage)
 		vim.api.nvim_set_current_win(win)
 	else
@@ -115,7 +119,6 @@ function M.open(message, on_cancel, target)
 
 	local group = vim.api.nvim_create_augroup("AtlasLoading" .. tabpage, { clear = true })
 	local indicator
-	---@type AtlasLoadingView
 	local view = {
 		tabpage = tabpage,
 		buf = buf,
@@ -148,6 +151,9 @@ function M.open(message, on_cancel, target)
 		if vim.api.nvim_buf_is_valid(view.buf) then
 			pcall(vim.api.nvim_buf_delete, view.buf, { force = true })
 		end
+		if on_abandon then
+			on_abandon(cancelled and "user_close" or "reload_failed")
+		end
 		if cancelled and on_cancel then
 			on_cancel()
 		end
@@ -168,6 +174,8 @@ function M.open(message, on_cancel, target)
 			statuscolumn = statuscolumn,
 			statusline = statusline,
 			winbar = winbar,
+			diff_lifecycle = diff_lifecycle,
+			on_abandon = on_abandon,
 		}
 	end
 	view.update = function(_, next_message)
@@ -181,6 +189,7 @@ function M.open(message, on_cancel, target)
 		close(true)
 	end
 	view.handoff = handoff
+	---@cast view AtlasLoadingView
 
 	indicator = spinner.create({ on_tick = draw })
 	vim.keymap.set("n", "q", view.cancel, { buffer = buf, silent = true, nowait = true, desc = "Cancel" })
@@ -192,7 +201,7 @@ function M.open(message, on_cancel, target)
 		group = group,
 		callback = function()
 			if not vim.api.nvim_tabpage_is_valid(view.tabpage) then
-				view.cancel()
+				view:cancel()
 			end
 		end,
 	})
@@ -201,7 +210,7 @@ function M.open(message, on_cancel, target)
 		buffer = buf,
 		callback = function()
 			vim.schedule(function()
-				view.cancel()
+				view:cancel()
 			end)
 		end,
 	})

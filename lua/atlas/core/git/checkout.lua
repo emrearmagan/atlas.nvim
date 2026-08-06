@@ -262,12 +262,14 @@ end
 ---@return string|nil cache_path
 ---@return string|nil clone_url
 local function cached_pr_repository(pr)
-	local target = require("atlas.commands.open.parser").parse(pr.link.html)
+	local resolver = require("atlas.providers.resolve")
+	local target = resolver.resolve(pr.link.html)
 	if not target or target.domain ~= "pulls" or target.entity ~= "pr" then
 		return nil, nil
 	end
+	---@cast target AtlasTarget
 	local repository = pr.repo_full_name
-	local base_url = require("atlas.commands.open.resolver").base_url(target):gsub("/+$", "")
+	local base_url = resolver.base_url(target):gsub("/+$", "")
 	local cache_path = vim.fs.joinpath(vim.fn.stdpath("cache"), "atlas", "repos", target.host, repository)
 	return cache_path, string.format("%s/%s.git", base_url, repository)
 end

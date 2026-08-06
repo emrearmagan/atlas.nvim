@@ -140,18 +140,11 @@ function M.cell_hl(row, col, ctx)
 			or (row.kind == "pr" and (row._pr_icon_hl or "AtlasPROpen") or "AtlasTextMuted")
 		return { { start_col = 0, end_col = #ctx.padded, hl_group = hl_group } }
 	end
-	if col.key == "branch" then
-		return { { start_col = 0, end_col = #ctx.padded, hl_group = "AtlasTextMuted" } }
-	end
 	if col.key == "created" or col.key == "updated" or (row.kind == "meta" and col.key == "repo_pr") then
 		return { { start_col = 0, end_col = #ctx.padded, hl_group = "AtlasTextMuted" } }
 	end
 	if col.key == "author" then
 		local hl_group = M.author_hl(row.author_hl or row.author)
-		return { { start_col = 0, end_col = #ctx.padded, hl_group = hl_group } }
-	end
-	if col.key == "repo" then
-		local hl_group = M.repo_hl(row.repo_hl or row.repo)
 		return { { start_col = 0, end_col = #ctx.padded, hl_group = hl_group } }
 	end
 	if col.key == "status" then
@@ -164,7 +157,7 @@ end
 ---@param groups PullsGroup[]|nil
 ---@param current_user PullsUser|nil
 ---@return table[]
-function M.build_footer_items(groups, current_user)
+function M.build_statusline_items(groups, current_user)
 	local repos = groups or {}
 	local pr_count = 0
 	local repo_names = {}
@@ -180,7 +173,7 @@ function M.build_footer_items(groups, current_user)
 	local items = {
 		{
 			text = string.format("%s %d PR%s", PR_ICON, pr_count, pr_count == 1 and "" or "s"),
-			hl_group = "AtlasLogInfo",
+			hl_group = "AtlasFooterInfo",
 		},
 	}
 	local user_name = tostring((current_user or {}).username or (current_user or {}).name or "")
@@ -188,12 +181,16 @@ function M.build_footer_items(groups, current_user)
 		table.insert(items, {
 			text = string.format("%s @%s", icons.general("user"), user_name),
 			hl_group = "AtlasFooterText",
+			priority = 50,
+			min_width = 8,
 		})
 	end
 	if #repo_names > 0 then
 		table.insert(items, {
 			text = string.format("%s %s", REPO_ICON, table.concat(repo_names, ", ")),
 			hl_group = "AtlasFooterText",
+			priority = 10,
+			min_width = 8,
 		})
 	end
 	return items
@@ -221,13 +218,6 @@ local function compact_columns()
 			can_grow = false,
 			header_hl = "AtlasColumnHeader",
 		},
-		{
-			key = "repo",
-			name = string.format("%s Repo", REPO_ICON),
-			min_width = 5,
-			can_grow = false,
-			header_hl = "AtlasColumnHeader",
-		},
 		{ key = "created", name = icons.general("created"), can_grow = false, header_hl = "AtlasColumnHeader" },
 		{ key = "updated", name = icons.general("updated"), can_grow = false, header_hl = "AtlasColumnHeader" },
 	})
@@ -244,8 +234,6 @@ function M.build_compact_table(groups)
 			local id_str = tostring(pr.id or "")
 			local title = tostring(pr.title or "")
 			local author_name = (pr.author and pr.author.name) and pr.author.name or ""
-			local src = (pr.source and pr.source.branch) or ""
-			local dst = (pr.destination and pr.destination.branch) or ""
 			local is_reloading = state.is_pr_reloading(pr.repo_full_name, pr.id)
 			local state_str = tostring(pr.state or "")
 			local state_label = state_str ~= ""
@@ -266,8 +254,6 @@ function M.build_compact_table(groups)
 				status_raw = state_str,
 				author = string.format("%s %s", icons.general("user"), author_display),
 				author_hl = author_name,
-				repo = string.format("%s %s", REPO_ICON, repo_label),
-				repo_hl = repo_label,
 				created = utils.relative_time(pr.created_on),
 				updated = utils.relative_time(pr.updated_on),
 				_item = {
@@ -280,13 +266,12 @@ function M.build_compact_table(groups)
 			table.insert(rows, {
 				kind = "meta",
 				pr_icon = "",
-				repo_pr = src .. " → " .. dst,
+				repo_pr = string.format("%s %s", REPO_ICON, repo_label),
 				conversation = "",
 				tasks = "",
 				status = "",
 				status_raw = "",
 				author = "",
-				repo = "",
 				created = "",
 				updated = "",
 				separator = true,
@@ -322,13 +307,6 @@ local function plain_columns()
 			can_grow = false,
 			header_hl = "AtlasColumnHeader",
 		},
-		{
-			key = "branch",
-			name = string.format("%s Branch", icons.pulls("branch")),
-			max_width = 28,
-			can_grow = false,
-			header_hl = "AtlasColumnHeader",
-		},
 		{ key = "created", name = icons.general("created"), can_grow = false, header_hl = "AtlasColumnHeader" },
 		{ key = "updated", name = icons.general("updated"), can_grow = false, header_hl = "AtlasColumnHeader" },
 	}
@@ -350,7 +328,6 @@ function M.build_plain_tree_table(groups)
 				status = "",
 				status_raw = "",
 				author = "",
-				branch = "",
 				created = "",
 				updated = "",
 			})
@@ -365,7 +342,6 @@ function M.build_plain_tree_table(groups)
 			status = "",
 			status_raw = "",
 			author = "",
-			branch = "",
 			created = "",
 			updated = "",
 			separator = true,
@@ -375,8 +351,6 @@ function M.build_plain_tree_table(groups)
 			local id_str = tostring(pr.id or "")
 			local title = tostring(pr.title or "")
 			local author_name = (pr.author and pr.author.name) and pr.author.name or ""
-			local src = (pr.source and pr.source.branch) or ""
-			local dst = (pr.destination and pr.destination.branch) or ""
 			local icon = pr_icon_or_spinner(pr)
 			local _, icon_hl = pr_icon_and_hl(pr)
 			local is_reloading = state.is_pr_reloading(pr.repo_full_name, pr.id)
@@ -395,7 +369,6 @@ function M.build_plain_tree_table(groups)
 				status_raw = state_str,
 				author = string.format("%s %s", icons.general("user"), author_display),
 				author_hl = author_name,
-				branch = utils.truncate(src .. " → " .. dst, 28),
 				created = utils.relative_time(pr.created_on),
 				updated = utils.relative_time(pr.updated_on),
 				_item = { kind = "pr", id = pr.id, repo = group.repo, pr = pr },
@@ -406,16 +379,6 @@ function M.build_plain_tree_table(groups)
 		columns = plain_columns(),
 		rows = rows,
 	}
-end
-
----@param pr PullRequest
----@return string[], AtlasUIHighlight[]
-function M.pr_popup_content(pr)
-	local provider = state.provider
-	if provider and provider.pr_popup_content then
-		return provider.pr_popup_content(pr)
-	end
-	return { string.format(" #%s: %s", tostring(pr.id or ""), tostring(pr.title or "")) }, {}
 end
 
 return M

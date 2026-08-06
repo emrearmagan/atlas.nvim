@@ -1,7 +1,7 @@
 local M = {}
 
 local providers = require("atlas.pulls.providers")
-local service = require("atlas.pulls.providers.gitlab.api.service")
+local service = require("atlas.providers.gitlab.client").pulls
 local mr_api = require("atlas.pulls.providers.gitlab.api.mergerequests")
 
 ---@param pr PullRequest

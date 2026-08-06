@@ -3,7 +3,8 @@
 --------------------------------------------------------------------------------
 
 ---@class IssueUser
----@field account_id string
+---@field id integer|nil
+---@field account_id string|nil
 ---@field display_name string
 
 --------------------------------------------------------------------------------
@@ -82,7 +83,6 @@
 ---@field url string|nil
 ---@field author IssueUser|nil
 ---@field body string|nil
----@field _body table|nil
 ---@field created string|nil
 ---@field updated string|nil
 ---@field parent_id string|number|nil

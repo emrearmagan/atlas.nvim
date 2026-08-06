@@ -1,6 +1,6 @@
 local M = {}
 
-local footer = require("atlas.ui.components.footer")
+local statusline = require("atlas.ui.statusline")
 local resolver = require("atlas.core.keymaps")
 local utils = require("atlas.ui.shared.utils")
 local actions = require("atlas.pulls.actions")
@@ -90,7 +90,7 @@ function M.register(buf, views)
 		)
 	end
 
-	if state.provider and state.provider.open_actions then
+	if state.provider and state.provider.capabilities.actions then
 		utils.insert_if(
 			items,
 			item("ui.open_actions", {
@@ -99,7 +99,7 @@ function M.register(buf, views)
 				callback = function()
 					local pr = selected_pr()
 					if pr == nil then
-						footer.notify("warn", "No PR selected")
+						statusline.notify("warn", "No PR selected")
 						return
 					end
 					actions.open_actions(pr, "main")
@@ -116,7 +116,7 @@ function M.register(buf, views)
 			callback = function()
 				local pr = selected_pr()
 				if pr == nil then
-					footer.notify("warn", "No PR selected")
+					statusline.notify("warn", "No PR selected")
 					return
 				end
 				actions.open_in_browser(pr)
@@ -132,7 +132,7 @@ function M.register(buf, views)
 			callback = function()
 				local pr = selected_pr()
 				if pr == nil then
-					footer.notify("warn", "No PR selected")
+					statusline.notify("warn", "No PR selected")
 					return
 				end
 				actions.copy_url(pr)
@@ -142,13 +142,13 @@ function M.register(buf, views)
 
 	utils.insert_if(
 		items,
-		item("pulls.copy_id", {
+		item("ui.copy_id", {
 			desc = "Copy PR ID",
 			opts = { nowait = true },
 			callback = function()
 				local pr = selected_pr()
 				if pr == nil then
-					footer.notify("warn", "No PR selected")
+					statusline.notify("warn", "No PR selected")
 					return
 				end
 				actions.copy_id(pr)
@@ -164,7 +164,7 @@ function M.register(buf, views)
 			callback = function()
 				local pr = selected_pr()
 				if pr == nil then
-					footer.notify("warn", "No PR selected")
+					statusline.notify("warn", "No PR selected")
 					return
 				end
 				actions.show_details(pr, buf)
@@ -180,7 +180,7 @@ function M.register(buf, views)
 			callback = function()
 				local pr = selected_pr()
 				if pr == nil then
-					footer.notify("warn", "No PR selected")
+					statusline.notify("warn", "No PR selected")
 					return
 				end
 				actions.open_diff(pr)
@@ -196,7 +196,7 @@ function M.register(buf, views)
 			callback = function()
 				local pr = selected_pr()
 				if pr == nil then
-					footer.notify("warn", "No PR selected")
+					statusline.notify("warn", "No PR selected")
 					return
 				end
 				actions.checkout(pr)
@@ -204,7 +204,7 @@ function M.register(buf, views)
 		})
 	)
 
-	if state.provider and state.provider.search then
+	if state.provider and state.provider.capabilities.search then
 		utils.insert_if(
 			items,
 			item("ui.search", {
@@ -223,7 +223,7 @@ function M.register(buf, views)
 			callback = function()
 				local pr = selected_pr()
 				if pr == nil then
-					footer.notify("warn", "No PR selected")
+					statusline.notify("warn", "No PR selected")
 					return
 				end
 				actions.refresh(pr)
@@ -251,7 +251,7 @@ function M.register(buf, views)
 			callback = function()
 				local pr = selected_pr()
 				if pr == nil then
-					footer.notify("warn", "No PR selected")
+					statusline.notify("warn", "No PR selected")
 					return
 				end
 
@@ -263,9 +263,6 @@ function M.register(buf, views)
 
 				if detail_open and panel_state.current_panel == "repo" then
 					layout.toggle_detail()
-					if ui_state.on_panel_close then
-						ui_state.on_panel_close()
-					end
 					return
 				end
 

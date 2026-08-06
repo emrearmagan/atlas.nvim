@@ -2,7 +2,7 @@
 local M = {}
 
 local md_editor = require("atlas.ui.popups.editor")
-local footer = require("atlas.ui.components.footer")
+local statusline = require("atlas.ui.statusline")
 local panel_state = require("atlas.pulls.ui.panel.pr.state")
 local renderer = require("atlas.pulls.ui.panel.pr.tabs.review.renderer")
 local review_threads = require("atlas.ui.components.review_threads")
@@ -13,20 +13,22 @@ local review_actions = require("atlas.pulls.actions.review")
 ---@return AtlasMarkdownCompletionProvider|nil
 local function author_completion()
 	local provider = require("atlas.pulls.state").provider
+	local comments_capability = provider and provider.capabilities.comments
 	local comments = state.comments
 	local tasks = state.tasks
 	local pr = require("atlas.pulls.ui.panel.pr.state").current_pr
 	if
 		not provider
 		or not pr
-		or not provider.comment_completion
+		or not comments_capability
+		or not comments_capability.comment_completion
 		or (type(comments) ~= "table" and type(tasks) ~= "table")
 	then
 		return nil
 	end
 	local reviewers = require("atlas.pulls.ui.panel.pr.tabs.overview.state").reviewers
 	local conversation = require("atlas.pulls.ui.panel.pr.tabs.conversation.state").comments
-	return provider.comment_completion({
+	return comments_capability.comment_completion({
 		pr = pr,
 		comments = type(comments) == "table" and comments or {},
 		tasks = type(tasks) == "table" and tasks or nil,
@@ -122,7 +124,8 @@ function M.on_select(pr, _repo, refresh, opts)
 	state.reset()
 
 	local provider = get_provider()
-	if provider == nil then
+	local reviews = provider and provider.capabilities.reviews
+	if reviews == nil then
 		state.comments = "Pull request provider is not available"
 		refresh()
 		return
@@ -130,10 +133,10 @@ function M.on_select(pr, _repo, refresh, opts)
 
 	local pr_id = tostring(pr.id or "")
 	state.comments = "loading"
-	state.tasks = provider.fetch_tasks and "loading" or nil
-	footer.notify("loading", string.format("Loading review for #%s...", pr_id))
+	state.tasks = reviews.fetch_tasks and "loading" or nil
+	statusline.notify("loading", string.format("Loading review for #%s...", pr_id))
 
-	local pending = provider.fetch_tasks and 2 or 1
+	local pending = reviews.fetch_tasks and 2 or 1
 	local comments_error, tasks_error
 	local function complete()
 		pending = pending - 1
@@ -142,15 +145,15 @@ function M.on_select(pr, _repo, refresh, opts)
 			return
 		end
 		if comments_error then
-			footer.notify("error", string.format("Failed to load comments for #%s: %s", pr_id, comments_error))
+			statusline.notify("error", string.format("Failed to load comments for #%s: %s", pr_id, comments_error))
 		elseif tasks_error then
-			footer.notify("warn", string.format("Failed to load review items for #%s: %s", pr_id, tasks_error))
+			statusline.notify("warn", string.format("Failed to load review items for #%s: %s", pr_id, tasks_error))
 		else
-			footer.notify("success", string.format("Review loaded for #%s", pr_id), 1200)
+			statusline.notify("success", string.format("Review loaded for #%s", pr_id), 1200)
 		end
 	end
 
-	local comments_handle = provider.fetch_comments(pr, opts, function(comments, err)
+	local comments_handle = reviews.fetch_comments(pr, opts, function(comments, err)
 		if not is_current(request_generation, pr) then
 			return
 		end
@@ -164,7 +167,7 @@ function M.on_select(pr, _repo, refresh, opts)
 	end)
 	track(comments_handle)
 
-	local fetch_tasks = provider.fetch_tasks
+	local fetch_tasks = reviews.fetch_tasks
 	if fetch_tasks then
 		local tasks_handle = fetch_tasks(pr, opts, function(tasks, err)
 			if not is_current(request_generation, pr) then
@@ -346,11 +349,12 @@ end
 ---@param refresh fun()
 function M.add_task(pr, refresh)
 	local provider = get_provider()
-	if not provider or not provider.add_task then
-		footer.notify("error", "Provider does not support tasks")
+	local reviews = provider and provider.capabilities.reviews
+	if not reviews or not reviews.add_task then
+		statusline.notify("error", "Provider does not support tasks")
 		return
 	end
-	local add_task = provider.add_task
+	local add_task = reviews.add_task
 	local tasks = state.tasks
 	if type(tasks) ~= "table" then
 		return
@@ -384,22 +388,22 @@ function M.add_task(pr, refresh)
 				return
 			end
 			if not text or vim.trim(text) == "" then
-				footer.notify("warn", "Task cannot be empty")
+				statusline.notify("warn", "Task cannot be empty")
 				return
 			end
-			footer.notify("loading", "Adding task...")
+			statusline.notify("loading", "Adding task...")
 			track(add_task(pr, text, parent, function(task, err)
 				if not is_current_list(context_generation, pr, "tasks", tasks) then
 					return
 				end
 				if err then
-					footer.notify("error", tostring(err))
+					statusline.notify("error", tostring(err))
 					return
 				end
 				if task then
 					table.insert(tasks, task)
 				end
-				footer.notify("success", "Task added", 1200)
+				statusline.notify("success", "Task added", 1200)
 				refresh()
 			end))
 		end,

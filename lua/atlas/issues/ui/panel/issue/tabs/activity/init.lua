@@ -6,7 +6,7 @@ local icons = require("atlas.ui.shared.icons")
 local highlights = require("atlas.ui.shared.highlights")
 local spinner = require("atlas.ui.components.spinner")
 local threads = require("atlas.ui.components.threadsv2")
-local footer = require("atlas.ui.components.footer")
+local statusline = require("atlas.ui.statusline")
 local state = require("atlas.issues.ui.panel.issue.tabs.activity.state")
 
 local PADDING_X = 1
@@ -66,13 +66,14 @@ local function content_hl(item, row, row_index)
 	return entry.body_hl(row, row_index)
 end
 
----@param _issue Issue
+---@param issue Issue
 ---@param refresh fun()
 ---@param opts { force_refresh: boolean|nil }|nil
 function M.on_select(issue, refresh, opts)
 	opts = opts or {}
 	local provider = get_provider()
-	if not provider or not provider.fetch_activity then
+	local comments = provider and provider.capabilities.comments
+	if not comments or not comments.fetch_activity then
 		return
 	end
 
@@ -86,24 +87,24 @@ function M.on_select(issue, refresh, opts)
 	state.issue = issue
 
 	local issue_key = tostring(issue.key or "")
-	footer.notify("loading", string.format("Loading history for %s...", issue_key))
+	statusline.notify("loading", string.format("Loading history for %s...", issue_key))
 
-	track(provider.fetch_activity(issue, { force_load = force_refresh }, function(entries, err)
+	track(comments.fetch_activity(issue, { force_load = force_refresh }, function(entries, err)
 		state.is_loading = false
 
 		if err then
 			state.entries = {}
-			footer.notify("error", string.format("Failed to load history for %s", issue_key))
+			statusline.notify("error", string.format("Failed to load history for %s", issue_key))
 		else
 			state.entries = entries or {}
-			footer.notify("success", string.format("History loaded for %s (%d)", issue_key, #state.entries), 1200)
+			statusline.notify("success", string.format("History loaded for %s (%d)", issue_key, #state.entries), 1200)
 		end
 
 		refresh()
 	end))
 end
 
----@param issue Issue
+---@param _issue Issue
 ---@param width integer
 ---@return string[], table[], table<integer, table>|nil
 function M.render(_issue, width)
@@ -161,7 +162,7 @@ function M.deactivate()
 	cancel_all()
 	if state.is_loading then
 		state.is_loading = false
-		footer.notify("info", "", 0)
+		statusline.clear_notice()
 	end
 end
 

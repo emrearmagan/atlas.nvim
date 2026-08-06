@@ -491,7 +491,7 @@ function M.complete_cmdline(arglead, cmdline, cursorpos)
 		local static_fields, static_field_lookup = {}, {}
 		local static_functions = {}
 		local static_operators_by_field = {}
-		local fields, fields_by_key, functions = build_autocomplete_index(STATIC_AUTOCOMPLETE_DATA)
+		local fields, _, functions = build_autocomplete_index(STATIC_AUTOCOMPLETE_DATA)
 
 		for _, field in ipairs(fields) do
 			local candidate = field_completion(field.value)
