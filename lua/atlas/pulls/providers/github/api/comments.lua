@@ -132,13 +132,6 @@ local function gql_to_raw(gql_comment, thread)
 	}
 end
 
----@param connection table|nil
----@return table|nil
-local function last_node(connection)
-	local nodes = json.nilify(json.safe_table(connection).nodes) or {}
-	return nodes[#nodes]
-end
-
 ---@param node table
 ---@param thread table
 ---@param fallback_parent number|string|nil
@@ -569,7 +562,8 @@ mutation($reviewId:ID!,$path:String!,$body:String!,$line:Int!,$side:DiffSide!,$s
 
 		local data = result and result.data or {}
 		local thread = data.addPullRequestReviewThread and data.addPullRequestReviewThread.thread
-		local node = type(thread) == "table" and last_node(thread.comments) or nil
+		local nodes = type(thread) == "table" and json.nilify(json.safe_table(thread.comments).nodes) or {}
+		local node = nodes[#nodes]
 		if type(thread) ~= "table" or tostring(thread.id or "") == "" then
 			on_done(nil, "GitHub did not return the created review thread")
 			return

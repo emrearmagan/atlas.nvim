@@ -529,7 +529,7 @@ function M.edit_comment(pr, comment, on_done)
 		return nil
 	end
 
-	local payload = draft and { note = body } or { body = body }
+	local payload = draft and { note = body, position = raw.position } or { body = body }
 	return service.request("PUT", endpoint, payload, function(result, err)
 		if err or type(result) ~= "table" then
 			on_done(nil, err or "Empty response")

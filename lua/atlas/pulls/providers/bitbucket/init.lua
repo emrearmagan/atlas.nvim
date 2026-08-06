@@ -482,7 +482,6 @@ return {
 			edit_task = edit_task,
 			delete_task = delete_task,
 			set_thread_resolved = set_thread_resolved,
-			submit_review = pullrequests_api.submit_review,
 		},
 		repository = {
 			fetch_details = repositories_api.fetch_detail,

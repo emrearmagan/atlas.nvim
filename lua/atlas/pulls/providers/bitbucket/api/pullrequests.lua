@@ -346,26 +346,6 @@ function M.request_changes(pr, on_done)
 end
 
 ---@param pr PullRequest
----@param body string
----@param on_done fun(ok: boolean, err: string|nil)
----@return { cancel: fun() }|nil
-function M.submit_review(pr, body, on_done)
-	--TODO: How to resolve those pending comments tho ?
-	if vim.trim(body) == "" then
-		on_done(false, "Review comment cannot be empty")
-		return nil
-	end
-
-	return require("atlas.pulls.providers.bitbucket.api.comments").add_comment(pr, body, nil, function(comment, err)
-		if err or not comment then
-			on_done(false, err or "Bitbucket did not return the review comment")
-			return
-		end
-		on_done(true, nil)
-	end)
-end
-
----@param pr PullRequest
 ---@param _opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(reviewers: PullsReviewer[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil

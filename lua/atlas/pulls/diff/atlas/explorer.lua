@@ -533,12 +533,6 @@ function M.render(session, annotated_paths)
 			line_hl_group = "Visual",
 			priority = 10,
 		})
-		if session.panel.win and vim.api.nvim_win_is_valid(session.panel.win) then
-			local cursor = vim.api.nvim_win_get_cursor(session.panel.win)
-			if cursor[1] == 1 then
-				vim.api.nvim_win_set_cursor(session.panel.win, { selected_line, 0 })
-			end
-		end
 	end
 end
 
