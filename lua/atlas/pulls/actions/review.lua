@@ -268,7 +268,14 @@ function M.add(context, inline, opts)
 
 	local key = string.format("pr-comment-add-%s-%s", tostring(context.pr.id or ""), pending and "pending" or "now")
 	if inline then
-		key = string.format("%s-%s-%s", key, tostring(inline.from or ""), tostring(inline.to or ""))
+		key = string.format(
+			"%s-%s-%s-%s-%s",
+			key,
+			tostring(inline.start_from or ""),
+			tostring(inline.start_to or ""),
+			tostring(inline.from or ""),
+			tostring(inline.to or "")
+		)
 	end
 	open_editor(context, {
 		key = key,

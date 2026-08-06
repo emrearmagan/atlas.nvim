@@ -332,6 +332,8 @@ end
 function M.to_comment(raw, thread_state)
 	local line = json.nilify(raw.line)
 	local original_line = json.nilify(raw.original_line)
+	local start_line = json.nilify(raw.start_line) or json.nilify(raw.original_start_line)
+	local start_side = json.nilify(raw.start_side) or raw.side
 	local path = json.nilify(raw.path)
 
 	local inline, inline_hunk
@@ -339,10 +341,15 @@ function M.to_comment(raw, thread_state)
 		local side = raw.side == "LEFT" and "old" or "new"
 		local anchor = line or original_line
 		if anchor then
+			if start_line == anchor then
+				start_line = nil
+			end
 			inline = {
 				path = tostring(path),
 				from = side == "old" and anchor or nil,
 				to = side == "new" and anchor or nil,
+				start_from = start_side == "LEFT" and start_line or nil,
+				start_to = start_side ~= "LEFT" and start_line or nil,
 			}
 		end
 		inline_hunk = parse_diff_hunk(raw.diff_hunk)

@@ -326,6 +326,25 @@ local function add_inline_comment(pr, path, iid, content, inline, pending, on_do
 			old_line = inline.from,
 			new_line = inline.to,
 		}
+		local start_from, start_to = inline.start_from, inline.start_to
+		if start_from or start_to then
+			local line_code = require("atlas.pulls.providers.gitlab.api.line_code")
+			local side = inline.to and "new" or "old"
+			position.line_range = {
+				start = {
+					line_code = line_code.encode(inline.path, start_from, start_to),
+					type = side,
+					old_line = start_from,
+					new_line = start_to,
+				},
+				["end"] = {
+					line_code = line_code.encode(inline.path, inline.from, inline.to),
+					type = side,
+					old_line = inline.from,
+					new_line = inline.to,
+				},
+			}
+		end
 		local resource = pending and "draft_notes" or "discussions"
 		local endpoint = string.format("/projects/%s/merge_requests/%d/%s", service.url_encode(path), iid, resource)
 		local payload = pending and { note = content, position = position } or { body = content, position = position }

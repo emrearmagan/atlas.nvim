@@ -9,6 +9,7 @@ local resolver = require("atlas.core.keymaps")
 ---@field desc string
 ---@field index integer
 ---@field callback fun()
+---@field mode string|string[]|nil
 
 ---@class AtlasReviewKeymapGroup
 ---@field name string
@@ -29,9 +30,10 @@ local resolver = require("atlas.core.keymaps")
 ---@param desc string
 ---@param index integer
 ---@param callback fun()|nil
-local function add(items, action, desc, index, callback)
+---@param mode string|string[]|nil
+local function add(items, action, desc, index, callback, mode)
 	if callback then
-		table.insert(items, { action = action, desc = desc, index = index, callback = callback })
+		table.insert(items, { action = action, desc = desc, index = index, callback = callback, mode = mode })
 	end
 end
 
@@ -85,18 +87,26 @@ function M.groups(session, actions, buf, opts)
 	end
 
 	if include_actions and content then
+		local function add_comment(action, desc, index, pending)
+			add(review, action, desc, index, function()
+				if vim.fn.mode() == "n" then
+					actions.add_comment(buf, pending)
+					return
+				end
+				local start_line = vim.fn.line("v")
+				local end_line = vim.api.nvim_win_get_cursor(0)[1]
+				vim.cmd.normal({ args = { vim.keycode("<Esc>") }, bang = true })
+				actions.add_comment(buf, pending, start_line, end_line)
+			end, { "n", "x" })
+		end
 		add(review, "pulls.review.view_thread", "Open comment or note", 20, function()
 			open_item(session, buf)
 		end)
 		add(review, "pulls.review.toggle_resolved", "Toggle resolved", 21, function()
 			actions.toggle_resolved(buf)
 		end)
-		add(review, "pulls.review.add_comment", "Add pending inline comment", 30, function()
-			actions.add_comment(buf, true)
-		end)
-		add(review, "pulls.review.submit_comment", "Submit inline comment", 31, function()
-			actions.add_comment(buf, false)
-		end)
+		add_comment("pulls.review.add_comment", "Add pending comment", 30, true)
+		add_comment("pulls.review.submit_comment", "Submit comment", 31, false)
 		add(review, "pulls.review.delete_comment", "Delete comment at cursor", 32, function()
 			actions.delete_comment(buf)
 		end)
@@ -191,6 +201,7 @@ local function map_buffer(session, actions, buf, reload)
 					desc = definition.desc,
 					index = definition.index,
 					callback = guard(actions.active, definition.callback),
+					mode = definition.mode,
 					opts = { silent = true, nowait = true },
 				})
 			end

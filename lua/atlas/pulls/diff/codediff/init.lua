@@ -4,7 +4,7 @@ local comments = require("atlas.pulls.diff.shared.comments")
 local events = require("atlas.core.events")
 local notes = require("atlas.pulls.diff.shared.notes")
 local notify = require("atlas.core.notify")
-local overlay = require("atlas.pulls.diff.shared.comments.overlay")
+local renderer = require("atlas.pulls.diff.shared.comments.renderer")
 local review_keymaps = require("atlas.pulls.diff.shared.keymaps")
 
 ---@type table<string, DiffFileStatus>
@@ -272,8 +272,8 @@ local function sync(entry)
 	local previous = entry.session
 	local buffers_changed = not previous or previous.left.buf ~= left_buf or previous.right.buf ~= right_buf
 	if previous and buffers_changed then
-		overlay.clear_comments(previous.left.buf)
-		overlay.clear_comments(previous.right.buf)
+		renderer.clear_comments(previous.left.buf)
+		renderer.clear_comments(previous.right.buf)
 		notes.clear(previous)
 	end
 	local context = entry.context

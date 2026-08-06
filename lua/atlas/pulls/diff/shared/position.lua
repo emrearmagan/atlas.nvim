@@ -97,4 +97,33 @@ function M.from_line(document, side, line)
 	return result, nil
 end
 
+---@param document AtlasReviewDocument
+---@param side AtlasReviewSide
+---@param start_line integer
+---@param end_line integer
+---@return PullsInlineCommentPosition|nil
+---@return string|nil
+function M.from_range(document, side, start_line, end_line)
+	start_line, end_line = math.min(start_line, end_line), math.max(start_line, end_line)
+	local first, err = M.from_line(document, side, start_line)
+	if not first then
+		return nil, err
+	end
+	local last
+	last, err = M.from_line(document, side, end_line)
+	if not last then
+		return nil, err
+	end
+	if start_line ~= end_line then
+		local first_side = M.location(first)
+		local last_side = M.location(last)
+		if first_side ~= last_side then
+			return nil, "The selected lines cannot be represented as one review range"
+		end
+		last.start_from = first.from
+		last.start_to = first.to
+	end
+	return last, nil
+end
+
 return M

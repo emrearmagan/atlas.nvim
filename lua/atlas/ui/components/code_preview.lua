@@ -5,6 +5,7 @@ local M = {}
 ---@field lines string[]
 ---@field start_line integer
 ---@field anchor_line integer|nil
+---@field anchor_start integer|nil
 ---@field prefixes string[]|nil
 
 ---@param opts AtlasCodePreviewOptions
@@ -15,6 +16,11 @@ function M.render(opts)
 	local lines, prefixes, highlights = {}, {}, {}
 	for index, source in ipairs(opts.lines) do
 		local line_number = opts.start_line + index - 1
+		local selected = opts.anchor_start
+				and opts.anchor_line
+				and line_number >= opts.anchor_start
+				and line_number <= opts.anchor_line
+			or line_number == opts.anchor_line
 		local prefix = opts.prefixes and opts.prefixes[index]
 			or string.format("%" .. number_width .. "d  ", line_number)
 		prefixes[index] = #prefix
@@ -27,7 +33,7 @@ function M.render(opts)
 			line = index - 1,
 			start_col = 0,
 			end_col = #prefix,
-			hl_group = line_number == opts.anchor_line and "CursorLineNr" or "AtlasTextMuted",
+			hl_group = selected and "CursorLineNr" or "AtlasTextMuted",
 		})
 	end
 

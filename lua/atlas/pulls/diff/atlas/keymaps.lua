@@ -314,6 +314,7 @@ function M.register_review(session, actions)
 						desc = definition.desc,
 						index = definition.index,
 						callback = run(definition.callback),
+						mode = definition.mode,
 						opts = { silent = true, nowait = true },
 					})
 				)

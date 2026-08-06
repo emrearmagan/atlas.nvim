@@ -17,6 +17,10 @@ local function comment_location(comment)
 	end
 	local path = inline.path:match("([^/\\]+)$") or inline.path
 	local line = inline.to or inline.from
+	local start_line = inline.to and inline.start_to or inline.start_from
+	if line and start_line and line ~= start_line then
+		return string.format("%s:%d-%d", path, start_line, line)
+	end
 	return line and string.format("%s:%d", path, line) or path
 end
 

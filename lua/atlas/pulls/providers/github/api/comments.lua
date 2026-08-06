@@ -20,9 +20,12 @@ query($owner:String!,$name:String!,$number:Int!,$endCursor:String){
           isResolved
           isOutdated
           diffSide
+          startDiffSide
           path
           line
+          startLine
           originalLine
+          originalStartLine
           comments(first:100){
             nodes{
               databaseId
@@ -117,8 +120,11 @@ local function gql_to_raw(gql_comment, thread)
 		path = thread.path or gql_comment.path,
 		diff_hunk = gql_comment.diffHunk,
 		line = thread.line or gql_comment.line,
+		start_line = thread.startLine or gql_comment.startLine,
 		original_line = thread.originalLine or gql_comment.originalLine,
+		original_start_line = thread.originalStartLine or gql_comment.originalStartLine,
 		side = thread.diffSide,
+		start_side = thread.startDiffSide,
 		url = gql_comment.url,
 		html_url = gql_comment.url,
 		created_at = gql_comment.createdAt,
@@ -509,14 +515,17 @@ end
 local function add_review_thread(pr, content, inline, review_id, on_done)
 	local side = inline.to and "RIGHT" or "LEFT"
 	local line = inline.to or inline.from
+	local start_line = side == "RIGHT" and inline.start_to or inline.start_from
 	local query = ([[
-mutation($reviewId:ID!,$path:String!,$body:String!,$line:Int!,$side:DiffSide!){
+mutation($reviewId:ID!,$path:String!,$body:String!,$line:Int!,$side:DiffSide!,$startLine:Int,$startSide:DiffSide){
   addPullRequestReviewThread(input:{
     pullRequestReviewId:$reviewId
     path:$path
     body:$body
     line:$line
     side:$side
+    startLine:$startLine
+    startSide:$startSide
   }){
     thread{
       id
@@ -524,8 +533,11 @@ mutation($reviewId:ID!,$path:String!,$body:String!,$line:Int!,$side:DiffSide!){
       isOutdated
       path
       line
+      startLine
       originalLine
+      originalStartLine
       diffSide
+      startDiffSide
       comments(last:1){nodes{%s}}
     }
   }
@@ -543,6 +555,9 @@ mutation($reviewId:ID!,$path:String!,$body:String!,$line:Int!,$side:DiffSide!){
 		"-F",
 		"line=" .. tostring(line),
 	}
+	if start_line then
+		vim.list_extend(args, { "-F", "startLine=" .. tostring(start_line), "-f", "startSide=" .. side })
+	end
 	vim.list_extend(args, { "-f", "reviewId=" .. review_id })
 	vim.list_extend(args, { "-f", "query=" .. query })
 
@@ -568,9 +583,12 @@ mutation($reviewId:ID!,$path:String!,$body:String!,$line:Int!,$side:DiffSide!){
 		thread.diffSide = thread.diffSide or side
 		if side == "LEFT" then
 			thread.originalLine = thread.originalLine or line
+			thread.originalStartLine = thread.originalStartLine or start_line
 		else
 			thread.line = thread.line or line
+			thread.startLine = thread.startLine or start_line
 		end
+		thread.startDiffSide = thread.startDiffSide or (start_line and side or nil)
 		local review = json.safe_table(node.pullRequestReview)
 		remember_pending_review(pr, review)
 		local created = to_review_comment(node, thread, nil)
@@ -595,6 +613,7 @@ local function add_published_inline_comment(pr, content, inline, on_done)
 	local commit_id = tostring(inline.commit_hash or pr.source.commit_hash or "")
 	local side = inline.to and "RIGHT" or "LEFT"
 	local line = inline.to or inline.from
+	local start_line = side == "RIGHT" and inline.start_to or inline.start_from
 	if commit_id == "" then
 		vim.schedule(function()
 			on_done(nil, "Missing source commit hash")
@@ -602,7 +621,7 @@ local function add_published_inline_comment(pr, content, inline, on_done)
 		return nil
 	end
 
-	return cli.gh({
+	local args = {
 		"api",
 		"-X",
 		"POST",
@@ -617,7 +636,12 @@ local function add_published_inline_comment(pr, content, inline, on_done)
 		"side=" .. side,
 		"-F",
 		"line=" .. tostring(line),
-	}, function(result, err)
+	}
+	if start_line then
+		vim.list_extend(args, { "-F", "start_line=" .. tostring(start_line), "-f", "start_side=" .. side })
+	end
+
+	return cli.gh(args, function(result, err)
 		if err or type(result) ~= "table" then
 			on_done(nil, err or "Failed to create inline comment")
 			return
@@ -1011,8 +1035,11 @@ mutation($threadId:ID!,$reviewId:ID,$body:String!){
 				id = thread_id,
 				path = inline.path,
 				line = inline.to,
+				startLine = inline.start_to,
 				originalLine = inline.from,
-				diffSide = inline.from ~= nil and "LEFT" or "RIGHT",
+				originalStartLine = inline.start_from,
+				diffSide = inline.to ~= nil and "RIGHT" or "LEFT",
+				startDiffSide = inline.start_to ~= nil and "RIGHT" or (inline.start_from and "LEFT" or nil),
 				isResolved = parent.state == "RESOLVED",
 				isOutdated = parent.state == "OUTDATED",
 			}, parent.parent_id or parent.id)

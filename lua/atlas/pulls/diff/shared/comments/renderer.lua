@@ -6,7 +6,7 @@ local utils = require("atlas.ui.shared.utils")
 
 local namespace = vim.api.nvim_create_namespace("atlas_review_comments")
 
----@class AtlasCommentOverlayContext
+---@class AtlasCommentRendererContext
 ---@field threads AtlasReviewThreadNode[]
 ---@field expanded_threads table<string, boolean>
 ---@field old_path string
@@ -24,7 +24,7 @@ local function buffer_width(buf)
 	return vim.o.columns
 end
 
----@param context AtlasCommentOverlayContext
+---@param context AtlasCommentRendererContext
 ---@param buf integer
 ---@param list AtlasReviewThreadNode[]
 ---@return [string, string][][]
@@ -71,13 +71,13 @@ function M.pad_comments(buf, line, count, above)
 	})
 end
 
----@class AtlasCommentOverlayOptions
+---@class AtlasCommentRendererOptions
 ---@field above_lines table<integer, boolean>
 
----@param context AtlasCommentOverlayContext
+---@param context AtlasCommentRendererContext
 ---@param buf integer
 ---@param by_line table<integer, AtlasReviewThreadNode[]>
----@param opts AtlasCommentOverlayOptions
+---@param opts AtlasCommentRendererOptions
 ---@return table<integer, integer>
 function M.render_comments(context, buf, by_line, opts)
 	if not vim.api.nvim_buf_is_valid(buf) then
@@ -88,6 +88,22 @@ function M.render_comments(context, buf, by_line, opts)
 	local line_count = vim.api.nvim_buf_line_count(buf)
 	for line, list in pairs(by_line) do
 		if line >= 1 and line <= line_count then
+			local marked = {}
+			for _, node in ipairs(list) do
+				local inline = node.comment.inline
+				local start_line = inline and (inline.to and inline.start_to or inline.start_from)
+				for range_line = start_line or line, line - 1 do
+					if range_line >= 1 and not marked[range_line] then
+						marked[range_line] = true
+						vim.api.nvim_buf_set_extmark(buf, namespace, range_line - 1, 0, {
+							number_hl_group = "CursorLineNr",
+							sign_text = "┃",
+							sign_hl_group = "AtlasLogInfo",
+							priority = 1100,
+						})
+					end
+				end
+			end
 			local virtual_lines = M.thread_lines(context, buf, list)
 			sizes[line] = #virtual_lines
 			vim.api.nvim_buf_set_extmark(buf, namespace, line - 1, 0, {

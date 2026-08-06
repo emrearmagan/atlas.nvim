@@ -2,7 +2,7 @@ local M = {}
 
 local actions = require("atlas.pulls.actions.review")
 local code_preview = require("atlas.ui.components.code_preview")
-local overlay = require("atlas.pulls.diff.shared.comments.overlay")
+local renderer = require("atlas.pulls.diff.shared.comments.renderer")
 local position = require("atlas.pulls.diff.shared.position")
 local comment_threads = require("atlas.ui.components.review_threads")
 
@@ -93,7 +93,7 @@ end
 
 ---@param session AtlasReviewSession
 ---@param state AtlasReviewState
----@return AtlasCommentOverlayContext|nil
+---@return AtlasCommentRendererContext|nil
 local function render_context(session, state)
 	local document = session.document
 	if not document then
@@ -110,7 +110,7 @@ local function render_context(session, state)
 end
 
 ---@param session AtlasReviewSession
----@param context AtlasCommentOverlayContext
+---@param context AtlasCommentRendererContext
 ---@param path string
 ---@param side "LEFT"|"RIGHT"
 ---@return table<integer, AtlasReviewThreadNode[]>
@@ -135,7 +135,7 @@ local function threads_by_line(session, context, path, side)
 end
 
 ---@param session AtlasReviewSession
----@param context AtlasCommentOverlayContext
+---@param context AtlasCommentRendererContext
 ---@param path string
 ---@param side "LEFT"|"RIGHT"
 ---@return table<integer, AtlasReviewThreadNode[]>
@@ -195,7 +195,7 @@ function M.render(session, opts)
 		local old_threads = threads_by_line(session, context, context.old_path, "LEFT")
 		for old_line, old_list in pairs(old_threads) do
 			if position.is_changed(session.document, "LEFT", old_line) then
-				deleted_comments[old_line] = overlay.thread_lines(context, session.right.buf, old_list)
+				deleted_comments[old_line] = renderer.thread_lines(context, session.right.buf, old_list)
 			else
 				local line, above = opposite_line(session, "LEFT", old_line)
 				right_threads[line] = right_threads[line] or {}
@@ -208,24 +208,24 @@ function M.render(session, opts)
 	else
 		right_threads, right_above = visible_threads(session, context, context.new_path, "RIGHT")
 	end
-	local right = overlay.render_comments(context, session.right.buf, right_threads, {
+	local right = renderer.render_comments(context, session.right.buf, right_threads, {
 		above_lines = right_above,
 	})
 	if session.layout ~= "side-by-side" then
-		overlay.clear_comments(session.left.buf)
+		renderer.clear_comments(session.left.buf)
 		return deleted_comments
 	end
 	local left_threads, left_above = visible_threads(session, context, context.old_path, "LEFT")
-	local left = overlay.render_comments(context, session.left.buf, left_threads, {
+	local left = renderer.render_comments(context, session.left.buf, left_threads, {
 		above_lines = left_above,
 	})
 	for line, count in pairs(left) do
 		local target, above = opposite_line(session, "LEFT", line)
-		overlay.pad_comments(session.right.buf, target, count, left_above[line] or above)
+		renderer.pad_comments(session.right.buf, target, count, left_above[line] or above)
 	end
 	for line, count in pairs(right) do
 		local target, above = opposite_line(session, "RIGHT", line)
-		overlay.pad_comments(session.left.buf, target, count, right_above[line] or above)
+		renderer.pad_comments(session.left.buf, target, count, right_above[line] or above)
 	end
 	return deleted_comments
 end
@@ -249,15 +249,18 @@ end
 
 ---@param session AtlasReviewSession
 ---@param buf integer
+---@param start_line integer|nil
+---@param end_line integer|nil
 ---@return PullsInlineCommentPosition|nil
 ---@return string|nil
-local function inline_position(session, buf)
+local function inline_position(session, buf, start_line, end_line)
 	local document = session.document
 	local _, side = buffer_context(session, buf)
 	if not document or not side then
 		return nil, "This buffer is not part of the diff"
 	end
-	local inline, err = position.from_line(document, side, vim.api.nvim_win_get_cursor(0)[1])
+	local cursor_line = vim.api.nvim_win_get_cursor(0)[1]
+	local inline, err = position.from_range(document, side, start_line or cursor_line, end_line or cursor_line)
 	if inline then
 		inline.commit_hash = session.head_revision
 	end
@@ -266,8 +269,10 @@ end
 
 ---@param session AtlasReviewSession
 ---@param buf integer
+---@param selected_start integer|nil
+---@param selected_end integer|nil
 ---@return AtlasMarkdownEditorPreview|nil
-local function inline_preview(session, buf)
+local function inline_preview(session, buf, selected_start, selected_end)
 	local document = session.document
 	local _, side = buffer_context(session, buf)
 	if not document or not side or document.binary then
@@ -275,17 +280,20 @@ local function inline_preview(session, buf)
 	end
 
 	local line = vim.api.nvim_win_get_cursor(0)[1]
+	selected_start, selected_end = selected_start or line, selected_end or line
+	selected_start, selected_end = math.min(selected_start, selected_end), math.max(selected_start, selected_end)
 	local source = side == "LEFT" and document.old or document.new
-	local start_line = math.max(1, line - 2)
+	local start_line = math.max(1, selected_start - 2)
 	local lines = {}
-	for index = start_line, math.min(#source.lines, line + 2) do
+	for index = start_line, math.min(#source.lines, selected_end + 2) do
 		table.insert(lines, source.lines[index])
 	end
 	return code_preview.render({
 		file_path = source.path,
 		lines = lines,
 		start_line = start_line,
-		anchor_line = line,
+		anchor_start = selected_start,
+		anchor_line = selected_end,
 	})
 end
 
@@ -637,18 +645,20 @@ end
 ---@param state AtlasReviewState
 ---@param buf integer
 ---@param pending boolean
-local function add_inline_comment(session, state, buf, pending)
+---@param start_line integer|nil
+---@param end_line integer|nil
+local function add_inline_comment(session, state, buf, pending, start_line, end_line)
 	local context = action_context(session, state, nil)
 	if not context then
 		view_notify(session, "warn", "Review is not ready")
 		return
 	end
-	local inline, err = inline_position(session, buf)
+	local inline, err = inline_position(session, buf, start_line, end_line)
 	if not inline then
 		view_notify(session, "info", err or "Unable to comment on this line")
 		return
 	end
-	actions.add(context, inline, { pending = pending, preview = inline_preview(session, buf) })
+	actions.add(context, inline, { pending = pending, preview = inline_preview(session, buf, start_line, end_line) })
 end
 
 ---@param session AtlasReviewSession
@@ -726,8 +736,8 @@ local function register_keymaps(session, state)
 		toggle_resolved = function(buf)
 			toggle_resolved_at_cursor(session, state, buf)
 		end,
-		add_comment = function(buf, pending)
-			add_inline_comment(session, state, buf, pending)
+		add_comment = function(buf, pending, start_line, end_line)
+			add_inline_comment(session, state, buf, pending, start_line, end_line)
 		end,
 		delete_comment = function(buf)
 			delete_comment_at_cursor(session, state, buf)
@@ -884,8 +894,8 @@ function M.detach(session)
 	session.review = nil
 	cancel_requests(state)
 	require("atlas.pulls.diff.shared.comments.popup").close(tostring(session.tabpage))
-	overlay.clear_comments(session.left.buf)
-	overlay.clear_comments(session.right.buf)
+	renderer.clear_comments(session.left.buf)
+	renderer.clear_comments(session.right.buf)
 end
 
 return M

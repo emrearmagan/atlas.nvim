@@ -365,10 +365,12 @@ local function comment_inline(raw_inline)
 	local path = tostring(inline.path or "")
 	local from = tonumber(inline["from"])
 	local to = tonumber(inline["to"])
+	local start_from = tonumber(inline.start_from)
+	local start_to = tonumber(inline.start_to)
 	if path == "" or (from == nil and to == nil) then
 		return nil
 	end
-	return { path = path, from = from, to = to }
+	return { path = path, from = from, to = to, start_from = start_from, start_to = start_to }
 end
 
 ---@param result table|nil
