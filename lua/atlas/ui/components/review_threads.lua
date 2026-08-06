@@ -108,6 +108,7 @@ local function suggestion_content(comment)
 			file_path = comment.inline.path,
 			lines = lines,
 			start_line = comment.inline.start_to or comment.inline.to or 1,
+			show_line_numbers = false,
 		})
 end
 
