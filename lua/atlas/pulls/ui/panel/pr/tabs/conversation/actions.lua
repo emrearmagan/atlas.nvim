@@ -50,41 +50,6 @@ end
 
 ---@param pr PullRequest
 ---@param refresh fun()
-function M.edit_title(pr, refresh)
-	local provider = get_provider()
-	local core = provider and provider.capabilities.core
-	if not core or not core.update_title then
-		statusline.notify("warn", "Editing the PR title is not supported for this provider")
-		return
-	end
-
-	md_editor.open({
-		key = "pr-title-edit-" .. tostring(pr.id),
-		title = " Edit Title ",
-		width_ratio = 0.5,
-		height_ratio = 0.12,
-		initial_text = pr.title or "",
-		on_save = function(text)
-			local title = text and vim.trim(text) or ""
-			if title == "" or title == pr.title then
-				return
-			end
-			statusline.notify("loading", "Updating title...")
-			core.update_title(pr, title, function(ok, err)
-				if err or ok == false then
-					statusline.notify("error", "Title update failed: " .. tostring(err or "Unknown error"))
-					return
-				end
-				pr.title = title
-				statusline.notify("success", "Title updated", 1200)
-				refresh()
-			end)
-		end,
-	})
-end
-
----@param pr PullRequest
----@param refresh fun()
 function M.add(pr, refresh)
 	local provider = get_provider()
 	local comments = provider and provider.capabilities.comments

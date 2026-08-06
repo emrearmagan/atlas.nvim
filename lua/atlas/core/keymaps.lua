@@ -57,6 +57,7 @@ local M = {}
 ---@class AtlasPullsKeymaps
 ---@field open_diff? AtlasKeymapValue
 ---@field checkout? AtlasKeymapValue
+---@field edit_title? AtlasKeymapValue
 ---@field review? AtlasPullsReviewKeymaps
 ---@field filter_status_open? AtlasKeymapValue
 ---@field filter_status_merged? AtlasKeymapValue
@@ -101,6 +102,7 @@ local M = {}
 ---| "ui.search"
 ---| "pulls.open_diff"
 ---| "pulls.checkout"
+---| "pulls.edit_title"
 ---| "pulls.review.toggle_approval"
 ---| "pulls.review.request_changes"
 ---| "pulls.review.submit_review"
@@ -314,6 +316,9 @@ function M.validate()
 			"ui.show_details",
 			"ui.search",
 		}),
+		-- pulls.review.add_task, pulls.review.edit_comment and pulls.edit_title are
+		-- intentionally excluded: each is scoped to a tab that owns the key while active,
+		-- so reusing "T"/"e" across them is not a real conflict.
 		pulls = conflicts_for({
 			"pulls.open_diff",
 			"pulls.checkout",

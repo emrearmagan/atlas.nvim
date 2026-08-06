@@ -151,6 +151,27 @@ function M.register(buf)
 		})
 	)
 
+	if state.provider and state.provider.capabilities.core and state.provider.capabilities.core.update_title then
+		utils.insert_if(
+			items,
+			item("pulls.edit_title", {
+				desc = "Edit PR title",
+				opts = { nowait = true, silent = true },
+				callback = function()
+					local pr = panel_state.current_pr
+					if pr == nil then
+						return
+					end
+					actions.edit_title(pr, function(ok)
+						if ok then
+							require("atlas.pulls.ui.panel").render()
+						end
+					end)
+				end,
+			})
+		)
+	end
+
 	if panel_state.current_pr and actions.is_action_available(panel_state.current_pr, "toggle_subscription") then
 		utils.insert_if(
 			items,
@@ -281,6 +302,7 @@ function M.remove(buf)
 	utils.insert_if(general, remove_item("ui.open_in_browser"))
 	utils.insert_if(general, remove_item("pulls.open_diff"))
 	utils.insert_if(general, remove_item("pulls.checkout"))
+	utils.insert_if(general, remove_item("pulls.edit_title"))
 	utils.insert_if(general, remove_item("ui.toggle_subscription"))
 	utils.insert_if(general, remove_item("ui.next_panel_tab"))
 	utils.insert_if(general, remove_item("ui.previous_panel_tab"))

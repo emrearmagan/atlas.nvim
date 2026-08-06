@@ -2,6 +2,7 @@ local M = {}
 
 local statusline = require("atlas.ui.statusline")
 local checkout = require("atlas.core.git.checkout")
+local md_editor = require("atlas.ui.popups.editor")
 
 ---@class PullsActionResult
 ---@field changed_pr boolean
@@ -38,6 +39,44 @@ function M.open_in_browser(pr)
 	end
 	vim.ui.open(url)
 	statusline.notify("info", "Opened in browser")
+end
+
+---@param pr PullRequest
+---@param on_done fun(ok: boolean)
+function M.edit_title(pr, on_done)
+	local p = provider()
+	local core = p and p.capabilities.core
+	if not core or not core.update_title then
+		statusline.notify("warn", "Editing the PR title is not supported for this provider")
+		on_done(false)
+		return
+	end
+
+	md_editor.open({
+		key = "pr-title-edit-" .. tostring(pr.id),
+		title = " Edit Title ",
+		width_ratio = 0.5,
+		height_ratio = 0.12,
+		initial_text = pr.title or "",
+		on_save = function(text)
+			local title = text and vim.trim(text) or ""
+			if title == "" or title == pr.title then
+				on_done(false)
+				return
+			end
+			statusline.notify("loading", "Updating title...")
+			core.update_title(pr, title, function(ok, err)
+				if err or ok == false then
+					statusline.notify("error", "Title update failed: " .. tostring(err or "Unknown error"))
+					on_done(false)
+					return
+				end
+				pr.title = title
+				statusline.notify("success", "Title updated", 1200)
+				on_done(true)
+			end)
+		end,
+	})
 end
 
 ---@param pr PullRequest
