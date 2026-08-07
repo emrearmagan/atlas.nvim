@@ -811,6 +811,7 @@ Thanks go to these wonderful people ([emoji key](https://allcontributors.org/emo
     </tr>
     <tr>
       <td align="center" valign="top" width="14.28%"><a href="https://nuagir.com"><img src="https://avatars.githubusercontent.com/u/35815402?v=4?s=100" width="100px;" alt="Jean-Frederic Mainville"/><br /><sub><b>Jean-Frederic Mainville</b></sub></a><br /><a href="#code-jfmainville" title="Code">💻</a></td>
+      <td align="center" valign="top" width="14.28%"><a href="https://github.com/23andreas"><img src="https://avatars.githubusercontent.com/u/12485755?v=4?s=100" width="100px;" alt="23andreas"/><br /><sub><b>23andreas</b></sub></a><br /><a href="#code-23andreas" title="Code">💻</a></td>
     </tr>
   </tbody>
 </table>
