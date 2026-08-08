@@ -7,9 +7,6 @@
 
 A Neovim plugin for managing GitHub/Bitbucket/GitLab PRs and Jira/GitHub/GitLab issues without leaving your editor.
 
-> [!CAUTION]
-> **Still in early development, will have breaking changes!**
-
 <p>
   <img alt="GitHub" src="https://img.shields.io/badge/GitHub-181717?style=flat-square&logo=github&logoColor=white">
   <img alt="Bitbucket" src="https://img.shields.io/badge/Bitbucket-0052CC?style=flat-square&logo=bitbucket&logoColor=white">
@@ -17,16 +14,15 @@ A Neovim plugin for managing GitHub/Bitbucket/GitLab PRs and Jira/GitHub/GitLab 
   <img alt="Jira" src="https://img.shields.io/badge/Jira-0052CC?style=flat-square&logo=jira&logoColor=white">
 </p>
 
-<p align="center">
-  <img width="49%" alt="AtlasDiff" src="https://github.com/user-attachments/assets/d6de618b-0eef-4546-b33d-f21ad3bc4fc3">
-  <img width="49%" alt="Atlas UI" src="https://github.com/user-attachments/assets/8b570bb3-d073-4ab0-99fc-2d9179e173cd">
-</p>
+<img alt="Atlas UI" src="https://github.com/user-attachments/assets/de6459f9-f123-40a6-acbd-097a17e7ae86" />
+
+
+> [!CAUTION]
+> **Still in early development, will have breaking changes!**
 
 ## Table of Contents
 
 - [Installation](#installation)
-  - [Using lazy.nvim](#using-lazynvim)
-  - [Using packer.nvim](#using-packernvim)
 - [Requirements](#requirements)
 - [Configuration](#configuration)
 - [Commands](#commands)
@@ -41,13 +37,6 @@ A Neovim plugin for managing GitHub/Bitbucket/GitLab PRs and Jira/GitHub/GitLab 
     - [GitHub](#github-issues)
     - [GitLab](#gitlab-issues)
 - [Features](#features)
-  - [Review Pull Requests](#review-pull-requests)
-  - [View Pipelines](#view-pipelines)
-  - [Create Pull Requests](#create-pull-requests)
-  - [Create Issues](#create-issues)
-  - [Notifications](#notifications)
-  - [Bookmarks](#bookmarks)
-  - [Custom Actions](#custom-actions)
 - [Events](#events)
 - [Keymaps](#keymaps)
 - [Contributing](#contributing)
@@ -549,11 +538,11 @@ issues = {
 
 ## Features
 
-Atlas keeps the pull request and issue workflows you use throughout the day inside Neovim.
+Keep the pull request and issue workflows you use throughout the day inside Neovim.
 
 ### Review Pull Requests
 
-<img width="100%" alt="AtlasDiff review" src="https://github.com/user-attachments/assets/d6de618b-0eef-4546-b33d-f21ad3bc4fc3">
+<img alt="AtlasDiff" src="https://github.com/user-attachments/assets/7280373a-f6e9-4847-be64-89e245d461cd" />
 
 Press the configured `pulls.open_diff` key (`gd` by default) on a pull request to start a review.
 
