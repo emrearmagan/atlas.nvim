@@ -388,6 +388,13 @@ local function render_footer(lines, spans, line_map, item, depth, pfx, has_child
 	if depth == 0 and has_children then
 		footer_prefix = pfx.pad .. "│ "
 	end
+	if item.content_block then
+		lines[#lines + 1] = footer_prefix
+		map_line(line_map, #lines, make_line_map(item, "footer_gap", depth))
+		if #footer_prefix > 0 then
+			span(spans, #lines - 1, 0, #footer_prefix, "AtlasTextMuted")
+		end
+	end
 
 	local footer_text = ""
 	local footer_spans = {}
