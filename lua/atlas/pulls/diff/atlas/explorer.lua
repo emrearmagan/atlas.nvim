@@ -214,21 +214,24 @@ local function compact_folder(node)
 	return node, label
 end
 
----@param session AtlasNativeDiffSession
+---@param files DiffFile[]
+---@param reviewed_files table<string, boolean>
 ---@return integer[], integer[]
-local function grouped_indices(session)
+local function grouped_indices(files, reviewed_files)
 	local unreviewed, reviewed = {}, {}
-	for index, file in ipairs(session.files) do
-		table.insert(session.reviewed_files[file.path] and reviewed or unreviewed, index)
+	for index, file in ipairs(files) do
+		table.insert(reviewed_files[file.path] and reviewed or unreviewed, index)
 	end
 	return unreviewed, reviewed
 end
 
----@param session AtlasNativeDiffSession
+---@param files DiffFile[]
+---@param grouped boolean
+---@param reviewed_files table<string, boolean>
 ---@return integer[]
-function M.ordered_indices(session)
-	local unreviewed, reviewed = grouped_indices(session)
-	if not session.explorer.grouped then
+local function ordered_indices(files, grouped, reviewed_files)
+	local unreviewed, reviewed = grouped_indices(files, reviewed_files)
+	if not grouped then
 		vim.list_extend(unreviewed, reviewed)
 		return unreviewed
 	end
@@ -237,11 +240,28 @@ function M.ordered_indices(session)
 		for _, folder in ipairs(sorted_folders(node)) do
 			append(folder)
 		end
-		vim.list_extend(ordered, sorted_files(node, session.files))
+		vim.list_extend(ordered, sorted_files(node, files))
 	end
-	append(build_tree(session.files, unreviewed))
-	append(build_tree(session.files, reviewed))
+	append(build_tree(files, unreviewed))
+	append(build_tree(files, reviewed))
 	return ordered
+end
+
+---@param files DiffFile[]
+---@param options AtlasDiffExplorerOptions
+---@return DiffFile[]
+function M.order_files(files, options)
+	local ordered = {}
+	for _, index in ipairs(ordered_indices(files, options.grouped, {})) do
+		table.insert(ordered, files[index])
+	end
+	return ordered
+end
+
+---@param session AtlasNativeDiffSession
+---@return integer[]
+function M.ordered_indices(session)
+	return ordered_indices(session.files, session.explorer.grouped, session.reviewed_files)
 end
 
 ---@param session AtlasNativeDiffSession
@@ -344,7 +364,7 @@ function M.render(session, annotated_paths)
 	local first_header
 	session.panel_items = {}
 
-	local unreviewed, reviewed = grouped_indices(session)
+	local unreviewed, reviewed = grouped_indices(session.files, session.reviewed_files)
 	annotated_paths = annotated_paths or {}
 	local noted_paths = {}
 	for _, note in ipairs((session.notes and session.notes.items) or {}) do

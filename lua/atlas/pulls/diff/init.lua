@@ -214,7 +214,8 @@ local function launch_diff(opts, view, on_done)
 			base_revision = opts.base_revision,
 			head_revision = opts.head_revision,
 			filter = function(files)
-				return explorer.filter(files, explorer_options)
+				local visible = explorer.filter(files, explorer_options)
+				return explorer.order_files(visible, explorer_options)
 			end,
 			on_progress = function(message)
 				view:update(message)

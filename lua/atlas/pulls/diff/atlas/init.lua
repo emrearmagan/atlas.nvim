@@ -940,6 +940,10 @@ local function initialize_session(session)
 			notes.attach(session, review)
 			comments.attach(session, review)
 		end
+		local selected_line = explorer.line_for_file(session, session.selected_index)
+		if selected_line and session.panel.win and vim.api.nvim_win_is_valid(session.panel.win) then
+			vim.api.nvim_win_set_cursor(session.panel.win, { selected_line, 0 })
+		end
 
 		focus_first_hunk(session)
 		statusline.update(session)
