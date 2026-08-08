@@ -209,6 +209,7 @@ local function register_commands()
 	pcall(vim.api.nvim_del_user_command, "AtlasCreateIssue")
 	pcall(vim.api.nvim_del_user_command, "AtlasDiff")
 	pcall(vim.api.nvim_del_user_command, "AtlasNotes")
+	pcall(vim.api.nvim_del_user_command, "AtlasNotesClearAll")
 
 	vim.api.nvim_create_user_command("AtlasLogs", function()
 		require("atlas.ui.logs").toggle()
@@ -269,6 +270,10 @@ local function register_commands()
 		desc = "Open local review notes",
 		nargs = "?",
 	})
+
+	vim.api.nvim_create_user_command("AtlasNotesClearAll", function()
+		require("atlas.pulls.notes.ui").clear_all()
+	end, { desc = "Delete all local review notes" })
 
 	vim.api.nvim_create_user_command("AtlasSearch", function(opts)
 		local provider_id = opts.fargs[1] and opts.fargs[1]:lower() or nil

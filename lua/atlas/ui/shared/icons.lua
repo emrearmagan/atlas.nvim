@@ -39,6 +39,8 @@ local ICONS = {
 		watching = { icon = "", hl_group = "AtlasTextPositive" },
 		arrow_up = { icon = "", hl_group = "AtlasTextMuted" },
 		arrow_right = { icon = "", hl_group = "AtlasTextMuted" },
+		fold_open = { icon = "", hl_group = "AtlasTextMuted" },
+		fold_closed = { icon = "", hl_group = "AtlasTextMuted" },
 		custom_action = { icon = "", hl_group = "AtlasTextMuted" },
 	},
 

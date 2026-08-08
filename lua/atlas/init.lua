@@ -18,6 +18,7 @@ local function bootstrap_common()
 		{ name = "AtlasIssues", desc = "Open issues" },
 		{ name = "AtlasDiff", desc = "Open native diff or pull request" },
 		{ name = "AtlasNotes", desc = "Manage local review notes" },
+		{ name = "AtlasNotesClearAll", desc = "Delete all local review notes" },
 		{ name = "AtlasSearch", desc = "Search across providers" },
 		{ name = "AtlasOpen", desc = "Open URL or reference" },
 		{ name = "AtlasClearCache", desc = "Clear Atlas cache" },

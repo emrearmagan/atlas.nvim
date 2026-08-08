@@ -8,6 +8,13 @@ local review_threads = require("atlas.ui.components.review_threads")
 local utils = require("atlas.ui.shared.utils")
 local namespace = vim.api.nvim_create_namespace("atlas.review_panel")
 
+---@param action AtlasKeymapActionId
+---@return string|nil
+local function key_label(action)
+	local keys = resolver.resolve(action)
+	return keys and table.concat(keys, " / ") or nil
+end
+
 ---@param comment PullsComment
 ---@return string
 local function comment_location(comment)
@@ -33,6 +40,10 @@ end
 ---@field on_select fun(item: AtlasReviewPanelSelection, focus_diff: boolean)
 ---@field on_refresh fun()
 ---@field on_close fun()
+---@field can_comment_action fun(action: AtlasReviewCommentAction, comment: PullsComment): boolean
+---@field on_comment_action fun(action: AtlasReviewCommentAction, comment: PullsComment)
+---@field on_edit_note fun(note: AtlasNote)
+---@field on_delete_note fun(note: AtlasNote)
 
 ---@class AtlasReviewPanelData
 ---@field comments PullsComment[]
@@ -46,6 +57,7 @@ end
 ---@field data AtlasReviewPanelData
 ---@field callbacks AtlasReviewPanelCallbacks
 ---@field expanded_items table<string, boolean>
+---@field expanded_sections table<string, boolean>
 
 ---@param buf integer
 ---@param win integer|nil
@@ -63,6 +75,10 @@ function M.new(buf, win, callbacks)
 		},
 		callbacks = callbacks,
 		expanded_items = {},
+		expanded_sections = {
+			comments = true,
+			notes = false,
+		},
 	}
 end
 
@@ -184,8 +200,18 @@ function M.render(panel, data)
 		end
 	end
 	local comment_icon = icons.general("comment")
-	local note_icon, note_icon_hl = icons.general("pin")
+	local note_icon = icons.general("pin")
 	local pending_icon = icons.pulls_status("inprogress")
+	local comment_action_keys = {
+		reply = key_label("pulls.review.diff.add_comment"),
+		edit = key_label("pulls.review.diff.edit_comment"),
+		delete = key_label("pulls.review.diff.delete"),
+		toggle_resolved = key_label("pulls.review.diff.toggle_resolved"),
+	}
+	local note_action_keys = {
+		edit = key_label("pulls.review.diff.edit_comment"),
+		delete = key_label("pulls.review.diff.delete"),
+	}
 	vim.wo[panel.win].winbar = string.format(
 		" Atlas Review %%=%s Comments: %d   %s Notes: %d   %s Pending: %d ",
 		comment_icon,
@@ -196,55 +222,57 @@ function M.render(panel, data)
 		pending
 	)
 	local sections = {
-		{ title = "Comments", icon = comment_icon, icon_hl = "AtlasLogInfo", items = comments },
-		{ title = "Notes", icon = note_icon, icon_hl = note_icon_hl, items = notes },
+		{ id = "comments", title = "Comments", items = comments },
+		{ id = "notes", title = "Notes", items = notes },
 	}
 	for _, section in ipairs(sections) do
 		if #section.items > 0 then
 			if #lines > 0 then
 				table.insert(lines, "")
 			end
-			local title = string.format("%s %s", section.icon, section.title)
-			local header = string.format("%s (%d)", title, #section.items)
+			local expanded = panel.expanded_sections[section.id] == true
+			local expander, expander_hl = icons.general(expanded and "fold_open" or "fold_closed")
+			local header = string.format("%s %s", expander, section.title)
 			table.insert(lines, header)
+			line_map[#lines] = { section = section.id, tree_key = "section:" .. section.id }
 			table.insert(spans, {
 				line = #lines - 1,
 				start_col = 0,
-				end_col = #section.icon,
-				hl_group = section.icon_hl,
+				end_col = #expander,
+				hl_group = expander_hl,
 			})
-			table.insert(spans, {
-				line = #lines - 1,
-				start_col = #title + 1,
-				end_col = #header,
-				hl_group = "AtlasTextMuted",
-			})
-			for index, item in ipairs(section.items) do
-				local expanded = panel.expanded_items[item.key] == true
-				local block_lines, block_spans, block_map
-				if item.kind == "comment" then
-					block_lines, block_spans, block_map = review_threads.render_compact(
-						item.thread,
-						width,
-						expanded,
-						comment_location(item.thread.comment)
-					)
-				else
-					block_lines, block_spans, block_map = note_renderer.render_list({
-						{
-							target = panel.data.note_target,
-							note = item.note,
-							expanded = expanded,
-						},
-					}, width)
-				end
-				local offset = #lines
-				utils.append_block(lines, spans, { lines = block_lines, highlights = block_spans })
-				for line, entry in pairs(block_map) do
-					line_map[offset + line] = entry
-				end
-				if expanded and index < #section.items then
-					table.insert(lines, "")
+			if expanded then
+				for index, item in ipairs(section.items) do
+					local item_expanded = panel.expanded_items[item.key] == true
+					local block_lines, block_spans, block_map
+					if item.kind == "comment" then
+						block_lines, block_spans, block_map = review_threads.render_compact(
+							item.thread,
+							width,
+							item_expanded,
+							comment_location(item.thread.comment),
+							{
+								action_keys = comment_action_keys,
+								can_action = panel.callbacks.can_comment_action,
+							}
+						)
+					else
+						block_lines, block_spans, block_map = note_renderer.render_list({
+							{
+								target = panel.data.note_target,
+								note = item.note,
+								expanded = item_expanded,
+							},
+						}, width, { action_keys = note_action_keys })
+					end
+					local offset = #lines
+					utils.append_block(lines, spans, { lines = block_lines, highlights = block_spans })
+					for line, entry in pairs(block_map) do
+						line_map[offset + line] = entry
+					end
+					if item_expanded and index < #section.items then
+						table.insert(lines, "")
+					end
 				end
 			end
 		end
@@ -311,10 +339,34 @@ function M.register_keymaps(panel)
 		end
 	end
 	local function toggle_selected()
-		local key = tree_key(selected_entry(panel))
+		local entry = selected_entry(panel)
+		if entry and entry.section then
+			panel.expanded_sections[entry.section] = not panel.expanded_sections[entry.section]
+			M.render(panel)
+			return
+		end
+		local key = tree_key(entry)
 		if key then
 			panel.expanded_items[key] = not panel.expanded_items[key]
 			M.render(panel)
+		end
+	end
+	local function run_action(action)
+		local entry = selected_entry(panel)
+		if entry and entry.note then
+			if action == "edit" then
+				panel.callbacks.on_edit_note(entry.note)
+			elseif action == "delete" then
+				panel.callbacks.on_delete_note(entry.note)
+			end
+			return
+		end
+		local comment = entry and entry.comment or nil
+		if action == "toggle_resolved" and entry then
+			comment = entry.thread_root or comment
+		end
+		if comment and panel.callbacks.can_comment_action(action, comment) then
+			panel.callbacks.on_comment_action(action, comment)
 		end
 	end
 	local entries = {}
@@ -324,8 +376,20 @@ function M.register_keymaps(panel)
 	add_mapping(entries, "pulls.review.explorer.open_file", "Open item in diff", 2, function()
 		show_selected(true)
 	end)
-	add_mapping(entries, { "ui.show_details", "ui.toggle_fold" }, "Expand / collapse", 3, toggle_selected)
-	add_mapping(entries, "ui.toggle_all_folds", "Expand / collapse all", 4, function()
+	add_mapping(entries, "pulls.review.diff.add_comment", "Reply to comment", 3, function()
+		run_action("reply")
+	end)
+	add_mapping(entries, "pulls.review.diff.edit_comment", "Edit comment or note", 4, function()
+		run_action("edit")
+	end)
+	add_mapping(entries, "pulls.review.diff.delete", "Delete comment or note", 5, function()
+		run_action("delete")
+	end)
+	add_mapping(entries, "pulls.review.diff.toggle_resolved", "Resolve / reopen comment", 6, function()
+		run_action("toggle_resolved")
+	end)
+	add_mapping(entries, { "ui.show_details", "ui.toggle_fold" }, "Expand / collapse", 7, toggle_selected)
+	add_mapping(entries, "ui.toggle_all_folds", "Expand / collapse all", 8, function()
 		local comments, notes = panel_items(panel.data)
 		local items = vim.list_extend(comments, notes)
 		local expand = false
@@ -340,8 +404,8 @@ function M.register_keymaps(panel)
 		end
 		M.render(panel)
 	end)
-	add_mapping(entries, "ui.refresh", "Refresh review", 5, panel.callbacks.on_refresh)
-	add_mapping(entries, "ui.close", "Close panel", 6, panel.callbacks.on_close)
+	add_mapping(entries, "ui.refresh", "Refresh review", 9, panel.callbacks.on_refresh)
+	add_mapping(entries, "ui.close", "Close panel", 10, panel.callbacks.on_close)
 	add_mapping(entries, "ui.help", "Toggle help", 0, function()
 		help.toggle({ buffer = panel.buf })
 	end)

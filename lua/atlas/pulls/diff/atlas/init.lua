@@ -189,6 +189,11 @@ local function render_file(session)
 		left = session.left,
 		right = session.right,
 	})
+	if session.layout == "side-by-side" then
+		vim.api.nvim_win_call(session.right.win, function()
+			vim.cmd("syncbind")
+		end)
+	end
 end
 
 ---@param session AtlasNativeDiffSession
@@ -235,6 +240,7 @@ local function configure_content_window(session, win)
 	if not vim.api.nvim_win_is_valid(win) then
 		return
 	end
+	local side_by_side = session.layout == "side-by-side"
 	local options = vim.wo[win][0]
 	options.colorcolumn = ""
 	options.cursorbind = false
@@ -247,8 +253,8 @@ local function configure_content_window(session, win)
 	options.number = session.number
 	options.relativenumber = session.relativenumber
 	options.spell = false
-	options.diff = false
-	options.scrollbind = false
+	options.diff = side_by_side
+	options.scrollbind = side_by_side
 	options.wrap = false
 	options.winhighlight = ""
 	local file = session.files[session.selected_index]
@@ -857,6 +863,18 @@ local function create_session(open_options, options)
 				on_refresh = function()
 					comments.reload(session)
 					notes.reload(session)
+				end,
+				can_comment_action = function(action, comment)
+					return comments.is_action_available(session, action, comment)
+				end,
+				on_comment_action = function(action, comment)
+					comments.run_action(session, action, comment)
+				end,
+				on_edit_note = function(note)
+					notes.edit(session, note)
+				end,
+				on_delete_note = function(note)
+					notes.delete(session, note)
 				end,
 			}) or nil,
 			reload = open_options.reload,

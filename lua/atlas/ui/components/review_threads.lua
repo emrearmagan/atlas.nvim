@@ -483,24 +483,25 @@ end
 ---@param width integer
 ---@param expanded boolean
 ---@param location string
+---@param opts AtlasReviewThreadRenderOptions|nil
 ---@return string[], AtlasUIHighlight[], table<integer, table>
-function M.render_compact(node, width, expanded, location)
-	local item = build_item(node, {
-		expanded = function()
-			return true
-		end,
-	}, true, nil)
+function M.render_compact(node, width, expanded, location, opts)
+	opts = opts or {}
+	opts.expanded = function()
+		return true
+	end
+	local item = build_item(node, opts, true, nil)
 
 	local comment = node.comment
 	local replies = descendant_count(node)
 	local marker, marker_hl = M.status_marker(comment)
 	local fields = {
 		{ text = location, hl = "Normal" },
+		{ text = utils.relative_time(comment.created_on), hl = "AtlasTextMuted" },
 		{
 			text = replies > 0 and string.format("%d %s", replies, replies == 1 and "reply" or "replies") or "",
 			hl = "AtlasTextMuted",
 		},
-		{ text = utils.relative_time(comment.created_on), hl = "AtlasTextMuted" },
 		{ text = marker, hl = marker_hl },
 	}
 	local metadata, metadata_hl = "", {}
@@ -525,7 +526,7 @@ function M.render_compact(node, width, expanded, location)
 		end
 	end
 
-	local expander, expander_hl = icons.general(expanded and "arrow_up" or "arrow_right")
+	local expander, expander_hl = icons.general(expanded and "fold_open" or "fold_closed")
 	item.icon = expander
 	item.icon_hl = expander_hl
 	item.author = "@" .. author_name(comment.author)

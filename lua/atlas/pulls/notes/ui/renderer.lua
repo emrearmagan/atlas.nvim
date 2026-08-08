@@ -33,12 +33,14 @@ local progress_icon, progress_icon_hl = icons.general("progress")
 
 ---@class AtlasNotesUIListRenderOptions
 ---@field padding_x integer|nil
+---@field action_keys AtlasNotesUIActionKeys|nil
 
 ---@class AtlasNotesUIManagerRenderOptions
 ---@field documents AtlasNotesUIManagerDocument[]
 ---@field width integer
 ---@field target_filter AtlasNoteTarget|nil
 ---@field expanded table<string, boolean>
+---@field action_keys AtlasNotesUIActionKeys|nil
 
 ---@class AtlasNotesUIManagerDocument
 ---@field target AtlasNoteTarget
@@ -118,15 +120,12 @@ function M.render_details(note, target)
 	return lines, spans
 end
 
----@param note AtlasNote
----@param opts AtlasNotesUIRenderOptions
----@return AtlasThreadV2Item
-local function card_item(note, opts)
-	local timestamp = utils.relative_time(note.updated_at or note.created_at)
-	local outdated = opts.outdated and opts.outdated[note.id]
+---@param action_keys AtlasNotesUIActionKeys|nil
+---@return AtlasThreadV2FooterItem[]
+local function note_footer(action_keys)
 	local footer_items = {}
 	for _, action in ipairs({ "edit", "delete" }) do
-		local key = opts.action_keys and opts.action_keys[action]
+		local key = action_keys and action_keys[action]
 		if key then
 			table.insert(footer_items, {
 				text = string.format("%s %s", key, action),
@@ -134,6 +133,15 @@ local function card_item(note, opts)
 			})
 		end
 	end
+	return footer_items
+end
+
+---@param note AtlasNote
+---@param opts AtlasNotesUIRenderOptions
+---@return AtlasThreadV2Item
+local function card_item(note, opts)
+	local timestamp = utils.relative_time(note.updated_at or note.created_at)
+	local outdated = opts.outdated and opts.outdated[note.id]
 	return {
 		icon = note_icon,
 		icon_hl = note_icon_hl,
@@ -142,7 +150,7 @@ local function card_item(note, opts)
 		right_text = outdated and progress_icon or "",
 		content = utils.strip_markup(note.body),
 		children = {},
-		footer_items = footer_items,
+		footer_items = note_footer(opts.action_keys),
 		line_map = { note = note },
 		meta = { type_hl = type_highlight(note.type) },
 	}
@@ -186,8 +194,9 @@ function M.render_cards(items, width, opts)
 end
 
 ---@param item AtlasNotesUIListItem
+---@param opts AtlasNotesUIListRenderOptions
 ---@return AtlasThreadV2Item
-local function list_item(item)
+local function list_item(item, opts)
 	local note = item.note
 	local content = utils.strip_markup(note.body)
 	if content == "" then
@@ -217,7 +226,7 @@ local function list_item(item)
 		add_metadata(progress_icon, progress_icon_hl)
 	end
 
-	local expander, expander_hl = icons.general(item.expanded and "arrow_up" or "arrow_right")
+	local expander, expander_hl = icons.general(item.expanded and "fold_open" or "fold_closed")
 	return {
 		icon = expander,
 		icon_hl = expander_hl,
@@ -226,7 +235,7 @@ local function list_item(item)
 		right_text = "",
 		content = item.expanded and content or nil,
 		children = {},
-		footer_items = {},
+		footer_items = item.expanded and note_footer(opts.action_keys) or {},
 		line_map = {
 			target = item.target,
 			note = note,
@@ -248,7 +257,7 @@ function M.render_list(items, width, opts)
 	local lines, spans, line_map = {}, {}, {}
 	for index, item in ipairs(items) do
 		local offset = #lines
-		local item_lines, item_spans, item_map = threadsv2.render({ list_item(item) }, math.max(width, 6), {
+		local item_lines, item_spans, item_map = threadsv2.render({ list_item(item, opts) }, math.max(width, 6), {
 			padding_x = opts.padding_x or 0,
 			author_hl = function(rendered)
 				return rendered.meta.type_hl
@@ -289,7 +298,7 @@ function M.render_manager(opts)
 			local target = notes.target_label(document.target)
 			local key = "target:" .. document.target.ref
 			local expanded = opts.expanded[key] == true
-			local expander = icons.general(expanded and "arrow_up" or "arrow_right")
+			local expander = icons.general(expanded and "fold_open" or "fold_closed")
 			local count = string.format("  %d %s", #items, #items == 1 and "note" or "notes")
 			local header = string.format("%s %s%s", expander, target, count)
 			local target_start = #expander + 1
@@ -320,7 +329,10 @@ function M.render_manager(opts)
 
 			if expanded then
 				local offset = #lines
-				local note_lines, note_spans, note_map = M.render_list(items, opts.width, { padding_x = 4 })
+				local note_lines, note_spans, note_map = M.render_list(items, opts.width, {
+					padding_x = 4,
+					action_keys = opts.action_keys,
+				})
 				utils.append_block(lines, spans, { lines = note_lines, highlights = note_spans })
 				for line, entry in pairs(note_map) do
 					line_map[offset + line] = entry

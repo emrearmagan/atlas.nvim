@@ -130,6 +130,10 @@ unchanged.
 :AtlasNotes
         Open the local-notes manager across all pull requests.
 
+                                                          *:AtlasNotesClearAll*
+:AtlasNotesClearAll
+        Delete all local review notes after confirmation.
+
                                                                  *:AtlasIssues*
 :AtlasIssues [provider]
         Open the issues panel. With an argument (`jira`, `github`, `gitlab`)
