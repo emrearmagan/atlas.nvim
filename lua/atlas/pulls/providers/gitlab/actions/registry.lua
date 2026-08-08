@@ -6,6 +6,7 @@ local multi_select = require("atlas.ui.popups.multi_select")
 local mr_api = require("atlas.pulls.providers.gitlab.api.mergerequests")
 local users_api = require("atlas.pulls.providers.gitlab.api.users")
 local service = require("atlas.providers.gitlab.client").pulls
+local checkout = require("atlas.core.git.checkout")
 
 ---@param ctx GitLabPullsActionContext
 ---@return boolean
@@ -673,7 +674,7 @@ function M.available(ctx)
 		if type(item) == "table" and type(item.label) == "string" and type(item.run) == "function" then
 			table.insert(out, {
 				id = tostring(item.id or item.label),
-				label = item.label,
+				label = icons.general("custom_action") .. "  " .. item.label,
 				is_available = function(action_ctx)
 					if not has_pr(action_ctx) then
 						return false, "No MR selected"
@@ -700,9 +701,15 @@ function M.available(ctx)
 						end)
 					end
 
+					local repo_path = checkout.resolve_repo_path_for_pr(action_ctx.pr, {
+						require_git = false,
+						require_existing = false,
+					})
 					local ok, err = pcall(item.run, action_ctx.pr, {
+						repo_path = repo_path,
 						pr = action_ctx.pr,
 						user = pulls_state.current_user,
+						output = require("atlas.ui.popups.live").create,
 					}, custom_done)
 
 					if not ok then

@@ -61,15 +61,15 @@ end
 ---@return string
 local function type_highlight(note_type)
 	if note_type == "issue" then
-		return select(2, icons.general("error"))
+		return "AtlasLogError"
 	end
 	if note_type == "suggestion" then
-		return select(2, icons.general("warning"))
+		return "AtlasLogWarn"
 	end
 	if note_type == "praise" then
-		return select(2, icons.general("success"))
+		return "AtlasTextPositive"
 	end
-	return select(2, icons.general("info"))
+	return "AtlasLogInfo"
 end
 
 ---@param note_type AtlasNoteType

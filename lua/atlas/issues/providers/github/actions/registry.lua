@@ -498,7 +498,7 @@ function M.available(ctx)
 		if type(item) == "table" and type(item.label) == "string" and type(item.run) == "function" then
 			table.insert(out, {
 				id = tostring(item.id or item.label),
-				label = item.label,
+				label = icons.general("custom_action") .. "  " .. item.label,
 				is_available = function(action_ctx)
 					if not has_issue(action_ctx) then
 						return false, "No issue selected"
@@ -532,6 +532,7 @@ function M.available(ctx)
 					local ok, err = pcall(item.run, action_ctx.issue, {
 						issue = action_ctx.issue,
 						user = issues_state.current_user,
+						output = require("atlas.ui.popups.live").create,
 					}, custom_done)
 
 					if not ok then

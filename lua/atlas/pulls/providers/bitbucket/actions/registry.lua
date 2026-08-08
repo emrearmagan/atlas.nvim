@@ -4,6 +4,7 @@ local pullrequests = require("atlas.pulls.providers.bitbucket.api.pullrequests")
 local users_api = require("atlas.pulls.providers.bitbucket.api.users")
 local repositories = require("atlas.pulls.providers.bitbucket.api.repositories")
 local statusline = require("atlas.ui.statusline")
+local icons = require("atlas.ui.shared.icons")
 local checkout = require("atlas.core.git.checkout")
 local logger = require("atlas.core.logger")
 
@@ -363,7 +364,7 @@ function M.available(ctx)
 		if type(item) == "table" and type(item.label) == "string" and type(item.run) == "function" then
 			table.insert(out, {
 				id = tostring(item.id or item.label),
-				label = item.label,
+				label = icons.general("custom_action") .. "  " .. item.label,
 				is_available = function(action_ctx)
 					if not has_pr(action_ctx) then
 						return false, "No PR selected"
@@ -402,6 +403,7 @@ function M.available(ctx)
 						repo_path = repo_path,
 						pr = action_ctx.pr,
 						user = pulls_state.current_user,
+						output = require("atlas.ui.popups.live").create,
 					}, custom_done)
 
 					if not ok then

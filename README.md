@@ -657,8 +657,8 @@ pulls = {
   },
   custom_actions = {
     {
-      id = "open_tmux_window",
-      label = "Open repo in tmux window",
+      id = "show_repo_status",
+      label = "Show repository status",
       confirmation = true,
       ---@param pr PullRequest
       ---@param ctx AtlasPullsCustomActionContext
@@ -669,15 +669,17 @@ pulls = {
           return
         end
 
-        vim.system({ "tmux", "new-window", "-c", ctx.repo_path }, { text = true }, function(res)
-          vim.schedule(function()
-            if res.code ~= 0 then
-              done(false, "Failed to open tmux window")
-              return
-            end
-            done(true, "Opened tmux window")
-          end)
-        end)
+        local output = ctx.output("Repository status")
+        output:write("Checking " .. ctx.repo_path)
+        output:run({ "git", "status", "--short" }, function(code)
+          if code ~= 0 then
+            done(false, "Failed to read repository status")
+            return
+          end
+          done(true, "Repository status loaded")
+        end, {
+          cwd = ctx.repo_path,
+        })
       end,
     },
   },
@@ -698,6 +700,13 @@ issues = {
     },
   },
 },
+```
+
+Use `ctx.output(title)` to show output from a custom action:
+
+```lua
+output:write("Loading...")
+output:run(cmd, on_exit, { cwd = "/repo" })
 ```
 
 </details>

@@ -45,6 +45,7 @@
 ---@field repo_path string|nil
 ---@field pr PullRequest
 ---@field user PullsUser|nil
+---@field output fun(title: string): AtlasLiveOutput
 
 ---@class AtlasPullsCustomAction
 ---@field id string
@@ -66,6 +67,7 @@
 ---@class AtlasIssuesCustomActionContext
 ---@field issue Issue|nil
 ---@field user IssueUser|nil
+---@field output fun(title: string): AtlasLiveOutput
 
 ---@class AtlasIssuesCustomAction
 ---@field id string
