@@ -140,11 +140,8 @@ function M.file(document, opts)
 	vim.api.nvim_buf_clear_namespace(right_buf, namespace, 0, -1)
 	vim.api.nvim_buf_clear_namespace(right_buf, inline_namespace, 0, -1)
 	local hunks = document.changes
-	if not document.binary then
+	if opts.layout == "inline" and not document.binary then
 		for _, hunk in ipairs(hunks) do
-			if hunk.old_count > 0 then
-				highlight_lines(left_buf, hunk.old_start, hunk.old_count, "AtlasDiffRemoveLine")
-			end
 			if hunk.new_count > 0 then
 				highlight_lines(right_buf, hunk.new_start, hunk.new_count, "AtlasDiffAddLine")
 			end
