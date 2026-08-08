@@ -2,7 +2,7 @@ local M = {}
 
 local box = require("atlas.ui.components.box")
 local threads = require("atlas.ui.components.review_threads")
-local utils = require("atlas.ui.shared.utils")
+local virtual_lines = require("atlas.ui.components.virtual_lines")
 
 local namespace = vim.api.nvim_create_namespace("atlas_review_comments")
 
@@ -13,23 +13,13 @@ local namespace = vim.api.nvim_create_namespace("atlas_review_comments")
 ---@field new_path string
 ---@field reaction_options PullsReactionOption[]|nil
 
----@param buf integer
----@return integer
-local function buffer_width(buf)
-	for _, win in ipairs(vim.fn.win_findbuf(buf)) do
-		if vim.api.nvim_win_is_valid(win) then
-			return vim.api.nvim_win_get_width(win)
-		end
-	end
-	return vim.o.columns
-end
-
 ---@param context AtlasCommentRendererContext
 ---@param buf integer
 ---@param list AtlasReviewThreadNode[]
 ---@return [string, string][][]
 function M.thread_lines(context, buf, list)
-	local width = buffer_width(buf)
+	local win = vim.fn.win_findbuf(buf)[1]
+	local width = win and vim.api.nvim_win_get_width(win) or vim.o.columns
 	local lines, spans = threads.render(list, math.max(1, width - 4), {
 		expanded = function(root)
 			return threads.is_thread_expanded(root, context.expanded_threads)
@@ -41,7 +31,7 @@ function M.thread_lines(context, buf, list)
 		width = width,
 		padding_x = 0,
 	})
-	return utils.virtual_lines(rendered.lines, rendered.highlights)
+	return virtual_lines.render(rendered.lines, rendered.highlights)
 end
 
 ---@param buf integer|nil

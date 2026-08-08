@@ -5,7 +5,7 @@ local note_editor = require("atlas.pulls.notes.ui.editor")
 local note_popup = require("atlas.pulls.notes.ui.popup")
 local note_renderer = require("atlas.pulls.notes.ui.renderer")
 local store = require("atlas.pulls.notes")
-local utils = require("atlas.ui.shared.utils")
+local virtual_lines = require("atlas.ui.components.virtual_lines")
 
 local namespace = vim.api.nvim_create_namespace("atlas_diff_notes")
 
@@ -87,9 +87,9 @@ function M.render(session)
 		local lines, spans = note_renderer.render_cards(notes, width, {
 			outdated = outdated,
 		})
-		local virtual_lines = utils.virtual_lines(lines, spans)
+		local rendered_lines = virtual_lines.render(lines, spans)
 		vim.api.nvim_buf_set_extmark(session.right.buf, namespace, line - 1, 0, {
-			virt_lines = virtual_lines,
+			virt_lines = rendered_lines,
 			virt_lines_leftcol = true,
 			number_hl_group = "CursorLineNr",
 			priority = 1080,
@@ -99,7 +99,7 @@ function M.render(session)
 			local target, above =
 				position.opposite_line(document, "RIGHT", line, vim.api.nvim_buf_line_count(session.left.buf))
 			local padding = {}
-			for _ = 1, #virtual_lines do
+			for _ = 1, #rendered_lines do
 				table.insert(padding, { { "", "Normal" } })
 			end
 			vim.api.nvim_buf_set_extmark(session.left.buf, namespace, target - 1, 0, {

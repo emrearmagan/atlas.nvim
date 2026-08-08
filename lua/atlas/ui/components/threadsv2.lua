@@ -13,6 +13,12 @@ local highlights = require("atlas.ui.shared.highlights")
 ---@field hl_group string|nil
 ---@field highlights { start_col: integer, end_col: integer, hl_group: string }[]|nil
 
+---@class AtlasThreadContentBlock
+---@field title string|nil
+---@field right_text string|nil
+---@field lines string[]
+---@field highlights AtlasUIHighlight[]|nil
+
 ---@class AtlasThreadV2Item
 ---@field icon string|nil                  Icon string rendered before author
 ---@field icon_hl string|nil               Highlight group for the icon
@@ -20,7 +26,7 @@ local highlights = require("atlas.ui.shared.highlights")
 ---@field additional string|nil            Extra text between author and timestamp
 ---@field right_text string|nil             Right-aligned text (e.g. timestamp, hash)
 ---@field content string|nil               Body text (may contain newlines)
----@field content_block { title: string|nil, right_text: string|nil, lines: string[], highlights: AtlasUIHighlight[]|nil }|nil Styled lines rendered after the body
+---@field content_block AtlasThreadContentBlock|nil Styled lines rendered after the body
 ---@field footer_items AtlasThreadV2FooterItem[]|nil
 ---@field children AtlasThreadV2Item[]|nil Nested replies
 ---@field meta table|nil                   Arbitrary metadata passed through
@@ -87,6 +93,83 @@ local function span(spans, line, start_col, end_col, hl_group)
 		end_col = end_col,
 		hl_group = hl_group,
 	}
+end
+
+---@param block AtlasThreadContentBlock
+---@param width integer
+---@param prefix string
+---@return { lines: string[], highlights: AtlasUIHighlight[] }
+local function render_content_block(block, width, prefix)
+	local lines, block_highlights = {}, {}
+
+	if block.title then
+		local right_text = block.right_text or ""
+		local gap = right_text ~= ""
+				and math.max(1, width - vim.fn.strdisplaywidth(block.title) - vim.fn.strdisplaywidth(right_text))
+			or 0
+		local line = prefix .. block.title .. string.rep(" ", gap) .. right_text
+		table.insert(lines, line)
+		table.insert(block_highlights, {
+			line = #lines - 1,
+			start_col = 0,
+			end_col = #line,
+			hl_group = "AtlasTextMuted",
+		})
+	end
+
+	local highlights_by_line, backgrounds = {}, {}
+	for _, highlight in ipairs(block.highlights or {}) do
+		local line = highlight.line + 1
+		if highlight.line_hl_group then
+			backgrounds[line] = highlight.line_hl_group
+		else
+			highlights_by_line[line] = highlights_by_line[line] or {}
+			table.insert(highlights_by_line[line], highlight)
+		end
+	end
+
+	for index, source in ipairs(block.lines) do
+		local row = utils.truncate(source, width)
+		local background = backgrounds[index]
+		if background then
+			local padding = width - vim.fn.strdisplaywidth(row)
+			if padding > 0 then
+				row = row .. string.rep(" ", padding)
+			end
+		end
+		local line = prefix .. row
+		table.insert(lines, line)
+		if prefix ~= "" then
+			table.insert(block_highlights, {
+				line = #lines - 1,
+				start_col = 0,
+				end_col = #prefix,
+				hl_group = "AtlasTextMuted",
+			})
+		end
+		if background then
+			table.insert(block_highlights, {
+				line = #lines - 1,
+				start_col = #prefix,
+				end_col = #line,
+				hl_group = background,
+			})
+		end
+		for _, highlight in ipairs(highlights_by_line[index] or {}) do
+			local start_col = math.min(highlight.start_col, #row)
+			local end_col = math.min(highlight.end_col, #row)
+			if end_col > start_col then
+				table.insert(block_highlights, {
+					line = #lines - 1,
+					start_col = #prefix + start_col,
+					end_col = #prefix + end_col,
+					hl_group = highlight.hl_group,
+				})
+			end
+		end
+	end
+
+	return { lines = lines, highlights = block_highlights }
 end
 
 ---@param line_map table<integer, AtlasThreadV2LineMap>
@@ -342,44 +425,19 @@ local function render_content(lines, spans, line_map, item, depth, pfx, opts, wi
 
 	local block = item.content_block
 	if block then
-		if block.title then
-			if #content_lines > 0 then
-				lines[#lines + 1] = body_prefix
-				map_line(line_map, #lines, make_line_map(item, "content", depth))
-				if #body_prefix > 0 then
-					span(spans, #lines - 1, 0, #body_prefix, "AtlasTextMuted")
-				end
-			end
-			local right_text = block.right_text or ""
-			local gap = right_text ~= "" and math.max(1, content_max_dw - #block.title - #right_text) or 0
-			local row = block.title .. string.rep(" ", gap) .. right_text
-			lines[#lines + 1] = body_prefix .. row
-			map_line(line_map, #lines, make_line_map(item, "content", depth))
-			span(spans, #lines - 1, 0, #body_prefix + #row, "AtlasTextMuted")
-		end
-		local highlights_by_line = {}
-		for _, highlight in ipairs(block.highlights or {}) do
-			if highlight.start_col ~= nil then
-				local line = highlight.line + 1
-				highlights_by_line[line] = highlights_by_line[line] or {}
-				table.insert(highlights_by_line[line], highlight)
-			end
-		end
-		for index, source in ipairs(block.lines) do
-			local row = utils.truncate(source, content_max_dw)
-			local full_line = body_prefix .. row
-			lines[#lines + 1] = full_line
+		if block.title and #content_lines > 0 then
+			lines[#lines + 1] = body_prefix
 			map_line(line_map, #lines, make_line_map(item, "content", depth))
 			if #body_prefix > 0 then
 				span(spans, #lines - 1, 0, #body_prefix, "AtlasTextMuted")
 			end
-			for _, highlight in ipairs(highlights_by_line[index] or {}) do
-				local start_col = math.min(highlight.start_col, #row)
-				local end_col = math.min(highlight.end_col, #row)
-				if end_col > start_col then
-					span(spans, #lines - 1, #body_prefix + start_col, #body_prefix + end_col, highlight.hl_group)
-				end
-			end
+		end
+
+		local rendered = render_content_block(block, content_max_dw, body_prefix)
+		local first_line = #lines + 1
+		utils.append_block(lines, spans, rendered)
+		for line = first_line, #lines do
+			map_line(line_map, line, make_line_map(item, "content", depth))
 		end
 	end
 end

@@ -8,6 +8,7 @@ local M = {}
 ---@field anchor_start integer|nil
 ---@field line_numbers integer[]|nil
 ---@field show_line_numbers boolean|nil
+---@field background_hl_group string|nil
 
 ---@param opts AtlasCodePreviewOptions
 ---@return AtlasMarkdownEditorPreview
@@ -32,7 +33,7 @@ function M.render(opts)
 		table.insert(lines, prefix .. source)
 		table.insert(highlights, {
 			line = index - 1,
-			line_hl_group = "AtlasFooterBackground",
+			line_hl_group = opts.background_hl_group or "CursorLine",
 		})
 		table.insert(highlights, {
 			line = index - 1,

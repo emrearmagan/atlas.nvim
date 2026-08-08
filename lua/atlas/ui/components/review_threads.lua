@@ -77,7 +77,7 @@ local function can_action(opts, action, comment)
 end
 
 ---@param comment PullsComment
----@return string|nil, { title: string, right_text: string, lines: string[], highlights: AtlasUIHighlight[]|nil }|nil
+---@return string|nil, AtlasThreadContentBlock|nil
 local function suggestion_content(comment)
 	if not comment.inline then
 		return nil, nil
@@ -106,9 +106,15 @@ local function suggestion_content(comment)
 		lines = lines,
 		start_line = start_line,
 		show_line_numbers = false,
+		background_hl_group = "AtlasDiffChangeLine",
 	})
 	return prose ~= "" and prose or nil,
-		{ title = "Suggestion", right_text = range, lines = preview.lines, highlights = preview.highlights }
+		{
+			title = "Suggestion",
+			right_text = range,
+			lines = preview.lines,
+			highlights = preview.highlights,
+		}
 end
 
 ---@param comment PullsComment
@@ -179,9 +185,11 @@ local function comment_item(comment, opts, is_root)
 		text = "(deleted comment)"
 	else
 		text, content_block = suggestion_content(comment)
-		text = text or utils.strip_markup(comment.content_display or comment.content_raw or "")
+		if not content_block then
+			text = utils.strip_markup(comment.content_display or comment.content_raw or "")
+		end
 	end
-	if text == "" then
+	if text == "" and not content_block then
 		text = "(empty comment)"
 	end
 
