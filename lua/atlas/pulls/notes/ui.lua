@@ -4,6 +4,7 @@ local keymaps = require("atlas.pulls.notes.ui.keymaps")
 local notes = require("atlas.pulls.notes")
 local notify = require("atlas.core.notify")
 local renderer = require("atlas.pulls.notes.ui.renderer")
+local resolver = require("atlas.core.keymaps")
 
 local M = {}
 
@@ -31,6 +32,13 @@ local state = {
 	expanded = {},
 }
 
+---@param action AtlasKeymapActionId
+---@return string|nil
+local function key_label(action)
+	local keys = resolver.resolve(action)
+	return keys and table.concat(keys, " / ") or nil
+end
+
 ---@return boolean
 local function valid_buffer()
 	return state.buf ~= nil and vim.api.nvim_buf_is_valid(state.buf)
@@ -56,6 +64,10 @@ local function render()
 		width = valid_window() and vim.api.nvim_win_get_width(state.win) or vim.o.columns,
 		target_filter = state.target_filter,
 		expanded = state.expanded,
+		action_keys = {
+			edit = key_label("pulls.review.diff.edit_comment"),
+			delete = key_label("pulls.review.diff.delete"),
+		},
 	})
 	state.line_map = line_map
 	if valid_window() then
@@ -196,6 +208,24 @@ function M.open(opts)
 	vim.api.nvim_set_option_value("scrollbind", false, { win = state.win })
 	vim.api.nvim_set_option_value("cursorbind", false, { win = state.win })
 	refresh()
+end
+
+function M.clear_all()
+	vim.ui.input({ prompt = "Delete all local review notes? [y/N]: " }, function(answer)
+		answer = vim.trim(tostring(answer or "")):lower()
+		if answer ~= "y" and answer ~= "yes" then
+			return
+		end
+		local cleared, err = notes.clear_all()
+		if not cleared then
+			notify.error(err or "Unable to delete local notes")
+			return
+		end
+		state.documents = {}
+		state.expanded = {}
+		render()
+		notify.info("Local review notes deleted")
+	end)
 end
 
 return M
