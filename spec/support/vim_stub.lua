@@ -43,6 +43,35 @@ _G.vim = {
 		end,
 	},
 
+	-- vim.tbl_extend(behavior, ...) -> shallow merge honoring "keep"/"force"/"error"
+	tbl_extend = function(behavior, ...)
+		assert(
+			behavior == "keep" or behavior == "force" or behavior == "error",
+			"vim.tbl_extend: unsupported behavior " .. tostring(behavior)
+		)
+		local out = {}
+		for index = 1, select("#", ...) do
+			for k, v in pairs(select(index, ...) or {}) do
+				if out[k] == nil then
+					out[k] = v
+				elseif behavior == "force" then
+					out[k] = v
+				elseif behavior == "error" then
+					error("vim.tbl_extend: key found in more than one map: " .. tostring(k))
+				end
+			end
+		end
+		return out
+	end,
+
+	-- vim.list_extend(dst, src) -> append src onto dst in place
+	list_extend = function(dst, src)
+		for _, v in ipairs(src or {}) do
+			table.insert(dst, v)
+		end
+		return dst
+	end,
+
 	-- vim.tbl_keys(t) -> list of the table's keys
 	tbl_keys = function(t)
 		local keys = {}

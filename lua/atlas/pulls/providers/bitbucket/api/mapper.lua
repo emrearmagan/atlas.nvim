@@ -384,10 +384,11 @@ function M.to_comment(result)
 	local links = as_table(entry.links) or {}
 	local parent = as_table(entry.parent)
 	local resolution = as_table(entry.resolution)
+	local outdated = type(entry.inline) == "table" and entry.inline.outdated == true
 	local state = entry.deleted == true and "DELETED"
 		or (entry.pending == true and "PENDING")
 		or (resolution ~= nil and "RESOLVED")
-		or (type(entry.inline) == "table" and entry.inline.outdated == true and "OUTDATED")
+		or (outdated and "OUTDATED")
 		or nil
 
 	return {
@@ -399,6 +400,7 @@ function M.to_comment(result)
 		inline = comment_inline(entry.inline),
 		is_task = nil,
 		state = state,
+		outdated = outdated,
 		url = tostring((as_table(links.self) or {}).href or ""),
 		html_url = tostring((as_table(links.html) or {}).href or ""),
 		_raw = entry,

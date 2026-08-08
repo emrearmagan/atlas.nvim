@@ -657,8 +657,8 @@ pulls = {
   },
   custom_actions = {
     {
-      id = "open_tmux_window",
-      label = "Open repo in tmux window",
+      id = "show_repo_status",
+      label = "Show repository status",
       confirmation = true,
       ---@param pr PullRequest
       ---@param ctx AtlasPullsCustomActionContext
@@ -669,15 +669,17 @@ pulls = {
           return
         end
 
-        vim.system({ "tmux", "new-window", "-c", ctx.repo_path }, { text = true }, function(res)
-          vim.schedule(function()
-            if res.code ~= 0 then
-              done(false, "Failed to open tmux window")
-              return
-            end
-            done(true, "Opened tmux window")
-          end)
-        end)
+        local output = ctx.output("Repository status")
+        output:write("Checking " .. ctx.repo_path)
+        output:run({ "git", "status", "--short" }, function(code)
+          if code ~= 0 then
+            done(false, "Failed to read repository status")
+            return
+          end
+          done(true, "Repository status loaded")
+        end, {
+          cwd = ctx.repo_path,
+        })
       end,
     },
   },
@@ -698,6 +700,13 @@ issues = {
     },
   },
 },
+```
+
+Use `ctx.output(title)` to show output from a custom action:
+
+```lua
+output:write("Loading...")
+output:run(cmd, on_exit, { cwd = "/repo" })
 ```
 
 </details>
@@ -721,6 +730,7 @@ keymaps = {
     previous_item = "k",
     first_item = "gg",
     last_item = "G",
+    submit = "<C-s>",
     help = "g?", -- { "g?", "<leader>?" } would add aliases
     close = "q", -- false would disable it
     toggle_panel = "p",
@@ -752,39 +762,46 @@ keymaps = {
   pulls = {
     open_diff = "gd",
     checkout = "gc",
+    edit_title = "T",
     review = {
       toggle_approval = "ga",
       request_changes = "gr",
       submit_review = "gs",
-      open_file = "<CR>",
-      toggle_explorer_grouping = "T",
-      toggle_layout = "t",
-      toggle_compact = "u",
-      next_hunk = "]h",
-      previous_hunk = "[h",
-      next_file = { "]f", "<Tab>" },
-      previous_file = { "[f", "<S-Tab>" },
-      toggle_file_reviewed = "-",
-      toggle_commits = "gC",
-      toggle_review_panel = "gR",
-      next_comment = "]c",
-      previous_comment = "[c",
-      next_note = "]n",
-      previous_note = "[n",
-      view_thread = "K",
-      edit_comment = "e",
-      add_task = "T",
-      add_comment = "c",
-      submit_comment = "C",
-      add_suggestion = "s",
-      submit_suggestion = "S",
-      delete_comment = "dd",
-      add_note = "n",
-      toggle_resolved = "x",
+      explorer = {
+        focus_file = "<CR>",
+        open_file = "l",
+        next_file = { "]f", "<Tab>" },
+        previous_file = { "[f", "<S-Tab>" },
+        toggle_grouping = "T",
+        toggle_file_reviewed = "-",
+        toggle_commits = "gC",
+      },
+      diff = {
+        toggle_layout = "t",
+        toggle_compact = "u",
+        next_hunk = "]h",
+        previous_hunk = "[h",
+        toggle_review_panel = "gR",
+        next_comment = "]c",
+        previous_comment = "[c",
+        next_note = "]n",
+        previous_note = "[n",
+        add_comment = "c",
+        submit_comment = "C",
+        add_suggestion = "s",
+        submit_suggestion = "S",
+        edit_comment = "e",
+        delete = "dd",
+        add_note = "<leader>n",
+        add_task = "T",
+        toggle_resolved = "x",
+      },
     },
-    filter_status_open = "gpo",
-    filter_status_merged = "gpm",
-    filter_status_declined = "gpd",
+    filters = {
+      open = "gpo",
+      merged = "gpm",
+      declined = "gpd",
+    },
   },
 },
 ```
@@ -813,6 +830,7 @@ Thanks go to these wonderful people ([emoji key](https://allcontributors.org/emo
     </tr>
     <tr>
       <td align="center" valign="top" width="14.28%"><a href="https://nuagir.com"><img src="https://avatars.githubusercontent.com/u/35815402?v=4?s=100" width="100px;" alt="Jean-Frederic Mainville"/><br /><sub><b>Jean-Frederic Mainville</b></sub></a><br /><a href="#code-jfmainville" title="Code">💻</a></td>
+      <td align="center" valign="top" width="14.28%"><a href="https://github.com/23andreas"><img src="https://avatars.githubusercontent.com/u/12485755?v=4?s=100" width="100px;" alt="23andreas"/><br /><sub><b>23andreas</b></sub></a><br /><a href="#code-23andreas" title="Code">💻</a></td>
     </tr>
   </tbody>
 </table>

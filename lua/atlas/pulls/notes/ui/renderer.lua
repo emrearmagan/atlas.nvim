@@ -15,8 +15,12 @@ local progress_icon, progress_icon_hl = icons.general("progress")
 ---@field note AtlasNote|nil
 ---@field tree_key string|nil
 
+---@class AtlasNotesUIActionKeys
+---@field edit? string
+---@field delete? string
+
 ---@class AtlasNotesUIRenderOptions
----@field actions boolean|nil
+---@field action_keys AtlasNotesUIActionKeys|nil
 ---@field boxed boolean|nil
 ---@field padding_x integer|nil
 ---@field outdated table<string, boolean>|nil
@@ -57,15 +61,15 @@ end
 ---@return string
 local function type_highlight(note_type)
 	if note_type == "issue" then
-		return select(2, icons.general("error"))
+		return "AtlasLogError"
 	end
 	if note_type == "suggestion" then
-		return select(2, icons.general("warning"))
+		return "AtlasLogWarn"
 	end
 	if note_type == "praise" then
-		return select(2, icons.general("success"))
+		return "AtlasTextPositive"
 	end
-	return select(2, icons.general("info"))
+	return "AtlasLogInfo"
 end
 
 ---@param note_type AtlasNoteType
@@ -120,6 +124,16 @@ end
 local function card_item(note, opts)
 	local timestamp = utils.relative_time(note.updated_at or note.created_at)
 	local outdated = opts.outdated and opts.outdated[note.id]
+	local footer_items = {}
+	for _, action in ipairs({ "edit", "delete" }) do
+		local key = opts.action_keys and opts.action_keys[action]
+		if key then
+			table.insert(footer_items, {
+				text = string.format("%s %s", key, action),
+				hl_group = "AtlasTextMuted",
+			})
+		end
+	end
 	return {
 		icon = note_icon,
 		icon_hl = note_icon_hl,
@@ -128,7 +142,7 @@ local function card_item(note, opts)
 		right_text = outdated and progress_icon or "",
 		content = utils.strip_markup(note.body),
 		children = {},
-		footer_items = opts.actions and { "e edit", "d delete" } or {},
+		footer_items = footer_items,
 		line_map = { note = note },
 		meta = { type_hl = type_highlight(note.type) },
 	}

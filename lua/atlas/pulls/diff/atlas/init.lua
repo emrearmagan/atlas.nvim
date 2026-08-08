@@ -665,6 +665,7 @@ local function toggle_review_panel(session)
 	statusline.attach(panel.win)
 	reflow_review_panel(session)
 	review_panel.render(panel)
+	vim.api.nvim_set_current_win(panel.win)
 end
 
 ---@param session AtlasNativeDiffSession
@@ -676,13 +677,17 @@ local function toggle_commits(session)
 	if not session.panel.win or not vim.api.nvim_win_is_valid(session.panel.win) then
 		session.commits_visible = true
 		toggle_panel(session)
-		return
-	end
-	session.commits_visible = not session.commits_visible
-	if not session.commits_visible then
-		close_commits_panel(session)
 	else
-		open_commits_panel(session)
+		session.commits_visible = not session.commits_visible
+		if not session.commits_visible then
+			close_commits_panel(session)
+		else
+			open_commits_panel(session)
+		end
+	end
+	local win = session.commits_panel.win
+	if win and vim.api.nvim_win_is_valid(win) then
+		vim.api.nvim_set_current_win(win)
 	end
 end
 
@@ -722,8 +727,11 @@ local function register_keymaps(session)
 		toggle_review_panel = function()
 			toggle_review_panel(session)
 		end,
-		select_file = function(index)
+		select_file = function(index, focus_diff)
 			select_file(session, index)
+			if focus_diff and session.right.win and vim.api.nvim_win_is_valid(session.right.win) then
+				vim.api.nvim_set_current_win(session.right.win)
+			end
 		end,
 		show_commit = function()
 			commits.show_details(session)

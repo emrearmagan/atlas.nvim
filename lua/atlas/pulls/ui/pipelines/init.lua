@@ -101,7 +101,11 @@ local function current_selection(session)
 	if not valid_win(session.pipeline_win) then
 		return nil
 	end
-	return session.line_map[vim.api.nvim_win_get_cursor(session.pipeline_win)[1]]
+	local selection = session.line_map[vim.api.nvim_win_get_cursor(session.pipeline_win)[1]]
+	if not selection or not selection.pipeline then
+		return nil
+	end
+	return selection
 end
 
 ---@param url string|nil

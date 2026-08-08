@@ -2,6 +2,7 @@ local M = {}
 
 local logger = require("atlas.core.logger")
 local table_view = require("atlas.ui.components.table_tree")
+local utils = require("atlas.ui.shared.utils")
 local ns = vim.api.nvim_create_namespace("atlas.logs")
 
 local level_hl = {
@@ -12,11 +13,13 @@ local level_hl = {
 }
 
 local LOGS_BUFFER_NAME = "atlas://logs"
-local LOGS_RENDER_WIDTH = 10000
+local LOGS_WINBAR = " Atlas Logs %=%#AtlasTextMuted#↵ Toggle details   R Refresh   q Close %*"
 local REFRESH_INTERVAL_MS = 2000
 local logs_buf = nil
 local logs_win = nil
 local refresh_timer = nil
+local line_map = {}
+local expanded_row = nil
 
 ---@param line string
 ---@return table
@@ -80,12 +83,16 @@ local function refresh_buffer()
 
 	local lines = logger.read_lines()
 	local rows = {}
-	for _, line in ipairs(lines) do
-		table.insert(rows, parse_log_line(tostring(line or "")))
+	for index, line in ipairs(lines) do
+		local raw = tostring(line or "")
+		local row = parse_log_line(raw)
+		row._log_index = index
+		row.display_message = (index == expanded_row and "▾ " or "▸ ") .. row.message
+		table.insert(rows, row)
 	end
 	if #rows == 0 then
 		rows = {
-			{ timestamp = "", level = "", message = "(no logs yet)", context = "" },
+			{ timestamp = "", level = "", message = "(no logs yet)", display_message = "(no logs yet)", context = "" },
 		}
 	end
 
@@ -94,15 +101,15 @@ local function refresh_buffer()
 		width = vim.api.nvim_win_get_width(logs_win)
 	end
 
-	local rendered_lines, _, spans = table_view.render({
-		width = math.max(width, LOGS_RENDER_WIDTH),
+	local rendered_lines, rendered_line_map, spans = table_view.render({
+		width = width,
 		margin = 0,
 		fill = false,
+		show_header = false,
 		columns = {
-			{ key = "timestamp", name = "Timestamp", min_width = 19, can_grow = false, header_hl = "Normal" },
+			{ key = "timestamp", name = "Time", min_width = 19, can_grow = false, header_hl = "Normal" },
 			{ key = "level", name = "Level", min_width = 7, can_grow = false, header_hl = "Normal" },
-			{ key = "message", name = "Message", min_width = 24, header_hl = "Normal" },
-			{ key = "context", name = "Context", min_width = 20, header_hl = "Normal" },
+			{ key = "display_message", name = "Message", min_width = 24, header_hl = "Normal" },
 		},
 		rows = rows,
 		cell_hl = function(row, col)
@@ -113,8 +120,35 @@ local function refresh_buffer()
 		end,
 	})
 
+	local final_lines = {}
+	local final_line_map = {}
+	local translated_lines = {}
+	for rendered_line, text in ipairs(rendered_lines) do
+		translated_lines[rendered_line - 1] = #final_lines
+		table.insert(final_lines, text)
+
+		local row = rendered_line_map[rendered_line]
+		if row ~= nil then
+			final_line_map[#final_lines] = row
+		end
+		if row ~= nil and row._log_index == expanded_row then
+			local content = row.context ~= "" and row.context or row.message
+			for _, chunk in ipairs(utils.wrap_line(content, math.max(width - 4, 1))) do
+				table.insert(final_lines, "  " .. chunk)
+				final_line_map[#final_lines] = row
+			end
+			table.insert(final_lines, "")
+			final_line_map[#final_lines] = row
+		end
+	end
+
+	for _, span in ipairs(spans or {}) do
+		span.line = translated_lines[span.line] or span.line
+	end
+	line_map = final_line_map
+
 	vim.api.nvim_set_option_value("modifiable", true, { buf = logs_buf })
-	vim.api.nvim_buf_set_lines(logs_buf, 0, -1, false, rendered_lines)
+	vim.api.nvim_buf_set_lines(logs_buf, 0, -1, false, final_lines)
 	vim.api.nvim_set_option_value("modifiable", false, { buf = logs_buf })
 
 	vim.api.nvim_buf_clear_namespace(logs_buf, ns, 0, -1)
@@ -124,6 +158,29 @@ local function refresh_buffer()
 			end_col = span.end_col,
 			hl_group = span.hl_group,
 		})
+	end
+end
+
+local function toggle_details()
+	local row = line_map[vim.api.nvim_win_get_cursor(0)[1]]
+	if row == nil or row._log_index == nil then
+		return
+	end
+
+	if expanded_row == row._log_index then
+		expanded_row = nil
+	else
+		expanded_row = row._log_index
+	end
+	refresh_buffer()
+	local target_line = nil
+	for buffer_line, mapped_row in pairs(line_map) do
+		if mapped_row._log_index == row._log_index and (target_line == nil or buffer_line < target_line) then
+			target_line = buffer_line
+		end
+	end
+	if target_line ~= nil then
+		vim.api.nvim_win_set_cursor(0, { target_line, 0 })
 	end
 end
 
@@ -194,6 +251,7 @@ function M.open()
 	vim.api.nvim_set_option_value("wrap", false, { win = logs_win })
 	vim.api.nvim_set_option_value("cursorline", true, { win = logs_win })
 	vim.api.nvim_set_option_value("winfixheight", true, { win = logs_win })
+	vim.api.nvim_set_option_value("winbar", LOGS_WINBAR, { win = logs_win })
 	pcall(vim.api.nvim_win_set_height, logs_win, 12)
 
 	local opts = { buffer = buf, silent = true, nowait = true }
@@ -203,6 +261,7 @@ function M.open()
 	vim.keymap.set("n", "R", function()
 		refresh_buffer()
 	end, opts)
+	vim.keymap.set("n", "<CR>", toggle_details, opts)
 
 	refresh_buffer()
 	move_cursor_to_last_line()

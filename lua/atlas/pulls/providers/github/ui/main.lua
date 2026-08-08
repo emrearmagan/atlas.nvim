@@ -234,7 +234,7 @@ local function compact_rows(groups)
 			table.insert(rows, {
 				kind = "meta",
 				pr_icon = "",
-				repo_pr = string.format("%s %s", REPO_ICON, repo_label),
+				repo_pr = repo_label,
 				conversation = "",
 				ci = "",
 				ci_hl = "",

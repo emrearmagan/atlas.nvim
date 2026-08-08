@@ -8,6 +8,11 @@ local highlights = require("atlas.ui.shared.highlights")
 
 ---@alias AtlasThreadV2Mode "tree" | "linked"
 
+---@class AtlasThreadV2FooterItem
+---@field text string
+---@field hl_group string|nil
+---@field highlights { start_col: integer, end_col: integer, hl_group: string }[]|nil
+
 ---@class AtlasThreadV2Item
 ---@field icon string|nil                  Icon string rendered before author
 ---@field icon_hl string|nil               Highlight group for the icon
@@ -16,8 +21,7 @@ local highlights = require("atlas.ui.shared.highlights")
 ---@field right_text string|nil             Right-aligned text (e.g. timestamp, hash)
 ---@field content string|nil               Body text (may contain newlines)
 ---@field content_block { lines: string[], highlights: AtlasUIHighlight[]|nil }|nil Styled lines rendered after the body
----@field footer_items string[]|nil        Action labels shown in the footer row
----@field footer_highlights { start_col: integer, end_col: integer, hl_group: string }[]|nil
+---@field footer_items AtlasThreadV2FooterItem[]|nil
 ---@field children AtlasThreadV2Item[]|nil Nested replies
 ---@field meta table|nil                   Arbitrary metadata passed through
 ---@field line_map table|nil               Extra fields merged into every line-map entry
@@ -27,6 +31,7 @@ local highlights = require("atlas.ui.shared.highlights")
 ---@field mode AtlasThreadV2Mode|nil                                                           Rendering mode (default "tree")
 ---@field separator string|nil                                                                 Character for root separators (default "─")
 ---@field content_max_lines integer|nil                                                        Max visible content lines per item (nil = unlimited). Truncated with ".."
+---@field content_prefix string|nil                                                           Prefix placed before root content after padding
 ---@field author_hl? fun(item: AtlasThreadV2Item, author: string): string|nil                   Returns hl group for author
 ---@field additional_hl? fun(item: AtlasThreadV2Item, additional: string): string|table[]|nil    Returns a group or highlighted segments
 ---@field content_hl? fun(item: AtlasThreadV2Item, row: string, row_index: integer): table[]|nil Returns segments for content
@@ -286,10 +291,15 @@ local function render_content(lines, spans, line_map, item, depth, pfx, opts, wi
 	local content_lines = item.content ~= nil and utils.sanitize_lines(tostring(item.content)) or {}
 	local max = opts.content_max_lines
 	local truncated = type(max) == "number" and max > 0 and #content_lines > max
+	local body_prefix = pfx.body_prefix
+	if depth == 0 and opts.content_prefix then
+		body_prefix = pfx.pad .. opts.content_prefix
+	end
+
 	local visible_count = truncated and max or #content_lines
 
 	-- Available width for content text (after prefix)
-	local prefix_dw = vim.api.nvim_strwidth(pfx.body_prefix)
+	local prefix_dw = vim.api.nvim_strwidth(body_prefix)
 	local padding_x = tonumber(opts.padding_x) or 2
 	local content_max_dw = width - prefix_dw - padding_x
 	if content_max_dw < 10 then
@@ -301,24 +311,18 @@ local function render_content(lines, spans, line_map, item, depth, pfx, opts, wi
 		local row = content_lines[src_index]
 		for _, wrap_row in ipairs(utils.wrap_line(row, content_max_dw)) do
 			row_index = row_index + 1
-			local full_line = pfx.body_prefix .. wrap_row
+			local full_line = body_prefix .. wrap_row
 			lines[#lines + 1] = full_line
 			map_line(line_map, #lines, make_line_map(item, "content", depth))
 
-			if #pfx.body_prefix > 0 then
-				span(spans, #lines - 1, 0, #pfx.body_prefix, "AtlasTextMuted")
+			if #body_prefix > 0 then
+				span(spans, #lines - 1, 0, #body_prefix, "AtlasTextMuted")
 			end
 
 			local segments = (opts.content_hl or noop_hl)(item, wrap_row, row_index)
 			if segments then
 				for _, seg in ipairs(segments) do
-					span(
-						spans,
-						#lines - 1,
-						#pfx.body_prefix + seg.start_col,
-						#pfx.body_prefix + seg.end_col,
-						seg.hl_group
-					)
+					span(spans, #lines - 1, #body_prefix + seg.start_col, #body_prefix + seg.end_col, seg.hl_group)
 				end
 			end
 		end
@@ -326,14 +330,14 @@ local function render_content(lines, spans, line_map, item, depth, pfx, opts, wi
 
 	-- Ellipsis indicator when content was truncated
 	if truncated then
-		local full_line = pfx.body_prefix .. ".."
+		local full_line = body_prefix .. ".."
 		lines[#lines + 1] = full_line
 		map_line(line_map, #lines, make_line_map(item, "content_truncated", depth))
 
-		if #pfx.body_prefix > 0 then
-			span(spans, #lines - 1, 0, #pfx.body_prefix, "AtlasTextMuted")
+		if #body_prefix > 0 then
+			span(spans, #lines - 1, 0, #body_prefix, "AtlasTextMuted")
 		end
-		span(spans, #lines - 1, #pfx.body_prefix, #full_line, "AtlasTextMuted")
+		span(spans, #lines - 1, #body_prefix, #full_line, "AtlasTextMuted")
 	end
 
 	local block = item.content_block
@@ -348,23 +352,17 @@ local function render_content(lines, spans, line_map, item, depth, pfx, opts, wi
 		end
 		for index, source in ipairs(block.lines) do
 			local row = utils.truncate(source, content_max_dw)
-			local full_line = pfx.body_prefix .. row
+			local full_line = body_prefix .. row
 			lines[#lines + 1] = full_line
 			map_line(line_map, #lines, make_line_map(item, "content", depth))
-			if #pfx.body_prefix > 0 then
-				span(spans, #lines - 1, 0, #pfx.body_prefix, "AtlasTextMuted")
+			if #body_prefix > 0 then
+				span(spans, #lines - 1, 0, #body_prefix, "AtlasTextMuted")
 			end
 			for _, highlight in ipairs(highlights_by_line[index] or {}) do
 				local start_col = math.min(highlight.start_col, #row)
 				local end_col = math.min(highlight.end_col, #row)
 				if end_col > start_col then
-					span(
-						spans,
-						#lines - 1,
-						#pfx.body_prefix + start_col,
-						#pfx.body_prefix + end_col,
-						highlight.hl_group
-					)
+					span(spans, #lines - 1, #body_prefix + start_col, #body_prefix + end_col, highlight.hl_group)
 				end
 			end
 		end
@@ -391,12 +389,37 @@ local function render_footer(lines, spans, line_map, item, depth, pfx, has_child
 		footer_prefix = pfx.pad .. "│ "
 	end
 
-	local footer_text = table.concat(footer_items, "   ")
+	local footer_text = ""
+	local footer_spans = {}
+	for index, footer_item in ipairs(footer_items) do
+		if index > 1 then
+			footer_text = footer_text .. "   "
+		end
+		local start_col = #footer_text
+		footer_text = footer_text .. footer_item.text
+		if footer_item.highlights and #footer_item.highlights > 0 then
+			for _, highlight in ipairs(footer_item.highlights) do
+				table.insert(footer_spans, {
+					start_col = start_col + highlight.start_col,
+					end_col = start_col + highlight.end_col,
+					hl_group = highlight.hl_group,
+				})
+			end
+		else
+			table.insert(footer_spans, {
+				start_col = start_col,
+				end_col = #footer_text,
+				hl_group = footer_item.hl_group or "AtlasTextMuted",
+			})
+		end
+	end
 	local full_line = footer_prefix .. footer_text
 	lines[#lines + 1] = full_line
 	map_line(line_map, #lines, make_line_map(item, "footer", depth))
-	span(spans, #lines - 1, 0, #full_line, "AtlasTextMuted")
-	for _, highlight in ipairs(item.footer_highlights or {}) do
+	if #footer_prefix > 0 then
+		span(spans, #lines - 1, 0, #footer_prefix, "AtlasTextMuted")
+	end
+	for _, highlight in ipairs(footer_spans) do
 		span(
 			spans,
 			#lines - 1,

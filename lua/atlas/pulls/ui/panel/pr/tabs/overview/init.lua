@@ -366,8 +366,10 @@ local function render_pipelines(_pr, width, lines, spans, line_map)
 		end
 		local state_value = tostring(pipeline.state or "UNKNOWN"):upper()
 		local icon = icons.pulls_status(state_value:lower())
+		local jobs = pipeline.jobs or {}
+		local job_count = string.format("%d %s", #jobs, #jobs == 1 and "job" or "jobs")
 		local row = {
-			label = tostring(pipeline.name or pipeline.key or "Pipeline"),
+			label = string.format("%s  %s", tostring(pipeline.name or pipeline.key or "Pipeline"), job_count),
 			status = string.format("%s %s", icon, status_label(state_value)),
 			status_hl = PIPELINE_HL[state_value] or "AtlasPipelineLinkMuted",
 			kind = "pipeline",
@@ -375,12 +377,13 @@ local function render_pipelines(_pr, width, lines, spans, line_map)
 			url = tostring(pipeline.url or ""),
 			children = {},
 		}
-		for _, job in ipairs(pipeline.jobs or {}) do
+		for _, job in ipairs(jobs) do
 			local job_state = tostring(job.state or "UNKNOWN"):upper()
 			local job_icon = icons.pulls_status(job_state:lower())
 			table.insert(row.children, {
-				label = tostring(job.name or "Job"),
-				status = string.format("%s %s", job_icon, status_label(job_state)),
+				label = string.format("%s %s", job_icon, tostring(job.name or "Job")),
+				status = "",
+				status_icon = job_icon,
 				status_hl = PIPELINE_HL[job_state] or "AtlasPipelineLinkMuted",
 				kind = "pipeline",
 				pipeline = pipeline,
@@ -403,14 +406,27 @@ local function render_pipelines(_pr, width, lines, spans, line_map)
 		rows = rows,
 		tree = {
 			column_key = "label",
-			default_expanded = true,
+			leaf_prefix = "",
+			show_indicator = false,
 			is_expanded = function(row)
 				return state.is_pipeline_expanded(row.pipeline)
 			end,
 		},
-		cell_hl = function(row, column, _context)
+		cell_hl = function(row, column, context)
 			if row.kind == "separator" then
 				return nil
+			end
+			if column.key == "label" and row.status_icon then
+				local start_col = context.text:find(row.status_icon, 1, true)
+				if start_col then
+					return {
+						{
+							start_col = start_col - 1,
+							end_col = start_col - 1 + #row.status_icon,
+							hl_group = row.status_hl,
+						},
+					}
+				end
 			end
 			if column.key == "status" then
 				return row.status_hl

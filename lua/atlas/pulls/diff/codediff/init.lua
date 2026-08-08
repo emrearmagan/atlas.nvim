@@ -6,6 +6,9 @@ local notes = require("atlas.pulls.diff.shared.notes")
 local notify = require("atlas.core.notify")
 local renderer = require("atlas.pulls.diff.shared.comments.renderer")
 local review_keymaps = require("atlas.pulls.diff.shared.keymaps")
+local statusline = require("atlas.pulls.diff.shared.statusline")
+
+local STATUSLINE = "%!v:lua.require'atlas.pulls.diff.codediff'.statusline()"
 
 ---@type table<string, DiffFileStatus>
 local FILE_STATUSES = {
@@ -44,6 +47,7 @@ local READY_RETRIES = 80
 
 ---@class AtlasCodeDiffExplorer
 ---@field bufnr integer|nil
+---@field winid integer|nil
 ---@field current_selection AtlasCodeDiffSelection|nil
 ---@field current_file_path string|nil
 
@@ -207,6 +211,7 @@ local function refresh_scroll(entry, session)
 	local current_is_diff = current == session.left.win or current == session.right.win
 	local leader = current_is_diff and current or session.right.win or session.left.win
 	scroll.refresh(entry.tabpage, leader)
+	vim.cmd("redrawstatus")
 end
 
 ---@param entry AtlasCodeDiffReview
@@ -290,6 +295,16 @@ local function sync(entry)
 		binary = false,
 	}
 	entry.session = session
+	if left_win and vim.api.nvim_win_is_valid(left_win) then
+		vim.api.nvim_set_option_value("statusline", STATUSLINE, { win = left_win, scope = "local" })
+	end
+	if right_win and vim.api.nvim_win_is_valid(right_win) then
+		vim.api.nvim_set_option_value("statusline", STATUSLINE, { win = right_win, scope = "local" })
+	end
+	if explorer.winid and vim.api.nvim_win_is_valid(explorer.winid) then
+		vim.api.nvim_set_option_value("statusline", STATUSLINE, { win = explorer.winid, scope = "local" })
+	end
+	vim.cmd("redrawstatus")
 	session.refresh_ui = function()
 		comments.render(session)
 		notes.render(session)
@@ -436,6 +451,23 @@ function M.detach(tabpage, reason)
 	if attached then
 		events.emit("AtlasReviewDetached", event_data(entry, reason or "viewer_closed"))
 	end
+end
+
+---@return string
+function M.statusline()
+	local entry = sessions[vim.api.nvim_get_current_tabpage()]
+	local session = entry and entry.session
+	if not session then
+		return ""
+	end
+	local pr = entry.context.pr
+	return statusline.render(
+		string.format("#%s %s", tostring(pr.id), tostring(pr.title)),
+		nil,
+		nil,
+		session.review,
+		session.notes
+	)
 end
 
 return M

@@ -65,19 +65,19 @@ local function render_header(opts)
 
 	local left = table.concat(left_parts, "")
 	local actions_text = opts.actions_text or ""
-	local header_line
+	local header_line = left
 	if actions_text ~= "" then
-		local gap = math.max(2, width - vim.api.nvim_strwidth(left) - vim.api.nvim_strwidth(actions_text))
-		header_line = left .. string.rep(" ", gap) .. actions_text
-		local actions_start = #left + gap
-		table.insert(spans, {
-			line = 0,
-			start_col = actions_start,
-			end_col = actions_start + #actions_text,
-			hl_group = actions_hl,
-		})
-	else
-		header_line = left
+		local gap = width - vim.api.nvim_strwidth(left) - vim.api.nvim_strwidth(actions_text)
+		if gap >= 2 then
+			header_line = left .. string.rep(" ", gap) .. actions_text
+			local actions_start = #left + gap
+			table.insert(spans, {
+				line = 0,
+				start_col = actions_start,
+				end_col = actions_start + #actions_text,
+				hl_group = actions_hl,
+			})
+		end
 	end
 
 	return { lines = { header_line }, spans = spans }

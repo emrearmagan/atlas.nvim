@@ -6,8 +6,6 @@ local providers = require("atlas.providers")
 ---@field icon string
 ---@field hl_group string
 
-local progress_icon = "󰦖"
-
 ---@type table
 local ICONS = {
 	fallback = { icon = "•", hl_group = "AtlasTextMuted" },
@@ -26,21 +24,22 @@ local ICONS = {
 		reply = { icon = "", hl_group = "AtlasLogInfo" },
 		edit = { icon = "", hl_group = "AtlasLogInfo" },
 		delete = { icon = "󰆴", hl_group = "AtlasLogError" },
-		progress = { icon = progress_icon, hl_group = "AtlasTextMuted" },
+		progress = { icon = "󰦖", hl_group = "AtlasTextMuted" },
 		success = { icon = "", hl_group = "AtlasTextPositive" },
 		warning = { icon = "", hl_group = "AtlasLogWarn" },
-		error = { icon = "", hl_group = "AtlasLogError" },
-		info = { icon = "", hl_group = "AtlasLogInfo" },
+		error = { icon = "", hl_group = "AtlasLogError" },
+		info = { icon = "", hl_group = "AtlasLogInfo" },
 		bell = { icon = "󰂚", hl_group = "AtlasTextMuted" },
 		bell_no = { icon = "󰂛", hl_group = "AtlasTextMuted" },
 		bell_unread = { icon = "󱅫", hl_group = "AtlasLogInfo" },
-		pin = { icon = "󰐃", hl_group = "AtlasTextWarning" },
+		pin = { icon = "󰐃", hl_group = "AtlasTextNote" },
 		dot = { icon = "●", hl_group = "AtlasTextMuted" },
 		activity_more = { icon = "󰉺", hl_group = "AtlasTextMuted" },
 		star = { icon = "", hl_group = "AtlasTextWarning" },
 		watching = { icon = "", hl_group = "AtlasTextPositive" },
 		arrow_up = { icon = "", hl_group = "AtlasTextMuted" },
 		arrow_right = { icon = "", hl_group = "AtlasTextMuted" },
+		custom_action = { icon = "", hl_group = "AtlasTextMuted" },
 	},
 
 	pulls = {
@@ -51,7 +50,6 @@ local ICONS = {
 		declined_pr = { icon = "", hl_group = "AtlasPRDeclined" },
 		tasks = { icon = "󰘽", hl_group = "AtlasTextWarning" },
 		pipeline = { icon = "󰜎", hl_group = "AtlasTextWarning" },
-		check = { icon = "", hl_group = "AtlasLogInfo" },
 		commit = { icon = "", hl_group = "AtlasTextMuted" },
 		changes = { icon = "󱓉", hl_group = "AtlasTextMuted" },
 		file = { icon = "", hl_group = "AtlasTextMuted" },
@@ -63,7 +61,7 @@ local ICONS = {
 		status = {
 			successful = { icon = "", hl_group = "AtlasTextPositive" },
 			failed = { icon = "", hl_group = "AtlasLogError" },
-			inprogress = { icon = progress_icon, hl_group = "AtlasTextWarning" },
+			inprogress = { icon = "󰦖", hl_group = "AtlasTextWarning" },
 			stopped = { icon = "󰓛", hl_group = "AtlasTextMuted" },
 			unknown = { icon = "", hl_group = "AtlasTextMuted" },
 		},

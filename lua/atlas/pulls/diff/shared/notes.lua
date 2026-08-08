@@ -188,6 +188,38 @@ end
 
 ---@param session AtlasReviewSession
 ---@param buf integer
+---@return boolean
+function M.delete_at_cursor(session, buf)
+	local state = session.notes
+	local items = notes_at_cursor(session, buf)
+	if not state or #items == 0 then
+		return false
+	end
+	if #items > 1 then
+		M.open_at_cursor(session, buf)
+		return true
+	end
+
+	local note = items[1]
+	vim.ui.input({ prompt = "Delete local note? [y/N]: " }, function(answer)
+		answer = vim.trim(tostring(answer or "")):lower()
+		if answer ~= "y" and answer ~= "yes" then
+			return
+		end
+		local deleted, err = store.delete(state.target, note.id)
+		if not deleted then
+			notify(session, "error", err or "Unable to delete local note")
+			return
+		end
+		remove(state, note.id)
+		session.refresh_ui()
+		notify(session, "success", "Local note deleted")
+	end)
+	return true
+end
+
+---@param session AtlasReviewSession
+---@param buf integer
 function M.add_at_cursor(session, buf)
 	local state = session.notes
 	local document = session.document

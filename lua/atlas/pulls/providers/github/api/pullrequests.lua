@@ -20,7 +20,7 @@ query($owner: String!, $repo: String!, $number: Int!) {
       assignees(first: 10) { nodes { login } }
       author { login ... on User { name } }
       headRefName baseRefName headRefOid baseRefOid
-      comments { totalCount }
+		totalCommentsCount
       commits(last: 1) {
         nodes { commit { statusCheckRollup { state } } }
       }
@@ -41,7 +41,7 @@ query($search: String!, $limit: Int!) {
         latestOpinionatedReviews(last: 10) { nodes { state } }
         author { login ... on User { name } }
         headRefName baseRefName headRefOid baseRefOid
-        comments { totalCount }
+		totalCommentsCount
         repository { name nameWithOwner }
         commits(last: 1) {
           nodes { commit { statusCheckRollup { state } } }

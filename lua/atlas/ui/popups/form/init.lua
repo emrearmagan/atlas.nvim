@@ -173,9 +173,11 @@ end
 ---@param name AtlasFormBufferName
 ---@param buf integer
 local function setup_keymaps(state, opts, name, buf)
-	local items = {
-		{
-			key = "<C-s>",
+	local items = {}
+	local submit_keys = keymaps.resolve("ui.submit")
+	if submit_keys then
+		items[#items + 1] = {
+			key = #submit_keys == 1 and submit_keys[1] or submit_keys,
 			mode = { "n", "i" },
 			desc = "Submit",
 			callback = function()
@@ -183,13 +185,13 @@ local function setup_keymaps(state, opts, name, buf)
 				opts.submit()
 			end,
 			opts = { silent = true, nowait = true },
-		},
-		{
-			key = "q",
-			desc = "Close",
-			callback = opts.close,
-			opts = { silent = true, nowait = true },
-		},
+		}
+	end
+	items[#items + 1] = {
+		key = "q",
+		desc = "Close",
+		callback = opts.close,
+		opts = { silent = true, nowait = true },
 	}
 
 	if name == "editor" then
@@ -235,9 +237,14 @@ end
 ---@param opts AtlasFormOpenOpts
 ---@return AtlasStatuslineSegment[]
 local function build_statusline_items(opts)
-	local items = {
-		{ text = "<C-s> submit", hl_group = "AtlasFooterText" },
-	}
+	local items = {}
+	local submit_keys = keymaps.resolve("ui.submit")
+	if submit_keys then
+		items[#items + 1] = {
+			text = string.format("%s submit", table.concat(submit_keys, " / ")),
+			hl_group = "AtlasFooterText",
+		}
+	end
 	for _, keymap in ipairs(opts.keymaps or {}) do
 		local key = type(keymap.key) == "table" and table.concat(keymap.key, " / ") or keymap.key
 		items[#items + 1] = {

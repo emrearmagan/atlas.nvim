@@ -1,5 +1,6 @@
 local M = {}
 
+local keymaps = require("atlas.core.keymaps")
 local threads = require("atlas.ui.components.review_threads")
 local statusline = require("atlas.ui.statusline")
 
@@ -93,17 +94,37 @@ local function apply_spans(buf, spans)
 	end
 end
 
+---@class AtlasReviewThreadPopupKeys
+---@field close? string[]
+---@field reply? string[]
+---@field edit? string[]
+---@field delete? string[]
+---@field toggle_resolved? string[]
+
+---@param keys string[]|nil
+---@return string|nil
+local function key_label(keys)
+	return keys and table.concat(keys, " / ") or nil
+end
+
 ---@param opts AtlasReviewThreadPopupOpts
+---@param keys AtlasReviewThreadPopupKeys
 ---@return string[], AtlasThreadV2Span[], table<integer, AtlasThreadV2LineMap>, integer, integer, integer, integer
-local function popup_content(opts)
+local function popup_content(opts, keys)
 	local available_width = math.max(vim.o.columns - 4, 1)
 	local width = math.min(100, available_width)
-	local toggle_key = opts.toggle_resolved_keys and table.concat(opts.toggle_resolved_keys, " / ") or nil
+	local toggle_key = key_label(keys.toggle_resolved)
 	local lines, spans, line_map = threads.render(opts.nodes, width, {
 		expanded = function()
 			return true
 		end,
 		can_action = opts.can_action,
+		action_keys = {
+			reply = key_label(keys.reply),
+			edit = key_label(keys.edit),
+			delete = key_label(keys.delete),
+			toggle_resolved = toggle_key,
+		},
 		padding_x = 1,
 		toggle_resolved_key = toggle_key,
 		reaction_options = opts.reaction_options,
@@ -125,34 +146,62 @@ function M.open(opts)
 
 	M.close()
 	local source_win = vim.api.nvim_get_current_win()
-
-	local lines, spans, line_map, width, height, row, col = popup_content(opts)
-	if #lines == 0 then
-		return
-	end
+	local keys = {
+		close = keymaps.resolve("ui.close"),
+		reply = keymaps.resolve("pulls.review.diff.add_comment"),
+		edit = keymaps.resolve("pulls.review.diff.edit_comment"),
+		delete = keymaps.resolve("pulls.review.diff.delete"),
+		toggle_resolved = opts.toggle_resolved_keys,
+	}
 
 	local buf = vim.api.nvim_create_buf(false, true)
 	vim.api.nvim_set_option_value("buftype", "nofile", { buf = buf })
 	vim.api.nvim_set_option_value("bufhidden", "wipe", { buf = buf })
 	vim.api.nvim_set_option_value("swapfile", false, { buf = buf })
 	vim.api.nvim_set_option_value("filetype", "atlas-review-thread", { buf = buf })
-	vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-	vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
-	apply_spans(buf, spans)
 
-	local title = opts.title or " Review thread "
-	local win = vim.api.nvim_open_win(buf, true, {
-		relative = "editor",
-		row = row,
-		col = col,
-		width = width,
-		height = height,
-		style = "minimal",
-		border = "rounded",
-		title = title,
-		title_pos = "center",
-		zindex = 40,
-	})
+	---@param win? integer
+	---@return table|nil
+	local function render(win)
+		local cursor = win and vim.api.nvim_win_get_cursor(win) or nil
+		local lines, spans, line_map, width, height, row, col = popup_content(opts, keys)
+		if #lines == 0 then
+			return nil
+		end
+
+		vim.api.nvim_set_option_value("modifiable", true, { buf = buf })
+		vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+		vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
+		apply_spans(buf, spans)
+		state.line_map = line_map
+
+		local config = {
+			relative = "editor",
+			row = row,
+			col = col,
+			width = width,
+			height = height,
+		}
+		if win then
+			vim.api.nvim_win_set_config(win, config)
+			local cursor_row = math.min(cursor[1], #lines)
+			local cursor_col = math.min(cursor[2], #(lines[cursor_row] or ""))
+			vim.api.nvim_win_set_cursor(win, { cursor_row, cursor_col })
+		end
+		return config
+	end
+
+	local config = render()
+	if not config then
+		vim.api.nvim_buf_delete(buf, { force = true })
+		return
+	end
+	config.style = "minimal"
+	config.border = "rounded"
+	config.title = opts.title or " Review thread "
+	config.title_pos = "center"
+	config.zindex = 40
+	local win = vim.api.nvim_open_win(buf, true, config)
 	vim.api.nvim_set_option_value(
 		"winhighlight",
 		"Normal:NormalFloat,NormalNC:NormalFloat,EndOfBuffer:NormalFloat,FloatBorder:FloatBorder",
@@ -170,7 +219,6 @@ function M.open(opts)
 	state.buf = buf
 	state.win = win
 	state.owner = opts.owner
-	state.line_map = line_map
 
 	local function close_current()
 		close(win, buf, opts.owner)
@@ -193,11 +241,18 @@ function M.open(opts)
 	end
 
 	local keymap_opts = { buffer = buf, nowait = true, silent = true }
-	vim.keymap.set("n", "q", close_current, keymap_opts)
+	local function map(keys_to_map, callback)
+		for _, key in ipairs(keys_to_map or {}) do
+			vim.keymap.set("n", key, callback, keymap_opts)
+		end
+	end
+
+	map(keys.close, close_current)
 	vim.keymap.set("n", "<Esc>", close_current, keymap_opts)
-	vim.keymap.set("n", "c", action("reply"), keymap_opts)
-	vim.keymap.set("n", "e", action("edit"), keymap_opts)
-	vim.keymap.set("n", "d", action("delete"), keymap_opts)
+	map(keys.reply, action("reply"))
+	map(keys.edit, action("edit"))
+	map(keys.delete, action("delete"))
+
 	local function toggle_resolved()
 		if not valid_win(win) or state.win ~= win or state.owner ~= opts.owner then
 			return
@@ -210,37 +265,14 @@ function M.open(opts)
 			opts.on_action(action_name, target, close_current)
 		end
 	end
-	for _, key in ipairs(opts.toggle_resolved_keys or {}) do
-		vim.keymap.set("n", key, toggle_resolved, keymap_opts)
-	end
+	map(keys.toggle_resolved, toggle_resolved)
 
 	local resize_autocmd = vim.api.nvim_create_autocmd("VimResized", {
 		callback = function()
 			vim.schedule(function()
-				if state.win ~= win or not valid_win(win) or not valid_buf(buf) then
-					return
+				if state.win == win and valid_win(win) and valid_buf(buf) then
+					render(win)
 				end
-				local cursor = vim.api.nvim_win_get_cursor(win)
-				local updated_lines, updated_spans, updated_map, updated_width, updated_height, updated_row, updated_col =
-					popup_content(opts)
-				if #updated_lines == 0 then
-					return
-				end
-				vim.api.nvim_set_option_value("modifiable", true, { buf = buf })
-				vim.api.nvim_buf_set_lines(buf, 0, -1, false, updated_lines)
-				vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
-				apply_spans(buf, updated_spans)
-				state.line_map = updated_map
-				vim.api.nvim_win_set_config(win, {
-					relative = "editor",
-					width = updated_width,
-					height = updated_height,
-					row = updated_row,
-					col = updated_col,
-				})
-				local cursor_row = math.min(cursor[1], #updated_lines)
-				local cursor_col = math.min(cursor[2], #(updated_lines[cursor_row] or ""))
-				vim.api.nvim_win_set_cursor(win, { cursor_row, cursor_col })
 			end)
 		end,
 	})

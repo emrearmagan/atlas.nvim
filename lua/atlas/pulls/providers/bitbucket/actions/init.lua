@@ -8,6 +8,7 @@ local statusline = require("atlas.ui.statusline")
 ---| "merge"
 ---| "toggle_approval"
 ---| "request_changes"
+---| "edit_title"
 ---| "search"
 
 ---@param id BitbucketActionId|string

@@ -91,6 +91,7 @@ function M.configure(panel)
 	vim.wo[panel.win].wrap = false
 	vim.wo[panel.win].foldenable = false
 	vim.wo[panel.win].winfixheight = true
+	vim.wo[panel.win].winbar = " Atlas Review"
 end
 
 ---@param panel AtlasReviewPanel
@@ -174,8 +175,26 @@ function M.render(panel, data)
 	local width = math.max(6, vim.api.nvim_win_get_width(panel.win))
 	local lines, spans, line_map = {}, {}, {}
 	local comments, notes = panel_items(panel.data)
+	local published, pending = 0, 0
+	for _, comment in ipairs(panel.data.comments) do
+		if comment.state == "PENDING" then
+			pending = pending + 1
+		else
+			published = published + 1
+		end
+	end
 	local comment_icon = icons.general("comment")
 	local note_icon, note_icon_hl = icons.general("pin")
+	local pending_icon = icons.pulls_status("inprogress")
+	vim.wo[panel.win].winbar = string.format(
+		" Atlas Review %%=%s Comments: %d   %s Notes: %d   %s Pending: %d ",
+		comment_icon,
+		published,
+		note_icon,
+		#panel.data.notes,
+		pending_icon,
+		pending
+	)
 	local sections = {
 		{ title = "Comments", icon = comment_icon, icon_hl = "AtlasLogInfo", items = comments },
 		{ title = "Notes", icon = note_icon, icon_hl = note_icon_hl, items = notes },
@@ -258,13 +277,16 @@ function M.render(panel, data)
 end
 
 ---@param entries table[]
----@param action AtlasKeymapActionId
+---@param action AtlasKeymapActionId|AtlasKeymapActionId[]
 ---@param desc string
 ---@param index integer
 ---@param callback fun()
 local function add_mapping(entries, action, desc, index, callback)
-	local keys = resolver.resolve(action)
-	if keys then
+	local keys = {}
+	for _, action_id in ipairs(type(action) == "table" and action or { action }) do
+		vim.list_extend(keys, resolver.resolve(action_id) or {})
+	end
+	if #keys > 0 then
 		table.insert(entries, {
 			key = #keys == 1 and keys[1] or keys,
 			desc = desc,
@@ -288,20 +310,21 @@ function M.register_keymaps(panel)
 			panel.callbacks.on_select({ kind = "comment", comment = entry.thread_root or entry.comment }, focus_diff)
 		end
 	end
-	local entries = {}
-	add_mapping(entries, "pulls.review.open_file", "Show item in diff", 1, function()
-		show_selected(false)
-	end)
-	add_mapping(entries, "pulls.open_diff", "Open item in diff", 2, function()
-		show_selected(true)
-	end)
-	add_mapping(entries, "ui.toggle_fold", "Expand / collapse", 3, function()
+	local function toggle_selected()
 		local key = tree_key(selected_entry(panel))
 		if key then
 			panel.expanded_items[key] = not panel.expanded_items[key]
 			M.render(panel)
 		end
+	end
+	local entries = {}
+	add_mapping(entries, "pulls.review.explorer.focus_file", "Show item in diff", 1, function()
+		show_selected(false)
 	end)
+	add_mapping(entries, "pulls.review.explorer.open_file", "Open item in diff", 2, function()
+		show_selected(true)
+	end)
+	add_mapping(entries, { "ui.show_details", "ui.toggle_fold" }, "Expand / collapse", 3, toggle_selected)
 	add_mapping(entries, "ui.toggle_all_folds", "Expand / collapse all", 4, function()
 		local comments, notes = panel_items(panel.data)
 		local items = vim.list_extend(comments, notes)

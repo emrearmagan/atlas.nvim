@@ -556,7 +556,7 @@ local function open_thread(session, state, buf)
 			nodes = nodes,
 			owner = owner,
 			title = popup_title(nodes),
-			toggle_resolved_keys = require("atlas.core.keymaps").resolve("pulls.review.toggle_resolved"),
+			toggle_resolved_keys = require("atlas.core.keymaps").resolve("pulls.review.diff.toggle_resolved"),
 			reaction_options = comments and comments.reaction_options,
 			can_action = function(action, comment)
 				return can_action(state, action, comment)
@@ -780,7 +780,15 @@ local function register_keymaps(session, state)
 		jump_comment = function(buf, direction)
 			jump_comment(session, state, buf, direction)
 		end,
-		open_in_browser = function()
+		open_in_browser = function(buf)
+			for _, thread in ipairs(threads_at_cursor(session, state, buf)) do
+				local comment = thread.comment
+				local url = tostring(comment.html_url or comment.url or "")
+				if url ~= "" then
+					vim.ui.open(url)
+					return
+				end
+			end
 			if state.pr then
 				require("atlas.pulls.actions").open_in_browser(state.pr)
 			else

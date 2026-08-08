@@ -1,3 +1,4 @@
+local keymaps = require("atlas.core.keymaps")
 local editor = require("atlas.pulls.notes.ui.editor")
 local notes = require("atlas.pulls.notes")
 local renderer = require("atlas.pulls.notes.ui.renderer")
@@ -31,9 +32,17 @@ end
 function M.open(opts)
 	M.close()
 	local source_win = vim.api.nvim_get_current_win()
+	local keys = {
+		close = keymaps.resolve("ui.close"),
+		edit = keymaps.resolve("pulls.review.diff.edit_comment"),
+		delete = keymaps.resolve("pulls.review.diff.delete"),
+	}
 	local width = math.max(1, math.min(100, vim.o.columns - 4))
 	local lines, spans, line_map = renderer.render_cards(opts.notes, width, {
-		actions = true,
+		action_keys = {
+			edit = keys.edit and table.concat(keys.edit, " / ") or nil,
+			delete = keys.delete and table.concat(keys.delete, " / ") or nil,
+		},
 		boxed = false,
 		padding_x = 1,
 		outdated = opts.outdated,
@@ -116,10 +125,15 @@ function M.open(opts)
 	end
 
 	local key_opts = { buffer = buf, silent = true, nowait = true }
-	vim.keymap.set("n", "q", M.close, key_opts)
+	local function map(keys_to_map, callback)
+		for _, key in ipairs(keys_to_map or {}) do
+			vim.keymap.set("n", key, callback, key_opts)
+		end
+	end
+	map(keys.close, M.close)
 	vim.keymap.set("n", "<Esc>", M.close, key_opts)
-	vim.keymap.set("n", "e", edit, key_opts)
-	vim.keymap.set("n", "d", delete, key_opts)
+	map(keys.edit, edit)
+	map(keys.delete, delete)
 end
 
 return M

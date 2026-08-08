@@ -1,4 +1,5 @@
 local actions = require("atlas.pulls.notes.ui.actions")
+local icons = require("atlas.ui.shared.icons")
 local keymaps = require("atlas.pulls.notes.ui.keymaps")
 local notes = require("atlas.pulls.notes")
 local notify = require("atlas.core.notify")
@@ -57,6 +58,25 @@ local function render()
 		expanded = state.expanded,
 	})
 	state.line_map = line_map
+	if valid_window() then
+		local note_count = 0
+		for _, document in ipairs(state.documents) do
+			note_count = note_count + #document.notes
+		end
+		local pull_icon = icons.pulls("pr")
+		local note_icon = icons.general("pin")
+		vim.api.nvim_set_option_value(
+			"winbar",
+			string.format(
+				" Atlas Notes %%=%s Pull requests: %d   %s Notes: %d ",
+				pull_icon,
+				#state.documents,
+				note_icon,
+				note_count
+			),
+			{ win = state.win }
+		)
+	end
 	vim.api.nvim_set_option_value("modifiable", true, { buf = state.buf })
 	vim.api.nvim_buf_set_lines(state.buf, 0, -1, false, lines)
 	vim.api.nvim_set_option_value("modifiable", false, { buf = state.buf })

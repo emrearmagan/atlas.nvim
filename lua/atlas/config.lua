@@ -45,6 +45,7 @@
 ---@field repo_path string|nil
 ---@field pr PullRequest
 ---@field user PullsUser|nil
+---@field output fun(title: string): AtlasLiveOutput
 
 ---@class AtlasPullsCustomAction
 ---@field id string
@@ -66,6 +67,7 @@
 ---@class AtlasIssuesCustomActionContext
 ---@field issue Issue|nil
 ---@field user IssueUser|nil
+---@field output fun(title: string): AtlasLiveOutput
 
 ---@class AtlasIssuesCustomAction
 ---@field id string
@@ -118,6 +120,7 @@ M.options = {
 			previous_item = "k",
 			first_item = "gg",
 			last_item = "G",
+			submit = "<C-s>",
 			help = "g?",
 			close = "q",
 			toggle_panel = "p",
@@ -147,35 +150,41 @@ M.options = {
 				toggle_approval = "ga",
 				request_changes = "gr",
 				submit_review = "gs",
-				open_file = "<CR>",
-				toggle_explorer_grouping = "T",
-				toggle_layout = "t",
-				toggle_compact = "u",
-				next_hunk = "]h",
-				previous_hunk = "[h",
-				next_file = { "]f", "<Tab>" },
-				previous_file = { "[f", "<S-Tab>" },
-				toggle_file_reviewed = "-",
-				toggle_commits = "gC",
-				toggle_review_panel = "gR",
-				next_comment = "]c",
-				previous_comment = "[c",
-				next_note = "]n",
-				previous_note = "[n",
-				view_thread = "K",
-				edit_comment = "e",
-				add_task = "T",
-				add_comment = "c",
-				submit_comment = "C",
-				add_suggestion = "s",
-				submit_suggestion = "S",
-				delete_comment = "dd",
-				add_note = "n",
-				toggle_resolved = "x",
+				explorer = {
+					focus_file = "<CR>",
+					open_file = "l",
+					next_file = { "]f", "<Tab>" },
+					previous_file = { "[f", "<S-Tab>" },
+					toggle_grouping = "T",
+					toggle_file_reviewed = "-",
+					toggle_commits = "gC",
+				},
+				diff = {
+					toggle_layout = "t",
+					toggle_compact = "u",
+					next_hunk = "]h",
+					previous_hunk = "[h",
+					toggle_review_panel = "gR",
+					next_comment = "]c",
+					previous_comment = "[c",
+					next_note = "]n",
+					previous_note = "[n",
+					add_comment = "c",
+					submit_comment = "C",
+					add_suggestion = "s",
+					submit_suggestion = "S",
+					edit_comment = "e",
+					delete = "dd",
+					add_note = "<leader>n",
+					add_task = "T",
+					toggle_resolved = "x",
+				},
 			},
-			filter_status_open = "gpo",
-			filter_status_merged = "gpm",
-			filter_status_declined = "gpd",
+			filters = {
+				open = "gpo",
+				merged = "gpm",
+				declined = "gpd",
+			},
 		},
 		issues = {
 			transition_issue = "gs",

@@ -67,6 +67,9 @@ local function toggle_thread(refresh)
 	if not root then
 		return
 	end
+	if root.is_task or entry.thread_has_replies ~= true then
+		return
+	end
 	state.toggle(root.id)
 	refresh()
 end
@@ -128,7 +131,6 @@ function M.setup(buf, refresh)
 			end,
 		})
 	end
-
 	help.register("Panel", items, { index = 212, buffer = buf })
 end
 
