@@ -32,42 +32,37 @@ local function author_hl(name)
 end
 
 ---@param comment PullsComment
----@return string text, string hl
+---@return string text, string|table[] hl
 function M.status_marker(comment)
 	if comment.state == "DELETED" then
 		return icons.general("delete")
 	end
-	if comment.state == "RESOLVED" then
-		return icons.general("success")
-	end
-	if comment.state == "OUTDATED" then
-		return icons.general("progress")
-	end
 	if comment.state == "PENDING" then
 		return icons.pulls_status("inprogress")
 	end
-	return "", "AtlasTextMuted"
-end
 
----@param label string
----@param root AtlasReviewThreadNode
----@return AtlasThreadV2Item
-local function summary_item(label, root)
-	return {
-		icon = "",
-		author = label,
-		additional = nil,
-		right_text = "",
-		content = nil,
-		children = {},
-		footer_items = {},
-		line_map = {
-			entity_kind = "comment_summary",
-			thread_root = root.comment,
-			comment = root.comment,
-		},
-		meta = { is_summary = true },
-	}
+	local resolved = comment.state == "RESOLVED"
+	local outdated = comment.outdated == true or comment.state == "OUTDATED"
+	if resolved and outdated then
+		local resolved_icon, resolved_hl = icons.general("success")
+		local outdated_icon, outdated_hl = icons.general("progress")
+		return resolved_icon .. " " .. outdated_icon,
+			{
+				{ start_col = 0, end_col = #resolved_icon, hl_group = resolved_hl },
+				{
+					start_col = #resolved_icon + 1,
+					end_col = #resolved_icon + 1 + #outdated_icon,
+					hl_group = outdated_hl,
+				},
+			}
+	end
+	if resolved then
+		return icons.general("success")
+	end
+	if outdated then
+		return icons.general("progress")
+	end
+	return "", "AtlasTextMuted"
 end
 
 ---@param opts AtlasReviewThreadRenderOptions
@@ -97,20 +92,26 @@ local function comment_item(comment, opts, is_root)
 		local additional = timestamp ~= "" and ("TASK  " .. timestamp) or "TASK"
 		local footer_items = {}
 		if opts.toggle_resolved_key and can_action(opts, "toggle_task", comment) then
-			table.insert(
-				footer_items,
-				string.format(
+			table.insert(footer_items, {
+				text = string.format(
 					"%s (%s)",
 					is_resolved and icons.general("refresh") or icons.general("success"),
 					opts.toggle_resolved_key
-				)
-			)
+				),
+				hl_group = "AtlasTextMuted",
+			})
 		end
 		if can_action(opts, "edit", comment) then
-			table.insert(footer_items, string.format("%s (e)", icons.general("edit")))
+			table.insert(footer_items, {
+				text = string.format("%s (e)", icons.general("edit")),
+				hl_group = "AtlasTextMuted",
+			})
 		end
 		if can_action(opts, "delete", comment) then
-			table.insert(footer_items, string.format("%s (d)", icons.general("delete")))
+			table.insert(footer_items, {
+				text = string.format("%s (d)", icons.general("delete")),
+				hl_group = "AtlasTextMuted",
+			})
 		end
 
 		local user_icon, user_icon_hl = icons.general("user")
@@ -143,12 +144,34 @@ local function comment_item(comment, opts, is_root)
 
 	local author = author_name(comment.author)
 	local footer_items = {}
-	local reaction_highlights
 	if opts.show_reactions ~= false then
-		local reactions
-		reactions, reaction_highlights = emojis.format(comment.reactions, opts.reaction_options)
+		local reactions, reaction_highlights = emojis.format(comment.reactions, opts.reaction_options)
 		if reactions ~= "" then
-			table.insert(footer_items, reactions)
+			table.insert(footer_items, { text = reactions, highlights = reaction_highlights })
+		end
+	end
+
+	if is_root and opts.action_keys then
+		local actions = {
+			{ name = "reply", label = "reply" },
+			{ name = "edit", label = "edit" },
+			{ name = "delete", label = "delete" },
+		}
+		for _, action in ipairs(actions) do
+			local key = opts.action_keys[action.name]
+			if key and can_action(opts, action.name, comment) then
+				table.insert(footer_items, {
+					text = string.format("%s %s", key, action.label),
+					hl_group = "AtlasTextMuted",
+				})
+			end
+		end
+		local toggle_key = opts.action_keys.toggle_resolved
+		if toggle_key and can_action(opts, "toggle_resolved", comment) then
+			table.insert(footer_items, {
+				text = string.format("%s %s", toggle_key, is_resolved and "reopen" or "resolve"),
+				hl_group = "AtlasTextMuted",
+			})
 		end
 	end
 
@@ -167,7 +190,6 @@ local function comment_item(comment, opts, is_root)
 		content = text,
 		children = {},
 		footer_items = footer_items,
-		footer_highlights = reaction_highlights,
 		line_map = { comment = comment, entity_kind = "comment" },
 		meta = {
 			comment = comment,
@@ -308,29 +330,19 @@ local function descendant_count(node)
 end
 
 ---@param comment PullsComment
----@return boolean
-local function collapsed_by_default(comment)
-	return not comment.is_task and (comment.state == "RESOLVED" or comment.state == "OUTDATED")
-end
-
----@param comment PullsComment
 ---@param expanded table<string, boolean>
 ---@return boolean
 function M.is_thread_expanded(comment, expanded)
 	if comment.is_task then
 		return true
 	end
-	local value = expanded[M.comment_key(comment)]
-	if value ~= nil then
-		return value
-	end
-	return not collapsed_by_default(comment)
+	return expanded[M.comment_key(comment)] == true
 end
 
 ---@param node AtlasReviewThreadNode
 ---@return boolean
 local function is_collapsible(node)
-	return not node.comment.is_task
+	return not node.comment.is_task and (#node.children > 0 or node.comment.state == "RESOLVED")
 end
 
 ---@param nodes AtlasReviewThreadNode[]
@@ -348,13 +360,8 @@ function M.toggle_all_threads(nodes, expanded)
 		end
 	end
 	for _, node in ipairs(collapsible) do
-		local default_expanded = not collapsed_by_default(node.comment)
 		local key = M.comment_key(node.comment)
-		if should_expand == default_expanded then
-			expanded[key] = nil
-		else
-			expanded[key] = should_expand
-		end
+		expanded[key] = should_expand or nil
 	end
 	return #collapsible > 0, should_expand
 end
@@ -368,15 +375,16 @@ local function build_item(node, opts, is_root, root)
 	root = root or node.comment
 	local item = comment_item(node.comment, opts, is_root)
 	item.line_map.thread_root = root
+	item.line_map.thread_has_replies = not is_root or #node.children > 0
 	if is_root and not node.comment.is_task and not opts.expanded(node.comment) then
-		item.additional = nil
-		item.content = nil
-		item.footer_items = {}
 		item.children = {}
-		if not collapsed_by_default(node.comment) and #node.children > 0 then
+		if node.comment.state == "RESOLVED" then
+			item.content = nil
+			item.footer_items = {}
+		elseif #node.children > 0 then
 			local count = descendant_count(node)
 			local label = string.format("%d %s", count, count == 1 and "reply" or "replies")
-			item.children = { summary_item(label, node) }
+			table.insert(item.footer_items, { text = label, hl_group = "AtlasLogInfo" })
 		end
 		return item
 	end
@@ -387,9 +395,16 @@ local function build_item(node, opts, is_root, root)
 	return item
 end
 
+---@class AtlasReviewThreadActionKeys
+---@field reply? string
+---@field edit? string
+---@field delete? string
+---@field toggle_resolved? string
+
 ---@class AtlasReviewThreadRenderOptions
 ---@field expanded? fun(root: PullsComment): boolean
 ---@field can_action? fun(action: AtlasReviewCommentAction, comment: PullsComment): boolean
+---@field action_keys? AtlasReviewThreadActionKeys
 ---@field padding_x? integer
 ---@field toggle_resolved_key? string
 ---@field reaction_options? PullsReactionOption[]
@@ -443,7 +458,17 @@ function M.render_compact(node, width, expanded, location)
 			end
 			local start_col = #metadata
 			metadata = metadata .. field.text
-			table.insert(metadata_hl, { start_col = start_col, end_col = #metadata, hl_group = field.hl })
+			if type(field.hl) == "table" then
+				for _, highlight in ipairs(field.hl) do
+					table.insert(metadata_hl, {
+						start_col = start_col + highlight.start_col,
+						end_col = start_col + highlight.end_col,
+						hl_group = highlight.hl_group,
+					})
+				end
+			else
+				table.insert(metadata_hl, { start_col = start_col, end_col = #metadata, hl_group = field.hl })
+			end
 		end
 	end
 
@@ -459,7 +484,6 @@ function M.render_compact(node, width, expanded, location)
 		item.content = nil
 		item.children = {}
 		item.footer_items = {}
-		item.footer_highlights = {}
 	end
 
 	return threadsv2.render({ item }, width, threads_opts(0))

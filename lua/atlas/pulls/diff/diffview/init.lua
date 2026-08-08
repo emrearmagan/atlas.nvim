@@ -6,6 +6,9 @@ local notes = require("atlas.pulls.diff.shared.notes")
 local notify = require("atlas.core.notify")
 local overlay = require("atlas.pulls.diff.shared.comments.overlay")
 local review_keymaps = require("atlas.pulls.diff.shared.keymaps")
+local statusline = require("atlas.pulls.diff.shared.statusline")
+
+local STATUSLINE = "%!v:lua.require'atlas.pulls.diff.diffview'.statusline()"
 
 ---@type table<string, DiffFileStatus>
 local FILE_STATUSES = {
@@ -42,6 +45,8 @@ local sessions = {}
 ---@field suspended boolean
 ---@field closed boolean
 ---@field session_id string
+---@field additions integer
+---@field deletions integer
 
 ---@param value string|nil
 ---@return string
@@ -182,6 +187,7 @@ local function refresh_scroll(entry, session)
 	if layout and layout.sync_scroll then
 		pcall(layout.sync_scroll, layout)
 	end
+	vim.cmd("redrawstatus")
 end
 
 ---@param entry AtlasDiffviewReview
@@ -217,6 +223,14 @@ local function sync(entry)
 	end
 	if not layout.a:is_file_open() or not layout.b:is_file_open() then
 		return false
+	end
+	entry.additions, entry.deletions = 0, 0
+	for _, file in view.files:iter() do
+		local stats = file.stats
+		if stats then
+			entry.additions = entry.additions + (stats.additions or 0)
+			entry.deletions = entry.deletions + (stats.deletions or 0)
+		end
 	end
 
 	local path = relative_path(entry.root, current.path)
@@ -256,6 +270,9 @@ local function sync(entry)
 		binary = binary,
 	}
 	entry.session = session
+	vim.api.nvim_set_option_value("statusline", STATUSLINE, { win = layout.a.id, scope = "local" })
+	vim.api.nvim_set_option_value("statusline", STATUSLINE, { win = layout.b.id, scope = "local" })
+	vim.cmd("redrawstatus")
 	session.refresh_ui = function()
 		refresh_scroll(entry, session)
 	end
@@ -351,6 +368,8 @@ function M.attach(context, view, opts)
 		suspended = false,
 		closed = false,
 		session_id = events.new_id("diffview"),
+		additions = 0,
+		deletions = 0,
 	}
 	sessions[tabpage] = entry
 	register_events(entry)
@@ -378,6 +397,23 @@ function M.detach(tabpage, reason)
 	if attached then
 		events.emit("AtlasReviewDetached", event_data(entry, reason or "viewer_closed"))
 	end
+end
+
+---@return string
+function M.statusline()
+	local entry = sessions[vim.api.nvim_get_current_tabpage()]
+	local session = entry and entry.session
+	if not session then
+		return ""
+	end
+	local pr = entry.context.pr
+	return statusline.render(
+		string.format("#%s %s", tostring(pr.id), tostring(pr.title)),
+		entry.additions,
+		entry.deletions,
+		session.review,
+		session.notes
+	)
 end
 
 return M

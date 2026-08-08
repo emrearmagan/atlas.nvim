@@ -5,6 +5,7 @@ local M = {}
 ---@field previous_item? AtlasKeymapValue
 ---@field first_item? AtlasKeymapValue
 ---@field last_item? AtlasKeymapValue
+---@field submit? AtlasKeymapValue
 ---@field help? AtlasKeymapValue
 ---@field close? AtlasKeymapValue
 ---@field toggle_panel? AtlasKeymapValue
@@ -26,42 +27,51 @@ local M = {}
 ---@field show_details? AtlasKeymapValue
 ---@field search? AtlasKeymapValue
 
----@class AtlasPullsReviewKeymaps
----@field toggle_approval? AtlasKeymapValue
----@field request_changes? AtlasKeymapValue
----@field submit_review? AtlasKeymapValue
+---@class AtlasPullsReviewExplorerKeymaps
+---@field focus_file? AtlasKeymapValue
 ---@field open_file? AtlasKeymapValue
----@field toggle_explorer_grouping? AtlasKeymapValue
+---@field next_file? AtlasKeymapValue
+---@field previous_file? AtlasKeymapValue
+---@field toggle_grouping? AtlasKeymapValue
+---@field toggle_file_reviewed? AtlasKeymapValue
+---@field toggle_commits? AtlasKeymapValue
+
+---@class AtlasPullsReviewDiffKeymaps
 ---@field toggle_layout? AtlasKeymapValue
 ---@field toggle_compact? AtlasKeymapValue
 ---@field next_hunk? AtlasKeymapValue
 ---@field previous_hunk? AtlasKeymapValue
----@field next_file? AtlasKeymapValue
----@field previous_file? AtlasKeymapValue
----@field toggle_file_reviewed? AtlasKeymapValue
----@field toggle_commits? AtlasKeymapValue
 ---@field toggle_review_panel? AtlasKeymapValue
 ---@field next_comment? AtlasKeymapValue
 ---@field previous_comment? AtlasKeymapValue
 ---@field next_note? AtlasKeymapValue
 ---@field previous_note? AtlasKeymapValue
----@field view_thread? AtlasKeymapValue
----@field edit_comment? AtlasKeymapValue
----@field add_task? AtlasKeymapValue
 ---@field add_comment? AtlasKeymapValue
 ---@field submit_comment? AtlasKeymapValue
----@field delete_comment? AtlasKeymapValue
+---@field edit_comment? AtlasKeymapValue
+---@field delete? AtlasKeymapValue
 ---@field add_note? AtlasKeymapValue
+---@field add_task? AtlasKeymapValue
 ---@field toggle_resolved? AtlasKeymapValue
+
+---@class AtlasPullsReviewKeymaps
+---@field toggle_approval? AtlasKeymapValue
+---@field request_changes? AtlasKeymapValue
+---@field submit_review? AtlasKeymapValue
+---@field explorer? AtlasPullsReviewExplorerKeymaps
+---@field diff? AtlasPullsReviewDiffKeymaps
+
+---@class AtlasPullsFilterKeymaps
+---@field open? AtlasKeymapValue
+---@field merged? AtlasKeymapValue
+---@field declined? AtlasKeymapValue
 
 ---@class AtlasPullsKeymaps
 ---@field open_diff? AtlasKeymapValue
 ---@field checkout? AtlasKeymapValue
 ---@field edit_title? AtlasKeymapValue
 ---@field review? AtlasPullsReviewKeymaps
----@field filter_status_open? AtlasKeymapValue
----@field filter_status_merged? AtlasKeymapValue
----@field filter_status_declined? AtlasKeymapValue
+---@field filters? AtlasPullsFilterKeymaps
 
 ---@class AtlasIssuesKeymaps
 ---@field transition_issue? AtlasKeymapValue
@@ -80,6 +90,7 @@ local M = {}
 ---| "ui.previous_item"
 ---| "ui.first_item"
 ---| "ui.last_item"
+---| "ui.submit"
 ---| "ui.help"
 ---| "ui.close"
 ---| "ui.toggle_panel"
@@ -106,32 +117,32 @@ local M = {}
 ---| "pulls.review.toggle_approval"
 ---| "pulls.review.request_changes"
 ---| "pulls.review.submit_review"
----| "pulls.review.open_file"
----| "pulls.review.toggle_explorer_grouping"
----| "pulls.review.toggle_layout"
----| "pulls.review.toggle_compact"
----| "pulls.review.next_hunk"
----| "pulls.review.previous_hunk"
----| "pulls.review.next_file"
----| "pulls.review.previous_file"
----| "pulls.review.toggle_file_reviewed"
----| "pulls.review.toggle_commits"
----| "pulls.review.toggle_review_panel"
----| "pulls.review.next_comment"
----| "pulls.review.previous_comment"
----| "pulls.review.next_note"
----| "pulls.review.previous_note"
----| "pulls.review.view_thread"
----| "pulls.review.edit_comment"
----| "pulls.review.add_task"
----| "pulls.review.add_comment"
----| "pulls.review.submit_comment"
----| "pulls.review.delete_comment"
----| "pulls.review.add_note"
----| "pulls.review.toggle_resolved"
----| "pulls.filter_status_open"
----| "pulls.filter_status_merged"
----| "pulls.filter_status_declined"
+---| "pulls.review.explorer.focus_file"
+---| "pulls.review.explorer.open_file"
+---| "pulls.review.explorer.next_file"
+---| "pulls.review.explorer.previous_file"
+---| "pulls.review.explorer.toggle_grouping"
+---| "pulls.review.explorer.toggle_file_reviewed"
+---| "pulls.review.explorer.toggle_commits"
+---| "pulls.review.diff.toggle_layout"
+---| "pulls.review.diff.toggle_compact"
+---| "pulls.review.diff.next_hunk"
+---| "pulls.review.diff.previous_hunk"
+---| "pulls.review.diff.toggle_review_panel"
+---| "pulls.review.diff.next_comment"
+---| "pulls.review.diff.previous_comment"
+---| "pulls.review.diff.next_note"
+---| "pulls.review.diff.previous_note"
+---| "pulls.review.diff.add_comment"
+---| "pulls.review.diff.submit_comment"
+---| "pulls.review.diff.edit_comment"
+---| "pulls.review.diff.delete"
+---| "pulls.review.diff.add_note"
+---| "pulls.review.diff.add_task"
+---| "pulls.review.diff.toggle_resolved"
+---| "pulls.filters.open"
+---| "pulls.filters.merged"
+---| "pulls.filters.declined"
 ---| "issues.transition_issue"
 ---| "issues.change_assignee"
 ---| "issues.change_reporter"
@@ -298,6 +309,7 @@ end
 function M.validate()
 	local result = {
 		ui = conflicts_for({
+			"ui.submit",
 			"ui.help",
 			"ui.close",
 			"ui.toggle_panel",
@@ -322,30 +334,30 @@ function M.validate()
 			"pulls.review.toggle_approval",
 			"pulls.review.request_changes",
 			"pulls.review.submit_review",
-			"pulls.review.open_file",
-			"pulls.review.toggle_explorer_grouping",
-			"pulls.review.toggle_layout",
-			"pulls.review.toggle_compact",
-			"pulls.review.next_hunk",
-			"pulls.review.previous_hunk",
-			"pulls.review.next_file",
-			"pulls.review.previous_file",
-			"pulls.review.toggle_file_reviewed",
-			"pulls.review.toggle_commits",
-			"pulls.review.toggle_review_panel",
-			"pulls.review.next_comment",
-			"pulls.review.previous_comment",
-			"pulls.review.next_note",
-			"pulls.review.previous_note",
-			"pulls.review.view_thread",
-			"pulls.review.add_comment",
-			"pulls.review.submit_comment",
-			"pulls.review.delete_comment",
-			"pulls.review.add_note",
-			"pulls.review.toggle_resolved",
-			"pulls.filter_status_open",
-			"pulls.filter_status_merged",
-			"pulls.filter_status_declined",
+			"pulls.review.explorer.focus_file",
+			"pulls.review.explorer.open_file",
+			"pulls.review.explorer.next_file",
+			"pulls.review.explorer.previous_file",
+			"pulls.review.explorer.toggle_grouping",
+			"pulls.review.explorer.toggle_file_reviewed",
+			"pulls.review.explorer.toggle_commits",
+			"pulls.review.diff.toggle_layout",
+			"pulls.review.diff.toggle_compact",
+			"pulls.review.diff.next_hunk",
+			"pulls.review.diff.previous_hunk",
+			"pulls.review.diff.toggle_review_panel",
+			"pulls.review.diff.next_comment",
+			"pulls.review.diff.previous_comment",
+			"pulls.review.diff.next_note",
+			"pulls.review.diff.previous_note",
+			"pulls.review.diff.add_comment",
+			"pulls.review.diff.submit_comment",
+			"pulls.review.diff.delete",
+			"pulls.review.diff.add_note",
+			"pulls.review.diff.toggle_resolved",
+			"pulls.filters.open",
+			"pulls.filters.merged",
+			"pulls.filters.declined",
 		}),
 		issues = conflicts_for({
 			"issues.transition_issue",

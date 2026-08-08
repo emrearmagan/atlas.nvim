@@ -276,50 +276,43 @@ function M.render_repo(repo, width, extra_rows)
 
 	local rows = {}
 
-	local function icon_cell(icon, value, icon_hl)
-		local text = string.format("%s %s", icon, tostring(value))
-		local hl = {
-			{ start_col = 0, end_col = #icon, hl_group = icon_hl },
-			{ start_col = #icon, end_col = #text, hl_group = "AtlasTextMuted" },
-		}
-		return text, hl
-	end
-
 	local has_stars = tonumber(repo.stars) ~= nil
 	local has_forks = tonumber(repo.forks) ~= nil
 	local has_watchers = tonumber(repo.watchers) ~= nil
 
 	if has_stars or has_forks then
-		local v1, v1_hl
+		local k1, k1_hl, v1
 		if has_stars then
-			local star_icon, star_hl = icons.general("star")
-			v1, v1_hl = icon_cell(star_icon, repo.stars, star_hl)
+			k1, k1_hl = icons.general("star")
+			v1 = string.format("Stars: %s", repo.stars)
 		else
-			v1, v1_hl = "-", "AtlasTextMuted"
+			k1, k1_hl, v1 = "", "AtlasTextMuted", "Stars: -"
 		end
-		local v2, v2_hl
+		local k2, k2_hl, v2
 		if has_forks then
-			local fork_icon, fork_hl = icons.pulls("fork")
-			v2, v2_hl = icon_cell(fork_icon, repo.forks, fork_hl)
+			k2, k2_hl = icons.pulls("fork")
+			v2 = string.format("Forks: %s", repo.forks)
 		else
-			v2, v2_hl = "-", "AtlasTextMuted"
+			k2, k2_hl, v2 = "", "AtlasTextMuted", "Forks: -"
 		end
 		table.insert(rows, {
-			k1 = "Stars:",
+			k1 = k1,
+			k1_hl = k1_hl,
 			v1 = v1,
-			v1_hl = v1_hl,
-			k2 = "Forks:",
+			v1_hl = "AtlasTextMuted",
+			k2 = k2,
+			k2_hl = k2_hl,
 			v2 = v2,
-			v2_hl = v2_hl,
+			v2_hl = "AtlasTextMuted",
 		})
 	end
 	if has_watchers then
 		local watching_icon, watching_hl = icons.general("watching")
-		local v1, v1_hl = icon_cell(watching_icon, repo.watchers, watching_hl)
 		table.insert(rows, {
-			k1 = "Watchers:",
-			v1 = v1,
-			v1_hl = v1_hl,
+			k1 = watching_icon,
+			k1_hl = watching_hl,
+			v1 = string.format("Watchers: %s", repo.watchers),
+			v1_hl = "AtlasTextMuted",
 			k2 = "",
 			v2 = "",
 			v2_hl = "AtlasTextMuted",
@@ -347,7 +340,8 @@ function M.render_repo(repo, width, extra_rows)
 			cell_hl = function(row, col)
 				if col.key == "k1" or col.key == "k2" then
 					local label = col.key == "k1" and row.k1 or row.k2
-					return { { start_col = 0, end_col = #label, hl_group = "AtlasTextMuted" } }
+					local hl = col.key == "k1" and row.k1_hl or row.k2_hl
+					return { { start_col = 0, end_col = #label, hl_group = hl or "AtlasTextMuted" } }
 				end
 				if col.key == "v1" then
 					if type(row.v1_hl) == "table" then

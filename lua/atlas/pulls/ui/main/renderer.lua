@@ -7,8 +7,22 @@ local header = require("atlas.ui.components.header")
 local icons = require("atlas.ui.shared.icons")
 local navbar = require("atlas.ui.components.navbar")
 local table_tree = require("atlas.ui.components.table_tree")
+local ui_utils = require("atlas.ui.utils")
 local utils = require("atlas.ui.shared.utils")
 local statusline = require("atlas.ui.statusline")
+
+---@param lines string[]
+---@param text string
+---@param width integer
+---@param height integer
+local function append_centered_loading(lines, text, width, height)
+	local available_height = math.max(1, height - #lines)
+	for _ = 1, math.max(0, math.floor((available_height - 1) / 2)) do
+		table.insert(lines, "")
+	end
+	local centered = ui_utils.center_text(text, width)
+	table.insert(lines, centered)
+end
 
 ---@param lines string[]
 ---@param spans table[]
@@ -188,6 +202,7 @@ end
 function M.render(opts)
 	local lines, spans = {}, {}
 	local line_map = {}
+	local loading_text = string.format("%s Loading...", state.reload_spinner_frame or "⠋")
 	statusline.set_items(helper.build_statusline_items(state.pulls, state.current_user))
 
 	render_header(lines, spans, opts.width)
@@ -210,7 +225,7 @@ function M.render(opts)
 			})
 		elseif state.is_loading then
 			table.insert(lines, "")
-			table.insert(lines, "Loading...")
+			append_centered_loading(lines, loading_text, opts.width, opts.height)
 		elseif state.pulls and #state.pulls > 0 then
 			table.insert(lines, "")
 			local body_lines, body_spans, body_map
@@ -243,7 +258,7 @@ function M.render(opts)
 			},
 		})
 	elseif state.is_loading then
-		table.insert(lines, "Loading...")
+		append_centered_loading(lines, loading_text, opts.width, opts.height)
 	else
 		local layout = state.active_view and state.active_view.layout or "compact"
 		local groups = state.pulls or {}

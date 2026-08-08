@@ -38,7 +38,7 @@
 ---@field toggle_thread fun(buf: integer): boolean
 ---@field toggle_all_threads fun(): boolean
 ---@field jump_comment fun(buf: integer, direction: 1|-1)
----@field open_in_browser fun()
+---@field open_in_browser fun(buf: integer)
 
 ---@class AtlasReviewSession
 ---@field tabpage integer

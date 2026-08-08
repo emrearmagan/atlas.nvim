@@ -169,10 +169,10 @@ local function thread_from_comment(comment)
 		id = tostring(raw.thread_id or ""),
 		path = inline.path,
 		line = inline.to,
-		originalLine = inline.from,
+		originalLine = comment.inline_hunk_anchor or inline.from,
 		diffSide = inline.from ~= nil and "LEFT" or "RIGHT",
 		isResolved = comment.state == "RESOLVED",
-		isOutdated = comment.state == "OUTDATED",
+		isOutdated = comment.outdated == true or comment.state == "OUTDATED",
 	}
 end
 
@@ -972,6 +972,7 @@ function M.edit_comment(pr, comment, on_done)
 		end
 		local updated = mapper.to_comment(result)
 		updated.state = comment.state
+		updated.outdated = comment.outdated
 		updated._raw = comment._raw
 		on_done(updated, nil)
 	end, {
@@ -1108,6 +1109,7 @@ function M.reply_comment(pr, parent, content, on_done)
 					created.parent_id = root_id
 					created.inline_hunk = created.inline_hunk or parent.inline_hunk
 					created.state = parent.state
+					created.outdated = parent.outdated
 					created.can_resolve = false
 					on_done(created, nil)
 				end,

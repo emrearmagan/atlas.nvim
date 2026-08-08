@@ -4,7 +4,7 @@ local utils = require("atlas.ui.shared.utils")
 local icons = require("atlas.ui.shared.icons")
 local threads = require("atlas.ui.components.threadsv2")
 
-local COLLAPSE_KEEP = 2
+local COLLAPSE_KEEP = 3
 local COLLAPSE_THRESHOLD = 5
 
 ---@param actor {nickname:string?, name:string?}|nil
@@ -23,37 +23,46 @@ local function actor_name(actor)
 end
 
 local EVENT = {
-	approval = { icons.pulls_status("successful") },
-	changes_requested = { icons.pulls_status("inprogress") },
-	review = { icons.pulls("activity") },
-	comment = { icons.general("user") },
-	closed = { icons.pulls("declined_pr") },
-	merged = { icons.pulls("merged_pr") },
-	reopened = { icons.pulls("pr") },
-	committed = { icons.pulls("commit") },
-	force_pushed = { icons.general("edit") },
-	labeled = { icons.pulls("tag") },
-	unlabeled = { icons.pulls("tag") },
-	assigned = { icons.general("user") },
-	unassigned = { icons.general("user") },
-	review_requested = { icons.general("user") },
-	ready_for_review = { icons.pulls("pr") },
-	convert_to_draft = { icons.pulls("activity") },
-	update = { icons.pulls("activity") },
+	approval = icons.pulls_status("successful"),
+	unapproval = icons.pulls_status("inprogress"),
+	changes_requested = icons.pulls_status("inprogress"),
+	review = icons.pulls("activity"),
+	comment = icons.general("user"),
+	comment_deleted = icons.general("delete"),
+	closed = icons.pulls("declined_pr"),
+	merged = icons.pulls("merged_pr"),
+	reopened = icons.pulls("pr"),
+	committed = icons.pulls("commit"),
+	force_pushed = icons.general("edit"),
+	labeled = icons.pulls("tag"),
+	unlabeled = icons.pulls("tag"),
+	assigned = icons.general("user"),
+	unassigned = icons.general("user"),
+	review_requested = icons.general("user"),
+	renamed = icons.general("edit"),
+	ready_for_review = icons.pulls("pr"),
+	convert_to_draft = icons.pulls("activity"),
+	update = icons.pulls("activity"),
 }
 
 ---@param entry PullsActivityEntry
 ---@return { icon: string, icon_hl: string|nil, additional: string|nil, content: string|nil }
 function M.classify(entry)
-	local meta = EVENT[entry.kind] or { icons.pulls("activity") }
+	local icon = EVENT[entry.kind] or icons.pulls("activity")
+	local icon_hl = "AtlasTextMuted"
+	if entry.kind == "approval" then
+		icon_hl = "AtlasTextPositive"
+	elseif entry.kind == "changes_requested" then
+		icon_hl = "AtlasTextWarning"
+	end
 	local label = tostring(entry.label or "")
 	local body = entry.body
 	if entry.kind == "comment" and entry.deleted == true then
 		body = "(deleted comment)"
 	end
 	return {
-		icon = meta[1],
-		icon_hl = meta[2],
+		icon = icon,
+		icon_hl = icon_hl,
 		additional = label ~= "" and label or entry.kind,
 		content = body,
 	}
@@ -95,7 +104,7 @@ local function additional_hl(item, _text)
 	if entry.kind == "approval" then
 		return "AtlasTextPositive"
 	end
-	if entry.kind == "changes_requested" then
+	if entry.kind == "unapproval" or entry.kind == "changes_requested" then
 		return "AtlasTextWarning"
 	end
 	return "AtlasTextMuted"
@@ -123,7 +132,7 @@ end
 ---Render a list of activities.
 ---@param entries PullsActivityEntry[]
 ---@param width integer
----@param opts { padding_x: integer|nil, content_max_lines: integer|nil, squash: boolean|nil, run_id: string|nil }|nil
+---@param opts { padding_x: integer|nil, content_max_lines: integer|nil, squash: boolean|nil, run_id: string|nil, has_next: boolean|nil }|nil
 ---@return string[] lines, table[] spans, table<integer, table>|nil line_map
 function M.render(entries, width, opts)
 	opts = opts or {}
@@ -153,15 +162,16 @@ function M.render(entries, width, opts)
 		local line = string.rep(" ", padding_x) .. "│"
 		append(
 			{ line },
-			{ { line = 0, start_col = padding_x, end_col = padding_x + #"│", hl_group = "AtlasBorder" } }
+			{ { line = 0, start_col = padding_x, end_col = padding_x + #"│", hl_group = "AtlasTextMuted" } }
 		)
 	end
 
-	local function render_entry(entry)
+	local function render_entry(entry, has_next)
 		separator()
 		append(threads.render(to_thread_items({ entry }, opts.run_id), width, {
 			padding_x = padding_x,
 			content_max_lines = content_max_lines,
+			content_prefix = has_next and "│  " or "   ",
 			additional_hl = additional_hl,
 			content_hl = content_hl,
 		}))
@@ -184,16 +194,13 @@ function M.render(entries, width, opts)
 	end
 
 	if opts.squash and #entries > COLLAPSE_THRESHOLD then
-		for i = 1, COLLAPSE_KEEP do
-			render_entry(entries[i])
-		end
-		render_gap(#entries - (COLLAPSE_KEEP * 2))
+		render_gap(#entries - COLLAPSE_KEEP)
 		for i = #entries - COLLAPSE_KEEP + 1, #entries do
-			render_entry(entries[i])
+			render_entry(entries[i], i < #entries or opts.has_next == true)
 		end
 	else
-		for _, entry in ipairs(entries) do
-			render_entry(entry)
+		for i, entry in ipairs(entries) do
+			render_entry(entry, i < #entries or opts.has_next == true)
 		end
 	end
 

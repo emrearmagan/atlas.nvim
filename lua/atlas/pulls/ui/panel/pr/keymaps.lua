@@ -151,7 +151,7 @@ function M.register(buf)
 		})
 	)
 
-	if state.provider and state.provider.capabilities.core and state.provider.capabilities.core.update_title then
+	if panel_state.current_pr and actions.is_action_available(panel_state.current_pr, "edit_title") then
 		utils.insert_if(
 			items,
 			item("pulls.edit_title", {
@@ -162,11 +162,7 @@ function M.register(buf)
 					if pr == nil then
 						return
 					end
-					actions.edit_title(pr, function(ok)
-						if ok then
-							require("atlas.pulls.ui.panel").render()
-						end
-					end)
+					actions.run_action(pr, "edit_title", { source = "panel" })
 				end,
 			})
 		)

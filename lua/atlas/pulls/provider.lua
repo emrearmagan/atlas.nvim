@@ -140,9 +140,11 @@
 
 ---@class PullsPanelHeaderRow
 ---@field k1 string
+---@field k1_hl? string
 ---@field v1 string
 ---@field v1_hl string|table[] hl group name, or list of {start_col, end_col, hl_group} relative to the v1 cell
 ---@field k2 string
+---@field k2_hl? string
 ---@field v2 string
 ---@field v2_hl string|table[] hl group name, or list of {start_col, end_col, hl_group} relative to the v2 cell
 

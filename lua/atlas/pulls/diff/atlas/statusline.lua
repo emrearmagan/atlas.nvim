@@ -2,9 +2,11 @@ local M = {}
 
 local diff = require("atlas.ui.components.diff_hunks")
 local icons = require("atlas.ui.shared.icons")
+local keymaps = require("atlas.core.keymaps")
 local spinner = require("atlas.ui.components.spinner")
 local state = require("atlas.pulls.diff.atlas.state")
 local renderer = require("atlas.ui.statusline")
+local summary = require("atlas.pulls.diff.shared.statusline")
 
 local EXPRESSION = "%!v:lua.require'atlas.pulls.diff.atlas.statusline'.current()"
 
@@ -69,38 +71,7 @@ end
 ---@return AtlasStatuslineSegment[]
 local function segments(session)
 	local additions, deletions = total_stats(session)
-	local review = session.review
-	local result = {
-		{ text = identity(session), hl_group = "AtlasFooterText", priority = 40, min_width = 12 },
-	}
-	if review then
-		result[#result + 1] = {
-			text = string.format("comments %d", #review.comments),
-			hl_group = "AtlasFooterText",
-			align = "right",
-			priority = 30,
-		}
-		if #review.tasks > 0 then
-			local label = review.tasks[1].task_label or "Task"
-			result[#result + 1] = {
-				text = string.format("%ss %d", label:lower(), #review.tasks),
-				hl_group = "AtlasFooterText",
-				align = "right",
-				priority = 20,
-			}
-		end
-	end
-	result[#result + 1] = {
-		text = string.format("+%d", additions),
-		hl_group = "AtlasFooterSuccess",
-		align = "right",
-	}
-	result[#result + 1] = {
-		text = string.format("-%d", deletions),
-		hl_group = "AtlasFooterError",
-		align = "right",
-	}
-	return result
+	return summary.items(identity(session), additions, deletions, session.review, session.notes)
 end
 
 ---@param session AtlasNativeDiffSession
@@ -174,7 +145,10 @@ function M.current()
 	if not session or session.closing then
 		return ""
 	end
-	return renderer.format(session.statusline.items, session.statusline.notice)
+	local help_keys = keymaps.resolve("ui.help")
+	return renderer.format(session.statusline.items, session.statusline.notice, nil, {
+		help_key = help_keys and help_keys[1],
+	})
 end
 
 ---@param session AtlasNativeDiffSession

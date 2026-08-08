@@ -70,7 +70,7 @@ end
 ---@param width integer
 ---@param current_user PullsUser|nil
 local function emit_tasks(lines, spans, line_map, tasks, width, current_user)
-	local toggle_keys = keymaps.resolve("pulls.review.toggle_resolved")
+	local toggle_keys = keymaps.resolve("pulls.review.diff.toggle_resolved")
 	local provider = require("atlas.pulls.state").provider
 	local padding = string.rep(" ", PADDING_X)
 
@@ -176,7 +176,7 @@ end
 ---@param current_user PullsUser|nil
 local function emit_thread_box(lines, spans, line_map, nodes, width, current_user)
 	local inner = math.max(1, width - (PADDING_X * 2) - 4)
-	local toggle_keys = keymaps.resolve("pulls.review.toggle_resolved")
+	local toggle_keys = keymaps.resolve("pulls.review.diff.toggle_resolved")
 	local provider = require("atlas.pulls.state").provider
 	local comments = provider and provider.capabilities.comments
 	local t_lines, t_spans, t_map = review_threads.render(nodes, inner, {
@@ -200,16 +200,23 @@ local function emit_thread_box(lines, spans, line_map, nodes, width, current_use
 	utils.append_block(lines, spans, { lines = result.lines, highlights = result.highlights })
 end
 
+---@class CommentsHunkBucket
+---@field hunk DiffHunk
+---@field threads_by_anchor table<string, { threads: AtlasReviewThreadNode[], current_user: PullsUser|nil }>
+
+---@param hunk DiffHunk
+---@return string
+local function hunk_key(hunk)
+	return string.format("%s|%s", tostring(hunk.new_start or 0), tostring(hunk.old_start or 0))
+end
+
 ---@param lines string[]
 ---@param spans table[]
 ---@param line_map table<integer, table>
 ---@param width integer
 ---@param file_path string
----@param hunk DiffHunk
----@param threads_by_anchor table<string, { threads: AtlasReviewThreadNode[], current_user: PullsUser|nil }>
----@return boolean collapsed
-local function emit_hunk_with_comments(lines, spans, line_map, width, file_path, hunk, threads_by_anchor)
-	local collapsed = state.collapsed_hunks[diff.hunk_key({ path = file_path }, hunk)] == true
+---@param buckets CommentsHunkBucket[]
+local function emit_file_with_comments(lines, spans, line_map, width, file_path, buckets)
 	local function count(node)
 		local total = 1
 		for _, child in ipairs(node.children or {}) do
@@ -217,20 +224,28 @@ local function emit_hunk_with_comments(lines, spans, line_map, width, file_path,
 		end
 		return total
 	end
-	local total = 0
-	for _, anchor in pairs(threads_by_anchor) do
-		for _, node in ipairs(anchor.threads or {}) do
-			total = total + count(node)
+
+	local file = { path = file_path, status = "modified", hunks = {} }
+	local totals = {}
+	local buckets_by_key = {}
+	for _, bucket in ipairs(buckets) do
+		table.insert(file.hunks, bucket.hunk)
+		buckets_by_key[diff.hunk_key(file, bucket.hunk)] = bucket
+		local total = 0
+		for _, anchor in pairs(bucket.threads_by_anchor) do
+			for _, node in ipairs(anchor.threads or {}) do
+				total = total + count(node)
+			end
 		end
+		totals[hunk_key(bucket.hunk)] = total
 	end
 
-	local cb_lines, cb_spans, cb_map = diff.hunks({
-		{ path = file_path, status = "modified", hunks = { hunk } },
-	}, {
+	local cb_lines, cb_spans, cb_map = diff.hunks({ file }, {
 		max_width = width,
 		padding_x = PADDING_X,
 		collapsed_hunks = state.collapsed_hunks,
-		hunk_footer = function()
+		hunk_footer = function(_, hunk)
+			local total = totals[hunk_key(hunk)] or 0
 			if total == 0 then
 				return nil
 			end
@@ -249,6 +264,7 @@ local function emit_hunk_with_comments(lines, spans, line_map, width, file_path,
 		table.insert(list, s)
 	end
 
+	local current_bucket
 	for i, text in ipairs(cb_lines) do
 		table.insert(lines, text)
 		local out_line = #lines - 1
@@ -261,20 +277,29 @@ local function emit_hunk_with_comments(lines, spans, line_map, width, file_path,
 			line_map[#lines] = entry
 		end
 
-		if entry and entry.kind == "hunk_line" and entry.path == file_path and entry.line ~= nil then
+		if entry and entry.kind == "hunk_header" then
+			current_bucket = buckets_by_key[entry.hunk_key]
+		elseif entry and entry.kind == "hunk_line" and entry.path == file_path and entry.line ~= nil then
 			local anchor_key = string.format("%s:%s", entry.side or "new", tostring(entry.line))
-			local anchor = threads_by_anchor[anchor_key]
+			local anchor = current_bucket and current_bucket.threads_by_anchor[anchor_key]
 			if anchor then
 				entry.thread_roots = {}
 				for _, thread in ipairs(anchor.threads) do
 					table.insert(entry.thread_roots, thread.comment)
 				end
 				emit_thread_box(lines, spans, line_map, anchor.threads, width, anchor.current_user)
-				threads_by_anchor[anchor_key] = nil
+				current_bucket.threads_by_anchor[anchor_key] = nil
 			end
 		end
 	end
-	return collapsed
+
+	for _, bucket in ipairs(buckets) do
+		if state.collapsed_hunks[diff.hunk_key(file, bucket.hunk)] ~= true then
+			for _, anchor in pairs(bucket.threads_by_anchor) do
+				emit_thread_box(lines, spans, line_map, anchor.threads, width, anchor.current_user)
+			end
+		end
+	end
 end
 
 ---@param _pr PullRequest
@@ -331,20 +356,11 @@ function M.render(_pr, width, comments, tasks)
 
 	local roots = review_threads.group_comments(comments, type(tasks) == "table" and tasks or nil)
 
-	---@class CommentsHunkBucket
-	---@field hunk DiffHunk
-	---@field threads_by_anchor table<string, { threads: AtlasReviewThreadNode[], current_user: PullsUser|nil }>
-
 	local general_roots = {}
 	---@type table<string, { path: string, hunks: table<string, CommentsHunkBucket>, hunk_order: string[] }>
 	local file_buckets = {}
 	---@type string[]
 	local file_order = {}
-
-	---@param hunk DiffHunk
-	local function hunk_key(hunk)
-		return string.format("%s|%s", tostring(hunk.new_start or 0), tostring(hunk.old_start or 0))
-	end
 
 	for _, thread in ipairs(roots) do
 		local c = thread.comment
@@ -367,7 +383,7 @@ function M.render(_pr, width, comments, tasks)
 				hb.hunk = c.inline_hunk
 			end
 			local side = c.inline.to ~= nil and "new" or "old"
-			local line = c.inline.to or c.inline.from
+			local line = c.inline_hunk_anchor or c.inline.to or c.inline.from
 			local akey = string.format("%s:%s", side, tostring(line or ""))
 			local anchor = hb.threads_by_anchor[akey]
 			if anchor == nil then
@@ -393,18 +409,12 @@ function M.render(_pr, width, comments, tasks)
 
 		for _, path in ipairs(file_order) do
 			local file = file_buckets[path]
+			local buckets = {}
 			for _, hkey in ipairs(file.hunk_order) do
-				local hb = file.hunks[hkey]
-				local collapsed =
-					emit_hunk_with_comments(lines, spans, line_map, max_width, path, hb.hunk, hb.threads_by_anchor)
-				if not collapsed then
-					-- orphans (didnt match any rendered line)
-					for _, anchor in pairs(hb.threads_by_anchor) do
-						emit_thread_box(lines, spans, line_map, anchor.threads, max_width, current_user)
-					end
-				end
-				table.insert(lines, "")
+				table.insert(buckets, file.hunks[hkey])
 			end
+			emit_file_with_comments(lines, spans, line_map, max_width, path, buckets)
+			table.insert(lines, "")
 		end
 	end
 

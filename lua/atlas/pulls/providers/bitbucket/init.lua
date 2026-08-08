@@ -464,7 +464,6 @@ return {
 			fetch_activity = pullrequests_api.fetch_activity,
 			fetch_commits = pullrequests_api.fetch_commits,
 			fetch_diff = pullrequests_api.fetch_diff,
-			update_title = pullrequests_api.update_title,
 			views = views,
 		},
 		comments = {

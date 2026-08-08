@@ -266,7 +266,7 @@ function M.build_compact_table(groups)
 			table.insert(rows, {
 				kind = "meta",
 				pr_icon = "",
-				repo_pr = string.format("%s %s", REPO_ICON, repo_label),
+				repo_pr = repo_label,
 				conversation = "",
 				tasks = "",
 				status = "",

@@ -185,11 +185,11 @@ local function actor_from(user)
 end
 
 ---@param body string
----@return "approval"|"changes_requested"|"update"
+---@return "approval"|"unapproval"|"changes_requested"|"update"
 local function classify_system_note(body)
 	local b = tostring(body or ""):lower()
 	if b:find("unapproved this merge request", 1, true) then
-		return "update"
+		return "unapproval"
 	end
 	if b:find("approved this merge request", 1, true) then
 		return "approval"
@@ -260,6 +260,7 @@ function M.to_comment(note, discussion_first_id, discussion_id, resolved)
 		inline = inline,
 		is_task = nil,
 		state = state,
+		outdated = outdated,
 		can_resolve = note.resolvable,
 		reactions = reaction_counts(note.award_emoji),
 		html_url = json.safe_str(note.web_url),
@@ -322,7 +323,9 @@ function M.to_activity(note)
 	local first_line = body:match("([^\r\n]+)") or body
 	local kind = classify_system_note(body)
 	local content_raw = first_line
-	if kind == "approval" or kind == "changes_requested" then
+	if kind == "unapproval" then
+		content_raw = "unapproved"
+	elseif kind == "approval" or kind == "changes_requested" then
 		content_raw = nil
 	end
 	return {

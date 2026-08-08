@@ -81,6 +81,9 @@ end
 local function pipeline_rows(pipelines)
 	local rows = {}
 	for _, pipeline in ipairs(pipelines) do
+		if #rows > 0 then
+			table.insert(rows, { kind = "separator" })
+		end
 		local icon, icon_hl = icons.pulls_status(tostring(pipeline.state or "UNKNOWN"):lower())
 		table.insert(rows, {
 			icon = icon,
@@ -98,7 +101,7 @@ end
 ---@param context { text: string }
 ---@return table[]|nil
 local function cell_hl(row, column, context)
-	if column.key ~= "label" then
+	if column.key ~= "label" or row.icon == nil then
 		return nil
 	end
 	local icon_start, icon_end = context.text:find(row.icon, 1, true)

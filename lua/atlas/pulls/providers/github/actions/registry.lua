@@ -2,6 +2,7 @@ local M = {}
 
 local cli = require("atlas.providers.github.client").pulls
 local comments = require("atlas.pulls.providers.github.api.comments")
+local pullrequests = require("atlas.pulls.providers.github.api.pullrequests")
 local statusline = require("atlas.ui.statusline")
 local checkout = require("atlas.core.git.checkout")
 local logger = require("atlas.core.logger")
@@ -264,6 +265,18 @@ local ACTIONS = {
 						done({ changed_pr = true, message = "Merged" }, nil)
 					end)
 				end)
+			end)
+		end,
+	},
+	{
+		id = "edit_title",
+		label = "Edit title",
+		is_available = function(ctx)
+			return has_pr(ctx), "No PR selected"
+		end,
+		run = function(ctx, done)
+			require("atlas.pulls.actions").edit_title(ctx.pr, pullrequests.update_title, function(changed)
+				done({ changed_pr = changed, message = changed and "Title updated" or nil }, nil)
 			end)
 		end,
 	},

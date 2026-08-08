@@ -281,20 +281,21 @@ local function render(session)
 	local status_start = name_start + #name + 2
 	local title = string.format("  %s %s  %s", status_icon, name, status)
 
-	local metadata = { pipeline_name(session.pipeline) }
+	local pipeline = pipeline_name(session.pipeline)
+	local metadata = { pipeline }
 	local duration = duration_text(session.job.duration)
 	if duration ~= "" then
 		table.insert(metadata, duration)
 	end
-	local started = utils.relative_time_text(session.job.started_at)
+	local started = utils.relative_time(session.job.started_at)
 	if started ~= "-" then
-		table.insert(metadata, "Started " .. started)
+		started = started == "now" and "started just now" or "started " .. started .. " ago"
+		table.insert(metadata, started)
 	end
 	local metadata_line = "  " .. table.concat(metadata, "  ")
 	local divider = string.rep("─", math.max(width - 2, 1))
 	local lines = { "", title, metadata_line, "", divider, "" }
 	local spans = {
-		{ line = 1, start_col = name_start, end_col = name_start + #name, hl_group = "AtlasColumnHeader" },
 		{
 			line = 1,
 			start_col = icon_start,
@@ -309,6 +310,14 @@ local function render(session)
 		},
 		{ line = 4, start_col = 0, end_col = #divider, hl_group = "AtlasTextMuted" },
 	}
+	if #metadata > 1 then
+		table.insert(spans, {
+			line = 2,
+			start_col = #pipeline + 4,
+			end_col = #metadata_line,
+			hl_group = "AtlasTextMuted",
+		})
+	end
 
 	if session.status == "loading" then
 		local text = session.frame and string.format("%s Loading...", session.frame) or spinner.with_text("Loading...")

@@ -36,6 +36,7 @@ local function inherit_thread_context(comment, parent)
 	comment.parent_id = parent.parent_id or parent.id
 	comment.inline = comment.inline or parent.inline
 	comment.inline_hunk = comment.inline_hunk or parent.inline_hunk
+	comment.outdated = comment.outdated or parent.outdated
 	if comment.state == nil and (parent.state == "RESOLVED" or parent.state == "OUTDATED") then
 		comment.state = parent.state
 	end
@@ -529,6 +530,7 @@ function M.edit_comment(pr, comment, on_done)
 		updated.inline = updated.inline or comment.inline
 		updated.inline_hunk = updated.inline_hunk or comment.inline_hunk
 		updated.state = updated.state or comment.state
+		updated.outdated = updated.outdated or comment.outdated
 		on_done(updated, nil)
 	end)
 end
