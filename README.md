@@ -129,6 +129,7 @@ Set `global_statusline = false` to leave Neovim's `laststatus` option unchanged.
 - `:AtlasPulls [provider]` - Open Atlas pulls domain
 - `:AtlasDiff <base>...<head>` or `:AtlasDiff <pull-request-url>` - Open a local Git range or pull request review
 - `:AtlasNotes` - Inspect local review notes across pull requests
+- `:AtlasNotesClearAll` - Delete all local review notes
 - `:AtlasCreatePR` - Create a pull request from the current branch
 - `:AtlasCreateIssue` - Create an issue (GitHub / GitLab / Jira)
 - `:AtlasSearch [provider]` - Search configured pull-request and issue providers

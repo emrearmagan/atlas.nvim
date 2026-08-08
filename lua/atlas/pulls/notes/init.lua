@@ -392,4 +392,14 @@ function M.delete(target, id)
 	return deleted == true, err
 end
 
+---@return boolean, string|nil
+function M.clear_all()
+	for _, path in ipairs(storage.files()) do
+		if vim.fn.delete(path) ~= 0 then
+			return false, "Unable to delete notes: " .. path
+		end
+	end
+	return true, nil
+end
+
 return M
