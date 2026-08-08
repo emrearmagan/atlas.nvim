@@ -864,6 +864,18 @@ local function create_session(open_options, options)
 					comments.reload(session)
 					notes.reload(session)
 				end,
+				can_comment_action = function(action, comment)
+					return comments.is_action_available(session, action, comment)
+				end,
+				on_comment_action = function(action, comment)
+					comments.run_action(session, action, comment)
+				end,
+				on_edit_note = function(note)
+					notes.edit(session, note)
+				end,
+				on_delete_note = function(note)
+					notes.delete(session, note)
+				end,
 			}) or nil,
 			reload = open_options.reload,
 			refresh_ui = function()
