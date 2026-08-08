@@ -20,7 +20,7 @@ local highlights = require("atlas.ui.shared.highlights")
 ---@field additional string|nil            Extra text between author and timestamp
 ---@field right_text string|nil             Right-aligned text (e.g. timestamp, hash)
 ---@field content string|nil               Body text (may contain newlines)
----@field content_block { lines: string[], highlights: AtlasUIHighlight[]|nil }|nil Styled lines rendered after the body
+---@field content_block { title: string|nil, right_text: string|nil, lines: string[], highlights: AtlasUIHighlight[]|nil }|nil Styled lines rendered after the body
 ---@field footer_items AtlasThreadV2FooterItem[]|nil
 ---@field children AtlasThreadV2Item[]|nil Nested replies
 ---@field meta table|nil                   Arbitrary metadata passed through
@@ -342,6 +342,21 @@ local function render_content(lines, spans, line_map, item, depth, pfx, opts, wi
 
 	local block = item.content_block
 	if block then
+		if block.title then
+			if #content_lines > 0 then
+				lines[#lines + 1] = body_prefix
+				map_line(line_map, #lines, make_line_map(item, "content", depth))
+				if #body_prefix > 0 then
+					span(spans, #lines - 1, 0, #body_prefix, "AtlasTextMuted")
+				end
+			end
+			local right_text = block.right_text or ""
+			local gap = right_text ~= "" and math.max(1, content_max_dw - #block.title - #right_text) or 0
+			local row = block.title .. string.rep(" ", gap) .. right_text
+			lines[#lines + 1] = body_prefix .. row
+			map_line(line_map, #lines, make_line_map(item, "content", depth))
+			span(spans, #lines - 1, 0, #body_prefix + #row, "AtlasTextMuted")
+		end
 		local highlights_by_line = {}
 		for _, highlight in ipairs(block.highlights or {}) do
 			if highlight.start_col ~= nil then
@@ -390,7 +405,7 @@ local function render_footer(lines, spans, line_map, item, depth, pfx, has_child
 	end
 	if item.content_block then
 		lines[#lines + 1] = footer_prefix
-		map_line(line_map, #lines, make_line_map(item, "footer_gap", depth))
+		map_line(line_map, #lines, make_line_map(item, "footer", depth))
 		if #footer_prefix > 0 then
 			span(spans, #lines - 1, 0, #footer_prefix, "AtlasTextMuted")
 		end

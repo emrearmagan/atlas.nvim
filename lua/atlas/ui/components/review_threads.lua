@@ -77,7 +77,7 @@ local function can_action(opts, action, comment)
 end
 
 ---@param comment PullsComment
----@return string|nil, AtlasMarkdownEditorPreview|nil
+---@return string|nil, { title: string, right_text: string, lines: string[], highlights: AtlasUIHighlight[]|nil }|nil
 local function suggestion_content(comment)
 	if not comment.inline then
 		return nil, nil
@@ -93,18 +93,22 @@ local function suggestion_content(comment)
 	if trailing ~= "" then
 		prose = prose ~= "" and (prose .. "\n\n" .. trailing) or trailing
 	end
-	local content = prose ~= "" and (prose .. "\n\nSuggestion") or "Suggestion"
+	local start_line = comment.inline.start_to or comment.inline.to or 1
+	local end_line = comment.inline.to or start_line
+	local range = start_line == end_line and string.format("Line +%d", end_line)
+		or string.format("Lines +%d to +%d", start_line, end_line)
 	local lines = vim.split(replacement, "\n", { plain = true })
 	if #lines == 0 then
 		lines = { "" }
 	end
-	return content,
-		code_preview.render({
-			file_path = comment.inline.path,
-			lines = lines,
-			start_line = comment.inline.start_to or comment.inline.to or 1,
-			show_line_numbers = false,
-		})
+	local preview = code_preview.render({
+		file_path = comment.inline.path,
+		lines = lines,
+		start_line = start_line,
+		show_line_numbers = false,
+	})
+	return prose ~= "" and prose or nil,
+		{ title = "Suggestion", right_text = range, lines = preview.lines, highlights = preview.highlights }
 end
 
 ---@param comment PullsComment
@@ -235,7 +239,6 @@ local function comment_item(comment, opts, is_root)
 			comment = comment,
 			author_hl_name = author,
 			is_deleted = is_deleted,
-			is_suggestion = content_block ~= nil,
 			right_text_hl = marker_hl,
 		},
 	}
@@ -263,9 +266,6 @@ local function threads_opts(padding_x)
 		content_hl = function(item, row)
 			local meta = item and item.meta or {}
 			local segments = {}
-			if meta.is_suggestion and row == "Suggestion" then
-				table.insert(segments, { start_col = 0, end_col = #row, hl_group = "AtlasTextMuted" })
-			end
 			if meta.is_task == true then
 				local checkbox_start, checkbox_end = row:find("%[[ xX]%]")
 				if checkbox_start then
