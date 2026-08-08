@@ -1,5 +1,6 @@
 local M = {}
 
+local keymaps = require("atlas.core.keymaps")
 local statusline = require("atlas.ui.statusline")
 local utils = require("atlas.ui.shared.utils")
 
@@ -133,6 +134,7 @@ function M.open(opts)
 		return nil, nil
 	end
 	local source_win = vim.api.nvim_get_current_win()
+	local submit_keys = keymaps.resolve("ui.submit") or {}
 
 	local buf = vim.api.nvim_create_buf(false, true)
 	vim.api.nvim_set_option_value("buftype", "nofile", { buf = buf })
@@ -178,7 +180,10 @@ function M.open(opts)
 	if preview then
 		render_preview(buf, preview, width)
 	end
-	local footer_items = { "q quit", "<C-s> save+close" }
+	local footer_items = { "q quit" }
+	if #submit_keys > 0 then
+		table.insert(footer_items, string.format("%s save+close", table.concat(submit_keys, " / ")))
+	end
 	for _, action in ipairs(opts.actions or {}) do
 		local action_key = action.key
 		local description = action.description
@@ -360,11 +365,13 @@ function M.open(opts)
 		close_editor()
 	end
 
-	vim.keymap.set("n", "<C-s>", save_and_close, { buffer = buf, silent = true, nowait = true })
-	vim.keymap.set("i", "<C-s>", function()
-		vim.cmd("stopinsert")
-		save_and_close()
-	end, { buffer = buf, silent = true, nowait = true })
+	for _, submit_key in ipairs(submit_keys) do
+		vim.keymap.set("n", submit_key, save_and_close, { buffer = buf, silent = true, nowait = true })
+		vim.keymap.set("i", submit_key, function()
+			vim.cmd("stopinsert")
+			save_and_close()
+		end, { buffer = buf, silent = true, nowait = true })
+	end
 
 	for _, action in ipairs(opts.actions or {}) do
 		vim.keymap.set(action.mode or "n", action.key, function()

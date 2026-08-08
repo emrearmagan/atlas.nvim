@@ -82,9 +82,12 @@ function M.to_pull_request(raw)
 			branch = tostring(raw.baseRefName or ""),
 			commit_hash = tostring(raw.baseRefOid or ""),
 		},
-		comments_count = tonumber(raw.commentsCount) or (type(raw.comments) == "table" and tonumber(
-			raw.comments.totalCount
-		)) or (type(raw.comments) == "table" and #raw.comments) or tonumber(raw.comments) or 0,
+		comments_count = tonumber(raw.totalCommentsCount)
+			or tonumber(raw.commentsCount)
+			or (type(raw.comments) == "table" and tonumber(raw.comments.totalCount))
+			or (type(raw.comments) == "table" and #raw.comments)
+			or tonumber(raw.comments)
+			or 0,
 		tasks_count = 0,
 		created_on = tostring(raw.createdAt or ""),
 		updated_on = tostring(raw.updatedAt or ""),
@@ -229,6 +232,9 @@ function M.to_activity(item)
 		}
 	elseif event == "reviewed" then
 		local state_label = tostring(item.state or ""):lower()
+		if state_label == "pending" then
+			return nil
+		end
 		local kind = state_label == "approved" and "approval"
 			or state_label == "changes_requested" and "changes_requested"
 			or "review"
@@ -242,7 +248,6 @@ function M.to_activity(item)
 			date = date,
 			label = verb,
 			body = body ~= "" and body or nil,
-			always_render = body ~= "" or nil,
 		}
 	elseif event == "closed" or event == "merged" or event == "reopened" then
 		return { kind = event, actor = actor, date = date, label = event }
@@ -284,6 +289,22 @@ function M.to_activity(item)
 			date = date,
 			label = reviewer ~= "" and ("requested review from " .. reviewer) or "requested review",
 		}
+	elseif event == "renamed" then
+		local rename = item.rename or {}
+		return {
+			kind = "renamed",
+			actor = actor,
+			date = date,
+			label = "changed the title",
+			body = string.format("%s → %s", tostring(rename.from or ""), tostring(rename.to or "")),
+		}
+	elseif event == "comment_deleted" then
+		return {
+			kind = "comment_deleted",
+			actor = actor,
+			date = date,
+			label = "deleted a comment",
+		}
 	elseif event == "ready_for_review" then
 		return {
 			kind = "ready_for_review",
@@ -305,7 +326,7 @@ local function comment(raw, raw_user)
 		id = raw.id,
 		parent_id = nil,
 		author = comment_author(raw_user),
-		content_raw = tostring(raw.body or ""),
+		content_raw = body_text(raw.body),
 		created_on = tostring(raw.created_at or raw.submitted_at or ""),
 		inline = nil,
 		url = nil,
@@ -334,10 +355,11 @@ function M.to_comment(raw, thread_state)
 	local original_line = json.nilify(raw.original_line)
 	local path = json.nilify(raw.path)
 
-	local inline, inline_hunk
+	local inline, inline_hunk, inline_hunk_anchor
 	if path ~= nil then
 		local side = raw.side == "LEFT" and "old" or "new"
 		local anchor = line or original_line
+		inline_hunk_anchor = original_line or anchor
 		if anchor then
 			inline = {
 				path = tostring(path),
@@ -346,8 +368,8 @@ function M.to_comment(raw, thread_state)
 			}
 		end
 		inline_hunk = parse_diff_hunk(raw.diff_hunk)
-		if inline and inline_hunk and anchor then
-			inline_hunk = diff_parser.window_hunk(inline_hunk, side, anchor)
+		if inline and inline_hunk and inline_hunk_anchor then
+			inline_hunk = diff_parser.window_hunk(inline_hunk, side, inline_hunk_anchor)
 		end
 	end
 
@@ -355,8 +377,10 @@ function M.to_comment(raw, thread_state)
 	result.parent_id = json.nilify(raw.in_reply_to_id)
 	result.inline = inline
 	result.inline_hunk = inline_hunk
+	result.inline_hunk_anchor = inline_hunk and inline_hunk_anchor or nil
 	result.is_task = nil
 	if thread_state then
+		result.outdated = thread_state.outdated == true
 		if thread_state.pending then
 			result.state = "PENDING"
 		elseif thread_state.resolved then

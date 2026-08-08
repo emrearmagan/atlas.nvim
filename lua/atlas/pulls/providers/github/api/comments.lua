@@ -25,6 +25,7 @@ query($owner:String!,$name:String!,$number:Int!,$endCursor:String){
           originalLine
           comments(first:100){
             nodes{
+              id
               databaseId
               body
               diffHunk
@@ -44,6 +45,7 @@ query($owner:String!,$name:String!,$number:Int!,$endCursor:String){
 ]]
 
 local REVIEW_COMMENT_FIELDS = [[
+id
 databaseId
 body
 diffHunk
@@ -145,6 +147,7 @@ local function to_review_comment(node, thread, fallback_parent)
 		outdated = thread.isOutdated == true,
 	})
 	comment._raw = {
+		comment_id = tostring(node.id or ""),
 		thread_id = tostring(thread.id or ""),
 		review_id = tostring(review.id or ""),
 	}
@@ -152,6 +155,25 @@ local function to_review_comment(node, thread, fallback_parent)
 		comment.parent_id = fallback_parent
 	end
 	return comment
+end
+
+---Rebuild the thread node `to_review_comment` expects from a comment we already mapped.
+---Mutations that return a bare comment do not carry the thread, but its path/line/side
+---are already known from the comment we started out with.
+---@param comment PullsComment
+---@return table
+local function thread_from_comment(comment)
+	local inline = comment.inline or {}
+	local raw = comment._raw or {}
+	return {
+		id = tostring(raw.thread_id or ""),
+		path = inline.path,
+		line = inline.to,
+		originalLine = comment.inline_hunk_anchor or inline.from,
+		diffSide = inline.from ~= nil and "LEFT" or "RIGHT",
+		isResolved = comment.state == "RESOLVED",
+		isOutdated = comment.outdated == true or comment.state == "OUTDATED",
+	}
 end
 
 ---@param pr PullRequest
@@ -767,6 +789,127 @@ mutation($pullRequestId:ID!,$commitOID:GitObjectID){
 	)
 end
 
+local UPDATE_REVIEW_COMMENT_MUTATION = ([[
+mutation($commentId:ID!,$body:String!){
+  updatePullRequestReviewComment(input:{pullRequestReviewCommentId:$commentId,body:$body}){
+    pullRequestReviewComment{%s}
+  }
+}
+]]):format(REVIEW_COMMENT_FIELDS)
+
+local DELETE_REVIEW_COMMENT_MUTATION = [[
+mutation($commentId:ID!){
+  deletePullRequestReviewComment(input:{id:$commentId}){
+    pullRequestReview{id state commit{oid}}
+  }
+}
+]]
+
+---Comments belonging to a pending (draft) review are not published yet, so the REST
+---endpoints return 404 for them. GraphQL addresses them by node id instead.
+---@param comment PullsComment
+---@return boolean
+local function is_pending(comment)
+	return comment.state == "PENDING"
+end
+
+---@param comment PullsComment
+---@return string
+local function comment_node_id(comment)
+	return tostring((comment._raw or {}).comment_id or "")
+end
+
+---@generic T
+---@param comment PullsComment
+---@param missing_result T
+---@param on_done fun(result: T, err: string|nil)
+---@return string|nil node_id `nil` when `on_done` was already called with the missing-id error
+local function require_comment_node_id(comment, missing_result, on_done)
+	local node_id = comment_node_id(comment)
+	if node_id == "" then
+		vim.schedule(function()
+			on_done(missing_result, "Missing review comment id")
+		end)
+		return nil
+	end
+	return node_id
+end
+
+---@param pr PullRequest
+---@param comment PullsComment
+---@param node_id string
+---@param on_done fun(comment: PullsComment|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+local function edit_pending_comment(pr, comment, node_id, on_done)
+	return cli.gh({
+		"api",
+		"graphql",
+		"-f",
+		"commentId=" .. node_id,
+		"-f",
+		"body=" .. tostring(comment.content_raw or ""),
+		"-f",
+		"query=" .. UPDATE_REVIEW_COMMENT_MUTATION,
+	}, function(result, err)
+		if err then
+			on_done(nil, err)
+			return
+		end
+		local data = json.safe_table(json.safe_table(result).data)
+		local payload = json.safe_table(json.nilify(data.updatePullRequestReviewComment))
+		local node = json.nilify(payload.pullRequestReviewComment)
+		if type(node) ~= "table" or json.nilify(node.databaseId) == nil then
+			on_done(nil, "GitHub did not return the updated comment")
+			return
+		end
+		local updated = to_review_comment(node, thread_from_comment(comment), comment.parent_id)
+		updated.inline_hunk = updated.inline_hunk or comment.inline_hunk
+		on_done(updated, nil)
+	end, {
+		action = "Edit comment",
+		repo = pr.repo_full_name,
+		number = pr.id,
+		comment_id = comment.id,
+	})
+end
+
+---@param pr PullRequest
+---@param target PullsComment
+---@param node_id string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+local function delete_pending_comment(pr, target, node_id, on_done)
+	return cli.gh({
+		"api",
+		"graphql",
+		"-f",
+		"commentId=" .. node_id,
+		"-f",
+		"query=" .. DELETE_REVIEW_COMMENT_MUTATION,
+	}, function(result, err)
+		if err then
+			on_done(false, err)
+			return
+		end
+		-- Dropping the last draft comment discards the pending review, so the cached
+		-- review id would otherwise go stale and break the next pending comment.
+		local data = json.safe_table(json.safe_table(result).data)
+		local payload = json.safe_table(json.nilify(data.deletePullRequestReviewComment))
+		local review = json.nilify(payload.pullRequestReview)
+		if type(review) == "table" and review.state == "PENDING" then
+			remember_pending_review(pr, review)
+		else
+			pr._raw.reviews = nil
+		end
+		on_done(true, nil)
+	end, {
+		action = "Delete comment",
+		repo = pr.repo_full_name,
+		number = pr.id,
+		comment_id = target.id,
+	})
+end
+
 ---@param pr PullRequest
 ---@param comment PullsComment
 ---@param on_done fun(comment: PullsComment|nil, err: string|nil)
@@ -809,6 +952,14 @@ function M.edit_comment(pr, comment, on_done)
 		})
 	end
 
+	if is_pending(comment) then
+		local node_id = require_comment_node_id(comment, nil, on_done)
+		if node_id == nil then
+			return nil
+		end
+		return edit_pending_comment(pr, comment, node_id, on_done)
+	end
+
 	local endpoint = comment.inline ~= nil
 			and string.format("repos/%s/pulls/comments/%s", repo_slug, tostring(comment.id))
 		or string.format("repos/%s/issues/comments/%s", repo_slug, tostring(comment.id))
@@ -821,6 +972,7 @@ function M.edit_comment(pr, comment, on_done)
 		end
 		local updated = mapper.to_comment(result)
 		updated.state = comment.state
+		updated.outdated = comment.outdated
 		updated._raw = comment._raw
 		on_done(updated, nil)
 	end, {
@@ -849,6 +1001,14 @@ function M.delete_comment(pr, target, on_done)
 			on_done(false, "Cannot delete the pull request description")
 		end)
 		return nil
+	end
+
+	if is_pending(target) then
+		local node_id = require_comment_node_id(target, false, on_done)
+		if node_id == nil then
+			return nil
+		end
+		return delete_pending_comment(pr, target, node_id, on_done)
 	end
 
 	local endpoint = target.inline ~= nil
@@ -949,6 +1109,7 @@ function M.reply_comment(pr, parent, content, on_done)
 					created.parent_id = root_id
 					created.inline_hunk = created.inline_hunk or parent.inline_hunk
 					created.state = parent.state
+					created.outdated = parent.outdated
 					created.can_resolve = false
 					on_done(created, nil)
 				end,
@@ -1004,18 +1165,9 @@ mutation($threadId:ID!,$reviewId:ID,$body:String!){
 				on_done(nil, "GitHub did not return the created reply")
 				return
 			end
-			local inline = parent.inline or {}
 			local review = json.safe_table(reply.pullRequestReview)
 			remember_pending_review(pr, review)
-			local created = to_review_comment(reply, {
-				id = thread_id,
-				path = inline.path,
-				line = inline.to,
-				originalLine = inline.from,
-				diffSide = inline.from ~= nil and "LEFT" or "RIGHT",
-				isResolved = parent.state == "RESOLVED",
-				isOutdated = parent.state == "OUTDATED",
-			}, parent.parent_id or parent.id)
+			local created = to_review_comment(reply, thread_from_comment(parent), parent.parent_id or parent.id)
 			created.inline_hunk = created.inline_hunk or parent.inline_hunk
 			on_done(created, nil)
 		end, {

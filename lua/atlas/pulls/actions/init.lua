@@ -42,16 +42,9 @@ function M.open_in_browser(pr)
 end
 
 ---@param pr PullRequest
+---@param update_title fun(pr: PullRequest, title: string, on_done: fun(ok: boolean, err: string|nil))
 ---@param on_done fun(ok: boolean)
-function M.edit_title(pr, on_done)
-	local p = provider()
-	local core = p and p.capabilities.core
-	if not core or not core.update_title then
-		statusline.notify("warn", "Editing the PR title is not supported for this provider")
-		on_done(false)
-		return
-	end
-
+function M.edit_title(pr, update_title, on_done)
 	md_editor.open({
 		key = "pr-title-edit-" .. tostring(pr.id),
 		title = " Edit Title ",
@@ -65,7 +58,7 @@ function M.edit_title(pr, on_done)
 				return
 			end
 			statusline.notify("loading", "Updating title...")
-			core.update_title(pr, title, function(ok, err)
+			update_title(pr, title, function(ok, err)
 				if err or ok == false then
 					statusline.notify("error", "Title update failed: " .. tostring(err or "Unknown error"))
 					on_done(false)

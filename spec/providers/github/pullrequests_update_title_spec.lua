@@ -1,19 +1,12 @@
+local github_client = require("spec.support.github_client_stub")
+
 local function fresh_module()
 	package.loaded["atlas.pulls.providers.github.api.pullrequests"] = nil
 	return require("atlas.pulls.providers.github.api.pullrequests")
 end
 
 local function stub_client(gh)
-	package.preload["atlas.providers.github.client"] = function()
-		local client = {
-			gh = gh,
-			get_mem = function()
-				return nil, false
-			end,
-			set_mem = function() end,
-		}
-		return { pulls = client, issues = client }
-	end
+	github_client.install({ gh = gh })
 end
 
 describe("github pullrequests.update_title", function()
@@ -22,12 +15,10 @@ describe("github pullrequests.update_title", function()
 	before_each(function()
 		calls = {}
 		package.loaded["atlas.pulls.providers.github.api.pullrequests"] = nil
-		package.loaded["atlas.providers.github.client"] = nil
 	end)
 
 	after_each(function()
-		package.preload["atlas.providers.github.client"] = nil
-		package.loaded["atlas.providers.github.client"] = nil
+		github_client.uninstall()
 		package.loaded["atlas.pulls.providers.github.api.pullrequests"] = nil
 	end)
 

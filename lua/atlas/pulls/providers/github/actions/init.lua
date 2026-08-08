@@ -14,6 +14,7 @@ local statusline = require("atlas.ui.statusline")
 ---| "convert_to_draft"
 ---| "edit_reviewers"
 ---| "edit_assignees"
+---| "edit_title"
 ---| "create_issue"
 ---| "labels"
 ---| "search"

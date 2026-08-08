@@ -34,7 +34,7 @@ local ICONS = {
 		bell = { icon = "󰂚", hl_group = "AtlasTextMuted" },
 		bell_no = { icon = "󰂛", hl_group = "AtlasTextMuted" },
 		bell_unread = { icon = "󱅫", hl_group = "AtlasLogInfo" },
-		pin = { icon = "󰐃", hl_group = "AtlasTextWarning" },
+		pin = { icon = "󰐃", hl_group = "AtlasTextNote" },
 		dot = { icon = "●", hl_group = "AtlasTextMuted" },
 		activity_more = { icon = "󰉺", hl_group = "AtlasTextMuted" },
 		star = { icon = "", hl_group = "AtlasTextWarning" },

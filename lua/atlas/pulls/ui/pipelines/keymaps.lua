@@ -41,13 +41,17 @@ function M.setup_pipelines(buf, title, actions)
 	add_help_action(items, "ui.help", function()
 		help.toggle({ buffer = buf })
 	end, "Toggle help", 5)
-	table.insert(items, {
-		key = "q",
-		desc = "Close pipelines",
-		index = 6,
-		callback = actions.close,
-		opts = { silent = true, nowait = true },
-	})
+	local close_keys = keymaps.resolve("ui.close") or {}
+	vim.list_extend(close_keys, keymaps.resolve("ui.toggle_panel") or {})
+	if #close_keys > 0 then
+		table.insert(items, {
+			key = close_keys,
+			desc = "Close pipelines",
+			index = 6,
+			callback = actions.close,
+			opts = { silent = true, nowait = true },
+		})
+	end
 	help.register(title, items, { buffer = buf, index = 100 })
 end
 

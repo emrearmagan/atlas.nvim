@@ -181,6 +181,18 @@ local ACTIONS = {
 		end,
 	},
 	{
+		id = "edit_title",
+		label = "Edit title",
+		is_available = function(ctx)
+			return has_pr(ctx), "No PR selected"
+		end,
+		run = function(ctx, done)
+			require("atlas.pulls.actions").edit_title(ctx.pr, pullrequests.update_title, function(changed)
+				done({ changed_pr = changed, message = changed and "Title updated" or nil }, nil)
+			end)
+		end,
+	},
+	{
 		id = "search",
 		label = "Search repositories",
 		is_available = function(_)

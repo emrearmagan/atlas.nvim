@@ -38,6 +38,8 @@ local function apply_main_opts(win)
 	set_window_option(win, "signcolumn", "no")
 	set_window_option(win, "statuscolumn", "")
 	set_window_option(win, "foldcolumn", "0")
+	set_window_option(win, "foldmethod", "manual")
+	set_window_option(win, "foldenable", false)
 	set_window_option(win, "wrap", false)
 	set_window_option(win, "cursorline", true)
 	set_window_option(win, "scrollbind", false)
@@ -59,6 +61,8 @@ local function apply_detail_opts(win)
 	set_window_option(win, "signcolumn", "no")
 	set_window_option(win, "statuscolumn", "")
 	set_window_option(win, "foldcolumn", "0")
+	set_window_option(win, "foldmethod", "manual")
+	set_window_option(win, "foldenable", false)
 	set_window_option(win, "wrap", true)
 	set_window_option(win, "breakindent", true)
 	set_window_option(win, "cursorline", true)
@@ -319,24 +323,6 @@ function M.close(reason)
 		close_session(state.session_id, reason or "user_close")
 	end
 end
-
---- When scrolling in the panel or notification window the main view kinda break and this helps. I dont know why tho..
-vim.api.nvim_create_autocmd("WinScrolled", {
-	group = resize_group,
-	callback = function()
-		if not M.is_open() then
-			return
-		end
-
-		local main_key = tostring(state.main_win or "")
-		for win_key, _ in pairs(vim.v.event) do
-			if win_key ~= "all" and win_key ~= main_key then
-				vim.cmd("redraw!")
-				return
-			end
-		end
-	end,
-})
 
 vim.api.nvim_create_autocmd({ "VimResized", "WinResized" }, {
 	group = resize_group,

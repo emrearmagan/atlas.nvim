@@ -1,7 +1,7 @@
 local M = {}
 
 local statusline = require("atlas.ui.statusline")
-local status_spinner = require("atlas.ui.components.spinner")
+local spinner = require("atlas.ui.components.spinner")
 local state = require("atlas.pulls.state")
 local layout = require("atlas.ui.layout")
 local helper = require("atlas.pulls.ui.main.helper")
@@ -22,13 +22,18 @@ local function render_if_active()
 	require("atlas.pulls.ui.main").render()
 end
 
-local refresh_status_spinner = status_spinner.create({
+local loading_spinner = spinner.create({
 	interval_ms = 120,
 	on_tick = function(frame)
 		state.reload_spinner_frame = frame
 		render_if_active()
 	end,
 })
+
+local function stop_loading_spinner()
+	loading_spinner:stop()
+	state.reload_spinner_frame = "⠋"
+end
 
 ---@return boolean
 local function has_reloading_prs()
@@ -40,17 +45,24 @@ local function has_reloading_prs()
 	return false
 end
 
+local function sync_loading_spinner()
+	if state.is_loading or has_reloading_prs() then
+		if not loading_spinner:is_running() then
+			loading_spinner:start()
+		end
+		state.reload_spinner_frame = loading_spinner:current_frame()
+	else
+		stop_loading_spinner()
+	end
+end
+
 ---@param repo_id string
 ---@param pr_id string|number
 local function begin_pr_reload(repo_id, pr_id)
 	local key = state.reload_key(repo_id, pr_id)
 	state.reloading_pr_keys[key] = (tonumber(state.reloading_pr_keys[key]) or 0) + 1
 
-	if not refresh_status_spinner:is_running() then
-		refresh_status_spinner:start()
-	end
-
-	state.reload_spinner_frame = refresh_status_spinner:current_frame()
+	sync_loading_spinner()
 	render_if_active()
 end
 
@@ -65,10 +77,7 @@ local function end_pr_reload(repo_id, pr_id)
 		state.reloading_pr_keys[key] = nil
 	end
 
-	if not has_reloading_prs() then
-		refresh_status_spinner:stop()
-		state.reload_spinner_frame = "⠋"
-	end
+	sync_loading_spinner()
 
 	render_if_active()
 end
@@ -83,9 +92,8 @@ local function cancel_pr_reload_handles()
 end
 
 local function reset_reload_state()
-	refresh_status_spinner:stop()
+	stop_loading_spinner()
 	state.reloading_pr_keys = {}
-	state.reload_spinner_frame = "⠋"
 end
 
 local function cancel_active_requests()
@@ -164,6 +172,7 @@ local function load_active_view(opts, on_done)
 
 	state.is_loading = true
 	state.error = nil
+	sync_loading_spinner()
 	statusline.notify("loading", "Loading pull requests...")
 	render_if_active()
 
@@ -185,6 +194,7 @@ local function load_active_view(opts, on_done)
 			return
 		end
 		state.is_loading = false
+		sync_loading_spinner()
 		state.current_view = state.active_view
 
 		local first_err = nil
@@ -372,12 +382,14 @@ function M.run_bookmark(name, value)
 	state.is_loading = true
 	state.error = nil
 	state.pulls = nil
+	sync_loading_spinner()
 	statusline.notify("loading", "Running query...")
 	render_if_active()
 
 	active_pullrequests_handle = core.fetch_pullrequests(view, { force_load = false }, function(groups, err)
 		active_pullrequests_handle = nil
 		state.is_loading = false
+		sync_loading_spinner()
 		local first_err = type(err) == "table" and err[1] or err
 		if first_err and (groups == nil or #groups == 0) then
 			state.error = tostring(first_err)
