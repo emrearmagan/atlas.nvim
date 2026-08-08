@@ -187,20 +187,30 @@ function M.open_at_cursor(session, buf)
 end
 
 ---@param session AtlasReviewSession
----@param buf integer
----@return boolean
-function M.delete_at_cursor(session, buf)
+---@param note AtlasNote
+function M.edit(session, note)
 	local state = session.notes
-	local items = notes_at_cursor(session, buf)
-	if not state or #items == 0 then
-		return false
+	if not state then
+		return
 	end
-	if #items > 1 then
-		M.open_at_cursor(session, buf)
-		return true
-	end
+	note_editor.edit(state.target, note, function(updated, err)
+		if not updated then
+			notify(session, "error", err or "Unable to update local note")
+			return
+		end
+		upsert(state, updated)
+		session.refresh_ui()
+		notify(session, "success", "Local note updated")
+	end)
+end
 
-	local note = items[1]
+---@param session AtlasReviewSession
+---@param note AtlasNote
+function M.delete(session, note)
+	local state = session.notes
+	if not state then
+		return
+	end
 	vim.ui.input({ prompt = "Delete local note? [y/N]: " }, function(answer)
 		answer = vim.trim(tostring(answer or "")):lower()
 		if answer ~= "y" and answer ~= "yes" then
@@ -215,6 +225,23 @@ function M.delete_at_cursor(session, buf)
 		session.refresh_ui()
 		notify(session, "success", "Local note deleted")
 	end)
+end
+
+---@param session AtlasReviewSession
+---@param buf integer
+---@return boolean
+function M.delete_at_cursor(session, buf)
+	local state = session.notes
+	local items = notes_at_cursor(session, buf)
+	if not state or #items == 0 then
+		return false
+	end
+	if #items > 1 then
+		M.open_at_cursor(session, buf)
+		return true
+	end
+
+	M.delete(session, items[1])
 	return true
 end
 
