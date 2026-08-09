@@ -131,7 +131,7 @@ end
 
 ---@param pr PullRequest
 ---@param refresh fun()
----@param opts { force_refresh: boolean|nil }|nil
+---@param opts { force_refresh: boolean|nil, pr_refreshed: boolean|nil }|nil
 function M.fetches(pr, refresh, opts)
 	cancel_panel_fetches()
 	reset_state()
@@ -145,7 +145,13 @@ function M.fetches(pr, refresh, opts)
 	local repo = tostring(pr.repo or "")
 	local force = opts and opts.force_refresh == true
 
-	if owner ~= "" and repo ~= "" and pr.id ~= nil then
+	if opts and opts.pr_refreshed then
+		local raw = pr._raw or {}
+		state.header_extras = {
+			assignees = raw.assignees,
+			labels = raw.labels,
+		}
+	elseif owner ~= "" and repo ~= "" and pr.id ~= nil then
 		state.header_loading = true
 		track_panel(pullrequests.get_pr(owner, repo, pr.id, function(fresh, err)
 			state.header_loading = false

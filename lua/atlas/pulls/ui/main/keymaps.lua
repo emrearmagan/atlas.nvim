@@ -41,6 +41,26 @@ function M.register(buf, views)
 	local help = require("atlas.ui.popups.help")
 	local state = require("atlas.pulls.state")
 	local provider_name = state.provider and state.provider.name or "Pulls"
+	---@param id AtlasPullActionId
+	---@param needs_pr boolean
+	local function run_action(id, needs_pr)
+		local pr = selected_pr()
+
+		if needs_pr and not pr then
+			statusline.notify("warn", "No PR selected")
+			return
+		end
+		if state.provider then
+			actions.run(id, {
+				provider = state.provider,
+				pr = pr,
+				current_user = state.current_user,
+				buf = buf,
+			}, function(result)
+				require("atlas.pulls.ui.main.controller").apply_action_result(pr, result)
+			end)
+		end
+	end
 
 	local items = {}
 
@@ -90,7 +110,7 @@ function M.register(buf, views)
 		)
 	end
 
-	if state.provider and state.provider.capabilities.actions then
+	if state.provider then
 		utils.insert_if(
 			items,
 			item("ui.open_actions", {
@@ -102,7 +122,16 @@ function M.register(buf, views)
 						statusline.notify("warn", "No PR selected")
 						return
 					end
-					actions.open_actions(pr, "main")
+					if state.provider then
+						actions.open({
+							provider = state.provider,
+							pr = pr,
+							current_user = state.current_user,
+							buf = buf,
+						}, function(result)
+							require("atlas.pulls.ui.main.controller").apply_action_result(pr, result)
+						end)
+					end
 				end,
 			})
 		)
@@ -114,12 +143,7 @@ function M.register(buf, views)
 			desc = "Open PR in browser",
 			opts = { nowait = true },
 			callback = function()
-				local pr = selected_pr()
-				if pr == nil then
-					statusline.notify("warn", "No PR selected")
-					return
-				end
-				actions.open_in_browser(pr)
+				run_action("open_in_browser", true)
 			end,
 		})
 	)
@@ -130,12 +154,7 @@ function M.register(buf, views)
 			desc = "Copy PR URL",
 			opts = { nowait = true },
 			callback = function()
-				local pr = selected_pr()
-				if pr == nil then
-					statusline.notify("warn", "No PR selected")
-					return
-				end
-				actions.copy_url(pr)
+				run_action("copy_url", true)
 			end,
 		})
 	)
@@ -146,12 +165,7 @@ function M.register(buf, views)
 			desc = "Copy PR ID",
 			opts = { nowait = true },
 			callback = function()
-				local pr = selected_pr()
-				if pr == nil then
-					statusline.notify("warn", "No PR selected")
-					return
-				end
-				actions.copy_id(pr)
+				run_action("copy_id", true)
 			end,
 		})
 	)
@@ -162,12 +176,7 @@ function M.register(buf, views)
 			desc = "Show PR details",
 			opts = { nowait = true },
 			callback = function()
-				local pr = selected_pr()
-				if pr == nil then
-					statusline.notify("warn", "No PR selected")
-					return
-				end
-				actions.show_details(pr, buf)
+				require("atlas.pulls.ui.main.controller").show_pr_details(buf)
 			end,
 		})
 	)
@@ -178,12 +187,7 @@ function M.register(buf, views)
 			desc = "Open PR diff",
 			opts = { nowait = true },
 			callback = function()
-				local pr = selected_pr()
-				if pr == nil then
-					statusline.notify("warn", "No PR selected")
-					return
-				end
-				actions.open_diff(pr)
+				run_action("open_diff", true)
 			end,
 		})
 	)
@@ -194,23 +198,25 @@ function M.register(buf, views)
 			desc = "Checkout PR branch",
 			opts = { nowait = true },
 			callback = function()
-				local pr = selected_pr()
-				if pr == nil then
-					statusline.notify("warn", "No PR selected")
-					return
-				end
-				actions.checkout(pr)
+				run_action("checkout", true)
 			end,
 		})
 	)
 
-	if state.provider and state.provider.capabilities.search then
+	local search_available = state.provider
+		and actions.is_available("search", {
+			provider = state.provider,
+			current_user = state.current_user,
+			buf = buf,
+		})
+
+	if search_available then
 		utils.insert_if(
 			items,
 			item("ui.search", {
 				desc = "Search repositories",
 				callback = function()
-					actions.search()
+					run_action("search", false)
 				end,
 			})
 		)
@@ -226,7 +232,7 @@ function M.register(buf, views)
 					statusline.notify("warn", "No PR selected")
 					return
 				end
-				actions.refresh(pr)
+				require("atlas.pulls.ui.main.controller").refresh_pr(pr)
 			end,
 		})
 	)
@@ -236,7 +242,7 @@ function M.register(buf, views)
 		item("ui.refresh_view", {
 			desc = "Refresh current view",
 			callback = function()
-				actions.refresh_view()
+				require("atlas.pulls.ui.main.controller").refresh_current_view()
 			end,
 		})
 	)

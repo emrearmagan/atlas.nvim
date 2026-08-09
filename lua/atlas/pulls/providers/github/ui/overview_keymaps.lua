@@ -1,17 +1,21 @@
 local M = {}
 
 local help = require("atlas.ui.popups.help")
+local actions = require("atlas.pulls.actions")
 
----@param id GitHubActionId|string
+---@param id AtlasGitHubActionId
 ---@param pr PullRequest
 local function run_action(id, pr)
-	local actions = require("atlas.pulls.providers.github.actions")
-	actions.run(id, { pr = pr, source = "panel" }, function(result, _)
-		if result ~= nil and result.changed_pr then
-			local controller = require("atlas.pulls.ui.main.controller")
-			controller.refresh_pr(pr)
-		end
-	end)
+	local state = require("atlas.pulls.state")
+	if state.provider then
+		actions.run(id, {
+			provider = state.provider,
+			pr = pr,
+			current_user = state.current_user,
+		}, function(result)
+			require("atlas.pulls.ui.main.controller").apply_action_result(pr, result)
+		end)
+	end
 end
 
 ---@param buf integer

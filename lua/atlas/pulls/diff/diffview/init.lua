@@ -4,9 +4,9 @@ local comments = require("atlas.pulls.diff.shared.comments")
 local events = require("atlas.core.events")
 local notes = require("atlas.pulls.diff.shared.notes")
 local notify = require("atlas.core.notify")
-local renderer = require("atlas.pulls.diff.shared.comments.renderer")
+local comment_renderer = require("atlas.pulls.diff.shared.ui.comment_renderer")
 local review_keymaps = require("atlas.pulls.diff.shared.keymaps")
-local statusline = require("atlas.pulls.diff.shared.statusline")
+local statusline = require("atlas.pulls.diff.shared.ui.statusline")
 
 local STATUSLINE = "%!v:lua.require'atlas.pulls.diff.diffview'.statusline()"
 
@@ -193,8 +193,8 @@ end
 ---@param entry AtlasDiffviewReview
 local function suspend(entry)
 	if entry.session then
-		renderer.clear_comments(entry.session.left.buf)
-		renderer.clear_comments(entry.session.right.buf)
+		comment_renderer.clear_comments(entry.session.left.buf)
+		comment_renderer.clear_comments(entry.session.right.buf)
 		notes.clear(entry.session)
 		entry.session.document = nil
 	end
@@ -252,8 +252,8 @@ local function sync(entry)
 		or previous.left.buf ~= layout.a.file.bufnr
 		or previous.right.buf ~= layout.b.file.bufnr
 	if previous and buffers_changed then
-		renderer.clear_comments(previous.left.buf)
-		renderer.clear_comments(previous.right.buf)
+		comment_renderer.clear_comments(previous.left.buf)
+		comment_renderer.clear_comments(previous.right.buf)
 		notes.clear(previous)
 	end
 	local resumed = entry.suspended

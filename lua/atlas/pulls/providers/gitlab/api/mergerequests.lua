@@ -1,6 +1,7 @@
 local M = {}
 
 local service = require("atlas.providers.gitlab.client").pulls
+local comments_api = require("atlas.pulls.providers.gitlab.api.comments")
 local mapper = require("atlas.pulls.providers.gitlab.api.mapper")
 
 ---@param params table<string, any>
@@ -314,10 +315,85 @@ function M.set_title(pr, title, on_done)
 end
 
 ---@param pr PullRequest
----@param ids integer[]
+---@param draft boolean
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.set_reviewer_ids(pr, ids, on_done)
+function M.set_draft(pr, draft, on_done)
+	local title = tostring(pr.title or ""):gsub("^%s*[Dd]raft:%s*", ""):gsub("^%s*WIP:%s*", "")
+	if title == "" then
+		on_done(false, "MR title is empty after stripping draft prefix")
+		return nil
+	end
+	if draft then
+		title = "Draft: " .. title
+	end
+
+	return M.update_mr(pr, { title = title }, function(updated, err)
+		if err then
+			on_done(false, err)
+			return
+		end
+		pr.title = updated and updated.title or title
+		pr.state = updated and updated.state or (draft and "draft" or "open")
+		pr._raw.draft = draft
+		on_done(true, nil)
+	end)
+end
+
+---@param opts { repo_slug: string, repo_root: string|nil, head: string, base: string, pr: PullRequest|nil }
+---@param on_done fun(reviewers: PullsCreatePRReviewer[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_default_reviewers(opts, on_done)
+	local slug = tostring(opts.repo_slug or "")
+	if slug == "" then
+		vim.schedule(function()
+			on_done(nil, "Missing project slug")
+		end)
+		return nil
+	end
+
+	local endpoint = string.format("/projects/%s/members/all?per_page=100", service.url_encode(slug))
+	return service.request("GET", endpoint, nil, function(result, err)
+		if err then
+			on_done(nil, err)
+			return
+		end
+
+		local selected = {}
+		for _, reviewer in ipairs((opts.pr and opts.pr._raw.reviewers) or {}) do
+			selected[tostring(reviewer.id or "")] = true
+		end
+
+		local reviewers = {}
+		for _, raw in ipairs(type(result) == "table" and result or {}) do
+			local login = type(raw) == "table" and tostring(raw.username or "") or ""
+			local id = type(raw) == "table" and tonumber(raw.id) or nil
+			if login ~= "" and id then
+				table.insert(reviewers, {
+					label = "@" .. login,
+					provider_id = tostring(id),
+					selected = selected[tostring(id)] == true,
+					default = false,
+				})
+			end
+		end
+		on_done(reviewers, nil)
+	end)
+end
+
+---@param pr PullRequest
+---@param reviewers PullsCreatePRReviewer[]
+---@param _original_reviewers PullsCreatePRReviewer[]
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.update_reviewers(pr, reviewers, _original_reviewers, on_done)
+	local ids = {}
+	for _, reviewer in ipairs(reviewers) do
+		local id = tonumber(reviewer.provider_id)
+		if id then
+			table.insert(ids, id)
+		end
+	end
 	-- GitLab requires non-empty array; pass {0} to clear.
 	local body = { reviewer_ids = (#ids == 0) and { 0 } or ids }
 	return M.update_mr(pr, body, function(_, err)
@@ -407,7 +483,39 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.submit_review(pr, body, on_done)
-	return require("atlas.pulls.providers.gitlab.api.comments").publish_review(pr, "reviewed", body, on_done)
+	return comments_api.publish_review(pr, "reviewed", body, on_done)
+end
+
+---@param pr PullRequest
+---@param body string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.approve_review(pr, body, on_done)
+	return M.approve(pr, function(ok, err)
+		if not ok or vim.trim(body) == "" then
+			on_done(ok, err)
+			return
+		end
+		comments_api.add_comment(pr, body, nil, function(comment, comment_err)
+			on_done(comment ~= nil, comment_err)
+		end)
+	end)
+end
+
+---@param pr PullRequest
+---@param body string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.unapprove_review(pr, body, on_done)
+	return M.unapprove(pr, function(ok, err)
+		if not ok or vim.trim(body) == "" then
+			on_done(ok, err)
+			return
+		end
+		comments_api.add_comment(pr, body, nil, function(comment, comment_err)
+			on_done(comment ~= nil, comment_err)
+		end)
+	end)
 end
 
 ---@param pr PullRequest
@@ -415,7 +523,7 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.request_changes(pr, body, on_done)
-	return require("atlas.pulls.providers.gitlab.api.comments").publish_review(pr, "requested_changes", body, on_done)
+	return comments_api.publish_review(pr, "requested_changes", body, on_done)
 end
 
 ---@param pr PullRequest

@@ -68,26 +68,35 @@ function M.move_cursor(direction)
 	on_cursor_moved()
 end
 
-function M.focus_first_item()
+---@param predicate fun(item: table): boolean
+---@return boolean
+function M.focus_item(predicate)
 	local layout = require("atlas.ui.layout")
 	local win = layout.win_id("main")
 	local buf = layout.buf_id("main")
 	if win == nil or not vim.api.nvim_win_is_valid(win) then
-		return
+		return false
 	end
 	if buf == nil or not vim.api.nvim_buf_is_valid(buf) then
-		return
+		return false
 	end
 
 	local line_map = ui_state.line_map or {}
-	local max_line = vim.api.nvim_buf_line_count(buf)
-	for lnum = 1, max_line do
-		if is_selectable(line_map[lnum]) then
+	for lnum = 1, vim.api.nvim_buf_line_count(buf) do
+		local item = line_map[lnum]
+		if is_selectable(item) and predicate(item) then
 			vim.api.nvim_win_set_cursor(win, { lnum, 0 })
 			on_cursor_moved()
-			return
+			return true
 		end
 	end
+	return false
+end
+
+function M.focus_first_item()
+	M.focus_item(function()
+		return true
+	end)
 end
 
 function M.focus_last_item()

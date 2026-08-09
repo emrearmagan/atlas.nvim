@@ -34,13 +34,6 @@ function M.run(args, opts, on_done)
 	}
 end
 
----@param cmd string[]
----@param cwd string
----@param on_done fun(res: vim.SystemCompleted)
-local function run(cmd, cwd, on_done)
-	vim.system(cmd, { cwd = cwd, text = true }, on_done)
-end
-
 ---@return string
 local function default_cwd()
 	local buf_name = vim.api.nvim_buf_get_name(0)
@@ -364,7 +357,7 @@ end
 ---@param branch string
 ---@param on_done fun(ok: boolean, err: string|nil)
 function M.checkout_branch(root, branch, on_done)
-	run({ "git", "checkout", branch }, root, function(res)
+	M.run({ "checkout", branch }, { cwd = root, text = true }, function(res)
 		if res.code ~= 0 then
 			local err = trim(res.stderr)
 			if err == "" then
@@ -382,7 +375,7 @@ end
 ---@param start_point string
 ---@param on_done fun(ok: boolean, err: string|nil)
 function M.checkout_new_branch(root, branch, start_point, on_done)
-	run({ "git", "checkout", "-b", branch, start_point }, root, function(res)
+	M.run({ "checkout", "-b", branch, start_point }, { cwd = root, text = true }, function(res)
 		if res.code ~= 0 then
 			local err = trim(res.stderr)
 			if err == "" then
@@ -401,21 +394,17 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 function M.push_branch(root, branch, remote, on_done)
 	remote = remote or "origin"
-	run(
-		{ "git", "-C", root, "push", "-u", remote, branch },
-		root,
-		vim.schedule_wrap(function(res)
-			if res.code ~= 0 then
-				local err = trim(res.stderr)
-				if err == "" then
-					err = string.format("git push failed with code %d", res.code)
-				end
-				on_done(false, err)
-				return
+	M.run({ "push", "-u", remote, branch }, { cwd = root, text = true }, function(res)
+		if res.code ~= 0 then
+			local err = trim(res.stderr)
+			if err == "" then
+				err = string.format("git push failed with code %d", res.code)
 			end
-			on_done(true, nil)
-		end)
-	)
+			on_done(false, err)
+			return
+		end
+		on_done(true, nil)
+	end)
 end
 
 return M

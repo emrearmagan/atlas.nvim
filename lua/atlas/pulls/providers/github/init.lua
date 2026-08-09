@@ -149,47 +149,6 @@ local function fetch_notifications(opts, on_done)
 	return notifications_api.fetch(vim.tbl_extend("force", { all = true, per_page = 100 }, opts or {}), on_done)
 end
 
----@param opts { repo_slug: string, repo_root: string|nil, head: string, base: string }
----@param on_done fun(reviewers: PullsCreatePRReviewer[]|nil, err: string|nil)
----@return { cancel: fun() }|nil
-local function fetch_default_reviewers(opts, on_done)
-	local slug = tostring(opts.repo_slug or "")
-	if slug == "" then
-		vim.schedule(function()
-			on_done(nil, "Missing repo slug")
-		end)
-		return nil
-	end
-
-	return cli.gh(
-		{ "api", "--paginate", string.format("repos/%s/collaborators?per_page=100", slug) },
-		function(result, err)
-			if err then
-				on_done(nil, err)
-				return
-			end
-
-			local reviewers = {}
-			for _, raw in ipairs(type(result) == "table" and result or {}) do
-				local login = type(raw) == "table" and tostring(raw.login or "") or ""
-				if login ~= "" then
-					table.insert(reviewers, {
-						label = "@" .. login,
-						provider_id = login,
-						selected = false,
-						default = false,
-					})
-				end
-			end
-			on_done(reviewers, nil)
-		end
-	)
-end
-
-local function search()
-	actions.run("search", { source = "main" }, function() end)
-end
-
 ---@param value string
 ---@param parsed AtlasParsedUrl|nil
 ---@return AtlasTarget|nil, string|nil
@@ -288,8 +247,13 @@ return {
 			fetch_user = fetch_user,
 			fetch_pullrequests = fetch_pullrequests,
 			fetch_pullrequest = fetch_pullrequest,
-			fetch_description = pullrequests_api.get_description,
+			create_pr = pullrequests_api.create_pr,
+			fetch_default_reviewers = pullrequests_api.fetch_default_reviewers,
 			fetch_reviewers = pullrequests_api.get_reviewers,
+			update_reviewers = pullrequests_api.update_reviewers,
+			update_title = pullrequests_api.update_title,
+			set_draft = pullrequests_api.set_draft,
+			fetch_description = pullrequests_api.get_description,
 			fetch_merge_checks = checks_api.get_merge_checks_summary,
 			fetch_diffstat = pullrequests_api.get_diffstat,
 			fetch_activity = activity_api.fetch_activity,
@@ -301,17 +265,22 @@ return {
 			reaction_options = require("atlas.ui.shared.emojis").github(),
 			comment_completion = require("atlas.pulls.providers.github.completion.author").build_completion,
 			fetch_conversation = fetch_conversation,
+			fetch_review_comments = comments_api.fetch_comments,
 			add_comment = comments_api.add_comment,
 			edit_comment = comments_api.edit_comment,
 			delete_comment = comments_api.delete_comment,
 			add_reaction = add_reaction,
+			set_thread_resolved = comments_api.set_thread_resolved,
 		},
 		reviews = {
 			fetch_review_context = pullrequests_api.get_review_context,
-			fetch_comments = comments_api.fetch_comments,
-			fetch_tasks = comments_api.fetch_tasks,
-			set_thread_resolved = comments_api.set_thread_resolved,
 			submit_review = comments_api.submit_review,
+			approve = comments_api.approve_review,
+			unapprove = comments_api.unapprove_review,
+			request_changes = comments_api.request_changes_review,
+		},
+		tasks = {
+			fetch_tasks = comments_api.fetch_tasks,
 		},
 		repository = {
 			fetch_details = repositories_api.fetch_detail,
@@ -328,11 +297,6 @@ return {
 			fetch = fetch_notifications,
 			mark_read = notifications_api.mark_read,
 			mark_done = notifications_api.mark_done,
-		},
-		search = search,
-		create = {
-			create_pr = pullrequests_api.create_pr,
-			fetch_default_reviewers = fetch_default_reviewers,
 		},
 		actions = actions,
 		ui = {

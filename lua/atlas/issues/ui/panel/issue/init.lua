@@ -141,13 +141,16 @@ local function make_refresh_callback(issue)
 end
 
 ---@param issue Issue
----@param opts { force_refresh: boolean|nil }|nil
+---@param opts { force_refresh: boolean|nil, issue_refreshed: boolean|nil }|nil
 local function dispatch_provider_fetches(issue, opts)
 	local state = require("atlas.issues.state")
 	local provider = state.provider
 	local panel = provider and provider.capabilities.ui and provider.capabilities.ui.panel
 	if panel and panel.fetches then
-		panel.fetches(issue, make_refresh_callback(issue), { force_load = opts and opts.force_refresh == true })
+		panel.fetches(issue, make_refresh_callback(issue), {
+			force_load = opts and opts.force_refresh == true,
+			issue_refreshed = opts and opts.issue_refreshed == true,
+		})
 	end
 end
 
@@ -172,7 +175,7 @@ function M.render()
 end
 
 ---@param issue Issue|nil
----@param opts { force_refresh: boolean|nil }|nil
+---@param opts { force_refresh: boolean|nil, issue_refreshed: boolean|nil }|nil
 function M.on_select(issue, opts)
 	opts = opts or {}
 

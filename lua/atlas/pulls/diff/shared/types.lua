@@ -28,6 +28,7 @@
 
 ---@class AtlasReviewKeymapActions
 ---@field active fun(): boolean
+---@field open_actions (fun())|nil
 ---@field toggle_approval (fun())|nil
 ---@field request_changes (fun())|nil
 ---@field submit_review (fun())|nil

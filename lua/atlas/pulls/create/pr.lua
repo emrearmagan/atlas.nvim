@@ -155,7 +155,7 @@ local function preview_diff(pr_state)
 		form.notify("error", err or "Unable to resolve diff revisions")
 		return
 	end
-	require("atlas.pulls.actions").open_diff_range({
+	require("atlas.pulls.diff").open_range({
 		git_root = pr_state.fields.repo_root,
 		base_revision = base,
 		head_revision = head,
@@ -275,8 +275,7 @@ end
 ---@param on_change fun()
 local function load_reviewers(pr_state, on_change)
 	local provider = pr_state.fields.provider
-	local create = provider and provider.capabilities.create
-	if create == nil or create.fetch_default_reviewers == nil then
+	if provider == nil then
 		pr_state.fields.reviewers = {}
 		return
 	end
@@ -299,7 +298,7 @@ local function load_reviewers(pr_state, on_change)
 		)
 	end
 
-	create.fetch_default_reviewers({
+	provider.capabilities.core.fetch_default_reviewers({
 		repo_slug = pr_state.fields.repo_slug,
 		repo_root = pr_state.fields.repo_root,
 		head = pr_state.fields.head,
@@ -350,9 +349,8 @@ local function submit(pr_state)
 
 	local body = get_body(pr_state)
 	local provider = pr_state.fields.provider
-	local create = provider and provider.capabilities.create
-	if not create then
-		form.notify("error", "Provider does not support PR creation")
+	if not provider then
+		form.notify("error", "Provider unavailable")
 		return
 	end
 
@@ -379,7 +377,7 @@ local function submit(pr_state)
 
 	local function do_create()
 		form.notify("loading", "Creating pull request...")
-		create.create_pr({
+		provider.capabilities.core.create_pr({
 			repo_slug = pr_state.fields.repo_slug,
 			repo_root = pr_state.fields.repo_root,
 			title = title,
@@ -561,11 +559,6 @@ function M.start()
 		notify.error(provider_err or "Provider unavailable")
 		return
 	end
-	if not provider.capabilities.create then
-		notify.error("Provider " .. info.provider .. " does not support PR creation")
-		return
-	end
-
 	local base = git_branch.default_branch(root, "origin") or "main"
 
 	if head == base then

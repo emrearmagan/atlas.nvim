@@ -38,8 +38,20 @@ function M.register(buf, views)
 	local help = require("atlas.ui.popups.help")
 	local controller = require("atlas.issues.ui.main.controller")
 	local state = require("atlas.issues.state")
-	local provider_name = state.provider and state.provider.name or "Issues"
-	local capabilities = state.provider and state.provider.capabilities or {}
+	local provider = assert(state.provider)
+	local provider_name = provider.name
+	local capabilities = provider.capabilities
+	local function context(issue)
+		return { provider = provider, issue = issue, current_user = state.current_user }
+	end
+	local function supports(action_id)
+		for _, action in ipairs((capabilities.actions and capabilities.actions.items) or {}) do
+			if action.id == action_id then
+				return true
+			end
+		end
+		return false
+	end
 
 	local items = {}
 
@@ -81,33 +93,33 @@ function M.register(buf, views)
 						statusline.notify("warn", "No issue selected")
 						return
 					end
-					actions.open_actions(issue, "main")
+					actions.open(context(issue), controller.apply_action_result)
 				end,
 			})
 		)
 	end
 
-	if capabilities.actions then
+	if actions.is_available("create_issue", context(nil)) then
 		utils.insert_if(
 			items,
 			item("issues.create_issue", {
 				desc = "Create issue",
 				index = 2,
 				callback = function()
-					actions.run_action("create_issue", selected_issue(), "main")
+					actions.run("create_issue", context(selected_issue()), controller.apply_action_result)
 				end,
 			})
 		)
 	end
 
-	if capabilities.search then
+	if actions.is_available("search", context(nil)) then
 		utils.insert_if(
 			items,
 			item("ui.search", {
 				desc = "Search issues",
 				index = 3,
 				callback = function()
-					actions.search()
+					actions.run("search", context(nil), controller.apply_action_result)
 				end,
 			})
 		)
@@ -181,7 +193,7 @@ function M.register(buf, views)
 					statusline.notify("warn", "No issue selected")
 					return
 				end
-				actions.copy_key(issue)
+				actions.run("copy_issue_key", context(issue))
 			end,
 		})
 	)
@@ -198,13 +210,13 @@ function M.register(buf, views)
 					statusline.notify("warn", "No issue selected")
 					return
 				end
-				actions.copy_url(issue)
+				actions.run("copy_issue_url", context(issue))
 			end,
 		})
 	)
 
 	-- g* keys grouped together
-	if capabilities.actions then
+	if supports("transition") then
 		utils.insert_if(
 			items,
 			item("issues.transition_issue", {
@@ -216,11 +228,13 @@ function M.register(buf, views)
 						statusline.notify("warn", "No issue selected")
 						return
 					end
-					actions.run_action("transition", issue, "main")
+					actions.run("transition", context(issue), controller.apply_action_result)
 				end,
 			})
 		)
+	end
 
+	if supports("assign") then
 		utils.insert_if(
 			items,
 			item("issues.change_assignee", {
@@ -232,11 +246,13 @@ function M.register(buf, views)
 						statusline.notify("warn", "No issue selected")
 						return
 					end
-					actions.run_action("assign", issue, "main")
+					actions.run("assign", context(issue), controller.apply_action_result)
 				end,
 			})
 		)
+	end
 
+	if supports("reporter") then
 		utils.insert_if(
 			items,
 			item("issues.change_reporter", {
@@ -248,11 +264,13 @@ function M.register(buf, views)
 						statusline.notify("warn", "No issue selected")
 						return
 					end
-					actions.run_action("reporter", issue, "main")
+					actions.run("reporter", context(issue), controller.apply_action_result)
 				end,
 			})
 		)
+	end
 
+	if supports("edit_issue") then
 		utils.insert_if(
 			items,
 			item("issues.edit_issue", {
@@ -264,7 +282,7 @@ function M.register(buf, views)
 						statusline.notify("warn", "No issue selected")
 						return
 					end
-					actions.run_action("edit_issue", issue, "main")
+					actions.run("edit_issue", context(issue), controller.apply_action_result)
 				end,
 			})
 		)
@@ -282,7 +300,7 @@ function M.register(buf, views)
 					statusline.notify("warn", "No issue selected")
 					return
 				end
-				actions.open_in_browser(issue)
+				actions.run("browse_issue", context(issue))
 			end,
 		})
 	)

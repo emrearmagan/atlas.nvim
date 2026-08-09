@@ -399,7 +399,7 @@ function M.checkout_pr(pr, on_done)
 		return
 	end
 
-	git.checkout_branch(repo_path, src_branch, function(ok)
+	git.checkout_branch(repo_path, src_branch, function(ok, checkout_err)
 		if ok then
 			logger.loginfo("checkout.checkout_pr switched existing branch", {
 				pr_id = pr.id,
@@ -407,6 +407,17 @@ function M.checkout_pr(pr, on_done)
 				branch = src_branch,
 			})
 			on_done({ repo_path = repo_path, local_branch = src_branch }, nil)
+			return
+		end
+		if git.rev_exists(repo_path, "refs/heads/" .. src_branch) then
+			local err = checkout_err or "Unable to switch to the existing branch"
+			logger.logerror("checkout.checkout_pr switch existing branch failed", {
+				pr_id = pr.id,
+				repo_path = repo_path,
+				branch = src_branch,
+				error = err,
+			})
+			on_done(nil, err)
 			return
 		end
 

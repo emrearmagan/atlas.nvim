@@ -8,7 +8,17 @@ local renderer = require("atlas.pulls.ui.panel.pr.tabs.review.renderer")
 local review_threads = require("atlas.ui.components.review_threads")
 local state = require("atlas.pulls.ui.panel.pr.tabs.review.state")
 local keymaps = require("atlas.pulls.ui.panel.pr.tabs.review.keymaps")
-local review_actions = require("atlas.pulls.actions.review")
+local review = require("atlas.pulls.actions.review")
+
+local THREAD_ACTIONS = {
+	add_comment = function(context, comment, on_done)
+		return review.add_comment(context, { parent = comment }, on_done)
+	end,
+	edit = review.edit_comment,
+	delete = review.delete_comment,
+	toggle_task = review.toggle_task,
+	toggle_resolved = review.toggle_resolved,
+}
 
 ---@return AtlasMarkdownCompletionProvider|nil
 local function author_completion()
@@ -124,8 +134,9 @@ function M.on_select(pr, _repo, refresh, opts)
 	state.reset()
 
 	local provider = get_provider()
-	local reviews = provider and provider.capabilities.reviews
-	if reviews == nil then
+	local comments_capability = provider and provider.capabilities.comments
+	local tasks = provider and provider.capabilities.tasks
+	if comments_capability == nil then
 		state.comments = "Pull request provider is not available"
 		refresh()
 		return
@@ -133,10 +144,10 @@ function M.on_select(pr, _repo, refresh, opts)
 
 	local pr_id = tostring(pr.id or "")
 	state.comments = "loading"
-	state.tasks = reviews.fetch_tasks and "loading" or nil
+	state.tasks = tasks and "loading" or nil
 	statusline.notify("loading", string.format("Loading review for #%s...", pr_id))
 
-	local pending = reviews.fetch_tasks and 2 or 1
+	local pending = tasks and 2 or 1
 	local comments_error, tasks_error
 	local function complete()
 		pending = pending - 1
@@ -153,7 +164,7 @@ function M.on_select(pr, _repo, refresh, opts)
 		end
 	end
 
-	local comments_handle = reviews.fetch_comments(pr, opts, function(comments, err)
+	local comments_handle = comments_capability.fetch_review_comments(pr, opts, function(comments, err)
 		if not is_current(request_generation, pr) then
 			return
 		end
@@ -167,9 +178,8 @@ function M.on_select(pr, _repo, refresh, opts)
 	end)
 	track(comments_handle)
 
-	local fetch_tasks = reviews.fetch_tasks
-	if fetch_tasks then
-		local tasks_handle = fetch_tasks(pr, opts, function(tasks, err)
+	if tasks then
+		local tasks_handle = tasks.fetch_tasks(pr, opts, function(result, err)
 			if not is_current(request_generation, pr) then
 				return
 			end
@@ -177,7 +187,7 @@ function M.on_select(pr, _repo, refresh, opts)
 				tasks_error = tostring(err)
 				state.tasks = tasks_error
 			else
-				state.tasks = tasks or {}
+				state.tasks = result or {}
 			end
 			complete()
 		end)
@@ -185,15 +195,15 @@ function M.on_select(pr, _repo, refresh, opts)
 	end
 end
 
----@param pr PullRequest
+---@param _pr PullRequest
 ---@param width integer
 ---@return string[], table[], table<integer, table>|nil
-function M.render(pr, width)
+function M.render(_pr, width)
 	local completion = author_completion()
 	if completion and completion.resolve_items then
 		completion.resolve_items()
 	end
-	return renderer.render(pr, width, state.comments, state.tasks)
+	return renderer.render(width, state.comments, state.tasks)
 end
 
 ---@param _lnum integer
@@ -275,10 +285,9 @@ function M.deactivate(buf)
 end
 
 ---@param pr PullRequest
----@param refresh fun()
 ---@param key "comments"|"tasks"
----@return AtlasReviewCommentActionContext|nil
-local function action_context(pr, refresh, key)
+---@return AtlasReviewActionContext|nil
+local function action_context(pr, key)
 	local provider = get_provider()
 	local items = state[key]
 	if not provider or type(items) ~= "table" then
@@ -289,28 +298,38 @@ local function action_context(pr, refresh, key)
 	return {
 		provider = provider,
 		pr = pr,
-		current_user = require("atlas.pulls.state").current_user,
 		items = items,
 		completion = author_completion(),
 		active = function()
 			return is_current_list(context_generation, pr, key, items)
 		end,
 		track = track,
-		refresh = refresh,
 	}
 end
 
 -- Actions
 
----@param action AtlasReviewCommentAction
+---@param action AtlasReviewThreadAction
 ---@param pr PullRequest
 ---@param entry table
 ---@param refresh fun()
 local function run_comment_action(action, pr, entry, refresh)
 	local comment = entry and entry.comment
-	local context = comment and action_context(pr, refresh, comment.is_task and "tasks" or "comments") or nil
+	local context = comment and action_context(pr, comment.is_task and "tasks" or "comments") or nil
 	if comment and context then
-		review_actions.run(context, action, comment)
+		local on_done = function(result, err)
+			if result and not err then
+				if result.changed_pr then
+					require("atlas.pulls.ui.main.controller").refresh_pr(pr)
+				else
+					refresh()
+				end
+			end
+		end
+		local handler = THREAD_ACTIONS[action]
+		if handler then
+			handler(context, comment, on_done)
+		end
 	end
 end
 
@@ -318,7 +337,7 @@ end
 ---@param entry table
 ---@param refresh fun()
 function M.reply_comment(pr, entry, refresh)
-	run_comment_action("reply", pr, entry, refresh)
+	run_comment_action("add_comment", pr, entry, refresh)
 end
 
 ---@param pr PullRequest
@@ -349,12 +368,12 @@ end
 ---@param refresh fun()
 function M.add_task(pr, refresh)
 	local provider = get_provider()
-	local reviews = provider and provider.capabilities.reviews
-	if not reviews or not reviews.add_task then
+	local tasks_capability = provider and provider.capabilities.tasks
+	if not tasks_capability or not tasks_capability.add_task then
 		statusline.notify("error", "Provider does not support tasks")
 		return
 	end
-	local add_task = reviews.add_task
+	local add_task = tasks_capability.add_task
 	local tasks = state.tasks
 	if type(tasks) ~= "table" then
 		return

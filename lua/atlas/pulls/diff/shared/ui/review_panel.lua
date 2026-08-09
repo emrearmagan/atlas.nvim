@@ -3,7 +3,7 @@ local M = {}
 local help = require("atlas.ui.popups.help")
 local icons = require("atlas.ui.shared.icons")
 local note_renderer = require("atlas.pulls.notes.ui.renderer")
-local resolver = require("atlas.core.keymaps")
+local keymap_resolver = require("atlas.core.keymaps")
 local review_threads = require("atlas.ui.components.review_threads")
 local utils = require("atlas.ui.shared.utils")
 local namespace = vim.api.nvim_create_namespace("atlas.review_panel")
@@ -11,7 +11,7 @@ local namespace = vim.api.nvim_create_namespace("atlas.review_panel")
 ---@param action AtlasKeymapActionId
 ---@return string|nil
 local function key_label(action)
-	local keys = resolver.resolve(action)
+	local keys = keymap_resolver.resolve(action)
 	return keys and table.concat(keys, " / ") or nil
 end
 
@@ -40,8 +40,7 @@ end
 ---@field on_select fun(item: AtlasReviewPanelSelection, focus_diff: boolean)
 ---@field on_refresh fun()
 ---@field on_close fun()
----@field can_comment_action fun(action: AtlasReviewCommentAction, comment: PullsComment): boolean
----@field on_comment_action fun(action: AtlasReviewCommentAction, comment: PullsComment)
+---@field on_comment_action fun(action: AtlasReviewThreadAction, comment: PullsComment)
 ---@field on_edit_note fun(note: AtlasNote)
 ---@field on_delete_note fun(note: AtlasNote)
 
@@ -253,7 +252,6 @@ function M.render(panel, data)
 							comment_location(item.thread.comment),
 							{
 								action_keys = comment_action_keys,
-								can_action = panel.callbacks.can_comment_action,
 							}
 						)
 					else
@@ -312,7 +310,7 @@ end
 local function add_mapping(entries, action, desc, index, callback)
 	local keys = {}
 	for _, action_id in ipairs(type(action) == "table" and action or { action }) do
-		vim.list_extend(keys, resolver.resolve(action_id) or {})
+		vim.list_extend(keys, keymap_resolver.resolve(action_id) or {})
 	end
 	if #keys > 0 then
 		table.insert(entries, {
@@ -365,7 +363,7 @@ function M.register_keymaps(panel)
 		if action == "toggle_resolved" and entry then
 			comment = entry.thread_root or comment
 		end
-		if comment and panel.callbacks.can_comment_action(action, comment) then
+		if comment then
 			panel.callbacks.on_comment_action(action, comment)
 		end
 	end
@@ -377,7 +375,7 @@ function M.register_keymaps(panel)
 		show_selected(true)
 	end)
 	add_mapping(entries, "pulls.review.diff.add_comment", "Reply to comment", 3, function()
-		run_action("reply")
+		run_action("add_comment")
 	end)
 	add_mapping(entries, "pulls.review.diff.edit_comment", "Edit comment or note", 4, function()
 		run_action("edit")

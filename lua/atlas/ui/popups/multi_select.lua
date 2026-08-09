@@ -11,6 +11,7 @@
 
 local M = {}
 
+local icons = require("atlas.ui.shared.icons")
 local statusline = require("atlas.ui.statusline")
 
 ---@param list table[]
@@ -54,13 +55,14 @@ function M.open(opts)
 	local selected = vim.deepcopy(original)
 	local title = vim.trim(opts.prompt or "Select"):gsub(":$", "")
 	local footer = " Space toggle | Enter apply "
+	local checkmark = icons.general("success")
 	local lines = {}
 
 	local function render()
 		lines = {}
 		for _, item in ipairs(opts.items) do
-			local marker = contains(selected, opts.key(item), opts.key) and "✓ " or "  "
-			table.insert(lines, marker .. opts.format(item))
+			local marker = contains(selected, opts.key(item), opts.key) and checkmark .. " " or "  "
+			table.insert(lines, " " .. marker .. opts.format(item))
 		end
 	end
 
@@ -141,6 +143,8 @@ function M.open(opts)
 	end
 
 	local key_opts = { buffer = buf, silent = true, nowait = true }
+	vim.keymap.set("n", "<C-j>", "j", key_opts)
+	vim.keymap.set("n", "<C-k>", "k", key_opts)
 	vim.keymap.set("n", "<Space>", update, key_opts)
 	vim.keymap.set("n", "<CR>", function()
 		close()

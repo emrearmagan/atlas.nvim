@@ -7,7 +7,6 @@ local diff = require("atlas.ui.components.diff_hunks")
 local icons = require("atlas.ui.shared.icons")
 local highlights = require("atlas.ui.shared.highlights")
 local keymaps = require("atlas.core.keymaps")
-local review_actions = require("atlas.pulls.actions.review")
 local review_threads = require("atlas.ui.components.review_threads")
 local state = require("atlas.pulls.ui.panel.pr.tabs.review.state")
 
@@ -68,18 +67,18 @@ end
 ---@param line_map table<integer, table>
 ---@param tasks PullsComment[]
 ---@param width integer
----@param current_user PullsUser|nil
-local function emit_tasks(lines, spans, line_map, tasks, width, current_user)
+local function emit_tasks(lines, spans, line_map, tasks, width)
 	local toggle_keys = keymaps.resolve("pulls.review.diff.toggle_resolved")
-	local provider = require("atlas.pulls.state").provider
+	local edit_keys = keymaps.resolve("pulls.review.diff.edit_comment")
+	local delete_keys = keymaps.resolve("pulls.review.diff.delete")
 	local padding = string.rep(" ", PADDING_X)
 
 	for _, task in ipairs(tasks) do
 		local resolved = task.state == "RESOLVED"
-		local actions = {}
-		if toggle_keys and review_actions.is_available("toggle_task", task, current_user, provider) then
+		local footer = {}
+		if toggle_keys then
 			table.insert(
-				actions,
+				footer,
 				string.format(
 					"%s (%s)",
 					resolved and icons.general("refresh") or icons.general("success"),
@@ -87,11 +86,11 @@ local function emit_tasks(lines, spans, line_map, tasks, width, current_user)
 				)
 			)
 		end
-		if review_actions.is_available("edit", task, current_user, provider) then
-			table.insert(actions, string.format("%s (e)", icons.general("edit")))
+		if edit_keys then
+			table.insert(footer, string.format("%s (%s)", icons.general("edit"), table.concat(edit_keys, " / ")))
 		end
-		if review_actions.is_available("delete", task, current_user, provider) then
-			table.insert(actions, string.format("%s (d)", icons.general("delete")))
+		if delete_keys then
+			table.insert(footer, string.format("%s (%s)", icons.general("delete"), table.concat(delete_keys, " / ")))
 		end
 
 		local title = utils.task_text(task.content_display or task.content_raw)
@@ -137,7 +136,7 @@ local function emit_tasks(lines, spans, line_map, tasks, width, current_user)
 
 		local creator = author_name(task.author)
 		local author = "by @" .. creator
-		local action_text = table.concat(actions, "  ")
+		local action_text = table.concat(footer, "  ")
 		local meta_prefix = padding .. string.rep(" ", #checkbox + 1)
 		local meta_line, visible_author = task_row(meta_prefix, author, action_text, width)
 		table.insert(lines, meta_line)
@@ -173,8 +172,7 @@ end
 ---@param line_map table<integer, table>
 ---@param nodes AtlasReviewThreadNode[]
 ---@param width integer
----@param current_user PullsUser|nil
-local function emit_thread_box(lines, spans, line_map, nodes, width, current_user)
+local function emit_thread_box(lines, spans, line_map, nodes, width)
 	local inner = math.max(1, width - (PADDING_X * 2) - 4)
 	local toggle_keys = keymaps.resolve("pulls.review.diff.toggle_resolved")
 	local provider = require("atlas.pulls.state").provider
@@ -182,9 +180,6 @@ local function emit_thread_box(lines, spans, line_map, nodes, width, current_use
 	local t_lines, t_spans, t_map = review_threads.render(nodes, inner, {
 		expanded = function(root)
 			return state.is_thread_expanded(root)
-		end,
-		can_action = function(action, comment)
-			return review_actions.is_available(action, comment, current_user, provider)
 		end,
 		padding_x = 0,
 		toggle_resolved_key = toggle_keys and table.concat(toggle_keys, " / ") or nil,
@@ -202,7 +197,7 @@ end
 
 ---@class CommentsHunkBucket
 ---@field hunk DiffHunk
----@field threads_by_anchor table<string, { threads: AtlasReviewThreadNode[], current_user: PullsUser|nil }>
+---@field threads_by_anchor table<string, { threads: AtlasReviewThreadNode[] }>
 
 ---@param hunk DiffHunk
 ---@return string
@@ -287,7 +282,7 @@ local function emit_file_with_comments(lines, spans, line_map, width, file_path,
 				for _, thread in ipairs(anchor.threads) do
 					table.insert(entry.thread_roots, thread.comment)
 				end
-				emit_thread_box(lines, spans, line_map, anchor.threads, width, anchor.current_user)
+				emit_thread_box(lines, spans, line_map, anchor.threads, width)
 				current_bucket.threads_by_anchor[anchor_key] = nil
 			end
 		end
@@ -296,23 +291,21 @@ local function emit_file_with_comments(lines, spans, line_map, width, file_path,
 	for _, bucket in ipairs(buckets) do
 		if state.collapsed_hunks[diff.hunk_key(file, bucket.hunk)] ~= true then
 			for _, anchor in pairs(bucket.threads_by_anchor) do
-				emit_thread_box(lines, spans, line_map, anchor.threads, width, anchor.current_user)
+				emit_thread_box(lines, spans, line_map, anchor.threads, width)
 			end
 		end
 	end
 end
 
----@param _pr PullRequest
 ---@param width integer
 ---@param comments PullsComment[]|"loading"|string|nil
 ---@param tasks PullsComment[]|"loading"|string|nil
 ---@return string[], table[], table<integer, table>
-function M.render(_pr, width, comments, tasks)
+function M.render(width, comments, tasks)
 	local lines = {}
 	local spans = {}
 	local line_map = {}
 	local max_width = math.max(1, width)
-	local current_user = require("atlas.pulls.state").current_user
 
 	if tasks == "loading" then
 		utils.push(lines, spans, spinner.with_text("Loading tasks..."), "AtlasTextMuted", PADDING_X)
@@ -330,7 +323,7 @@ function M.render(_pr, width, comments, tasks)
 		end)
 		utils.push(lines, spans, task_heading(sorted_tasks), "AtlasColumnHeader", PADDING_X)
 		table.insert(lines, "")
-		emit_tasks(lines, spans, line_map, sorted_tasks, max_width, current_user)
+		emit_tasks(lines, spans, line_map, sorted_tasks, max_width)
 		table.insert(lines, "")
 	end
 
@@ -387,7 +380,7 @@ function M.render(_pr, width, comments, tasks)
 			local akey = string.format("%s:%s", side, tostring(line or ""))
 			local anchor = hb.threads_by_anchor[akey]
 			if anchor == nil then
-				anchor = { threads = {}, current_user = current_user }
+				anchor = { threads = {} }
 				hb.threads_by_anchor[akey] = anchor
 			end
 			table.insert(anchor.threads, thread)
@@ -399,7 +392,7 @@ function M.render(_pr, width, comments, tasks)
 	if #general_roots > 0 then
 		utils.push(lines, spans, "Conversation", "AtlasColumnHeader", PADDING_X)
 		table.insert(lines, "")
-		emit_thread_box(lines, spans, line_map, general_roots, max_width, current_user)
+		emit_thread_box(lines, spans, line_map, general_roots, max_width)
 		table.insert(lines, "")
 	end
 

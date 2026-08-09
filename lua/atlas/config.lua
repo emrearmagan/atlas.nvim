@@ -256,7 +256,7 @@ local function register_commands()
 	end, { desc = "Create an issue" })
 
 	vim.api.nvim_create_user_command("AtlasDiff", function(opts)
-		require("atlas.pulls.actions").open_atlas_diff(opts.args)
+		require("atlas.pulls.diff").open_argument(opts.args)
 	end, {
 		desc = "Open a Git range or pull request in AtlasDiff",
 		nargs = 1,

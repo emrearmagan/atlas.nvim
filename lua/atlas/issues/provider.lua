@@ -39,8 +39,6 @@
 ---@field core IssuesCoreCapability
 ---@field comments IssuesCommentsCapability|nil
 ---@field notifications AtlasNotificationsCapability|nil
----@field search (fun(on_done: fun(result: table|nil, err: string|nil)|nil))|nil
----@field create_issue (fun())|nil
 ---@field actions IssuesActionsCapability|nil
 ---@field ui IssuesUICapability|nil
 
@@ -62,8 +60,13 @@
 ---@field comment_completion (fun(): AtlasMarkdownCompletionProvider|nil)|nil
 
 ---@class IssuesActionsCapability
----@field run fun(action_id: string, ctx: table, on_done: fun(result: table|nil, err: string|nil))
----@field open fun(ctx: { issue: Issue|nil, source: "main"|"panel"|nil }, on_done: fun(result: table|nil, err: string|nil))
+---@field items AtlasIssueAction[]
+---@field is_available fun(action_id: string, context: AtlasIssueActionContext): boolean
+---@field run fun(action_id: string, context: AtlasIssueActionContext, on_done: fun(result: IssuesActionResult|nil, err: string|nil)): boolean
+
+---@class IssuesActionResult
+---@field issue_key string|nil
+---@field removed boolean|nil
 
 ---@class IssuesUICapability
 ---@field setup fun()|nil
@@ -81,7 +84,7 @@
 ---@field header_rows (fun(issue: Issue): IssuesPanelHeaderRow[])|nil
 ---@field chips (fun(issue: Issue): IssuesPanelChip[])|nil
 ---@field tabs (fun(): IssuesPanelTab[])|nil
----@field fetches (fun(issue: Issue, refresh: fun(), opts: { force_load?: boolean }|nil))|nil
+---@field fetches (fun(issue: Issue, refresh: fun(), opts: { force_load?: boolean, issue_refreshed?: boolean }|nil))|nil
 ---@field is_loading (fun(issue: Issue): boolean)|nil
 
 --------------------------------------------------------------------------------

@@ -383,10 +383,120 @@ function M.submit_review(pr, body, on_done)
 end
 
 ---@param pr PullRequest
+---@param body string
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.approve_review(pr, on_done)
-	return finish_review(pr, "APPROVE", "", on_done)
+function M.approve_review(pr, body, on_done)
+	return finish_review(pr, "APPROVE", body, on_done)
+end
+
+---@param pr PullRequest
+---@param on_done fun(review: table|nil, repo_slug: string|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+local function current_review(pr, on_done)
+	local repo_slug = pr.repo_full_name or ""
+	local owner, name = repo_slug:match("^([^/]+)/(.+)$")
+	if owner == nil or name == nil then
+		on_done(nil, nil, "Invalid repository slug")
+		return nil
+	end
+
+	local query = [[
+		query($owner: String!, $name: String!, $number: Int!) {
+			repository(owner: $owner, name: $name) {
+				pullRequest(number: $number) {
+					viewerLatestReview { databaseId state }
+				}
+			}
+		}
+	]]
+	return cli.gh({
+		"api",
+		"graphql",
+		"-f",
+		"owner=" .. owner,
+		"-f",
+		"name=" .. name,
+		"-F",
+		"number=" .. tostring(pr.id),
+		"-f",
+		"query=" .. query,
+	}, function(result, err)
+		if err then
+			on_done(nil, nil, err)
+			return
+		end
+		local review = ((((result or {}).data or {}).repository or {}).pullRequest or {}).viewerLatestReview
+		on_done(type(review) == "table" and review or nil, repo_slug, nil)
+	end)
+end
+
+---@param pr PullRequest
+---@param review table
+---@param repo_slug string
+---@param body string
+---@param on_done fun(ok: boolean, err: string|nil)
+local function dismiss_review(pr, review, repo_slug, body, on_done)
+	local message = vim.trim(body)
+	if message == "" then
+		message = "Dismissed by reviewer"
+	end
+	cli.gh({
+		"api",
+		"-X",
+		"PUT",
+		string.format(
+			"repos/%s/pulls/%s/reviews/%s/dismissals",
+			repo_slug,
+			tostring(pr.id),
+			tostring(review.databaseId)
+		),
+		"-f",
+		"message=" .. message,
+	}, function(_, err)
+		on_done(err == nil, err)
+	end)
+end
+
+---@param pr PullRequest
+---@param body string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.unapprove_review(pr, body, on_done)
+	return current_review(pr, function(review, repo_slug, err)
+		local state = type(review) == "table" and tostring(review.state or ""):upper() or ""
+		if err or review == nil or review.databaseId == nil or state ~= "APPROVED" then
+			on_done(false, err or "No active review")
+			return
+		end
+		dismiss_review(pr, review, repo_slug, body, on_done)
+	end)
+end
+
+---@param pr PullRequest
+---@param on_done fun(action: "approved"|"unapproved"|"changes_request_dismissed"|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.toggle_approval(pr, on_done)
+	return current_review(pr, function(review, repo_slug, err)
+		if err then
+			on_done(nil, err)
+			return
+		end
+		local state = type(review) == "table" and tostring(review.state or ""):upper() or ""
+		if review and review.databaseId and (state == "APPROVED" or state == "CHANGES_REQUESTED") then
+			dismiss_review(pr, review, repo_slug, "", function(ok, dismiss_err)
+				if not ok then
+					on_done(nil, dismiss_err)
+					return
+				end
+				on_done(state == "APPROVED" and "unapproved" or "changes_request_dismissed", nil)
+			end)
+			return
+		end
+		M.approve_review(pr, "", function(ok, approve_err)
+			on_done(ok and "approved" or nil, approve_err)
+		end)
+	end)
 end
 
 ---@param pr PullRequest
@@ -394,7 +504,8 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.request_changes_review(pr, body, on_done)
-	return finish_review(pr, "REQUEST_CHANGES", body, on_done)
+	local message = vim.trim(body) == "" and "Changes requested" or body
+	return finish_review(pr, "REQUEST_CHANGES", message, on_done)
 end
 
 ---@param pr PullRequest
@@ -947,6 +1058,7 @@ function M.edit_comment(pr, comment, on_done)
 	end
 
 	if tostring(comment.id) == "__body__" then
+		local body = tostring(comment.content_raw or "")
 		return cli.gh({
 			"pr",
 			"edit",
@@ -954,19 +1066,14 @@ function M.edit_comment(pr, comment, on_done)
 			"--repo",
 			repo_slug,
 			"--body",
-			tostring(comment.content_raw or ""),
+			body,
 		}, function(_, err)
 			if err then
 				on_done(nil, err)
 				return
 			end
-			on_done({
-				id = "__body__",
-				parent_id = nil,
-				author = comment.author,
-				content_raw = tostring(comment.content_raw or ""),
-				created_on = comment.created_on or pr.created_on or "",
-			}, nil)
+			pr.description = body
+			on_done(vim.tbl_extend("force", {}, comment, { content_raw = body }), nil)
 		end, {
 			action = "Edit comment",
 			repo = pr.repo_full_name,

@@ -212,27 +212,6 @@ function M.add_reaction(issue, comment, key, on_done)
 	return require("atlas.issues.providers.gitlab.api.notes").add_reaction(issue_key, comment.id, key, on_done)
 end
 
----@param on_done fun(result: table|nil, err: string|nil)|nil
-local function search(on_done)
-	require("atlas.issues.providers.gitlab.actions").run(
-		"search",
-		{ issue = nil, source = "main" },
-		function(result, err)
-			if on_done then
-				on_done(result, err)
-			end
-		end
-	)
-end
-
-local function create_issue()
-	require("atlas.issues.create").from_repository(
-		"gitlab",
-		require("atlas.issues.create.gitlab.issue").open,
-		"project_path"
-	)
-end
-
 ---@param opts { force_load: boolean|nil }|nil
 ---@param on_done fun(notifications: AtlasNotification[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
@@ -387,8 +366,6 @@ return {
 			mark_read = M.mark_notification_read,
 			mark_done = M.mark_notification_done,
 		},
-		search = search,
-		create_issue = create_issue,
 		actions = require("atlas.issues.providers.gitlab.actions"),
 		ui = {
 			setup = require("atlas.issues.providers.gitlab.highlights").setup,

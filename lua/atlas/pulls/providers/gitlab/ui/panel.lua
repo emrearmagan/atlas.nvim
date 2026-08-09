@@ -97,7 +97,7 @@ end
 
 ---@param pr PullRequest
 ---@param refresh fun()
----@param opts { force_refresh: boolean|nil }|nil
+---@param opts { force_refresh: boolean|nil, pr_refreshed: boolean|nil }|nil
 function M.fetches(pr, refresh, opts)
 	cancel_panel_fetches()
 	reset_state()
@@ -114,13 +114,15 @@ function M.fetches(pr, refresh, opts)
 		end))
 	end
 
-	track_panel(mr_api.get_mr(pr, { force_refresh = force }, function(fresh, err)
-		if not err and type(fresh) == "table" then
-			pr.is_subscribed = fresh.is_subscribed
-			pr._raw = fresh._raw
-		end
-		refresh()
-	end))
+	if not (opts and opts.pr_refreshed) then
+		track_panel(mr_api.get_mr(pr, { force_refresh = force }, function(fresh, err)
+			if not err and type(fresh) == "table" then
+				pr.is_subscribed = fresh.is_subscribed
+				pr._raw = fresh._raw
+			end
+			refresh()
+		end))
+	end
 
 	local provider = require("atlas.pulls.state").provider
 	local core = provider and provider.capabilities.core

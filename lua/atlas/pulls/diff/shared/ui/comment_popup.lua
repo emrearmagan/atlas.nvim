@@ -1,6 +1,6 @@
 local M = {}
 
-local keymaps = require("atlas.core.keymaps")
+local keymap_resolver = require("atlas.core.keymaps")
 local threads = require("atlas.ui.components.review_threads")
 local statusline = require("atlas.ui.statusline")
 
@@ -12,8 +12,7 @@ local namespace = vim.api.nvim_create_namespace("atlas.review.thread_popup")
 ---@field title? string
 ---@field toggle_resolved_keys? string[]
 ---@field reaction_options? PullsReactionOption[]
----@field can_action fun(action: AtlasReviewCommentAction, comment: PullsComment): boolean
----@field on_action fun(action: AtlasReviewCommentAction, comment: PullsComment, close: fun())
+---@field on_action fun(action: AtlasReviewThreadAction, comment: PullsComment, close: fun())
 
 ---@class AtlasReviewThreadPopupState
 ---@field buf integer|nil
@@ -118,7 +117,6 @@ local function popup_content(opts, keys)
 		expanded = function()
 			return true
 		end,
-		can_action = opts.can_action,
 		action_keys = {
 			reply = key_label(keys.reply),
 			edit = key_label(keys.edit),
@@ -147,10 +145,10 @@ function M.open(opts)
 	M.close()
 	local source_win = vim.api.nvim_get_current_win()
 	local keys = {
-		close = keymaps.resolve("ui.close"),
-		reply = keymaps.resolve("pulls.review.diff.add_comment"),
-		edit = keymaps.resolve("pulls.review.diff.edit_comment"),
-		delete = keymaps.resolve("pulls.review.diff.delete"),
+		close = keymap_resolver.resolve("ui.close"),
+		reply = keymap_resolver.resolve("pulls.review.diff.add_comment"),
+		edit = keymap_resolver.resolve("pulls.review.diff.edit_comment"),
+		delete = keymap_resolver.resolve("pulls.review.diff.delete"),
 		toggle_resolved = opts.toggle_resolved_keys,
 	}
 
@@ -224,7 +222,7 @@ function M.open(opts)
 		close(win, buf, opts.owner)
 	end
 
-	---@param action_name AtlasReviewCommentAction
+	---@param action_name AtlasReviewThreadAction
 	local function action(action_name)
 		return function()
 			if not valid_win(win) or state.win ~= win or state.owner ~= opts.owner then
@@ -233,7 +231,7 @@ function M.open(opts)
 			local lnum = vim.api.nvim_win_get_cursor(win)[1]
 			local entry = state.line_map[lnum]
 			local comment = entry and entry.comment or nil
-			if comment == nil or not opts.can_action(action_name, comment) then
+			if comment == nil then
 				return
 			end
 			opts.on_action(action_name, comment, close_current)
@@ -249,7 +247,7 @@ function M.open(opts)
 
 	map(keys.close, close_current)
 	vim.keymap.set("n", "<Esc>", close_current, keymap_opts)
-	map(keys.reply, action("reply"))
+	map(keys.reply, action("add_comment"))
 	map(keys.edit, action("edit"))
 	map(keys.delete, action("delete"))
 
@@ -261,7 +259,7 @@ function M.open(opts)
 		local comment = entry and entry.comment or nil
 		local action_name = comment and comment.is_task and "toggle_task" or "toggle_resolved"
 		local target = action_name == "toggle_resolved" and entry and entry.thread_root or comment
-		if target and opts.can_action(action_name, target) then
+		if target then
 			opts.on_action(action_name, target, close_current)
 		end
 	end

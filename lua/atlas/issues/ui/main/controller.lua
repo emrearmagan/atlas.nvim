@@ -344,7 +344,8 @@ local function load_active_view(opts, on_done)
 end
 
 ---@param on_done fun()|nil
-function M.refresh_current_view(on_done)
+---@param focus_issue_key string|nil
+function M.refresh_current_view(on_done, focus_issue_key)
 	local provider = state.provider
 	local refresh = provider and provider.capabilities.core.refresh
 	if refresh then
@@ -352,7 +353,18 @@ function M.refresh_current_view(on_done)
 	end
 
 	load_active_view({ force_load = true }, function()
-		navigation.focus_first_item()
+		local focused = focus_issue_key ~= nil
+			and navigation.focus_item(function(item)
+				return item.kind == "issue" and item._issue and item._issue.key == focus_issue_key
+			end)
+		if not focused then
+			navigation.focus_first_item()
+		end
+		local item = navigation.current_item()
+		local panel = require("atlas.issues.ui.panel")
+		if panel.is_open() and (type(item) ~= "table" or item.kind ~= "issue") then
+			panel.close()
+		end
 		if on_done ~= nil then
 			on_done()
 		end
@@ -435,21 +447,16 @@ function M.show_issue_details(source_buf)
 	})
 end
 
-function M.open_actions()
-	local node = navigation.current_item()
-	if type(node) ~= "table" or node.kind ~= "issue" then
-		statusline.notify("warn", "No issue selected")
+---@param result IssuesActionResult|nil
+function M.apply_action_result(result)
+	if result == nil then
 		return
 	end
-
-	local issue = type(node._issue) == "table" and node._issue or nil
-	if issue == nil then
-		statusline.notify("warn", "Issue payload missing on line")
-		return
+	if result.removed then
+		M.refresh_current_view()
+	elseif result.issue_key ~= nil and result.issue_key ~= "" then
+		M.refresh_issue(result.issue_key)
 	end
-
-	local actions = require("atlas.issues.actions")
-	actions.open_actions(issue, "main")
 end
 
 ---@param issue Issue|string|nil
@@ -457,8 +464,7 @@ end
 function M.refresh_issue(issue, on_done)
 	on_done = on_done or function() end
 
-	local current_issue = type(issue) == "table" and issue or nil
-	local issue_key = current_issue and tostring(current_issue.key or "") or (type(issue) == "string" and issue or "")
+	local issue_key = type(issue) == "table" and tostring(issue.key or "") or (type(issue) == "string" and issue or "")
 	if issue_key == "" then
 		statusline.notify("warn", "Issue key missing")
 		on_done()
@@ -473,11 +479,6 @@ function M.refresh_issue(issue, on_done)
 
 	statusline.notify("loading", string.format("Reloading %s...", issue_key))
 	begin_issue_reload(issue_key)
-
-	local panel = require("atlas.issues.ui.panel")
-	if panel.is_open() then
-		panel.on_select(current_issue, { force_refresh = true })
-	end
 
 	local active_view = type(state.active_view) == "table" and state.active_view or {}
 	local reload_handle = nil
@@ -517,11 +518,12 @@ function M.refresh_issue(issue, on_done)
 			state.issue_tree = helper.build_issue_tree(issues)
 			end_issue_reload(issue_key)
 
-			if panel.is_open() then
-				panel.on_select(fetched_issue)
+			local panel = require("atlas.issues.ui.panel")
+			local panel_issue = require("atlas.issues.ui.panel.issue.state").current_issue
+			if panel.is_open() and panel_issue and tostring(panel_issue.key or "") == issue_key then
+				panel.on_select(fetched_issue, { force_refresh = true, issue_refreshed = true })
 			end
 
-			render_if_active()
 			statusline.notify("success", string.format("Reloaded %s", issue_key), 1200)
 			on_done()
 		end
