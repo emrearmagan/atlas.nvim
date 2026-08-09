@@ -483,6 +483,29 @@ local function action_context(session, state, comment, after_refresh)
 end
 
 ---@param session AtlasReviewSession
+---@param action AtlasReviewCommentAction
+---@param comment PullsComment
+---@return boolean
+function M.is_action_available(session, action, comment)
+	local state = session.review
+	return state ~= nil and active(session, state) and can_action(state, action, comment)
+end
+
+---@param session AtlasReviewSession
+---@param action AtlasReviewCommentAction
+---@param comment PullsComment
+function M.run_action(session, action, comment)
+	local state = session.review
+	if not state then
+		return
+	end
+	local context = action_context(session, state, comment)
+	if context then
+		actions.run(context, action, comment)
+	end
+end
+
+---@param session AtlasReviewSession
 ---@param state AtlasReviewState
 ---@param buf integer
 ---@return AtlasReviewThreadNode[]
