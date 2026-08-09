@@ -24,9 +24,9 @@ function M.setup(buf, refresh)
 	local tab = require("atlas.pulls.ui.panel.pr.tabs.review")
 	local panel_state = require("atlas.pulls.ui.panel.pr.state")
 	local provider = require("atlas.pulls.state").provider
-	local reviews = provider and provider.capabilities.reviews
-	local edit_description = reviews and reviews.edit_task and "Edit comment / task" or "Edit comment"
-	local delete_description = reviews and reviews.delete_task and "Delete comment / task" or "Delete comment"
+	local tasks = provider and provider.capabilities.tasks
+	local edit_description = tasks and tasks.edit_task and "Edit comment / task" or "Edit comment"
+	local delete_description = tasks and tasks.delete_task and "Delete comment / task" or "Delete comment"
 
 	local function cursor_entry()
 		local win = layout.win_id("detail")
@@ -66,7 +66,7 @@ function M.setup(buf, refresh)
 			end,
 		})
 	)
-	if reviews and reviews.add_task then
+	if tasks and tasks.add_task then
 		utils.insert_if(
 			items,
 			from_action("pulls.review.diff.add_task", {

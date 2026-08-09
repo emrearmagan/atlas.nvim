@@ -151,42 +151,6 @@ local function fetch_diffstat(pr, opts, on_done)
 	end)
 end
 
----@param opts { repo_slug: string, repo_root: string|nil, head: string, base: string }
----@param on_done fun(reviewers: PullsCreatePRReviewer[]|nil, err: string|nil)
----@return { cancel: fun() }|nil
-local function fetch_default_reviewers(opts, on_done)
-	local slug = tostring(opts.repo_slug or "")
-	if slug == "" then
-		vim.schedule(function()
-			on_done(nil, "Missing project slug")
-		end)
-		return nil
-	end
-
-	local endpoint = string.format("/projects/%s/members/all?per_page=100", service.url_encode(slug))
-	return service.request("GET", endpoint, nil, function(result, err)
-		if err then
-			on_done(nil, err)
-			return
-		end
-
-		local reviewers = {}
-		for _, raw in ipairs(type(result) == "table" and result or {}) do
-			local login = type(raw) == "table" and tostring(raw.username or "") or ""
-			local id = type(raw) == "table" and tonumber(raw.id) or nil
-			if login ~= "" and id then
-				table.insert(reviewers, {
-					label = "@" .. login,
-					provider_id = tostring(id),
-					selected = false,
-					default = false,
-				})
-			end
-		end
-		on_done(reviewers, nil)
-	end)
-end
-
 ---@param opts PullsCreatePROpts
 ---@param on_done fun(result: PullsCreatePRResult|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
@@ -232,10 +196,6 @@ local function views()
 			{ name = "Created", key = "2", scope = "created_by_me", state = "opened" },
 		}
 	return require("atlas.ui.shared.bookmarks_view").append_to_views(configured, config.bookmarks, "S", "Search")
-end
-
-local function search()
-	actions.run("search", { source = "main" }, function() end)
 end
 
 ---@param value string
@@ -347,8 +307,13 @@ return {
 			fetch_user = users_api.fetch_user,
 			fetch_pullrequests = fetch_pullrequests,
 			fetch_pullrequest = fetch_pullrequest,
-			fetch_description = mergerequests_api.get_description,
+			create_pr = create_pr,
 			fetch_reviewers = mergerequests_api.get_reviewers,
+			update_reviewers = mergerequests_api.update_reviewers,
+			update_title = mergerequests_api.set_title,
+			set_draft = mergerequests_api.set_draft,
+			fetch_description = mergerequests_api.get_description,
+			fetch_default_reviewers = mergerequests_api.fetch_default_reviewers,
 			fetch_merge_checks = checks_api.get_merge_checks,
 			fetch_diffstat = fetch_diffstat,
 			fetch_activity = activity_api.fetch_activity,
@@ -360,16 +325,19 @@ return {
 			reaction_options = require("atlas.ui.shared.emojis").gitlab(),
 			comment_completion = require("atlas.pulls.providers.gitlab.completion.author").build_completion,
 			fetch_conversation = fetch_conversation,
+			fetch_review_comments = comments_api.fetch_comments,
 			add_comment = comments_api.add_comment,
 			edit_comment = comments_api.edit_comment,
 			delete_comment = comments_api.delete_comment,
 			add_reaction = comments_api.add_reaction,
+			set_thread_resolved = comments_api.set_thread_resolved,
 		},
 		reviews = {
 			fetch_review_context = mergerequests_api.get_review_context,
-			fetch_comments = comments_api.fetch_comments,
-			set_thread_resolved = comments_api.set_thread_resolved,
 			submit_review = mergerequests_api.submit_review,
+			approve = mergerequests_api.approve_review,
+			unapprove = mergerequests_api.unapprove_review,
+			request_changes = mergerequests_api.request_changes,
 		},
 		repository = {
 			fetch_details = repositories_api.fetch_detail,
@@ -386,11 +354,6 @@ return {
 			fetch = fetch_notifications,
 			mark_read = notifications_api.mark_read,
 			mark_done = notifications_api.mark_done,
-		},
-		search = search,
-		create = {
-			create_pr = create_pr,
-			fetch_default_reviewers = fetch_default_reviewers,
 		},
 		actions = actions,
 		ui = {

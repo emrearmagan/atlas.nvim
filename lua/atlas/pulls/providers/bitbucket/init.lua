@@ -445,10 +445,6 @@ local function set_thread_resolved(pr, root, resolved, on_done)
 	return comments_api.set_thread_resolved(pr, root.parent_id or root.id, resolved, on_done)
 end
 
-local function search()
-	actions.run("search", { source = "main" }, function() end)
-end
-
 return {
 	resolve = resolve_target,
 	search_view = search_view,
@@ -459,7 +455,12 @@ return {
 			fetch_user = users_api.fetch_current_user,
 			fetch_pullrequests = fetch_pullrequests,
 			fetch_pullrequest = pullrequests_api.fetch_pullrequest,
+			create_pr = pullrequests_api.create_pr,
+			fetch_default_reviewers = pullrequests_api.fetch_default_reviewers,
 			fetch_reviewers = pullrequests_api.fetch_reviewers,
+			update_reviewers = pullrequests_api.update_reviewers,
+			update_title = pullrequests_api.update_title,
+			set_draft = pullrequests_api.set_draft,
 			fetch_diffstat = pullrequests_api.fetch_diffstat,
 			fetch_activity = pullrequests_api.fetch_activity,
 			fetch_commits = pullrequests_api.fetch_commits,
@@ -469,19 +470,24 @@ return {
 		comments = {
 			comment_completion = require("atlas.pulls.providers.bitbucket.completion.author").build_completion,
 			fetch_conversation = fetch_conversation,
+			fetch_review_comments = fetch_comments,
 			add_comment = comments_api.add_comment,
 			edit_comment = comments_api.edit_comment,
 			delete_comment = comments_api.delete_comment,
+			set_thread_resolved = set_thread_resolved,
 		},
 		reviews = {
 			fetch_review_context = pullrequests_api.fetch_review_context,
-			fetch_comments = fetch_comments,
+			submit_review = pullrequests_api.submit_review,
+			approve = pullrequests_api.approve_review,
+			unapprove = pullrequests_api.unapprove_review,
+			request_changes = pullrequests_api.request_changes_review,
+		},
+		tasks = {
 			fetch_tasks = fetch_tasks,
 			add_task = add_task,
 			edit_task = edit_task,
 			delete_task = delete_task,
-			set_thread_resolved = set_thread_resolved,
-			submit_review = pullrequests_api.submit_review,
 		},
 		repository = {
 			fetch_details = repositories_api.fetch_detail,
@@ -494,11 +500,6 @@ return {
 			fetch_commit_status = fetch_commit_status,
 			fetch_job_log = pipelines_api.fetch_pipeline_job_log,
 			actions = require("atlas.pulls.providers.bitbucket.actions.pipelines"),
-		},
-		search = search,
-		create = {
-			create_pr = pullrequests_api.create_pr,
-			fetch_default_reviewers = pullrequests_api.fetch_default_reviewers,
 		},
 		actions = actions,
 		ui = {

@@ -311,7 +311,7 @@ end
 
 ---@param query string
 ---@param opts { force_load?: boolean, max_results?: number }|nil
----@param on_done fun(items: { id: any, key: string, summary: string }[]|nil, err: string|nil)
+---@param on_done fun(items: { id: any, key: string, summary: string, url: string|nil }[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.search_issues_picker(query, opts, on_done)
 	opts = opts or {}
@@ -337,6 +337,7 @@ function M.search_issues_picker(query, opts, on_done)
 				id = issue.key,
 				key = issue.key,
 				summary = issue.summary,
+				url = issue.url,
 			})
 		end
 		on_done(items, nil)

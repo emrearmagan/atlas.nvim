@@ -6,7 +6,7 @@ local keymaps = require("atlas.core.keymaps")
 local spinner = require("atlas.ui.components.spinner")
 local state = require("atlas.pulls.diff.atlas.state")
 local renderer = require("atlas.ui.statusline")
-local summary = require("atlas.pulls.diff.shared.statusline")
+local summary = require("atlas.pulls.diff.shared.ui.statusline")
 
 local EXPRESSION = "%!v:lua.require'atlas.pulls.diff.atlas.statusline'.current()"
 

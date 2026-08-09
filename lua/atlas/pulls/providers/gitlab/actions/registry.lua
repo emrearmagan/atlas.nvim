@@ -1,14 +1,14 @@
 local M = {}
 
+local actions = require("atlas.pulls.actions")
 local icons = require("atlas.ui.shared.icons")
 local statusline = require("atlas.ui.statusline")
 local multi_select = require("atlas.ui.popups.multi_select")
 local mr_api = require("atlas.pulls.providers.gitlab.api.mergerequests")
 local users_api = require("atlas.pulls.providers.gitlab.api.users")
 local service = require("atlas.providers.gitlab.client").pulls
-local checkout = require("atlas.core.git.checkout")
 
----@param ctx GitLabPullsActionContext
+---@param ctx AtlasPullActionContext
 ---@return boolean
 local function has_pr(ctx)
 	return ctx.pr ~= nil
@@ -30,33 +30,13 @@ local function pr_label(pr)
 	return string.format("!%s", tostring(pr.id or ""))
 end
 
----@param title string
----@return string
-local function strip_draft_prefix(title)
-	local stripped = (tostring(title or "")):gsub("^%s*[Dd]raft:%s*", ""):gsub("^%s*WIP:%s*", "")
-	return stripped
-end
-
----@param title string
----@return boolean
-local function is_draft_title(title)
-	local t = tostring(title or "")
-	return t:match("^%s*[Dd]raft:") ~= nil or t:match("^%s*WIP:") ~= nil
-end
-
----@param ctx table
----@return boolean
-local function is_open(ctx)
-	return has_pr(ctx) and ctx.pr.state == "open"
-end
-
----@param ctx table
+---@param ctx AtlasPullActionContext
 ---@return boolean
 local function is_open_or_draft(ctx)
 	return has_pr(ctx) and (ctx.pr.state == "open" or ctx.pr.state == "draft")
 end
 
----@param ctx GitLabPullsActionContext
+---@param ctx AtlasPullActionContext
 ---@param level "loading"|"success"|"warn"|"error"|"info"
 ---@param message string
 ---@param duration integer|nil
@@ -65,666 +45,429 @@ local function notify(ctx, level, message, duration)
 	callback(level, message, duration)
 end
 
-local ACTIONS = {
-	{
-		id = "toggle_approval",
-		label = "Approve / Unapprove",
-		is_available = function(ctx)
-			if not is_open_or_draft(ctx) then
-				return false, "MR is not open"
-			end
-			return true, nil
-		end,
-		run = function(ctx, done)
-			local pr = ctx.pr
-			notify(ctx, "loading", string.format("Checking approval for %s...", pr_label(pr)))
-			mr_api.get_approval_state(pr, function(approved, err)
-				if err then
-					notify(ctx, "error", err)
-					done(nil, err)
-					return
-				end
+---@type AtlasPullAction[]
+local ACTIONS = {}
+M.items = ACTIONS
 
-				if approved then
-					notify(ctx, "loading", string.format("Unapproving %s...", pr_label(pr)))
-					mr_api.unapprove(pr, function(ok, unapprove_err)
-						if not ok then
-							notify(ctx, "error", unapprove_err or "Unapprove failed")
-							done(nil, unapprove_err or "Unapprove failed")
-							return
-						end
-						notify(ctx, "success", string.format("Unapproved %s", pr_label(pr)), 1200)
-						done({ changed_pr = true, message = "Unapproved" }, nil)
-					end)
-				else
-					notify(ctx, "loading", string.format("Approving %s...", pr_label(pr)))
-					mr_api.approve(pr, function(ok, approve_err)
-						if not ok then
-							notify(ctx, "error", approve_err or "Approve failed")
-							done(nil, approve_err or "Approve failed")
-							return
-						end
-						notify(ctx, "success", string.format("Approved %s", pr_label(pr)), 1200)
-						done({ changed_pr = true, message = "Approved" }, nil)
-					end)
-				end
-			end)
-		end,
-	},
-	{
-		id = "request_changes",
-		label = "Request changes",
-		is_available = function(ctx)
-			if not is_open_or_draft(ctx) then
-				return false, "MR is not open"
-			end
-			return true, nil
-		end,
-		run = function(ctx, done)
-			local pr = ctx.pr
-			vim.ui.input({ prompt = "Reason for requesting changes: " }, function(input)
-				if input == nil then
-					done({ changed_pr = false, message = "Cancelled" }, nil)
-					return
-				end
-
-				local body = vim.trim(input)
-				if body == "" then
-					body = "Changes requested"
-				end
-
-				notify(ctx, "loading", "Requesting changes...")
-				mr_api.request_changes(pr, body, function(ok, err)
-					if not ok then
-						notify(ctx, "error", "Request changes failed: " .. tostring(err))
-						done(nil, tostring(err))
-						return
-					end
-
-					notify(ctx, "success", "Changes requested", 1200)
-					done({ changed_pr = true, message = "Changes requested" }, nil)
-				end)
-			end)
-		end,
-	},
-	{
-		id = "merge",
-		label = "Merge MR",
-		is_available = function(ctx)
-			if not has_pr(ctx) then
-				return false, "No MR selected"
-			end
-			if ctx.pr.state == "draft" then
-				return false, "MR is a draft"
-			end
-			if ctx.pr.state ~= "open" then
-				return false, "MR is not open"
-			end
-			return true, nil
-		end,
-		run = function(ctx, done)
-			local pr = ctx.pr
-			vim.ui.input({ prompt = string.format("Merge %s? Squash? [n/y]: ", pr_label(pr)) }, function(input)
-				if input == nil then
-					done({ changed_pr = false, message = "Merge cancelled" }, nil)
-					return
-				end
-				local squash = vim.trim(tostring(input)):lower() == "y"
-				statusline.notify("loading", string.format("Merging %s...", pr_label(pr)))
-				mr_api.merge(pr, {
-					squash = squash,
-					should_remove_source_branch = true,
-				}, function(ok, err)
-					if not ok then
-						statusline.notify("error", err or "Merge failed")
-						done(nil, err or "Merge failed")
-						return
-					end
-					statusline.notify("success", string.format("Merged %s", pr_label(pr)), 1500)
-					done({ changed_pr = true, message = "Merged" }, nil)
-				end)
-			end)
-		end,
-	},
-	{
-		id = "edit_title",
-		label = "Edit title",
-		is_available = function(ctx)
-			return has_pr(ctx), "No MR selected"
-		end,
-		run = function(ctx, done)
-			require("atlas.pulls.actions").edit_title(ctx.pr, mr_api.set_title, function(changed)
-				done({ changed_pr = changed, message = changed and "Title updated" or nil }, nil)
-			end)
-		end,
-	},
-	{
-		id = "close",
-		label = "Close MR",
-		is_available = function(ctx)
-			if not is_open_or_draft(ctx) then
-				return false, "MR is already closed/merged"
-			end
-			return true, nil
-		end,
-		run = function(ctx, done)
-			local pr = ctx.pr
-			statusline.notify("loading", string.format("Closing %s...", pr_label(pr)))
-			mr_api.set_state(pr, "close", function(ok, err)
-				if not ok then
-					statusline.notify("error", err or "Close failed")
-					done(nil, err or "Close failed")
-					return
-				end
-				statusline.notify("success", string.format("Closed %s", pr_label(pr)), 1200)
-				done({ changed_pr = true, message = "Closed" }, nil)
-			end)
-		end,
-	},
-	{
-		id = "reopen",
-		label = "Reopen MR",
-		is_available = function(ctx)
-			if not has_pr(ctx) then
-				return false, "No MR selected"
-			end
-			if ctx.pr.state ~= "declined" then
-				return false, "MR is not closed"
-			end
-			return true, nil
-		end,
-		run = function(ctx, done)
-			local pr = ctx.pr
-			statusline.notify("loading", string.format("Reopening %s...", pr_label(pr)))
-			mr_api.set_state(pr, "reopen", function(ok, err)
-				if not ok then
-					statusline.notify("error", err or "Reopen failed")
-					done(nil, err or "Reopen failed")
-					return
-				end
-				statusline.notify("success", string.format("Reopened %s", pr_label(pr)), 1200)
-				done({ changed_pr = true, message = "Reopened" }, nil)
-			end)
-		end,
-	},
-	{
-		id = "convert_to_draft",
-		label = "Convert to draft",
-		is_available = function(ctx)
-			if not is_open(ctx) then
-				return false, "MR is not open"
-			end
-			if is_draft_title(ctx.pr.title) then
-				return false, "MR is already a draft"
-			end
-			return true, nil
-		end,
-		run = function(ctx, done)
-			local pr = ctx.pr
-			local new_title = "Draft: " .. strip_draft_prefix(pr.title)
-			statusline.notify("loading", string.format("Marking %s as draft...", pr_label(pr)))
-			mr_api.set_title(pr, new_title, function(ok, err)
-				if not ok then
-					statusline.notify("error", err or "Failed")
-					done(nil, err or "Failed")
-					return
-				end
-				statusline.notify("success", "Marked as draft", 1200)
-				done({ changed_pr = true, message = "Marked as draft" }, nil)
-			end)
-		end,
-	},
-	{
-		id = "ready_for_review",
-		label = "Mark as ready for review",
-		is_available = function(ctx)
-			if not has_pr(ctx) then
-				return false, "No MR selected"
-			end
-			if not is_draft_title(ctx.pr.title) and ctx.pr.state ~= "draft" then
-				return false, "MR is not a draft"
-			end
-			return true, nil
-		end,
-		run = function(ctx, done)
-			local pr = ctx.pr
-			local new_title = strip_draft_prefix(pr.title)
-			if new_title == "" then
-				done(nil, "MR title is empty after stripping draft prefix")
-				return
-			end
-			statusline.notify("loading", string.format("Marking %s ready for review...", pr_label(pr)))
-			mr_api.set_title(pr, new_title, function(ok, err)
-				if not ok then
-					statusline.notify("error", err or "Failed")
-					done(nil, err or "Failed")
-					return
-				end
-				statusline.notify("success", "Marked as ready", 1200)
-				done({ changed_pr = true, message = "Marked as ready" }, nil)
-			end)
-		end,
-	},
-	{
-		id = "edit_reviewers",
-		label = "Edit reviewers",
-		is_available = function(ctx)
-			if not is_open_or_draft(ctx) then
-				return false, "MR is not open"
-			end
-			return true, nil
-		end,
-		run = function(ctx, done)
-			local pr = ctx.pr
-			local path = project_path(pr)
-			if path == "" then
-				done(nil, "Could not determine project path")
-				return
-			end
-
-			statusline.notify("loading", "Loading members...")
-			users_api.list_members(path, "", function(members, err)
-				if err or members == nil then
-					statusline.notify("error", err or "Failed to load members")
-					done(nil, err or "Failed to load members")
-					return
-				end
-				statusline.clear_notice()
-				if #members == 0 then
-					done(nil, "No assignable members")
-					return
-				end
-
-				local raw = pr._raw
-				local original = {}
-				local original_set = {}
-				for _, r in ipairs(raw.reviewers or {}) do
-					local id = tonumber(r.id)
-					if id then
-						table.insert(original, { id = id, username = r.username, name = r.name or r.username })
-						original_set[id] = true
-					end
-				end
-
-				multi_select.open({
-					items = members,
-					selected = vim.deepcopy(original),
-					key = function(item)
-						return tostring(item.id or "")
-					end,
-					format = function(item)
-						return string.format(
-							"%s %s (@%s)",
-							icons.general("user"),
-							item.name or item.username,
-							item.username
-						)
-					end,
-					prompt = string.format("Reviewers for %s", pr_label(pr)),
-					on_done = function(selected)
-						local final_ids = {}
-						local final_set = {}
-						for _, it in ipairs(selected) do
-							local id = tonumber(it.id)
-							if id then
-								table.insert(final_ids, id)
-								final_set[id] = true
-							end
-						end
-
-						local changed = false
-						if #final_ids ~= #original then
-							changed = true
-						else
-							for id, _ in pairs(original_set) do
-								if not final_set[id] then
-									changed = true
-									break
-								end
-							end
-						end
-
-						if not changed then
-							done({ changed_pr = false, message = "No changes" }, nil)
-							return
-						end
-
-						statusline.notify("loading", string.format("Updating reviewers on %s...", pr_label(pr)))
-						mr_api.set_reviewer_ids(pr, final_ids, function(ok, set_err)
-							if not ok then
-								statusline.notify("error", set_err or "Failed")
-								done(nil, set_err or "Failed")
-								return
-							end
-							local msg = string.format("%d reviewer(s)", #final_ids)
-							statusline.notify("success", msg, 1200)
-							done({ changed_pr = true, message = msg }, nil)
-						end)
-					end,
-				})
-			end)
-		end,
-	},
-	{
-		id = "edit_assignees",
-		label = "Edit assignees",
-		is_available = function(ctx)
-			if not is_open_or_draft(ctx) then
-				return false, "MR is not open"
-			end
-			return true, nil
-		end,
-		run = function(ctx, done)
-			local pr = ctx.pr
-			local path = project_path(pr)
-			if path == "" then
-				done(nil, "Could not determine project path")
-				return
-			end
-
-			statusline.notify("loading", "Loading members...")
-			users_api.list_members(path, "", function(members, err)
-				if err or members == nil then
-					statusline.notify("error", err or "Failed to load members")
-					done(nil, err or "Failed to load members")
-					return
-				end
-				statusline.clear_notice()
-				if #members == 0 then
-					done(nil, "No assignable members")
-					return
-				end
-
-				local raw = pr._raw
-				local original = {}
-				local original_set = {}
-				for _, a in ipairs(raw.assignees or {}) do
-					local id = tonumber(a.id)
-					if id then
-						table.insert(original, { id = id, username = a.username, name = a.name or a.username })
-						original_set[id] = true
-					end
-				end
-
-				multi_select.open({
-					items = members,
-					selected = vim.deepcopy(original),
-					key = function(item)
-						return tostring(item.id or "")
-					end,
-					format = function(item)
-						return string.format(
-							"%s %s (@%s)",
-							icons.general("user"),
-							item.name or item.username,
-							item.username
-						)
-					end,
-					prompt = string.format("Assignees for %s", pr_label(pr)),
-					on_done = function(selected)
-						local final_ids = {}
-						local final_set = {}
-						for _, it in ipairs(selected) do
-							local id = tonumber(it.id)
-							if id then
-								table.insert(final_ids, id)
-								final_set[id] = true
-							end
-						end
-
-						local changed = false
-						if #final_ids ~= #original then
-							changed = true
-						else
-							for id, _ in pairs(original_set) do
-								if not final_set[id] then
-									changed = true
-									break
-								end
-							end
-						end
-
-						if not changed then
-							done({ changed_pr = false, message = "No changes" }, nil)
-							return
-						end
-
-						statusline.notify("loading", string.format("Updating assignees on %s...", pr_label(pr)))
-						mr_api.set_assignee_ids(pr, final_ids, function(ok, set_err)
-							if not ok then
-								statusline.notify("error", set_err or "Failed")
-								done(nil, set_err or "Failed")
-								return
-							end
-							local msg = string.format("%d assignee(s)", #final_ids)
-							statusline.notify("success", msg, 1200)
-							done({ changed_pr = true, message = msg }, nil)
-						end)
-					end,
-				})
-			end)
-		end,
-	},
-	{
-		id = "search",
-		label = "Search projects",
-		is_available = function(_)
-			return true, nil
-		end,
-		run = function(_, done)
-			vim.ui.input({ prompt = "Search projects: " }, function(input)
-				if input == nil or vim.trim(input) == "" then
-					done({ changed_pr = false, message = "Search cancelled" }, nil)
-					return
-				end
-
-				local query = vim.trim(input)
-				statusline.notify("loading", "Searching projects...")
-				local endpoint = string.format(
-					"/projects?search=%s&per_page=20&order_by=last_activity_at",
-					service.url_encode(query)
-				)
-				service.request("GET", endpoint, nil, function(result, err)
-					if err then
-						statusline.notify("error", string.format("Search failed: %s", tostring(err)))
-						done(nil, tostring(err))
-						return
-					end
-
-					local list = {}
-					for _, item in ipairs(type(result) == "table" and result or {}) do
-						local full_path = tostring(item.path_with_namespace or "")
-						if full_path ~= "" then
-							table.insert(list, full_path)
-						end
-					end
-
-					if #list == 0 then
-						statusline.notify("warn", "No projects found")
-						done({ changed_pr = false, message = "No projects found" }, nil)
-						return
-					end
-
-					statusline.notify("info", string.format("Found %d projects", #list), 1200)
-
-					vim.ui.select(list, {
-						prompt = "Select project",
-						kind = "atlas_gitlab_project_select",
-					}, function(project)
-						if project == nil then
-							done({ changed_pr = false, message = "Selection cancelled" }, nil)
-							return
-						end
-
-						---@type AtlasGitLabPullsViewConfig
-						local search_view = {
-							name = "Search",
-							key = nil,
-							project = project,
-							scope = "all",
-						}
-
-						local controller = require("atlas.pulls.ui.main.controller")
-						statusline.notify("success", string.format("Search view -> %s", project))
-						controller.switch_view(search_view)
-						done({ changed_pr = false, message = "Search view switched" }, nil)
-					end)
-				end)
-			end)
-		end,
-	},
-	{
-		id = "toggle_subscription",
-		label = "Toggle subscription",
-		is_available = function(ctx)
-			if not has_pr(ctx) then
-				return false, "No MR selected"
-			end
-			local path = project_path(ctx.pr)
-			if path == "" then
-				return false, "Missing project path"
-			end
-			return true, nil
-		end,
-		run = function(ctx, done)
-			local pr = ctx.pr
-			local path = project_path(pr)
-			local iid = tonumber(pr.id)
-			if iid == nil then
-				done(nil, "Invalid MR identifier")
-				return
-			end
-			local action = pr.is_subscribed == true and "unsubscribe" or "subscribe"
-			local endpoint = string.format("/projects/%s/merge_requests/%d/%s", service.url_encode(path), iid, action)
-			statusline.notify("loading", pr.is_subscribed and "Unsubscribing..." or "Subscribing...")
-			service.request("POST", endpoint, nil, function(result, err)
-				if err then
-					statusline.notify("error", tostring(err))
-					done(nil, tostring(err))
-					return
-				end
-				local subscribed = type(result) == "table" and result.subscribed
-				if type(subscribed) ~= "boolean" then
-					subscribed = action == "subscribe"
-				end
-				pr.is_subscribed = subscribed == true
-				statusline.notify("success", pr.is_subscribed and "Subscribed" or "Unsubscribed", 1200)
-				done({ changed_pr = true, message = pr.is_subscribed and "Subscribed" or "Unsubscribed" }, nil)
-			end)
-		end,
-	},
-}
-
----@param ctx table
----@return table[]
-function M.available(ctx)
-	local out = {}
-	for _, action in ipairs(ACTIONS) do
-		if not action.hidden then
-			local ok = action.is_available(ctx)
-			if ok then
-				table.insert(out, action)
-			end
-		end
-	end
-
-	-- Shared actions
-	if has_pr(ctx) then
-		local shared_actions = require("atlas.pulls.actions")
-		table.insert(out, {
-			id = "open_pipelines",
-			label = "Open Pipelines",
-			is_available = function()
-				return true, nil
-			end,
-			run = function(action_ctx, done)
-				shared_actions.open_pipelines(action_ctx.pr, done)
-			end,
-		})
-		table.insert(out, {
-			id = "open_diff",
-			label = "Open diff",
-			is_available = function()
-				return true, nil
-			end,
-			run = function(action_ctx, done)
-				shared_actions.open_diff(action_ctx.pr)
-				done({ changed_pr = false, message = "Opened diff" }, nil)
-			end,
-		})
-		table.insert(out, {
-			id = "checkout",
-			label = "Checkout MR branch",
-			is_available = function()
-				return true, nil
-			end,
-			run = function(action_ctx, done)
-				shared_actions.checkout(action_ctx.pr)
-				done({ changed_pr = false, message = "Checkout started" }, nil)
-			end,
-		})
-	end
-
-	-- Custom actions from config
-	local pulls_cfg = require("atlas.config").options.pulls or {}
-	local custom_actions = pulls_cfg.custom_actions or {}
-	local pulls_state = require("atlas.pulls.state")
-
-	for _, item in ipairs(custom_actions) do
-		if type(item) == "table" and type(item.label) == "string" and type(item.run) == "function" then
-			table.insert(out, {
-				id = tostring(item.id or item.label),
-				label = icons.general("custom_action") .. "  " .. item.label,
-				is_available = function(action_ctx)
-					if not has_pr(action_ctx) then
-						return false, "No MR selected"
-					end
-					return true, nil
-				end,
-				run = function(action_ctx, done)
-					statusline.notify("loading", string.format("Running %s...", tostring(item.label)))
-
-					local done_called = false
-					local function custom_done(ok, message)
-						if done_called then
-							return
-						end
-						done_called = true
-						vim.schedule(function()
-							if ok == false then
-								statusline.notify("error", tostring(message or (item.label .. " failed")))
-								done(nil, tostring(message or (item.label .. " failed")))
-								return
-							end
-							statusline.notify("success", tostring(message or (item.label .. " done")))
-							done({ changed_pr = false, message = tostring(message or (item.label .. " done")) }, nil)
-						end)
-					end
-
-					local repo_path = checkout.resolve_repo_path_for_pr(action_ctx.pr, {
-						require_git = false,
-						require_existing = false,
-					})
-					local ok, err = pcall(item.run, action_ctx.pr, {
-						repo_path = repo_path,
-						pr = action_ctx.pr,
-						user = pulls_state.current_user,
-						output = require("atlas.ui.popups.live").create,
-					}, custom_done)
-
-					if not ok then
-						custom_done(false, string.format("Custom action failed: %s", tostring(err)))
-					end
-				end,
-			})
-		end
-	end
-
-	return out
+---@param action AtlasPullAction
+local function register(action)
+	table.insert(ACTIONS, action)
 end
 
----@param id string
----@return table|nil
+---@param ctx AtlasPullActionContext
+---@return boolean, string|nil
+local function toggle_approval_available(ctx)
+	if not is_open_or_draft(ctx) then
+		return false, "MR is not open"
+	end
+	return true, nil
+end
+
+---@param ctx AtlasPullActionContext
+---@param done fun(result: PullsActionResult|nil, err: string|nil)
+local function toggle_approval(ctx, done)
+	local pr = ctx.pr
+	notify(ctx, "loading", string.format("Checking approval for %s...", pr_label(pr)))
+	mr_api.get_approval_state(pr, function(approved, err)
+		if err then
+			notify(ctx, "error", err)
+			done(nil, err)
+			return
+		end
+
+		if approved then
+			notify(ctx, "loading", string.format("Unapproving %s...", pr_label(pr)))
+			mr_api.unapprove(pr, function(ok, unapprove_err)
+				if not ok then
+					notify(ctx, "error", unapprove_err or "Unapprove failed")
+					done(nil, unapprove_err or "Unapprove failed")
+					return
+				end
+				notify(ctx, "success", string.format("Unapproved %s", pr_label(pr)), 1200)
+				done({ changed_pr = true, message = "Unapproved" }, nil)
+			end)
+		else
+			notify(ctx, "loading", string.format("Approving %s...", pr_label(pr)))
+			mr_api.approve(pr, function(ok, approve_err)
+				if not ok then
+					notify(ctx, "error", approve_err or "Approve failed")
+					done(nil, approve_err or "Approve failed")
+					return
+				end
+				notify(ctx, "success", string.format("Approved %s", pr_label(pr)), 1200)
+				done({ changed_pr = true, message = "Approved" }, nil)
+			end)
+		end
+	end)
+end
+
+---@param ctx AtlasPullActionContext
+---@return boolean, string|nil
+local function merge_available(ctx)
+	if not has_pr(ctx) then
+		return false, "No MR selected"
+	end
+	if ctx.pr.state == "draft" then
+		return false, "MR is a draft"
+	end
+	if ctx.pr.state ~= "open" then
+		return false, "MR is not open"
+	end
+	return true, nil
+end
+
+---@param ctx AtlasPullActionContext
+---@param done fun(result: PullsActionResult|nil, err: string|nil)
+local function merge(ctx, done)
+	local pr = ctx.pr
+	vim.ui.input({ prompt = string.format("Merge %s? Squash? [n/y]: ", pr_label(pr)) }, function(input)
+		if input == nil then
+			done({ changed_pr = false, message = "Merge cancelled" }, nil)
+			return
+		end
+		local squash = vim.trim(tostring(input)):lower() == "y"
+		notify(ctx, "loading", string.format("Merging %s...", pr_label(pr)))
+		mr_api.merge(pr, {
+			squash = squash,
+			should_remove_source_branch = true,
+		}, function(ok, err)
+			if not ok then
+				notify(ctx, "error", err or "Merge failed")
+				done(nil, err or "Merge failed")
+				return
+			end
+			notify(ctx, "success", string.format("Merged %s", pr_label(pr)), 1500)
+			done({ changed_pr = true, message = "Merged" }, nil)
+		end)
+	end)
+end
+
+---@param ctx AtlasPullActionContext
+---@return boolean, string|nil
+local function close_available(ctx)
+	if not is_open_or_draft(ctx) then
+		return false, "MR is already closed/merged"
+	end
+	return true, nil
+end
+
+---@param ctx AtlasPullActionContext
+---@param done fun(result: PullsActionResult|nil, err: string|nil)
+local function close(ctx, done)
+	local pr = ctx.pr
+	notify(ctx, "loading", string.format("Closing %s...", pr_label(pr)))
+	mr_api.set_state(pr, "close", function(ok, err)
+		if not ok then
+			notify(ctx, "error", err or "Close failed")
+			done(nil, err or "Close failed")
+			return
+		end
+		notify(ctx, "success", string.format("Closed %s", pr_label(pr)), 1200)
+		done({ changed_pr = true, message = "Closed" }, nil)
+	end)
+end
+
+---@param ctx AtlasPullActionContext
+---@return boolean, string|nil
+local function reopen_available(ctx)
+	if not has_pr(ctx) then
+		return false, "No MR selected"
+	end
+	if ctx.pr.state ~= "declined" then
+		return false, "MR is not closed"
+	end
+	return true, nil
+end
+
+---@param ctx AtlasPullActionContext
+---@param done fun(result: PullsActionResult|nil, err: string|nil)
+local function reopen(ctx, done)
+	local pr = ctx.pr
+	notify(ctx, "loading", string.format("Reopening %s...", pr_label(pr)))
+	mr_api.set_state(pr, "reopen", function(ok, err)
+		if not ok then
+			notify(ctx, "error", err or "Reopen failed")
+			done(nil, err or "Reopen failed")
+			return
+		end
+		notify(ctx, "success", string.format("Reopened %s", pr_label(pr)), 1200)
+		done({ changed_pr = true, message = "Reopened" }, nil)
+	end)
+end
+
+---@param ctx AtlasPullActionContext
+---@return boolean, string|nil
+local function edit_assignees_available(ctx)
+	if not is_open_or_draft(ctx) then
+		return false, "MR is not open"
+	end
+	return true, nil
+end
+
+---@param ctx AtlasPullActionContext
+---@param done fun(result: PullsActionResult|nil, err: string|nil)
+local function edit_assignees(ctx, done)
+	local pr = ctx.pr
+	local path = project_path(pr)
+	if path == "" then
+		done(nil, "Could not determine project path")
+		return
+	end
+
+	notify(ctx, "loading", "Loading members...")
+	users_api.list_members(path, "", function(members, err)
+		if err or members == nil then
+			notify(ctx, "error", err or "Failed to load members")
+			done(nil, err or "Failed to load members")
+			return
+		end
+		if #members == 0 then
+			notify(ctx, "warn", "No assignable members")
+			done(nil, "No assignable members")
+			return
+		end
+		notify(ctx, "success", "Members loaded", 1200)
+
+		local raw = pr._raw
+		local original = {}
+		local original_set = {}
+		for _, a in ipairs(raw.assignees or {}) do
+			local id = tonumber(a.id)
+			if id then
+				table.insert(original, { id = id, username = a.username, name = a.name or a.username })
+				original_set[id] = true
+			end
+		end
+
+		multi_select.open({
+			items = members,
+			selected = vim.deepcopy(original),
+			key = function(item)
+				return tostring(item.id or "")
+			end,
+			format = function(item)
+				return string.format("%s %s (@%s)", icons.general("user"), item.name or item.username, item.username)
+			end,
+			prompt = string.format("Assignees for %s", pr_label(pr)),
+			on_done = function(selected)
+				local final_ids = {}
+				local final_set = {}
+				for _, it in ipairs(selected) do
+					local id = tonumber(it.id)
+					if id then
+						table.insert(final_ids, id)
+						final_set[id] = true
+					end
+				end
+
+				local changed = false
+				if #final_ids ~= #original then
+					changed = true
+				else
+					for id, _ in pairs(original_set) do
+						if not final_set[id] then
+							changed = true
+							break
+						end
+					end
+				end
+
+				if not changed then
+					done({ changed_pr = false, message = "No changes" }, nil)
+					return
+				end
+
+				notify(ctx, "loading", string.format("Updating assignees on %s...", pr_label(pr)))
+				mr_api.set_assignee_ids(pr, final_ids, function(ok, set_err)
+					if not ok then
+						notify(ctx, "error", set_err or "Failed")
+						done(nil, set_err or "Failed")
+						return
+					end
+					local msg = string.format("%d assignee(s)", #final_ids)
+					notify(ctx, "success", msg, 1200)
+					done({ changed_pr = true, message = msg }, nil)
+				end)
+			end,
+		})
+	end)
+end
+
+---@param ctx AtlasPullActionContext
+---@param done fun(result: PullsActionResult|nil, err: string|nil)
+local function search(ctx, done)
+	vim.ui.input({ prompt = "Search projects: " }, function(input)
+		if input == nil or vim.trim(input) == "" then
+			done({ changed_pr = false, message = "Search cancelled" }, nil)
+			return
+		end
+
+		local query = vim.trim(input)
+		notify(ctx, "loading", "Searching projects...")
+		local endpoint =
+			string.format("/projects?search=%s&per_page=20&order_by=last_activity_at", service.url_encode(query))
+		service.request("GET", endpoint, nil, function(result, err)
+			if err then
+				notify(ctx, "error", string.format("Search failed: %s", tostring(err)))
+				done(nil, tostring(err))
+				return
+			end
+
+			local list = {}
+			for _, item in ipairs(type(result) == "table" and result or {}) do
+				local full_path = tostring(item.path_with_namespace or "")
+				if full_path ~= "" then
+					table.insert(list, full_path)
+				end
+			end
+
+			if #list == 0 then
+				notify(ctx, "warn", "No projects found")
+				done({ changed_pr = false, message = "No projects found" }, nil)
+				return
+			end
+
+			notify(ctx, "info", string.format("Found %d projects", #list), 1200)
+
+			vim.ui.select(list, {
+				prompt = "Select project",
+				kind = "atlas_gitlab_project_select",
+			}, function(project)
+				if project == nil then
+					done({ changed_pr = false, message = "Selection cancelled" }, nil)
+					return
+				end
+
+				---@type AtlasGitLabPullsViewConfig
+				local search_view = {
+					name = "Search",
+					key = nil,
+					project = project,
+					scope = "all",
+				}
+
+				local controller = require("atlas.pulls.ui.main.controller")
+				notify(ctx, "success", string.format("Search view -> %s", project))
+				controller.switch_view(search_view)
+				done({ changed_pr = false, message = "Search view switched" }, nil)
+			end)
+		end)
+	end)
+end
+
+---@param ctx AtlasPullActionContext
+---@return boolean, string|nil
+local function toggle_subscription_available(ctx)
+	if not has_pr(ctx) then
+		return false, "No MR selected"
+	end
+	local path = project_path(ctx.pr)
+	if path == "" then
+		return false, "Missing project path"
+	end
+	return true, nil
+end
+
+---@param ctx AtlasPullActionContext
+---@param done fun(result: PullsActionResult|nil, err: string|nil)
+local function toggle_subscription(ctx, done)
+	local pr = ctx.pr
+	local path = project_path(pr)
+	local iid = tonumber(pr.id)
+	if iid == nil then
+		done(nil, "Invalid MR identifier")
+		return
+	end
+	local action = pr.is_subscribed == true and "unsubscribe" or "subscribe"
+	local endpoint = string.format("/projects/%s/merge_requests/%d/%s", service.url_encode(path), iid, action)
+	notify(ctx, "loading", pr.is_subscribed and "Unsubscribing..." or "Subscribing...")
+	service.request("POST", endpoint, nil, function(result, err)
+		if err then
+			notify(ctx, "error", tostring(err))
+			done(nil, tostring(err))
+			return
+		end
+		local subscribed = type(result) == "table" and result.subscribed
+		if type(subscribed) ~= "boolean" then
+			subscribed = action == "subscribe"
+		end
+		pr.is_subscribed = subscribed == true
+		notify(ctx, "success", pr.is_subscribed and "Subscribed" or "Unsubscribed", 1200)
+		done({ changed_pr = true, message = pr.is_subscribed and "Subscribed" or "Unsubscribed" }, nil)
+	end)
+end
+
+register({
+	id = actions.request_changes.id,
+	label = actions.request_changes.label,
+	is_available = toggle_approval_available,
+	run = actions.request_changes.run,
+})
+
+register({
+	id = "toggle_approval",
+	label = "Toggle approval",
+	is_available = toggle_approval_available,
+	run = toggle_approval,
+})
+
+register({
+	id = "merge",
+	label = "Merge MR",
+	is_available = merge_available,
+	run = merge,
+})
+
+register(actions.edit_title)
+
+register({
+	id = "close",
+	label = "Close MR",
+	is_available = close_available,
+	run = close,
+})
+
+register({
+	id = "reopen",
+	label = "Reopen MR",
+	is_available = reopen_available,
+	run = reopen,
+})
+
+register(actions.convert_to_draft)
+register(actions.ready_for_review)
+register(actions.edit_reviewers)
+
+register({
+	id = "edit_assignees",
+	label = "Edit assignees",
+	is_available = edit_assignees_available,
+	run = edit_assignees,
+})
+
+register({
+	id = "search",
+	label = "Search projects",
+	run = search,
+})
+
+register({
+	id = "toggle_subscription",
+	label = "Toggle subscription",
+	is_available = toggle_subscription_available,
+	run = toggle_subscription,
+})
+
+register(actions.open_pipelines)
+register(actions.open_diff)
+register(actions.checkout)
+
+register(actions.copy_id)
+register(actions.copy_url)
+register(actions.open_in_browser)
+
+---@param id AtlasGitLabActionId
+---@return AtlasPullAction|nil
 function M.find(id)
 	for _, action in ipairs(ACTIONS) do
 		if action.id == id then

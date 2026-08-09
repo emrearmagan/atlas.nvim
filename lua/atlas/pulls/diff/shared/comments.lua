@@ -1,10 +1,22 @@
 local M = {}
 
-local actions = require("atlas.pulls.actions.review")
+local actions = require("atlas.pulls.actions")
+local diff_actions = require("atlas.pulls.diff.shared.actions")
+local review = require("atlas.pulls.actions.review")
 local code_preview = require("atlas.ui.components.code_preview")
-local overlay = require("atlas.pulls.diff.shared.comments.overlay")
+local comment_renderer = require("atlas.pulls.diff.shared.ui.comment_renderer")
 local position = require("atlas.pulls.diff.shared.position")
-local comment_threads = require("atlas.ui.components.review_threads")
+local review_threads = require("atlas.ui.components.review_threads")
+
+local THREAD_ACTIONS = {
+	add_comment = function(context, comment, on_done)
+		return review.add_comment(context, { parent = comment, pending = true }, on_done)
+	end,
+	edit = review.edit_comment,
+	delete = review.delete_comment,
+	toggle_task = review.toggle_task,
+	toggle_resolved = review.toggle_resolved,
+}
 
 ---@type fun(session: AtlasReviewSession, state: AtlasReviewState)
 local reload_review
@@ -73,14 +85,6 @@ local function cancel_requests(state)
 	end
 end
 
----@param state AtlasReviewState
----@param action AtlasReviewCommentAction
----@param comment PullsComment
----@return boolean
-local function can_action(state, action, comment)
-	return actions.is_available(action, comment, state.current_user, state.provider)
-end
-
 ---@param session AtlasReviewSession
 ---@param side "LEFT"|"RIGHT"
 ---@param line integer
@@ -93,7 +97,7 @@ end
 
 ---@param session AtlasReviewSession
 ---@param state AtlasReviewState
----@return AtlasCommentOverlayContext|nil
+---@return AtlasCommentRendererContext|nil
 local function render_context(session, state)
 	local document = session.document
 	if not document then
@@ -101,7 +105,7 @@ local function render_context(session, state)
 	end
 	local comments = state.provider and state.provider.capabilities.comments
 	return {
-		threads = comment_threads.group_comments(state.comments, state.tasks),
+		threads = review_threads.group_comments(state.comments, state.tasks),
 		expanded_threads = state.expanded_threads,
 		old_path = document.old.path,
 		new_path = document.new.path,
@@ -110,7 +114,7 @@ local function render_context(session, state)
 end
 
 ---@param session AtlasReviewSession
----@param context AtlasCommentOverlayContext
+---@param context AtlasCommentRendererContext
 ---@param path string
 ---@param side "LEFT"|"RIGHT"
 ---@return table<integer, AtlasReviewThreadNode[]>
@@ -135,7 +139,7 @@ local function threads_by_line(session, context, path, side)
 end
 
 ---@param session AtlasReviewSession
----@param context AtlasCommentOverlayContext
+---@param context AtlasCommentRendererContext
 ---@param path string
 ---@param side "LEFT"|"RIGHT"
 ---@return table<integer, AtlasReviewThreadNode[]>
@@ -195,7 +199,7 @@ function M.render(session, opts)
 		local old_threads = threads_by_line(session, context, context.old_path, "LEFT")
 		for old_line, old_list in pairs(old_threads) do
 			if position.is_changed(session.document, "LEFT", old_line) then
-				deleted_comments[old_line] = overlay.thread_lines(context, session.right.buf, old_list)
+				deleted_comments[old_line] = comment_renderer.thread_lines(context, session.right.buf, old_list)
 			else
 				local line, above = opposite_line(session, "LEFT", old_line)
 				right_threads[line] = right_threads[line] or {}
@@ -208,24 +212,24 @@ function M.render(session, opts)
 	else
 		right_threads, right_above = visible_threads(session, context, context.new_path, "RIGHT")
 	end
-	local right = overlay.render_comments(context, session.right.buf, right_threads, {
+	local right = comment_renderer.render_comments(context, session.right.buf, right_threads, {
 		above_lines = right_above,
 	})
 	if session.layout ~= "side-by-side" then
-		overlay.clear_comments(session.left.buf)
+		comment_renderer.clear_comments(session.left.buf)
 		return deleted_comments
 	end
 	local left_threads, left_above = visible_threads(session, context, context.old_path, "LEFT")
-	local left = overlay.render_comments(context, session.left.buf, left_threads, {
+	local left = comment_renderer.render_comments(context, session.left.buf, left_threads, {
 		above_lines = left_above,
 	})
 	for line, count in pairs(left) do
 		local target, above = opposite_line(session, "LEFT", line)
-		overlay.pad_comments(session.right.buf, target, count, left_above[line] or above)
+		comment_renderer.pad_comments(session.right.buf, target, count, left_above[line] or above)
 	end
 	for line, count in pairs(right) do
 		local target, above = opposite_line(session, "RIGHT", line)
-		overlay.pad_comments(session.left.buf, target, count, right_above[line] or above)
+		comment_renderer.pad_comments(session.left.buf, target, count, right_above[line] or above)
 	end
 	return deleted_comments
 end
@@ -304,7 +308,7 @@ local function toggle_at_cursor(session, state, buf)
 	end
 	local line = vim.api.nvim_win_get_cursor(0)[1]
 	local threads = visible_threads(session, context, path, side)[line] or {}
-	if not comment_threads.toggle_all_threads(threads, state.expanded_threads) then
+	if not review_threads.toggle_all_threads(threads, state.expanded_threads) then
 		return false
 	end
 	session.refresh_ui()
@@ -326,7 +330,7 @@ local function toggle_all_threads(session, state)
 	}) do
 		for _, threads in pairs(visible_threads(session, review_context, location.path, location.side)) do
 			for _, thread in ipairs(threads) do
-				local key = comment_threads.comment_key(thread.comment)
+				local key = review_threads.comment_key(thread.comment)
 				if not seen[key] then
 					seen[key] = true
 					table.insert(roots, thread)
@@ -334,7 +338,7 @@ local function toggle_all_threads(session, state)
 			end
 		end
 	end
-	if not comment_threads.toggle_all_threads(roots, state.expanded_threads) then
+	if not review_threads.toggle_all_threads(roots, state.expanded_threads) then
 		return false
 	end
 	session.refresh_ui()
@@ -419,15 +423,14 @@ end
 ---@param session AtlasReviewSession
 ---@param state AtlasReviewState
 ---@param comment PullsComment|nil
----@param after_refresh (fun())|nil
----@return AtlasReviewCommentActionContext|nil
-local function action_context(session, state, comment, after_refresh)
-	if state.loading or not active(session, state) or not state.provider or not state.pr then
+---@return AtlasReviewActionContext|nil
+local function action_context(session, state, comment)
+	local provider = state.provider
+	local pr = state.pr
+	if state.loading or not active(session, state) or not provider or not pr then
 		return nil
 	end
 	local generation = state.generation
-	local provider = state.provider
-	local pr = state.pr
 	local items = comment and comment.is_task and state.tasks or state.comments
 	local comments = provider.capabilities.comments
 	local completion = comments
@@ -457,22 +460,6 @@ local function action_context(session, state, comment, after_refresh)
 		track = function(handle)
 			return track(session, state, handle)
 		end,
-		refresh = function()
-			if active(session, state) then
-				if completion and completion.resolve_items then
-					completion.resolve_items()
-				end
-				session.refresh_ui()
-				if after_refresh then
-					after_refresh()
-				end
-			end
-		end,
-		reload = function()
-			if active(session, state) then
-				reload_review(session, state)
-			end
-		end,
 		notify = function(level, message, duration)
 			if not active(session, state) then
 				return
@@ -483,26 +470,79 @@ local function action_context(session, state, comment, after_refresh)
 end
 
 ---@param session AtlasReviewSession
----@param action AtlasReviewCommentAction
----@param comment PullsComment
----@return boolean
-function M.is_action_available(session, action, comment)
-	local state = session.review
-	return state ~= nil and active(session, state) and can_action(state, action, comment)
+---@param state AtlasReviewState
+---@param context AtlasReviewActionContext
+---@param after_refresh (fun())|nil
+local function refresh_review(session, state, context, after_refresh)
+	if not active(session, state) then
+		return
+	end
+	if context.completion and context.completion.resolve_items then
+		context.completion.resolve_items()
+	end
+	session.refresh_ui()
+	if after_refresh then
+		after_refresh()
+	end
 end
 
 ---@param session AtlasReviewSession
----@param action AtlasReviewCommentAction
+---@param state AtlasReviewState
+---@param action AtlasReviewThreadAction
+---@param comment PullsComment
+---@param after_refresh (fun())|nil
+---@return boolean handled
+local function run_comment_action(session, state, action, comment, after_refresh)
+	local context = action_context(session, state, comment)
+	if not context then
+		return false
+	end
+	local on_done = function(result, err)
+		if result and not err then
+			refresh_review(session, state, context, after_refresh)
+			if require("atlas.pulls.state").provider == context.provider then
+				require("atlas.pulls.ui.main.controller").apply_action_result(context.pr, result)
+			end
+		end
+	end
+	local handler = THREAD_ACTIONS[action]
+	return handler ~= nil and handler(context, comment, on_done)
+end
+
+---@param session AtlasReviewSession
+---@param state AtlasReviewState
+local function reload_pull_request(session, state)
+	local provider = state.provider
+	local pr = state.pr
+	if not active(session, state) or not provider or not pr then
+		return
+	end
+	local generation = state.generation
+	local handle = provider.capabilities.core.fetch_pullrequest(pr, { force_load = true }, function(updated, err)
+		if not active(session, state) or state.generation ~= generation then
+			return
+		end
+		if updated then
+			for key, value in pairs(updated) do
+				pr[key] = value
+			end
+		elseif err then
+			view_notify(session, "warn", "PR refresh failed: " .. tostring(err))
+		end
+		reload_review(session, state)
+	end)
+	track(session, state, handle)
+end
+
+---@param session AtlasReviewSession
+---@param action AtlasReviewThreadAction
 ---@param comment PullsComment
 function M.run_action(session, action, comment)
 	local state = session.review
 	if not state then
 		return
 	end
-	local context = action_context(session, state, comment)
-	if context then
-		actions.run(context, action, comment)
-	end
+	run_comment_action(session, state, action, comment)
 end
 
 ---@param session AtlasReviewSession
@@ -551,11 +591,11 @@ local function open_thread(session, state, buf)
 	if #threads == 0 then
 		return false
 	end
-	local popup = require("atlas.pulls.diff.shared.comments.popup")
+	local popup = require("atlas.pulls.diff.shared.ui.comment_popup")
 	local owner = tostring(session.tabpage)
 	local root_keys = {}
 	for _, thread in ipairs(threads) do
-		root_keys[comment_threads.comment_key(thread.comment)] = true
+		root_keys[review_threads.comment_key(thread.comment)] = true
 	end
 
 	local show
@@ -567,20 +607,17 @@ local function open_thread(session, state, buf)
 			title = popup_title(nodes),
 			toggle_resolved_keys = require("atlas.core.keymaps").resolve("pulls.review.diff.toggle_resolved"),
 			reaction_options = comments and comments.reaction_options,
-			can_action = function(action, comment)
-				return can_action(state, action, comment)
-			end,
 			on_action = function(action, comment, close)
 				local refresh_popup
-				if action == "reply" or action == "edit" then
+				if action == "add_comment" or action == "edit" then
 					refresh_popup = function()
 						vim.schedule(function()
 							if not active(session, state) or not popup.is_open(owner) then
 								return
 							end
 							local updated = {}
-							for _, node in ipairs(comment_threads.group_comments(state.comments, state.tasks)) do
-								if root_keys[comment_threads.comment_key(node.comment)] then
+							for _, node in ipairs(review_threads.group_comments(state.comments, state.tasks)) do
+								if root_keys[review_threads.comment_key(node.comment)] then
 									table.insert(updated, node)
 								end
 							end
@@ -592,15 +629,9 @@ local function open_thread(session, state, buf)
 						end)
 					end
 				end
-				local action_ctx = action_context(session, state, comment, refresh_popup)
-				if not action_ctx then
-					view_notify(session, "warn", "Review actions are not ready")
-					return
-				end
-				if refresh_popup == nil then
+				if run_comment_action(session, state, action, comment, refresh_popup) and refresh_popup == nil then
 					close()
 				end
-				actions.run(action_ctx, action, comment)
 			end,
 		})
 	end
@@ -625,14 +656,7 @@ local function toggle_resolved_at_cursor(session, state, buf)
 
 	local comment = threads[1].comment
 	local action = comment.is_task and "toggle_task" or "toggle_resolved"
-	if not can_action(state, action, comment) then
-		view_notify(session, "info", "This thread cannot be updated")
-		return
-	end
-	local context = action_context(session, state, comment)
-	if context then
-		actions.run(context, action, comment)
-	end
+	run_comment_action(session, state, action, comment)
 end
 
 ---@param session AtlasReviewSession
@@ -646,14 +670,7 @@ local function toggle_task_at_cursor(session, state)
 	if not comment then
 		return
 	end
-	if not can_action(state, "toggle_task", comment) then
-		view_notify(session, "info", "This task cannot be updated")
-		return
-	end
-	local context = action_context(session, state, comment)
-	if context then
-		actions.run(context, "toggle_task", comment)
-	end
+	run_comment_action(session, state, "toggle_task", comment)
 end
 
 ---@param session AtlasReviewSession
@@ -671,7 +688,15 @@ local function add_inline_comment(session, state, buf, pending)
 		view_notify(session, "info", err or "Unable to comment on this line")
 		return
 	end
-	actions.add(context, inline, { pending = pending, preview = inline_preview(session, buf) })
+	review.add_comment(context, {
+		inline = inline,
+		pending = pending,
+		preview = inline_preview(session, buf),
+	}, function(result, err)
+		if result and not err then
+			refresh_review(session, state, context)
+		end
+	end)
 end
 
 ---@param session AtlasReviewSession
@@ -689,59 +714,75 @@ local function delete_comment_at_cursor(session, state, buf)
 	end
 
 	local comment = threads[1].comment
-	if not can_action(state, "delete", comment) then
-		view_notify(session, "info", "This comment cannot be deleted")
-		return
-	end
-	local context = action_context(session, state, comment)
-	if context then
-		actions.run(context, "delete", comment)
-	end
+	run_comment_action(session, state, "delete", comment)
 end
 
 ---@param session AtlasReviewSession
 ---@param state AtlasReviewState
 local function register_keymaps(session, state)
 	local toggle_task
-	local reviews = state.provider and state.provider.capabilities.reviews
-	if reviews and reviews.edit_task and session.review_view.task_at_cursor then
+	if session.review_view.task_at_cursor then
 		toggle_task = function()
 			toggle_task_at_cursor(session, state)
 		end
 	end
+	local context = state.provider
+			and state.pr
+			and {
+				provider = state.provider,
+				pr = state.pr,
+				current_user = state.current_user,
+			}
+		or nil
+	local function run_action(id)
+		local current = action_context(session, state, nil)
+		if current then
+			actions.run(id, current, function(result)
+				if result and result.changed_pr then
+					reload_pull_request(session, state)
+				end
+			end)
+		end
+	end
 	local submit_review
-	if actions.can_submit(state.provider) then
+	if context then
 		submit_review = function()
-			local context = action_context(session, state, nil)
-			if not context then
-				view_notify(session, "warn", "Review is not ready")
-				return
+			local current = action_context(session, state, nil)
+			if current then
+				actions.submit_review.run(current, function(result)
+					if result and result.changed_pr then
+						reload_pull_request(session, state)
+					end
+				end)
 			end
-			actions.submit(context)
 		end
 	end
 	local toggle_approval
-	if state.pr and actions.can_toggle_approval(state.pr) then
+	if context and actions.is_available("toggle_approval", context) then
 		toggle_approval = function()
-			local context = action_context(session, state, nil)
-			if context then
-				actions.toggle_approval(context)
-			end
+			run_action("toggle_approval")
 		end
 	end
 	local request_changes
-	if state.pr and actions.can_request_changes(state.pr) then
+	if context and actions.is_available("request_changes", context) then
 		request_changes = function()
-			local context = action_context(session, state, nil)
-			if context then
-				actions.request_changes(context)
-			end
+			run_action("request_changes")
 		end
 	end
 	session.review_view.register_keymaps({
 		active = function()
 			return active(session, state)
 		end,
+		open_actions = context and function()
+			local current = action_context(session, state, nil)
+			if current then
+				diff_actions.open(current, function(result)
+					if result and result.changed_pr then
+						reload_pull_request(session, state)
+					end
+				end)
+			end
+		end or nil,
 		toggle_approval = toggle_approval,
 		request_changes = request_changes,
 		submit_review = submit_review,
@@ -749,7 +790,7 @@ local function register_keymaps(session, state)
 		toggle_resolved = function(buf)
 			toggle_resolved_at_cursor(session, state, buf)
 		end,
-		add_comment = function(buf, pending)
+		add_comment_at_cursor = function(buf, pending)
 			add_inline_comment(session, state, buf, pending)
 		end,
 		delete_comment = function(buf)
@@ -773,8 +814,9 @@ local function register_keymaps(session, state)
 					return
 				end
 			end
-			if state.pr then
-				require("atlas.pulls.actions").open_in_browser(state.pr)
+			local context = action_context(session, state, nil)
+			if context then
+				actions.run("open_in_browser", context)
 			else
 				view_notify(session, "warn", "Review is not ready")
 			end
@@ -914,9 +956,9 @@ function M.detach(session)
 	end
 	session.review = nil
 	cancel_requests(state)
-	require("atlas.pulls.diff.shared.comments.popup").close(tostring(session.tabpage))
-	overlay.clear_comments(session.left.buf)
-	overlay.clear_comments(session.right.buf)
+	require("atlas.pulls.diff.shared.ui.comment_popup").close(tostring(session.tabpage))
+	comment_renderer.clear_comments(session.left.buf)
+	comment_renderer.clear_comments(session.right.buf)
 end
 
 return M

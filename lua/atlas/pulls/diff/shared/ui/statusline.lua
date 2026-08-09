@@ -1,7 +1,7 @@
 local M = {}
 
 local icons = require("atlas.ui.shared.icons")
-local renderer = require("atlas.ui.statusline")
+local statusline = require("atlas.ui.statusline")
 
 ---@param identity string
 ---@param additions integer|nil
@@ -63,7 +63,7 @@ end
 ---@param notes AtlasReviewNotesState|nil
 ---@return string
 function M.render(identity, additions, deletions, review, notes)
-	return renderer.format(M.items(identity, additions, deletions, review, notes), nil, nil, {
+	return statusline.format(M.items(identity, additions, deletions, review, notes), nil, nil, {
 		help_key = "gA",
 		left_padding = 3,
 	})

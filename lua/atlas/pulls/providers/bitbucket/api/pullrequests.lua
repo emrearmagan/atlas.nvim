@@ -219,18 +219,17 @@ function M.fetch_pullrequest(pr, opts, on_done)
 end
 
 ---@param pr PullRequest
----@param title string
+---@param fields table
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
-function M.update_title(pr, title, on_done)
+local function update_pullrequest(pr, fields, on_done)
 	local url = pr_link(pr, "self")
 	if url == "" then
 		on_done(false, "No pull request URL available")
 		return nil
 	end
 
-	local body = vim.json.encode({ title = title })
-	return service.request("PUT", url, nil, body, function(_, err)
+	return service.request("PUT", url, nil, vim.json.encode(fields), function(_, err)
 		if err then
 			on_done(false, err)
 			return
@@ -238,6 +237,22 @@ function M.update_title(pr, title, on_done)
 		service.clear_cache()
 		on_done(true, nil)
 	end)
+end
+
+---@param pr PullRequest
+---@param title string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { job_id: integer, cancel: fun() }|nil
+function M.update_title(pr, title, on_done)
+	return update_pullrequest(pr, { title = title }, on_done)
+end
+
+---@param pr PullRequest
+---@param draft boolean
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { job_id: integer, cancel: fun() }|nil
+function M.set_draft(pr, draft, on_done)
+	return update_pullrequest(pr, { draft = draft }, on_done)
 end
 
 ---@param pr PullRequest
@@ -366,6 +381,57 @@ function M.submit_review(pr, body, on_done)
 end
 
 ---@param pr PullRequest
+---@param body string
+---@param action fun(pr: PullRequest, on_done: fun(result: table|nil, err: string|nil)): { cancel: fun() }|nil
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+local function approval_review(pr, body, action, on_done)
+	return action(pr, function(_, err)
+		if err or vim.trim(body) == "" then
+			on_done(err == nil, err)
+			return
+		end
+		M.submit_review(pr, body, on_done)
+	end)
+end
+
+---@param pr PullRequest
+---@param body string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.approve_review(pr, body, on_done)
+	return approval_review(pr, body, M.approve, on_done)
+end
+
+---@param pr PullRequest
+---@param body string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.unapprove_review(pr, body, on_done)
+	return approval_review(pr, body, M.unapprove, on_done)
+end
+
+---@param pr PullRequest
+---@param body string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.request_changes_review(pr, body, on_done)
+	local comment = vim.trim(body)
+	if comment == "" then
+		comment = "Changes requested"
+	end
+	return M.submit_review(pr, comment, function(ok, err)
+		if not ok then
+			on_done(false, err)
+			return
+		end
+		M.request_changes(pr, function(_, request_err)
+			on_done(request_err == nil, request_err)
+		end)
+	end)
+end
+
+---@param pr PullRequest
 ---@param _opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(reviewers: PullsReviewer[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
@@ -406,6 +472,19 @@ function M.fetch_reviewers(pr, _opts, on_done)
 
 		on_done(reviewers, nil)
 	end)
+end
+
+---@param pr PullRequest
+---@param selected PullsCreatePRReviewer[]
+---@param _original PullsCreatePRReviewer[]
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { job_id: integer, cancel: fun() }|nil
+function M.update_reviewers(pr, selected, _original, on_done)
+	local reviewers = {}
+	for _, reviewer in ipairs(selected) do
+		table.insert(reviewers, { uuid = reviewer.provider_id })
+	end
+	return update_pullrequest(pr, { reviewers = reviewers }, on_done)
 end
 
 ---@param pr PullRequest
@@ -593,7 +672,7 @@ function M.create_pr(opts, on_done)
 	})
 end
 
----@param opts { repo_slug: string }
+---@param opts { repo_slug: string, repo_root: string|nil, head: string, base: string, pr: PullRequest|nil }
 ---@param on_done fun(reviewers: PullsCreatePRReviewer[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_default_reviewers(opts, on_done)
@@ -613,26 +692,52 @@ function M.fetch_default_reviewers(opts, on_done)
 			return
 		end
 
-		local items = {}
+		local selected = {}
+		local current = {}
+		for _, participant in ipairs((opts.pr and opts.pr._raw.participants) or {}) do
+			if tostring(participant.role or ""):upper() == "REVIEWER" then
+				local user = type(participant.user) == "table" and participant.user or {}
+				local uuid = tostring(user.uuid or "")
+				if uuid ~= "" then
+					selected[uuid] = true
+					current[uuid] = user
+				end
+			end
+		end
+
+		local reviewers = {}
+		local found = {}
 		local values = type(result) == "table" and type(result.values) == "table" and result.values or {}
 		for _, entry in ipairs(values) do
-			local user = type(entry) == "table" and type(entry.user) == "table" and entry.user or nil
-			local uuid = user and tostring(user.uuid or "") or ""
-			if user and uuid ~= "" then
+			local user = type(entry) == "table" and (type(entry.user) == "table" and entry.user or entry) or {}
+			local uuid = type(user) == "table" and tostring(user.uuid or "") or ""
+			if uuid ~= "" then
+				found[uuid] = true
 				local nickname = tostring(user.nickname or "")
-				local display = tostring(user.display_name or "")
-				local label = nickname ~= "" and ("@" .. nickname)
-					or (display ~= "" and ("@" .. display) or ("@" .. uuid))
-				table.insert(items, {
-					label = label,
+				local name = tostring(user.display_name or "")
+				local is_selected = opts.pr == nil or selected[uuid] == true
+				table.insert(reviewers, {
+					label = nickname ~= "" and ("@" .. nickname) or (name ~= "" and name or uuid),
 					provider_id = uuid,
-					selected = true,
+					selected = is_selected,
 					default = true,
 				})
 			end
 		end
 
-		on_done(items, nil)
+		for uuid, user in pairs(current) do
+			if not found[uuid] then
+				local nickname = tostring(user.nickname or "")
+				local name = tostring(user.display_name or "")
+				table.insert(reviewers, {
+					label = nickname ~= "" and ("@" .. nickname) or (name ~= "" and name or uuid),
+					provider_id = uuid,
+					selected = true,
+				})
+			end
+		end
+
+		on_done(reviewers, nil)
 	end)
 end
 

@@ -6,7 +6,7 @@ local utils = require("atlas.ui.shared.utils")
 
 local namespace = vim.api.nvim_create_namespace("atlas_review_comments")
 
----@class AtlasCommentOverlayContext
+---@class AtlasCommentRendererContext
 ---@field threads AtlasReviewThreadNode[]
 ---@field expanded_threads table<string, boolean>
 ---@field old_path string
@@ -24,7 +24,7 @@ local function buffer_width(buf)
 	return vim.o.columns
 end
 
----@param context AtlasCommentOverlayContext
+---@param context AtlasCommentRendererContext
 ---@param buf integer
 ---@param list AtlasReviewThreadNode[]
 ---@return [string, string][][]
@@ -71,13 +71,13 @@ function M.pad_comments(buf, line, count, above)
 	})
 end
 
----@class AtlasCommentOverlayOptions
+---@class AtlasCommentRendererOptions
 ---@field above_lines table<integer, boolean>
 
----@param context AtlasCommentOverlayContext
+---@param context AtlasCommentRendererContext
 ---@param buf integer
 ---@param by_line table<integer, AtlasReviewThreadNode[]>
----@param opts AtlasCommentOverlayOptions
+---@param opts AtlasCommentRendererOptions
 ---@return table<integer, integer>
 function M.render_comments(context, buf, by_line, opts)
 	if not vim.api.nvim_buf_is_valid(buf) then

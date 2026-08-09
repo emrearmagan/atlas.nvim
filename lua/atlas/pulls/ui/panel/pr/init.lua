@@ -190,7 +190,7 @@ local function make_refresh_callback(pr)
 end
 
 ---@param pr PullRequest
----@param opts { force_refresh: boolean|nil }|nil
+---@param opts { force_refresh: boolean|nil, pr_refreshed: boolean|nil }|nil
 local function dispatch_provider_fetches(pr, opts)
 	local state = require("atlas.pulls.state")
 	local provider = state.provider
@@ -223,7 +223,7 @@ end
 
 ---@param pr PullRequest|nil
 ---@param repo PullsRepo|nil
----@param opts { force_refresh: boolean|nil }|nil
+---@param opts { force_refresh: boolean|nil, pr_refreshed: boolean|nil }|nil
 function M.on_select(pr, repo, opts)
 	opts = opts or {}
 
@@ -265,7 +265,7 @@ function M.on_select(pr, repo, opts)
 	end
 
 	if should_fetch then
-		dispatch_provider_fetches(panel_state.current_pr, { force_refresh = opts.force_refresh == true })
+		dispatch_provider_fetches(panel_state.current_pr, opts)
 		notify_tab(panel_state.current_pr, panel_state.current_repo, { force_refresh = opts.force_refresh == true })
 		update_spinner()
 	end

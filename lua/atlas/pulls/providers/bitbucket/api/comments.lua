@@ -134,7 +134,7 @@ function M.edit_comment(pr, comment, on_done)
 			on_done(nil, "Bitbucket did not return the updated comment")
 			return
 		end
-		on_done(updated, nil)
+		on_done(vim.tbl_extend("force", {}, comment, updated), nil)
 	end)
 end
 

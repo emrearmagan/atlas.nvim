@@ -13,7 +13,7 @@ local comments = require("atlas.pulls.diff.shared.comments")
 local events = require("atlas.core.events")
 local notes = require("atlas.pulls.diff.shared.notes")
 local position = require("atlas.pulls.diff.shared.position")
-local review_panel = require("atlas.pulls.diff.shared.review_panel")
+local review_panel = require("atlas.pulls.diff.shared.ui.review_panel")
 local review_threads = require("atlas.ui.components.review_threads")
 local close
 local reload_session
@@ -863,9 +863,6 @@ local function create_session(open_options, options)
 				on_refresh = function()
 					comments.reload(session)
 					notes.reload(session)
-				end,
-				can_comment_action = function(action, comment)
-					return comments.is_action_available(session, action, comment)
 				end,
 				on_comment_action = function(action, comment)
 					comments.run_action(session, action, comment)

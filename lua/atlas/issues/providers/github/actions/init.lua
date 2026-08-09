@@ -1,48 +1,50 @@
 local M = {}
 
 local registry = require("atlas.issues.providers.github.actions.registry")
+local statusline = require("atlas.ui.statusline")
 
----@param action_id string
----@param ctx table
----@param on_done fun(result: table|nil, err: string|nil)
+---@alias AtlasGitHubIssueActionId
+---| AtlasIssueActionId
+---| "close"
+---| "reopen"
+---| "labels"
+
+M.items = registry.items
+
+---@param action_id AtlasGitHubIssueActionId
+---@param ctx AtlasIssueActionContext
+---@return boolean
+function M.is_available(action_id, ctx)
+	local action = registry.find(action_id)
+	return action ~= nil and (action.is_available == nil or action.is_available(ctx) == true)
+end
+
+---@param action_id AtlasGitHubIssueActionId
+---@param ctx AtlasIssueActionContext
+---@param on_done fun(result: IssuesActionResult|nil, err: string|nil)
+---@return boolean handled
 function M.run(action_id, ctx, on_done)
 	local action = registry.find(action_id)
 	if action == nil then
-		on_done(nil, string.format("Unknown action: %s", tostring(action_id)))
-		return
+		local err = string.format("Unknown action: %s", tostring(action_id))
+		statusline.notify("warn", err)
+		on_done(nil, err)
+		return false
 	end
 
-	local available, err = action.is_available(ctx)
+	local available, err = true, nil
+	if action.is_available then
+		available, err = action.is_available(ctx)
+	end
 	if not available then
-		on_done(nil, tostring(err or "Action is not available"))
-		return
+		err = tostring(err or "Action is not available")
+		statusline.notify("warn", err)
+		on_done(nil, err)
+		return false
 	end
 
 	action.run(ctx, on_done)
-end
-
----@param ctx table
----@param on_done fun(result: table|nil, err: string|nil)
-function M.open(ctx, on_done)
-	local actions = registry.available(ctx)
-	if #actions == 0 then
-		on_done({ changed_issue_key = nil, message = "No actions available" }, nil)
-		return
-	end
-
-	vim.ui.select(actions, {
-		prompt = "Choose GitHub action",
-		kind = "atlas_github_issue_actions",
-		format_item = function(item)
-			return tostring((item and item.label) or "")
-		end,
-	}, function(action)
-		if action == nil then
-			on_done({ changed_issue_key = nil, message = "Action cancelled" }, nil)
-			return
-		end
-		action.run(ctx, on_done)
-	end)
+	return true
 end
 
 return M

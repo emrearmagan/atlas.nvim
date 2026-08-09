@@ -269,9 +269,23 @@ function M.is_loading(_issue)
 	return state.detail_loading or conversation_state.any_loading()
 end
 
+---@param target Issue
+---@param fresh Issue
+local function update_details(target, fresh)
+	local raw = fresh._raw or {}
+	state.assignees = raw.assignees
+	state.labels = raw.labels
+	state.milestone = raw.milestone
+	state.sub_issues = raw.sub_issues
+	state.body = raw.body
+	state.parent = fresh.parent
+	target.is_subscribed = fresh.is_subscribed
+	target._raw = fresh._raw
+end
+
 ---@param issue Issue
 ---@param refresh fun()
----@param opts { force_load?: boolean }|nil
+---@param opts { force_load?: boolean, issue_refreshed?: boolean }|nil
 function M.fetches(issue, refresh, opts)
 	local key = tostring(issue.key or "")
 	if key == "" then
@@ -279,21 +293,16 @@ function M.fetches(issue, refresh, opts)
 	end
 
 	reset_state()
-	state.detail_loading = true
+	if opts and opts.issue_refreshed then
+		update_details(issue, issue)
+		return
+	end
 
-	local issues_api = require("atlas.issues.providers.github.api.issues")
-	issues_api.get_issue(key, function(fresh, err)
+	state.detail_loading = true
+	require("atlas.issues.providers.github.api.issues").get_issue(key, function(fresh, err)
 		state.detail_loading = false
 		if not err and type(fresh) == "table" then
-			local fraw = fresh._raw or {}
-			state.assignees = fraw.assignees
-			state.labels = fraw.labels
-			state.milestone = fraw.milestone
-			state.sub_issues = fraw.sub_issues
-			state.body = fraw.body
-			state.parent = fresh.parent
-			issue.is_subscribed = fresh.is_subscribed
-			issue._raw = fresh._raw
+			update_details(issue, fresh)
 		end
 		refresh()
 	end, { force_load = opts and opts.force_load == true or false })

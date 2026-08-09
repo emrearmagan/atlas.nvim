@@ -30,7 +30,9 @@ local M = {}
 function M.load(review, options, on_done)
 	local provider = review.provider
 	local core = provider.capabilities.core
+	local comments = provider.capabilities.comments
 	local reviews = provider.capabilities.reviews
+	local tasks = provider.capabilities.tasks
 	local previous = review.initial_review or {}
 	local values = {
 		current_user = review.current_user,
@@ -56,16 +58,16 @@ function M.load(review, options, on_done)
 			values.review_context = value or values.review_context
 		end)
 	end
-	if reviews then
+	if comments then
 		add("comments", function(done)
-			return reviews.fetch_comments(review.pr, fetch_opts, done)
+			return comments.fetch_review_comments(review.pr, fetch_opts, done)
 		end, function(value)
 			values.comments = value or {}
 		end)
 	end
-	if reviews and reviews.fetch_tasks then
+	if tasks then
 		add("tasks", function(done)
-			return reviews.fetch_tasks(review.pr, fetch_opts, done)
+			return tasks.fetch_tasks(review.pr, fetch_opts, done)
 		end, function(value)
 			values.tasks = value or {}
 		end)

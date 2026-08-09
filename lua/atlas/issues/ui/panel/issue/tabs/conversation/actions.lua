@@ -35,6 +35,11 @@ local function with_comments(fn)
 	fn(list)
 end
 
+---@param issue Issue
+local function refresh_issue(issue)
+	require("atlas.issues.ui.main.controller").refresh_issue(issue)
+end
+
 ---@param comment IssueComment
 ---@return boolean
 local function is_own_comment(comment)
@@ -46,8 +51,7 @@ local function is_own_comment(comment)
 end
 
 ---@param issue Issue
----@param refresh fun()
-function M.add(issue, refresh)
+function M.add(issue)
 	local comments = get_comments()
 	if not comments or not comments.add_comment then
 		return
@@ -63,18 +67,13 @@ function M.add(issue, refresh)
 				return
 			end
 			statusline.notify("loading", "Adding comment...")
-			comments.add_comment(issue, text, function(comment, err)
+			comments.add_comment(issue, text, function(_, err)
 				if err then
 					statusline.notify("error", "Add comment failed: " .. err)
 					return
 				end
-				if comment then
-					with_comments(function(list)
-						table.insert(list, comment)
-					end)
-				end
 				statusline.notify("success", "Comment added", 1200)
-				refresh()
+				refresh_issue(issue)
 			end)
 		end,
 	})
@@ -82,8 +81,7 @@ end
 
 ---@param issue Issue
 ---@param entry table
----@param refresh fun()
-function M.reply(issue, entry, refresh)
+function M.reply(issue, entry)
 	if not entry or entry.kind ~= "comment" or not entry.comment then
 		return
 	end
@@ -113,18 +111,13 @@ function M.reply(issue, entry, refresh)
 				return
 			end
 			statusline.notify("loading", "Sending reply...")
-			local function done(reply, err)
+			local function done(_, err)
 				if err then
 					statusline.notify("error", "Reply failed: " .. err)
 					return
 				end
-				if reply then
-					with_comments(function(list)
-						table.insert(list, reply)
-					end)
-				end
 				statusline.notify("success", "Reply added", 1200)
-				refresh()
+				refresh_issue(issue)
 			end
 			if comments.reply_comment then
 				comments.reply_comment(issue, parent, text, done)
@@ -189,8 +182,7 @@ end
 
 ---@param issue Issue
 ---@param entry table
----@param refresh fun()
-function M.delete(issue, entry, refresh)
+function M.delete(issue, entry)
 	if not entry or entry.kind ~= "comment" or not entry.comment then
 		return
 	end
@@ -210,23 +202,13 @@ function M.delete(issue, entry, refresh)
 			return
 		end
 		statusline.notify("loading", "Deleting comment...")
-		comments.delete_comment(issue, tostring(comment.id), function(ok, err)
+		comments.delete_comment(issue, tostring(comment.id), function(_, err)
 			if err then
 				statusline.notify("error", "Delete failed: " .. err)
 				return
 			end
-			if ok then
-				with_comments(function(list)
-					for i, c in ipairs(list) do
-						if tostring(c.id) == tostring(comment.id) then
-							table.remove(list, i)
-							break
-						end
-					end
-				end)
-			end
 			statusline.notify("success", "Comment deleted", 1200)
-			refresh()
+			refresh_issue(issue)
 		end)
 	end)
 end

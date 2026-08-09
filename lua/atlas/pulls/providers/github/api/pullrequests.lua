@@ -245,6 +245,44 @@ function M.update_title(pr, title, on_done)
 	})
 end
 
+---@param pr PullRequest
+---@param draft boolean
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.set_draft(pr, draft, on_done)
+	local repo_slug = pr.repo_full_name or ""
+	if repo_slug == "" then
+		vim.schedule(function()
+			on_done(false, "Missing repo")
+		end)
+		return nil
+	end
+
+	local args = {
+		"pr",
+		"ready",
+		tostring(pr.id),
+		"--repo",
+		repo_slug,
+	}
+	if draft then
+		table.insert(args, "--undo")
+	end
+
+	return cli.gh(args, function(_, err)
+		if err then
+			on_done(false, err)
+			return
+		end
+		memory_cache.delete(string.format("github:pr:%s:%s", repo_slug, tostring(pr.id)))
+		on_done(true, nil)
+	end, {
+		action = draft and "Convert PR to draft" or "Mark PR ready for review",
+		repo = repo_slug,
+		number = pr.id,
+	})
+end
+
 ---@return { login: string, state: "APPROVED"|"CHANGES_REQUESTED"|"COMMENTED"|"DISMISSED" }[], string[]
 local function parse_reviews(result)
 	local latest = {}
@@ -328,10 +366,18 @@ function M.get_reviewers(pr, opts, on_done)
 			elseif r.state == "CHANGES_REQUESTED" then
 				decision = "changes_requested"
 			end
-			table.insert(reviewers, { name = r.login, nickname = r.login, decision = decision })
+			table.insert(reviewers, {
+				name = r.login,
+				nickname = r.login,
+				decision = decision,
+			})
 		end
 		for _, login in ipairs(pending) do
-			table.insert(reviewers, { name = login, nickname = login, decision = "pending" })
+			table.insert(reviewers, {
+				name = login,
+				nickname = login,
+				decision = "pending",
+			})
 		end
 
 		cli.set_mem(cache_key, reviewers)
@@ -340,6 +386,140 @@ function M.get_reviewers(pr, opts, on_done)
 		action = "Fetch PR reviewers",
 		repo = repo_slug,
 		number = pr.id,
+	})
+end
+
+---@param opts { repo_slug: string, repo_root: string|nil, head: string, base: string, pr: PullRequest|nil }
+---@param on_done fun(reviewers: PullsCreatePRReviewer[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_default_reviewers(opts, on_done)
+	local slug = tostring(opts.repo_slug or "")
+	if slug == "" then
+		vim.schedule(function()
+			on_done(nil, "Missing repo slug")
+		end)
+		return nil
+	end
+
+	return cli.gh(
+		{ "api", "--paginate", string.format("repos/%s/collaborators?per_page=100", slug) },
+		function(result, err)
+			if err then
+				on_done(nil, err)
+				return
+			end
+
+			local reviewers = {}
+			local by_login = {}
+			for _, raw in ipairs(type(result) == "table" and result or {}) do
+				local login = type(raw) == "table" and tostring(raw.login or "") or ""
+				if login ~= "" then
+					local reviewer = {
+						label = "@" .. login,
+						provider_id = login,
+						selected = false,
+						default = false,
+					}
+					by_login[login] = reviewer
+					table.insert(reviewers, reviewer)
+				end
+			end
+
+			if not opts.pr then
+				on_done(reviewers, nil)
+				return
+			end
+			M.get_reviewers(opts.pr, { force_refresh = true }, function(current, current_err)
+				if current_err then
+					on_done(nil, current_err)
+					return
+				end
+				for _, item in ipairs(current or {}) do
+					local login = item.nickname or item.name
+					local reviewer = by_login[login]
+					if reviewer then
+						reviewer.selected = true
+					else
+						table.insert(reviewers, {
+							label = "@" .. login,
+							provider_id = login,
+							selected = true,
+						})
+					end
+				end
+				on_done(reviewers, nil)
+			end)
+		end
+	)
+end
+
+---@param pr PullRequest
+---@param selected PullsCreatePRReviewer[]
+---@param original PullsCreatePRReviewer[]
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.update_reviewers(pr, selected, original, on_done)
+	local repo_slug = pr.repo_full_name or ""
+	if repo_slug == "" then
+		vim.schedule(function()
+			on_done(false, "Missing repo")
+		end)
+		return nil
+	end
+
+	local selected_set = {}
+	for _, reviewer in ipairs(selected) do
+		selected_set[reviewer.provider_id] = true
+	end
+
+	local original_set = {}
+	for _, reviewer in ipairs(original) do
+		original_set[reviewer.provider_id] = true
+	end
+
+	local added = {}
+	for _, reviewer in ipairs(selected) do
+		if not original_set[reviewer.provider_id] then
+			table.insert(added, reviewer.provider_id)
+		end
+	end
+
+	local removed = {}
+	for _, reviewer in ipairs(original) do
+		if not selected_set[reviewer.provider_id] then
+			table.insert(removed, reviewer.provider_id)
+		end
+	end
+
+	if #added == 0 and #removed == 0 then
+		on_done(true, nil)
+		return nil
+	end
+
+	local args = { "pr", "edit", tostring(pr.id), "--repo", repo_slug }
+	for _, login in ipairs(added) do
+		table.insert(args, "--add-reviewer")
+		table.insert(args, login)
+	end
+	for _, login in ipairs(removed) do
+		table.insert(args, "--remove-reviewer")
+		table.insert(args, login)
+	end
+
+	return cli.gh(args, function(_, err)
+		if err then
+			on_done(false, err)
+			return
+		end
+		memory_cache.delete(string.format("github:reviewers:%s:%s", repo_slug, tostring(pr.id)))
+		memory_cache.delete(string.format("github:review-context:%s:%s", repo_slug, tostring(pr.id)))
+		on_done(true, nil)
+	end, {
+		action = "Update PR reviewers",
+		repo = repo_slug,
+		number = pr.id,
+		added = #added,
+		removed = #removed,
 	})
 end
 

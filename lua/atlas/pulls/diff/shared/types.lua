@@ -28,12 +28,13 @@
 
 ---@class AtlasReviewKeymapActions
 ---@field active fun(): boolean
+---@field open_actions (fun())|nil
 ---@field toggle_approval (fun())|nil
 ---@field request_changes (fun())|nil
 ---@field submit_review (fun())|nil
 ---@field toggle_task (fun())|nil
 ---@field toggle_resolved fun(buf: integer)
----@field add_comment fun(buf: integer, pending: boolean)
+---@field add_comment_at_cursor fun(buf: integer, pending: boolean)
 ---@field delete_comment fun(buf: integer)
 ---@field toggle_thread fun(buf: integer): boolean
 ---@field toggle_all_threads fun(): boolean
