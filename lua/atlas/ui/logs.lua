@@ -1,5 +1,6 @@
 local M = {}
 
+local keymaps = require("atlas.core.keymaps")
 local logger = require("atlas.core.logger")
 local table_view = require("atlas.ui.components.table_tree")
 local utils = require("atlas.ui.shared.utils")
@@ -13,7 +14,6 @@ local level_hl = {
 }
 
 local LOGS_BUFFER_NAME = "atlas://logs"
-local LOGS_WINBAR = " Atlas Logs %=%#AtlasTextMuted#↵ Toggle details   R Refresh   q Close %*"
 local REFRESH_INTERVAL_MS = 2000
 local logs_buf = nil
 local logs_win = nil
@@ -251,7 +251,13 @@ function M.open()
 	vim.api.nvim_set_option_value("wrap", false, { win = logs_win })
 	vim.api.nvim_set_option_value("cursorline", true, { win = logs_win })
 	vim.api.nvim_set_option_value("winfixheight", true, { win = logs_win })
-	vim.api.nvim_set_option_value("winbar", LOGS_WINBAR, { win = logs_win })
+	local fold_keys = keymaps.resolve("ui.toggle_fold") or {}
+	local fold_hint = fold_keys[1] and fold_keys[1] .. " Toggle details   " or ""
+	vim.api.nvim_set_option_value(
+		"winbar",
+		" Atlas Logs %=%#AtlasTextMuted#" .. fold_hint .. "R Refresh   q Close %*",
+		{ win = logs_win }
+	)
 	pcall(vim.api.nvim_win_set_height, logs_win, 12)
 
 	local opts = { buffer = buf, silent = true, nowait = true }
@@ -261,7 +267,9 @@ function M.open()
 	vim.keymap.set("n", "R", function()
 		refresh_buffer()
 	end, opts)
-	vim.keymap.set("n", "<CR>", toggle_details, opts)
+	for _, key in ipairs(fold_keys) do
+		vim.keymap.set("n", key, toggle_details, opts)
+	end
 
 	refresh_buffer()
 	move_cursor_to_last_line()
