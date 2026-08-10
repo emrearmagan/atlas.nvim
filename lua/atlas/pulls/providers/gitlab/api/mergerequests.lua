@@ -753,7 +753,7 @@ function M.get_reviewers(pr, opts, on_done)
 						decision = "changes_requested"
 					end
 					table.insert(reviewers, {
-						name = r.username,
+						name = (type(r.name) == "string" and r.name ~= "") and r.name or r.username,
 						nickname = r.username,
 						decision = decision,
 					})

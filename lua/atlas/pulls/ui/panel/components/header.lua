@@ -79,7 +79,7 @@ end
 ---@param extra_rows PullsPanelHeaderRow[]|nil
 ---@return string[], table[]
 function M.render(pr, width, extra_rows)
-	local author_name = (pr.author and pr.author.name) or "Unknown"
+	local author_name = helper.user_handle(pr.author)
 	local created_text = utils.relative_time_text(pr.created_on)
 	local repo_name = tostring(pr.repo_full_name or "")
 	local src = tostring((pr.source or {}).branch or "?")
@@ -87,20 +87,9 @@ function M.render(pr, width, extra_rows)
 
 	local id_text = string.format("#%s", tostring(pr.id or "?"))
 	local title_text = tostring(pr.title or "")
-	local title = string.format(" %s %s", id_text, title_text)
-
-	local bell_icon, bell_hl
-	if pr.is_subscribed ~= nil then
-		if pr.is_subscribed then
-			bell_icon = icons.general("bell")
-			bell_hl = "AtlasLogInfo"
-		else
-			bell_icon, bell_hl = icons.general("bell_no")
-		end
-		local title_w = vim.api.nvim_strwidth(title)
-		local bell_w = vim.api.nvim_strwidth(bell_icon)
-		local pad = math.max(1, width - title_w - bell_w - 1)
-		title = title .. string.rep(" ", pad) .. bell_icon
+	local title_lines = utils.wrap_line(string.format("%s %s", id_text, title_text), math.max(1, width - 1))
+	for index, line in ipairs(title_lines) do
+		title_lines[index] = " " .. line
 	end
 
 	local author_icon, author_icon_hl = icons.general("user")
@@ -108,30 +97,8 @@ function M.render(pr, width, extra_rows)
 	local by_sep = " - "
 	local byline = by_prefix .. author_name .. by_sep .. created_text
 
-	local panel_state = require("atlas.pulls.ui.panel.pr.state")
-	local diff_text, diff_add_text, diff_del_text
-	if type(panel_state.diffstat) == "table" and #panel_state.diffstat > 0 then
-		local total_add, total_del = 0, 0
-		for _, entry in ipairs(panel_state.diffstat) do
-			total_add = total_add + (tonumber(entry.lines_added) or 0)
-			total_del = total_del + (tonumber(entry.lines_removed) or 0)
-		end
-		if total_add + total_del > 0 then
-			diff_add_text = "+" .. tostring(total_add)
-			diff_del_text = "-" .. tostring(total_del)
-			diff_text = diff_add_text .. " " .. diff_del_text
-			local byline_w = vim.api.nvim_strwidth(byline)
-			local diff_w = vim.api.nvim_strwidth(diff_text)
-			local gap = math.max(2, width - byline_w - diff_w)
-			byline = byline .. string.rep(" ", gap) .. diff_text
-		end
-	end
-
-	local lines = {
-		title,
-		byline,
-		"",
-	}
+	local lines = vim.list_extend({}, title_lines)
+	vim.list_extend(lines, { byline, "" })
 
 	local updated_text = utils.relative_time_text(pr.updated_on)
 
@@ -198,35 +165,26 @@ function M.render(pr, width, extra_rows)
 	table.insert(lines, "")
 
 	-- Spans
-	local spans = {
-		{ line = 0, line_hl_group = "AtlasPanelHeaderBg" },
-		{ line = 1, line_hl_group = "AtlasPanelHeaderBg" },
-	}
+	local spans = {}
+	for line = 0, #title_lines do
+		table.insert(spans, { line = line, line_hl_group = "AtlasTabInactive" })
+	end
 
 	add_span(spans, lines, 0, 1, 1 + #id_text, "AtlasTextMuted")
-	if bell_icon then
-		add_span(spans, lines, 0, #title - #bell_icon, #title, bell_hl)
-	end
-	add_span(spans, lines, 1, 1, 1 + #author_icon, author_icon_hl)
+	local author_line = #title_lines
+	add_span(spans, lines, author_line, 1, 1 + #author_icon, author_icon_hl)
 
 	local author_start = #by_prefix - 1
 	local author_end = author_start + #("@" .. author_name)
-	add_span(spans, lines, 1, author_start, author_end, helper.author_hl(author_name))
+	add_span(spans, lines, author_line, author_start, author_end, helper.author_hl(author_name))
 
 	local ts_start = author_end + #by_sep
 	local ts_end = ts_start + #created_text
-	add_span(spans, lines, 1, ts_start, ts_end, "AtlasTextMuted")
-
-	if diff_text and diff_add_text and diff_del_text then
-		local diff_start = #byline - #diff_text
-		local diff_del_start = diff_start + #diff_add_text + 1
-		add_span(spans, lines, 1, diff_start, diff_start + #diff_add_text, "AtlasTextPositive")
-		add_span(spans, lines, 1, diff_del_start, diff_del_start + #diff_del_text, "AtlasLogError")
-	end
+	add_span(spans, lines, author_line, ts_start, ts_end, "AtlasTextMuted")
 
 	for _, span in ipairs(tbl_spans) do
 		table.insert(spans, {
-			line = span.line + 3,
+			line = span.line + #title_lines + 2,
 			start_col = span.start_col,
 			end_col = span.end_col,
 			hl_group = span.hl_group,
@@ -365,8 +323,8 @@ function M.render_repo(repo, width, extra_rows)
 		table.insert(lines, "")
 
 		local spans = {
-			{ line = 0, line_hl_group = "AtlasPanelHeaderBg" },
-			{ line = 1, line_hl_group = "AtlasPanelHeaderBg" },
+			{ line = 0, line_hl_group = "AtlasTabInactive" },
+			{ line = 1, line_hl_group = "AtlasTabInactive" },
 		}
 
 		add_span(spans, lines, 0, 1, 1 + #full_name, highlights.dynamic_for(full_name) or "AtlasTextMuted")
@@ -393,8 +351,8 @@ function M.render_repo(repo, width, extra_rows)
 	end
 
 	local spans = {
-		{ line = 0, line_hl_group = "AtlasPanelHeaderBg" },
-		{ line = 1, line_hl_group = "AtlasPanelHeaderBg" },
+		{ line = 0, line_hl_group = "AtlasTabInactive" },
+		{ line = 1, line_hl_group = "AtlasTabInactive" },
 	}
 	add_span(spans, lines, 0, 1, 1 + #full_name, highlights.dynamic_for(full_name) or "AtlasTextMuted")
 	add_span(spans, lines, 1, 1, 1 + #author_icon, author_icon_hl)

@@ -205,6 +205,7 @@ function M.render(opts)
 	local loading_text = string.format("%s Loading...", state.reload_spinner_frame or "⠋")
 	statusline.set_items(helper.build_statusline_items(state.pulls, state.current_user))
 
+	table.insert(lines, "")
 	render_header(lines, spans, opts.width)
 	table.insert(lines, "")
 

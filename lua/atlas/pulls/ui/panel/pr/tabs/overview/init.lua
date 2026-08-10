@@ -10,6 +10,7 @@ local statusline = require("atlas.ui.statusline")
 local state = require("atlas.pulls.ui.panel.pr.tabs.overview.state")
 local panel_state = require("atlas.pulls.ui.panel.pr.state")
 local keymaps = require("atlas.pulls.ui.panel.pr.tabs.overview.keymaps")
+local helper = require("atlas.pulls.ui.main.helper")
 
 local PADDING_X = 1
 local PADDING = string.rep(" ", PADDING_X)
@@ -212,9 +213,7 @@ local function render_reviewers(_pr, width, lines, spans)
 		if grouped[s] == nil then
 			s = "pending"
 		end
-		local name = (d.name and d.name ~= "") and d.name
-			or (d.nickname and d.nickname ~= "") and d.nickname
-			or "Unknown"
+		local name = helper.user_handle(d)
 		table.insert(grouped[s], name)
 	end
 

@@ -6,6 +6,7 @@ local panel_state = require("atlas.pulls.ui.panel.pr.state")
 local header = require("atlas.pulls.ui.panel.components.header")
 local chips = require("atlas.pulls.ui.panel.components.chips")
 local panel_tabs = require("atlas.pulls.ui.panel.components.tabs")
+local icons = require("atlas.ui.shared.icons")
 
 local ns = vim.api.nvim_create_namespace("atlas.panel")
 
@@ -56,6 +57,32 @@ function M.render(tab_items, get_tab_module)
 
 	local pr = panel_state.current_pr
 	local width = vim.api.nvim_win_get_width(win)
+	local winbar_items = {}
+	if pr ~= nil then
+		if type(panel_state.diffstat) == "table" then
+			local additions, deletions = 0, 0
+			for _, entry in ipairs(panel_state.diffstat) do
+				additions = additions + (tonumber(entry.lines_added) or 0)
+				deletions = deletions + (tonumber(entry.lines_removed) or 0)
+			end
+			if additions + deletions > 0 then
+				winbar_items[#winbar_items + 1] = string.format("%%#AtlasTextPositive#+%d%%*", additions)
+				winbar_items[#winbar_items + 1] = string.format("%%#AtlasLogError#-%d%%*", deletions)
+			end
+		end
+		if pr.is_subscribed ~= nil then
+			local bell, bell_hl = icons.general(pr.is_subscribed and "bell" or "bell_no")
+			if pr.is_subscribed then
+				bell_hl = "AtlasLogInfo"
+			end
+			winbar_items[#winbar_items + 1] = string.format("%%#%s#%s%%*", bell_hl, bell)
+		end
+	end
+	vim.api.nvim_set_option_value(
+		"winbar",
+		#winbar_items > 0 and ("%=" .. table.concat(winbar_items, "  ") .. " ") or " ",
+		{ win = win }
+	)
 
 	local lines = {}
 	local spans = {}
