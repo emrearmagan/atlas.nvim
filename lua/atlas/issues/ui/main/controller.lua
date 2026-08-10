@@ -470,6 +470,10 @@ function M.refresh_issue(issue, on_done)
 		on_done()
 		return
 	end
+	if state.is_issue_reloading(issue_key) then
+		on_done()
+		return
+	end
 
 	local provider = state.provider
 	if provider == nil then
@@ -529,15 +533,6 @@ function M.refresh_issue(issue, on_done)
 		end
 	)
 	table.insert(active_issue_reload_handles, reload_handle)
-end
-
----@param issue_key string|nil
-function M.toggle_issue_collapsed(issue_key)
-	if state.toggle_issue_collapsed(issue_key) ~= true then
-		return
-	end
-
-	render_if_active()
 end
 
 function M.toggle_current_issue_collapsed()

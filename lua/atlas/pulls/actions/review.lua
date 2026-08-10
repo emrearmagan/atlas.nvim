@@ -183,7 +183,6 @@ local function remove_comment(items, comment)
 	for _, existing in ipairs(items) do
 		if tostring(existing.parent_id or "") == id then
 			comment.content_raw = ""
-			comment.deleted = true
 			comment.state = "DELETED"
 			return
 		end

@@ -30,13 +30,17 @@ local function track(handle)
 	end
 end
 
+function M.reset()
+	cancel_all()
+	state.reset()
+end
+
 ---@param pr PullRequest
 ---@param _repo PullsRepo|nil
 ---@param refresh fun()
 ---@param opts { force_refresh: boolean|nil }|nil
 function M.on_select(pr, _repo, refresh, opts)
-	cancel_all()
-	state.reset()
+	M.reset()
 	opts = opts or {}
 
 	local provider = get_provider()
@@ -87,6 +91,11 @@ function M.on_enter(_pr, entry)
 		vim.ui.open(url)
 		return true
 	end
+end
+
+---@return boolean
+function M.is_loading()
+	return state.any_loading()
 end
 
 function M.activate(buf, refresh)

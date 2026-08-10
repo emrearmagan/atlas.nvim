@@ -128,13 +128,6 @@ local function gql_to_raw(gql_comment, thread)
 	}
 end
 
----@param connection table|nil
----@return table|nil
-local function last_node(connection)
-	local nodes = json.nilify(json.safe_table(connection).nodes) or {}
-	return nodes[#nodes]
-end
-
 ---@param node table
 ---@param thread table
 ---@param fallback_parent number|string|nil
@@ -188,11 +181,11 @@ local function remember_pending_review(pr, review)
 end
 
 ---@param pr PullRequest
----@return string|nil
-local function pending_review_id(pr)
+---@return table|nil
+local function pending_review(pr)
 	for _, review in ipairs(json.safe_table(pr._raw.reviews).nodes or {}) do
 		if review.state == "PENDING" and tostring(review.id or "") ~= "" then
-			return tostring(review.id)
+			return review
 		end
 	end
 	return nil
@@ -305,9 +298,9 @@ query($owner:String!,$name:String!,$number:Int!){
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 local function finish_review(pr, event, body, on_done)
-	local known_review = pending_review_id(pr)
+	local known_review = pending_review(pr)
 	if known_review then
-		return submit_pending_review(pr, known_review, event, body, on_done)
+		return submit_pending_review(pr, tostring(known_review.id), event, body, on_done)
 	end
 
 	local owner, name = pr.repo_full_name:match("^([^/]+)/([^/]+)$")
@@ -319,7 +312,8 @@ local function finish_review(pr, event, body, on_done)
 	end
 
 	local cancelled = false
-	local current = cli.gh({
+	local current
+	current = cli.gh({
 		"api",
 		"graphql",
 		"-f",
@@ -350,8 +344,11 @@ local function finish_review(pr, event, body, on_done)
 				break
 			end
 		end
-		current = review_id and submit_pending_review(pr, review_id, event, body, on_done)
-			or create_review(pr, tostring(pull_request.id), event, body, on_done)
+		if review_id then
+			current = submit_pending_review(pr, review_id, event, body, on_done)
+		else
+			current = create_review(pr, tostring(pull_request.id), event, body, on_done)
+		end
 		if cancelled and current then
 			current.cancel()
 		end
@@ -387,13 +384,13 @@ function M.approve_review(pr, body, on_done)
 end
 
 ---@param pr PullRequest
----@param on_done fun(review: table|nil, repo_slug: string|nil, err: string|nil)
+---@param on_done fun(review: table|nil, repo_slug: string, err: string|nil)
 ---@return { cancel: fun() }|nil
 local function current_review(pr, on_done)
 	local repo_slug = pr.repo_full_name or ""
 	local owner, name = repo_slug:match("^([^/]+)/(.+)$")
 	if owner == nil or name == nil then
-		on_done(nil, nil, "Invalid repository slug")
+		on_done(nil, repo_slug, "Invalid repository slug")
 		return nil
 	end
 
@@ -419,7 +416,7 @@ local function current_review(pr, on_done)
 		"query=" .. query,
 	}, function(result, err)
 		if err then
-			on_done(nil, nil, err)
+			on_done(nil, repo_slug, err)
 			return
 		end
 		local review = ((((result or {}).data or {}).repository or {}).pullRequest or {}).viewerLatestReview
@@ -451,21 +448,6 @@ local function dismiss_review(pr, review, repo_slug, body, on_done)
 		"message=" .. message,
 	}, function(_, err)
 		on_done(err == nil, err)
-	end)
-end
-
----@param pr PullRequest
----@param body string
----@param on_done fun(ok: boolean, err: string|nil)
----@return { cancel: fun() }|nil
-function M.unapprove_review(pr, body, on_done)
-	return current_review(pr, function(review, repo_slug, err)
-		local state = type(review) == "table" and tostring(review.state or ""):upper() or ""
-		if err or review == nil or review.databaseId == nil or state ~= "APPROVED" then
-			on_done(false, err or "No active review")
-			return
-		end
-		dismiss_review(pr, review, repo_slug, body, on_done)
 	end)
 end
 
@@ -687,7 +669,8 @@ mutation($reviewId:ID!,$path:String!,$body:String!,$line:Int!,$side:DiffSide!){
 
 		local data = result and result.data or {}
 		local thread = data.addPullRequestReviewThread and data.addPullRequestReviewThread.thread
-		local node = type(thread) == "table" and last_node(thread.comments) or nil
+		local nodes = type(thread) == "table" and json.safe_table(thread.comments).nodes or {}
+		local node = nodes[#nodes]
 		if type(thread) ~= "table" or tostring(thread.id or "") == "" then
 			on_done(nil, "GitHub did not return the created review thread")
 			return
@@ -756,7 +739,6 @@ local function add_published_inline_comment(pr, content, inline, on_done)
 			return
 		end
 		local created = mapper.to_comment(result)
-		created.can_resolve = false
 		on_done(created, nil)
 	end, {
 		action = "Add comment",
@@ -765,6 +747,86 @@ local function add_published_inline_comment(pr, content, inline, on_done)
 		inline = true,
 	})
 end
+
+local CREATE_PENDING_REVIEW_MUTATION = [[
+mutation($pullRequestId:ID!,$commitOID:GitObjectID){
+  addPullRequestReview(input:{pullRequestId:$pullRequestId commitOID:$commitOID}){
+    pullRequestReview{id state commit{oid}}
+  }
+}
+]]
+
+---@param pr PullRequest
+---@param commit_oid string
+---@param use_review fun(review_id: string): { cancel: fun() }|nil
+---@param on_done fun(comment: PullsComment|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+local function with_pending_review(pr, commit_oid, use_review, on_done)
+	local review = pending_review(pr)
+	if review then
+		local review_commit = tostring(((review or {}).commit or {}).oid or "")
+		if commit_oid ~= "" and review_commit ~= "" and commit_oid ~= review_commit then
+			on_done(nil, "Pending review belongs to a different commit")
+			return nil
+		end
+		return use_review(tostring(review.id))
+	end
+
+	local pull_request_id = github_mapping.node_id(pr._raw) or ""
+	if pull_request_id == "" then
+		on_done(nil, "Missing pull request node id")
+		return nil
+	end
+
+	local args = {
+		"api",
+		"graphql",
+		"-f",
+		"pullRequestId=" .. pull_request_id,
+		"-f",
+		"query=" .. CREATE_PENDING_REVIEW_MUTATION,
+	}
+	if commit_oid ~= "" then
+		vim.list_extend(args, { "-f", "commitOID=" .. commit_oid })
+	end
+
+	local cancelled = false
+	local current
+	current = cli.gh(args, function(result, err)
+		if cancelled then
+			return
+		end
+		if err then
+			on_done(nil, err)
+			return
+		end
+		local data = result and result.data or {}
+		local created = data.addPullRequestReview and data.addPullRequestReview.pullRequestReview
+		if type(created) ~= "table" or tostring(created.id or "") == "" then
+			on_done(nil, "GitHub did not return the pending review")
+			return
+		end
+		remember_pending_review(pr, created)
+		current = use_review(tostring(created.id))
+		if cancelled and current then
+			current.cancel()
+		end
+	end, {
+		action = "Create pending review",
+		repo = pr.repo_full_name,
+		number = pr.id,
+	})
+	return {
+		cancel = function()
+			cancelled = true
+			if current then
+				current.cancel()
+			end
+		end,
+	}
+end
+
+local reply_comment
 
 ---@param pr PullRequest
 ---@param content string
@@ -775,7 +837,7 @@ function M.add_comment(pr, content, opts, on_done)
 	opts = opts or {}
 
 	if opts.parent then
-		return M.reply_comment(pr, opts.parent, content, on_done)
+		return reply_comment(pr, opts.parent, content, opts.pending == true, on_done)
 	end
 
 	local repo_slug = pr.repo_full_name or ""
@@ -787,26 +849,9 @@ function M.add_comment(pr, content, opts, on_done)
 	end
 
 	if opts.inline then
-		local raw = pr._raw
-		local reviews = json.safe_table(raw.reviews).nodes or {}
-		local pending_review = reviews[1]
-		local review_id = tostring((pending_review or {}).id or "")
 		local commit_oid = tostring(opts.inline.commit_hash or pr.source.commit_hash or "")
-		local pending_commit = tostring(((pending_review or {}).commit or {}).oid or "")
-		if
-			opts.pending
-			and review_id ~= ""
-			and commit_oid ~= ""
-			and pending_commit ~= ""
-			and commit_oid ~= pending_commit
-		then
-			vim.schedule(function()
-				on_done(nil, "Pending review belongs to a different commit")
-			end)
-			return nil
-		end
 		if not opts.pending then
-			if review_id ~= "" then
+			if pending_review(pr) then
 				vim.schedule(function()
 					on_done(nil, "Submit the pending review first")
 				end)
@@ -814,70 +859,9 @@ function M.add_comment(pr, content, opts, on_done)
 			end
 			return add_published_inline_comment(pr, content, opts.inline, on_done)
 		end
-		if review_id ~= "" then
+		return with_pending_review(pr, commit_oid, function(review_id)
 			return add_review_thread(pr, content, opts.inline, review_id, on_done)
-		end
-
-		local pull_request_id = github_mapping.node_id(raw) or ""
-		if pull_request_id == "" then
-			vim.schedule(function()
-				on_done(nil, "Missing pull request node id")
-			end)
-			return nil
-		end
-
-		local cancelled = false
-		local current
-		local query = [[
-mutation($pullRequestId:ID!,$commitOID:GitObjectID){
-  addPullRequestReview(input:{pullRequestId:$pullRequestId commitOID:$commitOID}){
-    pullRequestReview{id state commit{oid}}
-  }
-}
-]]
-		local args = {
-			"api",
-			"graphql",
-			"-f",
-			"pullRequestId=" .. pull_request_id,
-			"-f",
-			"query=" .. query,
-		}
-		if commit_oid ~= "" then
-			vim.list_extend(args, { "-f", "commitOID=" .. commit_oid })
-		end
-		current = cli.gh(args, function(result, err)
-			if cancelled then
-				return
-			end
-			if err then
-				on_done(nil, err)
-				return
-			end
-			local data = result and result.data or {}
-			local review = data.addPullRequestReview and data.addPullRequestReview.pullRequestReview
-			if type(review) ~= "table" or tostring(review.id or "") == "" then
-				on_done(nil, "GitHub did not return the pending review")
-				return
-			end
-			remember_pending_review(pr, review)
-			current = add_review_thread(pr, content, opts.inline, tostring(review.id), on_done)
-			if cancelled and current then
-				current.cancel()
-			end
-		end, {
-			action = "Create pending review",
-			repo = pr.repo_full_name,
-			number = pr.id,
-		})
-		return {
-			cancel = function()
-				cancelled = true
-				if current then
-					current.cancel()
-				end
-			end,
-		}
+		end, on_done)
 	end
 
 	return cli.api(
@@ -915,36 +899,6 @@ mutation($commentId:ID!){
   }
 }
 ]]
-
----Comments belonging to a pending (draft) review are not published yet, so the REST
----endpoints return 404 for them. GraphQL addresses them by node id instead.
----@param comment PullsComment
----@return boolean
-local function is_pending(comment)
-	return comment.state == "PENDING"
-end
-
----@param comment PullsComment
----@return string
-local function comment_node_id(comment)
-	return tostring((comment._raw or {}).comment_id or "")
-end
-
----@generic T
----@param comment PullsComment
----@param missing_result T
----@param on_done fun(result: T, err: string|nil)
----@return string|nil node_id `nil` when `on_done` was already called with the missing-id error
-local function require_comment_node_id(comment, missing_result, on_done)
-	local node_id = comment_node_id(comment)
-	if node_id == "" then
-		vim.schedule(function()
-			on_done(missing_result, "Missing review comment id")
-		end)
-		return nil
-	end
-	return node_id
-end
 
 ---@param pr PullRequest
 ---@param comment PullsComment
@@ -1059,9 +1013,10 @@ function M.edit_comment(pr, comment, on_done)
 		})
 	end
 
-	if is_pending(comment) then
-		local node_id = require_comment_node_id(comment, nil, on_done)
-		if node_id == nil then
+	if comment.state == "PENDING" then
+		local node_id = tostring((comment._raw or {}).comment_id or "")
+		if node_id == "" then
+			on_done(nil, "Missing review comment id")
 			return nil
 		end
 		return edit_pending_comment(pr, comment, node_id, on_done)
@@ -1110,9 +1065,10 @@ function M.delete_comment(pr, target, on_done)
 		return nil
 	end
 
-	if is_pending(target) then
-		local node_id = require_comment_node_id(target, false, on_done)
-		if node_id == nil then
+	if target.state == "PENDING" then
+		local node_id = tostring((target._raw or {}).comment_id or "")
+		if node_id == "" then
+			on_done(false, "Missing review comment id")
 			return nil
 		end
 		return delete_pending_comment(pr, target, node_id, on_done)
@@ -1187,9 +1143,10 @@ end
 ---@param pr PullRequest
 ---@param parent PullsComment
 ---@param content string
+---@param pending boolean
 ---@param on_done fun(comment: PullsComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.reply_comment(pr, parent, content, on_done)
+reply_comment = function(pr, parent, content, pending, on_done)
 	local repo_slug = pr.repo_full_name or ""
 	if repo_slug == "" then
 		vim.schedule(function()
@@ -1202,6 +1159,10 @@ function M.reply_comment(pr, parent, content, on_done)
 		local raw = parent._raw or {}
 		local thread_id = tostring(raw.thread_id or "")
 		if thread_id == "" then
+			if pending then
+				on_done(nil, "Missing review thread id")
+				return nil
+			end
 			local root_id = parent.parent_id or parent.id
 			return cli.api(
 				"POST",
@@ -1217,7 +1178,6 @@ function M.reply_comment(pr, parent, content, on_done)
 					created.inline_hunk = created.inline_hunk or parent.inline_hunk
 					created.state = parent.state
 					created.outdated = parent.outdated
-					created.can_resolve = false
 					on_done(created, nil)
 				end,
 				{
@@ -1227,14 +1187,6 @@ function M.reply_comment(pr, parent, content, on_done)
 					parent_id = root_id,
 				}
 			)
-		end
-
-		local review_id = parent.state == "PENDING" and tostring(raw.review_id or "") or ""
-		if parent.state == "PENDING" and review_id == "" then
-			vim.schedule(function()
-				on_done(nil, "Missing pending review id")
-			end)
-			return nil
 		end
 
 		local query = ([[
@@ -1248,41 +1200,48 @@ mutation($threadId:ID!,$reviewId:ID,$body:String!){
   }
 }
 ]]):format(REVIEW_COMMENT_FIELDS)
-		local args = {
-			"api",
-			"graphql",
-			"-f",
-			"threadId=" .. thread_id,
-			"-f",
-			"body=" .. content,
-		}
-		if review_id ~= "" then
-			vim.list_extend(args, { "-f", "reviewId=" .. review_id })
-		end
-		vim.list_extend(args, { "-f", "query=" .. query })
+		local function add_reply(review_id)
+			local args = {
+				"api",
+				"graphql",
+				"-f",
+				"threadId=" .. thread_id,
+				"-f",
+				"body=" .. content,
+			}
+			if review_id ~= "" then
+				vim.list_extend(args, { "-f", "reviewId=" .. review_id })
+			end
+			vim.list_extend(args, { "-f", "query=" .. query })
 
-		return cli.gh(args, function(result, err)
-			if err then
-				on_done(nil, err)
-				return
-			end
-			local data = result and result.data or {}
-			local reply = data.addPullRequestReviewThreadReply and data.addPullRequestReviewThreadReply.comment
-			if type(reply) ~= "table" or json.nilify(reply.databaseId) == nil then
-				on_done(nil, "GitHub did not return the created reply")
-				return
-			end
-			local review = json.safe_table(reply.pullRequestReview)
-			remember_pending_review(pr, review)
-			local created = to_review_comment(reply, thread_from_comment(parent), parent.parent_id or parent.id)
-			created.inline_hunk = created.inline_hunk or parent.inline_hunk
-			on_done(created, nil)
-		end, {
-			action = "Reply comment",
-			repo = pr.repo_full_name,
-			number = pr.id,
-			parent_id = parent.id,
-		})
+			return cli.gh(args, function(result, err)
+				if err then
+					on_done(nil, err)
+					return
+				end
+				local data = result and result.data or {}
+				local reply = data.addPullRequestReviewThreadReply and data.addPullRequestReviewThreadReply.comment
+				if type(reply) ~= "table" or json.nilify(reply.databaseId) == nil then
+					on_done(nil, "GitHub did not return the created reply")
+					return
+				end
+				local review = json.safe_table(reply.pullRequestReview)
+				remember_pending_review(pr, review)
+				local created = to_review_comment(reply, thread_from_comment(parent), parent.parent_id or parent.id)
+				created.inline_hunk = created.inline_hunk or parent.inline_hunk
+				on_done(created, nil)
+			end, {
+				action = "Reply comment",
+				repo = pr.repo_full_name,
+				number = pr.id,
+				parent_id = parent.id,
+			})
+		end
+
+		if pending then
+			return with_pending_review(pr, tostring(pr.source.commit_hash or ""), add_reply, on_done)
+		end
+		return add_reply("")
 	end
 
 	return M.add_comment(pr, content, nil, on_done)

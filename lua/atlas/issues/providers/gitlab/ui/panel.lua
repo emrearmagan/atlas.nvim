@@ -28,8 +28,9 @@ local function milestone_display(milestone)
 end
 
 ---@param issue Issue
+---@param _loading boolean
 ---@return IssuesPanelHeaderRow[]
-function M.header_rows(issue)
+function M.header_rows(issue, _loading)
 	local raw = issue._raw or {}
 	local user_icon = icons.general("user")
 
@@ -95,8 +96,9 @@ local function label_hl(hex)
 end
 
 ---@param issue Issue
+---@param _loading boolean
 ---@return IssuesPanelChip[]
-function M.chips(issue)
+function M.chips(issue, _loading)
 	local chips = {}
 	local raw = issue._raw or {}
 	local labels = type(raw.labels) == "table" and raw.labels or {}
@@ -107,16 +109,6 @@ function M.chips(issue)
 		end
 	end
 	return chips
-end
-
--- Lifecycle
-
----@param _issue Issue
----@return boolean
-function M.is_loading(_issue)
-	local conversation_state = require("atlas.issues.ui.panel.issue.tabs.conversation.state")
-	local history_state = require("atlas.issues.ui.panel.issue.tabs.activity.state")
-	return conversation_state.any_loading() or history_state.any_loading()
 end
 
 ---@return IssuesPanelTab[]

@@ -34,6 +34,11 @@ local function track(handle)
 	end
 end
 
+function M.reset()
+	cancel_all()
+	state.reset()
+end
+
 ---@param state_name string|nil
 ---@return string
 local function status_hl(state_name)
@@ -125,8 +130,7 @@ function M.on_select(pr, _repo, refresh, opts)
 		or type(state.commits) == "string"
 
 	if should_fetch then
-		cancel_all()
-		state.reset()
+		M.reset()
 	end
 
 	if should_fetch and core.fetch_commits then
@@ -257,6 +261,11 @@ function M.on_enter(_pr, entry)
 		vim.ui.open(url)
 		return true
 	end
+end
+
+---@return boolean
+function M.is_loading()
+	return state.any_loading()
 end
 
 function M.deactivate()

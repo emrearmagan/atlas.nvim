@@ -12,9 +12,4 @@ function M.reset()
 	M.last_path = nil
 end
 
----@return boolean
-function M.any_loading()
-	return M.issues == "loading"
-end
-
 return M

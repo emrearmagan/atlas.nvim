@@ -222,8 +222,6 @@
 ---@field task_label string|nil                          -- display name override; defaults to "Task"
 ---@field state "PENDING"|"RESOLVED"|"DELETED"|"OUTDATED"|nil -- primary state; nil = active/open
 ---@field outdated boolean|nil                           -- may coexist with RESOLVED
----@field can_resolve boolean|nil                        -- false when the provider cannot resolve this thread yet
----@field deleted boolean|nil
 ---@field reactions table<string, integer>|nil
 ---@field url string|nil
 ---@field html_url string|nil

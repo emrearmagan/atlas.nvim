@@ -3,7 +3,6 @@ local M = {}
 
 local icons = require("atlas.ui.shared.icons")
 local helper = require("atlas.issues.ui.main.helper")
-local conversation_state = require("atlas.issues.ui.panel.issue.tabs.conversation.state")
 
 local state = {
 	assignees = nil, ---@type table|nil
@@ -12,7 +11,6 @@ local state = {
 	sub_issues = nil, ---@type table|nil
 	body = nil, ---@type string|nil
 	parent = nil, ---@type Issue|nil
-	detail_loading = false,
 }
 
 local function reset_state()
@@ -22,7 +20,6 @@ local function reset_state()
 	state.sub_issues = nil
 	state.body = nil
 	state.parent = nil
-	state.detail_loading = false
 end
 
 ---@param body string|nil
@@ -143,8 +140,9 @@ end
 -- Header rows
 
 ---@param issue Issue
+---@param _loading boolean
 ---@return IssuesPanelHeaderRow[]
-function M.header_rows(issue)
+function M.header_rows(issue, _loading)
 	local raw = issue._raw or {}
 
 	local reporter_name = issue.reporter and tostring(issue.reporter.display_name or "") or ""
@@ -240,10 +238,11 @@ local function label_hl(hex)
 end
 
 ---@param issue Issue
+---@param loading boolean
 ---@return IssuesPanelChip[]
-function M.chips(issue)
+function M.chips(issue, loading)
 	local chips = {}
-	if state.detail_loading then
+	if loading then
 		local spinner = require("atlas.ui.components.spinner")
 		table.insert(chips, { label = spinner.with_text("Loading..."), hl = "AtlasTextMuted" })
 		return chips
@@ -261,14 +260,6 @@ function M.chips(issue)
 	return chips
 end
 
--- Lifecycle
-
----@param _issue Issue
----@return boolean
-function M.is_loading(_issue)
-	return state.detail_loading or conversation_state.any_loading()
-end
-
 ---@param target Issue
 ---@param fresh Issue
 local function update_details(target, fresh)
@@ -284,28 +275,29 @@ local function update_details(target, fresh)
 end
 
 ---@param issue Issue
----@param refresh fun()
----@param opts { force_load?: boolean, issue_refreshed?: boolean }|nil
-function M.fetches(issue, refresh, opts)
+---@param opts { force_refresh: boolean|nil, issue_refreshed: boolean|nil }|nil
+---@param on_done fun()
+---@return { cancel: fun() }|nil
+function M.fetch_header(issue, opts, on_done)
 	local key = tostring(issue.key or "")
 	if key == "" then
+		on_done()
 		return
 	end
 
 	reset_state()
 	if opts and opts.issue_refreshed then
 		update_details(issue, issue)
+		on_done()
 		return
 	end
 
-	state.detail_loading = true
-	require("atlas.issues.providers.github.api.issues").get_issue(key, function(fresh, err)
-		state.detail_loading = false
+	return require("atlas.issues.providers.github.api.issues").get_issue(key, function(fresh, err)
 		if not err and type(fresh) == "table" then
 			update_details(issue, fresh)
 		end
-		refresh()
-	end, { force_load = opts and opts.force_load == true or false })
+		on_done()
+	end, { force_load = opts and opts.force_refresh == true or false })
 end
 
 ---@return IssuesPanelTab[]

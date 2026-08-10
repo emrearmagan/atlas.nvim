@@ -1,13 +1,11 @@
 ---@class PullsOverviewState
 ---@field reviewers PullsReviewer[]|"loading"|string|nil
----@field pipelines PullsPipeline[]|"loading"|string|nil
 ---@field description string|"loading"|nil
 ---@field merge_checks PullsMergeCheck[]|"loading"|string|nil
 ---@field description_expanded boolean
 ---@field collapsed_pipelines table<PullsPipeline, boolean>
 local M = {
 	reviewers = nil,
-	pipelines = nil,
 	description = nil,
 	merge_checks = nil,
 	description_expanded = false,
@@ -16,7 +14,6 @@ local M = {
 
 function M.reset()
 	M.reviewers = nil
-	M.pipelines = nil
 	M.description = nil
 	M.merge_checks = nil
 	M.description_expanded = false
@@ -41,10 +38,7 @@ end
 
 ---@return boolean
 function M.any_loading()
-	return M.reviewers == "loading"
-		or M.pipelines == "loading"
-		or M.description == "loading"
-		or M.merge_checks == "loading"
+	return M.reviewers == "loading" or M.description == "loading" or M.merge_checks == "loading"
 end
 
 return M

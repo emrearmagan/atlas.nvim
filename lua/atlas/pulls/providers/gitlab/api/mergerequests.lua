@@ -483,39 +483,34 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.submit_review(pr, body, on_done)
-	return comments_api.publish_review(pr, nil, body, on_done)
+	return comments_api.publish_review(pr, "reviewed", body, on_done)
 end
 
 ---@param pr PullRequest
 ---@param body string
 ---@param on_done fun(ok: boolean, err: string|nil)
----@return { cancel: fun() }|nil
+---@return { cancel: fun() }
 function M.approve_review(pr, body, on_done)
-	return M.approve(pr, function(ok, err)
-		if not ok or vim.trim(body) == "" then
-			on_done(ok, err)
+	local cancelled = false
+	local current
+	current = comments_api.publish_review(pr, "reviewed", body, function(ok, err)
+		if cancelled then
 			return
 		end
-		comments_api.add_comment(pr, body, nil, function(comment, comment_err)
-			on_done(comment ~= nil, comment_err)
-		end)
-	end)
-end
-
----@param pr PullRequest
----@param body string
----@param on_done fun(ok: boolean, err: string|nil)
----@return { cancel: fun() }|nil
-function M.unapprove_review(pr, body, on_done)
-	return M.unapprove(pr, function(ok, err)
-		if not ok or vim.trim(body) == "" then
-			on_done(ok, err)
+		if not ok then
+			on_done(false, err)
 			return
 		end
-		comments_api.add_comment(pr, body, nil, function(comment, comment_err)
-			on_done(comment ~= nil, comment_err)
-		end)
+		current = M.approve(pr, on_done)
 	end)
+	return {
+		cancel = function()
+			cancelled = true
+			if current then
+				current.cancel()
+			end
+		end,
+	}
 end
 
 ---@param pr PullRequest

@@ -67,15 +67,15 @@ function M.render(tab_items, get_tab_module)
 		local state = require("atlas.pulls.state")
 		local provider = state.provider
 		local panel = provider and provider.capabilities.ui and provider.capabilities.ui.panel
-		local extra_rows = panel and panel.header_rows and panel.header_rows(pr) or nil
-		local extra_chips = panel and panel.chips and panel.chips(pr) or nil
+		local extra_rows = panel and panel.header_rows and panel.header_rows(pr, panel_state.header_loading) or nil
+		local extra_chips = panel and panel.chips and panel.chips(pr, panel_state.header_loading) or nil
 
 		-- Header
 		local h_lines, h_spans = header.render(pr, width, extra_rows)
 		utils.append_block(lines, spans, { lines = h_lines, highlights = h_spans })
 
 		-- Chips
-		local chip_line, chip_spans = chips.render(pr, { extra_chips = extra_chips })
+		local chip_line, chip_spans = chips.render(pr, { extra_chips = extra_chips, pipelines = panel_state.pipelines })
 		table.insert(lines, chip_line)
 		local chip_base = #lines - 1
 		for _, span in ipairs(chip_spans) do

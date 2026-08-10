@@ -384,51 +384,44 @@ end
 ---@param body string
 ---@param action fun(pr: PullRequest, on_done: fun(result: table|nil, err: string|nil)): { cancel: fun() }|nil
 ---@param on_done fun(ok: boolean, err: string|nil)
----@return { cancel: fun() }|nil
-local function approval_review(pr, body, action, on_done)
-	return action(pr, function(_, err)
+---@return { cancel: fun() }
+local function review_action(pr, body, action, on_done)
+	local cancelled = false
+	local current
+	current = action(pr, function(_, err)
+		if cancelled then
+			return
+		end
 		if err or vim.trim(body) == "" then
 			on_done(err == nil, err)
 			return
 		end
-		M.submit_review(pr, body, on_done)
+		current = M.submit_review(pr, body, on_done)
 	end)
+	return {
+		cancel = function()
+			cancelled = true
+			if current then
+				current.cancel()
+			end
+		end,
+	}
 end
 
 ---@param pr PullRequest
 ---@param body string
 ---@param on_done fun(ok: boolean, err: string|nil)
----@return { cancel: fun() }|nil
+---@return { cancel: fun() }
 function M.approve_review(pr, body, on_done)
-	return approval_review(pr, body, M.approve, on_done)
+	return review_action(pr, body, M.approve, on_done)
 end
 
 ---@param pr PullRequest
 ---@param body string
 ---@param on_done fun(ok: boolean, err: string|nil)
----@return { cancel: fun() }|nil
-function M.unapprove_review(pr, body, on_done)
-	return approval_review(pr, body, M.unapprove, on_done)
-end
-
----@param pr PullRequest
----@param body string
----@param on_done fun(ok: boolean, err: string|nil)
----@return { cancel: fun() }|nil
+---@return { cancel: fun() }
 function M.request_changes_review(pr, body, on_done)
-	local comment = vim.trim(body)
-	if comment == "" then
-		comment = "Changes requested"
-	end
-	return M.submit_review(pr, comment, function(ok, err)
-		if not ok then
-			on_done(false, err)
-			return
-		end
-		M.request_changes(pr, function(_, request_err)
-			on_done(request_err == nil, request_err)
-		end)
-	end)
+	return review_action(pr, body, M.request_changes, on_done)
 end
 
 ---@param pr PullRequest

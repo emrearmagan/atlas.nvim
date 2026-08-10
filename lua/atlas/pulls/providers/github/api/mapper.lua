@@ -104,69 +104,6 @@ function M.to_pull_request(raw)
 	}
 end
 
----@param raw table (search/issues API item)
----@return PullRequest
-function M.to_pull_request_from_search(raw)
-	local author = comment_author(raw.user)
-
-	local state = "open"
-	local raw_state = tostring(raw.state or ""):lower()
-	local pr_info = raw.pull_request or {}
-	if json.nilify(pr_info.merged_at) then
-		state = "merged"
-	elseif raw_state == "closed" then
-		state = "declined"
-	elseif raw.draft == true then
-		state = "draft"
-	end
-
-	local repo_url = tostring(raw.repository_url or "")
-	local repo_full_name = repo_url:match("/repos/([^/]+/[^/]+)$") or ""
-	local owner, repo_name = repo_full_name:match("^(.*)/([^/]+)$")
-	owner = owner or ""
-	repo_name = repo_name or repo_full_name
-
-	return {
-		id = tostring(raw.number or ""),
-		title = tostring(raw.title or ""),
-		description = tostring(raw.body or ""),
-		state = state,
-		author = author,
-		source = { branch = "", commit_hash = "" },
-		destination = { branch = "", commit_hash = "" },
-		comments_count = tonumber(raw.comments) or 0,
-		tasks_count = 0,
-		created_on = tostring(raw.created_at or ""),
-		updated_on = tostring(raw.updated_at or ""),
-		link = { html = tostring(pr_info.html_url or raw.html_url or "") },
-		provider = "github",
-		workspace = owner,
-		repo = repo_name,
-		repo_full_name = repo_full_name,
-		_raw = raw,
-	}
-end
-
----@param items table[]
----@return PullRequest[]
-function M.to_search_results(items)
-	local out = {}
-	for _, raw in ipairs(items or {}) do
-		table.insert(out, M.to_pull_request_from_search(raw))
-	end
-	return out
-end
-
----@param raw_prs table[]
----@return PullRequest[]
-function M.to_pull_requests_list(raw_prs)
-	local out = {}
-	for _, raw in ipairs(raw_prs or {}) do
-		table.insert(out, M.to_pull_request(raw))
-	end
-	return out
-end
-
 ---@param prs PullRequest[]
 ---@return PullsGroup[]
 function M.to_pull_request_groups(prs)
@@ -341,9 +278,7 @@ function M.to_activity_comment(raw)
 	local raw_user = type(raw.user) == "table" and raw.user or (type(raw.actor) == "table" and raw.actor or nil)
 	local result = comment(raw, raw_user)
 	result.parent_id = nil
-	result.deleted = false
 	result.inline = nil
-	result.can_resolve = false
 	return result
 end
 
@@ -389,7 +324,6 @@ function M.to_comment(raw, thread_state)
 			result.state = "OUTDATED"
 		end
 	end
-	result.can_resolve = inline == nil and false or nil
 	return result
 end
 

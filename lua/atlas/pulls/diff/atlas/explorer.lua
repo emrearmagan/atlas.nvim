@@ -43,30 +43,6 @@ function M.options()
 	}
 end
 
----@param files DiffFile[]
----@param options AtlasDiffExplorerOptions
----@return DiffFile[]
-function M.filter(files, options)
-	if #options.ignore == 0 then
-		return files
-	end
-	local patterns = {}
-	for _, pattern in ipairs(options.ignore) do
-		local ok, regex = pcall(vim.fn.glob2regpat, pattern)
-		if ok then
-			table.insert(patterns, regex)
-		end
-	end
-	return vim.tbl_filter(function(file)
-		for _, pattern in ipairs(patterns) do
-			if vim.fn.match(file.path, pattern) >= 0 then
-				return false
-			end
-		end
-		return true
-	end, files)
-end
-
 ---@param author { name: string, nickname: string|nil }|nil
 ---@return string
 local function author_name(author)
@@ -214,21 +190,24 @@ local function compact_folder(node)
 	return node, label
 end
 
----@param session AtlasNativeDiffSession
+---@param files DiffFile[]
+---@param reviewed_files table<string, boolean>
 ---@return integer[], integer[]
-local function grouped_indices(session)
+local function split_indices(files, reviewed_files)
 	local unreviewed, reviewed = {}, {}
-	for index, file in ipairs(session.files) do
-		table.insert(session.reviewed_files[file.path] and reviewed or unreviewed, index)
+	for index, file in ipairs(files) do
+		table.insert(reviewed_files[file.path] and reviewed or unreviewed, index)
 	end
 	return unreviewed, reviewed
 end
 
----@param session AtlasNativeDiffSession
+---@param files DiffFile[]
+---@param grouped boolean
+---@param reviewed_files table<string, boolean>
 ---@return integer[]
-function M.ordered_indices(session)
-	local unreviewed, reviewed = grouped_indices(session)
-	if not session.explorer.grouped then
+local function ordered_indices(files, grouped, reviewed_files)
+	local unreviewed, reviewed = split_indices(files, reviewed_files)
+	if not grouped then
 		vim.list_extend(unreviewed, reviewed)
 		return unreviewed
 	end
@@ -237,11 +216,49 @@ function M.ordered_indices(session)
 		for _, folder in ipairs(sorted_folders(node)) do
 			append(folder)
 		end
-		vim.list_extend(ordered, sorted_files(node, session.files))
+		vim.list_extend(ordered, sorted_files(node, files))
 	end
-	append(build_tree(session.files, unreviewed))
-	append(build_tree(session.files, reviewed))
+	append(build_tree(files, unreviewed))
+	append(build_tree(files, reviewed))
 	return ordered
+end
+
+---@param session AtlasNativeDiffSession
+---@return integer[], integer[]
+local function grouped_indices(session)
+	return split_indices(session.files, session.reviewed_files)
+end
+
+---@param session AtlasNativeDiffSession
+---@return integer[]
+function M.ordered_indices(session)
+	return ordered_indices(session.files, session.explorer.grouped, session.reviewed_files)
+end
+
+---@param files DiffFile[]
+---@param options AtlasDiffExplorerOptions
+---@return DiffFile[]
+function M.filter(files, options)
+	local patterns = {}
+	for _, pattern in ipairs(options.ignore) do
+		local ok, regex = pcall(vim.fn.glob2regpat, pattern)
+		if ok then
+			table.insert(patterns, regex)
+		end
+	end
+	local visible = vim.tbl_filter(function(file)
+		for _, pattern in ipairs(patterns) do
+			if vim.fn.match(file.path, pattern) >= 0 then
+				return false
+			end
+		end
+		return true
+	end, files)
+	local result = {}
+	for _, index in ipairs(ordered_indices(visible, options.grouped, {})) do
+		table.insert(result, visible[index])
+	end
+	return result
 end
 
 ---@param session AtlasNativeDiffSession
@@ -261,9 +278,8 @@ function M.width(session)
 	return math.min(session.explorer.width, math.max(20, vim.o.columns - 40))
 end
 
----@param session AtlasNativeDiffSession
 ---@param win integer|nil
-function M.configure_window(session, win)
+function M.configure_window(win)
 	if not win or not vim.api.nvim_win_is_valid(win) then
 		return
 	end
@@ -291,8 +307,8 @@ end
 
 ---@param session AtlasNativeDiffSession
 function M.configure(session)
-	M.configure_window(session, session.panel.win)
-	M.configure_window(session, session.commits_panel.win)
+	M.configure_window(session.panel.win)
+	M.configure_window(session.commits_panel.win)
 end
 
 ---@alias AtlasDiffExplorerVirtualLine { [1]: string, [2]: string }[]

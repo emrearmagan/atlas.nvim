@@ -480,7 +480,6 @@ return {
 			fetch_review_context = pullrequests_api.fetch_review_context,
 			submit_review = pullrequests_api.submit_review,
 			approve = pullrequests_api.approve_review,
-			unapprove = pullrequests_api.unapprove_review,
 			request_changes = pullrequests_api.request_changes_review,
 		},
 		tasks = {

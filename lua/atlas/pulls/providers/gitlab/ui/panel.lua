@@ -8,34 +8,16 @@ local icons = require("atlas.ui.shared.icons")
 
 local state = {
 	labels_by_name = nil, ---@type table<string, { color: string|nil, text_color: string|nil }>|nil
-	header_loading = false,
 }
 
 local function reset_state()
 	state.labels_by_name = nil
-	state.header_loading = false
-end
-
----@type { cancel: fun() }[]
-local panel_in_flight = {}
-
-local function cancel_panel_fetches()
-	for _, handle in ipairs(panel_in_flight) do
-		handle.cancel()
-	end
-	panel_in_flight = {}
-end
-
----@param handle { cancel: fun() }|nil
-local function track_panel(handle)
-	if handle then
-		table.insert(panel_in_flight, handle)
-	end
 end
 
 ---@param pr PullRequest
+---@param _loading boolean
 ---@return PullsPanelHeaderRow[]
-function M.header_rows(pr)
+function M.header_rows(pr, _loading)
 	local raw = pr._raw
 	local assignees = type(raw.assignees) == "table" and raw.assignees or {}
 
@@ -51,10 +33,11 @@ function M.header_rows(pr)
 end
 
 ---@param pr PullRequest
+---@param loading boolean
 ---@return PullsPanelChip[]
-function M.chips(pr)
+function M.chips(pr, loading)
 	local chips = {}
-	if state.header_loading and state.labels_by_name == nil then
+	if loading and state.labels_by_name == nil then
 		table.insert(chips, { label = spinner.with_text("Loading labels"), hl = "AtlasTextMuted" })
 		return chips
 	end
@@ -96,79 +79,61 @@ function M.chips(pr)
 end
 
 ---@param pr PullRequest
----@param refresh fun()
 ---@param opts { force_refresh: boolean|nil, pr_refreshed: boolean|nil }|nil
-function M.fetches(pr, refresh, opts)
-	cancel_panel_fetches()
+---@param on_done fun()
+---@return { cancel: fun() }|nil
+function M.fetch_header(pr, opts, on_done)
 	reset_state()
 
 	local force = opts and opts.force_refresh == true
 	local project_path = pr.repo_full_name
+	local fetch_labels = project_path ~= ""
+	local fetch_details = not (opts and opts.pr_refreshed)
+	local pending = (fetch_labels and 1 or 0) + (fetch_details and 1 or 0)
+	local requests = {}
 
-	if project_path ~= "" then
-		state.header_loading = true
-		track_panel(mr_api.get_project_labels(project_path, { force_refresh = force }, function(by_name, _)
-			state.header_loading = false
-			state.labels_by_name = by_name or {}
-			refresh()
-		end))
+	if pending == 0 then
+		on_done()
+		return
 	end
 
-	if not (opts and opts.pr_refreshed) then
-		track_panel(mr_api.get_mr(pr, { force_refresh = force }, function(fresh, err)
+	local function complete()
+		pending = pending - 1
+		if pending == 0 then
+			on_done()
+		end
+	end
+
+	if fetch_labels then
+		local request = mr_api.get_project_labels(project_path, { force_refresh = force }, function(by_name, _)
+			state.labels_by_name = by_name or {}
+			complete()
+		end)
+		if request then
+			table.insert(requests, request)
+		end
+	end
+
+	if fetch_details then
+		local request = mr_api.get_mr(pr, { force_refresh = force }, function(fresh, err)
 			if not err and type(fresh) == "table" then
 				pr.is_subscribed = fresh.is_subscribed
 				pr._raw = fresh._raw
 			end
-			refresh()
-		end))
+			complete()
+		end)
+		if request then
+			table.insert(requests, request)
+		end
 	end
 
-	local provider = require("atlas.pulls.state").provider
-	local core = provider and provider.capabilities.core
-	local panel_state = require("atlas.pulls.ui.panel.pr.state")
-	panel_state.diffstat = "loading"
-	if core and core.fetch_diffstat then
-		track_panel(core.fetch_diffstat(pr, { force_refresh = force }, function(entries, err)
-			panel_state.diffstat = err and err or (entries or {})
-			refresh()
-		end))
-	end
-
-	local overview_state = require("atlas.pulls.ui.panel.pr.tabs.overview.state")
-	local checks = require("atlas.pulls.providers.gitlab.api.checks")
-	overview_state.pipelines = "loading"
-	track_panel(checks.get_pipelines(pr, { force_refresh = force }, function(pipelines, err)
-		overview_state.pipelines = err and err or (pipelines or {})
-		refresh()
-	end))
-end
-
----@param _pr PullRequest
----@param active_tab string|nil
----@return boolean
-function M.is_loading(_pr, active_tab)
-	if state.header_loading then
-		return true
-	end
-	if active_tab == "conversation" then
-		local conversation_state = require("atlas.pulls.ui.panel.pr.tabs.conversation.state")
-		return conversation_state.any_loading()
-	end
-	if active_tab == "review" then
-		local comments_state = require("atlas.pulls.ui.panel.pr.tabs.review.state")
-		return comments_state.any_loading()
-	end
-	if active_tab == "commits" then
-		local commits_state = require("atlas.pulls.ui.panel.pr.tabs.commits.state")
-		return commits_state.any_loading()
-	end
-	if active_tab ~= nil and active_tab ~= "overview" then
-		return false
-	end
-
-	local overview_state = require("atlas.pulls.ui.panel.pr.tabs.overview.state")
-	return overview_state.any_loading()
+	return {
+		cancel = function()
+			for _, request in ipairs(requests) do
+				request.cancel()
+			end
+		end,
+	}
 end
 
 ---@return PullsPanelTab[]

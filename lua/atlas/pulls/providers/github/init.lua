@@ -87,7 +87,6 @@ local function fetch_conversation(pr, opts, on_done)
 				content_raw = description,
 				created_on = pr.created_on or "",
 				reactions = pr.reactions,
-				can_resolve = false,
 			})
 		end
 		on_done({ comments = comments, events = type(result.events) == "table" and result.events or {} }, nil)
@@ -125,6 +124,8 @@ local function add_reaction(pr, comment, key, on_done)
 	local endpoint
 	if tostring(comment.id) == "__body__" then
 		endpoint = string.format("repos/%s/issues/%s/reactions", repo_slug, tostring(pr.id))
+	elseif comment.inline then
+		endpoint = string.format("repos/%s/pulls/comments/%s/reactions", repo_slug, tostring(comment.id))
 	else
 		endpoint = string.format("repos/%s/issues/comments/%s/reactions", repo_slug, tostring(comment.id))
 	end
@@ -276,7 +277,6 @@ return {
 			fetch_review_context = pullrequests_api.get_review_context,
 			submit_review = comments_api.submit_review,
 			approve = comments_api.approve_review,
-			unapprove = comments_api.unapprove_review,
 			request_changes = comments_api.request_changes_review,
 		},
 		tasks = {

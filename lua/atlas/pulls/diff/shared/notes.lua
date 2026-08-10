@@ -169,19 +169,13 @@ function M.open_at_cursor(session, buf)
 		return
 	end
 	note_popup.open({
-		target = state.target,
 		notes = items,
 		outdated = outdated,
-		notify = function(level, message)
-			notify(session, level, message)
+		on_edit = function(note)
+			M.edit(session, note)
 		end,
-		on_change = function(change)
-			if change.kind == "delete" then
-				remove(state, change.id)
-			elseif change.note then
-				upsert(state, change.note)
-			end
-			session.refresh_ui()
+		on_delete = function(note)
+			M.delete(session, note)
 		end,
 	})
 end

@@ -8,6 +8,7 @@ local box = require("atlas.ui.components.box")
 local table_tree = require("atlas.ui.components.table_tree")
 local statusline = require("atlas.ui.statusline")
 local state = require("atlas.pulls.ui.panel.pr.tabs.overview.state")
+local panel_state = require("atlas.pulls.ui.panel.pr.state")
 local keymaps = require("atlas.pulls.ui.panel.pr.tabs.overview.keymaps")
 
 local PADDING_X = 1
@@ -37,6 +38,11 @@ local function track(handle)
 	end
 end
 
+function M.reset()
+	cancel_all()
+	state.reset()
+end
+
 ---@param pr PullRequest
 ---@param _repo PullsRepo|nil
 ---@param refresh fun()
@@ -51,8 +57,6 @@ function M.on_select(pr, _repo, refresh, opts)
 	local core = provider.capabilities.core
 
 	local force_refresh = opts.force_refresh == true
-	local pr_id = tostring(pr.id or "")
-
 	local can_fetch_reviewers = core.fetch_reviewers ~= nil
 	local can_fetch_description = core.fetch_description ~= nil
 	local can_fetch_merge_checks = core.fetch_merge_checks ~= nil
@@ -67,45 +71,15 @@ function M.on_select(pr, _repo, refresh, opts)
 		cancel_all()
 	end
 
-	local pending = 0
-	local errors = 0
-	if should_fetch_description then
-		pending = pending + 1
-	end
-	if should_fetch_reviewers then
-		pending = pending + 1
-	end
-	if should_fetch_merge_checks then
-		pending = pending + 1
-	end
-
-	if pending > 0 then
-		statusline.notify("loading", string.format("Loading overview for #%s...", pr_id))
-	end
-
-	local function complete(err)
-		if err then
-			errors = errors + 1
-		end
-		pending = pending - 1
-		if pending == 0 then
-			if errors > 0 then
-				statusline.notify("error", string.format("Failed to load overview for #%s", pr_id))
-			else
-				statusline.notify("success", string.format("Overview loaded for #%s", pr_id), 1200)
-			end
-		end
-	end
-
 	if should_fetch_description then
 		state.description = "loading"
 		track(core.fetch_description(pr, opts, function(desc, err)
 			if err then
 				state.description = nil
+				statusline.notify("error", "Failed to load pull request description")
 			else
 				state.description = desc or ""
 			end
-			complete(err)
 			refresh()
 		end))
 	end
@@ -118,7 +92,6 @@ function M.on_select(pr, _repo, refresh, opts)
 			else
 				state.reviewers = reviewers or {}
 			end
-			complete(err)
 			refresh()
 		end))
 	end
@@ -131,7 +104,6 @@ function M.on_select(pr, _repo, refresh, opts)
 			else
 				state.merge_checks = checks or {}
 			end
-			complete(err)
 			refresh()
 		end))
 	end
@@ -313,11 +285,11 @@ end
 ---@param spans table[]
 ---@param line_map table<integer, table>
 local function render_pipelines(_pr, width, lines, spans, line_map)
-	if state.pipelines == nil then
+	if panel_state.pipelines == nil then
 		return
 	end
 
-	if state.pipelines == "loading" then
+	if panel_state.pipelines == "loading" then
 		utils.push(lines, spans, "Pipelines", "AtlasColumnHeader", PADDING_X)
 		local loading_text = spinner.with_text("Loading pipelines...")
 		utils.append_block(
@@ -334,9 +306,9 @@ local function render_pipelines(_pr, width, lines, spans, line_map)
 		return
 	end
 
-	if type(state.pipelines) == "string" then
+	if type(panel_state.pipelines) == "string" then
 		utils.push(lines, spans, "Pipelines", "AtlasColumnHeader", PADDING_X)
-		local err_text = state.pipelines
+		local err_text = panel_state.pipelines
 		utils.append_block(
 			lines,
 			spans,
@@ -351,7 +323,7 @@ local function render_pipelines(_pr, width, lines, spans, line_map)
 		return
 	end
 
-	local entries = state.pipelines
+	local entries = panel_state.pipelines
 
 	if #entries == 0 then
 		return
@@ -680,6 +652,11 @@ function M.on_enter(_pr, entry)
 		vim.ui.open(entry.url)
 		return true
 	end
+end
+
+---@return boolean
+function M.is_loading()
+	return state.any_loading()
 end
 
 function M.activate(buf, refresh)

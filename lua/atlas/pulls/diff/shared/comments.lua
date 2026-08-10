@@ -48,6 +48,24 @@ local function active(session, state)
 	return not session.closing and session.review == state
 end
 
+---@param state AtlasReviewState
+---@return AtlasMarkdownCompletionProvider|nil
+local function comment_completion(state)
+	if not state.provider or not state.pr then
+		return nil
+	end
+	local comments = state.provider.capabilities.comments
+	if not comments or not comments.comment_completion then
+		return nil
+	end
+	return comments.comment_completion({
+		pr = state.pr,
+		comments = state.comments,
+		tasks = state.tasks,
+		review_context = state.review_context,
+	})
+end
+
 ---@param session AtlasReviewSession
 ---@param state AtlasReviewState
 ---@param handle { cancel: fun() }|nil
@@ -73,6 +91,30 @@ local function track(session, state, handle)
 				break
 			end
 		end
+	end
+end
+
+---@param session AtlasReviewSession
+---@param state AtlasReviewState
+---@param start fun(done: fun(...)): { cancel: fun() }|nil
+---@param on_done fun(...)
+local function run_request(session, state, start, on_done)
+	local finished = false
+	local release
+	local function complete(...)
+		if finished then
+			return
+		end
+		finished = true
+		if release then
+			release()
+		end
+		on_done(...)
+	end
+	local handle = start(complete)
+	release = track(session, state, handle)
+	if finished then
+		release()
 	end
 end
 
@@ -359,45 +401,51 @@ local function jump_comment(session, state, buf, direction)
 		return
 	end
 
-	local sides = session.layout == "inline" and { "RIGHT" }
-		or { current_side, current_side == "LEFT" and "RIGHT" or "LEFT" }
+	local sides = session.layout == "inline" and { "RIGHT" } or { "LEFT", "RIGHT" }
 	local current_line = vim.api.nvim_win_get_cursor(0)[1]
 	local locations = {}
-	for side_index, side in ipairs(sides) do
+	for _, side in ipairs(sides) do
 		local path = side == "LEFT" and context.old_path or context.new_path
-		local by_line = visible_threads(session, context, path, side)
-		local lines = vim.tbl_keys(by_line)
-		table.sort(lines)
-		if direction < 0 then
-			local reversed = {}
-			for index = #lines, 1, -1 do
-				table.insert(reversed, lines[index])
+		for line in pairs(visible_threads(session, context, path, side)) do
+			local display_line = line
+			if side ~= current_side then
+				display_line = opposite_line(session, side, line)
 			end
-			lines = reversed
-		end
-		for _, line in ipairs(lines) do
-			if side_index > 1 or (direction > 0 and line > current_line) or (direction < 0 and line < current_line) then
-				table.insert(locations, { side = side, line = line })
-			end
-		end
-	end
-
-	if #locations == 0 then
-		local path = current_side == "LEFT" and context.old_path or context.new_path
-		local by_line = visible_threads(session, context, path, current_side)
-		local lines = vim.tbl_keys(by_line)
-		table.sort(lines)
-		local line = direction > 0 and lines[1] or lines[#lines]
-		if line then
-			table.insert(locations, { side = current_side, line = line })
+			table.insert(locations, { side = side, line = line, display_line = display_line })
 		end
 	end
 	if #locations == 0 then
 		view_notify(session, "info", "No comments in this file")
 		return
 	end
+	table.sort(locations, function(left, right)
+		return left.display_line == right.display_line and left.side < right.side
+			or left.display_line < right.display_line
+	end)
 
-	local target = locations[1]
+	local target = direction > 0 and locations[1] or locations[#locations]
+	if direction > 0 then
+		for _, location in ipairs(locations) do
+			if
+				location.display_line > current_line
+				or (location.display_line == current_line and location.side > current_side)
+			then
+				target = location
+				break
+			end
+		end
+	else
+		for index = #locations, 1, -1 do
+			local location = locations[index]
+			if
+				location.display_line < current_line
+				or (location.display_line == current_line and location.side < current_side)
+			then
+				target = location
+				break
+			end
+		end
+	end
 	local target_win = target.side == "LEFT" and session.left.win or session.right.win
 	if not target_win or not vim.api.nvim_win_is_valid(target_win) then
 		return
@@ -432,30 +480,14 @@ local function action_context(session, state, comment)
 	end
 	local generation = state.generation
 	local items = comment and comment.is_task and state.tasks or state.comments
-	local comments = provider.capabilities.comments
-	local completion = comments
-			and comments.comment_completion
-			and comments.comment_completion({
-				pr = pr,
-				comments = state.comments,
-				tasks = state.tasks,
-				review_context = state.review_context,
-			})
-		or nil
 	return {
 		provider = provider,
 		pr = pr,
 		current_user = state.current_user,
 		items = items,
-		completion = completion,
+		completion = comment_completion(state),
 		active = function()
-			local current_items = comment and comment.is_task and state.tasks or state.comments
-			return active(session, state)
-				and not state.loading
-				and state.generation == generation
-				and state.provider == provider
-				and state.pr == pr
-				and current_items == items
+			return active(session, state) and not state.loading and state.generation == generation
 		end,
 		track = function(handle)
 			return track(session, state, handle)
@@ -473,7 +505,7 @@ end
 ---@param state AtlasReviewState
 ---@param context AtlasReviewActionContext
 ---@param after_refresh (fun())|nil
-local function refresh_review(session, state, context, after_refresh)
+local function refresh_after_action(session, state, context, after_refresh)
 	if not active(session, state) then
 		return
 	end
@@ -499,10 +531,7 @@ local function run_comment_action(session, state, action, comment, after_refresh
 	end
 	local on_done = function(result, err)
 		if result and not err then
-			refresh_review(session, state, context, after_refresh)
-			if require("atlas.pulls.state").provider == context.provider then
-				require("atlas.pulls.ui.main.controller").apply_action_result(context.pr, result)
-			end
+			refresh_after_action(session, state, context, after_refresh)
 		end
 	end
 	local handler = THREAD_ACTIONS[action]
@@ -518,7 +547,9 @@ local function reload_pull_request(session, state)
 		return
 	end
 	local generation = state.generation
-	local handle = provider.capabilities.core.fetch_pullrequest(pr, { force_load = true }, function(updated, err)
+	run_request(session, state, function(done)
+		return provider.capabilities.core.fetch_pullrequest(pr, { force_load = true }, done)
+	end, function(updated, err)
 		if not active(session, state) or state.generation ~= generation then
 			return
 		end
@@ -531,7 +562,6 @@ local function reload_pull_request(session, state)
 		end
 		reload_review(session, state)
 	end)
-	track(session, state, handle)
 end
 
 ---@param session AtlasReviewSession
@@ -694,7 +724,7 @@ local function add_inline_comment(session, state, buf, pending)
 		preview = inline_preview(session, buf),
 	}, function(result, err)
 		if result and not err then
-			refresh_review(session, state, context)
+			refresh_after_action(session, state, context)
 		end
 	end)
 end
@@ -734,14 +764,15 @@ local function register_keymaps(session, state)
 				current_user = state.current_user,
 			}
 		or nil
+	local function after_action(result)
+		if result and result.changed_pr then
+			reload_pull_request(session, state)
+		end
+	end
 	local function run_action(id)
 		local current = action_context(session, state, nil)
 		if current then
-			actions.run(id, current, function(result)
-				if result and result.changed_pr then
-					reload_pull_request(session, state)
-				end
-			end)
+			actions.run(id, current, after_action)
 		end
 	end
 	local submit_review
@@ -749,11 +780,7 @@ local function register_keymaps(session, state)
 		submit_review = function()
 			local current = action_context(session, state, nil)
 			if current then
-				actions.submit_review.run(current, function(result)
-					if result and result.changed_pr then
-						reload_pull_request(session, state)
-					end
-				end)
+				actions.submit_review.run(current, after_action)
 			end
 		end
 	end
@@ -776,11 +803,7 @@ local function register_keymaps(session, state)
 		open_actions = context and function()
 			local current = action_context(session, state, nil)
 			if current then
-				diff_actions.open(current, function(result)
-					if result and result.changed_pr then
-						reload_pull_request(session, state)
-					end
-				end)
+				diff_actions.open(current, after_action)
 			end
 		end or nil,
 		toggle_approval = toggle_approval,
@@ -836,16 +859,7 @@ local function apply_prepared(session, state, context)
 	local initial = context.initial_review
 	state.comments = vim.deepcopy(initial.comments)
 	state.tasks = vim.deepcopy(initial.tasks)
-	local comments = context.provider.capabilities.comments
-	local completion = comments
-			and comments.comment_completion
-			and comments.comment_completion({
-				pr = context.pr,
-				comments = state.comments,
-				tasks = state.tasks,
-				review_context = state.review_context,
-			})
-		or nil
+	local completion = comment_completion(state)
 	if completion and completion.resolve_items then
 		completion.resolve_items()
 	end
@@ -866,17 +880,19 @@ reload_review = function(session, state)
 	state.loading = true
 	session.refresh_ui()
 	view_notify(session, "loading", "Refreshing review...")
-	local handle = require("atlas.pulls.diff.shared.review").load({
-		provider = state.provider,
-		pr = state.pr,
-		current_user = state.current_user,
-		review_context = state.review_context,
-		initial_review = {
-			comments = state.comments,
-			tasks = state.tasks,
-			warnings = {},
-		},
-	}, { force_refresh = true }, function(result)
+	run_request(session, state, function(done)
+		return require("atlas.pulls.diff.shared.review").load({
+			provider = state.provider,
+			pr = state.pr,
+			current_user = state.current_user,
+			review_context = state.review_context,
+			initial_review = {
+				comments = state.comments,
+				tasks = state.tasks,
+				warnings = {},
+			},
+		}, { force_refresh = true }, done)
+	end, function(result)
 		if not active(session, state) or state.generation ~= generation then
 			return
 		end
@@ -886,7 +902,6 @@ reload_review = function(session, state)
 			view_notify(session, "success", "Review refreshed", 1200)
 		end
 	end)
-	track(session, state, handle)
 end
 
 ---@param session AtlasReviewSession
@@ -913,7 +928,6 @@ function M.reload(session)
 		return false
 	end
 	if state.loading then
-		view_notify(session, "info", "Review items are still loading", 1200)
 		return false
 	end
 	if not state.provider or not state.pr then

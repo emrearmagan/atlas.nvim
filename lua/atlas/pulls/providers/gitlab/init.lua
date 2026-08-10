@@ -336,7 +336,6 @@ return {
 			fetch_review_context = mergerequests_api.get_review_context,
 			submit_review = mergerequests_api.submit_review,
 			approve = mergerequests_api.approve_review,
-			unapprove = mergerequests_api.unapprove_review,
 			request_changes = mergerequests_api.request_changes,
 		},
 		repository = {

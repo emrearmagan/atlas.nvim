@@ -79,7 +79,6 @@
 ---@field fetch_review_context (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(context: { authors: PullsAuthor[] }|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field submit_review (fun(pr: PullRequest, body: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field approve (fun(pr: PullRequest, body: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
----@field unapprove (fun(pr: PullRequest, body: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field request_changes (fun(pr: PullRequest, body: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
 
 ---@class PullsTasksCapability
@@ -122,11 +121,10 @@
 ---@field pending boolean|nil              -- add the comment to a pending review
 
 ---@class PullsProviderPanel
----@field header_rows (fun(pr: PullRequest): PullsPanelHeaderRow[])|nil
----@field chips (fun(pr: PullRequest): PullsPanelChip[])|nil
+---@field header_rows (fun(pr: PullRequest, loading: boolean): PullsPanelHeaderRow[])|nil
+---@field chips (fun(pr: PullRequest, loading: boolean): PullsPanelChip[])|nil
 ---@field tabs (fun(): PullsPanelTab[])|nil
----@field fetches (fun(pr: PullRequest, refresh: fun(), opts: { force_refresh: boolean|nil, pr_refreshed: boolean|nil }|nil))|nil
----@field is_loading (fun(pr: PullRequest, active_tab: string|nil): boolean)|nil
+---@field fetch_header (fun(pr: PullRequest, opts: { force_refresh: boolean|nil, pr_refreshed: boolean|nil }|nil, on_done: fun()): { cancel: fun() }|nil)|nil
 
 ---@class PullsProviderPanelKeymaps
 ---@field register fun(buf: integer)
@@ -160,8 +158,10 @@
 ---@class PullsPanelTabModule
 ---@field render fun(pr: PullRequest, width: integer): string[], table[], table<integer, table>|nil
 ---@field on_select (fun(pr: PullRequest, repo: PullsRepo|nil, refresh: fun(), opts: { force_refresh: boolean|nil }|nil))|nil
+---@field reset (fun())|nil
 ---@field activate (fun(buf: integer|nil, refresh: fun()|nil))|nil
 ---@field deactivate (fun(buf: integer|nil))|nil
+---@field is_loading (fun(): boolean)|nil
 ---@field is_selectable_line (fun(lnum: integer, entry: table): boolean)|nil
 ---@field on_enter (fun(pr: PullRequest, entry: table): boolean|nil)|nil
 

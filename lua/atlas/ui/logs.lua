@@ -293,8 +293,4 @@ function M.toggle()
 	M.open()
 end
 
-function M.refresh()
-	refresh_buffer()
-end
-
 return M

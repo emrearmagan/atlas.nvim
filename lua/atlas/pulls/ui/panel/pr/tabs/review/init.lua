@@ -81,6 +81,12 @@ local function cancel_all()
 	in_flight = {}
 end
 
+function M.reset()
+	invalidate()
+	cancel_all()
+	state.reset()
+end
+
 ---@param handle { cancel: fun() }|nil
 ---@return fun()
 local function track(handle)
@@ -129,9 +135,8 @@ end
 ---@param refresh fun()
 ---@param opts { force_refresh: boolean|nil }|nil
 function M.on_select(pr, _repo, refresh, opts)
-	local request_generation = invalidate()
-	cancel_all()
-	state.reset()
+	M.reset()
+	local request_generation = generation
 
 	local provider = get_provider()
 	local comments_capability = provider and provider.capabilities.comments
@@ -265,6 +270,11 @@ function M.show_details(_pr, entry, buf)
 	table.insert(lines, "")
 	table.insert(lines, string.format("by @%s  %s", author_name, utils.relative_time(task.created_on)))
 	require("atlas.ui.popups.info").show({ lines = lines, source_buf = buf })
+end
+
+---@return boolean
+function M.is_loading()
+	return state.any_loading()
 end
 
 function M.activate(buf, refresh)

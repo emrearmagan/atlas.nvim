@@ -37,21 +37,24 @@ end
 
 ---@param session AtlasReviewSession
 ---@param buf integer
-local function open_item(session, buf)
+---@param prompt string
+---@param on_comment fun()
+---@param on_note fun()
+local function with_item_at_cursor(session, buf, prompt, on_comment, on_note)
 	local has_comments = comments.has_at_cursor(session, buf)
 	local has_notes = notes.has_at_cursor(session, buf)
 	if has_comments and has_notes then
-		vim.ui.select({ "Comment thread", "Local notes" }, { prompt = "Open review item:" }, function(choice)
+		vim.ui.select({ "Comment thread", "Local notes" }, { prompt = prompt }, function(choice)
 			if choice == "Comment thread" then
-				comments.open_at_cursor(session, buf)
+				on_comment()
 			elseif choice == "Local notes" then
-				notes.open_at_cursor(session, buf)
+				on_note()
 			end
 		end)
 	elseif has_comments then
-		comments.open_at_cursor(session, buf)
+		on_comment()
 	elseif has_notes then
-		notes.open_at_cursor(session, buf)
+		on_note()
 	else
 		session.review_view.notify("info", "No comment or note at cursor")
 	end
@@ -89,7 +92,11 @@ function M.groups(session, actions, buf, opts)
 
 	if include_actions and content then
 		add(review, "ui.show_details", "Open comment or note", 20, function()
-			open_item(session, buf)
+			with_item_at_cursor(session, buf, "Open review item:", function()
+				comments.open_at_cursor(session, buf)
+			end, function()
+				notes.open_at_cursor(session, buf)
+			end)
 		end)
 		add(review, "pulls.review.diff.toggle_resolved", "Toggle resolved", 21, function()
 			actions.toggle_resolved(buf)
@@ -101,9 +108,11 @@ function M.groups(session, actions, buf, opts)
 			actions.add_comment_at_cursor(buf, false)
 		end)
 		add(review, "pulls.review.diff.delete", "Delete comment or note at cursor", 32, function()
-			if not notes.delete_at_cursor(session, buf) then
+			with_item_at_cursor(session, buf, "Delete review item:", function()
 				actions.delete_comment(buf)
-			end
+			end, function()
+				notes.delete_at_cursor(session, buf)
+			end)
 		end)
 		if new_side then
 			add(review, "pulls.review.diff.add_note", "Add local note", 33, function()
@@ -144,16 +153,6 @@ function M.groups(session, actions, buf, opts)
 	return groups
 end
 
----@param action AtlasKeymapActionId
----@return string|string[]|nil
-local function keys(action)
-	local resolved = resolver.resolve(action)
-	if not resolved then
-		return nil
-	end
-	return #resolved == 1 and resolved[1] or resolved
-end
-
 ---@param active fun(): boolean
 ---@param callback fun()
 ---@return fun()
@@ -189,7 +188,7 @@ local function map_buffer(session, actions, buf, reload)
 			})
 		end
 		for _, definition in ipairs(group.items) do
-			local key = keys(definition.action)
+			local key = resolver.resolve(definition.action)
 			if key then
 				table.insert(items, {
 					key = key,

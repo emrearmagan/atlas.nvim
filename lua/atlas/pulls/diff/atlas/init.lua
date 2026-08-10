@@ -358,7 +358,7 @@ local function open_commits_panel(session)
 	end)
 	session.commits_panel.win = commits_win
 	vim.api.nvim_win_set_buf(commits_win, session.commits_panel.buf)
-	explorer.configure_window(session, commits_win)
+	explorer.configure_window(commits_win)
 	vim.wo[commits_win].winfixheight = true
 	commits.render(session)
 end
@@ -648,7 +648,7 @@ local function toggle_panel(session)
 		return
 	end
 	session.panel.win = split_window(anchor_win, session.panel.buf, "left", explorer.width(session))
-	explorer.configure_window(session, session.panel.win)
+	explorer.configure_window(session.panel.win)
 	render_explorer(session)
 	open_commits_panel(session)
 end
@@ -891,7 +891,6 @@ local function create_session(open_options, options)
 			statusline.attach(session.review_panel.win)
 		end
 		register_keymaps(session)
-		review_panel.register_keymaps(session.review_panel)
 		local focus_win = options.explorer.initial_focus == "explorer" and panel_win or nil
 		vim.api.nvim_set_current_win(focus_win or right_win)
 	end)
@@ -955,6 +954,7 @@ local function initialize_session(session)
 			notes.attach(session, review)
 			comments.attach(session, review)
 		end
+		review_panel.register_keymaps(session.review_panel)
 
 		focus_first_hunk(session)
 		statusline.update(session)
