@@ -460,6 +460,7 @@ return {
 			fetch_reviewers = pullrequests_api.fetch_reviewers,
 			update_reviewers = pullrequests_api.update_reviewers,
 			update_title = pullrequests_api.update_title,
+			update_description = pullrequests_api.update_description,
 			set_draft = pullrequests_api.set_draft,
 			fetch_diffstat = pullrequests_api.fetch_diffstat,
 			fetch_activity = pullrequests_api.fetch_activity,

@@ -311,6 +311,7 @@ return {
 			fetch_reviewers = mergerequests_api.get_reviewers,
 			update_reviewers = mergerequests_api.update_reviewers,
 			update_title = mergerequests_api.set_title,
+			update_description = mergerequests_api.set_description,
 			set_draft = mergerequests_api.set_draft,
 			fetch_description = mergerequests_api.get_description,
 			fetch_default_reviewers = mergerequests_api.fetch_default_reviewers,

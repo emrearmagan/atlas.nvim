@@ -315,6 +315,21 @@ function M.set_title(pr, title, on_done)
 end
 
 ---@param pr PullRequest
+---@param description string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.set_description(pr, description, on_done)
+	return M.update_mr(pr, { description = description }, function(updated, err)
+		if err then
+			on_done(false, err)
+			return
+		end
+		pr.description = updated and updated.description or description
+		on_done(true, nil)
+	end)
+end
+
+---@param pr PullRequest
 ---@param draft boolean
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
