@@ -22,8 +22,7 @@ local THREAD_ACTIONS = {
 local reload_review
 
 ---@class AtlasReviewState
----@field comments PullsComment[]
----@field tasks PullsComment[]
+---@field data PullsReviewData
 ---@field expanded_threads table<string, boolean>
 ---@field request_handles { cancel: fun() }[]
 ---@field provider PullsProvider|nil
@@ -60,8 +59,8 @@ local function comment_completion(state)
 	end
 	return comments.comment_completion({
 		pr = state.pr,
-		comments = state.comments,
-		tasks = state.tasks,
+		comments = state.data.comments,
+		tasks = state.data.tasks,
 		review_context = state.review_context,
 	})
 end
@@ -147,7 +146,7 @@ local function render_context(session, state)
 	end
 	local comments = state.provider and state.provider.capabilities.comments
 	return {
-		threads = review_threads.group_comments(state.comments, state.tasks),
+		threads = review_threads.group_comments(state.data.comments, state.data.tasks),
 		expanded_threads = state.expanded_threads,
 		old_path = document.old.path,
 		new_path = document.new.path,
@@ -208,7 +207,7 @@ end
 ---@return table<string, boolean>
 function M.annotated_paths(state)
 	local paths = {}
-	for _, comment in ipairs((state and state.comments) or {}) do
+	for _, comment in ipairs((state and state.data.comments) or {}) do
 		local inline = comment.inline
 		if inline then
 			paths[inline.path] = true
@@ -479,12 +478,13 @@ local function action_context(session, state, comment)
 		return nil
 	end
 	local generation = state.generation
-	local items = comment and comment.is_task and state.tasks or state.comments
+	local items = comment and comment.is_task and state.data.tasks or state.data.comments
 	return {
 		provider = provider,
 		pr = pr,
 		current_user = state.current_user,
 		items = items,
+		data = state.data,
 		completion = comment_completion(state),
 		active = function()
 			return active(session, state) and not state.loading and state.generation == generation
@@ -646,7 +646,7 @@ local function open_thread(session, state, buf)
 								return
 							end
 							local updated = {}
-							for _, node in ipairs(review_threads.group_comments(state.comments, state.tasks)) do
+							for _, node in ipairs(review_threads.group_comments(state.data.comments, state.data.tasks)) do
 								if root_keys[review_threads.comment_key(node.comment)] then
 									table.insert(updated, node)
 								end
@@ -756,17 +756,17 @@ local function register_keymaps(session, state)
 			toggle_task_at_cursor(session, state)
 		end
 	end
-	local context = state.provider
-			and state.pr
-			and {
-				provider = state.provider,
-				pr = state.pr,
-				current_user = state.current_user,
-			}
-		or nil
+	local context = action_context(session, state, nil)
+	local reviews = state.provider and state.provider.capabilities.reviews
+	local reviewable = state.pr and (state.pr.state == "open" or state.pr.state == "draft")
 	local function after_action(result)
-		if result and result.changed_pr then
+		if not result then
+			return
+		end
+		if result.changed_pr then
 			reload_pull_request(session, state)
+		else
+			session.refresh_ui()
 		end
 	end
 	local function run_action(id)
@@ -775,25 +775,39 @@ local function register_keymaps(session, state)
 			actions.run(id, current, after_action)
 		end
 	end
-	local submit_review
-	if context then
-		submit_review = function()
+	local function review_action()
+		if not state.data.review.pending then
 			local current = action_context(session, state, nil)
-			if current then
-				actions.submit_review.run(current, after_action)
+			if current and reviews and reviews.start_review then
+				actions.start_review.run(current, after_action)
 			end
+			return
+		end
+		local current = action_context(session, state, nil)
+		if current and reviews and reviews.submit_review then
+			actions.submit_review.run(current, after_action)
+		elseif current then
+			actions.run("open_in_browser", current)
 		end
 	end
 	local toggle_approval
 	if context and actions.is_available("toggle_approval", context) then
 		toggle_approval = function()
-			run_action("toggle_approval")
+			if state.data.review.pending and reviews and not reviews.submit_review then
+				run_action("open_in_browser")
+			else
+				run_action("toggle_approval")
+			end
 		end
 	end
 	local request_changes
 	if context and actions.is_available("request_changes", context) then
 		request_changes = function()
-			run_action("request_changes")
+			if state.data.review.pending and reviews and not reviews.submit_review then
+				run_action("open_in_browser")
+			else
+				run_action("request_changes")
+			end
 		end
 	end
 	session.review_view.register_keymaps({
@@ -803,12 +817,21 @@ local function register_keymaps(session, state)
 		open_actions = context and function()
 			local current = action_context(session, state, nil)
 			if current then
-				diff_actions.open(current, after_action)
+				diff_actions.open(current, {
+					finish_review = function()
+						actions.run("open_in_browser", current)
+					end,
+					on_done = after_action,
+				})
 			end
 		end or nil,
 		toggle_approval = toggle_approval,
 		request_changes = request_changes,
-		submit_review = submit_review,
+		review_action = context
+				and reviewable
+				and (state.data.review.pending or (reviews and reviews.start_review))
+				and review_action
+			or nil,
 		toggle_task = toggle_task,
 		toggle_resolved = function(buf)
 			toggle_resolved_at_cursor(session, state, buf)
@@ -857,8 +880,11 @@ local function apply_prepared(session, state, context)
 	state.provider = context.provider
 	state.pr = context.pr
 	local initial = context.initial_review
-	state.comments = vim.deepcopy(initial.comments)
-	state.tasks = vim.deepcopy(initial.tasks)
+	state.data = {
+		review = vim.deepcopy(initial.review),
+		comments = vim.deepcopy(initial.comments),
+		tasks = vim.deepcopy(initial.tasks),
+	}
 	local completion = comment_completion(state)
 	if completion and completion.resolve_items then
 		completion.resolve_items()
@@ -887,8 +913,9 @@ reload_review = function(session, state)
 			current_user = state.current_user,
 			review_context = state.review_context,
 			initial_review = {
-				comments = state.comments,
-				tasks = state.tasks,
+				review = state.data.review,
+				comments = state.data.comments,
+				tasks = state.data.tasks,
 				warnings = {},
 			},
 		}, { force_refresh = true }, done)
@@ -946,8 +973,7 @@ function M.attach(session, context)
 	end
 	---@type AtlasReviewState
 	local state = {
-		comments = {},
-		tasks = {},
+		data = { review = { pending = false }, comments = {}, tasks = {} },
 		expanded_threads = {},
 		request_handles = {},
 		provider = nil,

@@ -225,7 +225,7 @@ local function refresh_ui(session)
 	local review = session.review
 	local note_state = session.notes
 	review_panel.render(session.review_panel, {
-		comments = review and review.comments or {},
+		comments = review and review.data.comments or {},
 		notes = note_state and note_state.items or {},
 		note_target = note_state and note_state.target or nil,
 	})
@@ -515,8 +515,9 @@ end
 
 ---@param session AtlasNativeDiffSession
 ---@param index integer
+---@param direction 1|-1
 ---@return integer|nil
-local function next_unreviewed_file(session, index)
+local function unreviewed_file(session, index, direction)
 	local order = explorer.ordered_indices(session)
 	local order_position = 1
 	for current, ordered_index in ipairs(order) do
@@ -526,7 +527,7 @@ local function next_unreviewed_file(session, index)
 		end
 	end
 	for offset = 1, #order - 1 do
-		local candidate = order[((order_position - 1 + offset) % #order) + 1]
+		local candidate = order[((order_position - 1 + direction * offset) % #order) + 1]
 		if not session.reviewed_files[session.files[candidate].path] then
 			return candidate
 		end
@@ -546,7 +547,7 @@ local function toggle_file_reviewed(session)
 		return
 	end
 	local reviewed = not session.reviewed_files[file.path]
-	local next_index = reviewed and next_unreviewed_file(session, index) or nil
+	local next_index = reviewed and unreviewed_file(session, index, 1) or nil
 	session.reviewed_files[file.path] = reviewed
 	if reviewed then
 		if next_index then
@@ -560,6 +561,22 @@ local function toggle_file_reviewed(session)
 	end
 	render_explorer(session)
 	local line = explorer.line_for_file(session, index)
+	if line and session.panel.win and vim.api.nvim_win_is_valid(session.panel.win) then
+		vim.api.nvim_win_set_cursor(session.panel.win, { line, 0 })
+	end
+end
+
+---@param session AtlasNativeDiffSession
+---@param direction 1|-1
+local function navigate_unreviewed_file(session, direction)
+	local index = explorer.file_at_cursor(session) or session.selected_index
+	local target = unreviewed_file(session, index, direction)
+	if not target then
+		statusline.notify(session, "info", "No other unreviewed files")
+		return
+	end
+	select_file(session, target)
+	local line = explorer.line_for_file(session, target)
 	if line and session.panel.win and vim.api.nvim_win_is_valid(session.panel.win) then
 		vim.api.nvim_win_set_cursor(session.panel.win, { line, 0 })
 	end
@@ -720,6 +737,9 @@ local function register_keymaps(session)
 		end,
 		navigate_file = function(direction)
 			navigate_file(session, direction)
+		end,
+		navigate_unreviewed_file = function(direction)
+			navigate_unreviewed_file(session, direction)
 		end,
 		toggle_file_reviewed = function()
 			toggle_file_reviewed(session)

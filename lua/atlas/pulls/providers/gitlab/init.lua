@@ -325,7 +325,6 @@ return {
 			reaction_options = require("atlas.ui.shared.emojis").gitlab(),
 			comment_completion = require("atlas.pulls.providers.gitlab.completion.author").build_completion,
 			fetch_conversation = fetch_conversation,
-			fetch_review_comments = comments_api.fetch_comments,
 			add_comment = comments_api.add_comment,
 			edit_comment = comments_api.edit_comment,
 			delete_comment = comments_api.delete_comment,
@@ -333,10 +332,12 @@ return {
 			set_thread_resolved = comments_api.set_thread_resolved,
 		},
 		reviews = {
+			fetch = comments_api.fetch_review,
 			fetch_review_context = mergerequests_api.get_review_context,
 			submit_review = mergerequests_api.submit_review,
 			approve = mergerequests_api.approve_review,
 			request_changes = mergerequests_api.request_changes,
+			discard_review = comments_api.discard_review,
 		},
 		repository = {
 			fetch_details = repositories_api.fetch_detail,

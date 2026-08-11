@@ -521,7 +521,7 @@ function M.render(session, annotated_paths)
 		add_section("Reviewed", reviewed, true)
 	end
 
-	local tasks = (session.review and session.review.tasks) or {}
+	local tasks = (session.review and session.review.data.tasks) or {}
 	if #tasks > 0 then
 		add_header(string.format("%s (%d)", task_label(tasks[1], true), #tasks), true)
 		for _, task in ipairs(tasks) do

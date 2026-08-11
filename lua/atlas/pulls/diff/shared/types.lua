@@ -31,7 +31,7 @@
 ---@field open_actions (fun())|nil
 ---@field toggle_approval (fun())|nil
 ---@field request_changes (fun())|nil
----@field submit_review (fun())|nil
+---@field review_action (fun())|nil
 ---@field toggle_task (fun())|nil
 ---@field toggle_resolved fun(buf: integer)
 ---@field add_comment_at_cursor fun(buf: integer, pending: boolean)

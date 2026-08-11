@@ -85,7 +85,6 @@ local function load_comments(pr, opts, on_done)
 	local pending = 2
 	local discussions_result, drafts_result
 	local first_err
-	local drafts_failed = false
 	local handles = {}
 	local cancelled = false
 
@@ -128,9 +127,7 @@ local function load_comments(pr, opts, on_done)
 			local comment = inherit_thread_context(mapper.to_draft_comment(draft, root and root.id or nil), root)
 			table.insert(result, comment)
 		end
-		if not drafts_failed then
-			service.set_memory_cache(cache_key, result)
-		end
+		service.set_memory_cache(cache_key, result)
 		on_done(result, nil)
 	end
 
@@ -160,8 +157,7 @@ local function load_comments(pr, opts, on_done)
 	end))
 	track(service.fetch_all_pages(drafts_ep, function(result, err)
 		if err then
-			drafts_failed = true
-			drafts_result = {}
+			first_err = first_err or err
 		else
 			drafts_result = result
 		end
@@ -177,11 +173,16 @@ local function load_comments(pr, opts, on_done)
 	}
 end
 
+local function bust_caches(path, iid)
+	service.delete_memory_cache(string.format("gitlab_pulls:comments:%s!%d", path, iid))
+	service.delete_memory_cache(string.format("gitlab_pulls:activity:%s!%d", path, iid))
+end
+
 ---@param pr PullRequest
 ---@param opts { force_refresh: boolean|nil }|nil
----@param on_done fun(comments: PullsComment[]|nil, err: string|nil)
+---@param on_done fun(data: PullsReviewData|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_comments(pr, opts, on_done)
+function M.fetch_review(pr, opts, on_done)
 	local load_handle, diff_handle
 	local cancelled = false
 	load_handle = load_comments(pr, opts, function(result, err)
@@ -195,7 +196,9 @@ function M.fetch_comments(pr, opts, on_done)
 			end
 			local files_by_path = index_files(files or {})
 			local comments = {}
+			local pending_review = false
 			for _, comment in ipairs(result) do
+				pending_review = pending_review or comment.state == "PENDING"
 				if comment.inline then
 					local side = comment.inline.to ~= nil and "new" or "old"
 					local line = comment.inline.to or comment.inline.from
@@ -205,7 +208,11 @@ function M.fetch_comments(pr, opts, on_done)
 					table.insert(comments, comment)
 				end
 			end
-			on_done(comments, nil)
+			on_done({
+				review = { id = nil, commit_hash = nil, pending = pending_review },
+				comments = comments,
+				tasks = {},
+			}, nil)
 		end)
 	end)
 	return {
@@ -216,6 +223,56 @@ function M.fetch_comments(pr, opts, on_done)
 			end
 			if diff_handle then
 				diff_handle.cancel()
+			end
+		end,
+	}
+end
+
+---@param pr PullRequest
+---@param _review PullsReview
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.discard_review(pr, _review, on_done)
+	local path, iid = project_iid(pr)
+	if path == "" or iid == nil then
+		on_done(false, "Invalid MR identifier")
+		return nil
+	end
+
+	local prefix = string.format("/projects/%s/merge_requests/%d/draft_notes", service.url_encode(path), iid)
+	local current
+	local cancelled = false
+	local function delete_next(drafts, index)
+		if cancelled then
+			return
+		end
+		local draft = drafts[index]
+		if draft == nil then
+			bust_caches(path, iid)
+			on_done(true, nil)
+			return
+		end
+		current = service.request("DELETE", prefix .. "/" .. tostring(draft.id), nil, function(_, err)
+			if err then
+				on_done(false, err)
+				return
+			end
+			delete_next(drafts, index + 1)
+		end)
+	end
+
+	current = service.fetch_all_pages(prefix .. "?per_page=100", function(drafts, err)
+		if err then
+			on_done(false, err)
+			return
+		end
+		delete_next(drafts or {}, 1)
+	end)
+	return {
+		cancel = function()
+			cancelled = true
+			if current then
+				current.cancel()
 			end
 		end,
 	}
@@ -239,11 +296,6 @@ function M.fetch_general_comments(pr, opts, on_done)
 		end
 		on_done(general, nil)
 	end)
-end
-
-local function bust_caches(path, iid)
-	service.delete_memory_cache(string.format("gitlab_pulls:comments:%s!%d", path, iid))
-	service.delete_memory_cache(string.format("gitlab_pulls:activity:%s!%d", path, iid))
 end
 
 ---@param pr PullRequest

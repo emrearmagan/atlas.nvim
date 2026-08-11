@@ -171,10 +171,11 @@ function M.setup(buf, refresh)
 			opts = { nowait = true, silent = true },
 			callback = function()
 				local state = require("atlas.pulls.ui.panel.pr.tabs.review.state")
-				local comments = state.comments
-				if type(comments) ~= "table" then
+				local data = state.data
+				if not data then
 					return
 				end
+				local comments = data.comments
 				local keys = {}
 				local seen = {}
 				for _, comment in ipairs(comments) do

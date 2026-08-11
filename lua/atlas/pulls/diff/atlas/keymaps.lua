@@ -44,6 +44,7 @@ end
 ---@field reload fun()
 ---@field navigate_hunk fun(direction: 1|-1)
 ---@field navigate_file fun(direction: 1|-1)
+---@field navigate_unreviewed_file fun(direction: 1|-1)
 ---@field toggle_file_reviewed fun()
 ---@field toggle_panel fun()
 ---@field toggle_commits fun()
@@ -66,6 +67,28 @@ function M.register(session, actions)
 			index = 1,
 			callback = run(function()
 				actions.navigate_hunk(-1)
+			end),
+			opts = { silent = true, nowait = true },
+		})
+	)
+	add(
+		navigation,
+		item("pulls.review.explorer.previous_unreviewed_file", {
+			desc = "Previous unreviewed file",
+			index = 5,
+			callback = run(function()
+				actions.navigate_unreviewed_file(-1)
+			end),
+			opts = { silent = true, nowait = true },
+		})
+	)
+	add(
+		navigation,
+		item("pulls.review.explorer.next_unreviewed_file", {
+			desc = "Next unreviewed file",
+			index = 6,
+			callback = run(function()
+				actions.navigate_unreviewed_file(1)
 			end),
 			opts = { silent = true, nowait = true },
 		})

@@ -331,8 +331,10 @@ M.checkout = {
 M.copy_id = utils.copy_id
 M.copy_url = utils.copy_url
 M.open_in_browser = utils.open_in_browser
+M.start_review = review.start_review
 M.submit_review = review.submit_review
 M.approve = review.approve
 M.request_changes = review.request_changes
+M.discard_review = review.discard_review
 
 return M

@@ -479,18 +479,20 @@ function M.approve(pr, on_done)
 end
 
 ---@param pr PullRequest
+---@param _review PullsReview|nil
 ---@param body string
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.submit_review(pr, body, on_done)
+function M.submit_review(pr, _review, body, on_done)
 	return comments_api.publish_review(pr, "reviewed", body, on_done)
 end
 
 ---@param pr PullRequest
+---@param _review PullsReview|nil
 ---@param body string
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }
-function M.approve_review(pr, body, on_done)
+function M.approve_review(pr, _review, body, on_done)
 	local cancelled = false
 	local current
 	current = comments_api.publish_review(pr, "reviewed", body, function(ok, err)
@@ -514,10 +516,11 @@ function M.approve_review(pr, body, on_done)
 end
 
 ---@param pr PullRequest
+---@param _review PullsReview|nil
 ---@param body string
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.request_changes(pr, body, on_done)
+function M.request_changes(pr, _review, body, on_done)
 	return comments_api.publish_review(pr, "requested_changes", body, on_done)
 end
 

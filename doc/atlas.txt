@@ -744,6 +744,8 @@ Defaults live under `keymaps` in `setup()`. Each entry accepts:
             open_file             = "l",
             next_file             = { "]f", "<Tab>" },
             previous_file         = { "[f", "<S-Tab>" },
+            next_unreviewed_file      = "]u",
+            previous_unreviewed_file  = "[u",
             toggle_grouping       = "T",
             toggle_file_reviewed  = "-",
             toggle_commits        = "gC",

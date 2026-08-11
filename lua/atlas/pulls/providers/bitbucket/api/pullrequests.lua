@@ -2,6 +2,7 @@ local M = {}
 
 local service = require("atlas.pulls.providers.bitbucket.api.service")
 local mapper = require("atlas.pulls.providers.bitbucket.api.mapper")
+local comments = require("atlas.pulls.providers.bitbucket.api.comments")
 local cache = require("atlas.core.cache")
 local logger = require("atlas.core.logger")
 local state = require("atlas.pulls.providers.bitbucket.state")
@@ -361,17 +362,18 @@ function M.request_changes(pr, on_done)
 end
 
 ---@param pr PullRequest
+---@param _review PullsReview|nil
 ---@param body string
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.submit_review(pr, body, on_done)
-	--TODO: How to resolve those pending comments tho ?
+function M.submit_review(pr, _review, body, on_done)
+	-- TODO: How to resolve those pending comments?
 	if vim.trim(body) == "" then
 		on_done(false, "Review comment cannot be empty")
 		return nil
 	end
 
-	return require("atlas.pulls.providers.bitbucket.api.comments").add_comment(pr, body, nil, function(comment, err)
+	return comments.add_comment(pr, body, nil, function(comment, err)
 		if err or not comment then
 			on_done(false, err or "Bitbucket did not return the review comment")
 			return
@@ -396,7 +398,7 @@ local function review_action(pr, body, action, on_done)
 			on_done(err == nil, err)
 			return
 		end
-		current = M.submit_review(pr, body, on_done)
+		current = M.submit_review(pr, nil, body, on_done)
 	end)
 	return {
 		cancel = function()
@@ -409,18 +411,20 @@ local function review_action(pr, body, action, on_done)
 end
 
 ---@param pr PullRequest
+---@param _review PullsReview|nil
 ---@param body string
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }
-function M.approve_review(pr, body, on_done)
+function M.approve_review(pr, _review, body, on_done)
 	return review_action(pr, body, M.approve, on_done)
 end
 
 ---@param pr PullRequest
+---@param _review PullsReview|nil
 ---@param body string
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }
-function M.request_changes_review(pr, body, on_done)
+function M.request_changes_review(pr, _review, body, on_done)
 	return review_action(pr, body, M.request_changes, on_done)
 end
 

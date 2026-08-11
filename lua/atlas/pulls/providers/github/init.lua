@@ -266,7 +266,6 @@ return {
 			reaction_options = require("atlas.ui.shared.emojis").github(),
 			comment_completion = require("atlas.pulls.providers.github.completion.author").build_completion,
 			fetch_conversation = fetch_conversation,
-			fetch_review_comments = comments_api.fetch_comments,
 			add_comment = comments_api.add_comment,
 			edit_comment = comments_api.edit_comment,
 			delete_comment = comments_api.delete_comment,
@@ -274,13 +273,13 @@ return {
 			set_thread_resolved = comments_api.set_thread_resolved,
 		},
 		reviews = {
+			fetch = comments_api.fetch_review,
 			fetch_review_context = pullrequests_api.get_review_context,
+			start_review = comments_api.start_review,
 			submit_review = comments_api.submit_review,
 			approve = comments_api.approve_review,
 			request_changes = comments_api.request_changes_review,
-		},
-		tasks = {
-			fetch_tasks = comments_api.fetch_tasks,
+			discard_review = comments_api.discard_review,
 		},
 		repository = {
 			fetch_details = repositories_api.fetch_detail,

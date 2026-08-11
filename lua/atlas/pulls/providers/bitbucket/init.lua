@@ -225,6 +225,31 @@ local function fetch_commit_status(commit, opts, on_done)
 	return pipelines_api.fetch_commit_status(statuses_url, opts, on_done)
 end
 
+---@param pr PullRequest
+---@param opts { force_refresh: boolean|nil }|nil
+---@param on_done fun(tasks: PullsComment[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+local function fetch_tasks(pr, opts, on_done)
+	opts = opts or {}
+	return comments_api.fetch_tasks(
+		tostring(pr.workspace or ""),
+		tostring(pr.repo or ""),
+		pr.id,
+		{ force_refresh = opts.force_refresh == true },
+		function(tasks, err)
+			if err then
+				on_done(nil, err)
+				return
+			end
+			tasks = tasks or {}
+			table.sort(tasks, function(a, b)
+				return tostring(a.created_on or "") < tostring(b.created_on or "")
+			end)
+			on_done(tasks, nil)
+		end
+	)
+end
+
 ---@param comment PullsComment
 ---@param files DiffFile[]|nil
 local function attach_hunk(comment, files)
@@ -249,18 +274,26 @@ end
 
 ---@param pr PullRequest
 ---@param opts { force_refresh: boolean|nil }|nil
----@param on_done fun(comments: PullsComment[]|nil, err: string|nil)
+---@param on_done fun(data: PullsReviewData|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-local function fetch_comments(pr, opts, on_done)
+local function fetch_review(pr, opts, on_done)
 	opts = opts or {}
-	local comments_result, diff_result, comments_err
+	local comments_result, diff_result, tasks_result
+	local review_err
+	local pending = 3
 	local handles = {}
 	local cancelled = false
 
 	local function finish()
-		if cancelled or comments_result == nil or diff_result == nil then
+		pending = pending - 1
+		if cancelled or pending > 0 then
 			return
 		end
+		if review_err then
+			on_done(nil, review_err)
+			return
+		end
+
 		local comments = {}
 		for _, comment in ipairs(comments_result) do
 			if comment.inline then
@@ -268,28 +301,47 @@ local function fetch_comments(pr, opts, on_done)
 				table.insert(comments, comment)
 			end
 		end
-		on_done(comments, comments_err)
+		local pending_review = false
+		for _, items in ipairs({ comments_result, tasks_result }) do
+			for _, item in ipairs(items) do
+				-- Bitbucket only exposes pending items to their author.
+				if item.state == "PENDING" then
+					pending_review = true
+					break
+				end
+			end
+		end
+		on_done({
+			review = { id = nil, commit_hash = nil, pending = pending_review },
+			comments = comments,
+			tasks = tasks_result,
+		}, nil)
 	end
 
 	local comments_handle = comments_api.fetch_comments(pr, opts, function(comments, err)
-		comments_err = err
-		comments_result = err and {} or (comments or {})
+		review_err = review_err or err
+		comments_result = comments or {}
 		finish()
 	end)
 	if comments_handle then
 		table.insert(handles, comments_handle)
 	end
 
-	local diff_handle = pullrequests_api.fetch_diff(
-		pr,
-		{ force_refresh = opts.force_refresh == true },
-		function(files, err)
-			diff_result = err and {} or (files or {})
-			finish()
-		end
-	)
+	local diff_handle = pullrequests_api.fetch_diff(pr, { force_refresh = opts.force_refresh == true }, function(files)
+		diff_result = files or {}
+		finish()
+	end)
 	if diff_handle then
 		table.insert(handles, diff_handle)
+	end
+
+	local tasks_handle = fetch_tasks(pr, opts, function(tasks, err)
+		review_err = review_err or err
+		tasks_result = tasks or {}
+		finish()
+	end)
+	if tasks_handle then
+		table.insert(handles, tasks_handle)
 	end
 
 	return {
@@ -348,31 +400,6 @@ local function fetch_conversation(pr, opts, on_done)
 			end
 		end,
 	}
-end
-
----@param pr PullRequest
----@param opts { force_refresh: boolean|nil }|nil
----@param on_done fun(tasks: PullsComment[]|nil, err: string|nil)
----@return { cancel: fun() }|nil
-local function fetch_tasks(pr, opts, on_done)
-	opts = opts or {}
-	return comments_api.fetch_tasks(
-		tostring(pr.workspace or ""),
-		tostring(pr.repo or ""),
-		pr.id,
-		{ force_refresh = opts.force_refresh == true },
-		function(tasks, err)
-			if err then
-				on_done(nil, err)
-				return
-			end
-			tasks = tasks or {}
-			table.sort(tasks, function(a, b)
-				return tostring(a.created_on or "") < tostring(b.created_on or "")
-			end)
-			on_done(tasks, nil)
-		end
-	)
 end
 
 ---@param pr PullRequest
@@ -437,6 +464,95 @@ local function delete_task(task, on_done)
 end
 
 ---@param pr PullRequest
+---@param _review PullsReview
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }
+local function discard_review(pr, _review, on_done)
+	local comments, tasks
+	local pending = 2
+	local first_err
+	local handles = {}
+	local current
+	local cancelled = false
+
+	local function delete_next(items, index)
+		if cancelled then
+			return
+		end
+		local item = items[index]
+		if item == nil then
+			on_done(true, nil)
+			return
+		end
+		local callback = function(_, err)
+			if err then
+				on_done(false, err)
+				return
+			end
+			delete_next(items, index + 1)
+		end
+		if item.is_task then
+			current = delete_task(item, callback)
+		else
+			current = comments_api.delete_comment(pr, item, callback)
+		end
+	end
+
+	local function finish()
+		pending = pending - 1
+		if cancelled or pending > 0 then
+			return
+		end
+		if first_err then
+			on_done(false, first_err)
+			return
+		end
+
+		local items = {}
+		for _, task in ipairs(tasks) do
+			if task.state == "PENDING" then
+				table.insert(items, task)
+			end
+		end
+		for index = #comments, 1, -1 do
+			local comment = comments[index]
+			if comment.state == "PENDING" then
+				table.insert(items, comment)
+			end
+		end
+		delete_next(items, 1)
+	end
+
+	local function track(handle)
+		if handle then
+			table.insert(handles, handle)
+		end
+	end
+
+	track(comments_api.fetch_comments(pr, { force_refresh = true }, function(result, err)
+		first_err = first_err or err
+		comments = result or {}
+		finish()
+	end))
+	track(fetch_tasks(pr, { force_refresh = true }, function(result, err)
+		first_err = first_err or err
+		tasks = result or {}
+		finish()
+	end))
+	return {
+		cancel = function()
+			cancelled = true
+			for _, handle in ipairs(handles) do
+				handle.cancel()
+			end
+			if current then
+				current.cancel()
+			end
+		end,
+	}
+end
+
+---@param pr PullRequest
 ---@param root PullsComment
 ---@param resolved boolean
 ---@param on_done fun(ok: boolean, err: string|nil)
@@ -470,20 +586,20 @@ return {
 		comments = {
 			comment_completion = require("atlas.pulls.providers.bitbucket.completion.author").build_completion,
 			fetch_conversation = fetch_conversation,
-			fetch_review_comments = fetch_comments,
 			add_comment = comments_api.add_comment,
 			edit_comment = comments_api.edit_comment,
 			delete_comment = comments_api.delete_comment,
 			set_thread_resolved = set_thread_resolved,
 		},
 		reviews = {
+			fetch = fetch_review,
 			fetch_review_context = pullrequests_api.fetch_review_context,
 			submit_review = pullrequests_api.submit_review,
 			approve = pullrequests_api.approve_review,
 			request_changes = pullrequests_api.request_changes_review,
+			discard_review = discard_review,
 		},
 		tasks = {
-			fetch_tasks = fetch_tasks,
 			add_task = add_task,
 			edit_task = edit_task,
 			delete_task = delete_task,

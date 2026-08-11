@@ -32,6 +32,8 @@ local M = {}
 ---@field open_file? AtlasKeymapValue
 ---@field next_file? AtlasKeymapValue
 ---@field previous_file? AtlasKeymapValue
+---@field next_unreviewed_file? AtlasKeymapValue
+---@field previous_unreviewed_file? AtlasKeymapValue
 ---@field toggle_grouping? AtlasKeymapValue
 ---@field toggle_file_reviewed? AtlasKeymapValue
 ---@field toggle_commits? AtlasKeymapValue
@@ -121,6 +123,8 @@ local M = {}
 ---| "pulls.review.explorer.open_file"
 ---| "pulls.review.explorer.next_file"
 ---| "pulls.review.explorer.previous_file"
+---| "pulls.review.explorer.next_unreviewed_file"
+---| "pulls.review.explorer.previous_unreviewed_file"
 ---| "pulls.review.explorer.toggle_grouping"
 ---| "pulls.review.explorer.toggle_file_reviewed"
 ---| "pulls.review.explorer.toggle_commits"
@@ -338,6 +342,8 @@ function M.validate()
 			"pulls.review.explorer.open_file",
 			"pulls.review.explorer.next_file",
 			"pulls.review.explorer.previous_file",
+			"pulls.review.explorer.next_unreviewed_file",
+			"pulls.review.explorer.previous_unreviewed_file",
 			"pulls.review.explorer.toggle_grouping",
 			"pulls.review.explorer.toggle_file_reviewed",
 			"pulls.review.explorer.toggle_commits",

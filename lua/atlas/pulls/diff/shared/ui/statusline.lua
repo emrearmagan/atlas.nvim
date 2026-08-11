@@ -18,19 +18,10 @@ function M.items(identity, additions, deletions, review, notes)
 		result[#result + 1] = { text = string.format("-%d", deletions), hl_group = "AtlasFooterError" }
 	end
 
-	local published, pending = 0, 0
-	if review then
-		for _, comment in ipairs(review.comments) do
-			if comment.state == "PENDING" then
-				pending = pending + 1
-			else
-				published = published + 1
-			end
-		end
-	end
-	if published > 0 then
+	local comment_count = review and #review.data.comments or 0
+	if comment_count > 0 then
 		result[#result + 1] = {
-			text = string.format("%s %d", icons.general("comment"), published),
+			text = string.format("%s %d", icons.general("comment"), comment_count),
 			hl_group = "AtlasFooterInfo",
 			align = "right",
 			priority = 30,
@@ -45,10 +36,11 @@ function M.items(identity, additions, deletions, review, notes)
 			priority = 20,
 		}
 	end
-	if pending > 0 then
+	if review then
+		local pending = review.data.review.pending
 		result[#result + 1] = {
-			text = string.format("%s %d", icons.pulls_status("inprogress"), pending),
-			hl_group = "AtlasFooterWarning",
+			text = pending and (icons.pulls_status("inprogress") .. " Pending review") or "No pending review",
+			hl_group = pending and "AtlasFooterWarning" or "AtlasFooterText",
 			align = "right",
 			priority = 50,
 		}
