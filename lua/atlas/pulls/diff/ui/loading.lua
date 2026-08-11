@@ -44,6 +44,11 @@ function M.render(buf, win, text)
 	})
 end
 
+---@class AtlasDiffLifecycle
+---@field session_id string
+---@field opened boolean
+---@field closed boolean
+
 ---@class AtlasLoadingTarget
 ---@field tabpage integer
 ---@field buf integer
@@ -53,7 +58,7 @@ end
 ---@field statuscolumn string
 ---@field statusline string
 ---@field winbar string
----@field diff_lifecycle AtlasNativeDiffLifecycle|nil
+---@field diff_lifecycle AtlasDiffLifecycle|nil
 ---@field on_abandon (fun(reason: string))|nil
 
 ---@class AtlasLoadingView

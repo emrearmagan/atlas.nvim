@@ -21,7 +21,3 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
-
-# Local worktrees
-.worktrees/
-atlas.bak

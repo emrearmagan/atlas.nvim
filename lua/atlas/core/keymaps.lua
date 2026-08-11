@@ -44,6 +44,7 @@ local M = {}
 ---@field next_hunk? AtlasKeymapValue
 ---@field previous_hunk? AtlasKeymapValue
 ---@field toggle_review_panel? AtlasKeymapValue
+---@field toggle_comments? AtlasKeymapValue
 ---@field next_comment? AtlasKeymapValue
 ---@field previous_comment? AtlasKeymapValue
 ---@field next_note? AtlasKeymapValue
@@ -133,6 +134,7 @@ local M = {}
 ---| "pulls.review.diff.next_hunk"
 ---| "pulls.review.diff.previous_hunk"
 ---| "pulls.review.diff.toggle_review_panel"
+---| "pulls.review.diff.toggle_comments"
 ---| "pulls.review.diff.next_comment"
 ---| "pulls.review.diff.previous_comment"
 ---| "pulls.review.diff.next_note"
@@ -352,6 +354,7 @@ function M.validate()
 			"pulls.review.diff.next_hunk",
 			"pulls.review.diff.previous_hunk",
 			"pulls.review.diff.toggle_review_panel",
+			"pulls.review.diff.toggle_comments",
 			"pulls.review.diff.next_comment",
 			"pulls.review.diff.previous_comment",
 			"pulls.review.diff.next_note",

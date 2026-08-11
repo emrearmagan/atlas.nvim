@@ -39,6 +39,7 @@
 ---@field compact boolean|nil
 ---@field compact_context_lines integer|nil
 ---@field show_review_panel boolean|nil
+---@field show_comments boolean|nil
 ---@field explorer AtlasPullsDiffExplorerConfig|nil
 
 ---@class AtlasPullsCustomActionContext
@@ -103,6 +104,7 @@ M.options = {
 			compact = true,
 			compact_context_lines = 3,
 			show_review_panel = false,
+			show_comments = true,
 			explorer = {
 				grouped = true,
 				hidden = false,
@@ -167,6 +169,7 @@ M.options = {
 					next_hunk = "]h",
 					previous_hunk = "[h",
 					toggle_review_panel = "gR",
+					toggle_comments = "gH",
 					next_comment = "]c",
 					previous_comment = "[c",
 					next_note = "]n",

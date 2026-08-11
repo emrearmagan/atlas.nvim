@@ -7,7 +7,7 @@ local utils = require("atlas.ui.shared.utils")
 
 local BACKGROUND_HL = "AtlasFooterBackground"
 local EXPRESSION = "%!v:lua.require'atlas.ui.statusline'.current()"
-local DIFF_EXPRESSION = "%!v:lua.require'atlas.pulls.diff.atlas.statusline'.current()"
+local DIFF_EXPRESSION = "%!v:lua.require'atlas.pulls.diff.ui.statusline'.current()"
 
 ---@class AtlasStatuslineSegment
 ---@field text string

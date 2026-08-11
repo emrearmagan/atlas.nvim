@@ -2,32 +2,20 @@ local M = {}
 
 local core_git = require("atlas.core.git")
 
----@class AtlasNativeDiffRange
----@field root string
----@field base_revision string Immutable merge-base commit hash.
+---@class AtlasNativeDiffRange: AtlasDiffSource
 ---@field head_revision string Immutable commit hash.
 
----@class AtlasNativeDiffDocument: AtlasReviewDocument
----@field changes DiffHunk[]
-
----@class AtlasPreparedDiff
+---@class AtlasNativeDiffData
 ---@field range AtlasNativeDiffRange
 ---@field files DiffFile[]
----@field document AtlasNativeDiffDocument
+---@field document AtlasDiffDocument
 
----@class AtlasDiffPrepareOptions
----@field git_root string
----@field base_revision string
----@field head_revision string
----@field filter (fun(files: DiffFile[]): DiffFile[])|nil
----@field on_progress (fun(message: string))|nil
-
----@class AtlasDiffGitOperation
+---@class AtlasNativeDiffGitOperation
 ---@field cancelled boolean
 ---@field finished boolean
 ---@field handles { cancel: fun() }[]
 ---@field cancel fun()
----@field finish fun(self: AtlasDiffGitOperation, result: any, err: string|nil)
+---@field finish fun(self: AtlasNativeDiffGitOperation, result: any, err: string|nil)
 
 -- Git requests
 
@@ -49,9 +37,9 @@ local function command_error(res, fallback)
 end
 
 ---@param callback fun(result: any, err: string|nil)
----@return AtlasDiffGitOperation
+---@return AtlasNativeDiffGitOperation
 local function new_operation(callback)
-	---@type AtlasDiffGitOperation
+	---@type AtlasNativeDiffGitOperation
 	local op = {
 		cancelled = false,
 		finished = false,
@@ -85,7 +73,7 @@ local function new_operation(callback)
 	return op
 end
 
----@param op AtlasDiffGitOperation
+---@param op AtlasNativeDiffGitOperation
 ---@param args string[]
 ---@param opts vim.SystemOpts
 ---@param on_exit fun(res: vim.SystemCompleted)
@@ -282,7 +270,7 @@ end
 
 -- Range and files
 
----@param op AtlasDiffGitOperation
+---@param op AtlasNativeDiffGitOperation
 ---@param cwd string
 ---@param base_revision string
 ---@param head_revision string
@@ -339,7 +327,7 @@ local function resolve_range(op, cwd, base_revision, head_revision, on_done)
 	end)
 end
 
----@param op AtlasDiffGitOperation
+---@param op AtlasNativeDiffGitOperation
 ---@param range AtlasNativeDiffRange
 ---@param on_done fun(files: DiffFile[])
 local function list_files(op, range, on_done)
@@ -387,7 +375,7 @@ end
 
 -- Documents
 
----@param op AtlasDiffGitOperation
+---@param op AtlasNativeDiffGitOperation
 ---@param root string
 ---@param revision string
 ---@param path string
@@ -431,10 +419,10 @@ local function load_content(op, root, revision, path, on_done)
 	end)
 end
 
----@param op AtlasDiffGitOperation
+---@param op AtlasNativeDiffGitOperation
 ---@param range AtlasNativeDiffRange
 ---@param file DiffFile
----@param on_done fun(document: AtlasNativeDiffDocument)
+---@param on_done fun(document: AtlasDiffDocument)
 local function load_document(op, range, file, on_done)
 	local root = tostring(range and range.root or "")
 	local base = trim(range and range.base_revision)
@@ -455,22 +443,21 @@ local function load_document(op, range, file, on_done)
 	local old_path = file.old_path or file.path
 	local old_query = file.status == "added" and "" or old_path
 	local new_query = file.status == "deleted" and "" or file.path
-	local old_content, new_content
-	local load_error
+	local result = {}
 
 	local function complete()
-		if old_content == nil or new_content == nil then
+		if result.old == nil or result.new == nil then
 			return
 		end
-		if load_error then
-			op:finish(nil, load_error)
+		if result.error then
+			op:finish(nil, result.error)
 			return
 		end
 
-		local old_lines, old_binary = content_lines(old_content)
-		local new_lines, new_binary = content_lines(new_content)
+		local old_lines, old_binary = content_lines(result.old)
+		local new_lines, new_binary = content_lines(result.new)
 		local binary = old_binary or new_binary
-		local hunks, hunk_error = diff_hunks(old_lines, new_lines, old_content, new_content, binary)
+		local hunks, hunk_error = diff_hunks(old_lines, new_lines, result.old, result.new, binary)
 		if not hunks then
 			op:finish(nil, hunk_error)
 			return
@@ -485,20 +472,20 @@ local function load_document(op, range, file, on_done)
 	end
 
 	load_content(op, root, base, old_query, function(content, err)
-		old_content = content or ""
-		load_error = load_error or err
+		result.old = content or ""
+		result.error = result.error or err
 		complete()
 	end)
 	load_content(op, root, head, new_query, function(content, err)
-		new_content = content or ""
-		load_error = load_error or err
+		result.new = content or ""
+		result.error = result.error or err
 		complete()
 	end)
 end
 
 ---@param range AtlasNativeDiffRange
 ---@param file DiffFile
----@param on_done fun(document: AtlasNativeDiffDocument|nil, err: string|nil)
+---@param on_done fun(document: AtlasDiffDocument|nil, err: string|nil)
 ---@return { cancel: fun() }
 function M.document(range, file, on_done)
 	local op = new_operation(on_done)
@@ -508,12 +495,12 @@ function M.document(range, file, on_done)
 	return op
 end
 
--- Preparation
+-- Initial diff data
 
----@param options AtlasDiffPrepareOptions
----@param on_done fun(result: AtlasPreparedDiff|nil, err: string|nil)
+---@param options { git_root: string, base_revision: string, head_revision: string, filter: (fun(files: DiffFile[]): DiffFile[])|nil, on_progress: (fun(message: string))|nil }
+---@param on_done fun(result: AtlasNativeDiffData|nil, err: string|nil)
 ---@return { cancel: fun() }
-function M.prepare(options, on_done)
+function M.load(options, on_done)
 	local op = new_operation(on_done)
 
 	---@param message string

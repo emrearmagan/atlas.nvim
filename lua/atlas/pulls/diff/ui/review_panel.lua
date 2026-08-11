@@ -1,12 +1,15 @@
 local M = {}
 
+local comments = require("atlas.pulls.diff.comments")
 local help = require("atlas.ui.popups.help")
 local icons = require("atlas.ui.shared.icons")
-local note_renderer = require("atlas.pulls.notes.ui.renderer")
 local keymap_resolver = require("atlas.core.keymaps")
+local note_renderer = require("atlas.pulls.notes.ui.renderer")
+local notes = require("atlas.pulls.diff.notes")
+local review = require("atlas.pulls.diff.review")
 local review_threads = require("atlas.ui.components.review_threads")
 local utils = require("atlas.ui.shared.utils")
-local namespace = vim.api.nvim_create_namespace("atlas.review_panel")
+local namespace = vim.api.nvim_create_namespace("atlas_diff_review_panel")
 
 ---@param action AtlasKeymapActionId
 ---@return string|nil
@@ -27,50 +30,42 @@ local function comment_location(comment)
 	return line and string.format("%s:%d", path, line) or path
 end
 
----@class AtlasReviewPanelSelection
----@field kind "comment"|"note"
----@field comment PullsComment|nil
----@field note AtlasNote|nil
-
----@class AtlasReviewPanelCallbacks
----@field on_select fun(item: AtlasReviewPanelSelection, focus_diff: boolean)
----@field on_refresh fun()
----@field on_toggle fun()
----@field on_comment_action fun(action: AtlasReviewThreadAction, comment: PullsComment)
----@field on_edit_note fun(note: AtlasNote)
----@field on_delete_note fun(note: AtlasNote)
-
----@class AtlasReviewPanelData
+---@class AtlasDiffReviewPanelData
 ---@field comments PullsComment[]
 ---@field tasks PullsComment[]
 ---@field notes AtlasNote[]
 ---@field note_target AtlasNoteTarget|nil
 
----@class AtlasReviewPanel
+---@class AtlasDiffReviewPanel
 ---@field buf integer
 ---@field win integer|nil
 ---@field line_map table<integer, table>
----@field data AtlasReviewPanelData
----@field callbacks AtlasReviewPanelCallbacks
+---@field session AtlasDiffSession
 ---@field expanded_items table<string, boolean>
 ---@field expanded_sections table<string, boolean>
 
+---@param session AtlasDiffSession
+---@return AtlasDiffReviewPanelData
+local function panel_data(session)
+	local review_state = session.review
+	return {
+		comments = review_state and review_state.comments or {},
+		tasks = review_state and review_state.tasks or {},
+		notes = session.notes or {},
+		note_target = session.note_target,
+	}
+end
+
 ---@param buf integer
 ---@param win integer|nil
----@param callbacks AtlasReviewPanelCallbacks
----@return AtlasReviewPanel
-function M.new(buf, win, callbacks)
+---@param session AtlasDiffSession
+---@return AtlasDiffReviewPanel
+function M.new(buf, win, session)
 	return {
 		buf = buf,
 		win = win,
 		line_map = {},
-		data = {
-			comments = {},
-			tasks = {},
-			notes = {},
-			note_target = nil,
-		},
-		callbacks = callbacks,
+		session = session,
 		expanded_items = {},
 		expanded_sections = {
 			pending = true,
@@ -82,9 +77,9 @@ function M.new(buf, win, callbacks)
 end
 
 ---@param name string
----@param callbacks AtlasReviewPanelCallbacks
----@return AtlasReviewPanel
-function M.create(name, callbacks)
+---@param session AtlasDiffSession
+---@return AtlasDiffReviewPanel
+function M.create(name, session)
 	local buf = vim.api.nvim_create_buf(false, true)
 	vim.api.nvim_buf_set_name(buf, name)
 	vim.bo[buf].bufhidden = "hide"
@@ -92,10 +87,10 @@ function M.create(name, callbacks)
 	vim.bo[buf].buftype = "nofile"
 	vim.bo[buf].swapfile = false
 	vim.bo[buf].undolevels = -1
-	return M.new(buf, nil, callbacks)
+	return M.new(buf, nil, session)
 end
 
----@param panel AtlasReviewPanel|nil
+---@param panel AtlasDiffReviewPanel|nil
 ---@return boolean
 local function active(panel)
 	return panel ~= nil
@@ -104,7 +99,7 @@ local function active(panel)
 		and vim.api.nvim_win_is_valid(panel.win)
 end
 
----@param panel AtlasReviewPanel|nil
+---@param panel AtlasDiffReviewPanel|nil
 function M.configure(panel)
 	if not active(panel) then
 		return
@@ -127,7 +122,7 @@ function M.configure(panel)
 	vim.api.nvim_win_set_height(panel.win, math.min(16, math.max(4, vim.o.lines - 8)))
 end
 
----@param panel AtlasReviewPanel
+---@param panel AtlasDiffReviewPanel
 ---@param anchor integer
 ---@param focus boolean
 ---@return integer|nil
@@ -150,8 +145,11 @@ function M.open(panel, anchor, focus)
 	return panel.win
 end
 
----@param panel AtlasReviewPanel
+---@param panel AtlasDiffReviewPanel|nil
 function M.close(panel)
+	if not panel then
+		return
+	end
 	local win = panel.win
 	panel.win = nil
 	if win and vim.api.nvim_win_is_valid(win) then
@@ -159,15 +157,18 @@ function M.close(panel)
 	end
 end
 
----@param panel AtlasReviewPanel
+---@param panel AtlasDiffReviewPanel|nil
 function M.delete(panel)
+	if not panel then
+		return
+	end
 	M.close(panel)
 	if vim.api.nvim_buf_is_valid(panel.buf) then
 		vim.api.nvim_buf_delete(panel.buf, { force = true })
 	end
 end
 
----@param panel AtlasReviewPanel
+---@param panel AtlasDiffReviewPanel
 ---@return table|nil
 local function selected_entry(panel)
 	if not active(panel) then
@@ -200,13 +201,13 @@ local function has_pending(thread)
 	return false
 end
 
----@param data AtlasReviewPanelData
+---@param data AtlasDiffReviewPanelData
 ---@return table[], table[], table[], table[]
 local function panel_items(data)
-	local pending, comments, tasks, notes = {}, {}, {}, {}
+	local pending, published_comments, standalone_tasks, rendered_notes = {}, {}, {}, {}
 	for _, thread in ipairs(review_threads.group_comments(data.comments, data.tasks)) do
 		local inline = thread.comment.inline
-		table.insert(has_pending(thread) and pending or comments, {
+		table.insert(has_pending(thread) and pending or published_comments, {
 			kind = "comment",
 			thread = thread,
 			key = review_threads.comment_key(thread.comment),
@@ -222,7 +223,7 @@ local function panel_items(data)
 	for _, task in ipairs(data.tasks) do
 		if not task.parent_id or not comment_ids[tostring(task.parent_id)] then
 			local inline = task.inline
-			table.insert(tasks, {
+			table.insert(standalone_tasks, {
 				kind = "task",
 				thread = { comment = task, children = {} },
 				key = review_threads.comment_key(task),
@@ -234,7 +235,7 @@ local function panel_items(data)
 	end
 	if data.note_target then
 		for _, note in ipairs(data.notes) do
-			table.insert(notes, {
+			table.insert(rendered_notes, {
 				kind = "note",
 				note = note,
 				key = note_renderer.note_key(data.note_target, note),
@@ -257,32 +258,33 @@ local function panel_items(data)
 		return left.key < right.key
 	end
 	table.sort(pending, sort_items)
-	table.sort(comments, sort_items)
-	table.sort(tasks, sort_items)
-	table.sort(notes, sort_items)
-	return pending, comments, tasks, notes
+	table.sort(published_comments, sort_items)
+	table.sort(standalone_tasks, sort_items)
+	table.sort(rendered_notes, sort_items)
+	return pending, published_comments, standalone_tasks, rendered_notes
 end
 
----@param panel AtlasReviewPanel|nil
----@param data AtlasReviewPanelData|nil
-function M.render(panel, data)
+---@param panel AtlasDiffReviewPanel|nil
+---@param session AtlasDiffSession|nil
+function M.render(panel, session)
 	if not panel then
 		return
 	end
-	if data then
-		panel.data = data
+	if session then
+		panel.session = session
 	end
-	if not active(panel) then
+	if not active(panel) or not panel.session then
 		return
 	end
 
+	local data = panel_data(panel.session)
 	local selected = tree_key(selected_entry(panel))
 	local cursor = vim.api.nvim_win_get_cursor(panel.win)
 	local width = math.max(6, vim.api.nvim_win_get_width(panel.win))
 	local lines, spans, line_map = {}, {}, {}
-	local pending_comments, comments, tasks, notes = panel_items(panel.data)
+	local pending_comments, published_comments, standalone_tasks, rendered_notes = panel_items(data)
 	local published, pending = 0, 0
-	for _, items in ipairs({ panel.data.comments, panel.data.tasks }) do
+	for _, items in ipairs({ data.comments, data.tasks }) do
 		for _, item in ipairs(items) do
 			if item.state == "PENDING" then
 				pending = pending + 1
@@ -310,17 +312,17 @@ function M.render(panel, data)
 		comment_icon,
 		published,
 		task_icon,
-		#panel.data.tasks,
+		#data.tasks,
 		note_icon,
-		#panel.data.notes,
+		#data.notes,
 		pending_icon,
 		pending
 	)
 	local sections = {
 		{ id = "pending", title = "Pending", item_name = "comment", items = pending_comments },
-		{ id = "tasks", title = "Tasks", item_name = "task", items = tasks },
-		{ id = "comments", title = "Comments", item_name = "comment", items = comments },
-		{ id = "notes", title = "Notes", item_name = "note", items = notes },
+		{ id = "tasks", title = "Tasks", item_name = "task", items = standalone_tasks },
+		{ id = "comments", title = "Comments", item_name = "comment", items = published_comments },
+		{ id = "notes", title = "Notes", item_name = "note", items = rendered_notes },
 	}
 	for _, section in ipairs(sections) do
 		if #section.items > 0 then
@@ -353,7 +355,7 @@ function M.render(panel, data)
 						panel.expanded_items[item.key] = true
 					end
 					local item_expanded = panel.expanded_items[item.key] == true
-					local block_lines, block_spans, block_map
+					local block_lines, block_spans, block_map = {}, {}, {}
 					if item.kind ~= "note" then
 						block_lines, block_spans, block_map = review_threads.render_compact(
 							item.thread,
@@ -369,7 +371,7 @@ function M.render(panel, data)
 					else
 						block_lines, block_spans, block_map = note_renderer.render_list({
 							{
-								target = panel.data.note_target,
+								target = data.note_target,
 								note = item.note,
 								expanded = item_expanded,
 							},
@@ -435,11 +437,23 @@ local function add_mapping(entries, action, desc, index, callback)
 	end
 end
 
----@param panel AtlasReviewPanel
+---@param panel AtlasDiffReviewPanel|nil
+---@return AtlasDiffSession|nil
+local function active_session(panel)
+	local session = panel and panel.session or nil
+	return session and not session.closed and session or nil
+end
+
+---@param panel AtlasDiffReviewPanel
 ---@param buffers integer[]
 function M.register_toggle(panel, buffers)
 	local entries = {}
-	add_mapping(entries, "pulls.review.diff.toggle_review_panel", "Toggle review panel", 5, panel.callbacks.on_toggle)
+	add_mapping(entries, "pulls.review.diff.toggle_review_panel", "Toggle review panel", 5, function()
+		local session = active_session(panel)
+		if session and session.toggle_review_panel then
+			session.toggle_review_panel(true)
+		end
+	end)
 	for _, buf in ipairs(buffers) do
 		if vim.api.nvim_buf_is_valid(buf) then
 			help.register("General", entries, { buffer = buf, index = 90 })
@@ -447,19 +461,23 @@ function M.register_toggle(panel, buffers)
 	end
 end
 
----@param panel AtlasReviewPanel|nil
+---@param panel AtlasDiffReviewPanel|nil
 function M.register_keymaps(panel)
 	if not panel then
 		return
 	end
 	local function show_selected(focus_diff)
+		local session = active_session(panel)
+		if not session or not session.focus_item then
+			return
+		end
 		local entry = selected_entry(panel)
 		if entry and entry.note then
-			panel.callbacks.on_select({ kind = "note", note = entry.note }, focus_diff)
+			session.focus_item({ kind = "note", note = entry.note }, focus_diff)
 		elseif entry and (entry.thread_root or entry.comment) then
 			local comment = entry.thread_root or entry.comment
 			if not comment.is_task then
-				panel.callbacks.on_select({ kind = "comment", comment = comment }, focus_diff)
+				session.focus_item({ kind = "comment", comment = comment }, focus_diff)
 			end
 		end
 	end
@@ -477,12 +495,16 @@ function M.register_keymaps(panel)
 		end
 	end
 	local function run_action(action)
+		local session = active_session(panel)
+		if not session then
+			return
+		end
 		local entry = selected_entry(panel)
 		if entry and entry.note then
 			if action == "edit" then
-				panel.callbacks.on_edit_note(entry.note)
+				notes.edit(session, entry.note)
 			elseif action == "delete" then
-				panel.callbacks.on_delete_note(entry.note)
+				notes.delete(session, entry.note)
 			end
 			return
 		end
@@ -497,7 +519,7 @@ function M.register_keymaps(panel)
 			if action == "toggle_resolved" and comment.is_task then
 				action = "toggle_task"
 			end
-			panel.callbacks.on_comment_action(action, comment)
+			comments.run_action(session, action, comment)
 		end
 	end
 	local entries = {}
@@ -529,12 +551,16 @@ function M.register_keymaps(panel)
 	end)
 	add_mapping(entries, { "ui.show_details", "ui.toggle_fold" }, "Expand / collapse", 8, toggle_selected)
 	add_mapping(entries, "ui.toggle_all_folds", "Expand / collapse all", 9, function()
-		local pending, comments, tasks, notes = panel_items(panel.data)
+		local session = active_session(panel)
+		if not session then
+			return
+		end
+		local pending, published_comments, standalone_tasks, rendered_notes = panel_items(panel_data(session))
 		local items = {}
 		vim.list_extend(items, pending)
-		vim.list_extend(items, comments)
-		vim.list_extend(items, tasks)
-		vim.list_extend(items, notes)
+		vim.list_extend(items, published_comments)
+		vim.list_extend(items, standalone_tasks)
+		vim.list_extend(items, rendered_notes)
 		local expand = false
 		for _, item in ipairs(items) do
 			if panel.expanded_items[item.key] ~= true then
@@ -547,8 +573,20 @@ function M.register_keymaps(panel)
 		end
 		M.render(panel)
 	end)
-	add_mapping(entries, "ui.refresh", "Refresh review", 10, panel.callbacks.on_refresh)
-	add_mapping(entries, "ui.close", "Close panel", 11, panel.callbacks.on_toggle)
+	add_mapping(entries, "ui.refresh", "Refresh review", 10, function()
+		local session = active_session(panel)
+		if not session then
+			return
+		end
+		review.reload(session)
+		notes.reload(session)
+	end)
+	add_mapping(entries, "ui.close", "Close panel", 11, function()
+		local session = active_session(panel)
+		if session and session.toggle_review_panel then
+			session.toggle_review_panel()
+		end
+	end)
 	add_mapping(entries, "ui.help", "Toggle help", 0, function()
 		help.toggle({ buffer = panel.buf })
 	end)
