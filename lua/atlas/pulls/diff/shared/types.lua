@@ -24,7 +24,6 @@
 ---@class AtlasReviewView
 ---@field notify fun(level: "loading"|"success"|"warn"|"error"|"info", message: string, duration?: integer)
 ---@field register_keymaps fun(actions: AtlasReviewKeymapActions)
----@field task_at_cursor (fun(): PullsComment|nil)|nil
 
 ---@class AtlasReviewKeymapActions
 ---@field active fun(): boolean
@@ -32,7 +31,6 @@
 ---@field toggle_approval (fun())|nil
 ---@field request_changes (fun())|nil
 ---@field review_action (fun())|nil
----@field toggle_task (fun())|nil
 ---@field toggle_resolved fun(buf: integer)
 ---@field add_comment_at_cursor fun(buf: integer, pending: boolean)
 ---@field delete_comment fun(buf: integer)

@@ -341,7 +341,6 @@ function M.register_review(session, actions)
 	}) do
 		local groups = review_keymaps.groups(session, actions, buf, {
 			include_actions = buf ~= session.commits_panel.buf,
-			include_task = buf == session.panel.buf,
 		})
 		for _, group in ipairs(groups) do
 			local items = {}

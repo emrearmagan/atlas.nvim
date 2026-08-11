@@ -10,7 +10,6 @@ local M = {}
 ---@alias AtlasNativeDiffPanelItem
 ---| { kind: "file", index: integer }
 ---| { kind: "folder", path: string }
----| { kind: "task", comment: PullsComment }
 
 ---@class AtlasNativeDiffSession: AtlasReviewSession
 ---@field lifecycle AtlasNativeDiffLifecycle

@@ -16,7 +16,6 @@ A Neovim plugin for managing GitHub/Bitbucket/GitLab PRs and Jira/GitHub/GitLab 
 
 <img alt="Atlas UI" src="https://github.com/user-attachments/assets/de6459f9-f123-40a6-acbd-097a17e7ae86" />
 
-
 > [!CAUTION]
 > **Still in early development, will have breaking changes!**
 
@@ -148,12 +147,12 @@ pulls = {
   diff = {
     -- Any command that accepts explicit <base>...<head> Git revisions.
     open_cmd = "AtlasDiff", -- default; for example "DiffviewOpen" or "CodeDiff".
+    show_review_panel = false, -- Set true to show the review panel when a diff opens.
 
     -- AtlasDiff options; external viewers use their own configuration.
     layout = "inline", -- "inline" or "side-by-side".
     compact = true, -- Start with only changed hunks and surrounding context visible.
     compact_context_lines = 3, -- Context lines shown around hunks in compact mode.
-    show_review_panel = false, -- Set true to show comments and notes when AtlasDiff opens.
     explorer = {
       grouped = true, -- Group changed files by directory.
       hidden = false,
@@ -550,7 +549,7 @@ Press the configured `pulls.open_diff` key (`gd` by default) on a pull request t
 - See pending, resolved, and outdated provider threads at their diff locations.
 - Review provider tasks and GitHub checklists alongside the comments they belong to.
 - Add, reply to, edit, delete, resolve, or reopen comments when supported.
-- Browse provider comments and local notes in AtlasDiff's bottom list; use `za` to expand an item.
+- Browse comments, tasks, and local notes
 - Submit pending comments with an optional review summary when supported.
 
 > [!NOTE]

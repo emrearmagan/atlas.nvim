@@ -18,7 +18,7 @@ local THREAD_ACTIONS = {
 	toggle_resolved = review.toggle_resolved,
 }
 
----@type fun(session: AtlasReviewSession, state: AtlasReviewState)
+---@type fun(session: AtlasReviewSession, state: AtlasReviewState, on_done?: fun(warnings: string[]))
 local reload_review
 
 ---@class AtlasReviewState
@@ -691,20 +691,6 @@ end
 
 ---@param session AtlasReviewSession
 ---@param state AtlasReviewState
-local function toggle_task_at_cursor(session, state)
-	local task_at_cursor = session.review_view.task_at_cursor
-	if not task_at_cursor then
-		return
-	end
-	local comment = task_at_cursor()
-	if not comment then
-		return
-	end
-	run_comment_action(session, state, "toggle_task", comment)
-end
-
----@param session AtlasReviewSession
----@param state AtlasReviewState
 ---@param buf integer
 ---@param pending boolean
 local function add_inline_comment(session, state, buf, pending)
@@ -750,12 +736,6 @@ end
 ---@param session AtlasReviewSession
 ---@param state AtlasReviewState
 local function register_keymaps(session, state)
-	local toggle_task
-	if session.review_view.task_at_cursor then
-		toggle_task = function()
-			toggle_task_at_cursor(session, state)
-		end
-	end
 	local context = action_context(session, state, nil)
 	local reviews = state.provider and state.provider.capabilities.reviews
 	local reviewable = state.pr and (state.pr.state == "open" or state.pr.state == "draft")
@@ -832,7 +812,6 @@ local function register_keymaps(session, state)
 				and (state.data.review.pending or (reviews and reviews.start_review))
 				and review_action
 			or nil,
-		toggle_task = toggle_task,
 		toggle_resolved = function(buf)
 			toggle_resolved_at_cursor(session, state, buf)
 		end,
@@ -891,12 +870,9 @@ local function apply_prepared(session, state, context)
 	end
 	state.loading = false
 	session.refresh_ui()
-	if #initial.warnings > 0 then
-		view_notify(session, "warn", table.concat(initial.warnings, "; "))
-	end
 end
 
-reload_review = function(session, state)
+reload_review = function(session, state, on_done)
 	if not state.provider or not state.pr then
 		return
 	end
@@ -905,7 +881,6 @@ reload_review = function(session, state)
 	local generation = state.generation
 	state.loading = true
 	session.refresh_ui()
-	view_notify(session, "loading", "Refreshing review...")
 	run_request(session, state, function(done)
 		return require("atlas.pulls.diff.shared.review").load({
 			provider = state.provider,
@@ -925,8 +900,10 @@ reload_review = function(session, state)
 		end
 		local warnings = result.initial_review.warnings
 		apply_prepared(session, state, result)
-		if #warnings == 0 then
-			view_notify(session, "success", "Review refreshed", 1200)
+		if on_done then
+			on_done(warnings)
+		elseif #warnings > 0 then
+			view_notify(session, "warn", table.concat(warnings, "; "))
 		end
 	end)
 end
@@ -961,7 +938,14 @@ function M.reload(session)
 		view_notify(session, "info", "No pull request review is available", 1200)
 		return false
 	end
-	reload_review(session, state)
+	view_notify(session, "loading", "Refreshing review...")
+	reload_review(session, state, function(warnings)
+		if #warnings > 0 then
+			view_notify(session, "warn", table.concat(warnings, "; "))
+		else
+			view_notify(session, "success", "Review refreshed", 1200)
+		end
+	end)
 	return true
 end
 
@@ -985,6 +969,9 @@ function M.attach(session, context)
 	}
 	session.review = state
 	apply_prepared(session, state, context)
+	if #context.initial_review.warnings > 0 then
+		view_notify(session, "warn", table.concat(context.initial_review.warnings, "; "))
+	end
 	register_keymaps(session, state)
 end
 

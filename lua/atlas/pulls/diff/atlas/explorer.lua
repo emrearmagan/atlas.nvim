@@ -43,26 +43,6 @@ function M.options()
 	}
 end
 
----@param author { name: string, nickname: string|nil }|nil
----@return string
-local function author_name(author)
-	if author == nil then
-		return "Unknown"
-	end
-	if author.nickname and author.nickname ~= "" then
-		return author.nickname
-	end
-	return author.name ~= "" and author.name or "Unknown"
-end
-
----@param task PullsComment
----@param plural boolean
----@return string
-local function task_label(task, plural)
-	local label = task.task_label or "Task"
-	return plural and (label .. "s") or label
-end
-
 ---@param status DiffFileStatus
 ---@return string, string
 local function status_marker(status)
@@ -521,32 +501,11 @@ function M.render(session, annotated_paths)
 		add_section("Reviewed", reviewed, true)
 	end
 
-	local tasks = (session.review and session.review.data.tasks) or {}
-	if #tasks > 0 then
-		add_header(string.format("%s (%d)", task_label(tasks[1], true), #tasks), true)
-		for _, task in ipairs(tasks) do
-			local checkbox = task.state == "RESOLVED" and "[x]" or "[ ]"
-			local content = utils.task_text(task.content_display or task.content_raw):match("[^\n]*") or ""
-			if content == "" then
-				content = string.format("(empty %s)", task_label(task, false):lower())
-			end
-			local text = checkbox .. " " .. utils.truncate(content, math.max(1, width - #checkbox - 1))
-			table.insert(lines, text)
-			session.panel_items[#lines] = { kind = "task", comment = task }
-			table.insert(highlights, {
-				#lines - 1,
-				0,
-				#checkbox,
-				task.state == "RESOLVED" and "AtlasTextPositive" or "AtlasTextMuted",
-			})
-		end
-	end
-
 	write(session, lines, highlights, headers, first_header)
 end
 
 ---@param session AtlasNativeDiffSession
----@return { kind: "file", index: integer }|{ kind: "folder", path: string }|{ kind: "task", comment: PullsComment }|nil
+---@return { kind: "file", index: integer }|{ kind: "folder", path: string }|nil
 local function item_at_cursor(session)
 	if vim.api.nvim_get_current_buf() ~= session.panel.buf then
 		return nil
@@ -559,13 +518,6 @@ end
 function M.file_at_cursor(session)
 	local item = item_at_cursor(session)
 	return item and item.kind == "file" and item.index or nil
-end
-
----@param session AtlasNativeDiffSession
----@return PullsComment|nil
-function M.task_at_cursor(session)
-	local item = item_at_cursor(session)
-	return item and item.kind == "task" and item.comment or nil
 end
 
 ---@param session AtlasNativeDiffSession
@@ -661,23 +613,6 @@ end
 function M.show_path(session)
 	local item = item_at_cursor(session)
 	if not item then
-		return
-	end
-	if item.kind == "task" then
-		local task = item.comment
-		local content = utils.task_text(task.content_display or task.content_raw)
-		local empty = string.format("(empty %s)", task_label(task, false):lower())
-		local lines = vim.split(content ~= "" and content or empty, "\n", { plain = true })
-		table.insert(lines, "")
-		table.insert(lines, string.format("by @%s  %s", author_name(task.author), utils.relative_time(task.created_on)))
-		local width = math.max(1, math.min(100, vim.o.columns - 4))
-		vim.lsp.util.open_floating_preview(lines, "markdown", {
-			border = "rounded",
-			focusable = false,
-			max_width = width,
-			wrap_at = width,
-			title = string.format(" %s ", task_label(task, false)),
-		})
 		return
 	end
 

@@ -202,20 +202,6 @@ local function render_explorer(session)
 end
 
 ---@param session AtlasNativeDiffSession
-local function reflow_review_panel(session)
-	local panel = session.review_panel
-	if not panel or not panel.win or not vim.api.nvim_win_is_valid(panel.win) then
-		return
-	end
-	if vim.api.nvim_win_get_position(panel.win)[2] > 0 then
-		vim.api.nvim_win_call(panel.win, function()
-			vim.cmd("wincmd J")
-		end)
-	end
-	vim.api.nvim_win_set_height(panel.win, math.min(16, math.max(4, vim.o.lines - 8)))
-end
-
----@param session AtlasNativeDiffSession
 local function refresh_ui(session)
 	local deleted_comments = comments.render(session, { inline_deleted_lines = true })
 	if session.layout == "inline" then
@@ -226,6 +212,7 @@ local function refresh_ui(session)
 	local note_state = session.notes
 	review_panel.render(session.review_panel, {
 		comments = review and review.data.comments or {},
+		tasks = review and review.data.tasks or {},
 		notes = note_state and note_state.items or {},
 		note_target = note_state and note_state.target or nil,
 	})
@@ -677,18 +664,16 @@ local function toggle_review_panel(session)
 		return
 	end
 	if panel.win and vim.api.nvim_win_is_valid(panel.win) then
-		vim.api.nvim_win_close(panel.win, true)
+		review_panel.close(panel)
 		return
 	end
 	if not session.right.win or not vim.api.nvim_win_is_valid(session.right.win) then
 		return
 	end
-	panel.win = split_window(session.right.win, panel.buf, "below", 16)
-	review_panel.configure(panel)
-	statusline.attach(panel.win)
-	reflow_review_panel(session)
-	review_panel.render(panel)
-	vim.api.nvim_set_current_win(panel.win)
+	local win = review_panel.open(panel, session.right.win, true)
+	if win then
+		statusline.attach(win)
+	end
 end
 
 ---@param session AtlasNativeDiffSession
@@ -864,13 +849,10 @@ local function create_session(open_options, options)
 				register_keymaps = function(actions)
 					keymaps.register_review(session, actions)
 				end,
-				task_at_cursor = function()
-					return explorer.task_at_cursor(session)
-				end,
 			},
 			notes = nil,
 			review_panel = review_buf and review_panel.new(review_buf, review_win, {
-				on_close = function()
+				on_toggle = function()
 					toggle_review_panel(session)
 				end,
 				on_select = function(item, focus_diff)
@@ -966,7 +948,6 @@ local function initialize_session(session)
 			configure_content_window(session, session.left.win)
 		end
 		configure_content_window(session, right_win)
-		reflow_review_panel(session)
 		render_file(session)
 		render_explorer(session)
 		local review = session.review_context
@@ -1236,7 +1217,6 @@ local function resize_current_view()
 	if session.left.win then
 		configure_content_window(session, session.left.win)
 	end
-	reflow_review_panel(session)
 	render_file(session)
 	session.refresh_ui()
 end

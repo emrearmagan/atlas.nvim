@@ -3,9 +3,11 @@ local M = {}
 local comments = require("atlas.pulls.diff.shared.comments")
 local events = require("atlas.core.events")
 local notes = require("atlas.pulls.diff.shared.notes")
-local notify = require("atlas.core.notify")
 local comment_renderer = require("atlas.pulls.diff.shared.ui.comment_renderer")
+local position = require("atlas.pulls.diff.shared.position")
 local review_keymaps = require("atlas.pulls.diff.shared.keymaps")
+local review_panel = require("atlas.pulls.diff.shared.ui.review_panel")
+local review_threads = require("atlas.ui.components.review_threads")
 local statusline = require("atlas.pulls.diff.shared.ui.statusline")
 
 local STATUSLINE = "%!v:lua.require'atlas.pulls.diff.codediff'.statusline()"
@@ -43,13 +45,17 @@ local READY_RETRIES = 80
 
 ---@class AtlasCodeDiffSelection
 ---@field path string
+---@field old_path string|nil
 ---@field status string|nil
+---@field group string|nil
 
 ---@class AtlasCodeDiffExplorer
 ---@field bufnr integer|nil
 ---@field winid integer|nil
 ---@field current_selection AtlasCodeDiffSelection|nil
 ---@field current_file_path string|nil
+---@field status_result table<string, AtlasCodeDiffSelection[]>|nil
+---@field on_file_select (fun(selection: AtlasCodeDiffSelection, opts: { no_jump: boolean }|nil))|nil
 
 ---@class AtlasCodeDiffLifecycle
 ---@field get_session fun(tabpage: integer): AtlasCodeDiffSession|nil
@@ -67,6 +73,10 @@ local READY_RETRIES = 80
 ---@field reload (fun(target: AtlasLoadingTarget|nil))|nil
 ---@field session AtlasReviewSession|nil
 ---@field actions AtlasReviewKeymapActions|nil
+---@field review_panel AtlasReviewPanel
+---@field statusline AtlasDiffStatuslineState
+---@field auto_open_panel boolean
+---@field pending_selection table|nil
 ---@field group integer
 ---@field generation integer
 ---@field closed boolean
@@ -182,6 +192,182 @@ local function reload(entry)
 	end)
 end
 
+---@param session AtlasReviewSession
+---@return AtlasReviewPanelData
+local function review_panel_data(session)
+	local review = session.review
+	local note_state = session.notes
+	return {
+		comments = review and review.data.comments or {},
+		tasks = review and review.data.tasks or {},
+		notes = note_state and note_state.items or {},
+		note_target = note_state and note_state.target or nil,
+	}
+end
+
+---@param entry AtlasCodeDiffReview
+---@param level "loading"|"success"|"warn"|"error"|"info"
+---@param message string
+---@param duration integer|nil
+local function view_notify(entry, level, message, duration)
+	statusline.notify(entry.statusline, level, message, duration)
+end
+
+---@param entry AtlasCodeDiffReview
+---@param focus boolean
+---@return boolean opened
+local function open_review_panel(entry, focus)
+	local panel = entry.review_panel
+	local codediff = entry.lifecycle.get_session(entry.tabpage)
+	local anchor = codediff and codediff.modified_win or nil
+	if not anchor or not vim.api.nvim_win_is_valid(anchor) then
+		anchor = codediff and codediff.original_win or nil
+	end
+	if not anchor then
+		return false
+	end
+	local win = review_panel.open(panel, anchor, focus)
+	if win then
+		vim.api.nvim_set_option_value("statusline", STATUSLINE, { win = win, scope = "local" })
+	end
+	return win ~= nil
+end
+
+---@param entry AtlasCodeDiffReview
+local function toggle_review_panel(entry)
+	local panel = entry.review_panel
+	if panel.win and vim.api.nvim_win_is_valid(panel.win) then
+		review_panel.close(panel)
+		return
+	end
+	open_review_panel(entry, true)
+end
+
+---@param entry AtlasCodeDiffReview
+---@param path string
+---@return AtlasCodeDiffSelection|nil
+local function find_review_file(entry, path)
+	path = relative_path(entry.root, path)
+	local explorer = entry.lifecycle.get_explorer(entry.tabpage)
+	if not explorer then
+		return nil
+	end
+	local function matches(file)
+		return relative_path(entry.root, file.path) == path or relative_path(entry.root, file.old_path) == path
+	end
+	if explorer.current_selection and matches(explorer.current_selection) then
+		return vim.deepcopy(explorer.current_selection)
+	end
+	for _, group in ipairs({ "unstaged", "staged", "conflicts" }) do
+		for _, file in ipairs((explorer.status_result or {})[group] or {}) do
+			if matches(file) then
+				file = vim.deepcopy(file)
+				file.group = file.group or group
+				return file
+			end
+		end
+	end
+	return nil
+end
+
+---@param entry AtlasCodeDiffReview
+local function reveal_pending_selection(entry)
+	local pending = entry.pending_selection
+	local session = entry.session
+	local document = session and session.document
+	if
+		not pending
+		or not session
+		or not document
+		or (document.old.path ~= pending.path and document.new.path ~= pending.path)
+	then
+		return
+	end
+	entry.pending_selection = nil
+	if pending.note and (document.binary or document.status == "deleted") then
+		view_notify(entry, "info", "This note's file is no longer in the diff")
+		return
+	end
+	local source = pending.side == "LEFT" and document.old.lines or document.new.lines
+	if #source == 0 or pending.line < 1 then
+		view_notify(entry, "info", "This review item's diff position is outdated")
+		return
+	end
+	local line = math.min(pending.line, #source)
+	local win = pending.side == "LEFT" and session.left.win or session.right.win
+	if pending.side == "LEFT" and session.layout == "inline" then
+		win = session.right.win
+		line = position.opposite_line(document, "LEFT", line, vim.api.nvim_buf_line_count(session.right.buf))
+	end
+	if not win or not vim.api.nvim_win_is_valid(win) then
+		return
+	end
+	session.refresh_ui()
+	vim.api.nvim_win_set_cursor(win, { line, 0 })
+	vim.api.nvim_win_call(win, function()
+		pcall(vim.cmd.normal, { "zvzz", bang = true })
+	end)
+	if vim.api.nvim_get_current_tabpage() == entry.tabpage then
+		if pending.focus_diff then
+			vim.api.nvim_set_current_win(win)
+		else
+			local panel = entry.review_panel
+			if panel.win and vim.api.nvim_win_is_valid(panel.win) then
+				vim.api.nvim_set_current_win(panel.win)
+			end
+		end
+	end
+end
+
+---@param entry AtlasCodeDiffReview
+---@param item AtlasReviewPanelSelection
+---@param focus_diff boolean
+local function select_review_item(entry, item, focus_diff)
+	local session = entry.session
+	if not session then
+		return
+	end
+	local file, path, side, line
+	if item.kind == "note" and item.note then
+		path, side, line = item.note.file_path, "RIGHT", item.note.line
+		file = find_review_file(entry, path)
+	else
+		local comment = item.comment
+		local inline = comment and comment.inline or nil
+		if not inline then
+			view_notify(entry, "info", "This comment is not attached to the diff")
+			return
+		end
+		path = inline.path
+		side, line = position.location(inline)
+		file = find_review_file(entry, path)
+		if session.review then
+			session.review.expanded_threads[review_threads.comment_key(comment)] = true
+		end
+	end
+	if not file then
+		view_notify(entry, "info", "This review item's file is no longer in the diff")
+		return
+	end
+	if not side or type(line) ~= "number" then
+		view_notify(entry, "info", "This review item no longer has a diff position")
+		return
+	end
+	entry.pending_selection = {
+		path = relative_path(entry.root, path),
+		side = side,
+		line = line,
+		note = item.kind == "note",
+		focus_diff = focus_diff,
+	}
+	local explorer = entry.lifecycle.get_explorer(entry.tabpage)
+	if explorer and explorer.on_file_select then
+		explorer.on_file_select(file, { no_jump = true })
+	else
+		entry.pending_selection = nil
+	end
+end
+
 ---@param entry AtlasCodeDiffReview
 local function map_review(entry)
 	local session = entry.session
@@ -201,6 +387,7 @@ local function map_review(entry)
 			reload(entry)
 		end or nil,
 	})
+	review_panel.register_toggle(entry.review_panel, buffers)
 end
 
 ---@param entry AtlasCodeDiffReview
@@ -308,14 +495,12 @@ local function sync(entry)
 	session.refresh_ui = function()
 		comments.render(session)
 		notes.render(session)
+		review_panel.render(entry.review_panel, review_panel_data(session))
 		refresh_scroll(entry, session)
 	end
 	session.review_view = {
-		notify = function(level, message)
-			local notify_level = level == "error" and vim.log.levels.ERROR
-				or level == "warn" and vim.log.levels.WARN
-				or vim.log.levels.INFO
-			notify.show(notify_level, message)
+		notify = function(level, message, duration)
+			view_notify(entry, level, message, duration)
 		end,
 		register_keymaps = function(actions)
 			entry.actions = actions
@@ -327,7 +512,7 @@ local function sync(entry)
 		local ok, err = pcall(comments.attach, session, context)
 		if not ok then
 			comments.detach(session)
-			notify.error("Unable to load comments: " .. tostring(err))
+			view_notify(entry, "error", "Unable to load comments: " .. tostring(err))
 		else
 			events.emit("AtlasReviewAttached", event_data(entry))
 		end
@@ -337,6 +522,10 @@ local function sync(entry)
 		end
 		session.refresh_ui()
 	end
+	if entry.auto_open_panel and open_review_panel(entry, false) then
+		entry.auto_open_panel = false
+	end
+	reveal_pending_selection(entry)
 	return true
 end
 
@@ -392,6 +581,15 @@ local function register_events(entry)
 			end
 		end,
 	})
+	vim.api.nvim_create_autocmd("WinClosed", {
+		group = entry.group,
+		callback = function(args)
+			local panel = entry.review_panel
+			if tonumber(args.match) == panel.win then
+				panel.win = nil
+			end
+		end,
+	})
 end
 
 ---@param context AtlasPreparedReviewContext
@@ -408,8 +606,10 @@ function M.attach(context, tabpage, opts)
 		return "CodeDiff session is unavailable"
 	end
 	M.detach(tabpage, "replaced")
+	local diff_config = (require("atlas.config").options.pulls or {}).diff or {}
 	---@type AtlasCodeDiffReview
-	local entry = {
+	local entry
+	entry = {
 		tabpage = tabpage,
 		lifecycle = lifecycle,
 		context = context,
@@ -419,13 +619,65 @@ function M.attach(context, tabpage, opts)
 		reload = opts.reload,
 		session = nil,
 		actions = nil,
+		review_panel = review_panel.create(string.format("atlas-codediff://%d/review", tabpage), {
+			on_toggle = function()
+				toggle_review_panel(entry)
+			end,
+			on_select = function(item, focus_diff)
+				select_review_item(entry, item, focus_diff)
+			end,
+			on_refresh = function()
+				if entry.session then
+					comments.reload(entry.session)
+					notes.reload(entry.session)
+				end
+			end,
+			on_comment_action = function(action, comment)
+				if entry.session then
+					comments.run_action(entry.session, action, comment)
+				end
+			end,
+			on_edit_note = function(note)
+				if entry.session then
+					notes.edit(entry.session, note)
+				end
+			end,
+			on_delete_note = function(note)
+				if entry.session then
+					notes.delete(entry.session, note)
+				end
+			end,
+		}),
+		statusline = statusline.new(),
+		auto_open_panel = diff_config.show_review_panel == true,
+		pending_selection = nil,
 		group = vim.api.nvim_create_augroup("AtlasCodeDiffReview" .. tabpage, { clear = true }),
 		generation = 0,
 		closed = false,
 		session_id = events.new_id("codediff"),
 	}
+	review_panel.register_keymaps(entry.review_panel)
+	review_panel.register_toggle(entry.review_panel, { entry.review_panel.buf })
+	review_panel.render(entry.review_panel, {
+		comments = context.initial_review.comments,
+		tasks = context.initial_review.tasks,
+		notes = {},
+		note_target = nil,
+	})
 	sessions[tabpage] = entry
 	register_events(entry)
+	local codediff = lifecycle.get_session(tabpage)
+	local explorer = lifecycle.get_explorer(tabpage)
+	local buffers = {}
+	for _, buf in pairs({ codediff.original_bufnr, codediff.modified_bufnr, explorer and explorer.bufnr }) do
+		if buf and vim.api.nvim_buf_is_valid(buf) then
+			table.insert(buffers, buf)
+		end
+	end
+	review_panel.register_toggle(entry.review_panel, buffers)
+	if entry.auto_open_panel and open_review_panel(entry, false) then
+		entry.auto_open_panel = false
+	end
 	wait_until_ready(entry)
 	return nil
 end
@@ -441,12 +693,15 @@ function M.detach(tabpage, reason)
 	sessions[tabpage] = nil
 	entry.closed = true
 	entry.generation = entry.generation + 1
+	entry.pending_selection = nil
 	local attached = entry.session and entry.session.review ~= nil
 	if entry.session then
 		entry.session.closing = true
 		comments.detach(entry.session)
 		notes.detach(entry.session)
 	end
+	statusline.dispose(entry.statusline)
+	review_panel.delete(entry.review_panel)
 	pcall(vim.api.nvim_del_augroup_by_id, entry.group)
 	if attached then
 		events.emit("AtlasReviewDetached", event_data(entry, reason or "viewer_closed"))
@@ -466,7 +721,8 @@ function M.statusline()
 		nil,
 		nil,
 		session.review,
-		session.notes
+		session.notes,
+		entry.statusline
 	)
 end
 

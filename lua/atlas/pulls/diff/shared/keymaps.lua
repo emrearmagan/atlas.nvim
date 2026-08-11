@@ -17,7 +17,6 @@ local resolver = require("atlas.core.keymaps")
 
 ---@class AtlasReviewKeymapGroupOptions
 ---@field include_actions boolean|nil
----@field include_task boolean|nil
 ---@field reload (fun())|nil
 
 ---@class AtlasReviewKeymapOptions
@@ -87,9 +86,6 @@ function M.groups(session, actions, buf, opts)
 		add(review, "pulls.review.toggle_approval", "Approve / unapprove", 8, actions.toggle_approval)
 		add(review, "pulls.review.request_changes", "Request changes", 9, actions.request_changes)
 		add(review, "pulls.review.submit_review", "Start / submit review", 10, actions.review_action)
-		if opts.include_task then
-			add(review, "pulls.review.diff.toggle_resolved", "Toggle task completion", 11, actions.toggle_task)
-		end
 	end
 
 	if include_actions and content then

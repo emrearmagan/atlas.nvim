@@ -1,9 +1,7 @@
 local M = {}
 
 local diff = require("atlas.ui.components.diff_hunks")
-local icons = require("atlas.ui.shared.icons")
 local keymaps = require("atlas.core.keymaps")
-local spinner = require("atlas.ui.components.spinner")
 local state = require("atlas.pulls.diff.atlas.state")
 local renderer = require("atlas.ui.statusline")
 local summary = require("atlas.pulls.diff.shared.ui.statusline")
@@ -15,29 +13,15 @@ function M.attach(win)
 	vim.api.nvim_set_option_value("statusline", EXPRESSION, { win = win, scope = "local" })
 end
 
----@class AtlasNativeDiffStatuslineNotice: AtlasStatuslineNotice
----@field token integer
-
----@class AtlasNativeDiffStatusline
+---@class AtlasNativeDiffStatusline: AtlasDiffStatuslineState
 ---@field items AtlasStatuslineSegment[]
----@field notice AtlasNativeDiffStatuslineNotice
----@field spinner SpinnerInstance|nil
 
 ---@return AtlasNativeDiffStatusline
 function M.new()
-	return {
-		items = {},
-		notice = { text = "", hl_group = "AtlasFooterText", token = 0 },
-		spinner = nil,
-	}
-end
-
----@param current AtlasNativeDiffStatusline
-local function stop_spinner(current)
-	if current.spinner then
-		current.spinner:stop()
-		current.spinner = nil
-	end
+	---@type AtlasNativeDiffStatusline
+	local current = summary.new()
+	current.items = {}
+	return current
 end
 
 ---@param session AtlasNativeDiffSession
@@ -82,61 +66,12 @@ function M.update(session)
 	end
 end
 
----@param level "loading"|"success"|"warn"|"error"|"info"
----@return string icon, string hl_group
-local function notice_style(level)
-	local icon_name = level == "warn" and "warning" or level
-	local icon = level == "loading" and "" or icons.general(icon_name)
-	local highlights = {
-		loading = "AtlasFooterInfo",
-		success = "AtlasFooterSuccess",
-		warn = "AtlasFooterWarning",
-		error = "AtlasFooterError",
-		info = "AtlasFooterInfo",
-	}
-	return icon, highlights[level] or "AtlasFooterText"
-end
-
 ---@param session AtlasNativeDiffSession
 ---@param level "loading"|"success"|"warn"|"error"|"info"
 ---@param message string
 ---@param duration? integer
 function M.notify(session, level, message, duration)
-	local current = session.statusline
-	message = tostring(message or ""):gsub("[\r\n]+", " | ")
-	message = #message > 60 and message:sub(1, 57) .. "..." or message
-	current.notice.token = current.notice.token + 1
-	local token = current.notice.token
-	stop_spinner(current)
-
-	local icon, hl_group = notice_style(level)
-	current.notice.hl_group = hl_group
-	if level == "loading" then
-		current.spinner = spinner.create({
-			on_tick = function(frame)
-				if session.closing or current.notice.token ~= token then
-					return
-				end
-				current.notice.text = string.format("%s %s", frame, message)
-				vim.cmd("redrawstatus")
-			end,
-		})
-		current.notice.text = current.spinner:text(message)
-		current.spinner:start()
-		vim.cmd("redrawstatus")
-		return
-	end
-
-	current.notice.text = icon ~= "" and string.format("%s %s", icon, message) or message
-	vim.cmd("redrawstatus")
-	vim.defer_fn(function()
-		if session.closing or current.notice.token ~= token then
-			return
-		end
-		current.notice.text = ""
-		current.notice.hl_group = "AtlasFooterText"
-		vim.cmd("redrawstatus")
-	end, duration or 2500)
+	summary.notify(session.statusline, level, message, duration)
 end
 
 ---@return string
@@ -153,7 +88,7 @@ end
 
 ---@param session AtlasNativeDiffSession
 function M.dispose(session)
-	stop_spinner(session.statusline)
+	summary.dispose(session.statusline)
 end
 
 return M

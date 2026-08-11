@@ -125,7 +125,7 @@ function M.fetch_review(pr, opts, on_done)
 
 		local inline_comments = {}
 		for _, comment in ipairs(review_comments) do
-			if comment.inline then
+			if comment.inline and comment.state ~= "DELETED" then
 				attach_hunk(comment, files)
 				table.insert(inline_comments, comment)
 			end
@@ -216,23 +216,20 @@ end
 
 ---@param pr PullRequest
 ---@param _review PullsReview|nil
----@param body string
+---@param _body string
 ---@param on_done fun(ok: boolean, err: string|nil)
----@return { cancel: fun() }|nil
-function M.submit_review(pr, _review, body, on_done)
-	-- TODO: How to resolve those pending comments?
-	if vim.trim(body) == "" then
-		on_done(false, "Review comment cannot be empty")
+---@return nil
+function M.submit_review(pr, _review, _body, on_done)
+	local url = tostring((pr.link or {}).html or "")
+	if url == "" then
+		on_done(false, "No pull request URL available")
 		return nil
 	end
 
-	return comments.add_comment(pr, body, nil, function(comment, err)
-		if err or not comment then
-			on_done(false, err or "Bitbucket did not return the review comment")
-			return
-		end
-		on_done(true, nil)
-	end)
+	-- TODO: I could not figure out how to resolve the pending comments and submit via the API, so for now we just open the PR in the browser for the user to submit their review.
+	vim.ui.open(url)
+	on_done(true, nil)
+	return nil
 end
 
 ---@param pr PullRequest
