@@ -129,27 +129,23 @@ local function comment_item(comment, opts, is_root)
 		local timestamp = utils.relative_time(comment.created_on)
 		local additional = timestamp ~= "" and ("TASK  " .. timestamp) or "TASK"
 		local footer_items = {}
-		if opts.toggle_resolved_key then
-			table.insert(footer_items, {
-				text = string.format(
-					"%s (%s)",
-					is_resolved and icons.general("refresh") or icons.general("success"),
-					opts.toggle_resolved_key
-				),
-				hl_group = "AtlasTextMuted",
-			})
-		end
-		local edit_key = opts.action_keys and opts.action_keys.edit
+		local edit_key = is_root and opts.action_keys and opts.action_keys.edit
 		if edit_key then
 			table.insert(footer_items, {
-				text = string.format("%s (%s)", icons.general("edit"), edit_key),
+				text = edit_key .. " edit",
 				hl_group = "AtlasTextMuted",
 			})
 		end
-		local delete_key = opts.action_keys and opts.action_keys.delete
+		local delete_key = is_root and opts.action_keys and opts.action_keys.delete
 		if delete_key then
 			table.insert(footer_items, {
-				text = string.format("%s (%s)", icons.general("delete"), delete_key),
+				text = delete_key .. " delete",
+				hl_group = "AtlasTextMuted",
+			})
+		end
+		if is_root and opts.toggle_resolved_key then
+			table.insert(footer_items, {
+				text = opts.toggle_resolved_key .. (is_resolved and " reopen" or " complete"),
 				hl_group = "AtlasTextMuted",
 			})
 		end

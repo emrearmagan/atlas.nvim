@@ -14,8 +14,7 @@ end
 ---@param buf integer
 ---@param win integer|nil
 ---@param text string
----@param hl_group string|nil
-function M.render(buf, win, text, hl_group)
+function M.render(buf, win, text)
 	if not win or not vim.api.nvim_win_is_valid(win) or not vim.api.nvim_buf_is_valid(buf) then
 		return
 	end
@@ -40,10 +39,15 @@ function M.render(buf, win, text, hl_group)
 	local col = math.max(0, math.floor((width - vim.fn.strdisplaywidth(text)) / 2))
 	M.clear(buf)
 	vim.api.nvim_buf_set_extmark(buf, namespace, math.floor((height - 1) / 2), 0, {
-		virt_text = { { text, hl_group or "AtlasLogInfo" } },
+		virt_text = { { text, "Normal" } },
 		virt_text_win_col = col,
 	})
 end
+
+---@class AtlasDiffLifecycle
+---@field session_id string
+---@field opened boolean
+---@field closed boolean
 
 ---@class AtlasLoadingTarget
 ---@field tabpage integer
@@ -54,7 +58,7 @@ end
 ---@field statuscolumn string
 ---@field statusline string
 ---@field winbar string
----@field diff_lifecycle AtlasNativeDiffLifecycle|nil
+---@field diff_lifecycle AtlasDiffLifecycle|nil
 ---@field on_abandon (fun(reason: string))|nil
 
 ---@class AtlasLoadingView

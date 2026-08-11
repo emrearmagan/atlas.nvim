@@ -7,6 +7,7 @@ local review_threads = require("atlas.ui.components.review_threads")
 ---@class AtlasReviewActionContext: AtlasPullActionContext
 ---@field pr PullRequest
 ---@field items PullsComment[]|nil
+---@field data PullsReviewData|nil
 ---@field completion AtlasMarkdownCompletionProvider|nil
 ---@field active (fun(): boolean)|nil
 ---@field track (fun(handle: { cancel: fun() }|nil): fun())|nil
@@ -162,6 +163,7 @@ function M.add_comment(context, opts, on_done)
 					parent = parent,
 					inline = opts.inline,
 					pending = pending,
+					review = context.data and context.data.review,
 				}, done)
 			end, function(created, err)
 				if not active(context) then
@@ -178,6 +180,9 @@ function M.add_comment(context, opts, on_done)
 				if created and context.items then
 					upsert_comment(context.items, created)
 				end
+				if pending and context.data then
+					context.data.review.pending = true
+				end
 				notify(context, "success", message, 1200)
 				on_done({ changed_pr = false, message = message }, nil)
 			end)
@@ -193,7 +198,6 @@ local function remove_comment(items, comment)
 	for _, existing in ipairs(items) do
 		if tostring(existing.parent_id or "") == id then
 			comment.content_raw = ""
-			comment.deleted = true
 			comment.state = "DELETED"
 			return
 		end
@@ -321,9 +325,29 @@ function M.delete_comment(context, comment, on_done)
 				on_done(nil, "Delete failed")
 				return
 			end
+			local pending = comment.state == "PENDING"
 			local message = comment.is_task and "Task deleted" or "Comment deleted"
-			notify(context, "success", message, 1200)
+			if pending and context.data then
+				run_request(context, function(done)
+					return context.provider.capabilities.reviews.fetch(context.pr, { force_refresh = true }, done)
+				end, function(data)
+					if not active(context) then
+						return
+					end
+					if data then
+						context.data.review = data.review
+						context.data.comments = data.comments
+						context.data.tasks = data.tasks
+					else
+						remove_comment(items, comment)
+					end
+					notify(context, "success", message, 1200)
+					on_done({ changed_pr = false, message = message }, nil)
+				end)
+				return
+			end
 			remove_comment(items, comment)
+			notify(context, "success", message, 1200)
 			on_done({ changed_pr = false, message = message }, nil)
 		end)
 	end)
@@ -443,7 +467,7 @@ local function open_review_editor(context, capability, title, loading, success, 
 			end
 			notify(context, "loading", loading)
 			run_request(context, function(done)
-				return submit(context.pr, body, done)
+				return submit(context.pr, context.data and context.data.review, body, done)
 			end, function(ok, err)
 				if not active(context) then
 					return
@@ -461,6 +485,36 @@ local function open_review_editor(context, capability, title, loading, success, 
 	})
 	return true
 end
+
+M.start_review = {
+	id = "start_review",
+	label = "Start review",
+	run = function(context, on_done)
+		local data = context.data
+		local reviews = context.provider.capabilities.reviews
+		local start = reviews and reviews.start_review
+		if not data or data.review.pending or not start then
+			return false
+		end
+		notify(context, "loading", "Starting review...")
+		run_request(context, function(done)
+			return start(context.pr, data.review, done)
+		end, function(ok, err)
+			if not active(context) then
+				return
+			end
+			if not ok then
+				local message = tostring(err or "Unknown error")
+				notify(context, "error", "Start review failed: " .. message)
+				on_done(nil, message)
+				return
+			end
+			notify(context, "success", "Review started", 1200)
+			on_done({ changed_pr = false, message = "Review started" }, nil)
+		end)
+		return true
+	end,
+}
 
 M.submit_review = {
 	id = "submit_review",
@@ -497,6 +551,50 @@ M.request_changes = {
 			"Changes requested",
 			on_done
 		)
+	end,
+}
+
+M.discard_review = {
+	id = "discard_review",
+	label = "Discard review",
+	run = function(context, on_done)
+		local data = context.data
+		local reviews = context.provider.capabilities.reviews
+		local discard = reviews and reviews.discard_review
+		if not data or not data.review.pending or not discard then
+			return false
+		end
+		vim.ui.input({ prompt = "Discard pending review? [y/N]: " }, function(input)
+			if not active(context) or not input or not input:lower():match("^y") then
+				return
+			end
+			notify(context, "loading", "Discarding review...")
+			run_request(context, function(done)
+				return discard(context.pr, data.review, done)
+			end, function(ok, err)
+				if not active(context) then
+					return
+				end
+				if not ok then
+					notify(context, "error", "Discard review failed: " .. tostring(err or "Unknown error"))
+					on_done(nil, err)
+					return
+				end
+				data.review.id = nil
+				data.review.commit_hash = nil
+				data.review.pending = false
+				for _, items in ipairs({ data.comments, data.tasks }) do
+					for index = #items, 1, -1 do
+						if items[index].state == "PENDING" then
+							table.remove(items, index)
+						end
+					end
+				end
+				notify(context, "success", "Review discarded", 1200)
+				on_done({ changed_pr = false, message = "Review discarded" }, nil)
+			end)
+		end)
+		return true
 	end,
 }
 

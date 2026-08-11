@@ -32,6 +32,11 @@ local function track(handle)
 	end
 end
 
+function M.reset()
+	cancel_all()
+	state.reset()
+end
+
 ---@param pr PullRequest
 ---@param _repo PullsRepo|nil
 ---@param refresh fun()
@@ -52,8 +57,7 @@ function M.on_select(pr, _repo, refresh, opts)
 		or type(state.activity) == "string"
 
 	if should_fetch then
-		cancel_all()
-		state.reset()
+		M.reset()
 	end
 
 	local pr_id = tostring(pr.id or "")
@@ -119,6 +123,11 @@ end
 function M.is_selectable_line(_lnum, entry)
 	local k = entry.kind
 	return k == "header" or k == "content"
+end
+
+---@return boolean
+function M.is_loading()
+	return state.any_loading()
 end
 
 function M.deactivate()

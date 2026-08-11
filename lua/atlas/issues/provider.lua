@@ -81,11 +81,10 @@
 --------------------------------------------------------------------------------
 
 ---@class IssuesProviderPanel
----@field header_rows (fun(issue: Issue): IssuesPanelHeaderRow[])|nil
----@field chips (fun(issue: Issue): IssuesPanelChip[])|nil
+---@field header_rows (fun(issue: Issue, loading: boolean): IssuesPanelHeaderRow[])|nil
+---@field chips (fun(issue: Issue, loading: boolean): IssuesPanelChip[])|nil
 ---@field tabs (fun(): IssuesPanelTab[])|nil
----@field fetches (fun(issue: Issue, refresh: fun(), opts: { force_load?: boolean, issue_refreshed?: boolean }|nil))|nil
----@field is_loading (fun(issue: Issue): boolean)|nil
+---@field fetch_header (fun(issue: Issue, opts: { force_refresh: boolean|nil, issue_refreshed: boolean|nil }|nil, on_done: fun()): { cancel: fun() }|nil)|nil
 
 --------------------------------------------------------------------------------
 -- Panel types
@@ -106,8 +105,10 @@
 ---@class IssuesPanelTabModule
 ---@field render fun(issue: Issue, width: integer): string[], table[], table<integer, table>|nil
 ---@field on_select (fun(issue: Issue, refresh: fun(), opts: { force_refresh: boolean|nil }|nil))|nil
+---@field reset (fun())|nil
 ---@field activate (fun(buf: integer|nil, refresh: fun()|nil))|nil
 ---@field deactivate (fun(buf: integer|nil))|nil
+---@field is_loading (fun(): boolean)|nil
 ---@field is_selectable_line (fun(lnum: integer, entry: table): boolean)|nil
 ---@field on_enter (fun(issue: Issue, entry: table): boolean|nil)|nil
 

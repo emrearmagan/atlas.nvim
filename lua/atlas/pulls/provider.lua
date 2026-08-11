@@ -68,7 +68,6 @@
 ---@field reaction_options PullsReactionOption[]|nil
 ---@field comment_completion (fun(context: AtlasPullsCommentCompletionContext): AtlasMarkdownCompletionProvider|nil)|nil
 ---@field fetch_conversation (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(result: { comments: PullsComment[], events: PullsActivityEntry[] }|nil, err: string|nil)): { cancel: fun() }|nil)|nil
----@field fetch_review_comments fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(comments: PullsComment[]|nil, err: string|nil)): { cancel: fun() }|nil
 ---@field add_comment (fun(pr: PullRequest, content: string, opts: PullsAddCommentOpts|nil, on_done: fun(comment: PullsComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field edit_comment (fun(pr: PullRequest, comment: PullsComment, on_done: fun(comment: PullsComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field delete_comment (fun(pr: PullRequest, target: PullsComment, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
@@ -76,14 +75,15 @@
 ---@field set_thread_resolved (fun(pr: PullRequest, root: PullsComment, resolved: boolean, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
 
 ---@class PullsReviewsCapability
+---@field fetch fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(data: PullsReviewData|nil, err: string|nil)): { cancel: fun() }|nil
 ---@field fetch_review_context (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(context: { authors: PullsAuthor[] }|nil, err: string|nil)): { cancel: fun() }|nil)|nil
----@field submit_review (fun(pr: PullRequest, body: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
----@field approve (fun(pr: PullRequest, body: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
----@field unapprove (fun(pr: PullRequest, body: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
----@field request_changes (fun(pr: PullRequest, body: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field start_review (fun(pr: PullRequest, review: PullsReview, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field submit_review (fun(pr: PullRequest, review: PullsReview|nil, body: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field approve (fun(pr: PullRequest, review: PullsReview|nil, body: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field request_changes (fun(pr: PullRequest, review: PullsReview|nil, body: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field discard_review (fun(pr: PullRequest, review: PullsReview, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
 
 ---@class PullsTasksCapability
----@field fetch_tasks fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(tasks: PullsComment[]|nil, err: string|nil)): { cancel: fun() }|nil
 ---@field add_task (fun(pr: PullRequest, content: string, parent: PullsComment|nil, on_done: fun(comment: PullsComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field edit_task (fun(task: PullsComment, on_done: fun(task: PullsComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field delete_task (fun(task: PullsComment, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
@@ -120,13 +120,13 @@
 ---@field parent PullsComment|nil          -- reply to this comment
 ---@field inline PullsInlineCommentPosition|nil
 ---@field pending boolean|nil              -- add the comment to a pending review
+---@field review PullsReview|nil
 
 ---@class PullsProviderPanel
----@field header_rows (fun(pr: PullRequest): PullsPanelHeaderRow[])|nil
----@field chips (fun(pr: PullRequest): PullsPanelChip[])|nil
+---@field header_rows (fun(pr: PullRequest, loading: boolean): PullsPanelHeaderRow[])|nil
+---@field chips (fun(pr: PullRequest, loading: boolean): PullsPanelChip[])|nil
 ---@field tabs (fun(): PullsPanelTab[])|nil
----@field fetches (fun(pr: PullRequest, refresh: fun(), opts: { force_refresh: boolean|nil, pr_refreshed: boolean|nil }|nil))|nil
----@field is_loading (fun(pr: PullRequest, active_tab: string|nil): boolean)|nil
+---@field fetch_header (fun(pr: PullRequest, opts: { force_refresh: boolean|nil, pr_refreshed: boolean|nil }|nil, on_done: fun()): { cancel: fun() }|nil)|nil
 
 ---@class PullsProviderPanelKeymaps
 ---@field register fun(buf: integer)
@@ -160,8 +160,10 @@
 ---@class PullsPanelTabModule
 ---@field render fun(pr: PullRequest, width: integer): string[], table[], table<integer, table>|nil
 ---@field on_select (fun(pr: PullRequest, repo: PullsRepo|nil, refresh: fun(), opts: { force_refresh: boolean|nil }|nil))|nil
+---@field reset (fun())|nil
 ---@field activate (fun(buf: integer|nil, refresh: fun()|nil))|nil
 ---@field deactivate (fun(buf: integer|nil))|nil
+---@field is_loading (fun(): boolean)|nil
 ---@field is_selectable_line (fun(lnum: integer, entry: table): boolean)|nil
 ---@field on_enter (fun(pr: PullRequest, entry: table): boolean|nil)|nil
 

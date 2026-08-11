@@ -138,45 +138,4 @@ function M.build_completion()
 	}
 end
 
----@param text string
----@return string
-function M.resolve(text)
-	local raw = tostring(text or "")
-	if raw == "" then
-		return ""
-	end
-
-	local mention_map = build_map()
-
-	local resolved = raw:gsub("%[@([^%]]+)%]%((atlas%-mention:([^%)]+))%)", function(label, _, id)
-		local entry = mention_map[tostring(id or "")]
-		local name = entry and entry.label or nil
-		if name ~= nil and name ~= "" then
-			return "@" .. name
-		end
-
-		local fallback = vim.trim(tostring(label or ""))
-		if fallback:sub(1, 1) == "@" then
-			return fallback
-		end
-		return fallback ~= "" and ("@" .. fallback) or ""
-	end)
-
-	resolved = resolved:gsub("%[@([^%]]+)%]%{mention:([^}]+)%}", function(label, id)
-		local entry = mention_map[tostring(id or "")]
-		local name = entry and entry.label or nil
-		if name ~= nil and name ~= "" then
-			return "@" .. name
-		end
-
-		local fallback = vim.trim(tostring(label or ""))
-		if fallback:sub(1, 1) == "@" then
-			return fallback
-		end
-		return fallback ~= "" and ("@" .. fallback) or ""
-	end)
-
-	return resolved
-end
-
 return M

@@ -46,6 +46,7 @@ function M.render(tab_items, get_tab_module)
 	if win == nil or not vim.api.nvim_win_is_valid(win) then
 		return
 	end
+	vim.api.nvim_set_option_value("winbar", " ", { win = win })
 
 	local repo = panel_state.current_repo
 	local repo_details = type(panel_state.current_repo_details) == "table" and panel_state.current_repo_details or nil

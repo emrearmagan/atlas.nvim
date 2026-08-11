@@ -24,24 +24,17 @@ local THREAD_ACTIONS = {
 local function author_completion()
 	local provider = require("atlas.pulls.state").provider
 	local comments_capability = provider and provider.capabilities.comments
-	local comments = state.comments
-	local tasks = state.tasks
+	local data = state.data
 	local pr = require("atlas.pulls.ui.panel.pr.state").current_pr
-	if
-		not provider
-		or not pr
-		or not comments_capability
-		or not comments_capability.comment_completion
-		or (type(comments) ~= "table" and type(tasks) ~= "table")
-	then
+	if not provider or not pr or not data or not comments_capability or not comments_capability.comment_completion then
 		return nil
 	end
 	local reviewers = require("atlas.pulls.ui.panel.pr.tabs.overview.state").reviewers
 	local conversation = require("atlas.pulls.ui.panel.pr.tabs.conversation.state").comments
 	return comments_capability.comment_completion({
 		pr = pr,
-		comments = type(comments) == "table" and comments or {},
-		tasks = type(tasks) == "table" and tasks or nil,
+		comments = data.comments,
+		tasks = data.tasks,
 		reviewers = type(reviewers) == "table" and reviewers or nil,
 		conversation = type(conversation) == "table" and conversation or nil,
 	})
@@ -67,11 +60,10 @@ end
 
 ---@param expected_generation integer
 ---@param pr PullRequest
----@param key "comments"|"tasks"
----@param items PullsComment[]
+---@param data PullsReviewData
 ---@return boolean
-local function is_current_list(expected_generation, pr, key, items)
-	return is_current(expected_generation, pr) and state[key] == items
+local function is_current_data(expected_generation, pr, data)
+	return is_current(expected_generation, pr) and state.data == data
 end
 
 local function cancel_all()
@@ -79,6 +71,12 @@ local function cancel_all()
 		pcall(handle.cancel)
 	end
 	in_flight = {}
+end
+
+function M.reset()
+	invalidate()
+	cancel_all()
+	state.reset()
 end
 
 ---@param handle { cancel: fun() }|nil
@@ -129,70 +127,37 @@ end
 ---@param refresh fun()
 ---@param opts { force_refresh: boolean|nil }|nil
 function M.on_select(pr, _repo, refresh, opts)
-	local request_generation = invalidate()
-	cancel_all()
-	state.reset()
+	M.reset()
+	local request_generation = generation
 
 	local provider = get_provider()
-	local comments_capability = provider and provider.capabilities.comments
-	local tasks = provider and provider.capabilities.tasks
-	if comments_capability == nil then
-		state.comments = "Pull request provider is not available"
+	local reviews = provider and provider.capabilities.reviews
+	if reviews == nil then
+		state.status = "Pull request provider is not available"
 		refresh()
 		return
 	end
 
 	local pr_id = tostring(pr.id or "")
-	state.comments = "loading"
-	state.tasks = tasks and "loading" or nil
+	state.status = "loading"
 	statusline.notify("loading", string.format("Loading review for #%s...", pr_id))
 
-	local pending = tasks and 2 or 1
-	local comments_error, tasks_error
-	local function complete()
-		pending = pending - 1
-		refresh()
-		if pending > 0 then
-			return
-		end
-		if comments_error then
-			statusline.notify("error", string.format("Failed to load comments for #%s: %s", pr_id, comments_error))
-		elseif tasks_error then
-			statusline.notify("warn", string.format("Failed to load review items for #%s: %s", pr_id, tasks_error))
-		else
-			statusline.notify("success", string.format("Review loaded for #%s", pr_id), 1200)
-		end
-	end
-
-	local comments_handle = comments_capability.fetch_review_comments(pr, opts, function(comments, err)
+	local handle = reviews.fetch(pr, opts, function(data, err)
 		if not is_current(request_generation, pr) then
 			return
 		end
-		if err then
-			comments_error = tostring(err)
-			state.comments = comments_error
+		if err or not data then
+			local message = tostring(err or "Provider returned no review data")
+			state.status = message
+			statusline.notify("error", string.format("Failed to load review for #%s: %s", pr_id, message))
 		else
-			state.comments = comments or {}
+			state.data = data
+			state.status = nil
+			statusline.notify("success", string.format("Review loaded for #%s", pr_id), 1200)
 		end
-		complete()
+		refresh()
 	end)
-	track(comments_handle)
-
-	if tasks then
-		local tasks_handle = tasks.fetch_tasks(pr, opts, function(result, err)
-			if not is_current(request_generation, pr) then
-				return
-			end
-			if err then
-				tasks_error = tostring(err)
-				state.tasks = tasks_error
-			else
-				state.tasks = result or {}
-			end
-			complete()
-		end)
-		track(tasks_handle)
-	end
+	track(handle)
 end
 
 ---@param _pr PullRequest
@@ -203,7 +168,11 @@ function M.render(_pr, width)
 	if completion and completion.resolve_items then
 		completion.resolve_items()
 	end
-	return renderer.render(width, state.comments, state.tasks)
+	if state.status then
+		return renderer.render(width, state.status, nil)
+	end
+	local data = state.data
+	return renderer.render(width, data and data.comments or nil, data and data.tasks or nil)
 end
 
 ---@param _lnum integer
@@ -267,6 +236,11 @@ function M.show_details(_pr, entry, buf)
 	require("atlas.ui.popups.info").show({ lines = lines, source_buf = buf })
 end
 
+---@return boolean
+function M.is_loading()
+	return state.any_loading()
+end
+
 function M.activate(buf, refresh)
 	if buf == nil or refresh == nil then
 		return
@@ -289,19 +263,20 @@ end
 ---@return AtlasReviewActionContext|nil
 local function action_context(pr, key)
 	local provider = get_provider()
-	local items = state[key]
-	if not provider or type(items) ~= "table" then
+	local data = state.data
+	if not provider or not data then
 		return nil
 	end
-	---@cast items PullsComment[]
+	local items = data[key]
 	local context_generation = generation
 	return {
 		provider = provider,
 		pr = pr,
 		items = items,
+		data = data,
 		completion = author_completion(),
 		active = function()
-			return is_current_list(context_generation, pr, key, items)
+			return is_current_data(context_generation, pr, data)
 		end,
 		track = track,
 	}
@@ -374,13 +349,13 @@ function M.add_task(pr, refresh)
 		return
 	end
 	local add_task = tasks_capability.add_task
-	local tasks = state.tasks
-	if type(tasks) ~= "table" then
+	local data = state.data
+	if not data then
 		return
 	end
-	---@cast tasks PullsComment[]
+	local tasks = data.tasks
 	local context_generation = generation
-	if not is_current_list(context_generation, pr, "tasks", tasks) then
+	if not is_current_data(context_generation, pr, data) then
 		return
 	end
 
@@ -403,7 +378,7 @@ function M.add_task(pr, refresh)
 		title = " Add Task ",
 		preview = preview,
 		on_save = function(text)
-			if not is_current_list(context_generation, pr, "tasks", tasks) then
+			if not is_current_data(context_generation, pr, data) then
 				return
 			end
 			if not text or vim.trim(text) == "" then
@@ -412,7 +387,7 @@ function M.add_task(pr, refresh)
 			end
 			statusline.notify("loading", "Adding task...")
 			track(add_task(pr, text, parent, function(task, err)
-				if not is_current_list(context_generation, pr, "tasks", tasks) then
+				if not is_current_data(context_generation, pr, data) then
 					return
 				end
 				if err then

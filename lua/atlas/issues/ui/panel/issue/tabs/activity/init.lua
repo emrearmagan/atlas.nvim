@@ -28,6 +28,11 @@ local function track(handle)
 	end
 end
 
+function M.reset()
+	cancel_all()
+	state.reset()
+end
+
 ---@return IssuesProvider|nil
 local function get_provider()
 	return require("atlas.issues.state").provider
@@ -82,7 +87,7 @@ function M.on_select(issue, refresh, opts)
 		return
 	end
 
-	cancel_all()
+	M.reset()
 	state.is_loading = true
 	state.issue = issue
 
@@ -156,7 +161,10 @@ function M.is_selectable_line(_lnum, entry)
 	return entry.kind == "history"
 end
 
-function M.activate() end
+---@return boolean
+function M.is_loading()
+	return state.any_loading()
+end
 
 function M.deactivate()
 	cancel_all()

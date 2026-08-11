@@ -60,7 +60,8 @@ function M.setup(buf, refresh)
 				local entry = (panel_state.line_map or {})[lnum]
 				local pr = panel_state.current_pr
 				if pr and entry and entry.kind == "pipeline" and entry.pipeline then
-					local pipelines = type(state.pipelines) == "table" and state.pipelines or { entry.pipeline }
+					local pipelines = type(panel_state.pipelines) == "table" and panel_state.pipelines
+						or { entry.pipeline }
 					require("atlas.pulls.ui.pipelines").open(pr, pipelines, entry.pipeline, entry.job)
 				end
 			end,

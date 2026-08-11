@@ -28,6 +28,11 @@ local function track(handle)
 	end
 end
 
+function M.reset()
+	cancel_all()
+	state.reset()
+end
+
 ---@param raw any
 ---@return string
 local function to_markdown(raw)
@@ -51,10 +56,8 @@ function M.on_select(issue, refresh, opts)
 		return
 	end
 
-	cancel_all()
+	M.reset()
 	state.description_loading = true
-	state.raw_description = nil
-	state.md_description = nil
 
 	local issue_key = tostring(issue.key or "")
 	statusline.notify("loading", string.format("Loading description for %s...", issue_key))
@@ -147,6 +150,11 @@ local function apply_filetype(buf)
 		vim.api.nvim_set_option_value("syntax", "OFF", { buf = buf })
 		vim.api.nvim_set_option_value("filetype", "", { buf = buf })
 	end
+end
+
+---@return boolean
+function M.is_loading()
+	return state.description_loading
 end
 
 function M.activate(buf, refresh)

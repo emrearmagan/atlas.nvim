@@ -1,7 +1,6 @@
 local M = {}
 
 local service = require("atlas.issues.providers.jira.api.service")
-local cache = require("atlas.core.cache")
 local config = require("atlas.issues.providers.jira.api.config")
 
 ---@param str string
@@ -15,13 +14,7 @@ end
 ---@param callback fun(user: IssueUser|nil, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.get_myself(callback)
-	local cache_key = "jira:myself:" .. (config.jira_config().email or "")
-	local cached = cache.get(cache_key)
-	if cached and cached.value then
-		callback(cached.value, nil)
-		return nil
-	end
-
+	local jira = config.jira_config()
 	return service.request("GET", "/myself", nil, function(result, err)
 		if err or not result then
 			callback(nil, err or "Empty response")
@@ -32,13 +25,12 @@ function M.get_myself(callback)
 			display_name = tostring(result.displayName or ""),
 		}
 		-- Jira cloud uses `accountId` while Jira server uses `name`
-		if config.jira_config().api_type == "server" then
+		if jira.api_type == "server" then
 			user.account_id = tostring(result.name or "")
 		else
 			user.account_id = tostring(result.accountId or "")
 		end
 
-		cache.set(cache_key, user, service.cache_ttl())
 		callback(user, nil)
 	end, {
 		action = "Fetch current user",

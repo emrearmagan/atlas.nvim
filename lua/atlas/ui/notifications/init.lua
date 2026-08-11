@@ -326,7 +326,6 @@ local function mark_read(notification)
 		return
 	end
 	if not notification.unread then
-		statusline.notify("info", "Already read")
 		return
 	end
 
@@ -520,11 +519,6 @@ function M.refresh_in_background(opts, on_done)
 		end
 		on_done(state.unread_count, nil)
 	end)
-end
-
----@return integer
-function M.unread_count()
-	return state.unread_count or 0
 end
 
 return M

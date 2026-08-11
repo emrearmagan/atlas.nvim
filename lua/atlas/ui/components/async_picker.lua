@@ -638,6 +638,7 @@ function M.open(opts)
 		{ win = results_win }
 	)
 	vim.api.nvim_set_option_value("cursorline", true, { win = results_win })
+	vim.api.nvim_set_option_value("cursorlineopt", "line", { win = results_win })
 	statusline.inherit(results_win, input_win)
 
 	-- Initialize state

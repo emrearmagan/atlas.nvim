@@ -1,6 +1,4 @@
 local keymaps = require("atlas.core.keymaps")
-local editor = require("atlas.pulls.notes.ui.editor")
-local notes = require("atlas.pulls.notes")
 local renderer = require("atlas.pulls.notes.ui.renderer")
 local statusline = require("atlas.ui.statusline")
 
@@ -9,17 +7,11 @@ local M = {}
 local namespace = vim.api.nvim_create_namespace("atlas.notes.popup")
 local current_win
 
----@class AtlasNotesUIChange
----@field kind "upsert"|"delete"
----@field note AtlasNote|nil
----@field id string
-
 ---@class AtlasNotesUIPopupOptions
----@field target AtlasNoteTarget
 ---@field notes AtlasNote[]
 ---@field outdated table<string, boolean>|nil
----@field on_change fun(change: AtlasNotesUIChange)
----@field notify fun(level: "success"|"error", message: string)
+---@field on_edit fun(note: AtlasNote)
+---@field on_delete fun(note: AtlasNote)
 
 function M.close()
 	if current_win and vim.api.nvim_win_is_valid(current_win) then
@@ -93,14 +85,7 @@ function M.open(opts)
 			return
 		end
 		M.close()
-		editor.edit(opts.target, note, function(updated, err)
-			if not updated then
-				opts.notify("error", err or "Unable to update local note")
-				return
-			end
-			opts.on_change({ kind = "upsert", note = updated, id = updated.id })
-			opts.notify("success", "Local note updated")
-		end)
+		opts.on_edit(note)
 	end
 
 	local function delete()
@@ -109,19 +94,7 @@ function M.open(opts)
 			return
 		end
 		M.close()
-		vim.ui.input({ prompt = "Delete local note? [y/N]: " }, function(answer)
-			answer = vim.trim(tostring(answer or "")):lower()
-			if answer ~= "y" and answer ~= "yes" then
-				return
-			end
-			local deleted, err = notes.delete(opts.target, note.id)
-			if not deleted then
-				opts.notify("error", err or "Unable to delete local note")
-				return
-			end
-			opts.on_change({ kind = "delete", note = nil, id = note.id })
-			opts.notify("success", "Local note deleted")
-		end)
+		opts.on_delete(note)
 	end
 
 	local key_opts = { buffer = buf, silent = true, nowait = true }

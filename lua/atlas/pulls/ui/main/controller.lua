@@ -298,6 +298,10 @@ function M.refresh_pr(pr, on_done)
 
 	local pr_id = pr.id
 	local repo_id = tostring(pr.repo_full_name or "")
+	if state.is_pr_reloading(repo_id, pr_id) then
+		on_done()
+		return
+	end
 
 	statusline.notify("loading", string.format("Reloading PR #%s...", tostring(pr_id)))
 	begin_pr_reload(repo_id, pr_id)

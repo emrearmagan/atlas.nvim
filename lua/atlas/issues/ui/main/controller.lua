@@ -129,11 +129,6 @@ end
 
 ---@param on_done fun(err: string|nil)
 local function get_current_user(on_done)
-	if state.current_user ~= nil then
-		on_done(nil)
-		return
-	end
-
 	local provider = state.provider
 	if provider == nil then
 		on_done("no provider")
@@ -327,20 +322,17 @@ local function load_active_view(opts, on_done)
 		end)
 	end
 
-	if state.current_user == nil then
-		get_current_user(function(user_err)
-			if is_stale_request() then
-				return
-			end
-			if user_err then
-				statusline.notify("warn", string.format("Failed to fetch current user: %s", tostring(user_err)))
-				return
-			end
-			render_if_active()
-		end)
-	end
-
-	fetch_page(nil, {})
+	get_current_user(function(user_err)
+		if is_stale_request() then
+			return
+		end
+		if user_err then
+			finalize_fetch_failure(user_err, {})
+			return
+		end
+		render_if_active()
+		fetch_page(nil, {})
+	end)
 end
 
 ---@param on_done fun()|nil
@@ -470,6 +462,10 @@ function M.refresh_issue(issue, on_done)
 		on_done()
 		return
 	end
+	if state.is_issue_reloading(issue_key) then
+		on_done()
+		return
+	end
 
 	local provider = state.provider
 	if provider == nil then
@@ -529,15 +525,6 @@ function M.refresh_issue(issue, on_done)
 		end
 	)
 	table.insert(active_issue_reload_handles, reload_handle)
-end
-
----@param issue_key string|nil
-function M.toggle_issue_collapsed(issue_key)
-	if state.toggle_issue_collapsed(issue_key) ~= true then
-		return
-	end
-
-	render_if_active()
 end
 
 function M.toggle_current_issue_collapsed()

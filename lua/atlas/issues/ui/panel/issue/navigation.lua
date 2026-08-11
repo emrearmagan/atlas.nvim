@@ -76,36 +76,4 @@ function M.move_cursor(direction)
 	end
 end
 
-function M.focus_first()
-	local win, buf = panel_win_buf()
-	if win == nil or buf == nil then
-		return
-	end
-
-	local max_line = vim.api.nvim_buf_line_count(buf)
-	for lnum = 1, max_line do
-		if is_selectable(lnum) then
-			vim.api.nvim_win_set_cursor(win, { lnum, 0 })
-			return
-		end
-	end
-	vim.api.nvim_win_set_cursor(win, { 1, 0 })
-end
-
-function M.focus_last()
-	local win, buf = panel_win_buf()
-	if win == nil or buf == nil then
-		return
-	end
-
-	local max_line = vim.api.nvim_buf_line_count(buf)
-	for lnum = max_line, 1, -1 do
-		if is_selectable(lnum) then
-			vim.api.nvim_win_set_cursor(win, { lnum, 0 })
-			return
-		end
-	end
-	vim.api.nvim_win_set_cursor(win, { max_line, 0 })
-end
-
 return M

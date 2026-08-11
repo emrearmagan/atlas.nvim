@@ -480,6 +480,7 @@ function M.render(opts)
 	local lines, spans = {}, {}
 	local line_map = {}
 
+	table.insert(lines, "")
 	utils.append_block(
 		lines,
 		spans,

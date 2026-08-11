@@ -32,6 +32,8 @@ local M = {}
 ---@field open_file? AtlasKeymapValue
 ---@field next_file? AtlasKeymapValue
 ---@field previous_file? AtlasKeymapValue
+---@field next_unreviewed_file? AtlasKeymapValue
+---@field previous_unreviewed_file? AtlasKeymapValue
 ---@field toggle_grouping? AtlasKeymapValue
 ---@field toggle_file_reviewed? AtlasKeymapValue
 ---@field toggle_commits? AtlasKeymapValue
@@ -42,6 +44,7 @@ local M = {}
 ---@field next_hunk? AtlasKeymapValue
 ---@field previous_hunk? AtlasKeymapValue
 ---@field toggle_review_panel? AtlasKeymapValue
+---@field toggle_comments? AtlasKeymapValue
 ---@field next_comment? AtlasKeymapValue
 ---@field previous_comment? AtlasKeymapValue
 ---@field next_note? AtlasKeymapValue
@@ -123,6 +126,8 @@ local M = {}
 ---| "pulls.review.explorer.open_file"
 ---| "pulls.review.explorer.next_file"
 ---| "pulls.review.explorer.previous_file"
+---| "pulls.review.explorer.next_unreviewed_file"
+---| "pulls.review.explorer.previous_unreviewed_file"
 ---| "pulls.review.explorer.toggle_grouping"
 ---| "pulls.review.explorer.toggle_file_reviewed"
 ---| "pulls.review.explorer.toggle_commits"
@@ -131,6 +136,7 @@ local M = {}
 ---| "pulls.review.diff.next_hunk"
 ---| "pulls.review.diff.previous_hunk"
 ---| "pulls.review.diff.toggle_review_panel"
+---| "pulls.review.diff.toggle_comments"
 ---| "pulls.review.diff.next_comment"
 ---| "pulls.review.diff.previous_comment"
 ---| "pulls.review.diff.next_note"
@@ -342,6 +348,8 @@ function M.validate()
 			"pulls.review.explorer.open_file",
 			"pulls.review.explorer.next_file",
 			"pulls.review.explorer.previous_file",
+			"pulls.review.explorer.next_unreviewed_file",
+			"pulls.review.explorer.previous_unreviewed_file",
 			"pulls.review.explorer.toggle_grouping",
 			"pulls.review.explorer.toggle_file_reviewed",
 			"pulls.review.explorer.toggle_commits",
@@ -350,6 +358,7 @@ function M.validate()
 			"pulls.review.diff.next_hunk",
 			"pulls.review.diff.previous_hunk",
 			"pulls.review.diff.toggle_review_panel",
+			"pulls.review.diff.toggle_comments",
 			"pulls.review.diff.next_comment",
 			"pulls.review.diff.previous_comment",
 			"pulls.review.diff.next_note",

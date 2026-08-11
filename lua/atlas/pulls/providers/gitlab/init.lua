@@ -1,12 +1,13 @@
 local actions = require("atlas.pulls.providers.gitlab.actions")
 local activity_api = require("atlas.pulls.providers.gitlab.api.activity")
+local changes_api = require("atlas.pulls.providers.gitlab.api.changes")
 local checks_api = require("atlas.pulls.providers.gitlab.api.checks")
 local comments_api = require("atlas.pulls.providers.gitlab.api.comments")
-local commits_api = require("atlas.pulls.providers.gitlab.api.commits")
-local files_api = require("atlas.pulls.providers.gitlab.api.files")
-local mergerequests_api = require("atlas.pulls.providers.gitlab.api.mergerequests")
 local notifications_api = require("atlas.pulls.providers.gitlab.api.notifications")
+local pipelines_api = require("atlas.pulls.providers.gitlab.api.pipelines")
+local pullrequests_api = require("atlas.pulls.providers.gitlab.api.pullrequests")
 local repositories_api = require("atlas.pulls.providers.gitlab.api.repositories")
+local reviews_api = require("atlas.pulls.providers.gitlab.api.reviews")
 local service = require("atlas.providers.gitlab.client").pulls
 local users_api = require("atlas.pulls.providers.gitlab.api.users")
 local resolver = require("atlas.providers.resolve")
@@ -38,7 +39,7 @@ local function fetch_pullrequests(view, opts, on_done)
 	end
 	require("atlas.pulls.state").last_search_query = table.concat(parts, " ")
 
-	return mergerequests_api.list_mrs(view, {
+	return pullrequests_api.fetch_pullrequests(view, {
 		force_load = opts and opts.force_load == true or false,
 		pagelen = opts and opts.pagelen or 50,
 		state = state,
@@ -56,7 +57,7 @@ end
 ---@param on_done fun(pr: PullRequest|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 local function fetch_pullrequest(pr, opts, on_done)
-	return mergerequests_api.get_mr(pr, { force_load = opts and opts.force_load == true or false }, on_done)
+	return pullrequests_api.fetch_pullrequest(pr, { force_load = opts and opts.force_load == true or false }, on_done)
 end
 
 ---@param pr PullRequest
@@ -96,7 +97,7 @@ local function fetch_conversation(pr, opts, on_done)
 		table.insert(handles, activity_handle)
 	end
 
-	local comments_handle = comments_api.fetch_general_comments(pr, opts, function(comments, err)
+	local comments_handle = comments_api.fetch_general(pr, opts, function(comments, err)
 		if err then
 			first_err = first_err or err
 		else
@@ -118,39 +119,6 @@ local function fetch_conversation(pr, opts, on_done)
 	}
 end
 
----@param pr PullRequest
----@param opts { force_refresh: boolean|nil }|nil
----@param on_done fun(entries: PullsDiffstatEntry[]|nil, err: string|nil)
----@return { cancel: fun() }|nil
-local function fetch_diffstat(pr, opts, on_done)
-	return files_api.fetch_diff(pr, opts, function(files, err)
-		if not files then
-			on_done(nil, err)
-			return
-		end
-
-		local entries = {}
-		for _, file in ipairs(files) do
-			local additions, deletions = file.additions, file.deletions
-			if additions == nil and deletions == nil then
-				additions, deletions = 0, 0
-				for _, hunk in ipairs(file.hunks) do
-					additions = additions + hunk.additions
-					deletions = deletions + hunk.deletions
-				end
-			end
-			table.insert(entries, {
-				status = file.status,
-				path = file.path,
-				old_path = file.old_path,
-				lines_added = additions or 0,
-				lines_removed = deletions or 0,
-			})
-		end
-		on_done(entries, nil)
-	end)
-end
-
 ---@param opts PullsCreatePROpts
 ---@param on_done fun(result: PullsCreatePRResult|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
@@ -163,7 +131,7 @@ local function create_pr(opts, on_done)
 		end
 	end
 
-	return mergerequests_api.create_mr({
+	return pullrequests_api.create({
 		project_path = opts.repo_slug,
 		source_branch = opts.head,
 		target_branch = opts.base,
@@ -308,24 +276,23 @@ return {
 			fetch_pullrequests = fetch_pullrequests,
 			fetch_pullrequest = fetch_pullrequest,
 			create_pr = create_pr,
-			fetch_reviewers = mergerequests_api.get_reviewers,
-			update_reviewers = mergerequests_api.update_reviewers,
-			update_title = mergerequests_api.set_title,
-			set_draft = mergerequests_api.set_draft,
-			fetch_description = mergerequests_api.get_description,
-			fetch_default_reviewers = mergerequests_api.fetch_default_reviewers,
-			fetch_merge_checks = checks_api.get_merge_checks,
-			fetch_diffstat = fetch_diffstat,
+			fetch_reviewers = pullrequests_api.fetch_reviewers,
+			update_reviewers = pullrequests_api.update_reviewers,
+			update_title = pullrequests_api.update_title,
+			set_draft = pullrequests_api.set_draft,
+			fetch_description = pullrequests_api.fetch_description,
+			fetch_default_reviewers = pullrequests_api.fetch_default_reviewers,
+			fetch_merge_checks = checks_api.fetch,
+			fetch_diffstat = changes_api.fetch_diffstat,
 			fetch_activity = activity_api.fetch_activity,
-			fetch_commits = commits_api.fetch_commits,
-			fetch_diff = files_api.fetch_diff,
+			fetch_commits = changes_api.fetch_commits,
+			fetch_diff = changes_api.fetch_diff,
 			views = views,
 		},
 		comments = {
 			reaction_options = require("atlas.ui.shared.emojis").gitlab(),
 			comment_completion = require("atlas.pulls.providers.gitlab.completion.author").build_completion,
 			fetch_conversation = fetch_conversation,
-			fetch_review_comments = comments_api.fetch_comments,
 			add_comment = comments_api.add_comment,
 			edit_comment = comments_api.edit_comment,
 			delete_comment = comments_api.delete_comment,
@@ -333,11 +300,12 @@ return {
 			set_thread_resolved = comments_api.set_thread_resolved,
 		},
 		reviews = {
-			fetch_review_context = mergerequests_api.get_review_context,
-			submit_review = mergerequests_api.submit_review,
-			approve = mergerequests_api.approve_review,
-			unapprove = mergerequests_api.unapprove_review,
-			request_changes = mergerequests_api.request_changes,
+			fetch = reviews_api.fetch,
+			fetch_review_context = reviews_api.fetch_context,
+			submit_review = reviews_api.submit,
+			approve = reviews_api.approve,
+			request_changes = reviews_api.request_changes,
+			discard_review = reviews_api.discard,
 		},
 		repository = {
 			fetch_details = repositories_api.fetch_detail,
@@ -346,8 +314,8 @@ return {
 			delete_branch = repositories_api.delete_branch,
 		},
 		pipelines = {
-			fetch = checks_api.get_pipelines,
-			fetch_job_log = checks_api.get_pipeline_job_log,
+			fetch = pipelines_api.fetch,
+			fetch_job_log = pipelines_api.fetch_job_log,
 			actions = require("atlas.pulls.providers.gitlab.actions.pipelines"),
 		},
 		notifications = {

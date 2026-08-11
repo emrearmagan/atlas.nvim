@@ -187,12 +187,13 @@ Shared config that applies to all pulls providers:
       diff = {
         -- Any command that accepts explicit <base>...<head> Git revisions.
         open_cmd = "AtlasDiff", -- default; e.g. "DiffviewOpen" or "CodeDiff"
+        show_review_panel = false, -- set true to show the review panel initially
+        show_comments = true, -- show inline comment overlays initially
 
         -- AtlasDiff options; external viewers use their own configuration.
         layout = "inline", -- "inline" or "side-by-side"
         compact = true, -- initially show hunks plus surrounding context
         compact_context_lines = 3, -- context lines around hunks in compact mode
-        show_review_panel = false, -- set true to show comments and notes initially
         explorer = {
           grouped = true, -- group changed files by directory
           hidden = false,
@@ -520,8 +521,7 @@ to start a review.
   - Review provider tasks and GitHub checklists alongside the comments they
     belong to.
   - Add, reply to, edit, delete, resolve, or reopen comments when supported.
-  - Browse provider comments and local notes in AtlasDiff's bottom list; use
-    `za` to expand an item.
+  - Browse comments, tasks, and local notes in the bottom review panel
   - Submit pending comments with an optional review summary when supported.
 
 CodeDiff, sindrets/diffview.nvim, and dlyongemallo/diffview-plus.nvim can
@@ -744,6 +744,8 @@ Defaults live under `keymaps` in `setup()`. Each entry accepts:
             open_file             = "l",
             next_file             = { "]f", "<Tab>" },
             previous_file         = { "[f", "<S-Tab>" },
+            next_unreviewed_file      = "]u",
+            previous_unreviewed_file  = "[u",
             toggle_grouping       = "T",
             toggle_file_reviewed  = "-",
             toggle_commits        = "gC",
@@ -754,6 +756,7 @@ Defaults live under `keymaps` in `setup()`. Each entry accepts:
             next_hunk             = "]h",
             previous_hunk         = "[h",
             toggle_review_panel   = "gR",
+            toggle_comments       = "gH",
             next_comment          = "]c",
             previous_comment      = "[c",
             next_note             = "]n",
