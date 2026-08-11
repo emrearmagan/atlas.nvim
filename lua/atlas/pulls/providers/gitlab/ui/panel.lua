@@ -2,7 +2,7 @@
 local M = {}
 
 local header = require("atlas.pulls.ui.panel.components.header")
-local mr_api = require("atlas.pulls.providers.gitlab.api.mergerequests")
+local pullrequests_api = require("atlas.pulls.providers.gitlab.api.pullrequests")
 local spinner = require("atlas.ui.components.spinner")
 local icons = require("atlas.ui.shared.icons")
 
@@ -105,17 +105,21 @@ function M.fetch_header(pr, opts, on_done)
 	end
 
 	if fetch_labels then
-		local request = mr_api.get_project_labels(project_path, { force_refresh = force }, function(by_name, _)
-			state.labels_by_name = by_name or {}
-			complete()
-		end)
+		local request = pullrequests_api.fetch_project_labels(
+			project_path,
+			{ force_refresh = force },
+			function(by_name, _)
+				state.labels_by_name = by_name or {}
+				complete()
+			end
+		)
 		if request then
 			table.insert(requests, request)
 		end
 	end
 
 	if fetch_details then
-		local request = mr_api.get_mr(pr, { force_refresh = force }, function(fresh, err)
+		local request = pullrequests_api.fetch_pullrequest(pr, { force_refresh = force }, function(fresh, err)
 			if not err and type(fresh) == "table" then
 				pr.is_subscribed = fresh.is_subscribed
 				pr._raw = fresh._raw

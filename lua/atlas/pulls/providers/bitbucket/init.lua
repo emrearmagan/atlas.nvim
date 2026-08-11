@@ -1,10 +1,13 @@
 local actions = require("atlas.pulls.providers.bitbucket.actions")
+local activity_api = require("atlas.pulls.providers.bitbucket.api.activity")
+local changes_api = require("atlas.pulls.providers.bitbucket.api.changes")
 local comments_api = require("atlas.pulls.providers.bitbucket.api.comments")
 local pipelines_api = require("atlas.pulls.providers.bitbucket.api.pipelines")
 local pullrequests_api = require("atlas.pulls.providers.bitbucket.api.pullrequests")
 local repositories_api = require("atlas.pulls.providers.bitbucket.api.repositories")
+local reviews_api = require("atlas.pulls.providers.bitbucket.api.reviews")
+local tasks_api = require("atlas.pulls.providers.bitbucket.api.tasks")
 local users_api = require("atlas.pulls.providers.bitbucket.api.users")
-local diff_parser = require("atlas.core.git.diff_parser")
 local resolver = require("atlas.providers.resolve")
 
 ---@param value string
@@ -212,355 +215,6 @@ local function views()
 	return result
 end
 
----@param commit PullsCommit
----@param opts { force_refresh: boolean|nil }|nil
----@param on_done fun(status: string|nil, url: string|nil, err: string|nil)
----@return { cancel: fun() }|nil
-local function fetch_commit_status(commit, opts, on_done)
-	local statuses_url = tostring(commit.statuses_url or "")
-	if statuses_url == "" then
-		on_done("unknown", nil, nil)
-		return nil
-	end
-	return pipelines_api.fetch_commit_status(statuses_url, opts, on_done)
-end
-
----@param pr PullRequest
----@param opts { force_refresh: boolean|nil }|nil
----@param on_done fun(tasks: PullsComment[]|nil, err: string|nil)
----@return { cancel: fun() }|nil
-local function fetch_tasks(pr, opts, on_done)
-	opts = opts or {}
-	return comments_api.fetch_tasks(
-		tostring(pr.workspace or ""),
-		tostring(pr.repo or ""),
-		pr.id,
-		{ force_refresh = opts.force_refresh == true },
-		function(tasks, err)
-			if err then
-				on_done(nil, err)
-				return
-			end
-			tasks = tasks or {}
-			table.sort(tasks, function(a, b)
-				return tostring(a.created_on or "") < tostring(b.created_on or "")
-			end)
-			on_done(tasks, nil)
-		end
-	)
-end
-
----@param comment PullsComment
----@param files DiffFile[]|nil
-local function attach_hunk(comment, files)
-	if not comment.inline or not files then
-		return
-	end
-	local side = comment.inline.to ~= nil and "new" or "old"
-	local line = comment.inline.to or comment.inline.from
-	if not line then
-		return
-	end
-	for _, file in ipairs(files) do
-		if file.path == comment.inline.path or file.old_path == comment.inline.path then
-			local hunk = diff_parser.find_hunk(file, side, line)
-			if hunk then
-				comment.inline_hunk = hunk
-				return
-			end
-		end
-	end
-end
-
----@param pr PullRequest
----@param opts { force_refresh: boolean|nil }|nil
----@param on_done fun(data: PullsReviewData|nil, err: string|nil)
----@return { cancel: fun() }|nil
-local function fetch_review(pr, opts, on_done)
-	opts = opts or {}
-	local comments_result, diff_result, tasks_result
-	local review_err
-	local pending = 3
-	local handles = {}
-	local cancelled = false
-
-	local function finish()
-		pending = pending - 1
-		if cancelled or pending > 0 then
-			return
-		end
-		if review_err then
-			on_done(nil, review_err)
-			return
-		end
-
-		local comments = {}
-		for _, comment in ipairs(comments_result) do
-			if comment.inline then
-				attach_hunk(comment, diff_result)
-				table.insert(comments, comment)
-			end
-		end
-		local pending_review = false
-		for _, items in ipairs({ comments_result, tasks_result }) do
-			for _, item in ipairs(items) do
-				-- Bitbucket only exposes pending items to their author.
-				if item.state == "PENDING" then
-					pending_review = true
-					break
-				end
-			end
-		end
-		on_done({
-			review = { id = nil, commit_hash = nil, pending = pending_review },
-			comments = comments,
-			tasks = tasks_result,
-		}, nil)
-	end
-
-	local comments_handle = comments_api.fetch_comments(pr, opts, function(comments, err)
-		review_err = review_err or err
-		comments_result = comments or {}
-		finish()
-	end)
-	if comments_handle then
-		table.insert(handles, comments_handle)
-	end
-
-	local diff_handle = pullrequests_api.fetch_diff(pr, { force_refresh = opts.force_refresh == true }, function(files)
-		diff_result = files or {}
-		finish()
-	end)
-	if diff_handle then
-		table.insert(handles, diff_handle)
-	end
-
-	local tasks_handle = fetch_tasks(pr, opts, function(tasks, err)
-		review_err = review_err or err
-		tasks_result = tasks or {}
-		finish()
-	end)
-	if tasks_handle then
-		table.insert(handles, tasks_handle)
-	end
-
-	return {
-		cancel = function()
-			cancelled = true
-			for _, handle in ipairs(handles) do
-				handle.cancel()
-			end
-		end,
-	}
-end
-
----@param pr PullRequest
----@param opts { force_refresh: boolean|nil }|nil
----@param on_done fun(result: { comments: PullsComment[], events: PullsActivityEntry[] }|nil, err: string|nil)
----@return { cancel: fun() }
-local function fetch_conversation(pr, opts, on_done)
-	local cancelled = false
-	local comments_handle, activity_handle
-	comments_handle = comments_api.fetch_comments(pr, opts, function(result, err)
-		if cancelled then
-			return
-		end
-		if err then
-			on_done(nil, err)
-			return
-		end
-
-		local comments = {}
-		for _, comment in ipairs(result or {}) do
-			if comment.inline == nil then
-				table.insert(comments, comment)
-			end
-		end
-		activity_handle = pullrequests_api.fetch_activity(pr, opts, function(events)
-			if not cancelled then
-				local timeline = {}
-				for _, event in ipairs(events or {}) do
-					if event.kind ~= "comment" then
-						table.insert(timeline, event)
-					end
-				end
-				on_done({ comments = comments, events = timeline }, nil)
-			end
-		end)
-	end)
-
-	return {
-		cancel = function()
-			cancelled = true
-			if comments_handle then
-				comments_handle.cancel()
-			end
-			if activity_handle then
-				activity_handle.cancel()
-			end
-		end,
-	}
-end
-
----@param pr PullRequest
----@param content string
----@param parent PullsComment|nil
----@param on_done fun(comment: PullsComment|nil, err: string|nil)
----@return { cancel: fun() }|nil
-local function add_task(pr, content, parent, on_done)
-	return comments_api.create_task(
-		tostring(pr.workspace or ""),
-		tostring(pr.repo or ""),
-		pr.id,
-		content,
-		{ comment_id = parent and parent.id or nil, pending = parent ~= nil and parent.state == "PENDING" },
-		function(created, err)
-			if err or not created then
-				on_done(nil, err or "Bitbucket did not return the created task")
-				return
-			end
-			on_done(created, nil)
-		end
-	)
-end
-
----@param task PullsComment
----@param on_done fun(task: PullsComment|nil, err: string|nil)
----@return { cancel: fun() }|nil
-local function edit_task(task, on_done)
-	local task_url = tostring(task.url or "")
-	if task_url == "" then
-		vim.schedule(function()
-			on_done(nil, "Missing task URL")
-		end)
-		return nil
-	end
-	return comments_api.update_task(task_url, {
-		content_raw = task.content_raw,
-		state = task.state == "RESOLVED" and "RESOLVED" or "UNRESOLVED",
-	}, function(updated, err)
-		if err or not updated then
-			on_done(nil, err or "Bitbucket did not return the updated task")
-			return
-		end
-		on_done(updated, nil)
-	end)
-end
-
----@param task PullsComment
----@param on_done fun(ok: boolean, err: string|nil)
----@return { cancel: fun() }|nil
-local function delete_task(task, on_done)
-	local task_url = tostring(task.url or "")
-	if task_url == "" then
-		vim.schedule(function()
-			on_done(false, "Missing task URL")
-		end)
-		return nil
-	end
-	return comments_api.delete_task(task_url, function(_, err)
-		on_done(err == nil, err)
-	end)
-end
-
----@param pr PullRequest
----@param _review PullsReview
----@param on_done fun(ok: boolean, err: string|nil)
----@return { cancel: fun() }
-local function discard_review(pr, _review, on_done)
-	local comments, tasks
-	local pending = 2
-	local first_err
-	local handles = {}
-	local current
-	local cancelled = false
-
-	local function delete_next(items, index)
-		if cancelled then
-			return
-		end
-		local item = items[index]
-		if item == nil then
-			on_done(true, nil)
-			return
-		end
-		local callback = function(_, err)
-			if err then
-				on_done(false, err)
-				return
-			end
-			delete_next(items, index + 1)
-		end
-		if item.is_task then
-			current = delete_task(item, callback)
-		else
-			current = comments_api.delete_comment(pr, item, callback)
-		end
-	end
-
-	local function finish()
-		pending = pending - 1
-		if cancelled or pending > 0 then
-			return
-		end
-		if first_err then
-			on_done(false, first_err)
-			return
-		end
-
-		local items = {}
-		for _, task in ipairs(tasks) do
-			if task.state == "PENDING" then
-				table.insert(items, task)
-			end
-		end
-		for index = #comments, 1, -1 do
-			local comment = comments[index]
-			if comment.state == "PENDING" then
-				table.insert(items, comment)
-			end
-		end
-		delete_next(items, 1)
-	end
-
-	local function track(handle)
-		if handle then
-			table.insert(handles, handle)
-		end
-	end
-
-	track(comments_api.fetch_comments(pr, { force_refresh = true }, function(result, err)
-		first_err = first_err or err
-		comments = result or {}
-		finish()
-	end))
-	track(fetch_tasks(pr, { force_refresh = true }, function(result, err)
-		first_err = first_err or err
-		tasks = result or {}
-		finish()
-	end))
-	return {
-		cancel = function()
-			cancelled = true
-			for _, handle in ipairs(handles) do
-				handle.cancel()
-			end
-			if current then
-				current.cancel()
-			end
-		end,
-	}
-end
-
----@param pr PullRequest
----@param root PullsComment
----@param resolved boolean
----@param on_done fun(ok: boolean, err: string|nil)
----@return { cancel: fun() }|nil
-local function set_thread_resolved(pr, root, resolved, on_done)
-	return comments_api.set_thread_resolved(pr, root.parent_id or root.id, resolved, on_done)
-end
-
 return {
 	resolve = resolve_target,
 	search_view = search_view,
@@ -577,32 +231,32 @@ return {
 			update_reviewers = pullrequests_api.update_reviewers,
 			update_title = pullrequests_api.update_title,
 			set_draft = pullrequests_api.set_draft,
-			fetch_diffstat = pullrequests_api.fetch_diffstat,
-			fetch_activity = pullrequests_api.fetch_activity,
-			fetch_commits = pullrequests_api.fetch_commits,
-			fetch_diff = pullrequests_api.fetch_diff,
+			fetch_diffstat = changes_api.fetch_diffstat,
+			fetch_activity = activity_api.fetch_activity,
+			fetch_commits = changes_api.fetch_commits,
+			fetch_diff = changes_api.fetch_diff,
 			views = views,
 		},
 		comments = {
 			comment_completion = require("atlas.pulls.providers.bitbucket.completion.author").build_completion,
-			fetch_conversation = fetch_conversation,
+			fetch_conversation = activity_api.fetch_conversation,
 			add_comment = comments_api.add_comment,
 			edit_comment = comments_api.edit_comment,
 			delete_comment = comments_api.delete_comment,
-			set_thread_resolved = set_thread_resolved,
+			set_thread_resolved = comments_api.set_thread_resolved,
 		},
 		reviews = {
-			fetch = fetch_review,
-			fetch_review_context = pullrequests_api.fetch_review_context,
-			submit_review = pullrequests_api.submit_review,
-			approve = pullrequests_api.approve_review,
-			request_changes = pullrequests_api.request_changes_review,
-			discard_review = discard_review,
+			fetch = reviews_api.fetch_review,
+			fetch_review_context = reviews_api.fetch_review_context,
+			submit_review = reviews_api.submit_review,
+			approve = reviews_api.approve_review,
+			request_changes = reviews_api.request_changes_review,
+			discard_review = reviews_api.discard_review,
 		},
 		tasks = {
-			add_task = add_task,
-			edit_task = edit_task,
-			delete_task = delete_task,
+			add_task = tasks_api.add_task,
+			edit_task = tasks_api.edit_task,
+			delete_task = tasks_api.delete_task,
 		},
 		repository = {
 			fetch_details = repositories_api.fetch_detail,
@@ -612,7 +266,7 @@ return {
 		},
 		pipelines = {
 			fetch = pipelines_api.fetch_pipelines,
-			fetch_commit_status = fetch_commit_status,
+			fetch_commit_status = pipelines_api.fetch_commit_status,
 			fetch_job_log = pipelines_api.fetch_pipeline_job_log,
 			actions = require("atlas.pulls.providers.bitbucket.actions.pipelines"),
 		},
