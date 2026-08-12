@@ -1,6 +1,7 @@
 local M = {}
 
 local actions = require("atlas.pulls.actions")
+local action_utils = require("atlas.pulls.actions.utils")
 local icons = require("atlas.ui.shared.icons")
 local statusline = require("atlas.ui.statusline")
 local multi_select = require("atlas.ui.popups.multi_select")
@@ -121,26 +122,29 @@ end
 ---@param done fun(result: PullsActionResult|nil, err: string|nil)
 local function merge(ctx, done)
 	local pr = ctx.pr
-	vim.ui.input({ prompt = string.format("Merge %s? Squash? [n/y]: ", pr_label(pr)) }, function(input)
-		if input == nil then
-			done({ changed_pr = false, message = "Merge cancelled" }, nil)
-			return
-		end
-		local squash = vim.trim(tostring(input)):lower() == "y"
-		notify(ctx, "loading", string.format("Merging %s...", pr_label(pr)))
-		pullrequests_api.merge(pr, {
-			squash = squash,
-			should_remove_source_branch = true,
-		}, function(ok, err)
-			if not ok then
-				notify(ctx, "error", err or "Merge failed")
-				done(nil, err or "Merge failed")
+	local options = action_utils.merge_options()
+	vim.ui.input(
+		{ prompt = string.format("Confirm %s merge %s? [y/N]: ", options.method, pr_label(pr)) },
+		function(input)
+			if not input or not vim.trim(input):lower():match("^y") then
+				done({ changed_pr = false, message = "Merge cancelled" }, nil)
 				return
 			end
-			notify(ctx, "success", string.format("Merged %s", pr_label(pr)), 1500)
-			done({ changed_pr = true, message = "Merged" }, nil)
-		end)
-	end)
+			notify(ctx, "loading", string.format("Merging %s...", pr_label(pr)))
+			pullrequests_api.merge(pr, {
+				squash = options.method == "squash",
+				should_remove_source_branch = options.delete_branch,
+			}, function(ok, err)
+				if not ok then
+					notify(ctx, "error", err or "Merge failed")
+					done(nil, err or "Merge failed")
+					return
+				end
+				notify(ctx, "success", string.format("Merged %s", pr_label(pr)), 1500)
+				done({ changed_pr = true, message = "Merged" }, nil)
+			end)
+		end
+	)
 end
 
 ---@param ctx AtlasPullActionContext

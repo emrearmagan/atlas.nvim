@@ -62,6 +62,8 @@
 ---@class AtlasPullsConfig
 ---@field repo_config AtlasPullsRepoConfig|nil
 ---@field diff AtlasPullsDiffConfig|nil
+---@field default_merge_method "merge"|"squash"|nil
+---@field default_delete_branch boolean|nil
 ---@field custom_actions AtlasPullsCustomAction[]|nil
 ---@field providers AtlasPullsProviders|nil
 
@@ -96,6 +98,8 @@ local M = {}
 M.options = {
 	global_statusline = true,
 	pulls = {
+		default_merge_method = "merge",
+		default_delete_branch = false,
 		diff = {
 			open_cmd = "AtlasDiff",
 			layout = "inline",

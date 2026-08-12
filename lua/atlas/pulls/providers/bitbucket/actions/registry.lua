@@ -1,6 +1,7 @@
 local M = {}
 
 local actions = require("atlas.pulls.actions")
+local action_utils = require("atlas.pulls.actions.utils")
 local pullrequests = require("atlas.pulls.providers.bitbucket.api.pullrequests")
 local reviews = require("atlas.pulls.providers.bitbucket.api.reviews")
 local users_api = require("atlas.pulls.providers.bitbucket.api.users")
@@ -144,8 +145,9 @@ local function merge(ctx, done)
 		return
 	end
 
+	local options = action_utils.merge_options()
 	vim.ui.input({
-		prompt = string.format("Confirm merge PR #%s? [y/N]: ", tostring(pr.id or "")),
+		prompt = string.format("Confirm %s merge PR #%s? [y/N]: ", options.method, tostring(pr.id or "")),
 	}, function(input)
 		if input == nil then
 			done({ changed_pr = false, message = "Merge cancelled" }, nil)
@@ -160,7 +162,10 @@ local function merge(ctx, done)
 		end
 
 		notify(ctx, "loading", "Starting Merge...")
-		pullrequests.merge(pr, {}, function(_, err)
+		pullrequests.merge(pr, {
+			merge_strategy = options.method == "merge" and "merge_commit" or options.method,
+			close_source_branch = options.delete_branch,
+		}, function(_, err)
 			if err ~= nil then
 				notify(ctx, "error", string.format("Merge failed: %s", tostring(err)))
 				done(nil, tostring(err))

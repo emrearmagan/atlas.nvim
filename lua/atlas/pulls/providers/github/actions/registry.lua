@@ -1,6 +1,7 @@
 local M = {}
 
 local actions = require("atlas.pulls.actions")
+local action_utils = require("atlas.pulls.actions.utils")
 local cli = require("atlas.providers.github.client").pulls
 local pullrequests = require("atlas.pulls.providers.github.api.pullrequests")
 local reviews = require("atlas.pulls.providers.github.api.reviews")
@@ -85,6 +86,9 @@ local function merge_available(ctx)
 	if repo_slug(ctx) == "" then
 		return false, "Missing repository info"
 	end
+	if ctx.pr.state ~= "open" then
+		return false, "PR is not open"
+	end
 	return true, nil
 end
 
@@ -98,51 +102,27 @@ local function merge(ctx, done)
 	end
 
 	local slug = repo_slug(ctx)
-	local strategies = { "merge", "squash", "rebase" }
-
-	vim.ui.select(strategies, {
-		prompt = string.format("Merge strategy for PR #%s:", tostring(pr.id or "")),
-		kind = "atlas_github_merge_strategy",
-	}, function(strategy)
-		if strategy == nil then
+	local options = action_utils.merge_options()
+	vim.ui.input({
+		prompt = string.format("Confirm %s merge PR #%s? [y/N]: ", options.method, tostring(pr.id or "")),
+	}, function(input)
+		if not input or not vim.trim(input):lower():match("^y") then
 			done({ changed_pr = false, message = "Merge cancelled" }, nil)
 			return
 		end
-
-		vim.ui.input({
-			prompt = string.format("Confirm %s merge PR #%s? [y/N]: ", strategy, tostring(pr.id or "")),
-		}, function(input)
-			if input == nil then
-				done({ changed_pr = false, message = "Merge cancelled" }, nil)
+		local args = { "pr", "merge", tostring(pr.id), "--repo", slug, "--" .. options.method }
+		if options.delete_branch then
+			table.insert(args, "--delete-branch")
+		end
+		notify(ctx, "loading", "Merging PR...")
+		cli.gh(args, function(_, err)
+			if err then
+				notify(ctx, "error", string.format("Merge failed: %s", tostring(err)))
+				done(nil, tostring(err))
 				return
 			end
-
-			local normalized = vim.trim(tostring(input)):lower()
-			if normalized ~= "y" and normalized ~= "yes" then
-				notify(ctx, "info", "Merge cancelled")
-				done({ changed_pr = false, message = "Merge cancelled" }, nil)
-				return
-			end
-
-			notify(ctx, "loading", "Merging PR...")
-			cli.gh({
-				"pr",
-				"merge",
-				tostring(pr.id),
-				"--repo",
-				slug,
-				"--" .. strategy,
-				"--delete-branch",
-			}, function(_, err)
-				if err then
-					notify(ctx, "error", string.format("Merge failed: %s", tostring(err)))
-					done(nil, tostring(err))
-					return
-				end
-
-				notify(ctx, "success", "Merge succeeded", 1200)
-				done({ changed_pr = true, message = "Merged" }, nil)
-			end)
+			notify(ctx, "success", "Merge succeeded", 1200)
+			done({ changed_pr = true, message = "Merged" }, nil)
 		end)
 	end)
 end

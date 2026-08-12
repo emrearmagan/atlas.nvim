@@ -143,6 +143,8 @@ Use `:Atlas pulls [provider]` to browse and manage pull requests from GitHub, Bi
 
 ```lua
 pulls = {
+  default_merge_method = "merge", -- "merge" or "squash".
+  default_delete_branch = false,
   diff = {
     -- Any command that accepts explicit <base>...<head> Git revisions.
     open_cmd = "AtlasDiff", -- default; for example "DiffviewOpen" or "CodeDiff".
