@@ -42,9 +42,6 @@ describe("provider contracts", function()
 		)
 	end)
 
-	-- `update_description` is optional on the capability type, but every shipped
-	-- pull request provider wires it, so a rename that leaves a dangling
-	-- reference in a provider's init.lua fails here.
 	it("wires update_description on every pull request provider", function()
 		for _, registered in ipairs(providers.list("pulls")) do
 			local provider = assert(providers.load(registered.id, "pulls"))

@@ -209,7 +209,6 @@ M.edit_description = {
 				on_save = function(text)
 					local description = text or ""
 					if description == current then
-						-- Also clears the loading notice raised before fetching.
 						notify(context, "info", "Description unchanged", 1200)
 						done({ changed_pr = false, message = "No changes" }, nil)
 						return

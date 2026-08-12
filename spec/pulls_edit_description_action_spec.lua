@@ -1,8 +1,3 @@
--- Covers the provider-agnostic edit_description action: it edits against the
--- remote description, skips no-op saves, and writes the new body back to the PR.
-
--- Load the actions module against a stubbed markdown editor so `on_save` and
--- `on_cancel` can be driven from the spec, then restore the real editor module.
 local function fresh_actions(editor)
 	local real_editor = package.loaded["atlas.ui.popups.editor"]
 	package.loaded["atlas.ui.popups.editor"] = editor
