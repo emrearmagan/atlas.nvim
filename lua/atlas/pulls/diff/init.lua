@@ -34,6 +34,7 @@ local VIEWERS = {
 ---@field current_user PullsUser|nil
 ---@field review_context { authors: PullsAuthor[] }|nil
 ---@field initial_review AtlasInitialReview|nil
+---@field root string|nil
 
 ---@param requested AtlasPullsDiffOpenCommand|string|nil
 ---@return string|nil, string|nil
@@ -50,9 +51,13 @@ local function configured_command(requested)
 end
 
 -- Prefer an existing checkout; nil makes Atlas use its shared cache.
----@param pr PullRequest
+---@param context AtlasReviewOpenContext
 ---@return string|nil
-local function repository_path(pr)
+local function repository_path(context)
+	local pr = context.pr
+	if context.root then
+		return context.root
+	end
 	local cwd = vim.fn.getcwd()
 	local current = git.local_repository(cwd)
 	local target = resolver.resolve(pr.link.html)
@@ -322,7 +327,7 @@ local function start_pr(context, command, refresh, on_done, target, existing)
 	end
 
 	local function load_repository()
-		request = checkout.ensure_pr_repository(context.pr, repository_path(context.pr), function(message)
+		request = checkout.ensure_pr_repository(context.pr, repository_path(context), function(message)
 			view:update(message)
 		end, function(root, err)
 			later(function()
@@ -368,8 +373,9 @@ local function start_pr(context, command, refresh, on_done, target, existing)
 end
 
 ---@param value string
+---@param requested AtlasPullsDiffOpenCommand|string|nil
 ---@return { cancel: fun() }|nil
-local function open_pull_request(value)
+function M.open_pull_request(value, requested)
 	local target, target_err = resolver.resolve(value)
 	if not target then
 		notify.error(target_err or "Invalid pull request URL")
@@ -388,6 +394,11 @@ local function open_pull_request(value)
 		notify.error("Unable to load pull request provider: " .. target.provider)
 		return nil
 	end
+	local command, command_err = configured_command(requested)
+	if not command then
+		notify.error(command_err)
+		return nil
+	end
 	return start_pr(
 		{
 			provider = provider,
@@ -396,7 +407,7 @@ local function open_pull_request(value)
 			review_context = nil,
 			initial_review = nil,
 		},
-		"AtlasDiff",
+		command,
 		true,
 		function(err)
 			if err then
@@ -416,7 +427,7 @@ end
 ---@param value string
 function M.open_argument(value)
 	if not value:find("...", 1, true) then
-		open_pull_request(value)
+		M.open_pull_request(value, "AtlasDiff")
 		return
 	end
 	local separator = value:find("...", 1, true)

@@ -115,57 +115,47 @@ unchanged.
 ==============================================================================
 5. COMMANDS                                                    *atlas-commands*
 
-                                                                  *:AtlasPulls*
-:AtlasPulls [provider]
-        Open the pulls panel. With an argument (`github`, `bitbucket`,
-        `gitlab`) it opens that provider directly. Without one, Atlas opens
-        the only configured provider or asks you to choose.
+                                                                      *:Atlas*
+:Atlas
+        Pick an Atlas command.
+
+:Atlas pulls [provider]
+:Atlas issues [provider]
+        Open a provider dashboard. Without an argument, Atlas opens the only
+        configured provider or asks you to choose.
+
+:Atlas review [pull-request-url]
+        Infer the provider and repository from the current Git remote, pick
+        an open or draft pull request, and open its diff. With a URL, open that
+        pull request directly.
+
+:Atlas diff <base>...<head>
+:Atlas diff <pull-request-url>
+        Open an explicit Git range or pull request in native AtlasDiff.
+
+:Atlas notes [target]
+:Atlas clear-notes
+        Open the local-notes manager or delete all local notes.
+
+:Atlas create-pr
+:Atlas create-issue
+        Start the pull-request or issue creation flow.
+
+:Atlas search [provider]
+        Search configured pull-request and issue providers.
+
+:Atlas open <target>
+        Open a provider URL, Jira key, `owner/repo#number`, or PR/issue
+        number.
+
+:Atlas clear-cache
+:Atlas logs
+        Clear Atlas caches or toggle the Atlas log buffer.
 
                                                                    *:AtlasDiff*
 :AtlasDiff <base>...<head>
 :AtlasDiff <pull-request-url>
-	Open an explicit Git range or pull request review.
-
-                                                                  *:AtlasNotes*
-:AtlasNotes
-        Open the local-notes manager across all pull requests.
-
-                                                          *:AtlasNotesClearAll*
-:AtlasNotesClearAll
-        Delete all local review notes after confirmation.
-
-                                                                 *:AtlasIssues*
-:AtlasIssues [provider]
-        Open the issues panel. With an argument (`jira`, `github`, `gitlab`)
-        it opens that provider directly. Without one, Atlas opens the only
-        configured provider or asks you to choose.
-
-                                                               *:AtlasCreatePR*
-:AtlasCreatePR
-        Start the create-PR flow for the current branch.
-
-                                                            *:AtlasCreateIssue*
-:AtlasCreateIssue
-        Start the create-issue flow for GitHub, GitLab, or Jira.
-
-                                                                 *:AtlasSearch*
-:AtlasSearch [provider]
-	Search configured pull-request and issue providers.
-
-                                                                   *:AtlasOpen*
-:AtlasOpen <target>
-        Open a provider URL, Jira key, `owner/repo#number`, or PR/issue
-        number.
-
-                                                             *:AtlasClearCache*
-:AtlasClearCache
-        Clear both disk and in-memory caches. Useful when stale data is
-        showing up after a remote-side change.
-
-                                                                   *:AtlasLogs*
-:AtlasLogs
-        Toggle a split with the Atlas log buffer. Refreshes every 2s while
-        open. Helpful for debugging API calls.
+        Retained as the native AtlasDiff viewer command.
 
 ==============================================================================
 6. PULLS                                                          *atlas-pulls*
@@ -537,7 +527,7 @@ request. Each note is attached to a file and line and can be an `ISSUE`,
 saved line changes.
 
 For scripts, use `bin/atlas-notes`. Notes added there appear in AtlasDiff,
-CodeDiff, Diffview, Diffview-plus, and `:AtlasNotes`:
+CodeDiff, Diffview, Diffview-plus, and `:Atlas notes`:
 >sh
   ./bin/atlas-notes add \
     --target https://github.com/owner/repository/pull/123 \
@@ -561,7 +551,7 @@ still running.
 CREATE PULL REQUESTS                         *atlas-create-pull-requests*
                                                     *atlas-pulls-create*
 
-`:AtlasCreatePR` opens the pull request form for the current branch. The
+`:Atlas create-pr` opens the pull request form for the current branch. The
 newest commit supplies the title. Atlas first reads the configured
 `pr_template`, or `.github/pull_request_template.md` by default.
 
@@ -578,7 +568,7 @@ the draft state, or preview commits and diffstat before submitting.
 CREATE ISSUES                                      *atlas-create-issues*
                                                     *atlas-issues-create*
 
-`:AtlasCreateIssue` opens the creation flow for the configured issue
+`:Atlas create-issue` opens the creation flow for the configured issue
 providers. GitHub and GitLab use the current repository, while Jira uses the
 configured instance. The forms support Markdown descriptions and
 provider-specific fields such as labels, assignees, milestones, and Jira

@@ -77,11 +77,15 @@ end
 ---@param info AtlasGitRemoteInfo
 ---@param domain AtlasDomain
 ---@param entity AtlasEntity
----@param number integer
+---@param number integer|nil
 ---@param base_url string
 ---@return AtlasTarget
 local function target(info, domain, entity, number, base_url)
 	local owner, repo = info.slug:match("^(.+)/([^/]+)$")
+	local url = string.format("%s/%s", base_url, info.slug)
+	if entity ~= "repo" then
+		url = string.format("%s/pull-requests/%d", url, assert(number))
+	end
 	return {
 		provider = "bitbucket",
 		domain = domain,
@@ -91,7 +95,7 @@ local function target(info, domain, entity, number, base_url)
 		workspace = owner,
 		repo = repo,
 		number = number,
-		url = string.format("%s/%s/pull-requests/%d", base_url, info.slug, number),
+		url = url,
 	}
 end
 
@@ -114,9 +118,13 @@ end
 local function fetch_pullrequests(view, opts, on_done)
 	---@cast view AtlasBitbucketViewConfig
 	local active_statuses = {}
-	for status, enabled in pairs(require("atlas.pulls.state").status_filters or {}) do
-		if enabled then
-			table.insert(active_statuses, status)
+	if opts.state then
+		active_statuses = { opts.state:upper() }
+	else
+		for status, enabled in pairs(require("atlas.pulls.state").status_filters or {}) do
+			if enabled then
+				table.insert(active_statuses, status)
+			end
 		end
 	end
 	if #active_statuses == 0 then

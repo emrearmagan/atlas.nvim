@@ -19,7 +19,8 @@ local resolver = require("atlas.providers.resolve")
 local function fetch_pullrequests(view, opts, on_done)
 	---@cast view AtlasGitLabPullsViewConfig
 	local filters = require("atlas.pulls.state").status_filters or {}
-	local state = filters.MERGED and "merged" or (filters.DECLINED and "closed" or "opened")
+	local states = { open = "opened", merged = "merged", declined = "closed" }
+	local state = states[opts.state] or (filters.MERGED and "merged" or (filters.DECLINED and "closed" or "opened"))
 	local parts = { string.format("is:%s", state) }
 	for _, field in ipairs({
 		"project",
@@ -231,11 +232,15 @@ end
 ---@param info AtlasGitRemoteInfo
 ---@param domain AtlasDomain
 ---@param entity AtlasEntity
----@param number integer
+---@param number integer|nil
 ---@param base_url string
 ---@return AtlasTarget
 local function target(info, domain, entity, number, base_url)
 	local owner, repo = info.slug:match("^(.+)/([^/]+)$")
+	local url = string.format("%s/%s", base_url, info.slug)
+	if entity ~= "repo" then
+		url = string.format("%s/-/%s/%d", url, entity == "pr" and "merge_requests" or "issues", assert(number))
+	end
 	return {
 		provider = "gitlab",
 		domain = domain,
@@ -245,13 +250,7 @@ local function target(info, domain, entity, number, base_url)
 		repo = repo,
 		project_path = info.slug,
 		number = number,
-		url = string.format(
-			"%s/%s/-/%s/%d",
-			base_url,
-			info.slug,
-			entity == "pr" and "merge_requests" or "issues",
-			number
-		),
+		url = url,
 	}
 end
 

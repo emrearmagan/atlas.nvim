@@ -40,13 +40,13 @@ local function fetch_pullrequests(view, opts, on_done)
 	local query = search:find("is:pr") and search or "is:pr " .. search
 	local filters = require("atlas.pulls.state").status_filters or {}
 	local open, merged, declined = filters.OPEN, filters.MERGED, filters.DECLINED
-	if open and not merged and not declined then
+	if opts.state == "open" or (opts.state == nil and open and not merged and not declined) then
 		query = query .. " is:open"
-	elseif merged and not open and not declined then
+	elseif opts.state == "merged" or (opts.state == nil and merged and not open and not declined) then
 		query = query .. " is:merged"
-	elseif declined and not open and not merged then
+	elseif opts.state == "declined" or (opts.state == nil and declined and not open and not merged) then
 		query = query .. " is:closed -is:merged"
-	elseif merged and declined and not open then
+	elseif opts.state == nil and merged and declined and not open then
 		query = query .. " is:closed"
 	end
 
@@ -196,26 +196,29 @@ end
 ---@param target AtlasTarget
 ---@return AtlasPullsViewConfig
 local function search_view(target)
+	local search = string.format("repo:%s/%s is:pr", target.owner, target.repo)
+	if target.number then
+		search = search .. " " .. tostring(target.number)
+	end
 	return {
 		name = "Search",
 		layout = "compact",
-		search = string.format(
-			"repo:%s/%s %s is:pr",
-			target.owner,
-			target.repo,
-			target.number and tostring(target.number) or ""
-		),
+		search = search,
 	}
 end
 
 ---@param info AtlasGitRemoteInfo
 ---@param domain AtlasDomain
 ---@param entity AtlasEntity
----@param number integer
+---@param number integer|nil
 ---@param base_url string
 ---@return AtlasTarget
 local function target(info, domain, entity, number, base_url)
 	local owner, repo = info.slug:match("^(.+)/([^/]+)$")
+	local url = string.format("%s/%s/%s", base_url, owner, repo)
+	if entity ~= "repo" then
+		url = string.format("%s/%s/%d", url, entity == "pr" and "pull" or "issues", assert(number))
+	end
 	return {
 		provider = "github",
 		domain = domain,
@@ -224,7 +227,7 @@ local function target(info, domain, entity, number, base_url)
 		owner = owner,
 		repo = repo,
 		number = number,
-		url = string.format("%s/%s/%s/%s/%d", base_url, owner, repo, entity == "pr" and "pull" or "issues", number),
+		url = url,
 	}
 end
 

@@ -1,4 +1,4 @@
--- Builds the initial title and description for AtlasCreatePR.
+-- Builds the initial title and description for `:Atlas create-pr`.
 --
 -- The newest commit supplies the title. For the description, Atlas first reads
 -- the configured `pr_template`, or `.github/pull_request_template.md` by
