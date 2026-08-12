@@ -4,6 +4,7 @@ local notify = require("atlas.core.notify")
 
 ---@class AtlasCommand
 ---@field name string
+---@field usage string|nil
 ---@field description string
 ---@field run fun(args: string[])
 ---@field complete (fun(arglead: string): string[])|nil
@@ -40,6 +41,15 @@ local function complete_providers(domain, arglead)
 	return vim.tbl_filter(function(provider)
 		return provider:find(arglead, 1, true) == 1
 	end, require("atlas.providers").ids(domain))
+end
+
+---@param arglead string
+---@param options string[]
+---@return string[]
+local function complete_options(arglead, options)
+	return vim.tbl_filter(function(option)
+		return option:find(arglead, 1, true) == 1
+	end, options)
 end
 
 ---@param args string[]
@@ -101,18 +111,28 @@ M.register({
 })
 
 M.register({
-	name = "create-pr",
-	description = "Create a pull request",
-	run = function()
-		require("atlas.pulls.create.pr").start()
+	name = "create",
+	usage = "create <pr|issue>",
+	description = "Create a pull request or issue",
+	complete = function(arglead)
+		return complete_options(arglead, { "pr", "issue" })
 	end,
-})
+	run = function(args)
+		local function start(kind)
+			if kind == "pr" then
+				require("atlas.pulls.create.pr").start()
+			elseif kind == "issue" then
+				require("atlas.issues.create").start()
+			else
+				notify.error("Usage: :Atlas create <pr|issue>")
+			end
+		end
 
-M.register({
-	name = "create-issue",
-	description = "Create an issue",
-	run = function()
-		require("atlas.issues.create").start()
+		if args[1] then
+			start(args[1]:lower())
+		else
+			vim.ui.select({ "pr", "issue" }, { prompt = "Create:" }, start)
+		end
 	end,
 })
 
@@ -141,20 +161,46 @@ M.register({
 })
 
 M.register({
-	name = "clear-notes",
-	description = "Delete all local review notes",
-	run = function()
-		require("atlas.pulls.notes.ui").clear_all()
+	name = "clear",
+	usage = "clear [notes]",
+	description = "Clear Atlas data or local notes",
+	complete = function(arglead)
+		return complete_options(arglead, { "notes" })
 	end,
-})
+	run = function(args)
+		local target = args[1] and args[1]:lower() or nil
+		if target == "notes" then
+			require("atlas.pulls.notes.ui").clear_all()
+			return
+		end
+		if target then
+			notify.error("Usage: :Atlas clear [notes]")
+			return
+		end
 
-M.register({
-	name = "clear-cache",
-	description = "Clear Atlas cache",
-	run = function()
-		require("atlas.core.cache").clear_all()
-		require("atlas.core.memory_cache").clear_all()
-		notify.info("Cache cleared")
+		vim.ui.input(
+			{ prompt = "Delete Atlas caches, cloned repositories, local notes, and logs? [y/N]: " },
+			function(answer)
+				answer = vim.trim(tostring(answer or "")):lower()
+				if answer ~= "y" and answer ~= "yes" then
+					return
+				end
+				local cleared, err = require("atlas.pulls.notes").clear_all()
+				if not cleared then
+					notify.error(err or "Unable to delete local notes")
+					return
+				end
+				require("atlas.core.cache").clear_all()
+				require("atlas.core.memory_cache").clear_all()
+				require("atlas.ui.components.async_picker").clear_cache()
+				require("atlas.core.logger").clear()
+				local notes_ui = package.loaded["atlas.pulls.notes.ui"]
+				if notes_ui then
+					notes_ui.refresh()
+				end
+				notify.info("Atlas data cleared")
+			end
+		)
 	end,
 })
 
@@ -170,7 +216,7 @@ local function pick_command()
 	vim.ui.select(M.commands, {
 		prompt = "Atlas:",
 		format_item = function(command)
-			return command.name .. "  " .. command.description
+			return (command.usage or command.name) .. "  " .. command.description
 		end,
 	}, function(command)
 		if command then

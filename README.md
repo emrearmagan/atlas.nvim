@@ -128,11 +128,11 @@ Set `global_statusline = false` to leave Neovim's `laststatus` option unchanged.
 - `:Atlas pulls [provider]` / `:Atlas issues [provider]` - Open a provider dashboard
 - `:Atlas review [pull-request-url]` - Review a pull request with the configured diff viewer
 - `:Atlas diff <base>...<head>` or `:Atlas diff <pull-request-url>` - Open native AtlasDiff
-- `:Atlas notes [target]` / `:Atlas clear-notes` - Inspect or delete local review notes
-- `:Atlas create-pr` / `:Atlas create-issue` - Create a pull request or issue
+- `:Atlas notes [target]` / `:Atlas clear notes` - Inspect or delete local review notes
+- `:Atlas create pr` / `:Atlas create issue` - Create a pull request or issue
 - `:Atlas search [provider]` - Search configured pull-request and issue providers
 - `:Atlas open <target>` - Open a provider URL, Jira key, repository reference, or PR/issue number
-- `:Atlas clear-cache` / `:Atlas logs` - Clear caches or toggle Atlas logs
+- `:Atlas clear` / `:Atlas logs` - Clear Atlas data or toggle Atlas logs
 - `:AtlasDiff <base>...<head>` or `:AtlasDiff <pull-request-url>` - Retained as the native diff-viewer command
 
 ## Pulls
@@ -594,7 +594,7 @@ View pipelines and their jobs, inspect their status, and read job logs directly 
 
 <img align="right" width="54%" hspace="16" vspace="8" alt="Create pull request" src="https://github.com/user-attachments/assets/d6335c66-35f7-4495-b83a-53819d7ec7d5">
 
-`:Atlas create-pr` opens the pull request form for the current branch. The newest commit supplies the title. Atlas first reads the configured `pr_template`, or `.github/pull_request_template.md` by default.
+`:Atlas create pr` opens the pull request form for the current branch. The newest commit supplies the title. Atlas first reads the configured `pr_template`, or `.github/pull_request_template.md` by default.
 
 Without a template, Atlas groups conventional commits into sections, recognizes leading Jira keys such as `[JIRA-123]`, links commit hashes and issue references, collects references under **Related**, and appends the diffstat. If no commits use a conventional prefix, it uses a linked plain commit list instead.
 
@@ -606,7 +606,7 @@ Edit the title and description, choose the target branch and reviewers, set the 
 
 <img align="left" width="54%" hspace="16" vspace="8" alt="Create issue" src="https://github.com/user-attachments/assets/8f3b06d8-763d-4e0f-ab93-9c3754065ca3">
 
-`:Atlas create-issue` opens the creation flow for the configured issue providers. GitHub and GitLab use the current repository, while Jira uses the configured instance. The forms support Markdown descriptions and provider-specific fields such as labels, assignees, milestones, and Jira issue types.
+`:Atlas create issue` opens the creation flow for the configured issue providers. GitHub and GitLab use the current repository, while Jira uses the configured instance. The forms support Markdown descriptions and provider-specific fields such as labels, assignees, milestones, and Jira issue types.
 
 GitHub, GitLab, and Jira can apply a saved Markdown template or save the current description as a new one. Templates are shared between providers and stored under Neovim's data directory.
 

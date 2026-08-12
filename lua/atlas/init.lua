@@ -16,7 +16,7 @@ local function bootstrap_common()
 
 	local commands = { { name = "Atlas", desc = "Choose a command" } }
 	for _, command in ipairs(require("atlas.commands").commands) do
-		table.insert(commands, { name = "Atlas " .. command.name, desc = command.description })
+		table.insert(commands, { name = "Atlas " .. (command.usage or command.name), desc = command.description })
 	end
 	table.insert(commands, { name = "AtlasDiff", desc = "Open native diff or pull request" })
 	require("atlas.ui.popups.help").register_command(
