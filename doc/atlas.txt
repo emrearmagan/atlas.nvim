@@ -174,6 +174,7 @@ Shared config that applies to all pulls providers:
 >lua
   require("atlas").setup({
     pulls = {
+      delete_notes = false, -- delete local notes after approval or merge
       default_merge_method = "merge", -- "merge" or "squash"
       default_delete_branch = false,
       diff = {

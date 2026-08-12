@@ -5,6 +5,7 @@ local action_utils = require("atlas.pulls.actions.utils")
 local icons = require("atlas.ui.shared.icons")
 local statusline = require("atlas.ui.statusline")
 local multi_select = require("atlas.ui.popups.multi_select")
+local notes = require("atlas.pulls.notes")
 local pullrequests_api = require("atlas.pulls.providers.gitlab.api.pullrequests")
 local reviews_api = require("atlas.pulls.providers.gitlab.api.reviews")
 local users_api = require("atlas.pulls.providers.gitlab.api.users")
@@ -97,6 +98,7 @@ local function toggle_approval(ctx, done)
 					return
 				end
 				notify(ctx, "success", string.format("Approved %s", pr_label(pr)), 1200)
+				notes.clear_for_pull_request(pr)
 				done({ changed_pr = true, message = "Approved" }, nil)
 			end)
 		end
@@ -141,6 +143,7 @@ local function merge(ctx, done)
 					return
 				end
 				notify(ctx, "success", string.format("Merged %s", pr_label(pr)), 1500)
+				notes.clear_for_pull_request(pr)
 				done({ changed_pr = true, message = "Merged" }, nil)
 			end)
 		end

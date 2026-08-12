@@ -2,6 +2,7 @@ local M = {}
 
 local actions = require("atlas.pulls.actions")
 local action_utils = require("atlas.pulls.actions.utils")
+local notes = require("atlas.pulls.notes")
 local pullrequests = require("atlas.pulls.providers.bitbucket.api.pullrequests")
 local reviews = require("atlas.pulls.providers.bitbucket.api.reviews")
 local users_api = require("atlas.pulls.providers.bitbucket.api.users")
@@ -95,6 +96,9 @@ local function toggle_approval(ctx, done)
 
 			local message = approved and "Unapproved" or "Approved"
 			notify(ctx, "success", "PR " .. message:lower(), 1200)
+			if not approved then
+				notes.clear_for_pull_request(pr)
+			end
 			done({ changed_pr = true, message = message }, nil)
 		end)
 	end)
@@ -173,6 +177,7 @@ local function merge(ctx, done)
 			end
 
 			notify(ctx, "success", "Merge succeeded", 1200)
+			notes.clear_for_pull_request(pr)
 			done({ changed_pr = true, message = "Merged" }, nil)
 		end)
 	end)

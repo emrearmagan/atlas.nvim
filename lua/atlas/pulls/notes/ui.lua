@@ -144,6 +144,10 @@ local function refresh()
 	render()
 end
 
+function M.refresh()
+	refresh()
+end
+
 ---@return integer
 local function ensure_buffer()
 	if valid_buffer() then

@@ -1,6 +1,7 @@
 local M = {}
 
 local editor = require("atlas.ui.popups.editor")
+local notes = require("atlas.pulls.notes")
 local statusline = require("atlas.ui.statusline")
 local review_threads = require("atlas.ui.components.review_threads")
 
@@ -469,6 +470,9 @@ local function open_review_editor(context, capability, title, loading, success, 
 					return
 				end
 				notify(context, "success", success, 1200)
+				if capability == "approve" then
+					notes.clear_for_pull_request(context.pr)
+				end
 				on_done({ changed_pr = true, message = success }, nil)
 			end)
 		end,
