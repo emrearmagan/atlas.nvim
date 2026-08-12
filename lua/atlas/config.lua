@@ -39,7 +39,7 @@
 ---@field compact boolean|nil
 ---@field compact_context_lines integer|nil
 ---@field show_review_panel boolean|nil
----@field show_comments boolean|nil
+---@field show_comments boolean|nil Show full inline comment and note cards initially; false uses compact hints.
 ---@field explorer AtlasPullsDiffExplorerConfig|nil
 
 ---@class AtlasPullsCustomActionContext

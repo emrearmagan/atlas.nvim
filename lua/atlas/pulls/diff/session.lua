@@ -8,6 +8,7 @@ local note_popup = require("atlas.pulls.notes.ui.popup")
 local notes = require("atlas.pulls.diff.notes")
 local review = require("atlas.pulls.diff.review")
 local review_panel = require("atlas.pulls.diff.ui.review_panel")
+local hints = require("atlas.pulls.diff.ui.hints")
 local statusline = require("atlas.pulls.diff.ui.statusline")
 local ui_comments = require("atlas.pulls.diff.ui.comments")
 
@@ -82,7 +83,7 @@ local sessions = {}
 ---@field note_target AtlasNoteTarget|nil
 ---@field viewer_state table
 ---@field expanded_threads table<string, boolean>
----@field show_comments boolean
+---@field expanded_overlays boolean
 ---@field help_key string
 ---@field review_attached boolean
 ---@field closed boolean
@@ -95,6 +96,7 @@ local sessions = {}
 
 ---@class AtlasDiffRenderOutput
 ---@field deleted_lines table<integer, [string, string][][]>
+---@field deleted_hints table<integer, [string, string][]>
 ---@field annotated_paths table<string, { comments: boolean, notes: boolean }>
 
 ---@param opts { viewer_id: string, source: AtlasDiffSource, review: AtlasDiffReview|nil, commits: PullsCommit[]|nil }
@@ -119,7 +121,7 @@ function M.new(opts)
 		note_target = note_target,
 		viewer_state = {},
 		expanded_threads = {},
-		show_comments = ((config.options.pulls or {}).diff or {}).show_comments ~= false,
+		expanded_overlays = ((config.options.pulls or {}).diff or {}).show_comments ~= false,
 		help_key = opts.viewer_id == "atlas" and (keymaps.resolve("ui.help") or { "g?" })[1] or "gA",
 		review_attached = false,
 		closed = false,
@@ -157,6 +159,7 @@ function M.set_current(session, current)
 	if session.current then
 		ui_comments.clear(session.current)
 		notes.clear(session.current)
+		hints.clear(session.current)
 	end
 	session.current = current
 	M.render(session)
@@ -167,14 +170,22 @@ function M.render(session)
 	if session.closed then
 		return
 	end
-	local output = { deleted_lines = {}, annotated_paths = comments.annotated_paths(session) }
+	local output = { deleted_lines = {}, deleted_hints = {}, annotated_paths = comments.annotated_paths(session) }
 	if session.current then
-		if session.show_comments then
+		if session.expanded_overlays then
+			hints.clear(session.current)
 			output.deleted_lines = comments.render(session, session.viewer_state.inline_deleted_lines == true)
+			notes.render(session)
 		else
 			ui_comments.clear(session.current)
+			notes.clear(session.current)
+			local items, deleted = comments.hints(session, session.viewer_state.inline_deleted_lines == true)
+			vim.list_extend(items, notes.hints(session))
+			hints.render(session.current, items)
+			for line, line_items in pairs(deleted) do
+				output.deleted_hints[line] = hints.chunks(line_items)
+			end
 		end
-		notes.render(session)
 	end
 	review_panel.render(session.review_panel, session)
 	if session.current and session.render_view then
@@ -241,6 +252,7 @@ function M.detach(session, reason)
 	if session.current then
 		ui_comments.clear(session.current)
 		notes.clear(session.current)
+		hints.clear(session.current)
 	end
 	review_panel.delete(session.review_panel)
 	statusline.dispose(session.statusline)

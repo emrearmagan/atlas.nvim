@@ -150,7 +150,7 @@ pulls = {
     -- Any command that accepts explicit <base>...<head> Git revisions.
     open_cmd = "AtlasDiff", -- default; for example "DiffviewOpen" or "CodeDiff".
     show_review_panel = false, -- Set true to show the review panel when a diff opens.
-    show_comments = true, -- Show inline comment overlays when a diff opens.
+    show_comments = true, -- Show full comment and note cards; false uses compact inline hints.
 
     -- AtlasDiff options; external viewers use their own configuration.
     layout = "inline", -- "inline" or "side-by-side".

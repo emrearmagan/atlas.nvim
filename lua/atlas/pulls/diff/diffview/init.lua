@@ -2,6 +2,7 @@ local M = {}
 
 local comments = require("atlas.pulls.diff.ui.comments")
 local config = require("atlas.config")
+local hints = require("atlas.pulls.diff.ui.hints")
 local notes = require("atlas.pulls.diff.notes")
 local position = require("atlas.pulls.diff.position")
 local review_keymaps = require("atlas.pulls.diff.keymaps")
@@ -270,6 +271,7 @@ local function suspend(session)
 	if session.current then
 		comments.clear(session.current)
 		notes.clear(session.current)
+		hints.clear(session.current)
 		session.current = nil
 	end
 	if not state.suspended then

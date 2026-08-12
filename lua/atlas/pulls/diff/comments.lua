@@ -120,6 +120,79 @@ function M.annotated_paths(session)
 end
 
 ---@param session AtlasDiffSession
+---@param context AtlasCommentRendererContext
+---@param inline_deleted_lines boolean
+---@return table
+local function placed_threads(session, context, inline_deleted_lines)
+	local current = session.current
+	local placed = { right = {}, right_above = {}, left = {}, left_above = {}, deleted = {} }
+	if inline_deleted_lines and current.layout == "inline" then
+		placed.right = threads_by_line(session, context, context.new_path, "RIGHT")
+		for old_line, list in pairs(threads_by_line(session, context, context.old_path, "LEFT")) do
+			if position.is_changed(current.document, "LEFT", old_line) then
+				placed.deleted[old_line] = list
+			else
+				local line, above = opposite_line(session, "LEFT", old_line)
+				placed.right[line] = placed.right[line] or {}
+				vim.list_extend(placed.right[line], list)
+				placed.right_above[line] = above or nil
+			end
+		end
+	else
+		placed.right, placed.right_above = visible_threads(session, context, context.new_path, "RIGHT")
+	end
+	if current.layout == "side-by-side" then
+		placed.left, placed.left_above = visible_threads(session, context, context.old_path, "LEFT")
+	end
+	return placed
+end
+
+---@param target AtlasDiffHint[]
+---@param buf integer
+---@param line integer
+---@param list AtlasReviewThreadNode[]
+local function add_line_hints(target, buf, line, list)
+	for _, node in ipairs(list) do
+		target[#target + 1] = {
+			buf = buf,
+			line = line,
+			kind = "comment",
+			text = node.comment.content_display or node.comment.content_raw,
+		}
+	end
+end
+
+---@param target AtlasDiffHint[]
+---@param buf integer
+---@param by_line table<integer, AtlasReviewThreadNode[]>
+local function add_hints(target, buf, by_line)
+	for line, list in pairs(by_line) do
+		add_line_hints(target, buf, line, list)
+	end
+end
+
+---@param session AtlasDiffSession
+---@param inline_deleted_lines boolean
+---@return AtlasDiffHint[], table<integer, AtlasDiffHint[]>
+function M.hints(session, inline_deleted_lines)
+	local current = session.current
+	local context = render_context(session)
+	if not current or not context then
+		return {}, {}
+	end
+	local placed = placed_threads(session, context, inline_deleted_lines)
+	local items = {}
+	add_hints(items, current.right.buf, placed.right)
+	add_hints(items, current.left.buf, placed.left)
+	local deleted_hints = {}
+	for line, list in pairs(placed.deleted) do
+		deleted_hints[line] = {}
+		add_line_hints(deleted_hints[line], current.right.buf, line, list)
+	end
+	return items, deleted_hints
+end
+
+---@param session AtlasDiffSession
 ---@param inline_deleted_lines boolean
 ---@return table<integer, [string, string][][]>
 function M.render(session, inline_deleted_lines)
@@ -128,25 +201,12 @@ function M.render(session, inline_deleted_lines)
 	if not current or not context then
 		return {}
 	end
-	local right_threads, right_above = {}, {}
+	local placed = placed_threads(session, context, inline_deleted_lines)
 	local deleted = {}
-	if inline_deleted_lines and current.layout == "inline" then
-		right_threads = threads_by_line(session, context, context.new_path, "RIGHT")
-		right_above = {}
-		for old_line, list in pairs(threads_by_line(session, context, context.old_path, "LEFT")) do
-			if position.is_changed(current.document, "LEFT", old_line) then
-				deleted[old_line] = ui.thread_lines(context, current.right.buf, list)
-			else
-				local line, above = opposite_line(session, "LEFT", old_line)
-				right_threads[line] = right_threads[line] or {}
-				vim.list_extend(right_threads[line], list)
-				right_above[line] = above or nil
-			end
-		end
-	else
-		right_threads, right_above = visible_threads(session, context, context.new_path, "RIGHT")
+	for line, list in pairs(placed.deleted) do
+		deleted[line] = ui.thread_lines(context, current.right.buf, list)
 	end
-	local right = ui.render_comments(context, current.right.buf, right_threads, right_above)
+	local right = ui.render_comments(context, current.right.buf, placed.right, placed.right_above)
 	if current.layout ~= "side-by-side" then
 		if vim.api.nvim_buf_is_valid(current.left.buf) then
 			vim.api.nvim_buf_clear_namespace(
@@ -158,15 +218,14 @@ function M.render(session, inline_deleted_lines)
 		end
 		return deleted
 	end
-	local left_threads, left_above = visible_threads(session, context, context.old_path, "LEFT")
-	local left = ui.render_comments(context, current.left.buf, left_threads, left_above)
+	local left = ui.render_comments(context, current.left.buf, placed.left, placed.left_above)
 	for line, count in pairs(left) do
 		local target, above = opposite_line(session, "LEFT", line)
-		ui.pad(current.right.buf, target, count, left_above[line] or above)
+		ui.pad(current.right.buf, target, count, placed.left_above[line] or above)
 	end
 	for line, count in pairs(right) do
 		local target, above = opposite_line(session, "RIGHT", line)
-		ui.pad(current.left.buf, target, count, right_above[line] or above)
+		ui.pad(current.left.buf, target, count, placed.right_above[line] or above)
 	end
 	return deleted
 end
