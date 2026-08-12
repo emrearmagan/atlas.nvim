@@ -1,4 +1,4 @@
-local checks = require("atlas.pulls.providers.gitlab.api.checks")
+local pipelines = require("atlas.pulls.providers.gitlab.api.pipelines")
 
 ---@param item PullsPipeline|PullsPipelineJob
 ---@return string
@@ -40,7 +40,7 @@ return {
 			return tonumber(ctx.pipeline.provider_id) ~= nil and can_retry(ctx.pipeline)
 		end,
 		run = function(ctx, done)
-			checks.retry_pipeline(ctx.pr, ctx.pipeline, function(_, err)
+			pipelines.retry(ctx.pr, ctx.pipeline, function(_, err)
 				done(err)
 			end)
 		end,
@@ -53,7 +53,7 @@ return {
 			return tonumber(ctx.pipeline.provider_id) ~= nil and can_cancel(ctx.pipeline)
 		end,
 		run = function(ctx, done)
-			checks.cancel_pipeline(ctx.pr, ctx.pipeline, function(_, err)
+			pipelines.cancel(ctx.pr, ctx.pipeline, function(_, err)
 				done(err)
 			end)
 		end,
@@ -65,7 +65,7 @@ return {
 			return ctx.job ~= nil and tonumber(ctx.job.id) ~= nil and can_retry(ctx.job)
 		end,
 		run = function(ctx, done)
-			checks.retry_pipeline_job(ctx.pr, ctx.job, function(_, err)
+			pipelines.retry_job(ctx.pr, ctx.job, function(_, err)
 				done(err)
 			end)
 		end,
@@ -78,7 +78,7 @@ return {
 			return ctx.job ~= nil and tonumber(ctx.job.id) ~= nil and can_cancel(ctx.job)
 		end,
 		run = function(ctx, done)
-			checks.cancel_pipeline_job(ctx.pr, ctx.job, function(_, err)
+			pipelines.cancel_job(ctx.pr, ctx.job, function(_, err)
 				done(err)
 			end)
 		end,

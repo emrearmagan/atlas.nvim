@@ -1,29 +1,12 @@
 local M = {}
 
 local service = require("atlas.providers.gitlab.client").pulls
-local diff_parser = require("atlas.core.git.diff_parser")
-local files_api = require("atlas.pulls.providers.gitlab.api.files")
 local mapper = require("atlas.pulls.providers.gitlab.api.mapper")
 
 ---@param pr PullRequest
 ---@return string project_path, integer|nil iid
 local function project_iid(pr)
 	return pr.repo_full_name, tonumber(pr.id)
-end
-
----@param files DiffFile[]
----@return table<string, DiffFile>
-local function index_files(files)
-	local by_path = {}
-	for _, f in ipairs(files or {}) do
-		if f.path ~= "" then
-			by_path[f.path] = f
-		end
-		if f.old_path and f.old_path ~= "" and by_path[f.old_path] == nil then
-			by_path[f.old_path] = f
-		end
-	end
-	return by_path
 end
 
 ---@param comment PullsComment
@@ -59,7 +42,7 @@ end
 ---@param opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(result: PullsComment[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-local function load_comments(pr, opts, on_done)
+function M.fetch(pr, opts, on_done)
 	opts = opts or {}
 	local path, iid = project_iid(pr)
 	if path == "" or iid == nil then
@@ -85,7 +68,6 @@ local function load_comments(pr, opts, on_done)
 	local pending = 2
 	local discussions_result, drafts_result
 	local first_err
-	local drafts_failed = false
 	local handles = {}
 	local cancelled = false
 
@@ -128,9 +110,7 @@ local function load_comments(pr, opts, on_done)
 			local comment = inherit_thread_context(mapper.to_draft_comment(draft, root and root.id or nil), root)
 			table.insert(result, comment)
 		end
-		if not drafts_failed then
-			service.set_memory_cache(cache_key, result)
-		end
+		service.set_memory_cache(cache_key, result)
 		on_done(result, nil)
 	end
 
@@ -160,8 +140,7 @@ local function load_comments(pr, opts, on_done)
 	end))
 	track(service.fetch_all_pages(drafts_ep, function(result, err)
 		if err then
-			drafts_failed = true
-			drafts_result = {}
+			first_err = first_err or err
 		else
 			drafts_result = result
 		end
@@ -177,56 +156,17 @@ local function load_comments(pr, opts, on_done)
 	}
 end
 
----@param pr PullRequest
----@param opts { force_refresh: boolean|nil }|nil
----@param on_done fun(comments: PullsComment[]|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.fetch_comments(pr, opts, on_done)
-	local load_handle, diff_handle
-	local cancelled = false
-	load_handle = load_comments(pr, opts, function(result, err)
-		if not result then
-			on_done(nil, err)
-			return
-		end
-		diff_handle = files_api.fetch_diff(pr, opts, function(files)
-			if cancelled then
-				return
-			end
-			local files_by_path = index_files(files or {})
-			local comments = {}
-			for _, comment in ipairs(result) do
-				if comment.inline then
-					local side = comment.inline.to ~= nil and "new" or "old"
-					local line = comment.inline.to or comment.inline.from
-					if line then
-						comment.inline_hunk = diff_parser.find_hunk(files_by_path[comment.inline.path], side, line)
-					end
-					table.insert(comments, comment)
-				end
-			end
-			on_done(comments, nil)
-		end)
-	end)
-	return {
-		cancel = function()
-			cancelled = true
-			if load_handle then
-				load_handle.cancel()
-			end
-			if diff_handle then
-				diff_handle.cancel()
-			end
-		end,
-	}
+local function bust_caches(path, iid)
+	service.delete_memory_cache(string.format("gitlab_pulls:comments:%s!%d", path, iid))
+	service.delete_memory_cache(string.format("gitlab_pulls:activity:%s!%d", path, iid))
 end
 
 ---@param pr PullRequest
 ---@param opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(comments: PullsComment[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_general_comments(pr, opts, on_done)
-	return load_comments(pr, opts, function(result, err)
+function M.fetch_general(pr, opts, on_done)
+	return M.fetch(pr, opts, function(result, err)
 		if not result then
 			on_done(nil, err)
 			return
@@ -238,44 +178,6 @@ function M.fetch_general_comments(pr, opts, on_done)
 			end
 		end
 		on_done(general, nil)
-	end)
-end
-
-local function bust_caches(path, iid)
-	service.delete_memory_cache(string.format("gitlab_pulls:comments:%s!%d", path, iid))
-	service.delete_memory_cache(string.format("gitlab_pulls:activity:%s!%d", path, iid))
-end
-
----@param pr PullRequest
----@param reviewer_state "reviewed"|"requested_changes"|nil
----@param body string|nil
----@param on_done fun(ok: boolean, err: string|nil)
----@return { cancel: fun() }|nil
-function M.publish_review(pr, reviewer_state, body, on_done)
-	local path, iid = project_iid(pr)
-	if path == "" or iid == nil then
-		on_done(false, "Invalid MR identifier")
-		return nil
-	end
-
-	local payload
-	if body and vim.trim(body) ~= "" then
-		payload = { note = body }
-	end
-	if reviewer_state then
-		payload = payload or {}
-		payload.reviewer_state = reviewer_state
-	end
-
-	local endpoint =
-		string.format("/projects/%s/merge_requests/%d/draft_notes/bulk_publish", service.url_encode(path), iid)
-	return service.request("POST", endpoint, payload, function(_, err)
-		if err then
-			on_done(false, err)
-			return
-		end
-		bust_caches(path, iid)
-		on_done(true, nil)
 	end)
 end
 

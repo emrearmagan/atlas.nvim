@@ -39,6 +39,7 @@
 ---@field compact boolean|nil
 ---@field compact_context_lines integer|nil
 ---@field show_review_panel boolean|nil
+---@field show_comments boolean|nil
 ---@field explorer AtlasPullsDiffExplorerConfig|nil
 
 ---@class AtlasPullsCustomActionContext
@@ -103,6 +104,7 @@ M.options = {
 			compact = true,
 			compact_context_lines = 3,
 			show_review_panel = false,
+			show_comments = true,
 			explorer = {
 				grouped = true,
 				hidden = false,
@@ -156,6 +158,8 @@ M.options = {
 					open_file = "l",
 					next_file = { "]f", "<Tab>" },
 					previous_file = { "[f", "<S-Tab>" },
+					next_unreviewed_file = "]u",
+					previous_unreviewed_file = "[u",
 					toggle_grouping = "T",
 					toggle_file_reviewed = "-",
 					toggle_commits = "gC",
@@ -166,6 +170,7 @@ M.options = {
 					next_hunk = "]h",
 					previous_hunk = "[h",
 					toggle_review_panel = "gR",
+					toggle_comments = "gH",
 					next_comment = "]c",
 					previous_comment = "[c",
 					next_note = "]n",

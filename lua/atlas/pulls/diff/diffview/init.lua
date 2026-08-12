@@ -1,14 +1,13 @@
 local M = {}
 
-local comments = require("atlas.pulls.diff.shared.comments")
-local events = require("atlas.core.events")
-local notes = require("atlas.pulls.diff.shared.notes")
-local notify = require("atlas.core.notify")
-local comment_renderer = require("atlas.pulls.diff.shared.ui.comment_renderer")
-local review_keymaps = require("atlas.pulls.diff.shared.keymaps")
-local statusline = require("atlas.pulls.diff.shared.ui.statusline")
-
-local STATUSLINE = "%!v:lua.require'atlas.pulls.diff.diffview'.statusline()"
+local comments = require("atlas.pulls.diff.ui.comments")
+local config = require("atlas.config")
+local notes = require("atlas.pulls.diff.notes")
+local position = require("atlas.pulls.diff.position")
+local review_keymaps = require("atlas.pulls.diff.keymaps")
+local review_panel = require("atlas.pulls.diff.ui.review_panel")
+local session_api = require("atlas.pulls.diff.session")
+local statusline = require("atlas.pulls.diff.ui.statusline")
 
 ---@type table<string, DiffFileStatus>
 local FILE_STATUSES = {
@@ -21,39 +20,24 @@ local FILE_STATUSES = {
 	T = "type_changed",
 }
 
----@type table<integer, AtlasDiffviewReview>
-local sessions = {}
-
----@class AtlasDiffviewAttachOptions
----@field root string
----@field base_revision string
----@field head_revision string
----@field reload (fun(target: AtlasLoadingTarget|nil))|nil
-
----@class AtlasDiffviewReview
----@field tabpage integer
+---@class AtlasDiffviewState
 ---@field view table
----@field context AtlasPreparedReviewContext
----@field root string
----@field base_revision string
----@field head_revision string
----@field reload (fun(target: AtlasLoadingTarget|nil))|nil
----@field session AtlasReviewSession|nil
----@field actions AtlasReviewKeymapActions|nil
 ---@field group integer
 ---@field sync_scheduled boolean
 ---@field suspended boolean
----@field closed boolean
----@field session_id string
+---@field auto_open_panel boolean
+---@field pending_jump { path: string, comment: PullsComment|nil, note: AtlasNote|nil, focus_diff: boolean }|nil
 ---@field additions integer
 ---@field deletions integer
+---@field closed boolean
+---@field reloading boolean
+---@field reload_view (fun())|nil
 
 ---@param value string|nil
 ---@return string
 local function clean_path(value)
 	local path = tostring(value or "")
-	path = path:gsub("\\", "/"):gsub("^%./", ""):gsub("/+$", "")
-	return path
+	return (path:gsub("\\", "/"):gsub("^%./", ""):gsub("/+$", ""))
 end
 
 ---@param root string
@@ -67,25 +51,6 @@ local function relative_path(root, path)
 		return path:sub(#prefix + 1)
 	end
 	return path
-end
-
----@param entry AtlasDiffviewReview
----@param reason string|nil
----@return table
-local function event_data(entry, reason)
-	local data = {
-		version = 1,
-		session_id = entry.session_id,
-		viewer = "diffview",
-		tabpage = entry.tabpage,
-		root = entry.root,
-		base_revision = entry.base_revision,
-		head_revision = entry.head_revision,
-	}
-	if reason then
-		data.reason = reason
-	end
-	return data
 end
 
 ---@param window table
@@ -114,22 +79,118 @@ local function line_changes(old_lines, new_lines)
 	})
 	for _, change in ipairs(changes) do
 		local old_start, old_count, new_start, new_count = unpack(change)
-		table.insert(result, {
+		result[#result + 1] = {
 			old_start = old_start,
 			old_count = old_count,
 			new_start = new_start,
 			new_count = new_count,
-		})
+		}
 	end
 	return result
 end
 
----@param entry AtlasDiffviewReview
-local function reload(entry)
-	if not entry.reload then
+---@param session AtlasDiffSession
+---@param focus boolean
+---@return boolean opened
+local function open_review_panel(session, focus)
+	local state = session.viewer_state --[[@as AtlasDiffviewState]]
+	if state.closed then
+		return false
+	end
+	local layout = state.view and state.view.cur_layout or nil
+	local anchor = layout and layout.b and layout.b.id or nil
+	if not anchor or not vim.api.nvim_win_is_valid(anchor) then
+		anchor = layout and layout.a and layout.a.id or nil
+	end
+	if not anchor or not session.review_panel then
+		return false
+	end
+	local win = review_panel.open(session.review_panel, anchor, focus)
+	if win then
+		statusline.attach(win)
+	end
+	return win ~= nil
+end
+
+---@param session AtlasDiffSession
+---@param focus boolean|nil
+local function toggle_review_panel(session, focus)
+	local panel = session.review_panel
+	if not panel then
 		return
 	end
-	local callback = entry.reload
+	if panel.win and vim.api.nvim_win_is_valid(panel.win) then
+		review_panel.close(panel)
+		return
+	end
+	open_review_panel(session, focus ~= false)
+end
+
+---@param session AtlasDiffSession
+local function finish_pending_jump(session)
+	local state = session.viewer_state --[[@as AtlasDiffviewState]]
+	local pending = state.pending_jump
+	local current = session.current
+	local document = current and current.document or nil
+	if
+		not pending
+		or not current
+		or not document
+		or (document.old.path ~= pending.path and document.new.path ~= pending.path)
+	then
+		return
+	end
+	state.pending_jump = nil
+
+	---@type AtlasDiffSide|nil
+	local side = pending.note and "RIGHT" or nil
+	local line = pending.note and pending.note.line or nil
+	if pending.comment then
+		side, line = position.location(pending.comment.inline)
+	elseif document.binary or document.status == "deleted" then
+		session_api.notify(session, "info", "This note's file is no longer in the diff")
+		return
+	end
+
+	local source = side == "LEFT" and document.old.lines or document.new.lines
+	local target = side == "LEFT" and current.left or current.right
+	if
+		not side
+		or not line
+		or line < 1
+		or #source == 0
+		or not target.win
+		or not vim.api.nvim_win_is_valid(target.win)
+	then
+		session_api.notify(session, "info", "This review item's diff position is outdated")
+		return
+	end
+
+	line = math.min(line, #source)
+	vim.api.nvim_win_set_cursor(target.win, { line, 0 })
+	vim.api.nvim_win_call(target.win, function()
+		pcall(vim.cmd.normal, { "zvzz", bang = true })
+	end)
+	if vim.api.nvim_get_current_tabpage() == session.tabpage then
+		if pending.focus_diff then
+			vim.api.nvim_set_current_win(target.win)
+		elseif
+			session.review_panel
+			and session.review_panel.win
+			and vim.api.nvim_win_is_valid(session.review_panel.win)
+		then
+			vim.api.nvim_set_current_win(session.review_panel.win)
+		end
+	end
+end
+
+---@param session AtlasDiffSession
+local function reload_view(session)
+	local state = session.viewer_state --[[@as AtlasDiffviewState]]
+	if state.closed or state.reloading or not session.reload then
+		return
+	end
+	local reload = session.reload
 	vim.cmd("tabnew")
 	local win = vim.api.nvim_get_current_win()
 	local target = {
@@ -142,99 +203,120 @@ local function reload(entry)
 		statusline = vim.wo[win].statusline,
 		winbar = vim.wo[win].winbar,
 	}
+	state.reloading = true
 	local ok, err = pcall(function()
-		entry.view:close()
-		require("diffview.lib").dispose_view(entry.view)
+		state.view:close()
+		require("diffview.lib").dispose_view(state.view)
 	end)
 	if not ok then
+		state.reloading = false
 		vim.cmd("tabclose")
-		notify.error("Unable to close Diffview: " .. tostring(err))
+		session_api.notify(session, "error", "Unable to close Diffview: " .. tostring(err))
 		return
 	end
-	M.detach(entry.tabpage, "reload")
+	M.detach(session, "reload")
 	vim.schedule(function()
-		callback(target)
+		reload(target)
 	end)
 end
 
----@param entry AtlasDiffviewReview
-local function map_review(entry)
-	local session = entry.session
-	local actions = entry.actions
-	if not session or not actions then
+---@param session AtlasDiffSession
+local function register_review_buffers(session)
+	local current = session.current
+	if not current then
 		return
 	end
-	local view = entry.view
-	local panel_buf = view.panel and view.panel.bufid
-	local buffers = { session.left.buf, session.right.buf }
-	if panel_buf and vim.api.nvim_buf_is_valid(panel_buf) then
-		table.insert(buffers, panel_buf)
+	local state = session.viewer_state --[[@as AtlasDiffviewState]]
+	local candidates = { current.left.buf, current.right.buf }
+	local diffview_panel_buf = state.view.panel and state.view.panel.bufid or nil
+	if diffview_panel_buf then
+		candidates[#candidates + 1] = diffview_panel_buf
 	end
-	review_keymaps.register(session, actions, {
+	local buffers, seen = {}, {}
+	for _, buf in ipairs(candidates) do
+		if buf and not seen[buf] and vim.api.nvim_buf_is_valid(buf) then
+			seen[buf] = true
+			buffers[#buffers + 1] = buf
+		end
+	end
+	review_keymaps.register(session, {
 		buffers = buffers,
-		reload = entry.reload and function()
-			reload(entry)
-		end or nil,
+		reload = state.reload_view,
+		help_key = "gA",
 	})
+	if session.review_panel then
+		review_panel.register_toggle(session.review_panel, buffers)
+	end
 end
 
----@param entry AtlasDiffviewReview
----@param session AtlasReviewSession
-local function refresh_scroll(entry, session)
-	comments.render(session)
-	notes.render(session)
-	local layout = entry.view.cur_layout
+---@param session AtlasDiffSession
+local function render_view(session)
+	local state = session.viewer_state --[[@as AtlasDiffviewState]]
+	if state.closed then
+		return
+	end
+	local layout = state.view and state.view.cur_layout or nil
 	if layout and layout.sync_scroll then
 		pcall(layout.sync_scroll, layout)
 	end
-	vim.cmd("redrawstatus")
 end
 
----@param entry AtlasDiffviewReview
-local function suspend(entry)
-	if entry.session then
-		comment_renderer.clear_comments(entry.session.left.buf)
-		comment_renderer.clear_comments(entry.session.right.buf)
-		notes.clear(entry.session)
-		entry.session.document = nil
+---@param session AtlasDiffSession
+local function suspend(session)
+	local state = session.viewer_state --[[@as AtlasDiffviewState]]
+	if state.closed then
+		return
 	end
-	if not entry.suspended then
-		entry.suspended = true
-		notify.warn("Atlas review overlays require a two-pane Diffview layout")
+	if session.current then
+		comments.clear(session.current)
+		notes.clear(session.current)
+		session.current = nil
+	end
+	if not state.suspended then
+		state.suspended = true
+		session_api.notify(session, "warn", "Atlas review overlays require a two-pane Diffview layout")
 	end
 end
 
----@param entry AtlasDiffviewReview
----@return boolean
-local function sync(entry)
-	if entry.closed or not vim.api.nvim_tabpage_is_valid(entry.tabpage) then
+---@param session AtlasDiffSession
+---@return boolean synced
+local function sync(session)
+	if
+		session.closed
+		or not session.tabpage
+		or not vim.api.nvim_tabpage_is_valid(session.tabpage)
+		or session_api.get(session.tabpage) ~= session
+	then
 		return false
 	end
-	local view = entry.view
+	local state = session.viewer_state --[[@as AtlasDiffviewState]]
+	if state.closed then
+		return false
+	end
+	local view = state.view
 	local current = view.cur_entry
 	local layout = view.cur_layout
 	if not view.ready or not current or not layout then
 		return false
 	end
-	local layout_name = tostring(layout.name or "")
-	if not layout_name:match("^diff2_") then
-		suspend(entry)
+	if not tostring(layout.name or ""):match("^diff2_") then
+		suspend(session)
 		return false
 	end
 	if not layout.a:is_file_open() or not layout.b:is_file_open() then
 		return false
 	end
-	entry.additions, entry.deletions = 0, 0
+
+	state.additions, state.deletions = 0, 0
 	for _, file in view.files:iter() do
-		local stats = file.stats
-		if stats then
-			entry.additions = entry.additions + (stats.additions or 0)
-			entry.deletions = entry.deletions + (stats.deletions or 0)
+		if file.stats then
+			state.additions = state.additions + (file.stats.additions or 0)
+			state.deletions = state.deletions + (file.stats.deletions or 0)
 		end
 	end
 
-	local path = relative_path(entry.root, current.path)
-	local old_path = relative_path(entry.root, current.oldpath)
+	local path = relative_path(session.source.root, current.path)
+	local old_path = relative_path(session.source.root, current.oldpath)
 	if old_path == "" then
 		old_path = path
 	end
@@ -245,175 +327,240 @@ local function sync(entry)
 	local old_lines = buffer_lines(layout.a)
 	local new_lines = buffer_lines(layout.b)
 	local binary = layout.a.file.binary == true or layout.b.file.binary == true
-	local changes = binary and {} or line_changes(old_lines, new_lines)
-	local previous = entry.session
+	local previous = session.current
 	local buffers_changed = not previous
 		or previous.left.buf ~= layout.a.file.bufnr
 		or previous.right.buf ~= layout.b.file.bufnr
-	if previous and buffers_changed then
-		comment_renderer.clear_comments(previous.left.buf)
-		comment_renderer.clear_comments(previous.right.buf)
-		notes.clear(previous)
-	end
-	local resumed = entry.suspended
-	entry.suspended = false
-	local session = previous or { tabpage = entry.tabpage, closing = false }
-	session.head_revision = entry.head_revision
-	session.layout = "side-by-side"
-	session.left = { buf = layout.a.file.bufnr, win = layout.a.id }
-	session.right = { buf = layout.b.file.bufnr, win = layout.b.id }
-	session.document = {
-		status = status,
-		old = { path = old_path, lines = old_lines },
-		new = { path = path, lines = new_lines },
-		changes = changes,
-		binary = binary,
+	local current_view = {
+		layout = "side-by-side",
+		document = {
+			status = status,
+			old = { path = old_path, lines = old_lines },
+			new = { path = path, lines = new_lines },
+			changes = binary and {} or line_changes(old_lines, new_lines),
+			binary = binary,
+		},
+		left = { buf = layout.a.file.bufnr, win = layout.a.id },
+		right = { buf = layout.b.file.bufnr, win = layout.b.id },
 	}
-	entry.session = session
-	vim.api.nvim_set_option_value("statusline", STATUSLINE, { win = layout.a.id, scope = "local" })
-	vim.api.nvim_set_option_value("statusline", STATUSLINE, { win = layout.b.id, scope = "local" })
-	vim.cmd("redrawstatus")
-	session.refresh_ui = function()
-		refresh_scroll(entry, session)
+	state.suspended = false
+	statusline.attach(current_view.left.win)
+	statusline.attach(current_view.right.win)
+	session_api.set_current(session, current_view)
+	session_api.review_attached(session)
+	if buffers_changed then
+		register_review_buffers(session)
 	end
-	session.review_view = {
-		notify = function(level, message)
-			local notify_level = level == "error" and vim.log.levels.ERROR
-				or level == "warn" and vim.log.levels.WARN
-				or vim.log.levels.INFO
-			notify.show(notify_level, message)
-		end,
-		register_keymaps = function(actions)
-			entry.actions = actions
-			map_review(entry)
-		end,
-	}
-	if not session.review then
-		notes.attach(session, entry.context)
-		local ok, err = pcall(comments.attach, session, entry.context)
-		if not ok then
-			comments.detach(session)
-			notify.error("Unable to load comments: " .. tostring(err))
-		else
-			events.emit("AtlasReviewAttached", event_data(entry))
-		end
-	else
-		if buffers_changed or resumed then
-			map_review(entry)
-		end
-		session.refresh_ui()
+	if state.auto_open_panel and open_review_panel(session, false) then
+		state.auto_open_panel = false
 	end
+	finish_pending_jump(session)
 	return true
 end
 
----@param entry AtlasDiffviewReview
-local function schedule_sync(entry)
-	if entry.closed or entry.sync_scheduled then
+---@param session AtlasDiffSession
+local function schedule_sync(session)
+	local state = session.viewer_state --[[@as AtlasDiffviewState]]
+	if session.closed or state.closed or state.sync_scheduled then
 		return
 	end
-	entry.sync_scheduled = true
+	state.sync_scheduled = true
 	vim.schedule(function()
-		entry.sync_scheduled = false
-		sync(entry)
+		if session.viewer_state ~= state or state.closed then
+			return
+		end
+		state.sync_scheduled = false
+		sync(session)
 	end)
 end
 
----@param entry AtlasDiffviewReview
-local function register_events(entry)
+---@param session AtlasDiffSession
+---@param item AtlasDiffReviewPanelSelection
+---@param focus_diff boolean
+local function focus_item(session, item, focus_diff)
+	local state = session.viewer_state --[[@as AtlasDiffviewState]]
+	if state.closed then
+		return
+	end
+	local pending = { focus_diff = focus_diff }
+	local note = item.kind == "note" and item.note or nil
+	local comment = item.comment and item.comment.inline and item.comment or nil
+	if not note and not comment then
+		session_api.notify(session, "info", "This comment is not attached to the diff")
+		return
+	end
+	local path = relative_path(session.source.root, note and note.file_path or comment.inline.path)
+	pending.note = note
+	pending.comment = comment
+	if path == "" then
+		session_api.notify(session, "info", "This review item's file is no longer in the diff")
+		return
+	end
+	pending.path = path
+	state.pending_jump = pending
+	finish_pending_jump(session)
+	if not state.pending_jump then
+		return
+	end
+	for _, file in state.view.files:iter() do
+		if
+			relative_path(session.source.root, file.path) == path
+			or relative_path(session.source.root, file.oldpath) == path
+		then
+			state.view:set_file(file, false, true)
+			return
+		end
+	end
+	state.pending_jump = nil
+	session_api.notify(session, "info", "This review item's file is no longer in the diff")
+end
+
+---@param session AtlasDiffSession
+local function register_events(session)
+	local state = session.viewer_state --[[@as AtlasDiffviewState]]
 	vim.api.nvim_create_autocmd("User", {
-		group = entry.group,
+		group = state.group,
 		pattern = { "DiffviewDiffBufWinEnter", "DiffviewViewPostLayout" },
 		callback = function()
-			if vim.api.nvim_get_current_tabpage() == entry.tabpage then
-				schedule_sync(entry)
+			if
+				session.viewer_state == state
+				and not state.closed
+				and vim.api.nvim_get_current_tabpage() == session.tabpage
+			then
+				schedule_sync(session)
 			end
 		end,
 	})
 	vim.api.nvim_create_autocmd("User", {
-		group = entry.group,
+		group = state.group,
 		pattern = "DiffviewViewClosed",
 		callback = function()
 			vim.schedule(function()
-				if not entry.closed and not vim.api.nvim_tabpage_is_valid(entry.tabpage) then
-					M.detach(entry.tabpage, "viewer_closed")
+				if
+					session.viewer_state == state
+					and not state.reloading
+					and not state.closed
+					and not session.closed
+					and session.tabpage
+					and not vim.api.nvim_tabpage_is_valid(session.tabpage)
+				then
+					M.detach(session, "viewer_closed")
 				end
 			end)
 		end,
 	})
 end
 
----@param context AtlasPreparedReviewContext
+---@param session AtlasDiffSession
 ---@param view table
----@param opts AtlasDiffviewAttachOptions
----@return string|nil err
-function M.attach(context, view, opts)
-	local tabpage = view and view.tabpage
-	if not tabpage or not vim.api.nvim_tabpage_is_valid(tabpage) then
-		return "Diffview session is unavailable"
-	end
-	M.detach(tabpage, "replaced")
-	---@type AtlasDiffviewReview
-	local entry = {
-		tabpage = tabpage,
+---@param tabpage integer
+local function attach(session, view, tabpage)
+	local diff_config = (config.options.pulls or {}).diff or {}
+	---@type AtlasDiffviewState
+	local state = {
 		view = view,
-		context = context,
-		root = clean_path(opts.root),
-		base_revision = opts.base_revision,
-		head_revision = opts.head_revision,
-		reload = opts.reload,
-		session = nil,
-		actions = nil,
-		group = vim.api.nvim_create_augroup("AtlasDiffviewReview" .. tabpage, { clear = true }),
+		group = vim.api.nvim_create_augroup("AtlasDiffview" .. tabpage, { clear = true }),
 		sync_scheduled = false,
 		suspended = false,
-		closed = false,
-		session_id = events.new_id("diffview"),
+		auto_open_panel = diff_config.show_review_panel == true
+			and (session.review ~= nil or session.note_target ~= nil),
+		pending_jump = nil,
 		additions = 0,
 		deletions = 0,
+		closed = false,
+		reloading = false,
 	}
-	sessions[tabpage] = entry
-	register_events(entry)
-	schedule_sync(entry)
+	session.viewer_state = state
+	state.reload_view = function()
+		reload_view(session)
+	end
+
+	if session.review or session.note_target then
+		local panel =
+			session_api.create_review_panel(session, string.format("atlas-diff-diffview://%d/review", tabpage))
+		review_panel.configure(panel)
+		review_panel.register_keymaps(panel)
+	end
+	register_events(session)
+	session_api.attach(session, {
+		tabpage = tabpage,
+		notify = function(level, message, duration)
+			statusline.notify(session.statusline, level, message, duration)
+		end,
+		focus_item = function(item, focus_diff)
+			focus_item(session, item, focus_diff)
+		end,
+		render_view = function()
+			render_view(session)
+		end,
+		toggle_review_panel = function(focus)
+			toggle_review_panel(session, focus)
+		end,
+	})
+	schedule_sync(session)
+end
+
+---@param session AtlasDiffSession
+---@param loading_view AtlasLoadingView
+---@param on_done fun(err: string|nil)
+---@return nil
+function M.open(session, loading_view, on_done)
+	local finished = false
+	local function finish(err)
+		if finished then
+			return
+		end
+		finished = true
+		loading_view:finish()
+		vim.schedule(function()
+			on_done(err)
+		end)
+	end
+
+	local source = session.source
+	local range = source.head_revision and source.base_revision .. "..." .. source.head_revision or source.base_revision
+	local ok, view = pcall(vim.api.nvim_win_call, loading_view.win, function()
+		vim.cmd("tcd " .. vim.fn.fnameescape(source.root))
+		vim.api.nvim_cmd({
+			cmd = "DiffviewOpen",
+			args = { range },
+		}, {})
+		return require("diffview.lib").get_current_view()
+	end)
+	if not ok then
+		finish(tostring(view))
+		return nil
+	end
+	local tabpage = view and view.tabpage or nil
+	if not tabpage or not vim.api.nvim_tabpage_is_valid(tabpage) then
+		finish("Diffview session is unavailable")
+		return nil
+	end
+
+	local attached, attach_err = pcall(attach, session, view, tabpage)
+	if not attached then
+		local state = session.viewer_state --[[@as AtlasDiffviewState]]
+		if state.view == view then
+			M.detach(session, "attach_failed")
+		end
+		finish("Unable to attach review to Diffview: " .. tostring(attach_err))
+		return nil
+	end
+	finish(nil)
 	return nil
 end
 
----@param tabpage integer|nil
+---@param session AtlasDiffSession
 ---@param reason string|nil
-function M.detach(tabpage, reason)
-	tabpage = tabpage or vim.api.nvim_get_current_tabpage()
-	local entry = sessions[tabpage]
-	if not entry then
+function M.detach(session, reason)
+	local state = session.viewer_state --[[@as AtlasDiffviewState]]
+	if session.closed or not state or state.closed then
 		return
 	end
-	sessions[tabpage] = nil
-	entry.closed = true
-	local attached = entry.session and entry.session.review ~= nil
-	if entry.session then
-		entry.session.closing = true
-		comments.detach(entry.session)
-		notes.detach(entry.session)
-	end
-	pcall(vim.api.nvim_del_augroup_by_id, entry.group)
-	if attached then
-		events.emit("AtlasReviewDetached", event_data(entry, reason or "viewer_closed"))
-	end
-end
-
----@return string
-function M.statusline()
-	local entry = sessions[vim.api.nvim_get_current_tabpage()]
-	local session = entry and entry.session
-	if not session then
-		return ""
-	end
-	local pr = entry.context.pr
-	return statusline.render(
-		string.format("#%s %s", tostring(pr.id), tostring(pr.title)),
-		entry.additions,
-		entry.deletions,
-		session.review,
-		session.notes
-	)
+	state.closed = true
+	state.pending_jump = nil
+	pcall(vim.api.nvim_del_augroup_by_id, state.group)
+	session_api.detach(session, reason)
 end
 
 return M

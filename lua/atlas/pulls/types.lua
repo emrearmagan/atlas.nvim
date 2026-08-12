@@ -228,6 +228,20 @@
 ---@field _raw table|nil
 
 --------------------------------------------------------------------------------
+-- Review
+--------------------------------------------------------------------------------
+
+---@class PullsReview
+---@field id string|nil
+---@field commit_hash string|nil
+---@field pending boolean
+
+---@class PullsReviewData
+---@field review PullsReview
+---@field comments PullsComment[]
+---@field tasks PullsComment[]
+
+--------------------------------------------------------------------------------
 -- Commit
 --------------------------------------------------------------------------------
 

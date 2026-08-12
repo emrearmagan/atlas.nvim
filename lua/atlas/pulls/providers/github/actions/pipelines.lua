@@ -1,4 +1,4 @@
-local checks = require("atlas.pulls.providers.github.api.checks")
+local pipelines = require("atlas.pulls.providers.github.api.pipelines")
 
 ---@param item PullsPipeline|PullsPipelineJob
 ---@return string
@@ -9,7 +9,7 @@ end
 ---@param ctx PullsPipelineActionContext
 ---@return boolean
 local function has_pipeline_id(ctx)
-	return tonumber(ctx.pipeline.provider_id) ~= nil or checks.parse_run_id(ctx.pipeline.url) ~= nil
+	return tonumber(ctx.pipeline.provider_id) ~= nil or pipelines.parse_run_id(ctx.pipeline.url) ~= nil
 end
 
 ---@param pipeline PullsPipeline
@@ -32,7 +32,7 @@ return {
 			return has_pipeline_id(ctx) and state(ctx.pipeline) == "FAILED" and not is_running(ctx.pipeline)
 		end,
 		run = function(ctx, done)
-			checks.rerun_pipeline(ctx.pr, ctx.pipeline, true, function(_, err)
+			pipelines.rerun(ctx.pr, ctx.pipeline, true, function(_, err)
 				done(err)
 			end)
 		end,
@@ -44,7 +44,7 @@ return {
 			return has_pipeline_id(ctx) and not is_running(ctx.pipeline)
 		end,
 		run = function(ctx, done)
-			checks.rerun_pipeline(ctx.pr, ctx.pipeline, false, function(_, err)
+			pipelines.rerun(ctx.pr, ctx.pipeline, false, function(_, err)
 				done(err)
 			end)
 		end,
@@ -57,7 +57,7 @@ return {
 			return has_pipeline_id(ctx) and is_running(ctx.pipeline)
 		end,
 		run = function(ctx, done)
-			checks.cancel_pipeline(ctx.pr, ctx.pipeline, function(_, err)
+			pipelines.cancel(ctx.pr, ctx.pipeline, function(_, err)
 				done(err)
 			end)
 		end,
@@ -72,7 +72,7 @@ return {
 				and not is_running(ctx.pipeline)
 		end,
 		run = function(ctx, done)
-			checks.rerun_pipeline_job(ctx.pr, ctx.job, function(_, err)
+			pipelines.rerun_job(ctx.pr, ctx.job, function(_, err)
 				done(err)
 			end)
 		end,

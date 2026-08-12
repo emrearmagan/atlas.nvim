@@ -1,12 +1,14 @@
 local actions = require("atlas.pulls.providers.github.actions")
 local activity_api = require("atlas.pulls.providers.github.api.activity")
+local changes_api = require("atlas.pulls.providers.github.api.changes")
 local checks_api = require("atlas.pulls.providers.github.api.checks")
 local cli = require("atlas.providers.github.client").pulls
 local comments_api = require("atlas.pulls.providers.github.api.comments")
-local commits_api = require("atlas.pulls.providers.github.api.commits")
 local notifications_api = require("atlas.pulls.providers.github.api.notifications")
+local pipelines_api = require("atlas.pulls.providers.github.api.pipelines")
 local pullrequests_api = require("atlas.pulls.providers.github.api.pullrequests")
 local repositories_api = require("atlas.pulls.providers.github.api.repositories")
+local reviews_api = require("atlas.pulls.providers.github.api.reviews")
 local users_api = require("atlas.pulls.providers.github.api.users")
 local resolver = require("atlas.providers.resolve")
 
@@ -256,18 +258,17 @@ return {
 			update_description = pullrequests_api.update_description,
 			set_draft = pullrequests_api.set_draft,
 			fetch_description = pullrequests_api.get_description,
-			fetch_merge_checks = checks_api.get_merge_checks_summary,
-			fetch_diffstat = pullrequests_api.get_diffstat,
+			fetch_merge_checks = checks_api.fetch,
+			fetch_diffstat = changes_api.fetch_diffstat,
 			fetch_activity = activity_api.fetch_activity,
-			fetch_commits = commits_api.fetch_commits,
-			fetch_diff = commits_api.fetch_diff,
+			fetch_commits = changes_api.fetch_commits,
+			fetch_diff = changes_api.fetch_diff,
 			views = views,
 		},
 		comments = {
 			reaction_options = require("atlas.ui.shared.emojis").github(),
 			comment_completion = require("atlas.pulls.providers.github.completion.author").build_completion,
 			fetch_conversation = fetch_conversation,
-			fetch_review_comments = comments_api.fetch_comments,
 			add_comment = comments_api.add_comment,
 			edit_comment = comments_api.edit_comment,
 			delete_comment = comments_api.delete_comment,
@@ -275,13 +276,13 @@ return {
 			set_thread_resolved = comments_api.set_thread_resolved,
 		},
 		reviews = {
-			fetch_review_context = pullrequests_api.get_review_context,
-			submit_review = comments_api.submit_review,
-			approve = comments_api.approve_review,
-			request_changes = comments_api.request_changes_review,
-		},
-		tasks = {
-			fetch_tasks = comments_api.fetch_tasks,
+			fetch = reviews_api.fetch,
+			fetch_review_context = reviews_api.fetch_context,
+			start_review = reviews_api.start,
+			submit_review = reviews_api.submit,
+			approve = reviews_api.approve,
+			request_changes = reviews_api.request_changes,
+			discard_review = reviews_api.discard,
 		},
 		repository = {
 			fetch_details = repositories_api.fetch_detail,
@@ -289,9 +290,9 @@ return {
 			fetch_tags = repositories_api.fetch_tags,
 		},
 		pipelines = {
-			fetch = checks_api.get_pipelines,
-			fetch_details = checks_api.get_pipeline_details,
-			fetch_job_log = checks_api.get_pipeline_job_log,
+			fetch = pipelines_api.fetch,
+			fetch_details = pipelines_api.fetch_details,
+			fetch_job_log = pipelines_api.fetch_job_log,
 			actions = require("atlas.pulls.providers.github.actions.pipelines"),
 		},
 		notifications = {

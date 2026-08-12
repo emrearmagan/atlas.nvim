@@ -327,4 +327,99 @@ function M.to_comment(raw, thread_state)
 	return result
 end
 
+---@param node table
+---@param thread table
+---@param fallback_parent number|string|nil
+---@return PullsComment
+function M.to_review_comment(node, thread, fallback_parent)
+	local author = json.nilify(node.author) or {}
+	local reply_to = json.nilify(node.replyTo)
+	local review = json.safe_table(node.pullRequestReview)
+	local result = M.to_comment({
+		id = node.databaseId,
+		in_reply_to_id = reply_to and reply_to.databaseId or nil,
+		user = { login = author.login, id = author.databaseId },
+		body = node.body,
+		path = thread.path or node.path,
+		diff_hunk = node.diffHunk,
+		line = thread.line or node.line,
+		original_line = thread.originalLine or node.originalLine,
+		side = thread.diffSide,
+		url = node.url,
+		html_url = node.url,
+		created_at = node.createdAt,
+		reactions = github_mapping.reaction_groups(node.reactionGroups),
+	}, {
+		pending = review.state == "PENDING",
+		resolved = thread.isResolved == true,
+		outdated = thread.isOutdated == true,
+	})
+	result._raw = {
+		comment_id = tostring(node.id or ""),
+		thread_id = tostring(thread.id or ""),
+	}
+	if result.parent_id == nil then
+		result.parent_id = fallback_parent
+	end
+	return result
+end
+
+---@param comment PullsComment
+---@return table
+function M.review_thread(comment)
+	local inline = comment.inline or {}
+	local raw = comment._raw or {}
+	return {
+		id = tostring(raw.thread_id or ""),
+		path = inline.path,
+		line = inline.to,
+		originalLine = comment.inline_hunk_anchor or inline.from,
+		diffSide = inline.from ~= nil and "LEFT" or "RIGHT",
+		isResolved = comment.state == "RESOLVED",
+		isOutdated = comment.outdated == true or comment.state == "OUTDATED",
+	}
+end
+
+---@param comments PullsComment[]
+function M.normalize_inline_hunks(comments)
+	local longest = {}
+	for _, comment in ipairs(comments) do
+		local inline = comment.inline
+		local hunk = comment.inline_hunk
+		if inline and hunk then
+			local key = string.format("%s|%d|%d", inline.path, hunk.old_start, hunk.new_start)
+			if not longest[key] or #hunk.lines > #longest[key].lines then
+				longest[key] = hunk
+			end
+		end
+	end
+	for _, comment in ipairs(comments) do
+		local inline = comment.inline
+		local hunk = comment.inline_hunk
+		if inline and hunk then
+			local key = string.format("%s|%d|%d", inline.path, hunk.old_start, hunk.new_start)
+			comment.inline_hunk = longest[key]
+		end
+	end
+end
+
+---@param raw table
+---@return PullsComment[]
+function M.to_tasks(raw)
+	local out = {}
+	for _, line in ipairs(vim.split(tostring(raw.body or ""), "\n", { plain = true })) do
+		local marker = line:match("^%s*[-*+]%s+%[([ xX])%]") or line:match("^%s*%[([ xX])%]")
+		if marker then
+			local task = M.to_comment(raw)
+			task.id = string.format("github-task:%s:%06d", tostring(raw.id), #out + 1)
+			task.content_raw = line
+			task.is_task = true
+			task.task_label = "Checklist"
+			task.state = marker:lower() == "x" and "RESOLVED" or nil
+			table.insert(out, task)
+		end
+	end
+	return out
+end
+
 return M

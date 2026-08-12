@@ -1,10 +1,9 @@
 local M = {}
 
----@alias AtlasReviewSide "LEFT"|"RIGHT"
+---@alias AtlasDiffSide "LEFT"|"RIGHT"
 
 ---@param inline PullsInlineCommentPosition|nil
----@return AtlasReviewSide|nil side
----@return integer|nil line
+---@return AtlasDiffSide|nil, integer|nil
 function M.location(inline)
 	if not inline then
 		return nil, nil
@@ -18,12 +17,11 @@ function M.location(inline)
 	return nil, nil
 end
 
----@param document AtlasReviewDocument
----@param side AtlasReviewSide
+---@param document AtlasDiffDocument
+---@param side AtlasDiffSide
 ---@param line integer
 ---@param target_line_count integer
----@return integer line
----@return boolean above
+---@return integer, boolean
 function M.opposite_line(document, side, line, target_line_count)
 	local offset = 0
 	for _, change in ipairs(document.changes) do
@@ -36,22 +34,16 @@ function M.opposite_line(document, side, line, target_line_count)
 		end
 		if count > 0 and line < start + count then
 			local target = other_start + (other_count > 0 and math.min(line - start, other_count - 1) or 0)
-			if target < 1 then
-				return 1, true
-			end
-			return math.min(target_line_count, target), false
+			return math.max(1, math.min(target_line_count, target)), target < 1
 		end
 		offset = offset + other_count - count
 	end
 	local target = line + offset
-	if target < 1 then
-		return 1, true
-	end
-	return math.min(target_line_count, target), false
+	return math.max(1, math.min(target_line_count, target)), target < 1
 end
 
----@param document AtlasReviewDocument
----@param side AtlasReviewSide
+---@param document AtlasDiffDocument
+---@param side AtlasDiffSide
 ---@param line integer
 ---@return boolean
 function M.is_changed(document, side, line)
@@ -65,11 +57,10 @@ function M.is_changed(document, side, line)
 	return false
 end
 
----@param document AtlasReviewDocument
----@param side AtlasReviewSide
+---@param document AtlasDiffDocument
+---@param side AtlasDiffSide
 ---@param line integer
----@return PullsInlineCommentPosition|nil
----@return string|nil
+---@return PullsInlineCommentPosition|nil, string|nil
 function M.from_line(document, side, line)
 	local source = side == "LEFT" and document.old or document.new
 	local other = side == "LEFT" and document.new or document.old
@@ -79,7 +70,6 @@ function M.from_line(document, side, line)
 	if line < 1 or line > #source.lines then
 		return nil, "The selected line is outside the file"
 	end
-
 	local result = {
 		path = document.new.path,
 		old_path = document.old.path,

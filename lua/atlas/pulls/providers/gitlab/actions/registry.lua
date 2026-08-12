@@ -4,7 +4,8 @@ local actions = require("atlas.pulls.actions")
 local icons = require("atlas.ui.shared.icons")
 local statusline = require("atlas.ui.statusline")
 local multi_select = require("atlas.ui.popups.multi_select")
-local mr_api = require("atlas.pulls.providers.gitlab.api.mergerequests")
+local pullrequests_api = require("atlas.pulls.providers.gitlab.api.pullrequests")
+local reviews_api = require("atlas.pulls.providers.gitlab.api.reviews")
 local users_api = require("atlas.pulls.providers.gitlab.api.users")
 local service = require("atlas.providers.gitlab.client").pulls
 
@@ -68,7 +69,7 @@ end
 local function toggle_approval(ctx, done)
 	local pr = ctx.pr
 	notify(ctx, "loading", string.format("Checking approval for %s...", pr_label(pr)))
-	mr_api.get_approval_state(pr, function(approved, err)
+	reviews_api.fetch_approval_state(pr, function(approved, err)
 		if err then
 			notify(ctx, "error", err)
 			done(nil, err)
@@ -77,7 +78,7 @@ local function toggle_approval(ctx, done)
 
 		if approved then
 			notify(ctx, "loading", string.format("Unapproving %s...", pr_label(pr)))
-			mr_api.unapprove(pr, function(ok, unapprove_err)
+			reviews_api.unapprove_pull_request(pr, function(ok, unapprove_err)
 				if not ok then
 					notify(ctx, "error", unapprove_err or "Unapprove failed")
 					done(nil, unapprove_err or "Unapprove failed")
@@ -88,7 +89,7 @@ local function toggle_approval(ctx, done)
 			end)
 		else
 			notify(ctx, "loading", string.format("Approving %s...", pr_label(pr)))
-			mr_api.approve(pr, function(ok, approve_err)
+			reviews_api.approve_pull_request(pr, function(ok, approve_err)
 				if not ok then
 					notify(ctx, "error", approve_err or "Approve failed")
 					done(nil, approve_err or "Approve failed")
@@ -127,7 +128,7 @@ local function merge(ctx, done)
 		end
 		local squash = vim.trim(tostring(input)):lower() == "y"
 		notify(ctx, "loading", string.format("Merging %s...", pr_label(pr)))
-		mr_api.merge(pr, {
+		pullrequests_api.merge(pr, {
 			squash = squash,
 			should_remove_source_branch = true,
 		}, function(ok, err)
@@ -156,7 +157,7 @@ end
 local function close(ctx, done)
 	local pr = ctx.pr
 	notify(ctx, "loading", string.format("Closing %s...", pr_label(pr)))
-	mr_api.set_state(pr, "close", function(ok, err)
+	pullrequests_api.set_state(pr, "close", function(ok, err)
 		if not ok then
 			notify(ctx, "error", err or "Close failed")
 			done(nil, err or "Close failed")
@@ -184,7 +185,7 @@ end
 local function reopen(ctx, done)
 	local pr = ctx.pr
 	notify(ctx, "loading", string.format("Reopening %s...", pr_label(pr)))
-	mr_api.set_state(pr, "reopen", function(ok, err)
+	pullrequests_api.set_state(pr, "reopen", function(ok, err)
 		if not ok then
 			notify(ctx, "error", err or "Reopen failed")
 			done(nil, err or "Reopen failed")
@@ -278,7 +279,7 @@ local function edit_assignees(ctx, done)
 				end
 
 				notify(ctx, "loading", string.format("Updating assignees on %s...", pr_label(pr)))
-				mr_api.set_assignee_ids(pr, final_ids, function(ok, set_err)
+				pullrequests_api.update_assignees(pr, final_ids, function(ok, set_err)
 					if not ok then
 						notify(ctx, "error", set_err or "Failed")
 						done(nil, set_err or "Failed")

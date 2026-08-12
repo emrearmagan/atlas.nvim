@@ -2,6 +2,7 @@ local M = {}
 
 local actions = require("atlas.pulls.actions")
 local pullrequests = require("atlas.pulls.providers.bitbucket.api.pullrequests")
+local reviews = require("atlas.pulls.providers.bitbucket.api.reviews")
 local users_api = require("atlas.pulls.providers.bitbucket.api.users")
 local repositories = require("atlas.pulls.providers.bitbucket.api.repositories")
 local statusline = require("atlas.ui.statusline")
@@ -49,7 +50,7 @@ local function toggle_approval_available(ctx)
 	if not has_pr(ctx) or ctx.pr == nil then
 		return false, "No PR selected"
 	end
-	if not pullrequests.has_action(ctx.pr, "approve") then
+	if not reviews.has_action(ctx.pr, "approve") then
 		return false, "No approve URL available"
 	end
 	return true, nil
@@ -79,7 +80,7 @@ local function toggle_approval(ctx, done)
 		end
 
 		local approved = is_approved(fresh_pr, ctx.current_user)
-		local update = approved and pullrequests.unapprove or pullrequests.approve
+		local update = approved and reviews.unapprove or reviews.approve
 		notify(ctx, "loading", approved and "Unapproving PR..." or "Approving PR...")
 		update(fresh_pr, function(_, update_err)
 			if update_err ~= nil then
@@ -114,7 +115,7 @@ local function request_changes_available(ctx)
 	if not has_pr(ctx) or ctx.pr == nil then
 		return false, "No PR selected"
 	end
-	if not pullrequests.has_action(ctx.pr, "request_changes") then
+	if not reviews.has_action(ctx.pr, "request_changes") then
 		return false, "No request changes URL available"
 	end
 	return true, nil

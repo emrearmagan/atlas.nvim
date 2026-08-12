@@ -2,8 +2,8 @@ local M = {}
 
 local actions = require("atlas.pulls.actions")
 local cli = require("atlas.providers.github.client").pulls
-local comments = require("atlas.pulls.providers.github.api.comments")
 local pullrequests = require("atlas.pulls.providers.github.api.pullrequests")
+local reviews = require("atlas.pulls.providers.github.api.reviews")
 local statusline = require("atlas.ui.statusline")
 local multi_select = require("atlas.ui.popups.multi_select")
 local github_mapping = require("atlas.providers.github.mapping")
@@ -59,7 +59,7 @@ local function toggle_approval(ctx, done)
 		return
 	end
 	notify(ctx, "loading", "Checking approval...")
-	comments.toggle_approval(pr, function(action, err)
+	reviews.toggle_approval(pr, function(action, err)
 		if action == nil then
 			notify(ctx, "error", tostring(err))
 			done(nil, tostring(err))

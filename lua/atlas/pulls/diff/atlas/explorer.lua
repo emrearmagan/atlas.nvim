@@ -1,11 +1,11 @@
 local M = {}
 
+local config = require("atlas.config")
 local diff = require("atlas.ui.components.diff_hunks")
-local statusline = require("atlas.pulls.diff.atlas.statusline")
 local icons = require("atlas.ui.shared.icons")
 local utils = require("atlas.ui.shared.utils")
 
-local namespace = vim.api.nvim_create_namespace("atlas_native_diff_panel")
+local namespace = vim.api.nvim_create_namespace("atlas_diff_native_panel")
 
 local STATUS_MARKERS = {
 	added = { "A", "DiagnosticOk" },
@@ -21,7 +21,7 @@ local note_icon, note_icon_hl = icons.general("pin")
 local folder_closed_icon, folder_closed_icon_hl = icons.general("folder_closed")
 local folder_open_icon, folder_open_icon_hl = icons.general("folder_open")
 
----@class AtlasDiffExplorerOptions
+---@class AtlasNativeDiffExplorerOptions
 ---@field grouped boolean
 ---@field hidden boolean
 ---@field show_commits boolean
@@ -29,38 +29,22 @@ local folder_open_icon, folder_open_icon_hl = icons.general("folder_open")
 ---@field initial_focus "explorer"|"diff"
 ---@field ignore string[]
 
----@return AtlasDiffExplorerOptions
+---@alias AtlasNativeDiffPanelItem
+---| { kind: "file", index: integer }
+---| { kind: "folder", path: string }
+
+---@return AtlasNativeDiffExplorerOptions
 function M.options()
-	local diff_config = (require("atlas.config").options.pulls or {}).diff or {}
-	local config = diff_config.explorer or {}
+	local diff_config = (config.options.pulls or {}).diff or {}
+	local explorer_config = diff_config.explorer or {}
 	return {
-		grouped = config.grouped == true,
-		hidden = config.hidden == true,
-		show_commits = config.show_commits == true,
-		width = math.max(20, math.floor(tonumber(config.width) or 40)),
-		initial_focus = config.initial_focus == "diff" and "diff" or "explorer",
-		ignore = config.ignore or {},
+		grouped = explorer_config.grouped == true,
+		hidden = explorer_config.hidden == true,
+		show_commits = explorer_config.show_commits == true,
+		width = math.max(20, math.floor(tonumber(explorer_config.width) or 40)),
+		initial_focus = explorer_config.initial_focus == "diff" and "diff" or "explorer",
+		ignore = explorer_config.ignore or {},
 	}
-end
-
----@param author { name: string, nickname: string|nil }|nil
----@return string
-local function author_name(author)
-	if author == nil then
-		return "Unknown"
-	end
-	if author.nickname and author.nickname ~= "" then
-		return author.nickname
-	end
-	return author.name ~= "" and author.name or "Unknown"
-end
-
----@param task PullsComment
----@param plural boolean
----@return string
-local function task_label(task, plural)
-	local label = task.task_label or "Task"
-	return plural and (label .. "s") or label
 end
 
 ---@param status DiffFileStatus
@@ -121,15 +105,15 @@ local function stat_parts(file)
 	return parts
 end
 
----@class AtlasDiffExplorerTree
+---@class AtlasNativeDiffExplorerTree
 ---@field name string
 ---@field path string
----@field folders table<string, AtlasDiffExplorerTree>
+---@field folders table<string, AtlasNativeDiffExplorerTree>
 ---@field files integer[]
 
 ---@param files DiffFile[]
 ---@param indices integer[]
----@return AtlasDiffExplorerTree
+---@return AtlasNativeDiffExplorerTree
 local function build_tree(files, indices)
 	local root = { name = "", path = "", folders = {}, files = {} }
 	for _, index in ipairs(indices) do
@@ -148,8 +132,8 @@ local function build_tree(files, indices)
 	return root
 end
 
----@param node AtlasDiffExplorerTree
----@return AtlasDiffExplorerTree[]
+---@param node AtlasNativeDiffExplorerTree
+---@return AtlasNativeDiffExplorerTree[]
 local function sorted_folders(node)
 	local folders = {}
 	for _, folder in pairs(node.folders) do
@@ -161,7 +145,7 @@ local function sorted_folders(node)
 	return folders
 end
 
----@param node AtlasDiffExplorerTree
+---@param node AtlasNativeDiffExplorerTree
 ---@param files DiffFile[]
 ---@return integer[]
 local function sorted_files(node, files)
@@ -175,8 +159,8 @@ local function sorted_files(node, files)
 	return indices
 end
 
----@param node AtlasDiffExplorerTree
----@return AtlasDiffExplorerTree node, string label
+---@param node AtlasNativeDiffExplorerTree
+---@return AtlasNativeDiffExplorerTree node, string label
 local function compact_folder(node)
 	local label = node.name
 	while #node.files == 0 do
@@ -223,20 +207,20 @@ local function ordered_indices(files, grouped, reviewed_files)
 	return ordered
 end
 
----@param session AtlasNativeDiffSession
+---@param session AtlasDiffSession
 ---@return integer[], integer[]
 local function grouped_indices(session)
-	return split_indices(session.files, session.reviewed_files)
+	return split_indices(session.viewer_state.files, session.reviewed_files)
 end
 
----@param session AtlasNativeDiffSession
+---@param session AtlasDiffSession
 ---@return integer[]
 function M.ordered_indices(session)
-	return ordered_indices(session.files, session.explorer.grouped, session.reviewed_files)
+	return ordered_indices(session.viewer_state.files, session.viewer_state.explorer.grouped, session.reviewed_files)
 end
 
 ---@param files DiffFile[]
----@param options AtlasDiffExplorerOptions
+---@param options AtlasNativeDiffExplorerOptions
 ---@return DiffFile[]
 function M.filter(files, options)
 	local patterns = {}
@@ -261,21 +245,21 @@ function M.filter(files, options)
 	return result
 end
 
----@param session AtlasNativeDiffSession
+---@param session AtlasDiffSession
 ---@param file_index integer
 function M.reveal_file(session, file_index)
-	local file = session.files[file_index]
+	local file = session.viewer_state.files[file_index]
 	local parent = file and directory(file.path) or nil
 	while parent do
-		session.collapsed_folders[parent] = nil
+		session.viewer_state.collapsed_folders[parent] = nil
 		parent = directory(parent)
 	end
 end
 
----@param session AtlasNativeDiffSession
+---@param session AtlasDiffSession
 ---@return integer
 function M.width(session)
-	return math.min(session.explorer.width, math.max(20, vim.o.columns - 40))
+	return math.min(session.viewer_state.explorer.width, math.max(20, vim.o.columns - 40))
 end
 
 ---@param win integer|nil
@@ -302,24 +286,23 @@ function M.configure_window(win)
 	options.winfixwidth = true
 	options.wrap = false
 	options.winbar = ""
-	statusline.attach(win)
 end
 
----@param session AtlasNativeDiffSession
+---@param session AtlasDiffSession
 function M.configure(session)
-	M.configure_window(session.panel.win)
-	M.configure_window(session.commits_panel.win)
+	M.configure_window(session.viewer_state.panel.win)
+	M.configure_window(session.viewer_state.commits_panel.win)
 end
 
----@alias AtlasDiffExplorerVirtualLine { [1]: string, [2]: string }[]
+---@alias AtlasNativeDiffExplorerVirtualLine { [1]: string, [2]: string }[]
 
----@param session AtlasNativeDiffSession
+---@param session AtlasDiffSession
 ---@param lines string[]
 ---@param highlights { [1]: integer, [2]: integer, [3]: integer, [4]: string }[]
----@param headers table<integer, AtlasDiffExplorerVirtualLine[]>
----@param first_header AtlasDiffExplorerVirtualLine
+---@param headers table<integer, AtlasNativeDiffExplorerVirtualLine[]>
+---@param first_header AtlasNativeDiffExplorerVirtualLine
 local function write(session, lines, highlights, headers, first_header)
-	local buf = session.panel.buf
+	local buf = session.viewer_state.panel.buf
 	vim.bo[buf].modifiable = true
 	vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
 	vim.bo[buf].modifiable = false
@@ -344,35 +327,27 @@ local function write(session, lines, highlights, headers, first_header)
 	end
 end
 
----@param session AtlasNativeDiffSession
----@param annotated_paths? table<string, boolean>
+---@param session AtlasDiffSession
+---@param annotated_paths? table<string, { comments: boolean, notes: boolean }>
 function M.render(session, annotated_paths)
-	local buf = session.panel.buf
+	local buf = session.viewer_state.panel.buf
 	if not vim.api.nvim_buf_is_valid(buf) then
 		return
 	end
-	local width = session.panel.win
-			and vim.api.nvim_win_is_valid(session.panel.win)
-			and vim.api.nvim_win_get_width(session.panel.win)
+	local width = session.viewer_state.panel.win
+			and vim.api.nvim_win_is_valid(session.viewer_state.panel.win)
+			and vim.api.nvim_win_get_width(session.viewer_state.panel.win)
 		or M.width(session)
+	local unreviewed, reviewed = grouped_indices(session)
 	-- Keep the first extmark heading visible at the top.
 	local lines, highlights, headers = { "" }, {}, {}
-	local first_header
-	session.panel_items = {}
+	local first_header = { { string.format("Files (%d)", #unreviewed), "AtlasLogInfo" } }
+	session.viewer_state.panel_items = {}
 
-	local unreviewed, reviewed = grouped_indices(session)
 	annotated_paths = annotated_paths or {}
-	local noted_paths = {}
-	for _, note in ipairs((session.notes and session.notes.items) or {}) do
-		noted_paths[note.file_path] = true
-	end
 	---@param text string
 	---@param spacing boolean|nil
 	local function add_header(text, spacing)
-		if not first_header then
-			first_header = { { text, "AtlasLogInfo" } }
-			return
-		end
 		local row = #lines
 		local virtual_lines = headers[row] or {}
 		if spacing then
@@ -386,13 +361,15 @@ function M.render(session, annotated_paths)
 	---@param branch string
 	---@param show_directory boolean
 	local function add_file(file_index, branch, show_directory)
-		local file = session.files[file_index]
+		local file = session.viewer_state.files[file_index]
 		local label = file_label(file)
 		local parent = directory(file.path)
 		local status, status_highlight = status_marker(file.status)
-		local has_comments = annotated_paths[file.path] or (file.old_path and annotated_paths[file.old_path])
+		local annotation = annotated_paths[file.path]
+		local old_annotation = file.old_path and annotated_paths[file.old_path]
+		local has_comments = (annotation and annotation.comments) or (old_annotation and old_annotation.comments)
 		local has_notes = file.status ~= "deleted"
-			and (noted_paths[file.path] or (file.old_path and noted_paths[file.old_path]))
+			and ((annotation and annotation.notes) or (old_annotation and old_annotation.notes))
 		local devicon, devicon_hl = web_icon(basename(file.path))
 		local status_part = { text = status, hl_group = status_highlight }
 		local suffix_parts = stat_parts(file)
@@ -441,7 +418,7 @@ function M.render(session, annotated_paths)
 		local text = left .. string.rep(" ", padding) .. suffix
 		table.insert(lines, text)
 		local line = #lines
-		session.panel_items[line] = { kind = "file", index = file_index }
+		session.viewer_state.panel_items[line] = { kind = "file", index = file_index }
 
 		table.insert(highlights, { line - 1, 0, #branch, "AtlasTextMuted" })
 		local col = #branch
@@ -461,19 +438,19 @@ function M.render(session, annotated_paths)
 		end
 	end
 
-	---@param node AtlasDiffExplorerTree
+	---@param node AtlasNativeDiffExplorerTree
 	---@param label string
 	---@param branch string
 	---@return boolean collapsed
 	local function add_folder(node, label, branch)
-		local collapsed = session.collapsed_folders[node.path] == true
+		local collapsed = session.viewer_state.collapsed_folders[node.path] == true
 		local icon = collapsed and folder_closed_icon or folder_open_icon
 		local icon_hl = collapsed and folder_closed_icon_hl or folder_open_icon_hl
 		local available = width - vim.fn.strdisplaywidth(branch) - vim.fn.strdisplaywidth(icon) - 1
 		label = utils.truncate(label, math.max(1, available))
 		local text = branch .. icon .. " " .. label
 		table.insert(lines, text)
-		session.panel_items[#lines] = { kind = "folder", path = node.path }
+		session.viewer_state.panel_items[#lines] = { kind = "folder", path = node.path }
 		table.insert(highlights, { #lines - 1, 0, #branch, "AtlasTextMuted" })
 		local icon_start = #branch
 		table.insert(highlights, { #lines - 1, icon_start, icon_start + #icon, icon_hl })
@@ -482,12 +459,9 @@ function M.render(session, annotated_paths)
 		return collapsed
 	end
 
-	---@param title string
 	---@param indices integer[]
-	---@param spacing boolean|nil
-	local function add_section(title, indices, spacing)
-		add_header(string.format("%s (%d)", title, #indices), spacing)
-		if not session.explorer.grouped then
+	local function add_section(indices)
+		if not session.viewer_state.explorer.grouped then
 			for _, index in ipairs(indices) do
 				add_file(index, "  ", true)
 			end
@@ -496,7 +470,7 @@ function M.render(session, annotated_paths)
 
 		local function add_tree(node, prefix)
 			local folders = sorted_folders(node)
-			local files = sorted_files(node, session.files)
+			local files = sorted_files(node, session.viewer_state.files)
 			local total = #folders + #files
 			local entry = 0
 			for _, folder in ipairs(folders) do
@@ -513,74 +487,47 @@ function M.render(session, annotated_paths)
 				add_file(index, prefix .. (entry == total and "└ " or "├ "), false)
 			end
 		end
-		add_tree(build_tree(session.files, indices), "")
+		add_tree(build_tree(session.viewer_state.files, indices), "")
 	end
 
-	add_section("Files", unreviewed)
-	if session.review_context or #reviewed > 0 then
-		add_section("Reviewed", reviewed, true)
-	end
-
-	local tasks = (session.review and session.review.tasks) or {}
-	if #tasks > 0 then
-		add_header(string.format("%s (%d)", task_label(tasks[1], true), #tasks), true)
-		for _, task in ipairs(tasks) do
-			local checkbox = task.state == "RESOLVED" and "[x]" or "[ ]"
-			local content = utils.task_text(task.content_display or task.content_raw):match("[^\n]*") or ""
-			if content == "" then
-				content = string.format("(empty %s)", task_label(task, false):lower())
-			end
-			local text = checkbox .. " " .. utils.truncate(content, math.max(1, width - #checkbox - 1))
-			table.insert(lines, text)
-			session.panel_items[#lines] = { kind = "task", comment = task }
-			table.insert(highlights, {
-				#lines - 1,
-				0,
-				#checkbox,
-				task.state == "RESOLVED" and "AtlasTextPositive" or "AtlasTextMuted",
-			})
-		end
+	add_section(unreviewed)
+	if session.review or #reviewed > 0 then
+		add_header(string.format("Reviewed (%d)", #reviewed), true)
+		add_section(reviewed)
 	end
 
 	write(session, lines, highlights, headers, first_header)
 end
 
----@param session AtlasNativeDiffSession
----@return { kind: "file", index: integer }|{ kind: "folder", path: string }|{ kind: "task", comment: PullsComment }|nil
+---@param session AtlasDiffSession
+---@return { kind: "file", index: integer }|{ kind: "folder", path: string }|nil
 local function item_at_cursor(session)
-	if vim.api.nvim_get_current_buf() ~= session.panel.buf then
+	if vim.api.nvim_get_current_buf() ~= session.viewer_state.panel.buf then
 		return nil
 	end
-	return session.panel_items[vim.api.nvim_win_get_cursor(0)[1]]
+	return session.viewer_state.panel_items[vim.api.nvim_win_get_cursor(0)[1]]
 end
 
----@param session AtlasNativeDiffSession
+---@param session AtlasDiffSession
 ---@return integer|nil
 function M.file_at_cursor(session)
 	local item = item_at_cursor(session)
 	return item and item.kind == "file" and item.index or nil
 end
 
----@param session AtlasNativeDiffSession
----@return PullsComment|nil
-function M.task_at_cursor(session)
-	local item = item_at_cursor(session)
-	return item and item.kind == "task" and item.comment or nil
-end
-
----@param session AtlasNativeDiffSession
+---@param session AtlasDiffSession
 ---@param item AtlasNativeDiffPanelItem|nil
 ---@return boolean
 local function toggle_folder(session, item)
 	if not item or item.kind ~= "folder" then
 		return false
 	end
-	session.collapsed_folders[item.path] = not session.collapsed_folders[item.path]
-	session.refresh_ui()
+	session.viewer_state.collapsed_folders[item.path] = not session.viewer_state.collapsed_folders[item.path]
+	M.render(session, session.viewer_state.annotated_paths)
 	return true
 end
 
----@param session AtlasNativeDiffSession
+---@param session AtlasDiffSession
 ---@return integer|nil
 function M.open_at_cursor(session)
 	local item = item_at_cursor(session)
@@ -594,34 +541,36 @@ function M.open_at_cursor(session)
 	return item.kind == "file" and item.index or nil
 end
 
----@param session AtlasNativeDiffSession
+---@param session AtlasDiffSession
 ---@return boolean
 function M.toggle_folder(session)
 	return toggle_folder(session, item_at_cursor(session))
 end
 
----@param session AtlasNativeDiffSession
+---@param session AtlasDiffSession
 ---@return boolean grouped
 function M.toggle_grouping(session)
-	local file_index = M.file_at_cursor(session) or session.pending_index or session.selected_index
-	session.explorer.grouped = not session.explorer.grouped
-	session.refresh_ui()
+	local file_index = M.file_at_cursor(session)
+		or session.viewer_state.pending_index
+		or session.viewer_state.selected_index
+	session.viewer_state.explorer.grouped = not session.viewer_state.explorer.grouped
+	M.render(session, session.viewer_state.annotated_paths)
 
 	local line = M.line_for_file(session, file_index)
-	if line and session.panel.win and vim.api.nvim_win_is_valid(session.panel.win) then
-		vim.api.nvim_win_set_cursor(session.panel.win, { line, 0 })
+	if line and session.viewer_state.panel.win and vim.api.nvim_win_is_valid(session.viewer_state.panel.win) then
+		vim.api.nvim_win_set_cursor(session.viewer_state.panel.win, { line, 0 })
 	end
-	return session.explorer.grouped
+	return session.viewer_state.explorer.grouped
 end
 
----@param session AtlasNativeDiffSession
+---@param session AtlasDiffSession
 ---@return boolean
 function M.toggle_all_folders(session)
-	if not session.explorer.grouped then
+	if not session.viewer_state.explorer.grouped then
 		return false
 	end
 	local folders = {}
-	for _, file in ipairs(session.files) do
+	for _, file in ipairs(session.viewer_state.files) do
 		local parent = directory(file.path)
 		while parent do
 			folders[parent] = true
@@ -632,24 +581,24 @@ function M.toggle_all_folders(session)
 		return false
 	end
 	local collapse = false
-	for _, item in pairs(session.panel_items) do
-		if item.kind == "folder" and not session.collapsed_folders[item.path] then
+	for _, item in pairs(session.viewer_state.panel_items) do
+		if item.kind == "folder" and not session.viewer_state.collapsed_folders[item.path] then
 			collapse = true
 			break
 		end
 	end
 	for parent in pairs(folders) do
-		session.collapsed_folders[parent] = collapse or nil
+		session.viewer_state.collapsed_folders[parent] = collapse or nil
 	end
-	session.refresh_ui()
+	M.render(session, session.viewer_state.annotated_paths)
 	return true
 end
 
----@param session AtlasNativeDiffSession
+---@param session AtlasDiffSession
 ---@param file_index integer
 ---@return integer|nil
 function M.line_for_file(session, file_index)
-	for line, item in pairs(session.panel_items) do
+	for line, item in pairs(session.viewer_state.panel_items) do
 		if item.kind == "file" and item.index == file_index then
 			return line
 		end
@@ -657,42 +606,26 @@ function M.line_for_file(session, file_index)
 	return nil
 end
 
----@param session AtlasNativeDiffSession
+---@param session AtlasDiffSession
 function M.show_path(session)
 	local item = item_at_cursor(session)
 	if not item then
 		return
 	end
-	if item.kind == "task" then
-		local task = item.comment
-		local content = utils.task_text(task.content_display or task.content_raw)
-		local empty = string.format("(empty %s)", task_label(task, false):lower())
-		local lines = vim.split(content ~= "" and content or empty, "\n", { plain = true })
-		table.insert(lines, "")
-		table.insert(lines, string.format("by @%s  %s", author_name(task.author), utils.relative_time(task.created_on)))
-		local width = math.max(1, math.min(100, vim.o.columns - 4))
-		vim.lsp.util.open_floating_preview(lines, "markdown", {
-			border = "rounded",
-			focusable = false,
-			max_width = width,
-			wrap_at = width,
-			title = string.format(" %s ", task_label(task, false)),
-		})
-		return
-	end
 
-	local path
-	if item.kind == "folder" then
-		path = vim.fs.joinpath(session.range.root, item.path)
-	else
-		local file = session.files[item.index]
+	local path = item.kind == "folder" and vim.fs.joinpath(session.source.root, item.path) or nil
+	if item.kind == "file" then
+		local file = session.viewer_state.files[item.index]
 		if not file then
 			return
 		end
-		path = vim.fs.joinpath(session.range.root, file.path)
+		path = vim.fs.joinpath(session.source.root, file.path)
 		if file.status == "renamed" and file.old_path then
-			path = vim.fs.joinpath(session.range.root, file.old_path) .. " -> " .. path
+			path = vim.fs.joinpath(session.source.root, file.old_path) .. " -> " .. path
 		end
+	end
+	if not path then
+		return
 	end
 	local width = math.max(1, math.min(100, vim.o.columns - 4))
 	vim.lsp.util.open_floating_preview({ path }, "text", {

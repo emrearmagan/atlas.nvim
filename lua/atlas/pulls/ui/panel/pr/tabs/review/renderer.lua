@@ -4,7 +4,6 @@ local utils = require("atlas.ui.shared.utils")
 local spinner = require("atlas.ui.components.spinner")
 local box = require("atlas.ui.components.box")
 local diff = require("atlas.ui.components.diff_hunks")
-local icons = require("atlas.ui.shared.icons")
 local highlights = require("atlas.ui.shared.highlights")
 local keymaps = require("atlas.core.keymaps")
 local review_threads = require("atlas.ui.components.review_threads")
@@ -76,21 +75,14 @@ local function emit_tasks(lines, spans, line_map, tasks, width)
 	for _, task in ipairs(tasks) do
 		local resolved = task.state == "RESOLVED"
 		local footer = {}
-		if toggle_keys then
-			table.insert(
-				footer,
-				string.format(
-					"%s (%s)",
-					resolved and icons.general("refresh") or icons.general("success"),
-					table.concat(toggle_keys, " / ")
-				)
-			)
-		end
 		if edit_keys then
-			table.insert(footer, string.format("%s (%s)", icons.general("edit"), table.concat(edit_keys, " / ")))
+			table.insert(footer, table.concat(edit_keys, " / ") .. " edit")
 		end
 		if delete_keys then
-			table.insert(footer, string.format("%s (%s)", icons.general("delete"), table.concat(delete_keys, " / ")))
+			table.insert(footer, table.concat(delete_keys, " / ") .. " delete")
+		end
+		if toggle_keys then
+			table.insert(footer, table.concat(toggle_keys, " / ") .. (resolved and " reopen" or " complete"))
 		end
 
 		local title = utils.task_text(task.content_display or task.content_raw)
