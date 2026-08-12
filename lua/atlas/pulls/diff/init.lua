@@ -32,7 +32,7 @@ local VIEWERS = {
 ---@field provider PullsProvider
 ---@field pr PullRequest
 ---@field current_user PullsUser|nil
----@field review_context { authors: PullsAuthor[] }|nil
+---@field review_context PullsReviewContext|nil
 ---@field initial_review AtlasInitialReview|nil
 ---@field root string|nil
 

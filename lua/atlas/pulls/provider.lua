@@ -23,7 +23,7 @@
 ---@field tasks PullsComment[]|nil
 ---@field reviewers PullsReviewer[]|nil
 ---@field conversation PullsComment[]|nil
----@field review_context { authors: PullsAuthor[] }|nil
+---@field review_context PullsReviewContext|nil
 
 ---@class PullsProvider
 ---@field id string
@@ -78,7 +78,7 @@
 
 ---@class PullsReviewsCapability
 ---@field fetch fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(data: PullsReviewData|nil, err: string|nil)): { cancel: fun() }|nil
----@field fetch_review_context (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(context: { authors: PullsAuthor[] }|nil, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field fetch_review_context (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(context: PullsReviewContext|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field start_review (fun(pr: PullRequest, review: PullsReview, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field submit_review (fun(pr: PullRequest, review: PullsReview|nil, body: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field approve (fun(pr: PullRequest, review: PullsReview|nil, body: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil

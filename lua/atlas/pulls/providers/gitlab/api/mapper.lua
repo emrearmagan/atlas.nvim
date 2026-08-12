@@ -19,6 +19,54 @@ local function normalize_author(raw)
 	return { name = "Unknown", id = "", username = "unknown", nickname = "unknown" }
 end
 
+---@param values table
+---@return PullsAuthor[]
+local function normalize_authors(values)
+	local authors = {}
+	for _, raw in ipairs(values) do
+		if type(raw) == "table" then
+			table.insert(authors, normalize_author(raw))
+		end
+	end
+	return authors
+end
+
+---@param values table
+---@return PullsReviewer[]
+local function normalize_reviewers(values)
+	local reviewers = {}
+	for _, raw in ipairs(values) do
+		if type(raw) == "table" then
+			local author = normalize_author(raw)
+			table.insert(reviewers, {
+				id = author.id,
+				provider_id = author.id,
+				name = author.name,
+				username = author.username,
+				nickname = author.nickname,
+				decision = "pending",
+			})
+		end
+	end
+	return reviewers
+end
+
+---@param values table
+---@return PullsLabel[]
+local function normalize_labels(values)
+	local labels = {}
+	for _, raw in ipairs(values) do
+		local name = type(raw) == "table" and json.safe_str(raw.name) or json.safe_str(raw)
+		if name and name ~= "" then
+			table.insert(labels, {
+				name = name,
+				color = type(raw) == "table" and json.safe_str(raw.color) or nil,
+			})
+		end
+	end
+	return labels
+end
+
 ---@param mr table
 ---@return "open"|"merged"|"declined"|"draft"
 local function normalize_state(mr)
@@ -91,24 +139,15 @@ function M.to_pull_request(raw)
 		repo = repo,
 		repo_full_name = project_path,
 		is_subscribed = type(raw.subscribed) == "boolean" and raw.subscribed or nil,
+		assignees = normalize_authors(json.safe_table(raw.assignees)),
+		reviewers = normalize_reviewers(json.safe_table(raw.reviewers)),
+		labels = normalize_labels(json.safe_table(raw.labels)),
 		_raw = {
-			iid = iid,
-			project_id = tonumber(raw.project_id),
-			project_path = project_path,
 			merge_status = json.safe_str(raw.merge_status),
 			detailed_merge_status = json.safe_str(raw.detailed_merge_status),
 			blocking_discussions_resolved = json.nilify(raw.blocking_discussions_resolved),
 			has_conflicts = raw.has_conflicts == true,
-			draft = raw.draft == true or raw.work_in_progress == true,
-			labels = json.safe_table(raw.labels),
-			assignees = json.safe_table(raw.assignees),
-			reviewers = json.safe_table(raw.reviewers),
-			milestone = json.nilify(raw.milestone),
-			merged_at = json.safe_str(raw.merged_at),
-			closed_at = json.safe_str(raw.closed_at),
-			sha = type(sha) == "string" and sha or nil,
 			diff_refs = json.nilify(raw.diff_refs),
-			pipeline = json.nilify(raw.head_pipeline) or json.nilify(raw.pipeline),
 		},
 	}
 end
@@ -247,13 +286,10 @@ function M.to_comment(note, discussion_first_id, discussion_id, resolved)
 	end
 	local state = resolved and "RESOLVED" or (outdated and "OUTDATED" or nil)
 
-	local raw_with_discussion = note
-	if discussion_id ~= nil and discussion_id ~= "" then
-		raw_with_discussion = vim.tbl_extend("force", {}, note, { discussion_id = discussion_id })
-	end
 	return {
 		id = note.id,
 		parent_id = (note.id ~= discussion_first_id) and discussion_first_id or nil,
+		thread_id = discussion_id ~= nil and discussion_id ~= "" and discussion_id or nil,
 		author = actor_from(note.author),
 		content_raw = tostring(note.body or ""),
 		created_on = tostring(note.created_at or ""),
@@ -263,7 +299,6 @@ function M.to_comment(note, discussion_first_id, discussion_id, resolved)
 		outdated = outdated,
 		reactions = reaction_counts(note.award_emoji),
 		html_url = json.safe_str(note.web_url),
-		_raw = raw_with_discussion,
 	}
 end
 
@@ -281,7 +316,7 @@ function M.to_draft_comment(draft, discussion_first_id)
 		comment.author = { name = "You", nickname = nil, username = "", id = tostring(draft.author_id) }
 	end
 	comment.state = "PENDING"
-	comment._raw = vim.tbl_extend("force", {}, draft, { draft_note_id = draft.id })
+	comment._raw = { draft_note_id = draft.id }
 	return comment
 end
 

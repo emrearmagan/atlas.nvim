@@ -63,7 +63,6 @@ local function normalize(raw)
 		icon_hl = icon_def.hl or icon_def[2],
 		unread = raw.unread == true,
 		url = html_url,
-		_raw = raw,
 	}
 end
 

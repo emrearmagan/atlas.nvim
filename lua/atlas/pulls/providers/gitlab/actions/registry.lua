@@ -229,10 +229,9 @@ local function edit_assignees(ctx, done)
 		end
 		notify(ctx, "success", "Members loaded", 1200)
 
-		local raw = pr._raw
 		local original = {}
 		local original_set = {}
-		for _, a in ipairs(raw.assignees or {}) do
+		for _, a in ipairs(pr.assignees or {}) do
 			local id = tonumber(a.id)
 			if id then
 				table.insert(original, { id = id, username = a.username, name = a.name or a.username })

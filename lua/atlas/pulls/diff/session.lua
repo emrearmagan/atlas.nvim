@@ -42,7 +42,7 @@ local sessions = {}
 ---@field provider PullsProvider
 ---@field pr PullRequest
 ---@field current_user PullsUser|nil
----@field context { authors: PullsAuthor[] }|nil
+---@field context PullsReviewContext|nil
 ---@field state PullsReview
 ---@field comments PullsComment[]
 ---@field tasks PullsComment[]

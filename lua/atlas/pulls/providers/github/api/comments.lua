@@ -348,6 +348,7 @@ function M.edit_comment(pr, comment, on_done)
 		local updated = mapper.to_comment(result)
 		updated.state = comment.state
 		updated.outdated = comment.outdated
+		updated.thread_id = comment.thread_id
 		updated._raw = comment._raw
 		on_done(updated, nil)
 	end, {
@@ -428,8 +429,7 @@ mutation($threadId:ID!){
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.set_thread_resolved(pr, root, resolved, on_done)
-	local raw = root._raw or {}
-	local thread_id = tostring(raw.thread_id or "")
+	local thread_id = tostring(root.thread_id or "")
 	if thread_id == "" then
 		vim.schedule(function()
 			on_done(false, "Missing review thread id")
@@ -470,8 +470,7 @@ reply_comment = function(pr, parent, content, opts, on_done)
 
 	if parent.inline ~= nil then
 		local pending = opts.pending == true
-		local raw = parent._raw or {}
-		local thread_id = tostring(raw.thread_id or "")
+		local thread_id = tostring(parent.thread_id or "")
 		if thread_id == "" then
 			if pending then
 				on_done(nil, "Missing review thread id")

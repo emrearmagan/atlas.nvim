@@ -33,6 +33,68 @@ local function comment_author(raw)
 	return { name = user.login, id = user.id, username = user.login, nickname = user.login }
 end
 
+---@param raw table
+---@return PullsAuthor[]|nil
+local function pull_assignees(raw)
+	if json.nilify(raw.assignees) == nil then
+		return nil
+	end
+
+	local assignees = {}
+	for _, node in ipairs(github_mapping.connection_nodes(raw.assignees)) do
+		local assignee = pull_author(node)
+		if assignee.username ~= "" then
+			table.insert(assignees, assignee)
+		end
+	end
+	return assignees
+end
+
+---@param raw table
+---@return PullsLabel[]|nil
+local function pull_labels(raw)
+	if json.nilify(raw.labels) == nil then
+		return nil
+	end
+
+	local labels = {}
+	for _, node in ipairs(github_mapping.connection_nodes(raw.labels)) do
+		local name = json.safe_str(node.name)
+		if name and name ~= "" then
+			table.insert(labels, { name = name, color = json.safe_str(node.color) })
+		end
+	end
+	return labels
+end
+
+---@param raw table
+---@return PullsReviewer[]|nil
+local function pull_reviewers(raw)
+	if json.nilify(raw.latestOpinionatedReviews) == nil then
+		return nil
+	end
+
+	local reviewers = {}
+	for _, node in ipairs(github_mapping.connection_nodes(raw.latestOpinionatedReviews)) do
+		local author = pull_author(node.author)
+		if author.username ~= "" then
+			local state = tostring(node.state or ""):upper()
+			local decision = state == "APPROVED" and "approved"
+				or state == "CHANGES_REQUESTED" and "changes_requested"
+				or "pending"
+			table.insert(reviewers, {
+				id = author.id ~= "" and author.id or author.username,
+				provider_id = author.username,
+				name = author.name,
+				username = author.username,
+				nickname = author.nickname,
+				decision = decision,
+			})
+		end
+	end
+	return reviewers
+end
+
 ---@param diff_hunk string|nil
 ---@return DiffHunk|nil
 local function parse_diff_hunk(diff_hunk)
@@ -100,7 +162,15 @@ function M.to_pull_request(raw)
 		repo_full_name = repo_full_name,
 		is_subscribed = tostring(raw.viewerSubscription or "") == "SUBSCRIBED",
 		reactions = github_mapping.reaction_groups(raw.reactionGroups),
-		_raw = raw,
+		assignees = pull_assignees(raw),
+		reviewers = pull_reviewers(raw),
+		labels = pull_labels(raw),
+		lines_added = tonumber(raw.additions),
+		lines_removed = tonumber(raw.deletions),
+		_raw = {
+			node_id = json.safe_str(raw.id),
+			commits = json.nilify(raw.commits),
+		},
 	}
 end
 
@@ -354,10 +424,8 @@ function M.to_review_comment(node, thread, fallback_parent)
 		resolved = thread.isResolved == true,
 		outdated = thread.isOutdated == true,
 	})
-	result._raw = {
-		comment_id = tostring(node.id or ""),
-		thread_id = tostring(thread.id or ""),
-	}
+	result.thread_id = json.safe_str(thread.id)
+	result._raw = { comment_id = tostring(node.id or "") }
 	if result.parent_id == nil then
 		result.parent_id = fallback_parent
 	end
@@ -368,9 +436,8 @@ end
 ---@return table
 function M.review_thread(comment)
 	local inline = comment.inline or {}
-	local raw = comment._raw or {}
 	return {
-		id = tostring(raw.thread_id or ""),
+		id = tostring(comment.thread_id or ""),
 		path = inline.path,
 		line = inline.to,
 		originalLine = comment.inline_hunk_anchor or inline.from,

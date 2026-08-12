@@ -17,6 +17,7 @@ local function inherit_thread_context(comment, parent)
 		return comment
 	end
 	comment.parent_id = parent.parent_id or parent.id
+	comment.thread_id = comment.thread_id or parent.thread_id
 	comment.inline = comment.inline or parent.inline
 	comment.inline_hunk = comment.inline_hunk or parent.inline_hunk
 	comment.outdated = comment.outdated or parent.outdated
@@ -305,7 +306,7 @@ function M.add_comment(pr, content, opts, on_done)
 		return nil
 	end
 	local parent = opts.parent
-	if parent and parent.state == "PENDING" and tostring((parent._raw or {}).discussion_id or "") == "" then
+	if parent and parent.state == "PENDING" and tostring(parent.thread_id or "") == "" then
 		on_done(nil, "GitLab cannot reply to this draft until it is published")
 		return nil
 	end
@@ -316,8 +317,8 @@ function M.add_comment(pr, content, opts, on_done)
 	if opts.pending then
 		local endpoint = string.format("/projects/%s/merge_requests/%d/draft_notes", service.url_encode(path), iid)
 		local payload = { note = content }
-		if parent and parent._raw then
-			local discussion_id = tostring(parent._raw.discussion_id or "")
+		if parent then
+			local discussion_id = tostring(parent.thread_id or "")
 			if discussion_id ~= "" then
 				payload.in_reply_to_discussion_id = discussion_id
 			end
@@ -334,7 +335,7 @@ function M.add_comment(pr, content, opts, on_done)
 		end)
 	end
 
-	local discussion_id = parent and tostring((parent._raw or {}).discussion_id or "") or ""
+	local discussion_id = parent and tostring(parent.thread_id or "") or ""
 	if parent and discussion_id == "" then
 		on_done(nil, "Missing discussion id")
 		return nil
@@ -388,7 +389,7 @@ local function comment_endpoint(path, iid, comment)
 	if draft_note_id then
 		return string.format("%s/draft_notes/%d", prefix, note_id), true
 	end
-	local discussion_id = tostring(raw.discussion_id or "")
+	local discussion_id = tostring(comment.thread_id or "")
 	if discussion_id ~= "" then
 		return string.format("%s/discussions/%s/notes/%d", prefix, service.url_encode(discussion_id), note_id), false
 	end
@@ -406,7 +407,6 @@ function M.edit_comment(pr, comment, on_done)
 		on_done(nil, "Invalid MR identifier")
 		return nil
 	end
-	local raw = comment._raw or {}
 	local endpoint, draft = comment_endpoint(path, iid, comment)
 	if not endpoint then
 		on_done(nil, "Invalid note id")
@@ -425,10 +425,11 @@ function M.edit_comment(pr, comment, on_done)
 			updated = mapper.to_draft_comment(result, comment.parent_id)
 		else
 			local first_id = comment.parent_id or comment.id
-			local discussion_id = tostring(raw.discussion_id or "")
+			local discussion_id = tostring(comment.thread_id or "")
 			updated = add_permalink(pr, mapper.to_comment(result, first_id, discussion_id, comment.state == "RESOLVED"))
 		end
 		updated.parent_id = comment.parent_id
+		updated.thread_id = updated.thread_id or comment.thread_id
 		updated.inline = updated.inline or comment.inline
 		updated.inline_hunk = updated.inline_hunk or comment.inline_hunk
 		updated.state = updated.state or comment.state
@@ -470,8 +471,7 @@ end
 ---@return { cancel: fun() }|nil
 function M.set_thread_resolved(pr, root, resolved, on_done)
 	local path, iid = project_iid(pr)
-	local raw = root._raw or {}
-	local discussion_id = tostring(raw.discussion_id or "")
+	local discussion_id = tostring(root.thread_id or "")
 	if path == "" or iid == nil then
 		on_done(false, "Invalid MR identifier")
 		return nil

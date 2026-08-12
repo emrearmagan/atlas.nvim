@@ -94,7 +94,7 @@ end
 
 ---@param pr PullRequest
 ---@param _opts { force_refresh: boolean|nil }|nil
----@param on_done fun(context: { authors: PullsAuthor[] }|nil, err: string|nil)
+---@param on_done fun(context: PullsReviewContext|nil, err: string|nil)
 function M.fetch_context(pr, _opts, on_done)
 	local authors = {}
 	local seen = {}
@@ -115,21 +115,9 @@ function M.fetch_context(pr, _opts, on_done)
 	end
 
 	add(pr.author)
-	for _, list in ipairs({ pr._raw.assignees or {}, pr._raw.reviewers or {} }) do
+	for _, list in ipairs({ pr.assignees or {}, pr.reviewers or {} }) do
 		for _, user in ipairs(list) do
-			if type(user) == "table" then
-				local username = tostring(user.username or "")
-				local name = tostring(user.name or username)
-				local id = tostring(user.id or "")
-				if id ~= "" or username ~= "" or name ~= "" then
-					add({
-						id = id,
-						name = name,
-						username = username,
-						nickname = username ~= "" and username or nil,
-					})
-				end
-			end
+			add(user)
 		end
 	end
 	on_done({ authors = authors }, nil)

@@ -6,28 +6,11 @@ local diff_parser = require("atlas.core.git.diff_parser")
 local service = require("atlas.pulls.providers.bitbucket.api.service")
 local tasks = require("atlas.pulls.providers.bitbucket.api.tasks")
 
----@param link any
----@return string
-local function link_href(link)
-	if type(link) == "string" then
-		return link
-	end
-	if type(link) == "table" then
-		return tostring(link.href or "")
-	end
-	return ""
-end
-
 ---@param pr PullRequest
 ---@param key "approve"|"request_changes"
 ---@return string
 local function action_url(pr, key)
-	local links = type(pr._raw.links) == "table" and pr._raw.links or {}
-	local link = links[key]
-	if link == nil and key == "request_changes" then
-		link = links["request-changes"]
-	end
-	return link_href(link)
+	return tostring((pr._raw.links or {})[key] or "")
 end
 
 ---@param pr PullRequest
@@ -39,7 +22,7 @@ end
 
 ---@param pr PullRequest
 ---@param _opts { force_refresh: boolean|nil }|nil
----@param on_done fun(context: { authors: PullsAuthor[] }|nil, err: string|nil)
+---@param on_done fun(context: PullsReviewContext|nil, err: string|nil)
 ---@return nil
 function M.fetch_review_context(pr, _opts, on_done)
 	local authors = {}
@@ -61,21 +44,8 @@ function M.fetch_review_context(pr, _opts, on_done)
 	end
 
 	add(pr.author)
-	for _, participant in ipairs(pr._raw.participants or {}) do
-		local user = type(participant) == "table" and participant.user or nil
-		if type(user) == "table" then
-			local id = tostring(user.account_id or user.id or "")
-			local username = tostring(user.nickname or user.username or "")
-			local name = tostring(user.display_name or user.name or username)
-			if id ~= "" or username ~= "" or name ~= "" then
-				add({
-					id = id,
-					name = name,
-					username = username,
-					nickname = username ~= "" and username or nil,
-				})
-			end
-		end
+	for _, reviewer in ipairs(pr.reviewers or {}) do
+		add(reviewer)
 	end
 	on_done({ authors = authors }, nil)
 end

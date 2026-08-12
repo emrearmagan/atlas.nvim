@@ -17,10 +17,12 @@ end
 ---@param current_user PullsUser
 ---@return boolean
 local function is_approved(pr, current_user)
-	for _, participant in ipairs(pr._raw.participants or {}) do
-		local user = participant.user or {}
-		if tostring(user.account_id or user.uuid or "") == current_user.id then
-			return participant.approved == true or participant.state == "approved"
+	for _, reviewer in ipairs(pr.reviewers or {}) do
+		if
+			reviewer.id == current_user.id
+			or (reviewer.username ~= "" and reviewer.username == current_user.username)
+		then
+			return reviewer.decision == "approved"
 		end
 	end
 	return false

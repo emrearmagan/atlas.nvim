@@ -123,6 +123,35 @@ local function clone_url(repository)
 	return full_name ~= "" and string.format("https://bitbucket.org/%s.git", full_name) or ""
 end
 
+---@param participants table[]|nil
+---@return PullsReviewer[]
+function M.to_reviewers(participants)
+	local reviewers = {}
+	for _, participant in ipairs(participants or {}) do
+		if tostring(participant.role or ""):upper() == "REVIEWER" then
+			local user = as_table(participant.user) or {}
+			local provider_id = tostring(user.uuid or "")
+			local state = tostring(participant.state or ""):lower()
+			local decision = "pending"
+			if participant.approved == true or state == "approved" then
+				decision = "approved"
+			elseif state == "changes_requested" then
+				decision = "changes_requested"
+			end
+			local username = tostring(user.nickname or user.username or "")
+			table.insert(reviewers, {
+				id = tostring(user.account_id or user.uuid or user.id or ""),
+				provider_id = provider_id ~= "" and provider_id or nil,
+				name = tostring(user.display_name or user.name or username),
+				username = username,
+				nickname = username ~= "" and username or nil,
+				decision = decision,
+			})
+		end
+	end
+	return reviewers
+end
+
 ---@param item table
 ---@param workspace string
 ---@param repo string
@@ -179,7 +208,7 @@ local function normalize_pull(item, workspace, repo)
 		close_source_branch = pr.close_source_branch == true,
 		created_on = tostring(pr.created_on or ""),
 		updated_on = tostring(pr.updated_on or ""),
-		participants = as_table(pr.participants) or {},
+		reviewers = M.to_reviewers(as_table(pr.participants)),
 		workspace = workspace,
 		repo = repo,
 		repo_full_name = repo_full_name,
@@ -228,7 +257,11 @@ local function to_pull_request(raw)
 		workspace = workspace,
 		repo = repo,
 		repo_full_name = repo_full_name,
-		_raw = raw,
+		reviewers = raw.reviewers,
+		_raw = {
+			links = links,
+			close_source_branch = raw.close_source_branch,
+		},
 	}
 end
 
@@ -401,7 +434,6 @@ function M.to_comment(result)
 		outdated = outdated,
 		url = tostring((as_table(links.self) or {}).href or ""),
 		html_url = tostring((as_table(links.html) or {}).href or ""),
-		_raw = entry,
 	}
 end
 
@@ -445,7 +477,6 @@ function M.to_tasks_list(result)
 				or nil,
 			url = tostring((as_table(links.self) or {}).href or ""),
 			html_url = tostring((as_table(links.html) or {}).href or ""),
-			_raw = task,
 		})
 	end
 

@@ -18,12 +18,9 @@ end
 ---@param _loading boolean
 ---@return PullsPanelHeaderRow[]
 function M.header_rows(pr, _loading)
-	local raw = pr._raw
-	local assignees = type(raw.assignees) == "table" and raw.assignees or {}
-
 	local logins = {}
-	for _, node in ipairs(assignees) do
-		local login = type(node) == "table" and tostring(node.username or node.name or "") or ""
+	for _, assignee in ipairs(pr.assignees or {}) do
+		local login = tostring(assignee.username or assignee.name or "")
 		if login ~= "" then
 			table.insert(logins, login)
 		end
@@ -43,13 +40,12 @@ function M.chips(pr, loading)
 	end
 
 	local MAX_LABELS = 10
-	local raw = pr._raw
-	local labels = type(raw.labels) == "table" and raw.labels or {}
+	local labels = pr.labels or {}
 	local by_name = state.labels_by_name or {}
 	local shown = 0
-	for _, entry in ipairs(labels) do
-		local name = type(entry) == "string" and entry or (type(entry) == "table" and entry.name) or nil
-		if type(name) == "string" and name ~= "" then
+	for _, label in ipairs(labels) do
+		local name = label.name
+		if name ~= "" then
 			if shown >= MAX_LABELS then
 				break
 			end
@@ -122,6 +118,9 @@ function M.fetch_header(pr, opts, on_done)
 		local request = pullrequests_api.fetch_pullrequest(pr, { force_refresh = force }, function(fresh, err)
 			if not err and type(fresh) == "table" then
 				pr.is_subscribed = fresh.is_subscribed
+				pr.assignees = fresh.assignees
+				pr.reviewers = fresh.reviewers
+				pr.labels = fresh.labels
 				pr._raw = fresh._raw
 			end
 			complete()

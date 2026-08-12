@@ -307,28 +307,7 @@ function M.fetch_reviewers(pr, _opts, on_done)
 			return
 		end
 
-		---@type PullsReviewer[]
-		local reviewers = {}
-		for _, item in ipairs((result or {}).participants or {}) do
-			local p = type(item) == "table" and item or {}
-			local user = type(p.user) == "table" and p.user or {}
-			if tostring(p.role or ""):upper() == "REVIEWER" then
-				local decision = "pending"
-				local s = tostring(p.state or "")
-				if s == "approved" then
-					decision = "approved"
-				elseif s == "changes_requested" then
-					decision = "changes_requested"
-				end
-				table.insert(reviewers, {
-					name = tostring(user.display_name or ""),
-					nickname = tostring(user.nickname or ""),
-					decision = decision,
-				})
-			end
-		end
-
-		on_done(reviewers, nil)
+		on_done(mapper.to_reviewers((result or {}).participants), nil)
 	end)
 end
 
@@ -431,14 +410,11 @@ function M.fetch_default_reviewers(opts, on_done)
 
 		local selected = {}
 		local current = {}
-		for _, participant in ipairs((opts.pr and opts.pr._raw.participants) or {}) do
-			if tostring(participant.role or ""):upper() == "REVIEWER" then
-				local user = type(participant.user) == "table" and participant.user or {}
-				local uuid = tostring(user.uuid or "")
-				if uuid ~= "" then
-					selected[uuid] = true
-					current[uuid] = user
-				end
+		for _, reviewer in ipairs((opts.pr and opts.pr.reviewers) or {}) do
+			local id = tostring(reviewer.provider_id or "")
+			if id ~= "" then
+				selected[id] = true
+				current[id] = reviewer
 			end
 		end
 
@@ -462,10 +438,10 @@ function M.fetch_default_reviewers(opts, on_done)
 			end
 		end
 
-		for uuid, user in pairs(current) do
+		for uuid, reviewer in pairs(current) do
 			if not found[uuid] then
-				local nickname = tostring(user.nickname or "")
-				local name = tostring(user.display_name or "")
+				local nickname = tostring(reviewer.nickname or reviewer.username or "")
+				local name = tostring(reviewer.name or "")
 				table.insert(reviewers, {
 					label = nickname ~= "" and ("@" .. nickname) or (name ~= "" and name or uuid),
 					provider_id = uuid,

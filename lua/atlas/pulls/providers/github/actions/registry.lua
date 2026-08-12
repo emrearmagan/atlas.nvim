@@ -289,16 +289,13 @@ local function edit_assignees(ctx, done)
 			return
 		end
 
-		local raw = pr._raw
-		local raw_assignees = type(raw.assignees) == "table" and raw.assignees or {}
-		local nodes = type(raw_assignees.nodes) == "table" and raw_assignees.nodes or {}
 		local original = {}
 		local original_set = {}
-		for _, node in ipairs(nodes) do
-			local login = type(node) == "table" and tostring(node.login or "") or ""
+		for _, assignee in ipairs(pr.assignees or {}) do
+			local login = assignee.username
 			if login ~= "" and not original_set[login] then
 				original_set[login] = true
-				table.insert(original, { account_id = login, display_name = login, email = "" })
+				table.insert(original, { account_id = login, display_name = assignee.name, email = "" })
 			end
 		end
 
@@ -404,14 +401,9 @@ local function edit_labels(ctx, done)
 			return
 		end
 
-		local raw = pr._raw
-		local raw_labels = raw.labels
-		if type(raw_labels) == "table" and type(raw_labels.nodes) == "table" then
-			raw_labels = raw_labels.nodes
-		end
 		local original = {}
 		local original_set = {}
-		for _, label in ipairs(raw_labels or {}) do
+		for _, label in ipairs(pr.labels or {}) do
 			local name = tostring(label.name or "")
 			if name ~= "" then
 				table.insert(original, { name = name, color = label.color })

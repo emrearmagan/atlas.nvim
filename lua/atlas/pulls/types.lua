@@ -25,6 +25,10 @@
 ---@class PullsLink
 ---@field html string
 
+---@class PullsLabel
+---@field name string
+---@field color string|nil
+
 --------------------------------------------------------------------------------
 -- Pull Request
 --------------------------------------------------------------------------------
@@ -50,6 +54,11 @@
 ---@field repo string
 ---@field is_subscribed boolean|nil
 ---@field reactions table<string, integer>|nil
+---@field assignees PullsAuthor[]|nil
+---@field reviewers PullsReviewer[]|nil
+---@field labels PullsLabel[]|nil
+---@field lines_added number|nil
+---@field lines_removed number|nil
 ---@field _raw table
 
 --------------------------------------------------------------------------------
@@ -119,9 +128,8 @@
 -- Reviewer
 --------------------------------------------------------------------------------
 
----@class PullsReviewer
----@field name string
----@field nickname string|nil
+---@class PullsReviewer: PullsAuthor
+---@field provider_id string|nil Identifier used when updating the reviewer list.
 ---@field decision "approved"|"changes_requested"|"pending"
 
 --------------------------------------------------------------------------------
@@ -211,6 +219,7 @@
 ---@class PullsComment
 ---@field id number|string
 ---@field parent_id number|string|nil
+---@field thread_id string|nil
 ---@field author PullsAuthor|nil
 ---@field content_raw string
 ---@field content_display string|nil
@@ -240,6 +249,9 @@
 ---@field review PullsReview
 ---@field comments PullsComment[]
 ---@field tasks PullsComment[]
+
+---@class PullsReviewContext
+---@field authors PullsAuthor[]
 
 --------------------------------------------------------------------------------
 -- Commit

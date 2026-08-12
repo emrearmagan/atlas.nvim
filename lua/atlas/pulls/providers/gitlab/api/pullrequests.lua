@@ -305,7 +305,6 @@ function M.set_draft(pr, draft, on_done)
 		end
 		pr.title = updated and updated.title or title
 		pr.state = updated and updated.state or (draft and "draft" or "open")
-		pr._raw.draft = draft
 		on_done(true, nil)
 	end)
 end
@@ -330,8 +329,8 @@ function M.fetch_default_reviewers(opts, on_done)
 		end
 
 		local selected = {}
-		for _, reviewer in ipairs((opts.pr and opts.pr._raw.reviewers) or {}) do
-			selected[tostring(reviewer.id or "")] = true
+		for _, reviewer in ipairs((opts.pr and opts.pr.reviewers) or {}) do
+			selected[tostring(reviewer.provider_id or "")] = true
 		end
 
 		local reviewers = {}
@@ -546,13 +545,13 @@ end
 function M.fetch_reviewers(pr, opts, on_done)
 	opts = opts or {}
 
-	---@param raw table
-	local function build(raw)
+	---@param current PullsReviewer[]
+	local function build(current)
 		reviews_api.fetch_reviewer_states(pr, opts, function(states, _)
 			states = states or {}
 			local reviewers = {}
-			for _, r in ipairs(raw.reviewers or {}) do
-				if type(r) == "table" and type(r.username) == "string" then
+			for _, r in ipairs(current) do
+				if r.username ~= "" then
 					local s = tostring(states[r.username] or ""):lower()
 					local decision = "pending"
 					if s == "approved" then
@@ -561,8 +560,11 @@ function M.fetch_reviewers(pr, opts, on_done)
 						decision = "changes_requested"
 					end
 					table.insert(reviewers, {
-						name = (type(r.name) == "string" and r.name ~= "") and r.name or r.username,
-						nickname = r.username,
+						id = r.id,
+						provider_id = r.provider_id,
+						name = r.name ~= "" and r.name or r.username,
+						username = r.username,
+						nickname = r.nickname or r.username,
 						decision = decision,
 					})
 				end
@@ -571,10 +573,9 @@ function M.fetch_reviewers(pr, opts, on_done)
 		end)
 	end
 
-	local cached = pr._raw
-	if opts.force_refresh ~= true and type(cached.reviewers) == "table" then
+	if opts.force_refresh ~= true and pr.reviewers ~= nil then
 		vim.schedule(function()
-			build(cached)
+			build(pr.reviewers or {})
 		end)
 		return nil
 	end
@@ -584,7 +585,7 @@ function M.fetch_reviewers(pr, opts, on_done)
 			on_done(nil, err)
 			return
 		end
-		build(mr._raw)
+		build(mr.reviewers or {})
 	end)
 end
 
