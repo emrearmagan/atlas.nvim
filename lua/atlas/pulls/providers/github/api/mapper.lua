@@ -359,13 +359,16 @@ function M.to_comment(raw, thread_state)
 	local line = json.nilify(raw.line)
 	local original_line = json.nilify(raw.original_line)
 	local path = json.nilify(raw.path)
+	local subject_type = tostring(raw.subject_type or ""):upper()
 
-	local inline, inline_hunk, inline_hunk_anchor
+	local file, inline, inline_hunk, inline_hunk_anchor
 	if path ~= nil then
 		local side = raw.side == "LEFT" and "old" or "new"
 		local anchor = line or original_line
-		inline_hunk_anchor = original_line or anchor
-		if anchor then
+		if subject_type == "FILE" then
+			file = { path = tostring(path) }
+		elseif anchor then
+			inline_hunk_anchor = original_line or anchor
 			inline = {
 				path = tostring(path),
 				from = side == "old" and anchor or nil,
@@ -380,6 +383,7 @@ function M.to_comment(raw, thread_state)
 
 	local result = comment(raw, type(raw.user) == "table" and raw.user or nil)
 	result.parent_id = json.nilify(raw.in_reply_to_id)
+	result.file = file
 	result.inline = inline
 	result.inline_hunk = inline_hunk
 	result.inline_hunk_anchor = inline_hunk and inline_hunk_anchor or nil
@@ -411,6 +415,7 @@ function M.to_review_comment(node, thread, fallback_parent)
 		user = { login = author.login, id = author.databaseId },
 		body = node.body,
 		path = thread.path or node.path,
+		subject_type = thread.subjectType or node.subjectType,
 		diff_hunk = node.diffHunk,
 		line = thread.line or node.line,
 		original_line = thread.originalLine or node.originalLine,
@@ -436,12 +441,14 @@ end
 ---@return table
 function M.review_thread(comment)
 	local inline = comment.inline or {}
+	local file = comment.file
 	return {
 		id = tostring(comment.thread_id or ""),
-		path = inline.path,
+		subjectType = file and "FILE" or "LINE",
+		path = file and file.path or inline.path,
 		line = inline.to,
 		originalLine = comment.inline_hunk_anchor or inline.from,
-		diffSide = inline.from ~= nil and "LEFT" or "RIGHT",
+		diffSide = not file and (inline.from ~= nil and "LEFT" or "RIGHT") or nil,
 		isResolved = comment.state == "RESOLVED",
 		isOutdated = comment.outdated == true or comment.state == "OUTDATED",
 	}

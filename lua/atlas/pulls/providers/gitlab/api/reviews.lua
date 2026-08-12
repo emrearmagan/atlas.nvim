@@ -69,6 +69,8 @@ function M.fetch(pr, opts, on_done)
 					if line then
 						comment.inline_hunk = diff_parser.find_hunk(files_by_path[comment.inline.path], side, line)
 					end
+				end
+				if comment.inline or comment.file then
 					table.insert(comments, comment)
 				end
 			end

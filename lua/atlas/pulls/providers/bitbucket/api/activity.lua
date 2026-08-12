@@ -42,7 +42,7 @@ function M.fetch_conversation(pr, opts, on_done)
 
 		local general_comments = {}
 		for _, comment in ipairs(result or {}) do
-			if comment.inline == nil then
+			if comment.inline == nil and comment.file == nil then
 				table.insert(general_comments, comment)
 			end
 		end

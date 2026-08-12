@@ -18,6 +18,16 @@ function M.location(inline)
 end
 
 ---@param document AtlasDiffDocument
+---@param comment PullsComment
+---@return AtlasDiffSide|nil, integer|nil
+function M.comment(document, comment)
+	if comment.file then
+		return document.status == "deleted" and "LEFT" or "RIGHT", 1
+	end
+	return M.location(comment.inline)
+end
+
+---@param document AtlasDiffDocument
 ---@param side AtlasDiffSide
 ---@param line integer
 ---@param target_line_count integer

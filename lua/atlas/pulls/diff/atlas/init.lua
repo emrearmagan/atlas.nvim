@@ -1,6 +1,7 @@
 local M = {}
 
 local commits = require("atlas.pulls.diff.atlas.commits")
+local comments = require("atlas.pulls.diff.comments")
 local config = require("atlas.config")
 local events = require("atlas.core.events")
 local explorer = require("atlas.pulls.diff.atlas.explorer")
@@ -132,8 +133,8 @@ end
 local function focus_item(session, item, focus_diff)
 	local comment = item.comment
 	local note = item.note
-	local path = note and note.file_path
-		or (comment and comment.inline and (comment.inline.path or comment.inline.old_path))
+	local target = comment and (comment.file or comment.inline) or nil
+	local path = note and note.file_path or (target and (target.path or target.old_path))
 	local index = path and file_index(session, path) or nil
 	if not index then
 		session_api.notify(session, "info", "This review item's file is no longer in the diff")
@@ -149,7 +150,7 @@ local function focus_item(session, item, focus_diff)
 				return
 			end
 		else
-			side, line = position.location(comment and comment.inline)
+			side, line = position.comment(document, comment)
 		end
 		if not side or not line then
 			session_api.notify(session, "info", "This review item no longer has a diff position")
@@ -389,6 +390,14 @@ local function register_keymaps(session)
 		end,
 		show_commit = function()
 			commits.show_details(session)
+		end,
+		add_file_comment = function(pending)
+			local state = session.viewer_state --[[@as AtlasNativeDiffState]]
+			local index = explorer.file_at_cursor(session)
+			local file = index and state.files[index] or nil
+			if file then
+				comments.add_to_file(session, { path = file.path, old_path = file.old_path }, pending)
+			end
 		end,
 	})
 end

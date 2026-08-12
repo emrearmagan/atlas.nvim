@@ -21,12 +21,12 @@ end
 ---@param comment PullsComment
 ---@return string
 local function comment_location(comment)
-	local inline = comment.inline
-	if not inline then
+	local position = comment.file or comment.inline
+	if not position then
 		return ""
 	end
-	local path = inline.path:match("([^/\\]+)$") or inline.path
-	local line = inline.to or inline.from
+	local path = position.path:match("([^/\\]+)$") or position.path
+	local line = comment.inline and (comment.inline.to or comment.inline.from) or nil
 	return line and string.format("%s:%d", path, line) or path
 end
 
@@ -206,13 +206,13 @@ end
 local function panel_items(data)
 	local pending, published_comments, standalone_tasks, rendered_notes = {}, {}, {}, {}
 	for _, thread in ipairs(review_threads.group_comments(data.comments, data.tasks)) do
-		local inline = thread.comment.inline
+		local position = thread.comment.file or thread.comment.inline
 		table.insert(has_pending(thread) and pending or published_comments, {
 			kind = "comment",
 			thread = thread,
 			key = review_threads.comment_key(thread.comment),
-			path = inline and inline.path or "",
-			line = inline and (inline.to or inline.from) or 0,
+			path = position and position.path or "",
+			line = thread.comment.inline and (thread.comment.inline.to or thread.comment.inline.from) or 0,
 			timestamp = tostring(thread.comment.created_on or ""),
 		})
 	end
@@ -222,13 +222,13 @@ local function panel_items(data)
 	end
 	for _, task in ipairs(data.tasks) do
 		if not task.parent_id or not comment_ids[tostring(task.parent_id)] then
-			local inline = task.inline
+			local position = task.file or task.inline
 			table.insert(standalone_tasks, {
 				kind = "task",
 				thread = { comment = task, children = {} },
 				key = review_threads.comment_key(task),
-				path = inline and inline.path or "",
-				line = inline and (inline.to or inline.from) or 0,
+				path = position and position.path or "",
+				line = task.inline and (task.inline.to or task.inline.from) or 0,
 				timestamp = tostring(task.created_on or ""),
 			})
 		end

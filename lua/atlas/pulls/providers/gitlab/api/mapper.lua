@@ -280,9 +280,19 @@ function M.to_comment(note, discussion_first_id, discussion_id, resolved)
 	local original_position = type(note.original_position) == "table" and note.original_position or nil
 	local outdated = position == nil and original_position ~= nil
 	position = position or original_position
-	local inline
-	if position and tostring(position.position_type or "text") == "text" then
+	local file, inline
+	local position_type = position and tostring(position.position_type or "text") or ""
+	if position_type == "text" then
 		inline = to_inline_position(position)
+	elseif position_type == "file" then
+		local path = json.safe_str(position.new_path) or json.safe_str(position.old_path)
+		if path then
+			file = {
+				path = path,
+				old_path = json.safe_str(position.old_path),
+				commit_hash = json.safe_str(position.head_sha),
+			}
+		end
 	end
 	local state = resolved and "RESOLVED" or (outdated and "OUTDATED" or nil)
 
@@ -293,6 +303,7 @@ function M.to_comment(note, discussion_first_id, discussion_id, resolved)
 		author = actor_from(note.author),
 		content_raw = tostring(note.body or ""),
 		created_on = tostring(note.created_at or ""),
+		file = file,
 		inline = inline,
 		is_task = nil,
 		state = state,

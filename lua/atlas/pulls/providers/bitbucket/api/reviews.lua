@@ -93,11 +93,11 @@ function M.fetch_review(pr, opts, on_done)
 			return
 		end
 
-		local inline_comments = {}
+		local anchored_comments = {}
 		for _, comment in ipairs(review_comments) do
-			if comment.inline and comment.state ~= "DELETED" then
+			if (comment.inline or comment.file) and comment.state ~= "DELETED" then
 				attach_hunk(comment, files)
-				table.insert(inline_comments, comment)
+				table.insert(anchored_comments, comment)
 			end
 		end
 		local has_pending = false
@@ -112,7 +112,7 @@ function M.fetch_review(pr, opts, on_done)
 		end
 		on_done({
 			review = { id = nil, commit_hash = nil, pending = has_pending },
-			comments = inline_comments,
+			comments = anchored_comments,
 			tasks = review_tasks,
 		}, nil)
 	end

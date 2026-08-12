@@ -390,19 +390,22 @@ function M.to_pull_request_groups(prs)
 end
 
 ---@param raw_inline table|nil
----@return PullsInlineCommentPosition|nil
-local function comment_inline(raw_inline)
+---@return PullsInlineCommentPosition|nil, PullsFileCommentPosition|nil
+local function comment_position(raw_inline)
 	local inline = as_table(raw_inline)
 	if inline == nil then
-		return nil
+		return nil, nil
 	end
 	local path = tostring(inline.path or "")
 	local from = tonumber(inline["from"])
 	local to = tonumber(inline["to"])
-	if path == "" or (from == nil and to == nil) then
-		return nil
+	if path == "" then
+		return nil, nil
 	end
-	return { path = path, from = from, to = to }
+	if from == nil and to == nil then
+		return nil, { path = path }
+	end
+	return { path = path, from = from, to = to }, nil
 end
 
 ---@param result table|nil
@@ -417,6 +420,7 @@ function M.to_comment(result)
 	local parent = as_table(entry.parent)
 	local resolution = as_table(entry.resolution)
 	local outdated = type(entry.inline) == "table" and entry.inline.outdated == true
+	local inline, file = comment_position(entry.inline)
 	local state = entry.deleted == true and "DELETED"
 		or (entry.pending == true and "PENDING")
 		or (resolution ~= nil and "RESOLVED")
@@ -429,7 +433,8 @@ function M.to_comment(result)
 		author = actor(entry.user),
 		content_raw = tostring(content.raw or ""),
 		created_on = tostring(entry.created_on or ""),
-		inline = comment_inline(entry.inline),
+		file = file,
+		inline = inline,
 		is_task = nil,
 		state = state,
 		outdated = outdated,

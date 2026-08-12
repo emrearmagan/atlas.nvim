@@ -18,20 +18,22 @@ pullRequestReview { id state commit { oid } }
 
 ---@param pr PullRequest
 ---@param content string
----@param inline PullsInlineCommentPosition
+---@param target PullsInlineCommentPosition|PullsFileCommentPosition
+---@param file_level boolean
 ---@param review_id string
 ---@param pending_review PullsReview|nil
 ---@param on_done fun(comment: PullsComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-local function add_review_thread(pr, content, inline, review_id, pending_review, on_done)
-	local side = inline.to and "RIGHT" or "LEFT"
-	local line = inline.to or inline.from
+local function add_review_thread(pr, content, target, file_level, review_id, pending_review, on_done)
+	local side = not file_level and (target.to and "RIGHT" or "LEFT") or nil
+	local line = not file_level and (target.to or target.from) or nil
 	local query = ([[
-mutation($reviewId:ID!,$path:String!,$body:String!,$line:Int!,$side:DiffSide!){
+mutation($reviewId:ID!,$path:String!,$body:String!,$subjectType:PullRequestReviewThreadSubjectType!,$line:Int,$side:DiffSide){
   addPullRequestReviewThread(input:{
     pullRequestReviewId:$reviewId
     path:$path
     body:$body
+    subjectType:$subjectType
     line:$line
     side:$side
   }){
@@ -39,6 +41,7 @@ mutation($reviewId:ID!,$path:String!,$body:String!,$line:Int!,$side:DiffSide!){
       id
       isResolved
       isOutdated
+      subjectType
       path
       line
       originalLine
@@ -54,12 +57,13 @@ mutation($reviewId:ID!,$path:String!,$body:String!,$line:Int!,$side:DiffSide!){
 		"-f",
 		"body=" .. content,
 		"-f",
-		"path=" .. inline.path,
+		"path=" .. target.path,
 		"-f",
-		"side=" .. side,
-		"-F",
-		"line=" .. tostring(line),
+		"subjectType=" .. (file_level and "FILE" or "LINE"),
 	}
+	if not file_level then
+		vim.list_extend(args, { "-f", "side=" .. side, "-F", "line=" .. tostring(line) })
+	end
 	vim.list_extend(args, { "-f", "reviewId=" .. review_id })
 	vim.list_extend(args, { "-f", "query=" .. query })
 
@@ -82,11 +86,12 @@ mutation($reviewId:ID!,$path:String!,$body:String!,$line:Int!,$side:DiffSide!){
 			return
 		end
 
-		thread.path = thread.path or inline.path
+		thread.path = thread.path or target.path
+		thread.subjectType = thread.subjectType or (file_level and "FILE" or "LINE")
 		thread.diffSide = thread.diffSide or side
 		if side == "LEFT" then
 			thread.originalLine = thread.originalLine or line
-		else
+		elseif side == "RIGHT" then
 			thread.line = thread.line or line
 		end
 		local review = json.safe_table(node.pullRequestReview)
@@ -97,19 +102,18 @@ mutation($reviewId:ID!,$path:String!,$body:String!,$line:Int!,$side:DiffSide!){
 		action = "Add pending comment",
 		repo = pr.repo_full_name,
 		number = pr.id,
-		inline = true,
+		inline = not file_level,
 	})
 end
 
 ---@param pr PullRequest
 ---@param content string
----@param inline PullsInlineCommentPosition
+---@param target PullsInlineCommentPosition|PullsFileCommentPosition
+---@param file_level boolean
 ---@param on_done fun(comment: PullsComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-local function add_published_inline_comment(pr, content, inline, on_done)
-	local commit_id = tostring(inline.commit_hash or pr.source.commit_hash or "")
-	local side = inline.to and "RIGHT" or "LEFT"
-	local line = inline.to or inline.from
+local function add_published_review_comment(pr, content, target, file_level, on_done)
+	local commit_id = tostring(target.commit_hash or pr.source.commit_hash or "")
 	if commit_id == "" then
 		vim.schedule(function()
 			on_done(nil, "Missing source commit hash")
@@ -117,7 +121,7 @@ local function add_published_inline_comment(pr, content, inline, on_done)
 		return nil
 	end
 
-	return cli.gh({
+	local args = {
 		"api",
 		"-X",
 		"POST",
@@ -127,23 +131,29 @@ local function add_published_inline_comment(pr, content, inline, on_done)
 		"-f",
 		"commit_id=" .. commit_id,
 		"-f",
-		"path=" .. inline.path,
-		"-f",
-		"side=" .. side,
-		"-F",
-		"line=" .. tostring(line),
-	}, function(result, err)
+		"path=" .. target.path,
+	}
+	if file_level then
+		vim.list_extend(args, { "-f", "subject_type=file" })
+	else
+		local side = target.to and "RIGHT" or "LEFT"
+		local line = target.to or target.from
+		vim.list_extend(args, { "-f", "side=" .. side, "-F", "line=" .. tostring(line) })
+	end
+
+	return cli.gh(args, function(result, err)
 		if err or type(result) ~= "table" then
-			on_done(nil, err or "Failed to create inline comment")
+			on_done(nil, err or "Failed to create review comment")
 			return
 		end
+		result.subject_type = result.subject_type or (file_level and "file" or "line")
 		local created = mapper.to_comment(result)
 		on_done(created, nil)
 	end, {
 		action = "Add comment",
 		repo = pr.repo_full_name,
 		number = pr.id,
-		inline = true,
+		inline = not file_level,
 	})
 end
 
@@ -169,8 +179,10 @@ function M.add_comment(pr, content, opts, on_done)
 		return nil
 	end
 
-	if opts.inline then
-		local commit_oid = tostring(opts.inline.commit_hash or pr.source.commit_hash or "")
+	local target = opts.inline or opts.file
+	if target then
+		local file_level = opts.file ~= nil
+		local commit_oid = tostring(target.commit_hash or pr.source.commit_hash or "")
 		if not opts.pending then
 			if opts.review and opts.review.pending then
 				vim.schedule(function()
@@ -178,10 +190,10 @@ function M.add_comment(pr, content, opts, on_done)
 				end)
 				return nil
 			end
-			return add_published_inline_comment(pr, content, opts.inline, on_done)
+			return add_published_review_comment(pr, content, target, file_level, on_done)
 		end
 		return reviews.with_pending(pr, opts.review, commit_oid, function(review_id)
-			return add_review_thread(pr, content, opts.inline, review_id, opts.review, on_done)
+			return add_review_thread(pr, content, target, file_level, review_id, opts.review, on_done)
 		end, function(err)
 			on_done(nil, err)
 		end)
@@ -335,7 +347,7 @@ function M.edit_comment(pr, comment, on_done)
 		return edit_pending_comment(pr, comment, node_id, on_done)
 	end
 
-	local endpoint = comment.inline ~= nil
+	local endpoint = (comment.inline ~= nil or comment.file ~= nil)
 			and string.format("repos/%s/pulls/comments/%s", repo_slug, tostring(comment.id))
 		or string.format("repos/%s/issues/comments/%s", repo_slug, tostring(comment.id))
 	local body = tostring(comment.content_raw or "")
@@ -346,6 +358,7 @@ function M.edit_comment(pr, comment, on_done)
 			return
 		end
 		local updated = mapper.to_comment(result)
+		updated.file = updated.file or comment.file
 		updated.state = comment.state
 		updated.outdated = comment.outdated
 		updated.thread_id = comment.thread_id
@@ -388,7 +401,7 @@ function M.delete_comment(pr, target, on_done)
 		return delete_pending_comment(pr, target, node_id, on_done)
 	end
 
-	local endpoint = target.inline ~= nil
+	local endpoint = (target.inline ~= nil or target.file ~= nil)
 			and string.format("repos/%s/pulls/comments/%s", repo_slug, tostring(target.id))
 		or string.format("repos/%s/issues/comments/%s", repo_slug, tostring(target.id))
 
@@ -468,7 +481,7 @@ reply_comment = function(pr, parent, content, opts, on_done)
 		return nil
 	end
 
-	if parent.inline ~= nil then
+	if parent.inline ~= nil or parent.file ~= nil then
 		local pending = opts.pending == true
 		local thread_id = tostring(parent.thread_id or "")
 		if thread_id == "" then
@@ -488,6 +501,7 @@ reply_comment = function(pr, parent, content, opts, on_done)
 					end
 					local created = mapper.to_comment(result)
 					created.parent_id = root_id
+					created.file = created.file or parent.file
 					created.inline_hunk = created.inline_hunk or parent.inline_hunk
 					created.state = parent.state
 					created.outdated = parent.outdated

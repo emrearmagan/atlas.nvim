@@ -126,7 +126,7 @@ local function add_reaction(pr, comment, key, on_done)
 	local endpoint
 	if tostring(comment.id) == "__body__" then
 		endpoint = string.format("repos/%s/issues/%s/reactions", repo_slug, tostring(pr.id))
-	elseif comment.inline then
+	elseif comment.inline or comment.file then
 		endpoint = string.format("repos/%s/pulls/comments/%s/reactions", repo_slug, tostring(comment.id))
 	else
 		endpoint = string.format("repos/%s/issues/comments/%s/reactions", repo_slug, tostring(comment.id))

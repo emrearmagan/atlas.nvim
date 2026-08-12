@@ -18,6 +18,7 @@ local function inherit_thread_context(comment, parent)
 	end
 	comment.parent_id = parent.parent_id or parent.id
 	comment.thread_id = comment.thread_id or parent.thread_id
+	comment.file = comment.file or parent.file
 	comment.inline = comment.inline or parent.inline
 	comment.inline_hunk = comment.inline_hunk or parent.inline_hunk
 	comment.outdated = comment.outdated or parent.outdated
@@ -174,7 +175,7 @@ function M.fetch_general(pr, opts, on_done)
 		end
 		local general = {}
 		for _, comment in ipairs(result) do
-			if not comment.inline then
+			if not comment.inline and not comment.file then
 				table.insert(general, comment)
 			end
 		end
@@ -201,11 +202,12 @@ end
 ---@param path string
 ---@param iid integer
 ---@param content string
----@param inline PullsInlineCommentPosition
+---@param target PullsInlineCommentPosition|PullsFileCommentPosition
+---@param file_level boolean
 ---@param pending boolean
 ---@param on_done fun(comment: PullsComment|nil, err: string|nil)
 ---@return { cancel: fun() }
-local function add_inline_comment(pr, path, iid, content, inline, pending, on_done)
+local function add_positioned_comment(pr, path, iid, content, target, file_level, pending, on_done)
 	local cancelled = false
 	local request
 	local function track(handle)
@@ -221,14 +223,14 @@ local function add_inline_comment(pr, path, iid, content, inline, pending, on_do
 	end
 	local function create(refs)
 		local position = {
-			position_type = "text",
+			position_type = file_level and "file" or "text",
 			base_sha = refs.base_sha,
 			head_sha = refs.head_sha,
 			start_sha = refs.start_sha,
-			old_path = inline.old_path or inline.path,
-			new_path = inline.path,
-			old_line = inline.from,
-			new_line = inline.to,
+			old_path = target.old_path or target.path,
+			new_path = target.path,
+			old_line = not file_level and target.from or nil,
+			new_line = not file_level and target.to or nil,
 		}
 		local resource = pending and "draft_notes" or "discussions"
 		local endpoint = string.format("/projects/%s/merge_requests/%d/%s", service.url_encode(path), iid, resource)
@@ -255,7 +257,7 @@ local function add_inline_comment(pr, path, iid, content, inline, pending, on_do
 
 	local raw = pr._raw
 	local refs = normalize_diff_refs(raw.diff_refs)
-	if refs and inline.commit_hash and refs.head_sha ~= inline.commit_hash then
+	if refs and target.commit_hash and refs.head_sha ~= target.commit_hash then
 		refs = nil
 	end
 	if refs then
@@ -270,7 +272,7 @@ local function add_inline_comment(pr, path, iid, content, inline, pending, on_do
 				finish(nil, err or "Unable to load merge request diff refs")
 				return
 			end
-			if inline.commit_hash and latest_refs.head_sha ~= inline.commit_hash then
+			if target.commit_hash and latest_refs.head_sha ~= target.commit_hash then
 				finish(nil, "Merge request head changed")
 				return
 			end
@@ -310,8 +312,9 @@ function M.add_comment(pr, content, opts, on_done)
 		on_done(nil, "GitLab cannot reply to this draft until it is published")
 		return nil
 	end
-	if opts.inline then
-		return add_inline_comment(pr, path, iid, content, opts.inline, opts.pending == true, on_done)
+	local target = opts.inline or opts.file
+	if target then
+		return add_positioned_comment(pr, path, iid, content, target, opts.file ~= nil, opts.pending == true, on_done)
 	end
 
 	if opts.pending then
@@ -430,6 +433,7 @@ function M.edit_comment(pr, comment, on_done)
 		end
 		updated.parent_id = comment.parent_id
 		updated.thread_id = updated.thread_id or comment.thread_id
+		updated.file = updated.file or comment.file
 		updated.inline = updated.inline or comment.inline
 		updated.inline_hunk = updated.inline_hunk or comment.inline_hunk
 		updated.state = updated.state or comment.state

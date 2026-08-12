@@ -58,12 +58,16 @@ local function with_item(session, buf, on_comment, on_note)
 end
 
 ---@param session AtlasDiffSession
----@param opts { buffers: integer[], reload: fun()|nil, help_key: string|nil }
+---@param opts { buffers: integer[], reload: fun()|nil, help_key: string|nil, file_buffers: integer[]|nil, add_file_comment: (fun(pending: boolean))|nil }
 function M.register(session, opts)
 	local action_context = session.review and review.action_context(session) or nil
 	local reviews = session.review and session.review.provider.capabilities.reviews or {}
 	local reviewable = session.review and (session.review.pr.state == "open" or session.review.pr.state == "draft")
 	local has_review_items = session.review ~= nil or session.note_target ~= nil
+	local file_buffers = {}
+	for _, buf in ipairs(opts.file_buffers or {}) do
+		file_buffers[buf] = true
+	end
 	for _, buf in ipairs(opts.buffers) do
 		if vim.api.nvim_buf_is_valid(buf) then
 			local items = {}
@@ -120,6 +124,14 @@ function M.register(session, opts)
 				add(items, "ui.open_in_browser", "Open comment in browser", function()
 					comments.open_in_browser(session, buf)
 				end)
+				if file_buffers[buf] and opts.add_file_comment then
+					add(items, "pulls.review.diff.add_comment", "Add pending file comment", function()
+						opts.add_file_comment(true)
+					end)
+					add(items, "pulls.review.diff.submit_comment", "Submit file comment", function()
+						opts.add_file_comment(false)
+					end)
+				end
 			end
 
 			if has_review_items and content_buffer(session, buf) then

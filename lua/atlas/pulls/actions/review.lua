@@ -91,7 +91,7 @@ local function upsert_comment(items, comment)
 end
 
 ---@param context AtlasReviewActionContext
----@param opts { parent: PullsComment|nil, inline: PullsInlineCommentPosition|nil, pending: boolean|nil, preview: AtlasMarkdownEditorPreview|nil }|nil
+---@param opts { parent: PullsComment|nil, inline: PullsInlineCommentPosition|nil, file: PullsFileCommentPosition|nil, pending: boolean|nil, preview: AtlasMarkdownEditorPreview|nil }|nil
 ---@param on_done fun(result: PullsActionResult|nil, err: string|nil)
 ---@return boolean handled
 function M.add_comment(context, opts, on_done)
@@ -127,6 +127,8 @@ function M.add_comment(context, opts, on_done)
 	local title = " Add Comment "
 	if parent then
 		title = " Reply to Comment "
+	elseif opts.file then
+		title = pending and " Add Pending File Comment " or " Add File Comment "
 	elseif pending then
 		title = " Add Pending Comment "
 	elseif opts.inline then
@@ -156,6 +158,7 @@ function M.add_comment(context, opts, on_done)
 				return add(context.pr, text, {
 					parent = parent,
 					inline = opts.inline,
+					file = opts.file,
 					pending = pending,
 					review = context.data and context.data.review,
 				}, done)

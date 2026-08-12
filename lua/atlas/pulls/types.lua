@@ -216,6 +216,11 @@
 ---@field to integer|nil
 ---@field commit_hash string|nil
 
+---@class PullsFileCommentPosition
+---@field path string
+---@field old_path string|nil
+---@field commit_hash string|nil
+
 ---@class PullsComment
 ---@field id number|string
 ---@field parent_id number|string|nil
@@ -225,6 +230,7 @@
 ---@field content_display string|nil
 ---@field created_on string
 ---@field inline PullsInlineCommentPosition|nil
+---@field file PullsFileCommentPosition|nil
 ---@field inline_hunk DiffHunk|nil                       -- surrounding diff context for inline comments
 ---@field inline_hunk_anchor integer|nil                 -- line coordinate inside inline_hunk
 ---@field is_task boolean|nil                            -- true = render as task (checkbox)

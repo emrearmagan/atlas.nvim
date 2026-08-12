@@ -146,6 +146,7 @@ pulls = {
   delete_notes = false, -- Delete local PR notes after approval or merge.
   default_merge_method = "merge", -- "merge" or "squash".
   default_delete_branch = false,
+
   diff = {
     -- Any command that accepts explicit <base>...<head> Git revisions.
     open_cmd = "AtlasDiff", -- default; for example "DiffviewOpen" or "CodeDiff".

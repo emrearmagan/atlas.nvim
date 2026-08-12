@@ -123,6 +123,7 @@
 ---@class PullsAddCommentOpts
 ---@field parent PullsComment|nil          -- reply to this comment
 ---@field inline PullsInlineCommentPosition|nil
+---@field file PullsFileCommentPosition|nil
 ---@field pending boolean|nil              -- add the comment to a pending review
 ---@field review PullsReview|nil
 

@@ -80,6 +80,36 @@ function M.render_comments(context, buf, by_line, above_lines)
 	return sizes
 end
 
+---@param context AtlasCommentRendererContext
+---@param buf integer
+---@param list AtlasReviewThreadNode[]
+---@return integer
+function M.render_file_comments(context, buf, list)
+	if #list == 0 or not vim.api.nvim_buf_is_valid(buf) then
+		return 0
+	end
+	local virtual_lines = M.thread_lines(context, buf, list)
+	vim.api.nvim_buf_set_extmark(buf, namespace, 0, 0, {
+		virt_lines = virtual_lines,
+		virt_lines_above = true,
+		virt_lines_leftcol = true,
+		priority = 1100,
+	})
+	-- Reveal virtual lines placed above the first buffer line.
+	vim.schedule(function()
+		for _, win in ipairs(vim.fn.win_findbuf(buf)) do
+			local view = vim.api.nvim_win_call(win, vim.fn.winsaveview)
+			if view.topline == 1 then
+				view.topfill = #virtual_lines
+				vim.api.nvim_win_call(win, function()
+					vim.fn.winrestview(view)
+				end)
+			end
+		end
+	end)
+	return #virtual_lines
+end
+
 ---@param buf integer
 ---@param line integer
 ---@param count integer
