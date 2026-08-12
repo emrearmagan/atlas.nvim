@@ -555,6 +555,7 @@ Press the configured `pulls.open_diff` key (`gd` by default) on a pull request t
 - Review provider tasks and GitHub checklists alongside the comments they belong to.
 - Add, reply to, edit, delete, resolve, or reopen comments when supported.
 - Browse comments, tasks, and local notes
+- Mark files reviewed in AtlasDiff; GitHub syncs the state with the pull request.
 - Submit pending comments with an optional review summary when supported.
 
 > [!NOTE]

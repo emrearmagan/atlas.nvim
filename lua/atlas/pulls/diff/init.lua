@@ -137,6 +137,9 @@ local function make_session(session, viewer_id, source, review, commits)
 	session.source = source
 	session.review = review
 	session.commits = commits
+	if review and review.context and review.context.reviewed_files then
+		session.reviewed_files = review.context.reviewed_files
+	end
 	session.current = nil
 	session.viewer_state = {}
 	session.review_panel = nil

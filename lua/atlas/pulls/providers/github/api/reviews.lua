@@ -44,6 +44,36 @@ query($owner:String!,$name:String!,$number:Int!,$endCursor:String){
 }
 ]]
 
+local REVIEW_CONTEXT_QUERY = [[
+query($owner:String!,$repo:String!,$number:Int!,$endCursor:String){
+  repository(owner:$owner,name:$repo){
+    pullRequest(number:$number){
+      id
+      assignees(first:100){nodes{id login name}}
+      reviews(first:100){nodes{author{login}}}
+      reviewRequests(first:100){nodes{requestedReviewer{... on User{id login name}}}}
+      files(first:100,after:$endCursor){
+        pageInfo{hasNextPage endCursor}
+        nodes{path viewerViewedState}
+      }
+    }
+  }
+}
+]]
+
+local SET_FILE_REVIEWED_MUTATIONS = {
+	[true] = [[
+mutation($pullRequestId:ID!,$path:String!){
+  markFileAsViewed(input:{pullRequestId:$pullRequestId,path:$path}){clientMutationId}
+}
+]],
+	[false] = [[
+mutation($pullRequestId:ID!,$path:String!){
+  unmarkFileAsViewed(input:{pullRequestId:$pullRequestId,path:$path}){clientMutationId}
+}
+]],
+}
+
 ---@param node table|nil
 ---@return PullsReview
 local function from_node(node)
@@ -582,6 +612,36 @@ function M.fetch(pr, opts, on_done)
 	}
 end
 
+---@param pr PullRequest
+---@param path string
+---@param reviewed boolean
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.set_file_reviewed(pr, path, reviewed, on_done)
+	local pull_request_id = github_mapping.node_id(pr._raw)
+	if not pull_request_id then
+		on_done(false, "Missing pull request node id")
+		return nil
+	end
+	return cli.gh({
+		"api",
+		"graphql",
+		"-f",
+		"query=" .. SET_FILE_REVIEWED_MUTATIONS[reviewed],
+		"-f",
+		"pullRequestId=" .. pull_request_id,
+		"-f",
+		"path=" .. path,
+	}, function(_, err)
+		on_done(err == nil, err)
+	end, {
+		action = reviewed and "Mark file reviewed" or "Mark file unreviewed",
+		repo = pr.repo_full_name,
+		number = pr.id,
+		path = path,
+	})
+end
+
 local CREATE_PENDING_REVIEW_MUTATION = [[
 mutation($pullRequestId:ID!,$commitOID:GitObjectID){
   addPullRequestReview(input:{pullRequestId:$pullRequestId commitOID:$commitOID}){
@@ -728,13 +788,14 @@ end
 
 ---@param pr PullRequest
 ---@param opts { force_refresh: boolean|nil }|nil
----@param on_done fun(context: { authors: PullsAuthor[] }|nil, err: string|nil)
+---@param on_done fun(context: PullsReviewContext|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_context(pr, opts, on_done)
 	local repo_slug = pr.repo_full_name or ""
-	if repo_slug == "" then
+	local owner, repo = repo_slug:match("^([^/]+)/(.+)$")
+	if not owner or not repo then
 		vim.schedule(function()
-			on_done(nil, "Missing repo")
+			on_done(nil, "Missing repository info")
 		end)
 		return nil
 	end
@@ -750,18 +811,43 @@ function M.fetch_context(pr, opts, on_done)
 	end
 
 	return cli.gh({
-		"pr",
-		"view",
-		tostring(pr.id),
-		"--repo",
-		repo_slug,
-		"--json",
-		"assignees,reviews,reviewRequests",
+		"api",
+		"graphql",
+		"--paginate",
+		"--slurp",
+		"-f",
+		"query=" .. REVIEW_CONTEXT_QUERY,
+		"-f",
+		"owner=" .. owner,
+		"-f",
+		"repo=" .. repo,
+		"-F",
+		"number=" .. tostring(pr.id),
 	}, function(result, err)
 		if err or type(result) ~= "table" then
 			on_done(nil, err or "Failed to fetch review context")
 			return
 		end
+		local pull_request
+		local reviewed_files = {}
+		for _, page in ipairs(result) do
+			local current = (((page or {}).data or {}).repository or {}).pullRequest
+			if type(current) ~= "table" then
+				on_done(nil, "Failed to fetch review context")
+				return
+			end
+			pull_request = pull_request or current
+			for _, file in ipairs(((current.files or {}).nodes or {})) do
+				if file.viewerViewedState == "VIEWED" then
+					reviewed_files[tostring(file.path)] = true
+				end
+			end
+		end
+		if not pull_request then
+			on_done(nil, "Failed to fetch review context")
+			return
+		end
+		pr._raw.node_id = tostring(pull_request.id or "")
 
 		local authors = {}
 		local seen = {}
@@ -777,18 +863,18 @@ function M.fetch_context(pr, opts, on_done)
 		end
 
 		add(pr.author)
-		for _, raw in ipairs(result.assignees or {}) do
+		for _, raw in ipairs(((pull_request.assignees or {}).nodes or {})) do
 			add(review_author(raw))
 		end
-		for _, raw in ipairs(result.reviews or {}) do
+		for _, raw in ipairs(((pull_request.reviews or {}).nodes or {})) do
 			add(review_author(type(raw) == "table" and raw.author or nil))
 		end
-		for _, raw in ipairs(result.reviewRequests or {}) do
+		for _, raw in ipairs(((pull_request.reviewRequests or {}).nodes or {})) do
 			add(review_author(type(raw) == "table" and (raw.requestedReviewer or raw) or nil))
 		end
 
-		local context = { authors = authors }
-		cli.set_mem(cache_key, context)
+		local context = { authors = authors, reviewed_files = reviewed_files }
+		cli.set_mem(cache_key, context, cli.cache_ttl())
 		on_done(context, nil)
 	end, {
 		action = "Fetch PR review context",

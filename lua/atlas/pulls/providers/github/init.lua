@@ -287,6 +287,7 @@ return {
 			approve = reviews_api.approve,
 			request_changes = reviews_api.request_changes,
 			discard_review = reviews_api.discard,
+			set_file_reviewed = reviews_api.set_file_reviewed,
 		},
 		repository = {
 			fetch_details = repositories_api.fetch_detail,

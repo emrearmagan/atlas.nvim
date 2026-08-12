@@ -515,6 +515,7 @@ to start a review.
     belong to.
   - Add, reply to, edit, delete, resolve, or reopen comments when supported.
   - Browse comments, tasks, and local notes in the bottom review panel
+  - Mark files reviewed in AtlasDiff; GitHub syncs the state with the pull request.
   - Submit pending comments with an optional review summary when supported.
 
 CodeDiff, sindrets/diffview.nvim, and dlyongemallo/diffview-plus.nvim can

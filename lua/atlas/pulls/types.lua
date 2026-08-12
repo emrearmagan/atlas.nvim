@@ -252,6 +252,7 @@
 
 ---@class PullsReviewContext
 ---@field authors PullsAuthor[]
+---@field reviewed_files table<string, boolean>|nil
 
 --------------------------------------------------------------------------------
 -- Commit

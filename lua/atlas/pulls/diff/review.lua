@@ -235,6 +235,9 @@ function M.reload(session)
 				return
 			end
 			session.review = loaded
+			if loaded.context and loaded.context.reviewed_files then
+				session.reviewed_files = loaded.context.reviewed_files
+			end
 			session:render()
 			if #warnings > 0 then
 				notify(session, "warn", table.concat(warnings, "; "))

@@ -108,7 +108,7 @@ function M.new(opts)
 		source = opts.source,
 		review = opts.review,
 		notes = note_items,
-		reviewed_files = {},
+		reviewed_files = (opts.review and opts.review.context and opts.review.context.reviewed_files) or {},
 		current = nil,
 		commits = opts.commits or {},
 		statusline = statusline.new(),

@@ -2,6 +2,18 @@ local M = {}
 
 local pull_actions = require("atlas.pulls.actions")
 local review_api = require("atlas.pulls.diff.review")
+local notes = require("atlas.pulls.notes")
+
+---@param session AtlasDiffSession
+local function reload_notes(session)
+	if not session.note_target then
+		return
+	end
+	local items = notes.list(session.note_target)
+	if items then
+		session.notes = items
+	end
+end
 
 ---@param session AtlasDiffSession
 ---@param action AtlasPullAction
@@ -13,6 +25,7 @@ local function run(session, action)
 	action.run(context, function(result, err)
 		if result and not err and context.active and context.active() then
 			review_api.apply_action_data(session, context.data)
+			reload_notes(session)
 			review_api.reload(session)
 		end
 	end)
@@ -57,6 +70,7 @@ function M.toggle_approval(session)
 	end
 	pull_actions.run("toggle_approval", context, function(result, err)
 		if result and not err and context.active and context.active() then
+			reload_notes(session)
 			review_api.reload(session)
 		end
 	end)
