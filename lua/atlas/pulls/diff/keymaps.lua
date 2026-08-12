@@ -107,13 +107,13 @@ function M.register(session, opts)
 						actions.start_or_submit(session)
 					end)
 				end
-				add(items, "pulls.review.diff.toggle_comments", "Toggle comment overlays", function()
+				add(items, "pulls.review.diff.toggle_comments", "Toggle comment and note overlays", function()
 					session.show_comments = not session.show_comments
 					session:render()
 					session_api.notify(
 						session,
 						"info",
-						session.show_comments and "Comments shown" or "Comments hidden",
+						session.show_comments and "Review overlays shown" or "Review overlays hidden",
 						1200
 					)
 				end)

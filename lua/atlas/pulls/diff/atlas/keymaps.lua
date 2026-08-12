@@ -238,7 +238,7 @@ function M.register(session, actions)
 	local panel_actions = {}
 	add(
 		panel_actions,
-		item("pulls.review.explorer.focus_file", {
+		item("pulls.review.show_item", {
 			desc = "Show changed file",
 			index = 1,
 			callback = run(function()
@@ -252,8 +252,8 @@ function M.register(session, actions)
 	)
 	add(
 		panel_actions,
-		item("pulls.review.explorer.open_file", {
-			desc = "Open changed file",
+		item("pulls.review.focus_item", {
+			desc = "Focus changed file",
 			index = 2,
 			callback = run(function()
 				local index = explorer.open_at_cursor(session)

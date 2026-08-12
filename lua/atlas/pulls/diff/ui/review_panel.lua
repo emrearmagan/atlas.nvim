@@ -523,10 +523,10 @@ function M.register_keymaps(panel)
 		end
 	end
 	local entries = {}
-	add_mapping(entries, "pulls.review.explorer.focus_file", "Show item in diff", 1, function()
+	add_mapping(entries, "pulls.review.show_item", "Show item in diff", 1, function()
 		show_selected(false)
 	end)
-	add_mapping(entries, "pulls.review.explorer.open_file", "Open item in diff", 2, function()
+	add_mapping(entries, "pulls.review.focus_item", "Focus item in diff", 2, function()
 		show_selected(true)
 	end)
 	add_mapping(entries, "ui.open_in_browser", "Open comment in browser", 3, function()
@@ -549,7 +549,7 @@ function M.register_keymaps(panel)
 	add_mapping(entries, "pulls.review.diff.toggle_resolved", "Toggle resolved / completed", 7, function()
 		run_action("toggle_resolved")
 	end)
-	add_mapping(entries, { "ui.show_details", "ui.toggle_fold" }, "Expand / collapse", 8, toggle_selected)
+	add_mapping(entries, "ui.toggle_fold", "Expand / collapse", 8, toggle_selected)
 	add_mapping(entries, "ui.toggle_all_folds", "Expand / collapse all", 9, function()
 		local session = active_session(panel)
 		if not session then

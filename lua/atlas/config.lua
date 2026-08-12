@@ -154,12 +154,12 @@ M.options = {
 			edit_title = "T",
 			edit_description = "D",
 			review = {
+				show_item = "<CR>",
+				focus_item = "gd",
 				toggle_approval = "ga",
 				request_changes = "gr",
 				submit_review = "gs",
 				explorer = {
-					focus_file = "<CR>",
-					open_file = "l",
 					next_file = { "]f", "<Tab>" },
 					previous_file = { "[f", "<S-Tab>" },
 					next_unreviewed_file = "]u",
@@ -187,6 +187,9 @@ M.options = {
 					add_task = "T",
 					toggle_resolved = "x",
 				},
+			},
+			pipelines = {
+				open = "gd",
 			},
 			filters = {
 				open = "gpo",
