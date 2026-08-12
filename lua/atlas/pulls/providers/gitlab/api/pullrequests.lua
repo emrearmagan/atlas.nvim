@@ -256,6 +256,13 @@ function M.set_state(pr, state_event, on_done)
 end
 
 ---@param pr PullRequest
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.decline(pr, on_done)
+	return M.set_state(pr, "close", on_done)
+end
+
+---@param pr PullRequest
 ---@param title string
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil

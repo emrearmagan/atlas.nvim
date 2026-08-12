@@ -260,6 +260,7 @@ return {
 			update_title = pullrequests_api.update_title,
 			update_description = pullrequests_api.update_description,
 			set_draft = pullrequests_api.set_draft,
+			decline = pullrequests_api.decline,
 			fetch_description = pullrequests_api.get_description,
 			fetch_merge_checks = checks_api.fetch,
 			fetch_diffstat = changes_api.fetch_diffstat,

@@ -321,6 +321,35 @@ function M.update_description(pr, description, on_done)
 	})
 end
 
+---@param pr PullRequest
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.decline(pr, on_done)
+	local repo_slug = pr.repo_full_name or ""
+	if repo_slug == "" then
+		on_done(false, "Missing repo")
+		return nil
+	end
+	return cli.gh({
+		"pr",
+		"close",
+		tostring(pr.id),
+		"--repo",
+		repo_slug,
+	}, function(_, err)
+		if err then
+			on_done(false, err)
+			return
+		end
+		memory_cache.delete(string.format("github:pr:%s:%s", repo_slug, tostring(pr.id)))
+		on_done(true, nil)
+	end, {
+		action = "Decline PR",
+		repo = repo_slug,
+		number = pr.id,
+	})
+end
+
 ---@return { login: string, state: "APPROVED"|"CHANGES_REQUESTED"|"COMMENTED"|"DISMISSED" }[], string[]
 local function parse_reviews(result)
 	local latest = {}

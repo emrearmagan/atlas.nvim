@@ -29,7 +29,7 @@ describe("provider contracts", function()
 			"pulls",
 			{ "bitbucket", "github", "gitlab" },
 			{ "resolve", "search_view", "target", "repositories" },
-			{ "fetch_user", "fetch_pullrequests", "fetch_pullrequest", "views" }
+			{ "fetch_user", "fetch_pullrequests", "fetch_pullrequest", "decline", "views" }
 		)
 	end)
 

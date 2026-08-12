@@ -186,6 +186,7 @@ local function normalize_pull(item, workspace, repo)
 			html = link_href(links, "html"),
 			self = link_href(links, "self"),
 			merge = link_href(links, "merge"),
+			decline = link_href(links, "decline"),
 			commits = link_href(links, "commits"),
 			approve = link_href(links, "approve"),
 			request_changes = link_href(links, "request_changes"),

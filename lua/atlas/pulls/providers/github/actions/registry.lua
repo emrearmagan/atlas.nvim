@@ -149,66 +149,6 @@ end
 
 ---@param ctx AtlasPullActionContext
 ---@return boolean, string|nil
-local function close_available(ctx)
-	if not has_pr(ctx) or ctx.pr == nil then
-		return false, "No PR selected"
-	end
-	if repo_slug(ctx) == "" then
-		return false, "Missing repository info"
-	end
-	local state = tostring(ctx.pr.state or ""):lower()
-	if state ~= "open" and state ~= "draft" then
-		return false, "PR is not open"
-	end
-	return true, nil
-end
-
----@param ctx AtlasPullActionContext
----@param done fun(result: PullsActionResult|nil, err: string|nil)
-local function close(ctx, done)
-	local pr = ctx.pr
-	if pr == nil then
-		done(nil, "No PR selected")
-		return
-	end
-
-	vim.ui.input({
-		prompt = string.format("Close PR #%s? [y/N]: ", tostring(pr.id or "")),
-	}, function(input)
-		if input == nil then
-			done({ changed_pr = false, message = "Close cancelled" }, nil)
-			return
-		end
-
-		local normalized = vim.trim(tostring(input)):lower()
-		if normalized ~= "y" and normalized ~= "yes" then
-			notify(ctx, "info", "Close cancelled")
-			done({ changed_pr = false, message = "Close cancelled" }, nil)
-			return
-		end
-
-		notify(ctx, "loading", "Closing PR...")
-		cli.gh({
-			"pr",
-			"close",
-			tostring(pr.id),
-			"--repo",
-			repo_slug(ctx),
-		}, function(_, err)
-			if err then
-				notify(ctx, "error", string.format("Close failed: %s", tostring(err)))
-				done(nil, tostring(err))
-				return
-			end
-
-			notify(ctx, "success", "PR closed", 1200)
-			done({ changed_pr = true, message = "Closed" }, nil)
-		end)
-	end)
-end
-
----@param ctx AtlasPullActionContext
----@return boolean, string|nil
 local function reopen_available(ctx)
 	if not has_pr(ctx) or ctx.pr == nil then
 		return false, "No PR selected"
@@ -611,12 +551,7 @@ register({
 register(actions.edit_title)
 register(actions.edit_description)
 
-register({
-	id = "close",
-	label = "Close PR",
-	is_available = close_available,
-	run = close,
-})
+register(actions.decline)
 
 register({
 	id = "reopen",

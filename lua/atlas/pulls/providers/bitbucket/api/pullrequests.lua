@@ -6,33 +6,15 @@ local cache = require("atlas.core.cache")
 local logger = require("atlas.core.logger")
 local state = require("atlas.pulls.providers.bitbucket.state")
 
----@param link any
----@return string
-local function link_href(link)
-	if type(link) == "string" then
-		return link
-	end
-	if type(link) == "table" then
-		return tostring(link.href or "")
-	end
-	return ""
-end
-
 ---@param pr PullRequest
 ---@param key string
 ---@return string
 local function pr_link(pr, key)
-	local raw = pr._raw
-	local links = type(raw.links) == "table" and raw.links or {}
-	local link = links[key]
-	if link == nil and key == "request_changes" then
-		link = links["request-changes"]
-	end
-	return link_href(link)
+	return tostring((pr._raw.links or {})[key] or "")
 end
 
 ---@param pr PullRequest
----@param action "merge"
+---@param action "merge"|"decline"
 ---@return boolean
 function M.has_action(pr, action)
 	return pr_link(pr, action) ~= ""
@@ -287,6 +269,25 @@ function M.merge(pr, opts, on_done)
 
 	local body = vim.fn.empty(payload) == 1 and nil or vim.json.encode(payload)
 	return service.request("POST", merge_url, nil, body, on_done)
+end
+
+---@param pr PullRequest
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { job_id: integer, cancel: fun() }|nil
+function M.decline(pr, on_done)
+	local url = pr_link(pr, "decline")
+	if url == "" then
+		on_done(false, "No decline URL available")
+		return nil
+	end
+	return service.request("POST", url, nil, nil, function(_, err)
+		if err then
+			on_done(false, err)
+			return
+		end
+		service.clear_cache()
+		on_done(true, nil)
+	end)
 end
 
 ---@param pr PullRequest

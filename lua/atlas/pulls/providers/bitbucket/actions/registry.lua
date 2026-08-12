@@ -113,6 +113,18 @@ end
 
 ---@param ctx AtlasPullActionContext
 ---@return boolean, string|nil
+local function decline_available(ctx)
+	if not actions.decline.is_available(ctx) or ctx.pr == nil then
+		return false, "PR is not open"
+	end
+	if not pullrequests.has_action(ctx.pr, "decline") then
+		return false, "No decline URL available"
+	end
+	return true, nil
+end
+
+---@param ctx AtlasPullActionContext
+---@return boolean, string|nil
 local function request_changes_available(ctx)
 	if not has_pr(ctx) or ctx.pr == nil then
 		return false, "No PR selected"
@@ -289,6 +301,13 @@ register({
 	label = "Merge",
 	is_available = merge_available,
 	run = merge,
+})
+
+register({
+	id = actions.decline.id,
+	label = actions.decline.label,
+	is_available = decline_available,
+	run = actions.decline.run,
 })
 
 register(actions.edit_title)

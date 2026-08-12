@@ -240,6 +240,7 @@ return {
 			update_title = pullrequests_api.update_title,
 			update_description = pullrequests_api.update_description,
 			set_draft = pullrequests_api.set_draft,
+			decline = pullrequests_api.decline,
 			fetch_diffstat = changes_api.fetch_diffstat,
 			fetch_activity = activity_api.fetch_activity,
 			fetch_commits = changes_api.fetch_commits,
