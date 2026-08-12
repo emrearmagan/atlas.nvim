@@ -111,7 +111,7 @@ function M.register(session, opts)
 						actions.start_or_submit(session)
 					end)
 				end
-				add(items, "pulls.review.diff.toggle_comments", "Toggle full / compact review overlays", function()
+				add(items, "pulls.review.diff.toggle_comments", "Toggle comment display", function()
 					session.expanded_overlays = not session.expanded_overlays
 					session:render()
 					session_api.notify(

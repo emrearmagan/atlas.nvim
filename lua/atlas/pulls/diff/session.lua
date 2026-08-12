@@ -121,7 +121,7 @@ function M.new(opts)
 		note_target = note_target,
 		viewer_state = {},
 		expanded_threads = {},
-		expanded_overlays = ((config.options.pulls or {}).diff or {}).show_comments ~= false,
+		expanded_overlays = ((config.options.pulls or {}).diff or {}).comment_display == "virtual_lines",
 		help_key = opts.viewer_id == "atlas" and (keymaps.resolve("ui.help") or { "g?" })[1] or "gA",
 		review_attached = false,
 		closed = false,

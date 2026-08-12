@@ -173,7 +173,7 @@ function M.register(session, actions)
 		add(
 			general,
 			item("pulls.review.diff.toggle_compact", {
-				desc = "Toggle full / compact",
+				desc = "Toggle comment display",
 				index = 5,
 				callback = run(actions.toggle_compact),
 				opts = { silent = true, nowait = true },

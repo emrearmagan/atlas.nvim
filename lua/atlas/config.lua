@@ -39,7 +39,7 @@
 ---@field compact boolean|nil
 ---@field compact_context_lines integer|nil
 ---@field show_review_panel boolean|nil
----@field show_comments boolean|nil Show full inline comment and note cards initially; false uses compact hints.
+---@field comment_display "virtual_lines"|"virtual_text"|nil Initial comment and note display mode.
 ---@field explorer AtlasPullsDiffExplorerConfig|nil
 
 ---@class AtlasPullsCustomActionContext
@@ -108,7 +108,7 @@ M.options = {
 			compact = true,
 			compact_context_lines = 3,
 			show_review_panel = false,
-			show_comments = true,
+			comment_display = "virtual_lines",
 			explorer = {
 				grouped = true,
 				hidden = false,

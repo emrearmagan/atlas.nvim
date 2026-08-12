@@ -182,7 +182,7 @@ Shared config that applies to all pulls providers:
         -- Any command that accepts explicit <base>...<head> Git revisions.
         open_cmd = "AtlasDiff", -- default; e.g. "DiffviewOpen" or "CodeDiff"
         show_review_panel = false, -- set true to show the review panel initially
-        show_comments = true, -- show full comment and note cards; false uses compact hints
+        comment_display = "virtual_lines", -- or compact "virtual_text" hints
 
         -- AtlasDiff options; external viewers use their own configuration.
         layout = "inline", -- "inline" or "side-by-side"
