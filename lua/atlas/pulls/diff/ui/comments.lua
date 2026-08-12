@@ -24,6 +24,17 @@ local function buffer_width(buf)
 	return wins[1] and vim.api.nvim_win_get_width(wins[1]) or vim.o.columns
 end
 
+---@param comment PullsComment
+---@return string
+local function comment_location(comment)
+	if comment.file then
+		return vim.fs.basename(comment.file.path)
+	end
+	local inline = comment.inline
+	local line = inline and (inline.to or inline.from)
+	return line and ("Line " .. tostring(line)) or ""
+end
+
 ---@param current AtlasDiffCurrent
 function M.clear(current)
 	for _, side in ipairs({ current.left, current.right }) do
@@ -45,6 +56,7 @@ function M.thread_lines(context, buf, list)
 		end,
 		padding_x = 0,
 		reaction_options = context.reaction_options,
+		location = comment_location,
 	})
 	local rendered = box.render({ { lines = lines, spans = spans } }, { width = width, padding_x = 0 })
 	return utils.virtual_lines(rendered.lines, rendered.highlights)
@@ -191,6 +203,7 @@ function M.open_popup(opts)
 		padding_x = 1,
 		toggle_resolved_key = toggle_key,
 		reaction_options = opts.reaction_options,
+		location = comment_location,
 	})
 	if #lines == 0 then
 		return
