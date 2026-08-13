@@ -31,8 +31,17 @@ local function comment_location(comment)
 		return vim.fs.basename(comment.file.path)
 	end
 	local inline = comment.inline
-	local line = inline and (inline.to or inline.from)
-	return line and ("Line " .. tostring(line)) or ""
+	if not inline then
+		return ""
+	end
+	local right = inline.to ~= nil
+	local side = right and "R" or "L"
+	local line = right and inline.to or inline.from
+	local start_line = right and inline.start_to or inline.start_from
+	if line and start_line and line ~= start_line then
+		return string.format("%s%d-%s%d", side, start_line, side, line)
+	end
+	return line and (side .. tostring(line)) or ""
 end
 
 ---@param current AtlasDiffCurrent

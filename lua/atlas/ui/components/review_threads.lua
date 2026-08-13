@@ -88,9 +88,6 @@ local function suggestion_content(comment)
 		prose = prose ~= "" and (prose .. "\n\n" .. trailing) or trailing
 	end
 	local start_line = comment.inline.start_to or comment.inline.to or 1
-	local end_line = comment.inline.to or start_line
-	local range = start_line == end_line and string.format("Line +%d", end_line)
-		or string.format("Lines +%d to +%d", start_line, end_line)
 	local lines = vim.split(replacement, "\n", { plain = true })
 	if #lines == 0 then
 		lines = { "" }
@@ -105,7 +102,6 @@ local function suggestion_content(comment)
 	return prose ~= "" and prose or nil,
 		{
 			title = "Suggestion",
-			right_text = range,
 			lines = preview.lines,
 			highlights = preview.highlights,
 		}
