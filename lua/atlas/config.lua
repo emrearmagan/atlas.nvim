@@ -148,6 +148,7 @@ M.options = {
 			open_diff = "gd",
 			checkout = "gc",
 			edit_title = "T",
+			edit_description = "D",
 			review = {
 				toggle_approval = "ga",
 				request_changes = "gr",

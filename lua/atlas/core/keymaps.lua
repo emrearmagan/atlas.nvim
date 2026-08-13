@@ -73,6 +73,7 @@ local M = {}
 ---@field open_diff? AtlasKeymapValue
 ---@field checkout? AtlasKeymapValue
 ---@field edit_title? AtlasKeymapValue
+---@field edit_description? AtlasKeymapValue
 ---@field review? AtlasPullsReviewKeymaps
 ---@field filters? AtlasPullsFilterKeymaps
 
@@ -117,6 +118,7 @@ local M = {}
 ---| "pulls.open_diff"
 ---| "pulls.checkout"
 ---| "pulls.edit_title"
+---| "pulls.edit_description"
 ---| "pulls.review.toggle_approval"
 ---| "pulls.review.request_changes"
 ---| "pulls.review.submit_review"
@@ -337,6 +339,7 @@ function M.validate()
 		pulls = conflicts_for({
 			"pulls.open_diff",
 			"pulls.checkout",
+			"pulls.edit_description",
 			"pulls.review.toggle_approval",
 			"pulls.review.request_changes",
 			"pulls.review.submit_review",

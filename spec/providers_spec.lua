@@ -41,4 +41,11 @@ describe("provider contracts", function()
 			{ "fetch_user", "fetch_issues", "fetch_issue", "views" }
 		)
 	end)
+
+	it("wires update_description on every pull request provider", function()
+		for _, registered in ipairs(providers.list("pulls")) do
+			local provider = assert(providers.load(registered.id, "pulls"))
+			assert_functions(provider.capabilities.core, { "update_description" }, registered.id .. ".pulls.core")
+		end
+	end)
 end)

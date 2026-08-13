@@ -617,6 +617,7 @@ register({
 })
 
 register(actions.edit_title)
+register(actions.edit_description)
 
 register({
 	id = "close",

@@ -203,6 +203,28 @@ function M.register(buf)
 		)
 	end
 
+	if context and actions.is_available("edit_description", context) then
+		utils.insert_if(
+			items,
+			item("pulls.edit_description", {
+				desc = "Edit PR description",
+				opts = { nowait = true, silent = true },
+				callback = function()
+					local pr = panel_state.current_pr
+					if pr == nil then
+						return
+					end
+					local current = action_context(pr)
+					if current then
+						actions.run("edit_description", current, function(result)
+							require("atlas.pulls.ui.main.controller").apply_action_result(pr, result)
+						end)
+					end
+				end,
+			})
+		)
+	end
+
 	if context and actions.is_available("toggle_subscription", context) then
 		utils.insert_if(
 			items,
@@ -337,6 +359,7 @@ function M.remove(buf)
 	utils.insert_if(general, remove_item("pulls.open_diff"))
 	utils.insert_if(general, remove_item("pulls.checkout"))
 	utils.insert_if(general, remove_item("pulls.edit_title"))
+	utils.insert_if(general, remove_item("pulls.edit_description"))
 	utils.insert_if(general, remove_item("ui.toggle_subscription"))
 	utils.insert_if(general, remove_item("ui.next_panel_tab"))
 	utils.insert_if(general, remove_item("ui.previous_panel_tab"))
