@@ -279,6 +279,7 @@ return {
 			fetch_reviewers = pullrequests_api.fetch_reviewers,
 			update_reviewers = pullrequests_api.update_reviewers,
 			update_title = pullrequests_api.update_title,
+			update_description = pullrequests_api.update_description,
 			set_draft = pullrequests_api.set_draft,
 			fetch_description = pullrequests_api.fetch_description,
 			fetch_default_reviewers = pullrequests_api.fetch_default_reviewers,

@@ -248,6 +248,14 @@ function M.update_title(pr, title, on_done)
 end
 
 ---@param pr PullRequest
+---@param description string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { job_id: integer, cancel: fun() }|nil
+function M.update_description(pr, description, on_done)
+	return update_pullrequest(pr, { description = description }, on_done)
+end
+
+---@param pr PullRequest
 ---@param draft boolean
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
