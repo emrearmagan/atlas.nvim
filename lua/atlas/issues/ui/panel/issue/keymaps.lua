@@ -47,6 +47,12 @@ end
 function M.register(buf)
 	local items = {}
 	local nav = require("atlas.issues.ui.panel.issue.navigation")
+	local controller = require("atlas.issues.ui.main.controller")
+	local state = require("atlas.issues.state")
+	local provider = assert(state.provider)
+	local function context(issue)
+		return { provider = provider, issue = issue, current_user = state.current_user }
+	end
 
 	utils.insert_if(
 		items,
@@ -76,13 +82,12 @@ function M.register(buf)
 			desc = "Refresh issue",
 			opts = { nowait = true, silent = true },
 			callback = function()
-				require("atlas.issues.ui.main.controller").refresh_issue(panel_state.current_issue)
+				controller.refresh_issue(panel_state.current_issue)
 			end,
 		})
 	)
 
-	local state = require("atlas.issues.state")
-	if state.provider and state.provider.capabilities.actions then
+	if provider.capabilities.actions then
 		utils.insert_if(
 			items,
 			item("ui.open_actions", {
@@ -92,7 +97,7 @@ function M.register(buf)
 					if issue == nil then
 						return
 					end
-					actions.open_actions(issue, "panel")
+					actions.open(context(issue), controller.apply_action_result)
 				end,
 			})
 		)
@@ -111,7 +116,7 @@ function M.register(buf)
 				if issue == nil then
 					return
 				end
-				actions.open_in_browser(issue)
+				actions.run("browse_issue", context(issue))
 			end,
 		})
 	)
@@ -126,9 +131,7 @@ function M.register(buf)
 				if issue == nil then
 					return
 				end
-				actions.run_action("toggle_subscription", issue, "panel", function()
-					require("atlas.issues.ui.panel").render()
-				end)
+				actions.run("toggle_subscription", context(issue), controller.apply_action_result)
 			end,
 		})
 	)

@@ -19,6 +19,46 @@ local DEFAULT_TABS = {
 	},
 }
 
+---@return PullsPanelTab[]
+local function get_tabs()
+	local state = require("atlas.pulls.state")
+	local provider = state.provider
+	local panel = provider and provider.capabilities.ui and provider.capabilities.ui.panel
+	if panel and panel.tabs then
+		local tabs = panel.tabs()
+		if type(tabs) == "table" and #tabs > 0 then
+			return tabs
+		end
+	end
+	return DEFAULT_TABS
+end
+
+---@param tab_key string
+---@return PullsPanelTab|nil
+local function get_tab(tab_key)
+	for _, tab in ipairs(get_tabs()) do
+		if tab.key == tab_key then
+			return tab
+		end
+	end
+	return nil
+end
+
+---@param tab_key string
+---@return PullsPanelTabModule|nil
+local function get_tab_module(tab_key)
+	local tab = get_tab(tab_key)
+	return tab and tab.mod or nil
+end
+
+local function reset_tabs()
+	for _, tab in ipairs(get_tabs()) do
+		if tab.mod.reset then
+			tab.mod.reset()
+		end
+	end
+end
+
 -- Loading spinner
 
 local spinner_timer = nil
@@ -32,17 +72,14 @@ local function stop_spinner()
 end
 
 local function is_loading()
-	local pr = panel_state.current_pr
-	if pr == nil then
+	if panel_state.current_pr == nil then
 		return false
 	end
-	local state = require("atlas.pulls.state")
-	local provider = state.provider
-	local panel = provider and provider.capabilities.ui and provider.capabilities.ui.panel
-	if panel and panel.is_loading then
-		return panel.is_loading(pr, panel_state.current_tab)
+	if panel_state.header_loading or panel_state.diffstat == "loading" or panel_state.pipelines == "loading" then
+		return true
 	end
-	return false
+	local tab = get_tab_module(panel_state.current_tab)
+	return tab ~= nil and tab.is_loading ~= nil and tab.is_loading()
 end
 
 local function start_spinner()
@@ -75,38 +112,6 @@ local function update_spinner()
 end
 
 -- Helper
-
----@return PullsPanelTab[]
-local function get_tabs()
-	local state = require("atlas.pulls.state")
-	local provider = state.provider
-	local panel = provider and provider.capabilities.ui and provider.capabilities.ui.panel
-	if panel and panel.tabs then
-		local tabs = panel.tabs()
-		if type(tabs) == "table" and #tabs > 0 then
-			return tabs
-		end
-	end
-	return DEFAULT_TABS
-end
-
----@param tab_key string
----@return PullsPanelTab|nil
-local function get_tab(tab_key)
-	for _, tab in ipairs(get_tabs()) do
-		if tab.key == tab_key then
-			return tab
-		end
-	end
-	return nil
-end
-
----@param tab_key string
----@return PullsPanelTabModule|nil
-local function get_tab_module(tab_key)
-	local tab = get_tab(tab_key)
-	return tab and tab.mod or nil
-end
 
 local function refresh_panel()
 	if M.is_open() then
@@ -170,16 +175,19 @@ local function switch_tab_keymaps(old_key, new_key)
 end
 
 ---@param pr PullRequest|nil
+---@return boolean
+local function is_current_pr(pr)
+	local current = panel_state.current_pr
+	return current ~= nil
+		and tostring(current.id or "") == tostring(pr and pr.id or "")
+		and tostring(current.repo_full_name or "") == tostring(pr and pr.repo_full_name or "")
+end
+
+---@param pr PullRequest|nil
 ---@return fun()
 local function make_refresh_callback(pr)
-	local expected_id = tostring(pr and pr.id or "")
-	local expected_repo = tostring(pr and pr.repo_full_name or "")
 	return function()
-		local active = panel_state.current_pr
-		if active == nil then
-			return
-		end
-		if tostring(active.id or "") ~= expected_id or tostring(active.repo_full_name or "") ~= expected_repo then
+		if not is_current_pr(pr) then
 			return
 		end
 		update_spinner()
@@ -189,21 +197,79 @@ local function make_refresh_callback(pr)
 	end
 end
 
+---@type { cancel: fun() }[]
+local panel_requests = {}
+
+local function cancel_panel_requests()
+	for _, request in ipairs(panel_requests) do
+		request.cancel()
+	end
+	panel_requests = {}
+end
+
+---@param request { cancel: fun() }|nil
+local function track_panel_request(request)
+	if request then
+		table.insert(panel_requests, request)
+	end
+end
+
 ---@param pr PullRequest
----@param opts { force_refresh: boolean|nil }|nil
-local function dispatch_provider_fetches(pr, opts)
+---@param opts { force_refresh: boolean|nil, pr_refreshed: boolean|nil }|nil
+local function fetch_panel_data(pr, opts)
+	cancel_panel_requests()
+
 	local state = require("atlas.pulls.state")
 	local provider = state.provider
+	if provider == nil then
+		return
+	end
+
+	local refresh = make_refresh_callback(pr)
 	local panel = provider and provider.capabilities.ui and provider.capabilities.ui.panel
-	if panel and panel.fetches then
-		panel.fetches(pr, make_refresh_callback(pr), opts)
+	if panel and panel.fetch_header then
+		panel_state.header_loading = true
+		track_panel_request(panel.fetch_header(pr, opts, function()
+			if not is_current_pr(pr) then
+				return
+			end
+			panel_state.header_loading = false
+			refresh()
+		end))
+	else
+		panel_state.header_loading = false
+	end
+
+	local force_refresh = opts and opts.force_refresh == true
+	local core = provider.capabilities.core
+	if core.fetch_diffstat then
+		panel_state.diffstat = "loading"
+		track_panel_request(core.fetch_diffstat(pr, { force_refresh = force_refresh }, function(entries, err)
+			if not is_current_pr(pr) then
+				return
+			end
+			panel_state.diffstat = err and err or (entries or {})
+			refresh()
+		end))
+	end
+
+	local pipelines = provider.capabilities.pipelines
+	if pipelines then
+		panel_state.pipelines = "loading"
+		track_panel_request(pipelines.fetch(pr, { force_refresh = force_refresh }, function(items, err)
+			if not is_current_pr(pr) then
+				return
+			end
+			panel_state.pipelines = err and err or (items or {})
+			refresh()
+		end))
 	end
 end
 
 ---@param pr PullRequest
 ---@param repo PullsRepo|nil
 ---@param opts { force_refresh: boolean|nil }|nil
-local function notify_tab(pr, repo, opts)
+local function load_active_tab(pr, repo, opts)
 	local tab_mod = get_tab_module(panel_state.current_tab)
 	if tab_mod and tab_mod.on_select then
 		tab_mod.on_select(pr, repo, make_refresh_callback(pr), opts)
@@ -223,7 +289,7 @@ end
 
 ---@param pr PullRequest|nil
 ---@param repo PullsRepo|nil
----@param opts { force_refresh: boolean|nil }|nil
+---@param opts { force_refresh: boolean|nil, pr_refreshed: boolean|nil }|nil
 function M.on_select(pr, repo, opts)
 	opts = opts or {}
 
@@ -257,16 +323,19 @@ function M.on_select(pr, repo, opts)
 	end
 
 	if context_changed or opts.force_refresh == true then
-		require("atlas.pulls.ui.panel.pr.tabs.overview.state").reset()
-		require("atlas.pulls.ui.panel.pr.tabs.activity.state").reset()
-		require("atlas.pulls.ui.panel.pr.tabs.commits.state").reset()
-		require("atlas.pulls.ui.panel.pr.tabs.review.state").reset()
+		reset_tabs()
 		panel_state.diffstat = nil
+		panel_state.pipelines = nil
+		panel_state.header_loading = false
 	end
 
 	if should_fetch then
-		dispatch_provider_fetches(panel_state.current_pr, { force_refresh = opts.force_refresh == true })
-		notify_tab(panel_state.current_pr, panel_state.current_repo, { force_refresh = opts.force_refresh == true })
+		fetch_panel_data(panel_state.current_pr, opts)
+		load_active_tab(
+			panel_state.current_pr,
+			panel_state.current_repo,
+			{ force_refresh = opts.force_refresh == true }
+		)
 		update_spinner()
 	end
 
@@ -295,7 +364,7 @@ function M.next_tab()
 	switch_tab_keymaps(old_key, panel_state.current_tab)
 
 	if panel_state.current_pr then
-		notify_tab(panel_state.current_pr, panel_state.current_repo)
+		load_active_tab(panel_state.current_pr, panel_state.current_repo)
 		update_spinner()
 	end
 
@@ -323,7 +392,7 @@ function M.prev_tab()
 	switch_tab_keymaps(old_key, panel_state.current_tab)
 
 	if panel_state.current_pr then
-		notify_tab(panel_state.current_pr, panel_state.current_repo)
+		load_active_tab(panel_state.current_pr, panel_state.current_repo)
 		update_spinner()
 	end
 
@@ -334,10 +403,13 @@ end
 function M.close()
 	switch_tab_keymaps(panel_state.current_tab, nil)
 	stop_spinner()
+	cancel_panel_requests()
 	panel_state.reset()
 end
 
-function M.activate() end
+function M.activate()
+	update_spinner()
+end
 
 function M.deactivate()
 	switch_tab_keymaps(panel_state.current_tab, nil)

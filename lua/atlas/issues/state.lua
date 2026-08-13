@@ -43,23 +43,6 @@ function M.is_issue_reloading(issue_key)
 	return (tonumber(M.reloading_issue_keys[key]) or 0) > 0
 end
 
-function M.reset()
-	M.active_view = nil
-	M.current_view = nil
-	M.is_loading = false
-	M.error = nil
-	M.current_user = nil
-	M.issues = nil
-	M.issue_tree = nil
-	M.line_map = {}
-	M.collapsed_issue_keys = {}
-	M.provider = nil
-	M.latest_request_tokens = {}
-	M.request_seq = 0
-	M.reloading_issue_keys = {}
-	M.reload_spinner_frame = "⠋"
-end
-
 ---@param issue_key string|nil
 ---@return boolean
 function M.toggle_issue_collapsed(issue_key)

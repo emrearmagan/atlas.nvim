@@ -6,9 +6,44 @@ local renderer = require("atlas.issues.ui.panel.issue.renderer")
 
 local SPINNER_INTERVAL_MS = 100
 
+---@return IssuesPanelTab[]
+local function get_tabs()
+	local state = require("atlas.issues.state")
+	local provider = state.provider
+	local panel = provider and provider.capabilities.ui and provider.capabilities.ui.panel
+	if panel and panel.tabs then
+		local tabs = panel.tabs()
+		if type(tabs) == "table" then
+			return tabs
+		end
+	end
+	return {}
+end
+
+---@param tab_key string
+---@return IssuesPanelTabModule|nil
+local function get_tab_module(tab_key)
+	for _, tab in ipairs(get_tabs()) do
+		if tab.key == tab_key then
+			return tab.mod
+		end
+	end
+	return nil
+end
+
+local function reset_tabs()
+	for _, tab in ipairs(get_tabs()) do
+		if tab.mod.reset then
+			tab.mod.reset()
+		end
+	end
+end
+
 -- Loading spinner
 
 local spinner_timer = nil
+---@type { cancel: fun() }|nil
+local header_request = nil
 
 local function stop_spinner()
 	if spinner_timer ~= nil then
@@ -23,13 +58,11 @@ local function is_loading()
 	if issue == nil then
 		return false
 	end
-	local state = require("atlas.issues.state")
-	local provider = state.provider
-	local panel = provider and provider.capabilities.ui and provider.capabilities.ui.panel
-	if panel and panel.is_loading then
-		return panel.is_loading(issue)
+	if panel_state.header_loading then
+		return true
 	end
-	return false
+	local tab = get_tab_module(panel_state.current_tab)
+	return tab ~= nil and tab.is_loading ~= nil and tab.is_loading()
 end
 
 local function start_spinner()
@@ -62,31 +95,6 @@ local function update_spinner()
 end
 
 -- Helper
-
----@return IssuesPanelTab[]
-local function get_tabs()
-	local state = require("atlas.issues.state")
-	local provider = state.provider
-	local panel = provider and provider.capabilities.ui and provider.capabilities.ui.panel
-	if panel and panel.tabs then
-		local tabs = panel.tabs()
-		if type(tabs) == "table" then
-			return tabs
-		end
-	end
-	return {}
-end
-
----@param tab_key string
----@return IssuesPanelTabModule|nil
-local function get_tab_module(tab_key)
-	for _, tab in ipairs(get_tabs()) do
-		if tab.key == tab_key then
-			return tab.mod
-		end
-	end
-	return nil
-end
 
 local function refresh_panel()
 	if M.is_open() then
@@ -125,12 +133,17 @@ local function switch_tab_keymaps(old_key, new_key)
 end
 
 ---@param issue Issue|nil
+---@return boolean
+local function is_current_issue(issue)
+	local current = panel_state.current_issue
+	return current ~= nil and tostring(current.key or "") == tostring(issue and issue.key or "")
+end
+
+---@param issue Issue|nil
 ---@return fun()
 local function make_refresh_callback(issue)
-	local expected_key = tostring(issue and issue.key or "")
 	return function()
-		local active = panel_state.current_issue
-		if active == nil or tostring(active.key or "") ~= expected_key then
+		if not is_current_issue(issue) then
 			return
 		end
 		update_spinner()
@@ -141,19 +154,34 @@ local function make_refresh_callback(issue)
 end
 
 ---@param issue Issue
----@param opts { force_refresh: boolean|nil }|nil
-local function dispatch_provider_fetches(issue, opts)
+---@param opts { force_refresh: boolean|nil, issue_refreshed: boolean|nil }|nil
+local function fetch_header(issue, opts)
+	if header_request then
+		header_request.cancel()
+		header_request = nil
+	end
+
 	local state = require("atlas.issues.state")
 	local provider = state.provider
 	local panel = provider and provider.capabilities.ui and provider.capabilities.ui.panel
-	if panel and panel.fetches then
-		panel.fetches(issue, make_refresh_callback(issue), { force_load = opts and opts.force_refresh == true })
+	if panel and panel.fetch_header then
+		local refresh = make_refresh_callback(issue)
+		panel_state.header_loading = true
+		header_request = panel.fetch_header(issue, opts, function()
+			if not is_current_issue(issue) then
+				return
+			end
+			panel_state.header_loading = false
+			refresh()
+		end)
+	else
+		panel_state.header_loading = false
 	end
 end
 
 ---@param issue Issue
 ---@param opts { force_refresh: boolean|nil }|nil
-local function notify_tab(issue, opts)
+local function load_active_tab(issue, opts)
 	local tab_mod = get_tab_module(panel_state.current_tab)
 	if tab_mod and tab_mod.on_select then
 		tab_mod.on_select(issue, make_refresh_callback(issue), opts)
@@ -172,7 +200,7 @@ function M.render()
 end
 
 ---@param issue Issue|nil
----@param opts { force_refresh: boolean|nil }|nil
+---@param opts { force_refresh: boolean|nil, issue_refreshed: boolean|nil }|nil
 function M.on_select(issue, opts)
 	opts = opts or {}
 
@@ -210,15 +238,13 @@ function M.on_select(issue, opts)
 		switch_tab_keymaps(nil, panel_state.current_tab)
 	end
 
-	if context_changed then
-		require("atlas.issues.providers.jira.ui.overview.state").reset()
-		require("atlas.issues.ui.panel.issue.tabs.activity.state").reset()
-		require("atlas.issues.ui.panel.issue.tabs.conversation.state").reset()
+	if context_changed or opts.force_refresh == true then
+		reset_tabs()
 	end
 
 	if should_fetch then
-		dispatch_provider_fetches(panel_state.current_issue, opts)
-		notify_tab(panel_state.current_issue, { force_refresh = opts.force_refresh == true })
+		fetch_header(panel_state.current_issue, opts)
+		load_active_tab(panel_state.current_issue, { force_refresh = opts.force_refresh == true })
 		update_spinner()
 	end
 
@@ -243,7 +269,7 @@ function M.next_tab()
 	switch_tab_keymaps(old_key, panel_state.current_tab)
 
 	if panel_state.current_issue then
-		notify_tab(panel_state.current_issue)
+		load_active_tab(panel_state.current_issue)
 		update_spinner()
 	end
 
@@ -271,7 +297,7 @@ function M.prev_tab()
 	switch_tab_keymaps(old_key, panel_state.current_tab)
 
 	if panel_state.current_issue then
-		notify_tab(panel_state.current_issue)
+		load_active_tab(panel_state.current_issue)
 		update_spinner()
 	end
 
@@ -281,16 +307,11 @@ end
 function M.close()
 	switch_tab_keymaps(panel_state.current_tab, nil)
 	stop_spinner()
-	panel_state.reset()
-end
-
-function M.activate() end
-
-function M.deactivate()
-	local tab_mod = get_tab_module(panel_state.current_tab)
-	if tab_mod and tab_mod.deactivate then
-		tab_mod.deactivate()
+	if header_request then
+		header_request.cancel()
+		header_request = nil
 	end
+	panel_state.reset()
 end
 
 return M

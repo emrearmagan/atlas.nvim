@@ -30,12 +30,16 @@ local function track(handle)
 	end
 end
 
+function M.reset()
+	cancel_all()
+	state.reset()
+end
+
 ---@param issue Issue
 ---@param refresh fun()
 ---@param opts { force_refresh: boolean|nil }|nil
 function M.on_select(issue, refresh, opts)
-	cancel_all()
-	state.reset()
+	M.reset()
 	opts = opts or {}
 
 	local provider = get_provider()
@@ -86,6 +90,11 @@ function M.on_enter(_issue, entry) ---@diagnostic disable-line: unused-local
 			return true
 		end
 	end
+end
+
+---@return boolean
+function M.is_loading()
+	return state.any_loading()
 end
 
 function M.activate(buf, refresh)

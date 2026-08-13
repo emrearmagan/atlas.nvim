@@ -39,11 +39,10 @@
 ---@field core PullsCoreCapability
 ---@field comments PullsCommentsCapability|nil
 ---@field reviews PullsReviewsCapability|nil
+---@field tasks PullsTasksCapability|nil
 ---@field repository PullsRepositoryCapability|nil
 ---@field pipelines PullsPipelinesCapability|nil
 ---@field notifications AtlasNotificationsCapability|nil
----@field search (fun())|nil
----@field create PullsCreateCapability|nil
 ---@field actions PullsActionsCapability|nil
 ---@field ui PullsUICapability|nil
 
@@ -51,8 +50,13 @@
 ---@field fetch_user fun(on_done: fun(user: PullsUser|nil, err: string|nil)): { cancel: fun() }|nil
 ---@field fetch_pullrequests fun(view: AtlasPullsViewConfig, opts: PullsFetchOpts, on_done: fun(groups: PullsGroup[], err: string[]|nil)): { cancel: fun() }|nil
 ---@field fetch_pullrequest fun(pr: PullRequestRef, opts: PullsFetchOpts, on_done: fun(pr: PullRequest|nil, err: string|nil)): { cancel: fun() }|nil
+---@field create_pr fun(opts: PullsCreatePROpts, on_done: fun(result: PullsCreatePRResult|nil, err: string|nil)): { cancel: fun() }|nil
+---@field update_title fun(pr: PullRequest, title: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil
+---@field set_draft fun(pr: PullRequest, draft: boolean, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil
+---@field fetch_default_reviewers fun(opts: { repo_slug: string, repo_root: string|nil, head: string, base: string, pr: PullRequest|nil }, on_done: fun(reviewers: PullsCreatePRReviewer[]|nil, err: string|nil)): { cancel: fun() }|nil
 ---@field fetch_description (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(description: string|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field fetch_reviewers (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(reviewers: PullsReviewer[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field update_reviewers fun(pr: PullRequest, reviewers: PullsCreatePRReviewer[], original: PullsCreatePRReviewer[], on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil
 ---@field fetch_merge_checks (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(checks: PullsMergeCheck[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field fetch_diffstat (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(entries: PullsDiffstatEntry[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field fetch_activity (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(entries: PullsActivityEntry[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
@@ -68,16 +72,21 @@
 ---@field edit_comment (fun(pr: PullRequest, comment: PullsComment, on_done: fun(comment: PullsComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field delete_comment (fun(pr: PullRequest, target: PullsComment, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field add_reaction (fun(pr: PullRequest, comment: PullsComment, key: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field set_thread_resolved (fun(pr: PullRequest, root: PullsComment, resolved: boolean, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
 
 ---@class PullsReviewsCapability
+---@field fetch fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(data: PullsReviewData|nil, err: string|nil)): { cancel: fun() }|nil
 ---@field fetch_review_context (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(context: { authors: PullsAuthor[] }|nil, err: string|nil)): { cancel: fun() }|nil)|nil
----@field fetch_comments fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(comments: PullsComment[]|nil, err: string|nil)): { cancel: fun() }|nil
----@field fetch_tasks (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(tasks: PullsComment[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field start_review (fun(pr: PullRequest, review: PullsReview, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field submit_review (fun(pr: PullRequest, review: PullsReview|nil, body: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field approve (fun(pr: PullRequest, review: PullsReview|nil, body: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field request_changes (fun(pr: PullRequest, review: PullsReview|nil, body: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field discard_review (fun(pr: PullRequest, review: PullsReview, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
+
+---@class PullsTasksCapability
 ---@field add_task (fun(pr: PullRequest, content: string, parent: PullsComment|nil, on_done: fun(comment: PullsComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field edit_task (fun(task: PullsComment, on_done: fun(task: PullsComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field delete_task (fun(task: PullsComment, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
----@field set_thread_resolved (fun(pr: PullRequest, root: PullsComment, resolved: boolean, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
----@field submit_review (fun(pr: PullRequest, body: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
 
 ---@class PullsRepositoryCapability
 ---@field fetch_details fun(repo: PullsRepo, opts: PullsFetchOpts, on_done: fun(repo: PullsRepoDetails|nil, err: string|nil)): { cancel: fun() }|nil
@@ -92,14 +101,10 @@
 ---@field fetch_job_log (fun(pr: PullRequest, pipeline: PullsPipeline, job: PullsPipelineJob, on_done: fun(log: string|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field actions PullsPipelineAction[]|nil
 
----@class PullsCreateCapability
----@field create_pr fun(opts: PullsCreatePROpts, on_done: fun(result: PullsCreatePRResult|nil, err: string|nil)): { cancel: fun() }|nil
----@field fetch_default_reviewers (fun(opts: { repo_slug: string, repo_root: string|nil, head: string, base: string }, on_done: fun(reviewers: PullsCreatePRReviewer[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
-
 ---@class PullsActionsCapability
----@field is_available fun(action_id: string, ctx: table): boolean
----@field run fun(action_id: string, ctx: table, on_done: fun(result: PullsActionResult|nil, err: string|nil))
----@field open fun(ctx: { pr: PullRequest|nil, source: "main"|"panel"|"diff"|nil, current_user: PullsUser|nil }, on_done: fun(result: PullsActionResult|nil))
+---@field items AtlasPullAction[]
+---@field is_available fun(action_id: string, ctx: AtlasPullActionContext): boolean
+---@field run fun(action_id: string, ctx: AtlasPullActionContext, on_done: fun(result: PullsActionResult|nil, err: string|nil)): boolean
 
 ---@class PullsUICapability
 ---@field setup fun()|nil
@@ -115,13 +120,13 @@
 ---@field parent PullsComment|nil          -- reply to this comment
 ---@field inline PullsInlineCommentPosition|nil
 ---@field pending boolean|nil              -- add the comment to a pending review
+---@field review PullsReview|nil
 
 ---@class PullsProviderPanel
----@field header_rows (fun(pr: PullRequest): PullsPanelHeaderRow[])|nil
----@field chips (fun(pr: PullRequest): PullsPanelChip[])|nil
+---@field header_rows (fun(pr: PullRequest, loading: boolean): PullsPanelHeaderRow[])|nil
+---@field chips (fun(pr: PullRequest, loading: boolean): PullsPanelChip[])|nil
 ---@field tabs (fun(): PullsPanelTab[])|nil
----@field fetches (fun(pr: PullRequest, refresh: fun(), opts: { force_refresh: boolean|nil }|nil))|nil
----@field is_loading (fun(pr: PullRequest, active_tab: string|nil): boolean)|nil
+---@field fetch_header (fun(pr: PullRequest, opts: { force_refresh: boolean|nil, pr_refreshed: boolean|nil }|nil, on_done: fun()): { cancel: fun() }|nil)|nil
 
 ---@class PullsProviderPanelKeymaps
 ---@field register fun(buf: integer)
@@ -155,8 +160,10 @@
 ---@class PullsPanelTabModule
 ---@field render fun(pr: PullRequest, width: integer): string[], table[], table<integer, table>|nil
 ---@field on_select (fun(pr: PullRequest, repo: PullsRepo|nil, refresh: fun(), opts: { force_refresh: boolean|nil }|nil))|nil
+---@field reset (fun())|nil
 ---@field activate (fun(buf: integer|nil, refresh: fun()|nil))|nil
 ---@field deactivate (fun(buf: integer|nil))|nil
+---@field is_loading (fun(): boolean)|nil
 ---@field is_selectable_line (fun(lnum: integer, entry: table): boolean)|nil
 ---@field on_enter (fun(pr: PullRequest, entry: table): boolean|nil)|nil
 

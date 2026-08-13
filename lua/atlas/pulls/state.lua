@@ -43,20 +43,4 @@ function M.is_pr_reloading(repo_id, pr_id)
 	return (tonumber(M.reloading_pr_keys[key]) or 0) > 0
 end
 
-function M.reset()
-	M.active_view = nil
-	M.current_view = nil
-	M.is_loading = false
-	M.error = nil
-	M.current_user = nil
-	M.pulls = nil
-	M.provider = nil
-	M.latest_request_tokens = {}
-	M.request_seq = 0
-	M.reloading_pr_keys = {}
-	M.reload_spinner_frame = "⠋"
-	M.status_filters = { OPEN = true, MERGED = false, DECLINED = false }
-	M.last_search_query = nil
-end
-
 return M

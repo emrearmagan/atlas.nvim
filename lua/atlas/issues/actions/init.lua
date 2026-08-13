@@ -1,123 +1,97 @@
 local M = {}
 
-local statusline = require("atlas.ui.statusline")
+local utils = require("atlas.issues.actions.utils")
 
----@return IssuesProvider|nil
-local function provider()
-	return require("atlas.issues.state").provider
+---@alias AtlasIssueActionId
+---| "transition"
+---| "assign"
+---| "create_issue"
+---| "search"
+---| "browse_issue"
+---| "copy_issue_key"
+---| "copy_issue_url"
+---| "toggle_subscription"
+
+---@class AtlasIssueActionContext
+---@field provider IssuesProvider
+---@field issue Issue|nil
+---@field current_user IssueUser|nil
+---@field repo_slug string|nil
+---@field project_path string|nil
+
+---@class AtlasIssueAction
+---@field id string
+---@field label string
+---@field hidden boolean|nil
+---@field custom boolean|nil
+---@field is_available (fun(context: AtlasIssueActionContext): boolean, string|nil)|nil
+---@field run fun(context: AtlasIssueActionContext, on_done: fun(result: IssuesActionResult|nil, err: string|nil))
+
+---@param id string
+---@param context AtlasIssueActionContext
+---@return boolean
+function M.is_available(id, context)
+	local actions = context.provider.capabilities.actions
+	return actions ~= nil and actions.is_available(id, context)
 end
 
----@param action_id string
----@param issue Issue|nil
----@param source "main"|"panel"|nil
----@param on_done fun(result: table|nil)|nil
-function M.run_action(action_id, issue, source, on_done)
-	local p = provider()
-	local actions = p and p.capabilities.actions
+---@param id string
+---@param context AtlasIssueActionContext
+---@param on_done fun(result: IssuesActionResult|nil, err: string|nil)|nil
+---@return boolean handled
+function M.run(id, context, on_done)
+	local actions = context.provider.capabilities.actions
 	if not actions then
+		return false
+	end
+	return actions.run(id, context, on_done or function() end)
+end
+
+---@param context AtlasIssueActionContext
+---@param on_done fun(result: IssuesActionResult|nil, err: string|nil)|nil
+function M.open(context, on_done)
+	local actions = context.provider.capabilities.actions
+	local items = {}
+	for _, action in ipairs(actions and actions.items or {}) do
+		if not action.hidden and M.is_available(action.id, context) then
+			table.insert(items, action)
+		end
+	end
+	vim.list_extend(items, utils.custom_actions(context))
+	if #items == 0 then
+		if on_done then
+			on_done(nil, "No actions available")
+		end
 		return
 	end
 
-	actions.run(action_id, { issue = issue, source = source }, function(result, err)
-		if err ~= nil then
-			statusline.notify("error", tostring(err))
+	vim.ui.select(items, {
+		prompt = string.format(
+			"Choose %s action for %s",
+			context.provider.name,
+			tostring(context.issue and context.issue.key or "issue")
+		),
+		kind = "atlas_issue_actions",
+		format_item = function(action)
+			return action.label
+		end,
+	}, function(action)
+		if not action then
 			if on_done then
-				on_done(nil)
+				on_done(nil, nil)
 			end
 			return
 		end
-
-		if result ~= nil and result.message ~= nil and result.message ~= "" then
-			statusline.notify("info", tostring(result.message), 1200)
-		end
-
-		if result ~= nil and result.changed_issue_key ~= nil and result.changed_issue_key ~= "" then
-			require("atlas.issues.ui.main.controller").refresh_issue(result.changed_issue_key)
-		end
-
-		if on_done then
-			on_done(result)
-		end
-	end)
-end
-
----@param issue Issue
----@param source "main"|"panel"|nil
----@param on_done fun(result: table|nil)|nil
-function M.open_actions(issue, source, on_done)
-	local p = provider()
-	local actions = p and p.capabilities.actions
-	if not actions then
-		return
-	end
-
-	actions.open({ issue = issue, source = source }, function(result, err)
-		if err ~= nil then
-			statusline.notify("error", tostring(err))
-			if on_done then
-				on_done(nil)
-			end
+		if action.custom then
+			action.run(context, on_done or function() end)
 			return
 		end
-
-		if result ~= nil and result.changed_issue_key ~= nil and result.changed_issue_key ~= "" then
-			require("atlas.issues.ui.main.controller").refresh_issue(result.changed_issue_key)
-		end
-
-		if result ~= nil and result.message ~= nil and result.message ~= "" then
-			statusline.notify("info", tostring(result.message), 1200)
-		end
-
-		if on_done then
-			on_done(result)
-		end
+		M.run(action.id, context, on_done)
 	end)
 end
 
----@param on_done fun(result: table|nil)|nil
-function M.search(on_done)
-	local p = provider()
-	local search = p and p.capabilities.search
-	if not search then
-		return
-	end
-
-	search(function(result, err)
-		if err ~= nil then
-			statusline.notify("error", tostring(err))
-			if on_done then
-				on_done(nil)
-			end
-			return
-		end
-
-		if result ~= nil and result.message ~= nil and result.message ~= "" then
-			statusline.notify("info", tostring(result.message), 1200)
-		end
-
-		if result ~= nil and result.changed_issue_key ~= nil and result.changed_issue_key ~= "" then
-			require("atlas.issues.ui.main.controller").refresh_issue(result.changed_issue_key)
-		end
-
-		if on_done then
-			on_done(result)
-		end
-	end)
-end
-
----@param issue Issue
-function M.open_in_browser(issue)
-	M.run_action("browse_issue", issue, "main")
-end
-
----@param issue Issue
-function M.copy_key(issue)
-	M.run_action("copy_issue_key", issue, "main")
-end
-
----@param issue Issue
-function M.copy_url(issue)
-	M.run_action("copy_issue_url", issue, "main")
-end
+M.browse_issue = utils.browse_issue
+M.copy_issue_key = utils.copy_issue_key
+M.copy_issue_url = utils.copy_issue_url
 
 return M

@@ -222,12 +222,24 @@
 ---@field task_label string|nil                          -- display name override; defaults to "Task"
 ---@field state "PENDING"|"RESOLVED"|"DELETED"|"OUTDATED"|nil -- primary state; nil = active/open
 ---@field outdated boolean|nil                           -- may coexist with RESOLVED
----@field can_resolve boolean|nil                        -- false when the provider cannot resolve this thread yet
----@field deleted boolean|nil
 ---@field reactions table<string, integer>|nil
 ---@field url string|nil
 ---@field html_url string|nil
 ---@field _raw table|nil
+
+--------------------------------------------------------------------------------
+-- Review
+--------------------------------------------------------------------------------
+
+---@class PullsReview
+---@field id string|nil
+---@field commit_hash string|nil
+---@field pending boolean
+
+---@class PullsReviewData
+---@field review PullsReview
+---@field comments PullsComment[]
+---@field tasks PullsComment[]
 
 --------------------------------------------------------------------------------
 -- Commit

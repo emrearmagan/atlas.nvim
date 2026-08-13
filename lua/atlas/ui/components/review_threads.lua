@@ -6,6 +6,8 @@ local highlights = require("atlas.ui.shared.highlights")
 local icons = require("atlas.ui.shared.icons")
 local utils = require("atlas.ui.shared.utils")
 
+---@alias AtlasReviewThreadAction "add_comment"|"edit"|"delete"|"toggle_task"|"toggle_resolved"
+
 ---@param author { name: string, nickname: string|nil }|nil
 ---@return string
 local function author_name(author)
@@ -65,14 +67,6 @@ function M.status_marker(comment)
 	return "", "AtlasTextMuted"
 end
 
----@param opts AtlasReviewThreadRenderOptions
----@param action AtlasReviewCommentAction
----@param comment PullsComment
----@return boolean
-local function can_action(opts, action, comment)
-	return opts.can_action ~= nil and opts.can_action(action, comment) == true
-end
-
 ---@param comment PullsComment
 ---@param opts AtlasReviewThreadRenderOptions
 ---@param is_root? boolean
@@ -91,25 +85,23 @@ local function comment_item(comment, opts, is_root)
 		local timestamp = utils.relative_time(comment.created_on)
 		local additional = timestamp ~= "" and ("TASK  " .. timestamp) or "TASK"
 		local footer_items = {}
-		if opts.toggle_resolved_key and can_action(opts, "toggle_task", comment) then
+		local edit_key = is_root and opts.action_keys and opts.action_keys.edit
+		if edit_key then
 			table.insert(footer_items, {
-				text = string.format(
-					"%s (%s)",
-					is_resolved and icons.general("refresh") or icons.general("success"),
-					opts.toggle_resolved_key
-				),
+				text = edit_key .. " edit",
 				hl_group = "AtlasTextMuted",
 			})
 		end
-		if can_action(opts, "edit", comment) then
+		local delete_key = is_root and opts.action_keys and opts.action_keys.delete
+		if delete_key then
 			table.insert(footer_items, {
-				text = string.format("%s (e)", icons.general("edit")),
+				text = delete_key .. " delete",
 				hl_group = "AtlasTextMuted",
 			})
 		end
-		if can_action(opts, "delete", comment) then
+		if is_root and opts.toggle_resolved_key then
 			table.insert(footer_items, {
-				text = string.format("%s (d)", icons.general("delete")),
+				text = opts.toggle_resolved_key .. (is_resolved and " reopen" or " complete"),
 				hl_group = "AtlasTextMuted",
 			})
 		end
@@ -153,13 +145,13 @@ local function comment_item(comment, opts, is_root)
 
 	if is_root and opts.action_keys then
 		local actions = {
-			{ name = "reply", label = "reply" },
-			{ name = "edit", label = "edit" },
-			{ name = "delete", label = "delete" },
+			{ key = "reply", label = "reply" },
+			{ key = "edit", label = "edit" },
+			{ key = "delete", label = "delete" },
 		}
 		for _, action in ipairs(actions) do
-			local key = opts.action_keys[action.name]
-			if key and can_action(opts, action.name, comment) then
+			local key = opts.action_keys[action.key]
+			if key then
 				table.insert(footer_items, {
 					text = string.format("%s %s", key, action.label),
 					hl_group = "AtlasTextMuted",
@@ -167,7 +159,7 @@ local function comment_item(comment, opts, is_root)
 			end
 		end
 		local toggle_key = opts.action_keys.toggle_resolved
-		if toggle_key and can_action(opts, "toggle_resolved", comment) then
+		if toggle_key then
 			table.insert(footer_items, {
 				text = string.format("%s %s", toggle_key, is_resolved and "reopen" or "resolve"),
 				hl_group = "AtlasTextMuted",
@@ -403,7 +395,6 @@ end
 
 ---@class AtlasReviewThreadRenderOptions
 ---@field expanded? fun(root: PullsComment): boolean
----@field can_action? fun(action: AtlasReviewCommentAction, comment: PullsComment): boolean
 ---@field action_keys? AtlasReviewThreadActionKeys
 ---@field padding_x? integer
 ---@field toggle_resolved_key? string

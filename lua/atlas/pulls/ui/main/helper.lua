@@ -49,6 +49,21 @@ function M.author_hl(name)
 	return highlights.dynamic_for(lower) or "AtlasTextMuted"
 end
 
+---@param user { name: string?, nickname: string?, username: string? }|nil
+---@return string
+function M.user_handle(user)
+	if user == nil then
+		return "Unknown"
+	end
+	if user.nickname and user.nickname ~= "" then
+		return user.nickname
+	end
+	if user.username and user.username ~= "" then
+		return user.username
+	end
+	return (user.name and user.name ~= "") and user.name or "Unknown"
+end
+
 ---@param repo string|nil
 ---@return string
 function M.repo_hl(repo)
@@ -200,7 +215,7 @@ end
 local function compact_columns()
 	local cols = {
 		{ key = "pr_icon", name = "", min_width = 1, can_grow = false, header_hl = "AtlasColumnHeader" },
-		{ key = "repo_pr", name = "PR", min_width = 42, header_hl = "AtlasColumnHeader" },
+		{ key = "repo_pr", name = "Title", min_width = 42, header_hl = "AtlasColumnHeader" },
 		{
 			key = "conversation",
 			name = icons.general("conversation"),
@@ -233,7 +248,7 @@ function M.build_compact_table(groups)
 		for _, pr in ipairs(group.prs or {}) do
 			local id_str = tostring(pr.id or "")
 			local title = tostring(pr.title or "")
-			local author_name = (pr.author and pr.author.name) and pr.author.name or ""
+			local author_name = M.user_handle(pr.author)
 			local is_reloading = state.is_pr_reloading(pr.repo_full_name, pr.id)
 			local state_str = tostring(pr.state or "")
 			local state_label = state_str ~= ""
@@ -291,7 +306,7 @@ end
 local function plain_columns()
 	return {
 		{ key = "pr_icon", name = "", min_width = 1, can_grow = false, header_hl = "AtlasColumnHeader" },
-		{ key = "name", name = "PR", min_width = 42, header_hl = "AtlasColumnHeader" },
+		{ key = "name", name = "Title", min_width = 42, header_hl = "AtlasColumnHeader" },
 		{
 			key = "conversation",
 			name = icons.general("conversation"),
@@ -350,7 +365,7 @@ function M.build_plain_tree_table(groups)
 		for _, pr in ipairs(group.prs or {}) do
 			local id_str = tostring(pr.id or "")
 			local title = tostring(pr.title or "")
-			local author_name = (pr.author and pr.author.name) and pr.author.name or ""
+			local author_name = M.user_handle(pr.author)
 			local icon = pr_icon_or_spinner(pr)
 			local _, icon_hl = pr_icon_and_hl(pr)
 			local is_reloading = state.is_pr_reloading(pr.repo_full_name, pr.id)

@@ -258,27 +258,6 @@ function M.fetch_activity(issue, opts, on_done)
 	end, { force_load = opts and opts.force_load == true or false })
 end
 
----@param on_done fun(result: table|nil, err: string|nil)|nil
-local function search(on_done)
-	require("atlas.issues.providers.github.actions").run(
-		"search",
-		{ issue = nil, source = "main" },
-		function(result, err)
-			if on_done then
-				on_done(result, err)
-			end
-		end
-	)
-end
-
-local function create_issue()
-	require("atlas.issues.create").from_repository(
-		"github",
-		require("atlas.issues.create.github.issue").open,
-		"repo_slug"
-	)
-end
-
 ---@param opts { force_load: boolean|nil }|nil
 ---@param on_done fun(notifications: AtlasNotification[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
@@ -427,8 +406,6 @@ return {
 			mark_read = M.mark_notification_read,
 			mark_done = M.mark_notification_done,
 		},
-		search = search,
-		create_issue = create_issue,
 		actions = require("atlas.issues.providers.github.actions"),
 		ui = {
 			setup = require("atlas.issues.providers.github.highlights").setup,

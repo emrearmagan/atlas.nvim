@@ -84,11 +84,6 @@ function M.set_memory_cache(key, value, ttl)
 	memory_cache.set(key, value, ttl or M.cache_ttl())
 end
 
----@param key string
-function M.delete_memory_cache(key)
-	memory_cache.delete(key)
-end
-
 ---@param method string
 ---@param endpoint string
 ---@param data table|nil

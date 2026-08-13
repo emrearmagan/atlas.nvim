@@ -245,6 +245,44 @@ function M.update_title(pr, title, on_done)
 	})
 end
 
+---@param pr PullRequest
+---@param draft boolean
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.set_draft(pr, draft, on_done)
+	local repo_slug = pr.repo_full_name or ""
+	if repo_slug == "" then
+		vim.schedule(function()
+			on_done(false, "Missing repo")
+		end)
+		return nil
+	end
+
+	local args = {
+		"pr",
+		"ready",
+		tostring(pr.id),
+		"--repo",
+		repo_slug,
+	}
+	if draft then
+		table.insert(args, "--undo")
+	end
+
+	return cli.gh(args, function(_, err)
+		if err then
+			on_done(false, err)
+			return
+		end
+		memory_cache.delete(string.format("github:pr:%s:%s", repo_slug, tostring(pr.id)))
+		on_done(true, nil)
+	end, {
+		action = draft and "Convert PR to draft" or "Mark PR ready for review",
+		repo = repo_slug,
+		number = pr.id,
+	})
+end
+
 ---@return { login: string, state: "APPROVED"|"CHANGES_REQUESTED"|"COMMENTED"|"DISMISSED" }[], string[]
 local function parse_reviews(result)
 	local latest = {}
@@ -328,10 +366,18 @@ function M.get_reviewers(pr, opts, on_done)
 			elseif r.state == "CHANGES_REQUESTED" then
 				decision = "changes_requested"
 			end
-			table.insert(reviewers, { name = r.login, nickname = r.login, decision = decision })
+			table.insert(reviewers, {
+				name = r.login,
+				nickname = r.login,
+				decision = decision,
+			})
 		end
 		for _, login in ipairs(pending) do
-			table.insert(reviewers, { name = login, nickname = login, decision = "pending" })
+			table.insert(reviewers, {
+				name = login,
+				nickname = login,
+				decision = "pending",
+			})
 		end
 
 		cli.set_mem(cache_key, reviewers)
@@ -343,162 +389,137 @@ function M.get_reviewers(pr, opts, on_done)
 	})
 end
 
----@param raw table|nil
----@return PullsAuthor|nil
-local function review_author(raw)
-	if type(raw) ~= "table" then
-		return nil
-	end
-	local login = tostring(raw.login or "")
-	if login == "" then
-		return nil
-	end
-	return {
-		id = tostring(raw.id or login),
-		name = tostring(raw.name or login),
-		username = login,
-		nickname = login,
-	}
-end
-
----@param pr PullRequest
----@param opts { force_refresh: boolean|nil }|nil
----@param on_done fun(context: { authors: PullsAuthor[] }|nil, err: string|nil)
+---@param opts { repo_slug: string, repo_root: string|nil, head: string, base: string, pr: PullRequest|nil }
+---@param on_done fun(reviewers: PullsCreatePRReviewer[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.get_review_context(pr, opts, on_done)
-	local repo_slug = pr.repo_full_name or ""
-	if repo_slug == "" then
+function M.fetch_default_reviewers(opts, on_done)
+	local slug = tostring(opts.repo_slug or "")
+	if slug == "" then
 		vim.schedule(function()
-			on_done(nil, "Missing repo")
+			on_done(nil, "Missing repo slug")
 		end)
 		return nil
 	end
 
-	local cache_key = string.format("github:review-context:%s:%s", repo_slug, tostring(pr.id))
-	opts = opts or {}
-	if not opts.force_refresh then
-		local cached, ok = cli.get_mem(cache_key)
-		if ok then
-			on_done(cached, nil)
-			return nil
-		end
-	end
-
-	return cli.gh({
-		"pr",
-		"view",
-		tostring(pr.id),
-		"--repo",
-		repo_slug,
-		"--json",
-		"assignees,reviews,reviewRequests",
-	}, function(result, err)
-		if err or type(result) ~= "table" then
-			on_done(nil, err or "Failed to fetch review context")
-			return
-		end
-
-		local authors = {}
-		local seen = {}
-		---@param author PullsAuthor|nil
-		local function add(author)
-			if author == nil then
+	return cli.gh(
+		{ "api", "--paginate", string.format("repos/%s/collaborators?per_page=100", slug) },
+		function(result, err)
+			if err then
+				on_done(nil, err)
 				return
 			end
-			local key = tostring(author.username or author.nickname or author.name or ""):lower()
-			if key == "" or seen[key] then
+
+			local reviewers = {}
+			local by_login = {}
+			for _, raw in ipairs(type(result) == "table" and result or {}) do
+				local login = type(raw) == "table" and tostring(raw.login or "") or ""
+				if login ~= "" then
+					local reviewer = {
+						label = "@" .. login,
+						provider_id = login,
+						selected = false,
+						default = false,
+					}
+					by_login[login] = reviewer
+					table.insert(reviewers, reviewer)
+				end
+			end
+
+			if not opts.pr then
+				on_done(reviewers, nil)
 				return
 			end
-			seen[key] = true
-			table.insert(authors, author)
+			M.get_reviewers(opts.pr, { force_refresh = true }, function(current, current_err)
+				if current_err then
+					on_done(nil, current_err)
+					return
+				end
+				for _, item in ipairs(current or {}) do
+					local login = item.nickname or item.name
+					local reviewer = by_login[login]
+					if reviewer then
+						reviewer.selected = true
+					else
+						table.insert(reviewers, {
+							label = "@" .. login,
+							provider_id = login,
+							selected = true,
+						})
+					end
+				end
+				on_done(reviewers, nil)
+			end)
 		end
-
-		add(pr.author)
-		for _, raw in ipairs(result.assignees or {}) do
-			add(review_author(raw))
-		end
-		for _, raw in ipairs(result.reviews or {}) do
-			add(review_author(type(raw) == "table" and raw.author or nil))
-		end
-		for _, raw in ipairs(result.reviewRequests or {}) do
-			local requested = type(raw) == "table" and (raw.requestedReviewer or raw) or nil
-			add(review_author(requested))
-		end
-
-		local context = { authors = authors }
-		cli.set_mem(cache_key, context)
-		on_done(context, nil)
-	end, {
-		action = "Fetch PR review context",
-		repo = repo_slug,
-		number = pr.id,
-	})
+	)
 end
 
 ---@param pr PullRequest
----@param opts { force_refresh: boolean|nil }|nil
----@param on_done fun(entries: PullsDiffstatEntry[]|nil, err: string|nil)
+---@param selected PullsCreatePRReviewer[]
+---@param original PullsCreatePRReviewer[]
+---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.get_diffstat(pr, opts, on_done)
+function M.update_reviewers(pr, selected, original, on_done)
 	local repo_slug = pr.repo_full_name or ""
 	if repo_slug == "" then
 		vim.schedule(function()
-			on_done(nil, "Missing repo")
+			on_done(false, "Missing repo")
 		end)
 		return nil
 	end
 
-	local cache_key = string.format("github:diffstat:%s:%s", repo_slug, tostring(pr.id))
-	opts = opts or {}
+	local selected_set = {}
+	for _, reviewer in ipairs(selected) do
+		selected_set[reviewer.provider_id] = true
+	end
 
-	if not opts.force_refresh then
-		local cached, ok = cli.get_mem(cache_key)
-		if ok then
-			on_done(cached, nil)
-			return nil
+	local original_set = {}
+	for _, reviewer in ipairs(original) do
+		original_set[reviewer.provider_id] = true
+	end
+
+	local added = {}
+	for _, reviewer in ipairs(selected) do
+		if not original_set[reviewer.provider_id] then
+			table.insert(added, reviewer.provider_id)
 		end
 	end
 
-	return cli.gh({
-		"pr",
-		"view",
-		tostring(pr.id),
-		"--repo",
-		repo_slug,
-		"--json",
-		"files",
-	}, function(result, err)
-		if err or type(result) ~= "table" then
-			on_done(nil, err or "Failed to fetch files")
+	local removed = {}
+	for _, reviewer in ipairs(original) do
+		if not selected_set[reviewer.provider_id] then
+			table.insert(removed, reviewer.provider_id)
+		end
+	end
+
+	if #added == 0 and #removed == 0 then
+		on_done(true, nil)
+		return nil
+	end
+
+	local args = { "pr", "edit", tostring(pr.id), "--repo", repo_slug }
+	for _, login in ipairs(added) do
+		table.insert(args, "--add-reviewer")
+		table.insert(args, login)
+	end
+	for _, login in ipairs(removed) do
+		table.insert(args, "--remove-reviewer")
+		table.insert(args, login)
+	end
+
+	return cli.gh(args, function(_, err)
+		if err then
+			on_done(false, err)
 			return
 		end
-
-		local entries = {}
-		for _, file in ipairs(result.files or {}) do
-			local additions = tonumber(file.additions) or 0
-			local deletions = tonumber(file.deletions) or 0
-			local status = "modified"
-			if additions > 0 and deletions == 0 then
-				status = "added"
-			elseif additions == 0 and deletions > 0 then
-				status = "removed"
-			end
-
-			table.insert(entries, {
-				status = status,
-				path = tostring(file.path or ""),
-				old_path = nil,
-				lines_added = additions,
-				lines_removed = deletions,
-			})
-		end
-
-		cli.set_mem(cache_key, entries)
-		on_done(entries, nil)
+		memory_cache.delete(string.format("github:reviewers:%s:%s", repo_slug, tostring(pr.id)))
+		memory_cache.delete(string.format("github:review-context:%s:%s", repo_slug, tostring(pr.id)))
+		on_done(true, nil)
 	end, {
-		action = "Fetch PR diffstat",
+		action = "Update PR reviewers",
 		repo = repo_slug,
 		number = pr.id,
+		added = #added,
+		removed = #removed,
 	})
 end
 

@@ -118,20 +118,6 @@ function M.to_issue(raw, fallback_slug)
 	return issue
 end
 
----@param raw_list table[]|nil
----@param fallback_slug string|nil
----@return Issue[]
-function M.to_issues_list(raw_list, fallback_slug)
-	local out = {}
-	for _, raw in ipairs(raw_list or {}) do
-		local issue = M.to_issue(raw, fallback_slug)
-		if issue ~= nil then
-			table.insert(out, issue)
-		end
-	end
-	return out
-end
-
 ---@param nodes table[]|nil
 ---@return Issue[]
 function M.to_search_results(nodes)
@@ -205,19 +191,6 @@ end
 ---@return IssueComment|nil
 function M.to_comment(raw)
 	return to_comment(raw, type(raw) == "table" and raw.user or nil)
-end
-
----@param raw_list table[]|nil
----@return IssueComment[]
-function M.to_comments_list(raw_list)
-	local out = {}
-	for _, raw in ipairs(raw_list or {}) do
-		local c = M.to_comment(raw)
-		if c ~= nil then
-			table.insert(out, c)
-		end
-	end
-	return out
 end
 
 ---@param hex string|nil

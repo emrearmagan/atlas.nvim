@@ -44,11 +44,6 @@ function M.build_headers(user, token, has_body)
 	}
 end
 
----@return string
-function M.base_url()
-	return API_BASE
-end
-
 ---@param endpoint string
 ---@return string
 function M.url(endpoint)
@@ -87,11 +82,6 @@ end
 ---@param ttl number|nil
 function M.set_cache(key, value, ttl)
 	memory_cache.set(key, value, ttl or M.cache_ttl())
-end
-
----@param key string
-function M.delete_cache(key)
-	memory_cache.delete(key)
 end
 
 ---@param result any

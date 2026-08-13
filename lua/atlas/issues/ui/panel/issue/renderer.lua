@@ -55,8 +55,8 @@ function M.render(tab_items, get_tab_module)
 		local state = require("atlas.issues.state")
 		local provider = state.provider
 		local panel = provider and provider.capabilities.ui and provider.capabilities.ui.panel
-		local extra_rows = panel and panel.header_rows and panel.header_rows(issue) or nil
-		local extra_chips = panel and panel.chips and panel.chips(issue) or nil
+		local extra_rows = panel and panel.header_rows and panel.header_rows(issue, panel_state.header_loading) or nil
+		local extra_chips = panel and panel.chips and panel.chips(issue, panel_state.header_loading) or nil
 
 		-- Header
 		local h_lines, h_spans = header.render(issue, width, extra_rows)

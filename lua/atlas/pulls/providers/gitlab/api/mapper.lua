@@ -261,7 +261,6 @@ function M.to_comment(note, discussion_first_id, discussion_id, resolved)
 		is_task = nil,
 		state = state,
 		outdated = outdated,
-		can_resolve = note.resolvable,
 		reactions = reaction_counts(note.award_emoji),
 		html_url = json.safe_str(note.web_url),
 		_raw = raw_with_discussion,

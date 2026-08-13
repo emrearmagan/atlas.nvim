@@ -160,7 +160,7 @@ end
 local function compact_columns()
 	return {
 		{ key = "pr_icon", name = "", min_width = 1, can_grow = false, header_hl = "AtlasColumnHeader" },
-		{ key = "repo_pr", name = "PR", min_width = 42, header_hl = "AtlasColumnHeader" },
+		{ key = "repo_pr", name = "Title", min_width = 42, header_hl = "AtlasColumnHeader" },
 		{
 			key = "conversation",
 			name = icons.general("conversation"),
@@ -204,7 +204,7 @@ local function compact_rows(groups)
 		for _, pr in ipairs(group.prs or {}) do
 			local id_str = tostring(pr.id or "")
 			local title = tostring(pr.title or "")
-			local author_name = (pr.author and pr.author.name) and pr.author.name or ""
+			local author_name = helper.user_handle(pr.author)
 			local is_reloading = state.is_pr_reloading(pr.repo_full_name, pr.id)
 			local ci, ci_h = ci_icon_and_hl(pr)
 			local review, review_h = review_icon_and_hl(pr)
@@ -259,7 +259,7 @@ end
 local function plain_columns()
 	return {
 		{ key = "pr_icon", name = "", min_width = 1, can_grow = false, header_hl = "AtlasColumnHeader" },
-		{ key = "name", name = "PR", min_width = 42, header_hl = "AtlasColumnHeader" },
+		{ key = "name", name = "Title", min_width = 42, header_hl = "AtlasColumnHeader" },
 		{
 			key = "conversation",
 			name = icons.general("conversation"),
@@ -338,7 +338,7 @@ local function plain_rows(groups)
 		for _, pr in ipairs(group.prs or {}) do
 			local id_str = tostring(pr.id or "")
 			local title = tostring(pr.title or "")
-			local author_name = (pr.author and pr.author.name) and pr.author.name or ""
+			local author_name = helper.user_handle(pr.author)
 			local icon = pr_icon_or_spinner(pr)
 			local _, icon_hl = pr_icon_and_hl(pr)
 			local ci, ci_h = ci_icon_and_hl(pr)

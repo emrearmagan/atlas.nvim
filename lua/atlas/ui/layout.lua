@@ -45,7 +45,7 @@ local function apply_main_opts(win)
 	set_window_option(win, "scrollbind", false)
 	set_window_option(win, "cursorbind", false)
 	set_window_option(win, "diff", false)
-	set_window_option(win, "winbar", " ")
+	set_window_option(win, "winbar", "")
 	statusline.attach(win)
 	set_window_option(
 		win,

@@ -6,6 +6,7 @@ local state = require("atlas.pulls.state")
 local layout = require("atlas.ui.layout")
 local helper = require("atlas.pulls.ui.main.helper")
 local navigation = require("atlas.ui.navigation")
+local info_popup = require("atlas.ui.popups.info")
 
 local active_pullrequests_handle = nil
 local active_pr_reload_handles = {}
@@ -261,6 +262,15 @@ end
 function M.refresh_current_view(on_done)
 	load_active_view({ force_load = true }, function()
 		navigation.focus_first_item()
+		local item = navigation.current_item()
+		local panel = require("atlas.pulls.ui.panel")
+		if
+			require("atlas.pulls.ui.panel.state").current_panel == "pr"
+			and panel.is_open()
+			and (type(item) ~= "table" or item.kind ~= "pr")
+		then
+			panel.close()
+		end
 		if on_done ~= nil then
 			on_done()
 		end
@@ -288,24 +298,13 @@ function M.refresh_pr(pr, on_done)
 
 	local pr_id = pr.id
 	local repo_id = tostring(pr.repo_full_name or "")
+	if state.is_pr_reloading(repo_id, pr_id) then
+		on_done()
+		return
+	end
 
 	statusline.notify("loading", string.format("Reloading PR #%s...", tostring(pr_id)))
 	begin_pr_reload(repo_id, pr_id)
-
-	local panel = require("atlas.pulls.ui.panel")
-	if panel.is_open() then
-		local root_panel_state = require("atlas.pulls.ui.panel.state")
-		local selected_repo = nil
-		local current_item = navigation.current_item()
-		if type(current_item) == "table" and type(current_item.repo) == "table" then
-			selected_repo = current_item.repo
-		end
-		if root_panel_state.current_panel == "repo" then
-			panel.on_select(pr, selected_repo, { force_refresh = true })
-		else
-			panel.on_select(pr, nil, { force_refresh = true })
-		end
-	end
 
 	local reload_handle = nil
 	reload_handle = core.fetch_pullrequest(pr, { force_load = true }, function(fetched_pr, err)
@@ -343,14 +342,55 @@ function M.refresh_pr(pr, on_done)
 		state.pulls = groups
 		end_pr_reload(repo_id, pr_id)
 
-		if panel.is_open() then
-			panel.on_select(fetched_pr, nil)
+		local pr_panel_state = require("atlas.pulls.ui.panel.pr.state")
+		local panel_pr = pr_panel_state.current_pr
+		local panel = require("atlas.pulls.ui.panel.pr")
+		if
+			panel.is_open()
+			and panel_pr ~= nil
+			and tostring(panel_pr.id) == tostring(pr_id)
+			and tostring(panel_pr.repo_full_name) == repo_id
+		then
+			panel.on_select(fetched_pr, pr_panel_state.current_repo, {
+				force_refresh = true,
+				pr_refreshed = true,
+			})
 		end
 
 		statusline.notify("success", string.format("Reloaded PR #%s", tostring(pr_id)), 1200)
 		on_done()
 	end)
 	table.insert(active_pr_reload_handles, reload_handle)
+end
+
+---@param source_buf integer|nil
+function M.show_pr_details(source_buf)
+	local node = navigation.current_item()
+	if type(node) ~= "table" or (node.kind ~= "pr" and node.kind ~= "pr_meta") then
+		statusline.notify("warn", "No PR selected")
+		return
+	end
+
+	local pr = node.pr
+	if type(pr) ~= "table" then
+		statusline.notify("warn", "No PR selected")
+		return
+	end
+
+	local lines, highlights = require("atlas.pulls.ui.popup").content(pr)
+	info_popup.show({
+		lines = lines,
+		highlights = highlights,
+		source_buf = source_buf,
+	})
+end
+
+---@param pr PullRequest|nil
+---@param result PullsActionResult|nil
+function M.apply_action_result(pr, result)
+	if pr ~= nil and result ~= nil and result.changed_pr then
+		M.refresh_pr(pr)
+	end
 end
 
 ---@param view AtlasPullsViewConfig

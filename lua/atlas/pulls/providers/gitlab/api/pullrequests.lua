@@ -2,6 +2,7 @@ local M = {}
 
 local service = require("atlas.providers.gitlab.client").pulls
 local mapper = require("atlas.pulls.providers.gitlab.api.mapper")
+local reviews_api = require("atlas.pulls.providers.gitlab.api.reviews")
 
 ---@param params table<string, any>
 ---@return string
@@ -22,7 +23,7 @@ end
 ---@param opts { force_load?: boolean, pagelen?: number, state?: "opened"|"closed"|"merged"|"all" }|nil
 ---@param on_done fun(groups: PullsGroup[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.list_mrs(view, opts, on_done)
+function M.fetch_pullrequests(view, opts, on_done)
 	opts = opts or {}
 	local per_page = math.max(1, math.min(100, tonumber(opts.pagelen) or 100))
 	local project = view.project ~= nil and tostring(view.project) ~= "" and view.project or nil
@@ -98,7 +99,7 @@ end
 ---@param opts { force_refresh?: boolean }|nil
 ---@param on_done fun(by_name: table<string, { color: string|nil, text_color: string|nil }>|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.get_project_labels(project_path, opts, on_done)
+function M.fetch_project_labels(project_path, opts, on_done)
 	opts = opts or {}
 	if project_path == nil or project_path == "" then
 		on_done(nil, "Missing project_path")
@@ -142,7 +143,7 @@ end
 ---@param opts { force_load?: boolean, force_refresh?: boolean }|nil
 ---@param on_done fun(pr: PullRequest|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.get_mr(pr, opts, on_done)
+function M.fetch_pullrequest(pr, opts, on_done)
 	opts = opts or {}
 	local path = pr.repo_full_name
 	local iid = tonumber(pr.id)
@@ -179,55 +180,10 @@ function M.get_mr(pr, opts, on_done)
 end
 
 ---@param pr PullRequest
----@param _opts { force_refresh: boolean|nil }|nil
----@param on_done fun(context: { authors: PullsAuthor[] }|nil, err: string|nil)
----@return nil
-function M.get_review_context(pr, _opts, on_done)
-	local authors = {}
-	local seen = {}
-	---@param author PullsAuthor|nil
-	local function add(author)
-		if author == nil then
-			return
-		end
-		local key = tostring(author.id or "")
-		if key == "" then
-			key = tostring(author.username or author.nickname or author.name or "")
-		end
-		if key == "" or seen[key] then
-			return
-		end
-		seen[key] = true
-		table.insert(authors, author)
-	end
-
-	add(pr.author)
-	local raw = pr._raw
-	for _, list in ipairs({ raw.assignees or {}, raw.reviewers or {} }) do
-		for _, user in ipairs(list) do
-			if type(user) == "table" then
-				local username = tostring(user.username or "")
-				local name = tostring(user.name or username)
-				local id = tostring(user.id or "")
-				if id ~= "" or username ~= "" or name ~= "" then
-					add({
-						id = id,
-						name = name,
-						username = username,
-						nickname = username ~= "" and username or nil,
-					})
-				end
-			end
-		end
-	end
-	on_done({ authors = authors }, nil)
-end
-
----@param pr PullRequest
 ---@param opts { force_refresh?: boolean }|nil
 ---@param on_done fun(description: string|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.get_description(pr, opts, on_done)
+function M.fetch_description(pr, opts, on_done)
 	opts = opts or {}
 	if opts.force_refresh ~= true and pr.description ~= nil then
 		vim.schedule(function()
@@ -236,7 +192,7 @@ function M.get_description(pr, opts, on_done)
 		return nil
 	end
 
-	return M.get_mr(pr, opts, function(mr, err)
+	return M.fetch_pullrequest(pr, opts, function(mr, err)
 		if err or mr == nil then
 			on_done(nil, err)
 			return
@@ -264,7 +220,7 @@ end
 ---@param payload table
 ---@param on_done fun(pr: PullRequest|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.update_mr(pr, payload, on_done)
+function M.update(pr, payload, on_done)
 	local path, iid = project_iid(pr)
 	if path == "" or iid == nil then
 		on_done(nil, "Invalid MR identifier")
@@ -290,7 +246,7 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.set_state(pr, state_event, on_done)
-	return M.update_mr(pr, { state_event = state_event }, function(_, err)
+	return M.update(pr, { state_event = state_event }, function(_, err)
 		if err then
 			on_done(false, err)
 			return
@@ -303,8 +259,8 @@ end
 ---@param title string
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.set_title(pr, title, on_done)
-	return M.update_mr(pr, { title = title }, function(_, err)
+function M.update_title(pr, title, on_done)
+	return M.update(pr, { title = title }, function(_, err)
 		if err then
 			on_done(false, err)
 			return
@@ -314,126 +270,107 @@ function M.set_title(pr, title, on_done)
 end
 
 ---@param pr PullRequest
----@param ids integer[]
+---@param draft boolean
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.set_reviewer_ids(pr, ids, on_done)
-	-- GitLab requires non-empty array; pass {0} to clear.
-	local body = { reviewer_ids = (#ids == 0) and { 0 } or ids }
-	return M.update_mr(pr, body, function(_, err)
-		if err then
-			on_done(false, err)
-			return
-		end
-		on_done(true, nil)
-	end)
-end
-
----@param pr PullRequest
----@param ids integer[]
----@param on_done fun(ok: boolean, err: string|nil)
----@return { cancel: fun() }|nil
-function M.set_assignee_ids(pr, ids, on_done)
-	local body = { assignee_ids = (#ids == 0) and { 0 } or ids }
-	return M.update_mr(pr, body, function(_, err)
-		if err then
-			on_done(false, err)
-			return
-		end
-		on_done(true, nil)
-	end)
-end
-
----@param pr PullRequest
----@param on_done fun(state: {user_has_approved: boolean, approved_by: string[]}|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.get_approvals(pr, on_done)
-	local path, iid = project_iid(pr)
-	if path == "" or iid == nil then
-		on_done(nil, "Invalid MR identifier")
+function M.set_draft(pr, draft, on_done)
+	local title = tostring(pr.title or ""):gsub("^%s*[Dd]raft:%s*", ""):gsub("^%s*WIP:%s*", "")
+	if title == "" then
+		on_done(false, "MR title is empty after stripping draft prefix")
 		return nil
 	end
-	local endpoint = string.format("/projects/%s/merge_requests/%d/approvals", service.url_encode(path), iid)
+	if draft then
+		title = "Draft: " .. title
+	end
 
-	return service.request("GET", endpoint, nil, function(result, err)
-		if err or type(result) ~= "table" then
-			on_done(nil, err or "Failed to fetch approval state")
+	return M.update(pr, { title = title }, function(updated, err)
+		if err then
+			on_done(false, err)
 			return
 		end
-		local approved_by = {}
-		for _, entry in ipairs(result.approved_by or {}) do
-			local user = type(entry) == "table" and (entry.user or entry) or nil
-			local login = type(user) == "table" and tostring(user.username or "") or ""
-			if login ~= "" then
-				table.insert(approved_by, login)
-			end
-		end
-		on_done({ user_has_approved = result.user_has_approved == true, approved_by = approved_by }, nil)
+		pr.title = updated and updated.title or title
+		pr.state = updated and updated.state or (draft and "draft" or "open")
+		pr._raw.draft = draft
+		on_done(true, nil)
 	end)
 end
 
----@param pr PullRequest
----@param on_done fun(approved: boolean|nil, err: string|nil)
+---@param opts { repo_slug: string, repo_root: string|nil, head: string, base: string, pr: PullRequest|nil }
+---@param on_done fun(reviewers: PullsCreatePRReviewer[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.get_approval_state(pr, on_done)
-	return M.get_approvals(pr, function(state, err)
-		if err or state == nil then
+function M.fetch_default_reviewers(opts, on_done)
+	local slug = tostring(opts.repo_slug or "")
+	if slug == "" then
+		vim.schedule(function()
+			on_done(nil, "Missing project slug")
+		end)
+		return nil
+	end
+
+	local endpoint = string.format("/projects/%s/members/all?per_page=100", service.url_encode(slug))
+	return service.request("GET", endpoint, nil, function(result, err)
+		if err then
 			on_done(nil, err)
 			return
 		end
-		on_done(state.user_has_approved, nil)
+
+		local selected = {}
+		for _, reviewer in ipairs((opts.pr and opts.pr._raw.reviewers) or {}) do
+			selected[tostring(reviewer.id or "")] = true
+		end
+
+		local reviewers = {}
+		for _, raw in ipairs(type(result) == "table" and result or {}) do
+			local login = type(raw) == "table" and tostring(raw.username or "") or ""
+			local id = type(raw) == "table" and tonumber(raw.id) or nil
+			if login ~= "" and id then
+				table.insert(reviewers, {
+					label = "@" .. login,
+					provider_id = tostring(id),
+					selected = selected[tostring(id)] == true,
+					default = false,
+				})
+			end
+		end
+		on_done(reviewers, nil)
 	end)
 end
 
-function M.approve(pr, on_done)
-	local path, iid = project_iid(pr)
-	if path == "" or iid == nil then
-		on_done(false, "Invalid MR identifier")
-		return nil
+---@param pr PullRequest
+---@param reviewers PullsCreatePRReviewer[]
+---@param _original_reviewers PullsCreatePRReviewer[]
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.update_reviewers(pr, reviewers, _original_reviewers, on_done)
+	local ids = {}
+	for _, reviewer in ipairs(reviewers) do
+		local id = tonumber(reviewer.provider_id)
+		if id then
+			table.insert(ids, id)
+		end
 	end
-	local endpoint = string.format("/projects/%s/merge_requests/%d/approve", service.url_encode(path), iid)
-	return service.request("POST", endpoint, nil, function(_, err)
+	-- GitLab requires non-empty array; pass {0} to clear.
+	local body = { reviewer_ids = (#ids == 0) and { 0 } or ids }
+	return M.update(pr, body, function(_, err)
 		if err then
 			on_done(false, err)
 			return
 		end
-		bust_caches(pr)
 		on_done(true, nil)
 	end)
 end
 
 ---@param pr PullRequest
----@param body string
+---@param ids integer[]
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.submit_review(pr, body, on_done)
-	return require("atlas.pulls.providers.gitlab.api.comments").publish_review(pr, nil, body, on_done)
-end
-
----@param pr PullRequest
----@param body string
----@param on_done fun(ok: boolean, err: string|nil)
----@return { cancel: fun() }|nil
-function M.request_changes(pr, body, on_done)
-	return require("atlas.pulls.providers.gitlab.api.comments").publish_review(pr, "requested_changes", body, on_done)
-end
-
----@param pr PullRequest
----@param on_done fun(ok: boolean, err: string|nil)
----@return { cancel: fun() }|nil
-function M.unapprove(pr, on_done)
-	local path, iid = project_iid(pr)
-	if path == "" or iid == nil then
-		on_done(false, "Invalid MR identifier")
-		return nil
-	end
-	local endpoint = string.format("/projects/%s/merge_requests/%d/unapprove", service.url_encode(path), iid)
-	return service.request("POST", endpoint, nil, function(_, err)
+function M.update_assignees(pr, ids, on_done)
+	local body = { assignee_ids = (#ids == 0) and { 0 } or ids }
+	return M.update(pr, body, function(_, err)
 		if err then
 			on_done(false, err)
 			return
 		end
-		bust_caches(pr)
 		on_done(true, nil)
 	end)
 end
@@ -503,7 +440,7 @@ end
 ---@param opts GitLabCreateMrOpts
 ---@param on_done fun(result: GitLabCreateMrResult|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.create_mr(opts, on_done)
+function M.create(opts, on_done)
 	if type(opts) ~= "table" then
 		on_done(nil, "Missing options")
 		return nil
@@ -589,55 +526,14 @@ end
 
 ---@param pr PullRequest
 ---@param opts { force_refresh?: boolean }|nil
----@param on_done fun(by_username: table<string, string>|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.get_reviewer_states(pr, opts, on_done)
-	opts = opts or {}
-	local path = pr.repo_full_name
-	local iid = tonumber(pr.id)
-	if path == "" or iid == nil then
-		on_done(nil, "Invalid MR identifier")
-		return nil
-	end
-
-	local cache_key = string.format("gitlab_pulls:reviewer_states:%s!%d", path, iid)
-	if opts.force_refresh ~= true then
-		local cached, ok = service.get_memory_cache(cache_key)
-		if ok then
-			on_done(cached, nil)
-			return nil
-		end
-	end
-
-	local endpoint = string.format("/projects/%s/merge_requests/%d/reviewers", service.url_encode(path), iid)
-	return service.request("GET", endpoint, nil, function(result, err)
-		if err then
-			on_done(nil, err)
-			return
-		end
-
-		local by_username = {}
-		for _, item in ipairs(type(result) == "table" and result or {}) do
-			local user = type(item) == "table" and type(item.user) == "table" and item.user or nil
-			if user and type(user.username) == "string" and type(item.state) == "string" then
-				by_username[user.username] = item.state
-			end
-		end
-		service.set_memory_cache(cache_key, by_username)
-		on_done(by_username, nil)
-	end)
-end
-
----@param pr PullRequest
----@param opts { force_refresh?: boolean }|nil
 ---@param on_done fun(reviewers: PullsReviewer[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.get_reviewers(pr, opts, on_done)
+function M.fetch_reviewers(pr, opts, on_done)
 	opts = opts or {}
 
 	---@param raw table
 	local function build(raw)
-		M.get_reviewer_states(pr, opts, function(states, _)
+		reviews_api.fetch_reviewer_states(pr, opts, function(states, _)
 			states = states or {}
 			local reviewers = {}
 			for _, r in ipairs(raw.reviewers or {}) do
@@ -650,7 +546,7 @@ function M.get_reviewers(pr, opts, on_done)
 						decision = "changes_requested"
 					end
 					table.insert(reviewers, {
-						name = r.username,
+						name = (type(r.name) == "string" and r.name ~= "") and r.name or r.username,
 						nickname = r.username,
 						decision = decision,
 					})
@@ -668,7 +564,7 @@ function M.get_reviewers(pr, opts, on_done)
 		return nil
 	end
 
-	return M.get_mr(pr, opts, function(mr, err)
+	return M.fetch_pullrequest(pr, opts, function(mr, err)
 		if err or mr == nil then
 			on_done(nil, err)
 			return

@@ -120,18 +120,6 @@ function M.pulls_status(status)
 	return get(ICONS.pulls.status[status])
 end
 
----@param provider_id AtlasPullsProviderId
----@param name string
----@return string, string
-function M.pulls_provider(provider_id, name)
-	local domain = providers.domain(provider_id, "pulls")
-	local style = nil
-	if name == "provider" and domain then
-		style = domain.icon
-	end
-	return get(style, ICONS.pulls[name] or ICONS.general[name])
-end
-
 -- Issues
 
 ---@param name string
