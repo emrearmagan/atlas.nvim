@@ -86,6 +86,15 @@ function M.custom_actions(context)
 	return actions
 end
 
+---@return { method: "merge"|"squash", delete_branch: boolean }
+function M.merge_options()
+	local config = require("atlas.config").options.pulls or {}
+	return {
+		method = config.default_merge_method or "merge",
+		delete_branch = config.default_delete_branch == true,
+	}
+end
+
 M.copy_id = {
 	id = "copy_id",
 	label = "Copy ID",

@@ -7,23 +7,23 @@ local providers = require("atlas.providers")
 ---@param opts AtlasConfig|nil
 function M.setup(opts)
 	require("atlas.config").setup(opts)
+	require("atlas.commands").setup()
 	require("atlas.core.logger").clear()
 end
 
 local function bootstrap_common()
 	require("atlas.ui.shared.highlights").setup()
 
-	require("atlas.ui.popups.help").register_command("Commands", {
-		{ name = "AtlasPulls", desc = "Open pulls" },
-		{ name = "AtlasIssues", desc = "Open issues" },
-		{ name = "AtlasDiff", desc = "Open native diff or pull request" },
-		{ name = "AtlasNotes", desc = "Manage local review notes" },
-		{ name = "AtlasNotesClearAll", desc = "Delete all local review notes" },
-		{ name = "AtlasSearch", desc = "Search across providers" },
-		{ name = "AtlasOpen", desc = "Open URL or reference" },
-		{ name = "AtlasClearCache", desc = "Clear Atlas cache" },
-		{ name = "AtlasLogs", desc = "Open Atlas logs" },
-	}, { index = 999, buffer = require("atlas.ui.layout").buf_id("main") })
+	local commands = { { name = "Atlas", desc = "Choose a command" } }
+	for _, command in ipairs(require("atlas.commands").commands) do
+		table.insert(commands, { name = "Atlas " .. (command.usage or command.name), desc = command.description })
+	end
+	table.insert(commands, { name = "AtlasDiff", desc = "Open native diff or pull request" })
+	require("atlas.ui.popups.help").register_command(
+		"Commands",
+		commands,
+		{ index = 999, buffer = require("atlas.ui.layout").buf_id("main") }
+	)
 end
 
 ---@param domain "pulls"|"issues"

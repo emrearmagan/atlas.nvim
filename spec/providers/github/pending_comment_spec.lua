@@ -29,9 +29,9 @@ local function pending_comment(overrides)
 		content_raw = "updated body",
 		state = "PENDING",
 		inline = { path = "lua/init.lua", to = 12 },
+		thread_id = "PRRT_node",
 		_raw = {
 			comment_id = "PRRC_node",
-			thread_id = "PRRT_node",
 		},
 	}, overrides or {})
 end
@@ -96,7 +96,7 @@ describe("github pending review comments", function()
 			assert.equal("PENDING", updated.state)
 			assert.equal("lua/init.lua", updated.inline.path)
 			assert.equal(12, updated.inline.to)
-			assert.equal("PRRT_node", updated._raw.thread_id)
+			assert.equal("PRRT_node", updated.thread_id)
 			assert.equal("PRRC_node", updated._raw.comment_id)
 		end)
 

@@ -1,9 +1,11 @@
 local M = {}
 
 local actions = require("atlas.pulls.actions")
+local action_utils = require("atlas.pulls.actions.utils")
 local icons = require("atlas.ui.shared.icons")
 local statusline = require("atlas.ui.statusline")
 local multi_select = require("atlas.ui.popups.multi_select")
+local notes = require("atlas.pulls.notes")
 local pullrequests_api = require("atlas.pulls.providers.gitlab.api.pullrequests")
 local reviews_api = require("atlas.pulls.providers.gitlab.api.reviews")
 local users_api = require("atlas.pulls.providers.gitlab.api.users")
@@ -96,6 +98,7 @@ local function toggle_approval(ctx, done)
 					return
 				end
 				notify(ctx, "success", string.format("Approved %s", pr_label(pr)), 1200)
+				notes.clear_for_pull_request(pr)
 				done({ changed_pr = true, message = "Approved" }, nil)
 			end)
 		end
@@ -121,51 +124,30 @@ end
 ---@param done fun(result: PullsActionResult|nil, err: string|nil)
 local function merge(ctx, done)
 	local pr = ctx.pr
-	vim.ui.input({ prompt = string.format("Merge %s? Squash? [n/y]: ", pr_label(pr)) }, function(input)
-		if input == nil then
-			done({ changed_pr = false, message = "Merge cancelled" }, nil)
-			return
-		end
-		local squash = vim.trim(tostring(input)):lower() == "y"
-		notify(ctx, "loading", string.format("Merging %s...", pr_label(pr)))
-		pullrequests_api.merge(pr, {
-			squash = squash,
-			should_remove_source_branch = true,
-		}, function(ok, err)
-			if not ok then
-				notify(ctx, "error", err or "Merge failed")
-				done(nil, err or "Merge failed")
+	local options = action_utils.merge_options()
+	vim.ui.input(
+		{ prompt = string.format("Confirm %s merge %s? [y/N]: ", options.method, pr_label(pr)) },
+		function(input)
+			if not input or not vim.trim(input):lower():match("^y") then
+				done({ changed_pr = false, message = "Merge cancelled" }, nil)
 				return
 			end
-			notify(ctx, "success", string.format("Merged %s", pr_label(pr)), 1500)
-			done({ changed_pr = true, message = "Merged" }, nil)
-		end)
-	end)
-end
-
----@param ctx AtlasPullActionContext
----@return boolean, string|nil
-local function close_available(ctx)
-	if not is_open_or_draft(ctx) then
-		return false, "MR is already closed/merged"
-	end
-	return true, nil
-end
-
----@param ctx AtlasPullActionContext
----@param done fun(result: PullsActionResult|nil, err: string|nil)
-local function close(ctx, done)
-	local pr = ctx.pr
-	notify(ctx, "loading", string.format("Closing %s...", pr_label(pr)))
-	pullrequests_api.set_state(pr, "close", function(ok, err)
-		if not ok then
-			notify(ctx, "error", err or "Close failed")
-			done(nil, err or "Close failed")
-			return
+			notify(ctx, "loading", string.format("Merging %s...", pr_label(pr)))
+			pullrequests_api.merge(pr, {
+				squash = options.method == "squash",
+				should_remove_source_branch = options.delete_branch,
+			}, function(ok, err)
+				if not ok then
+					notify(ctx, "error", err or "Merge failed")
+					done(nil, err or "Merge failed")
+					return
+				end
+				notify(ctx, "success", string.format("Merged %s", pr_label(pr)), 1500)
+				notes.clear_for_pull_request(pr)
+				done({ changed_pr = true, message = "Merged" }, nil)
+			end)
 		end
-		notify(ctx, "success", string.format("Closed %s", pr_label(pr)), 1200)
-		done({ changed_pr = true, message = "Closed" }, nil)
-	end)
+	)
 end
 
 ---@param ctx AtlasPullActionContext
@@ -229,10 +211,9 @@ local function edit_assignees(ctx, done)
 		end
 		notify(ctx, "success", "Members loaded", 1200)
 
-		local raw = pr._raw
 		local original = {}
 		local original_set = {}
-		for _, a in ipairs(raw.assignees or {}) do
+		for _, a in ipairs(pr.assignees or {}) do
 			local id = tonumber(a.id)
 			if id then
 				table.insert(original, { id = id, username = a.username, name = a.name or a.username })
@@ -420,13 +401,9 @@ register({
 })
 
 register(actions.edit_title)
+register(actions.edit_description)
 
-register({
-	id = "close",
-	label = "Close MR",
-	is_available = close_available,
-	run = close,
-})
+register(actions.decline)
 
 register({
 	id = "reopen",

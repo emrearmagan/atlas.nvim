@@ -223,12 +223,17 @@ local function comment_item(comment, opts, is_root)
 		marker, marker_hl = M.status_marker(comment)
 	end
 	local user_icon, user_icon_hl = icons.general("user")
+	local additional = utils.relative_time(comment.created_on)
+	local location = is_root and opts.location and opts.location(comment) or ""
+	if location ~= "" then
+		additional = additional ~= "" and (additional .. "  " .. location) or location
+	end
 
 	return {
 		icon = user_icon,
 		icon_hl = user_icon_hl,
 		author = tostring(author),
-		additional = utils.relative_time(comment.created_on),
+		additional = additional,
 		right_text = marker,
 		content = text,
 		content_block = content_block,
@@ -453,6 +458,7 @@ end
 ---@field toggle_resolved_key? string
 ---@field reaction_options? PullsReactionOption[]
 ---@field show_reactions? boolean
+---@field location? fun(comment: PullsComment): string
 
 ---@param nodes AtlasReviewThreadNode[]
 ---@param width integer

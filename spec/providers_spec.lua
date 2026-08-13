@@ -29,7 +29,7 @@ describe("provider contracts", function()
 			"pulls",
 			{ "bitbucket", "github", "gitlab" },
 			{ "resolve", "search_view", "target", "repositories" },
-			{ "fetch_user", "fetch_pullrequests", "fetch_pullrequest", "views" }
+			{ "fetch_user", "fetch_pullrequests", "fetch_pullrequest", "decline", "views" }
 		)
 	end)
 
@@ -40,5 +40,12 @@ describe("provider contracts", function()
 			{ "resolve", "search_view", "issue_key" },
 			{ "fetch_user", "fetch_issues", "fetch_issue", "views" }
 		)
+	end)
+
+	it("wires update_description on every pull request provider", function()
+		for _, registered in ipairs(providers.list("pulls")) do
+			local provider = assert(providers.load(registered.id, "pulls"))
+			assert_functions(provider.capabilities.core, { "update_description" }, registered.id .. ".pulls.core")
+		end
 	end)
 end)

@@ -1,6 +1,7 @@
 local M = {}
 
 local config = require("atlas.config")
+local comments = require("atlas.pulls.diff.comments")
 local position = require("atlas.pulls.diff.position")
 local review_keymaps = require("atlas.pulls.diff.keymaps")
 local review_panel = require("atlas.pulls.diff.ui.review_panel")
@@ -48,6 +49,7 @@ local FILE_STATUSES = {
 ---@field current_selection AtlasCodeDiffSelection|nil
 ---@field current_file_path string|nil
 ---@field status_result table<string, AtlasCodeDiffSelection[]>|nil
+---@field tree table|nil
 ---@field on_file_select (fun(selection: AtlasCodeDiffSelection, opts: { no_jump: boolean }|nil))|nil
 
 ---@class AtlasCodeDiffLifecycle
@@ -215,20 +217,28 @@ local function reveal_pending_selection(session)
 		notify(session, "info", "This note's file is no longer in the diff")
 		return
 	end
+	if pending.comment then
+		pending.side, pending.line = position.comment(document, pending.comment)
+	end
+	if not pending.side or not pending.line then
+		notify(session, "info", "This review item no longer has a diff position")
+		return
+	end
 	local source = pending.side == "LEFT" and document.old.lines or document.new.lines
-	if #source == 0 or pending.line < 1 then
+	if (not pending.comment or not pending.comment.file) and (#source == 0 or pending.line < 1) then
 		notify(session, "info", "This review item's diff position is outdated")
 		return
 	end
-	local line = math.min(pending.line, #source)
 	local win = pending.side == "LEFT" and current.left.win or current.right.win
 	if pending.side == "LEFT" and current.layout == "inline" then
 		win = current.right.win
-		line = position.opposite_line(document, "LEFT", line, vim.api.nvim_buf_line_count(current.right.buf))
+		pending.line =
+			position.opposite_line(document, "LEFT", pending.line, vim.api.nvim_buf_line_count(current.right.buf))
 	end
 	if not win or not vim.api.nvim_win_is_valid(win) then
 		return
 	end
+	local line = math.min(pending.line, vim.api.nvim_buf_line_count(vim.api.nvim_win_get_buf(win)))
 	vim.api.nvim_win_set_cursor(win, { line, 0 })
 	vim.api.nvim_win_call(win, function()
 		pcall(vim.cmd.normal, { "zvzz", bang = true })
@@ -254,23 +264,24 @@ local function focus_item(session, item, focus_diff)
 		return
 	end
 	local note = item.kind == "note" and item.note or nil
-	local inline = item.comment and item.comment.inline or nil
-	if not note and not inline then
+	local comment = item.comment
+	local target = comment and (comment.file or comment.inline) or nil
+	if not note and not target then
 		notify(session, "info", "This comment is not attached to the diff")
 		return
 	end
-	local path = note and note.file_path or inline.path
+	local path = note and note.file_path or target.path
 	local side = note and "RIGHT" or nil
 	local line = note and note.line or nil
-	if inline then
-		side, line = position.location(inline)
+	if comment and comment.inline then
+		side, line = position.location(comment.inline)
 	end
 	local file = find_review_file(session, path)
 	if not file then
 		notify(session, "info", "This review item's file is no longer in the diff")
 		return
 	end
-	if not side or type(line) ~= "number" then
+	if (not comment or not comment.file) and (not side or type(line) ~= "number") then
 		notify(session, "info", "This review item no longer has a diff position")
 		return
 	end
@@ -279,6 +290,7 @@ local function focus_item(session, item, focus_diff)
 		side = side,
 		line = line,
 		note = item.kind == "note",
+		comment = comment,
 		focus_diff = focus_diff,
 	}
 	local explorer = state.lifecycle.get_explorer(state.tabpage)
@@ -319,6 +331,18 @@ local function register_review_buffers(session, buffers)
 		buffers = valid,
 		reload = state.reload_view,
 		help_key = "gA",
+		file_buffers = { state.lifecycle.get_explorer(state.tabpage).bufnr },
+		add_file_comment = function(pending)
+			local explorer = state.lifecycle.get_explorer(state.tabpage)
+			local node = explorer and explorer.tree and explorer.tree:get_node() or nil
+			local file = node and node.data or nil
+			if file and file.type ~= "group" and file.type ~= "directory" then
+				comments.add_to_file(session, {
+					path = relative_path(session.source.root, file.path),
+					old_path = file.old_path and relative_path(session.source.root, file.old_path) or nil,
+				}, pending)
+			end
+		end,
 	})
 	if session.review_panel then
 		review_panel.register_toggle(session.review_panel, valid)

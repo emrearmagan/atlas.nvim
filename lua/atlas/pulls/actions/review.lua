@@ -1,6 +1,7 @@
 local M = {}
 
 local editor = require("atlas.ui.popups.editor")
+local notes = require("atlas.pulls.notes")
 local statusline = require("atlas.ui.statusline")
 local review_threads = require("atlas.ui.components.review_threads")
 
@@ -90,7 +91,7 @@ local function upsert_comment(items, comment)
 end
 
 ---@param context AtlasReviewActionContext
----@param opts { parent: PullsComment|nil, inline: PullsInlineCommentPosition|nil, pending: boolean|nil, preview: AtlasMarkdownEditorPreview|nil, initial_text: string|nil, kind: "comment"|"suggestion"|nil }|nil
+---@param opts { parent: PullsComment|nil, inline: PullsInlineCommentPosition|nil, file: PullsFileCommentPosition|nil, pending: boolean|nil, preview: AtlasMarkdownEditorPreview|nil, initial_text: string|nil, kind: "comment"|"suggestion"|nil }|nil
 ---@param on_done fun(result: PullsActionResult|nil, err: string|nil)
 ---@return boolean handled
 function M.add_comment(context, opts, on_done)
@@ -129,6 +130,8 @@ function M.add_comment(context, opts, on_done)
 		title = " Reply to Comment "
 	elseif suggestion then
 		title = pending and " Add Pending Suggestion " or " Add Suggestion "
+	elseif opts.file then
+		title = pending and " Add Pending File Comment " or " Add File Comment "
 	elseif pending then
 		title = " Add Pending Comment "
 	elseif opts.inline then
@@ -162,6 +165,7 @@ function M.add_comment(context, opts, on_done)
 				return add(context.pr, text, {
 					parent = parent,
 					inline = opts.inline,
+					file = opts.file,
 					pending = pending,
 					review = context.data and context.data.review,
 				}, done)
@@ -479,6 +483,9 @@ local function open_review_editor(context, capability, title, loading, success, 
 					return
 				end
 				notify(context, "success", success, 1200)
+				if capability == "approve" then
+					notes.clear_for_pull_request(context.pr)
+				end
 				on_done({ changed_pr = true, message = success }, nil)
 			end)
 		end,

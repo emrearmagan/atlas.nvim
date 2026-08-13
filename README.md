@@ -124,31 +124,34 @@ Set `global_statusline = false` to leave Neovim's `laststatus` option unchanged.
 
 ## Commands
 
-- `:AtlasIssues [provider]` - Open Atlas issues domain
-- `:AtlasPulls [provider]` - Open Atlas pulls domain
-- `:AtlasDiff <base>...<head>` or `:AtlasDiff <pull-request-url>` - Open a local Git range or pull request review
-- `:AtlasNotes` - Inspect local review notes across pull requests
-- `:AtlasNotesClearAll` - Delete all local review notes
-- `:AtlasCreatePR` - Create a pull request from the current branch
-- `:AtlasCreateIssue` - Create an issue (GitHub / GitLab / Jira)
-- `:AtlasSearch [provider]` - Search configured pull-request and issue providers
-- `:AtlasOpen <target>` - Open a provider URL, Jira key, repository reference, or PR/issue number
-- `:AtlasClearCache` - Clear Atlas disk and memory cache
-- `:AtlasLogs` - Toggle Atlas logs
+- `:Atlas` - Pick a command
+- `:Atlas pulls [provider]` / `:Atlas issues [provider]` - Open a provider dashboard
+- `:Atlas review [pull-request-url]` - Review a pull request with the configured diff viewer
+- `:Atlas diff <base>...<head>` or `:Atlas diff <pull-request-url>` - Open native AtlasDiff
+- `:Atlas notes [target]` / `:Atlas clear notes` - Inspect or delete local review notes
+- `:Atlas create pr` / `:Atlas create issue` - Create a pull request or issue
+- `:Atlas search [provider]` - Search configured pull-request and issue providers
+- `:Atlas open <target>` - Open a provider URL, Jira key, repository reference, or PR/issue number
+- `:Atlas clear` / `:Atlas logs` - Clear Atlas data or toggle Atlas logs
+- `:AtlasDiff <base>...<head>` or `:AtlasDiff <pull-request-url>` - Retained as the native diff-viewer command
 
 ## Pulls
 
-Use `:AtlasPulls [provider]` to browse and manage pull requests from GitHub, Bitbucket, and GitLab.
+Use `:Atlas pulls [provider]` to browse and manage pull requests from GitHub, Bitbucket, and GitLab.
 
 ### Pulls Configuration
 
 ```lua
 pulls = {
+  delete_notes = false, -- Delete local PR notes after approval or merge.
+  default_merge_method = "merge", -- "merge" or "squash".
+  default_delete_branch = false,
+
   diff = {
     -- Any command that accepts explicit <base>...<head> Git revisions.
     open_cmd = "AtlasDiff", -- default; for example "DiffviewOpen" or "CodeDiff".
     show_review_panel = false, -- Set true to show the review panel when a diff opens.
-    show_comments = true, -- Show inline comment overlays when a diff opens.
+    comment_display = "virtual_lines", -- "virtual_lines" or compact "virtual_text" hints.
 
     -- AtlasDiff options; external viewers use their own configuration.
     layout = "inline", -- "inline" or "side-by-side".
@@ -341,7 +344,7 @@ pulls = {
 
 ## Issues
 
-Use `:AtlasIssues [provider]` to browse and manage Jira, GitHub, and GitLab issues.
+Use `:Atlas issues [provider]` to browse and manage Jira, GitHub, and GitLab issues.
 
 ### Issue Configuration
 
@@ -545,12 +548,15 @@ Keep the pull request and issue workflows you use throughout the day inside Neov
 
 <img alt="AtlasDiff" src="https://github.com/user-attachments/assets/7280373a-f6e9-4847-be64-89e245d461cd" />
 
+Run `:Atlas review` inside a Git repository to pick one of its open or draft pull requests, or pass a pull-request URL directly. Atlas opens the configured diff viewer.
+
 Press the configured `pulls.open_diff` key (`gd` by default) on a pull request to start a review.
 
 - See pending, resolved, and outdated provider threads at their diff locations.
 - Review provider tasks and GitHub checklists alongside the comments they belong to.
 - Add, reply to, edit, delete, resolve, or reopen comments when supported.
 - Browse comments, tasks, and local notes
+- Mark files reviewed in AtlasDiff; GitHub syncs the state with the pull request.
 - Submit pending comments with an optional review summary when supported.
 
 > [!NOTE]
@@ -564,7 +570,7 @@ Local notes let you leave something on a diff without posting it to the pull req
 
 <br clear="both">
 
-For scripts, use `bin/atlas-notes`. Notes added there appear in AtlasDiff, CodeDiff, Diffview, Diffview-plus, and `:AtlasNotes`:
+For scripts, use `bin/atlas-notes`. Notes added there appear in AtlasDiff, CodeDiff, Diffview, Diffview-plus, and `:Atlas notes`:
 
 ```sh
 ./bin/atlas-notes add \
@@ -588,7 +594,7 @@ View pipelines and their jobs, inspect their status, and read job logs directly 
 
 <img align="right" width="54%" hspace="16" vspace="8" alt="Create pull request" src="https://github.com/user-attachments/assets/d6335c66-35f7-4495-b83a-53819d7ec7d5">
 
-`:AtlasCreatePR` opens the pull request form for the current branch. The newest commit supplies the title. Atlas first reads the configured `pr_template`, or `.github/pull_request_template.md` by default.
+`:Atlas create pr` opens the pull request form for the current branch. The newest commit supplies the title. Atlas first reads the configured `pr_template`, or `.github/pull_request_template.md` by default.
 
 Without a template, Atlas groups conventional commits into sections, recognizes leading Jira keys such as `[JIRA-123]`, links commit hashes and issue references, collects references under **Related**, and appends the diffstat. If no commits use a conventional prefix, it uses a linked plain commit list instead.
 
@@ -600,7 +606,7 @@ Edit the title and description, choose the target branch and reviewers, set the 
 
 <img align="left" width="54%" hspace="16" vspace="8" alt="Create issue" src="https://github.com/user-attachments/assets/8f3b06d8-763d-4e0f-ab93-9c3754065ca3">
 
-`:AtlasCreateIssue` opens the creation flow for the configured issue providers. GitHub and GitLab use the current repository, while Jira uses the configured instance. The forms support Markdown descriptions and provider-specific fields such as labels, assignees, milestones, and Jira issue types.
+`:Atlas create issue` opens the creation flow for the configured issue providers. GitHub and GitLab use the current repository, while Jira uses the configured instance. The forms support Markdown descriptions and provider-specific fields such as labels, assignees, milestones, and Jira issue types.
 
 GitHub, GitLab, and Jira can apply a saved Markdown template or save the current description as a new one. Templates are shared between providers and stored under Neovim's data directory.
 
@@ -753,13 +759,14 @@ keymaps = {
     open_diff = "gd",
     checkout = "gc",
     edit_title = "T",
+    edit_description = "D",
     review = {
+      show_item = "<CR>",
+      focus_item = "gd",
       toggle_approval = "ga",
       request_changes = "gr",
       submit_review = "gs",
       explorer = {
-        focus_file = "<CR>",
-        open_file = "l",
         next_file = { "]f", "<Tab>" },
         previous_file = { "[f", "<S-Tab>" },
         next_unreviewed_file = "]u",
@@ -789,6 +796,9 @@ keymaps = {
         add_task = "T",
         toggle_resolved = "x",
       },
+    },
+    pipelines = {
+      open = "gd",
     },
     filters = {
       open = "gpo",

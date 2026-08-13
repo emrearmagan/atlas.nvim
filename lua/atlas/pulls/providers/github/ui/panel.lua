@@ -3,6 +3,8 @@ local M = {}
 
 local icons = require("atlas.ui.shared.icons")
 local header = require("atlas.pulls.ui.panel.components.header")
+local pullrequests = require("atlas.pulls.providers.github.api.pullrequests")
+local spinner = require("atlas.ui.components.spinner")
 
 local MAX_HASH_LEN = 12
 
@@ -14,23 +16,13 @@ local function label_hl(hex)
 	return name
 end
 
-local state = {
-	header_extras = nil, ---@type { assignees: table|nil, labels: table|nil }|nil
-}
-
-local function reset_state()
-	state.header_extras = nil
-end
-
 -- Panel
 
----@param _pr PullRequest
+---@param pr PullRequest
 ---@param loading boolean
 ---@return PullsPanelHeaderRow[]
-function M.header_rows(_pr, loading)
-	local spinner = require("atlas.ui.components.spinner")
-
-	if loading and state.header_extras == nil then
+function M.header_rows(pr, loading)
+	if loading and pr.assignees == nil then
 		return {
 			{
 				k1 = "Assignees:",
@@ -43,13 +35,9 @@ function M.header_rows(_pr, loading)
 		}
 	end
 
-	local extras = state.header_extras or {}
-	local assignees = type(extras.assignees) == "table" and extras.assignees or {}
-	local nodes = type(assignees.nodes) == "table" and assignees.nodes or {}
-
 	local logins = {}
-	for _, node in ipairs(nodes) do
-		local login = type(node) == "table" and tostring(node.login or "") or ""
+	for _, assignee in ipairs(pr.assignees or {}) do
+		local login = assignee.username
 		if login ~= "" then
 			table.insert(logins, login)
 		end
@@ -72,14 +60,10 @@ function M.chips(pr, loading)
 		table.insert(chips, { label = hash, hl = "AtlasTabInactive" })
 	end
 
-	if loading and state.header_extras == nil then
-		local spinner = require("atlas.ui.components.spinner")
+	if loading and pr.labels == nil then
 		table.insert(chips, { label = spinner.with_text("Loading labels"), hl = "AtlasTextMuted" })
 	else
-		local extras = state.header_extras or {}
-		local labels = type(extras.labels) == "table" and extras.labels or {}
-		local label_nodes = type(labels.nodes) == "table" and labels.nodes or {}
-		for _, lbl in ipairs(label_nodes) do
+		for _, lbl in ipairs(pr.labels or {}) do
 			local name = tostring(lbl.name or "")
 			if name ~= "" then
 				local color = tostring(lbl.color or "")
@@ -97,30 +81,21 @@ end
 ---@param on_done fun()
 ---@return { cancel: fun() }|nil
 function M.fetch_header(pr, opts, on_done)
-	reset_state()
-
-	local pullrequests = require("atlas.pulls.providers.github.api.pullrequests")
-
 	local owner = tostring(pr.workspace or "")
 	local repo = tostring(pr.repo or "")
 	local force = opts and opts.force_refresh == true
 
 	if opts and opts.pr_refreshed then
-		local raw = pr._raw or {}
-		state.header_extras = {
-			assignees = raw.assignees,
-			labels = raw.labels,
-		}
 		on_done()
 	elseif owner ~= "" and repo ~= "" and pr.id ~= nil then
 		return pullrequests.get_pr(owner, repo, pr.id, function(fresh, err)
 			if not err and type(fresh) == "table" then
-				local raw = fresh._raw
-				state.header_extras = {
-					assignees = raw.assignees,
-					labels = raw.labels,
-				}
 				pr.is_subscribed = fresh.is_subscribed
+				pr.assignees = fresh.assignees
+				pr.reviewers = fresh.reviewers
+				pr.labels = fresh.labels
+				pr.lines_added = fresh.lines_added
+				pr.lines_removed = fresh.lines_removed
 				pr._raw = fresh._raw
 			end
 			on_done()

@@ -60,7 +60,6 @@ function M.fetch_detail(repo, opts, on_done)
 			stars = tonumber(result.stargazerCount) or nil,
 			forks = tonumber(result.forkCount) or nil,
 			watchers = type(result.watchers) == "table" and tonumber(result.watchers.totalCount) or nil,
-			_raw = result,
 		}
 
 		cli.gh({

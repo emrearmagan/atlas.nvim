@@ -21,7 +21,9 @@ local notify = utils.notify
 ---| "open_diff"
 ---| "checkout"
 ---| "merge"
+---| "decline"
 ---| "edit_title"
+---| "edit_description"
 ---| "ready_for_review"
 ---| "convert_to_draft"
 ---| "edit_reviewers"
@@ -183,8 +185,106 @@ M.edit_title = {
 	end,
 }
 
+M.edit_description = {
+	id = "edit_description",
+	label = "Edit description",
+	is_available = function(context)
+		if not has_pr(context) then
+			return false, "No PR selected"
+		end
+		if context.provider.capabilities.core.update_description == nil then
+			return false, "Provider does not support editing the description"
+		end
+		return true
+	end,
+	run = function(context, done)
+		local pr = assert(context.pr)
+		local core = context.provider.capabilities.core
+
+		---@param current string
+		local function edit(current)
+			md_editor.open({
+				key = "pr-description-edit-" .. tostring(pr.id),
+				title = " Edit Description ",
+				initial_text = current,
+				on_save = function(text)
+					local description = text or ""
+					if description == current then
+						notify(context, "info", "Description unchanged", 1200)
+						done({ changed_pr = false, message = "No changes" }, nil)
+						return
+					end
+					notify(context, "loading", "Updating description...")
+					core.update_description(pr, description, function(ok, err)
+						if err or ok == false then
+							local message = tostring(err or "Unknown error")
+							notify(context, "error", "Description update failed: " .. message)
+							done(nil, message)
+							return
+						end
+						pr.description = description
+						notify(context, "success", "Description updated", 1200)
+						done({ changed_pr = true, message = "Description updated" }, nil)
+					end)
+				end,
+				on_cancel = function()
+					notify(context, "info", "Description unchanged", 1200)
+					done({ changed_pr = false }, nil)
+				end,
+			})
+		end
+
+		-- Always edit against the remote description so a stale panel does not
+		-- silently revert someone else's edit.
+		if core.fetch_description then
+			notify(context, "loading", "Loading description...")
+			core.fetch_description(pr, { force_refresh = true }, function(description, err)
+				if err then
+					local message = tostring(err)
+					notify(context, "error", "Failed to load description: " .. message)
+					done(nil, message)
+					return
+				end
+				edit(tostring(description or ""))
+			end)
+			return
+		end
+
+		edit(tostring(pr.description or ""))
+	end,
+}
+
 M.ready_for_review = draft_action(false)
 M.convert_to_draft = draft_action(true)
+
+M.decline = {
+	id = "decline",
+	label = "Decline",
+	is_available = function(context)
+		return context.pr ~= nil and (context.pr.state == "open" or context.pr.state == "draft")
+	end,
+	run = function(context, done)
+		local pr = assert(context.pr)
+		vim.ui.input({ prompt = string.format("Decline PR #%s? [y/N]: ", tostring(pr.id)) }, function(input)
+			if not input or not vim.trim(input):lower():match("^y") then
+				done({ changed_pr = false, message = "Decline cancelled" }, nil)
+				return
+			end
+			notify(context, "loading", "Declining PR...")
+			context.provider.capabilities.core.decline(pr, function(ok, err)
+				if not ok then
+					local message = tostring(err or "Decline failed")
+					notify(context, "error", message)
+					done(nil, message)
+					return
+				end
+				pr.state = "declined"
+				notify(context, "success", "PR declined", 1200)
+				done({ changed_pr = true, message = "Declined" }, nil)
+			end)
+		end)
+	end,
+}
 
 M.edit_reviewers = {
 	id = "edit_reviewers",

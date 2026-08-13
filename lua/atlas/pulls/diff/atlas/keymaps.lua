@@ -20,6 +20,7 @@ local review_panel = require("atlas.pulls.diff.ui.review_panel")
 ---@field toggle_commits fun()
 ---@field select_file fun(index: integer, focus_diff: boolean|nil)
 ---@field show_commit fun()
+---@field add_file_comment fun(pending: boolean)
 
 ---@param action AtlasKeymapActionId
 ---@param definition AtlasHelpKeyItem
@@ -172,7 +173,7 @@ function M.register(session, actions)
 		add(
 			general,
 			item("pulls.review.diff.toggle_compact", {
-				desc = "Toggle full / compact",
+				desc = "Toggle comment display",
 				index = 5,
 				callback = run(actions.toggle_compact),
 				opts = { silent = true, nowait = true },
@@ -238,7 +239,7 @@ function M.register(session, actions)
 	local panel_actions = {}
 	add(
 		panel_actions,
-		item("pulls.review.explorer.focus_file", {
+		item("pulls.review.show_item", {
 			desc = "Show changed file",
 			index = 1,
 			callback = run(function()
@@ -252,8 +253,8 @@ function M.register(session, actions)
 	)
 	add(
 		panel_actions,
-		item("pulls.review.explorer.open_file", {
-			desc = "Open changed file",
+		item("pulls.review.focus_item", {
+			desc = "Focus changed file",
 			index = 2,
 			callback = run(function()
 				local index = explorer.open_at_cursor(session)
@@ -326,6 +327,8 @@ function M.register(session, actions)
 	review_keymaps.register(session, {
 		buffers = review_buffers,
 		reload = actions.reload,
+		file_buffers = { state.panel.buf },
+		add_file_comment = actions.add_file_comment,
 	})
 	if session.review_panel then
 		review_panel.register_toggle(session.review_panel, {

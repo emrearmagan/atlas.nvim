@@ -12,15 +12,15 @@ query($owner: String!, $repo: String!, $number: Int!) {
       id number title state isDraft viewerSubscription
       createdAt updatedAt url body
       reactionGroups { content reactors { totalCount } }
-      additions deletions changedFiles
-      reviewDecision
+      additions deletions
       labels(first: 10) { nodes { name color } }
-      milestone { number title state }
-      latestOpinionatedReviews(last: 10) { nodes { state author { login } } }
-      assignees(first: 10) { nodes { login } }
+      latestOpinionatedReviews(last: 10) {
+        nodes { state author { login ... on User { name } } }
+      }
+      assignees(first: 10) { nodes { id login name } }
       author { login ... on User { name } }
       headRefName baseRefName headRefOid baseRefOid
-		totalCommentsCount
+      totalCommentsCount
       commits(last: 1) {
         nodes { commit { statusCheckRollup { state } } }
       }
@@ -38,10 +38,12 @@ query($search: String!, $limit: Int!) {
         createdAt updatedAt url
         additions deletions
         reactionGroups { content reactors { totalCount } }
-        latestOpinionatedReviews(last: 10) { nodes { state } }
+        latestOpinionatedReviews(last: 10) {
+          nodes { state author { login ... on User { name } } }
+        }
         author { login ... on User { name } }
         headRefName baseRefName headRefOid baseRefOid
-		totalCommentsCount
+        totalCommentsCount
         repository { name nameWithOwner }
         commits(last: 1) {
           nodes { commit { statusCheckRollup { state } } }
@@ -283,6 +285,71 @@ function M.set_draft(pr, draft, on_done)
 	})
 end
 
+---@param pr PullRequest
+---@param description string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.update_description(pr, description, on_done)
+	local repo_slug = pr.repo_full_name or ""
+	if repo_slug == "" then
+		vim.schedule(function()
+			on_done(false, "Missing repo")
+		end)
+		return nil
+	end
+
+	return cli.gh({
+		"pr",
+		"edit",
+		tostring(pr.id),
+		"--repo",
+		repo_slug,
+		"--body",
+		description,
+	}, function(_, err)
+		if err then
+			on_done(false, err)
+			return
+		end
+		memory_cache.delete(string.format("github:pr:%s:%s", repo_slug, tostring(pr.id)))
+		memory_cache.delete(string.format("github:desc:%s:%s", repo_slug, tostring(pr.id)))
+		on_done(true, nil)
+	end, {
+		action = "Update PR description",
+		repo = repo_slug,
+		number = pr.id,
+	})
+end
+
+---@param pr PullRequest
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.decline(pr, on_done)
+	local repo_slug = pr.repo_full_name or ""
+	if repo_slug == "" then
+		on_done(false, "Missing repo")
+		return nil
+	end
+	return cli.gh({
+		"pr",
+		"close",
+		tostring(pr.id),
+		"--repo",
+		repo_slug,
+	}, function(_, err)
+		if err then
+			on_done(false, err)
+			return
+		end
+		memory_cache.delete(string.format("github:pr:%s:%s", repo_slug, tostring(pr.id)))
+		on_done(true, nil)
+	end, {
+		action = "Decline PR",
+		repo = repo_slug,
+		number = pr.id,
+	})
+end
+
 ---@return { login: string, state: "APPROVED"|"CHANGES_REQUESTED"|"COMMENTED"|"DISMISSED" }[], string[]
 local function parse_reviews(result)
 	local latest = {}
@@ -367,14 +434,20 @@ function M.get_reviewers(pr, opts, on_done)
 				decision = "changes_requested"
 			end
 			table.insert(reviewers, {
+				id = r.login,
+				provider_id = r.login,
 				name = r.login,
+				username = r.login,
 				nickname = r.login,
 				decision = decision,
 			})
 		end
 		for _, login in ipairs(pending) do
 			table.insert(reviewers, {
+				id = login,
+				provider_id = login,
 				name = login,
+				username = login,
 				nickname = login,
 				decision = "pending",
 			})
@@ -588,7 +661,7 @@ function M.create_pr(opts, on_done)
 end
 
 ---@param slug string
----@param on_done fun(labels: table[]|nil, err: string|nil)
+---@param on_done fun(labels: PullsLabel[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.list_labels(slug, on_done)
 	if type(slug) ~= "string" or slug == "" then
@@ -615,7 +688,6 @@ function M.list_labels(slug, on_done)
 					table.insert(list, {
 						name = raw.name,
 						color = type(raw.color) == "string" and raw.color or nil,
-						description = type(raw.description) == "string" and raw.description or nil,
 					})
 				end
 			end

@@ -6,7 +6,6 @@ local statusline = require("atlas.ui.statusline")
 
 ---@alias AtlasGitLabActionId
 ---| AtlasPullActionId
----| "close"
 ---| "reopen"
 ---| "edit_assignees"
 ---| "toggle_subscription"

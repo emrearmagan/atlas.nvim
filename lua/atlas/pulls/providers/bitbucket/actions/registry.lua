@@ -1,6 +1,8 @@
 local M = {}
 
 local actions = require("atlas.pulls.actions")
+local action_utils = require("atlas.pulls.actions.utils")
+local notes = require("atlas.pulls.notes")
 local pullrequests = require("atlas.pulls.providers.bitbucket.api.pullrequests")
 local reviews = require("atlas.pulls.providers.bitbucket.api.reviews")
 local users_api = require("atlas.pulls.providers.bitbucket.api.users")
@@ -17,10 +19,12 @@ end
 ---@param current_user PullsUser
 ---@return boolean
 local function is_approved(pr, current_user)
-	for _, participant in ipairs(pr._raw.participants or {}) do
-		local user = participant.user or {}
-		if tostring(user.account_id or user.uuid or "") == current_user.id then
-			return participant.approved == true or participant.state == "approved"
+	for _, reviewer in ipairs(pr.reviewers or {}) do
+		if
+			reviewer.id == current_user.id
+			or (reviewer.username ~= "" and reviewer.username == current_user.username)
+		then
+			return reviewer.decision == "approved"
 		end
 	end
 	return false
@@ -92,6 +96,9 @@ local function toggle_approval(ctx, done)
 
 			local message = approved and "Unapproved" or "Approved"
 			notify(ctx, "success", "PR " .. message:lower(), 1200)
+			if not approved then
+				notes.clear_for_pull_request(pr)
+			end
 			done({ changed_pr = true, message = message }, nil)
 		end)
 	end)
@@ -105,6 +112,18 @@ local function merge_available(ctx)
 	end
 	if not pullrequests.has_action(ctx.pr, "merge") then
 		return false, "No merge URL available"
+	end
+	return true, nil
+end
+
+---@param ctx AtlasPullActionContext
+---@return boolean, string|nil
+local function decline_available(ctx)
+	if not actions.decline.is_available(ctx) or ctx.pr == nil then
+		return false, "PR is not open"
+	end
+	if not pullrequests.has_action(ctx.pr, "decline") then
+		return false, "No decline URL available"
 	end
 	return true, nil
 end
@@ -130,8 +149,9 @@ local function merge(ctx, done)
 		return
 	end
 
+	local options = action_utils.merge_options()
 	vim.ui.input({
-		prompt = string.format("Confirm merge PR #%s? [y/N]: ", tostring(pr.id or "")),
+		prompt = string.format("Confirm %s merge PR #%s? [y/N]: ", options.method, tostring(pr.id or "")),
 	}, function(input)
 		if input == nil then
 			done({ changed_pr = false, message = "Merge cancelled" }, nil)
@@ -146,7 +166,10 @@ local function merge(ctx, done)
 		end
 
 		notify(ctx, "loading", "Starting Merge...")
-		pullrequests.merge(pr, {}, function(_, err)
+		pullrequests.merge(pr, {
+			merge_strategy = options.method == "merge" and "merge_commit" or options.method,
+			close_source_branch = options.delete_branch,
+		}, function(_, err)
 			if err ~= nil then
 				notify(ctx, "error", string.format("Merge failed: %s", tostring(err)))
 				done(nil, tostring(err))
@@ -154,6 +177,7 @@ local function merge(ctx, done)
 			end
 
 			notify(ctx, "success", "Merge succeeded", 1200)
+			notes.clear_for_pull_request(pr)
 			done({ changed_pr = true, message = "Merged" }, nil)
 		end)
 	end)
@@ -289,7 +313,15 @@ register({
 	run = merge,
 })
 
+register({
+	id = actions.decline.id,
+	label = actions.decline.label,
+	is_available = decline_available,
+	run = actions.decline.run,
+})
+
 register(actions.edit_title)
+register(actions.edit_description)
 register(actions.ready_for_review)
 register(actions.convert_to_draft)
 register(actions.edit_reviewers)

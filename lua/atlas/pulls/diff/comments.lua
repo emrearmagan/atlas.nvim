@@ -50,25 +50,28 @@ end
 ---@param context AtlasCommentRendererContext
 ---@param path string
 ---@param side AtlasDiffSide
----@return table<integer, AtlasReviewThreadNode[]>
+---@return table<integer, AtlasReviewThreadNode[]>, AtlasReviewThreadNode[]
 local function threads_by_line(session, context, path, side)
 	local document = session.current.document
 	local lines = side == "LEFT" and document.old.lines or document.new.lines
-	local result = {}
+	local result, file_threads = {}, {}
 	for _, node in ipairs(context.threads) do
-		local inline = node.comment.inline
-		local comment_side, line = position.location(inline)
-		local matches = inline and inline.path == path
-		if inline and not matches and (path == context.old_path or path == context.new_path) then
-			matches = inline.path == context.old_path or inline.path == context.new_path
+		local comment = node.comment
+		local target = comment.file or comment.inline
+		local comment_side, line = position.comment(document, comment)
+		local matches = target and target.path == path
+		if target and not matches and (path == context.old_path or path == context.new_path) then
+			matches = target.path == context.old_path or target.path == context.new_path
 		end
-		if matches and comment_side == side and line and line >= 1 and #lines > 0 then
-			line = math.min(line, #lines)
+		if matches and comment_side == side and comment.file then
+			file_threads[#file_threads + 1] = node
+		elseif matches and comment_side == side and line and line >= 1 and #lines > 0 then
+			line = math.min(line, math.max(1, #lines))
 			result[line] = result[line] or {}
 			result[line][#result[line] + 1] = node
 		end
 	end
-	return result
+	return result, file_threads
 end
 
 ---@param session AtlasDiffSession
@@ -85,20 +88,22 @@ end
 ---@param context AtlasCommentRendererContext
 ---@param path string
 ---@param side AtlasDiffSide
----@return table<integer, AtlasReviewThreadNode[]>, table<integer, boolean>
+---@return table<integer, AtlasReviewThreadNode[]>, table<integer, boolean>, AtlasReviewThreadNode[]
 local function visible_threads(session, context, path, side)
-	local result = threads_by_line(session, context, path, side)
+	local result, file_threads = threads_by_line(session, context, path, side)
 	local above = {}
 	if session.current.layout ~= "inline" or side ~= "RIGHT" then
-		return result, above
+		return result, above, file_threads
 	end
-	for old_line, old_threads in pairs(threads_by_line(session, context, context.old_path, "LEFT")) do
+	local old_by_line, old_file_threads = threads_by_line(session, context, context.old_path, "LEFT")
+	for old_line, old_threads in pairs(old_by_line) do
 		local line, is_above = opposite_line(session, "LEFT", old_line)
 		result[line] = result[line] or {}
 		vim.list_extend(result[line], old_threads)
 		above[line] = is_above or nil
 	end
-	return result, above
+	vim.list_extend(file_threads, old_file_threads)
+	return result, above, file_threads
 end
 
 ---@param session AtlasDiffSession
@@ -107,9 +112,10 @@ function M.annotated_paths(session)
 	local paths = {}
 	local review = session.review
 	for _, comment in ipairs(review and review.comments or {}) do
-		if comment.inline then
-			paths[comment.inline.path] = paths[comment.inline.path] or { comments = false, notes = false }
-			paths[comment.inline.path].comments = true
+		local target = comment.file or comment.inline
+		if target then
+			paths[target.path] = paths[target.path] or { comments = false, notes = false }
+			paths[target.path].comments = true
 		end
 	end
 	for _, note in ipairs(session.notes) do
@@ -117,6 +123,92 @@ function M.annotated_paths(session)
 		paths[note.file_path].notes = true
 	end
 	return paths
+end
+
+---@param session AtlasDiffSession
+---@param context AtlasCommentRendererContext
+---@param inline_deleted_lines boolean
+---@return table
+local function placed_threads(session, context, inline_deleted_lines)
+	local current = session.current
+	local placed = {
+		right = {},
+		right_above = {},
+		right_file = {},
+		left = {},
+		left_above = {},
+		left_file = {},
+		deleted = {},
+	}
+	if inline_deleted_lines and current.layout == "inline" then
+		placed.right, placed.right_file = threads_by_line(session, context, context.new_path, "RIGHT")
+		local old_by_line, old_file_threads = threads_by_line(session, context, context.old_path, "LEFT")
+		for old_line, list in pairs(old_by_line) do
+			if position.is_changed(current.document, "LEFT", old_line) then
+				placed.deleted[old_line] = list
+			else
+				local line, above = opposite_line(session, "LEFT", old_line)
+				placed.right[line] = placed.right[line] or {}
+				vim.list_extend(placed.right[line], list)
+				placed.right_above[line] = above or nil
+			end
+		end
+		vim.list_extend(placed.right_file, old_file_threads)
+	else
+		placed.right, placed.right_above, placed.right_file =
+			visible_threads(session, context, context.new_path, "RIGHT")
+	end
+	if current.layout == "side-by-side" then
+		placed.left, placed.left_above, placed.left_file = visible_threads(session, context, context.old_path, "LEFT")
+	end
+	return placed
+end
+
+---@param target AtlasDiffHint[]
+---@param buf integer
+---@param line integer
+---@param list AtlasReviewThreadNode[]
+local function add_line_hints(target, buf, line, list)
+	for _, node in ipairs(list) do
+		target[#target + 1] = {
+			buf = buf,
+			line = line,
+			kind = "comment",
+			text = node.comment.content_display or node.comment.content_raw,
+		}
+	end
+end
+
+---@param target AtlasDiffHint[]
+---@param buf integer
+---@param by_line table<integer, AtlasReviewThreadNode[]>
+local function add_hints(target, buf, by_line)
+	for line, list in pairs(by_line) do
+		add_line_hints(target, buf, line, list)
+	end
+end
+
+---@param session AtlasDiffSession
+---@param inline_deleted_lines boolean
+---@return AtlasDiffHint[], table<integer, AtlasDiffHint[]>
+function M.hints(session, inline_deleted_lines)
+	local current = session.current
+	local context = render_context(session)
+	if not current or not context then
+		return {}, {}
+	end
+	local placed = placed_threads(session, context, inline_deleted_lines)
+	local items = {}
+	add_hints(items, current.right.buf, placed.right)
+	add_hints(items, current.left.buf, placed.left)
+	add_line_hints(items, current.right.buf, 1, placed.right_file)
+	add_line_hints(items, current.left.buf, 1, placed.left_file)
+	local deleted_hints = {}
+	for line, list in pairs(placed.deleted) do
+		deleted_hints[line] = {}
+		add_line_hints(deleted_hints[line], current.right.buf, line, list)
+	end
+	return items, deleted_hints
 end
 
 ---@param session AtlasDiffSession
@@ -128,25 +220,13 @@ function M.render(session, inline_deleted_lines)
 	if not current or not context then
 		return {}
 	end
-	local right_threads, right_above = {}, {}
+	local placed = placed_threads(session, context, inline_deleted_lines)
 	local deleted = {}
-	if inline_deleted_lines and current.layout == "inline" then
-		right_threads = threads_by_line(session, context, context.new_path, "RIGHT")
-		right_above = {}
-		for old_line, list in pairs(threads_by_line(session, context, context.old_path, "LEFT")) do
-			if position.is_changed(current.document, "LEFT", old_line) then
-				deleted[old_line] = ui.thread_lines(context, current.right.buf, list)
-			else
-				local line, above = opposite_line(session, "LEFT", old_line)
-				right_threads[line] = right_threads[line] or {}
-				vim.list_extend(right_threads[line], list)
-				right_above[line] = above or nil
-			end
-		end
-	else
-		right_threads, right_above = visible_threads(session, context, context.new_path, "RIGHT")
+	for line, list in pairs(placed.deleted) do
+		deleted[line] = ui.thread_lines(context, current.right.buf, list)
 	end
-	local right = ui.render_comments(context, current.right.buf, right_threads, right_above)
+	local right = ui.render_comments(context, current.right.buf, placed.right, placed.right_above)
+	local right_file_size = ui.render_file_comments(context, current.right.buf, placed.right_file)
 	if current.layout ~= "side-by-side" then
 		if vim.api.nvim_buf_is_valid(current.left.buf) then
 			vim.api.nvim_buf_clear_namespace(
@@ -158,15 +238,21 @@ function M.render(session, inline_deleted_lines)
 		end
 		return deleted
 	end
-	local left_threads, left_above = visible_threads(session, context, context.old_path, "LEFT")
-	local left = ui.render_comments(context, current.left.buf, left_threads, left_above)
+	local left = ui.render_comments(context, current.left.buf, placed.left, placed.left_above)
+	local left_file_size = ui.render_file_comments(context, current.left.buf, placed.left_file)
 	for line, count in pairs(left) do
 		local target, above = opposite_line(session, "LEFT", line)
-		ui.pad(current.right.buf, target, count, left_above[line] or above)
+		ui.pad(current.right.buf, target, count, placed.left_above[line] or above)
 	end
 	for line, count in pairs(right) do
 		local target, above = opposite_line(session, "RIGHT", line)
-		ui.pad(current.left.buf, target, count, right_above[line] or above)
+		ui.pad(current.left.buf, target, count, placed.right_above[line] or above)
+	end
+	if left_file_size > 0 then
+		ui.pad(current.right.buf, 1, left_file_size, true)
+	end
+	if right_file_size > 0 then
+		ui.pad(current.left.buf, 1, right_file_size, true)
 	end
 	return deleted
 end
@@ -273,7 +359,13 @@ local function at_cursor(session, buf)
 	if not path or not side or not context then
 		return {}
 	end
-	return visible_threads(session, context, path, side)[vim.api.nvim_win_get_cursor(0)[1]] or {}
+	local line = vim.api.nvim_win_get_cursor(0)[1]
+	local by_line, _, file_threads = visible_threads(session, context, path, side)
+	local nodes = vim.list_extend({}, by_line[line] or {})
+	if line == 1 then
+		vim.list_extend(nodes, file_threads)
+	end
+	return nodes
 end
 
 ---@param session AtlasDiffSession
@@ -286,16 +378,23 @@ end
 ---@param nodes AtlasReviewThreadNode[]
 ---@return string
 local function popup_title(nodes)
-	local path, side, line
+	local path, side, line, file_comment
 	for _, node in ipairs(nodes) do
-		local inline = node.comment.inline
-		if inline then
-			local node_side, node_line = position.location(inline)
-			if path and (path ~= inline.path or side ~= node_side or line ~= node_line) then
+		local comment = node.comment
+		local target = comment.file or comment.inline
+		if target then
+			local node_side, node_line = "RIGHT", 1
+			if comment.inline then
+				node_side, node_line = position.location(comment.inline)
+			end
+			if path and (path ~= target.path or side ~= node_side or line ~= node_line) then
 				return " Review threads "
 			end
-			path, side, line = inline.path, node_side, node_line
+			path, side, line, file_comment = target.path, node_side, node_line, comment.file ~= nil
 		end
+	end
+	if file_comment and path then
+		return string.format(" %s ", path)
 	end
 	return path and side and line and string.format(" %s:%d (%s) ", path, line, side) or " Review thread "
 end
@@ -365,12 +464,16 @@ function M.jump(session, buf, direction)
 	local sides = session.current.layout == "inline" and { "RIGHT" } or { "LEFT", "RIGHT" }
 	for _, side in ipairs(sides) do
 		local path = side == "LEFT" and context.old_path or context.new_path
-		for line in pairs(visible_threads(session, context, path, side)) do
+		local by_line, _, file_threads = visible_threads(session, context, path, side)
+		for line in pairs(by_line) do
 			locations[#locations + 1] = {
 				side = side,
 				line = line,
 				display = side == current_side and line or opposite_line(session, side, line),
 			}
+		end
+		if #file_threads > 0 and by_line[1] == nil then
+			locations[#locations + 1] = { side = side, line = 1, display = 1 }
 		end
 	end
 	if #locations == 0 then
@@ -458,6 +561,23 @@ local function add(session, buf, pending, start_line, end_line, suggestion)
 		opts.kind = "suggestion"
 	end
 	actions.add_comment(context, opts, function(result, action_err)
+		if result and not action_err then
+			review.apply_action_data(session, context.data)
+			session:render()
+		end
+	end)
+end
+
+---@param session AtlasDiffSession
+---@param file PullsFileCommentPosition
+---@param pending boolean
+function M.add_to_file(session, file, pending)
+	local context = review.action_context(session)
+	if not context then
+		return
+	end
+	file.commit_hash = session.source.head_revision
+	actions.add_comment(context, { file = file, pending = pending }, function(result, action_err)
 		if result and not action_err then
 			review.apply_action_data(session, context.data)
 			session:render()

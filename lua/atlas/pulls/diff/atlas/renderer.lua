@@ -84,7 +84,8 @@ end
 ---@param document AtlasDiffDocument
 ---@param right_buf integer
 ---@param comments? table<integer, [string, string][][]>
-function M.inline_deleted_lines(document, right_buf, comments)
+---@param hints? table<integer, [string, string][]>
+function M.inline_deleted_lines(document, right_buf, comments, hints)
 	vim.api.nvim_buf_clear_namespace(right_buf, inline_namespace, 0, -1)
 	if document.binary then
 		return
@@ -95,10 +96,12 @@ function M.inline_deleted_lines(document, right_buf, comments)
 		if hunk.old_count > 0 then
 			local virtual_lines = {}
 			for line = hunk.old_start, hunk.old_start + hunk.old_count - 1 do
-				table.insert(virtual_lines, {
+				local row = {
 					{ string.rep(" ", textoff), "Normal" },
 					{ document.old.lines[line] or "", "AtlasDiffRemoveLine" },
-				})
+				}
+				vim.list_extend(row, (hints and hints[line]) or {})
+				table.insert(virtual_lines, row)
 				vim.list_extend(virtual_lines, (comments and comments[line]) or {})
 			end
 			local line_count = vim.api.nvim_buf_line_count(right_buf)

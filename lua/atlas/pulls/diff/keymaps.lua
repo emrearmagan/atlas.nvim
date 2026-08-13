@@ -75,12 +75,16 @@ local function add_range(items, action, desc, callback)
 end
 
 ---@param session AtlasDiffSession
----@param opts { buffers: integer[], reload: fun()|nil, help_key: string|nil }
+---@param opts { buffers: integer[], reload: fun()|nil, help_key: string|nil, file_buffers: integer[]|nil, add_file_comment: (fun(pending: boolean))|nil }
 function M.register(session, opts)
 	local action_context = session.review and review.action_context(session) or nil
 	local reviews = session.review and session.review.provider.capabilities.reviews or {}
 	local reviewable = session.review and (session.review.pr.state == "open" or session.review.pr.state == "draft")
 	local has_review_items = session.review ~= nil or session.note_target ~= nil
+	local file_buffers = {}
+	for _, buf in ipairs(opts.file_buffers or {}) do
+		file_buffers[buf] = true
+	end
 	for _, buf in ipairs(opts.buffers) do
 		if vim.api.nvim_buf_is_valid(buf) then
 			local items = {}
@@ -124,19 +128,27 @@ function M.register(session, opts)
 						actions.start_or_submit(session)
 					end)
 				end
-				add(items, "pulls.review.diff.toggle_comments", "Toggle comment overlays", function()
-					session.show_comments = not session.show_comments
+				add(items, "pulls.review.diff.toggle_comments", "Toggle comment display", function()
+					session.expanded_overlays = not session.expanded_overlays
 					session:render()
 					session_api.notify(
 						session,
 						"info",
-						session.show_comments and "Comments shown" or "Comments hidden",
+						session.expanded_overlays and "Review overlays expanded" or "Review overlays compact",
 						1200
 					)
 				end)
 				add(items, "ui.open_in_browser", "Open comment in browser", function()
 					comments.open_in_browser(session, buf)
 				end)
+				if file_buffers[buf] and opts.add_file_comment then
+					add(items, "pulls.review.diff.add_comment", "Add pending file comment", function()
+						opts.add_file_comment(true)
+					end)
+					add(items, "pulls.review.diff.submit_comment", "Submit file comment", function()
+						opts.add_file_comment(false)
+					end)
+				end
 			end
 
 			if has_review_items and content_buffer(session, buf) then

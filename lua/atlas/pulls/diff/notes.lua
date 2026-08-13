@@ -57,6 +57,26 @@ local function visible(session)
 end
 
 ---@param session AtlasDiffSession
+---@return AtlasDiffHint[]
+function M.hints(session)
+	local current = session.current
+	if not current then
+		return {}
+	end
+	local items = {}
+	local visible_notes = visible(session)
+	for _, note in ipairs(visible_notes) do
+		items[#items + 1] = {
+			buf = current.right.buf,
+			line = anchor_line(note, current.document),
+			kind = "note",
+			text = note.body,
+		}
+	end
+	return items
+end
+
+---@param session AtlasDiffSession
 function M.render(session)
 	local current = session.current
 	if not current then

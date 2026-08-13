@@ -33,6 +33,68 @@ local function comment_author(raw)
 	return { name = user.login, id = user.id, username = user.login, nickname = user.login }
 end
 
+---@param raw table
+---@return PullsAuthor[]|nil
+local function pull_assignees(raw)
+	if json.nilify(raw.assignees) == nil then
+		return nil
+	end
+
+	local assignees = {}
+	for _, node in ipairs(github_mapping.connection_nodes(raw.assignees)) do
+		local assignee = pull_author(node)
+		if assignee.username ~= "" then
+			table.insert(assignees, assignee)
+		end
+	end
+	return assignees
+end
+
+---@param raw table
+---@return PullsLabel[]|nil
+local function pull_labels(raw)
+	if json.nilify(raw.labels) == nil then
+		return nil
+	end
+
+	local labels = {}
+	for _, node in ipairs(github_mapping.connection_nodes(raw.labels)) do
+		local name = json.safe_str(node.name)
+		if name and name ~= "" then
+			table.insert(labels, { name = name, color = json.safe_str(node.color) })
+		end
+	end
+	return labels
+end
+
+---@param raw table
+---@return PullsReviewer[]|nil
+local function pull_reviewers(raw)
+	if json.nilify(raw.latestOpinionatedReviews) == nil then
+		return nil
+	end
+
+	local reviewers = {}
+	for _, node in ipairs(github_mapping.connection_nodes(raw.latestOpinionatedReviews)) do
+		local author = pull_author(node.author)
+		if author.username ~= "" then
+			local state = tostring(node.state or ""):upper()
+			local decision = state == "APPROVED" and "approved"
+				or state == "CHANGES_REQUESTED" and "changes_requested"
+				or "pending"
+			table.insert(reviewers, {
+				id = author.id ~= "" and author.id or author.username,
+				provider_id = author.username,
+				name = author.name,
+				username = author.username,
+				nickname = author.nickname,
+				decision = decision,
+			})
+		end
+	end
+	return reviewers
+end
+
 ---@param diff_hunk string|nil
 ---@return DiffHunk|nil
 local function parse_diff_hunk(diff_hunk)
@@ -100,7 +162,15 @@ function M.to_pull_request(raw)
 		repo_full_name = repo_full_name,
 		is_subscribed = tostring(raw.viewerSubscription or "") == "SUBSCRIBED",
 		reactions = github_mapping.reaction_groups(raw.reactionGroups),
-		_raw = raw,
+		assignees = pull_assignees(raw),
+		reviewers = pull_reviewers(raw),
+		labels = pull_labels(raw),
+		lines_added = tonumber(raw.additions),
+		lines_removed = tonumber(raw.deletions),
+		_raw = {
+			node_id = json.safe_str(raw.id),
+			commits = json.nilify(raw.commits),
+		},
 	}
 end
 
@@ -291,13 +361,16 @@ function M.to_comment(raw, thread_state)
 	local start_line = json.nilify(raw.start_line) or json.nilify(raw.original_start_line)
 	local start_side = json.nilify(raw.start_side) or raw.side
 	local path = json.nilify(raw.path)
+	local subject_type = tostring(raw.subject_type or ""):upper()
 
-	local inline, inline_hunk, inline_hunk_anchor
+	local file, inline, inline_hunk, inline_hunk_anchor
 	if path ~= nil then
 		local side = raw.side == "LEFT" and "old" or "new"
 		local anchor = line or original_line
-		inline_hunk_anchor = original_line or anchor
-		if anchor then
+		if subject_type == "FILE" then
+			file = { path = tostring(path) }
+		elseif anchor then
+			inline_hunk_anchor = original_line or anchor
 			if start_line == anchor then
 				start_line = nil
 			end
@@ -317,6 +390,7 @@ function M.to_comment(raw, thread_state)
 
 	local result = comment(raw, type(raw.user) == "table" and raw.user or nil)
 	result.parent_id = json.nilify(raw.in_reply_to_id)
+	result.file = file
 	result.inline = inline
 	result.inline_hunk = inline_hunk
 	result.inline_hunk_anchor = inline_hunk and inline_hunk_anchor or nil
@@ -348,6 +422,7 @@ function M.to_review_comment(node, thread, fallback_parent)
 		user = { login = author.login, id = author.databaseId },
 		body = node.body,
 		path = thread.path or node.path,
+		subject_type = thread.subjectType or node.subjectType,
 		diff_hunk = node.diffHunk,
 		line = thread.line or node.line,
 		start_line = thread.startLine or node.startLine,
@@ -364,10 +439,8 @@ function M.to_review_comment(node, thread, fallback_parent)
 		resolved = thread.isResolved == true,
 		outdated = thread.isOutdated == true,
 	})
-	result._raw = {
-		comment_id = tostring(node.id or ""),
-		thread_id = tostring(thread.id or ""),
-	}
+	result.thread_id = json.safe_str(thread.id)
+	result._raw = { comment_id = tostring(node.id or "") }
 	if result.parent_id == nil then
 		result.parent_id = fallback_parent
 	end
@@ -378,12 +451,14 @@ end
 ---@return table
 function M.review_thread(comment)
 	local inline = comment.inline or {}
-	local raw = comment._raw or {}
-	local side = inline.to ~= nil and "RIGHT" or "LEFT"
-	local start_side = inline.start_to ~= nil and "RIGHT" or (inline.start_from ~= nil and "LEFT" or nil)
+	local file = comment.file
+	local side = not file and (inline.to ~= nil and "RIGHT" or "LEFT") or nil
+	local start_side = not file and (inline.start_to ~= nil and "RIGHT" or (inline.start_from ~= nil and "LEFT" or nil))
+		or nil
 	return {
-		id = tostring(raw.thread_id or ""),
-		path = inline.path,
+		id = tostring(comment.thread_id or ""),
+		subjectType = file and "FILE" or "LINE",
+		path = file and file.path or inline.path,
 		line = inline.to,
 		startLine = inline.start_to,
 		originalLine = comment.inline_hunk_anchor or inline.from,

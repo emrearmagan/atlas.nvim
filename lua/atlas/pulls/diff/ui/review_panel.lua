@@ -21,13 +21,14 @@ end
 ---@param comment PullsComment
 ---@return string
 local function comment_location(comment)
-	local inline = comment.inline
-	if not inline then
+	local position = comment.file or comment.inline
+	if not position then
 		return ""
 	end
-	local path = inline.path:match("([^/\\]+)$") or inline.path
-	local line = inline.to or inline.from
-	local start_line = inline.to and inline.start_to or inline.start_from
+	local inline = comment.inline
+	local path = position.path:match("([^/\\]+)$") or position.path
+	local line = inline and (inline.to or inline.from) or nil
+	local start_line = inline and (inline.to and inline.start_to or inline.start_from) or nil
 	if line and start_line and line ~= start_line then
 		return string.format("%s:%d-%d", path, start_line, line)
 	end
@@ -210,13 +211,13 @@ end
 local function panel_items(data)
 	local pending, published_comments, standalone_tasks, rendered_notes = {}, {}, {}, {}
 	for _, thread in ipairs(review_threads.group_comments(data.comments, data.tasks)) do
-		local inline = thread.comment.inline
+		local position = thread.comment.file or thread.comment.inline
 		table.insert(has_pending(thread) and pending or published_comments, {
 			kind = "comment",
 			thread = thread,
 			key = review_threads.comment_key(thread.comment),
-			path = inline and inline.path or "",
-			line = inline and (inline.to or inline.from) or 0,
+			path = position and position.path or "",
+			line = thread.comment.inline and (thread.comment.inline.to or thread.comment.inline.from) or 0,
 			timestamp = tostring(thread.comment.created_on or ""),
 		})
 	end
@@ -226,13 +227,13 @@ local function panel_items(data)
 	end
 	for _, task in ipairs(data.tasks) do
 		if not task.parent_id or not comment_ids[tostring(task.parent_id)] then
-			local inline = task.inline
+			local position = task.file or task.inline
 			table.insert(standalone_tasks, {
 				kind = "task",
 				thread = { comment = task, children = {} },
 				key = review_threads.comment_key(task),
-				path = inline and inline.path or "",
-				line = inline and (inline.to or inline.from) or 0,
+				path = position and position.path or "",
+				line = task.inline and (task.inline.to or task.inline.from) or 0,
 				timestamp = tostring(task.created_on or ""),
 			})
 		end
@@ -527,10 +528,10 @@ function M.register_keymaps(panel)
 		end
 	end
 	local entries = {}
-	add_mapping(entries, "pulls.review.explorer.focus_file", "Show item in diff", 1, function()
+	add_mapping(entries, "pulls.review.show_item", "Show item in diff", 1, function()
 		show_selected(false)
 	end)
-	add_mapping(entries, "pulls.review.explorer.open_file", "Open item in diff", 2, function()
+	add_mapping(entries, "pulls.review.focus_item", "Focus item in diff", 2, function()
 		show_selected(true)
 	end)
 	add_mapping(entries, "ui.open_in_browser", "Open comment in browser", 3, function()
@@ -553,7 +554,7 @@ function M.register_keymaps(panel)
 	add_mapping(entries, "pulls.review.diff.toggle_resolved", "Toggle resolved / completed", 7, function()
 		run_action("toggle_resolved")
 	end)
-	add_mapping(entries, { "ui.show_details", "ui.toggle_fold" }, "Expand / collapse", 8, toggle_selected)
+	add_mapping(entries, "ui.toggle_fold", "Expand / collapse", 8, toggle_selected)
 	add_mapping(entries, "ui.toggle_all_folds", "Expand / collapse all", 9, function()
 		local session = active_session(panel)
 		if not session then

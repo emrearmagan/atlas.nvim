@@ -68,6 +68,10 @@ local MAX_CACHE_ENTRIES = 200
 ---@type table<string, { queries: table<string, AsyncPickerCacheEntry>, order: string[] }>
 local cache_store = {}
 
+function M.clear_cache()
+	cache_store = {}
+end
+
 ---@param s string
 ---@return string
 local function sanitize_line(s)

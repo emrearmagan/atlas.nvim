@@ -4,7 +4,7 @@ local service = require("atlas.pulls.providers.bitbucket.api.service")
 local mapper = require("atlas.pulls.providers.bitbucket.api.mapper")
 
 ---@param raw_content string
----@param opts? { parent_id?: number|string|nil, inline?: { from?: number, to?: number, start_from?: number, start_to?: number, path?: string }|nil, pending?: boolean|nil }
+---@param opts? { parent_id?: number|string|nil, file?: PullsFileCommentPosition|nil, inline?: { from?: number, to?: number, start_from?: number, start_to?: number, path?: string }|nil, pending?: boolean|nil }
 ---@return string
 local function encode_comment_payload(raw_content, opts)
 	opts = opts or {}
@@ -27,6 +27,8 @@ local function encode_comment_payload(raw_content, opts)
 			start_to = opts.inline.start_to,
 			path = opts.inline.path,
 		}
+	elseif opts.file then
+		payload.inline = { path = opts.file.path }
 	end
 
 	return vim.json.encode(payload)
@@ -83,6 +85,7 @@ function M.add_comment(pr, content, opts, on_done)
 	local parent = opts and opts.parent or nil
 	local body = encode_comment_payload(content, {
 		parent_id = parent and (parent.parent_id or parent.id) or nil,
+		file = opts and opts.file or nil,
 		inline = opts and opts.inline or nil,
 		pending = (opts and opts.pending == true) or (parent ~= nil and parent.state == "PENDING"),
 	})
