@@ -12,6 +12,7 @@ describe("providers.resolve", function()
 				gitlab = { base_url = "https://gitlab.example.com" },
 				bitbucket = {},
 				jira = { base_url = "https://jira.example.com" },
+				shortcut = { token = "shortcut-test-token" },
 			},
 			pulls = {
 				github = {},
@@ -22,6 +23,7 @@ describe("providers.resolve", function()
 				github = {},
 				gitlab = {},
 				jira = {},
+				shortcut = {},
 			},
 		}
 	end)
@@ -117,6 +119,17 @@ describe("providers.resolve", function()
 		assert.are.equal(repository.repository_url, merge_request.repository_url)
 		assert.are.equal(12, merge_request.id)
 		assert.are.equal("https://jira.example.com/jira/browse/ATLAS-123", jira.url)
+	end)
+
+	it("resolves Shortcut Story URLs", function()
+		local story = assert(providers.resolve("https://app.shortcut.com/acme/story/123/example-story"))
+		assert.are.equal("shortcut", story.provider)
+		assert.are.equal("issues", story.domain)
+		assert.are.equal("issue", story.entity)
+		assert.are.equal("acme", story.workspace)
+		assert.are.equal(123, story.number)
+		assert.are.equal(123, story.id)
+		assert.are.equal("123", story.issue_key)
 	end)
 
 	it("rejects unsupported URLs", function()
