@@ -43,6 +43,7 @@ local ICONS = {
 		fold_open = { icon = "", hl_group = "AtlasTextMuted" },
 		fold_closed = { icon = "", hl_group = "AtlasTextMuted" },
 		custom_action = { icon = "", hl_group = "AtlasTextMuted" },
+		tag = { icon = "", hl_group = "AtlasTextWarning" },
 	},
 
 	pulls = {
@@ -57,7 +58,6 @@ local ICONS = {
 		changes = { icon = "󱓉", hl_group = "AtlasTextMuted" },
 		file = { icon = "", hl_group = "AtlasTextMuted" },
 		activity = { icon = "󱐋", hl_group = "AtlasTextMuted" },
-		tag = { icon = "", hl_group = "AtlasTextWarning" },
 		branch = { icon = "", hl_group = "AtlasLogInfo" },
 		review = { icon = "", hl_group = "AtlasTextMuted" },
 
