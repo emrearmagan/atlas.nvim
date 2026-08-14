@@ -25,6 +25,17 @@ local VIEWERS = {
 	DiffviewOpen = "diffview",
 }
 
+---@param operation string
+---@param context table
+---@param err string|nil
+local function log_result(operation, context, err)
+	if err then
+		logger.logerror(operation .. " failed", vim.tbl_extend("force", {}, context, { error = tostring(err) }))
+	else
+		logger.loginfo(operation .. " ready", context)
+	end
+end
+
 ---@class AtlasInitialReview: PullsReviewData
 ---@field warnings string[]
 
@@ -171,6 +182,14 @@ local function start_range(opts, on_done, target, existing)
 		end
 		return nil
 	end
+	local operation = existing and "diff.reload" or "diff.open"
+	local log = {
+		viewer = VIEWERS[command] or command,
+		root = root,
+		base_revision = base,
+		head_revision = head,
+	}
+	logger.loginfo(operation, log)
 
 	local request = { cancel = function() end }
 	local cancelled = false
@@ -184,6 +203,7 @@ local function start_range(opts, on_done, target, existing)
 	if not viewer_id then
 		local err = open_external(command, { root = root, base_revision = base, head_revision = head })
 		view:finish()
+		log_result(operation, log, err)
 		if on_done then
 			on_done(err)
 		end
@@ -203,7 +223,11 @@ local function start_range(opts, on_done, target, existing)
 		end, next_target, session)
 	end
 	request = open_viewer(session, view, {}, function(err)
-		if not cancelled and on_done then
+		if cancelled then
+			return
+		end
+		log_result(operation, log, err)
+		if on_done then
 			on_done(err)
 		end
 	end) or request
@@ -224,6 +248,14 @@ end
 ---@return { cancel: fun() }|nil
 local function start_pr(context, command, refresh, on_done, target, existing)
 	local viewer_id = VIEWERS[command]
+	local operation = existing and "diff.reload" or "diff.open"
+	local log = {
+		viewer = viewer_id or command,
+		provider = context.provider.id,
+		repo = context.pr.repo_full_name,
+		pr_id = context.pr.id,
+	}
+	logger.loginfo(operation, log)
 	local request = { cancel = function() end }
 	local cancelled = false
 	local finished = false
@@ -243,6 +275,7 @@ local function start_pr(context, command, refresh, on_done, target, existing)
 			return
 		end
 		finished = true
+		log_result(operation, log, err)
 		if on_done then
 			on_done(err)
 		end
@@ -285,6 +318,9 @@ local function start_pr(context, command, refresh, on_done, target, existing)
 	---@param review AtlasDiffReview|nil
 	---@param warnings string[]
 	local function load_commits(source, review, warnings)
+		log.root = source.root
+		log.base_revision = source.base_revision
+		log.head_revision = source.head_revision
 		if not viewer_id then
 			local err = open_external(command, source)
 			view:finish()
@@ -473,11 +509,7 @@ function M.open_pr(context, on_done)
 		end
 		return nil
 	end
-	local pr = context.pr
 	return start_pr(context, command, false, function(open_err)
-		if open_err then
-			logger.logerror("diff.open failed", { pr_id = pr.id, error = tostring(open_err) })
-		end
 		if on_done then
 			on_done(open_err, open_err and "error" or nil)
 		end

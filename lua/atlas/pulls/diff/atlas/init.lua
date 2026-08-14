@@ -7,6 +7,7 @@ local events = require("atlas.core.events")
 local explorer = require("atlas.pulls.diff.atlas.explorer")
 local git = require("atlas.pulls.diff.atlas.git")
 local keymaps = require("atlas.pulls.diff.atlas.keymaps")
+local logger = require("atlas.core.logger")
 local notes = require("atlas.pulls.diff.notes")
 local position = require("atlas.pulls.diff.position")
 local pulls_highlights = require("atlas.pulls.ui.highlights")
@@ -75,7 +76,9 @@ local function select_file(session, index, on_loaded)
 		if not document then
 			state.pending_index = nil
 			explorer.render(session, state.annotated_paths)
-			session_api.notify(session, "error", tostring(err or "Unable to load file diff"))
+			local message = tostring(err or "Unable to load file diff")
+			logger.logerror("diff.file failed", { path = state.files[index].path, error = message })
+			session_api.notify(session, "error", message)
 			return
 		end
 		state.selected_index = index

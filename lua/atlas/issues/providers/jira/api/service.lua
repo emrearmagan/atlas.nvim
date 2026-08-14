@@ -121,21 +121,16 @@ function M.request(method, endpoint, data, on_done, ctx)
 	logger.loginfo(message, log)
 	return http.curl_request(method, url, headers, payload, function(result, err)
 		if err then
-			logger.logerror("Jira request failed", {
-				method = method,
-				endpoint = endpoint,
-				error = tostring(err),
-			})
+			logger.logerror("Jira request failed", vim.tbl_extend("force", {}, log, { error = tostring(err) }))
 			on_done(nil, err)
 			return
 		end
 
 		if type(result) ~= "table" then
-			logger.logerror("Jira response parse failed", {
-				method = method,
-				endpoint = endpoint,
-				error = "Jira response is not a JSON object",
-			})
+			logger.logerror(
+				"Jira response parse failed",
+				vim.tbl_extend("force", {}, log, { error = "Jira response is not a JSON object" })
+			)
 			on_done(nil, "Jira response is not a JSON object")
 			return
 		end
@@ -149,11 +144,10 @@ function M.request(method, endpoint, data, on_done, ctx)
 				table.insert(messages, k .. ": " .. v)
 			end
 			if #messages > 0 then
-				logger.logerror("Jira API returned errors", {
-					method = method,
-					endpoint = endpoint,
-					error = table.concat(messages, "; "),
-				})
+				logger.logerror(
+					"Jira API returned errors",
+					vim.tbl_extend("force", {}, log, { error = table.concat(messages, "; ") })
+				)
 				on_done(nil, table.concat(messages, "; "))
 				return
 			end

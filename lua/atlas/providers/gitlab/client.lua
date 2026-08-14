@@ -43,6 +43,7 @@ local function log_request(default_message, fields, ctx)
 	local message = log.action or default_message
 	log.action = nil
 	logger.loginfo(message, log)
+	return message, log
 end
 
 ---@param domain "pulls"|"issues"
@@ -178,14 +179,10 @@ local function new(domain)
 			payload = encoded
 		end
 
-		log_request("GitLab request", { method = method, endpoint = endpoint }, ctx)
+		local message, log = log_request("GitLab request", { method = method, endpoint = endpoint }, ctx)
 		return http.curl_request(method, client.url(endpoint), client.build_headers(), payload, function(result, err)
 			if err then
-				logger.logerror("GitLab request failed", {
-					method = method,
-					endpoint = endpoint,
-					error = tostring(err),
-				})
+				logger.logerror(message .. " failed", vim.tbl_extend("force", {}, log, { error = tostring(err) }))
 				on_done(nil, err)
 				return
 			end
@@ -196,7 +193,7 @@ local function new(domain)
 					api_err = tostring(result.error)
 				end
 				if api_err ~= nil then
-					logger.logerror("GitLab API error", { method = method, endpoint = endpoint, error = api_err })
+					logger.logerror(message .. " failed", vim.tbl_extend("force", {}, log, { error = api_err }))
 					on_done(nil, api_err)
 					return
 				end
@@ -219,14 +216,10 @@ local function new(domain)
 			return nil
 		end
 
-		log_request("GitLab request", { method = method, endpoint = endpoint }, ctx)
+		local message, log = log_request("GitLab request", { method = method, endpoint = endpoint }, ctx)
 		return http.curl_text_request(method, client.url(endpoint), client.build_headers(), nil, function(result, err)
 			if err then
-				logger.logerror("GitLab request failed", {
-					method = method,
-					endpoint = endpoint,
-					error = tostring(err),
-				})
+				logger.logerror(message .. " failed", vim.tbl_extend("force", {}, log, { error = tostring(err) }))
 				on_done(nil, err)
 				return
 			end
@@ -248,7 +241,7 @@ local function new(domain)
 		end
 
 		local payload = vim.fn.json_encode({ query = query, variables = variables or vim.empty_dict() })
-		log_request("GitLab GraphQL", { transport = "graphql", variables = variables }, ctx)
+		local message, log = log_request("GitLab GraphQL", { transport = "graphql" }, ctx)
 		return http.curl_request(
 			"POST",
 			client.base_url() .. "/api/graphql",
@@ -256,13 +249,13 @@ local function new(domain)
 			payload,
 			function(result, err)
 				if err then
-					logger.logerror("GitLab GraphQL failed", { error = tostring(err) })
+					logger.logerror(message .. " failed", vim.tbl_extend("force", {}, log, { error = tostring(err) }))
 					on_done(nil, err)
 					return
 				end
 				if type(result) == "table" and type(result.errors) == "table" and #result.errors > 0 then
 					local graphql_err = tostring(result.errors[1].message or "GraphQL error")
-					logger.logerror("GitLab GraphQL error", { error = graphql_err })
+					logger.logerror(message .. " failed", vim.tbl_extend("force", {}, log, { error = graphql_err }))
 					on_done(nil, graphql_err)
 					return
 				end
