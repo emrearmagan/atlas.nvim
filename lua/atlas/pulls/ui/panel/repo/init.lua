@@ -4,6 +4,7 @@ local layout = require("atlas.ui.layout")
 local root_panel_state = require("atlas.pulls.ui.panel.state")
 local panel_state = require("atlas.pulls.ui.panel.repo.state")
 local renderer = require("atlas.pulls.ui.panel.repo.renderer")
+local panel_keymaps = require("atlas.pulls.ui.panel.keymaps")
 local icons = require("atlas.ui.shared.icons")
 local statusline = require("atlas.ui.statusline")
 
@@ -202,6 +203,10 @@ function M.on_select(repo, opts)
 		panel_state.current_tab = get_tabs()[1].key
 	end
 
+	local buf = layout.buf_id("detail")
+	if buf then
+		panel_keymaps.register(buf)
+	end
 	activate_current_tab()
 
 	local should_fetch = opts.force_refresh == true or type(panel_state.current_repo_details) ~= "table"

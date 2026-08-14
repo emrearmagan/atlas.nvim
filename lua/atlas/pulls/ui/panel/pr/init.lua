@@ -4,6 +4,7 @@ local layout = require("atlas.ui.layout")
 local root_panel_state = require("atlas.pulls.ui.panel.state")
 local panel_state = require("atlas.pulls.ui.panel.pr.state")
 local renderer = require("atlas.pulls.ui.panel.pr.renderer")
+local panel_keymaps = require("atlas.pulls.ui.panel.keymaps")
 local icons = require("atlas.ui.shared.icons")
 local overview_icon, overview_icon_hl = icons.general("overview")
 
@@ -309,6 +310,10 @@ function M.on_select(pr, repo, opts)
 		return
 	end
 
+	local buf = layout.buf_id("detail")
+	if buf then
+		panel_keymaps.register(buf)
+	end
 	activate_current_tab()
 
 	local should_fetch = context_changed or opts.force_refresh == true
