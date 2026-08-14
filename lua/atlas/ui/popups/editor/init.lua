@@ -2,7 +2,7 @@ local M = {}
 
 local keymaps = require("atlas.core.keymaps")
 local statusline = require("atlas.ui.statusline")
-local utils = require("atlas.ui.shared.utils")
+local virtual_lines = require("atlas.ui.components.virtual_lines")
 
 local completion_provider_by_buf = {}
 local preview_namespace = vim.api.nvim_create_namespace("atlas.markdown_editor.preview")
@@ -13,24 +13,10 @@ local MAX_PREVIEW_LINES = 6
 ---@param width integer
 local function render_preview(buf, preview, width)
 	vim.api.nvim_buf_clear_namespace(buf, preview_namespace, 0, -1)
-	local spans, line_highlights = {}, {}
-	for _, highlight in ipairs(preview.highlights or {}) do
-		if highlight.line_hl_group then
-			line_highlights[highlight.line] = highlight.line_hl_group
-		else
-			table.insert(spans, highlight)
-		end
-	end
-	local lines = utils.virtual_lines(preview.lines, spans)
-	for index, line in ipairs(lines) do
-		local background = line_highlights[index - 1] or "AtlasFooterBackground"
-		local line_width = 0
-		for _, chunk in ipairs(line) do
-			line_width = line_width + vim.api.nvim_strwidth(chunk[1])
-			chunk[2] = { chunk[2], background }
-		end
-		table.insert(line, { string.rep(" ", math.max(0, width - line_width)), background })
-	end
+	local lines = virtual_lines.render(preview.lines, preview.highlights, {
+		width = width,
+		background_hl_group = "CursorLine",
+	})
 	table.insert(lines, { { string.rep("─", width), "AtlasBorder" } })
 	vim.api.nvim_buf_set_extmark(buf, preview_namespace, 0, 0, {
 		virt_lines = lines,

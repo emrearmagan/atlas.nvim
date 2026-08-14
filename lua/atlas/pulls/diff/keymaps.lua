@@ -57,6 +57,23 @@ local function with_item(session, buf, on_comment, on_note)
 	end
 end
 
+---@param items AtlasHelpKeyItem[]
+---@param action AtlasKeymapActionId
+---@param desc string
+---@param callback fun(start_line?: integer, end_line?: integer)
+local function add_range(items, action, desc, callback)
+	add(items, action, desc, function()
+		if vim.fn.mode() == "n" then
+			callback()
+			return
+		end
+		local start_line = vim.fn.line("v")
+		local end_line = vim.api.nvim_win_get_cursor(0)[1]
+		vim.cmd.normal({ args = { vim.keycode("<Esc>") }, bang = true })
+		callback(start_line, end_line)
+	end, { "n", "x" })
+end
+
 ---@param session AtlasDiffSession
 ---@param opts { buffers: integer[], reload: fun()|nil, help_key: string|nil, file_buffers: integer[]|nil, add_file_comment: (fun(pending: boolean))|nil }
 function M.register(session, opts)
@@ -143,12 +160,40 @@ function M.register(session, opts)
 					end)
 				end)
 				if session.review then
-					add(items, "pulls.review.diff.add_comment", "Add pending inline comment", function()
-						comments.add_at_cursor(session, buf, true)
-					end, { "n", "x" })
-					add(items, "pulls.review.diff.submit_comment", "Submit inline comment", function()
-						comments.add_at_cursor(session, buf, false)
-					end, { "n", "x" })
+					add_range(
+						items,
+						"pulls.review.diff.add_comment",
+						"Add pending inline comment",
+						function(start, finish)
+							comments.add_comment(session, buf, true, start, finish)
+						end
+					)
+					add_range(
+						items,
+						"pulls.review.diff.submit_comment",
+						"Submit inline comment",
+						function(start, finish)
+							comments.add_comment(session, buf, false, start, finish)
+						end
+					)
+					if session.current and buf == session.current.right.buf then
+						add_range(
+							items,
+							"pulls.review.diff.add_suggestion",
+							"Add pending suggestion",
+							function(start, finish)
+								comments.add_suggestion(session, buf, true, start, finish)
+							end
+						)
+						add_range(
+							items,
+							"pulls.review.diff.submit_suggestion",
+							"Submit suggestion",
+							function(start, finish)
+								comments.add_suggestion(session, buf, false, start, finish)
+							end
+						)
+					end
 					add(items, "pulls.review.diff.toggle_resolved", "Toggle resolved", function()
 						comments.toggle_resolved_at_cursor(session, buf)
 					end)

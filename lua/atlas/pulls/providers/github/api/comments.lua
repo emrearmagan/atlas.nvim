@@ -27,8 +27,9 @@ pullRequestReview { id state commit { oid } }
 local function add_review_thread(pr, content, target, file_level, review_id, pending_review, on_done)
 	local side = not file_level and (target.to and "RIGHT" or "LEFT") or nil
 	local line = not file_level and (target.to or target.from) or nil
+	local start_line = not file_level and (side == "RIGHT" and target.start_to or target.start_from) or nil
 	local query = ([[
-mutation($reviewId:ID!,$path:String!,$body:String!,$subjectType:PullRequestReviewThreadSubjectType!,$line:Int,$side:DiffSide){
+mutation($reviewId:ID!,$path:String!,$body:String!,$subjectType:PullRequestReviewThreadSubjectType!,$line:Int,$side:DiffSide,$startLine:Int,$startSide:DiffSide){
   addPullRequestReviewThread(input:{
     pullRequestReviewId:$reviewId
     path:$path
@@ -36,6 +37,8 @@ mutation($reviewId:ID!,$path:String!,$body:String!,$subjectType:PullRequestRevie
     subjectType:$subjectType
     line:$line
     side:$side
+    startLine:$startLine
+    startSide:$startSide
   }){
     thread{
       id
@@ -44,8 +47,11 @@ mutation($reviewId:ID!,$path:String!,$body:String!,$subjectType:PullRequestRevie
       subjectType
       path
       line
+      startLine
       originalLine
+      originalStartLine
       diffSide
+      startDiffSide
       comments(last:1){nodes{%s}}
     }
   }
@@ -63,6 +69,9 @@ mutation($reviewId:ID!,$path:String!,$body:String!,$subjectType:PullRequestRevie
 	}
 	if not file_level then
 		vim.list_extend(args, { "-f", "side=" .. side, "-F", "line=" .. tostring(line) })
+		if start_line then
+			vim.list_extend(args, { "-F", "startLine=" .. tostring(start_line), "-f", "startSide=" .. side })
+		end
 	end
 	vim.list_extend(args, { "-f", "reviewId=" .. review_id })
 	vim.list_extend(args, { "-f", "query=" .. query })
@@ -91,9 +100,12 @@ mutation($reviewId:ID!,$path:String!,$body:String!,$subjectType:PullRequestRevie
 		thread.diffSide = thread.diffSide or side
 		if side == "LEFT" then
 			thread.originalLine = thread.originalLine or line
+			thread.originalStartLine = thread.originalStartLine or start_line
 		elseif side == "RIGHT" then
 			thread.line = thread.line or line
+			thread.startLine = thread.startLine or start_line
 		end
+		thread.startDiffSide = thread.startDiffSide or (start_line and side or nil)
 		local review = json.safe_table(node.pullRequestReview)
 		reviews.update(pending_review, review)
 		local created = mapper.to_review_comment(node, thread, nil)
@@ -139,6 +151,10 @@ local function add_published_review_comment(pr, content, target, file_level, on_
 		local side = target.to and "RIGHT" or "LEFT"
 		local line = target.to or target.from
 		vim.list_extend(args, { "-f", "side=" .. side, "-F", "line=" .. tostring(line) })
+		local start_line = side == "RIGHT" and target.start_to or target.start_from
+		if start_line then
+			vim.list_extend(args, { "-F", "start_line=" .. tostring(start_line), "-f", "start_side=" .. side })
+		end
 	end
 
 	return cli.gh(args, function(result, err)

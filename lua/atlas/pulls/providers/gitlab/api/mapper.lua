@@ -245,6 +245,8 @@ local function to_inline_position(position)
 	local path = json.safe_str(position.new_path) or json.safe_str(position.old_path) or ""
 	local old_line = tonumber(position.old_line)
 	local new_line = tonumber(position.new_line)
+	local line_range = type(position.line_range) == "table" and position.line_range or {}
+	local start = type(line_range.start) == "table" and line_range.start or {}
 	if path == "" or (old_line == nil and new_line == nil) then
 		return nil
 	end
@@ -253,6 +255,8 @@ local function to_inline_position(position)
 		old_path = json.safe_str(position.old_path),
 		from = old_line,
 		to = new_line,
+		start_from = tonumber(start.old_line),
+		start_to = tonumber(start.new_line),
 	}
 end
 

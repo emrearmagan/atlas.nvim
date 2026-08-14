@@ -49,6 +49,8 @@ local M = {}
 ---@field previous_note? AtlasKeymapValue
 ---@field add_comment? AtlasKeymapValue
 ---@field submit_comment? AtlasKeymapValue
+---@field add_suggestion? AtlasKeymapValue
+---@field submit_suggestion? AtlasKeymapValue
 ---@field edit_comment? AtlasKeymapValue
 ---@field delete? AtlasKeymapValue
 ---@field add_note? AtlasKeymapValue
@@ -147,6 +149,8 @@ local M = {}
 ---| "pulls.review.diff.previous_note"
 ---| "pulls.review.diff.add_comment"
 ---| "pulls.review.diff.submit_comment"
+---| "pulls.review.diff.add_suggestion"
+---| "pulls.review.diff.submit_suggestion"
 ---| "pulls.review.diff.edit_comment"
 ---| "pulls.review.diff.delete"
 ---| "pulls.review.diff.add_note"
@@ -375,6 +379,8 @@ function M.validate()
 			"pulls.review.diff.previous_note",
 			"pulls.review.diff.add_comment",
 			"pulls.review.diff.submit_comment",
+			"pulls.review.diff.add_suggestion",
+			"pulls.review.diff.submit_suggestion",
 			"pulls.review.diff.delete",
 			"pulls.review.diff.add_note",
 			"pulls.review.diff.toggle_resolved",

@@ -274,16 +274,28 @@ local function buffer_context(session, buf)
 	return nil, nil
 end
 
+---@param start_line integer|nil
+---@param end_line integer|nil
+---@return integer, integer
+local function selected_range(start_line, end_line)
+	local cursor_line = vim.api.nvim_win_get_cursor(0)[1]
+	start_line = start_line or cursor_line
+	end_line = end_line or cursor_line
+	return math.min(start_line, end_line), math.max(start_line, end_line)
+end
+
 ---@param session AtlasDiffSession
 ---@param buf integer
+---@param start_line integer
+---@param end_line integer
 ---@return PullsInlineCommentPosition|nil, string|nil
-local function inline_position(session, buf)
+local function inline_position(session, buf, start_line, end_line)
 	local current = session.current
 	local _, side = buffer_context(session, buf)
 	if not current or not side then
 		return nil, "This buffer is not part of the diff"
 	end
-	local inline, err = position.from_line(current.document, side, vim.api.nvim_win_get_cursor(0)[1])
+	local inline, err = position.from_range(current.document, side, start_line, end_line)
 	if inline then
 		inline.commit_hash = session.source.head_revision
 	end
@@ -292,21 +304,28 @@ end
 
 ---@param session AtlasDiffSession
 ---@param buf integer
+---@param selected_start integer
+---@param selected_end integer
 ---@return AtlasMarkdownEditorPreview|nil
-local function inline_preview(session, buf)
+local function inline_preview(session, buf, selected_start, selected_end)
 	local current = session.current
 	local _, side = buffer_context(session, buf)
 	if not current or not side or current.document.binary then
 		return nil
 	end
-	local line = vim.api.nvim_win_get_cursor(0)[1]
 	local source = side == "LEFT" and current.document.old or current.document.new
-	local first = math.max(1, line - 2)
+	local first = math.max(1, selected_start - 2)
 	local lines = {}
-	for index = first, math.min(#source.lines, line + 2) do
+	for index = first, math.min(#source.lines, selected_end + 2) do
 		lines[#lines + 1] = source.lines[index]
 	end
-	return code_preview.render({ file_path = source.path, lines = lines, start_line = first, anchor_line = line })
+	return code_preview.render({
+		file_path = source.path,
+		lines = lines,
+		start_line = first,
+		anchor_start = selected_start,
+		anchor_line = selected_end,
+	})
 end
 
 ---@param session AtlasDiffSession
@@ -505,21 +524,43 @@ end
 ---@param session AtlasDiffSession
 ---@param buf integer
 ---@param pending boolean
-function M.add_at_cursor(session, buf, pending)
+---@param start_line integer|nil
+---@param end_line integer|nil
+---@param suggestion boolean
+local function add(session, buf, pending, start_line, end_line, suggestion)
 	local context = review.action_context(session)
-	if not context then
+	local current = session.current
+	if not context or not current then
 		return
 	end
-	local inline, err = inline_position(session, buf)
+	if suggestion and buf ~= current.right.buf then
+		notify(session, "info", "Suggestions are only available on the new side of the diff")
+		return
+	end
+	start_line, end_line = selected_range(start_line, end_line)
+	local inline, err = inline_position(session, buf, start_line, end_line)
 	if not inline then
 		notify(session, "info", err or "Cannot comment on this line")
 		return
 	end
-	actions.add_comment(context, {
+	local opts = {
 		inline = inline,
 		pending = pending,
-		preview = inline_preview(session, buf),
-	}, function(result, action_err)
+		preview = inline_preview(session, buf, start_line, end_line),
+	}
+	if suggestion then
+		local lines = {}
+		for line = start_line, end_line do
+			lines[#lines + 1] = current.document.new.lines[line]
+		end
+		local fence = "suggestion"
+		if context.provider.id == "gitlab" then
+			fence = string.format("suggestion:-%d+0", #lines - 1)
+		end
+		opts.initial_text = string.format("\n```%s\n%s\n```", fence, table.concat(lines, "\n"))
+		opts.kind = "suggestion"
+	end
+	actions.add_comment(context, opts, function(result, action_err)
 		if result and not action_err then
 			review.apply_action_data(session, context.data)
 			session:render()
@@ -542,6 +583,24 @@ function M.add_to_file(session, file, pending)
 			session:render()
 		end
 	end)
+end
+
+---@param session AtlasDiffSession
+---@param buf integer
+---@param pending boolean
+---@param start_line integer|nil
+---@param end_line integer|nil
+function M.add_comment(session, buf, pending, start_line, end_line)
+	add(session, buf, pending, start_line, end_line, false)
+end
+
+---@param session AtlasDiffSession
+---@param buf integer
+---@param pending boolean
+---@param start_line integer|nil
+---@param end_line integer|nil
+function M.add_suggestion(session, buf, pending, start_line, end_line)
+	add(session, buf, pending, start_line, end_line, true)
 end
 
 ---@param session AtlasDiffSession

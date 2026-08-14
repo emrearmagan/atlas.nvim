@@ -232,6 +232,25 @@ local function add_positioned_comment(pr, path, iid, content, target, file_level
 			old_line = not file_level and target.from or nil,
 			new_line = not file_level and target.to or nil,
 		}
+		local start_from, start_to = target.start_from, target.start_to
+		if not file_level and (start_from or start_to) then
+			local line_code = require("atlas.pulls.providers.gitlab.api.line_code")
+			local side = target.to and "new" or "old"
+			position.line_range = {
+				start = {
+					line_code = line_code.encode(target.path, start_from, start_to),
+					type = side,
+					old_line = start_from,
+					new_line = start_to,
+				},
+				["end"] = {
+					line_code = line_code.encode(target.path, target.from, target.to),
+					type = side,
+					old_line = target.from,
+					new_line = target.to,
+				},
+			}
+		end
 		local resource = pending and "draft_notes" or "discussions"
 		local endpoint = string.format("/projects/%s/merge_requests/%d/%s", service.url_encode(path), iid, resource)
 		local payload = pending and { note = content, position = position } or { body = content, position = position }

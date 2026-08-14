@@ -214,6 +214,8 @@
 ---@field old_path string|nil
 ---@field from integer|nil
 ---@field to integer|nil
+---@field start_from integer|nil
+---@field start_to integer|nil
 ---@field commit_hash string|nil
 
 ---@class PullsFileCommentPosition

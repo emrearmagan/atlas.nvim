@@ -91,7 +91,7 @@ local function upsert_comment(items, comment)
 end
 
 ---@param context AtlasReviewActionContext
----@param opts { parent: PullsComment|nil, inline: PullsInlineCommentPosition|nil, file: PullsFileCommentPosition|nil, pending: boolean|nil, preview: AtlasMarkdownEditorPreview|nil }|nil
+---@param opts { parent: PullsComment|nil, inline: PullsInlineCommentPosition|nil, file: PullsFileCommentPosition|nil, pending: boolean|nil, preview: AtlasMarkdownEditorPreview|nil, initial_text: string|nil, kind: "comment"|"suggestion"|nil }|nil
 ---@param on_done fun(result: PullsActionResult|nil, err: string|nil)
 ---@return boolean handled
 function M.add_comment(context, opts, on_done)
@@ -115,6 +115,7 @@ function M.add_comment(context, opts, on_done)
 		return false
 	end
 	local pending = opts.pending == true or (parent ~= nil and parent.state == "PENDING")
+	local suggestion = opts.kind == "suggestion"
 
 	local completion = context.completion
 	if completion == nil and context.items then
@@ -127,6 +128,8 @@ function M.add_comment(context, opts, on_done)
 	local title = " Add Comment "
 	if parent then
 		title = " Reply to Comment "
+	elseif suggestion then
+		title = pending and " Add Pending Suggestion " or " Add Suggestion "
 	elseif opts.file then
 		title = pending and " Add Pending File Comment " or " Add File Comment "
 	elseif pending then
@@ -142,7 +145,7 @@ function M.add_comment(context, opts, on_done)
 	open_editor(context, {
 		key = "pr-comment",
 		title = title,
-		initial_text = mention ~= "" and (mention .. " ") or "",
+		initial_text = opts.initial_text or (mention ~= "" and (mention .. " ") or ""),
 		completion = completion,
 		preview = preview,
 		on_save = function(text)
@@ -152,8 +155,12 @@ function M.add_comment(context, opts, on_done)
 			if vim.trim(text) == "" then
 				return
 			end
-			local message = parent and "Reply added" or "Comment added"
-			notify(context, "loading", parent and "Sending reply..." or "Adding comment...")
+			local message = parent and "Reply added" or suggestion and "Suggestion added" or "Comment added"
+			notify(
+				context,
+				"loading",
+				parent and "Sending reply..." or suggestion and "Adding suggestion..." or "Adding comment..."
+			)
 			run_request(context, function(done)
 				return add(context.pr, text, {
 					parent = parent,
@@ -167,7 +174,10 @@ function M.add_comment(context, opts, on_done)
 					return
 				end
 				if err then
-					notify(context, "error", (parent and "Reply failed: " or "Add comment failed: ") .. err)
+					local prefix = parent and "Reply failed: "
+						or suggestion and "Add suggestion failed: "
+						or "Add comment failed: "
+					notify(context, "error", prefix .. err)
 					on_done(nil, err)
 					return
 				end

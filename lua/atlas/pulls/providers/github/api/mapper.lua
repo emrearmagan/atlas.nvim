@@ -358,6 +358,8 @@ end
 function M.to_comment(raw, thread_state)
 	local line = json.nilify(raw.line)
 	local original_line = json.nilify(raw.original_line)
+	local start_line = json.nilify(raw.start_line) or json.nilify(raw.original_start_line)
+	local start_side = json.nilify(raw.start_side) or raw.side
 	local path = json.nilify(raw.path)
 	local subject_type = tostring(raw.subject_type or ""):upper()
 
@@ -369,10 +371,15 @@ function M.to_comment(raw, thread_state)
 			file = { path = tostring(path) }
 		elseif anchor then
 			inline_hunk_anchor = original_line or anchor
+			if start_line == anchor then
+				start_line = nil
+			end
 			inline = {
 				path = tostring(path),
 				from = side == "old" and anchor or nil,
 				to = side == "new" and anchor or nil,
+				start_from = start_side == "LEFT" and start_line or nil,
+				start_to = start_side ~= "LEFT" and start_line or nil,
 			}
 		end
 		inline_hunk = parse_diff_hunk(raw.diff_hunk)
@@ -418,8 +425,11 @@ function M.to_review_comment(node, thread, fallback_parent)
 		subject_type = thread.subjectType or node.subjectType,
 		diff_hunk = node.diffHunk,
 		line = thread.line or node.line,
+		start_line = thread.startLine or node.startLine,
 		original_line = thread.originalLine or node.originalLine,
+		original_start_line = thread.originalStartLine or node.originalStartLine,
 		side = thread.diffSide,
+		start_side = thread.startDiffSide,
 		url = node.url,
 		html_url = node.url,
 		created_at = node.createdAt,
@@ -442,13 +452,19 @@ end
 function M.review_thread(comment)
 	local inline = comment.inline or {}
 	local file = comment.file
+	local side = not file and (inline.to ~= nil and "RIGHT" or "LEFT") or nil
+	local start_side = not file and (inline.start_to ~= nil and "RIGHT" or (inline.start_from ~= nil and "LEFT" or nil))
+		or nil
 	return {
 		id = tostring(comment.thread_id or ""),
 		subjectType = file and "FILE" or "LINE",
 		path = file and file.path or inline.path,
 		line = inline.to,
+		startLine = inline.start_to,
 		originalLine = comment.inline_hunk_anchor or inline.from,
-		diffSide = not file and (inline.from ~= nil and "LEFT" or "RIGHT") or nil,
+		originalStartLine = inline.start_from,
+		diffSide = side,
+		startDiffSide = start_side,
 		isResolved = comment.state == "RESOLVED",
 		isOutdated = comment.outdated == true or comment.state == "OUTDATED",
 	}

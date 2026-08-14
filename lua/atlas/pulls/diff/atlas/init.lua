@@ -542,6 +542,10 @@ function M.open(session, loading_view, on_done)
 				review_panel.configure(panel)
 			end
 			session_api.set_current(session, view.current(session))
+			local selected_line = explorer.line_for_file(session, state.selected_index)
+			if selected_line and state.panel.win then
+				vim.api.nvim_win_set_cursor(state.panel.win, { selected_line, 0 })
+			end
 			session_api.review_attached(session)
 			register_keymaps(session)
 			review_panel.register_keymaps(panel)

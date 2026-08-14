@@ -666,7 +666,7 @@ Use `ctx.output(title)` to show output from a custom action:
   output:write("Loading...")
   output:run(cmd, on_exit, { cwd = "/repo" })
 <
-============================================================================== 
+==============================================================================
 9. EVENTS                                                        *atlas-events*
 
 Atlas emits these `User` events after setup or cleanup completes:
@@ -759,6 +759,8 @@ Defaults live under `keymaps` in `setup()`. Each entry accepts:
             previous_note         = "[n",
             add_comment           = "c",
             submit_comment        = "C",
+            add_suggestion        = "s",
+            submit_suggestion     = "S",
             edit_comment          = "e",
             delete                = "dd",
             add_note              = "<leader>n",

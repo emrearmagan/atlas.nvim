@@ -399,13 +399,15 @@ local function comment_position(raw_inline)
 	local path = tostring(inline.path or "")
 	local from = tonumber(inline["from"])
 	local to = tonumber(inline["to"])
+	local start_from = tonumber(inline.start_from)
+	local start_to = tonumber(inline.start_to)
 	if path == "" then
 		return nil, nil
 	end
 	if from == nil and to == nil then
 		return nil, { path = path }
 	end
-	return { path = path, from = from, to = to }, nil
+	return { path = path, from = from, to = to, start_from = start_from, start_to = start_to }, nil
 end
 
 ---@param result table|nil

@@ -140,15 +140,12 @@ local function render_hunk(lines, spans, line_map, file, hunk, is_collapsed, opt
 
 	-- Body
 	if not is_collapsed then
-		local last_line =
-			math.max((hunk.old_start or 0) + (hunk.old_count or 0), (hunk.new_start or 0) + (hunk.new_count or 0))
-		local number_width = math.max(2, #tostring(last_line))
-		local source_lines, prefixes = {}, {}
+		local source_lines, line_numbers = {}, {}
 		for _, dl in ipairs(hunk.lines or {}) do
 			if dl.kind ~= "meta" then
 				local line = dl.new_line or dl.old_line or 0
 				table.insert(source_lines, dl.content or dl.text or "")
-				table.insert(prefixes, string.format("%" .. number_width .. "d  ", line))
+				table.insert(line_numbers, line)
 			end
 		end
 		local preview = code_preview.render({
@@ -156,7 +153,7 @@ local function render_hunk(lines, spans, line_map, file, hunk, is_collapsed, opt
 			lines = source_lines,
 			start_line = 1,
 			anchor_line = nil,
-			prefixes = prefixes,
+			line_numbers = line_numbers,
 		})
 		local preview_spans = {}
 		for _, span in ipairs(preview.highlights) do

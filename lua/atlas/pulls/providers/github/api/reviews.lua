@@ -16,14 +16,17 @@ query($owner:String!,$name:String!,$number:Int!,$endCursor:String){
       reviewThreads(first:100,after:$endCursor){
         pageInfo{hasNextPage endCursor}
         nodes{
-		  id
-		  isResolved
-		  isOutdated
-		  subjectType
-		  diffSide
+          id
+          isResolved
+          isOutdated
+          subjectType
+          diffSide
+          startDiffSide
           path
           line
+          startLine
           originalLine
+          originalStartLine
           comments(first:100){
             nodes{
               id

@@ -25,8 +25,13 @@ local function comment_location(comment)
 	if not position then
 		return ""
 	end
+	local inline = comment.inline
 	local path = position.path:match("([^/\\]+)$") or position.path
-	local line = comment.inline and (comment.inline.to or comment.inline.from) or nil
+	local line = inline and (inline.to or inline.from) or nil
+	local start_line = inline and (inline.to and inline.start_to or inline.start_from) or nil
+	if line and start_line and line ~= start_line then
+		return string.format("%s:%d-%d", path, start_line, line)
+	end
 	return line and string.format("%s:%d", path, line) or path
 end
 
