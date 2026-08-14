@@ -133,7 +133,7 @@ local function make_session(session, viewer_id, source, review, commits)
 		session.review_request.cancel()
 		session.review_request = nil
 	end
-	review_api.cancel_actions(session)
+	review_api.invalidate(session)
 	session.source = source
 	session.review = review
 	session.commits = commits

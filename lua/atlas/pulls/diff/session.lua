@@ -132,7 +132,9 @@ end
 ---@param callbacks AtlasDiffSessionCallbacks
 function M.attach(session, callbacks)
 	if session.tabpage and session.tabpage ~= callbacks.tabpage then
-		sessions[session.tabpage] = nil
+		if sessions[session.tabpage] == session then
+			sessions[session.tabpage] = nil
+		end
 	end
 	session.tabpage = callbacks.tabpage
 	session.notify = callbacks.notify
@@ -246,7 +248,7 @@ function M.detach(session, reason)
 	end
 	review.invalidate(session)
 	ui_comments.close_popup(session.id)
-	note_popup.close()
+	note_popup.close(session.id)
 	if session.current then
 		ui_comments.clear(session.current)
 		notes.clear(session.current)
@@ -254,7 +256,7 @@ function M.detach(session, reason)
 	end
 	review_panel.delete(session.review_panel)
 	statusline.dispose(session.statusline)
-	if session.tabpage then
+	if session.tabpage and sessions[session.tabpage] == session then
 		sessions[session.tabpage] = nil
 	end
 	if session.review_attached then

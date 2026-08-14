@@ -171,6 +171,7 @@ function M.open_at_cursor(session, buf)
 		return
 	end
 	note_popup.open({
+		owner = session.id,
 		notes = notes,
 		outdated = outdated,
 		on_edit = function(note)

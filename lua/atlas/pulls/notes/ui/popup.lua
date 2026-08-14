@@ -6,18 +6,25 @@ local M = {}
 
 local namespace = vim.api.nvim_create_namespace("atlas.notes.popup")
 local current_win
+local current_owner
 
 ---@class AtlasNotesUIPopupOptions
+---@field owner string
 ---@field notes AtlasNote[]
 ---@field outdated table<string, boolean>|nil
 ---@field on_edit fun(note: AtlasNote)
 ---@field on_delete fun(note: AtlasNote)
 
-function M.close()
+---@param owner string|nil
+function M.close(owner)
+	if owner and current_owner ~= owner then
+		return
+	end
 	if current_win and vim.api.nvim_win_is_valid(current_win) then
 		vim.api.nvim_win_close(current_win, true)
 	end
 	current_win = nil
+	current_owner = nil
 end
 
 ---@param opts AtlasNotesUIPopupOptions
@@ -65,6 +72,7 @@ function M.open(opts)
 		zindex = 250,
 	})
 	current_win = win
+	current_owner = opts.owner
 	vim.api.nvim_set_option_value(
 		"winhighlight",
 		"Normal:NormalFloat,NormalNC:NormalFloat,EndOfBuffer:NormalFloat,FloatBorder:FloatBorder",
