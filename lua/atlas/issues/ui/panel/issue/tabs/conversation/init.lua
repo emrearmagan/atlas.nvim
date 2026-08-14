@@ -58,14 +58,16 @@ function M.on_select(issue, refresh, opts)
 
 	track(comments.fetch_conversation(issue, opts, function(result, err)
 		if err then
-			state.comments = err
-			state.activity = err
+			state.comments = {}
+			state.activity = {}
+			state.error = tostring(err)
 			statusline.notify("error", string.format("Failed to load conversation for %s", key))
 		else
 			result = result or {}
 			state.comments = result.comments or {}
 			state.activity = result.events or {}
 			state.reaction_options = result.reaction_options or {}
+			state.error = nil
 			statusline.notify("success", string.format("Conversation loaded for %s", key), 1200)
 		end
 		refresh()

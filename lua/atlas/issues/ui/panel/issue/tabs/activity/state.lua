@@ -1,6 +1,7 @@
 local M = {
 	issue = nil, ---@type Issue|nil
 	entries = nil, ---@type IssueActivityEntry[]|nil
+	error = nil, ---@type string|nil
 	is_loading = false,
 	line_map = {},
 }
@@ -8,6 +9,7 @@ local M = {
 function M.reset()
 	M.issue = nil
 	M.entries = nil
+	M.error = nil
 	M.is_loading = false
 	M.line_map = {}
 end

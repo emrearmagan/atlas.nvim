@@ -98,10 +98,11 @@ function M.on_select(issue, refresh, opts)
 		state.is_loading = false
 
 		if err then
-			state.entries = {}
+			state.error = tostring(err)
 			statusline.notify("error", string.format("Failed to load history for %s", issue_key))
 		else
 			state.entries = entries or {}
+			state.error = nil
 			statusline.notify("success", string.format("History loaded for %s (%d)", issue_key, #state.entries), 1200)
 		end
 
@@ -118,6 +119,10 @@ function M.render(_issue, width)
 
 	if state.is_loading then
 		utils.push(lines, spans, spinner.with_text("Loading history..."), "AtlasTextMuted", PADDING_X)
+		return lines, spans, {}
+	end
+	if state.error then
+		utils.push(lines, spans, state.error, "AtlasLogError", PADDING_X)
 		return lines, spans, {}
 	end
 

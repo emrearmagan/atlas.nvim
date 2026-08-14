@@ -1,12 +1,14 @@
 ---@class IssuesConversationTabState
----@field comments IssueComment[]|"loading"|string|nil
----@field activity IssueActivityEntry[]|"loading"|string|nil
+---@field comments IssueComment[]|"loading"|nil
+---@field activity IssueActivityEntry[]|"loading"|nil
+---@field error string|nil
 ---@field collapsed table<string, boolean>
 ---@field expanded_runs table<string, boolean>
 ---@field reaction_options IssueReactionOption[]
 local M = {
 	comments = nil,
 	activity = nil,
+	error = nil,
 	collapsed = {},
 	expanded_runs = {},
 	reaction_options = {},
@@ -15,6 +17,7 @@ local M = {
 function M.reset()
 	M.comments = nil
 	M.activity = nil
+	M.error = nil
 	M.collapsed = {}
 	M.expanded_runs = {}
 	M.reaction_options = {}
