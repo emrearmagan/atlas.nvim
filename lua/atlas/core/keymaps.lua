@@ -60,7 +60,7 @@ local M = {}
 ---@class AtlasPullsReviewKeymaps
 ---@field show_item? AtlasKeymapValue
 ---@field focus_item? AtlasKeymapValue
----@field toggle_approval? AtlasKeymapValue
+---@field approve? AtlasKeymapValue
 ---@field request_changes? AtlasKeymapValue
 ---@field submit_review? AtlasKeymapValue
 ---@field explorer? AtlasPullsReviewExplorerKeymaps
@@ -125,7 +125,7 @@ local M = {}
 ---| "pulls.checkout"
 ---| "pulls.edit_title"
 ---| "pulls.edit_description"
----| "pulls.review.toggle_approval"
+---| "pulls.review.approve"
 ---| "pulls.review.request_changes"
 ---| "pulls.review.submit_review"
 ---| "pulls.review.show_item"
@@ -355,7 +355,7 @@ function M.validate()
 			"pulls.filters.declined",
 		}),
 		["pull review"] = conflicts_for({
-			"pulls.review.toggle_approval",
+			"pulls.review.approve",
 			"pulls.review.request_changes",
 			"pulls.review.submit_review",
 			"pulls.review.show_item",

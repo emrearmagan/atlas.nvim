@@ -23,6 +23,9 @@ local function run(session, action)
 		return
 	end
 	action.run(context, function(result, err)
+		if session.closed then
+			return
+		end
 		if result and not err then
 			review_api.apply_action_data(session, context.data)
 			reload_notes(session)
@@ -58,22 +61,17 @@ function M.start_or_submit(session)
 end
 
 ---@param session AtlasDiffSession
-function M.toggle_approval(session)
+function M.approve(session)
 	local review = session.review
 	local context = review_api.action_context(session)
-	if not review or not context or not pull_actions.is_available("toggle_approval", context) then
+	if not review or not context or not pull_actions.is_available("approve", context) then
 		return
 	end
 	if review.state.pending and not (review.provider.capabilities.reviews or {}).submit_review then
 		open_in_browser(session)
 		return
 	end
-	pull_actions.run("toggle_approval", context, function(result, err)
-		if result and not err then
-			reload_notes(session)
-			review_api.reload(session)
-		end
-	end)
+	run(session, pull_actions.approve)
 end
 
 ---@param session AtlasDiffSession
@@ -124,7 +122,7 @@ function M.open(session)
 		items[#items + 1] = pull_actions.start_review
 	end
 	local can_complete = reviewable and (not pending or reviews.submit_review ~= nil)
-	if can_complete and reviews.approve and pull_actions.is_available("toggle_approval", context) then
+	if can_complete and reviews.approve and pull_actions.is_available("approve", context) then
 		items[#items + 1] = pull_actions.approve
 	end
 	if can_complete and reviews.request_changes and pull_actions.is_available("request_changes", context) then

@@ -15,21 +15,6 @@ local function has_pr(ctx)
 	return ctx.pr ~= nil and ctx.pr.id ~= nil
 end
 
----@param pr PullRequest
----@param current_user PullsUser
----@return boolean
-local function is_approved(pr, current_user)
-	for _, reviewer in ipairs(pr.reviewers or {}) do
-		if
-			reviewer.id == current_user.id
-			or (reviewer.username ~= "" and reviewer.username == current_user.username)
-		then
-			return reviewer.decision == "approved"
-		end
-	end
-	return false
-end
-
 ---@param ctx AtlasPullActionContext
 ---@param level "loading"|"success"|"warn"|"error"|"info"
 ---@param message string
@@ -50,7 +35,7 @@ end
 
 ---@param ctx AtlasPullActionContext
 ---@return boolean, string|nil
-local function toggle_approval_available(ctx)
+local function approve_available(ctx)
 	if not has_pr(ctx) or ctx.pr == nil then
 		return false, "No PR selected"
 	end
@@ -58,54 +43,6 @@ local function toggle_approval_available(ctx)
 		return false, "No approve URL available"
 	end
 	return true, nil
-end
-
----@param ctx AtlasPullActionContext
----@param done fun(result: PullsActionResult|nil, err: string|nil)
-local function toggle_approval(ctx, done)
-	local pr = ctx.pr
-	if pr == nil then
-		done(nil, "No PR selected")
-		return
-	end
-	if ctx.current_user == nil then
-		notify(ctx, "error", "Current user is unavailable")
-		done(nil, "Current user is unavailable")
-		return
-	end
-
-	notify(ctx, "loading", "Checking approval...")
-	pullrequests.fetch_pullrequest(pr, { force_load = true }, function(fresh_pr, err)
-		if not fresh_pr then
-			local message = tostring(err or "Unable to load pull request")
-			notify(ctx, "error", message)
-			done(nil, message)
-			return
-		end
-
-		local approved = is_approved(fresh_pr, ctx.current_user)
-		notify(ctx, "loading", approved and "Unapproving PR..." or "Approving PR...")
-		local function on_done(_, update_err)
-			if update_err ~= nil then
-				local action = approved and "Unapprove" or "Approve"
-				notify(ctx, "error", string.format("%s failed: %s", action, tostring(update_err)))
-				done(nil, tostring(update_err))
-				return
-			end
-
-			local message = approved and "Unapproved" or "Approved"
-			notify(ctx, "success", "PR " .. message:lower(), 1200)
-			if not approved then
-				notes.clear_for_pull_request(pr)
-			end
-			done({ changed_pr = true, message = message }, nil)
-		end
-		if approved then
-			reviews.unapprove(fresh_pr, on_done)
-		else
-			reviews.approve(fresh_pr, nil, "", on_done)
-		end
-	end)
 end
 
 ---@param ctx AtlasPullActionContext
@@ -297,17 +234,17 @@ local function search(ctx, done)
 end
 
 register({
+	id = actions.approve.id,
+	label = actions.approve.label,
+	is_available = approve_available,
+	run = actions.approve.run,
+})
+
+register({
 	id = actions.request_changes.id,
 	label = actions.request_changes.label,
 	is_available = request_changes_available,
 	run = actions.request_changes.run,
-})
-
-register({
-	id = "toggle_approval",
-	label = "Toggle approval",
-	is_available = toggle_approval_available,
-	run = toggle_approval,
 })
 
 register({

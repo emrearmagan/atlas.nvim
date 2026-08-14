@@ -734,7 +734,7 @@ Defaults live under `keymaps` in `setup()`. Each entry accepts:
         review = {
           show_item             = "<CR>",
           focus_item            = "gd",
-          toggle_approval       = "ga",
+          approve               = "ga",
           request_changes       = "gr",
           submit_review         = "gs",
           explorer = {

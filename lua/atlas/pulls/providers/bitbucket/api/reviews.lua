@@ -171,18 +171,6 @@ function M.approve(pr, _review, body, on_done)
 end
 
 ---@param pr PullRequest
----@param on_done fun(result: table|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.unapprove(pr, on_done)
-	local url = action_url(pr, "approve")
-	if url == "" then
-		on_done(nil, "No approve URL available")
-		return nil
-	end
-	return service.request("DELETE", url, nil, nil, on_done)
-end
-
----@param pr PullRequest
 ---@param _review PullsReview|nil
 ---@param body string
 ---@param on_done fun(ok: boolean, err: string|nil)

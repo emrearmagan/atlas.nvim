@@ -7,7 +7,6 @@ local statusline = require("atlas.ui.statusline")
 local multi_select = require("atlas.ui.popups.multi_select")
 local notes = require("atlas.pulls.notes")
 local pullrequests_api = require("atlas.pulls.providers.gitlab.api.pullrequests")
-local reviews_api = require("atlas.pulls.providers.gitlab.api.reviews")
 local users_api = require("atlas.pulls.providers.gitlab.api.users")
 local service = require("atlas.providers.gitlab.client").pulls
 
@@ -59,50 +58,11 @@ end
 
 ---@param ctx AtlasPullActionContext
 ---@return boolean, string|nil
-local function toggle_approval_available(ctx)
+local function review_available(ctx)
 	if not is_open_or_draft(ctx) then
 		return false, "MR is not open"
 	end
 	return true, nil
-end
-
----@param ctx AtlasPullActionContext
----@param done fun(result: PullsActionResult|nil, err: string|nil)
-local function toggle_approval(ctx, done)
-	local pr = ctx.pr
-	notify(ctx, "loading", string.format("Checking approval for %s...", pr_label(pr)))
-	reviews_api.fetch_approval_state(pr, function(approved, err)
-		if err then
-			notify(ctx, "error", err)
-			done(nil, err)
-			return
-		end
-
-		if approved then
-			notify(ctx, "loading", string.format("Unapproving %s...", pr_label(pr)))
-			reviews_api.unapprove_pull_request(pr, function(ok, unapprove_err)
-				if not ok then
-					notify(ctx, "error", unapprove_err or "Unapprove failed")
-					done(nil, unapprove_err or "Unapprove failed")
-					return
-				end
-				notify(ctx, "success", string.format("Unapproved %s", pr_label(pr)), 1200)
-				done({ changed_pr = true, message = "Unapproved" }, nil)
-			end)
-		else
-			notify(ctx, "loading", string.format("Approving %s...", pr_label(pr)))
-			reviews_api.approve_pull_request(pr, function(ok, approve_err)
-				if not ok then
-					notify(ctx, "error", approve_err or "Approve failed")
-					done(nil, approve_err or "Approve failed")
-					return
-				end
-				notify(ctx, "success", string.format("Approved %s", pr_label(pr)), 1200)
-				notes.clear_for_pull_request(pr)
-				done({ changed_pr = true, message = "Approved" }, nil)
-			end)
-		end
-	end)
 end
 
 ---@param ctx AtlasPullActionContext
@@ -380,17 +340,17 @@ local function toggle_subscription(ctx, done)
 end
 
 register({
-	id = actions.request_changes.id,
-	label = actions.request_changes.label,
-	is_available = toggle_approval_available,
-	run = actions.request_changes.run,
+	id = actions.approve.id,
+	label = actions.approve.label,
+	is_available = review_available,
+	run = actions.approve.run,
 })
 
 register({
-	id = "toggle_approval",
-	label = "Toggle approval",
-	is_available = toggle_approval_available,
-	run = toggle_approval,
+	id = actions.request_changes.id,
+	label = actions.request_changes.label,
+	is_available = review_available,
+	run = actions.request_changes.run,
 })
 
 register({

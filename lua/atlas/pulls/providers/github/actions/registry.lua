@@ -5,7 +5,6 @@ local action_utils = require("atlas.pulls.actions.utils")
 local cli = require("atlas.providers.github.client").pulls
 local notes = require("atlas.pulls.notes")
 local pullrequests = require("atlas.pulls.providers.github.api.pullrequests")
-local reviews = require("atlas.pulls.providers.github.api.reviews")
 local statusline = require("atlas.ui.statusline")
 local multi_select = require("atlas.ui.popups.multi_select")
 local github_mapping = require("atlas.providers.github.mapping")
@@ -42,43 +41,17 @@ end
 
 ---@param ctx AtlasPullActionContext
 ---@return boolean, string|nil
-local function toggle_approval_available(ctx)
+local function review_available(ctx)
 	if not has_pr(ctx) or ctx.pr == nil then
 		return false, "No PR selected"
 	end
 	if repo_slug(ctx) == "" then
 		return false, "Missing repository info"
 	end
-	return true, nil
-end
-
----@param ctx AtlasPullActionContext
----@param done fun(result: PullsActionResult|nil, err: string|nil)
-local function toggle_approval(ctx, done)
-	local pr = ctx.pr
-	if pr == nil then
-		done(nil, "No PR selected")
-		return
+	if ctx.pr.state ~= "open" and ctx.pr.state ~= "draft" then
+		return false, "PR is not open"
 	end
-	notify(ctx, "loading", "Checking approval...")
-	reviews.toggle_approval(pr, function(action, err)
-		if action == nil then
-			notify(ctx, "error", tostring(err))
-			done(nil, tostring(err))
-			return
-		end
-
-		local message = ({
-			approved = "PR approved",
-			unapproved = "PR unapproved",
-			changes_request_dismissed = "Changes request dismissed",
-		})[action]
-		notify(ctx, "success", message, 1200)
-		if action == "approved" then
-			notes.clear_for_pull_request(pr)
-		end
-		done({ changed_pr = true, message = message }, nil)
-	end)
+	return true, nil
 end
 
 ---@param ctx AtlasPullActionContext
@@ -513,17 +486,17 @@ local function toggle_subscription(ctx, done)
 end
 
 register({
-	id = actions.request_changes.id,
-	label = actions.request_changes.label,
-	is_available = toggle_approval_available,
-	run = actions.request_changes.run,
+	id = actions.approve.id,
+	label = actions.approve.label,
+	is_available = review_available,
+	run = actions.approve.run,
 })
 
 register({
-	id = "toggle_approval",
-	label = "Toggle approval",
-	is_available = toggle_approval_available,
-	run = toggle_approval,
+	id = actions.request_changes.id,
+	label = actions.request_changes.label,
+	is_available = review_available,
+	run = actions.request_changes.run,
 })
 
 register({

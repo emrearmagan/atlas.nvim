@@ -209,75 +209,15 @@ function M.publish(pr, reviewer_state, body, on_done)
 end
 
 ---@param pr PullRequest
----@param on_done fun(state: { user_has_approved: boolean, approved_by: string[] }|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.fetch_approvals(pr, on_done)
-	local path, iid = project_iid(pr)
-	if path == "" or iid == nil then
-		on_done(nil, "Invalid MR identifier")
-		return nil
-	end
-	local endpoint = string.format("/projects/%s/merge_requests/%d/approvals", service.url_encode(path), iid)
-	return service.request("GET", endpoint, nil, function(result, err)
-		if err or type(result) ~= "table" then
-			on_done(nil, err or "Failed to fetch approval state")
-			return
-		end
-		local approved_by = {}
-		for _, entry in ipairs(result.approved_by or {}) do
-			local user = type(entry) == "table" and (entry.user or entry) or nil
-			local login = type(user) == "table" and tostring(user.username or "") or ""
-			if login ~= "" then
-				table.insert(approved_by, login)
-			end
-		end
-		on_done({ user_has_approved = result.user_has_approved == true, approved_by = approved_by }, nil)
-	end)
-end
-
----@param pr PullRequest
----@param on_done fun(approved: boolean|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.fetch_approval_state(pr, on_done)
-	return M.fetch_approvals(pr, function(state, err)
-		if not state then
-			on_done(nil, err)
-			return
-		end
-		on_done(state.user_has_approved, nil)
-	end)
-end
-
----@param pr PullRequest
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.approve_pull_request(pr, on_done)
+local function approve_pull_request(pr, on_done)
 	local path, iid = project_iid(pr)
 	if path == "" or iid == nil then
 		on_done(false, "Invalid MR identifier")
 		return nil
 	end
 	local endpoint = string.format("/projects/%s/merge_requests/%d/approve", service.url_encode(path), iid)
-	return service.request("POST", endpoint, nil, function(_, err)
-		if err then
-			on_done(false, err)
-			return
-		end
-		bust_pull_request_cache(pr)
-		on_done(true, nil)
-	end)
-end
-
----@param pr PullRequest
----@param on_done fun(ok: boolean, err: string|nil)
----@return { cancel: fun() }|nil
-function M.unapprove_pull_request(pr, on_done)
-	local path, iid = project_iid(pr)
-	if path == "" or iid == nil then
-		on_done(false, "Invalid MR identifier")
-		return nil
-	end
-	local endpoint = string.format("/projects/%s/merge_requests/%d/unapprove", service.url_encode(path), iid)
 	return service.request("POST", endpoint, nil, function(_, err)
 		if err then
 			on_done(false, err)
@@ -313,7 +253,7 @@ function M.approve(pr, _review, body, on_done)
 			on_done(false, err)
 			return
 		end
-		current = M.approve_pull_request(pr, on_done)
+		current = approve_pull_request(pr, on_done)
 	end)
 	return {
 		cancel = function()

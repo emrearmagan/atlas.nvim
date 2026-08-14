@@ -28,7 +28,7 @@ local notify = utils.notify
 ---| "convert_to_draft"
 ---| "edit_reviewers"
 ---| "search"
----| "toggle_approval"
+---| "approve"
 ---| "request_changes"
 
 ---@class AtlasPullActionContext
