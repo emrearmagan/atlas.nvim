@@ -87,7 +87,12 @@ function M.render(tab_items, get_tab_module)
 
 		local tab_mod = get_tab_module(panel_state.current_tab)
 		local content_offset = #lines
-		if tab_mod then
+		local detail_error = type(panel_state.current_repo_details) == "string"
+			and panel_state.current_repo_details ~= "loading"
+		if detail_error then
+			utils.push(lines, spans, panel_state.current_repo_details, "AtlasLogError", PADDING_X)
+			panel_state.line_map = {}
+		elseif tab_mod then
 			local tab_lines_c, tab_spans_c, tab_line_map = tab_mod.render(repo, width)
 			utils.append_block(lines, spans, { lines = tab_lines_c, highlights = tab_spans_c })
 			local adjusted = {}

@@ -1,6 +1,6 @@
 ---@class PullsRepoBranchesTabState
 ---@field repo PullsRepoDetails|nil
----@field branches PullsRepoBranches|"loading"|nil
+---@field branches PullsRepoBranches|"loading"|string|nil
 ---@field line_map table<integer, table>
 local M = {
 	repo = nil,

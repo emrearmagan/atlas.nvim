@@ -86,6 +86,10 @@ function M.render(_repo, width)
 		utils.push(lines, spans, spinner.with_text("Loading branches..."), "AtlasTextMuted", PADDING_X)
 		return lines, spans, line_map
 	end
+	if type(state.branches) == "string" then
+		utils.push(lines, spans, state.branches, "AtlasLogError", PADDING_X)
+		return lines, spans, line_map
+	end
 
 	local repo = state.repo
 	if repo == nil then
@@ -178,7 +182,7 @@ function M.on_select(_pr, repo, refresh, opts)
 		end
 		state.repo = active_detail
 		if err then
-			state.branches = { entries = {} }
+			state.branches = tostring(err)
 			statusline.notify("error", string.format("Failed to load branches for %s", repo_label))
 		else
 			state.branches = branches or { entries = {} }
