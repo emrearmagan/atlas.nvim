@@ -1,5 +1,6 @@
 local M = {}
 
+local request_scope = require("atlas.core.requests")
 local service = require("atlas.providers.gitlab.client").pulls
 local http = require("atlas.core.http")
 local config = require("atlas.config")
@@ -61,7 +62,10 @@ function M.fetch_detail(repo, opts, on_done)
 	end
 
 	local endpoint = string.format("/projects/%s?statistics=true", service.url_encode(path))
-	return service.request("GET", endpoint, nil, function(result, err)
+	local requests = request_scope.new()
+	requests.run(function(done)
+		return service.request("GET", endpoint, nil, done)
+	end, function(result, err)
 		if err or type(result) ~= "table" then
 			on_done(nil, err or "Failed to fetch repo details")
 			return
@@ -108,7 +112,9 @@ function M.fetch_detail(repo, opts, on_done)
 				service.url_encode(default_branch)
 			)
 		)
-		http.curl_text_request("GET", readme_url, service.build_headers(), nil, function(body, _)
+		requests.run(function(done)
+			return http.curl_text_request("GET", readme_url, service.build_headers(), nil, done)
+		end, function(body, _)
 			if type(body) == "string" and body ~= "" then
 				details.readme = body
 			end
@@ -116,6 +122,7 @@ function M.fetch_detail(repo, opts, on_done)
 			on_done(details, nil)
 		end)
 	end)
+	return requests
 end
 
 ---@param repo PullsRepoDetails

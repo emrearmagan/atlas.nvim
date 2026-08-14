@@ -2,6 +2,7 @@ local actions = require("atlas.pulls.providers.github.actions")
 local activity_api = require("atlas.pulls.providers.github.api.activity")
 local changes_api = require("atlas.pulls.providers.github.api.changes")
 local checks_api = require("atlas.pulls.providers.github.api.checks")
+local request_scope = require("atlas.core.requests")
 local cli = require("atlas.providers.github.client").pulls
 local comments_api = require("atlas.pulls.providers.github.api.comments")
 local notifications_api = require("atlas.pulls.providers.github.api.notifications")
@@ -77,6 +78,8 @@ end
 ---@param on_done fun(result: { comments: PullsComment[], events: PullsActivityEntry[] }|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 local function fetch_conversation(pr, opts, on_done)
+	local requests = request_scope.new()
+
 	---@param result { comments: PullsComment[], events: PullsActivityEntry[] }
 	---@param description string
 	local function finish(result, description)
@@ -94,7 +97,9 @@ local function fetch_conversation(pr, opts, on_done)
 		on_done({ comments = comments, events = type(result.events) == "table" and result.events or {} }, nil)
 	end
 
-	return activity_api.fetch_conversation(pr, opts, function(result, err)
+	requests.run(function(done)
+		return activity_api.fetch_conversation(pr, opts, done)
+	end, function(result, err)
 		if err or type(result) ~= "table" then
 			on_done(nil, err or "Failed to fetch conversation")
 			return
@@ -105,10 +110,13 @@ local function fetch_conversation(pr, opts, on_done)
 			finish(result, description)
 			return
 		end
-		pullrequests_api.get_description(pr, opts, function(value)
+		requests.run(function(done)
+			return pullrequests_api.get_description(pr, opts, done)
+		end, function(value)
 			finish(result, tostring(value or ""))
 		end)
 	end)
+	return requests
 end
 
 ---@param pr PullRequest

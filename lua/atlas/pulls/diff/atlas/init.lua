@@ -227,19 +227,11 @@ local function toggle_file_reviewed(session)
 	if not context then
 		return
 	end
-	local release
-	local handle = reviews.set_file_reviewed(current_review.pr, file.path, reviewed, function(ok, err)
-		if release then
-			release()
-		end
-		if not context.active() then
-			return
-		end
+	reviews.set_file_reviewed(current_review.pr, file.path, reviewed, function(ok, err)
 		if not ok then
 			session_api.notify(session, "error", "Unable to update reviewed file: " .. tostring(err))
 		end
 	end)
-	release = context.track(handle)
 end
 
 ---@param session AtlasDiffSession

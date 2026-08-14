@@ -1,6 +1,7 @@
 ---@class PullsCommentsTab : PullsPanelTabModule
 local M = {}
 
+local request_scope = require("atlas.core.requests")
 local md_editor = require("atlas.ui.popups.editor")
 local statusline = require("atlas.ui.statusline")
 local panel_state = require("atlas.pulls.ui.panel.pr.state")
@@ -40,8 +41,7 @@ local function author_completion()
 	})
 end
 
----@type { cancel: fun() }[]
-local in_flight = {}
+local requests = request_scope.new()
 local tab_active = false
 local generation = 0
 
@@ -58,47 +58,11 @@ local function is_current(expected_generation, pr)
 	return tab_active and generation == expected_generation and panel_state.current_pr == pr
 end
 
----@param expected_generation integer
----@param pr PullRequest
----@param data PullsReviewData
----@return boolean
-local function is_current_data(expected_generation, pr, data)
-	return is_current(expected_generation, pr) and state.data == data
-end
-
-local function cancel_all()
-	for _, handle in ipairs(in_flight) do
-		pcall(handle.cancel)
-	end
-	in_flight = {}
-end
-
 function M.reset()
 	invalidate()
-	cancel_all()
+	requests.cancel()
+	requests = request_scope.new()
 	state.reset()
-end
-
----@param handle { cancel: fun() }|nil
----@return fun()
-local function track(handle)
-	if not handle then
-		return function() end
-	end
-	table.insert(in_flight, handle)
-	local tracked = true
-	return function()
-		if not tracked then
-			return
-		end
-		tracked = false
-		for index, candidate in ipairs(in_flight) do
-			if candidate == handle then
-				table.remove(in_flight, index)
-				break
-			end
-		end
-	end
 end
 
 ---@return PullsProvider|nil
@@ -142,7 +106,9 @@ function M.on_select(pr, _repo, refresh, opts)
 	state.status = "loading"
 	statusline.notify("loading", string.format("Loading review for #%s...", pr_id))
 
-	local handle = reviews.fetch(pr, opts, function(data, err)
+	requests.run(function(done)
+		return reviews.fetch(pr, opts, done)
+	end, function(data, err)
 		if not is_current(request_generation, pr) then
 			return
 		end
@@ -157,7 +123,6 @@ function M.on_select(pr, _repo, refresh, opts)
 		end
 		refresh()
 	end)
-	track(handle)
 end
 
 ---@param _pr PullRequest
@@ -255,7 +220,8 @@ function M.deactivate(buf)
 	if buf ~= nil then
 		keymaps.teardown(buf)
 	end
-	cancel_all()
+	requests.cancel()
+	requests = request_scope.new()
 end
 
 ---@param pr PullRequest
@@ -268,17 +234,12 @@ local function action_context(pr, key)
 		return nil
 	end
 	local items = data[key]
-	local context_generation = generation
 	return {
 		provider = provider,
 		pr = pr,
 		items = items,
 		data = data,
 		completion = author_completion(),
-		active = function()
-			return is_current_data(context_generation, pr, data)
-		end,
-		track = track,
 	}
 end
 
@@ -354,10 +315,6 @@ function M.add_task(pr, refresh)
 		return
 	end
 	local tasks = data.tasks
-	local context_generation = generation
-	if not is_current_data(context_generation, pr, data) then
-		return
-	end
 
 	local win = require("atlas.ui.layout").win_id("detail")
 	local parent = nil
@@ -378,18 +335,12 @@ function M.add_task(pr, refresh)
 		title = " Add Task ",
 		preview = preview,
 		on_save = function(text)
-			if not is_current_data(context_generation, pr, data) then
-				return
-			end
 			if not text or vim.trim(text) == "" then
 				statusline.notify("warn", "Task cannot be empty")
 				return
 			end
 			statusline.notify("loading", "Adding task...")
-			track(add_task(pr, text, parent, function(task, err)
-				if not is_current_data(context_generation, pr, data) then
-					return
-				end
+			add_task(pr, text, parent, function(task, err)
 				if err then
 					statusline.notify("error", tostring(err))
 					return
@@ -399,7 +350,7 @@ function M.add_task(pr, refresh)
 				end
 				statusline.notify("success", "Task added", 1200)
 				refresh()
-			end))
+			end)
 		end,
 	})
 end

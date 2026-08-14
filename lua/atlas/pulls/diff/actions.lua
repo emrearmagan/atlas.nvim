@@ -23,7 +23,7 @@ local function run(session, action)
 		return
 	end
 	action.run(context, function(result, err)
-		if result and not err and context.active and context.active() then
+		if result and not err then
 			review_api.apply_action_data(session, context.data)
 			reload_notes(session)
 			review_api.reload(session)
@@ -69,7 +69,7 @@ function M.toggle_approval(session)
 		return
 	end
 	pull_actions.run("toggle_approval", context, function(result, err)
-		if result and not err and context.active and context.active() then
+		if result and not err then
 			reload_notes(session)
 			review_api.reload(session)
 		end

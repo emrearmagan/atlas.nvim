@@ -1,5 +1,7 @@
 local M = {}
 
+local request_scope = require("atlas.core.requests")
+
 ---@param review AtlasDiffReview
 ---@return AtlasMarkdownCompletionProvider|nil
 local function comment_completion(review)
@@ -24,13 +26,8 @@ local function resolve_items(review)
 end
 
 ---@param session AtlasDiffSession
-function M.cancel_actions(session)
-	local requests = session.review_action_requests
-	session.review_action_requests = {}
+function M.invalidate(session)
 	session.review_generation = session.review_generation + 1
-	for _, handle in ipairs(requests) do
-		handle.cancel()
-	end
 end
 
 ---@param session AtlasDiffSession
@@ -48,96 +45,66 @@ end
 ---@param on_done fun(review: AtlasDiffReview, warnings: string[])
 ---@return { cancel: fun() }
 function M.load(context, force_refresh, on_done)
-	local values = {
-		current_user = context.current_user,
-		context = context.context,
-		state = context.state,
-		comments = context.comments,
-		tasks = context.tasks,
-	}
 	local options = force_refresh and { force_refresh = true } or {}
-	local cancelled = false
-	local pending = 0
-	local started = false
-	local handles = {}
-	local warnings = {}
-	local function finish()
-		if cancelled or not started or pending > 0 then
-			return
+	local starts = {}
+	local reviews = context.provider.capabilities.reviews
+	if reviews and reviews.fetch_review_context then
+		starts.review_context = function(done)
+			return reviews.fetch_review_context(context.pr, options, done)
+		end
+	end
+	if reviews then
+		starts.review = function(done)
+			return reviews.fetch(context.pr, options, done)
+		end
+	end
+	if not context.current_user then
+		starts.current_user = function(done)
+			return context.provider.capabilities.core.fetch_user(done)
+		end
+	end
+
+	local pending = request_scope.new()
+	pending.all(starts, function(values, errors)
+		local warnings = {}
+		if errors.review_context then
+			warnings[#warnings + 1] = "Unable to load review context: " .. tostring(errors.review_context)
+		end
+		if errors.review then
+			warnings[#warnings + 1] = "Unable to load review: " .. tostring(errors.review)
+		end
+		if errors.current_user then
+			warnings[#warnings + 1] = "Unable to load current user: " .. tostring(errors.current_user)
+		end
+		local current_user = context.current_user
+		if not errors.current_user and values.current_user then
+			current_user = values.current_user
+		end
+		local review_context = context.context
+		if not errors.review_context and values.review_context then
+			review_context = values.review_context
+		end
+		local state = context.state
+		local comments = context.comments
+		local tasks = context.tasks
+		if not errors.review and values.review then
+			state = values.review.review
+			comments = values.review.comments
+			tasks = values.review.tasks
 		end
 		local review = {
 			provider = context.provider,
 			pr = context.pr,
-			current_user = values.current_user,
-			context = values.context,
-			state = values.state,
-			comments = values.comments,
-			tasks = values.tasks,
+			current_user = current_user,
+			context = review_context,
+			state = state,
+			comments = comments,
+			tasks = tasks,
 		}
 		resolve_items(review)
 		on_done(review, warnings)
-	end
-
-	---@param name string
-	---@param start fun(done: fun(value: any, err: string|nil)): { cancel: fun() }|nil
-	---@param apply fun(value: any)
-	local function fetch(name, start, apply)
-		pending = pending + 1
-		local done = false
-		local handle = start(function(value, err)
-			if cancelled or done then
-				return
-			end
-			done = true
-			if err then
-				warnings[#warnings + 1] = "Unable to load " .. name .. ": " .. tostring(err)
-			else
-				apply(value)
-			end
-			pending = pending - 1
-			finish()
-		end)
-		if handle and not done then
-			handles[#handles + 1] = handle
-		end
-	end
-
-	local reviews = context.provider.capabilities.reviews
-	if reviews and reviews.fetch_review_context then
-		fetch("review context", function(done)
-			return reviews.fetch_review_context(context.pr, options, done)
-		end, function(value)
-			values.context = value or values.context
-		end)
-	end
-	if reviews then
-		fetch("review", function(done)
-			return reviews.fetch(context.pr, options, done)
-		end, function(value)
-			if value then
-				values.state = value.review
-				values.comments = value.comments
-				values.tasks = value.tasks
-			end
-		end)
-	end
-	if not values.current_user then
-		fetch("current user", function(done)
-			return context.provider.capabilities.core.fetch_user(done)
-		end, function(value)
-			values.current_user = value or values.current_user
-		end)
-	end
-	started = true
-	finish()
-	return {
-		cancel = function()
-			cancelled = true
-			for _, handle in ipairs(handles) do
-				handle.cancel()
-			end
-		end,
-	}
+	end)
+	return pending
 end
 
 ---@param session AtlasDiffSession
@@ -147,10 +114,6 @@ function M.action_context(session, comment)
 	local review = session.review
 	if not review or session.review_request then
 		return nil
-	end
-	local generation = session.review_generation
-	local function active()
-		return not session.closed and session.review == review and session.review_generation == generation
 	end
 	local data = {
 		review = review.state,
@@ -165,28 +128,7 @@ function M.action_context(session, comment)
 		items = comment and comment.is_task and review.tasks or review.comments,
 		completion = comment_completion(review),
 		notify = function(level, message, duration)
-			if active() then
-				notify(session, level, message, duration)
-			end
-		end,
-		active = active,
-		track = function(handle)
-			if not handle then
-				return function() end
-			end
-			if not active() then
-				handle.cancel()
-				return function() end
-			end
-			table.insert(session.review_action_requests, handle)
-			return function()
-				for index, request in ipairs(session.review_action_requests) do
-					if request == handle then
-						table.remove(session.review_action_requests, index)
-						return
-					end
-				end
-			end
+			notify(session, level, message, duration)
 		end,
 	}
 end
@@ -213,12 +155,13 @@ function M.reload(session)
 	if session.review_request then
 		session.review_request.cancel()
 	end
-	M.cancel_actions(session)
+	M.invalidate(session)
 	local generation = session.review_generation
 	notify(session, "loading", "Refreshing review...")
-	local finished = false
-	local request = M.load(
-		{
+	local pending = request_scope.new()
+	session.review_request = pending
+	pending.run(function(done)
+		return M.load({
 			provider = review.provider,
 			pr = review.pr,
 			current_user = review.current_user,
@@ -226,29 +169,23 @@ function M.reload(session)
 			state = review.state,
 			comments = review.comments,
 			tasks = review.tasks,
-		},
-		true,
-		function(loaded, warnings)
-			finished = true
-			session.review_request = nil
-			if session.closed or session.review_generation ~= generation then
-				return
-			end
-			session.review = loaded
-			if loaded.context and loaded.context.reviewed_files then
-				session.reviewed_files = loaded.context.reviewed_files
-			end
-			session:render()
-			if #warnings > 0 then
-				notify(session, "warn", table.concat(warnings, "; "))
-			else
-				notify(session, "success", "Review refreshed", 1200)
-			end
+		}, true, done)
+	end, function(loaded, warnings)
+		session.review_request = nil
+		if session.closed or session.review_generation ~= generation then
+			return
 		end
-	)
-	if not finished then
-		session.review_request = request
-	end
+		session.review = loaded
+		if loaded.context and loaded.context.reviewed_files then
+			session.reviewed_files = loaded.context.reviewed_files
+		end
+		session:render()
+		if #warnings > 0 then
+			notify(session, "warn", table.concat(warnings, "; "))
+		else
+			notify(session, "success", "Review refreshed", 1200)
+		end
+	end)
 end
 
 return M

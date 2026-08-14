@@ -10,8 +10,6 @@ local review_threads = require("atlas.ui.components.review_threads")
 ---@field items PullsComment[]|nil
 ---@field data PullsReviewData|nil
 ---@field completion AtlasMarkdownCompletionProvider|nil
----@field active (fun(): boolean)|nil
----@field track (fun(handle: { cancel: fun() }|nil): fun())|nil
 
 ---@param provider PullsProvider
 ---@param pr PullRequest
@@ -49,35 +47,6 @@ local function notify(context, level, message, duration)
 	statusline.notify(level, message, duration)
 end
 
----@param context AtlasReviewActionContext
----@return boolean
-local function active(context)
-	return context.active == nil or context.active()
-end
-
----@param context AtlasReviewActionContext
----@param start fun(done: fun(...)): { cancel: fun() }|nil
----@param done fun(...)
-local function run_request(context, start, done)
-	local finished = false
-	local release
-	local function complete(...)
-		if finished then
-			return
-		end
-		finished = true
-		if release then
-			release()
-		end
-		done(...)
-	end
-	local handle = start(complete)
-	release = context.track and context.track(handle) or function() end
-	if finished then
-		release()
-	end
-end
-
 ---@param items PullsComment[]
 ---@param comment PullsComment
 local function upsert_comment(items, comment)
@@ -96,9 +65,6 @@ end
 ---@return boolean handled
 function M.add_comment(context, opts, on_done)
 	opts = opts or {}
-	if not active(context) then
-		return false
-	end
 	local parent = opts.parent
 	if parent and parent.is_task then
 		local message = "Tasks do not support replies"
@@ -149,9 +115,6 @@ function M.add_comment(context, opts, on_done)
 		completion = completion,
 		preview = preview,
 		on_save = function(text)
-			if not active(context) then
-				return
-			end
 			if vim.trim(text) == "" then
 				return
 			end
@@ -161,18 +124,13 @@ function M.add_comment(context, opts, on_done)
 				"loading",
 				parent and "Sending reply..." or suggestion and "Adding suggestion..." or "Adding comment..."
 			)
-			run_request(context, function(done)
-				return add(context.pr, text, {
-					parent = parent,
-					inline = opts.inline,
-					file = opts.file,
-					pending = pending,
-					review = context.data and context.data.review,
-				}, done)
-			end, function(created, err)
-				if not active(context) then
-					return
-				end
+			add(context.pr, text, {
+				parent = parent,
+				inline = opts.inline,
+				file = opts.file,
+				pending = pending,
+				review = context.data and context.data.review,
+			}, function(created, err)
 				if err then
 					local prefix = parent and "Reply failed: "
 						or suggestion and "Add suggestion failed: "
@@ -219,9 +177,6 @@ end
 ---@param on_done fun(result: PullsActionResult|nil, err: string|nil)
 ---@return boolean handled
 function M.edit_comment(context, comment, on_done)
-	if not active(context) then
-		return false
-	end
 	local update
 	if comment.is_task then
 		local tasks = context.provider.capabilities.tasks
@@ -243,23 +198,12 @@ function M.edit_comment(context, comment, on_done)
 		title = comment.is_task and " Edit Task " or " Edit Comment ",
 		initial_text = comment.content_raw or "",
 		on_save = function(text)
-			if not active(context) then
-				return
-			end
 			if vim.trim(text) == "" then
 				return
 			end
 			notify(context, "loading", comment.is_task and "Editing task..." or "Editing comment...")
 			local desired = vim.tbl_extend("force", {}, comment, { content_raw = text })
-			run_request(context, function(done)
-				if comment.is_task then
-					return update(desired, done)
-				end
-				return update(context.pr, desired, done)
-			end, function(updated, err)
-				if not active(context) then
-					return
-				end
+			local callback = function(updated, err)
 				if err then
 					notify(context, "error", "Edit failed: " .. err)
 					on_done(nil, err)
@@ -271,7 +215,12 @@ function M.edit_comment(context, comment, on_done)
 					upsert_comment(items, updated)
 				end
 				on_done({ changed_pr = false, message = message }, nil)
-			end)
+			end
+			if comment.is_task then
+				update(desired, callback)
+			else
+				update(context.pr, desired, callback)
+			end
 		end,
 	})
 	return true
@@ -282,9 +231,6 @@ end
 ---@param on_done fun(result: PullsActionResult|nil, err: string|nil)
 ---@return boolean handled
 function M.delete_comment(context, comment, on_done)
-	if not active(context) then
-		return false
-	end
 	local remove
 	if comment.is_task then
 		local tasks = context.provider.capabilities.tasks
@@ -302,23 +248,12 @@ function M.delete_comment(context, comment, on_done)
 	local items = assert(context.items)
 
 	vim.ui.input({ prompt = comment.is_task and "Delete task? [y/N]: " or "Delete comment? [y/N]: " }, function(input)
-		if not active(context) then
-			return
-		end
 		local confirmed = input and vim.trim(input):lower()
 		if confirmed ~= "y" and confirmed ~= "yes" then
 			return
 		end
 		notify(context, "loading", comment.is_task and "Deleting task..." or "Deleting comment...")
-		run_request(context, function(done)
-			if comment.is_task then
-				return remove(comment, done)
-			end
-			return remove(context.pr, comment, done)
-		end, function(ok, err)
-			if not active(context) then
-				return
-			end
+		local callback = function(ok, err)
 			if err then
 				notify(context, "error", "Delete failed: " .. err)
 				on_done(nil, err)
@@ -332,12 +267,7 @@ function M.delete_comment(context, comment, on_done)
 			local pending = comment.state == "PENDING"
 			local message = comment.is_task and "Task deleted" or "Comment deleted"
 			if pending and context.data then
-				run_request(context, function(done)
-					return context.provider.capabilities.reviews.fetch(context.pr, { force_refresh = true }, done)
-				end, function(data)
-					if not active(context) then
-						return
-					end
+				context.provider.capabilities.reviews.fetch(context.pr, { force_refresh = true }, function(data)
 					if data then
 						context.data.review = data.review
 						context.data.comments = data.comments
@@ -353,7 +283,12 @@ function M.delete_comment(context, comment, on_done)
 			remove_comment(items, comment)
 			notify(context, "success", message, 1200)
 			on_done({ changed_pr = false, message = message }, nil)
-		end)
+		end
+		if comment.is_task then
+			remove(comment, callback)
+		else
+			remove(context.pr, comment, callback)
+		end
 	end)
 	return true
 end
@@ -363,9 +298,6 @@ end
 ---@param on_done fun(result: PullsActionResult|nil, err: string|nil)
 ---@return boolean handled
 function M.toggle_task(context, comment, on_done)
-	if not active(context) then
-		return false
-	end
 	local tasks = context.provider.capabilities.tasks
 	local update = tasks and tasks.edit_task
 	if not update then
@@ -384,12 +316,7 @@ function M.toggle_task(context, comment, on_done)
 		desired.state = "RESOLVED"
 	end
 	notify(context, "loading", is_resolved and "Reopening task..." or "Resolving task...")
-	run_request(context, function(done)
-		return update(desired, done)
-	end, function(updated, err)
-		if not active(context) then
-			return
-		end
+	update(desired, function(updated, err)
 		if err then
 			notify(context, "error", tostring(err))
 			on_done(nil, tostring(err))
@@ -410,9 +337,6 @@ end
 ---@param on_done fun(result: PullsActionResult|nil, err: string|nil)
 ---@return boolean handled
 function M.toggle_resolved(context, comment, on_done)
-	if not active(context) then
-		return false
-	end
 	local resolved = comment.state ~= "RESOLVED"
 	local comments = context.provider.capabilities.comments
 	local set_resolved = comments and comments.set_thread_resolved
@@ -423,12 +347,7 @@ function M.toggle_resolved(context, comment, on_done)
 		return false
 	end
 	notify(context, "loading", resolved and "Resolving thread..." or "Reopening thread...")
-	run_request(context, function(done)
-		return set_resolved(context.pr, comment, resolved, done)
-	end, function(ok, err)
-		if not active(context) then
-			return
-		end
+	set_resolved(context.pr, comment, resolved, function(ok, err)
 		if err or not ok then
 			local message = tostring(err or "Unable to update thread")
 			notify(context, "error", message)
@@ -451,9 +370,6 @@ end
 ---@param on_done fun(result: PullsActionResult|nil, err: string|nil)
 ---@return boolean handled
 local function open_review_editor(context, capability, title, loading, success, on_done)
-	if not active(context) then
-		return false
-	end
 	local reviews = context.provider.capabilities.reviews
 	local submit = reviews and reviews[capability]
 	if not submit then
@@ -466,16 +382,8 @@ local function open_review_editor(context, capability, title, loading, success, 
 		key = "pr-review",
 		title = title,
 		on_save = function(body)
-			if not active(context) then
-				return
-			end
 			notify(context, "loading", loading)
-			run_request(context, function(done)
-				return submit(context.pr, context.data and context.data.review, body, done)
-			end, function(ok, err)
-				if not active(context) then
-					return
-				end
+			submit(context.pr, context.data and context.data.review, body, function(ok, err)
 				if not ok then
 					local message = vim.trim(title) .. " failed: " .. tostring(err or "Unknown error")
 					notify(context, "error", message)
@@ -504,12 +412,7 @@ M.start_review = {
 			return false
 		end
 		notify(context, "loading", "Starting review...")
-		run_request(context, function(done)
-			return start(context.pr, data.review, done)
-		end, function(ok, err)
-			if not active(context) then
-				return
-			end
+		start(context.pr, data.review, function(ok, err)
 			if not ok then
 				local message = tostring(err or "Unknown error")
 				notify(context, "error", "Start review failed: " .. message)
@@ -572,16 +475,11 @@ M.discard_review = {
 			return false
 		end
 		vim.ui.input({ prompt = "Discard pending review? [y/N]: " }, function(input)
-			if not active(context) or not input or not input:lower():match("^y") then
+			if not input or not input:lower():match("^y") then
 				return
 			end
 			notify(context, "loading", "Discarding review...")
-			run_request(context, function(done)
-				return discard(context.pr, data.review, done)
-			end, function(ok, err)
-				if not active(context) then
-					return
-				end
+			discard(context.pr, data.review, function(ok, err)
 				if not ok then
 					notify(context, "error", "Discard review failed: " .. tostring(err or "Unknown error"))
 					on_done(nil, err)

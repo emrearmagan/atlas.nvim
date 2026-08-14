@@ -164,6 +164,11 @@ end
 function M.render(_pr, width)
 	local lines, spans, line_map = {}, {}, {}
 
+	if state.error then
+		utils.push(lines, spans, state.error, "AtlasLogError", PADDING_X)
+		return lines, spans, line_map
+	end
+
 	local comments_ready = type(state.comments) == "table"
 	local activity_ready = type(state.activity) == "table"
 	if state.comments == nil and state.activity == nil then

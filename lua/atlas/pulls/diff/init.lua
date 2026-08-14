@@ -207,7 +207,12 @@ local function start_range(opts, on_done, target, existing)
 			on_done(err)
 		end
 	end) or request
-	return { cancel = cancel }
+	return {
+		cancel = function()
+			cancel()
+			view:finish()
+		end,
+	}
 end
 
 ---@param context AtlasReviewOpenContext
@@ -372,7 +377,12 @@ local function start_pr(context, command, refresh, on_done, target, existing)
 	else
 		load_repository()
 	end
-	return { cancel = cancel }
+	return {
+		cancel = function()
+			cancel()
+			view:finish()
+		end,
+	}
 end
 
 ---@param value string

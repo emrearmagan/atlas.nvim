@@ -78,7 +78,6 @@ local sessions = {}
 ---@field statusline AtlasDiffStatuslineState
 ---@field review_panel AtlasDiffReviewPanel|nil
 ---@field review_request { cancel: fun() }|nil
----@field review_action_requests { cancel: fun() }[]
 ---@field review_generation integer
 ---@field note_target AtlasNoteTarget|nil
 ---@field viewer_state table
@@ -116,7 +115,6 @@ function M.new(opts)
 		statusline = statusline.new(),
 		review_panel = nil,
 		review_request = nil,
-		review_action_requests = {},
 		review_generation = 0,
 		note_target = note_target,
 		viewer_state = {},
@@ -246,7 +244,7 @@ function M.detach(session, reason)
 		session.review_request.cancel()
 		session.review_request = nil
 	end
-	review.cancel_actions(session)
+	review.invalidate(session)
 	ui_comments.close_popup(session.id)
 	note_popup.close()
 	if session.current then
