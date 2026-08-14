@@ -311,6 +311,7 @@ function M.close()
 		header_request.cancel()
 		header_request = nil
 	end
+	reset_tabs()
 	panel_state.reset()
 end
 

@@ -129,6 +129,10 @@ end
 
 ---@param on_done fun(err: string|nil)
 local function get_current_user(on_done)
+	if state.current_user ~= nil then
+		on_done(nil)
+		return
+	end
 	local provider = state.provider
 	if provider == nil then
 		on_done("no provider")
@@ -354,8 +358,14 @@ function M.refresh_current_view(on_done, focus_issue_key)
 		end
 		local item = navigation.current_item()
 		local panel = require("atlas.issues.ui.panel")
-		if panel.is_open() and (type(item) ~= "table" or item.kind ~= "issue") then
-			panel.close()
+		if panel.is_open() then
+			if focus_issue_key and not focused then
+				panel.close()
+			elseif type(item) == "table" and item.kind == "issue" and item._issue then
+				panel.on_select(item._issue, { force_refresh = true, issue_refreshed = true })
+			else
+				panel.close()
+			end
 		end
 		if on_done ~= nil then
 			on_done()
@@ -374,10 +384,6 @@ end
 ---@param name string
 ---@param value any
 function M.run_bookmark(name, value)
-	local provider = state.provider
-	if provider == nil then
-		return
-	end
 	local view = { name = name, layout = "compact" }
 	if type(value) == "string" then
 		view.search = value
@@ -387,32 +393,9 @@ function M.run_bookmark(name, value)
 		end
 	end
 
-	cancel_active_requests()
-	state.is_loading = true
-	state.error = nil
-	state.issues = nil
-	state.issue_tree = nil
-	state.current_view = view
-	statusline.notify("loading", "Running query...")
-	render_if_active()
-
-	active_issues_handle = provider.capabilities.core.fetch_issues(view, {
-		force_load = false,
-		max_results = tonumber((config.options and config.options.issues or {}).max_results) or 100,
-		layout = view.layout,
-	}, function(issues, _, _, err)
-		active_issues_handle = nil
-		state.is_loading = false
-		if err then
-			state.error = tostring(err)
-			statusline.notify("error", string.format("Query failed: %s", state.error))
-		else
-			state.error = nil
-			state.issues = issues or {}
-			state.issue_tree = helper.build_issue_tree(issues or {})
-			statusline.notify("success", string.format("Loaded %d issues", #(issues or {})), 1200)
-		end
-		render_if_active()
+	state.active_view = view
+	load_active_view({ force_load = false }, function()
+		navigation.focus_first_item()
 	end)
 end
 
@@ -444,10 +427,8 @@ function M.apply_action_result(result)
 	if result == nil then
 		return
 	end
-	if result.removed then
-		M.refresh_current_view()
-	elseif result.issue_key ~= nil and result.issue_key ~= "" then
-		M.refresh_issue(result.issue_key)
+	if result.issue_key ~= nil and result.issue_key ~= "" then
+		M.refresh_current_view(nil, result.issue_key)
 	end
 end
 

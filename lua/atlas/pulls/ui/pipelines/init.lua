@@ -234,7 +234,7 @@ end
 ---@param delay_ms integer|nil
 ---@param force_refresh boolean|nil
 local function reload_pipelines(session, delay_ms, force_refresh)
-	if session.refreshing then
+	if session.closed or session.refreshing then
 		return
 	end
 	local provider = session.provider

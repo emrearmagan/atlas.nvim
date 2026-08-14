@@ -404,6 +404,7 @@ function M.close()
 	switch_tab_keymaps(panel_state.current_tab, nil)
 	stop_spinner()
 	cancel_panel_requests()
+	reset_tabs()
 	panel_state.reset()
 end
 

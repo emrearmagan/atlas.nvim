@@ -53,10 +53,9 @@ function M.prev_tab()
 end
 
 function M.close()
-	local panel = active_panel()
-	local result = panel.close()
+	pr_panel.close()
+	repo_panel.close()
 	panel_state.reset()
-	return result
 end
 
 return M
