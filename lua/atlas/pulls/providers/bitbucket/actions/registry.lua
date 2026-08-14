@@ -84,9 +84,8 @@ local function toggle_approval(ctx, done)
 		end
 
 		local approved = is_approved(fresh_pr, ctx.current_user)
-		local update = approved and reviews.unapprove or reviews.approve
 		notify(ctx, "loading", approved and "Unapproving PR..." or "Approving PR...")
-		update(fresh_pr, function(_, update_err)
+		local function on_done(_, update_err)
 			if update_err ~= nil then
 				local action = approved and "Unapprove" or "Approve"
 				notify(ctx, "error", string.format("%s failed: %s", action, tostring(update_err)))
@@ -100,7 +99,12 @@ local function toggle_approval(ctx, done)
 				notes.clear_for_pull_request(pr)
 			end
 			done({ changed_pr = true, message = message }, nil)
-		end)
+		end
+		if approved then
+			reviews.unapprove(fresh_pr, on_done)
+		else
+			reviews.approve(fresh_pr, nil, "", on_done)
+		end
 	end)
 end
 

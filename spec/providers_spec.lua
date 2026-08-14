@@ -48,4 +48,11 @@ describe("provider contracts", function()
 			assert_functions(provider.capabilities.core, { "update_description" }, registered.id .. ".pulls.core")
 		end
 	end)
+
+	it("exposes Bitbucket review actions", function()
+		local provider = assert(providers.load("bitbucket", "pulls"))
+		local reviews = assert(provider.capabilities.reviews)
+
+		assert_functions(reviews, { "submit_review", "approve", "request_changes" }, "bitbucket.pulls.reviews")
+	end)
 end)

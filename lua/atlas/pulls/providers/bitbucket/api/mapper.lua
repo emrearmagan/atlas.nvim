@@ -77,7 +77,7 @@ local function map_state(bb_state, is_draft)
 		return "open"
 	elseif s == "MERGED" then
 		return "merged"
-	elseif s == "DECLINED" then
+	elseif s == "DECLINED" or s == "SUPERSEDED" then
 		return "declined"
 	end
 	return "open"

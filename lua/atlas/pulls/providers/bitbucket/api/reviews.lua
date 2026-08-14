@@ -149,15 +149,25 @@ function M.fetch_review(pr, opts, on_done)
 end
 
 ---@param pr PullRequest
----@param on_done fun(result: table|nil, err: string|nil)
+---@param _review PullsReview|nil
+---@param body string
+---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.approve(pr, on_done)
+function M.approve(pr, _review, body, on_done)
 	local url = action_url(pr, "approve")
 	if url == "" then
-		on_done(nil, "No approve URL available")
+		on_done(false, "No approve URL available")
 		return nil
 	end
-	return service.request("POST", url, nil, nil, on_done)
+	return service.request("POST", url, nil, nil, function(_, err)
+		if err or vim.trim(body) == "" then
+			on_done(err == nil, err)
+			return
+		end
+		comments.add_comment(pr, body, nil, function(comment, comment_err)
+			on_done(comment ~= nil, comment_err)
+		end)
+	end)
 end
 
 ---@param pr PullRequest
@@ -173,15 +183,25 @@ function M.unapprove(pr, on_done)
 end
 
 ---@param pr PullRequest
----@param on_done fun(result: table|nil, err: string|nil)
+---@param _review PullsReview|nil
+---@param body string
+---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.request_changes(pr, on_done)
+function M.request_changes(pr, _review, body, on_done)
 	local url = action_url(pr, "request_changes")
 	if url == "" then
-		on_done(nil, "No request changes URL available")
+		on_done(false, "No request changes URL available")
 		return nil
 	end
-	return service.request("POST", url, nil, nil, on_done)
+	return service.request("POST", url, nil, nil, function(_, err)
+		if err or vim.trim(body) == "" then
+			on_done(err == nil, err)
+			return
+		end
+		comments.add_comment(pr, body, nil, function(comment, comment_err)
+			on_done(comment ~= nil, comment_err)
+		end)
+	end)
 end
 
 ---@param pr PullRequest
@@ -200,52 +220,6 @@ function M.submit_review(pr, _review, _body, on_done)
 	vim.ui.open(url)
 	on_done(true, nil)
 	return nil
-end
-
----@param pr PullRequest
----@param body string
----@param action fun(pr: PullRequest, on_done: fun(result: table|nil, err: string|nil)): { cancel: fun() }|nil
----@param on_done fun(ok: boolean, err: string|nil)
----@return { cancel: fun() }
-local function complete(pr, body, action, on_done)
-	local cancelled = false
-	local current
-	current = action(pr, function(_, err)
-		if cancelled then
-			return
-		end
-		if err or vim.trim(body) == "" then
-			on_done(err == nil, err)
-			return
-		end
-		current = M.submit_review(pr, nil, body, on_done)
-	end)
-	return {
-		cancel = function()
-			cancelled = true
-			if current then
-				current.cancel()
-			end
-		end,
-	}
-end
-
----@param pr PullRequest
----@param _review PullsReview|nil
----@param body string
----@param on_done fun(ok: boolean, err: string|nil)
----@return { cancel: fun() }
-function M.approve_review(pr, _review, body, on_done)
-	return complete(pr, body, M.approve, on_done)
-end
-
----@param pr PullRequest
----@param _review PullsReview|nil
----@param body string
----@param on_done fun(ok: boolean, err: string|nil)
----@return { cancel: fun() }
-function M.request_changes_review(pr, _review, body, on_done)
-	return complete(pr, body, M.request_changes, on_done)
 end
 
 ---@param pr PullRequest

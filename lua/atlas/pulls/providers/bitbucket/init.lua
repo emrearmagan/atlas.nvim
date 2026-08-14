@@ -259,8 +259,8 @@ return {
 			fetch = reviews_api.fetch_review,
 			fetch_review_context = reviews_api.fetch_review_context,
 			submit_review = reviews_api.submit_review,
-			approve = reviews_api.approve_review,
-			request_changes = reviews_api.request_changes_review,
+			approve = reviews_api.approve,
+			request_changes = reviews_api.request_changes,
 			discard_review = reviews_api.discard_review,
 		},
 		tasks = {

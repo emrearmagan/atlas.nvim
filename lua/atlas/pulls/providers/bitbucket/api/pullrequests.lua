@@ -2,7 +2,6 @@ local M = {}
 
 local service = require("atlas.pulls.providers.bitbucket.api.service")
 local mapper = require("atlas.pulls.providers.bitbucket.api.mapper")
-local cache = require("atlas.core.cache")
 local logger = require("atlas.core.logger")
 local state = require("atlas.pulls.providers.bitbucket.state")
 
@@ -38,10 +37,10 @@ local function fetch_pullrequests_single(workspace, repo, opts, on_done)
 	local statuses_for_key = opts.statuses or { state.pr_state }
 	local key = cache_key(workspace, repo, statuses_for_key)
 	if not opts.force then
-		local cached = cache.get(key)
-		if cached and cached.value then
+		local cached, ok = service.get_cache(key)
+		if ok then
 			logger.loginfo("Bitbucket cache hit", { workspace = workspace, repo = repo })
-			on_done(cached.value, nil)
+			on_done(cached, nil)
 			return nil
 		end
 	end
@@ -65,7 +64,7 @@ local function fetch_pullrequests_single(workspace, repo, opts, on_done)
 		end
 
 		local normalized = mapper.to_pull_requests_list(result, workspace, repo)
-		cache.set(key, normalized, opts.cache_ttl)
+		service.set_cache(key, normalized, opts.cache_ttl)
 		logger.loginfo("Fetch success", {
 			workspace = workspace,
 			repo = repo,
