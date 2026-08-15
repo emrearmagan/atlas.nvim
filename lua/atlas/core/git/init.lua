@@ -313,15 +313,13 @@ end
 ---@param root string
 ---@param branch string
 ---@param remote string|nil
----@return boolean
-function M.branch_exists_on_remote(root, branch, remote)
+---@param on_done fun(exists: boolean)
+---@return { cancel: fun() }
+function M.branch_exists_on_remote(root, branch, remote, on_done)
 	remote = remote or "origin"
-	local res = vim.system(
-		{ "git", "-C", root, "ls-remote", "--exit-code", "--heads", remote, branch },
-		{ text = true }
-	)
-		:wait()
-	return res.code == 0
+	return M.run({ "ls-remote", "--exit-code", "--heads", remote, branch }, { cwd = root, text = true }, function(res)
+		on_done(res.code == 0)
+	end)
 end
 
 ---@param root string

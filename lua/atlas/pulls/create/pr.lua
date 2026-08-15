@@ -399,27 +399,28 @@ local function submit(pr_state)
 		end)
 	end
 
-	-- Make sure the source branch exists on the remote first.
-	local has_remote = git_branch.branch_exists_on_remote(pr_state.fields.repo_root, pr_state.fields.head, "origin")
-	if has_remote then
-		do_create()
-		return
-	end
-
-	form.notify("loading", "Pushing " .. pr_state.fields.head .. " to origin...")
-	git_branch.push_branch(pr_state.fields.repo_root, pr_state.fields.head, "origin", function(ok, push_err)
-		if not ok then
-			pr_state.is_submitting = false
-			local err = tostring(push_err or "Unknown error")
-			logger.logerror("Create PR push failed", {
-				repo_path = pr_state.fields.repo_root,
-				branch = pr_state.fields.head,
-				error = err,
-			})
-			form.notify("error", "git push failed: " .. err)
+	form.notify("loading", "Checking remote branch...")
+	git_branch.branch_exists_on_remote(pr_state.fields.repo_root, pr_state.fields.head, "origin", function(has_remote)
+		if has_remote then
+			do_create()
 			return
 		end
-		do_create()
+
+		form.notify("loading", "Pushing " .. pr_state.fields.head .. " to origin...")
+		git_branch.push_branch(pr_state.fields.repo_root, pr_state.fields.head, "origin", function(ok, push_err)
+			if not ok then
+				pr_state.is_submitting = false
+				local err = tostring(push_err or "Unknown error")
+				logger.logerror("Create PR push failed", {
+					repo_path = pr_state.fields.repo_root,
+					branch = pr_state.fields.head,
+					error = err,
+				})
+				form.notify("error", "git push failed: " .. err)
+				return
+			end
+			do_create()
+		end)
 	end)
 end
 
