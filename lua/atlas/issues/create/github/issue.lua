@@ -344,7 +344,7 @@ local function submit(issue_state)
 		body = get_body(issue_state),
 		labels = label_names,
 		assignees = assignee_logins,
-		milestone = issue_state.fields.milestone and issue_state.fields.milestone.number or nil,
+		milestone = issue_state.fields.milestone and issue_state.fields.milestone.title or nil,
 	}, function(result, err)
 		vim.schedule(function()
 			issue_state.is_submitting = false

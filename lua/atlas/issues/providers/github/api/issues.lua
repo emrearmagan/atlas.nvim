@@ -441,7 +441,7 @@ end
 ---@field body string|nil
 ---@field labels string[]|nil
 ---@field assignees string[]|nil
----@field milestone integer|nil
+---@field milestone string|nil
 
 ---@param opts GitHubCreateIssueOpts
 ---@param on_done fun(result: { number: integer|nil, url: string|nil }|nil, err: string|nil)
@@ -492,9 +492,9 @@ function M.create_issue(opts, on_done)
 		end
 	end
 
-	if type(opts.milestone) == "number" then
+	if opts.milestone then
 		table.insert(args, "--milestone")
-		table.insert(args, tostring(opts.milestone))
+		table.insert(args, opts.milestone)
 	end
 
 	return cli.gh(args, function(result, err)
