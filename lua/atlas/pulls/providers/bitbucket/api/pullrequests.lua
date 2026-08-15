@@ -1,5 +1,6 @@
 local M = {}
 
+local config = require("atlas.config")
 local service = require("atlas.pulls.providers.bitbucket.api.service")
 local mapper = require("atlas.pulls.providers.bitbucket.api.mapper")
 local logger = require("atlas.core.logger")
@@ -349,7 +350,7 @@ function M.create_pr(opts, on_done)
 		description = opts.body or "",
 		source = { branch = { name = opts.head } },
 		destination = { branch = { name = opts.base } },
-		close_source_branch = true,
+		close_source_branch = config.options.pulls.default_delete_branch == true,
 		draft = opts.draft == true,
 	}
 

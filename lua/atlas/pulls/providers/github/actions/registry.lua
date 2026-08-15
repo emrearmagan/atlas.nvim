@@ -80,8 +80,9 @@ local function merge(ctx, done)
 
 	local slug = repo_slug(ctx)
 	local options = action_utils.merge_options()
+	local label = options.method == "squash" and "squash merge" or "merge"
 	vim.ui.input({
-		prompt = string.format("Confirm %s merge PR #%s? [y/N]: ", options.method, tostring(pr.id or "")),
+		prompt = string.format("Confirm %s of PR #%s? [y/N]: ", label, tostring(pr.id or "")),
 	}, function(input)
 		if not input or not vim.trim(input):lower():match("^y") then
 			done({ changed_pr = false, message = "Merge cancelled" }, nil)

@@ -315,6 +315,9 @@ end
 
 function M.ensure_open()
 	ensure_main()
+	if state.tab_id and vim.api.nvim_tabpage_is_valid(state.tab_id) then
+		vim.api.nvim_set_current_tabpage(state.tab_id)
+	end
 	local keymaps = require("atlas.ui.keymaps")
 	if state.main_buf ~= nil and buf_util.valid(state.main_buf) then
 		keymaps.register(state.main_buf)

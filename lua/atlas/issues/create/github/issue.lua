@@ -370,6 +370,9 @@ local function submit(issue_state)
 
 			close(issue_state)
 			notify.info(message)
+			if type(url) == "string" and url ~= "" then
+				require("atlas.commands.open").open(url)
+			end
 		end)
 	end)
 end

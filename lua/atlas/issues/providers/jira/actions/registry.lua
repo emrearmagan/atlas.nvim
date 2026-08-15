@@ -454,6 +454,11 @@ local function create_issue(context, done)
 	local projects_api = require("atlas.issues.providers.jira.api.projects")
 	local md_to_adf = require("atlas.issues.providers.jira.converted.markdown")
 	local issue_editor = require("atlas.issues.create.jira.issue")
+	local function open_created_issue(key)
+		vim.schedule(function()
+			require("atlas.commands.open").open(key)
+		end)
+	end
 	local function run_create(project_key)
 		issue_editor.open(function(fields, submit_done)
 			local issue_type = fields.issue_type
@@ -522,10 +527,12 @@ local function create_issue(context, done)
 									notify.info(string.format("Created %s", result.key), { timeout = 2000 })
 									submit_done(true, nil)
 									done({ issue_key = result.key }, nil)
+									open_created_issue(result.key)
 								else
 									notify.warn("Issue created but failed to set description", { timeout = 3000 })
 									submit_done(true, "Description not set")
 									done({ issue_key = result.key }, nil)
+									open_created_issue(result.key)
 								end
 							end)
 							return
@@ -534,6 +541,7 @@ local function create_issue(context, done)
 						notify.info(string.format("Created %s", result.key), { timeout = 2000 })
 						submit_done(true, nil)
 						done({ issue_key = result.key }, nil)
+						open_created_issue(result.key)
 						return
 					end
 

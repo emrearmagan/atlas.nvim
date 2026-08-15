@@ -85,8 +85,9 @@ end
 local function merge(ctx, done)
 	local pr = ctx.pr
 	local options = action_utils.merge_options()
+	local label = options.method == "squash" and "squash merge" or "merge"
 	vim.ui.input(
-		{ prompt = string.format("Confirm %s merge %s? [y/N]: ", options.method, pr_label(pr)) },
+		{ prompt = string.format("Confirm %s of %s? [y/N]: ", label, pr_label(pr)) },
 		function(input)
 			if not input or not vim.trim(input):lower():match("^y") then
 				done({ changed_pr = false, message = "Merge cancelled" }, nil)

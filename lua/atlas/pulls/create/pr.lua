@@ -326,11 +326,11 @@ local function on_success(pr_state, result)
 	if type(url) == "string" and url ~= "" then
 		notify.info("PR created: " .. url)
 		pcall(vim.fn.setreg, "+", url)
-	else
-		notify.info("PR created")
+		require("atlas.commands.open").open(url)
+		return
 	end
 
-	-- Refresh the main pulls UI (if open) so the new PR shows up.
+	notify.info("PR created")
 	pcall(function()
 		require("atlas.pulls.ui.main.controller").refresh_current_view()
 	end)
