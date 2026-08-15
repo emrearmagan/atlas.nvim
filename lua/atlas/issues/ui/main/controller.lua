@@ -331,10 +331,10 @@ local function load_active_view(opts, on_done)
 			return
 		end
 		if user_err then
-			finalize_fetch_failure(user_err, {})
-			return
+			statusline.notify("warn", string.format("Failed to fetch current user: %s", tostring(user_err)))
+		else
+			render_if_active()
 		end
-		render_if_active()
 		fetch_page(nil, {})
 	end)
 end

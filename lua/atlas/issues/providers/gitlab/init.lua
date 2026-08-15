@@ -1,5 +1,6 @@
 local GITLAB_REACTION_OPTIONS = require("atlas.ui.shared.emojis").gitlab()
 local resolver = require("atlas.providers.resolve")
+local request_scope = require("atlas.core.requests")
 
 ---@class GitLabIssuesProvider : IssuesProvider
 local M = {}
@@ -57,22 +58,18 @@ function M.fetch_conversation(issue, opts, on_done)
 		return nil
 	end
 
-	local comments_result, events_result
-	local first_err
-	local pending = 2
-	local handles = {}
-	local cancelled = false
-
-	local function finish()
-		if cancelled then
-			return
-		end
-		pending = pending - 1
-		if pending > 0 then
-			return
-		end
-		if first_err and comments_result == nil and events_result == nil then
-			on_done(nil, first_err)
+	local requests = request_scope.new()
+	requests.all({
+		comments = function(done)
+			return notes.list_comments(key, { force_load = force }, done)
+		end,
+		events = function(done)
+			return notes.list_history(key, { force_load = force }, done)
+		end,
+	}, function(values, errors)
+		local err = errors.comments or errors.events
+		if err and values.comments == nil and values.events == nil then
+			on_done(nil, err)
 			return
 		end
 		local comments = {}
@@ -87,48 +84,14 @@ function M.fetch_conversation(issue, opts, on_done)
 				created = raw.created_at or "",
 			})
 		end
-		vim.list_extend(comments, comments_result or {})
+		vim.list_extend(comments, values.comments or {})
 		on_done({
 			comments = comments,
-			events = events_result or {},
+			events = values.events or {},
 			reaction_options = GITLAB_REACTION_OPTIONS,
 		}, nil)
-	end
-
-	table.insert(
-		handles,
-		notes.list_comments(key, { force_load = force }, function(comments, err)
-			if err then
-				first_err = first_err or err
-			else
-				comments_result = comments
-			end
-			finish()
-		end)
-	)
-
-	table.insert(
-		handles,
-		notes.list_history(key, { force_load = force }, function(events, err)
-			if err then
-				first_err = first_err or err
-			else
-				events_result = events
-			end
-			finish()
-		end)
-	)
-
-	return {
-		cancel = function()
-			cancelled = true
-			for _, h in ipairs(handles) do
-				if h and h.cancel then
-					pcall(h.cancel)
-				end
-			end
-		end,
-	}
+	end)
+	return requests
 end
 
 ---@param issue Issue

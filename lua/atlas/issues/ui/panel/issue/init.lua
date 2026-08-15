@@ -302,6 +302,7 @@ function M.prev_tab()
 	end
 
 	M.render()
+	scroll_to_top()
 end
 
 function M.close()

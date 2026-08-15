@@ -8,7 +8,7 @@ local resolver = require("atlas.providers.resolve")
 local request
 
 local function no_repository()
-	notify.error("No supported Git repository found. Use :Atlas pulls instead.")
+	notify.error("No supported Git repository found")
 end
 
 ---@param value string|nil

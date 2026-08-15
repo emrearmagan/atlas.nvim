@@ -2,6 +2,7 @@
 local M = {}
 
 local resolver = require("atlas.providers.resolve")
+local request_scope = require("atlas.core.requests")
 
 ---@param view IssuesViewConfig
 ---@param opts IssuesFetchOpts
@@ -166,6 +167,7 @@ function M.fetch_conversation(issue, opts, on_done)
 	end
 
 	local timeline = require("atlas.issues.providers.github.api.timeline")
+	local requests = request_scope.new()
 
 	---@param description string
 	local function build(result, description)
@@ -190,7 +192,9 @@ function M.fetch_conversation(issue, opts, on_done)
 		}, nil)
 	end
 
-	return timeline.list_conversation(key, function(result, err)
+	requests.run(function(done)
+		return timeline.list_conversation(key, done, { force_load = opts.force_refresh == true })
+	end, function(result, err)
 		if err or type(result) ~= "table" then
 			on_done(nil, err or "Failed to fetch conversation")
 			return
@@ -202,10 +206,13 @@ function M.fetch_conversation(issue, opts, on_done)
 			return
 		end
 
-		fetch_description(key, function(desc, _)
+		requests.run(function(done)
+			return fetch_description(key, done)
+		end, function(desc)
 			build(result, tostring(desc or ""))
 		end)
-	end, { force_load = opts.force_refresh == true })
+	end)
+	return requests
 end
 
 ---@param issue Issue
