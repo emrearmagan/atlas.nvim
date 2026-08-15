@@ -44,7 +44,7 @@ local function load(name)
 end
 
 local function current_picker()
-	local name = config.options.picker or "auto"
+	local name = config.options.ui.picker or "auto"
 	if name ~= "auto" then
 		return assert(load(name), string.format("Picker '%s' is not available", name))
 	end

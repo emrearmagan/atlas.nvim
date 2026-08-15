@@ -92,10 +92,12 @@ use {
 
 ```lua
 {
-  -- Too lazy to manage a statusline per split? Same. Make it global.
-  global_statusline = true,
-  -- "auto", "default", "snacks", or "fzf-lua".
-  picker = "auto",
+  ui = {
+    -- Too lazy to manage a statusline per split? Same. Make it global.
+    global_statusline = true,
+    -- "auto", "default", "snacks", or "fzf-lua".
+    picker = "auto",
+  },
 
   pulls = {
     -- See Pulls Configuration below.
