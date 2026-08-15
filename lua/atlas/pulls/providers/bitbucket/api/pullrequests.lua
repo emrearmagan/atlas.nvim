@@ -291,10 +291,15 @@ function M.decline(pr, on_done)
 end
 
 ---@param pr PullRequest
----@param _opts { force_refresh: boolean|nil }|nil
+---@param opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(reviewers: PullsReviewer[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_reviewers(pr, _opts, on_done)
+function M.fetch_reviewers(pr, opts, on_done)
+	if not (opts or {}).force_refresh and pr.reviewers ~= nil then
+		on_done(pr.reviewers, nil)
+		return nil
+	end
+
 	local raw = pr._raw
 	local self_url = tostring((raw.links or {}).self or "")
 	if self_url == "" then
@@ -308,7 +313,8 @@ function M.fetch_reviewers(pr, _opts, on_done)
 			return
 		end
 
-		on_done(mapper.to_reviewers((result or {}).participants), nil)
+		pr.reviewers = mapper.to_reviewers((result or {}).participants)
+		on_done(pr.reviewers, nil)
 	end)
 end
 

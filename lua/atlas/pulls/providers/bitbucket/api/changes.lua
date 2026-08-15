@@ -5,14 +5,22 @@ local mapper = require("atlas.pulls.providers.bitbucket.api.mapper")
 local service = require("atlas.pulls.providers.bitbucket.api.service")
 
 ---@param pr PullRequest
----@param _opts { force_refresh: boolean|nil }|nil
+---@param opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(entries: PullsDiffstatEntry[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_diffstat(pr, _opts, on_done)
+function M.fetch_diffstat(pr, opts, on_done)
 	local diffstat_url = tostring((pr._raw.links or {}).diffstat or "")
 	if diffstat_url == "" then
 		on_done({}, nil)
 		return nil
+	end
+	local key = "bitbucket:pr:diffstat:" .. diffstat_url
+	if not (opts or {}).force_refresh then
+		local cached, ok = service.get_cache(key)
+		if ok then
+			on_done(cached, nil)
+			return nil
+		end
 	end
 
 	return service.request("GET", diffstat_url, nil, nil, function(result, err)
@@ -40,6 +48,7 @@ function M.fetch_diffstat(pr, _opts, on_done)
 			})
 		end
 
+		service.set_cache(key, entries)
 		on_done(entries, nil)
 	end)
 end
