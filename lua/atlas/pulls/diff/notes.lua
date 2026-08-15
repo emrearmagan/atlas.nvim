@@ -6,7 +6,7 @@ local note_popup = require("atlas.pulls.notes.ui.popup")
 local note_renderer = require("atlas.pulls.notes.ui.renderer")
 local position = require("atlas.pulls.diff.position")
 local store = require("atlas.pulls.notes")
-local utils = require("atlas.ui.shared.utils")
+local virtual_lines = require("atlas.ui.components.virtual_lines")
 
 local namespace = vim.api.nvim_create_namespace("atlas_diff_notes")
 
@@ -57,6 +57,26 @@ local function visible(session)
 end
 
 ---@param session AtlasDiffSession
+---@return AtlasDiffHint[]
+function M.hints(session)
+	local current = session.current
+	if not current then
+		return {}
+	end
+	local items = {}
+	local visible_notes = visible(session)
+	for _, note in ipairs(visible_notes) do
+		items[#items + 1] = {
+			buf = current.right.buf,
+			line = anchor_line(note, current.document),
+			kind = "note",
+			text = note.body,
+		}
+	end
+	return items
+end
+
+---@param session AtlasDiffSession
 function M.render(session)
 	local current = session.current
 	if not current then
@@ -80,9 +100,9 @@ function M.render(session)
 		or vim.o.columns
 	for line, items in pairs(grouped) do
 		local lines, spans = note_renderer.render_cards(items, width, { outdated = outdated })
-		local virtual_lines = utils.virtual_lines(lines, spans)
+		local rendered_lines = virtual_lines.render(lines, spans)
 		vim.api.nvim_buf_set_extmark(current.right.buf, namespace, line - 1, 0, {
-			virt_lines = virtual_lines,
+			virt_lines = rendered_lines,
 			virt_lines_leftcol = true,
 			number_hl_group = "CursorLineNr",
 			priority = 1080,
@@ -91,7 +111,7 @@ function M.render(session)
 			local target, above =
 				position.opposite_line(current.document, "RIGHT", line, vim.api.nvim_buf_line_count(current.left.buf))
 			local padding = {}
-			for _ = 1, #virtual_lines do
+			for _ = 1, #rendered_lines do
 				padding[#padding + 1] = { { "", "Normal" } }
 			end
 			vim.api.nvim_buf_set_extmark(current.left.buf, namespace, target - 1, 0, {
@@ -151,6 +171,7 @@ function M.open_at_cursor(session, buf)
 		return
 	end
 	note_popup.open({
+		owner = session.id,
 		notes = notes,
 		outdated = outdated,
 		on_edit = function(note)

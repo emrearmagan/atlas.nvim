@@ -1,38 +1,20 @@
 local M = {}
 
+local config = require("atlas.config")
 local service = require("atlas.pulls.providers.bitbucket.api.service")
 local mapper = require("atlas.pulls.providers.bitbucket.api.mapper")
-local cache = require("atlas.core.cache")
 local logger = require("atlas.core.logger")
 local state = require("atlas.pulls.providers.bitbucket.state")
-
----@param link any
----@return string
-local function link_href(link)
-	if type(link) == "string" then
-		return link
-	end
-	if type(link) == "table" then
-		return tostring(link.href or "")
-	end
-	return ""
-end
 
 ---@param pr PullRequest
 ---@param key string
 ---@return string
 local function pr_link(pr, key)
-	local raw = pr._raw
-	local links = type(raw.links) == "table" and raw.links or {}
-	local link = links[key]
-	if link == nil and key == "request_changes" then
-		link = links["request-changes"]
-	end
-	return link_href(link)
+	return tostring((pr._raw.links or {})[key] or "")
 end
 
 ---@param pr PullRequest
----@param action "merge"
+---@param action "merge"|"decline"
 ---@return boolean
 function M.has_action(pr, action)
 	return pr_link(pr, action) ~= ""
@@ -56,10 +38,10 @@ local function fetch_pullrequests_single(workspace, repo, opts, on_done)
 	local statuses_for_key = opts.statuses or { state.pr_state }
 	local key = cache_key(workspace, repo, statuses_for_key)
 	if not opts.force then
-		local cached = cache.get(key)
-		if cached and cached.value then
+		local cached, ok = service.get_cache(key)
+		if ok then
 			logger.loginfo("Bitbucket cache hit", { workspace = workspace, repo = repo })
-			on_done(cached.value, nil)
+			on_done(cached, nil)
 			return nil
 		end
 	end
@@ -83,7 +65,7 @@ local function fetch_pullrequests_single(workspace, repo, opts, on_done)
 		end
 
 		local normalized = mapper.to_pull_requests_list(result, workspace, repo)
-		cache.set(key, normalized, opts.cache_ttl)
+		service.set_cache(key, normalized, opts.cache_ttl)
 		logger.loginfo("Fetch success", {
 			workspace = workspace,
 			repo = repo,
@@ -290,10 +272,34 @@ function M.merge(pr, opts, on_done)
 end
 
 ---@param pr PullRequest
----@param _opts { force_refresh: boolean|nil }|nil
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { job_id: integer, cancel: fun() }|nil
+function M.decline(pr, on_done)
+	local url = pr_link(pr, "decline")
+	if url == "" then
+		on_done(false, "No decline URL available")
+		return nil
+	end
+	return service.request("POST", url, nil, nil, function(_, err)
+		if err then
+			on_done(false, err)
+			return
+		end
+		service.clear_cache()
+		on_done(true, nil)
+	end)
+end
+
+---@param pr PullRequest
+---@param opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(reviewers: PullsReviewer[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_reviewers(pr, _opts, on_done)
+function M.fetch_reviewers(pr, opts, on_done)
+	if not (opts or {}).force_refresh and pr.reviewers ~= nil then
+		on_done(pr.reviewers, nil)
+		return nil
+	end
+
 	local raw = pr._raw
 	local self_url = tostring((raw.links or {}).self or "")
 	if self_url == "" then
@@ -307,28 +313,8 @@ function M.fetch_reviewers(pr, _opts, on_done)
 			return
 		end
 
-		---@type PullsReviewer[]
-		local reviewers = {}
-		for _, item in ipairs((result or {}).participants or {}) do
-			local p = type(item) == "table" and item or {}
-			local user = type(p.user) == "table" and p.user or {}
-			if tostring(p.role or ""):upper() == "REVIEWER" then
-				local decision = "pending"
-				local s = tostring(p.state or "")
-				if s == "approved" then
-					decision = "approved"
-				elseif s == "changes_requested" then
-					decision = "changes_requested"
-				end
-				table.insert(reviewers, {
-					name = tostring(user.display_name or ""),
-					nickname = tostring(user.nickname or ""),
-					decision = decision,
-				})
-			end
-		end
-
-		on_done(reviewers, nil)
+		pr.reviewers = mapper.to_reviewers((result or {}).participants)
+		on_done(pr.reviewers, nil)
 	end)
 end
 
@@ -370,7 +356,7 @@ function M.create_pr(opts, on_done)
 		description = opts.body or "",
 		source = { branch = { name = opts.head } },
 		destination = { branch = { name = opts.base } },
-		close_source_branch = true,
+		close_source_branch = config.options.pulls.default_delete_branch == true,
 		draft = opts.draft == true,
 	}
 
@@ -431,14 +417,11 @@ function M.fetch_default_reviewers(opts, on_done)
 
 		local selected = {}
 		local current = {}
-		for _, participant in ipairs((opts.pr and opts.pr._raw.participants) or {}) do
-			if tostring(participant.role or ""):upper() == "REVIEWER" then
-				local user = type(participant.user) == "table" and participant.user or {}
-				local uuid = tostring(user.uuid or "")
-				if uuid ~= "" then
-					selected[uuid] = true
-					current[uuid] = user
-				end
+		for _, reviewer in ipairs((opts.pr and opts.pr.reviewers) or {}) do
+			local id = tostring(reviewer.provider_id or "")
+			if id ~= "" then
+				selected[id] = true
+				current[id] = reviewer
 			end
 		end
 
@@ -462,10 +445,10 @@ function M.fetch_default_reviewers(opts, on_done)
 			end
 		end
 
-		for uuid, user in pairs(current) do
+		for uuid, reviewer in pairs(current) do
 			if not found[uuid] then
-				local nickname = tostring(user.nickname or "")
-				local name = tostring(user.display_name or "")
+				local nickname = tostring(reviewer.nickname or reviewer.username or "")
+				local name = tostring(reviewer.name or "")
 				table.insert(reviewers, {
 					label = nickname ~= "" and ("@" .. nickname) or (name ~= "" and name or uuid),
 					provider_id = uuid,

@@ -18,6 +18,7 @@ local groups = {
 	AtlasPipelineLinkMuted = { fg = "#7f849c" },
 
 	AtlasDiffAddLine = { link = "DiffAdd" },
+	AtlasDiffChangeLine = { link = "DiffChange" },
 	AtlasDiffRemoveLine = { link = "DiffDelete" },
 }
 

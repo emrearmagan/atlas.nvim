@@ -21,13 +21,14 @@ local notify = utils.notify
 ---| "open_diff"
 ---| "checkout"
 ---| "merge"
+---| "decline"
 ---| "edit_title"
 ---| "edit_description"
 ---| "ready_for_review"
 ---| "convert_to_draft"
 ---| "edit_reviewers"
 ---| "search"
----| "toggle_approval"
+---| "approve"
 ---| "request_changes"
 
 ---@class AtlasPullActionContext
@@ -121,12 +122,9 @@ function M.open(context, on_done)
 		return
 	end
 
+	local target = context.pr and string.format(" for #%s", tostring(context.pr.id)) or ""
 	vim.ui.select(items, {
-		prompt = string.format(
-			"Choose %s action for #%s",
-			context.provider.name,
-			tostring(context.pr and context.pr.id or "")
-		),
+		prompt = string.format("Choose %s action%s", context.provider.name, target),
 		kind = "atlas_pulls_actions",
 		format_item = function(action)
 			return action.label
@@ -255,6 +253,35 @@ M.edit_description = {
 
 M.ready_for_review = draft_action(false)
 M.convert_to_draft = draft_action(true)
+
+M.decline = {
+	id = "decline",
+	label = "Decline",
+	is_available = function(context)
+		return context.pr ~= nil and (context.pr.state == "open" or context.pr.state == "draft")
+	end,
+	run = function(context, done)
+		local pr = assert(context.pr)
+		vim.ui.input({ prompt = string.format("Decline PR #%s? [y/N]: ", tostring(pr.id)) }, function(input)
+			if not input or not vim.trim(input):lower():match("^y") then
+				done({ changed_pr = false, message = "Decline cancelled" }, nil)
+				return
+			end
+			notify(context, "loading", "Declining PR...")
+			context.provider.capabilities.core.decline(pr, function(ok, err)
+				if not ok then
+					local message = tostring(err or "Decline failed")
+					notify(context, "error", message)
+					done(nil, message)
+					return
+				end
+				pr.state = "declined"
+				notify(context, "success", "PR declined", 1200)
+				done({ changed_pr = true, message = "Declined" }, nil)
+			end)
+		end)
+	end,
+}
 
 M.edit_reviewers = {
 	id = "edit_reviewers",

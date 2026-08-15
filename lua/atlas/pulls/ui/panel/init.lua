@@ -33,10 +33,6 @@ function M.on_select(pr, repo, opts)
 	local prev_panel = inactive_panel()
 	prev_panel.deactivate()
 	target_panel.activate()
-	local detail_buf = require("atlas.ui.layout").buf_id("detail")
-	if detail_buf ~= nil and vim.api.nvim_buf_is_valid(detail_buf) then
-		require("atlas.pulls.ui.panel.keymaps").register(detail_buf)
-	end
 
 	if panel_state.current_panel == "repo" then
 		return target_panel.on_select(repo, opts)
@@ -53,10 +49,9 @@ function M.prev_tab()
 end
 
 function M.close()
-	local panel = active_panel()
-	local result = panel.close()
+	pr_panel.close()
+	repo_panel.close()
 	panel_state.reset()
-	return result
 end
 
 return M

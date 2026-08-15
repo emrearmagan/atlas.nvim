@@ -1,20 +1,57 @@
+local request_scope = require("atlas.core.requests")
+
 ---@class PullsConversationTabState
----@field comments PullsComment[]|"loading"|string|nil
----@field activity PullsActivityEntry[]|"loading"|string|nil
+---@field comments PullsComment[]|"loading"|nil
+---@field activity PullsActivityEntry[]|"loading"|nil
+---@field error string|nil
+---@field generation integer
 ---@field collapsed table<string, boolean>
 ---@field expanded_runs table<string, boolean>
+---@field requests AtlasRequestScope
 local M = {
 	comments = nil,
 	activity = nil,
+	error = nil,
+	generation = 0,
 	collapsed = {},
 	expanded_runs = {},
+	requests = request_scope.new(),
 }
 
+local current_pr = nil
+
 function M.reset()
+	M.generation = M.generation + 1
+	current_pr = nil
+	M.requests.cancel()
+	M.requests = request_scope.new()
 	M.comments = nil
 	M.activity = nil
+	M.error = nil
 	M.collapsed = {}
 	M.expanded_runs = {}
+end
+
+---@param pr PullRequest
+---@return integer
+function M.activate(pr)
+	M.reset()
+	current_pr = pr
+	return M.generation
+end
+
+function M.deactivate()
+	M.generation = M.generation + 1
+	current_pr = nil
+	M.requests.cancel()
+	M.requests = request_scope.new()
+end
+
+---@param expected_generation integer
+---@param pr PullRequest
+---@return boolean
+function M.is_current(expected_generation, pr)
+	return M.generation == expected_generation and current_pr == pr
 end
 
 ---@param run_id any

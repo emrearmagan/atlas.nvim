@@ -25,6 +25,10 @@
 ---@class PullsLink
 ---@field html string
 
+---@class PullsLabel
+---@field name string
+---@field color string|nil
+
 --------------------------------------------------------------------------------
 -- Pull Request
 --------------------------------------------------------------------------------
@@ -50,6 +54,11 @@
 ---@field repo string
 ---@field is_subscribed boolean|nil
 ---@field reactions table<string, integer>|nil
+---@field assignees PullsAuthor[]|nil
+---@field reviewers PullsReviewer[]|nil
+---@field labels PullsLabel[]|nil
+---@field lines_added number|nil
+---@field lines_removed number|nil
 ---@field _raw table
 
 --------------------------------------------------------------------------------
@@ -119,9 +128,8 @@
 -- Reviewer
 --------------------------------------------------------------------------------
 
----@class PullsReviewer
----@field name string
----@field nickname string|nil
+---@class PullsReviewer: PullsAuthor
+---@field provider_id string|nil Identifier used when updating the reviewer list.
 ---@field decision "approved"|"changes_requested"|"pending"
 
 --------------------------------------------------------------------------------
@@ -206,16 +214,25 @@
 ---@field old_path string|nil
 ---@field from integer|nil
 ---@field to integer|nil
+---@field start_from integer|nil
+---@field start_to integer|nil
+---@field commit_hash string|nil
+
+---@class PullsFileCommentPosition
+---@field path string
+---@field old_path string|nil
 ---@field commit_hash string|nil
 
 ---@class PullsComment
 ---@field id number|string
 ---@field parent_id number|string|nil
+---@field thread_id string|nil
 ---@field author PullsAuthor|nil
 ---@field content_raw string
 ---@field content_display string|nil
 ---@field created_on string
 ---@field inline PullsInlineCommentPosition|nil
+---@field file PullsFileCommentPosition|nil
 ---@field inline_hunk DiffHunk|nil                       -- surrounding diff context for inline comments
 ---@field inline_hunk_anchor integer|nil                 -- line coordinate inside inline_hunk
 ---@field is_task boolean|nil                            -- true = render as task (checkbox)
@@ -240,6 +257,10 @@
 ---@field review PullsReview
 ---@field comments PullsComment[]
 ---@field tasks PullsComment[]
+
+---@class PullsReviewContext
+---@field authors PullsAuthor[]
+---@field reviewed_files table<string, boolean>|nil
 
 --------------------------------------------------------------------------------
 -- Commit

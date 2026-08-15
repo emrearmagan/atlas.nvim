@@ -36,7 +36,7 @@ local function to_items(repo)
 		end
 		local content = nil
 		if author_str and first_line then
-			content = author_str .. " · " .. first_line
+			content = author_str .. "  " .. first_line
 		elseif first_line then
 			content = first_line
 		elseif author_str then
@@ -73,6 +73,10 @@ function M.render(_repo, width)
 
 	if state.tags == "loading" then
 		utils.push(lines, spans, spinner.with_text("Loading tags..."), "AtlasTextMuted", PADDING_X)
+		return lines, spans, line_map
+	end
+	if type(state.tags) == "string" then
+		utils.push(lines, spans, state.tags, "AtlasLogError", PADDING_X)
 		return lines, spans, line_map
 	end
 
@@ -167,7 +171,7 @@ function M.on_select(_pr, repo, refresh, opts)
 		end
 		state.repo = active_detail
 		if err then
-			state.tags = { entries = {} }
+			state.tags = tostring(err)
 			statusline.notify("error", string.format("Failed to load tags for %s", repo_label))
 		else
 			state.tags = tags or { entries = {} }

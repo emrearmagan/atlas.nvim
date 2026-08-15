@@ -1,6 +1,5 @@
 local M = {}
 
-local resolver = require("atlas.core.keymaps")
 local state = require("atlas.pulls.state")
 local helper = require("atlas.pulls.ui.main.helper")
 local header = require("atlas.ui.components.header")
@@ -57,15 +56,6 @@ local function add_pr_id_spans(table_lines, table_map, table_spans)
 	end
 end
 
----@return string
-local function refresh_key_display()
-	local keys = resolver.resolve("ui.refresh_view")
-	if type(keys) == "table" and #keys > 0 then
-		return tostring(keys[1])
-	end
-	return "R"
-end
-
 ---@param opts { width: integer }
 ---@param repos PullsGroup[]
 ---@return string[], table[], table<integer, table>
@@ -111,7 +101,7 @@ local function render_header(lines, spans, width)
 		return tostring(v.key or v.name or "")
 	end
 
-	local icon = state.provider and state.provider.icon or "•"
+	local icon = state.provider and state.provider.icon or icons.fallback()
 	local title = state.provider and state.provider.name or "Atlas"
 	local hl_group = state.provider and state.provider.hl_group or "Title"
 
@@ -163,27 +153,19 @@ local function render_header(lines, spans, width)
 		table.insert(actions, { label = label, hl_group = hl })
 	end
 
-	table.insert(actions, { label = "|", hl_group = "AtlasTextMuted" })
-
 	if state.provider and state.provider.capabilities.notifications then
+		table.insert(actions, { label = "|", hl_group = "AtlasTextMuted" })
 		local notif_state = require("atlas.ui.notifications.state")
-		local icons_mod = require("atlas.ui.shared.icons")
 		local count = notif_state.unread_count or 0
 		local bell_icon, bell_hl
 		if count > 0 then
-			bell_icon, bell_hl = icons_mod.general("bell_unread")
+			bell_icon, bell_hl = icons.general("bell_unread")
 		else
-			bell_icon, bell_hl = icons_mod.general("bell")
+			bell_icon, bell_hl = icons.general("bell")
 		end
 		local bell_label = count > 0 and string.format("%s %d", bell_icon, count) or bell_icon
 		table.insert(actions, { label = bell_label, hl_group = bell_hl })
-		table.insert(actions, { label = "|", hl_group = "AtlasTextMuted" })
 	end
-
-	table.insert(actions, {
-		label = string.format("Refresh (%s)", refresh_key_display()),
-		hl_group = "AtlasTextMuted",
-	})
 
 	utils.append_block(
 		lines,

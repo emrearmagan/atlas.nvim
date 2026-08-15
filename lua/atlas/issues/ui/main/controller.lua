@@ -13,7 +13,7 @@ local active_issues_handle = nil
 local active_issue_reload_handles = {}
 
 local function render_if_active()
-	if not layout.is_open() then
+	if not layout.is_active() then
 		return
 	end
 
@@ -129,6 +129,10 @@ end
 
 ---@param on_done fun(err: string|nil)
 local function get_current_user(on_done)
+	if state.current_user ~= nil then
+		on_done(nil)
+		return
+	end
 	local provider = state.provider
 	if provider == nil then
 		on_done("no provider")
@@ -327,64 +331,21 @@ local function load_active_view(opts, on_done)
 			return
 		end
 		if user_err then
-			finalize_fetch_failure(user_err, {})
-			return
+			statusline.notify("warn", string.format("Failed to fetch current user: %s", tostring(user_err)))
+		else
+			render_if_active()
 		end
-		render_if_active()
 		fetch_page(nil, {})
 	end)
 end
 
+---@param view IssuesViewConfig
+---@param force_load boolean
 ---@param on_done fun()|nil
----@param focus_issue_key string|nil
-function M.refresh_current_view(on_done, focus_issue_key)
-	local provider = state.provider
-	local refresh = provider and provider.capabilities.core.refresh
-	if refresh then
-		refresh()
-	end
-
-	load_active_view({ force_load = true }, function()
-		local focused = focus_issue_key ~= nil
-			and navigation.focus_item(function(item)
-				return item.kind == "issue" and item._issue and item._issue.key == focus_issue_key
-			end)
-		if not focused then
-			navigation.focus_first_item()
-		end
-		local item = navigation.current_item()
-		local panel = require("atlas.issues.ui.panel")
-		if panel.is_open() and (type(item) ~= "table" or item.kind ~= "issue") then
-			panel.close()
-		end
-		if on_done ~= nil then
-			on_done()
-		end
-	end)
-end
-
----@param view IssuesViewConfig|nil
-function M.switch_view(view)
-	state.active_view = view
-	load_active_view({ force_load = false }, function()
-		navigation.focus_first_item()
-	end)
-end
-
----@param name string
----@param value any
-function M.run_bookmark(name, value)
+local function load_bookmark(view, force_load, on_done)
 	local provider = state.provider
 	if provider == nil then
 		return
-	end
-	local view = { name = name, layout = "compact" }
-	if type(value) == "string" then
-		view.search = value
-	elseif type(value) == "table" then
-		for k, v in pairs(value) do
-			view[k] = v
-		end
 	end
 
 	cancel_active_requests()
@@ -397,7 +358,7 @@ function M.run_bookmark(name, value)
 	render_if_active()
 
 	active_issues_handle = provider.capabilities.core.fetch_issues(view, {
-		force_load = false,
+		force_load = force_load,
 		max_results = tonumber((config.options and config.options.issues or {}).max_results) or 100,
 		layout = view.layout,
 	}, function(issues, _, _, err)
@@ -413,7 +374,86 @@ function M.run_bookmark(name, value)
 			statusline.notify("success", string.format("Loaded %d issues", #(issues or {})), 1200)
 		end
 		render_if_active()
+		if on_done then
+			on_done()
+		end
 	end)
+end
+
+---@param on_done fun()|nil
+---@param focus_issue_key string|nil
+function M.refresh_current_view(on_done, focus_issue_key)
+	local provider = state.provider
+	local refresh = provider and provider.capabilities.core.refresh
+	if refresh then
+		refresh()
+	end
+	local current_view = state.current_view
+	local bookmark_active = state.active_view
+		and state.active_view._kind == "bookmarks"
+		and current_view
+		and current_view._kind ~= "bookmarks"
+	if bookmark_active and focus_issue_key == nil then
+		local item = navigation.current_item()
+		if item and item.kind == "issue" and item._issue then
+			focus_issue_key = item._issue.key
+		end
+	end
+
+	local function finish()
+		local focused = bookmark_active and focus_issue_key == nil
+		if focus_issue_key ~= nil then
+			focused = navigation.focus_item(function(item)
+				return item.kind == "issue" and item._issue and item._issue.key == focus_issue_key
+			end)
+		end
+		if not focused then
+			navigation.focus_first_item()
+		end
+		local item = navigation.current_item()
+		local panel = require("atlas.issues.ui.panel")
+		if panel.is_open() then
+			if focus_issue_key and not focused then
+				panel.close()
+			elseif type(item) == "table" and item.kind == "issue" and item._issue then
+				panel.on_select(item._issue, { force_refresh = true, issue_refreshed = true })
+			else
+				panel.close()
+			end
+		end
+		if on_done ~= nil then
+			on_done()
+		end
+	end
+
+	if bookmark_active then
+		load_bookmark(current_view, true, finish)
+	else
+		load_active_view({ force_load = true }, finish)
+	end
+end
+
+---@param view IssuesViewConfig|nil
+function M.switch_view(view)
+	state.active_view = view
+	load_active_view({ force_load = false }, function()
+		navigation.focus_first_item()
+	end)
+end
+
+---@param name string
+---@param value any
+function M.run_bookmark(name, value)
+	local view = { name = name, layout = "compact" }
+	if type(value) == "string" then
+		view.search = value
+	elseif type(value) == "table" then
+		for k, v in pairs(value) do
+			view[k] = v
+		end
+	end
+
+	load_bookmark(view, false)
 end
 
 ---@param source_buf integer|nil
@@ -444,10 +484,8 @@ function M.apply_action_result(result)
 	if result == nil then
 		return
 	end
-	if result.removed then
-		M.refresh_current_view()
-	elseif result.issue_key ~= nil and result.issue_key ~= "" then
-		M.refresh_issue(result.issue_key)
+	if result.issue_key ~= nil and result.issue_key ~= "" then
+		M.refresh_current_view(nil, result.issue_key)
 	end
 end
 

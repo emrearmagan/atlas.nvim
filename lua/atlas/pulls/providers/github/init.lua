@@ -2,6 +2,7 @@ local actions = require("atlas.pulls.providers.github.actions")
 local activity_api = require("atlas.pulls.providers.github.api.activity")
 local changes_api = require("atlas.pulls.providers.github.api.changes")
 local checks_api = require("atlas.pulls.providers.github.api.checks")
+local request_scope = require("atlas.core.requests")
 local cli = require("atlas.providers.github.client").pulls
 local comments_api = require("atlas.pulls.providers.github.api.comments")
 local notifications_api = require("atlas.pulls.providers.github.api.notifications")
@@ -40,13 +41,13 @@ local function fetch_pullrequests(view, opts, on_done)
 	local query = search:find("is:pr") and search or "is:pr " .. search
 	local filters = require("atlas.pulls.state").status_filters or {}
 	local open, merged, declined = filters.OPEN, filters.MERGED, filters.DECLINED
-	if open and not merged and not declined then
+	if opts.state == "open" or (opts.state == nil and open and not merged and not declined) then
 		query = query .. " is:open"
-	elseif merged and not open and not declined then
+	elseif opts.state == "merged" or (opts.state == nil and merged and not open and not declined) then
 		query = query .. " is:merged"
-	elseif declined and not open and not merged then
+	elseif opts.state == "declined" or (opts.state == nil and declined and not open and not merged) then
 		query = query .. " is:closed -is:merged"
-	elseif merged and declined and not open then
+	elseif opts.state == nil and merged and declined and not open then
 		query = query .. " is:closed"
 	end
 
@@ -77,6 +78,8 @@ end
 ---@param on_done fun(result: { comments: PullsComment[], events: PullsActivityEntry[] }|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 local function fetch_conversation(pr, opts, on_done)
+	local requests = request_scope.new()
+
 	---@param result { comments: PullsComment[], events: PullsActivityEntry[] }
 	---@param description string
 	local function finish(result, description)
@@ -94,7 +97,9 @@ local function fetch_conversation(pr, opts, on_done)
 		on_done({ comments = comments, events = type(result.events) == "table" and result.events or {} }, nil)
 	end
 
-	return activity_api.fetch_conversation(pr, opts, function(result, err)
+	requests.run(function(done)
+		return activity_api.fetch_conversation(pr, opts, done)
+	end, function(result, err)
 		if err or type(result) ~= "table" then
 			on_done(nil, err or "Failed to fetch conversation")
 			return
@@ -105,10 +110,13 @@ local function fetch_conversation(pr, opts, on_done)
 			finish(result, description)
 			return
 		end
-		pullrequests_api.get_description(pr, opts, function(value)
+		requests.run(function(done)
+			return pullrequests_api.get_description(pr, opts, done)
+		end, function(value)
 			finish(result, tostring(value or ""))
 		end)
 	end)
+	return requests
 end
 
 ---@param pr PullRequest
@@ -126,7 +134,7 @@ local function add_reaction(pr, comment, key, on_done)
 	local endpoint
 	if tostring(comment.id) == "__body__" then
 		endpoint = string.format("repos/%s/issues/%s/reactions", repo_slug, tostring(pr.id))
-	elseif comment.inline then
+	elseif comment.inline or comment.file then
 		endpoint = string.format("repos/%s/pulls/comments/%s/reactions", repo_slug, tostring(comment.id))
 	else
 		endpoint = string.format("repos/%s/issues/comments/%s/reactions", repo_slug, tostring(comment.id))
@@ -196,26 +204,29 @@ end
 ---@param target AtlasTarget
 ---@return AtlasPullsViewConfig
 local function search_view(target)
+	local search = string.format("repo:%s/%s is:pr", target.owner, target.repo)
+	if target.number then
+		search = search .. " " .. tostring(target.number)
+	end
 	return {
 		name = "Search",
 		layout = "compact",
-		search = string.format(
-			"repo:%s/%s %s is:pr",
-			target.owner,
-			target.repo,
-			target.number and tostring(target.number) or ""
-		),
+		search = search,
 	}
 end
 
 ---@param info AtlasGitRemoteInfo
 ---@param domain AtlasDomain
 ---@param entity AtlasEntity
----@param number integer
+---@param number integer|nil
 ---@param base_url string
 ---@return AtlasTarget
 local function target(info, domain, entity, number, base_url)
 	local owner, repo = info.slug:match("^(.+)/([^/]+)$")
+	local url = string.format("%s/%s/%s", base_url, owner, repo)
+	if entity ~= "repo" then
+		url = string.format("%s/%s/%d", url, entity == "pr" and "pull" or "issues", assert(number))
+	end
 	return {
 		provider = "github",
 		domain = domain,
@@ -224,7 +235,7 @@ local function target(info, domain, entity, number, base_url)
 		owner = owner,
 		repo = repo,
 		number = number,
-		url = string.format("%s/%s/%s/%s/%d", base_url, owner, repo, entity == "pr" and "pull" or "issues", number),
+		url = url,
 	}
 end
 
@@ -257,6 +268,7 @@ return {
 			update_title = pullrequests_api.update_title,
 			update_description = pullrequests_api.update_description,
 			set_draft = pullrequests_api.set_draft,
+			decline = pullrequests_api.decline,
 			fetch_description = pullrequests_api.get_description,
 			fetch_merge_checks = checks_api.fetch,
 			fetch_diffstat = changes_api.fetch_diffstat,
@@ -283,6 +295,7 @@ return {
 			approve = reviews_api.approve,
 			request_changes = reviews_api.request_changes,
 			discard_review = reviews_api.discard,
+			set_file_reviewed = reviews_api.set_file_reviewed,
 		},
 		repository = {
 			fetch_details = repositories_api.fetch_detail,

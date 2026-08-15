@@ -15,6 +15,7 @@
 ---@field force_load boolean|nil
 ---@field force_refresh boolean|nil
 ---@field pagelen number|nil
+---@field state "open"|"merged"|"declined"|nil
 
 ---@class AtlasPullsCommentCompletionContext
 ---@field pr PullRequest
@@ -22,7 +23,7 @@
 ---@field tasks PullsComment[]|nil
 ---@field reviewers PullsReviewer[]|nil
 ---@field conversation PullsComment[]|nil
----@field review_context { authors: PullsAuthor[] }|nil
+---@field review_context PullsReviewContext|nil
 
 ---@class PullsProvider
 ---@field id string
@@ -31,7 +32,7 @@
 ---@field hl_group string
 ---@field resolve fun(value: string, parsed: AtlasParsedUrl|nil): AtlasTarget|nil, string|nil
 ---@field search_view fun(target: AtlasTarget): AtlasPullsViewConfig
----@field target fun(info: AtlasGitRemoteInfo, domain: AtlasDomain, entity: AtlasEntity, number: integer, base_url: string): AtlasTarget
+---@field target fun(info: AtlasGitRemoteInfo, domain: AtlasDomain, entity: AtlasEntity, number: integer|nil, base_url: string): AtlasTarget
 ---@field repositories fun(options: table): string[]
 ---@field capabilities PullsProviderCapabilities
 
@@ -54,6 +55,7 @@
 ---@field update_title fun(pr: PullRequest, title: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil
 ---@field update_description (fun(pr: PullRequest, description: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field set_draft fun(pr: PullRequest, draft: boolean, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil
+---@field decline fun(pr: PullRequest, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil
 ---@field fetch_default_reviewers fun(opts: { repo_slug: string, repo_root: string|nil, head: string, base: string, pr: PullRequest|nil }, on_done: fun(reviewers: PullsCreatePRReviewer[]|nil, err: string|nil)): { cancel: fun() }|nil
 ---@field fetch_description (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(description: string|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field fetch_reviewers (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(reviewers: PullsReviewer[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
@@ -77,12 +79,13 @@
 
 ---@class PullsReviewsCapability
 ---@field fetch fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(data: PullsReviewData|nil, err: string|nil)): { cancel: fun() }|nil
----@field fetch_review_context (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(context: { authors: PullsAuthor[] }|nil, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field fetch_review_context (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(context: PullsReviewContext|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field start_review (fun(pr: PullRequest, review: PullsReview, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field submit_review (fun(pr: PullRequest, review: PullsReview|nil, body: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field approve (fun(pr: PullRequest, review: PullsReview|nil, body: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field request_changes (fun(pr: PullRequest, review: PullsReview|nil, body: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field discard_review (fun(pr: PullRequest, review: PullsReview, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field set_file_reviewed (fun(pr: PullRequest, path: string, reviewed: boolean, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
 
 ---@class PullsTasksCapability
 ---@field add_task (fun(pr: PullRequest, content: string, parent: PullsComment|nil, on_done: fun(comment: PullsComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
@@ -120,6 +123,7 @@
 ---@class PullsAddCommentOpts
 ---@field parent PullsComment|nil          -- reply to this comment
 ---@field inline PullsInlineCommentPosition|nil
+---@field file PullsFileCommentPosition|nil
 ---@field pending boolean|nil              -- add the comment to a pending review
 ---@field review PullsReview|nil
 

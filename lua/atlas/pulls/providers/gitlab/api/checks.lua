@@ -5,13 +5,14 @@ local pipelines_api = require("atlas.pulls.providers.gitlab.api.pipelines")
 local pullrequests_api = require("atlas.pulls.providers.gitlab.api.pullrequests")
 
 ---@param raw table
+---@param draft boolean
 ---@return PullsMergeCheck[]
-local function parse_merge_checks(raw)
+local function parse_merge_checks(raw, draft)
 	local checks = {}
 	local dms = tostring(raw.detailed_merge_status or ""):lower()
 	local has_conflicts = raw.has_conflicts == true
 
-	if raw.draft == true or raw.work_in_progress == true then
+	if draft then
 		table.insert(checks, {
 			key = "draft",
 			state = "warning",
@@ -127,7 +128,7 @@ end
 function M.fetch(pr, opts, on_done)
 	opts = opts or {}
 	local pending = 2
-	local mr_raw, pipelines_result
+	local mr, pipelines_result
 	local first_err
 
 	local function finish()
@@ -135,11 +136,11 @@ function M.fetch(pr, opts, on_done)
 		if pending > 0 then
 			return
 		end
-		if mr_raw == nil and pipelines_result == nil then
+		if mr == nil and pipelines_result == nil then
 			on_done(nil, first_err or "Failed to fetch merge checks")
 			return
 		end
-		local checks = parse_merge_checks(mr_raw or {})
+		local checks = parse_merge_checks((mr and mr._raw) or {}, (mr or pr).state == "draft")
 		local bc = providers.pipelines_check(pipelines_result, "Pipelines")
 		if bc then
 			table.insert(checks, bc)
@@ -154,7 +155,7 @@ function M.fetch(pr, opts, on_done)
 			if err then
 				first_err = first_err or err
 			elseif fresh then
-				mr_raw = fresh._raw
+				mr = fresh
 			end
 			finish()
 		end

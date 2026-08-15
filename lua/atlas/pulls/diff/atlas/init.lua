@@ -1,11 +1,13 @@
 local M = {}
 
 local commits = require("atlas.pulls.diff.atlas.commits")
+local comments = require("atlas.pulls.diff.comments")
 local config = require("atlas.config")
 local events = require("atlas.core.events")
 local explorer = require("atlas.pulls.diff.atlas.explorer")
 local git = require("atlas.pulls.diff.atlas.git")
 local keymaps = require("atlas.pulls.diff.atlas.keymaps")
+local logger = require("atlas.core.logger")
 local notes = require("atlas.pulls.diff.notes")
 local position = require("atlas.pulls.diff.position")
 local pulls_highlights = require("atlas.pulls.ui.highlights")
@@ -74,7 +76,9 @@ local function select_file(session, index, on_loaded)
 		if not document then
 			state.pending_index = nil
 			explorer.render(session, state.annotated_paths)
-			session_api.notify(session, "error", tostring(err or "Unable to load file diff"))
+			local message = tostring(err or "Unable to load file diff")
+			logger.logerror("diff.file failed", { path = state.files[index].path, error = message })
+			session_api.notify(session, "error", message)
 			return
 		end
 		state.selected_index = index
@@ -132,8 +136,8 @@ end
 local function focus_item(session, item, focus_diff)
 	local comment = item.comment
 	local note = item.note
-	local path = note and note.file_path
-		or (comment and comment.inline and (comment.inline.path or comment.inline.old_path))
+	local target = comment and (comment.file or comment.inline) or nil
+	local path = note and note.file_path or (target and (target.path or target.old_path))
 	local index = path and file_index(session, path) or nil
 	if not index then
 		session_api.notify(session, "info", "This review item's file is no longer in the diff")
@@ -149,7 +153,7 @@ local function focus_item(session, item, focus_diff)
 				return
 			end
 		else
-			side, line = position.location(comment and comment.inline)
+			side, line = position.comment(document, comment)
 		end
 		if not side or not line then
 			session_api.notify(session, "info", "This review item no longer has a diff position")
@@ -203,6 +207,13 @@ local function toggle_file_reviewed(session)
 		return
 	end
 	local reviewed = not session.reviewed_files[file.path]
+	local current_review = session.review
+	local reviews = current_review and current_review.provider.capabilities.reviews
+	local context
+	if reviews and reviews.set_file_reviewed then
+		context = review.action_context(session)
+	end
+
 	local next_index = reviewed and unreviewed_file(session, index, 1) or nil
 	session.reviewed_files[file.path] = reviewed or nil
 	if next_index then
@@ -215,6 +226,15 @@ local function toggle_file_reviewed(session)
 	if line and state.panel.win and vim.api.nvim_win_is_valid(state.panel.win) then
 		vim.api.nvim_win_set_cursor(state.panel.win, { line, 0 })
 	end
+
+	if not context then
+		return
+	end
+	reviews.set_file_reviewed(current_review.pr, file.path, reviewed, function(ok, err)
+		if not ok then
+			session_api.notify(session, "error", "Unable to update reviewed file: " .. tostring(err))
+		end
+	end)
 end
 
 ---@param session AtlasDiffSession
@@ -366,6 +386,14 @@ local function register_keymaps(session)
 		show_commit = function()
 			commits.show_details(session)
 		end,
+		add_file_comment = function(pending)
+			local state = session.viewer_state --[[@as AtlasNativeDiffState]]
+			local index = explorer.file_at_cursor(session)
+			local file = index and state.files[index] or nil
+			if file then
+				comments.add_to_file(session, { path = file.path, old_path = file.old_path }, pending)
+			end
+		end,
 	})
 end
 
@@ -509,6 +537,10 @@ function M.open(session, loading_view, on_done)
 				review_panel.configure(panel)
 			end
 			session_api.set_current(session, view.current(session))
+			local selected_line = explorer.line_for_file(session, state.selected_index)
+			if selected_line and state.panel.win then
+				vim.api.nvim_win_set_cursor(state.panel.win, { selected_line, 0 })
+			end
 			session_api.review_attached(session)
 			register_keymaps(session)
 			review_panel.register_keymaps(panel)

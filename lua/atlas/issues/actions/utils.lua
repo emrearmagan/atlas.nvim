@@ -1,6 +1,7 @@
 local M = {}
 
 local icons = require("atlas.ui.shared.icons")
+local logger = require("atlas.core.logger")
 local statusline = require("atlas.ui.statusline")
 
 ---@param context AtlasIssueActionContext
@@ -44,6 +45,7 @@ local function custom_action(item)
 				output = require("atlas.ui.popups.live").create,
 			}, complete)
 			if not ok then
+				logger.logerror(string.format("Custom issue action '%s' failed: %s", item.label, tostring(err)))
 				complete(false, "Custom action failed: " .. tostring(err))
 			end
 		end,

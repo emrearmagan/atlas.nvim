@@ -91,11 +91,6 @@ function M.init(provider, opts)
 	ui_state.on_panel_open = function()
 		M.render()
 		local panel = require("atlas.pulls.ui.panel")
-		local panel_keymaps = require("atlas.pulls.ui.panel.keymaps")
-		local detail_buf = require("atlas.ui.layout").buf_id("detail")
-		if detail_buf then
-			panel_keymaps.register(detail_buf)
-		end
 		local navigation = require("atlas.ui.navigation")
 		local current = navigation.current_item()
 		if

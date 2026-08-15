@@ -25,6 +25,17 @@ local VIEWERS = {
 	DiffviewOpen = "diffview",
 }
 
+---@param operation string
+---@param context table
+---@param err string|nil
+local function log_result(operation, context, err)
+	if err then
+		logger.logerror(operation .. " failed", vim.tbl_extend("force", {}, context, { error = tostring(err) }))
+	else
+		logger.loginfo(operation .. " ready", context)
+	end
+end
+
 ---@class AtlasInitialReview: PullsReviewData
 ---@field warnings string[]
 
@@ -32,8 +43,9 @@ local VIEWERS = {
 ---@field provider PullsProvider
 ---@field pr PullRequest
 ---@field current_user PullsUser|nil
----@field review_context { authors: PullsAuthor[] }|nil
+---@field review_context PullsReviewContext|nil
 ---@field initial_review AtlasInitialReview|nil
+---@field root string|nil
 
 ---@param requested AtlasPullsDiffOpenCommand|string|nil
 ---@return string|nil, string|nil
@@ -50,9 +62,13 @@ local function configured_command(requested)
 end
 
 -- Prefer an existing checkout; nil makes Atlas use its shared cache.
----@param pr PullRequest
+---@param context AtlasReviewOpenContext
 ---@return string|nil
-local function repository_path(pr)
+local function repository_path(context)
+	local pr = context.pr
+	if context.root then
+		return context.root
+	end
 	local cwd = vim.fn.getcwd()
 	local current = git.local_repository(cwd)
 	local target = resolver.resolve(pr.link.html)
@@ -128,10 +144,13 @@ local function make_session(session, viewer_id, source, review, commits)
 		session.review_request.cancel()
 		session.review_request = nil
 	end
-	review_api.cancel_actions(session)
+	review_api.invalidate(session)
 	session.source = source
 	session.review = review
 	session.commits = commits
+	if review and review.context and review.context.reviewed_files then
+		session.reviewed_files = review.context.reviewed_files
+	end
 	session.current = nil
 	session.viewer_state = {}
 	session.review_panel = nil
@@ -163,6 +182,14 @@ local function start_range(opts, on_done, target, existing)
 		end
 		return nil
 	end
+	local operation = existing and "diff.reload" or "diff.open"
+	local log = {
+		viewer = VIEWERS[command] or command,
+		root = root,
+		base_revision = base,
+		head_revision = head,
+	}
+	logger.loginfo(operation, log)
 
 	local request = { cancel = function() end }
 	local cancelled = false
@@ -176,6 +203,7 @@ local function start_range(opts, on_done, target, existing)
 	if not viewer_id then
 		local err = open_external(command, { root = root, base_revision = base, head_revision = head })
 		view:finish()
+		log_result(operation, log, err)
 		if on_done then
 			on_done(err)
 		end
@@ -195,11 +223,20 @@ local function start_range(opts, on_done, target, existing)
 		end, next_target, session)
 	end
 	request = open_viewer(session, view, {}, function(err)
-		if not cancelled and on_done then
+		if cancelled then
+			return
+		end
+		log_result(operation, log, err)
+		if on_done then
 			on_done(err)
 		end
 	end) or request
-	return { cancel = cancel }
+	return {
+		cancel = function()
+			cancel()
+			view:finish()
+		end,
+	}
 end
 
 ---@param context AtlasReviewOpenContext
@@ -211,6 +248,14 @@ end
 ---@return { cancel: fun() }|nil
 local function start_pr(context, command, refresh, on_done, target, existing)
 	local viewer_id = VIEWERS[command]
+	local operation = existing and "diff.reload" or "diff.open"
+	local log = {
+		viewer = viewer_id or command,
+		provider = context.provider.id,
+		repo = context.pr.repo_full_name,
+		pr_id = context.pr.id,
+	}
+	logger.loginfo(operation, log)
 	local request = { cancel = function() end }
 	local cancelled = false
 	local finished = false
@@ -230,6 +275,7 @@ local function start_pr(context, command, refresh, on_done, target, existing)
 			return
 		end
 		finished = true
+		log_result(operation, log, err)
 		if on_done then
 			on_done(err)
 		end
@@ -272,6 +318,9 @@ local function start_pr(context, command, refresh, on_done, target, existing)
 	---@param review AtlasDiffReview|nil
 	---@param warnings string[]
 	local function load_commits(source, review, warnings)
+		log.root = source.root
+		log.base_revision = source.base_revision
+		log.head_revision = source.head_revision
 		if not viewer_id then
 			local err = open_external(command, source)
 			view:finish()
@@ -322,7 +371,7 @@ local function start_pr(context, command, refresh, on_done, target, existing)
 	end
 
 	local function load_repository()
-		request = checkout.ensure_pr_repository(context.pr, repository_path(context.pr), function(message)
+		request = checkout.ensure_pr_repository(context.pr, repository_path(context), function(message)
 			view:update(message)
 		end, function(root, err)
 			later(function()
@@ -364,12 +413,18 @@ local function start_pr(context, command, refresh, on_done, target, existing)
 	else
 		load_repository()
 	end
-	return { cancel = cancel }
+	return {
+		cancel = function()
+			cancel()
+			view:finish()
+		end,
+	}
 end
 
 ---@param value string
+---@param requested AtlasPullsDiffOpenCommand|string|nil
 ---@return { cancel: fun() }|nil
-local function open_pull_request(value)
+function M.open_pull_request(value, requested)
 	local target, target_err = resolver.resolve(value)
 	if not target then
 		notify.error(target_err or "Invalid pull request URL")
@@ -388,6 +443,11 @@ local function open_pull_request(value)
 		notify.error("Unable to load pull request provider: " .. target.provider)
 		return nil
 	end
+	local command, command_err = configured_command(requested)
+	if not command then
+		notify.error(command_err)
+		return nil
+	end
 	return start_pr(
 		{
 			provider = provider,
@@ -396,7 +456,7 @@ local function open_pull_request(value)
 			review_context = nil,
 			initial_review = nil,
 		},
-		"AtlasDiff",
+		command,
 		true,
 		function(err)
 			if err then
@@ -416,7 +476,7 @@ end
 ---@param value string
 function M.open_argument(value)
 	if not value:find("...", 1, true) then
-		open_pull_request(value)
+		M.open_pull_request(value, "AtlasDiff")
 		return
 	end
 	local separator = value:find("...", 1, true)
@@ -449,11 +509,7 @@ function M.open_pr(context, on_done)
 		end
 		return nil
 	end
-	local pr = context.pr
 	return start_pr(context, command, false, function(open_err)
-		if open_err then
-			logger.logerror("diff.open failed", { pr_id = pr.id, error = tostring(open_err) })
-		end
 		if on_done then
 			on_done(open_err, open_err and "error" or nil)
 		end

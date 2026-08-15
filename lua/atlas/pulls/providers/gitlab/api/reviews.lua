@@ -69,6 +69,8 @@ function M.fetch(pr, opts, on_done)
 					if line then
 						comment.inline_hunk = diff_parser.find_hunk(files_by_path[comment.inline.path], side, line)
 					end
+				end
+				if comment.inline or comment.file then
 					table.insert(comments, comment)
 				end
 			end
@@ -94,7 +96,7 @@ end
 
 ---@param pr PullRequest
 ---@param _opts { force_refresh: boolean|nil }|nil
----@param on_done fun(context: { authors: PullsAuthor[] }|nil, err: string|nil)
+---@param on_done fun(context: PullsReviewContext|nil, err: string|nil)
 function M.fetch_context(pr, _opts, on_done)
 	local authors = {}
 	local seen = {}
@@ -115,21 +117,9 @@ function M.fetch_context(pr, _opts, on_done)
 	end
 
 	add(pr.author)
-	for _, list in ipairs({ pr._raw.assignees or {}, pr._raw.reviewers or {} }) do
+	for _, list in ipairs({ pr.assignees or {}, pr.reviewers or {} }) do
 		for _, user in ipairs(list) do
-			if type(user) == "table" then
-				local username = tostring(user.username or "")
-				local name = tostring(user.name or username)
-				local id = tostring(user.id or "")
-				if id ~= "" or username ~= "" or name ~= "" then
-					add({
-						id = id,
-						name = name,
-						username = username,
-						nickname = username ~= "" and username or nil,
-					})
-				end
-			end
+			add(user)
 		end
 	end
 	on_done({ authors = authors }, nil)
@@ -219,75 +209,15 @@ function M.publish(pr, reviewer_state, body, on_done)
 end
 
 ---@param pr PullRequest
----@param on_done fun(state: { user_has_approved: boolean, approved_by: string[] }|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.fetch_approvals(pr, on_done)
-	local path, iid = project_iid(pr)
-	if path == "" or iid == nil then
-		on_done(nil, "Invalid MR identifier")
-		return nil
-	end
-	local endpoint = string.format("/projects/%s/merge_requests/%d/approvals", service.url_encode(path), iid)
-	return service.request("GET", endpoint, nil, function(result, err)
-		if err or type(result) ~= "table" then
-			on_done(nil, err or "Failed to fetch approval state")
-			return
-		end
-		local approved_by = {}
-		for _, entry in ipairs(result.approved_by or {}) do
-			local user = type(entry) == "table" and (entry.user or entry) or nil
-			local login = type(user) == "table" and tostring(user.username or "") or ""
-			if login ~= "" then
-				table.insert(approved_by, login)
-			end
-		end
-		on_done({ user_has_approved = result.user_has_approved == true, approved_by = approved_by }, nil)
-	end)
-end
-
----@param pr PullRequest
----@param on_done fun(approved: boolean|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.fetch_approval_state(pr, on_done)
-	return M.fetch_approvals(pr, function(state, err)
-		if not state then
-			on_done(nil, err)
-			return
-		end
-		on_done(state.user_has_approved, nil)
-	end)
-end
-
----@param pr PullRequest
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.approve_pull_request(pr, on_done)
+local function approve_pull_request(pr, on_done)
 	local path, iid = project_iid(pr)
 	if path == "" or iid == nil then
 		on_done(false, "Invalid MR identifier")
 		return nil
 	end
 	local endpoint = string.format("/projects/%s/merge_requests/%d/approve", service.url_encode(path), iid)
-	return service.request("POST", endpoint, nil, function(_, err)
-		if err then
-			on_done(false, err)
-			return
-		end
-		bust_pull_request_cache(pr)
-		on_done(true, nil)
-	end)
-end
-
----@param pr PullRequest
----@param on_done fun(ok: boolean, err: string|nil)
----@return { cancel: fun() }|nil
-function M.unapprove_pull_request(pr, on_done)
-	local path, iid = project_iid(pr)
-	if path == "" or iid == nil then
-		on_done(false, "Invalid MR identifier")
-		return nil
-	end
-	local endpoint = string.format("/projects/%s/merge_requests/%d/unapprove", service.url_encode(path), iid)
 	return service.request("POST", endpoint, nil, function(_, err)
 		if err then
 			on_done(false, err)
@@ -323,7 +253,7 @@ function M.approve(pr, _review, body, on_done)
 			on_done(false, err)
 			return
 		end
-		current = M.approve_pull_request(pr, on_done)
+		current = approve_pull_request(pr, on_done)
 	end)
 	return {
 		cancel = function()

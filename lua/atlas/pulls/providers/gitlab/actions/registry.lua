@@ -1,11 +1,12 @@
 local M = {}
 
 local actions = require("atlas.pulls.actions")
+local action_utils = require("atlas.pulls.actions.utils")
 local icons = require("atlas.ui.shared.icons")
 local statusline = require("atlas.ui.statusline")
 local multi_select = require("atlas.ui.popups.multi_select")
+local notes = require("atlas.pulls.notes")
 local pullrequests_api = require("atlas.pulls.providers.gitlab.api.pullrequests")
-local reviews_api = require("atlas.pulls.providers.gitlab.api.reviews")
 local users_api = require("atlas.pulls.providers.gitlab.api.users")
 local service = require("atlas.providers.gitlab.client").pulls
 
@@ -57,49 +58,11 @@ end
 
 ---@param ctx AtlasPullActionContext
 ---@return boolean, string|nil
-local function toggle_approval_available(ctx)
+local function review_available(ctx)
 	if not is_open_or_draft(ctx) then
 		return false, "MR is not open"
 	end
 	return true, nil
-end
-
----@param ctx AtlasPullActionContext
----@param done fun(result: PullsActionResult|nil, err: string|nil)
-local function toggle_approval(ctx, done)
-	local pr = ctx.pr
-	notify(ctx, "loading", string.format("Checking approval for %s...", pr_label(pr)))
-	reviews_api.fetch_approval_state(pr, function(approved, err)
-		if err then
-			notify(ctx, "error", err)
-			done(nil, err)
-			return
-		end
-
-		if approved then
-			notify(ctx, "loading", string.format("Unapproving %s...", pr_label(pr)))
-			reviews_api.unapprove_pull_request(pr, function(ok, unapprove_err)
-				if not ok then
-					notify(ctx, "error", unapprove_err or "Unapprove failed")
-					done(nil, unapprove_err or "Unapprove failed")
-					return
-				end
-				notify(ctx, "success", string.format("Unapproved %s", pr_label(pr)), 1200)
-				done({ changed_pr = true, message = "Unapproved" }, nil)
-			end)
-		else
-			notify(ctx, "loading", string.format("Approving %s...", pr_label(pr)))
-			reviews_api.approve_pull_request(pr, function(ok, approve_err)
-				if not ok then
-					notify(ctx, "error", approve_err or "Approve failed")
-					done(nil, approve_err or "Approve failed")
-					return
-				end
-				notify(ctx, "success", string.format("Approved %s", pr_label(pr)), 1200)
-				done({ changed_pr = true, message = "Approved" }, nil)
-			end)
-		end
-	end)
 end
 
 ---@param ctx AtlasPullActionContext
@@ -121,16 +84,17 @@ end
 ---@param done fun(result: PullsActionResult|nil, err: string|nil)
 local function merge(ctx, done)
 	local pr = ctx.pr
-	vim.ui.input({ prompt = string.format("Merge %s? Squash? [n/y]: ", pr_label(pr)) }, function(input)
-		if input == nil then
+	local options = action_utils.merge_options()
+	local label = options.method == "squash" and "squash merge" or "merge"
+	vim.ui.input({ prompt = string.format("Confirm %s of %s? [y/N]: ", label, pr_label(pr)) }, function(input)
+		if not input or not vim.trim(input):lower():match("^y") then
 			done({ changed_pr = false, message = "Merge cancelled" }, nil)
 			return
 		end
-		local squash = vim.trim(tostring(input)):lower() == "y"
 		notify(ctx, "loading", string.format("Merging %s...", pr_label(pr)))
 		pullrequests_api.merge(pr, {
-			squash = squash,
-			should_remove_source_branch = true,
+			squash = options.method == "squash",
+			should_remove_source_branch = options.delete_branch,
 		}, function(ok, err)
 			if not ok then
 				notify(ctx, "error", err or "Merge failed")
@@ -138,33 +102,9 @@ local function merge(ctx, done)
 				return
 			end
 			notify(ctx, "success", string.format("Merged %s", pr_label(pr)), 1500)
+			notes.clear_for_pull_request(pr)
 			done({ changed_pr = true, message = "Merged" }, nil)
 		end)
-	end)
-end
-
----@param ctx AtlasPullActionContext
----@return boolean, string|nil
-local function close_available(ctx)
-	if not is_open_or_draft(ctx) then
-		return false, "MR is already closed/merged"
-	end
-	return true, nil
-end
-
----@param ctx AtlasPullActionContext
----@param done fun(result: PullsActionResult|nil, err: string|nil)
-local function close(ctx, done)
-	local pr = ctx.pr
-	notify(ctx, "loading", string.format("Closing %s...", pr_label(pr)))
-	pullrequests_api.set_state(pr, "close", function(ok, err)
-		if not ok then
-			notify(ctx, "error", err or "Close failed")
-			done(nil, err or "Close failed")
-			return
-		end
-		notify(ctx, "success", string.format("Closed %s", pr_label(pr)), 1200)
-		done({ changed_pr = true, message = "Closed" }, nil)
 	end)
 end
 
@@ -229,10 +169,9 @@ local function edit_assignees(ctx, done)
 		end
 		notify(ctx, "success", "Members loaded", 1200)
 
-		local raw = pr._raw
 		local original = {}
 		local original_set = {}
-		for _, a in ipairs(raw.assignees or {}) do
+		for _, a in ipairs(pr.assignees or {}) do
 			local id = tonumber(a.id)
 			if id then
 				table.insert(original, { id = id, username = a.username, name = a.name or a.username })
@@ -399,17 +338,17 @@ local function toggle_subscription(ctx, done)
 end
 
 register({
-	id = actions.request_changes.id,
-	label = actions.request_changes.label,
-	is_available = toggle_approval_available,
-	run = actions.request_changes.run,
+	id = actions.approve.id,
+	label = actions.approve.label,
+	is_available = review_available,
+	run = actions.approve.run,
 })
 
 register({
-	id = "toggle_approval",
-	label = "Toggle approval",
-	is_available = toggle_approval_available,
-	run = toggle_approval,
+	id = actions.request_changes.id,
+	label = actions.request_changes.label,
+	is_available = review_available,
+	run = actions.request_changes.run,
 })
 
 register({
@@ -422,12 +361,7 @@ register({
 register(actions.edit_title)
 register(actions.edit_description)
 
-register({
-	id = "close",
-	label = "Close MR",
-	is_available = close_available,
-	run = close,
-})
+register(actions.decline)
 
 register({
 	id = "reopen",

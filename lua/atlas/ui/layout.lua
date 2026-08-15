@@ -249,6 +249,10 @@ function M.is_open()
 	return win_util.valid(state.main_win)
 end
 
+function M.is_active()
+	return M.is_open() and vim.api.nvim_get_current_tabpage() == state.tab_id
+end
+
 ---@param pane "main"|"detail"
 ---@return integer|nil
 function M.win_id(pane)
@@ -311,6 +315,9 @@ end
 
 function M.ensure_open()
 	ensure_main()
+	if state.tab_id and vim.api.nvim_tabpage_is_valid(state.tab_id) then
+		vim.api.nvim_set_current_tabpage(state.tab_id)
+	end
 	local keymaps = require("atlas.ui.keymaps")
 	if state.main_buf ~= nil and buf_util.valid(state.main_buf) then
 		keymaps.register(state.main_buf)
@@ -327,7 +334,7 @@ end
 vim.api.nvim_create_autocmd({ "VimResized", "WinResized" }, {
 	group = resize_group,
 	callback = function()
-		if not M.is_open() then
+		if not M.is_active() then
 			return
 		end
 		M.reflow()
@@ -340,10 +347,7 @@ vim.api.nvim_create_autocmd({ "VimResized", "WinResized" }, {
 vim.api.nvim_create_autocmd("TabEnter", {
 	group = resize_group,
 	callback = function()
-		if not M.is_open() then
-			return
-		end
-		if vim.api.nvim_get_current_tabpage() ~= state.tab_id then
+		if not M.is_active() then
 			return
 		end
 		M.reflow()

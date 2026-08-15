@@ -3,6 +3,7 @@ local M = {}
 local form = require("atlas.ui.popups.form")
 local git_branch = require("atlas.core.git")
 local keymaps = require("atlas.core.keymaps")
+local logger = require("atlas.core.logger")
 local description = require("atlas.pulls.create.description")
 local pulls_helper = require("atlas.pulls.ui.main.helper")
 local multi_select = require("atlas.ui.popups.multi_select")
@@ -325,11 +326,11 @@ local function on_success(pr_state, result)
 	if type(url) == "string" and url ~= "" then
 		notify.info("PR created: " .. url)
 		pcall(vim.fn.setreg, "+", url)
-	else
-		notify.info("PR created")
+		require("atlas.commands.open").open(url)
+		return
 	end
 
-	-- Refresh the main pulls UI (if open) so the new PR shows up.
+	notify.info("PR created")
 	pcall(function()
 		require("atlas.pulls.ui.main.controller").refresh_current_view()
 	end)
@@ -398,21 +399,28 @@ local function submit(pr_state)
 		end)
 	end
 
-	-- Make sure the source branch exists on the remote first.
-	local has_remote = git_branch.branch_exists_on_remote(pr_state.fields.repo_root, pr_state.fields.head, "origin")
-	if has_remote then
-		do_create()
-		return
-	end
-
-	form.notify("loading", "Pushing " .. pr_state.fields.head .. " to origin...")
-	git_branch.push_branch(pr_state.fields.repo_root, pr_state.fields.head, "origin", function(ok, push_err)
-		if not ok then
-			pr_state.is_submitting = false
-			form.notify("error", "git push failed: " .. tostring(push_err or ""))
+	form.notify("loading", "Checking remote branch...")
+	git_branch.branch_exists_on_remote(pr_state.fields.repo_root, pr_state.fields.head, "origin", function(has_remote)
+		if has_remote then
+			do_create()
 			return
 		end
-		do_create()
+
+		form.notify("loading", "Pushing " .. pr_state.fields.head .. " to origin...")
+		git_branch.push_branch(pr_state.fields.repo_root, pr_state.fields.head, "origin", function(ok, push_err)
+			if not ok then
+				pr_state.is_submitting = false
+				local err = tostring(push_err or "Unknown error")
+				logger.logerror("Create PR push failed", {
+					repo_path = pr_state.fields.repo_root,
+					branch = pr_state.fields.head,
+					error = err,
+				})
+				form.notify("error", "git push failed: " .. err)
+				return
+			end
+			do_create()
+		end)
 	end)
 end
 

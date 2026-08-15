@@ -353,40 +353,6 @@ function M.sanitize_lines(text)
 	return out
 end
 
----@param lines string[]
----@param spans { line: integer, start_col: integer, end_col: integer, hl_group: string }[]
----@return [string, string][][]
-function M.virtual_lines(lines, spans)
-	local starts = {}
-	for _, span in ipairs(spans or {}) do
-		starts[span.line + 1] = starts[span.line + 1] or {}
-		table.insert(starts[span.line + 1], span)
-	end
-	local result = {}
-	for index, line in ipairs(lines) do
-		local line_spans = starts[index] or {}
-		table.sort(line_spans, function(left, right)
-			return left.start_col == right.start_col and left.end_col < right.end_col
-				or left.start_col < right.start_col
-		end)
-		local chunks, col = {}, 0
-		for _, span in ipairs(line_spans) do
-			if span.start_col >= col then
-				if span.start_col > col then
-					table.insert(chunks, { line:sub(col + 1, span.start_col), "Normal" })
-				end
-				table.insert(chunks, { line:sub(span.start_col + 1, span.end_col), span.hl_group })
-				col = span.end_col
-			end
-		end
-		if col < #line then
-			table.insert(chunks, { line:sub(col + 1), "Normal" })
-		end
-		result[index] = chunks
-	end
-	return result
-end
-
 local strwidth = vim.api.nvim_strwidth
 local strcharpart = vim.fn.strcharpart
 local strchars = vim.fn.strchars

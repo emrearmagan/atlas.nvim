@@ -89,7 +89,7 @@ function M.render_details(note, target)
 	local label = notes.target_label(target)
 	local note_type = type_label(note.type)
 	local location = string.format("%s:%d", note.file_path, note.line)
-	local lines = { string.format("%s · %s · %s", note_type, location, label), "", "Target: " .. target.ref }
+	local lines = { string.format("%s  %s  %s", note_type, location, label), "", "Target: " .. target.ref }
 	local spans = {
 		{ line = 0, start_col = 0, end_col = #note_type, hl_group = type_highlight(note.type) },
 		{ line = 0, start_col = #note_type, end_col = #lines[1], hl_group = "AtlasTextMuted" },

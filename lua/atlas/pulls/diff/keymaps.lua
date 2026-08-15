@@ -57,13 +57,35 @@ local function with_item(session, buf, on_comment, on_note)
 	end
 end
 
+---@param items AtlasHelpKeyItem[]
+---@param action AtlasKeymapActionId
+---@param desc string
+---@param callback fun(start_line?: integer, end_line?: integer)
+local function add_range(items, action, desc, callback)
+	add(items, action, desc, function()
+		if vim.fn.mode() == "n" then
+			callback()
+			return
+		end
+		local start_line = vim.fn.line("v")
+		local end_line = vim.api.nvim_win_get_cursor(0)[1]
+		vim.cmd.normal({ args = { vim.keycode("<Esc>") }, bang = true })
+		callback(start_line, end_line)
+	end, { "n", "x" })
+end
+
 ---@param session AtlasDiffSession
----@param opts { buffers: integer[], reload: fun()|nil, help_key: string|nil }
+---@param opts { buffers: integer[], reload: fun()|nil, help_key: string|nil, file_buffers: integer[]|nil, add_file_comment: (fun(pending: boolean))|nil }
 function M.register(session, opts)
 	local action_context = session.review and review.action_context(session) or nil
 	local reviews = session.review and session.review.provider.capabilities.reviews or {}
 	local reviewable = session.review and (session.review.pr.state == "open" or session.review.pr.state == "draft")
+	local can_complete = reviewable and (not session.review.state.pending or reviews.submit_review ~= nil)
 	local has_review_items = session.review ~= nil or session.note_target ~= nil
+	local file_buffers = {}
+	for _, buf in ipairs(opts.file_buffers or {}) do
+		file_buffers[buf] = true
+	end
 	for _, buf in ipairs(opts.buffers) do
 		if vim.api.nvim_buf_is_valid(buf) then
 			local items = {}
@@ -92,12 +114,12 @@ function M.register(session, opts)
 				add(items, "ui.open_actions", "Review actions", function()
 					actions.open(session)
 				end)
-				if action_context and pull_actions.is_available("toggle_approval", action_context) then
-					add(items, "pulls.review.toggle_approval", "Approve / unapprove", function()
-						actions.toggle_approval(session)
+				if can_complete and action_context and pull_actions.is_available("approve", action_context) then
+					add(items, "pulls.review.approve", "Approve", function()
+						actions.approve(session)
 					end)
 				end
-				if action_context and pull_actions.is_available("request_changes", action_context) then
+				if can_complete and action_context and pull_actions.is_available("request_changes", action_context) then
 					add(items, "pulls.review.request_changes", "Request changes", function()
 						actions.request_changes(session)
 					end)
@@ -107,19 +129,27 @@ function M.register(session, opts)
 						actions.start_or_submit(session)
 					end)
 				end
-				add(items, "pulls.review.diff.toggle_comments", "Toggle comment overlays", function()
-					session.show_comments = not session.show_comments
+				add(items, "pulls.review.diff.toggle_comments", "Toggle comment display", function()
+					session.expanded_overlays = not session.expanded_overlays
 					session:render()
 					session_api.notify(
 						session,
 						"info",
-						session.show_comments and "Comments shown" or "Comments hidden",
+						session.expanded_overlays and "Review overlays expanded" or "Review overlays compact",
 						1200
 					)
 				end)
 				add(items, "ui.open_in_browser", "Open comment in browser", function()
 					comments.open_in_browser(session, buf)
 				end)
+				if file_buffers[buf] and opts.add_file_comment then
+					add(items, "pulls.review.diff.add_comment", "Add pending file comment", function()
+						opts.add_file_comment(true)
+					end)
+					add(items, "pulls.review.diff.submit_comment", "Submit file comment", function()
+						opts.add_file_comment(false)
+					end)
+				end
 			end
 
 			if has_review_items and content_buffer(session, buf) then
@@ -131,12 +161,40 @@ function M.register(session, opts)
 					end)
 				end)
 				if session.review then
-					add(items, "pulls.review.diff.add_comment", "Add pending inline comment", function()
-						comments.add_at_cursor(session, buf, true)
-					end, { "n", "x" })
-					add(items, "pulls.review.diff.submit_comment", "Submit inline comment", function()
-						comments.add_at_cursor(session, buf, false)
-					end, { "n", "x" })
+					add_range(
+						items,
+						"pulls.review.diff.add_comment",
+						"Add pending inline comment",
+						function(start, finish)
+							comments.add_comment(session, buf, true, start, finish)
+						end
+					)
+					add_range(
+						items,
+						"pulls.review.diff.submit_comment",
+						"Submit inline comment",
+						function(start, finish)
+							comments.add_comment(session, buf, false, start, finish)
+						end
+					)
+					if session.current and buf == session.current.right.buf then
+						add_range(
+							items,
+							"pulls.review.diff.add_suggestion",
+							"Add pending suggestion",
+							function(start, finish)
+								comments.add_suggestion(session, buf, true, start, finish)
+							end
+						)
+						add_range(
+							items,
+							"pulls.review.diff.submit_suggestion",
+							"Submit suggestion",
+							function(start, finish)
+								comments.add_suggestion(session, buf, false, start, finish)
+							end
+						)
+					end
 					add(items, "pulls.review.diff.toggle_resolved", "Toggle resolved", function()
 						comments.toggle_resolved_at_cursor(session, buf)
 					end)

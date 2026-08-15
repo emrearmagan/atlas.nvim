@@ -43,17 +43,33 @@ local function get_issue_type_display(fields, issue_types, spinner_instance)
 	return "None", icon_hl
 end
 
+---@param reporter IssueUser|nil
+---@param loading boolean
+---@param spinner_instance SpinnerInstance|nil
+---@return string
+---@return string
+local function get_reporter_display(reporter, loading, spinner_instance)
+	if loading then
+		local frame = spinner_instance and spinner_instance:current_frame() or "⠋"
+		return frame .. " Loading...", "AtlasTextMuted"
+	end
+
+	local name = reporter and reporter.display_name or "Unknown"
+	return icons.general("user") .. " " .. name, helper.person_hl(name)
+end
+
 ---@param fields IssueEditorFields
 ---@param assignees IssueUser[]|"loading"|nil
 ---@param issue_types IssueType[]|"loading"|nil
+---@param reporter IssueUser|nil
+---@param reporter_loading boolean
 ---@param spinner_instance SpinnerInstance|nil
 ---@return AtlasFormMetaRow[]
-function M.meta_rows(fields, assignees, issue_types, spinner_instance)
-	local user_icon, user_icon_hl = icons.general("user")
-	local provider_icon, provider_hl = icons.issues_provider("jira", "provider")
+function M.meta_rows(fields, assignees, issue_types, reporter, reporter_loading, spinner_instance)
+	local provider_icon = icons.issues_provider("jira", "provider")
 	local assignee_text, assignee_hl = get_assignee_display(fields, assignees, spinner_instance)
 	local issue_type_text, issue_type_hl = get_issue_type_display(fields, issue_types, spinner_instance)
-	local reporter_name = fields.reporter and fields.reporter.display_name or "Unknown"
+	local reporter_text, reporter_hl = get_reporter_display(reporter, reporter_loading, spinner_instance)
 	local project_name = fields.project or "Unknown"
 
 	return {
@@ -61,24 +77,14 @@ function M.meta_rows(fields, assignees, issue_types, spinner_instance)
 			"Assignee:",
 			{ text = assignee_text, hl = assignee_hl },
 			"Reporter:",
-			{
-				text = string.format("%s %s", user_icon, reporter_name),
-				spans = {
-					{ start_col = 0, end_col = #user_icon, hl_group = user_icon_hl },
-					{
-						start_col = #user_icon + 1,
-						end_col = #user_icon + 1 + #reporter_name,
-						hl_group = helper.person_hl(reporter_name),
-					},
-				},
-			},
+			{ text = reporter_text, hl = reporter_hl },
 		},
 		{
 			"Project:",
 			{
 				text = string.format("%s %s", provider_icon, project_name),
 				spans = {
-					{ start_col = 0, end_col = #provider_icon, hl_group = provider_hl },
+					{ start_col = 0, end_col = #provider_icon, hl_group = "AtlasJiraKey" },
 					{
 						start_col = #provider_icon + 1,
 						end_col = #provider_icon + 1 + #project_name,

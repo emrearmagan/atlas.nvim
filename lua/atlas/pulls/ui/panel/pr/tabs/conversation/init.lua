@@ -11,27 +11,7 @@ local function get_provider()
 	return require("atlas.pulls.state").provider
 end
 
----@type { cancel: fun() }[]
-local in_flight = {}
-
-local function cancel_all()
-	for _, h in ipairs(in_flight) do
-		if h and h.cancel then
-			pcall(h.cancel)
-		end
-	end
-	in_flight = {}
-end
-
----@param handle { cancel: fun() }|nil
-local function track(handle)
-	if handle then
-		table.insert(in_flight, handle)
-	end
-end
-
 function M.reset()
-	cancel_all()
 	state.reset()
 end
 
@@ -40,7 +20,7 @@ end
 ---@param refresh fun()
 ---@param opts { force_refresh: boolean|nil }|nil
 function M.on_select(pr, _repo, refresh, opts)
-	M.reset()
+	local request_generation = state.activate(pr)
 	opts = opts or {}
 
 	local provider = get_provider()
@@ -57,19 +37,26 @@ function M.on_select(pr, _repo, refresh, opts)
 	state.activity = "loading"
 	statusline.notify("loading", string.format("Loading conversation for #%s...", id))
 
-	track(comments.fetch_conversation(pr, opts, function(result, err)
+	state.requests.run(function(done)
+		return comments.fetch_conversation(pr, opts, done)
+	end, function(result, err)
+		if not state.is_current(request_generation, pr) then
+			return
+		end
 		if err then
-			state.comments = err
-			state.activity = err
+			state.comments = {}
+			state.activity = {}
+			state.error = tostring(err)
 			statusline.notify("error", string.format("Failed to load conversation for #%s", id))
 		else
 			result = type(result) == "table" and result or {}
 			state.comments = type(result.comments) == "table" and result.comments or {}
 			state.activity = type(result.events) == "table" and result.events or {}
+			state.error = nil
 			statusline.notify("success", string.format("Conversation loaded for #%s", id), 1200)
 		end
 		refresh()
-	end))
+	end)
 end
 
 M.render = renderer.render
@@ -109,7 +96,7 @@ function M.deactivate(buf)
 	if buf ~= nil then
 		keymaps.teardown(buf)
 	end
-	cancel_all()
+	state.deactivate()
 end
 
 return M

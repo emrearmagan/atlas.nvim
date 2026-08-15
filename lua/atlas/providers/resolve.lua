@@ -229,11 +229,11 @@ function M.base_url(target)
 	return "https://" .. host
 end
 
----Build a provider target from a Git remote and item number.
+---Build a provider target from a Git remote.
 ---@param info AtlasGitRemoteInfo
 ---@param domain AtlasDomain
 ---@param entity AtlasEntity
----@param number integer
+---@param number integer|nil
 ---@return AtlasTarget
 function M.target(info, domain, entity, number)
 	local partial = { provider = info.provider, domain = domain, host = info.host }

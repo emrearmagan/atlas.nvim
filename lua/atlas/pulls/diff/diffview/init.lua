@@ -1,13 +1,15 @@
 local M = {}
 
-local comments = require("atlas.pulls.diff.ui.comments")
+local comments = require("atlas.pulls.diff.comments")
 local config = require("atlas.config")
+local hints = require("atlas.pulls.diff.ui.hints")
 local notes = require("atlas.pulls.diff.notes")
 local position = require("atlas.pulls.diff.position")
 local review_keymaps = require("atlas.pulls.diff.keymaps")
 local review_panel = require("atlas.pulls.diff.ui.review_panel")
 local session_api = require("atlas.pulls.diff.session")
 local statusline = require("atlas.pulls.diff.ui.statusline")
+local ui_comments = require("atlas.pulls.diff.ui.comments")
 
 ---@type table<string, DiffFileStatus>
 local FILE_STATUSES = {
@@ -146,19 +148,18 @@ local function finish_pending_jump(session)
 	local side = pending.note and "RIGHT" or nil
 	local line = pending.note and pending.note.line or nil
 	if pending.comment then
-		side, line = position.location(pending.comment.inline)
+		side, line = position.comment(document, pending.comment)
 	elseif document.binary or document.status == "deleted" then
 		session_api.notify(session, "info", "This note's file is no longer in the diff")
 		return
 	end
 
-	local source = side == "LEFT" and document.old.lines or document.new.lines
 	local target = side == "LEFT" and current.left or current.right
 	if
 		not side
 		or not line
 		or line < 1
-		or #source == 0
+		or ((not pending.comment or not pending.comment.file) and #(side == "LEFT" and document.old.lines or document.new.lines) == 0)
 		or not target.win
 		or not vim.api.nvim_win_is_valid(target.win)
 	then
@@ -166,7 +167,7 @@ local function finish_pending_jump(session)
 		return
 	end
 
-	line = math.min(line, #source)
+	line = math.min(line, vim.api.nvim_buf_line_count(target.buf))
 	vim.api.nvim_win_set_cursor(target.win, { line, 0 })
 	vim.api.nvim_win_call(target.win, function()
 		pcall(vim.cmd.normal, { "zvzz", bang = true })
@@ -243,6 +244,16 @@ local function register_review_buffers(session)
 		buffers = buffers,
 		reload = state.reload_view,
 		help_key = "gA",
+		file_buffers = diffview_panel_buf and { diffview_panel_buf } or nil,
+		add_file_comment = function(pending)
+			local file = state.view:infer_cur_file()
+			if file then
+				comments.add_to_file(session, {
+					path = relative_path(session.source.root, file.path),
+					old_path = file.oldpath and relative_path(session.source.root, file.oldpath) or nil,
+				}, pending)
+			end
+		end,
 	})
 	if session.review_panel then
 		review_panel.register_toggle(session.review_panel, buffers)
@@ -268,8 +279,9 @@ local function suspend(session)
 		return
 	end
 	if session.current then
-		comments.clear(session.current)
+		ui_comments.clear(session.current)
 		notes.clear(session.current)
+		hints.clear(session.current)
 		session.current = nil
 	end
 	if not state.suspended then
@@ -326,7 +338,8 @@ local function sync(session)
 	local status = FILE_STATUSES[tostring(current.status or ""):sub(1, 1)] or "modified"
 	local old_lines = buffer_lines(layout.a)
 	local new_lines = buffer_lines(layout.b)
-	local binary = layout.a.file.binary == true or layout.b.file.binary == true
+	local binary = (status ~= "added" and layout.a.file.binary == true)
+		or (status ~= "deleted" and layout.b.file.binary == true)
 	local previous = session.current
 	local buffers_changed = not previous
 		or previous.left.buf ~= layout.a.file.bufnr
@@ -384,12 +397,13 @@ local function focus_item(session, item, focus_diff)
 	end
 	local pending = { focus_diff = focus_diff }
 	local note = item.kind == "note" and item.note or nil
-	local comment = item.comment and item.comment.inline and item.comment or nil
+	local comment = item.comment and (item.comment.file or item.comment.inline) and item.comment or nil
 	if not note and not comment then
 		session_api.notify(session, "info", "This comment is not attached to the diff")
 		return
 	end
-	local path = relative_path(session.source.root, note and note.file_path or comment.inline.path)
+	local target = comment and (comment.file or comment.inline) or nil
+	local path = relative_path(session.source.root, note and note.file_path or target.path)
 	pending.note = note
 	pending.comment = comment
 	if path == "" then

@@ -4,7 +4,7 @@ local box = require("atlas.ui.components.box")
 local keymaps = require("atlas.core.keymaps")
 local statusline = require("atlas.ui.statusline")
 local threads = require("atlas.ui.components.review_threads")
-local utils = require("atlas.ui.shared.utils")
+local virtual_lines = require("atlas.ui.components.virtual_lines")
 
 local namespace = vim.api.nvim_create_namespace("atlas_diff_comments")
 local popup_namespace = vim.api.nvim_create_namespace("atlas_diff_thread_popup")
@@ -22,6 +22,26 @@ local popup = { buf = nil, win = nil, owner = nil, line_map = {} }
 local function buffer_width(buf)
 	local wins = vim.fn.win_findbuf(buf)
 	return wins[1] and vim.api.nvim_win_get_width(wins[1]) or vim.o.columns
+end
+
+---@param comment PullsComment
+---@return string
+local function comment_location(comment)
+	if comment.file then
+		return vim.fs.basename(comment.file.path)
+	end
+	local inline = comment.inline
+	if not inline then
+		return ""
+	end
+	local right = inline.to ~= nil
+	local side = right and "R" or "L"
+	local line = right and inline.to or inline.from
+	local start_line = right and inline.start_to or inline.start_from
+	if line and start_line and line ~= start_line then
+		return string.format("%s%d-%s%d", side, start_line, side, line)
+	end
+	return line and (side .. tostring(line)) or ""
 end
 
 ---@param current AtlasDiffCurrent
@@ -45,9 +65,10 @@ function M.thread_lines(context, buf, list)
 		end,
 		padding_x = 0,
 		reaction_options = context.reaction_options,
+		location = comment_location,
 	})
 	local rendered = box.render({ { lines = lines, spans = spans } }, { width = width, padding_x = 0 })
-	return utils.virtual_lines(rendered.lines, rendered.highlights)
+	return virtual_lines.render(rendered.lines, rendered.highlights)
 end
 
 ---@param context AtlasCommentRendererContext
@@ -64,6 +85,22 @@ function M.render_comments(context, buf, by_line, above_lines)
 	local line_count = vim.api.nvim_buf_line_count(buf)
 	for line, list in pairs(by_line) do
 		if line >= 1 and line <= line_count then
+			local marked = {}
+			for _, node in ipairs(list) do
+				local inline = node.comment.inline
+				local start_line = inline and (inline.to and inline.start_to or inline.start_from)
+				for range_line = start_line or line, line - 1 do
+					if range_line >= 1 and not marked[range_line] then
+						marked[range_line] = true
+						vim.api.nvim_buf_set_extmark(buf, namespace, range_line - 1, 0, {
+							number_hl_group = "CursorLineNr",
+							sign_text = "┃",
+							sign_hl_group = "AtlasLogInfo",
+							priority = 1100,
+						})
+					end
+				end
+			end
 			local virtual_lines = M.thread_lines(context, buf, list)
 			sizes[line] = #virtual_lines
 			vim.api.nvim_buf_set_extmark(buf, namespace, line - 1, 0, {
@@ -78,6 +115,36 @@ function M.render_comments(context, buf, by_line, above_lines)
 		end
 	end
 	return sizes
+end
+
+---@param context AtlasCommentRendererContext
+---@param buf integer
+---@param list AtlasReviewThreadNode[]
+---@return integer
+function M.render_file_comments(context, buf, list)
+	if #list == 0 or not vim.api.nvim_buf_is_valid(buf) then
+		return 0
+	end
+	local virtual_lines = M.thread_lines(context, buf, list)
+	vim.api.nvim_buf_set_extmark(buf, namespace, 0, 0, {
+		virt_lines = virtual_lines,
+		virt_lines_above = true,
+		virt_lines_leftcol = true,
+		priority = 1100,
+	})
+	-- Reveal virtual lines placed above the first buffer line.
+	vim.schedule(function()
+		for _, win in ipairs(vim.fn.win_findbuf(buf)) do
+			local view = vim.api.nvim_win_call(win, vim.fn.winsaveview)
+			if view.topline == 1 then
+				view.topfill = #virtual_lines
+				vim.api.nvim_win_call(win, function()
+					vim.fn.winrestview(view)
+				end)
+			end
+		end
+	end)
+	return #virtual_lines
 end
 
 ---@param buf integer
@@ -161,6 +228,7 @@ function M.open_popup(opts)
 		padding_x = 1,
 		toggle_resolved_key = toggle_key,
 		reaction_options = opts.reaction_options,
+		location = comment_location,
 	})
 	if #lines == 0 then
 		return

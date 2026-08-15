@@ -5,20 +5,20 @@ local resolver = require("atlas.core.keymaps")
 local utils = require("atlas.ui.shared.utils")
 local actions = require("atlas.pulls.actions")
 
----@return PullRequest|nil
+---@return PullRequest|nil, PullsRepo|nil
 local function selected_pr()
 	local navigation = require("atlas.ui.navigation")
 	local node = navigation.current_item()
 	if type(node) ~= "table" then
-		return nil
+		return nil, nil
 	end
 	if node.kind == "pr" and type(node.pr) == "table" then
-		return node.pr
+		return node.pr, node.repo
 	end
 	if node.kind == "pr_meta" and type(node.pr) == "table" then
-		return node.pr
+		return node.pr, node.repo
 	end
-	return nil
+	return nil, nil
 end
 
 ---@param action_id AtlasKeymapActionId|string
@@ -118,10 +118,6 @@ function M.register(buf, views)
 				index = 1,
 				callback = function()
 					local pr = selected_pr()
-					if pr == nil then
-						statusline.notify("warn", "No PR selected")
-						return
-					end
 					if state.provider then
 						actions.open({
 							provider = state.provider,
@@ -255,9 +251,9 @@ function M.register(buf, views)
 			desc = "Open repo panel",
 			opts = { nowait = true, silent = true },
 			callback = function()
-				local pr = selected_pr()
-				if pr == nil then
-					statusline.notify("warn", "No PR selected")
+				local pr, repo = selected_pr()
+				if pr == nil or repo == nil then
+					statusline.notify("warn", "No repository selected")
 					return
 				end
 
@@ -282,7 +278,7 @@ function M.register(buf, views)
 					return
 				end
 
-				panel.on_select(pr, nil)
+				panel.on_select(pr, repo)
 			end,
 		},
 	}, { buffer = buf })

@@ -1,10 +1,13 @@
 local M = {}
 
 local threadsv2 = require("atlas.ui.components.threadsv2")
+local code_preview = require("atlas.ui.components.code_preview")
 local emojis = require("atlas.ui.shared.emojis")
 local highlights = require("atlas.ui.shared.highlights")
 local icons = require("atlas.ui.shared.icons")
 local utils = require("atlas.ui.shared.utils")
+
+local SUGGESTION_PATTERN = "^(.-)```suggestion[^\n]*\n(.-)\n```(.*)$"
 
 ---@alias AtlasReviewThreadAction "add_comment"|"edit"|"delete"|"toggle_task"|"toggle_resolved"
 
@@ -68,6 +71,43 @@ function M.status_marker(comment)
 end
 
 ---@param comment PullsComment
+---@return string|nil, AtlasThreadContentBlock|nil
+local function suggestion_content(comment)
+	if not comment.inline then
+		return nil, nil
+	end
+	local raw = tostring(comment.content_raw or ""):gsub("\r\n", "\n")
+	local before, replacement, after = raw:match(SUGGESTION_PATTERN)
+	if replacement == nil then
+		return nil, nil
+	end
+
+	local prose = utils.strip_markup(before)
+	local trailing = utils.strip_markup(after)
+	if trailing ~= "" then
+		prose = prose ~= "" and (prose .. "\n\n" .. trailing) or trailing
+	end
+	local start_line = comment.inline.start_to or comment.inline.to or 1
+	local lines = vim.split(replacement, "\n", { plain = true })
+	if #lines == 0 then
+		lines = { "" }
+	end
+	local preview = code_preview.render({
+		file_path = comment.inline.path,
+		lines = lines,
+		start_line = start_line,
+		show_line_numbers = false,
+		background_hl_group = "AtlasDiffChangeLine",
+	})
+	return prose ~= "" and prose or nil,
+		{
+			title = "Suggestion",
+			lines = preview.lines,
+			highlights = preview.highlights,
+		}
+end
+
+---@param comment PullsComment
 ---@param opts AtlasReviewThreadRenderOptions
 ---@param is_root? boolean
 ---@return AtlasThreadV2Item
@@ -128,9 +168,16 @@ local function comment_item(comment, opts, is_root)
 		}
 	end
 
-	local text = is_deleted and "(deleted comment)"
-		or utils.strip_markup(comment.content_display or comment.content_raw or "")
-	if text == "" then
+	local text, content_block
+	if is_deleted then
+		text = "(deleted comment)"
+	else
+		text, content_block = suggestion_content(comment)
+		if not content_block then
+			text = utils.strip_markup(comment.content_display or comment.content_raw or "")
+		end
+	end
+	if text == "" and not content_block then
 		text = "(empty comment)"
 	end
 
@@ -172,14 +219,20 @@ local function comment_item(comment, opts, is_root)
 		marker, marker_hl = M.status_marker(comment)
 	end
 	local user_icon, user_icon_hl = icons.general("user")
+	local additional = utils.relative_time(comment.created_on)
+	local location = is_root and opts.location and opts.location(comment) or ""
+	if location ~= "" then
+		additional = additional ~= "" and (additional .. "  " .. location) or location
+	end
 
 	return {
 		icon = user_icon,
 		icon_hl = user_icon_hl,
 		author = tostring(author),
-		additional = utils.relative_time(comment.created_on),
+		additional = additional,
 		right_text = marker,
 		content = text,
+		content_block = content_block,
 		children = {},
 		footer_items = footer_items,
 		line_map = { comment = comment, entity_kind = "comment" },
@@ -372,6 +425,7 @@ local function build_item(node, opts, is_root, root)
 		item.children = {}
 		if node.comment.state == "RESOLVED" then
 			item.content = nil
+			item.content_block = nil
 			item.footer_items = {}
 		elseif #node.children > 0 then
 			local count = descendant_count(node)
@@ -400,6 +454,7 @@ end
 ---@field toggle_resolved_key? string
 ---@field reaction_options? PullsReactionOption[]
 ---@field show_reactions? boolean
+---@field location? fun(comment: PullsComment): string
 
 ---@param nodes AtlasReviewThreadNode[]
 ---@param width integer
@@ -474,6 +529,7 @@ function M.render_compact(node, width, expanded, location, opts)
 	item.meta.additional_hl = metadata_hl
 	if not expanded then
 		item.content = nil
+		item.content_block = nil
 		item.children = {}
 		item.footer_items = {}
 	end

@@ -150,7 +150,7 @@ function M.render(session)
 			priority = 50,
 		}
 	end
-	return renderer.format(items, session.statusline.notice, nil, { help_key = session.help_key, left_padding = 3 })
+	return renderer.format(items, session.statusline.notice, nil, { help_key = session.help_key })
 end
 
 ---@return string

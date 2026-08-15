@@ -8,6 +8,7 @@ local note_popup = require("atlas.pulls.notes.ui.popup")
 local notes = require("atlas.pulls.diff.notes")
 local review = require("atlas.pulls.diff.review")
 local review_panel = require("atlas.pulls.diff.ui.review_panel")
+local hints = require("atlas.pulls.diff.ui.hints")
 local statusline = require("atlas.pulls.diff.ui.statusline")
 local ui_comments = require("atlas.pulls.diff.ui.comments")
 
@@ -42,7 +43,7 @@ local sessions = {}
 ---@field provider PullsProvider
 ---@field pr PullRequest
 ---@field current_user PullsUser|nil
----@field context { authors: PullsAuthor[] }|nil
+---@field context PullsReviewContext|nil
 ---@field state PullsReview
 ---@field comments PullsComment[]
 ---@field tasks PullsComment[]
@@ -77,12 +78,11 @@ local sessions = {}
 ---@field statusline AtlasDiffStatuslineState
 ---@field review_panel AtlasDiffReviewPanel|nil
 ---@field review_request { cancel: fun() }|nil
----@field review_action_requests { cancel: fun() }[]
 ---@field review_generation integer
 ---@field note_target AtlasNoteTarget|nil
 ---@field viewer_state table
 ---@field expanded_threads table<string, boolean>
----@field show_comments boolean
+---@field expanded_overlays boolean
 ---@field help_key string
 ---@field review_attached boolean
 ---@field closed boolean
@@ -95,6 +95,7 @@ local sessions = {}
 
 ---@class AtlasDiffRenderOutput
 ---@field deleted_lines table<integer, [string, string][][]>
+---@field deleted_hints table<integer, [string, string][]>
 ---@field annotated_paths table<string, { comments: boolean, notes: boolean }>
 
 ---@param opts { viewer_id: string, source: AtlasDiffSource, review: AtlasDiffReview|nil, commits: PullsCommit[]|nil }
@@ -108,18 +109,17 @@ function M.new(opts)
 		source = opts.source,
 		review = opts.review,
 		notes = note_items,
-		reviewed_files = {},
+		reviewed_files = (opts.review and opts.review.context and opts.review.context.reviewed_files) or {},
 		current = nil,
 		commits = opts.commits or {},
 		statusline = statusline.new(),
 		review_panel = nil,
 		review_request = nil,
-		review_action_requests = {},
 		review_generation = 0,
 		note_target = note_target,
 		viewer_state = {},
 		expanded_threads = {},
-		show_comments = ((config.options.pulls or {}).diff or {}).show_comments ~= false,
+		expanded_overlays = ((config.options.pulls or {}).diff or {}).comment_display == "virtual_lines",
 		help_key = opts.viewer_id == "atlas" and (keymaps.resolve("ui.help") or { "g?" })[1] or "gA",
 		review_attached = false,
 		closed = false,
@@ -132,7 +132,9 @@ end
 ---@param callbacks AtlasDiffSessionCallbacks
 function M.attach(session, callbacks)
 	if session.tabpage and session.tabpage ~= callbacks.tabpage then
-		sessions[session.tabpage] = nil
+		if sessions[session.tabpage] == session then
+			sessions[session.tabpage] = nil
+		end
 	end
 	session.tabpage = callbacks.tabpage
 	session.notify = callbacks.notify
@@ -157,6 +159,7 @@ function M.set_current(session, current)
 	if session.current then
 		ui_comments.clear(session.current)
 		notes.clear(session.current)
+		hints.clear(session.current)
 	end
 	session.current = current
 	M.render(session)
@@ -167,14 +170,22 @@ function M.render(session)
 	if session.closed then
 		return
 	end
-	local output = { deleted_lines = {}, annotated_paths = comments.annotated_paths(session) }
+	local output = { deleted_lines = {}, deleted_hints = {}, annotated_paths = comments.annotated_paths(session) }
 	if session.current then
-		if session.show_comments then
+		if session.expanded_overlays then
+			hints.clear(session.current)
 			output.deleted_lines = comments.render(session, session.viewer_state.inline_deleted_lines == true)
+			notes.render(session)
 		else
 			ui_comments.clear(session.current)
+			notes.clear(session.current)
+			local items, deleted = comments.hints(session, session.viewer_state.inline_deleted_lines == true)
+			vim.list_extend(items, notes.hints(session))
+			hints.render(session.current, items)
+			for line, line_items in pairs(deleted) do
+				output.deleted_hints[line] = hints.chunks(line_items)
+			end
 		end
-		notes.render(session)
 	end
 	review_panel.render(session.review_panel, session)
 	if session.current and session.render_view then
@@ -235,16 +246,17 @@ function M.detach(session, reason)
 		session.review_request.cancel()
 		session.review_request = nil
 	end
-	review.cancel_actions(session)
+	review.invalidate(session)
 	ui_comments.close_popup(session.id)
-	note_popup.close()
+	note_popup.close(session.id)
 	if session.current then
 		ui_comments.clear(session.current)
 		notes.clear(session.current)
+		hints.clear(session.current)
 	end
 	review_panel.delete(session.review_panel)
 	statusline.dispose(session.statusline)
-	if session.tabpage then
+	if session.tabpage and sessions[session.tabpage] == session then
 		sessions[session.tabpage] = nil
 	end
 	if session.review_attached then

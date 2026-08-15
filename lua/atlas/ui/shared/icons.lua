@@ -8,7 +8,7 @@ local providers = require("atlas.providers")
 
 ---@type table
 local ICONS = {
-	fallback = { icon = "•", hl_group = "AtlasTextMuted" },
+	fallback = { icon = "", hl_group = "AtlasTextMuted" },
 
 	general = {
 		search = { icon = "", hl_group = "AtlasTextMuted" },

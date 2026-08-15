@@ -249,7 +249,7 @@ local function issue_meta_text(issue)
 	if #parts == 0 then
 		return tostring(issue.key or "")
 	end
-	return table.concat(parts, " • ")
+	return table.concat(parts, "  ")
 end
 
 ---@param issues Issue[]|nil
@@ -413,7 +413,7 @@ end
 ---@return string[], table[], table<integer, table>
 function M.render(opts)
 	local provider = state.provider
-	local provider_icon = provider and provider.icon or "•"
+	local provider_icon = provider and provider.icon or icons.fallback()
 	local provider_name = provider and provider.name or "Issues"
 	local provider_hl = provider and provider.hl_group or "Title"
 	local issue_count = #(state.issues or {})

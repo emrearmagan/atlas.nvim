@@ -28,8 +28,6 @@ local M = {}
 ---@field search? AtlasKeymapValue
 
 ---@class AtlasPullsReviewExplorerKeymaps
----@field focus_file? AtlasKeymapValue
----@field open_file? AtlasKeymapValue
 ---@field next_file? AtlasKeymapValue
 ---@field previous_file? AtlasKeymapValue
 ---@field next_unreviewed_file? AtlasKeymapValue
@@ -51,6 +49,8 @@ local M = {}
 ---@field previous_note? AtlasKeymapValue
 ---@field add_comment? AtlasKeymapValue
 ---@field submit_comment? AtlasKeymapValue
+---@field add_suggestion? AtlasKeymapValue
+---@field submit_suggestion? AtlasKeymapValue
 ---@field edit_comment? AtlasKeymapValue
 ---@field delete? AtlasKeymapValue
 ---@field add_note? AtlasKeymapValue
@@ -58,11 +58,16 @@ local M = {}
 ---@field toggle_resolved? AtlasKeymapValue
 
 ---@class AtlasPullsReviewKeymaps
----@field toggle_approval? AtlasKeymapValue
+---@field show_item? AtlasKeymapValue
+---@field focus_item? AtlasKeymapValue
+---@field approve? AtlasKeymapValue
 ---@field request_changes? AtlasKeymapValue
 ---@field submit_review? AtlasKeymapValue
 ---@field explorer? AtlasPullsReviewExplorerKeymaps
 ---@field diff? AtlasPullsReviewDiffKeymaps
+
+---@class AtlasPullsPipelinesKeymaps
+---@field open? AtlasKeymapValue
 
 ---@class AtlasPullsFilterKeymaps
 ---@field open? AtlasKeymapValue
@@ -75,6 +80,7 @@ local M = {}
 ---@field edit_title? AtlasKeymapValue
 ---@field edit_description? AtlasKeymapValue
 ---@field review? AtlasPullsReviewKeymaps
+---@field pipelines? AtlasPullsPipelinesKeymaps
 ---@field filters? AtlasPullsFilterKeymaps
 
 ---@class AtlasIssuesKeymaps
@@ -119,11 +125,11 @@ local M = {}
 ---| "pulls.checkout"
 ---| "pulls.edit_title"
 ---| "pulls.edit_description"
----| "pulls.review.toggle_approval"
+---| "pulls.review.approve"
 ---| "pulls.review.request_changes"
 ---| "pulls.review.submit_review"
----| "pulls.review.explorer.focus_file"
----| "pulls.review.explorer.open_file"
+---| "pulls.review.show_item"
+---| "pulls.review.focus_item"
 ---| "pulls.review.explorer.next_file"
 ---| "pulls.review.explorer.previous_file"
 ---| "pulls.review.explorer.next_unreviewed_file"
@@ -143,11 +149,14 @@ local M = {}
 ---| "pulls.review.diff.previous_note"
 ---| "pulls.review.diff.add_comment"
 ---| "pulls.review.diff.submit_comment"
+---| "pulls.review.diff.add_suggestion"
+---| "pulls.review.diff.submit_suggestion"
 ---| "pulls.review.diff.edit_comment"
 ---| "pulls.review.diff.delete"
 ---| "pulls.review.diff.add_note"
 ---| "pulls.review.diff.add_task"
 ---| "pulls.review.diff.toggle_resolved"
+---| "pulls.pipelines.open"
 ---| "pulls.filters.open"
 ---| "pulls.filters.merged"
 ---| "pulls.filters.declined"
@@ -339,12 +348,18 @@ function M.validate()
 		pulls = conflicts_for({
 			"pulls.open_diff",
 			"pulls.checkout",
+			"pulls.edit_title",
 			"pulls.edit_description",
-			"pulls.review.toggle_approval",
+			"pulls.filters.open",
+			"pulls.filters.merged",
+			"pulls.filters.declined",
+		}),
+		["pull review"] = conflicts_for({
+			"pulls.review.approve",
 			"pulls.review.request_changes",
 			"pulls.review.submit_review",
-			"pulls.review.explorer.focus_file",
-			"pulls.review.explorer.open_file",
+			"pulls.review.show_item",
+			"pulls.review.focus_item",
 			"pulls.review.explorer.next_file",
 			"pulls.review.explorer.previous_file",
 			"pulls.review.explorer.next_unreviewed_file",
@@ -364,13 +379,13 @@ function M.validate()
 			"pulls.review.diff.previous_note",
 			"pulls.review.diff.add_comment",
 			"pulls.review.diff.submit_comment",
+			"pulls.review.diff.add_suggestion",
+			"pulls.review.diff.submit_suggestion",
 			"pulls.review.diff.delete",
 			"pulls.review.diff.add_note",
 			"pulls.review.diff.toggle_resolved",
-			"pulls.filters.open",
-			"pulls.filters.merged",
-			"pulls.filters.declined",
 		}),
+		pipelines = conflicts_for({ "pulls.pipelines.open" }),
 		issues = conflicts_for({
 			"issues.transition_issue",
 			"issues.change_assignee",

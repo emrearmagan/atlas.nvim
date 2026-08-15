@@ -1,7 +1,7 @@
 local M = {}
 
 local table_tree = require("atlas.ui.components.table_tree")
-local text_utils = require("atlas.ui.shared.utils")
+local virtual_lines = require("atlas.ui.components.virtual_lines")
 
 local NS = vim.api.nvim_create_namespace("atlas.editor.meta")
 
@@ -151,7 +151,7 @@ function M.render_meta(state, rows)
 	end
 
 	vim.api.nvim_buf_set_extmark(buf, NS, 0, 0, {
-		virt_lines = text_utils.virtual_lines(top_lines, top_spans),
+		virt_lines = virtual_lines.render(top_lines, top_spans),
 		virt_lines_above = true,
 		virt_lines_leftcol = true,
 		right_gravity = false,

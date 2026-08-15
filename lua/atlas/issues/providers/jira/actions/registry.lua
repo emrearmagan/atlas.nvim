@@ -414,11 +414,12 @@ local function edit_issue(ctx, done)
 			summary = tostring(issue.summary or ""),
 			description = initial_description,
 			assignee = issue.assignee,
-			reporter = issue.reporter or issues_state.current_user,
+			reporter = issue.reporter,
 			project = issue.project and issue.project.key or "",
 			issue_key = issue.key,
 			issue_type = issue.type,
 		}, {
+			current_user = ctx.current_user,
 			preview_fn = function(markdown)
 				local utils = require("atlas.ui.shared.utils")
 				return utils.encode_pretty_json(md_to_adf.to_adf(markdown))
@@ -447,12 +448,17 @@ local function edit_issue(ctx, done)
 	end)
 end
 
----@param _ AtlasIssueActionContext
+---@param context AtlasIssueActionContext
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
-local function create_issue(_, done)
+local function create_issue(context, done)
 	local projects_api = require("atlas.issues.providers.jira.api.projects")
 	local md_to_adf = require("atlas.issues.providers.jira.converted.markdown")
 	local issue_editor = require("atlas.issues.create.jira.issue")
+	local function open_created_issue(key)
+		vim.schedule(function()
+			require("atlas.commands.open").open(key)
+		end)
+	end
 	local function run_create(project_key)
 		issue_editor.open(function(fields, submit_done)
 			local issue_type = fields.issue_type
@@ -476,6 +482,10 @@ local function create_issue(_, done)
 			end
 
 			local is_server = config.jira_config().api_type == "server"
+			if fields.reporter and fields.reporter.account_id then
+				api_fields.reporter = is_server and { name = fields.reporter.account_id }
+					or { accountId = fields.reporter.account_id }
+			end
 
 			local desc = fields.description
 			if type(desc) == "string" then
@@ -517,10 +527,12 @@ local function create_issue(_, done)
 									notify.info(string.format("Created %s", result.key), { timeout = 2000 })
 									submit_done(true, nil)
 									done({ issue_key = result.key }, nil)
+									open_created_issue(result.key)
 								else
 									notify.warn("Issue created but failed to set description", { timeout = 3000 })
 									submit_done(true, "Description not set")
 									done({ issue_key = result.key }, nil)
+									open_created_issue(result.key)
 								end
 							end)
 							return
@@ -529,6 +541,7 @@ local function create_issue(_, done)
 						notify.info(string.format("Created %s", result.key), { timeout = 2000 })
 						submit_done(true, nil)
 						done({ issue_key = result.key }, nil)
+						open_created_issue(result.key)
 						return
 					end
 
@@ -543,11 +556,12 @@ local function create_issue(_, done)
 			summary = "",
 			description = nil,
 			assignee = nil,
-			reporter = issues_state.current_user,
+			reporter = nil,
 			project = project_key,
 			issue_key = nil,
 			issue_type = nil,
 		}, {
+			current_user = context.current_user,
 			preview_fn = function(markdown)
 				local utils = require("atlas.ui.shared.utils")
 				return utils.encode_pretty_json(md_to_adf.to_adf(markdown))

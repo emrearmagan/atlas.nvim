@@ -49,6 +49,9 @@ function M.init(provider, opts)
 	local state = require("atlas.issues.state")
 	local controller = require("atlas.issues.ui.main.controller")
 	local keymaps = require("atlas.issues.ui.main.keymaps")
+	if state.provider ~= provider then
+		state.current_user = nil
+	end
 	state.provider = provider
 
 	local notifications = require("atlas.ui.notifications")

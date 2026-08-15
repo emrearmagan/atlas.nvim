@@ -52,7 +52,7 @@ function M.setup(buf, refresh)
 	)
 	utils.insert_if(
 		items,
-		item("ui.show_details", {
+		item("pulls.pipelines.open", {
 			desc = "Show pipeline details",
 			opts = { nowait = true, silent = true },
 			callback = function()
@@ -74,7 +74,7 @@ end
 function M.teardown(buf)
 	local items = {}
 	utils.insert_if(items, remove_item("ui.toggle_fold"))
-	utils.insert_if(items, remove_item("ui.show_details"))
+	utils.insert_if(items, remove_item("pulls.pipelines.open"))
 	help.remove("Panel", items, { buffer = buf })
 end
 

@@ -23,6 +23,7 @@ function M.render(notifications, width)
 			end_col = #empty,
 			hl_group = "AtlasTextMuted",
 		})
+		table.insert(lines, "")
 		return lines, spans, line_map
 	end
 
@@ -125,6 +126,7 @@ function M.render(notifications, width)
 			table.insert(spans, { line = #lines - 1, start_col = 0, end_col = #sep, hl_group = "AtlasBorder" })
 		end
 	end
+	table.insert(lines, "")
 
 	return lines, spans, line_map
 end

@@ -1,9 +1,10 @@
 local M = {}
 
 local actions = require("atlas.pulls.actions")
+local action_utils = require("atlas.pulls.actions.utils")
 local cli = require("atlas.providers.github.client").pulls
+local notes = require("atlas.pulls.notes")
 local pullrequests = require("atlas.pulls.providers.github.api.pullrequests")
-local reviews = require("atlas.pulls.providers.github.api.reviews")
 local statusline = require("atlas.ui.statusline")
 local multi_select = require("atlas.ui.popups.multi_select")
 local github_mapping = require("atlas.providers.github.mapping")
@@ -40,40 +41,17 @@ end
 
 ---@param ctx AtlasPullActionContext
 ---@return boolean, string|nil
-local function toggle_approval_available(ctx)
+local function review_available(ctx)
 	if not has_pr(ctx) or ctx.pr == nil then
 		return false, "No PR selected"
 	end
 	if repo_slug(ctx) == "" then
 		return false, "Missing repository info"
 	end
-	return true, nil
-end
-
----@param ctx AtlasPullActionContext
----@param done fun(result: PullsActionResult|nil, err: string|nil)
-local function toggle_approval(ctx, done)
-	local pr = ctx.pr
-	if pr == nil then
-		done(nil, "No PR selected")
-		return
+	if ctx.pr.state ~= "open" and ctx.pr.state ~= "draft" then
+		return false, "PR is not open"
 	end
-	notify(ctx, "loading", "Checking approval...")
-	reviews.toggle_approval(pr, function(action, err)
-		if action == nil then
-			notify(ctx, "error", tostring(err))
-			done(nil, tostring(err))
-			return
-		end
-
-		local message = ({
-			approved = "PR approved",
-			unapproved = "PR unapproved",
-			changes_request_dismissed = "Changes request dismissed",
-		})[action]
-		notify(ctx, "success", message, 1200)
-		done({ changed_pr = true, message = message }, nil)
-	end)
+	return true, nil
 end
 
 ---@param ctx AtlasPullActionContext
@@ -84,6 +62,9 @@ local function merge_available(ctx)
 	end
 	if repo_slug(ctx) == "" then
 		return false, "Missing repository info"
+	end
+	if ctx.pr.state ~= "open" then
+		return false, "PR is not open"
 	end
 	return true, nil
 end
@@ -98,111 +79,29 @@ local function merge(ctx, done)
 	end
 
 	local slug = repo_slug(ctx)
-	local strategies = { "merge", "squash", "rebase" }
-
-	vim.ui.select(strategies, {
-		prompt = string.format("Merge strategy for PR #%s:", tostring(pr.id or "")),
-		kind = "atlas_github_merge_strategy",
-	}, function(strategy)
-		if strategy == nil then
+	local options = action_utils.merge_options()
+	local label = options.method == "squash" and "squash merge" or "merge"
+	vim.ui.input({
+		prompt = string.format("Confirm %s of PR #%s? [y/N]: ", label, tostring(pr.id or "")),
+	}, function(input)
+		if not input or not vim.trim(input):lower():match("^y") then
 			done({ changed_pr = false, message = "Merge cancelled" }, nil)
 			return
 		end
-
-		vim.ui.input({
-			prompt = string.format("Confirm %s merge PR #%s? [y/N]: ", strategy, tostring(pr.id or "")),
-		}, function(input)
-			if input == nil then
-				done({ changed_pr = false, message = "Merge cancelled" }, nil)
-				return
-			end
-
-			local normalized = vim.trim(tostring(input)):lower()
-			if normalized ~= "y" and normalized ~= "yes" then
-				notify(ctx, "info", "Merge cancelled")
-				done({ changed_pr = false, message = "Merge cancelled" }, nil)
-				return
-			end
-
-			notify(ctx, "loading", "Merging PR...")
-			cli.gh({
-				"pr",
-				"merge",
-				tostring(pr.id),
-				"--repo",
-				slug,
-				"--" .. strategy,
-				"--delete-branch",
-			}, function(_, err)
-				if err then
-					notify(ctx, "error", string.format("Merge failed: %s", tostring(err)))
-					done(nil, tostring(err))
-					return
-				end
-
-				notify(ctx, "success", "Merge succeeded", 1200)
-				done({ changed_pr = true, message = "Merged" }, nil)
-			end)
-		end)
-	end)
-end
-
----@param ctx AtlasPullActionContext
----@return boolean, string|nil
-local function close_available(ctx)
-	if not has_pr(ctx) or ctx.pr == nil then
-		return false, "No PR selected"
-	end
-	if repo_slug(ctx) == "" then
-		return false, "Missing repository info"
-	end
-	local state = tostring(ctx.pr.state or ""):lower()
-	if state ~= "open" and state ~= "draft" then
-		return false, "PR is not open"
-	end
-	return true, nil
-end
-
----@param ctx AtlasPullActionContext
----@param done fun(result: PullsActionResult|nil, err: string|nil)
-local function close(ctx, done)
-	local pr = ctx.pr
-	if pr == nil then
-		done(nil, "No PR selected")
-		return
-	end
-
-	vim.ui.input({
-		prompt = string.format("Close PR #%s? [y/N]: ", tostring(pr.id or "")),
-	}, function(input)
-		if input == nil then
-			done({ changed_pr = false, message = "Close cancelled" }, nil)
-			return
+		local args = { "pr", "merge", tostring(pr.id), "--repo", slug, "--" .. options.method }
+		if options.delete_branch then
+			table.insert(args, "--delete-branch")
 		end
-
-		local normalized = vim.trim(tostring(input)):lower()
-		if normalized ~= "y" and normalized ~= "yes" then
-			notify(ctx, "info", "Close cancelled")
-			done({ changed_pr = false, message = "Close cancelled" }, nil)
-			return
-		end
-
-		notify(ctx, "loading", "Closing PR...")
-		cli.gh({
-			"pr",
-			"close",
-			tostring(pr.id),
-			"--repo",
-			repo_slug(ctx),
-		}, function(_, err)
+		notify(ctx, "loading", "Merging PR...")
+		cli.gh(args, function(_, err)
 			if err then
-				notify(ctx, "error", string.format("Close failed: %s", tostring(err)))
+				notify(ctx, "error", string.format("Merge failed: %s", tostring(err)))
 				done(nil, tostring(err))
 				return
 			end
-
-			notify(ctx, "success", "PR closed", 1200)
-			done({ changed_pr = true, message = "Closed" }, nil)
+			notify(ctx, "success", "Merge succeeded", 1200)
+			notes.clear_for_pull_request(pr)
+			done({ changed_pr = true, message = "Merged" }, nil)
 		end)
 	end)
 end
@@ -289,16 +188,13 @@ local function edit_assignees(ctx, done)
 			return
 		end
 
-		local raw = pr._raw
-		local raw_assignees = type(raw.assignees) == "table" and raw.assignees or {}
-		local nodes = type(raw_assignees.nodes) == "table" and raw_assignees.nodes or {}
 		local original = {}
 		local original_set = {}
-		for _, node in ipairs(nodes) do
-			local login = type(node) == "table" and tostring(node.login or "") or ""
+		for _, assignee in ipairs(pr.assignees or {}) do
+			local login = assignee.username
 			if login ~= "" and not original_set[login] then
 				original_set[login] = true
-				table.insert(original, { account_id = login, display_name = login, email = "" })
+				table.insert(original, { account_id = login, display_name = assignee.name, email = "" })
 			end
 		end
 
@@ -404,14 +300,9 @@ local function edit_labels(ctx, done)
 			return
 		end
 
-		local raw = pr._raw
-		local raw_labels = raw.labels
-		if type(raw_labels) == "table" and type(raw_labels.nodes) == "table" then
-			raw_labels = raw_labels.nodes
-		end
 		local original = {}
 		local original_set = {}
-		for _, label in ipairs(raw_labels or {}) do
+		for _, label in ipairs(pr.labels or {}) do
 			local name = tostring(label.name or "")
 			if name ~= "" then
 				table.insert(original, { name = name, color = label.color })
@@ -596,17 +487,17 @@ local function toggle_subscription(ctx, done)
 end
 
 register({
-	id = actions.request_changes.id,
-	label = actions.request_changes.label,
-	is_available = toggle_approval_available,
-	run = actions.request_changes.run,
+	id = actions.approve.id,
+	label = actions.approve.label,
+	is_available = review_available,
+	run = actions.approve.run,
 })
 
 register({
-	id = "toggle_approval",
-	label = "Toggle approval",
-	is_available = toggle_approval_available,
-	run = toggle_approval,
+	id = actions.request_changes.id,
+	label = actions.request_changes.label,
+	is_available = review_available,
+	run = actions.request_changes.run,
 })
 
 register({
@@ -619,12 +510,7 @@ register({
 register(actions.edit_title)
 register(actions.edit_description)
 
-register({
-	id = "close",
-	label = "Close PR",
-	is_available = close_available,
-	run = close,
-})
+register(actions.decline)
 
 register({
 	id = "reopen",

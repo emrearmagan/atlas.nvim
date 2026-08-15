@@ -39,7 +39,7 @@
 ---@field compact boolean|nil
 ---@field compact_context_lines integer|nil
 ---@field show_review_panel boolean|nil
----@field show_comments boolean|nil
+---@field comment_display "virtual_lines"|"virtual_text"|nil Initial comment and note display mode.
 ---@field explorer AtlasPullsDiffExplorerConfig|nil
 
 ---@class AtlasPullsCustomActionContext
@@ -62,6 +62,9 @@
 ---@class AtlasPullsConfig
 ---@field repo_config AtlasPullsRepoConfig|nil
 ---@field diff AtlasPullsDiffConfig|nil
+---@field delete_notes boolean|nil
+---@field default_merge_method "merge"|"squash"|nil
+---@field default_delete_branch boolean|nil
 ---@field custom_actions AtlasPullsCustomAction[]|nil
 ---@field providers AtlasPullsProviders|nil
 
@@ -92,19 +95,20 @@
 
 local M = {}
 
-local notify = require("atlas.core.notify")
-
 ---@type AtlasConfig
 M.options = {
 	global_statusline = true,
 	pulls = {
+		delete_notes = false,
+		default_merge_method = "merge",
+		default_delete_branch = false,
 		diff = {
 			open_cmd = "AtlasDiff",
 			layout = "inline",
 			compact = true,
 			compact_context_lines = 3,
 			show_review_panel = false,
-			show_comments = true,
+			comment_display = "virtual_lines",
 			explorer = {
 				grouped = true,
 				hidden = false,
@@ -150,12 +154,12 @@ M.options = {
 			edit_title = "T",
 			edit_description = "D",
 			review = {
-				toggle_approval = "ga",
+				show_item = "<CR>",
+				focus_item = "gd",
+				approve = "ga",
 				request_changes = "gr",
 				submit_review = "gs",
 				explorer = {
-					focus_file = "<CR>",
-					open_file = "l",
 					next_file = { "]f", "<Tab>" },
 					previous_file = { "[f", "<S-Tab>" },
 					next_unreviewed_file = "]u",
@@ -177,12 +181,17 @@ M.options = {
 					previous_note = "[n",
 					add_comment = "c",
 					submit_comment = "C",
+					add_suggestion = "s",
+					submit_suggestion = "S",
 					edit_comment = "e",
 					delete = "dd",
 					add_note = "<leader>n",
 					add_task = "T",
 					toggle_resolved = "x",
 				},
+			},
+			pipelines = {
+				open = "gd",
 			},
 			filters = {
 				open = "gpo",
@@ -200,104 +209,6 @@ M.options = {
 	},
 }
 
--- Commands
-
-local function register_commands()
-	pcall(vim.api.nvim_del_user_command, "AtlasPulls")
-	pcall(vim.api.nvim_del_user_command, "AtlasIssues")
-	pcall(vim.api.nvim_del_user_command, "AtlasSearch")
-	pcall(vim.api.nvim_del_user_command, "AtlasOpen")
-	pcall(vim.api.nvim_del_user_command, "AtlasLogs")
-	pcall(vim.api.nvim_del_user_command, "AtlasClearCache")
-	pcall(vim.api.nvim_del_user_command, "AtlasCreatePR")
-	pcall(vim.api.nvim_del_user_command, "AtlasCreateIssue")
-	pcall(vim.api.nvim_del_user_command, "AtlasDiff")
-	pcall(vim.api.nvim_del_user_command, "AtlasNotes")
-	pcall(vim.api.nvim_del_user_command, "AtlasNotesClearAll")
-
-	vim.api.nvim_create_user_command("AtlasLogs", function()
-		require("atlas.ui.logs").toggle()
-	end, { desc = "Toggle Atlas log viewer" })
-
-	vim.api.nvim_create_user_command("AtlasClearCache", function()
-		require("atlas.core.cache").clear_all()
-		require("atlas.core.memory_cache").clear_all()
-		notify.info("Cache cleared")
-	end, { desc = "Clear Atlas disk and memory cache" })
-
-	vim.api.nvim_create_user_command("AtlasPulls", function(opts)
-		local provider_id = opts.fargs[1] and opts.fargs[1]:lower() or nil
-		require("atlas").open("pulls", provider_id)
-	end, {
-		desc = "Open Atlas pulls",
-		nargs = "?",
-		complete = function(arglead)
-			return vim.tbl_filter(function(p)
-				return p:find(arglead, 1, true) == 1
-			end, require("atlas.providers").ids("pulls"))
-		end,
-	})
-
-	vim.api.nvim_create_user_command("AtlasIssues", function(opts)
-		local provider_id = opts.fargs[1] and opts.fargs[1]:lower() or nil
-		require("atlas").open("issues", provider_id)
-	end, {
-		desc = "Open Atlas issues",
-		nargs = "?",
-		complete = function(arglead)
-			return vim.tbl_filter(function(p)
-				return p:find(arglead, 1, true) == 1
-			end, require("atlas.providers").ids("issues"))
-		end,
-	})
-
-	vim.api.nvim_create_user_command("AtlasCreatePR", function()
-		require("atlas.pulls.create.pr").start()
-	end, { desc = "Create a pull request from the current branch" })
-
-	vim.api.nvim_create_user_command("AtlasCreateIssue", function()
-		require("atlas.issues.create").start()
-	end, { desc = "Create an issue" })
-
-	vim.api.nvim_create_user_command("AtlasDiff", function(opts)
-		require("atlas.pulls.diff").open_argument(opts.args)
-	end, {
-		desc = "Open a Git range or pull request in AtlasDiff",
-		nargs = 1,
-	})
-
-	vim.api.nvim_create_user_command("AtlasNotes", function(opts)
-		require("atlas.pulls.notes.ui").open({
-			target = opts.args ~= "" and opts.args or nil,
-		})
-	end, {
-		desc = "Open local review notes",
-		nargs = "?",
-	})
-
-	vim.api.nvim_create_user_command("AtlasNotesClearAll", function()
-		require("atlas.pulls.notes.ui").clear_all()
-	end, { desc = "Delete all local review notes" })
-
-	vim.api.nvim_create_user_command("AtlasSearch", function(opts)
-		local provider_id = opts.fargs[1] and opts.fargs[1]:lower() or nil
-		require("atlas.commands.search").run(provider_id)
-	end, {
-		desc = "Search across Atlas providers",
-		nargs = "?",
-		complete = function(arglead)
-			return require("atlas.commands.search").complete(arglead)
-		end,
-	})
-
-	vim.api.nvim_create_user_command("AtlasOpen", function(opts)
-		require("atlas.commands.open").open(opts.args)
-	end, {
-		desc = "Open a provider URL or reference",
-		nargs = 1,
-	})
-end
-
 -- Setup
 
 ---@param opts AtlasConfig|table|nil
@@ -307,7 +218,6 @@ function M.setup(opts)
 	if M.options.global_statusline ~= false then
 		vim.opt.laststatus = 3
 	end
-	register_commands()
 end
 
 return M

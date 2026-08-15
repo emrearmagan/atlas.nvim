@@ -292,7 +292,7 @@ local function pick_milestone(issue_state)
 			local choices = { "(none)" }
 			local map = {}
 			for _, item in ipairs(items) do
-				local label = string.format("#%s · %s", tostring(item.number), tostring(item.title))
+				local label = string.format("#%s  %s", tostring(item.number), tostring(item.title))
 				table.insert(choices, label)
 				map[label] = item
 			end
@@ -344,7 +344,7 @@ local function submit(issue_state)
 		body = get_body(issue_state),
 		labels = label_names,
 		assignees = assignee_logins,
-		milestone = issue_state.fields.milestone and issue_state.fields.milestone.number or nil,
+		milestone = issue_state.fields.milestone and issue_state.fields.milestone.title or nil,
 	}, function(result, err)
 		vim.schedule(function()
 			issue_state.is_submitting = false
@@ -370,6 +370,9 @@ local function submit(issue_state)
 
 			close(issue_state)
 			notify.info(message)
+			if type(url) == "string" and url ~= "" then
+				require("atlas.commands.open").open(url)
+			end
 		end)
 	end)
 end

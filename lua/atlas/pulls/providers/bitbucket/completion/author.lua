@@ -4,15 +4,11 @@ local M = {}
 ---@return PullsAuthor[]
 local function collect_authors(context)
 	local authors = {}
-	local handles = {}
 	local function add(author)
 		if type(author) ~= "table" then
 			return
 		end
 		local id = tostring(author.id or "")
-		if id == "" then
-			id = tostring(author.account_id or "")
-		end
 		if id == "" or authors[id] then
 			return
 		end
@@ -29,9 +25,6 @@ local function collect_authors(context)
 			name = name,
 			username = username,
 		}
-		if username ~= "" then
-			handles[username:lower()] = true
-		end
 	end
 
 	local pr = context.pr
@@ -40,8 +33,8 @@ local function collect_authors(context)
 	end
 	if pr then
 		add(pr.author)
-		for _, participant in ipairs(pr._raw.participants or {}) do
-			add(type(participant) == "table" and participant.user or nil)
+		for _, reviewer in ipairs(pr.reviewers or {}) do
+			add(reviewer)
 		end
 	end
 	for _, items in ipairs({ context.comments or {}, context.tasks or {}, context.conversation or {} }) do
@@ -50,13 +43,7 @@ local function collect_authors(context)
 		end
 	end
 	for _, reviewer in ipairs(context.reviewers or {}) do
-		local handle = tostring(reviewer.nickname or "")
-		if handle == "" then
-			handle = tostring(reviewer.name or "")
-		end
-		if handle ~= "" and not handles[handle:lower()] then
-			add({ id = handle, name = reviewer.name, nickname = reviewer.nickname })
-		end
+		add(reviewer)
 	end
 
 	return vim.tbl_values(authors)

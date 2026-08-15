@@ -302,6 +302,7 @@ function M.prev_tab()
 	end
 
 	M.render()
+	scroll_to_top()
 end
 
 function M.close()
@@ -311,6 +312,7 @@ function M.close()
 		header_request.cancel()
 		header_request = nil
 	end
+	reset_tabs()
 	panel_state.reset()
 end
 

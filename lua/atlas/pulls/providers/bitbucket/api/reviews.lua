@@ -6,28 +6,11 @@ local diff_parser = require("atlas.core.git.diff_parser")
 local service = require("atlas.pulls.providers.bitbucket.api.service")
 local tasks = require("atlas.pulls.providers.bitbucket.api.tasks")
 
----@param link any
----@return string
-local function link_href(link)
-	if type(link) == "string" then
-		return link
-	end
-	if type(link) == "table" then
-		return tostring(link.href or "")
-	end
-	return ""
-end
-
 ---@param pr PullRequest
 ---@param key "approve"|"request_changes"
 ---@return string
 local function action_url(pr, key)
-	local links = type(pr._raw.links) == "table" and pr._raw.links or {}
-	local link = links[key]
-	if link == nil and key == "request_changes" then
-		link = links["request-changes"]
-	end
-	return link_href(link)
+	return tostring((pr._raw.links or {})[key] or "")
 end
 
 ---@param pr PullRequest
@@ -39,7 +22,7 @@ end
 
 ---@param pr PullRequest
 ---@param _opts { force_refresh: boolean|nil }|nil
----@param on_done fun(context: { authors: PullsAuthor[] }|nil, err: string|nil)
+---@param on_done fun(context: PullsReviewContext|nil, err: string|nil)
 ---@return nil
 function M.fetch_review_context(pr, _opts, on_done)
 	local authors = {}
@@ -61,21 +44,8 @@ function M.fetch_review_context(pr, _opts, on_done)
 	end
 
 	add(pr.author)
-	for _, participant in ipairs(pr._raw.participants or {}) do
-		local user = type(participant) == "table" and participant.user or nil
-		if type(user) == "table" then
-			local id = tostring(user.account_id or user.id or "")
-			local username = tostring(user.nickname or user.username or "")
-			local name = tostring(user.display_name or user.name or username)
-			if id ~= "" or username ~= "" or name ~= "" then
-				add({
-					id = id,
-					name = name,
-					username = username,
-					nickname = username ~= "" and username or nil,
-				})
-			end
-		end
+	for _, reviewer in ipairs(pr.reviewers or {}) do
+		add(reviewer)
 	end
 	on_done({ authors = authors }, nil)
 end
@@ -123,11 +93,11 @@ function M.fetch_review(pr, opts, on_done)
 			return
 		end
 
-		local inline_comments = {}
+		local anchored_comments = {}
 		for _, comment in ipairs(review_comments) do
-			if comment.inline and comment.state ~= "DELETED" then
+			if (comment.inline or comment.file) and comment.state ~= "DELETED" then
 				attach_hunk(comment, files)
-				table.insert(inline_comments, comment)
+				table.insert(anchored_comments, comment)
 			end
 		end
 		local has_pending = false
@@ -142,7 +112,7 @@ function M.fetch_review(pr, opts, on_done)
 		end
 		on_done({
 			review = { id = nil, commit_hash = nil, pending = has_pending },
-			comments = inline_comments,
+			comments = anchored_comments,
 			tasks = review_tasks,
 		}, nil)
 	end
@@ -179,39 +149,47 @@ function M.fetch_review(pr, opts, on_done)
 end
 
 ---@param pr PullRequest
----@param on_done fun(result: table|nil, err: string|nil)
+---@param _review PullsReview|nil
+---@param body string
+---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.approve(pr, on_done)
+function M.approve(pr, _review, body, on_done)
 	local url = action_url(pr, "approve")
 	if url == "" then
-		on_done(nil, "No approve URL available")
+		on_done(false, "No approve URL available")
 		return nil
 	end
-	return service.request("POST", url, nil, nil, on_done)
+	return service.request("POST", url, nil, nil, function(_, err)
+		if err or vim.trim(body) == "" then
+			on_done(err == nil, err)
+			return
+		end
+		comments.add_comment(pr, body, nil, function(comment, comment_err)
+			on_done(comment ~= nil, comment_err)
+		end)
+	end)
 end
 
 ---@param pr PullRequest
----@param on_done fun(result: table|nil, err: string|nil)
+---@param _review PullsReview|nil
+---@param body string
+---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.unapprove(pr, on_done)
-	local url = action_url(pr, "approve")
-	if url == "" then
-		on_done(nil, "No approve URL available")
-		return nil
-	end
-	return service.request("DELETE", url, nil, nil, on_done)
-end
-
----@param pr PullRequest
----@param on_done fun(result: table|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.request_changes(pr, on_done)
+function M.request_changes(pr, _review, body, on_done)
 	local url = action_url(pr, "request_changes")
 	if url == "" then
-		on_done(nil, "No request changes URL available")
+		on_done(false, "No request changes URL available")
 		return nil
 	end
-	return service.request("POST", url, nil, nil, on_done)
+	return service.request("POST", url, nil, nil, function(_, err)
+		if err or vim.trim(body) == "" then
+			on_done(err == nil, err)
+			return
+		end
+		comments.add_comment(pr, body, nil, function(comment, comment_err)
+			on_done(comment ~= nil, comment_err)
+		end)
+	end)
 end
 
 ---@param pr PullRequest
@@ -230,52 +208,6 @@ function M.submit_review(pr, _review, _body, on_done)
 	vim.ui.open(url)
 	on_done(true, nil)
 	return nil
-end
-
----@param pr PullRequest
----@param body string
----@param action fun(pr: PullRequest, on_done: fun(result: table|nil, err: string|nil)): { cancel: fun() }|nil
----@param on_done fun(ok: boolean, err: string|nil)
----@return { cancel: fun() }
-local function complete(pr, body, action, on_done)
-	local cancelled = false
-	local current
-	current = action(pr, function(_, err)
-		if cancelled then
-			return
-		end
-		if err or vim.trim(body) == "" then
-			on_done(err == nil, err)
-			return
-		end
-		current = M.submit_review(pr, nil, body, on_done)
-	end)
-	return {
-		cancel = function()
-			cancelled = true
-			if current then
-				current.cancel()
-			end
-		end,
-	}
-end
-
----@param pr PullRequest
----@param _review PullsReview|nil
----@param body string
----@param on_done fun(ok: boolean, err: string|nil)
----@return { cancel: fun() }
-function M.approve_review(pr, _review, body, on_done)
-	return complete(pr, body, M.approve, on_done)
-end
-
----@param pr PullRequest
----@param _review PullsReview|nil
----@param body string
----@param on_done fun(ok: boolean, err: string|nil)
----@return { cancel: fun() }
-function M.request_changes_review(pr, _review, body, on_done)
-	return complete(pr, body, M.request_changes, on_done)
 end
 
 ---@param pr PullRequest

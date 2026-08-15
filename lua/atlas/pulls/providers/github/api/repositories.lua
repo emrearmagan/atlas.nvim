@@ -1,5 +1,6 @@
 local M = {}
 
+local request_scope = require("atlas.core.requests")
 local cli = require("atlas.providers.github.client").pulls
 
 ---@param repo PullsRepo
@@ -28,13 +29,16 @@ function M.fetch_detail(repo, opts, on_done)
 		end
 	end
 
-	return cli.gh({
-		"repo",
-		"view",
-		slug,
-		"--json",
-		"name,nameWithOwner,owner,description,defaultBranchRef,isPrivate,createdAt,diskUsage,url,stargazerCount,forkCount,watchers",
-	}, function(result, err)
+	local requests = request_scope.new()
+	requests.run(function(done)
+		return cli.gh({
+			"repo",
+			"view",
+			slug,
+			"--json",
+			"name,nameWithOwner,owner,description,defaultBranchRef,isPrivate,createdAt,diskUsage,url,stargazerCount,forkCount,watchers",
+		}, done)
+	end, function(result, err)
 		if err or type(result) ~= "table" then
 			on_done(nil, err or "Failed to fetch repo details")
 			return
@@ -60,15 +64,16 @@ function M.fetch_detail(repo, opts, on_done)
 			stars = tonumber(result.stargazerCount) or nil,
 			forks = tonumber(result.forkCount) or nil,
 			watchers = type(result.watchers) == "table" and tonumber(result.watchers.totalCount) or nil,
-			_raw = result,
 		}
 
-		cli.gh({
-			"api",
-			string.format("repos/%s/readme", slug),
-			"--header",
-			"Accept: application/vnd.github.raw+json",
-		}, function(readme_result, readme_err)
+		requests.run(function(done)
+			return cli.gh({
+				"api",
+				string.format("repos/%s/readme", slug),
+				"--header",
+				"Accept: application/vnd.github.raw+json",
+			}, done)
+		end, function(readme_result, readme_err)
 			if not readme_err and readme_result then
 				details.readme = tostring(readme_result)
 			end
@@ -76,6 +81,7 @@ function M.fetch_detail(repo, opts, on_done)
 			on_done(details, nil)
 		end)
 	end)
+	return requests
 end
 
 ---@param repo PullsRepoDetails

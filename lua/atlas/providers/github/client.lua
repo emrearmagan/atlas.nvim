@@ -69,6 +69,7 @@ local function new(domain)
 	---@return { job_id: integer, cancel: fun() }|nil
 	local function run(args, parse_json, callback, ctx)
 		if vim.fn.executable("gh") ~= 1 then
+			logger.logerror("GitHub CLI unavailable", { domain = domain, error = "gh executable not found" })
 			vim.schedule(function()
 				callback(nil, "gh CLI not found. Install from https://cli.github.com")
 			end)
@@ -76,20 +77,23 @@ local function new(domain)
 		end
 
 		local cmd = vim.list_extend({ "gh" }, args)
-		local log = vim.tbl_extend("keep", { cmd = table.concat(cmd, " ") }, ctx or {})
+		local log = vim.tbl_extend("keep", { domain = domain }, ctx or {})
 		local message = log.action or "GitHub CLI"
 		log.action = nil
 		logger.loginfo(message, log)
 
 		local cancelled = false
-		local handle = vim.system(cmd, { text = true }, function(result)
+		local function on_exit(result)
 			vim.schedule(function()
 				if cancelled then
 					return
 				end
 				if result.code ~= 0 then
 					local err = sanitize_error(result.stderr)
-					logger.logerror("GitHub CLI error", { code = result.code, err = err })
+					logger.logerror(
+						message .. " failed",
+						vim.tbl_extend("force", {}, log, { code = result.code, error = err })
+					)
 					callback(nil, err)
 					return
 				end
@@ -112,9 +116,11 @@ local function new(domain)
 				end
 				callback(stdout, nil)
 			end)
-		end)
+		end
 
-		if not handle then
+		local started, handle = pcall(vim.system, cmd, { text = true }, on_exit)
+		if not started then
+			logger.logerror(message .. " failed", vim.tbl_extend("force", {}, log, { error = tostring(handle) }))
 			vim.schedule(function()
 				callback(nil, "Failed to start gh process")
 			end)
@@ -148,7 +154,14 @@ local function new(domain)
 				table.insert(args, string.format("%s=%s", key, tostring(value)))
 			end
 		end
-		return client.gh(args, callback, ctx)
+		return client.gh(
+			args,
+			callback,
+			vim.tbl_extend("keep", ctx or {}, {
+				method = method,
+				endpoint = endpoint,
+			})
+		)
 	end
 
 	return client
