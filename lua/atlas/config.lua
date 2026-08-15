@@ -90,6 +90,7 @@
 ---@class AtlasUIConfig
 ---@field global_statusline boolean|nil Set one statusline across all windows (default: true)
 ---@field picker AtlasPickerName|nil
+---@field listed_buffer boolean|nil Make the main Atlas dashboard a listed buffer (default: false)
 
 ---@class AtlasConfig
 ---@field ui AtlasUIConfig|nil
@@ -104,6 +105,7 @@ M.options = {
 	ui = {
 		global_statusline = true,
 		picker = "auto",
+		listed_buffer = false,
 	},
 	pulls = {
 		delete_notes = false,

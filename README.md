@@ -97,6 +97,8 @@ use {
     global_statusline = true,
     -- "auto", "default", "snacks", or "fzf-lua".
     picker = "auto",
+    -- Make the main Atlas dashboard a listed buffer.
+    listed_buffer = false,
   },
 
   pulls = {

@@ -25,14 +25,6 @@ function M.open_query(query)
 	end
 
 	local view = { name = "Search (JQL)", layout = "compact", jql = query }
-
-	local ui_state = require("atlas.ui.state")
-	local layout = require("atlas.ui.layout")
-	if layout.is_open() and ui_state.current_view == "jira" then
-		require("atlas.issues.ui.main.controller").switch_view(view)
-		return
-	end
-
 	require("atlas").open("issues", "jira", { initial_view = view })
 end
 
