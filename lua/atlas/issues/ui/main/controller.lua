@@ -339,6 +339,47 @@ local function load_active_view(opts, on_done)
 	end)
 end
 
+---@param view IssuesViewConfig
+---@param force_load boolean
+---@param on_done fun()|nil
+local function load_bookmark(view, force_load, on_done)
+	local provider = state.provider
+	if provider == nil then
+		return
+	end
+
+	cancel_active_requests()
+	state.is_loading = true
+	state.error = nil
+	state.issues = nil
+	state.issue_tree = nil
+	state.current_view = view
+	statusline.notify("loading", "Running query...")
+	render_if_active()
+
+	active_issues_handle = provider.capabilities.core.fetch_issues(view, {
+		force_load = force_load,
+		max_results = tonumber((config.options and config.options.issues or {}).max_results) or 100,
+		layout = view.layout,
+	}, function(issues, _, _, err)
+		active_issues_handle = nil
+		state.is_loading = false
+		if err then
+			state.error = tostring(err)
+			statusline.notify("error", string.format("Query failed: %s", state.error))
+		else
+			state.error = nil
+			state.issues = issues or {}
+			state.issue_tree = helper.build_issue_tree(issues or {})
+			statusline.notify("success", string.format("Loaded %d issues", #(issues or {})), 1200)
+		end
+		render_if_active()
+		if on_done then
+			on_done()
+		end
+	end)
+end
+
 ---@param on_done fun()|nil
 ---@param focus_issue_key string|nil
 function M.refresh_current_view(on_done, focus_issue_key)
@@ -347,12 +388,25 @@ function M.refresh_current_view(on_done, focus_issue_key)
 	if refresh then
 		refresh()
 	end
+	local current_view = state.current_view
+	local bookmark_active = state.active_view
+		and state.active_view._kind == "bookmarks"
+		and current_view
+		and current_view._kind ~= "bookmarks"
+	if bookmark_active and focus_issue_key == nil then
+		local item = navigation.current_item()
+		if item and item.kind == "issue" and item._issue then
+			focus_issue_key = item._issue.key
+		end
+	end
 
-	load_active_view({ force_load = true }, function()
-		local focused = focus_issue_key ~= nil
-			and navigation.focus_item(function(item)
+	local function finish()
+		local focused = bookmark_active and focus_issue_key == nil
+		if focus_issue_key ~= nil then
+			focused = navigation.focus_item(function(item)
 				return item.kind == "issue" and item._issue and item._issue.key == focus_issue_key
 			end)
+		end
 		if not focused then
 			navigation.focus_first_item()
 		end
@@ -370,7 +424,13 @@ function M.refresh_current_view(on_done, focus_issue_key)
 		if on_done ~= nil then
 			on_done()
 		end
-	end)
+	end
+
+	if bookmark_active then
+		load_bookmark(current_view, true, finish)
+	else
+		load_active_view({ force_load = true }, finish)
+	end
 end
 
 ---@param view IssuesViewConfig|nil
@@ -393,10 +453,7 @@ function M.run_bookmark(name, value)
 		end
 	end
 
-	state.active_view = view
-	load_active_view({ force_load = false }, function()
-		navigation.focus_first_item()
-	end)
+	load_bookmark(view, false)
 end
 
 ---@param source_buf integer|nil
