@@ -36,7 +36,7 @@ local function to_items(repo)
 		end
 		local content = nil
 		if author_str and first_line then
-			content = author_str .. " · " .. first_line
+			content = author_str .. "  " .. first_line
 		elseif first_line then
 			content = first_line
 		elseif author_str then

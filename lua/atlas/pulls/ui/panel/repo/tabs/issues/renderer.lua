@@ -150,7 +150,7 @@ function M.render(state, width, repository_loading, issue_type_hl)
 			table.insert(meta_parts, date_text)
 		end
 		local meta_start = #meta_line
-		meta_line = meta_line .. table.concat(meta_parts, " · ")
+		meta_line = meta_line .. table.concat(meta_parts, "  ")
 		table.insert(meta_spans, { start_col = meta_start, end_col = #meta_line, hl_group = "AtlasTextMuted" })
 
 		table.insert(lines, meta_line)

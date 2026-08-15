@@ -4,7 +4,7 @@ local ui_utils = require("atlas.ui.utils")
 
 function M.render(opts)
 	local width = opts.width or vim.o.columns
-	local icon = opts.icon or "•"
+	local icon = opts.icon or ""
 	local title = opts.title or "Atlas"
 	local hl_group = opts.hl_group or "Title"
 

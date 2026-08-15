@@ -74,14 +74,14 @@ local function to_thread_item(commit, width)
 	local author = (commit.author_nickname ~= "" and commit.author_nickname) or commit.author_name or "Unknown"
 	local hash = tostring(commit.short_hash or commit.hash or ""):sub(1, 8)
 	local when = utils.relative_time(commit.date)
-	local content = author .. " · " .. when
+	local content = author .. "  " .. when
 
 	-- Pipeline status
 	local pipeline_state = state.status_by_hash[commit.hash]
 	if pipeline_state == "loading" then
-		content = content .. " · " .. icons.pulls_status("inprogress") .. " pipelines"
+		content = content .. "  " .. icons.pulls_status("inprogress") .. " pipelines"
 	elseif pipeline_state ~= nil and pipeline_state ~= "unknown" then
-		content = content .. " · " .. icons.pulls_status(pipeline_state) .. " " .. status_label(pipeline_state)
+		content = content .. "  " .. icons.pulls_status(pipeline_state) .. " " .. status_label(pipeline_state)
 	end
 
 	-- Truncate message to leave room for hash + icon + gaps

@@ -292,7 +292,7 @@ local function pick_milestone(issue_state)
 			local choices = { "(none)" }
 			local map = {}
 			for _, item in ipairs(items) do
-				local label = string.format("#%s · %s", tostring(item.number), tostring(item.title))
+				local label = string.format("#%s  %s", tostring(item.number), tostring(item.title))
 				table.insert(choices, label)
 				map[label] = item
 			end

@@ -193,7 +193,7 @@ local function choose_repository(choices, prompt, on_choice)
 	vim.ui.select(choices, {
 		prompt = prompt,
 		format_item = function(item)
-			return string.format("%s · %s", item.provider, item.slug)
+			return string.format("%s  %s", item.provider, item.slug)
 		end,
 	}, function(choice)
 		if choice and current_request == request_id then
