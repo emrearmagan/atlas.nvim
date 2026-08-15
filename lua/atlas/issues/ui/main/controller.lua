@@ -13,7 +13,7 @@ local active_issues_handle = nil
 local active_issue_reload_handles = {}
 
 local function render_if_active()
-	if not layout.is_open() then
+	if not layout.is_active() then
 		return
 	end
 

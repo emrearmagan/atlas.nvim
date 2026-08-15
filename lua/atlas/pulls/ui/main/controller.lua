@@ -12,7 +12,7 @@ local active_pullrequests_handle = nil
 local active_pr_reload_handles = {}
 
 local function render_if_active()
-	if not layout.is_open() then
+	if not layout.is_active() then
 		return
 	end
 	local ui_main_state = require("atlas.ui.state")

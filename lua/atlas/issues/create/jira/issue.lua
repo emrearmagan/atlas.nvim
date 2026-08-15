@@ -27,9 +27,12 @@ local async_picker = require("atlas.ui.components.async_picker")
 ---@field fields IssueEditorFields
 ---@field assignees IssueUser[]|"loading"|nil
 ---@field issue_types IssueType[]|"loading"|nil
+---@field current_user IssueUser|nil
+---@field current_user_loading boolean
 ---@field spinner SpinnerInstance|nil
 ---@field assignees_handle { job_id: integer, cancel: fun() }|nil
 ---@field issue_types_handle { job_id: integer, cancel: fun() }|nil
+---@field current_user_handle { job_id: integer, cancel: fun() }|nil
 ---@field content_width integer
 ---@field on_submit fun(fields: IssueEditorFields, done: fun(ok: boolean, err: string|nil))|nil
 ---@field preview_fn (fun(markdown: string): string)|nil
@@ -51,9 +54,12 @@ local state = {
 	},
 	assignees = nil,
 	issue_types = nil,
+	current_user = nil,
+	current_user_loading = false,
 	spinner = nil,
 	assignees_handle = nil,
 	issue_types_handle = nil,
+	current_user_handle = nil,
 	content_width = 0,
 	on_submit = nil,
 	preview_fn = nil,
@@ -117,7 +123,14 @@ local function pick_default_issue_type(issue_types)
 end
 
 local function meta_rows()
-	return issue_helper.meta_rows(state.fields, state.assignees, state.issue_types, state.spinner)
+	return issue_helper.meta_rows(
+		state.fields,
+		state.assignees,
+		state.issue_types,
+		state.fields.reporter or state.current_user,
+		state.current_user_loading,
+		state.spinner
+	)
 end
 
 local function render_meta()
@@ -129,7 +142,7 @@ local function stop_loading_spinner_if_done()
 		return
 	end
 
-	if state.assignees == "loading" or state.issue_types == "loading" then
+	if state.assignees == "loading" or state.issue_types == "loading" or state.current_user_loading then
 		return
 	end
 
@@ -147,6 +160,11 @@ local function cancel_pending_requests()
 		pcall(state.issue_types_handle.cancel)
 	end
 	state.issue_types_handle = nil
+
+	if state.current_user_handle and state.current_user_handle.cancel then
+		pcall(state.current_user_handle.cancel)
+	end
+	state.current_user_handle = nil
 end
 
 local function close_ui()
@@ -175,8 +193,11 @@ local function close_ui()
 	}
 	state.assignees = nil
 	state.issue_types = nil
+	state.current_user = nil
+	state.current_user_loading = false
 	state.assignees_handle = nil
 	state.issue_types_handle = nil
+	state.current_user_handle = nil
 	state.content_width = 0
 	state.on_submit = nil
 	state.preview_fn = nil
@@ -383,7 +404,17 @@ local function show_reporter_picker()
 			)
 		end,
 		on_select = function(item)
-			state.fields.reporter = item.value
+			if state.current_user_handle then
+				state.current_user_handle.cancel()
+				state.current_user_handle = nil
+			end
+			state.current_user_loading = false
+			if state.current_user and item.value.account_id == state.current_user.account_id then
+				state.fields.reporter = nil
+			else
+				state.fields.reporter = item.value
+			end
+			stop_loading_spinner_if_done()
 			render_meta()
 		end,
 	})
@@ -460,7 +491,7 @@ end
 
 ---@param on_submit fun(fields: IssueEditorFields, done: fun(ok: boolean, err: string|nil))|nil
 ---@param opts IssueEditorFields
----@param editor_opts { preview_fn?: fun(markdown: string): string }|nil
+---@param editor_opts { preview_fn?: fun(markdown: string): string, current_user?: IssueUser }|nil
 function M.open(on_submit, opts, editor_opts)
 	if valid_win(state.layout.editor_win) then
 		close_ui()
@@ -474,6 +505,8 @@ function M.open(on_submit, opts, editor_opts)
 	state.preview_fn = editor_opts and editor_opts.preview_fn or nil
 	state.assignees = nil
 	state.issue_types = nil
+	state.current_user = editor_opts and editor_opts.current_user or nil
+	state.current_user_loading = state.fields.reporter == nil and state.current_user == nil
 
 	local initial_desc = type(state.fields.description) == "string" and state.fields.description or ""
 	state.initial_summary = tostring(state.fields.summary or "")
@@ -532,7 +565,7 @@ function M.open(on_submit, opts, editor_opts)
 	state.issue_types = "loading"
 	state.spinner = spinner.create({
 		on_tick = function()
-			if state.assignees == "loading" or state.issue_types == "loading" then
+			if state.assignees == "loading" or state.issue_types == "loading" or state.current_user_loading then
 				render_meta()
 			end
 		end,
@@ -540,6 +573,22 @@ function M.open(on_submit, opts, editor_opts)
 	state.spinner:start()
 
 	render_meta()
+
+	if state.current_user_loading then
+		state.current_user_handle = users_api.get_myself(function(user, err)
+			state.current_user_handle = nil
+			state.current_user_loading = false
+			if err then
+				form.notify("warn", "Failed to load reporter: " .. err, 2000)
+			else
+				state.current_user = user
+			end
+			stop_loading_spinner_if_done()
+			vim.schedule(function()
+				render_meta()
+			end)
+		end)
+	end
 
 	if state.fields.project ~= "" then
 		state.assignees_handle = users_api.get_assignable_users(

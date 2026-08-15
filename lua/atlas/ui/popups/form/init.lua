@@ -248,12 +248,15 @@ local function build_statusline_items(opts)
 	for _, keymap in ipairs(opts.keymaps or {}) do
 		local key = type(keymap.key) == "table" and table.concat(keymap.key, " / ") or keymap.key
 		items[#items + 1] = {
-			text = string.format("%s %s", key, keymap.desc),
+			text = string.format("%s%s %s", #items > 0 and "| " or "", key, keymap.desc),
 			hl_group = "AtlasFooterText",
 			priority = 10,
 		}
 	end
-	items[#items + 1] = { text = "q close", hl_group = "AtlasFooterText" }
+	items[#items + 1] = {
+		text = string.format("%sq close", #items > 0 and "| " or ""),
+		hl_group = "AtlasFooterText",
+	}
 	return items
 end
 
@@ -316,6 +319,24 @@ function M.open(state, opts)
 	end
 
 	layout.augroup = vim.api.nvim_create_augroup("AtlasForm" .. next_id, { clear = true })
+	-- Keep an empty line for both the title and description when either one is deleted.
+	vim.api.nvim_create_autocmd({ "TextChanged", "TextChangedI" }, {
+		group = layout.augroup,
+		buffer = layout.editor_buf,
+		callback = function()
+			if vim.api.nvim_buf_line_count(layout.editor_buf) == 1 then
+				local changed_line = vim.fn.line("'[")
+				vim.cmd("silent! undojoin")
+				if changed_line == 1 then
+					vim.api.nvim_buf_set_lines(layout.editor_buf, 0, 0, false, { "" })
+					vim.api.nvim_win_set_cursor(layout.editor_win, { 1, 0 })
+				else
+					vim.api.nvim_buf_set_lines(layout.editor_buf, 1, -1, false, { "" })
+					vim.api.nvim_win_set_cursor(layout.editor_win, { 2, 0 })
+				end
+			end
+		end,
+	})
 	vim.api.nvim_create_autocmd({ "VimResized", "WinResized" }, {
 		group = layout.augroup,
 		callback = function()
