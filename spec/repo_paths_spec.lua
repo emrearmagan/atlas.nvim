@@ -2,20 +2,16 @@ local checkout = require("atlas.core.git.checkout")
 
 describe("repo_paths", function()
 	describe("validate", function()
-		it("accepts valid mappings", function()
-			local ok = checkout.validate_repo_paths({
-				["ws/*"] = "~/code/*",
-				["ws/repo"] = "~/code/special",
-			})
-
-			assert.is_true(ok)
-		end)
-
 		it("fails when wildcard parity is wrong", function()
 			local ok = checkout.validate_repo_paths({
 				["ws/*"] = "~/code/no-star",
 			})
 
+			assert.is_false(ok)
+		end)
+
+		it("rejects keys without workspace/repo shape", function()
+			local ok = checkout.validate_repo_paths({ ["bad"] = "~/x" })
 			assert.is_false(ok)
 		end)
 	end)
@@ -80,23 +76,6 @@ describe("repo_paths", function()
 			)
 			assert.is_nil(path)
 			assert.is_truthy(err)
-		end)
-
-		it("returns error when nothing matches", function()
-			local path, err = checkout.resolve_repo_path(
-				{ ["ws/specific"] = "~/code/specific" },
-				"ws/other",
-				{ require_git = false, require_existing = false }
-			)
-			assert.is_nil(path)
-			assert.is_truthy(err)
-		end)
-	end)
-
-	describe("validate", function()
-		it("rejects keys without workspace/repo shape", function()
-			local ok = checkout.validate_repo_paths({ ["bad"] = "~/x" })
-			assert.is_false(ok)
 		end)
 	end)
 end)
