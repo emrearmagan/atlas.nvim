@@ -230,19 +230,20 @@ register({
 	run = merge,
 })
 
-if service.api_type() ~= "server" then
-	register({
-		id = actions.decline.id,
-		label = actions.decline.label,
-		is_available = decline_available,
-		run = actions.decline.run,
-	})
+register({
+	id = actions.decline.id,
+	label = actions.decline.label,
+	is_available = decline_available,
+	run = actions.decline.run,
+})
 
-	register(actions.edit_title)
-	register(actions.edit_description)
+register(actions.edit_title)
+register(actions.edit_description)
+register(actions.edit_reviewers)
+
+if service.api_type() ~= "server" then
 	register(actions.ready_for_review)
 	register(actions.convert_to_draft)
-	register(actions.edit_reviewers)
 end
 
 register({

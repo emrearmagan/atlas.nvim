@@ -261,9 +261,6 @@ an app password (or API token); Server uses username + PAT (or password).
 Views are scoped to one or more `workspace/repo` pairs. On Server, use the
 project key as `workspace`. Bitbucket has no cross-workspace search like
 GitHub does.
-Server support currently omits comments/review threads and exposes build
-statuses without Cloud pipeline jobs, logs, or controls.
-
 >lua
   pulls = {
     providers = {

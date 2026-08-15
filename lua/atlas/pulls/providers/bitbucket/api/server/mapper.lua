@@ -66,6 +66,28 @@ local function map_author(author)
 	}
 end
 
+---@param reviewers table[]|nil
+---@return PullsReviewer[]
+function M.to_reviewers(reviewers)
+	local result = {}
+	for _, reviewer in ipairs(reviewers or {}) do
+		local user = as_table(reviewer.user) or {}
+		local username = tostring(user.name or user.slug or "")
+		local status = tostring(reviewer.status or ""):upper()
+		local decision = status == "APPROVED" and "approved"
+			or (status == "NEEDS_WORK" and "changes_requested" or "pending")
+		table.insert(result, {
+			id = tostring(user.id or ""),
+			provider_id = username ~= "" and username or nil,
+			name = tostring(user.displayName or username),
+			username = username,
+			nickname = username ~= "" and username or nil,
+			decision = decision,
+		})
+	end
+	return result
+end
+
 ---@param raw table  one entry from values[]
 ---@param workspace string
 ---@param repo string
@@ -78,6 +100,7 @@ local function to_pull_request(raw, workspace, repo)
 	local current_user = select(1, service.get_auth())
 	raw.links = as_table(raw.links) or {}
 	raw.links.approve = service.url(pr_base .. "/approve")
+	raw.links.decline = service.url(pr_base .. "/decline")
 	raw.links.merge = service.url(pr_base .. "/merge?version=" .. tostring(raw.version or 0))
 	if current_user and current_user ~= "" then
 		raw.links.request_changes = service.url(pr_base .. "/participants/" .. current_user)
@@ -89,6 +112,7 @@ local function to_pull_request(raw, workspace, repo)
 		description = tostring(raw.description or ""),
 		state = map_state(raw.state),
 		author = map_author(raw.author),
+		reviewers = M.to_reviewers(raw.reviewers),
 		source = map_ref(raw.fromRef),
 		destination = map_ref(raw.toRef),
 		comments_count = tonumber(properties.commentCount) or 0,

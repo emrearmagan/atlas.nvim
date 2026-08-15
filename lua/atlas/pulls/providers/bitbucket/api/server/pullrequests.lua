@@ -2,7 +2,6 @@ local M = {}
 
 local service = require("atlas.pulls.providers.bitbucket.api.service")
 local mapper = require("atlas.pulls.providers.bitbucket.api.server.mapper")
-local cache = require("atlas.core.cache")
 local logger = require("atlas.core.logger")
 local http = require("atlas.core.http")
 local state = require("atlas.pulls.providers.bitbucket.state")
@@ -33,7 +32,7 @@ local function pr_link(pr, key)
 end
 
 ---@param pr PullRequest
----@param action "merge"|"approve"|"request_changes"
+---@param action "merge"|"decline"|"approve"|"request_changes"
 ---@return boolean
 function M.has_action(pr, action)
 	return pr_link(pr, action) ~= ""
@@ -70,10 +69,10 @@ local function fetch_pullrequests_single(workspace, repo, opts, on_done)
 	local statuses_for_key = opts.statuses or { state.pr_state }
 	local key = cache_key(workspace, repo, statuses_for_key)
 	if not opts.force then
-		local cached = cache.get(key)
-		if cached and cached.value then
+		local cached, ok = service.get_cache(key)
+		if ok then
 			logger.loginfo("Bitbucket Server cache hit", { workspace = workspace, repo = repo })
-			on_done(cached.value, nil)
+			on_done(cached, nil)
 			return nil
 		end
 	end
@@ -124,7 +123,7 @@ local function fetch_pullrequests_single(workspace, repo, opts, on_done)
 		end
 
 		local normalized = mapper.to_pull_requests_list(result, workspace, repo)
-		cache.set(key, normalized, opts.cache_ttl)
+		service.set_cache(key, normalized, opts.cache_ttl)
 		logger.loginfo("Bitbucket Server fetch success", {
 			workspace = workspace,
 			repo = repo,
@@ -256,6 +255,42 @@ function M.fetch_pullrequest(pr, opts, on_done)
 end
 
 ---@param pr PullRequest
+---@param fields table
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { job_id: integer, cancel: fun() }|nil
+local function update_pullrequest(pr, fields, on_done)
+	fields.version = pr._raw.version
+	local endpoint = string.format("/projects/%s/repos/%s/pull-requests/%s", pr.workspace, pr.repo, tostring(pr.id))
+	return service.request("PUT", endpoint, nil, vim.json.encode(fields), function(result, err)
+		if err then
+			on_done(false, err)
+			return
+		end
+		if result.version ~= nil then
+			pr._raw.version = result.version
+		end
+		service.clear_cache()
+		on_done(true, nil)
+	end, { action = "Bitbucket Server update PR", pr_id = pr.id })
+end
+
+---@param pr PullRequest
+---@param title string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { job_id: integer, cancel: fun() }|nil
+function M.update_title(pr, title, on_done)
+	return update_pullrequest(pr, { title = title }, on_done)
+end
+
+---@param pr PullRequest
+---@param description string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { job_id: integer, cancel: fun() }|nil
+function M.update_description(pr, description, on_done)
+	return update_pullrequest(pr, { description = description }, on_done)
+end
+
+---@param pr PullRequest
 ---@param _opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(context: { authors: PullsAuthor[] }|nil, err: string|nil)
 ---@return nil
@@ -300,18 +335,6 @@ function M.fetch_review_context(pr, _opts, on_done)
 	on_done({ authors = authors }, nil)
 end
 
----@param status any  Server reviewer status: "APPROVED"|"UNAPPROVED"|"NEEDS_WORK"
----@return "approved"|"changes_requested"|"pending"
-local function reviewer_decision(status)
-	local s = tostring(status or ""):upper()
-	if s == "APPROVED" then
-		return "approved"
-	elseif s == "NEEDS_WORK" then
-		return "changes_requested"
-	end
-	return "pending"
-end
-
 ---@param pr PullRequest
 ---@param _opts any
 ---@param on_done fun(reviewers: PullsReviewer[]|nil, err: string|nil)
@@ -329,18 +352,8 @@ function M.fetch_reviewers(pr, _opts, on_done) ---@diagnostic disable-line: unus
 			return
 		end
 
-		---@type PullsReviewer[]
-		local reviewers = {}
-		for _, item in ipairs((type(result) == "table" and result.reviewers) or {}) do
-			local p = type(item) == "table" and item or {}
-			local user = type(p.user) == "table" and p.user or {}
-			table.insert(reviewers, {
-				name = tostring(user.displayName or user.name or ""),
-				nickname = tostring(user.name or ""),
-				decision = reviewer_decision(p.status),
-			})
-		end
-
+		local reviewers = mapper.to_reviewers((type(result) == "table" and result.reviewers) or {})
+		pr.reviewers = reviewers
 		on_done(reviewers, nil)
 	end, {
 		action = "Bitbucket Server PR reviewers",
@@ -633,6 +646,43 @@ function M.merge(pr, _opts, on_done) ---@diagnostic disable-line: unused-local
 	return service.request("POST", merge_url, nil, nil, on_done, { action = "Bitbucket Server merge" })
 end
 
+---@param pr PullRequest
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { job_id: integer, cancel: fun() }|nil
+function M.decline(pr, on_done)
+	local endpoint = string.format(
+		"/projects/%s/repos/%s/pull-requests/%s/decline?version=%s",
+		pr.workspace,
+		pr.repo,
+		tostring(pr.id),
+		tostring(pr._raw.version)
+	)
+	return service.request("POST", endpoint, nil, nil, function(result, err)
+		if err then
+			on_done(false, err)
+			return
+		end
+		if result.version ~= nil then
+			pr._raw.version = result.version
+		end
+		service.clear_cache()
+		on_done(true, nil)
+	end, { action = "Bitbucket Server decline PR", pr_id = pr.id })
+end
+
+---@param pr PullRequest
+---@param selected PullsCreatePRReviewer[]
+---@param _original PullsCreatePRReviewer[]
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { job_id: integer, cancel: fun() }|nil
+function M.update_reviewers(pr, selected, _original, on_done)
+	local reviewers = {}
+	for _, reviewer in ipairs(selected) do
+		table.insert(reviewers, { user = { name = reviewer.provider_id } })
+	end
+	return update_pullrequest(pr, { reviewers = reviewers }, on_done)
+end
+
 ---@param branch any
 ---@return string  "refs/heads/<name>" form, ready for Server APIs
 local function refs_heads(branch)
@@ -724,6 +774,13 @@ function M.fetch_default_reviewers(opts, on_done)
 			return
 		end
 
+		local current = {}
+		for _, reviewer in ipairs((opts.pr and opts.pr.reviewers) or {}) do
+			if reviewer.provider_id then
+				current[reviewer.provider_id] = reviewer
+			end
+		end
+
 		---@type table<string, true>
 		local seen = {}
 		---@type PullsCreatePRReviewer[]
@@ -737,10 +794,19 @@ function M.fetch_default_reviewers(opts, on_done)
 					table.insert(items, {
 						label = "@" .. (user.slug or name) .. " (" .. display .. ")",
 						provider_id = name,
-						selected = true,
+						selected = opts.pr == nil or current[name] ~= nil,
 						default = true,
 					})
 				end
+			end
+		end
+		for name, reviewer in pairs(current) do
+			if not seen[name] then
+				table.insert(items, {
+					label = "@" .. tostring(reviewer.nickname or reviewer.username or name),
+					provider_id = name,
+					selected = true,
+				})
 			end
 		end
 		on_done(items, nil)

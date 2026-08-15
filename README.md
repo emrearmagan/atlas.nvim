@@ -245,8 +245,6 @@ pulls = {
 
 Atlas supports both Bitbucket Cloud and Bitbucket Server / Data Center. Cloud uses an app password (or API token); Server uses a username plus PAT (or password).
 In view entries, `workspace` is the Cloud workspace slug or the Server project key.
-Server support currently omits comments/review threads and exposes build statuses without Cloud pipeline jobs, logs, or controls.
-
 <details>
 <summary><strong>Bitbucket</strong></summary>
 

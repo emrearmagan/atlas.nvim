@@ -1,37 +1,45 @@
+local cache_cleared
+
 local function fresh_module()
 	package.loaded["atlas.pulls.providers.bitbucket.api.pullrequests"] = nil
 	package.loaded["atlas.pulls.providers.bitbucket.api.cloud.pullrequests"] = nil
+	package.loaded["atlas.pulls.providers.bitbucket.api.server.pullrequests"] = nil
 	package.loaded["atlas.pulls.providers.bitbucket.api.router"] = nil
 	return require("atlas.pulls.providers.bitbucket.api.pullrequests")
 end
 
-local function stub_service(request)
+local function stub_service(request, api_type)
 	package.preload["atlas.pulls.providers.bitbucket.api.service"] = function()
 		return {
 			api_type = function()
-				return "cloud"
+				return api_type or "cloud"
 			end,
 			request = request,
-			clear_cache = function() end,
+			clear_cache = function()
+				cache_cleared = cache_cleared + 1
+			end,
 		}
 	end
 end
 
 describe("bitbucket pull request updates", function()
 	local calls
-	local cache_cleared
+	local json_encode
 
 	before_each(function()
 		calls = {}
 		cache_cleared = 0
+		json_encode = vim.json.encode
 		package.loaded["atlas.pulls.providers.bitbucket.api.service"] = nil
 	end)
 
 	after_each(function()
+		vim.json.encode = json_encode
 		package.preload["atlas.pulls.providers.bitbucket.api.service"] = nil
 		package.loaded["atlas.pulls.providers.bitbucket.api.service"] = nil
 		package.loaded["atlas.pulls.providers.bitbucket.api.router"] = nil
 		package.loaded["atlas.pulls.providers.bitbucket.api.cloud.pullrequests"] = nil
+		package.loaded["atlas.pulls.providers.bitbucket.api.server.pullrequests"] = nil
 		package.loaded["atlas.pulls.providers.bitbucket.api.pullrequests"] = nil
 	end)
 
@@ -103,5 +111,52 @@ describe("bitbucket pull request updates", function()
 
 		assert.is_false(ok)
 		assert.equal("boom", err)
+	end)
+
+	it("updates Bitbucket Server pull requests", function()
+		local bodies = {}
+		vim.json.encode = function(value)
+			table.insert(bodies, value)
+			return "encoded"
+		end
+		stub_service(function(method, url, headers, body, callback)
+			table.insert(calls, { method = method, url = url, headers = headers, body = body })
+			callback({ version = 7 + #calls }, nil)
+		end, "server")
+		local api = fresh_module()
+		local pr = {
+			id = 5,
+			workspace = "ATLAS",
+			repo = "atlas.nvim",
+			_raw = { version = 7 },
+		}
+
+		api.update_title(pr, "New title", function(ok, err)
+			assert.is_true(ok)
+			assert.is_nil(err)
+		end)
+		api.update_description(pr, "New body", function(ok, err)
+			assert.is_true(ok)
+			assert.is_nil(err)
+		end)
+		api.update_reviewers(pr, { { provider_id = "alice" } }, {}, function(ok, err)
+			assert.is_true(ok)
+			assert.is_nil(err)
+		end)
+		api.decline(pr, function(ok, err)
+			assert.is_true(ok)
+			assert.is_nil(err)
+		end)
+		assert.equal(4, #calls)
+		assert.equal("PUT", calls[1].method)
+		assert.equal("/projects/ATLAS/repos/atlas.nvim/pull-requests/5", calls[1].url)
+		assert.same({ title = "New title", version = 7 }, bodies[1])
+		assert.same({ description = "New body", version = 8 }, bodies[2])
+		assert.same({ reviewers = { { user = { name = "alice" } } }, version = 9 }, bodies[3])
+		assert.equal("POST", calls[4].method)
+		assert.equal("/projects/ATLAS/repos/atlas.nvim/pull-requests/5/decline?version=10", calls[4].url)
+		assert.is_nil(calls[4].body)
+		assert.equal(11, pr._raw.version)
+		assert.equal(4, cache_cleared)
 	end)
 end)

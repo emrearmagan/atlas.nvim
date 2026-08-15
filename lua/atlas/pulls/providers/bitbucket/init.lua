@@ -303,12 +303,12 @@ local core_capability = {
 	fetch_diff = changes_api.fetch_diff,
 	views = views,
 }
+core_capability.update_reviewers = pullrequests_api.update_reviewers
+core_capability.update_title = pullrequests_api.update_title
+core_capability.update_description = pullrequests_api.update_description
+core_capability.decline = pullrequests_api.decline
 if not server then
-	core_capability.update_reviewers = pullrequests_api.update_reviewers
-	core_capability.update_title = pullrequests_api.update_title
-	core_capability.update_description = pullrequests_api.update_description
 	core_capability.set_draft = pullrequests_api.set_draft
-	core_capability.decline = pullrequests_api.decline
 end
 
 ---@type PullsCommentsCapability|nil
