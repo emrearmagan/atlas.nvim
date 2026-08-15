@@ -2,6 +2,7 @@ local M = {}
 
 local explorer = require("atlas.pulls.diff.atlas.explorer")
 local help = require("atlas.ui.popups.help")
+local picker = require("atlas.picker")
 local resolver = require("atlas.core.keymaps")
 local review_keymaps = require("atlas.pulls.diff.keymaps")
 local review_panel = require("atlas.pulls.diff.ui.review_panel")
@@ -123,6 +124,36 @@ function M.register(session, actions)
 			index = 6,
 			callback = run(function()
 				actions.navigate_unreviewed_file(1)
+			end),
+			opts = { silent = true, nowait = true },
+		})
+	)
+	add(
+		navigation,
+		item("pulls.review.explorer.find_file", {
+			desc = "Find changed file",
+			index = 7,
+			callback = run(function()
+				local files = {}
+				for index, file in ipairs(state.files) do
+					files[index] = { index = index, path = file.path }
+				end
+				picker.find({
+					title = "Changed files",
+					items = files,
+					initial_index = state.pending_index or state.selected_index,
+					key = function(file)
+						return file.path
+					end,
+					format_item = function(file)
+						return file.path
+					end,
+					on_select = function(file)
+						if file then
+							actions.select_file(file.index, true)
+						end
+					end,
+				})
 			end),
 			opts = { silent = true, nowait = true },
 		})

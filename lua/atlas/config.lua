@@ -89,6 +89,7 @@
 
 ---@class AtlasConfig
 ---@field global_statusline boolean|nil Set one statusline across all windows (default: true)
+---@field picker AtlasPickerName|nil
 ---@field pulls AtlasPullsConfig|nil
 ---@field issues AtlasIssuesConfig|nil
 ---@field keymaps AtlasKeymapsConfig|nil  -- see core/keymaps.lua for type
@@ -98,6 +99,7 @@ local M = {}
 ---@type AtlasConfig
 M.options = {
 	global_statusline = true,
+	picker = "auto",
 	pulls = {
 		delete_notes = false,
 		default_merge_method = "merge",
@@ -160,6 +162,7 @@ M.options = {
 				request_changes = "gr",
 				submit_review = "gs",
 				explorer = {
+					find_file = "<leader>ff",
 					next_file = { "]f", "<Tab>" },
 					previous_file = { "[f", "<S-Tab>" },
 					next_unreviewed_file = "]u",

@@ -4,9 +4,9 @@ local actions = require("atlas.pulls.actions")
 local action_utils = require("atlas.pulls.actions.utils")
 local cli = require("atlas.providers.github.client").pulls
 local notes = require("atlas.pulls.notes")
+local picker = require("atlas.picker")
 local pullrequests = require("atlas.pulls.providers.github.api.pullrequests")
 local statusline = require("atlas.ui.statusline")
-local multi_select = require("atlas.ui.popups.multi_select")
 local github_mapping = require("atlas.providers.github.mapping")
 
 ---@param ctx AtlasPullActionContext
@@ -197,21 +197,22 @@ local function edit_assignees(ctx, done)
 				table.insert(original, { account_id = login, display_name = assignee.name, email = "" })
 			end
 		end
+		notify(ctx, "success", "Assignees loaded", 1200)
 
-		multi_select.open({
+		picker.multi_select({
 			items = items,
 			selected = vim.deepcopy(original),
 			key = function(item)
 				return item.account_id
 			end,
-			format = function(item)
+			format_item = function(item)
 				return string.format(
 					"@%s%s",
 					item.account_id,
 					item.display_name and item.display_name ~= item.account_id and (" — " .. item.display_name) or ""
 				)
 			end,
-			prompt = string.format("Assignees for PR #%s:", tostring(pr.id or "")),
+			title = string.format("Assignees for PR #%s", tostring(pr.id or "")),
 			on_done = function(selected)
 				local selected_set = {}
 				for _, item in ipairs(selected) do
@@ -283,79 +284,89 @@ local function edit_labels(ctx, done)
 	local slug = repo_slug(ctx)
 
 	notify(ctx, "loading", "Loading labels...")
-	pullrequests.list_labels(slug, function(labels, err)
-		if err or labels == nil then
-			notify(ctx, "error", err or "Failed to load labels")
-			done(nil, err or "Failed to load labels")
+	pullrequests.get_pr(pr.workspace, pr.repo, pr.id, function(current, current_err)
+		if current_err or current == nil then
+			notify(ctx, "error", current_err or "Failed to load PR labels")
+			done(nil, current_err or "Failed to load PR labels")
 			return
 		end
 
-		local items = {}
-		for _, label in ipairs(labels) do
-			table.insert(items, { name = label.name, color = label.color })
-		end
-
-		if #items == 0 then
-			done(nil, "No labels available")
-			return
-		end
-
-		local original = {}
-		local original_set = {}
-		for _, label in ipairs(pr.labels or {}) do
-			local name = tostring(label.name or "")
-			if name ~= "" then
-				table.insert(original, { name = name, color = label.color })
-				original_set[name] = true
+		pullrequests.list_labels(slug, function(labels, err)
+			if err or labels == nil then
+				notify(ctx, "error", err or "Failed to load labels")
+				done(nil, err or "Failed to load labels")
+				return
 			end
-		end
 
-		multi_select.open({
-			items = items,
-			selected = vim.deepcopy(original),
-			key = function(item)
-				return item.name
-			end,
-			format = function(item)
-				return tostring(item.name or "")
-			end,
-			prompt = string.format("Labels for PR #%s", tostring(pr.id or "")),
-			on_done = function(selected)
-				local selected_set = {}
-				for _, item in ipairs(selected) do
-					selected_set[item.name] = true
+			local items = {}
+			for _, label in ipairs(labels) do
+				table.insert(items, { name = label.name, color = label.color })
+			end
+
+			if #items == 0 then
+				notify(ctx, "warn", "No labels available")
+				done({ changed_pr = false, message = "No labels available" }, nil)
+				return
+			end
+
+			local original = {}
+			local original_set = {}
+			for _, label in ipairs(current.labels or {}) do
+				local name = tostring(label.name or "")
+				if name ~= "" then
+					table.insert(original, { name = name, color = label.color })
+					original_set[name] = true
 				end
+			end
+			notify(ctx, "success", "Labels loaded", 1200)
 
-				local adds, removes = {}, {}
-				for name in pairs(selected_set) do
-					if not original_set[name] then
-						table.insert(adds, name)
+			picker.multi_select({
+				items = items,
+				selected = vim.deepcopy(original),
+				key = function(item)
+					return item.name
+				end,
+				format_item = function(item)
+					return tostring(item.name or "")
+				end,
+				title = string.format("Labels for PR #%s", tostring(pr.id or "")),
+				on_done = function(selected)
+					local selected_set = {}
+					for _, item in ipairs(selected) do
+						selected_set[item.name] = true
 					end
-				end
-				for name in pairs(original_set) do
-					if not selected_set[name] then
-						table.insert(removes, name)
+
+					local adds, removes = {}, {}
+					for name in pairs(selected_set) do
+						if not original_set[name] then
+							table.insert(adds, name)
+						end
 					end
-				end
+					for name in pairs(original_set) do
+						if not selected_set[name] then
+							table.insert(removes, name)
+						end
+					end
 
-				if #adds == 0 and #removes == 0 then
-					done({ changed_pr = false, message = "No changes" }, nil)
-					return
-				end
-
-				notify(ctx, "loading", string.format("Updating labels on #%s...", tostring(pr.id or "")))
-				pullrequests.update_labels(slug, pr.id, { add = adds, remove = removes }, function(ok, set_err)
-					if not ok then
-						notify(ctx, "error", set_err or "Failed")
-						done(nil, set_err or "Failed")
+					if #adds == 0 and #removes == 0 then
+						done({ changed_pr = false, message = "No changes" }, nil)
 						return
 					end
-					local message = string.format("+%d / -%d label(s)", #adds, #removes)
-					notify(ctx, "success", message, 1200)
-					done({ changed_pr = true, message = message }, nil)
-				end)
-			end,
-		})
+
+					notify(ctx, "loading", string.format("Updating labels on #%s...", tostring(pr.id or "")))
+					pullrequests.update_labels(slug, pr.id, { add = adds, remove = removes }, function(ok, set_err)
+						if not ok then
+							notify(ctx, "error", set_err or "Failed")
+							done(nil, set_err or "Failed")
+							return
+						end
+						local message = string.format("+%d / -%d label(s)", #adds, #removes)
+						notify(ctx, "success", message, 1200)
+						done({ changed_pr = true, message = message }, nil)
+					end)
+				end,
+			})
+		end)
 	end)
 end
 ---@param ctx AtlasPullActionContext
@@ -387,61 +398,65 @@ end
 ---@param ctx AtlasPullActionContext
 ---@param done fun(result: PullsActionResult|nil, err: string|nil)
 local function search(ctx, done)
-	vim.ui.input({ prompt = "Search repositories: " }, function(input)
-		if input == nil or vim.trim(input) == "" then
-			done({ changed_pr = false, message = "Search cancelled" }, nil)
-			return
-		end
-
-		local query = vim.trim(input)
-		notify(ctx, "loading", "Searching repositories...")
-		cli.gh({ "search", "repos", query, "--json", "fullName", "--limit", "20" }, function(result, err)
-			if err then
-				notify(ctx, "error", string.format("Search failed: %s", tostring(err)))
-				done(nil, tostring(err))
+	picker.search({
+		title = "Search repositories",
+		fetch_on_open = false,
+		format_item = function(item)
+			return item.label
+		end,
+		fetch = function(query, fetch_done)
+			query = vim.trim(query)
+			if query == "" then
+				fetch_done({}, nil)
 				return
 			end
 
-			local list = {}
-			for _, item in ipairs(type(result) == "table" and result or {}) do
-				local full_name = tostring(item.fullName or "")
-				if full_name ~= "" then
-					table.insert(list, full_name)
-				end
-			end
-
-			if #list == 0 then
-				notify(ctx, "warn", "No repositories found")
-				done({ changed_pr = false, message = "No repositories found" }, nil)
-				return
-			end
-
-			notify(ctx, "info", string.format("Found %d repositories", #list), 1200)
-
-			vim.ui.select(list, {
-				prompt = "Select repository",
-				kind = "atlas_github_repo_select",
-			}, function(repo)
-				if repo == nil then
-					done({ changed_pr = false, message = "Selection cancelled" }, nil)
+			return cli.gh({ "search", "repos", query, "--json", "fullName", "--limit", "20" }, function(result, err)
+				if err then
+					fetch_done(nil, tostring(err))
 					return
 				end
 
-				local search_query = string.format("repo:%s is:pr", repo)
-				---@type AtlasGitHubViewConfig
-				local search_view = {
-					name = "Search",
-					key = nil,
-					search = search_query,
-				}
-
-				local controller = require("atlas.pulls.ui.main.controller")
-				notify(ctx, "success", string.format("Search view -> %s", repo))
-				controller.switch_view(search_view)
-				done({ changed_pr = false, message = "Search view switched" }, nil)
+				local list = {}
+				for _, item in ipairs(type(result) == "table" and result or {}) do
+					local full_name = tostring(item.fullName or "")
+					if full_name ~= "" then
+						table.insert(list, { id = full_name, label = full_name })
+					end
+				end
+				fetch_done(list, nil)
 			end)
-		end)
-	end)
+		end,
+		on_select = function(item)
+			local repo = item.id
+			---@type AtlasGitHubViewConfig
+			local search_view = {
+				name = "Search",
+				key = nil,
+				search = string.format("repo:%s is:pr", repo),
+			}
+
+			notify(ctx, "success", string.format("Search view -> %s", repo))
+			require("atlas").open("pulls", "github", { initial_view = search_view })
+			done({ changed_pr = false, message = "Search view switched" }, nil)
+		end,
+		on_cancel = function()
+			done({ changed_pr = false, message = "Search cancelled" }, nil)
+		end,
+	})
+end
+
+---@param _ AtlasPullActionContext
+---@param done fun(result: PullsActionResult|nil, err: string|nil)
+local function search_pull_requests(_, done)
+	local state = require("atlas.pulls.state")
+	local view = state.active_view or state.current_view or {}
+	local query = vim.trim(tostring(view.search or ""))
+	if query == "" or not query:find("is:pr", 1, true) then
+		query = "is:pr " .. query
+	end
+	require("atlas.pulls.providers.github.completion.search").open(vim.trim(query) .. " ")
+	done(nil, nil)
 end
 
 ---@param ctx AtlasPullActionContext
@@ -548,6 +563,12 @@ register({
 	id = "search",
 	label = "Search repositories",
 	run = search,
+})
+
+register({
+	id = "search_pull_requests",
+	label = "Search pull requests",
+	run = search_pull_requests,
 })
 
 register({

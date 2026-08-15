@@ -87,6 +87,8 @@ up and what's missing.
   require("atlas").setup({
     -- Use one statusline across all windows.
     global_statusline = true,
+    -- "auto", "default", "snacks", or "fzf-lua".
+    picker = "auto",
 
     pulls = {
       -- See |atlas-pulls-configuration|.
@@ -738,6 +740,7 @@ Defaults live under `keymaps` in `setup()`. Each entry accepts:
           request_changes       = "gr",
           submit_review         = "gs",
           explorer = {
+            find_file             = "<leader>ff",
             next_file             = { "]f", "<Tab>" },
             previous_file         = { "[f", "<S-Tab>" },
             next_unreviewed_file      = "]u",

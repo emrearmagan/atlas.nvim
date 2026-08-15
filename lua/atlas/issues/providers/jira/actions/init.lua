@@ -8,8 +8,7 @@ local statusline = require("atlas.ui.statusline")
 ---| "reporter"
 ---| "delete_issue"
 ---| "edit_issue"
----| "search_query_issue"
----| "manage_templates"
+---| "search_jql"
 
 M.items = registry.items
 

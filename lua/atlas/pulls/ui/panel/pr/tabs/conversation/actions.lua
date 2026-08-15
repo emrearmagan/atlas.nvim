@@ -1,5 +1,6 @@
 local M = {}
 
+local picker = require("atlas.picker")
 local statusline = require("atlas.ui.statusline")
 local review = require("atlas.pulls.actions.review")
 local state = require("atlas.pulls.ui.panel.pr.tabs.conversation.state")
@@ -147,36 +148,38 @@ function M.react(pr, entry, refresh)
 			label = string.format("%s  %s", option.emoji or option.key, option.label or option.key),
 		})
 	end
-	vim.ui.select(choices, {
-		prompt = "Add reaction",
+	picker.select({
+		title = "Add reaction",
+		items = choices,
 		format_item = function(item)
 			return item.label
 		end,
-	}, function(selected)
-		if selected == nil then
-			return
-		end
-		statusline.notify("loading", "Adding reaction...")
-		comments.add_reaction(pr, comment, selected.key, function(ok, err)
-			if err then
-				statusline.notify("error", "Reaction failed: " .. tostring(err))
+		on_select = function(selected)
+			if selected == nil then
 				return
 			end
-			if ok then
-				with_comments(function(list)
-					for _, current in ipairs(list) do
-						if current.id == comment.id then
-							current.reactions = current.reactions or {}
-							current.reactions[selected.key] = (tonumber(current.reactions[selected.key]) or 0) + 1
-							break
+			statusline.notify("loading", "Adding reaction...")
+			comments.add_reaction(pr, comment, selected.key, function(ok, err)
+				if err then
+					statusline.notify("error", "Reaction failed: " .. tostring(err))
+					return
+				end
+				if ok then
+					with_comments(function(list)
+						for _, current in ipairs(list) do
+							if current.id == comment.id then
+								current.reactions = current.reactions or {}
+								current.reactions[selected.key] = (tonumber(current.reactions[selected.key]) or 0) + 1
+								break
+							end
 						end
-					end
-				end)
-			end
-			statusline.notify("success", "Reaction added", 1200)
-			refresh()
-		end)
-	end)
+					end)
+				end
+				statusline.notify("success", "Reaction added", 1200)
+				refresh()
+			end)
+		end,
+	})
 end
 
 return M

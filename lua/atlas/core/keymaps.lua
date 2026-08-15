@@ -28,6 +28,7 @@ local M = {}
 ---@field search? AtlasKeymapValue
 
 ---@class AtlasPullsReviewExplorerKeymaps
+---@field find_file? AtlasKeymapValue
 ---@field next_file? AtlasKeymapValue
 ---@field previous_file? AtlasKeymapValue
 ---@field next_unreviewed_file? AtlasKeymapValue
@@ -130,6 +131,7 @@ local M = {}
 ---| "pulls.review.submit_review"
 ---| "pulls.review.show_item"
 ---| "pulls.review.focus_item"
+---| "pulls.review.explorer.find_file"
 ---| "pulls.review.explorer.next_file"
 ---| "pulls.review.explorer.previous_file"
 ---| "pulls.review.explorer.next_unreviewed_file"
@@ -360,6 +362,7 @@ function M.validate()
 			"pulls.review.submit_review",
 			"pulls.review.show_item",
 			"pulls.review.focus_item",
+			"pulls.review.explorer.find_file",
 			"pulls.review.explorer.next_file",
 			"pulls.review.explorer.previous_file",
 			"pulls.review.explorer.next_unreviewed_file",

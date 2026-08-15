@@ -1,6 +1,7 @@
 local M = {}
 
 local md_editor = require("atlas.ui.popups.editor")
+local picker = require("atlas.picker")
 local statusline = require("atlas.ui.statusline")
 local renderer = require("atlas.issues.ui.panel.issue.tabs.conversation.renderer")
 local state = require("atlas.issues.ui.panel.issue.tabs.conversation.state")
@@ -238,36 +239,38 @@ function M.react(issue, entry, refresh)
 			label = string.format("%s  %s", opt.emoji or opt.key, opt.label or opt.key),
 		})
 	end
-	vim.ui.select(choices, {
-		prompt = "Add reaction",
+	picker.select({
+		title = "Add reaction",
+		items = choices,
 		format_item = function(item)
 			return item.label
 		end,
-	}, function(selected)
-		if selected == nil then
-			return
-		end
-		statusline.notify("loading", "Adding reaction...")
-		comments.add_reaction(issue, comment, selected.key, function(ok, err)
-			if err then
-				statusline.notify("error", "Reaction failed: " .. tostring(err))
+		on_select = function(selected)
+			if selected == nil then
 				return
 			end
-			if ok then
-				with_comments(function(list)
-					for _, c in ipairs(list) do
-						if tostring(c.id) == tostring(comment.id) then
-							c.reactions = c.reactions or {}
-							c.reactions[selected.key] = (tonumber(c.reactions[selected.key]) or 0) + 1
-							break
+			statusline.notify("loading", "Adding reaction...")
+			comments.add_reaction(issue, comment, selected.key, function(ok, err)
+				if err then
+					statusline.notify("error", "Reaction failed: " .. tostring(err))
+					return
+				end
+				if ok then
+					with_comments(function(list)
+						for _, c in ipairs(list) do
+							if tostring(c.id) == tostring(comment.id) then
+								c.reactions = c.reactions or {}
+								c.reactions[selected.key] = (tonumber(c.reactions[selected.key]) or 0) + 1
+								break
+							end
 						end
-					end
-				end)
-			end
-			statusline.notify("success", "Reaction added", 1200)
-			refresh()
-		end)
-	end)
+					end)
+				end
+				statusline.notify("success", "Reaction added", 1200)
+				refresh()
+			end)
+		end,
+	})
 end
 
 return M

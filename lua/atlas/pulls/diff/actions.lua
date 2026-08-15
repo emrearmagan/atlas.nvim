@@ -1,5 +1,7 @@
 local M = {}
 
+local picker = require("atlas.picker")
+
 local pull_actions = require("atlas.pulls.actions")
 local review_api = require("atlas.pulls.diff.review")
 local notes = require("atlas.pulls.notes")
@@ -132,18 +134,20 @@ function M.open(session)
 		return
 	end
 
-	vim.ui.select(items, {
-		prompt = "Review action",
+	picker.select({
+		title = "Review action",
+		items = items,
 		kind = "atlas_diff_actions",
 		format_item = function(action)
 			return action.label
 		end,
-	}, function(action)
-		if not action then
-			return
-		end
-		run(session, action)
-	end)
+		on_select = function(action)
+			if not action then
+				return
+			end
+			run(session, action)
+		end,
+	})
 end
 
 return M

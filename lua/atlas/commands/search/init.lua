@@ -1,6 +1,7 @@
 local M = {}
 
 local notify = require("atlas.core.notify")
+local picker = require("atlas.picker")
 local providers = require("atlas.providers")
 
 local domain_labels = {
@@ -75,16 +76,18 @@ local function choose(entries, prompt)
 		return
 	end
 
-	vim.ui.select(entries, {
-		prompt = prompt,
+	picker.select({
+		title = prompt,
+		items = entries,
 		format_item = function(entry)
 			return entry.label
 		end,
-	}, function(entry)
-		if entry then
-			entry.open()
-		end
-	end)
+		on_select = function(entry)
+			if entry then
+				entry.open()
+			end
+		end,
+	})
 end
 
 ---@param provider_id AtlasProviderId|nil

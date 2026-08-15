@@ -2,9 +2,8 @@ local M = {}
 
 local actions = require("atlas.issues.actions")
 local icons = require("atlas.ui.shared.icons")
+local picker = require("atlas.picker")
 local statusline = require("atlas.ui.statusline")
-local async_picker = require("atlas.ui.components.async_picker")
-local multi_select = require("atlas.ui.popups.multi_select")
 local issues_api = require("atlas.issues.providers.gitlab.api.issues")
 local users_api = require("atlas.issues.providers.gitlab.api.users")
 local labels_api = require("atlas.issues.providers.gitlab.api.labels")
@@ -162,13 +161,13 @@ local function assign(ctx, done)
 			end
 		end
 
-		multi_select.open({
+		picker.multi_select({
 			items = members,
 			selected = vim.deepcopy(original),
 			key = function(item)
 				return tostring(item.id or item.account_id or "")
 			end,
-			format = function(item)
+			format_item = function(item)
 				return string.format(
 					"%s %s (@%s)",
 					icons.general("user"),
@@ -176,7 +175,7 @@ local function assign(ctx, done)
 					item.account_id or item.username
 				)
 			end,
-			prompt = string.format("Assignees for %s", key),
+			title = string.format("Assignees for %s", key),
 			on_done = function(selected)
 				local final_ids = {}
 				local final_set = {}
@@ -265,16 +264,16 @@ local function labels(ctx, done)
 			end
 		end
 
-		multi_select.open({
+		picker.multi_select({
 			items = all_labels,
 			selected = vim.deepcopy(original),
 			key = function(item)
 				return tostring(item.name or "")
 			end,
-			format = function(item)
+			format_item = function(item)
 				return tostring(item.name or "")
 			end,
-			prompt = string.format("Labels for %s", key),
+			title = string.format("Labels for %s", key),
 			on_done = function(selected)
 				local selected_set = {}
 				for _, it in ipairs(selected) do
@@ -316,26 +315,33 @@ end
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function search(_, done)
 	local prev_items = nil
-	async_picker.open({
+	picker.search({
 		title = "Search GitLab Issues",
-		prompt = "Search issues",
-		debounce_ms = 250,
-		identifier = "gitlab_issue_picker_search",
-		cache_ttl_ms = 30000,
 		fetch_on_open = false,
 		format_item = function(item)
 			return string.format("%s %s", icons.fallback(), tostring(item.label or ""))
 		end,
-		fetch = function(fetch_ctx, fetch_done)
-			local q = vim.trim(fetch_ctx.query)
+		preview_item = function(item, done)
+			local issue = item.value
+			return issues_api.get_issue(issue.key, {}, function(detail, err)
+				if err then
+					done({ title = issue.key, lines = { err } })
+					return
+				end
+				local description = vim.trim(tostring(detail and detail._raw and detail._raw.description or ""))
+				done({
+					title = issue.key,
+					lines = vim.split(description ~= "" and description or "No description", "\n", { plain = true }),
+				})
+			end)
+		end,
+		fetch = function(query, fetch_done)
+			local q = vim.trim(query)
 			if q == "" then
 				fetch_done(prev_items or {}, nil)
 				return
 			end
-			issues_api.search_issues_picker(q, {}, function(items, err)
-				if fetch_ctx.signal.cancelled then
-					return
-				end
+			return issues_api.search_issues_picker(q, {}, function(items, err)
 				if err or items == nil then
 					fetch_done(nil, err or "Search failed")
 					return
@@ -345,7 +351,6 @@ local function search(_, done)
 					table.insert(picker_items, {
 						id = it.key,
 						label = string.format("%s - %s", it.key, it.summary),
-						secondary = it.key,
 						value = it,
 					})
 				end
@@ -481,6 +486,7 @@ register({ id = "assign", label = "Edit Assignees", is_available = assign_availa
 register({ id = "labels", label = "Edit Labels", is_available = labels_available, run = labels })
 register({ id = "search", label = "Search Issues", run = search })
 register({ id = "create_issue", label = "Create Issue", run = create_issue })
+register(actions.manage_templates)
 register(actions.browse_issue)
 register(actions.copy_issue_key)
 register(actions.copy_issue_url)

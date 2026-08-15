@@ -4,6 +4,7 @@ local actions = require("atlas.pulls.diff.actions")
 local comments = require("atlas.pulls.diff.comments")
 local help = require("atlas.ui.popups.help")
 local notes = require("atlas.pulls.diff.notes")
+local picker = require("atlas.picker")
 local pull_actions = require("atlas.pulls.actions")
 local resolver = require("atlas.core.keymaps")
 local review = require("atlas.pulls.diff.review")
@@ -43,13 +44,17 @@ local function with_item(session, buf, on_comment, on_note)
 	local has_comment = comments.has_at_cursor(session, buf)
 	local has_note = notes.has_at_cursor(session, buf)
 	if has_comment and has_note then
-		vim.ui.select({ "Comment thread", "Local notes" }, { prompt = "Select review item" }, function(choice)
-			if choice == "Comment thread" then
-				on_comment()
-			elseif choice == "Local notes" then
-				on_note()
-			end
-		end)
+		picker.select({
+			title = "Select review item",
+			items = { "Comment thread", "Local notes" },
+			on_select = function(choice)
+				if choice == "Comment thread" then
+					on_comment()
+				elseif choice == "Local notes" then
+					on_note()
+				end
+			end,
+		})
 	elseif has_comment then
 		on_comment()
 	elseif has_note then

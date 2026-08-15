@@ -1,6 +1,7 @@
 local M = {}
 
 local notify = require("atlas.core.notify")
+local picker = require("atlas.picker")
 local providers = require("atlas.providers")
 
 ---@class AtlasCreateIssueChoice
@@ -47,12 +48,16 @@ function M.start()
 		table.insert(labels, c.label)
 	end
 
-	vim.ui.select(labels, { prompt = "Create issue with:" }, function(_, idx)
-		if idx == nil then
-			return
-		end
-		create(choices[idx].provider)
-	end)
+	picker.select({
+		title = "Create issue with:",
+		items = labels,
+		on_select = function(_, index)
+			if index == nil then
+				return
+			end
+			create(choices[index].provider)
+		end,
+	})
 end
 
 return M

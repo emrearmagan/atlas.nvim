@@ -1,5 +1,7 @@
 local M = {}
 
+local picker = require("atlas.picker")
+local templates = require("atlas.issues.templates")
 local utils = require("atlas.issues.actions.utils")
 
 ---@alias AtlasIssueActionId
@@ -10,6 +12,7 @@ local utils = require("atlas.issues.actions.utils")
 ---| "browse_issue"
 ---| "copy_issue_key"
 ---| "copy_issue_url"
+---| "manage_templates"
 ---| "toggle_subscription"
 
 ---@class AtlasIssueActionContext
@@ -66,29 +69,40 @@ function M.open(context, on_done)
 	end
 
 	local target = context.issue and string.format(" for %s", tostring(context.issue.key)) or ""
-	vim.ui.select(items, {
-		prompt = string.format("Choose %s action%s", context.provider.name, target),
+	picker.select({
+		title = string.format("Choose %s action%s", context.provider.name, target),
+		items = items,
 		kind = "atlas_issue_actions",
 		format_item = function(action)
 			return action.label
 		end,
-	}, function(action)
-		if not action then
-			if on_done then
-				on_done(nil, nil)
+		on_select = function(action)
+			if not action then
+				if on_done then
+					on_done(nil, nil)
+				end
+				return
 			end
-			return
-		end
-		if action.custom then
-			action.run(context, on_done or function() end)
-			return
-		end
-		M.run(action.id, context, on_done)
-	end)
+			if action.custom then
+				action.run(context, on_done or function() end)
+				return
+			end
+			M.run(action.id, context, on_done)
+		end,
+	})
 end
 
 M.browse_issue = utils.browse_issue
 M.copy_issue_key = utils.copy_issue_key
 M.copy_issue_url = utils.copy_issue_url
+M.manage_templates = {
+	id = "manage_templates",
+	label = "Manage Issue Templates",
+	run = function(_, done)
+		templates.manage(function(err)
+			done(nil, err)
+		end)
+	end,
+}
 
 return M

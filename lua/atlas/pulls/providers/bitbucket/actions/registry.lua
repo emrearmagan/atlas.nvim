@@ -3,6 +3,7 @@ local M = {}
 local actions = require("atlas.pulls.actions")
 local action_utils = require("atlas.pulls.actions.utils")
 local notes = require("atlas.pulls.notes")
+local picker = require("atlas.picker")
 local pullrequests = require("atlas.pulls.providers.bitbucket.api.pullrequests")
 local reviews = require("atlas.pulls.providers.bitbucket.api.reviews")
 local users_api = require("atlas.pulls.providers.bitbucket.api.users")
@@ -152,65 +153,36 @@ local function search(ctx, done)
 				return
 			end
 
-			vim.ui.input({ prompt = string.format("Search repos in %s: ", selected_ws.slug) }, function(input)
-				if input == nil then
-					done({ changed_pr = false, message = "Search cancelled" }, nil)
-					return
-				end
-
-				notify(ctx, "loading", "Searching repositories...")
-				repositories.fetch_workspace_repositories(selected_ws.slug, input, function(repos, repo_err)
-					if repo_err ~= nil then
-						notify(ctx, "error", string.format("Repo search failed: %s", tostring(repo_err)))
-						done(nil, tostring(repo_err))
-						return
-					end
-
-					local list = repos or {}
-					if #list == 0 then
-						notify(ctx, "warn", "No repositories found")
-						done({ changed_pr = false, message = "No repositories found" }, nil)
-						return
-					end
-
-					notify(ctx, "info", string.format("Found %d repositories", #list), 1200)
-
-					vim.ui.select(list, {
-						prompt = "Select repository",
-						kind = "atlas_bitbucket_repo_select",
-						format_item = function(item)
-							return item.full_name ~= "" and item.full_name or item.name
-						end,
-					}, function(repo)
-						if repo == nil then
-							done({ changed_pr = false, message = "Selection cancelled" }, nil)
-							return
-						end
-
-						---@type AtlasBitbucketViewConfig
-						local search_view = {
-							name = "Search",
-							key = nil,
-							layout = "compact",
-							repos = {
-								{
-									workspace = tostring(repo.owner or ""),
-									repo = tostring(repo.repo_name or ""),
-								},
+			picker.search({
+				title = string.format("Repositories in %s", selected_ws.slug),
+				format_item = function(repo)
+					return repo.full_name ~= "" and repo.full_name or repo.name
+				end,
+				fetch = function(query, fetch_done)
+					return repositories.fetch_workspace_repositories(selected_ws.slug, vim.trim(query), fetch_done)
+				end,
+				on_select = function(repo)
+					---@type AtlasBitbucketViewConfig
+					local search_view = {
+						name = "Search",
+						key = nil,
+						layout = "compact",
+						repos = {
+							{
+								workspace = tostring(repo.owner or ""),
+								repo = tostring(repo.repo_name or ""),
 							},
-						}
+						},
+					}
 
-						local controller = require("atlas.pulls.ui.main.controller")
-						notify(
-							ctx,
-							"success",
-							string.format("Search view -> %s", tostring(repo.full_name or repo.name))
-						)
-						controller.switch_view(search_view)
-						done({ changed_pr = false, message = "Search view switched" }, nil)
-					end)
-				end)
-			end)
+					notify(ctx, "success", string.format("Search view -> %s", tostring(repo.full_name or repo.name)))
+					require("atlas").open("pulls", "bitbucket", { initial_view = search_view })
+					done({ changed_pr = false, message = "Search view switched" }, nil)
+				end,
+				on_cancel = function()
+					done({ changed_pr = false, message = "Search cancelled" }, nil)
+				end,
+			})
 		end
 
 		if #ws == 1 then
@@ -218,19 +190,21 @@ local function search(ctx, done)
 			return
 		end
 
-		vim.ui.select(ws, {
-			prompt = "Select workspace",
+		picker.select({
+			title = "Select workspace",
+			items = ws,
 			kind = "atlas_bitbucket_workspace_select",
 			format_item = function(item)
 				return item.slug
 			end,
-		}, function(selected)
-			if selected == nil then
-				done({ changed_pr = false, message = "Selection cancelled" }, nil)
-				return
-			end
-			continue_with_workspace(selected)
-		end)
+			on_select = function(selected)
+				if selected == nil then
+					done({ changed_pr = false, message = "Selection cancelled" }, nil)
+					return
+				end
+				continue_with_workspace(selected)
+			end,
+		})
 	end)
 end
 

@@ -2,6 +2,7 @@ local M = {}
 
 local logger = require("atlas.core.logger")
 local notify = require("atlas.core.notify")
+local picker = require("atlas.picker")
 local providers = require("atlas.providers")
 
 ---@param opts AtlasConfig|nil
@@ -108,18 +109,20 @@ function M.open(domain, provider_id, opts)
 		return
 	end
 
-	vim.ui.select(ids, {
-		prompt = string.format("Select provider:"),
+	picker.select({
+		title = "Select provider:",
+		items = ids,
 		format_item = function(id)
 			local provider = providers[id]
 			return provider and provider.name or id
 		end,
-	}, function(choice)
-		if choice == nil then
-			return
-		end
-		open_with_provider(domain, choice, opts)
-	end)
+		on_select = function(choice)
+			if choice == nil then
+				return
+			end
+			open_with_provider(domain, choice, opts)
+		end,
+	})
 end
 
 return M

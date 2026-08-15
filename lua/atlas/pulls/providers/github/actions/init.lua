@@ -10,6 +10,7 @@ local statusline = require("atlas.ui.statusline")
 ---| "edit_assignees"
 ---| "create_issue"
 ---| "labels"
+---| "search_pull_requests"
 ---| "toggle_subscription"
 
 M.items = registry.items

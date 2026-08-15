@@ -144,7 +144,11 @@ function M.search_issue(query, on_done, opts)
 		end
 	end
 
-	local endpoint = "/issue/picker?query=" .. url_encode(q) .. "&showSubTasks=true&showSubTaskParent=true"
+	local endpoint = "/issue/picker?query="
+		.. url_encode(q)
+		.. "&currentJQL="
+		.. url_encode("ORDER BY updated DESC")
+		.. "&showSubTasks=true&showSubTaskParent=true"
 
 	return service.request("GET", endpoint, nil, function(result, err)
 		if err ~= nil or type(result) ~= "table" then

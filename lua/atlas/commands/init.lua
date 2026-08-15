@@ -1,6 +1,9 @@
 local M = {}
 
 local notify = require("atlas.core.notify")
+local picker = require("atlas.picker")
+local providers = require("atlas.providers")
+local ui_utils = require("atlas.ui.utils")
 
 ---@class AtlasCommand
 ---@field name string
@@ -131,7 +134,7 @@ M.register({
 		if args[1] then
 			start(args[1]:lower())
 		else
-			vim.ui.select({ "pr", "issue" }, { prompt = "Create:" }, start)
+			picker.select({ title = "Create:", items = { "pr", "issue" }, on_select = start })
 		end
 	end,
 })
@@ -192,7 +195,6 @@ M.register({
 				end
 				require("atlas.core.cache").clear_all()
 				require("atlas.core.memory_cache").clear_all()
-				require("atlas.ui.components.async_picker").clear_cache()
 				require("atlas.core.logger").clear()
 				local notes_ui = package.loaded["atlas.pulls.notes.ui"]
 				if notes_ui then
@@ -213,16 +215,62 @@ M.register({
 })
 
 local function pick_command()
-	vim.ui.select(M.commands, {
-		prompt = "Atlas:",
-		format_item = function(command)
-			return (command.usage or command.name) .. "  " .. command.description
-		end,
-	}, function(command)
-		if command then
-			command.run({})
+	---@type { command: AtlasCommand, args: string[], label: string, description: string }[]
+	local choices = {}
+	local function add(command, args, description)
+		local label = command.name
+		if #args > 0 then
+			label = label .. " " .. table.concat(args, " ")
 		end
-	end)
+		table.insert(choices, {
+			command = command,
+			args = args,
+			label = label,
+			description = description or command.description,
+		})
+	end
+
+	for _, command in ipairs(M.commands) do
+		if command.name == "pulls" or command.name == "issues" then
+			local domain = command.name
+			---@cast domain "pulls"|"issues"
+			for _, provider in ipairs(providers.configured(domain)) do
+				local label = domain == "pulls" and "pull requests" or "issues"
+				add(command, { provider.id }, string.format("Open %s %s", provider.name, label))
+			end
+		elseif command.name == "search" then
+			for _, provider_id in ipairs(assert(command.complete)("")) do
+				local provider = providers[provider_id]
+				add(command, { provider_id }, "Search " .. (provider and provider.name or provider_id))
+			end
+		elseif command.name == "create" then
+			add(command, { "pr" }, "Create a pull request")
+			add(command, { "issue" }, "Create an issue")
+		elseif command.name == "clear" then
+			add(command, {}, "Clear caches, clones, notes, and logs")
+			add(command, { "notes" }, "Clear local review notes")
+		else
+			add(command, {}, command.description)
+		end
+	end
+
+	local label_width = 0
+	for _, choice in ipairs(choices) do
+		label_width = math.max(label_width, vim.fn.strdisplaywidth(choice.label))
+	end
+
+	picker.select({
+		title = "Atlas:",
+		items = choices,
+		format_item = function(choice)
+			return ui_utils.pad_right(choice.label, label_width) .. "  " .. choice.description
+		end,
+		on_select = function(choice)
+			if choice then
+				choice.command.run(choice.args)
+			end
+		end,
+	})
 end
 
 ---@param args string[]

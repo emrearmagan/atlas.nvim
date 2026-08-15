@@ -94,6 +94,8 @@ use {
 {
   -- Too lazy to manage a statusline per split? Same. Make it global.
   global_statusline = true,
+  -- "auto", "default", "snacks", or "fzf-lua".
+  picker = "auto",
 
   pulls = {
     -- See Pulls Configuration below.
@@ -765,6 +767,7 @@ keymaps = {
       request_changes = "gr",
       submit_review = "gs",
       explorer = {
+        find_file = "<leader>ff",
         next_file = { "]f", "<Tab>" },
         previous_file = { "[f", "<S-Tab>" },
         next_unreviewed_file = "]u",
