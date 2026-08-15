@@ -122,12 +122,9 @@ function M.open(context, on_done)
 		return
 	end
 
+	local target = context.pr and string.format(" for #%s", tostring(context.pr.id)) or ""
 	vim.ui.select(items, {
-		prompt = string.format(
-			"Choose %s action for #%s",
-			context.provider.name,
-			tostring(context.pr and context.pr.id or "")
-		),
+		prompt = string.format("Choose %s action%s", context.provider.name, target),
 		kind = "atlas_pulls_actions",
 		format_item = function(action)
 			return action.label

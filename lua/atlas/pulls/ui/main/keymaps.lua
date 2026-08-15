@@ -118,10 +118,6 @@ function M.register(buf, views)
 				index = 1,
 				callback = function()
 					local pr = selected_pr()
-					if pr == nil then
-						statusline.notify("warn", "No PR selected")
-						return
-					end
 					if state.provider then
 						actions.open({
 							provider = state.provider,

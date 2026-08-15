@@ -65,12 +65,9 @@ function M.open(context, on_done)
 		return
 	end
 
+	local target = context.issue and string.format(" for %s", tostring(context.issue.key)) or ""
 	vim.ui.select(items, {
-		prompt = string.format(
-			"Choose %s action for %s",
-			context.provider.name,
-			tostring(context.issue and context.issue.key or "issue")
-		),
+		prompt = string.format("Choose %s action%s", context.provider.name, target),
 		kind = "atlas_issue_actions",
 		format_item = function(action)
 			return action.label

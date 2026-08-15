@@ -89,10 +89,6 @@ function M.register(buf, views)
 				index = 1,
 				callback = function()
 					local issue = selected_issue()
-					if issue == nil then
-						statusline.notify("warn", "No issue selected")
-						return
-					end
 					actions.open(context(issue), controller.apply_action_result)
 				end,
 			})
