@@ -180,7 +180,8 @@ function M.format(segments, current_notice, available, options)
 			priority = 10,
 		}
 	end
-	fit(fitted, available or current_width())
+	local left_padding = options.left_padding or 0
+	fit(fitted, math.max((available or current_width()) - left_padding - 1, 0))
 
 	local left, right = {}, {}
 	for _, segment in ipairs(fitted) do
@@ -188,7 +189,7 @@ function M.format(segments, current_notice, available, options)
 	end
 
 	return table.concat({
-		"%#" .. BACKGROUND_HL .. "#%<" .. string.rep(" ", options.left_padding or 0),
+		"%#" .. BACKGROUND_HL .. "#" .. string.rep(" ", left_padding),
 		table.concat(left),
 		"%=",
 		table.concat(right),
