@@ -57,13 +57,12 @@ local function normalize(raw)
 	return {
 		id = tostring(raw.id or ""),
 		title = raw_title,
-		subtitle = table.concat(subtitle_parts, "  ·  "),
+		subtitle = table.concat(subtitle_parts, "  "),
 		timestamp = updated_at ~= "" and updated_at or nil,
 		icon = icon_def.icon or icon_def[1],
 		icon_hl = icon_def.hl or icon_def[2],
 		unread = raw.unread == true,
 		url = html_url,
-		_raw = raw,
 	}
 end
 

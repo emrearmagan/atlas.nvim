@@ -3,9 +3,10 @@ local M = {}
 local form = require("atlas.ui.popups.form")
 local git_branch = require("atlas.core.git")
 local keymaps = require("atlas.core.keymaps")
+local logger = require("atlas.core.logger")
+local picker = require("atlas.picker")
 local description = require("atlas.pulls.create.description")
 local pulls_helper = require("atlas.pulls.ui.main.helper")
-local multi_select = require("atlas.ui.popups.multi_select")
 local notify = require("atlas.core.notify")
 
 ---@class CreatePRFields
@@ -155,7 +156,7 @@ local function preview_diff(pr_state)
 		form.notify("error", err or "Unable to resolve diff revisions")
 		return
 	end
-	require("atlas.pulls.actions").open_diff_range({
+	require("atlas.pulls.diff").open_range({
 		git_root = pr_state.fields.repo_root,
 		base_revision = base,
 		head_revision = head,
@@ -211,15 +212,17 @@ local function pick_base(pr_state, on_change)
 		return
 	end
 
-	vim.ui.select(choices, {
-		prompt = "Select base branch:",
-	}, function(choice)
-		if type(choice) ~= "string" or choice == "" then
-			return
-		end
-		pr_state.fields.base = choice
-		on_change()
-	end)
+	picker.select({
+		title = "Select base branch:",
+		items = choices,
+		on_select = function(choice)
+			if type(choice) ~= "string" or choice == "" then
+				return
+			end
+			pr_state.fields.base = choice
+			on_change()
+		end,
+	})
 end
 
 ---@param pr_state CreatePRState
@@ -256,17 +259,16 @@ local function pick_reviewers(pr_state, on_change)
 		on_change()
 	end
 
-	multi_select.open({
+	picker.multi_select({
 		items = reviewers,
 		selected = selected,
 		key = function(item)
 			return item.provider_id
 		end,
-		format = function(item)
+		format_item = function(item)
 			return item.label
 		end,
-		prompt = "Reviewers:",
-		on_change = sync_selection,
+		title = "Reviewers",
 		on_done = sync_selection,
 	})
 end
@@ -275,8 +277,7 @@ end
 ---@param on_change fun()
 local function load_reviewers(pr_state, on_change)
 	local provider = pr_state.fields.provider
-	local create = provider and provider.capabilities.create
-	if create == nil or create.fetch_default_reviewers == nil then
+	if provider == nil then
 		pr_state.fields.reviewers = {}
 		return
 	end
@@ -299,7 +300,7 @@ local function load_reviewers(pr_state, on_change)
 		)
 	end
 
-	create.fetch_default_reviewers({
+	provider.capabilities.core.fetch_default_reviewers({
 		repo_slug = pr_state.fields.repo_slug,
 		repo_root = pr_state.fields.repo_root,
 		head = pr_state.fields.head,
@@ -326,11 +327,11 @@ local function on_success(pr_state, result)
 	if type(url) == "string" and url ~= "" then
 		notify.info("PR created: " .. url)
 		pcall(vim.fn.setreg, "+", url)
-	else
-		notify.info("PR created")
+		require("atlas.commands.open").open(url)
+		return
 	end
 
-	-- Refresh the main pulls UI (if open) so the new PR shows up.
+	notify.info("PR created")
 	pcall(function()
 		require("atlas.pulls.ui.main.controller").refresh_current_view()
 	end)
@@ -350,9 +351,8 @@ local function submit(pr_state)
 
 	local body = get_body(pr_state)
 	local provider = pr_state.fields.provider
-	local create = provider and provider.capabilities.create
-	if not create then
-		form.notify("error", "Provider does not support PR creation")
+	if not provider then
+		form.notify("error", "Provider unavailable")
 		return
 	end
 
@@ -379,7 +379,7 @@ local function submit(pr_state)
 
 	local function do_create()
 		form.notify("loading", "Creating pull request...")
-		create.create_pr({
+		provider.capabilities.core.create_pr({
 			repo_slug = pr_state.fields.repo_slug,
 			repo_root = pr_state.fields.repo_root,
 			title = title,
@@ -400,21 +400,28 @@ local function submit(pr_state)
 		end)
 	end
 
-	-- Make sure the source branch exists on the remote first.
-	local has_remote = git_branch.branch_exists_on_remote(pr_state.fields.repo_root, pr_state.fields.head, "origin")
-	if has_remote then
-		do_create()
-		return
-	end
-
-	form.notify("loading", "Pushing " .. pr_state.fields.head .. " to origin...")
-	git_branch.push_branch(pr_state.fields.repo_root, pr_state.fields.head, "origin", function(ok, push_err)
-		if not ok then
-			pr_state.is_submitting = false
-			form.notify("error", "git push failed: " .. tostring(push_err or ""))
+	form.notify("loading", "Checking remote branch...")
+	git_branch.branch_exists_on_remote(pr_state.fields.repo_root, pr_state.fields.head, "origin", function(has_remote)
+		if has_remote then
+			do_create()
 			return
 		end
-		do_create()
+
+		form.notify("loading", "Pushing " .. pr_state.fields.head .. " to origin...")
+		git_branch.push_branch(pr_state.fields.repo_root, pr_state.fields.head, "origin", function(ok, push_err)
+			if not ok then
+				pr_state.is_submitting = false
+				local err = tostring(push_err or "Unknown error")
+				logger.logerror("Create PR push failed", {
+					repo_path = pr_state.fields.repo_root,
+					branch = pr_state.fields.head,
+					error = err,
+				})
+				form.notify("error", "git push failed: " .. err)
+				return
+			end
+			do_create()
+		end)
 	end)
 end
 
@@ -561,11 +568,6 @@ function M.start()
 		notify.error(provider_err or "Provider unavailable")
 		return
 	end
-	if not provider.capabilities.create then
-		notify.error("Provider " .. info.provider .. " does not support PR creation")
-		return
-	end
-
 	local base = git_branch.default_branch(root, "origin") or "main"
 
 	if head == base then

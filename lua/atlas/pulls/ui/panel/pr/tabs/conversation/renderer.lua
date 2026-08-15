@@ -20,7 +20,7 @@ local function append_connector(lines, spans)
 		line = #lines - 1,
 		start_col = PADDING_X,
 		end_col = PADDING_X + #CONNECTOR,
-		hl_group = "AtlasBorder",
+		hl_group = "AtlasTextMuted",
 	})
 end
 
@@ -80,13 +80,18 @@ end
 ---@return PullsConversationTimelineEntry[]
 local function build_timeline(comments, activity)
 	-- Build a sorted mixed list of comments and activity entries.
-	local mixed = {}
+	local mixed, description = {}, nil
 	for _, thread in ipairs(review_threads.group_comments(comments)) do
-		table.insert(mixed, {
+		local item = {
 			kind = "comment",
 			timestamp = thread.comment.created_on or "",
 			thread = thread,
-		})
+		}
+		if tostring(thread.comment.id) == "__body__" then
+			description = item
+		else
+			table.insert(mixed, item)
+		end
 	end
 	for _, a in ipairs(activity) do
 		table.insert(mixed, { kind = "activity", timestamp = a.date or "", activity = a })
@@ -100,6 +105,9 @@ local function build_timeline(comments, activity)
 		end
 		return ta < tb
 	end)
+	if description then
+		table.insert(mixed, 1, description)
+	end
 
 	-- Collapse consecutive activities into a single activity_run entry.
 	local entries, run = {}, {}
@@ -111,16 +119,7 @@ local function build_timeline(comments, activity)
 	end
 	for _, item in ipairs(mixed) do
 		if item.kind == "activity" then
-			if item.activity.always_render then
-				flush_run()
-				table.insert(entries, {
-					type = "activity_run",
-					timestamp = item.activity.date or "",
-					activities = { item.activity },
-				})
-			else
-				table.insert(run, item.activity)
-			end
+			table.insert(run, item.activity)
 		else
 			flush_run()
 			table.insert(entries, {
@@ -138,7 +137,8 @@ end
 
 ---@param entry PullsConversationTimelineEntry
 ---@param width integer
-local function render_entry(entry, width)
+---@param has_next boolean
+local function render_entry(entry, width, has_next)
 	if entry.type == "comment" then
 		local thread = entry.thread
 		local root = thread.comment
@@ -153,6 +153,7 @@ local function render_entry(entry, width)
 			padding_x = PADDING_X,
 			squash = not state.is_run_expanded(run_id),
 			run_id = run_id,
+			has_next = has_next,
 		})
 	end
 	return {}, {}, {}
@@ -162,6 +163,11 @@ end
 ---@param width integer
 function M.render(_pr, width)
 	local lines, spans, line_map = {}, {}, {}
+
+	if state.error then
+		utils.push(lines, spans, state.error, "AtlasLogError", PADDING_X)
+		return lines, spans, line_map
+	end
 
 	local comments_ready = type(state.comments) == "table"
 	local activity_ready = type(state.activity) == "table"
@@ -184,11 +190,11 @@ function M.render(_pr, width)
 		return lines, spans, line_map
 	end
 
-	for _, entry in ipairs(entries) do
+	for index, entry in ipairs(entries) do
 		if #lines > 0 then
 			append_connector(lines, spans)
 		end
-		local e_lines, e_spans, e_map = render_entry(entry, width)
+		local e_lines, e_spans, e_map = render_entry(entry, width, index < #entries)
 		splice(lines, spans, line_map, e_lines, e_spans, e_map)
 	end
 

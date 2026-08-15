@@ -14,18 +14,38 @@ local M = {}
 ---@param buf integer
 ---@param actions AtlasNotesUIActions
 function M.register(buf, actions)
-	local note_actions = {
-		{ key = "K", desc = "Show note details", index = 1, callback = actions.details, opts = { nowait = true } },
-		{ key = "e", desc = "Edit note", index = 2, callback = actions.edit, opts = { nowait = true } },
-		{
-			key = "d",
+	local note_actions = {}
+	local details_keys = resolver.resolve("ui.show_details")
+	if details_keys then
+		table.insert(note_actions, {
+			key = #details_keys == 1 and details_keys[1] or details_keys,
+			desc = "Show note details",
+			index = 1,
+			callback = actions.details,
+			opts = { nowait = true },
+		})
+	end
+	local edit_keys = resolver.resolve("pulls.review.diff.edit_comment")
+	if edit_keys then
+		table.insert(note_actions, {
+			key = #edit_keys == 1 and edit_keys[1] or edit_keys,
+			desc = "Edit note",
+			index = 2,
+			callback = actions.edit,
+			opts = { nowait = true },
+		})
+	end
+	local delete_keys = resolver.resolve("pulls.review.diff.delete")
+	if delete_keys then
+		table.insert(note_actions, {
+			key = #delete_keys == 1 and delete_keys[1] or delete_keys,
 			mode = { "n", "x" },
 			desc = "Delete selected notes",
 			index = 3,
 			callback = actions.delete,
 			opts = { nowait = true },
-		},
-	}
+		})
+	end
 	local fold_keys = resolver.resolve("ui.toggle_fold")
 	if fold_keys then
 		table.insert(note_actions, {

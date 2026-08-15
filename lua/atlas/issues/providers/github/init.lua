@@ -2,6 +2,7 @@
 local M = {}
 
 local resolver = require("atlas.providers.resolve")
+local request_scope = require("atlas.core.requests")
 
 ---@param view IssuesViewConfig
 ---@param opts IssuesFetchOpts
@@ -166,6 +167,7 @@ function M.fetch_conversation(issue, opts, on_done)
 	end
 
 	local timeline = require("atlas.issues.providers.github.api.timeline")
+	local requests = request_scope.new()
 
 	---@param description string
 	local function build(result, description)
@@ -190,7 +192,9 @@ function M.fetch_conversation(issue, opts, on_done)
 		}, nil)
 	end
 
-	return timeline.list_conversation(key, function(result, err)
+	requests.run(function(done)
+		return timeline.list_conversation(key, done, { force_load = opts.force_refresh == true })
+	end, function(result, err)
 		if err or type(result) ~= "table" then
 			on_done(nil, err or "Failed to fetch conversation")
 			return
@@ -202,10 +206,13 @@ function M.fetch_conversation(issue, opts, on_done)
 			return
 		end
 
-		fetch_description(key, function(desc, _)
+		requests.run(function(done)
+			return fetch_description(key, done)
+		end, function(desc)
 			build(result, tostring(desc or ""))
 		end)
-	end, { force_load = opts.force_refresh == true })
+	end)
+	return requests
 end
 
 ---@param issue Issue
@@ -256,27 +263,6 @@ function M.fetch_activity(issue, opts, on_done)
 		end
 		on_done(result.events, nil)
 	end, { force_load = opts and opts.force_load == true or false })
-end
-
----@param on_done fun(result: table|nil, err: string|nil)|nil
-local function search(on_done)
-	require("atlas.issues.providers.github.actions").run(
-		"search",
-		{ issue = nil, source = "main" },
-		function(result, err)
-			if on_done then
-				on_done(result, err)
-			end
-		end
-	)
-end
-
-local function create_issue()
-	require("atlas.issues.create").from_repository(
-		"github",
-		require("atlas.issues.create.github.issue").open,
-		"repo_slug"
-	)
 end
 
 ---@param opts { force_load: boolean|nil }|nil
@@ -427,8 +413,6 @@ return {
 			mark_read = M.mark_notification_read,
 			mark_done = M.mark_notification_done,
 		},
-		search = search,
-		create_issue = create_issue,
 		actions = require("atlas.issues.providers.github.actions"),
 		ui = {
 			setup = require("atlas.issues.providers.github.highlights").setup,

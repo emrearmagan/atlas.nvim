@@ -32,11 +32,48 @@ _G.vim = {
 		return tostring(v)
 	end,
 
+	-- vim.schedule(fn) -> run immediately; specs are single-threaded
+	schedule = function(fn)
+		fn()
+	end,
+
 	api = {
 		nvim_create_namespace = function()
 			return 1
 		end,
+		nvim_strwidth = function(value)
+			return #tostring(value or "")
+		end,
 	},
+
+	-- vim.tbl_extend(behavior, ...) -> shallow merge honoring "keep"/"force"/"error"
+	tbl_extend = function(behavior, ...)
+		assert(
+			behavior == "keep" or behavior == "force" or behavior == "error",
+			"vim.tbl_extend: unsupported behavior " .. tostring(behavior)
+		)
+		local out = {}
+		for index = 1, select("#", ...) do
+			for k, v in pairs(select(index, ...) or {}) do
+				if out[k] == nil then
+					out[k] = v
+				elseif behavior == "force" then
+					out[k] = v
+				elseif behavior == "error" then
+					error("vim.tbl_extend: key found in more than one map: " .. tostring(k))
+				end
+			end
+		end
+		return out
+	end,
+
+	-- vim.list_extend(dst, src) -> append src onto dst in place
+	list_extend = function(dst, src)
+		for _, v in ipairs(src or {}) do
+			table.insert(dst, v)
+		end
+		return dst
+	end,
 
 	-- vim.tbl_keys(t) -> list of the table's keys
 	tbl_keys = function(t)
@@ -49,12 +86,29 @@ _G.vim = {
 
 	env = { HOME = os.getenv("HOME") or "" },
 
-	api = {
-		nvim_create_namespace = function(_)
-			return 1
-		end,
-		nvim_strwidth = function(value)
-			return #tostring(value or "")
+	-- vim.json.encode(value) -> minimal JSON encoder for plain Lua values
+	json = {
+		encode = function(value)
+			local t = type(value)
+			if t == "string" then
+				return '"' .. value:gsub('[\\"]', "\\%0"):gsub("\n", "\\n") .. '"'
+			elseif t == "number" or t == "boolean" then
+				return tostring(value)
+			elseif t == "table" then
+				local keys = {}
+				for k in pairs(value) do
+					table.insert(keys, k)
+				end
+				table.sort(keys, function(a, b)
+					return tostring(a) < tostring(b)
+				end)
+				local parts = {}
+				for _, k in ipairs(keys) do
+					table.insert(parts, string.format('"%s":%s', tostring(k), _G.vim.json.encode(value[k])))
+				end
+				return "{" .. table.concat(parts, ",") .. "}"
+			end
+			return "null"
 		end,
 	},
 

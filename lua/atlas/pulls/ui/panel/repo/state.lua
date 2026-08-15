@@ -1,6 +1,6 @@
 ---@class PullsRepoPanelState
 ---@field current_repo PullsRepo|nil
----@field current_repo_details PullsRepoDetails|"loading"|nil
+---@field current_repo_details PullsRepoDetails|"loading"|string|nil
 ---@field current_tab string
 ---@field line_map table<integer, table>
 local M = {

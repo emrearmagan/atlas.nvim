@@ -1,6 +1,9 @@
 local M = {}
 
+local markdown_editor = require("atlas.ui.popups.editor")
 local notify = require("atlas.core.notify")
+local picker = require("atlas.picker")
+local statusline = require("atlas.ui.statusline")
 local templates_root = vim.fn.stdpath("data") .. "/atlas/issues/templates"
 
 ---@class IssueTemplateInfo
@@ -10,7 +13,6 @@ local templates_root = vim.fn.stdpath("data") .. "/atlas/issues/templates"
 ---@class AtlasIssueTemplateContext
 ---@field get_description fun(): string
 ---@field set_description fun(description: string): boolean
----@field picker_kind string
 ---@field menu_kind string
 
 ---@param name string|nil
@@ -85,6 +87,30 @@ function M.list()
 	end
 
 	return templates, nil
+end
+
+---@param title string
+---@param templates IssueTemplateInfo[]
+---@param on_select fun(template: IssueTemplateInfo|nil)
+function M.pick(title, templates, on_select)
+	picker.select_with_preview({
+		title = title,
+		items = templates,
+		key = function(template)
+			return template.path
+		end,
+		format_item = function(template)
+			return template.name
+		end,
+		preview_item = function(template, done)
+			local content, read_err = M.read(template.name)
+			done({
+				title = template.name,
+				lines = vim.split(read_err or (content ~= "" and content or "Empty template"), "\n", { plain = true }),
+			})
+		end,
+		on_select = on_select,
+	})
 end
 
 ---@param name string
@@ -164,6 +190,163 @@ function M.delete(name)
 	return true, nil, normalized_name
 end
 
+---@param on_done fun(err: string|nil)
+function M.manage(on_done)
+	local finished = false
+	local function finish(err)
+		if finished then
+			return
+		end
+		finished = true
+		if err then
+			statusline.notify("error", err)
+		end
+		on_done(err)
+	end
+
+	local options = {
+		{ id = "create", label = "Create template" },
+		{ id = "edit", label = "Edit template" },
+	}
+
+	picker.select({
+		title = "Templates",
+		items = options,
+		kind = "atlas_issue_template_actions",
+		format_item = function(item)
+			return item.label
+		end,
+		on_select = function(choice)
+			if choice == nil then
+				finish()
+				return
+			end
+
+			if choice.id == "create" then
+				markdown_editor.open({
+					key = string.format("template_new_%d", vim.loop.hrtime()),
+					title = " New Issue Template ",
+					initial_text = "",
+					on_save = function(text)
+						local markdown = tostring(text or "")
+						vim.ui.input({ prompt = "Template name: " }, function(name_input)
+							if name_input == nil then
+								finish()
+								return
+							end
+
+							local name = vim.trim(name_input)
+							if name == "" then
+								finish("Template name is required")
+								return
+							end
+
+							local ok, write_err, existed, normalized_name =
+								M.write(name, markdown, { overwrite = false })
+							if ok then
+								finish()
+								return
+							end
+							if not existed then
+								finish(write_err or "Failed to create template")
+								return
+							end
+
+							vim.ui.input({
+								prompt = string.format(
+									'Template "%s" exists. Overwrite? [y/N]: ',
+									tostring(normalized_name or name)
+								),
+							}, function(confirm)
+								if vim.trim(confirm or ""):lower() ~= "y" then
+									finish()
+									return
+								end
+
+								local overwrite_ok, overwrite_err = M.write(name, markdown, { overwrite = true })
+								if not overwrite_ok then
+									finish(overwrite_err or "Failed to overwrite template")
+									return
+								end
+								finish()
+							end)
+						end)
+					end,
+					on_cancel = function()
+						finish()
+					end,
+				})
+				return
+			end
+
+			local templates, list_err = M.list()
+			if list_err then
+				finish(list_err)
+				return
+			end
+			if templates == nil or #templates == 0 then
+				finish()
+				return
+			end
+
+			M.pick("Edit template", templates, function(selected)
+				if selected == nil then
+					finish()
+					return
+				end
+
+				local content, read_err = M.read(selected.name)
+				if read_err then
+					finish(read_err)
+					return
+				end
+
+				local key = ("template_" .. selected.name):gsub("[^%w%-_]+", "_")
+				markdown_editor.open({
+					key = key,
+					title = string.format(" Template: %s ", selected.name),
+					initial_text = content,
+					actions = {
+						{
+							key = "<C-d>",
+							description = "delete",
+							callback = function(editor_context)
+								vim.ui.input({
+									prompt = string.format('Delete template "%s"? [y/N]: ', selected.name),
+								}, function(confirm)
+									if vim.trim(confirm or ""):lower() ~= "y" then
+										return
+									end
+
+									local deleted, delete_err = M.delete(selected.name)
+									if not deleted then
+										finish(delete_err or "Failed to delete template")
+										return
+									end
+
+									editor_context.close()
+									finish()
+								end)
+							end,
+						},
+					},
+					on_save = function(text)
+						local ok, write_err = M.write(selected.name, text, { overwrite = true })
+						if not ok then
+							finish(write_err or "Failed to update template")
+							return
+						end
+						finish()
+					end,
+					on_cancel = function()
+						finish()
+					end,
+				})
+			end)
+		end,
+	})
+end
+
 ---@param context AtlasIssueTemplateContext
 local function apply_template(context)
 	local templates, err = M.list()
@@ -176,13 +359,7 @@ local function apply_template(context)
 		return
 	end
 
-	vim.ui.select(templates, {
-		prompt = "Apply template",
-		kind = context.picker_kind,
-		format_item = function(template)
-			return template.name
-		end,
-	}, function(template)
+	M.pick("Apply template", templates, function(template)
 		if template == nil then
 			return
 		end
@@ -269,22 +446,24 @@ function M.open(context)
 		{ id = "save", label = "Save current description as template" },
 	}
 
-	vim.ui.select(actions, {
-		prompt = "Issue templates",
+	picker.select({
+		title = "Issue templates",
+		items = actions,
 		kind = context.menu_kind,
 		format_item = function(action)
 			return action.label
 		end,
-	}, function(action)
-		if action == nil then
-			return
-		end
-		if action.id == "apply" then
-			apply_template(context)
-		else
-			save_template(context)
-		end
-	end)
+		on_select = function(action)
+			if action == nil then
+				return
+			end
+			if action.id == "apply" then
+				apply_template(context)
+			else
+				save_template(context)
+			end
+		end,
+	})
 end
 
 return M

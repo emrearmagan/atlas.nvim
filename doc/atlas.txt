@@ -88,6 +88,8 @@ up and what's missing.
   require("atlas").setup({
     -- Use one statusline across all windows.
     global_statusline = true,
+    -- "auto", "default", "snacks", or "fzf-lua".
+    picker = "auto",
 
     pulls = {
       -- See |atlas-pulls-configuration|.
@@ -116,53 +118,48 @@ unchanged.
 ==============================================================================
 5. COMMANDS                                                    *atlas-commands*
 
-                                                                  *:AtlasPulls*
-:AtlasPulls [provider]
-        Open the pulls panel. With an argument (`github`, `bitbucket`,
-        `gitlab`) it opens that provider directly. Without one, Atlas opens
-        the only configured provider or asks you to choose.
+                                                                      *:Atlas*
+:Atlas
+        Pick an Atlas command.
+
+:Atlas pulls [provider]
+:Atlas issues [provider]
+        Open a provider dashboard. Without an argument, Atlas opens the only
+        configured provider or asks you to choose.
+
+:Atlas review [pull-request-url]
+        Infer the provider and repository from the current Git remote, pick
+        an open or draft pull request, and open its diff. With a URL, open that
+        pull request directly.
+
+:Atlas diff <base>...<head>
+:Atlas diff <pull-request-url>
+        Open an explicit Git range or pull request in native AtlasDiff.
+
+:Atlas notes [target]
+:Atlas clear notes
+	Open the local-notes manager or delete all local notes.
+
+:Atlas create pr
+:Atlas create issue
+	Start the pull-request or issue creation flow.
+
+:Atlas search [provider]
+        Search configured pull-request and issue providers.
+
+:Atlas open <target>
+        Open a provider URL, Jira key, `owner/repo#number`, or PR/issue
+        number.
+
+:Atlas clear
+:Atlas logs
+	Clear Atlas caches, cloned repositories, local notes, and logs, or toggle
+	the Atlas log buffer.
 
                                                                    *:AtlasDiff*
 :AtlasDiff <base>...<head>
 :AtlasDiff <pull-request-url>
-	Open an explicit Git range or pull request review.
-
-                                                                  *:AtlasNotes*
-:AtlasNotes
-        Open the local-notes manager across all pull requests.
-
-                                                                 *:AtlasIssues*
-:AtlasIssues [provider]
-        Open the issues panel. With an argument (`jira`, `github`, `gitlab`)
-        it opens that provider directly. Without one, Atlas opens the only
-        configured provider or asks you to choose.
-
-                                                               *:AtlasCreatePR*
-:AtlasCreatePR
-        Start the create-PR flow for the current branch.
-
-                                                            *:AtlasCreateIssue*
-:AtlasCreateIssue
-        Start the create-issue flow for GitHub, GitLab, or Jira.
-
-                                                                 *:AtlasSearch*
-:AtlasSearch [provider]
-	Search configured pull-request and issue providers.
-
-                                                                   *:AtlasOpen*
-:AtlasOpen <target>
-        Open a provider URL, Jira key, `owner/repo#number`, or PR/issue
-        number.
-
-                                                             *:AtlasClearCache*
-:AtlasClearCache
-        Clear both disk and in-memory caches. Useful when stale data is
-        showing up after a remote-side change.
-
-                                                                   *:AtlasLogs*
-:AtlasLogs
-        Toggle a split with the Atlas log buffer. Refreshes every 2s while
-        open. Helpful for debugging API calls.
+        Retained as the native AtlasDiff viewer command.
 
 ==============================================================================
 6. PULLS                                                          *atlas-pulls*
@@ -181,15 +178,19 @@ Shared config that applies to all pulls providers:
 >lua
   require("atlas").setup({
     pulls = {
+      delete_notes = false, -- delete local notes after approval or merge
+      default_merge_method = "merge", -- "merge" or "squash"
+      default_delete_branch = false,
       diff = {
         -- Any command that accepts explicit <base>...<head> Git revisions.
         open_cmd = "AtlasDiff", -- default; e.g. "DiffviewOpen" or "CodeDiff"
+        show_review_panel = false, -- set true to show the review panel initially
+        comment_display = "virtual_lines", -- or compact "virtual_text" hints
 
         -- AtlasDiff options; external viewers use their own configuration.
         layout = "inline", -- "inline" or "side-by-side"
         compact = true, -- initially show hunks plus surrounding context
         compact_context_lines = 3, -- context lines around hunks in compact mode
-        show_review_panel = false, -- set true to show comments and notes initially
         explorer = {
           grouped = true, -- group changed files by directory
           hidden = false,
@@ -524,8 +525,8 @@ to start a review.
   - Review provider tasks and GitHub checklists alongside the comments they
     belong to.
   - Add, reply to, edit, delete, resolve, or reopen comments when supported.
-  - Browse provider comments and local notes in AtlasDiff's bottom list; use
-    `za` to expand an item.
+  - Browse comments, tasks, and local notes in the bottom review panel
+  - Mark files reviewed in AtlasDiff; GitHub syncs the state with the pull request.
   - Submit pending comments with an optional review summary when supported.
 
 CodeDiff, sindrets/diffview.nvim, and dlyongemallo/diffview-plus.nvim can
@@ -541,7 +542,7 @@ request. Each note is attached to a file and line and can be an `ISSUE`,
 saved line changes.
 
 For scripts, use `bin/atlas-notes`. Notes added there appear in AtlasDiff,
-CodeDiff, Diffview, Diffview-plus, and `:AtlasNotes`:
+CodeDiff, Diffview, Diffview-plus, and `:Atlas notes`:
 >sh
   ./bin/atlas-notes add \
     --target https://github.com/owner/repository/pull/123 \
@@ -565,7 +566,7 @@ still running.
 CREATE PULL REQUESTS                         *atlas-create-pull-requests*
                                                     *atlas-pulls-create*
 
-`:AtlasCreatePR` opens the pull request form for the current branch. The
+`:Atlas create pr` opens the pull request form for the current branch. The
 newest commit supplies the title. Atlas first reads the configured
 `pr_template`, or `.github/pull_request_template.md` by default.
 
@@ -582,7 +583,7 @@ the draft state, or preview commits and diffstat before submitting.
 CREATE ISSUES                                      *atlas-create-issues*
                                                     *atlas-issues-create*
 
-`:AtlasCreateIssue` opens the creation flow for the configured issue
+`:Atlas create issue` opens the creation flow for the configured issue
 providers. GitHub and GitLab use the current repository, while Jira uses the
 configured instance. The forms support Markdown descriptions and
 provider-specific fields such as labels, assignees, milestones, and Jira
@@ -625,8 +626,8 @@ to your own tooling. They appear in the action menu (default `A`).
     },
     custom_actions = {
       {
-        id = "open_tmux_window",
-        label = "Open repo in tmux window",
+        id = "show_repo_status",
+        label = "Show repository status",
         confirmation = true,
         ---@param pr PullRequest
         ---@param ctx AtlasPullsCustomActionContext
@@ -637,15 +638,17 @@ to your own tooling. They appear in the action menu (default `A`).
             return
           end
 
-          vim.system({ "tmux", "new-window", "-c", ctx.repo_path }, { text = true }, function(res)
-            vim.schedule(function()
-              if res.code ~= 0 then
-                done(false, "Failed to open tmux window")
-                return
-              end
-              done(true, "Opened tmux window")
-            end)
-          end)
+          local output = ctx.output("Repository status")
+          output:write("Checking " .. ctx.repo_path)
+          output:run({ "git", "status", "--short" }, function(code)
+            if code ~= 0 then
+              done(false, "Failed to read repository status")
+              return
+            end
+            done(true, "Repository status loaded")
+          end, {
+            cwd = ctx.repo_path,
+          })
         end,
       },
     },
@@ -668,6 +671,11 @@ to your own tooling. They appear in the action menu (default `A`).
   }
 <
 
+Use `ctx.output(title)` to show output from a custom action:
+>lua
+  output:write("Loading...")
+  output:run(cmd, on_exit, { cwd = "/repo" })
+<
 ==============================================================================
 9. EVENTS                                                        *atlas-events*
 
@@ -699,6 +707,7 @@ Defaults live under `keymaps` in `setup()`. Each entry accepts:
         previous_item           = "k",
         first_item              = "gg",
         last_item               = "G",
+        submit                  = "<C-s>",
         help                    = "g?",    -- { "g?", "<leader>?" } for aliases
         close                   = "q",
         toggle_panel            = "p",
@@ -730,37 +739,54 @@ Defaults live under `keymaps` in `setup()`. Each entry accepts:
       pulls = {
         open_diff              = "gd",
         checkout               = "gc",
+        edit_title             = "T",
+        edit_description       = "D",
         review = {
-          toggle_approval       = "ga",
+          show_item             = "<CR>",
+          focus_item            = "gd",
+          approve               = "ga",
           request_changes       = "gr",
           submit_review         = "gs",
-          open_file             = "<CR>",
-          toggle_explorer_grouping = "T",
-          toggle_layout        = "t",
-          toggle_compact       = "u",
-          next_hunk            = "]h",
-          previous_hunk        = "[h",
-          next_file            = { "]f", "<Tab>" },
-          previous_file        = { "[f", "<S-Tab>" },
-          toggle_file_reviewed = "-",
-          toggle_commits       = "gC",
-          toggle_review_panel  = "gR",
-          next_comment         = "]c",
-          previous_comment     = "[c",
-          next_note            = "]n",
-          previous_note        = "[n",
-          view_thread          = "K",
-          edit_comment         = "e",
-          add_task             = "T",
-          add_comment          = "c",
-          submit_comment       = "C",
-          delete_comment       = "dd",
-          add_note             = "n",
-          toggle_resolved      = "x",
+          explorer = {
+            find_file             = "<leader>ff",
+            next_file             = { "]f", "<Tab>" },
+            previous_file         = { "[f", "<S-Tab>" },
+            next_unreviewed_file      = "]u",
+            previous_unreviewed_file  = "[u",
+            toggle_grouping       = "T",
+            toggle_file_reviewed  = "-",
+            toggle_commits        = "gC",
+          },
+          diff = {
+            toggle_layout         = "t",
+            toggle_compact        = "u",
+            next_hunk             = "]h",
+            previous_hunk         = "[h",
+            toggle_review_panel   = "gR",
+            toggle_comments       = "gH",
+            next_comment          = "]c",
+            previous_comment      = "[c",
+            next_note             = "]n",
+            previous_note         = "[n",
+            add_comment           = "c",
+            submit_comment        = "C",
+            add_suggestion        = "s",
+            submit_suggestion     = "S",
+            edit_comment          = "e",
+            delete                = "dd",
+            add_note              = "<leader>n",
+            add_task              = "T",
+            toggle_resolved       = "x",
+          },
         },
-        filter_status_open     = "gpo",
-        filter_status_merged   = "gpm",
-        filter_status_declined = "gpd",
+        pipelines = {
+          open = "gd",
+        },
+        filters = {
+          open                   = "gpo",
+          merged                 = "gpm",
+          declined               = "gpd",
+        },
       },
     },
   })

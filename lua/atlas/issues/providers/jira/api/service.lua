@@ -84,11 +84,6 @@ function M.set_memory_cache(key, value, ttl)
 	memory_cache.set(key, value, ttl or M.cache_ttl())
 end
 
----@param key string
-function M.delete_memory_cache(key)
-	memory_cache.delete(key)
-end
-
 ---@param method string
 ---@param endpoint string
 ---@param data table|nil
@@ -126,27 +121,25 @@ function M.request(method, endpoint, data, on_done, ctx)
 	logger.loginfo(message, log)
 	return http.curl_request(method, url, headers, payload, function(result, err)
 		if err then
-			logger.logerror("Jira request failed", {
-				method = method,
-				endpoint = endpoint,
-				error = tostring(err),
-			})
+			logger.logerror("Jira request failed", vim.tbl_extend("force", {}, log, { error = tostring(err) }))
 			on_done(nil, err)
 			return
 		end
 
 		if type(result) ~= "table" then
-			logger.logerror("Jira response parse failed", {
-				method = method,
-				endpoint = endpoint,
-				error = "Jira response is not a JSON object",
-			})
+			logger.logerror(
+				"Jira response parse failed",
+				vim.tbl_extend("force", {}, log, { error = "Jira response is not a JSON object" })
+			)
 			on_done(nil, "Jira response is not a JSON object")
 			return
 		end
 
-		if result.errorMessages or result.errors then
+		if result.errorMessage or result.errorMessages or result.errors then
 			local messages = {}
+			if result.errorMessage then
+				table.insert(messages, result.errorMessage)
+			end
 			for _, msg in ipairs(result.errorMessages or {}) do
 				table.insert(messages, msg)
 			end
@@ -154,11 +147,10 @@ function M.request(method, endpoint, data, on_done, ctx)
 				table.insert(messages, k .. ": " .. v)
 			end
 			if #messages > 0 then
-				logger.logerror("Jira API returned errors", {
-					method = method,
-					endpoint = endpoint,
-					error = table.concat(messages, "; "),
-				})
+				logger.logerror(
+					"Jira API returned errors",
+					vim.tbl_extend("force", {}, log, { error = table.concat(messages, "; ") })
+				)
 				on_done(nil, table.concat(messages, "; "))
 				return
 			end

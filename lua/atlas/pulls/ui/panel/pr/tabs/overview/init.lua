@@ -8,7 +8,9 @@ local box = require("atlas.ui.components.box")
 local table_tree = require("atlas.ui.components.table_tree")
 local statusline = require("atlas.ui.statusline")
 local state = require("atlas.pulls.ui.panel.pr.tabs.overview.state")
+local panel_state = require("atlas.pulls.ui.panel.pr.state")
 local keymaps = require("atlas.pulls.ui.panel.pr.tabs.overview.keymaps")
+local helper = require("atlas.pulls.ui.main.helper")
 
 local PADDING_X = 1
 local PADDING = string.rep(" ", PADDING_X)
@@ -37,6 +39,11 @@ local function track(handle)
 	end
 end
 
+function M.reset()
+	cancel_all()
+	state.reset()
+end
+
 ---@param pr PullRequest
 ---@param _repo PullsRepo|nil
 ---@param refresh fun()
@@ -51,8 +58,6 @@ function M.on_select(pr, _repo, refresh, opts)
 	local core = provider.capabilities.core
 
 	local force_refresh = opts.force_refresh == true
-	local pr_id = tostring(pr.id or "")
-
 	local can_fetch_reviewers = core.fetch_reviewers ~= nil
 	local can_fetch_description = core.fetch_description ~= nil
 	local can_fetch_merge_checks = core.fetch_merge_checks ~= nil
@@ -67,45 +72,15 @@ function M.on_select(pr, _repo, refresh, opts)
 		cancel_all()
 	end
 
-	local pending = 0
-	local errors = 0
-	if should_fetch_description then
-		pending = pending + 1
-	end
-	if should_fetch_reviewers then
-		pending = pending + 1
-	end
-	if should_fetch_merge_checks then
-		pending = pending + 1
-	end
-
-	if pending > 0 then
-		statusline.notify("loading", string.format("Loading overview for #%s...", pr_id))
-	end
-
-	local function complete(err)
-		if err then
-			errors = errors + 1
-		end
-		pending = pending - 1
-		if pending == 0 then
-			if errors > 0 then
-				statusline.notify("error", string.format("Failed to load overview for #%s", pr_id))
-			else
-				statusline.notify("success", string.format("Overview loaded for #%s", pr_id), 1200)
-			end
-		end
-	end
-
 	if should_fetch_description then
 		state.description = "loading"
 		track(core.fetch_description(pr, opts, function(desc, err)
 			if err then
 				state.description = nil
+				statusline.notify("error", "Failed to load pull request description")
 			else
 				state.description = desc or ""
 			end
-			complete(err)
 			refresh()
 		end))
 	end
@@ -118,7 +93,6 @@ function M.on_select(pr, _repo, refresh, opts)
 			else
 				state.reviewers = reviewers or {}
 			end
-			complete(err)
 			refresh()
 		end))
 	end
@@ -131,7 +105,6 @@ function M.on_select(pr, _repo, refresh, opts)
 			else
 				state.merge_checks = checks or {}
 			end
-			complete(err)
 			refresh()
 		end))
 	end
@@ -240,9 +213,7 @@ local function render_reviewers(_pr, width, lines, spans)
 		if grouped[s] == nil then
 			s = "pending"
 		end
-		local name = (d.name and d.name ~= "") and d.name
-			or (d.nickname and d.nickname ~= "") and d.nickname
-			or "Unknown"
+		local name = helper.user_handle(d)
 		table.insert(grouped[s], name)
 	end
 
@@ -313,11 +284,11 @@ end
 ---@param spans table[]
 ---@param line_map table<integer, table>
 local function render_pipelines(_pr, width, lines, spans, line_map)
-	if state.pipelines == nil then
+	if panel_state.pipelines == nil then
 		return
 	end
 
-	if state.pipelines == "loading" then
+	if panel_state.pipelines == "loading" then
 		utils.push(lines, spans, "Pipelines", "AtlasColumnHeader", PADDING_X)
 		local loading_text = spinner.with_text("Loading pipelines...")
 		utils.append_block(
@@ -334,9 +305,9 @@ local function render_pipelines(_pr, width, lines, spans, line_map)
 		return
 	end
 
-	if type(state.pipelines) == "string" then
+	if type(panel_state.pipelines) == "string" then
 		utils.push(lines, spans, "Pipelines", "AtlasColumnHeader", PADDING_X)
-		local err_text = state.pipelines
+		local err_text = panel_state.pipelines
 		utils.append_block(
 			lines,
 			spans,
@@ -351,7 +322,7 @@ local function render_pipelines(_pr, width, lines, spans, line_map)
 		return
 	end
 
-	local entries = state.pipelines
+	local entries = panel_state.pipelines
 
 	if #entries == 0 then
 		return
@@ -366,8 +337,10 @@ local function render_pipelines(_pr, width, lines, spans, line_map)
 		end
 		local state_value = tostring(pipeline.state or "UNKNOWN"):upper()
 		local icon = icons.pulls_status(state_value:lower())
+		local jobs = pipeline.jobs or {}
+		local job_count = string.format("%d %s", #jobs, #jobs == 1 and "job" or "jobs")
 		local row = {
-			label = tostring(pipeline.name or pipeline.key or "Pipeline"),
+			label = string.format("%s  %s", tostring(pipeline.name or pipeline.key or "Pipeline"), job_count),
 			status = string.format("%s %s", icon, status_label(state_value)),
 			status_hl = PIPELINE_HL[state_value] or "AtlasPipelineLinkMuted",
 			kind = "pipeline",
@@ -375,12 +348,13 @@ local function render_pipelines(_pr, width, lines, spans, line_map)
 			url = tostring(pipeline.url or ""),
 			children = {},
 		}
-		for _, job in ipairs(pipeline.jobs or {}) do
+		for _, job in ipairs(jobs) do
 			local job_state = tostring(job.state or "UNKNOWN"):upper()
 			local job_icon = icons.pulls_status(job_state:lower())
 			table.insert(row.children, {
-				label = tostring(job.name or "Job"),
-				status = string.format("%s %s", job_icon, status_label(job_state)),
+				label = string.format("%s %s", job_icon, tostring(job.name or "Job")),
+				status = "",
+				status_icon = job_icon,
 				status_hl = PIPELINE_HL[job_state] or "AtlasPipelineLinkMuted",
 				kind = "pipeline",
 				pipeline = pipeline,
@@ -403,14 +377,27 @@ local function render_pipelines(_pr, width, lines, spans, line_map)
 		rows = rows,
 		tree = {
 			column_key = "label",
-			default_expanded = true,
+			leaf_prefix = "",
+			show_indicator = false,
 			is_expanded = function(row)
 				return state.is_pipeline_expanded(row.pipeline)
 			end,
 		},
-		cell_hl = function(row, column, _context)
+		cell_hl = function(row, column, context)
 			if row.kind == "separator" then
 				return nil
+			end
+			if column.key == "label" and row.status_icon then
+				local start_col = context.text:find(row.status_icon, 1, true)
+				if start_col then
+					return {
+						{
+							start_col = start_col - 1,
+							end_col = start_col - 1 + #row.status_icon,
+							hl_group = row.status_hl,
+						},
+					}
+				end
 			end
 			if column.key == "status" then
 				return row.status_hl
@@ -664,6 +651,11 @@ function M.on_enter(_pr, entry)
 		vim.ui.open(entry.url)
 		return true
 	end
+end
+
+---@return boolean
+function M.is_loading()
+	return state.any_loading()
 end
 
 function M.activate(buf, refresh)

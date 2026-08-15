@@ -1,6 +1,7 @@
 local M = {}
 
 local notify = require("atlas.core.notify")
+local picker = require("atlas.picker")
 local providers = require("atlas.providers")
 
 ---@class AtlasCreateIssueChoice
@@ -10,51 +11,23 @@ local providers = require("atlas.providers")
 ---@return AtlasCreateIssueChoice[]
 local function build_choices()
 	local choices = {}
+	local actions = require("atlas.issues.actions")
 	for _, provider_config in ipairs(providers.configured("issues")) do
 		local provider = providers.load(provider_config.id, "issues")
-		if provider and provider.capabilities.create_issue then
-			table.insert(choices, { label = provider_config.name, provider = provider })
+		if provider then
+			---@cast provider IssuesProvider
+			if actions.is_available("create_issue", { provider = provider }) then
+				table.insert(choices, { label = provider_config.name, provider = provider })
+			end
 		end
 	end
 
 	return choices
 end
 
----@param provider_id string
----@param open fun(opts: table)
----@param repo_field string
-function M.from_repository(provider_id, open, repo_field)
-	local git_branch = require("atlas.core.git")
-	local root, root_err = git_branch.repo_root(nil)
-	if not root then
-		notify.error(root_err or "Not in a git repository")
-		return
-	end
-
-	local remote_url, remote_err = git_branch.remote_url(root, "origin")
-	if not remote_url then
-		notify.error(remote_err or "No origin remote configured")
-		return
-	end
-
-	local info, parse_err = git_branch.parse_remote_url(remote_url)
-	if not info then
-		notify.error(parse_err or "Could not parse remote URL")
-		return
-	end
-
-	if info.provider ~= provider_id then
-		notify.error(
-			string.format(
-				"Current repo is on %s but you picked %s; switch into the right clone first",
-				info.provider,
-				provider_id
-			)
-		)
-		return
-	end
-
-	open({ [repo_field] = info.slug })
+---@param provider IssuesProvider
+local function create(provider)
+	require("atlas.issues.actions").run("create_issue", { provider = provider })
 end
 
 function M.start()
@@ -66,7 +39,7 @@ function M.start()
 	end
 
 	if #choices == 1 then
-		choices[1].provider.capabilities.create_issue()
+		create(choices[1].provider)
 		return
 	end
 
@@ -75,12 +48,16 @@ function M.start()
 		table.insert(labels, c.label)
 	end
 
-	vim.ui.select(labels, { prompt = "Create issue with:" }, function(_, idx)
-		if idx == nil then
-			return
-		end
-		choices[idx].provider.capabilities.create_issue()
-	end)
+	picker.select({
+		title = "Create issue with:",
+		items = labels,
+		on_select = function(_, index)
+			if index == nil then
+				return
+			end
+			create(choices[index].provider)
+		end,
+	})
 end
 
 return M

@@ -9,7 +9,7 @@ function M.content(pr)
 	local id = tostring(pr.id or "")
 	local marker = pr.provider == "gitlab" and "!" or "#"
 	local state = tostring(pr.state or "-")
-	local author = tostring((pr.author and pr.author.name) or "Unknown")
+	local author = helper.user_handle(pr.author)
 	local repo = tostring(pr.repo_full_name or "")
 	local branch = tostring((pr.source or {}).branch or "?")
 		.. " → "

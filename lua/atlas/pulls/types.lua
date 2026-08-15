@@ -25,6 +25,10 @@
 ---@class PullsLink
 ---@field html string
 
+---@class PullsLabel
+---@field name string
+---@field color string|nil
+
 --------------------------------------------------------------------------------
 -- Pull Request
 --------------------------------------------------------------------------------
@@ -50,6 +54,11 @@
 ---@field repo string
 ---@field is_subscribed boolean|nil
 ---@field reactions table<string, integer>|nil
+---@field assignees PullsAuthor[]|nil
+---@field reviewers PullsReviewer[]|nil
+---@field labels PullsLabel[]|nil
+---@field lines_added number|nil
+---@field lines_removed number|nil
 ---@field _raw table
 
 --------------------------------------------------------------------------------
@@ -119,9 +128,8 @@
 -- Reviewer
 --------------------------------------------------------------------------------
 
----@class PullsReviewer
----@field name string
----@field nickname string|nil
+---@class PullsReviewer: PullsAuthor
+---@field provider_id string|nil Identifier used when updating the reviewer list.
 ---@field decision "approved"|"changes_requested"|"pending"
 
 --------------------------------------------------------------------------------
@@ -191,7 +199,6 @@
 ---@field label string|nil
 ---@field body string|nil
 ---@field deleted boolean|nil
----@field always_render boolean|nil
 
 --------------------------------------------------------------------------------
 -- Comment
@@ -207,26 +214,53 @@
 ---@field old_path string|nil
 ---@field from integer|nil
 ---@field to integer|nil
+---@field start_from integer|nil
+---@field start_to integer|nil
+---@field commit_hash string|nil
+
+---@class PullsFileCommentPosition
+---@field path string
+---@field old_path string|nil
 ---@field commit_hash string|nil
 
 ---@class PullsComment
 ---@field id number|string
 ---@field parent_id number|string|nil
+---@field thread_id string|nil
 ---@field author PullsAuthor|nil
 ---@field content_raw string
 ---@field content_display string|nil
 ---@field created_on string
 ---@field inline PullsInlineCommentPosition|nil
+---@field file PullsFileCommentPosition|nil
 ---@field inline_hunk DiffHunk|nil                       -- surrounding diff context for inline comments
+---@field inline_hunk_anchor integer|nil                 -- line coordinate inside inline_hunk
 ---@field is_task boolean|nil                            -- true = render as task (checkbox)
 ---@field task_label string|nil                          -- display name override; defaults to "Task"
----@field state "PENDING"|"RESOLVED"|"DELETED"|"OUTDATED"|nil -- nil = active/open
----@field can_resolve boolean|nil                        -- false when the provider cannot resolve this thread yet
----@field deleted boolean|nil
+---@field state "PENDING"|"RESOLVED"|"DELETED"|"OUTDATED"|nil -- primary state; nil = active/open
+---@field outdated boolean|nil                           -- may coexist with RESOLVED
 ---@field reactions table<string, integer>|nil
 ---@field url string|nil
 ---@field html_url string|nil
 ---@field _raw table|nil
+
+--------------------------------------------------------------------------------
+-- Review
+--------------------------------------------------------------------------------
+
+---@class PullsReview
+---@field id string|nil
+---@field commit_hash string|nil
+---@field pending boolean
+
+---@class PullsReviewData
+---@field review PullsReview
+---@field comments PullsComment[]
+---@field tasks PullsComment[]
+
+---@class PullsReviewContext
+---@field authors PullsAuthor[]
+---@field reviewed_files table<string, boolean>|nil
 
 --------------------------------------------------------------------------------
 -- Commit

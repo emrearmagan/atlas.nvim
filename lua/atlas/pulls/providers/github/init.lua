@@ -1,12 +1,15 @@
 local actions = require("atlas.pulls.providers.github.actions")
 local activity_api = require("atlas.pulls.providers.github.api.activity")
+local changes_api = require("atlas.pulls.providers.github.api.changes")
 local checks_api = require("atlas.pulls.providers.github.api.checks")
+local request_scope = require("atlas.core.requests")
 local cli = require("atlas.providers.github.client").pulls
 local comments_api = require("atlas.pulls.providers.github.api.comments")
-local commits_api = require("atlas.pulls.providers.github.api.commits")
 local notifications_api = require("atlas.pulls.providers.github.api.notifications")
+local pipelines_api = require("atlas.pulls.providers.github.api.pipelines")
 local pullrequests_api = require("atlas.pulls.providers.github.api.pullrequests")
 local repositories_api = require("atlas.pulls.providers.github.api.repositories")
+local reviews_api = require("atlas.pulls.providers.github.api.reviews")
 local users_api = require("atlas.pulls.providers.github.api.users")
 local resolver = require("atlas.providers.resolve")
 
@@ -38,13 +41,13 @@ local function fetch_pullrequests(view, opts, on_done)
 	local query = search:find("is:pr") and search or "is:pr " .. search
 	local filters = require("atlas.pulls.state").status_filters or {}
 	local open, merged, declined = filters.OPEN, filters.MERGED, filters.DECLINED
-	if open and not merged and not declined then
+	if opts.state == "open" or (opts.state == nil and open and not merged and not declined) then
 		query = query .. " is:open"
-	elseif merged and not open and not declined then
+	elseif opts.state == "merged" or (opts.state == nil and merged and not open and not declined) then
 		query = query .. " is:merged"
-	elseif declined and not open and not merged then
+	elseif opts.state == "declined" or (opts.state == nil and declined and not open and not merged) then
 		query = query .. " is:closed -is:merged"
-	elseif merged and declined and not open then
+	elseif opts.state == nil and merged and declined and not open then
 		query = query .. " is:closed"
 	end
 
@@ -75,6 +78,8 @@ end
 ---@param on_done fun(result: { comments: PullsComment[], events: PullsActivityEntry[] }|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 local function fetch_conversation(pr, opts, on_done)
+	local requests = request_scope.new()
+
 	---@param result { comments: PullsComment[], events: PullsActivityEntry[] }
 	---@param description string
 	local function finish(result, description)
@@ -87,13 +92,14 @@ local function fetch_conversation(pr, opts, on_done)
 				content_raw = description,
 				created_on = pr.created_on or "",
 				reactions = pr.reactions,
-				can_resolve = false,
 			})
 		end
 		on_done({ comments = comments, events = type(result.events) == "table" and result.events or {} }, nil)
 	end
 
-	return activity_api.fetch_conversation(pr, opts, function(result, err)
+	requests.run(function(done)
+		return activity_api.fetch_conversation(pr, opts, done)
+	end, function(result, err)
 		if err or type(result) ~= "table" then
 			on_done(nil, err or "Failed to fetch conversation")
 			return
@@ -104,10 +110,13 @@ local function fetch_conversation(pr, opts, on_done)
 			finish(result, description)
 			return
 		end
-		pullrequests_api.get_description(pr, opts, function(value)
+		requests.run(function(done)
+			return pullrequests_api.get_description(pr, opts, done)
+		end, function(value)
 			finish(result, tostring(value or ""))
 		end)
 	end)
+	return requests
 end
 
 ---@param pr PullRequest
@@ -125,6 +134,8 @@ local function add_reaction(pr, comment, key, on_done)
 	local endpoint
 	if tostring(comment.id) == "__body__" then
 		endpoint = string.format("repos/%s/issues/%s/reactions", repo_slug, tostring(pr.id))
+	elseif comment.inline or comment.file then
+		endpoint = string.format("repos/%s/pulls/comments/%s/reactions", repo_slug, tostring(comment.id))
 	else
 		endpoint = string.format("repos/%s/issues/comments/%s/reactions", repo_slug, tostring(comment.id))
 	end
@@ -147,47 +158,6 @@ end
 ---@return { cancel: fun() }|nil
 local function fetch_notifications(opts, on_done)
 	return notifications_api.fetch(vim.tbl_extend("force", { all = true, per_page = 100 }, opts or {}), on_done)
-end
-
----@param opts { repo_slug: string, repo_root: string|nil, head: string, base: string }
----@param on_done fun(reviewers: PullsCreatePRReviewer[]|nil, err: string|nil)
----@return { cancel: fun() }|nil
-local function fetch_default_reviewers(opts, on_done)
-	local slug = tostring(opts.repo_slug or "")
-	if slug == "" then
-		vim.schedule(function()
-			on_done(nil, "Missing repo slug")
-		end)
-		return nil
-	end
-
-	return cli.gh(
-		{ "api", "--paginate", string.format("repos/%s/collaborators?per_page=100", slug) },
-		function(result, err)
-			if err then
-				on_done(nil, err)
-				return
-			end
-
-			local reviewers = {}
-			for _, raw in ipairs(type(result) == "table" and result or {}) do
-				local login = type(raw) == "table" and tostring(raw.login or "") or ""
-				if login ~= "" then
-					table.insert(reviewers, {
-						label = "@" .. login,
-						provider_id = login,
-						selected = false,
-						default = false,
-					})
-				end
-			end
-			on_done(reviewers, nil)
-		end
-	)
-end
-
-local function search()
-	actions.run("search", { source = "main" }, function() end)
 end
 
 ---@param value string
@@ -234,26 +204,29 @@ end
 ---@param target AtlasTarget
 ---@return AtlasPullsViewConfig
 local function search_view(target)
+	local search = string.format("repo:%s/%s is:pr", target.owner, target.repo)
+	if target.number then
+		search = search .. " " .. tostring(target.number)
+	end
 	return {
 		name = "Search",
 		layout = "compact",
-		search = string.format(
-			"repo:%s/%s %s is:pr",
-			target.owner,
-			target.repo,
-			target.number and tostring(target.number) or ""
-		),
+		search = search,
 	}
 end
 
 ---@param info AtlasGitRemoteInfo
 ---@param domain AtlasDomain
 ---@param entity AtlasEntity
----@param number integer
+---@param number integer|nil
 ---@param base_url string
 ---@return AtlasTarget
 local function target(info, domain, entity, number, base_url)
 	local owner, repo = info.slug:match("^(.+)/([^/]+)$")
+	local url = string.format("%s/%s/%s", base_url, owner, repo)
+	if entity ~= "repo" then
+		url = string.format("%s/%s/%d", url, entity == "pr" and "pull" or "issues", assert(number))
+	end
 	return {
 		provider = "github",
 		domain = domain,
@@ -262,7 +235,7 @@ local function target(info, domain, entity, number, base_url)
 		owner = owner,
 		repo = repo,
 		number = number,
-		url = string.format("%s/%s/%s/%s/%d", base_url, owner, repo, entity == "pr" and "pull" or "issues", number),
+		url = url,
 	}
 end
 
@@ -288,13 +261,20 @@ return {
 			fetch_user = fetch_user,
 			fetch_pullrequests = fetch_pullrequests,
 			fetch_pullrequest = fetch_pullrequest,
-			fetch_description = pullrequests_api.get_description,
+			create_pr = pullrequests_api.create_pr,
+			fetch_default_reviewers = pullrequests_api.fetch_default_reviewers,
 			fetch_reviewers = pullrequests_api.get_reviewers,
-			fetch_merge_checks = checks_api.get_merge_checks_summary,
-			fetch_diffstat = pullrequests_api.get_diffstat,
+			update_reviewers = pullrequests_api.update_reviewers,
+			update_title = pullrequests_api.update_title,
+			update_description = pullrequests_api.update_description,
+			set_draft = pullrequests_api.set_draft,
+			decline = pullrequests_api.decline,
+			fetch_description = pullrequests_api.get_description,
+			fetch_merge_checks = checks_api.fetch,
+			fetch_diffstat = changes_api.fetch_diffstat,
 			fetch_activity = activity_api.fetch_activity,
-			fetch_commits = commits_api.fetch_commits,
-			fetch_diff = commits_api.fetch_diff,
+			fetch_commits = changes_api.fetch_commits,
+			fetch_diff = changes_api.fetch_diff,
 			views = views,
 		},
 		comments = {
@@ -305,13 +285,17 @@ return {
 			edit_comment = comments_api.edit_comment,
 			delete_comment = comments_api.delete_comment,
 			add_reaction = add_reaction,
+			set_thread_resolved = comments_api.set_thread_resolved,
 		},
 		reviews = {
-			fetch_review_context = pullrequests_api.get_review_context,
-			fetch_comments = comments_api.fetch_comments,
-			fetch_tasks = comments_api.fetch_tasks,
-			set_thread_resolved = comments_api.set_thread_resolved,
-			submit_review = comments_api.submit_review,
+			fetch = reviews_api.fetch,
+			fetch_review_context = reviews_api.fetch_context,
+			start_review = reviews_api.start,
+			submit_review = reviews_api.submit,
+			approve = reviews_api.approve,
+			request_changes = reviews_api.request_changes,
+			discard_review = reviews_api.discard,
+			set_file_reviewed = reviews_api.set_file_reviewed,
 		},
 		repository = {
 			fetch_details = repositories_api.fetch_detail,
@@ -319,20 +303,15 @@ return {
 			fetch_tags = repositories_api.fetch_tags,
 		},
 		pipelines = {
-			fetch = checks_api.get_pipelines,
-			fetch_details = checks_api.get_pipeline_details,
-			fetch_job_log = checks_api.get_pipeline_job_log,
+			fetch = pipelines_api.fetch,
+			fetch_details = pipelines_api.fetch_details,
+			fetch_job_log = pipelines_api.fetch_job_log,
 			actions = require("atlas.pulls.providers.github.actions.pipelines"),
 		},
 		notifications = {
 			fetch = fetch_notifications,
 			mark_read = notifications_api.mark_read,
 			mark_done = notifications_api.mark_done,
-		},
-		search = search,
-		create = {
-			create_pr = pullrequests_api.create_pr,
-			fetch_default_reviewers = fetch_default_reviewers,
 		},
 		actions = actions,
 		ui = {

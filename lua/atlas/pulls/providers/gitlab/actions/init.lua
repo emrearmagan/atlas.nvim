@@ -4,70 +4,55 @@ local registry = require("atlas.pulls.providers.gitlab.actions.registry")
 local logger = require("atlas.core.logger")
 local statusline = require("atlas.ui.statusline")
 
----@class GitLabPullsActionContext
----@field pr PullRequest|nil
----@field source "main"|"panel"|"diff"|nil
----@field notify fun(level: "loading"|"success"|"info"|"warn"|"error", message: string, duration: integer|nil)|nil
+---@alias AtlasGitLabActionId
+---| AtlasPullActionId
+---| "reopen"
+---| "edit_assignees"
+---| "toggle_subscription"
 
----@param id string
----@param ctx GitLabPullsActionContext
----@return boolean
-function M.is_available(id, ctx)
-	local action = registry.find(id)
-	return action ~= nil and action.is_available(ctx) == true
+M.items = registry.items
+
+---@param id AtlasGitLabActionId
+---@return AtlasPullAction|nil
+local function find(id)
+	return registry.find(id)
 end
 
----@param id string
----@param ctx GitLabPullsActionContext
+---@param id AtlasGitLabActionId
+---@param ctx AtlasPullActionContext
+---@return boolean
+function M.is_available(id, ctx)
+	local action = find(id)
+	return action ~= nil and (action.is_available == nil or action.is_available(ctx) == true)
+end
+
+---@param id AtlasGitLabActionId
+---@param ctx AtlasPullActionContext
 ---@param on_done fun(result: PullsActionResult|nil, err: string|nil)
+---@return boolean handled
 function M.run(id, ctx, on_done)
-	local action = registry.find(id)
+	local action = find(id)
 	if action == nil then
 		local err = string.format("Unknown action: %s", tostring(id))
-		logger.logerror("gitlab.pulls.action.unknown", { action_id = tostring(id), source = ctx and ctx.source or nil })
+		logger.logerror("gitlab.pulls.action.unknown", { action_id = tostring(id) })
 		on_done(nil, err)
-		return
+		return false
 	end
 
-	local available, available_err = action.is_available(ctx)
+	local available, available_err = true, nil
+	if action.is_available then
+		available, available_err = action.is_available(ctx)
+	end
 	if not available then
 		local err = tostring(available_err or string.format("Action is not available: %s", tostring(id)))
 		local notify = ctx.notify or statusline.notify
 		notify("warn", err)
 		on_done(nil, err)
-		return
+		return false
 	end
 
 	action.run(ctx, on_done)
-end
-
----@param ctx GitLabPullsActionContext
----@param on_done fun(result: PullsActionResult|nil, err: string|nil)
-function M.open(ctx, on_done)
-	local actions = registry.available(ctx)
-	if #actions == 0 then
-		on_done({ changed_pr = false, message = "No actions available" }, nil)
-		return
-	end
-
-	local pr_label = ""
-	if ctx and ctx.pr ~= nil then
-		pr_label = string.format(" MR !%s", tostring(ctx.pr.id or ""))
-	end
-
-	vim.ui.select(actions, {
-		prompt = string.format("Choose GitLab action%s", pr_label),
-		kind = "atlas_gitlab_pulls_actions",
-		format_item = function(item)
-			return tostring((item and item.label) or "")
-		end,
-	}, function(action)
-		if action == nil then
-			on_done({ changed_pr = false, message = "Action cancelled" }, nil)
-			return
-		end
-		action.run(ctx, on_done)
-	end)
+	return true
 end
 
 return M

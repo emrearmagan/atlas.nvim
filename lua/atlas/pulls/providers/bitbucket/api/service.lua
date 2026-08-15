@@ -169,7 +169,9 @@ end
 function M.request(method, url, headers, body, callback, ctx)
 	local user, token, auth_err = M.get_auth()
 	if auth_err then
-		callback(nil, sanitize_error(auth_err))
+		local err = sanitize_error(auth_err)
+		logger.logerror("Bitbucket auth missing", { error = err })
+		callback(nil, err)
 		return nil
 	end
 
@@ -194,16 +196,16 @@ function M.request(method, url, headers, body, callback, ctx)
 	return http.curl_request(method, full_url, request_headers, body, function(result, err)
 		if err then
 			local safe_err = sanitize_error(err)
-			logger.logerror("Bitbucket request failed", {
-				method = method,
-				url = full_url,
-				error = safe_err,
-			})
+			logger.logerror("Bitbucket request failed", vim.tbl_extend("force", {}, log, { error = safe_err }))
 			callback(nil, safe_err)
 			return
 		end
 
 		if type(result) ~= "table" then
+			logger.logerror(
+				"Bitbucket response invalid",
+				vim.tbl_extend("force", {}, log, { error = "Response is not a JSON object" })
+			)
 			callback(nil, "Bitbucket response is not a JSON object")
 			return
 		end
@@ -211,11 +213,7 @@ function M.request(method, url, headers, body, callback, ctx)
 		local api_err = M.api_error_message(result)
 		if api_err then
 			api_err = sanitize_error(api_err)
-			logger.logerror("Bitbucket API error", {
-				method = method,
-				url = full_url,
-				error = api_err,
-			})
+			logger.logerror("Bitbucket API error", vim.tbl_extend("force", {}, log, { error = api_err }))
 			callback(nil, api_err)
 			return
 		end
@@ -275,7 +273,9 @@ end
 function M.request_text(method, url, headers, body, callback, ctx)
 	local user, token, auth_err = M.get_auth()
 	if auth_err then
-		callback(nil, sanitize_error(auth_err))
+		local err = sanitize_error(auth_err)
+		logger.logerror("Bitbucket auth missing", { error = err })
+		callback(nil, err)
 		return nil
 	end
 
@@ -300,11 +300,7 @@ function M.request_text(method, url, headers, body, callback, ctx)
 	return http.curl_text_request(method, full_url, request_headers, body, function(text, err)
 		if err then
 			local safe_err = sanitize_error(err)
-			logger.logerror("Bitbucket request failed", {
-				method = method,
-				url = full_url,
-				error = safe_err,
-			})
+			logger.logerror("Bitbucket request failed", vim.tbl_extend("force", {}, log, { error = safe_err }))
 			callback(nil, safe_err)
 			return
 		end

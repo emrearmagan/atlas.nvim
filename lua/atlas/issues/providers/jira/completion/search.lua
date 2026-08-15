@@ -18,7 +18,7 @@ local function complete(arglead, cmdline, cursorpos)
 end
 
 ---@param query string
-local function run(query)
+function M.open_query(query)
 	query = vim.trim(tostring(query or ""))
 	if query == "" then
 		return
@@ -41,7 +41,7 @@ function M.open(default)
 	prompt.open({
 		name = "AtlasJqlSearch",
 		complete = complete,
-		on_submit = run,
+		on_submit = M.open_query,
 		default = default,
 	})
 end

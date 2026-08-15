@@ -58,7 +58,7 @@ function M.fetch_conversation(pr, opts, on_done)
 			local run_start, run_count = nil, 0
 			local function flush()
 				if run_start ~= nil then
-					run_start.content_raw = string.format("added %d commit%s", run_count, run_count == 1 and "" or "s")
+					run_start.label = string.format("added %d commit%s", run_count, run_count == 1 and "" or "s")
 					run_start.kind = "update"
 					table.insert(squashed, run_start)
 					run_start, run_count = nil, 0

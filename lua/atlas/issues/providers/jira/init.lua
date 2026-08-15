@@ -268,24 +268,6 @@ function M.fetch_activity(issue, opts, on_done)
 	})
 end
 
----@param on_done fun(result: table|nil, err: string|nil)|nil
-local function search(on_done)
-	local jira_actions = require("atlas.issues.providers.jira.actions")
-	jira_actions.run("search_issues", { issue = nil, source = "main" }, function(result, err)
-		if on_done ~= nil then
-			on_done(result, err)
-		end
-	end)
-end
-
-local function create_issue()
-	require("atlas.issues.providers.jira.actions").run("create_issue", {}, function(_, err)
-		if err then
-			require("atlas.core.notify").error("Jira create issue failed: " .. tostring(err))
-		end
-	end)
-end
-
 ---@return AtlasJiraViewConfig[]
 function M.views()
 	local cfg = require("atlas.issues.providers.jira.api.config").jira_config()
@@ -325,8 +307,6 @@ return {
 				return require("atlas.issues.providers.jira.completion.author").build_completion()
 			end,
 		},
-		search = search,
-		create_issue = create_issue,
 		actions = require("atlas.issues.providers.jira.actions"),
 		ui = {
 			setup = require("atlas.issues.providers.jira.highlights").setup,

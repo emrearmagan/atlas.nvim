@@ -41,7 +41,7 @@ local function normalize(raw)
 	return {
 		id = tostring(raw.id or ""),
 		title = tostring(target.title or raw.body or ""),
-		subtitle = table.concat(subtitle_parts, "  ·  "),
+		subtitle = table.concat(subtitle_parts, "  "),
 		timestamp = tostring(raw.updated_at or raw.created_at or ""),
 		icon = icon_def.icon or icon_def[1],
 		icon_hl = icon_def.hl or icon_def[2],

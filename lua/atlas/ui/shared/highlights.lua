@@ -32,8 +32,7 @@ end
 
 ---@type table<string, table>
 local groups = {
-	AtlasTabInactive = { bg = "#494d64", fg = "#a5adcb" },
-	AtlasPanelHeaderBg = { bg = "#494d64" },
+	AtlasTabInactive = { link = "CursorLine" },
 	AtlasColumnHeader = { fg = "#7f849c", bold = true },
 	AtlasSectionHeader = { fg = "#7f849c", bold = true, underline = true },
 	AtlasBorder = { fg = "#585b70" },
@@ -42,6 +41,7 @@ local groups = {
 	AtlasTextMutedItalic = { fg = "#7f849c", italic = true },
 	AtlasTextMutedStrikethrough = { fg = "#7f849c", strikethrough = true },
 	AtlasTextPositive = { fg = "#a6da95", bold = true },
+	AtlasTextNote = { fg = "#f5bde6", bold = true },
 	AtlasTextWarning = { fg = "#f9e2af", bold = true },
 
 	AtlasLogInfo = { fg = "#89b4fa", bold = true },
@@ -51,6 +51,7 @@ local groups = {
 	AtlasFooterBackground = { bg = "#202635" },
 	AtlasFooterText = { fg = "#7f849c", bg = "#202635" },
 	AtlasFooterInfo = { fg = "#89b4fa", bg = "#202635", bold = true },
+	AtlasFooterNote = { fg = "#f5bde6", bg = "#202635", bold = true },
 	AtlasFooterWarning = { fg = "#f9e2af", bg = "#202635", bold = true },
 	AtlasFooterError = { fg = "#f38ba8", bg = "#202635", bold = true },
 	AtlasFooterSuccess = { fg = "#a6da95", bg = "#202635", bold = true },

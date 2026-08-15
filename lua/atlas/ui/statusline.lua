@@ -7,7 +7,7 @@ local utils = require("atlas.ui.shared.utils")
 
 local BACKGROUND_HL = "AtlasFooterBackground"
 local EXPRESSION = "%!v:lua.require'atlas.ui.statusline'.current()"
-local DIFF_EXPRESSION = "%!v:lua.require'atlas.pulls.diff.atlas.statusline'.current()"
+local DIFF_EXPRESSION = "%!v:lua.require'atlas.pulls.diff.ui.statusline'.current()"
 
 ---@class AtlasStatuslineSegment
 ---@field text string
@@ -146,17 +146,13 @@ local function add(output, segment)
 	end
 end
 
----@return string|nil
-local function help_label()
-	local keys = keymaps.resolve("ui.help")
-	return keys and string.format("%s help", keys[1]) or nil
-end
-
 ---@param segments AtlasStatuslineSegment[]
 ---@param current_notice AtlasStatuslineNotice|nil
 ---@param available integer|nil
+---@param options { help_key: string|nil, show_version: boolean|nil, left_padding: integer|nil }|nil
 ---@return string
-function M.format(segments, current_notice, available)
+function M.format(segments, current_notice, available, options)
+	options = options or {}
 	local fitted = {}
 	for _, segment in ipairs(segments or {}) do
 		fitted[#fitted + 1] = copy_segment(segment)
@@ -168,22 +164,24 @@ function M.format(segments, current_notice, available)
 			align = "right",
 		}
 	end
-	fitted[#fitted + 1] = {
-		text = string.format("atlas (%s)", utils.get_version()),
-		hl_group = "AtlasFooterText",
-		align = "right",
-		priority = 0,
-	}
-	local help = help_label()
-	if help then
+	if options.show_version then
 		fitted[#fitted + 1] = {
-			text = help,
-			hl_group = "AtlasFooterWarning",
+			text = string.format("atlas (%s)", utils.get_version()),
+			hl_group = "AtlasFooterText",
 			align = "right",
-			priority = 1,
+			priority = 0,
 		}
 	end
-	fit(fitted, available or current_width())
+	if options.help_key then
+		fitted[#fitted + 1] = {
+			text = string.format("%s help", options.help_key),
+			hl_group = "AtlasFooterWarning",
+			align = "right",
+			priority = 10,
+		}
+	end
+	local left_padding = options.left_padding or 0
+	fit(fitted, math.max((available or current_width()) - left_padding - 1, 0))
 
 	local left, right = {}, {}
 	for _, segment in ipairs(fitted) do
@@ -191,10 +189,11 @@ function M.format(segments, current_notice, available)
 	end
 
 	return table.concat({
-		"%#" .. BACKGROUND_HL .. "#%<",
+		"%#" .. BACKGROUND_HL .. "#" .. string.rep(" ", left_padding),
 		table.concat(left),
 		"%=",
 		table.concat(right),
+		" ",
 	})
 end
 
@@ -311,7 +310,11 @@ end
 
 ---@return string
 function M.current()
-	return M.format(items, notice)
+	local help_keys = keymaps.resolve("ui.help")
+	return M.format(items, notice, nil, {
+		help_key = help_keys and help_keys[1],
+		show_version = true,
+	})
 end
 
 function M.clear_notice()

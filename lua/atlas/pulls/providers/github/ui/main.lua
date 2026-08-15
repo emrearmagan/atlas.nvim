@@ -83,18 +83,14 @@ end
 ---@param pr PullRequest
 ---@return string, string
 local function review_icon_and_hl(pr)
-	local ok, nodes = pcall(function()
-		return pr._raw.latestOpinionatedReviews.nodes
-	end)
-	if not ok or type(nodes) ~= "table" then
+	if pr.reviewers == nil then
 		return REVIEW_ICON.REVIEW_REQUIRED[1], REVIEW_ICON.REVIEW_REQUIRED[2]
 	end
 	local approved, changes = 0, 0
-	for _, node in ipairs(nodes) do
-		local s = tostring(node.state or ""):upper()
-		if s == "APPROVED" then
+	for _, reviewer in ipairs(pr.reviewers) do
+		if reviewer.decision == "approved" then
 			approved = approved + 1
-		elseif s == "CHANGES_REQUESTED" then
+		elseif reviewer.decision == "changes_requested" then
 			changes = changes + 1
 		end
 	end
@@ -160,7 +156,7 @@ end
 local function compact_columns()
 	return {
 		{ key = "pr_icon", name = "", min_width = 1, can_grow = false, header_hl = "AtlasColumnHeader" },
-		{ key = "repo_pr", name = "PR", min_width = 42, header_hl = "AtlasColumnHeader" },
+		{ key = "repo_pr", name = "Title", min_width = 42, header_hl = "AtlasColumnHeader" },
 		{
 			key = "conversation",
 			name = icons.general("conversation"),
@@ -204,12 +200,11 @@ local function compact_rows(groups)
 		for _, pr in ipairs(group.prs or {}) do
 			local id_str = tostring(pr.id or "")
 			local title = tostring(pr.title or "")
-			local author_name = (pr.author and pr.author.name) and pr.author.name or ""
+			local author_name = helper.user_handle(pr.author)
 			local is_reloading = state.is_pr_reloading(pr.repo_full_name, pr.id)
 			local ci, ci_h = ci_icon_and_hl(pr)
 			local review, review_h = review_icon_and_hl(pr)
-			local diff_text, diff_highlights =
-				diff_stats(tonumber(pr._raw.additions) or 0, tonumber(pr._raw.deletions) or 0)
+			local diff_text, diff_highlights = diff_stats(pr.lines_added or 0, pr.lines_removed or 0)
 			local icon, icon_hl = pr_icon_and_hl(pr)
 			table.insert(rows, {
 				kind = "pr",
@@ -234,7 +229,7 @@ local function compact_rows(groups)
 			table.insert(rows, {
 				kind = "meta",
 				pr_icon = "",
-				repo_pr = string.format("%s %s", REPO_ICON, repo_label),
+				repo_pr = repo_label,
 				conversation = "",
 				ci = "",
 				ci_hl = "",
@@ -259,7 +254,7 @@ end
 local function plain_columns()
 	return {
 		{ key = "pr_icon", name = "", min_width = 1, can_grow = false, header_hl = "AtlasColumnHeader" },
-		{ key = "name", name = "PR", min_width = 42, header_hl = "AtlasColumnHeader" },
+		{ key = "name", name = "Title", min_width = 42, header_hl = "AtlasColumnHeader" },
 		{
 			key = "conversation",
 			name = icons.general("conversation"),
@@ -338,13 +333,12 @@ local function plain_rows(groups)
 		for _, pr in ipairs(group.prs or {}) do
 			local id_str = tostring(pr.id or "")
 			local title = tostring(pr.title or "")
-			local author_name = (pr.author and pr.author.name) and pr.author.name or ""
+			local author_name = helper.user_handle(pr.author)
 			local icon = pr_icon_or_spinner(pr)
 			local _, icon_hl = pr_icon_and_hl(pr)
 			local ci, ci_h = ci_icon_and_hl(pr)
 			local review, review_h = review_icon_and_hl(pr)
-			local diff_text, diff_highlights =
-				diff_stats(tonumber(pr._raw.additions) or 0, tonumber(pr._raw.deletions) or 0)
+			local diff_text, diff_highlights = diff_stats(pr.lines_added or 0, pr.lines_removed or 0)
 			table.insert(rows, {
 				kind = "pr",
 				pr_icon = icon,

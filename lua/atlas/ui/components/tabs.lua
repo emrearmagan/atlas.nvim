@@ -45,14 +45,6 @@ function M.render(items, active_tab, width, opts)
 				hl_group = hl,
 			})
 		end
-		if icon ~= "" and type(tab.icon_hl) == "string" and tab.icon_hl ~= "" then
-			table.insert(spans, {
-				line = 0,
-				start_col = col,
-				end_col = col + #tab.icon,
-				hl_group = tab.icon_hl,
-			})
-		end
 		col = col + #part
 
 		if i < #items then

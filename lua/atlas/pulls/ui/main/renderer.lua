@@ -1,14 +1,27 @@
 local M = {}
 
-local resolver = require("atlas.core.keymaps")
 local state = require("atlas.pulls.state")
 local helper = require("atlas.pulls.ui.main.helper")
 local header = require("atlas.ui.components.header")
 local icons = require("atlas.ui.shared.icons")
 local navbar = require("atlas.ui.components.navbar")
 local table_tree = require("atlas.ui.components.table_tree")
+local ui_utils = require("atlas.ui.utils")
 local utils = require("atlas.ui.shared.utils")
 local statusline = require("atlas.ui.statusline")
+
+---@param lines string[]
+---@param text string
+---@param width integer
+---@param height integer
+local function append_centered_loading(lines, text, width, height)
+	local available_height = math.max(1, height - #lines)
+	for _ = 1, math.max(0, math.floor((available_height - 1) / 2)) do
+		table.insert(lines, "")
+	end
+	local centered = ui_utils.center_text(text, width)
+	table.insert(lines, centered)
+end
 
 ---@param lines string[]
 ---@param spans table[]
@@ -41,15 +54,6 @@ local function add_pr_id_spans(table_lines, table_map, table_spans)
 			end
 		end
 	end
-end
-
----@return string
-local function refresh_key_display()
-	local keys = resolver.resolve("ui.refresh_view")
-	if type(keys) == "table" and #keys > 0 then
-		return tostring(keys[1])
-	end
-	return "R"
 end
 
 ---@param opts { width: integer }
@@ -97,7 +101,7 @@ local function render_header(lines, spans, width)
 		return tostring(v.key or v.name or "")
 	end
 
-	local icon = state.provider and state.provider.icon or "•"
+	local icon = state.provider and state.provider.icon or icons.fallback()
 	local title = state.provider and state.provider.name or "Atlas"
 	local hl_group = state.provider and state.provider.hl_group or "Title"
 
@@ -149,27 +153,19 @@ local function render_header(lines, spans, width)
 		table.insert(actions, { label = label, hl_group = hl })
 	end
 
-	table.insert(actions, { label = "|", hl_group = "AtlasTextMuted" })
-
 	if state.provider and state.provider.capabilities.notifications then
+		table.insert(actions, { label = "|", hl_group = "AtlasTextMuted" })
 		local notif_state = require("atlas.ui.notifications.state")
-		local icons_mod = require("atlas.ui.shared.icons")
 		local count = notif_state.unread_count or 0
 		local bell_icon, bell_hl
 		if count > 0 then
-			bell_icon, bell_hl = icons_mod.general("bell_unread")
+			bell_icon, bell_hl = icons.general("bell_unread")
 		else
-			bell_icon, bell_hl = icons_mod.general("bell")
+			bell_icon, bell_hl = icons.general("bell")
 		end
 		local bell_label = count > 0 and string.format("%s %d", bell_icon, count) or bell_icon
 		table.insert(actions, { label = bell_label, hl_group = bell_hl })
-		table.insert(actions, { label = "|", hl_group = "AtlasTextMuted" })
 	end
-
-	table.insert(actions, {
-		label = string.format("Refresh (%s)", refresh_key_display()),
-		hl_group = "AtlasTextMuted",
-	})
 
 	utils.append_block(
 		lines,
@@ -188,8 +184,10 @@ end
 function M.render(opts)
 	local lines, spans = {}, {}
 	local line_map = {}
+	local loading_text = string.format("%s Loading...", state.reload_spinner_frame or "⠋")
 	statusline.set_items(helper.build_statusline_items(state.pulls, state.current_user))
 
+	table.insert(lines, "")
 	render_header(lines, spans, opts.width)
 	table.insert(lines, "")
 
@@ -210,7 +208,7 @@ function M.render(opts)
 			})
 		elseif state.is_loading then
 			table.insert(lines, "")
-			table.insert(lines, "Loading...")
+			append_centered_loading(lines, loading_text, opts.width, opts.height)
 		elseif state.pulls and #state.pulls > 0 then
 			table.insert(lines, "")
 			local body_lines, body_spans, body_map
@@ -243,7 +241,7 @@ function M.render(opts)
 			},
 		})
 	elseif state.is_loading then
-		table.insert(lines, "Loading...")
+		append_centered_loading(lines, loading_text, opts.width, opts.height)
 	else
 		local layout = state.active_view and state.active_view.layout or "compact"
 		local groups = state.pulls or {}

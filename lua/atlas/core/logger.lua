@@ -1,8 +1,6 @@
 local M = {}
 
 local LOG_FILE_NAME = "atlas.log"
-local DEFAULT_LEVEL = "INFO"
-
 ---@alias AtlasLogLevel "DEBUG"|"INFO"|"WARN"|"ERROR"
 
 local function now_iso()
@@ -125,18 +123,6 @@ end
 ---@param context table|nil
 function M.logerror(message, context)
 	write("ERROR", message, context)
-end
-
----@param level AtlasLogLevel|nil
----@param message any
----@param context table|nil
-function M.log(level, message, context)
-	write(level or DEFAULT_LEVEL, message, context)
-end
-
----@return string
-function M.path()
-	return log_path()
 end
 
 ---@return string[]

@@ -1,18 +1,18 @@
----@class PullsCommentsTabState
----@field comments PullsComment[]|"loading"|string|nil
----@field tasks PullsComment[]|"loading"|string|nil
+---@class PullsReviewTabState
+---@field data PullsReviewData|nil
+---@field status string|nil
 ---@field collapsed_hunks table<string, boolean>
 ---@field expanded_threads table<string, boolean>
 local M = {
-	comments = nil,
-	tasks = nil,
+	data = nil,
+	status = nil,
 	collapsed_hunks = {},
 	expanded_threads = {},
 }
 
 function M.reset()
-	M.comments = nil
-	M.tasks = nil
+	M.data = nil
+	M.status = nil
 	M.collapsed_hunks = {}
 	M.expanded_threads = {}
 end
@@ -105,7 +105,7 @@ end
 
 ---@return boolean
 function M.any_loading()
-	return M.comments == "loading" or M.tasks == "loading"
+	return M.status == "loading"
 end
 
 return M

@@ -101,12 +101,13 @@ function M.fetch_pipelines(pr, _opts, on_done) ---@diagnostic disable-line: unus
 	})
 end
 
----@param statuses_url string
+---@param commit PullsCommit
 ---@param opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(status: string|nil, url: string|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_commit_status(statuses_url, opts, on_done)
-	if type(statuses_url) ~= "string" or statuses_url == "" then
+function M.fetch_commit_status(commit, opts, on_done)
+	local statuses_url = tostring(commit.statuses_url or "")
+	if statuses_url == "" then
 		on_done("unknown", nil, nil)
 		return nil
 	end

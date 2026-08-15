@@ -33,6 +33,68 @@ local function comment_author(raw)
 	return { name = user.login, id = user.id, username = user.login, nickname = user.login }
 end
 
+---@param raw table
+---@return PullsAuthor[]|nil
+local function pull_assignees(raw)
+	if json.nilify(raw.assignees) == nil then
+		return nil
+	end
+
+	local assignees = {}
+	for _, node in ipairs(github_mapping.connection_nodes(raw.assignees)) do
+		local assignee = pull_author(node)
+		if assignee.username ~= "" then
+			table.insert(assignees, assignee)
+		end
+	end
+	return assignees
+end
+
+---@param raw table
+---@return PullsLabel[]|nil
+local function pull_labels(raw)
+	if json.nilify(raw.labels) == nil then
+		return nil
+	end
+
+	local labels = {}
+	for _, node in ipairs(github_mapping.connection_nodes(raw.labels)) do
+		local name = json.safe_str(node.name)
+		if name and name ~= "" then
+			table.insert(labels, { name = name, color = json.safe_str(node.color) })
+		end
+	end
+	return labels
+end
+
+---@param raw table
+---@return PullsReviewer[]|nil
+local function pull_reviewers(raw)
+	if json.nilify(raw.latestOpinionatedReviews) == nil then
+		return nil
+	end
+
+	local reviewers = {}
+	for _, node in ipairs(github_mapping.connection_nodes(raw.latestOpinionatedReviews)) do
+		local author = pull_author(node.author)
+		if author.username ~= "" then
+			local state = tostring(node.state or ""):upper()
+			local decision = state == "APPROVED" and "approved"
+				or state == "CHANGES_REQUESTED" and "changes_requested"
+				or "pending"
+			table.insert(reviewers, {
+				id = author.id ~= "" and author.id or author.username,
+				provider_id = author.username,
+				name = author.name,
+				username = author.username,
+				nickname = author.nickname,
+				decision = decision,
+			})
+		end
+	end
+	return reviewers
+end
+
 ---@param diff_hunk string|nil
 ---@return DiffHunk|nil
 local function parse_diff_hunk(diff_hunk)
@@ -82,9 +144,12 @@ function M.to_pull_request(raw)
 			branch = tostring(raw.baseRefName or ""),
 			commit_hash = tostring(raw.baseRefOid or ""),
 		},
-		comments_count = tonumber(raw.commentsCount) or (type(raw.comments) == "table" and tonumber(
-			raw.comments.totalCount
-		)) or (type(raw.comments) == "table" and #raw.comments) or tonumber(raw.comments) or 0,
+		comments_count = tonumber(raw.totalCommentsCount)
+			or tonumber(raw.commentsCount)
+			or (type(raw.comments) == "table" and tonumber(raw.comments.totalCount))
+			or (type(raw.comments) == "table" and #raw.comments)
+			or tonumber(raw.comments)
+			or 0,
 		tasks_count = 0,
 		created_on = tostring(raw.createdAt or ""),
 		updated_on = tostring(raw.updatedAt or ""),
@@ -97,71 +162,16 @@ function M.to_pull_request(raw)
 		repo_full_name = repo_full_name,
 		is_subscribed = tostring(raw.viewerSubscription or "") == "SUBSCRIBED",
 		reactions = github_mapping.reaction_groups(raw.reactionGroups),
-		_raw = raw,
+		assignees = pull_assignees(raw),
+		reviewers = pull_reviewers(raw),
+		labels = pull_labels(raw),
+		lines_added = tonumber(raw.additions),
+		lines_removed = tonumber(raw.deletions),
+		_raw = {
+			node_id = json.safe_str(raw.id),
+			commits = json.nilify(raw.commits),
+		},
 	}
-end
-
----@param raw table (search/issues API item)
----@return PullRequest
-function M.to_pull_request_from_search(raw)
-	local author = comment_author(raw.user)
-
-	local state = "open"
-	local raw_state = tostring(raw.state or ""):lower()
-	local pr_info = raw.pull_request or {}
-	if json.nilify(pr_info.merged_at) then
-		state = "merged"
-	elseif raw_state == "closed" then
-		state = "declined"
-	elseif raw.draft == true then
-		state = "draft"
-	end
-
-	local repo_url = tostring(raw.repository_url or "")
-	local repo_full_name = repo_url:match("/repos/([^/]+/[^/]+)$") or ""
-	local owner, repo_name = repo_full_name:match("^(.*)/([^/]+)$")
-	owner = owner or ""
-	repo_name = repo_name or repo_full_name
-
-	return {
-		id = tostring(raw.number or ""),
-		title = tostring(raw.title or ""),
-		description = tostring(raw.body or ""),
-		state = state,
-		author = author,
-		source = { branch = "", commit_hash = "" },
-		destination = { branch = "", commit_hash = "" },
-		comments_count = tonumber(raw.comments) or 0,
-		tasks_count = 0,
-		created_on = tostring(raw.created_at or ""),
-		updated_on = tostring(raw.updated_at or ""),
-		link = { html = tostring(pr_info.html_url or raw.html_url or "") },
-		provider = "github",
-		workspace = owner,
-		repo = repo_name,
-		repo_full_name = repo_full_name,
-		_raw = raw,
-	}
-end
-
----@param items table[]
----@return PullRequest[]
-function M.to_search_results(items)
-	local out = {}
-	for _, raw in ipairs(items or {}) do
-		table.insert(out, M.to_pull_request_from_search(raw))
-	end
-	return out
-end
-
----@param raw_prs table[]
----@return PullRequest[]
-function M.to_pull_requests_list(raw_prs)
-	local out = {}
-	for _, raw in ipairs(raw_prs or {}) do
-		table.insert(out, M.to_pull_request(raw))
-	end
-	return out
 end
 
 ---@param prs PullRequest[]
@@ -229,6 +239,9 @@ function M.to_activity(item)
 		}
 	elseif event == "reviewed" then
 		local state_label = tostring(item.state or ""):lower()
+		if state_label == "pending" then
+			return nil
+		end
 		local kind = state_label == "approved" and "approval"
 			or state_label == "changes_requested" and "changes_requested"
 			or "review"
@@ -242,7 +255,6 @@ function M.to_activity(item)
 			date = date,
 			label = verb,
 			body = body ~= "" and body or nil,
-			always_render = body ~= "" or nil,
 		}
 	elseif event == "closed" or event == "merged" or event == "reopened" then
 		return { kind = event, actor = actor, date = date, label = event }
@@ -284,6 +296,22 @@ function M.to_activity(item)
 			date = date,
 			label = reviewer ~= "" and ("requested review from " .. reviewer) or "requested review",
 		}
+	elseif event == "renamed" then
+		local rename = item.rename or {}
+		return {
+			kind = "renamed",
+			actor = actor,
+			date = date,
+			label = "changed the title",
+			body = string.format("%s → %s", tostring(rename.from or ""), tostring(rename.to or "")),
+		}
+	elseif event == "comment_deleted" then
+		return {
+			kind = "comment_deleted",
+			actor = actor,
+			date = date,
+			label = "deleted a comment",
+		}
 	elseif event == "ready_for_review" then
 		return {
 			kind = "ready_for_review",
@@ -305,7 +333,7 @@ local function comment(raw, raw_user)
 		id = raw.id,
 		parent_id = nil,
 		author = comment_author(raw_user),
-		content_raw = tostring(raw.body or ""),
+		content_raw = body_text(raw.body),
 		created_on = tostring(raw.created_at or raw.submitted_at or ""),
 		inline = nil,
 		url = nil,
@@ -320,9 +348,7 @@ function M.to_activity_comment(raw)
 	local raw_user = type(raw.user) == "table" and raw.user or (type(raw.actor) == "table" and raw.actor or nil)
 	local result = comment(raw, raw_user)
 	result.parent_id = nil
-	result.deleted = false
 	result.inline = nil
-	result.can_resolve = false
 	return result
 end
 
@@ -332,31 +358,45 @@ end
 function M.to_comment(raw, thread_state)
 	local line = json.nilify(raw.line)
 	local original_line = json.nilify(raw.original_line)
+	local start_line = json.nilify(raw.start_line) or json.nilify(raw.original_start_line)
+	local start_side = json.nilify(raw.start_side) or raw.side
 	local path = json.nilify(raw.path)
+	local subject_type = tostring(raw.subject_type or ""):upper()
 
-	local inline, inline_hunk
+	local file, inline, inline_hunk, inline_hunk_anchor
 	if path ~= nil then
 		local side = raw.side == "LEFT" and "old" or "new"
 		local anchor = line or original_line
-		if anchor then
+		if subject_type == "FILE" then
+			file = { path = tostring(path) }
+		elseif anchor then
+			inline_hunk_anchor = original_line or anchor
+			if start_line == anchor then
+				start_line = nil
+			end
 			inline = {
 				path = tostring(path),
 				from = side == "old" and anchor or nil,
 				to = side == "new" and anchor or nil,
+				start_from = start_side == "LEFT" and start_line or nil,
+				start_to = start_side ~= "LEFT" and start_line or nil,
 			}
 		end
 		inline_hunk = parse_diff_hunk(raw.diff_hunk)
-		if inline and inline_hunk and anchor then
-			inline_hunk = diff_parser.window_hunk(inline_hunk, side, anchor)
+		if inline and inline_hunk and inline_hunk_anchor then
+			inline_hunk = diff_parser.window_hunk(inline_hunk, side, inline_hunk_anchor)
 		end
 	end
 
 	local result = comment(raw, type(raw.user) == "table" and raw.user or nil)
 	result.parent_id = json.nilify(raw.in_reply_to_id)
+	result.file = file
 	result.inline = inline
 	result.inline_hunk = inline_hunk
+	result.inline_hunk_anchor = inline_hunk and inline_hunk_anchor or nil
 	result.is_task = nil
 	if thread_state then
+		result.outdated = thread_state.outdated == true
 		if thread_state.pending then
 			result.state = "PENDING"
 		elseif thread_state.resolved then
@@ -365,8 +405,111 @@ function M.to_comment(raw, thread_state)
 			result.state = "OUTDATED"
 		end
 	end
-	result.can_resolve = inline == nil and false or nil
 	return result
+end
+
+---@param node table
+---@param thread table
+---@param fallback_parent number|string|nil
+---@return PullsComment
+function M.to_review_comment(node, thread, fallback_parent)
+	local author = json.nilify(node.author) or {}
+	local reply_to = json.nilify(node.replyTo)
+	local review = json.safe_table(node.pullRequestReview)
+	local result = M.to_comment({
+		id = node.databaseId,
+		in_reply_to_id = reply_to and reply_to.databaseId or nil,
+		user = { login = author.login, id = author.databaseId },
+		body = node.body,
+		path = thread.path or node.path,
+		subject_type = thread.subjectType or node.subjectType,
+		diff_hunk = node.diffHunk,
+		line = thread.line or node.line,
+		start_line = thread.startLine or node.startLine,
+		original_line = thread.originalLine or node.originalLine,
+		original_start_line = thread.originalStartLine or node.originalStartLine,
+		side = thread.diffSide,
+		start_side = thread.startDiffSide,
+		url = node.url,
+		html_url = node.url,
+		created_at = node.createdAt,
+		reactions = github_mapping.reaction_groups(node.reactionGroups),
+	}, {
+		pending = review.state == "PENDING",
+		resolved = thread.isResolved == true,
+		outdated = thread.isOutdated == true,
+	})
+	result.thread_id = json.safe_str(thread.id)
+	result._raw = { comment_id = tostring(node.id or "") }
+	if result.parent_id == nil then
+		result.parent_id = fallback_parent
+	end
+	return result
+end
+
+---@param comment PullsComment
+---@return table
+function M.review_thread(comment)
+	local inline = comment.inline or {}
+	local file = comment.file
+	local side = not file and (inline.to ~= nil and "RIGHT" or "LEFT") or nil
+	local start_side = not file and (inline.start_to ~= nil and "RIGHT" or (inline.start_from ~= nil and "LEFT" or nil))
+		or nil
+	return {
+		id = tostring(comment.thread_id or ""),
+		subjectType = file and "FILE" or "LINE",
+		path = file and file.path or inline.path,
+		line = inline.to,
+		startLine = inline.start_to,
+		originalLine = comment.inline_hunk_anchor or inline.from,
+		originalStartLine = inline.start_from,
+		diffSide = side,
+		startDiffSide = start_side,
+		isResolved = comment.state == "RESOLVED",
+		isOutdated = comment.outdated == true or comment.state == "OUTDATED",
+	}
+end
+
+---@param comments PullsComment[]
+function M.normalize_inline_hunks(comments)
+	local longest = {}
+	for _, comment in ipairs(comments) do
+		local inline = comment.inline
+		local hunk = comment.inline_hunk
+		if inline and hunk then
+			local key = string.format("%s|%d|%d", inline.path, hunk.old_start, hunk.new_start)
+			if not longest[key] or #hunk.lines > #longest[key].lines then
+				longest[key] = hunk
+			end
+		end
+	end
+	for _, comment in ipairs(comments) do
+		local inline = comment.inline
+		local hunk = comment.inline_hunk
+		if inline and hunk then
+			local key = string.format("%s|%d|%d", inline.path, hunk.old_start, hunk.new_start)
+			comment.inline_hunk = longest[key]
+		end
+	end
+end
+
+---@param raw table
+---@return PullsComment[]
+function M.to_tasks(raw)
+	local out = {}
+	for _, line in ipairs(vim.split(tostring(raw.body or ""), "\n", { plain = true })) do
+		local marker = line:match("^%s*[-*+]%s+%[([ xX])%]") or line:match("^%s*%[([ xX])%]")
+		if marker then
+			local task = M.to_comment(raw)
+			task.id = string.format("github-task:%s:%06d", tostring(raw.id), #out + 1)
+			task.content_raw = line
+			task.is_task = true
+			task.task_label = "Checklist"
+			task.state = marker:lower() == "x" and "RESOLVED" or nil
+			table.insert(out, task)
+		end
+	end
+	return out
 end
 
 return M

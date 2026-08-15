@@ -3,19 +3,20 @@ local M = {}
 local icons = require("atlas.ui.shared.icons")
 local utils = require("atlas.ui.shared.utils")
 
-local namespace = vim.api.nvim_create_namespace("atlas_native_diff_commits")
+local namespace = vim.api.nvim_create_namespace("atlas_diff_native_commits")
 
----@param session AtlasNativeDiffSession
+---@param session AtlasDiffSession
 function M.render(session)
-	local buf = session.commits_panel.buf
+	local buf = session.viewer_state.commits_panel.buf
 	if not vim.api.nvim_buf_is_valid(buf) then
 		return
 	end
-	local win = session.commits_panel.win
-	local width = win and vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_width(win) or session.explorer.width
+	local win = session.viewer_state.commits_panel.win
+	local width = win and vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_width(win)
+		or session.viewer_state.explorer.width
 	local lines, highlights = { "" }, {}
 	local icon, icon_hl = icons.pulls("commit")
-	session.commit_items = {}
+	session.viewer_state.commit_items = {}
 
 	if #session.commits == 0 then
 		table.insert(lines, "No commits")
@@ -27,7 +28,7 @@ function M.render(session)
 			local prefix = string.format("%s %s ", icon, hash)
 			local text = prefix .. utils.truncate(message, math.max(1, width - vim.fn.strdisplaywidth(prefix)))
 			table.insert(lines, text)
-			session.commit_items[#lines] = commit
+			session.viewer_state.commit_items[#lines] = commit
 			local icon_start = 0
 			local hash_start = icon_start + #icon + 1
 			table.insert(highlights, { #lines - 1, icon_start, icon_start + #icon, icon_hl })
@@ -57,12 +58,12 @@ function M.render(session)
 	end
 end
 
----@param session AtlasNativeDiffSession
+---@param session AtlasDiffSession
 function M.show_details(session)
-	if vim.api.nvim_get_current_buf() ~= session.commits_panel.buf then
+	if vim.api.nvim_get_current_buf() ~= session.viewer_state.commits_panel.buf then
 		return
 	end
-	local commit = session.commit_items[vim.api.nvim_win_get_cursor(0)[1]]
+	local commit = session.viewer_state.commit_items[vim.api.nvim_win_get_cursor(0)[1]]
 	if not commit then
 		return
 	end

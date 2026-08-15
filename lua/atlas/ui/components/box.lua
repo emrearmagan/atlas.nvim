@@ -28,6 +28,8 @@ function M.render(groups, opts)
 	local padding_x = opts.padding_x or 1
 	local border_hl = opts.border_hl or "AtlasBorder"
 	local outer_pad = string.rep(" ", padding_x)
+	local line_prefix = outer_pad .. BORDER_VERTICAL
+	local line_prefix_width = vim.fn.strdisplaywidth(line_prefix)
 
 	local inner_width = math.max(4, opts.width - (padding_x * 2) - 2)
 
@@ -66,11 +68,11 @@ function M.render(groups, opts)
 
 		for _, content_line in ipairs(group.lines or {}) do
 			local padded = " " .. content_line
-			local display_width = vim.api.nvim_strwidth(padded)
+			local display_width = vim.fn.strdisplaywidth(line_prefix .. padded) - line_prefix_width
 			if display_width < inner_width then
 				padded = padded .. string.rep(" ", inner_width - display_width)
 			end
-			local line = outer_pad .. BORDER_VERTICAL .. padded .. BORDER_VERTICAL
+			local line = line_prefix .. padded .. BORDER_VERTICAL
 			table.insert(lines, line)
 			local lnum = #lines - 1
 			-- Left border

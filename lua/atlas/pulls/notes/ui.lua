@@ -1,8 +1,10 @@
 local actions = require("atlas.pulls.notes.ui.actions")
+local icons = require("atlas.ui.shared.icons")
 local keymaps = require("atlas.pulls.notes.ui.keymaps")
 local notes = require("atlas.pulls.notes")
 local notify = require("atlas.core.notify")
 local renderer = require("atlas.pulls.notes.ui.renderer")
+local resolver = require("atlas.core.keymaps")
 
 local M = {}
 
@@ -30,6 +32,13 @@ local state = {
 	expanded = {},
 }
 
+---@param action AtlasKeymapActionId
+---@return string|nil
+local function key_label(action)
+	local keys = resolver.resolve(action)
+	return keys and table.concat(keys, " / ") or nil
+end
+
 ---@return boolean
 local function valid_buffer()
 	return state.buf ~= nil and vim.api.nvim_buf_is_valid(state.buf)
@@ -55,8 +64,31 @@ local function render()
 		width = valid_window() and vim.api.nvim_win_get_width(state.win) or vim.o.columns,
 		target_filter = state.target_filter,
 		expanded = state.expanded,
+		action_keys = {
+			edit = key_label("pulls.review.diff.edit_comment"),
+			delete = key_label("pulls.review.diff.delete"),
+		},
 	})
 	state.line_map = line_map
+	if valid_window() then
+		local note_count = 0
+		for _, document in ipairs(state.documents) do
+			note_count = note_count + #document.notes
+		end
+		local pull_icon = icons.pulls("pr")
+		local note_icon = icons.general("pin")
+		vim.api.nvim_set_option_value(
+			"winbar",
+			string.format(
+				" Atlas Notes %%=%s Pull requests: %d   %s Notes: %d ",
+				pull_icon,
+				#state.documents,
+				note_icon,
+				note_count
+			),
+			{ win = state.win }
+		)
+	end
 	vim.api.nvim_set_option_value("modifiable", true, { buf = state.buf })
 	vim.api.nvim_buf_set_lines(state.buf, 0, -1, false, lines)
 	vim.api.nvim_set_option_value("modifiable", false, { buf = state.buf })
@@ -110,6 +142,10 @@ local function refresh()
 	end
 	state.documents = documents
 	render()
+end
+
+function M.refresh()
+	refresh()
 end
 
 ---@return integer
@@ -176,6 +212,24 @@ function M.open(opts)
 	vim.api.nvim_set_option_value("scrollbind", false, { win = state.win })
 	vim.api.nvim_set_option_value("cursorbind", false, { win = state.win })
 	refresh()
+end
+
+function M.clear_all()
+	vim.ui.input({ prompt = "Delete all local review notes? [y/N]: " }, function(answer)
+		answer = vim.trim(tostring(answer or "")):lower()
+		if answer ~= "y" and answer ~= "yes" then
+			return
+		end
+		local cleared, err = notes.clear_all()
+		if not cleared then
+			notify.error(err or "Unable to delete local notes")
+			return
+		end
+		state.documents = {}
+		state.expanded = {}
+		render()
+		notify.info("Local review notes deleted")
+	end)
 end
 
 return M

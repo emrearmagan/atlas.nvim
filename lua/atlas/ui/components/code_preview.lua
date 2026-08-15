@@ -5,29 +5,41 @@ local M = {}
 ---@field lines string[]
 ---@field start_line integer
 ---@field anchor_line integer|nil
----@field prefixes string[]|nil
+---@field anchor_start integer|nil
+---@field line_numbers integer[]|nil
+---@field show_line_numbers boolean|nil
+---@field background_hl_group string|nil
 
 ---@param opts AtlasCodePreviewOptions
 ---@return AtlasMarkdownEditorPreview
 function M.render(opts)
 	local last_line = opts.start_line + #opts.lines - 1
+	for _, line in ipairs(opts.line_numbers or {}) do
+		last_line = math.max(last_line, line)
+	end
 	local number_width = #tostring(last_line)
-	local lines, prefixes, highlights = {}, {}, {}
+	local lines, offsets, highlights = {}, {}, {}
 	for index, source in ipairs(opts.lines) do
 		local line_number = opts.start_line + index - 1
-		local prefix = opts.prefixes and opts.prefixes[index]
-			or string.format("%" .. number_width .. "d  ", line_number)
-		prefixes[index] = #prefix
+		local selected = opts.anchor_start
+				and opts.anchor_line
+				and line_number >= opts.anchor_start
+				and line_number <= opts.anchor_line
+			or line_number == opts.anchor_line
+		local display_line = opts.line_numbers and opts.line_numbers[index] or line_number
+		local prefix = opts.show_line_numbers == false and ""
+			or string.format("%" .. number_width .. "d  ", display_line)
+		offsets[index] = #prefix
 		table.insert(lines, prefix .. source)
 		table.insert(highlights, {
 			line = index - 1,
-			line_hl_group = "AtlasFooterBackground",
+			line_hl_group = opts.background_hl_group or "CursorLine",
 		})
 		table.insert(highlights, {
 			line = index - 1,
 			start_col = 0,
 			end_col = #prefix,
-			hl_group = line_number == opts.anchor_line and "CursorLineNr" or "AtlasTextMuted",
+			hl_group = selected and "CursorLineNr" or "AtlasTextMuted",
 		})
 	end
 
@@ -57,8 +69,8 @@ function M.render(opts)
 					if to > from then
 						table.insert(syntax_highlights, {
 							line = row,
-							start_col = prefixes[row + 1] + from,
-							end_col = prefixes[row + 1] + to,
+							start_col = offsets[row + 1] + from,
+							end_col = offsets[row + 1] + to,
 							hl_group = "@" .. capture .. "." .. language,
 						})
 					end

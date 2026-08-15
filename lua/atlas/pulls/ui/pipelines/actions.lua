@@ -1,5 +1,6 @@
 local M = {}
 
+local picker = require("atlas.picker")
 local statusline = require("atlas.ui.statusline")
 
 ---@class PullsPipelineActionContext
@@ -31,27 +32,29 @@ function M.open(provider, ctx, on_select)
 		return
 	end
 
-	vim.ui.select(available, {
-		prompt = "Choose pipeline action",
+	picker.select({
+		title = "Choose pipeline action",
+		items = available,
 		kind = "atlas_pipeline_actions",
 		format_item = function(action)
 			return action.label
 		end,
-	}, function(action)
-		if not action then
-			return
-		end
-		if not action.confirm then
-			on_select(action)
-			return
-		end
-		vim.ui.input({ prompt = action.confirm .. " [y/N]: " }, function(input)
-			local answer = vim.trim(tostring(input or "")):lower()
-			if answer == "y" or answer == "yes" then
-				on_select(action)
+		on_select = function(action)
+			if not action then
+				return
 			end
-		end)
-	end)
+			if not action.confirm then
+				on_select(action)
+				return
+			end
+			vim.ui.input({ prompt = action.confirm .. " [y/N]: " }, function(input)
+				local answer = vim.trim(tostring(input or "")):lower()
+				if answer == "y" or answer == "yes" then
+					on_select(action)
+				end
+			end)
+		end,
+	})
 end
 
 return M

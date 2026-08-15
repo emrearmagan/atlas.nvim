@@ -1,3 +1,4 @@
+local notify = require("atlas.core.notify")
 local storage = require("atlas.pulls.notes.storage")
 
 local M = {}
@@ -390,6 +391,50 @@ function M.delete(target, id)
 		return nil, "Note not found: " .. id
 	end)
 	return deleted == true, err
+end
+
+---@param target AtlasNoteTarget
+---@return boolean, string|nil
+function M.clear(target)
+	local path = storage.path(target.ref)
+	if vim.fn.filereadable(path) == 0 then
+		return true, nil
+	end
+	if vim.fn.delete(path) ~= 0 then
+		return false, "Unable to delete notes: " .. path
+	end
+	return true, nil
+end
+
+---@param pr PullRequest
+function M.clear_for_pull_request(pr)
+	if (require("atlas.config").options.pulls or {}).delete_notes ~= true then
+		return
+	end
+	local target, target_err = M.target_for_pull_request(pr)
+	if not target then
+		notify.warn(target_err or "Unable to find local notes")
+		return
+	end
+	local ok, err = M.clear(target)
+	if not ok then
+		notify.warn(err or "Unable to delete local notes")
+		return
+	end
+	local ui = package.loaded["atlas.pulls.notes.ui"]
+	if ui then
+		ui.refresh()
+	end
+end
+
+---@return boolean, string|nil
+function M.clear_all()
+	for _, path in ipairs(storage.files()) do
+		if vim.fn.delete(path) ~= 0 then
+			return false, "Unable to delete notes: " .. path
+		end
+	end
+	return true, nil
 end
 
 return M

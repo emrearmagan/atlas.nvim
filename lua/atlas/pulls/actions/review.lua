@@ -1,58 +1,15 @@
 local M = {}
 
 local editor = require("atlas.ui.popups.editor")
+local notes = require("atlas.pulls.notes")
 local statusline = require("atlas.ui.statusline")
-local pull_actions = require("atlas.pulls.actions")
 local review_threads = require("atlas.ui.components.review_threads")
 
----@alias AtlasReviewCommentAction "reply"|"edit"|"delete"|"toggle_task"|"toggle_resolved"
-
----@param provider PullsProvider|nil
----@param action AtlasReviewCommentAction
----@param comment PullsComment
----@return function|nil
-local function action_handler(provider, action, comment)
-	if not provider then
-		return nil
-	end
-	local comments = provider.capabilities.comments
-	local reviews = provider.capabilities.reviews
-	if action == "edit" then
-		if comment.is_task then
-			return reviews and reviews.edit_task
-		end
-		return comments and comments.edit_comment
-	end
-	if action == "delete" then
-		if comment.is_task then
-			return reviews and reviews.delete_task
-		end
-		return comments and comments.delete_comment
-	end
-	if action == "toggle_task" then
-		return reviews and reviews.edit_task
-	end
-	if action == "reply" then
-		return comments and comments.add_comment
-	end
-	return reviews and reviews.set_thread_resolved
-end
-
----@class AtlasReviewCommentActionContext
----@field provider PullsProvider
+---@class AtlasReviewActionContext: AtlasPullActionContext
 ---@field pr PullRequest
----@field current_user PullsUser|nil
----@field items PullsComment[]
+---@field items PullsComment[]|nil
+---@field data PullsReviewData|nil
 ---@field completion AtlasMarkdownCompletionProvider|nil
----@field active (fun(): boolean)|nil
----@field track fun(handle: { cancel: fun() }|nil): fun()
----@field refresh fun()
----@field reload (fun())|nil
----@field notify fun(level: "loading"|"success"|"info"|"warn"|"error", message: string, duration: integer|nil)|nil
-
----@class AtlasReviewAddOptions
----@field pending boolean|nil
----@field preview AtlasMarkdownEditorPreview|nil
 
 ---@param provider PullsProvider
 ---@param pr PullRequest
@@ -66,59 +23,22 @@ local function author_completion(provider, pr, comments)
 	return capability.comment_completion({ pr = pr, comments = comments })
 end
 
----@param comment PullsComment
----@param current_user PullsUser|nil
----@return boolean
-local function is_own_comment(comment, current_user)
-	if not current_user or not comment.author then
-		return false
-	end
-	local author_id = tostring(comment.author.id or "")
-	local user_id = tostring(current_user.id or "")
-	return author_id ~= "" and user_id ~= "" and author_id == user_id
-end
-
----@param action AtlasReviewCommentAction
----@param comment PullsComment
----@param current_user PullsUser|nil
----@param provider PullsProvider|nil
----@return boolean
-function M.is_available(action, comment, current_user, provider)
-	if comment.state == "DELETED" then
-		return false
-	end
-	if action == "reply" and comment.is_task then
-		return false
-	end
-	if action == "toggle_task" and not comment.is_task then
-		return false
-	end
-	if action == "toggle_resolved" then
-		if comment.is_task or comment.state == "PENDING" or comment.can_resolve == false then
-			return false
-		end
-	end
-	if (action == "edit" or action == "delete") and not is_own_comment(comment, current_user) then
-		return false
-	end
-	return action_handler(provider, action, comment) ~= nil
-end
-
----@param context AtlasReviewCommentActionContext
+---@param context AtlasReviewActionContext
 ---@param opts AtlasMarkdownEditorOptions
 local function open_editor(context, opts)
 	opts.width_ratio = 0.5
 	opts.height_ratio = 0.18
-	opts.completion = opts.completion
-		or context.completion
-		or author_completion(context.provider, context.pr, context.items)
+	opts.completion = opts.completion or context.completion
+	if opts.completion == nil and context.items then
+		opts.completion = author_completion(context.provider, context.pr, context.items)
+	end
 	editor.open(opts)
 end
 
----@param context AtlasReviewCommentActionContext
+---@param context AtlasReviewActionContext
 ---@param level "loading"|"success"|"info"|"warn"|"error"
 ---@param message string
----@param duration integer|nil
+---@param duration? integer
 local function notify(context, level, message, duration)
 	if context.notify then
 		context.notify(level, message, duration)
@@ -127,370 +47,266 @@ local function notify(context, level, message, duration)
 	statusline.notify(level, message, duration)
 end
 
----@param context AtlasReviewCommentActionContext
----@return boolean
-local function active(context)
-	return context.active == nil or context.active()
-end
-
----@param provider PullsProvider|nil
----@return boolean
-function M.can_submit(provider)
-	local reviews = provider and provider.capabilities.reviews
-	return reviews ~= nil and reviews.submit_review ~= nil
-end
-
----@param pr PullRequest
----@return boolean
-function M.can_toggle_approval(pr)
-	return pull_actions.is_action_available(pr, "toggle_approval")
-end
-
----@param context AtlasReviewCommentActionContext
----@param action_id string
-local function run_pull_action(context, action_id)
-	pull_actions.run_action(context.pr, action_id, {
-		source = "diff",
-		current_user = context.current_user,
-		notify = context.notify,
-	}, function(result, err)
-		if not active(context) or err or not result then
-			return
-		end
-		if not result.changed_pr then
-			notify(context, "info", tostring(result.message or "Action cancelled"), 1200)
-			return
-		end
-		if context.reload then
-			context.reload()
-		else
-			context.refresh()
-		end
-	end)
-end
-
----@param pr PullRequest
----@return boolean
-function M.can_request_changes(pr)
-	return pull_actions.is_action_available(pr, "request_changes")
-end
-
----@param context AtlasReviewCommentActionContext
----@param start fun(done: fun(...)): { cancel: fun() }|nil
----@param done fun(...)
-local function run_request(context, start, done)
-	local finished = false
-	local release
-	local function complete(...)
-		if finished then
-			return
-		end
-		finished = true
-		if release then
-			release()
-		end
-		done(...)
-	end
-	release = context.track(start(complete))
-	if finished then
-		release()
-	end
-end
-
----@param context AtlasReviewCommentActionContext
----@return boolean handled
-function M.submit(context)
-	local provider = context.provider
-	if not active(context) or not M.can_submit(provider) then
-		return false
-	end
-	local submit_review = provider.capabilities.reviews.submit_review
-	---@cast submit_review function
-	open_editor(context, {
-		key = "pr-review-submit-" .. tostring(context.pr.id),
-		title = " Submit Review ",
-		on_save = function(body)
-			if not active(context) then
-				return
-			end
-			notify(context, "loading", "Submitting review...", nil)
-			run_request(context, function(done)
-				return submit_review(context.pr, body, done)
-			end, function(ok, err)
-				if not active(context) then
-					return
-				end
-				if err or not ok then
-					notify(context, "error", "Submit review failed: " .. tostring(err or "Unknown error"), nil)
-					return
-				end
-				notify(context, "success", "Review submitted", 1200)
-				if context.reload then
-					context.reload()
-				else
-					context.refresh()
-				end
-			end)
-		end,
-	})
-	return true
-end
-
----@param context AtlasReviewCommentActionContext
-function M.toggle_approval(context)
-	if not active(context) or not M.can_toggle_approval(context.pr) then
-		return
-	end
-	run_pull_action(context, "toggle_approval")
-end
-
----@param context AtlasReviewCommentActionContext
-function M.request_changes(context)
-	if not active(context) or not M.can_request_changes(context.pr) then
-		return
-	end
-	run_pull_action(context, "request_changes")
-end
-
----@param context AtlasReviewCommentActionContext
----@param inline PullsInlineCommentPosition|nil
----@param opts AtlasReviewAddOptions|nil
----@return boolean handled
-function M.add(context, inline, opts)
-	local provider = context.provider
-	local comments = provider.capabilities.comments
-	local add_comment = comments and comments.add_comment
-	if not active(context) or not add_comment then
-		return false
-	end
-	opts = opts or {}
-	local pending = opts.pending == true
-
-	local key = string.format("pr-comment-add-%s-%s", tostring(context.pr.id or ""), pending and "pending" or "now")
-	if inline then
-		key = string.format("%s-%s-%s", key, tostring(inline.from or ""), tostring(inline.to or ""))
-	end
-	open_editor(context, {
-		key = key,
-		title = pending and " Add Pending Comment " or (inline and " Add Inline Comment " or " Add Comment "),
-		preview = opts.preview,
-		on_save = function(text)
-			if not active(context) or not text or vim.trim(text) == "" then
-				return
-			end
-			notify(context, "loading", "Adding comment...", nil)
-			run_request(context, function(done)
-				return add_comment(context.pr, text, { inline = inline, pending = pending }, done)
-			end, function(created, err)
-				if not active(context) then
-					return
-				end
-				if err then
-					notify(context, "error", "Add comment failed: " .. err, nil)
-					return
-				end
-				if created then
-					table.insert(context.items, created)
-				end
-				notify(context, "success", "Comment added", 1200)
-				context.refresh()
-			end)
-		end,
-	})
-	return true
-end
-
----@param context AtlasReviewCommentActionContext
+---@param items PullsComment[]
 ---@param comment PullsComment
-local function upsert_comment(context, comment)
-	for index, existing in ipairs(context.items) do
+local function upsert_comment(items, comment)
+	for index, existing in ipairs(items) do
 		if tostring(existing.id) == tostring(comment.id) then
-			context.items[index] = comment
+			items[index] = comment
 			return
 		end
 	end
-	table.insert(context.items, comment)
+	table.insert(items, comment)
 end
 
----@param context AtlasReviewCommentActionContext
+---@param context AtlasReviewActionContext
+---@param opts { parent: PullsComment|nil, inline: PullsInlineCommentPosition|nil, file: PullsFileCommentPosition|nil, pending: boolean|nil, preview: AtlasMarkdownEditorPreview|nil, initial_text: string|nil, kind: "comment"|"suggestion"|nil }|nil
+---@param on_done fun(result: PullsActionResult|nil, err: string|nil)
+---@return boolean handled
+function M.add_comment(context, opts, on_done)
+	opts = opts or {}
+	local parent = opts.parent
+	if parent and parent.is_task then
+		local message = "Tasks do not support replies"
+		notify(context, "error", message)
+		on_done(nil, message)
+		return false
+	end
+	local comments = context.provider.capabilities.comments
+	local add = comments and comments.add_comment
+	if not add then
+		local message = "Provider does not support comments"
+		notify(context, "error", message)
+		on_done(nil, message)
+		return false
+	end
+	local pending = opts.pending == true or (parent ~= nil and parent.state == "PENDING")
+	local suggestion = opts.kind == "suggestion"
+
+	local completion = context.completion
+	if completion == nil and context.items then
+		completion = author_completion(context.provider, context.pr, context.items)
+	end
+	local mention = ""
+	if parent and completion and completion.format_mention then
+		mention = completion.format_mention(parent.author) or ""
+	end
+	local title = " Add Comment "
+	if parent then
+		title = " Reply to Comment "
+	elseif suggestion then
+		title = pending and " Add Pending Suggestion " or " Add Suggestion "
+	elseif opts.file then
+		title = pending and " Add Pending File Comment " or " Add File Comment "
+	elseif pending then
+		title = " Add Pending Comment "
+	elseif opts.inline then
+		title = " Add Inline Comment "
+	end
+	local preview = opts.preview
+	if preview == nil and parent then
+		preview = review_threads.render_comment(parent, math.max(math.floor(vim.o.columns * 0.5), 80))
+	end
+
+	open_editor(context, {
+		key = "pr-comment",
+		title = title,
+		initial_text = opts.initial_text or (mention ~= "" and (mention .. " ") or ""),
+		completion = completion,
+		preview = preview,
+		on_save = function(text)
+			if vim.trim(text) == "" then
+				return
+			end
+			local message = parent and "Reply added" or suggestion and "Suggestion added" or "Comment added"
+			notify(
+				context,
+				"loading",
+				parent and "Sending reply..." or suggestion and "Adding suggestion..." or "Adding comment..."
+			)
+			add(context.pr, text, {
+				parent = parent,
+				inline = opts.inline,
+				file = opts.file,
+				pending = pending,
+				review = context.data and context.data.review,
+			}, function(created, err)
+				if err then
+					local prefix = parent and "Reply failed: "
+						or suggestion and "Add suggestion failed: "
+						or "Add comment failed: "
+					notify(context, "error", prefix .. err)
+					on_done(nil, err)
+					return
+				end
+				if created and context.items then
+					upsert_comment(context.items, created)
+				end
+				if pending and context.data then
+					context.data.review.pending = true
+				end
+				notify(context, "success", message, 1200)
+				on_done({ changed_pr = false, message = message }, nil)
+			end)
+		end,
+	})
+	return true
+end
+
+---@param items PullsComment[]
 ---@param comment PullsComment
-local function remove_comment(context, comment)
+local function remove_comment(items, comment)
 	local id = tostring(comment.id)
-	for _, existing in ipairs(context.items) do
+	for _, existing in ipairs(items) do
 		if tostring(existing.parent_id or "") == id then
 			comment.content_raw = ""
-			comment.deleted = true
 			comment.state = "DELETED"
 			return
 		end
 	end
-	for index = #context.items, 1, -1 do
-		local existing = context.items[index]
+	for index = #items, 1, -1 do
+		local existing = items[index]
 		if tostring(existing.id) == tostring(comment.id) then
-			table.remove(context.items, index)
+			table.remove(items, index)
 		end
 	end
 end
 
----@param context AtlasReviewCommentActionContext
+---@param context AtlasReviewActionContext
 ---@param comment PullsComment
+---@param on_done fun(result: PullsActionResult|nil, err: string|nil)
 ---@return boolean handled
-local function reply(context, comment)
-	local provider = context.provider
-	if not active(context) or not M.is_available("reply", comment, context.current_user, provider) then
+function M.edit_comment(context, comment, on_done)
+	local update
+	if comment.is_task then
+		local tasks = context.provider.capabilities.tasks
+		update = tasks and tasks.edit_task
+	else
+		local comments = context.provider.capabilities.comments
+		update = comments and comments.edit_comment
+	end
+	if not update then
+		local message = "Provider does not support editing this item"
+		notify(context, "error", message)
+		on_done(nil, message)
 		return false
 	end
-	local add_comment = action_handler(provider, "reply", comment)
-	---@cast add_comment function
-
-	local completion = context.completion or author_completion(provider, context.pr, context.items)
-	local mention = ""
-	if completion and completion.format_mention then
-		mention = completion.format_mention(comment.author) or ""
-	end
-	open_editor(context, {
-		key = "pr-comment-reply-" .. tostring(comment.id),
-		title = " Reply to Comment ",
-		initial_text = mention ~= "" and (mention .. " ") or "",
-		completion = completion,
-		preview = review_threads.render_comment(comment, math.max(math.floor(vim.o.columns * 0.5), 80)),
-		on_save = function(text)
-			if not active(context) or not text or vim.trim(text) == "" then
-				return
-			end
-			notify(context, "loading", "Sending reply...", nil)
-			run_request(context, function(done)
-				return add_comment(context.pr, text, {
-					parent = comment,
-					pending = comment.state == "PENDING",
-				}, done)
-			end, function(created, err)
-				if not active(context) then
-					return
-				end
-				if err then
-					notify(context, "error", "Reply failed: " .. err, nil)
-					return
-				end
-				if created then
-					if created.parent_id == nil then
-						created.parent_id = comment.parent_id or comment.id
-					end
-					table.insert(context.items, created)
-				end
-				notify(context, "success", "Reply added", 1200)
-				context.refresh()
-			end)
-		end,
-	})
-	return true
-end
-
----@param context AtlasReviewCommentActionContext
----@param comment PullsComment
----@return boolean handled
-local function edit(context, comment)
-	local provider = context.provider
-	if not active(context) or not M.is_available("edit", comment, context.current_user, provider) then
-		return false
-	end
-	local update = action_handler(provider, "edit", comment)
-	---@cast update function
+	local items = assert(context.items)
 
 	open_editor(context, {
-		key = "pr-comment-edit-" .. tostring(comment.id),
+		key = "pr-comment-edit",
 		title = comment.is_task and " Edit Task " or " Edit Comment ",
 		initial_text = comment.content_raw or "",
 		on_save = function(text)
-			if not active(context) or not text or vim.trim(text) == "" then
+			if vim.trim(text) == "" then
 				return
 			end
-			notify(context, "loading", comment.is_task and "Editing task..." or "Editing comment...", nil)
+			notify(context, "loading", comment.is_task and "Editing task..." or "Editing comment...")
 			local desired = vim.tbl_extend("force", {}, comment, { content_raw = text })
-			run_request(context, function(done)
-				if comment.is_task then
-					return update(desired, done)
-				end
-				return update(context.pr, desired, done)
-			end, function(updated, err)
-				if not active(context) then
-					return
-				end
+			local callback = function(updated, err)
 				if err then
-					notify(context, "error", "Edit failed: " .. err, nil)
+					notify(context, "error", "Edit failed: " .. err)
+					on_done(nil, err)
 					return
 				end
-				notify(context, "success", comment.is_task and "Task updated" or "Comment updated", 1200)
-				upsert_comment(context, vim.tbl_extend("keep", updated or {}, desired))
-				context.refresh()
-			end)
+				local message = comment.is_task and "Task updated" or "Comment updated"
+				notify(context, "success", message, 1200)
+				if updated then
+					upsert_comment(items, updated)
+				end
+				on_done({ changed_pr = false, message = message }, nil)
+			end
+			if comment.is_task then
+				update(desired, callback)
+			else
+				update(context.pr, desired, callback)
+			end
 		end,
 	})
 	return true
 end
 
----@param context AtlasReviewCommentActionContext
+---@param context AtlasReviewActionContext
 ---@param comment PullsComment
+---@param on_done fun(result: PullsActionResult|nil, err: string|nil)
 ---@return boolean handled
-local function delete(context, comment)
-	local provider = context.provider
-	if not active(context) or not M.is_available("delete", comment, context.current_user, provider) then
+function M.delete_comment(context, comment, on_done)
+	local remove
+	if comment.is_task then
+		local tasks = context.provider.capabilities.tasks
+		remove = tasks and tasks.delete_task
+	else
+		local comments = context.provider.capabilities.comments
+		remove = comments and comments.delete_comment
+	end
+	if not remove then
+		local message = "Provider does not support deleting this item"
+		notify(context, "error", message)
+		on_done(nil, message)
 		return false
 	end
-	local remove = action_handler(provider, "delete", comment)
-	---@cast remove function
+	local items = assert(context.items)
 
 	vim.ui.input({ prompt = comment.is_task and "Delete task? [y/N]: " or "Delete comment? [y/N]: " }, function(input)
-		if not active(context) then
-			return
-		end
 		local confirmed = input and vim.trim(input):lower()
 		if confirmed ~= "y" and confirmed ~= "yes" then
 			return
 		end
-		notify(context, "loading", comment.is_task and "Deleting task..." or "Deleting comment...", nil)
-		run_request(context, function(done)
-			if comment.is_task then
-				return remove(comment, done)
-			end
-			return remove(context.pr, comment, done)
-		end, function(ok, err)
-			if not active(context) then
-				return
-			end
+		notify(context, "loading", comment.is_task and "Deleting task..." or "Deleting comment...")
+		local callback = function(ok, err)
 			if err then
-				notify(context, "error", "Delete failed: " .. err, nil)
+				notify(context, "error", "Delete failed: " .. err)
+				on_done(nil, err)
 				return
 			end
 			if not ok then
-				notify(context, "error", "Delete failed", nil)
+				notify(context, "error", "Delete failed")
+				on_done(nil, "Delete failed")
 				return
 			end
-			notify(context, "success", comment.is_task and "Task deleted" or "Comment deleted", 1200)
-			remove_comment(context, comment)
-			context.refresh()
-		end)
+			local pending = comment.state == "PENDING"
+			local message = comment.is_task and "Task deleted" or "Comment deleted"
+			if pending and context.data then
+				context.provider.capabilities.reviews.fetch(context.pr, { force_refresh = true }, function(data)
+					if data then
+						context.data.review = data.review
+						context.data.comments = data.comments
+						context.data.tasks = data.tasks
+					else
+						remove_comment(items, comment)
+					end
+					notify(context, "success", message, 1200)
+					on_done({ changed_pr = false, message = message }, nil)
+				end)
+				return
+			end
+			remove_comment(items, comment)
+			notify(context, "success", message, 1200)
+			on_done({ changed_pr = false, message = message }, nil)
+		end
+		if comment.is_task then
+			remove(comment, callback)
+		else
+			remove(context.pr, comment, callback)
+		end
 	end)
 	return true
 end
 
----@param context AtlasReviewCommentActionContext
+---@param context AtlasReviewActionContext
 ---@param comment PullsComment
+---@param on_done fun(result: PullsActionResult|nil, err: string|nil)
 ---@return boolean handled
-local function toggle_task(context, comment)
-	if not active(context) then
+function M.toggle_task(context, comment, on_done)
+	local tasks = context.provider.capabilities.tasks
+	local update = tasks and tasks.edit_task
+	if not update then
+		local message = "Provider does not support tasks"
+		notify(context, "error", message)
+		on_done(nil, message)
 		return false
 	end
-	if not comment.is_task then
-		notify(context, "warn", "Not a task", nil)
-		return false
-	end
-	local provider = context.provider
-	if not M.is_available("toggle_task", comment, context.current_user, provider) then
-		return false
-	end
-	local update = action_handler(provider, "toggle_task", comment)
-	---@cast update function
+	local items = assert(context.items)
 
 	local is_resolved = comment.state == "RESOLVED"
 	local desired = vim.deepcopy(comment)
@@ -499,75 +315,192 @@ local function toggle_task(context, comment)
 	else
 		desired.state = "RESOLVED"
 	end
-	notify(context, "loading", is_resolved and "Reopening task..." or "Resolving task...", nil)
-	run_request(context, function(done)
-		return update(desired, done)
-	end, function(updated, err)
-		if not active(context) then
-			return
-		end
+	notify(context, "loading", is_resolved and "Reopening task..." or "Resolving task...")
+	update(desired, function(updated, err)
 		if err then
-			notify(context, "error", tostring(err), nil)
+			notify(context, "error", tostring(err))
+			on_done(nil, tostring(err))
 			return
 		end
-		notify(context, "success", is_resolved and "Task reopened" or "Task resolved", 1200)
-		upsert_comment(context, vim.tbl_extend("keep", updated or {}, desired))
-		context.refresh()
+		local message = is_resolved and "Task reopened" or "Task resolved"
+		notify(context, "success", message, 1200)
+		if updated then
+			upsert_comment(items, updated)
+		end
+		on_done({ changed_pr = false, message = message }, nil)
 	end)
 	return true
 end
 
----@param context AtlasReviewCommentActionContext
+---@param context AtlasReviewActionContext
 ---@param comment PullsComment
+---@param on_done fun(result: PullsActionResult|nil, err: string|nil)
 ---@return boolean handled
-local function toggle_resolved(context, comment)
-	local provider = context.provider
-	if not active(context) or not M.is_available("toggle_resolved", comment, context.current_user, provider) then
+function M.toggle_resolved(context, comment, on_done)
+	local resolved = comment.state ~= "RESOLVED"
+	local comments = context.provider.capabilities.comments
+	local set_resolved = comments and comments.set_thread_resolved
+	if not set_resolved then
+		local message = "Provider does not support resolving threads"
+		notify(context, "error", message)
+		on_done(nil, message)
 		return false
 	end
-
-	local resolved = comment.state ~= "RESOLVED"
-	local set_resolved = action_handler(provider, "toggle_resolved", comment)
-	---@cast set_resolved function
-	notify(context, "loading", resolved and "Resolving thread..." or "Reopening thread...", nil)
-	run_request(context, function(done)
-		return set_resolved(context.pr, comment, resolved, done)
-	end, function(ok, err)
-		if not active(context) then
-			return
-		end
+	notify(context, "loading", resolved and "Resolving thread..." or "Reopening thread...")
+	set_resolved(context.pr, comment, resolved, function(ok, err)
 		if err or not ok then
-			notify(context, "error", tostring(err or "Unable to update thread"), nil)
+			local message = tostring(err or "Unable to update thread")
+			notify(context, "error", message)
+			on_done(nil, message)
 			return
 		end
-		notify(context, "success", resolved and "Thread resolved" or "Thread reopened", 1200)
+		local message = resolved and "Thread resolved" or "Thread reopened"
+		notify(context, "success", message, 1200)
 		comment.state = resolved and "RESOLVED" or nil
-		context.refresh()
+		on_done({ changed_pr = false, message = message }, nil)
 	end)
 	return true
 end
 
----@param context AtlasReviewCommentActionContext
----@param action AtlasReviewCommentAction
----@param comment PullsComment
+---@param context AtlasReviewActionContext
+---@param capability "submit_review"|"approve"|"request_changes"
+---@param title string
+---@param loading string
+---@param success string
+---@param on_done fun(result: PullsActionResult|nil, err: string|nil)
 ---@return boolean handled
-function M.run(context, action, comment)
-	if action == "reply" then
-		return reply(context, comment)
+local function open_review_editor(context, capability, title, loading, success, on_done)
+	local reviews = context.provider.capabilities.reviews
+	local submit = reviews and reviews[capability]
+	if not submit then
+		local message = "Provider does not support this review action"
+		notify(context, "error", message)
+		on_done(nil, message)
+		return false
 	end
-	if action == "edit" then
-		return edit(context, comment)
-	end
-	if action == "delete" then
-		return delete(context, comment)
-	end
-	if action == "toggle_task" then
-		return toggle_task(context, comment)
-	end
-	if action == "toggle_resolved" then
-		return toggle_resolved(context, comment)
-	end
-	return false
+	open_editor(context, {
+		key = "pr-review",
+		title = title,
+		on_save = function(body)
+			notify(context, "loading", loading)
+			submit(context.pr, context.data and context.data.review, body, function(ok, err)
+				if not ok then
+					local message = vim.trim(title) .. " failed: " .. tostring(err or "Unknown error")
+					notify(context, "error", message)
+					on_done(nil, err)
+					return
+				end
+				notify(context, "success", success, 1200)
+				if capability == "approve" then
+					notes.clear_for_pull_request(context.pr)
+				end
+				on_done({ changed_pr = true, message = success }, nil)
+			end)
+		end,
+	})
+	return true
 end
+
+M.start_review = {
+	id = "start_review",
+	label = "Start review",
+	run = function(context, on_done)
+		local data = context.data
+		local reviews = context.provider.capabilities.reviews
+		local start = reviews and reviews.start_review
+		if not data or data.review.pending or not start then
+			return false
+		end
+		notify(context, "loading", "Starting review...")
+		start(context.pr, data.review, function(ok, err)
+			if not ok then
+				local message = tostring(err or "Unknown error")
+				notify(context, "error", "Start review failed: " .. message)
+				on_done(nil, message)
+				return
+			end
+			notify(context, "success", "Review started", 1200)
+			on_done({ changed_pr = false, message = "Review started" }, nil)
+		end)
+		return true
+	end,
+}
+
+M.submit_review = {
+	id = "submit_review",
+	label = "Submit review",
+	run = function(context, on_done)
+		return open_review_editor(
+			context,
+			"submit_review",
+			" Submit Review ",
+			"Submitting review...",
+			"Review submitted",
+			on_done
+		)
+	end,
+}
+
+M.approve = {
+	id = "approve",
+	label = "Approve",
+	run = function(context, on_done)
+		return open_review_editor(context, "approve", " Approve ", "Approving...", "Approved", on_done)
+	end,
+}
+
+M.request_changes = {
+	id = "request_changes",
+	label = "Request changes",
+	run = function(context, on_done)
+		return open_review_editor(
+			context,
+			"request_changes",
+			" Request Changes ",
+			"Requesting changes...",
+			"Changes requested",
+			on_done
+		)
+	end,
+}
+
+M.discard_review = {
+	id = "discard_review",
+	label = "Discard review",
+	run = function(context, on_done)
+		local data = context.data
+		local reviews = context.provider.capabilities.reviews
+		local discard = reviews and reviews.discard_review
+		if not data or not data.review.pending or not discard then
+			return false
+		end
+		vim.ui.input({ prompt = "Discard pending review? [y/N]: " }, function(input)
+			if not input or not input:lower():match("^y") then
+				return
+			end
+			notify(context, "loading", "Discarding review...")
+			discard(context.pr, data.review, function(ok, err)
+				if not ok then
+					notify(context, "error", "Discard review failed: " .. tostring(err or "Unknown error"))
+					on_done(nil, err)
+					return
+				end
+				data.review.id = nil
+				data.review.commit_hash = nil
+				data.review.pending = false
+				for _, items in ipairs({ data.comments, data.tasks }) do
+					for index = #items, 1, -1 do
+						if items[index].state == "PENDING" then
+							table.remove(items, index)
+						end
+					end
+				end
+				notify(context, "success", "Review discarded", 1200)
+				on_done({ changed_pr = false, message = "Review discarded" }, nil)
+			end)
+		end)
+		return true
+	end,
+}
 
 return M

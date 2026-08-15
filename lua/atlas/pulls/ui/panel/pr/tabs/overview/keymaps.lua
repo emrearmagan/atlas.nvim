@@ -52,7 +52,7 @@ function M.setup(buf, refresh)
 	)
 	utils.insert_if(
 		items,
-		item("ui.show_details", {
+		item("pulls.pipelines.open", {
 			desc = "Show pipeline details",
 			opts = { nowait = true, silent = true },
 			callback = function()
@@ -60,7 +60,8 @@ function M.setup(buf, refresh)
 				local entry = (panel_state.line_map or {})[lnum]
 				local pr = panel_state.current_pr
 				if pr and entry and entry.kind == "pipeline" and entry.pipeline then
-					local pipelines = type(state.pipelines) == "table" and state.pipelines or { entry.pipeline }
+					local pipelines = type(panel_state.pipelines) == "table" and panel_state.pipelines
+						or { entry.pipeline }
 					require("atlas.pulls.ui.pipelines").open(pr, pipelines, entry.pipeline, entry.job)
 				end
 			end,
@@ -73,7 +74,7 @@ end
 function M.teardown(buf)
 	local items = {}
 	utils.insert_if(items, remove_item("ui.toggle_fold"))
-	utils.insert_if(items, remove_item("ui.show_details"))
+	utils.insert_if(items, remove_item("pulls.pipelines.open"))
 	help.remove("Panel", items, { buffer = buf })
 end
 

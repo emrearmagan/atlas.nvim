@@ -101,7 +101,11 @@ local function current_selection(session)
 	if not valid_win(session.pipeline_win) then
 		return nil
 	end
-	return session.line_map[vim.api.nvim_win_get_cursor(session.pipeline_win)[1]]
+	local selection = session.line_map[vim.api.nvim_win_get_cursor(session.pipeline_win)[1]]
+	if not selection or not selection.pipeline then
+		return nil
+	end
+	return selection
 end
 
 ---@param url string|nil
@@ -230,7 +234,7 @@ end
 ---@param delay_ms integer|nil
 ---@param force_refresh boolean|nil
 local function reload_pipelines(session, delay_ms, force_refresh)
-	if session.refreshing then
+	if session.closed or session.refreshing then
 		return
 	end
 	local provider = session.provider

@@ -22,8 +22,8 @@
 --               repos = { { workspace = "acme", repo = "core" } },
 --               filter = function(pr, ctx)
 --                 if ctx.user == nil then return true end
---                 for _, r in ipairs(pr._raw and pr._raw.reviewers or {}) do
---                   if r.uuid == ctx.user.id then return true end
+--                 for _, reviewer in ipairs(pr.reviewers or {}) do
+--                   if reviewer.username == ctx.user.username then return true end
 --                 end
 --                 return false
 --               end,

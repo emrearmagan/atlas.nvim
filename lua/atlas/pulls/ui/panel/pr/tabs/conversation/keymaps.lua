@@ -7,18 +7,6 @@ local panel_state = require("atlas.pulls.ui.panel.pr.state")
 local state = require("atlas.pulls.ui.panel.pr.tabs.conversation.state")
 local actions = require("atlas.pulls.ui.panel.pr.tabs.conversation.actions")
 
----@param key string|string[]|nil
----@return string|string[]|nil
-local function single_or_list(key)
-	if key == nil then
-		return nil
-	end
-	if type(key) == "table" then
-		return #key == 1 and key[1] or key
-	end
-	return key
-end
-
 local function cursor_entry()
 	local win = layout.win_id("detail")
 	if win == nil or not vim.api.nvim_win_is_valid(win) then
@@ -67,6 +55,9 @@ local function toggle_thread(refresh)
 	if not root then
 		return
 	end
+	if root.is_task or entry.thread_has_replies ~= true then
+		return
+	end
 	state.toggle(root.id)
 	refresh()
 end
@@ -81,14 +72,6 @@ function M.setup(buf, refresh)
 			opts = { nowait = true, silent = true },
 			callback = function()
 				dispatch_simple(refresh, actions.add)
-			end,
-		},
-		{
-			key = "c",
-			desc = "Reply to comment",
-			opts = { nowait = true, silent = true },
-			callback = function()
-				dispatch_with_entry(refresh, actions.reply)
 			end,
 		},
 		{
@@ -116,11 +99,22 @@ function M.setup(buf, refresh)
 			end,
 		},
 	}
+	local reply_keys = resolver.resolve("pulls.review.diff.submit_comment")
+	if reply_keys ~= nil then
+		table.insert(items, 2, {
+			key = reply_keys,
+			desc = "Reply to comment",
+			opts = { nowait = true, silent = true },
+			callback = function()
+				dispatch_with_entry(refresh, actions.reply)
+			end,
+		})
+	end
 
-	local fold_key = single_or_list(resolver.resolve("ui.toggle_fold"))
-	if fold_key ~= nil then
+	local fold_keys = resolver.resolve("ui.toggle_fold")
+	if fold_keys ~= nil then
 		table.insert(items, {
-			key = fold_key,
+			key = fold_keys,
 			desc = "Expand / collapse thread",
 			opts = { nowait = true, silent = true },
 			callback = function()
@@ -128,7 +122,6 @@ function M.setup(buf, refresh)
 			end,
 		})
 	end
-
 	help.register("Panel", items, { index = 212, buffer = buf })
 end
 
@@ -136,14 +129,17 @@ end
 function M.teardown(buf)
 	local items = {
 		{ key = { "a", "i" } },
-		{ key = "c" },
 		{ key = "e" },
 		{ key = "d" },
 		{ key = "gr" },
 	}
-	local fold_key = single_or_list(resolver.resolve("ui.toggle_fold"))
-	if fold_key ~= nil then
-		table.insert(items, { key = fold_key })
+	local reply_keys = resolver.resolve("pulls.review.diff.submit_comment")
+	if reply_keys ~= nil then
+		table.insert(items, { key = reply_keys })
+	end
+	local fold_keys = resolver.resolve("ui.toggle_fold")
+	if fold_keys ~= nil then
+		table.insert(items, { key = fold_keys })
 	end
 	help.remove("Panel", items, { buffer = buf })
 end

@@ -1,6 +1,6 @@
 ---@class PullsRepoTagsTabState
 ---@field repo PullsRepoDetails|nil
----@field tags PullsRepoTags|"loading"|nil
+---@field tags PullsRepoTags|"loading"|string|nil
 ---@field line_map table<integer, table>
 local M = {
 	repo = nil,

@@ -6,6 +6,22 @@ local utils = require("atlas.ui.shared.utils")
 local panel_state = require("atlas.pulls.ui.panel.pr.state")
 local actions = require("atlas.pulls.actions")
 
+---@param pr PullRequest
+---@param buf integer|nil
+---@return AtlasPullActionContext|nil
+local function action_context(pr, buf)
+	local state = require("atlas.pulls.state")
+	if not state.provider then
+		return nil
+	end
+	return {
+		provider = state.provider,
+		pr = pr,
+		current_user = state.current_user,
+		buf = buf,
+	}
+end
+
 ---@return PullsPanelTabModule|nil
 local function current_tab_mod()
 	local provider = require("atlas.pulls.state").provider
@@ -84,7 +100,10 @@ function M.register(buf)
 				if pr == nil then
 					return
 				end
-				actions.open_in_browser(pr)
+				local context = action_context(pr, buf)
+				if context then
+					actions.run("open_in_browser", context)
+				end
 			end,
 		})
 	)
@@ -96,16 +115,15 @@ function M.register(buf)
 			opts = { nowait = true, silent = true },
 			callback = function()
 				local pr = panel_state.current_pr
-				local repo = panel_state.current_repo
 				if pr then
-					require("atlas.pulls.ui.panel").on_select(pr, repo, { force_refresh = true })
+					require("atlas.pulls.ui.main.controller").refresh_pr(pr)
 				end
 			end,
 		})
 	)
 
 	local state = require("atlas.pulls.state")
-	if state.provider and state.provider.capabilities.actions then
+	if state.provider then
 		utils.insert_if(
 			items,
 			item("ui.open_actions", {
@@ -115,7 +133,12 @@ function M.register(buf)
 					if pr == nil then
 						return
 					end
-					actions.open_actions(pr, "panel")
+					local context = action_context(pr, buf)
+					if context then
+						actions.open(context, function(result)
+							require("atlas.pulls.ui.main.controller").apply_action_result(pr, result)
+						end)
+					end
 				end,
 			})
 		)
@@ -131,7 +154,10 @@ function M.register(buf)
 				if pr == nil then
 					return
 				end
-				actions.open_diff(pr)
+				local context = action_context(pr, buf)
+				if context then
+					actions.run("open_diff", context)
+				end
 			end,
 		})
 	)
@@ -146,12 +172,60 @@ function M.register(buf)
 				if pr == nil then
 					return
 				end
-				actions.checkout(pr)
+				local context = action_context(pr, buf)
+				if context then
+					actions.run("checkout", context)
+				end
 			end,
 		})
 	)
 
-	if panel_state.current_pr and actions.is_action_available(panel_state.current_pr, "toggle_subscription") then
+	local context = panel_state.current_pr and action_context(panel_state.current_pr) or nil
+	if context and actions.is_available("edit_title", context) then
+		utils.insert_if(
+			items,
+			item("pulls.edit_title", {
+				desc = "Edit PR title",
+				opts = { nowait = true, silent = true },
+				callback = function()
+					local pr = panel_state.current_pr
+					if pr == nil then
+						return
+					end
+					local current = action_context(pr)
+					if current then
+						actions.run("edit_title", current, function(result)
+							require("atlas.pulls.ui.main.controller").apply_action_result(pr, result)
+						end)
+					end
+				end,
+			})
+		)
+	end
+
+	if context and actions.is_available("edit_description", context) then
+		utils.insert_if(
+			items,
+			item("pulls.edit_description", {
+				desc = "Edit PR description",
+				opts = { nowait = true, silent = true },
+				callback = function()
+					local pr = panel_state.current_pr
+					if pr == nil then
+						return
+					end
+					local current = action_context(pr)
+					if current then
+						actions.run("edit_description", current, function(result)
+							require("atlas.pulls.ui.main.controller").apply_action_result(pr, result)
+						end)
+					end
+				end,
+			})
+		)
+	end
+
+	if context and actions.is_available("toggle_subscription", context) then
 		utils.insert_if(
 			items,
 			item("ui.toggle_subscription", {
@@ -162,9 +236,12 @@ function M.register(buf)
 					if pr == nil then
 						return
 					end
-					actions.run_action(pr, "toggle_subscription", { source = "panel" }, function(_, _)
-						require("atlas.pulls.ui.panel").render()
-					end)
+					local current = action_context(pr)
+					if current then
+						actions.run("toggle_subscription", current, function()
+							require("atlas.pulls.ui.panel").render()
+						end)
+					end
 				end,
 			})
 		)
@@ -281,6 +358,8 @@ function M.remove(buf)
 	utils.insert_if(general, remove_item("ui.open_in_browser"))
 	utils.insert_if(general, remove_item("pulls.open_diff"))
 	utils.insert_if(general, remove_item("pulls.checkout"))
+	utils.insert_if(general, remove_item("pulls.edit_title"))
+	utils.insert_if(general, remove_item("pulls.edit_description"))
 	utils.insert_if(general, remove_item("ui.toggle_subscription"))
 	utils.insert_if(general, remove_item("ui.next_panel_tab"))
 	utils.insert_if(general, remove_item("ui.previous_panel_tab"))

@@ -1,38 +1,20 @@
 local M = {}
 
+local config = require("atlas.config")
 local service = require("atlas.pulls.providers.bitbucket.api.service")
 local mapper = require("atlas.pulls.providers.bitbucket.api.cloud.mapper")
-local cache = require("atlas.core.cache")
 local logger = require("atlas.core.logger")
 local state = require("atlas.pulls.providers.bitbucket.state")
-
----@param link any
----@return string
-local function link_href(link)
-	if type(link) == "string" then
-		return link
-	end
-	if type(link) == "table" then
-		return tostring(link.href or "")
-	end
-	return ""
-end
 
 ---@param pr PullRequest
 ---@param key string
 ---@return string
 local function pr_link(pr, key)
-	local raw = pr._raw
-	local links = type(raw.links) == "table" and raw.links or {}
-	local link = links[key]
-	if link == nil and key == "request_changes" then
-		link = links["request-changes"]
-	end
-	return link_href(link)
+	return tostring((pr._raw.links or {})[key] or "")
 end
 
 ---@param pr PullRequest
----@param action "merge"|"approve"|"request_changes"
+---@param action "merge"|"decline"
 ---@return boolean
 function M.has_action(pr, action)
 	return pr_link(pr, action) ~= ""
@@ -56,10 +38,10 @@ local function fetch_pullrequests_single(workspace, repo, opts, on_done)
 	local statuses_for_key = opts.statuses or { state.pr_state }
 	local key = cache_key(workspace, repo, statuses_for_key)
 	if not opts.force then
-		local cached = cache.get(key)
-		if cached and cached.value then
+		local cached, ok = service.get_cache(key)
+		if ok then
 			logger.loginfo("Bitbucket cache hit", { workspace = workspace, repo = repo })
-			on_done(cached.value, nil)
+			on_done(cached, nil)
 			return nil
 		end
 	end
@@ -83,7 +65,7 @@ local function fetch_pullrequests_single(workspace, repo, opts, on_done)
 		end
 
 		local normalized = mapper.to_pull_requests_list(result, workspace, repo)
-		cache.set(key, normalized, opts.cache_ttl)
+		service.set_cache(key, normalized, opts.cache_ttl)
 		logger.loginfo("Fetch success", {
 			workspace = workspace,
 			repo = repo,
@@ -219,46 +201,48 @@ function M.fetch_pullrequest(pr, opts, on_done)
 end
 
 ---@param pr PullRequest
----@param _opts { force_refresh: boolean|nil }|nil
----@param on_done fun(context: { authors: PullsAuthor[] }|nil, err: string|nil)
----@return nil
-function M.fetch_review_context(pr, _opts, on_done)
-	local authors = {}
-	local seen = {}
-	---@param author PullsAuthor|nil
-	local function add(author)
-		if author == nil then
-			return
-		end
-		local key = tostring(author.id or "")
-		if key == "" then
-			key = tostring(author.username or author.nickname or author.name or "")
-		end
-		if key == "" or seen[key] then
-			return
-		end
-		seen[key] = true
-		table.insert(authors, author)
+---@param fields table
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { job_id: integer, cancel: fun() }|nil
+local function update_pullrequest(pr, fields, on_done)
+	local url = pr_link(pr, "self")
+	if url == "" then
+		on_done(false, "No pull request URL available")
+		return nil
 	end
 
-	add(pr.author)
-	for _, participant in ipairs(pr._raw.participants or {}) do
-		local user = type(participant) == "table" and participant.user or nil
-		if type(user) == "table" then
-			local id = tostring(user.account_id or user.id or "")
-			local username = tostring(user.nickname or user.username or "")
-			local name = tostring(user.display_name or user.name or username)
-			if id ~= "" or username ~= "" or name ~= "" then
-				add({
-					id = id,
-					name = name,
-					username = username,
-					nickname = username ~= "" and username or nil,
-				})
-			end
+	return service.request("PUT", url, nil, vim.json.encode(fields), function(_, err)
+		if err then
+			on_done(false, err)
+			return
 		end
-	end
-	on_done({ authors = authors }, nil)
+		service.clear_cache()
+		on_done(true, nil)
+	end)
+end
+
+---@param pr PullRequest
+---@param title string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { job_id: integer, cancel: fun() }|nil
+function M.update_title(pr, title, on_done)
+	return update_pullrequest(pr, { title = title }, on_done)
+end
+
+---@param pr PullRequest
+---@param description string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { job_id: integer, cancel: fun() }|nil
+function M.update_description(pr, description, on_done)
+	return update_pullrequest(pr, { description = description }, on_done)
+end
+
+---@param pr PullRequest
+---@param draft boolean
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { job_id: integer, cancel: fun() }|nil
+function M.set_draft(pr, draft, on_done)
+	return update_pullrequest(pr, { draft = draft }, on_done)
 end
 
 ---@param pr PullRequest
@@ -288,66 +272,34 @@ function M.merge(pr, opts, on_done)
 end
 
 ---@param pr PullRequest
----@param on_done fun(result: table|nil, err: string|nil)
----@return { job_id: integer, cancel: fun() }|nil
-function M.approve(pr, on_done)
-	local approve_url = pr_link(pr, "approve")
-	if approve_url == "" then
-		on_done(nil, "No approve URL available")
-		return nil
-	end
-	return service.request("POST", approve_url, nil, nil, on_done)
-end
-
----@param pr PullRequest
----@param on_done fun(result: table|nil, err: string|nil)
----@return { job_id: integer, cancel: fun() }|nil
-function M.unapprove(pr, on_done)
-	local approve_url = pr_link(pr, "approve")
-	if approve_url == "" then
-		on_done(nil, "No approve URL available")
-		return nil
-	end
-	return service.request("DELETE", approve_url, nil, nil, on_done)
-end
-
----@param pr PullRequest
----@param on_done fun(result: table|nil, err: string|nil)
----@return { job_id: integer, cancel: fun() }|nil
-function M.request_changes(pr, on_done)
-	local request_changes_url = pr_link(pr, "request_changes")
-	if request_changes_url == "" then
-		on_done(nil, "No request changes URL available")
-		return nil
-	end
-	return service.request("POST", request_changes_url, nil, nil, on_done)
-end
-
----@param pr PullRequest
----@param body string
 ---@param on_done fun(ok: boolean, err: string|nil)
----@return { cancel: fun() }|nil
-function M.submit_review(pr, body, on_done)
-	--TODO: How to resolve those pending comments tho ?
-	if vim.trim(body) == "" then
-		on_done(false, "Review comment cannot be empty")
+---@return { job_id: integer, cancel: fun() }|nil
+function M.decline(pr, on_done)
+	local url = pr_link(pr, "decline")
+	if url == "" then
+		on_done(false, "No decline URL available")
 		return nil
 	end
-
-	return require("atlas.pulls.providers.bitbucket.api.comments").add_comment(pr, body, nil, function(comment, err)
-		if err or not comment then
-			on_done(false, err or "Bitbucket did not return the review comment")
+	return service.request("POST", url, nil, nil, function(_, err)
+		if err then
+			on_done(false, err)
 			return
 		end
+		service.clear_cache()
 		on_done(true, nil)
 	end)
 end
 
 ---@param pr PullRequest
----@param _opts { force_refresh: boolean|nil }|nil
+---@param opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(reviewers: PullsReviewer[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_reviewers(pr, _opts, on_done)
+function M.fetch_reviewers(pr, opts, on_done)
+	if not (opts or {}).force_refresh and pr.reviewers ~= nil then
+		on_done(pr.reviewers, nil)
+		return nil
+	end
+
 	local raw = pr._raw
 	local self_url = tostring((raw.links or {}).self or "")
 	if self_url == "" then
@@ -361,150 +313,22 @@ function M.fetch_reviewers(pr, _opts, on_done)
 			return
 		end
 
-		---@type PullsReviewer[]
-		local reviewers = {}
-		for _, item in ipairs((result or {}).participants or {}) do
-			local p = type(item) == "table" and item or {}
-			local user = type(p.user) == "table" and p.user or {}
-			if tostring(p.role or ""):upper() == "REVIEWER" then
-				local decision = "pending"
-				local s = tostring(p.state or "")
-				if s == "approved" then
-					decision = "approved"
-				elseif s == "changes_requested" then
-					decision = "changes_requested"
-				end
-				table.insert(reviewers, {
-					name = tostring(user.display_name or ""),
-					nickname = tostring(user.nickname or ""),
-					decision = decision,
-				})
-			end
-		end
-
-		on_done(reviewers, nil)
+		pr.reviewers = mapper.to_reviewers((result or {}).participants)
+		on_done(pr.reviewers, nil)
 	end)
 end
 
 ---@param pr PullRequest
----@param _opts { force_refresh: boolean|nil }|nil
----@param on_done fun(entries: PullsActivityEntry[]|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.fetch_activity(pr, _opts, on_done)
-	local raw = pr._raw
-	local activity_url = tostring((raw.links or {}).activity or "")
-	if activity_url == "" then
-		on_done({}, nil)
-		return nil
+---@param selected PullsCreatePRReviewer[]
+---@param _original PullsCreatePRReviewer[]
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { job_id: integer, cancel: fun() }|nil
+function M.update_reviewers(pr, selected, _original, on_done)
+	local reviewers = {}
+	for _, reviewer in ipairs(selected) do
+		table.insert(reviewers, { uuid = reviewer.provider_id })
 	end
-
-	return service.fetch_all_values(activity_url, function(result, err)
-		if err then
-			on_done(nil, err)
-			return
-		end
-
-		on_done(mapper.to_activities_list(result), nil)
-	end)
-end
-
----@param pr PullRequest
----@param _opts { force_refresh: boolean|nil }|nil
----@param on_done fun(entries: PullsDiffstatEntry[]|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.fetch_diffstat(pr, _opts, on_done)
-	local raw = pr._raw
-	local diffstat_url = tostring((raw.links or {}).diffstat or "")
-	if diffstat_url == "" then
-		on_done({}, nil)
-		return nil
-	end
-
-	return service.request("GET", diffstat_url, nil, nil, function(result, err)
-		if err then
-			on_done(nil, err)
-			return
-		end
-
-		---@type PullsDiffstatEntry[]
-		local entries = {}
-		for _, item in ipairs((result or {}).values or {}) do
-			local d = type(item) == "table" and item or {}
-			local new_file = type(d.new) == "table" and d.new or {}
-			local old_file = type(d.old) == "table" and d.old or {}
-			local status = tostring(d.status or ""):lower()
-			if status == "" then
-				status = "modified"
-			end
-
-			table.insert(entries, {
-				status = status,
-				path = tostring(new_file.path or old_file.path or ""),
-				old_path = old_file.path and tostring(old_file.path) or nil,
-				lines_added = tonumber(d.lines_added) or 0,
-				lines_removed = tonumber(d.lines_removed) or 0,
-			})
-		end
-
-		on_done(entries, nil)
-	end)
-end
-
----@param pr PullRequest
----@param opts { force_refresh: boolean|nil }|nil
----@param on_done fun(commits: PullsCommit[]|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.fetch_commits(pr, opts, on_done)
-	local raw = pr._raw
-	local commits_url = tostring((raw.links or {}).commits or "")
-	if commits_url == "" then
-		on_done({}, nil)
-		return nil
-	end
-
-	local force = (opts or {}).force_refresh == true
-	local sep = commits_url:find("?") and "&" or "?"
-	local url = string.format("%s%spagelen=%d", commits_url, sep, 50)
-	local key = "bitbucket:pr:commits:" .. url
-	if not force then
-		local cached, ok = service.get_cache(key)
-		if ok then
-			on_done(cached, nil)
-			return nil
-		end
-	end
-
-	return service.request("GET", url, nil, nil, function(result, err)
-		if err then
-			on_done(nil, err)
-			return
-		end
-		local commits = mapper.to_commits_list(result)
-		service.set_cache(key, commits, service.cache_ttl())
-		on_done(commits, nil)
-	end)
-end
-
----@param pr PullRequest
----@param _opts { force_refresh: boolean|nil }|nil
----@param on_done fun(files: DiffFile[]|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.fetch_diff(pr, _opts, on_done)
-	local raw = pr._raw
-	local diff_url = tostring((raw.links or {}).diff or "")
-	if diff_url == "" then
-		on_done({}, nil)
-		return nil
-	end
-
-	local diff_parser = require("atlas.core.git.diff_parser")
-	return service.request_text("GET", diff_url, nil, nil, function(text, err)
-		if err then
-			on_done(nil, err)
-			return
-		end
-		on_done(diff_parser.parse(text or ""), nil)
-	end)
+	return update_pullrequest(pr, { reviewers = reviewers }, on_done)
 end
 
 ---@param opts PullsCreatePROpts
@@ -532,7 +356,7 @@ function M.create_pr(opts, on_done)
 		description = opts.body or "",
 		source = { branch = { name = opts.head } },
 		destination = { branch = { name = opts.base } },
-		close_source_branch = true,
+		close_source_branch = config.options.pulls.default_delete_branch == true,
 		draft = opts.draft == true,
 	}
 
@@ -571,7 +395,7 @@ function M.create_pr(opts, on_done)
 	})
 end
 
----@param opts { repo_slug: string }
+---@param opts { repo_slug: string, repo_root: string|nil, head: string, base: string, pr: PullRequest|nil }
 ---@param on_done fun(reviewers: PullsCreatePRReviewer[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_default_reviewers(opts, on_done)
@@ -591,26 +415,49 @@ function M.fetch_default_reviewers(opts, on_done)
 			return
 		end
 
-		local items = {}
+		local selected = {}
+		local current = {}
+		for _, reviewer in ipairs((opts.pr and opts.pr.reviewers) or {}) do
+			local id = tostring(reviewer.provider_id or "")
+			if id ~= "" then
+				selected[id] = true
+				current[id] = reviewer
+			end
+		end
+
+		local reviewers = {}
+		local found = {}
 		local values = type(result) == "table" and type(result.values) == "table" and result.values or {}
 		for _, entry in ipairs(values) do
-			local user = type(entry) == "table" and type(entry.user) == "table" and entry.user or nil
-			local uuid = user and tostring(user.uuid or "") or ""
-			if user and uuid ~= "" then
+			local user = type(entry) == "table" and (type(entry.user) == "table" and entry.user or entry) or {}
+			local uuid = type(user) == "table" and tostring(user.uuid or "") or ""
+			if uuid ~= "" then
+				found[uuid] = true
 				local nickname = tostring(user.nickname or "")
-				local display = tostring(user.display_name or "")
-				local label = nickname ~= "" and ("@" .. nickname)
-					or (display ~= "" and ("@" .. display) or ("@" .. uuid))
-				table.insert(items, {
-					label = label,
+				local name = tostring(user.display_name or "")
+				local is_selected = opts.pr == nil or selected[uuid] == true
+				table.insert(reviewers, {
+					label = nickname ~= "" and ("@" .. nickname) or (name ~= "" and name or uuid),
 					provider_id = uuid,
-					selected = true,
+					selected = is_selected,
 					default = true,
 				})
 			end
 		end
 
-		on_done(items, nil)
+		for uuid, reviewer in pairs(current) do
+			if not found[uuid] then
+				local nickname = tostring(reviewer.nickname or reviewer.username or "")
+				local name = tostring(reviewer.name or "")
+				table.insert(reviewers, {
+					label = nickname ~= "" and ("@" .. nickname) or (name ~= "" and name or uuid),
+					provider_id = uuid,
+					selected = true,
+				})
+			end
+		end
+
+		on_done(reviewers, nil)
 	end)
 end
 

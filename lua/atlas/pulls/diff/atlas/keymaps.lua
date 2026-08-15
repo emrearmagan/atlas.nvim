@@ -2,66 +2,69 @@ local M = {}
 
 local explorer = require("atlas.pulls.diff.atlas.explorer")
 local help = require("atlas.ui.popups.help")
+local picker = require("atlas.picker")
 local resolver = require("atlas.core.keymaps")
-local review_keymaps = require("atlas.pulls.diff.shared.keymaps")
+local review_keymaps = require("atlas.pulls.diff.keymaps")
+local review_panel = require("atlas.pulls.diff.ui.review_panel")
+
+---@class AtlasNativeDiffKeymapActions
+---@field close fun()
+---@field reload fun()
+---@field refresh_review fun()
+---@field toggle_layout fun()
+---@field toggle_compact fun()
+---@field navigate_hunk fun(direction: 1|-1)
+---@field navigate_file fun(direction: 1|-1)
+---@field navigate_unreviewed_file fun(direction: 1|-1)
+---@field toggle_file_reviewed fun()
+---@field toggle_explorer fun()
+---@field toggle_commits fun()
+---@field select_file fun(index: integer, focus_diff: boolean|nil)
+---@field show_commit fun()
+---@field add_file_comment fun(pending: boolean)
 
 ---@param action AtlasKeymapActionId
----@param map_item AtlasHelpKeyItem
+---@param definition AtlasHelpKeyItem
 ---@return AtlasHelpKeyItem|nil
-local function item(action, map_item)
+local function item(action, definition)
 	local keys = resolver.resolve(action)
 	if not keys then
 		return nil
 	end
-	map_item.key = #keys == 1 and keys[1] or keys
-	return map_item
+	definition.key = #keys == 1 and keys[1] or keys
+	return definition
 end
 
 ---@param items AtlasHelpKeyItem[]
----@param value AtlasHelpKeyItem|nil
-local function add(items, value)
-	if value then
-		table.insert(items, value)
+---@param definition AtlasHelpKeyItem|nil
+local function add(items, definition)
+	if definition then
+		items[#items + 1] = definition
 	end
 end
 
----@param active fun(): boolean
+---@param session AtlasDiffSession
 ---@param callback fun()
 ---@return fun()
-local function guard(active, callback)
+local function guard(session, callback)
 	return function()
-		if active() and not help.is_open() then
+		if not session.closed and not session.viewer_state.closing and not help.is_open() then
 			callback()
 		end
 	end
 end
 
----@class AtlasDiffKeymapActions
----@field active fun(): boolean
----@field close fun()
----@field toggle_layout fun()
----@field toggle_compact fun()
----@field reload fun()
----@field navigate_hunk fun(direction: 1|-1)
----@field navigate_file fun(direction: 1|-1)
----@field toggle_file_reviewed fun()
----@field toggle_panel fun()
----@field toggle_commits fun()
----@field toggle_review_panel fun()
----@field select_file fun(index: integer)
----@field show_commit fun()
-
----@param session AtlasNativeDiffSession
----@param actions AtlasDiffKeymapActions
+---@param session AtlasDiffSession
+---@param actions AtlasNativeDiffKeymapActions
 function M.register(session, actions)
-	local review_enabled = session.review_context ~= nil
+	local state = session.viewer_state --[[@as AtlasNativeDiffState]]
 	local run = function(callback)
-		return guard(actions.active, callback)
+		return guard(session, callback)
 	end
 	local navigation = {}
 	add(
 		navigation,
-		item("pulls.review.previous_hunk", {
+		item("pulls.review.diff.previous_hunk", {
 			desc = "Previous diff hunk",
 			index = 1,
 			callback = run(function()
@@ -72,7 +75,7 @@ function M.register(session, actions)
 	)
 	add(
 		navigation,
-		item("pulls.review.next_hunk", {
+		item("pulls.review.diff.next_hunk", {
 			desc = "Next diff hunk",
 			index = 2,
 			callback = run(function()
@@ -83,7 +86,7 @@ function M.register(session, actions)
 	)
 	add(
 		navigation,
-		item("pulls.review.previous_file", {
+		item("pulls.review.explorer.previous_file", {
 			desc = "Previous file",
 			index = 3,
 			callback = run(function()
@@ -94,7 +97,7 @@ function M.register(session, actions)
 	)
 	add(
 		navigation,
-		item("pulls.review.next_file", {
+		item("pulls.review.explorer.next_file", {
 			desc = "Next file",
 			index = 4,
 			callback = run(function()
@@ -103,24 +106,72 @@ function M.register(session, actions)
 			opts = { silent = true, nowait = true },
 		})
 	)
-	for _, buf in ipairs({
-		session.panel.buf,
-		session.commits_panel.buf,
-		session.left.buf,
-		session.right.buf,
-	}) do
-		local general_actions = {}
+	add(
+		navigation,
+		item("pulls.review.explorer.previous_unreviewed_file", {
+			desc = "Previous unreviewed file",
+			index = 5,
+			callback = run(function()
+				actions.navigate_unreviewed_file(-1)
+			end),
+			opts = { silent = true, nowait = true },
+		})
+	)
+	add(
+		navigation,
+		item("pulls.review.explorer.next_unreviewed_file", {
+			desc = "Next unreviewed file",
+			index = 6,
+			callback = run(function()
+				actions.navigate_unreviewed_file(1)
+			end),
+			opts = { silent = true, nowait = true },
+		})
+	)
+	add(
+		navigation,
+		item("pulls.review.explorer.find_file", {
+			desc = "Find changed file",
+			index = 7,
+			callback = run(function()
+				local files = {}
+				for index, file in ipairs(state.files) do
+					files[index] = { index = index, path = file.path }
+				end
+				picker.find({
+					title = "Changed files",
+					items = files,
+					initial_index = state.pending_index or state.selected_index,
+					key = function(file)
+						return file.path
+					end,
+					format_item = function(file)
+						return file.path
+					end,
+					on_select = function(file)
+						if file then
+							actions.select_file(file.index, true)
+						end
+					end,
+				})
+			end),
+			opts = { silent = true, nowait = true },
+		})
+	)
+
+	for _, buf in ipairs({ state.panel.buf, state.commits_panel.buf, state.left.buf, state.right.buf }) do
+		local general = {}
 		add(
-			general_actions,
+			general,
 			item("ui.close", {
-				desc = "Close diff",
+				desc = buf == state.commits_panel.buf and "Close commits" or "Close diff",
 				index = 1,
-				callback = run(actions.close),
+				callback = run(buf == state.commits_panel.buf and actions.toggle_commits or actions.close),
 				opts = { silent = true, nowait = true },
 			})
 		)
 		add(
-			general_actions,
+			general,
 			item("ui.help", {
 				desc = "Toggle help",
 				index = 2,
@@ -131,27 +182,18 @@ function M.register(session, actions)
 			})
 		)
 		add(
-			general_actions,
+			general,
 			item("ui.toggle_panel", {
 				desc = "Toggle file explorer",
 				index = 3,
-				callback = run(actions.toggle_panel),
-				opts = { silent = true, nowait = true },
-			})
-		)
-		add(
-			general_actions,
-			item("ui.refresh_view", {
-				desc = review_enabled and "Reload pull request diff" or "Reload diff",
-				index = 6,
-				callback = run(actions.reload),
+				callback = run(actions.toggle_explorer),
 				opts = { silent = true, nowait = true },
 			})
 		)
 		if #session.commits > 0 then
 			add(
-				general_actions,
-				item("pulls.review.toggle_commits", {
+				general,
+				item("pulls.review.explorer.toggle_commits", {
 					desc = "Toggle commits",
 					index = 4,
 					callback = run(actions.toggle_commits),
@@ -159,68 +201,77 @@ function M.register(session, actions)
 				})
 			)
 		end
-		if review_enabled then
+		add(
+			general,
+			item("pulls.review.diff.toggle_compact", {
+				desc = "Toggle compact diff",
+				index = 5,
+				callback = run(actions.toggle_compact),
+				opts = { silent = true, nowait = true },
+			})
+		)
+		add(
+			general,
+			item("pulls.review.diff.toggle_layout", {
+				desc = "Toggle side-by-side / inline",
+				index = 6,
+				callback = run(actions.toggle_layout),
+				opts = { silent = true, nowait = true },
+			})
+		)
+		if buf == state.commits_panel.buf then
+			if session.review then
+				add(
+					general,
+					item("ui.refresh", {
+						desc = "Refresh review",
+						index = 7,
+						callback = run(actions.refresh_review),
+						opts = { silent = true, nowait = true },
+					})
+				)
+			end
 			add(
-				general_actions,
-				item("pulls.review.toggle_review_panel", {
-					desc = "Toggle review panel",
-					index = 5,
-					callback = run(actions.toggle_review_panel),
+				general,
+				item("ui.refresh_view", {
+					desc = "Reload diff",
+					index = 8,
+					callback = run(actions.reload),
 					opts = { silent = true, nowait = true },
 				})
 			)
-		end
-		if buf == session.commits_panel.buf then
 			add(
-				general_actions,
+				general,
 				item("ui.show_details", {
-					desc = "Show details",
+					desc = "Show commit details",
 					index = 9,
 					callback = run(actions.show_commit),
 					opts = { silent = true, nowait = true },
 				})
 			)
 		end
-		add(
-			general_actions,
-			item("pulls.review.toggle_compact", {
-				desc = "Toggle full / compact",
-				index = 7,
-				callback = run(actions.toggle_compact),
-				opts = { silent = true, nowait = true },
-			})
-		)
-		add(
-			general_actions,
-			item("pulls.review.toggle_layout", {
-				desc = "Toggle side-by-side / inline",
-				index = 8,
-				callback = run(actions.toggle_layout),
-				opts = { silent = true, nowait = true },
-			})
-		)
-		local review_actions = {}
-		if review_enabled and buf ~= session.commits_panel.buf then
+		help.register("General", general, { index = 90, buffer = buf })
+		if session.review and (buf == state.left.buf or buf == state.right.buf) then
+			local review = {}
 			add(
-				review_actions,
-				item("pulls.review.toggle_file_reviewed", {
+				review,
+				item("pulls.review.explorer.toggle_file_reviewed", {
 					desc = "Toggle file reviewed",
-					index = 2,
+					index = 1,
 					callback = run(actions.toggle_file_reviewed),
 					opts = { silent = true, nowait = true },
 				})
 			)
+			help.register("Review", review, { index = 110, buffer = buf })
 		end
-		help.register("General", general_actions, { index = 90, buffer = buf })
-		help.register("Review", review_actions, { index = 110, buffer = buf })
 		help.register("Navigation", navigation, { index = 120, buffer = buf })
 	end
 
-	local explorer_actions = {}
+	local panel_actions = {}
 	add(
-		explorer_actions,
-		item("pulls.review.open_file", {
-			desc = "Open changed file",
+		panel_actions,
+		item("pulls.review.show_item", {
+			desc = "Show changed file",
 			index = 1,
 			callback = run(function()
 				local index = explorer.open_at_cursor(session)
@@ -232,10 +283,24 @@ function M.register(session, actions)
 		})
 	)
 	add(
-		explorer_actions,
+		panel_actions,
+		item("pulls.review.focus_item", {
+			desc = "Focus changed file",
+			index = 2,
+			callback = run(function()
+				local index = explorer.open_at_cursor(session)
+				if index then
+					actions.select_file(index, true)
+				end
+			end),
+			opts = { silent = true, nowait = true },
+		})
+	)
+	add(
+		panel_actions,
 		item("ui.show_details", {
 			desc = "Show file path / item",
-			index = 2,
+			index = 3,
 			callback = run(function()
 				explorer.show_path(session)
 			end),
@@ -243,10 +308,10 @@ function M.register(session, actions)
 		})
 	)
 	add(
-		explorer_actions,
-		item("pulls.review.toggle_explorer_grouping", {
+		panel_actions,
+		item("pulls.review.explorer.toggle_grouping", {
 			desc = "Toggle grouped / plain files",
-			index = 3,
+			index = 4,
 			callback = run(function()
 				explorer.toggle_grouping(session)
 			end),
@@ -254,10 +319,10 @@ function M.register(session, actions)
 		})
 	)
 	add(
-		explorer_actions,
+		panel_actions,
 		item("ui.toggle_fold", {
 			desc = "Toggle folder",
-			index = 4,
+			index = 5,
 			callback = run(function()
 				explorer.toggle_folder(session)
 			end),
@@ -265,61 +330,44 @@ function M.register(session, actions)
 		})
 	)
 	add(
-		explorer_actions,
+		panel_actions,
 		item("ui.toggle_all_folds", {
 			desc = "Toggle all folders",
-			index = 5,
+			index = 6,
 			callback = run(function()
 				explorer.toggle_all_folders(session)
 			end),
 			opts = { silent = true, nowait = true },
 		})
 	)
-	if not review_enabled then
-		add(
-			explorer_actions,
-			item("pulls.review.toggle_file_reviewed", {
-				desc = "Toggle file reviewed",
-				index = 6,
-				callback = run(actions.toggle_file_reviewed),
-				opts = { silent = true, nowait = true },
-			})
-		)
-	end
-	help.register("Explorer", explorer_actions, { index = 80, buffer = session.panel.buf })
-end
-
----@param session AtlasNativeDiffSession
----@param actions AtlasReviewKeymapActions
-function M.register_review(session, actions)
-	local run = function(callback)
-		return guard(actions.active, callback)
-	end
-	for _, buf in ipairs({
-		session.panel.buf,
-		session.commits_panel.buf,
-		session.left.buf,
-		session.right.buf,
-	}) do
-		local groups = review_keymaps.groups(session, actions, buf, {
-			include_actions = buf ~= session.commits_panel.buf,
-			include_task = buf == session.panel.buf,
+	add(
+		panel_actions,
+		item("pulls.review.explorer.toggle_file_reviewed", {
+			desc = "Toggle file reviewed",
+			index = 7,
+			callback = run(actions.toggle_file_reviewed),
+			opts = { silent = true, nowait = true },
 		})
-		for _, group in ipairs(groups) do
-			local items = {}
-			for _, definition in ipairs(group.items) do
-				add(
-					items,
-					item(definition.action, {
-						desc = definition.desc,
-						index = definition.index,
-						callback = run(definition.callback),
-						opts = { silent = true, nowait = true },
-					})
-				)
-			end
-			help.register(group.name, items, { index = group.index, buffer = buf })
-		end
+	)
+	help.register("Explorer", panel_actions, { index = 80, buffer = state.panel.buf })
+
+	local review_buffers = { state.panel.buf, state.left.buf, state.right.buf }
+	if session.review_panel then
+		review_buffers[#review_buffers + 1] = session.review_panel.buf
+	end
+	review_keymaps.register(session, {
+		buffers = review_buffers,
+		reload = actions.reload,
+		file_buffers = { state.panel.buf },
+		add_file_comment = actions.add_file_comment,
+	})
+	if session.review_panel then
+		review_panel.register_toggle(session.review_panel, {
+			state.panel.buf,
+			state.commits_panel.buf,
+			state.left.buf,
+			state.right.buf,
+		})
 	end
 end
 

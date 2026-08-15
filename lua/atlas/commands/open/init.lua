@@ -2,6 +2,7 @@ local M = {}
 
 local git = require("atlas.core.git")
 local notify = require("atlas.core.notify")
+local picker = require("atlas.picker")
 local providers = require("atlas.providers")
 local resolver = require("atlas.providers.resolve")
 local request_id = 0
@@ -190,16 +191,18 @@ local function choose_repository(choices, prompt, on_choice)
 		return
 	end
 	local current_request = request_id
-	vim.ui.select(choices, {
-		prompt = prompt,
+	picker.select({
+		title = prompt,
+		items = choices,
 		format_item = function(item)
-			return string.format("%s · %s", item.provider, item.slug)
+			return string.format("%s  %s", item.provider, item.slug)
 		end,
-	}, function(choice)
-		if choice and current_request == request_id then
-			on_choice(choice)
-		end
-	end)
+		on_select = function(choice)
+			if choice and current_request == request_id then
+				on_choice(choice)
+			end
+		end,
+	})
 end
 
 ---@param choices AtlasGitRemoteInfo[]

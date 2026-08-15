@@ -5,15 +5,16 @@ local icons = require("atlas.ui.shared.icons")
 local utils = require("atlas.ui.shared.utils")
 local helper = require("atlas.issues.ui.main.helper")
 
-local overview_state = require("atlas.issues.providers.jira.ui.overview.state")
-local conversation_state = require("atlas.issues.ui.panel.issue.tabs.conversation.state")
-local history_state = require("atlas.issues.ui.panel.issue.tabs.activity.state")
+local state = {
+	custom_fields = nil, ---@type table[]|nil
+}
 
 -- Header rows
 
 ---@param issue Issue
+---@param loading boolean
 ---@return IssuesPanelHeaderRow[]
-function M.header_rows(issue)
+function M.header_rows(issue, loading)
 	local user_icon = icons.general("user")
 	local priority = tostring(issue.priority or "-")
 	local priority_icon, priority_hl = icons.issues_priority(priority)
@@ -47,34 +48,26 @@ function M.header_rows(issue)
 		},
 	}
 
-	local project_key = issue.project and issue.project.key or nil
-	if project_key then
-		local jira_cfg = require("atlas.issues.providers.jira.api.config").jira_config()
-		local project_config = jira_cfg and jira_cfg.project_config and jira_cfg.project_config[project_key] or nil
-		if project_config then
-			if overview_state.custom_fields_loading then
+	if loading then
+		table.insert(rows, {
+			k1 = "Fields:",
+			v1 = "Loading...",
+			v1_hl = "AtlasTextMuted",
+			k2 = "",
+			v2 = "",
+			v2_hl = nil,
+		})
+	else
+		for _, field in ipairs(state.custom_fields or {}) do
+			if field.display == "table" then
 				table.insert(rows, {
-					k1 = "Fields:",
-					v1 = "Loading...",
-					v1_hl = "AtlasTextMuted",
+					k1 = string.format("%s:", field.name),
+					v1 = field.formatted,
+					v1_hl = field.hl_group or "Normal",
 					k2 = "",
 					v2 = "",
 					v2_hl = nil,
 				})
-			else
-				local custom_fields = overview_state.custom_fields or {}
-				for _, field in ipairs(custom_fields) do
-					if field.display == "table" then
-						table.insert(rows, {
-							k1 = string.format("%s:", field.name),
-							v1 = field.formatted,
-							v1_hl = field.hl_group or "Normal",
-							k2 = "",
-							v2 = "",
-							v2_hl = nil,
-						})
-					end
-				end
 			end
 		end
 	end
@@ -85,8 +78,9 @@ end
 -- Chips
 
 ---@param issue Issue
+---@param loading boolean
 ---@return IssuesPanelChip[]
-function M.chips(issue)
+function M.chips(issue, loading)
 	local chips = {}
 
 	local parent_key = issue.parent and issue.parent.key or nil
@@ -109,11 +103,10 @@ function M.chips(issue)
 		hl = due ~= "" and "AtlasJiraChipDueDate" or "AtlasTextMuted",
 	})
 
-	if overview_state.custom_fields_loading then
+	if loading then
 		table.insert(chips, { label = "Loading...", hl = "AtlasTextMuted" })
 	else
-		local custom_fields = overview_state.custom_fields or {}
-		for _, field in ipairs(custom_fields) do
+		for _, field in ipairs(state.custom_fields or {}) do
 			if field.display == "chip" then
 				table.insert(chips, {
 					label = field.formatted,
@@ -129,9 +122,12 @@ end
 -- Fetches
 
 ---@param issue Issue
----@param refresh fun()
----@param opts { force_load?: boolean }|nil
-function M.fetches(issue, refresh, opts)
+---@param opts { force_refresh: boolean|nil, issue_refreshed: boolean|nil }|nil
+---@param on_done fun()
+---@return { cancel: fun() }|nil
+function M.fetch_header(issue, opts, on_done)
+	state.custom_fields = nil
+
 	local issue_key = tostring(issue.key or "")
 	local project_key = issue.project and issue.project.key or nil
 
@@ -140,8 +136,7 @@ function M.fetches(issue, refresh, opts)
 		or nil
 
 	if not project_config then
-		overview_state.custom_fields = nil
-		overview_state.custom_fields_loading = false
+		on_done()
 		return
 	end
 
@@ -151,31 +146,24 @@ function M.fetches(issue, refresh, opts)
 	end
 
 	if #extra_fields == 0 then
-		overview_state.custom_fields = nil
-		overview_state.custom_fields_loading = false
+		on_done()
 		return
 	end
 
-	overview_state.custom_fields = nil
-	overview_state.custom_fields_loading = true
-
 	local issues_api = require("atlas.issues.providers.jira.api.issues")
-	issues_api.get_custom_fields(issue_key, extra_fields, function(values, err)
-		overview_state.custom_fields_loading = false
-
+	return issues_api.get_custom_fields(issue_key, extra_fields, function(values, err)
 		if err or not values then
-			overview_state.custom_fields = nil
-			refresh()
+			on_done()
 			return
 		end
 
-		overview_state.custom_fields = {}
+		state.custom_fields = {}
 		for field_id, field_cfg in pairs(project_config) do
 			local raw_value = values[field_id]
 			if raw_value ~= nil then
 				local format_ok, formatted = pcall(field_cfg.format, raw_value)
 				if format_ok and formatted and formatted ~= "" then
-					table.insert(overview_state.custom_fields, {
+					table.insert(state.custom_fields, {
 						name = field_cfg.name or field_id,
 						formatted = formatted,
 						hl_group = field_cfg.hl_group,
@@ -185,14 +173,8 @@ function M.fetches(issue, refresh, opts)
 			end
 		end
 
-		refresh()
-	end, { force_load = opts and opts.force_load == true })
-end
-
----@param issue Issue
----@return boolean
-function M.is_loading(issue)
-	return overview_state.description_loading or conversation_state.any_loading() or history_state.any_loading()
+		on_done()
+	end, { force_load = opts and opts.force_refresh == true })
 end
 
 -- Tabs

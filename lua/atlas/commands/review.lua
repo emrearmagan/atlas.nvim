@@ -1,0 +1,123 @@
+local M = {}
+
+local git = require("atlas.core.git")
+local notify = require("atlas.core.notify")
+local picker = require("atlas.picker")
+local providers = require("atlas.providers")
+local resolver = require("atlas.providers.resolve")
+local ui_utils = require("atlas.ui.shared.utils")
+
+local request
+
+local function no_repository()
+	notify.error("No supported Git repository found")
+end
+
+---@param value string|nil
+function M.open(value)
+	if value then
+		require("atlas.pulls.diff").open_pull_request(value)
+		return
+	end
+
+	local root = git.repo_root()
+	local info = root and git.local_repository(root) or nil
+	if not info then
+		no_repository()
+		return
+	end
+	if not providers.domain(info.provider, "pulls") or not providers.options(info.provider, "pulls") then
+		no_repository()
+		return
+	end
+
+	local provider = assert(providers.load(info.provider, "pulls"))
+	---@cast provider PullsProvider
+	local target = resolver.target(info, "pulls", "repo", nil)
+	local view = provider.search_view(target)
+	if request then
+		request.cancel()
+	end
+	notify.info("Fetching pull requests for " .. info.slug .. "...")
+	request = provider.capabilities.core.fetch_pullrequests(view, {
+		force_load = true,
+		state = "open",
+	}, function(groups, errors)
+		request = nil
+		if errors and #errors > 0 then
+			notify.error(table.concat(errors, "; "))
+			return
+		end
+
+		local pull_requests = {}
+		for _, group in ipairs(groups or {}) do
+			for _, pr in ipairs(group.prs or {}) do
+				if pr.state == "open" or pr.state == "draft" then
+					table.insert(pull_requests, pr)
+				end
+			end
+		end
+		if #pull_requests == 0 then
+			notify.info("No open pull requests found for " .. info.slug)
+			return
+		end
+
+		picker.select_with_preview({
+			title = "Review pull request",
+			items = pull_requests,
+			key = function(pr)
+				return tostring(pr.id)
+			end,
+			format_item = function(pr)
+				return string.format("#%s %s", tostring(pr.id), pr.title)
+			end,
+			preview_item = function(pr, done)
+				return provider.capabilities.core.fetch_pullrequest(pr, { force_load = false }, function(detail, err)
+					if err then
+						done({ title = "#" .. tostring(pr.id), lines = { err } })
+						return
+					end
+					local current = detail or pr
+					local author = current.author.username ~= "" and "@" .. current.author.username
+						or current.author.name
+					local status = current.state .. "   updated " .. ui_utils.relative_time(current.updated_on)
+					if current.lines_added ~= nil and current.lines_removed ~= nil then
+						status = status .. string.format("   +%d -%d", current.lines_added, current.lines_removed)
+					end
+					local description = ui_utils.strip_markup(current.description)
+					local lines = {
+						author,
+						current.source.branch .. " → " .. current.destination.branch,
+						status,
+						"",
+					}
+					vim.list_extend(
+						lines,
+						vim.split(description ~= "" and description or "No description", "\n", { plain = true })
+					)
+					done({
+						title = "#" .. tostring(pr.id),
+						lines = lines,
+					})
+				end)
+			end,
+			on_select = function(pr)
+				if not pr then
+					return
+				end
+				require("atlas.pulls.diff").open_pr({
+					provider = provider,
+					pr = pr,
+					current_user = nil,
+					root = root,
+				}, function(err)
+					if err then
+						notify.error("Unable to open diff: " .. tostring(err))
+					end
+				end)
+			end,
+		})
+	end)
+end
+
+return M

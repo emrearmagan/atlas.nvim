@@ -1,6 +1,7 @@
 local M = {}
 
 local notify = require("atlas.core.notify")
+local picker = require("atlas.picker")
 local providers = require("atlas.providers")
 
 local domain_labels = {
@@ -13,6 +14,32 @@ local domain_labels = {
 ---@field label string
 ---@field open fun()
 
+---@param provider PullsProvider
+---@return fun()|nil
+local function pulls_search(provider)
+	local actions = require("atlas.pulls.actions")
+	local context = { provider = provider }
+	if not actions.is_available("search", context) then
+		return nil
+	end
+	return function()
+		actions.run("search", context)
+	end
+end
+
+---@param provider IssuesProvider
+---@return fun()|nil
+local function issues_search(provider)
+	local actions = require("atlas.issues.actions")
+	local context = { provider = provider }
+	if not actions.is_available("search", context) then
+		return nil
+	end
+	return function()
+		actions.run("search", context)
+	end
+end
+
 ---@return AtlasSearchEntry[]
 local function configured_searches()
 	local entries = {}
@@ -20,7 +47,14 @@ local function configured_searches()
 		for _, domain in ipairs({ "pulls", "issues" }) do
 			if provider_config.domains[domain] and providers.options(provider_config.id, domain) then
 				local provider = assert(providers.load(provider_config.id, domain))
-				local search = provider.capabilities.search
+				local search
+				if domain == "pulls" then
+					---@cast provider PullsProvider
+					search = pulls_search(provider)
+				else
+					---@cast provider IssuesProvider
+					search = issues_search(provider)
+				end
 				if search then
 					table.insert(entries, {
 						id = provider_config.id,
@@ -42,16 +76,18 @@ local function choose(entries, prompt)
 		return
 	end
 
-	vim.ui.select(entries, {
-		prompt = prompt,
+	picker.select({
+		title = prompt,
+		items = entries,
 		format_item = function(entry)
 			return entry.label
 		end,
-	}, function(entry)
-		if entry then
-			entry.open()
-		end
-	end)
+		on_select = function(entry)
+			if entry then
+				entry.open()
+			end
+		end,
+	})
 end
 
 ---@param provider_id AtlasProviderId|nil

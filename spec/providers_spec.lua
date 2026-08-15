@@ -29,7 +29,7 @@ describe("provider contracts", function()
 			"pulls",
 			{ "bitbucket", "github", "gitlab" },
 			{ "resolve", "search_view", "target", "repositories" },
-			{ "fetch_user", "fetch_pullrequests", "fetch_pullrequest", "views" }
+			{ "fetch_user", "fetch_pullrequests", "fetch_pullrequest", "update_description", "decline", "views" }
 		)
 	end)
 
@@ -40,5 +40,12 @@ describe("provider contracts", function()
 			{ "resolve", "search_view", "issue_key" },
 			{ "fetch_user", "fetch_issues", "fetch_issue", "views" }
 		)
+	end)
+
+	it("exposes Bitbucket review actions", function()
+		local provider = assert(providers.load("bitbucket", "pulls"))
+		local reviews = assert(provider.capabilities.reviews)
+
+		assert_functions(reviews, { "submit_review", "approve", "request_changes" }, "bitbucket.pulls.reviews")
 	end)
 end)

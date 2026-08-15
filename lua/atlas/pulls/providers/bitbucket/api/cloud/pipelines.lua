@@ -85,16 +85,25 @@ local function parse_jobs(result)
 end
 
 ---@param pr PullRequest
----@param _opts { force_refresh: boolean|nil }|nil
+---@param opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(pipelines: PullsPipeline[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_pipelines(pr, _opts, on_done)
+function M.fetch_pipelines(pr, opts, on_done)
 	local raw = pr._raw
 	local statuses_url = tostring((raw.links or {}).statuses or "")
 	local commit_hash = tostring((pr.source or {}).commit_hash or "")
 	if statuses_url == "" then
 		on_done({}, nil)
 		return nil
+	end
+
+	local key = "bitbucket:pr:pipelines:" .. statuses_url
+	if not (opts or {}).force_refresh then
+		local cached, ok = service.get_cache(key)
+		if ok then
+			on_done(cached, nil)
+			return nil
+		end
 	end
 
 	local cancelled = false
@@ -138,6 +147,7 @@ function M.fetch_pipelines(pr, _opts, on_done)
 		end
 
 		if #pipeline_jobs == 0 then
+			service.set_cache(key, pipelines)
 			on_done(pipelines, nil)
 			return
 		end
@@ -164,6 +174,9 @@ function M.fetch_pipelines(pr, _opts, on_done)
 				end
 				pending = pending - 1
 				if pending == 0 then
+					if not first_err then
+						service.set_cache(key, pipelines)
+					end
 					on_done(first_err and nil or pipelines, first_err)
 				end
 			end))
@@ -246,12 +259,13 @@ function M.stop_pipeline(pr, pipeline, on_done)
 	end, { action = "Stop pipeline", repo = repo, pipeline_id = id })
 end
 
----@param statuses_url string
+---@param commit PullsCommit
 ---@param opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(status: string|nil, url: string|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_commit_status(statuses_url, opts, on_done)
-	if type(statuses_url) ~= "string" or statuses_url == "" then
+function M.fetch_commit_status(commit, opts, on_done)
+	local statuses_url = tostring(commit.statuses_url or "")
+	if statuses_url == "" then
 		on_done("unknown", nil, nil)
 		return nil
 	end

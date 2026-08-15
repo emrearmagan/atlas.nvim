@@ -21,13 +21,9 @@ local function collect_logins(context)
 	end
 
 	if pr then
-		for _, list in ipairs({ pr._raw.assignees, pr._raw.reviewers }) do
-			if type(list) == "table" then
-				for _, u in ipairs(list) do
-					if type(u) == "table" then
-						add(u.username or u.name)
-					end
-				end
+		for _, list in ipairs({ pr.assignees or {}, pr.reviewers or {} }) do
+			for _, user in ipairs(list) do
+				add(user.username or user.nickname or user.name)
 			end
 		end
 	end

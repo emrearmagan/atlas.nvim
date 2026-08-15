@@ -1,17 +1,18 @@
 local M = {}
 
 local statusline = require("atlas.ui.statusline")
-local status_spinner = require("atlas.ui.components.spinner")
+local spinner = require("atlas.ui.components.spinner")
 local state = require("atlas.pulls.state")
 local layout = require("atlas.ui.layout")
 local helper = require("atlas.pulls.ui.main.helper")
 local navigation = require("atlas.ui.navigation")
+local info_popup = require("atlas.ui.popups.info")
 
 local active_pullrequests_handle = nil
 local active_pr_reload_handles = {}
 
 local function render_if_active()
-	if not layout.is_open() then
+	if not layout.is_active() then
 		return
 	end
 	local ui_main_state = require("atlas.ui.state")
@@ -22,13 +23,18 @@ local function render_if_active()
 	require("atlas.pulls.ui.main").render()
 end
 
-local refresh_status_spinner = status_spinner.create({
+local loading_spinner = spinner.create({
 	interval_ms = 120,
 	on_tick = function(frame)
 		state.reload_spinner_frame = frame
 		render_if_active()
 	end,
 })
+
+local function stop_loading_spinner()
+	loading_spinner:stop()
+	state.reload_spinner_frame = "⠋"
+end
 
 ---@return boolean
 local function has_reloading_prs()
@@ -40,17 +46,24 @@ local function has_reloading_prs()
 	return false
 end
 
+local function sync_loading_spinner()
+	if state.is_loading or has_reloading_prs() then
+		if not loading_spinner:is_running() then
+			loading_spinner:start()
+		end
+		state.reload_spinner_frame = loading_spinner:current_frame()
+	else
+		stop_loading_spinner()
+	end
+end
+
 ---@param repo_id string
 ---@param pr_id string|number
 local function begin_pr_reload(repo_id, pr_id)
 	local key = state.reload_key(repo_id, pr_id)
 	state.reloading_pr_keys[key] = (tonumber(state.reloading_pr_keys[key]) or 0) + 1
 
-	if not refresh_status_spinner:is_running() then
-		refresh_status_spinner:start()
-	end
-
-	state.reload_spinner_frame = refresh_status_spinner:current_frame()
+	sync_loading_spinner()
 	render_if_active()
 end
 
@@ -65,10 +78,7 @@ local function end_pr_reload(repo_id, pr_id)
 		state.reloading_pr_keys[key] = nil
 	end
 
-	if not has_reloading_prs() then
-		refresh_status_spinner:stop()
-		state.reload_spinner_frame = "⠋"
-	end
+	sync_loading_spinner()
 
 	render_if_active()
 end
@@ -83,9 +93,8 @@ local function cancel_pr_reload_handles()
 end
 
 local function reset_reload_state()
-	refresh_status_spinner:stop()
+	stop_loading_spinner()
 	state.reloading_pr_keys = {}
-	state.reload_spinner_frame = "⠋"
 end
 
 local function cancel_active_requests()
@@ -164,6 +173,7 @@ local function load_active_view(opts, on_done)
 
 	state.is_loading = true
 	state.error = nil
+	sync_loading_spinner()
 	statusline.notify("loading", "Loading pull requests...")
 	render_if_active()
 
@@ -185,6 +195,7 @@ local function load_active_view(opts, on_done)
 			return
 		end
 		state.is_loading = false
+		sync_loading_spinner()
 		state.current_view = state.active_view
 
 		local first_err = nil
@@ -247,14 +258,98 @@ local function load_active_view(opts, on_done)
 	end
 end
 
+---@param view AtlasPullsViewConfig
+---@param force_load boolean
 ---@param on_done fun()|nil
-function M.refresh_current_view(on_done)
-	load_active_view({ force_load = true }, function()
-		navigation.focus_first_item()
+local function load_bookmark(view, force_load, on_done)
+	local provider = state.provider
+	if provider == nil then
+		return
+	end
+
+	cancel_active_requests()
+	state.is_loading = true
+	state.error = nil
+	state.pulls = nil
+	state.current_view = view
+	sync_loading_spinner()
+	statusline.notify("loading", "Running query...")
+	render_if_active()
+
+	active_pullrequests_handle = provider.capabilities.core.fetch_pullrequests(
+		view,
+		{ force_load = force_load },
+		function(groups, err)
+			active_pullrequests_handle = nil
+			state.is_loading = false
+			sync_loading_spinner()
+			local first_err = type(err) == "table" and err[1] or err
+			if first_err and (groups == nil or #groups == 0) then
+				state.error = tostring(first_err)
+				state.pulls = {}
+				statusline.notify("error", string.format("Query failed: %s", state.error))
+			else
+				state.error = nil
+				state.pulls = groups or {}
+				statusline.notify("success", "Pull requests loaded", 1200)
+			end
+			render_if_active()
+			if on_done then
+				on_done()
+			end
+		end
+	)
+end
+
+---@param on_done fun()|nil
+---@param focus_pr PullRequest|nil
+function M.refresh_current_view(on_done, focus_pr)
+	local current_view = state.current_view
+	local bookmark_active = state.active_view
+		and state.active_view._kind == "bookmarks"
+		and current_view
+		and current_view._kind ~= "bookmarks"
+	if bookmark_active and focus_pr == nil then
+		local item = navigation.current_item()
+		if item and item.kind == "pr" then
+			focus_pr = item.pr
+		end
+	end
+
+	local function finish()
+		local focused = bookmark_active and focus_pr == nil
+		if focus_pr ~= nil then
+			focused = navigation.focus_item(function(item)
+				return item.kind == "pr"
+					and item.pr
+					and tostring(item.pr.id) == tostring(focus_pr.id)
+					and tostring(item.pr.repo_full_name) == tostring(focus_pr.repo_full_name)
+			end)
+		end
+		if not focused then
+			navigation.focus_first_item()
+		end
+		local item = navigation.current_item()
+		local panel = require("atlas.pulls.ui.panel")
+		if require("atlas.pulls.ui.panel.state").current_panel == "pr" and panel.is_open() then
+			if focus_pr and not focused then
+				panel.close()
+			elseif type(item) == "table" and item.kind == "pr" and item.pr then
+				panel.on_select(item.pr, item.repo, { force_refresh = true, pr_refreshed = true })
+			else
+				panel.close()
+			end
+		end
 		if on_done ~= nil then
 			on_done()
 		end
-	end)
+	end
+
+	if bookmark_active then
+		load_bookmark(current_view, true, finish)
+	else
+		load_active_view({ force_load = true }, finish)
+	end
 end
 
 ---@param pr PullRequest|nil
@@ -278,24 +373,13 @@ function M.refresh_pr(pr, on_done)
 
 	local pr_id = pr.id
 	local repo_id = tostring(pr.repo_full_name or "")
+	if state.is_pr_reloading(repo_id, pr_id) then
+		on_done()
+		return
+	end
 
 	statusline.notify("loading", string.format("Reloading PR #%s...", tostring(pr_id)))
 	begin_pr_reload(repo_id, pr_id)
-
-	local panel = require("atlas.pulls.ui.panel")
-	if panel.is_open() then
-		local root_panel_state = require("atlas.pulls.ui.panel.state")
-		local selected_repo = nil
-		local current_item = navigation.current_item()
-		if type(current_item) == "table" and type(current_item.repo) == "table" then
-			selected_repo = current_item.repo
-		end
-		if root_panel_state.current_panel == "repo" then
-			panel.on_select(pr, selected_repo, { force_refresh = true })
-		else
-			panel.on_select(pr, nil, { force_refresh = true })
-		end
-	end
 
 	local reload_handle = nil
 	reload_handle = core.fetch_pullrequest(pr, { force_load = true }, function(fetched_pr, err)
@@ -333,14 +417,55 @@ function M.refresh_pr(pr, on_done)
 		state.pulls = groups
 		end_pr_reload(repo_id, pr_id)
 
-		if panel.is_open() then
-			panel.on_select(fetched_pr, nil)
+		local pr_panel_state = require("atlas.pulls.ui.panel.pr.state")
+		local panel_pr = pr_panel_state.current_pr
+		local panel = require("atlas.pulls.ui.panel.pr")
+		if
+			panel.is_open()
+			and panel_pr ~= nil
+			and tostring(panel_pr.id) == tostring(pr_id)
+			and tostring(panel_pr.repo_full_name) == repo_id
+		then
+			panel.on_select(fetched_pr, pr_panel_state.current_repo, {
+				force_refresh = true,
+				pr_refreshed = true,
+			})
 		end
 
 		statusline.notify("success", string.format("Reloaded PR #%s", tostring(pr_id)), 1200)
 		on_done()
 	end)
 	table.insert(active_pr_reload_handles, reload_handle)
+end
+
+---@param source_buf integer|nil
+function M.show_pr_details(source_buf)
+	local node = navigation.current_item()
+	if type(node) ~= "table" or (node.kind ~= "pr" and node.kind ~= "pr_meta") then
+		statusline.notify("warn", "No PR selected")
+		return
+	end
+
+	local pr = node.pr
+	if type(pr) ~= "table" then
+		statusline.notify("warn", "No PR selected")
+		return
+	end
+
+	local lines, highlights = require("atlas.pulls.ui.popup").content(pr)
+	info_popup.show({
+		lines = lines,
+		highlights = highlights,
+		source_buf = source_buf,
+	})
+end
+
+---@param pr PullRequest|nil
+---@param result PullsActionResult|nil
+function M.apply_action_result(pr, result)
+	if pr ~= nil and result ~= nil and result.changed_pr then
+		M.refresh_pr(pr)
+	end
 end
 
 ---@param view AtlasPullsViewConfig
@@ -354,11 +479,6 @@ end
 ---@param name string
 ---@param value any
 function M.run_bookmark(name, value)
-	local provider = state.provider
-	if provider == nil then
-		return
-	end
-	local core = provider.capabilities.core
 	local view = { name = name, layout = "compact" }
 	if type(value) == "string" then
 		view.search = value
@@ -368,28 +488,7 @@ function M.run_bookmark(name, value)
 		end
 	end
 
-	cancel_active_requests()
-	state.is_loading = true
-	state.error = nil
-	state.pulls = nil
-	statusline.notify("loading", "Running query...")
-	render_if_active()
-
-	active_pullrequests_handle = core.fetch_pullrequests(view, { force_load = false }, function(groups, err)
-		active_pullrequests_handle = nil
-		state.is_loading = false
-		local first_err = type(err) == "table" and err[1] or err
-		if first_err and (groups == nil or #groups == 0) then
-			state.error = tostring(first_err)
-			state.pulls = {}
-			statusline.notify("error", string.format("Query failed: %s", state.error))
-		else
-			state.error = nil
-			state.pulls = groups or {}
-			statusline.notify("success", "Pull requests loaded", 1200)
-		end
-		render_if_active()
-	end)
+	load_bookmark(view, false)
 end
 
 ---@param status string

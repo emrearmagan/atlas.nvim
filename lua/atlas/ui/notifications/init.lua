@@ -115,23 +115,18 @@ function M.close()
 end
 
 ---@param target_buf integer
----@param header_lines string[]
----@param header_spans table[]
----@param body_lines string[]
----@param body_spans table[]
----@param body_map table<integer, table>
+---@param lines string[]
+---@param spans table[]
+---@param line_map table<integer, table>
 ---@return table<integer, table>
-local function flush(target_buf, header_lines, header_spans, body_lines, body_spans, body_map)
-	local all_lines = vim.list_extend({}, header_lines)
-	vim.list_extend(all_lines, body_lines)
-
+local function flush(target_buf, lines, spans, line_map)
 	vim.api.nvim_set_option_value("modifiable", true, { buf = target_buf })
-	vim.api.nvim_buf_set_lines(target_buf, 0, -1, false, all_lines)
+	vim.api.nvim_buf_set_lines(target_buf, 0, -1, false, lines)
 	vim.api.nvim_set_option_value("modifiable", false, { buf = target_buf })
 
 	vim.api.nvim_buf_clear_namespace(target_buf, ns, 0, -1)
 
-	for _, span in ipairs(header_spans or {}) do
+	for _, span in ipairs(spans or {}) do
 		pcall(vim.api.nvim_buf_set_extmark, target_buf, ns, span.line, span.start_col, {
 			end_row = span.line,
 			end_col = span.end_col,
@@ -139,60 +134,14 @@ local function flush(target_buf, header_lines, header_spans, body_lines, body_sp
 		})
 	end
 
-	local base = #header_lines
-	for _, span in ipairs(body_spans or {}) do
-		pcall(vim.api.nvim_buf_set_extmark, target_buf, ns, span.line + base, span.start_col, {
-			end_row = span.line + base,
-			end_col = span.end_col,
-			hl_group = span.hl_group,
-		})
-	end
-
-	local mapped = {}
-	for lnum, item in pairs(body_map or {}) do
-		mapped[lnum + base] = item
-	end
-	return mapped
+	return line_map
 end
 
----@param width integer
----@return string[], table[]
-local function render_header(width)
-	local lines = {}
-	local spans = {}
-
+local function window_title()
 	local provider = current_provider
 	local provider_name = provider and provider.name or "Atlas"
-	local provider_hl = provider and provider.hl_group or "Title"
 	local bell = icons.general("bell")
-	local title = string.format("  %s  Notifications  (%s)  ", bell, provider_name)
-	local count_label
-	if state.is_loading then
-		count_label = "loading.."
-	elseif state.error then
-		count_label = "error"
-	else
-		local total = #(state.notifications or {})
-		count_label = string.format("%d unread / %d total", state.unread_count, total)
-	end
-
-	local pad = math.max(1, width - vim.api.nvim_strwidth(title) - vim.api.nvim_strwidth(count_label) - 2)
-	local line = title .. string.rep(" ", pad) .. count_label .. " "
-	table.insert(lines, line)
-	table.insert(spans, { line = 0, start_col = 0, end_col = #title, hl_group = provider_hl })
-	local count_start = #title + pad
-	table.insert(spans, {
-		line = 0,
-		start_col = count_start,
-		end_col = count_start + #count_label,
-		hl_group = "AtlasTextMuted",
-	})
-
-	local sep = string.rep("─", math.max(1, width))
-	table.insert(lines, sep)
-	table.insert(spans, { line = 1, start_col = 0, end_col = #sep, hl_group = "AtlasBorder" })
-
-	return lines, spans
+	return string.format(" %s Notifications (%s) ", bell, provider_name)
 end
 
 local function build_footer_text()
@@ -213,7 +162,6 @@ local function rerender()
 	end
 	local width = vim.api.nvim_win_get_width(win)
 
-	local header_lines, header_spans = render_header(width)
 	local body_lines, body_spans, body_map
 
 	if state.is_loading then
@@ -230,7 +178,7 @@ local function rerender()
 	end
 
 	if buf ~= nil then
-		current_line_map = flush(buf, header_lines, header_spans, body_lines, body_spans, body_map)
+		current_line_map = flush(buf, body_lines, body_spans, body_map)
 	end
 end
 
@@ -326,7 +274,6 @@ local function mark_read(notification)
 		return
 	end
 	if not notification.unread then
-		statusline.notify("info", "Already read")
 		return
 	end
 
@@ -458,7 +405,7 @@ function M.open()
 		height = height,
 		style = "minimal",
 		border = "rounded",
-		title = " Notifications ",
+		title = window_title(),
 		title_pos = "center",
 		footer = build_footer_text(),
 		footer_pos = "center",
@@ -520,11 +467,6 @@ function M.refresh_in_background(opts, on_done)
 		end
 		on_done(state.unread_count, nil)
 	end)
-end
-
----@return integer
-function M.unread_count()
-	return state.unread_count or 0
 end
 
 return M

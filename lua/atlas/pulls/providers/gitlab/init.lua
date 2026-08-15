@@ -1,12 +1,13 @@
 local actions = require("atlas.pulls.providers.gitlab.actions")
 local activity_api = require("atlas.pulls.providers.gitlab.api.activity")
+local changes_api = require("atlas.pulls.providers.gitlab.api.changes")
 local checks_api = require("atlas.pulls.providers.gitlab.api.checks")
 local comments_api = require("atlas.pulls.providers.gitlab.api.comments")
-local commits_api = require("atlas.pulls.providers.gitlab.api.commits")
-local files_api = require("atlas.pulls.providers.gitlab.api.files")
-local mergerequests_api = require("atlas.pulls.providers.gitlab.api.mergerequests")
 local notifications_api = require("atlas.pulls.providers.gitlab.api.notifications")
+local pipelines_api = require("atlas.pulls.providers.gitlab.api.pipelines")
+local pullrequests_api = require("atlas.pulls.providers.gitlab.api.pullrequests")
 local repositories_api = require("atlas.pulls.providers.gitlab.api.repositories")
+local reviews_api = require("atlas.pulls.providers.gitlab.api.reviews")
 local service = require("atlas.providers.gitlab.client").pulls
 local users_api = require("atlas.pulls.providers.gitlab.api.users")
 local resolver = require("atlas.providers.resolve")
@@ -18,7 +19,8 @@ local resolver = require("atlas.providers.resolve")
 local function fetch_pullrequests(view, opts, on_done)
 	---@cast view AtlasGitLabPullsViewConfig
 	local filters = require("atlas.pulls.state").status_filters or {}
-	local state = filters.MERGED and "merged" or (filters.DECLINED and "closed" or "opened")
+	local states = { open = "opened", merged = "merged", declined = "closed" }
+	local state = states[opts.state] or (filters.MERGED and "merged" or (filters.DECLINED and "closed" or "opened"))
 	local parts = { string.format("is:%s", state) }
 	for _, field in ipairs({
 		"project",
@@ -38,7 +40,7 @@ local function fetch_pullrequests(view, opts, on_done)
 	end
 	require("atlas.pulls.state").last_search_query = table.concat(parts, " ")
 
-	return mergerequests_api.list_mrs(view, {
+	return pullrequests_api.fetch_pullrequests(view, {
 		force_load = opts and opts.force_load == true or false,
 		pagelen = opts and opts.pagelen or 50,
 		state = state,
@@ -56,7 +58,7 @@ end
 ---@param on_done fun(pr: PullRequest|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 local function fetch_pullrequest(pr, opts, on_done)
-	return mergerequests_api.get_mr(pr, { force_load = opts and opts.force_load == true or false }, on_done)
+	return pullrequests_api.fetch_pullrequest(pr, { force_load = opts and opts.force_load == true or false }, on_done)
 end
 
 ---@param pr PullRequest
@@ -96,7 +98,7 @@ local function fetch_conversation(pr, opts, on_done)
 		table.insert(handles, activity_handle)
 	end
 
-	local comments_handle = comments_api.fetch_general_comments(pr, opts, function(comments, err)
+	local comments_handle = comments_api.fetch_general(pr, opts, function(comments, err)
 		if err then
 			first_err = first_err or err
 		else
@@ -118,75 +120,6 @@ local function fetch_conversation(pr, opts, on_done)
 	}
 end
 
----@param pr PullRequest
----@param opts { force_refresh: boolean|nil }|nil
----@param on_done fun(entries: PullsDiffstatEntry[]|nil, err: string|nil)
----@return { cancel: fun() }|nil
-local function fetch_diffstat(pr, opts, on_done)
-	return files_api.fetch_diff(pr, opts, function(files, err)
-		if not files then
-			on_done(nil, err)
-			return
-		end
-
-		local entries = {}
-		for _, file in ipairs(files) do
-			local additions, deletions = file.additions, file.deletions
-			if additions == nil and deletions == nil then
-				additions, deletions = 0, 0
-				for _, hunk in ipairs(file.hunks) do
-					additions = additions + hunk.additions
-					deletions = deletions + hunk.deletions
-				end
-			end
-			table.insert(entries, {
-				status = file.status,
-				path = file.path,
-				old_path = file.old_path,
-				lines_added = additions or 0,
-				lines_removed = deletions or 0,
-			})
-		end
-		on_done(entries, nil)
-	end)
-end
-
----@param opts { repo_slug: string, repo_root: string|nil, head: string, base: string }
----@param on_done fun(reviewers: PullsCreatePRReviewer[]|nil, err: string|nil)
----@return { cancel: fun() }|nil
-local function fetch_default_reviewers(opts, on_done)
-	local slug = tostring(opts.repo_slug or "")
-	if slug == "" then
-		vim.schedule(function()
-			on_done(nil, "Missing project slug")
-		end)
-		return nil
-	end
-
-	local endpoint = string.format("/projects/%s/members/all?per_page=100", service.url_encode(slug))
-	return service.request("GET", endpoint, nil, function(result, err)
-		if err then
-			on_done(nil, err)
-			return
-		end
-
-		local reviewers = {}
-		for _, raw in ipairs(type(result) == "table" and result or {}) do
-			local login = type(raw) == "table" and tostring(raw.username or "") or ""
-			local id = type(raw) == "table" and tonumber(raw.id) or nil
-			if login ~= "" and id then
-				table.insert(reviewers, {
-					label = "@" .. login,
-					provider_id = tostring(id),
-					selected = false,
-					default = false,
-				})
-			end
-		end
-		on_done(reviewers, nil)
-	end)
-end
-
 ---@param opts PullsCreatePROpts
 ---@param on_done fun(result: PullsCreatePRResult|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
@@ -199,7 +132,7 @@ local function create_pr(opts, on_done)
 		end
 	end
 
-	return mergerequests_api.create_mr({
+	return pullrequests_api.create({
 		project_path = opts.repo_slug,
 		source_branch = opts.head,
 		target_branch = opts.base,
@@ -232,10 +165,6 @@ local function views()
 			{ name = "Created", key = "2", scope = "created_by_me", state = "opened" },
 		}
 	return require("atlas.ui.shared.bookmarks_view").append_to_views(configured, config.bookmarks, "S", "Search")
-end
-
-local function search()
-	actions.run("search", { source = "main" }, function() end)
 end
 
 ---@param value string
@@ -303,11 +232,15 @@ end
 ---@param info AtlasGitRemoteInfo
 ---@param domain AtlasDomain
 ---@param entity AtlasEntity
----@param number integer
+---@param number integer|nil
 ---@param base_url string
 ---@return AtlasTarget
 local function target(info, domain, entity, number, base_url)
 	local owner, repo = info.slug:match("^(.+)/([^/]+)$")
+	local url = string.format("%s/%s", base_url, info.slug)
+	if entity ~= "repo" then
+		url = string.format("%s/-/%s/%d", url, entity == "pr" and "merge_requests" or "issues", assert(number))
+	end
 	return {
 		provider = "gitlab",
 		domain = domain,
@@ -317,13 +250,7 @@ local function target(info, domain, entity, number, base_url)
 		repo = repo,
 		project_path = info.slug,
 		number = number,
-		url = string.format(
-			"%s/%s/-/%s/%d",
-			base_url,
-			info.slug,
-			entity == "pr" and "merge_requests" or "issues",
-			number
-		),
+		url = url,
 	}
 end
 
@@ -347,13 +274,20 @@ return {
 			fetch_user = users_api.fetch_user,
 			fetch_pullrequests = fetch_pullrequests,
 			fetch_pullrequest = fetch_pullrequest,
-			fetch_description = mergerequests_api.get_description,
-			fetch_reviewers = mergerequests_api.get_reviewers,
-			fetch_merge_checks = checks_api.get_merge_checks,
-			fetch_diffstat = fetch_diffstat,
+			create_pr = create_pr,
+			fetch_reviewers = pullrequests_api.fetch_reviewers,
+			update_reviewers = pullrequests_api.update_reviewers,
+			update_title = pullrequests_api.update_title,
+			update_description = pullrequests_api.update_description,
+			set_draft = pullrequests_api.set_draft,
+			decline = pullrequests_api.decline,
+			fetch_description = pullrequests_api.fetch_description,
+			fetch_default_reviewers = pullrequests_api.fetch_default_reviewers,
+			fetch_merge_checks = checks_api.fetch,
+			fetch_diffstat = changes_api.fetch_diffstat,
 			fetch_activity = activity_api.fetch_activity,
-			fetch_commits = commits_api.fetch_commits,
-			fetch_diff = files_api.fetch_diff,
+			fetch_commits = changes_api.fetch_commits,
+			fetch_diff = changes_api.fetch_diff,
 			views = views,
 		},
 		comments = {
@@ -364,12 +298,15 @@ return {
 			edit_comment = comments_api.edit_comment,
 			delete_comment = comments_api.delete_comment,
 			add_reaction = comments_api.add_reaction,
+			set_thread_resolved = comments_api.set_thread_resolved,
 		},
 		reviews = {
-			fetch_review_context = mergerequests_api.get_review_context,
-			fetch_comments = comments_api.fetch_comments,
-			set_thread_resolved = comments_api.set_thread_resolved,
-			submit_review = mergerequests_api.submit_review,
+			fetch = reviews_api.fetch,
+			fetch_review_context = reviews_api.fetch_context,
+			submit_review = reviews_api.submit,
+			approve = reviews_api.approve,
+			request_changes = reviews_api.request_changes,
+			discard_review = reviews_api.discard,
 		},
 		repository = {
 			fetch_details = repositories_api.fetch_detail,
@@ -378,19 +315,14 @@ return {
 			delete_branch = repositories_api.delete_branch,
 		},
 		pipelines = {
-			fetch = checks_api.get_pipelines,
-			fetch_job_log = checks_api.get_pipeline_job_log,
+			fetch = pipelines_api.fetch,
+			fetch_job_log = pipelines_api.fetch_job_log,
 			actions = require("atlas.pulls.providers.gitlab.actions.pipelines"),
 		},
 		notifications = {
 			fetch = fetch_notifications,
 			mark_read = notifications_api.mark_read,
 			mark_done = notifications_api.mark_done,
-		},
-		search = search,
-		create = {
-			create_pr = create_pr,
-			fetch_default_reviewers = fetch_default_reviewers,
 		},
 		actions = actions,
 		ui = {

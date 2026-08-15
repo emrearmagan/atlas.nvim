@@ -1,5 +1,7 @@
 local M = {}
 
+local logger = require("atlas.core.logger")
+
 ---@param value any
 ---@return string
 local function one_line(value)
@@ -39,7 +41,7 @@ local function curl_fetch(method, url, headers, data, callback, follow_redirects
 	local err_out = {}
 	local cancelled = false
 
-	local job_id = vim.fn.jobstart(args, {
+	local job_opts = {
 		stdout_buffered = true,
 		stderr_buffered = true,
 		on_stdout = function(_, response)
@@ -86,7 +88,19 @@ local function curl_fetch(method, url, headers, data, callback, follow_redirects
 				callback(body, http_status, nil)
 			end)
 		end,
-	})
+	}
+	local started, result = pcall(vim.fn.jobstart, args, job_opts)
+	local job_id = started and result or -1
+	if job_id <= 0 then
+		local err = started and "Failed to start curl" or one_line(result)
+		logger.logerror("HTTP request failed to start", { method = method, url = url, error = err })
+		vim.schedule(function()
+			if cancelled then
+				return
+			end
+			callback(nil, nil, err)
+		end)
+	end
 
 	return {
 		job_id = job_id,

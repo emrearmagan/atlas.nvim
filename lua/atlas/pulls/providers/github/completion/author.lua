@@ -30,12 +30,8 @@ local function collect_logins(context)
 	end
 
 	if pr then
-		local raw_assignees = type(pr._raw.assignees) == "table" and pr._raw.assignees or {}
-		local nodes = type(raw_assignees.nodes) == "table" and raw_assignees.nodes or {}
-		for _, node in ipairs(nodes) do
-			if type(node) == "table" then
-				add(node.login)
-			end
+		for _, assignee in ipairs(pr.assignees or {}) do
+			add(assignee.username)
 		end
 	end
 

@@ -5,20 +5,20 @@ local resolver = require("atlas.core.keymaps")
 local utils = require("atlas.ui.shared.utils")
 local actions = require("atlas.pulls.actions")
 
----@return PullRequest|nil
+---@return PullRequest|nil, PullsRepo|nil
 local function selected_pr()
 	local navigation = require("atlas.ui.navigation")
 	local node = navigation.current_item()
 	if type(node) ~= "table" then
-		return nil
+		return nil, nil
 	end
 	if node.kind == "pr" and type(node.pr) == "table" then
-		return node.pr
+		return node.pr, node.repo
 	end
 	if node.kind == "pr_meta" and type(node.pr) == "table" then
-		return node.pr
+		return node.pr, node.repo
 	end
-	return nil
+	return nil, nil
 end
 
 ---@param action_id AtlasKeymapActionId|string
@@ -41,6 +41,26 @@ function M.register(buf, views)
 	local help = require("atlas.ui.popups.help")
 	local state = require("atlas.pulls.state")
 	local provider_name = state.provider and state.provider.name or "Pulls"
+	---@param id AtlasPullActionId
+	---@param needs_pr boolean
+	local function run_action(id, needs_pr)
+		local pr = selected_pr()
+
+		if needs_pr and not pr then
+			statusline.notify("warn", "No PR selected")
+			return
+		end
+		if state.provider then
+			actions.run(id, {
+				provider = state.provider,
+				pr = pr,
+				current_user = state.current_user,
+				buf = buf,
+			}, function(result)
+				require("atlas.pulls.ui.main.controller").apply_action_result(pr, result)
+			end)
+		end
+	end
 
 	local items = {}
 
@@ -72,9 +92,9 @@ function M.register(buf, views)
 	})
 
 	local STATUS_TOGGLES = {
-		{ status = "OPEN", action_id = "pulls.filter_status_open" },
-		{ status = "MERGED", action_id = "pulls.filter_status_merged" },
-		{ status = "DECLINED", action_id = "pulls.filter_status_declined" },
+		{ status = "OPEN", action_id = "pulls.filters.open" },
+		{ status = "MERGED", action_id = "pulls.filters.merged" },
+		{ status = "DECLINED", action_id = "pulls.filters.declined" },
 	}
 	for _, sf in ipairs(STATUS_TOGGLES) do
 		local s = sf
@@ -90,7 +110,7 @@ function M.register(buf, views)
 		)
 	end
 
-	if state.provider and state.provider.capabilities.actions then
+	if state.provider then
 		utils.insert_if(
 			items,
 			item("ui.open_actions", {
@@ -98,11 +118,16 @@ function M.register(buf, views)
 				index = 1,
 				callback = function()
 					local pr = selected_pr()
-					if pr == nil then
-						statusline.notify("warn", "No PR selected")
-						return
+					if state.provider then
+						actions.open({
+							provider = state.provider,
+							pr = pr,
+							current_user = state.current_user,
+							buf = buf,
+						}, function(result)
+							require("atlas.pulls.ui.main.controller").apply_action_result(pr, result)
+						end)
 					end
-					actions.open_actions(pr, "main")
 				end,
 			})
 		)
@@ -114,12 +139,7 @@ function M.register(buf, views)
 			desc = "Open PR in browser",
 			opts = { nowait = true },
 			callback = function()
-				local pr = selected_pr()
-				if pr == nil then
-					statusline.notify("warn", "No PR selected")
-					return
-				end
-				actions.open_in_browser(pr)
+				run_action("open_in_browser", true)
 			end,
 		})
 	)
@@ -130,12 +150,7 @@ function M.register(buf, views)
 			desc = "Copy PR URL",
 			opts = { nowait = true },
 			callback = function()
-				local pr = selected_pr()
-				if pr == nil then
-					statusline.notify("warn", "No PR selected")
-					return
-				end
-				actions.copy_url(pr)
+				run_action("copy_url", true)
 			end,
 		})
 	)
@@ -146,12 +161,7 @@ function M.register(buf, views)
 			desc = "Copy PR ID",
 			opts = { nowait = true },
 			callback = function()
-				local pr = selected_pr()
-				if pr == nil then
-					statusline.notify("warn", "No PR selected")
-					return
-				end
-				actions.copy_id(pr)
+				run_action("copy_id", true)
 			end,
 		})
 	)
@@ -162,12 +172,7 @@ function M.register(buf, views)
 			desc = "Show PR details",
 			opts = { nowait = true },
 			callback = function()
-				local pr = selected_pr()
-				if pr == nil then
-					statusline.notify("warn", "No PR selected")
-					return
-				end
-				actions.show_details(pr, buf)
+				require("atlas.pulls.ui.main.controller").show_pr_details(buf)
 			end,
 		})
 	)
@@ -178,12 +183,7 @@ function M.register(buf, views)
 			desc = "Open PR diff",
 			opts = { nowait = true },
 			callback = function()
-				local pr = selected_pr()
-				if pr == nil then
-					statusline.notify("warn", "No PR selected")
-					return
-				end
-				actions.open_diff(pr)
+				run_action("open_diff", true)
 			end,
 		})
 	)
@@ -194,23 +194,25 @@ function M.register(buf, views)
 			desc = "Checkout PR branch",
 			opts = { nowait = true },
 			callback = function()
-				local pr = selected_pr()
-				if pr == nil then
-					statusline.notify("warn", "No PR selected")
-					return
-				end
-				actions.checkout(pr)
+				run_action("checkout", true)
 			end,
 		})
 	)
 
-	if state.provider and state.provider.capabilities.search then
+	local search_available = state.provider
+		and actions.is_available("search", {
+			provider = state.provider,
+			current_user = state.current_user,
+			buf = buf,
+		})
+
+	if search_available then
 		utils.insert_if(
 			items,
 			item("ui.search", {
 				desc = "Search repositories",
 				callback = function()
-					actions.search()
+					run_action("search", false)
 				end,
 			})
 		)
@@ -226,7 +228,7 @@ function M.register(buf, views)
 					statusline.notify("warn", "No PR selected")
 					return
 				end
-				actions.refresh(pr)
+				require("atlas.pulls.ui.main.controller").refresh_pr(pr)
 			end,
 		})
 	)
@@ -236,7 +238,7 @@ function M.register(buf, views)
 		item("ui.refresh_view", {
 			desc = "Refresh current view",
 			callback = function()
-				actions.refresh_view()
+				require("atlas.pulls.ui.main.controller").refresh_current_view()
 			end,
 		})
 	)
@@ -249,9 +251,9 @@ function M.register(buf, views)
 			desc = "Open repo panel",
 			opts = { nowait = true, silent = true },
 			callback = function()
-				local pr = selected_pr()
-				if pr == nil then
-					statusline.notify("warn", "No PR selected")
+				local pr, repo = selected_pr()
+				if pr == nil or repo == nil then
+					statusline.notify("warn", "No repository selected")
 					return
 				end
 
@@ -276,7 +278,7 @@ function M.register(buf, views)
 					return
 				end
 
-				panel.on_select(pr, nil)
+				panel.on_select(pr, repo)
 			end,
 		},
 	}, { buffer = buf })
