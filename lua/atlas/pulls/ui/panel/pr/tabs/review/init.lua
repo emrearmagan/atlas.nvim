@@ -137,7 +137,13 @@ function M.render(_pr, width)
 		return renderer.render(width, state.status, nil)
 	end
 	local data = state.data
-	return renderer.render(width, data and data.comments or nil, data and data.tasks or nil)
+	local provider = get_provider()
+	return renderer.render(
+		width,
+		data and data.comments or nil,
+		data and data.tasks or nil,
+		provider and provider.capabilities.tasks
+	)
 end
 
 ---@param _lnum integer

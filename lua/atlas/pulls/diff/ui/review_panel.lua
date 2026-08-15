@@ -308,6 +308,12 @@ function M.render(panel, session)
 		delete = key_label("pulls.review.diff.delete"),
 		toggle_resolved = key_label("pulls.review.diff.toggle_resolved"),
 	}
+	local task_capability = panel.session.review and panel.session.review.provider.capabilities.tasks
+	local task_action_keys = {
+		edit = task_capability and task_capability.edit_task and comment_action_keys.edit or nil,
+		delete = task_capability and task_capability.delete_task and comment_action_keys.delete or nil,
+		toggle_resolved = task_capability and task_capability.edit_task and comment_action_keys.toggle_resolved or nil,
+	}
 	local note_action_keys = {
 		edit = key_label("pulls.review.diff.edit_comment"),
 		delete = key_label("pulls.review.diff.delete"),
@@ -368,9 +374,8 @@ function M.render(panel, session)
 							item_expanded,
 							comment_location(item.thread.comment),
 							{
-								action_keys = comment_action_keys,
-								toggle_resolved_key = item.kind == "task" and comment_action_keys.toggle_resolved
-									or nil,
+								action_keys = item.kind == "task" and task_action_keys or comment_action_keys,
+								toggle_resolved_key = item.kind == "task" and task_action_keys.toggle_resolved or nil,
 							}
 						)
 					else

@@ -66,10 +66,11 @@ end
 ---@param line_map table<integer, table>
 ---@param tasks PullsComment[]
 ---@param width integer
-local function emit_tasks(lines, spans, line_map, tasks, width)
-	local toggle_keys = keymaps.resolve("pulls.review.diff.toggle_resolved")
-	local edit_keys = keymaps.resolve("pulls.review.diff.edit_comment")
-	local delete_keys = keymaps.resolve("pulls.review.diff.delete")
+---@param capability PullsTasksCapability|nil
+local function emit_tasks(lines, spans, line_map, tasks, width, capability)
+	local toggle_keys = capability and capability.edit_task and keymaps.resolve("pulls.review.diff.toggle_resolved")
+	local edit_keys = capability and capability.edit_task and keymaps.resolve("pulls.review.diff.edit_comment")
+	local delete_keys = capability and capability.delete_task and keymaps.resolve("pulls.review.diff.delete")
 	local padding = string.rep(" ", PADDING_X)
 
 	for _, task in ipairs(tasks) do
@@ -309,8 +310,9 @@ end
 ---@param width integer
 ---@param comments PullsComment[]|"loading"|string|nil
 ---@param tasks PullsComment[]|"loading"|string|nil
+---@param task_capability PullsTasksCapability|nil
 ---@return string[], table[], table<integer, table>
-function M.render(width, comments, tasks)
+function M.render(width, comments, tasks, task_capability)
 	local lines = {}
 	local spans = {}
 	local line_map = {}
@@ -332,7 +334,7 @@ function M.render(width, comments, tasks)
 		end)
 		utils.push(lines, spans, task_heading(sorted_tasks), "AtlasColumnHeader", PADDING_X)
 		table.insert(lines, "")
-		emit_tasks(lines, spans, line_map, sorted_tasks, max_width)
+		emit_tasks(lines, spans, line_map, sorted_tasks, max_width, task_capability)
 		table.insert(lines, "")
 	end
 
