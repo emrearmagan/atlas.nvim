@@ -455,7 +455,7 @@ local function search_pull_requests(_, done)
 	if query == "" or not query:find("is:pr", 1, true) then
 		query = "is:pr " .. query
 	end
-	require("atlas.pulls.providers.github.completion.search").open(vim.trim(query) .. " ")
+	require("atlas.providers.github.completion.search").open(vim.trim(query) .. " ")
 	done(nil, nil)
 end
 

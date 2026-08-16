@@ -51,4 +51,17 @@ describe("provider contracts", function()
 
 		assert_functions(reviews, { "submit_review", "approve", "request_changes" }, "bitbucket.pulls.reviews")
 	end)
+
+	it("exposes notifications for GitHub and GitLab", function()
+		for _, id in ipairs({ "github", "gitlab" }) do
+			for _, domain in ipairs({ "pulls", "issues" }) do
+				local provider = assert(providers.load(id, domain))
+				assert_functions(
+					provider.capabilities.notifications,
+					{ "fetch", "mark_read", "mark_done" },
+					id .. "." .. domain .. ".notifications"
+				)
+			end
+		end
+	end)
 end)
