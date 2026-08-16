@@ -279,13 +279,29 @@ function M.parse_remote_url(url)
 		return nil, string.format("Could not parse remote URL: %s", url)
 	end
 
+	if url:match("^http://") then
+		host = host:gsub(":80$", "")
+	elseif url:match("^https://") then
+		host = host:gsub(":443$", "")
+	end
 	path = path:gsub("%.git$", "")
+	local resolver = require("atlas.providers.resolve")
+	local is_http = url:match("^https?://") ~= nil
+	local provider
+	if is_http then
+		provider = resolver.provider_for_host(host, "/" .. path)
+	else
+		provider = resolver.provider_for_ssh_host(host)
+	end
+	provider = provider or "unknown"
+	if provider ~= "unknown" and is_http then
+		---@cast provider AtlasProviderId
+		path = resolver.remote_repository_path(provider, host, path)
+	end
 	local owner, repo = path:match("^([^/]+)/(.+)$")
 	if owner == nil or repo == nil then
 		return nil, string.format("Could not parse owner/repo from: %s", url)
 	end
-
-	local provider = require("atlas.providers.resolve").provider_for_host(host) or "unknown"
 
 	return {
 		host = host,

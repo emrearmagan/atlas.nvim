@@ -16,6 +16,7 @@ CONTENTS                                                       *atlas-contents*
        GitHub ............................... |atlas-pulls-github|
        Bitbucket ............................ |atlas-pulls-bitbucket|
        GitLab ............................... |atlas-pulls-gitlab|
+       Gitea / Forgejo ...................... |atlas-pulls-gitea|
   7. Issues ................................. |atlas-issues|
        Configuration ........................ |atlas-issues-configuration|
        Jira ................................. |atlas-issues-jira|
@@ -36,8 +37,8 @@ CONTENTS                                                       *atlas-contents*
 ==============================================================================
 1. INTRODUCTION                              *atlas* *atlas.nvim* *atlas-introduction*
 
-Atlas manages pull requests and issues across GitHub, Bitbucket, GitLab and
-Jira from inside Neovim.
+Atlas manages pull requests from GitHub, Bitbucket, GitLab, Gitea, and Forgejo,
+and issues from Jira, GitHub, and GitLab.
 
 ==============================================================================
 2. INSTALLATION                                            *atlas-installation*
@@ -75,6 +76,7 @@ With packer.nvim:
   - For GitHub: the `gh` CLI, authenticated via `gh auth login`
   - For Bitbucket: Bitbucket Cloud API token (`api.bitbucket.org`)
   - For GitLab: REST API v4 and a Personal Access Token with the `api` scope
+  - For Gitea / Forgejo: REST API v1 and an API token
   - For Jira: Cloud REST API v3 or Server REST API v2
 
 Run `:checkhealth atlas` after configuring providers to see what's wired
@@ -98,6 +100,7 @@ up and what's missing.
         bitbucket = {}, -- see |atlas-pulls-bitbucket|
         github = {},    -- see |atlas-pulls-github|
         gitlab = {},    -- see |atlas-pulls-gitlab|
+        gitea = {},     -- see |atlas-pulls-gitea|
       },
     },
     issues = {
@@ -167,7 +170,7 @@ conversation, review, and commits) on the right.
 
 Atlas supports configurable views and bookmarks, comments and review threads,
 build and merge checks, commits and diffstats, provider notifications, and
-pull request actions. GitHub and GitLab also expose repository issues
+pull request actions. GitHub, GitLab, Gitea, and Forgejo also expose repository
 alongside the repository overview, branches, and tags.
 
 PULLS CONFIGURATION                              *atlas-pulls-configuration*
@@ -333,6 +336,48 @@ Self-hosted GitLab has not been tested yet.
 <
 `extra_params` is passed through to the MR list endpoint. Use it for
 anything not covered by the explicit view fields.
+
+------------------------------------------------------------------------------
+GITEA / FORGEJO PULLS                                  *atlas-pulls-gitea*
+
+Use the `gitea` provider with a `base_url` and `token`. `api_type` defaults to
+`"gitea"`; set it to `"forgejo"` for Forgejo.
+
+>lua
+  pulls = {
+    providers = {
+      ---@type AtlasGiteaForgejoPullsConfig
+      gitea = {
+        api_type = "gitea", -- or "forgejo"
+        base_url = "https://git.example.com",
+        token = vim.env.GITEA_TOKEN,
+        cache_ttl = 300,
+        draft_prefix = "WIP:",
+
+        views = {
+          {
+            name = "Repository",
+            key = "1",
+            layout = "compact",
+            repo = "owner/repository",
+            search = "authentication",
+          },
+        },
+
+        bookmarks = {
+          key = "S",
+          label = "Search",
+          items = {
+            ["Authentication"] = {
+              repo = "owner/repository",
+              search = "authentication",
+            },
+          },
+        },
+      },
+    },
+  }
+<
 
 ==============================================================================
 7. ISSUES                                                        *atlas-issues*
@@ -587,8 +632,9 @@ stored under Neovim's data directory.
 ------------------------------------------------------------------------------
 NOTIFICATIONS                                              *atlas-notifications*
 
-Open GitHub and GitLab notifications inside Atlas, refresh them, open the
-related item, and mark notifications as read or done without leaving Neovim.
+Open GitHub, GitLab, Gitea, and Forgejo notifications inside Atlas, refresh
+them, open the related item, and mark notifications as read or done without
+leaving Neovim.
 
 ------------------------------------------------------------------------------
 BOOKMARKS                                                      *atlas-bookmarks*

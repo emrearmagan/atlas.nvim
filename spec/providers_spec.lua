@@ -27,7 +27,7 @@ describe("provider contracts", function()
 	it("loads pull request providers", function()
 		assert_contract(
 			"pulls",
-			{ "bitbucket", "github", "gitlab" },
+			{ "bitbucket", "gitea", "github", "gitlab" },
 			{ "resolve", "search_view", "target", "repositories" },
 			{ "fetch_user", "fetch_pullrequests", "fetch_pullrequest", "update_description", "decline", "views" }
 		)

@@ -1,4 +1,5 @@
 local notify = require("atlas.core.notify")
+local resolver = require("atlas.providers.resolve")
 local storage = require("atlas.pulls.notes.storage")
 
 local M = {}
@@ -254,10 +255,11 @@ function M.resolve_target(value)
 		return normalize_target({ provider = provider, host = host, repository = repository, id = id })
 	end
 
-	local url_host, path = value:match("^https?://([^/?#]+)([^?#]*)")
-	if not url_host then
+	local parsed = resolver.parse_url(value)
+	if not parsed then
 		return nil, "Expected a pull request URL or canonical reference"
 	end
+	local url_host, path = parsed.host, parsed.path
 	local owner, repo
 	owner, repo, id = path:match("^/([^/]+)/([^/]+)/pull/(%d+)/?$")
 	if owner then
@@ -267,8 +269,16 @@ function M.resolve_target(value)
 		if owner then
 			provider, repository = "bitbucket", owner .. "/" .. repo
 		else
-			repository, id = path:match("^/(.-)/%-/merge_requests/(%d+)/?$")
-			provider = repository and "gitlab" or nil
+			if resolver.provider_for_host(url_host, path) == "gitea" then
+				local configured_path = resolver.path_for_base(parsed, resolver.configured_base("pulls", "gitea"))
+				owner, repo, id = (configured_path or path):match("^/([^/]+)/([^/]+)/pulls/(%d+)/?$")
+			end
+			if owner then
+				provider, repository = "gitea", owner .. "/" .. repo
+			else
+				repository, id = path:match("^/(.-)/%-/merge_requests/(%d+)/?$")
+				provider = repository and "gitlab" or nil
+			end
 		end
 	end
 	if not provider or not repository or not id then
@@ -287,9 +297,10 @@ end
 ---@return AtlasNoteTarget|nil, string|nil
 function M.target_for_pull_request(pr)
 	local url = pr.link.html
+	local parsed = resolver.parse_url(url)
 	return normalize_target({
 		provider = pr.provider,
-		host = url:match("^https?://([^/?#]+)"),
+		host = parsed and parsed.host or nil,
 		repository = pr.repo_full_name,
 		id = pr.id,
 		url = url,

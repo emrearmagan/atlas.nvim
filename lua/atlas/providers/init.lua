@@ -1,6 +1,6 @@
 local M = {}
 
----@alias AtlasPullsProviderId "bitbucket"|"github"|"gitlab"
+---@alias AtlasPullsProviderId "bitbucket"|"github"|"gitlab"|"gitea"
 ---@alias AtlasIssuesProviderId "jira"|"github"|"gitlab"
 ---@alias AtlasProviderId AtlasPullsProviderId|AtlasIssuesProviderId
 
@@ -151,6 +151,18 @@ add({
 		issues = {
 			module = "atlas.issues.providers.gitlab",
 			icon = { icon = "", hl_group = "AtlasGLIssuesTheme" },
+			bookmark_key = "S",
+		},
+	},
+})
+
+add({
+	id = "gitea",
+	name = "Gitea / Forgejo",
+	domains = {
+		pulls = {
+			module = "atlas.pulls.providers.gitea",
+			icon = { icon = "", hl_group = "AtlasGiteaTheme" },
 			bookmark_key = "S",
 		},
 	},

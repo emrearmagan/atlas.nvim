@@ -2,7 +2,7 @@ local M = {}
 
 ---@class AtlasSearchPromptOpts
 ---@field name string command name used transiently as the cmdline prompt
----@field complete fun(arglead: string, cmdline: string, cursorpos: integer): string[]
+---@field complete (fun(arglead: string, cmdline: string, cursorpos: integer): string[])|nil
 ---@field on_submit fun(query: string)
 ---@field default? string text pre-filled into the cmdline after the command name
 

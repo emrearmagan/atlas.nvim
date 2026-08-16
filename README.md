@@ -5,7 +5,7 @@
 
 # Atlas.nvim
 
-A Neovim plugin for managing GitHub/Bitbucket/GitLab PRs and Jira/GitHub/GitLab issues without leaving your editor.
+A Neovim plugin for managing pull requests from GitHub, Bitbucket, GitLab, Gitea, and Forgejo, and Jira/GitHub/GitLab issues without leaving your editor.
 
 <p>
   <img alt="GitHub" src="https://img.shields.io/badge/GitHub-181717?style=flat-square&logo=github&logoColor=white">
@@ -30,6 +30,7 @@ A Neovim plugin for managing GitHub/Bitbucket/GitLab PRs and Jira/GitHub/GitLab 
     - [GitHub](#github)
     - [Bitbucket](#bitbucket)
     - [GitLab](#gitlab)
+    - [Gitea / Forgejo](#gitea-forgejo)
 - [Issues](#issues)
   - [Configuration](#issue-configuration)
     - [Jira](#jira)
@@ -81,6 +82,7 @@ use {
 - Bitbucket: Bitbucket Cloud REST API 2.0 (`api.bitbucket.org`)
 - GitHub: GitHub CLI (`gh`) authenticated with `gh auth login`
 - GitLab: GitLab REST API v4 (`gitlab.com` or self-hosted), Personal Access Token with `api` scope
+- Gitea / Forgejo: REST API v1 and an API token
 
 > [!NOTE]
 > I have only tested this with my personal and work accounts. If you encounter any issues, please feel free to open an issue.
@@ -108,6 +110,8 @@ use {
       github = {},
       ---@type AtlasGitLabPullsConfig
       gitlab = {},
+      ---@type AtlasGiteaForgejoPullsConfig
+      gitea = {},
     },
   },
 
@@ -146,7 +150,7 @@ use {
 
 ## Pulls
 
-Use `:Atlas pulls [provider]` to browse and manage pull requests from GitHub, Bitbucket, and GitLab.
+Use `:Atlas pulls [provider]` to browse and manage pull requests from GitHub, Bitbucket, GitLab, Gitea, and Forgejo.
 
 ### Pulls Configuration
 
@@ -348,6 +352,52 @@ pulls = {
 ```
 
 <img alt="GitLab pull requests" src="https://github.com/user-attachments/assets/128fe916-e733-4abb-9c5c-5244684f3c41">
+
+</details>
+
+<a id="gitea-forgejo"></a>
+
+<details>
+<summary><strong>Gitea / Forgejo</strong></summary>
+
+Use the `gitea` provider with a `base_url` and `token`. `api_type` defaults to
+`"gitea"`; set it to `"forgejo"` for Forgejo.
+
+```lua
+pulls = {
+  providers = {
+    ---@type AtlasGiteaForgejoPullsConfig
+    gitea = {
+      api_type = "gitea", -- or "forgejo"
+      base_url = "https://git.example.com",
+      token = vim.env.GITEA_TOKEN,
+      cache_ttl = 300,
+      draft_prefix = "WIP:",
+
+      views = {
+        {
+          name = "Repository",
+          key = "1",
+          layout = "compact",
+          repo = "owner/repository",
+          search = "authentication",
+        },
+      },
+
+      bookmarks = {
+        key = "S",
+        label = "Search",
+        items = {
+          ["Authentication"] = {
+            repo = "owner/repository",
+            search = "authentication",
+          },
+        },
+      },
+    },
+  },
+},
+```
 
 </details>
 
@@ -622,7 +672,7 @@ GitHub, GitLab, and Jira can apply a saved Markdown template or save the current
   <img width="85%" alt="Notifications" src="https://github.com/user-attachments/assets/117b5ad7-3840-4487-bd91-f2f9bf213428">
 </p>
 
-Open GitHub and GitLab notifications inside Atlas, refresh them, open the related item, and mark notifications as read or done without leaving Neovim.
+Open GitHub, GitLab, Gitea, and Forgejo notifications inside Atlas, refresh them, open the related item, and mark notifications as read or done without leaving Neovim.
 
 ### Bookmarks
 

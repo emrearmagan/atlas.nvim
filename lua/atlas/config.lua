@@ -56,7 +56,7 @@
 
 -- Configs
 
----@alias AtlasPullsProviders table<string, AtlasBitbucketConfig|AtlasGitHubConfig|AtlasGitLabPullsConfig|table>
+---@alias AtlasPullsProviders table<string, AtlasBitbucketConfig|AtlasGitHubConfig|AtlasGitLabPullsConfig|AtlasGiteaForgejoPullsConfig|table>
 ---@alias AtlasIssuesProviders table<string, AtlasJiraIssuesConfig|AtlasGitHubIssuesConfig|AtlasGitLabIssuesConfig|table>
 
 ---@class AtlasPullsConfig

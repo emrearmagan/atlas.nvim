@@ -1,4 +1,5 @@
 local config = require("atlas.config")
+local git = require("atlas.core.git")
 local resolver = require("atlas.providers.resolve")
 
 describe("Atlas target resolver", function()
@@ -12,6 +13,7 @@ describe("Atlas target resolver", function()
 					github = {},
 					gitlab = { base_url = "https://gitlab.example.com" },
 					bitbucket = {},
+					gitea = { base_url = "http://localhost:3000", api_type = "forgejo" },
 				},
 			},
 			issues = {
@@ -33,12 +35,16 @@ describe("Atlas target resolver", function()
 		local jira = assert(resolver.resolve("https://jira.example.com/browse/ATLAS-123"))
 		local gitlab = assert(resolver.resolve("https://gitlab.example.com/emrearmagan/atlas.nvim/-/issues/8"))
 		local bitbucket = assert(resolver.resolve("https://bitbucket.org/emrearmagan/atlas.nvim/pull-requests/7"))
+		local forgejo_pr = assert(resolver.resolve("http://localhost:3000/atlas/atlas.test/pulls/3"))
 
 		assert.are.equal("pr", github.entity)
 		assert.are.equal(42, github.number)
 		assert.are.equal("ATLAS-123", jira.issue_key)
 		assert.are.equal("emrearmagan/atlas.nvim", gitlab.project_path)
 		assert.are.equal("emrearmagan", bitbucket.workspace)
+		assert.are.equal("gitea", forgejo_pr.provider)
+		assert.are.equal("pulls", forgejo_pr.domain)
+		assert.are.equal(3, forgejo_pr.number)
 	end)
 
 	it("resolves keys and numbers", function()
@@ -73,6 +79,9 @@ describe("Atlas target resolver", function()
 		config.options.pulls.providers.bitbucket.views = {
 			{ name = "Bitbucket", repos = { { workspace = "owner", repo = "bitbucket" } } },
 		}
+		config.options.pulls.providers.gitea.views = {
+			{ name = "Forgejo", repo = "owner/forgejo" },
+		}
 
 		local found = {}
 		for _, repository in ipairs(resolver.configured_repositories()) do
@@ -82,6 +91,59 @@ describe("Atlas target resolver", function()
 			github = "owner/github",
 			gitlab = "owner/gitlab",
 			bitbucket = "owner/bitbucket",
+			gitea = "owner/forgejo",
 		}, found)
+	end)
+
+	it("resolves self-hosted Git remotes across web paths and SSH ports", function()
+		config.options.pulls.providers.gitea.base_url = "http://localhost:3000/git"
+
+		local web = assert(git.parse_remote_url("http://localhost:3000/git/owner/repo.git"))
+		local ssh = assert(git.parse_remote_url("ssh://git@localhost:2222/owner/repo.git"))
+
+		assert.are.equal("gitea", web.provider)
+		assert.are.equal("owner/repo", web.slug)
+		assert.are.equal("gitea", ssh.provider)
+		assert.are.equal("owner/repo", ssh.slug)
+	end)
+
+	it("does not claim an HTTP remote from a different port", function()
+		local remote = assert(git.parse_remote_url("http://localhost:9999/owner/repo.git"))
+		assert.are.equal("unknown", remote.provider)
+	end)
+
+	it("resolves encoded self-hosted URL paths", function()
+		config.options.pulls.providers.gitea.base_url = "http://localhost:3000/git%2Droot"
+
+		local remote = assert(git.parse_remote_url("http://localhost:3000/git%2Droot/owner/repo.git"))
+		assert.are.equal("gitea", remote.provider)
+		assert.are.equal("owner/repo", remote.slug)
+	end)
+
+	it("treats default HTTP ports as the same authority", function()
+		config.options.pulls.providers.gitea.base_url = "https://git.example"
+
+		local target = assert(resolver.resolve("https://git.example:443/owner/repo/pulls/7"))
+		local remote = assert(git.parse_remote_url("https://git.example:443/owner/repo.git"))
+		assert.are.equal("gitea", target.provider)
+		assert.are.equal("gitea", remote.provider)
+
+		config.options.pulls.providers.gitea.base_url = "https://git.example:443"
+		assert.are.equal("gitea", assert(resolver.resolve("https://git.example/owner/repo/pulls/7")).provider)
+	end)
+
+	it("uses one note target for equivalent self-hosted URLs", function()
+		config.options.pulls.providers.gitea.base_url = "https://git.example/git-root"
+		local notes = require("atlas.pulls.notes")
+		local url = "https://git.example:443/git%2Droot/owner/repo/pulls/7"
+		local from_url = assert(notes.resolve_target(url))
+		local from_pull = assert(notes.target_for_pull_request({
+			id = 7,
+			provider = "gitea",
+			repo_full_name = "owner/repo",
+			link = { html = url },
+		}))
+
+		assert.are.equal(from_url.ref, from_pull.ref)
 	end)
 end)

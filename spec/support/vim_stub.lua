@@ -43,6 +43,10 @@ _G.vim = {
 		end,
 	},
 
+	trim = function(value)
+		return tostring(value or ""):gsub("^%s+", ""):gsub("%s+$", "")
+	end,
+
 	-- vim.tbl_extend(behavior, ...) -> shallow merge honoring "keep"/"force"/"error"
 	tbl_extend = function(behavior, ...)
 		assert(

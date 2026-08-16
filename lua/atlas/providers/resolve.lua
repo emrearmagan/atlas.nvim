@@ -40,24 +40,34 @@ local function clean(value)
 	return result
 end
 
+---@param path string
+---@return string
+local function decode_path(path)
+	return (path:gsub("%%(%x%x)", function(hex)
+		return string.char(tonumber(hex, 16))
+	end))
+end
+
 ---@param value string
 ---@return AtlasParsedUrl|nil, string|nil
-local function parse_url(value)
+function M.parse_url(value)
 	if value == "" then
 		return nil, "Missing URL"
 	end
 
-	local host, path = value:match("^https?://([^/?#]+)([^?#]*)")
+	local scheme, host, path = value:match("^(https?)://([^/?#]+)([^?#]*)")
 	if host == nil then
 		return nil, "Expected an http(s) URL"
 	end
 
-	path = (path or "")
-		:gsub("%%(%x%x)", function(hex)
-			return string.char(tonumber(hex, 16))
-		end)
-		:gsub("/+$", "")
-	return { host = host:lower(), path = path }
+	host = host:lower()
+	if scheme == "http" then
+		host = host:gsub(":80$", "")
+	elseif scheme == "https" then
+		host = host:gsub(":443$", "")
+	end
+	path = decode_path(path or ""):gsub("/+$", "")
+	return { host = host, path = path }
 end
 
 ---Return the configured provider URL as a parsed host and path.
@@ -70,7 +80,7 @@ function M.configured_base(domain, provider)
 		return nil
 	end
 
-	local parsed = parse_url(options.base_url)
+	local parsed = M.parse_url(options.base_url)
 	return parsed and { host = parsed.host, path = parsed.path } or nil
 end
 
@@ -125,10 +135,10 @@ function M.resolve(value)
 		return { number = tonumber(number) }
 	end
 
-	local parsed, parse_err = parse_url(clean_value)
+	local parsed, parse_err = M.parse_url(clean_value)
 	local provider_list = providers.list()
 	if parsed then
-		local provider_id = M.provider_for_host(parsed.host)
+		local provider_id = M.provider_for_host(parsed.host, parsed.path)
 		if provider_id == nil then
 			return nil, "Unsupported Atlas URL"
 		end
@@ -152,41 +162,64 @@ function M.resolve(value)
 	return nil, resolve_err or parse_err or "Unsupported Atlas target"
 end
 
----@param url string
----@return string|nil
-local function url_host(url)
-	return tostring(url or ""):lower():match("^https?://([^/]+)")
+---@param host string|nil
+---@return string
+local function hostname(host)
+	host = tostring(host or ""):lower()
+	if host:sub(1, 1) == "[" then
+		return host:match("^%[([^%]]+)%]") or host
+	end
+	return host:match("^([^:]+):%d+$") or host
 end
 
 ---@param provider AtlasProviderId
 ---@return string
 local function provider_host(provider)
 	for _, domain in ipairs({ "pulls", "issues" }) do
-		local options = providers.options(provider, domain)
-		local host = options and url_host(options.base_url) or nil
-		if host then
-			return host
+		local base = M.configured_base(domain, provider)
+		if base then
+			return base.host
 		end
 	end
 	return providers[provider].default_host or ""
 end
 
+---@param host string
+---@param path string|nil
+---@param ignore_port boolean
+---@return AtlasProviderId|nil
+local function configured_provider(host, path, ignore_port)
+	for _, provider in ipairs(providers.list()) do
+		for _, domain in ipairs({ "pulls", "issues" }) do
+			if provider.domains[domain] then
+				local base = M.configured_base(domain, provider.id)
+				local host_matches = base and base.host == host
+				if ignore_port and base then
+					host_matches = hostname(base.host) == hostname(host)
+				end
+				if host_matches and (path == nil or M.path_for_base({ host = host, path = path }, base) ~= nil) then
+					return provider.id
+				end
+			end
+		end
+	end
+end
+
 ---Find the provider that owns a configured or well-known host.
 ---@param host string
+---@param path string|nil
 ---@return AtlasProviderId|nil
-function M.provider_for_host(host)
+function M.provider_for_host(host, path)
 	host = tostring(host or ""):lower()
 	if host == "" then
 		return nil
 	end
+	path = path and decode_path(path) or nil
 
 	-- Configured URLs come first so self-hosted providers resolve correctly.
-	for _, provider in ipairs(providers.list()) do
-		for domain in pairs(provider.domains) do
-			if url_host((providers.options(provider.id, domain) or {}).base_url) == host then
-				return provider.id
-			end
-		end
+	local configured = configured_provider(host, path, false)
+	if configured then
+		return configured
 	end
 
 	for _, provider in ipairs(providers.list()) do
@@ -195,6 +228,43 @@ function M.provider_for_host(host)
 			return provider.id
 		end
 	end
+end
+
+---Find a provider for an SSH remote whose port may differ from its web URL.
+---@param host string
+---@return AtlasProviderId|nil
+function M.provider_for_ssh_host(host)
+	host = tostring(host or ""):lower()
+	if host == "" then
+		return nil
+	end
+
+	local configured = configured_provider(host, nil, true)
+	if configured then
+		return configured
+	end
+
+	return M.provider_for_host(hostname(host))
+end
+
+---Strip a configured web base path from an HTTP Git remote path.
+---@param provider AtlasProviderId
+---@param host string
+---@param path string
+---@return string
+function M.remote_repository_path(provider, host, path)
+	host = tostring(host or ""):lower()
+	path = decode_path(tostring(path or "")):gsub("^/+", ""):gsub("/+$", "")
+	for _, domain in ipairs({ "pulls", "issues" }) do
+		if providers[provider].domains[domain] then
+			local base = M.configured_base(domain, provider)
+			local result = M.path_for_base({ host = host, path = "/" .. path }, base)
+			if result then
+				return result:gsub("^/+", "")
+			end
+		end
+	end
+	return path
 end
 
 ---@param target AtlasTarget

@@ -140,6 +140,7 @@
 ---@field name string
 ---@field state string
 ---@field provider_state string|nil
+---@field provider_context string|nil Raw commit-status context when this pipeline represents a commit status.
 ---@field url string|nil
 ---@field key string|nil
 ---@field provider_id string|nil
@@ -151,6 +152,7 @@
 ---@field name string
 ---@field state string
 ---@field provider_state string|nil
+---@field provider_context string|nil Raw commit-status context when this job represents a commit status.
 ---@field url string|nil
 ---@field stage string|nil
 ---@field started_at string|nil
