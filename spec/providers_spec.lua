@@ -17,7 +17,10 @@ local function assert_contract(domain, expected_ids, provider_functions, core_fu
 		assert.equal(registered.id, provider.id)
 		assert.equal(registered.name, provider.name)
 		assert_functions(provider, provider_functions, label)
-		assert_functions(provider.capabilities and provider.capabilities.core, core_functions, label .. ".core")
+		local capabilities = provider.capabilities
+		assert_functions(capabilities and capabilities.core, core_functions, label .. ".core")
+		assert.equal("table", type(capabilities.actions and capabilities.actions.items), label .. ".actions.items")
+		assert_functions(capabilities.actions, { "is_available", "run" }, label .. ".actions")
 	end
 	table.sort(ids)
 	assert.same(expected_ids, ids)
@@ -36,7 +39,7 @@ describe("provider contracts", function()
 	it("loads issue providers", function()
 		assert_contract(
 			"issues",
-			{ "github", "gitlab", "jira" },
+			{ "gitea", "github", "gitlab", "jira" },
 			{ "resolve", "search_view", "issue_key" },
 			{ "fetch_user", "fetch_issues", "fetch_issue", "views" }
 		)

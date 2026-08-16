@@ -187,7 +187,7 @@ end
 ---@param host string
 ---@param path string|nil
 ---@param ignore_port boolean
----@return AtlasProviderId|nil
+---@return AtlasProviderId|nil, AtlasUrlBase|nil
 local function configured_provider(host, path, ignore_port)
 	for _, provider in ipairs(providers.list()) do
 		for _, domain in ipairs({ "pulls", "issues" }) do
@@ -198,7 +198,7 @@ local function configured_provider(host, path, ignore_port)
 					host_matches = hostname(base.host) == hostname(host)
 				end
 				if host_matches and (path == nil or M.path_for_base({ host = host, path = path }, base) ~= nil) then
-					return provider.id
+					return provider.id, base
 				end
 			end
 		end
@@ -230,41 +230,44 @@ function M.provider_for_host(host, path)
 	end
 end
 
----Find a provider for an SSH remote whose port may differ from its web URL.
+---@class AtlasResolvedGitRemote
+---@field provider AtlasProviderId|nil
+---@field host string Canonical web authority.
+---@field repository_path string
+
+---Resolve a Git remote to its provider, canonical web host, and repository path.
 ---@param host string
----@return AtlasProviderId|nil
-function M.provider_for_ssh_host(host)
+---@param repository_path string
+---@param is_http boolean
+---@return AtlasResolvedGitRemote
+function M.resolve_git_remote(host, repository_path, is_http)
 	host = tostring(host or ""):lower()
-	if host == "" then
-		return nil
-	end
+	repository_path = tostring(repository_path or ""):gsub("^/+", ""):gsub("/+$", "")
 
-	local configured = configured_provider(host, nil, true)
-	if configured then
-		return configured
-	end
-
-	return M.provider_for_host(hostname(host))
-end
-
----Strip a configured web base path from an HTTP Git remote path.
----@param provider AtlasProviderId
----@param host string
----@param path string
----@return string
-function M.remote_repository_path(provider, host, path)
-	host = tostring(host or ""):lower()
-	path = decode_path(tostring(path or "")):gsub("^/+", ""):gsub("/+$", "")
-	for _, domain in ipairs({ "pulls", "issues" }) do
-		if providers[provider].domains[domain] then
-			local base = M.configured_base(domain, provider)
-			local result = M.path_for_base({ host = host, path = "/" .. path }, base)
-			if result then
-				return result:gsub("^/+", "")
-			end
+	if is_http then
+		local parsed_path = "/" .. decode_path(repository_path)
+		local provider, base = configured_provider(host, parsed_path, false)
+		if provider and base then
+			local path = assert(M.path_for_base({ host = host, path = parsed_path }, base))
+			return { provider = provider, host = base.host, repository_path = path:gsub("^/+", "") }
 		end
+		return {
+			provider = M.provider_for_host(host, "/" .. repository_path),
+			host = host,
+			repository_path = decode_path(repository_path),
+		}
 	end
-	return path
+
+	local provider, base = configured_provider(host, nil, true)
+	if provider and base then
+		return { provider = provider, host = base.host, repository_path = repository_path }
+	end
+	local canonical_host = hostname(host)
+	return {
+		provider = M.provider_for_host(canonical_host),
+		host = canonical_host,
+		repository_path = repository_path,
+	}
 end
 
 ---@param target AtlasTarget

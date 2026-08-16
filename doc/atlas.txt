@@ -22,6 +22,7 @@ CONTENTS                                                       *atlas-contents*
        Jira ................................. |atlas-issues-jira|
        GitHub ............................... |atlas-issues-github|
        GitLab ............................... |atlas-issues-gitlab|
+       Gitea / Forgejo ...................... |atlas-issues-gitea|
   8. Features ............................... |atlas-features|
        Review pull requests ................. |atlas-review-pull-requests|
          Local notes ........................ |atlas-local-notes|
@@ -38,7 +39,7 @@ CONTENTS                                                       *atlas-contents*
 1. INTRODUCTION                              *atlas* *atlas.nvim* *atlas-introduction*
 
 Atlas manages pull requests from GitHub, Bitbucket, GitLab, Gitea, and Forgejo,
-and issues from Jira, GitHub, and GitLab.
+and issues from Jira, GitHub, GitLab, Gitea, and Forgejo.
 
 ==============================================================================
 2. INSTALLATION                                            *atlas-installation*
@@ -76,8 +77,8 @@ With packer.nvim:
   - For GitHub: the `gh` CLI, authenticated via `gh auth login`
   - For Bitbucket: Bitbucket Cloud API token (`api.bitbucket.org`)
   - For GitLab: REST API v4 and a Personal Access Token with the `api` scope
-  - For Gitea / Forgejo: REST API v1 and an API token
   - For Jira: Cloud REST API v3 or Server REST API v2
+  - For Gitea / Forgejo: REST API v1 and an API token
 
 Run `:checkhealth atlas` after configuring providers to see what's wired
 up and what's missing.
@@ -109,6 +110,7 @@ up and what's missing.
         jira = {},   -- see |atlas-issues-jira|
         github = {}, -- see |atlas-issues-github|
         gitlab = {}, -- see |atlas-issues-gitlab|
+        gitea = {},  -- see |atlas-issues-gitea|
       },
     },
   })
@@ -171,7 +173,7 @@ conversation, review, and commits) on the right.
 Atlas supports configurable views and bookmarks, comments and review threads,
 build and merge checks, commits and diffstats, provider notifications, and
 pull request actions. GitHub, GitLab, Gitea, and Forgejo also expose repository
-alongside the repository overview, branches, and tags.
+issues alongside the repository overview, branches, and tags.
 
 PULLS CONFIGURATION                              *atlas-pulls-configuration*
 
@@ -544,6 +546,27 @@ Same auth model as |atlas-pulls-gitlab|. Views take a `scope`
   }
 <
 
+------------------------------------------------------------------------------
+GITEA / FORGEJO ISSUES                                *atlas-issues-gitea*
+
+Issues use the same `gitea` provider configuration.
+
+>lua
+  issues = {
+    providers = {
+      gitea = {
+        api_type = "gitea", -- or "forgejo"
+        base_url = "https://git.example.com",
+        token = vim.env.GITEA_TOKEN,
+        views = {
+          { name = "Open", key = "1", repo = "owner/repository",
+            state = "open" },
+        },
+      },
+    },
+  }
+<
+
 ==============================================================================
 8. FEATURES                                                     *atlas-features*
 
@@ -620,14 +643,13 @@ CREATE ISSUES                                      *atlas-create-issues*
                                                     *atlas-issues-create*
 
 `:Atlas create issue` opens the creation flow for the configured issue
-providers. GitHub and GitLab use the current repository, while Jira uses the
-configured instance. The forms support Markdown descriptions and
-provider-specific fields such as labels, assignees, milestones, and Jira
-issue types.
+providers. GitHub, GitLab, Gitea, and Forgejo use the current repository,
+while Jira uses its configured instance. The forms support Markdown
+descriptions and provider-specific metadata.
 
-GitHub, GitLab, and Jira can apply a saved Markdown template or save the
-current description as a new one. Templates are shared between providers and
-stored under Neovim's data directory.
+Every issue form can apply a saved Markdown template or save the current
+description as a new one. Templates are shared between providers and stored
+under Neovim's data directory.
 
 ------------------------------------------------------------------------------
 NOTIFICATIONS                                              *atlas-notifications*
@@ -639,10 +661,10 @@ leaving Neovim.
 ------------------------------------------------------------------------------
 BOOKMARKS                                                      *atlas-bookmarks*
 
-Turn frequently used GitHub and GitLab searches or Jira JQL into named
-shortcuts. Use bookmarks for review queues, recurring project views, and the
-searches you return to throughout the day. Bookmarks appear alongside your
-configured views.
+Turn frequently used provider searches or Jira JQL into named shortcuts. Use
+bookmarks for review queues, recurring project views, and the searches you
+return to throughout the day. Bookmarks appear alongside your configured
+views.
 
 ------------------------------------------------------------------------------
 CUSTOM ACTIONS                                    *atlas-custom-actions*

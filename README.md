@@ -5,7 +5,7 @@
 
 # Atlas.nvim
 
-A Neovim plugin for managing pull requests from GitHub, Bitbucket, GitLab, Gitea, and Forgejo, and Jira/GitHub/GitLab issues without leaving your editor.
+A Neovim plugin for managing pull requests from GitHub, Bitbucket, GitLab, Gitea, and Forgejo, and issues from Jira, GitHub, GitLab, Gitea, and Forgejo without leaving your editor.
 
 <p>
   <img alt="GitHub" src="https://img.shields.io/badge/GitHub-181717?style=flat-square&logo=github&logoColor=white">
@@ -36,6 +36,7 @@ A Neovim plugin for managing pull requests from GitHub, Bitbucket, GitLab, Gitea
     - [Jira](#jira)
     - [GitHub](#github-issues)
     - [GitLab](#gitlab-issues)
+    - [Gitea / Forgejo](#gitea-forgejo-issues)
 - [Features](#features)
 - [Events](#events)
 - [Keymaps](#keymaps)
@@ -124,6 +125,8 @@ use {
       github = {},
       ---@type AtlasGitLabIssuesConfig
       gitlab = {},
+      ---@type AtlasGiteaForgejoIssuesConfig
+      gitea = {},
     },
   },
 }
@@ -403,7 +406,7 @@ pulls = {
 
 ## Issues
 
-Use `:Atlas issues [provider]` to browse and manage Jira, GitHub, and GitLab issues.
+Use `:Atlas issues [provider]` to browse and manage Jira, GitHub, GitLab, Gitea, and Forgejo issues.
 
 ### Issue Configuration
 
@@ -595,6 +598,30 @@ issues = {
 
 </details>
 
+<a id="gitea-forgejo-issues"></a>
+
+<details>
+<summary><strong>Gitea / Forgejo Issues</strong></summary>
+
+Issues use the same `gitea` provider configuration.
+
+```lua
+issues = {
+  providers = {
+    gitea = {
+      api_type = "gitea", -- or "forgejo"
+      base_url = "https://git.example.com",
+      token = vim.env.GITEA_TOKEN,
+      views = {
+        { name = "Open", key = "1", repo = "owner/repository", state = "open" },
+      },
+    },
+  },
+},
+```
+
+</details>
+
 ## Features
 
 ### Review Pull Requests
@@ -662,9 +689,9 @@ Edit the title and description, choose the target branch and reviewers, set the 
   <img width="85%" alt="Create issue" src="https://github.com/user-attachments/assets/8f3b06d8-763d-4e0f-ab93-9c3754065ca3">
 </p>
 
-`:Atlas create issue` opens the creation flow for the configured issue providers. GitHub and GitLab use the current repository, while Jira uses the configured instance. The forms support Markdown descriptions and provider-specific fields such as labels, assignees, milestones, and Jira issue types.
+`:Atlas create issue` opens the creation flow for the configured issue providers. GitHub, GitLab, Gitea, and Forgejo use the current repository, while Jira uses its configured instance. The forms support Markdown descriptions and provider-specific metadata.
 
-GitHub, GitLab, and Jira can apply a saved Markdown template or save the current description as a new one. Templates are shared between providers and stored under Neovim's data directory.
+Every issue form can apply a saved Markdown template or save the current description as a new one. Templates are shared between providers and stored under Neovim's data directory.
 
 ### Notifications
 
@@ -680,7 +707,7 @@ Open GitHub, GitLab, Gitea, and Forgejo notifications inside Atlas, refresh them
   <img width="85%" alt="Bookmarks" src="https://github.com/user-attachments/assets/f008d6af-dfc6-4b65-8af1-94cd6ce9fc99">
 </p>
 
-Turn frequently used GitHub and GitLab searches or Jira JQL into named shortcuts. Use bookmarks for review queues, recurring project views, and the searches you return to throughout the day.
+Turn frequently used provider searches or Jira JQL into named shortcuts. Use bookmarks for review queues, recurring project views, and the searches you return to throughout the day.
 
 Bookmarks appear alongside your configured views, keeping important queries one action away.
 

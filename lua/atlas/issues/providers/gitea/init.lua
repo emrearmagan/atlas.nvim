@@ -1,252 +1,275 @@
-local icons = require("atlas.ui.shared.icons")
+require("atlas.issues.providers.gitea.config")
 
----@class GiteaIssuesProvider : IssuesProvider
-local M = {
-	id = "gitea",
-	name = "Gitea",
-	icon = icons.issues("issue"),
-	hl_group = "AtlasGiteaIssuesTheme",
-	panel = require("atlas.issues.providers.gitea.ui.panel"),
-}
+local api = require("atlas.issues.providers.gitea.api")
+local resolver = require("atlas.providers.resolve")
+local request_scope = require("atlas.core.requests")
 
-function M.setup()
-	require("atlas.issues.providers.gitea.highlights").setup()
-end
+local M = {}
+local REACTION_OPTIONS = require("atlas.ui.shared.emojis").github()
 
----@param issue Issue
----@param is_child boolean
----@return table
-function M.format_row(issue, is_child)
-	return require("atlas.issues.providers.gitea.ui.renderer").format_row(issue, is_child)
-end
-
----@param row table
----@param col table
----@param ctx { text: string, padded: string, width: integer }
----@return table[]|nil
-function M.cell_hl(row, col, ctx)
-	return require("atlas.issues.providers.gitea.ui.renderer").cell_hl(row, col, ctx)
-end
-
----@param on_done fun(user: IssueUser|nil, err: string|nil)
-function M.fetch_user(on_done)
-	require("atlas.issues.providers.gitea.api.users").get_user(on_done)
-end
-
----@param view IssuesViewConfig
+---@param view AtlasGiteaForgejoIssuesViewConfig
 ---@param opts IssuesFetchOpts
 ---@param on_done fun(issues: Issue[], next_page_token: string|nil, is_last: boolean, err: string|nil)
----@return { cancel: fun() }|nil
 function M.fetch_issues(view, opts, on_done)
-	---@cast view AtlasGiteaIssuesViewConfig
-	local issues_api = require("atlas.issues.providers.gitea.api.issues")
-	local limit = opts and opts.max_results or 50
-	return issues_api.list_issues(view, {
-		force_load = opts and opts.force_load == true or false,
-		max_results = limit,
-	}, function(issues, err)
-		if err then
-			on_done({}, nil, true, err)
-			return
-		end
-
+	return api.issues.list(view, opts or {}, function(issues, next_page_token, is_last, err)
 		local pinned, rest = {}, {}
 		for _, issue in ipairs(issues or {}) do
-			if issue.is_pinned == true then
-				table.insert(pinned, issue)
-			else
-				table.insert(rest, issue)
-			end
+			table.insert(issue.is_pinned and pinned or rest, issue)
 		end
-		local sorted = {}
-		for _, i in ipairs(pinned) do
-			table.insert(sorted, i)
-		end
-		for _, i in ipairs(rest) do
-			table.insert(sorted, i)
-		end
-
-		on_done(sorted, nil, true, nil)
+		vim.list_extend(pinned, rest)
+		on_done(pinned, next_page_token, is_last, err)
 	end)
 end
 
----@param key string
----@param opts IssuesFetchOpts|nil
----@param on_done fun(issue: Issue|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.fetch_issue(key, opts, on_done)
-	return require("atlas.issues.providers.gitea.api.issues").get_issue(key, opts, on_done)
-end
-
 ---@param issue Issue
----@param opts IssuesFetchOpts|nil
----@param on_done fun(comments: IssueComment[]|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.fetch_comments(issue, opts, on_done)
-	return require("atlas.issues.providers.gitea.api.comments").list(tostring(issue.key or ""), on_done, opts)
-end
-
----@param issue Issue
----@param opts IssuesFetchOpts|nil
----@param on_done fun(entries: IssueActivityEntry[]|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.fetch_activity(issue, opts, on_done)
-	local timeline = require("atlas.issues.providers.gitea.api.timeline")
-	return timeline.list_conversation(tostring(issue.key or ""), function(result, err)
-		if err or type(result) ~= "table" then
-			on_done(nil, err)
-			return
-		end
-		on_done(type(result.events) == "table" and result.events or {}, nil)
-	end, { force_load = opts and opts.force_load == true or false })
-end
-
----@param issue Issue
----@param opts { force_refresh: boolean|nil }|nil
----@param on_done fun(result: { comments: IssueComment[], events: IssueActivityEntry[], reaction_options: IssueReactionOption[]|nil }|nil, err: string|nil)
----@return { cancel: fun() }|nil
+---@param opts table|nil
+---@param on_done fun(result: table|nil, err: string|nil)
 function M.fetch_conversation(issue, opts, on_done)
-	opts = opts or {}
-	local key = tostring(issue and issue.key or "")
-	if key == "" then
-		on_done(nil, "Invalid issue key")
-		return nil
-	end
-
-	local timeline = require("atlas.issues.providers.gitea.api.timeline")
-	return timeline.list_conversation(key, function(result, err)
+	local requests = request_scope.new()
+	requests.run(function(done)
+		return api.timeline.list(issue.key, opts, done)
+	end, function(result, err)
 		if err or type(result) ~= "table" then
-			on_done(nil, err or "Failed to fetch conversation")
+			on_done(nil, err or "Invalid Gitea/Forgejo timeline response")
 			return
 		end
-
 		local comments = {}
-		local raw = type(issue._raw) == "table" and issue._raw or {}
-		local description = tostring(raw.body or "")
+		local raw = issue._raw or {}
+		local description = tostring(raw.description or "")
 		if description ~= "" then
 			table.insert(comments, {
 				id = "__body__",
 				url = issue.url,
 				author = issue.reporter,
 				body = description,
-				created = raw.created_at or "",
+				created = tostring(raw.created_at or ""),
+				reactions = raw.reactions,
 			})
 		end
-		for _, c in ipairs(type(result.comments) == "table" and result.comments or {}) do
-			table.insert(comments, c)
-		end
+		vim.list_extend(comments, result.comments or {})
 
-		on_done({
-			comments = comments,
-			events = type(result.events) == "table" and result.events or {},
-			reaction_options = nil,
-		}, nil)
-	end, { force_load = opts.force_refresh == true })
-end
-
----@param issue Issue
----@param content string
----@param on_done fun(comment: IssueComment|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.add_comment(issue, content, on_done)
-	local key = tostring(issue.key or "")
-	return require("atlas.issues.providers.gitea.api.comments").add(key, content, on_done)
-end
-
----@param issue Issue
----@param parent IssueComment
----@param content string
----@param on_done fun(comment: IssueComment|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.reply_comment(issue, parent, content, on_done) ---@diagnostic disable-line: unused-local
-	-- Gitea issue comments are flat; reply is just a new comment
-	local key = tostring(issue.key or "")
-	return require("atlas.issues.providers.gitea.api.comments").add(key, content, on_done)
-end
-
----@param issue Issue
----@param comment_id string
----@param content string
----@param on_done fun(comment: IssueComment|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.edit_comment(issue, comment_id, content, on_done)
-	if tostring(comment_id) == "__body__" then
-		local raw = type(issue._raw) == "table" and issue._raw or {}
-		local slug = tostring(raw.slug or "")
-		local number = tonumber(raw.number)
-		if slug == "" or number == nil then
-			on_done(nil, "Invalid issue")
-			return nil
-		end
-		local cli = require("atlas.issues.providers.gitea.api.cli")
-		local endpoint = string.format("/repos/%s/issues/%d", slug, number)
-		local body = vim.json.encode({ body = content })
-		return cli.api("PATCH", endpoint, body, function(_, err)
-			if err then
-				on_done(nil, err)
+		local function load_reactions(index)
+			local comment = comments[index]
+			if not comment then
+				on_done({ comments = comments, events = result.events or {}, reaction_options = REACTION_OPTIONS }, nil)
 				return
 			end
-			cli.delete_mem(string.format("gitea_issues:get:%s#%d", slug, number))
-			raw.body = content
-			on_done({
-				id = "__body__",
-				url = issue.url,
-				author = issue.reporter,
-				body = content,
-				created = raw.created_at or "",
-			}, nil)
-		end)
-	end
-	local key = tostring(issue.key or "")
-	return require("atlas.issues.providers.gitea.api.comments").edit(key, comment_id, content, on_done)
+			requests.run(function(done)
+				return api.comments.list_reactions(issue.key, comment.id, done)
+			end, function(reactions)
+				comment.reactions = reactions
+				if tostring(comment.id) == "__body__" then
+					raw.reactions = reactions
+				end
+				load_reactions(index + 1)
+			end)
+		end
+		load_reactions(1)
+	end)
+	return requests
+end
+
+---@param issue Issue
+---@param opts IssuesFetchOpts|nil
+---@param on_done fun(entries: IssueActivityEntry[]|nil, err: string|nil)
+function M.fetch_activity(issue, opts, on_done)
+	return api.timeline.list(issue.key, opts, function(result, err)
+		on_done(result and result.events or nil, err)
+	end)
 end
 
 ---@param issue Issue
 ---@param comment_id string
----@param on_done fun(ok: boolean, err: string|nil)
----@return { cancel: fun() }|nil
-function M.delete_comment(issue, comment_id, on_done)
-	if tostring(comment_id) == "__body__" then
-		on_done(false, "Cannot delete the issue description")
-		return nil
+---@param content string
+---@param on_done fun(comment: IssueComment|nil, err: string|nil)
+function M.edit_comment(issue, comment_id, content, on_done)
+	if tostring(comment_id) ~= "__body__" then
+		local requests = request_scope.new()
+		requests.run(function(done)
+			return api.comments.edit(issue.key, comment_id, content, done)
+		end, function(comment, err)
+			if err or not comment then
+				on_done(nil, err or "Failed to update comment")
+				return
+			end
+			requests.run(function(done)
+				return api.comments.list_reactions(issue.key, comment_id, done)
+			end, function(reactions)
+				comment.reactions = reactions
+				on_done(comment, nil)
+			end)
+		end)
+		return requests
 	end
-	local key = tostring(issue.key or "")
-	return require("atlas.issues.providers.gitea.api.comments").delete(key, comment_id, on_done)
+	return api.issues.update_issue(issue, { body = content }, function(updated, err)
+		if err or not updated then
+			on_done(nil, err or "Failed to update issue description")
+			return
+		end
+		local reactions = (issue._raw or {}).reactions
+		issue._raw = updated._raw
+		issue._raw.reactions = reactions
+		on_done({
+			id = "__body__",
+			url = updated.url,
+			author = updated.reporter,
+			body = content,
+			created = tostring((updated._raw or {}).created_at or ""),
+			reactions = reactions,
+		}, nil)
+	end)
 end
 
----@param action_id string
----@param ctx table
----@param on_done fun(result: table|nil, err: string|nil)
-function M.run_action(action_id, ctx, on_done)
-	require("atlas.issues.providers.gitea.actions").run(action_id, ctx, on_done)
+---@param issue Issue
+---@param comment IssueComment
+---@param key string
+---@param on_done fun(ok: boolean, err: string|nil)
+function M.add_reaction(issue, comment, key, on_done)
+	return api.comments.add_reaction(issue.key, comment.id, key, on_done)
 end
 
----@param issue Issue|nil
----@param source "main"|"panel"|nil
----@param on_done fun(result: table|nil, err: string|nil)
-function M.open_actions(issue, source, on_done)
-	require("atlas.issues.providers.gitea.actions").open({ issue = issue, source = source }, on_done)
-end
-
----@return AtlasGiteaIssuesViewConfig[]
+---@return AtlasGiteaForgejoIssuesViewConfig[]
 function M.views()
-	local cli = require("atlas.issues.providers.gitea.api.cli")
-	local views = cli.gitea_config().views
-	if views ~= nil then
-		return views
+	local cfg = require("atlas.providers").options("gitea", "issues") or {}
+	local views = cfg.views
+	if views == nil then
+		views = {
+			{ name = "Assigned", key = "1", scope = "assigned", state = "open" },
+			{ name = "Created", key = "2", scope = "created", state = "open" },
+		}
+	end
+	return require("atlas.ui.shared.bookmarks_view").append_to_views(views, cfg.bookmarks, "S", "Search")
+end
+
+---@param value string
+---@param parsed AtlasParsedUrl|nil
+---@return AtlasTarget|nil, string|nil
+function M.resolve(value, parsed)
+	if not parsed then
+		return nil, nil
+	end
+	local path = resolver.path_for_base(parsed, resolver.configured_base("issues", "gitea"))
+	if path == nil then
+		return nil, nil
+	end
+	local owner, repo, number, tail = path:match("^/([^/]+)/([^/]+)/issues/(%d+)(.*)$")
+	if not owner then
+		return nil, nil
+	end
+	if not resolver.valid_tail(tail) then
+		return nil, "Unsupported Gitea/Forgejo issue URL"
 	end
 	return {
-		{
-			name = "Assigned",
-			key = "1",
-			filter = { assigned = true, state = "open" },
-		},
-		{
-			name = "Created",
-			key = "2",
-			filter = { created = true, state = "open" },
-		},
+		provider = "gitea",
+		domain = "issues",
+		entity = "issue",
+		url = value,
+		host = parsed.host,
+		owner = owner,
+		repo = repo,
+		project_path = owner .. "/" .. repo,
+		number = tonumber(number),
 	}
 end
 
-return M
+---@param target AtlasTarget
+---@return AtlasGiteaForgejoIssuesViewConfig
+function M.search_view(target)
+	return { name = "Search", layout = "compact", repo = target.project_path, state = "all" }
+end
+
+---@param target AtlasTarget
+---@return string|nil
+function M.issue_key(target)
+	if target.project_path and target.number then
+		return string.format("%s#%d", target.project_path, target.number)
+	end
+end
+
+---@param info AtlasGitRemoteInfo
+---@param domain AtlasDomain
+---@param entity AtlasEntity
+---@param number integer
+---@param base_url string
+---@return AtlasTarget
+function M.target(info, domain, entity, number, base_url)
+	local owner, repo = info.slug:match("^([^/]+)/([^/]+)$")
+	return {
+		provider = "gitea",
+		domain = domain,
+		entity = entity,
+		host = info.host,
+		owner = owner,
+		repo = repo,
+		project_path = info.slug,
+		number = number,
+		url = string.format("%s/%s/%s/%d", base_url, info.slug, entity == "pr" and "pulls" or "issues", number),
+	}
+end
+
+---@param options table
+---@return string[]
+function M.repositories(options)
+	local result = {}
+	for _, view in ipairs(options.views or {}) do
+		if type(view.repo) == "string" and view.repo ~= "" then
+			table.insert(result, view.repo)
+		end
+	end
+	return result
+end
+
+local renderer = require("atlas.issues.providers.gitea.ui.renderer")
+
+---@type IssuesCommentsCapability
+local comments = {
+	fetch_activity = M.fetch_activity,
+	fetch_conversation = M.fetch_conversation,
+	add_comment = function(issue, content, on_done)
+		return api.comments.add(issue.key, content, on_done)
+	end,
+	edit_comment = M.edit_comment,
+	delete_comment = function(issue, comment_id, on_done)
+		if tostring(comment_id) == "__body__" then
+			on_done(false, "Cannot delete the issue description")
+			return nil
+		end
+		return api.comments.delete(issue.key, comment_id, on_done)
+	end,
+	add_reaction = M.add_reaction,
+	comment_completion = function()
+		return require("atlas.issues.providers.gitea.completion.author").build_completion()
+	end,
+}
+
+---@type AtlasNotificationsCapability
+local notifications = {
+	fetch = api.notifications.fetch,
+	mark_read = api.notifications.mark_read,
+	mark_done = api.notifications.mark_done,
+}
+
+return {
+	resolve = M.resolve,
+	search_view = M.search_view,
+	issue_key = M.issue_key,
+	target = M.target,
+	repositories = M.repositories,
+	capabilities = {
+		core = {
+			fetch_user = api.issues.fetch_user,
+			fetch_issues = M.fetch_issues,
+			fetch_issue = api.issues.get,
+			views = M.views,
+		},
+		comments = comments,
+		notifications = notifications,
+		actions = require("atlas.issues.providers.gitea.actions"),
+		ui = {
+			setup = require("atlas.issues.providers.gitea.highlights").setup,
+			format_row = renderer.format_row,
+			cell_hl = renderer.cell_hl,
+			panel = require("atlas.issues.providers.gitea.ui.panel"),
+		},
+	},
+}

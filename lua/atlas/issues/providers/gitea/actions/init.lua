@@ -1,48 +1,60 @@
 local M = {}
 
 local registry = require("atlas.issues.providers.gitea.actions.registry")
+local statusline = require("atlas.ui.statusline")
 
----@param action_id string
----@param ctx table
----@param on_done fun(result: table|nil, err: string|nil)
-function M.run(action_id, ctx, on_done)
+---@alias AtlasGiteaForgejoIssueActionId
+---| AtlasIssueActionId
+---| "close"
+---| "reopen"
+---| "edit_issue"
+---| "delete_issue"
+---| "labels"
+---| "milestone"
+---| "pin"
+---| "unpin"
+---| "lock_issue"
+---| "unlock_issue"
+
+M.items = registry.items
+
+---@param action_id AtlasGiteaForgejoIssueActionId
+---@param ctx AtlasIssueActionContext
+---@return boolean
+function M.is_available(action_id, ctx)
 	local action = registry.find(action_id)
-	if action == nil then
-		on_done(nil, string.format("Unknown action: %s", tostring(action_id)))
-		return
-	end
-
-	local available, err = action.is_available(ctx)
-	if not available then
-		on_done(nil, tostring(err or "Action is not available"))
-		return
-	end
-
-	action.run(ctx, on_done)
+	return action ~= nil and (action.is_available == nil or action.is_available(ctx) == true)
 end
 
----@param ctx table
----@param on_done fun(result: table|nil, err: string|nil)
-function M.open(ctx, on_done)
-	local actions = registry.available(ctx)
-	if #actions == 0 then
-		on_done({ changed_issue_key = nil, message = "No actions available" }, nil)
-		return
+---@param action_id AtlasGiteaForgejoIssueActionId
+---@param ctx AtlasIssueActionContext
+---@param on_done fun(result: IssuesActionResult|nil, err: string|nil)
+---@return boolean handled
+function M.run(action_id, ctx, on_done)
+	local action = registry.find(action_id)
+	if not action then
+		local err = string.format("Unknown action: %s", tostring(action_id))
+		statusline.notify("warn", err)
+		on_done(nil, err)
+		return false
 	end
-
-	vim.ui.select(actions, {
-		prompt = "Choose Gitea action",
-		kind = "atlas_gitea_issue_actions",
-		format_item = function(item)
-			return tostring((item and item.label) or "")
-		end,
-	}, function(action)
-		if action == nil then
-			on_done({ changed_issue_key = nil, message = "Action cancelled" }, nil)
-			return
+	local available, err = true, nil
+	if action.is_available then
+		available, err = action.is_available(ctx)
+	end
+	if not available then
+		err = tostring(err or "Action is not available")
+		statusline.notify("warn", err)
+		on_done(nil, err)
+		return false
+	end
+	action.run(ctx, function(result, run_err)
+		if run_err then
+			statusline.notify("error", tostring(run_err))
 		end
-		action.run(ctx, on_done)
+		on_done(result, run_err)
 	end)
+	return true
 end
 
 return M

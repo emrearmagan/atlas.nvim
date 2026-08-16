@@ -8,10 +8,7 @@ local helper = require("atlas.issues.ui.main.helper")
 ---@param status_id string|nil
 ---@return string
 local function state_chip_hl(status_id)
-	if status_id == "closed" then
-		return "AtlasGiteaIssueClosedChip"
-	end
-	return "AtlasGiteaIssueOpenChip"
+	return status_id == "closed" and "AtlasGiteaIssueClosedChip" or "AtlasGiteaIssueOpenChip"
 end
 
 ---@param hex string|nil
@@ -25,175 +22,111 @@ local function label_hl(hex)
 	local r = tonumber(clean:sub(1, 2), 16) or 0
 	local g = tonumber(clean:sub(3, 4), 16) or 0
 	local b = tonumber(clean:sub(5, 6), 16) or 0
-	local lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255
-	local fg = lum > 0.6 and "#1e1e2e" or "#ffffff"
-	vim.api.nvim_set_hl(0, name, { fg = fg, bg = "#" .. clean, bold = true })
+	local foreground = (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6 and "#1e1e2e" or "#ffffff"
+	vim.api.nvim_set_hl(0, name, { fg = foreground, bg = "#" .. clean, bold = true })
 	return name
 end
 
-local state = {
-	labels = nil, ---@type table|nil
-	milestone = nil, ---@type table|nil
-	assignees = nil, ---@type table|nil
-	body = nil, ---@type string|nil
-	detail_loading = false,
-}
-
-local function reset_state()
-	state.labels = nil
-	state.milestone = nil
-	state.assignees = nil
-	state.body = nil
-	state.detail_loading = false
-end
-
---------------------------------------------------------------------------------
--- Header rows
---------------------------------------------------------------------------------
-
 ---@param issue Issue
+---@param _loading boolean
 ---@return IssuesPanelHeaderRow[]
-function M.header_rows(issue)
-	local raw = type(issue._raw) == "table" and issue._raw or {}
-	local user_icon = icons.general("user")
-
-	local reporter_name = type(issue.reporter) == "table" and tostring(issue.reporter.display_name or "") or ""
-	if reporter_name == "" then
-		reporter_name = "Unknown"
+function M.header_rows(issue, _loading)
+	local raw = issue._raw or {}
+	local reporter = issue.reporter and tostring(issue.reporter.display_name or "") or ""
+	if reporter == "" then
+		reporter = "Unknown"
 	end
 
-	-- Assignees
-	local assignees_nodes = state.assignees or raw.assignees or {}
-	local assignee_logins = {}
-	for _, a in ipairs(assignees_nodes) do
-		local login = tostring(a.login or a.account_id or "")
+	local assignees = {}
+	for _, value in ipairs(type(raw.assignees) == "table" and raw.assignees or {}) do
+		local login = tostring(value.login or "")
 		if login ~= "" then
-			table.insert(assignee_logins, "@" .. login)
+			table.insert(assignees, "@" .. login)
 		end
 	end
-	local assignees_text = #assignee_logins > 0 and table.concat(assignee_logins, ", ") or "Unassigned"
-	local assignees_hl = #assignee_logins > 0
-		and (helper.person_hl and helper.person_hl(assignee_logins[1]:sub(2)) or "Normal")
-		or "AtlasTextMuted"
-
-	-- Milestone
-	local milestone = state.milestone or raw.milestone
-	local milestone_text = ""
-	if type(milestone) == "table" and type(milestone.title) == "string" then
-		milestone_text = milestone.title
-	end
-
+	local assignee_text = #assignees > 0 and table.concat(assignees, ", ") or "Unassigned"
+	local milestone = type(raw.milestone) == "table" and tostring(raw.milestone.title or "") or ""
 	local rows = {
 		{
 			k1 = "Status:",
 			v1 = tostring(issue.status or "Open"),
 			v1_hl = state_chip_hl(issue.status_id),
-			k2 = "Reporter:",
-			v2 = string.format("%s %s", user_icon, reporter_name),
-			v2_hl = helper.person_hl and helper.person_hl(reporter_name) or "Normal",
+			k2 = "Author:",
+			v2 = string.format("%s %s", icons.general("user"), reporter),
+			v2_hl = helper.person_hl(reporter),
 		},
 		{
-			k1 = "Assignee:",
-			v1 = assignees_text,
-			v1_hl = assignees_hl,
-			k2 = milestone_text ~= "" and "Milestone:" or "",
-			v2 = milestone_text,
-			v2_hl = milestone_text ~= "" and "AtlasTextMuted" or nil,
+			k1 = "Assignees:",
+			v1 = assignee_text,
+			v1_hl = #assignees > 0 and helper.person_hl(assignees[1]:sub(2)) or "AtlasTextMuted",
+			k2 = milestone ~= "" and "Milestone:" or "",
+			v2 = milestone,
+			v2_hl = milestone ~= "" and "AtlasTextMuted" or nil,
 		},
 	}
 
-	if raw.created_at and raw.created_at ~= "" then
-		local rel = utils.relative_time_text and utils.relative_time_text(raw.created_at) or raw.created_at
+	if type(raw.created_at) == "string" and raw.created_at ~= "" then
 		table.insert(rows, {
 			k1 = "Opened:",
-			v1 = rel or raw.created_at,
+			v1 = utils.relative_time_text(raw.created_at) or raw.created_at,
 			v1_hl = "AtlasTextMuted",
-			k2 = "",
-			v2 = "",
-			v2_hl = nil,
+			k2 = issue.duedate and "Due:" or "",
+			v2 = issue.duedate or "",
+			v2_hl = issue.duedate and "AtlasTextWarning" or nil,
 		})
 	end
-
 	return rows
 end
 
---------------------------------------------------------------------------------
--- Chips: labels
---------------------------------------------------------------------------------
-
 ---@param issue Issue
+---@param loading boolean
 ---@return IssuesPanelChip[]
-function M.chips(issue)
+function M.chips(issue, loading)
 	local chips = {}
-	if state.detail_loading then
+	if loading then
 		local spinner = require("atlas.ui.components.spinner")
 		table.insert(chips, { label = spinner.with_text("Loading..."), hl = "AtlasTextMuted" })
 		return chips
 	end
-
-	local raw = type(issue._raw) == "table" and issue._raw or {}
-	local labels = state.labels or raw.labels or {}
-	for _, lbl in ipairs(labels) do
-		local name = tostring(lbl.name or "")
+	for _, label in ipairs(type(issue._raw) == "table" and issue._raw.labels or {}) do
+		local name = tostring(label.name or "")
 		if name ~= "" then
-			table.insert(chips, { label = name, hl = label_hl(lbl.color) })
+			table.insert(chips, { label = name, hl = label_hl(label.color) })
 		end
 	end
 	return chips
 end
 
---------------------------------------------------------------------------------
--- Lifecycle
---------------------------------------------------------------------------------
-
----@param _issue Issue
----@return boolean
-function M.is_loading(_issue)
-	local conversation_state = require("atlas.issues.ui.panel.issue.tabs.conversation.state")
-	return state.detail_loading
-		or (type(conversation_state.any_loading) == "function" and conversation_state.any_loading())
-end
-
 ---@param issue Issue
----@param refresh fun()
----@param opts { force_load?: boolean }|nil
-function M.fetches(issue, refresh, opts)
-	local key = tostring(issue.key or "")
-	if key == "" then
-		return
-	end
-
-	reset_state()
-	state.detail_loading = true
-
-	local issues_api = require("atlas.issues.providers.gitea.api.issues")
-	issues_api.get_issue(key, { force_load = opts and opts.force_load == true or false }, function(fresh, err)
-		state.detail_loading = false
-		if not err and type(fresh) == "table" then
-			local fraw = fresh._raw or {}
-			state.labels = fraw.labels
-			state.milestone = fraw.milestone
-			state.assignees = fraw.assignees
-			state.body = fraw.body
-			issue._raw = fresh._raw
+---@param _opts { force_refresh: boolean|nil, issue_refreshed: boolean|nil }|nil
+---@param on_done fun()
+---@return { cancel: fun() }|nil
+function M.fetch_header(issue, _opts, on_done)
+	return require("atlas.issues.providers.gitea.api").issues.check_subscription(issue.key, function(subscribed, err)
+		if not err then
+			issue.is_subscribed = subscribed
 		end
-		refresh()
+		on_done()
 	end)
 end
 
 ---@return IssuesPanelTab[]
 function M.tabs()
+	local conversation_icon, conversation_hl = icons.general("conversation")
+	local activity_icon, activity_hl = icons.pulls("activity")
 	return {
 		{
 			key = "conversation",
 			label = "Conversation",
-			icon = icons.general("conversation"),
+			icon = conversation_icon,
+			icon_hl = conversation_hl,
 			mod = require("atlas.issues.ui.panel.issue.tabs.conversation"),
 		},
 		{
 			key = "activity",
 			label = "Activity",
-			icon = icons.pulls("activity"),
+			icon = activity_icon,
+			icon_hl = activity_hl,
 			mod = require("atlas.issues.ui.panel.issue.tabs.activity"),
 		},
 	}

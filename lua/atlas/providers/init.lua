@@ -1,7 +1,7 @@
 local M = {}
 
 ---@alias AtlasPullsProviderId "bitbucket"|"github"|"gitlab"|"gitea"
----@alias AtlasIssuesProviderId "jira"|"github"|"gitlab"
+---@alias AtlasIssuesProviderId "jira"|"github"|"gitlab"|"gitea"
 ---@alias AtlasProviderId AtlasPullsProviderId|AtlasIssuesProviderId
 
 ---@class AtlasProviderDomain
@@ -162,6 +162,11 @@ add({
 	domains = {
 		pulls = {
 			module = "atlas.pulls.providers.gitea",
+			icon = { icon = "", hl_group = "AtlasGiteaTheme" },
+			bookmark_key = "S",
+		},
+		issues = {
+			module = "atlas.issues.providers.gitea",
 			icon = { icon = "", hl_group = "AtlasGiteaTheme" },
 			bookmark_key = "S",
 		},

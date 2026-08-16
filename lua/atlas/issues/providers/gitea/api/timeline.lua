@@ -1,62 +1,58 @@
+local service = require("atlas.providers.gitea.client").issues
+local json = require("atlas.core.json")
+local pagination = require("atlas.issues.providers.gitea.api.pagination")
+local mapper = require("atlas.issues.providers.gitea.api.mapper")
+
 local M = {}
 
-local cli = require("atlas.issues.providers.gitea.api.cli")
-local mapper = require("atlas.issues.providers.gitea.api.mapper")
-local json = require("atlas.core.json")
+---@param key string
+---@return string|nil
+local function endpoint(key)
+	local slug, number = mapper.parse_key(key)
+	local owner, repo = slug:match("^([^/]+)/([^/]+)$")
+	if not owner or not number then
+		return nil
+	end
+	return string.format("/repos/%s/%s/issues/%d/timeline", service.url_encode(owner), service.url_encode(repo), number)
+end
 
 ---@param key string
+---@param _ table|nil
 ---@param on_done fun(result: { comments: IssueComment[], events: IssueActivityEntry[] }|nil, err: string|nil)
----@param opts { force_load?: boolean }|nil
 ---@return { cancel: fun() }|nil
-function M.list_conversation(key, on_done, opts)
-	opts = opts or {}
-	local slug, number = mapper.parse_key(key)
-	if slug == "" or number == nil then
-		vim.schedule(function()
-			on_done(nil, "Invalid issue key")
-		end)
+function M.list(key, _, on_done)
+	local path = endpoint(key)
+	if path == nil then
+		on_done(nil, "Invalid Gitea/Forgejo issue key")
 		return nil
 	end
 
-	local cache_key = string.format("gitea_issues:conversation:%s#%d", slug, number)
-	if not opts.force_load then
-		local cached, ok = cli.get_mem(cache_key)
-		if ok then
-			on_done(cached, nil)
-			return nil
-		end
-	end
-
-	local endpoint = string.format("/repos/%s/issues/%d/timeline", slug, number)
-	return cli.get(endpoint, function(result, err)
+	return pagination.fetch_all(path, nil, {
+		invalid_response = "Invalid Gitea/Forgejo timeline response",
+		post_filtered = true,
+	}, function(values, err)
 		if err then
 			on_done(nil, err)
 			return
 		end
 
-		local conversation = { comments = {}, events = {} }
-		for _, raw in ipairs(type(result) == "table" and result or {}) do
-			local raw_type = type(raw) == "table" and json.safe_str(raw.type) or ""
+		local result = { comments = {}, events = {} }
+		for _, raw in ipairs(values or {}) do
+			local raw_type = type(raw) == "table" and json.safe_str(raw.type) or nil
 			if raw_type == "comment" then
-				local comment = mapper.to_timeline_comment(raw)
+				local comment = mapper.to_comment(raw)
 				if comment then
-					table.insert(conversation.comments, comment)
+					table.insert(result.comments, comment)
 				end
 			else
 				local entry = mapper.to_timeline_entry(raw)
 				if entry then
-					table.insert(conversation.events, entry)
+					table.insert(result.events, entry)
 				end
 			end
 		end
-
-		cli.set_mem(cache_key, conversation)
-		on_done(conversation, nil)
-	end, {
-		action = "Gitea fetch issue timeline",
-		slug = slug,
-		number = number,
-	})
+		on_done(result, nil)
+	end)
 end
 
 return M

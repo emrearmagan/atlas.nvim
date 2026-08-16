@@ -1,151 +1,176 @@
-local M = {}
-
-local cli = require("atlas.issues.providers.gitea.api.cli")
+local service = require("atlas.providers.gitea.client").issues
+local pagination = require("atlas.issues.providers.gitea.api.pagination")
 local mapper = require("atlas.issues.providers.gitea.api.mapper")
 
----@param key string
----@param on_done fun(comments: IssueComment[]|nil, err: string|nil)
----@param opts { force_load?: boolean }|nil
----@return { cancel: fun() }|nil
-function M.list(key, on_done, opts)
-	opts = opts or {}
-	local slug, number = mapper.parse_key(key)
-	if slug == "" or number == nil then
-		vim.schedule(function()
-			on_done(nil, "Invalid issue key")
-		end)
+local M = {}
+
+---@param value any
+---@return table[]|nil
+local function list_values(value)
+	if value == nil or value == vim.NIL then
+		return {}
+	end
+	if type(value) ~= "table" then
 		return nil
 	end
-
-	local cache_key = string.format("gitea_issues:comments:%s#%d", slug, number)
-	if not opts.force_load then
-		local cached, ok = cli.get_mem(cache_key)
-		if ok then
-			on_done(cached, nil)
+	for key in pairs(value) do
+		if key ~= "__http_status" and (type(key) ~= "number" or key < 1 or key % 1 ~= 0) then
 			return nil
 		end
 	end
+	return value
+end
 
-	local endpoint = string.format("/repos/%s/issues/%d/comments", slug, number)
-	return cli.get(endpoint, function(result, err)
-		if err then
-			on_done(nil, err)
-			return
+---@param key string
+---@return string|nil, integer|nil
+local function endpoint(key)
+	local slug, number = mapper.parse_key(key)
+	local owner, repo = slug:match("^([^/]+)/([^/]+)$")
+	if not owner or not number then
+		return nil, nil
+	end
+	return string.format("/repos/%s/%s", service.url_encode(owner), service.url_encode(repo)), number
+end
+
+---@param key string
+---@param comment_id string|integer
+---@return string|nil
+local function reactions_endpoint(key, comment_id)
+	local base, number = endpoint(key)
+	if not base then
+		return nil
+	end
+	if tostring(comment_id) == "__body__" then
+		return string.format("%s/issues/%d/reactions", base, number)
+	end
+	local id = tonumber(comment_id)
+	if not id then
+		return nil
+	end
+	return string.format("%s/issues/comments/%d/reactions", base, id)
+end
+
+---@param values table[]
+---@return table<string, number>|nil
+local function reaction_counts(values)
+	local counts
+	for _, raw in ipairs(values) do
+		local content = type(raw) == "table" and vim.trim(tostring(raw.content or "")) or ""
+		if content ~= "" then
+			counts = counts or {}
+			counts[content] = (counts[content] or 0) + 1
 		end
-		local comments = mapper.to_comments_list(type(result) == "table" and result or {})
-		cli.set_mem(cache_key, comments)
-		on_done(comments, nil)
-	end, {
-		action = "Gitea fetch issue comments",
-		slug = slug,
-		number = number,
-	})
+	end
+	return counts
 end
 
 ---@param key string
 ---@param body string
 ---@param on_done fun(comment: IssueComment|nil, err: string|nil)
----@return { cancel: fun() }|nil
 function M.add(key, body, on_done)
-	local slug, number = mapper.parse_key(key)
-	if slug == "" or number == nil then
-		vim.schedule(function()
-			on_done(nil, "Invalid issue key")
-		end)
+	local base, number = endpoint(key)
+	if not base or vim.trim(tostring(body or "")) == "" then
+		on_done(nil, not base and "Invalid Gitea/Forgejo issue key" or "Comment cannot be empty")
 		return nil
 	end
-	if type(body) ~= "string" or vim.trim(body) == "" then
-		vim.schedule(function()
-			on_done(nil, "Comment cannot be empty")
-		end)
-		return nil
-	end
-
-	local endpoint = string.format("/repos/%s/issues/%d/comments", slug, number)
-	local payload = vim.json.encode({ body = body })
-	return cli.api("POST", endpoint, payload, function(result, err)
-		if err or type(result) ~= "table" then
-			on_done(nil, err or "Empty response")
-			return
+	return service.request(
+		"POST",
+		string.format("%s/issues/%d/comments", base, number),
+		{ body = body },
+		function(raw, err)
+			local comment = not err and mapper.to_comment(raw) or nil
+			on_done(comment, err or (not comment and "Invalid Gitea/Forgejo comment response" or nil))
 		end
-		cli.delete_mem(string.format("gitea_issues:comments:%s#%d", slug, number))
-		cli.delete_mem(string.format("gitea_issues:conversation:%s#%d", slug, number))
-		on_done(mapper.to_comment(result), nil)
-	end, {
-		action = "Gitea add issue comment",
-		slug = slug,
-		number = number,
-	})
+	)
 end
 
 ---@param key string
----@param comment_id string|number
+---@param comment_id string|integer
 ---@param body string
 ---@param on_done fun(comment: IssueComment|nil, err: string|nil)
----@return { cancel: fun() }|nil
 function M.edit(key, comment_id, body, on_done)
-	local slug, number = mapper.parse_key(key)
-	if slug == "" then
-		vim.schedule(function()
-			on_done(nil, "Invalid issue key")
-		end)
+	local base = endpoint(key)
+	if not base or tonumber(comment_id) == nil or vim.trim(tostring(body or "")) == "" then
+		on_done(nil, not base and "Invalid Gitea/Forgejo issue key" or "Invalid comment")
 		return nil
 	end
-	if type(body) ~= "string" or vim.trim(body) == "" then
-		vim.schedule(function()
-			on_done(nil, "Comment cannot be empty")
-		end)
-		return nil
-	end
-
-	local endpoint = string.format("/repos/%s/issues/comments/%s", slug, tostring(comment_id))
-	local payload = vim.json.encode({ body = body })
-	return cli.api("PATCH", endpoint, payload, function(result, err)
-		if err or type(result) ~= "table" then
-			on_done(nil, err or "Empty response")
-			return
+	return service.request(
+		"PATCH",
+		string.format("%s/issues/comments/%d", base, tonumber(comment_id)),
+		{ body = body },
+		function(raw, err)
+			local comment = not err and mapper.to_comment(raw) or nil
+			on_done(comment, err or (not comment and "Invalid Gitea/Forgejo comment response" or nil))
 		end
-		if number ~= nil then
-			cli.delete_mem(string.format("gitea_issues:comments:%s#%d", slug, number))
-			cli.delete_mem(string.format("gitea_issues:conversation:%s#%d", slug, number))
-		end
-		on_done(mapper.to_comment(result), nil)
-	end, {
-		action = "Gitea edit issue comment",
-		slug = slug,
-		comment_id = comment_id,
-	})
+	)
 end
 
 ---@param key string
----@param comment_id string|number
+---@param comment_id string|integer
 ---@param on_done fun(ok: boolean, err: string|nil)
----@return { cancel: fun() }|nil
 function M.delete(key, comment_id, on_done)
-	local slug, number = mapper.parse_key(key)
-	if slug == "" then
-		vim.schedule(function()
-			on_done(false, "Invalid issue key")
-		end)
+	local base = endpoint(key)
+	if not base or tonumber(comment_id) == nil then
+		on_done(false, not base and "Invalid Gitea/Forgejo issue key" or "Invalid comment")
 		return nil
 	end
+	return service.request(
+		"DELETE",
+		string.format("%s/issues/comments/%d", base, tonumber(comment_id)),
+		nil,
+		function(_, err)
+			on_done(err == nil, err)
+		end
+	)
+end
 
-	local endpoint = string.format("/repos/%s/issues/comments/%s", slug, tostring(comment_id))
-	return cli.api("DELETE", endpoint, nil, function(_, err)
-		if err then
-			on_done(false, err)
+---@param key string
+---@param comment_id string|integer
+---@param on_done fun(reactions: table<string, number>|nil, err: string|nil)
+function M.list_reactions(key, comment_id, on_done)
+	local path = reactions_endpoint(key, comment_id)
+	if not path then
+		on_done(nil, "Invalid Gitea/Forgejo issue or comment")
+		return nil
+	end
+	if tostring(comment_id) == "__body__" then
+		return pagination.fetch_all(
+			path,
+			nil,
+			{ invalid_response = "Invalid Gitea/Forgejo reactions response" },
+			function(raw, err)
+				if err then
+					on_done(nil, err)
+					return
+				end
+				on_done(reaction_counts(raw or {}), nil)
+			end
+		)
+	end
+	return service.request("GET", path, nil, function(raw, err)
+		local values = list_values(raw)
+		if err or not values then
+			on_done(nil, err or "Invalid Gitea/Forgejo reactions response")
 			return
 		end
-		if number ~= nil then
-			cli.delete_mem(string.format("gitea_issues:comments:%s#%d", slug, number))
-			cli.delete_mem(string.format("gitea_issues:conversation:%s#%d", slug, number))
-		end
-		on_done(true, nil)
-	end, {
-		action = "Gitea delete issue comment",
-		slug = slug,
-		comment_id = comment_id,
-	})
+		on_done(reaction_counts(values), nil)
+	end)
+end
+
+---@param key string
+---@param comment_id string|integer
+---@param content string
+---@param on_done fun(ok: boolean, err: string|nil)
+function M.add_reaction(key, comment_id, content, on_done)
+	local path = reactions_endpoint(key, comment_id)
+	content = vim.trim(tostring(content or ""))
+	if not path or content == "" then
+		on_done(false, not path and "Invalid Gitea/Forgejo issue or comment" or "Reaction is required")
+		return nil
+	end
+	return service.request("POST", path, { content = content }, function(_, err)
+		on_done(err == nil, err)
+	end)
 end
 
 return M

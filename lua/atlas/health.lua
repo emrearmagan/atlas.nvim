@@ -151,32 +151,42 @@ end
 
 local function check_gitea()
 	local pulls = providers.options("gitea", "pulls")
-	if pulls == nil then
+	local issues = providers.options("gitea", "issues")
+	if pulls == nil and issues == nil then
 		vim.health.info("Gitea / Forgejo not configured")
 		return
 	end
 
-	local label = "Gitea / Forgejo pulls"
-	local base_url = vim.trim(tostring(pulls.base_url or ""))
-	if base_url == "" then
-		vim.health.error(label .. " base_url is required")
-	elseif not base_url:match("^https?://[^/]+") then
-		vim.health.error(label .. " base_url must start with http:// or https://")
-	else
-		vim.health.ok(label .. " base_url configured")
+	for _, entry in ipairs({ { "pulls", pulls }, { "issues", issues } }) do
+		local domain, options = entry[1], entry[2]
+		if options then
+			local label = string.format("Gitea / Forgejo %s", domain)
+			local base_url = vim.trim(tostring(options.base_url or ""))
+			if base_url == "" then
+				vim.health.error(label .. " base_url is required")
+			elseif not base_url:match("^https?://[^/]+") then
+				vim.health.error(label .. " base_url must start with http:// or https://")
+			else
+				vim.health.ok(label .. " base_url configured")
+			end
+			if vim.trim(tostring(options.token or "")) == "" then
+				vim.health.error(label .. " token is required")
+			else
+				vim.health.ok(label .. " token configured")
+			end
+			local api_type = tostring(options.api_type or "gitea")
+			if api_type == "forgejo" or api_type == "gitea" then
+				vim.health.ok(string.format("%s API type: %s", label, api_type))
+			else
+				vim.health.error(string.format("%s api_type must be 'forgejo' or 'gitea'", label))
+			end
+			if domain == "issues" and options.views == nil then
+				vim.health.ok(label .. ": using default views")
+			else
+				check_views(options.views, label)
+			end
+		end
 	end
-	if vim.trim(tostring(pulls.token or "")) == "" then
-		vim.health.error(label .. " token is required")
-	else
-		vim.health.ok(label .. " token configured")
-	end
-	local api_type = tostring(pulls.api_type or "gitea")
-	if api_type == "forgejo" or api_type == "gitea" then
-		vim.health.ok(string.format("%s API type: %s", label, api_type))
-	else
-		vim.health.error(string.format("%s api_type must be 'forgejo' or 'gitea'", label))
-	end
-	check_views(pulls.views, label)
 end
 
 local function check_jira()

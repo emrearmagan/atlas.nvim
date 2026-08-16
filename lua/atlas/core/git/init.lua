@@ -249,7 +249,7 @@ function M.remote_url(root, remote)
 end
 
 ---@class AtlasGitRemoteInfo
----@field host string -- e.g. "github.com" / "bitbucket.org" / "gitlab.com"
+---@field host string Canonical provider web authority.
 ---@field provider string
 ---@field slug string -- "owner/repo" or nested "group/subgroup/repo" (without .git)
 ---@field owner string
@@ -287,17 +287,10 @@ function M.parse_remote_url(url)
 	path = path:gsub("%.git$", "")
 	local resolver = require("atlas.providers.resolve")
 	local is_http = url:match("^https?://") ~= nil
-	local provider
-	if is_http then
-		provider = resolver.provider_for_host(host, "/" .. path)
-	else
-		provider = resolver.provider_for_ssh_host(host)
-	end
-	provider = provider or "unknown"
-	if provider ~= "unknown" and is_http then
-		---@cast provider AtlasProviderId
-		path = resolver.remote_repository_path(provider, host, path)
-	end
+	local resolved = resolver.resolve_git_remote(host, path, is_http)
+	local provider = resolved.provider or "unknown"
+	host = resolved.host
+	path = resolved.repository_path
 	local owner, repo = path:match("^([^/]+)/(.+)$")
 	if owner == nil or repo == nil then
 		return nil, string.format("Could not parse owner/repo from: %s", url)

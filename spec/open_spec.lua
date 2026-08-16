@@ -21,6 +21,7 @@ describe("Atlas target resolver", function()
 					github = {},
 					gitlab = { base_url = "https://gitlab.example.com" },
 					jira = { base_url = "https://jira.example.com" },
+					gitea = { base_url = "http://localhost:3000", api_type = "forgejo" },
 				},
 			},
 		}
@@ -36,6 +37,7 @@ describe("Atlas target resolver", function()
 		local gitlab = assert(resolver.resolve("https://gitlab.example.com/emrearmagan/atlas.nvim/-/issues/8"))
 		local bitbucket = assert(resolver.resolve("https://bitbucket.org/emrearmagan/atlas.nvim/pull-requests/7"))
 		local forgejo_pr = assert(resolver.resolve("http://localhost:3000/atlas/atlas.test/pulls/3"))
+		local forgejo_issue = assert(resolver.resolve("http://localhost:3000/atlas/atlas.test/issues/4"))
 
 		assert.are.equal("pr", github.entity)
 		assert.are.equal(42, github.number)
@@ -45,6 +47,8 @@ describe("Atlas target resolver", function()
 		assert.are.equal("gitea", forgejo_pr.provider)
 		assert.are.equal("pulls", forgejo_pr.domain)
 		assert.are.equal(3, forgejo_pr.number)
+		assert.are.equal("issues", forgejo_issue.domain)
+		assert.are.equal(4, forgejo_issue.number)
 	end)
 
 	it("resolves keys and numbers", function()
@@ -97,14 +101,18 @@ describe("Atlas target resolver", function()
 
 	it("resolves self-hosted Git remotes across web paths and SSH ports", function()
 		config.options.pulls.providers.gitea.base_url = "http://localhost:3000/git"
+		config.options.issues.providers.gitea.base_url = "http://localhost:3000/git"
 
 		local web = assert(git.parse_remote_url("http://localhost:3000/git/owner/repo.git"))
 		local ssh = assert(git.parse_remote_url("ssh://git@localhost:2222/owner/repo.git"))
+		local target = assert(resolver.resolve("http://localhost:3000/git/owner/repo/pulls/7"))
 
 		assert.are.equal("gitea", web.provider)
 		assert.are.equal("owner/repo", web.slug)
-		assert.are.equal("gitea", ssh.provider)
-		assert.are.equal("owner/repo", ssh.slug)
+		assert.are.equal(target.provider, ssh.provider)
+		assert.are.equal(target.host, ssh.host)
+		assert.are.equal(target.project_path, ssh.slug)
+		assert.is_truthy(ssh.url:find("localhost:2222", 1, true))
 	end)
 
 	it("does not claim an HTTP remote from a different port", function()
@@ -114,6 +122,7 @@ describe("Atlas target resolver", function()
 
 	it("resolves encoded self-hosted URL paths", function()
 		config.options.pulls.providers.gitea.base_url = "http://localhost:3000/git%2Droot"
+		config.options.issues.providers.gitea.base_url = "http://localhost:3000/git%2Droot"
 
 		local remote = assert(git.parse_remote_url("http://localhost:3000/git%2Droot/owner/repo.git"))
 		assert.are.equal("gitea", remote.provider)
@@ -122,6 +131,7 @@ describe("Atlas target resolver", function()
 
 	it("treats default HTTP ports as the same authority", function()
 		config.options.pulls.providers.gitea.base_url = "https://git.example"
+		config.options.issues.providers.gitea.base_url = "https://git.example"
 
 		local target = assert(resolver.resolve("https://git.example:443/owner/repo/pulls/7"))
 		local remote = assert(git.parse_remote_url("https://git.example:443/owner/repo.git"))
@@ -129,11 +139,13 @@ describe("Atlas target resolver", function()
 		assert.are.equal("gitea", remote.provider)
 
 		config.options.pulls.providers.gitea.base_url = "https://git.example:443"
+		config.options.issues.providers.gitea.base_url = "https://git.example:443"
 		assert.are.equal("gitea", assert(resolver.resolve("https://git.example/owner/repo/pulls/7")).provider)
 	end)
 
 	it("uses one note target for equivalent self-hosted URLs", function()
 		config.options.pulls.providers.gitea.base_url = "https://git.example/git-root"
+		config.options.issues.providers.gitea.base_url = "https://git.example/git-root"
 		local notes = require("atlas.pulls.notes")
 		local url = "https://git.example:443/git%2Droot/owner/repo/pulls/7"
 		local from_url = assert(notes.resolve_target(url))
