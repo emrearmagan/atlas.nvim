@@ -130,9 +130,16 @@ function M.issues(name)
 end
 
 ---@param name string|nil
+---@param provider_id AtlasIssuesProviderId|nil
 ---@return string, string
-function M.issues_type(name)
+function M.issues_type(name, provider_id)
 	local key = tostring(name or "")
+	if provider_id == "shortcut" then
+		key = key == "feature" and "story" or key == "chore" and "task" or key
+		local style = ICONS.issues.type[key]
+		return style and get(style) or "", "AtlasTextMuted"
+	end
+
 	local default = ICONS.issues.type[key:lower()]
 	local jira = config.domain_options("jira", "issues") or {}
 	local configured = ((jira.project_config or {}).issue_types or {})[key]

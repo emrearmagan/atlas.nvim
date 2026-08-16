@@ -3,6 +3,7 @@ local M = {}
 ---@type table<string, table>
 local groups = {
 	AtlasShortcutTheme = { fg = "#FFFFFF", bg = "#494BCB", bold = true },
+	AtlasShortcutChipParent = { link = "AtlasShortcutTheme" },
 }
 
 function M.setup()

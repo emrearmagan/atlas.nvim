@@ -391,18 +391,6 @@ local function jira()
 end
 
 local function shortcut()
-	---@param name string
-	---@return string, string
-	local function type_icon(name)
-		if name == "feature" then
-			return icons.issues_type("story")
-		end
-		if name == "chore" then
-			return icons.issues_type("task")
-		end
-		return icons.issues_type(name)
-	end
-
 	---@param issue ShortcutIssue
 	---@return string
 	local function compact_meta(issue)
@@ -431,7 +419,7 @@ local function shortcut()
 
 	local function values(issue, is_child, layout)
 		---@cast issue ShortcutIssue
-		local row_icon = type_icon(issue.type.name)
+		local row_icon = icons.issues_type(issue.type.name, "shortcut")
 		local label = "#" .. issue.key
 		local name = label .. " " .. issue.title
 		if is_child then
@@ -476,7 +464,7 @@ local function shortcut()
 		---@cast issue ShortcutIssue
 
 		if col.key == "icon" then
-			local icon, icon_hl = type_icon(issue.type.name)
+			local icon, icon_hl = icons.issues_type(issue.type.name, "shortcut")
 			local start_col, end_col = ctx.text:find(icon, 1, true)
 			if start_col then
 				return { { start_col = start_col - 1, end_col = end_col, hl_group = icon_hl } }
@@ -486,7 +474,7 @@ local function shortcut()
 		if col.key == "name" then
 			local spans = {}
 			if (tonumber(table_row._tv2_depth) or 0) > 0 then
-				local icon, icon_hl = type_icon(issue.type.name)
+				local icon, icon_hl = icons.issues_type(issue.type.name, "shortcut")
 				local start_col, end_col = ctx.text:find(icon, 1, true)
 				if start_col then
 					table.insert(spans, { start_col = start_col - 1, end_col = end_col, hl_group = icon_hl })
