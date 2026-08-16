@@ -1,6 +1,16 @@
 local checkout = require("atlas.core.git.checkout")
 
 describe("repo_paths", function()
+	it("uses the pull request snapshot commits for diffs", function()
+		local base, head = checkout.pr_diff_revisions({
+			destination = { commit_hash = "base123" },
+			source = { commit_hash = "head456" },
+		})
+
+		assert.equal("base123", base)
+		assert.equal("head456", head)
+	end)
+
 	describe("validate", function()
 		it("fails when wildcard parity is wrong", function()
 			local ok = checkout.validate_repo_paths({

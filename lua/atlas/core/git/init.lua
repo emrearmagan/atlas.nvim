@@ -87,18 +87,6 @@ function M.rev_exists(root, rev)
 end
 
 ---@param root string
----@param revision string
----@return string|nil
-function M.resolve_revision(root, revision)
-	local res = vim.system(
-		{ "git", "-C", root, "rev-parse", "--verify", "--end-of-options", revision .. "^{commit}" },
-		{ text = true }
-	):wait()
-	local hash = trim(res.stdout)
-	return res.code == 0 and hash ~= "" and hash or nil
-end
-
----@param root string
 ---@param base string
 ---@param head string
 ---@return string|nil base_revision

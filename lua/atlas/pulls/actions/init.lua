@@ -414,15 +414,23 @@ M.checkout = {
 	run = function(context, done)
 		local pr = assert(context.pr)
 		notify(context, "loading", string.format("Checking out PR #%s", tostring(pr.id or "")))
-		git_checkout.checkout_pr(pr, function(_, err)
-			vim.schedule(function()
-				if err then
-					notify(context, "error", string.format("Checkout failed: %s", tostring(err)))
-					done(nil, tostring(err))
-					return
-				end
-				notify(context, "success", string.format("Checked out PR #%s", tostring(pr.id or "")))
-				done({ changed_pr = false, message = "Checked out PR" }, nil)
+		context.provider.capabilities.core.fetch_pullrequest(pr, { force_load = true }, function(current, fetch_err)
+			if not current then
+				local err = tostring(fetch_err or "Unable to load pull request")
+				notify(context, "error", "Checkout failed: " .. err)
+				done(nil, err)
+				return
+			end
+			git_checkout.checkout_pr(current, function(_, err)
+				vim.schedule(function()
+					if err then
+						notify(context, "error", string.format("Checkout failed: %s", tostring(err)))
+						done(nil, tostring(err))
+						return
+					end
+					notify(context, "success", string.format("Checked out PR #%s", tostring(pr.id or "")))
+					done({ changed_pr = false, message = "Checked out PR" }, nil)
+				end)
 			end)
 		end)
 	end,

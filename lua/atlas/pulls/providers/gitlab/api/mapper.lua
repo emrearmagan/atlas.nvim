@@ -115,6 +115,9 @@ function M.to_pull_request(raw)
 	local source_branch = json.safe_str(raw.source_branch) or ""
 	local target_branch = json.safe_str(raw.target_branch) or ""
 	local sha = json.nilify(raw.sha)
+	local diff_refs = json.nilify(raw.diff_refs)
+	local head_sha = type(diff_refs) == "table" and json.safe_str(diff_refs.head_sha) or nil
+	local base_sha = type(diff_refs) == "table" and json.safe_str(diff_refs.base_sha) or nil
 
 	---@type PullRequest
 	return {
@@ -125,10 +128,10 @@ function M.to_pull_request(raw)
 		author = normalize_author(raw.author),
 		source = {
 			branch = source_branch,
-			commit_hash = type(sha) == "string" and sha or "",
+			commit_hash = head_sha or (type(sha) == "string" and sha or ""),
 			fetch_ref = string.format("refs/merge-requests/%d/head", iid),
 		},
-		destination = { branch = target_branch, commit_hash = "" },
+		destination = { branch = target_branch, commit_hash = base_sha or "" },
 		comments_count = tonumber(raw.user_notes_count) or 0,
 		tasks_count = 0,
 		created_on = json.safe_str(raw.created_at) or "",
@@ -147,7 +150,7 @@ function M.to_pull_request(raw)
 			detailed_merge_status = json.safe_str(raw.detailed_merge_status),
 			blocking_discussions_resolved = json.nilify(raw.blocking_discussions_resolved),
 			has_conflicts = raw.has_conflicts == true,
-			diff_refs = json.nilify(raw.diff_refs),
+			diff_refs = diff_refs,
 		},
 	}
 end
