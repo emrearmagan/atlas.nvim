@@ -11,6 +11,8 @@ Review GitHub, Bitbucket, and GitLab pull requests and manage Jira, GitHub, and 
   <img alt="GitHub" src="https://img.shields.io/badge/GitHub-181717?style=flat-square&logo=github&logoColor=white">
   <img alt="Bitbucket" src="https://img.shields.io/badge/Bitbucket-0052CC?style=flat-square&logo=bitbucket&logoColor=white">
   <img alt="GitLab" src="https://img.shields.io/badge/GitLab-FC6D26?style=flat-square&logo=gitlab&logoColor=white">
+  <img alt="Gitea" src="https://img.shields.io/badge/Gitea-609926?style=flat-square&logo=gitea&logoColor=white">
+  <img alt="Forgejo" src="https://img.shields.io/badge/Forgejo-FB923C?style=flat-square&logo=forgejo&logoColor=white">
   <img alt="Jira" src="https://img.shields.io/badge/Jira-0052CC?style=flat-square&logo=jira&logoColor=white">
 </p>
 
