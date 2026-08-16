@@ -2,7 +2,7 @@ local M = {}
 
 local git_checkout = require("atlas.core.git.checkout")
 local md_editor = require("atlas.ui.popups.editor")
-local multi_select = require("atlas.ui.popups.multi_select")
+local picker = require("atlas.picker")
 local review = require("atlas.pulls.actions.review")
 local utils = require("atlas.pulls.actions.utils")
 
@@ -123,25 +123,27 @@ function M.open(context, on_done)
 	end
 
 	local target = context.pr and string.format(" for #%s", tostring(context.pr.id)) or ""
-	vim.ui.select(items, {
-		prompt = string.format("Choose %s action%s", context.provider.name, target),
+	picker.select({
+		title = string.format("Choose %s action%s", context.provider.name, target),
+		items = items,
 		kind = "atlas_pulls_actions",
 		format_item = function(action)
 			return action.label
 		end,
-	}, function(action)
-		if not action then
-			if on_done then
-				on_done({ changed_pr = false, message = "Cancelled" }, nil)
+		on_select = function(action)
+			if not action then
+				if on_done then
+					on_done({ changed_pr = false, message = "Cancelled" }, nil)
+				end
+				return
 			end
-			return
-		end
-		if action.custom then
-			action.run(context, on_done or function() end)
-			return
-		end
-		M.run(action.id, context, on_done)
-	end)
+			if action.custom then
+				action.run(context, on_done or function() end)
+				return
+			end
+			M.run(action.id, context, on_done)
+		end,
+	})
 end
 
 M.edit_title = {
@@ -324,17 +326,18 @@ M.edit_reviewers = {
 					table.insert(original, reviewer)
 				end
 			end
+			notify(context, "success", "Reviewers loaded", 1200)
 
-			multi_select.open({
+			picker.multi_select({
 				items = reviewers,
 				selected = original,
 				key = function(reviewer)
 					return reviewer.provider_id
 				end,
-				format = function(reviewer)
+				format_item = function(reviewer)
 					return reviewer.label
 				end,
-				prompt = string.format("Reviewers for #%s", tostring(pr.id or "")),
+				title = string.format("Reviewers for #%s", tostring(pr.id or "")),
 				on_done = function(chosen)
 					local changed = #chosen ~= #original
 					if not changed then

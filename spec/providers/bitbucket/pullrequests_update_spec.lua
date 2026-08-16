@@ -12,14 +12,13 @@ local function stub_service(request)
 	end
 end
 
-describe("bitbucket pullrequests.update_title", function()
+describe("bitbucket pull request updates", function()
 	local calls
 	local cache_cleared
 
 	before_each(function()
 		calls = {}
 		cache_cleared = 0
-		package.loaded["atlas.pulls.providers.bitbucket.api.pullrequests"] = nil
 		package.loaded["atlas.pulls.providers.bitbucket.api.service"] = nil
 	end)
 
@@ -37,7 +36,7 @@ describe("bitbucket pullrequests.update_title", function()
 		local api = fresh_module()
 
 		local ok, err
-		api.update_title({ id = 5, _raw = { links = {} } }, "New title", function(success, e)
+		api.update_description({ id = 5, _raw = { links = {} } }, "New body", function(success, e)
 			ok, err = success, e
 		end)
 
@@ -46,7 +45,7 @@ describe("bitbucket pullrequests.update_title", function()
 		assert.equal(0, #calls)
 	end)
 
-	it("PUTs the new title as JSON to the PR's self link", function()
+	it("PUTs title and description fields to the PR's self link", function()
 		package.preload["atlas.pulls.providers.bitbucket.api.service"] = function()
 			return {
 				request = function(method, url, headers, body, callback)
@@ -64,18 +63,21 @@ describe("bitbucket pullrequests.update_title", function()
 			_raw = { links = { self = "https://api.bitbucket.org/2.0/repositories/ws/repo/pullrequests/5" } },
 		}
 
-		local ok, err
-		api.update_title(pr, "New title", function(success, e)
-			ok, err = success, e
+		api.update_title(pr, "New title", function(success, err)
+			assert.is_true(success)
+			assert.is_nil(err)
+		end)
+		api.update_description(pr, "New body", function(success, err)
+			assert.is_true(success)
+			assert.is_nil(err)
 		end)
 
-		assert.is_true(ok)
-		assert.is_nil(err)
-		assert.equal(1, #calls)
+		assert.equal(2, #calls)
 		assert.equal("PUT", calls[1].method)
 		assert.equal("https://api.bitbucket.org/2.0/repositories/ws/repo/pullrequests/5", calls[1].url)
 		assert.equal('{"title":"New title"}', calls[1].body)
-		assert.equal(1, cache_cleared)
+		assert.equal('{"description":"New body"}', calls[2].body)
+		assert.equal(2, cache_cleared)
 	end)
 
 	it("propagates errors from the request", function()
@@ -85,7 +87,7 @@ describe("bitbucket pullrequests.update_title", function()
 		local api = fresh_module()
 
 		local ok, err
-		api.update_title({ id = 5, _raw = { links = { self = "url" } } }, "New title", function(success, e)
+		api.update_description({ id = 5, _raw = { links = { self = "url" } } }, "New body", function(success, e)
 			ok, err = success, e
 		end)
 

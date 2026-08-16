@@ -1,4 +1,4 @@
-*atlas.txt*  Pull requests and issues from Neovim   Last change: 2026 Aug 04
+*atlas.txt*  Pull requests and issues from Neovim   Last change: 2026 Aug 16
 
 Author: Emre Armagan
 License: MIT
@@ -85,8 +85,12 @@ up and what's missing.
 
 >lua
   require("atlas").setup({
-    -- Use one statusline across all windows.
-    global_statusline = true,
+    ui = {
+      -- Use one statusline across all windows.
+      global_statusline = true,
+      -- "auto", "default", "snacks", or "fzf-lua".
+      picker = "auto",
+    },
 
     pulls = {
       -- See |atlas-pulls-configuration|.
@@ -108,9 +112,6 @@ up and what's missing.
 <
 Only the providers listed in `setup()` are loaded. No provider is enabled by
 default.
-
-Set `global_statusline = false` to leave Neovim's `laststatus` option
-unchanged.
 
 ==============================================================================
 5. COMMANDS                                                    *atlas-commands*
@@ -738,6 +739,7 @@ Defaults live under `keymaps` in `setup()`. Each entry accepts:
           request_changes       = "gr",
           submit_review         = "gs",
           explorer = {
+            find_file             = "<leader>ff",
             next_file             = { "]f", "<Tab>" },
             previous_file         = { "[f", "<S-Tab>" },
             next_unreviewed_file      = "]u",

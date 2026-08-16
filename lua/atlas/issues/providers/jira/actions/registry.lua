@@ -2,9 +2,10 @@ local M = {}
 
 local actions = require("atlas.issues.actions")
 local icons = require("atlas.ui.shared.icons")
+local picker = require("atlas.picker")
 local statusline = require("atlas.ui.statusline")
-local async_picker = require("atlas.ui.components.async_picker")
 local issues_api = require("atlas.issues.providers.jira.api.issues")
+local adf = require("atlas.issues.providers.jira.converted.adf")
 local notify = require("atlas.core.notify")
 local transitions_api = require("atlas.issues.providers.jira.api.transitions")
 local users_api = require("atlas.issues.providers.jira.api.users")
@@ -62,27 +63,25 @@ local function transition(ctx, done)
 		done = icons.general("success"),
 	}
 
-	async_picker.open({
+	picker.search({
 		title = string.format("Transition %s", issue_key),
-		prompt = "Filter transitions",
 		debounce_ms = 0,
-		identifier = "jira_transitions:" .. issue_key,
 		format_item = function(item)
 			local transition = item.value
 			local category = type(transition) == "table" and transition.to_status_category or nil
 			local icon = (category and status_category_icons[category]) or icons.fallback()
 			return string.format("%s %s", icon, item.label)
 		end,
-		fetch = function(fetch_ctx, fetch_done)
+		fetch = function(query, fetch_done)
 			if all_items then
-				local query = vim.trim(fetch_ctx.query):lower()
-				if query == "" then
+				local normalized = vim.trim(query):lower()
+				if normalized == "" then
 					fetch_done(all_items, nil)
 					return
 				end
 				local filtered = {}
 				for _, item in ipairs(all_items) do
-					if item.label:lower():find(query, 1, true) then
+					if item.label:lower():find(normalized, 1, true) then
 						table.insert(filtered, item)
 					end
 				end
@@ -90,7 +89,7 @@ local function transition(ctx, done)
 				return
 			end
 
-			transitions_api.get_transitions(issue_key, function(transitions, err)
+			return transitions_api.get_transitions(issue_key, function(transitions, err)
 				if err ~= nil or transitions == nil then
 					fetch_done(nil, err or "Failed to load transitions")
 					return
@@ -193,13 +192,9 @@ local function assign(ctx, done)
 		return items
 	end
 
-	async_picker.open({
+	picker.search({
 		title = string.format("Assign %s", issue_key),
-		prompt = "Search users",
 		initial_items = to_picker_items({}),
-		debounce_ms = 250,
-		cache_ttl_ms = 60000,
-		identifier = "jira_users:" .. (issue_project_key or ""),
 		fetch_on_open = false,
 		format_item = function(item)
 			if item.id == "__unassign__" then
@@ -207,10 +202,10 @@ local function assign(ctx, done)
 			end
 			return string.format("%s %s", icons.general("user"), item.label)
 		end,
-		fetch = function(fetch_ctx, fetch_done)
-			users_api.get_assignable_users(
+		fetch = function(query, fetch_done)
+			return users_api.get_assignable_users(
 				{ issue_key = issue_key, project = issue_project_key },
-				fetch_ctx.query,
+				query,
 				function(users, err)
 					if err then
 						fetch_done(nil, err)
@@ -272,28 +267,20 @@ local function reporter(ctx, done)
 		return items
 	end
 
-	async_picker.open({
+	picker.search({
 		title = string.format("Reporter for %s", issue_key),
-		prompt = "Search users",
-		initial_items = {},
-		debounce_ms = 250,
-		cache_ttl_ms = 60000,
 		fetch_on_open = false,
 		format_item = function(item)
 			return string.format("%s %s", icons.general("user"), item.label)
 		end,
-		fetch = function(fetch_ctx, fetch_done)
-			users_api.get_assignable_users(
-				{ issue_key = issue_key, project = nil },
-				fetch_ctx.query,
-				function(users, err)
-					if err then
-						fetch_done(nil, err)
-						return
-					end
-					fetch_done(to_picker_items(users), nil)
+		fetch = function(query, fetch_done)
+			return users_api.get_assignable_users({ issue_key = issue_key, project = nil }, query, function(users, err)
+				if err then
+					fetch_done(nil, err)
+					return
 				end
-			)
+				fetch_done(to_picker_items(users), nil)
+			end)
 		end,
 		on_select = function(item)
 			local selected = item.value
@@ -370,7 +357,6 @@ local function edit_issue(ctx, done)
 	local issue = assert(ctx.issue)
 
 	local issue_key = issue.key
-	local adf = require("atlas.issues.providers.jira.converted.adf")
 	local md_to_adf = require("atlas.issues.providers.jira.converted.markdown")
 	local issue_editor = require("atlas.issues.create.jira.issue")
 
@@ -405,6 +391,7 @@ local function edit_issue(ctx, done)
 					return
 				end
 
+				statusline.notify("success", string.format("Updated %s", issue_key), 1200)
 				submit_done(true, nil)
 				vim.schedule(function()
 					done({ issue_key = issue_key }, nil)
@@ -571,11 +558,9 @@ local function create_issue(context, done)
 
 	local all_items = nil
 
-	async_picker.open({
+	picker.search({
 		title = "Create Issue",
-		prompt = "Select project",
 		debounce_ms = 0,
-		identifier = "jira_creatable_projects",
 		format_item = function(item)
 			local provider_icon, provider_hl = icons.issues_provider("jira", "provider")
 			local project = item.value
@@ -586,10 +571,10 @@ local function create_issue(context, done)
 			end
 			return string.format("%s %s - %s", provider_icon, item.label, project.name), provider_hl
 		end,
-		fetch = function(fetch_ctx, fetch_done)
+		fetch = function(query, fetch_done)
 			if all_items then
-				local query = vim.trim(fetch_ctx.query):lower()
-				if query == "" then
+				local normalized = vim.trim(query):lower()
+				if normalized == "" then
 					fetch_done(all_items, nil)
 					return
 				end
@@ -603,7 +588,7 @@ local function create_issue(context, done)
 						.. " "
 						.. (project.category and project.category.name or "")
 					):lower()
-					if haystack:find(query, 1, true) then
+					if haystack:find(normalized, 1, true) then
 						table.insert(filtered, item)
 					end
 				end
@@ -611,10 +596,7 @@ local function create_issue(context, done)
 				return
 			end
 
-			projects_api.get_projects({ maxResults = 50, total = 2, status = "live" }, function(groups, err)
-				if fetch_ctx.signal.cancelled then
-					return
-				end
+			return projects_api.get_projects({ maxResults = 50, total = 2, status = "live" }, function(groups, err)
 				if err or not groups then
 					fetch_done(nil, err or "Failed to load projects")
 					return
@@ -639,9 +621,6 @@ local function create_issue(context, done)
 					permissions = { "CREATE_ISSUES" },
 					project_ids = project_ids,
 				}, function(permission_map, perm_err)
-					if fetch_ctx.signal.cancelled then
-						return
-					end
 					if perm_err or not permission_map then
 						fetch_done(nil, perm_err or "Failed to load project permissions")
 						return
@@ -676,25 +655,33 @@ end
 
 ---@param _ AtlasIssueActionContext
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
-local function search_query_issue(_, done)
-	async_picker.open({
+local function search_issue(_, done)
+	picker.search({
 		title = "Search Issues",
-		prompt = "Issue name or key",
 		debounce_ms = 200,
-		identifier = "jira_issue_picker_search",
-		cache_ttl_ms = 30000,
-		fetch_on_open = true,
 		format_item = function(item)
-			local provider_icon = icons.issues_provider("jira", "provider")
-			return string.format("%s %s", provider_icon, tostring(item.label or "")), "AtlasJiraKey"
+			return tostring(item.label or "")
 		end,
-		fetch = function(fetch_ctx, fetch_done)
-			local query = vim.trim(fetch_ctx.query)
-			issues_api.search_issue(query, function(items, err)
-				if fetch_ctx.signal.cancelled then
+		preview_item = function(item, preview_done)
+			local issue = item.value
+			return issues_api.get_issue_detail(issue.key, function(detail, err)
+				if err then
+					preview_done({ title = issue.key, lines = { err } })
 					return
 				end
-
+				local description = detail and detail.description
+				if type(description) == "table" then
+					description = adf.to_markdown(description)
+				end
+				description = vim.trim(tostring(description or ""))
+				preview_done({
+					title = issue.key,
+					lines = vim.split(description ~= "" and description or "No description", "\n", { plain = true }),
+				})
+			end)
+		end,
+		fetch = function(query, fetch_done)
+			return issues_api.search_issue(vim.trim(query), function(items, err)
 				if err ~= nil or items == nil then
 					fetch_done(nil, err or "Failed to search tickets")
 					return
@@ -705,7 +692,6 @@ local function search_query_issue(_, done)
 					table.insert(picker_items, {
 						id = tostring(issue.id or issue.key),
 						label = string.format("%s - %s", issue.key, issue.summary),
-						secondary = issue.key,
 						value = issue,
 					})
 				end
@@ -733,198 +719,7 @@ end
 
 ---@param _ AtlasIssueActionContext
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
-local function manage_templates(_, done)
-	local template_store = require("atlas.issues.templates")
-	local markdown_editor = require("atlas.ui.popups.editor")
-
-	local options = {
-		{ id = "create", label = "Create template" },
-		{ id = "edit", label = "Edit template" },
-	}
-
-	vim.ui.select(options, {
-		prompt = "Templates",
-		kind = "atlas_jira_template_actions",
-		format_item = function(item)
-			return tostring((item and item.label) or "")
-		end,
-	}, function(choice)
-		if choice == nil then
-			done(nil, nil)
-			return
-		end
-
-		if choice.id == "create" then
-			local finalized = false
-			local function finish(err)
-				if finalized then
-					return
-				end
-				finalized = true
-				if err then
-					statusline.notify("error", err)
-				end
-				done(nil, err)
-			end
-
-			markdown_editor.open({
-				key = string.format("template_new_%d", vim.loop.hrtime()),
-				title = " New Issue Template ",
-				initial_text = "",
-				on_save = function(text)
-					local markdown = tostring(text or "")
-					vim.ui.input({ prompt = "Template name: " }, function(name_input)
-						if name_input == nil then
-							finish()
-							return
-						end
-
-						local name = vim.trim(tostring(name_input))
-						if name == "" then
-							finish("Template name is required")
-							return
-						end
-
-						local ok, write_err, existed, normalized_name =
-							template_store.write(name, markdown, { overwrite = false })
-						if ok then
-							finish()
-							return
-						end
-
-						if existed then
-							vim.ui.input({
-								prompt = string.format(
-									'Template "%s" exists. Overwrite? [y/N]: ',
-									tostring(normalized_name or name)
-								),
-							}, function(confirm)
-								if confirm == nil or vim.trim(tostring(confirm)):lower() ~= "y" then
-									finish()
-									return
-								end
-
-								local overwrite_ok, overwrite_err =
-									template_store.write(name, markdown, { overwrite = true })
-								if not overwrite_ok then
-									finish(overwrite_err or "Failed to overwrite template")
-									return
-								end
-
-								finish()
-							end)
-							return
-						end
-
-						finish(write_err or "Failed to create template")
-					end)
-				end,
-				on_cancel = function()
-					finish()
-				end,
-			})
-			return
-		end
-
-		local templates, list_err = template_store.list()
-		if list_err then
-			statusline.notify("error", list_err)
-			done(nil, list_err)
-			return
-		end
-
-		if templates == nil or #templates == 0 then
-			done(nil, nil)
-			return
-		end
-
-		vim.ui.select(templates, {
-			prompt = "Edit template",
-			kind = "atlas_jira_templates",
-			format_item = function(item)
-				return tostring((item and item.name) or "")
-			end,
-		}, function(selected)
-			if selected == nil then
-				done(nil, nil)
-				return
-			end
-
-			local template_name = tostring(selected.name or "")
-			if template_name == "" then
-				statusline.notify("error", "Invalid template selected")
-				done(nil, "Invalid template selected")
-				return
-			end
-
-			local content, read_err = template_store.read(template_name)
-			if read_err then
-				statusline.notify("error", read_err)
-				done(nil, read_err)
-				return
-			end
-
-			local finalized = false
-			local function finish(err)
-				if finalized then
-					return
-				end
-				finalized = true
-				if err then
-					statusline.notify("error", err)
-				end
-				done(nil, err)
-			end
-
-			local key = ("template_" .. template_name):gsub("[^%w%-_]+", "_")
-			markdown_editor.open({
-				key = key,
-				title = string.format(" Template: %s ", template_name),
-				initial_text = content,
-				actions = {
-					{
-						key = "<C-d>",
-						description = "delete",
-						callback = function(editor_ctx)
-							vim.ui.input({
-								prompt = string.format('Delete template "%s"? [y/N]: ', template_name),
-							}, function(confirm)
-								if confirm == nil or vim.trim(tostring(confirm)):lower() ~= "y" then
-									return
-								end
-
-								local deleted, delete_err = template_store.delete(template_name)
-								if not deleted then
-									finish(delete_err or "Failed to delete template")
-									return
-								end
-
-								editor_ctx.close()
-								finish()
-							end)
-						end,
-					},
-				},
-				on_save = function(text)
-					local ok, write_err = template_store.write(template_name, text, { overwrite = true })
-					if not ok then
-						finish(write_err or "Failed to update template")
-						return
-					end
-
-					finish()
-				end,
-				on_cancel = function()
-					finish()
-				end,
-			})
-		end)
-	end)
-end
-
----@param _ AtlasIssueActionContext
----@param done fun(result: IssuesActionResult|nil, err: string|nil)
-local function search(_, done)
+local function search_jql(_, done)
 	require("atlas.issues.providers.jira.completion.search").open(current_jql())
 	done(nil, nil)
 end
@@ -1082,20 +877,16 @@ register({
 	run = create_issue,
 })
 register({
-	id = "search_query_issue",
-	label = "Search Issue",
-	run = search_query_issue,
-})
-register({
-	id = "manage_templates",
-	label = "Manage Issue Templates",
-	run = manage_templates,
-})
-register({
 	id = "search",
-	label = "Search JQL",
-	run = search,
+	label = "Search Issue",
+	run = search_issue,
 })
+register({
+	id = "search_jql",
+	label = "Search JQL",
+	run = search_jql,
+})
+register(actions.manage_templates)
 register({
 	id = "browse_issue",
 	label = "Open Issue In Browser",

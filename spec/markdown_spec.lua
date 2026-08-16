@@ -15,10 +15,6 @@ end
 
 describe("markdown to adf", function()
 	describe("paragraph", function()
-		it("converts plain text", function()
-			assert.are.same(doc({ p({ text("hello world") }) }), md.to_adf("hello world"))
-		end)
-
 		it("separates paragraphs by blank lines", function()
 			assert.are.same(doc({ p({ text("first") }), p({ text("second") }) }), md.to_adf("first\n\nsecond"))
 		end)

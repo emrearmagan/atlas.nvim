@@ -464,7 +464,7 @@ end
 ---@param result PullsActionResult|nil
 function M.apply_action_result(pr, result)
 	if pr ~= nil and result ~= nil and result.changed_pr then
-		M.refresh_current_view(nil, pr)
+		M.refresh_pr(pr)
 	end
 end
 

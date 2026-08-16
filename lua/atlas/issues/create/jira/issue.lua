@@ -7,7 +7,7 @@ local users_api = require("atlas.issues.providers.jira.api.users")
 local issues_api = require("atlas.issues.providers.jira.api.issues")
 local templates = require("atlas.issues.templates")
 local spinner = require("atlas.ui.components.spinner")
-local async_picker = require("atlas.ui.components.async_picker")
+local picker = require("atlas.picker")
 
 ---@class IssueEditorFields
 ---@field summary string
@@ -287,7 +287,7 @@ local function toggle_preview()
 end
 
 local function show_assignee_picker()
-	---@type AsyncPickerItem[]
+	---@type table[]
 	local initial_items = {}
 
 	table.insert(initial_items, {
@@ -306,24 +306,20 @@ local function show_assignee_picker()
 		end
 	end
 
-	async_picker.open({
+	picker.search({
 		title = "Select Assignee",
-		prompt = "Search users",
 		initial_items = initial_items,
 		fetch_on_open = not (state.assignees and state.assignees ~= "loading" and #state.assignees > 0),
-		debounce_ms = 250,
-		cache_ttl_ms = 60000,
-		identifier = "jira_users:" .. (state.fields.project or ""),
 		format_item = function(item)
 			if item.id == "__unassign__" then
 				return item.label
 			end
 			return string.format("%s %s", icons.general("user"), item.label or "")
 		end,
-		fetch = function(ctx, done)
-			users_api.get_assignable_users(
+		fetch = function(query, done)
+			return users_api.get_assignable_users(
 				{ project = state.fields.project, issue_key = state.fields.issue_key },
-				ctx.query,
+				query,
 				function(users, err)
 					if err then
 						done(nil, err)
@@ -358,7 +354,7 @@ local function show_assignee_picker()
 end
 
 local function show_reporter_picker()
-	---@type AsyncPickerItem[]
+	---@type table[]
 	local initial_items = {}
 
 	if state.assignees and state.assignees ~= "loading" then
@@ -371,21 +367,17 @@ local function show_reporter_picker()
 		end
 	end
 
-	async_picker.open({
+	picker.search({
 		title = "Select Reporter",
-		prompt = "Search users",
 		initial_items = initial_items,
 		fetch_on_open = not (state.assignees and state.assignees ~= "loading" and #state.assignees > 0),
-		debounce_ms = 250,
-		cache_ttl_ms = 60000,
-		identifier = "jira_users:" .. (state.fields.project or ""),
 		format_item = function(item)
 			return string.format("%s %s", icons.general("user"), item.label or "")
 		end,
-		fetch = function(ctx, done)
-			users_api.get_assignable_users(
+		fetch = function(query, done)
+			return users_api.get_assignable_users(
 				{ project = state.fields.project, issue_key = state.fields.issue_key },
-				ctx.query,
+				query,
 				function(users, err)
 					if err then
 						done(nil, err)
@@ -421,7 +413,7 @@ local function show_reporter_picker()
 end
 
 local function show_issue_type_picker()
-	---@type AsyncPickerItem[]
+	---@type table[]
 	local initial_items = {}
 
 	if state.issue_types and state.issue_types ~= "loading" then
@@ -434,23 +426,21 @@ local function show_issue_type_picker()
 		end
 	end
 
-	async_picker.open({
+	picker.search({
 		title = "Select Issue Type",
-		prompt = "Filter types",
 		initial_items = initial_items,
 		fetch_on_open = not (state.issue_types and state.issue_types ~= "loading" and #state.issue_types > 0),
 		debounce_ms = 0,
-		identifier = "jira_issue_types:" .. (state.fields.project or ""),
 		format_item = function(item)
 			local icon, icon_hl = icons.issues_type(item.label)
 			return string.format("%s %s", icon, item.label), icon_hl
 		end,
-		fetch = function(ctx, fetch_done)
+		fetch = function(query, fetch_done)
+			local cancelled = false
 			local function do_filter()
-				if ctx.signal.cancelled then
+				if cancelled then
 					return
 				end
-
 				if state.issue_types == "loading" then
 					vim.defer_fn(do_filter, 100)
 					return
@@ -466,14 +456,14 @@ local function show_issue_type_picker()
 					end
 				end
 
-				local query = vim.trim(ctx.query):lower()
-				if query == "" then
+				local normalized = vim.trim(query):lower()
+				if normalized == "" then
 					fetch_done(initial_items, nil)
 					return
 				end
 				local filtered = {}
 				for _, item in ipairs(initial_items) do
-					if item.label:lower():find(query, 1, true) then
+					if item.label:lower():find(normalized, 1, true) then
 						table.insert(filtered, item)
 					end
 				end
@@ -481,6 +471,11 @@ local function show_issue_type_picker()
 			end
 
 			do_filter()
+			return {
+				cancel = function()
+					cancelled = true
+				end,
+			}
 		end,
 		on_select = function(item)
 			state.fields.issue_type = item.value
@@ -546,7 +541,6 @@ function M.open(on_submit, opts, editor_opts)
 					templates.open({
 						get_description = get_active_markdown_description,
 						set_description = set_description_markdown,
-						picker_kind = "atlas_jira_templates",
 						menu_kind = "atlas_issue_templates_menu",
 					})
 				end,

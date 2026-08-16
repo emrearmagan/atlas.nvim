@@ -64,10 +64,10 @@ describe("gitlab pullrequests.update_description", function()
 	it("PUTs the new description to the merge request endpoint", function()
 		stub_service(function(method, endpoint, payload, callback)
 			table.insert(calls, { method = method, endpoint = endpoint, payload = payload })
-			callback({ description = "New body" }, nil)
+			callback({ description = "Normalized by GitLab" }, nil)
 		end)
 		local api = fresh_module()
-		local pr = { id = 12, repo_full_name = "group/project" }
+		local pr = { id = 12, repo_full_name = "group/project", description = "Old body" }
 
 		local ok, err
 		api.update_description(pr, "New body", function(success, e)
@@ -80,17 +80,6 @@ describe("gitlab pullrequests.update_description", function()
 		assert.equal("PUT", calls[1].method)
 		assert.equal("/projects/group%2Fproject/merge_requests/12", calls[1].endpoint)
 		assert.same({ description = "New body" }, calls[1].payload)
-	end)
-
-	it("stores the description returned by the API on the PR", function()
-		stub_service(function(_, _, _, callback)
-			callback({ description = "Normalized by GitLab" }, nil)
-		end)
-		local api = fresh_module()
-		local pr = { id = 12, repo_full_name = "group/project", description = "Old body" }
-
-		api.update_description(pr, "New body", function() end)
-
 		assert.equal("Normalized by GitLab", pr.description)
 	end)
 

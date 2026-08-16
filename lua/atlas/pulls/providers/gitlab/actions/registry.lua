@@ -3,8 +3,8 @@ local M = {}
 local actions = require("atlas.pulls.actions")
 local action_utils = require("atlas.pulls.actions.utils")
 local icons = require("atlas.ui.shared.icons")
+local picker = require("atlas.picker")
 local statusline = require("atlas.ui.statusline")
-local multi_select = require("atlas.ui.popups.multi_select")
 local notes = require("atlas.pulls.notes")
 local pullrequests_api = require("atlas.pulls.providers.gitlab.api.pullrequests")
 local users_api = require("atlas.pulls.providers.gitlab.api.users")
@@ -179,16 +179,16 @@ local function edit_assignees(ctx, done)
 			end
 		end
 
-		multi_select.open({
+		picker.multi_select({
 			items = members,
 			selected = vim.deepcopy(original),
 			key = function(item)
 				return tostring(item.id or "")
 			end,
-			format = function(item)
+			format_item = function(item)
 				return string.format("%s %s (@%s)", icons.general("user"), item.name or item.username, item.username)
 			end,
-			prompt = string.format("Assignees for %s", pr_label(pr)),
+			title = string.format("Assignees for %s", pr_label(pr)),
 			on_done = function(selected)
 				local final_ids = {}
 				local final_set = {}
@@ -236,63 +236,55 @@ end
 ---@param ctx AtlasPullActionContext
 ---@param done fun(result: PullsActionResult|nil, err: string|nil)
 local function search(ctx, done)
-	vim.ui.input({ prompt = "Search projects: " }, function(input)
-		if input == nil or vim.trim(input) == "" then
-			done({ changed_pr = false, message = "Search cancelled" }, nil)
-			return
-		end
-
-		local query = vim.trim(input)
-		notify(ctx, "loading", "Searching projects...")
-		local endpoint =
-			string.format("/projects?search=%s&per_page=20&order_by=last_activity_at", service.url_encode(query))
-		service.request("GET", endpoint, nil, function(result, err)
-			if err then
-				notify(ctx, "error", string.format("Search failed: %s", tostring(err)))
-				done(nil, tostring(err))
+	picker.search({
+		title = "Search projects",
+		fetch_on_open = false,
+		format_item = function(item)
+			return item.label
+		end,
+		fetch = function(query, fetch_done)
+			query = vim.trim(query)
+			if query == "" then
+				fetch_done({}, nil)
 				return
 			end
 
-			local list = {}
-			for _, item in ipairs(type(result) == "table" and result or {}) do
-				local full_path = tostring(item.path_with_namespace or "")
-				if full_path ~= "" then
-					table.insert(list, full_path)
-				end
-			end
-
-			if #list == 0 then
-				notify(ctx, "warn", "No projects found")
-				done({ changed_pr = false, message = "No projects found" }, nil)
-				return
-			end
-
-			notify(ctx, "info", string.format("Found %d projects", #list), 1200)
-
-			vim.ui.select(list, {
-				prompt = "Select project",
-				kind = "atlas_gitlab_project_select",
-			}, function(project)
-				if project == nil then
-					done({ changed_pr = false, message = "Selection cancelled" }, nil)
+			local endpoint =
+				string.format("/projects?search=%s&per_page=20&order_by=last_activity_at", service.url_encode(query))
+			return service.request("GET", endpoint, nil, function(result, err)
+				if err then
+					fetch_done(nil, tostring(err))
 					return
 				end
 
-				---@type AtlasGitLabPullsViewConfig
-				local search_view = {
-					name = "Search",
-					key = nil,
-					project = project,
-					scope = "all",
-				}
-
-				local controller = require("atlas.pulls.ui.main.controller")
-				notify(ctx, "success", string.format("Search view -> %s", project))
-				controller.switch_view(search_view)
-				done({ changed_pr = false, message = "Search view switched" }, nil)
+				local list = {}
+				for _, item in ipairs(type(result) == "table" and result or {}) do
+					local full_path = tostring(item.path_with_namespace or "")
+					if full_path ~= "" then
+						table.insert(list, { id = full_path, label = full_path })
+					end
+				end
+				fetch_done(list, nil)
 			end)
-		end)
-	end)
+		end,
+		on_select = function(item)
+			local project = item.id
+			---@type AtlasGitLabPullsViewConfig
+			local search_view = {
+				name = "Search",
+				key = nil,
+				project = project,
+				scope = "all",
+			}
+
+			notify(ctx, "success", string.format("Search view -> %s", project))
+			require("atlas").open("pulls", "gitlab", { initial_view = search_view })
+			done({ changed_pr = false, message = "Search view switched" }, nil)
+		end,
+		on_cancel = function()
+			done({ changed_pr = false, message = "Search cancelled" }, nil)
+		end,
+	})
 end
 
 ---@param ctx AtlasPullActionContext

@@ -1,8 +1,8 @@
 local M = {}
 
 local form = require("atlas.ui.popups.form")
-local multi_select = require("atlas.ui.popups.multi_select")
 local notify = require("atlas.core.notify")
+local picker = require("atlas.picker")
 local pulls_helper = require("atlas.pulls.ui.main.helper")
 local icons = require("atlas.ui.shared.icons")
 local templates = require("atlas.issues.templates")
@@ -208,13 +208,13 @@ local function pick_assignees(issue_state)
 			end
 			form.clear_notice()
 
-			multi_select.open({
+			picker.multi_select({
 				items = items,
 				selected = issue_state.fields.assignees,
 				key = function(item)
 					return item.account_id
 				end,
-				format = function(item)
+				format_item = function(item)
 					return string.format(
 						"@%s%s",
 						item.account_id,
@@ -222,7 +222,7 @@ local function pick_assignees(issue_state)
 							or ""
 					)
 				end,
-				prompt = "Assignees",
+				title = "Assignees",
 				on_done = function(selected)
 					issue_state.fields.assignees = selected or {}
 					render_meta(issue_state)
@@ -252,16 +252,16 @@ local function pick_labels(issue_state)
 			end
 			form.clear_notice()
 
-			multi_select.open({
+			picker.multi_select({
 				items = items,
 				selected = issue_state.fields.labels,
 				key = function(item)
 					return item.name
 				end,
-				format = function(item)
+				format_item = function(item)
 					return tostring(item.name)
 				end,
-				prompt = "Labels",
+				title = "Labels",
 				on_done = function(selected)
 					issue_state.fields.labels = selected or {}
 					render_meta(issue_state)
@@ -297,17 +297,21 @@ local function pick_milestone(issue_state)
 				map[label] = item
 			end
 
-			vim.ui.select(choices, { prompt = "Select milestone:" }, function(choice)
-				if choice == nil then
-					return
-				end
-				if choice == "(none)" then
-					issue_state.fields.milestone = nil
-				else
-					issue_state.fields.milestone = map[choice]
-				end
-				render_meta(issue_state)
-			end)
+			picker.select({
+				title = "Select milestone:",
+				items = choices,
+				on_select = function(choice)
+					if choice == nil then
+						return
+					end
+					if choice == "(none)" then
+						issue_state.fields.milestone = nil
+					else
+						issue_state.fields.milestone = map[choice]
+					end
+					render_meta(issue_state)
+				end,
+			})
 		end)
 	end)
 end
@@ -455,7 +459,7 @@ function M.open(opts)
 				end,
 			},
 			{
-				key = "gt",
+				key = "gT",
 				mode = "n",
 				buffers = { "editor" },
 				desc = "templates",
@@ -467,7 +471,6 @@ function M.open(opts)
 						set_description = function(description)
 							return form.set_body(issue_state.layout, description)
 						end,
-						picker_kind = "atlas_github_templates",
 						menu_kind = "atlas_github_templates_menu",
 					})
 				end,

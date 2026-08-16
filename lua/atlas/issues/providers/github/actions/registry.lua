@@ -2,8 +2,9 @@ local M = {}
 
 local actions = require("atlas.issues.actions")
 local icons = require("atlas.ui.shared.icons")
+local picker = require("atlas.picker")
 local statusline = require("atlas.ui.statusline")
-local multi_select = require("atlas.ui.popups.multi_select")
+local cli = require("atlas.providers.github.client").issues
 local issues_api = require("atlas.issues.providers.github.api.issues")
 local users_api = require("atlas.issues.providers.github.api.users")
 local normalizer = require("atlas.issues.providers.github.api.mapper")
@@ -205,16 +206,16 @@ local function assign(ctx, done)
 			end
 		end
 
-		multi_select.open({
+		picker.multi_select({
 			items = items,
 			selected = vim.deepcopy(original),
 			key = function(item)
 				return item.login
 			end,
-			format = function(item)
+			format_item = function(item)
 				return string.format("%s %s", icons.general("user"), item.name or item.login)
 			end,
-			prompt = string.format("Assignees for %s", key),
+			title = string.format("Assignees for %s", key),
 			on_done = function(selected)
 				local selected_set = {}
 				for _, it in ipairs(selected) do
@@ -307,16 +308,16 @@ local function labels(ctx, done)
 			end
 		end
 
-		multi_select.open({
+		picker.multi_select({
 			items = items,
 			selected = vim.deepcopy(original),
 			key = function(item)
 				return item.name
 			end,
-			format = function(item)
+			format_item = function(item)
 				return tostring(item.name or "")
 			end,
-			prompt = string.format("Labels for %s", key),
+			title = string.format("Labels for %s", key),
 			on_done = function(selected)
 				local selected_set = {}
 				for _, it in ipairs(selected) do
@@ -389,7 +390,7 @@ end
 
 ---@param _ AtlasIssueActionContext
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
-local function search(_, done)
+local function search_issues(_, done)
 	local state = require("atlas.issues.state")
 	local view = state.active_view or state.current_view or {}
 	local default = vim.trim(tostring(view.search or ""))
@@ -398,6 +399,53 @@ local function search(_, done)
 	end
 	require("atlas.pulls.providers.github.completion.search").open(vim.trim(default) .. " ")
 	done(nil, nil)
+end
+
+---@param _ AtlasIssueActionContext
+---@param done fun(result: IssuesActionResult|nil, err: string|nil)
+local function search(_, done)
+	picker.search({
+		title = "Search repositories",
+		fetch_on_open = false,
+		format_item = function(item)
+			return item.label
+		end,
+		fetch = function(query, fetch_done)
+			query = vim.trim(query)
+			if query == "" then
+				fetch_done({}, nil)
+				return
+			end
+
+			return cli.gh({ "search", "repos", query, "--json", "fullName", "--limit", "20" }, function(result, err)
+				if err then
+					fetch_done(nil, tostring(err))
+					return
+				end
+
+				local items = {}
+				for _, repo in ipairs(type(result) == "table" and result or {}) do
+					local full_name = tostring(repo.fullName or "")
+					if full_name ~= "" then
+						table.insert(items, { id = full_name, label = full_name })
+					end
+				end
+				fetch_done(items, nil)
+			end)
+		end,
+		on_select = function(item)
+			---@type AtlasGitHubIssuesViewConfig
+			local view = {
+				name = "Search",
+				search = string.format("repo:%s is:issue", item.id),
+			}
+			require("atlas").open("issues", "github", { initial_view = view })
+			done(nil, nil)
+		end,
+		on_cancel = function()
+			done(nil, nil)
+		end,
+	})
 end
 
 ---@param ctx AtlasIssueActionContext
@@ -451,7 +499,9 @@ register({
 register({ id = "assign", label = "Edit Assignees", is_available = assign_available, run = assign })
 register({ id = "labels", label = "Edit Labels", is_available = labels_available, run = labels })
 register({ id = "create_issue", label = "Create Issue", run = create_issue })
-register({ id = "search", label = "Search Issues", run = search })
+register({ id = "search", label = "Search repositories", run = search })
+register({ id = "search_issues", label = "Search issues", run = search_issues })
+register(actions.manage_templates)
 register(actions.browse_issue)
 register(actions.copy_issue_key)
 register({

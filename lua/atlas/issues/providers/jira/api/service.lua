@@ -135,8 +135,11 @@ function M.request(method, endpoint, data, on_done, ctx)
 			return
 		end
 
-		if result.errorMessages or result.errors then
+		if result.errorMessage or result.errorMessages or result.errors then
 			local messages = {}
+			if result.errorMessage then
+				table.insert(messages, result.errorMessage)
+			end
 			for _, msg in ipairs(result.errorMessages or {}) do
 				table.insert(messages, msg)
 			end

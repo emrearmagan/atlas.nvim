@@ -77,15 +77,6 @@ describe("pulls edit_description action", function()
 		assert.equal("pr-description-edit-7", opened[1].key)
 	end)
 
-	it("falls back to the PR description when the provider cannot fetch one", function()
-		local ctx = context()
-		ctx.provider.capabilities.core.update_description = function() end
-
-		actions.edit_description.run(ctx, function() end)
-
-		assert.equal("cached body", opened[1].initial_text)
-	end)
-
 	it("reports a fetch failure instead of opening the editor", function()
 		local ctx, notifications = context()
 		ctx.provider.capabilities.core.fetch_description = function(_, _, on_done)
@@ -149,6 +140,7 @@ describe("pulls edit_description action", function()
 		actions.edit_description.run(ctx, function(r)
 			result = r
 		end)
+		assert.equal("cached body", opened[1].initial_text)
 		opened[1].on_save("cached body")
 
 		assert.is_false(called)

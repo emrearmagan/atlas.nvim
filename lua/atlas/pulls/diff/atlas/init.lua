@@ -378,6 +378,10 @@ local function register_keymaps(session)
 		select_file = function(index, focus_diff)
 			select_file(session, index)
 			local state = session.viewer_state
+			local line = explorer.line_for_file(session, index)
+			if line and state.panel.win and vim.api.nvim_win_is_valid(state.panel.win) then
+				vim.api.nvim_win_set_cursor(state.panel.win, { line, 0 })
+			end
 			local win = state.right.win or state.left.win
 			if focus_diff and win then
 				vim.api.nvim_set_current_win(win)

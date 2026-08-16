@@ -481,12 +481,18 @@ end
 
 ---@param result IssuesActionResult|nil
 function M.apply_action_result(result)
-	if result == nil then
+	if result == nil or result.issue_key == nil or result.issue_key == "" then
 		return
 	end
-	if result.issue_key ~= nil and result.issue_key ~= "" then
-		M.refresh_current_view(nil, result.issue_key)
+
+	for _, issue in ipairs(state.issues or {}) do
+		if issue.key == result.issue_key and not result.removed then
+			M.refresh_issue(result.issue_key)
+			return
+		end
 	end
+
+	M.refresh_current_view(nil, result.issue_key)
 end
 
 ---@param issue Issue|string|nil

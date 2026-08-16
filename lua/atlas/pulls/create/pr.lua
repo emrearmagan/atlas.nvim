@@ -4,9 +4,9 @@ local form = require("atlas.ui.popups.form")
 local git_branch = require("atlas.core.git")
 local keymaps = require("atlas.core.keymaps")
 local logger = require("atlas.core.logger")
+local picker = require("atlas.picker")
 local description = require("atlas.pulls.create.description")
 local pulls_helper = require("atlas.pulls.ui.main.helper")
-local multi_select = require("atlas.ui.popups.multi_select")
 local notify = require("atlas.core.notify")
 
 ---@class CreatePRFields
@@ -212,15 +212,17 @@ local function pick_base(pr_state, on_change)
 		return
 	end
 
-	vim.ui.select(choices, {
-		prompt = "Select base branch:",
-	}, function(choice)
-		if type(choice) ~= "string" or choice == "" then
-			return
-		end
-		pr_state.fields.base = choice
-		on_change()
-	end)
+	picker.select({
+		title = "Select base branch:",
+		items = choices,
+		on_select = function(choice)
+			if type(choice) ~= "string" or choice == "" then
+				return
+			end
+			pr_state.fields.base = choice
+			on_change()
+		end,
+	})
 end
 
 ---@param pr_state CreatePRState
@@ -257,17 +259,16 @@ local function pick_reviewers(pr_state, on_change)
 		on_change()
 	end
 
-	multi_select.open({
+	picker.multi_select({
 		items = reviewers,
 		selected = selected,
 		key = function(item)
 			return item.provider_id
 		end,
-		format = function(item)
+		format_item = function(item)
 			return item.label
 		end,
-		prompt = "Reviewers:",
-		on_change = sync_selection,
+		title = "Reviewers",
 		on_done = sync_selection,
 	})
 end

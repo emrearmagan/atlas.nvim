@@ -9,12 +9,11 @@ local function stub_client(gh)
 	github_client.install({ gh = gh })
 end
 
-describe("github pullrequests.update_description", function()
+describe("github pull request updates", function()
 	local calls
 
 	before_each(function()
 		calls = {}
-		package.loaded["atlas.pulls.providers.github.api.pullrequests"] = nil
 	end)
 
 	after_each(function()
@@ -29,32 +28,37 @@ describe("github pullrequests.update_description", function()
 		end)
 		local api = fresh_module()
 
-		local ok, err
-		api.update_description({ id = 42, repo_full_name = "" }, "New body", function(success, e)
-			ok, err = success, e
-		end)
-
-		assert.is_false(ok)
-		assert.equal("Missing repo", err)
+		for action, value in pairs({ update_title = "New title", update_description = "New body" }) do
+			local ok, err
+			api[action]({ id = 42, repo_full_name = "" }, value, function(success, e)
+				ok, err = success, e
+			end)
+			assert.is_false(ok)
+			assert.equal("Missing repo", err)
+		end
 		assert.equal(0, #calls)
 	end)
 
-	it("runs gh pr edit with the new body", function()
+	it("runs gh pr edit with the new title and body", function()
 		stub_client(function(args, callback)
 			table.insert(calls, args)
 			callback(nil, nil)
 		end)
 		local api = fresh_module()
 
-		local ok, err
-		api.update_description({ id = 42, repo_full_name = "octo/repo" }, "Line one\nLine two", function(success, e)
-			ok, err = success, e
+		local pr = { id = 42, repo_full_name = "octo/repo" }
+		api.update_title(pr, "New title", function(success, err)
+			assert.is_true(success)
+			assert.is_nil(err)
+		end)
+		api.update_description(pr, "Line one\nLine two", function(success, err)
+			assert.is_true(success)
+			assert.is_nil(err)
 		end)
 
-		assert.is_true(ok)
-		assert.is_nil(err)
-		assert.equal(1, #calls)
-		assert.same({ "pr", "edit", "42", "--repo", "octo/repo", "--body", "Line one\nLine two" }, calls[1])
+		assert.equal(2, #calls)
+		assert.same({ "pr", "edit", "42", "--repo", "octo/repo", "--title", "New title" }, calls[1])
+		assert.same({ "pr", "edit", "42", "--repo", "octo/repo", "--body", "Line one\nLine two" }, calls[2])
 	end)
 
 	it("clears an empty description", function()
@@ -79,12 +83,13 @@ describe("github pullrequests.update_description", function()
 		end)
 		local api = fresh_module()
 
-		local ok, err
-		api.update_description({ id = 42, repo_full_name = "octo/repo" }, "New body", function(success, e)
-			ok, err = success, e
-		end)
-
-		assert.is_false(ok)
-		assert.equal("boom", err)
+		for action, value in pairs({ update_title = "New title", update_description = "New body" }) do
+			local ok, err
+			api[action]({ id = 42, repo_full_name = "octo/repo" }, value, function(success, e)
+				ok, err = success, e
+			end)
+			assert.is_false(ok)
+			assert.equal("boom", err)
+		end
 	end)
 end)

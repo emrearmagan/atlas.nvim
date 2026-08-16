@@ -87,8 +87,12 @@
 
 -- Config
 
----@class AtlasConfig
+---@class AtlasUIConfig
 ---@field global_statusline boolean|nil Set one statusline across all windows (default: true)
+---@field picker AtlasPickerName|nil
+
+---@class AtlasConfig
+---@field ui AtlasUIConfig|nil
 ---@field pulls AtlasPullsConfig|nil
 ---@field issues AtlasIssuesConfig|nil
 ---@field keymaps AtlasKeymapsConfig|nil  -- see core/keymaps.lua for type
@@ -97,7 +101,10 @@ local M = {}
 
 ---@type AtlasConfig
 M.options = {
-	global_statusline = true,
+	ui = {
+		global_statusline = true,
+		picker = "auto",
+	},
 	pulls = {
 		delete_notes = false,
 		default_merge_method = "merge",
@@ -160,6 +167,7 @@ M.options = {
 				request_changes = "gr",
 				submit_review = "gs",
 				explorer = {
+					find_file = "<leader>ff",
 					next_file = { "]f", "<Tab>" },
 					previous_file = { "[f", "<S-Tab>" },
 					next_unreviewed_file = "]u",
@@ -215,7 +223,7 @@ M.options = {
 function M.setup(opts)
 	local resolved = opts or {}
 	M.options = vim.tbl_deep_extend("force", M.options, resolved)
-	if M.options.global_statusline ~= false then
+	if M.options.ui.global_statusline ~= false then
 		vim.opt.laststatus = 3
 	end
 end

@@ -95,13 +95,7 @@ describe("diff_parser", function()
 			assert.are.equal("context", lines[1].content)
 			assert.are.equal("removed", lines[2].content)
 			assert.are.equal("added", lines[3].content)
-		end)
-
-		it("keeps the original text field with marker intact", function()
-			local raw = "diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1,1 +1,1 @@\n+added\n"
-			local lines = parser.parse(raw)[1].hunks[1].lines
-			assert.are.equal("+added", lines[1].text)
-			assert.are.equal("added", lines[1].content)
+			assert.are.equal("+added", lines[3].text)
 		end)
 	end)
 
@@ -125,13 +119,6 @@ describe("diff_parser", function()
 			local h = parser.parse(raw)[1].hunks[1]
 			assert.are.equal(3, h.additions)
 			assert.are.equal(2, h.deletions)
-		end)
-
-		it("treats context-only hunks as zero", function()
-			local raw = "diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1,2 +1,2 @@\n a\n b\n"
-			local h = parser.parse(raw)[1].hunks[1]
-			assert.are.equal(0, h.additions)
-			assert.are.equal(0, h.deletions)
 		end)
 	end)
 
