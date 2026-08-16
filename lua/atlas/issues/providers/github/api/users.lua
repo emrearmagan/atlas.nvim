@@ -28,37 +28,4 @@ function M.get_user(on_done)
 	})
 end
 
----@param slug string
----@param query string|nil
----@param on_done fun(users: IssueUser[]|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.get_assignable_users(slug, query, on_done)
-	if type(slug) ~= "string" or slug == "" then
-		on_done(nil, "Missing repository slug")
-		return nil
-	end
-
-	local q = vim.trim(tostring(query or ""))
-	return cli.gh({ "api", "--paginate", string.format("repos/%s/assignees?per_page=100", slug) }, function(result, err)
-		if err or type(result) ~= "table" then
-			on_done(nil, err)
-			return
-		end
-		local users = {}
-		for _, raw in ipairs(result) do
-			local user = normalizer.to_user(raw)
-			if user then
-				if
-					q == ""
-					or user.display_name:lower():find(q:lower(), 1, true)
-					or user.account_id:lower():find(q:lower(), 1, true)
-				then
-					table.insert(users, user)
-				end
-			end
-		end
-		on_done(users, nil)
-	end)
-end
-
 return M

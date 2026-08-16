@@ -34,6 +34,13 @@ local function id_tail(gid)
 	return tostring(gid or ""):match("([^/]+)$") or ""
 end
 
+---@param path string
+---@param iid integer
+---@return string
+local function discussions_cache_key(path, iid)
+	return string.format("gitlab:discussions:%s#%d", path, iid)
+end
+
 ---@param key string
 ---@param opts { force_load?: boolean }|nil
 ---@param on_done fun(discussions: table[]|nil, err: string|nil)
@@ -46,7 +53,7 @@ local function fetch_discussions(key, opts, on_done)
 		return nil
 	end
 
-	local cache_key = string.format("gitlab:discussions:%s#%d", path, iid)
+	local cache_key = discussions_cache_key(path, iid)
 	if not opts.force_load then
 		local cached, ok = service.get_memory_cache(cache_key)
 		if ok then
@@ -75,34 +82,44 @@ local function fetch_discussions(key, opts, on_done)
 	})
 end
 
+---@param discussions table[]
+---@return IssueComment[], IssueActivityEntry[]
+local function map_discussions(discussions)
+	local comments = {}
+	local events = {}
+	for _, discussion in ipairs(discussions) do
+		local discussion_id = id_tail(discussion.id)
+		local first_id = nil
+		for _, raw in ipairs(type(discussion.notes) == "table" and discussion.notes.nodes or {}) do
+			if raw.system == true then
+				local entry = normalizer.to_activity_from_note(raw)
+				if entry then
+					table.insert(events, entry)
+				end
+			else
+				local comment = normalizer.to_comment_from_note(raw, first_id, discussion_id)
+				if comment then
+					first_id = first_id or comment.id
+					table.insert(comments, comment)
+				end
+			end
+		end
+	end
+	return comments, events
+end
+
 ---@param key string
 ---@param opts { force_load?: boolean }|nil
----@param on_done fun(comments: IssueComment[]|nil, err: string|nil)
+---@param on_done fun(result: { comments: IssueComment[], events: IssueActivityEntry[] }|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.list_comments(key, opts, on_done)
+function M.list_conversation(key, opts, on_done)
 	return fetch_discussions(key, opts, function(discussions, err)
 		if err or discussions == nil then
 			on_done(nil, err)
 			return
 		end
-		local out = {}
-		for _, discussion in ipairs(discussions) do
-			local discussion_id = id_tail(discussion.id)
-			local notes = type(discussion.notes) == "table" and discussion.notes.nodes or {}
-			local first_id = nil
-			for _, raw in ipairs(notes) do
-				if raw.system ~= true then
-					local c = normalizer.to_comment_from_note(raw, first_id, discussion_id)
-					if c then
-						if first_id == nil then
-							first_id = c.id
-						end
-						table.insert(out, c)
-					end
-				end
-			end
-		end
-		on_done(out, nil)
+		local comments, events = map_discussions(discussions)
+		on_done({ comments = comments, events = events }, nil)
 	end)
 end
 
@@ -116,18 +133,8 @@ function M.list_history(key, opts, on_done)
 			on_done(nil, err)
 			return
 		end
-		local out = {}
-		for _, discussion in ipairs(discussions) do
-			for _, raw in ipairs(type(discussion.notes) == "table" and discussion.notes.nodes or {}) do
-				if raw.system == true then
-					local entry = normalizer.to_activity_from_note(raw)
-					if entry then
-						table.insert(out, entry)
-					end
-				end
-			end
-		end
-		on_done(out, nil)
+		local _, events = map_discussions(discussions)
+		on_done(events, nil)
 	end)
 end
 
@@ -146,16 +153,23 @@ function M.add(key, body, on_done)
 		return nil
 	end
 
-	local endpoint = string.format("/projects/%s/issues/%d/notes", service.url_encode(path), iid)
+	local endpoint = string.format("/projects/%s/issues/%d/discussions", service.url_encode(path), iid)
 	return service.request("POST", endpoint, { body = body }, function(result, err)
 		if err or type(result) ~= "table" then
 			on_done(nil, err or "Empty response")
 			return
 		end
-		service.delete_memory_cache(string.format("gitlab:discussions:%s#%d", path, iid))
-		on_done(normalizer.to_comment_from_note(result), nil)
+		local discussion_id = tostring(result.id or "")
+		local notes = type(result.notes) == "table" and result.notes or {}
+		local comment = normalizer.to_comment_from_note(notes[1], nil, discussion_id)
+		if comment == nil then
+			on_done(nil, "GitLab did not return the created comment")
+			return
+		end
+		service.delete_memory_cache(discussions_cache_key(path, iid))
+		on_done(comment, nil)
 	end, {
-		action = "Add note",
+		action = "Add discussion",
 		path = path,
 		iid = iid,
 	})
@@ -188,7 +202,7 @@ function M.reply_in_discussion(key, parent, body, on_done)
 			on_done(nil, err or "Empty response")
 			return
 		end
-		service.delete_memory_cache(string.format("gitlab:discussions:%s#%d", path, iid))
+		service.delete_memory_cache(discussions_cache_key(path, iid))
 		on_done(normalizer.to_comment_from_note(result, parent.id, discussion_id), nil)
 	end, {
 		action = "Reply in discussion",
@@ -199,11 +213,11 @@ function M.reply_in_discussion(key, parent, body, on_done)
 end
 
 ---@param key string
----@param note_id string|number
+---@param comment IssueComment
 ---@param body string
 ---@param on_done fun(comment: IssueComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.edit(key, note_id, body, on_done)
+function M.edit(key, comment, body, on_done)
 	local path, iid = normalizer.parse_key(key)
 	if path == "" or iid == nil then
 		on_done(nil, "Invalid issue key")
@@ -214,46 +228,71 @@ function M.edit(key, note_id, body, on_done)
 		return nil
 	end
 
-	local endpoint = string.format("/projects/%s/issues/%d/notes/%s", service.url_encode(path), iid, tostring(note_id))
+	local note_id = tostring(comment.id)
+	local discussion_id = comment._raw and tostring(comment._raw.discussion_id or "") or ""
+	local endpoint = string.format("/projects/%s/issues/%d/notes/%s", service.url_encode(path), iid, note_id)
+	if discussion_id ~= "" then
+		endpoint = string.format(
+			"/projects/%s/issues/%d/discussions/%s/notes/%s",
+			service.url_encode(path),
+			iid,
+			discussion_id,
+			note_id
+		)
+	end
 	return service.request("PUT", endpoint, { body = body }, function(result, err)
 		if err or type(result) ~= "table" then
 			on_done(nil, err or "Empty response")
 			return
 		end
-		service.delete_memory_cache(string.format("gitlab:discussions:%s#%d", path, iid))
-		on_done(normalizer.to_comment_from_note(result), nil)
+		service.delete_memory_cache(discussions_cache_key(path, iid))
+		on_done(
+			normalizer.to_comment_from_note(result, comment.parent_id, discussion_id ~= "" and discussion_id or nil),
+			nil
+		)
 	end, {
 		action = "Edit note",
 		path = path,
 		iid = iid,
-		note_id = tostring(note_id),
+		note_id = note_id,
 	})
 end
 
 ---@param key string
----@param note_id string|number
+---@param comment IssueComment
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.delete(key, note_id, on_done)
+function M.delete(key, comment, on_done)
 	local path, iid = normalizer.parse_key(key)
 	if path == "" or iid == nil then
 		on_done(false, "Invalid issue key")
 		return nil
 	end
 
-	local endpoint = string.format("/projects/%s/issues/%d/notes/%s", service.url_encode(path), iid, tostring(note_id))
+	local note_id = tostring(comment.id)
+	local discussion_id = comment._raw and tostring(comment._raw.discussion_id or "") or ""
+	local endpoint = string.format("/projects/%s/issues/%d/notes/%s", service.url_encode(path), iid, note_id)
+	if discussion_id ~= "" then
+		endpoint = string.format(
+			"/projects/%s/issues/%d/discussions/%s/notes/%s",
+			service.url_encode(path),
+			iid,
+			discussion_id,
+			note_id
+		)
+	end
 	return service.request("DELETE", endpoint, nil, function(_, err)
 		if err then
 			on_done(false, err)
 			return
 		end
-		service.delete_memory_cache(string.format("gitlab:discussions:%s#%d", path, iid))
+		service.delete_memory_cache(discussions_cache_key(path, iid))
 		on_done(true, nil)
 	end, {
 		action = "Delete note",
 		path = path,
 		iid = iid,
-		note_id = tostring(note_id),
+		note_id = note_id,
 	})
 end
 
@@ -280,7 +319,7 @@ function M.add_reaction(key, note_id, name, on_done)
 			on_done(false, err)
 			return
 		end
-		service.delete_memory_cache(string.format("gitlab:discussions:%s#%d", path, iid))
+		service.delete_memory_cache(discussions_cache_key(path, iid))
 		on_done(true, nil)
 	end, {
 		action = "Add reaction",

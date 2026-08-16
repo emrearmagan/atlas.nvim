@@ -3,7 +3,8 @@ local M = {}
 local form = require("atlas.ui.popups.form")
 local notify = require("atlas.core.notify")
 local picker = require("atlas.picker")
-local pulls_helper = require("atlas.pulls.ui.main.helper")
+local request_scope = require("atlas.core.requests")
+local highlights = require("atlas.ui.shared.highlights")
 local icons = require("atlas.ui.shared.icons")
 local templates = require("atlas.issues.templates")
 
@@ -16,9 +17,9 @@ local templates = require("atlas.issues.templates")
 ---@field title string
 
 ---@class GitLabCreateIssuePickers
----@field list_labels fun(on_done: fun(items: GitLabCreateIssueLabel[]|nil, err: string|nil))|nil
----@field list_assignees fun(on_done: fun(items: IssueUser[]|nil, err: string|nil))|nil
----@field list_milestones fun(on_done: fun(items: GitLabCreateIssueMilestone[]|nil, err: string|nil))|nil
+---@field list_labels fun(on_done: fun(items: GitLabCreateIssueLabel[]|nil, err: string|nil)): { cancel: fun() }|nil
+---@field list_assignees fun(on_done: fun(items: IssueUser[]|nil, err: string|nil)): { cancel: fun() }|nil
+---@field list_milestones fun(on_done: fun(items: GitLabCreateIssueMilestone[]|nil, err: string|nil)): { cancel: fun() }|nil
 
 ---@class GitLabCreateIssueFields
 ---@field project_path string
@@ -32,6 +33,7 @@ local templates = require("atlas.issues.templates")
 ---@field content_width integer
 ---@field is_submitting boolean
 ---@field pickers GitLabCreateIssuePickers
+---@field requests AtlasRequestScope
 ---@field on_done fun(result: GitLabIssueEditorResult|nil, err: string|nil)|nil
 
 ---@param project_path string
@@ -43,7 +45,7 @@ local function default_pickers(project_path)
 
 	return {
 		list_labels = function(cb)
-			labels_api.list(project_path, function(items, err)
+			return labels_api.list(project_path, function(items, err)
 				if err or items == nil then
 					cb(nil, err)
 					return
@@ -56,10 +58,10 @@ local function default_pickers(project_path)
 			end)
 		end,
 		list_assignees = function(cb)
-			users_api.list_members(project_path, "", cb)
+			return users_api.list_members(project_path, "", cb)
 		end,
 		list_milestones = function(cb)
-			milestones_api.list(project_path, function(items, err)
+			return milestones_api.list(project_path, function(items, err)
 				if err or items == nil then
 					cb(nil, err)
 					return
@@ -72,6 +74,15 @@ local function default_pickers(project_path)
 			end)
 		end,
 	}
+end
+
+---@param repo string
+---@return string
+local function repo_hl(repo)
+	if repo == "" then
+		return "AtlasTextMutedItalic"
+	end
+	return highlights.dynamic_for(repo:lower()) or "AtlasTextMuted"
 end
 
 ---@class GitLabIssueEditorResult
@@ -171,7 +182,7 @@ local function meta_rows(issue_state)
 	return {
 		{
 			"Project:",
-			{ text = repo, hl = pulls_helper.repo_hl(repo) },
+			{ text = repo, hl = repo_hl(repo) },
 			"Milestone:",
 			{ text = milestone_text, hl = milestone_hl },
 		},
@@ -197,6 +208,7 @@ end
 
 ---@param issue_state GitLabCreateIssueState
 local function close(issue_state)
+	issue_state.requests.cancel()
 	form.close(issue_state.layout)
 	issue_state.layout = {}
 	issue_state.is_submitting = false
@@ -226,38 +238,36 @@ local function pick_assignees(issue_state)
 	end
 
 	form.notify("loading", "Loading assignees...")
-	issue_state.pickers.list_assignees(function(items, err)
-		vim.schedule(function()
-			if err then
-				form.notify("error", "Load members failed: " .. tostring(err))
-				return
-			end
-			if type(items) ~= "table" or #items == 0 then
-				form.notify("warn", "No assignable members", 1500)
-				return
-			end
-			form.clear_notice()
-			picker.multi_select({
-				items = items,
-				selected = issue_state.fields.assignees,
-				key = function(item)
-					return tostring(item.id or item.account_id or "")
-				end,
-				format_item = function(item)
-					return string.format(
-						"%s %s (@%s)",
-						icons.general("user"),
-						item.display_name or item.account_id,
-						item.account_id
-					)
-				end,
-				title = "Assignees",
-				on_done = function(selected)
-					issue_state.fields.assignees = selected or {}
-					render_meta(issue_state)
-				end,
-			})
-		end)
+	issue_state.requests.run(issue_state.pickers.list_assignees, function(items, err)
+		if err then
+			form.notify("error", "Load members failed: " .. tostring(err))
+			return
+		end
+		if type(items) ~= "table" or #items == 0 then
+			form.notify("warn", "No assignable members", 1500)
+			return
+		end
+		form.clear_notice()
+		picker.multi_select({
+			items = items,
+			selected = issue_state.fields.assignees,
+			key = function(item)
+				return tostring(item.id or item.account_id or "")
+			end,
+			format_item = function(item)
+				return string.format(
+					"%s %s (@%s)",
+					icons.general("user"),
+					item.display_name or item.account_id,
+					item.account_id
+				)
+			end,
+			title = "Assignees",
+			on_done = function(selected)
+				issue_state.fields.assignees = selected or {}
+				render_meta(issue_state)
+			end,
+		})
 	end)
 end
 
@@ -269,33 +279,31 @@ local function pick_labels(issue_state)
 	end
 
 	form.notify("loading", "Loading labels...")
-	issue_state.pickers.list_labels(function(items, err)
-		vim.schedule(function()
-			if err then
-				form.notify("error", "Load labels failed: " .. tostring(err))
-				return
-			end
-			if type(items) ~= "table" or #items == 0 then
-				form.notify("warn", "No labels available", 1500)
-				return
-			end
-			form.clear_notice()
-			picker.multi_select({
-				items = items,
-				selected = issue_state.fields.labels,
-				key = function(item)
-					return tostring(item.name or "")
-				end,
-				format_item = function(item)
-					return tostring(item.name or "")
-				end,
-				title = "Labels",
-				on_done = function(selected)
-					issue_state.fields.labels = selected or {}
-					render_meta(issue_state)
-				end,
-			})
-		end)
+	issue_state.requests.run(issue_state.pickers.list_labels, function(items, err)
+		if err then
+			form.notify("error", "Load labels failed: " .. tostring(err))
+			return
+		end
+		if type(items) ~= "table" or #items == 0 then
+			form.notify("warn", "No labels available", 1500)
+			return
+		end
+		form.clear_notice()
+		picker.multi_select({
+			items = items,
+			selected = issue_state.fields.labels,
+			key = function(item)
+				return tostring(item.name or "")
+			end,
+			format_item = function(item)
+				return tostring(item.name or "")
+			end,
+			title = "Labels",
+			on_done = function(selected)
+				issue_state.fields.labels = selected or {}
+				render_meta(issue_state)
+			end,
+		})
 	end)
 end
 
@@ -307,40 +315,38 @@ local function pick_milestone(issue_state)
 	end
 
 	form.notify("loading", "Loading milestones...")
-	issue_state.pickers.list_milestones(function(items, err)
-		vim.schedule(function()
-			if err then
-				form.notify("error", "Load milestones failed: " .. tostring(err))
-				return
-			end
-			form.clear_notice()
+	issue_state.requests.run(issue_state.pickers.list_milestones, function(items, err)
+		if err then
+			form.notify("error", "Load milestones failed: " .. tostring(err))
+			return
+		end
+		form.clear_notice()
 
-			local choices = { "None" }
-			local map = {}
-			for _, item in ipairs(items or {}) do
-				local label = tostring(item.title or "")
-				if label ~= "" then
-					table.insert(choices, label)
-					map[label] = item
+		local choices = { "None" }
+		local map = {}
+		for _, item in ipairs(items or {}) do
+			local label = tostring(item.title or "")
+			if label ~= "" then
+				table.insert(choices, label)
+				map[label] = item
+			end
+		end
+
+		picker.select({
+			title = "Select milestone:",
+			items = choices,
+			on_select = function(choice)
+				if choice == nil then
+					return
 				end
-			end
-
-			picker.select({
-				title = "Select milestone:",
-				items = choices,
-				on_select = function(choice)
-					if choice == nil then
-						return
-					end
-					if choice == "None" then
-						issue_state.fields.milestone = nil
-					else
-						issue_state.fields.milestone = map[choice]
-					end
-					render_meta(issue_state)
-				end,
-			})
-		end)
+				if choice == "None" then
+					issue_state.fields.milestone = nil
+				else
+					issue_state.fields.milestone = map[choice]
+				end
+				render_meta(issue_state)
+			end,
+		})
 	end)
 end
 
@@ -373,46 +379,46 @@ local function submit(issue_state)
 	form.notify("loading", "Creating issue...")
 
 	local issues_api = require("atlas.issues.providers.gitlab.api.issues")
-	issues_api.create_issue({
-		project_path = issue_state.fields.project_path,
-		title = title,
-		description = get_body(issue_state),
-		labels = label_names,
-		assignee_ids = assignee_ids,
-		milestone_id = issue_state.fields.milestone and issue_state.fields.milestone.id or nil,
-	}, function(result, err)
-		vim.schedule(function()
-			issue_state.is_submitting = false
+	issue_state.requests.run(function(done)
+		return issues_api.create_issue({
+			project_path = issue_state.fields.project_path,
+			title = title,
+			description = get_body(issue_state),
+			labels = label_names,
+			assignee_ids = assignee_ids,
+			milestone_id = issue_state.fields.milestone and issue_state.fields.milestone.id or nil,
+		}, done)
+	end, function(result, err)
+		issue_state.is_submitting = false
 
-			if err then
-				form.notify("error", "Create issue failed: " .. tostring(err))
-				if issue_state.on_done then
-					issue_state.on_done(nil, err)
-				end
-				return
-			end
-
-			local url = result and result.url or nil
-			local message = "Issue created"
-			if type(url) == "string" and url ~= "" then
-				message = message .. ": " .. url
-				pcall(vim.fn.setreg, "+", url)
-			end
-
+		if err then
+			form.notify("error", "Create issue failed: " .. tostring(err))
 			if issue_state.on_done then
-				issue_state.on_done({
-					url = url,
-					key = result and result.key or nil,
-					iid = result and result.iid or nil,
-				}, nil)
+				issue_state.on_done(nil, err)
 			end
+			return
+		end
 
-			close(issue_state)
-			notify.info(message, { timeout = 1200 })
-			if type(url) == "string" and url ~= "" then
-				require("atlas.commands.open").open(url)
-			end
-		end)
+		local url = result and result.url or nil
+		local message = "Issue created"
+		if type(url) == "string" and url ~= "" then
+			message = message .. ": " .. url
+			pcall(vim.fn.setreg, "+", url)
+		end
+
+		if issue_state.on_done then
+			issue_state.on_done({
+				url = url,
+				key = result and result.key or nil,
+				iid = result and result.iid or nil,
+			}, nil)
+		end
+
+		close(issue_state)
+		notify.info(message, { timeout = 1200 })
+		if type(url) == "string" and url ~= "" then
+			require("atlas.commands.open").open(url)
+		end
 	end)
 end
 
@@ -433,8 +439,7 @@ function M.open(opts)
 		return
 	end
 
-	require("atlas.ui.shared.highlights").setup()
-	require("atlas.pulls.ui.highlights").setup()
+	highlights.setup()
 	require("atlas.issues.providers.gitlab.highlights").setup()
 
 	---@type GitLabCreateIssueState
@@ -449,6 +454,7 @@ function M.open(opts)
 		content_width = 80,
 		is_submitting = false,
 		pickers = default_pickers(project_path),
+		requests = request_scope.new(),
 		on_done = opts.on_done,
 	}
 

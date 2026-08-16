@@ -49,7 +49,9 @@ local function format_reactions(reactions)
 		return "", {}
 	end
 	local emoji_by_key, order = {}, {}
-	for _, opt in ipairs(state.reaction_options or {}) do
+	local provider = require("atlas.issues.state").provider
+	local comments = provider and provider.capabilities.comments
+	for _, opt in ipairs((comments and comments.reaction_options) or {}) do
 		emoji_by_key[opt.key] = opt.emoji
 		table.insert(order, opt.key)
 	end
@@ -126,11 +128,13 @@ end
 local function build_comment_sections(comment, verb, width, show_actions)
 	local author = author_name(comment.author)
 	local actions = {}
-	if show_actions ~= false then
+	if show_actions ~= false and comment.deleted ~= true then
 		table.insert(actions, string.format("%s (c)", icons.general("reply")))
 		if is_own_comment(comment) then
 			table.insert(actions, string.format("%s (e)", icons.general("edit")))
-			table.insert(actions, string.format("%s (d)", icons.general("delete")))
+			if tostring(comment.id) ~= "__body__" then
+				table.insert(actions, string.format("%s (d)", icons.general("delete")))
+			end
 		end
 	end
 

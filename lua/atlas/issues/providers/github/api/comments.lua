@@ -1,5 +1,6 @@
 local M = {}
 
+local cache = require("atlas.issues.providers.github.api.cache")
 local cli = require("atlas.providers.github.client").issues
 local normalizer = require("atlas.issues.providers.github.api.mapper")
 
@@ -27,8 +28,7 @@ function M.add(key, body, on_done)
 				on_done(nil, err or "Empty response")
 				return
 			end
-			cli.delete_cache(string.format("github_issues:comments:%s#%d", slug, number))
-			cli.delete_cache(string.format("github_issues:conversation:%s#%d", slug, number))
+			cache.invalidate(key)
 			on_done(normalizer.to_comment(result), nil)
 		end,
 		{
@@ -64,11 +64,7 @@ function M.edit(key, comment_id, body, on_done)
 				on_done(nil, err or "Empty response")
 				return
 			end
-			local _, number = normalizer.parse_key(key)
-			if number ~= nil then
-				cli.delete_cache(string.format("github_issues:comments:%s#%d", slug, number))
-				cli.delete_cache(string.format("github_issues:conversation:%s#%d", slug, number))
-			end
+			cache.invalidate(key)
 			on_done(normalizer.to_comment(result), nil)
 		end,
 		{
@@ -84,7 +80,7 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.delete(key, comment_id, on_done)
-	local slug, number = normalizer.parse_key(key)
+	local slug, _ = normalizer.parse_key(key)
 	if slug == "" then
 		on_done(false, "Invalid issue key")
 		return nil
@@ -99,10 +95,7 @@ function M.delete(key, comment_id, on_done)
 				on_done(false, err)
 				return
 			end
-			if number ~= nil then
-				cli.delete_cache(string.format("github_issues:comments:%s#%d", slug, number))
-				cli.delete_cache(string.format("github_issues:conversation:%s#%d", slug, number))
-			end
+			cache.invalidate(key)
 			on_done(true, nil)
 		end,
 		{
