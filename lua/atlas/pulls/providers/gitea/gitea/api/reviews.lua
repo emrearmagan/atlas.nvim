@@ -217,45 +217,14 @@ local function fetch_comments(pr, _, on_done)
 	end
 
 	local cancelled, active = false, nil
-	local function fetch_reactions(comments, index, on_reactions_done)
-		if cancelled then
-			return
-		end
-		local comment = comments[index]
-		if not comment then
-			on_reactions_done()
-			return
-		end
-		local id = tostring(comment.id or "")
-		local repo = base:match("^(.-)/pulls/%d+$")
-		if not repo or not id:match("^%d+$") then
-			fetch_reactions(comments, index + 1, on_reactions_done)
-			return
-		end
-		active = service.request(
-			"GET",
-			string.format("%s/issues/comments/%s/reactions", repo, id),
-			nil,
-			function(values, err)
-				if cancelled then
-					return
-				end
-				if not err and is_list(values) then
-					comment.reactions = mapper.reaction_counts(values)
-				end
-				fetch_reactions(comments, index + 1, on_reactions_done)
-			end
-		)
-	end
 	local function fetch_comments(reviews, index, comments)
 		if cancelled then
 			return
 		end
 		local review = reviews[index]
 		if review == nil then
-			fetch_reactions(comments, 1, function()
-				on_done(mapper.thread_comments(comments), nil, reviews)
-			end)
+			-- TODO: Load inline-comment reactions lazily when the diff UI requests them.
+			on_done(mapper.thread_comments(comments), nil, reviews)
 			return
 		end
 		local review_id = type(review) == "table" and tostring(review.id or "") or ""
