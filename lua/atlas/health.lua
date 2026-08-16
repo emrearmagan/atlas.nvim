@@ -97,7 +97,14 @@ local function check_bitbucket()
 		return
 	end
 
-	check_credentials(bitbucket, { "user", "token" }, "Bitbucket")
+	local credential_keys = { "user", "token" }
+	if bitbucket.api_type == "server" then
+		table.insert(credential_keys, "base_url")
+	end
+	check_credentials(bitbucket, credential_keys, "Bitbucket")
+	if bitbucket.api_type == "server" then
+		check_https_url(bitbucket.base_url, "pulls.providers.bitbucket.base_url")
+	end
 	check_views(bitbucket.views, "Bitbucket pulls")
 end
 

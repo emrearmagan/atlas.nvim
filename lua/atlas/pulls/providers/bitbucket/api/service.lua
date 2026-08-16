@@ -5,7 +5,13 @@ local logger = require("atlas.core.logger")
 local http = require("atlas.core.http")
 local memory_cache = require("atlas.core.memory_cache")
 
-local API_BASE = "https://api.bitbucket.org/2.0"
+local CLOUD_BASE = "https://api.bitbucket.org/2.0"
+local SERVER_API_PATH = "/rest/api/1.0"
+
+---@return AtlasBitbucketConfig
+local function bb_config()
+	return (((config.options or {}).pulls or {}).providers or {}).bitbucket or {} ---@type AtlasBitbucketConfig
+end
 
 ---@param err any
 ---@return string
@@ -13,14 +19,14 @@ local function sanitize_error(err)
 	return (tostring(err or ""):gsub("[\r\n]+", " | "))
 end
 
+---@return "cloud"|"server"
+function M.api_type()
+	return bb_config().api_type == "server" and "server" or "cloud"
+end
+
 ---@return string, string, string|nil
 function M.get_auth()
-	local bb = (
-		config.options
-		and config.options.pulls
-		and config.options.pulls.providers
-		and config.options.pulls.providers.bitbucket
-	) or {}
+	local bb = bb_config()
 	local user = tostring(bb.user or "")
 	local token = tostring(bb.token or "")
 
@@ -44,22 +50,52 @@ function M.build_headers(user, token, has_body)
 	}
 end
 
+---@return string
+function M.base_url()
+	if M.api_type() == "server" then
+		local cfg_base = tostring(bb_config().base_url or "")
+		return cfg_base:gsub("/+$", "") .. SERVER_API_PATH
+	end
+	return CLOUD_BASE
+end
+
 ---@param endpoint string
 ---@return string
 function M.url(endpoint)
 	if endpoint:sub(1, 1) ~= "/" then
 		endpoint = "/" .. endpoint
 	end
-	return API_BASE .. endpoint
+	return M.base_url() .. endpoint
+end
+
+---@param api_path string  e.g. "/rest/build-status/1.0"
+---@param endpoint string  e.g. "/commits/<sha>"
+---@return string
+function M.server_url(api_path, endpoint)
+	local cfg_base = tostring(bb_config().base_url or ""):gsub("/+$", "")
+	if endpoint:sub(1, 1) ~= "/" then
+		endpoint = "/" .. endpoint
+	end
+	return cfg_base .. api_path .. endpoint
+end
+
+---Normalize a Bitbucket Server clone path to PROJECT/repository.
+---HTTPS clone URLs may include the configured context path and an /scm prefix.
+---@param slug string|nil
+---@return string
+function M.normalize_server_repo_slug(slug)
+	local result = tostring(slug or ""):gsub("^/+", ""):gsub("%.git$", "")
+	local base_path = tostring(bb_config().base_url or ""):match("^https?://[^/]+(/[^?#]*)") or ""
+	base_path = base_path:gsub("^/+", ""):gsub("/+$", "")
+	if base_path ~= "" and result:sub(1, #base_path + 1) == base_path .. "/" then
+		result = result:sub(#base_path + 2)
+	end
+	return (result:gsub("^[Ss][Cc][Mm]/", ""))
 end
 
 ---@return number
 function M.cache_ttl()
-	local bb = config.options
-		and config.options.pulls
-		and config.options.pulls.providers
-		and config.options.pulls.providers.bitbucket
-	return ((bb and bb.cache_ttl) or 300)
+	return tonumber(bb_config().cache_ttl) or 300
 end
 
 function M.clear_cache()
@@ -84,19 +120,43 @@ function M.set_cache(key, value, ttl)
 	memory_cache.set(key, value, ttl or M.cache_ttl())
 end
 
+---@param key string
+function M.delete_cache(key)
+	memory_cache.delete(key)
+end
+
 ---@param result any
 ---@return string|nil
 function M.api_error_message(result)
-	if type(result) ~= "table" or result.error == nil then
+	if type(result) ~= "table" then
 		return nil
 	end
-	if type(result.error) == "table" and result.error.message then
-		return tostring(result.error.message)
+
+	-- Cloud: { error = { message = "..." } } or { error = "..." }
+	if result.error ~= nil then
+		if type(result.error) == "table" and result.error.message then
+			return tostring(result.error.message)
+		end
+		if type(result.error) == "string" then
+			return result.error
+		end
+		return "Bitbucket API error"
 	end
-	if type(result.error) == "string" then
-		return result.error
+
+	-- Server: { errors = [{ message, exceptionName, ... }] }
+	if type(result.errors) == "table" and #result.errors > 0 then
+		local parts = {}
+		for _, e in ipairs(result.errors) do
+			if type(e) == "table" and e.message then
+				table.insert(parts, tostring(e.message))
+			end
+		end
+		if #parts > 0 then
+			return table.concat(parts, " | ")
+		end
+		return "Bitbucket API error"
 	end
-	return "Bitbucket API error"
+	return nil
 end
 
 ---@param method string "GET"|"POST"|"PUT"|"DELETE"

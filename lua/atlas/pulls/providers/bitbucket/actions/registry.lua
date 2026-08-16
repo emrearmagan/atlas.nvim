@@ -8,6 +8,7 @@ local pullrequests = require("atlas.pulls.providers.bitbucket.api.pullrequests")
 local reviews = require("atlas.pulls.providers.bitbucket.api.reviews")
 local users_api = require("atlas.pulls.providers.bitbucket.api.users")
 local repositories = require("atlas.pulls.providers.bitbucket.api.repositories")
+local service = require("atlas.pulls.providers.bitbucket.api.service")
 local statusline = require("atlas.ui.statusline")
 
 ---@param ctx AtlasPullActionContext
@@ -238,9 +239,12 @@ register({
 
 register(actions.edit_title)
 register(actions.edit_description)
-register(actions.ready_for_review)
-register(actions.convert_to_draft)
 register(actions.edit_reviewers)
+
+if service.api_type() ~= "server" then
+	register(actions.ready_for_review)
+	register(actions.convert_to_draft)
+end
 
 register({
 	id = "search",

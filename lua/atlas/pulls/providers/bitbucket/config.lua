@@ -1,4 +1,4 @@
--- Example:
+-- Example — Bitbucket Cloud (default):
 --   require("atlas").setup({
 --     pulls = {
 --       providers = {
@@ -33,9 +33,27 @@
 --       },
 --     },
 --   })
+--
+-- Example — Bitbucket Server / Data Center:
+--   bitbucket = {
+--     api_type = "server",
+--     base_url = "https://bitbucket.your-company.com",
+--     user     = "admin",
+--     token    = vim.env.BITBUCKET_TOKEN,         -- PAT or password
+--     views = {
+--       {
+--         name = "All",
+--         key  = "1",
+--         repos = {
+--           -- `workspace` doubles as the project key on Server.
+--           { workspace = "ACME", repo = "core" },
+--         },
+--       },
+--     },
+--   }
 
 ---@class AtlasBitbucketRepoRef
----@field workspace string
+---@field workspace string  on Cloud: workspace slug; on Server: project key
 ---@field repo string
 
 ---@class AtlasBitbucketViewConfig : AtlasPullsViewConfig
@@ -46,5 +64,7 @@
 ---@class AtlasBitbucketConfig
 ---@field user string
 ---@field token string
+---@field api_type "cloud"|"server"|nil  defaults to "cloud"
+---@field base_url string|nil            required when api_type = "server"
 ---@field cache_ttl number|nil
 ---@field views AtlasBitbucketViewConfig[]|nil

@@ -74,6 +74,7 @@ With packer.nvim:
   - `git` and `curl` on `$PATH`
   - For GitHub: the `gh` CLI, authenticated via `gh auth login`
   - For Bitbucket: Bitbucket Cloud API token (`api.bitbucket.org`)
+    or Bitbucket Server / Data Center user + PAT (self-hosted, REST v1.0)
   - For GitLab: REST API v4 and a Personal Access Token with the `api` scope
   - For Jira: Cloud REST API v3 or Server REST API v2
 
@@ -254,14 +255,18 @@ GitHub search expression.
 ------------------------------------------------------------------------------
 BITBUCKET PULLS                                        *atlas-pulls-bitbucket*
 
-Bitbucket Cloud only. Auth uses an app password (or API token). Views are
-scoped to one or more `workspace/repo` pairs - Bitbucket doesn't have a
-cross-workspace search like GitHub does.
-
+Supports both Bitbucket Cloud and Bitbucket Server / Data Center. Cloud uses
+an app password (or API token); Server uses username + PAT (or password).
+Views are scoped to one or more `workspace/repo` pairs. On Server, use the
+project key as `workspace`. Bitbucket has no cross-workspace search like
+GitHub does.
 >lua
   pulls = {
     providers = {
       bitbucket = {
+        -- For self-hosted Bitbucket Server / Data Center set:
+        --   api_type = "server",
+        --   base_url = "https://bitbucket.your-company.com",
         user      = vim.env.BITBUCKET_USER,
         token     = vim.env.BITBUCKET_TOKEN,
         cache_ttl = 300,

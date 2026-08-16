@@ -78,7 +78,7 @@ use {
 - Neovim: `0.10+`
 - `git` and `curl` on `$PATH`
 - Jira: Jira Cloud REST API v3 (`*.atlassian.net`) or Jira Server REST API v2
-- Bitbucket: Bitbucket Cloud REST API 2.0 (`api.bitbucket.org`)
+- Bitbucket: Bitbucket Cloud REST API 2.0 (`api.bitbucket.org`) or Bitbucket Server / Data Center REST API 1.0 (self-hosted)
 - GitHub: GitHub CLI (`gh`) authenticated with `gh auth login`
 - GitLab: GitLab REST API v4 (`gitlab.com` or self-hosted), Personal Access Token with `api` scope
 
@@ -245,6 +245,8 @@ pulls = {
 
 <a id="bitbucket"></a>
 
+Atlas supports both Bitbucket Cloud and Bitbucket Server / Data Center. Cloud uses an app password (or API token); Server uses a username plus PAT (or password).
+In view entries, `workspace` is the Cloud workspace slug or the Server project key.
 <details>
 <summary><strong>Bitbucket</strong></summary>
 
@@ -252,6 +254,9 @@ pulls = {
 pulls = {
   providers = {
     bitbucket = {
+      -- For self-hosted Bitbucket Server / Data Center set:
+      --   api_type = "server",
+      --   base_url = "https://bitbucket.your-company.com",
       user = vim.env.BITBUCKET_USER,
       token = vim.env.BITBUCKET_TOKEN,
       cache_ttl = 300,

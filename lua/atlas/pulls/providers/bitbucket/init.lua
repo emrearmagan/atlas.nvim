@@ -1,14 +1,66 @@
 local actions = require("atlas.pulls.providers.bitbucket.actions")
+local service = require("atlas.pulls.providers.bitbucket.api.service")
 local activity_api = require("atlas.pulls.providers.bitbucket.api.activity")
 local changes_api = require("atlas.pulls.providers.bitbucket.api.changes")
-local comments_api = require("atlas.pulls.providers.bitbucket.api.comments")
 local pipelines_api = require("atlas.pulls.providers.bitbucket.api.pipelines")
 local pullrequests_api = require("atlas.pulls.providers.bitbucket.api.pullrequests")
 local repositories_api = require("atlas.pulls.providers.bitbucket.api.repositories")
 local reviews_api = require("atlas.pulls.providers.bitbucket.api.reviews")
-local tasks_api = require("atlas.pulls.providers.bitbucket.api.tasks")
 local users_api = require("atlas.pulls.providers.bitbucket.api.users")
 local resolver = require("atlas.providers.resolve")
+
+local function is_server()
+	return service.api_type() == "server"
+end
+
+local server = is_server()
+local comments_api
+local tasks_api
+if not server then
+	comments_api = require("atlas.pulls.providers.bitbucket.api.comments")
+	tasks_api = require("atlas.pulls.providers.bitbucket.api.tasks")
+end
+
+---@param value string
+---@param parsed AtlasParsedUrl
+---@param path string
+---@return AtlasTarget|nil, string|nil
+local function resolve_server_target(value, parsed, path)
+	local project, repo, number, tail = path:match("^/projects/([^/]+)/repos/([^/]+)/pull%-requests/(%d+)(.*)$")
+	if project then
+		if not resolver.valid_tail(tail) then
+			return nil, "Unsupported Bitbucket Server/Data Center pull request URL"
+		end
+		return {
+			provider = "bitbucket",
+			domain = "pulls",
+			entity = "pr",
+			url = value,
+			host = parsed.host,
+			workspace = project,
+			owner = project,
+			repo = repo,
+			number = tonumber(number),
+		}
+	end
+
+	project, repo = path:match("^/projects/([^/]+)/repos/([^/]+)$")
+	if project then
+		return {
+			provider = "bitbucket",
+			domain = "pulls",
+			entity = "repo",
+			url = value,
+			host = parsed.host,
+			workspace = project,
+			owner = project,
+			repo = repo,
+		}
+	end
+
+	return nil,
+		"Unsupported Bitbucket Server/Data Center URL. Expected /projects/PROJECT/repos/REPO[/pull-requests/NUMBER]"
+end
 
 ---@param value string
 ---@param parsed AtlasParsedUrl|nil
@@ -17,6 +69,15 @@ local function resolve_target(value, parsed)
 	if parsed == nil then
 		return nil, nil
 	end
+
+	if is_server() then
+		local path = resolver.path_for_base(parsed, resolver.configured_base("pulls", "bitbucket"))
+		if path == nil then
+			return nil, nil
+		end
+		return resolve_server_target(value, parsed, path)
+	end
+
 	if parsed.host == "bitbucket.org" then
 		local workspace, repo, number, tail = parsed.path:match("^/([^/]+)/([^/]+)/pull%-requests/(%d+)(.*)$")
 		if workspace then
@@ -81,8 +142,13 @@ end
 ---@param base_url string
 ---@return AtlasTarget
 local function target(info, domain, entity, number, base_url)
-	local owner, repo = info.slug:match("^(.+)/([^/]+)$")
-	local url = string.format("%s/%s", base_url, info.slug)
+	local slug = tostring(info.slug or "")
+	if is_server() then
+		slug = service.normalize_server_repo_slug(slug)
+	end
+	local owner, repo = slug:match("^(.+)/([^/]+)$")
+	local url = is_server() and string.format("%s/projects/%s/repos/%s", base_url, owner, repo)
+		or string.format("%s/%s", base_url, slug)
 	if entity ~= "repo" then
 		url = string.format("%s/pull-requests/%d", url, assert(number))
 	end
@@ -223,63 +289,87 @@ local function views()
 	return result
 end
 
+---@type PullsCoreCapability
+local core_capability = {
+	fetch_user = users_api.fetch_current_user,
+	fetch_pullrequests = fetch_pullrequests,
+	fetch_pullrequest = pullrequests_api.fetch_pullrequest,
+	create_pr = pullrequests_api.create_pr,
+	fetch_default_reviewers = pullrequests_api.fetch_default_reviewers,
+	fetch_reviewers = pullrequests_api.fetch_reviewers,
+	fetch_diffstat = changes_api.fetch_diffstat,
+	fetch_activity = activity_api.fetch_activity,
+	fetch_commits = changes_api.fetch_commits,
+	fetch_diff = changes_api.fetch_diff,
+	views = views,
+}
+core_capability.update_reviewers = pullrequests_api.update_reviewers
+core_capability.update_title = pullrequests_api.update_title
+core_capability.update_description = pullrequests_api.update_description
+core_capability.decline = pullrequests_api.decline
+if not server then
+	core_capability.set_draft = pullrequests_api.set_draft
+end
+
+---@type PullsCommentsCapability|nil
+local comments_capability
+---@type PullsTasksCapability|nil
+local tasks_capability
+if not server then
+	comments_capability = {
+		comment_completion = require("atlas.pulls.providers.bitbucket.completion.author").build_completion,
+		fetch_conversation = activity_api.fetch_conversation,
+		add_comment = comments_api.add_comment,
+		edit_comment = comments_api.edit_comment,
+		delete_comment = comments_api.delete_comment,
+		set_thread_resolved = comments_api.set_thread_resolved,
+	}
+	tasks_capability = {
+		add_task = tasks_api.add_task,
+		edit_task = tasks_api.edit_task,
+		delete_task = tasks_api.delete_task,
+	}
+end
+
+---@type PullsReviewsCapability
+local reviews_capability = {
+	fetch = reviews_api.fetch_review,
+	fetch_review_context = reviews_api.fetch_review_context,
+	approve = reviews_api.approve,
+	request_changes = reviews_api.request_changes,
+}
+if not server then
+	reviews_capability.submit_review = reviews_api.submit_review
+	reviews_capability.discard_review = reviews_api.discard_review
+end
+
+---@type PullsPipelinesCapability
+local pipelines_capability = {
+	fetch = pipelines_api.fetch_pipelines,
+	fetch_commit_status = pipelines_api.fetch_commit_status,
+}
+if not server then
+	pipelines_capability.fetch_job_log = pipelines_api.fetch_pipeline_job_log
+	pipelines_capability.actions = require("atlas.pulls.providers.bitbucket.actions.pipelines")
+end
+
 return {
 	resolve = resolve_target,
 	search_view = search_view,
 	target = target,
 	repositories = repositories,
 	capabilities = {
-		core = {
-			fetch_user = users_api.fetch_current_user,
-			fetch_pullrequests = fetch_pullrequests,
-			fetch_pullrequest = pullrequests_api.fetch_pullrequest,
-			create_pr = pullrequests_api.create_pr,
-			fetch_default_reviewers = pullrequests_api.fetch_default_reviewers,
-			fetch_reviewers = pullrequests_api.fetch_reviewers,
-			update_reviewers = pullrequests_api.update_reviewers,
-			update_title = pullrequests_api.update_title,
-			update_description = pullrequests_api.update_description,
-			set_draft = pullrequests_api.set_draft,
-			decline = pullrequests_api.decline,
-			fetch_diffstat = changes_api.fetch_diffstat,
-			fetch_activity = activity_api.fetch_activity,
-			fetch_commits = changes_api.fetch_commits,
-			fetch_diff = changes_api.fetch_diff,
-			views = views,
-		},
-		comments = {
-			comment_completion = require("atlas.pulls.providers.bitbucket.completion.author").build_completion,
-			fetch_conversation = activity_api.fetch_conversation,
-			add_comment = comments_api.add_comment,
-			edit_comment = comments_api.edit_comment,
-			delete_comment = comments_api.delete_comment,
-			set_thread_resolved = comments_api.set_thread_resolved,
-		},
-		reviews = {
-			fetch = reviews_api.fetch_review,
-			fetch_review_context = reviews_api.fetch_review_context,
-			submit_review = reviews_api.submit_review,
-			approve = reviews_api.approve,
-			request_changes = reviews_api.request_changes,
-			discard_review = reviews_api.discard_review,
-		},
-		tasks = {
-			add_task = tasks_api.add_task,
-			edit_task = tasks_api.edit_task,
-			delete_task = tasks_api.delete_task,
-		},
+		core = core_capability,
+		comments = comments_capability,
+		reviews = reviews_capability,
+		tasks = tasks_capability,
 		repository = {
 			fetch_details = repositories_api.fetch_detail,
 			fetch_branches = fetch_repo_branches,
 			fetch_tags = fetch_repo_tags,
 			delete_branch = repositories_api.delete_branch,
 		},
-		pipelines = {
-			fetch = pipelines_api.fetch_pipelines,
-			fetch_commit_status = pipelines_api.fetch_commit_status,
-			fetch_job_log = pipelines_api.fetch_pipeline_job_log,
-			actions = require("atlas.pulls.providers.bitbucket.actions.pipelines"),
-		},
+		pipelines = pipelines_capability,
 		actions = actions,
 		ui = {
 			setup = require("atlas.pulls.providers.bitbucket.highlights").setup,

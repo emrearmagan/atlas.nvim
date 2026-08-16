@@ -41,6 +41,9 @@ _G.vim = {
 		nvim_create_namespace = function()
 			return 1
 		end,
+		nvim_strwidth = function(value)
+			return #tostring(value or "")
+		end,
 	},
 
 	-- vim.tbl_extend(behavior, ...) -> shallow merge honoring "keep"/"force"/"error"
@@ -124,6 +127,16 @@ _G.vim = {
 		end,
 		stdpath = function(_)
 			return "/tmp"
+		end,
+		strcharpart = function(value, start, length)
+			local first = (tonumber(start) or 0) + 1
+			if length == nil then
+				return value:sub(first)
+			end
+			return value:sub(first, first + length - 1)
+		end,
+		strchars = function(value)
+			return #tostring(value or "")
 		end,
 		writefile = function(_, _, _)
 			return 0
