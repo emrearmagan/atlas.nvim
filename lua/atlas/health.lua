@@ -154,6 +154,36 @@ local function check_gitlab()
 	check_provider_views("gitlab")
 end
 
+local function check_gitea()
+	local pulls = providers.options("gitea", "pulls")
+	if pulls == nil then
+		vim.health.info("Gitea / Forgejo not configured")
+		return
+	end
+
+	local label = "Gitea / Forgejo pulls"
+	local base_url = vim.trim(tostring(pulls.base_url or ""))
+	if base_url == "" then
+		vim.health.error(label .. " base_url is required")
+	elseif not base_url:match("^https?://[^/]+") then
+		vim.health.error(label .. " base_url must start with http:// or https://")
+	else
+		vim.health.ok(label .. " base_url configured")
+	end
+	if vim.trim(tostring(pulls.token or "")) == "" then
+		vim.health.error(label .. " token is required")
+	else
+		vim.health.ok(label .. " token configured")
+	end
+	local api_type = tostring(pulls.api_type or "gitea")
+	if api_type == "forgejo" or api_type == "gitea" then
+		vim.health.ok(string.format("%s API type: %s", label, api_type))
+	else
+		vim.health.error(string.format("%s api_type must be 'forgejo' or 'gitea'", label))
+	end
+	check_views(pulls.views, label)
+end
+
 local function check_jira()
 	local provider = config.provider_options("jira")
 	if provider == nil then
@@ -213,6 +243,9 @@ function M.check()
 
 	vim.health.start("GitLab")
 	check_gitlab()
+
+	vim.health.start("Gitea / Forgejo")
+	check_gitea()
 
 	vim.health.start("Jira")
 	check_jira()

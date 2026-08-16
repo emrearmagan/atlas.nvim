@@ -1,228 +1,149 @@
----@class GiteaPullsProviderPanel : PullsProviderPanel
 local M = {}
 
 local icons = require("atlas.ui.shared.icons")
+local header = require("atlas.pulls.ui.panel.components.header")
+local request_scope = require("atlas.core.requests")
+local spinner = require("atlas.ui.components.spinner")
 
-local state = {
-	header_loading = false,
-}
+local MAX_HASH_LEN = 12
 
-local function reset_state()
-	state.header_loading = false
-end
+---@param pullrequests table
+---@return PullsProviderPanel
+function M.new(pullrequests)
+	local panel = {}
 
---------------------------------------------------------------------------------
--- Helpers
---------------------------------------------------------------------------------
-
----@param builds PullsBuild[]
----@return string
-local function aggregate_build_status(builds)
-	local has_success = false
-	local has_stopped = false
-	for _, b in ipairs(builds) do
-		local s = tostring(b.state or ""):upper()
-		if s == "FAILED" then
-			return "failed"
+	---@param pr PullRequest
+	---@param loading boolean
+	---@return PullsPanelHeaderRow[]
+	function panel.header_rows(pr, loading)
+		if loading and pr.assignees == nil then
+			return {
+				{
+					k1 = "Assignees:",
+					v1 = spinner.with_text("Loading..."),
+					v1_hl = "AtlasTextMuted",
+					k2 = "",
+					v2 = "",
+					v2_hl = "AtlasTextMuted",
+				},
+			}
 		end
-		if s == "INPROGRESS" then
-			return "inprogress"
+		local logins = {}
+		for _, assignee in ipairs(pr.assignees or {}) do
+			local login = tostring(assignee.username or "")
+			if login ~= "" then
+				table.insert(logins, login)
+			end
 		end
-		if s == "STOPPED" then
-			has_stopped = true
-		elseif s == "SUCCESSFUL" then
-			has_success = true
+		local rows = { header.assignee_row(logins) }
+		return rows
+	end
+
+	---@param hex string
+	---@return string
+	local function label_hl(hex)
+		hex = tostring(hex or ""):gsub("^#", "")
+		if not hex:match("^%x%x%x%x%x%x$") then
+			return "AtlasTabInactive"
 		end
-	end
-	if has_success then
-		return "successful"
-	end
-	if has_stopped then
-		return "stopped"
-	end
-	return "unknown"
-end
-
---------------------------------------------------------------------------------
--- Panel interface
---------------------------------------------------------------------------------
-
----@param pr PullRequest
----@return PullsPanelHeaderRow[]
-function M.header_rows(pr)
-	local raw = type(pr._raw) == "table" and pr._raw or {}
-
-	local state_hl = "AtlasTextMuted"
-	local s = tostring(pr.state or ""):lower()
-	if s == "open" then
-		state_hl = "AtlasGiteaPROpen"
-	elseif s == "merged" then
-		state_hl = "AtlasGiteaPRMerged"
-	elseif s == "declined" then
-		state_hl = "AtlasGiteaPRDeclined"
-	elseif s == "draft" then
-		state_hl = "AtlasGiteaPRDraft"
+		local name = "AtlasGiteaLabel_" .. hex
+		vim.api.nvim_set_hl(0, name, { fg = "#1e1e2e", bg = "#" .. hex, bold = true })
+		return name
 	end
 
-	local author = pr.author or {}
-	local author_str = tostring(author.username or author.name or "")
-
-	local src_branch = type(pr.source) == "table" and tostring(pr.source.branch or "") or ""
-	local dst_branch = type(pr.destination) == "table" and tostring(pr.destination.branch or "") or ""
-	local branch_str = src_branch ~= "" and (src_branch .. " → " .. dst_branch) or ""
-
-	local additions = tonumber(raw.additions) or 0
-	local deletions = tonumber(raw.deletions) or 0
-	local changes_str = string.format("+%d / -%d", additions, deletions)
-
-	return {
-		{
-			k1 = "State:",
-			v1 = tostring(pr.state or "open"),
-			v1_hl = state_hl,
-			k2 = "Author:",
-			v2 = author_str,
-			v2_hl = "AtlasTextMuted",
-		},
-		{
-			k1 = "Branch:",
-			v1 = branch_str,
-			v1_hl = "AtlasTextMuted",
-			k2 = "Changes:",
-			v2 = changes_str,
-			v2_hl = "AtlasTextMuted",
-		},
-	}
-end
-
----@param pr PullRequest
----@return PullsPanelChip[]
-function M.chips(pr) ---@diagnostic disable-line: unused-local
-	local chips = {}
-
-	-- Show CI build status chip
-	local BUILD_HL = {
-		successful = "AtlasTextPositive",
-		failed = "AtlasLogError",
-		inprogress = "AtlasTextWarning",
-		stopped = "AtlasTextMuted",
-	}
-
-	local overview_state = require("atlas.pulls.ui.panel.pr.tabs.overview.state")
-	local spinner = require("atlas.ui.components.spinner")
-	if overview_state.builds == "loading" then
-		table.insert(chips, { label = spinner.with_text("Loading checks"), hl = "AtlasTextMuted" })
-	elseif type(overview_state.builds) == "table" and #overview_state.builds > 0 then
-		local builds = overview_state.builds --[[@as PullsBuild[] ]]
-		local status = aggregate_build_status(builds)
-		if status ~= "unknown" then
-			local icon = icons.pulls_status and icons.pulls_status(status) or ""
-			local label = status:sub(1, 1):upper() .. status:sub(2)
-			table.insert(chips, {
-				label = icon ~= "" and string.format("%s %s", icon, label) or label,
-				hl = BUILD_HL[status] or "AtlasTextMuted",
-			})
+	---@param pr PullRequest
+	---@param _loading boolean
+	---@return PullsPanelChip[]
+	function panel.chips(pr, _loading)
+		local chips = {}
+		local hash = tostring(type(pr.source) == "table" and pr.source.commit_hash or "")
+		if hash ~= "" then
+			table.insert(chips, { label = hash:sub(1, MAX_HASH_LEN), hl = "AtlasTabInactive" })
 		end
+		for _, label in ipairs(pr.labels or {}) do
+			if label.name ~= "" then
+				table.insert(chips, { label = label.name, hl = label_hl(label.color or "") })
+			end
+		end
+		return chips
 	end
 
-	return chips
-end
-
----@param pr PullRequest
----@param active_tab string|nil
----@return boolean
-function M.is_loading(pr, active_tab) ---@diagnostic disable-line: unused-local
-	if state.header_loading then
-		return true
+	---@param pr PullRequest
+	---@param opts { force_refresh: boolean|nil, pr_refreshed: boolean|nil }|nil
+	---@param on_done fun()
+	---@return { cancel: fun() }|nil
+	function panel.fetch_header(pr, opts, on_done)
+		local starts = {}
+		if not (opts and opts.pr_refreshed) then
+			starts.pull = function(done)
+				return pullrequests.get(pr, { force_refresh = opts and opts.force_refresh }, done)
+			end
+		end
+		starts.subscription = function(done)
+			return pullrequests.subscription(pr, done)
+		end
+		local requests = request_scope.new()
+		requests.all(starts, function(values)
+			local fresh = values.pull
+			if type(fresh) == "table" then
+				for _, field in ipairs({
+					"assignees",
+					"reviewers",
+					"labels",
+					"reactions",
+				}) do
+					pr[field] = fresh[field]
+				end
+				pr._raw = fresh._raw
+			end
+			if type(values.subscription) == "boolean" then
+				pr.is_subscribed = values.subscription
+			end
+			on_done()
+		end)
+		return requests
 	end
-	local overview_state = require("atlas.pulls.ui.panel.pr.tabs.overview.state")
-	local conversation_state = require("atlas.pulls.ui.panel.pr.tabs.conversation.state")
-	local commits_state = require("atlas.pulls.ui.panel.pr.tabs.commits.state")
-	local files_state = require("atlas.pulls.ui.panel.pr.tabs.files.state")
-	if active_tab == "overview" then
-		return overview_state.any_loading()
-	elseif active_tab == "conversation" then
-		return conversation_state.any_loading()
-	elseif active_tab == "commits" then
-		return commits_state.any_loading()
-	elseif active_tab == "files" then
-		return files_state.any_loading()
+
+	---@return PullsPanelTab[]
+	function panel.tabs()
+		local overview_icon, overview_hl = icons.general("overview")
+		local conversation_icon, conversation_hl = icons.general("conversation")
+		local review_icon, review_hl = icons.pulls("review")
+		local commit_icon, commit_hl = icons.pulls("commit")
+		return {
+			{
+				key = "overview",
+				label = "Overview",
+				icon = overview_icon,
+				icon_hl = overview_hl,
+				mod = require("atlas.pulls.ui.panel.pr.tabs.overview"),
+				keymaps = require("atlas.pulls.providers.gitea.ui.overview_keymaps"),
+			},
+			{
+				key = "conversation",
+				label = "Conversation",
+				icon = conversation_icon,
+				icon_hl = conversation_hl,
+				mod = require("atlas.pulls.ui.panel.pr.tabs.conversation"),
+			},
+			{
+				key = "review",
+				label = "Review",
+				icon = review_icon,
+				icon_hl = review_hl,
+				mod = require("atlas.pulls.ui.panel.pr.tabs.review"),
+			},
+			{
+				key = "commits",
+				label = "Commits",
+				icon = commit_icon,
+				icon_hl = commit_hl,
+				mod = require("atlas.pulls.ui.panel.pr.tabs.commits"),
+			},
+		}
 	end
-	return false
-end
 
----@type { cancel: fun() }[]
-local panel_in_flight = {}
-
-local function cancel_panel_fetches()
-	for _, handle in ipairs(panel_in_flight) do
-		handle.cancel()
-	end
-	panel_in_flight = {}
-end
-
----@param handle { cancel: fun() }|nil
-local function track_panel(handle)
-	if handle then
-		table.insert(panel_in_flight, handle)
-	end
-end
-
----@param pr PullRequest
----@param refresh fun()
----@param opts { force_refresh: boolean|nil }|nil
-function M.fetches(pr, refresh, opts)
-	cancel_panel_fetches()
-	reset_state()
-
-	local overview_state = require("atlas.pulls.ui.panel.pr.tabs.overview.state")
-	local files_state = require("atlas.pulls.ui.panel.pr.tabs.files.state")
-	local checks = require("atlas.pulls.providers.gitea.api.checks")
-	local pullrequests = require("atlas.pulls.providers.gitea.api.pullrequests")
-
-	local force = opts and opts.force_refresh == true
-
-	-- Fetch CI builds
-	overview_state.builds = "loading"
-	track_panel(checks.get_builds(pr, { force_refresh = force }, function(builds, err)
-		overview_state.builds = err and err or (builds or {})
-		refresh()
-	end))
-
-	-- Fetch diffstat
-	files_state.diffstat = "loading"
-	track_panel(pullrequests.get_diffstat(pr, { force_refresh = force }, function(entries, err)
-		files_state.diffstat = err and err or (entries or {})
-		refresh()
-	end))
-end
-
---------------------------------------------------------------------------------
--- Tabs
---------------------------------------------------------------------------------
-
----@return PullsPanelTab[]
-function M.tabs()
-	return {
-		{
-			key = "conversation",
-			label = "Conversation",
-			icon = icons.general("conversation"),
-			mod = require("atlas.pulls.ui.panel.pr.tabs.conversation"),
-		},
-		{
-			key = "commits",
-			label = "Commits",
-			icon = icons.pulls("commit"),
-			mod = require("atlas.pulls.ui.panel.pr.tabs.commits"),
-		},
-		{
-			key = "files",
-			label = "Changes",
-			icon = icons.pulls("changes"),
-			mod = require("atlas.pulls.ui.panel.pr.tabs.files"),
-		},
-	}
+	return panel
 end
 
 return M

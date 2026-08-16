@@ -1,0 +1,5 @@
+---@class AtlasGiteaForgejoConfig
+---@field api_type "gitea"|"forgejo"|nil Defaults to gitea.
+---@field base_url string
+---@field token string
+---@field cache_ttl number|nil
