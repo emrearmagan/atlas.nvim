@@ -1,6 +1,7 @@
 local GITLAB_REACTION_OPTIONS = require("atlas.ui.shared.emojis").gitlab()
 local resolver = require("atlas.providers.resolve")
 local request_scope = require("atlas.core.requests")
+local notifications_api = require("atlas.providers.gitlab.notifications").new("issues")
 
 ---@class GitLabIssuesProvider : IssuesProvider
 local M = {}
@@ -175,28 +176,6 @@ function M.add_reaction(issue, comment, key, on_done)
 	return require("atlas.issues.providers.gitlab.api.notes").add_reaction(issue_key, comment.id, key, on_done)
 end
 
----@param opts { force_load: boolean|nil }|nil
----@param on_done fun(notifications: AtlasNotification[]|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.fetch_notifications(opts, on_done)
-	local notifications = require("atlas.pulls.providers.gitlab.api.notifications")
-	return notifications.fetch(opts or {}, on_done)
-end
-
----@param id string
----@param on_done fun(ok: boolean, err: string|nil)
----@return { cancel: fun() }|nil
-function M.mark_notification_read(id, on_done)
-	return require("atlas.pulls.providers.gitlab.api.notifications").mark_read(id, on_done)
-end
-
----@param id string
----@param on_done fun(ok: boolean, err: string|nil)
----@return { cancel: fun() }|nil
-function M.mark_notification_done(id, on_done)
-	return require("atlas.pulls.providers.gitlab.api.notifications").mark_done(id, on_done)
-end
-
 ---@return AtlasGitLabIssuesViewConfig[]
 function M.views()
 	local cfg = require("atlas.providers.gitlab.client").issues.gitlab_config()
@@ -325,9 +304,9 @@ return {
 			add_reaction = M.add_reaction,
 		},
 		notifications = {
-			fetch = M.fetch_notifications,
-			mark_read = M.mark_notification_read,
-			mark_done = M.mark_notification_done,
+			fetch = notifications_api.fetch,
+			mark_read = notifications_api.mark_read,
+			mark_done = notifications_api.mark_done,
 		},
 		actions = require("atlas.issues.providers.gitlab.actions"),
 		ui = {

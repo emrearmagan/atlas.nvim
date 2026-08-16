@@ -397,7 +397,7 @@ local function search_issues(_, done)
 	if default == "" or not default:find("is:issue") then
 		default = "is:issue " .. default
 	end
-	require("atlas.pulls.providers.github.completion.search").open(vim.trim(default) .. " ")
+	require("atlas.providers.github.completion.search").open(vim.trim(default) .. " ")
 	done(nil, nil)
 end
 

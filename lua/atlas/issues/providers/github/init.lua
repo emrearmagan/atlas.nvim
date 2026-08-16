@@ -3,6 +3,7 @@ local M = {}
 
 local resolver = require("atlas.providers.resolve")
 local request_scope = require("atlas.core.requests")
+local notifications_api = require("atlas.providers.github.notifications").new("issues")
 
 ---@param view IssuesViewConfig
 ---@param opts IssuesFetchOpts
@@ -265,29 +266,6 @@ function M.fetch_activity(issue, opts, on_done)
 	end, { force_load = opts and opts.force_load == true or false })
 end
 
----@param opts { force_load: boolean|nil }|nil
----@param on_done fun(notifications: AtlasNotification[]|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.fetch_notifications(opts, on_done)
-	local notifications = require("atlas.pulls.providers.github.api.notifications")
-	local merged = vim.tbl_extend("force", { all = true, per_page = 100 }, opts or {})
-	return notifications.fetch(merged, on_done)
-end
-
----@param id string
----@param on_done fun(ok: boolean, err: string|nil)
----@return { cancel: fun() }|nil
-function M.mark_notification_read(id, on_done)
-	return require("atlas.pulls.providers.github.api.notifications").mark_read(id, on_done)
-end
-
----@param id string
----@param on_done fun(ok: boolean, err: string|nil)
----@return { cancel: fun() }|nil
-function M.mark_notification_done(id, on_done)
-	return require("atlas.pulls.providers.github.api.notifications").mark_done(id, on_done)
-end
-
 ---@return AtlasGitHubIssuesViewConfig[]
 function M.views()
 	local cli = require("atlas.providers.github.client").issues
@@ -409,9 +387,9 @@ return {
 			add_reaction = M.add_reaction,
 		},
 		notifications = {
-			fetch = M.fetch_notifications,
-			mark_read = M.mark_notification_read,
-			mark_done = M.mark_notification_done,
+			fetch = notifications_api.fetch,
+			mark_read = notifications_api.mark_read,
+			mark_done = notifications_api.mark_done,
 		},
 		actions = require("atlas.issues.providers.github.actions"),
 		ui = {
