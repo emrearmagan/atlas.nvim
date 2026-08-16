@@ -82,7 +82,10 @@ function M.rev_exists(root, rev)
 	if root == "" or rev == "" then
 		return false
 	end
-	local res = vim.system({ "git", "-C", root, "rev-parse", "--verify", "--quiet", rev }, { text = true }):wait()
+	local res = vim.system(
+		{ "git", "-C", root, "rev-parse", "--verify", "--quiet", rev .. "^{commit}" },
+		{ text = true, env = { GIT_NO_LAZY_FETCH = "1" } }
+	):wait()
 	return res.code == 0
 end
 
