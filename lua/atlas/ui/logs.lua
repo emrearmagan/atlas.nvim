@@ -19,7 +19,7 @@ local logs_buf = nil
 local logs_win = nil
 local refresh_timer = nil
 local line_map = {}
-local expanded_row = nil
+local expanded_rows = {}
 
 ---@param line string
 ---@return table
@@ -87,7 +87,7 @@ local function refresh_buffer()
 		local raw = tostring(line or "")
 		local row = parse_log_line(raw)
 		row._log_index = index
-		row.display_message = (index == expanded_row and "▾ " or "▸ ") .. row.message
+		row.display_message = (expanded_rows[index] and "▾ " or "▸ ") .. row.message
 		table.insert(rows, row)
 	end
 	if #rows == 0 then
@@ -131,7 +131,7 @@ local function refresh_buffer()
 		if row ~= nil then
 			final_line_map[#final_lines] = row
 		end
-		if row ~= nil and row._log_index == expanded_row then
+		if row ~= nil and expanded_rows[row._log_index] then
 			local content = row.context ~= "" and row.context or row.message
 			for _, chunk in ipairs(utils.wrap_line(content, math.max(width - 4, 1))) do
 				table.insert(final_lines, "  " .. chunk)
@@ -167,10 +167,10 @@ local function toggle_details()
 		return
 	end
 
-	if expanded_row == row._log_index then
-		expanded_row = nil
+	if expanded_rows[row._log_index] then
+		expanded_rows[row._log_index] = nil
 	else
-		expanded_row = row._log_index
+		expanded_rows[row._log_index] = true
 	end
 	refresh_buffer()
 	local target_line = nil
