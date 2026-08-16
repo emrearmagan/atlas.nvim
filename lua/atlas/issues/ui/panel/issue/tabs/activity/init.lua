@@ -8,28 +8,14 @@ local spinner = require("atlas.ui.components.spinner")
 local threads = require("atlas.ui.components.threadsv2")
 local statusline = require("atlas.ui.statusline")
 local state = require("atlas.issues.ui.panel.issue.tabs.activity.state")
+local request_scope = require("atlas.core.requests")
 
 local PADDING_X = 1
-
----@type { cancel: fun() }[]
-local in_flight = {}
-
-local function cancel_all()
-	for _, handle in ipairs(in_flight) do
-		handle.cancel()
-	end
-	in_flight = {}
-end
-
----@param handle { cancel: fun() }|nil
-local function track(handle)
-	if handle then
-		table.insert(in_flight, handle)
-	end
-end
+local requests = request_scope.new()
 
 function M.reset()
-	cancel_all()
+	requests.cancel()
+	requests = request_scope.new()
 	state.reset()
 end
 
@@ -94,7 +80,9 @@ function M.on_select(issue, refresh, opts)
 	local issue_key = tostring(issue.key or "")
 	statusline.notify("loading", string.format("Loading history for %s...", issue_key))
 
-	track(comments.fetch_activity(issue, { force_load = force_refresh }, function(entries, err)
+	requests.run(function(done)
+		return comments.fetch_activity(issue, { force_load = force_refresh }, done)
+	end, function(entries, err)
 		state.is_loading = false
 
 		if err then
@@ -107,7 +95,7 @@ function M.on_select(issue, refresh, opts)
 		end
 
 		refresh()
-	end))
+	end)
 end
 
 ---@param _issue Issue
@@ -172,7 +160,8 @@ function M.is_loading()
 end
 
 function M.deactivate()
-	cancel_all()
+	requests.cancel()
+	requests = request_scope.new()
 	if state.is_loading then
 		state.is_loading = false
 		statusline.clear_notice()

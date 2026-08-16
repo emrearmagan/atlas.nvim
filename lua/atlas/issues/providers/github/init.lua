@@ -3,6 +3,7 @@ local M = {}
 
 local resolver = require("atlas.providers.resolve")
 local request_scope = require("atlas.core.requests")
+local issue_cache = require("atlas.issues.providers.github.api.cache")
 local notifications_api = require("atlas.providers.github.notifications").new("issues")
 
 ---@param view IssuesViewConfig
@@ -97,12 +98,12 @@ function M.add_comment(issue, content, on_done)
 end
 
 ---@param issue Issue
----@param comment_id string
+---@param comment IssueComment
 ---@param content string
 ---@param on_done fun(comment: IssueComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.edit_comment(issue, comment_id, content, on_done)
-	if tostring(comment_id) == "__body__" then
+function M.edit_comment(issue, comment, content, on_done)
+	if tostring(comment.id) == "__body__" then
 		local raw = issue._raw or {}
 		local slug = tostring(raw.slug or "")
 		local number = tonumber(raw.number)
@@ -124,7 +125,7 @@ function M.edit_comment(issue, comment_id, content, on_done)
 				on_done(nil, err)
 				return
 			end
-			cli.delete_cache(string.format("github_issues:get:%s#%d", slug, number))
+			issue_cache.invalidate(tostring(issue.key or ""))
 			raw.body = content
 			on_done({
 				id = "__body__",
@@ -137,27 +138,25 @@ function M.edit_comment(issue, comment_id, content, on_done)
 		end)
 	end
 	local key = tostring(issue.key or "")
-	return require("atlas.issues.providers.github.api.comments").edit(key, comment_id, content, on_done)
+	return require("atlas.issues.providers.github.api.comments").edit(key, tostring(comment.id), content, on_done)
 end
 
 ---@param issue Issue
----@param comment_id string
+---@param comment IssueComment
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.delete_comment(issue, comment_id, on_done)
-	if tostring(comment_id) == "__body__" then
+function M.delete_comment(issue, comment, on_done)
+	if tostring(comment.id) == "__body__" then
 		on_done(false, "Cannot delete the issue description")
 		return nil
 	end
 	local key = tostring(issue.key or "")
-	return require("atlas.issues.providers.github.api.comments").delete(key, comment_id, on_done)
+	return require("atlas.issues.providers.github.api.comments").delete(key, tostring(comment.id), on_done)
 end
-
-local GITHUB_REACTION_OPTIONS = require("atlas.ui.shared.emojis").github()
 
 ---@param issue Issue
 ---@param opts { force_refresh: boolean|nil }|nil
----@param on_done fun(result: { comments: IssueComment[], events: IssueActivityEntry[], reaction_options: IssueReactionOption[]|nil }|nil, err: string|nil)
+---@param on_done fun(result: { comments: IssueComment[], events: IssueActivityEntry[] }|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_conversation(issue, opts, on_done)
 	opts = opts or {}
@@ -170,11 +169,12 @@ function M.fetch_conversation(issue, opts, on_done)
 	local timeline = require("atlas.issues.providers.github.api.timeline")
 	local requests = request_scope.new()
 
+	---@param result table
 	---@param description string
-	local function build(result, description)
+	local function finish(result, description)
+		local raw = issue._raw or {}
 		local comments = {}
 		if description ~= "" then
-			local raw = issue._raw or {}
 			table.insert(comments, {
 				id = "__body__",
 				url = issue.url,
@@ -189,7 +189,6 @@ function M.fetch_conversation(issue, opts, on_done)
 		on_done({
 			comments = comments,
 			events = result.events or {},
-			reaction_options = GITHUB_REACTION_OPTIONS,
 		}, nil)
 	end
 
@@ -200,17 +199,18 @@ function M.fetch_conversation(issue, opts, on_done)
 			on_done(nil, err or "Failed to fetch conversation")
 			return
 		end
+
 		local raw = issue._raw or {}
 		local description = tostring(raw.body or "")
 		if description ~= "" then
-			build(result, description)
+			finish(result, description)
 			return
 		end
 
 		requests.run(function(done)
 			return fetch_description(key, done)
-		end, function(desc)
-			build(result, tostring(desc or ""))
+		end, function(body)
+			finish(result, tostring(body or ""))
 		end)
 	end)
 	return requests
@@ -247,6 +247,7 @@ function M.add_reaction(issue, comment, key, on_done)
 			on_done(false, err)
 			return
 		end
+		issue_cache.invalidate(tostring(issue.key or ""))
 		on_done(true, nil)
 	end)
 end
@@ -379,6 +380,7 @@ return {
 			views = M.views,
 		},
 		comments = {
+			reaction_options = require("atlas.ui.shared.emojis").github(),
 			fetch_activity = M.fetch_activity,
 			fetch_conversation = M.fetch_conversation,
 			add_comment = M.add_comment,

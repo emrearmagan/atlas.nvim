@@ -8,9 +8,10 @@ local layout = require("atlas.ui.layout")
 local navigation = require("atlas.ui.navigation")
 local info_popup = require("atlas.ui.popups.info")
 local helper = require("atlas.issues.ui.main.helper")
+local requests = require("atlas.core.requests")
 
-local active_issues_handle = nil
-local active_issue_reload_handles = {}
+local active_requests = requests.new()
+local issue_reload_requests = requests.new()
 
 local function render_if_active()
 	if not layout.is_active() then
@@ -33,15 +34,6 @@ local refresh_status_spinner = status_spinner.create({
 		render_if_active()
 	end,
 })
-
-local function cancel_issue_reload_handles()
-	for _, handle in ipairs(active_issue_reload_handles) do
-		if handle ~= nil and handle.cancel then
-			pcall(handle.cancel)
-		end
-	end
-	active_issue_reload_handles = {}
-end
 
 local function reset_reload_state()
 	refresh_status_spinner:stop()
@@ -90,62 +82,33 @@ local function end_issue_reload(issue_key)
 end
 
 local function cancel_active_requests()
-	if active_issues_handle ~= nil and active_issues_handle.cancel then
-		pcall(active_issues_handle.cancel)
-	end
-	active_issues_handle = nil
+	active_requests.cancel()
+	active_requests = requests.new()
 
-	cancel_issue_reload_handles()
+	issue_reload_requests.cancel()
+	issue_reload_requests = requests.new()
 	reset_reload_state()
 end
 
----@param view IssuesViewConfig|nil
----@return string
-local function view_id(view)
-	if view == nil then
-		return "default"
-	end
-	return view.key or view.name or "default"
-end
-
----@param a IssuesViewConfig|nil
----@param b IssuesViewConfig|nil
----@return boolean
-local function same_view(a, b)
-	if a == nil and b == nil then
-		return true
-	end
-	if a == nil or b == nil then
-		return false
-	end
-	return view_id(a) == view_id(b)
-end
-
----@return integer
-local function next_request_token()
-	state.request_seq = (state.request_seq or 0) + 1
-	return state.request_seq
-end
-
----@param on_done fun(err: string|nil)
-local function get_current_user(on_done)
+---@param provider IssuesProvider
+---@param scope AtlasRequestScope
+local function fetch_current_user(provider, scope)
 	if state.current_user ~= nil then
-		on_done(nil)
 		return
 	end
-	local provider = state.provider
-	if provider == nil then
-		on_done("no provider")
-		return
-	end
-
-	provider.capabilities.core.fetch_user(function(user, err)
-		if err ~= nil then
-			on_done(tostring(err))
+	scope.run(function(done)
+		return provider.capabilities.core.fetch_user(done)
+	end, function(user, err)
+		if err then
+			statusline.notify("warn", string.format("Failed to fetch current user: %s", tostring(err)))
 			return
 		end
 		state.current_user = user
-		on_done(nil)
+		render_if_active()
+		local panel = require("atlas.issues.ui.panel")
+		if layout.is_active() and require("atlas.ui.state").current_view == provider.id and panel.is_open() then
+			panel.render()
+		end
 	end)
 end
 
@@ -176,8 +139,8 @@ local function load_active_view(opts, on_done)
 		return
 	end
 
+	cancel_active_requests()
 	if target_view._kind == "bookmarks" then
-		cancel_active_requests()
 		if refresh_status_spinner:is_running() then
 			refresh_status_spinner:stop()
 		end
@@ -192,10 +155,8 @@ local function load_active_view(opts, on_done)
 		return
 	end
 
-	local target_view_id = view_id(target_view)
-	local token = next_request_token()
-	state.latest_request_tokens[target_view_id] = token
-	cancel_active_requests()
+	local load_requests = active_requests
+	fetch_current_user(provider, load_requests)
 
 	state.is_loading = true
 	state.error = nil
@@ -210,16 +171,6 @@ local function load_active_view(opts, on_done)
 
 	render_if_active()
 
-	local function is_stale_request()
-		if not same_view(state.active_view, target_view) then
-			return true
-		end
-		if state.latest_request_tokens[target_view_id] ~= token then
-			return true
-		end
-		return false
-	end
-
 	local function finish_loading()
 		state.is_loading = false
 		if not has_reloading_issues() then
@@ -228,10 +179,6 @@ local function load_active_view(opts, on_done)
 	end
 
 	local function finalize_fetch_failure(err, issues)
-		if is_stale_request() then
-			return
-		end
-
 		finish_loading()
 		state.current_view = state.active_view
 
@@ -252,10 +199,6 @@ local function load_active_view(opts, on_done)
 	end
 
 	local function finalize_fetch_success(issues)
-		if is_stale_request() then
-			return
-		end
-
 		state.current_view = state.active_view
 		state.error = nil
 		state.issues = issues
@@ -271,10 +214,6 @@ local function load_active_view(opts, on_done)
 	local max_results = (configured_max and configured_max > 0) and math.floor(configured_max) or 100
 
 	local function fetch_page(next_page_token, issues)
-		if is_stale_request() then
-			return
-		end
-
 		issues = issues or {}
 		local remaining = max_results - #issues
 		if remaining <= 0 then
@@ -282,18 +221,14 @@ local function load_active_view(opts, on_done)
 			return
 		end
 
-		active_issues_handle = provider.capabilities.core.fetch_issues(target_view, {
-			force_load = opts.force_load == true,
-			next_page_token = next_page_token,
-			max_results = remaining,
-			layout = target_view.layout or "plain",
-		}, function(page_issues, next_token, is_last, err)
-			active_issues_handle = nil
-
-			if is_stale_request() then
-				return
-			end
-
+		load_requests.run(function(done)
+			return provider.capabilities.core.fetch_issues(target_view, {
+				force_load = opts.force_load == true,
+				next_page_token = next_page_token,
+				max_results = remaining,
+				layout = target_view.layout or "plain",
+			}, done)
+		end, function(page_issues, next_token, is_last, err)
 			if err ~= nil then
 				finalize_fetch_failure(err, issues)
 				return
@@ -326,17 +261,7 @@ local function load_active_view(opts, on_done)
 		end)
 	end
 
-	get_current_user(function(user_err)
-		if is_stale_request() then
-			return
-		end
-		if user_err then
-			statusline.notify("warn", string.format("Failed to fetch current user: %s", tostring(user_err)))
-		else
-			render_if_active()
-		end
-		fetch_page(nil, {})
-	end)
+	fetch_page(nil, {})
 end
 
 ---@param view IssuesViewConfig
@@ -349,6 +274,8 @@ local function load_bookmark(view, force_load, on_done)
 	end
 
 	cancel_active_requests()
+	local load_requests = active_requests
+	fetch_current_user(provider, load_requests)
 	state.is_loading = true
 	state.error = nil
 	state.issues = nil
@@ -357,12 +284,13 @@ local function load_bookmark(view, force_load, on_done)
 	statusline.notify("loading", "Running query...")
 	render_if_active()
 
-	active_issues_handle = provider.capabilities.core.fetch_issues(view, {
-		force_load = force_load,
-		max_results = tonumber((config.options and config.options.issues or {}).max_results) or 100,
-		layout = view.layout,
-	}, function(issues, _, _, err)
-		active_issues_handle = nil
+	load_requests.run(function(done)
+		return provider.capabilities.core.fetch_issues(view, {
+			force_load = force_load,
+			max_results = tonumber((config.options and config.options.issues or {}).max_results) or 100,
+			layout = view.layout,
+		}, done)
+	end, function(issues, _, _, err)
 		state.is_loading = false
 		if err then
 			state.error = tostring(err)
@@ -521,54 +449,47 @@ function M.refresh_issue(issue, on_done)
 	begin_issue_reload(issue_key)
 
 	local active_view = type(state.active_view) == "table" and state.active_view or {}
-	local reload_handle = nil
-	reload_handle = provider.capabilities.core.fetch_issue(
-		issue_key,
-		{ force_load = true, layout = active_view.layout or "plain" },
-		function(fetched_issue, err)
-			for i = #active_issue_reload_handles, 1, -1 do
-				if active_issue_reload_handles[i] == reload_handle then
-					table.remove(active_issue_reload_handles, i)
-					break
-				end
-			end
-
-			if err ~= nil or fetched_issue == nil then
-				end_issue_reload(issue_key)
-				statusline.notify("error", tostring(err or "Failed to reload issue"))
-				on_done()
-				return
-			end
-
-			local issues = state.issues or {}
-			local replaced = false
-			for i, existing in ipairs(issues) do
-				if type(existing) == "table" and existing.key == issue_key then
-					issues[i] = fetched_issue
-					replaced = true
-					break
-				end
-			end
-
-			if not replaced then
-				table.insert(issues, fetched_issue)
-			end
-
-			state.issues = issues
-			state.issue_tree = helper.build_issue_tree(issues)
+	issue_reload_requests.run(function(done)
+		return provider.capabilities.core.fetch_issue(
+			issue_key,
+			{ force_load = true, layout = active_view.layout or "plain" },
+			done
+		)
+	end, function(fetched_issue, err)
+		if err ~= nil or fetched_issue == nil then
 			end_issue_reload(issue_key)
-
-			local panel = require("atlas.issues.ui.panel")
-			local panel_issue = require("atlas.issues.ui.panel.issue.state").current_issue
-			if panel.is_open() and panel_issue and tostring(panel_issue.key or "") == issue_key then
-				panel.on_select(fetched_issue, { force_refresh = true, issue_refreshed = true })
-			end
-
-			statusline.notify("success", string.format("Reloaded %s", issue_key), 1200)
+			statusline.notify("error", tostring(err or "Failed to reload issue"))
 			on_done()
+			return
 		end
-	)
-	table.insert(active_issue_reload_handles, reload_handle)
+
+		local issues = state.issues or {}
+		local replaced = false
+		for i, existing in ipairs(issues) do
+			if type(existing) == "table" and existing.key == issue_key then
+				issues[i] = fetched_issue
+				replaced = true
+				break
+			end
+		end
+
+		if not replaced then
+			table.insert(issues, fetched_issue)
+		end
+
+		state.issues = issues
+		state.issue_tree = helper.build_issue_tree(issues)
+		end_issue_reload(issue_key)
+
+		local panel = require("atlas.issues.ui.panel")
+		local panel_issue = require("atlas.issues.ui.panel.issue.state").current_issue
+		if panel.is_open() and panel_issue and tostring(panel_issue.key or "") == issue_key then
+			panel.on_select(fetched_issue, { force_refresh = true, issue_refreshed = true })
+		end
+
+		statusline.notify("success", string.format("Reloaded %s", issue_key), 1200)
+		on_done()
+	end)
 end
 
 function M.toggle_current_issue_collapsed()
@@ -601,7 +522,6 @@ function M.refresh_current_issue(on_done)
 end
 
 function M.dispose()
-	state.latest_request_tokens = {}
 	state.is_loading = false
 	cancel_active_requests()
 end

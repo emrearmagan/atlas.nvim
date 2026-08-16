@@ -62,6 +62,10 @@ local function new(domain)
 		memory.set(key, value, ttl)
 	end
 
+	function client.delete_mem(key)
+		memory.delete(key)
+	end
+
 	---@param args string[]
 	---@param parse_json boolean
 	---@param callback fun(result: any, err: string|nil)

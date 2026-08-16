@@ -11,35 +11,16 @@ local function get_provider()
 	return require("atlas.issues.state").provider
 end
 
----@type { cancel: fun() }[]
-local in_flight = {}
-
-local function cancel_all()
-	for _, h in ipairs(in_flight) do
-		if h and h.cancel then
-			pcall(h.cancel)
-		end
-	end
-	in_flight = {}
-end
-
----@param handle { cancel: fun() }|nil
-local function track(handle)
-	if handle then
-		table.insert(in_flight, handle)
-	end
-end
-
 function M.reset()
-	cancel_all()
 	state.reset()
+	statusline.clear_notice()
 end
 
 ---@param issue Issue
 ---@param refresh fun()
 ---@param opts { force_refresh: boolean|nil }|nil
 function M.on_select(issue, refresh, opts)
-	M.reset()
+	local generation = state.activate(issue)
 	opts = opts or {}
 
 	local provider = get_provider()
@@ -56,7 +37,12 @@ function M.on_select(issue, refresh, opts)
 	state.activity = "loading"
 	statusline.notify("loading", string.format("Loading conversation for %s...", key))
 
-	track(comments.fetch_conversation(issue, opts, function(result, err)
+	state.requests.run(function(done)
+		return comments.fetch_conversation(issue, opts, done)
+	end, function(result, err)
+		if not state.is_current(generation, issue) then
+			return
+		end
 		if err then
 			state.comments = {}
 			state.activity = {}
@@ -66,12 +52,11 @@ function M.on_select(issue, refresh, opts)
 			result = result or {}
 			state.comments = result.comments or {}
 			state.activity = result.events or {}
-			state.reaction_options = result.reaction_options or {}
 			state.error = nil
 			statusline.notify("success", string.format("Conversation loaded for %s", key), 1200)
 		end
 		refresh()
-	end))
+	end)
 end
 
 M.render = renderer.render
@@ -110,7 +95,8 @@ function M.deactivate(buf)
 	if buf ~= nil then
 		keymaps.teardown(buf)
 	end
-	cancel_all()
+	state.deactivate()
+	statusline.clear_notice()
 end
 
 return M

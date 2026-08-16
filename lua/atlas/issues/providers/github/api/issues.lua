@@ -1,6 +1,7 @@
 local M = {}
 
 local cli = require("atlas.providers.github.client").issues
+local cache = require("atlas.issues.providers.github.api.cache")
 local normalizer = require("atlas.issues.providers.github.api.mapper")
 
 local SEARCH_GQL = [[
@@ -231,7 +232,7 @@ function M.set_state(key, state, on_done)
 			on_done(false, err)
 			return
 		end
-		cli.delete_cache(string.format("github_issues:get:%s#%d", slug, number))
+		cache.invalidate(key)
 		on_done(true, nil)
 	end, {
 		action = "Issue state change",
@@ -277,7 +278,7 @@ local function edit_issue_diff(key, diff, add_flag, remove_flag, on_done, ctx)
 			on_done(false, err)
 			return
 		end
-		cli.delete_cache(string.format("github_issues:get:%s#%d", slug, number))
+		cache.invalidate(key)
 		on_done(true, nil)
 	end, ctx)
 end
@@ -344,43 +345,6 @@ function M.list_labels(slug, on_done)
 		on_done(list, nil)
 	end, {
 		action = "Fetch repo labels",
-		slug = slug,
-	})
-end
-
----@param slug string
----@param on_done fun(assignees: IssueUser[]|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.list_assignees(slug, on_done)
-	if type(slug) ~= "string" or slug == "" then
-		vim.schedule(function()
-			on_done(nil, "Missing repository slug")
-		end)
-		return nil
-	end
-
-	return cli.gh({
-		"api",
-		"--paginate",
-		string.format("repos/%s/assignees?per_page=100", slug),
-	}, function(result, err)
-		if err then
-			on_done(nil, err)
-			return
-		end
-
-		local list = {}
-		if type(result) == "table" then
-			for _, raw in ipairs(result) do
-				local user = normalizer.to_user(raw)
-				if user then
-					table.insert(list, user)
-				end
-			end
-		end
-		on_done(list, nil)
-	end, {
-		action = "Fetch repo assignees",
 		slug = slug,
 	})
 end

@@ -7,29 +7,15 @@ local statusline = require("atlas.ui.statusline")
 local state = require("atlas.issues.providers.jira.ui.overview.state")
 local adf = require("atlas.issues.providers.jira.converted.adf")
 local issues_api = require("atlas.issues.providers.jira.api.issues")
+local request_scope = require("atlas.core.requests")
 
 local PADDING_X = 1
 local PADDING = string.rep(" ", PADDING_X)
-
----@type { cancel: fun() }[]
-local in_flight = {}
-
-local function cancel_all()
-	for _, handle in ipairs(in_flight) do
-		handle.cancel()
-	end
-	in_flight = {}
-end
-
----@param handle { cancel: fun() }|nil
-local function track(handle)
-	if handle then
-		table.insert(in_flight, handle)
-	end
-end
+local requests = request_scope.new()
 
 function M.reset()
-	cancel_all()
+	requests.cancel()
+	requests = request_scope.new()
 	state.reset()
 end
 
@@ -62,7 +48,9 @@ function M.on_select(issue, refresh, opts)
 	local issue_key = tostring(issue.key or "")
 	statusline.notify("loading", string.format("Loading description for %s...", issue_key))
 
-	track(issues_api.get_issue_description(issue_key, function(raw, err)
+	requests.run(function(done)
+		return issues_api.get_issue_description(issue_key, done, { force_load = force_refresh })
+	end, function(raw, err)
 		state.description_loading = false
 
 		if err then
@@ -78,7 +66,7 @@ function M.on_select(issue, refresh, opts)
 
 		statusline.notify("success", string.format("Description loaded for %s", issue_key), 1200)
 		refresh()
-	end, { force_load = force_refresh }))
+	end)
 end
 
 -- Render
@@ -177,7 +165,8 @@ function M.deactivate(buf)
 		vim.api.nvim_set_option_value("syntax", "OFF", { buf = buf })
 		vim.api.nvim_set_option_value("filetype", "", { buf = buf })
 	end
-	cancel_all()
+	requests.cancel()
+	requests = request_scope.new()
 	if state.description_loading then
 		state.description_loading = false
 		statusline.clear_notice()

@@ -26,19 +26,61 @@ local function get_completion()
 	return nil
 end
 
----@param fn fun(list: IssueComment[])
-local function with_comments(fn)
+---@return IssueComment[]|nil
+local function comments_list()
 	local list = state.comments
 	if type(list) ~= "table" then
-		return
+		return nil
 	end
 	---@cast list IssueComment[]
-	fn(list)
+	return list
+end
+
+---@param comment IssueComment
+local function upsert_comment(comment)
+	local list = comments_list()
+	if list == nil then
+		return
+	end
+	for index, current in ipairs(list) do
+		if tostring(current.id) == tostring(comment.id) then
+			list[index] = comment
+			return
+		end
+	end
+	table.insert(list, comment)
+end
+
+---@param comment IssueComment
+local function remove_comment(comment)
+	local list = comments_list()
+	if list == nil then
+		return
+	end
+	for _, current in ipairs(list) do
+		if tostring(current.parent_id or "") == tostring(comment.id) then
+			comment.body = nil
+			comment.deleted = true
+			return
+		end
+	end
+	for index = #list, 1, -1 do
+		if tostring(list[index].id) == tostring(comment.id) then
+			table.remove(list, index)
+			return
+		end
+	end
 end
 
 ---@param issue Issue
-local function refresh_issue(issue)
-	require("atlas.issues.ui.main.controller").refresh_issue(issue)
+---@param amount integer
+local function adjust_comment_count(issue, amount)
+	local raw = issue._raw
+	if type(raw) ~= "table" or raw.comment_count == nil then
+		return
+	end
+	raw.comment_count = math.max(0, (tonumber(raw.comment_count) or 0) + amount)
+	require("atlas.issues.ui.main").render()
 end
 
 ---@param comment IssueComment
@@ -52,7 +94,8 @@ local function is_own_comment(comment)
 end
 
 ---@param issue Issue
-function M.add(issue)
+---@param refresh fun()
+function M.add(issue, refresh)
 	local comments = get_comments()
 	if not comments or not comments.add_comment then
 		return
@@ -67,14 +110,22 @@ function M.add(issue)
 			if not text or vim.trim(text) == "" then
 				return
 			end
+			local generation = state.generation
 			statusline.notify("loading", "Adding comment...")
-			comments.add_comment(issue, text, function(_, err)
+			comments.add_comment(issue, text, function(created, err)
+				if not state.is_current(generation, issue) then
+					return
+				end
 				if err then
 					statusline.notify("error", "Add comment failed: " .. err)
 					return
 				end
+				if created then
+					upsert_comment(created)
+					adjust_comment_count(issue, 1)
+				end
 				statusline.notify("success", "Comment added", 1200)
-				refresh_issue(issue)
+				refresh()
 			end)
 		end,
 	})
@@ -82,7 +133,8 @@ end
 
 ---@param issue Issue
 ---@param entry table
-function M.reply(issue, entry)
+---@param refresh fun()
+function M.reply(issue, entry, refresh)
 	if not entry or entry.kind ~= "comment" or not entry.comment then
 		return
 	end
@@ -112,13 +164,21 @@ function M.reply(issue, entry)
 				return
 			end
 			statusline.notify("loading", "Sending reply...")
-			local function done(_, err)
+			local generation = state.generation
+			local function done(created, err)
+				if not state.is_current(generation, issue) then
+					return
+				end
 				if err then
 					statusline.notify("error", "Reply failed: " .. err)
 					return
 				end
+				if created then
+					upsert_comment(created)
+					adjust_comment_count(issue, 1)
+				end
 				statusline.notify("success", "Reply added", 1200)
-				refresh_issue(issue)
+				refresh()
 			end
 			if comments.reply_comment then
 				comments.reply_comment(issue, parent, text, done)
@@ -156,24 +216,29 @@ function M.edit(issue, entry, refresh)
 			if not text or vim.trim(text) == "" then
 				return
 			end
+			local generation = state.generation
 			statusline.notify("loading", "Editing comment...")
-			comments.edit_comment(issue, tostring(comment.id), text, function(updated, err)
+			comments.edit_comment(issue, comment, text, function(updated, err)
+				if not state.is_current(generation, issue) then
+					return
+				end
 				if err then
 					statusline.notify("error", "Edit failed: " .. err)
 					return
 				end
-				with_comments(function(list)
-					for i, c in ipairs(list) do
-						if tostring(c.id) == tostring(comment.id) then
-							if updated then
-								list[i] = updated
-							else
-								c.body = text
-							end
-							break
+				local list = comments_list() or {}
+				for i, current in ipairs(list) do
+					if tostring(current.id) == tostring(comment.id) then
+						if updated then
+							updated.parent_id = updated.parent_id or current.parent_id
+							updated._raw = vim.tbl_extend("keep", updated._raw or {}, current._raw or {})
+							list[i] = updated
+						else
+							current.body = text
 						end
+						break
 					end
-				end)
+				end
 				statusline.notify("success", "Comment updated", 1200)
 				refresh()
 			end)
@@ -183,7 +248,8 @@ end
 
 ---@param issue Issue
 ---@param entry table
-function M.delete(issue, entry)
+---@param refresh fun()
+function M.delete(issue, entry, refresh)
 	if not entry or entry.kind ~= "comment" or not entry.comment then
 		return
 	end
@@ -202,14 +268,20 @@ function M.delete(issue, entry)
 		if confirmed ~= "y" and confirmed ~= "yes" then
 			return
 		end
+		local generation = state.generation
 		statusline.notify("loading", "Deleting comment...")
-		comments.delete_comment(issue, tostring(comment.id), function(_, err)
+		comments.delete_comment(issue, comment, function(_, err)
+			if not state.is_current(generation, issue) then
+				return
+			end
 			if err then
 				statusline.notify("error", "Delete failed: " .. err)
 				return
 			end
+			remove_comment(comment)
+			adjust_comment_count(issue, -1)
 			statusline.notify("success", "Comment deleted", 1200)
-			refresh_issue(issue)
+			refresh()
 		end)
 	end)
 end
@@ -226,7 +298,7 @@ function M.react(issue, entry, refresh)
 		statusline.notify("warn", "Provider does not support reactions")
 		return
 	end
-	local options = state.reaction_options or {}
+	local options = comments.reaction_options or {}
 	if #options == 0 then
 		statusline.notify("warn", "No reactions available for this provider")
 		return
@@ -249,22 +321,24 @@ function M.react(issue, entry, refresh)
 			if selected == nil then
 				return
 			end
+			local generation = state.generation
 			statusline.notify("loading", "Adding reaction...")
 			comments.add_reaction(issue, comment, selected.key, function(ok, err)
+				if not state.is_current(generation, issue) then
+					return
+				end
 				if err then
 					statusline.notify("error", "Reaction failed: " .. tostring(err))
 					return
 				end
 				if ok then
-					with_comments(function(list)
-						for _, c in ipairs(list) do
-							if tostring(c.id) == tostring(comment.id) then
-								c.reactions = c.reactions or {}
-								c.reactions[selected.key] = (tonumber(c.reactions[selected.key]) or 0) + 1
-								break
-							end
+					for _, current in ipairs(comments_list() or {}) do
+						if tostring(current.id) == tostring(comment.id) then
+							current.reactions = current.reactions or {}
+							current.reactions[selected.key] = (tonumber(current.reactions[selected.key]) or 0) + 1
+							break
 						end
-					end)
+					end
 				end
 				statusline.notify("success", "Reaction added", 1200)
 				refresh()
