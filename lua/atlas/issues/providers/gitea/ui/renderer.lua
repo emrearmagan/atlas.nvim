@@ -6,62 +6,43 @@ local helper = require("atlas.issues.ui.main.helper")
 local state = require("atlas.issues.state")
 
 ---@param status_id string|nil
----@return string
+---@return string, string
 local function state_icon(status_id)
 	if status_id == "closed" then
-		return icons.pulls_status("successful")
+		return icons.pulls_status("successful"), "AtlasGiteaIssueClosed"
 	end
-	return icons.issues("issue")
-end
-
----@param status_id string|nil
----@return string
-local function state_hl(status_id)
-	if status_id == "closed" then
-		return "AtlasGiteaIssueClosed"
-	end
-	return "AtlasGiteaIssueOpen"
+	return icons.issues("issue"), "AtlasGiteaIssueOpen"
 end
 
 ---@param status_id string|nil
 ---@return string
 local function state_chip_hl(status_id)
-	if status_id == "closed" then
-		return "AtlasGiteaIssueClosedChip"
-	end
-	return "AtlasGiteaIssueOpenChip"
+	return status_id == "closed" and "AtlasGiteaIssueClosedChip" or "AtlasGiteaIssueOpenChip"
 end
 
 ---@param issue Issue
 ---@return string
 local function key_label(issue)
-	local raw = type(issue._raw) == "table" and issue._raw or {}
-	local number = raw.number or 0
-	local slug = tostring(raw.slug or "")
-	return slug ~= "" and string.format("%s#%d", slug, number) or string.format("#%d", number)
+	local raw = issue._raw or {}
+	local number = tonumber(raw.number) or 0
+	local path = tostring(raw.project_path or "")
+	return path ~= "" and string.format("%s#%d", path, number) or string.format("#%d", number)
 end
 
 ---@param issue Issue
 ---@param is_child boolean
 ---@return table
 function M.format_row(issue, is_child)
-	local title = issue.summary or ""
-	local label = key_label(issue)
-
-	local is_pinned = issue.is_pinned == true
-	local row_icon = is_pinned and icons.general("pin") or state_icon(issue.status_id)
-
-	local name = is_child and ("  " .. row_icon .. "  " .. label .. "  " .. title)
-		or (label .. "  " .. title)
-
-	local assignee_name = type(issue.assignee) == "table" and issue.assignee.display_name or "Unassigned"
-	local reporter_name = type(issue.reporter) == "table" and issue.reporter.display_name or "Unknown"
-
+	local icon = issue.is_pinned and icons.general("pin") or state_icon(issue.status_id)
+	local key = key_label(issue)
+	local title = tostring(issue.summary or "")
+	local assignee = issue.assignee and issue.assignee.display_name or "Unassigned"
+	local reporter = issue.reporter and issue.reporter.display_name or "Unknown"
 	return {
-		icon = is_child and "" or row_icon,
-		name = name,
-		assignee = string.format("%s %s", icons.general("user"), utils.shorten_name(assignee_name, 20)),
-		reporter = string.format("%s %s", icons.general("user"), utils.shorten_name(reporter_name, 20)),
+		icon = is_child and "" or icon,
+		name = is_child and ("  " .. icon .. "  " .. key .. "  " .. title) or (key .. "  " .. title),
+		assignee = string.format("%s %s", icons.general("user"), utils.shorten_name(assignee, 20)),
+		reporter = string.format("%s %s", icons.general("user"), utils.shorten_name(reporter, 20)),
 		status = (function()
 			local issue_key = tostring(issue.key or "")
 			if issue_key ~= "" and state.is_issue_reloading(issue_key) then
@@ -83,60 +64,59 @@ function M.cell_hl(row, col, ctx)
 	end
 
 	if col.key == "icon" then
-		local is_pinned = issue.is_pinned == true
-		local s = is_pinned and icons.general("pin") or state_icon(issue.status_id)
-		if s == "" then
-			return nil
+		local icon, icon_hl = state_icon(issue.status_id)
+		if issue.is_pinned then
+			icon, icon_hl = icons.general("pin"), "AtlasTextWarning"
 		end
-		local ss, ee = ctx.text:find(s, 1, true)
-		if not ss or not ee then
-			return nil
-		end
-		local hl = is_pinned and "AtlasTextWarning" or state_hl(issue.status_id)
-		return { { start_col = ss - 1, end_col = ee, hl_group = hl } }
+		local first, last = ctx.text:find(icon, 1, true)
+		return first and { { start_col = first - 1, end_col = last, hl_group = icon_hl } } or nil
 	end
 
 	if col.key == "name" then
 		local spans = {}
-		local is_child = (tonumber(row._tv2_depth) or 0) > 0
-		if is_child then
-			local s_icon = state_icon(issue.status_id)
-			local is, ie = ctx.text:find(s_icon, 1, true)
-			if is and ie then
-				table.insert(spans, { start_col = is - 1, end_col = ie, hl_group = state_hl(issue.status_id) })
+		if (tonumber(row._tv2_depth) or 0) > 0 then
+			local icon, icon_hl = state_icon(issue.status_id)
+			if issue.is_pinned then
+				icon, icon_hl = icons.general("pin"), "AtlasTextWarning"
+			end
+			local first, last = ctx.text:find(icon, 1, true)
+			if first then
+				table.insert(spans, { start_col = first - 1, end_col = last, hl_group = icon_hl })
 			end
 		end
-
-		local label = key_label(issue)
-		local s, e = ctx.text:find(label, 1, true)
-		if s and e then
-			table.insert(spans, { start_col = s - 1, end_col = e, hl_group = "AtlasGiteaIssueKey" })
-			local title_start = e + 2
-			if title_start <= #ctx.text then
-				table.insert(spans, { start_col = title_start - 1, end_col = #ctx.text, hl_group = "Normal" })
-			end
+		local first, last = ctx.text:find(key_label(issue), 1, true)
+		if first then
+			table.insert(spans, { start_col = first - 1, end_col = last, hl_group = "AtlasGiteaIssueKey" })
 		end
 		return #spans > 0 and spans or nil
 	end
 
 	if col.key == "status" then
 		local issue_key = tostring(issue.key or "")
-		local hl_group = issue_key ~= "" and state.is_issue_reloading(issue_key) and "AtlasTextMuted"
+		local hl = issue_key ~= "" and state.is_issue_reloading(issue_key) and "AtlasTextMuted"
 			or state_chip_hl(issue.status_id)
-		return { { start_col = 0, end_col = #ctx.padded, hl_group = hl_group } }
+		return { { start_col = 0, end_col = #ctx.padded, hl_group = hl } }
 	end
 
 	if col.key == "assignee" then
-		local name = type(issue.assignee) == "table" and issue.assignee.display_name or nil
-		return { { start_col = 0, end_col = #ctx.padded, hl_group = helper.person_hl(name) } }
+		return {
+			{
+				start_col = 0,
+				end_col = #ctx.padded,
+				hl_group = helper.person_hl(issue.assignee and issue.assignee.display_name or nil),
+			},
+		}
 	end
 
 	if col.key == "reporter" then
-		local name = type(issue.reporter) == "table" and issue.reporter.display_name or nil
-		return { { start_col = 0, end_col = #ctx.padded, hl_group = helper.person_hl(name) } }
+		return {
+			{
+				start_col = 0,
+				end_col = #ctx.padded,
+				hl_group = helper.person_hl(issue.reporter and issue.reporter.display_name or nil),
+			},
+		}
 	end
-
-	return nil
 end
 
 return M

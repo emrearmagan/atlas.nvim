@@ -8,13 +8,23 @@ local API_PATH = "/api/v1"
 local API_TYPE = "forgejo"
 local NAME = "Forgejo"
 
+---@param domain "pulls"|"issues"
 ---@return table
-local function new()
+local function new(domain)
 	local client = {}
 
-	---@return AtlasForgejoPullsConfig
+	---@return AtlasGiteaForgejoConfig
 	function client.config()
-		return providers.options("gitea", "pulls") or {}
+		local configured = providers.options("gitea", domain)
+		if configured ~= nil then
+			return configured
+		end
+		-- Pull requests can create issues without requiring the user to duplicate
+		-- the same instance credentials under issues.providers.gitea.
+		if domain == "issues" then
+			return providers.options("gitea", "pulls") or {}
+		end
+		return {}
 	end
 
 	---@return string
@@ -164,7 +174,7 @@ local function new()
 
 		logger.loginfo(NAME .. " request", {
 			api_type = API_TYPE,
-			domain = "pulls",
+			domain = domain,
 			endpoint = endpoint,
 			method = method,
 		})
@@ -192,5 +202,6 @@ local function new()
 end
 
 return {
-	pulls = new(),
+	pulls = new("pulls"),
+	issues = new("issues"),
 }
