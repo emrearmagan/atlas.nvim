@@ -294,6 +294,14 @@ end
 
 local PR_CACHE_MAX_AGE = 7 * 24 * 60 * 60
 
+---@param action string
+---@param phase string
+---@param percent integer
+---@return string
+local function progress_message(action, phase, percent)
+	return string.format("%s...\n%s %d%% / 100%%", action, phase, percent)
+end
+
 local function clean_pr_cache()
 	local root = vim.fs.joinpath(vim.fn.stdpath("cache"), "atlas", "repos")
 	for _, git_dir in ipairs(vim.fs.find(".git", { path = root, type = "directory", limit = math.huge })) do
@@ -365,6 +373,7 @@ function M.ensure_pr_repository(pr, repo_path, on_progress, on_done)
 	-- Leave the cache without a checkout; Git loads trees and blobs when a diff needs them.
 	current = git.run({
 		"clone",
+		"--progress",
 		"--filter=tree:0",
 		"--no-checkout",
 		"--single-branch",
@@ -383,6 +392,8 @@ function M.ensure_pr_repository(pr, repo_path, on_progress, on_done)
 			return
 		end
 		fetch(path)
+	end, function(phase, percent)
+		on_progress(progress_message("Cloning repository", phase, percent))
 	end)
 
 	return handle

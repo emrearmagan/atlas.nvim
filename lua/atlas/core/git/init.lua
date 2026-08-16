@@ -7,14 +7,72 @@ local function trim(s)
 	return (s:gsub("^%s+", ""):gsub("%s+$", ""))
 end
 
+---@param line string
+---@return string|nil label
+---@return integer|nil percent
+local function parse_progress(line)
+	line = trim(line):gsub("^remote:%s*", "")
+	local label, percent = line:match("^([^:]+):%s*(%d+)%%")
+	return label and trim(label) or nil, percent and tonumber(percent) or nil
+end
+
 ---@param args string[] Arguments after `git`.
 ---@param opts vim.SystemOpts|nil
 ---@param on_done fun(res: vim.SystemCompleted)
+---@param on_progress (fun(label: string, percent: integer))|nil
 ---@return { cancel: fun() }
-function M.run(args, opts, on_done)
+function M.run(args, opts, on_done, on_progress)
 	local cancelled = false
 	local finished = false
-	local handle = vim.system(vim.list_extend({ "git" }, args), opts or {}, function(res)
+	local system_opts = opts or {}
+	local stderr = {}
+	local pending = ""
+	local last_progress = ""
+
+	local function report_progress(line)
+		local label, percent = parse_progress(line)
+		if not label or not percent or not on_progress then
+			return
+		end
+		local progress = label .. ":" .. percent
+		if progress == last_progress then
+			return
+		end
+		last_progress = progress
+		local callback = on_progress
+		vim.schedule(function()
+			if not cancelled and not finished then
+				callback(label, percent)
+			end
+		end)
+	end
+
+	if on_progress then
+		system_opts = vim.tbl_extend("force", {}, system_opts)
+		system_opts.stderr = function(_, data)
+			if not data then
+				return
+			end
+			table.insert(stderr, data)
+			pending = pending .. data
+			while true do
+				local boundary = pending:find("[\r\n]")
+				if not boundary then
+					break
+				end
+				report_progress(pending:sub(1, boundary - 1))
+				pending = pending:sub(boundary + 1)
+			end
+		end
+	end
+
+	local handle = vim.system(vim.list_extend({ "git" }, args), system_opts, function(res)
+		if on_progress then
+			if pending ~= "" then
+				report_progress(pending)
+			end
+			res.stderr = table.concat(stderr)
+		end
 		vim.schedule(function()
 			if cancelled then
 				return
