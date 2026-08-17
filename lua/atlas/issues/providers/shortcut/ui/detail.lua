@@ -106,7 +106,7 @@ function M.tabs()
 			key = "overview",
 			label = "Overview",
 			icon = { icon = overview_icon, hl_group = overview_hl },
-			mod = require("atlas.issues.providers.shortcut.ui.overview"),
+			mod = require("atlas.issues.ui.detail.tabs.overview"),
 		},
 		{
 			key = "conversation",
