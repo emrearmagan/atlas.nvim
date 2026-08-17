@@ -444,6 +444,9 @@ function M.to_review_comment(node, thread, fallback_parent)
 	if result.parent_id == nil then
 		result.parent_id = fallback_parent
 	end
+	if result.parent_id == nil and thread.isResolved == true and type(json.nilify(thread.resolvedBy)) == "table" then
+		result.resolved_by = comment_author(thread.resolvedBy)
+	end
 	return result
 end
 

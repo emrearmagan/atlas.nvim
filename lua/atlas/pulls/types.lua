@@ -231,6 +231,8 @@
 ---@field content_raw string
 ---@field content_display string|nil
 ---@field created_on string
+---@field resolved_on string|nil
+---@field resolved_by PullsAuthor|nil
 ---@field inline PullsInlineCommentPosition|nil
 ---@field file PullsFileCommentPosition|nil
 ---@field inline_hunk DiffHunk|nil                       -- surrounding diff context for inline comments

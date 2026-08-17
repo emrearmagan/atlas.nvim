@@ -22,11 +22,13 @@ end
 
 ---@param workspace string
 ---@param repo string
+---@param statuses string[]
+---@param pagelen integer
 ---@return string
-local function cache_key(workspace, repo, statuses)
+local function cache_key(workspace, repo, statuses, pagelen)
 	local sorted = vim.deepcopy(statuses)
 	table.sort(sorted)
-	return string.format("bitbucket:prs:%s/%s:%s", workspace, repo, table.concat(sorted, ","))
+	return string.format("bitbucket:prs:%s/%s:%s:pagelen:%d", workspace, repo, table.concat(sorted, ","), pagelen)
 end
 
 ---@param workspace string
@@ -36,9 +38,10 @@ end
 ---@return { job_id: integer, cancel: fun() }|nil
 local function fetch_pullrequests_single(workspace, repo, opts, on_done)
 	local statuses_for_key = opts.statuses or { state.pr_state }
-	local key = cache_key(workspace, repo, statuses_for_key)
+	local pagelen = tonumber(opts.pagelen) or 50
+	local key = cache_key(workspace, repo, statuses_for_key, pagelen)
 	if not opts.force then
-		local cached, ok = service.get_cache(key)
+		local cached, ok = service.get_persistent_cache(key)
 		if ok then
 			logger.loginfo("Bitbucket cache hit", { workspace = workspace, repo = repo })
 			on_done(cached, nil)
@@ -56,7 +59,7 @@ local function fetch_pullrequests_single(workspace, repo, opts, on_done)
 		workspace,
 		repo,
 		table.concat(state_params, "&"),
-		tonumber(opts.pagelen) or 50
+		pagelen
 	)
 	return service.request("GET", endpoint, nil, nil, function(result, err)
 		if err then
@@ -65,7 +68,7 @@ local function fetch_pullrequests_single(workspace, repo, opts, on_done)
 		end
 
 		local normalized = mapper.to_pull_requests_list(result, workspace, repo)
-		service.set_cache(key, normalized, opts.cache_ttl)
+		service.set_persistent_cache(key, normalized, opts.cache_ttl)
 		logger.loginfo("Fetch success", {
 			workspace = workspace,
 			repo = repo,

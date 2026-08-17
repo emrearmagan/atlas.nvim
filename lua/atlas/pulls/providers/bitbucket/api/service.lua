@@ -1,5 +1,6 @@
 local M = {}
 
+local cache = require("atlas.core.cache")
 local config = require("atlas.config")
 local logger = require("atlas.core.logger")
 local http = require("atlas.core.http")
@@ -59,7 +60,7 @@ function M.cache_ttl()
 		and config.options.pulls
 		and config.options.pulls.providers
 		and config.options.pulls.providers.bitbucket
-	return ((bb and bb.cache_ttl) or 300)
+	return tonumber(bb and bb.cache_ttl) or 300
 end
 
 function M.clear_cache()
@@ -82,6 +83,23 @@ end
 ---@param ttl number|nil
 function M.set_cache(key, value, ttl)
 	memory_cache.set(key, value, ttl or M.cache_ttl())
+end
+
+---@param key string
+---@return any|nil, boolean
+function M.get_persistent_cache(key)
+	local entry = cache.get(key)
+	if not entry or entry.value == nil then
+		return nil, false
+	end
+	return entry.value, true
+end
+
+---@param key string
+---@param value any
+---@param ttl number|nil
+function M.set_persistent_cache(key, value, ttl)
+	cache.set(key, value, ttl or M.cache_ttl())
 end
 
 ---@param result any

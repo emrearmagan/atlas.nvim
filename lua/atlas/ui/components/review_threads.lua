@@ -26,6 +26,81 @@ local function author_name(author)
 	return "Unknown"
 end
 
+---@param author PullsAuthor|nil
+---@return string|nil
+local function author_mention(author)
+	if author == nil then
+		return nil
+	end
+	local username = tostring(author.nickname or author.username or "")
+	if username ~= "" then
+		return "@" .. username
+	end
+	local name = tostring(author.name or "")
+	return name ~= "" and name or nil
+end
+
+---@param comment PullsComment
+---@return string|nil
+local function resolution_text(comment)
+	if comment.state ~= "RESOLVED" then
+		return nil
+	end
+	local resolver = author_mention(comment.resolved_by)
+	local resolved_at = comment.resolved_on and utils.relative_time(comment.resolved_on) or ""
+	local text = resolver and ("resolved by " .. resolver) or "resolved"
+	if resolved_at ~= "" then
+		text = text .. "  " .. resolved_at
+	end
+	return text
+end
+
+---@param comment PullsComment
+---@return { text: string, hl_group: string }|nil
+local function resolution_footer(comment)
+	local text = resolution_text(comment)
+	return text and { text = text, hl_group = "AtlasTextMuted" } or nil
+end
+
+---@param text string
+---@param marker string
+---@param marker_hl string|table[]|nil
+---@return string, string|table[]|nil
+local function status_text(text, marker, marker_hl)
+	if text == "" then
+		return marker, marker_hl
+	end
+	local separator = marker ~= "" and "  " or ""
+	local highlights = {
+		{ start_col = 0, end_col = #text, hl_group = "AtlasTextMuted" },
+	}
+	local offset = #text + #separator
+	if type(marker_hl) == "table" then
+		for _, highlight in ipairs(marker_hl) do
+			table.insert(highlights, {
+				start_col = offset + highlight.start_col,
+				end_col = offset + highlight.end_col,
+				hl_group = highlight.hl_group,
+			})
+		end
+	elseif marker ~= "" and marker_hl then
+		table.insert(highlights, {
+			start_col = offset,
+			end_col = offset + #marker,
+			hl_group = marker_hl,
+		})
+	end
+	return text .. separator .. marker, highlights
+end
+
+---@param comment PullsComment
+---@param marker string
+---@param marker_hl string|table[]|nil
+---@return string, string|table[]|nil
+local function resolution_status(comment, marker, marker_hl)
+	return status_text(resolution_text(comment) or "", marker, marker_hl)
+end
+
 ---@param name string|nil
 ---@return string
 local function author_hl(name)
@@ -125,6 +200,10 @@ local function comment_item(comment, opts, is_root)
 		local timestamp = utils.relative_time(comment.created_on)
 		local additional = timestamp ~= "" and ("TASK  " .. timestamp) or "TASK"
 		local footer_items = {}
+		local resolution = resolution_footer(comment)
+		if resolution then
+			table.insert(footer_items, resolution)
+		end
 		local edit_key = is_root and opts.action_keys and opts.action_keys.edit
 		if edit_key then
 			table.insert(footer_items, {
@@ -217,6 +296,7 @@ local function comment_item(comment, opts, is_root)
 	local marker, marker_hl
 	if is_root then
 		marker, marker_hl = M.status_marker(comment)
+		marker, marker_hl = resolution_status(comment, marker, marker_hl)
 	end
 	local user_icon, user_icon_hl = icons.general("user")
 	local additional = utils.relative_time(comment.created_on)
@@ -469,7 +549,25 @@ function M.render(nodes, width, opts)
 	for _, node in ipairs(nodes or {}) do
 		table.insert(rendered, build_item(node, opts, true, nil))
 	end
-	return threadsv2.render(rendered, width, threads_opts(opts.padding_x or 1))
+	return threadsv2.render(rendered, width, threads_opts(opts.padding_x or 1, opts))
+end
+
+---@param node AtlasReviewThreadNode
+---@param width integer
+---@param opts AtlasReviewThreadRenderOptions|nil
+---@return string[], table[], table<integer, table>
+function M.render_task_compact(node, width, opts)
+	opts = opts or {}
+	opts.expanded = function()
+		return true
+	end
+	local item = build_item(node, opts, true, nil)
+	local task = node.comment
+	local label = tostring(task.task_label or "")
+	item.additional = label ~= "" and label or "added a task"
+	local marker, marker_hl = M.status_marker(task)
+	item.right_text, item.meta.right_text_hl = status_text(utils.relative_time(task.created_on), marker, marker_hl)
+	return threadsv2.render({ item }, width, threads_opts(opts.padding_x or 1, opts))
 end
 
 ---@param node AtlasReviewThreadNode
@@ -495,8 +593,10 @@ function M.render_compact(node, width, expanded, location, opts)
 			text = replies > 0 and string.format("%d %s", replies, replies == 1 and "reply" or "replies") or "",
 			hl = "AtlasTextMuted",
 		},
-		{ text = marker, hl = marker_hl },
 	}
+	if comment.is_task then
+		table.insert(fields, { text = marker, hl = marker_hl })
+	end
 	local metadata, metadata_hl = "", {}
 	for _, field in ipairs(fields) do
 		if field.text ~= "" then
@@ -524,7 +624,11 @@ function M.render_compact(node, width, expanded, location, opts)
 	item.icon_hl = expander_hl
 	item.author = "@" .. author_name(comment.author)
 	item.additional = metadata
-	item.right_text = ""
+	if comment.is_task then
+		item.right_text = ""
+	else
+		item.right_text, item.meta.right_text_hl = resolution_status(comment, marker, marker_hl)
+	end
 	item.line_map.tree_key = M.comment_key(comment)
 	item.meta.additional_hl = metadata_hl
 	if not expanded then
@@ -532,6 +636,10 @@ function M.render_compact(node, width, expanded, location, opts)
 		item.content_block = nil
 		item.children = {}
 		item.footer_items = {}
+		local resolution = comment.is_task and resolution_footer(comment) or nil
+		if resolution ~= nil then
+			table.insert(item.footer_items, resolution)
+		end
 	end
 
 	return threadsv2.render({ item }, width, threads_opts(0))

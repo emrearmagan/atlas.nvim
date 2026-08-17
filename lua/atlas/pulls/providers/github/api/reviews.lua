@@ -18,6 +18,7 @@ query($owner:String!,$name:String!,$number:Int!,$endCursor:String){
         nodes{
           id
           isResolved
+          resolvedBy{login databaseId}
           isOutdated
           subjectType
           diffSide

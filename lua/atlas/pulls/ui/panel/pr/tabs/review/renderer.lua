@@ -4,27 +4,11 @@ local utils = require("atlas.ui.shared.utils")
 local spinner = require("atlas.ui.components.spinner")
 local box = require("atlas.ui.components.box")
 local diff = require("atlas.ui.components.diff_hunks")
-local highlights = require("atlas.ui.shared.highlights")
 local keymaps = require("atlas.core.keymaps")
 local review_threads = require("atlas.ui.components.review_threads")
 local state = require("atlas.pulls.ui.panel.pr.tabs.review.state")
 
 local PADDING_X = 1
-
----@param author { name: string, nickname: string|nil }|nil
----@return string
-local function author_name(author)
-	if author == nil then
-		return "Unknown"
-	end
-	if author.nickname and author.nickname ~= "" then
-		return author.nickname
-	end
-	if author.name and author.name ~= "" then
-		return author.name
-	end
-	return "Unknown"
-end
 
 ---@param tasks PullsComment[]
 ---@return string
@@ -36,127 +20,23 @@ local function task_heading(tasks)
 	return label:sub(-1):lower() == "s" and label or (label .. "s")
 end
 
----@param prefix string
----@param text string
----@param suffix string
----@param width integer
----@return string line, string text
-local function task_row(prefix, text, suffix, width)
-	local gap_width = suffix ~= "" and 2 or 0
-	local text_width = width - vim.api.nvim_strwidth(prefix) - vim.api.nvim_strwidth(suffix) - PADDING_X - gap_width
-	if text_width > 0 then
-		text = utils.truncate(text, text_width)
-	else
-		text = ""
-	end
-
-	if suffix == "" then
-		return prefix .. text, text
-	end
-
-	local gap = math.max(
-		2,
-		width - vim.api.nvim_strwidth(prefix) - vim.api.nvim_strwidth(text) - vim.api.nvim_strwidth(suffix) - PADDING_X
-	)
-	return prefix .. text .. string.rep(" ", gap) .. suffix, text
-end
-
 ---@param lines string[]
 ---@param spans table[]
 ---@param line_map table<integer, table>
----@param tasks PullsComment[]
+---@param task PullsComment
 ---@param width integer
----@param capability PullsTasksCapability|nil
-local function emit_tasks(lines, spans, line_map, tasks, width, capability)
-	local toggle_keys = capability and capability.edit_task and keymaps.resolve("pulls.review.diff.toggle_resolved")
-	local edit_keys = capability and capability.edit_task and keymaps.resolve("pulls.review.diff.edit_comment")
-	local delete_keys = capability and capability.delete_task and keymaps.resolve("pulls.review.diff.delete")
-	local padding = string.rep(" ", PADDING_X)
-
-	for _, task in ipairs(tasks) do
-		local resolved = task.state == "RESOLVED"
-		local footer = {}
-		if edit_keys then
-			table.insert(footer, table.concat(edit_keys, " / ") .. " edit")
-		end
-		if delete_keys then
-			table.insert(footer, table.concat(delete_keys, " / ") .. " delete")
-		end
-		if toggle_keys then
-			table.insert(footer, table.concat(toggle_keys, " / ") .. (resolved and " reopen" or " complete"))
-		end
-
-		local title = utils.task_text(task.content_display or task.content_raw)
-		local newline = title:find("\n", 1, true)
-		title = newline and title:sub(1, newline - 1) or title
-		if title == "" then
-			title = string.format("(empty %s)", (task.task_label or "task"):lower())
-		end
-
-		local checkbox = resolved and "[x]" or "[ ]"
-		local timestamp = utils.relative_time(task.created_on)
-		local marker, marker_hl = review_threads.status_marker(task)
-		local title_suffix = timestamp
-		if marker ~= "" then
-			title_suffix = title_suffix ~= "" and (title_suffix .. "  " .. marker) or marker
-		end
-		local title_prefix = padding .. checkbox .. " "
-		local title_line = task_row(title_prefix, title, title_suffix, width)
-		table.insert(lines, title_line)
-		line_map[#lines] = { kind = "header", comment = task, entity_kind = "task" }
-		table.insert(spans, {
-			line = #lines - 1,
-			start_col = #padding,
-			end_col = #padding + #checkbox,
-			hl_group = resolved and "AtlasTextPositive" or "AtlasTextMuted",
-		})
-		if title_suffix ~= "" then
-			table.insert(spans, {
-				line = #lines - 1,
-				start_col = #title_line - #title_suffix,
-				end_col = #title_line,
-				hl_group = "AtlasTextMuted",
-			})
-			if marker ~= "" then
-				table.insert(spans, {
-					line = #lines - 1,
-					start_col = #title_line - #marker,
-					end_col = #title_line,
-					hl_group = marker_hl,
-				})
-			end
-		end
-
-		local creator = author_name(task.author)
-		local author = "by @" .. creator
-		local action_text = table.concat(footer, "  ")
-		local meta_prefix = padding .. string.rep(" ", #checkbox + 1)
-		local meta_line, visible_author = task_row(meta_prefix, author, action_text, width)
-		table.insert(lines, meta_line)
-		line_map[#lines] = { kind = "task_meta", comment = task, entity_kind = "task" }
-		if visible_author ~= "" then
-			local normalized_author = vim.trim(creator):lower()
-			local author_highlight
-			if normalized_author == "" or normalized_author == "unknown" then
-				author_highlight = "AtlasTextMutedItalic"
-			else
-				author_highlight = highlights.dynamic_for(normalized_author) or "AtlasTextMuted"
-			end
-			table.insert(spans, {
-				line = #lines - 1,
-				start_col = #meta_prefix,
-				end_col = #meta_prefix + #visible_author,
-				hl_group = author_highlight,
-			})
-		end
-		if action_text ~= "" then
-			table.insert(spans, {
-				line = #lines - 1,
-				start_col = #meta_line - #action_text,
-				end_col = #meta_line,
-				hl_group = "AtlasTextMuted",
-			})
-		end
+local function emit_task(lines, spans, line_map, task, width)
+	local task_lines, task_spans, task_map = review_threads.render_task_compact(
+		{ comment = task, children = {} },
+		width,
+		{
+			padding_x = PADDING_X,
+		}
+	)
+	local offset = #lines
+	utils.append_block(lines, spans, { lines = task_lines, highlights = task_spans })
+	for line, entry in pairs(task_map) do
+		line_map[offset + line] = entry
 	end
 end
 
@@ -310,9 +190,8 @@ end
 ---@param width integer
 ---@param comments PullsComment[]|"loading"|string|nil
 ---@param tasks PullsComment[]|"loading"|string|nil
----@param task_capability PullsTasksCapability|nil
 ---@return string[], table[], table<integer, table>
-function M.render(width, comments, tasks, task_capability)
+function M.render(width, comments, tasks)
 	local lines = {}
 	local spans = {}
 	local line_map = {}
@@ -334,7 +213,9 @@ function M.render(width, comments, tasks, task_capability)
 		end)
 		utils.push(lines, spans, task_heading(sorted_tasks), "AtlasColumnHeader", PADDING_X)
 		table.insert(lines, "")
-		emit_tasks(lines, spans, line_map, sorted_tasks, max_width, task_capability)
+		for _, task in ipairs(sorted_tasks) do
+			emit_task(lines, spans, line_map, task, max_width)
+		end
 		table.insert(lines, "")
 	end
 
