@@ -50,10 +50,15 @@ describe("atlas keymap conflicts", function()
 		end
 	end)
 
-	it("includes navigation keys in domain conflicts", function()
-		config.options.keymaps.ui.next_item = "gd"
+	it("reports unexpected conflicts inside nested groups", function()
+		config.options.keymaps.pulls.checkout = "gr"
 
 		local pulls_conflicts = keymaps.validate().pulls
-		assert.are.same({ "pulls.open_diff", "ui.next_item" }, pulls_conflicts["gd"])
+		assert.are.same({
+			"pulls.checkout",
+			"pulls.edit_reviewers",
+			"pulls.review.request_changes",
+			"ui.comments.react",
+		}, pulls_conflicts["gr"])
 	end)
 end)

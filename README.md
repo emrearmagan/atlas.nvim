@@ -750,7 +750,6 @@ keymaps = {
       open = "N",
       mark_read = "r",
       mark_done = "d",
-      refresh = "R",
     },
     toggle_subscription = "gS",
     refresh = "r",
@@ -775,7 +774,7 @@ keymaps = {
     checkout = "gc",
     external_help = "gA", -- Atlas help in external diff viewers
     toggle_repo_panel = "o",
-    toggle_repo_issue_state = "s",
+    toggle_repo_issue_state = "t",
     edit_title = "T",
     edit_description = "D",
     edit_reviewers = "gr",

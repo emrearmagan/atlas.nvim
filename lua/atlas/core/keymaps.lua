@@ -37,7 +37,6 @@ local M = {}
 ---@field open? AtlasKeymapValue
 ---@field mark_read? AtlasKeymapValue
 ---@field mark_done? AtlasKeymapValue
----@field refresh? AtlasKeymapValue
 
 ---@class AtlasPullsReviewExplorerKeymaps
 ---@field find_file? AtlasKeymapValue
@@ -133,7 +132,6 @@ local M = {}
 ---| "ui.notifications.open"
 ---| "ui.notifications.mark_read"
 ---| "ui.notifications.mark_done"
----| "ui.notifications.refresh"
 ---| "ui.toggle_subscription"
 ---| "ui.refresh"
 ---| "ui.refresh_view"
@@ -243,49 +241,6 @@ function M.resolve(action_id)
 	return normalize(from_config(action_id))
 end
 
--- Navigation is bound in every Atlas buffer, so these participate in the
--- conflict check for every section.
----@type AtlasKeymapActionId[]
-local NAV_ACTIONS = {
-	"ui.next_item",
-	"ui.previous_item",
-	"ui.first_item",
-	"ui.last_item",
-}
-
----@param action_ids AtlasKeymapActionId[]
----@return table<string, string[]>
-local function conflicts_for(action_ids)
-	---@type table<string, table<string, true>>
-	local seen_by_key = {}
-
-	---@param ids AtlasKeymapActionId[]
-	local function collect(ids)
-		for _, action_id in ipairs(ids) do
-			local keys = M.resolve(action_id) or {}
-			for _, key in ipairs(keys) do
-				seen_by_key[key] = seen_by_key[key] or {}
-				seen_by_key[key][action_id] = true
-			end
-		end
-	end
-
-	collect(NAV_ACTIONS)
-	collect(action_ids)
-
-	---@type table<string, string[]>
-	local conflicts = {}
-	for key, seen in pairs(seen_by_key) do
-		local actions = vim.tbl_keys(seen)
-		table.sort(actions)
-		if #actions > 1 then
-			conflicts[key] = actions
-		end
-	end
-
-	return conflicts
-end
-
 ---@param section_path string[]
 ---@return { key?: string, label?: string, items?: table }|nil
 local function get_bookmarks(section_path)
@@ -350,186 +305,99 @@ end
 
 ---@return table<string, table<string, string[]>>
 function M.validate()
-	local result = {
-		ui = conflicts_for({
-			"ui.select",
-			"ui.submit",
-			"ui.help",
-			"ui.close",
-			"ui.delete",
-			"ui.toggle_panel",
-			"ui.toggle_fold",
-			"ui.toggle_all_folds",
-			"ui.previous_panel_tab",
-			"ui.next_panel_tab",
-			"ui.notifications.open",
-			"ui.toggle_subscription",
-			"ui.refresh",
-			"ui.refresh_view",
-			"ui.open_actions",
-			"ui.open_in_browser",
-			"ui.copy_id",
-			"ui.copy_url",
-			"ui.show_details",
-			"ui.search",
-		}),
-		pulls = conflicts_for({
-			"pulls.open_diff",
-			"pulls.checkout",
-			"pulls.toggle_repo_panel",
-			"pulls.edit_title",
-			"pulls.edit_description",
-			"pulls.filters.open",
-			"pulls.filters.merged",
-			"pulls.filters.declined",
-		}),
-		["pull review"] = conflicts_for({
-			"pulls.external_help",
-			"pulls.review.approve",
-			"pulls.review.request_changes",
-			"pulls.review.submit_review",
-			"ui.select",
-			"pulls.review.focus_item",
-			"pulls.review.explorer.find_file",
-			"pulls.review.explorer.next_file",
-			"pulls.review.explorer.previous_file",
-			"pulls.review.explorer.next_unreviewed_file",
-			"pulls.review.explorer.previous_unreviewed_file",
-			"pulls.review.explorer.toggle_grouping",
-			"pulls.review.explorer.toggle_file_reviewed",
-			"pulls.review.explorer.toggle_commits",
-			"pulls.review.diff.toggle_layout",
-			"pulls.review.diff.toggle_compact",
-			"pulls.review.diff.next_hunk",
-			"pulls.review.diff.previous_hunk",
-			"pulls.review.diff.toggle_review_panel",
-			"pulls.review.diff.toggle_comments",
-			"pulls.review.diff.next_comment",
-			"pulls.review.diff.previous_comment",
-			"pulls.review.diff.next_note",
-			"pulls.review.diff.previous_note",
-			"pulls.review.diff.add_comment",
-			"pulls.review.diff.submit_comment",
-			"pulls.review.diff.add_suggestion",
-			"pulls.review.diff.submit_suggestion",
-			"ui.comments.edit",
-			"ui.delete",
-			"pulls.review.diff.add_note",
-			"pulls.review.diff.toggle_resolved",
-		}),
-		["pull conversation"] = conflicts_for({
-			"ui.refresh",
-			"ui.refresh_view",
-			"ui.open_actions",
-			"ui.open_in_browser",
-			"ui.toggle_subscription",
-			"ui.next_panel_tab",
-			"ui.previous_panel_tab",
-			"ui.help",
-			"ui.toggle_panel",
-			"ui.close",
-			"ui.toggle_fold",
-			"ui.toggle_all_folds",
-			"ui.comments.add",
-			"ui.comments.reply",
-			"ui.comments.edit",
-			"ui.delete",
+	-- TODO: Give these actions unique default mappings.
+	---@type AtlasKeymapActionId[][]
+	local ALLOWED_CONFLICTS = {
+		{ "ui.next_panel_tab", "pulls.review.explorer.next_file" },
+		{ "ui.previous_panel_tab", "pulls.review.explorer.previous_file" },
+		{ "ui.comments.reply", "pulls.review.diff.add_comment", "issues.create_issue" },
+		{ "pulls.edit_title", "pulls.review.explorer.toggle_grouping" },
+		{ "pulls.toggle_repo_issue_state", "pulls.review.diff.toggle_layout" },
+		{ "pulls.edit_assignees", "pulls.review.approve" },
+		{ "pulls.open_diff", "pulls.review.focus_item", "pulls.pipelines.open" },
+		{
 			"ui.comments.react",
-		}),
-		["pull overview"] = conflicts_for({
-			"ui.refresh",
-			"ui.refresh_view",
-			"ui.open_actions",
-			"ui.open_in_browser",
-			"ui.toggle_subscription",
-			"ui.next_panel_tab",
-			"ui.previous_panel_tab",
-			"ui.help",
-			"ui.toggle_panel",
-			"ui.close",
 			"pulls.edit_reviewers",
-			"pulls.edit_assignees",
-		}),
-		["pull review tab"] = conflicts_for({
-			"ui.refresh",
-			"ui.refresh_view",
-			"ui.open_actions",
-			"ui.open_in_browser",
-			"ui.toggle_subscription",
-			"ui.next_panel_tab",
-			"ui.previous_panel_tab",
-			"ui.help",
-			"ui.toggle_panel",
-			"ui.close",
-			"ui.comments.reply",
-			"ui.comments.edit",
-			"ui.delete",
-			"pulls.review.add_task",
-			"pulls.review.diff.toggle_resolved",
-			"ui.show_details",
-			"ui.toggle_fold",
-			"ui.toggle_all_folds",
-			"pulls.review.diff.next_hunk",
-			"pulls.review.diff.previous_hunk",
-		}),
-		["repo panel"] = conflicts_for({
-			"ui.refresh",
-			"ui.refresh_view",
-			"ui.open_in_browser",
-			"ui.next_panel_tab",
-			"ui.previous_panel_tab",
-			"ui.help",
-			"ui.close",
-			"pulls.toggle_repo_panel",
-			"pulls.toggle_repo_issue_state",
-			"ui.delete",
-		}),
+			"pulls.review.request_changes",
+			"issues.change_reporter",
+		},
+	}
+
+	local function conflict_allowed(actions)
+		for _, group in ipairs(ALLOWED_CONFLICTS) do
+			local allowed = {}
+			for _, action_id in ipairs(group) do
+				allowed[action_id] = true
+			end
+
+			local matches = true
+			for _, action_id in ipairs(actions) do
+				if not allowed[action_id] then
+					matches = false
+					break
+				end
+			end
+			if matches then
+				return true
+			end
+		end
+		return false
+	end
+
+	local function collect_actions(node, path, action_ids)
+		for name, value in pairs(node) do
+			local action_id = path .. "." .. name
+			local notification_action = action_id == "ui.notifications.mark_read"
+				or action_id == "ui.notifications.mark_done"
+			if not notification_action then
+				if normalize(value) then
+					table.insert(action_ids, action_id)
+				elseif type(value) == "table" then
+					collect_actions(value, action_id, action_ids)
+				end
+			end
+		end
+	end
+
+	local keymaps = require("atlas.config").options.keymaps
+	local function actions_for(namespaces)
+		local action_ids = {}
+		for _, namespace in ipairs(namespaces) do
+			collect_actions(keymaps[namespace] or {}, namespace, action_ids)
+		end
+		return action_ids
+	end
+
+	local function conflicts_for(action_ids)
+		local seen_by_key = {}
+		for _, action_id in ipairs(action_ids) do
+			for _, key in ipairs(M.resolve(action_id) or {}) do
+				seen_by_key[key] = seen_by_key[key] or {}
+				seen_by_key[key][action_id] = true
+			end
+		end
+
+		local conflicts = {}
+		for key, seen in pairs(seen_by_key) do
+			local actions = vim.tbl_keys(seen)
+			table.sort(actions)
+			if #actions > 1 and not conflict_allowed(actions) then
+				conflicts[key] = actions
+			end
+		end
+		return conflicts
+	end
+
+	local result = {
+		ui = conflicts_for(actions_for({ "ui" })),
+		pulls = conflicts_for(actions_for({ "ui", "pulls" })),
+		issues = conflicts_for(actions_for({ "ui", "issues" })),
 		notifications = conflicts_for({
 			"ui.notifications.mark_read",
 			"ui.notifications.mark_done",
-			"ui.notifications.refresh",
-			"ui.open_in_browser",
-			"ui.close",
-		}),
-		pipelines = conflicts_for({ "pulls.pipelines.open" }),
-		issues = conflicts_for({
-			"issues.transition_issue",
-			"issues.change_assignee",
-			"issues.change_reporter",
-			"issues.edit_issue",
-			"issues.create_issue",
-		}),
-		["issue overview"] = conflicts_for({
-			"ui.refresh",
 			"ui.refresh_view",
-			"ui.open_actions",
 			"ui.open_in_browser",
-			"ui.toggle_subscription",
-			"ui.next_panel_tab",
-			"ui.previous_panel_tab",
-			"ui.help",
-			"ui.toggle_panel",
 			"ui.close",
-			"issues.toggle_description_mode",
-		}),
-		["issue conversation"] = conflicts_for({
-			"ui.refresh",
-			"ui.refresh_view",
-			"ui.open_actions",
-			"ui.open_in_browser",
-			"ui.toggle_subscription",
-			"ui.next_panel_tab",
-			"ui.previous_panel_tab",
-			"ui.help",
-			"ui.toggle_panel",
-			"ui.close",
-			"ui.comments.add",
-			"ui.comments.reply",
-			"ui.comments.edit",
-			"ui.delete",
-			"ui.comments.react",
-			"ui.toggle_fold",
-			"ui.toggle_all_folds",
 		}),
 	}
 
