@@ -48,8 +48,11 @@ local function resolution_text(comment)
 		return nil
 	end
 	local resolver = author_mention(comment.resolved_by)
+	if resolver == nil then
+		return nil
+	end
 	local resolved_at = comment.resolved_on and utils.relative_time(comment.resolved_on) or ""
-	local text = resolver and ("resolved by " .. resolver) or "resolved"
+	local text = "resolved by " .. resolver
 	if resolved_at ~= "" then
 		text = text .. "  " .. resolved_at
 	end

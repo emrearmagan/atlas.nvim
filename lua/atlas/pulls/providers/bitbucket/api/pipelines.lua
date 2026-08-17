@@ -96,7 +96,10 @@ function M.fetch_pipelines(pr, opts, on_done)
 		return nil
 	end
 
-	local key = "bitbucket:pr:pipelines:" .. statuses_url
+	local fields = "values.name,values.key,values.state,values.url,next"
+	local sep = statuses_url:find("?") and "&" or "?"
+	local url = string.format("%s%spagelen=%d&fields=%s", statuses_url, sep, 100, fields)
+	local key = "bitbucket:pr:pipelines:" .. url
 	if not (opts or {}).force_refresh then
 		local cached, ok = service.get_cache(key)
 		if ok then
@@ -113,7 +116,7 @@ function M.fetch_pipelines(pr, opts, on_done)
 		end
 	end
 
-	track(service.request("GET", statuses_url, nil, nil, function(result, err)
+	track(service.fetch_all_values(url, function(result, err)
 		if cancelled then
 			return
 		end
