@@ -167,6 +167,7 @@ local function normalize_pull(item, workspace, repo)
 	local source_repository = as_table(source.repository) or {}
 	local destination_branch = as_table(destination.branch) or {}
 	local destination_commit = as_table(destination.commit) or {}
+	local participants = as_table(pr.participants)
 	local repo_full_name = (workspace ~= "" and repo ~= "") and string.format("%s/%s", workspace, repo) or ""
 
 	return {
@@ -209,7 +210,7 @@ local function normalize_pull(item, workspace, repo)
 		close_source_branch = pr.close_source_branch == true,
 		created_on = tostring(pr.created_on or ""),
 		updated_on = tostring(pr.updated_on or ""),
-		reviewers = M.to_reviewers(as_table(pr.participants)),
+		reviewers = participants and M.to_reviewers(participants) or nil,
 		workspace = workspace,
 		repo = repo,
 		repo_full_name = repo_full_name,
