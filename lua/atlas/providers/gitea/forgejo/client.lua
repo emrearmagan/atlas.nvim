@@ -195,7 +195,7 @@ local function new(domain)
 				on_done(nil, err)
 				return
 			end
-			if type(result) ~= "table" then
+			if result ~= vim.NIL and type(result) ~= "table" then
 				local shape_err = NAME .. " response is not a JSON object or list"
 				logger.logerror(NAME .. " response invalid", {
 					domain = domain,

@@ -57,12 +57,14 @@ function M.fetch_all(endpoint, params, opts, on_done)
 				finish(nil, err)
 				return
 			end
-			if not json.is_list(result) then
+			-- Gitea returns JSON null after the final timeline page.
+			local items = result == vim.NIL and {} or result
+			if not json.is_list(items) then
 				finish(nil, opts.invalid_response or "Invalid paginated response")
 				return
 			end
 
-			for _, value in ipairs(result) do
+			for _, value in ipairs(items) do
 				if opts.accept == nil or opts.accept(value) then
 					table.insert(values, value)
 					if max_items and #values >= max_items then
@@ -73,7 +75,7 @@ function M.fetch_all(endpoint, params, opts, on_done)
 			end
 
 			if opts.post_filtered then
-				empty_pages = #result == 0 and empty_pages + 1 or 0
+				empty_pages = #items == 0 and empty_pages + 1 or 0
 				-- Timeline and review rows are paginated before the server removes
 				-- hidden entries. Scan past one empty page because later pages may
 				-- still contain visible rows.
@@ -81,7 +83,7 @@ function M.fetch_all(endpoint, params, opts, on_done)
 					finish(values, nil)
 					return
 				end
-			elseif #result < page_size then
+			elseif #items < page_size then
 				finish(values, nil)
 				return
 			end
