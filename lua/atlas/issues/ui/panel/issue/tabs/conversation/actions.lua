@@ -135,7 +135,7 @@ end
 ---@param entry table
 ---@param refresh fun()
 function M.reply(issue, entry, refresh)
-	if not entry or entry.kind ~= "comment" or not entry.comment then
+	if not entry or entry.entity_kind ~= "comment" or not entry.comment then
 		return
 	end
 	local comments = get_comments()
@@ -193,7 +193,7 @@ end
 ---@param entry table
 ---@param refresh fun()
 function M.edit(issue, entry, refresh)
-	if not entry or entry.kind ~= "comment" or not entry.comment then
+	if not entry or entry.entity_kind ~= "comment" or not entry.comment then
 		return
 	end
 	local comment = entry.comment
@@ -250,7 +250,7 @@ end
 ---@param entry table
 ---@param refresh fun()
 function M.delete(issue, entry, refresh)
-	if not entry or entry.kind ~= "comment" or not entry.comment then
+	if not entry or entry.entity_kind ~= "comment" or not entry.comment then
 		return
 	end
 	local comment = entry.comment
@@ -290,7 +290,7 @@ end
 ---@param entry table
 ---@param refresh fun()
 function M.react(issue, entry, refresh)
-	if not entry or entry.kind ~= "comment" or not entry.comment then
+	if not entry or entry.entity_kind ~= "comment" or not entry.comment then
 		return
 	end
 	local comments = get_comments()

@@ -215,6 +215,13 @@ M.options = {
 			change_reporter = "gr",
 			edit_issue = "ge",
 			create_issue = "c",
+			comments = {
+				add = { "a", "i" },
+				reply = "c",
+				edit = "e",
+				delete = "dd",
+				react = "gr",
+			},
 		},
 	},
 }

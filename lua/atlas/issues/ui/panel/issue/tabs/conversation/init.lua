@@ -50,7 +50,12 @@ function M.on_select(issue, refresh, opts)
 			statusline.notify("error", string.format("Failed to load conversation for %s", key))
 		else
 			result = result or {}
-			state.comments = result.comments or {}
+			state.comments = {}
+			for _, comment in ipairs(result.comments or {}) do
+				if not comment.deleted then
+					table.insert(state.comments, comment)
+				end
+			end
 			state.activity = result.events or {}
 			state.error = nil
 			statusline.notify("success", string.format("Conversation loaded for %s", key), 1200)
@@ -64,13 +69,13 @@ M.render = renderer.render
 ---@param _lnum integer
 ---@param entry table
 function M.is_selectable_line(_lnum, entry) ---@diagnostic disable-line: unused-local
-	return entry.kind == "comment" or entry.activity_entry ~= nil or entry.kind == "activity_gap"
+	return entry.entity_kind == "comment" or entry.activity_entry ~= nil or entry.kind == "activity_gap"
 end
 
 ---@param _issue Issue
 ---@param entry table
 function M.on_enter(_issue, entry) ---@diagnostic disable-line: unused-local
-	if entry and entry.kind == "comment" and entry.comment then
+	if entry and entry.entity_kind == "comment" and entry.comment then
 		local url = tostring(entry.comment.url or "")
 		if url ~= "" then
 			vim.ui.open(url)

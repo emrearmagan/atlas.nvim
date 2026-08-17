@@ -2,10 +2,20 @@ local M = {}
 
 local help = require("atlas.ui.popups.help")
 local resolver = require("atlas.core.keymaps")
+local utils = require("atlas.ui.shared.utils")
 local layout = require("atlas.ui.layout")
 local panel_state = require("atlas.issues.ui.panel.issue.state")
+local comment_threads = require("atlas.issues.ui.components.comment_threads")
 local state = require("atlas.issues.ui.panel.issue.tabs.conversation.state")
 local actions = require("atlas.issues.ui.panel.issue.tabs.conversation.actions")
+
+local COMMENT_ACTIONS = {
+	"issues.comments.add",
+	"issues.comments.reply",
+	"issues.comments.edit",
+	"issues.comments.delete",
+	"issues.comments.react",
+}
 
 local function cursor_entry()
 	local win = layout.win_id("detail")
@@ -20,28 +30,36 @@ end
 ---@param fn fun(issue: Issue, refresh: fun())
 local function dispatch_simple(refresh, fn)
 	local issue = panel_state.current_issue
-	if issue == nil then
-		return
+	if issue then
+		fn(issue, refresh)
 	end
-	fn(issue, refresh)
 end
 
 ---@param refresh fun()
 ---@param fn fun(issue: Issue, entry: table, refresh: fun())
 local function dispatch_with_entry(refresh, fn)
 	local issue = panel_state.current_issue
-	if issue == nil then
-		return
-	end
 	local entry = cursor_entry()
-	if not entry then
-		return
+	if issue and entry then
+		fn(issue, entry, refresh)
 	end
-	fn(issue, entry, refresh)
+end
+
+---@param action_id AtlasKeymapActionId|string
+---@param map_item table
+---@return table|nil
+local function from_action(action_id, map_item)
+	local keys = resolver.resolve(action_id)
+	if keys == nil then
+		return nil
+	end
+	local item = vim.tbl_deep_extend("force", {}, map_item)
+	item.key = #keys == 1 and keys[1] or keys
+	return item
 end
 
 ---@param refresh fun()
-local function toggle_thread(refresh)
+local function toggle_fold(refresh)
 	local entry = cursor_entry()
 	if not entry then
 		return
@@ -51,88 +69,124 @@ local function toggle_thread(refresh)
 		refresh()
 		return
 	end
-	local root = entry.thread_root or entry.comment
-	if not root then
+
+	local comment = entry.comment
+	local kind = tostring(entry.kind or "")
+	local content_line = kind:find("content", 1, true) ~= nil
+	local standalone_root = entry.thread_has_replies ~= true
+	if comment and (content_line or standalone_root) and state.toggle_comment(comment) then
+		refresh()
 		return
 	end
-	state.toggle(root.id)
-	refresh()
+
+	local root = entry.thread_root or comment
+	if root and entry.thread_has_replies == true then
+		state.toggle(root.id)
+		refresh()
+	end
 end
 
 ---@param buf integer
 ---@param refresh fun()
 function M.setup(buf, refresh)
-	local items = {
-		{
-			key = { "a", "i" },
-			desc = "Add comment",
-			opts = { nowait = true, silent = true },
-			callback = function()
-				dispatch_simple(refresh, actions.add)
-			end,
-		},
-		{
-			key = "c",
-			desc = "Reply to comment",
-			opts = { nowait = true, silent = true },
-			callback = function()
-				dispatch_with_entry(refresh, actions.reply)
-			end,
-		},
-		{
-			key = "e",
-			desc = "Edit comment",
-			opts = { nowait = true, silent = true },
-			callback = function()
-				dispatch_with_entry(refresh, actions.edit)
-			end,
-		},
-		{
-			key = "d",
-			desc = "Delete comment",
-			opts = { nowait = true, silent = true },
-			callback = function()
-				dispatch_with_entry(refresh, actions.delete)
-			end,
-		},
-		{
-			key = "gr",
-			desc = "Add reaction",
-			opts = { nowait = true, silent = true },
-			callback = function()
-				dispatch_with_entry(refresh, actions.react)
-			end,
-		},
-	}
+	local provider = require("atlas.issues.state").provider
+	local comments = provider and provider.capabilities.comments
+	local items = {}
 
-	local fold_keys = resolver.resolve("ui.toggle_fold")
-	if fold_keys ~= nil then
-		table.insert(items, {
-			key = fold_keys,
-			desc = "Expand / collapse thread",
+	if comments and comments.add_comment then
+		utils.insert_if(
+			items,
+			from_action("issues.comments.add", {
+				desc = "Add comment",
+				opts = { nowait = true, silent = true },
+				callback = function()
+					dispatch_simple(refresh, actions.add)
+				end,
+			})
+		)
+		utils.insert_if(
+			items,
+			from_action("issues.comments.reply", {
+				desc = "Reply to comment",
+				opts = { nowait = true, silent = true },
+				callback = function()
+					dispatch_with_entry(refresh, actions.reply)
+				end,
+			})
+		)
+	end
+	if comments and comments.edit_comment then
+		utils.insert_if(
+			items,
+			from_action("issues.comments.edit", {
+				desc = "Edit comment",
+				opts = { nowait = true, silent = true },
+				callback = function()
+					dispatch_with_entry(refresh, actions.edit)
+				end,
+			})
+		)
+	end
+	if comments and comments.delete_comment then
+		utils.insert_if(
+			items,
+			from_action("issues.comments.delete", {
+				desc = "Delete comment",
+				opts = { nowait = true, silent = true },
+				callback = function()
+					dispatch_with_entry(refresh, actions.delete)
+				end,
+			})
+		)
+	end
+	if comments and comments.add_reaction and #(comments.reaction_options or {}) > 0 then
+		utils.insert_if(
+			items,
+			from_action("issues.comments.react", {
+				desc = "Add reaction",
+				opts = { nowait = true, silent = true },
+				callback = function()
+					dispatch_with_entry(refresh, actions.react)
+				end,
+			})
+		)
+	end
+
+	utils.insert_if(
+		items,
+		from_action("ui.toggle_fold", {
+			desc = "Expand / collapse comment or thread",
 			opts = { nowait = true, silent = true },
 			callback = function()
-				toggle_thread(refresh)
+				toggle_fold(refresh)
 			end,
 		})
-	end
+	)
+	utils.insert_if(
+		items,
+		from_action("ui.toggle_all_folds", {
+			desc = "Expand / collapse all threads",
+			opts = { nowait = true, silent = true },
+			callback = function()
+				local comments_list = type(state.comments) == "table" and state.comments or {}
+				if state.toggle_all_threads(comment_threads.group_comments(comments_list)) then
+					refresh()
+				end
+			end,
+		})
+	)
 
 	help.register("Panel", items, { index = 212, buffer = buf })
 end
 
 ---@param buf integer
 function M.teardown(buf)
-	local items = {
-		{ key = { "a", "i" } },
-		{ key = "c" },
-		{ key = "e" },
-		{ key = "d" },
-		{ key = "gr" },
-	}
-	local fold_keys = resolver.resolve("ui.toggle_fold")
-	if fold_keys ~= nil then
-		table.insert(items, { key = fold_keys })
+	local items = {}
+	for _, action_id in ipairs(COMMENT_ACTIONS) do
+		utils.insert_if(items, from_action(action_id, {}))
 	end
+	utils.insert_if(items, from_action("ui.toggle_fold", {}))
+	utils.insert_if(items, from_action("ui.toggle_all_folds", {}))
 	help.remove("Panel", items, { buffer = buf })
 end
 

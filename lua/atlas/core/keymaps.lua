@@ -90,6 +90,14 @@ local M = {}
 ---@field change_reporter? AtlasKeymapValue
 ---@field edit_issue? AtlasKeymapValue
 ---@field create_issue? AtlasKeymapValue
+---@field comments? AtlasIssuesCommentKeymaps
+
+---@class AtlasIssuesCommentKeymaps
+---@field add? AtlasKeymapValue
+---@field reply? AtlasKeymapValue
+---@field edit? AtlasKeymapValue
+---@field delete? AtlasKeymapValue
+---@field react? AtlasKeymapValue
 
 ---@class AtlasKeymapsConfig
 ---@field ui? AtlasUIKeymaps
@@ -167,6 +175,11 @@ local M = {}
 ---| "issues.change_reporter"
 ---| "issues.edit_issue"
 ---| "issues.create_issue"
+---| "issues.comments.add"
+---| "issues.comments.reply"
+---| "issues.comments.edit"
+---| "issues.comments.delete"
+---| "issues.comments.react"
 
 ---@param value AtlasKeymapValue
 ---@return string[]|nil
@@ -395,6 +408,24 @@ function M.validate()
 			"issues.change_reporter",
 			"issues.edit_issue",
 			"issues.create_issue",
+		}),
+		["issue conversation"] = conflicts_for({
+			"ui.refresh",
+			"ui.open_actions",
+			"ui.open_in_browser",
+			"ui.toggle_subscription",
+			"ui.next_panel_tab",
+			"ui.previous_panel_tab",
+			"ui.help",
+			"ui.toggle_panel",
+			"ui.close",
+			"issues.comments.add",
+			"issues.comments.reply",
+			"issues.comments.edit",
+			"issues.comments.delete",
+			"issues.comments.react",
+			"ui.toggle_fold",
+			"ui.toggle_all_folds",
 		}),
 	}
 

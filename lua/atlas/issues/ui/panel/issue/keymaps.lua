@@ -76,16 +76,15 @@ function M.register(buf)
 			end,
 		})
 	)
-	utils.insert_if(
-		items,
-		item("ui.refresh", {
-			desc = "Refresh issue",
-			opts = { nowait = true, silent = true },
-			callback = function()
-				controller.refresh_issue(panel_state.current_issue)
-			end,
-		})
-	)
+	local refresh_item = {
+		desc = "Refresh issue",
+		opts = { nowait = true, silent = true },
+		callback = function()
+			controller.refresh_issue(panel_state.current_issue)
+		end,
+	}
+	utils.insert_if(items, item("ui.refresh", refresh_item))
+	utils.insert_if(items, item("ui.refresh_view", refresh_item))
 
 	if provider.capabilities.actions then
 		utils.insert_if(
@@ -243,6 +242,7 @@ function M.remove(buf)
 	utils.insert_if(general, remove_item("ui.next_item"))
 	utils.insert_if(general, remove_item("ui.previous_item"))
 	utils.insert_if(general, remove_item("ui.refresh"))
+	utils.insert_if(general, remove_item("ui.refresh_view"))
 	utils.insert_if(general, remove_item("ui.open_actions"))
 	utils.insert_if(general, remove_item("ui.open_in_browser"))
 	utils.insert_if(general, remove_item("ui.toggle_subscription"))
