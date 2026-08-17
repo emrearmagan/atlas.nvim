@@ -5,7 +5,7 @@ local spinner = require("atlas.ui.components.spinner")
 local box = require("atlas.ui.components.box")
 local diff = require("atlas.ui.components.diff_hunks")
 local keymaps = require("atlas.core.keymaps")
-local review_threads = require("atlas.ui.components.review_threads")
+local review_threads = require("atlas.pulls.ui.components.review_threads")
 local state = require("atlas.pulls.ui.panel.pr.tabs.review.state")
 
 local PADDING_X = 1

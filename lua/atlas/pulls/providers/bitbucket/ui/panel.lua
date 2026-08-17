@@ -52,7 +52,7 @@ end
 ---@return PullsPanelTab[]
 function M.tabs()
 	local overview_icon, overview_hl = icons.general("overview")
-	local activity_icon, activity_hl = icons.pulls("activity")
+	local conversation_icon, conversation_hl = icons.general("conversation")
 	local review_icon, review_hl = icons.pulls("review")
 	local commit_icon, commit_hl = icons.pulls("commit")
 	return {
@@ -64,18 +64,18 @@ function M.tabs()
 			mod = require("atlas.pulls.ui.panel.pr.tabs.overview"),
 		},
 		{
+			key = "conversation",
+			label = "Conversation",
+			icon = conversation_icon,
+			icon_hl = conversation_hl,
+			mod = require("atlas.pulls.ui.panel.pr.tabs.conversation"),
+		},
+		{
 			key = "review",
 			label = "Review",
 			icon = review_icon,
 			icon_hl = review_hl,
 			mod = require("atlas.pulls.ui.panel.pr.tabs.review"),
-		},
-		{
-			key = "activity",
-			label = "Activity",
-			icon = activity_icon,
-			icon_hl = activity_hl,
-			mod = require("atlas.pulls.ui.panel.pr.tabs.activity"),
 		},
 		{
 			key = "commits",

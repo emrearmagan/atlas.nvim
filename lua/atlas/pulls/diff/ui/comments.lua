@@ -3,7 +3,7 @@ local M = {}
 local box = require("atlas.ui.components.box")
 local keymaps = require("atlas.core.keymaps")
 local statusline = require("atlas.ui.statusline")
-local threads = require("atlas.ui.components.review_threads")
+local threads = require("atlas.pulls.ui.components.review_threads")
 local virtual_lines = require("atlas.ui.components.virtual_lines")
 
 local namespace = vim.api.nvim_create_namespace("atlas_diff_comments")

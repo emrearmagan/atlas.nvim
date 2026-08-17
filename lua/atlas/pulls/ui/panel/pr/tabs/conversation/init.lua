@@ -27,6 +27,7 @@ function M.on_select(pr, _repo, refresh, opts)
 	local comments = provider and provider.capabilities.comments
 	if not comments or not comments.fetch_conversation then
 		state.comments = {}
+		state.tasks = {}
 		state.activity = {}
 		refresh()
 		return
@@ -34,6 +35,7 @@ function M.on_select(pr, _repo, refresh, opts)
 
 	local id = tostring(pr.id or "")
 	state.comments = "loading"
+	state.tasks = "loading"
 	state.activity = "loading"
 	statusline.notify("loading", string.format("Loading conversation for #%s...", id))
 
@@ -45,12 +47,19 @@ function M.on_select(pr, _repo, refresh, opts)
 		end
 		if err then
 			state.comments = {}
+			state.tasks = {}
 			state.activity = {}
 			state.error = tostring(err)
 			statusline.notify("error", string.format("Failed to load conversation for #%s", id))
 		else
 			result = type(result) == "table" and result or {}
-			state.comments = type(result.comments) == "table" and result.comments or {}
+			state.comments = {}
+			for _, comment in ipairs(type(result.comments) == "table" and result.comments or {}) do
+				if comment.state ~= "DELETED" then
+					table.insert(state.comments, comment)
+				end
+			end
+			state.tasks = type(result.tasks) == "table" and result.tasks or {}
 			state.activity = type(result.events) == "table" and result.events or {}
 			state.error = nil
 			statusline.notify("success", string.format("Conversation loaded for #%s", id), 1200)
@@ -64,16 +73,19 @@ M.render = renderer.render
 ---@param _lnum integer
 ---@param entry table
 function M.is_selectable_line(_lnum, entry)
-	return entry.entity_kind == "comment" or entry.activity_entry ~= nil or entry.kind == "activity_gap"
+	return entry.entity_kind == "comment"
+		or entry.entity_kind == "task"
+		or entry.activity_entry ~= nil
+		or entry.kind == "activity_gap"
 end
 
 ---@param _pr PullRequest
 ---@param entry table
 function M.on_enter(_pr, entry)
-	if not entry or entry.entity_kind ~= "comment" or not entry.comment then
+	if not entry or (entry.entity_kind ~= "comment" and entry.entity_kind ~= "task") or not entry.comment then
 		return
 	end
-	local url = tostring(entry.comment.html_url or "")
+	local url = tostring(entry.comment.html_url or entry.comment.url or "")
 	if url ~= "" then
 		vim.ui.open(url)
 		return true

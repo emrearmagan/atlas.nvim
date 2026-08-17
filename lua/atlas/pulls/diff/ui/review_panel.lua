@@ -7,7 +7,7 @@ local keymap_resolver = require("atlas.core.keymaps")
 local note_renderer = require("atlas.pulls.notes.ui.renderer")
 local notes = require("atlas.pulls.diff.notes")
 local review = require("atlas.pulls.diff.review")
-local review_threads = require("atlas.ui.components.review_threads")
+local review_threads = require("atlas.pulls.ui.components.review_threads")
 local utils = require("atlas.ui.shared.utils")
 local namespace = vim.api.nvim_create_namespace("atlas_diff_review_panel")
 

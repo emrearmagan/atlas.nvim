@@ -1,3 +1,4 @@
+--TODO: Holy complex fuck pls refactor
 local M = {}
 
 local threadsv2 = require("atlas.ui.components.threadsv2")
@@ -326,11 +327,24 @@ local function comment_item(comment, opts, is_root)
 end
 
 ---@param padding_x integer
+---@param opts AtlasReviewThreadRenderOptions
 ---@return AtlasThreadV2RenderOpts
-local function threads_opts(padding_x)
+local function threads_opts(padding_x, opts)
+	local content_max_lines = opts.content_max_lines
+	if type(content_max_lines) == "function" then
+		local callback = content_max_lines
+		content_max_lines = function(item)
+			local comment = item.line_map and item.line_map.comment or nil
+			return comment and callback(comment) or nil
+		end
+	end
+
 	return {
 		padding_x = padding_x,
 		separator = "─",
+		content_max_lines = content_max_lines,
+		content_truncated_text = opts.content_truncated_text,
+		content_prefix = opts.content_prefix,
 		additional_hl = function(item)
 			return item.meta.additional_hl or "AtlasTextMuted"
 		end,
@@ -535,6 +549,9 @@ end
 ---@field reaction_options? PullsReactionOption[]
 ---@field show_reactions? boolean
 ---@field location? fun(comment: PullsComment): string
+---@field content_prefix? string
+---@field content_max_lines? integer|fun(comment: PullsComment): integer|nil
+---@field content_truncated_text? string
 
 ---@param nodes AtlasReviewThreadNode[]
 ---@param width integer
@@ -642,7 +659,7 @@ function M.render_compact(node, width, expanded, location, opts)
 		end
 	end
 
-	return threadsv2.render({ item }, width, threads_opts(0))
+	return threadsv2.render({ item }, width, threads_opts(0, opts))
 end
 
 ---@param comment PullsComment

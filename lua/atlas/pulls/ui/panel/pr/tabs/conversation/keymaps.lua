@@ -4,6 +4,7 @@ local help = require("atlas.ui.popups.help")
 local resolver = require("atlas.core.keymaps")
 local layout = require("atlas.ui.layout")
 local panel_state = require("atlas.pulls.ui.panel.pr.state")
+local review_threads = require("atlas.pulls.ui.components.review_threads")
 local state = require("atlas.pulls.ui.panel.pr.tabs.conversation.state")
 local actions = require("atlas.pulls.ui.panel.pr.tabs.conversation.actions")
 
@@ -40,8 +41,20 @@ local function dispatch_with_entry(refresh, fn)
 	fn(pr, entry, refresh)
 end
 
+---@param action_id AtlasKeymapActionId|string
+---@param map_item table
+---@return table|nil
+local function from_action(action_id, map_item)
+	local keys = resolver.resolve(action_id)
+	if keys == nil then
+		return nil
+	end
+	map_item.key = #keys == 1 and keys[1] or keys
+	return map_item
+end
+
 ---@param refresh fun()
-local function toggle_thread(refresh)
+local function toggle_fold(refresh)
 	local entry = cursor_entry()
 	if not entry then
 		return
@@ -51,6 +64,16 @@ local function toggle_thread(refresh)
 		refresh()
 		return
 	end
+
+	local comment = entry.comment
+	local kind = tostring(entry.kind or "")
+	local content_line = kind:find("content", 1, true) ~= nil
+	local standalone_root = entry.thread_has_replies ~= true
+	if comment and (content_line or standalone_root) and state.toggle_comment(comment) then
+		refresh()
+		return
+	end
+
 	local root = entry.thread_root or entry.comment
 	if not root then
 		return
@@ -65,6 +88,9 @@ end
 ---@param buf integer
 ---@param refresh fun()
 function M.setup(buf, refresh)
+	local provider = require("atlas.pulls.state").provider
+	local tasks = provider and provider.capabilities.tasks
+	local has_tasks = tasks and tasks.edit_task ~= nil
 	local items = {
 		{
 			key = { "a", "i" },
@@ -76,7 +102,7 @@ function M.setup(buf, refresh)
 		},
 		{
 			key = "e",
-			desc = "Edit comment",
+			desc = has_tasks and "Edit comment / task" or "Edit comment",
 			opts = { nowait = true, silent = true },
 			callback = function()
 				dispatch_with_entry(refresh, actions.edit)
@@ -84,7 +110,7 @@ function M.setup(buf, refresh)
 		},
 		{
 			key = "d",
-			desc = "Delete comment",
+			desc = has_tasks and "Delete comment / task" or "Delete comment",
 			opts = { nowait = true, silent = true },
 			callback = function()
 				dispatch_with_entry(refresh, actions.delete)
@@ -99,6 +125,18 @@ function M.setup(buf, refresh)
 			end,
 		},
 	}
+	if has_tasks then
+		local toggle_task = from_action("pulls.review.diff.toggle_resolved", {
+			desc = "Toggle task",
+			opts = { nowait = true, silent = true },
+			callback = function()
+				dispatch_with_entry(refresh, actions.toggle_task)
+			end,
+		})
+		if toggle_task then
+			table.insert(items, toggle_task)
+		end
+	end
 	local reply_keys = resolver.resolve("pulls.review.diff.submit_comment")
 	if reply_keys ~= nil then
 		table.insert(items, 2, {
@@ -115,12 +153,26 @@ function M.setup(buf, refresh)
 	if fold_keys ~= nil then
 		table.insert(items, {
 			key = fold_keys,
-			desc = "Expand / collapse thread",
+			desc = "Expand / collapse comment or thread",
 			opts = { nowait = true, silent = true },
 			callback = function()
-				toggle_thread(refresh)
+				toggle_fold(refresh)
 			end,
 		})
+	end
+	local toggle_all = from_action("ui.toggle_all_folds", {
+		desc = "Expand / collapse all threads",
+		opts = { nowait = true, silent = true },
+		callback = function()
+			local comments = type(state.comments) == "table" and state.comments or {}
+			local tasks = type(state.tasks) == "table" and state.tasks or {}
+			if state.toggle_all_threads(review_threads.group_comments(comments, tasks)) then
+				refresh()
+			end
+		end,
+	})
+	if toggle_all then
+		table.insert(items, toggle_all)
 	end
 	help.register("Panel", items, { index = 212, buffer = buf })
 end
@@ -140,6 +192,18 @@ function M.teardown(buf)
 	local fold_keys = resolver.resolve("ui.toggle_fold")
 	if fold_keys ~= nil then
 		table.insert(items, { key = fold_keys })
+	end
+	local toggle_all_keys = resolver.resolve("ui.toggle_all_folds")
+	if toggle_all_keys ~= nil then
+		table.insert(items, { key = #toggle_all_keys == 1 and toggle_all_keys[1] or toggle_all_keys })
+	end
+	local provider = require("atlas.pulls.state").provider
+	local tasks = provider and provider.capabilities.tasks
+	if tasks and tasks.edit_task then
+		local toggle_task_keys = resolver.resolve("pulls.review.diff.toggle_resolved")
+		if toggle_task_keys ~= nil then
+			table.insert(items, { key = #toggle_task_keys == 1 and toggle_task_keys[1] or toggle_task_keys })
+		end
 	end
 	help.remove("Panel", items, { buffer = buf })
 end

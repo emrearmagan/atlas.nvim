@@ -36,7 +36,8 @@ local highlights = require("atlas.ui.shared.highlights")
 ---@field padding_x integer|nil                                                                Horizontal padding (default 2)
 ---@field mode AtlasThreadV2Mode|nil                                                           Rendering mode (default "tree")
 ---@field separator string|nil                                                                 Character for root separators (default "─")
----@field content_max_lines integer|nil                                                        Max visible content lines per item (nil = unlimited). Truncated with ".."
+---@field content_max_lines integer|fun(item: AtlasThreadV2Item): integer|nil                  Max visible content lines per item (nil = unlimited).
+---@field content_truncated_text string|nil                                                   Text shown when content is truncated.
 ---@field content_prefix string|nil                                                           Prefix placed before root content after padding
 ---@field author_hl? fun(item: AtlasThreadV2Item, author: string): string|nil                   Returns hl group for author
 ---@field additional_hl? fun(item: AtlasThreadV2Item, additional: string): string|table[]|nil    Returns a group or highlighted segments
@@ -373,11 +374,11 @@ local function render_content(lines, spans, line_map, item, depth, pfx, opts, wi
 
 	local content_lines = item.content ~= nil and utils.sanitize_lines(tostring(item.content)) or {}
 	local max = opts.content_max_lines
+	if type(max) == "function" then
+		max = max(item)
+	end
 	local truncated = type(max) == "number" and max > 0 and #content_lines > max
 	local body_prefix = pfx.body_prefix
-	if depth == 0 and opts.content_prefix then
-		body_prefix = pfx.pad .. opts.content_prefix
-	end
 
 	local visible_count = truncated and max or #content_lines
 
@@ -411,12 +412,12 @@ local function render_content(lines, spans, line_map, item, depth, pfx, opts, wi
 		end
 	end
 
-	-- Ellipsis indicator when content was truncated
+	-- Indicator when content was truncated.
 	if truncated then
-		local full_line = body_prefix .. ".."
+		local hint_text = opts.content_truncated_text or ".."
+		local full_line = body_prefix .. hint_text
 		lines[#lines + 1] = full_line
 		map_line(line_map, #lines, make_line_map(item, "content_truncated", depth))
-
 		if #body_prefix > 0 then
 			span(spans, #lines - 1, 0, #body_prefix, "AtlasTextMuted")
 		end
@@ -545,6 +546,9 @@ end
 local function render_tree(lines, spans, line_map, item, depth, branch_prefix, is_last, opts, width)
 	local padding_x = tonumber(opts.padding_x) or 2
 	local pfx = compute_prefixes(depth, branch_prefix, is_last, padding_x)
+	if depth == 0 and opts.content_prefix then
+		pfx.body_prefix = pfx.pad .. opts.content_prefix
+	end
 
 	render_header(lines, spans, line_map, item, depth, pfx, opts, width)
 	render_content(lines, spans, line_map, item, depth, pfx, opts, width)
@@ -597,6 +601,9 @@ local function render_linked(lines, spans, line_map, item, depth, branch_prefix,
 			pfx.body_prefix = pfx.pad .. "│ "
 		end
 	end
+	if depth == 0 and opts.content_prefix then
+		pfx.body_prefix = pfx.pad .. opts.content_prefix
+	end
 
 	render_header(lines, spans, line_map, item, depth, pfx, opts, width)
 	render_content(lines, spans, line_map, item, depth, pfx, opts, width)
@@ -643,6 +650,7 @@ function M.render(items, width, opts)
 		mode = "tree",
 		separator = "─",
 		content_max_lines = nil,
+		content_truncated_text = nil,
 		author_hl = default_author_hl,
 		additional_hl = noop_hl,
 		content_hl = noop_hl,
