@@ -465,7 +465,7 @@ function M.fetch_default_reviewers(opts, on_done)
 	end
 
 	return cli.gh(
-		{ "api", "--paginate", string.format("repos/%s/collaborators?per_page=100", slug) },
+		{ "api", "--paginate", "--slurp", string.format("repos/%s/collaborators?per_page=100", slug) },
 		function(result, err)
 			if err or type(result) ~= "table" then
 				on_done(nil, err or "Failed to fetch repository collaborators")
@@ -474,17 +474,19 @@ function M.fetch_default_reviewers(opts, on_done)
 
 			local reviewers = {}
 			local by_login = {}
-			for _, raw in ipairs(result) do
-				local login = tostring(raw.login or "")
-				if login ~= "" then
-					local reviewer = {
-						label = "@" .. login,
-						provider_id = login,
-						selected = false,
-						default = false,
-					}
-					by_login[login] = reviewer
-					table.insert(reviewers, reviewer)
+			for _, page in ipairs(result) do
+				for _, raw in ipairs(page) do
+					local login = tostring(raw.login or "")
+					if login ~= "" then
+						local reviewer = {
+							label = "@" .. login,
+							provider_id = login,
+							selected = false,
+							default = false,
+						}
+						by_login[login] = reviewer
+						table.insert(reviewers, reviewer)
+					end
 				end
 			end
 
@@ -664,6 +666,7 @@ function M.list_labels(slug, on_done)
 	return cli.gh({
 		"api",
 		"--paginate",
+		"--slurp",
 		string.format("repos/%s/labels?per_page=100", slug),
 	}, function(result, err)
 		if err or type(result) ~= "table" then
@@ -672,13 +675,15 @@ function M.list_labels(slug, on_done)
 		end
 
 		local list = {}
-		for _, raw in ipairs(result) do
-			local name = json.safe_str(raw.name)
-			if name then
-				table.insert(list, {
-					name = name,
-					color = json.safe_str(raw.color),
-				})
+		for _, page in ipairs(result) do
+			for _, raw in ipairs(page) do
+				local name = json.safe_str(raw.name)
+				if name then
+					table.insert(list, {
+						name = name,
+						color = json.safe_str(raw.color),
+					})
+				end
 			end
 		end
 		on_done(list, nil)

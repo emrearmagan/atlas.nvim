@@ -94,10 +94,6 @@ local function new(domain)
 		return tonumber(client.gitlab_config().cache_ttl) or 300
 	end
 
-	function client.clear_memory_cache()
-		memory_cache.clear_all()
-	end
-
 	---@param key string
 	---@return any|nil, boolean
 	function client.get_memory_cache(key)

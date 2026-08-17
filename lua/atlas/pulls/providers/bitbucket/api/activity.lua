@@ -81,8 +81,10 @@ function M.fetch_activity(pr, _opts, on_done)
 		on_done({}, nil)
 		return nil
 	end
+	local sep = activity_url:find("?") and "&" or "?"
+	local url = string.format("%s%spagelen=50&fields=-values.comment,-values.pull_request", activity_url, sep)
 
-	return service.fetch_all_values(activity_url, function(result, err)
+	return service.fetch_all_values(url, function(result, err)
 		if err then
 			on_done(nil, err)
 			return
@@ -99,7 +101,7 @@ function M.fetch_conversation(pr, opts, on_done)
 	local requests = request_scope.new()
 	requests.all({
 		comments = function(done)
-			return comments.fetch_comments(pr, opts, done)
+			return comments.fetch_global_comments(pr, opts, done)
 		end,
 		tasks = function(done)
 			return tasks.fetch_tasks(pr, opts, done)

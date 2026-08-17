@@ -5,10 +5,6 @@ local notifications_api = require("atlas.providers.gitlab.notifications").new("i
 ---@class GitLabIssuesProvider : IssuesProvider
 local M = {}
 
-function M.on_refresh()
-	require("atlas.providers.gitlab.client").issues.clear_memory_cache()
-end
-
 ---@param view IssuesViewConfig
 ---@param opts IssuesFetchOpts
 ---@param on_done fun(issues: Issue[], next_page_token: string|nil, is_last: boolean, err: string|nil)
@@ -280,7 +276,6 @@ return {
 			fetch_issues = M.fetch_issues,
 			fetch_issue = M.fetch_issue,
 			views = M.views,
-			refresh = M.on_refresh,
 		},
 		comments = {
 			reaction_options = GITLAB_REACTION_OPTIONS,

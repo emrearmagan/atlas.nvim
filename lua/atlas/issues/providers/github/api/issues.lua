@@ -316,6 +316,7 @@ function M.list_labels(slug, on_done)
 	return cli.gh({
 		"api",
 		"--paginate",
+		"--slurp",
 		string.format("repos/%s/labels?per_page=100", slug),
 	}, function(result, err)
 		if err or type(result) ~= "table" then
@@ -324,14 +325,16 @@ function M.list_labels(slug, on_done)
 		end
 
 		local list = {}
-		for _, raw in ipairs(result) do
-			local name = json.safe_str(raw.name)
-			if name then
-				table.insert(list, {
-					name = name,
-					color = json.safe_str(raw.color),
-					description = json.safe_str(raw.description),
-				})
+		for _, page in ipairs(result) do
+			for _, raw in ipairs(page) do
+				local name = json.safe_str(raw.name)
+				if name then
+					table.insert(list, {
+						name = name,
+						color = json.safe_str(raw.color),
+						description = json.safe_str(raw.description),
+					})
+				end
 			end
 		end
 		on_done(list, nil)
@@ -364,6 +367,7 @@ function M.list_milestones(slug, on_done)
 	return cli.gh({
 		"api",
 		"--paginate",
+		"--slurp",
 		string.format("repos/%s/milestones?state=open&per_page=100", slug),
 	}, function(result, err)
 		if err or type(result) ~= "table" then
@@ -372,16 +376,18 @@ function M.list_milestones(slug, on_done)
 		end
 
 		local list = {}
-		for _, raw in ipairs(result) do
-			local number = tonumber(raw.number)
-			local title = json.safe_str(raw.title)
-			if number and title then
-				table.insert(list, {
-					number = number,
-					title = title,
-					state = json.safe_str(raw.state),
-					description = json.safe_str(raw.description),
-				})
+		for _, page in ipairs(result) do
+			for _, raw in ipairs(page) do
+				local number = tonumber(raw.number)
+				local title = json.safe_str(raw.title)
+				if number and title then
+					table.insert(list, {
+						number = number,
+						title = title,
+						state = json.safe_str(raw.state),
+						description = json.safe_str(raw.description),
+					})
+				end
 			end
 		end
 		on_done(list, nil)
