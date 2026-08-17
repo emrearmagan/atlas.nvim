@@ -2,7 +2,6 @@ local M = {}
 
 local icons = require("atlas.ui.shared.icons")
 local header = require("atlas.pulls.ui.panel.components.header")
-local request_scope = require("atlas.core.requests")
 local spinner = require("atlas.ui.components.spinner")
 
 local MAX_HASH_LEN = 12
@@ -69,39 +68,16 @@ function M.new(pullrequests)
 	end
 
 	---@param pr PullRequest
-	---@param opts { force_refresh: boolean|nil, pr_refreshed: boolean|nil }|nil
+	---@param _opts { force_refresh: boolean|nil, pr_refreshed: boolean|nil }|nil
 	---@param on_done fun()
 	---@return { cancel: fun() }|nil
-	function panel.fetch_header(pr, opts, on_done)
-		local starts = {}
-		if not (opts and opts.pr_refreshed) then
-			starts.pull = function(done)
-				return pullrequests.get(pr, { force_refresh = opts and opts.force_refresh }, done)
-			end
-		end
-		starts.subscription = function(done)
-			return pullrequests.subscription(pr, done)
-		end
-		local requests = request_scope.new()
-		requests.all(starts, function(values)
-			local fresh = values.pull
-			if type(fresh) == "table" then
-				for _, field in ipairs({
-					"assignees",
-					"reviewers",
-					"labels",
-					"reactions",
-				}) do
-					pr[field] = fresh[field]
-				end
-				pr._raw = fresh._raw
-			end
-			if type(values.subscription) == "boolean" then
-				pr.is_subscribed = values.subscription
+	function panel.fetch_header(pr, _opts, on_done)
+		return pullrequests.subscription(pr, function(subscribed, err)
+			if not err and type(subscribed) == "boolean" then
+				pr.is_subscribed = subscribed
 			end
 			on_done()
 		end)
-		return requests
 	end
 
 	---@return PullsPRPanelTab[]

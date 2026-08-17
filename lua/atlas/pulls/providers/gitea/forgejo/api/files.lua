@@ -3,6 +3,26 @@ local pagination = require("atlas.pulls.providers.gitea.forgejo.api.pagination")
 
 local M = {}
 
+---@param pr PullRequest
+---@return string|nil
+local function diffstat_cache_key(pr)
+	local source = type(pr.source) == "table" and pr.source or {}
+	local destination = type(pr.destination) == "table" and pr.destination or {}
+	local head = tostring(source.commit_hash or "")
+	local base = tostring(destination.commit_hash or "")
+	if head == "" or base == "" then
+		return nil
+	end
+	return table.concat({
+		"gitea:pulls:forgejo:diffstat",
+		service.url_encode(service.base_url()),
+		service.url_encode(tostring(pr.repo_full_name or "")),
+		tostring(pr.id or ""),
+		service.url_encode(head),
+		service.url_encode(base),
+	}, ":")
+end
+
 local function endpoint(pr)
 	if type(pr) ~= "table" then
 		return nil
@@ -14,11 +34,20 @@ local function endpoint(pr)
 	end
 end
 
-function M.diffstat(pr, _, on_done)
+function M.diffstat(pr, opts, on_done)
 	local base = endpoint(pr)
 	if not base then
 		on_done(nil, "Invalid Forgejo repository")
 		return nil
+	end
+	opts = opts or {}
+	local key = diffstat_cache_key(pr)
+	if key and opts.force_refresh ~= true then
+		local cached, ok = service.get_memory_cache(key)
+		if ok then
+			on_done(cached, nil)
+			return nil
+		end
 	end
 	return pagination.fetch_all(base .. "/files", nil, {
 		invalid_response = "Invalid pull request files response",
@@ -41,6 +70,9 @@ function M.diffstat(pr, _, on_done)
 				lines_added = file.additions or 0,
 				lines_removed = file.deletions or 0,
 			})
+		end
+		if key then
+			service.set_memory_cache(key, entries)
 		end
 		on_done(entries, nil)
 	end)
