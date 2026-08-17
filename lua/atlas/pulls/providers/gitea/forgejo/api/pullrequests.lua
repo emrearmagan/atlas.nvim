@@ -321,6 +321,11 @@ function api.get(ref, opts, on_done)
 end
 
 function api.description(pr, opts, on_done)
+	opts = opts or {}
+	if opts.force_refresh ~= true and pr.description ~= nil then
+		on_done(tostring(pr.description or ""), nil)
+		return nil
+	end
 	return api.get(pr, opts, function(fresh, err)
 		on_done(fresh and tostring(fresh.description or "") or nil, err)
 	end)

@@ -191,42 +191,12 @@ local function fetch_comments(pr, _, on_done)
 	end
 
 	local requests = request_scope.new()
-	local function fetch_comments(reviews, index, comments)
-		local review = reviews[index]
-		if review == nil then
-			-- TODO: Load inline-comment reactions lazily when the diff UI requests them.
-			on_done(mapper.thread_comments(comments), nil, reviews)
-			return
-		end
-		local review_id = type(review) == "table" and tostring(review.id or "") or ""
-		if not review_id:match("^%d+$") then
-			on_done(nil, "Invalid pull request reviews response")
-			return
-		end
-		if review.comments_count == 0 then
-			fetch_comments(reviews, index + 1, comments)
-			return
-		end
-
-		requests.run(function(done)
+	-- TODO: Load inline-comment reactions lazily when the diff UI requests them.
+	local function start_comments(review_id)
+		return function(done)
 			return service.request("GET", string.format("%s/reviews/%s/comments", base, review_id), nil, done)
-		end, function(raw, err)
-			if err or not json.is_list(raw) then
-				on_done(nil, err or "Invalid pull request review comments response")
-				return
-			end
-			for _, value in ipairs(raw) do
-				local comment = mapper.to_comment(value, review)
-				if not comment or not comment.inline then
-					on_done(nil, "Invalid pull request review comments response")
-					return
-				end
-				table.insert(comments, comment)
-			end
-			fetch_comments(reviews, index + 1, comments)
-		end)
+		end
 	end
-
 	requests.run(function(done)
 		return pagination.fetch_all(base .. "/reviews", nil, {
 			invalid_response = "Invalid pull request reviews response",
@@ -237,7 +207,40 @@ local function fetch_comments(pr, _, on_done)
 			on_done(nil, err)
 			return
 		end
-		fetch_comments(reviews or {}, 1, {})
+		reviews = reviews or {}
+		local starts = {}
+		for index, review in ipairs(reviews) do
+			local review_id = type(review) == "table" and tostring(review.id or "") or ""
+			if not review_id:match("^%d+$") then
+				on_done(nil, "Invalid pull request reviews response")
+				return
+			end
+			if review.comments_count ~= 0 then
+				starts[tostring(index)] = start_comments(review_id)
+			end
+		end
+		requests.all(starts, function(values, errors)
+			local comments = {}
+			for index, review in ipairs(reviews) do
+				local key = tostring(index)
+				if starts[key] then
+					local raw, comments_err = values[key], errors[key]
+					if comments_err or not json.is_list(raw) then
+						on_done(nil, comments_err or "Invalid pull request review comments response")
+						return
+					end
+					for _, value in ipairs(raw) do
+						local comment = mapper.to_comment(value, review)
+						if not comment or not comment.inline then
+							on_done(nil, "Invalid pull request review comments response")
+							return
+						end
+						table.insert(comments, comment)
+					end
+				end
+			end
+			on_done(mapper.thread_comments(comments), nil, reviews)
+		end)
 	end)
 	return requests
 end

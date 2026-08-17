@@ -4,6 +4,23 @@ local json = require("atlas.core.json")
 
 local M = {}
 
+---@param pr PullRequest
+---@return string|nil
+local function cache_key(pr)
+	local source = type(pr.source) == "table" and pr.source or {}
+	local head = tostring(source.commit_hash or "")
+	if head == "" then
+		return nil
+	end
+	return table.concat({
+		"gitea:pulls:forgejo:commits",
+		service.url_encode(service.base_url()),
+		service.url_encode(tostring(pr.repo_full_name or "")),
+		tostring(pr.id or ""),
+		service.url_encode(head),
+	}, ":")
+end
+
 local function pull_parts(pr)
 	if type(pr) ~= "table" then
 		return nil
@@ -15,11 +32,20 @@ local function pull_parts(pr)
 	end
 end
 
-function M.fetch(pr, _, on_done)
+function M.fetch(pr, opts, on_done)
 	local owner, repo, id = pull_parts(pr)
 	if not owner then
 		on_done(nil, "Invalid Forgejo repository")
 		return nil
+	end
+	opts = opts or {}
+	local key = cache_key(pr)
+	if key and opts.force_refresh ~= true then
+		local cached, ok = service.get_memory_cache(key)
+		if ok then
+			on_done(cached, nil)
+			return nil
+		end
 	end
 	local endpoint =
 		string.format("/repos/%s/%s/pulls/%s/commits", service.url_encode(owner), service.url_encode(repo), id)
@@ -56,6 +82,9 @@ function M.fetch(pr, _, on_done)
 					service.url_encode(hash)
 				),
 			})
+		end
+		if key then
+			service.set_memory_cache(key, commits)
 		end
 		on_done(commits, nil)
 	end)
