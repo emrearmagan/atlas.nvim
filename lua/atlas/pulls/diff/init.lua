@@ -70,7 +70,7 @@ local function repository_path(context)
 		return context.root
 	end
 	local cwd = vim.fn.getcwd()
-	local current = git.local_repository(cwd)
+	local current = git.local_repository(cwd, "pulls")
 	local target = resolver.resolve(pr.link.html)
 	if
 		current

@@ -257,8 +257,9 @@ end
 ---@field url string -- original remote URL
 
 ---@param url string
+---@param domain AtlasDomain|nil
 ---@return AtlasGitRemoteInfo|nil info, string|nil err
-function M.parse_remote_url(url)
+function M.parse_remote_url(url, domain)
 	if type(url) ~= "string" or url == "" then
 		return nil, "Empty remote URL"
 	end
@@ -287,7 +288,7 @@ function M.parse_remote_url(url)
 	path = path:gsub("%.git$", "")
 	local resolver = require("atlas.providers.resolve")
 	local is_http = url:match("^https?://") ~= nil
-	local resolved = resolver.resolve_git_remote(host, path, is_http)
+	local resolved = resolver.resolve_git_remote(host, path, is_http, domain)
 	local provider = resolved.provider or "unknown"
 	host = resolved.host
 	path = resolved.repository_path
@@ -308,11 +309,12 @@ function M.parse_remote_url(url)
 end
 
 ---@param cwd string|nil
+---@param domain AtlasDomain|nil
 ---@return AtlasGitRemoteInfo|nil
-function M.local_repository(cwd)
+function M.local_repository(cwd, domain)
 	local root = M.repo_root(cwd)
 	local remote_url = root and M.remote_url(root, "origin") or nil
-	local info = remote_url and M.parse_remote_url(remote_url) or nil
+	local info = remote_url and M.parse_remote_url(remote_url, domain) or nil
 	return info and info.provider ~= "unknown" and info or nil
 end
 

@@ -120,6 +120,19 @@ describe("Atlas target resolver", function()
 		assert.are.equal("unknown", remote.provider)
 	end)
 
+	it("resolves Git remotes for the requested domain", function()
+		config.options.pulls.providers.gitea.base_url = "http://localhost:3000"
+		config.options.issues.providers.gitea.base_url = "http://localhost:3001"
+
+		local pulls = assert(git.parse_remote_url("http://localhost:3000/owner/repo.git", "pulls"))
+		local wrong_instance = assert(git.parse_remote_url("http://localhost:3001/owner/repo.git", "pulls"))
+		local issues = assert(git.parse_remote_url("http://localhost:3001/owner/repo.git", "issues"))
+
+		assert.are.equal("gitea", pulls.provider)
+		assert.are.equal("unknown", wrong_instance.provider)
+		assert.are.equal("gitea", issues.provider)
+	end)
+
 	it("resolves encoded self-hosted URL paths", function()
 		config.options.pulls.providers.gitea.base_url = "http://localhost:3000/git%2Droot"
 		config.options.issues.providers.gitea.base_url = "http://localhost:3000/git%2Droot"

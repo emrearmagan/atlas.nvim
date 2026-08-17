@@ -70,7 +70,7 @@ local function context_slug(ctx)
 	local git = require("atlas.core.git")
 	local root = git.repo_root(nil)
 	local remote = root and git.remote_url(root, "origin") or nil
-	local info = remote and git.parse_remote_url(remote) or nil
+	local info = remote and git.parse_remote_url(remote, "issues") or nil
 	return info and info.provider == "gitea" and info.slug or nil
 end
 

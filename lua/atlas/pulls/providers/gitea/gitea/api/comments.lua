@@ -4,20 +4,9 @@ local mapper = require("atlas.pulls.providers.gitea.gitea.api.mapper")
 local reviews = require("atlas.pulls.providers.gitea.gitea.api.reviews")
 local pullrequests = require("atlas.pulls.providers.gitea.gitea.api.pullrequests")
 local request_scope = require("atlas.core.requests")
+local json = require("atlas.core.json")
 
 local M = {}
-
-local function is_list(value)
-	if type(value) ~= "table" then
-		return false
-	end
-	for key in pairs(value) do
-		if key ~= "__http_status" and type(key) ~= "number" then
-			return false
-		end
-	end
-	return true
-end
 
 ---@param value table
 ---@return string|nil
@@ -241,7 +230,7 @@ function M.fetch(pr, opts, on_done)
 							}, mapped)
 						end
 						return service.request("GET", target, nil, function(values, reactions_err)
-							if not reactions_err and not is_list(values) then
+							if not reactions_err and not json.is_list(values) then
 								reactions_err = "Invalid Gitea reactions response"
 							end
 							mapped(values, reactions_err)
@@ -268,7 +257,7 @@ end
 
 function M.fetch_activity(pr, _, on_done)
 	return M.fetch(pr, { activity_only = true }, function(result, err)
-		on_done(type(result) == "table" and result.events or nil, err)
+		on_done(result and result.events or nil, err)
 	end)
 end
 

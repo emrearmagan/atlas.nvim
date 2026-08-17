@@ -2,6 +2,7 @@ local json = require("atlas.core.json")
 local pagination = require("atlas.pulls.providers.gitea.forgejo.api.pagination")
 local providers = require("atlas.pulls.providers")
 local service = require("atlas.providers.gitea.forgejo.client").pulls
+local request_scope = require("atlas.core.requests")
 
 local M = {}
 
@@ -243,16 +244,18 @@ local function resolve_run(pr, pipeline, on_done)
 		head_sha = sha ~= "" and sha or nil,
 		limit = 1,
 	}), nil, function(raw, err)
-		local runs = type(raw) == "table" and raw.workflow_runs or nil
-		local run = type(runs) == "table" and runs[1] or nil
+		if err then
+			on_done(nil, err)
+			return
+		end
+		local runs = json.safe_table(json.nilify(raw.workflow_runs))
+		local run = json.safe_table(json.nilify(runs[1]))
 		if
-			err
-			or type(run) ~= "table"
-			or tonumber(run.id) == nil
+			tonumber(run.id) == nil
 			or tostring(run.index_in_repo or "") ~= run_number
 			or (sha ~= "" and tostring(run.commit_sha or "") ~= sha)
 		then
-			on_done(nil, err or "Forgejo Actions run not found")
+			on_done(nil, "Forgejo Actions run not found")
 			return
 		end
 		on_done(run, nil)
@@ -270,64 +273,50 @@ function M.fetch_details(pr, pipeline, _opts, on_done)
 		on_done(pipeline, nil)
 		return nil
 	end
-	local cancelled, active = false, nil
-	active = resolve_run(pr, pipeline, function(run, err)
-		if cancelled then
-			return
-		end
-		if err or type(run) ~= "table" then
-			on_done(nil, err or "Invalid Forgejo Actions run response")
+	local requests = request_scope.new()
+	requests.run(function(done)
+		return resolve_run(pr, pipeline, done)
+	end, function(run, err)
+		if err then
+			on_done(nil, err)
 			return
 		end
 		local run_id = tostring(run.id)
-		active = service.request(
-			"GET",
-			string.format("%s/actions/runs/%s/jobs", base, run_id),
-			nil,
-			function(raw, jobs_err)
-				if cancelled then
+		requests.run(function(done)
+			return service.request("GET", string.format("%s/actions/runs/%s/jobs", base, run_id), nil, done)
+		end, function(raw, jobs_err)
+			if jobs_err then
+				on_done(nil, jobs_err)
+				return
+			end
+			local jobs = {}
+			for _, job in ipairs(raw) do
+				if type(job) ~= "table" or tonumber(job.id) == nil then
+					on_done(nil, "Invalid Forgejo Actions jobs response")
 					return
 				end
-				if jobs_err or type(raw) ~= "table" then
-					on_done(nil, jobs_err or "Invalid Forgejo Actions jobs response")
-					return
-				end
-				local jobs = {}
-				for _, job in ipairs(raw) do
-					if type(job) ~= "table" or tonumber(job.id) == nil then
-						on_done(nil, "Invalid Forgejo Actions jobs response")
-						return
-					end
-					table.insert(jobs, {
-						id = job.id,
-						name = json.safe_str(job.name) or ("Job #" .. tostring(job.id)),
-						state = M.state(json.safe_str(job.status)),
-						provider_state = json.safe_str(job.status) or "",
-						url = nil,
-						steps = {},
-					})
-				end
-				local result = vim.tbl_extend("force", {}, pipeline, {
-					name = pipeline.name or json.safe_str(run.workflow_id) or "Actions run #" .. run_id,
-					state = M.state(json.safe_str(run.status)),
-					provider_state = json.safe_str(run.status) or "",
-					url = service.absolute_url(json.safe_str(run.html_url)) or pipeline.url,
-					provider_id = tostring(run.id or run_id),
-					commit_hash = json.safe_str(run.commit_sha) or pipeline.commit_hash,
-					jobs = jobs,
+				table.insert(jobs, {
+					id = job.id,
+					name = json.safe_str(job.name) or ("Job #" .. tostring(job.id)),
+					state = M.state(json.safe_str(job.status)),
+					provider_state = json.safe_str(job.status) or "",
+					url = nil,
+					steps = {},
 				})
-				on_done(result, nil)
 			end
-		)
+			local result = vim.tbl_extend("force", {}, pipeline, {
+				name = pipeline.name or json.safe_str(run.workflow_id) or "Actions run #" .. run_id,
+				state = M.state(json.safe_str(run.status)),
+				provider_state = json.safe_str(run.status) or "",
+				url = service.absolute_url(json.safe_str(run.html_url)) or pipeline.url,
+				provider_id = tostring(run.id or run_id),
+				commit_hash = json.safe_str(run.commit_sha) or pipeline.commit_hash,
+				jobs = jobs,
+			})
+			on_done(result, nil)
+		end)
 	end)
-	return {
-		cancel = function()
-			cancelled = true
-			if active and active.cancel then
-				active.cancel()
-			end
-		end,
-	}
+	return requests
 end
 
 ---@param pr PullRequest
@@ -355,34 +344,21 @@ function M.cancel(pr, pipeline, on_done)
 		on_done(false, "Invalid Forgejo Actions run")
 		return nil
 	end
-	local cancelled, active = false, nil
-	active = resolve_run(pr, pipeline, function(run, err)
-		if cancelled then
-			return
-		end
+	local requests = request_scope.new()
+	requests.run(function(done)
+		return resolve_run(pr, pipeline, done)
+	end, function(run, err)
 		if err or not run then
 			on_done(false, err or "Forgejo Actions run not found")
 			return
 		end
-		active = service.request(
-			"POST",
-			string.format("%s/actions/runs/%s/cancel", base, run.id),
-			nil,
-			function(_, cancel_err)
-				if not cancelled then
-					on_done(cancel_err == nil, cancel_err)
-				end
-			end
-		)
+		requests.run(function(done)
+			return service.request("POST", string.format("%s/actions/runs/%s/cancel", base, run.id), nil, done)
+		end, function(_, cancel_err)
+			on_done(cancel_err == nil, cancel_err)
+		end)
 	end)
-	return {
-		cancel = function()
-			cancelled = true
-			if active and active.cancel then
-				active.cancel()
-			end
-		end,
-	}
+	return requests
 end
 
 return M

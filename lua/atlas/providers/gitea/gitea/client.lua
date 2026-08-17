@@ -153,6 +153,7 @@ local function new(domain)
 	function client.request(method, endpoint, data, on_done)
 		local _, auth_err = client.get_auth()
 		if auth_err then
+			logger.logerror(NAME .. " auth missing", { domain = domain, error = auth_err })
 			vim.schedule(function()
 				on_done(nil, auth_err)
 			end)
@@ -164,6 +165,11 @@ local function new(domain)
 		if data ~= nil then
 			local ok, encoded = pcall(vim.json.encode, data)
 			if not ok then
+				logger.logerror(NAME .. " payload encode failed", {
+					domain = domain,
+					endpoint = endpoint,
+					error = tostring(encoded),
+				})
 				vim.schedule(function()
 					on_done(nil, "Invalid Gitea request payload")
 				end)
@@ -178,7 +184,30 @@ local function new(domain)
 			endpoint = endpoint,
 			method = method,
 		})
-		return http.curl_request(method, client.url(endpoint), client.headers(), payload, on_done)
+		return http.curl_request(method, client.url(endpoint), client.headers(), payload, function(result, err)
+			if err then
+				logger.logerror(NAME .. " request failed", {
+					domain = domain,
+					endpoint = endpoint,
+					method = method,
+					error = tostring(err),
+				})
+				on_done(nil, err)
+				return
+			end
+			if type(result) ~= "table" then
+				local shape_err = NAME .. " response is not a JSON object or list"
+				logger.logerror(NAME .. " response invalid", {
+					domain = domain,
+					endpoint = endpoint,
+					method = method,
+					error = shape_err,
+				})
+				on_done(nil, shape_err)
+				return
+			end
+			on_done(result, nil)
+		end)
 	end
 
 	---@param method string
@@ -188,6 +217,7 @@ local function new(domain)
 	function client.request_text(method, endpoint, on_done)
 		local _, auth_err = client.get_auth()
 		if auth_err then
+			logger.logerror(NAME .. " auth missing", { domain = domain, error = auth_err })
 			vim.schedule(function()
 				on_done(nil, auth_err)
 			end)
@@ -195,7 +225,25 @@ local function new(domain)
 		end
 
 		method = tostring(method or "GET"):upper()
-		return http.curl_text_request(method, client.url(endpoint), client.headers(), nil, on_done)
+		logger.loginfo(NAME .. " request", {
+			api_type = API_TYPE,
+			domain = domain,
+			endpoint = endpoint,
+			method = method,
+		})
+		return http.curl_text_request(method, client.url(endpoint), client.headers(), nil, function(result, err)
+			if err then
+				logger.logerror(NAME .. " request failed", {
+					domain = domain,
+					endpoint = endpoint,
+					method = method,
+					error = tostring(err),
+				})
+				on_done(nil, err)
+				return
+			end
+			on_done(result, nil)
+		end)
 	end
 
 	return client

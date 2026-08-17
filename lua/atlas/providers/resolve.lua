@@ -187,12 +187,14 @@ end
 ---@param host string
 ---@param path string|nil
 ---@param ignore_port boolean
+---@param domain AtlasDomain|nil
 ---@return AtlasProviderId|nil, AtlasUrlBase|nil
-local function configured_provider(host, path, ignore_port)
+local function configured_provider(host, path, ignore_port, domain)
+	local domains = domain and { domain } or { "pulls", "issues" }
 	for _, provider in ipairs(providers.list()) do
-		for _, domain in ipairs({ "pulls", "issues" }) do
-			if provider.domains[domain] then
-				local base = M.configured_base(domain, provider.id)
+		for _, current_domain in ipairs(domains) do
+			if provider.domains[current_domain] then
+				local base = M.configured_base(current_domain, provider.id)
 				local host_matches = base and base.host == host
 				if ignore_port and base then
 					host_matches = hostname(base.host) == hostname(host)
@@ -205,11 +207,25 @@ local function configured_provider(host, path, ignore_port)
 	end
 end
 
+---@param host string
+---@param domain AtlasDomain|nil
+---@return AtlasProviderId|nil
+local function provider_for_default_host(host, domain)
+	for _, provider in ipairs(providers.list()) do
+		local supports_domain = domain == nil or provider.domains[domain] ~= nil
+		local default_host = provider.default_host
+		if supports_domain and default_host and (host == default_host or host:find(provider.id, 1, true)) then
+			return provider.id
+		end
+	end
+end
+
 ---Find the provider that owns a configured or well-known host.
 ---@param host string
 ---@param path string|nil
+---@param domain AtlasDomain|nil
 ---@return AtlasProviderId|nil
-function M.provider_for_host(host, path)
+function M.provider_for_host(host, path, domain)
 	host = tostring(host or ""):lower()
 	if host == "" then
 		return nil
@@ -217,17 +233,11 @@ function M.provider_for_host(host, path)
 	path = path and decode_path(path) or nil
 
 	-- Configured URLs come first so self-hosted providers resolve correctly.
-	local configured = configured_provider(host, path, false)
+	local configured = configured_provider(host, path, false, domain)
 	if configured then
 		return configured
 	end
-
-	for _, provider in ipairs(providers.list()) do
-		local default_host = provider.default_host
-		if default_host and (host == default_host or host:find(provider.id, 1, true)) then
-			return provider.id
-		end
-	end
+	return provider_for_default_host(host, domain)
 end
 
 ---@class AtlasResolvedGitRemote
@@ -239,32 +249,33 @@ end
 ---@param host string
 ---@param repository_path string
 ---@param is_http boolean
+---@param domain AtlasDomain|nil
 ---@return AtlasResolvedGitRemote
-function M.resolve_git_remote(host, repository_path, is_http)
+function M.resolve_git_remote(host, repository_path, is_http, domain)
 	host = tostring(host or ""):lower()
 	repository_path = tostring(repository_path or ""):gsub("^/+", ""):gsub("/+$", "")
 
 	if is_http then
 		local parsed_path = "/" .. decode_path(repository_path)
-		local provider, base = configured_provider(host, parsed_path, false)
+		local provider, base = configured_provider(host, parsed_path, false, domain)
 		if provider and base then
 			local path = assert(M.path_for_base({ host = host, path = parsed_path }, base))
 			return { provider = provider, host = base.host, repository_path = path:gsub("^/+", "") }
 		end
 		return {
-			provider = M.provider_for_host(host, "/" .. repository_path),
+			provider = M.provider_for_host(host, "/" .. repository_path, domain),
 			host = host,
 			repository_path = decode_path(repository_path),
 		}
 	end
 
-	local provider, base = configured_provider(host, nil, true)
+	local provider, base = configured_provider(host, nil, true, domain)
 	if provider and base then
 		return { provider = provider, host = base.host, repository_path = repository_path }
 	end
 	local canonical_host = hostname(host)
 	return {
-		provider = M.provider_for_host(canonical_host),
+		provider = M.provider_for_host(canonical_host, nil, domain),
 		host = canonical_host,
 		repository_path = repository_path,
 	}

@@ -1,22 +1,10 @@
 local service = require("atlas.providers.gitea.forgejo.client").pulls
 local pagination = require("atlas.pulls.providers.gitea.forgejo.api.pagination")
 local mapper = require("atlas.pulls.providers.gitea.forgejo.api.mapper")
+local request_scope = require("atlas.core.requests")
+local json = require("atlas.core.json")
 
 local M = {}
-
----@param value any
----@return boolean
-local function is_list(value)
-	if type(value) ~= "table" then
-		return false
-	end
-	for key in pairs(value) do
-		if key ~= "__http_status" and (type(key) ~= "number" or key < 1 or key % 1 ~= 0) then
-			return false
-		end
-	end
-	return true
-end
 
 ---@param value integer|nil
 ---@return integer|nil
@@ -84,19 +72,22 @@ function M.create_comment(mapper, pr, raw_comment, commit_id, opts, pending_body
 		on_done(nil, "Submit the pending review first")
 		return nil
 	end
-	local cancelled, active = false, nil
-	active = service.request("POST", base .. "/reviews", {
-		body = pending and pending_body or nil,
-		event = pending and "PENDING" or "COMMENT",
-		commit_id = commit_id,
-		comments = { raw_comment },
-	}, function(raw_review, err)
-		local review_id = type(raw_review) == "table" and tostring(raw_review.id or "") or ""
-		if cancelled then
+	local requests = request_scope.new()
+	requests.run(function(done)
+		return service.request("POST", base .. "/reviews", {
+			body = pending and pending_body or nil,
+			event = pending and "PENDING" or "COMMENT",
+			commit_id = commit_id,
+			comments = { raw_comment },
+		}, done)
+	end, function(raw_review, err)
+		if err then
+			on_done(nil, err)
 			return
 		end
-		if err or not review_id:match("^%d+$") then
-			on_done(nil, err or "Invalid pull request review response")
+		local review_id = tostring(raw_review.id or "")
+		if not review_id:match("^%d+$") then
+			on_done(nil, "Invalid pull request review response")
 			return
 		end
 		if pending and type(target_review) == "table" then
@@ -104,41 +95,28 @@ function M.create_comment(mapper, pr, raw_comment, commit_id, opts, pending_body
 			target_review.commit_hash = tostring(raw_review.commit_id or commit_id)
 			target_review.pending = true
 		end
-		active = service.request(
-			"GET",
-			string.format("%s/reviews/%s/comments", base, review_id),
-			nil,
-			function(raw, fetch_err)
-				if cancelled then
-					return
-				end
-				local newest, newest_id
-				if not fetch_err and is_list(raw) then
-					for _, value in ipairs(raw) do
-						local id = type(value) == "table" and tonumber(value.id) or nil
-						if id and (not newest_id or id > newest_id) then
-							newest = value
-							newest_id = id
-						end
+		requests.run(function(done)
+			return service.request("GET", string.format("%s/reviews/%s/comments", base, review_id), nil, done)
+		end, function(raw, fetch_err)
+			local newest, newest_id
+			if not fetch_err and json.is_list(raw) then
+				for _, value in ipairs(raw) do
+					local id = type(value) == "table" and tonumber(value.id) or nil
+					if id and (not newest_id or id > newest_id) then
+						newest = value
+						newest_id = id
 					end
 				end
-				local created = newest and mapper.to_comment(newest, raw_review) or nil
-				if not created or not created.inline then
-					on_done(nil, fetch_err or "Invalid pull request review comment response")
-					return
-				end
-				on_done(created, nil)
 			end
-		)
+			local created = newest and mapper.to_comment(newest, raw_review) or nil
+			if not created or not created.inline then
+				on_done(nil, fetch_err or "Invalid pull request review comment response")
+				return
+			end
+			on_done(created, nil)
+		end)
 	end)
-	return {
-		cancel = function()
-			cancelled = true
-			if active and active.cancel then
-				active.cancel()
-			end
-		end,
-	}
+	return requests
 end
 
 ---@param pr PullRequest
@@ -154,10 +132,6 @@ local function submit(pr, review, event, body, on_done)
 		return nil
 	end
 	body = tostring(body or "")
-	if event == "COMMENT" and vim.trim(body) == "" then
-		on_done(false, "Review body cannot be empty")
-		return nil
-	end
 	if event == "REQUEST_CHANGES" and vim.trim(body) == "" then
 		on_done(false, "Request changes body cannot be empty")
 		return nil
@@ -216,11 +190,8 @@ local function fetch_comments(pr, _, on_done)
 		return nil
 	end
 
-	local cancelled, active = false, nil
+	local requests = request_scope.new()
 	local function fetch_comments(reviews, index, comments)
-		if cancelled then
-			return
-		end
 		local review = reviews[index]
 		if review == nil then
 			-- TODO: Load inline-comment reactions lazily when the diff UI requests them.
@@ -237,52 +208,38 @@ local function fetch_comments(pr, _, on_done)
 			return
 		end
 
-		active = service.request(
-			"GET",
-			string.format("%s/reviews/%s/comments", base, review_id),
-			nil,
-			function(raw, err)
-				if cancelled then
-					return
-				end
-				if err or not is_list(raw) then
-					on_done(nil, err or "Invalid pull request review comments response")
-					return
-				end
-				for _, value in ipairs(raw) do
-					local comment = mapper.to_comment(value, review)
-					if not comment or not comment.inline then
-						on_done(nil, "Invalid pull request review comments response")
-						return
-					end
-					table.insert(comments, comment)
-				end
-				fetch_comments(reviews, index + 1, comments)
+		requests.run(function(done)
+			return service.request("GET", string.format("%s/reviews/%s/comments", base, review_id), nil, done)
+		end, function(raw, err)
+			if err or not json.is_list(raw) then
+				on_done(nil, err or "Invalid pull request review comments response")
+				return
 			end
-		)
+			for _, value in ipairs(raw) do
+				local comment = mapper.to_comment(value, review)
+				if not comment or not comment.inline then
+					on_done(nil, "Invalid pull request review comments response")
+					return
+				end
+				table.insert(comments, comment)
+			end
+			fetch_comments(reviews, index + 1, comments)
+		end)
 	end
 
-	active = pagination.fetch_all(base .. "/reviews", nil, {
-		invalid_response = "Invalid pull request reviews response",
-		post_filtered = true,
-	}, function(reviews, err)
-		if cancelled then
-			return
-		end
+	requests.run(function(done)
+		return pagination.fetch_all(base .. "/reviews", nil, {
+			invalid_response = "Invalid pull request reviews response",
+			post_filtered = true,
+		}, done)
+	end, function(reviews, err)
 		if err then
 			on_done(nil, err)
 			return
 		end
 		fetch_comments(reviews or {}, 1, {})
 	end)
-	return {
-		cancel = function()
-			cancelled = true
-			if active and active.cancel then
-				active.cancel()
-			end
-		end,
-	}
+	return requests
 end
 
 ---@param pr PullRequest
@@ -290,70 +247,31 @@ end
 ---@param on_done fun(data: PullsReviewData|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch(pr, opts, on_done)
-	local cancelled, active = false, nil
-	local current_user
-	local function load_comments()
-		active = fetch_comments(pr, opts, function(comments, err, raw_reviews)
-			if cancelled then
-				return
-			end
-			if err then
-				on_done(nil, err)
-				return
-			end
-			local pending
-			for _, raw in ipairs(raw_reviews or {}) do
-				local raw_user = type(raw) == "table" and raw.user or nil
-				local state = type(raw) == "table" and tostring(raw.state or ""):upper() or ""
-				local raw_id = type(raw_user) == "table" and tostring(raw_user.id or "") or ""
-				local current_id = type(current_user) == "table" and tostring(current_user.id or "") or ""
-				local raw_login = type(raw_user) == "table" and tostring(raw_user.login or ""):lower() or ""
-				local current_login = type(current_user) == "table" and tostring(current_user.login or ""):lower() or ""
-				local same_user = type(raw_user) == "table"
-					and type(current_user) == "table"
-					and (
-						(raw_id ~= "" and current_id ~= "" and raw_id == current_id)
-						or (raw_login ~= "" and current_login ~= "" and raw_login == current_login)
-					)
-				if same_user and state == "PENDING" and tostring(raw.id or ""):match("^%d+$") then
-					if not pending or raw.id > pending.id then
-						pending = raw
-					end
-				end
-			end
-			local source = type(pr.source) == "table" and pr.source or {}
-			local commit_hash = tostring((pending and pending.commit_id) or source.commit_hash or "")
-			on_done({
-				review = {
-					id = pending and tostring(pending.id) or nil,
-					commit_hash = commit_hash ~= "" and commit_hash or nil,
-					pending = pending ~= nil,
-				},
-				comments = comments or {},
-				tasks = {},
-			}, nil)
-		end)
-	end
-
-	active = service.request("GET", "/user", nil, function(raw, err)
-		if cancelled then
+	return fetch_comments(pr, opts, function(comments, err, raw_reviews)
+		if err then
+			on_done(nil, err)
 			return
 		end
-		if err or type(raw) ~= "table" then
-			on_done(nil, err or "Invalid Forgejo user response")
-			return
+		local pending, pending_id
+		for _, raw in ipairs(raw_reviews or {}) do
+			local id = tonumber(raw.id)
+			if tostring(raw.state or ""):upper() == "PENDING" and id and (not pending_id or id > pending_id) then
+				pending = raw
+				pending_id = id
+			end
 		end
-		current_user = raw
-		load_comments()
+		local source = type(pr.source) == "table" and pr.source or {}
+		local commit_hash = tostring((pending and pending.commit_id) or source.commit_hash or "")
+		on_done({
+			review = {
+				id = pending and tostring(pending.id) or nil,
+				commit_hash = commit_hash ~= "" and commit_hash or nil,
+				pending = pending ~= nil,
+			},
+			comments = comments or {},
+			tasks = {},
+		}, nil)
 	end)
-	return {
-		cancel = function()
-			cancelled = true
-			if active and active.cancel then
-				active.cancel()
-			end
-		end,
-	}
 end
 
 ---@param pr PullRequest
@@ -405,9 +323,13 @@ function M.start_review(pr, review, on_done)
 		event = "PENDING",
 		commit_id = commit_id,
 	}, function(raw, err)
-		local id = type(raw) == "table" and tostring(raw.id or "") or ""
-		if err or not id:match("^%d+$") then
-			on_done(false, err or "Invalid pull request review response")
+		if err then
+			on_done(false, err)
+			return
+		end
+		local id = tostring(raw.id or "")
+		if not id:match("^%d+$") then
+			on_done(false, "Invalid pull request review response")
 			return
 		end
 		review.id = id

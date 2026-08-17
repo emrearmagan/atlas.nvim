@@ -1,21 +1,8 @@
 local service = require("atlas.providers.gitea.forgejo.client").pulls
 local json = require("atlas.core.json")
+local request_scope = require("atlas.core.requests")
 
 local M = {}
-
----@param value any
----@return boolean
-local function is_list(value)
-	if type(value) ~= "table" then
-		return false
-	end
-	for key in pairs(value) do
-		if key ~= "__http_status" and (type(key) ~= "number" or key < 1 or key % 1 ~= 0) then
-			return false
-		end
-	end
-	return true
-end
 
 ---@class AtlasForgejoPaginationOpts
 ---@field page_size? integer
@@ -38,12 +25,13 @@ function M.fetch_all(endpoint, params, opts, on_done)
 	local page = 1
 	local values = {}
 	local empty_pages = 0
-	local active, cancelled, finished
+	local requests = request_scope.new()
+	local finished = false
 
 	---@param result table[]|nil
 	---@param err string|nil
 	local function finish(result, err)
-		if cancelled or finished then
+		if finished then
 			return
 		end
 		finished = true
@@ -59,17 +47,17 @@ function M.fetch_all(endpoint, params, opts, on_done)
 		query.page = page
 		query.limit = page_size
 
-		local requested_page = page
-		local handle = service.request("GET", endpoint .. service.query(query), nil, function(result, err)
-			if cancelled or finished then
+		requests.run(function(done)
+			return service.request("GET", endpoint .. service.query(query), nil, done)
+		end, function(result, err)
+			if finished then
 				return
 			end
 			if err then
 				finish(nil, err)
 				return
 			end
-			result = json.nilify(result) or {}
-			if not is_list(result) then
+			if not json.is_list(result) then
 				finish(nil, opts.invalid_response or "Invalid paginated response")
 				return
 			end
@@ -93,7 +81,7 @@ function M.fetch_all(endpoint, params, opts, on_done)
 					finish(values, nil)
 					return
 				end
-			elseif #result == 0 then
+			elseif #result < page_size then
 				finish(values, nil)
 				return
 			end
@@ -101,23 +89,10 @@ function M.fetch_all(endpoint, params, opts, on_done)
 			page = page + 1
 			fetch_page()
 		end)
-
-		-- A mocked request may complete synchronously. Do not overwrite the
-		-- handle for a later page in that case.
-		if not finished and not cancelled and page == requested_page then
-			active = handle
-		end
 	end
 
 	fetch_page()
-	return {
-		cancel = function()
-			cancelled = true
-			if active and active.cancel then
-				active.cancel()
-			end
-		end,
-	}
+	return requests
 end
 
 return M

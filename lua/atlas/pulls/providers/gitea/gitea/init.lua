@@ -49,7 +49,7 @@ local function fetch_pullrequests(view, opts, on_done)
 	}, function(groups, err)
 		local nonempty = {}
 		for _, group in ipairs(groups or {}) do
-			if type(group.prs) == "table" and #group.prs > 0 then
+			if #group.prs > 0 then
 				table.insert(nonempty, group)
 			end
 		end
@@ -145,10 +145,8 @@ end
 ---@return string[]
 local function repositories(options)
 	local result = {}
-	for _, view in ipairs(type(options) == "table" and options.views or {}) do
-		if type(view.repo) == "string" then
-			table.insert(result, view.repo)
-		end
+	for _, view in ipairs(options.views or {}) do
+		table.insert(result, view.repo)
 	end
 	return result
 end
@@ -178,6 +176,7 @@ local repository = {
 	fetch_details = repositories_api.detail,
 	fetch_branches = repositories_api.branches,
 	fetch_tags = repositories_api.tags,
+	fetch_issues = repositories_api.fetch_issues,
 	delete_branch = repositories_api.delete_branch,
 }
 
@@ -189,8 +188,6 @@ local notifications = {
 
 local actions = require("atlas.pulls.providers.gitea.gitea.actions")
 local panel = require("atlas.pulls.providers.gitea.ui.panel").new(pullrequests_api)
-local repo_issues = require("atlas.pulls.providers.gitea.ui.repo_issues").new(repositories_api)
-local repo_panel = require("atlas.pulls.providers.gitea.ui.repo_panel").new(repo_issues)
 
 return {
 	resolve = resolve,
@@ -234,7 +231,7 @@ return {
 			setup = require("atlas.pulls.providers.gitea.highlights").setup,
 			render = require("atlas.pulls.providers.gitea.ui.main").render,
 			panel = panel,
-			repo_panel = repo_panel,
+			repo_panel = require("atlas.pulls.providers.gitea.ui.repo_panel"),
 		},
 	},
 }

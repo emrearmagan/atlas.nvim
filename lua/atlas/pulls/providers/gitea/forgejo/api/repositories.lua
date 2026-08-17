@@ -1,6 +1,7 @@
 local service = require("atlas.providers.gitea.forgejo.client").pulls
 local pagination = require("atlas.pulls.providers.gitea.forgejo.api.pagination")
 local request_scope = require("atlas.core.requests")
+local json = require("atlas.core.json")
 
 local M = {}
 
@@ -43,27 +44,33 @@ function M.detail(repo, _, on_done)
 	requests.run(function(done)
 		return service.request("GET", base, nil, done)
 	end, function(raw, err)
-		if err or type(raw) ~= "table" then
-			on_done(nil, err or "Invalid repository response")
+		if err then
+			on_done(nil, err)
 			return
 		end
-		local full_name = tostring(raw.full_name or slug)
+		local full_name = json.safe_str(raw.full_name)
+		local name = json.safe_str(raw.name)
+		if not full_name or not name then
+			on_done(nil, "Invalid repository response")
+			return
+		end
+		local owner = json.safe_table(json.nilify(raw.owner))
 		local details = {
 			id = full_name,
-			name = tostring(raw.name or ""),
+			name = name,
 			full_name = full_name,
-			owner = type(raw.owner) == "table" and tostring(raw.owner.login or "") or repo.owner,
-			repo_name = tostring(raw.name or ""),
-			html_url = raw.html_url,
-			description = tostring(raw.description or ""),
-			size = raw.size,
-			default_branch = raw.default_branch,
+			owner = json.safe_str(owner.login) or tostring(repo.owner or ""),
+			repo_name = name,
+			html_url = json.safe_str(raw.html_url) or "",
+			description = json.safe_str(raw.description) or "",
+			size = tonumber(raw.size),
+			default_branch = json.safe_str(raw.default_branch),
 			is_private = raw.private == true,
-			created_on = raw.created_at,
+			created_on = json.safe_str(raw.created_at) or "",
 			readme = nil,
-			stars = raw.stars_count,
-			watchers = raw.watchers_count,
-			forks = raw.forks_count,
+			stars = tonumber(raw.stars_count),
+			watchers = tonumber(raw.watchers_count),
+			forks = tonumber(raw.forks_count),
 		}
 		local ref = tostring(details.default_branch or "")
 		if ref == "" then
@@ -99,29 +106,30 @@ local function refs(repo, kind, on_done)
 		end
 		local entries = {}
 		for _, value in ipairs(raw or {}) do
-			if type(value) ~= "table" or tostring(value.name or "") == "" then
+			value = json.safe_table(json.nilify(value))
+			local name = json.safe_str(value.name)
+			if not name or name == "" then
 				on_done(nil, "Invalid repository " .. kind .. " response")
 				return
 			end
-			local commit = type(value.commit) == "table" and value.commit or {}
+			local commit = json.safe_table(json.nilify(value.commit))
 			if kind == "tags" then
 				table.insert(entries, {
-					name = tostring(value.name or ""),
-					hash = tostring(commit.sha or commit.id or ""):sub(1, 8),
+					name = name,
+					hash = (json.safe_str(commit.sha) or json.safe_str(commit.id) or ""):sub(1, 8),
 					date = "",
-					message = tostring(value.message or ""),
+					message = json.safe_str(value.message) or "",
 					author = "",
 				})
 			else
+				local author = json.safe_table(json.nilify(commit.author))
 				table.insert(entries, {
-					name = tostring(value.name or ""),
-					hash = tostring(commit.sha or commit.id or ""):sub(1, 8),
-					date = tostring(commit.timestamp or ""),
-					message = tostring(commit.message or ""),
-					author = type(commit.author) == "table" and tostring(
-						commit.author.name or commit.author.username or ""
-					) or "",
-					api_url = base .. "/branches/" .. service.url_encode(tostring(value.name or "")),
+					name = name,
+					hash = (json.safe_str(commit.sha) or json.safe_str(commit.id) or ""):sub(1, 8),
+					date = json.safe_str(commit.timestamp) or "",
+					message = json.safe_str(commit.message) or "",
+					author = json.safe_str(author.name) or json.safe_str(author.username) or "",
+					api_url = base .. "/branches/" .. service.url_encode(name),
 				})
 			end
 		end
@@ -137,11 +145,13 @@ function M.tags(repo, _, on_done)
 	return refs(repo, "tags", on_done)
 end
 
----@param slug string
+---@param repo PullsRepoDetails
 ---@param state "open"|"closed"
----@param on_done fun(issues: table[]|nil, err: string|nil)
+---@param _opts PullsFetchOpts
+---@param on_done fun(result: { entries: PullsRepoIssue[], counts: { open: integer, closed: integer }|nil }|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_issues(slug, state, on_done)
+function M.fetch_issues(repo, state, _opts, on_done)
+	local slug = tostring(repo.full_name or repo.id or "")
 	local base = endpoint(slug)
 	if not base then
 		on_done(nil, "Invalid Forgejo repository")
@@ -151,7 +161,7 @@ function M.fetch_issues(slug, state, on_done)
 		max_items = 50,
 		invalid_response = "Invalid Forgejo issues response",
 		accept = function(raw)
-			return type(raw) == "table" and type(raw.pull_request) ~= "table"
+			return json.nilify(json.safe_table(raw).pull_request) == nil
 		end,
 	}, function(issues, err)
 		if err then
@@ -159,20 +169,25 @@ function M.fetch_issues(slug, state, on_done)
 			return
 		end
 		local result = {}
-		for _, raw in ipairs(issues or {}) do
-			local reporter = type(raw.user) == "table" and raw.user or {}
+		for _, raw in ipairs(issues) do
+			raw = json.safe_table(json.nilify(raw))
+			local number = tonumber(raw.number)
+			if not number then
+				on_done(nil, "Invalid Forgejo issue response")
+				return
+			end
+			local reporter = json.safe_table(json.nilify(raw.user))
 			table.insert(result, {
-				number = raw.number,
-				title = tostring(raw.title or ""),
-				state = tostring(raw.state or state):lower(),
-				author = tostring(reporter.login or ""),
-				created_at = tostring(raw.created_at or ""),
-				comments = raw.comments or 0,
-				url = tostring(raw.html_url or ""),
-				labels = raw.labels or {},
+				number = number,
+				title = json.safe_str(raw.title) or "",
+				state = (json.safe_str(raw.state) or state):lower() == "closed" and "closed" or "open",
+				author = json.safe_str(reporter.login) or "",
+				created_at = json.safe_str(raw.created_at) or "",
+				comments = tonumber(raw.comments) or 0,
+				url = json.safe_str(raw.html_url) or "",
 			})
 		end
-		on_done(result, nil)
+		on_done({ entries = result, counts = nil }, nil)
 	end)
 end
 
@@ -205,17 +220,20 @@ function M.search(term, on_done)
 			on_done(nil, err)
 			return
 		end
-		local values = type(raw) == "table" and raw.data or nil
-		if type(values) ~= "table" then
+		local values = json.nilify(raw.data)
+		if not values or not vim.islist(values) then
 			on_done(nil, "Invalid repository search response")
 			return
 		end
 		local result = {}
 		for _, repo in ipairs(values) do
-			local full_name = type(repo) == "table" and tostring(repo.full_name or "") or ""
-			if full_name ~= "" then
-				table.insert(result, full_name)
+			repo = json.safe_table(json.nilify(repo))
+			local full_name = json.safe_str(repo.full_name) or ""
+			if full_name == "" then
+				on_done(nil, "Invalid repository search response")
+				return
 			end
+			table.insert(result, full_name)
 		end
 		on_done(result, nil)
 	end)

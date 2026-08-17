@@ -29,8 +29,8 @@ function M.fetch_conversation(issue, opts, on_done)
 	requests.run(function(done)
 		return api.timeline.list(issue.key, opts, done)
 	end, function(result, err)
-		if err or type(result) ~= "table" then
-			on_done(nil, err or "Invalid Gitea/Forgejo timeline response")
+		if err then
+			on_done(nil, err)
 			return
 		end
 		local comments = {}
@@ -51,7 +51,7 @@ function M.fetch_conversation(issue, opts, on_done)
 		local function load_reactions(index)
 			local comment = comments[index]
 			if not comment then
-				on_done({ comments = comments, events = result.events or {}, reaction_options = REACTION_OPTIONS }, nil)
+				on_done({ comments = comments, events = result.events or {} }, nil)
 				return
 			end
 			requests.run(function(done)
@@ -79,11 +79,12 @@ function M.fetch_activity(issue, opts, on_done)
 end
 
 ---@param issue Issue
----@param comment_id string
+---@param comment IssueComment
 ---@param content string
 ---@param on_done fun(comment: IssueComment|nil, err: string|nil)
-function M.edit_comment(issue, comment_id, content, on_done)
-	if tostring(comment_id) ~= "__body__" then
+function M.edit_comment(issue, comment, content, on_done)
+	local comment_id = tostring(comment.id or "")
+	if comment_id ~= "__body__" then
 		local requests = request_scope.new()
 		requests.run(function(done)
 			return api.comments.edit(issue.key, comment_id, content, done)
@@ -223,14 +224,16 @@ local renderer = require("atlas.issues.providers.gitea.ui.renderer")
 
 ---@type IssuesCommentsCapability
 local comments = {
+	reaction_options = REACTION_OPTIONS,
 	fetch_activity = M.fetch_activity,
 	fetch_conversation = M.fetch_conversation,
 	add_comment = function(issue, content, on_done)
 		return api.comments.add(issue.key, content, on_done)
 	end,
 	edit_comment = M.edit_comment,
-	delete_comment = function(issue, comment_id, on_done)
-		if tostring(comment_id) == "__body__" then
+	delete_comment = function(issue, comment, on_done)
+		local comment_id = tostring(comment.id or "")
+		if comment_id == "__body__" then
 			on_done(false, "Cannot delete the issue description")
 			return nil
 		end

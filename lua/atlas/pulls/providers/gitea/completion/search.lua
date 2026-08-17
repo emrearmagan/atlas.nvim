@@ -4,6 +4,7 @@ local M = {}
 ---@param global boolean
 local function open(default, global)
 	local state = require("atlas.pulls.state")
+	---@type AtlasGiteaForgejoPullsViewConfig
 	local view = state.active_view or state.current_view or {}
 	local repo = tostring(view.repo or "")
 	if not global and repo == "" then

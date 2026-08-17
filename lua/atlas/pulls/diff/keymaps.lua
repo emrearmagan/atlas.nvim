@@ -5,7 +5,6 @@ local comments = require("atlas.pulls.diff.comments")
 local help = require("atlas.ui.popups.help")
 local notes = require("atlas.pulls.diff.notes")
 local picker = require("atlas.picker")
-local pull_actions = require("atlas.pulls.actions")
 local resolver = require("atlas.core.keymaps")
 local review = require("atlas.pulls.diff.review")
 local session_api = require("atlas.pulls.diff.session")
@@ -82,10 +81,8 @@ end
 ---@param session AtlasDiffSession
 ---@param opts { buffers: integer[], reload: fun()|nil, help_key: string|string[]|nil, file_buffers: integer[]|nil, add_file_comment: (fun(pending: boolean))|nil }
 function M.register(session, opts)
-	local action_context = session.review and review.action_context(session) or nil
 	local reviews = session.review and session.review.provider.capabilities.reviews or {}
 	local reviewable = session.review and (session.review.pr.state == "open" or session.review.pr.state == "draft")
-	local can_complete = reviewable and (not session.review.state.pending or reviews.submit_review ~= nil)
 	local has_review_items = session.review ~= nil or session.note_target ~= nil
 	local file_buffers = {}
 	for _, buf in ipairs(opts.file_buffers or {}) do
@@ -119,12 +116,12 @@ function M.register(session, opts)
 				add(items, "ui.open_actions", "Review actions", function()
 					actions.open(session)
 				end)
-				if can_complete and action_context and pull_actions.is_available("approve", action_context) then
+				if reviewable and reviews.approve then
 					add(items, "pulls.review.approve", "Approve", function()
 						actions.approve(session)
 					end)
 				end
-				if can_complete and action_context and pull_actions.is_available("request_changes", action_context) then
+				if reviewable and reviews.request_changes then
 					add(items, "pulls.review.request_changes", "Request changes", function()
 						actions.request_changes(session)
 					end)
