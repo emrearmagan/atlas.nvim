@@ -1,4 +1,4 @@
----@class PullsOverviewTab : PullsPanelTabModule
+---@class PullsOverviewTab : PullsPRPanelTabModule
 local M = {}
 
 local utils = require("atlas.ui.shared.utils")
@@ -45,10 +45,9 @@ function M.reset()
 end
 
 ---@param pr PullRequest
----@param _repo PullsRepo|nil
 ---@param refresh fun()
 ---@param opts { force_refresh: boolean|nil }|nil
-function M.on_select(pr, _repo, refresh, opts)
+function M.on_select(pr, refresh, opts)
 	opts = opts or {}
 
 	local provider = get_provider()

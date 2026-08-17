@@ -3,6 +3,7 @@ local M = {}
 local service = require("atlas.issues.providers.jira.api.service")
 local normalizer = require("atlas.issues.providers.jira.api.mapper")
 local cache = require("atlas.core.cache")
+local json = require("atlas.core.json")
 local logger = require("atlas.core.logger")
 local config = require("atlas.issues.providers.jira.api.config")
 
@@ -151,7 +152,7 @@ function M.search_issue(query, on_done, opts)
 		.. "&showSubTasks=true&showSubTaskParent=true"
 
 	return service.request("GET", endpoint, nil, function(result, err)
-		if err ~= nil or type(result) ~= "table" then
+		if err ~= nil then
 			on_done(nil, err or "Empty response")
 			return
 		end
@@ -159,17 +160,15 @@ function M.search_issue(query, on_done, opts)
 		---@type JiraIssuePickerItem[]
 		local items = {}
 		for _, section in ipairs(result.sections or {}) do
-			for _, issue in ipairs((type(section) == "table" and section.issues) or {}) do
-				if type(issue) == "table" then
-					local key = tostring(issue.key or "")
-					if key ~= "" then
-						local summary = tostring(issue.summaryText or issue.summary or "")
-						table.insert(items, {
-							id = tostring(issue.id or key),
-							key = key,
-							summary = summary,
-						})
-					end
+			for _, issue in ipairs(section.issues or {}) do
+				local key = tostring(issue.key or "")
+				if key ~= "" then
+					local summary = tostring(issue.summaryText or issue.summary or "")
+					table.insert(items, {
+						id = tostring(issue.id or key),
+						key = key,
+						summary = summary,
+					})
 				end
 			end
 		end
@@ -248,7 +247,7 @@ function M.get_issue_history_page(issue_key, start_at, max_results, on_done, opt
 
 		local raw = result
 		if is_server then
-			raw = type(result.changelog) == "table" and result.changelog or { values = {} }
+			raw = json.safe_table(result.changelog)
 		end
 
 		local page = normalizer.to_history_page(raw, start, size)
@@ -542,12 +541,12 @@ function M.get_create_meta(project_key, callback)
 	if config.jira_config().api_type == "server" then
 		local endpoint = string.format("/issue/createmeta/%s/issuetypes", escaped_key)
 		return service.request("GET", endpoint, nil, function(result, err)
-			if err ~= nil or type(result) ~= "table" then
+			if err ~= nil then
 				callback(nil, err or "Empty response")
 				return
 			end
 
-			local raw_types = type(result.values) == "table" and result.values or {}
+			local raw_types = result.values or {}
 			local issue_types = {}
 			for _, raw in ipairs(raw_types) do
 				local issue_type = normalizer.to_issue_type(raw)
@@ -565,31 +564,23 @@ function M.get_create_meta(project_key, callback)
 	local endpoint = string.format("/issue/createmeta?projectKeys=%s&expand=projects.issuetypes", escaped_key)
 
 	return service.request("GET", endpoint, nil, function(result, err)
-		if err ~= nil or type(result) ~= "table" then
+		if err ~= nil then
 			callback(nil, err or "Empty response")
 			return
 		end
 
-		local projects = result.projects
-		if type(projects) ~= "table" then
-			callback({}, nil)
-			return
-		end
+		local projects = json.safe_table(result.projects)
 
 		local matched_project = nil
 		for _, project in ipairs(projects) do
-			if type(project) == "table" and tostring(project.key or "") == project_key then
+			if tostring(project.key or "") == project_key then
 				matched_project = project
 				break
 			end
 		end
 
 		local project = matched_project or projects[1]
-		local raw_types = type(project) == "table" and project.issuetypes or nil
-		if type(raw_types) ~= "table" then
-			callback({}, nil)
-			return
-		end
+		local raw_types = json.safe_table(project and project.issuetypes)
 
 		local issue_types = {}
 		for _, raw in ipairs(raw_types) do

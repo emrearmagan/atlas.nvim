@@ -4,6 +4,8 @@ local M = {}
 local utils = require("atlas.ui.shared.utils")
 local spinner = require("atlas.ui.components.spinner")
 local statusline = require("atlas.ui.statusline")
+local help = require("atlas.ui.popups.help")
+local keymaps = require("atlas.core.keymaps")
 local state = require("atlas.issues.providers.jira.ui.overview.state")
 local adf = require("atlas.issues.providers.jira.converted.adf")
 local issues_api = require("atlas.issues.providers.jira.api.issues")
@@ -147,20 +149,31 @@ end
 
 function M.activate(buf, refresh)
 	apply_filetype(buf)
-	if buf and vim.api.nvim_buf_is_valid(buf) then
-		vim.keymap.set("n", "m", function()
-			state.view_mode = state.view_mode == "raw" and "markdown" or "raw"
-			apply_filetype(buf)
-			if refresh then
-				refresh()
-			end
-		end, { buffer = buf, silent = true, nowait = true })
+	local keys = keymaps.resolve("issues.toggle_description_mode")
+	if buf and vim.api.nvim_buf_is_valid(buf) and keys then
+		help.register("Panel", {
+			{
+				key = #keys == 1 and keys[1] or keys,
+				desc = "Toggle description mode",
+				opts = { silent = true, nowait = true },
+				callback = function()
+					state.view_mode = state.view_mode == "raw" and "markdown" or "raw"
+					apply_filetype(buf)
+					if refresh then
+						refresh()
+					end
+				end,
+			},
+		}, { index = 212, buffer = buf })
 	end
 end
 
 function M.deactivate(buf)
 	if buf and vim.api.nvim_buf_is_valid(buf) then
-		pcall(vim.keymap.del, "n", "m", { buffer = buf })
+		local keys = keymaps.resolve("issues.toggle_description_mode")
+		if keys then
+			help.remove("Panel", { { key = #keys == 1 and keys[1] or keys } }, { buffer = buf })
+		end
 		pcall(vim.treesitter.stop, buf)
 		vim.api.nvim_set_option_value("syntax", "OFF", { buf = buf })
 		vim.api.nvim_set_option_value("filetype", "", { buf = buf })

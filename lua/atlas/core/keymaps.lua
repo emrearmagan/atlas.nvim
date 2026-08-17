@@ -5,18 +5,18 @@ local M = {}
 ---@field previous_item? AtlasKeymapValue
 ---@field first_item? AtlasKeymapValue
 ---@field last_item? AtlasKeymapValue
+---@field select? AtlasKeymapValue
 ---@field submit? AtlasKeymapValue
 ---@field help? AtlasKeymapValue
 ---@field close? AtlasKeymapValue
+---@field delete? AtlasKeymapValue
+---@field comments? AtlasUICommentKeymaps
 ---@field toggle_panel? AtlasKeymapValue
 ---@field toggle_fold? AtlasKeymapValue
 ---@field toggle_all_folds? AtlasKeymapValue
 ---@field previous_panel_tab? AtlasKeymapValue
 ---@field next_panel_tab? AtlasKeymapValue
----@field open_notifications? AtlasKeymapValue
----@field notifications_mark_read? AtlasKeymapValue
----@field notifications_mark_done? AtlasKeymapValue
----@field notifications_refresh? AtlasKeymapValue
+---@field notifications? AtlasUINotificationKeymaps
 ---@field toggle_subscription? AtlasKeymapValue
 ---@field refresh? AtlasKeymapValue
 ---@field refresh_view? AtlasKeymapValue
@@ -26,6 +26,18 @@ local M = {}
 ---@field copy_url? AtlasKeymapValue
 ---@field show_details? AtlasKeymapValue
 ---@field search? AtlasKeymapValue
+
+---@class AtlasUICommentKeymaps
+---@field add? AtlasKeymapValue
+---@field reply? AtlasKeymapValue
+---@field edit? AtlasKeymapValue
+---@field react? AtlasKeymapValue
+
+---@class AtlasUINotificationKeymaps
+---@field open? AtlasKeymapValue
+---@field mark_read? AtlasKeymapValue
+---@field mark_done? AtlasKeymapValue
+---@field refresh? AtlasKeymapValue
 
 ---@class AtlasPullsReviewExplorerKeymaps
 ---@field find_file? AtlasKeymapValue
@@ -52,18 +64,15 @@ local M = {}
 ---@field submit_comment? AtlasKeymapValue
 ---@field add_suggestion? AtlasKeymapValue
 ---@field submit_suggestion? AtlasKeymapValue
----@field edit_comment? AtlasKeymapValue
----@field delete? AtlasKeymapValue
 ---@field add_note? AtlasKeymapValue
----@field add_task? AtlasKeymapValue
 ---@field toggle_resolved? AtlasKeymapValue
 
 ---@class AtlasPullsReviewKeymaps
----@field show_item? AtlasKeymapValue
 ---@field focus_item? AtlasKeymapValue
 ---@field approve? AtlasKeymapValue
 ---@field request_changes? AtlasKeymapValue
 ---@field submit_review? AtlasKeymapValue
+---@field add_task? AtlasKeymapValue
 ---@field explorer? AtlasPullsReviewExplorerKeymaps
 ---@field diff? AtlasPullsReviewDiffKeymaps
 
@@ -78,8 +87,13 @@ local M = {}
 ---@class AtlasPullsKeymaps
 ---@field open_diff? AtlasKeymapValue
 ---@field checkout? AtlasKeymapValue
+---@field external_help? AtlasKeymapValue
+---@field toggle_repo_panel? AtlasKeymapValue
+---@field toggle_repo_issue_state? AtlasKeymapValue
 ---@field edit_title? AtlasKeymapValue
 ---@field edit_description? AtlasKeymapValue
+---@field edit_reviewers? AtlasKeymapValue
+---@field edit_assignees? AtlasKeymapValue
 ---@field review? AtlasPullsReviewKeymaps
 ---@field pipelines? AtlasPullsPipelinesKeymaps
 ---@field filters? AtlasPullsFilterKeymaps
@@ -90,6 +104,7 @@ local M = {}
 ---@field change_reporter? AtlasKeymapValue
 ---@field edit_issue? AtlasKeymapValue
 ---@field create_issue? AtlasKeymapValue
+---@field toggle_description_mode? AtlasKeymapValue
 
 ---@class AtlasKeymapsConfig
 ---@field ui? AtlasUIKeymaps
@@ -101,18 +116,24 @@ local M = {}
 ---| "ui.previous_item"
 ---| "ui.first_item"
 ---| "ui.last_item"
+---| "ui.select"
 ---| "ui.submit"
 ---| "ui.help"
 ---| "ui.close"
+---| "ui.delete"
+---| "ui.comments.add"
+---| "ui.comments.reply"
+---| "ui.comments.edit"
+---| "ui.comments.react"
 ---| "ui.toggle_panel"
 ---| "ui.toggle_fold"
 ---| "ui.toggle_all_folds"
 ---| "ui.previous_panel_tab"
 ---| "ui.next_panel_tab"
----| "ui.open_notifications"
----| "ui.notifications_mark_read"
----| "ui.notifications_mark_done"
----| "ui.notifications_refresh"
+---| "ui.notifications.open"
+---| "ui.notifications.mark_read"
+---| "ui.notifications.mark_done"
+---| "ui.notifications.refresh"
 ---| "ui.toggle_subscription"
 ---| "ui.refresh"
 ---| "ui.refresh_view"
@@ -124,12 +145,17 @@ local M = {}
 ---| "ui.search"
 ---| "pulls.open_diff"
 ---| "pulls.checkout"
+---| "pulls.external_help"
+---| "pulls.toggle_repo_panel"
+---| "pulls.toggle_repo_issue_state"
 ---| "pulls.edit_title"
 ---| "pulls.edit_description"
+---| "pulls.edit_reviewers"
+---| "pulls.edit_assignees"
 ---| "pulls.review.approve"
 ---| "pulls.review.request_changes"
 ---| "pulls.review.submit_review"
----| "pulls.review.show_item"
+---| "pulls.review.add_task"
 ---| "pulls.review.focus_item"
 ---| "pulls.review.explorer.find_file"
 ---| "pulls.review.explorer.next_file"
@@ -153,10 +179,7 @@ local M = {}
 ---| "pulls.review.diff.submit_comment"
 ---| "pulls.review.diff.add_suggestion"
 ---| "pulls.review.diff.submit_suggestion"
----| "pulls.review.diff.edit_comment"
----| "pulls.review.diff.delete"
 ---| "pulls.review.diff.add_note"
----| "pulls.review.diff.add_task"
 ---| "pulls.review.diff.toggle_resolved"
 ---| "pulls.pipelines.open"
 ---| "pulls.filters.open"
@@ -167,6 +190,7 @@ local M = {}
 ---| "issues.change_reporter"
 ---| "issues.edit_issue"
 ---| "issues.create_issue"
+---| "issues.toggle_description_mode"
 
 ---@param value AtlasKeymapValue
 ---@return string[]|nil
@@ -328,15 +352,17 @@ end
 function M.validate()
 	local result = {
 		ui = conflicts_for({
+			"ui.select",
 			"ui.submit",
 			"ui.help",
 			"ui.close",
+			"ui.delete",
 			"ui.toggle_panel",
 			"ui.toggle_fold",
 			"ui.toggle_all_folds",
 			"ui.previous_panel_tab",
 			"ui.next_panel_tab",
-			"ui.open_notifications",
+			"ui.notifications.open",
 			"ui.toggle_subscription",
 			"ui.refresh",
 			"ui.refresh_view",
@@ -350,6 +376,7 @@ function M.validate()
 		pulls = conflicts_for({
 			"pulls.open_diff",
 			"pulls.checkout",
+			"pulls.toggle_repo_panel",
 			"pulls.edit_title",
 			"pulls.edit_description",
 			"pulls.filters.open",
@@ -357,10 +384,11 @@ function M.validate()
 			"pulls.filters.declined",
 		}),
 		["pull review"] = conflicts_for({
+			"pulls.external_help",
 			"pulls.review.approve",
 			"pulls.review.request_changes",
 			"pulls.review.submit_review",
-			"pulls.review.show_item",
+			"ui.select",
 			"pulls.review.focus_item",
 			"pulls.review.explorer.find_file",
 			"pulls.review.explorer.next_file",
@@ -384,9 +412,84 @@ function M.validate()
 			"pulls.review.diff.submit_comment",
 			"pulls.review.diff.add_suggestion",
 			"pulls.review.diff.submit_suggestion",
-			"pulls.review.diff.delete",
+			"ui.comments.edit",
+			"ui.delete",
 			"pulls.review.diff.add_note",
 			"pulls.review.diff.toggle_resolved",
+		}),
+		["pull conversation"] = conflicts_for({
+			"ui.refresh",
+			"ui.refresh_view",
+			"ui.open_actions",
+			"ui.open_in_browser",
+			"ui.toggle_subscription",
+			"ui.next_panel_tab",
+			"ui.previous_panel_tab",
+			"ui.help",
+			"ui.toggle_panel",
+			"ui.close",
+			"ui.toggle_fold",
+			"ui.toggle_all_folds",
+			"ui.comments.add",
+			"ui.comments.reply",
+			"ui.comments.edit",
+			"ui.delete",
+			"ui.comments.react",
+		}),
+		["pull overview"] = conflicts_for({
+			"ui.refresh",
+			"ui.refresh_view",
+			"ui.open_actions",
+			"ui.open_in_browser",
+			"ui.toggle_subscription",
+			"ui.next_panel_tab",
+			"ui.previous_panel_tab",
+			"ui.help",
+			"ui.toggle_panel",
+			"ui.close",
+			"pulls.edit_reviewers",
+			"pulls.edit_assignees",
+		}),
+		["pull review tab"] = conflicts_for({
+			"ui.refresh",
+			"ui.refresh_view",
+			"ui.open_actions",
+			"ui.open_in_browser",
+			"ui.toggle_subscription",
+			"ui.next_panel_tab",
+			"ui.previous_panel_tab",
+			"ui.help",
+			"ui.toggle_panel",
+			"ui.close",
+			"ui.comments.reply",
+			"ui.comments.edit",
+			"ui.delete",
+			"pulls.review.add_task",
+			"pulls.review.diff.toggle_resolved",
+			"ui.show_details",
+			"ui.toggle_fold",
+			"ui.toggle_all_folds",
+			"pulls.review.diff.next_hunk",
+			"pulls.review.diff.previous_hunk",
+		}),
+		["repo panel"] = conflicts_for({
+			"ui.refresh",
+			"ui.refresh_view",
+			"ui.open_in_browser",
+			"ui.next_panel_tab",
+			"ui.previous_panel_tab",
+			"ui.help",
+			"ui.close",
+			"pulls.toggle_repo_panel",
+			"pulls.toggle_repo_issue_state",
+			"ui.delete",
+		}),
+		notifications = conflicts_for({
+			"ui.notifications.mark_read",
+			"ui.notifications.mark_done",
+			"ui.notifications.refresh",
+			"ui.open_in_browser",
+			"ui.close",
 		}),
 		pipelines = conflicts_for({ "pulls.pipelines.open" }),
 		issues = conflicts_for({
@@ -395,6 +498,38 @@ function M.validate()
 			"issues.change_reporter",
 			"issues.edit_issue",
 			"issues.create_issue",
+		}),
+		["issue overview"] = conflicts_for({
+			"ui.refresh",
+			"ui.refresh_view",
+			"ui.open_actions",
+			"ui.open_in_browser",
+			"ui.toggle_subscription",
+			"ui.next_panel_tab",
+			"ui.previous_panel_tab",
+			"ui.help",
+			"ui.toggle_panel",
+			"ui.close",
+			"issues.toggle_description_mode",
+		}),
+		["issue conversation"] = conflicts_for({
+			"ui.refresh",
+			"ui.refresh_view",
+			"ui.open_actions",
+			"ui.open_in_browser",
+			"ui.toggle_subscription",
+			"ui.next_panel_tab",
+			"ui.previous_panel_tab",
+			"ui.help",
+			"ui.toggle_panel",
+			"ui.close",
+			"ui.comments.add",
+			"ui.comments.reply",
+			"ui.comments.edit",
+			"ui.delete",
+			"ui.comments.react",
+			"ui.toggle_fold",
+			"ui.toggle_all_folds",
 		}),
 	}
 

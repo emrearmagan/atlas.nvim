@@ -28,7 +28,7 @@ function M.fetch_current_user(on_done)
 			return
 		end
 
-		local raw = type(result) == "table" and result or {}
+		local raw = result
 		---@type PullsUser
 		local current_user = {
 			name = tostring(raw.display_name or raw.name or ""),
@@ -72,20 +72,17 @@ function M.fetch_workspaces(on_done)
 			return
 		end
 
-		local payload = type(result) == "table" and result or {}
+		local payload = result
 		---@type BitbucketWorkspace[]
 		local workspaces = {}
-		for _, item in ipairs(payload.values or {}) do
-			local entry = type(item) == "table" and item or {}
-			local workspace = type(entry.workspace) == "table" and entry.workspace or {}
-			local links = type(workspace.links) == "table" and workspace.links or {}
-			local self_link = type(links.self) == "table" and links.self or {}
+		for _, entry in ipairs(payload.values or {}) do
+			local workspace = entry.workspace
 
 			table.insert(workspaces, {
 				administrator = entry.administrator == true,
 				slug = tostring(workspace.slug or ""),
 				uuid = tostring(workspace.uuid or ""),
-				links_self = self_link.href ~= nil and tostring(self_link.href) or nil,
+				links_self = tostring(workspace.links.self.href),
 			})
 		end
 

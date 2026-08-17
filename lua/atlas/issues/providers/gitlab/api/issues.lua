@@ -68,7 +68,7 @@ function M.list_issues(view, opts, on_done)
 			on_done(nil, err)
 			return
 		end
-		local issues = normalizer.to_issues_list(type(result) == "table" and result or {})
+		local issues = normalizer.to_issues_list(result)
 		service.set_memory_cache(cache_key, issues)
 		on_done(issues, nil)
 	end, {
@@ -100,8 +100,8 @@ function M.get_issue(key, opts, on_done)
 
 	local endpoint = string.format("/projects/%s/issues/%d", service.url_encode(path), iid)
 	return service.request("GET", endpoint, nil, function(result, err)
-		if err or type(result) ~= "table" then
-			on_done(nil, err or "Empty response")
+		if err then
+			on_done(nil, err)
 			return
 		end
 		local issue = normalizer.to_issue(result)
@@ -272,8 +272,8 @@ function M.create_issue(opts, on_done)
 	local endpoint = string.format("/projects/%s/issues", service.url_encode(path))
 
 	return service.request("POST", endpoint, payload, function(result, err)
-		if err or type(result) ~= "table" then
-			on_done(nil, err or "Empty response")
+		if err then
+			on_done(nil, err)
 			return
 		end
 
@@ -315,7 +315,7 @@ function M.search_issues_picker(query, opts, on_done)
 			on_done(nil, err)
 			return
 		end
-		local issues = normalizer.to_issues_list(type(result) == "table" and result or {})
+		local issues = normalizer.to_issues_list(result)
 		local items = {}
 		for _, issue in ipairs(issues) do
 			table.insert(items, {

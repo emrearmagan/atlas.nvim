@@ -1,88 +1,16 @@
 local M = {}
 
+local keymaps = require("atlas.core.keymaps")
 local utils = require("atlas.ui.shared.utils")
-local icons = require("atlas.ui.shared.icons")
 local spinner = require("atlas.ui.components.spinner")
 local box = require("atlas.ui.components.box")
-local comment_box = require("atlas.ui.components.comment_box")
-local emojis = require("atlas.ui.shared.emojis")
-local helper = require("atlas.issues.ui.main.helper")
+local comment_threads = require("atlas.issues.ui.components.comment_threads")
 local activity_component = require("atlas.issues.ui.panel.issue.tabs.components.activity")
 local state = require("atlas.issues.ui.panel.issue.tabs.conversation.state")
 
 local PADDING_X = 1
 local PADDING = string.rep(" ", PADDING_X)
 local CONNECTOR = "│"
-local REPLY_INDENT = "    "
-
--- Helpers
-
----@param author IssueUser|nil
----@return string
-local function author_name(author)
-	if author == nil then
-		return "Unknown"
-	end
-	if author.display_name and author.display_name ~= "" then
-		return author.display_name
-	end
-	if author.account_id and author.account_id ~= "" then
-		return author.account_id
-	end
-	return "Unknown"
-end
-
----@param comment IssueComment
----@return boolean
-local function is_own_comment(comment)
-	local current_user = require("atlas.issues.state").current_user
-	if not current_user or not comment.author then
-		return false
-	end
-	return tostring(comment.author.account_id or "") == tostring(current_user.account_id or "")
-end
-
----@param reactions table|nil
----@return string text, table[] spans
-local function format_reactions(reactions)
-	if reactions == nil then
-		return "", {}
-	end
-	local emoji_by_key, order = {}, {}
-	local provider = require("atlas.issues.state").provider
-	local comments = provider and provider.capabilities.comments
-	for _, opt in ipairs((comments and comments.reaction_options) or {}) do
-		emoji_by_key[opt.key] = opt.emoji
-		table.insert(order, opt.key)
-	end
-	for key in pairs(reactions) do
-		if emoji_by_key[key] == nil then
-			emoji_by_key[key] = emojis.glyph(key)
-			table.insert(order, key)
-		end
-	end
-
-	local parts, spans = {}, {}
-	local col = 0
-	for _, key in ipairs(order) do
-		local count = tonumber(reactions[key]) or 0
-		if count > 0 then
-			if #parts > 0 then
-				col = col + 2
-			end
-			local icon = emoji_by_key[key]
-			local count_text = " " .. tostring(count)
-			table.insert(spans, { start_col = col, end_col = col + #icon, hl_group = "AtlasLogInfo" })
-			table.insert(
-				spans,
-				{ start_col = col + #icon, end_col = col + #icon + #count_text, hl_group = "AtlasTextMuted" }
-			)
-			col = col + #icon + #count_text
-			table.insert(parts, icon .. count_text)
-		end
-	end
-	return table.concat(parts, "  "), spans
-end
 
 ---@param lines string[]
 ---@param spans table[]
@@ -93,7 +21,7 @@ local function append_connector(lines, spans)
 		line = #lines - 1,
 		start_col = PADDING_X,
 		end_col = PADDING_X + #CONNECTOR,
-		hl_group = "AtlasBorder",
+		hl_group = "AtlasTextMuted",
 	})
 end
 
@@ -105,274 +33,75 @@ end
 ---@param src_map table<integer, table>|nil
 local function splice(dst_lines, dst_spans, dst_map, src_lines, src_spans, src_map)
 	local offset = #dst_lines
-	for _, l in ipairs(src_lines) do
-		table.insert(dst_lines, l)
+	for _, line in ipairs(src_lines) do
+		table.insert(dst_lines, line)
 	end
-	for _, s in ipairs(src_spans) do
-		s.line = s.line + offset
-		table.insert(dst_spans, s)
+	for _, span in ipairs(src_spans) do
+		span.line = span.line + offset
+		table.insert(dst_spans, span)
 	end
-	if src_map then
-		for lnum, data in pairs(src_map) do
-			dst_map[offset + lnum] = data
-		end
+	for lnum, entry in pairs(src_map or {}) do
+		dst_map[offset + lnum] = entry
 	end
 end
 
--- Comment box
-
----@param comment IssueComment
----@param verb "commented"|"replied"
----@param width integer
----@param show_actions boolean|nil
-local function build_comment_sections(comment, verb, width, show_actions)
-	local author = author_name(comment.author)
-	local actions = {}
-	if show_actions ~= false and comment.deleted ~= true then
-		table.insert(actions, string.format("%s (c)", icons.general("reply")))
-		if is_own_comment(comment) then
-			table.insert(actions, string.format("%s (e)", icons.general("edit")))
-			if tostring(comment.id) ~= "__body__" then
-				table.insert(actions, string.format("%s (d)", icons.general("delete")))
-			end
-		end
-	end
-
-	local body_lines, body_hl = {}, nil
-	if comment.deleted == true then
-		table.insert(body_lines, "(deleted comment)")
-		body_hl = "AtlasTextMutedItalic"
-	else
-		local raw = utils.strip_markup(tostring(comment.body or ""))
-		if raw == "" then
-			raw = "(empty comment)"
-		end
-		for _, line in ipairs(utils.sanitize_lines(raw)) do
-			for _, chunk in ipairs(utils.wrap_line(line, width)) do
-				table.insert(body_lines, chunk)
-			end
-		end
-	end
-
-	local rtext, rspans = format_reactions(comment.reactions)
-	local reactions = nil
-	if rtext ~= "" then
-		reactions = { text = rtext, spans = rspans }
-	end
-	local user_icon, user_icon_hl = icons.general("user")
-
-	return comment_box.render({
-		author = author,
-		author_hl = helper.person_hl(author),
-		icon = user_icon,
-		icon_hl = user_icon_hl,
-		verb = verb,
-		timestamp = utils.relative_time(comment.created),
-		actions_text = table.concat(actions, "  "),
-		body_lines = body_lines,
-		body_hl = body_hl,
-		reactions = reactions,
-		width = width,
-	})
-end
-
----@param comment IssueComment
----@param width integer
----@return AtlasMarkdownEditorPreview
-function M.render_comment(comment, width)
-	local verb = comment.parent_id and "replied" or "commented"
-	local header, body = build_comment_sections(comment, verb, width, false)
-	local lines, highlights = {}, {}
-	splice(lines, highlights, {}, header.lines, header.spans)
-	splice(lines, highlights, {}, body.lines, body.spans)
-	return { lines = lines, highlights = highlights }
-end
-
----@param replies IssueComment[]
----@param root IssueComment
----@param width integer
-local function build_reply_group(replies, root, width)
-	local lines, spans, line_to_entry = {}, {}, {}
-	for ri, reply in ipairs(replies) do
-		if ri > 1 then
-			table.insert(lines, "")
-			line_to_entry[#lines] = { kind = "comment", comment = reply, thread_root = root, entity_kind = "comment" }
-		end
-		local header, body = build_comment_sections(reply, "replied", width - #REPLY_INDENT)
-		local hl, hs = header.lines[1], header.spans
-		local cl, cs = body.lines, body.spans
-		local header_base = #lines
-		table.insert(lines, REPLY_INDENT .. hl)
-		for _, s in ipairs(hs) do
-			table.insert(
-				spans,
-				vim.tbl_extend("force", s, {
-					line = header_base,
-					start_col = s.start_col + #REPLY_INDENT,
-					end_col = s.end_col + #REPLY_INDENT,
-				})
-			)
-		end
-		line_to_entry[#lines] = { kind = "comment", comment = reply, thread_root = root, entity_kind = "comment" }
-		local content_base = #lines
-		for li, l in ipairs(cl) do
-			table.insert(lines, REPLY_INDENT .. l)
-			line_to_entry[#lines] = { kind = "comment", comment = reply, thread_root = root, entity_kind = "comment" }
-			for _, s in ipairs(cs) do
-				if s.line == li - 1 then
-					table.insert(
-						spans,
-						vim.tbl_extend("force", s, {
-							line = content_base + li - 1,
-							start_col = s.start_col + #REPLY_INDENT,
-							end_col = s.end_col + #REPLY_INDENT,
-						})
-					)
-				end
-			end
-		end
-	end
-	return { lines = lines, spans = spans }, line_to_entry
-end
-
----@param comments IssueComment[]
+---@param thread IssuesCommentThreadNode
 ---@param collapsed boolean
 ---@param width integer
-local function render_thread(comments, collapsed, width)
-	comments = comments or {}
-	if #comments == 0 then
-		return {}, {}, {}
-	end
-	local root = comments[1]
-	local replies = {}
-	for i = 2, #comments do
-		table.insert(replies, comments[i])
-	end
-	local inner = math.max(10, width - (PADDING_X * 2) - 4) - 2
-
-	local groups, group_entries = {}, {}
-	local function push(group, meta)
-		table.insert(groups, group)
-		table.insert(group_entries, meta)
-	end
-
-	local header, body = build_comment_sections(root, "commented", inner)
-	push(
-		{ lines = header.lines, spans = header.spans },
-		{ default = { kind = "comment", comment = root, thread_root = root, entity_kind = "comment" } }
-	)
-	push(
-		{ lines = body.lines, spans = body.spans },
-		{ default = { kind = "comment", comment = root, thread_root = root, entity_kind = "comment" } }
-	)
-
-	if collapsed and #replies > 0 then
-		local prefix =
-			string.format("%s %d %s", icons.general("arrow_right"), #replies, #replies == 1 and "reply" or "replies")
-		local suffix = "  za to expand"
-		local label = prefix .. suffix
-		push({
-			lines = { label },
-			spans = {
-				{ line = 0, start_col = 0, end_col = #prefix, hl_group = "AtlasLogInfo" },
-				{ line = 0, start_col = #prefix, end_col = #label, hl_group = "AtlasTextMuted" },
-			},
-		}, { default = { kind = "thread_toggle", thread_root = root, entity_kind = "thread_toggle" } })
-	elseif #replies > 0 then
-		local g, line_to_entry = build_reply_group(replies, root, inner)
-		push(g, { by_line = line_to_entry })
-		if #replies > 1 then
-			local prefix = icons.general("arrow_up")
-			local suffix = "  za to collapse"
-			local label = prefix .. suffix
-			push({
-				lines = { label },
-				spans = {
-					{ line = 0, start_col = 0, end_col = #prefix, hl_group = "AtlasLogInfo" },
-					{ line = 0, start_col = #prefix, end_col = #label, hl_group = "AtlasTextMuted" },
-				},
-			}, { default = { kind = "thread_toggle", thread_root = root, entity_kind = "thread_toggle" } })
-		end
-	end
-
-	local block = box.render(groups, { width = width, padding_x = PADDING_X })
-
-	local line_map = {}
-	local cursor = 2 -- after top border
-	for gi, group in ipairs(groups) do
-		local meta = group_entries[gi]
-		for li = 1, #group.lines do
-			line_map[cursor + li - 1] = (meta.by_line and meta.by_line[li]) or meta.default
-		end
-		cursor = cursor + #group.lines
-		if gi < #groups then
-			cursor = cursor + 1
-		end
-	end
-	return block.lines, block.highlights, line_map
+local function render_thread(thread, collapsed, width)
+	local provider = require("atlas.issues.state").provider
+	local comments = provider and provider.capabilities.comments
+	local inner = math.max(1, width - (PADDING_X * 2) - 4)
+	local fold_keys = keymaps.resolve("ui.toggle_fold")
+	local fold_key = fold_keys and fold_keys[1]
+	local lines, spans, line_map = comment_threads.render({ thread }, inner, {
+		expanded = function()
+			return not collapsed
+		end,
+		padding_x = 0,
+		reaction_options = comments and comments.reaction_options,
+		content_max_lines = fold_key and state.comment_max_lines or nil,
+		content_truncated_text = fold_key and (fold_key .. " to expand") or nil,
+	})
+	local result = box.render({ { lines = lines, spans = spans, line_map = line_map } }, {
+		width = width,
+		padding_x = PADDING_X,
+	})
+	return result.lines, result.highlights, result.line_map
 end
-
--- Timeline
 
 ---@class IssuesConversationTimelineEntry
 ---@field type "comment"|"activity_run"
 ---@field timestamp string
----@field comment IssueComment|nil
----@field replies IssueComment[]|nil
+---@field thread IssuesCommentThreadNode|nil
 ---@field activities IssueActivityEntry[]|nil
-
----@param comments IssueComment[]
-local function group_threads(comments)
-	local by_id, order = {}, {}
-	for _, c in ipairs(comments) do
-		if c.parent_id == nil then
-			by_id[tostring(c.id)] = { root = c, replies = {} }
-			table.insert(order, tostring(c.id))
-		end
-	end
-	for _, c in ipairs(comments) do
-		if c.parent_id ~= nil then
-			local pkey = tostring(c.parent_id)
-			if by_id[pkey] then
-				table.insert(by_id[pkey].replies, c)
-			else
-				by_id[tostring(c.id)] = { root = c, replies = {} }
-				table.insert(order, tostring(c.id))
-			end
-		end
-	end
-	local threads = {}
-	for _, key in ipairs(order) do
-		table.insert(threads, by_id[key])
-	end
-	return threads
-end
 
 ---@param comments IssueComment[]
 ---@param activity IssueActivityEntry[]
 ---@return IssuesConversationTimelineEntry[]
 local function build_timeline(comments, activity)
 	local mixed = {}
-	for _, t in ipairs(group_threads(comments)) do
+	for _, thread in ipairs(comment_threads.group_comments(comments)) do
 		table.insert(mixed, {
 			kind = "comment",
-			timestamp = t.root.created or "",
-			comment = t.root,
-			replies = t.replies,
+			timestamp = thread.comment.created or "",
+			thread = thread,
 		})
 	end
-	for _, a in ipairs(activity) do
-		table.insert(mixed, { kind = "activity", timestamp = a.date or "", activity = a })
+	for _, entry in ipairs(activity) do
+		table.insert(mixed, { kind = "activity", timestamp = entry.date or "", activity = entry })
 	end
-	table.sort(mixed, function(a, b)
-		local ta, tb = tostring(a.timestamp), tostring(b.timestamp)
-		if ta == tb then
-			return a.kind == "activity" and b.kind ~= "activity"
+	table.sort(mixed, function(left, right)
+		local left_time = tostring(left.timestamp)
+		local right_time = tostring(right.timestamp)
+		if left_time == right_time then
+			return left.kind == "activity" and right.kind ~= "activity"
 		end
-		return ta < tb
+		return left_time < right_time
 	end)
 
-	local entries, run = {}, {}
+	local entries = {}
+	local run = {}
 	local function flush_run()
 		if #run > 0 then
 			table.insert(entries, { type = "activity_run", timestamp = run[1].date or "", activities = run })
@@ -396,8 +125,7 @@ local function build_timeline(comments, activity)
 			table.insert(entries, {
 				type = "comment",
 				timestamp = item.timestamp,
-				comment = item.comment,
-				replies = item.replies,
+				thread = item.thread,
 			})
 		end
 	end
@@ -405,22 +133,19 @@ local function build_timeline(comments, activity)
 	return entries
 end
 
--- Render
-
 ---@param entry IssuesConversationTimelineEntry
 ---@param width integer
 local function render_entry(entry, width)
 	if entry.type == "comment" then
-		local key = tostring(entry.comment.id)
-		if #(entry.replies or {}) > 1 and state.collapsed[key] == nil then
+		local thread = entry.thread
+		local root = thread.comment
+		local key = tostring(root.id)
+		if #thread.children > 0 and state.collapsed[key] == nil then
 			state.collapsed[key] = true
 		end
-		local thread = { entry.comment }
-		for _, r in ipairs(entry.replies or {}) do
-			table.insert(thread, r)
-		end
-		return render_thread(thread, state.is_collapsed(entry.comment.id), width)
-	elseif entry.type == "activity_run" then
+		return render_thread(thread, state.is_collapsed(root.id), width)
+	end
+	if entry.type == "activity_run" then
 		local run_id = tostring(entry.timestamp or "")
 		return activity_component.render(entry.activities or {}, width, {
 			padding_x = PADDING_X,
@@ -433,7 +158,7 @@ end
 
 ---@param _issue Issue
 ---@param width integer
-function M.render(_issue, width) ---@diagnostic disable-line: unused-local
+function M.render(_issue, width)
 	local lines, spans, line_map = {}, {}, {}
 
 	if state.error then
@@ -466,11 +191,13 @@ function M.render(_issue, width) ---@diagnostic disable-line: unused-local
 		if #lines > 0 then
 			append_connector(lines, spans)
 		end
-		local e_lines, e_spans, e_map = render_entry(entry, width)
-		splice(lines, spans, line_map, e_lines, e_spans, e_map)
+		local entry_lines, entry_spans, entry_map = render_entry(entry, width)
+		splice(lines, spans, line_map, entry_lines, entry_spans, entry_map)
 	end
 
 	return lines, spans, line_map
 end
+
+M.render_comment = comment_threads.render_comment
 
 return M

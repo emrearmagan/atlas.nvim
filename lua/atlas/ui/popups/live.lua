@@ -1,5 +1,7 @@
 local M = {}
 
+local keymaps = require("atlas.core.keymaps")
+
 ---@class AtlasLiveCommandOptions
 ---@field cwd string|nil
 ---@field env table<string, string|number>|nil
@@ -30,8 +32,9 @@ local function on_main(callback)
 end
 
 ---@param title string
+---@param close_keys string[]
 ---@return table
-local function window_config(title)
+local function window_config(title, close_keys)
 	local width = math.floor(vim.o.columns * 0.4)
 	local height = math.floor(vim.o.lines * 0.25)
 
@@ -41,8 +44,8 @@ local function window_config(title)
 		border = "rounded",
 		title = " " .. title .. " ",
 		title_pos = "center",
-		footer = " q close ",
-		footer_pos = "center",
+		footer = close_keys[1] and " " .. table.concat(close_keys, " / ") .. " close " or nil,
+		footer_pos = close_keys[1] and "center" or nil,
 		width = width,
 		height = height,
 		row = math.max(0, math.floor((vim.o.lines - height) / 2) - 1),
@@ -70,14 +73,17 @@ local function ensure_open(self)
 
 	local buf = vim.api.nvim_create_buf(false, true)
 	vim.api.nvim_set_option_value("bufhidden", "wipe", { buf = buf })
+	local close_keys = keymaps.resolve("ui.close") or {}
 
 	self.buf = buf
-	self.win = vim.api.nvim_open_win(buf, true, window_config(self.title))
+	self.win = vim.api.nvim_open_win(buf, true, window_config(self.title, close_keys))
 	self.channel = vim.api.nvim_open_term(buf, {})
 
-	vim.keymap.set("n", "q", function()
-		self:cancel()
-	end, { buffer = buf, silent = true, desc = "cancel output" })
+	for _, key in ipairs(close_keys) do
+		vim.keymap.set("n", key, function()
+			self:cancel()
+		end, { buffer = buf, silent = true, desc = "cancel output" })
+	end
 
 	vim.api.nvim_create_autocmd("BufWipeout", {
 		buffer = buf,

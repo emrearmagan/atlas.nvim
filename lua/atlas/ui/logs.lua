@@ -252,21 +252,32 @@ function M.open()
 	vim.api.nvim_set_option_value("cursorline", true, { win = logs_win })
 	vim.api.nvim_set_option_value("winfixheight", true, { win = logs_win })
 	local fold_keys = keymaps.resolve("ui.toggle_fold") or {}
-	local fold_hint = fold_keys[1] and fold_keys[1] .. " Toggle details   " or ""
+	local refresh_keys = keymaps.resolve("ui.refresh_view") or {}
+	local close_keys = keymaps.resolve("ui.close") or {}
+	local hints = {}
+	if #fold_keys > 0 then
+		table.insert(hints, table.concat(fold_keys, " / ") .. " Toggle details")
+	end
+	if #refresh_keys > 0 then
+		table.insert(hints, table.concat(refresh_keys, " / ") .. " Refresh")
+	end
+	if #close_keys > 0 then
+		table.insert(hints, table.concat(close_keys, " / ") .. " Close")
+	end
 	vim.api.nvim_set_option_value(
 		"winbar",
-		" Atlas Logs %=%#AtlasTextMuted#" .. fold_hint .. "R Refresh   q Close %*",
+		" Atlas Logs %=%#AtlasTextMuted#" .. table.concat(hints, "   ") .. (#hints > 0 and " " or "") .. "%*",
 		{ win = logs_win }
 	)
 	pcall(vim.api.nvim_win_set_height, logs_win, 12)
 
 	local opts = { buffer = buf, silent = true, nowait = true }
-	vim.keymap.set("n", "q", function()
-		M.close()
-	end, opts)
-	vim.keymap.set("n", "R", function()
-		refresh_buffer()
-	end, opts)
+	for _, key in ipairs(close_keys) do
+		vim.keymap.set("n", key, M.close, opts)
+	end
+	for _, key in ipairs(refresh_keys) do
+		vim.keymap.set("n", key, refresh_buffer, opts)
+	end
 	for _, key in ipairs(fold_keys) do
 		vim.keymap.set("n", key, toggle_details, opts)
 	end

@@ -47,16 +47,17 @@ end
 function M.register(buf)
 	M.remove(buf)
 	local nav = require("atlas.pulls.ui.panel.repo.navigation")
-	local general = {
-		{
-			key = "o",
+	local general = {}
+	utils.insert_if(
+		general,
+		item("pulls.toggle_repo_panel", {
 			desc = "Close repo panel",
 			opts = { nowait = true, silent = true },
 			callback = function()
 				require("atlas.ui.layout").toggle_detail()
 			end,
-		},
-	}
+		})
+	)
 
 	utils.insert_if(
 		general,
@@ -106,16 +107,15 @@ function M.register(buf)
 		})
 	)
 
-	utils.insert_if(
-		general,
-		item("ui.refresh", {
-			desc = "Refresh tab",
-			opts = { nowait = true, silent = true },
-			callback = function()
-				require("atlas.pulls.ui.panel").on_select(nil, nil, { force_refresh = true })
-			end,
-		})
-	)
+	local refresh_item = {
+		desc = "Refresh tab",
+		opts = { nowait = true, silent = true },
+		callback = function()
+			require("atlas.pulls.ui.panel").on_select(nil, nil, { force_refresh = true })
+		end,
+	}
+	utils.insert_if(general, item("ui.refresh", refresh_item))
+	utils.insert_if(general, item("ui.refresh_view", refresh_item))
 
 	utils.insert_if(
 		general,
@@ -220,15 +220,15 @@ end
 
 ---@param buf integer
 function M.remove(buf)
-	local general_items = {
-		{ key = "o" },
-	}
+	local general_items = {}
 
+	utils.insert_if(general_items, remove_item("pulls.toggle_repo_panel"))
 	utils.insert_if(general_items, remove_item("ui.next_item"))
 	utils.insert_if(general_items, remove_item("ui.previous_item"))
 	utils.insert_if(general_items, remove_item("ui.first_item"))
 	utils.insert_if(general_items, remove_item("ui.last_item"))
 	utils.insert_if(general_items, remove_item("ui.refresh"))
+	utils.insert_if(general_items, remove_item("ui.refresh_view"))
 	utils.insert_if(general_items, remove_item("ui.open_in_browser"))
 	utils.insert_if(general_items, remove_item("ui.next_panel_tab"))
 	utils.insert_if(general_items, remove_item("ui.previous_panel_tab"))

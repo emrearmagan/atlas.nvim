@@ -3,7 +3,7 @@ local M = {}
 local box = require("atlas.ui.components.box")
 local keymaps = require("atlas.core.keymaps")
 local statusline = require("atlas.ui.statusline")
-local threads = require("atlas.ui.components.review_threads")
+local threads = require("atlas.pulls.ui.components.review_threads")
 local virtual_lines = require("atlas.ui.components.virtual_lines")
 
 local namespace = vim.api.nvim_create_namespace("atlas_diff_comments")
@@ -209,8 +209,8 @@ function M.open_popup(opts)
 	local keys = {
 		close = keymaps.resolve("ui.close"),
 		reply = keymaps.resolve("pulls.review.diff.add_comment"),
-		edit = keymaps.resolve("pulls.review.diff.edit_comment"),
-		delete = keymaps.resolve("pulls.review.diff.delete"),
+		edit = keymaps.resolve("ui.comments.edit"),
+		delete = keymaps.resolve("ui.delete"),
 		toggle = opts.toggle_resolved_keys,
 	}
 	local width = math.min(100, math.max(1, vim.o.columns - 4))

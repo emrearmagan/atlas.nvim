@@ -40,3 +40,39 @@ describe("normalize_pr author.name", function()
 		end
 	end)
 end)
+
+describe("review thread resolution", function()
+	local function review_comment(reply_to)
+		return {
+			id = "PRRC_1",
+			databaseId = 1,
+			body = "Review comment",
+			createdAt = "2024-01-01T00:00:00Z",
+			author = { login = "author", databaseId = 2 },
+			replyTo = reply_to,
+			pullRequestReview = { state = "COMMENTED" },
+		}
+	end
+
+	local function resolved_thread()
+		return {
+			id = "PRRT_1",
+			isResolved = true,
+			isOutdated = false,
+			resolvedBy = { login = "resolver", databaseId = 3 },
+		}
+	end
+
+	it("maps the resolver onto a resolved root comment", function()
+		local comment = normalizer.to_review_comment(review_comment(nil), resolved_thread(), nil)
+
+		assert.same({ name = "resolver", id = "3", username = "resolver", nickname = "resolver" }, comment.resolved_by)
+		assert.is_nil(comment.resolved_on)
+	end)
+
+	it("does not map the resolver onto replies", function()
+		local comment = normalizer.to_review_comment(review_comment({ databaseId = 1 }), resolved_thread(), 1)
+
+		assert.is_nil(comment.resolved_by)
+	end)
+end)

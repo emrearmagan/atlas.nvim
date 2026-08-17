@@ -167,6 +167,7 @@ local function normalize_pull(item, workspace, repo)
 	local source_repository = as_table(source.repository) or {}
 	local destination_branch = as_table(destination.branch) or {}
 	local destination_commit = as_table(destination.commit) or {}
+	local participants = as_table(pr.participants)
 	local repo_full_name = (workspace ~= "" and repo ~= "") and string.format("%s/%s", workspace, repo) or ""
 
 	return {
@@ -209,7 +210,7 @@ local function normalize_pull(item, workspace, repo)
 		close_source_branch = pr.close_source_branch == true,
 		created_on = tostring(pr.created_on or ""),
 		updated_on = tostring(pr.updated_on or ""),
-		reviewers = M.to_reviewers(as_table(pr.participants)),
+		reviewers = participants and M.to_reviewers(participants) or nil,
 		workspace = workspace,
 		repo = repo,
 		repo_full_name = repo_full_name,
@@ -421,6 +422,7 @@ function M.to_comment(result)
 	local links = as_table(entry.links) or {}
 	local parent = as_table(entry.parent)
 	local resolution = as_table(entry.resolution)
+	local is_thread_root = parent == nil
 	local outdated = type(entry.inline) == "table" and entry.inline.outdated == true
 	local inline, file = comment_position(entry.inline)
 	local state = entry.deleted == true and "DELETED"
@@ -435,6 +437,13 @@ function M.to_comment(result)
 		author = actor(entry.user),
 		content_raw = tostring(content.raw or ""),
 		created_on = tostring(entry.created_on or ""),
+		resolved_on = resolution
+				and is_thread_root
+				and type(resolution.created_on) == "string"
+				and resolution.created_on
+			or nil,
+		resolved_by = resolution and is_thread_root and type(resolution.user) == "table" and actor(resolution.user)
+			or nil,
 		file = file,
 		inline = inline,
 		is_task = nil,
@@ -472,6 +481,7 @@ function M.to_tasks_list(result)
 		local content = as_table(task.content) or {}
 		local links = as_table(task.links) or {}
 		local comment = as_table(task.comment)
+		local resolved_by = as_table(task.resolved_by)
 
 		table.insert(entries, {
 			id = tonumber(task.id) or 0,
@@ -479,6 +489,8 @@ function M.to_tasks_list(result)
 			author = actor(task.creator),
 			content_raw = tostring(content.raw or ""),
 			created_on = tostring(task.created_on or ""),
+			resolved_on = type(task.resolved_on) == "string" and task.resolved_on or nil,
+			resolved_by = resolved_by and actor(resolved_by) or nil,
 			is_task = true,
 			state = task.pending == true and "PENDING"
 				or (tostring(task.state or "") == "RESOLVED" and "RESOLVED")

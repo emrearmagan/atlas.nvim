@@ -69,22 +69,20 @@ function M.get_assignable_users(opts, query, callback)
 	local endpoint = "/user/assignable/search?" .. table.concat(params, "&")
 
 	return service.request("GET", endpoint, nil, function(result, err)
-		if err ~= nil or type(result) ~= "table" then
+		if err ~= nil then
 			callback(nil, err or "Empty response")
 			return
 		end
 
 		local users = {}
 		for _, raw in ipairs(result) do
-			if type(raw) == "table" then
-				local user = { display_name = tostring(raw.displayName or "") }
-				if is_server then
-					user.account_id = tostring(raw.name or "")
-				else
-					user.account_id = tostring(raw.accountId or "")
-				end
-				table.insert(users, user)
+			local user = { display_name = tostring(raw.displayName or "") }
+			if is_server then
+				user.account_id = tostring(raw.name or "")
+			else
+				user.account_id = tostring(raw.accountId or "")
 			end
+			table.insert(users, user)
 		end
 
 		callback(users, nil)
@@ -148,7 +146,7 @@ function M.get_permissions_bulk(opts, callback)
 	end
 
 	return service.request("POST", "/permissions/check", payload, function(result, err)
-		if err ~= nil or type(result) ~= "table" then
+		if err ~= nil then
 			-- Handle 404 as a fallback since Jira server API don't have bulk permissions endpoint
 			if err and err:find("HTTP 404", 1, true) == 1 then
 				local fallback = {}

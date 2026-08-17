@@ -5,7 +5,7 @@ local code_preview = require("atlas.ui.components.code_preview")
 local keymaps = require("atlas.core.keymaps")
 local position = require("atlas.pulls.diff.position")
 local review = require("atlas.pulls.diff.review")
-local review_threads = require("atlas.ui.components.review_threads")
+local review_threads = require("atlas.pulls.ui.components.review_threads")
 local ui = require("atlas.pulls.diff.ui.comments")
 
 local ACTIONS = {

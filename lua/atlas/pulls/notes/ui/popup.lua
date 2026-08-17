@@ -33,8 +33,8 @@ function M.open(opts)
 	local source_win = vim.api.nvim_get_current_win()
 	local keys = {
 		close = keymaps.resolve("ui.close"),
-		edit = keymaps.resolve("pulls.review.diff.edit_comment"),
-		delete = keymaps.resolve("pulls.review.diff.delete"),
+		edit = keymaps.resolve("ui.comments.edit"),
+		delete = keymaps.resolve("ui.delete"),
 	}
 	local width = math.max(1, math.min(100, vim.o.columns - 4))
 	local lines, spans, line_map = renderer.render_cards(opts.notes, width, {

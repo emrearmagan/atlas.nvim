@@ -1,7 +1,21 @@
 local M = {}
 
 local help = require("atlas.ui.popups.help")
+local resolver = require("atlas.core.keymaps")
+local utils = require("atlas.ui.shared.utils")
 local actions = require("atlas.pulls.actions")
+
+---@param action_id AtlasKeymapActionId|string
+---@param map_item table
+---@return table|nil
+local function item(action_id, map_item)
+	local keys = resolver.resolve(action_id)
+	if keys == nil then
+		return nil
+	end
+	map_item.key = #keys == 1 and keys[1] or keys
+	return map_item
+end
 
 ---@param id AtlasGitHubActionId
 ---@param pr PullRequest
@@ -21,9 +35,10 @@ end
 ---@param buf integer
 function M.register(buf)
 	local panel_state = require("atlas.pulls.ui.panel.pr.state")
-	local items = {
-		{
-			key = "gr",
+	local items = {}
+	utils.insert_if(
+		items,
+		item("pulls.edit_reviewers", {
 			desc = "Edit reviewers",
 			opts = { nowait = true },
 			callback = function()
@@ -33,9 +48,11 @@ function M.register(buf)
 				end
 				run_action("edit_reviewers", pr)
 			end,
-		},
-		{
-			key = "ga",
+		})
+	)
+	utils.insert_if(
+		items,
+		item("pulls.edit_assignees", {
 			desc = "Edit assignees",
 			opts = { nowait = true },
 			callback = function()
@@ -45,15 +62,18 @@ function M.register(buf)
 				end
 				run_action("edit_assignees", pr)
 			end,
-		},
-	}
+		})
+	)
 
 	help.register("Panel", items, { index = 212, buffer = buf })
 end
 
 ---@param buf integer
 function M.remove(buf)
-	help.remove("Panel", { { key = "gr" }, { key = "ga" } }, { buffer = buf })
+	local items = {}
+	utils.insert_if(items, item("pulls.edit_reviewers", {}))
+	utils.insert_if(items, item("pulls.edit_assignees", {}))
+	help.remove("Panel", items, { buffer = buf })
 end
 
 return M

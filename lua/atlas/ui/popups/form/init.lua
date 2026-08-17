@@ -187,12 +187,15 @@ local function setup_keymaps(state, opts, name, buf)
 			opts = { silent = true, nowait = true },
 		}
 	end
-	items[#items + 1] = {
-		key = "q",
-		desc = "Close",
-		callback = opts.close,
-		opts = { silent = true, nowait = true },
-	}
+	local close_keys = keymaps.resolve("ui.close")
+	if close_keys then
+		items[#items + 1] = {
+			key = #close_keys == 1 and close_keys[1] or close_keys,
+			desc = "Close",
+			callback = opts.close,
+			opts = { silent = true, nowait = true },
+		}
+	end
 
 	if name == "editor" then
 		items[#items + 1] = {
@@ -253,10 +256,13 @@ local function build_statusline_items(opts)
 			priority = 10,
 		}
 	end
-	items[#items + 1] = {
-		text = string.format("%sq close", #items > 0 and "| " or ""),
-		hl_group = "AtlasFooterText",
-	}
+	local close_keys = keymaps.resolve("ui.close")
+	if close_keys then
+		items[#items + 1] = {
+			text = string.format("%s%s close", #items > 0 and "| " or "", table.concat(close_keys, " / ")),
+			hl_group = "AtlasFooterText",
+		}
+	end
 	return items
 end
 

@@ -42,10 +42,9 @@ local function to_items(repo)
 		elseif author_str then
 			content = author_str
 		end
-		local tag_icon, tag_icon_hl = icons.pulls("tag")
+		local tag_icon = icons.pulls("tag")
 		table.insert(items, {
 			icon = tag_icon,
-			icon_hl = tag_icon_hl,
 			author = tostring(tag.name or ""),
 			additional = tag.hash and tostring(tag.hash):sub(1, 8) or nil,
 			right_text = tag.date and utils.relative_time_text(tag.date) or nil,
@@ -110,11 +109,10 @@ function M.render(_repo, width)
 	return lines, spans, line_map
 end
 
----@param _pr PullRequest|nil
 ---@param repo PullsRepo|nil
 ---@param refresh fun()
 ---@param opts PullsFetchOpts|nil
-function M.on_select(_pr, repo, refresh, opts)
+function M.on_select(repo, refresh, opts)
 	opts = opts or {}
 	local detail = require("atlas.pulls.ui.panel.repo.state").current_repo_details
 	if repo == nil then

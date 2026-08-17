@@ -115,20 +115,18 @@ function M.fetch_project_labels(project_path, opts, on_done)
 	end
 	local endpoint = string.format("/projects/%s/labels?per_page=100", service.url_encode(project_path))
 	return service.request("GET", endpoint, nil, function(result, err)
-		if err or type(result) ~= "table" then
-			on_done(nil, err or "Empty response")
+		if err then
+			on_done(nil, err)
 			return
 		end
 		local by_name = {}
 		for _, item in ipairs(result) do
-			if type(item) == "table" then
-				local name = type(item.name) == "string" and item.name or nil
-				if name then
-					by_name[name] = {
-						color = type(item.color) == "string" and item.color or nil,
-						text_color = type(item.text_color) == "string" and item.text_color or nil,
-					}
-				end
+			local name = type(item.name) == "string" and item.name or nil
+			if name then
+				by_name[name] = {
+					color = type(item.color) == "string" and item.color or nil,
+					text_color = type(item.text_color) == "string" and item.text_color or nil,
+				}
 			end
 		end
 		service.set_memory_cache(cache_key, by_name)
@@ -163,8 +161,8 @@ function M.fetch_pullrequest(pr, opts, on_done)
 
 	local endpoint = string.format("/projects/%s/merge_requests/%d", service.url_encode(path), iid)
 	return service.request("GET", endpoint, nil, function(result, err)
-		if err or type(result) ~= "table" then
-			on_done(nil, err or "Empty response")
+		if err then
+			on_done(nil, err)
 			return
 		end
 		local mr = mapper.to_pull_request(result)
@@ -233,7 +231,7 @@ function M.update(pr, payload, on_done)
 			return
 		end
 		bust_caches(pr)
-		on_done(type(result) == "table" and mapper.to_pull_request(result) or nil, nil)
+		on_done(mapper.to_pull_request(result), nil)
 	end, {
 		action = "Update MR",
 		project_path = path,
@@ -341,9 +339,9 @@ function M.fetch_default_reviewers(opts, on_done)
 		end
 
 		local reviewers = {}
-		for _, raw in ipairs(type(result) == "table" and result or {}) do
-			local login = type(raw) == "table" and tostring(raw.username or "") or ""
-			local id = type(raw) == "table" and tonumber(raw.id) or nil
+		for _, raw in ipairs(result) do
+			local login = tostring(raw.username or "")
+			local id = tonumber(raw.id)
 			if login ~= "" and id then
 				table.insert(reviewers, {
 					label = "@" .. login,
@@ -525,8 +523,8 @@ function M.create(opts, on_done)
 	local endpoint = string.format("/projects/%s/merge_requests", service.url_encode(path))
 
 	return service.request("POST", endpoint, payload, function(result, err)
-		if err or type(result) ~= "table" then
-			on_done(nil, err or "Empty response")
+		if err then
+			on_done(nil, err)
 			return
 		end
 		local mr = mapper.to_pull_request(result)

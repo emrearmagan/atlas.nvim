@@ -79,17 +79,19 @@ function M.register(buf, views)
 		end
 	end
 
-	table.insert(items, {
-		key = "<CR>",
-		desc = "Run bookmark",
-		callback = function()
-			local navigation = require("atlas.ui.navigation")
-			local node = navigation.current_item()
-			if type(node) == "table" and node.kind == "bookmark" then
-				require("atlas.pulls.ui.main.controller").run_bookmark(node.name, node.value)
-			end
-		end,
-	})
+	utils.insert_if(
+		items,
+		item("ui.select", {
+			desc = "Run bookmark",
+			callback = function()
+				local navigation = require("atlas.ui.navigation")
+				local node = navigation.current_item()
+				if type(node) == "table" and node.kind == "bookmark" then
+					require("atlas.pulls.ui.main.controller").run_bookmark(node.name, node.value)
+				end
+			end,
+		})
+	)
 
 	local STATUS_TOGGLES = {
 		{ status = "OPEN", action_id = "pulls.filters.open" },
@@ -245,9 +247,10 @@ function M.register(buf, views)
 
 	help.register(provider_name, items, { index = 220, buffer = buf })
 
-	help.register("General", {
-		{
-			key = "o",
+	local general = {}
+	utils.insert_if(
+		general,
+		item("pulls.toggle_repo_panel", {
 			desc = "Open repo panel",
 			opts = { nowait = true, silent = true },
 			callback = function()
@@ -280,8 +283,9 @@ function M.register(buf, views)
 
 				panel.on_select(pr, repo)
 			end,
-		},
-	}, { buffer = buf })
+		})
+	)
+	help.register("General", general, { buffer = buf })
 end
 
 return M

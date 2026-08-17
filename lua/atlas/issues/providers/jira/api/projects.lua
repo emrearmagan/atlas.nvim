@@ -90,7 +90,7 @@ function M.get_projects(opts, callback)
 			-- Handle differences in response structure between API versions
 			local normalized = result
 			if path == "/project" then
-				local items = type(result) == "table" and result or {}
+				local items = result
 				normalized = {
 					values = items,
 					isLast = true,

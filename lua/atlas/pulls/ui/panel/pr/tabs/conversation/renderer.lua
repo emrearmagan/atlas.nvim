@@ -1,9 +1,10 @@
 local M = {}
 
+local keymaps = require("atlas.core.keymaps")
 local utils = require("atlas.ui.shared.utils")
 local spinner = require("atlas.ui.components.spinner")
 local box = require("atlas.ui.components.box")
-local review_threads = require("atlas.ui.components.review_threads")
+local review_threads = require("atlas.pulls.ui.components.review_threads")
 local activity_component = require("atlas.pulls.ui.panel.pr.tabs.components.activity")
 local state = require("atlas.pulls.ui.panel.pr.tabs.conversation.state")
 
@@ -53,12 +54,16 @@ local function render_thread(thread, collapsed, width)
 	local provider = require("atlas.pulls.state").provider
 	local comments = provider and provider.capabilities.comments
 	local inner = math.max(1, width - (PADDING_X * 2) - 4)
+	local fold_keys = keymaps.resolve("ui.toggle_fold")
+	local fold_key = fold_keys and fold_keys[1]
 	local lines, spans, line_map = review_threads.render({ thread }, inner, {
 		expanded = function()
 			return not collapsed
 		end,
 		padding_x = 0,
 		reaction_options = comments and comments.reaction_options,
+		content_max_lines = fold_key and state.comment_max_lines or nil,
+		content_truncated_text = fold_key and (fold_key .. " to expand") or nil,
 	})
 	local result = box.render({ { lines = lines, spans = spans, line_map = line_map } }, {
 		width = width,
@@ -76,12 +81,15 @@ end
 ---@field activities PullsActivityEntry[]|nil
 
 ---@param comments PullsComment[]
+---@param tasks PullsComment[]
 ---@param activity PullsActivityEntry[]
 ---@return PullsConversationTimelineEntry[]
-local function build_timeline(comments, activity)
+local function build_timeline(comments, tasks, activity)
 	-- Build a sorted mixed list of comments and activity entries.
 	local mixed, description = {}, nil
-	for _, thread in ipairs(review_threads.group_comments(comments)) do
+	local conversation_items = vim.list_extend({}, comments)
+	vim.list_extend(conversation_items, tasks)
+	for _, thread in ipairs(review_threads.group_comments(conversation_items)) do
 		local item = {
 			kind = "comment",
 			timestamp = thread.comment.created_on or "",
@@ -142,8 +150,14 @@ local function render_entry(entry, width, has_next)
 	if entry.type == "comment" then
 		local thread = entry.thread
 		local root = thread.comment
+		if root.is_task then
+			return review_threads.render_task_compact(thread, width, {
+				padding_x = PADDING_X,
+				content_prefix = has_next and "│ " or "  ",
+			})
+		end
 		local key = tostring(root.id)
-		if #thread.children > 1 and state.collapsed[key] == nil then
+		if #thread.children > 0 and state.collapsed[key] == nil then
 			state.collapsed[key] = true
 		end
 		return render_thread(thread, state.is_collapsed(root.id), width)
@@ -170,20 +184,23 @@ function M.render(_pr, width)
 	end
 
 	local comments_ready = type(state.comments) == "table"
+	local tasks_ready = type(state.tasks) == "table"
 	local activity_ready = type(state.activity) == "table"
-	if state.comments == nil and state.activity == nil then
+	if state.comments == nil and state.tasks == nil and state.activity == nil then
 		return lines, spans, line_map
 	end
-	if not comments_ready and not activity_ready then
+	if not comments_ready and not tasks_ready and not activity_ready then
 		utils.push(lines, spans, spinner.with_text("Loading conversation..."), "AtlasTextMuted", PADDING_X)
 		return lines, spans, line_map
 	end
 
 	local comments = comments_ready and state.comments or {}
+	local tasks = tasks_ready and state.tasks or {}
 	local activity = activity_ready and state.activity or {}
 	---@cast comments PullsComment[]
+	---@cast tasks PullsComment[]
 	---@cast activity PullsActivityEntry[]
-	local entries = build_timeline(comments, activity)
+	local entries = build_timeline(comments, tasks, activity)
 
 	if #entries == 0 then
 		utils.push(lines, spans, "No conversation yet.", "AtlasTextMuted", PADDING_X)

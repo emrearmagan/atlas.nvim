@@ -1,5 +1,6 @@
 local M = {}
 
+local json = require("atlas.core.json")
 local service = require("atlas.providers.gitlab.client").issues
 
 ---@class GitLabMilestone
@@ -20,21 +21,19 @@ function M.list(project_path, on_done)
 	local endpoint =
 		string.format("/projects/%s/milestones?per_page=100&state=active", service.url_encode(project_path))
 	return service.request("GET", endpoint, nil, function(result, err)
-		if err or type(result) ~= "table" then
+		if err then
 			on_done(nil, err)
 			return
 		end
 		local out = {}
 		for _, raw in ipairs(result) do
-			if type(raw) == "table" and tonumber(raw.id) and type(raw.title) == "string" then
-				table.insert(out, {
-					id = tonumber(raw.id),
-					iid = tonumber(raw.iid),
-					title = raw.title,
-					description = type(raw.description) == "string" and raw.description or nil,
-					state = type(raw.state) == "string" and raw.state or nil,
-				})
-			end
+			table.insert(out, {
+				id = tonumber(raw.id),
+				iid = tonumber(raw.iid),
+				title = raw.title,
+				description = json.safe_str(raw.description),
+				state = json.safe_str(raw.state),
+			})
 		end
 		on_done(out, nil)
 	end, {

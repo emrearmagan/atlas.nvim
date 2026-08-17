@@ -67,14 +67,16 @@ function M.fetch_detail(repo, opts, on_done)
 	requests.run(function(done)
 		return service.request("GET", endpoint, nil, done)
 	end, function(result, err)
-		if err or type(result) ~= "table" then
-			on_done(nil, err or "Failed to fetch repo details")
+		if err then
+			on_done(nil, err)
 			return
 		end
 
 		local name = json.safe_str(result.path) or tostring(repo.repo_name or repo.name or "")
 		local full_path = json.safe_str(result.path_with_namespace) or path
 		local owner = full_path:match("^(.-)/[^/]+$") or ""
+
+		local statistics = json.safe_table(result.statistics)
 
 		---@type PullsRepoDetails
 		local details = {
@@ -85,7 +87,7 @@ function M.fetch_detail(repo, opts, on_done)
 			repo_name = name,
 			html_url = json.safe_str(result.web_url) or "",
 			description = json.safe_str(result.description) or "",
-			size = type(result.statistics) == "table" and tonumber(result.statistics.repository_size) or nil,
+			size = tonumber(statistics.repository_size),
 			default_branch = json.safe_str(result.default_branch) or "",
 			is_private = json.safe_str(result.visibility) == "private",
 			created_on = json.safe_str(result.created_at) or "",
@@ -159,14 +161,14 @@ function M.fetch_branches(repo, opts, on_done)
 
 	local endpoint = string.format("/projects/%s/repository/branches?per_page=100", service.url_encode(path))
 	return service.request("GET", endpoint, nil, function(result, err)
-		if err or type(result) ~= "table" then
-			on_done(nil, err or "Failed to fetch branches")
+		if err then
+			on_done(nil, err)
 			return
 		end
 
 		local entries = {}
 		for _, branch in ipairs(result) do
-			local commit = type(branch.commit) == "table" and branch.commit or {}
+			local commit = branch.commit
 			table.insert(entries, {
 				name = json.safe_str(branch.name) or "",
 				hash = (json.safe_str(commit.short_id) or json.safe_str(commit.id) or ""):sub(1, 8),
@@ -207,14 +209,14 @@ function M.fetch_tags(repo, opts, on_done)
 
 	local endpoint = string.format("/projects/%s/repository/tags?per_page=100", service.url_encode(path))
 	return service.request("GET", endpoint, nil, function(result, err)
-		if err or type(result) ~= "table" then
-			on_done(nil, err or "Failed to fetch tags")
+		if err then
+			on_done(nil, err)
 			return
 		end
 
 		local entries = {}
 		for _, tag in ipairs(result) do
-			local commit = type(tag.commit) == "table" and tag.commit or {}
+			local commit = tag.commit
 			table.insert(entries, {
 				name = json.safe_str(tag.name) or "",
 				hash = (json.safe_str(commit.short_id) or json.safe_str(commit.id) or ""):sub(1, 8),
@@ -228,6 +230,69 @@ function M.fetch_tags(repo, opts, on_done)
 		service.set_memory_cache(cache_key, tags)
 		on_done(tags, nil)
 	end)
+end
+
+---@param repo PullsRepoDetails
+---@param state "open"|"closed"
+---@param _opts PullsFetchOpts
+---@param on_done fun(result: { entries: PullsRepoIssue[], counts: { open: integer, closed: integer }|nil }|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_issues(repo, state, _opts, on_done)
+	local path = repo_path(repo)
+	if path == "" then
+		on_done(nil, "Missing repository info")
+		return nil
+	end
+
+	local project = service.url_encode(path)
+	local api_state = state == "open" and "opened" or "closed"
+	local requests = request_scope.new()
+	requests.all({
+		issues = function(done)
+			local endpoint = string.format(
+				"/projects/%s/issues?state=%s&per_page=50&order_by=created_at&sort=desc",
+				project,
+				api_state
+			)
+			return service.request("GET", endpoint, nil, done)
+		end,
+		statistics = function(done)
+			local endpoint = string.format("/projects/%s/issues_statistics", project)
+			return service.request("GET", endpoint, nil, done)
+		end,
+	}, function(results, errors)
+		if errors.issues then
+			on_done(nil, errors.issues)
+			return
+		end
+
+		local entries = {}
+		for _, raw in ipairs(results.issues or {}) do
+			local author = json.nilify(raw.author)
+			table.insert(entries, {
+				number = raw.iid,
+				title = json.safe_str(raw.title) or "",
+				state = (json.safe_str(raw.state) or ""):lower() == "closed" and "closed" or "open",
+				author = author and (json.safe_str(author.username) or json.safe_str(author.name) or "") or "",
+				created_at = json.safe_str(raw.created_at) or "",
+				comments = tonumber(raw.user_notes_count) or 0,
+				url = json.safe_str(raw.web_url) or "",
+			})
+		end
+
+		local counts
+		local statistics = json.nilify(results.statistics)
+		if statistics then
+			local raw_counts = statistics.statistics.counts
+			counts = {
+				open = tonumber(raw_counts.opened) or 0,
+				closed = tonumber(raw_counts.closed) or 0,
+			}
+		end
+
+		on_done({ entries = entries, counts = counts }, nil)
+	end)
+	return requests
 end
 
 ---@param repo PullsRepoDetails

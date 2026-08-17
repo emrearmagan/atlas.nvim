@@ -41,7 +41,7 @@ function M.fetch_conversation(pr, opts, on_done)
 			local conversation = { comments = {}, events = {} }
 			for _, page in ipairs(result) do
 				for _, item in ipairs(page) do
-					local event_name = type(item) == "table" and tostring(item.event or "") or ""
+					local event_name = tostring(item.event or "")
 					if event_name == "commented" then
 						table.insert(conversation.comments, mapper.to_activity_comment(item))
 					else

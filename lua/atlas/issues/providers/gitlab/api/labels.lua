@@ -1,5 +1,6 @@
 local M = {}
 
+local json = require("atlas.core.json")
 local service = require("atlas.providers.gitlab.client").issues
 
 ---@class GitLabLabel
@@ -18,24 +19,22 @@ function M.list(project_path, on_done)
 	end
 	local endpoint = string.format("/projects/%s/labels?per_page=100", service.url_encode(project_path))
 	return service.request("GET", endpoint, nil, function(result, err)
-		if err or type(result) ~= "table" then
+		if err then
 			on_done(nil, err)
 			return
 		end
 		local out = {}
 		for _, raw in ipairs(result) do
-			if type(raw) == "table" and type(raw.name) == "string" then
-				local color = type(raw.color) == "string" and raw.color or nil
-				if color and color:sub(1, 1) == "#" then
-					color = color:sub(2)
-				end
-				table.insert(out, {
-					id = tonumber(raw.id),
-					name = raw.name,
-					color = color,
-					description = type(raw.description) == "string" and raw.description or nil,
-				})
+			local color = json.safe_str(raw.color)
+			if color and color:sub(1, 1) == "#" then
+				color = color:sub(2)
 			end
+			table.insert(out, {
+				id = tonumber(raw.id),
+				name = raw.name,
+				color = color,
+				description = json.safe_str(raw.description),
+			})
 		end
 		on_done(out, nil)
 	end, {

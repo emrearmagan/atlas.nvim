@@ -302,14 +302,17 @@ function M.to_comment(note, discussion_first_id, discussion_id, resolved)
 		end
 	end
 	local state = resolved and "RESOLVED" or (outdated and "OUTDATED" or nil)
+	local is_thread_root = note.id == discussion_first_id
 
 	return {
 		id = note.id,
-		parent_id = (note.id ~= discussion_first_id) and discussion_first_id or nil,
+		parent_id = not is_thread_root and discussion_first_id or nil,
 		thread_id = discussion_id ~= nil and discussion_id ~= "" and discussion_id or nil,
 		author = actor_from(note.author),
 		content_raw = tostring(note.body or ""),
 		created_on = tostring(note.created_at or ""),
+		resolved_on = resolved and is_thread_root and json.safe_str(note.resolved_at) or nil,
+		resolved_by = resolved and is_thread_root and actor_from(note.resolved_by) or nil,
 		file = file,
 		inline = inline,
 		is_task = nil,

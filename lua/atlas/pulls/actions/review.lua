@@ -3,7 +3,7 @@ local M = {}
 local editor = require("atlas.ui.popups.editor")
 local notes = require("atlas.pulls.notes")
 local statusline = require("atlas.ui.statusline")
-local review_threads = require("atlas.ui.components.review_threads")
+local review_threads = require("atlas.pulls.ui.components.review_threads")
 
 ---@class AtlasReviewActionContext: AtlasPullActionContext
 ---@field pr PullRequest

@@ -28,14 +28,14 @@ function M.list_conversation(key, on_done, opts)
 	return cli.gh(
 		{ "api", "--paginate", string.format("repos/%s/issues/%d/timeline", slug, number) },
 		function(result, err)
-			if err then
-				on_done(nil, err)
+			if err or type(result) ~= "table" then
+				on_done(nil, err or "Failed to fetch issue conversation")
 				return
 			end
 
 			local conversation = { comments = {}, events = {} }
-			for _, raw in ipairs(type(result) == "table" and result or {}) do
-				local raw_event = type(raw) == "table" and json.safe_str(raw.event) or ""
+			for _, raw in ipairs(result) do
+				local raw_event = json.safe_str(raw.event) or ""
 				if raw_event == "commented" then
 					local comment = normalizer.to_timeline_comment(raw)
 					if comment then

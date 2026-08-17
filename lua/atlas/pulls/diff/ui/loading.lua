@@ -1,5 +1,6 @@
 local M = {}
 
+local keymaps = require("atlas.core.keymaps")
 local namespace = vim.api.nvim_create_namespace("atlas_loading")
 local spinner = require("atlas.ui.components.spinner")
 local utils = require("atlas.ui.shared.utils")
@@ -202,7 +203,9 @@ function M.open(message, on_cancel, target)
 	---@cast view AtlasLoadingView
 
 	indicator = spinner.create({ on_tick = draw })
-	vim.keymap.set("n", "q", view.cancel, { buffer = buf, silent = true, nowait = true, desc = "Cancel" })
+	for _, key in ipairs(keymaps.resolve("ui.close") or {}) do
+		vim.keymap.set("n", key, view.cancel, { buffer = buf, silent = true, nowait = true, desc = "Cancel" })
+	end
 	vim.api.nvim_create_autocmd({ "VimResized", "WinResized" }, {
 		group = group,
 		callback = draw,

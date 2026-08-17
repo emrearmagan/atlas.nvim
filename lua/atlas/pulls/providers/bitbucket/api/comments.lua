@@ -48,7 +48,8 @@ function M.fetch_comments(pr, opts, on_done)
 
 	local force = (opts or {}).force_refresh == true
 	local sep = comments_url:find("?") and "&" or "?"
-	local url = string.format("%s%spagelen=%d", comments_url, sep, 100)
+	local fields = "%2Bvalues.resolution.user%2C%2Bvalues.resolution.created_on"
+	local url = string.format("%s%spagelen=%d&fields=%s", comments_url, sep, 100, fields)
 	local key = "bitbucket:pr:comments:" .. url
 	if not force then
 		local cached, ok = service.get_cache(key)
