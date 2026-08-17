@@ -38,11 +38,12 @@ function M.fetch_all(endpoint, params, opts, on_done)
 				finish(nil, err)
 				return
 			end
-			if not json.is_list(result) then
+			-- Both APIs return JSON null after the final timeline page.
+			local items = result == vim.NIL and {} or result
+			if not json.is_list(items) then
 				finish(nil, opts.invalid_response)
 				return
 			end
-			local items = result
 
 			vim.list_extend(values, items)
 			if opts.post_filtered then
