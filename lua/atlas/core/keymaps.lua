@@ -404,7 +404,7 @@ function M.validate()
 			local conflicts =
 				view_key_conflicts({ domain, "providers", provider.id }, provider_domain.bookmark_key or "")
 			if next(conflicts) ~= nil then
-				result[string.format("%s %s views", provider.name:lower(), domain)] = conflicts
+				result[string.format("%s %s views", provider.name(domain):lower(), domain)] = conflicts
 			end
 		end
 	end

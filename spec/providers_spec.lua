@@ -1,4 +1,5 @@
 local providers = require("atlas.providers")
+local config = require("atlas.config")
 
 local function assert_functions(value, names, label)
 	assert.equal("table", type(value), label)
@@ -15,7 +16,8 @@ local function assert_contract(domain, expected_ids, provider_functions, core_fu
 		local label = registered.id .. "." .. domain
 
 		assert.equal(registered.id, provider.id)
-		assert.equal(registered.name, provider.name)
+		assert.equal("string", type(provider.name))
+		assert.is_true(provider.name ~= "")
 		assert_functions(provider, provider_functions, label)
 		local capabilities = provider.capabilities
 		assert_functions(capabilities and capabilities.core, core_functions, label .. ".core")
@@ -27,6 +29,16 @@ local function assert_contract(domain, expected_ids, provider_functions, core_fu
 end
 
 describe("provider contracts", function()
+	local original_options
+
+	before_each(function()
+		original_options = config.options
+	end)
+
+	after_each(function()
+		config.options = original_options
+	end)
+
 	it("loads pull request providers", function()
 		assert_contract(
 			"pulls",
@@ -63,5 +75,24 @@ describe("provider contracts", function()
 				)
 			end
 		end
+	end)
+
+	it("uses the configured Gitea or Forgejo identity", function()
+		config.options = {
+			pulls = { providers = { gitea = { api_type = "forgejo" } } },
+			issues = { providers = { gitea = { api_type = "gitea" } } },
+		}
+
+		assert.equal("Forgejo", providers.gitea.name("pulls"))
+		assert.same({ icon = "", hl_group = "AtlasForgejoTheme" }, providers.gitea.icon("pulls"))
+		assert.equal("Gitea", providers.gitea.name("issues"))
+		assert.same({ icon = "", hl_group = "AtlasGiteaTheme" }, providers.gitea.icon("issues"))
+	end)
+
+	it("shares GitHub and GitLab themes across domains", function()
+		assert.equal("AtlasGitHubTheme", providers.github.icon("pulls").hl_group)
+		assert.equal("AtlasGitHubTheme", providers.github.icon("issues").hl_group)
+		assert.equal("AtlasGitLabTheme", providers.gitlab.icon("pulls").hl_group)
+		assert.equal("AtlasGitLabTheme", providers.gitlab.icon("issues").hl_group)
 	end)
 end)
