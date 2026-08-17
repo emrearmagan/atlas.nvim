@@ -132,7 +132,7 @@ end
 ---@param root string
 ---@return PullsCreateDescriptionLinks
 local function links(root)
-	local remote = git.local_repository(root)
+	local remote = git.local_repository(root, "pulls")
 	return {
 		provider = remote and remote.provider or nil,
 		repo_url = remote and remote.url or nil,

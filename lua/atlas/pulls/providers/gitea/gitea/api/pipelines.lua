@@ -2,6 +2,7 @@ local json = require("atlas.core.json")
 local pagination = require("atlas.pulls.providers.gitea.gitea.api.pagination")
 local providers = require("atlas.pulls.providers")
 local service = require("atlas.providers.gitea.gitea.client").pulls
+local request_scope = require("atlas.core.requests")
 
 local M = {}
 
@@ -341,54 +342,38 @@ end
 ---@param on_done fun(raw: table|nil, err: string|nil)
 ---@return { cancel: fun() }
 local function fetch_jobs(base, run_id, on_done)
-	local active, cancelled, finished = nil, false, false
 	local page, jobs = 1, {}
-
-	local function finish(raw, err)
-		if cancelled or finished then
-			return
-		end
-		finished = true
-		on_done(raw, err)
-	end
+	local requests = request_scope.new()
 
 	local fetch_page
 	function fetch_page()
-		local requested_page = page
 		local endpoint = string.format("%s/actions/runs/%d/jobs", base, run_id)
 			.. service.query({ limit = 50, page = page })
-		local handle = service.request("GET", endpoint, nil, function(raw, err)
-			if cancelled or finished then
+		requests.run(function(done)
+			return service.request("GET", endpoint, nil, done)
+		end, function(raw, err)
+			if err then
+				on_done(nil, err)
 				return
 			end
-			local values = type(raw) == "table" and json.nilify(raw.jobs) or nil
-			local total = type(raw) == "table" and tonumber(raw.total_count) or nil
-			if err or type(values) ~= "table" or total == nil then
-				finish(nil, err or "Invalid Gitea Actions jobs response")
+			local values = json.nilify(raw.jobs)
+			local total = tonumber(raw.total_count)
+			if type(values) ~= "table" or total == nil then
+				on_done(nil, "Invalid Gitea Actions jobs response")
 				return
 			end
 			vim.list_extend(jobs, values)
 			if #jobs >= total or #values == 0 then
-				finish({ total_count = total, jobs = jobs }, nil)
+				on_done({ total_count = total, jobs = jobs }, nil)
 				return
 			end
 			page = page + 1
 			fetch_page()
 		end)
-		if not cancelled and not finished and page == requested_page then
-			active = handle
-		end
 	end
 
 	fetch_page()
-	return {
-		cancel = function()
-			cancelled = true
-			if active and active.cancel then
-				active.cancel()
-			end
-		end,
-	}
+	return requests
 end
 
 ---@param pr PullRequest
@@ -408,29 +393,24 @@ function M.fetch_details(pr, pipeline, _opts, on_done)
 		return nil
 	end
 
-	local cancelled = false
-	local handles = {}
-	local function track(handle)
-		if handle then
-			table.insert(handles, handle)
-		end
-	end
-
-	track(service.request("GET", string.format("%s/actions/runs/%d", base, run_id), nil, function(run, err)
-		if cancelled then
+	local requests = request_scope.new()
+	requests.run(function(done)
+		return service.request("GET", string.format("%s/actions/runs/%d", base, run_id), nil, done)
+	end, function(run, err)
+		if err then
+			on_done(nil, err)
 			return
 		end
-		if err or type(run) ~= "table" or tonumber(run.id) ~= run_id then
-			on_done(nil, err or "Invalid Gitea Actions run response")
+		if tonumber(run.id) ~= run_id then
+			on_done(nil, "Invalid Gitea Actions run response")
 			return
 		end
 
-		track(fetch_jobs(base, run_id, function(raw, jobs_err)
-			if cancelled then
-				return
-			end
-			if jobs_err or type(raw) ~= "table" then
-				on_done(nil, jobs_err or "Invalid Gitea Actions jobs response")
+		requests.run(function(done)
+			return fetch_jobs(base, run_id, done)
+		end, function(raw, jobs_err)
+			if jobs_err then
+				on_done(nil, jobs_err)
 				return
 			end
 			local jobs, map_err = map_jobs(raw)
@@ -447,19 +427,10 @@ function M.fetch_details(pr, pipeline, _opts, on_done)
 				jobs = jobs,
 			})
 			on_done(result, nil)
-		end))
-	end))
+		end)
+	end)
 
-	return {
-		cancel = function()
-			cancelled = true
-			for _, handle in ipairs(handles) do
-				if handle.cancel then
-					handle.cancel()
-				end
-			end
-		end,
-	}
+	return requests
 end
 
 ---@param pr PullRequest

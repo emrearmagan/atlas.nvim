@@ -27,30 +27,16 @@ local function issue_endpoint(key)
 	return string.format("%s/issues/%d", base, number), number, slug
 end
 
----@param value any
----@return boolean
-local function is_list(value)
-	if type(value) ~= "table" then
-		return false
-	end
-	for key in pairs(value) do
-		if key ~= "__http_status" and (type(key) ~= "number" or key < 1 or key % 1 ~= 0) then
-			return false
-		end
-	end
-	return true
-end
-
 ---@param raw any
 ---@param fallback_slug string|nil
 ---@return Issue[]|nil, string|nil
 local function map_issues(raw, fallback_slug)
-	if not is_list(raw) then
+	if not json.is_list(raw) then
 		return nil, "Invalid Gitea/Forgejo issues response"
 	end
 	local issues = {}
 	for _, value in ipairs(raw) do
-		if type(json.nilify(type(value) == "table" and value.pull_request or nil)) ~= "table" then
+		if json.nilify(json.safe_table(value).pull_request) == nil then
 			local issue = mapper.to_issue(value, fallback_slug)
 			if not issue then
 				return nil, "Invalid Gitea/Forgejo issue response"
@@ -65,7 +51,7 @@ end
 ---@param name string
 ---@return table[]|nil, string|nil
 local function expect_list(raw, name)
-	if not is_list(raw) then
+	if not json.is_list(raw) then
 		return nil, string.format("Invalid Gitea/Forgejo %s response", name)
 	end
 	return raw, nil
@@ -74,30 +60,35 @@ end
 ---@param raw any
 ---@return table|nil
 local function map_label(raw)
-	if type(raw) ~= "table" or type(raw.name) ~= "string" or raw.name == "" then
+	raw = json.safe_table(json.nilify(raw))
+	local name = json.safe_str(raw.name)
+	if not name or name == "" then
 		return nil
 	end
 	return {
 		id = tonumber(raw.id),
-		name = raw.name,
-		color = type(raw.color) == "string" and raw.color or nil,
+		name = name,
+		color = json.safe_str(raw.color),
 	}
 end
 
 ---@param raw any
 ---@return table|nil
 local function map_milestone(raw)
-	if type(raw) ~= "table" or tonumber(raw.id) == nil or type(raw.title) ~= "string" then
+	raw = json.safe_table(json.nilify(raw))
+	local id = tonumber(raw.id)
+	local title = json.safe_str(raw.title)
+	if not id or not title then
 		return nil
 	end
-	return { id = tonumber(raw.id), title = raw.title }
+	return { id = id, title = title }
 end
 
 ---@param on_done fun(user: IssueUser|nil, err: string|nil)
 function M.fetch_user(on_done)
 	return service.request("GET", "/user", nil, function(raw, err)
-		if err or type(raw) ~= "table" then
-			on_done(nil, err or "Invalid Gitea/Forgejo user response")
+		if err then
+			on_done(nil, err)
 			return
 		end
 		local user = mapper.to_user(raw)
@@ -207,8 +198,8 @@ function M.get(key, _, on_done)
 		return nil
 	end
 	return service.request("GET", endpoint, nil, function(raw, err)
-		if err or type(raw) ~= "table" then
-			on_done(nil, err or "Invalid Gitea/Forgejo issue response")
+		if err then
+			on_done(nil, err)
 			return
 		end
 		local issue = mapper.to_issue(raw, slug)
@@ -238,8 +229,8 @@ function M.create(opts, on_done)
 		milestone = opts.milestone,
 		due_date = opts.due_date,
 	}, function(raw, err)
-		if err or type(raw) ~= "table" then
-			on_done(nil, err or "Invalid Gitea/Forgejo create issue response")
+		if err then
+			on_done(nil, err)
 			return
 		end
 		local issue = mapper.to_issue(raw, slug)
@@ -261,8 +252,8 @@ function M.update(key, changes, on_done)
 		return nil
 	end
 	return service.request("PATCH", endpoint, changes or {}, function(raw, err)
-		if err or type(raw) ~= "table" then
-			on_done(nil, err or "Invalid Gitea/Forgejo update issue response")
+		if err then
+			on_done(nil, err)
 			return
 		end
 		local issue = mapper.to_issue(raw, slug)
@@ -280,7 +271,7 @@ end
 function M.update_issue(issue, changes, on_done)
 	local payload = vim.tbl_extend("force", {}, changes or {})
 	if service.api_type() == "gitea" then
-		payload.content_version = type(issue._raw) == "table" and issue._raw.content_version or nil
+		payload.content_version = issue._raw.content_version
 	end
 	return M.update(issue.key, payload, on_done)
 end
@@ -381,17 +372,18 @@ function M.list_labels(slug, on_done)
 		nil,
 		{ invalid_response = "Invalid Gitea/Forgejo labels response" },
 		function(raw, err)
-			local values, list_err = expect_list(raw, "labels")
-			if err or list_err then
-				on_done(nil, err or list_err)
+			if err then
+				on_done(nil, err)
 				return
 			end
 			local labels = {}
-			for _, value in ipairs(values or {}) do
+			for _, value in ipairs(raw) do
 				local label = map_label(value)
-				if label then
-					table.insert(labels, label)
+				if not label then
+					on_done(nil, "Invalid Gitea/Forgejo label response")
+					return
 				end
+				table.insert(labels, label)
 			end
 			on_done(labels, nil)
 		end
@@ -415,9 +407,11 @@ function M.list_assignees(slug, on_done)
 		local users = {}
 		for _, value in ipairs(values or {}) do
 			local user = mapper.to_user(value)
-			if user then
-				table.insert(users, user)
+			if not user then
+				on_done(nil, "Invalid Gitea/Forgejo assignee response")
+				return
 			end
+			table.insert(users, user)
 		end
 		on_done(users, nil)
 	end)
@@ -436,17 +430,18 @@ function M.list_milestones(slug, on_done)
 		{ state = "open" },
 		{ invalid_response = "Invalid Gitea/Forgejo milestones response" },
 		function(raw, err)
-			local values, list_err = expect_list(raw, "milestones")
-			if err or list_err then
-				on_done(nil, err or list_err)
+			if err then
+				on_done(nil, err)
 				return
 			end
 			local milestones = {}
-			for _, value in ipairs(values or {}) do
+			for _, value in ipairs(raw) do
 				local milestone = map_milestone(value)
-				if milestone then
-					table.insert(milestones, milestone)
+				if not milestone then
+					on_done(nil, "Invalid Gitea/Forgejo milestone response")
+					return
 				end
+				table.insert(milestones, milestone)
 			end
 			on_done(milestones, nil)
 		end
@@ -477,8 +472,12 @@ function M.check_subscription(key, on_done)
 		return nil
 	end
 	return service.request("GET", endpoint .. "/subscriptions/check", nil, function(raw, err)
-		if err or type(raw) ~= "table" or type(raw.subscribed) ~= "boolean" then
-			on_done(nil, err or "Invalid Gitea/Forgejo subscription response")
+		if err then
+			on_done(nil, err)
+			return
+		end
+		if type(raw.subscribed) ~= "boolean" then
+			on_done(nil, "Invalid Gitea/Forgejo subscription response")
 			return
 		end
 		on_done(raw.subscribed, nil)

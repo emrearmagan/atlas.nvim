@@ -1,25 +1,9 @@
 local service = require("atlas.providers.gitea.client").issues
 local pagination = require("atlas.issues.providers.gitea.api.pagination")
 local mapper = require("atlas.issues.providers.gitea.api.mapper")
+local json = require("atlas.core.json")
 
 local M = {}
-
----@param value any
----@return table[]|nil
-local function list_values(value)
-	if value == nil or value == vim.NIL then
-		return {}
-	end
-	if type(value) ~= "table" then
-		return nil
-	end
-	for key in pairs(value) do
-		if key ~= "__http_status" and (type(key) ~= "number" or key < 1 or key % 1 ~= 0) then
-			return nil
-		end
-	end
-	return value
-end
 
 ---@param key string
 ---@return string|nil, integer|nil
@@ -55,7 +39,7 @@ end
 local function reaction_counts(values)
 	local counts
 	for _, raw in ipairs(values) do
-		local content = type(raw) == "table" and vim.trim(tostring(raw.content or "")) or ""
+		local content = vim.trim(json.safe_str(json.safe_table(raw).content) or "")
 		if content ~= "" then
 			counts = counts or {}
 			counts[content] = (counts[content] or 0) + 1
@@ -148,12 +132,11 @@ function M.list_reactions(key, comment_id, on_done)
 		)
 	end
 	return service.request("GET", path, nil, function(raw, err)
-		local values = list_values(raw)
-		if err or not values then
+		if err or not json.is_list(raw) then
 			on_done(nil, err or "Invalid Gitea/Forgejo reactions response")
 			return
 		end
-		on_done(reaction_counts(values), nil)
+		on_done(reaction_counts(raw), nil)
 	end)
 end
 

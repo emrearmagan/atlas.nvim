@@ -1,23 +1,8 @@
 local service = require("atlas.providers.gitea.client").issues
+local json = require("atlas.core.json")
+local request_scope = require("atlas.core.requests")
 
 local M = {}
-
----@param value any
----@return table[]|nil
-local function list_values(value)
-	if value == nil or value == vim.NIL then
-		return {}
-	end
-	if type(value) ~= "table" then
-		return nil
-	end
-	for key in pairs(value) do
-		if key ~= "__http_status" and (type(key) ~= "number" or key < 1 or key % 1 ~= 0) then
-			return nil
-		end
-	end
-	return value
-end
 
 ---@param endpoint string
 ---@param params table<string, any>|nil
@@ -29,10 +14,11 @@ function M.fetch_all(endpoint, params, opts, on_done)
 	local page = 1
 	local values = {}
 	local empty_pages = 0
-	local active, cancelled, finished
+	local requests = request_scope.new()
+	local finished = false
 
 	local function finish(result, err)
-		if cancelled or finished then
+		if finished then
 			return
 		end
 		finished = true
@@ -42,20 +28,21 @@ function M.fetch_all(endpoint, params, opts, on_done)
 	local fetch_page
 	function fetch_page()
 		local query = vim.tbl_extend("force", {}, params or {}, { page = page, limit = 50 })
-		local requested_page = page
-		local handle = service.request("GET", endpoint .. service.query(query), nil, function(result, err)
-			if cancelled or finished then
+		requests.run(function(done)
+			return service.request("GET", endpoint .. service.query(query), nil, done)
+		end, function(result, err)
+			if finished then
 				return
 			end
 			if err then
 				finish(nil, err)
 				return
 			end
-			local items = list_values(result)
-			if items == nil then
+			if not json.is_list(result) then
 				finish(nil, opts.invalid_response)
 				return
 			end
+			local items = result
 
 			vim.list_extend(values, items)
 			if opts.post_filtered then
@@ -64,7 +51,7 @@ function M.fetch_all(endpoint, params, opts, on_done)
 					finish(values, nil)
 					return
 				end
-			elseif #items == 0 then
+			elseif #items < 50 then
 				finish(values, nil)
 				return
 			end
@@ -72,21 +59,10 @@ function M.fetch_all(endpoint, params, opts, on_done)
 			page = page + 1
 			fetch_page()
 		end)
-
-		if not finished and not cancelled and page == requested_page then
-			active = handle
-		end
 	end
 
 	fetch_page()
-	return {
-		cancel = function()
-			cancelled = true
-			if active and active.cancel then
-				active.cancel()
-			end
-		end,
-	}
+	return requests
 end
 
 return M

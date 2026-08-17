@@ -2,6 +2,7 @@ local providers = require("atlas.pulls.providers")
 local pipeline_api = require("atlas.pulls.providers.gitea.forgejo.api.pipelines")
 local pullrequests = require("atlas.pulls.providers.gitea.forgejo.api.pullrequests")
 local service = require("atlas.providers.gitea.forgejo.client").pulls
+local request_scope = require("atlas.core.requests")
 
 local M = {}
 
@@ -29,16 +30,15 @@ local function fetch_branch_protection(pr, on_done)
 		return nil
 	end
 
-	local cancelled, active = false, nil
-	active = service.request("GET", base .. "/branches/" .. service.url_encode(branch), nil, function(raw, err)
-		if cancelled then
-			return
-		end
+	local requests = request_scope.new()
+	requests.run(function(done)
+		return service.request("GET", base .. "/branches/" .. service.url_encode(branch), nil, done)
+	end, function(raw, err)
 		if err then
 			on_done(nil, err)
 			return
 		end
-		if type(raw) ~= "table" then
+		if type(raw.protected) ~= "boolean" then
 			on_done(nil, "Invalid Forgejo branch response")
 			return
 		end
@@ -52,32 +52,17 @@ local function fetch_branch_protection(pr, on_done)
 			status_check_contexts = raw.status_check_contexts,
 		}
 		local rule = vim.trim(tostring(raw.effective_branch_protection_name or raw.name or branch))
-		active = service.request(
-			"GET",
-			base .. "/branch_protections/" .. service.url_encode(rule),
-			nil,
-			function(value, rule_err)
-				if cancelled then
-					return
-				end
-				if rule_err then
-					on_done(summary, rule_err)
-				elseif type(value) ~= "table" then
-					on_done(nil, "Invalid Forgejo branch protection response")
-				else
-					on_done(value, nil)
-				end
+		requests.run(function(done)
+			return service.request("GET", base .. "/branch_protections/" .. service.url_encode(rule), nil, done)
+		end, function(value, rule_err)
+			if rule_err then
+				on_done(summary, rule_err)
+			else
+				on_done(value, nil)
 			end
-		)
+		end)
 	end)
-	return {
-		cancel = function()
-			cancelled = true
-			if active and active.cancel then
-				active.cancel()
-			end
-		end,
-	}
+	return requests
 end
 
 ---@param reviewers PullsReviewer[]
@@ -109,7 +94,7 @@ local function reviewers_check(reviewers, raw_reviews, protection, protection_er
 					approved = approved + 1
 				elseif state == "REQUEST_CHANGES" and review.dismissed ~= true then
 					changes = changes + 1
-				elseif state == "REQUEST_REVIEW" then
+				elseif state == "REQUEST_REVIEW" and review.dismissed ~= true then
 					pending = pending + 1
 				end
 			end
@@ -344,7 +329,7 @@ function M.fetch_merge_checks(pr, opts, on_done)
 	local pending, fresh, review_data, pipelines, protection = 4, nil, nil, nil, nil
 	local first_err
 	local review_err, pipeline_err, protection_err
-	local handles = {}
+	local requests = request_scope.new()
 	local function finish()
 		pending = pending - 1
 		if pending > 0 then
@@ -405,43 +390,38 @@ function M.fetch_merge_checks(pr, opts, on_done)
 		on_done(checks, nil)
 	end
 
-	local function track(handle)
-		if handle then
-			table.insert(handles, handle)
-		end
-	end
-	track(pullrequests.get(pr, opts or {}, function(value, err)
+	requests.run(function(done)
+		return pullrequests.get(pr, opts or {}, done)
+	end, function(value, err)
 		fresh = value
 		first_err = first_err or err
 		finish()
-	end))
-	track(pullrequests.review_data(pr, opts or {}, function(value, err)
+	end)
+	requests.run(function(done)
+		return pullrequests.review_data(pr, opts or {}, done)
+	end, function(value, err)
 		review_data = value
 		review_err = err
 		first_err = first_err or err
 		finish()
-	end))
-	track(pipeline_api.fetch(pr, opts, function(value, err)
+	end)
+	requests.run(function(done)
+		return pipeline_api.fetch(pr, opts, done)
+	end, function(value, err)
 		pipelines = value
 		pipeline_err = err
 		first_err = first_err or err
 		finish()
-	end))
-	track(fetch_branch_protection(pr, function(value, err)
+	end)
+	requests.run(function(done)
+		return fetch_branch_protection(pr, done)
+	end, function(value, err)
 		protection = value
 		protection_err = err
 		first_err = first_err or err
 		finish()
-	end))
-	return {
-		cancel = function()
-			for _, handle in ipairs(handles) do
-				if handle.cancel then
-					handle.cancel()
-				end
-			end
-		end,
-	}
+	end)
+	return requests
 end
 
 return M

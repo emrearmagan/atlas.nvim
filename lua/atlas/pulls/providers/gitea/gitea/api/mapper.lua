@@ -348,6 +348,7 @@ function M.to_comment(raw, review, lines)
 		inline = inline,
 		inline_hunk = inline_hunk,
 		state = comment_state,
+		resolved_by = resolver and author(resolver) or nil,
 		outdated = outdated,
 		html_url = json.nilify(raw.html_url),
 		_raw = inline and {

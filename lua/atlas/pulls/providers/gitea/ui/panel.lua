@@ -8,7 +8,7 @@ local spinner = require("atlas.ui.components.spinner")
 local MAX_HASH_LEN = 12
 
 ---@param pullrequests table
----@return PullsProviderPanel
+---@return PullsProviderPRPanel
 function M.new(pullrequests)
 	local panel = {}
 
@@ -104,7 +104,7 @@ function M.new(pullrequests)
 		return requests
 	end
 
-	---@return PullsPanelTab[]
+	---@return PullsPRPanelTab[]
 	function panel.tabs()
 		local overview_icon, overview_hl = icons.general("overview")
 		local conversation_icon, conversation_hl = icons.general("conversation")

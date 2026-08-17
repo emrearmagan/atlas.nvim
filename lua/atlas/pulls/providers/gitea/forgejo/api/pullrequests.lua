@@ -2,23 +2,10 @@ local service = require("atlas.providers.gitea.forgejo.client").pulls
 local pagination = require("atlas.pulls.providers.gitea.forgejo.api.pagination")
 local mapper = require("atlas.pulls.providers.gitea.forgejo.api.mapper")
 local request_scope = require("atlas.core.requests")
+local json = require("atlas.core.json")
 
 local api = {}
 local cache_namespace = "forgejo"
-
----@param value any
----@return boolean
-local function is_list(value)
-	if type(value) ~= "table" then
-		return false
-	end
-	for key in pairs(value) do
-		if key ~= "__http_status" and (type(key) ~= "number" or key < 1 or key % 1 ~= 0) then
-			return false
-		end
-	end
-	return true
-end
 
 local function draft_prefix()
 	local prefix = vim.trim(tostring(service.config().draft_prefix or ""))
@@ -86,20 +73,16 @@ local function run_requests(requests, on_done)
 		on_done(true, nil)
 		return nil
 	end
-	local cancelled, active = false, nil
+	local scope = request_scope.new()
 	local function run(index)
-		if cancelled then
-			return
-		end
 		local request = requests[index]
 		if not request then
 			on_done(true, nil)
 			return
 		end
-		active = service.request(request.method, request.endpoint, request.data, function(_, err)
-			if cancelled then
-				return
-			end
+		scope.run(function(done)
+			return service.request(request.method, request.endpoint, request.data, done)
+		end, function(_, err)
 			if err then
 				on_done(false, err)
 				return
@@ -108,14 +91,7 @@ local function run_requests(requests, on_done)
 		end)
 	end
 	run(1)
-	return {
-		cancel = function()
-			cancelled = true
-			if active and active.cancel then
-				active.cancel()
-			end
-		end,
-	}
+	return scope
 end
 
 ---@param opts PullsCreatePROpts|table
@@ -158,13 +134,16 @@ local function create(opts, on_done)
 		return nil
 	end
 
-	local cancelled, active = false, nil
-	active = service.request("POST", context.endpoint .. "/pulls", context.payload, function(raw, request_err)
-		if cancelled then
+	local requests = request_scope.new()
+	requests.run(function(done)
+		return service.request("POST", context.endpoint .. "/pulls", context.payload, done)
+	end, function(raw, request_err)
+		if request_err then
+			on_done(nil, request_err)
 			return
 		end
-		if request_err or type(raw) ~= "table" or raw.number == nil then
-			on_done(nil, request_err or "Invalid pull request response")
+		if raw.number == nil then
+			on_done(nil, "Invalid pull request response")
 			return
 		end
 		local result = { id = raw.number, url = raw.html_url, message = "Pull request created" }
@@ -183,30 +162,22 @@ local function create(opts, on_done)
 			on_done(result, nil)
 			return
 		end
-		active = service.request(
-			"POST",
-			string.format("%s/pulls/%s/requested_reviewers", context.endpoint, tostring(raw.number)),
-			{ reviewers = context.reviewers, team_reviewers = {} },
-			function(_, reviewers_err)
-				if cancelled then
-					return
-				end
-				if reviewers_err then
-					table.insert(warnings, "reviewers could not be requested")
-					update_message()
-				end
-				on_done(result, nil)
+		requests.run(function(done)
+			return service.request(
+				"POST",
+				string.format("%s/pulls/%s/requested_reviewers", context.endpoint, tostring(raw.number)),
+				{ reviewers = context.reviewers, team_reviewers = {} },
+				done
+			)
+		end, function(_, reviewers_err)
+			if reviewers_err then
+				table.insert(warnings, "reviewers could not be requested")
+				update_message()
 			end
-		)
+			on_done(result, nil)
+		end)
 	end)
-	return {
-		cancel = function()
-			cancelled = true
-			if active and active.cancel then
-				active.cancel()
-			end
-		end,
-	}
+	return requests
 end
 
 api.create = create
@@ -233,11 +204,15 @@ end
 
 function api.fetch_user(on_done)
 	return service.request("GET", "/user", nil, function(raw, err)
-		if err or type(raw) ~= "table" then
-			on_done(nil, err or "Invalid user response")
+		if err then
+			on_done(nil, err)
 			return
 		end
 		local user = mapper.author(raw)
+		if user.id == "" or user.username == "unknown" then
+			on_done(nil, "Invalid user response")
+			return
+		end
 		on_done({ id = user.id, name = user.name, username = user.username }, nil)
 	end)
 end
@@ -428,13 +403,23 @@ function api.review_data(pr, _, on_done)
 				pending_requests = pending_requests + 1
 			end
 		end
-		on_done({ raw = raw or {}, reviewers = reviewers, pending_requests = pending_requests }, nil)
+		local latest_reviews = {}
+		for _, decision in pairs(latest_decision) do
+			table.insert(latest_reviews, decision.raw)
+		end
+		for _, request in pairs(latest_team_request) do
+			table.insert(latest_reviews, request.raw)
+		end
+		table.sort(latest_reviews, function(left, right)
+			return tonumber(left.id) < tonumber(right.id)
+		end)
+		on_done({ raw = latest_reviews, reviewers = reviewers, pending_requests = pending_requests }, nil)
 	end)
 end
 
 function api.reviewers(pr, opts, on_done)
 	return api.review_data(pr, opts, function(data, err)
-		on_done(type(data) == "table" and data.reviewers or nil, err)
+		on_done(data and data.reviewers or nil, err)
 	end)
 end
 
@@ -449,7 +434,7 @@ function api.fetch_default_reviewers(opts, on_done)
 	local starts = {
 		candidates = function(done)
 			return service.request("GET", endpoint .. "/reviewers", nil, function(raw, err)
-				if err or not is_list(raw) then
+				if err or not json.is_list(raw) then
 					done(nil, err or "Invalid repository reviewers response")
 					return
 				end
@@ -694,7 +679,7 @@ function api.list_assignees(slug, on_done)
 		return nil
 	end
 	return service.request("GET", endpoint .. "/assignees", nil, function(raw, err)
-		if err or not is_list(raw) then
+		if err or not json.is_list(raw) then
 			on_done(nil, err or "Invalid repository assignees response")
 			return
 		end
@@ -808,7 +793,11 @@ function api.subscription(pr, on_done)
 				on_done(nil, err)
 				return
 			end
-			on_done(type(raw) == "table" and raw.subscribed == true, nil)
+			if type(raw.subscribed) ~= "boolean" then
+				on_done(nil, "Invalid subscription response")
+				return
+			end
+			on_done(raw.subscribed, nil)
 		end
 	)
 end

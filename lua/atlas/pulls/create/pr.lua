@@ -583,7 +583,7 @@ function M.start()
 		return
 	end
 
-	local info = git_branch.local_repository(root)
+	local info = git_branch.local_repository(root, "pulls")
 	if not info then
 		notify.error("Could not resolve the origin repository", { vim_notify = true })
 		return

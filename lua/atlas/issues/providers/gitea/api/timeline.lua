@@ -38,7 +38,7 @@ function M.list(key, _, on_done)
 
 		local result = { comments = {}, events = {} }
 		for _, raw in ipairs(values or {}) do
-			local raw_type = type(raw) == "table" and json.safe_str(raw.type) or nil
+			local raw_type = json.safe_str(raw.type)
 			if raw_type == "comment" then
 				local comment = mapper.to_comment(raw)
 				if comment then

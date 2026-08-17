@@ -1,20 +1,9 @@
 local clients = require("atlas.providers.gitea.client")
 local icons = require("atlas.ui.shared.icons")
 local json = require("atlas.core.json")
+local request_scope = require("atlas.core.requests")
 
 local M = {}
-
-local function is_list(value)
-	if type(value) ~= "table" then
-		return false
-	end
-	for key in pairs(value) do
-		if key ~= "__http_status" and type(key) ~= "number" then
-			return false
-		end
-	end
-	return true
-end
 
 ---@param domain "pulls"|"issues"
 ---@return table
@@ -66,7 +55,8 @@ function M.new(domain)
 	function api.fetch(opts, on_done)
 		opts = opts or {}
 		local limit = math.max(1, math.min(100, tonumber(opts.limit) or 100))
-		local notifications, active, cancelled = {}, nil, false
+		local notifications = {}
+		local requests = request_scope.new()
 		local page_size = math.min(50, limit)
 		local function fetch(page)
 			local endpoint = "/notifications"
@@ -76,12 +66,10 @@ function M.new(domain)
 					page = page,
 					limit = page_size,
 				})
-			local advanced = false
-			local handle = service.request("GET", endpoint, nil, function(result, err)
-				if cancelled then
-					return
-				end
-				if err or not is_list(result) then
+			requests.run(function(done)
+				return service.request("GET", endpoint, nil, done)
+			end, function(result, err)
+				if err or not json.is_list(result) then
 					on_done(nil, err or "Invalid Gitea/Forgejo notifications response")
 					return
 				end
@@ -95,25 +83,14 @@ function M.new(domain)
 					end
 				end
 				if #result > 0 and #notifications < limit then
-					advanced = true
 					fetch(page + 1)
 					return
 				end
 				on_done(notifications, nil)
 			end)
-			if not advanced then
-				active = handle
-			end
 		end
 		fetch(1)
-		return {
-			cancel = function()
-				cancelled = true
-				if active and active.cancel then
-					active.cancel()
-				end
-			end,
-		}
+		return requests
 	end
 
 	local function mark_read(id, on_done)
