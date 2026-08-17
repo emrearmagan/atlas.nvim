@@ -76,6 +76,15 @@ function M.delete(key)
 	remove_from_order(key)
 end
 
+---@param prefix string
+function M.clear_prefix(prefix)
+	for key in pairs(store) do
+		if key:sub(1, #prefix) == prefix then
+			M.delete(key)
+		end
+	end
+end
+
 function M.clear_all()
 	store = {}
 	order = {}

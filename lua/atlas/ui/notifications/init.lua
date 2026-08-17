@@ -46,7 +46,7 @@ local function popup_keys()
 	return {
 		mark_read = resolve_keys("ui.notifications.mark_read"),
 		mark_done = resolve_keys("ui.notifications.mark_done"),
-		refresh = resolve_keys("ui.notifications.refresh"),
+		refresh = resolve_keys("ui.refresh_view"),
 		open_in_browser = resolve_keys("ui.open_in_browser"),
 		close = resolve_keys("ui.close"),
 	}

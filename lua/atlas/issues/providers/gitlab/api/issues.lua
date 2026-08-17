@@ -56,7 +56,7 @@ function M.list_issues(view, opts, on_done)
 	local cache_key = "gitlab:issues:list:" .. endpoint
 
 	if not opts.force_load then
-		local cached, ok = service.get_memory_cache(cache_key)
+		local cached, ok = service.get_cache(cache_key)
 		if ok then
 			on_done(cached, nil)
 			return nil
@@ -69,7 +69,7 @@ function M.list_issues(view, opts, on_done)
 			return
 		end
 		local issues = normalizer.to_issues_list(result)
-		service.set_memory_cache(cache_key, issues)
+		service.set_cache(cache_key, issues)
 		on_done(issues, nil)
 	end, {
 		action = "List issues",
@@ -280,8 +280,6 @@ function M.create_issue(opts, on_done)
 		local issue = normalizer.to_issue(result)
 		local iid = (issue and issue._raw and issue._raw.iid) or tonumber(result.iid)
 		local key = (issue and issue.key) or (iid and string.format("%s#%d", path, iid) or nil)
-		service.clear_memory_cache()
-
 		on_done({
 			key = key,
 			iid = iid,

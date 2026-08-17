@@ -1,6 +1,7 @@
 local M = {}
 
 local service = require("atlas.providers.gitlab.client").pulls
+local diff_parser = require("atlas.core.git.diff_parser")
 
 ---@param pr PullRequest
 ---@return string project_path, integer|nil iid
@@ -76,16 +77,26 @@ local function rebuild_unified_diff(change)
 end
 
 ---@param pr PullRequest
----@param _opts { force_refresh: boolean|nil }|nil
+---@param opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(files: DiffFile[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_diff(pr, _opts, on_done)
+function M.fetch_diff(pr, opts, on_done)
+	opts = opts or {}
 	local path, iid = project_iid(pr)
 	if path == "" or iid == nil then
 		vim.schedule(function()
 			on_done(nil, "Invalid MR identifier")
 		end)
 		return nil
+	end
+
+	local cache_key = string.format("gitlab_pulls:diff:%s!%d", path, iid)
+	if not opts.force_refresh then
+		local cached, ok = service.get_memory_cache(cache_key)
+		if ok then
+			on_done(cached, nil)
+			return nil
+		end
 	end
 
 	local endpoint = string.format("/projects/%s/merge_requests/%d/changes", service.url_encode(path), iid)
@@ -98,8 +109,9 @@ function M.fetch_diff(pr, _opts, on_done)
 		for _, change in ipairs(result.changes) do
 			table.insert(parts, rebuild_unified_diff(change))
 		end
-		local diff_parser = require("atlas.core.git.diff_parser")
-		on_done(diff_parser.parse(table.concat(parts, "\n")), nil)
+		local files = diff_parser.parse(table.concat(parts, "\n"))
+		service.set_memory_cache(cache_key, files)
+		on_done(files, nil)
 	end)
 end
 

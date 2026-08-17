@@ -64,7 +64,7 @@ function M.cache_ttl()
 end
 
 function M.clear_cache()
-	memory_cache.clear_all()
+	memory_cache.clear_prefix("bitbucket:")
 end
 
 ---@param key string

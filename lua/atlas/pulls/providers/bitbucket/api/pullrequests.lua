@@ -309,8 +309,10 @@ function M.fetch_reviewers(pr, opts, on_done)
 		on_done(nil, "No PR self link available")
 		return nil
 	end
+	local sep = self_url:find("?") and "&" or "?"
+	local url = string.format("%s%sfields=participants", self_url, sep)
 
-	return service.request("GET", self_url, nil, nil, function(result, err)
+	return service.request("GET", url, nil, nil, function(result, err)
 		if err then
 			on_done(nil, err)
 			return

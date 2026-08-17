@@ -21,7 +21,7 @@ function M.new(domain)
 
 		local q = vim.trim(tostring(query or "")):lower()
 		return cli.gh(
-			{ "api", "--paginate", string.format("repos/%s/assignees?per_page=100", slug) },
+			{ "api", "--paginate", "--slurp", string.format("repos/%s/assignees?per_page=100", slug) },
 			function(result, err)
 				if err or type(result) ~= "table" then
 					on_done(nil, err)
@@ -29,11 +29,13 @@ function M.new(domain)
 				end
 
 				local users = {}
-				for _, raw in ipairs(result) do
-					local user = mapping.identity(raw)
-					if user and user.login ~= "" then
-						if q == "" or user.name:lower():find(q, 1, true) or user.login:lower():find(q, 1, true) then
-							table.insert(users, { account_id = user.login, display_name = user.name })
+				for _, page in ipairs(result) do
+					for _, raw in ipairs(page) do
+						local user = mapping.identity(raw)
+						if user and user.login ~= "" then
+							if q == "" or user.name:lower():find(q, 1, true) or user.login:lower():find(q, 1, true) then
+								table.insert(users, { account_id = user.login, display_name = user.name })
+							end
 						end
 					end
 				end

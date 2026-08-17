@@ -36,9 +36,10 @@ end
 
 ---@param pr PullRequest
 ---@param opts { force_refresh: boolean|nil }|nil
+---@param query string|nil
 ---@param on_done fun(comments: PullsComment[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_comments(pr, opts, on_done)
+local function fetch_comments(pr, opts, query, on_done)
 	local raw = pr._raw
 	local comments_url = tostring((raw.links or {}).comments or "")
 	if comments_url == "" then
@@ -49,7 +50,8 @@ function M.fetch_comments(pr, opts, on_done)
 	local force = (opts or {}).force_refresh == true
 	local sep = comments_url:find("?") and "&" or "?"
 	local fields = "%2Bvalues.resolution.user%2C%2Bvalues.resolution.created_on"
-	local url = string.format("%s%spagelen=%d&fields=%s", comments_url, sep, 100, fields)
+	local filter = query and "&q=" .. query or ""
+	local url = string.format("%s%spagelen=%d&fields=%s%s", comments_url, sep, 100, fields, filter)
 	local key = "bitbucket:pr:comments:" .. url
 	if not force then
 		local cached, ok = service.get_cache(key)
@@ -68,6 +70,22 @@ function M.fetch_comments(pr, opts, on_done)
 		service.set_cache(key, comments, service.cache_ttl())
 		on_done(comments, nil)
 	end)
+end
+
+---@param pr PullRequest
+---@param opts { force_refresh: boolean|nil }|nil
+---@param on_done fun(comments: PullsComment[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_comments(pr, opts, on_done)
+	return fetch_comments(pr, opts, nil, on_done)
+end
+
+---@param pr PullRequest
+---@param opts { force_refresh: boolean|nil }|nil
+---@param on_done fun(comments: PullsComment[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_global_comments(pr, opts, on_done)
+	return fetch_comments(pr, opts, "inline.path%20%3D%20null", on_done)
 end
 
 ---@param pr PullRequest

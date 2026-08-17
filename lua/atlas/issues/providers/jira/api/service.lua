@@ -63,7 +63,7 @@ function M.cache_ttl()
 end
 
 function M.clear_memory_cache()
-	memory_cache.clear_all()
+	memory_cache.clear_prefix("jira:")
 end
 
 ---@param key string
