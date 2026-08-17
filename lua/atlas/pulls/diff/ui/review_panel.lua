@@ -304,8 +304,8 @@ function M.render(panel, session)
 	local pending_icon = icons.pulls_status("inprogress")
 	local comment_action_keys = {
 		reply = key_label("pulls.review.diff.add_comment"),
-		edit = key_label("pulls.review.diff.edit_comment"),
-		delete = key_label("pulls.review.diff.delete"),
+		edit = key_label("ui.comments.edit"),
+		delete = key_label("ui.delete"),
 		toggle_resolved = key_label("pulls.review.diff.toggle_resolved"),
 	}
 	local task_capability = panel.session.review and panel.session.review.provider.capabilities.tasks
@@ -315,8 +315,8 @@ function M.render(panel, session)
 		toggle_resolved = task_capability and task_capability.edit_task and comment_action_keys.toggle_resolved or nil,
 	}
 	local note_action_keys = {
-		edit = key_label("pulls.review.diff.edit_comment"),
-		delete = key_label("pulls.review.diff.delete"),
+		edit = key_label("ui.comments.edit"),
+		delete = key_label("ui.delete"),
 	}
 	vim.wo[panel.win].winbar = string.format(
 		" Atlas Review %%=%s Comments: %d   %s Tasks: %d   %s Notes: %d   %s Pending: %d ",
@@ -533,7 +533,7 @@ function M.register_keymaps(panel)
 		end
 	end
 	local entries = {}
-	add_mapping(entries, "pulls.review.show_item", "Show item in diff", 1, function()
+	add_mapping(entries, "ui.select", "Show item in diff", 1, function()
 		show_selected(false)
 	end)
 	add_mapping(entries, "pulls.review.focus_item", "Focus item in diff", 2, function()
@@ -550,10 +550,10 @@ function M.register_keymaps(panel)
 	add_mapping(entries, "pulls.review.diff.add_comment", "Reply to comment", 4, function()
 		run_action("add_comment")
 	end)
-	add_mapping(entries, "pulls.review.diff.edit_comment", "Edit review item", 5, function()
+	add_mapping(entries, "ui.comments.edit", "Edit review item", 5, function()
 		run_action("edit")
 	end)
-	add_mapping(entries, "pulls.review.diff.delete", "Delete review item", 6, function()
+	add_mapping(entries, "ui.delete", "Delete review item", 6, function()
 		run_action("delete")
 	end)
 	add_mapping(entries, "pulls.review.diff.toggle_resolved", "Toggle resolved / completed", 7, function()

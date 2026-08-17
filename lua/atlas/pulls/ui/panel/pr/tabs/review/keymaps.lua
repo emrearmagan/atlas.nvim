@@ -40,7 +40,7 @@ function M.setup(buf, refresh)
 	local items = {}
 	utils.insert_if(
 		items,
-		from_action("pulls.review.diff.submit_comment", {
+		from_action("ui.comments.reply", {
 			desc = "Reply to comment",
 			opts = { nowait = true, silent = true },
 			callback = function()
@@ -54,7 +54,7 @@ function M.setup(buf, refresh)
 	)
 	utils.insert_if(
 		items,
-		from_action("pulls.review.diff.edit_comment", {
+		from_action("ui.comments.edit", {
 			desc = edit_description,
 			opts = { nowait = true, silent = true },
 			callback = function()
@@ -69,7 +69,7 @@ function M.setup(buf, refresh)
 	if tasks and tasks.add_task then
 		utils.insert_if(
 			items,
-			from_action("pulls.review.diff.add_task", {
+			from_action("pulls.review.add_task", {
 				desc = "Add task",
 				opts = { nowait = true, silent = true },
 				callback = function()
@@ -83,7 +83,7 @@ function M.setup(buf, refresh)
 	end
 	utils.insert_if(
 		items,
-		from_action("pulls.review.diff.delete", {
+		from_action("ui.delete", {
 			desc = delete_description,
 			opts = { nowait = true, silent = true },
 			callback = function()
@@ -262,10 +262,10 @@ end
 ---@param buf integer
 function M.teardown(buf)
 	local items = {}
-	utils.insert_if(items, remove_item("pulls.review.diff.submit_comment"))
-	utils.insert_if(items, remove_item("pulls.review.diff.edit_comment"))
-	utils.insert_if(items, remove_item("pulls.review.diff.add_task"))
-	utils.insert_if(items, remove_item("pulls.review.diff.delete"))
+	utils.insert_if(items, remove_item("ui.comments.reply"))
+	utils.insert_if(items, remove_item("ui.comments.edit"))
+	utils.insert_if(items, remove_item("pulls.review.add_task"))
+	utils.insert_if(items, remove_item("ui.delete"))
 	utils.insert_if(items, remove_item("pulls.review.diff.toggle_resolved"))
 	utils.insert_if(items, remove_item("ui.toggle_fold"))
 	utils.insert_if(items, remove_item("ui.toggle_all_folds"))

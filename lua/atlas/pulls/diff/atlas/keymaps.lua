@@ -270,7 +270,7 @@ function M.register(session, actions)
 	local panel_actions = {}
 	add(
 		panel_actions,
-		item("pulls.review.show_item", {
+		item("ui.select", {
 			desc = "Show changed file",
 			index = 1,
 			callback = run(function()

@@ -209,8 +209,8 @@ function M.open_popup(opts)
 	local keys = {
 		close = keymaps.resolve("ui.close"),
 		reply = keymaps.resolve("pulls.review.diff.add_comment"),
-		edit = keymaps.resolve("pulls.review.diff.edit_comment"),
-		delete = keymaps.resolve("pulls.review.diff.delete"),
+		edit = keymaps.resolve("ui.comments.edit"),
+		delete = keymaps.resolve("ui.delete"),
 		toggle = opts.toggle_resolved_keys,
 	}
 	local width = math.min(100, math.max(1, vim.o.columns - 4))

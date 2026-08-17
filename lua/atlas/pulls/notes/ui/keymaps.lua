@@ -25,7 +25,7 @@ function M.register(buf, actions)
 			opts = { nowait = true },
 		})
 	end
-	local edit_keys = resolver.resolve("pulls.review.diff.edit_comment")
+	local edit_keys = resolver.resolve("ui.comments.edit")
 	if edit_keys then
 		table.insert(note_actions, {
 			key = #edit_keys == 1 and edit_keys[1] or edit_keys,
@@ -35,7 +35,7 @@ function M.register(buf, actions)
 			opts = { nowait = true },
 		})
 	end
-	local delete_keys = resolver.resolve("pulls.review.diff.delete")
+	local delete_keys = resolver.resolve("ui.delete")
 	if delete_keys then
 		table.insert(note_actions, {
 			key = #delete_keys == 1 and delete_keys[1] or delete_keys,
@@ -57,10 +57,17 @@ function M.register(buf, actions)
 		})
 	end
 	help.register("Notes", note_actions, { buffer = buf, index = 100 })
-	local view = {
-		{ key = "R", desc = "Reload notes", index = 5, callback = actions.refresh, opts = { nowait = true } },
-		{ key = "q", desc = "Close notes", index = 7, callback = actions.close, opts = { nowait = true } },
-	}
+	local view = {}
+	local refresh_keys = resolver.resolve("ui.refresh_view")
+	if refresh_keys then
+		table.insert(view, {
+			key = #refresh_keys == 1 and refresh_keys[1] or refresh_keys,
+			desc = "Reload notes",
+			index = 5,
+			callback = actions.refresh,
+			opts = { nowait = true },
+		})
+	end
 	local help_keys = resolver.resolve("ui.help")
 	if help_keys then
 		table.insert(view, {
@@ -70,6 +77,16 @@ function M.register(buf, actions)
 			callback = function()
 				help.toggle({ buffer = buf })
 			end,
+			opts = { nowait = true },
+		})
+	end
+	local close_keys = resolver.resolve("ui.close")
+	if close_keys then
+		table.insert(view, {
+			key = #close_keys == 1 and close_keys[1] or close_keys,
+			desc = "Close notes",
+			index = 7,
+			callback = actions.close,
 			opts = { nowait = true },
 		})
 	end

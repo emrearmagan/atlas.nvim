@@ -80,7 +80,7 @@ local function add_range(items, action, desc, callback)
 end
 
 ---@param session AtlasDiffSession
----@param opts { buffers: integer[], reload: fun()|nil, help_key: string|nil, file_buffers: integer[]|nil, add_file_comment: (fun(pending: boolean))|nil }
+---@param opts { buffers: integer[], reload: fun()|nil, help_key: string|string[]|nil, file_buffers: integer[]|nil, add_file_comment: (fun(pending: boolean))|nil }
 function M.register(session, opts)
 	local action_context = session.review and review.action_context(session) or nil
 	local reviews = session.review and session.review.provider.capabilities.reviews or {}
@@ -210,7 +210,7 @@ function M.register(session, opts)
 						comments.jump(session, buf, 1)
 					end)
 				end
-				add(items, "pulls.review.diff.delete", "Delete comment or note", function()
+				add(items, "ui.delete", "Delete comment or note", function()
 					with_item(session, buf, function()
 						comments.delete_at_cursor(session, buf)
 					end, function()

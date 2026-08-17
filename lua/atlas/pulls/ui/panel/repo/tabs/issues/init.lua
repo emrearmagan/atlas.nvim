@@ -2,6 +2,8 @@
 local M = {}
 
 local statusline = require("atlas.ui.statusline")
+local help = require("atlas.ui.popups.help")
+local resolver = require("atlas.core.keymaps")
 local pulls_state = require("atlas.pulls.state")
 local repo_panel_state = require("atlas.pulls.ui.panel.repo.state")
 local renderer = require("atlas.pulls.ui.panel.repo.tabs.issues.renderer")
@@ -149,23 +151,31 @@ end
 ---@param buf integer
 ---@param refresh fun()
 function M.activate(buf, refresh)
-	require("atlas.ui.popups.help").register("Issues", {
-		{
-			key = "s",
+	local keys = resolver.resolve("pulls.toggle_repo_issue_state")
+	local items = {}
+	if keys then
+		table.insert(items, {
+			key = #keys == 1 and keys[1] or keys,
 			desc = "Toggle open/closed",
 			opts = { nowait = true, silent = true },
 			callback = function()
 				M.toggle_filter(refresh)
 			end,
-		},
-	}, { index = 212, buffer = buf })
+		})
+	end
+	help.register("Issues", items, { index = 212, buffer = buf })
 end
 
 ---@param buf integer|nil
 function M.deactivate(buf)
 	stop_request()
 	if buf then
-		require("atlas.ui.popups.help").remove("Issues", { { key = "s" } }, { buffer = buf })
+		local keys = resolver.resolve("pulls.toggle_repo_issue_state")
+		local items = {}
+		if keys then
+			table.insert(items, { key = #keys == 1 and keys[1] or keys })
+		end
+		help.remove("Issues", items, { buffer = buf })
 	end
 end
 

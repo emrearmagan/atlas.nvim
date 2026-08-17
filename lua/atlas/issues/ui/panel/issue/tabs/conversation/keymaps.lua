@@ -10,11 +10,11 @@ local state = require("atlas.issues.ui.panel.issue.tabs.conversation.state")
 local actions = require("atlas.issues.ui.panel.issue.tabs.conversation.actions")
 
 local COMMENT_ACTIONS = {
-	"issues.comments.add",
-	"issues.comments.reply",
-	"issues.comments.edit",
-	"issues.comments.delete",
-	"issues.comments.react",
+	"ui.comments.add",
+	"ui.comments.reply",
+	"ui.comments.edit",
+	"ui.delete",
+	"ui.comments.react",
 }
 
 local function cursor_entry()
@@ -96,7 +96,7 @@ function M.setup(buf, refresh)
 	if comments and comments.add_comment then
 		utils.insert_if(
 			items,
-			from_action("issues.comments.add", {
+			from_action("ui.comments.add", {
 				desc = "Add comment",
 				opts = { nowait = true, silent = true },
 				callback = function()
@@ -106,7 +106,7 @@ function M.setup(buf, refresh)
 		)
 		utils.insert_if(
 			items,
-			from_action("issues.comments.reply", {
+			from_action("ui.comments.reply", {
 				desc = "Reply to comment",
 				opts = { nowait = true, silent = true },
 				callback = function()
@@ -118,7 +118,7 @@ function M.setup(buf, refresh)
 	if comments and comments.edit_comment then
 		utils.insert_if(
 			items,
-			from_action("issues.comments.edit", {
+			from_action("ui.comments.edit", {
 				desc = "Edit comment",
 				opts = { nowait = true, silent = true },
 				callback = function()
@@ -130,7 +130,7 @@ function M.setup(buf, refresh)
 	if comments and comments.delete_comment then
 		utils.insert_if(
 			items,
-			from_action("issues.comments.delete", {
+			from_action("ui.delete", {
 				desc = "Delete comment",
 				opts = { nowait = true, silent = true },
 				callback = function()
@@ -142,7 +142,7 @@ function M.setup(buf, refresh)
 	if comments and comments.add_reaction and #(comments.reaction_options or {}) > 0 then
 		utils.insert_if(
 			items,
-			from_action("issues.comments.react", {
+			from_action("ui.comments.react", {
 				desc = "Add reaction",
 				opts = { nowait = true, silent = true },
 				callback = function()

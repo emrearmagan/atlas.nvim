@@ -2,11 +2,20 @@ local M = {}
 
 local help = require("atlas.ui.popups.help")
 local resolver = require("atlas.core.keymaps")
+local utils = require("atlas.ui.shared.utils")
 local layout = require("atlas.ui.layout")
 local panel_state = require("atlas.pulls.ui.panel.pr.state")
 local review_threads = require("atlas.pulls.ui.components.review_threads")
 local state = require("atlas.pulls.ui.panel.pr.tabs.conversation.state")
 local actions = require("atlas.pulls.ui.panel.pr.tabs.conversation.actions")
+
+local COMMENT_ACTIONS = {
+	"ui.comments.add",
+	"ui.comments.reply",
+	"ui.comments.edit",
+	"ui.delete",
+	"ui.comments.react",
+}
 
 local function cursor_entry()
 	local win = layout.win_id("detail")
@@ -91,40 +100,57 @@ function M.setup(buf, refresh)
 	local provider = require("atlas.pulls.state").provider
 	local tasks = provider and provider.capabilities.tasks
 	local has_tasks = tasks and tasks.edit_task ~= nil
-	local items = {
-		{
-			key = { "a", "i" },
+	local items = {}
+	utils.insert_if(
+		items,
+		from_action("ui.comments.add", {
 			desc = "Add comment",
 			opts = { nowait = true, silent = true },
 			callback = function()
 				dispatch_simple(refresh, actions.add)
 			end,
-		},
-		{
-			key = "e",
+		})
+	)
+	utils.insert_if(
+		items,
+		from_action("ui.comments.reply", {
+			desc = "Reply to comment",
+			opts = { nowait = true, silent = true },
+			callback = function()
+				dispatch_with_entry(refresh, actions.reply)
+			end,
+		})
+	)
+	utils.insert_if(
+		items,
+		from_action("ui.comments.edit", {
 			desc = has_tasks and "Edit comment / task" or "Edit comment",
 			opts = { nowait = true, silent = true },
 			callback = function()
 				dispatch_with_entry(refresh, actions.edit)
 			end,
-		},
-		{
-			key = "d",
+		})
+	)
+	utils.insert_if(
+		items,
+		from_action("ui.delete", {
 			desc = has_tasks and "Delete comment / task" or "Delete comment",
 			opts = { nowait = true, silent = true },
 			callback = function()
 				dispatch_with_entry(refresh, actions.delete)
 			end,
-		},
-		{
-			key = "gr",
+		})
+	)
+	utils.insert_if(
+		items,
+		from_action("ui.comments.react", {
 			desc = "Add reaction",
 			opts = { nowait = true, silent = true },
 			callback = function()
 				dispatch_with_entry(refresh, actions.react)
 			end,
-		},
-	}
+		})
+	)
 	if has_tasks then
 		local toggle_task = from_action("pulls.review.diff.toggle_resolved", {
 			desc = "Toggle task",
@@ -137,18 +163,6 @@ function M.setup(buf, refresh)
 			table.insert(items, toggle_task)
 		end
 	end
-	local reply_keys = resolver.resolve("pulls.review.diff.submit_comment")
-	if reply_keys ~= nil then
-		table.insert(items, 2, {
-			key = reply_keys,
-			desc = "Reply to comment",
-			opts = { nowait = true, silent = true },
-			callback = function()
-				dispatch_with_entry(refresh, actions.reply)
-			end,
-		})
-	end
-
 	local fold_keys = resolver.resolve("ui.toggle_fold")
 	if fold_keys ~= nil then
 		table.insert(items, {
@@ -179,15 +193,9 @@ end
 
 ---@param buf integer
 function M.teardown(buf)
-	local items = {
-		{ key = { "a", "i" } },
-		{ key = "e" },
-		{ key = "d" },
-		{ key = "gr" },
-	}
-	local reply_keys = resolver.resolve("pulls.review.diff.submit_comment")
-	if reply_keys ~= nil then
-		table.insert(items, { key = reply_keys })
+	local items = {}
+	for _, action_id in ipairs(COMMENT_ACTIONS) do
+		utils.insert_if(items, from_action(action_id, {}))
 	end
 	local fold_keys = resolver.resolve("ui.toggle_fold")
 	if fold_keys ~= nil then

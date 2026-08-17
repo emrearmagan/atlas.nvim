@@ -2,6 +2,7 @@ local M = {}
 
 local comments = require("atlas.pulls.diff.comments")
 local config = require("atlas.config")
+local keymaps = require("atlas.core.keymaps")
 local hints = require("atlas.pulls.diff.ui.hints")
 local notes = require("atlas.pulls.diff.notes")
 local position = require("atlas.pulls.diff.position")
@@ -243,7 +244,7 @@ local function register_review_buffers(session)
 	review_keymaps.register(session, {
 		buffers = buffers,
 		reload = state.reload_view,
-		help_key = "gA",
+		help_key = keymaps.resolve("pulls.external_help"),
 		file_buffers = diffview_panel_buf and { diffview_panel_buf } or nil,
 		add_file_comment = function(pending)
 			local file = state.view:infer_cur_file()

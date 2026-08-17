@@ -65,8 +65,8 @@ local function render()
 		target_filter = state.target_filter,
 		expanded = state.expanded,
 		action_keys = {
-			edit = key_label("pulls.review.diff.edit_comment"),
-			delete = key_label("pulls.review.diff.delete"),
+			edit = key_label("ui.comments.edit"),
+			delete = key_label("ui.delete"),
 		},
 	})
 	state.line_map = line_map

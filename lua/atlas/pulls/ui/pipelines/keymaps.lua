@@ -57,13 +57,7 @@ function M.setup_job_log(buf, actions)
 	add_help_action(items, "ui.help", function()
 		help.toggle({ buffer = buf })
 	end, "Toggle help", 3)
-	table.insert(items, {
-		key = "q",
-		desc = "Close job log",
-		index = 4,
-		callback = actions.close,
-		opts = { silent = true, nowait = true },
-	})
+	add_help_action(items, "ui.close", actions.close, "Close job log", 4)
 	help.register("Job Log", items, { buffer = buf, index = 100 })
 end
 
