@@ -59,7 +59,7 @@ local function configured_searches()
 				if search then
 					table.insert(entries, {
 						id = provider_config.id,
-						label = provider_config.name .. " " .. domain_labels[domain],
+						label = provider.name .. " " .. domain_labels[domain],
 						open = search,
 					})
 				end
@@ -105,7 +105,7 @@ function M.run(provider_id)
 			notify.error("No configured search for provider: " .. provider_id, { vim_notify = true })
 			return
 		end
-		choose(matches, "Search " .. providers[provider_id].name .. " in:")
+		choose(matches, "Search " .. providers[provider_id].name(nil) .. " in:")
 		return
 	end
 

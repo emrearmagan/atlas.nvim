@@ -278,12 +278,12 @@ local function pick_command()
 			---@cast domain "pulls"|"issues"
 			for _, provider in ipairs(providers.configured(domain)) do
 				local label = domain == "pulls" and "pull requests" or "issues"
-				add(command, { provider.id }, string.format("Open %s %s", provider.name, label))
+				add(command, { provider.id }, string.format("Open %s %s", provider.name(domain), label))
 			end
 		elseif command.name == "search" then
 			for _, provider_id in ipairs(assert(command.complete)("")) do
 				local provider = providers[provider_id]
-				add(command, { provider_id }, "Search " .. (provider and provider.name or provider_id))
+				add(command, { provider_id }, "Search " .. (provider and provider.name(nil) or provider_id))
 			end
 		elseif command.name == "create" then
 			add(command, { "pr" }, "Create a pull request")

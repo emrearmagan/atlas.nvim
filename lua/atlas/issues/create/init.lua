@@ -13,7 +13,7 @@ local function build_choices()
 		if provider then
 			---@cast provider IssuesProvider
 			if actions.is_available("create_issue", { provider = provider }) then
-				table.insert(choices, { label = provider_config.name, provider = provider })
+				table.insert(choices, { label = provider.name, provider = provider })
 			end
 		end
 	end
