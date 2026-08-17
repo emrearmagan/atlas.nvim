@@ -1,4 +1,4 @@
----@class PullsCommentsTab : PullsPanelTabModule
+---@class PullsCommentsTab : PullsPRPanelTabModule
 local M = {}
 
 local request_scope = require("atlas.core.requests")
@@ -87,10 +87,9 @@ end
 -- Lifecycle
 
 ---@param pr PullRequest
----@param _repo PullsRepo|nil
 ---@param refresh fun()
 ---@param opts { force_refresh: boolean|nil }|nil
-function M.on_select(pr, _repo, refresh, opts)
+function M.on_select(pr, refresh, opts)
 	M.reset()
 	local request_generation = generation
 

@@ -1,4 +1,4 @@
----@class BitbucketProviderPanel : PullsProviderPanel
+---@class BitbucketProviderPRPanel : PullsProviderPRPanel
 local M = {}
 
 local icons = require("atlas.ui.shared.icons")
@@ -49,7 +49,7 @@ function M.chips(pr, _loading)
 	return chips
 end
 
----@return PullsPanelTab[]
+---@return PullsPRPanelTab[]
 function M.tabs()
 	local overview_icon, overview_hl = icons.general("overview")
 	local conversation_icon, conversation_hl = icons.general("conversation")

@@ -128,12 +128,13 @@ local function submit_pending(pr, review_id, event, body, on_done)
 		"-f",
 		"query=" .. SUBMIT_REVIEW_MUTATION,
 	}, function(result, err)
-		if err then
-			on_done(false, err)
+		if err or type(result) ~= "table" then
+			on_done(false, err or "Failed to submit review")
 			return
 		end
-		local review = (((result or {}).data or {}).submitPullRequestReview or {}).pullRequestReview
-		if type(review) ~= "table" or tostring(review.id or "") == "" then
+		local payload = json.nilify(result.data.submitPullRequestReview)
+		local review = payload and json.nilify(payload.pullRequestReview)
+		if not review or tostring(review.id or "") == "" then
 			on_done(false, "GitHub did not return the submitted review")
 			return
 		end
@@ -172,12 +173,13 @@ local function create(pr, pull_request_id, event, body, on_done)
 		"-f",
 		"query=" .. CREATE_REVIEW_MUTATION,
 	}, function(result, err)
-		if err then
-			on_done(false, err)
+		if err or type(result) ~= "table" then
+			on_done(false, err or "Failed to submit review")
 			return
 		end
-		local review = (((result or {}).data or {}).addPullRequestReview or {}).pullRequestReview
-		if type(review) ~= "table" or tostring(review.id or "") == "" then
+		local payload = json.nilify(result.data.addPullRequestReview)
+		local review = payload and json.nilify(payload.pullRequestReview)
+		if not review or tostring(review.id or "") == "" then
 			on_done(false, "GitHub did not return the submitted review")
 			return
 		end
@@ -221,12 +223,13 @@ local function find_pending(pr, on_done)
 		"-f",
 		"query=" .. PENDING_REVIEW_QUERY,
 	}, function(result, err)
-		if err then
-			on_done(nil, nil, err)
+		if err or type(result) ~= "table" then
+			on_done(nil, nil, err or "Failed to find pending review")
 			return
 		end
-		local pull_request = (((result or {}).data or {}).repository or {}).pullRequest
-		if type(pull_request) ~= "table" or tostring(pull_request.id or "") == "" then
+		local repository = json.nilify(result.data.repository)
+		local pull_request = repository and json.nilify(repository.pullRequest)
+		if not pull_request or tostring(pull_request.id or "") == "" then
 			on_done(nil, nil, "GitHub did not return the pull request")
 			return
 		end
@@ -397,9 +400,9 @@ local function fetch_comments(pr, opts, on_done)
 		local pull_request
 		local threads = {}
 		for _, page in ipairs(result) do
-			local data = type(page) == "table" and page.data or nil
-			local page_pr = data and data.repository and data.repository.pullRequest
-			if type(page_pr) ~= "table" then
+			local repository = json.nilify(page.data.repository)
+			local page_pr = repository and json.nilify(repository.pullRequest)
+			if not page_pr then
 				on_done(nil, "Missing pull request review data")
 				return
 			end
@@ -462,7 +465,7 @@ local function fetch_tasks(pr, opts, on_done)
 		end
 		local tasks = {}
 		for _, page in ipairs(result) do
-			for _, raw in ipairs(type(page) == "table" and page or {}) do
+			for _, raw in ipairs(page) do
 				vim.list_extend(tasks, mapper.to_tasks(raw))
 			end
 		end
@@ -601,13 +604,13 @@ function M.with_pending(pr, review, commit_oid, use_review, on_error)
 			if cancelled then
 				return
 			end
-			if err then
-				on_error(err)
+			if err or type(result) ~= "table" then
+				on_error(err or "Failed to create pending review")
 				return
 			end
-			local data = result and result.data or {}
-			local created = data.addPullRequestReview and data.addPullRequestReview.pullRequestReview
-			if type(created) ~= "table" or tostring(created.id or "") == "" then
+			local data = result.data
+			local created = json.nilify(data.addPullRequestReview and data.addPullRequestReview.pullRequestReview)
+			if not created or tostring(created.id or "") == "" then
 				on_error("GitHub did not return the pending review")
 				return
 			end
@@ -687,7 +690,8 @@ end
 ---@param raw table|nil
 ---@return PullsAuthor|nil
 local function review_author(raw)
-	if type(raw) ~= "table" or tostring(raw.login or "") == "" then
+	raw = json.nilify(raw)
+	if not raw or tostring(raw.login or "") == "" then
 		return nil
 	end
 	local login = tostring(raw.login)
@@ -744,8 +748,9 @@ function M.fetch_context(pr, opts, on_done)
 		local pull_request
 		local reviewed_files = {}
 		for _, page in ipairs(result) do
-			local current = (((page or {}).data or {}).repository or {}).pullRequest
-			if type(current) ~= "table" then
+			local repository = json.nilify(page.data.repository)
+			local current = repository and json.nilify(repository.pullRequest)
+			if not current then
 				on_done(nil, "Failed to fetch review context")
 				return
 			end
@@ -780,10 +785,10 @@ function M.fetch_context(pr, opts, on_done)
 			add(review_author(raw))
 		end
 		for _, raw in ipairs(((pull_request.reviews or {}).nodes or {})) do
-			add(review_author(type(raw) == "table" and raw.author or nil))
+			add(review_author(raw.author))
 		end
 		for _, raw in ipairs(((pull_request.reviewRequests or {}).nodes or {})) do
-			add(review_author(type(raw) == "table" and (raw.requestedReviewer or raw) or nil))
+			add(review_author(raw.requestedReviewer or raw))
 		end
 
 		local context = { authors = authors, reviewed_files = reviewed_files }

@@ -1,6 +1,7 @@
 local M = {}
 
 local diff_parser = require("atlas.core.git.diff_parser")
+local json = require("atlas.core.json")
 local mapper = require("atlas.pulls.providers.bitbucket.api.mapper")
 local service = require("atlas.pulls.providers.bitbucket.api.service")
 
@@ -32,8 +33,8 @@ function M.fetch_diffstat(pr, opts, on_done)
 		---@type PullsDiffstatEntry[]
 		local entries = {}
 		for _, item in ipairs((result or {}).values or {}) do
-			local new_file = type(item.new) == "table" and item.new or {}
-			local old_file = type(item.old) == "table" and item.old or {}
+			local new_file = json.safe_table(item.new)
+			local old_file = json.safe_table(item.old)
 			local status = tostring(item.status or ""):lower()
 			if status == "" then
 				status = "modified"

@@ -90,7 +90,7 @@ local function map_discussions(discussions)
 	for _, discussion in ipairs(discussions) do
 		local discussion_id = id_tail(discussion.id)
 		local first_id = nil
-		for _, raw in ipairs(type(discussion.notes) == "table" and discussion.notes.nodes or {}) do
+		for _, raw in ipairs(discussion.notes.nodes) do
 			if raw.system == true then
 				local entry = normalizer.to_activity_from_note(raw)
 				if entry then
@@ -155,12 +155,12 @@ function M.add(key, body, on_done)
 
 	local endpoint = string.format("/projects/%s/issues/%d/discussions", service.url_encode(path), iid)
 	return service.request("POST", endpoint, { body = body }, function(result, err)
-		if err or type(result) ~= "table" then
-			on_done(nil, err or "Empty response")
+		if err then
+			on_done(nil, err)
 			return
 		end
 		local discussion_id = tostring(result.id or "")
-		local notes = type(result.notes) == "table" and result.notes or {}
+		local notes = result.notes
 		local comment = normalizer.to_comment_from_note(notes[1], nil, discussion_id)
 		if comment == nil then
 			on_done(nil, "GitLab did not return the created comment")
@@ -198,8 +198,8 @@ function M.reply_in_discussion(key, parent, body, on_done)
 	local endpoint =
 		string.format("/projects/%s/issues/%d/discussions/%s/notes", service.url_encode(path), iid, discussion_id)
 	return service.request("POST", endpoint, { body = body }, function(result, err)
-		if err or type(result) ~= "table" then
-			on_done(nil, err or "Empty response")
+		if err then
+			on_done(nil, err)
 			return
 		end
 		service.delete_memory_cache(discussions_cache_key(path, iid))
@@ -241,8 +241,8 @@ function M.edit(key, comment, body, on_done)
 		)
 	end
 	return service.request("PUT", endpoint, { body = body }, function(result, err)
-		if err or type(result) ~= "table" then
-			on_done(nil, err or "Empty response")
+		if err then
+			on_done(nil, err)
 			return
 		end
 		service.delete_memory_cache(discussions_cache_key(path, iid))

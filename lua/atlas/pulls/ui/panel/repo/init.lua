@@ -168,7 +168,7 @@ end
 local function notify_tab(repo, opts)
 	local tab_mod = get_tab_module(panel_state.current_tab)
 	if tab_mod and tab_mod.on_select then
-		tab_mod.on_select(nil, repo, refresh_panel, opts)
+		tab_mod.on_select(repo, refresh_panel, opts)
 	end
 end
 

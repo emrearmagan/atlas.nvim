@@ -53,10 +53,9 @@ local function to_items(repo)
 		if author == "" then
 			author = nil
 		end
-		local branch_icon, branch_icon_hl = icons.pulls("branch")
+		local branch_icon = icons.pulls("branch")
 		table.insert(items, {
 			icon = branch_icon,
-			icon_hl = branch_icon_hl,
 			author = tostring(branch.name or ""),
 			additional = author,
 			right_text = branch.date and utils.relative_time_text(branch.date) or nil,
@@ -121,11 +120,10 @@ function M.render(_repo, width)
 	return lines, spans, line_map
 end
 
----@param _pr PullRequest|nil
 ---@param repo PullsRepo|nil
 ---@param refresh fun()
 ---@param opts PullsFetchOpts|nil
-function M.on_select(_pr, repo, refresh, opts)
+function M.on_select(repo, refresh, opts)
 	opts = opts or {}
 	local detail = require("atlas.pulls.ui.panel.repo.state").current_repo_details
 	if repo == nil then

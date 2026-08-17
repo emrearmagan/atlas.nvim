@@ -21,7 +21,7 @@ local function append_separator(width, lines, spans)
 	table.insert(spans, { line = #lines - 1, start_col = 0, end_col = #line, hl_group = "AtlasBorder" })
 end
 
----@param state table
+---@param state PullsRepoIssuesTabState
 ---@param width integer
 ---@param lines string[]
 ---@param spans table[]
@@ -52,7 +52,7 @@ local function render_filter_bar(state, width, lines, spans)
 	append_separator(width, lines, spans)
 end
 
----@param state table
+---@param state PullsRepoIssuesTabState
 ---@param width integer
 ---@param repository_loading boolean
 ---@param issue_type_hl? fun(color: string): string

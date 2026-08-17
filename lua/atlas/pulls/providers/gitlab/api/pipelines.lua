@@ -65,20 +65,18 @@ function M.fetch(pr, opts, on_done)
 		end
 
 		local pipelines = {}
-		for _, item in ipairs(type(result) == "table" and result or {}) do
-			if type(item) == "table" then
-				local id = item.id
-				table.insert(pipelines, {
-					name = string.format("Pipeline #%s", tostring(id or "")),
-					state = map_state(item.status),
-					provider_state = tostring(item.status or ""),
-					url = type(item.web_url) == "string" and item.web_url or nil,
-					key = id and tostring(id) or nil,
-					provider_id = id and tostring(id) or nil,
-					commit_hash = tostring(item.sha or ""),
-					jobs = {},
-				})
-			end
+		for _, item in ipairs(result) do
+			local id = item.id
+			table.insert(pipelines, {
+				name = string.format("Pipeline #%s", tostring(id or "")),
+				state = map_state(item.status),
+				provider_state = tostring(item.status or ""),
+				url = type(item.web_url) == "string" and item.web_url or nil,
+				key = id and tostring(id) or nil,
+				provider_id = id and tostring(id) or nil,
+				commit_hash = tostring(item.sha or ""),
+				jobs = {},
+			})
 		end
 
 		if #pipelines == 0 then
@@ -118,20 +116,18 @@ function M.fetch(pr, opts, on_done)
 					if jobs_err then
 						first_err = first_err or tostring(jobs_err)
 					else
-						for _, job in ipairs(type(jobs) == "table" and jobs or {}) do
-							if type(job) == "table" then
-								table.insert(pipeline.jobs, {
-									id = job.id or "",
-									name = tostring(job.name or "Job"),
-									state = map_state(job.status),
-									provider_state = tostring(job.status or ""),
-									url = type(job.web_url) == "string" and job.web_url or nil,
-									stage = type(job.stage) == "string" and job.stage or nil,
-									started_at = job.started_at,
-									completed_at = job.finished_at,
-									duration = tonumber(job.duration),
-								})
-							end
+						for _, job in ipairs(jobs) do
+							table.insert(pipeline.jobs, {
+								id = job.id or "",
+								name = tostring(job.name or "Job"),
+								state = map_state(job.status),
+								provider_state = tostring(job.status or ""),
+								url = type(job.web_url) == "string" and job.web_url or nil,
+								stage = type(job.stage) == "string" and job.stage or nil,
+								started_at = job.started_at,
+								completed_at = job.finished_at,
+								duration = tonumber(job.duration),
+							})
 						end
 					end
 					finish()

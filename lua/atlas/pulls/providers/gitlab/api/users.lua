@@ -14,8 +14,8 @@ function M.fetch_user(on_done)
 	end
 
 	return service.request("GET", "/user", nil, function(result, err)
-		if err or type(result) ~= "table" then
-			on_done(nil, err or "Empty response")
+		if err then
+			on_done(nil, err)
 			return
 		end
 		local user = mapper.to_user(result)
@@ -42,7 +42,7 @@ function M.list_members(project_path, query, on_done)
 	end
 
 	return service.request("GET", endpoint, nil, function(result, err)
-		if err or type(result) ~= "table" then
+		if err then
 			on_done(nil, err)
 			return
 		end

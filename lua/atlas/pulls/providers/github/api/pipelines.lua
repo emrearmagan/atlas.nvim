@@ -2,6 +2,7 @@ local M = {}
 
 local providers = require("atlas.pulls.providers")
 local cli = require("atlas.providers.github.client").pulls
+local json = require("atlas.core.json")
 
 ---@param url string|nil
 ---@return integer|nil
@@ -243,8 +244,8 @@ function M.fetch_details(pr, pipeline, _opts, on_done)
 
 	local endpoint = string.format("repos/%s/actions/runs/%d/jobs?per_page=100", repo_slug, run_id)
 	return cli.gh({ "api", endpoint }, function(result, err)
-		if err then
-			on_done(nil, err)
+		if err or type(result) ~= "table" then
+			on_done(nil, err or "Failed to fetch pipeline details")
 			return
 		end
 
@@ -254,7 +255,7 @@ function M.fetch_details(pr, pipeline, _opts, on_done)
 		end
 
 		local jobs = {}
-		for _, raw_job in ipairs(type(result) == "table" and result.jobs or {}) do
+		for _, raw_job in ipairs(result.jobs or {}) do
 			local job_id = raw_job.id or ""
 			local job = existing_jobs[tostring(job_id)] or {}
 			job.id = job_id
@@ -266,7 +267,7 @@ function M.fetch_details(pr, pipeline, _opts, on_done)
 			job.completed_at = raw_job.completed_at
 			job.duration = duration(raw_job.started_at, raw_job.completed_at)
 			job.steps = {}
-			for _, raw_step in ipairs(type(raw_job.steps) == "table" and raw_job.steps or {}) do
+			for _, raw_step in ipairs(json.safe_table(raw_job.steps)) do
 				table.insert(job.steps, {
 					id = string.format("%s:%s", tostring(job_id), tostring(raw_step.number or #job.steps + 1)),
 					name = tostring(raw_step.name or "Step"),

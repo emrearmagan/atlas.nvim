@@ -102,10 +102,10 @@ function M.set_persistent_cache(key, value, ttl)
 	cache.set(key, value, ttl or M.cache_ttl())
 end
 
----@param result any
+---@param result table
 ---@return string|nil
 function M.api_error_message(result)
-	if type(result) ~= "table" or result.error == nil then
+	if result.error == nil then
 		return nil
 	end
 	if type(result.error) == "table" and result.error.message then

@@ -1,4 +1,4 @@
----@class ConversationTab : PullsPanelTabModule
+---@class ConversationTab : PullsPRPanelTabModule
 local M = {}
 
 local state = require("atlas.pulls.ui.panel.pr.tabs.conversation.state")
@@ -16,10 +16,9 @@ function M.reset()
 end
 
 ---@param pr PullRequest
----@param _repo PullsRepo|nil
 ---@param refresh fun()
 ---@param opts { force_refresh: boolean|nil }|nil
-function M.on_select(pr, _repo, refresh, opts)
+function M.on_select(pr, refresh, opts)
 	local request_generation = state.activate(pr)
 	opts = opts or {}
 

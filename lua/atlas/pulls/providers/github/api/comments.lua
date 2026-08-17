@@ -77,20 +77,20 @@ mutation($reviewId:ID!,$path:String!,$body:String!,$subjectType:PullRequestRevie
 	vim.list_extend(args, { "-f", "query=" .. query })
 
 	return cli.gh(args, function(result, err)
-		if err then
-			on_done(nil, err)
+		if err or type(result) ~= "table" then
+			on_done(nil, err or "Failed to create review thread")
 			return
 		end
 
-		local data = result and result.data or {}
-		local thread = data.addPullRequestReviewThread and data.addPullRequestReviewThread.thread
-		local nodes = type(thread) == "table" and json.safe_table(thread.comments).nodes or {}
-		local node = nodes[#nodes]
-		if type(thread) ~= "table" or tostring(thread.id or "") == "" then
+		local payload = json.nilify(result.data.addPullRequestReviewThread)
+		local thread = payload and json.nilify(payload.thread)
+		if not thread or tostring(thread.id or "") == "" then
 			on_done(nil, "GitHub did not return the created review thread")
 			return
 		end
-		if type(node) ~= "table" or json.nilify(node.databaseId) == nil then
+		local nodes = json.safe_table(json.safe_table(thread.comments).nodes)
+		local node = json.nilify(nodes[#nodes])
+		if not node or json.nilify(node.databaseId) == nil then
 			on_done(nil, "GitHub did not return the created review comment")
 			return
 		end
@@ -267,14 +267,14 @@ local function edit_pending_comment(pr, comment, node_id, on_done)
 		"-f",
 		"query=" .. UPDATE_REVIEW_COMMENT_MUTATION,
 	}, function(result, err)
-		if err then
-			on_done(nil, err)
+		if err or type(result) ~= "table" then
+			on_done(nil, err or "Failed to update comment")
 			return
 		end
-		local data = json.safe_table(json.safe_table(result).data)
+		local data = json.safe_table(result.data)
 		local payload = json.safe_table(json.nilify(data.updatePullRequestReviewComment))
 		local node = json.nilify(payload.pullRequestReviewComment)
-		if type(node) ~= "table" or json.nilify(node.databaseId) == nil then
+		if not node or json.nilify(node.databaseId) == nil then
 			on_done(nil, "GitHub did not return the updated comment")
 			return
 		end
@@ -558,13 +558,13 @@ mutation($threadId:ID!,$reviewId:ID,$body:String!){
 			vim.list_extend(args, { "-f", "query=" .. query })
 
 			return cli.gh(args, function(result, err)
-				if err then
-					on_done(nil, err)
+				if err or type(result) ~= "table" then
+					on_done(nil, err or "Failed to create reply")
 					return
 				end
-				local data = result and result.data or {}
-				local reply = data.addPullRequestReviewThreadReply and data.addPullRequestReviewThreadReply.comment
-				if type(reply) ~= "table" or json.nilify(reply.databaseId) == nil then
+				local payload = json.nilify(result.data.addPullRequestReviewThreadReply)
+				local reply = payload and json.nilify(payload.comment)
+				if not reply or json.nilify(reply.databaseId) == nil then
 					on_done(nil, "GitHub did not return the created reply")
 					return
 				end

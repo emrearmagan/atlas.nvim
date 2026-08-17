@@ -116,6 +116,16 @@
 ---@class PullsRepoTags
 ---@field entries PullsRepoTag[]
 
+---@class PullsRepoIssue
+---@field number integer|string
+---@field title string
+---@field state "open"|"closed"
+---@field author string
+---@field created_at string
+---@field comments integer
+---@field url string
+---@field issue_type { name: string, color: string }|nil
+
 --------------------------------------------------------------------------------
 -- Group (PRs grouped by repository)
 --------------------------------------------------------------------------------

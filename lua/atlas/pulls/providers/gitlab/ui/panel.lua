@@ -1,4 +1,4 @@
----@class GitLabPullsProviderPanel : PullsProviderPanel
+---@class GitLabProviderPRPanel : PullsProviderPRPanel
 local M = {}
 
 local header = require("atlas.pulls.ui.panel.components.header")
@@ -139,7 +139,7 @@ function M.fetch_header(pr, opts, on_done)
 	}
 end
 
----@return PullsPanelTab[]
+---@return PullsPRPanelTab[]
 function M.tabs()
 	local overview_icon, overview_hl = icons.general("overview")
 	local conversation_icon, conversation_hl = icons.general("conversation")

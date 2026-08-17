@@ -378,16 +378,7 @@ function M.create_pr(opts, on_done)
 			return
 		end
 
-		local id = nil
-		local url = nil
-		if type(result) == "table" then
-			id = result.id
-			if type(result.links) == "table" and type(result.links.html) == "table" then
-				url = result.links.html.href
-			end
-		end
-
-		on_done({ id = id, url = url, message = "PR created" }, nil)
+		on_done({ id = result.id, url = result.links.html.href, message = "PR created" }, nil)
 	end, {
 		action = "Create PR",
 		workspace = workspace,
@@ -430,10 +421,10 @@ function M.fetch_default_reviewers(opts, on_done)
 
 		local reviewers = {}
 		local found = {}
-		local values = type(result) == "table" and type(result.values) == "table" and result.values or {}
+		local values = result.values or {}
 		for _, entry in ipairs(values) do
-			local user = type(entry) == "table" and (type(entry.user) == "table" and entry.user or entry) or {}
-			local uuid = type(user) == "table" and tostring(user.uuid or "") or ""
+			local user = entry.user
+			local uuid = tostring(user.uuid or "")
 			if uuid ~= "" then
 				found[uuid] = true
 				local nickname = tostring(user.nickname or "")

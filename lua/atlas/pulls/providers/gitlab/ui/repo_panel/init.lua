@@ -22,7 +22,7 @@ function M.tabs()
 			label = "Issues",
 			icon = issue_icon,
 			icon_hl = issue_hl,
-			mod = require("atlas.pulls.providers.gitlab.ui.repo_panel.issues"),
+			mod = require("atlas.pulls.ui.panel.repo.tabs.issues"),
 		},
 		{
 			key = "branches",

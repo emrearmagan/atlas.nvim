@@ -305,6 +305,7 @@ return {
 			fetch_details = repositories_api.fetch_detail,
 			fetch_branches = repositories_api.fetch_branches,
 			fetch_tags = repositories_api.fetch_tags,
+			fetch_issues = repositories_api.fetch_issues,
 			delete_branch = repositories_api.delete_branch,
 		},
 		pipelines = {

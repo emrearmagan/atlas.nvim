@@ -68,8 +68,7 @@ end
 ---@return PullsPipelineJob[]
 local function parse_jobs(result)
 	local jobs = {}
-	for index, item in ipairs((result or {}).values or {}) do
-		local job = type(item) == "table" and item or {}
+	for index, job in ipairs((result or {}).values or {}) do
 		table.insert(jobs, {
 			id = tostring(job.uuid or index),
 			name = tostring(job.name or "Job"),
@@ -126,8 +125,7 @@ function M.fetch_pipelines(pr, opts, on_done)
 		---@type PullsPipeline[]
 		local pipelines = {}
 		local pipeline_jobs = {}
-		for _, item in ipairs((result or {}).values or {}) do
-			local status = type(item) == "table" and item or {}
+		for _, status in ipairs((result or {}).values or {}) do
 			local url = tostring(status.url or "")
 			local id = pipeline_id(url)
 			local pipeline = {
