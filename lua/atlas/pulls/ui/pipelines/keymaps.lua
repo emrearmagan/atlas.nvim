@@ -27,7 +27,18 @@ end
 ---@param actions { close: fun(), show_logs: fun(), refresh: fun(), open_url: fun(), open_actions: fun() }
 function M.setup_pipelines(buf, title, actions)
 	local items = {}
-	add_help_action(items, "pulls.pipelines.open", actions.show_logs, "Show job logs", 1)
+	local log_keys = keymaps.resolve("pulls.pipelines.open") or {}
+	vim.list_extend(log_keys, keymaps.resolve("ui.show_details") or {})
+	vim.list_extend(log_keys, keymaps.resolve("ui.select") or {})
+	if #log_keys > 0 then
+		table.insert(items, {
+			key = log_keys,
+			desc = "Show job logs",
+			index = 1,
+			callback = actions.show_logs,
+			opts = { silent = true, nowait = true },
+		})
+	end
 	add_help_action(items, "ui.refresh", actions.refresh, "Refresh pipelines", 2)
 	add_help_action(items, "ui.open_in_browser", actions.open_url, "Open pipeline in browser", 3)
 	add_help_action(items, "ui.open_actions", actions.open_actions, "Open pipeline actions", 4)
