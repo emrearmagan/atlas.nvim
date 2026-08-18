@@ -182,7 +182,7 @@ M.register({
 		end
 
 		vim.ui.input(
-			{ prompt = "Delete Atlas caches, cloned repositories, local notes, and logs? [y/N]: " },
+			{ prompt = "Delete Atlas caches, cloned repositories, local notes, starred items, and logs? [y/N]: " },
 			function(answer)
 				answer = vim.trim(tostring(answer or "")):lower()
 				if answer ~= "y" and answer ~= "yes" then
@@ -191,6 +191,11 @@ M.register({
 				local cleared, err = require("atlas.pulls.notes").clear_all()
 				if not cleared then
 					notify.error(err or "Unable to delete local notes")
+					return
+				end
+				local stars_cleared, stars_err = require("atlas.core.starred").clear_all()
+				if not stars_cleared then
+					notify.error(stars_err or "Unable to delete starred items")
 					return
 				end
 				require("atlas.core.cache").clear_all()
