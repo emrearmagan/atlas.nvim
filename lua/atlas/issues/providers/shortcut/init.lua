@@ -154,12 +154,12 @@ return {
 		},
 		comments = {
 			comment_completion = author_completion.for_issues,
+			fetch_activity = api.history.fetch,
 			fetch_conversation = M.fetch_conversation,
 			add_comment = api.comments.add_comment,
 			reply_comment = api.comments.reply_comment,
 			edit_comment = api.comments.edit_comment,
 			delete_comment = api.comments.delete_comment,
-			-- fetch_activity = M.fetch_activity,
 		},
 		-- notifications = require("atlas.issues.providers.shortcut.notifications"),
 		-- actions = require("atlas.issues.providers.shortcut.actions"),

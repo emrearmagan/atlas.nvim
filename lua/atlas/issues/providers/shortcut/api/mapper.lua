@@ -160,4 +160,111 @@ function M.to_comment(raw, users)
 	}
 end
 
+local ACTION_LABELS = {
+	create = "created",
+	update = "updated",
+	delete = "deleted",
+	merge = "merged",
+	push = "pushed",
+	close = "closed",
+	open = "opened",
+	reopen = "reopened",
+	sync = "synced",
+	comment = "commented on",
+	["bulk-update"] = "bulk updated",
+}
+
+local CHANGE_LABELS = {
+	workflow_state_id = "status",
+	owner_ids = "owners",
+	label_ids = "labels",
+	name = "name",
+	description = "description",
+	story_type = "type",
+	estimate = "points",
+	deadline = "deadline",
+	parent_story_id = "parent",
+	requested_by_id = "requester",
+	epic_id = "epic",
+	iteration_id = "iteration",
+	group_id = "team",
+	project_id = "project",
+	complete = "completion",
+	completed = "completion",
+	archived = "archived",
+	verb = "relationship",
+}
+
+---@param value string
+---@return string
+local function entity_label(value)
+	return value:gsub("^story%-", ""):gsub("[_-]", " ")
+end
+
+---@param action table
+---@return string|nil
+local function action_body(action)
+	local fields = {}
+	for field in pairs(json.safe_table(action.changes)) do
+		if CHANGE_LABELS[field] then
+			table.insert(fields, CHANGE_LABELS[field])
+		end
+	end
+	if #fields > 0 then
+		table.sort(fields)
+		return table.concat(fields, ", ")
+	end
+	if action.entity_type == "pull-request" then
+		return string.format("#%s %s", tostring(action.number), tostring(action.title))
+	end
+	if action.entity_type == "story-link" then
+		return string.format(
+			"#%s %s #%s",
+			tostring(action.subject_id),
+			tostring(action.verb),
+			tostring(action.object_id)
+		)
+	end
+	return json.safe_str(action.name) or json.safe_str(action.title) or json.safe_str(action.description)
+end
+
+---@param raw table
+---@return IssueActivityEntry[]
+function M.to_activity(raw)
+	local actor_name = json.safe_str(raw.actor_name)
+	if actor_name == nil or actor_name == "" then
+		actor_name = raw.automation_id and "Automation" or "Unknown"
+	end
+	local actor = {
+		account_id = json.safe_str(raw.member_id),
+		display_name = actor_name,
+	}
+	local entries = {}
+	for _, action in ipairs(json.safe_table(raw.actions)) do
+		local entity = entity_label(tostring(action.entity_type or "activity"))
+		local verb = ACTION_LABELS[tostring(action.action)] or tostring(action.action or "updated")
+		local label = entity == "comment" and verb == "created" and "commented" or (verb .. " " .. entity)
+		table.insert(entries, {
+			kind = tostring(action.entity_type or "history"),
+			actor = actor,
+			date = json.safe_str(raw.changed_at),
+			label = label,
+			body = action_body(action),
+		})
+	end
+	return entries
+end
+
+---@param history table[]
+---@return IssueActivityEntry[]
+function M.to_history(history)
+	local entries = {}
+	for _, raw in ipairs(history) do
+		for _, entry in ipairs(M.to_activity(raw)) do
+			table.insert(entries, entry)
+		end
+	end
+	return entries
+end
+
 return M
