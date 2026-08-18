@@ -19,8 +19,6 @@
 ---@field with_relationships boolean|nil
 
 ---@class IssuesViewConfig : AtlasIssuesViewConfig
----@field _kind "bookmarks"|nil
----@field _bookmarks table<string, any>|nil
 
 ---@class IssuesProvider
 ---@field id string

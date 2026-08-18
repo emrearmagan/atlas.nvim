@@ -150,7 +150,7 @@ local function views()
 	---@cast config AtlasGitHubConfig
 	local configured = type(config.views) == "table" and #config.views > 0 and config.views
 		or { { name = "Me", key = "1", search = "involves:@me", layout = "compact" } }
-	return require("atlas.ui.shared.bookmarks_view").append_to_views(configured, config.bookmarks, "S", "Search")
+	return configured
 end
 
 ---@param value string

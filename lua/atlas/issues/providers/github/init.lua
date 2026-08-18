@@ -278,7 +278,7 @@ function M.views()
 			search = "assignee:@me is:open",
 		},
 	}
-	return require("atlas.ui.shared.bookmarks_view").append_to_views(views, cfg.bookmarks, "S", "Search")
+	return views
 end
 
 local renderer = require("atlas.issues.providers.github.ui.renderer")

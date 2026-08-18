@@ -116,7 +116,7 @@ local function render_header(lines, spans, width)
 		})
 	)
 
-	local views = state.provider and state.provider.capabilities.core.views() or {}
+	local views = state.provider and require("atlas.ui.shared.bookmarks_view").views(state.provider, "pulls") or {}
 	local nav_source = {}
 	for _, v in ipairs(views or {}) do
 		table.insert(nav_source, v)
@@ -194,7 +194,14 @@ function M.render(opts)
 	local active = state.active_view
 	if type(active) == "table" and active._kind == "bookmarks" then
 		append_search_text(lines, spans)
-		require("atlas.ui.shared.bookmarks_view").render(lines, spans, line_map, active._bookmarks or {}, opts.width)
+		require("atlas.ui.shared.bookmarks_view").render(
+			lines,
+			spans,
+			line_map,
+			active._bookmarks or {},
+			opts.width,
+			active._starred
+		)
 
 		if state.error then
 			local error_text = tostring(state.error or ""):gsub("[\r\n]+", " | ")

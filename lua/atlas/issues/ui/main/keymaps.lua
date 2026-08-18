@@ -56,7 +56,7 @@ function M.register(buf, views)
 	local items = {}
 
 	for _, view in ipairs(views or {}) do
-		if view.key ~= nil and view.key ~= "" then
+		if view._kind ~= "bookmarks" and view.key ~= nil and view.key ~= "" then
 			local v = view
 			table.insert(items, {
 				key = v.key,
@@ -67,6 +67,23 @@ function M.register(buf, views)
 				end,
 			})
 		end
+	end
+
+	local bookmark_key = require("atlas.ui.shared.bookmarks_view").key("issues", provider.id)
+	if bookmark_key then
+		table.insert(items, {
+			key = bookmark_key,
+			desc = "Switch to bookmarks",
+			hidden = true,
+			callback = function()
+				for _, view in ipairs(require("atlas.ui.shared.bookmarks_view").views(provider, "issues")) do
+					if view._kind == "bookmarks" then
+						controller.switch_view(view)
+						return
+					end
+				end
+			end,
+		})
 	end
 
 	utils.insert_if(
@@ -137,9 +154,20 @@ function M.register(buf, views)
 
 	utils.insert_if(
 		items,
+		item("ui.toggle_star", {
+			desc = "Star or unstar issue",
+			index = 5,
+			callback = function()
+				controller.toggle_issue_star(selected_issue())
+			end,
+		})
+	)
+
+	utils.insert_if(
+		items,
 		item("ui.refresh", {
 			desc = "Reload selected issue",
-			index = 5,
+			index = 6,
 			callback = function()
 				controller.refresh_current_issue()
 			end,
@@ -150,7 +178,7 @@ function M.register(buf, views)
 		items,
 		item("ui.refresh_view", {
 			desc = "Refresh current view",
-			index = 6,
+			index = 7,
 			callback = function()
 				controller.refresh_current_view()
 			end,
@@ -161,7 +189,7 @@ function M.register(buf, views)
 		items,
 		item("ui.toggle_fold", {
 			desc = "Toggle issue children",
-			index = 7,
+			index = 8,
 			callback = function()
 				controller.toggle_current_issue_collapsed()
 			end,
@@ -172,7 +200,7 @@ function M.register(buf, views)
 		items,
 		item("ui.toggle_all_folds", {
 			desc = "Toggle all issue children",
-			index = 8,
+			index = 9,
 			callback = function()
 				controller.toggle_all_issues_collapsed()
 			end,
@@ -183,7 +211,7 @@ function M.register(buf, views)
 		items,
 		item("ui.copy_id", {
 			desc = "Copy issue key",
-			index = 9,
+			index = 10,
 			opts = { nowait = true },
 			callback = function()
 				local issue = selected_issue()
@@ -200,7 +228,7 @@ function M.register(buf, views)
 		items,
 		item("ui.copy_url", {
 			desc = "Copy issue URL",
-			index = 9,
+			index = 10,
 			opts = { nowait = true },
 			callback = function()
 				local issue = selected_issue()
@@ -219,7 +247,7 @@ function M.register(buf, views)
 			items,
 			item("issues.transition_issue", {
 				desc = "Transition issue",
-				index = 10,
+				index = 11,
 				callback = function()
 					local issue = selected_issue()
 					if issue == nil then
@@ -237,7 +265,7 @@ function M.register(buf, views)
 			items,
 			item("issues.change_assignee", {
 				desc = "Change assignee",
-				index = 11,
+				index = 12,
 				callback = function()
 					local issue = selected_issue()
 					if issue == nil then
@@ -255,7 +283,7 @@ function M.register(buf, views)
 			items,
 			item("issues.change_reporter", {
 				desc = "Change reporter",
-				index = 12,
+				index = 13,
 				callback = function()
 					local issue = selected_issue()
 					if issue == nil then
@@ -273,7 +301,7 @@ function M.register(buf, views)
 			items,
 			item("issues.edit_issue", {
 				desc = "Edit issue",
-				index = 13,
+				index = 14,
 				callback = function()
 					local issue = selected_issue()
 					if issue == nil then
@@ -290,7 +318,7 @@ function M.register(buf, views)
 		items,
 		item("ui.open_in_browser", {
 			desc = "Open issue in browser",
-			index = 14,
+			index = 15,
 			opts = { nowait = true },
 			callback = function()
 				local issue = selected_issue()
@@ -331,6 +359,7 @@ function M.remove(buf)
 	utils.insert_if(items, item("ui.refresh", { key = "" }))
 	utils.insert_if(items, item("ui.refresh_view", { key = "" }))
 	utils.insert_if(items, item("ui.show_details", { key = "" }))
+	utils.insert_if(items, item("ui.toggle_star", { key = "" }))
 	utils.insert_if(items, item("ui.toggle_fold", { key = "" }))
 	utils.insert_if(items, item("ui.toggle_all_folds", { key = "" }))
 

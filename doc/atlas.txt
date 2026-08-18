@@ -140,6 +140,9 @@ default.
 :Atlas clear notes
 	Open the local-notes manager or delete all local notes.
 
+:Atlas clear stars
+	Delete all locally starred pull requests and issues.
+
 :Atlas create pr
 :Atlas create issue
 	Start the pull-request or issue creation flow.
@@ -153,8 +156,8 @@ default.
 
 :Atlas clear
 :Atlas logs
-	Clear Atlas caches, cloned repositories, local notes, and logs, or toggle
-	the Atlas log buffer.
+	Clear Atlas caches, cloned repositories, local notes, starred items, and
+	logs, or toggle the Atlas log buffer.
 
                                                                    *:AtlasDiff*
 :AtlasDiff <base>...<head>
@@ -598,7 +601,8 @@ BOOKMARKS                                                      *atlas-bookmarks*
 Turn frequently used GitHub and GitLab searches or Jira JQL into named
 shortcuts. Use bookmarks for review queues, recurring project views, and the
 searches you return to throughout the day. Bookmarks appear alongside your
-configured views.
+configured views. Press `*` on a pull request or issue to star it. Starred
+items stay at the top of lists and appear in the first bookmark entry.
 
 ------------------------------------------------------------------------------
 CUSTOM ACTIONS                                    *atlas-custom-actions*
@@ -722,6 +726,7 @@ Defaults live under `keymaps` in `setup()`. Each entry accepts:
           mark_done = "d",
         },
         toggle_subscription     = "gS",
+        toggle_star             = "*",
         refresh                 = "r",
         refresh_view            = "R",
         open_actions            = "A",
