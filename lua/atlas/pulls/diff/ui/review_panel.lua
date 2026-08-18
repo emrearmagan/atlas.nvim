@@ -533,7 +533,7 @@ function M.register_keymaps(panel)
 		end
 	end
 	local entries = {}
-	add_mapping(entries, "ui.select", "Show item in diff", 1, function()
+	add_mapping(entries, { "ui.select", "ui.show_details" }, "Show item in diff", 1, function()
 		show_selected(false)
 	end)
 	add_mapping(entries, "pulls.review.focus_item", "Focus item in diff", 2, function()
