@@ -25,6 +25,7 @@ local function invalidate_conversation(key)
 	end
 
 	cli.delete_mem(string.format("github_issues:conversation:%s#%d", slug, number))
+	cli.delete_mem(string.format("github_issues:description:%s#%d", slug, number))
 end
 
 ---@param key string
