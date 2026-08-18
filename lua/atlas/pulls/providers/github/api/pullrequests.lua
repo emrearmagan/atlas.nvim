@@ -56,13 +56,13 @@ query($search: String!, $limit: Int!) {
 ]]
 
 ---@param search string
----@param on_done fun(groups: PullsGroup[], err: string[]|nil)
+---@param on_done fun(pulls: PullRequest[], err: string[]|nil)
 ---@param opts { force_load?: boolean, limit?: number }|nil
 ---@return { cancel: fun() }|nil
 function M.search_prs(search, on_done, opts)
 	opts = opts or {}
 	local limit = math.max(1, tonumber(opts.limit) or 50)
-	local cache_key = string.format("github:search:%s:limit:%d", search, limit)
+	local cache_key = string.format("github:pulls:search:%s:limit:%d", search, limit)
 
 	if not opts.force_load then
 		local cached, ok = cli.get_cache(cache_key)
@@ -88,11 +88,9 @@ function M.search_prs(search, on_done, opts)
 		end
 
 		local prs = mapper.to_search_results_from_graphql(result.data.search.nodes or {})
-		local groups = mapper.to_pull_request_groups(prs)
-
-		cli.set_cache(cache_key, groups)
-		logger.loginfo("GitHub GraphQL search complete", { count = #prs, groups = #groups })
-		on_done(groups, nil)
+		cli.set_cache(cache_key, prs)
+		logger.loginfo("GitHub GraphQL search complete", { count = #prs })
+		on_done(prs, nil)
 	end, {
 		action = "Search PRs",
 		search = search,

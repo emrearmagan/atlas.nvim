@@ -49,7 +49,7 @@ function M.views(provider, domain)
 			(bookmarks and bookmarks.label) or (provider_domain and provider_domain.bookmark_label) or "Search"
 		),
 		key = tostring(M.key(domain, provider.id)),
-		layout = "plain",
+		layout = domain == "pulls" and "grouped" or "plain",
 		_kind = "bookmarks",
 		_bookmarks = (bookmarks and bookmarks.items) or {},
 		_starred = { domain = domain, provider = provider.id },

@@ -26,7 +26,7 @@ end
 
 ---@param view AtlasPullsViewConfig
 ---@param opts PullsFetchOpts
----@param on_done fun(groups: PullsGroup[], err: string[]|nil)
+---@param on_done fun(pulls: PullRequest[], err: string[]|nil)
 ---@return { cancel: fun() }|nil
 local function fetch_pullrequests(view, opts, on_done)
 	---@cast view AtlasGitHubViewConfig

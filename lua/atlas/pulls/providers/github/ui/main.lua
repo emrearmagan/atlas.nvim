@@ -9,7 +9,6 @@ local state = require("atlas.pulls.state")
 local PR_ICON, PR_ICON_HL = icons.pulls("pr")
 local MERGED_PR_ICON, MERGED_PR_ICON_HL = icons.pulls("merged_pr")
 local DECLINED_PR_ICON, DECLINED_PR_ICON_HL = icons.pulls("declined_pr")
-local REPO_ICON = icons.pulls("repo")
 local STAR_ICON = icons.general("star")
 
 ---@param additions number
@@ -134,11 +133,13 @@ end
 ---@param lines string[]
 ---@param map table<integer, table>
 ---@param spans table[]
-local function add_pr_id_spans(lines, map, spans)
+---@param layout "compact"|"grouped"|"plain"
+local function add_pr_reference_spans(lines, map, spans, layout)
 	for lnum, item in pairs(map or {}) do
-		if type(item) == "table" and item.kind == "pr" then
+		if item.kind == "pr" then
 			local line = lines[lnum] or ""
-			local s, e = string.find(line, "#%d+")
+			local reference = (layout == "plain" and item.pr.repo_full_name or "") .. "#" .. tostring(item.pr.id)
+			local s, e = string.find(line, reference, 1, true)
 			if s and e then
 				table.insert(spans, {
 					line = lnum - 1,
@@ -192,69 +193,66 @@ local function compact_columns()
 	}
 end
 
----@param groups PullsGroup[]
+---@param pulls PullRequest[]
 ---@return table[]
-local function compact_rows(groups)
+local function compact_rows(pulls)
 	local rows = {}
-	for _, group in ipairs(groups or {}) do
-		local repo_label = group.repo.name or ""
-		for _, pr in ipairs(group.prs or {}) do
-			local id_str = tostring(pr.id or "")
-			local title = tostring(pr.title or "")
-			local author_name = helper.user_handle(pr.author)
-			local is_reloading = state.is_pr_reloading(pr.repo_full_name, pr.id)
-			local ci, ci_h = ci_icon_and_hl(pr)
-			local review, review_h = review_icon_and_hl(pr)
-			local diff_text, diff_highlights = diff_stats(pr.lines_added or 0, pr.lines_removed or 0)
-			local icon, icon_hl = pr_icon_and_hl(pr)
-			table.insert(rows, {
-				kind = "pr",
-				pr_icon = pr_icon_or_spinner(pr),
-				_pr_reloading = is_reloading,
-				_pr_icon_str = icon,
-				_pr_icon_hl = icon_hl,
-				repo_pr = (pr.is_starred and STAR_ICON .. " " or "") .. "#" .. id_str .. " " .. title,
-				conversation = tostring(pr.comments_count or 0),
-				ci = ci,
-				ci_hl = ci_h,
-				review = review,
-				review_hl = review_h,
-				diff = diff_text,
-				diff_hl = diff_highlights,
-				author = string.format("%s %s", icons.general("user"), utils.shorten_name(author_name, 20)),
-				author_hl = author_name,
-				created = utils.relative_time(pr.created_on),
-				updated = utils.relative_time(pr.updated_on),
-				_item = { kind = "pr", id = pr.id, repo = group.repo, pr = pr },
-			})
-			table.insert(rows, {
-				kind = "meta",
-				pr_icon = "",
-				repo_pr = repo_label,
-				conversation = "",
-				ci = "",
-				ci_hl = "",
-				review = "",
-				review_hl = "",
-				diff = "",
-				diff_hl = nil,
-				author = "",
-				created = "",
-				updated = "",
-				separator = true,
-				_item = { kind = "pr_meta", id = pr.id, repo = group.repo, pr = pr },
-			})
-		end
+	for _, pr in ipairs(pulls) do
+		local repo = helper.repo(pr)
+		local id_str = tostring(pr.id or "")
+		local title = tostring(pr.title or "")
+		local author_name = helper.user_handle(pr.author)
+		local is_reloading = state.is_pr_reloading(pr.repo_full_name, pr.id)
+		local ci, ci_h = ci_icon_and_hl(pr)
+		local review, review_h = review_icon_and_hl(pr)
+		local diff_text, diff_highlights = diff_stats(pr.lines_added or 0, pr.lines_removed or 0)
+		local icon, icon_hl = pr_icon_and_hl(pr)
+		table.insert(rows, {
+			kind = "pr",
+			pr_icon = pr_icon_or_spinner(pr),
+			_pr_reloading = is_reloading,
+			_pr_icon_str = icon,
+			_pr_icon_hl = icon_hl,
+			repo_pr = (pr.is_starred and STAR_ICON .. " " or "") .. "#" .. id_str .. " " .. title,
+			conversation = tostring(pr.comments_count or 0),
+			ci = ci,
+			ci_hl = ci_h,
+			review = review,
+			review_hl = review_h,
+			diff = diff_text,
+			diff_hl = diff_highlights,
+			author = string.format("%s %s", icons.general("user"), utils.shorten_name(author_name, 20)),
+			author_hl = author_name,
+			created = utils.relative_time(pr.created_on),
+			updated = utils.relative_time(pr.updated_on),
+			_item = { kind = "pr", id = pr.id, repo = repo, pr = pr },
+		})
+		table.insert(rows, {
+			kind = "meta",
+			pr_icon = "",
+			repo_pr = repo.name,
+			conversation = "",
+			ci = "",
+			ci_hl = "",
+			review = "",
+			review_hl = "",
+			diff = "",
+			diff_hl = nil,
+			author = "",
+			created = "",
+			updated = "",
+			separator = true,
+			_item = { kind = "pr_meta", id = pr.id, repo = repo, pr = pr },
+		})
 	end
 	return rows
 end
 
--- Plain layout
+-- Grouped and plain layouts
 
 ---@return table[]
-local function plain_columns()
+local function list_columns()
 	return {
-		{ key = "pr_icon", name = "", min_width = 1, can_grow = false, header_hl = "AtlasColumnHeader" },
 		{ key = "name", name = "Title", min_width = 42, header_hl = "AtlasColumnHeader" },
 		{
 			key = "conversation",
@@ -290,17 +288,28 @@ local function plain_columns()
 	}
 end
 
----@param groups PullsGroup[]
+---@param pulls PullRequest[]
+---@param layout "grouped"|"plain"
 ---@return table[]
-local function plain_rows(groups)
+local function list_rows(pulls, layout)
 	local rows = {}
-	for i, group in ipairs(groups or {}) do
-		local repo_label = group.repo.name or ""
-		if i > 1 then
+	local grouped = layout == "grouped"
+	local sections = {}
+	if grouped then
+		sections = helper.group_by_repo(pulls)
+	else
+		for _, pr in ipairs(pulls) do
+			table.insert(sections, { repo = helper.repo(pr), pulls = { pr } })
+		end
+	end
+	for i, section in ipairs(sections) do
+		if grouped then
+			if i > 1 then
+				table.insert(rows, { kind = "spacer" })
+			end
 			table.insert(rows, {
-				kind = "spacer",
-				pr_icon = "",
-				name = "",
+				kind = "repo",
+				name = section.repo.name,
 				conversation = "",
 				ci = "",
 				ci_hl = "",
@@ -311,29 +320,17 @@ local function plain_rows(groups)
 				author = "",
 				created = "",
 				updated = "",
+				_item = { kind = "repo", repo = section.repo },
 			})
+			table.insert(rows, { kind = "spacer" })
 		end
-		table.insert(rows, {
-			kind = "repo",
-			pr_icon = REPO_ICON,
-			name = repo_label,
-			repo_full_name = repo_label,
-			conversation = "",
-			ci = "",
-			ci_hl = "",
-			review = "",
-			review_hl = "",
-			diff = "",
-			diff_hl = nil,
-			author = "",
-			created = "",
-			updated = "",
-			separator = true,
-			_item = { kind = "repo", repo = group.repo },
-		})
-		for _, pr in ipairs(group.prs or {}) do
+		for pr_index, pr in ipairs(section.pulls) do
+			if not grouped and #rows > 0 then
+				table.insert(rows, { kind = "spacer" })
+			end
 			local id_str = tostring(pr.id or "")
 			local title = tostring(pr.title or "")
+			local reference = (grouped and "" or pr.repo_full_name) .. "#" .. id_str
 			local author_name = helper.user_handle(pr.author)
 			local icon = pr_icon_or_spinner(pr)
 			local _, icon_hl = pr_icon_and_hl(pr)
@@ -342,11 +339,10 @@ local function plain_rows(groups)
 			local diff_text, diff_highlights = diff_stats(pr.lines_added or 0, pr.lines_removed or 0)
 			table.insert(rows, {
 				kind = "pr",
-				pr_icon = icon,
 				_pr_reloading = state.is_pr_reloading(pr.repo_full_name, pr.id),
 				_pr_icon_str = icon,
 				_pr_icon_hl = icon_hl,
-				name = (pr.is_starred and STAR_ICON .. " " or "") .. "#" .. id_str .. " " .. title,
+				name = icon .. " " .. (pr.is_starred and STAR_ICON .. " " or "") .. reference .. " " .. title,
 				conversation = tostring(pr.comments_count or 0),
 				ci = ci,
 				ci_hl = ci_h,
@@ -358,8 +354,11 @@ local function plain_rows(groups)
 				author_hl = author_name,
 				created = utils.relative_time(pr.created_on),
 				updated = utils.relative_time(pr.updated_on),
-				_item = { kind = "pr", id = pr.id, repo = group.repo, pr = pr },
+				_item = { kind = "pr", id = pr.id, repo = section.repo, pr = pr },
 			})
+			if grouped and pr_index < #section.pulls then
+				table.insert(rows, { kind = "spacer" })
+			end
 		end
 	end
 	return rows
@@ -367,22 +366,22 @@ end
 
 -- Render
 
----@param groups PullsGroup[]
----@param layout string
+---@param pulls PullRequest[]
+---@param layout "compact"|"grouped"|"plain"
 ---@param opts { width: integer }
 ---@return PullsMainRenderResult
-function M.render(groups, layout, opts)
+function M.render(pulls, layout, opts)
 	local lines = {}
 	local spans = {}
 
 	local tbl_lines, tbl_map, tbl_spans
 
-	if layout == "plain" then
+	if layout == "grouped" or layout == "plain" then
 		tbl_lines, tbl_map, tbl_spans = table_tree.render({
 			width = opts.width,
 			margin = 1,
-			columns = plain_columns(),
-			rows = plain_rows(groups),
+			columns = list_columns(),
+			rows = list_rows(pulls, layout),
 			cell_hl = cell_hl,
 		})
 	else
@@ -390,12 +389,12 @@ function M.render(groups, layout, opts)
 			width = opts.width,
 			margin = 1,
 			columns = compact_columns(),
-			rows = compact_rows(groups),
+			rows = compact_rows(pulls),
 			cell_hl = cell_hl,
 		})
 	end
 
-	add_pr_id_spans(tbl_lines, tbl_map, tbl_spans)
+	add_pr_reference_spans(tbl_lines, tbl_map, tbl_spans, layout)
 
 	local base = #lines
 	for _, line in ipairs(tbl_lines) do

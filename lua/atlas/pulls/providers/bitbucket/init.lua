@@ -113,7 +113,7 @@ end
 
 ---@param view AtlasPullsViewConfig
 ---@param opts PullsFetchOpts
----@param on_done fun(groups: PullsGroup[], err: string[]|nil)
+---@param on_done fun(pulls: PullRequest[], err: string[]|nil)
 ---@return { cancel: fun() }|nil
 local function fetch_pullrequests(view, opts, on_done)
 	---@cast view AtlasBitbucketViewConfig
@@ -160,24 +160,18 @@ local function fetch_pullrequests(view, opts, on_done)
 		force_load = opts.force_load == true,
 		pagelen = opts.pagelen,
 		statuses = active_statuses,
-	}, function(groups, err)
+	}, function(pulls, err)
 		if type(view.filter) ~= "function" then
-			on_done(groups, err)
+			on_done(pulls, err)
 			return
 		end
 
 		local context = { user = require("atlas.pulls.state").current_user }
 		local filtered = {}
-		for _, group in ipairs(groups or {}) do
-			local prs = {}
-			for _, pr in ipairs(group.prs or {}) do
-				local ok, keep = pcall(view.filter, pr, context)
-				if ok and keep ~= false then
-					table.insert(prs, pr)
-				end
-			end
-			if #prs > 0 then
-				table.insert(filtered, vim.tbl_extend("force", group, { prs = prs }))
+		for _, pr in ipairs(pulls) do
+			local ok, keep = pcall(view.filter, pr, context)
+			if ok and keep ~= false then
+				table.insert(filtered, pr)
 			end
 		end
 		on_done(filtered, err)

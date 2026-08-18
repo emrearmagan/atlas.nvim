@@ -39,11 +39,13 @@ end
 ---@param table_lines string[]
 ---@param table_map table<integer, table>
 ---@param table_spans table[]
-local function add_pr_id_spans(table_lines, table_map, table_spans)
+---@param layout "compact"|"grouped"|"plain"
+local function add_pr_reference_spans(table_lines, table_map, table_spans, layout)
 	for lnum, item in pairs(table_map or {}) do
-		if type(item) == "table" and item.kind == "pr" then
+		if item.kind == "pr" then
 			local line = table_lines[lnum] or ""
-			local s, e = string.find(line, "#%d+")
+			local reference = (layout == "plain" and item.pr.repo_full_name or "") .. "#" .. tostring(item.pr.id)
+			local s, e = string.find(line, reference, 1, true)
 			if s and e then
 				table.insert(table_spans, {
 					line = lnum - 1,
@@ -57,10 +59,10 @@ local function add_pr_id_spans(table_lines, table_map, table_spans)
 end
 
 ---@param opts { width: integer }
----@param repos PullsGroup[]
+---@param pulls PullRequest[]
 ---@return string[], table[], table<integer, table>
-local function build_plain_content(opts, repos)
-	local table_data = helper.build_compact_table(repos)
+local function build_compact_content(opts, pulls)
+	local table_data = helper.build_compact_table(pulls)
 	local tbl_lines, tbl_map, tbl_spans = table_tree.render({
 		width = opts.width,
 		margin = 1,
@@ -68,15 +70,16 @@ local function build_plain_content(opts, repos)
 		rows = table_data.rows,
 		cell_hl = helper.cell_hl,
 	})
-	add_pr_id_spans(tbl_lines, tbl_map, tbl_spans)
+	add_pr_reference_spans(tbl_lines, tbl_map, tbl_spans, "compact")
 	return tbl_lines, tbl_spans, tbl_map
 end
 
 ---@param opts { width: integer }
----@param repos PullsGroup[]
+---@param pulls PullRequest[]
+---@param layout "grouped"|"plain"
 ---@return string[], table[], table<integer, table>
-local function build_plain_singleline_content(opts, repos)
-	local table_data = helper.build_plain_tree_table(repos)
+local function build_list_content(opts, pulls, layout)
+	local table_data = helper.build_list_table(pulls, layout)
 	local tbl_lines, tbl_map, tbl_spans = table_tree.render({
 		width = opts.width,
 		margin = 1,
@@ -84,7 +87,7 @@ local function build_plain_singleline_content(opts, repos)
 		rows = table_data.rows,
 		cell_hl = helper.cell_hl,
 	})
-	add_pr_id_spans(tbl_lines, tbl_map, tbl_spans)
+	add_pr_reference_spans(tbl_lines, tbl_map, tbl_spans, layout)
 	return tbl_lines, tbl_spans, tbl_map
 end
 
@@ -184,8 +187,9 @@ end
 function M.render(opts)
 	local lines, spans = {}, {}
 	local line_map = {}
+	local pulls = helper.starred_first(state.pulls or {})
 	local loading_text = string.format("%s Loading...", state.reload_spinner_frame or "⠋")
-	statusline.set_items(helper.build_statusline_items(state.pulls, state.current_user))
+	statusline.set_items(helper.build_statusline_items(pulls, state.current_user))
 
 	table.insert(lines, "")
 	render_header(lines, spans, opts.width)
@@ -216,15 +220,15 @@ function M.render(opts)
 		elseif state.is_loading then
 			table.insert(lines, "")
 			append_centered_loading(lines, loading_text, opts.width, opts.height)
-		elseif state.pulls and #state.pulls > 0 then
+		elseif #pulls > 0 then
 			table.insert(lines, "")
 			local body_lines, body_spans, body_map
 			local ui = state.provider and state.provider.capabilities.ui
 			if ui and ui.render then
-				local result = ui.render(state.pulls, "plain", { width = opts.width })
+				local result = ui.render(pulls, "grouped", { width = opts.width })
 				body_lines, body_spans, body_map = result.lines, result.spans, result.line_map
 			else
-				body_lines, body_spans, body_map = build_plain_singleline_content(opts, state.pulls)
+				body_lines, body_spans, body_map = build_list_content(opts, pulls, "grouped")
 			end
 			local body_base = #lines
 			utils.append_block(lines, spans, { lines = body_lines, highlights = body_spans })
@@ -251,17 +255,16 @@ function M.render(opts)
 		append_centered_loading(lines, loading_text, opts.width, opts.height)
 	else
 		local layout = state.active_view and state.active_view.layout or "compact"
-		local groups = state.pulls or {}
 		local body_lines, body_spans, body_map
 
 		local ui = state.provider and state.provider.capabilities.ui
 		if ui and ui.render then
-			local result = ui.render(groups, layout, { width = opts.width })
+			local result = ui.render(pulls, layout, { width = opts.width })
 			body_lines, body_spans, body_map = result.lines, result.spans, result.line_map
-		elseif layout == "plain" then
-			body_lines, body_spans, body_map = build_plain_singleline_content(opts, groups)
+		elseif layout == "grouped" or layout == "plain" then
+			body_lines, body_spans, body_map = build_list_content(opts, pulls, layout)
 		else
-			body_lines, body_spans, body_map = build_plain_content(opts, groups)
+			body_lines, body_spans, body_map = build_compact_content(opts, pulls)
 		end
 
 		local body_base = #lines

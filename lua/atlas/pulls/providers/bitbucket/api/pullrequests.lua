@@ -82,7 +82,7 @@ end
 
 ---@param view_repos AtlasBitbucketRepoRef[]
 ---@param opts { force_load: boolean, pagelen: number|nil, statuses: string[]|nil }
----@param on_done fun(groups: PullsGroup[], err: string[]|nil)
+---@param on_done fun(pulls: PullRequest[], err: string[]|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_pullrequests(view_repos, opts, on_done)
 	if view_repos == nil or #view_repos == 0 then
@@ -104,7 +104,7 @@ function M.fetch_pullrequests(view_repos, opts, on_done)
 
 	local pending = #view_repos
 	local done = false
-	local all_prs = {}
+	local results = {}
 	local errors = {}
 	local handles = {}
 
@@ -117,7 +117,7 @@ function M.fetch_pullrequests(view_repos, opts, on_done)
 		end
 	end
 
-	local function finish(prs, err)
+	local function finish(index, prs, err)
 		if done then
 			return
 		end
@@ -126,35 +126,38 @@ function M.fetch_pullrequests(view_repos, opts, on_done)
 			table.insert(errors, tostring(err))
 		end
 
-		for _, pr in ipairs(prs or {}) do
-			table.insert(all_prs, pr)
-		end
+		results[index] = prs
 
 		pending = pending - 1
 		if pending == 0 then
 			done = true
+			local all_prs = {}
+			for result_index = 1, #view_repos do
+				vim.list_extend(all_prs, results[result_index])
+			end
 
 			logger.loginfo("Bitbucket batch fetch completed", {
 				repo_count = #view_repos,
 				pr_count = #all_prs,
 				error_count = #errors,
 			})
-			local groups = mapper.to_pull_request_groups(all_prs)
 			if #errors > 0 then
-				on_done(groups, errors)
+				on_done(all_prs, errors)
 			else
-				on_done(groups, nil)
+				on_done(all_prs, nil)
 			end
 		end
 	end
 
-	for _, repo in ipairs(view_repos) do
+	for index, repo in ipairs(view_repos) do
 		local handle = fetch_pullrequests_single(repo.workspace, repo.repo, {
 			cache_ttl = ttl,
 			force = opts.force_load,
 			pagelen = opts.pagelen,
 			statuses = opts.statuses,
-		}, finish)
+		}, function(prs, err)
+			finish(index, prs, err)
+		end)
 		if handle ~= nil then
 			table.insert(handles, handle)
 		end

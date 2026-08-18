@@ -211,19 +211,19 @@ pulls = {
         {
           name = "My PRs",
           key = "1",
-          layout = "plain",
+          layout = "plain", -- "compact", "grouped", or "plain"
           search = "author:@me sort:updated-desc",
         },
         {
           name = "Team",
           key = "2",
-          layout = "compact",
+          layout = "compact", -- "compact", "grouped", or "plain"
           search = "org:your-org sort:updated-desc",
         },
         {
           name = "Repo",
           key = "3",
-          layout = "plain",
+          layout = "grouped",
           search = "repo:your-org/your-repo",
         },
       },
@@ -279,7 +279,7 @@ pulls = {
         {
           name = "Team",
           key = "1",
-          layout = "plain", -- "compact" or "plain"
+          layout = "grouped",
           repos = {
             { workspace = "your-workspace", repo = "atlas" },
             { workspace = "your-workspace", repo = "other-repo" },
@@ -315,6 +315,7 @@ pulls = {
         {
           name = "Assigned",
           key = "1",
+          layout = "grouped", -- "compact", "grouped", or "plain"
           scope = "assigned_to_me",
         },
         {
