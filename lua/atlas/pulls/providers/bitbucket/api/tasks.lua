@@ -19,7 +19,27 @@ end
 ---@param on_done fun(tasks: PullsComment[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_tasks(pr, opts, on_done)
-	local url = endpoint(pr) .. "?pagelen=100"
+	local fields = table.concat({
+		"values.id",
+		"values.comment.id",
+		"values.creator.display_name",
+		"values.creator.nickname",
+		"values.creator.username",
+		"values.creator.account_id",
+		"values.content.raw",
+		"values.created_on",
+		"values.resolved_on",
+		"values.resolved_by.display_name",
+		"values.resolved_by.nickname",
+		"values.resolved_by.username",
+		"values.resolved_by.account_id",
+		"values.pending",
+		"values.state",
+		"values.links.self.href",
+		"values.links.html.href",
+		"next",
+	}, ",")
+	local url = string.format("%s?pagelen=100&fields=%s", endpoint(pr), fields)
 	local key = string.format(
 		"bitbucket:pr:tasks:%s/%s/%s",
 		tostring(pr.workspace or ""),

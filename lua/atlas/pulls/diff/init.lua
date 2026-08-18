@@ -384,35 +384,22 @@ local function start_pr(context, command, refresh, on_done, target, existing)
 					fail(tostring(revision_err or "Unable to resolve pull request revisions"))
 					return
 				end
-				local head_hash = git.resolve_revision(root, head)
-				if not head_hash then
-					fail("Unable to resolve pull request head")
-					return
-				end
-				load_review({ root = root, base_revision = base, head_revision = head_hash })
+				load_review({ root = root, base_revision = base, head_revision = head })
 			end)
 		end) or request
 	end
 
-	if refresh then
-		view:update("Refreshing pull request...")
-		request = context.provider.capabilities.core.fetch_pullrequest(
-			context.pr,
-			{ force_load = true },
-			function(pr, err)
-				later(function()
-					if not pr then
-						fail(tostring(err or "Unable to refresh pull request"))
-						return
-					end
-					context.pr = pr
-					load_repository()
-				end)
+	view:update(refresh and "Refreshing pull request..." or "Loading pull request...")
+	request = context.provider.capabilities.core.fetch_pullrequest(context.pr, { force_load = true }, function(pr, err)
+		later(function()
+			if not pr then
+				fail(tostring(err or "Unable to load pull request"))
+				return
 			end
-		) or request
-	else
-		load_repository()
-	end
+			context.pr = pr
+			load_repository()
+		end)
+	end) or request
 	return {
 		cancel = function()
 			cancel()

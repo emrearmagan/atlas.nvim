@@ -3,13 +3,15 @@ local M = {}
 local providers = require("atlas.pulls.providers")
 local cli = require("atlas.providers.github.client").pulls
 local pipelines = require("atlas.pulls.providers.github.api.pipelines")
+local json = require("atlas.core.json")
 
 ---@return { login: string, state: "APPROVED"|"CHANGES_REQUESTED"|"COMMENTED"|"DISMISSED" }[], string[]
 local function parse_reviews(result)
 	local latest = {}
 	local order = {}
 	for _, review in ipairs(result.reviews or {}) do
-		local login = type(review.author) == "table" and tostring(review.author.login or "") or ""
+		local author = json.nilify(review.author)
+		local login = author and tostring(author.login or "") or ""
 		local state = tostring(review.state or ""):upper()
 		if login ~= "" and state ~= "PENDING" then
 			local at = tostring(review.submittedAt or "")
@@ -30,7 +32,7 @@ local function parse_reviews(result)
 
 	local pending = {}
 	for _, req in ipairs(result.reviewRequests or {}) do
-		local login = type(req) == "table" and tostring(req.login or "") or ""
+		local login = tostring(req.login or "")
 		if login ~= "" and latest[login] == nil then
 			table.insert(pending, login)
 		end
@@ -192,13 +194,13 @@ function M.fetch(pr, opts, on_done)
 				details = { "Draft pull requests cannot be merged." },
 			})
 		end
-		if type(mc_result) == "table" then
+		if mc_result then
 			table.insert(checks, reviews_check(mc_result))
 		end
 		local b = providers.pipelines_check(pipelines_result, "Pipelines")
 		if b then
 			table.insert(checks, b)
-		elseif type(mc_result) == "table" and mc_result.merge_state == "UNSTABLE" then
+		elseif mc_result and mc_result.merge_state == "UNSTABLE" then
 			table.insert(checks, {
 				key = "pipelines",
 				state = "warning",
@@ -206,7 +208,7 @@ function M.fetch(pr, opts, on_done)
 				details = { "A pipeline may be pending, failing, or require action." },
 			})
 		end
-		if type(mc_result) == "table" then
+		if mc_result then
 			local c = conflicts_check(mc_result.mergeable)
 			if c then
 				table.insert(checks, c)

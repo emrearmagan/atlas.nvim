@@ -1,13 +1,9 @@
 local GITLAB_REACTION_OPTIONS = require("atlas.ui.shared.emojis").gitlab()
 local resolver = require("atlas.providers.resolve")
-local request_scope = require("atlas.core.requests")
+local notifications_api = require("atlas.providers.gitlab.notifications").new("issues")
 
 ---@class GitLabIssuesProvider : IssuesProvider
 local M = {}
-
-function M.on_refresh()
-	require("atlas.providers.gitlab.client").issues.clear_memory_cache()
-end
 
 ---@param view IssuesViewConfig
 ---@param opts IssuesFetchOpts
@@ -46,7 +42,7 @@ end
 
 ---@param issue Issue
 ---@param opts { force_refresh: boolean|nil }|nil
----@param on_done fun(result: { comments: IssueComment[], events: IssueActivityEntry[], reaction_options: IssueReactionOption[]|nil }|nil, err: string|nil)
+---@param on_done fun(result: { comments: IssueComment[], events: IssueActivityEntry[] }|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_conversation(issue, opts, on_done)
 	opts = opts or {}
@@ -58,17 +54,8 @@ function M.fetch_conversation(issue, opts, on_done)
 		return nil
 	end
 
-	local requests = request_scope.new()
-	requests.all({
-		comments = function(done)
-			return notes.list_comments(key, { force_load = force }, done)
-		end,
-		events = function(done)
-			return notes.list_history(key, { force_load = force }, done)
-		end,
-	}, function(values, errors)
-		local err = errors.comments or errors.events
-		if err and values.comments == nil and values.events == nil then
+	return notes.list_conversation(key, { force_load = force }, function(result, err)
+		if err or result == nil then
 			on_done(nil, err)
 			return
 		end
@@ -84,14 +71,12 @@ function M.fetch_conversation(issue, opts, on_done)
 				created = raw.created_at or "",
 			})
 		end
-		vim.list_extend(comments, values.comments or {})
+		vim.list_extend(comments, result.comments)
 		on_done({
 			comments = comments,
-			events = values.events or {},
-			reaction_options = GITLAB_REACTION_OPTIONS,
+			events = result.events,
 		}, nil)
 	end)
-	return requests
 end
 
 ---@param issue Issue
@@ -114,13 +99,13 @@ function M.reply_comment(issue, parent, content, on_done)
 end
 
 ---@param issue Issue
----@param comment_id string
+---@param comment IssueComment
 ---@param content string
 ---@param on_done fun(comment: IssueComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.edit_comment(issue, comment_id, content, on_done)
+function M.edit_comment(issue, comment, content, on_done)
 	local key = tostring(issue.key or "")
-	if tostring(comment_id) == "__body__" then
+	if tostring(comment.id) == "__body__" then
 		local raw = issue._raw or {}
 		local project = tonumber(raw.project_id)
 		local iid = tonumber(raw.iid)
@@ -145,20 +130,20 @@ function M.edit_comment(issue, comment_id, content, on_done)
 			}, nil)
 		end)
 	end
-	return require("atlas.issues.providers.gitlab.api.notes").edit(key, comment_id, content, on_done)
+	return require("atlas.issues.providers.gitlab.api.notes").edit(key, comment, content, on_done)
 end
 
 ---@param issue Issue
----@param comment_id string
+---@param comment IssueComment
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.delete_comment(issue, comment_id, on_done)
-	if tostring(comment_id) == "__body__" then
+function M.delete_comment(issue, comment, on_done)
+	if tostring(comment.id) == "__body__" then
 		on_done(false, "Cannot delete the issue description")
 		return nil
 	end
 	local key = tostring(issue.key or "")
-	return require("atlas.issues.providers.gitlab.api.notes").delete(key, comment_id, on_done)
+	return require("atlas.issues.providers.gitlab.api.notes").delete(key, comment, on_done)
 end
 
 ---@param issue Issue
@@ -173,28 +158,6 @@ function M.add_reaction(issue, comment, key, on_done)
 	end
 	local issue_key = tostring(issue.key or "")
 	return require("atlas.issues.providers.gitlab.api.notes").add_reaction(issue_key, comment.id, key, on_done)
-end
-
----@param opts { force_load: boolean|nil }|nil
----@param on_done fun(notifications: AtlasNotification[]|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.fetch_notifications(opts, on_done)
-	local notifications = require("atlas.pulls.providers.gitlab.api.notifications")
-	return notifications.fetch(opts or {}, on_done)
-end
-
----@param id string
----@param on_done fun(ok: boolean, err: string|nil)
----@return { cancel: fun() }|nil
-function M.mark_notification_read(id, on_done)
-	return require("atlas.pulls.providers.gitlab.api.notifications").mark_read(id, on_done)
-end
-
----@param id string
----@param on_done fun(ok: boolean, err: string|nil)
----@return { cancel: fun() }|nil
-function M.mark_notification_done(id, on_done)
-	return require("atlas.pulls.providers.gitlab.api.notifications").mark_done(id, on_done)
 end
 
 ---@return AtlasGitLabIssuesViewConfig[]
@@ -313,9 +276,9 @@ return {
 			fetch_issues = M.fetch_issues,
 			fetch_issue = M.fetch_issue,
 			views = M.views,
-			refresh = M.on_refresh,
 		},
 		comments = {
+			reaction_options = GITLAB_REACTION_OPTIONS,
 			fetch_activity = M.fetch_activity,
 			fetch_conversation = M.fetch_conversation,
 			add_comment = M.add_comment,
@@ -325,9 +288,9 @@ return {
 			add_reaction = M.add_reaction,
 		},
 		notifications = {
-			fetch = M.fetch_notifications,
-			mark_read = M.mark_notification_read,
-			mark_done = M.mark_notification_done,
+			fetch = notifications_api.fetch,
+			mark_read = notifications_api.mark_read,
+			mark_done = notifications_api.mark_done,
 		},
 		actions = require("atlas.issues.providers.gitlab.actions"),
 		ui = {

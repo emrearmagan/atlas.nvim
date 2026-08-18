@@ -160,8 +160,13 @@ function M.approve(pr, _review, body, on_done)
 		return nil
 	end
 	return service.request("POST", url, nil, nil, function(_, err)
-		if err or vim.trim(body) == "" then
-			on_done(err == nil, err)
+		if err then
+			on_done(false, err)
+			return
+		end
+		service.clear_cache()
+		if vim.trim(body) == "" then
+			on_done(true, nil)
 			return
 		end
 		comments.add_comment(pr, body, nil, function(comment, comment_err)
@@ -182,8 +187,13 @@ function M.request_changes(pr, _review, body, on_done)
 		return nil
 	end
 	return service.request("POST", url, nil, nil, function(_, err)
-		if err or vim.trim(body) == "" then
-			on_done(err == nil, err)
+		if err then
+			on_done(false, err)
+			return
+		end
+		service.clear_cache()
+		if vim.trim(body) == "" then
+			on_done(true, nil)
 			return
 		end
 		comments.add_comment(pr, body, nil, function(comment, comment_err)

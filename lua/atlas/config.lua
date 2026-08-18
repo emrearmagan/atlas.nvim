@@ -90,6 +90,7 @@
 ---@class AtlasUIConfig
 ---@field global_statusline boolean|nil Set one statusline across all windows (default: true)
 ---@field picker AtlasPickerName|nil
+---@field listed_buffer boolean|nil Make the main Atlas dashboard a listed buffer (default: false)
 
 ---@class AtlasConfig
 ---@field ui AtlasUIConfig|nil
@@ -104,6 +105,7 @@ M.options = {
 	ui = {
 		global_statusline = true,
 		picker = "auto",
+		listed_buffer = false,
 	},
 	pulls = {
 		delete_notes = false,
@@ -133,18 +135,27 @@ M.options = {
 			previous_item = "k",
 			first_item = "gg",
 			last_item = "G",
+			select = "<CR>",
 			submit = "<C-s>",
 			help = "g?",
 			close = "q",
+			delete = "dd",
+			comments = {
+				add = { "a", "i" },
+				reply = "c",
+				edit = "e",
+				react = "gr",
+			},
 			toggle_panel = "p",
 			toggle_fold = "za",
 			toggle_all_folds = "zA",
 			previous_panel_tab = "<S-Tab>",
 			next_panel_tab = "<Tab>",
-			open_notifications = "N",
-			notifications_mark_read = "r",
-			notifications_mark_done = "d",
-			notifications_refresh = "R",
+			notifications = {
+				open = "N",
+				mark_read = "r",
+				mark_done = "d",
+			},
 			toggle_subscription = "gS",
 			refresh = "r",
 			refresh_view = "R",
@@ -158,14 +169,19 @@ M.options = {
 		pulls = {
 			open_diff = "gd",
 			checkout = "gc",
+			external_help = "gA", -- Atlas help in external diff viewers.
+			toggle_repo_panel = "o",
+			toggle_repo_issue_state = "t",
 			edit_title = "T",
 			edit_description = "D",
+			edit_reviewers = "gr",
+			edit_assignees = "ga",
 			review = {
-				show_item = "<CR>",
 				focus_item = "gd",
 				approve = "ga",
 				request_changes = "gr",
 				submit_review = "gs",
+				add_task = "<leader>t",
 				explorer = {
 					find_file = "<leader>ff",
 					next_file = { "]f", "<Tab>" },
@@ -191,10 +207,7 @@ M.options = {
 					submit_comment = "C",
 					add_suggestion = "s",
 					submit_suggestion = "S",
-					edit_comment = "e",
-					delete = "dd",
 					add_note = "<leader>n",
-					add_task = "T",
 					toggle_resolved = "x",
 				},
 			},
@@ -213,6 +226,7 @@ M.options = {
 			change_reporter = "gr",
 			edit_issue = "ge",
 			create_issue = "c",
+			toggle_description_mode = "m",
 		},
 	},
 }

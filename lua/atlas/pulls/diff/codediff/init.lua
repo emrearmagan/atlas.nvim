@@ -1,6 +1,7 @@
 local M = {}
 
 local config = require("atlas.config")
+local keymaps = require("atlas.core.keymaps")
 local comments = require("atlas.pulls.diff.comments")
 local position = require("atlas.pulls.diff.position")
 local review_keymaps = require("atlas.pulls.diff.keymaps")
@@ -330,7 +331,7 @@ local function register_review_buffers(session, buffers)
 	review_keymaps.register(session, {
 		buffers = valid,
 		reload = state.reload_view,
-		help_key = "gA",
+		help_key = keymaps.resolve("pulls.external_help"),
 		file_buffers = { state.lifecycle.get_explorer(state.tabpage).bufnr },
 		add_file_comment = function(pending)
 			local explorer = state.lifecycle.get_explorer(state.tabpage)

@@ -36,24 +36,19 @@ local function refresh_main()
 	end
 end
 
----@param action_id string
----@param fallback string
+---@param action_id AtlasKeymapActionId|string
 ---@return string[]
-local function resolve_keys(action_id, fallback)
-	local keys = resolver.resolve(action_id)
-	if type(keys) == "table" and #keys > 0 then
-		return keys
-	end
-	return { fallback }
+local function resolve_keys(action_id)
+	return resolver.resolve(action_id) or {}
 end
 
 local function popup_keys()
 	return {
-		mark_read = resolve_keys("ui.notifications_mark_read", "r"),
-		mark_done = resolve_keys("ui.notifications_mark_done", "d"),
-		refresh = resolve_keys("ui.notifications_refresh", "R"),
-		open_in_browser = resolve_keys("ui.open_in_browser", "gx"),
-		close = resolve_keys("ui.close", "q"),
+		mark_read = resolve_keys("ui.notifications.mark_read"),
+		mark_done = resolve_keys("ui.notifications.mark_done"),
+		refresh = resolve_keys("ui.refresh_view"),
+		open_in_browser = resolve_keys("ui.open_in_browser"),
+		close = resolve_keys("ui.close"),
 	}
 end
 
@@ -146,13 +141,22 @@ end
 
 local function build_footer_text()
 	local keys = popup_keys()
-	local items = {
-		string.format("%s open", keys.open_in_browser[1]),
-		string.format("%s mark read", keys.mark_read[1]),
-		string.format("%s mark done", keys.mark_done[1]),
-		string.format("%s refresh", keys.refresh[1]),
-		string.format("%s close", keys.close[1]),
-	}
+	local items = {}
+	if keys.open_in_browser[1] then
+		table.insert(items, keys.open_in_browser[1] .. " open")
+	end
+	if keys.mark_read[1] then
+		table.insert(items, keys.mark_read[1] .. " mark read")
+	end
+	if keys.mark_done[1] then
+		table.insert(items, keys.mark_done[1] .. " mark done")
+	end
+	if keys.refresh[1] then
+		table.insert(items, keys.refresh[1] .. " refresh")
+	end
+	if keys.close[1] then
+		table.insert(items, keys.close[1] .. " close")
+	end
 	return " " .. table.concat(items, " | ") .. " "
 end
 

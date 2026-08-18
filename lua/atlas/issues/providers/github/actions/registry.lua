@@ -6,7 +6,8 @@ local picker = require("atlas.picker")
 local statusline = require("atlas.ui.statusline")
 local cli = require("atlas.providers.github.client").issues
 local issues_api = require("atlas.issues.providers.github.api.issues")
-local users_api = require("atlas.issues.providers.github.api.users")
+local users_api = require("atlas.providers.github.users").new("issues")
+local issue_cache = require("atlas.issues.providers.github.api.cache")
 local normalizer = require("atlas.issues.providers.github.api.mapper")
 
 ---@param ctx AtlasIssueActionContext
@@ -397,7 +398,7 @@ local function search_issues(_, done)
 	if default == "" or not default:find("is:issue") then
 		default = "is:issue " .. default
 	end
-	require("atlas.pulls.providers.github.completion.search").open(vim.trim(default) .. " ")
+	require("atlas.providers.github.completion.search").open(vim.trim(default) .. " ")
 	done(nil, nil)
 end
 
@@ -480,6 +481,7 @@ local function toggle_subscription(ctx, done)
 				done(nil, tostring(err))
 				return
 			end
+			issue_cache.invalidate(tostring(issue.key or ""))
 			issue.is_subscribed = (next_state == "SUBSCRIBED")
 			statusline.notify("success", issue.is_subscribed and "Subscribed" or "Unsubscribed", 1200)
 			done({ issue_key = issue.key }, nil)

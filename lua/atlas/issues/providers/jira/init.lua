@@ -2,6 +2,7 @@
 local M = {}
 
 local resolver = require("atlas.providers.resolve")
+local request_scope = require("atlas.core.requests")
 
 ---@param value string
 ---@param parsed AtlasParsedUrl|nil
@@ -72,8 +73,9 @@ end
 
 ---@param issues Issue[]
 ---@param opts IssuesFetchOpts
+---@param requests AtlasRequestScope
 ---@param on_done fun(enriched: Issue[])
-local function enrich_with_parents(issues, opts, on_done)
+local function enrich_with_parents(issues, opts, requests, on_done)
 	local issues_cfg = require("atlas.config").options.issues or {}
 	if not relationships_enabled(issues_cfg, opts) then
 		on_done(issues)
@@ -111,7 +113,12 @@ local function enrich_with_parents(issues, opts, on_done)
 	local parent_jql = "key in (" .. table.concat(escaped, ",") .. ")"
 
 	local issues_api = require("atlas.issues.providers.jira.api.issues")
-	issues_api.search_issues(parent_jql, function(page, err)
+	requests.run(function(done)
+		return issues_api.search_issues(parent_jql, done, {
+			force_load = opts and opts.force_load == true or false,
+			max_results = #missing,
+		})
+	end, function(page, err)
 		if err or page == nil then
 			on_done(issues)
 			return
@@ -124,10 +131,7 @@ local function enrich_with_parents(issues, opts, on_done)
 			end
 		end
 		on_done(issues)
-	end, {
-		force_load = opts and opts.force_load == true or false,
-		max_results = #missing,
-	})
+	end)
 end
 
 ---@param view IssuesViewConfig
@@ -144,20 +148,24 @@ function M.fetch_issues(view, opts, on_done)
 		return nil
 	end
 
-	return issues_api.search_issues(jql, function(page, err)
+	local requests = request_scope.new()
+	requests.run(function(done)
+		return issues_api.search_issues(jql, done, {
+			force_load = opts and opts.force_load == true or false,
+			next_page_token = opts and opts.next_page_token or nil,
+			max_results = opts and opts.max_results or nil,
+		})
+	end, function(page, err)
 		if err or page == nil then
 			on_done({}, nil, true, err or "Failed to fetch issues")
 			return
 		end
 
-		enrich_with_parents(page.issues or {}, opts or {}, function(enriched)
+		enrich_with_parents(page.issues or {}, opts or {}, requests, function(enriched)
 			on_done(enriched, page.nextPageToken, page.isLast == true, nil)
 		end)
-	end, {
-		force_load = opts and opts.force_load == true or false,
-		next_page_token = opts and opts.next_page_token or nil,
-		max_results = opts and opts.max_results or nil,
-	})
+	end)
+	return requests
 end
 
 ---@param issue_key string
@@ -204,19 +212,19 @@ function M.reply_comment(issue, parent, content, on_done)
 end
 
 ---@param issue Issue
----@param comment_id string
+---@param comment IssueComment
 ---@param content string
 ---@param on_done fun(comment: IssueComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.edit_comment(issue, comment_id, content, on_done)
+function M.edit_comment(issue, comment, content, on_done)
 	local issue_key = tostring(issue.key or "")
 	local comments_api = require("atlas.issues.providers.jira.api.comments")
-	return comments_api.edit_comment(issue_key, comment_id, content, on_done)
+	return comments_api.edit_comment(issue_key, tostring(comment.id), content, on_done)
 end
 
 ---@param issue Issue
 ---@param opts { force_refresh: boolean|nil }|nil
----@param on_done fun(result: { comments: IssueComment[], events: IssueActivityEntry[], reaction_options: IssueReactionOption[]|nil }|nil, err: string|nil)
+---@param on_done fun(result: { comments: IssueComment[], events: IssueActivityEntry[] }|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_conversation(issue, opts, on_done)
 	opts = opts or {}
@@ -236,19 +244,18 @@ function M.fetch_conversation(issue, opts, on_done)
 		on_done({
 			comments = comments or {},
 			events = {},
-			reaction_options = nil,
 		}, nil)
 	end)
 end
 
 ---@param issue Issue
----@param comment_id string
+---@param comment IssueComment
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.delete_comment(issue, comment_id, on_done)
+function M.delete_comment(issue, comment, on_done)
 	local issue_key = tostring(issue.key or "")
 	local comments_api = require("atlas.issues.providers.jira.api.comments")
-	return comments_api.delete_comment(issue_key, comment_id, on_done)
+	return comments_api.delete_comment(issue_key, tostring(comment.id), on_done)
 end
 
 ---@param issue Issue

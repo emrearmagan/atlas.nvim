@@ -96,12 +96,10 @@ function M.fetch_activity(pr, opts, on_done)
 			return
 		end
 		local entries = {}
-		for _, note in ipairs(type(result) == "table" and result or {}) do
-			if type(note) == "table" then
-				local e = mapper.to_activity(note)
-				if e then
-					table.insert(entries, e)
-				end
+		for _, note in ipairs(result) do
+			local e = mapper.to_activity(note)
+			if e then
+				table.insert(entries, e)
 			end
 		end
 		entries = squash_inline_thread_activity(entries)

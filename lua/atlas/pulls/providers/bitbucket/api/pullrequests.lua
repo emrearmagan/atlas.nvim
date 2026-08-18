@@ -22,11 +22,13 @@ end
 
 ---@param workspace string
 ---@param repo string
+---@param statuses string[]
+---@param pagelen integer
 ---@return string
-local function cache_key(workspace, repo, statuses)
+local function cache_key(workspace, repo, statuses, pagelen)
 	local sorted = vim.deepcopy(statuses)
 	table.sort(sorted)
-	return string.format("bitbucket:prs:%s/%s:%s", workspace, repo, table.concat(sorted, ","))
+	return string.format("bitbucket:prs:%s/%s:%s:pagelen:%d", workspace, repo, table.concat(sorted, ","), pagelen)
 end
 
 ---@param workspace string
@@ -36,9 +38,10 @@ end
 ---@return { job_id: integer, cancel: fun() }|nil
 local function fetch_pullrequests_single(workspace, repo, opts, on_done)
 	local statuses_for_key = opts.statuses or { state.pr_state }
-	local key = cache_key(workspace, repo, statuses_for_key)
+	local pagelen = tonumber(opts.pagelen) or 50
+	local key = cache_key(workspace, repo, statuses_for_key, pagelen)
 	if not opts.force then
-		local cached, ok = service.get_cache(key)
+		local cached, ok = service.get_persistent_cache(key)
 		if ok then
 			logger.loginfo("Bitbucket cache hit", { workspace = workspace, repo = repo })
 			on_done(cached, nil)
@@ -56,7 +59,7 @@ local function fetch_pullrequests_single(workspace, repo, opts, on_done)
 		workspace,
 		repo,
 		table.concat(state_params, "&"),
-		tonumber(opts.pagelen) or 50
+		pagelen
 	)
 	return service.request("GET", endpoint, nil, nil, function(result, err)
 		if err then
@@ -65,7 +68,7 @@ local function fetch_pullrequests_single(workspace, repo, opts, on_done)
 		end
 
 		local normalized = mapper.to_pull_requests_list(result, workspace, repo)
-		service.set_cache(key, normalized, opts.cache_ttl)
+		service.set_persistent_cache(key, normalized, opts.cache_ttl)
 		logger.loginfo("Fetch success", {
 			workspace = workspace,
 			repo = repo,
@@ -267,8 +270,15 @@ function M.merge(pr, opts, on_done)
 		payload.message = opts.message
 	end
 
-	local body = vim.fn.empty(payload) == 1 and nil or vim.json.encode(payload)
-	return service.request("POST", merge_url, nil, body, on_done)
+	local body = next(payload) == nil and nil or vim.json.encode(payload)
+	return service.request("POST", merge_url, nil, body, function(result, err)
+		if err then
+			on_done(nil, err)
+			return
+		end
+		service.clear_cache()
+		on_done(result, nil)
+	end)
 end
 
 ---@param pr PullRequest
@@ -306,8 +316,10 @@ function M.fetch_reviewers(pr, opts, on_done)
 		on_done(nil, "No PR self link available")
 		return nil
 	end
+	local sep = self_url:find("?") and "&" or "?"
+	local url = string.format("%s%sfields=participants", self_url, sep)
 
-	return service.request("GET", self_url, nil, nil, function(result, err)
+	return service.request("GET", url, nil, nil, function(result, err)
 		if err then
 			on_done(nil, err)
 			return
@@ -375,16 +387,8 @@ function M.create_pr(opts, on_done)
 			return
 		end
 
-		local id = nil
-		local url = nil
-		if type(result) == "table" then
-			id = result.id
-			if type(result.links) == "table" and type(result.links.html) == "table" then
-				url = result.links.html.href
-			end
-		end
-
-		on_done({ id = id, url = url, message = "PR created" }, nil)
+		service.clear_cache()
+		on_done({ id = result.id, url = result.links.html.href, message = "PR created" }, nil)
 	end, {
 		action = "Create PR",
 		workspace = workspace,
@@ -427,10 +431,10 @@ function M.fetch_default_reviewers(opts, on_done)
 
 		local reviewers = {}
 		local found = {}
-		local values = type(result) == "table" and type(result.values) == "table" and result.values or {}
+		local values = result.values or {}
 		for _, entry in ipairs(values) do
-			local user = type(entry) == "table" and (type(entry.user) == "table" and entry.user or entry) or {}
-			local uuid = type(user) == "table" and tostring(user.uuid or "") or ""
+			local user = entry.user
+			local uuid = tostring(user.uuid or "")
 			if uuid ~= "" then
 				found[uuid] = true
 				local nickname = tostring(user.nickname or "")

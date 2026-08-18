@@ -22,7 +22,7 @@ local function action_context(pr, buf)
 	}
 end
 
----@return PullsPanelTabModule|nil
+---@return PullsPRPanelTabModule|nil
 local function current_tab_mod()
 	local provider = require("atlas.pulls.state").provider
 	local panel = provider and provider.capabilities.ui and provider.capabilities.ui.panel
@@ -108,19 +108,18 @@ function M.register(buf)
 		})
 	)
 
-	utils.insert_if(
-		items,
-		item("ui.refresh", {
-			desc = "Refresh tab",
-			opts = { nowait = true, silent = true },
-			callback = function()
-				local pr = panel_state.current_pr
-				if pr then
-					require("atlas.pulls.ui.main.controller").refresh_pr(pr)
-				end
-			end,
-		})
-	)
+	local refresh_item = {
+		desc = "Refresh tab",
+		opts = { nowait = true, silent = true },
+		callback = function()
+			local pr = panel_state.current_pr
+			if pr then
+				require("atlas.pulls.ui.main.controller").refresh_pr(pr)
+			end
+		end,
+	}
+	utils.insert_if(items, item("ui.refresh", refresh_item))
+	utils.insert_if(items, item("ui.refresh_view", refresh_item))
 
 	local state = require("atlas.pulls.state")
 	if state.provider then
@@ -354,6 +353,7 @@ function M.remove(buf)
 	utils.insert_if(general, remove_item("ui.next_item"))
 	utils.insert_if(general, remove_item("ui.previous_item"))
 	utils.insert_if(general, remove_item("ui.refresh"))
+	utils.insert_if(general, remove_item("ui.refresh_view"))
 	utils.insert_if(general, remove_item("ui.open_actions"))
 	utils.insert_if(general, remove_item("ui.open_in_browser"))
 	utils.insert_if(general, remove_item("pulls.open_diff"))

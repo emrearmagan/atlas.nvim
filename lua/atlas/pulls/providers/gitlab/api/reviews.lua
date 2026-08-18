@@ -302,11 +302,8 @@ function M.fetch_reviewer_states(pr, opts, on_done)
 			return
 		end
 		local by_username = {}
-		for _, item in ipairs(type(result) == "table" and result or {}) do
-			local user = type(item) == "table" and type(item.user) == "table" and item.user or nil
-			if user and type(user.username) == "string" and type(item.state) == "string" then
-				by_username[user.username] = item.state
-			end
+		for _, item in ipairs(result) do
+			by_username[item.user.username] = item.state
 		end
 		service.set_memory_cache(cache_key, by_username)
 		on_done(by_username, nil)

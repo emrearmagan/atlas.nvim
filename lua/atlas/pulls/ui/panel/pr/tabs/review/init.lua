@@ -1,4 +1,4 @@
----@class PullsCommentsTab : PullsPanelTabModule
+---@class PullsCommentsTab : PullsPRPanelTabModule
 local M = {}
 
 local request_scope = require("atlas.core.requests")
@@ -6,7 +6,7 @@ local md_editor = require("atlas.ui.popups.editor")
 local statusline = require("atlas.ui.statusline")
 local panel_state = require("atlas.pulls.ui.panel.pr.state")
 local renderer = require("atlas.pulls.ui.panel.pr.tabs.review.renderer")
-local review_threads = require("atlas.ui.components.review_threads")
+local review_threads = require("atlas.pulls.ui.components.review_threads")
 local state = require("atlas.pulls.ui.panel.pr.tabs.review.state")
 local keymaps = require("atlas.pulls.ui.panel.pr.tabs.review.keymaps")
 local review = require("atlas.pulls.actions.review")
@@ -87,10 +87,9 @@ end
 -- Lifecycle
 
 ---@param pr PullRequest
----@param _repo PullsRepo|nil
 ---@param refresh fun()
 ---@param opts { force_refresh: boolean|nil }|nil
-function M.on_select(pr, _repo, refresh, opts)
+function M.on_select(pr, refresh, opts)
 	M.reset()
 	local request_generation = generation
 
@@ -137,13 +136,7 @@ function M.render(_pr, width)
 		return renderer.render(width, state.status, nil)
 	end
 	local data = state.data
-	local provider = get_provider()
-	return renderer.render(
-		width,
-		data and data.comments or nil,
-		data and data.tasks or nil,
-		provider and provider.capabilities.tasks
-	)
+	return renderer.render(width, data and data.comments or nil, data and data.tasks or nil)
 end
 
 ---@param _lnum integer

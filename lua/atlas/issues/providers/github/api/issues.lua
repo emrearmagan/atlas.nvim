@@ -1,7 +1,9 @@
 local M = {}
 
 local cli = require("atlas.providers.github.client").issues
+local cache = require("atlas.issues.providers.github.api.cache")
 local normalizer = require("atlas.issues.providers.github.api.mapper")
+local json = require("atlas.core.json")
 
 local SEARCH_GQL = [[
 query($search: String!, $limit: Int!, $withRelationships: Boolean!) {
@@ -130,17 +132,12 @@ function M.search_issues(search, on_done, opts)
 		"-F",
 		"withRelationships=" .. tostring(with_relationships),
 	}, function(result, err)
-		if err then
-			on_done(nil, err)
+		if err or type(result) ~= "table" then
+			on_done(nil, err or "Failed to search issues")
 			return
 		end
 
-		local nodes = type(result) == "table"
-				and type(result.data) == "table"
-				and type(result.data.search) == "table"
-				and result.data.search.nodes
-			or nil
-		local issues = normalizer.to_search_results(type(nodes) == "table" and nodes or {})
+		local issues = normalizer.to_search_results(result.data.search.nodes or {})
 		cli.set_cache(cache_key, issues)
 		on_done(issues, nil)
 	end, {
@@ -198,11 +195,8 @@ function M.get_issue(key, on_done, opts)
 			return
 		end
 
-		local raw = type(result.data) == "table"
-				and type(result.data.repository) == "table"
-				and result.data.repository.issue
-			or nil
-		local issue = normalizer.to_issue(type(raw) == "table" and raw or {}, slug)
+		local repository = json.nilify(result.data.repository)
+		local issue = normalizer.to_issue(repository and repository.issue, slug)
 		if issue then
 			cli.set_mem(cache_key, issue)
 		end
@@ -231,7 +225,7 @@ function M.set_state(key, state, on_done)
 			on_done(false, err)
 			return
 		end
-		cli.delete_cache(string.format("github_issues:get:%s#%d", slug, number))
+		cache.invalidate(key)
 		on_done(true, nil)
 	end, {
 		action = "Issue state change",
@@ -277,7 +271,7 @@ local function edit_issue_diff(key, diff, add_flag, remove_flag, on_done, ctx)
 			on_done(false, err)
 			return
 		end
-		cli.delete_cache(string.format("github_issues:get:%s#%d", slug, number))
+		cache.invalidate(key)
 		on_done(true, nil)
 	end, ctx)
 end
@@ -322,21 +316,23 @@ function M.list_labels(slug, on_done)
 	return cli.gh({
 		"api",
 		"--paginate",
+		"--slurp",
 		string.format("repos/%s/labels?per_page=100", slug),
 	}, function(result, err)
-		if err then
-			on_done(nil, err)
+		if err or type(result) ~= "table" then
+			on_done(nil, err or "Failed to fetch labels")
 			return
 		end
 
 		local list = {}
-		if type(result) == "table" then
-			for _, raw in ipairs(result) do
-				if type(raw) == "table" and type(raw.name) == "string" then
+		for _, page in ipairs(result) do
+			for _, raw in ipairs(page) do
+				local name = json.safe_str(raw.name)
+				if name then
 					table.insert(list, {
-						name = raw.name,
-						color = type(raw.color) == "string" and raw.color or nil,
-						description = type(raw.description) == "string" and raw.description or nil,
+						name = name,
+						color = json.safe_str(raw.color),
+						description = json.safe_str(raw.description),
 					})
 				end
 			end
@@ -344,43 +340,6 @@ function M.list_labels(slug, on_done)
 		on_done(list, nil)
 	end, {
 		action = "Fetch repo labels",
-		slug = slug,
-	})
-end
-
----@param slug string
----@param on_done fun(assignees: IssueUser[]|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.list_assignees(slug, on_done)
-	if type(slug) ~= "string" or slug == "" then
-		vim.schedule(function()
-			on_done(nil, "Missing repository slug")
-		end)
-		return nil
-	end
-
-	return cli.gh({
-		"api",
-		"--paginate",
-		string.format("repos/%s/assignees?per_page=100", slug),
-	}, function(result, err)
-		if err then
-			on_done(nil, err)
-			return
-		end
-
-		local list = {}
-		if type(result) == "table" then
-			for _, raw in ipairs(result) do
-				local user = normalizer.to_user(raw)
-				if user then
-					table.insert(list, user)
-				end
-			end
-		end
-		on_done(list, nil)
-	end, {
-		action = "Fetch repo assignees",
 		slug = slug,
 	})
 end
@@ -408,22 +367,25 @@ function M.list_milestones(slug, on_done)
 	return cli.gh({
 		"api",
 		"--paginate",
+		"--slurp",
 		string.format("repos/%s/milestones?state=open&per_page=100", slug),
 	}, function(result, err)
-		if err then
-			on_done(nil, err)
+		if err or type(result) ~= "table" then
+			on_done(nil, err or "Failed to fetch milestones")
 			return
 		end
 
 		local list = {}
-		if type(result) == "table" then
-			for _, raw in ipairs(result) do
-				if type(raw) == "table" and type(raw.number) == "number" and type(raw.title) == "string" then
+		for _, page in ipairs(result) do
+			for _, raw in ipairs(page) do
+				local number = tonumber(raw.number)
+				local title = json.safe_str(raw.title)
+				if number and title then
 					table.insert(list, {
-						number = raw.number,
-						title = raw.title,
-						state = type(raw.state) == "string" and raw.state or nil,
-						description = type(raw.description) == "string" and raw.description or nil,
+						number = number,
+						title = title,
+						state = json.safe_str(raw.state),
+						description = json.safe_str(raw.description),
 					})
 				end
 			end
@@ -474,21 +436,17 @@ function M.create_issue(opts, on_done)
 		tostring(opts.body or ""),
 	}
 
-	if type(opts.labels) == "table" then
-		for _, label in ipairs(opts.labels) do
-			if type(label) == "string" and label ~= "" then
-				table.insert(args, "--label")
-				table.insert(args, label)
-			end
+	for _, label in ipairs(opts.labels or {}) do
+		if label ~= "" then
+			table.insert(args, "--label")
+			table.insert(args, label)
 		end
 	end
 
-	if type(opts.assignees) == "table" then
-		for _, login in ipairs(opts.assignees) do
-			if type(login) == "string" and login ~= "" then
-				table.insert(args, "--assignee")
-				table.insert(args, login)
-			end
+	for _, login in ipairs(opts.assignees or {}) do
+		if login ~= "" then
+			table.insert(args, "--assignee")
+			table.insert(args, login)
 		end
 	end
 

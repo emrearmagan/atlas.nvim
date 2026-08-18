@@ -43,8 +43,8 @@ local function apply_spans(buf, spans)
 	end
 end
 
----@param tab_items PullsPanelTab[]
----@param get_tab_module fun(key: string): PullsPanelTabModule|nil
+---@param tab_items PullsPRPanelTab[]
+---@param get_tab_module fun(key: string): PullsPRPanelTabModule|nil
 function M.render(tab_items, get_tab_module)
 	local buf = layout.buf_id("detail")
 	local win = layout.win_id("detail")

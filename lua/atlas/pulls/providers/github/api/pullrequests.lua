@@ -4,6 +4,7 @@ local cli = require("atlas.providers.github.client").pulls
 local mapper = require("atlas.pulls.providers.github.api.mapper")
 local logger = require("atlas.core.logger")
 local memory_cache = require("atlas.core.memory_cache")
+local json = require("atlas.core.json")
 
 local GET_PR_GQL = [[
 query($owner: String!, $repo: String!, $number: Int!) {
@@ -81,23 +82,12 @@ function M.search_prs(search, on_done, opts)
 		"-F",
 		"limit=" .. tostring(limit),
 	}, function(result, err)
-		if err then
-			on_done({}, { err })
+		if err or type(result) ~= "table" then
+			on_done({}, { err or "Failed to search pull requests" })
 			return
 		end
 
-		local nodes = type(result) == "table"
-				and type(result.data) == "table"
-				and type(result.data.search) == "table"
-				and result.data.search.nodes
-			or nil
-
-		if type(nodes) ~= "table" then
-			on_done({}, nil)
-			return
-		end
-
-		local prs = mapper.to_search_results_from_graphql(nodes)
+		local prs = mapper.to_search_results_from_graphql(result.data.search.nodes or {})
 		local groups = mapper.to_pull_request_groups(prs)
 
 		cli.set_cache(cache_key, groups)
@@ -146,10 +136,9 @@ function M.get_pr(owner, repo, number, on_done, opts)
 			return
 		end
 
-		local pr_raw = type(result.data) == "table"
-			and type(result.data.repository) == "table"
-			and result.data.repository.pullRequest
-		if type(pr_raw) ~= "table" then
+		local repository = json.nilify(result.data.repository)
+		local pr_raw = repository and json.nilify(repository.pullRequest)
+		if not pr_raw then
 			on_done(nil, "PR not found")
 			return
 		end
@@ -355,7 +344,8 @@ local function parse_reviews(result)
 	local latest = {}
 	local order = {}
 	for _, review in ipairs(result.reviews or {}) do
-		local login = type(review.author) == "table" and tostring(review.author.login or "") or ""
+		local author = json.nilify(review.author)
+		local login = author and tostring(author.login or "") or ""
 		local state = tostring(review.state or ""):upper()
 		if login ~= "" and state ~= "PENDING" then
 			local at = tostring(review.submittedAt or "")
@@ -376,7 +366,7 @@ local function parse_reviews(result)
 
 	local pending = {}
 	for _, req in ipairs(result.reviewRequests or {}) do
-		local login = type(req) == "table" and tostring(req.login or "") or ""
+		local login = tostring(req.login or "")
 		if login ~= "" and latest[login] == nil then
 			table.insert(pending, login)
 		end
@@ -475,26 +465,28 @@ function M.fetch_default_reviewers(opts, on_done)
 	end
 
 	return cli.gh(
-		{ "api", "--paginate", string.format("repos/%s/collaborators?per_page=100", slug) },
+		{ "api", "--paginate", "--slurp", string.format("repos/%s/collaborators?per_page=100", slug) },
 		function(result, err)
-			if err then
-				on_done(nil, err)
+			if err or type(result) ~= "table" then
+				on_done(nil, err or "Failed to fetch repository collaborators")
 				return
 			end
 
 			local reviewers = {}
 			local by_login = {}
-			for _, raw in ipairs(type(result) == "table" and result or {}) do
-				local login = type(raw) == "table" and tostring(raw.login or "") or ""
-				if login ~= "" then
-					local reviewer = {
-						label = "@" .. login,
-						provider_id = login,
-						selected = false,
-						default = false,
-					}
-					by_login[login] = reviewer
-					table.insert(reviewers, reviewer)
+			for _, page in ipairs(result) do
+				for _, raw in ipairs(page) do
+					local login = tostring(raw.login or "")
+					if login ~= "" then
+						local reviewer = {
+							label = "@" .. login,
+							provider_id = login,
+							selected = false,
+							default = false,
+						}
+						by_login[login] = reviewer
+						table.insert(reviewers, reviewer)
+					end
 				end
 			end
 
@@ -674,20 +666,22 @@ function M.list_labels(slug, on_done)
 	return cli.gh({
 		"api",
 		"--paginate",
+		"--slurp",
 		string.format("repos/%s/labels?per_page=100", slug),
 	}, function(result, err)
-		if err then
-			on_done(nil, err)
+		if err or type(result) ~= "table" then
+			on_done(nil, err or "Failed to fetch labels")
 			return
 		end
 
 		local list = {}
-		if type(result) == "table" then
-			for _, raw in ipairs(result) do
-				if type(raw) == "table" and type(raw.name) == "string" then
+		for _, page in ipairs(result) do
+			for _, raw in ipairs(page) do
+				local name = json.safe_str(raw.name)
+				if name then
 					table.insert(list, {
-						name = raw.name,
-						color = type(raw.color) == "string" and raw.color or nil,
+						name = name,
+						color = json.safe_str(raw.color),
 					})
 				end
 			end

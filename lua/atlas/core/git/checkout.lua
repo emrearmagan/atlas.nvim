@@ -161,37 +161,38 @@ end
 ---@return string|nil head_revision
 ---@return string|nil err
 function M.pr_diff_revisions(pr)
-	local id = tostring(pr.id or "")
-	if id == "" then
-		return nil, nil, "Pull request ID is missing"
+	local base = tostring(pr.destination.commit_hash or "")
+	local head = tostring(pr.source.commit_hash or "")
+	if base == "" then
+		return nil, nil, "Pull request base commit is missing"
 	end
-	-- Stable refs let one cached repository hold several PRs without checking out branches.
-	local prefix = "refs/atlas/pulls/" .. id
-	return prefix .. "/base", prefix .. "/head", nil
+	if head == "" then
+		return nil, nil, "Pull request head commit is missing"
+	end
+	return base, head, nil
 end
 
 ---@param ref PullsRef
----@param local_ref string
 ---@return string remote
----@return string refspec
-local function fetch_target(ref, local_ref)
+---@return string remote_ref
+local function fetch_target(ref)
 	local remote = tostring(ref.fetch_remote or "")
 	local source = tostring(ref.fetch_ref or "")
 	if source == "" then
 		local branch = tostring(ref.branch or "")
 		source = branch ~= "" and "refs/heads/" .. branch or ""
 	end
-	return remote ~= "" and remote or "origin", source ~= "" and "+" .. source .. ":" .. local_ref or ""
+	return remote ~= "" and remote or "origin", source
 end
 
 ---@param on_done fun(err: string|nil)
----@param message string|nil
+---@param err string|nil
 ---@return { cancel: fun() }
-local function schedule_error(on_done, message)
+local function schedule_result(on_done, err)
 	local cancelled = false
 	vim.schedule(function()
 		if not cancelled then
-			on_done(message)
+			on_done(err)
 		end
 	end)
 	return {
@@ -205,49 +206,66 @@ end
 ---@param repo_path string
 ---@param on_done fun(err: string|nil)
 ---@return { cancel: fun() }
-function M.fetch_pr_branches(pr, repo_path, on_done)
+function M.fetch_pr_refs(pr, repo_path, on_done)
 	local base_revision, head_revision, revision_err = M.pr_diff_revisions(pr)
 	if not base_revision or not head_revision then
-		return schedule_error(on_done, revision_err)
+		return schedule_result(on_done, revision_err)
 	end
-	local base_remote, base_ref = fetch_target(pr.destination, base_revision)
-	local head_remote, head_ref = fetch_target(pr.source, head_revision)
-	if base_ref == "" or head_ref == "" then
-		return schedule_error(on_done, "PR branch refs are missing")
-	end
-
-	if base_remote == head_remote then
-		return git.fetch_refs(repo_path, base_remote, { base_ref, head_ref }, function(ok, err)
-			if ok then
-				on_done(nil)
-			else
-				on_done(err or "Failed to fetch pull request refs")
-			end
-		end)
-	end
-
+	local base_remote, base_ref = fetch_target(pr.destination)
+	local head_remote, head_ref = fetch_target(pr.source)
 	local cancelled = false
 	local current
-	current = git.fetch_refs(repo_path, base_remote, { base_ref }, function(ok, err)
-		current = nil
-		if cancelled then
+	local fetch_err
+
+	local function missing_commit()
+		if not git.rev_exists(repo_path, base_revision) then
+			return "Pull request base commit is unavailable: " .. base_revision
+		end
+		if not git.rev_exists(repo_path, head_revision) then
+			return "Pull request head commit is unavailable: " .. head_revision
+		end
+	end
+
+	local function finish()
+		local missing = missing_commit()
+		on_done(missing and (fetch_err and missing .. ": " .. fetch_err or missing) or nil)
+	end
+
+	local function fetch_head()
+		if not missing_commit() or head_ref == "" then
+			finish()
 			return
 		end
-		if not ok then
-			on_done(err or "Failed to fetch pull request base ref")
-			return
-		end
-		current = git.fetch_refs(repo_path, head_remote, { head_ref }, function(head_ok, head_err)
+
+		current = git.fetch_refs(repo_path, head_remote, { head_ref }, function(ok, err)
 			current = nil
-			if not cancelled then
-				if head_ok then
-					on_done(nil)
-				else
-					on_done(head_err or "Failed to fetch pull request head ref")
-				end
+			if cancelled then
+				return
 			end
+			if not ok then
+				fetch_err = err or "Failed to fetch pull request ref"
+			end
+			finish()
 		end)
-	end)
+	end
+
+	if not missing_commit() then
+		return schedule_result(on_done, nil)
+	end
+	if base_ref == "" then
+		fetch_head()
+	else
+		current = git.fetch_refs(repo_path, base_remote, { base_ref }, function(ok, err)
+			current = nil
+			if cancelled then
+				return
+			end
+			if not ok then
+				fetch_err = err or "Failed to fetch pull request ref"
+			end
+			fetch_head()
+		end)
+	end
 	return {
 		cancel = function()
 			cancelled = true
@@ -275,6 +293,14 @@ local function cached_pr_repository(pr)
 end
 
 local PR_CACHE_MAX_AGE = 7 * 24 * 60 * 60
+
+---@param action string
+---@param phase string
+---@param percent integer
+---@return string
+local function progress_message(action, phase, percent)
+	return string.format("%s...\n%s %d%% / 100%%", action, phase, percent)
+end
 
 local function clean_pr_cache()
 	local root = vim.fs.joinpath(vim.fn.stdpath("cache"), "atlas", "repos")
@@ -307,7 +333,7 @@ function M.ensure_pr_repository(pr, repo_path, on_progress, on_done)
 	---@param path string
 	local function fetch(path)
 		on_progress("Fetching pull request refs...")
-		current = M.fetch_pr_branches(pr, path, function(err)
+		current = M.fetch_pr_refs(pr, path, function(err)
 			current = nil
 			if cancelled then
 				return
@@ -347,6 +373,7 @@ function M.ensure_pr_repository(pr, repo_path, on_progress, on_done)
 	-- Leave the cache without a checkout; Git loads trees and blobs when a diff needs them.
 	current = git.run({
 		"clone",
+		"--progress",
 		"--filter=tree:0",
 		"--no-checkout",
 		"--single-branch",
@@ -365,6 +392,8 @@ function M.ensure_pr_repository(pr, repo_path, on_progress, on_done)
 			return
 		end
 		fetch(path)
+	end, function(phase, percent)
+		on_progress(progress_message("Cloning repository", phase, percent))
 	end)
 
 	return handle
@@ -421,7 +450,7 @@ function M.checkout_pr(pr, on_done)
 			return
 		end
 
-		M.fetch_pr_branches(pr, repo_path, function(ferr)
+		M.fetch_pr_refs(pr, repo_path, function(ferr)
 			if ferr then
 				logger.logerror("checkout.checkout_pr fetch failed", {
 					pr_id = pr.id,

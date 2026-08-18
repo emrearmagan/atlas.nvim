@@ -20,7 +20,7 @@ local DEFAULT_TABS = {
 	},
 }
 
----@return PullsPanelTab[]
+---@return PullsPRPanelTab[]
 local function get_tabs()
 	local state = require("atlas.pulls.state")
 	local provider = state.provider
@@ -35,7 +35,7 @@ local function get_tabs()
 end
 
 ---@param tab_key string
----@return PullsPanelTab|nil
+---@return PullsPRPanelTab|nil
 local function get_tab(tab_key)
 	for _, tab in ipairs(get_tabs()) do
 		if tab.key == tab_key then
@@ -46,7 +46,7 @@ local function get_tab(tab_key)
 end
 
 ---@param tab_key string
----@return PullsPanelTabModule|nil
+---@return PullsPRPanelTabModule|nil
 local function get_tab_module(tab_key)
 	local tab = get_tab(tab_key)
 	return tab and tab.mod or nil
@@ -268,12 +268,11 @@ local function fetch_panel_data(pr, opts)
 end
 
 ---@param pr PullRequest
----@param repo PullsRepo|nil
 ---@param opts { force_refresh: boolean|nil }|nil
-local function load_active_tab(pr, repo, opts)
+local function load_active_tab(pr, opts)
 	local tab_mod = get_tab_module(panel_state.current_tab)
 	if tab_mod and tab_mod.on_select then
-		tab_mod.on_select(pr, repo, make_refresh_callback(pr), opts)
+		tab_mod.on_select(pr, make_refresh_callback(pr), opts)
 	end
 end
 
@@ -336,11 +335,7 @@ function M.on_select(pr, repo, opts)
 
 	if should_fetch then
 		fetch_panel_data(panel_state.current_pr, opts)
-		load_active_tab(
-			panel_state.current_pr,
-			panel_state.current_repo,
-			{ force_refresh = opts.force_refresh == true }
-		)
+		load_active_tab(panel_state.current_pr, { force_refresh = opts.force_refresh == true })
 		update_spinner()
 	end
 
@@ -369,7 +364,7 @@ function M.next_tab()
 	switch_tab_keymaps(old_key, panel_state.current_tab)
 
 	if panel_state.current_pr then
-		load_active_tab(panel_state.current_pr, panel_state.current_repo)
+		load_active_tab(panel_state.current_pr)
 		update_spinner()
 	end
 
@@ -397,7 +392,7 @@ function M.prev_tab()
 	switch_tab_keymaps(old_key, panel_state.current_tab)
 
 	if panel_state.current_pr then
-		load_active_tab(panel_state.current_pr, panel_state.current_repo)
+		load_active_tab(panel_state.current_pr)
 		update_spinner()
 	end
 

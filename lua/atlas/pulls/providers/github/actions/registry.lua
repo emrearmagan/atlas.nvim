@@ -8,6 +8,7 @@ local picker = require("atlas.picker")
 local pullrequests = require("atlas.pulls.providers.github.api.pullrequests")
 local statusline = require("atlas.ui.statusline")
 local github_mapping = require("atlas.providers.github.mapping")
+local users_api = require("atlas.providers.github.users").new("pulls")
 
 ---@param ctx AtlasPullActionContext
 ---@return boolean
@@ -171,10 +172,8 @@ local function edit_assignees(ctx, done)
 	end
 
 	local slug = repo_slug(ctx)
-	local issues_api = require("atlas.issues.providers.github.api.issues")
-
 	notify(ctx, "loading", "Loading assignees...")
-	issues_api.list_assignees(slug, function(items, err)
+	users_api.get_assignable_users(slug, nil, function(items, err)
 		if err then
 			notify(ctx, "error", string.format("Failed to load assignees: %s", tostring(err)))
 			done(nil, tostring(err))
@@ -455,7 +454,7 @@ local function search_pull_requests(_, done)
 	if query == "" or not query:find("is:pr", 1, true) then
 		query = "is:pr " .. query
 	end
-	require("atlas.pulls.providers.github.completion.search").open(vim.trim(query) .. " ")
+	require("atlas.providers.github.completion.search").open(vim.trim(query) .. " ")
 	done(nil, nil)
 end
 

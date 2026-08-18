@@ -1,4 +1,4 @@
----@class GitHubProviderPanel : PullsProviderPanel
+---@class GitHubProviderPRPanel : PullsProviderPRPanel
 local M = {}
 
 local icons = require("atlas.ui.shared.icons")
@@ -107,7 +107,7 @@ end
 
 -- Tabs
 
----@return PullsPanelTab[]
+---@return PullsPRPanelTab[]
 function M.tabs()
 	local overview_icon, overview_hl = icons.general("overview")
 	local conversation_icon, conversation_hl = icons.general("conversation")

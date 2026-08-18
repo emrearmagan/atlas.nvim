@@ -1,4 +1,4 @@
----@class PullsCommitsTab : PullsPanelTabModule
+---@class PullsCommitsTab : PullsPRPanelTabModule
 local M = {}
 
 local utils = require("atlas.ui.shared.utils")
@@ -110,10 +110,9 @@ local function to_thread_item(commit, width)
 end
 
 ---@param pr PullRequest
----@param _repo PullsRepo|nil
 ---@param refresh fun()
 ---@param opts { force_refresh: boolean|nil }|nil
-function M.on_select(pr, _repo, refresh, opts)
+function M.on_select(pr, refresh, opts)
 	opts = opts or {}
 
 	local provider = get_provider()

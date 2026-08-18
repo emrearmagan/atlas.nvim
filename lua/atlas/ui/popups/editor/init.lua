@@ -121,6 +121,7 @@ function M.open(opts)
 	end
 	local source_win = vim.api.nvim_get_current_win()
 	local submit_keys = keymaps.resolve("ui.submit") or {}
+	local close_keys = keymaps.resolve("ui.close") or {}
 
 	local buf = vim.api.nvim_create_buf(false, true)
 	vim.api.nvim_set_option_value("buftype", "nofile", { buf = buf })
@@ -166,7 +167,10 @@ function M.open(opts)
 	if preview then
 		render_preview(buf, preview, width)
 	end
-	local footer_items = { "q quit" }
+	local footer_items = {}
+	if #close_keys > 0 then
+		table.insert(footer_items, string.format("%s quit", table.concat(close_keys, " / ")))
+	end
 	if #submit_keys > 0 then
 		table.insert(footer_items, string.format("%s save+close", table.concat(submit_keys, " / ")))
 	end
@@ -183,7 +187,7 @@ function M.open(opts)
 		end
 	end
 
-	local footer_text = " " .. table.concat(footer_items, " | ") .. " "
+	local footer_text = #footer_items > 0 and " " .. table.concat(footer_items, " | ") .. " " or nil
 	local win = vim.api.nvim_open_win(buf, true, {
 		relative = "editor",
 		style = "minimal",
@@ -195,7 +199,7 @@ function M.open(opts)
 		title = opts.title,
 		title_pos = opts.title_pos or "center",
 		footer = footer_text,
-		footer_pos = "center",
+		footer_pos = footer_text and "center" or nil,
 	})
 	vim.api.nvim_set_option_value(
 		"winhighlight",
@@ -334,12 +338,14 @@ function M.open(opts)
 		return table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
 	end
 
-	vim.keymap.set("n", "q", function()
-		if opts.on_cancel then
-			opts.on_cancel()
-		end
-		close_editor()
-	end, { buffer = buf, silent = true, nowait = true })
+	for _, close_key in ipairs(close_keys) do
+		vim.keymap.set("n", close_key, function()
+			if opts.on_cancel then
+				opts.on_cancel()
+			end
+			close_editor()
+		end, { buffer = buf, silent = true, nowait = true })
+	end
 
 	local function save_and_close()
 		local body = get_text()

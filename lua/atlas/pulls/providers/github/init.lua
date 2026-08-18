@@ -5,7 +5,7 @@ local checks_api = require("atlas.pulls.providers.github.api.checks")
 local request_scope = require("atlas.core.requests")
 local cli = require("atlas.providers.github.client").pulls
 local comments_api = require("atlas.pulls.providers.github.api.comments")
-local notifications_api = require("atlas.pulls.providers.github.api.notifications")
+local notifications_api = require("atlas.providers.github.notifications").new("pulls")
 local pipelines_api = require("atlas.pulls.providers.github.api.pipelines")
 local pullrequests_api = require("atlas.pulls.providers.github.api.pullrequests")
 local repositories_api = require("atlas.pulls.providers.github.api.repositories")
@@ -153,13 +153,6 @@ local function views()
 	return require("atlas.ui.shared.bookmarks_view").append_to_views(configured, config.bookmarks, "S", "Search")
 end
 
----@param opts { force_load: boolean|nil }|nil
----@param on_done fun(notifications: AtlasNotification[]|nil, err: string|nil)
----@return { cancel: fun() }|nil
-local function fetch_notifications(opts, on_done)
-	return notifications_api.fetch(vim.tbl_extend("force", { all = true, per_page = 100 }, opts or {}), on_done)
-end
-
 ---@param value string
 ---@param parsed AtlasParsedUrl|nil
 ---@return AtlasTarget|nil, string|nil
@@ -301,6 +294,7 @@ return {
 			fetch_details = repositories_api.fetch_detail,
 			fetch_branches = repositories_api.fetch_branches,
 			fetch_tags = repositories_api.fetch_tags,
+			fetch_issues = repositories_api.fetch_issues,
 		},
 		pipelines = {
 			fetch = pipelines_api.fetch,
@@ -309,7 +303,7 @@ return {
 			actions = require("atlas.pulls.providers.github.actions.pipelines"),
 		},
 		notifications = {
-			fetch = fetch_notifications,
+			fetch = notifications_api.fetch,
 			mark_read = notifications_api.mark_read,
 			mark_done = notifications_api.mark_done,
 		},

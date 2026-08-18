@@ -1,6 +1,7 @@
 local M = {}
 
 local service = require("atlas.providers.gitlab.client").pulls
+local diff_parser = require("atlas.core.git.diff_parser")
 
 ---@param pr PullRequest
 ---@return string project_path, integer|nil iid
@@ -38,21 +39,19 @@ function M.fetch_commits(pr, opts, on_done)
 			return
 		end
 		local commits = {}
-		for _, raw in ipairs(type(result) == "table" and result or {}) do
-			if type(raw) == "table" then
-				local hash = tostring(raw.id or "")
-				local short = tostring(raw.short_id or (hash ~= "" and hash:sub(1, 8) or ""))
-				local title = tostring(raw.title or raw.message or "")
-				table.insert(commits, {
-					hash = hash,
-					short_hash = short ~= "" and short or nil,
-					message = title:match("([^\r\n]+)") or title,
-					author_name = tostring(raw.author_name or ""),
-					author_nickname = nil,
-					date = tostring(raw.authored_date or raw.committed_date or ""),
-					html_url = type(raw.web_url) == "string" and raw.web_url or nil,
-				})
-			end
+		for _, raw in ipairs(result) do
+			local hash = tostring(raw.id or "")
+			local short = tostring(raw.short_id or (hash ~= "" and hash:sub(1, 8) or ""))
+			local title = tostring(raw.title or raw.message or "")
+			table.insert(commits, {
+				hash = hash,
+				short_hash = short ~= "" and short or nil,
+				message = title:match("([^\r\n]+)") or title,
+				author_name = tostring(raw.author_name or ""),
+				author_nickname = nil,
+				date = tostring(raw.authored_date or raw.committed_date or ""),
+				html_url = type(raw.web_url) == "string" and raw.web_url or nil,
+			})
 		end
 		service.set_memory_cache(cache_key, commits)
 		on_done(commits, nil)
@@ -78,10 +77,11 @@ local function rebuild_unified_diff(change)
 end
 
 ---@param pr PullRequest
----@param _opts { force_refresh: boolean|nil }|nil
+---@param opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(files: DiffFile[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_diff(pr, _opts, on_done)
+function M.fetch_diff(pr, opts, on_done)
+	opts = opts or {}
 	local path, iid = project_iid(pr)
 	if path == "" or iid == nil then
 		vim.schedule(function()
@@ -90,20 +90,28 @@ function M.fetch_diff(pr, _opts, on_done)
 		return nil
 	end
 
+	local cache_key = string.format("gitlab_pulls:diff:%s!%d", path, iid)
+	if not opts.force_refresh then
+		local cached, ok = service.get_memory_cache(cache_key)
+		if ok then
+			on_done(cached, nil)
+			return nil
+		end
+	end
+
 	local endpoint = string.format("/projects/%s/merge_requests/%d/changes", service.url_encode(path), iid)
 	return service.request("GET", endpoint, nil, function(result, err)
-		if err or type(result) ~= "table" then
-			on_done(nil, err or "Empty response")
+		if err then
+			on_done(nil, err)
 			return
 		end
 		local parts = {}
-		for _, change in ipairs(type(result.changes) == "table" and result.changes or {}) do
-			if type(change) == "table" then
-				table.insert(parts, rebuild_unified_diff(change))
-			end
+		for _, change in ipairs(result.changes) do
+			table.insert(parts, rebuild_unified_diff(change))
 		end
-		local diff_parser = require("atlas.core.git.diff_parser")
-		on_done(diff_parser.parse(table.concat(parts, "\n")), nil)
+		local files = diff_parser.parse(table.concat(parts, "\n"))
+		service.set_memory_cache(cache_key, files)
+		on_done(files, nil)
 	end)
 end
 

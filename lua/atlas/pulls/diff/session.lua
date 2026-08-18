@@ -83,7 +83,7 @@ local sessions = {}
 ---@field viewer_state table
 ---@field expanded_threads table<string, boolean>
 ---@field expanded_overlays boolean
----@field help_key string
+---@field help_key string|nil
 ---@field review_attached boolean
 ---@field closed boolean
 ---@field render fun(self: AtlasDiffSession)
@@ -102,6 +102,7 @@ local sessions = {}
 ---@return AtlasDiffSession
 function M.new(opts)
 	local note_target, note_items = notes.load(opts.review)
+	local help_action = opts.viewer_id == "atlas" and "ui.help" or "pulls.external_help"
 	local session = {
 		id = events.new_id(opts.viewer_id),
 		viewer_id = opts.viewer_id,
@@ -120,7 +121,7 @@ function M.new(opts)
 		viewer_state = {},
 		expanded_threads = {},
 		expanded_overlays = ((config.options.pulls or {}).diff or {}).comment_display == "virtual_lines",
-		help_key = opts.viewer_id == "atlas" and (keymaps.resolve("ui.help") or { "g?" })[1] or "gA",
+		help_key = (keymaps.resolve(help_action) or {})[1],
 		review_attached = false,
 		closed = false,
 		render = M.render,

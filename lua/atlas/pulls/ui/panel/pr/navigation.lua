@@ -17,7 +17,7 @@ local function panel_win_buf()
 	return win, buf
 end
 
----@return PullsPanelTabModule|nil
+---@return PullsPRPanelTabModule|nil
 local function current_tab_mod()
 	local provider = require("atlas.pulls.state").provider
 	local panel = provider and provider.capabilities.ui and provider.capabilities.ui.panel

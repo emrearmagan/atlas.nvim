@@ -9,8 +9,6 @@
 ---@field line_map table<integer, table>
 ---@field collapsed_issue_keys table<string, boolean>
 ---@field provider IssuesProvider|nil
----@field latest_request_tokens table<string, integer>
----@field request_seq number
 ---@field reloading_issue_keys table<string, integer>
 ---@field reload_spinner_frame string
 local M = {
@@ -24,8 +22,6 @@ local M = {
 	line_map = {},
 	collapsed_issue_keys = {},
 	provider = nil,
-	latest_request_tokens = {},
-	request_seq = 0,
 	reloading_issue_keys = {},
 	reload_spinner_frame = "⠋",
 }

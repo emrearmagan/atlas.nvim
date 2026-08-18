@@ -1,6 +1,7 @@
 local M = {}
 
 ---@class CacheEntry
+---@field key string|nil
 ---@field value any
 ---@field expires_at number | nil
 
@@ -105,6 +106,7 @@ function M.set(key, value, ttl)
 	end
 
 	local entry = {
+		key = key,
 		value = value,
 		expires_at = expires_at,
 	}
@@ -141,6 +143,16 @@ end
 ---@param key string
 function M.delete(key)
 	delete_paths_for_key(key)
+end
+
+---@param prefix string
+function M.clear_prefix(prefix)
+	for _, path in ipairs(cache_files()) do
+		local entry = read_entry(path)
+		if entry and entry.key and entry.key:sub(1, #prefix) == prefix then
+			pcall(vim.fn.delete, path)
+		end
+	end
 end
 
 function M.clear_all()

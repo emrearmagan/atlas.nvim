@@ -69,17 +69,19 @@ function M.register(buf, views)
 		end
 	end
 
-	table.insert(items, {
-		key = "<CR>",
-		desc = "Run bookmark",
-		callback = function()
-			local navigation = require("atlas.ui.navigation")
-			local node = navigation.current_item()
-			if type(node) == "table" and node.kind == "bookmark" then
-				controller.run_bookmark(node.name, node.value)
-			end
-		end,
-	})
+	utils.insert_if(
+		items,
+		item("ui.select", {
+			desc = "Run bookmark",
+			callback = function()
+				local navigation = require("atlas.ui.navigation")
+				local node = navigation.current_item()
+				if type(node) == "table" and node.kind == "bookmark" then
+					controller.run_bookmark(node.name, node.value)
+				end
+			end,
+		})
+	)
 
 	if capabilities.actions then
 		utils.insert_if(
@@ -315,6 +317,7 @@ function M.remove(buf)
 	local provider_name = state.provider and state.provider.name or "Issues"
 	local items = {}
 
+	utils.insert_if(items, item("ui.select", { key = "" }))
 	utils.insert_if(items, item("ui.open_actions", { key = "" }))
 	utils.insert_if(items, item("issues.transition_issue", { key = "" }))
 	utils.insert_if(items, item("issues.change_assignee", { key = "" }))

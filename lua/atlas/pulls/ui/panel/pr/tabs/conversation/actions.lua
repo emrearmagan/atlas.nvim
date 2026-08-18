@@ -18,13 +18,14 @@ local function author_completion(pr)
 	if not comments_capability or not comments_capability.comment_completion then
 		return nil
 	end
-	local comments = require("atlas.pulls.ui.panel.pr.tabs.review.state").comments
 	local reviewers = require("atlas.pulls.ui.panel.pr.tabs.overview.state").reviewers
+	local conversation = type(state.comments) == "table" and state.comments or {}
 	return comments_capability.comment_completion({
 		pr = pr,
-		comments = type(comments) == "table" and comments or {},
+		comments = conversation,
+		tasks = type(state.tasks) == "table" and state.tasks or nil,
 		reviewers = type(reviewers) == "table" and reviewers or nil,
-		conversation = type(state.comments) == "table" and state.comments or nil,
+		conversation = conversation,
 	})
 end
 
@@ -39,17 +40,19 @@ local function with_comments(fn)
 end
 
 ---@param pr PullRequest
+---@param item PullsComment|nil
 ---@return AtlasReviewActionContext|nil
-local function action_context(pr)
+local function action_context(pr, item)
 	local provider = get_provider()
 	if not provider then
 		return nil
 	end
-	local comments = type(state.comments) == "table" and state.comments or nil
+	local items = item and item.is_task and state.tasks or state.comments
+	items = type(items) == "table" and items or nil
 	return {
 		provider = provider,
 		pr = pr,
-		items = comments,
+		items = items,
 		completion = author_completion(pr),
 	}
 end
@@ -73,7 +76,7 @@ end
 ---@param pr PullRequest
 ---@param refresh fun()
 function M.add(pr, refresh)
-	local context = action_context(pr)
+	local context = action_context(pr, nil)
 	if context then
 		review.add_comment(context, nil, on_done(pr, refresh))
 	end
@@ -86,7 +89,7 @@ function M.reply(pr, entry, refresh)
 	if not entry or entry.entity_kind ~= "comment" or not entry.comment then
 		return
 	end
-	local context = action_context(pr)
+	local context = action_context(pr, entry.comment)
 	if context then
 		review.add_comment(context, { parent = entry.comment }, on_done(pr, refresh))
 	end
@@ -96,10 +99,10 @@ end
 ---@param entry table
 ---@param refresh fun()
 function M.edit(pr, entry, refresh)
-	if not entry or entry.entity_kind ~= "comment" or not entry.comment then
+	if not entry or (entry.entity_kind ~= "comment" and entry.entity_kind ~= "task") or not entry.comment then
 		return
 	end
-	local context = action_context(pr)
+	local context = action_context(pr, entry.comment)
 	if context then
 		review.edit_comment(context, entry.comment, on_done(pr, refresh))
 	end
@@ -109,7 +112,7 @@ end
 ---@param entry table
 ---@param refresh fun()
 function M.delete(pr, entry, refresh)
-	if not entry or entry.entity_kind ~= "comment" or not entry.comment then
+	if not entry or (entry.entity_kind ~= "comment" and entry.entity_kind ~= "task") or not entry.comment then
 		return
 	end
 	local comment = entry.comment
@@ -117,7 +120,7 @@ function M.delete(pr, entry, refresh)
 		statusline.notify("info", "The pull request description cannot be deleted", 1200)
 		return
 	end
-	local context = action_context(pr)
+	local context = action_context(pr, comment)
 	if context then
 		review.delete_comment(context, comment, on_done(pr, refresh))
 	end
@@ -180,6 +183,20 @@ function M.react(pr, entry, refresh)
 			end)
 		end,
 	})
+end
+
+---@param pr PullRequest
+---@param entry table
+---@param refresh fun()
+function M.toggle_task(pr, entry, refresh)
+	local task = entry and entry.entity_kind == "task" and entry.comment or nil
+	if not task then
+		return
+	end
+	local context = action_context(pr, task)
+	if context then
+		review.toggle_task(context, task, on_done(pr, refresh))
+	end
 end
 
 return M

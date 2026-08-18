@@ -1,4 +1,4 @@
----@class ConversationTab : PullsPanelTabModule
+---@class ConversationTab : PullsPRPanelTabModule
 local M = {}
 
 local state = require("atlas.pulls.ui.panel.pr.tabs.conversation.state")
@@ -16,10 +16,9 @@ function M.reset()
 end
 
 ---@param pr PullRequest
----@param _repo PullsRepo|nil
 ---@param refresh fun()
 ---@param opts { force_refresh: boolean|nil }|nil
-function M.on_select(pr, _repo, refresh, opts)
+function M.on_select(pr, refresh, opts)
 	local request_generation = state.activate(pr)
 	opts = opts or {}
 
@@ -27,6 +26,7 @@ function M.on_select(pr, _repo, refresh, opts)
 	local comments = provider and provider.capabilities.comments
 	if not comments or not comments.fetch_conversation then
 		state.comments = {}
+		state.tasks = {}
 		state.activity = {}
 		refresh()
 		return
@@ -34,6 +34,7 @@ function M.on_select(pr, _repo, refresh, opts)
 
 	local id = tostring(pr.id or "")
 	state.comments = "loading"
+	state.tasks = "loading"
 	state.activity = "loading"
 	statusline.notify("loading", string.format("Loading conversation for #%s...", id))
 
@@ -43,16 +44,30 @@ function M.on_select(pr, _repo, refresh, opts)
 		if not state.is_current(request_generation, pr) then
 			return
 		end
-		if err then
+		if result then
 			state.comments = {}
-			state.activity = {}
-			state.error = tostring(err)
-			statusline.notify("error", string.format("Failed to load conversation for #%s", id))
+			for _, comment in ipairs(result.comments or {}) do
+				if comment.state ~= "DELETED" then
+					table.insert(state.comments, comment)
+				end
+			end
+			state.tasks = result.tasks or {}
+			state.activity = result.events or {}
 		else
-			result = type(result) == "table" and result or {}
-			state.comments = type(result.comments) == "table" and result.comments or {}
-			state.activity = type(result.events) == "table" and result.events or {}
-			state.error = nil
+			state.comments = {}
+			state.tasks = {}
+			state.activity = {}
+		end
+
+		state.error = nil
+		if err then
+			if not result then
+				state.error = tostring(err)
+			end
+			local message = result and "Conversation for #%s partially failed: %s"
+				or "Failed to load conversation for #%s: %s"
+			statusline.notify("error", string.format(message, id, tostring(err)))
+		else
 			statusline.notify("success", string.format("Conversation loaded for #%s", id), 1200)
 		end
 		refresh()
@@ -64,16 +79,19 @@ M.render = renderer.render
 ---@param _lnum integer
 ---@param entry table
 function M.is_selectable_line(_lnum, entry)
-	return entry.entity_kind == "comment" or entry.activity_entry ~= nil or entry.kind == "activity_gap"
+	return entry.entity_kind == "comment"
+		or entry.entity_kind == "task"
+		or entry.activity_entry ~= nil
+		or entry.kind == "activity_gap"
 end
 
 ---@param _pr PullRequest
 ---@param entry table
 function M.on_enter(_pr, entry)
-	if not entry or entry.entity_kind ~= "comment" or not entry.comment then
+	if not entry or (entry.entity_kind ~= "comment" and entry.entity_kind ~= "task") or not entry.comment then
 		return
 	end
-	local url = tostring(entry.comment.html_url or "")
+	local url = tostring(entry.comment.html_url or entry.comment.url or "")
 	if url ~= "" then
 		vim.ui.open(url)
 		return true

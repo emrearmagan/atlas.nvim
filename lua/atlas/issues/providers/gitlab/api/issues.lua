@@ -2,18 +2,32 @@ local M = {}
 
 local service = require("atlas.providers.gitlab.client").issues
 local normalizer = require("atlas.issues.providers.gitlab.api.mapper")
+local LIST_CACHE_PREFIX = "gitlab:issues:list:"
+
+---@param path string
+---@param iid integer
+local function invalidate_issue(path, iid)
+	service.delete_memory_cache(string.format("gitlab:issue:%s#%d", path, iid))
+	service.clear_cache(LIST_CACHE_PREFIX)
+end
 
 ---@param params table<string, any>
 ---@return string
 local function build_query(params)
-	local parts = {}
+	local keys = {}
 	for k, v in pairs(params or {}) do
 		if v ~= nil and v ~= "" then
-			table.insert(parts, k .. "=" .. service.url_encode(tostring(v)))
+			table.insert(keys, k)
 		end
 	end
-	if #parts == 0 then
+	if #keys == 0 then
 		return ""
+	end
+	table.sort(keys)
+
+	local parts = {}
+	for _, key in ipairs(keys) do
+		table.insert(parts, key .. "=" .. service.url_encode(tostring(params[key])))
 	end
 	return "?" .. table.concat(parts, "&")
 end
@@ -53,10 +67,10 @@ function M.list_issues(view, opts, on_done)
 	end
 
 	local endpoint = "/issues" .. build_query(params)
-	local cache_key = "gitlab:issues:list:" .. endpoint
+	local cache_key = LIST_CACHE_PREFIX .. endpoint
 
 	if not opts.force_load then
-		local cached, ok = service.get_memory_cache(cache_key)
+		local cached, ok = service.get_cache(cache_key)
 		if ok then
 			on_done(cached, nil)
 			return nil
@@ -68,8 +82,8 @@ function M.list_issues(view, opts, on_done)
 			on_done(nil, err)
 			return
 		end
-		local issues = normalizer.to_issues_list(type(result) == "table" and result or {})
-		service.set_memory_cache(cache_key, issues)
+		local issues = normalizer.to_issues_list(result)
+		service.set_cache(cache_key, issues)
 		on_done(issues, nil)
 	end, {
 		action = "List issues",
@@ -100,8 +114,8 @@ function M.get_issue(key, opts, on_done)
 
 	local endpoint = string.format("/projects/%s/issues/%d", service.url_encode(path), iid)
 	return service.request("GET", endpoint, nil, function(result, err)
-		if err or type(result) ~= "table" then
-			on_done(nil, err or "Empty response")
+		if err then
+			on_done(nil, err)
 			return
 		end
 		local issue = normalizer.to_issue(result)
@@ -132,7 +146,7 @@ function M.set_state(key, state_event, on_done)
 			on_done(false, err)
 			return
 		end
-		service.delete_memory_cache(string.format("gitlab:issue:%s#%d", path, iid))
+		invalidate_issue(path, iid)
 		on_done(true, nil)
 	end, {
 		action = "Issue state change",
@@ -171,7 +185,7 @@ function M.update_labels(key, diff, on_done)
 			on_done(false, err)
 			return
 		end
-		service.delete_memory_cache(string.format("gitlab:issue:%s#%d", path, iid))
+		invalidate_issue(path, iid)
 		on_done(true, nil)
 	end, {
 		action = "Update labels",
@@ -205,7 +219,7 @@ function M.set_assignee_ids(key, ids, on_done)
 			on_done(false, err)
 			return
 		end
-		service.delete_memory_cache(string.format("gitlab:issue:%s#%d", path, iid))
+		invalidate_issue(path, iid)
 		on_done(true, nil)
 	end, {
 		action = "Set assignees",
@@ -272,16 +286,15 @@ function M.create_issue(opts, on_done)
 	local endpoint = string.format("/projects/%s/issues", service.url_encode(path))
 
 	return service.request("POST", endpoint, payload, function(result, err)
-		if err or type(result) ~= "table" then
-			on_done(nil, err or "Empty response")
+		if err then
+			on_done(nil, err)
 			return
 		end
 
 		local issue = normalizer.to_issue(result)
 		local iid = (issue and issue._raw and issue._raw.iid) or tonumber(result.iid)
 		local key = (issue and issue.key) or (iid and string.format("%s#%d", path, iid) or nil)
-		service.clear_memory_cache()
-
+		service.clear_cache(LIST_CACHE_PREFIX)
 		on_done({
 			key = key,
 			iid = iid,
@@ -315,7 +328,7 @@ function M.search_issues_picker(query, opts, on_done)
 			on_done(nil, err)
 			return
 		end
-		local issues = normalizer.to_issues_list(type(result) == "table" and result or {})
+		local issues = normalizer.to_issues_list(result)
 		local items = {}
 		for _, issue in ipairs(issues) do
 			table.insert(items, {

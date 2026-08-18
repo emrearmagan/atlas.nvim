@@ -1,5 +1,6 @@
 local M = {}
 
+local json = require("atlas.core.json")
 local service = require("atlas.providers.gitlab.client").pulls
 local mapper = require("atlas.pulls.providers.gitlab.api.mapper")
 
@@ -85,7 +86,7 @@ function M.fetch(pr, opts, on_done)
 		local result = {}
 		local discussion_roots = {}
 		for _, discussion in ipairs(discussions_result) do
-			local notes = type(discussion.notes) == "table" and discussion.notes or {}
+			local notes = discussion.notes
 			if #notes > 0 then
 				local first = notes[1]
 				if first.system ~= true then
@@ -186,7 +187,7 @@ end
 ---@param value any Decoded API value.
 ---@return { base_sha: string, head_sha: string, start_sha: string }|nil
 local function normalize_diff_refs(value)
-	value = type(value) == "table" and value or {}
+	value = json.safe_table(value)
 	local refs = {
 		base_sha = tostring(value.base_sha or value.base_commit_sha or ""),
 		head_sha = tostring(value.head_sha or value.head_commit_sha or ""),
@@ -255,8 +256,8 @@ local function add_positioned_comment(pr, path, iid, content, target, file_level
 		local endpoint = string.format("/projects/%s/merge_requests/%d/%s", service.url_encode(path), iid, resource)
 		local payload = pending and { note = content, position = position } or { body = content, position = position }
 		track(service.request("POST", endpoint, payload, function(result, err)
-			if err or type(result) ~= "table" then
-				finish(nil, err or "Empty response")
+			if err then
+				finish(nil, err)
 				return
 			end
 			if pending then
@@ -264,8 +265,8 @@ local function add_positioned_comment(pr, path, iid, content, target, file_level
 				finish(mapper.to_draft_comment(result, nil), nil)
 				return
 			end
-			local first = type(result.notes) == "table" and result.notes[1] or nil
-			if type(first) ~= "table" then
+			local first = result.notes[1]
+			if not first then
 				finish(nil, "Created discussion has no comment")
 				return
 			end
@@ -285,10 +286,13 @@ local function add_positioned_comment(pr, path, iid, content, target, file_level
 		local endpoint =
 			string.format("/projects/%s/merge_requests/%d/versions?per_page=1", service.url_encode(path), iid)
 		track(service.request("GET", endpoint, nil, function(result, err)
-			local latest = type(result) == "table" and result[1] or nil
-			local latest_refs = normalize_diff_refs(latest)
-			if err or not latest_refs then
-				finish(nil, err or "Unable to load merge request diff refs")
+			if err then
+				finish(nil, err)
+				return
+			end
+			local latest_refs = normalize_diff_refs(result[1])
+			if not latest_refs then
+				finish(nil, "Unable to load merge request diff refs")
 				return
 			end
 			if target.commit_hash and latest_refs.head_sha ~= target.commit_hash then
@@ -346,8 +350,8 @@ function M.add_comment(pr, content, opts, on_done)
 			end
 		end
 		return service.request("POST", endpoint, payload, function(result, err)
-			if err or type(result) ~= "table" then
-				on_done(nil, err or "Empty response")
+			if err then
+				on_done(nil, err)
 				return
 			end
 			bust_caches(path, iid)
@@ -372,12 +376,12 @@ function M.add_comment(pr, content, opts, on_done)
 		or string.format("/projects/%s/merge_requests/%d/discussions", service.url_encode(path), iid)
 
 	return service.request("POST", endpoint, { body = content }, function(result, err)
-		if err or type(result) ~= "table" then
-			on_done(nil, err or "Empty response")
+		if err then
+			on_done(nil, err)
 			return
 		end
-		local note = parent and result or (result.notes or {})[1]
-		if type(note) ~= "table" then
+		local note = parent and result or result.notes[1]
+		if not note then
 			on_done(nil, "Empty response")
 			return
 		end
@@ -437,8 +441,8 @@ function M.edit_comment(pr, comment, on_done)
 
 	local payload = draft and { note = body } or { body = body }
 	return service.request("PUT", endpoint, payload, function(result, err)
-		if err or type(result) ~= "table" then
-			on_done(nil, err or "Empty response")
+		if err then
+			on_done(nil, err)
 			return
 		end
 		bust_caches(path, iid)

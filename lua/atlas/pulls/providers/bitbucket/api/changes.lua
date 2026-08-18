@@ -1,6 +1,7 @@
 local M = {}
 
 local diff_parser = require("atlas.core.git.diff_parser")
+local json = require("atlas.core.json")
 local mapper = require("atlas.pulls.providers.bitbucket.api.mapper")
 local service = require("atlas.pulls.providers.bitbucket.api.service")
 
@@ -14,7 +15,10 @@ function M.fetch_diffstat(pr, opts, on_done)
 		on_done({}, nil)
 		return nil
 	end
-	local key = "bitbucket:pr:diffstat:" .. diffstat_url
+	local fields = "values.status,values.lines_added,values.lines_removed,values.old.path,values.new.path,next"
+	local sep = diffstat_url:find("?") and "&" or "?"
+	local url = string.format("%s%sfields=%s", diffstat_url, sep, fields)
+	local key = "bitbucket:pr:diffstat:" .. url
 	if not (opts or {}).force_refresh then
 		local cached, ok = service.get_cache(key)
 		if ok then
@@ -23,7 +27,7 @@ function M.fetch_diffstat(pr, opts, on_done)
 		end
 	end
 
-	return service.request("GET", diffstat_url, nil, nil, function(result, err)
+	return service.fetch_all_values(url, function(result, err)
 		if err then
 			on_done(nil, err)
 			return
@@ -31,9 +35,9 @@ function M.fetch_diffstat(pr, opts, on_done)
 
 		---@type PullsDiffstatEntry[]
 		local entries = {}
-		for _, item in ipairs((result or {}).values or {}) do
-			local new_file = type(item.new) == "table" and item.new or {}
-			local old_file = type(item.old) == "table" and item.old or {}
+		for _, item in ipairs(result.values or {}) do
+			local new_file = json.safe_table(item.new)
+			local old_file = json.safe_table(item.old)
 			local status = tostring(item.status or ""):lower()
 			if status == "" then
 				status = "modified"

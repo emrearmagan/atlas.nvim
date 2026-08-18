@@ -1,5 +1,6 @@
 local M = {}
 
+local keymaps = require("atlas.core.keymaps")
 local namespace = vim.api.nvim_create_namespace("atlas_loading")
 local spinner = require("atlas.ui.components.spinner")
 local utils = require("atlas.ui.shared.utils")
@@ -35,13 +36,19 @@ function M.render(buf, win, text)
 		vim.bo[buf].readonly = readonly
 	end
 	local width = vim.api.nvim_win_get_width(win)
-	text = utils.truncate(tostring(text):gsub("[\r\n]+", " | "), math.max(1, width - 4))
-	local col = math.max(0, math.floor((width - vim.fn.strdisplaywidth(text)) / 2))
 	M.clear(buf)
-	vim.api.nvim_buf_set_extmark(buf, namespace, math.floor((height - 1) / 2), 0, {
-		virt_text = { { text, "Normal" } },
-		virt_text_win_col = col,
-	})
+	local row = math.floor((height - 1) / 2)
+	for index, line in ipairs(vim.split(tostring(text):gsub("\r", ""), "\n", { plain = true })) do
+		if row + index > height then
+			break
+		end
+		line = utils.truncate(line, math.max(1, width - 4))
+		local col = math.max(0, math.floor((width - vim.fn.strdisplaywidth(line)) / 2))
+		vim.api.nvim_buf_set_extmark(buf, namespace, row + index - 1, 0, {
+			virt_text = { { line, "Normal" } },
+			virt_text_win_col = col,
+		})
+	end
 end
 
 ---@class AtlasDiffLifecycle
@@ -196,7 +203,9 @@ function M.open(message, on_cancel, target)
 	---@cast view AtlasLoadingView
 
 	indicator = spinner.create({ on_tick = draw })
-	vim.keymap.set("n", "q", view.cancel, { buffer = buf, silent = true, nowait = true, desc = "Cancel" })
+	for _, key in ipairs(keymaps.resolve("ui.close") or {}) do
+		vim.keymap.set("n", key, view.cancel, { buffer = buf, silent = true, nowait = true, desc = "Cancel" })
+	end
 	vim.api.nvim_create_autocmd({ "VimResized", "WinResized" }, {
 		group = group,
 		callback = draw,

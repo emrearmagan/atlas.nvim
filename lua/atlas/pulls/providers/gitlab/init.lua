@@ -3,7 +3,7 @@ local activity_api = require("atlas.pulls.providers.gitlab.api.activity")
 local changes_api = require("atlas.pulls.providers.gitlab.api.changes")
 local checks_api = require("atlas.pulls.providers.gitlab.api.checks")
 local comments_api = require("atlas.pulls.providers.gitlab.api.comments")
-local notifications_api = require("atlas.pulls.providers.gitlab.api.notifications")
+local notifications_api = require("atlas.providers.gitlab.notifications").new("pulls")
 local pipelines_api = require("atlas.pulls.providers.gitlab.api.pipelines")
 local pullrequests_api = require("atlas.pulls.providers.gitlab.api.pullrequests")
 local repositories_api = require("atlas.pulls.providers.gitlab.api.repositories")
@@ -147,13 +147,6 @@ local function create_pr(opts, on_done)
 		end
 		on_done({ id = result.iid, url = result.url, message = "Merge request created" }, nil)
 	end)
-end
-
----@param opts { force_load: boolean|nil }|nil
----@param on_done fun(notifications: AtlasNotification[]|nil, err: string|nil)
----@return { cancel: fun() }|nil
-local function fetch_notifications(opts, on_done)
-	return notifications_api.fetch(vim.tbl_extend("force", { state = "pending", per_page = 100 }, opts or {}), on_done)
 end
 
 ---@return AtlasGitLabPullsViewConfig[]
@@ -312,6 +305,7 @@ return {
 			fetch_details = repositories_api.fetch_detail,
 			fetch_branches = repositories_api.fetch_branches,
 			fetch_tags = repositories_api.fetch_tags,
+			fetch_issues = repositories_api.fetch_issues,
 			delete_branch = repositories_api.delete_branch,
 		},
 		pipelines = {
@@ -320,7 +314,7 @@ return {
 			actions = require("atlas.pulls.providers.gitlab.actions.pipelines"),
 		},
 		notifications = {
-			fetch = fetch_notifications,
+			fetch = notifications_api.fetch,
 			mark_read = notifications_api.mark_read,
 			mark_done = notifications_api.mark_done,
 		},

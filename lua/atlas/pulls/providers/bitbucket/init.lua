@@ -284,6 +284,7 @@ return {
 		ui = {
 			setup = require("atlas.pulls.providers.bitbucket.highlights").setup,
 			panel = require("atlas.pulls.providers.bitbucket.ui.panel"),
+			repo_panel = require("atlas.pulls.providers.bitbucket.ui.repo_panel"),
 		},
 	},
 }

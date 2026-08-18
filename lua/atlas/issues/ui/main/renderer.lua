@@ -20,14 +20,10 @@ local function view_id(view)
 end
 
 ---@param action_id AtlasKeymapActionId|string
----@param fallback string
----@return string
-local function key_label(action_id, fallback)
+---@return string|nil
+local function key_label(action_id)
 	local keys = resolver.resolve(action_id)
-	if type(keys) == "table" and #keys > 0 then
-		return tostring(keys[1])
-	end
-	return fallback
+	return keys and keys[1] or nil
 end
 
 ---@param view IssuesViewConfig|nil
@@ -472,10 +468,13 @@ function M.render(opts)
 		table.insert(actions, { label = "|", hl_group = "AtlasTextMuted" })
 	end
 
-	table.insert(actions, {
-		label = string.format("Refresh (%s)", key_label("ui.refresh_view", "R")),
-		hl_group = "AtlasTextMuted",
-	})
+	local refresh_key = key_label("ui.refresh_view")
+	if refresh_key then
+		table.insert(actions, {
+			label = string.format("Refresh (%s)", refresh_key),
+			hl_group = "AtlasTextMuted",
+		})
+	end
 
 	local lines, spans = {}, {}
 	local line_map = {}

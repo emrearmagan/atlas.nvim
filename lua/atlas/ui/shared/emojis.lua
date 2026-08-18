@@ -25,7 +25,7 @@ function M.glyph(key)
 end
 
 ---@param reactions table<string, integer>|nil
----@param options PullsReactionOption[]|nil
+---@param options PullsReactionOption[]|IssueReactionOption[]|nil
 ---@return string text, table[] spans
 function M.format(reactions, options)
 	if reactions == nil then

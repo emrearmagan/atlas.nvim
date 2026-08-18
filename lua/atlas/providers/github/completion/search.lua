@@ -1,7 +1,7 @@
 local M = {}
 
 local prompt = require("atlas.commands.search.prompt")
-local query_api = require("atlas.pulls.providers.github.completion.query")
+local query_api = require("atlas.providers.github.completion.query")
 
 ---@param arglead string
 ---@param cmdline string

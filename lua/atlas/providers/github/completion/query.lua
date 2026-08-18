@@ -1,4 +1,4 @@
--- Docs:
+-- GitHub search syntax:
 --   https://docs.github.com/en/search-github/searching-on-github/searching-issues-and-pull-requests
 --   https://docs.github.com/en/search-github/getting-started-with-searching-on-github/understanding-the-search-syntax
 
