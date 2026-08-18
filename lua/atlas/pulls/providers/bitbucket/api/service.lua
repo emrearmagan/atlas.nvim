@@ -65,6 +65,7 @@ end
 
 function M.clear_cache()
 	memory_cache.clear_prefix("bitbucket:")
+	cache.clear_prefix("bitbucket:prs:")
 end
 
 ---@param key string

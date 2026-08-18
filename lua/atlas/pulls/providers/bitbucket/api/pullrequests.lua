@@ -270,8 +270,15 @@ function M.merge(pr, opts, on_done)
 		payload.message = opts.message
 	end
 
-	local body = vim.fn.empty(payload) == 1 and nil or vim.json.encode(payload)
-	return service.request("POST", merge_url, nil, body, on_done)
+	local body = next(payload) == nil and nil or vim.json.encode(payload)
+	return service.request("POST", merge_url, nil, body, function(result, err)
+		if err then
+			on_done(nil, err)
+			return
+		end
+		service.clear_cache()
+		on_done(result, nil)
+	end)
 end
 
 ---@param pr PullRequest
@@ -380,6 +387,7 @@ function M.create_pr(opts, on_done)
 			return
 		end
 
+		service.clear_cache()
 		on_done({ id = result.id, url = result.links.html.href, message = "PR created" }, nil)
 	end, {
 		action = "Create PR",
