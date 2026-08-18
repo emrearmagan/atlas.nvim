@@ -286,7 +286,7 @@ function M.views()
 				jql = "assignee = currentUser() AND resolution = Unresolved ORDER BY updated DESC",
 			},
 		}
-	return require("atlas.ui.shared.bookmarks_view").append_to_views(views, cfg.bookmarks, "J", "JQL")
+	return views
 end
 
 local renderer = require("atlas.issues.providers.jira.ui.renderer")

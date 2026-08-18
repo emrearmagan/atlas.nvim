@@ -8,12 +8,18 @@
 ---@field name string
 ---@field key string|nil
 ---@field layout "compact"|"plain"|nil
+---@field _kind "bookmarks"|"starred"|nil
+---@field _bookmarks table<string, any>|nil
+---@field _starred { domain: "pulls", provider: string }|nil
 
 ---@class AtlasIssuesViewConfig
 ---@field name string
 ---@field key string|nil
 ---@field layout "plain"|"compact"|nil
 ---@field search string|nil
+---@field _kind "bookmarks"|"starred"|nil
+---@field _bookmarks table<string, any>|nil
+---@field _starred { domain: "issues", provider: string }|nil
 
 ---@class AtlasPullsRepoConfig
 ---@field settings table<string, AtlasPullsRepoSettings>|nil

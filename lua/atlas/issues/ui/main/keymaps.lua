@@ -56,7 +56,7 @@ function M.register(buf, views)
 	local items = {}
 
 	for _, view in ipairs(views or {}) do
-		if view.key ~= nil and view.key ~= "" then
+		if view._kind ~= "bookmarks" and view.key ~= nil and view.key ~= "" then
 			local v = view
 			table.insert(items, {
 				key = v.key,
@@ -67,6 +67,23 @@ function M.register(buf, views)
 				end,
 			})
 		end
+	end
+
+	local bookmark_key = require("atlas.ui.shared.bookmarks_view").key("issues", provider.id)
+	if bookmark_key then
+		table.insert(items, {
+			key = bookmark_key,
+			desc = "Switch to bookmarks",
+			hidden = true,
+			callback = function()
+				for _, view in ipairs(require("atlas.ui.shared.bookmarks_view").views(provider, "issues")) do
+					if view._kind == "bookmarks" then
+						controller.switch_view(view)
+						return
+					end
+				end
+			end,
+		})
 	end
 
 	utils.insert_if(

@@ -427,7 +427,7 @@ function M.render(opts)
 	end
 	statusline.set_items(statusline_items)
 
-	local views = provider and provider.capabilities.core.views() or {}
+	local views = provider and require("atlas.ui.shared.bookmarks_view").views(provider, "issues") or {}
 	local active = state.active_view
 	local active_id = view_id(active)
 
@@ -506,7 +506,14 @@ function M.render(opts)
 
 	if type(active) == "table" and active._kind == "bookmarks" then
 		append_search_text(lines, spans, search_text(state.current_view))
-		require("atlas.ui.shared.bookmarks_view").render(lines, spans, line_map, active._bookmarks or {}, opts.width)
+		require("atlas.ui.shared.bookmarks_view").render(
+			lines,
+			spans,
+			line_map,
+			active._bookmarks or {},
+			opts.width,
+			active._starred
+		)
 
 		local issues = state.issues or {}
 		local issue_groups = state.issue_tree or {}
