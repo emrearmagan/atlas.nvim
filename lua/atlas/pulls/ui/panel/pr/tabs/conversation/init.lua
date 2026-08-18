@@ -44,23 +44,30 @@ function M.on_select(pr, refresh, opts)
 		if not state.is_current(request_generation, pr) then
 			return
 		end
-		if err then
+		if result then
 			state.comments = {}
-			state.tasks = {}
-			state.activity = {}
-			state.error = tostring(err)
-			statusline.notify("error", string.format("Failed to load conversation for #%s", id))
-		else
-			result = type(result) == "table" and result or {}
-			state.comments = {}
-			for _, comment in ipairs(type(result.comments) == "table" and result.comments or {}) do
+			for _, comment in ipairs(result.comments or {}) do
 				if comment.state ~= "DELETED" then
 					table.insert(state.comments, comment)
 				end
 			end
-			state.tasks = type(result.tasks) == "table" and result.tasks or {}
-			state.activity = type(result.events) == "table" and result.events or {}
-			state.error = nil
+			state.tasks = result.tasks or {}
+			state.activity = result.events or {}
+		else
+			state.comments = {}
+			state.tasks = {}
+			state.activity = {}
+		end
+
+		state.error = nil
+		if err then
+			if not result then
+				state.error = tostring(err)
+			end
+			local message = result and "Conversation for #%s partially failed: %s"
+				or "Failed to load conversation for #%s: %s"
+			statusline.notify("error", string.format(message, id, tostring(err)))
+		else
 			statusline.notify("success", string.format("Conversation loaded for #%s", id), 1200)
 		end
 		refresh()

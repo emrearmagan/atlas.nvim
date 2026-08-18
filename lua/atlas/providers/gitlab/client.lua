@@ -138,6 +138,11 @@ local function new(domain)
 		cache.delete(key)
 	end
 
+	---@param prefix string
+	function client.clear_cache(prefix)
+		cache.clear_prefix(prefix)
+	end
+
 	---@param str string
 	---@return string
 	function client.url_encode(str)
