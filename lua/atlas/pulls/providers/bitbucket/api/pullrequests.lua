@@ -80,7 +80,7 @@ local function fetch_pullrequests_single(workspace, repo, opts, on_done)
 	end, { action = "Fetching pull requests", workspace = workspace, repo = repo })
 end
 
----@param view_repos AtlasBitbucketRepoRef[]
+---@param view_repos AtlasBitbucketRepoTarget[]
 ---@param opts { force_load: boolean, pagelen: number|nil, statuses: string[]|nil }
 ---@param on_done fun(groups: PullsGroup[], err: string[]|nil)
 ---@return { cancel: fun() }|nil

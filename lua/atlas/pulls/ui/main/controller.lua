@@ -374,14 +374,18 @@ local function load_bookmark(view, force_load, on_done)
 			state.is_loading = false
 			sync_loading_spinner()
 			local first_err = type(err) == "table" and err[1] or err
-			if first_err and (groups == nil or #groups == 0) then
+			if first_err and #(groups or {}) == 0 then
 				state.error = tostring(first_err)
 				state.pulls = {}
 				statusline.notify("error", string.format("Query failed: %s", state.error))
 			else
 				state.error = nil
 				state.pulls = apply_starred(groups)
-				statusline.notify("success", "Pull requests loaded", 1200)
+				if first_err then
+					statusline.notify("warn", string.format("Some repositories failed: %s", tostring(first_err)))
+				else
+					statusline.notify("success", "Pull requests loaded", 1200)
+				end
 			end
 			render_if_active()
 			if on_done then

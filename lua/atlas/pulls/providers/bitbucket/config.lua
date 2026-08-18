@@ -10,16 +10,16 @@
 --             {
 --               name = "All",
 --               key  = "1",
---               repos = {
+--               targets = {
 --                 { workspace = "acme", repo = "core" },
---                 { workspace = "acme", repo = "web" },
+--                 { workspace = "acme", project = "WEB" },
 --               },
 --             },
 --             {
 --               name = "Reviewing",
 --               key  = "2",
 --               layout = "compact",
---               repos = { { workspace = "acme", repo = "core" } },
+--               targets = { { workspace = "acme", project = "CORE" } },
 --               filter = function(pr, ctx)
 --                 if ctx.user == nil then return true end
 --                 for _, reviewer in ipairs(pr.reviewers or {}) do
@@ -34,7 +34,10 @@
 --             -- label = "Search", -- default
 --             items = {
 --               ["Core"] = {
---                 repos = { { workspace = "acme", repo = "core" } },
+--                 targets = {
+--                   { workspace = "acme", repo = "standalone" },
+--                   { workspace = "acme", project = "CORE" },
+--                 },
 --                 filter = function(pr)
 --                   return not pr.draft
 --                 end,
@@ -46,18 +49,24 @@
 --     },
 --   })
 
----@class AtlasBitbucketRepoRef
+---@class AtlasBitbucketRepoTarget
 ---@field workspace string
 ---@field repo string
 
+---@class AtlasBitbucketProjectTarget
+---@field workspace string
+---@field project string
+
+---@alias AtlasBitbucketTarget AtlasBitbucketRepoTarget|AtlasBitbucketProjectTarget
+
 ---@class AtlasBitbucketViewConfig : AtlasPullsViewConfig
----@field repos AtlasBitbucketRepoRef[]|nil
+---@field targets AtlasBitbucketTarget[]
 ---@field filter? fun(pr: PullRequest, ctx: { user: PullsUser|nil }): boolean|nil
 ---@field status? "OPEN"|"MERGED"|"DECLINED"|"SUPERSEDED"
 
 ---@class AtlasBitbucketBookmarkConfig
 ---@field layout "compact"|"plain"|nil
----@field repos AtlasBitbucketRepoRef[]
+---@field targets AtlasBitbucketTarget[]
 ---@field filter? fun(pr: PullRequest, ctx: { user: PullsUser|nil }): boolean|nil
 
 ---@class AtlasBitbucketBookmarksConfig

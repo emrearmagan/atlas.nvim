@@ -265,8 +265,9 @@ pulls = {
           name = "Me",
           key = "M",
           layout = "compact",
-          repos = {
-            { workspace = "your-workspace", repo = "atlas" },
+          targets = {
+            { workspace = "your-workspace", repo = "standalone-repo" },
+            { workspace = "your-workspace", project = "CORE" },
           },
 
           ---@param pr PullRequest
@@ -280,9 +281,8 @@ pulls = {
           name = "Team",
           key = "1",
           layout = "plain", -- "compact" or "plain"
-          repos = {
-            { workspace = "your-workspace", repo = "atlas" },
-            { workspace = "your-workspace", repo = "other-repo" },
+          targets = {
+            { workspace = "your-workspace", project = "TEAM" },
           },
         },
       },
@@ -292,8 +292,9 @@ pulls = {
         label = "Search", -- default
         items = {
           ["Atlas"] = {
-            repos = {
+            targets = {
               { workspace = "your-workspace", repo = "atlas" },
+              { workspace = "your-workspace", project = "ATLAS" },
             },
             filter = function(pr)
               return not pr.draft
@@ -305,6 +306,8 @@ pulls = {
   },
 },
 ```
+
+Each Bitbucket target selects one repository with `repo`, or every repository in a project with its `project` key. Views and bookmarks can mix both target types and narrow the resulting PRs with `filter`.
 
 <img alt="Bitbucket pull requests" src="https://github.com/user-attachments/assets/bcdd0c9c-e15f-4e82-81fd-cde38aa68a2d">
 
@@ -648,7 +651,7 @@ Open GitHub and GitLab notifications inside Atlas, refresh them, open the relate
   <img width="85%" alt="Bookmarks" src="https://github.com/user-attachments/assets/f008d6af-dfc6-4b65-8af1-94cd6ce9fc99">
 </p>
 
-Turn frequently used GitHub and GitLab searches, Bitbucket repository views, or Jira JQL into named shortcuts. Use bookmarks for review queues, recurring project views, and the searches you return to throughout the day.
+Turn frequently used GitHub and GitLab searches, Bitbucket repository/project views, or Jira JQL into named shortcuts. Use bookmarks for review queues, recurring project views, and the searches you return to throughout the day.
 
 Bookmarks appear alongside your configured views, keeping important queries one action away.
 Star a pull request or issue with `*` to keep it at the top of lists. Starred items are saved locally and appear in the first bookmark entry.
