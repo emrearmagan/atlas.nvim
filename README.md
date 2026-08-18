@@ -286,6 +286,21 @@ pulls = {
           },
         },
       },
+
+      bookmarks = {
+        key   = "S",      -- default
+        label = "Search", -- default
+        items = {
+          ["Atlas"] = {
+            repos = {
+              { workspace = "your-workspace", repo = "atlas" },
+            },
+            filter = function(pr)
+              return not pr.draft
+            end,
+          },
+        },
+      },
     },
   },
 },
@@ -633,7 +648,7 @@ Open GitHub and GitLab notifications inside Atlas, refresh them, open the relate
   <img width="85%" alt="Bookmarks" src="https://github.com/user-attachments/assets/f008d6af-dfc6-4b65-8af1-94cd6ce9fc99">
 </p>
 
-Turn frequently used GitHub and GitLab searches or Jira JQL into named shortcuts. Use bookmarks for review queues, recurring project views, and the searches you return to throughout the day.
+Turn frequently used GitHub and GitLab searches, Bitbucket repository views, or Jira JQL into named shortcuts. Use bookmarks for review queues, recurring project views, and the searches you return to throughout the day.
 
 Bookmarks appear alongside your configured views, keeping important queries one action away.
 Star a pull request or issue with `*` to keep it at the top of lists. Starred items are saved locally and appear in the first bookmark entry.

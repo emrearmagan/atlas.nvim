@@ -29,6 +29,18 @@
 --               end,
 --             },
 --           },
+--           bookmarks = {
+--             -- key   = "S",      -- default
+--             -- label = "Search", -- default
+--             items = {
+--               ["Core"] = {
+--                 repos = { { workspace = "acme", repo = "core" } },
+--                 filter = function(pr)
+--                   return not pr.draft
+--                 end,
+--               },
+--             },
+--           },
 --         },
 --       },
 --     },
@@ -43,8 +55,19 @@
 ---@field filter? fun(pr: PullRequest, ctx: { user: PullsUser|nil }): boolean|nil
 ---@field status? "OPEN"|"MERGED"|"DECLINED"|"SUPERSEDED"
 
+---@class AtlasBitbucketBookmarkConfig
+---@field layout "compact"|"plain"|nil
+---@field repos AtlasBitbucketRepoRef[]
+---@field filter? fun(pr: PullRequest, ctx: { user: PullsUser|nil }): boolean|nil
+
+---@class AtlasBitbucketBookmarksConfig
+---@field key string|nil    -- default "S"
+---@field label string|nil  -- default "Search"
+---@field items table<string, AtlasBitbucketBookmarkConfig>|nil
+
 ---@class AtlasBitbucketConfig
 ---@field user string
 ---@field token string
 ---@field cache_ttl number|nil
 ---@field views AtlasBitbucketViewConfig[]|nil
+---@field bookmarks AtlasBitbucketBookmarksConfig|nil

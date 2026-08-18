@@ -103,7 +103,11 @@ end
 ---@return string[]
 local function repositories(options)
 	local result = {}
-	for _, view in ipairs(options.views or {}) do
+	local views = vim.list_extend({}, options.views or {})
+	for _, bookmark in pairs((options.bookmarks or {}).items or {}) do
+		table.insert(views, bookmark)
+	end
+	for _, view in ipairs(views) do
 		for _, repo in ipairs(view.repos or {}) do
 			table.insert(result, tostring(repo.workspace or "") .. "/" .. tostring(repo.repo or ""))
 		end

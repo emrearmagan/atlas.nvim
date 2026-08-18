@@ -293,6 +293,20 @@ cross-workspace search like GitHub does.
             },
           },
         },
+        bookmarks = {
+          -- key   = "S",      -- default
+          -- label = "Search", -- default
+          items = {
+            ["Atlas"] = {
+              repos = {
+                { workspace = "your-workspace", repo = "atlas" },
+              },
+              filter = function(pr)
+                return not pr.draft
+              end,
+            },
+          },
+        },
       },
     },
   }
@@ -598,11 +612,12 @@ related item, and mark notifications as read or done without leaving Neovim.
 ------------------------------------------------------------------------------
 BOOKMARKS                                                      *atlas-bookmarks*
 
-Turn frequently used GitHub and GitLab searches or Jira JQL into named
-shortcuts. Use bookmarks for review queues, recurring project views, and the
-searches you return to throughout the day. Bookmarks appear alongside your
-configured views. Press `*` on a pull request or issue to star it. Starred
-items stay at the top of lists and appear in the first bookmark entry.
+Turn frequently used GitHub and GitLab searches, Bitbucket repository views,
+or Jira JQL into named shortcuts. Use bookmarks for review queues, recurring
+project views, and the searches you return to throughout the day. Bookmarks
+appear alongside your configured views. Press `*` on a pull request or issue
+to star it. Starred items stay at the top of lists and appear in the first
+bookmark entry.
 
 ------------------------------------------------------------------------------
 CUSTOM ACTIONS                                    *atlas-custom-actions*

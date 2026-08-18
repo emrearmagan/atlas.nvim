@@ -66,6 +66,13 @@ local function preview_text(value)
 	if type(value) ~= "table" then
 		return ""
 	end
+	if value.repos then
+		local repos = {}
+		for _, repo in ipairs(value.repos) do
+			table.insert(repos, string.format("%s/%s", tostring(repo.workspace), tostring(repo.repo)))
+		end
+		return table.concat(repos, ", ")
+	end
 
 	local keys = {}
 	for k in pairs(value) do
