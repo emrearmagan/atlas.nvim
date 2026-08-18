@@ -12,13 +12,12 @@ local starred = require("atlas.core.starred")
 local active_pullrequests_handle = nil
 local active_pr_reload_handles = {}
 
----@param groups PullsGroup[]|nil
----@return PullsGroup[]
-local function apply_starred(groups)
-	groups = groups or {}
+---@param pulls PullRequest[]
+---@return PullRequest[]
+local function mark_starred(pulls)
 	local records = starred.list("pulls", state.provider.id)
 	if records == nil then
-		return groups
+		return pulls
 	end
 
 	local refs = {}
@@ -26,19 +25,10 @@ local function apply_starred(groups)
 		refs[record.ref] = true
 	end
 
-	local result = {}
-	for _, group in ipairs(groups) do
-		local starred_prs, other_prs = {}, {}
-		for _, pr in ipairs(group.prs) do
-			pr.is_starred = refs[starred.ref(pr, state.provider.id)] == true
-			table.insert(pr.is_starred and starred_prs or other_prs, pr)
-		end
-		table.insert(result, {
-			repo = group.repo,
-			prs = vim.list_extend(starred_prs, other_prs),
-		})
+	for _, pr in ipairs(pulls) do
+		pr.is_starred = refs[starred.ref(pr, state.provider.id)] == true
 	end
-	return result
+	return pulls
 end
 
 ---@param pr PullRequest
@@ -173,17 +163,12 @@ local function load_starred(view, on_done)
 			state.current_view = state.active_view
 			state.pulls = nil
 		else
-			local groups, by_repo = {}, {}
+			local pulls = {}
 			for _, record in ipairs(records) do
-				local repo_id = record.repo.id
-				if by_repo[repo_id] == nil then
-					by_repo[repo_id] = { repo = record.repo, prs = {} }
-					table.insert(groups, by_repo[repo_id])
-				end
 				record.item.is_starred = true
-				table.insert(by_repo[repo_id].prs, record.item)
+				table.insert(pulls, record.item)
 			end
-			state.pulls = groups
+			state.pulls = pulls
 		end
 	end
 
@@ -274,9 +259,9 @@ local function load_active_view(opts, on_done)
 		return false
 	end
 
-	---@param groups PullsGroup[]|nil
+	---@param pulls PullRequest[]
 	---@param err string[]|string|nil
-	local function finalize_fetch(groups, err)
+	local function finalize_fetch(pulls, err)
 		if is_stale_request() then
 			return
 		end
@@ -291,12 +276,12 @@ local function load_active_view(opts, on_done)
 			first_err = err
 		end
 
-		local has_groups = #(groups or {}) > 0
+		local has_pulls = #pulls > 0
 
 		if first_err ~= nil then
-			if has_groups then
+			if has_pulls then
 				state.error = nil
-				state.pulls = apply_starred(groups)
+				state.pulls = mark_starred(pulls)
 				statusline.notify("warn", string.format("Some repositories failed: %s", tostring(first_err)))
 			else
 				state.error = tostring(first_err)
@@ -305,7 +290,7 @@ local function load_active_view(opts, on_done)
 			end
 		else
 			state.error = nil
-			state.pulls = apply_starred(groups)
+			state.pulls = mark_starred(pulls)
 			statusline.notify("success", "Pull requests loaded", 1200)
 		end
 
@@ -320,9 +305,9 @@ local function load_active_view(opts, on_done)
 		active_pullrequests_handle = core.fetch_pullrequests(
 			target_view,
 			{ force_load = opts.force_load == true },
-			function(groups, err)
+			function(pulls, err)
 				active_pullrequests_handle = nil
-				finalize_fetch(groups, err)
+				finalize_fetch(pulls, err)
 			end
 		)
 	end
@@ -369,18 +354,18 @@ local function load_bookmark(view, force_load, on_done)
 	active_pullrequests_handle = provider.capabilities.core.fetch_pullrequests(
 		view,
 		{ force_load = force_load },
-		function(groups, err)
+		function(pulls, err)
 			active_pullrequests_handle = nil
 			state.is_loading = false
 			sync_loading_spinner()
 			local first_err = type(err) == "table" and err[1] or err
-			if first_err and #(groups or {}) == 0 then
+			if first_err and #pulls == 0 then
 				state.error = tostring(first_err)
 				state.pulls = {}
 				statusline.notify("error", string.format("Query failed: %s", state.error))
 			else
 				state.error = nil
-				state.pulls = apply_starred(groups)
+				state.pulls = mark_starred(pulls)
 				if first_err then
 					statusline.notify("warn", string.format("Some repositories failed: %s", tostring(first_err)))
 				else
@@ -486,29 +471,18 @@ function M.refresh_pr(pr, on_done)
 			return
 		end
 
-		local groups = state.pulls or {}
-		local replaced = false
-		local saved_repo = nil
-		for _, group in ipairs(groups) do
-			if group.repo.id == repo_id then
-				for i, existing_pr in ipairs(group.prs or {}) do
-					if existing_pr.id == pr_id then
-						group.prs[i] = fetched_pr
-						saved_repo = group.repo
-						replaced = true
-						break
-					end
-				end
-			end
-			if replaced then
+		local pulls = state.pulls or {}
+		for i, current in ipairs(pulls) do
+			if tostring(current.id) == tostring(pr_id) and tostring(current.repo_full_name) == repo_id then
+				pulls[i] = fetched_pr
 				break
 			end
 		end
 
-		state.pulls = apply_starred(groups)
+		state.pulls = mark_starred(pulls)
 		local snapshot_err
-		if fetched_pr.is_starred and saved_repo then
-			local _, err = starred.add(fetched_pr, state.provider.id, saved_repo)
+		if fetched_pr.is_starred then
+			local _, err = starred.add(fetched_pr, state.provider.id, helper.repo(fetched_pr))
 			snapshot_err = err
 		end
 		end_pr_reload(repo_id, pr_id)
@@ -578,7 +552,6 @@ function M.toggle_star(pr, repo)
 		return
 	end
 
-	state.pulls = apply_starred(state.pulls)
 	render_if_active()
 end
 

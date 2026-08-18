@@ -174,27 +174,6 @@ function M.to_pull_request(raw)
 	}
 end
 
----@param prs PullRequest[]
----@return PullsGroup[]
-function M.to_pull_request_groups(prs)
-	local by_repo = {}
-	local groups = {}
-	for _, pr in ipairs(prs or {}) do
-		local key = pr.repo_full_name or ""
-		local group = by_repo[key]
-		if not group then
-			group = {
-				repo = { id = key, name = key, owner = pr.workspace, repo_name = pr.repo },
-				prs = {},
-			}
-			by_repo[key] = group
-			table.insert(groups, group)
-		end
-		table.insert(group.prs, pr)
-	end
-	return groups
-end
-
 ---@param raw table
 ---@return PullsUser
 function M.to_user(raw)

@@ -37,7 +37,7 @@ local highlights = require("atlas.ui.shared.highlights")
 ---@field mode AtlasThreadV2Mode|nil                                                           Rendering mode (default "tree")
 ---@field separator string|nil                                                                 Character for root separators (default "─")
 ---@field content_max_lines integer|fun(item: AtlasThreadV2Item): integer|nil                  Max visible content lines per item (nil = unlimited).
----@field content_truncated_text string|nil                                                   Text shown when content is truncated.
+---@field content_truncated_key string|nil                                                    Key shown when expandable content is truncated.
 ---@field content_prefix string|nil                                                           Prefix placed before root content after padding
 ---@field author_hl? fun(item: AtlasThreadV2Item, author: string): string|nil                   Returns hl group for author
 ---@field additional_hl? fun(item: AtlasThreadV2Item, additional: string): string|table[]|nil    Returns a group or highlighted segments
@@ -414,14 +414,27 @@ local function render_content(lines, spans, line_map, item, depth, pfx, opts, wi
 
 	-- Indicator when content was truncated.
 	if truncated then
-		local hint_text = opts.content_truncated_text or ".."
-		local full_line = body_prefix .. hint_text
+		local key = opts.content_truncated_key
+		local prefix = key and "Press " or ""
+		local suffix = key and " to expand" or ""
+		local hint_text = key and (prefix .. key .. suffix) or ".."
+		local hint_padding = key and math.max(0, math.floor((content_max_dw - vim.api.nvim_strwidth(hint_text)) / 2))
+			or 0
+		local hint_start = #body_prefix + hint_padding
+		local full_line = body_prefix .. string.rep(" ", hint_padding) .. hint_text
 		lines[#lines + 1] = full_line
 		map_line(line_map, #lines, make_line_map(item, "content_truncated", depth))
 		if #body_prefix > 0 then
 			span(spans, #lines - 1, 0, #body_prefix, "AtlasTextMuted")
 		end
-		span(spans, #lines - 1, #body_prefix, #full_line, "AtlasTextMuted")
+		if key then
+			local key_start = hint_start + #prefix
+			span(spans, #lines - 1, hint_start, key_start, "AtlasTextMuted")
+			span(spans, #lines - 1, key_start, key_start + #key, "Normal")
+			span(spans, #lines - 1, key_start + #key, #full_line, "AtlasTextMuted")
+		else
+			span(spans, #lines - 1, hint_start, #full_line, "AtlasTextMuted")
+		end
 	end
 
 	local block = item.content_block
@@ -650,7 +663,7 @@ function M.render(items, width, opts)
 		mode = "tree",
 		separator = "─",
 		content_max_lines = nil,
-		content_truncated_text = nil,
+		content_truncated_key = nil,
 		author_hl = default_author_hl,
 		additional_hl = noop_hl,
 		content_hl = noop_hl,

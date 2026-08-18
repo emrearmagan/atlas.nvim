@@ -14,7 +14,7 @@ local helper = require("atlas.pulls.ui.main.helper")
 
 local PADDING_X = 1
 local PADDING = string.rep(" ", PADDING_X)
-local MAX_DESCRIPTION_LINES = 8
+local MAX_DESCRIPTION_LINES = 15
 
 ---@type { cancel: fun() }[]
 local in_flight = {}

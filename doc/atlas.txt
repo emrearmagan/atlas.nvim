@@ -235,11 +235,11 @@ GitHub search expression.
       github = {
         cache_ttl = 300,
         views = {
-          { name = "My PRs", key = "1", layout = "plain",
+          { name = "My PRs", key = "1", layout = "plain", -- "compact", "grouped", or "plain"
             search = "author:@me sort:updated-desc" },
           { name = "Team",   key = "2", layout = "compact",
             search = "org:your-org sort:updated-desc" },
-          { name = "Repo",   key = "3", layout = "plain",
+          { name = "Repo",   key = "3", layout = "grouped",
             search = "repo:your-org/your-repo" },
         },
         bookmarks = {
@@ -275,7 +275,7 @@ GitHub does.
           {
             name   = "Me",
             key    = "M",
-            layout = "compact",
+            layout = "compact", -- "compact", "grouped", or "plain"
             targets = {
               { workspace = "your-workspace", repo = "standalone-repo" },
               { workspace = "your-workspace", project = "CORE" },
@@ -290,7 +290,7 @@ GitHub does.
           {
             name   = "Team",
             key    = "1",
-            layout = "plain",
+            layout = "grouped",
             targets = {
               { workspace = "your-workspace", project = "TEAM" },
             },
@@ -306,7 +306,7 @@ GitHub does.
                 { workspace = "your-workspace", project = "ATLAS" },
               },
               filter = function(pr)
-                return not pr.draft
+                return pr.state ~= "draft"
               end,
             },
           },
@@ -335,7 +335,8 @@ Self-hosted GitLab has not been tested yet.
         token     = vim.env.GITLAB_TOKEN,
         cache_ttl = 300,
         views = {
-          { name = "Assigned",  key = "1", scope = "assigned_to_me" },
+          { name = "Assigned",  key = "1", layout = "grouped", -- "compact", "grouped", or "plain"
+            scope = "assigned_to_me" },
           { name = "Reviewing", key = "3", scope = "all",
             extra_params = { reviewer_id = "Me" } },
           -- One project:

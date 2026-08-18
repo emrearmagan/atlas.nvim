@@ -7,7 +7,7 @@
 ---@class AtlasPullsViewConfig
 ---@field name string
 ---@field key string|nil
----@field layout "compact"|"plain"|nil
+---@field layout "compact"|"grouped"|"plain"|nil
 ---@field _kind "bookmarks"|"starred"|nil
 ---@field _bookmarks table<string, any>|nil
 ---@field _starred { domain: "pulls", provider: string }|nil

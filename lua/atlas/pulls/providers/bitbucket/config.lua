@@ -39,7 +39,7 @@
 --                   { workspace = "acme", project = "CORE" },
 --                 },
 --                 filter = function(pr)
---                   return not pr.draft
+--                   return pr.state ~= "draft"
 --                 end,
 --               },
 --             },
@@ -65,7 +65,7 @@
 ---@field status? "OPEN"|"MERGED"|"DECLINED"|"SUPERSEDED"
 
 ---@class AtlasBitbucketBookmarkConfig
----@field layout "compact"|"plain"|nil
+---@field layout "compact"|"grouped"|"plain"|nil
 ---@field targets AtlasBitbucketTarget[]
 ---@field filter? fun(pr: PullRequest, ctx: { user: PullsUser|nil }): boolean|nil
 

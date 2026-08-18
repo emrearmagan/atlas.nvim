@@ -14,7 +14,7 @@ local resolver = require("atlas.providers.resolve")
 
 ---@param view AtlasPullsViewConfig
 ---@param opts PullsFetchOpts
----@param on_done fun(groups: PullsGroup[], err: string[]|nil)
+---@param on_done fun(pulls: PullRequest[], err: string[]|nil)
 ---@return { cancel: fun() }|nil
 local function fetch_pullrequests(view, opts, on_done)
 	---@cast view AtlasGitLabPullsViewConfig
@@ -44,12 +44,12 @@ local function fetch_pullrequests(view, opts, on_done)
 		force_load = opts and opts.force_load == true or false,
 		pagelen = opts and opts.pagelen or 50,
 		state = state,
-	}, function(groups, err)
+	}, function(pulls, err)
 		if err then
 			on_done({}, { err })
 			return
 		end
-		on_done(groups or {}, nil)
+		on_done(pulls, nil)
 	end)
 end
 

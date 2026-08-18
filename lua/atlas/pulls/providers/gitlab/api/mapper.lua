@@ -155,37 +155,17 @@ function M.to_pull_request(raw)
 	}
 end
 
----@param raw_list table[]|nil
----@return PullsGroup[] groups grouped by repo_full_name
-function M.to_pull_request_groups(raw_list)
-	local by_repo = {}
-	local order = {}
-	for _, raw in ipairs(raw_list or {}) do
+---@param raw_list table[]
+---@return PullRequest[]
+function M.to_pull_requests(raw_list)
+	local pulls = {}
+	for _, raw in ipairs(raw_list) do
 		local pr = M.to_pull_request(raw)
-		if pr ~= nil then
-			local key = pr.repo_full_name ~= "" and pr.repo_full_name or "unknown"
-			if not by_repo[key] then
-				by_repo[key] = {
-					repo = {
-						id = key,
-						name = pr.repo,
-						owner = pr.workspace,
-						repo_name = pr.repo,
-						html_url = nil,
-					},
-					prs = {},
-				}
-				table.insert(order, key)
-			end
-			table.insert(by_repo[key].prs, pr)
+		if pr then
+			table.insert(pulls, pr)
 		end
 	end
-
-	local groups = {}
-	for _, key in ipairs(order) do
-		table.insert(groups, by_repo[key])
-	end
-	return groups
+	return pulls
 end
 
 ---@param raw any Decoded API value.
