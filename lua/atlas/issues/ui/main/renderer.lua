@@ -9,6 +9,7 @@ local utils = require("atlas.ui.shared.utils")
 local statusline = require("atlas.ui.statusline")
 local helper = require("atlas.issues.ui.main.helper")
 local icons = require("atlas.ui.shared.icons")
+local STAR_ICON, STAR_ICON_HL = icons.general("star")
 
 ---@param view IssuesViewConfig|nil
 ---@return string
@@ -86,6 +87,9 @@ local function issue_to_row(issue, is_child)
 		}
 	end
 
+	if issue.is_starred then
+		row_data.name = STAR_ICON .. " " .. row_data.name
+	end
 	row_data._item = { kind = "issue", key = issue.key, _issue = issue }
 	row_data._issue = issue
 	row_data.children = row_data.children or {}
@@ -298,13 +302,17 @@ function cell_hl(row, col, ctx)
 	if row.kind == "meta" then
 		return { { start_col = 0, end_col = #ctx.padded, hl_group = "AtlasTextMuted" } }
 	end
-
 	local provider = state.provider
 	local ui = provider and provider.capabilities.ui
+	local spans
 	if ui and ui.cell_hl then
-		return ui.cell_hl(row, col, ctx)
+		spans = ui.cell_hl(row, col, ctx)
 	end
-	return nil
+	if col.key == "name" and row._issue and row._issue.is_starred then
+		spans = spans or {}
+		table.insert(spans, 1, { start_col = 0, end_col = #STAR_ICON, hl_group = STAR_ICON_HL })
+	end
+	return spans
 end
 
 ---@param issue Issue

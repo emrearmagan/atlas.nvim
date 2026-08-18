@@ -35,7 +35,7 @@ local ICONS = {
 		pin = { icon = "󰐃", hl_group = "AtlasTextNote" },
 		dot = { icon = "●", hl_group = "AtlasTextMuted" },
 		activity_more = { icon = "󰉺", hl_group = "AtlasTextMuted" },
-		star = { icon = "", hl_group = "AtlasTextWarning" },
+		star = { icon = "󰓎", hl_group = "AtlasTextWarning" },
 		watching = { icon = "", hl_group = "AtlasTextPositive" },
 		arrow_up = { icon = "", hl_group = "AtlasTextMuted" },
 		arrow_right = { icon = "", hl_group = "AtlasTextMuted" },

@@ -42,6 +42,12 @@ local function load()
 	if not ok or type(value) ~= "table" then
 		return nil, "Unable to read starred items: " .. path
 	end
+	for ref, item in pairs(value) do
+		if type(item) ~= "table" then
+			return nil, "Unable to read starred items: " .. path
+		end
+		item.ref = tostring(ref)
+	end
 	return value, nil
 end
 
