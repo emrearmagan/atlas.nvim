@@ -122,7 +122,17 @@ function M.fetch_conversation(pr, opts, on_done)
 				table.insert(timeline, event)
 			end
 		end
-		on_done({ comments = global_comments, tasks = global_tasks, events = timeline }, nil)
+
+		local failed = {}
+		for _, source in ipairs({ "comments", "tasks", "events" }) do
+			if errors[source] then
+				table.insert(failed, string.format("%s: %s", source, errors[source]))
+			end
+		end
+		on_done(
+			{ comments = global_comments, tasks = global_tasks, events = timeline },
+			#failed > 0 and table.concat(failed, "; ") or nil
+		)
 	end)
 	return requests
 end
