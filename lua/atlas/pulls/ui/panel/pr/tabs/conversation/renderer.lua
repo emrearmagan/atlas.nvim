@@ -63,7 +63,7 @@ local function render_thread(thread, collapsed, width)
 		padding_x = 0,
 		reaction_options = comments and comments.reaction_options,
 		content_max_lines = fold_key and state.comment_max_lines or nil,
-		content_truncated_text = fold_key and (fold_key .. " to expand") or nil,
+		content_truncated_key = fold_key,
 	})
 	local result = box.render({ { lines = lines, spans = spans, line_map = line_map } }, {
 		width = width,
