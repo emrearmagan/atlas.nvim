@@ -10,6 +10,7 @@ local PR_ICON, PR_ICON_HL = icons.pulls("pr")
 local MERGED_PR_ICON, MERGED_PR_ICON_HL = icons.pulls("merged_pr")
 local DECLINED_PR_ICON, DECLINED_PR_ICON_HL = icons.pulls("declined_pr")
 local REPO_ICON = icons.pulls("repo")
+local STAR_ICON = icons.general("star")
 
 local PR_STATE_ICON = {
 	open = { PR_ICON, PR_ICON_HL },
@@ -167,7 +168,7 @@ local function compact_rows(groups)
 				_pr_reloading = is_reloading,
 				_pr_icon_str = icon,
 				_pr_icon_hl = icon_hl,
-				repo_pr = "!" .. id_str .. " " .. title,
+				repo_pr = (pr.is_starred and STAR_ICON .. " " or "") .. "!" .. id_str .. " " .. title,
 				conversation = tostring(pr.comments_count or 0),
 				ci = ci,
 				ci_hl = ci_h,
@@ -274,7 +275,7 @@ local function plain_rows(groups)
 				_pr_reloading = state.is_pr_reloading(pr.repo_full_name, pr.id),
 				_pr_icon_str = icon,
 				_pr_icon_hl = icon_hl,
-				name = "!" .. id_str .. " " .. title,
+				name = (pr.is_starred and STAR_ICON .. " " or "") .. "!" .. id_str .. " " .. title,
 				conversation = tostring(pr.comments_count or 0),
 				ci = ci,
 				ci_hl = ci_h,

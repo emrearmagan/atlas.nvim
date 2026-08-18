@@ -53,6 +53,7 @@
 ---@field workspace string
 ---@field repo string
 ---@field is_subscribed boolean|nil
+---@field is_starred boolean|nil
 ---@field reactions table<string, integer>|nil
 ---@field assignees PullsAuthor[]|nil
 ---@field reviewers PullsReviewer[]|nil

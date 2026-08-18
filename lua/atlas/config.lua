@@ -157,6 +157,7 @@ M.options = {
 				mark_done = "d",
 			},
 			toggle_subscription = "gS",
+			toggle_star = "*",
 			refresh = "r",
 			refresh_view = "R",
 			open_actions = "A",

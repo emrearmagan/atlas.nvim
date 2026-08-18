@@ -18,6 +18,7 @@ local M = {}
 ---@field next_panel_tab? AtlasKeymapValue
 ---@field notifications? AtlasUINotificationKeymaps
 ---@field toggle_subscription? AtlasKeymapValue
+---@field toggle_star? AtlasKeymapValue
 ---@field refresh? AtlasKeymapValue
 ---@field refresh_view? AtlasKeymapValue
 ---@field open_actions? AtlasKeymapValue
@@ -133,6 +134,7 @@ local M = {}
 ---| "ui.notifications.mark_read"
 ---| "ui.notifications.mark_done"
 ---| "ui.toggle_subscription"
+---| "ui.toggle_star"
 ---| "ui.refresh"
 ---| "ui.refresh_view"
 ---| "ui.open_actions"

@@ -181,6 +181,21 @@ function M.register(buf, views)
 
 	utils.insert_if(
 		items,
+		item("ui.toggle_star", {
+			desc = "Star or unstar PR",
+			callback = function()
+				local pr, repo = selected_pr()
+				if pr == nil or repo == nil then
+					statusline.notify("warn", "No PR selected")
+					return
+				end
+				require("atlas.pulls.ui.main.controller").toggle_star(pr, repo)
+			end,
+		})
+	)
+
+	utils.insert_if(
+		items,
 		item("pulls.open_diff", {
 			desc = "Open PR diff",
 			opts = { nowait = true },

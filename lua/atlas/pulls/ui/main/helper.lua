@@ -10,6 +10,7 @@ local MERGED_PR_ICON, MERGED_PR_ICON_HL = icons.pulls("merged_pr")
 local DECLINED_PR_ICON, DECLINED_PR_ICON_HL = icons.pulls("declined_pr")
 local REPO_ICON = icons.pulls("repo")
 local TASKS_ICON = icons.pulls("tasks")
+local STAR_ICON, STAR_ICON_HL = icons.general("star")
 
 local PR_STATE_ICON = {
 	open = { PR_ICON, PR_ICON_HL },
@@ -133,6 +134,9 @@ end
 ---@param ctx { text: string, padded: string, width: integer }
 ---@return table[]|nil
 function M.cell_hl(row, col, ctx)
+	if (col.key == "name" or col.key == "repo_pr") and ctx.text:find(STAR_ICON, 1, true) == 1 then
+		return { { start_col = 0, end_col = #STAR_ICON, hl_group = STAR_ICON_HL } }
+	end
 	if col.key == "name" and row.kind == "repo" then
 		local hl_group = highlights.dynamic_for(row.repo_full_name)
 		return { { start_col = 0, end_col = #ctx.padded, hl_group = hl_group } }
@@ -262,7 +266,7 @@ function M.build_compact_table(groups)
 				_pr_reloading = is_reloading,
 				_pr_icon_str = icon,
 				_pr_icon_hl = icon_hl,
-				repo_pr = "#" .. id_str .. " " .. title,
+				repo_pr = (pr.is_starred and STAR_ICON .. " " or "") .. "#" .. id_str .. " " .. title,
 				conversation = tostring(pr.comments_count or 0),
 				tasks = tostring(pr.tasks_count or 0),
 				status = state_label,
@@ -377,7 +381,7 @@ function M.build_plain_tree_table(groups)
 				_pr_reloading = is_reloading,
 				_pr_icon_str = icon,
 				_pr_icon_hl = icon_hl,
-				name = "#" .. id_str .. " " .. title,
+				name = (pr.is_starred and STAR_ICON .. " " or "") .. "#" .. id_str .. " " .. title,
 				conversation = tostring(pr.comments_count or 0),
 				tasks = tostring(pr.tasks_count or 0),
 				status = "",

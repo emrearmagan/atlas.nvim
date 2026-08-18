@@ -7,9 +7,50 @@ local layout = require("atlas.ui.layout")
 local helper = require("atlas.pulls.ui.main.helper")
 local navigation = require("atlas.ui.navigation")
 local info_popup = require("atlas.ui.popups.info")
+local starred = require("atlas.core.starred")
 
 local active_pullrequests_handle = nil
 local active_pr_reload_handles = {}
+
+---@param groups PullsGroup[]|nil
+---@return PullsGroup[]
+local function apply_starred(groups)
+	groups = groups or {}
+	local records = starred.list("pulls", state.provider.id)
+	if records == nil then
+		return groups
+	end
+
+	local refs = {}
+	for _, record in ipairs(records) do
+		refs[record.ref] = true
+	end
+
+	local result = {}
+	for _, group in ipairs(groups) do
+		local starred_prs, other_prs = {}, {}
+		for _, pr in ipairs(group.prs) do
+			pr.is_starred = refs[starred.ref(pr, state.provider.id)] == true
+			table.insert(pr.is_starred and starred_prs or other_prs, pr)
+		end
+		table.insert(result, {
+			repo = group.repo,
+			prs = vim.list_extend(starred_prs, other_prs),
+		})
+	end
+	return result
+end
+
+---@param pr PullRequest
+---@return boolean
+local function focus_pull_request(pr)
+	return navigation.focus_item(function(item)
+		return item.kind == "pr"
+			and item.pr
+			and tostring(item.pr.id) == tostring(pr.id)
+			and tostring(item.pr.repo_full_name) == tostring(pr.repo_full_name)
+	end)
+end
 
 local function render_if_active()
 	if not layout.is_active() then
@@ -105,6 +146,51 @@ local function cancel_active_requests()
 
 	cancel_pr_reload_handles()
 	reset_reload_state()
+end
+
+---@param view AtlasPullsViewConfig
+---@param on_done fun()|nil
+local function load_starred(view, on_done)
+	cancel_active_requests()
+	state.is_loading = false
+	state.error = nil
+	state.last_search_query = nil
+	state.current_view = view
+
+	local records, err = starred.list("pulls", state.provider.id)
+	if records == nil then
+		state.error = err
+		state.pulls = {}
+	else
+		if #records == 0 then
+			if layout.win_id("detail") then
+				layout.toggle_detail()
+			end
+			if next(state.active_view._bookmarks) == nil then
+				M.switch_view(state.provider.capabilities.core.views()[1])
+				return
+			end
+			state.current_view = state.active_view
+			state.pulls = nil
+		else
+			local groups, by_repo = {}, {}
+			for _, record in ipairs(records) do
+				local repo_id = record.repo.id
+				if by_repo[repo_id] == nil then
+					by_repo[repo_id] = { repo = record.repo, prs = {} }
+					table.insert(groups, by_repo[repo_id])
+				end
+				record.item.is_starred = true
+				table.insert(by_repo[repo_id].prs, record.item)
+			end
+			state.pulls = groups
+		end
+	end
+
+	render_if_active()
+	if on_done then
+		on_done()
+	end
 end
 
 ---@return integer
@@ -210,7 +296,7 @@ local function load_active_view(opts, on_done)
 		if first_err ~= nil then
 			if has_groups then
 				state.error = nil
-				state.pulls = groups
+				state.pulls = apply_starred(groups)
 				statusline.notify("warn", string.format("Some repositories failed: %s", tostring(first_err)))
 			else
 				state.error = tostring(first_err)
@@ -219,7 +305,7 @@ local function load_active_view(opts, on_done)
 			end
 		else
 			state.error = nil
-			state.pulls = groups or {}
+			state.pulls = apply_starred(groups)
 			statusline.notify("success", "Pull requests loaded", 1200)
 		end
 
@@ -266,6 +352,10 @@ local function load_bookmark(view, force_load, on_done)
 	if provider == nil then
 		return
 	end
+	if view._kind == "starred" then
+		load_starred(view, on_done)
+		return
+	end
 
 	cancel_active_requests()
 	state.is_loading = true
@@ -290,7 +380,7 @@ local function load_bookmark(view, force_load, on_done)
 				statusline.notify("error", string.format("Query failed: %s", state.error))
 			else
 				state.error = nil
-				state.pulls = groups or {}
+				state.pulls = apply_starred(groups)
 				statusline.notify("success", "Pull requests loaded", 1200)
 			end
 			render_if_active()
@@ -319,12 +409,7 @@ function M.refresh_current_view(on_done, focus_pr)
 	local function finish()
 		local focused = bookmark_active and focus_pr == nil
 		if focus_pr ~= nil then
-			focused = navigation.focus_item(function(item)
-				return item.kind == "pr"
-					and item.pr
-					and tostring(item.pr.id) == tostring(focus_pr.id)
-					and tostring(item.pr.repo_full_name) == tostring(focus_pr.repo_full_name)
-			end)
+			focused = focus_pull_request(focus_pr)
 		end
 		if not focused then
 			navigation.focus_first_item()
@@ -399,11 +484,13 @@ function M.refresh_pr(pr, on_done)
 
 		local groups = state.pulls or {}
 		local replaced = false
+		local saved_repo = nil
 		for _, group in ipairs(groups) do
 			if group.repo.id == repo_id then
 				for i, existing_pr in ipairs(group.prs or {}) do
 					if existing_pr.id == pr_id then
 						group.prs[i] = fetched_pr
+						saved_repo = group.repo
 						replaced = true
 						break
 					end
@@ -414,7 +501,12 @@ function M.refresh_pr(pr, on_done)
 			end
 		end
 
-		state.pulls = groups
+		state.pulls = apply_starred(groups)
+		local snapshot_err
+		if fetched_pr.is_starred and saved_repo then
+			local _, err = starred.add(fetched_pr, state.provider.id, saved_repo)
+			snapshot_err = err
+		end
 		end_pr_reload(repo_id, pr_id)
 
 		local pr_panel_state = require("atlas.pulls.ui.panel.pr.state")
@@ -432,7 +524,11 @@ function M.refresh_pr(pr, on_done)
 			})
 		end
 
-		statusline.notify("success", string.format("Reloaded PR #%s", tostring(pr_id)), 1200)
+		if snapshot_err then
+			statusline.notify("warn", snapshot_err)
+		else
+			statusline.notify("success", string.format("Reloaded PR #%s", tostring(pr_id)), 1200)
+		end
 		on_done()
 	end)
 	table.insert(active_pr_reload_handles, reload_handle)
@@ -458,6 +554,28 @@ function M.show_pr_details(source_buf)
 		highlights = highlights,
 		source_buf = source_buf,
 	})
+end
+
+---@param pr PullRequest
+---@param repo PullsRepo
+function M.toggle_star(pr, repo)
+	local now_starred, err = starred.toggle(pr, state.provider.id, repo)
+	if now_starred == nil then
+		statusline.notify("error", err or "Unable to update starred pull request")
+		return
+	end
+
+	pr.is_starred = now_starred
+	statusline.notify("success", now_starred and "Pull request starred" or "Pull request unstarred", 1200)
+
+	local current_view = state.current_view
+	if current_view and current_view._kind == "starred" then
+		load_starred(current_view)
+		return
+	end
+
+	state.pulls = apply_starred(state.pulls)
+	render_if_active()
 end
 
 ---@param pr PullRequest|nil
