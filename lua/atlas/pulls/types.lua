@@ -53,6 +53,7 @@
 ---@field workspace string
 ---@field repo string
 ---@field is_subscribed boolean|nil
+---@field is_starred boolean|nil
 ---@field reactions table<string, integer>|nil
 ---@field assignees PullsAuthor[]|nil
 ---@field reviewers PullsReviewer[]|nil
@@ -125,14 +126,6 @@
 ---@field comments integer
 ---@field url string
 ---@field issue_type { name: string, color: string }|nil
-
---------------------------------------------------------------------------------
--- Group (PRs grouped by repository)
---------------------------------------------------------------------------------
-
----@class PullsGroup
----@field repo PullsRepo
----@field prs PullRequest[]
 
 --------------------------------------------------------------------------------
 -- Reviewer

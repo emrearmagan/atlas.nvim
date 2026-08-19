@@ -8,6 +8,7 @@ local M = {}
 ---@field module string
 ---@field icon AtlasIconStyle|nil
 ---@field bookmark_key string|nil
+---@field bookmark_label string|nil
 
 ---@class AtlasProvider
 ---@field id AtlasProviderId
@@ -104,6 +105,7 @@ add({
 			module = "atlas.issues.providers.jira",
 			icon = { icon = "󰌃", hl_group = "AtlasJiraTheme" },
 			bookmark_key = "J",
+			bookmark_label = "JQL",
 		},
 	},
 })
@@ -134,6 +136,7 @@ add({
 		pulls = {
 			module = "atlas.pulls.providers.bitbucket",
 			icon = { icon = "", hl_group = "AtlasBitbucketTheme" },
+			bookmark_key = "S",
 		},
 	},
 })

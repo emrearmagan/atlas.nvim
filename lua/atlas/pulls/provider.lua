@@ -49,7 +49,7 @@
 
 ---@class PullsCoreCapability
 ---@field fetch_user fun(on_done: fun(user: PullsUser|nil, err: string|nil)): { cancel: fun() }|nil
----@field fetch_pullrequests fun(view: AtlasPullsViewConfig, opts: PullsFetchOpts, on_done: fun(groups: PullsGroup[], err: string[]|nil)): { cancel: fun() }|nil
+---@field fetch_pullrequests fun(view: AtlasPullsViewConfig, opts: PullsFetchOpts, on_done: fun(pulls: PullRequest[], err: string[]|nil)): { cancel: fun() }|nil
 ---@field fetch_pullrequest fun(pr: PullRequestRef, opts: PullsFetchOpts, on_done: fun(pr: PullRequest|nil, err: string|nil)): { cancel: fun() }|nil
 ---@field create_pr fun(opts: PullsCreatePROpts, on_done: fun(result: PullsCreatePRResult|nil, err: string|nil)): { cancel: fun() }|nil
 ---@field update_title fun(pr: PullRequest, title: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil
@@ -120,6 +120,6 @@
 
 ---@class PullsUICapability
 ---@field setup fun()|nil
----@field render (fun(groups: PullsGroup[], layout: string, opts: { width: integer }): PullsMainRenderResult)|nil
+---@field render (fun(pulls: PullRequest[], layout: "compact"|"grouped"|"plain", opts: { width: integer }): PullsMainRenderResult)|nil
 ---@field panel PullsProviderPRPanel|nil
 ---@field repo_panel PullsProviderRepoPanel|nil

@@ -63,9 +63,11 @@ function M.fetch_issue(key, opts, on_done)
 end
 
 ---@param key string
+---@param opts { force_load: boolean|nil }|nil
 ---@param on_done fun(raw: any, err: string|nil)
 ---@return { cancel: fun() }|nil
-local function fetch_description(key, on_done)
+local function fetch_description(key, opts, on_done)
+	opts = opts or {}
 	local normalizer = require("atlas.issues.providers.github.api.mapper")
 	local slug, number = normalizer.parse_key(tostring(key or ""))
 	if slug == "" or number == nil then
@@ -73,7 +75,15 @@ local function fetch_description(key, on_done)
 		return nil
 	end
 	local cli = require("atlas.providers.github.client").issues
-	return cli.gh({
+	local cache_key = string.format("github_issues:description:%s#%d", slug, number)
+	if not opts.force_load then
+		local cached, ok = cli.get_mem(cache_key)
+		if ok then
+			on_done(cached, nil)
+			return nil
+		end
+	end
+	return cli.gh_text({
 		"api",
 		string.format("repos/%s/issues/%d", slug, number),
 		"--jq",
@@ -84,6 +94,7 @@ local function fetch_description(key, on_done)
 			return
 		end
 		local body = type(result) == "string" and result:gsub("\n$", "") or ""
+		cli.set_mem(cache_key, body)
 		on_done(body, nil)
 	end)
 end
@@ -192,26 +203,30 @@ function M.fetch_conversation(issue, opts, on_done)
 		}, nil)
 	end
 
-	requests.run(function(done)
-		return timeline.list_conversation(key, done, { force_load = opts.force_refresh == true })
-	end, function(result, err)
-		if err or type(result) ~= "table" then
-			on_done(nil, err or "Failed to fetch conversation")
+	local description = tostring((issue._raw or {}).body or "")
+	local starts = {
+		timeline = function(done)
+			return timeline.list_conversation(key, done, { force_load = opts.force_refresh == true })
+		end,
+	}
+	if description == "" or opts.force_refresh == true then
+		starts.description = function(done)
+			return fetch_description(key, { force_load = opts.force_refresh == true }, done)
+		end
+	end
+
+	requests.all(starts, function(values, errors)
+		if errors.timeline then
+			on_done(nil, errors.timeline)
 			return
 		end
 
-		local raw = issue._raw or {}
-		local description = tostring(raw.body or "")
-		if description ~= "" then
-			finish(result, description)
-			return
+		if errors.description == nil and values.description ~= nil then
+			description = tostring(values.description)
+			issue._raw = issue._raw or {}
+			issue._raw.body = description
 		end
-
-		requests.run(function(done)
-			return fetch_description(key, done)
-		end, function(body)
-			finish(result, tostring(body or ""))
-		end)
+		finish(values.timeline, description)
 	end)
 	return requests
 end
@@ -278,7 +293,7 @@ function M.views()
 			search = "assignee:@me is:open",
 		},
 	}
-	return require("atlas.ui.shared.bookmarks_view").append_to_views(views, cfg.bookmarks, "S", "Search")
+	return views
 end
 
 local renderer = require("atlas.issues.providers.github.ui.renderer")

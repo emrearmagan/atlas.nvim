@@ -26,7 +26,7 @@ end
 
 ---@param view AtlasPullsViewConfig
 ---@param opts PullsFetchOpts
----@param on_done fun(groups: PullsGroup[], err: string[]|nil)
+---@param on_done fun(pulls: PullRequest[], err: string[]|nil)
 ---@return { cancel: fun() }|nil
 local function fetch_pullrequests(view, opts, on_done)
 	---@cast view AtlasGitHubViewConfig
@@ -150,7 +150,7 @@ local function views()
 	---@cast config AtlasGitHubConfig
 	local configured = type(config.views) == "table" and #config.views > 0 and config.views
 		or { { name = "Me", key = "1", search = "involves:@me", layout = "compact" } }
-	return require("atlas.ui.shared.bookmarks_view").append_to_views(configured, config.bookmarks, "S", "Search")
+	return configured
 end
 
 ---@param value string

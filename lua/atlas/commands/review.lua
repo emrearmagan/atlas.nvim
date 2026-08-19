@@ -42,7 +42,7 @@ function M.open(value)
 	request = provider.capabilities.core.fetch_pullrequests(view, {
 		force_load = true,
 		state = "open",
-	}, function(groups, errors)
+	}, function(pulls, errors)
 		request = nil
 		if errors and #errors > 0 then
 			notify.error(table.concat(errors, "; "))
@@ -50,11 +50,9 @@ function M.open(value)
 		end
 
 		local pull_requests = {}
-		for _, group in ipairs(groups or {}) do
-			for _, pr in ipairs(group.prs or {}) do
-				if pr.state == "open" or pr.state == "draft" then
-					table.insert(pull_requests, pr)
-				end
+		for _, pr in ipairs(pulls) do
+			if pr.state == "open" or pr.state == "draft" then
+				table.insert(pull_requests, pr)
 			end
 		end
 		if #pull_requests == 0 then

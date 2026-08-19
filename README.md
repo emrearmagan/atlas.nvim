@@ -142,6 +142,7 @@ use {
 - `:Atlas notes [target]` - Inspect local review notes
 - `:Atlas clear` - Clear Atlas data
 - `:Atlas clear notes` - Delete local review notes
+- `:Atlas clear stars` - Delete locally starred items
 - `:Atlas logs` - Toggle Atlas logs
 - `:AtlasDiff <base>...<head>` - Open a Git range in native AtlasDiff directly
 - `:AtlasDiff <pull-request-url>` - Open a pull request in native AtlasDiff directly
@@ -210,19 +211,19 @@ pulls = {
         {
           name = "My PRs",
           key = "1",
-          layout = "plain",
+          layout = "plain", -- "compact", "grouped", or "plain"
           search = "author:@me sort:updated-desc",
         },
         {
           name = "Team",
           key = "2",
-          layout = "compact",
+          layout = "compact", -- "compact", "grouped", or "plain"
           search = "org:your-org sort:updated-desc",
         },
         {
           name = "Repo",
           key = "3",
-          layout = "plain",
+          layout = "grouped",
           search = "repo:your-org/your-repo",
         },
       },
@@ -278,7 +279,7 @@ pulls = {
         {
           name = "Team",
           key = "1",
-          layout = "plain", -- "compact" or "plain"
+          layout = "grouped",
           repos = {
             { workspace = "your-workspace", repo = "atlas" },
             { workspace = "your-workspace", repo = "other-repo" },
@@ -314,6 +315,7 @@ pulls = {
         {
           name = "Assigned",
           key = "1",
+          layout = "grouped", -- "compact", "grouped", or "plain"
           scope = "assigned_to_me",
         },
         {
@@ -635,6 +637,7 @@ Open GitHub and GitLab notifications inside Atlas, refresh them, open the relate
 Turn frequently used GitHub and GitLab searches or Jira JQL into named shortcuts. Use bookmarks for review queues, recurring project views, and the searches you return to throughout the day.
 
 Bookmarks appear alongside your configured views, keeping important queries one action away.
+Star a pull request or issue with `*` to keep it at the top of lists. Starred items are saved locally and appear in the first bookmark entry.
 
 ### Custom Actions
 
@@ -752,6 +755,7 @@ keymaps = {
       mark_done = "d",
     },
     toggle_subscription = "gS",
+    toggle_star = "*",
     refresh = "r",
     refresh_view = "R",
     open_actions = "A",
@@ -760,6 +764,13 @@ keymaps = {
     copy_url = "Y",
     show_details = "K",
     search = "?",
+  },
+  picker = {
+    next_item = { "<Down>", "<C-n>", "<C-j>" },
+    previous_item = { "<Up>", "<C-p>", "<C-k>" },
+    select = { "<CR>", "<C-s>" },
+    toggle = "<Tab>",
+    close = { "q", "<Esc>" },
   },
   issues = {
     transition_issue = "gs",

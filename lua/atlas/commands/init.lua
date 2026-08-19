@@ -165,10 +165,10 @@ M.register({
 
 M.register({
 	name = "clear",
-	usage = "clear [notes]",
-	description = "Clear Atlas data or local notes",
+	usage = "clear [notes|stars]",
+	description = "Clear Atlas data, local notes, or starred items",
 	complete = function(arglead)
-		return complete_options(arglead, { "notes" })
+		return complete_options(arglead, { "notes", "stars" })
 	end,
 	run = function(args)
 		local target = args[1] and args[1]:lower() or nil
@@ -176,13 +176,28 @@ M.register({
 			require("atlas.pulls.notes.ui").clear_all()
 			return
 		end
+		if target == "stars" then
+			vim.ui.input({ prompt = "Delete all starred items? [y/N]: " }, function(answer)
+				answer = vim.trim(tostring(answer or "")):lower()
+				if answer ~= "y" and answer ~= "yes" then
+					return
+				end
+				local cleared, err = require("atlas.core.starred").clear_all()
+				if not cleared then
+					notify.error(err or "Unable to delete starred items")
+					return
+				end
+				notify.info("Starred items deleted")
+			end)
+			return
+		end
 		if target then
-			notify.error("Usage: :Atlas clear [notes]")
+			notify.error("Usage: :Atlas clear [notes|stars]")
 			return
 		end
 
 		vim.ui.input(
-			{ prompt = "Delete Atlas caches, cloned repositories, local notes, and logs? [y/N]: " },
+			{ prompt = "Delete Atlas caches, cloned repositories, local notes, starred items, and logs? [y/N]: " },
 			function(answer)
 				answer = vim.trim(tostring(answer or "")):lower()
 				if answer ~= "y" and answer ~= "yes" then
@@ -191,6 +206,11 @@ M.register({
 				local cleared, err = require("atlas.pulls.notes").clear_all()
 				if not cleared then
 					notify.error(err or "Unable to delete local notes")
+					return
+				end
+				local stars_cleared, stars_err = require("atlas.core.starred").clear_all()
+				if not stars_cleared then
+					notify.error(stars_err or "Unable to delete starred items")
 					return
 				end
 				require("atlas.core.cache").clear_all()
@@ -247,8 +267,9 @@ local function pick_command()
 			add(command, { "pr" }, "Create a pull request")
 			add(command, { "issue" }, "Create an issue")
 		elseif command.name == "clear" then
-			add(command, {}, "Clear caches, clones, notes, and logs")
+			add(command, {}, "Clear caches, clones, notes, stars, and logs")
 			add(command, { "notes" }, "Clear local review notes")
+			add(command, { "stars" }, "Clear starred items")
 		else
 			add(command, {}, command.description)
 		end

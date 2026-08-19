@@ -21,7 +21,7 @@ end
 
 ---@param view AtlasGitLabPullsViewConfig
 ---@param opts { force_load?: boolean, pagelen?: number, state?: "opened"|"closed"|"merged"|"all" }|nil
----@param on_done fun(groups: PullsGroup[]|nil, err: string|nil)
+---@param on_done fun(pulls: PullRequest[], err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_pullrequests(view, opts, on_done)
 	opts = opts or {}
@@ -72,7 +72,7 @@ function M.fetch_pullrequests(view, opts, on_done)
 		endpoint = "/merge_requests" .. build_query(params)
 	end
 
-	local cache_key = "gitlab_pulls:list:" .. endpoint
+	local cache_key = "gitlab_pulls:merge_requests:" .. endpoint
 	if not opts.force_load then
 		local cached, ok = service.get_cache(cache_key)
 		if ok then
@@ -83,12 +83,12 @@ function M.fetch_pullrequests(view, opts, on_done)
 
 	return service.request("GET", endpoint, nil, function(result, err)
 		if err then
-			on_done(nil, err)
+			on_done({}, err)
 			return
 		end
-		local groups = mapper.to_pull_request_groups(result or {})
-		service.set_cache(cache_key, groups)
-		on_done(groups, nil)
+		local pulls = mapper.to_pull_requests(result)
+		service.set_cache(cache_key, pulls)
+		on_done(pulls, nil)
 	end, {
 		action = "List MRs",
 		endpoint = endpoint,

@@ -346,7 +346,7 @@ local function threads_opts(padding_x, opts)
 		padding_x = padding_x,
 		separator = "─",
 		content_max_lines = content_max_lines,
-		content_truncated_text = opts.content_truncated_text,
+		content_truncated_key = opts.content_truncated_key,
 		content_prefix = opts.content_prefix,
 		additional_hl = function(item)
 			return item.meta.additional_hl or "AtlasTextMuted"
@@ -554,7 +554,7 @@ end
 ---@field location? fun(comment: PullsComment): string
 ---@field content_prefix? string
 ---@field content_max_lines? integer|fun(comment: PullsComment): integer|nil
----@field content_truncated_text? string
+---@field content_truncated_key? string
 
 ---@param nodes AtlasReviewThreadNode[]
 ---@param width integer

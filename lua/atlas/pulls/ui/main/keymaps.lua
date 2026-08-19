@@ -65,7 +65,7 @@ function M.register(buf, views)
 	local items = {}
 
 	for _, view in ipairs(views or {}) do
-		if view.key ~= nil and view.key ~= "" then
+		if view._kind ~= "bookmarks" and view.key ~= nil and view.key ~= "" then
 			local v = view
 			table.insert(items, {
 				key = v.key,
@@ -77,6 +77,23 @@ function M.register(buf, views)
 				end,
 			})
 		end
+	end
+
+	local bookmark_key = state.provider and require("atlas.ui.shared.bookmarks_view").key("pulls", state.provider.id)
+	if bookmark_key then
+		table.insert(items, {
+			key = bookmark_key,
+			desc = "Switch to bookmarks",
+			hidden = true,
+			callback = function()
+				for _, view in ipairs(require("atlas.ui.shared.bookmarks_view").views(state.provider, "pulls")) do
+					if view._kind == "bookmarks" then
+						require("atlas.pulls.ui.main.controller").switch_view(view)
+						return
+					end
+				end
+			end,
+		})
 	end
 
 	utils.insert_if(
@@ -175,6 +192,21 @@ function M.register(buf, views)
 			opts = { nowait = true },
 			callback = function()
 				require("atlas.pulls.ui.main.controller").show_pr_details(buf)
+			end,
+		})
+	)
+
+	utils.insert_if(
+		items,
+		item("ui.toggle_star", {
+			desc = "Star or unstar PR",
+			callback = function()
+				local pr, repo = selected_pr()
+				if pr == nil or repo == nil then
+					statusline.notify("warn", "No PR selected")
+					return
+				end
+				require("atlas.pulls.ui.main.controller").toggle_star(pr, repo)
 			end,
 		})
 	)

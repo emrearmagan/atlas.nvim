@@ -7,13 +7,19 @@
 ---@class AtlasPullsViewConfig
 ---@field name string
 ---@field key string|nil
----@field layout "compact"|"plain"|nil
+---@field layout "compact"|"grouped"|"plain"|nil
+---@field _kind "bookmarks"|"starred"|nil
+---@field _bookmarks table<string, any>|nil
+---@field _starred { domain: "pulls", provider: string }|nil
 
 ---@class AtlasIssuesViewConfig
 ---@field name string
 ---@field key string|nil
 ---@field layout "plain"|"compact"|nil
 ---@field search string|nil
+---@field _kind "bookmarks"|"starred"|nil
+---@field _bookmarks table<string, any>|nil
+---@field _starred { domain: "issues", provider: string }|nil
 
 ---@class AtlasPullsRepoConfig
 ---@field settings table<string, AtlasPullsRepoSettings>|nil
@@ -157,6 +163,7 @@ M.options = {
 				mark_done = "d",
 			},
 			toggle_subscription = "gS",
+			toggle_star = "*",
 			refresh = "r",
 			refresh_view = "R",
 			open_actions = "A",
@@ -165,6 +172,13 @@ M.options = {
 			copy_url = "Y",
 			show_details = "K",
 			search = "?",
+		},
+		picker = {
+			next_item = { "<Down>", "<C-n>", "<C-j>" },
+			previous_item = { "<Up>", "<C-p>", "<C-k>" },
+			select = { "<CR>", "<C-s>" },
+			toggle = "<Tab>",
+			close = { "q", "<Esc>" },
 		},
 		pulls = {
 			open_diff = "gd",

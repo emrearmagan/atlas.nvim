@@ -168,7 +168,7 @@ function M.views()
 			{ name = "Assigned", key = "1", scope = "assigned_to_me", state = "opened" },
 			{ name = "Created", key = "2", scope = "created_by_me", state = "opened" },
 		}
-	return require("atlas.ui.shared.bookmarks_view").append_to_views(views, cfg.bookmarks, "S", "Search")
+	return views
 end
 
 local renderer = require("atlas.issues.providers.gitlab.ui.renderer")

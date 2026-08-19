@@ -18,6 +18,7 @@ local M = {}
 ---@field next_panel_tab? AtlasKeymapValue
 ---@field notifications? AtlasUINotificationKeymaps
 ---@field toggle_subscription? AtlasKeymapValue
+---@field toggle_star? AtlasKeymapValue
 ---@field refresh? AtlasKeymapValue
 ---@field refresh_view? AtlasKeymapValue
 ---@field open_actions? AtlasKeymapValue
@@ -37,6 +38,13 @@ local M = {}
 ---@field open? AtlasKeymapValue
 ---@field mark_read? AtlasKeymapValue
 ---@field mark_done? AtlasKeymapValue
+
+---@class AtlasPickerKeymaps
+---@field next_item? AtlasKeymapValue
+---@field previous_item? AtlasKeymapValue
+---@field select? AtlasKeymapValue
+---@field toggle? AtlasKeymapValue
+---@field close? AtlasKeymapValue
 
 ---@class AtlasPullsReviewExplorerKeymaps
 ---@field find_file? AtlasKeymapValue
@@ -107,6 +115,7 @@ local M = {}
 
 ---@class AtlasKeymapsConfig
 ---@field ui? AtlasUIKeymaps
+---@field picker? AtlasPickerKeymaps
 ---@field pulls? AtlasPullsKeymaps
 ---@field issues? AtlasIssuesKeymaps
 
@@ -133,6 +142,7 @@ local M = {}
 ---| "ui.notifications.mark_read"
 ---| "ui.notifications.mark_done"
 ---| "ui.toggle_subscription"
+---| "ui.toggle_star"
 ---| "ui.refresh"
 ---| "ui.refresh_view"
 ---| "ui.open_actions"
@@ -141,6 +151,11 @@ local M = {}
 ---| "ui.copy_url"
 ---| "ui.show_details"
 ---| "ui.search"
+---| "picker.next_item"
+---| "picker.previous_item"
+---| "picker.select"
+---| "picker.toggle"
+---| "picker.close"
 ---| "pulls.open_diff"
 ---| "pulls.checkout"
 ---| "pulls.external_help"
@@ -283,11 +298,12 @@ local function view_key_conflicts(section_path, default_bookmarks_key)
 	end
 
 	local bookmarks = get_bookmarks(section_path)
-	if type(bookmarks) == "table" and type(bookmarks.items) == "table" and next(bookmarks.items) ~= nil then
-		local bk = tostring(bookmarks.key or default_bookmarks_key)
+	if default_bookmarks_key ~= "" then
+		local bk = tostring((type(bookmarks) == "table" and bookmarks.key) or default_bookmarks_key)
 		if bk ~= "" then
 			seen[bk] = seen[bk] or {}
-			seen[bk][tostring(bookmarks.label or default_bookmarks_key) .. " (bookmarks)"] = true
+			seen[bk][tostring((type(bookmarks) == "table" and bookmarks.label) or default_bookmarks_key) .. " (bookmarks)"] =
+				true
 		end
 	end
 
@@ -389,6 +405,7 @@ function M.validate()
 	end
 
 	local result = {
+		picker = conflicts_for(actions_for({ "picker" })),
 		ui = conflicts_for(actions_for({ "ui" })),
 		pulls = conflicts_for(actions_for({ "ui", "pulls" })),
 		issues = conflicts_for(actions_for({ "ui", "issues" })),
@@ -405,7 +422,7 @@ function M.validate()
 		for _, provider in ipairs(require("atlas.providers").list(domain)) do
 			local provider_domain = provider.domains[domain]
 			local conflicts =
-				view_key_conflicts({ domain, "providers", provider.id }, provider_domain.bookmark_key or "")
+				view_key_conflicts({ domain, "providers", provider.id }, provider_domain.bookmark_key or "S")
 			if next(conflicts) ~= nil then
 				result[string.format("%s %s views", provider.name:lower(), domain)] = conflicts
 			end

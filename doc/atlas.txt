@@ -140,6 +140,9 @@ default.
 :Atlas clear notes
 	Open the local-notes manager or delete all local notes.
 
+:Atlas clear stars
+	Delete all locally starred pull requests and issues.
+
 :Atlas create pr
 :Atlas create issue
 	Start the pull-request or issue creation flow.
@@ -153,8 +156,8 @@ default.
 
 :Atlas clear
 :Atlas logs
-	Clear Atlas caches, cloned repositories, local notes, and logs, or toggle
-	the Atlas log buffer.
+	Clear Atlas caches, cloned repositories, local notes, starred items, and
+	logs, or toggle the Atlas log buffer.
 
                                                                    *:AtlasDiff*
 :AtlasDiff <base>...<head>
@@ -232,11 +235,11 @@ GitHub search expression.
       github = {
         cache_ttl = 300,
         views = {
-          { name = "My PRs", key = "1", layout = "plain",
+          { name = "My PRs", key = "1", layout = "plain", -- "compact", "grouped", or "plain"
             search = "author:@me sort:updated-desc" },
           { name = "Team",   key = "2", layout = "compact",
             search = "org:your-org sort:updated-desc" },
-          { name = "Repo",   key = "3", layout = "plain",
+          { name = "Repo",   key = "3", layout = "grouped",
             search = "repo:your-org/your-repo" },
         },
         bookmarks = {
@@ -271,7 +274,7 @@ cross-workspace search like GitHub does.
           {
             name   = "Me",
             key    = "M",
-            layout = "compact",
+            layout = "compact", -- "compact", "grouped", or "plain"
             repos  = { { workspace = "your-workspace", repo = "atlas" } },
             ---@param pr PullRequest
             ---@param ctx { user: PullsUser|nil }
@@ -283,7 +286,7 @@ cross-workspace search like GitHub does.
           {
             name   = "Team",
             key    = "1",
-            layout = "plain",
+            layout = "grouped",
             repos  = {
               { workspace = "your-workspace", repo = "atlas" },
               { workspace = "your-workspace", repo = "other-repo" },
@@ -313,7 +316,8 @@ Self-hosted GitLab has not been tested yet.
         token     = vim.env.GITLAB_TOKEN,
         cache_ttl = 300,
         views = {
-          { name = "Assigned",  key = "1", scope = "assigned_to_me" },
+          { name = "Assigned",  key = "1", layout = "grouped", -- "compact", "grouped", or "plain"
+            scope = "assigned_to_me" },
           { name = "Reviewing", key = "3", scope = "all",
             extra_params = { reviewer_id = "Me" } },
           -- One project:
@@ -598,7 +602,8 @@ BOOKMARKS                                                      *atlas-bookmarks*
 Turn frequently used GitHub and GitLab searches or Jira JQL into named
 shortcuts. Use bookmarks for review queues, recurring project views, and the
 searches you return to throughout the day. Bookmarks appear alongside your
-configured views.
+configured views. Press `*` on a pull request or issue to star it. Starred
+items stay at the top of lists and appear in the first bookmark entry.
 
 ------------------------------------------------------------------------------
 CUSTOM ACTIONS                                    *atlas-custom-actions*
@@ -722,6 +727,7 @@ Defaults live under `keymaps` in `setup()`. Each entry accepts:
           mark_done = "d",
         },
         toggle_subscription     = "gS",
+        toggle_star             = "*",
         refresh                 = "r",
         refresh_view            = "R",
         open_actions            = "A",
@@ -730,6 +736,13 @@ Defaults live under `keymaps` in `setup()`. Each entry accepts:
         copy_url                = "Y",
         show_details            = "K",
         search                  = "?",
+      },
+      picker = {
+        next_item    = { "<Down>", "<C-n>", "<C-j>" },
+        previous_item = { "<Up>", "<C-p>", "<C-k>" },
+        select       = { "<CR>", "<C-s>" },
+        toggle       = "<Tab>",
+        close        = { "q", "<Esc>" },
       },
       issues = {
         transition_issue = "gs",
