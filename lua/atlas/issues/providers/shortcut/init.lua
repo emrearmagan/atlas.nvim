@@ -4,6 +4,12 @@
 ---@class ShortcutIssueRef : IssueRef
 ---@field workspace string|nil
 
+---@class ShortcutIssueTask
+---@field id integer
+---@field description string
+---@field complete boolean
+---@field position integer
+
 ---@class ShortcutIssue : Issue
 ---@field id integer
 ---@field type IssueType
@@ -13,6 +19,7 @@
 ---@class ShortcutIssueDetails : IssueDetails
 ---@field parent IssueRef|nil
 ---@field sub_issues IssueRef[]
+---@field tasks ShortcutIssueTask[]
 
 local M = {}
 

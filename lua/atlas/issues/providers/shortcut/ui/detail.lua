@@ -26,6 +26,18 @@ local function owners_text(issue, details)
 	return issue.assignee.display_name
 end
 
+---@param tasks ShortcutIssueTask[]
+---@return integer
+local function completed_tasks(tasks)
+	local completed = 0
+	for _, task in ipairs(tasks) do
+		if task.complete then
+			completed = completed + 1
+		end
+	end
+	return completed
+end
+
 ---@param issue Issue
 ---@param details IssueDetails|nil
 ---@param _loading boolean
@@ -71,6 +83,14 @@ function M.chips(issue, details, _loading)
 		table.insert(chips, { label = string.format("%s pts", issue.story_points), hl = "AtlasTextMuted" })
 	end
 
+	if details and #details.tasks > 0 then
+		local completed_task_count = completed_tasks(details.tasks)
+		table.insert(chips, {
+			label = string.format("%s %d/%d", icons.general("tasks"), completed_task_count, #details.tasks),
+			hl = completed_task_count == #details.tasks and "AtlasTextPositive" or "AtlasTextWarning",
+		})
+	end
+
 	local deadline = utils.format_date(issue.duedate)
 	if deadline ~= "" then
 		table.insert(chips, {
@@ -107,7 +127,7 @@ function M.tabs()
 			key = "overview",
 			label = "Overview",
 			icon = { icon = overview_icon, hl_group = overview_hl },
-			mod = require("atlas.issues.ui.detail.tabs.overview"),
+			mod = require("atlas.issues.providers.shortcut.ui.overview"),
 		},
 		{
 			key = "conversation",

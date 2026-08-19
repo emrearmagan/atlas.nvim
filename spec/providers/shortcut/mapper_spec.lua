@@ -59,11 +59,19 @@ describe("Shortcut Story mapper", function()
 			parent_story_id = 122,
 			owner_ids = {},
 			sub_task_story_ids = { 124, 125 },
+			tasks = {
+				{ id = 2, description = "Second", complete = false, position = 2 },
+				{ id = 1, description = "First", complete = true, position = 1 },
+			},
 		}, {})
 
 		assert.equal("Full description", details.description)
 		assert.same({ key = "122" }, details.parent)
 		assert.same({ { key = "124" }, { key = "125" } }, details.sub_issues)
+		assert.same({
+			{ id = 1, description = "First", complete = true, position = 1 },
+			{ id = 2, description = "Second", complete = false, position = 2 },
+		}, details.tasks)
 	end)
 
 	it("maps Story comments", function()

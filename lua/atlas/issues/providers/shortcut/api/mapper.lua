@@ -75,6 +75,24 @@ local function shallow_story(id)
 	return { key = tostring(id) }
 end
 
+---@param raw_tasks table[]
+---@return ShortcutIssueTask[]
+local function story_tasks(raw_tasks)
+	local result = {}
+	for _, task in ipairs(raw_tasks) do
+		table.insert(result, {
+			id = task.id,
+			description = tostring(task.description),
+			complete = task.complete,
+			position = task.position,
+		})
+	end
+	table.sort(result, function(a, b)
+		return a.position < b.position
+	end)
+	return result
+end
+
 ---@param raw table
 ---@param users IssueUser[]
 ---@return ShortcutIssue
@@ -126,6 +144,7 @@ function M.to_issue_details(raw, users)
 		milestone = nil,
 		parent = parent_id and shallow_story(parent_id) or nil,
 		sub_issues = {},
+		tasks = story_tasks(raw.tasks or {}),
 	}
 	for _, id in ipairs(raw.sub_task_story_ids or {}) do
 		table.insert(details.sub_issues, shallow_story(id))
