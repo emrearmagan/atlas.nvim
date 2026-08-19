@@ -208,7 +208,7 @@ M.options = {
 				},
 				diff = {
 					toggle_layout = "t",
-					toggle_compact = "u",
+					toggle_compact = "gc",
 					next_hunk = "]h",
 					previous_hunk = "[h",
 					toggle_review_panel = "gR",
