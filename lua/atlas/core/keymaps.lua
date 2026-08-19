@@ -39,6 +39,13 @@ local M = {}
 ---@field mark_read? AtlasKeymapValue
 ---@field mark_done? AtlasKeymapValue
 
+---@class AtlasPickerKeymaps
+---@field next_item? AtlasKeymapValue
+---@field previous_item? AtlasKeymapValue
+---@field select? AtlasKeymapValue
+---@field toggle? AtlasKeymapValue
+---@field close? AtlasKeymapValue
+
 ---@class AtlasPullsReviewExplorerKeymaps
 ---@field find_file? AtlasKeymapValue
 ---@field next_file? AtlasKeymapValue
@@ -108,6 +115,7 @@ local M = {}
 
 ---@class AtlasKeymapsConfig
 ---@field ui? AtlasUIKeymaps
+---@field picker? AtlasPickerKeymaps
 ---@field pulls? AtlasPullsKeymaps
 ---@field issues? AtlasIssuesKeymaps
 
@@ -143,6 +151,11 @@ local M = {}
 ---| "ui.copy_url"
 ---| "ui.show_details"
 ---| "ui.search"
+---| "picker.next_item"
+---| "picker.previous_item"
+---| "picker.select"
+---| "picker.toggle"
+---| "picker.close"
 ---| "pulls.open_diff"
 ---| "pulls.checkout"
 ---| "pulls.external_help"
@@ -392,6 +405,7 @@ function M.validate()
 	end
 
 	local result = {
+		picker = conflicts_for(actions_for({ "picker" })),
 		ui = conflicts_for(actions_for({ "ui" })),
 		pulls = conflicts_for(actions_for({ "ui", "pulls" })),
 		issues = conflicts_for(actions_for({ "ui", "issues" })),

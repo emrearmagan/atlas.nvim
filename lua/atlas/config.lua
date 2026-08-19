@@ -173,6 +173,13 @@ M.options = {
 			show_details = "K",
 			search = "?",
 		},
+		picker = {
+			next_item = { "<Down>", "<C-n>", "<C-j>" },
+			previous_item = { "<Up>", "<C-p>", "<C-k>" },
+			select = { "<CR>", "<C-s>" },
+			toggle = "<Tab>",
+			close = { "q", "<Esc>" },
+		},
 		pulls = {
 			open_diff = "gd",
 			checkout = "gc",
