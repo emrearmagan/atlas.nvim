@@ -66,9 +66,10 @@ local function preview_text(value)
 	if type(value) ~= "table" then
 		return ""
 	end
-	if value.targets then
+	local configured_targets = value.targets or value.repos
+	if configured_targets then
 		local targets = {}
-		for _, target in ipairs(value.targets) do
+		for _, target in ipairs(configured_targets) do
 			local prefix = target.project and "project:" or ""
 			local name = target.project or target.repo
 			table.insert(targets, string.format("%s%s/%s", prefix, target.workspace, name))

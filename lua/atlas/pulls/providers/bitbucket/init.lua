@@ -11,6 +11,13 @@ local users_api = require("atlas.pulls.providers.bitbucket.api.users")
 local request_scope = require("atlas.core.requests")
 local resolver = require("atlas.providers.resolve")
 
+---@param view AtlasBitbucketViewConfig|AtlasBitbucketBookmarkConfig
+---@return AtlasBitbucketTarget[]
+local function view_targets(view)
+	-- `targets` used to be called `repos` so thats why :)
+	return view.targets or view.repos or {}
+end
+
 ---@param value string
 ---@param parsed AtlasParsedUrl|nil
 ---@return AtlasTarget|nil, string|nil
@@ -109,7 +116,7 @@ local function repositories(options)
 		table.insert(views, bookmark)
 	end
 	for _, view in ipairs(views) do
-		for _, target in ipairs(view.targets) do
+		for _, target in ipairs(view_targets(view)) do
 			if target.repo then
 				table.insert(result, target.workspace .. "/" .. target.repo)
 			end
@@ -124,6 +131,7 @@ end
 ---@return { cancel: fun() }|nil
 local function fetch_pullrequests(view, opts, on_done)
 	---@cast view AtlasBitbucketViewConfig
+	local targets = view_targets(view)
 	local active_statuses = {}
 	if opts.state then
 		active_statuses = { opts.state:upper() }
@@ -139,7 +147,7 @@ local function fetch_pullrequests(view, opts, on_done)
 	end
 
 	local parts = {}
-	for _, target_ref in ipairs(view.targets) do
+	for _, target_ref in ipairs(targets) do
 		if target_ref.repo then
 			table.insert(parts, string.format("repo:%s/%s", target_ref.workspace, target_ref.repo))
 		else
@@ -169,7 +177,6 @@ local function fetch_pullrequests(view, opts, on_done)
 	end
 
 	local scope = request_scope.new()
-	local targets = view.targets
 	local starts = {}
 	for index, target_ref in ipairs(targets) do
 		if target_ref.project then
@@ -243,7 +250,7 @@ local function views()
 			name = view.name,
 			key = view.key,
 			layout = view.layout,
-			targets = view.targets,
+			targets = view_targets(view),
 			filter = view.filter,
 		})
 	end
