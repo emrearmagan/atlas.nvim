@@ -5,6 +5,7 @@ local resolver = require("atlas.providers.resolve")
 local request_scope = require("atlas.core.requests")
 local issue_cache = require("atlas.issues.providers.github.api.cache")
 local notifications_api = require("atlas.providers.github.notifications").new("issues")
+local git = require("atlas.core.git")
 
 ---@param view IssuesViewConfig
 ---@param opts IssuesFetchOpts
@@ -282,6 +283,24 @@ function M.fetch_activity(issue, opts, on_done)
 	end, { force_load = opts and opts.force_load == true or false })
 end
 
+---@param view AtlasGitHubIssuesViewConfig
+---@return AtlasGitHubIssuesViewConfig
+local function resolve_cur_repo(view)
+    if not view.current_repo then
+        return view
+    end
+    local root = git.repo_root()
+    local info = git.local_repository(root)
+    if not info then
+        return view
+    end
+    local resolved = vim.tbl_extend("force", {}, view)
+    local additional = (view.search and vim.search ~= "") and (" " .. view.search) or ""
+    resolved.search = string.format("repo:%s%s", info.slug, additional)
+    return resolved
+end
+
+
 ---@return AtlasGitHubIssuesViewConfig[]
 function M.views()
 	local cli = require("atlas.providers.github.client").issues
@@ -293,7 +312,11 @@ function M.views()
 			search = "assignee:@me is:open",
 		},
 	}
-	return views
+    local resolved = {}
+    for i, view in ipairs(views) do
+        resolved[i] = resolve_cur_repo(view)
+    end
+    return resolved
 end
 
 local renderer = require("atlas.issues.providers.github.ui.renderer")

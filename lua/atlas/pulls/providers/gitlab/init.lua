@@ -163,7 +163,7 @@ local function resolve_cur_repo(view)
     end
     local resolved = vim.tbl_extend("force", {}, view)
     resolved.project = info.slug
-    resolved.scop = view.scope or "all"
+    resolved.scope = view.scope or "all"
     return resolved
 end
 

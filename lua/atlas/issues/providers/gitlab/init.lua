@@ -1,6 +1,7 @@
 local GITLAB_REACTION_OPTIONS = require("atlas.ui.shared.emojis").gitlab()
 local resolver = require("atlas.providers.resolve")
 local notifications_api = require("atlas.providers.gitlab.notifications").new("issues")
+local git = require("atlas.core.git")
 
 ---@class GitLabIssuesProvider : IssuesProvider
 local M = {}
@@ -160,6 +161,24 @@ function M.add_reaction(issue, comment, key, on_done)
 	return require("atlas.issues.providers.gitlab.api.notes").add_reaction(issue_key, comment.id, key, on_done)
 end
 
+---@param view AtlasGitLabIssuesViewConfig
+---@return AtlasGitLabIssuesViewConfig
+local function resolve_cur_repo(view)
+    if not view.current_repo then
+        return view
+    end
+    local root = git.repo_root()
+    local info = git.local_repository(root)
+    if not info then
+        return view
+    end
+    local resolved = vim.tbl_extend("force", {}, view)
+    resolved.project = info.slug
+    resolved.scope = view.scope or "all"
+    return resolved
+end
+
+
 ---@return AtlasGitLabIssuesViewConfig[]
 function M.views()
 	local cfg = require("atlas.providers.gitlab.client").issues.gitlab_config()
@@ -168,7 +187,11 @@ function M.views()
 			{ name = "Assigned", key = "1", scope = "assigned_to_me", state = "opened" },
 			{ name = "Created", key = "2", scope = "created_by_me", state = "opened" },
 		}
-	return views
+    local resolved = {}
+    for i, view in ipairs(views) do
+        resolved[i] = resolve_cur_repo(view)
+    end
+    return resolved
 end
 
 local renderer = require("atlas.issues.providers.gitlab.ui.renderer")

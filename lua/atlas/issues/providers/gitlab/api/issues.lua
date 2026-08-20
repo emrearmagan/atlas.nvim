@@ -38,6 +38,7 @@ end
 ---@return { cancel: fun() }|nil
 function M.list_issues(view, opts, on_done)
 	opts = opts or {}
+    local scoped_project = view.project ~= nil and tostring(view.project) ~= ""
 	local params = {
 		scope = view.scope or "assigned_to_me",
 		state = view.state or "opened",
@@ -66,7 +67,7 @@ function M.list_issues(view, opts, on_done)
 		end
 	end
 
-	local endpoint = "/issues" .. build_query(params)
+	local endpoint = ( scoped_project and string.format("/projects/%s/issues", service.url_encode(tostring(view.project))) or "/issues" ) .. build_query(params)
 	local cache_key = LIST_CACHE_PREFIX .. endpoint
 
 	if not opts.force_load then
