@@ -75,22 +75,28 @@ local function shallow_story(id)
 	return { key = tostring(id) }
 end
 
+---@param raw table
+---@return ShortcutIssueTask
+function M.to_task(raw)
+	return {
+		id = raw.id,
+		description = tostring(raw.description),
+		complete = raw.complete,
+		position = raw.position,
+	}
+end
+
 ---@param raw_tasks table[]
 ---@return ShortcutIssueTask[]
 local function story_tasks(raw_tasks)
-	local result = {}
-	for _, task in ipairs(raw_tasks) do
-		table.insert(result, {
-			id = task.id,
-			description = tostring(task.description),
-			complete = task.complete,
-			position = task.position,
-		})
+	local tasks = {}
+	for _, raw in ipairs(raw_tasks) do
+		table.insert(tasks, M.to_task(raw))
 	end
-	table.sort(result, function(a, b)
+	table.sort(tasks, function(a, b)
 		return a.position < b.position
 	end)
-	return result
+	return tasks
 end
 
 ---@param raw table

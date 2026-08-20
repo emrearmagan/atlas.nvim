@@ -286,6 +286,7 @@ M.options = {
 			change_reporter = "gr",
 			edit_issue = "ge",
 			create_issue = "c",
+			toggle_task = "x",
 			toggle_description_mode = "m",
 		},
 	},
