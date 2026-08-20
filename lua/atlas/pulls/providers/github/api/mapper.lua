@@ -67,32 +67,69 @@ local function pull_labels(raw)
 	return labels
 end
 
----@param raw table
----@return PullsReviewer[]|nil
-local function pull_reviewers(raw)
-	if json.nilify(raw.latestOpinionatedReviews) == nil then
+---@param left PullsReviewer
+---@param right PullsReviewer
+---@return boolean
+local function same_reviewer(left, right)
+	local left_provider = tostring(left.provider_id or "")
+	local right_provider = tostring(right.provider_id or "")
+	if left_provider ~= "" and right_provider ~= "" then
+		return left_provider:lower() == right_provider:lower()
+	end
+
+	local left_id = tostring(left.id or "")
+	local right_id = tostring(right.id or "")
+	if left_id ~= "" and right_id ~= "" then
+		return left_id == right_id
+	end
+
+	local left_username = tostring(left.username or "")
+	local right_username = tostring(right.username or "")
+	return left_username ~= "" and right_username ~= "" and left_username:lower() == right_username:lower()
+end
+
+---@param reviewers PullsReviewer[]
+---@param reviewer PullsReviewer
+local function upsert_reviewer(reviewers, reviewer)
+	for index, existing in ipairs(reviewers) do
+		if same_reviewer(existing, reviewer) then
+			reviewers[index] = reviewer
+			return
+		end
+	end
+	table.insert(reviewers, reviewer)
+end
+
+---@param raw any
+---@param decision "approved"|"changes_requested"|"pending"
+---@return PullsReviewer|nil
+local function pull_reviewer(raw, decision)
+	raw = json.nilify(raw)
+	if type(raw) ~= "table" then
 		return nil
 	end
 
-	local reviewers = {}
-	for _, node in ipairs(github_mapping.connection_nodes(raw.latestOpinionatedReviews)) do
-		local author = pull_author(node.author)
-		if author.username ~= "" then
-			local state = tostring(node.state or ""):upper()
-			local decision = state == "APPROVED" and "approved"
-				or state == "CHANGES_REQUESTED" and "changes_requested"
-				or "pending"
-			table.insert(reviewers, {
-				id = author.id ~= "" and author.id or author.username,
-				provider_id = author.username,
-				name = author.name,
-				username = author.username,
-				nickname = author.nickname,
-				decision = decision,
-			})
-		end
+	local user = github_mapping.identity(raw) or { id = "", login = "", name = "" }
+	local slug = json.safe_str(raw.slug) or ""
+	local combined_slug = json.safe_str(raw.combinedSlug) or ""
+	local organization = json.nilify(raw.organization)
+	local organization_login = type(organization) == "table" and (json.safe_str(organization.login) or "") or ""
+	local team = combined_slug ~= "" and combined_slug
+		or (organization_login ~= "" and slug ~= "" and organization_login .. "/" .. slug or slug)
+	local username = user.login ~= "" and user.login or team
+	if username == "" then
+		return nil
 	end
-	return reviewers
+	local name = user.name ~= "" and user.name or (json.safe_str(raw.name) or username)
+
+	return {
+		id = user.id ~= "" and user.id or username,
+		provider_id = username,
+		name = name,
+		username = username,
+		nickname = username,
+		decision = decision,
+	}
 end
 
 ---@param diff_hunk string|nil
@@ -116,6 +153,55 @@ end
 function M.to_pull_request(raw)
 	local number = tostring(raw.number or "")
 	local author = pull_author(raw.author)
+
+	local review_decisions
+	if json.nilify(raw.latestOpinionatedReviews) ~= nil then
+		review_decisions = {}
+		for _, node in ipairs(github_mapping.connection_nodes(raw.latestOpinionatedReviews)) do
+			local review_state = tostring(node.state or ""):upper()
+			local decision = review_state == "APPROVED" and "approved"
+				or review_state == "CHANGES_REQUESTED" and "changes_requested"
+				or nil
+			local reviewer = decision and pull_reviewer(node.author, decision) or nil
+			if reviewer then
+				upsert_reviewer(review_decisions, reviewer)
+			end
+		end
+	end
+
+	local reviewers
+	if json.nilify(raw.reviewRequests) ~= nil then
+		reviewers = {}
+		for _, node in ipairs(github_mapping.connection_nodes(raw.reviewRequests)) do
+			local reviewer = pull_reviewer(node.requestedReviewer or node, "pending")
+			if reviewer then
+				for _, decision in ipairs(review_decisions or {}) do
+					if same_reviewer(reviewer, decision) then
+						reviewer.decision = decision.decision
+						break
+					end
+				end
+				upsert_reviewer(reviewers, reviewer)
+			end
+		end
+	end
+
+	if review_decisions ~= nil then
+		local others = {}
+		for _, decision in ipairs(review_decisions) do
+			local assigned = false
+			for _, reviewer in ipairs(reviewers or {}) do
+				if same_reviewer(reviewer, decision) then
+					assigned = true
+					break
+				end
+			end
+			if not assigned then
+				table.insert(others, decision)
+			end
+		end
+		review_decisions = others
+	end
 
 	local state = "open"
 	local raw_state = tostring(raw.state or ""):upper()
@@ -169,7 +255,8 @@ function M.to_pull_request(raw)
 		is_subscribed = tostring(raw.viewerSubscription or "") == "SUBSCRIBED",
 		reactions = github_mapping.reaction_groups(raw.reactionGroups),
 		assignees = pull_assignees(raw),
-		reviewers = pull_reviewers(raw),
+		reviewers = reviewers,
+		review_decisions = review_decisions,
 		labels = pull_labels(raw),
 		lines_added = tonumber(raw.additions),
 		lines_removed = tonumber(raw.deletions),

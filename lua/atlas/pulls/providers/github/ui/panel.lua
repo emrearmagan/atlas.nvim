@@ -93,6 +93,7 @@ function M.fetch_header(pr, opts, on_done)
 				pr.is_subscribed = fresh.is_subscribed
 				pr.assignees = fresh.assignees
 				pr.reviewers = fresh.reviewers
+				pr.review_decisions = fresh.review_decisions
 				pr.labels = fresh.labels
 				pr.lines_added = fresh.lines_added
 				pr.lines_removed = fresh.lines_removed

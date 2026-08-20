@@ -58,6 +58,7 @@
 ---@field reactions table<string, integer>|nil
 ---@field assignees PullsAuthor[]|nil
 ---@field reviewers PullsReviewer[]|nil
+---@field review_decisions PullsReviewer[]|nil
 ---@field labels PullsLabel[]|nil
 ---@field lines_added number|nil
 ---@field lines_removed number|nil

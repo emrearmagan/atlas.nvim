@@ -355,7 +355,9 @@ function M.fetch_reviewers(pr, opts, on_done)
 			return
 		end
 
-		pr.reviewers = mapper.to_reviewers((result or {}).participants)
+		local participants = (result or {}).participants
+		pr.reviewers = mapper.to_reviewers(participants)
+		pr.review_decisions = mapper.to_review_decisions(participants)
 		on_done(pr.reviewers, nil)
 	end)
 end
