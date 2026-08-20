@@ -85,6 +85,7 @@ end
 ---@param on_done fun(pulls: PullRequest[], err: string[]|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_pullrequests(view_repos, opts, on_done)
+	local MAX_CONCURRENT_REQUESTS = 8
 	if view_repos == nil or #view_repos == 0 then
 		on_done({}, nil)
 		return nil
@@ -103,30 +104,38 @@ function M.fetch_pullrequests(view_repos, opts, on_done)
 	end
 
 	local pending = #view_repos
+	local next_index = 1
+	local active = 0
 	local done = false
+	local pumping = false
 	local results = {}
 	local errors = {}
 	local handles = {}
 
 	local function cancel_all()
 		done = true
-		for _, handle in ipairs(handles) do
+		for _, handle in pairs(handles) do
 			if handle and handle.cancel then
 				pcall(handle.cancel)
 			end
 		end
+		handles = {}
 	end
+
+	local pump
 
 	local function finish(index, prs, err)
 		if done then
 			return
 		end
 
+		handles[index] = nil
+		active = active - 1
 		if err then
 			table.insert(errors, tostring(err))
 		end
 
-		results[index] = prs
+		results[index] = prs or {}
 
 		pending = pending - 1
 		if pending == 0 then
@@ -146,22 +155,40 @@ function M.fetch_pullrequests(view_repos, opts, on_done)
 			else
 				on_done(all_prs, nil)
 			end
+			return
 		end
+
+		pump()
 	end
 
-	for index, repo in ipairs(view_repos) do
-		local handle = fetch_pullrequests_single(repo.workspace, repo.repo, {
-			cache_ttl = ttl,
-			force = opts.force_load,
-			pagelen = opts.pagelen,
-			statuses = opts.statuses,
-		}, function(prs, err)
-			finish(index, prs, err)
-		end)
-		if handle ~= nil then
-			table.insert(handles, handle)
+	pump = function()
+		if done or pumping then
+			return
 		end
+		pumping = true
+		while not done and active < MAX_CONCURRENT_REQUESTS and next_index <= #view_repos do
+			local index = next_index
+			local repo = view_repos[index]
+			next_index = next_index + 1
+			active = active + 1
+			local completed = false
+			local handle = fetch_pullrequests_single(repo.workspace, repo.repo, {
+				cache_ttl = ttl,
+				force = opts.force_load,
+				pagelen = opts.pagelen,
+				statuses = opts.statuses,
+			}, function(prs, err)
+				completed = true
+				finish(index, prs, err)
+			end)
+			if handle ~= nil and not completed and not done then
+				handles[index] = handle
+			end
+		end
+		pumping = false
 	end
+
+	pump()
 
 	return {
 		cancel = cancel_all,
