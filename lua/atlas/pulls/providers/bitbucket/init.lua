@@ -9,6 +9,7 @@ local reviews_api = require("atlas.pulls.providers.bitbucket.api.reviews")
 local tasks_api = require("atlas.pulls.providers.bitbucket.api.tasks")
 local users_api = require("atlas.pulls.providers.bitbucket.api.users")
 local resolver = require("atlas.providers.resolve")
+local git = require("atlas.core.git")
 
 ---@param value string
 ---@param parsed AtlasParsedUrl|nil
@@ -198,6 +199,23 @@ local function fetch_repo_tags(repo, opts, on_done)
 	return repositories_api.fetch_tags(tostring(tags.href or ""), opts, on_done)
 end
 
+
+---@param view AtlasBitbucketViewConfig
+---@return AtlasBitbucketRepoRef[]|nil
+local function resolve_cur_repo(view)
+    if not view.current_repo then
+        return view
+    end
+    local root = git.repo_root()
+    local info = git.local_repository(root)
+    if not info then
+        return view
+    end
+    return { { workspace = info.owner, repo = info.repo } }
+end
+
+
+
 ---@return AtlasBitbucketViewConfig[]
 local function views()
 	local config = (((require("atlas.config").options or {}).pulls or {}).providers or {}).bitbucket
@@ -207,7 +225,7 @@ local function views()
 			name = view.name,
 			key = view.key,
 			layout = view.layout,
-			repos = view.repos,
+			repos = resolve_cur_repo(view),
 			filter = view.filter,
 		})
 	end

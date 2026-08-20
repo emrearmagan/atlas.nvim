@@ -42,6 +42,7 @@
 ---@field repos AtlasBitbucketRepoRef[]|nil
 ---@field filter? fun(pr: PullRequest, ctx: { user: PullsUser|nil }): boolean|nil
 ---@field status? "OPEN"|"MERGED"|"DECLINED"|"SUPERSEDED"
+---@field current_repo boolean|nil
 
 ---@class AtlasBitbucketConfig
 ---@field user string
