@@ -11,6 +11,7 @@ local reviews_api = require("atlas.pulls.providers.gitlab.api.reviews")
 local service = require("atlas.providers.gitlab.client").pulls
 local users_api = require("atlas.pulls.providers.gitlab.api.users")
 local resolver = require("atlas.providers.resolve")
+local git = require("atlas.core.git")
 
 ---@param view AtlasPullsViewConfig
 ---@param opts PullsFetchOpts
@@ -149,6 +150,25 @@ local function create_pr(opts, on_done)
 	end)
 end
 
+---@param view AtlasGitLabPullsViewConfig
+---@return AtlasGitLabPullsViewConfig
+local function resolve_cur_repo(view)
+    if not view.current_repo then
+        return view
+    end
+    local root = git.repo_root()
+    local info = git.local_repository(root)
+    if not info then
+        return view
+    end
+    local resolved = vim.tbl_extend("force", {}, view)
+    resolved.project = info.slug
+    resolved.scop = view.scope or "all"
+    return resolved
+end
+
+
+
 ---@return AtlasGitLabPullsViewConfig[]
 local function views()
 	local config = service.gitlab_config()
@@ -157,7 +177,11 @@ local function views()
 			{ name = "Assigned", key = "1", scope = "assigned_to_me", state = "opened" },
 			{ name = "Created", key = "2", scope = "created_by_me", state = "opened" },
 		}
-	return configured
+    local resolved = {}
+    for i, view in ipairs(configured) do
+        resolved[i] = resolve_cur_repo(view)
+    end
+    return resolved
 end
 
 ---@param value string

@@ -26,7 +26,7 @@
 
 ---@class AtlasGitHubViewConfig : AtlasPullsViewConfig
 ---@field search string
----@field current_repo boolean
+---@field current_repo boolean|nil
 
 ---@class AtlasGitHubBookmarksConfig
 ---@field key string|nil    -- default "S"
