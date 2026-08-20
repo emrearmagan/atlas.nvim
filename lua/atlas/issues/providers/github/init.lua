@@ -286,20 +286,19 @@ end
 ---@param view AtlasGitHubIssuesViewConfig
 ---@return AtlasGitHubIssuesViewConfig
 local function resolve_cur_repo(view)
-    if not view.current_repo then
-        return view
-    end
-    local root = git.repo_root()
-    local info = git.local_repository(root)
-    if not info then
-        return view
-    end
-    local resolved = vim.tbl_extend("force", {}, view)
-    local additional = (view.search and vim.search ~= "") and (" " .. view.search) or ""
-    resolved.search = string.format("repo:%s%s", info.slug, additional)
-    return resolved
+	if not view.current_repo then
+		return view
+	end
+	local root = git.repo_root()
+	local info = git.local_repository(root)
+	if not info then
+		return view
+	end
+	local resolved = vim.tbl_extend("force", {}, view)
+	local additional = (view.search and vim.search ~= "") and (" " .. view.search) or ""
+	resolved.search = string.format("repo:%s%s", info.slug, additional)
+	return resolved
 end
-
 
 ---@return AtlasGitHubIssuesViewConfig[]
 function M.views()
@@ -312,11 +311,11 @@ function M.views()
 			search = "assignee:@me is:open",
 		},
 	}
-    local resolved = {}
-    for i, view in ipairs(views) do
-        resolved[i] = resolve_cur_repo(view)
-    end
-    return resolved
+	local resolved = {}
+	for i, view in ipairs(views) do
+		resolved[i] = resolve_cur_repo(view)
+	end
+	return resolved
 end
 
 local renderer = require("atlas.issues.providers.github.ui.renderer")

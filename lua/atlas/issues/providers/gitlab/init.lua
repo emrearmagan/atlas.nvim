@@ -164,20 +164,19 @@ end
 ---@param view AtlasGitLabIssuesViewConfig
 ---@return AtlasGitLabIssuesViewConfig
 local function resolve_cur_repo(view)
-    if not view.current_repo then
-        return view
-    end
-    local root = git.repo_root()
-    local info = git.local_repository(root)
-    if not info then
-        return view
-    end
-    local resolved = vim.tbl_extend("force", {}, view)
-    resolved.project = info.slug
-    resolved.scope = view.scope or "all"
-    return resolved
+	if not view.current_repo then
+		return view
+	end
+	local root = git.repo_root()
+	local info = git.local_repository(root)
+	if not info then
+		return view
+	end
+	local resolved = vim.tbl_extend("force", {}, view)
+	resolved.project = info.slug
+	resolved.scope = view.scope or "all"
+	return resolved
 end
-
 
 ---@return AtlasGitLabIssuesViewConfig[]
 function M.views()
@@ -187,11 +186,11 @@ function M.views()
 			{ name = "Assigned", key = "1", scope = "assigned_to_me", state = "opened" },
 			{ name = "Created", key = "2", scope = "created_by_me", state = "opened" },
 		}
-    local resolved = {}
-    for i, view in ipairs(views) do
-        resolved[i] = resolve_cur_repo(view)
-    end
-    return resolved
+	local resolved = {}
+	for i, view in ipairs(views) do
+		resolved[i] = resolve_cur_repo(view)
+	end
+	return resolved
 end
 
 local renderer = require("atlas.issues.providers.gitlab.ui.renderer")
