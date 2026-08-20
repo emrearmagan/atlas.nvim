@@ -140,6 +140,9 @@ default.
 :Atlas clear notes
 	Open the local-notes manager or delete all local notes.
 
+:Atlas clear cache
+	Delete cached data and cloned repositories.
+
 :Atlas clear stars
 	Delete all locally starred pull requests and issues.
 

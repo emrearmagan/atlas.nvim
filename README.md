@@ -141,6 +141,7 @@ use {
 - `:Atlas open <target>` - Open a provider URL, Jira key, repository reference, or PR/issue number
 - `:Atlas notes [target]` - Inspect local review notes
 - `:Atlas clear` - Clear Atlas data
+- `:Atlas clear cache` - Delete cached data and cloned repositories
 - `:Atlas clear notes` - Delete local review notes
 - `:Atlas clear stars` - Delete locally starred items
 - `:Atlas logs` - Toggle Atlas logs
