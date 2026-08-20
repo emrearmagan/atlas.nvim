@@ -9,6 +9,7 @@ local json = require("atlas.core.json")
 local GET_PR_GQL = [[
 query($owner: String!, $repo: String!, $number: Int!) {
   repository(owner: $owner, name: $repo) {
+    name nameWithOwner url sshUrl
     pullRequest(number: $number) {
       id number title state isDraft viewerSubscription
       createdAt updatedAt url body
@@ -45,7 +46,7 @@ query($search: String!, $limit: Int!) {
         author { login ... on User { name } }
         headRefName baseRefName headRefOid baseRefOid
         totalCommentsCount
-        repository { name nameWithOwner }
+        repository { name nameWithOwner url sshUrl }
         commits(last: 1) {
           nodes { commit { statusCheckRollup { state } } }
         }
@@ -141,7 +142,12 @@ function M.get_pr(owner, repo, number, on_done, opts)
 			return
 		end
 
-		pr_raw.repository = { name = repo, nameWithOwner = repo_slug }
+		pr_raw.repository = {
+			name = repository.name or repo,
+			nameWithOwner = repository.nameWithOwner or repo_slug,
+			url = repository.url,
+			sshUrl = repository.sshUrl,
+		}
 		local pr = mapper.to_pull_request(pr_raw)
 		cli.set_mem(cache_key, pr)
 		on_done(pr, nil)

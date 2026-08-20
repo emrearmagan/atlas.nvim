@@ -15,8 +15,9 @@
 ---@class PullsRef
 ---@field branch string
 ---@field commit_hash string
----@field fetch_remote string|nil Git remote name or URL used to fetch this ref.
 ---@field fetch_ref string|nil Remote ref used instead of `refs/heads/<branch>`.
+---@field https_url string|nil Provider-advertised HTTPS Git URL.
+---@field ssh_url string|nil Provider-advertised SSH Git URL.
 
 --------------------------------------------------------------------------------
 -- Links

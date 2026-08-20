@@ -675,7 +675,7 @@ function M.deactivate(buf)
 	keymaps.teardown(buf)
 	pcall(vim.treesitter.stop, buf)
 	vim.api.nvim_set_option_value("syntax", "OFF", { buf = buf })
-	vim.api.nvim_set_option_value("filetype", "", { buf = buf })
+	vim.api.nvim_set_option_value("filetype", "atlas.detail", { buf = buf })
 	cancel_all()
 end
 

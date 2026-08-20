@@ -42,7 +42,7 @@ end
 ---@param spans table[]
 ---@return integer
 local function create_buffer(name, lines, spans)
-	local buf = utils.buffer.create(name, "")
+	local buf = utils.buffer.create(name, "atlas.pipelines")
 	set_buffer_content(buf, lines, spans)
 	return buf
 end

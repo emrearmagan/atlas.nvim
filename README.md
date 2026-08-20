@@ -141,6 +141,7 @@ use {
 - `:Atlas open <target>` - Open a provider URL, Jira key, repository reference, or PR/issue number
 - `:Atlas notes [target]` - Inspect local review notes
 - `:Atlas clear` - Clear Atlas data
+- `:Atlas clear cache` - Delete cached data and cloned repositories
 - `:Atlas clear notes` - Delete local review notes
 - `:Atlas clear stars` - Delete locally starred items
 - `:Atlas logs` - Toggle Atlas logs
@@ -158,6 +159,7 @@ pulls = {
   delete_notes = false, -- Delete local PR notes after approval or merge.
   default_merge_method = "merge", -- "merge" or "squash".
   default_delete_branch = false,
+  git_transport = "ssh", -- "https" or "ssh" for Atlas-managed Git remotes.
 
   diff = {
     -- Any command that accepts explicit <base>...<head> Git revisions.
@@ -783,6 +785,13 @@ keymaps = {
     show_details = "K",
     search = "?",
   },
+  picker = {
+    next_item = { "<Down>", "<C-n>", "<C-j>" },
+    previous_item = { "<Up>", "<C-p>", "<C-k>" },
+    select = { "<CR>", "<C-s>" },
+    toggle = "<Tab>",
+    close = { "q", "<Esc>" },
+  },
   issues = {
     transition_issue = "gs",
     change_assignee = "ga",
@@ -819,7 +828,7 @@ keymaps = {
       },
       diff = {
         toggle_layout = "t",
-        toggle_compact = "u",
+        toggle_compact = "gc",
         next_hunk = "]h",
         previous_hunk = "[h",
         toggle_review_panel = "gR",

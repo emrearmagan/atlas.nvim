@@ -4,6 +4,8 @@
 
 -- Pulls Provider Config
 
+---@alias AtlasGitTransport "https"|"ssh"
+
 ---@class AtlasPullsViewConfig
 ---@field name string
 ---@field key string|nil
@@ -66,6 +68,7 @@
 ---@alias AtlasIssuesProviders table<string, AtlasJiraIssuesConfig|AtlasGitHubIssuesConfig|AtlasGitLabIssuesConfig|table>
 
 ---@class AtlasPullsConfig
+---@field git_transport AtlasGitTransport|nil Git transport for Atlas-managed repositories (default: "ssh").
 ---@field repo_config AtlasPullsRepoConfig|nil
 ---@field diff AtlasPullsDiffConfig|nil
 ---@field delete_notes boolean|nil
@@ -114,6 +117,7 @@ M.options = {
 		listed_buffer = false,
 	},
 	pulls = {
+		git_transport = "ssh",
 		delete_notes = false,
 		default_merge_method = "merge",
 		default_delete_branch = false,
@@ -173,6 +177,13 @@ M.options = {
 			show_details = "K",
 			search = "?",
 		},
+		picker = {
+			next_item = { "<Down>", "<C-n>", "<C-j>" },
+			previous_item = { "<Up>", "<C-p>", "<C-k>" },
+			select = { "<CR>", "<C-s>" },
+			toggle = "<Tab>",
+			close = { "q", "<Esc>" },
+		},
 		pulls = {
 			open_diff = "gd",
 			checkout = "gc",
@@ -201,7 +212,7 @@ M.options = {
 				},
 				diff = {
 					toggle_layout = "t",
-					toggle_compact = "u",
+					toggle_compact = "gc",
 					next_hunk = "]h",
 					previous_hunk = "[h",
 					toggle_review_panel = "gR",

@@ -110,7 +110,7 @@ function M.open(message, on_cancel, target)
 	vim.bo[buf].bufhidden = "wipe"
 	vim.bo[buf].buflisted = false
 	vim.bo[buf].buftype = "nofile"
-	vim.bo[buf].filetype = "atlas-loading"
+	vim.bo[buf].filetype = "atlas.loading"
 	vim.bo[buf].swapfile = false
 	vim.bo[buf].undolevels = -1
 	for name, value in pairs({

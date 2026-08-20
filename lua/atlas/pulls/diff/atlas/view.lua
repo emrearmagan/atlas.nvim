@@ -477,8 +477,8 @@ function M.create(session, data, target, options)
 	local left_buf = create_buffer(nil, "nowrite")
 	local panel_buf = create_buffer(string.format("atlas-diff://%d/files", tabpage))
 	local commits_buf = create_buffer(string.format("atlas-diff://%d/commits", tabpage))
-	vim.bo[panel_buf].filetype = "atlas-diff-files"
-	vim.bo[commits_buf].filetype = "atlas-diff-commits"
+	vim.bo[panel_buf].filetype = "atlas.diff-files"
+	vim.bo[commits_buf].filetype = "atlas.diff-commits"
 	vim.api.nvim_win_set_buf(right_win, right_buf)
 	if launcher_buf and vim.api.nvim_buf_is_valid(launcher_buf) then
 		vim.api.nvim_buf_delete(launcher_buf, { force = true })

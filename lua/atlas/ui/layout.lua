@@ -396,7 +396,7 @@ function M.toggle_detail()
 		close_detail(state.session_id, state.detail_win, true, true)
 		return
 	end
-	state.detail_buf = ensure_buf("detail_buf", "AtlasDetail", "atlas-detail")
+	state.detail_buf = ensure_buf("detail_buf", "AtlasDetail", "atlas.detail")
 	state.detail_win = win_util.create(main_win, "rightbelow vsplit", state.detail_buf, apply_detail_opts)
 	local detail_win = state.detail_win
 	local session_id = state.session_id

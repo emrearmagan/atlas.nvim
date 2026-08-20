@@ -140,6 +140,9 @@ default.
 :Atlas clear notes
 	Open the local-notes manager or delete all local notes.
 
+:Atlas clear cache
+	Delete cached data and cloned repositories.
+
 :Atlas clear stars
 	Delete all locally starred pull requests and issues.
 
@@ -184,6 +187,7 @@ Shared config that applies to all pulls providers:
       delete_notes = false, -- delete local notes after approval or merge
       default_merge_method = "merge", -- "merge" or "squash"
       default_delete_branch = false,
+      git_transport = "ssh", -- "https" or "ssh" for Atlas-managed Git remotes.
       diff = {
         -- Any command that accepts explicit <base>...<head> Git revisions.
         open_cmd = "AtlasDiff", -- default; e.g. "DiffviewOpen" or "CodeDiff"
@@ -757,6 +761,13 @@ Defaults live under `keymaps` in `setup()`. Each entry accepts:
         show_details            = "K",
         search                  = "?",
       },
+      picker = {
+        next_item    = { "<Down>", "<C-n>", "<C-j>" },
+        previous_item = { "<Up>", "<C-p>", "<C-k>" },
+        select       = { "<CR>", "<C-s>" },
+        toggle       = "<Tab>",
+        close        = { "q", "<Esc>" },
+      },
       issues = {
         transition_issue = "gs",
         change_assignee  = "ga",
@@ -793,7 +804,7 @@ Defaults live under `keymaps` in `setup()`. Each entry accepts:
           },
           diff = {
             toggle_layout         = "t",
-            toggle_compact        = "u",
+            toggle_compact        = "gc",
             next_hunk             = "]h",
             previous_hunk         = "[h",
             toggle_review_panel   = "gR",
