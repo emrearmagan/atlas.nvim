@@ -158,6 +158,7 @@ pulls = {
   delete_notes = false, -- Delete local PR notes after approval or merge.
   default_merge_method = "merge", -- "merge" or "squash".
   default_delete_branch = false,
+  git_transport = "ssh", -- "https" or "ssh" for Atlas-managed Git remotes.
 
   diff = {
     -- Any command that accepts explicit <base>...<head> Git revisions.

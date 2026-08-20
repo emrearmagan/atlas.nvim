@@ -128,6 +128,10 @@ function M.to_pull_request(raw)
 	end
 
 	local owner, repo_name, repo_full_name = github_mapping.repository(raw.repository)
+	local repository_url = json.safe_str((raw.repository or {}).url)
+	if repository_url and repository_url ~= "" and not repository_url:match("%.git$") then
+		repository_url = repository_url .. ".git"
+	end
 
 	return {
 		id = number,
@@ -143,6 +147,8 @@ function M.to_pull_request(raw)
 		destination = {
 			branch = tostring(raw.baseRefName or ""),
 			commit_hash = tostring(raw.baseRefOid or ""),
+			https_url = repository_url,
+			ssh_url = json.safe_str((raw.repository or {}).sshUrl),
 		},
 		comments_count = tonumber(raw.totalCommentsCount)
 			or tonumber(raw.commentsCount)

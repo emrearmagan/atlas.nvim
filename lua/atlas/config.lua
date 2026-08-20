@@ -4,6 +4,8 @@
 
 -- Pulls Provider Config
 
+---@alias AtlasGitTransport "https"|"ssh"
+
 ---@class AtlasPullsViewConfig
 ---@field name string
 ---@field key string|nil
@@ -66,6 +68,7 @@
 ---@alias AtlasIssuesProviders table<string, AtlasJiraIssuesConfig|AtlasGitHubIssuesConfig|AtlasGitLabIssuesConfig|table>
 
 ---@class AtlasPullsConfig
+---@field git_transport AtlasGitTransport|nil Git transport for Atlas-managed repositories (default: "ssh").
 ---@field repo_config AtlasPullsRepoConfig|nil
 ---@field diff AtlasPullsDiffConfig|nil
 ---@field delete_notes boolean|nil
@@ -114,6 +117,7 @@ M.options = {
 		listed_buffer = false,
 	},
 	pulls = {
+		git_transport = "ssh",
 		delete_notes = false,
 		default_merge_method = "merge",
 		default_delete_branch = false,
