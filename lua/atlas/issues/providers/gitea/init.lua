@@ -3,6 +3,7 @@ require("atlas.issues.providers.gitea.config")
 local api = require("atlas.issues.providers.gitea.api")
 local resolver = require("atlas.providers.resolve")
 local request_scope = require("atlas.core.requests")
+local git = require("atlas.core.git")
 
 local M = {}
 local REACTION_OPTIONS = require("atlas.ui.shared.emojis").github()
@@ -129,6 +130,22 @@ function M.add_reaction(issue, comment, key, on_done)
 	return api.comments.add_reaction(issue.key, comment.id, key, on_done)
 end
 
+---@param view AtlasGiteaForgejoIssuesViewConfig
+---@return AtlasGiteaForgejoPullsIssuesConfig
+local function resolve_cur_repo(view)
+	if not view.current_repo then
+		return view
+	end
+	local root = git.repo_root()
+	local info = git.local_repository(root, "issues") or nil
+	if not info then
+		return view
+	end
+	local resolved = vim.tbl_extend("force", {}, view)
+	resolved.repo = info.slug
+	return resolved
+end
+
 ---@return AtlasGiteaForgejoIssuesViewConfig[]
 function M.views()
 	local cfg = require("atlas.providers").options("gitea", "issues") or {}
@@ -139,7 +156,8 @@ function M.views()
 			{ name = "Created", key = "2", scope = "created", state = "open" },
 		}
 	end
-	return require("atlas.ui.shared.bookmarks_view").append_to_views(views, cfg.bookmarks, "S", "Search")
+	local resolved = vim.tbl_map(resolve_cur_repo, views)
+	return require("atlas.ui.shared.bookmarks_view").append_to_views(resolved, cfg.bookmarks, "S", "Search")
 end
 
 ---@param value string

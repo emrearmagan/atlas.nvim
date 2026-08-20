@@ -31,6 +31,7 @@ require("atlas.providers.gitea.config")
 ---@field search string|nil Pull request search text.
 
 ---@class AtlasGiteaForgejoPullsViewConfig : AtlasPullsViewConfig, AtlasGiteaForgejoPullsSearchConfig
+---@field current_repo boolean|nil
 
 ---@class AtlasGiteaForgejoPullsBookmarksConfig
 ---@field key string|nil

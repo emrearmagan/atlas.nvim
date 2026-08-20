@@ -11,6 +11,7 @@ require("atlas.providers.gitea.config")
 ---@field before string|nil RFC 3339 timestamp.
 ---@field owner string|nil Owner filter for cross-repository views.
 ---@field team string|nil Team filter for cross-repository views.
+---@field current_repo boolean|nil
 
 ---@class AtlasGiteaIssuesSearchConfig : AtlasGiteaForgejoIssuesSearchConfig
 ---@field created_by string|nil Gitea-only creator filter for cross-repository views.

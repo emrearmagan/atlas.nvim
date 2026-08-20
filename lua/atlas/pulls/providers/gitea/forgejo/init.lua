@@ -10,6 +10,7 @@ local pullrequests_api = require("atlas.pulls.providers.gitea.forgejo.api.pullre
 local repositories_api = require("atlas.pulls.providers.gitea.forgejo.api.repositories")
 local reviews_api = require("atlas.pulls.providers.gitea.forgejo.api.reviews")
 local resolver = require("atlas.providers.resolve")
+local git = require("atlas.core.git")
 
 ---@param view { repo: string|nil, search: string|nil }
 ---@param opts PullsFetchOpts
@@ -57,10 +58,27 @@ local function fetch_pullrequests(view, opts, on_done)
 	end)
 end
 
+---@param view AtlasGiteaForgejoPullsViewConfig
+---@return AtlasGiteaForgejoPullsViewConfig
+local function resolve_cur_repo(view)
+	if not view.current_repo then
+		return view
+	end
+	local root = git.repo_root()
+	local info = git.local_repository(root, "pulls") or nil
+	if not info then
+		return view
+	end
+	local resolved = vim.tbl_extend("force", {}, view)
+	resolved.repo = info.slug
+	return resolved
+end
+
 ---@return AtlasGiteaForgejoPullsViewConfig[]
 local function views()
 	local cfg = require("atlas.providers").options("gitea", "pulls") or {}
-	return require("atlas.ui.shared.bookmarks_view").append_to_views(cfg.views or {}, cfg.bookmarks, "S", "Search")
+	local resolved = vim.tbl_map(resolve_cur_repo, cfg.views or {})
+	return require("atlas.ui.shared.bookmarks_view").append_to_views(resolved, cfg.bookmarks, "S", "Search")
 end
 
 ---@param value string
