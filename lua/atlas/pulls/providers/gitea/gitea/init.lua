@@ -65,7 +65,7 @@ local function resolve_cur_repo(view)
 		return view
 	end
 	local root = git.repo_root()
-	local info = git.local_repository(root)
+	local info = git.local_repository(root, "pulls")
 	if not info then
 		return view
 	end
