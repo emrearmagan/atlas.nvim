@@ -12,6 +12,7 @@ local repositories_api = require("atlas.pulls.providers.github.api.repositories"
 local reviews_api = require("atlas.pulls.providers.github.api.reviews")
 local users_api = require("atlas.pulls.providers.github.api.users")
 local resolver = require("atlas.providers.resolve")
+local git = require("atlas.core.git")
 
 ---@param on_done fun(user: PullsUser|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
@@ -144,13 +145,34 @@ local function add_reaction(pr, comment, key, on_done)
 	end)
 end
 
+---@param view AtlasGitHubViewConfig
+---@return AtlasGitHubViewConfig
+local function resolve_cur_repo(view)
+	if not view.current_repo then
+		return view
+	end
+	local root = git.repo_root()
+	local info = git.local_repository(root)
+	if not info then
+		return view
+	end
+	local resolved = vim.tbl_extend("force", {}, view)
+	local additional = (view.search and vim.search ~= "") and (" " .. view.search) or ""
+	resolved.search = string.format("repo:%s%s", info.slug, additional)
+	return resolved
+end
+
 ---@return AtlasGitHubViewConfig[]
 local function views()
 	local config = ((require("atlas.config").options.pulls or {}).providers or {}).github or {}
 	---@cast config AtlasGitHubConfig
 	local configured = type(config.views) == "table" and #config.views > 0 and config.views
 		or { { name = "Me", key = "1", search = "involves:@me", layout = "compact" } }
-	return configured
+	local resolved = {}
+	for i, view in ipairs(configured) do
+		resolved[i] = resolve_cur_repo(view)
+	end
+	return resolved
 end
 
 ---@param value string

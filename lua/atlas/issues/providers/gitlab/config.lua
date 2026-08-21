@@ -47,6 +47,7 @@
 ---@field extra_params table<string, string>|nil
 
 ---@class AtlasGitLabIssuesViewConfig : IssuesViewConfig, AtlasGitLabIssuesSearchConfig
+---@field current_repo boolean|nil
 
 ---@class AtlasGitLabIssuesBookmarksConfig
 ---@field key string|nil    -- default "S"
