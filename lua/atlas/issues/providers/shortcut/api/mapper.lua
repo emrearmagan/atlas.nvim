@@ -9,7 +9,7 @@ function M.to_user(raw)
 	local id = tostring(raw.id)
 	local mention_name = json.safe_str(profile.mention_name) or json.safe_str(raw.mention_name)
 	local display_name = json.safe_str(profile.name) or json.safe_str(raw.name) or mention_name or id
-	return { account_id = id, display_name = display_name, mention_name = mention_name }
+	return { account_id = id, display_name = display_name, mention_name = mention_name, disabled = raw.disabled == true }
 end
 
 ---@param users IssueUser[]
@@ -27,15 +27,22 @@ local function user_for(users, id)
 	return nil
 end
 
+---@param raw table
+---@return ShortcutIssueLabel
+function M.to_label(raw)
+	return {
+		id = raw.id,
+		name = tostring(raw.name),
+		color = json.safe_str(raw.color),
+	}
+end
+
 ---@param raw_labels table[]
----@return IssueLabel[]
+---@return ShortcutIssueLabel[]
 local function labels(raw_labels)
 	local result = {}
-	for _, label in ipairs(raw_labels) do
-		table.insert(result, {
-			name = tostring(label.name),
-			color = json.safe_str(label.color),
-		})
+	for _, raw in ipairs(raw_labels) do
+		table.insert(result, M.to_label(raw))
 	end
 	return result
 end
@@ -52,21 +59,6 @@ local function owners(users, owner_ids)
 		end
 	end
 	return result
-end
-
----@param raw table
----@return string, string
-local function story_status(raw)
-	if raw.archived then
-		return "Archived", "archived"
-	end
-	if raw.completed then
-		return "Completed", "completed"
-	end
-	if raw.started then
-		return "Started", "started"
-	end
-	return "Not Started", "not_started"
 end
 
 ---@param id integer
@@ -101,14 +93,16 @@ end
 
 ---@param raw table
 ---@param users IssueUser[]
+---@param state ShortcutWorkflowState
 ---@return ShortcutIssue
-function M.to_issue(raw, users)
+function M.to_issue(raw, users, state)
 	local parent_id = tonumber(json.nilify(raw.parent_story_id))
 	local owner_ids = raw.owner_ids or {}
 	local mapped_labels = labels(raw.labels or {})
 	local comments = raw.comment_ids or raw.comments
 	local story_type = tostring(raw.story_type)
-	local status, status_id = story_status(raw)
+	local status = raw.archived and "Archived" or state.name
+	local status_id = raw.archived and "archived" or tostring(state.id)
 
 	---@type ShortcutIssue
 	local issue = {
@@ -117,6 +111,7 @@ function M.to_issue(raw, users)
 		title = tostring(raw.name),
 		status = status,
 		status_id = status_id,
+		workflow_state_id = raw.workflow_state_id,
 		type = {
 			id = story_type,
 			name = story_type,
@@ -126,11 +121,14 @@ function M.to_issue(raw, users)
 		reporter = user_for(users, raw.requested_by_id),
 		story_points = tonumber(json.nilify(raw.estimate)),
 		duedate = json.safe_str(raw.deadline),
+		parent = parent_id and shallow_story(parent_id) or nil,
 		url = json.safe_str(raw.app_url),
 		created_at = json.safe_str(raw.created_at),
 		updated_at = json.safe_str(raw.updated_at),
 		closed_at = json.safe_str(raw.completed_at),
 		comment_count = comments and #comments or nil,
+		owner_ids = owner_ids,
+		follower_ids = raw.follower_ids or {},
 		owner_count = #owner_ids,
 		labels = mapped_labels,
 	}
@@ -160,14 +158,23 @@ end
 
 ---@param stories table[]
 ---@param users IssueUser[]
+---@param states ShortcutWorkflowState[]
 ---@return ShortcutIssue[]
-function M.to_issues(stories, users)
+function M.to_issues(stories, users, states)
+	local states_by_id = {}
+	for _, state in ipairs(states) do
+		states_by_id[state.id] = state
+	end
+
 	local result = {}
 	for _, story in ipairs(stories) do
-		table.insert(result, M.to_issue(story, users))
+		local state = states_by_id[story.workflow_state_id]
+		---@cast state ShortcutWorkflowState
+		table.insert(result, M.to_issue(story, users, state))
 	end
 	return result
 end
+
 
 ---@param raw table
 ---@param users? IssueUser[]
@@ -223,7 +230,7 @@ local CHANGE_LABELS = {
 ---@param value string
 ---@return string
 local function entity_label(value)
-	return value:gsub("^story%-", ""):gsub("[_-]", " ")
+	return (value:gsub("^story%-", ""):gsub("[_-]", " "))
 end
 
 ---@param action table

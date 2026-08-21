@@ -1,8 +1,49 @@
 ---@class ShortcutIssueUser : IssueUser
+---@field account_id string
 ---@field mention_name string|nil
+---@field disabled boolean
 
 ---@class ShortcutIssueRef : IssueRef
 ---@field workspace string|nil
+
+---@class ShortcutIssueLabel : IssueLabel
+---@field id integer
+
+---@class ShortcutWorkflowState
+---@field id integer
+---@field workflow_id integer
+---@field workflow_name string
+---@field name string
+---@field type string
+---@field position integer
+
+---@alias ShortcutStoryType "feature"|"bug"|"chore"
+
+---@class ShortcutStoryCreate
+---@field name string
+---@field description string
+---@field story_type ShortcutStoryType
+---@field workflow_state_id integer
+---@field owner_ids string[]
+
+---@class ShortcutStoryCreated
+---@field id integer
+---@field key string
+---@field url string|nil
+
+---@class ShortcutStoryLabelInput
+---@field name string
+
+---@class ShortcutStoryUpdate
+---@field archived boolean|nil
+---@field name string|nil
+---@field description string|nil
+---@field story_type ShortcutStoryType|nil
+---@field labels ShortcutStoryLabelInput[]|nil
+---@field workflow_state_id integer|nil
+---@field owner_ids string[]|nil
+---@field requested_by_id string|nil
+---@field follower_ids string[]|nil
 
 ---@class ShortcutIssueTask
 ---@field id integer
@@ -13,8 +54,11 @@
 ---@class ShortcutIssue : Issue
 ---@field id integer
 ---@field type IssueType
+---@field workflow_state_id integer
+---@field owner_ids string[]
+---@field follower_ids string[]
 ---@field owner_count integer
----@field labels IssueLabel[]
+---@field labels ShortcutIssueLabel[]
 
 ---@class ShortcutIssueDetails : IssueDetails
 ---@field parent IssueRef|nil
@@ -169,7 +213,7 @@ return {
 			delete_comment = api.comments.delete_comment,
 		},
 		-- notifications = require("atlas.issues.providers.shortcut.notifications"),
-		-- actions = require("atlas.issues.providers.shortcut.actions"),
+		actions = require("atlas.issues.providers.shortcut.actions"),
 		ui = {
 			setup = require("atlas.issues.providers.shortcut.highlights").setup,
 			detail = require("atlas.issues.providers.shortcut.ui.detail"),

@@ -5,6 +5,14 @@ describe("Shortcut Story mapper", function()
 		local users = {
 			{ account_id = "owner", display_name = "Ada Owner" },
 		}
+		local state = {
+			id = 42,
+			workflow_id = 7,
+			workflow_name = "Development",
+			name = "Ready for Review",
+			type = "started",
+			position = 3,
+		}
 		local issue = assert(mapper.to_issue({
 			id = 123,
 			name = "Ship Shortcut support",
@@ -13,22 +21,26 @@ describe("Shortcut Story mapper", function()
 			started = true,
 			parent_story_id = 99,
 			owner_ids = { "owner", "other" },
-			labels = { { name = "api", color = "#123456" } },
+			follower_ids = { "follower" },
+			labels = { { id = 9, name = "api", color = "#123456" } },
 			comment_ids = { 1, 2 },
 			updated_at = "2026-08-23T10:00:00Z",
 			app_url = "https://app.shortcut.com/acme/story/123/ship-shortcut-support",
-		}, users))
+		}, users, state))
 
 		assert.same({
 			id = 123,
 			key = "123",
 			title = "Ship Shortcut support",
-			status = "Started",
-			status_id = "started",
+			status = "Ready for Review",
+			status_id = "42",
+			workflow_state_id = 42,
 			type = "bug",
 			assignee = { account_id = "owner", display_name = "Ada Owner" },
+			owner_ids = { "owner", "other" },
+			follower_ids = { "follower" },
 			owner_count = 2,
-			labels = { { name = "api", color = "#123456" } },
+			labels = { { id = 9, name = "api", color = "#123456" } },
 			comment_count = 2,
 			updated_at = "2026-08-23T10:00:00Z",
 			url = "https://app.shortcut.com/acme/story/123/ship-shortcut-support",
@@ -38,15 +50,18 @@ describe("Shortcut Story mapper", function()
 			title = issue.title,
 			status = issue.status,
 			status_id = issue.status_id,
+			workflow_state_id = issue.workflow_state_id,
 			type = issue.type and issue.type.name,
 			assignee = issue.assignee,
+			owner_ids = issue.owner_ids,
+			follower_ids = issue.follower_ids,
 			owner_count = issue.owner_count,
 			labels = issue.labels,
 			comment_count = issue.comment_count,
 			updated_at = issue.updated_at,
 			url = issue.url,
 		})
-		assert.is_nil(issue.parent)
+		assert.same({ key = "99" }, issue.parent)
 	end)
 
 	it("maps Story details", function()

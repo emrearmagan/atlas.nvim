@@ -5,6 +5,13 @@ local mapper = require("atlas.issues.providers.shortcut.api.mapper")
 local members = require("atlas.issues.providers.shortcut.api.members")
 local requests = require("atlas.core.requests")
 local service = require("atlas.issues.providers.shortcut.api.service")
+local workflows = require("atlas.issues.providers.shortcut.api.workflows")
+
+---@param story_id integer
+local function invalidate(story_id)
+	service.clear_cache("story:" .. tostring(story_id))
+	service.clear_cache("search:")
+end
 
 ---@param value number|nil
 ---@return integer
@@ -14,12 +21,9 @@ local function page_size(value)
 end
 
 ---@param query string
----@param opts { next_page_token?: string, max_results?: number }
+---@param opts { max_results?: number }
 ---@return string
 local function search_endpoint(query, opts)
-	if opts.next_page_token then
-		return (opts.next_page_token:gsub("^/api/v3", "", 1))
-	end
 	return string.format(
 		"/search/stories?query=%s&page_size=%d&detail=slim",
 		service.url_encode(query),
@@ -37,18 +41,28 @@ function M.search(query, opts, on_done)
 	local cache_key = "search:" .. endpoint
 	local scope = requests.new()
 
-	scope.run(function(done)
-		return members.list(done)
-	end, function(users, users_err)
-		if users_err then
-			on_done({}, nil, true, users_err)
+	scope.all({
+		users = function(done)
+			return members.list(done)
+		end,
+		states = function(done)
+			return workflows.list_states(done)
+		end,
+	}, function(values, errors)
+		local lookup_err = errors.users or errors.states
+		if lookup_err then
+			on_done({}, nil, true, lookup_err)
 			return
 		end
+		---@type IssueUser[]
+		local users = values.users
+		---@type ShortcutWorkflowState[]
+		local states = values.states
 
 		if not opts.force_load then
 			local cached, found = service.get_cache(cache_key)
 			if found then
-				on_done(mapper.to_issues(cached.stories, users), cached.next_page_token, cached.is_last, nil)
+				on_done(mapper.to_issues(cached.stories, users, states), nil, true, nil)
 				return
 			end
 		end
@@ -62,17 +76,11 @@ function M.search(query, opts, on_done)
 			end
 			---@cast result table
 
-			local next_page_token = json.safe_str(result.next)
-			if next_page_token == "" then
-				next_page_token = nil
-			end
 			local page = {
 				stories = result.data,
-				next_page_token = next_page_token,
-				is_last = next_page_token == nil,
 			}
 			service.set_cache(cache_key, page)
-			on_done(mapper.to_issues(page.stories, users), page.next_page_token, page.is_last, nil)
+			on_done(mapper.to_issues(page.stories, users, states), nil, true, nil)
 		end)
 	end)
 	return scope
@@ -103,47 +111,28 @@ local function get_story(story_id, opts, on_done)
 end
 
 ---@param story_id integer
----@param opts IssuesFetchOpts|nil
----@param on_done fun(story: table|nil, users: IssueUser[]|nil, err: string|nil)
----@return AtlasRequestScope
-local function load_story(story_id, opts, on_done)
-	opts = opts or {}
-	local scope = requests.new()
-	scope.run(function(done)
-		return members.list(done)
-	end, function(users, users_err)
-		if users_err then
-			on_done(nil, nil, users_err)
-			return
-		end
-
-		scope.run(function(done)
-			return get_story(story_id, opts, done)
-		end, function(story, story_err)
-			if story_err then
-				on_done(nil, nil, story_err)
-				return
-			end
-			on_done(story, users, nil)
-		end)
-	end)
-	return scope
-end
-
----@param story_id integer
 ---@param opts? IssuesFetchOpts
 ---@param on_done fun(issue: ShortcutIssueDetails|nil, err: string|nil)
 ---@return AtlasRequestScope
 function M.get(story_id, opts, on_done)
-	return load_story(story_id, opts, function(story, users, err)
+	opts = opts or {}
+	local scope = requests.new()
+	scope.all({
+		story = function(done)
+			return get_story(story_id, opts, done)
+		end,
+		users = function(done)
+			return members.list(done)
+		end,
+	}, function(values, errors)
+		local err = errors.story or errors.users
 		if err then
 			on_done(nil, err)
 			return
 		end
-		---@cast story table
-		---@cast users IssueUser[]
-		on_done(mapper.to_issue_details(story, users), nil)
+		on_done(mapper.to_issue_details(values.story, values.users), nil)
 	end)
+	return scope
 end
 
 ---@param refs IssueRef[]
@@ -173,6 +162,52 @@ function M.fetch_by_refs(refs, opts, on_done)
 	}, function(issues, _, _, err)
 		on_done(issues, err)
 	end)
+end
+
+---@param fields ShortcutStoryCreate
+---@param on_done fun(story: ShortcutStoryCreated|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.create(fields, on_done)
+	return service.request("POST", "/stories", fields, function(result, err)
+		if err then
+			on_done(nil, err)
+			return
+		end
+		---@cast result table
+		service.clear_cache("search:")
+		on_done({ id = result.id, key = tostring(result.id), url = json.safe_str(result.app_url) }, nil)
+	end, { action = "Create Shortcut Story" })
+end
+
+---@param issue Issue
+---@param fields ShortcutStoryUpdate
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.update(issue, fields, on_done)
+	---@cast issue ShortcutIssue
+	return service.request("PUT", "/stories/" .. tostring(issue.id), fields, function(_, err)
+		if err then
+			on_done(false, err)
+			return
+		end
+		invalidate(issue.id)
+		on_done(true, nil)
+	end, { action = "Update Shortcut Story", issue_key = issue.key })
+end
+
+---@param issue Issue
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.delete(issue, on_done)
+	---@cast issue ShortcutIssue
+	return service.request("DELETE", "/stories/" .. tostring(issue.id), nil, function(_, err)
+		if err then
+			on_done(false, err)
+			return
+		end
+		invalidate(issue.id)
+		on_done(true, nil)
+	end, { action = "Delete Shortcut Story", issue_key = issue.key })
 end
 
 return M
