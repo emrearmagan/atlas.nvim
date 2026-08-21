@@ -112,6 +112,7 @@ end
 -- Reviewers
 
 local DECISION_GROUPS = { "approved", "changes_requested", "pending" }
+local OTHER_DECISION_GROUPS = { "approved", "changes_requested" }
 
 local DECISION_ICONS = {
 	approved = { icon = icons.pulls_status("successful"), hl = "AtlasTextPositive" },
@@ -119,11 +120,58 @@ local DECISION_ICONS = {
 	pending = { icon = icons.pulls_status("inprogress"), hl = "AtlasTextMuted" },
 }
 
----@param _pr PullRequest
+---@param decisions PullsReviewer[]
+---@param groups string[]
+---@param width integer
+---@return BoxContentGroup
+local function decision_content(decisions, groups, width)
+	local box_lines = {}
+	local box_spans = {}
+	local grouped = { approved = {}, changes_requested = {}, pending = {} }
+	for _, decision in ipairs(decisions) do
+		local decision_state = decision.decision or "pending"
+		if grouped[decision_state] == nil then
+			decision_state = "pending"
+		end
+		table.insert(grouped[decision_state], helper.user_handle(decision))
+	end
+
+	local box_inner = math.max(10, width - (PADDING_X * 2) - 4)
+	for _, decision_state in ipairs(groups) do
+		local names = grouped[decision_state]
+		if #names > 0 then
+			table.sort(names)
+			local display = DECISION_ICONS[decision_state] or DECISION_ICONS.pending
+			local label = table.concat(names, ", ")
+			local icon_prefix = display.icon .. " "
+			local icon_prefix_width = vim.api.nvim_strwidth(icon_prefix)
+			local label_width = math.max(1, box_inner - icon_prefix_width)
+			local wrapped = utils.wrap_line(label, label_width)
+
+			local line_text = icon_prefix .. wrapped[1]
+			table.insert(box_lines, line_text)
+			table.insert(box_spans, {
+				line = #box_lines - 1,
+				start_col = 0,
+				end_col = #display.icon,
+				hl_group = display.hl,
+			})
+
+			local continuation_prefix = string.rep(" ", icon_prefix_width)
+			for i = 2, #wrapped do
+				table.insert(box_lines, continuation_prefix .. wrapped[i])
+			end
+		end
+	end
+
+	return { lines = box_lines, spans = box_spans }
+end
+
+---@param pr PullRequest
 ---@param width integer
 ---@param lines string[]
 ---@param spans table[]
-local function render_reviewers(_pr, width, lines, spans)
+local function render_reviewers(pr, width, lines, spans)
 	if state.reviewers == nil then
 		return
 	end
@@ -188,70 +236,45 @@ local function render_reviewers(_pr, width, lines, spans)
 		hl_group = "AtlasTextMuted",
 	})
 
+	local content
 	if #decisions == 0 then
 		local empty_text = "no reviewers yet"
-		utils.append_block(
-			lines,
-			spans,
-			box.render({
-				{
-					lines = { empty_text },
-					spans = { { line = 0, start_col = 0, end_col = #empty_text, hl_group = "AtlasTextMuted" } },
-				},
-			}, { width = width, padding_x = PADDING_X })
-		)
-		table.insert(lines, "")
-		return
+		content = {
+			lines = { empty_text },
+			spans = { { line = 0, start_col = 0, end_col = #empty_text, hl_group = "AtlasTextMuted" } },
+		}
+	else
+		content = decision_content(decisions, DECISION_GROUPS, width)
 	end
 
-	local box_lines = {}
-	local box_spans = {}
-	local grouped = { approved = {}, changes_requested = {}, pending = {} }
-	for _, d in ipairs(decisions) do
-		local s = d.decision or "pending"
-		if grouped[s] == nil then
-			s = "pending"
-		end
-		local name = helper.user_handle(d)
-		table.insert(grouped[s], name)
-	end
-
-	local box_inner = math.max(10, width - (PADDING_X * 2) - 4)
-	for _, s in ipairs(DECISION_GROUPS) do
-		local names = grouped[s]
-		if #names > 0 then
-			table.sort(names)
-			local d = DECISION_ICONS[s] or DECISION_ICONS.pending
-			local label = table.concat(names, ", ")
-			local icon_prefix = d.icon .. " "
-			local icon_prefix_width = vim.api.nvim_strwidth(icon_prefix)
-			local label_width = math.max(1, box_inner - icon_prefix_width)
-			local wrapped = utils.wrap_line(label, label_width)
-
-			local line_text = icon_prefix .. wrapped[1]
-			table.insert(box_lines, line_text)
-			table.insert(box_spans, {
-				line = #box_lines - 1,
-				start_col = 0,
-				end_col = #d.icon,
-				hl_group = d.hl,
-			})
-
-			local continuation_prefix = string.rep(" ", icon_prefix_width)
-			for i = 2, #wrapped do
-				table.insert(box_lines, continuation_prefix .. wrapped[i])
-			end
-		end
-	end
-
-	utils.append_block(
-		lines,
-		spans,
-		box.render({ { lines = box_lines, spans = box_spans } }, {
-			width = width,
-			padding_x = PADDING_X,
+	local others = pr.review_decisions or {}
+	if #others > 0 then
+		table.insert(content.lines, "")
+		local label = "Other decisions"
+		table.insert(content.lines, label)
+		table.insert(content.spans, {
+			line = #content.lines - 1,
+			start_col = 0,
+			end_col = #label,
+			hl_group = "AtlasColumnHeader",
 		})
-	)
+
+		local other_content = decision_content(others, OTHER_DECISION_GROUPS, width)
+		local line_offset = #content.lines
+		for _, line in ipairs(other_content.lines) do
+			table.insert(content.lines, line)
+		end
+		for _, span in ipairs(other_content.spans) do
+			table.insert(content.spans, {
+				line = line_offset + span.line,
+				start_col = span.start_col,
+				end_col = span.end_col,
+				hl_group = span.hl_group,
+			})
+		end
+	end
+
+	utils.append_block(lines, spans, box.render({ content }, { width = width, padding_x = PADDING_X }))
 	table.insert(lines, "")
 end
 

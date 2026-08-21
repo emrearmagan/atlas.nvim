@@ -219,7 +219,7 @@ pulls = {
         {
           name = "Team",
           key = "2",
-          layout = "compact", -- "compact", "grouped", or "plain"
+          layout = "compact",
           search = "org:your-org sort:updated-desc",
         },
         {
@@ -266,9 +266,10 @@ pulls = {
         {
           name = "Me",
           key = "M",
-          layout = "compact",
-          repos = {
-            { workspace = "your-workspace", repo = "atlas" },
+          layout = "compact", -- "compact", "grouped", or "plain"
+          targets = {
+            { workspace = "your-workspace", repo = "standalone-repo" },
+            { workspace = "your-workspace", project = "CORE" },
           },
 
           ---@param pr PullRequest
@@ -282,9 +283,24 @@ pulls = {
           name = "Team",
           key = "1",
           layout = "grouped",
-          repos = {
-            { workspace = "your-workspace", repo = "atlas" },
-            { workspace = "your-workspace", repo = "other-repo" },
+          targets = {
+            { workspace = "your-workspace", project = "TEAM" },
+          },
+        },
+      },
+
+      bookmarks = {
+        key   = "S",      -- default
+        label = "Search", -- default
+        items = {
+          ["Atlas"] = {
+            targets = {
+              { workspace = "your-workspace", repo = "atlas" },
+              { workspace = "your-workspace", project = "ATLAS" },
+            },
+            filter = function(pr)
+              return pr.state ~= "draft"
+            end,
           },
         },
       },
@@ -292,6 +308,8 @@ pulls = {
   },
 },
 ```
+
+Each Bitbucket target selects one repository with `repo`, or every repository in a project with its `project` key. Views and bookmarks can mix both target types and narrow the resulting PRs with `filter`.
 
 <img alt="Bitbucket pull requests" src="https://github.com/user-attachments/assets/bcdd0c9c-e15f-4e82-81fd-cde38aa68a2d">
 
@@ -636,7 +654,7 @@ Open GitHub and GitLab notifications inside Atlas, refresh them, open the relate
   <img width="85%" alt="Bookmarks" src="https://github.com/user-attachments/assets/f008d6af-dfc6-4b65-8af1-94cd6ce9fc99">
 </p>
 
-Turn frequently used GitHub and GitLab searches or Jira JQL into named shortcuts. Use bookmarks for review queues, recurring project views, and the searches you return to throughout the day.
+Turn frequently used GitHub and GitLab searches, Bitbucket repository/project views, or Jira JQL into named shortcuts. Use bookmarks for review queues, recurring project views, and the searches you return to throughout the day.
 
 Bookmarks appear alongside your configured views, keeping important queries one action away.
 Star a pull request or issue with `*` to keep it at the top of lists. Starred items are saved locally and appear in the first bookmark entry.

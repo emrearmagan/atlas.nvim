@@ -117,33 +117,61 @@ local function clone_urls(repository)
 	return https_url ~= "" and https_url or nil, ssh_url ~= "" and ssh_url or nil
 end
 
+---@param participant table
+---@return "approved"|"changes_requested"|nil
+local function participant_decision(participant)
+	local state = tostring(participant.state or ""):lower()
+	if participant.approved == true or state == "approved" then
+		return "approved"
+	end
+	if state == "changes_requested" then
+		return "changes_requested"
+	end
+	return nil
+end
+
+---@param participant table
+---@param decision "approved"|"changes_requested"|"pending"
+---@return PullsReviewer
+local function to_reviewer(participant, decision)
+	local user = as_table(participant.user) or {}
+	local provider_id = tostring(user.uuid or "")
+	local username = tostring(user.nickname or user.username or "")
+	return {
+		id = tostring(user.account_id or user.uuid or user.id or ""),
+		provider_id = provider_id ~= "" and provider_id or nil,
+		name = tostring(user.display_name or user.name or username),
+		username = username,
+		nickname = username ~= "" and username or nil,
+		decision = decision,
+	}
+end
+
 ---@param participants table[]|nil
 ---@return PullsReviewer[]
 function M.to_reviewers(participants)
 	local reviewers = {}
 	for _, participant in ipairs(participants or {}) do
 		if tostring(participant.role or ""):upper() == "REVIEWER" then
-			local user = as_table(participant.user) or {}
-			local provider_id = tostring(user.uuid or "")
-			local state = tostring(participant.state or ""):lower()
-			local decision = "pending"
-			if participant.approved == true or state == "approved" then
-				decision = "approved"
-			elseif state == "changes_requested" then
-				decision = "changes_requested"
-			end
-			local username = tostring(user.nickname or user.username or "")
-			table.insert(reviewers, {
-				id = tostring(user.account_id or user.uuid or user.id or ""),
-				provider_id = provider_id ~= "" and provider_id or nil,
-				name = tostring(user.display_name or user.name or username),
-				username = username,
-				nickname = username ~= "" and username or nil,
-				decision = decision,
-			})
+			table.insert(reviewers, to_reviewer(participant, participant_decision(participant) or "pending"))
 		end
 	end
 	return reviewers
+end
+
+---@param participants table[]|nil
+---@return PullsReviewer[]
+function M.to_review_decisions(participants)
+	local decisions = {}
+	for _, participant in ipairs(participants or {}) do
+		if tostring(participant.role or ""):upper() == "PARTICIPANT" then
+			local decision = participant_decision(participant)
+			if decision then
+				table.insert(decisions, to_reviewer(participant, decision))
+			end
+		end
+	end
+	return decisions
 end
 
 ---@param item table
@@ -211,6 +239,7 @@ local function normalize_pull(item, workspace, repo)
 		created_on = tostring(pr.created_on or ""),
 		updated_on = tostring(pr.updated_on or ""),
 		reviewers = participants and M.to_reviewers(participants) or nil,
+		review_decisions = participants and M.to_review_decisions(participants) or nil,
 		workspace = workspace,
 		repo = repo,
 		repo_full_name = repo_full_name,
@@ -263,6 +292,7 @@ local function to_pull_request(raw)
 		repo = repo,
 		repo_full_name = repo_full_name,
 		reviewers = raw.reviewers,
+		review_decisions = raw.review_decisions,
 		_raw = {
 			links = links,
 			close_source_branch = raw.close_source_branch,

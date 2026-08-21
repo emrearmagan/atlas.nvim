@@ -83,15 +83,17 @@ end
 ---@param pr PullRequest
 ---@return string, string
 local function review_icon_and_hl(pr)
-	if pr.reviewers == nil then
+	if pr.reviewers == nil and pr.review_decisions == nil then
 		return REVIEW_ICON.REVIEW_REQUIRED[1], REVIEW_ICON.REVIEW_REQUIRED[2]
 	end
 	local approved, changes = 0, 0
-	for _, reviewer in ipairs(pr.reviewers) do
-		if reviewer.decision == "approved" then
-			approved = approved + 1
-		elseif reviewer.decision == "changes_requested" then
-			changes = changes + 1
+	for _, collection in ipairs({ pr.reviewers or {}, pr.review_decisions or {} }) do
+		for _, reviewer in ipairs(collection) do
+			if reviewer.decision == "approved" then
+				approved = approved + 1
+			elseif reviewer.decision == "changes_requested" then
+				changes = changes + 1
+			end
 		end
 	end
 	if changes > 0 then
