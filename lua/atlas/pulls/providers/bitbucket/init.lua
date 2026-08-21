@@ -10,11 +10,18 @@ local tasks_api = require("atlas.pulls.providers.bitbucket.api.tasks")
 local users_api = require("atlas.pulls.providers.bitbucket.api.users")
 local request_scope = require("atlas.core.requests")
 local resolver = require("atlas.providers.resolve")
+local git = require("atlas.core.git")
 
 ---@param view AtlasBitbucketViewConfig|AtlasBitbucketBookmarkConfig
 ---@return AtlasBitbucketTarget[]
 local function view_targets(view)
 	-- `targets` used to be called `repos` so thats why :)
+	if view.current_repo then
+		local info = git.local_repository()
+		if info then
+			return { { workspace = info.owner, repo = info.repo } }
+		end
+	end
 	return view.targets or view.repos or {}
 end
 
