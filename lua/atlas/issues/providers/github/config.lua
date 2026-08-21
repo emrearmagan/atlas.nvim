@@ -25,6 +25,7 @@
 
 ---@class AtlasGitHubIssuesViewConfig : IssuesViewConfig
 ---@field search string
+---@field current_repo boolean|nil
 
 ---@class AtlasGitHubIssuesBookmarksConfig
 ---@field key string|nil    -- default "S"

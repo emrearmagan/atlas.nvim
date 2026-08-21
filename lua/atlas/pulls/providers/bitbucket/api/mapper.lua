@@ -99,8 +99,9 @@ local function link_href(links, key)
 end
 
 ---@param repository table|nil
----@return string
-local function clone_url(repository)
+---@return string|nil https_url
+---@return string|nil ssh_url
+local function clone_urls(repository)
 	repository = as_table(repository) or {}
 	local links = as_table(repository.links) or {}
 	local https_url, ssh_url
@@ -113,14 +114,7 @@ local function clone_url(repository)
 			ssh_url = href
 		end
 	end
-	if https_url and https_url ~= "" then
-		return https_url
-	end
-	if ssh_url and ssh_url ~= "" then
-		return ssh_url
-	end
-	local full_name = tostring(repository.full_name or "")
-	return full_name ~= "" and string.format("https://bitbucket.org/%s.git", full_name) or ""
+	return https_url ~= "" and https_url or nil, ssh_url ~= "" and ssh_url or nil
 end
 
 ---@param participants table[]|nil
@@ -167,6 +161,9 @@ local function normalize_pull(item, workspace, repo)
 	local source_repository = as_table(source.repository) or {}
 	local destination_branch = as_table(destination.branch) or {}
 	local destination_commit = as_table(destination.commit) or {}
+	local destination_repository = as_table(destination.repository) or {}
+	local source_https_url, source_ssh_url = clone_urls(source_repository)
+	local destination_https_url, destination_ssh_url = clone_urls(destination_repository)
 	local participants = as_table(pr.participants)
 	local repo_full_name = (workspace ~= "" and repo ~= "") and string.format("%s/%s", workspace, repo) or ""
 
@@ -200,12 +197,15 @@ local function normalize_pull(item, workspace, repo)
 		destination = {
 			branch = tostring(destination_branch.name or ""),
 			commit_hash = tostring(destination_commit.hash or ""),
+			https_url = destination_https_url,
+			ssh_url = destination_ssh_url,
 		},
 		source = {
 			branch = tostring(source_branch.name or ""),
 			commit_hash = tostring(source_commit.hash or ""),
 			repo_full_name = tostring(source_repository.full_name or ""),
-			clone_url = clone_url(source_repository),
+			https_url = source_https_url,
+			ssh_url = source_ssh_url,
 		},
 		close_source_branch = pr.close_source_branch == true,
 		created_on = tostring(pr.created_on or ""),
@@ -244,11 +244,14 @@ local function to_pull_request(raw)
 		source = {
 			branch = source_branch,
 			commit_hash = tostring(source.commit_hash or ""),
-			fetch_remote = source_is_fork and source.clone_url or nil,
+			https_url = source_is_fork and tostring(source.https_url or "") or nil,
+			ssh_url = source_is_fork and tostring(source.ssh_url or "") or nil,
 		},
 		destination = {
 			branch = tostring((raw.destination or {}).branch or ""),
 			commit_hash = tostring((raw.destination or {}).commit_hash or ""),
+			https_url = (raw.destination or {}).https_url,
+			ssh_url = (raw.destination or {}).ssh_url,
 		},
 		comments_count = tonumber(raw.comments) or 0,
 		tasks_count = tonumber(raw.tasks) or 0,

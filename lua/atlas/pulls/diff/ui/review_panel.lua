@@ -109,7 +109,7 @@ function M.configure(panel)
 	if not active(panel) then
 		return
 	end
-	vim.bo[panel.buf].filetype = "atlas-review"
+	vim.bo[panel.buf].filetype = "atlas.review"
 	vim.wo[panel.win].cursorline = true
 	vim.wo[panel.win].list = false
 	vim.wo[panel.win].number = false
@@ -318,17 +318,19 @@ function M.render(panel, session)
 		edit = key_label("ui.comments.edit"),
 		delete = key_label("ui.delete"),
 	}
-	vim.wo[panel.win].winbar = string.format(
-		" Atlas Review %%=%s Comments: %d   %s Tasks: %d   %s Notes: %d   %s Pending: %d ",
+	local winbar = string.format(
+		" Atlas Review %%=%s Comments: %d   %s Tasks: %d   %s Notes: %d",
 		comment_icon,
 		published,
 		task_icon,
 		#data.tasks,
 		note_icon,
-		#data.notes,
-		pending_icon,
-		pending
+		#data.notes
 	)
+	if pending > 0 then
+		winbar = winbar .. string.format("   %s Pending: %d", pending_icon, pending)
+	end
+	vim.wo[panel.win].winbar = winbar .. " "
 	local sections = {
 		{ id = "pending", title = "Pending", item_name = "comment", items = pending_comments },
 		{ id = "tasks", title = "Tasks", item_name = "task", items = standalone_tasks },

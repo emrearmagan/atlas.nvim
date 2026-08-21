@@ -163,15 +163,31 @@ M.register({
 	end,
 })
 
+local function clear_caches()
+	require("atlas.core.cache").clear_all()
+	require("atlas.core.memory_cache").clear_all()
+end
+
 M.register({
 	name = "clear",
-	usage = "clear [notes|stars]",
-	description = "Clear Atlas data, local notes, or starred items",
+	usage = "clear [cache|notes|stars]",
+	description = "Clear Atlas data, caches, local notes, or starred items",
 	complete = function(arglead)
-		return complete_options(arglead, { "notes", "stars" })
+		return complete_options(arglead, { "cache", "notes", "stars" })
 	end,
 	run = function(args)
 		local target = args[1] and args[1]:lower() or nil
+		if target == "cache" then
+			vim.ui.input({ prompt = "Delete Atlas caches and cloned repositories? [y/N]: " }, function(answer)
+				answer = vim.trim(tostring(answer or "")):lower()
+				if answer ~= "y" and answer ~= "yes" then
+					return
+				end
+				clear_caches()
+				notify.info("Atlas caches cleared")
+			end)
+			return
+		end
 		if target == "notes" then
 			require("atlas.pulls.notes.ui").clear_all()
 			return
@@ -192,7 +208,7 @@ M.register({
 			return
 		end
 		if target then
-			notify.error("Usage: :Atlas clear [notes|stars]")
+			notify.error("Usage: :Atlas clear [cache|notes|stars]")
 			return
 		end
 
@@ -213,8 +229,7 @@ M.register({
 					notify.error(stars_err or "Unable to delete starred items")
 					return
 				end
-				require("atlas.core.cache").clear_all()
-				require("atlas.core.memory_cache").clear_all()
+				clear_caches()
 				require("atlas.core.logger").clear()
 				local notes_ui = package.loaded["atlas.pulls.notes.ui"]
 				if notes_ui then
@@ -268,6 +283,7 @@ local function pick_command()
 			add(command, { "issue" }, "Create an issue")
 		elseif command.name == "clear" then
 			add(command, {}, "Clear caches, clones, notes, stars, and logs")
+			add(command, { "cache" }, "Clear caches and cloned repositories")
 			add(command, { "notes" }, "Clear local review notes")
 			add(command, { "stars" }, "Clear starred items")
 		else

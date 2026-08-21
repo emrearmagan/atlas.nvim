@@ -329,6 +329,7 @@ function M.validate()
 		{ "ui.comments.reply", "pulls.review.diff.add_comment", "issues.create_issue" },
 		{ "pulls.edit_title", "pulls.review.explorer.toggle_grouping" },
 		{ "pulls.toggle_repo_issue_state", "pulls.review.diff.toggle_layout" },
+		{ "pulls.checkout", "pulls.review.diff.toggle_compact" },
 		{ "pulls.edit_assignees", "pulls.review.approve" },
 		{ "pulls.open_diff", "pulls.review.focus_item", "pulls.pipelines.open" },
 		{

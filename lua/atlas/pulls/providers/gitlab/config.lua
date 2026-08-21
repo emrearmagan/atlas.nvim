@@ -48,6 +48,7 @@
 ---@field extra_params table<string, string>|nil
 
 ---@class AtlasGitLabPullsViewConfig : AtlasPullsViewConfig, AtlasGitLabPullsSearchConfig
+---@field current_repo boolean|nil
 
 ---@class AtlasGitLabPullsBookmarksConfig
 ---@field key string|nil    -- default "S"
