@@ -35,7 +35,7 @@ end
 function M.format_row(issue, is_child)
 	local icon = issue.is_pinned and icons.general("pin") or state_icon(issue.status_id)
 	local key = key_label(issue)
-	local title = issue.summary
+	local title = issue.title
 	local assignee = issue.assignee and issue.assignee.display_name or "Unassigned"
 	local reporter = issue.reporter and issue.reporter.display_name or "Unknown"
 	return {

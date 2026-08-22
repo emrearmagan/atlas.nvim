@@ -38,6 +38,37 @@ local function labels(values)
 	return result
 end
 
+---@param values table[]
+---@return IssueUser[]
+local function assignees(values)
+	local result = {}
+	for _, raw in ipairs(values) do
+		local assignee = user(raw)
+		if assignee then
+			table.insert(result, assignee)
+		end
+	end
+	return result
+end
+
+---@param raw table|nil
+---@return IssueMilestone|nil
+local function milestone(raw)
+	raw = json.nilify(raw)
+	if raw == nil then
+		return nil
+	end
+	local open_issues = raw.open_issues
+	local closed_issues = raw.closed_issues
+	local total = open_issues + closed_issues
+	return {
+		title = raw.title,
+		progress_percentage = total > 0 and (closed_issues / total) * 100 or nil,
+		open_issues = open_issues,
+		closed_issues = closed_issues,
+	}
+end
+
 local TIMELINE_EVENTS = {
 	reopen = { "reopened", "reopened" },
 	close = { "closed", "closed" },
@@ -107,12 +138,10 @@ function M.to_issue(raw, scoped_slug)
 
 	return {
 		key = string.format("%s#%d", slug, number),
-		summary = raw.title,
+		title = raw.title,
 		project = nil,
 		status = state == "closed" and "Closed" or "Open",
 		status_id = state,
-		status_category = nil,
-		status_color = nil,
 		type = nil,
 		priority = nil,
 		assignee = user(assignees[1]),
@@ -139,6 +168,25 @@ function M.to_issue(raw, scoped_slug)
 			comment_count = raw.comments,
 		},
 	}
+end
+
+---@param raw table
+---@param scoped_slug string|nil Repository slug supplied by repository-scoped endpoints.
+---@return IssueDetails|nil
+function M.to_issue_details(raw, scoped_slug)
+	local issue = M.to_issue(raw, scoped_slug)
+	if issue == nil then
+		return nil
+	end
+
+	issue.description = json.nilify(raw.body) or ""
+	issue.assignees = assignees(json.nilify(raw.assignees) or {})
+	issue.labels = labels(json.nilify(raw.labels) or {})
+	issue.milestone = milestone(raw.milestone)
+	issue.reactions = nil
+	issue.sub_issues = {}
+	issue.created_at = json.nilify(raw.created_at)
+	return issue
 end
 
 ---@param raw table

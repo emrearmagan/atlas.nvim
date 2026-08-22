@@ -384,7 +384,7 @@ function M.fetch_details(pr, pipeline, _opts, on_done)
 			local result = vim.tbl_extend("force", {}, pipeline, {
 				state = M.state(run.status, run.conclusion),
 				provider_state = provider_state(run),
-				url = service.absolute_url(run.html_url),
+				url = pipeline.url,
 				provider_id = tostring(run.id),
 				commit_hash = run.head_sha,
 				jobs = jobs,

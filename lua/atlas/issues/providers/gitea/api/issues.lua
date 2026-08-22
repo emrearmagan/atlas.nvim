@@ -148,7 +148,7 @@ end
 
 ---@param key string
 ---@param _ table|nil
----@param on_done fun(issue: Issue|nil, err: string|nil)
+---@param on_done fun(issue: IssueDetails|nil, err: string|nil)
 function M.get(key, _, on_done)
 	local endpoint, _, slug = issue_endpoint(key)
 	if not endpoint then
@@ -160,7 +160,7 @@ function M.get(key, _, on_done)
 			on_done(nil, err)
 			return
 		end
-		local issue = mapper.to_issue(raw, slug)
+		local issue = mapper.to_issue_details(raw, slug)
 		if not issue then
 			on_done(nil, "The requested number is not an issue")
 			return
