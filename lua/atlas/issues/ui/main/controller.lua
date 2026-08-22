@@ -163,6 +163,30 @@ local function set_issues(issues)
 	state.issue_tree = groups
 end
 
+---@param issue Issue
+---@return string|nil
+local function save_starred_issue(issue)
+	if not issue.is_starred then
+		return nil
+	end
+	local _, err = starred.add(issue, state.provider.id)
+	return err
+end
+
+---@param updated Issue
+---@return boolean, string|nil
+local function replace_issue(updated)
+	local issues = state.issues or {}
+	for index, current in ipairs(issues) do
+		if current.key == updated.key then
+			issues[index] = updated
+			set_issues(issues)
+			return true, save_starred_issue(updated)
+		end
+	end
+	return false, nil
+end
+
 ---@param opts { force_load: boolean }|nil
 ---@param on_done fun()|nil
 local function load_active_view(opts, on_done)
@@ -339,6 +363,8 @@ local function load_bookmark(view, force_load, on_done)
 		else
 			local issues = {}
 			for _, item in ipairs(saved) do
+				item.item.title = item.item.title or item.item.summary or ""
+				item.item.summary = nil
 				item.item.is_starred = true
 				table.insert(issues, item.item)
 			end
@@ -421,7 +447,7 @@ function M.refresh_current_view(on_done, focus_issue_key)
 			if focus_issue_key and not focused then
 				panel.close()
 			elseif type(item) == "table" and item.kind == "issue" and item._issue then
-				panel.on_select(item._issue, { force_refresh = true, issue_refreshed = true })
+				panel.on_select(item._issue, { force_refresh = true })
 			else
 				panel.close()
 			end
@@ -523,6 +549,16 @@ function M.apply_action_result(result)
 	M.refresh_current_view(nil, result.issue_key)
 end
 
+---@param issue Issue
+---@return boolean, string|nil
+function M.update_issue(issue)
+	local updated, err = replace_issue(issue)
+	if updated then
+		render_if_active()
+	end
+	return updated, err
+end
+
 ---@param issue Issue|string|nil
 ---@param on_done fun()|nil
 function M.refresh_issue(issue, on_done)
@@ -563,32 +599,19 @@ function M.refresh_issue(issue, on_done)
 			return
 		end
 
-		local issues = state.issues or {}
-		local replaced = false
-		for i, existing in ipairs(issues) do
-			if type(existing) == "table" and existing.key == issue_key then
-				issues[i] = fetched_issue
-				replaced = true
-				break
-			end
-		end
-
+		local replaced, snapshot_err = replace_issue(fetched_issue)
 		if not replaced then
+			local issues = state.issues or {}
 			table.insert(issues, fetched_issue)
-		end
-
-		set_issues(issues)
-		local snapshot_err
-		if fetched_issue.is_starred then
-			local _, err = starred.add(fetched_issue, state.provider.id)
-			snapshot_err = err
+			set_issues(issues)
+			snapshot_err = save_starred_issue(fetched_issue)
 		end
 		end_issue_reload(issue_key)
 
 		local panel = require("atlas.issues.ui.panel")
 		local panel_issue = require("atlas.issues.ui.panel.issue.state").current_issue
 		if panel.is_open() and panel_issue and tostring(panel_issue.key or "") == issue_key then
-			panel.on_select(fetched_issue, { force_refresh = true, issue_refreshed = true })
+			panel.on_select(fetched_issue, { force_refresh = true, details = fetched_issue })
 		end
 
 		if snapshot_err then

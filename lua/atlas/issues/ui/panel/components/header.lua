@@ -31,7 +31,7 @@ end
 function M.render(issue, width, extra_rows)
 	local issue_type = type(issue.type) == "table" and issue.type.name or "Issue"
 	local key = text_or(issue.key, "")
-	local title = text_or(issue.summary, "")
+	local title = text_or(issue.title, "")
 
 	local type_icon, type_icon_hl = icons.issues_type(issue_type)
 	if type_icon == "" then

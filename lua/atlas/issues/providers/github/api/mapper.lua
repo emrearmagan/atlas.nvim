@@ -25,6 +25,51 @@ local function first_assignee(raw_assignees)
 	return nil
 end
 
+---@param raw_assignees table[]|nil
+---@return IssueUser[]
+local function assignees(raw_assignees)
+	local users = {}
+	for _, raw in ipairs(json.safe_table(raw_assignees)) do
+		local user = M.to_user(raw)
+		if user then
+			table.insert(users, user)
+		end
+	end
+	return users
+end
+
+---@param raw_labels table[]|nil
+---@return IssueLabel[]
+local function labels(raw_labels)
+	local result = {}
+	for _, raw in ipairs(json.safe_table(raw_labels)) do
+		local name = json.safe_str(raw.name)
+		if name then
+			table.insert(result, { name = name, color = json.safe_str(raw.color) })
+		end
+	end
+	return result
+end
+
+---@param raw any
+---@return IssueMilestone|nil
+local function milestone(raw)
+	raw = json.nilify(raw)
+	if type(raw) ~= "table" then
+		return nil
+	end
+	local title = json.safe_str(raw.title)
+	if title == nil then
+		return nil
+	end
+	return {
+		title = title,
+		progress_percentage = tonumber(raw.progressPercentage),
+		open_issues = tonumber((raw.openIssues or {}).totalCount),
+		closed_issues = tonumber((raw.closedIssues or {}).totalCount),
+	}
+end
+
 ---@param state string|nil
 ---@return string, string
 local function normalize_state(state)
@@ -68,6 +113,8 @@ function M.to_issue(raw, fallback_slug)
 	local parent = M.to_issue(json.nilify(raw.parent), fallback_slug)
 	local milestone = json.nilify(raw.milestone)
 	local body = json.safe_str(raw.body) or ""
+	local subscription = json.safe_str(raw.viewerSubscription)
+	local is_subscribed = subscription and subscription == "SUBSCRIBED"
 	local created_at = json.safe_str(raw.createdAt) or json.safe_str(raw.created_at) or ""
 	local updated_at = json.safe_str(raw.updatedAt) or json.safe_str(raw.updated_at) or ""
 	local closed_at = json.safe_str(raw.closedAt) or json.safe_str(raw.closed_at)
@@ -82,12 +129,10 @@ function M.to_issue(raw, fallback_slug)
 	---@type Issue
 	local issue = {
 		key = key,
-		summary = title,
+		title = title,
 		project = nil,
 		status = status_name,
 		status_id = status_id,
-		status_category = nil,
-		status_color = nil,
 		type = nil,
 		priority = nil,
 		assignee = first_assignee(assignees),
@@ -97,7 +142,7 @@ function M.to_issue(raw, fallback_slug)
 		parent = parent,
 		url = url ~= "" and url or nil,
 		is_pinned = raw.isPinned == true,
-		is_subscribed = tostring(raw.viewerSubscription or "") == "SUBSCRIBED",
+		is_subscribed = is_subscribed,
 		_raw = {
 			node_id = json.safe_str(raw.id),
 			number = number,
@@ -115,6 +160,31 @@ function M.to_issue(raw, fallback_slug)
 			sub_issues = github_mapping.connection_nodes(raw.subIssues),
 		},
 	}
+	return issue
+end
+
+---@param raw any Decoded API value.
+---@param fallback_slug string|nil
+---@return IssueDetails|nil
+function M.to_issue_details(raw, fallback_slug)
+	local issue = M.to_issue(raw, fallback_slug)
+	if issue == nil then
+		return nil
+	end
+
+	issue.description = json.safe_str(raw.body) or ""
+	issue.assignees = assignees(github_mapping.connection_nodes(raw.assignees))
+	issue.labels = labels(github_mapping.connection_nodes(raw.labels))
+	issue.milestone = milestone(raw.milestone)
+	issue.reactions = github_mapping.reaction_groups(raw.reactionGroups)
+	issue.sub_issues = {}
+	for _, child in ipairs(github_mapping.connection_nodes(raw.subIssues)) do
+		local sub_issue = M.to_issue(child, fallback_slug)
+		if sub_issue then
+			table.insert(issue.sub_issues, sub_issue)
+		end
+	end
+	issue.created_at = json.safe_str(raw.createdAt) or json.safe_str(raw.created_at)
 	return issue
 end
 
@@ -193,18 +263,6 @@ function M.to_comment(raw)
 	return to_comment(raw, type(raw) == "table" and raw.user or nil)
 end
 
----@param hex string|nil
----@return string|nil
-local function label_hl_group(hex)
-	local clean = tostring(hex or ""):lower():gsub("[^0-9a-f]", "")
-	if #clean ~= 6 then
-		return nil
-	end
-	local name = "AtlasGHIssueLabel_" .. clean
-	vim.api.nvim_set_hl(0, name, { fg = "#" .. clean, bold = true })
-	return name
-end
-
 local EVENT_LABELS = {
 	reopened = "reopened",
 	locked = "locked conversation",
@@ -262,27 +320,18 @@ function M.to_timeline_entry(raw)
 	elseif event == "labeled" or event == "unlabeled" then
 		local label = json.nilify(raw.label)
 		local name = type(label) == "table" and (json.safe_str(label.name) or "") or ""
-		local color = type(label) == "table" and (json.safe_str(label.color) or "") or ""
-		entry.label = event == "labeled" and "added label" or "removed label"
-		if name ~= "" then
-			entry.body = name
-			local hl = label_hl_group(color)
-			if hl then
-				entry.body_hl = function(row, _)
-					return { { start_col = 0, end_col = #row, hl_group = hl } }
-				end
-			end
-		end
+		local verb = event == "labeled" and "added label" or "removed label"
+		entry.label = name ~= "" and (verb .. ": " .. name) or verb
 	elseif event == "assigned" or event == "unassigned" then
 		local assignee = json.nilify(raw.assignee)
 		local login = type(assignee) == "table" and (json.safe_str(assignee.login) or "") or ""
-		entry.label = event == "assigned" and "assigned" or "unassigned"
-		entry.body = login ~= "" and login or nil
+		local verb = event == "assigned" and "assigned" or "unassigned"
+		entry.label = login ~= "" and (verb .. " " .. login) or verb
 	elseif event == "milestoned" or event == "demilestoned" then
 		local milestone = json.nilify(raw.milestone)
 		local title = type(milestone) == "table" and (json.safe_str(milestone.title) or "") or ""
-		entry.label = event == "milestoned" and "added milestone" or "removed milestone"
-		entry.body = title ~= "" and title or nil
+		local verb = event == "milestoned" and "added milestone" or "removed milestone"
+		entry.label = title ~= "" and (verb .. ": " .. title) or verb
 	elseif event == "renamed" then
 		local rename = json.nilify(raw.rename)
 		local from = type(rename) == "table" and (json.safe_str(rename.from) or "") or ""
@@ -296,8 +345,8 @@ function M.to_timeline_entry(raw)
 					return nil
 				end
 				return {
-					{ start_col = 0, end_col = start - 1, hl_group = "AtlasTextWarning" },
-					{ start_col = finish, end_col = #row, hl_group = "AtlasTextPositive" },
+					{ start_col = 0, end_col = start - 1, hl_group = "AtlasTextMuted" },
+					{ start_col = finish, end_col = #row, hl_group = "Normal" },
 				}
 			end
 		end

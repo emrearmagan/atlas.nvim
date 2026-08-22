@@ -30,7 +30,7 @@ local EVENT_ICON = {
 	unassigned = { icons.general("user") },
 	milestoned = { icons.pulls("activity") },
 	demilestoned = { icons.pulls("activity") },
-	renamed = { icons.general("edit") },
+	renamed = { icons.general("edit"), "AtlasTextMuted" },
 	closed = { icons.pulls_status("successful") },
 	reopened = { icons.issues("issue") },
 	locked = { icons.pulls_status("stopped") },
@@ -52,7 +52,7 @@ function M.classify(entry)
 		icon = style[1],
 		icon_hl = style[2],
 		additional = raw ~= "" and raw or entry.kind,
-		content = nil,
+		content = entry.body,
 	}
 end
 
@@ -94,9 +94,21 @@ local function author_hl(item, _author)
 	return helper.person_hl(item.author)
 end
 
+---@param item AtlasThreadV2Item
+---@param row string
+---@param row_index integer
+---@return table[]|nil
+local function content_hl(item, row, row_index)
+	local entry = item.line_map and item.line_map.activity_entry
+	if entry == nil or entry.body_hl == nil then
+		return nil
+	end
+	return entry.body_hl(row, row_index)
+end
+
 ---@param entries IssueActivityEntry[]
 ---@param width integer
----@param opts { padding_x: integer|nil, content_max_lines: integer|nil, squash: boolean|nil, run_id: string|nil }|nil
+---@param opts { padding_x: integer|nil, content_max_lines: integer|nil, squash: boolean|nil, run_id: string|nil, has_next: boolean|nil }|nil
 ---@return string[] lines, table[] spans, table<integer, table>|nil line_map
 function M.render(entries, width, opts)
 	opts = opts or {}
@@ -130,13 +142,15 @@ function M.render(entries, width, opts)
 		)
 	end
 
-	local function render_entry(entry)
+	local function render_entry(entry, has_next)
 		separator()
 		append(threads.render(to_thread_items({ entry }, opts.run_id), width, {
 			padding_x = padding_x,
 			content_max_lines = content_max_lines,
+			content_prefix = has_next and "│  " or "   ",
 			additional_hl = additional_hl,
 			author_hl = author_hl,
+			content_hl = content_hl,
 		}))
 	end
 
@@ -158,15 +172,15 @@ function M.render(entries, width, opts)
 
 	if opts.squash and #entries > COLLAPSE_THRESHOLD then
 		for i = 1, COLLAPSE_KEEP do
-			render_entry(entries[i])
+			render_entry(entries[i], true)
 		end
 		render_gap(#entries - (COLLAPSE_KEEP * 2))
 		for i = #entries - COLLAPSE_KEEP + 1, #entries do
-			render_entry(entries[i])
+			render_entry(entries[i], i < #entries or opts.has_next == true)
 		end
 	else
-		for _, entry in ipairs(entries) do
-			render_entry(entry)
+		for i, entry in ipairs(entries) do
+			render_entry(entry, i < #entries or opts.has_next == true)
 		end
 	end
 

@@ -19,18 +19,15 @@
 ---@field category table|nil
 
 --------------------------------------------------------------------------------
---  Issue
+-- Issue
 --------------------------------------------------------------------------------
--- TODO: This has been mainly started with Jira so its pretty much jira specific, it currently works with github as well but i should probably refactor this at some point.
 
 ---@class Issue
 ---@field key string
----@field summary string
+---@field title string
 ---@field project IssueProject|nil
 ---@field status string|nil
 ---@field status_id string|nil
----@field status_category string|nil
----@field status_color string|nil
 ---@field type IssueType|nil
 ---@field priority string|nil
 ---@field assignee IssueUser|nil
@@ -43,6 +40,33 @@
 ---@field is_starred boolean|nil
 ---@field is_subscribed boolean|nil
 ---@field _raw table|nil
+
+---@class IssueDetails : Issue
+---@field description string
+---@field assignees IssueUser[]
+---@field labels IssueLabel[]
+---@field milestone IssueMilestone|nil
+---@field reactions table<string, integer>|nil
+---@field sub_issues Issue[]
+---@field created_at string|nil
+
+--------------------------------------------------------------------------------
+-- Label
+--------------------------------------------------------------------------------
+
+---@class IssueLabel
+---@field name string
+---@field color string|nil
+
+--------------------------------------------------------------------------------
+-- Milestone
+--------------------------------------------------------------------------------
+
+---@class IssueMilestone
+---@field title string
+---@field progress_percentage number|nil
+---@field open_issues integer|nil
+---@field closed_issues integer|nil
 
 --------------------------------------------------------------------------------
 -- Group
@@ -116,6 +140,14 @@
 ---@field body_hl IssueActivityBodyHlFn|nil
 ---@field deleted boolean|nil
 ---@field always_render boolean|nil
+
+---@alias IssueConversationItemKind "comment"|"description"|"activity"
+
+---@class IssueConversationItem
+---@field id string
+---@field kind IssueConversationItemKind
+---@field created_at string
+---@field entity IssueComment|IssueDetails|IssueActivityEntry
 
 ---@class IssueReactionOption
 ---@field key string

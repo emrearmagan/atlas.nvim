@@ -127,6 +127,8 @@
 
 local M = {}
 
+local notify = require("atlas.core.notify")
+
 ---@type AtlasConfig
 M.options = {
 	ui = {
@@ -325,7 +327,7 @@ local function migrate_legacy(opts)
 	end
 
 	if migrated then
-		vim.notify("Deprecated Config", vim.log.levels.WARN)
+		notify.warn("Deprecated Config")
 	end
 	return opts
 end

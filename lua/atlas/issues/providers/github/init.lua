@@ -3,7 +3,6 @@ local M = {}
 
 local config = require("atlas.config")
 local resolver = require("atlas.providers.resolve")
-local request_scope = require("atlas.core.requests")
 local issue_cache = require("atlas.issues.providers.github.api.cache")
 local notifications_api = require("atlas.providers.github.notifications").new("issues")
 local git = require("atlas.core.git")
@@ -50,7 +49,7 @@ end
 
 ---@param key string
 ---@param opts IssuesFetchOpts|nil
----@param on_done fun(issue: Issue|nil, err: string|nil)
+---@param on_done fun(issue: IssueDetails|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_issue(key, opts, on_done)
 	opts = opts or {}
@@ -64,40 +63,36 @@ function M.fetch_issue(key, opts, on_done)
 	return require("atlas.issues.providers.github.api.issues").get_issue(key, on_done, api_opts)
 end
 
----@param key string
----@param opts { force_load: boolean|nil }|nil
----@param on_done fun(raw: any, err: string|nil)
+---@param issue IssueDetails
+---@param content string
+---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-local function fetch_description(key, opts, on_done)
-	opts = opts or {}
-	local normalizer = require("atlas.issues.providers.github.api.mapper")
-	local slug, number = normalizer.parse_key(tostring(key or ""))
+function M.update_description(issue, content, on_done)
+	local raw = issue._raw or {}
+	local slug = tostring(raw.slug or "")
+	local number = tonumber(raw.number)
 	if slug == "" or number == nil then
-		on_done(nil, "Invalid issue key")
+		on_done(false, "Invalid issue")
 		return nil
 	end
+
 	local cli = require("atlas.providers.github.client").issues
-	local cache_key = string.format("github_issues:description:%s#%d", slug, number)
-	if not opts.force_load then
-		local cached, ok = cli.get_mem(cache_key)
-		if ok then
-			on_done(cached, nil)
-			return nil
-		end
-	end
-	return cli.gh_text({
-		"api",
-		string.format("repos/%s/issues/%d", slug, number),
-		"--jq",
-		".body",
-	}, function(result, err)
+	return cli.gh({
+		"issue",
+		"edit",
+		tostring(number),
+		"--repo",
+		slug,
+		"--body",
+		content,
+	}, function(_, err)
 		if err then
-			on_done(nil, err)
+			on_done(false, err)
 			return
 		end
-		local body = type(result) == "string" and result:gsub("\n$", "") or ""
-		cli.set_mem(cache_key, body)
-		on_done(body, nil)
+		issue_cache.invalidate(tostring(issue.key or ""))
+		issue.description = content
+		on_done(true, nil)
 	end)
 end
 
@@ -116,40 +111,6 @@ end
 ---@param on_done fun(comment: IssueComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.edit_comment(issue, comment, content, on_done)
-	if tostring(comment.id) == "__body__" then
-		local raw = issue._raw or {}
-		local slug = tostring(raw.slug or "")
-		local number = tonumber(raw.number)
-		if slug == "" or number == nil then
-			on_done(nil, "Invalid issue")
-			return nil
-		end
-		local cli = require("atlas.providers.github.client").issues
-		return cli.gh({
-			"issue",
-			"edit",
-			tostring(number),
-			"--repo",
-			slug,
-			"--body",
-			content,
-		}, function(_, err)
-			if err then
-				on_done(nil, err)
-				return
-			end
-			issue_cache.invalidate(tostring(issue.key or ""))
-			raw.body = content
-			on_done({
-				id = "__body__",
-				url = issue.url,
-				author = issue.reporter,
-				body = content,
-				created = raw.created_at or "",
-				reactions = raw.reactions,
-			}, nil)
-		end)
-	end
 	local key = tostring(issue.key or "")
 	return require("atlas.issues.providers.github.api.comments").edit(key, tostring(comment.id), content, on_done)
 end
@@ -159,17 +120,13 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.delete_comment(issue, comment, on_done)
-	if tostring(comment.id) == "__body__" then
-		on_done(false, "Cannot delete the issue description")
-		return nil
-	end
 	local key = tostring(issue.key or "")
 	return require("atlas.issues.providers.github.api.comments").delete(key, tostring(comment.id), on_done)
 end
 
----@param issue Issue
+---@param issue IssueDetails
 ---@param opts { force_refresh: boolean|nil }|nil
----@param on_done fun(result: { comments: IssueComment[], events: IssueActivityEntry[] }|nil, err: string|nil)
+---@param on_done fun(items: IssueConversationItem[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_conversation(issue, opts, on_done)
 	opts = opts or {}
@@ -180,65 +137,48 @@ function M.fetch_conversation(issue, opts, on_done)
 	end
 
 	local timeline = require("atlas.issues.providers.github.api.timeline")
-	local requests = request_scope.new()
-
-	---@param result table
-	---@param description string
-	local function finish(result, description)
-		local raw = issue._raw or {}
-		local comments = {}
-		if description ~= "" then
-			table.insert(comments, {
-				id = "__body__",
-				url = issue.url,
-				author = issue.reporter,
-				body = description,
-				created = raw.created_at or "",
-				reactions = raw.reactions,
-			})
-		end
-		vim.list_extend(comments, type(result.comments) == "table" and result.comments or {})
-
-		on_done({
-			comments = comments,
-			events = result.events or {},
-		}, nil)
-	end
-
-	local description = tostring((issue._raw or {}).body or "")
-	local starts = {
-		timeline = function(done)
-			return timeline.list_conversation(key, done, { force_load = opts.force_refresh == true })
-		end,
-	}
-	if description == "" or opts.force_refresh == true then
-		starts.description = function(done)
-			return fetch_description(key, { force_load = opts.force_refresh == true }, done)
-		end
-	end
-
-	requests.all(starts, function(values, errors)
-		if errors.timeline then
-			on_done(nil, errors.timeline)
+	return timeline.list_conversation(key, function(result, err)
+		if err or result == nil then
+			on_done(nil, err)
 			return
 		end
 
-		if errors.description == nil and values.description ~= nil then
-			description = tostring(values.description)
-			issue._raw = issue._raw or {}
-			issue._raw.body = description
+		local items = {}
+		if issue.description ~= "" then
+			table.insert(items, {
+				id = "description:" .. tostring(issue.key),
+				kind = "description",
+				created_at = issue.created_at or "",
+				entity = issue,
+			})
 		end
-		finish(values.timeline, description)
-	end)
-	return requests
+		for _, comment in ipairs(result.comments or {}) do
+			table.insert(items, {
+				id = "comment:" .. tostring(comment.id),
+				kind = "comment",
+				created_at = comment.created or "",
+				entity = comment,
+			})
+		end
+		for index, entry in ipairs(result.events or {}) do
+			table.insert(items, {
+				id = table.concat({ "activity", entry.date or "", index }, ":"),
+				kind = "activity",
+				created_at = entry.date or "",
+				entity = entry,
+			})
+		end
+
+		on_done(items, nil)
+	end, { force_load = opts.force_refresh == true })
 end
 
 ---@param issue Issue
----@param comment IssueComment
+---@param item IssueConversationItem
 ---@param key string
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.add_reaction(issue, comment, key, on_done)
+function M.add_reaction(issue, item, key, on_done)
 	local raw = issue._raw or {}
 	local slug = tostring(raw.slug or "")
 	local number = tonumber(raw.number)
@@ -248,14 +188,19 @@ function M.add_reaction(issue, comment, key, on_done)
 	end
 
 	local endpoint
-	if tostring(comment.id) == "__body__" then
+	if item.kind == "description" then
 		if number == nil then
 			on_done(false, "Invalid issue")
 			return nil
 		end
 		endpoint = string.format("repos/%s/issues/%d/reactions", slug, number)
-	else
+	elseif item.kind == "comment" then
+		local comment = item.entity
+		---@cast comment IssueComment
 		endpoint = string.format("repos/%s/issues/comments/%s/reactions", slug, tostring(comment.id))
+	else
+		on_done(false, "This item does not support reactions")
+		return nil
 	end
 
 	local cli = require("atlas.providers.github.client").issues
@@ -415,6 +360,7 @@ return {
 			fetch_user = require("atlas.issues.providers.github.api.users").get_user,
 			fetch_issues = M.fetch_issues,
 			fetch_issue = M.fetch_issue,
+			update_description = M.update_description,
 			views = M.views,
 		},
 		comments = {

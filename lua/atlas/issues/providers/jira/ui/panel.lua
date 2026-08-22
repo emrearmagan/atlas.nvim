@@ -4,6 +4,7 @@ local M = {}
 local icons = require("atlas.ui.shared.icons")
 local utils = require("atlas.ui.shared.utils")
 local helper = require("atlas.issues.ui.main.helper")
+local spinner = require("atlas.ui.components.spinner")
 
 local state = {
 	custom_fields = nil, ---@type table[]|nil
@@ -12,15 +13,17 @@ local state = {
 -- Header rows
 
 ---@param issue Issue
+---@param details IssueDetails|nil
 ---@param loading boolean
 ---@return IssuesPanelHeaderRow[]
-function M.header_rows(issue, loading)
+function M.header_rows(issue, details, loading)
+	local data = details or issue
 	local user_icon = icons.general("user")
-	local priority = tostring(issue.priority or "-")
+	local priority = tostring(data.priority or "-")
 	local priority_icon, priority_hl = icons.issues_priority(priority)
 	local priority_text = priority_icon ~= "" and string.format("%s %s", priority_icon, priority) or priority
-	local assignee_name = type(issue.assignee) == "table" and tostring(issue.assignee.display_name or "") or ""
-	local reporter_name = type(issue.reporter) == "table" and tostring(issue.reporter.display_name or "") or ""
+	local assignee_name = type(data.assignee) == "table" and tostring(data.assignee.display_name or "") or ""
+	local reporter_name = type(data.reporter) == "table" and tostring(data.reporter.display_name or "") or ""
 
 	if assignee_name == "" then
 		assignee_name = "Unassigned"
@@ -32,8 +35,8 @@ function M.header_rows(issue, loading)
 	local rows = {
 		{
 			k1 = "Status:",
-			v1 = tostring(issue.status or "Unknown"),
-			v1_hl = helper.status_hl(issue.status_id),
+			v1 = tostring(data.status or "Unknown"),
+			v1_hl = helper.status_hl(data.status_id),
 			k2 = "Priority:",
 			v2 = priority_text,
 			v2_hl = priority_hl,
@@ -51,13 +54,13 @@ function M.header_rows(issue, loading)
 	if loading then
 		table.insert(rows, {
 			k1 = "Fields:",
-			v1 = "Loading...",
+			v1 = spinner.with_text("Loading..."),
 			v1_hl = "AtlasTextMuted",
 			k2 = "",
 			v2 = "",
 			v2_hl = nil,
 		})
-	else
+	elseif details then
 		for _, field in ipairs(state.custom_fields or {}) do
 			if field.display == "table" then
 				table.insert(rows, {
@@ -78,25 +81,27 @@ end
 -- Chips
 
 ---@param issue Issue
+---@param details IssueDetails|nil
 ---@param loading boolean
 ---@return IssuesPanelChip[]
-function M.chips(issue, loading)
+function M.chips(issue, details, loading)
+	local data = details or issue
 	local chips = {}
 
-	local parent_key = issue.parent and issue.parent.key or nil
+	local parent_key = data.parent and data.parent.key or nil
 	table.insert(chips, {
 		label = string.format("%s %s", icons.pulls("branch"), parent_key or "-"),
 		hl = parent_key and "AtlasJiraChipParent" or "AtlasTextMuted",
 	})
 
-	local sp = issue.story_points
+	local sp = data.story_points
 	local sp_text = type(sp) == "number" and tostring(sp) or "-"
 	table.insert(chips, {
 		label = string.format("%s %s", icons.issues_provider("jira", "provider"), sp_text),
 		hl = type(sp) == "number" and "AtlasJiraChipStoryPoints" or "AtlasTextMuted",
 	})
 
-	local due = utils.format_date and utils.format_date(issue.duedate) or tostring(issue.duedate or "")
+	local due = utils.format_date and utils.format_date(data.duedate) or tostring(data.duedate or "")
 	local due_text = due ~= "" and due or "-"
 	table.insert(chips, {
 		label = string.format("%s %s", icons.general("created"), due_text),
@@ -104,8 +109,8 @@ function M.chips(issue, loading)
 	})
 
 	if loading then
-		table.insert(chips, { label = "Loading...", hl = "AtlasTextMuted" })
-	else
+		table.insert(chips, { label = spinner.with_text("Loading..."), hl = "AtlasTextMuted" })
+	elseif details then
 		for _, field in ipairs(state.custom_fields or {}) do
 			if field.display == "chip" then
 				table.insert(chips, {
@@ -121,15 +126,16 @@ end
 
 -- Fetches
 
----@param issue Issue
----@param opts { force_refresh: boolean|nil, issue_refreshed: boolean|nil }|nil
+---@param _issue Issue
+---@param details IssueDetails
+---@param opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun()
 ---@return { cancel: fun() }|nil
-function M.fetch_header(issue, opts, on_done)
+function M.fetch_header(_issue, details, opts, on_done)
 	state.custom_fields = nil
 
-	local issue_key = tostring(issue.key or "")
-	local project_key = issue.project and issue.project.key or nil
+	local issue_key = tostring(details.key or "")
+	local project_key = details.project and details.project.key or nil
 
 	local jira_cfg = require("atlas.issues.providers.jira.api.config").jira_config()
 	local project_config = jira_cfg and jira_cfg.project_config and project_key and jira_cfg.project_config[project_key]
