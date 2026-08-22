@@ -127,7 +127,7 @@ local function open_issue(target, on_error)
 		return
 	end
 	fetch_and_open(target, "fetch_issue", key, "Issue " .. key, function(issue)
-		require("atlas.issues.ui.panel").on_select(issue, { force_refresh = true })
+		require("atlas.issues.ui.panel").on_select(issue, { force_refresh = true, details = issue })
 	end, on_error)
 end
 

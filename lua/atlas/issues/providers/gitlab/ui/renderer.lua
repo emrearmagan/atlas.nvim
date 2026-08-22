@@ -36,7 +36,7 @@ end
 ---@param is_child boolean
 ---@return table
 function M.format_row(issue, is_child)
-	local title = issue.summary or ""
+	local title = issue.title or ""
 	local label = key_label(issue)
 
 	local row_icon = state_icon(issue.status_id)

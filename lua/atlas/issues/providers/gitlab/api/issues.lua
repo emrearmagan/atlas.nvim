@@ -2,7 +2,7 @@ local M = {}
 
 local service = require("atlas.providers.gitlab.client").issues
 local normalizer = require("atlas.issues.providers.gitlab.api.mapper")
-local LIST_CACHE_PREFIX = "gitlab:issues:list:"
+local LIST_CACHE_PREFIX = "gitlab:issues:list:v2:"
 
 ---@param path string
 ---@param iid integer
@@ -96,7 +96,7 @@ end
 
 ---@param key string
 ---@param opts { force_load?: boolean }|nil
----@param on_done fun(issue: Issue|nil, err: string|nil)
+---@param on_done fun(issue: IssueDetails|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.get_issue(key, opts, on_done)
 	opts = opts or {}
@@ -121,13 +121,39 @@ function M.get_issue(key, opts, on_done)
 			on_done(nil, err)
 			return
 		end
-		local issue = normalizer.to_issue(result)
+		local issue = normalizer.to_issue_details(result)
 		if issue then
 			service.set_memory_cache(cache_key, issue)
 		end
 		on_done(issue, nil)
 	end, {
 		action = "Fetch issue",
+		path = path,
+		iid = iid,
+	})
+end
+
+---@param key string
+---@param description string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.update_description(key, description, on_done)
+	local path, iid = normalizer.parse_key(key)
+	if path == "" or iid == nil then
+		on_done(false, "Invalid issue key")
+		return nil
+	end
+
+	local endpoint = string.format("/projects/%s/issues/%d", service.url_encode(path), iid)
+	return service.request("PUT", endpoint, { description = description }, function(_, err)
+		if err then
+			on_done(false, err)
+			return
+		end
+		invalidate_issue(path, iid)
+		on_done(true, nil)
+	end, {
+		action = "Update issue description",
 		path = path,
 		iid = iid,
 	})
@@ -312,7 +338,7 @@ end
 
 ---@param query string
 ---@param opts { force_load?: boolean, max_results?: number }|nil
----@param on_done fun(items: { id: any, key: string, summary: string, url: string|nil }[]|nil, err: string|nil)
+---@param on_done fun(items: { id: any, key: string, title: string, url: string|nil }[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.search_issues_picker(query, opts, on_done)
 	opts = opts or {}
@@ -337,7 +363,7 @@ function M.search_issues_picker(query, opts, on_done)
 			table.insert(items, {
 				id = issue.key,
 				key = issue.key,
-				summary = issue.summary,
+				title = issue.title,
 				url = issue.url,
 			})
 		end

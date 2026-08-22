@@ -4,8 +4,7 @@ local utils = require("atlas.ui.shared.utils")
 local MAX_COMMENT_LINES = 8
 
 ---@class IssuesConversationTabState
----@field comments IssueComment[]|"loading"|nil
----@field activity IssueActivityEntry[]|"loading"|nil
+---@field items IssueConversationItem[]|"loading"|nil
 ---@field error string|nil
 ---@field generation integer
 ---@field collapsed table<string, boolean>
@@ -13,8 +12,7 @@ local MAX_COMMENT_LINES = 8
 ---@field expanded_runs table<string, boolean>
 ---@field requests AtlasRequestScope
 local M = {
-	comments = nil,
-	activity = nil,
+	items = nil,
 	error = nil,
 	generation = 0,
 	collapsed = {},
@@ -30,8 +28,7 @@ function M.reset()
 	current_issue = nil
 	M.requests.cancel()
 	M.requests = request_scope.new()
-	M.comments = nil
-	M.activity = nil
+	M.items = nil
 	M.error = nil
 	M.collapsed = {}
 	M.expanded_comments = {}
@@ -74,7 +71,64 @@ end
 
 ---@return boolean
 function M.any_loading()
-	return M.comments == "loading" or M.activity == "loading"
+	return M.items == "loading"
+end
+
+---@return IssueComment[]
+function M.comments()
+	local result = {}
+	if type(M.items) ~= "table" then
+		return result
+	end
+	for _, item in ipairs(M.items) do
+		if item.kind == "comment" then
+			---@type IssueComment
+			local comment = item.entity
+			table.insert(result, comment)
+		end
+	end
+	return result
+end
+
+---@param comment IssueComment
+function M.upsert_comment(comment)
+	if type(M.items) ~= "table" then
+		return
+	end
+	local id = "comment:" .. tostring(comment.id)
+	local item = { id = id, kind = "comment", created_at = comment.created or "", entity = comment }
+	for index, current in ipairs(M.items) do
+		if current.id == id then
+			M.items[index] = item
+			return
+		end
+	end
+	table.insert(M.items, item)
+end
+
+---@param comment IssueComment
+function M.remove_comment(comment)
+	if type(M.items) ~= "table" then
+		return
+	end
+	for _, item in ipairs(M.items) do
+		if item.kind == "comment" then
+			---@type IssueComment
+			local current = item.entity
+			if tostring(current.parent_id or "") == tostring(comment.id) then
+				comment.body = nil
+				comment.deleted = true
+				return
+			end
+		end
+	end
+	local id = "comment:" .. tostring(comment.id)
+	for index = #M.items, 1, -1 do
+		if M.items[index].id == id then
+			table.remove(M.items, index)
+			return
+		end
+	end
 end
 
 ---@param comment IssueComment

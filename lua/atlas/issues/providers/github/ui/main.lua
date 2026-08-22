@@ -153,7 +153,7 @@ local function compact_issue_to_row(issue)
 	local row = issue_to_row(issue, false)
 	local number = tonumber(raw.number) or tostring(issue.key or ""):match("#(%d+)$")
 	local key_label = number and string.format("#%s", tostring(number)) or tostring(issue.key or "")
-	row.name = string.format("%s%s %s", issue.is_starred and (STAR_ICON .. " ") or "", key_label, issue.summary or "")
+	row.name = string.format("%s%s %s", issue.is_starred and (STAR_ICON .. " ") or "", key_label, issue.title or "")
 	row._compact_key_label = key_label
 	row.created = utils.relative_time(raw.created_at)
 	row.updated = utils.relative_time(raw.updated_at)
