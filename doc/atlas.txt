@@ -12,15 +12,13 @@ CONTENTS                                                       *atlas-contents*
   4. Configuration .......................... |atlas-configuration|
   5. Commands ............................... |atlas-commands|
   6. Pulls .................................. |atlas-pulls|
-       Configuration ........................ |atlas-pulls-configuration|
-       GitHub ............................... |atlas-pulls-github|
-       Bitbucket ............................ |atlas-pulls-bitbucket|
-       GitLab ............................... |atlas-pulls-gitlab|
+     GitHub ................................. |atlas-pulls-github|
+     Bitbucket .............................. |atlas-pulls-bitbucket|
+     GitLab ................................. |atlas-pulls-gitlab|
   7. Issues ................................. |atlas-issues|
-       Configuration ........................ |atlas-issues-configuration|
-       Jira ................................. |atlas-issues-jira|
-       GitHub ............................... |atlas-issues-github|
-       GitLab ............................... |atlas-issues-gitlab|
+     Jira ................................... |atlas-issues-jira|
+     GitHub ................................. |atlas-issues-github|
+     GitLab ................................. |atlas-issues-gitlab|
   8. Features ............................... |atlas-features|
        Review pull requests ................. |atlas-review-pull-requests|
          Local notes ........................ |atlas-local-notes|

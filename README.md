@@ -5,7 +5,7 @@
 
 # Atlas.nvim
 
-A Neovim plugin for managing GitHub/Bitbucket/GitLab PRs and Jira/GitHub/GitLab issues without leaving your editor.
+Review GitHub, Bitbucket, and GitLab pull requests and manage Jira, GitHub, and GitLab issues without leaving Neovim.
 
 <p>
   <img alt="GitHub" src="https://img.shields.io/badge/GitHub-181717?style=flat-square&logo=github&logoColor=white">
@@ -26,15 +26,13 @@ A Neovim plugin for managing GitHub/Bitbucket/GitLab PRs and Jira/GitHub/GitLab 
 - [Configuration](#configuration)
 - [Commands](#commands)
 - [Pulls](#pulls)
-  - [Configuration](#pulls-configuration)
-    - [GitHub](#github)
-    - [Bitbucket](#bitbucket)
-    - [GitLab](#gitlab)
+  - [GitHub](#github)
+  - [Bitbucket](#bitbucket)
+  - [GitLab](#gitlab)
 - [Issues](#issues)
-  - [Configuration](#issue-configuration)
-    - [Jira](#jira)
-    - [GitHub](#github-issues)
-    - [GitLab](#gitlab-issues)
+  - [Jira](#jira)
+  - [GitHub](#github-issues)
+  - [GitLab](#gitlab-issues)
 - [Features](#features)
 - [Events](#events)
 - [Keymaps](#keymaps)
