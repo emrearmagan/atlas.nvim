@@ -339,6 +339,8 @@ local function load_bookmark(view, force_load, on_done)
 		else
 			local issues = {}
 			for _, item in ipairs(saved) do
+				item.item.title = item.item.title or item.item.summary or ""
+				item.item.summary = nil
 				item.item.is_starred = true
 				table.insert(issues, item.item)
 			end
@@ -421,7 +423,7 @@ function M.refresh_current_view(on_done, focus_issue_key)
 			if focus_issue_key and not focused then
 				panel.close()
 			elseif type(item) == "table" and item.kind == "issue" and item._issue then
-				panel.on_select(item._issue, { force_refresh = true, issue_refreshed = true })
+				panel.on_select(item._issue, { force_refresh = true })
 			else
 				panel.close()
 			end
@@ -588,7 +590,7 @@ function M.refresh_issue(issue, on_done)
 		local panel = require("atlas.issues.ui.panel")
 		local panel_issue = require("atlas.issues.ui.panel.issue.state").current_issue
 		if panel.is_open() and panel_issue and tostring(panel_issue.key or "") == issue_key then
-			panel.on_select(fetched_issue, { force_refresh = true, issue_refreshed = true })
+			panel.on_select(fetched_issue, { force_refresh = true, details = fetched_issue })
 		end
 
 		if snapshot_err then

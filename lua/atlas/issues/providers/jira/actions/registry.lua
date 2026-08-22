@@ -398,7 +398,7 @@ local function edit_issue(ctx, done)
 				end)
 			end)
 		end, {
-			summary = tostring(issue.summary or ""),
+			summary = tostring(issue.title or ""),
 			description = initial_description,
 			assignee = issue.assignee,
 			reporter = issue.reporter,
@@ -691,7 +691,7 @@ local function search_issue(_, done)
 				for _, issue in ipairs(items) do
 					table.insert(picker_items, {
 						id = tostring(issue.id or issue.key),
-						label = string.format("%s - %s", issue.key, issue.summary),
+						label = string.format("%s - %s", issue.key, issue.title),
 						value = issue,
 					})
 				end

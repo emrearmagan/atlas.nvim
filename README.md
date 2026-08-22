@@ -719,7 +719,7 @@ issues = {
       ---@param ctx AtlasIssuesCustomActionContext
       ---@param done fun(ok: boolean|nil, message: string|nil)
       run = function(issue, ctx, done)
-        local branch = string.format("%s/%s", issue.key, issue.summary:lower():gsub("%s+", "-"))
+        local branch = string.format("%s/%s", issue.key, issue.title:lower():gsub("%s+", "-"))
         vim.fn.setreg("+", branch)
         done(true, "Copied: " .. branch)
       end,

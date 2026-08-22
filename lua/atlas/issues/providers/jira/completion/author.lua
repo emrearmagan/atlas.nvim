@@ -36,11 +36,8 @@ local function collect_users()
 		add((issue or {}).assignee)
 		add((issue or {}).reporter)
 	end
-	local conversation_comments = conversation_state.comments
-	if type(conversation_comments) == "table" then
-		for _, comment in ipairs(conversation_comments) do
-			add((comment or {}).author)
-		end
+	for _, comment in ipairs(conversation_state.comments()) do
+		add(comment.author)
 	end
 
 	table.sort(users, function(a, b)

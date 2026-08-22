@@ -38,6 +38,7 @@ query($owner: String!, $repo: String!, $number: Int!, $withRelationships: Boolea
   repository(owner: $owner, name: $repo) {
     issue(number: $number) {
       ...IssueFields
+      body
       reactionGroups { content reactors { totalCount } }
       parent @include(if: $withRelationships) {
         ...IssueFields
@@ -111,7 +112,7 @@ function M.search_issues(search, on_done, opts)
 
 	local with_relationships = relationships_enabled(opts)
 	local cache_key =
-		string.format("github_issues:search:v3:%s:%d:relationships:%s", query, limit, tostring(with_relationships))
+		string.format("github_issues:search:%s:%d:relationships:%s", query, limit, tostring(with_relationships))
 	if not opts.force_load then
 		local cached, ok = cli.get_cache(cache_key)
 		if ok then
@@ -148,7 +149,7 @@ function M.search_issues(search, on_done, opts)
 end
 
 ---@param key string
----@param on_done fun(issue: Issue|nil, err: string|nil)
+---@param on_done fun(issue: IssueDetails|nil, err: string|nil)
 ---@param opts { force_load?: boolean, with_relationships?: boolean, layout?: "plain"|"compact" }|nil
 ---@return { cancel: fun() }|nil
 function M.get_issue(key, on_done, opts)
@@ -161,7 +162,7 @@ function M.get_issue(key, on_done, opts)
 
 	local with_relationships = relationships_enabled(opts)
 	local cache_key =
-		string.format("github_issues:get:v2:%s#%d:relationships:%s", slug, number, tostring(with_relationships))
+		string.format("github_issues:get:%s#%d:relationships:%s", slug, number, tostring(with_relationships))
 	if not opts.force_load then
 		local cached, ok = cli.get_mem(cache_key)
 		if ok then
@@ -196,7 +197,7 @@ function M.get_issue(key, on_done, opts)
 		end
 
 		local repository = json.nilify(result.data.repository)
-		local issue = normalizer.to_issue(repository and repository.issue, slug)
+		local issue = normalizer.to_issue_details(repository and repository.issue, slug)
 		if issue then
 			cli.set_mem(cache_key, issue)
 		end

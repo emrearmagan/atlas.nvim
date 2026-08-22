@@ -3,24 +3,7 @@ local M = {}
 
 local icons = require("atlas.ui.shared.icons")
 local helper = require("atlas.issues.ui.main.helper")
-
-local state = {
-	assignees = nil, ---@type table|nil
-	labels = nil, ---@type table|nil
-	milestone = nil, ---@type table|nil
-	sub_issues = nil, ---@type table|nil
-	body = nil, ---@type string|nil
-	parent = nil, ---@type Issue|nil
-}
-
-local function reset_state()
-	state.assignees = nil
-	state.labels = nil
-	state.milestone = nil
-	state.sub_issues = nil
-	state.body = nil
-	state.parent = nil
-end
+local spinner = require("atlas.ui.components.spinner")
 
 ---@param body string|nil
 ---@return integer completed, integer total
@@ -39,45 +22,35 @@ local function task_progress(body)
 	return completed, total
 end
 
----@param raw table
----@return table[]
-local function assignee_nodes(raw)
-	local assignees = type(raw.assignees) == "table" and raw.assignees or {}
-	if type(assignees.nodes) == "table" then
-		return assignees.nodes
-	end
-	return assignees
-end
-
----@param raw table
+---@param assignees IssueUser[]
 ---@return string, string|table[]
-local function assignees_display(raw)
-	local logins = {}
-	for _, node in ipairs(assignee_nodes(raw)) do
-		local login = type(node) == "table" and tostring(node.login or node.account_id or "") or ""
-		if login ~= "" then
-			table.insert(logins, login)
+local function assignees_display(assignees)
+	local usernames = {}
+	for _, assignee in ipairs(assignees) do
+		local username = tostring(assignee.account_id or assignee.display_name or "")
+		if username ~= "" then
+			table.insert(usernames, username)
 		end
 	end
 
-	if #logins == 0 then
+	if #usernames == 0 then
 		return "Unassigned", "AtlasTextMuted"
 	end
 
 	local parts = {}
 	local spans = {}
 	local cursor = 0
-	for i, login in ipairs(logins) do
-		local token = "@" .. login
+	for i, username in ipairs(usernames) do
+		local token = "@" .. username
 		table.insert(parts, token)
 		table.insert(spans, {
 			start_col = cursor,
 			end_col = cursor + #token,
-			hl_group = helper.person_hl(login),
+			hl_group = helper.person_hl(username),
 		})
 		cursor = cursor + #token
 
-		if i < #logins then
+		if i < #usernames then
 			local sep = ", "
 			table.insert(parts, sep)
 			table.insert(spans, {
@@ -92,19 +65,7 @@ local function assignees_display(raw)
 	return table.concat(parts), spans
 end
 
----@param value any
----@return number|nil
-local function connection_count(value)
-	if type(value) == "number" then
-		return value
-	end
-	if type(value) == "table" then
-		return tonumber(value.totalCount)
-	end
-	return nil
-end
-
----@param milestone table|nil
+---@param milestone IssueMilestone|nil
 ---@return string
 local function milestone_display(milestone)
 	if milestone == nil then
@@ -116,9 +77,9 @@ local function milestone_display(milestone)
 		return ""
 	end
 
-	local percent = tonumber(milestone.progressPercentage)
-	local open_count = connection_count(milestone.openIssues) or tonumber(milestone.open_issues)
-	local closed_count = connection_count(milestone.closedIssues) or tonumber(milestone.closed_issues)
+	local percent = tonumber(milestone.progress_percentage)
+	local open_count = milestone.open_issues
+	local closed_count = milestone.closed_issues
 	local total = open_count and closed_count and (open_count + closed_count) or nil
 
 	if percent == nil and total and total > 0 then
@@ -140,48 +101,53 @@ end
 -- Header rows
 
 ---@param issue Issue
----@param _loading boolean
+---@param details IssueDetails|nil
+---@param loading boolean
 ---@return IssuesPanelHeaderRow[]
-function M.header_rows(issue, _loading)
-	local raw = issue._raw or {}
-
-	local reporter_name = issue.reporter and tostring(issue.reporter.display_name or "") or ""
+function M.header_rows(issue, details, loading)
+	local data = details or issue
+	local reporter_name = data.reporter and tostring(data.reporter.display_name or "") or ""
 	if reporter_name == "" then
 		reporter_name = "Unknown"
 	end
 
 	local status_cell = {
 		k1 = "Status:",
-		v1 = tostring(issue.status or "Open"),
-		v1_hl = issue.status_id == "closed" and "AtlasGHIssueClosedChip" or "AtlasGHIssueOpenChip",
+		v1 = tostring(data.status or "Open"),
+		v1_hl = data.status_id == "closed" and "AtlasGHIssueClosedChip" or "AtlasGHIssueOpenChip",
 
 		k2 = "Reporter:",
 		v2 = string.format("%s %s", icons.general("user"), reporter_name),
 		v2_hl = helper.person_hl(reporter_name),
 	}
 
-	local assignees_text, assignees_hl = assignees_display({ assignees = state.assignees or raw.assignees })
+	local assignees = details and details.assignees or (issue.assignee and { issue.assignee } or {})
+	local assignees_text, assignees_hl = assignees_display(assignees)
+	if loading and details == nil then
+		assignees_text = spinner.with_text("Loading...")
+		assignees_hl = "AtlasTextMuted"
+	end
 
 	local right_cells = {}
-	local parent = state.parent or issue.parent
+	local parent = data.parent
 	if parent and parent.key then
 		local pkey = tostring(parent.key)
-		local title = tostring(parent.summary or "")
+		local title = tostring(parent.title or "")
 		local text = title ~= "" and string.format("%s %s", pkey, title) or pkey
 		local hl = helper.issue_hl and helper.issue_hl(pkey) or "AtlasTextMuted"
 		table.insert(right_cells, { k = "Parent:", v = text, hl = hl })
 	end
 
-	local milestone_text = milestone_display(state.milestone or raw.milestone)
+	local milestone_text = milestone_display(details and details.milestone or nil)
 	if milestone_text ~= "" then
 		table.insert(right_cells, { k = "Milestone:", v = milestone_text, hl = "AtlasTextMuted" })
 	end
 
-	local subs = type(state.sub_issues) == "table" and state.sub_issues or {}
+	local subs = details and details.sub_issues or {}
 	if #subs > 0 then
 		local closed = 0
 		for _, s in ipairs(subs) do
-			if tostring(s.state or ""):upper() == "CLOSED" then
+			if s.status_id == "closed" then
 				closed = closed + 1
 			end
 		end
@@ -192,7 +158,7 @@ function M.header_rows(issue, _loading)
 		})
 	end
 
-	local completed, total = task_progress(state.body or raw.body)
+	local completed, total = task_progress(details and details.description or nil)
 	if total > 0 then
 		table.insert(right_cells, {
 			k = "Tasks:",
@@ -237,20 +203,18 @@ local function label_hl(hex)
 	return name
 end
 
----@param issue Issue
+---@param _issue Issue
+---@param details IssueDetails|nil
 ---@param loading boolean
 ---@return IssuesPanelChip[]
-function M.chips(issue, loading)
+function M.chips(_issue, details, loading)
 	local chips = {}
 	if loading then
-		local spinner = require("atlas.ui.components.spinner")
 		table.insert(chips, { label = spinner.with_text("Loading..."), hl = "AtlasTextMuted" })
 		return chips
 	end
 
-	local raw = issue._raw or {}
-	local labels = state.labels or raw.labels or {}
-	for _, label in ipairs(labels) do
+	for _, label in ipairs(details and details.labels or {}) do
 		local name = tostring(label.name or "")
 		if name ~= "" then
 			table.insert(chips, { label = name, hl = label_hl(label.color) })
@@ -258,46 +222,6 @@ function M.chips(issue, loading)
 	end
 
 	return chips
-end
-
----@param target Issue
----@param fresh Issue
-local function update_details(target, fresh)
-	local raw = fresh._raw or {}
-	state.assignees = raw.assignees
-	state.labels = raw.labels
-	state.milestone = raw.milestone
-	state.sub_issues = raw.sub_issues
-	state.body = raw.body
-	state.parent = fresh.parent
-	target.is_subscribed = fresh.is_subscribed
-	target._raw = fresh._raw
-end
-
----@param issue Issue
----@param opts { force_refresh: boolean|nil, issue_refreshed: boolean|nil }|nil
----@param on_done fun()
----@return { cancel: fun() }|nil
-function M.fetch_header(issue, opts, on_done)
-	local key = tostring(issue.key or "")
-	if key == "" then
-		on_done()
-		return
-	end
-
-	reset_state()
-	if opts and opts.issue_refreshed then
-		update_details(issue, issue)
-		on_done()
-		return
-	end
-
-	return require("atlas.issues.providers.github.api.issues").get_issue(key, function(fresh, err)
-		if not err and type(fresh) == "table" then
-			update_details(issue, fresh)
-		end
-		on_done()
-	end, { force_load = opts and opts.force_refresh == true or false })
 end
 
 ---@return IssuesPanelTab[]

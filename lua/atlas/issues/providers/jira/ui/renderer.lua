@@ -24,8 +24,7 @@ function M.format_row(issue, is_child)
 	local issue_type_name = issue.type and issue.type.name or nil
 	local t_icon = type_icon(issue_type_name)
 	local icon = is_child and "" or t_icon
-	local title = is_child and (t_icon .. " " .. issue.key .. " " .. issue.summary)
-		or (issue.key .. " " .. issue.summary)
+	local title = is_child and (t_icon .. " " .. issue.key .. " " .. issue.title) or (issue.key .. " " .. issue.title)
 	local due_display = utils.format_date(issue.duedate)
 	local p_icon = priority_icon(issue.priority)
 	local points_due = ""
@@ -104,7 +103,7 @@ function M.cell_hl(row, col, ctx)
 					table.insert(spans_for_cell, {
 						start_col = title_start - 1,
 						end_col = #ctx.text,
-						hl_group = helper.issue_title_hl(is_child and "" or issue.summary),
+						hl_group = helper.issue_title_hl(is_child and "" or issue.title),
 					})
 				end
 
@@ -180,22 +179,22 @@ end
 function M.issue_popup_content(issue)
 	local raw = issue._raw or {}
 	local fields = type(raw.fields) == "table" and raw.fields or {}
-	local summary = issue.summary or ""
+	local title = issue.title or ""
 	local key = issue.key or ""
 	local parent_key = issue.parent and issue.parent.key or nil
-	local parent_summary = issue.parent and issue.parent.summary or nil
+	local parent_title = issue.parent and issue.parent.title or nil
 
-	local lines = { string.format(" %s: %s", key, summary), "" }
+	local lines = { string.format(" %s: %s", key, title), "" }
 	---@type AtlasUIHighlight[]
 	local highlights = {
 		{ line = 0, start_col = 1, end_col = 1 + #key, hl_group = helper.issue_hl(key) },
 	}
-	if summary ~= "" then
+	if title ~= "" then
 		table.insert(highlights, {
 			line = 0,
 			start_col = 3 + #key,
 			end_col = #lines[1],
-			hl_group = helper.issue_title_hl(summary),
+			hl_group = helper.issue_title_hl(title),
 		})
 	end
 
@@ -287,9 +286,9 @@ function M.issue_popup_content(issue)
 
 	if parent_key and parent_key ~= "" then
 		push("Parent", parent_key, helper.issue_hl(parent_key))
-		if parent_summary and parent_summary ~= "" then
+		if parent_title and parent_title ~= "" then
 			local line = #lines
-			table.insert(lines, string.format("            %s", parent_summary))
+			table.insert(lines, string.format("            %s", parent_title))
 			table.insert(highlights, {
 				line = line,
 				start_col = 12,

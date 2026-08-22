@@ -2,6 +2,7 @@ local M = {}
 
 local layout = require("atlas.ui.layout")
 local utils = require("atlas.ui.shared.utils")
+local spinner = require("atlas.ui.components.spinner")
 local panel_state = require("atlas.issues.ui.panel.issue.state")
 local header = require("atlas.issues.ui.panel.components.header")
 local chips = require("atlas.issues.ui.panel.components.chips")
@@ -43,6 +44,7 @@ function M.render(tab_items, get_tab_module)
 	end
 
 	local issue = panel_state.current_issue
+	local details = panel_state.current_details
 	local width = vim.api.nvim_win_get_width(win)
 
 	local lines = {}
@@ -55,11 +57,12 @@ function M.render(tab_items, get_tab_module)
 		local state = require("atlas.issues.state")
 		local provider = state.provider
 		local panel = provider and provider.capabilities.ui and provider.capabilities.ui.panel
-		local extra_rows = panel and panel.header_rows and panel.header_rows(issue, panel_state.header_loading) or nil
-		local extra_chips = panel and panel.chips and panel.chips(issue, panel_state.header_loading) or nil
+		local extra_rows = panel and panel.header_rows and panel.header_rows(issue, details, panel_state.header_loading)
+			or nil
+		local extra_chips = panel and panel.chips and panel.chips(issue, details, panel_state.header_loading) or nil
 
 		-- Header
-		local h_lines, h_spans = header.render(issue, width, extra_rows)
+		local h_lines, h_spans = header.render(details or issue, width, extra_rows)
 		utils.append_block(lines, spans, { lines = h_lines, highlights = h_spans })
 
 		-- Chips
@@ -85,8 +88,8 @@ function M.render(tab_items, get_tab_module)
 		-- Tab content
 		local tab_mod = get_tab_module(panel_state.current_tab)
 		local content_offset = #lines
-		if tab_mod and tab_mod.render then
-			local tab_lines_c, tab_spans_c, tab_line_map = tab_mod.render(issue, width)
+		if tab_mod and tab_mod.render and details then
+			local tab_lines_c, tab_spans_c, tab_line_map = tab_mod.render(details, width)
 			utils.append_block(lines, spans, { lines = tab_lines_c, highlights = tab_spans_c })
 
 			local adjusted = {}
@@ -94,6 +97,11 @@ function M.render(tab_items, get_tab_module)
 				adjusted[content_offset + lnum] = entry
 			end
 			panel_state.line_map = adjusted
+		elseif details == nil then
+			local text = panel_state.header_loading and spinner.with_text("Loading issue...")
+				or "Issue details unavailable."
+			utils.push(lines, spans, text, "AtlasTextMuted", PADDING_X)
+			panel_state.line_map = {}
 		else
 			table.insert(lines, "  Unknown tab: " .. tostring(panel_state.current_tab))
 			panel_state.line_map = {}
