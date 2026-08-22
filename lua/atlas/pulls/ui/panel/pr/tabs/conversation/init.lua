@@ -40,15 +40,13 @@ function M.on_select(pr, refresh, opts)
 		if not state.is_current(request_generation, pr) then
 			return
 		end
+		state.items = {}
 		if result then
-			state.items = {}
 			for _, item in ipairs(result) do
 				if item.kind ~= "comment" or item.entity.state ~= "DELETED" then
 					table.insert(state.items, item)
 				end
 			end
-		else
-			state.items = {}
 		end
 
 		state.error = nil

@@ -40,7 +40,6 @@
 
 ---@class PullRequest : PullRequestRef
 ---@field title string
----@field description string
 ---@field state "open"|"merged"|"declined"|"draft"
 ---@field author PullsAuthor
 ---@field source PullsRef
@@ -53,16 +52,19 @@
 ---@field provider string
 ---@field workspace string
 ---@field repo string
----@field is_subscribed boolean|nil
 ---@field is_starred boolean|nil
----@field reactions table<string, integer>|nil
----@field assignees PullsAuthor[]|nil
 ---@field reviewers PullsReviewer[]|nil
----@field review_decisions PullsReviewer[]|nil
----@field labels PullsLabel[]|nil
 ---@field lines_added number|nil
 ---@field lines_removed number|nil
 ---@field _raw table
+
+---@class PullRequestDetails : PullRequest
+---@field description string
+---@field is_subscribed boolean|nil
+---@field reactions table<string, integer>|nil
+---@field assignees PullsAuthor[]|nil
+---@field reviewers PullsReviewer[]
+---@field labels PullsLabel[]|nil
 
 --------------------------------------------------------------------------------
 -- User (current authenticated user)
@@ -135,6 +137,7 @@
 
 ---@class PullsReviewer: PullsAuthor
 ---@field provider_id string|nil Identifier used when updating the reviewer list.
+---@field role "reviewer"|"participant"
 ---@field decision "approved"|"changes_requested"|"reviewed"|"pending"
 
 --------------------------------------------------------------------------------
@@ -291,7 +294,7 @@
 ---@field id string
 ---@field kind PullsConversationItemKind
 ---@field created_on string
----@field entity PullsComment|PullsReviewHistoryEntry|PullRequest|PullsActivityEntry
+---@field entity PullsComment|PullsReviewHistoryEntry|PullRequestDetails|PullsActivityEntry
 
 --------------------------------------------------------------------------------
 -- Commit

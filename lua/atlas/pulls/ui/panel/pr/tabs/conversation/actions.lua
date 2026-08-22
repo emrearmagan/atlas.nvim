@@ -166,6 +166,9 @@ function M.react(pr, entry, refresh)
 	if not item or (item.kind ~= "comment" and item.kind ~= "description") then
 		return
 	end
+	if item.kind == "description" and item.entity.reactions == nil then
+		return
+	end
 	local provider = get_provider()
 	local comments = provider and provider.capabilities.comments
 	if not comments or not comments.add_reaction then

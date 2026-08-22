@@ -106,6 +106,19 @@ query($owner:String!,$name:String!,$number:Int!,$endCursor:String){
           }
         }
       }
+      reviewRequestEvents:timelineItems(last:100,itemTypes:[REVIEW_REQUESTED_EVENT]){
+        nodes{
+          ... on ReviewRequestedEvent{
+            requestedReviewer{
+              ... on User{id login name}
+              ... on Bot{id login}
+              ... on Mannequin{id login name}
+              ... on Team{id name slug organization{login}}
+              ... on EnterpriseTeam{id name slug combinedSlug}
+            }
+          }
+        }
+      }
     }
   }
 }
@@ -492,8 +505,9 @@ end
 
 ---@param author PullsAuthor
 ---@param decision "approved"|"changes_requested"|"pending"
+---@param role "reviewer"|"participant"
 ---@return PullsReviewer
-local function reviewer(author, decision)
+local function reviewer(author, decision, role)
 	return {
 		id = author.id,
 		provider_id = author.username,
@@ -501,6 +515,7 @@ local function reviewer(author, decision)
 		username = author.username,
 		nickname = author.nickname,
 		decision = decision,
+		role = role,
 	}
 end
 
@@ -508,17 +523,29 @@ end
 ---@return PullsReviewer[]
 local function current_reviewers(pull_request)
 	local reviewers, by_login = {}, {}
-	local function add(author, decision)
+	local requested = {}
+	for _, node in ipairs(((pull_request.reviewRequestEvents or {}).nodes or {})) do
+		local author = review_author(node.requestedReviewer)
+		if author then
+			requested[tostring(author.username):lower()] = true
+		end
+	end
+
+	local function add(author, decision, role)
 		if not author then
 			return
 		end
 		local key = tostring(author.username):lower()
+		if requested[key] then
+			role = "reviewer"
+		end
 		local current = by_login[key]
 		if current then
 			current.decision = decision
+			current.role = role
 			return
 		end
-		current = reviewer(author, decision)
+		current = reviewer(author, decision, role)
 		by_login[key] = current
 		table.insert(reviewers, current)
 	end
@@ -526,13 +553,13 @@ local function current_reviewers(pull_request)
 	for _, node in ipairs(((pull_request.latestOpinionatedReviews or {}).nodes or {})) do
 		local state = tostring(node.state or "")
 		if state == "APPROVED" then
-			add(review_author(node.author), "approved")
+			add(review_author(node.author), "approved", "participant")
 		elseif state == "CHANGES_REQUESTED" then
-			add(review_author(node.author), "changes_requested")
+			add(review_author(node.author), "changes_requested", "participant")
 		end
 	end
 	for _, node in ipairs(((pull_request.reviewRequests or {}).nodes or {})) do
-		add(review_author(node.requestedReviewer), "pending")
+		add(review_author(node.requestedReviewer), "pending", "reviewer")
 	end
 	return reviewers
 end

@@ -409,7 +409,7 @@ function M.refresh_current_view(on_done, focus_pr)
 			if focus_pr and not focused then
 				panel.close()
 			elseif type(item) == "table" and item.kind == "pr" and item.pr then
-				panel.on_select(item.pr, item.repo, { force_refresh = true, pr_refreshed = true })
+				panel.on_select(item.pr, item.repo, { force_refresh = true })
 			else
 				panel.close()
 			end
@@ -498,7 +498,7 @@ function M.refresh_pr(pr, on_done)
 		then
 			panel.on_select(fetched_pr, pr_panel_state.current_repo, {
 				force_refresh = true,
-				pr_refreshed = true,
+				details = fetched_pr,
 			})
 		end
 

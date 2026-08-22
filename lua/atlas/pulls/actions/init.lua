@@ -5,6 +5,7 @@ local md_editor = require("atlas.ui.popups.editor")
 local picker = require("atlas.picker")
 local review = require("atlas.pulls.actions.review")
 local utils = require("atlas.pulls.actions.utils")
+local ui_utils = require("atlas.ui.shared.utils")
 
 local has_pr = utils.has_pr
 local notify = utils.notify
@@ -202,6 +203,7 @@ M.edit_description = {
 
 		---@param current string
 		local function edit(current)
+			current = ui_utils.normalize_newlines(current)
 			md_editor.open({
 				key = "pr-description-edit-" .. tostring(pr.id),
 				title = " Edit Description ",
@@ -221,7 +223,9 @@ M.edit_description = {
 							done(nil, message)
 							return
 						end
-						pr.description = description
+						if pr.description ~= nil then
+							pr.description = description
+						end
 						notify(context, "success", "Description updated", 1200)
 						done({ changed_pr = true, message = "Description updated" }, nil)
 					end)
@@ -235,21 +239,16 @@ M.edit_description = {
 
 		-- Always edit against the remote description so a stale panel does not
 		-- silently revert someone else's edit.
-		if core.fetch_description then
-			notify(context, "loading", "Loading description...")
-			core.fetch_description(pr, { force_refresh = true }, function(description, err)
-				if err then
-					local message = tostring(err)
-					notify(context, "error", "Failed to load description: " .. message)
-					done(nil, message)
-					return
-				end
-				edit(tostring(description or ""))
-			end)
-			return
-		end
-
-		edit(tostring(pr.description or ""))
+		notify(context, "loading", "Loading description...")
+		core.fetch_description(pr, { force_refresh = true }, function(description, err)
+			if err then
+				local message = tostring(err)
+				notify(context, "error", "Failed to load description: " .. message)
+				done(nil, message)
+				return
+			end
+			edit(tostring(description or ""))
+		end)
 	end,
 }
 

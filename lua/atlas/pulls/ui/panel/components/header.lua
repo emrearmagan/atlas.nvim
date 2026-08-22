@@ -2,9 +2,22 @@ local M = {}
 
 local icons = require("atlas.ui.shared.icons")
 local highlights = require("atlas.ui.shared.highlights")
+local spinner = require("atlas.ui.components.spinner")
 local table_tree = require("atlas.ui.components.table_tree")
 local utils = require("atlas.ui.shared.utils")
 local helper = require("atlas.pulls.ui.main.helper")
+
+---@return PullsPanelHeaderRow
+function M.loading_assignee_row()
+	return {
+		k1 = "Assignees:",
+		v1 = spinner.with_text("Loading..."),
+		v1_hl = "AtlasTextMuted",
+		k2 = "",
+		v2 = "",
+		v2_hl = "AtlasTextMuted",
+	}
+end
 
 ---@param logins string[]
 ---@return PullsPanelHeaderRow

@@ -8,7 +8,7 @@ local REVIEW_METADATA_QUERY = [[
 query($path:ID!,$iid:String!,$after:String){
   project(fullPath:$path){
     mergeRequest(iid:$iid){
-	  diffRefs{baseSha startSha headSha}
+      diffRefs{baseSha startSha headSha}
       reviewers(first:100){
         nodes{id name username mergeRequestInteraction{reviewState}}
       }
@@ -24,6 +24,19 @@ query($path:ID!,$iid:String!,$after:String){
           systemNoteMetadata{action}
         }
       }
+    }
+  }
+}
+]]
+
+local REVIEWERS_QUERY = [[
+query($path:ID!,$iid:String!){
+  project(fullPath:$path){
+    mergeRequest(iid:$iid){
+      reviewers(first:100){
+        nodes{id name username mergeRequestInteraction{reviewState}}
+      }
+      approvedBy(first:100){nodes{id name username}}
     }
   }
 }
@@ -54,7 +67,7 @@ local function bust_review_caches(path, iid)
 	service.delete_memory_cache(string.format("gitlab_pulls:comments:%s!%d", path, iid))
 	service.delete_memory_cache(string.format("gitlab_pulls:general-comments:%s!%d", path, iid))
 	service.delete_memory_cache(string.format("gitlab_pulls:activity:%s!%d", path, iid))
-	service.delete_memory_cache(string.format("gitlab_pulls:reviewer_states:%s!%d", path, iid))
+	service.delete_memory_cache(string.format("gitlab_pulls:reviewers:%s!%d", path, iid))
 	service.delete_memory_cache(metadata_cache_key(path, iid))
 end
 
@@ -81,6 +94,47 @@ local function to_author(raw)
 		username = username,
 		nickname = username ~= "" and username or nil,
 	}
+end
+
+---@param merge_request table
+---@return PullsReviewer[]
+local function map_reviewers(merge_request)
+	local reviewers = {}
+	local by_id = {}
+	for _, node in ipairs(json.safe_table(json.safe_table(merge_request.reviewers).nodes)) do
+		local author = to_author(node)
+		if author then
+			local interaction = json.safe_table(node.mergeRequestInteraction)
+			local state = (json.safe_str(interaction.reviewState) or ""):lower()
+			local reviewer = vim.tbl_extend("force", author, {
+				role = "reviewer",
+				decision = state == "approved" and "approved"
+					or (state == "requested_changes" and "changes_requested")
+					or (state == "reviewed" and "reviewed")
+					or "pending",
+			})
+			by_id[author.id] = reviewer
+			table.insert(reviewers, reviewer)
+		end
+	end
+	for _, node in ipairs(json.safe_table(json.safe_table(merge_request.approvedBy).nodes)) do
+		local author = to_author(node)
+		if author then
+			local reviewer = by_id[author.id]
+			if reviewer then
+				reviewer.decision = "approved"
+			else
+				table.insert(
+					reviewers,
+					vim.tbl_extend("force", author, {
+						decision = "approved",
+						role = "participant",
+					})
+				)
+			end
+		end
+	end
+	return reviewers
 end
 
 ---@param pr PullRequest
@@ -131,41 +185,7 @@ local function fetch_metadata(pr, opts, on_done)
 			end
 
 			if after == nil then
-				local by_id = {}
-				local nodes = json.safe_table(json.safe_table(merge_request.reviewers).nodes)
-				for _, node in ipairs(nodes) do
-					local author = to_author(node)
-					if author then
-						local interaction = json.safe_table(node.mergeRequestInteraction)
-						local state = (json.safe_str(interaction.reviewState) or ""):lower()
-						local reviewer = vim.tbl_extend("force", author, {
-							provider_id = author.id:match("/([^/]+)$") or author.id,
-							decision = state == "approved" and "approved"
-								or (state == "requested_changes" and "changes_requested")
-								or (state == "reviewed" and "reviewed")
-								or "pending",
-						})
-						by_id[author.id] = reviewer
-						table.insert(reviewers, reviewer)
-					end
-				end
-				for _, node in ipairs(json.safe_table(json.safe_table(merge_request.approvedBy).nodes)) do
-					local author = to_author(node)
-					if author then
-						local current = by_id[author.id]
-						if current then
-							current.decision = "approved"
-						else
-							table.insert(
-								reviewers,
-								vim.tbl_extend("force", author, {
-									provider_id = author.id:match("/([^/]+)$") or author.id,
-									decision = "approved",
-								})
-							)
-						end
-					end
-				end
+				reviewers = map_reviewers(merge_request)
 			end
 
 			local notes = json.safe_table(merge_request.notes)
@@ -518,9 +538,9 @@ end
 
 ---@param pr PullRequest
 ---@param opts { force_refresh?: boolean }|nil
----@param on_done fun(by_username: table<string, string>|nil, err: string|nil)
+---@param on_done fun(reviewers: PullsReviewer[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_reviewer_states(pr, opts, on_done)
+function M.fetch_reviewers(pr, opts, on_done)
 	opts = opts or {}
 	local path, iid = project_iid(pr)
 	if path == "" or iid == nil then
@@ -528,7 +548,7 @@ function M.fetch_reviewer_states(pr, opts, on_done)
 		return nil
 	end
 
-	local cache_key = string.format("gitlab_pulls:reviewer_states:%s!%d", path, iid)
+	local cache_key = string.format("gitlab_pulls:reviewers:%s!%d", path, iid)
 	if opts.force_refresh ~= true then
 		local cached, ok = service.get_memory_cache(cache_key)
 		if ok then
@@ -537,19 +557,21 @@ function M.fetch_reviewer_states(pr, opts, on_done)
 		end
 	end
 
-	local endpoint = string.format("/projects/%s/merge_requests/%d/reviewers", service.url_encode(path), iid)
-	return service.request("GET", endpoint, nil, function(result, err)
+	return service.graphql(REVIEWERS_QUERY, { path = path, iid = tostring(iid) }, function(result, err)
 		if err then
 			on_done(nil, err)
 			return
 		end
-		local by_username = {}
-		for _, item in ipairs(result) do
-			by_username[item.user.username] = item.state
+		local project = json.nilify(result and result.project)
+		local merge_request = project and json.nilify(project.mergeRequest)
+		if not merge_request then
+			on_done(nil, "GitLab did not return the merge request")
+			return
 		end
-		service.set_memory_cache(cache_key, by_username)
-		on_done(by_username, nil)
-	end)
+		local reviewers = map_reviewers(merge_request)
+		service.set_memory_cache(cache_key, reviewers)
+		on_done(reviewers, nil)
+	end, { action = "Fetch MR reviewers", project_path = path, iid = iid })
 end
 
 return M

@@ -197,7 +197,7 @@ end
 
 ---@param pr PullRequestRef
 ---@param opts? { force_load?: boolean }
----@param on_done fun(detail: PullRequest|nil, err: string|nil)
+---@param on_done fun(detail: PullRequestDetails|nil, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.fetch_pullrequest(pr, opts, on_done)
 	opts = opts or {}
@@ -223,13 +223,31 @@ function M.fetch_pullrequest(pr, opts, on_done)
 			return
 		end
 
-		local prs = mapper.to_pull_requests_list({ values = { result } }, workspace, repo)
-		if #prs == 0 then
-			on_done(nil, "Invalid pull request response")
+		local detail = mapper.to_pull_request_details(result, workspace, repo)
+		service.set_cache(key, detail, service.cache_ttl())
+		on_done(detail, nil)
+	end)
+end
+
+---@param pr PullRequest
+---@param _opts { force_refresh?: boolean }|nil
+---@param on_done fun(description: string|nil, err: string|nil)
+---@return { job_id: integer, cancel: fun() }|nil
+function M.fetch_description(pr, _opts, on_done)
+	local workspace, repo = pr.repo_full_name:match("^([^/]+)/(.+)$")
+	if workspace == nil or repo == nil then
+		on_done(nil, "PR missing workspace/repo info")
+		return nil
+	end
+
+	local endpoint =
+		string.format("/repositories/%s/%s/pullrequests/%s?fields=description", workspace, repo, tostring(pr.id))
+	return service.request("GET", endpoint, nil, nil, function(result, err)
+		if err then
+			on_done(nil, err)
 			return
 		end
-		service.set_cache(key, prs[1], service.cache_ttl())
-		on_done(prs[1], nil)
+		on_done(tostring(result.description or ""), nil)
 	end)
 end
 
@@ -368,7 +386,6 @@ function M.fetch_reviewers(pr, opts, on_done)
 			return
 		end
 		pr.reviewers = mapper.to_reviewers(participants)
-		pr.review_decisions = mapper.to_review_decisions(participants)
 		on_done(pr.reviewers, nil)
 	end)
 end
@@ -394,7 +411,6 @@ function M.fetch_review_participants(pr, opts, on_done)
 			return
 		end
 		local reviewers = mapper.to_reviewers(participants)
-		vim.list_extend(reviewers, mapper.to_review_decisions(participants))
 		service.set_cache(key, reviewers)
 		on_done(reviewers, nil)
 	end)
@@ -492,7 +508,7 @@ function M.fetch_default_reviewers(opts, on_done)
 		local selected = {}
 		local current = {}
 		for _, reviewer in ipairs((opts.pr and opts.pr.reviewers) or {}) do
-			local id = tostring(reviewer.provider_id or "")
+			local id = reviewer.role == "reviewer" and tostring(reviewer.provider_id or "") or ""
 			if id ~= "" then
 				selected[id] = true
 				current[id] = reviewer

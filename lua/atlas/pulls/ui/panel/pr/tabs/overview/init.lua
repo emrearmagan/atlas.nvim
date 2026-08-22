@@ -58,34 +58,24 @@ function M.on_select(pr, refresh, opts)
 
 	local force_refresh = opts.force_refresh == true
 	local can_fetch_reviewers = core.fetch_reviewers ~= nil
-	local can_fetch_description = core.fetch_description ~= nil
 	local can_fetch_merge_checks = core.fetch_merge_checks ~= nil
 	local should_fetch_reviewers = can_fetch_reviewers
 		and (force_refresh or state.reviewers == nil or state.reviewers == "loading")
-	local should_fetch_description = can_fetch_description
-		and (force_refresh or state.description == nil or state.description == "loading")
 	local should_fetch_merge_checks = can_fetch_merge_checks
 		and (force_refresh or state.merge_checks == nil or state.merge_checks == "loading")
 
-	if should_fetch_reviewers or should_fetch_description or should_fetch_merge_checks then
+	if should_fetch_reviewers or should_fetch_merge_checks then
 		cancel_all()
-	end
-
-	if should_fetch_description then
-		state.description = "loading"
-		track(core.fetch_description(pr, opts, function(desc, err)
-			if err then
-				state.description = nil
-				statusline.notify("error", "Failed to load pull request description")
-			else
-				state.description = desc or ""
-			end
-			refresh()
-		end))
 	end
 
 	if should_fetch_reviewers then
 		state.reviewers = "loading"
+	end
+	if should_fetch_merge_checks then
+		state.merge_checks = "loading"
+	end
+
+	if should_fetch_reviewers then
 		track(core.fetch_reviewers(pr, opts, function(reviewers, err)
 			if err then
 				state.reviewers = err
@@ -97,7 +87,6 @@ function M.on_select(pr, refresh, opts)
 	end
 
 	if should_fetch_merge_checks then
-		state.merge_checks = "loading"
 		track(core.fetch_merge_checks(pr, opts, function(checks, err)
 			if err then
 				state.merge_checks = err
@@ -178,9 +167,19 @@ local function render_reviewers(pr, width, lines, spans)
 	end
 
 	if state.reviewers == "loading" then
-		utils.push(lines, spans, "Reviewers (...)", "AtlasColumnHeader", PADDING_X)
-		local header_text = "Reviewers (...)"
-		local count_text = "(...)"
+		local approved_count = 0
+		local reviewer_count = 0
+		for _, reviewer in ipairs(pr.reviewers or {}) do
+			if reviewer.role ~= "participant" then
+				reviewer_count = reviewer_count + 1
+				if reviewer.decision == "approved" then
+					approved_count = approved_count + 1
+				end
+			end
+		end
+		local count_text = pr.reviewers and string.format("(%d/%d)", approved_count, reviewer_count) or "(...)"
+		local header_text = "Reviewers " .. count_text
+		utils.push(lines, spans, header_text, "AtlasColumnHeader", PADDING_X)
 		table.insert(spans, {
 			line = #lines - 1,
 			start_col = PADDING_X + #header_text - #count_text,
@@ -219,7 +218,11 @@ local function render_reviewers(pr, width, lines, spans)
 		return
 	end
 
-	local decisions = state.reviewers
+	local decisions = {}
+	local others = {}
+	for _, reviewer in ipairs(state.reviewers) do
+		table.insert(reviewer.role == "participant" and others or decisions, reviewer)
+	end
 	local approved_count = 0
 	for _, r in ipairs(decisions) do
 		if r.decision == "approved" then
@@ -248,7 +251,6 @@ local function render_reviewers(pr, width, lines, spans)
 		content = decision_content(decisions, DECISION_GROUPS, width)
 	end
 
-	local others = pr.review_decisions or {}
 	if #others > 0 then
 		table.insert(content.lines, "")
 		local label = "Other decisions"
@@ -444,7 +446,7 @@ end
 
 -- Description
 
----@param pr PullRequest
+---@param pr PullRequestDetails
 ---@param width integer
 ---@param lines string[]
 ---@param spans table[]
@@ -459,14 +461,7 @@ local function render_description(pr, width, lines, spans, line_map)
 
 	utils.push(lines, spans, "Description", "AtlasColumnHeader", PADDING_X)
 
-	if state.description == "loading" then
-		utils.push(lines, spans, spinner.with_text("Loading description..."), "AtlasTextMuted", PADDING_X)
-		table.insert(lines, "")
-		map_lines()
-		return
-	end
-
-	local desc_text = utils.strip_markup(state.description or pr.description or "")
+	local desc_text = utils.strip_markup(pr.description)
 	if desc_text == "" then
 		utils.push(lines, spans, "No description provided.", "AtlasTextMuted", PADDING_X)
 		table.insert(lines, "")
@@ -651,7 +646,9 @@ function M.render(pr, width)
 	local spans = {}
 	local line_map = {}
 
-	render_description(pr, width, lines, spans, line_map)
+	if panel_state.current_details then
+		render_description(panel_state.current_details, width, lines, spans, line_map)
+	end
 	render_reviewers(pr, width, lines, spans)
 	render_merge_checks(pr, width, lines, spans)
 	render_pipelines(pr, width, lines, spans, line_map)

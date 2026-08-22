@@ -1,6 +1,7 @@
 local M = {}
 
 local keymaps = require("atlas.core.keymaps")
+local utils = require("atlas.ui.shared.utils")
 local statusline = require("atlas.ui.statusline")
 local virtual_lines = require("atlas.ui.components.virtual_lines")
 
@@ -133,7 +134,7 @@ function M.open(opts)
 	local name = string.format("atlas://editor/%s.md", key)
 	pcall(vim.api.nvim_buf_set_name, buf, name)
 
-	local lines = vim.split(tostring(opts.initial_text or ""), "\n", { plain = true })
+	local lines = vim.split(utils.normalize_newlines(opts.initial_text), "\n", { plain = true })
 	if #lines == 0 then
 		lines = { "" }
 	end

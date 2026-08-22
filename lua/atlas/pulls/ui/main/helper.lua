@@ -49,13 +49,11 @@ end
 ---@return string, string
 local function review_icon_and_hl(pr)
 	local decision = "pending"
-	for _, reviewers in ipairs({ pr.reviewers or {}, pr.review_decisions or {} }) do
-		for _, reviewer in ipairs(reviewers) do
-			if reviewer.decision == "changes_requested" then
-				decision = "changes_requested"
-			elseif reviewer.decision == "approved" and decision == "pending" then
-				decision = "approved"
-			end
+	for _, reviewer in ipairs(pr.reviewers or {}) do
+		if reviewer.decision == "changes_requested" then
+			decision = "changes_requested"
+		elseif reviewer.decision == "approved" and decision == "pending" then
+			decision = "approved"
 		end
 	end
 	local style = REVIEW_ICON[decision]

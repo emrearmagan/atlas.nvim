@@ -29,7 +29,7 @@ end
 ---@param refresh fun()
 ---@param fn fun(pr: PullRequest, refresh: fun())
 local function dispatch_simple(refresh, fn)
-	local pr = panel_state.current_pr
+	local pr = panel_state.current_details or panel_state.current_pr
 	if pr == nil then
 		return
 	end
@@ -39,7 +39,7 @@ end
 ---@param refresh fun()
 ---@param fn fun(pr: PullRequest, entry: table, refresh: fun())
 local function dispatch_with_entry(refresh, fn)
-	local pr = panel_state.current_pr
+	local pr = panel_state.current_details or panel_state.current_pr
 	if pr == nil then
 		return
 	end

@@ -27,7 +27,7 @@ local function author_completion()
 	local provider = require("atlas.pulls.state").provider
 	local comments_capability = provider and provider.capabilities.comments
 	local data = state.data
-	local pr = require("atlas.pulls.ui.panel.pr.state").current_pr
+	local pr = require("atlas.pulls.ui.panel.pr.state").current_details
 	if not provider or not pr or not data or not comments_capability or not comments_capability.comment_completion then
 		return nil
 	end
@@ -56,7 +56,12 @@ end
 ---@param pr PullRequest
 ---@return boolean
 local function is_current(expected_generation, pr)
-	return tab_active and generation == expected_generation and panel_state.current_pr == pr
+	local current = panel_state.current_pr
+	return tab_active
+		and generation == expected_generation
+		and current ~= nil
+		and tostring(current.id or "") == tostring(pr.id or "")
+		and tostring(current.repo_full_name or "") == tostring(pr.repo_full_name or "")
 end
 
 function M.reset()

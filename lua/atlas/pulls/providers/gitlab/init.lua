@@ -56,7 +56,7 @@ end
 
 ---@param pr PullRequestRef
 ---@param opts PullsFetchOpts
----@param on_done fun(pr: PullRequest|nil, err: string|nil)
+---@param on_done fun(pr: PullRequestDetails|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 local function fetch_pullrequest(pr, opts, on_done)
 	return pullrequests_api.fetch_pullrequest(pr, { force_load = opts and opts.force_load == true or false }, on_done)

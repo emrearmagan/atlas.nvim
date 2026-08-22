@@ -72,7 +72,6 @@ describe("GitHub reviewer decisions", function()
 		local pr = normalizer.to_pull_request(raw)
 
 		assert.equal("pending", pr.reviewers[1].decision)
-		assert.same({}, pr.review_decisions)
 	end)
 end)
 

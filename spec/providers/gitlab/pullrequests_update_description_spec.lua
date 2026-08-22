@@ -29,7 +29,7 @@ describe("gitlab pullrequests.update_description", function()
 		package.loaded["atlas.providers.gitlab.client"] = nil
 		package.preload["atlas.pulls.providers.gitlab.api.mapper"] = function()
 			return {
-				to_pull_request = function(raw)
+				to_pull_request_details = function(raw)
 					return raw
 				end,
 			}

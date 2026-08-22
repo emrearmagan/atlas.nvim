@@ -9,6 +9,7 @@ local threads = require("atlas.ui.components.threadsv2")
 local review_threads = require("atlas.pulls.ui.components.review_threads")
 local activity_component = require("atlas.pulls.ui.panel.pr.tabs.components.activity")
 local state = require("atlas.pulls.ui.panel.pr.tabs.conversation.state")
+local panel_state = require("atlas.pulls.ui.panel.pr.state")
 
 local PADDING_X = 1
 local PADDING = string.rep(" ", PADDING_X)
@@ -246,7 +247,7 @@ end
 ---@param item PullsConversationItem
 ---@param width integer
 local function render_description(item, width)
-	---@type PullRequest
+	---@type PullRequestDetails
 	local pr = item.entity
 	---@type PullsComment
 	local comment = {
@@ -325,7 +326,20 @@ function M.render(_pr, width)
 	end
 
 	---@cast state.items PullsConversationItem[]
-	local entries, by_entity = build_timeline(state.items)
+	local items = state.items
+	local details = panel_state.current_details
+	if details and details.description ~= "" then
+		items = {
+			{
+				id = "description:" .. tostring(details.repo_full_name) .. "#" .. tostring(details.id),
+				kind = "description",
+				created_on = details.created_on,
+				entity = details,
+			},
+		}
+		vim.list_extend(items, state.items)
+	end
+	local entries, by_entity = build_timeline(items)
 
 	if #entries == 0 then
 		utils.push(lines, spans, "No conversation yet.", "AtlasTextMuted", PADDING_X)

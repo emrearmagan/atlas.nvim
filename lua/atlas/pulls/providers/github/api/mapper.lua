@@ -101,8 +101,9 @@ end
 
 ---@param raw any
 ---@param decision "approved"|"changes_requested"|"pending"
+---@param role "reviewer"|"participant"
 ---@return PullsReviewer|nil
-local function pull_reviewer(raw, decision)
+local function pull_reviewer(raw, decision, role)
 	raw = json.nilify(raw)
 	if type(raw) ~= "table" then
 		return nil
@@ -128,32 +129,32 @@ local function pull_reviewer(raw, decision)
 		username = username,
 		nickname = username,
 		decision = decision,
+		role = role,
 	}
 end
 
 ---@param raw table
 ---@return PullRequest
-function M.to_pull_request(raw)
+local function map_summary(raw)
 	local number = tostring(raw.number or "")
 	local author = pull_author(raw.author)
 
 	local has_reviews = json.nilify(raw.latestOpinionatedReviews) ~= nil
 	local has_requests = json.nilify(raw.reviewRequests) ~= nil
 	local reviewers = (has_reviews or has_requests) and {} or nil
-	local review_decisions = has_reviews and {} or nil
 	local requested = {}
 	for _, node in ipairs(github_mapping.connection_nodes(raw.reviewRequestEvents)) do
-		local reviewer = pull_reviewer(node.requestedReviewer, "pending")
+		local reviewer = pull_reviewer(node.requestedReviewer, "pending", "reviewer")
 		if reviewer then
-			requested[reviewer.id] = true
+			requested[tostring(reviewer.provider_id):lower()] = true
 		end
 	end
 
 	local active = {}
 	for _, node in ipairs(github_mapping.connection_nodes(raw.reviewRequests)) do
-		local reviewer = pull_reviewer(node.requestedReviewer or node, "pending")
+		local reviewer = pull_reviewer(node.requestedReviewer or node, "pending", "reviewer")
 		if reviewer then
-			requested[reviewer.id] = true
+			requested[tostring(reviewer.provider_id):lower()] = true
 			table.insert(active, reviewer)
 		end
 	end
@@ -163,10 +164,12 @@ function M.to_pull_request(raw)
 		local decision = state == "APPROVED" and "approved"
 			or state == "CHANGES_REQUESTED" and "changes_requested"
 			or nil
-		local reviewer = decision and pull_reviewer(node.author, decision) or nil
+		local reviewer = decision and pull_reviewer(node.author, decision, "participant") or nil
 		if reviewer then
-			local target = requested[reviewer.id] and reviewers or review_decisions
-			upsert_reviewer(target, reviewer)
+			if requested[tostring(reviewer.provider_id):lower()] then
+				reviewer.role = "reviewer"
+			end
+			upsert_reviewer(reviewers, reviewer)
 		end
 	end
 
@@ -196,7 +199,6 @@ function M.to_pull_request(raw)
 	return {
 		id = number,
 		title = tostring(raw.title or ""),
-		description = tostring(raw.body or ""),
 		state = state,
 		author = author,
 		source = {
@@ -226,12 +228,7 @@ function M.to_pull_request(raw)
 		workspace = owner,
 		repo = repo_name,
 		repo_full_name = repo_full_name,
-		is_subscribed = tostring(raw.viewerSubscription or "") == "SUBSCRIBED",
-		reactions = github_mapping.reaction_groups(raw.reactionGroups),
-		assignees = pull_assignees(raw),
 		reviewers = reviewers,
-		review_decisions = review_decisions,
-		labels = pull_labels(raw),
 		lines_added = tonumber(raw.additions),
 		lines_removed = tonumber(raw.deletions),
 		_raw = {
@@ -240,6 +237,28 @@ function M.to_pull_request(raw)
 			review_decision = json.safe_str(raw.reviewDecision),
 		},
 	}
+end
+
+---@param raw table
+---@return PullRequest
+function M.to_pull_request(raw)
+	return map_summary(raw)
+end
+
+---@param raw table
+---@return PullRequestDetails
+function M.to_pull_request_details(raw)
+	local pr = map_summary(raw)
+	local subscription = tostring(raw.viewerSubscription or "")
+	pr.description = tostring(raw.body or "")
+	if subscription ~= "" then
+		pr.is_subscribed = subscription == "SUBSCRIBED"
+	end
+	pr.reactions = github_mapping.reaction_groups(raw.reactionGroups) or {}
+	pr.assignees = pull_assignees(raw) or {}
+	pr.reviewers = pr.reviewers or {}
+	pr.labels = pull_labels(raw) or {}
+	return pr
 end
 
 ---@param raw table

@@ -2,7 +2,6 @@ local actions = require("atlas.pulls.providers.github.actions")
 local activity_api = require("atlas.pulls.providers.github.api.activity")
 local changes_api = require("atlas.pulls.providers.github.api.changes")
 local checks_api = require("atlas.pulls.providers.github.api.checks")
-local request_scope = require("atlas.core.requests")
 local cli = require("atlas.providers.github.client").pulls
 local comments_api = require("atlas.pulls.providers.github.api.comments")
 local notifications_api = require("atlas.providers.github.notifications").new("pulls")
@@ -61,7 +60,7 @@ end
 
 ---@param pr PullRequestRef
 ---@param opts PullsFetchOpts
----@param on_done fun(pr: PullRequest|nil, err: string|nil)
+---@param on_done fun(pr: PullRequestDetails|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 local function fetch_pullrequest(pr, opts, on_done)
 	local owner, repo = pr.repo_full_name:match("^([^/]+)/(.+)$")
@@ -79,43 +78,7 @@ end
 ---@param on_done fun(items: PullsConversationItem[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 local function fetch_conversation(pr, opts, on_done)
-	local requests = request_scope.new()
-
-	---@param items PullsConversationItem[]
-	---@param description string
-	local function finish(items, description)
-		if description ~= "" then
-			pr.description = description
-			table.insert(items, 1, {
-				id = "description:" .. tostring(pr.repo_full_name) .. "#" .. tostring(pr.id),
-				kind = "description",
-				created_on = pr.created_on or "",
-				entity = pr,
-			})
-		end
-		on_done(items, nil)
-	end
-
-	requests.run(function(done)
-		return activity_api.fetch_conversation(pr, opts, done)
-	end, function(result, err)
-		if err or type(result) ~= "table" then
-			on_done(nil, err or "Failed to fetch conversation")
-			return
-		end
-
-		local description = tostring(pr.description or "")
-		if description ~= "" then
-			finish(result, description)
-			return
-		end
-		requests.run(function(done)
-			return pullrequests_api.get_description(pr, opts, done)
-		end, function(value)
-			finish(result, tostring(value or ""))
-		end)
-	end)
-	return requests
+	return activity_api.fetch_conversation(pr, opts, on_done)
 end
 
 ---@param pr PullRequest

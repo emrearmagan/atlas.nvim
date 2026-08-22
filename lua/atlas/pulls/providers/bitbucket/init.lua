@@ -277,6 +277,7 @@ return {
 			fetch_user = users_api.fetch_current_user,
 			fetch_pullrequests = fetch_pullrequests,
 			fetch_pullrequest = pullrequests_api.fetch_pullrequest,
+			fetch_description = pullrequests_api.fetch_description,
 			create_pr = pullrequests_api.create_pr,
 			fetch_default_reviewers = pullrequests_api.fetch_default_reviewers,
 			fetch_reviewers = pullrequests_api.fetch_reviewers,

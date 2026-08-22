@@ -132,8 +132,9 @@ end
 
 ---@param participant table
 ---@param decision "approved"|"changes_requested"|"pending"
+---@param role "reviewer"|"participant"
 ---@return PullsReviewer
-local function to_reviewer(participant, decision)
+local function to_reviewer(participant, decision, role)
 	local user = as_table(participant.user) or {}
 	local provider_id = tostring(user.uuid or "")
 	local username = tostring(user.nickname or user.username or "")
@@ -144,6 +145,7 @@ local function to_reviewer(participant, decision)
 		username = username,
 		nickname = username ~= "" and username or nil,
 		decision = decision,
+		role = role,
 	}
 end
 
@@ -152,26 +154,15 @@ end
 function M.to_reviewers(participants)
 	local reviewers = {}
 	for _, participant in ipairs(participants or {}) do
-		if tostring(participant.role or ""):upper() == "REVIEWER" then
-			table.insert(reviewers, to_reviewer(participant, participant_decision(participant) or "pending"))
+		local role = tostring(participant.role or ""):upper()
+		local decision = participant_decision(participant)
+		if role == "REVIEWER" then
+			table.insert(reviewers, to_reviewer(participant, decision or "pending", "reviewer"))
+		elseif role == "PARTICIPANT" and decision then
+			table.insert(reviewers, to_reviewer(participant, decision, "participant"))
 		end
 	end
 	return reviewers
-end
-
----@param participants table[]|nil
----@return PullsReviewer[]
-function M.to_review_decisions(participants)
-	local decisions = {}
-	for _, participant in ipairs(participants or {}) do
-		if tostring(participant.role or ""):upper() == "PARTICIPANT" then
-			local decision = participant_decision(participant)
-			if decision then
-				table.insert(decisions, to_reviewer(participant, decision))
-			end
-		end
-	end
-	return decisions
 end
 
 ---@param item table
@@ -198,7 +189,7 @@ local function normalize_pull(item, workspace, repo)
 	return {
 		id = tonumber(pr.id) or 0,
 		title = tostring(pr.title or ""),
-		description = tostring(pr.description or ""),
+		description = type(pr.description) == "string" and pr.description or nil,
 		comments = tonumber(pr.comment_count) or 0,
 		tasks = tonumber(pr.task_count) or 0,
 		author = {
@@ -239,7 +230,6 @@ local function normalize_pull(item, workspace, repo)
 		created_on = tostring(pr.created_on or ""),
 		updated_on = tostring(pr.updated_on or ""),
 		reviewers = participants and M.to_reviewers(participants) or nil,
-		review_decisions = participants and M.to_review_decisions(participants) or nil,
 		workspace = workspace,
 		repo = repo,
 		repo_full_name = repo_full_name,
@@ -248,7 +238,7 @@ end
 
 ---@param raw table
 ---@return PullRequest
-local function to_pull_request(raw)
+local function map_summary(raw)
 	local workspace = tostring(raw.workspace or "")
 	local repo = tostring(raw.repo or "")
 	local repo_full_name = tostring(raw.repo_full_name or string.format("%s/%s", workspace, repo))
@@ -263,7 +253,6 @@ local function to_pull_request(raw)
 	return {
 		id = raw.id,
 		title = tostring(raw.title or ""),
-		description = tostring(raw.description or ""),
 		state = map_state(raw.state, raw.is_draft == true),
 		author = {
 			name = tostring(author.name or author.display_name or "Unknown"),
@@ -292,7 +281,6 @@ local function to_pull_request(raw)
 		repo = repo,
 		repo_full_name = repo_full_name,
 		reviewers = raw.reviewers,
-		review_decisions = raw.review_decisions,
 		_raw = {
 			links = links,
 			close_source_branch = raw.close_source_branch,
@@ -311,10 +299,22 @@ function M.to_pull_requests_list(result, workspace, repo)
 	local rp = tostring(repo or "")
 
 	for _, item in ipairs(payload.values or {}) do
-		table.insert(out, to_pull_request(normalize_pull(item, ws, rp)))
+		table.insert(out, map_summary(normalize_pull(item, ws, rp)))
 	end
 
 	return out
+end
+
+---@param raw table
+---@param workspace string
+---@param repo string
+---@return PullRequestDetails
+function M.to_pull_request_details(raw, workspace, repo)
+	local normalized = normalize_pull(raw, workspace, repo)
+	local pr = map_summary(normalized)
+	pr.description = tostring(normalized.description or "")
+	pr.reviewers = normalized.reviewers or {}
+	return pr
 end
 
 ---@param user table|nil

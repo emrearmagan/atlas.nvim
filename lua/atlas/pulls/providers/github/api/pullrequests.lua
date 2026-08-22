@@ -63,7 +63,6 @@ query($search: String!, $limit: Int!) {
         id number title state isDraft reviewDecision
         createdAt updatedAt url
         additions deletions
-        reactionGroups { content reactors { totalCount } }
         author { login ... on User { name } }
         headRefName baseRefName headRefOid baseRefOid
         totalCommentsCount
@@ -123,7 +122,7 @@ end
 ---@param owner string
 ---@param repo string
 ---@param number number|string
----@param on_done fun(pr: PullRequest|nil, err: string|nil)
+---@param on_done fun(pr: PullRequestDetails|nil, err: string|nil)
 ---@param opts { force_load?: boolean }|nil
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.get_pr(owner, repo, number, on_done, opts)
@@ -169,7 +168,7 @@ function M.get_pr(owner, repo, number, on_done, opts)
 			url = repository.url,
 			sshUrl = repository.sshUrl,
 		}
-		local pr = mapper.to_pull_request(pr_raw)
+		local pr = mapper.to_pull_request_details(pr_raw)
 		cli.set_mem(cache_key, pr)
 		on_done(pr, nil)
 	end, {
@@ -385,7 +384,6 @@ function M.get_reviewers(pr, opts, on_done)
 			return
 		end
 		pr.reviewers = fresh.reviewers
-		pr.review_decisions = fresh.review_decisions
 		on_done(pr.reviewers or {}, nil)
 	end, { force_load = opts.force_refresh == true })
 end
@@ -438,16 +436,18 @@ function M.fetch_default_reviewers(opts, on_done)
 					return
 				end
 				for _, item in ipairs(current or {}) do
-					local login = item.nickname or item.name
-					local reviewer = by_login[login]
-					if reviewer then
-						reviewer.selected = true
-					else
-						table.insert(reviewers, {
-							label = "@" .. login,
-							provider_id = login,
-							selected = true,
-						})
+					if item.role == "reviewer" then
+						local login = item.nickname or item.name
+						local reviewer = by_login[login]
+						if reviewer then
+							reviewer.selected = true
+						else
+							table.insert(reviewers, {
+								label = "@" .. login,
+								provider_id = login,
+								selected = true,
+							})
+						end
 					end
 				end
 				on_done(reviewers, nil)
