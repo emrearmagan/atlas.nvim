@@ -97,6 +97,9 @@ describe("Shortcut Story mapper", function()
 			text = "Looks good",
 			parent_id = 123,
 			created_at = "2026-08-23T10:00:00Z",
+			reactions = {
+				{ emoji = ":thumbsup:", permission_ids = { "one", "two" } },
+			},
 		}, { author })
 
 		assert.same({
@@ -105,6 +108,7 @@ describe("Shortcut Story mapper", function()
 			body = "Looks good",
 			parent_id = 123,
 			created = "2026-08-23T10:00:00Z",
+			reactions = { [":thumbsup:"] = 2 },
 			deleted = false,
 		}, comment)
 	end)

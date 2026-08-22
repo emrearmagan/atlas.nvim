@@ -175,6 +175,20 @@ function M.to_issues(stories, users, states)
 	return result
 end
 
+---@param raw_reactions table[]
+---@return table<string, integer>|nil
+local function reaction_counts(raw_reactions)
+	local counts
+	for _, reaction in ipairs(raw_reactions) do
+		local ids = reaction.permission_ids or {}
+		if #ids > 0 then
+			local emoji = tostring(reaction.emoji)
+			counts = counts or {}
+			counts[emoji] = #ids
+		end
+	end
+	return counts
+end
 
 ---@param raw table
 ---@param users? IssueUser[]
@@ -188,6 +202,7 @@ function M.to_comment(raw, users)
 		created = json.safe_str(raw.created_at),
 		updated = json.safe_str(raw.updated_at),
 		parent_id = tonumber(json.nilify(raw.parent_id)),
+		reactions = reaction_counts(raw.reactions or {}),
 		deleted = raw.deleted == true,
 	}
 end

@@ -202,4 +202,32 @@ function M.delete_comment(issue, comment, on_done)
 	})
 end
 
+---@param issue Issue
+---@param item IssueConversationItem
+---@param emoji string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.add_reaction(issue, item, emoji, on_done)
+	---@cast issue ShortcutIssue
+	if item.kind ~= "comment" then
+		on_done(false, "Reactions are only supported on comments")
+		return nil
+	end
+
+	local comment = item.entity
+	---@cast comment IssueComment
+	local endpoint = string.format("/stories/%d/comments/%s/reactions", issue.id, comment.id)
+	return service.request("POST", endpoint, { emoji = emoji }, function(_, err)
+		if err then
+			on_done(false, err)
+			return
+		end
+		invalidate(issue.id)
+		on_done(true, nil)
+	end, {
+		action = "Create Shortcut Story reaction",
+		issue_key = tostring(issue.id),
+	})
+end
+
 return M

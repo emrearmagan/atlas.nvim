@@ -73,11 +73,14 @@ describe("providers contracts", function()
 		local provider = assert(providers.load("shortcut", "issues"))
 		assert_functions(provider.capabilities.comments, {
 			"comment_completion",
+			"fetch_activity",
 			"fetch_conversation",
 			"add_comment",
 			"reply_comment",
 			"edit_comment",
 			"delete_comment",
+			"add_reaction",
 		}, "shortcut.issues.comments")
+		assert.is_true(#provider.capabilities.comments.reaction_options > 0)
 	end)
 end)

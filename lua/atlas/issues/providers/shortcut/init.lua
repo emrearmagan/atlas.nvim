@@ -70,6 +70,7 @@ local M = {}
 local api = require("atlas.issues.providers.shortcut.api")
 local author_completion = require("atlas.providers.shortcut.completion.author")
 local config = require("atlas.config")
+local emojis = require("atlas.ui.shared.emojis")
 
 local DEFAULT_VIEWS = {
 	{ name = "Open", key = "1", layout = "plain", search = "!is:done !is:archived" },
@@ -204,6 +205,7 @@ return {
 			refresh = M.refresh,
 		},
 		comments = {
+			reaction_options = emojis.shortcut(),
 			comment_completion = author_completion.for_issues,
 			fetch_activity = api.history.fetch,
 			fetch_conversation = M.fetch_conversation,
@@ -211,6 +213,7 @@ return {
 			reply_comment = api.comments.reply_comment,
 			edit_comment = api.comments.edit_comment,
 			delete_comment = api.comments.delete_comment,
+			add_reaction = api.comments.add_reaction,
 		},
 		-- notifications = require("atlas.issues.providers.shortcut.notifications"),
 		actions = require("atlas.issues.providers.shortcut.actions"),
