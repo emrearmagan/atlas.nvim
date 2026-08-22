@@ -107,7 +107,10 @@ M.register({
 
 M.register({
 	name = "open",
-	description = "Open a URL or reference",
+	description = "Open a URL, reference, or the current repository",
+	complete = function(arglead)
+		return complete_options(arglead, { "." })
+	end,
 	run = function(args)
 		with_argument(args, "Open: ", require("atlas.commands.open").open)
 	end,

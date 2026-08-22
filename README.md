@@ -138,7 +138,7 @@ use {
 - `:Atlas create pr` - Create a pull request
 - `:Atlas create issue` - Create an issue
 - `:Atlas search [provider]` - Search configured pull-request and issue providers
-- `:Atlas open <target>` - Open a provider URL, Jira key, repository reference, or PR/issue number
+- `:Atlas open <target>` - Open a provider URL, Jira key, repository reference, PR/issue number, or `.` for the current repository
 - `:Atlas notes [target]` - Inspect local review notes
 - `:Atlas clear` - Clear Atlas data
 - `:Atlas clear cache` - Delete cached data and cloned repositories

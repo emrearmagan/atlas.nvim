@@ -155,7 +155,7 @@ default.
 
 :Atlas open <target>
         Open a provider URL, Jira key, `owner/repo#number`, or PR/issue
-        number.
+        number. Use `.` to open the current Git repository.
 
 :Atlas clear
 :Atlas logs
