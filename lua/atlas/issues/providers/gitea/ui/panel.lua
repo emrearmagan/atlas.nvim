@@ -14,14 +14,17 @@ end
 ---@param hex string|nil
 ---@return string
 local function label_hl(hex)
-	local clean = tostring(hex or ""):lower():gsub("[^0-9a-f]", "")
+	local clean = (hex or ""):lower():gsub("[^0-9a-f]", "")
 	if #clean ~= 6 then
 		return "AtlasChipActive"
 	end
 	local name = "AtlasGiteaIssueLabel_" .. clean
-	local r = tonumber(clean:sub(1, 2), 16) or 0
-	local g = tonumber(clean:sub(3, 4), 16) or 0
-	local b = tonumber(clean:sub(5, 6), 16) or 0
+	local r = tonumber(clean:sub(1, 2), 16)
+	local g = tonumber(clean:sub(3, 4), 16)
+	local b = tonumber(clean:sub(5, 6), 16)
+	---@cast r number
+	---@cast g number
+	---@cast b number
 	local foreground = (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6 and "#1e1e2e" or "#ffffff"
 	vim.api.nvim_set_hl(0, name, { fg = foreground, bg = "#" .. clean, bold = true })
 	return name
@@ -31,25 +34,25 @@ end
 ---@param _loading boolean
 ---@return IssuesPanelHeaderRow[]
 function M.header_rows(issue, _loading)
-	local raw = issue._raw or {}
-	local reporter = issue.reporter and tostring(issue.reporter.display_name or "") or ""
+	local raw = issue._raw
+	local reporter = issue.reporter and issue.reporter.display_name or ""
 	if reporter == "" then
 		reporter = "Unknown"
 	end
 
 	local assignees = {}
-	for _, value in ipairs(type(raw.assignees) == "table" and raw.assignees or {}) do
-		local login = tostring(value.login or "")
+	for _, value in ipairs(raw.assignees) do
+		local login = value.login
 		if login ~= "" then
 			table.insert(assignees, "@" .. login)
 		end
 	end
 	local assignee_text = #assignees > 0 and table.concat(assignees, ", ") or "Unassigned"
-	local milestone = type(raw.milestone) == "table" and tostring(raw.milestone.title or "") or ""
+	local milestone = raw.milestone and raw.milestone.title or ""
 	local rows = {
 		{
 			k1 = "Status:",
-			v1 = tostring(issue.status or "Open"),
+			v1 = issue.status,
 			v1_hl = state_chip_hl(issue.status_id),
 			k2 = "Author:",
 			v2 = string.format("%s %s", icons.general("user"), reporter),
@@ -65,7 +68,7 @@ function M.header_rows(issue, _loading)
 		},
 	}
 
-	if type(raw.created_at) == "string" and raw.created_at ~= "" then
+	if raw.created_at ~= "" then
 		table.insert(rows, {
 			k1 = "Opened:",
 			v1 = utils.relative_time_text(raw.created_at) or raw.created_at,
@@ -88,8 +91,8 @@ function M.chips(issue, loading)
 		table.insert(chips, { label = spinner.with_text("Loading..."), hl = "AtlasTextMuted" })
 		return chips
 	end
-	for _, label in ipairs(type(issue._raw) == "table" and issue._raw.labels or {}) do
-		local name = tostring(label.name or "")
+	for _, label in ipairs(issue._raw.labels) do
+		local name = label.name
 		if name ~= "" then
 			table.insert(chips, { label = name, hl = label_hl(label.color) })
 		end

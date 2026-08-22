@@ -6,12 +6,22 @@ local request_scope = require("atlas.core.requests")
 
 local M = {}
 
+---@param raw table
+local function branch_protection(raw)
+	return {
+		required_approvals = tonumber(raw.required_approvals),
+		enable_status_check = raw.enable_status_check == true,
+		status_check_contexts = raw.status_check_contexts,
+		block_on_rejected_reviews = raw.block_on_rejected_reviews == true,
+		block_on_official_review_requests = raw.block_on_official_review_requests == true,
+		ignore_stale_approvals = raw.ignore_stale_approvals == true,
+		block_on_outdated_branch = raw.block_on_outdated_branch == true,
+	}
+end
+
 ---@param pr PullRequest
 ---@return string|nil
 local function repo_endpoint(pr)
-	if type(pr) ~= "table" then
-		return nil
-	end
 	local owner, repo = tostring(pr.repo_full_name or ""):match("^([^/]+)/([^/]+)$")
 	if owner then
 		return string.format("/repos/%s/%s", service.url_encode(owner), service.url_encode(repo))
@@ -23,8 +33,7 @@ end
 ---@return { cancel: fun() }|nil
 local function fetch_branch_protection(pr, on_done)
 	local base = repo_endpoint(pr)
-	local branch = type(pr) == "table" and type(pr.destination) == "table" and tostring(pr.destination.branch or "")
-		or ""
+	local branch = tostring(pr.destination.branch or "")
 	if not base or branch == "" then
 		on_done(false, nil)
 		return nil
@@ -38,27 +47,22 @@ local function fetch_branch_protection(pr, on_done)
 			on_done(nil, err)
 			return
 		end
-		if type(raw.protected) ~= "boolean" then
-			on_done(nil, "Invalid Forgejo branch response")
-			return
-		end
 		if raw.protected ~= true then
 			on_done(false, nil)
 			return
 		end
-		local summary = {
-			required_approvals = raw.required_approvals,
-			enable_status_check = raw.enable_status_check,
-			status_check_contexts = raw.status_check_contexts,
-		}
-		local rule = vim.trim(tostring(raw.effective_branch_protection_name or raw.name or branch))
+		local rule = vim.trim(tostring(raw.effective_branch_protection_name or ""))
 		requests.run(function(done)
 			return service.request("GET", base .. "/branch_protections/" .. service.url_encode(rule), nil, done)
 		end, function(value, rule_err)
 			if rule_err then
-				on_done(summary, rule_err)
+				if rule_err:match("^HTTP 404") then
+					on_done(false, nil)
+				else
+					on_done(nil, rule_err)
+				end
 			else
-				on_done(value, nil)
+				on_done(branch_protection(value), nil)
 			end
 		end)
 	end)
@@ -68,24 +72,18 @@ end
 ---@param reviewers PullsReviewer[]
 ---@param raw_reviews table[]
 ---@param protection table|false|nil
----@param protection_err string|nil
----@param reviews_err string|nil
 ---@param pending_requests integer|nil
 ---@return PullsMergeCheck
-local function reviewers_check(reviewers, raw_reviews, protection, protection_err, reviews_err, pending_requests)
-	if reviews_err then
-		return { key = "reviews", state = "muted", label = "Reviews unavailable", details = { reviews_err } }
-	end
-
-	local required = type(protection) == "table" and math.max(0, tonumber(protection.required_approvals) or 0) or 0
-	local blocks_changes = type(protection) == "table" and protection.block_on_rejected_reviews == true
-	local blocks_pending = type(protection) == "table" and protection.block_on_official_review_requests == true
+local function reviewers_check(reviewers, raw_reviews, protection, pending_requests)
+	local required = protection and math.max(0, tonumber(protection.required_approvals) or 0) or 0
+	local blocks_changes = protection and protection.block_on_rejected_reviews == true
+	local blocks_pending = protection and protection.block_on_official_review_requests == true
 	local has_policy = required > 0 or blocks_changes or blocks_pending
 	local approved, changes, pending = 0, 0, 0
-	if type(protection) == "table" then
-		for _, review in ipairs(raw_reviews or {}) do
-			local state = type(review) == "table" and tostring(review.state or ""):upper() or ""
-			if type(review) == "table" and review.official == true then
+	if protection then
+		for _, review in ipairs(raw_reviews) do
+			local state = tostring(review.state or ""):upper()
+			if review.official == true then
 				if
 					state == "APPROVED"
 					and review.dismissed ~= true
@@ -101,7 +99,7 @@ local function reviewers_check(reviewers, raw_reviews, protection, protection_er
 		end
 	else
 		pending = pending_requests or 0
-		for _, reviewer in ipairs(reviewers or {}) do
+		for _, reviewer in ipairs(reviewers) do
 			if reviewer.decision == "approved" then
 				approved = approved + 1
 			elseif reviewer.decision == "changes_requested" then
@@ -112,27 +110,8 @@ local function reviewers_check(reviewers, raw_reviews, protection, protection_er
 		end
 	end
 
-	local details = {}
-	if protection_err then
-		table.insert(details, protection_err)
-	end
-	if protection_err then
-		if required > 0 then
-			table.insert(details, string.format("%d/%d required approvals", approved, required))
-		elseif approved > 0 then
-			table.insert(details, string.format("%d approval%s", approved, approved == 1 and "" or "s"))
-		end
-		if changes > 0 then
-			table.insert(details, string.format("%d requested change%s", changes, changes == 1 and "" or "s"))
-		end
-		if pending > 0 then
-			table.insert(details, string.format("%d requested review%s", pending, pending == 1 and "" or "s"))
-		end
-		return { key = "reviews", state = "muted", label = "Review policy unavailable", details = details }
-	end
-
-	if type(protection) ~= "table" then
-		details = { "No protected-branch review requirement" }
+	if not protection then
+		local details = { "No protected-branch review requirement" }
 		if approved > 0 then
 			table.insert(details, string.format("%d approval%s", approved, approved == 1 and "" or "s"))
 		end
@@ -145,7 +124,7 @@ local function reviewers_check(reviewers, raw_reviews, protection, protection_er
 		return { key = "reviews", state = "muted", label = "Reviews", details = details }
 	end
 
-	details = {}
+	local details = {}
 	if required > 0 then
 		table.insert(details, string.format("%d/%d required approvals", approved, required))
 	elseif approved > 0 then
@@ -185,13 +164,13 @@ local STATUS_PRIORITY = {
 local function commit_statuses(pipelines)
 	local result = {}
 	for _, pipeline in ipairs(pipelines) do
-		if #(pipeline.jobs or {}) == 0 then
+		if #pipeline.jobs == 0 then
 			table.insert(result, {
 				context = tostring(pipeline.provider_context or ""),
 				state = tostring(pipeline.provider_state or ""):lower(),
 			})
 		else
-			for _, job in ipairs(pipeline.jobs or {}) do
+			for _, job in ipairs(pipeline.jobs) do
 				table.insert(result, {
 					context = tostring(job.provider_context or ""),
 					state = tostring(job.provider_state or ""):lower(),
@@ -230,15 +209,15 @@ local function check_state(state)
 	return "warning"
 end
 
----@param pipelines PullsPipeline[]|nil
+---@param pipelines PullsPipeline[]
 ---@param protection table|false|nil
 ---@return PullsMergeCheck|nil
 local function pipelines_check(pipelines, protection)
-	if type(protection) ~= "table" or protection.enable_status_check ~= true then
-		return providers.pipelines_check(pipelines or {}, "Pipelines")
+	if not protection or protection.enable_status_check ~= true then
+		return providers.pipelines_check(pipelines, "Pipelines")
 	end
-	local required = type(protection.status_check_contexts) == "table" and protection.status_check_contexts or {}
-	local statuses = commit_statuses(pipelines or {})
+	local required = protection.status_check_contexts or {}
+	local statuses = commit_statuses(pipelines)
 
 	if #required == 0 then
 		local states = {}
@@ -255,8 +234,7 @@ local function pipelines_check(pipelines, protection)
 	end
 
 	local function matches(pattern, context)
-		local ok, regex = pcall(vim.fn.glob2regpat, pattern)
-		return ok and type(regex) == "string" and vim.fn.match(context, regex) >= 0
+		return vim.fn.match(context, vim.fn.glob2regpat(pattern)) >= 0
 	end
 
 	local passed, failed, running, warning, missing = 0, 0, 0, 0, 0
@@ -305,12 +283,12 @@ end
 ---@param protection table|false|nil
 ---@return PullsMergeCheck|nil
 local function up_to_date_check(pr, protection)
-	if type(protection) ~= "table" or protection.block_on_outdated_branch ~= true then
+	if not protection or protection.block_on_outdated_branch ~= true then
 		return nil
 	end
-	local raw = type(pr._raw) == "table" and pr._raw or {}
+	local raw = pr._raw
 	local merge_base = tostring(raw.merge_base or "")
-	local base_head = type(pr.destination) == "table" and tostring(pr.destination.commit_hash or "") or ""
+	local base_head = tostring(pr.destination.commit_hash or "")
 	if merge_base == "" or base_head == "" then
 		return { key = "up_to_date", state = "muted", label = "Could not determine whether the branch is current" }
 	end
@@ -326,20 +304,27 @@ end
 ---@param opts table|nil
 ---@param on_done fun(checks: PullsMergeCheck[]|nil, err: string|nil)
 function M.fetch_merge_checks(pr, opts, on_done)
-	local pending, fresh, review_data, pipelines, protection = 4, nil, nil, nil, nil
+	local pending = 4
+	---@type PullRequest|nil
+	local fresh
+	---@type { reviewers: PullsReviewer[], raw: table[], pending_requests: integer }|nil
+	local review_data
+	---@type PullsPipeline[]|nil
+	local pipelines
+	---@type table|false|nil
+	local protection
 	local first_err
-	local review_err, pipeline_err, protection_err
 	local requests = request_scope.new()
 	local function finish()
 		pending = pending - 1
 		if pending > 0 then
 			return
 		end
-		if fresh == nil and review_data == nil and pipelines == nil and protection == nil then
-			on_done(nil, first_err or "Failed to fetch merge checks")
+		if first_err then
+			on_done(nil, first_err)
 			return
 		end
-		local current = fresh or pr
+		local current = fresh
 		local checks = {}
 		if current.state == "draft" then
 			table.insert(checks, {
@@ -349,35 +334,19 @@ function M.fetch_merge_checks(pr, opts, on_done)
 				details = { "Draft pull requests cannot be merged." },
 			})
 		end
-		if review_data or review_err or protection_err then
-			table.insert(
-				checks,
-				reviewers_check(
-					type(review_data) == "table" and review_data.reviewers or {},
-					type(review_data) == "table" and review_data.raw or {},
-					protection,
-					protection_err,
-					review_err,
-					type(review_data) == "table" and review_data.pending_requests or nil
-				)
-			)
-		end
-		local pipeline_check = pipelines and pipelines_check(pipelines, protection) or nil
+		table.insert(
+			checks,
+			reviewers_check(review_data.reviewers, review_data.raw, protection, review_data.pending_requests)
+		)
+		local pipeline_check = pipelines_check(pipelines, protection)
 		if pipeline_check then
 			table.insert(checks, pipeline_check)
-		elseif pipeline_err then
-			table.insert(checks, {
-				key = "pipelines",
-				state = "muted",
-				label = "Pipelines unavailable",
-				details = { pipeline_err },
-			})
 		end
 		local up_to_date = up_to_date_check(current, protection)
 		if up_to_date then
 			table.insert(checks, up_to_date)
 		end
-		local raw = type(current._raw) == "table" and current._raw or {}
+		local raw = current._raw
 		if raw.mergeable == true then
 			table.insert(checks, { key = "conflicts", state = "successful", label = "No conflicts with base branch" })
 		elseif raw.mergeable == false and current.state ~= "draft" then
@@ -401,7 +370,6 @@ function M.fetch_merge_checks(pr, opts, on_done)
 		return pullrequests.review_data(pr, opts or {}, done)
 	end, function(value, err)
 		review_data = value
-		review_err = err
 		first_err = first_err or err
 		finish()
 	end)
@@ -409,7 +377,6 @@ function M.fetch_merge_checks(pr, opts, on_done)
 		return pipeline_api.fetch(pr, opts, done)
 	end, function(value, err)
 		pipelines = value
-		pipeline_err = err
 		first_err = first_err or err
 		finish()
 	end)
@@ -417,7 +384,6 @@ function M.fetch_merge_checks(pr, opts, on_done)
 		return fetch_branch_protection(pr, done)
 	end, function(value, err)
 		protection = value
-		protection_err = err
 		first_err = first_err or err
 		finish()
 	end)

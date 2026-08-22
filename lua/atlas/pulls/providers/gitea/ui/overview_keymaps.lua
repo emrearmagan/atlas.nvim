@@ -21,15 +21,13 @@ end
 ---@param pr PullRequest
 local function run_action(id, pr)
 	local state = require("atlas.pulls.state")
-	if state.provider then
-		actions.run(id, {
-			provider = state.provider,
-			pr = pr,
-			current_user = state.current_user,
-		}, function(result)
-			require("atlas.pulls.ui.main.controller").apply_action_result(pr, result)
-		end)
-	end
+	actions.run(id, {
+		provider = state.provider,
+		pr = pr,
+		current_user = state.current_user,
+	}, function(result)
+		require("atlas.pulls.ui.main.controller").apply_action_result(pr, result)
+	end)
 end
 
 ---@param buf integer

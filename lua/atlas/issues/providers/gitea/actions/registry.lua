@@ -9,7 +9,7 @@ local api = require("atlas.issues.providers.gitea.api").issues
 ---@param ctx AtlasIssueActionContext
 ---@return boolean, string|nil
 local function has_issue(ctx)
-	if type(ctx.issue) ~= "table" or tostring(ctx.issue.key or "") == "" then
+	if not ctx.issue then
 		return false, "No issue selected"
 	end
 	return true, nil
@@ -37,22 +37,17 @@ end
 ---@param issue Issue
 ---@return string
 local function issue_slug(issue)
-	local raw = issue._raw or {}
-	local slug = tostring(raw.project_path or "")
-	if slug ~= "" then
-		return slug
-	end
-	return (tostring(issue.key or ""):match("^([^/]+/[^/]+)#%d+$")) or ""
+	return issue._raw.project_path
 end
 
 ---@param ctx AtlasIssueActionContext
 ---@return string|nil
 local function context_slug(ctx)
-	local explicit = tostring(ctx.repo_slug or "")
+	local explicit = ctx.repo_slug or ""
 	if explicit ~= "" then
 		return explicit
 	end
-	if type(ctx.issue) == "table" then
+	if ctx.issue then
 		local slug = issue_slug(ctx.issue)
 		if slug ~= "" then
 			return slug
@@ -61,7 +56,7 @@ local function context_slug(ctx)
 	local issues_state = require("atlas.issues.state")
 	for _, view in ipairs({ issues_state.current_view or {}, issues_state.active_view or {} }) do
 		---@cast view AtlasGiteaForgejoIssuesViewConfig
-		local configured = vim.trim(tostring(view.repo or ""))
+		local configured = vim.trim(view.repo or "")
 		if configured:match("^[^/%s]+/[^/%s]+$") then
 			return configured
 		end
@@ -76,10 +71,12 @@ end
 
 ---@return string[]
 local function configured_repositories()
-	local options = require("atlas.providers").options("gitea", "issues") or {}
+	---@type AtlasGiteaForgejoIssuesConfig
+	local options = require("atlas.config").domain_options("gitea", "issues") or {}
 	local result, seen = {}, {}
+	---@param value AtlasGiteaForgejoIssuesSearchConfig
 	local function add(value)
-		local slug = type(value) == "table" and vim.trim(tostring(value.repo or "")) or ""
+		local slug = vim.trim(value.repo or "")
 		if slug:match("^[^/%s]+/[^/%s]+$") and not seen[slug] then
 			seen[slug] = true
 			table.insert(result, slug)
@@ -88,7 +85,7 @@ local function configured_repositories()
 	for _, view in ipairs(options.views or {}) do
 		add(view)
 	end
-	for _, value in pairs(type(options.bookmarks) == "table" and options.bookmarks.items or {}) do
+	for _, value in pairs((options.bookmarks or {}).items or {}) do
 		add(value)
 	end
 	table.sort(result)
@@ -108,7 +105,7 @@ end
 local function run_action(action_id, ctx, done)
 	local action = M.find(action_id)
 	if not action then
-		done(nil, "Unknown action: " .. tostring(action_id))
+		done(nil, "Unknown action: " .. action_id)
 		return
 	end
 	action.run(ctx, done)
@@ -120,8 +117,8 @@ local function edit_assignees(issue, done)
 	local slug = issue_slug(issue)
 	statusline.notify("loading", "Loading assignees...")
 	api.list_assignees(slug, function(users, err)
-		if err or not users then
-			done(nil, err or "Failed to load assignees")
+		if err then
+			done(nil, err)
 			return
 		end
 		statusline.clear_notice()
@@ -130,8 +127,8 @@ local function edit_assignees(issue, done)
 		for _, item in ipairs(users) do
 			by_login[item.account_id] = item
 		end
-		for _, raw in ipairs((issue._raw or {}).assignees or {}) do
-			local login = tostring(raw.login or "")
+		for _, raw in ipairs(issue._raw.assignees) do
+			local login = raw.login
 			if by_login[login] then
 				table.insert(selected, by_login[login])
 				table.insert(current_logins, login)
@@ -141,7 +138,7 @@ local function edit_assignees(issue, done)
 			items = users,
 			selected = selected,
 			key = function(item)
-				return tostring(item.account_id or "")
+				return item.account_id
 			end,
 			format_item = function(item)
 				return string.format("%s %s (@%s)", icons.general("user"), item.display_name, item.account_id)
@@ -149,7 +146,7 @@ local function edit_assignees(issue, done)
 			title = "Assignees for " .. issue.key,
 			on_done = function(values)
 				local logins = {}
-				for _, item in ipairs(values or {}) do
+				for _, item in ipairs(values) do
 					table.insert(logins, item.account_id)
 				end
 				if same_values(logins, current_logins) then
@@ -159,7 +156,7 @@ local function edit_assignees(issue, done)
 				statusline.notify("loading", "Updating assignees...")
 				api.update_assignees(issue.key, logins, function(ok, update_err)
 					if not ok then
-						done(nil, update_err or "Failed to update assignees")
+						done(nil, update_err)
 						return
 					end
 					statusline.notify("success", "Assignees updated", 1200)
@@ -176,8 +173,8 @@ local function edit_labels(issue, done)
 	local slug = issue_slug(issue)
 	statusline.notify("loading", "Loading labels...")
 	api.list_labels(slug, function(labels, err)
-		if err or not labels then
-			done(nil, err or "Failed to load labels")
+		if err then
+			done(nil, err)
 			return
 		end
 		statusline.clear_notice()
@@ -185,26 +182,26 @@ local function edit_labels(issue, done)
 		for _, item in ipairs(labels) do
 			by_name[item.name] = item
 		end
-		for _, raw in ipairs((issue._raw or {}).labels or {}) do
+		for _, raw in ipairs(issue._raw.labels) do
 			if by_name[raw.name] then
 				table.insert(selected, by_name[raw.name])
-				table.insert(current_ids, by_name[raw.name].id or by_name[raw.name].name)
+				table.insert(current_ids, by_name[raw.name].id)
 			end
 		end
 		picker.multi_select({
 			items = labels,
 			selected = selected,
 			key = function(item)
-				return tostring(item.id or item.name or "")
+				return tostring(item.id)
 			end,
 			format_item = function(item)
-				return tostring(item.name or "")
+				return item.name
 			end,
 			title = "Labels for " .. issue.key,
 			on_done = function(values)
 				local ids = {}
-				for _, item in ipairs(values or {}) do
-					table.insert(ids, item.id or item.name)
+				for _, item in ipairs(values) do
+					table.insert(ids, item.id)
 				end
 				if same_values(ids, current_ids) then
 					done(nil, nil)
@@ -213,7 +210,7 @@ local function edit_labels(issue, done)
 				statusline.notify("loading", "Updating labels...")
 				api.update_labels(issue.key, ids, function(ok, update_err)
 					if not ok then
-						done(nil, update_err or "Failed to update labels")
+						done(nil, update_err)
 						return
 					end
 					statusline.notify("success", "Labels updated", 1200)
@@ -229,8 +226,8 @@ end
 local function edit_milestone(issue, done)
 	statusline.notify("loading", "Loading milestones...")
 	api.list_milestones(issue_slug(issue), function(milestones, err)
-		if err or not milestones then
-			done(nil, err or "Failed to load milestones")
+		if err then
+			done(nil, err)
 			return
 		end
 		statusline.clear_notice()
@@ -247,15 +244,15 @@ local function edit_milestone(issue, done)
 					done(nil, nil)
 					return
 				end
-				local current = type((issue._raw or {}).milestone) == "table" and (issue._raw or {}).milestone.id or nil
-				if tostring(choice.id or "") == tostring(current or "") then
+				local current = issue._raw.milestone and issue._raw.milestone.id or nil
+				if choice.id == current then
 					done(nil, nil)
 					return
 				end
 				statusline.notify("loading", "Updating milestone...")
 				api.update_milestone(issue.key, choice.id, function(ok, update_err)
 					if not ok then
-						done(nil, update_err or "Failed to update milestone")
+						done(nil, update_err)
 						return
 					end
 					statusline.notify("success", choice.id and "Milestone updated" or "Milestone removed", 1200)
@@ -270,19 +267,18 @@ end
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function toggle_subscription(ctx, done)
 	local issue = assert(ctx.issue)
-	local login = type(ctx.current_user) == "table" and vim.trim(tostring(ctx.current_user.account_id or "")) or ""
+	local login = ctx.current_user and ctx.current_user.account_id or nil
 	local function with_login(callback)
-		if login ~= "" then
+		if login then
 			callback(login)
 			return
 		end
 		api.fetch_user(function(user, err)
-			local fetched = type(user) == "table" and vim.trim(tostring(user.account_id or "")) or ""
-			if err or fetched == "" then
-				done(nil, err or "Could not determine current user")
+			if err then
+				done(nil, err)
 				return
 			end
-			callback(fetched)
+			callback(user.account_id)
 		end)
 	end
 	local function update(subscribed)
@@ -291,7 +287,7 @@ local function toggle_subscription(ctx, done)
 			statusline.notify("loading", next_state and "Subscribing..." or "Unsubscribing...")
 			api.set_subscription(issue.key, user_login, next_state, function(ok, err)
 				if not ok then
-					done(nil, err or "Failed to update subscription")
+					done(nil, err)
 					return
 				end
 				issue.is_subscribed = next_state
@@ -301,13 +297,13 @@ local function toggle_subscription(ctx, done)
 		end)
 	end
 
-	if type(issue.is_subscribed) == "boolean" then
+	if issue.is_subscribed ~= nil then
 		update(issue.is_subscribed)
 		return
 	end
 	api.check_subscription(issue.key, function(subscribed, err)
-		if err or type(subscribed) ~= "boolean" then
-			done(nil, err or "Could not read subscription")
+		if err then
+			done(nil, err)
 			return
 		end
 		update(subscribed)
@@ -323,10 +319,9 @@ local function set_locked(ctx, locked, reason, done)
 	statusline.notify("loading", (locked and "Locking " or "Unlocking ") .. issue.key .. "...")
 	api.set_locked(issue.key, locked, reason, function(ok, err)
 		if not ok then
-			done(nil, err or (locked and "Failed to lock issue" or "Failed to unlock issue"))
+			done(nil, err)
 			return
 		end
-		issue._raw = issue._raw or {}
 		issue._raw.is_locked = locked
 		statusline.notify("success", (locked and "Locked " or "Unlocked ") .. issue.key, 1200)
 		done({ issue_key = issue.key }, nil)
@@ -356,7 +351,7 @@ register({
 		statusline.notify("loading", "Closing " .. ctx.issue.key .. "...")
 		api.set_state(ctx.issue.key, "closed", function(ok, err)
 			if not ok then
-				done(nil, err or "Failed to close issue")
+				done(nil, err)
 				return
 			end
 			statusline.notify("success", "Closed " .. ctx.issue.key, 1200)
@@ -379,7 +374,7 @@ register({
 		statusline.notify("loading", "Reopening " .. ctx.issue.key .. "...")
 		api.set_state(ctx.issue.key, "open", function(ok, err)
 			if not ok then
-				done(nil, err or "Failed to reopen issue")
+				done(nil, err)
 				return
 			end
 			statusline.notify("success", "Reopened " .. ctx.issue.key, 1200)
@@ -397,7 +392,7 @@ register({
 		local action = ctx.issue.status_id == "closed" and "reopen" or "close"
 		local verb = action == "reopen" and "Reopen" or "Close"
 		vim.ui.input({ prompt = string.format("%s issue %s? [y/N]: ", verb, ctx.issue.key) }, function(input)
-			if vim.trim(tostring(input or "")):lower() ~= "y" then
+			if input == nil or vim.trim(input):lower() ~= "y" then
 				done(nil, nil)
 				return
 			end
@@ -420,7 +415,7 @@ register({
 		statusline.notify("loading", "Pinning " .. ctx.issue.key .. "...")
 		api.set_pinned(ctx.issue.key, true, function(ok, err)
 			if not ok then
-				done(nil, err or "Failed to pin issue")
+				done(nil, err)
 				return
 			end
 			ctx.issue.is_pinned = true
@@ -444,7 +439,7 @@ register({
 		statusline.notify("loading", "Unpinning " .. ctx.issue.key .. "...")
 		api.set_pinned(ctx.issue.key, false, function(ok, err)
 			if not ok then
-				done(nil, err or "Failed to unpin issue")
+				done(nil, err)
 				return
 			end
 			ctx.issue.is_pinned = false
@@ -463,7 +458,7 @@ if api.supports_locking() then
 			if not ok then
 				return false, err
 			end
-			return (ctx.issue._raw or {}).is_locked ~= true, "Issue is already locked"
+			return ctx.issue._raw.is_locked ~= true, "Issue is already locked"
 		end,
 		run = function(ctx, done)
 			vim.ui.input({ prompt = "Lock reason (optional): " }, function(reason)
@@ -484,7 +479,7 @@ if api.supports_locking() then
 			if not ok then
 				return false, err
 			end
-			return (ctx.issue._raw or {}).is_locked == true, "Issue is not locked"
+			return ctx.issue._raw.is_locked == true, "Issue is not locked"
 		end,
 		run = function(ctx, done)
 			set_locked(ctx, false, nil, done)
@@ -549,14 +544,14 @@ register({
 	is_available = has_issue,
 	run = function(ctx, done)
 		vim.ui.input({ prompt = string.format("Delete issue %s? [y/N]: ", ctx.issue.key) }, function(input)
-			if vim.trim(tostring(input or "")):lower() ~= "y" then
+			if input == nil or vim.trim(input):lower() ~= "y" then
 				done(nil, nil)
 				return
 			end
 			statusline.notify("loading", "Deleting " .. ctx.issue.key .. "...")
 			api.delete(ctx.issue.key, function(ok, err)
 				if not ok then
-					done(nil, err or "Failed to delete issue")
+					done(nil, err)
 					return
 				end
 				statusline.notify("success", "Deleted " .. ctx.issue.key, 1200)

@@ -13,11 +13,11 @@ local resolver = require("atlas.providers.resolve")
 
 ---@param view { repo: string|nil, search: string|nil }
 ---@param opts PullsFetchOpts
----@param on_done fun(groups: PullsGroup[], err: string[]|nil)
+---@param on_done fun(pulls: PullRequest[], err: string[]|nil)
 local function fetch_pullrequests(view, opts, on_done)
 	local filters = require("atlas.pulls.state").status_filters or {}
 	local statuses = {}
-	local explicit_status = opts and opts.state and tostring(opts.state):upper() or nil
+	local explicit_status = opts.state and opts.state:upper() or nil
 	if explicit_status then
 		statuses = { explicit_status }
 	else
@@ -31,36 +31,102 @@ local function fetch_pullrequests(view, opts, on_done)
 		end
 	end
 
-	local global = vim.trim(tostring(view.repo or "")) == ""
-	local query = global and { "type:pulls" } or { "repo:" .. tostring(view.repo or "") }
+	local global = vim.trim(view.repo or "") == ""
+	local query = global and { "type:pulls" } or { "repo:" .. view.repo }
 	for _, status in ipairs(statuses) do
 		table.insert(query, "is:" .. status:lower())
 	end
-	if vim.trim(tostring(view.search or "")) ~= "" then
-		table.insert(query, tostring(view.search))
+	if vim.trim(view.search or "") ~= "" then
+		table.insert(query, view.search)
 	end
 	require("atlas.pulls.state").last_search_query = table.concat(query, " ")
 
 	local fetch = global and pullrequests_api.search_global or pullrequests_api.list
 	return fetch(view, {
 		statuses = statuses,
-		pagelen = opts and opts.pagelen or 50,
-		force_load = opts and opts.force_load == true,
-	}, function(groups, err)
-		local nonempty = {}
-		for _, group in ipairs(groups or {}) do
-			if #group.prs > 0 then
-				table.insert(nonempty, group)
+		pagelen = opts.pagelen or 50,
+		force_load = opts.force_load == true,
+	}, function(pulls, err)
+		if err then
+			on_done({}, { err })
+			return
+		end
+		on_done(pulls, nil)
+	end)
+end
+
+---@param pr PullRequest
+---@param opts { force_refresh: boolean|nil }|nil
+---@param on_done fun(items: PullsConversationItem[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+local function fetch_conversation(pr, opts, on_done)
+	return comments_api.fetch(pr, opts, function(result, err)
+		if err then
+			on_done(nil, err)
+			return
+		end
+
+		local ordered = {}
+		local sequence = 0
+		local function add(kind, created_on, entity, id)
+			sequence = sequence + 1
+			table.insert(ordered, {
+				sequence = sequence,
+				item = {
+					id = id,
+					kind = kind,
+					created_on = created_on,
+					entity = entity,
+				},
+			})
+		end
+
+		for _, comment in ipairs(result.comments) do
+			if tostring(comment.id) ~= "__body__" then
+				add("comment", comment.created_on, comment, "comment:" .. tostring(comment.id))
 			end
 		end
-		on_done(nonempty, err and { err } or nil)
+		for index, event in ipairs(result.events) do
+			local created_on = event.date
+			local id = table.concat({ "activity", created_on, event.kind, tostring(index) }, ":")
+			add("activity", created_on, event, id)
+		end
+
+		table.sort(ordered, function(left, right)
+			if left.item.created_on == right.item.created_on then
+				return left.sequence < right.sequence
+			end
+			return left.item.created_on < right.item.created_on
+		end)
+
+		local items = {}
+		for _, value in ipairs(ordered) do
+			table.insert(items, value.item)
+		end
+		on_done(items, nil)
 	end)
+end
+
+---@param pr PullRequest
+---@param item PullsConversationItem
+---@param key string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+local function add_reaction(pr, item, key, on_done)
+	local target = item.entity
+	if item.kind == "description" then
+		target = { id = "__body__" }
+	elseif item.kind ~= "comment" then
+		on_done(false, "This item does not support reactions")
+		return nil
+	end
+	return comments_api.add_reaction(pr, target, key, on_done)
 end
 
 ---@return AtlasGiteaForgejoPullsViewConfig[]
 local function views()
-	local cfg = require("atlas.providers").options("gitea", "pulls") or {}
-	return require("atlas.ui.shared.bookmarks_view").append_to_views(cfg.views or {}, cfg.bookmarks, "S", "Search")
+	local cfg = require("atlas.config").domain_options("gitea", "pulls") or {}
+	return cfg.views or {}
 end
 
 ---@param value string
@@ -141,24 +207,45 @@ local function target(info, domain, entity, number, base_url)
 	}
 end
 
----@param options table
+---@param options AtlasGiteaForgejoPullsConfig
 ---@return string[]
 local function repositories(options)
-	local result = {}
+	local result, seen = {}, {}
+	---@param value string|nil
+	local function add(value)
+		local repo = vim.trim(value or "")
+		if repo ~= "" and not seen[repo] then
+			seen[repo] = true
+			table.insert(result, repo)
+		end
+	end
+
 	for _, view in ipairs(options.views or {}) do
-		table.insert(result, view.repo)
+		add(view.repo)
+	end
+
+	local bookmark_repos = {}
+	for _, bookmark in pairs((options.bookmarks or {}).items or {}) do
+		local repo = vim.trim(bookmark.repo or "")
+		if repo ~= "" then
+			table.insert(bookmark_repos, repo)
+		end
+	end
+	table.sort(bookmark_repos)
+	for _, repo in ipairs(bookmark_repos) do
+		add(repo)
 	end
 	return result
 end
 
 local comments = {
-	fetch_conversation = comments_api.fetch,
+	fetch_conversation = fetch_conversation,
 	reaction_options = require("atlas.ui.shared.emojis").github(),
 	comment_completion = require("atlas.pulls.providers.gitea.completion.author").build_completion,
 	add_comment = comments_api.add,
 	edit_comment = comments_api.edit,
 	delete_comment = comments_api.delete,
-	add_reaction = comments_api.add_reaction,
+	add_reaction = add_reaction,
 }
 
 local reviews = {

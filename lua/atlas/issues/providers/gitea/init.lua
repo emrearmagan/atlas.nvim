@@ -11,9 +11,13 @@ local REACTION_OPTIONS = require("atlas.ui.shared.emojis").github()
 ---@param opts IssuesFetchOpts
 ---@param on_done fun(issues: Issue[], next_page_token: string|nil, is_last: boolean, err: string|nil)
 function M.fetch_issues(view, opts, on_done)
-	return api.issues.list(view, opts or {}, function(issues, next_page_token, is_last, err)
+	return api.issues.list(view, opts, function(issues, next_page_token, is_last, err)
+		if err then
+			on_done({}, next_page_token, is_last, err)
+			return
+		end
 		local pinned, rest = {}, {}
-		for _, issue in ipairs(issues or {}) do
+		for _, issue in ipairs(issues) do
 			table.insert(issue.is_pinned and pinned or rest, issue)
 		end
 		vim.list_extend(pinned, rest)
@@ -34,31 +38,31 @@ function M.fetch_conversation(issue, opts, on_done)
 			return
 		end
 		local comments = {}
-		local raw = issue._raw or {}
-		local description = tostring(raw.description or "")
+		local raw = issue._raw
+		local description = raw.description
 		if description ~= "" then
 			table.insert(comments, {
 				id = "__body__",
 				url = issue.url,
 				author = issue.reporter,
 				body = description,
-				created = tostring(raw.created_at or ""),
+				created = raw.created_at,
 				reactions = raw.reactions,
 			})
 		end
-		vim.list_extend(comments, result.comments or {})
+		vim.list_extend(comments, result.comments)
 
 		local function load_reactions(index)
 			local comment = comments[index]
 			if not comment then
-				on_done({ comments = comments, events = result.events or {} }, nil)
+				on_done({ comments = comments, events = result.events }, nil)
 				return
 			end
 			requests.run(function(done)
 				return api.comments.list_reactions(issue.key, comment.id, done)
 			end, function(reactions)
 				comment.reactions = reactions
-				if tostring(comment.id) == "__body__" then
+				if comment.id == "__body__" then
 					raw.reactions = reactions
 				end
 				load_reactions(index + 1)
@@ -74,7 +78,11 @@ end
 ---@param on_done fun(entries: IssueActivityEntry[]|nil, err: string|nil)
 function M.fetch_activity(issue, opts, on_done)
 	return api.timeline.list(issue.key, opts, function(result, err)
-		on_done(result and result.events or nil, err)
+		if err then
+			on_done(nil, err)
+			return
+		end
+		on_done(result.events, nil)
 	end)
 end
 
@@ -83,31 +91,31 @@ end
 ---@param content string
 ---@param on_done fun(comment: IssueComment|nil, err: string|nil)
 function M.edit_comment(issue, comment, content, on_done)
-	local comment_id = tostring(comment.id or "")
+	local comment_id = comment.id
 	if comment_id ~= "__body__" then
 		local requests = request_scope.new()
 		requests.run(function(done)
 			return api.comments.edit(issue.key, comment_id, content, done)
-		end, function(comment, err)
-			if err or not comment then
-				on_done(nil, err or "Failed to update comment")
+		end, function(updated_comment, err)
+			if err then
+				on_done(nil, err)
 				return
 			end
 			requests.run(function(done)
 				return api.comments.list_reactions(issue.key, comment_id, done)
 			end, function(reactions)
-				comment.reactions = reactions
-				on_done(comment, nil)
+				updated_comment.reactions = reactions
+				on_done(updated_comment, nil)
 			end)
 		end)
 		return requests
 	end
 	return api.issues.update_issue(issue, { body = content }, function(updated, err)
-		if err or not updated then
-			on_done(nil, err or "Failed to update issue description")
+		if err then
+			on_done(nil, err)
 			return
 		end
-		local reactions = (issue._raw or {}).reactions
+		local reactions = issue._raw.reactions
 		issue._raw = updated._raw
 		issue._raw.reactions = reactions
 		on_done({
@@ -115,7 +123,7 @@ function M.edit_comment(issue, comment, content, on_done)
 			url = updated.url,
 			author = updated.reporter,
 			body = content,
-			created = tostring((updated._raw or {}).created_at or ""),
+			created = updated._raw.created_at,
 			reactions = reactions,
 		}, nil)
 	end)
@@ -139,7 +147,7 @@ function M.views()
 			{ name = "Created", key = "2", scope = "created", state = "open" },
 		}
 	end
-	return require("atlas.ui.shared.bookmarks_view").append_to_views(views, cfg.bookmarks, "S", "Search")
+	return views
 end
 
 ---@param value string
@@ -208,14 +216,33 @@ function M.target(info, domain, entity, number, base_url)
 	}
 end
 
----@param options table
+---@param options AtlasGiteaForgejoIssuesConfig
 ---@return string[]
 function M.repositories(options)
-	local result = {}
-	for _, view in ipairs(options.views or {}) do
-		if type(view.repo) == "string" and view.repo ~= "" then
-			table.insert(result, view.repo)
+	local result, seen = {}, {}
+	---@param value string|nil
+	local function add(value)
+		local repo = vim.trim(value or "")
+		if repo ~= "" and not seen[repo] then
+			seen[repo] = true
+			table.insert(result, repo)
 		end
+	end
+
+	for _, view in ipairs(options.views or {}) do
+		add(view.repo)
+	end
+
+	local bookmark_repos = {}
+	for _, bookmark in pairs((options.bookmarks or {}).items or {}) do
+		local repo = vim.trim(bookmark.repo or "")
+		if repo ~= "" then
+			table.insert(bookmark_repos, repo)
+		end
+	end
+	table.sort(bookmark_repos)
+	for _, repo in ipairs(bookmark_repos) do
+		add(repo)
 	end
 	return result
 end
@@ -232,7 +259,7 @@ local comments = {
 	end,
 	edit_comment = M.edit_comment,
 	delete_comment = function(issue, comment, on_done)
-		local comment_id = tostring(comment.id or "")
+		local comment_id = comment.id
 		if comment_id == "__body__" then
 			on_done(false, "Cannot delete the issue description")
 			return nil
