@@ -1,13 +1,12 @@
 local service = require("atlas.providers.gitea.gitea.client").pulls
 local pagination = require("atlas.pulls.providers.gitea.gitea.api.pagination")
-local json = require("atlas.core.json")
 
 local M = {}
 
 ---@param pr PullRequest
 ---@return string|nil
 local function cache_key(pr)
-	local source = type(pr.source) == "table" and pr.source or {}
+	local source = pr.source
 	local head = tostring(source.commit_hash or "")
 	if head == "" then
 		return nil
@@ -21,10 +20,9 @@ local function cache_key(pr)
 	}, ":")
 end
 
+---@param pr PullRequest
+---@return string|nil owner, string|nil repo, string|nil id
 local function pull_parts(pr)
-	if type(pr) ~= "table" then
-		return nil
-	end
 	local owner, repo = tostring(pr.repo_full_name or ""):match("^([^/]+)/([^/]+)$")
 	local id = tostring(pr.id or "")
 	if owner and id:match("^%d+$") then
@@ -49,22 +47,16 @@ function M.fetch(pr, opts, on_done)
 	end
 	local endpoint =
 		string.format("/repos/%s/%s/pulls/%s/commits", service.url_encode(owner), service.url_encode(repo), id)
-	return pagination.fetch_all(endpoint, nil, {
-		invalid_response = "Invalid pull request commits response",
-	}, function(raw, err)
+	return pagination.fetch_all(endpoint, nil, {}, function(raw, err)
 		if err then
 			on_done(nil, err)
 			return
 		end
 		local commits = {}
-		for _, value in ipairs(raw or {}) do
-			if type(value) ~= "table" or tostring(value.sha or "") == "" then
-				on_done(nil, "Invalid pull request commits response")
-				return
-			end
-			local commit = json.safe_table(value.commit)
-			local author = json.safe_table(commit.author)
-			local account = json.safe_table(value.author)
+		for _, value in ipairs(raw) do
+			local commit = value.commit
+			local author = commit.author
+			local account = value.author
 			local hash = value.sha
 			local login = account.login or ""
 			table.insert(commits, {

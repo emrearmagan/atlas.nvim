@@ -1,5 +1,4 @@
 local service = require("atlas.providers.gitea.gitea.client").pulls
-local json = require("atlas.core.json")
 local request_scope = require("atlas.core.requests")
 
 local M = {}
@@ -8,7 +7,6 @@ local M = {}
 ---@field page_size? integer
 ---@field max_items? integer
 ---@field accept? fun(value: any): boolean
----@field invalid_response? string
 ---@field post_filtered? boolean
 
 ---Fetch a paginated Gitea list. The API stops returning values after
@@ -59,11 +57,6 @@ function M.fetch_all(endpoint, params, opts, on_done)
 			end
 			-- Gitea returns JSON null after the final timeline page.
 			local items = result == vim.NIL and {} or result
-			if not json.is_list(items) then
-				finish(nil, opts.invalid_response or "Invalid paginated response")
-				return
-			end
-
 			for _, value in ipairs(items) do
 				if opts.accept == nil or opts.accept(value) then
 					table.insert(values, value)

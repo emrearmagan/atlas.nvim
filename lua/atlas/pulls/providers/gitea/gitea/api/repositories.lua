@@ -12,7 +12,7 @@ local function configured_readme_path(repo)
 	local settings = ((((config.options or {}).pulls or {}).repo_config or {}).settings or {})
 	for _, key in ipairs({ tostring(repo.id or ""), tostring(repo.full_name or ""), tostring(repo.name or "") }) do
 		local entry = key ~= "" and settings[key] or nil
-		if type(entry) == "table" and vim.trim(tostring(entry.readme or "")) ~= "" then
+		if entry and vim.trim(tostring(entry.readme or "")) ~= "" then
 			return tostring(entry.readme)
 		end
 	end
@@ -26,16 +26,12 @@ local function endpoint(slug)
 	end
 end
 
+---@param repo PullsRepo
+---@param _ PullsFetchOpts
+---@param on_done fun(repo: PullsRepoDetails|nil, err: string|nil)
+---@return { cancel: fun() }|nil
 function M.detail(repo, _, on_done)
-	if type(repo) ~= "table" then
-		on_done(nil, "Invalid Gitea repository")
-		return nil
-	end
-	local slug = tostring(repo.id or "")
-	if not slug:find("/", 1, true) then
-		slug = tostring(repo.owner or "") .. "/" .. tostring(repo.repo_name or repo.name or "")
-	end
-	local base = endpoint(slug)
+	local base = endpoint(repo.id)
 	if not base then
 		on_done(nil, "Invalid Gitea repository")
 		return nil
@@ -48,25 +44,21 @@ function M.detail(repo, _, on_done)
 			on_done(nil, err)
 			return
 		end
-		local full_name = json.safe_str(raw.full_name)
-		local name = json.safe_str(raw.name)
-		if not full_name or not name then
-			on_done(nil, "Invalid repository response")
-			return
-		end
-		local owner = json.safe_table(json.nilify(raw.owner))
+		local full_name = raw.full_name
+		local name = raw.name
+		local owner = raw.owner
 		local details = {
 			id = full_name,
 			name = name,
 			full_name = full_name,
-			owner = json.safe_str(owner.login) or tostring(repo.owner or ""),
+			owner = owner.login,
 			repo_name = name,
-			html_url = json.safe_str(raw.html_url) or "",
-			description = json.safe_str(raw.description) or "",
+			html_url = raw.html_url,
+			description = raw.description or "",
 			size = tonumber(raw.size),
-			default_branch = json.safe_str(raw.default_branch),
+			default_branch = raw.default_branch,
 			is_private = raw.private == true,
-			created_on = json.safe_str(raw.created_at) or "",
+			created_on = raw.created_at,
 			readme = nil,
 			stars = tonumber(raw.stars_count),
 			watchers = tonumber(raw.watchers_count),
@@ -81,8 +73,12 @@ function M.detail(repo, _, on_done)
 		local target = string.format("%s/raw/%s%s", base, service.url_encode(readme), service.query({ ref = ref }))
 		requests.run(function(done)
 			return service.request_text("GET", target, done)
-		end, function(body)
-			if type(body) == "string" and body ~= "" then
+		end, function(body, readme_err)
+			if readme_err and not readme_err:match("^HTTP 404") then
+				on_done(nil, readme_err)
+				return
+			end
+			if body and body ~= "" then
 				details.readme = body
 			end
 			on_done(details, nil)
@@ -91,44 +87,41 @@ function M.detail(repo, _, on_done)
 	return requests
 end
 
+---@param repo PullsRepoDetails
+---@param kind "branches"|"tags"
+---@param on_done fun(result: PullsRepoBranches|PullsRepoTags|nil, err: string|nil)
+---@return { cancel: fun() }|nil
 local function refs(repo, kind, on_done)
-	local base = type(repo) == "table" and endpoint(repo.full_name or repo.id) or nil
+	local base = endpoint(repo.full_name)
 	if not base then
 		on_done(nil, "Invalid Gitea repository")
 		return nil
 	end
-	return pagination.fetch_all(base .. "/" .. kind, nil, {
-		invalid_response = "Invalid repository " .. kind .. " response",
-	}, function(raw, err)
+	return pagination.fetch_all(base .. "/" .. kind, nil, nil, function(raw, err)
 		if err then
 			on_done(nil, err)
 			return
 		end
 		local entries = {}
-		for _, value in ipairs(raw or {}) do
-			value = json.safe_table(json.nilify(value))
-			local name = json.safe_str(value.name)
-			if not name or name == "" then
-				on_done(nil, "Invalid repository " .. kind .. " response")
-				return
-			end
-			local commit = json.safe_table(json.nilify(value.commit))
+		for _, value in ipairs(raw) do
+			local name = value.name
+			local commit = value.commit
 			if kind == "tags" then
 				table.insert(entries, {
 					name = name,
-					hash = (json.safe_str(commit.sha) or json.safe_str(commit.id) or ""):sub(1, 8),
+					hash = commit.sha:sub(1, 8),
 					date = "",
-					message = json.safe_str(value.message) or "",
+					message = value.message or "",
 					author = "",
 				})
 			else
-				local author = json.safe_table(json.nilify(commit.author))
+				local author = commit.author
 				table.insert(entries, {
 					name = name,
-					hash = (json.safe_str(commit.sha) or json.safe_str(commit.id) or ""):sub(1, 8),
-					date = json.safe_str(commit.timestamp) or "",
-					message = json.safe_str(commit.message) or "",
-					author = json.safe_str(author.name) or json.safe_str(author.username) or "",
+					hash = commit.id:sub(1, 8),
+					date = commit.timestamp,
+					message = commit.message,
+					author = author.name,
 					api_url = base .. "/branches/" .. service.url_encode(name),
 				})
 			end
@@ -151,17 +144,15 @@ end
 ---@param on_done fun(result: { entries: PullsRepoIssue[], counts: { open: integer, closed: integer }|nil }|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_issues(repo, state, _opts, on_done)
-	local slug = tostring(repo.full_name or repo.id or "")
-	local base = endpoint(slug)
+	local base = endpoint(repo.full_name)
 	if not base then
 		on_done(nil, "Invalid Gitea repository")
 		return nil
 	end
 	return pagination.fetch_all(base .. "/issues", { state = state, type = "issues" }, {
 		max_items = 50,
-		invalid_response = "Invalid Gitea issues response",
 		accept = function(raw)
-			return json.nilify(json.safe_table(raw).pull_request) == nil
+			return json.nilify(raw.pull_request) == nil
 		end,
 	}, function(issues, err)
 		if err then
@@ -170,21 +161,15 @@ function M.fetch_issues(repo, state, _opts, on_done)
 		end
 		local result = {}
 		for _, raw in ipairs(issues) do
-			raw = json.safe_table(json.nilify(raw))
-			local number = tonumber(raw.number)
-			if not number then
-				on_done(nil, "Invalid Gitea issue response")
-				return
-			end
-			local reporter = json.safe_table(json.nilify(raw.user))
+			local reporter = raw.user
 			table.insert(result, {
-				number = number,
-				title = json.safe_str(raw.title) or "",
-				state = (json.safe_str(raw.state) or state):lower() == "closed" and "closed" or "open",
-				author = json.safe_str(reporter.login) or "",
-				created_at = json.safe_str(raw.created_at) or "",
-				comments = tonumber(raw.comments) or 0,
-				url = json.safe_str(raw.html_url) or "",
+				number = raw.number,
+				title = raw.title,
+				state = raw.state:lower() == "closed" and "closed" or "open",
+				author = reporter.login,
+				created_at = raw.created_at,
+				comments = raw.comments,
+				url = raw.html_url,
 			})
 		end
 		on_done({ entries = result, counts = nil }, nil)
@@ -195,8 +180,8 @@ end
 ---@param branch PullsRepoBranch
 ---@param on_done fun(ok: boolean, err: string|nil)
 function M.delete_branch(repo, branch, on_done)
-	local base = type(repo) == "table" and endpoint(repo.full_name or repo.id) or nil
-	local name = type(branch) == "table" and vim.trim(tostring(branch.name or "")) or ""
+	local base = endpoint(repo.full_name)
+	local name = vim.trim(tostring(branch.name or ""))
 	if not base or name == "" then
 		on_done(false, "Invalid Gitea branch")
 		return nil
@@ -220,20 +205,10 @@ function M.search(term, on_done)
 			on_done(nil, err)
 			return
 		end
-		local values = json.nilify(raw.data)
-		if not values or not vim.islist(values) then
-			on_done(nil, "Invalid repository search response")
-			return
-		end
+		local values = raw.data
 		local result = {}
 		for _, repo in ipairs(values) do
-			repo = json.safe_table(json.nilify(repo))
-			local full_name = json.safe_str(repo.full_name) or ""
-			if full_name == "" then
-				on_done(nil, "Invalid repository search response")
-				return
-			end
-			table.insert(result, full_name)
+			table.insert(result, repo.full_name)
 		end
 		on_done(result, nil)
 	end)

@@ -5,17 +5,17 @@ local M = {}
 local function open(default, global)
 	local state = require("atlas.pulls.state")
 	---@type AtlasGiteaForgejoPullsViewConfig
-	local view = state.active_view or state.current_view or {}
-	local repo = tostring(view.repo or "")
+	local view = state.active_view
+	local repo = view.repo or ""
 	if not global and repo == "" then
 		require("atlas.ui.statusline").notify("warn", "Select a Gitea/Forgejo repository first")
 		return
 	end
 	require("atlas.commands.search.prompt").open({
 		name = "AtlasGiteaPullSearch",
-		default = default or tostring(view.search or ""),
+		default = default or view.search or "",
 		on_submit = function(query)
-			query = vim.trim(tostring(query or ""))
+			query = vim.trim(query)
 			local search_view = { name = "Search", layout = view.layout or "compact", search = query }
 			if not global then
 				search_view.repo = repo

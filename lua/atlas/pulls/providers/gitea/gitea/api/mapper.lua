@@ -3,14 +3,10 @@ local diff_parser = require("atlas.core.git.diff_parser")
 
 local M = {}
 
----@param raw table|nil
+---@param raw table
 ---@return PullsAuthor
 local function author(raw)
-	raw = json.nilify(raw)
-	if type(raw) ~= "table" then
-		return { id = "", name = "Unknown", username = "unknown", nickname = "unknown" }
-	end
-	local login = raw.login or "unknown"
+	local login = raw.login
 	local name = raw.full_name or ""
 	return {
 		id = tostring(raw.id or ""),
@@ -20,17 +16,17 @@ local function author(raw)
 	}
 end
 
----@param values table[]|nil
+---@param values table[]
 ---@return PullsAuthor[]
 local function authors(values)
 	local result = {}
-	for _, value in ipairs(json.safe_table(values)) do
+	for _, value in ipairs(values) do
 		table.insert(result, author(value))
 	end
 	return result
 end
 
----@param values table[]|nil
+---@param values table[]
 ---@return PullsReviewer[]
 local function reviewers(values)
 	local result = {}
@@ -41,6 +37,7 @@ local function reviewers(values)
 			name = value.name,
 			username = value.username,
 			nickname = value.nickname,
+			role = "reviewer",
 			decision = "pending",
 		})
 	end
@@ -51,7 +48,7 @@ end
 ---@return table<string, integer>|nil
 local function reaction_counts(values)
 	local result = {}
-	for _, value in ipairs(json.safe_table(values)) do
+	for _, value in ipairs(json.nilify(values) or {}) do
 		local key = value.content
 		if key and key ~= "" then
 			result[key] = (result[key] or 0) + 1
@@ -107,13 +104,9 @@ local function positive_line(value)
 	return line and line > 0 and line or nil
 end
 
----@param raw any
+---@param raw table
 ---@return { from: integer|nil, to: integer|nil, start_from: integer|nil, start_to: integer|nil }
 function M.review_lines(raw)
-	raw = json.nilify(raw)
-	if type(raw) ~= "table" then
-		return {}
-	end
 	return {
 		from = positive_line(raw.original_position),
 		to = positive_line(raw.position),
@@ -158,31 +151,183 @@ M.author = author
 M.reaction_counts = reaction_counts
 M.pull_state = state
 
----@param raw any
----@param fallback_slug string|nil
----@return PullRequest|nil
-function M.to_pull_request(raw, fallback_slug)
-	raw = json.nilify(raw)
-	if type(raw) ~= "table" then
-		return nil
-	end
-	local number = raw.number
-	if number == nil then
-		return nil
+local review_history_states = {
+	APPROVED = "approved",
+	REQUEST_CHANGES = "changes_requested",
+	COMMENT = "commented",
+}
+
+---@param pr PullRequest
+---@param raw_reviews table[]
+---@return { reviewers: PullsReviewer[], raw: table[], pending_requests: integer, history: PullsReviewHistoryEntry[] }
+function M.to_review_data(pr, raw_reviews)
+	local latest_opinion, latest_comment, latest_request, latest_team_request = {}, {}, {}, {}
+	local configured_reviewers = {}
+	for _, reviewer in ipairs(pr.reviewers or {}) do
+		if reviewer.id ~= "" then
+			configured_reviewers[reviewer.id] = reviewer
+		end
 	end
 
-	local base = json.nilify(raw.base) or {}
-	local head = json.nilify(raw.head) or {}
-	local repo_raw = json.nilify(base.repo) or {}
-	local slug = repo_raw.full_name or fallback_slug or ""
-	local workspace, repo = slug:match("^([^/]+)/([^/]+)$")
+	local history = {}
+	for _, review in ipairs(raw_reviews) do
+		local review_id = tonumber(review.id)
+		local review_state = tostring(review.state or ""):upper()
+		local is_opinion = review_state == "APPROVED" or review_state == "REQUEST_CHANGES"
+		local is_comment = review_state == "COMMENT"
+		local is_request = review_state == "REQUEST_REVIEW"
+		local user = json.nilify(review.user)
+		local team = json.nilify(review.team)
+		local mapped_author = user and author(user) or nil
 
-	local assignees = authors(raw.assignees)
-	if #assignees == 0 and json.nilify(raw.assignee) then
-		table.insert(assignees, author(raw.assignee))
+		if (is_opinion or is_comment or is_request) and mapped_author then
+			local key = mapped_author.id
+			local target = is_request and latest_request or (is_comment and latest_comment or latest_opinion)
+			local previous = target[key]
+			if key ~= "" and (not previous or review_id > previous.id) then
+				target[key] = { id = review_id, raw = review }
+			end
+		elseif is_request and team then
+			local key = tostring(team.id or team.name or "")
+			local previous = latest_team_request[key]
+			if key ~= "" and (not previous or review_id > previous.id) then
+				latest_team_request[key] = { id = review_id, raw = review }
+			end
+		end
+
+		local history_state = review.dismissed == true and "dismissed" or review_history_states[review_state]
+		local body = json.nilify(review.body)
+		if body and vim.trim(body) == "" then
+			body = nil
+		end
+		if history_state and not (history_state == "commented" and body == nil) then
+			table.insert(history, {
+				id = tostring(review.id),
+				author = mapped_author,
+				state = history_state,
+				submitted_on = nonempty(review.dismissed == true and review.updated_at or review.submitted_at) or "",
+				body = body,
+				commit_hash = nonempty(review.commit_id),
+				url = nonempty(review.html_url),
+			})
+		end
 	end
-	local labels, label_ids = {}, {}
-	for _, value in ipairs(json.safe_table(raw.labels)) do
+
+	local reviewers_result, latest_reviews, keys = {}, {}, {}
+	for key in pairs(latest_opinion) do
+		keys[key] = true
+	end
+	for key in pairs(latest_request) do
+		keys[key] = true
+	end
+	for key in pairs(latest_comment) do
+		keys[key] = true
+	end
+	for key in pairs(configured_reviewers) do
+		keys[key] = true
+	end
+	for key in pairs(keys) do
+		local opinion = latest_opinion[key]
+		local comment = latest_comment[key]
+		local request = latest_request[key]
+		local configured = configured_reviewers[key]
+		local active_opinion = opinion and opinion.raw.dismissed ~= true and opinion or nil
+		local active_comment = comment and comment.raw.dismissed ~= true and comment or nil
+		local active_request = request and request.raw.dismissed ~= true and request or nil
+		local current = active_opinion
+		if active_request and (not current or active_request.id > current.id) then
+			current = active_request
+		end
+		if active_comment and (not current or (current == active_request and active_comment.id > current.id)) then
+			current = active_comment
+		end
+		if current then
+			local review = current.raw
+			local review_state = tostring(review.state or ""):upper()
+			local mapped_author = author(review.user)
+			local role = (configured or active_request) and "reviewer" or "participant"
+			local decision = review_state == "APPROVED" and "approved"
+				or (review_state == "REQUEST_CHANGES" and "changes_requested" or "reviewed")
+			if review_state == "REQUEST_REVIEW" or review.stale == true then
+				decision = role == "reviewer" and "pending" or "reviewed"
+			end
+			table.insert(reviewers_result, {
+				id = mapped_author.id,
+				provider_id = mapped_author.username,
+				name = mapped_author.name,
+				username = mapped_author.username,
+				nickname = mapped_author.nickname,
+				role = role,
+				decision = decision,
+			})
+			table.insert(latest_reviews, review)
+		elseif configured then
+			table.insert(reviewers_result, {
+				id = configured.id,
+				provider_id = configured.provider_id,
+				name = configured.name,
+				username = configured.username,
+				nickname = configured.nickname,
+				role = "reviewer",
+				decision = "pending",
+			})
+		end
+	end
+
+	table.sort(reviewers_result, function(left, right)
+		return left.provider_id < right.provider_id
+	end)
+	local pending_requests = 0
+	for _, reviewer in ipairs(reviewers_result) do
+		if reviewer.decision == "pending" then
+			pending_requests = pending_requests + 1
+		end
+	end
+	for _, request in pairs(latest_team_request) do
+		if request.raw.dismissed ~= true and tostring(request.raw.state or ""):upper() == "REQUEST_REVIEW" then
+			pending_requests = pending_requests + 1
+			table.insert(latest_reviews, request.raw)
+		end
+	end
+	table.sort(latest_reviews, function(left, right)
+		return tonumber(left.id) < tonumber(right.id)
+	end)
+	table.sort(history, function(left, right)
+		if left.submitted_on ~= right.submitted_on then
+			return left.submitted_on < right.submitted_on
+		end
+		return tostring(left.id or "") < tostring(right.id or "")
+	end)
+
+	return {
+		reviewers = reviewers_result,
+		raw = latest_reviews,
+		pending_requests = pending_requests,
+		history = history,
+	}
+end
+
+---@param repository table
+---@return string|nil https_url, string|nil ssh_url
+local function clone_urls(repository)
+	return nonempty(repository.clone_url), nonempty(repository.ssh_url)
+end
+
+---@param raw table
+---@return PullsAuthor[]
+local function pull_assignees(raw)
+	local result = authors(json.nilify(raw.assignees) or {})
+	if #result == 0 and json.nilify(raw.assignee) then
+		table.insert(result, author(raw.assignee))
+	end
+	return result
+end
+
+---@param raw table
+---@return PullsLabel[], integer[]
+local function pull_labels(raw)
+	local labels, ids = {}, {}
+	for _, value in ipairs(json.nilify(raw.labels) or {}) do
 		local name = value.name
 		if name and name ~= "" then
 			table.insert(labels, {
@@ -191,23 +336,44 @@ function M.to_pull_request(raw, fallback_slug)
 			})
 		end
 		if value.id then
-			table.insert(label_ids, value.id)
+			table.insert(ids, value.id)
 		end
 	end
+	return labels, ids
+end
+
+---@param raw table
+---@return PullRequest
+function M.to_pull_request(raw)
+	local number = raw.number
+
+	local base = raw.base
+	local head = raw.head
+	local base_repo = base.repo
+	local head_repo = head.repo
+	local slug = base_repo.full_name or ""
+	local workspace, repo = slug:match("^([^/]+)/([^/]+)$")
+	local source_slug = tostring(head_repo.full_name or "")
+	local source_is_fork = source_slug ~= "" and slug ~= "" and source_slug ~= slug
+	local source_https_url, source_ssh_url = clone_urls(head_repo)
+	local destination_https_url, destination_ssh_url = clone_urls(base_repo)
 	return {
 		id = number,
 		title = raw.title or "",
-		description = raw.body or "",
 		state = state(raw),
 		author = author(raw.user),
 		source = {
 			branch = head.ref or "",
 			commit_hash = head.sha or "",
-			fetch_ref = string.format("refs/pull/%d/head", number),
+			fetch_ref = not source_is_fork and string.format("refs/pull/%d/head", number) or nil,
+			https_url = source_is_fork and source_https_url or nil,
+			ssh_url = source_is_fork and source_ssh_url or nil,
 		},
 		destination = {
 			branch = base.ref or "",
 			commit_hash = base.sha or "",
+			https_url = destination_https_url,
+			ssh_url = destination_ssh_url,
 		},
 		comments_count = (raw.comments or 0) + (raw.review_comments or 0),
 		tasks_count = 0,
@@ -215,71 +381,49 @@ function M.to_pull_request(raw, fallback_slug)
 		updated_on = raw.updated_at or "",
 		link = { html = raw.html_url or "" },
 		provider = "gitea",
-		workspace = workspace or "",
-		repo = repo or slug,
+		workspace = workspace,
+		repo = repo,
 		repo_full_name = slug,
-		assignees = assignees,
-		reviewers = reviewers(raw.requested_reviewers),
-		labels = labels,
+		reviewers = reviewers(json.nilify(raw.requested_reviewers) or {}),
 		lines_added = raw.additions,
 		lines_removed = raw.deletions,
 		_raw = {
 			mergeable = raw.mergeable,
 			merge_base = raw.merge_base,
-			label_ids = label_ids,
-		},
-	}
-end
-
----@param values table[]|nil
----@param fallback_slug string|nil
----@return PullsGroup[]|nil
-function M.to_groups(values, fallback_slug)
-	local prs = {}
-	for _, raw in ipairs(values or {}) do
-		local pr = M.to_pull_request(raw, fallback_slug)
-		if not pr then
-			return nil
-		end
-		table.insert(prs, pr)
-	end
-	if #prs == 0 then
-		return {}
-	end
-	local first = prs[1]
-	return {
-		{
-			repo = {
-				id = first.repo_full_name,
-				name = first.repo,
-				owner = first.workspace,
-				repo_name = first.repo,
-				html_url = nil,
-			},
-			prs = prs,
 		},
 	}
 end
 
 ---@param raw any
----@return PullRequest|nil
+---@return PullRequestDetails
+function M.to_pull_request_details(raw)
+	local pr = M.to_pull_request(raw)
+	local value = raw
+	local labels, label_ids = pull_labels(value)
+	pr.description = json.nilify(value.body) or ""
+	pr.is_subscribed = json.nilify(value.subscribed)
+	pr.assignees = pull_assignees(value)
+	pr.labels = labels
+	pr._raw.label_ids = label_ids
+	return pr
+end
+
+---@param values table[]
+---@return PullRequest[]
+function M.to_pull_requests(values)
+	local prs = {}
+	for _, raw in ipairs(values) do
+		table.insert(prs, M.to_pull_request(raw))
+	end
+	return prs
+end
+
+---@param raw table
+---@return PullRequest
 function M.to_search_pull_request(raw)
-	raw = json.nilify(raw)
-	if type(raw) ~= "table" then
-		return nil
-	end
-	local metadata = json.nilify(raw.pull_request)
-	local repository = json.nilify(raw.repository)
-	if type(metadata) ~= "table" or type(repository) ~= "table" then
-		return nil
-	end
+	local metadata = raw.pull_request
+	local repository = raw.repository
 	local slug = tostring(repository.full_name or "")
-	if slug == "" and repository.owner and repository.name then
-		slug = tostring(repository.owner) .. "/" .. tostring(repository.name)
-	end
-	if not slug:match("^[^/]+/[^/]+$") then
-		return nil
-	end
 
 	local normalized = {}
 	for key, value in pairs(raw) do
@@ -287,49 +431,17 @@ function M.to_search_pull_request(raw)
 	end
 	normalized.merged = metadata.merged
 	normalized.draft = metadata.draft
-	normalized.html_url = metadata.html_url or raw.html_url
+	normalized.html_url = metadata.html_url
 	normalized.base = { repo = { full_name = slug } }
-	normalized.head = {}
-	return M.to_pull_request(normalized, slug)
+	normalized.head = { repo = repository }
+	return M.to_pull_request(normalized)
 end
 
----@param prs PullRequest[]|nil
----@return PullsGroup[]|nil
-function M.group_pull_requests(prs)
-	local groups, by_repo = {}, {}
-	for _, pr in ipairs(prs or {}) do
-		if type(pr) ~= "table" or tostring(pr.repo_full_name or "") == "" then
-			return nil
-		end
-		local group = by_repo[pr.repo_full_name]
-		if not group then
-			group = {
-				repo = {
-					id = pr.repo_full_name,
-					name = pr.repo,
-					owner = pr.workspace,
-					repo_name = pr.repo,
-					html_url = nil,
-				},
-				prs = {},
-			}
-			by_repo[pr.repo_full_name] = group
-			table.insert(groups, group)
-		end
-		table.insert(group.prs, pr)
-	end
-	return groups
-end
-
----@param raw any
+---@param raw table
 ---@param review table|nil
 ---@param lines { from: integer|nil, to: integer|nil, start_from: integer|nil, start_to: integer|nil }|nil
----@return PullsComment|nil
+---@return PullsComment
 function M.to_comment(raw, review, lines)
-	raw = json.nilify(raw)
-	if type(raw) ~= "table" or json.nilify(raw.id) == nil then
-		return nil
-	end
 	review = json.nilify(review)
 	local inline, inline_hunk = inline_position(raw, lines or M.review_lines(raw))
 	local review_state = review and tostring(review.state or ""):upper() or ""
@@ -342,7 +454,7 @@ function M.to_comment(raw, review, lines)
 	return {
 		id = raw.id,
 		parent_id = nil,
-		author = author(raw.user),
+		author = raw.user and author(raw.user) or nil,
 		content_raw = raw.body or "",
 		created_on = raw.created_at or "",
 		inline = inline,
@@ -377,12 +489,12 @@ function M.thread_comments(comments)
 	local roots = {}
 	for _, comment in ipairs(comments) do
 		local inline = comment.inline
-		local path = type(inline) == "table" and tostring(inline.path or "") or ""
-		local line = type(inline) == "table" and (inline.to or inline.from) or nil
-		local side = type(inline) == "table" and inline.to and "new" or "old"
-		local raw = type(comment._raw) == "table" and comment._raw or {}
+		local path = inline and tostring(inline.path or "") or ""
+		local line = inline and (inline.to or inline.from) or nil
+		local side = inline and inline.to and "new" or "old"
+		local raw = comment._raw or {}
 		local review_id = tostring(raw.review_id or "")
-		if review_id ~= "" and path ~= "" and type(line) == "number" then
+		if review_id ~= "" and path ~= "" and line then
 			local key = table.concat({ review_id, path, side, tostring(line) }, "\0")
 			local root = roots[key]
 			if root then
@@ -396,14 +508,10 @@ function M.thread_comments(comments)
 	return comments
 end
 
----@param raw any
+---@param raw table
 ---@param review table|nil
 ---@return PullsActivityEntry|nil
 function M.to_activity(raw, review)
-	raw = json.nilify(raw)
-	if type(raw) ~= "table" then
-		return nil
-	end
 	local event = tostring(raw.type or ""):lower()
 	local actor = json.nilify(raw.user) and author(raw.user) or nil
 	local date = raw.created_at or ""
@@ -424,15 +532,10 @@ function M.to_activity(raw, review)
 	end
 
 	if event == "pull_push" then
-		local body = raw.body or ""
-		local decoded
-		if body ~= "" then
-			local ok, value = pcall(vim.json.decode, body)
-			decoded = ok and value or nil
-		end
-		local commits = type(decoded) == "table" and decoded.commit_ids or nil
-		local count = type(commits) == "table" and #commits or 0
-		local force = type(decoded) == "table" and decoded.is_force_push == true
+		local decoded = vim.json.decode(raw.body)
+		local commits = decoded.commit_ids
+		local count = #commits
+		local force = decoded.is_force_push == true
 		local label = force and "force pushed" or string.format("pushed %d commit%s", count, count == 1 and "" or "s")
 		return {
 			kind = force and "force_pushed" or "update",

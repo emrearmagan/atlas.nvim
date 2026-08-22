@@ -2,53 +2,38 @@ local json = require("atlas.core.json")
 
 local M = {}
 
----@param raw any
+---@param raw table|nil
 ---@return IssueUser|nil
 local function user(raw)
 	raw = json.nilify(raw)
-	if type(raw) ~= "table" then
+	if raw == nil then
 		return nil
 	end
-	local login = json.safe_str(raw.login) or ""
-	if login == "" then
-		return nil
-	end
-	local name = json.safe_str(raw.full_name) or ""
+	local login = raw.login
+	local name = raw.full_name
 	return {
-		id = tonumber(raw.id),
+		id = raw.id,
 		account_id = login,
 		display_name = name ~= "" and name or login,
 	}
 end
 
----@param raw any
+---@param raw table
 ---@return string
-local function repo_slug(raw)
-	raw = json.nilify(raw)
-	if type(raw) ~= "table" then
-		return ""
-	end
-	local full_name = json.safe_str(raw.full_name) or ""
-	if full_name ~= "" then
-		return full_name
-	end
-	local owner_name = json.safe_str(raw.owner)
-	local name = json.safe_str(raw.name)
-	return owner_name and name and (owner_name .. "/" .. name) or ""
+local function repository_slug(raw)
+	return raw.full_name
 end
 
----@param values any
+---@param values table[]
 ---@return table[]
 local function labels(values)
 	local result = {}
-	for _, raw in ipairs(json.safe_table(json.nilify(values))) do
-		if type(raw) == "table" and type(raw.name) == "string" and raw.name ~= "" then
-			table.insert(result, {
-				id = tonumber(raw.id),
-				name = raw.name,
-				color = json.safe_str(raw.color),
-			})
-		end
+	for _, raw in ipairs(values) do
+		table.insert(result, {
+			id = raw.id,
+			name = raw.name,
+			color = raw.color,
+		})
 	end
 	return result
 end
@@ -66,19 +51,19 @@ local TIMELINE_EVENTS = {
 	unpin = { "unpinned", "unpinned" },
 }
 
----@param value any
+---@param value string|nil
 ---@return string|nil
 local function nonempty(value)
-	local result = json.safe_str(value) or ""
+	local result = json.nilify(value)
 	return result ~= "" and result or nil
 end
 
----@param raw any
+---@param raw table|nil
 ---@param field string
 ---@return string|nil
 local function object_name(raw, field)
 	raw = json.nilify(raw)
-	return type(raw) == "table" and nonempty(raw[field]) or nil
+	return raw and nonempty(raw[field]) or nil
 end
 
 ---@param before string|nil
@@ -93,40 +78,26 @@ end
 
 M.to_user = user
 
----@param raw any
----@param fallback_slug string|nil
+---@param raw table
+---@param scoped_slug string|nil Repository slug supplied by repository-scoped endpoints.
 ---@return Issue|nil
-function M.to_issue(raw, fallback_slug)
-	raw = json.nilify(raw)
-	if type(raw) ~= "table" then
-		return nil
-	end
-	local number = tonumber(raw.number)
-	if number == nil or type(json.nilify(raw.pull_request)) == "table" then
+function M.to_issue(raw, scoped_slug)
+	if json.nilify(raw.pull_request) ~= nil then
 		return nil
 	end
 
-	local url = json.safe_str(raw.html_url) or ""
-	local slug = repo_slug(raw.repository)
-	if slug == "" then
-		slug = tostring(fallback_slug or "")
-	end
-	if slug == "" then
-		return nil
-	end
-
-	local state = tostring(raw.state or ""):lower() == "closed" and "closed" or "open"
-	local assignees = json.safe_table(json.nilify(raw.assignees))
-	local issue_labels = labels(raw.labels)
+	local number = raw.number
+	local url = raw.html_url
+	local slug = scoped_slug or repository_slug(raw.repository)
+	local state = raw.state
+	local assignees = json.nilify(raw.assignees) or {}
+	local issue_labels = labels(json.nilify(raw.labels) or {})
 	local milestone = json.nilify(raw.milestone)
-	if type(milestone) ~= "table" then
-		milestone = nil
-	end
 	local reporter = user(raw.user)
 	local original_author = nonempty(raw.original_author)
 	if not reporter and original_author then
 		reporter = {
-			id = tonumber(raw.original_author_id),
+			id = raw.original_author_id,
 			account_id = original_author,
 			display_name = original_author,
 		}
@@ -136,7 +107,7 @@ function M.to_issue(raw, fallback_slug)
 
 	return {
 		key = string.format("%s#%d", slug, number),
-		summary = json.safe_str(raw.title) or "",
+		summary = raw.title,
 		project = nil,
 		status = state == "closed" and "Closed" or "Open",
 		status_id = state,
@@ -144,62 +115,54 @@ function M.to_issue(raw, fallback_slug)
 		status_color = nil,
 		type = nil,
 		priority = nil,
-		assignee = user(assignees[1] or raw.assignee),
+		assignee = user(assignees[1]),
 		reporter = reporter,
 		story_points = nil,
 		duedate = display_due_date,
 		parent = nil,
-		url = url ~= "" and url or nil,
-		is_pinned = (tonumber(raw.pin_order) or 0) > 0,
+		url = url,
+		is_pinned = raw.pin_order > 0,
 		is_subscribed = nil,
 		_raw = {
 			number = number,
 			project_path = slug,
-			description = json.safe_str(raw.body) or "",
-			created_at = json.safe_str(raw.created_at) or "",
-			updated_at = json.safe_str(raw.updated_at),
-			closed_at = json.safe_str(raw.closed_at),
+			description = raw.body,
+			created_at = raw.created_at,
+			updated_at = raw.updated_at,
+			closed_at = json.nilify(raw.closed_at),
 			content_version = json.nilify(raw.content_version),
 			is_locked = json.nilify(raw.is_locked),
 			due_date = due_date,
 			labels = issue_labels,
 			assignees = assignees,
 			milestone = milestone,
-			comment_count = tonumber(raw.comments) or 0,
+			comment_count = raw.comments,
 		},
 	}
 end
 
----@param raw any
----@return IssueComment|nil
+---@param raw table
+---@return IssueComment
 function M.to_comment(raw)
-	raw = json.nilify(raw)
-	if type(raw) ~= "table" or json.nilify(raw.id) == nil then
-		return nil
-	end
 	return {
 		id = tostring(raw.id),
 		self = nil,
-		url = json.safe_str(raw.html_url),
+		url = raw.html_url,
 		author = user(raw.user),
-		body = json.safe_str(raw.body) or "",
-		created = json.safe_str(raw.created_at) or "",
-		updated = json.safe_str(raw.updated_at),
+		body = raw.body,
+		created = raw.created_at,
+		updated = json.nilify(raw.updated_at),
 		parent_id = nil,
 		children = nil,
 		reactions = nil,
 	}
 end
 
----@param raw any
+---@param raw table
 ---@return IssueActivityEntry|nil
 function M.to_timeline_entry(raw)
-	raw = json.nilify(raw)
-	if type(raw) ~= "table" then
-		return nil
-	end
-	local raw_type = nonempty(raw.type)
-	if raw_type == nil or raw_type == "comment" then
+	local raw_type = raw.type
+	if raw_type == "comment" then
 		return nil
 	end
 
@@ -214,7 +177,7 @@ function M.to_timeline_entry(raw)
 	}
 
 	if raw_type == "label" then
-		local added = tostring(json.nilify(raw.body) or "") == "1"
+		local added = raw.body == "1"
 		entry.kind = added and "labeled" or "unlabeled"
 		entry.label = added and "added label" or "removed label"
 		entry.body = object_name(raw.label, "name")
@@ -250,7 +213,7 @@ end
 ---@param key string
 ---@return string, integer|nil
 function M.parse_key(key)
-	local slug, number = tostring(key or ""):match("^([^/]+/[^/]+)#(%d+)$")
+	local slug, number = key:match("^([^/]+/[^/]+)#(%d+)$")
 	return slug or "", tonumber(number)
 end
 

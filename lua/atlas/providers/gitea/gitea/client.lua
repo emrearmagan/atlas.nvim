@@ -26,8 +26,8 @@ local function new(domain)
 	---@return string, string|nil
 	function client.get_auth()
 		local cfg = client.config()
-		local base_url = vim.trim(tostring(cfg.base_url or ""))
-		local token = vim.trim(tostring(cfg.token or ""))
+		local base_url = vim.trim(cfg.base_url or "")
+		local token = vim.trim(cfg.token or "")
 		if base_url == "" or token == "" then
 			return "", "Missing Gitea base_url or token in config"
 		end
@@ -36,11 +36,11 @@ local function new(domain)
 
 	---@return string
 	function client.base_url()
-		return (tostring(client.config().base_url or ""):gsub("/+$", ""))
+		return (client.config().base_url or ""):gsub("/+$", "")
 	end
 
 	function client.cache_ttl()
-		return tonumber(client.config().cache_ttl) or 300
+		return client.config().cache_ttl or 300
 	end
 
 	function client.get_cache(key)
@@ -68,7 +68,7 @@ local function new(domain)
 	---@param value string|nil
 	---@return string|nil
 	function client.absolute_url(value)
-		local url = tostring(value or "")
+		local url = value or ""
 		if url == "" then
 			return nil
 		end
@@ -80,7 +80,7 @@ local function new(domain)
 		if not origin then
 			return base .. url
 		end
-		prefix = tostring(prefix or ""):gsub("/+$", "")
+		prefix = prefix:gsub("/+$", "")
 		if url == prefix or url:sub(1, #prefix + 1) == prefix .. "/" then
 			return origin .. url
 		end
@@ -96,17 +96,15 @@ local function new(domain)
 	---@param value string
 	---@return string
 	function client.url_encode(value)
-		return (
-			tostring(value or ""):gsub("([^%w%-_.~])", function(char)
-				return string.format("%%%02X", string.byte(char))
-			end)
-		)
+		return (value:gsub("([^%w%-_.~])", function(char)
+			return string.format("%%%02X", string.byte(char))
+		end))
 	end
 
-	---@param values table<string, any>
+	---@param values table<string, string|number|boolean|(string|number|boolean)[]|nil>
 	---@return string
 	function client.query(values)
-		local keys = vim.tbl_keys(values or {})
+		local keys = vim.tbl_keys(values)
 		table.sort(keys)
 		local parts = {}
 		local function add(key, value)
@@ -132,7 +130,7 @@ local function new(domain)
 		return {
 			Accept = "application/json",
 			["Content-Type"] = "application/json",
-			Authorization = "token " .. vim.trim(tostring(client.config().token or "")),
+			Authorization = "token " .. vim.trim(client.config().token or ""),
 		}
 	end
 
@@ -151,22 +149,10 @@ local function new(domain)
 			return nil
 		end
 
-		method = tostring(method or "GET"):upper()
+		method = method:upper()
 		local payload
 		if data ~= nil then
-			local ok, encoded = pcall(vim.json.encode, data)
-			if not ok then
-				logger.logerror(NAME .. " payload encode failed", {
-					domain = domain,
-					endpoint = endpoint,
-					error = tostring(encoded),
-				})
-				vim.schedule(function()
-					on_done(nil, "Invalid Gitea request payload")
-				end)
-				return nil
-			end
-			payload = encoded
+			payload = vim.json.encode(data)
 		end
 
 		logger.loginfo(NAME .. " request", {
@@ -181,20 +167,9 @@ local function new(domain)
 					domain = domain,
 					endpoint = endpoint,
 					method = method,
-					error = tostring(err),
+					error = err,
 				})
 				on_done(nil, err)
-				return
-			end
-			if result ~= vim.NIL and type(result) ~= "table" then
-				local shape_err = NAME .. " response is not a JSON object or list"
-				logger.logerror(NAME .. " response invalid", {
-					domain = domain,
-					endpoint = endpoint,
-					method = method,
-					error = shape_err,
-				})
-				on_done(nil, shape_err)
 				return
 			end
 			on_done(result, nil)
@@ -215,7 +190,7 @@ local function new(domain)
 			return nil
 		end
 
-		method = tostring(method or "GET"):upper()
+		method = method:upper()
 		logger.loginfo(NAME .. " request", {
 			api_type = API_TYPE,
 			domain = domain,
@@ -228,7 +203,7 @@ local function new(domain)
 					domain = domain,
 					endpoint = endpoint,
 					method = method,
-					error = tostring(err),
+					error = err,
 				})
 				on_done(nil, err)
 				return

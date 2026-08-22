@@ -2,7 +2,6 @@ local M = {}
 
 local icons = require("atlas.ui.shared.icons")
 local header = require("atlas.pulls.ui.panel.components.header")
-local spinner = require("atlas.ui.components.spinner")
 
 local MAX_HASH_LEN = 12
 
@@ -11,25 +10,17 @@ local MAX_HASH_LEN = 12
 function M.new(pullrequests)
 	local panel = {}
 
-	---@param pr PullRequest
+	---@param _pr PullRequest
+	---@param details PullRequestDetails|nil
 	---@param loading boolean
 	---@return PullsPanelHeaderRow[]
-	function panel.header_rows(pr, loading)
-		if loading and pr.assignees == nil then
-			return {
-				{
-					k1 = "Assignees:",
-					v1 = spinner.with_text("Loading..."),
-					v1_hl = "AtlasTextMuted",
-					k2 = "",
-					v2 = "",
-					v2_hl = "AtlasTextMuted",
-				},
-			}
+	function panel.header_rows(_pr, details, loading)
+		if details == nil then
+			return loading and { header.loading_assignee_row() } or {}
 		end
 		local logins = {}
-		for _, assignee in ipairs(pr.assignees or {}) do
-			local login = tostring(assignee.username or "")
+		for _, assignee in ipairs(details.assignees or {}) do
+			local login = assignee.username
 			if login ~= "" then
 				table.insert(logins, login)
 			end
@@ -41,7 +32,7 @@ function M.new(pullrequests)
 	---@param hex string
 	---@return string
 	local function label_hl(hex)
-		hex = tostring(hex or ""):gsub("^#", "")
+		hex = hex:gsub("^#", "")
 		if not hex:match("^%x%x%x%x%x%x$") then
 			return "AtlasTabInactive"
 		end
@@ -51,15 +42,16 @@ function M.new(pullrequests)
 	end
 
 	---@param pr PullRequest
+	---@param details PullRequestDetails|nil
 	---@param _loading boolean
 	---@return PullsPanelChip[]
-	function panel.chips(pr, _loading)
+	function panel.chips(pr, details, _loading)
 		local chips = {}
-		local hash = tostring(type(pr.source) == "table" and pr.source.commit_hash or "")
+		local hash = pr.source.commit_hash
 		if hash ~= "" then
 			table.insert(chips, { label = hash:sub(1, MAX_HASH_LEN), hl = "AtlasTabInactive" })
 		end
-		for _, label in ipairs(pr.labels or {}) do
+		for _, label in ipairs((details and details.labels) or {}) do
 			if label.name ~= "" then
 				table.insert(chips, { label = label.name, hl = label_hl(label.color or "") })
 			end
@@ -67,14 +59,14 @@ function M.new(pullrequests)
 		return chips
 	end
 
-	---@param pr PullRequest
+	---@param details PullRequestDetails
 	---@param _opts { force_refresh: boolean|nil, pr_refreshed: boolean|nil }|nil
 	---@param on_done fun()
 	---@return { cancel: fun() }|nil
-	function panel.fetch_header(pr, _opts, on_done)
-		return pullrequests.subscription(pr, function(subscribed, err)
-			if not err and type(subscribed) == "boolean" then
-				pr.is_subscribed = subscribed
+	function panel.fetch_header(details, _opts, on_done)
+		return pullrequests.subscription(details, function(subscribed, err)
+			if not err then
+				details.is_subscribed = subscribed
 			end
 			on_done()
 		end)

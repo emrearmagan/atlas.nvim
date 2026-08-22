@@ -33,7 +33,7 @@ end
 function M.run(action_id, ctx, on_done)
 	local action = registry.find(action_id)
 	if not action then
-		local err = string.format("Unknown action: %s", tostring(action_id))
+		local err = string.format("Unknown action: %s", action_id)
 		statusline.notify("warn", err)
 		on_done(nil, err)
 		return false
@@ -43,14 +43,14 @@ function M.run(action_id, ctx, on_done)
 		available, err = action.is_available(ctx)
 	end
 	if not available then
-		err = tostring(err or "Action is not available")
+		err = err or "Action is not available"
 		statusline.notify("warn", err)
 		on_done(nil, err)
 		return false
 	end
 	action.run(ctx, function(result, run_err)
 		if run_err then
-			statusline.notify("error", tostring(run_err))
+			statusline.notify("error", run_err)
 		end
 		on_done(result, run_err)
 	end)

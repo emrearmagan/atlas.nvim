@@ -38,8 +38,8 @@ end
 ---@return table<string, number>|nil
 local function reaction_counts(values)
 	local counts
-	for _, raw in ipairs(values) do
-		local content = vim.trim(json.safe_str(json.safe_table(raw).content) or "")
+	for _, raw in ipairs(json.nilify(values) or {}) do
+		local content = raw.content
 		if content ~= "" then
 			counts = counts or {}
 			counts[content] = (counts[content] or 0) + 1
@@ -53,7 +53,7 @@ end
 ---@param on_done fun(comment: IssueComment|nil, err: string|nil)
 function M.add(key, body, on_done)
 	local base, number = endpoint(key)
-	if not base or vim.trim(tostring(body or "")) == "" then
+	if not base or vim.trim(body) == "" then
 		on_done(nil, not base and "Invalid Gitea/Forgejo issue key" or "Comment cannot be empty")
 		return nil
 	end
@@ -62,8 +62,11 @@ function M.add(key, body, on_done)
 		string.format("%s/issues/%d/comments", base, number),
 		{ body = body },
 		function(raw, err)
-			local comment = not err and mapper.to_comment(raw) or nil
-			on_done(comment, err or (not comment and "Invalid Gitea/Forgejo comment response" or nil))
+			if err then
+				on_done(nil, err)
+				return
+			end
+			on_done(mapper.to_comment(raw), nil)
 		end
 	)
 end
@@ -74,7 +77,7 @@ end
 ---@param on_done fun(comment: IssueComment|nil, err: string|nil)
 function M.edit(key, comment_id, body, on_done)
 	local base = endpoint(key)
-	if not base or tonumber(comment_id) == nil or vim.trim(tostring(body or "")) == "" then
+	if not base or tonumber(comment_id) == nil or vim.trim(body) == "" then
 		on_done(nil, not base and "Invalid Gitea/Forgejo issue key" or "Invalid comment")
 		return nil
 	end
@@ -83,8 +86,11 @@ function M.edit(key, comment_id, body, on_done)
 		string.format("%s/issues/comments/%d", base, tonumber(comment_id)),
 		{ body = body },
 		function(raw, err)
-			local comment = not err and mapper.to_comment(raw) or nil
-			on_done(comment, err or (not comment and "Invalid Gitea/Forgejo comment response" or nil))
+			if err then
+				on_done(nil, err)
+				return
+			end
+			on_done(mapper.to_comment(raw), nil)
 		end
 	)
 end
@@ -118,22 +124,17 @@ function M.list_reactions(key, comment_id, on_done)
 		return nil
 	end
 	if tostring(comment_id) == "__body__" then
-		return pagination.fetch_all(
-			path,
-			nil,
-			{ invalid_response = "Invalid Gitea/Forgejo reactions response" },
-			function(raw, err)
-				if err then
-					on_done(nil, err)
-					return
-				end
-				on_done(reaction_counts(raw or {}), nil)
+		return pagination.fetch_all(path, nil, {}, function(raw, err)
+			if err then
+				on_done(nil, err)
+				return
 			end
-		)
+			on_done(reaction_counts(raw), nil)
+		end)
 	end
 	return service.request("GET", path, nil, function(raw, err)
-		if err or not json.is_list(raw) then
-			on_done(nil, err or "Invalid Gitea/Forgejo reactions response")
+		if err then
+			on_done(nil, err)
 			return
 		end
 		on_done(reaction_counts(raw), nil)
@@ -146,7 +147,7 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 function M.add_reaction(key, comment_id, content, on_done)
 	local path = reactions_endpoint(key, comment_id)
-	content = vim.trim(tostring(content or ""))
+	content = vim.trim(content)
 	if not path or content == "" then
 		on_done(false, not path and "Invalid Gitea/Forgejo issue or comment" or "Reaction is required")
 		return nil

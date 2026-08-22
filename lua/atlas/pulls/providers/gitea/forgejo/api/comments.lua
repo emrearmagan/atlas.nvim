@@ -4,7 +4,6 @@ local mapper = require("atlas.pulls.providers.gitea.forgejo.api.mapper")
 local reviews = require("atlas.pulls.providers.gitea.forgejo.api.reviews")
 local pullrequests = require("atlas.pulls.providers.gitea.forgejo.api.pullrequests")
 local request_scope = require("atlas.core.requests")
-local json = require("atlas.core.json")
 
 local M = {}
 
@@ -15,10 +14,13 @@ local function review_id(value)
 	return id and id > 0 and tostring(id) or nil
 end
 
+---@param left PullsActivityEntry
+---@param right PullsActivityEntry
+---@return boolean
 local function same_actor(left, right)
-	local left_user = type(left) == "table" and left.actor or nil
-	local right_user = type(right) == "table" and right.actor or nil
-	if type(left_user) ~= "table" or type(right_user) ~= "table" then
+	local left_user = left.actor
+	local right_user = right.actor
+	if not left_user or not right_user then
 		return false
 	end
 	local left_id = tostring(left_user.id or left_user.username or "")
@@ -30,13 +32,8 @@ end
 ---@return PullsActivityEntry[]
 local function squash_pushes(entries)
 	local result, current, count, commit_ids = {}, nil, 0, {}
-	local function add(entry, fallback)
-		local ids = type(entry._commit_ids) == "table" and entry._commit_ids or {}
-		if #ids == 0 then
-			count = count + fallback
-			return
-		end
-		for _, id in ipairs(ids) do
+	local function add(entry)
+		for _, id in ipairs(entry._commit_ids) do
 			id = tostring(id)
 			if id ~= "" and not commit_ids[id] then
 				commit_ids[id] = true
@@ -59,12 +56,12 @@ local function squash_pushes(entries)
 			or nil
 		if entry_count then
 			if current and same_actor(current, entry) then
-				add(entry, entry_count)
+				add(entry)
 				current.date = entry.date or current.date
 			else
 				flush()
 				current = entry
-				add(entry, entry_count)
+				add(entry)
 			end
 		else
 			flush()
@@ -75,8 +72,10 @@ local function squash_pushes(entries)
 	return result
 end
 
+---@param pr PullRequest
+---@return string|nil
 local function endpoint(pr)
-	if type(pr) ~= "table" or not tostring(pr.id or ""):match("^%d+$") then
+	if not tostring(pr.id or ""):match("^%d+$") then
 		return nil
 	end
 	local owner, repo = tostring(pr.repo_full_name or ""):match("^([^/]+)/([^/]+)$")
@@ -90,7 +89,7 @@ end
 ---@param comment PullsComment
 ---@return string|nil
 local function reactions_endpoint(base, pr, comment)
-	local id = type(comment) == "table" and tostring(comment.id or "") or ""
+	local id = tostring(comment.id or "")
 	if id == "__body__" then
 		return string.format("%s/issues/%s/reactions", base, pr.id)
 	elseif id:match("^%d+$") then
@@ -106,7 +105,7 @@ end
 local function enrich_review_events(base, pr, timeline, on_done)
 	local has_reviews = false
 	for _, value in ipairs(timeline) do
-		if type(value) == "table" and tostring(value.type or ""):lower() == "review" then
+		if tostring(value.type or ""):lower() == "review" then
 			has_reviews = true
 			break
 		end
@@ -117,7 +116,6 @@ local function enrich_review_events(base, pr, timeline, on_done)
 	end
 
 	return pagination.fetch_all(string.format("%s/pulls/%s/reviews", base, pr.id), nil, {
-		invalid_response = "Invalid pull request reviews response",
 		post_filtered = true,
 	}, function(raw_reviews, err)
 		if err then
@@ -125,14 +123,14 @@ local function enrich_review_events(base, pr, timeline, on_done)
 			return
 		end
 		local by_id = {}
-		for _, review in ipairs(raw_reviews or {}) do
-			if type(review) == "table" and review.id ~= nil then
+		for _, review in ipairs(raw_reviews) do
+			if review.id ~= nil then
 				by_id[tostring(review.id)] = review
 			end
 		end
 		local last_review_event = {}
 		for index, value in ipairs(timeline) do
-			if type(value) == "table" and tostring(value.type or ""):lower() == "review" then
+			if tostring(value.type or ""):lower() == "review" then
 				local id = review_id(value)
 				if id then
 					last_review_event[id] = index
@@ -142,7 +140,7 @@ local function enrich_review_events(base, pr, timeline, on_done)
 
 		local result = {}
 		for index, value in ipairs(timeline) do
-			local id = type(value) == "table" and review_id(value) or nil
+			local id = review_id(value)
 			if id == nil or last_review_event[id] == index then
 				table.insert(result, value)
 			end
@@ -152,6 +150,7 @@ local function enrich_review_events(base, pr, timeline, on_done)
 end
 
 function M.fetch(pr, opts, on_done)
+	opts = opts or {}
 	local base = endpoint(pr)
 	if not base then
 		on_done(nil, "Invalid Forgejo repository")
@@ -160,7 +159,6 @@ function M.fetch(pr, opts, on_done)
 	local requests = request_scope.new()
 	requests.run(function(done)
 		return pagination.fetch_all(string.format("%s/issues/%s/timeline", base, pr.id), nil, {
-			invalid_response = "Invalid pull request timeline response",
 			post_filtered = true,
 		}, done)
 	end, function(raw, err)
@@ -169,14 +167,14 @@ function M.fetch(pr, opts, on_done)
 			return
 		end
 		requests.run(function(done)
-			return enrich_review_events(base, pr, raw or {}, done)
+			return enrich_review_events(base, pr, raw, done)
 		end, function(enriched, review_err)
-			if review_err or not enriched then
-				on_done(nil, review_err or "Invalid pull request reviews response")
+			if review_err then
+				on_done(nil, review_err)
 				return
 			end
 			local comments, events = {}, {}
-			local activity_only = type(opts) == "table" and opts.activity_only == true
+			local activity_only = opts.activity_only == true
 			local description = tostring(pr.description or "")
 			if not activity_only and description ~= "" then
 				table.insert(comments, {
@@ -189,15 +187,10 @@ function M.fetch(pr, opts, on_done)
 				})
 			end
 			for _, value in ipairs(enriched.timeline) do
-				local event = type(value) == "table" and tostring(value.type or ""):lower() or ""
+				local event = tostring(value.type or ""):lower()
 				if event == "comment" then
 					if not activity_only then
-						local comment = mapper.to_comment(value)
-						if not comment then
-							on_done(nil, "Invalid pull request comments response")
-							return
-						end
-						table.insert(comments, comment)
+						table.insert(comments, mapper.to_comment(value))
 					end
 				else
 					local id = review_id(value)
@@ -225,20 +218,18 @@ function M.fetch(pr, opts, on_done)
 							done(mapper.reaction_counts(values), nil)
 						end
 						if comment.id == "__body__" then
-							return pagination.fetch_all(target, nil, {
-								invalid_response = "Invalid Forgejo reactions response",
-							}, mapped)
+							return pagination.fetch_all(target, nil, {}, mapped)
 						end
-						return service.request("GET", target, nil, function(values, reactions_err)
-							if not reactions_err and not json.is_list(values) then
-								reactions_err = "Invalid Forgejo reactions response"
-							end
-							mapped(values, reactions_err)
-						end)
+						return service.request("GET", target, nil, mapped)
 					end
 				end
 			end
-			requests.all(starts, function(values)
+			requests.all(starts, function(values, errors)
+				local _, reactions_err = next(errors)
+				if reactions_err then
+					on_done(nil, reactions_err)
+					return
+				end
 				for index, reactions in pairs(values) do
 					local comment = comments[tonumber(index)]
 					if comment then
@@ -269,7 +260,7 @@ function M.add(pr, content, opts, on_done)
 	end
 	local parent = opts and opts.parent or nil
 	if parent and parent.inline then
-		local raw = type(parent._raw) == "table" and parent._raw or {}
+		local raw = parent._raw
 		local review_id = tostring(raw.review_id or "")
 		local inline = parent.inline
 		local path = tostring(inline.path or "")
@@ -298,11 +289,11 @@ function M.add(pr, content, opts, on_done)
 			string.format("%s/pulls/%s/reviews/%s/comments", base, pr.id, review_id),
 			payload,
 			function(value, err)
-				local created = not err and mapper.to_comment(value, { id = review_id }) or nil
-				if not created then
-					on_done(nil, err or "Invalid review comment response")
+				if err then
+					on_done(nil, err)
 					return
 				end
+				local created = mapper.to_comment(value, { id = review_id })
 				created.parent_id = parent.parent_id or parent.id
 				created.inline = created.inline or parent.inline
 				created.inline_hunk = created.inline_hunk or parent.inline_hunk
@@ -327,19 +318,14 @@ function M.add(pr, content, opts, on_done)
 				on_done(nil, err)
 				return
 			end
-			local comment = mapper.to_comment(raw)
-			if comment == nil then
-				on_done(nil, "Invalid comment response")
-				return
-			end
-			on_done(comment, nil)
+			on_done(mapper.to_comment(raw), nil)
 		end
 	)
 end
 
 function M.edit(pr, comment, on_done)
 	local base = endpoint(pr)
-	local id = type(comment) == "table" and tostring(comment.id or "") or ""
+	local id = tostring(comment.id or "")
 	if id == "__body__" then
 		return pullrequests.update_description(pr, tostring(comment.content_raw or ""), function(ok, err)
 			on_done(ok and comment or nil, err)
@@ -357,17 +343,13 @@ function M.edit(pr, comment, on_done)
 			return
 		end
 		local updated = mapper.to_comment(raw)
-		if updated == nil then
-			on_done(nil, "Invalid comment response")
-			return
-		end
 		on_done(vim.tbl_extend("force", {}, comment, updated), nil)
 	end)
 end
 
 function M.delete(pr, comment, on_done)
 	local base = endpoint(pr)
-	local id = type(comment) == "table" and tostring(comment.id or "") or ""
+	local id = tostring(comment.id or "")
 	if id == "__body__" then
 		on_done(false, "Cannot delete the pull request description")
 		return nil

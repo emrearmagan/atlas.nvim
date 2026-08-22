@@ -1,17 +1,13 @@
 local service = require("atlas.providers.gitea.gitea.client").pulls
 local icons = require("atlas.ui.shared.icons")
-local json = require("atlas.core.json")
 local request_scope = require("atlas.core.requests")
 
 local M = {}
 
 local function normalize(raw)
-	if type(raw) ~= "table" or json.nilify(raw.id) == nil then
-		return nil
-	end
-	local subject = json.safe_table(json.nilify(raw.subject))
-	local repository = json.safe_table(json.nilify(raw.repository))
-	local subject_type = (json.safe_str(subject.type) or ""):lower()
+	local subject = raw.subject
+	local repository = raw.repository
+	local subject_type = subject.type:lower()
 	local icon, icon_hl
 	if subject_type == "pull" or subject_type == "pullrequest" then
 		icon, icon_hl = icons.pulls("pr")
@@ -25,19 +21,19 @@ local function normalize(raw)
 		icon, icon_hl = icons.general("info")
 	end
 
-	local repo = json.safe_str(repository.full_name) or ""
-	local state = json.safe_str(subject.state) or ""
+	local repo = repository.full_name
+	local state = subject.state or ""
 	local subtitle = repo
 	if state ~= "" then
 		subtitle = subtitle ~= "" and (subtitle .. "  ·  " .. state) or state
 	end
-	local url = json.safe_str(subject.html_url) or json.safe_str(subject.latest_comment_html_url) or ""
+	local url = subject.html_url or subject.latest_comment_html_url or ""
 	url = service.absolute_url(url) or ""
 	return {
 		id = tostring(raw.id),
-		title = json.safe_str(subject.title) or "",
+		title = subject.title,
 		subtitle = subtitle ~= "" and subtitle or nil,
-		timestamp = json.safe_str(raw.updated_at),
+		timestamp = raw.updated_at,
 		icon = icon,
 		icon_hl = icon_hl,
 		unread = raw.unread == true,
@@ -63,17 +59,15 @@ function M.fetch(opts, on_done)
 		requests.run(function(done)
 			return service.request("GET", endpoint, nil, done)
 		end, function(result, err)
-			if err or not json.is_list(result) then
-				on_done(nil, err or "Invalid Gitea notifications response")
+			if err then
+				on_done(nil, err)
 				return
 			end
 			for _, raw in ipairs(result) do
 				local notification = normalize(raw)
-				if notification then
-					table.insert(notifications, notification)
-					if #notifications == limit then
-						break
-					end
+				table.insert(notifications, notification)
+				if #notifications == limit then
+					break
 				end
 			end
 			if #result > 0 and #notifications < limit then

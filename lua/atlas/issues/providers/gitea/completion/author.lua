@@ -7,25 +7,31 @@ local function collect_logins()
 	local conversation_state = require("atlas.issues.ui.panel.issue.tabs.conversation.state")
 	local seen, logins = {}, {}
 
-	local function add(user)
-		if type(user) ~= "table" then
+	---@param login string|nil
+	local function add_login(login)
+		if not login then
 			return
 		end
-		local login = vim.trim(tostring(user.account_id or user.login or ""))
+		login = vim.trim(login)
 		if login ~= "" and not seen[login] then
 			seen[login] = true
 			table.insert(logins, login)
 		end
 	end
 
+	---@param user IssueUser|nil
+	local function add(user)
+		add_login(user and user.account_id)
+	end
+
 	local function add_issue(issue)
-		if type(issue) ~= "table" then
+		if not issue then
 			return
 		end
 		add(issue.reporter)
 		add(issue.assignee)
-		for _, user in ipairs(type(issue._raw) == "table" and issue._raw.assignees or {}) do
-			add(user)
+		for _, user in ipairs(issue._raw.assignees) do
+			add_login(user.login)
 		end
 	end
 
@@ -35,7 +41,7 @@ local function collect_logins()
 		add_issue(issue)
 	end
 	local comments = conversation_state.comments
-	if type(comments) == "table" then
+	if comments and comments ~= "loading" then
 		for _, comment in ipairs(comments) do
 			add(comment.author)
 		end
@@ -49,11 +55,11 @@ function M.build_completion()
 	return {
 		trigger = "@",
 		find_start = function(before)
-			local start_after_at = tostring(before or ""):match(".*@()[-%w_.]*$")
+			local start_after_at = before:match(".*@()[-%w_.]*$")
 			return start_after_at and (start_after_at - 2) or nil
 		end,
 		complete = function(base)
-			local query = vim.trim(tostring(base or "")):gsub("^@", ""):lower()
+			local query = vim.trim(base):gsub("^@", ""):lower()
 			local matches = {}
 			for _, login in ipairs(collect_logins()) do
 				if query == "" or login:lower():find(query, 1, true) == 1 then
@@ -63,7 +69,8 @@ function M.build_completion()
 			return matches
 		end,
 		format_mention = function(author)
-			local login = vim.trim(tostring((author or {}).account_id or ""))
+			---@cast author IssueUser|nil
+			local login = author and author.account_id or ""
 			return login ~= "" and ("@" .. login) or ""
 		end,
 	}

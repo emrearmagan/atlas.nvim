@@ -11,7 +11,7 @@ local statusline = require("atlas.ui.statusline")
 ---@param ctx AtlasPullActionContext
 ---@return boolean
 local function has_pr(ctx)
-	return type(ctx) == "table" and type(ctx.pr) == "table" and ctx.pr.id ~= nil
+	return ctx.pr ~= nil
 end
 
 ---@param ctx AtlasPullActionContext
@@ -20,7 +20,7 @@ local function has_repository(ctx)
 	if not has_pr(ctx) then
 		return false, "No PR selected"
 	end
-	if not tostring(ctx.pr.repo_full_name or ""):match("^[^/]+/[^/]+$") then
+	if not ctx.pr.repo_full_name:match("^[^/]+/[^/]+$") then
 		return false, "Missing repository info"
 	end
 	return true, nil
@@ -46,8 +46,8 @@ local function can_submit_review(ctx)
 	if not ok then
 		return false, err
 	end
-	local current_id = type(ctx.current_user) == "table" and tostring(ctx.current_user.id or "") or ""
-	local author_id = type(ctx.pr.author) == "table" and tostring(ctx.pr.author.id or "") or ""
+	local current_id = ctx.current_user and ctx.current_user.id or ""
+	local author_id = ctx.pr.author.id
 	if current_id ~= "" and current_id == author_id then
 		return false, "Cannot review your own pull request"
 	end
@@ -140,8 +140,8 @@ register({
 				notify(ctx, "loading", "Merging PR...")
 				pullrequests.merge(pr, options, function(ok, err)
 					if not ok then
-						notify(ctx, "error", "Merge failed: " .. tostring(err))
-						done(nil, tostring(err or "Merge failed"))
+						notify(ctx, "error", "Merge failed: " .. err)
+						done(nil, err)
 						return
 					end
 					notes.clear_for_pull_request(pr)
@@ -163,9 +163,8 @@ register({
 		notify(ctx, "loading", "Updating branch...")
 		pullrequests.update_branch(pr, "merge", function(ok, err)
 			if not ok then
-				local message = tostring(err or "Update branch failed")
-				notify(ctx, "error", message)
-				done(nil, message)
+				notify(ctx, "error", err)
+				done(nil, err)
 				return
 			end
 			notify(ctx, "success", "Branch updated", 1200)
@@ -184,65 +183,72 @@ register({
 	label = "Edit assignees",
 	is_available = has_repository,
 	run = function(ctx, done)
-		local pr = assert(ctx.pr)
+		local ref = assert(ctx.pr)
 		notify(ctx, "loading", "Loading assignees...")
-		pullrequests.list_assignees(pr.repo_full_name, function(users, err)
-			if err then
-				notify(ctx, "error", "Failed to load assignees: " .. tostring(err))
-				done(nil, tostring(err))
+		pullrequests.get(ref, { force_load = true }, function(pr, details_err)
+			if details_err then
+				notify(ctx, "error", "Failed to load pull request: " .. details_err)
+				done(nil, details_err)
 				return
 			end
-			local original_set = selected_set(pr.assignees, function(user)
-				return tostring(user.username or "")
-			end)
-			local items, selected = {}, {}
-			for _, user in ipairs(users or {}) do
-				if user.username ~= "unknown" then
-					table.insert(items, user)
-					if original_set[user.username] then
-						table.insert(selected, user)
+			pullrequests.list_assignees(pr.repo_full_name, function(users, err)
+				if err then
+					notify(ctx, "error", "Failed to load assignees: " .. err)
+					done(nil, err)
+					return
+				end
+				local original_set = selected_set(pr.assignees, function(user)
+					return user.username
+				end)
+				local items, selected = {}, {}
+				for _, user in ipairs(users) do
+					if user.username ~= "unknown" then
+						table.insert(items, user)
+						if original_set[user.username] then
+							table.insert(selected, user)
+						end
 					end
 				end
-			end
-			if #items == 0 then
-				done({ changed_pr = false, message = "No assignees available" }, nil)
-				return
-			end
-			notify(ctx, "success", "Assignees loaded", 1200)
-			picker.multi_select({
-				items = items,
-				selected = selected,
-				key = function(user)
-					return user.username
-				end,
-				format_item = function(user)
-					return "@" .. user.username .. (user.name ~= user.username and (" — " .. user.name) or "")
-				end,
-				title = string.format("Assignees for PR #%s", tostring(pr.id)),
-				on_done = function(chosen)
-					local logins = {}
-					for _, user in ipairs(chosen) do
-						table.insert(logins, user.username)
-					end
-					local chosen_set = selected_set(chosen, function(user)
+				if #items == 0 then
+					done({ changed_pr = false, message = "No assignees available" }, nil)
+					return
+				end
+				notify(ctx, "success", "Assignees loaded", 1200)
+				picker.multi_select({
+					items = items,
+					selected = selected,
+					key = function(user)
 						return user.username
-					end)
-					if vim.deep_equal(chosen_set, original_set) then
-						done({ changed_pr = false, message = "No changes" }, nil)
-						return
-					end
-					notify(ctx, "loading", "Updating assignees...")
-					pullrequests.update_assignees(pr, logins, function(ok, update_err)
-						if not ok then
-							notify(ctx, "error", tostring(update_err or "Update assignees failed"))
-							done(nil, tostring(update_err or "Update assignees failed"))
+					end,
+					format_item = function(user)
+						return "@" .. user.username .. (user.name ~= user.username and (" — " .. user.name) or "")
+					end,
+					title = string.format("Assignees for PR #%s", tostring(pr.id)),
+					on_done = function(chosen)
+						local logins = {}
+						for _, user in ipairs(chosen) do
+							table.insert(logins, user.username)
+						end
+						local chosen_set = selected_set(chosen, function(user)
+							return user.username
+						end)
+						if vim.deep_equal(chosen_set, original_set) then
+							done({ changed_pr = false, message = "No changes" }, nil)
 							return
 						end
-						notify(ctx, "success", "Assignees updated", 1200)
-						done({ changed_pr = true, message = "Assignees updated" }, nil)
-					end)
-				end,
-			})
+						notify(ctx, "loading", "Updating assignees...")
+						pullrequests.update_assignees(pr, logins, function(ok, update_err)
+							if not ok then
+								notify(ctx, "error", update_err)
+								done(nil, update_err)
+								return
+							end
+							notify(ctx, "success", "Assignees updated", 1200)
+							done({ changed_pr = true, message = "Assignees updated" }, nil)
+						end)
+					end,
+				})
+			end)
 		end)
 	end,
 })
@@ -252,70 +258,77 @@ register({
 	label = "Edit labels",
 	is_available = has_repository,
 	run = function(ctx, done)
-		local pr = assert(ctx.pr)
+		local ref = assert(ctx.pr)
 		notify(ctx, "loading", "Loading labels...")
-		pullrequests.list_labels(pr.repo_full_name, function(raw_labels, err)
-			if err then
-				notify(ctx, "error", "Failed to load labels: " .. tostring(err))
-				done(nil, tostring(err))
+		pullrequests.get(ref, { force_load = true }, function(pr, details_err)
+			if details_err then
+				notify(ctx, "error", "Failed to load pull request: " .. details_err)
+				done(nil, details_err)
 				return
 			end
-			local raw_pr = type(pr._raw) == "table" and pr._raw or {}
-			local original_set = {}
-			for _, id in ipairs(type(raw_pr.label_ids) == "table" and raw_pr.label_ids or {}) do
-				original_set[tostring(id)] = true
-			end
-			local items, selected = {}, {}
-			for _, label in ipairs(raw_labels or {}) do
-				local id = tostring(type(label) == "table" and label.id or "")
-				local name = tostring(type(label) == "table" and label.name or "")
-				if id:match("^%d+$") and name ~= "" then
-					local item = { id = id, name = name }
-					table.insert(items, item)
-					if original_set[id] then
-						table.insert(selected, item)
+			pullrequests.list_labels(pr.repo_full_name, function(raw_labels, err)
+				if err then
+					notify(ctx, "error", "Failed to load labels: " .. err)
+					done(nil, err)
+					return
+				end
+				local raw_pr = pr._raw
+				local original_set = {}
+				for _, id in ipairs(raw_pr.label_ids or {}) do
+					original_set[tostring(id)] = true
+				end
+				local items, selected = {}, {}
+				for _, label in ipairs(raw_labels) do
+					local id = tostring(label.id or "")
+					local name = tostring(label.name or "")
+					if id:match("^%d+$") and name ~= "" then
+						local item = { id = id, name = name }
+						table.insert(items, item)
+						if original_set[id] then
+							table.insert(selected, item)
+						end
 					end
 				end
-			end
-			if #items == 0 then
-				done({ changed_pr = false, message = "No labels available" }, nil)
-				return
-			end
-			notify(ctx, "success", "Labels loaded", 1200)
-			picker.multi_select({
-				items = items,
-				selected = selected,
-				key = function(label)
-					return label.id
-				end,
-				format_item = function(label)
-					return label.name
-				end,
-				title = string.format("Labels for PR #%s", tostring(pr.id)),
-				on_done = function(chosen)
-					local chosen_set = selected_set(chosen, function(label)
+				if #items == 0 then
+					done({ changed_pr = false, message = "No labels available" }, nil)
+					return
+				end
+				notify(ctx, "success", "Labels loaded", 1200)
+				picker.multi_select({
+					items = items,
+					selected = selected,
+					key = function(label)
 						return label.id
-					end)
-					if vim.deep_equal(chosen_set, original_set) then
-						done({ changed_pr = false, message = "No changes" }, nil)
-						return
-					end
-					local ids = {}
-					for _, label in ipairs(chosen) do
-						table.insert(ids, assert(tonumber(label.id)))
-					end
-					notify(ctx, "loading", "Updating labels...")
-					pullrequests.update_labels(pr, ids, function(ok, update_err)
-						if not ok then
-							notify(ctx, "error", tostring(update_err or "Update labels failed"))
-							done(nil, tostring(update_err or "Update labels failed"))
+					end,
+					format_item = function(label)
+						return label.name
+					end,
+					title = string.format("Labels for PR #%s", tostring(pr.id)),
+					on_done = function(chosen)
+						local chosen_set = selected_set(chosen, function(label)
+							return label.id
+						end)
+						if vim.deep_equal(chosen_set, original_set) then
+							done({ changed_pr = false, message = "No changes" }, nil)
 							return
 						end
-						notify(ctx, "success", "Labels updated", 1200)
-						done({ changed_pr = true, message = "Labels updated" }, nil)
-					end)
-				end,
-			})
+						local ids = {}
+						for _, label in ipairs(chosen) do
+							table.insert(ids, assert(tonumber(label.id)))
+						end
+						notify(ctx, "loading", "Updating labels...")
+						pullrequests.update_labels(pr, ids, function(ok, update_err)
+							if not ok then
+								notify(ctx, "error", update_err)
+								done(nil, update_err)
+								return
+							end
+							notify(ctx, "success", "Labels updated", 1200)
+							done({ changed_pr = true, message = "Labels updated" }, nil)
+						end)
+					end,
+				})
+			end)
 		end)
 	end,
 })
@@ -340,8 +353,8 @@ register({
 		notify(ctx, "loading", "Reopening PR...")
 		pullrequests.set_state(pr, "open", function(_, err)
 			if err then
-				notify(ctx, "error", "Reopen failed: " .. tostring(err))
-				done(nil, tostring(err))
+				notify(ctx, "error", "Reopen failed: " .. err)
+				done(nil, err)
 				return
 			end
 			notify(ctx, "success", "PR reopened", 1200)
@@ -364,11 +377,15 @@ register({
 			end,
 			fetch = function(query, fetch_done)
 				return repositories.search(query, function(matches, err)
+					if err then
+						fetch_done(nil, err)
+						return
+					end
 					local items = {}
-					for _, repo in ipairs(matches or {}) do
+					for _, repo in ipairs(matches) do
 						table.insert(items, { id = repo, label = repo })
 					end
-					fetch_done(err and nil or items, err)
+					fetch_done(items, nil)
 				end)
 			end,
 			on_select = function(item)
@@ -399,7 +416,7 @@ register({
 	is_available = has_repository,
 	run = function(ctx, done)
 		local pr = assert(ctx.pr)
-		local user = type(ctx.current_user) == "table" and tostring(ctx.current_user.username or "") or ""
+		local user = ctx.current_user and ctx.current_user.username or ""
 		if user == "" then
 			done(nil, "Missing current Forgejo user")
 			return
@@ -409,8 +426,8 @@ register({
 			notify(ctx, "loading", subscribed and "Subscribing..." or "Unsubscribing...")
 			pullrequests.set_subscription(pr, user, subscribed, function(ok, err)
 				if not ok then
-					notify(ctx, "error", tostring(err or "Subscription update failed"))
-					done(nil, tostring(err or "Subscription update failed"))
+					notify(ctx, "error", err)
+					done(nil, err)
 					return
 				end
 				pr.is_subscribed = subscribed
@@ -424,9 +441,9 @@ register({
 		end
 		notify(ctx, "loading", "Checking subscription...")
 		pullrequests.subscription(pr, function(current, err)
-			if err or current == nil then
-				notify(ctx, "error", tostring(err or "Subscription check failed"))
-				done(nil, tostring(err or "Subscription check failed"))
+			if err then
+				notify(ctx, "error", err)
+				done(nil, err)
 				return
 			end
 			update(current)

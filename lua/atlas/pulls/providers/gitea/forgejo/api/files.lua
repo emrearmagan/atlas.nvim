@@ -6,8 +6,8 @@ local M = {}
 ---@param pr PullRequest
 ---@return string|nil
 local function diffstat_cache_key(pr)
-	local source = type(pr.source) == "table" and pr.source or {}
-	local destination = type(pr.destination) == "table" and pr.destination or {}
+	local source = pr.source
+	local destination = pr.destination
 	local head = tostring(source.commit_hash or "")
 	local base = tostring(destination.commit_hash or "")
 	if head == "" or base == "" then
@@ -23,10 +23,9 @@ local function diffstat_cache_key(pr)
 	}, ":")
 end
 
+---@param pr PullRequest
+---@return string|nil
 local function endpoint(pr)
-	if type(pr) ~= "table" then
-		return nil
-	end
 	local owner, repo = tostring(pr.repo_full_name or ""):match("^([^/]+)/([^/]+)$")
 	local id = tostring(pr.id or "")
 	if owner and id:match("^%d+$") then
@@ -49,26 +48,20 @@ function M.diffstat(pr, opts, on_done)
 			return nil
 		end
 	end
-	return pagination.fetch_all(base .. "/files", nil, {
-		invalid_response = "Invalid pull request files response",
-	}, function(raw, err)
+	return pagination.fetch_all(base .. "/files", nil, {}, function(raw, err)
 		if err then
 			on_done(nil, err)
 			return
 		end
 		local entries = {}
-		for _, file in ipairs(raw or {}) do
-			if type(file) ~= "table" or file.filename == nil or file.filename == "" then
-				on_done(nil, "Invalid pull request files response")
-				return
-			end
-			local status = tostring(file.status or "modified"):lower()
+		for _, file in ipairs(raw) do
+			local status = tostring(file.status):lower()
 			table.insert(entries, {
 				status = status == "changed" and "modified" or (status == "deleted" and "removed" or status),
 				path = file.filename,
 				old_path = file.previous_filename,
-				lines_added = file.additions or 0,
-				lines_removed = file.deletions or 0,
+				lines_added = file.additions,
+				lines_removed = file.deletions,
 			})
 		end
 		if key then
@@ -89,7 +82,7 @@ function M.diff(pr, _, on_done)
 			on_done(nil, err)
 			return
 		end
-		on_done(require("atlas.core.git.diff_parser").parse(tostring(raw or "")), nil)
+		on_done(require("atlas.core.git.diff_parser").parse(raw), nil)
 	end)
 end
 
