@@ -479,7 +479,8 @@ function M.configure(panel)
 		return
 	end
 	vim.bo[panel.buf].filetype = "atlas.review"
-	vim.bo[panel.buf].syntax = ""
+	vim.bo[panel.buf].syntax = "OFF"
+	pcall(vim.treesitter.stop, panel.buf)
 	vim.wo[panel.win].cursorline = true
 	vim.wo[panel.win].list = false
 	vim.wo[panel.win].number = false

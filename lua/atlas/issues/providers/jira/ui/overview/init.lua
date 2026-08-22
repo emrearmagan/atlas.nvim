@@ -136,9 +136,9 @@ local function apply_filetype(buf)
 		vim.api.nvim_set_option_value("filetype", "markdown", { buf = buf })
 		vim.api.nvim_set_option_value("syntax", "markdown", { buf = buf })
 	else
-		pcall(vim.treesitter.stop, buf)
-		vim.api.nvim_set_option_value("syntax", "OFF", { buf = buf })
 		vim.api.nvim_set_option_value("filetype", "atlas.detail", { buf = buf })
+		vim.api.nvim_set_option_value("syntax", "OFF", { buf = buf })
+		pcall(vim.treesitter.stop, buf)
 	end
 end
 
@@ -174,9 +174,9 @@ function M.deactivate(buf)
 		if keys then
 			help.remove("Panel", { { key = #keys == 1 and keys[1] or keys } }, { buffer = buf })
 		end
-		pcall(vim.treesitter.stop, buf)
-		vim.api.nvim_set_option_value("syntax", "OFF", { buf = buf })
 		vim.api.nvim_set_option_value("filetype", "atlas.detail", { buf = buf })
+		vim.api.nvim_set_option_value("syntax", "OFF", { buf = buf })
+		pcall(vim.treesitter.stop, buf)
 	end
 	requests.cancel()
 	requests = request_scope.new()
