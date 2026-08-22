@@ -29,9 +29,9 @@ function M.fetch_issues(view, opts, on_done)
 	end)
 end
 
----@param issue Issue
----@param opts table|nil
----@param on_done fun(result: table|nil, err: string|nil)
+---@param issue IssueDetails
+---@param opts { force_refresh: boolean|nil }|nil
+---@param on_done fun(items: IssueConversationItem[]|nil, err: string|nil)
 function M.fetch_conversation(issue, opts, on_done)
 	local requests = request_scope.new()
 	requests.run(function(done)
@@ -41,33 +41,58 @@ function M.fetch_conversation(issue, opts, on_done)
 			on_done(nil, err)
 			return
 		end
-		local comments = {}
-		local raw = issue._raw
-		local description = raw.description
-		if description ~= "" then
-			table.insert(comments, {
-				id = "__body__",
-				url = issue.url,
-				author = issue.reporter,
-				body = description,
-				created = raw.created_at,
-				reactions = raw.reactions,
+		local items = {}
+		local reaction_targets = {}
+		if issue.description ~= "" then
+			local item = {
+				id = "description:" .. issue.key,
+				kind = "description",
+				created_at = issue.created_at or "",
+				entity = issue,
+			}
+			table.insert(items, item)
+			table.insert(reaction_targets, {
+				comment_id = "__body__",
+				item = item,
 			})
 		end
-		vim.list_extend(comments, result.comments)
+		for _, comment in ipairs(result.comments) do
+			local item = {
+				id = "comment:" .. comment.id,
+				kind = "comment",
+				created_at = comment.created or "",
+				entity = comment,
+			}
+			table.insert(items, item)
+			table.insert(reaction_targets, {
+				comment_id = comment.id,
+				item = item,
+			})
+		end
+		for index, entry in ipairs(result.events) do
+			table.insert(items, {
+				id = table.concat({ "activity", entry.date or "", index }, ":"),
+				kind = "activity",
+				created_at = entry.date or "",
+				entity = entry,
+			})
+		end
 
 		local function load_reactions(index)
-			local comment = comments[index]
-			if not comment then
-				on_done({ comments = comments, events = result.events }, nil)
+			local target = reaction_targets[index]
+			if not target then
+				on_done(items, nil)
 				return
 			end
 			requests.run(function(done)
-				return comments_api.list_reactions(issue.key, comment.id, done)
+				return comments_api.list_reactions(issue.key, target.comment_id, done)
 			end, function(reactions)
-				comment.reactions = reactions
-				if comment.id == "__body__" then
-					raw.reactions = reactions
+				if target.item.kind == "description" then
+					issue.reactions = reactions
+				else
+					local comment = target.item.entity
+					---@cast comment IssueComment
+					comment.reactions = reactions
 				end
 				load_reactions(index + 1)
 			end)
@@ -75,6 +100,22 @@ function M.fetch_conversation(issue, opts, on_done)
 		load_reactions(1)
 	end)
 	return requests
+end
+
+---@param issue IssueDetails
+---@param content string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.update_description(issue, content, on_done)
+	return issues_api.update_issue(issue, { body = content }, function(updated, err)
+		if err then
+			on_done(false, err)
+			return
+		end
+		issue.description = content
+		issue._raw = updated._raw
+		on_done(true, nil)
+	end)
 end
 
 ---@param issue Issue
@@ -96,49 +137,41 @@ end
 ---@param on_done fun(comment: IssueComment|nil, err: string|nil)
 function M.edit_comment(issue, comment, content, on_done)
 	local comment_id = comment.id
-	if comment_id ~= "__body__" then
-		local requests = request_scope.new()
-		requests.run(function(done)
-			return comments_api.edit(issue.key, comment_id, content, done)
-		end, function(updated_comment, err)
-			if err then
-				on_done(nil, err)
-				return
-			end
-			requests.run(function(done)
-				return comments_api.list_reactions(issue.key, comment_id, done)
-			end, function(reactions)
-				updated_comment.reactions = reactions
-				on_done(updated_comment, nil)
-			end)
-		end)
-		return requests
-	end
-	return issues_api.update_issue(issue, { body = content }, function(updated, err)
+	local requests = request_scope.new()
+	requests.run(function(done)
+		return comments_api.edit(issue.key, comment_id, content, done)
+	end, function(updated_comment, err)
 		if err then
 			on_done(nil, err)
 			return
 		end
-		local reactions = issue._raw.reactions
-		issue._raw = updated._raw
-		issue._raw.reactions = reactions
-		on_done({
-			id = "__body__",
-			url = updated.url,
-			author = updated.reporter,
-			body = content,
-			created = updated._raw.created_at,
-			reactions = reactions,
-		}, nil)
+		requests.run(function(done)
+			return comments_api.list_reactions(issue.key, comment_id, done)
+		end, function(reactions)
+			updated_comment.reactions = reactions
+			on_done(updated_comment, nil)
+		end)
 	end)
+	return requests
 end
 
 ---@param issue Issue
----@param comment IssueComment
+---@param item IssueConversationItem
 ---@param key string
 ---@param on_done fun(ok: boolean, err: string|nil)
-function M.add_reaction(issue, comment, key, on_done)
-	return comments_api.add_reaction(issue.key, comment.id, key, on_done)
+function M.add_reaction(issue, item, key, on_done)
+	local comment_id
+	if item.kind == "description" then
+		comment_id = "__body__"
+	elseif item.kind == "comment" then
+		local comment = item.entity
+		---@cast comment IssueComment
+		comment_id = comment.id
+	else
+		on_done(false, "This item does not support reactions")
+		return nil
+	end
+	return comments_api.add_reaction(issue.key, comment_id, key, on_done)
 end
 
 ---@return AtlasForgejoIssuesViewConfig[]
@@ -263,12 +296,7 @@ local comments = {
 	end,
 	edit_comment = M.edit_comment,
 	delete_comment = function(issue, comment, on_done)
-		local comment_id = comment.id
-		if comment_id == "__body__" then
-			on_done(false, "Cannot delete the issue description")
-			return nil
-		end
-		return comments_api.delete(issue.key, comment_id, on_done)
+		return comments_api.delete(issue.key, comment.id, on_done)
 	end,
 	add_reaction = M.add_reaction,
 	comment_completion = function()
@@ -297,6 +325,7 @@ return {
 			fetch_user = issues_api.fetch_user,
 			fetch_issues = M.fetch_issues,
 			fetch_issue = issues_api.get,
+			update_description = M.update_description,
 			views = M.views,
 		},
 		comments = comments,

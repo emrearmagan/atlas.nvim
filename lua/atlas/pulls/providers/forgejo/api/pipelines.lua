@@ -291,7 +291,7 @@ function M.fetch_details(pr, pipeline, _opts, on_done)
 				name = pipeline.name,
 				state = M.state(run.status),
 				provider_state = run.status,
-				url = service.absolute_url(run.html_url),
+				url = pipeline.url,
 				provider_id = tostring(run.id),
 				commit_hash = run.commit_sha,
 				jobs = jobs,

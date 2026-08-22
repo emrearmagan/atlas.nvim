@@ -425,7 +425,7 @@ function M.open(opts)
 	form.open(state, {
 		title_label = "Title",
 		body_label = "Description",
-		initial_title = opts.issue and opts.issue.summary or "",
+		initial_title = opts.issue and opts.issue.title or "",
 		initial_body = initial_body,
 		close = function()
 			confirm_close(state)

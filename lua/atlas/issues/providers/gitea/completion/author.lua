@@ -30,21 +30,21 @@ local function collect_logins()
 		end
 		add(issue.reporter)
 		add(issue.assignee)
-		for _, user in ipairs(issue._raw.assignees) do
-			add_login(user.login)
-		end
 	end
 
 	add(issues_state.current_user)
-	add_issue(panel_state.current_issue)
+	local details = panel_state.current_details
+	if details then
+		add_issue(details)
+		for _, user in ipairs(details.assignees) do
+			add(user)
+		end
+	end
 	for _, issue in ipairs(issues_state.issues or {}) do
 		add_issue(issue)
 	end
-	local comments = conversation_state.comments
-	if comments and comments ~= "loading" then
-		for _, comment in ipairs(comments) do
-			add(comment.author)
-		end
+	for _, comment in ipairs(conversation_state.comments()) do
+		add(comment.author)
 	end
 	table.sort(logins)
 	return logins

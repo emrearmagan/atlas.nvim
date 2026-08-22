@@ -5,6 +5,7 @@ local icons = require("atlas.ui.shared.icons")
 local utils = require("atlas.ui.shared.utils")
 local helper = require("atlas.issues.ui.main.helper")
 local issues_api = require("atlas.issues.providers.forgejo.api.issues")
+local spinner = require("atlas.ui.components.spinner")
 
 ---@param status_id string|nil
 ---@return string
@@ -32,29 +33,35 @@ local function label_hl(hex)
 end
 
 ---@param issue Issue
----@param _loading boolean
+---@param details IssueDetails|nil
+---@param loading boolean
 ---@return IssuesPanelHeaderRow[]
-function M.header_rows(issue, _loading)
-	local raw = issue._raw
-	local reporter = issue.reporter and issue.reporter.display_name or ""
+function M.header_rows(issue, details, loading)
+	local data = details or issue
+	local reporter = data.reporter and data.reporter.display_name or ""
 	if reporter == "" then
 		reporter = "Unknown"
 	end
 
 	local assignees = {}
-	for _, value in ipairs(raw.assignees) do
-		local login = value.login
+	for _, value in ipairs(details and details.assignees or (issue.assignee and { issue.assignee } or {})) do
+		local login = value.account_id
 		if login ~= "" then
 			table.insert(assignees, "@" .. login)
 		end
 	end
 	local assignee_text = #assignees > 0 and table.concat(assignees, ", ") or "Unassigned"
-	local milestone = raw.milestone and raw.milestone.title or ""
+	local assignee_hl = #assignees > 0 and helper.person_hl(assignees[1]:sub(2)) or "AtlasTextMuted"
+	if loading and details == nil then
+		assignee_text = spinner.with_text("Loading...")
+		assignee_hl = "AtlasTextMuted"
+	end
+	local milestone = details and details.milestone and details.milestone.title or ""
 	local rows = {
 		{
 			k1 = "Status:",
-			v1 = issue.status,
-			v1_hl = state_chip_hl(issue.status_id),
+			v1 = data.status,
+			v1_hl = state_chip_hl(data.status_id),
 			k2 = "Author:",
 			v2 = string.format("%s %s", icons.general("user"), reporter),
 			v2_hl = helper.person_hl(reporter),
@@ -62,37 +69,38 @@ function M.header_rows(issue, _loading)
 		{
 			k1 = "Assignees:",
 			v1 = assignee_text,
-			v1_hl = #assignees > 0 and helper.person_hl(assignees[1]:sub(2)) or "AtlasTextMuted",
+			v1_hl = assignee_hl,
 			k2 = milestone ~= "" and "Milestone:" or "",
 			v2 = milestone,
 			v2_hl = milestone ~= "" and "AtlasTextMuted" or nil,
 		},
 	}
 
-	if raw.created_at ~= "" then
+	local created_at = details and details.created_at or ""
+	if created_at ~= "" then
 		table.insert(rows, {
 			k1 = "Opened:",
-			v1 = utils.relative_time_text(raw.created_at) or raw.created_at,
+			v1 = utils.relative_time_text(created_at) or created_at,
 			v1_hl = "AtlasTextMuted",
-			k2 = issue.duedate and "Due:" or "",
-			v2 = issue.duedate or "",
-			v2_hl = issue.duedate and "AtlasTextWarning" or nil,
+			k2 = data.duedate and "Due:" or "",
+			v2 = data.duedate or "",
+			v2_hl = data.duedate and "AtlasTextWarning" or nil,
 		})
 	end
 	return rows
 end
 
----@param issue Issue
+---@param _issue Issue
+---@param details IssueDetails|nil
 ---@param loading boolean
 ---@return IssuesPanelChip[]
-function M.chips(issue, loading)
+function M.chips(_issue, details, loading)
 	local chips = {}
 	if loading then
-		local spinner = require("atlas.ui.components.spinner")
 		table.insert(chips, { label = spinner.with_text("Loading..."), hl = "AtlasTextMuted" })
 		return chips
 	end
-	for _, label in ipairs(issue._raw.labels) do
+	for _, label in ipairs(details and details.labels or {}) do
 		local name = label.name
 		if name ~= "" then
 			table.insert(chips, { label = name, hl = label_hl(label.color) })
@@ -104,7 +112,6 @@ end
 ---@return IssuesPanelTab[]
 function M.tabs()
 	local conversation_icon, conversation_hl = icons.general("conversation")
-	local activity_icon, activity_hl = icons.pulls("activity")
 	return {
 		{
 			key = "conversation",
@@ -113,24 +120,19 @@ function M.tabs()
 			icon_hl = conversation_hl,
 			mod = require("atlas.issues.ui.panel.issue.tabs.conversation"),
 		},
-		{
-			key = "activity",
-			label = "Activity",
-			icon = activity_icon,
-			icon_hl = activity_hl,
-			mod = require("atlas.issues.ui.panel.issue.tabs.activity"),
-		},
 	}
 end
 
 ---@param issue Issue
----@param _ { force_refresh: boolean|nil, issue_refreshed: boolean|nil }|nil
+---@param details IssueDetails
+---@param _ { force_refresh: boolean|nil }|nil
 ---@param on_done fun()
 ---@return { cancel: fun() }|nil
-function M.fetch_header(issue, _, on_done)
-	return issues_api.check_subscription(issue.key, function(subscribed, err)
+function M.fetch_header(issue, details, _, on_done)
+	return issues_api.check_subscription(details.key, function(subscribed, err)
 		if not err then
 			issue.is_subscribed = subscribed
+			details.is_subscribed = subscribed
 		end
 		on_done()
 	end)
