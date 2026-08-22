@@ -4,11 +4,11 @@ local M = {}
 ---@param global boolean
 local function open(default, global)
 	local state = require("atlas.pulls.state")
-	---@type AtlasGiteaForgejoPullsViewConfig
+	---@type AtlasGiteaPullsViewConfig
 	local view = state.active_view
 	local repo = view.repo or ""
 	if not global and repo == "" then
-		require("atlas.ui.statusline").notify("warn", "Select a Gitea/Forgejo repository first")
+		require("atlas.ui.statusline").notify("warn", "Select a Gitea repository first")
 		return
 	end
 	require("atlas.commands.search.prompt").open({

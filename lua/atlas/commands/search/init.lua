@@ -105,7 +105,7 @@ function M.run(provider_id)
 			notify.error("No configured search for provider: " .. provider_id, { vim_notify = true })
 			return
 		end
-		choose(matches, "Search " .. providers[provider_id].name(nil) .. " in:")
+		choose(matches, "Search " .. providers[provider_id].name .. " in:")
 		return
 	end
 

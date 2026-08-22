@@ -54,7 +54,7 @@ end
 function M.add(key, body, on_done)
 	local base, number = endpoint(key)
 	if not base or vim.trim(body) == "" then
-		on_done(nil, not base and "Invalid Gitea/Forgejo issue key" or "Comment cannot be empty")
+		on_done(nil, not base and "Invalid Gitea issue key" or "Comment cannot be empty")
 		return nil
 	end
 	return service.request(
@@ -78,7 +78,7 @@ end
 function M.edit(key, comment_id, body, on_done)
 	local base = endpoint(key)
 	if not base or tonumber(comment_id) == nil or vim.trim(body) == "" then
-		on_done(nil, not base and "Invalid Gitea/Forgejo issue key" or "Invalid comment")
+		on_done(nil, not base and "Invalid Gitea issue key" or "Invalid comment")
 		return nil
 	end
 	return service.request(
@@ -101,7 +101,7 @@ end
 function M.delete(key, comment_id, on_done)
 	local base = endpoint(key)
 	if not base or tonumber(comment_id) == nil then
-		on_done(false, not base and "Invalid Gitea/Forgejo issue key" or "Invalid comment")
+		on_done(false, not base and "Invalid Gitea issue key" or "Invalid comment")
 		return nil
 	end
 	return service.request(
@@ -120,7 +120,7 @@ end
 function M.list_reactions(key, comment_id, on_done)
 	local path = reactions_endpoint(key, comment_id)
 	if not path then
-		on_done(nil, "Invalid Gitea/Forgejo issue or comment")
+		on_done(nil, "Invalid Gitea issue or comment")
 		return nil
 	end
 	if tostring(comment_id) == "__body__" then
@@ -149,7 +149,7 @@ function M.add_reaction(key, comment_id, content, on_done)
 	local path = reactions_endpoint(key, comment_id)
 	content = vim.trim(content)
 	if not path or content == "" then
-		on_done(false, not path and "Invalid Gitea/Forgejo issue or comment" or "Reaction is required")
+		on_done(false, not path and "Invalid Gitea issue or comment" or "Reaction is required")
 		return nil
 	end
 	return service.request("POST", path, { content = content }, function(_, err)

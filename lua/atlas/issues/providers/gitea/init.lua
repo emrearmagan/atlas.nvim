@@ -7,7 +7,7 @@ local request_scope = require("atlas.core.requests")
 local M = {}
 local REACTION_OPTIONS = require("atlas.ui.shared.emojis").github()
 
----@param view AtlasGiteaForgejoIssuesViewConfig
+---@param view AtlasGiteaIssuesViewConfig
 ---@param opts IssuesFetchOpts
 ---@param on_done fun(issues: Issue[], next_page_token: string|nil, is_last: boolean, err: string|nil)
 function M.fetch_issues(view, opts, on_done)
@@ -137,7 +137,7 @@ function M.add_reaction(issue, comment, key, on_done)
 	return api.comments.add_reaction(issue.key, comment.id, key, on_done)
 end
 
----@return AtlasGiteaForgejoIssuesViewConfig[]
+---@return AtlasGiteaIssuesViewConfig[]
 function M.views()
 	local cfg = require("atlas.providers").options("gitea", "issues") or {}
 	local views = cfg.views
@@ -166,7 +166,7 @@ function M.resolve(value, parsed)
 		return nil, nil
 	end
 	if not resolver.valid_tail(tail) then
-		return nil, "Unsupported Gitea/Forgejo issue URL"
+		return nil, "Unsupported Gitea issue URL"
 	end
 	return {
 		provider = "gitea",
@@ -182,7 +182,7 @@ function M.resolve(value, parsed)
 end
 
 ---@param target AtlasTarget
----@return AtlasGiteaForgejoIssuesViewConfig
+---@return AtlasGiteaIssuesViewConfig
 function M.search_view(target)
 	return { name = "Search", layout = "compact", repo = target.project_path, state = "all" }
 end
@@ -216,7 +216,7 @@ function M.target(info, domain, entity, number, base_url)
 	}
 end
 
----@param options AtlasGiteaForgejoIssuesConfig
+---@param options AtlasGiteaIssuesConfig
 ---@return string[]
 function M.repositories(options)
 	local result, seen = {}, {}

@@ -22,7 +22,7 @@ end
 function M.list(key, _, on_done)
 	local path = endpoint(key)
 	if path == nil then
-		on_done(nil, "Invalid Gitea/Forgejo issue key")
+		on_done(nil, "Invalid Gitea issue key")
 		return nil
 	end
 

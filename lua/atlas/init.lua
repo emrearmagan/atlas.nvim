@@ -97,7 +97,7 @@ function M.open(domain, provider_id, opts)
 		items = ids,
 		format_item = function(id)
 			local provider = providers[id]
-			return provider and provider.name(domain) or id
+			return provider and provider.name or id
 		end,
 		on_select = function(choice)
 			if choice == nil then
