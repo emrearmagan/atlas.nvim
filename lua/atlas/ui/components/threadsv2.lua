@@ -35,9 +35,10 @@ local highlights = require("atlas.ui.shared.highlights")
 ---@class AtlasThreadV2RenderOpts
 ---@field padding_x integer|nil                                                                Horizontal padding (default 2)
 ---@field mode AtlasThreadV2Mode|nil                                                           Rendering mode (default "tree")
+---@field show_connectors boolean|nil                                                         Show tree connectors (default true)
 ---@field separator string|nil                                                                 Character for root separators (default "─")
 ---@field content_max_lines integer|fun(item: AtlasThreadV2Item): integer|nil                  Max visible content lines per item (nil = unlimited).
----@field content_truncated_text string|nil                                                   Text shown when content is truncated.
+---@field content_truncated_key string|nil                                                    Key shown when expandable content is truncated.
 ---@field content_prefix string|nil                                                           Prefix placed before root content after padding
 ---@field author_hl? fun(item: AtlasThreadV2Item, author: string): string|nil                   Returns hl group for author
 ---@field additional_hl? fun(item: AtlasThreadV2Item, additional: string): string|table[]|nil    Returns a group or highlighted segments
@@ -213,15 +214,21 @@ end
 ---@param branch_prefix string
 ---@param is_last boolean
 ---@param padding_x integer
+---@param show_connectors boolean
 ---@return ThreadV2Prefixes
-local function compute_prefixes(depth, branch_prefix, is_last, padding_x)
+local function compute_prefixes(depth, branch_prefix, is_last, padding_x, show_connectors)
 	local pad = string.rep(" ", padding_x)
 	local connector = ""
 	local continuation = ""
 
 	if depth > 0 then
-		connector = is_last and "└─ " or "├─ "
-		continuation = is_last and "   " or "│  "
+		if show_connectors then
+			connector = is_last and "└─ " or "├─ "
+			continuation = is_last and "   " or "│  "
+		else
+			connector = "   "
+			continuation = "   "
+		end
 	end
 
 	local meta_prefix = pad .. branch_prefix .. connector
@@ -414,14 +421,27 @@ local function render_content(lines, spans, line_map, item, depth, pfx, opts, wi
 
 	-- Indicator when content was truncated.
 	if truncated then
-		local hint_text = opts.content_truncated_text or ".."
-		local full_line = body_prefix .. hint_text
+		local key = opts.content_truncated_key
+		local prefix = key and "Press " or ""
+		local suffix = key and " to expand" or ""
+		local hint_text = key and (prefix .. key .. suffix) or ".."
+		local hint_padding = key and math.max(0, math.floor((content_max_dw - vim.api.nvim_strwidth(hint_text)) / 2))
+			or 0
+		local hint_start = #body_prefix + hint_padding
+		local full_line = body_prefix .. string.rep(" ", hint_padding) .. hint_text
 		lines[#lines + 1] = full_line
 		map_line(line_map, #lines, make_line_map(item, "content_truncated", depth))
 		if #body_prefix > 0 then
 			span(spans, #lines - 1, 0, #body_prefix, "AtlasTextMuted")
 		end
-		span(spans, #lines - 1, #body_prefix, #full_line, "AtlasTextMuted")
+		if key then
+			local key_start = hint_start + #prefix
+			span(spans, #lines - 1, hint_start, key_start, "AtlasTextMuted")
+			span(spans, #lines - 1, key_start, key_start + #key, "Normal")
+			span(spans, #lines - 1, key_start + #key, #full_line, "AtlasTextMuted")
+		else
+			span(spans, #lines - 1, hint_start, #full_line, "AtlasTextMuted")
+		end
 	end
 
 	local block = item.content_block
@@ -452,14 +472,15 @@ end
 ---@param depth integer
 ---@param pfx ThreadV2Prefixes
 ---@param has_children boolean
-local function render_footer(lines, spans, line_map, item, depth, pfx, has_children)
+---@param show_connectors boolean
+local function render_footer(lines, spans, line_map, item, depth, pfx, has_children, show_connectors)
 	local footer_items = item.footer_items or {}
 	if #footer_items == 0 then
 		return
 	end
 
 	local footer_prefix = pfx.body_prefix
-	if depth == 0 and has_children then
+	if depth == 0 and has_children and show_connectors then
 		footer_prefix = pfx.pad .. "│ "
 	end
 	if item.content_block then
@@ -545,7 +566,8 @@ end
 ---@param width integer
 local function render_tree(lines, spans, line_map, item, depth, branch_prefix, is_last, opts, width)
 	local padding_x = tonumber(opts.padding_x) or 2
-	local pfx = compute_prefixes(depth, branch_prefix, is_last, padding_x)
+	local show_connectors = opts.show_connectors ~= false
+	local pfx = compute_prefixes(depth, branch_prefix, is_last, padding_x, show_connectors)
 	if depth == 0 and opts.content_prefix then
 		pfx.body_prefix = pfx.pad .. opts.content_prefix
 	end
@@ -554,12 +576,14 @@ local function render_tree(lines, spans, line_map, item, depth, branch_prefix, i
 	render_content(lines, spans, line_map, item, depth, pfx, opts, width)
 
 	local children = item.children or {}
-	render_footer(lines, spans, line_map, item, depth, pfx, #children > 0)
+	render_footer(lines, spans, line_map, item, depth, pfx, #children > 0, show_connectors)
 
 	for i, child in ipairs(children) do
 		-- Blank connector line before each child
 		local sep_prefix
-		if depth == 0 then
+		if not show_connectors then
+			sep_prefix = pfx.pad .. branch_prefix .. (depth == 0 and " " or pfx.continuation)
+		elseif depth == 0 then
 			sep_prefix = pfx.pad .. "│"
 		else
 			sep_prefix = pfx.pad .. branch_prefix .. pfx.continuation
@@ -589,13 +613,16 @@ end
 ---@param width integer
 local function render_linked(lines, spans, line_map, item, depth, branch_prefix, is_last, is_last_root, opts, width)
 	local padding_x = tonumber(opts.padding_x) or 2
-	local pfx = compute_prefixes(depth, branch_prefix, is_last, padding_x)
+	local show_connectors = opts.show_connectors ~= false
+	local pfx = compute_prefixes(depth, branch_prefix, is_last, padding_x, show_connectors)
 
 	-- In linked mode, root items get an indented body prefix so content
 	-- aligns beneath the header.  Non-last items show │, the last item
 	-- uses matching whitespace so the column stays consistent.
 	if depth == 0 then
-		if is_last_root then
+		if not show_connectors then
+			pfx.body_prefix = pfx.pad .. "  "
+		elseif is_last_root then
 			pfx.body_prefix = pfx.pad .. "  "
 		else
 			pfx.body_prefix = pfx.pad .. "│ "
@@ -609,12 +636,14 @@ local function render_linked(lines, spans, line_map, item, depth, branch_prefix,
 	render_content(lines, spans, line_map, item, depth, pfx, opts, width)
 
 	local children = item.children or {}
-	render_footer(lines, spans, line_map, item, depth, pfx, #children > 0)
+	render_footer(lines, spans, line_map, item, depth, pfx, #children > 0, show_connectors)
 
 	for i, child in ipairs(children) do
 		-- Blank connector line
 		local sep_prefix
-		if depth == 0 then
+		if not show_connectors then
+			sep_prefix = pfx.pad .. branch_prefix .. (depth == 0 and " " or pfx.continuation)
+		elseif depth == 0 then
 			sep_prefix = pfx.pad .. "│"
 		else
 			sep_prefix = pfx.pad .. branch_prefix .. pfx.continuation
@@ -631,7 +660,7 @@ local function render_linked(lines, spans, line_map, item, depth, branch_prefix,
 	-- In linked mode, after all children of a root item, add a blank │ line
 	-- so the next root item visually connects
 	if depth == 0 and #children > 0 then
-		blank_line(lines, spans, pfx.pad .. "│")
+		blank_line(lines, spans, pfx.pad .. (show_connectors and "│" or " "))
 	end
 end
 
@@ -648,9 +677,10 @@ function M.render(items, width, opts)
 	local o = vim.tbl_extend("force", {
 		padding_x = 2,
 		mode = "tree",
+		show_connectors = true,
 		separator = "─",
 		content_max_lines = nil,
-		content_truncated_text = nil,
+		content_truncated_key = nil,
 		author_hl = default_author_hl,
 		additional_hl = noop_hl,
 		content_hl = noop_hl,
@@ -682,7 +712,7 @@ function M.render(items, width, opts)
 		if idx < #list then
 			if is_linked then
 				-- Linked mode: │ continuation line between root items
-				blank_line(lines, spans, pad .. "│")
+				blank_line(lines, spans, pad .. (o.show_connectors and "│" or " "))
 			else
 				local sep = separator_line(width, padding_x, o.separator)
 				lines[#lines + 1] = sep

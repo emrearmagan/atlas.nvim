@@ -35,13 +35,11 @@ require("atlas.providers.gitea.config")
 ---@field label string|nil
 ---@field items table<string, AtlasForgejoIssuesSearchConfig>|nil
 
----@class AtlasGiteaIssuesConfig : AtlasGiteaForgejoConfig
----@field api_type "gitea"|nil Defaults to Gitea.
+---@class AtlasGiteaIssuesConfig
 ---@field views AtlasGiteaIssuesViewConfig[]|nil
 ---@field bookmarks AtlasGiteaIssuesBookmarksConfig|nil
 
----@class AtlasForgejoIssuesConfig : AtlasGiteaForgejoConfig
----@field api_type "forgejo"
+---@class AtlasForgejoIssuesConfig
 ---@field views AtlasForgejoIssuesViewConfig[]|nil
 ---@field bookmarks AtlasForgejoIssuesBookmarksConfig|nil
 

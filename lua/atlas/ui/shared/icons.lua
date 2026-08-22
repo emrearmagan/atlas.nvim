@@ -1,5 +1,6 @@
 local M = {}
 
+local config = require("atlas.config")
 local providers = require("atlas.providers")
 
 ---@class AtlasIconStyle
@@ -35,7 +36,7 @@ local ICONS = {
 		pin = { icon = "󰐃", hl_group = "AtlasTextNote" },
 		dot = { icon = "●", hl_group = "AtlasTextMuted" },
 		activity_more = { icon = "󰉺", hl_group = "AtlasTextMuted" },
-		star = { icon = "", hl_group = "AtlasTextWarning" },
+		star = { icon = "󰓎", hl_group = "AtlasTextWarning" },
 		watching = { icon = "", hl_group = "AtlasTextPositive" },
 		arrow_up = { icon = "", hl_group = "AtlasTextMuted" },
 		arrow_right = { icon = "", hl_group = "AtlasTextMuted" },
@@ -133,8 +134,7 @@ end
 function M.issues_type(name)
 	local key = tostring(name or "")
 	local default = ICONS.issues.type[key:lower()]
-	local options = require("atlas.config").options or {}
-	local jira = (((options.issues or {}).providers or {}).jira or {})
+	local jira = config.domain_options("jira", "issues") and config.provider_options("jira") or {}
 	local configured = ((jira.project_config or {}).issue_types or {})[key]
 
 	if configured then

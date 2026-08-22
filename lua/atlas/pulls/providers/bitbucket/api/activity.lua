@@ -95,7 +95,7 @@ end
 
 ---@param pr PullRequest
 ---@param opts { force_refresh: boolean|nil }|nil
----@param on_done fun(result: { comments: PullsComment[], tasks: PullsComment[], events: PullsActivityEntry[] }|nil, err: string|nil)
+---@param on_done fun(items: PullsConversationItem[]|nil, err: string|nil)
 ---@return { cancel: fun() }
 function M.fetch_conversation(pr, opts, on_done)
 	local requests = request_scope.new()
@@ -122,7 +122,39 @@ function M.fetch_conversation(pr, opts, on_done)
 				table.insert(timeline, event)
 			end
 		end
-		on_done({ comments = global_comments, tasks = global_tasks, events = timeline }, nil)
+
+		local failed = {}
+		for _, source in ipairs({ "comments", "tasks", "events" }) do
+			if errors[source] then
+				table.insert(failed, string.format("%s: %s", source, errors[source]))
+			end
+		end
+		local items = {}
+		for _, comment in ipairs(global_comments) do
+			table.insert(items, {
+				id = "comment:" .. tostring(comment.id),
+				kind = "comment",
+				created_on = comment.created_on or "",
+				entity = comment,
+			})
+		end
+		for _, task in ipairs(global_tasks) do
+			table.insert(items, {
+				id = "task:" .. tostring(task.id),
+				kind = "comment",
+				created_on = task.created_on or "",
+				entity = task,
+			})
+		end
+		for _, event in ipairs(timeline) do
+			table.insert(items, {
+				id = table.concat({ "activity", event.date or "", event.kind or "" }, ":"),
+				kind = "activity",
+				created_on = event.date or "",
+				entity = event,
+			})
+		end
+		on_done(items, #failed > 0 and table.concat(failed, "; ") or nil)
 	end)
 	return requests
 end

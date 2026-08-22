@@ -1,4 +1,5 @@
 local M = {}
+local config = require("atlas.config")
 
 ---@alias AtlasPullsProviderId "bitbucket"|"github"|"gitlab"|"gitea"
 ---@alias AtlasIssuesProviderId "jira"|"github"|"gitlab"|"gitea"
@@ -7,6 +8,7 @@ local M = {}
 ---@class AtlasProviderDomain
 ---@field module string
 ---@field bookmark_key string|nil
+---@field bookmark_label string|nil
 
 ---@class AtlasProvider
 ---@field id AtlasProviderId
@@ -72,23 +74,12 @@ function M.load(id, domain)
 	return implementation
 end
 
----@param id AtlasProviderId
----@param domain "pulls"|"issues"
----@return table|nil
-function M.options(id, domain)
-	local config = require("atlas.config").options or {}
-	local domain_options = type(config[domain]) == "table" and config[domain] or nil
-	local provider_options = domain_options and domain_options.providers or nil
-	local result = type(provider_options) == "table" and provider_options[id] or nil
-	return type(result) == "table" and result or nil
-end
-
 ---@param domain "pulls"|"issues"
 ---@return AtlasProvider[]
 function M.configured(domain)
 	local result = {}
 	for _, provider in ipairs(M.list(domain)) do
-		if M.options(provider.id, domain) ~= nil then
+		if config.domain_options(provider.id, domain) ~= nil then
 			table.insert(result, provider)
 		end
 	end
@@ -107,6 +98,7 @@ add({
 		issues = {
 			module = "atlas.issues.providers.jira",
 			bookmark_key = "J",
+			bookmark_label = "JQL",
 		},
 	},
 })
@@ -144,6 +136,7 @@ add({
 	domains = {
 		pulls = {
 			module = "atlas.pulls.providers.bitbucket",
+			bookmark_key = "S",
 		},
 	},
 })
@@ -175,11 +168,11 @@ add({
 		if domain == nil then
 			return "Gitea / Forgejo"
 		end
-		local options = M.options("gitea", domain) or {}
+		local options = config.provider_options("gitea") or {}
 		return options.api_type == "forgejo" and "Forgejo" or "Gitea"
 	end,
-	icon = function(domain)
-		local options = M.options("gitea", domain) or {}
+	icon = function()
+		local options = config.provider_options("gitea") or {}
 		if options.api_type == "forgejo" then
 			return { icon = "", hl_group = "AtlasForgejoTheme" }
 		end

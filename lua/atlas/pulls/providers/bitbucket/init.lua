@@ -2,13 +2,29 @@ local actions = require("atlas.pulls.providers.bitbucket.actions")
 local activity_api = require("atlas.pulls.providers.bitbucket.api.activity")
 local changes_api = require("atlas.pulls.providers.bitbucket.api.changes")
 local comments_api = require("atlas.pulls.providers.bitbucket.api.comments")
+local config = require("atlas.config")
 local pipelines_api = require("atlas.pulls.providers.bitbucket.api.pipelines")
 local pullrequests_api = require("atlas.pulls.providers.bitbucket.api.pullrequests")
 local repositories_api = require("atlas.pulls.providers.bitbucket.api.repositories")
 local reviews_api = require("atlas.pulls.providers.bitbucket.api.reviews")
 local tasks_api = require("atlas.pulls.providers.bitbucket.api.tasks")
 local users_api = require("atlas.pulls.providers.bitbucket.api.users")
+local request_scope = require("atlas.core.requests")
 local resolver = require("atlas.providers.resolve")
+local git = require("atlas.core.git")
+
+---@param view AtlasBitbucketViewConfig|AtlasBitbucketBookmarkConfig
+---@return AtlasBitbucketTarget[]
+local function view_targets(view)
+	-- `targets` used to be called `repos` so thats why :)
+	if view.current_repo then
+		local info = git.local_repository()
+		if info then
+			return { { workspace = info.owner, repo = info.repo } }
+		end
+	end
+	return view.targets or view.repos or {}
+end
 
 ---@param value string
 ---@param parsed AtlasParsedUrl|nil
@@ -65,12 +81,12 @@ local function resolve_target(value, parsed)
 end
 
 ---@param target AtlasTarget
----@return AtlasPullsViewConfig
+---@return AtlasBitbucketViewConfig
 local function search_view(target)
 	return {
 		name = "Search",
 		layout = "compact",
-		repos = { { workspace = target.workspace, repo = target.repo } },
+		targets = { { workspace = target.workspace, repo = target.repo } },
 	}
 end
 
@@ -103,9 +119,15 @@ end
 ---@return string[]
 local function repositories(options)
 	local result = {}
-	for _, view in ipairs(options.views or {}) do
-		for _, repo in ipairs(view.repos or {}) do
-			table.insert(result, tostring(repo.workspace or "") .. "/" .. tostring(repo.repo or ""))
+	local views = vim.list_extend({}, options.views or {})
+	for _, bookmark in pairs((options.bookmarks or {}).items or {}) do
+		table.insert(views, bookmark)
+	end
+	for _, view in ipairs(views) do
+		for _, target in ipairs(view_targets(view)) do
+			if target.repo then
+				table.insert(result, target.workspace .. "/" .. target.repo)
+			end
 		end
 	end
 	return result
@@ -113,10 +135,11 @@ end
 
 ---@param view AtlasPullsViewConfig
 ---@param opts PullsFetchOpts
----@param on_done fun(groups: PullsGroup[], err: string[]|nil)
+---@param on_done fun(pulls: PullRequest[], err: string[]|nil)
 ---@return { cancel: fun() }|nil
 local function fetch_pullrequests(view, opts, on_done)
 	---@cast view AtlasBitbucketViewConfig
+	local targets = view_targets(view)
 	local active_statuses = {}
 	if opts.state then
 		active_statuses = { opts.state:upper() }
@@ -131,57 +154,79 @@ local function fetch_pullrequests(view, opts, on_done)
 		active_statuses = { "OPEN" }
 	end
 
-	local workspaces, repos, seen_workspaces = {}, {}, {}
-	for _, ref in ipairs(view.repos or {}) do
-		local workspace = tostring(ref.workspace or "")
-		if workspace ~= "" and not seen_workspaces[workspace] then
-			seen_workspaces[workspace] = true
-			table.insert(workspaces, workspace)
-		end
-		local repo = tostring(ref.repo or "")
-		if repo ~= "" then
-			table.insert(repos, repo)
-		end
-	end
-
 	local parts = {}
-	if #workspaces > 0 then
-		table.insert(parts, string.format("workspace:%s", table.concat(workspaces, ",")))
-	end
-	if #repos > 0 then
-		table.insert(parts, string.format("repo:%s", table.concat(repos, ",")))
+	for _, target_ref in ipairs(targets) do
+		if target_ref.repo then
+			table.insert(parts, string.format("repo:%s/%s", target_ref.workspace, target_ref.repo))
+		else
+			table.insert(parts, string.format("project:%s/%s", target_ref.workspace, target_ref.project))
+		end
 	end
 	for _, status in ipairs(active_statuses) do
 		table.insert(parts, string.format("is:%s", status:lower()))
 	end
 	require("atlas.pulls.state").last_search_query = table.concat(parts, " ")
 
-	return pullrequests_api.fetch_pullrequests(view.repos or {}, {
-		force_load = opts.force_load == true,
-		pagelen = opts.pagelen,
-		statuses = active_statuses,
-	}, function(groups, err)
+	local function finish(pulls, err)
 		if type(view.filter) ~= "function" then
-			on_done(groups, err)
+			on_done(pulls, err)
 			return
 		end
 
 		local context = { user = require("atlas.pulls.state").current_user }
 		local filtered = {}
-		for _, group in ipairs(groups or {}) do
-			local prs = {}
-			for _, pr in ipairs(group.prs or {}) do
-				local ok, keep = pcall(view.filter, pr, context)
-				if ok and keep ~= false then
-					table.insert(prs, pr)
-				end
-			end
-			if #prs > 0 then
-				table.insert(filtered, vim.tbl_extend("force", group, { prs = prs }))
+		for _, pr in ipairs(pulls) do
+			local ok, keep = pcall(view.filter, pr, context)
+			if ok and keep ~= false then
+				table.insert(filtered, pr)
 			end
 		end
 		on_done(filtered, err)
+	end
+
+	local scope = request_scope.new()
+	local starts = {}
+	for index, target_ref in ipairs(targets) do
+		if target_ref.project then
+			local project = target_ref
+			starts[index] = function(done)
+				return repositories_api.fetch_project_repositories(project, opts, done)
+			end
+		end
+	end
+
+	scope.all(starts, function(project_repos, project_errors)
+		local repos, errors, seen = {}, {}, {}
+		for index, target_ref in ipairs(targets) do
+			local resolved = target_ref.repo and { target_ref } or project_repos[index] or {}
+			for _, repo in ipairs(resolved) do
+				local key = repo.workspace .. "/" .. repo.repo
+				if not seen[key] then
+					seen[key] = true
+					table.insert(repos, repo)
+				end
+			end
+			if project_errors[index] then
+				table.insert(
+					errors,
+					string.format("%s/%s: %s", target_ref.workspace, target_ref.project, project_errors[index])
+				)
+			end
+		end
+
+		scope.run(function(done)
+			return pullrequests_api.fetch_pullrequests(repos, {
+				force_load = opts.force_load == true,
+				pagelen = opts.pagelen,
+				statuses = active_statuses,
+			}, done)
+		end, function(pulls, fetch_errors)
+			vim.list_extend(errors, fetch_errors or {})
+			finish(pulls, #errors > 0 and errors or nil)
+		end)
 	end)
+
+	return { cancel = scope.cancel }
 end
 
 ---@param repo PullsRepoDetails
@@ -206,19 +251,19 @@ end
 
 ---@return AtlasBitbucketViewConfig[]
 local function views()
-	local config = (((require("atlas.config").options or {}).pulls or {}).providers or {}).bitbucket
+	local options = config.domain_options("bitbucket", "pulls")
 	local result = {}
-	for _, view in ipairs((config and config.views) or {}) do
+	for _, view in ipairs((options and options.views) or {}) do
 		table.insert(result, {
 			name = view.name,
 			key = view.key,
 			layout = view.layout,
-			repos = view.repos,
+			targets = view_targets(view),
 			filter = view.filter,
 		})
 	end
 	if #result == 0 then
-		table.insert(result, { name = "Pull Requests", key = "1", layout = "compact", repos = {} })
+		table.insert(result, { name = "Pull Requests", key = "1", layout = "compact", targets = {} })
 	end
 	return result
 end
@@ -233,6 +278,7 @@ return {
 			fetch_user = users_api.fetch_current_user,
 			fetch_pullrequests = fetch_pullrequests,
 			fetch_pullrequest = pullrequests_api.fetch_pullrequest,
+			fetch_description = pullrequests_api.fetch_description,
 			create_pr = pullrequests_api.create_pr,
 			fetch_default_reviewers = pullrequests_api.fetch_default_reviewers,
 			fetch_reviewers = pullrequests_api.fetch_reviewers,

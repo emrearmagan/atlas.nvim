@@ -67,7 +67,7 @@ local function render_options(padding_x, opts)
 	return {
 		padding_x = padding_x,
 		content_max_lines = max_lines,
-		content_truncated_text = opts.content_truncated_text,
+		content_truncated_key = opts.content_truncated_key,
 		author_hl = function(item)
 			return helper.person_hl(item.meta.author)
 		end,
@@ -168,7 +168,7 @@ end
 ---@field padding_x integer|nil
 ---@field reaction_options IssueReactionOption[]|nil
 ---@field content_max_lines integer|fun(comment: IssueComment): integer|nil
----@field content_truncated_text string|nil
+---@field content_truncated_key string|nil
 
 ---@param nodes IssuesCommentThreadNode[]
 ---@param width integer

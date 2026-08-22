@@ -14,7 +14,12 @@ local function base_raw()
 		createdAt = "2024-01-01T00:00:00Z",
 		updatedAt = "2024-01-02T00:00:00Z",
 		url = "https://github.com/owner/repo/pull/42",
-		repository = { name = "repo", nameWithOwner = "owner/repo" },
+		repository = {
+			name = "repo",
+			nameWithOwner = "owner/repo",
+			url = "https://github.com/owner/repo",
+			sshUrl = "git@github.com:owner/repo.git",
+		},
 		author = { login = "octocat", name = "Octo Cat", id = "1" },
 	}
 end
@@ -38,6 +43,35 @@ describe("normalize_pr author.name", function()
 			local pr = normalizer.to_pull_request(raw)
 			assert.are.equal("octocat", pr.author.name, case.label)
 		end
+	end)
+end)
+
+describe("GitHub Git remote mapping", function()
+	it("retains both URLs returned by the existing PR query", function()
+		local pr = normalizer.to_pull_request(base_raw())
+
+		assert.equal("https://github.com/owner/repo.git", pr.destination.https_url)
+		assert.equal("git@github.com:owner/repo.git", pr.destination.ssh_url)
+	end)
+end)
+
+describe("GitHub reviewer decisions", function()
+	it("keeps an active review request pending after an earlier decision", function()
+		local raw = base_raw()
+		raw.latestOpinionatedReviews = {
+			nodes = {
+				{ state = "APPROVED", author = { id = "2", login = "reviewer", name = "Reviewer" } },
+			},
+		}
+		raw.reviewRequests = {
+			nodes = {
+				{ requestedReviewer = { id = "2", login = "reviewer", name = "Reviewer" } },
+			},
+		}
+
+		local pr = normalizer.to_pull_request(raw)
+
+		assert.equal("pending", pr.reviewers[1].decision)
 	end)
 end)
 

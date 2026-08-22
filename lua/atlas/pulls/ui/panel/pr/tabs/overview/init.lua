@@ -14,7 +14,7 @@ local helper = require("atlas.pulls.ui.main.helper")
 
 local PADDING_X = 1
 local PADDING = string.rep(" ", PADDING_X)
-local MAX_DESCRIPTION_LINES = 8
+local MAX_DESCRIPTION_LINES = 15
 
 ---@type { cancel: fun() }[]
 local in_flight = {}
@@ -58,34 +58,24 @@ function M.on_select(pr, refresh, opts)
 
 	local force_refresh = opts.force_refresh == true
 	local can_fetch_reviewers = core.fetch_reviewers ~= nil
-	local can_fetch_description = core.fetch_description ~= nil
 	local can_fetch_merge_checks = core.fetch_merge_checks ~= nil
 	local should_fetch_reviewers = can_fetch_reviewers
 		and (force_refresh or state.reviewers == nil or state.reviewers == "loading")
-	local should_fetch_description = can_fetch_description
-		and (force_refresh or state.description == nil or state.description == "loading")
 	local should_fetch_merge_checks = can_fetch_merge_checks
 		and (force_refresh or state.merge_checks == nil or state.merge_checks == "loading")
 
-	if should_fetch_reviewers or should_fetch_description or should_fetch_merge_checks then
+	if should_fetch_reviewers or should_fetch_merge_checks then
 		cancel_all()
-	end
-
-	if should_fetch_description then
-		state.description = "loading"
-		track(core.fetch_description(pr, opts, function(desc, err)
-			if err then
-				state.description = nil
-				statusline.notify("error", "Failed to load pull request description")
-			else
-				state.description = desc or ""
-			end
-			refresh()
-		end))
 	end
 
 	if should_fetch_reviewers then
 		state.reviewers = "loading"
+	end
+	if should_fetch_merge_checks then
+		state.merge_checks = "loading"
+	end
+
+	if should_fetch_reviewers then
 		track(core.fetch_reviewers(pr, opts, function(reviewers, err)
 			if err then
 				state.reviewers = err
@@ -97,7 +87,6 @@ function M.on_select(pr, refresh, opts)
 	end
 
 	if should_fetch_merge_checks then
-		state.merge_checks = "loading"
 		track(core.fetch_merge_checks(pr, opts, function(checks, err)
 			if err then
 				state.merge_checks = err
@@ -111,27 +100,86 @@ end
 
 -- Reviewers
 
-local DECISION_GROUPS = { "approved", "changes_requested", "pending" }
+local DECISION_GROUPS = { "approved", "changes_requested", "reviewed", "pending" }
+local OTHER_DECISION_GROUPS = { "approved", "changes_requested" }
 
 local DECISION_ICONS = {
 	approved = { icon = icons.pulls_status("successful"), hl = "AtlasTextPositive" },
 	changes_requested = { icon = icons.pulls_status("failed"), hl = "AtlasLogError" },
+	reviewed = { icon = icons.pulls("review"), hl = "AtlasTextMuted" },
 	pending = { icon = icons.pulls_status("inprogress"), hl = "AtlasTextMuted" },
 }
 
----@param _pr PullRequest
+---@param decisions PullsReviewer[]
+---@param groups string[]
+---@param width integer
+---@return BoxContentGroup
+local function decision_content(decisions, groups, width)
+	local box_lines = {}
+	local box_spans = {}
+	local grouped = { approved = {}, changes_requested = {}, reviewed = {}, pending = {} }
+	for _, decision in ipairs(decisions) do
+		local decision_state = decision.decision or "pending"
+		if grouped[decision_state] == nil then
+			decision_state = "pending"
+		end
+		table.insert(grouped[decision_state], helper.user_handle(decision))
+	end
+
+	local box_inner = math.max(10, width - (PADDING_X * 2) - 4)
+	for _, decision_state in ipairs(groups) do
+		local names = grouped[decision_state]
+		if #names > 0 then
+			table.sort(names)
+			local display = DECISION_ICONS[decision_state] or DECISION_ICONS.pending
+			local label = table.concat(names, ", ")
+			local icon_prefix = display.icon .. " "
+			local icon_prefix_width = vim.api.nvim_strwidth(icon_prefix)
+			local label_width = math.max(1, box_inner - icon_prefix_width)
+			local wrapped = utils.wrap_line(label, label_width)
+
+			local line_text = icon_prefix .. wrapped[1]
+			table.insert(box_lines, line_text)
+			table.insert(box_spans, {
+				line = #box_lines - 1,
+				start_col = 0,
+				end_col = #display.icon,
+				hl_group = display.hl,
+			})
+
+			local continuation_prefix = string.rep(" ", icon_prefix_width)
+			for i = 2, #wrapped do
+				table.insert(box_lines, continuation_prefix .. wrapped[i])
+			end
+		end
+	end
+
+	return { lines = box_lines, spans = box_spans }
+end
+
+---@param pr PullRequest
 ---@param width integer
 ---@param lines string[]
 ---@param spans table[]
-local function render_reviewers(_pr, width, lines, spans)
+local function render_reviewers(pr, width, lines, spans)
 	if state.reviewers == nil then
 		return
 	end
 
 	if state.reviewers == "loading" then
-		utils.push(lines, spans, "Reviewers (...)", "AtlasColumnHeader", PADDING_X)
-		local header_text = "Reviewers (...)"
-		local count_text = "(...)"
+		local approved_count = 0
+		local reviewer_count = 0
+		for _, reviewer in ipairs(pr.reviewers or {}) do
+			if reviewer.role ~= "participant" then
+				reviewer_count = reviewer_count + 1
+				if reviewer.decision == "approved" then
+					approved_count = approved_count + 1
+				end
+			end
+		end
+		local count_text = pr.reviewers and string.format("(%d/%d)", approved_count, reviewer_count) or "(...)"
+		local header_text = "Reviewers " .. count_text
+		utils.push(lines, spans, header_text, "AtlasColumnHeader", PADDING_X)
 		table.insert(spans, {
 			line = #lines - 1,
 			start_col = PADDING_X + #header_text - #count_text,
@@ -170,7 +218,11 @@ local function render_reviewers(_pr, width, lines, spans)
 		return
 	end
 
-	local decisions = state.reviewers
+	local decisions = {}
+	local others = {}
+	for _, reviewer in ipairs(state.reviewers) do
+		table.insert(reviewer.role == "participant" and others or decisions, reviewer)
+	end
 	local approved_count = 0
 	for _, r in ipairs(decisions) do
 		if r.decision == "approved" then
@@ -188,70 +240,44 @@ local function render_reviewers(_pr, width, lines, spans)
 		hl_group = "AtlasTextMuted",
 	})
 
+	local content
 	if #decisions == 0 then
 		local empty_text = "no reviewers yet"
-		utils.append_block(
-			lines,
-			spans,
-			box.render({
-				{
-					lines = { empty_text },
-					spans = { { line = 0, start_col = 0, end_col = #empty_text, hl_group = "AtlasTextMuted" } },
-				},
-			}, { width = width, padding_x = PADDING_X })
-		)
-		table.insert(lines, "")
-		return
+		content = {
+			lines = { empty_text },
+			spans = { { line = 0, start_col = 0, end_col = #empty_text, hl_group = "AtlasTextMuted" } },
+		}
+	else
+		content = decision_content(decisions, DECISION_GROUPS, width)
 	end
 
-	local box_lines = {}
-	local box_spans = {}
-	local grouped = { approved = {}, changes_requested = {}, pending = {} }
-	for _, d in ipairs(decisions) do
-		local s = d.decision or "pending"
-		if grouped[s] == nil then
-			s = "pending"
-		end
-		local name = helper.user_handle(d)
-		table.insert(grouped[s], name)
-	end
-
-	local box_inner = math.max(10, width - (PADDING_X * 2) - 4)
-	for _, s in ipairs(DECISION_GROUPS) do
-		local names = grouped[s]
-		if #names > 0 then
-			table.sort(names)
-			local d = DECISION_ICONS[s] or DECISION_ICONS.pending
-			local label = table.concat(names, ", ")
-			local icon_prefix = d.icon .. " "
-			local icon_prefix_width = vim.api.nvim_strwidth(icon_prefix)
-			local label_width = math.max(1, box_inner - icon_prefix_width)
-			local wrapped = utils.wrap_line(label, label_width)
-
-			local line_text = icon_prefix .. wrapped[1]
-			table.insert(box_lines, line_text)
-			table.insert(box_spans, {
-				line = #box_lines - 1,
-				start_col = 0,
-				end_col = #d.icon,
-				hl_group = d.hl,
-			})
-
-			local continuation_prefix = string.rep(" ", icon_prefix_width)
-			for i = 2, #wrapped do
-				table.insert(box_lines, continuation_prefix .. wrapped[i])
-			end
-		end
-	end
-
-	utils.append_block(
-		lines,
-		spans,
-		box.render({ { lines = box_lines, spans = box_spans } }, {
-			width = width,
-			padding_x = PADDING_X,
+	if #others > 0 then
+		table.insert(content.lines, "")
+		local label = "Other decisions"
+		table.insert(content.lines, label)
+		table.insert(content.spans, {
+			line = #content.lines - 1,
+			start_col = 0,
+			end_col = #label,
+			hl_group = "AtlasColumnHeader",
 		})
-	)
+
+		local other_content = decision_content(others, OTHER_DECISION_GROUPS, width)
+		local line_offset = #content.lines
+		for _, line in ipairs(other_content.lines) do
+			table.insert(content.lines, line)
+		end
+		for _, span in ipairs(other_content.spans) do
+			table.insert(content.spans, {
+				line = line_offset + span.line,
+				start_col = span.start_col,
+				end_col = span.end_col,
+				hl_group = span.hl_group,
+			})
+		end
+	end
+
+	utils.append_block(lines, spans, box.render({ content }, { width = width, padding_x = PADDING_X }))
 	table.insert(lines, "")
 end
 
@@ -420,7 +446,7 @@ end
 
 -- Description
 
----@param pr PullRequest
+---@param pr PullRequestDetails
 ---@param width integer
 ---@param lines string[]
 ---@param spans table[]
@@ -435,14 +461,7 @@ local function render_description(pr, width, lines, spans, line_map)
 
 	utils.push(lines, spans, "Description", "AtlasColumnHeader", PADDING_X)
 
-	if state.description == "loading" then
-		utils.push(lines, spans, spinner.with_text("Loading description..."), "AtlasTextMuted", PADDING_X)
-		table.insert(lines, "")
-		map_lines()
-		return
-	end
-
-	local desc_text = utils.strip_markup(state.description or pr.description or "")
+	local desc_text = utils.strip_markup(pr.description)
 	if desc_text == "" then
 		utils.push(lines, spans, "No description provided.", "AtlasTextMuted", PADDING_X)
 		table.insert(lines, "")
@@ -627,7 +646,9 @@ function M.render(pr, width)
 	local spans = {}
 	local line_map = {}
 
-	render_description(pr, width, lines, spans, line_map)
+	if panel_state.current_details then
+		render_description(panel_state.current_details, width, lines, spans, line_map)
+	end
 	render_reviewers(pr, width, lines, spans)
 	render_merge_checks(pr, width, lines, spans)
 	render_pipelines(pr, width, lines, spans, line_map)
@@ -673,9 +694,9 @@ function M.deactivate(buf)
 		return
 	end
 	keymaps.teardown(buf)
-	pcall(vim.treesitter.stop, buf)
+	vim.api.nvim_set_option_value("filetype", "atlas.detail", { buf = buf })
 	vim.api.nvim_set_option_value("syntax", "OFF", { buf = buf })
-	vim.api.nvim_set_option_value("filetype", "", { buf = buf })
+	pcall(vim.treesitter.stop, buf)
 	cancel_all()
 end
 

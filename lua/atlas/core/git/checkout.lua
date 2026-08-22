@@ -6,6 +6,12 @@ local logger = require("atlas.core.logger")
 
 local LUA_PATTERN_SPECIALS = "[%^%$%(%)%%%.%[%]%+%-%?]"
 
+---@return AtlasGitTransport transport
+local function configured_git_transport()
+	local value = ((config.options or {}).pulls or {}).git_transport
+	return value == "https" and "https" or "ssh"
+end
+
 local function star_count(s)
 	local _, n = s:gsub("%*", "")
 	return n
@@ -173,16 +179,33 @@ function M.pr_diff_revisions(pr)
 end
 
 ---@param ref PullsRef
----@return string remote
 ---@return string remote_ref
-local function fetch_target(ref)
-	local remote = tostring(ref.fetch_remote or "")
-	local source = tostring(ref.fetch_ref or "")
-	if source == "" then
+local function fetch_ref(ref)
+	local remote_ref = tostring(ref.fetch_ref or "")
+	if remote_ref == "" then
 		local branch = tostring(ref.branch or "")
-		source = branch ~= "" and "refs/heads/" .. branch or ""
+		remote_ref = branch ~= "" and "refs/heads/" .. branch or ""
 	end
-	return remote ~= "" and remote or "origin", source
+	return remote_ref
+end
+
+---@param ref PullsRef
+---@param transport AtlasGitTransport
+---@param provider string
+---@return string remote
+---@return string|nil err
+local function source_remote(ref, transport, provider)
+	if ref.https_url ~= nil or ref.ssh_url ~= nil then
+		local selected = transport == "ssh" and ref.ssh_url or nil
+		if transport == "https" then
+			selected = ref.https_url
+		end
+		if type(selected) ~= "string" or selected == "" then
+			return "", string.format("%s did not provide a %s Git remote URL", provider, transport)
+		end
+		return selected, nil
+	end
+	return "origin", nil
 end
 
 ---@param on_done fun(err: string|nil)
@@ -211,8 +234,14 @@ function M.fetch_pr_refs(pr, repo_path, on_done)
 	if not base_revision or not head_revision then
 		return schedule_result(on_done, revision_err)
 	end
-	local base_remote, base_ref = fetch_target(pr.destination)
-	local head_remote, head_ref = fetch_target(pr.source)
+	local transport = configured_git_transport()
+	local base_remote = "origin"
+	local base_ref = fetch_ref(pr.destination)
+	local head_remote, remote_err = source_remote(pr.source, transport, pr.provider)
+	if remote_err then
+		return schedule_result(on_done, remote_err)
+	end
+	local head_ref = fetch_ref(pr.source)
 	local cancelled = false
 	local current
 	local fetch_err
@@ -278,7 +307,7 @@ end
 
 ---@param pr PullRequest
 ---@return string|nil cache_path
----@return string|nil clone_url
+---@return string|nil remote_url
 local function cached_pr_repository(pr)
 	local resolver = require("atlas.providers.resolve")
 	local target = resolver.resolve(pr.link.html)
@@ -287,8 +316,20 @@ local function cached_pr_repository(pr)
 	end
 	---@cast target AtlasTarget
 	local repository = pr.repo_full_name
-	local base_url = resolver.base_url(target):gsub("/+$", "")
+	local transport = configured_git_transport()
 	local cache_path = vim.fs.joinpath(vim.fn.stdpath("cache"), "atlas", "repos", target.host, repository)
+	local advertised = transport == "ssh" and pr.destination.ssh_url or nil
+	if transport == "https" then
+		advertised = pr.destination.https_url
+	end
+	if type(advertised) == "string" and advertised ~= "" then
+		return cache_path, advertised
+	end
+
+	if transport == "ssh" then
+		return cache_path, string.format("git@%s:%s.git", target.host, repository)
+	end
+	local base_url = resolver.base_url(target):gsub("/+$", "")
 	return cache_path, string.format("%s/%s.git", base_url, repository)
 end
 
@@ -369,7 +410,6 @@ function M.ensure_pr_repository(pr, repo_path, on_progress, on_done)
 	end
 	vim.fn.mkdir(vim.fs.dirname(path), "p")
 	on_progress("Cloning repository...")
-	-- TODO: use provider auth when Git credentials are unavailable.
 	-- Leave the cache without a checkout; Git loads trees and blobs when a diff needs them.
 	current = git.run({
 		"clone",

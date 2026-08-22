@@ -1,5 +1,6 @@
 local M = {}
 
+local config = require("atlas.config")
 local notify = require("atlas.core.notify")
 local picker = require("atlas.picker")
 local providers = require("atlas.providers")
@@ -45,7 +46,7 @@ local function configured_searches()
 	local entries = {}
 	for _, provider_config in ipairs(providers.list()) do
 		for _, domain in ipairs({ "pulls", "issues" }) do
-			if provider_config.domains[domain] and providers.options(provider_config.id, domain) then
+			if provider_config.domains[domain] and config.domain_options(provider_config.id, domain) then
 				local provider = assert(providers.load(provider_config.id, domain))
 				local search
 				if domain == "pulls" then

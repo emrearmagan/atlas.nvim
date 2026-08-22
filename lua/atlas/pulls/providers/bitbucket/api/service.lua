@@ -16,17 +16,12 @@ end
 
 ---@return string, string, string|nil
 function M.get_auth()
-	local bb = (
-		config.options
-		and config.options.pulls
-		and config.options.pulls.providers
-		and config.options.pulls.providers.bitbucket
-	) or {}
+	local bb = config.provider_options("bitbucket") or {}
 	local user = tostring(bb.user or "")
 	local token = tostring(bb.token or "")
 
 	if not user or user == "" or not token or token == "" then
-		return "", "", "Missing Bitbucket credentials in config (bitbucket.user / bitbucket.token)"
+		return "", "", "Missing Bitbucket credentials in config (providers.bitbucket.user / providers.bitbucket.token)"
 	end
 
 	return user, token, nil
@@ -56,15 +51,13 @@ end
 
 ---@return number
 function M.cache_ttl()
-	local bb = config.options
-		and config.options.pulls
-		and config.options.pulls.providers
-		and config.options.pulls.providers.bitbucket
+	local bb = config.provider_options("bitbucket")
 	return tonumber(bb and bb.cache_ttl) or 300
 end
 
 function M.clear_cache()
 	memory_cache.clear_prefix("bitbucket:")
+	cache.clear_prefix("bitbucket:prs:")
 end
 
 ---@param key string

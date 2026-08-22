@@ -126,7 +126,7 @@ function M.setup(buf, refresh)
 	utils.insert_if(
 		items,
 		from_action("ui.toggle_fold", {
-			desc = "Toggle hunk / thread fold",
+			desc = "Toggle thread fold",
 			opts = { nowait = true, silent = true },
 			callback = function()
 				local state = require("atlas.pulls.ui.panel.pr.tabs.review.state")
@@ -143,31 +143,13 @@ function M.setup(buf, refresh)
 						return
 					end
 				end
-
-				local key = entry.hunk_key
-				if key == nil then
-					local win = layout.win_id("detail")
-					local lnum = win and vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_cursor(win)[1] or 0
-					local map = panel_state.line_map or {}
-					for ln = lnum, 1, -1 do
-						local candidate = map[ln]
-						if candidate and candidate.kind == "hunk_header" and candidate.hunk_key then
-							key = candidate.hunk_key
-							break
-						end
-					end
-				end
-				if key ~= nil then
-					state.collapsed_hunks[key] = state.collapsed_hunks[key] ~= true
-					refresh()
-				end
 			end,
 		})
 	)
 	utils.insert_if(
 		items,
 		from_action("ui.toggle_all_folds", {
-			desc = "Toggle all hunk / thread folds",
+			desc = "Toggle all thread folds",
 			opts = { nowait = true, silent = true },
 			callback = function()
 				local state = require("atlas.pulls.ui.panel.pr.tabs.review.state")
@@ -175,24 +157,7 @@ function M.setup(buf, refresh)
 				if not data then
 					return
 				end
-				local comments = data.comments
-				local keys = {}
-				local seen = {}
-				for _, comment in ipairs(comments) do
-					if comment.inline and comment.inline.path and comment.inline_hunk then
-						local key = string.format(
-							"%s|%s|%s",
-							comment.inline.path,
-							tostring(comment.inline_hunk.new_start or 0),
-							tostring(comment.inline_hunk.old_start or 0)
-						)
-						if not seen[key] then
-							seen[key] = true
-							table.insert(keys, key)
-						end
-					end
-				end
-				if state.toggle_all_folds(comments, keys) then
+				if state.toggle_all_folds(data.comments) then
 					refresh()
 				end
 			end,
@@ -214,7 +179,7 @@ function M.setup(buf, refresh)
 				local last = vim.api.nvim_buf_line_count(vim.api.nvim_win_get_buf(win))
 				for ln = lnum + 1, last do
 					local e = map[ln]
-					if e and e.kind == "hunk_header" then
+					if e and e.hunk_start then
 						pcall(vim.api.nvim_win_set_cursor, win, { ln, 0 })
 						return
 					end
@@ -237,7 +202,7 @@ function M.setup(buf, refresh)
 				local lnum = vim.api.nvim_win_get_cursor(win)[1]
 				for ln = lnum - 1, 1, -1 do
 					local e = map[ln]
-					if e and e.kind == "hunk_header" then
+					if e and e.hunk_start then
 						pcall(vim.api.nvim_win_set_cursor, win, { ln, 0 })
 						return
 					end

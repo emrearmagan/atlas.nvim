@@ -21,10 +21,16 @@ end
 ---@param comment PullsComment
 ---@return AtlasDiffSide|nil, integer|nil
 function M.comment(document, comment)
+	local side, line
 	if comment.file then
-		return document.status == "deleted" and "LEFT" or "RIGHT", 1
+		side, line = document.status == "deleted" and "LEFT" or "RIGHT", 1
+	else
+		side, line = M.location(comment.inline)
 	end
-	return M.location(comment.inline)
+	if comment.outdated == true then
+		return side, nil
+	end
+	return side, line
 end
 
 ---@param document AtlasDiffDocument

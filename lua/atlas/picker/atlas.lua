@@ -79,6 +79,10 @@ function M.open(request)
 	local initial_layout = layout(#request.items)
 	local main_buf = vim.api.nvim_create_buf(false, true)
 	local preview_buf = has_preview and vim.api.nvim_create_buf(false, true) or nil
+	vim.bo[main_buf].filetype = "atlas.picker"
+	vim.bo[main_buf].syntax = "OFF"
+	pcall(vim.treesitter.stop, main_buf)
+	vim.b[main_buf].completion = false
 	for _, buf in ipairs({ main_buf, preview_buf }) do
 		if buf then
 			vim.api.nvim_set_option_value("bufhidden", "wipe", { buf = buf })
@@ -422,41 +426,17 @@ function M.open(request)
 		end
 	end
 
-	for _, key in ipairs({ "<Down>", "<C-n>", "<C-j>" }) do
-		vim.keymap.set({ "i", "n" }, key, function()
-			move(1)
-		end, map_opts)
-	end
-	for _, key in ipairs({ "<Up>", "<C-p>", "<C-k>" }) do
-		vim.keymap.set({ "i", "n" }, key, function()
-			move(-1)
-		end, map_opts)
-	end
-	map_configured("ui.next_item", function()
+	map_configured("picker.next_item", function()
 		move(1)
-	end)
-	map_configured("ui.previous_item", function()
+	end, { "i", "n" })
+	map_configured("picker.previous_item", function()
 		move(-1)
-	end)
-	map_configured("ui.first_item", function()
-		if #state.items > 0 then
-			state.index = 1
-			render()
-		end
-	end)
-	map_configured("ui.last_item", function()
-		if #state.items > 0 then
-			state.index = #state.items
-			render()
-		end
-	end)
-	vim.keymap.set({ "i", "n" }, "<CR>", confirm, map_opts)
-	map_configured("ui.submit", confirm, { "i", "n" })
+	end, { "i", "n" })
+	map_configured("picker.select", confirm, { "i", "n" })
 	if request.multi then
-		vim.keymap.set({ "i", "n" }, "<Tab>", toggle, map_opts)
-		vim.keymap.set("n", "<Space>", toggle, map_opts)
+		map_configured("picker.toggle", toggle, { "i", "n" })
 	end
-	map_configured("ui.close", function()
+	map_configured("picker.close", function()
 		close(true)
 	end)
 

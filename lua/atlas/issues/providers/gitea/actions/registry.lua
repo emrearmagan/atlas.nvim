@@ -76,7 +76,7 @@ end
 
 ---@return string[]
 local function configured_repositories()
-	local options = require("atlas.providers").options("gitea", "issues") or {}
+	local options = require("atlas.config").domain_options("gitea", "issues") or {}
 	local result, seen = {}, {}
 	local function add(value)
 		local slug = type(value) == "table" and vim.trim(tostring(value.repo or "")) or ""

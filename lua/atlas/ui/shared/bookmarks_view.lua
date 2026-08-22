@@ -1,27 +1,19 @@
 local M = {}
 
+local config = require("atlas.config")
 local icons = require("atlas.ui.shared.icons")
 local utils = require("atlas.ui.shared.utils")
 local ui_utils = require("atlas.ui.utils")
 
----@param queries { key?: string, label?: string, items?: table }|nil
----@param default_key string
----@param default_label string
----@return table|nil
-function M.build_view(queries, default_key, default_label)
-	if type(queries) ~= "table" or type(queries.items) ~= "table" then
-		return nil
-	end
-	if next(queries.items) == nil then
-		return nil
-	end
-	return {
-		name = tostring(queries.label or default_label),
-		key = tostring(queries.key or default_key),
-		layout = "plain",
-		_kind = "bookmarks",
-		_bookmarks = queries.items,
-	}
+---@param domain "pulls"|"issues"
+---@param provider string
+---@return string
+function M.key(domain, provider)
+	local providers = require("atlas.providers")
+	local options = config.domain_options(provider, domain) or {}
+	local configured = options.bookmarks and options.bookmarks.key
+	local provider_domain = providers.domain(provider, domain)
+	return configured or (provider_domain and provider_domain.bookmark_key) or "S"
 end
 
 ---@param items table<string, any>
@@ -38,18 +30,31 @@ local function sorted_items(items)
 end
 
 ---@generic V
----@param views V[]
----@param queries { key?: string, label?: string, items?: table }|nil
----@param default_key string
----@param default_label string
+---@param provider PullsProvider|IssuesProvider
+---@param domain "pulls"|"issues"
 ---@return V[]
-function M.append_to_views(views, queries, default_key, default_label)
-	local bookmarks_view = M.build_view(queries, default_key, default_label)
-	if bookmarks_view == nil then
+function M.views(provider, domain)
+	local providers = require("atlas.providers")
+	local options = config.domain_options(provider.id, domain) or {}
+	local bookmarks = options.bookmarks
+	local saved = require("atlas.core.starred").list(domain, provider.id) or {}
+	local views = provider.capabilities.core.views()
+	if (bookmarks == nil or next(bookmarks.items or {}) == nil) and #saved == 0 then
 		return views
 	end
+
+	local provider_domain = providers.domain(provider.id, domain)
 	local out = vim.list_extend({}, views)
-	table.insert(out, bookmarks_view)
+	table.insert(out, {
+		name = tostring(
+			(bookmarks and bookmarks.label) or (provider_domain and provider_domain.bookmark_label) or "Search"
+		),
+		key = tostring(M.key(domain, provider.id)),
+		layout = domain == "pulls" and "grouped" or "plain",
+		_kind = "bookmarks",
+		_bookmarks = (bookmarks and bookmarks.items) or {},
+		_starred = { domain = domain, provider = provider.id },
+	})
 	return out
 end
 
@@ -61,6 +66,16 @@ local function preview_text(value)
 	end
 	if type(value) ~= "table" then
 		return ""
+	end
+	local configured_targets = value.targets or value.repos
+	if configured_targets then
+		local targets = {}
+		for _, target in ipairs(configured_targets) do
+			local prefix = target.project and "project:" or ""
+			local name = target.project or target.repo
+			table.insert(targets, string.format("%s%s/%s", prefix, target.workspace, name))
+		end
+		return table.concat(targets, ", ")
 	end
 
 	local keys = {}
@@ -93,9 +108,20 @@ end
 ---@param line_map table<integer, table>
 ---@param items_table table<string, any>
 ---@param width integer
-function M.render(lines, spans, line_map, items_table, width)
+---@param starred { domain: "pulls"|"issues", provider: string }|nil
+function M.render(lines, spans, line_map, items_table, width, starred)
 	local items = sorted_items(items_table)
-	local bookmark = icons.general("star") or "*"
+	if starred then
+		local saved = require("atlas.core.starred").list(starred.domain, starred.provider) or {}
+		if #saved > 0 then
+			table.insert(items, 1, {
+				name = "Starred",
+				value = { _kind = "starred" },
+				preview = string.format("%d item%s", #saved, #saved == 1 and "" or "s"),
+			})
+		end
+	end
+	local bookmark = icons.general("star")
 	local arrow = icons.general("arrow_right") or "▸"
 
 	local header = string.format(" %s  Bookmarks", bookmark)
@@ -127,7 +153,7 @@ function M.render(lines, spans, line_map, items_table, width)
 	for _, item in ipairs(items) do
 		local item_w = ui_utils.text_width(item.name)
 		local name_pad = string.rep(" ", math.max(name_w - item_w, 0))
-		local preview = preview_text(item.value)
+		local preview = item.preview or preview_text(item.value)
 		preview = utils.truncate(preview, preview_w, false)
 
 		local row = string.format(" %s  %s%s%s%s", arrow, item.name, name_pad, string.rep(" ", gap), preview)

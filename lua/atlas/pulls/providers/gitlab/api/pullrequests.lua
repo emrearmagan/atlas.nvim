@@ -21,7 +21,7 @@ end
 
 ---@param view AtlasGitLabPullsViewConfig
 ---@param opts { force_load?: boolean, pagelen?: number, state?: "opened"|"closed"|"merged"|"all" }|nil
----@param on_done fun(groups: PullsGroup[]|nil, err: string|nil)
+---@param on_done fun(pulls: PullRequest[], err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_pullrequests(view, opts, on_done)
 	opts = opts or {}
@@ -72,7 +72,7 @@ function M.fetch_pullrequests(view, opts, on_done)
 		endpoint = "/merge_requests" .. build_query(params)
 	end
 
-	local cache_key = "gitlab_pulls:list:" .. endpoint
+	local cache_key = "gitlab_pulls:merge_requests:" .. endpoint
 	if not opts.force_load then
 		local cached, ok = service.get_cache(cache_key)
 		if ok then
@@ -83,12 +83,12 @@ function M.fetch_pullrequests(view, opts, on_done)
 
 	return service.request("GET", endpoint, nil, function(result, err)
 		if err then
-			on_done(nil, err)
+			on_done({}, err)
 			return
 		end
-		local groups = mapper.to_pull_request_groups(result or {})
-		service.set_cache(cache_key, groups)
-		on_done(groups, nil)
+		local pulls = mapper.to_pull_requests(result)
+		service.set_cache(cache_key, pulls)
+		on_done(pulls, nil)
 	end, {
 		action = "List MRs",
 		endpoint = endpoint,
@@ -139,7 +139,7 @@ end
 
 ---@param pr PullRequestRef
 ---@param opts { force_load?: boolean, force_refresh?: boolean }|nil
----@param on_done fun(pr: PullRequest|nil, err: string|nil)
+---@param on_done fun(pr: PullRequestDetails|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_pullrequest(pr, opts, on_done)
 	opts = opts or {}
@@ -165,7 +165,7 @@ function M.fetch_pullrequest(pr, opts, on_done)
 			on_done(nil, err)
 			return
 		end
-		local mr = mapper.to_pull_request(result)
+		local mr = mapper.to_pull_request_details(result)
 		if mr then
 			service.set_memory_cache(cache_key, mr)
 		end
@@ -183,14 +183,7 @@ end
 ---@return { cancel: fun() }|nil
 function M.fetch_description(pr, opts, on_done)
 	opts = opts or {}
-	if opts.force_refresh ~= true and pr.description ~= nil then
-		vim.schedule(function()
-			on_done(tostring(pr.description or ""), nil)
-		end)
-		return nil
-	end
-
-	return M.fetch_pullrequest(pr, opts, function(mr, err)
+	return M.fetch_pullrequest(pr, { force_load = opts.force_refresh == true }, function(mr, err)
 		if err or mr == nil then
 			on_done(nil, err)
 			return
@@ -212,11 +205,13 @@ local function bust_caches(pr)
 		return
 	end
 	service.delete_memory_cache(string.format("gitlab_pulls:get:%s!%d", path, iid))
+	service.delete_memory_cache(string.format("gitlab_pulls:reviewers:%s!%d", path, iid))
+	service.delete_memory_cache(string.format("gitlab_pulls:review_metadata:%s!%d", path, iid))
 end
 
 ---@param pr PullRequest
 ---@param payload table
----@param on_done fun(pr: PullRequest|nil, err: string|nil)
+---@param on_done fun(pr: PullRequestDetails|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.update(pr, payload, on_done)
 	local path, iid = project_iid(pr)
@@ -231,7 +226,7 @@ function M.update(pr, payload, on_done)
 			return
 		end
 		bust_caches(pr)
-		on_done(mapper.to_pull_request(result), nil)
+		on_done(mapper.to_pull_request_details(result), nil)
 	end, {
 		action = "Update MR",
 		project_path = path,
@@ -284,7 +279,9 @@ function M.update_description(pr, description, on_done)
 			on_done(false, err)
 			return
 		end
-		pr.description = updated and updated.description or description
+		if pr.description ~= nil then
+			pr.description = updated and updated.description or description
+		end
 		on_done(true, nil)
 	end)
 end
@@ -335,7 +332,9 @@ function M.fetch_default_reviewers(opts, on_done)
 
 		local selected = {}
 		for _, reviewer in ipairs((opts.pr and opts.pr.reviewers) or {}) do
-			selected[tostring(reviewer.provider_id or "")] = true
+			if reviewer.role == "reviewer" then
+				selected[tostring(reviewer.username or ""):lower()] = true
+			end
 		end
 
 		local reviewers = {}
@@ -346,7 +345,7 @@ function M.fetch_default_reviewers(opts, on_done)
 				table.insert(reviewers, {
 					label = "@" .. login,
 					provider_id = tostring(id),
-					selected = selected[tostring(id)] == true,
+					selected = selected[login:lower()] == true,
 					default = false,
 				})
 			end
@@ -548,49 +547,13 @@ end
 ---@param on_done fun(reviewers: PullsReviewer[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_reviewers(pr, opts, on_done)
-	opts = opts or {}
-
-	---@param current PullsReviewer[]
-	local function build(current)
-		reviews_api.fetch_reviewer_states(pr, opts, function(states, _)
-			states = states or {}
-			local reviewers = {}
-			for _, r in ipairs(current) do
-				if r.username ~= "" then
-					local s = tostring(states[r.username] or ""):lower()
-					local decision = "pending"
-					if s == "approved" then
-						decision = "approved"
-					elseif s == "requested_changes" then
-						decision = "changes_requested"
-					end
-					table.insert(reviewers, {
-						id = r.id,
-						provider_id = r.provider_id,
-						name = r.name ~= "" and r.name or r.username,
-						username = r.username,
-						nickname = r.nickname or r.username,
-						decision = decision,
-					})
-				end
-			end
-			on_done(reviewers, nil)
-		end)
-	end
-
-	if opts.force_refresh ~= true and pr.reviewers ~= nil then
-		vim.schedule(function()
-			build(pr.reviewers or {})
-		end)
-		return nil
-	end
-
-	return M.fetch_pullrequest(pr, opts, function(mr, err)
-		if err or mr == nil then
-			on_done(nil, err)
+	return reviews_api.fetch_reviewers(pr, opts, function(reviewers, err)
+		if err or reviewers == nil then
+			on_done(nil, err or "Failed to fetch reviewers")
 			return
 		end
-		build(mr.reviewers or {})
+		pr.reviewers = reviewers
+		on_done(reviewers, nil)
 	end)
 end
 

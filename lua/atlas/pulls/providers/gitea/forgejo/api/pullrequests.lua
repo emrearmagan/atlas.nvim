@@ -1,4 +1,5 @@
 local service = require("atlas.providers.gitea.forgejo.client").pulls
+local config = require("atlas.config")
 local pagination = require("atlas.pulls.providers.gitea.forgejo.api.pagination")
 local mapper = require("atlas.pulls.providers.gitea.forgejo.api.mapper")
 local request_scope = require("atlas.core.requests")
@@ -8,7 +9,7 @@ local api = {}
 local cache_namespace = "forgejo"
 
 local function draft_prefix()
-	local prefix = vim.trim(tostring(service.config().draft_prefix or ""))
+	local prefix = vim.trim(tostring((config.domain_options("gitea", "pulls") or {}).draft_prefix or ""))
 	return prefix ~= "" and prefix or "WIP:"
 end
 

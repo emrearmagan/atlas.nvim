@@ -1,7 +1,7 @@
 require("atlas.pulls.providers.gitea.config")
 
----@type AtlasGiteaForgejoPullsConfig
-local options = require("atlas.providers").options("gitea", "pulls") or {}
+---@type AtlasGiteaForgejoProviderConfig
+local options = require("atlas.config").provider_options("gitea") or {}
 local api_type = options.api_type or "gitea"
 
 if api_type == "gitea" then
@@ -11,4 +11,4 @@ if api_type == "forgejo" then
 	return require("atlas.pulls.providers.gitea.forgejo")
 end
 
-error("pulls.providers.gitea.api_type must be 'gitea' or 'forgejo'")
+error("providers.gitea.api_type must be 'gitea' or 'forgejo'")

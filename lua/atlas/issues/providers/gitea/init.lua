@@ -131,7 +131,7 @@ end
 
 ---@return AtlasGiteaForgejoIssuesViewConfig[]
 function M.views()
-	local cfg = require("atlas.providers").options("gitea", "issues") or {}
+	local cfg = require("atlas.config").domain_options("gitea", "issues") or {}
 	local views = cfg.views
 	if views == nil then
 		views = {

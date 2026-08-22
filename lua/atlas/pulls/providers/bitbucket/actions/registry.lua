@@ -167,7 +167,7 @@ local function search(ctx, done)
 						name = "Search",
 						key = nil,
 						layout = "compact",
-						repos = {
+						targets = {
 							{
 								workspace = tostring(repo.owner or ""),
 								repo = tostring(repo.repo_name or ""),

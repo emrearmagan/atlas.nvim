@@ -1,28 +1,19 @@
-local providers = require("atlas.providers")
+local config = require("atlas.config")
 
----@param domain "pulls"|"issues"
----@return AtlasGiteaForgejoConfig
-local function config(domain)
-	local configured = providers.options("gitea", domain)
-	if configured ~= nil then
-		return configured
-	end
-	if domain == "issues" then
-		return providers.options("gitea", "pulls") or {}
-	end
-	return {}
+---@return AtlasGiteaForgejoProviderConfig
+local function provider_config()
+	return config.provider_options("gitea") or {}
 end
 
----@param domain "pulls"|"issues"
 ---@return "gitea"|"forgejo"
-local function api_type(domain)
-	return config(domain).api_type == "forgejo" and "forgejo" or "gitea"
+local function api_type()
+	return provider_config().api_type == "forgejo" and "forgejo" or "gitea"
 end
 
 ---@param domain "pulls"|"issues"
 ---@return table
 local function client(domain)
-	return require("atlas.providers.gitea." .. api_type(domain) .. ".client")[domain]
+	return require("atlas.providers.gitea." .. api_type() .. ".client")[domain]
 end
 
 return {

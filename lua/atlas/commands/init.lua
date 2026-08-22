@@ -41,9 +41,13 @@ end
 ---@param arglead string
 ---@return string[]
 local function complete_providers(domain, arglead)
+	local ids = {}
+	for _, provider in ipairs(providers.configured(domain)) do
+		table.insert(ids, provider.id)
+	end
 	return vim.tbl_filter(function(provider)
 		return provider:find(arglead, 1, true) == 1
-	end, require("atlas.providers").ids(domain))
+	end, ids)
 end
 
 ---@param arglead string
@@ -163,26 +167,57 @@ M.register({
 	end,
 })
 
+local function clear_caches()
+	require("atlas.core.cache").clear_all()
+	require("atlas.core.memory_cache").clear_all()
+end
+
 M.register({
 	name = "clear",
-	usage = "clear [notes]",
-	description = "Clear Atlas data or local notes",
+	usage = "clear [cache|notes|stars]",
+	description = "Clear Atlas data, caches, local notes, or starred items",
 	complete = function(arglead)
-		return complete_options(arglead, { "notes" })
+		return complete_options(arglead, { "cache", "notes", "stars" })
 	end,
 	run = function(args)
 		local target = args[1] and args[1]:lower() or nil
+		if target == "cache" then
+			vim.ui.input({ prompt = "Delete Atlas caches and cloned repositories? [y/N]: " }, function(answer)
+				answer = vim.trim(tostring(answer or "")):lower()
+				if answer ~= "y" and answer ~= "yes" then
+					return
+				end
+				clear_caches()
+				notify.info("Atlas caches cleared")
+			end)
+			return
+		end
 		if target == "notes" then
 			require("atlas.pulls.notes.ui").clear_all()
 			return
 		end
+		if target == "stars" then
+			vim.ui.input({ prompt = "Delete all starred items? [y/N]: " }, function(answer)
+				answer = vim.trim(tostring(answer or "")):lower()
+				if answer ~= "y" and answer ~= "yes" then
+					return
+				end
+				local cleared, err = require("atlas.core.starred").clear_all()
+				if not cleared then
+					notify.error(err or "Unable to delete starred items")
+					return
+				end
+				notify.info("Starred items deleted")
+			end)
+			return
+		end
 		if target then
-			notify.error("Usage: :Atlas clear [notes]")
+			notify.error("Usage: :Atlas clear [cache|notes|stars]")
 			return
 		end
 
 		vim.ui.input(
-			{ prompt = "Delete Atlas caches, cloned repositories, local notes, and logs? [y/N]: " },
+			{ prompt = "Delete Atlas caches, cloned repositories, local notes, starred items, and logs? [y/N]: " },
 			function(answer)
 				answer = vim.trim(tostring(answer or "")):lower()
 				if answer ~= "y" and answer ~= "yes" then
@@ -193,8 +228,12 @@ M.register({
 					notify.error(err or "Unable to delete local notes")
 					return
 				end
-				require("atlas.core.cache").clear_all()
-				require("atlas.core.memory_cache").clear_all()
+				local stars_cleared, stars_err = require("atlas.core.starred").clear_all()
+				if not stars_cleared then
+					notify.error(stars_err or "Unable to delete starred items")
+					return
+				end
+				clear_caches()
 				require("atlas.core.logger").clear()
 				local notes_ui = package.loaded["atlas.pulls.notes.ui"]
 				if notes_ui then
@@ -247,8 +286,10 @@ local function pick_command()
 			add(command, { "pr" }, "Create a pull request")
 			add(command, { "issue" }, "Create an issue")
 		elseif command.name == "clear" then
-			add(command, {}, "Clear caches, clones, notes, and logs")
+			add(command, {}, "Clear caches, clones, notes, stars, and logs")
+			add(command, { "cache" }, "Clear caches and cloned repositories")
 			add(command, { "notes" }, "Clear local review notes")
+			add(command, { "stars" }, "Clear starred items")
 		else
 			add(command, {}, command.description)
 		end

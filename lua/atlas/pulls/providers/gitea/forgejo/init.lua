@@ -59,7 +59,7 @@ end
 
 ---@return AtlasGiteaForgejoPullsViewConfig[]
 local function views()
-	local cfg = require("atlas.providers").options("gitea", "pulls") or {}
+	local cfg = require("atlas.config").domain_options("gitea", "pulls") or {}
 	return require("atlas.ui.shared.bookmarks_view").append_to_views(cfg.views or {}, cfg.bookmarks, "S", "Search")
 end
 

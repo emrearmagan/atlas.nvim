@@ -52,9 +52,7 @@ local function new(domain)
 	local client = {}
 
 	function client.gitlab_config()
-		local options = config.options or {}
-		local provider_options = (options[domain] or {}).providers or {}
-		return provider_options.gitlab or {}
+		return config.provider_options("gitlab") or {}
 	end
 
 	---@return string base_url, string|nil err
@@ -136,6 +134,11 @@ local function new(domain)
 	---@param key string
 	function client.delete_cache(key)
 		cache.delete(key)
+	end
+
+	---@param prefix string
+	function client.clear_cache(prefix)
+		cache.clear_prefix(prefix)
 	end
 
 	---@param str string

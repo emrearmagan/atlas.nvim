@@ -237,7 +237,9 @@ function M.open_popup(opts)
 	vim.bo[buf].buftype = "nofile"
 	vim.bo[buf].bufhidden = "wipe"
 	vim.bo[buf].swapfile = false
-	vim.bo[buf].filetype = "atlas-review-thread"
+	vim.bo[buf].filetype = "atlas.review-thread"
+	vim.bo[buf].syntax = "OFF"
+	pcall(vim.treesitter.stop, buf)
 	vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
 	for _, span in ipairs(spans) do
 		vim.api.nvim_buf_set_extmark(buf, popup_namespace, span.line, span.start_col, {

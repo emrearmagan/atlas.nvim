@@ -1,10 +1,12 @@
 ---@class GitHubIssuesProvider : IssuesProvider
 local M = {}
 
+local config = require("atlas.config")
 local resolver = require("atlas.providers.resolve")
 local request_scope = require("atlas.core.requests")
 local issue_cache = require("atlas.issues.providers.github.api.cache")
 local notifications_api = require("atlas.providers.github.notifications").new("issues")
+local git = require("atlas.core.git")
 
 ---@param view IssuesViewConfig
 ---@param opts IssuesFetchOpts
@@ -63,9 +65,11 @@ function M.fetch_issue(key, opts, on_done)
 end
 
 ---@param key string
+---@param opts { force_load: boolean|nil }|nil
 ---@param on_done fun(raw: any, err: string|nil)
 ---@return { cancel: fun() }|nil
-local function fetch_description(key, on_done)
+local function fetch_description(key, opts, on_done)
+	opts = opts or {}
 	local normalizer = require("atlas.issues.providers.github.api.mapper")
 	local slug, number = normalizer.parse_key(tostring(key or ""))
 	if slug == "" or number == nil then
@@ -73,7 +77,15 @@ local function fetch_description(key, on_done)
 		return nil
 	end
 	local cli = require("atlas.providers.github.client").issues
-	return cli.gh({
+	local cache_key = string.format("github_issues:description:%s#%d", slug, number)
+	if not opts.force_load then
+		local cached, ok = cli.get_mem(cache_key)
+		if ok then
+			on_done(cached, nil)
+			return nil
+		end
+	end
+	return cli.gh_text({
 		"api",
 		string.format("repos/%s/issues/%d", slug, number),
 		"--jq",
@@ -84,6 +96,7 @@ local function fetch_description(key, on_done)
 			return
 		end
 		local body = type(result) == "string" and result:gsub("\n$", "") or ""
+		cli.set_mem(cache_key, body)
 		on_done(body, nil)
 	end)
 end
@@ -192,26 +205,30 @@ function M.fetch_conversation(issue, opts, on_done)
 		}, nil)
 	end
 
-	requests.run(function(done)
-		return timeline.list_conversation(key, done, { force_load = opts.force_refresh == true })
-	end, function(result, err)
-		if err or type(result) ~= "table" then
-			on_done(nil, err or "Failed to fetch conversation")
+	local description = tostring((issue._raw or {}).body or "")
+	local starts = {
+		timeline = function(done)
+			return timeline.list_conversation(key, done, { force_load = opts.force_refresh == true })
+		end,
+	}
+	if description == "" or opts.force_refresh == true then
+		starts.description = function(done)
+			return fetch_description(key, { force_load = opts.force_refresh == true }, done)
+		end
+	end
+
+	requests.all(starts, function(values, errors)
+		if errors.timeline then
+			on_done(nil, errors.timeline)
 			return
 		end
 
-		local raw = issue._raw or {}
-		local description = tostring(raw.body or "")
-		if description ~= "" then
-			finish(result, description)
-			return
+		if errors.description == nil and values.description ~= nil then
+			description = tostring(values.description)
+			issue._raw = issue._raw or {}
+			issue._raw.body = description
 		end
-
-		requests.run(function(done)
-			return fetch_description(key, done)
-		end, function(body)
-			finish(result, tostring(body or ""))
-		end)
+		finish(values.timeline, description)
 	end)
 	return requests
 end
@@ -267,18 +284,39 @@ function M.fetch_activity(issue, opts, on_done)
 	end, { force_load = opts and opts.force_load == true or false })
 end
 
+---@param view AtlasGitHubIssuesViewConfig
+---@return AtlasGitHubIssuesViewConfig
+local function resolve_cur_repo(view)
+	if not view.current_repo then
+		return view
+	end
+	local root = git.repo_root()
+	local info = git.local_repository(root)
+	if not info then
+		return view
+	end
+	local resolved = vim.tbl_extend("force", {}, view)
+	local additional = (view.search and vim.search ~= "") and (" " .. view.search) or ""
+	resolved.search = string.format("repo:%s%s", info.slug, additional)
+	return resolved
+end
+
 ---@return AtlasGitHubIssuesViewConfig[]
 function M.views()
-	local cli = require("atlas.providers.github.client").issues
-	local cfg = cli.github_config()
-	local views = cfg.views or {
-		{
-			name = "Assigned",
-			key = "1",
-			search = "assignee:@me is:open",
-		},
-	}
-	return require("atlas.ui.shared.bookmarks_view").append_to_views(views, cfg.bookmarks, "S", "Search")
+	local cfg = config.domain_options("github", "issues") or {}
+	local views = type(cfg.views) == "table" and #cfg.views > 0 and cfg.views
+		or {
+			{
+				name = "Assigned",
+				key = "1",
+				search = "assignee:@me is:open",
+			},
+		}
+	local resolved = {}
+	for i, view in ipairs(views) do
+		resolved[i] = resolve_cur_repo(view)
+	end
+	return resolved
 end
 
 local renderer = require("atlas.issues.providers.github.ui.renderer")

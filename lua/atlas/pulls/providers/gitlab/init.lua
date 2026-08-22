@@ -3,6 +3,7 @@ local activity_api = require("atlas.pulls.providers.gitlab.api.activity")
 local changes_api = require("atlas.pulls.providers.gitlab.api.changes")
 local checks_api = require("atlas.pulls.providers.gitlab.api.checks")
 local comments_api = require("atlas.pulls.providers.gitlab.api.comments")
+local config = require("atlas.config")
 local notifications_api = require("atlas.providers.gitlab.notifications").new("pulls")
 local pipelines_api = require("atlas.pulls.providers.gitlab.api.pipelines")
 local pullrequests_api = require("atlas.pulls.providers.gitlab.api.pullrequests")
@@ -11,10 +12,11 @@ local reviews_api = require("atlas.pulls.providers.gitlab.api.reviews")
 local service = require("atlas.providers.gitlab.client").pulls
 local users_api = require("atlas.pulls.providers.gitlab.api.users")
 local resolver = require("atlas.providers.resolve")
+local git = require("atlas.core.git")
 
 ---@param view AtlasPullsViewConfig
 ---@param opts PullsFetchOpts
----@param on_done fun(groups: PullsGroup[], err: string[]|nil)
+---@param on_done fun(pulls: PullRequest[], err: string[]|nil)
 ---@return { cancel: fun() }|nil
 local function fetch_pullrequests(view, opts, on_done)
 	---@cast view AtlasGitLabPullsViewConfig
@@ -44,18 +46,18 @@ local function fetch_pullrequests(view, opts, on_done)
 		force_load = opts and opts.force_load == true or false,
 		pagelen = opts and opts.pagelen or 50,
 		state = state,
-	}, function(groups, err)
+	}, function(pulls, err)
 		if err then
 			on_done({}, { err })
 			return
 		end
-		on_done(groups or {}, nil)
+		on_done(pulls, nil)
 	end)
 end
 
 ---@param pr PullRequestRef
 ---@param opts PullsFetchOpts
----@param on_done fun(pr: PullRequest|nil, err: string|nil)
+---@param on_done fun(pr: PullRequestDetails|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 local function fetch_pullrequest(pr, opts, on_done)
 	return pullrequests_api.fetch_pullrequest(pr, { force_load = opts and opts.force_load == true or false }, on_done)
@@ -63,7 +65,7 @@ end
 
 ---@param pr PullRequest
 ---@param opts { force_refresh: boolean|nil }|nil
----@param on_done fun(result: { comments: PullsComment[], events: PullsActivityEntry[] }|nil, err: string|nil)
+---@param on_done fun(items: PullsConversationItem[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 local function fetch_conversation(pr, opts, on_done)
 	local pending = 2
@@ -83,7 +85,24 @@ local function fetch_conversation(pr, opts, on_done)
 			on_done(nil, first_err or "Failed to fetch conversation")
 			return
 		end
-		on_done({ comments = comments_result or {}, events = events_result or {} }, nil)
+		local items = {}
+		for _, comment in ipairs(comments_result or {}) do
+			table.insert(items, {
+				id = "comment:" .. tostring(comment.id),
+				kind = "comment",
+				created_on = comment.created_on or "",
+				entity = comment,
+			})
+		end
+		for _, event in ipairs(events_result or {}) do
+			table.insert(items, {
+				id = table.concat({ "activity", event.date or "", event.kind or "" }, ":"),
+				kind = "activity",
+				created_on = event.date or "",
+				entity = event,
+			})
+		end
+		on_done(items, first_err)
 	end
 
 	local activity_handle = activity_api.fetch_activity(pr, opts, function(entries, err)
@@ -149,15 +168,36 @@ local function create_pr(opts, on_done)
 	end)
 end
 
+---@param view AtlasGitLabPullsViewConfig
+---@return AtlasGitLabPullsViewConfig
+local function resolve_cur_repo(view)
+	if not view.current_repo then
+		return view
+	end
+	local root = git.repo_root()
+	local info = git.local_repository(root)
+	if not info then
+		return view
+	end
+	local resolved = vim.tbl_extend("force", {}, view)
+	resolved.project = info.slug
+	resolved.scope = view.scope or "all"
+	return resolved
+end
+
 ---@return AtlasGitLabPullsViewConfig[]
 local function views()
-	local config = service.gitlab_config()
-	local configured = config.views
+	local options = config.domain_options("gitlab", "pulls") or {}
+	local configured = type(options.views) == "table" and #options.views > 0 and options.views
 		or {
 			{ name = "Assigned", key = "1", scope = "assigned_to_me", state = "opened" },
 			{ name = "Created", key = "2", scope = "created_by_me", state = "opened" },
 		}
-	return require("atlas.ui.shared.bookmarks_view").append_to_views(configured, config.bookmarks, "S", "Search")
+	local resolved = {}
+	for i, view in ipairs(configured) do
+		resolved[i] = resolve_cur_repo(view)
+	end
+	return resolved
 end
 
 ---@param value string

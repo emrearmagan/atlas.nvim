@@ -55,7 +55,7 @@ local function fetch_pullrequests_single(workspace, repo, opts, on_done)
 		table.insert(state_params, "state=" .. s)
 	end
 	local endpoint = string.format(
-		"/repositories/%s/%s/pullrequests?%s&pagelen=%d",
+		"/repositories/%s/%s/pullrequests?%s&pagelen=%d&fields=%%2Bvalues.participants",
 		workspace,
 		repo,
 		table.concat(state_params, "&"),
@@ -80,11 +80,12 @@ local function fetch_pullrequests_single(workspace, repo, opts, on_done)
 	end, { action = "Fetching pull requests", workspace = workspace, repo = repo })
 end
 
----@param view_repos AtlasBitbucketRepoRef[]
+---@param view_repos AtlasBitbucketRepoTarget[]
 ---@param opts { force_load: boolean, pagelen: number|nil, statuses: string[]|nil }
----@param on_done fun(groups: PullsGroup[], err: string[]|nil)
+---@param on_done fun(pulls: PullRequest[], err: string[]|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_pullrequests(view_repos, opts, on_done)
+	local MAX_CONCURRENT_REQUESTS = 8
 	if view_repos == nil or #view_repos == 0 then
 		on_done({}, nil)
 		return nil
@@ -103,62 +104,91 @@ function M.fetch_pullrequests(view_repos, opts, on_done)
 	end
 
 	local pending = #view_repos
+	local next_index = 1
+	local active = 0
 	local done = false
-	local all_prs = {}
+	local pumping = false
+	local results = {}
 	local errors = {}
 	local handles = {}
 
 	local function cancel_all()
 		done = true
-		for _, handle in ipairs(handles) do
+		for _, handle in pairs(handles) do
 			if handle and handle.cancel then
 				pcall(handle.cancel)
 			end
 		end
+		handles = {}
 	end
 
-	local function finish(prs, err)
+	local pump
+
+	local function finish(index, prs, err)
 		if done then
 			return
 		end
 
+		handles[index] = nil
+		active = active - 1
 		if err then
 			table.insert(errors, tostring(err))
 		end
 
-		for _, pr in ipairs(prs or {}) do
-			table.insert(all_prs, pr)
-		end
+		results[index] = prs or {}
 
 		pending = pending - 1
 		if pending == 0 then
 			done = true
+			local all_prs = {}
+			for result_index = 1, #view_repos do
+				vim.list_extend(all_prs, results[result_index])
+			end
 
 			logger.loginfo("Bitbucket batch fetch completed", {
 				repo_count = #view_repos,
 				pr_count = #all_prs,
 				error_count = #errors,
 			})
-			local groups = mapper.to_pull_request_groups(all_prs)
 			if #errors > 0 then
-				on_done(groups, errors)
+				on_done(all_prs, errors)
 			else
-				on_done(groups, nil)
+				on_done(all_prs, nil)
 			end
+			return
 		end
+
+		pump()
 	end
 
-	for _, repo in ipairs(view_repos) do
-		local handle = fetch_pullrequests_single(repo.workspace, repo.repo, {
-			cache_ttl = ttl,
-			force = opts.force_load,
-			pagelen = opts.pagelen,
-			statuses = opts.statuses,
-		}, finish)
-		if handle ~= nil then
-			table.insert(handles, handle)
+	pump = function()
+		if done or pumping then
+			return
 		end
+		pumping = true
+		while not done and active < MAX_CONCURRENT_REQUESTS and next_index <= #view_repos do
+			local index = next_index
+			local repo = view_repos[index]
+			next_index = next_index + 1
+			active = active + 1
+			local completed = false
+			local handle = fetch_pullrequests_single(repo.workspace, repo.repo, {
+				cache_ttl = ttl,
+				force = opts.force_load,
+				pagelen = opts.pagelen,
+				statuses = opts.statuses,
+			}, function(prs, err)
+				completed = true
+				finish(index, prs, err)
+			end)
+			if handle ~= nil and not completed and not done then
+				handles[index] = handle
+			end
+		end
+		pumping = false
 	end
+
+	pump()
 
 	return {
 		cancel = cancel_all,
@@ -167,7 +197,7 @@ end
 
 ---@param pr PullRequestRef
 ---@param opts? { force_load?: boolean }
----@param on_done fun(detail: PullRequest|nil, err: string|nil)
+---@param on_done fun(detail: PullRequestDetails|nil, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.fetch_pullrequest(pr, opts, on_done)
 	opts = opts or {}
@@ -193,13 +223,31 @@ function M.fetch_pullrequest(pr, opts, on_done)
 			return
 		end
 
-		local prs = mapper.to_pull_requests_list({ values = { result } }, workspace, repo)
-		if #prs == 0 then
-			on_done(nil, "Invalid pull request response")
+		local detail = mapper.to_pull_request_details(result, workspace, repo)
+		service.set_cache(key, detail, service.cache_ttl())
+		on_done(detail, nil)
+	end)
+end
+
+---@param pr PullRequest
+---@param _opts { force_refresh?: boolean }|nil
+---@param on_done fun(description: string|nil, err: string|nil)
+---@return { job_id: integer, cancel: fun() }|nil
+function M.fetch_description(pr, _opts, on_done)
+	local workspace, repo = pr.repo_full_name:match("^([^/]+)/(.+)$")
+	if workspace == nil or repo == nil then
+		on_done(nil, "PR missing workspace/repo info")
+		return nil
+	end
+
+	local endpoint =
+		string.format("/repositories/%s/%s/pullrequests/%s?fields=description", workspace, repo, tostring(pr.id))
+	return service.request("GET", endpoint, nil, nil, function(result, err)
+		if err then
+			on_done(nil, err)
 			return
 		end
-		service.set_cache(key, prs[1], service.cache_ttl())
-		on_done(prs[1], nil)
+		on_done(tostring(result.description or ""), nil)
 	end)
 end
 
@@ -270,8 +318,15 @@ function M.merge(pr, opts, on_done)
 		payload.message = opts.message
 	end
 
-	local body = vim.fn.empty(payload) == 1 and nil or vim.json.encode(payload)
-	return service.request("POST", merge_url, nil, body, on_done)
+	local body = next(payload) == nil and nil or vim.json.encode(payload)
+	return service.request("POST", merge_url, nil, body, function(result, err)
+		if err then
+			on_done(nil, err)
+			return
+		end
+		service.clear_cache()
+		on_done(result, nil)
+	end)
 end
 
 ---@param pr PullRequest
@@ -294,15 +349,9 @@ function M.decline(pr, on_done)
 end
 
 ---@param pr PullRequest
----@param opts { force_refresh: boolean|nil }|nil
----@param on_done fun(reviewers: PullsReviewer[]|nil, err: string|nil)
+---@param on_done fun(participants: table[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_reviewers(pr, opts, on_done)
-	if not (opts or {}).force_refresh and pr.reviewers ~= nil then
-		on_done(pr.reviewers, nil)
-		return nil
-	end
-
+local function fetch_participants(pr, on_done)
 	local raw = pr._raw
 	local self_url = tostring((raw.links or {}).self or "")
 	if self_url == "" then
@@ -317,9 +366,53 @@ function M.fetch_reviewers(pr, opts, on_done)
 			on_done(nil, err)
 			return
 		end
+		on_done((result or {}).participants, nil)
+	end)
+end
 
-		pr.reviewers = mapper.to_reviewers((result or {}).participants)
+---@param pr PullRequest
+---@param opts { force_refresh: boolean|nil }|nil
+---@param on_done fun(reviewers: PullsReviewer[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_reviewers(pr, opts, on_done)
+	if not (opts or {}).force_refresh and pr.reviewers ~= nil then
 		on_done(pr.reviewers, nil)
+		return nil
+	end
+
+	return fetch_participants(pr, function(participants, err)
+		if err then
+			on_done(nil, err)
+			return
+		end
+		pr.reviewers = mapper.to_reviewers(participants)
+		on_done(pr.reviewers, nil)
+	end)
+end
+
+---@param pr PullRequest
+---@param opts { force_refresh: boolean|nil }|nil
+---@param on_done fun(reviewers: PullsReviewer[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_review_participants(pr, opts, on_done)
+	local self_url = tostring(((pr._raw or {}).links or {}).self or "")
+	local key = "bitbucket:pr:review-participants:" .. self_url
+	if not (opts or {}).force_refresh then
+		local cached, ok = service.get_cache(key)
+		if ok then
+			on_done(cached, nil)
+			return nil
+		end
+	end
+
+	return fetch_participants(pr, function(participants, err)
+		if err then
+			on_done(nil, err)
+			return
+		end
+		local reviewers = mapper.to_reviewers(participants)
+		service.set_cache(key, reviewers)
+		on_done(reviewers, nil)
 	end)
 end
 
@@ -380,6 +473,7 @@ function M.create_pr(opts, on_done)
 			return
 		end
 
+		service.clear_cache()
 		on_done({ id = result.id, url = result.links.html.href, message = "PR created" }, nil)
 	end, {
 		action = "Create PR",
@@ -414,7 +508,7 @@ function M.fetch_default_reviewers(opts, on_done)
 		local selected = {}
 		local current = {}
 		for _, reviewer in ipairs((opts.pr and opts.pr.reviewers) or {}) do
-			local id = tostring(reviewer.provider_id or "")
+			local id = reviewer.role == "reviewer" and tostring(reviewer.provider_id or "") or ""
 			if id ~= "" then
 				selected[id] = true
 				current[id] = reviewer

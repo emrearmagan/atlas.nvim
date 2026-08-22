@@ -50,6 +50,8 @@ local function fetch_comments(pr, opts, query, on_done)
 	local force = (opts or {}).force_refresh == true
 	local sep = comments_url:find("?") and "&" or "?"
 	local fields = "%2Bvalues.resolution.user%2C%2Bvalues.resolution.created_on"
+		.. "%2C%2Bvalues.inline.*%2C-values.inline.context_lines"
+		.. "%2C-values.inline.src_rev%2C-values.inline.dest_rev%2C-values.inline.base_rev"
 	local filter = query and "&q=" .. query or ""
 	local url = string.format("%s%spagelen=%d&fields=%s%s", comments_url, sep, 100, fields, filter)
 	local key = "bitbucket:pr:comments:" .. url

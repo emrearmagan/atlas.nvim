@@ -2,7 +2,7 @@ local actions = require("atlas.pulls.providers.github.actions")
 local activity_api = require("atlas.pulls.providers.github.api.activity")
 local changes_api = require("atlas.pulls.providers.github.api.changes")
 local checks_api = require("atlas.pulls.providers.github.api.checks")
-local request_scope = require("atlas.core.requests")
+local config = require("atlas.config")
 local cli = require("atlas.providers.github.client").pulls
 local comments_api = require("atlas.pulls.providers.github.api.comments")
 local notifications_api = require("atlas.providers.github.notifications").new("pulls")
@@ -12,6 +12,7 @@ local repositories_api = require("atlas.pulls.providers.github.api.repositories"
 local reviews_api = require("atlas.pulls.providers.github.api.reviews")
 local users_api = require("atlas.pulls.providers.github.api.users")
 local resolver = require("atlas.providers.resolve")
+local git = require("atlas.core.git")
 
 ---@param on_done fun(user: PullsUser|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
@@ -26,7 +27,7 @@ end
 
 ---@param view AtlasPullsViewConfig
 ---@param opts PullsFetchOpts
----@param on_done fun(groups: PullsGroup[], err: string[]|nil)
+---@param on_done fun(pulls: PullRequest[], err: string[]|nil)
 ---@return { cancel: fun() }|nil
 local function fetch_pullrequests(view, opts, on_done)
 	---@cast view AtlasGitHubViewConfig
@@ -60,7 +61,7 @@ end
 
 ---@param pr PullRequestRef
 ---@param opts PullsFetchOpts
----@param on_done fun(pr: PullRequest|nil, err: string|nil)
+---@param on_done fun(pr: PullRequestDetails|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 local function fetch_pullrequest(pr, opts, on_done)
 	local owner, repo = pr.repo_full_name:match("^([^/]+)/(.+)$")
@@ -75,56 +76,18 @@ end
 
 ---@param pr PullRequest
 ---@param opts { force_refresh: boolean|nil }|nil
----@param on_done fun(result: { comments: PullsComment[], events: PullsActivityEntry[] }|nil, err: string|nil)
+---@param on_done fun(items: PullsConversationItem[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 local function fetch_conversation(pr, opts, on_done)
-	local requests = request_scope.new()
-
-	---@param result { comments: PullsComment[], events: PullsActivityEntry[] }
-	---@param description string
-	local function finish(result, description)
-		local comments = type(result.comments) == "table" and result.comments or {}
-		if description ~= "" then
-			table.insert(comments, 1, {
-				id = "__body__",
-				parent_id = nil,
-				author = pr.author,
-				content_raw = description,
-				created_on = pr.created_on or "",
-				reactions = pr.reactions,
-			})
-		end
-		on_done({ comments = comments, events = type(result.events) == "table" and result.events or {} }, nil)
-	end
-
-	requests.run(function(done)
-		return activity_api.fetch_conversation(pr, opts, done)
-	end, function(result, err)
-		if err or type(result) ~= "table" then
-			on_done(nil, err or "Failed to fetch conversation")
-			return
-		end
-
-		local description = tostring(pr.description or "")
-		if description ~= "" then
-			finish(result, description)
-			return
-		end
-		requests.run(function(done)
-			return pullrequests_api.get_description(pr, opts, done)
-		end, function(value)
-			finish(result, tostring(value or ""))
-		end)
-	end)
-	return requests
+	return activity_api.fetch_conversation(pr, opts, on_done)
 end
 
 ---@param pr PullRequest
----@param comment PullsComment
+---@param item PullsConversationItem
 ---@param key string
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-local function add_reaction(pr, comment, key, on_done)
+local function add_reaction(pr, item, key, on_done)
 	local repo_slug = pr.repo_full_name or ""
 	if repo_slug == "" then
 		on_done(false, "Missing repo")
@@ -132,25 +95,53 @@ local function add_reaction(pr, comment, key, on_done)
 	end
 
 	local endpoint
-	if tostring(comment.id) == "__body__" then
+	if item.kind == "description" then
 		endpoint = string.format("repos/%s/issues/%s/reactions", repo_slug, tostring(pr.id))
-	elseif comment.inline or comment.file then
-		endpoint = string.format("repos/%s/pulls/comments/%s/reactions", repo_slug, tostring(comment.id))
+	elseif item.kind == "comment" then
+		---@type PullsComment
+		local comment = item.entity
+		if comment.inline or comment.file then
+			endpoint = string.format("repos/%s/pulls/comments/%s/reactions", repo_slug, tostring(comment.id))
+		else
+			endpoint = string.format("repos/%s/issues/comments/%s/reactions", repo_slug, tostring(comment.id))
+		end
 	else
-		endpoint = string.format("repos/%s/issues/comments/%s/reactions", repo_slug, tostring(comment.id))
+		on_done(false, "This item does not support reactions")
+		return nil
 	end
 	return cli.gh({ "api", "-X", "POST", endpoint, "-f", "content=" .. key }, function(_, err)
 		on_done(err == nil, err)
 	end)
 end
 
+---@param view AtlasGitHubViewConfig
+---@return AtlasGitHubViewConfig
+local function resolve_cur_repo(view)
+	if not view.current_repo then
+		return view
+	end
+	local root = git.repo_root()
+	local info = git.local_repository(root)
+	if not info then
+		return view
+	end
+	local resolved = vim.tbl_extend("force", {}, view)
+	local additional = (view.search and vim.search ~= "") and (" " .. view.search) or ""
+	resolved.search = string.format("repo:%s%s", info.slug, additional)
+	return resolved
+end
+
 ---@return AtlasGitHubViewConfig[]
 local function views()
-	local config = ((require("atlas.config").options.pulls or {}).providers or {}).github or {}
-	---@cast config AtlasGitHubConfig
-	local configured = type(config.views) == "table" and #config.views > 0 and config.views
+	local options = config.domain_options("github", "pulls") or {}
+	---@cast options AtlasGitHubPullsConfig
+	local configured = type(options.views) == "table" and #options.views > 0 and options.views
 		or { { name = "Me", key = "1", search = "involves:@me", layout = "compact" } }
-	return require("atlas.ui.shared.bookmarks_view").append_to_views(configured, config.bookmarks, "S", "Search")
+	local resolved = {}
+	for i, view in ipairs(configured) do
+		resolved[i] = resolve_cur_repo(view)
+	end
+	return resolved
 end
 
 ---@param value string
@@ -283,6 +274,7 @@ return {
 		reviews = {
 			fetch = reviews_api.fetch,
 			fetch_review_context = reviews_api.fetch_context,
+			edit_review = reviews_api.edit_review,
 			start_review = reviews_api.start,
 			submit_review = reviews_api.submit,
 			approve = reviews_api.approve,

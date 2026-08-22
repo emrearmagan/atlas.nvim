@@ -278,7 +278,7 @@ end
 ---@return AtlasJiraViewConfig[]
 function M.views()
 	local cfg = require("atlas.issues.providers.jira.api.config").jira_config()
-	local views = cfg.views
+	local views = type(cfg.views) == "table" and #cfg.views > 0 and cfg.views
 		or {
 			{
 				name = "Issues",
@@ -286,7 +286,7 @@ function M.views()
 				jql = "assignee = currentUser() AND resolution = Unresolved ORDER BY updated DESC",
 			},
 		}
-	return require("atlas.ui.shared.bookmarks_view").append_to_views(views, cfg.bookmarks, "J", "JQL")
+	return views
 end
 
 local renderer = require("atlas.issues.providers.jira.ui.renderer")

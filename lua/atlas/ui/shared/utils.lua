@@ -334,6 +334,13 @@ function M.encode_pretty_json(value)
 end
 
 ---@param text string|nil
+---@return string
+function M.normalize_newlines(text)
+	local value = tostring(text or ""):gsub("\r\n", "\n")
+	return (value:gsub("\r", "\n"))
+end
+
+---@param text string|nil
 ---@return string[]
 function M.sanitize_lines(text)
 	if text == nil or text == "" then
@@ -341,7 +348,7 @@ function M.sanitize_lines(text)
 	end
 
 	local out = {}
-	text = text:gsub("\r\n", "\n")
+	text = M.normalize_newlines(text)
 	for line in (text .. "\n"):gmatch("(.-)\n") do
 		table.insert(out, line)
 	end
@@ -464,8 +471,7 @@ end
 ---@param text string|nil
 ---@return string
 function M.strip_markup(text)
-	local s = tostring(text or "")
-	s = s:gsub("\r\n", "\n")
+	local s = M.normalize_newlines(text)
 	s = s:gsub("<!%-%-.-%-%->", "")
 	-- Markdown links [text](url) → text
 	s = s:gsub("%[([^%]]*)%]%(([^)]*)%)", "%1")

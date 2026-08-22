@@ -1,10 +1,15 @@
 -- One Atlas provider supports both API implementations:
 --
--- gitea = {
---   api_type = "gitea", -- or "forgejo"
---   base_url = "https://git.example.com",
---   token = vim.env.GITEA_TOKEN,
---   cache_ttl = 300,
+-- providers = {
+--   gitea = {
+--     api_type = "gitea", -- or "forgejo"
+--     base_url = "https://git.example.com",
+--     token = vim.env.GITEA_TOKEN,
+--     cache_ttl = 300,
+--   },
+-- },
+-- pulls = {
+--   gitea = {
 --   draft_prefix = "WIP:",
 --   views = {
 --     {
@@ -22,7 +27,8 @@
 --       ["Authentication"] = { repo = "owner/repository", search = "authentication" },
 --     },
 --   },
--- }
+--   },
+-- },
 
 require("atlas.providers.gitea.config")
 
@@ -37,14 +43,12 @@ require("atlas.providers.gitea.config")
 ---@field label string|nil
 ---@field items table<string, AtlasGiteaForgejoPullsSearchConfig>|nil
 
----@class AtlasGiteaPullsConfig : AtlasGiteaForgejoConfig
----@field api_type "gitea"|nil Defaults to Gitea.
+---@class AtlasGiteaPullsConfig
 ---@field draft_prefix string|nil Enabled server prefix used to mark pull requests as drafts. Defaults to `WIP:`.
 ---@field views AtlasGiteaForgejoPullsViewConfig[]|nil
 ---@field bookmarks AtlasGiteaForgejoPullsBookmarksConfig|nil
 
----@class AtlasForgejoPullsConfig : AtlasGiteaForgejoConfig
----@field api_type "forgejo"
+---@class AtlasForgejoPullsConfig
 ---@field draft_prefix string|nil Enabled server prefix used to mark pull requests as drafts. Defaults to `WIP:`.
 ---@field views AtlasGiteaForgejoPullsViewConfig[]|nil
 ---@field bookmarks AtlasGiteaForgejoPullsBookmarksConfig|nil

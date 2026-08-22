@@ -4,7 +4,7 @@
 ---@field is_loading boolean
 ---@field error string|nil
 ---@field current_user PullsUser|nil
----@field pulls PullsGroup[]|nil
+---@field pulls PullRequest[]|nil
 ---@field provider PullsProvider|nil
 ---@field latest_request_tokens table
 ---@field request_seq number

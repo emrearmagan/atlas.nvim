@@ -35,7 +35,7 @@ local function render_chips(chips, opts)
 end
 
 ---@param pr PullRequest
----@param opts { padding_x?: integer, extra_chips?: PullsPanelChip[], pipelines?: PullsPipeline[]|"loading"|string }|nil
+---@param opts { padding_x?: integer, extra_chips?: PullsPanelChip[], pipelines?: PullsPipeline[]|"loading"|string, loading?: boolean }|nil
 ---@return string, table[]
 function M.render(pr, opts)
 	opts = opts or {}
@@ -47,8 +47,8 @@ function M.render(pr, opts)
 		table.insert(chips, chip)
 	end
 
-	if opts.pipelines == "loading" then
-		table.insert(chips, { label = spinner.with_text("Loading pipelines"), hl = "AtlasTextMuted" })
+	if opts.loading or opts.pipelines == "loading" then
+		table.insert(chips, { label = spinner.with_text("Loading..."), hl = "AtlasTextMuted" })
 	elseif type(opts.pipelines) == "table" and #opts.pipelines > 0 then
 		local status = providers.aggregate_pipeline_state(opts.pipelines):lower()
 		if status ~= "unknown" then

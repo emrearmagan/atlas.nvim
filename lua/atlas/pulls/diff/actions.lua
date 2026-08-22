@@ -29,7 +29,6 @@ local function run(session, action)
 			return
 		end
 		if result and not err then
-			review_api.apply_action_data(session, context.data)
 			reload_notes(session)
 			review_api.reload(session)
 		end
@@ -51,7 +50,7 @@ function M.start_or_submit(session)
 		return
 	end
 	local reviews = review.provider.capabilities.reviews or {}
-	if review.state.pending then
+	if review.data.review.pending then
 		if reviews.submit_review then
 			run(session, pull_actions.submit_review)
 		else
@@ -69,7 +68,7 @@ function M.approve(session)
 	if not review or not context or not pull_actions.is_available("approve", context) then
 		return
 	end
-	if review.state.pending and not (review.provider.capabilities.reviews or {}).submit_review then
+	if review.data.review.pending and not (review.provider.capabilities.reviews or {}).submit_review then
 		open_in_browser(session)
 		return
 	end
@@ -83,7 +82,7 @@ function M.request_changes(session)
 	if not review or not context or not pull_actions.is_available("request_changes", context) then
 		return
 	end
-	if review.state.pending and not (review.provider.capabilities.reviews or {}).submit_review then
+	if review.data.review.pending and not (review.provider.capabilities.reviews or {}).submit_review then
 		open_in_browser(session)
 		return
 	end
@@ -101,7 +100,7 @@ function M.open(session)
 		return
 	end
 	local reviews = review.provider.capabilities.reviews or {}
-	local pending = review.state.pending == true
+	local pending = review.data.review.pending == true
 	local reviewable = review.pr.state == "open" or review.pr.state == "draft"
 	local items = {}
 

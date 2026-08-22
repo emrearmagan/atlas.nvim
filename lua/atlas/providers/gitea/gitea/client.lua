@@ -2,7 +2,7 @@ local http = require("atlas.core.http")
 local cache = require("atlas.core.cache")
 local logger = require("atlas.core.logger")
 local memory_cache = require("atlas.core.memory_cache")
-local providers = require("atlas.providers")
+local config = require("atlas.config")
 
 local API_PATH = "/api/v1"
 local API_TYPE = "gitea"
@@ -13,18 +13,9 @@ local NAME = "Gitea"
 local function new(domain)
 	local client = {}
 
-	---@return AtlasGiteaForgejoConfig
+	---@return AtlasGiteaForgejoProviderConfig
 	function client.config()
-		local configured = providers.options("gitea", domain)
-		if configured ~= nil then
-			return configured
-		end
-		-- Pull requests can create issues without requiring the user to duplicate
-		-- the same instance credentials under issues.providers.gitea.
-		if domain == "issues" then
-			return providers.options("gitea", "pulls") or {}
-		end
-		return {}
+		return config.provider_options("gitea") or {}
 	end
 
 	---@return string

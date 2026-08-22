@@ -79,12 +79,16 @@ describe("provider contracts", function()
 
 	it("uses the configured Gitea or Forgejo identity", function()
 		config.options = {
-			pulls = { providers = { gitea = { api_type = "forgejo" } } },
-			issues = { providers = { gitea = { api_type = "gitea" } } },
+			providers = { gitea = { api_type = "forgejo" } },
+			pulls = { gitea = {} },
+			issues = { gitea = {} },
 		}
 
 		assert.equal("Forgejo", providers.gitea.name("pulls"))
 		assert.same({ icon = "", hl_group = "AtlasForgejoTheme" }, providers.gitea.icon("pulls"))
+		assert.equal("Forgejo", providers.gitea.name("issues"))
+
+		config.options.providers.gitea.api_type = "gitea"
 		assert.equal("Gitea", providers.gitea.name("issues"))
 		assert.same({ icon = "", hl_group = "AtlasGiteaTheme" }, providers.gitea.icon("issues"))
 	end)
