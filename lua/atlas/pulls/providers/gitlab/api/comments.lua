@@ -245,7 +245,7 @@ function M.fetch_general(pr, opts, on_done)
 			for _, note in ipairs(json.safe_table(notes.nodes)) do
 				local discussion = json.safe_table(note.discussion)
 				local root = json.safe_table(json.safe_table(discussion.notes).nodes)[1]
-				if note.system ~= true and note.position == nil and root then
+				if note.system ~= true and json.nilify(note.position) == nil and root then
 					note.id = id_tail(note.id)
 					note.award_emoji = json.safe_table(json.safe_table(note.award_emoji).nodes)
 					if type(note.author) == "table" then
