@@ -55,6 +55,27 @@ describe("GitHub Git remote mapping", function()
 	end)
 end)
 
+describe("GitHub reviewer decisions", function()
+	it("keeps an active review request pending after an earlier decision", function()
+		local raw = base_raw()
+		raw.latestOpinionatedReviews = {
+			nodes = {
+				{ state = "APPROVED", author = { id = "2", login = "reviewer", name = "Reviewer" } },
+			},
+		}
+		raw.reviewRequests = {
+			nodes = {
+				{ requestedReviewer = { id = "2", login = "reviewer", name = "Reviewer" } },
+			},
+		}
+
+		local pr = normalizer.to_pull_request(raw)
+
+		assert.equal("pending", pr.reviewers[1].decision)
+		assert.same({}, pr.review_decisions)
+	end)
+end)
+
 describe("review thread resolution", function()
 	local function review_comment(reply_to)
 		return {

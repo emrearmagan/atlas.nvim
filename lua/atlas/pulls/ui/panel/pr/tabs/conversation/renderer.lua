@@ -4,6 +4,8 @@ local keymaps = require("atlas.core.keymaps")
 local utils = require("atlas.ui.shared.utils")
 local spinner = require("atlas.ui.components.spinner")
 local box = require("atlas.ui.components.box")
+local icons = require("atlas.ui.shared.icons")
+local threads = require("atlas.ui.components.threadsv2")
 local review_threads = require("atlas.pulls.ui.components.review_threads")
 local activity_component = require("atlas.pulls.ui.panel.pr.tabs.components.activity")
 local state = require("atlas.pulls.ui.panel.pr.tabs.conversation.state")
@@ -72,43 +74,65 @@ local function render_thread(thread, collapsed, width)
 	return result.lines, result.highlights, result.line_map
 end
 
+---@param line_map table<integer, table>
+---@param item PullsConversationItem
+local function attach_item(line_map, item)
+	for _, entry in pairs(line_map) do
+		entry.conversation_item = item
+		entry.entity_kind = item.kind
+	end
+end
+
+---@param line_map table<integer, table>
+---@param by_entity table<table, PullsConversationItem>
+local function attach_entities(line_map, by_entity)
+	for _, entry in pairs(line_map) do
+		local item = by_entity[entry.comment or entry.activity_entry]
+		if item then
+			entry.conversation_item = item
+		end
+	end
+end
+
 -- Timeline
 
 ---@class PullsConversationTimelineEntry
----@field type "comment"|"activity_run"
+---@field type "comment"|"review"|"description"|"activity_run"
 ---@field timestamp string
 ---@field thread AtlasReviewThreadNode|nil
----@field activities PullsActivityEntry[]|nil
+---@field item PullsConversationItem|nil
+---@field items PullsConversationItem[]|nil
 
----@param comments PullsComment[]
----@param tasks PullsComment[]
----@param activity PullsActivityEntry[]
----@return PullsConversationTimelineEntry[]
-local function build_timeline(comments, tasks, activity)
-	-- Build a sorted mixed list of comments and activity entries.
+---@param items PullsConversationItem[]
+---@return PullsConversationTimelineEntry[], table<table, PullsConversationItem>
+local function build_timeline(items)
 	local mixed, description = {}, nil
-	local conversation_items = vim.list_extend({}, comments)
-	vim.list_extend(conversation_items, tasks)
-	for _, thread in ipairs(review_threads.group_comments(conversation_items)) do
-		local item = {
+	local comments, by_entity = {}, {}
+	for _, item in ipairs(items) do
+		by_entity[item.entity] = item
+		if item.kind == "comment" then
+			table.insert(comments, item.entity)
+		elseif item.kind == "description" then
+			description = { kind = "description", timestamp = item.created_on, item = item }
+		else
+			table.insert(mixed, {
+				kind = item.kind,
+				timestamp = item.created_on,
+				item = item,
+			})
+		end
+	end
+	for _, thread in ipairs(review_threads.group_comments(comments)) do
+		table.insert(mixed, {
 			kind = "comment",
 			timestamp = thread.comment.created_on or "",
 			thread = thread,
-		}
-		if tostring(thread.comment.id) == "__body__" then
-			description = item
-		else
-			table.insert(mixed, item)
-		end
-	end
-	for _, a in ipairs(activity) do
-		table.insert(mixed, { kind = "activity", timestamp = a.date or "", activity = a })
+		})
 	end
 	table.sort(mixed, function(a, b)
 		local ta, tb = tostring(a.timestamp), tostring(b.timestamp)
 		if ta == tb then
-			-- When activity and comment share a timestamp (review body),
-			-- render the activity row first, then the comment under it.
+			-- Keep an activity before other items created at the same time.
 			return a.kind == "activity" and b.kind ~= "activity"
 		end
 		return ta < tb
@@ -121,54 +145,163 @@ local function build_timeline(comments, tasks, activity)
 	local entries, run = {}, {}
 	local function flush_run()
 		if #run > 0 then
-			table.insert(entries, { type = "activity_run", timestamp = run[1].date or "", activities = run })
+			table.insert(entries, { type = "activity_run", timestamp = run[1].created_on, items = run })
 			run = {}
 		end
 	end
 	for _, item in ipairs(mixed) do
 		if item.kind == "activity" then
-			table.insert(run, item.activity)
+			table.insert(run, item.item)
 		else
 			flush_run()
-			table.insert(entries, {
-				type = "comment",
-				timestamp = item.timestamp,
-				thread = item.thread,
-			})
+			if item.kind == "review" or item.kind == "description" then
+				table.insert(entries, { type = item.kind, timestamp = item.timestamp, item = item.item })
+			else
+				table.insert(entries, {
+					type = "comment",
+					timestamp = item.timestamp,
+					thread = item.thread,
+				})
+			end
 		end
 	end
 	flush_run()
-	return entries
+	return entries, by_entity
 end
 
 -- Render
 
+---@param review PullsReviewHistoryEntry
+---@return string, string, string
+local function review_status(review)
+	local icon, hl = icons.pulls("activity")
+	local label = "left a review"
+	if review.state == "approved" then
+		icon, hl = icons.pulls_status("successful")
+		label = "approved"
+	elseif review.state == "changes_requested" then
+		icon, hl = icons.pulls_status("failed")
+		label = "requested changes"
+	elseif review.state == "dismissed" then
+		if review.previous_state == "approved" then
+			icon = icons.pulls_status("successful")
+			hl = "AtlasTextMuted"
+			label = "previously approved"
+		elseif review.previous_state == "changes_requested" then
+			icon = icons.pulls_status("failed")
+			hl = "AtlasTextMuted"
+			label = "previously requested changes"
+		else
+			icon, hl = icons.pulls_status("stopped")
+			label = "dismissed"
+		end
+	end
+	return icon, hl, label
+end
+
+---@param item PullsConversationItem
+---@param width integer
+---@param has_next boolean
+local function render_review(item, width, has_next)
+	---@type PullsReviewHistoryEntry
+	local review = item.entity
+	local icon, icon_hl, label = review_status(review)
+	local timestamp = utils.relative_time(review.submitted_on)
+	local additional = timestamp ~= "" and (label .. "  " .. timestamp) or label
+	local body = utils.strip_markup(review.body)
+	local lines, spans, line_map = threads.render(
+		{
+			{
+				icon = icon,
+				icon_hl = icon_hl,
+				author = review.author and (review.author.nickname or review.author.name) or "Unknown",
+				additional = additional,
+				content = body ~= "" and body or nil,
+			},
+		},
+		width,
+		{
+			padding_x = PADDING_X,
+			content_prefix = has_next and "│ " or "  ",
+			additional_hl = function(_, text)
+				local highlights = {
+					{ start_col = 0, end_col = math.min(#label, #text), hl_group = icon_hl },
+				}
+				local time_start = #label + 2
+				if time_start < #text then
+					table.insert(highlights, {
+						start_col = time_start,
+						end_col = #text,
+						hl_group = "AtlasTextMuted",
+					})
+				end
+				return highlights
+			end,
+		}
+	)
+	attach_item(line_map, item)
+	return lines, spans, line_map
+end
+
+---@param item PullsConversationItem
+---@param width integer
+local function render_description(item, width)
+	---@type PullRequest
+	local pr = item.entity
+	---@type PullsComment
+	local comment = {
+		id = item.id,
+		author = pr.author,
+		content_raw = pr.description or "",
+		created_on = pr.created_on,
+		reactions = pr.reactions,
+	}
+	local lines, spans, line_map = render_thread({ comment = comment, children = {} }, false, width)
+	attach_item(line_map, item)
+	return lines, spans, line_map
+end
+
 ---@param entry PullsConversationTimelineEntry
 ---@param width integer
 ---@param has_next boolean
-local function render_entry(entry, width, has_next)
+---@param by_entity table<table, PullsConversationItem>
+local function render_entry(entry, width, has_next, by_entity)
 	if entry.type == "comment" then
 		local thread = entry.thread
 		local root = thread.comment
 		if root.is_task then
-			return review_threads.render_task_compact(thread, width, {
+			local lines, spans, line_map = review_threads.render_task_compact(thread, width, {
 				padding_x = PADDING_X,
 				content_prefix = has_next and "│ " or "  ",
 			})
+			attach_entities(line_map, by_entity)
+			return lines, spans, line_map
 		end
 		local key = tostring(root.id)
 		if #thread.children > 0 and state.collapsed[key] == nil then
 			state.collapsed[key] = true
 		end
-		return render_thread(thread, state.is_collapsed(root.id), width)
+		local lines, spans, line_map = render_thread(thread, state.is_collapsed(root.id), width)
+		attach_entities(line_map, by_entity)
+		return lines, spans, line_map
+	elseif entry.type == "review" and entry.item then
+		return render_review(entry.item, width, has_next)
+	elseif entry.type == "description" and entry.item then
+		return render_description(entry.item, width)
 	elseif entry.type == "activity_run" then
 		local run_id = tostring(entry.timestamp or "")
-		return activity_component.render(entry.activities or {}, width, {
+		local activities = {}
+		for _, item in ipairs(entry.items or {}) do
+			table.insert(activities, item.entity)
+		end
+		local lines, spans, line_map = activity_component.render(activities, width, {
 			padding_x = PADDING_X,
 			squash = not state.is_run_expanded(run_id),
 			run_id = run_id,
 			has_next = has_next,
 		})
+		attach_entities(line_map or {}, by_entity)
+		return lines, spans, line_map
 	end
 	return {}, {}, {}
 end
@@ -183,24 +316,16 @@ function M.render(_pr, width)
 		return lines, spans, line_map
 	end
 
-	local comments_ready = type(state.comments) == "table"
-	local tasks_ready = type(state.tasks) == "table"
-	local activity_ready = type(state.activity) == "table"
-	if state.comments == nil and state.tasks == nil and state.activity == nil then
+	if state.items == nil then
 		return lines, spans, line_map
 	end
-	if not comments_ready and not tasks_ready and not activity_ready then
+	if state.items == "loading" then
 		utils.push(lines, spans, spinner.with_text("Loading conversation..."), "AtlasTextMuted", PADDING_X)
 		return lines, spans, line_map
 	end
 
-	local comments = comments_ready and state.comments or {}
-	local tasks = tasks_ready and state.tasks or {}
-	local activity = activity_ready and state.activity or {}
-	---@cast comments PullsComment[]
-	---@cast tasks PullsComment[]
-	---@cast activity PullsActivityEntry[]
-	local entries = build_timeline(comments, tasks, activity)
+	---@cast state.items PullsConversationItem[]
+	local entries, by_entity = build_timeline(state.items)
 
 	if #entries == 0 then
 		utils.push(lines, spans, "No conversation yet.", "AtlasTextMuted", PADDING_X)
@@ -211,7 +336,7 @@ function M.render(_pr, width)
 		if #lines > 0 then
 			append_connector(lines, spans)
 		end
-		local e_lines, e_spans, e_map = render_entry(entry, width, index < #entries)
+		local e_lines, e_spans, e_map = render_entry(entry, width, index < #entries, by_entity)
 		splice(lines, spans, line_map, e_lines, e_spans, e_map)
 	end
 

@@ -103,7 +103,7 @@ end
 function M.render(session)
 	local review = session.review
 	local pr = review and review.pr
-	local comments = review and review.comments or {}
+	local comments = review and review.data.comments or {}
 	local identity = pr and string.format("#%s %s", tostring(pr.id), tostring(pr.title))
 		or string.format(
 			"%s...%s",
@@ -140,7 +140,7 @@ function M.render(session)
 			pending = pending + 1
 		end
 	end
-	if pending > 0 or (review and review.state.pending) then
+	if pending > 0 or (review and review.data.review.pending) then
 		items[#items + 1] = {
 			text = icons.pulls_status("inprogress")
 				.. " "

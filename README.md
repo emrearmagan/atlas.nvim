@@ -166,6 +166,9 @@ pulls = {
     open_cmd = "AtlasDiff", -- default; for example "DiffviewOpen" or "CodeDiff".
     show_review_panel = false, -- Set true to show the review panel when a diff opens.
     comment_display = "virtual_lines", -- "virtual_lines" or compact "virtual_text" hints.
+    review_panel = {
+      height = 15,
+    },
 
     -- AtlasDiff options; external viewers use their own configuration.
     layout = "inline", -- "inline" or "side-by-side".

@@ -1,6 +1,7 @@
 ---@class PullsCommentsTab : PullsPRPanelTabModule
 local M = {}
 
+local diff_parser = require("atlas.core.git.diff_parser")
 local request_scope = require("atlas.core.requests")
 local md_editor = require("atlas.ui.popups.editor")
 local statusline = require("atlas.ui.statusline")
@@ -31,13 +32,13 @@ local function author_completion()
 		return nil
 	end
 	local reviewers = require("atlas.pulls.ui.panel.pr.tabs.overview.state").reviewers
-	local conversation = require("atlas.pulls.ui.panel.pr.tabs.conversation.state").comments
+	local conversation = require("atlas.pulls.ui.panel.pr.tabs.conversation.state").comments(false)
 	return comments_capability.comment_completion({
 		pr = pr,
 		comments = data.comments,
 		tasks = data.tasks,
 		reviewers = type(reviewers) == "table" and reviewers or nil,
-		conversation = type(conversation) == "table" and conversation or nil,
+		conversation = conversation,
 	})
 end
 
@@ -68,6 +69,32 @@ end
 ---@return PullsProvider|nil
 local function get_provider()
 	return require("atlas.pulls.state").provider
+end
+
+---@param comments PullsComment[]
+---@param files DiffFile[]
+local function set_hunks(comments, files)
+	local by_path = {}
+	for _, file in ipairs(files) do
+		by_path[file.path] = file
+		if file.old_path and by_path[file.old_path] == nil then
+			by_path[file.old_path] = file
+		end
+	end
+
+	local hunks = {}
+	for _, comment in ipairs(comments) do
+		local inline = comment.inline
+		local anchor = inline and (inline.to or inline.from)
+		if inline and anchor and comment.outdated ~= true then
+			local side = inline.to ~= nil and "new" or "old"
+			local hunk = diff_parser.find_hunk(by_path[inline.path], side, anchor)
+			if hunk then
+				hunks[tostring(comment.id)] = { hunk = hunk, anchor = anchor }
+			end
+		end
+	end
+	state.hunks_by_comment = hunks
 end
 
 ---@param opts { key: string, title: string, initial_text: string|nil, preview: AtlasMarkdownEditorPreview|nil, on_save: fun(text: string|nil) }
@@ -115,12 +142,45 @@ function M.on_select(pr, refresh, opts)
 			local message = tostring(err or "Provider returned no review data")
 			state.status = message
 			statusline.notify("error", string.format("Failed to load review for #%s: %s", pr_id, message))
-		else
+			refresh()
+			return
+		end
+
+		local fetch_diff = provider.capabilities.core.fetch_diff
+		local needs_diff = false
+		for _, comment in ipairs(data.comments) do
+			local inline = comment.inline
+			if comment.outdated ~= true and inline and inline.path and (inline.to or inline.from) then
+				needs_diff = true
+				break
+			end
+		end
+		if not needs_diff or not fetch_diff then
 			state.data = data
 			state.status = nil
 			statusline.notify("success", string.format("Review loaded for #%s", pr_id), 1200)
+			refresh()
+			return
 		end
-		refresh()
+
+		statusline.notify("loading", string.format("Loading diff context for #%s...", pr_id))
+		requests.run(function(done)
+			return fetch_diff(pr, opts, done)
+		end, function(files, diff_err)
+			if not is_current(request_generation, pr) then
+				return
+			end
+			if files then
+				set_hunks(data.comments, files)
+				statusline.notify("success", string.format("Review loaded for #%s", pr_id), 1200)
+			else
+				local message = tostring(diff_err or "Provider returned no diff data")
+				statusline.notify("warn", "Review loaded without diff context: " .. message)
+			end
+			state.data = data
+			state.status = nil
+			refresh()
+		end)
 	end)
 end
 
@@ -136,7 +196,7 @@ function M.render(_pr, width)
 		return renderer.render(width, state.status, nil)
 	end
 	local data = state.data
-	return renderer.render(width, data and data.comments or nil, data and data.tasks or nil)
+	return renderer.render(width, data and data.comments or nil, data and data.tasks or nil, state.hunks_by_comment)
 end
 
 ---@param _lnum integer
@@ -148,7 +208,6 @@ function M.is_selectable_line(_lnum, entry)
 		or k == "content"
 		or k == "thread_header"
 		or k == "thread_content"
-		or k == "hunk_header"
 		or k == "hunk_line"
 		or k == "file_header"
 end
@@ -156,11 +215,6 @@ end
 ---@param _pr PullRequest
 ---@param entry table
 function M.on_enter(_pr, entry)
-	if entry.kind == "hunk_header" and entry.hunk_key then
-		state.collapsed_hunks[entry.hunk_key] = state.collapsed_hunks[entry.hunk_key] ~= true
-		return true
-	end
-
 	local comment = entry.comment
 	if comment ~= nil and (entry.entity_kind == "comment" or entry.entity_kind == "task") then
 		local url = tostring(comment.html_url or comment.url or "")

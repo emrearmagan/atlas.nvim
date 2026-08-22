@@ -39,6 +39,9 @@
 ---@field initial_focus "explorer"|"diff"|nil
 ---@field ignore string[]|nil
 
+---@class AtlasPullsDiffReviewPanelConfig
+---@field height integer|nil
+
 ---@alias AtlasPullsDiffOpenCommand "AtlasDiff"|"DiffviewOpen"|"CodeDiff"
 
 ---@class AtlasPullsDiffConfig
@@ -49,6 +52,7 @@
 ---@field show_review_panel boolean|nil
 ---@field comment_display "virtual_lines"|"virtual_text"|nil Initial comment and note display mode.
 ---@field explorer AtlasPullsDiffExplorerConfig|nil
+---@field review_panel AtlasPullsDiffReviewPanelConfig|nil
 
 ---@class AtlasPullsCustomActionContext
 ---@field repo_path string|nil
@@ -128,6 +132,9 @@ M.options = {
 			compact_context_lines = 3,
 			show_review_panel = false,
 			comment_display = "virtual_lines",
+			review_panel = {
+				height = 15,
+			},
 			explorer = {
 				grouped = true,
 				hidden = false,

@@ -111,12 +111,13 @@ end
 
 -- Reviewers
 
-local DECISION_GROUPS = { "approved", "changes_requested", "pending" }
+local DECISION_GROUPS = { "approved", "changes_requested", "reviewed", "pending" }
 local OTHER_DECISION_GROUPS = { "approved", "changes_requested" }
 
 local DECISION_ICONS = {
 	approved = { icon = icons.pulls_status("successful"), hl = "AtlasTextPositive" },
 	changes_requested = { icon = icons.pulls_status("failed"), hl = "AtlasLogError" },
+	reviewed = { icon = icons.pulls("review"), hl = "AtlasTextMuted" },
 	pending = { icon = icons.pulls_status("inprogress"), hl = "AtlasTextMuted" },
 }
 
@@ -127,7 +128,7 @@ local DECISION_ICONS = {
 local function decision_content(decisions, groups, width)
 	local box_lines = {}
 	local box_spans = {}
-	local grouped = { approved = {}, changes_requested = {}, pending = {} }
+	local grouped = { approved = {}, changes_requested = {}, reviewed = {}, pending = {} }
 	for _, decision in ipairs(decisions) do
 		local decision_state = decision.decision or "pending"
 		if grouped[decision_state] == nil then

@@ -102,7 +102,11 @@ function M.render(tab_items, get_tab_module)
 		utils.append_block(lines, spans, { lines = h_lines, highlights = h_spans })
 
 		-- Chips
-		local chip_line, chip_spans = chips.render(pr, { extra_chips = extra_chips, pipelines = panel_state.pipelines })
+		local chip_line, chip_spans = chips.render(pr, {
+			extra_chips = extra_chips,
+			pipelines = panel_state.pipelines,
+			loading = panel_state.header_loading or panel_state.pipelines == "loading",
+		})
 		table.insert(lines, chip_line)
 		local chip_base = #lines - 1
 		for _, span in ipairs(chip_spans) do

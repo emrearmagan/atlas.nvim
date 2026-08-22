@@ -55,7 +55,7 @@ local function fetch_pullrequests_single(workspace, repo, opts, on_done)
 		table.insert(state_params, "state=" .. s)
 	end
 	local endpoint = string.format(
-		"/repositories/%s/%s/pullrequests?%s&pagelen=%d",
+		"/repositories/%s/%s/pullrequests?%s&pagelen=%d&fields=%%2Bvalues.participants",
 		workspace,
 		repo,
 		table.concat(state_params, "&"),
@@ -331,15 +331,9 @@ function M.decline(pr, on_done)
 end
 
 ---@param pr PullRequest
----@param opts { force_refresh: boolean|nil }|nil
----@param on_done fun(reviewers: PullsReviewer[]|nil, err: string|nil)
+---@param on_done fun(participants: table[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_reviewers(pr, opts, on_done)
-	if not (opts or {}).force_refresh and pr.reviewers ~= nil then
-		on_done(pr.reviewers, nil)
-		return nil
-	end
-
+local function fetch_participants(pr, on_done)
 	local raw = pr._raw
 	local self_url = tostring((raw.links or {}).self or "")
 	if self_url == "" then
@@ -354,11 +348,55 @@ function M.fetch_reviewers(pr, opts, on_done)
 			on_done(nil, err)
 			return
 		end
+		on_done((result or {}).participants, nil)
+	end)
+end
 
-		local participants = (result or {}).participants
+---@param pr PullRequest
+---@param opts { force_refresh: boolean|nil }|nil
+---@param on_done fun(reviewers: PullsReviewer[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_reviewers(pr, opts, on_done)
+	if not (opts or {}).force_refresh and pr.reviewers ~= nil then
+		on_done(pr.reviewers, nil)
+		return nil
+	end
+
+	return fetch_participants(pr, function(participants, err)
+		if err then
+			on_done(nil, err)
+			return
+		end
 		pr.reviewers = mapper.to_reviewers(participants)
 		pr.review_decisions = mapper.to_review_decisions(participants)
 		on_done(pr.reviewers, nil)
+	end)
+end
+
+---@param pr PullRequest
+---@param opts { force_refresh: boolean|nil }|nil
+---@param on_done fun(reviewers: PullsReviewer[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_review_participants(pr, opts, on_done)
+	local self_url = tostring(((pr._raw or {}).links or {}).self or "")
+	local key = "bitbucket:pr:review-participants:" .. self_url
+	if not (opts or {}).force_refresh then
+		local cached, ok = service.get_cache(key)
+		if ok then
+			on_done(cached, nil)
+			return nil
+		end
+	end
+
+	return fetch_participants(pr, function(participants, err)
+		if err then
+			on_done(nil, err)
+			return
+		end
+		local reviewers = mapper.to_reviewers(participants)
+		vim.list_extend(reviewers, mapper.to_review_decisions(participants))
+		service.set_cache(key, reviewers)
+		on_done(reviewers, nil)
 	end)
 end
 

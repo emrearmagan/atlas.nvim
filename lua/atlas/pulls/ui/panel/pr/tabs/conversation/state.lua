@@ -4,9 +4,7 @@ local utils = require("atlas.ui.shared.utils")
 local MAX_COMMENT_LINES = 8
 
 ---@class PullsConversationTabState
----@field comments PullsComment[]|"loading"|nil
----@field tasks PullsComment[]|"loading"|nil
----@field activity PullsActivityEntry[]|"loading"|nil
+---@field items PullsConversationItem[]|"loading"|nil
 ---@field error string|nil
 ---@field generation integer
 ---@field collapsed table<string, boolean>
@@ -14,9 +12,7 @@ local MAX_COMMENT_LINES = 8
 ---@field expanded_runs table<string, boolean>
 ---@field requests AtlasRequestScope
 local M = {
-	comments = nil,
-	tasks = nil,
-	activity = nil,
+	items = nil,
 	error = nil,
 	generation = 0,
 	collapsed = {},
@@ -32,9 +28,7 @@ function M.reset()
 	current_pr = nil
 	M.requests.cancel()
 	M.requests = request_scope.new()
-	M.comments = nil
-	M.tasks = nil
-	M.activity = nil
+	M.items = nil
 	M.error = nil
 	M.collapsed = {}
 	M.expanded_comments = {}
@@ -77,7 +71,55 @@ end
 
 ---@return boolean
 function M.any_loading()
-	return M.comments == "loading" or M.tasks == "loading" or M.activity == "loading"
+	return M.items == "loading"
+end
+
+---@param is_task boolean
+---@return PullsComment[]
+function M.comments(is_task)
+	local result = {}
+	if type(M.items) ~= "table" then
+		return result
+	end
+	for _, item in ipairs(M.items) do
+		if item.kind == "comment" then
+			---@type PullsComment
+			local comment = item.entity
+			if (comment.is_task == true) == is_task then
+				table.insert(result, comment)
+			end
+		end
+	end
+	return result
+end
+
+---@param comment PullsComment
+function M.upsert_comment(comment)
+	if type(M.items) ~= "table" then
+		return
+	end
+	local id = (comment.is_task and "task:" or "comment:") .. tostring(comment.id)
+	for index, item in ipairs(M.items) do
+		if item.id == id then
+			M.items[index] = { id = id, kind = "comment", created_on = comment.created_on or "", entity = comment }
+			return
+		end
+	end
+	table.insert(M.items, { id = id, kind = "comment", created_on = comment.created_on or "", entity = comment })
+end
+
+---@param comment PullsComment
+function M.remove_comment(comment)
+	if type(M.items) ~= "table" then
+		return
+	end
+	local id = (comment.is_task and "task:" or "comment:") .. tostring(comment.id)
+	for index = #M.items, 1, -1 do
+		if M.items[index].id == id then
+			table.remove(M.items, index)
+			return
+		end
+	end
 end
 
 ---@param comment PullsComment

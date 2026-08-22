@@ -3,7 +3,6 @@ local M = {}
 
 local header = require("atlas.pulls.ui.panel.components.header")
 local pullrequests_api = require("atlas.pulls.providers.gitlab.api.pullrequests")
-local spinner = require("atlas.ui.components.spinner")
 local icons = require("atlas.ui.shared.icons")
 
 local state = {
@@ -35,7 +34,6 @@ end
 function M.chips(pr, loading)
 	local chips = {}
 	if loading and state.labels_by_name == nil then
-		table.insert(chips, { label = spinner.with_text("Loading labels"), hl = "AtlasTextMuted" })
 		return chips
 	end
 

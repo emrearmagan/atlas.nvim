@@ -6,8 +6,7 @@ local utils = require("atlas.ui.shared.utils")
 ---@class AtlasDiffHunkRenderOptions
 ---@field max_width integer
 ---@field padding_x integer|nil                       default 1
----@field collapsed_hunks table<string, boolean>|nil  key = path|new_start|old_start
----@field hunk_footer (fun(file: DiffFile, hunk: DiffHunk): string|nil)|nil
+---@field show_line_numbers boolean|nil
 
 local DEFAULT_PADDING = 1
 
@@ -38,58 +37,19 @@ end
 ---@param padding_x integer
 ---@param max_width integer
 local function emit_file_header(lines, spans, file, padding_x, max_width)
-	local additions, deletions = M.file_stats(file)
-
 	local label = file.path
 	if file.status == "renamed" and file.old_path then
 		label = file.old_path .. " → " .. file.path
 	end
 
-	local add_text = string.format("+%d", additions)
-	local del_text = string.format("-%d", deletions)
-	local sep = "  "
-	local stats = add_text .. " " .. del_text
-
-	local available = math.max(1, max_width - padding_x - vim.api.nvim_strwidth(sep .. stats))
-	local truncated_label = utils.truncate(label, available, true)
-	local text = string.rep(" ", padding_x) .. truncated_label .. sep .. stats
+	label = utils.truncate(label, math.max(1, max_width - padding_x - 4), true)
+	local prefix = string.rep(" ", padding_x) .. label .. " "
+	local text = prefix .. string.rep("─", math.max(0, max_width - vim.api.nvim_strwidth(prefix)))
 
 	table.insert(lines, text)
 	local lnum = #lines - 1
-
-	local label_start = padding_x
-	local label_end = label_start + #truncated_label
-	table.insert(spans, { line = lnum, start_col = label_start, end_col = label_end, hl_group = "Normal" })
-
-	local add_start = label_end + #sep
-	local add_end = add_start + #add_text
-	table.insert(spans, {
-		line = lnum,
-		start_col = add_start,
-		end_col = add_end,
-		hl_group = additions > 0 and "AtlasTextPositive" or "AtlasTextMuted",
-	})
-
-	local del_start = add_end + 1
-	local del_end = del_start + #del_text
-	table.insert(spans, {
-		line = lnum,
-		start_col = del_start,
-		end_col = del_end,
-		hl_group = deletions > 0 and "AtlasLogError" or "AtlasTextMuted",
-	})
-end
-
----@param hunk DiffHunk
----@return integer
-local function body_count(hunk)
-	local n = 0
-	for _, dl in ipairs(hunk.lines or {}) do
-		if dl.kind ~= "meta" then
-			n = n + 1
-		end
-	end
-	return n
+	table.insert(spans, { line = lnum, start_col = padding_x, end_col = padding_x + #label, hl_group = "Normal" })
+	table.insert(spans, { line = lnum, start_col = #prefix, end_col = #text, hl_group = "AtlasTextMuted" })
 end
 
 ---@param lines string[]
@@ -97,22 +57,16 @@ end
 ---@param line_map table<integer, table>
 ---@param file DiffFile
 ---@param hunk DiffHunk
----@param is_collapsed boolean
 ---@param opts AtlasDiffHunkRenderOptions
-local function render_hunk(lines, spans, line_map, file, hunk, is_collapsed, opts)
+local function render_hunk(lines, spans, line_map, file, hunk, opts)
 	local padding_x = opts.padding_x or DEFAULT_PADDING
 	local pad = string.rep(" ", padding_x)
-	local inner = math.max(1, opts.max_width - (padding_x * 2))
 	local key = M.hunk_key(file, hunk)
 
 	---@param row string
 	---@param hl_full string|nil
 	---@param segments table[]|nil
 	local function push(row, hl_full, segments)
-		local dw = vim.api.nvim_strwidth(row)
-		if dw < inner then
-			row = row .. string.rep(" ", inner - dw)
-		end
 		local text = pad .. row
 		table.insert(lines, text)
 		local lnum = #lines - 1
@@ -125,84 +79,74 @@ local function render_hunk(lines, spans, line_map, file, hunk, is_collapsed, opt
 		return lnum
 	end
 
-	-- Header
-	local header_text = hunk.header or ""
-	local suffix = ""
-	if is_collapsed and header_text ~= "" then
-		suffix = string.format("  [+%d lines]", body_count(hunk))
-	end
-	local leading = " "
-	local available = math.max(1, inner - vim.api.nvim_strwidth(leading .. suffix))
-	header_text = utils.truncate(header_text, available)
-	local hdr_str = leading .. header_text .. suffix
-	local hdr_lnum = push(hdr_str, nil, { { 0, #hdr_str, "AtlasTextMuted" } })
-	line_map[hdr_lnum + 1] = { kind = "hunk_header", path = file.path, hunk_key = key }
-
-	-- Body
-	if not is_collapsed then
-		local source_lines, line_numbers = {}, {}
-		for _, dl in ipairs(hunk.lines or {}) do
-			if dl.kind ~= "meta" then
-				local line = dl.new_line or dl.old_line or 0
-				table.insert(source_lines, dl.content or dl.text or "")
-				table.insert(line_numbers, line)
-			end
-		end
-		local preview = code_preview.render({
-			file_path = file.path,
-			lines = source_lines,
-			start_line = 1,
-			anchor_line = nil,
-			line_numbers = line_numbers,
-		})
-		local preview_spans = {}
-		for _, span in ipairs(preview.highlights) do
-			if span.hl_group then
-				preview_spans[span.line + 1] = preview_spans[span.line + 1] or {}
-				table.insert(preview_spans[span.line + 1], { span.start_col, span.end_col, span.hl_group })
-			end
-		end
-		local preview_index = 0
-		for _, dl in ipairs(hunk.lines or {}) do
-			if dl.kind == "meta" then
-				local text = dl.content or dl.text or ""
-				push(" " .. text, nil, { { 0, #(" " .. text), "AtlasTextMuted" } })
-			else
-				preview_index = preview_index + 1
-				local text = preview.lines[preview_index]
-				local highlights = preview_spans[preview_index]
-
-				local body_lnum
-				if dl.kind == "add" then
-					body_lnum = push(text, "AtlasDiffAddLine", highlights)
-				elseif dl.kind == "remove" then
-					body_lnum = push(text, "AtlasDiffRemoveLine", highlights)
-				else
-					body_lnum = push(text, nil, highlights)
-				end
-				line_map[body_lnum + 1] = {
-					kind = "hunk_line",
-					path = file.path,
-					side = dl.kind == "remove" and "old" or "new",
-					line = dl.new_line or dl.old_line,
-				}
-			end
+	local source_lines, line_numbers = {}, {}
+	for _, dl in ipairs(hunk.lines or {}) do
+		if dl.kind ~= "meta" then
+			local line = dl.new_line or dl.old_line or 0
+			table.insert(source_lines, dl.content or dl.text or "")
+			table.insert(line_numbers, line)
 		end
 	end
-
-	-- Bottom
-	local footer = opts.hunk_footer and opts.hunk_footer(file, hunk) or nil
-	local bottom_text
-	local label = (footer and footer ~= "") and ("└─ " .. footer .. " ") or "└─"
-	local fill_w = math.max(1, inner - vim.api.nvim_strwidth(label))
-	bottom_text = pad .. label .. string.rep("─", fill_w)
-	table.insert(lines, bottom_text)
-	table.insert(spans, {
-		line = #lines - 1,
-		start_col = #pad,
-		end_col = #bottom_text,
-		hl_group = "AtlasTextMuted",
+	local preview = code_preview.render({
+		file_path = file.path,
+		lines = source_lines,
+		start_line = 1,
+		anchor_line = nil,
+		line_numbers = line_numbers,
+		show_line_numbers = opts.show_line_numbers,
 	})
+	local preview_spans, preview_backgrounds = {}, {}
+	for _, span in ipairs(preview.highlights) do
+		if span.hl_group then
+			preview_spans[span.line + 1] = preview_spans[span.line + 1] or {}
+			table.insert(preview_spans[span.line + 1], { span.start_col, span.end_col, span.hl_group })
+		elseif span.line_hl_group then
+			preview_backgrounds[span.line + 1] = span.line_hl_group
+		end
+	end
+	local preview_index = 0
+	for _, dl in ipairs(hunk.lines or {}) do
+		if dl.kind == "meta" then
+			local text = dl.content or dl.text or ""
+			push(" " .. text, nil, { { 0, #(" " .. text), "AtlasTextMuted" } })
+		else
+			preview_index = preview_index + 1
+			local marker = dl.kind == "add" and "+ " or (dl.kind == "remove" and "- " or "  ")
+			local text = marker .. preview.lines[preview_index]
+			local highlights = {}
+			for _, highlight in ipairs(preview_spans[preview_index] or {}) do
+				table.insert(highlights, {
+					highlight[1] + #marker,
+					highlight[2] + #marker,
+					highlight[3],
+				})
+			end
+			if dl.kind == "add" or dl.kind == "remove" then
+				table.insert(highlights, {
+					0,
+					1,
+					dl.kind == "add" and "AtlasTextPositive" or "AtlasLogError",
+				})
+			end
+
+			local body_lnum
+			if dl.kind == "add" then
+				body_lnum = push(text, "AtlasDiffAddLine", highlights)
+			elseif dl.kind == "remove" then
+				body_lnum = push(text, "AtlasDiffRemoveLine", highlights)
+			else
+				body_lnum = push(text, preview_backgrounds[preview_index], highlights)
+			end
+			line_map[body_lnum + 1] = {
+				kind = "hunk_line",
+				path = file.path,
+				side = dl.kind == "remove" and "old" or "new",
+				line = dl.new_line or dl.old_line,
+				hunk_key = key,
+				hunk_start = preview_index == 1,
+			}
+		end
+	end
 end
 
 ---@param files DiffFile[]
@@ -215,22 +159,24 @@ function M.hunks(files, opts)
 	local line_map = {}
 
 	for fi, file in ipairs(files) do
-		if file.hunks and #file.hunks > 0 then
-			emit_file_header(lines, spans, file, padding_x, opts.max_width)
+		emit_file_header(lines, spans, file, padding_x, opts.max_width)
+
+		for hi, hunk in ipairs(file.hunks) do
+			if hi > 1 then
+				local separator = string.rep(" ", padding_x) .. "..."
+				table.insert(lines, separator)
+				table.insert(spans, {
+					line = #lines - 1,
+					start_col = padding_x,
+					end_col = #separator,
+					hl_group = "AtlasTextMuted",
+				})
+			end
+			render_hunk(lines, spans, line_map, file, hunk, opts)
+		end
+
+		if fi < #files then
 			table.insert(lines, "")
-
-			for hi, hunk in ipairs(file.hunks) do
-				local key = M.hunk_key(file, hunk)
-				local is_collapsed = (opts.collapsed_hunks or {})[key] == true
-				render_hunk(lines, spans, line_map, file, hunk, is_collapsed, opts)
-				if hi < #file.hunks then
-					table.insert(lines, "")
-				end
-			end
-
-			if fi < #files then
-				table.insert(lines, "")
-			end
 		end
 	end
 

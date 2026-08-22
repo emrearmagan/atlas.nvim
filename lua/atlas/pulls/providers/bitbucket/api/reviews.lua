@@ -1,8 +1,7 @@
 local M = {}
 
-local changes = require("atlas.pulls.providers.bitbucket.api.changes")
 local comments = require("atlas.pulls.providers.bitbucket.api.comments")
-local diff_parser = require("atlas.core.git.diff_parser")
+local pullrequests = require("atlas.pulls.providers.bitbucket.api.pullrequests")
 local service = require("atlas.pulls.providers.bitbucket.api.service")
 local tasks = require("atlas.pulls.providers.bitbucket.api.tasks")
 
@@ -50,25 +49,77 @@ function M.fetch_review_context(pr, _opts, on_done)
 	on_done({ authors = authors }, nil)
 end
 
----@param comment PullsComment
----@param files DiffFile[]
-local function attach_hunk(comment, files)
-	if not comment.inline then
-		return
+---@param user table|nil
+---@return PullsAuthor|nil
+local function review_author(user)
+	if not user then
+		return nil
 	end
-	local side = comment.inline.to ~= nil and "new" or "old"
-	local line = comment.inline.to or comment.inline.from
-	if not line then
-		return
+	local username = tostring(user.nickname or user.username or "")
+	local name = tostring(user.display_name or user.name or "")
+	if username == "" and name == "" then
+		return nil
 	end
-	for _, file in ipairs(files) do
-		if file.path == comment.inline.path or file.old_path == comment.inline.path then
-			comment.inline_hunk = diff_parser.find_hunk(file, side, line)
-			if comment.inline_hunk then
-				return
-			end
+	return {
+		id = tostring(user.account_id or user.uuid or user.id or ""),
+		name = name ~= "" and name or username,
+		username = username,
+		nickname = username ~= "" and username or nil,
+	}
+end
+
+---@param result table|nil
+---@return PullsReviewHistoryEntry[]
+local function review_history(result)
+	local history = {}
+	for _, item in ipairs((result or {}).values or {}) do
+		local event = item.approval or item.changes_request
+		if event then
+			table.insert(history, {
+				author = review_author(event.user),
+				state = item.approval and "approved" or "changes_requested",
+				submitted_on = tostring(event.date or ""),
+			})
 		end
 	end
+	table.sort(history, function(a, b)
+		return a.submitted_on < b.submitted_on
+	end)
+	return history
+end
+
+---@param pr PullRequest
+---@param opts { force_refresh: boolean|nil }|nil
+---@param on_done fun(history: PullsReviewHistoryEntry[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+local function fetch_review_history(pr, opts, on_done)
+	local activity_url = tostring((pr._raw.links or {}).activity or "")
+	if activity_url == "" then
+		on_done({}, nil)
+		return nil
+	end
+
+	local sep = activity_url:find("?") and "&" or "?"
+	local fields = "values.approval,values.changes_request,next"
+	local url = string.format("%s%spagelen=50&fields=%s", activity_url, sep, fields)
+	local key = "bitbucket:pr:review-history:" .. url
+	if not (opts or {}).force_refresh then
+		local cached, ok = service.get_cache(key)
+		if ok then
+			on_done(cached, nil)
+			return nil
+		end
+	end
+
+	return service.fetch_all_values(url, function(result, err)
+		if err then
+			on_done(nil, err)
+			return
+		end
+		local history = review_history(result)
+		service.set_cache(key, history)
+		on_done(history, nil)
+	end)
 end
 
 ---@param pr PullRequest
@@ -77,9 +128,9 @@ end
 ---@return { cancel: fun() }
 function M.fetch_review(pr, opts, on_done)
 	opts = opts or {}
-	local review_comments, files, review_tasks
+	local review_comments, review_tasks, reviewers, history
 	local first_err
-	local pending = 3
+	local pending = 4
 	local handles = {}
 	local cancelled = false
 
@@ -93,11 +144,10 @@ function M.fetch_review(pr, opts, on_done)
 			return
 		end
 
-		local anchored_comments = {}
+		local filtered_comments = {}
 		for _, comment in ipairs(review_comments) do
 			if (comment.inline or comment.file) and comment.state ~= "DELETED" then
-				attach_hunk(comment, files)
-				table.insert(anchored_comments, comment)
+				table.insert(filtered_comments, comment)
 			end
 		end
 		local has_pending = false
@@ -112,8 +162,10 @@ function M.fetch_review(pr, opts, on_done)
 		end
 		on_done({
 			review = { id = nil, commit_hash = nil, pending = has_pending },
-			comments = anchored_comments,
+			comments = filtered_comments,
 			tasks = review_tasks,
+			reviewers = reviewers,
+			history = history,
 		}, nil)
 	end
 
@@ -128,13 +180,19 @@ function M.fetch_review(pr, opts, on_done)
 		review_comments = result or {}
 		finish()
 	end))
-	track(changes.fetch_diff(pr, opts, function(result)
-		files = result or {}
-		finish()
-	end))
 	track(tasks.fetch_tasks(pr, opts, function(result, err)
 		first_err = first_err or err
 		review_tasks = result or {}
+		finish()
+	end))
+	track(pullrequests.fetch_review_participants(pr, opts, function(result, err)
+		first_err = first_err or err
+		reviewers = result or {}
+		finish()
+	end))
+	track(fetch_review_history(pr, opts, function(result, err)
+		first_err = first_err or err
+		history = result or {}
 		finish()
 	end))
 

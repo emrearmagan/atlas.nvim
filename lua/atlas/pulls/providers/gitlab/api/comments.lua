@@ -4,6 +4,41 @@ local json = require("atlas.core.json")
 local service = require("atlas.providers.gitlab.client").pulls
 local mapper = require("atlas.pulls.providers.gitlab.api.mapper")
 
+local GENERAL_COMMENTS_QUERY = [[
+query($path:ID!,$iid:String!,$after:String){
+  project(fullPath:$path){
+    mergeRequest(iid:$iid){
+      notes(filter:ONLY_COMMENTS,first:100,after:$after){
+        pageInfo{hasNextPage endCursor}
+        nodes{
+          id
+          body
+          system
+          created_at:createdAt
+          position{__typename}
+          author{id name username}
+          award_emoji:awardEmoji(first:100){nodes{name}}
+          discussion{
+            id
+            resolved
+            resolved_at:resolvedAt
+            resolved_by:resolvedBy{id name username}
+            notes(first:1){nodes{id}}
+          }
+        }
+      }
+    }
+  }
+}
+]]
+
+---@param id any
+---@return string
+local function id_tail(id)
+	local value = tostring(id or "")
+	return value:match("([^/]+)$") or value
+end
+
 ---@param pr PullRequest
 ---@return string project_path, integer|nil iid
 local function project_iid(pr)
@@ -21,7 +56,6 @@ local function inherit_thread_context(comment, parent)
 	comment.thread_id = comment.thread_id or parent.thread_id
 	comment.file = comment.file or parent.file
 	comment.inline = comment.inline or parent.inline
-	comment.inline_hunk = comment.inline_hunk or parent.inline_hunk
 	comment.outdated = comment.outdated or parent.outdated
 	if comment.state == nil and (parent.state == "RESOLVED" or parent.state == "OUTDATED") then
 		comment.state = parent.state
@@ -161,6 +195,7 @@ end
 
 local function bust_caches(path, iid)
 	service.delete_memory_cache(string.format("gitlab_pulls:comments:%s!%d", path, iid))
+	service.delete_memory_cache(string.format("gitlab_pulls:general-comments:%s!%d", path, iid))
 	service.delete_memory_cache(string.format("gitlab_pulls:activity:%s!%d", path, iid))
 end
 
@@ -169,19 +204,125 @@ end
 ---@param on_done fun(comments: PullsComment[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_general(pr, opts, on_done)
-	return M.fetch(pr, opts, function(result, err)
-		if not result then
-			on_done(nil, err)
-			return
+	opts = opts or {}
+	local path, iid = project_iid(pr)
+	if path == "" or iid == nil then
+		on_done(nil, "Invalid MR identifier")
+		return nil
+	end
+
+	local cache_key = string.format("gitlab_pulls:general-comments:%s!%d", path, iid)
+	if not opts.force_refresh then
+		local cached, ok = service.get_memory_cache(cache_key)
+		if ok then
+			on_done(cached, nil)
+			return nil
 		end
-		local general = {}
-		for _, comment in ipairs(result) do
-			if not comment.inline and not comment.file then
-				table.insert(general, comment)
+	end
+
+	local records = {}
+	local after
+	local current
+	local cancelled = false
+
+	local function fetch_page()
+		current = service.graphql(GENERAL_COMMENTS_QUERY, {
+			path = path,
+			iid = tostring(iid),
+			after = after,
+		}, function(result, err)
+			if cancelled then
+				return
 			end
-		end
-		on_done(general, nil)
-	end)
+			local project = json.safe_table(result and result.project)
+			local merge_request = json.nilify(project.mergeRequest)
+			if err or not merge_request then
+				on_done(nil, err or "GitLab did not return the merge request")
+				return
+			end
+
+			local notes = json.safe_table(merge_request.notes)
+			for _, note in ipairs(json.safe_table(notes.nodes)) do
+				local discussion = json.safe_table(note.discussion)
+				local root = json.safe_table(json.safe_table(discussion.notes).nodes)[1]
+				if note.system ~= true and note.position == nil and root then
+					note.id = id_tail(note.id)
+					note.award_emoji = json.safe_table(json.safe_table(note.award_emoji).nodes)
+					if type(note.author) == "table" then
+						note.author.id = id_tail(note.author.id)
+					end
+					if note.id == id_tail(root.id) then
+						note.resolved_at = discussion.resolved_at
+						note.resolved_by = discussion.resolved_by
+						if type(note.resolved_by) == "table" then
+							note.resolved_by.id = id_tail(note.resolved_by.id)
+						end
+					end
+					table.insert(records, {
+						note = note,
+						root_id = id_tail(root.id),
+						discussion_id = id_tail(discussion.id),
+						resolved = discussion.resolved == true,
+					})
+				end
+			end
+
+			local page_info = json.safe_table(notes.pageInfo)
+			local end_cursor = json.safe_str(page_info.endCursor) or ""
+			if page_info.hasNextPage == true and end_cursor ~= "" then
+				after = end_cursor
+				fetch_page()
+				return
+			end
+
+			table.sort(records, function(a, b)
+				local left = tostring(a.note.created_at or "")
+				local right = tostring(b.note.created_at or "")
+				return left == right and tostring(a.note.id) < tostring(b.note.id) or left < right
+			end)
+			local comments = {}
+			local roots = {}
+			for _, record in ipairs(records) do
+				if record.note.id == record.root_id then
+					roots[record.discussion_id] = add_permalink(
+						pr,
+						mapper.to_comment(record.note, record.root_id, record.discussion_id, record.resolved)
+					)
+				end
+			end
+			for _, record in ipairs(records) do
+				local root_comment = roots[record.discussion_id]
+				local is_root = record.note.id == record.root_id
+				local comment = is_root and root_comment
+					or inherit_thread_context(
+						add_permalink(
+							pr,
+							mapper.to_comment(record.note, record.root_id, record.discussion_id, record.resolved)
+						),
+						root_comment
+					)
+				if comment then
+					table.insert(comments, comment)
+				end
+			end
+			service.set_memory_cache(cache_key, comments)
+			on_done(comments, nil)
+		end, {
+			action = "Fetch MR comments",
+			project_path = path,
+			iid = iid,
+		})
+	end
+
+	fetch_page()
+	return {
+		cancel = function()
+			cancelled = true
+			if current then
+				current.cancel()
+			end
+		end,
+	}
 end
 
 ---@param value any Decoded API value.
@@ -458,7 +599,6 @@ function M.edit_comment(pr, comment, on_done)
 		updated.thread_id = updated.thread_id or comment.thread_id
 		updated.file = updated.file or comment.file
 		updated.inline = updated.inline or comment.inline
-		updated.inline_hunk = updated.inline_hunk or comment.inline_hunk
 		updated.state = updated.state or comment.state
 		updated.outdated = updated.outdated or comment.outdated
 		on_done(updated, nil)
@@ -525,11 +665,17 @@ function M.set_thread_resolved(pr, root, resolved, on_done)
 end
 
 ---@param pr PullRequest
----@param comment PullsComment
+---@param item PullsConversationItem
 ---@param key string
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.add_reaction(pr, comment, key, on_done)
+function M.add_reaction(pr, item, key, on_done)
+	if item.kind ~= "comment" then
+		on_done(false, "This item does not support reactions")
+		return nil
+	end
+	---@type PullsComment
+	local comment = item.entity
 	local path, iid = project_iid(pr)
 	if path == "" or iid == nil then
 		on_done(false, "Invalid MR identifier")

@@ -178,8 +178,8 @@ function M.setup(buf, refresh)
 		desc = "Expand / collapse all threads",
 		opts = { nowait = true, silent = true },
 		callback = function()
-			local comments = type(state.comments) == "table" and state.comments or {}
-			local tasks = type(state.tasks) == "table" and state.tasks or {}
+			local comments = state.comments(false)
+			local tasks = state.comments(true)
 			if state.toggle_all_threads(review_threads.group_comments(comments, tasks)) then
 				refresh()
 			end

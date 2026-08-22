@@ -1,6 +1,7 @@
 local M = {}
 
 local picker = require("atlas.picker")
+local pull_actions = require("atlas.pulls.actions")
 local statusline = require("atlas.ui.statusline")
 local review = require("atlas.pulls.actions.review")
 local state = require("atlas.pulls.ui.panel.pr.tabs.conversation.state")
@@ -19,41 +20,32 @@ local function author_completion(pr)
 		return nil
 	end
 	local reviewers = require("atlas.pulls.ui.panel.pr.tabs.overview.state").reviewers
-	local conversation = type(state.comments) == "table" and state.comments or {}
+	local conversation = state.comments(false)
 	return comments_capability.comment_completion({
 		pr = pr,
 		comments = conversation,
-		tasks = type(state.tasks) == "table" and state.tasks or nil,
+		tasks = state.comments(true),
 		reviewers = type(reviewers) == "table" and reviewers or nil,
 		conversation = conversation,
 	})
 end
 
----@param fn fun(list: PullsComment[])
-local function with_comments(fn)
-	local list = state.comments
-	if type(list) ~= "table" then
-		return
-	end
-	---@cast list PullsComment[]
-	fn(list)
-end
-
 ---@param pr PullRequest
----@param item PullsComment|nil
+---@param comment PullsComment|nil
 ---@return AtlasReviewActionContext|nil
-local function action_context(pr, item)
+local function action_context(pr, comment)
 	local provider = get_provider()
 	if not provider then
 		return nil
 	end
-	local items = item and item.is_task and state.tasks or state.comments
-	items = type(items) == "table" and items or nil
+	local items = state.comments(comment and comment.is_task == true or false)
 	return {
 		provider = provider,
 		pr = pr,
 		items = items,
 		completion = author_completion(pr),
+		upsert_comment = state.upsert_comment,
+		remove_comment = state.remove_comment,
 	}
 end
 
@@ -86,12 +78,25 @@ end
 ---@param entry table
 ---@param refresh fun()
 function M.reply(pr, entry, refresh)
-	if not entry or entry.entity_kind ~= "comment" or not entry.comment then
+	local item = entry and entry.conversation_item or nil
+	if not item then
 		return
 	end
-	local context = action_context(pr, entry.comment)
+	if item.kind == "description" then
+		M.add(pr, refresh)
+		return
+	end
+	if item.kind ~= "comment" then
+		return
+	end
+	---@type PullsComment
+	local comment = item.entity
+	if comment.is_task then
+		return
+	end
+	local context = action_context(pr, comment)
 	if context then
-		review.add_comment(context, { parent = entry.comment }, on_done(pr, refresh))
+		review.add_comment(context, { parent = comment }, on_done(pr, refresh))
 	end
 end
 
@@ -99,12 +104,34 @@ end
 ---@param entry table
 ---@param refresh fun()
 function M.edit(pr, entry, refresh)
-	if not entry or (entry.entity_kind ~= "comment" and entry.entity_kind ~= "task") or not entry.comment then
+	local item = entry and entry.conversation_item or nil
+	if not item then
 		return
 	end
-	local context = action_context(pr, entry.comment)
+	if item.kind == "review" then
+		---@type PullsReviewHistoryEntry
+		local review_entry = item.entity
+		local context = action_context(pr, nil)
+		if context then
+			review.edit_review(context, review_entry, on_done(pr, refresh))
+		end
+		return
+	end
+	if item.kind == "description" then
+		local provider = get_provider()
+		if provider then
+			pull_actions.run("edit_description", { provider = provider, pr = pr }, on_done(pr, refresh))
+		end
+		return
+	end
+	if item.kind ~= "comment" then
+		return
+	end
+	---@type PullsComment
+	local comment = item.entity
+	local context = action_context(pr, comment)
 	if context then
-		review.edit_comment(context, entry.comment, on_done(pr, refresh))
+		review.edit_comment(context, comment, on_done(pr, refresh))
 	end
 end
 
@@ -112,14 +139,19 @@ end
 ---@param entry table
 ---@param refresh fun()
 function M.delete(pr, entry, refresh)
-	if not entry or (entry.entity_kind ~= "comment" and entry.entity_kind ~= "task") or not entry.comment then
+	local item = entry and entry.conversation_item or nil
+	if not item then
 		return
 	end
-	local comment = entry.comment
-	if tostring(comment.id) == "__body__" then
+	if item.kind == "description" then
 		statusline.notify("info", "The pull request description cannot be deleted", 1200)
 		return
 	end
+	if item.kind ~= "comment" then
+		return
+	end
+	---@type PullsComment
+	local comment = item.entity
 	local context = action_context(pr, comment)
 	if context then
 		review.delete_comment(context, comment, on_done(pr, refresh))
@@ -130,7 +162,8 @@ end
 ---@param entry table
 ---@param refresh fun()
 function M.react(pr, entry, refresh)
-	if not entry or entry.entity_kind ~= "comment" or not entry.comment then
+	local item = entry and entry.conversation_item or nil
+	if not item or (item.kind ~= "comment" and item.kind ~= "description") then
 		return
 	end
 	local provider = get_provider()
@@ -143,7 +176,7 @@ function M.react(pr, entry, refresh)
 		statusline.notify("warn", "No reactions available for this provider")
 		return
 	end
-	local comment = entry.comment
+	local target = item.entity
 	local choices = {}
 	for _, option in ipairs(options) do
 		table.insert(choices, {
@@ -162,21 +195,14 @@ function M.react(pr, entry, refresh)
 				return
 			end
 			statusline.notify("loading", "Adding reaction...")
-			comments.add_reaction(pr, comment, selected.key, function(ok, err)
+			comments.add_reaction(pr, item, selected.key, function(ok, err)
 				if err then
 					statusline.notify("error", "Reaction failed: " .. tostring(err))
 					return
 				end
 				if ok then
-					with_comments(function(list)
-						for _, current in ipairs(list) do
-							if current.id == comment.id then
-								current.reactions = current.reactions or {}
-								current.reactions[selected.key] = (tonumber(current.reactions[selected.key]) or 0) + 1
-								break
-							end
-						end
-					end)
+					target.reactions = target.reactions or {}
+					target.reactions[selected.key] = (tonumber(target.reactions[selected.key]) or 0) + 1
 				end
 				statusline.notify("success", "Reaction added", 1200)
 				refresh()
@@ -189,8 +215,13 @@ end
 ---@param entry table
 ---@param refresh fun()
 function M.toggle_task(pr, entry, refresh)
-	local task = entry and entry.entity_kind == "task" and entry.comment or nil
-	if not task then
+	local item = entry and entry.conversation_item or nil
+	if not item or item.kind ~= "comment" then
+		return
+	end
+	---@type PullsComment
+	local task = item.entity
+	if not task.is_task then
 		return
 	end
 	local context = action_context(pr, task)

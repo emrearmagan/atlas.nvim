@@ -76,26 +76,24 @@ end
 
 ---@param pr PullRequest
 ---@param opts { force_refresh: boolean|nil }|nil
----@param on_done fun(result: { comments: PullsComment[], events: PullsActivityEntry[] }|nil, err: string|nil)
+---@param on_done fun(items: PullsConversationItem[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 local function fetch_conversation(pr, opts, on_done)
 	local requests = request_scope.new()
 
-	---@param result { comments: PullsComment[], events: PullsActivityEntry[] }
+	---@param items PullsConversationItem[]
 	---@param description string
-	local function finish(result, description)
-		local comments = type(result.comments) == "table" and result.comments or {}
+	local function finish(items, description)
 		if description ~= "" then
-			table.insert(comments, 1, {
-				id = "__body__",
-				parent_id = nil,
-				author = pr.author,
-				content_raw = description,
+			pr.description = description
+			table.insert(items, 1, {
+				id = "description:" .. tostring(pr.repo_full_name) .. "#" .. tostring(pr.id),
+				kind = "description",
 				created_on = pr.created_on or "",
-				reactions = pr.reactions,
+				entity = pr,
 			})
 		end
-		on_done({ comments = comments, events = type(result.events) == "table" and result.events or {} }, nil)
+		on_done(items, nil)
 	end
 
 	requests.run(function(done)
@@ -121,11 +119,11 @@ local function fetch_conversation(pr, opts, on_done)
 end
 
 ---@param pr PullRequest
----@param comment PullsComment
+---@param item PullsConversationItem
 ---@param key string
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-local function add_reaction(pr, comment, key, on_done)
+local function add_reaction(pr, item, key, on_done)
 	local repo_slug = pr.repo_full_name or ""
 	if repo_slug == "" then
 		on_done(false, "Missing repo")
@@ -133,12 +131,19 @@ local function add_reaction(pr, comment, key, on_done)
 	end
 
 	local endpoint
-	if tostring(comment.id) == "__body__" then
+	if item.kind == "description" then
 		endpoint = string.format("repos/%s/issues/%s/reactions", repo_slug, tostring(pr.id))
-	elseif comment.inline or comment.file then
-		endpoint = string.format("repos/%s/pulls/comments/%s/reactions", repo_slug, tostring(comment.id))
+	elseif item.kind == "comment" then
+		---@type PullsComment
+		local comment = item.entity
+		if comment.inline or comment.file then
+			endpoint = string.format("repos/%s/pulls/comments/%s/reactions", repo_slug, tostring(comment.id))
+		else
+			endpoint = string.format("repos/%s/issues/comments/%s/reactions", repo_slug, tostring(comment.id))
+		end
 	else
-		endpoint = string.format("repos/%s/issues/comments/%s/reactions", repo_slug, tostring(comment.id))
+		on_done(false, "This item does not support reactions")
+		return nil
 	end
 	return cli.gh({ "api", "-X", "POST", endpoint, "-f", "content=" .. key }, function(_, err)
 		on_done(err == nil, err)
@@ -305,6 +310,7 @@ return {
 		reviews = {
 			fetch = reviews_api.fetch,
 			fetch_review_context = reviews_api.fetch_context,
+			edit_review = reviews_api.edit_review,
 			start_review = reviews_api.start,
 			submit_review = reviews_api.submit,
 			approve = reviews_api.approve,

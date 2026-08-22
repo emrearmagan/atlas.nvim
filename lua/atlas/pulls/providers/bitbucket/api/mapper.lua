@@ -340,6 +340,7 @@ function M.to_activities_list(result)
 		local entry = as_table(item) or {}
 		local update = as_table(entry.update)
 		local approval = as_table(entry.approval)
+		local changes_request = as_table(entry.changes_request)
 		local comment = as_table(entry.comment)
 
 		if update ~= nil then
@@ -355,6 +356,13 @@ function M.to_activities_list(result)
 				date = tostring(approval.date or ""),
 				actor = actor(approval.user),
 				label = "approved",
+			})
+		elseif changes_request ~= nil then
+			table.insert(entries, {
+				kind = "changes_requested",
+				date = tostring(changes_request.date or ""),
+				actor = actor(changes_request.user),
+				label = "requested changes",
 			})
 		elseif comment ~= nil then
 			local content = as_table(comment.content) or {}

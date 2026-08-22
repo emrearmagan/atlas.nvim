@@ -11,7 +11,7 @@ query($owner: String!, $repo: String!, $number: Int!) {
   repository(owner: $owner, name: $repo) {
     name nameWithOwner url sshUrl
     pullRequest(number: $number) {
-      id number title state isDraft viewerSubscription
+      id number title state isDraft viewerSubscription reviewDecision
       createdAt updatedAt url body
       reactionGroups { content reactors { totalCount } }
       additions deletions
@@ -27,6 +27,19 @@ query($owner: String!, $repo: String!, $number: Int!) {
             ... on Mannequin { id login name }
             ... on Team { id name slug organization { login } }
             ... on EnterpriseTeam { id name slug combinedSlug }
+          }
+        }
+      }
+      reviewRequestEvents: timelineItems(last: 100, itemTypes: [REVIEW_REQUESTED_EVENT]) {
+        nodes {
+          ... on ReviewRequestedEvent {
+            requestedReviewer {
+              ... on User { id login name }
+              ... on Bot { id login }
+              ... on Mannequin { id login name }
+              ... on Team { id name slug organization { login } }
+              ... on EnterpriseTeam { id name slug combinedSlug }
+            }
           }
         }
       }
@@ -47,24 +60,10 @@ query($search: String!, $limit: Int!) {
   search(query: $search, type: ISSUE, first: $limit) {
     nodes {
       ... on PullRequest {
-        id number title state isDraft
+        id number title state isDraft reviewDecision
         createdAt updatedAt url
         additions deletions
         reactionGroups { content reactors { totalCount } }
-        latestOpinionatedReviews(last: 100) {
-          nodes { state author { login ... on User { id name } } }
-        }
-        reviewRequests(first: 100) {
-          nodes {
-            requestedReviewer {
-              ... on User { id login name }
-              ... on Bot { id login }
-              ... on Mannequin { id login name }
-              ... on Team { id name slug organization { login } }
-              ... on EnterpriseTeam { id name slug combinedSlug }
-            }
-          }
-        }
         author { login ... on User { name } }
         headRefName baseRefName headRefOid baseRefOid
         totalCommentsCount
@@ -517,6 +516,7 @@ function M.update_reviewers(pr, selected, original, on_done)
 		end
 		memory_cache.delete(string.format("github:pr:%s:%s", repo_slug, tostring(pr.id)))
 		memory_cache.delete(string.format("github:review-context:%s:%s", repo_slug, tostring(pr.id)))
+		memory_cache.delete(string.format("github:review-details:%s:%s", repo_slug, tostring(pr.id)))
 		on_done(true, nil)
 	end, {
 		action = "Update PR reviewers",

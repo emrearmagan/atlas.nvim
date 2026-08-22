@@ -31,6 +31,7 @@ local function emit_task(lines, spans, line_map, task, width)
 		width,
 		{
 			padding_x = PADDING_X,
+			show_task_label = false,
 		}
 	)
 	local offset = #lines
@@ -46,11 +47,11 @@ end
 ---@param nodes AtlasReviewThreadNode[]
 ---@param width integer
 local function emit_thread_box(lines, spans, line_map, nodes, width)
-	local inner = math.max(1, width - (PADDING_X * 2) - 4)
+	local inner = math.max(1, width - 4)
 	local toggle_keys = keymaps.resolve("pulls.review.diff.toggle_resolved")
 	local provider = require("atlas.pulls.state").provider
 	local comments = provider and provider.capabilities.comments
-	local t_lines, t_spans, t_map = review_threads.render(nodes, inner, {
+	local thread_lines, thread_spans, thread_map = review_threads.render(nodes, inner, {
 		expanded = function(root)
 			return state.is_thread_expanded(root)
 		end,
@@ -59,9 +60,9 @@ local function emit_thread_box(lines, spans, line_map, nodes, width)
 		reaction_options = comments and comments.reaction_options,
 	})
 	local mark_line = #lines
-	local result = box.render({ { lines = t_lines, spans = t_spans, line_map = t_map } }, {
+	local result = box.render({ { lines = thread_lines, spans = thread_spans, line_map = thread_map } }, {
 		width = width,
-		padding_x = PADDING_X,
+		padding_x = 0,
 		line_map = line_map,
 		line_offset = mark_line,
 	})
@@ -92,47 +93,18 @@ end
 ---@param file_threads AtlasReviewThreadNode[]
 ---@param buckets CommentsHunkBucket[]
 local function emit_file_with_comments(lines, spans, line_map, width, file_path, file_threads, buckets)
-	local function count(node)
-		local total = 1
-		for _, child in ipairs(node.children or {}) do
-			total = total + count(child)
-		end
-		return total
-	end
-
 	local file = { path = file_path, status = "modified", hunks = {} }
-	local totals = {}
 	local buckets_by_key = {}
 	for _, bucket in ipairs(buckets) do
 		table.insert(file.hunks, bucket.hunk)
 		buckets_by_key[diff.hunk_key(file, bucket.hunk)] = bucket
-		local total = 0
-		for _, anchor in pairs(bucket.threads_by_anchor) do
-			for _, node in ipairs(anchor.threads or {}) do
-				total = total + count(node)
-			end
-		end
-		totals[hunk_key(bucket.hunk)] = total
 	end
 
 	local cb_lines, cb_spans, cb_map = diff.hunks({ file }, {
 		max_width = width,
 		padding_x = PADDING_X,
-		collapsed_hunks = state.collapsed_hunks,
-		hunk_footer = function(_, hunk)
-			local total = totals[hunk_key(hunk)] or 0
-			if total == 0 then
-				return nil
-			end
-			return string.format("%d %s", total, total == 1 and "comment" or "comments")
-		end,
+		show_line_numbers = false,
 	})
-	if #cb_lines == 0 then
-		utils.push(lines, spans, file_path, "Normal", PADDING_X)
-		table.insert(lines, "")
-		emit_thread_box(lines, spans, line_map, file_threads, width)
-		return
-	end
 
 	---@type table<integer, table[]>
 	local spans_by_cb_line = {}
@@ -158,9 +130,10 @@ local function emit_file_with_comments(lines, spans, line_map, width, file_path,
 			line_map[#lines] = entry
 		end
 
-		if entry and entry.kind == "hunk_header" then
+		if entry and entry.hunk_start then
 			current_bucket = buckets_by_key[entry.hunk_key]
-		elseif entry and entry.kind == "hunk_line" and entry.path == file_path and entry.line ~= nil then
+		end
+		if entry and entry.kind == "hunk_line" and entry.path == file_path and entry.line ~= nil then
 			local anchor_key = string.format("%s:%s", entry.side or "new", tostring(entry.line))
 			local anchor = current_bucket and current_bucket.threads_by_anchor[anchor_key]
 			if anchor then
@@ -172,17 +145,17 @@ local function emit_file_with_comments(lines, spans, line_map, width, file_path,
 				current_bucket.threads_by_anchor[anchor_key] = nil
 			end
 		end
-		if i == 2 and #file_threads > 0 then
+		if i == 1 and #file_threads > 0 then
 			emit_thread_box(lines, spans, line_map, file_threads, width)
-			table.insert(lines, "")
+			if #file.hunks > 0 then
+				table.insert(lines, "")
+			end
 		end
 	end
 
 	for _, bucket in ipairs(buckets) do
-		if state.collapsed_hunks[diff.hunk_key(file, bucket.hunk)] ~= true then
-			for _, anchor in pairs(bucket.threads_by_anchor) do
-				emit_thread_box(lines, spans, line_map, anchor.threads, width)
-			end
+		for _, anchor in pairs(bucket.threads_by_anchor) do
+			emit_thread_box(lines, spans, line_map, anchor.threads, width)
 		end
 	end
 end
@@ -190,12 +163,14 @@ end
 ---@param width integer
 ---@param comments PullsComment[]|"loading"|string|nil
 ---@param tasks PullsComment[]|"loading"|string|nil
+---@param hunks_by_comment table<string, { hunk: DiffHunk, anchor: integer }>|nil
 ---@return string[], table[], table<integer, table>
-function M.render(width, comments, tasks)
+function M.render(width, comments, tasks, hunks_by_comment)
 	local lines = {}
 	local spans = {}
 	local line_map = {}
 	local max_width = math.max(1, width)
+	hunks_by_comment = hunks_by_comment or {}
 
 	if tasks == "loading" then
 		utils.push(lines, spans, spinner.with_text("Loading tasks..."), "AtlasTextMuted", PADDING_X)
@@ -212,7 +187,6 @@ function M.render(width, comments, tasks)
 			return left_date == right_date and tostring(left.id) < tostring(right.id) or left_date < right_date
 		end)
 		utils.push(lines, spans, task_heading(sorted_tasks), "AtlasColumnHeader", PADDING_X)
-		table.insert(lines, "")
 		for _, task in ipairs(sorted_tasks) do
 			emit_task(lines, spans, line_map, task, max_width)
 		end
@@ -250,30 +224,26 @@ function M.render(width, comments, tasks)
 	for _, thread in ipairs(roots) do
 		local c = thread.comment
 		local path = c.file and c.file.path or (c.inline and c.inline.path)
-		if path and (c.file or c.inline_hunk) then
+		local context = hunks_by_comment[tostring(c.id)]
+		if path then
 			local file = file_buckets[path]
 			if file == nil then
 				file = { path = path, threads = {}, hunks = {}, hunk_order = {} }
 				file_buckets[path] = file
 				table.insert(file_order, path)
 			end
-			if c.file then
+			if context == nil then
 				table.insert(file.threads, thread)
 			else
-				local hkey = hunk_key(c.inline_hunk)
+				local hkey = hunk_key(context.hunk)
 				local hb = file.hunks[hkey]
 				if hb == nil then
-					hb = { hunk = c.inline_hunk, threads_by_anchor = {} }
+					hb = { hunk = context.hunk, threads_by_anchor = {} }
 					file.hunks[hkey] = hb
 					table.insert(file.hunk_order, hkey)
-				elseif #(c.inline_hunk.lines or {}) > #(hb.hunk.lines or {}) then
-					-- GitHub's diff hunk ends at the comment anchor, so the longest
-					-- snippet contains every anchor seen for this hunk.
-					hb.hunk = c.inline_hunk
 				end
 				local side = c.inline.to ~= nil and "new" or "old"
-				local line = c.inline_hunk_anchor or c.inline.to or c.inline.from
-				local akey = string.format("%s:%s", side, tostring(line or ""))
+				local akey = string.format("%s:%s", side, tostring(context.anchor))
 				local anchor = hb.threads_by_anchor[akey]
 				if anchor == nil then
 					anchor = { threads = {} }
@@ -295,7 +265,6 @@ function M.render(width, comments, tasks)
 
 	if #file_order > 0 then
 		utils.push(lines, spans, "Changes", "AtlasColumnHeader", PADDING_X)
-		table.insert(lines, "")
 
 		for _, path in ipairs(file_order) do
 			local file = file_buckets[path]

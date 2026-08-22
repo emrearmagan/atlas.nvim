@@ -12,6 +12,14 @@ local REPO_ICON = icons.pulls("repo")
 local TASKS_ICON = icons.pulls("tasks")
 local STAR_ICON, STAR_ICON_HL = icons.general("star")
 
+local REVIEW_ICON = {
+	approved = { icons.pulls_status("successful") },
+	changes_requested = { icons.pulls_status("failed") },
+	pending = { icons.pulls_status("inprogress") },
+}
+
+REVIEW_ICON.pending[2] = "AtlasTextMuted"
+
 local PR_STATE_ICON = {
 	open = { PR_ICON, PR_ICON_HL },
 	draft = { PR_ICON, "AtlasPRDraft" },
@@ -35,6 +43,23 @@ local function pr_icon_or_spinner(pr)
 	end
 	local icon = pr_icon_and_hl(pr)
 	return icon
+end
+
+---@param pr PullRequest
+---@return string, string
+local function review_icon_and_hl(pr)
+	local decision = "pending"
+	for _, reviewers in ipairs({ pr.reviewers or {}, pr.review_decisions or {} }) do
+		for _, reviewer in ipairs(reviewers) do
+			if reviewer.decision == "changes_requested" then
+				decision = "changes_requested"
+			elseif reviewer.decision == "approved" and decision == "pending" then
+				decision = "approved"
+			end
+		end
+	end
+	local style = REVIEW_ICON[decision]
+	return style[1], style[2]
 end
 
 ---@param name string|nil
@@ -168,6 +193,9 @@ function M.cell_hl(row, col, ctx)
 			or (row.kind == "pr" and (row._pr_icon_hl or "AtlasPROpen") or "AtlasTextMuted")
 		return { { start_col = 0, end_col = #ctx.padded, hl_group = hl_group } }
 	end
+	if col.key == "review" then
+		return { { start_col = 0, end_col = #ctx.padded, hl_group = row.review_hl or "AtlasTextMuted" } }
+	end
 	if col.key == "created" or col.key == "updated" or (row.kind == "meta" and col.key == "repo_pr") then
 		return { { start_col = 0, end_col = #ctx.padded, hl_group = "AtlasTextMuted" } }
 	end
@@ -273,6 +301,13 @@ local function compact_columns()
 			header_hl = "AtlasColumnHeader",
 		},
 		{ key = "tasks", name = TASKS_ICON, min_width = 2, can_grow = false, header_hl = "AtlasColumnHeader" },
+		{
+			key = "review",
+			name = icons.general("success"),
+			min_width = 1,
+			can_grow = false,
+			header_hl = "AtlasColumnHeader",
+		},
 	}
 	vim.list_extend(cols, {
 		{
@@ -304,6 +339,7 @@ function M.build_compact_table(pulls)
 			or ""
 		local author_display = utils.shorten_name(author_name, 20)
 		local icon, icon_hl = pr_icon_and_hl(pr)
+		local review, review_hl = review_icon_and_hl(pr)
 		table.insert(rows, {
 			kind = "pr",
 			pr_icon = pr_icon_or_spinner(pr),
@@ -313,6 +349,8 @@ function M.build_compact_table(pulls)
 			repo_pr = (pr.is_starred and STAR_ICON .. " " or "") .. "#" .. id_str .. " " .. title,
 			conversation = tostring(pr.comments_count or 0),
 			tasks = tostring(pr.tasks_count or 0),
+			review = review,
+			review_hl = review_hl,
 			status = state_label,
 			status_raw = state_str,
 			author = string.format("%s %s", icons.general("user"), author_display),
@@ -332,6 +370,8 @@ function M.build_compact_table(pulls)
 			repo_pr = repo_label,
 			conversation = "",
 			tasks = "",
+			review = "",
+			review_hl = "",
 			status = "",
 			status_raw = "",
 			author = "",
@@ -361,6 +401,13 @@ local function list_columns()
 			header_hl = "AtlasColumnHeader",
 		},
 		{ key = "tasks", name = TASKS_ICON, min_width = 2, can_grow = false, header_hl = "AtlasColumnHeader" },
+		{
+			key = "review",
+			name = icons.general("success"),
+			min_width = 1,
+			can_grow = false,
+			header_hl = "AtlasColumnHeader",
+		},
 		{
 			key = "author",
 			name = string.format("%s Author", icons.general("user")),
@@ -399,6 +446,8 @@ function M.build_list_table(pulls, layout)
 				name = repo_label,
 				conversation = "",
 				tasks = "",
+				review = "",
+				review_hl = "",
 				status = "",
 				status_raw = "",
 				author = "",
@@ -421,6 +470,7 @@ function M.build_list_table(pulls, layout)
 			local is_reloading = state.is_pr_reloading(pr.repo_full_name, pr.id)
 			local state_str = tostring(pr.state or "")
 			local author_display = utils.shorten_name(author_name, 20)
+			local review, review_hl = review_icon_and_hl(pr)
 			table.insert(rows, {
 				kind = "pr",
 				_pr_reloading = is_reloading,
@@ -429,6 +479,8 @@ function M.build_list_table(pulls, layout)
 				name = icon .. " " .. (pr.is_starred and STAR_ICON .. " " or "") .. reference .. " " .. title,
 				conversation = tostring(pr.comments_count or 0),
 				tasks = tostring(pr.tasks_count or 0),
+				review = review,
+				review_hl = review_hl,
 				status = "",
 				status_raw = state_str,
 				author = string.format("%s %s", icons.general("user"), author_display),

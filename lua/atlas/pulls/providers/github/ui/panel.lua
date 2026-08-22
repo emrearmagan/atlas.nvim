@@ -47,9 +47,9 @@ function M.header_rows(pr, loading)
 end
 
 ---@param pr PullRequest
----@param loading boolean
+---@param _loading boolean
 ---@return PullsPanelChip[]
-function M.chips(pr, loading)
+function M.chips(pr, _loading)
 	local chips = {}
 
 	local hash = tostring(pr.source and pr.source.commit_hash or "")
@@ -60,16 +60,12 @@ function M.chips(pr, loading)
 		table.insert(chips, { label = hash, hl = "AtlasTabInactive" })
 	end
 
-	if loading and pr.labels == nil then
-		table.insert(chips, { label = spinner.with_text("Loading labels"), hl = "AtlasTextMuted" })
-	else
-		for _, lbl in ipairs(pr.labels or {}) do
-			local name = tostring(lbl.name or "")
-			if name ~= "" then
-				local color = tostring(lbl.color or "")
-				local hl = color ~= "" and label_hl(color) or "AtlasTabInactive"
-				table.insert(chips, { label = name, hl = hl })
-			end
+	for _, lbl in ipairs(pr.labels or {}) do
+		local name = tostring(lbl.name or "")
+		if name ~= "" then
+			local color = tostring(lbl.color or "")
+			local hl = color ~= "" and label_hl(color) or "AtlasTabInactive"
+			table.insert(chips, { label = name, hl = hl })
 		end
 	end
 

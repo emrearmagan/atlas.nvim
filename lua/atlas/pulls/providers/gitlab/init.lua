@@ -64,7 +64,7 @@ end
 
 ---@param pr PullRequest
 ---@param opts { force_refresh: boolean|nil }|nil
----@param on_done fun(result: { comments: PullsComment[], events: PullsActivityEntry[] }|nil, err: string|nil)
+---@param on_done fun(items: PullsConversationItem[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 local function fetch_conversation(pr, opts, on_done)
 	local pending = 2
@@ -84,7 +84,24 @@ local function fetch_conversation(pr, opts, on_done)
 			on_done(nil, first_err or "Failed to fetch conversation")
 			return
 		end
-		on_done({ comments = comments_result or {}, events = events_result or {} }, nil)
+		local items = {}
+		for _, comment in ipairs(comments_result or {}) do
+			table.insert(items, {
+				id = "comment:" .. tostring(comment.id),
+				kind = "comment",
+				created_on = comment.created_on or "",
+				entity = comment,
+			})
+		end
+		for _, event in ipairs(events_result or {}) do
+			table.insert(items, {
+				id = table.concat({ "activity", event.date or "", event.kind or "" }, ":"),
+				kind = "activity",
+				created_on = event.date or "",
+				entity = event,
+			})
+		end
+		on_done(items, first_err)
 	end
 
 	local activity_handle = activity_api.fetch_activity(pr, opts, function(entries, err)

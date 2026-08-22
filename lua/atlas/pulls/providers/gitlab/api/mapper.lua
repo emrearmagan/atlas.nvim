@@ -240,6 +240,7 @@ local function to_inline_position(position)
 		to = new_line,
 		start_from = tonumber(start.old_line),
 		start_to = tonumber(start.new_line),
+		commit_hash = json.safe_str(position.head_sha),
 	}
 end
 
@@ -267,6 +268,13 @@ function M.to_comment(note, discussion_first_id, discussion_id, resolved)
 	local original_position = type(note.original_position) == "table" and note.original_position or nil
 	local outdated = position == nil and original_position ~= nil
 	position = position or original_position
+	local diff_refs = position
+			and {
+				base_sha = json.safe_str(position.base_sha),
+				start_sha = json.safe_str(position.start_sha),
+				head_sha = json.safe_str(position.head_sha),
+			}
+		or nil
 	local file, inline
 	local position_type = position and tostring(position.position_type or "text") or ""
 	if position_type == "text" then
@@ -300,6 +308,7 @@ function M.to_comment(note, discussion_first_id, discussion_id, resolved)
 		outdated = outdated,
 		reactions = reaction_counts(note.award_emoji),
 		html_url = json.safe_str(note.web_url),
+		_raw = diff_refs and { diff_refs = diff_refs } or nil,
 	}
 end
 
@@ -317,7 +326,7 @@ function M.to_draft_comment(draft, discussion_first_id)
 		comment.author = { name = "You", nickname = nil, username = "", id = tostring(draft.author_id) }
 	end
 	comment.state = "PENDING"
-	comment._raw = { draft_note_id = draft.id }
+	comment._raw = vim.tbl_extend("force", comment._raw or {}, { draft_note_id = draft.id })
 	return comment
 end
 

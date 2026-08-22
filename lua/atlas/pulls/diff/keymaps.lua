@@ -85,7 +85,8 @@ function M.register(session, opts)
 	local action_context = session.review and review.action_context(session) or nil
 	local reviews = session.review and session.review.provider.capabilities.reviews or {}
 	local reviewable = session.review and (session.review.pr.state == "open" or session.review.pr.state == "draft")
-	local can_complete = reviewable and (not session.review.state.pending or reviews.submit_review ~= nil)
+	local pending = session.review and session.review.data.review.pending == true
+	local can_complete = reviewable and (not pending or reviews.submit_review ~= nil)
 	local has_review_items = session.review ~= nil or session.note_target ~= nil
 	local file_buffers = {}
 	for _, buf in ipairs(opts.file_buffers or {}) do
@@ -129,7 +130,7 @@ function M.register(session, opts)
 						actions.request_changes(session)
 					end)
 				end
-				if reviewable and (session.review.state.pending or reviews.start_review) then
+				if reviewable and (session.review.data.review.pending or reviews.start_review) then
 					add(items, "pulls.review.submit_review", "Start / submit review", function()
 						actions.start_or_submit(session)
 					end)

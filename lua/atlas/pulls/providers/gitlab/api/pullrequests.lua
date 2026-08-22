@@ -212,6 +212,8 @@ local function bust_caches(pr)
 		return
 	end
 	service.delete_memory_cache(string.format("gitlab_pulls:get:%s!%d", path, iid))
+	service.delete_memory_cache(string.format("gitlab_pulls:reviewer_states:%s!%d", path, iid))
+	service.delete_memory_cache(string.format("gitlab_pulls:review_metadata:%s!%d", path, iid))
 end
 
 ---@param pr PullRequest
@@ -563,6 +565,8 @@ function M.fetch_reviewers(pr, opts, on_done)
 						decision = "approved"
 					elseif s == "requested_changes" then
 						decision = "changes_requested"
+					elseif s == "reviewed" then
+						decision = "reviewed"
 					end
 					table.insert(reviewers, {
 						id = r.id,

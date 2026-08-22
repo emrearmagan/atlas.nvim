@@ -25,17 +25,13 @@ function M.on_select(pr, refresh, opts)
 	local provider = get_provider()
 	local comments = provider and provider.capabilities.comments
 	if not comments or not comments.fetch_conversation then
-		state.comments = {}
-		state.tasks = {}
-		state.activity = {}
+		state.items = {}
 		refresh()
 		return
 	end
 
 	local id = tostring(pr.id or "")
-	state.comments = "loading"
-	state.tasks = "loading"
-	state.activity = "loading"
+	state.items = "loading"
 	statusline.notify("loading", string.format("Loading conversation for #%s...", id))
 
 	state.requests.run(function(done)
@@ -45,18 +41,14 @@ function M.on_select(pr, refresh, opts)
 			return
 		end
 		if result then
-			state.comments = {}
-			for _, comment in ipairs(result.comments or {}) do
-				if comment.state ~= "DELETED" then
-					table.insert(state.comments, comment)
+			state.items = {}
+			for _, item in ipairs(result) do
+				if item.kind ~= "comment" or item.entity.state ~= "DELETED" then
+					table.insert(state.items, item)
 				end
 			end
-			state.tasks = result.tasks or {}
-			state.activity = result.events or {}
 		else
-			state.comments = {}
-			state.tasks = {}
-			state.activity = {}
+			state.items = {}
 		end
 
 		state.error = nil
@@ -79,19 +71,19 @@ M.render = renderer.render
 ---@param _lnum integer
 ---@param entry table
 function M.is_selectable_line(_lnum, entry)
-	return entry.entity_kind == "comment"
-		or entry.entity_kind == "task"
-		or entry.activity_entry ~= nil
-		or entry.kind == "activity_gap"
+	return entry.conversation_item ~= nil or entry.kind == "activity_gap"
 end
 
 ---@param _pr PullRequest
 ---@param entry table
 function M.on_enter(_pr, entry)
-	if not entry or (entry.entity_kind ~= "comment" and entry.entity_kind ~= "task") or not entry.comment then
+	local item = entry and entry.conversation_item or nil
+	if not item then
 		return
 	end
-	local url = tostring(entry.comment.html_url or entry.comment.url or "")
+	local entity = item.entity
+	local url = item.kind == "description" and tostring((entity.link or {}).html or "")
+		or tostring(entity.html_url or entity.url or "")
 	if url ~= "" then
 		vim.ui.open(url)
 		return true
