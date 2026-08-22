@@ -12,7 +12,8 @@ describe("Atlas target resolver", function()
 				github = {},
 				gitlab = { base_url = "https://gitlab.example.com" },
 				bitbucket = {},
-				gitea = { base_url = "http://localhost:3000", api_type = "forgejo" },
+				gitea = { base_url = "http://localhost:3000" },
+				forgejo = { base_url = "http://localhost:3001" },
 				jira = { base_url = "https://jira.example.com" },
 			},
 			pulls = {
@@ -20,11 +21,13 @@ describe("Atlas target resolver", function()
 				gitlab = {},
 				bitbucket = {},
 				gitea = {},
+				forgejo = {},
 			},
 			issues = {
 				github = {},
 				gitlab = {},
 				gitea = {},
+				forgejo = {},
 				jira = {},
 			},
 		}
@@ -39,17 +42,18 @@ describe("Atlas target resolver", function()
 		local jira = assert(resolver.resolve("https://jira.example.com/browse/ATLAS-123"))
 		local gitlab = assert(resolver.resolve("https://gitlab.example.com/emrearmagan/atlas.nvim/-/issues/8"))
 		local bitbucket = assert(resolver.resolve("https://bitbucket.org/emrearmagan/atlas.nvim/pull-requests/7"))
-		local forgejo_pr = assert(resolver.resolve("http://localhost:3000/atlas/atlas.test/pulls/3"))
-		local forgejo_issue = assert(resolver.resolve("http://localhost:3000/atlas/atlas.test/issues/4"))
+		local gitea_pr = assert(resolver.resolve("http://localhost:3000/atlas/atlas.test/pulls/3"))
+		local forgejo_issue = assert(resolver.resolve("http://localhost:3001/atlas/atlas.test/issues/4"))
 
 		assert.are.equal("pr", github.entity)
 		assert.are.equal(42, github.number)
 		assert.are.equal("ATLAS-123", jira.issue_key)
 		assert.are.equal("emrearmagan/atlas.nvim", gitlab.project_path)
 		assert.are.equal("emrearmagan", bitbucket.workspace)
-		assert.are.equal("gitea", forgejo_pr.provider)
-		assert.are.equal("pulls", forgejo_pr.domain)
-		assert.are.equal(3, forgejo_pr.number)
+		assert.are.equal("gitea", gitea_pr.provider)
+		assert.are.equal("pulls", gitea_pr.domain)
+		assert.are.equal(3, gitea_pr.number)
+		assert.are.equal("forgejo", forgejo_issue.provider)
 		assert.are.equal("issues", forgejo_issue.domain)
 		assert.are.equal(4, forgejo_issue.number)
 	end)
@@ -87,6 +91,9 @@ describe("Atlas target resolver", function()
 			{ name = "Bitbucket", targets = { { workspace = "owner", repo = "bitbucket" } } },
 		}
 		config.options.pulls.gitea.views = {
+			{ name = "Gitea", repo = "owner/gitea" },
+		}
+		config.options.pulls.forgejo.views = {
 			{ name = "Forgejo", repo = "owner/forgejo" },
 		}
 
@@ -98,15 +105,17 @@ describe("Atlas target resolver", function()
 			github = "owner/github",
 			gitlab = "owner/gitlab",
 			bitbucket = "owner/bitbucket",
-			gitea = "owner/forgejo",
+			gitea = "owner/gitea",
+			forgejo = "owner/forgejo",
 		}, found)
 	end)
 
-	it("resolves self-hosted Git remotes across web paths and SSH ports", function()
+	it("resolves self-hosted HTTP and SSH remotes", function()
 		config.options.providers.gitea.base_url = "http://localhost:3000/git"
+		config.options.providers.forgejo.base_url = "http://forgejo.localhost:3001"
 
 		local web = assert(git.parse_remote_url("http://localhost:3000/git/owner/repo.git"))
-		local ssh = assert(git.parse_remote_url("ssh://git@localhost:2222/owner/repo.git"))
+		local ssh = assert(git.parse_remote_url("git@localhost:owner/repo.git"))
 		local target = assert(resolver.resolve("http://localhost:3000/git/owner/repo/pulls/7"))
 
 		assert.are.equal("gitea", web.provider)
@@ -114,7 +123,7 @@ describe("Atlas target resolver", function()
 		assert.are.equal(target.provider, ssh.provider)
 		assert.are.equal(target.host, ssh.host)
 		assert.are.equal(target.project_path, ssh.slug)
-		assert.is_truthy(ssh.url:find("localhost:2222", 1, true))
+		assert.are.equal("git@localhost:owner/repo.git", ssh.url)
 	end)
 
 	it("does not claim an HTTP remote from a different port", function()

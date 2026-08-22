@@ -163,10 +163,10 @@ end
 ---@param name string
 ---@return string, string
 function M.issues_provider(provider_id, name)
-	local provider = providers[provider_id]
+	local provider_domain = providers.domain(provider_id, "issues")
 	local style = nil
-	if name == "provider" and provider then
-		style = provider.icon("issues")
+	if name == "provider" and provider_domain then
+		style = provider_domain.icon
 	end
 	return get(style, ICONS.issues[name] or ICONS.pulls[name] or ICONS.general[name])
 end

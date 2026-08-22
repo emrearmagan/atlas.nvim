@@ -36,7 +36,7 @@ function M.fetch_all(endpoint, params, opts, on_done)
 				finish(nil, err)
 				return
 			end
-			-- Both APIs return JSON null after the final timeline page.
+			-- Gitea returns JSON null after the final timeline page.
 			local items = result == vim.NIL and {} or result
 			vim.list_extend(values, items)
 			if opts.post_filtered then

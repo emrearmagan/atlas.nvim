@@ -3,7 +3,7 @@ local M = {}
 local registry = require("atlas.issues.providers.gitea.actions.registry")
 local statusline = require("atlas.ui.statusline")
 
----@alias AtlasGiteaForgejoIssueActionId
+---@alias AtlasGiteaIssueActionId
 ---| AtlasIssueActionId
 ---| "close"
 ---| "reopen"
@@ -18,7 +18,7 @@ local statusline = require("atlas.ui.statusline")
 
 M.items = registry.items
 
----@param action_id AtlasGiteaForgejoIssueActionId
+---@param action_id AtlasGiteaIssueActionId
 ---@param ctx AtlasIssueActionContext
 ---@return boolean
 function M.is_available(action_id, ctx)
@@ -26,7 +26,7 @@ function M.is_available(action_id, ctx)
 	return action ~= nil and (action.is_available == nil or action.is_available(ctx) == true)
 end
 
----@param action_id AtlasGiteaForgejoIssueActionId
+---@param action_id AtlasGiteaIssueActionId
 ---@param ctx AtlasIssueActionContext
 ---@param on_done fun(result: IssuesActionResult|nil, err: string|nil)
 ---@return boolean handled

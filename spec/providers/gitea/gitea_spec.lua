@@ -1,9 +1,9 @@
-local CLIENT = "atlas.providers.gitea.gitea.client"
-local COMMENTS = "atlas.pulls.providers.gitea.gitea.api.comments"
-local PIPELINES = "atlas.pulls.providers.gitea.gitea.api.pipelines"
-local PROVIDER = "atlas.pulls.providers.gitea.gitea"
-local REVIEWS = "atlas.pulls.providers.gitea.gitea.api.reviews"
-local PREFIX = "atlas.pulls.providers.gitea.gitea"
+local CLIENT = "atlas.providers.gitea.client"
+local COMMENTS = "atlas.pulls.providers.gitea.api.comments"
+local PIPELINES = "atlas.pulls.providers.gitea.api.pipelines"
+local PROVIDER = "atlas.pulls.providers.gitea"
+local REVIEWS = "atlas.pulls.providers.gitea.api.reviews"
+local PREFIX = "atlas.pulls.providers.gitea"
 
 local function cleanup()
 	package.loaded[CLIENT] = nil
@@ -44,11 +44,8 @@ describe("Gitea pulls", function()
 		assert.equal(comments.add, provider.capabilities.comments.add_comment)
 		assert.equal(comments.set_thread_resolved, provider.capabilities.comments.set_thread_resolved)
 		assert.equal(pipelines.fetch_details, provider.capabilities.pipelines.fetch_details)
-		assert.equal(require("atlas.pulls.providers.gitea.gitea.actions"), provider.capabilities.actions)
-		assert.equal(
-			require("atlas.pulls.providers.gitea.gitea.actions.pipelines"),
-			provider.capabilities.pipelines.actions
-		)
+		assert.equal(require("atlas.pulls.providers.gitea.actions"), provider.capabilities.actions)
+		assert.equal(require("atlas.pulls.providers.gitea.actions.pipelines"), provider.capabilities.pipelines.actions)
 	end)
 
 	it("uses the Gitea 1.27 review-thread endpoints", function()

@@ -104,8 +104,10 @@ up and what's missing.
       github = {},
       ---@type AtlasGitLabProviderConfig
       gitlab = {},
-      ---@type AtlasGiteaForgejoProviderConfig
+      ---@type AtlasGiteaProviderConfig
       gitea = {},
+      ---@type AtlasForgejoProviderConfig
+      forgejo = {},
       ---@type AtlasJiraProviderConfig
       jira = {},
     },
@@ -118,8 +120,10 @@ up and what's missing.
       github = {},    -- |atlas-pulls-github|
       ---@type AtlasGitLabPullsConfig
       gitlab = {},    -- |atlas-pulls-gitlab|
-      ---@type AtlasGiteaForgejoPullsConfig
+      ---@type AtlasGiteaPullsConfig
       gitea = {},     -- |atlas-pulls-gitea|
+      ---@type AtlasForgejoPullsConfig
+      forgejo = {},   -- |atlas-pulls-forgejo|
     },
     issues = {
       -- See |atlas-issues-configuration|.
@@ -129,8 +133,10 @@ up and what's missing.
       github = {}, -- |atlas-issues-github|
       ---@type AtlasGitLabIssuesConfig
       gitlab = {}, -- |atlas-issues-gitlab|
-      ---@type AtlasGiteaForgejoIssuesConfig
+      ---@type AtlasGiteaIssuesConfig
       gitea = {},  -- |atlas-issues-gitea|
+      ---@type AtlasForgejoIssuesConfig
+      forgejo = {}, -- |atlas-issues-forgejo|
     },
   })
 <
@@ -403,25 +409,26 @@ Self-hosted GitLab has not been tested yet.
 anything not covered by the explicit view fields.
 
 ------------------------------------------------------------------------------
-GITEA / FORGEJO PULLS                                  *atlas-pulls-gitea*
-
-Configure the shared Gitea/Forgejo instance under `providers.gitea`. `api_type`
-defaults to `"gitea"`; set it to `"forgejo"` for Forgejo. Pull-request views
-and bookmarks live separately under `pulls.gitea`.
+GITEA / FORGEJO PULLS             *atlas-pulls-gitea* *atlas-pulls-forgejo*
 
 >lua
   providers = {
-    ---@type AtlasGiteaForgejoProviderConfig
+    ---@type AtlasGiteaProviderConfig
     gitea = {
-      api_type = "gitea", -- or "forgejo"
-      base_url = "https://git.example.com",
+      base_url = "http://localhost:3001",
       token = vim.env.GITEA_TOKEN,
+      cache_ttl = 300,
+    },
+    ---@type AtlasForgejoProviderConfig
+    forgejo = {
+      base_url = "http://localhost:3000",
+      token = vim.env.FORGEJO_TOKEN,
       cache_ttl = 300,
     },
   },
 
   pulls = {
-    ---@type AtlasGiteaForgejoPullsConfig
+    ---@type AtlasGiteaPullsConfig
     gitea = {
       draft_prefix = "WIP:",
 
@@ -444,6 +451,13 @@ and bookmarks live separately under `pulls.gitea`.
             search = "authentication",
           },
         },
+      },
+    },
+    ---@type AtlasForgejoPullsConfig
+    forgejo = {
+      views = {
+        { name = "Repository", key = "2",
+          repo = "owner/forgejo-repository" },
       },
     },
   }
@@ -629,17 +643,25 @@ Same shared `providers.gitlab` auth as |atlas-pulls-gitlab|. Views take a `scope
 <
 
 ------------------------------------------------------------------------------
-GITEA / FORGEJO ISSUES                                *atlas-issues-gitea*
+GITEA / FORGEJO ISSUES           *atlas-issues-gitea* *atlas-issues-forgejo*
 
-Issues use the same instance credentials from `providers.gitea`; only their
-views and bookmarks belong under `issues.gitea`.
+Issues reuse the matching instance credentials from `providers.gitea` or
+`providers.forgejo`; only their views and bookmarks belong under `issues.gitea`
+or `issues.forgejo`.
 
 >lua
   issues = {
-    ---@type AtlasGiteaForgejoIssuesConfig
+    ---@type AtlasGiteaIssuesConfig
     gitea = {
       views = {
         { name = "Open", key = "1", repo = "owner/repository",
+          state = "open" },
+      },
+    },
+    ---@type AtlasForgejoIssuesConfig
+    forgejo = {
+      views = {
+        { name = "Open", key = "2", repo = "owner/forgejo-repository",
           state = "open" },
       },
     },

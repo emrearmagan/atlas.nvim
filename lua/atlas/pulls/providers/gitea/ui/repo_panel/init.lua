@@ -1,4 +1,4 @@
----@class GiteaForgejoProviderRepoPanel : PullsProviderRepoPanel
+---@class GiteaProviderRepoPanel : PullsProviderRepoPanel
 local M = {}
 
 local icons = require("atlas.ui.shared.icons")

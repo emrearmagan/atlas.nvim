@@ -113,8 +113,10 @@ use {
     github = {},
     ---@type AtlasGitLabProviderConfig
     gitlab = {},
-    ---@type AtlasGiteaForgejoProviderConfig
+    ---@type AtlasGiteaProviderConfig
     gitea = {},
+    ---@type AtlasForgejoProviderConfig
+    forgejo = {},
     ---@type AtlasJiraProviderConfig
     jira = {},
   },
@@ -127,8 +129,10 @@ use {
     github = {},
     ---@type AtlasGitLabPullsConfig
     gitlab = {},
-    ---@type AtlasGiteaForgejoPullsConfig
+    ---@type AtlasGiteaPullsConfig
     gitea = {},
+    ---@type AtlasForgejoPullsConfig
+    forgejo = {},
   },
 
   issues = {
@@ -139,8 +143,10 @@ use {
     github = {},
     ---@type AtlasGitLabIssuesConfig
     gitlab = {},
-    ---@type AtlasGiteaForgejoIssuesConfig
+    ---@type AtlasGiteaIssuesConfig
     gitea = {},
+    ---@type AtlasForgejoIssuesConfig
+    forgejo = {},
   },
 }
 ```
@@ -413,23 +419,24 @@ pulls = {
 <details>
 <summary><strong>Gitea / Forgejo</strong></summary>
 
-Configure the shared Gitea/Forgejo instance under `providers.gitea`. `api_type`
-defaults to `"gitea"`; set it to `"forgejo"` for Forgejo. Pull-request views
-and bookmarks live separately under `pulls.gitea`.
-
 ```lua
 providers = {
-  ---@type AtlasGiteaForgejoProviderConfig
+  ---@type AtlasGiteaProviderConfig
   gitea = {
-    api_type = "gitea", -- or "forgejo"
-    base_url = "https://git.example.com",
+    base_url = "http://localhost:3001",
     token = vim.env.GITEA_TOKEN,
+    cache_ttl = 300,
+  },
+  ---@type AtlasForgejoProviderConfig
+  forgejo = {
+    base_url = "http://localhost:3000",
+    token = vim.env.FORGEJO_TOKEN,
     cache_ttl = 300,
   },
 },
 
 pulls = {
-  ---@type AtlasGiteaForgejoPullsConfig
+  ---@type AtlasGiteaPullsConfig
   gitea = {
     draft_prefix = "WIP:",
 
@@ -452,6 +459,12 @@ pulls = {
           search = "authentication",
         },
       },
+    },
+  },
+  ---@type AtlasForgejoPullsConfig
+  forgejo = {
+    views = {
+      { name = "Repository", key = "2", repo = "owner/forgejo-repository" },
     },
   },
 },
@@ -670,15 +683,22 @@ issues = {
 <details>
 <summary><strong>Gitea / Forgejo Issues</strong></summary>
 
-Issues use the same instance credentials from `providers.gitea`; only their
-views and bookmarks belong under `issues.gitea`.
+Issues reuse the matching instance credentials from `providers.gitea` or
+`providers.forgejo`; only their views and bookmarks belong under `issues.gitea`
+or `issues.forgejo`.
 
 ```lua
 issues = {
-  ---@type AtlasGiteaForgejoIssuesConfig
+  ---@type AtlasGiteaIssuesConfig
   gitea = {
     views = {
       { name = "Open", key = "1", repo = "owner/repository", state = "open" },
+    },
+  },
+  ---@type AtlasForgejoIssuesConfig
+  forgejo = {
+    views = {
+      { name = "Open", key = "2", repo = "owner/forgejo-repository", state = "open" },
     },
   },
 },

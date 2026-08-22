@@ -5,6 +5,8 @@ local icons = require("atlas.ui.shared.icons")
 local picker = require("atlas.picker")
 local statusline = require("atlas.ui.statusline")
 local api = require("atlas.issues.providers.gitea.api").issues
+local create_issue = require("atlas.issues.create.gitea.issue")
+local search = require("atlas.issues.providers.gitea.completion.search")
 
 ---@param ctx AtlasIssueActionContext
 ---@return boolean, string|nil
@@ -54,10 +56,19 @@ local function context_slug(ctx)
 		end
 	end
 	local issues_state = require("atlas.issues.state")
-	for _, view in ipairs({ issues_state.current_view or {}, issues_state.active_view or {} }) do
-		---@cast view AtlasGiteaForgejoIssuesViewConfig
-		local configured = vim.trim(view.repo or "")
-		if configured:match("^[^/%s]+/[^/%s]+$") then
+	if issues_state.provider and issues_state.provider.id == "gitea" then
+		---@param view AtlasGiteaIssuesViewConfig|nil
+		local function view_repo(view)
+			if view == nil then
+				return nil
+			end
+			local configured = vim.trim(view.repo or "")
+			if configured:match("^[^/%s]+/[^/%s]+$") then
+				return configured
+			end
+		end
+		local configured = view_repo(issues_state.current_view) or view_repo(issues_state.active_view)
+		if configured then
 			return configured
 		end
 	end
@@ -71,10 +82,10 @@ end
 
 ---@return string[]
 local function configured_repositories()
-	---@type AtlasGiteaForgejoIssuesConfig
-	local options = require("atlas.config").domain_options("gitea", "issues") or {}
+	---@type AtlasGiteaIssuesConfig
+	local options = require("atlas.config").domain_options("gitea", "issues")
 	local result, seen = {}, {}
-	---@param value AtlasGiteaForgejoIssuesSearchConfig
+	---@param value AtlasGiteaIssuesSearchConfig
 	local function add(value)
 		local slug = vim.trim(value.repo or "")
 		if slug:match("^[^/%s]+/[^/%s]+$") and not seen[slug] then
@@ -449,50 +460,48 @@ register({
 	end,
 })
 
-if api.supports_locking() then
-	register({
-		id = "lock_issue",
-		label = "Lock Issue",
-		is_available = function(ctx)
-			local ok, err = has_issue(ctx)
-			if not ok then
-				return false, err
+register({
+	id = "lock_issue",
+	label = "Lock Issue",
+	is_available = function(ctx)
+		local ok, err = has_issue(ctx)
+		if not ok then
+			return false, err
+		end
+		return ctx.issue._raw.is_locked ~= true, "Issue is already locked"
+	end,
+	run = function(ctx, done)
+		vim.ui.input({ prompt = "Lock reason (optional): " }, function(reason)
+			if reason == nil then
+				done(nil, nil)
+				return
 			end
-			return ctx.issue._raw.is_locked ~= true, "Issue is already locked"
-		end,
-		run = function(ctx, done)
-			vim.ui.input({ prompt = "Lock reason (optional): " }, function(reason)
-				if reason == nil then
-					done(nil, nil)
-					return
-				end
-				set_locked(ctx, true, reason, done)
-			end)
-		end,
-	})
+			set_locked(ctx, true, reason, done)
+		end)
+	end,
+})
 
-	register({
-		id = "unlock_issue",
-		label = "Unlock Issue",
-		is_available = function(ctx)
-			local ok, err = has_issue(ctx)
-			if not ok then
-				return false, err
-			end
-			return ctx.issue._raw.is_locked == true, "Issue is not locked"
-		end,
-		run = function(ctx, done)
-			set_locked(ctx, false, nil, done)
-		end,
-	})
-end
+register({
+	id = "unlock_issue",
+	label = "Unlock Issue",
+	is_available = function(ctx)
+		local ok, err = has_issue(ctx)
+		if not ok then
+			return false, err
+		end
+		return ctx.issue._raw.is_locked == true, "Issue is not locked"
+	end,
+	run = function(ctx, done)
+		set_locked(ctx, false, nil, done)
+	end,
+})
 
 register({
 	id = "edit_issue",
 	label = "Edit Issue",
 	is_available = has_issue,
 	run = function(ctx, done)
-		require("atlas.issues.create.gitea.issue").open({
+		create_issue.open({
 			repo_slug = issue_slug(ctx.issue),
 			issue = ctx.issue,
 			on_done = function(result, err)
@@ -570,7 +579,7 @@ register({
 	run = function(ctx, done)
 		local repositories = create_repositories(ctx)
 		local function open(slug)
-			require("atlas.issues.create.gitea.issue").open({
+			create_issue.open({
 				repo_slug = slug,
 				on_done = function(result, err)
 					done(result and { issue_key = result.key } or nil, err)
@@ -599,7 +608,7 @@ register({
 	id = "search",
 	label = "Search Issues",
 	run = function(_, done)
-		require("atlas.issues.providers.gitea.completion.search").open()
+		search.open()
 		done(nil, nil)
 	end,
 })
@@ -609,7 +618,7 @@ register(actions.browse_issue)
 register(actions.copy_issue_key)
 register(actions.copy_issue_url)
 
----@param id AtlasGiteaForgejoIssueActionId
+---@param id AtlasGiteaIssueActionId
 ---@return AtlasIssueAction|nil
 function M.find(id)
 	for _, action in ipairs(ACTIONS) do

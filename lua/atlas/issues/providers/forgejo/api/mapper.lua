@@ -1,0 +1,220 @@
+local json = require("atlas.core.json")
+
+local M = {}
+
+---@param raw table|nil
+---@return IssueUser|nil
+local function user(raw)
+	raw = json.nilify(raw)
+	if raw == nil then
+		return nil
+	end
+	local login = raw.login
+	local name = raw.full_name
+	return {
+		id = raw.id,
+		account_id = login,
+		display_name = name ~= "" and name or login,
+	}
+end
+
+---@param raw table
+---@return string
+local function repository_slug(raw)
+	return raw.full_name
+end
+
+---@param values table[]
+---@return table[]
+local function labels(values)
+	local result = {}
+	for _, raw in ipairs(values) do
+		table.insert(result, {
+			id = raw.id,
+			name = raw.name,
+			color = raw.color,
+		})
+	end
+	return result
+end
+
+local TIMELINE_EVENTS = {
+	reopen = { "reopened", "reopened" },
+	close = { "closed", "closed" },
+	issue_ref = { "referenced", "referenced" },
+	commit_ref = { "referenced", "referenced from a commit" },
+	comment_ref = { "referenced", "referenced from a comment" },
+	pull_ref = { "referenced", "referenced from a pull request" },
+	lock = { "locked", "locked conversation" },
+	unlock = { "unlocked", "unlocked conversation" },
+	pin = { "pinned", "pinned" },
+	unpin = { "unpinned", "unpinned" },
+}
+
+---@param value string|nil
+---@return string|nil
+local function nonempty(value)
+	local result = json.nilify(value)
+	return result ~= "" and result or nil
+end
+
+---@param raw table|nil
+---@param field string
+---@return string|nil
+local function object_name(raw, field)
+	raw = json.nilify(raw)
+	return raw and nonempty(raw[field]) or nil
+end
+
+---@param before string|nil
+---@param after string|nil
+---@return string|nil
+local function change(before, after)
+	if before and after then
+		return before .. " → " .. after
+	end
+	return after or before
+end
+
+M.to_user = user
+
+---@param raw table
+---@param scoped_slug string|nil Repository slug supplied by repository-scoped endpoints.
+---@return Issue|nil
+function M.to_issue(raw, scoped_slug)
+	if json.nilify(raw.pull_request) ~= nil then
+		return nil
+	end
+
+	local number = raw.number
+	local url = raw.html_url
+	local slug = scoped_slug or repository_slug(raw.repository)
+	local state = raw.state
+	local assignees = json.nilify(raw.assignees) or {}
+	local issue_labels = labels(json.nilify(raw.labels) or {})
+	local milestone = json.nilify(raw.milestone)
+	local reporter = user(raw.user)
+	local original_author = nonempty(raw.original_author)
+	if not reporter and original_author then
+		reporter = {
+			id = raw.original_author_id,
+			account_id = original_author,
+			display_name = original_author,
+		}
+	end
+	local due_date = nonempty(raw.due_date)
+	local display_due_date = due_date and (due_date:match("^%d%d%d%d%-%d%d%-%d%d") or due_date) or nil
+
+	return {
+		key = string.format("%s#%d", slug, number),
+		summary = raw.title,
+		project = nil,
+		status = state == "closed" and "Closed" or "Open",
+		status_id = state,
+		status_category = nil,
+		status_color = nil,
+		type = nil,
+		priority = nil,
+		assignee = user(assignees[1]),
+		reporter = reporter,
+		story_points = nil,
+		duedate = display_due_date,
+		parent = nil,
+		url = url,
+		is_pinned = raw.pin_order > 0,
+		is_subscribed = nil,
+		_raw = {
+			number = number,
+			project_path = slug,
+			description = raw.body,
+			created_at = raw.created_at,
+			updated_at = raw.updated_at,
+			closed_at = json.nilify(raw.closed_at),
+			content_version = json.nilify(raw.content_version),
+			is_locked = json.nilify(raw.is_locked),
+			due_date = due_date,
+			labels = issue_labels,
+			assignees = assignees,
+			milestone = milestone,
+			comment_count = raw.comments,
+		},
+	}
+end
+
+---@param raw table
+---@return IssueComment
+function M.to_comment(raw)
+	return {
+		id = tostring(raw.id),
+		self = nil,
+		url = raw.html_url,
+		author = user(raw.user),
+		body = raw.body,
+		created = raw.created_at,
+		updated = json.nilify(raw.updated_at),
+		parent_id = nil,
+		children = nil,
+		reactions = nil,
+	}
+end
+
+---@param raw table
+---@return IssueActivityEntry|nil
+function M.to_timeline_entry(raw)
+	local raw_type = raw.type
+	if raw_type == "comment" then
+		return nil
+	end
+
+	local event = TIMELINE_EVENTS[raw_type]
+	---@type IssueActivityEntry
+	local entry = {
+		kind = event and event[1] or raw_type,
+		actor = user(raw.user),
+		date = nonempty(raw.created_at),
+		label = event and event[2] or raw_type:gsub("_", " "),
+		body = nonempty(raw.body),
+	}
+
+	if raw_type == "label" then
+		local added = raw.body == "1"
+		entry.kind = added and "labeled" or "unlabeled"
+		entry.label = added and "added label" or "removed label"
+		entry.body = object_name(raw.label, "name")
+	elseif raw_type == "milestone" then
+		local before = object_name(raw.old_milestone, "title")
+		local after = object_name(raw.milestone, "title")
+		entry.kind = after and "milestoned" or "demilestoned"
+		entry.label = after and (before and "changed milestone" or "added milestone") or "removed milestone"
+		entry.body = change(before, after)
+	elseif raw_type == "assignees" then
+		local assignee = user(raw.assignee)
+		local team = object_name(raw.assignee_team, "name")
+		local removed = raw.removed_assignee == true
+		entry.kind = removed and "unassigned" or "assigned"
+		entry.label = removed and "unassigned" or "assigned"
+		entry.body = assignee and assignee.display_name or team
+	elseif raw_type == "change_title" then
+		entry.kind = "renamed"
+		entry.label = "renamed"
+		entry.body = change(nonempty(raw.old_title), nonempty(raw.new_title))
+	elseif raw_type == "change_issue_ref" or raw_type == "change_target_branch" then
+		entry.label = raw_type == "change_issue_ref" and "changed issue reference" or "changed target branch"
+		entry.body = change(nonempty(raw.old_ref), nonempty(raw.new_ref))
+	elseif entry.kind == "referenced" then
+		entry.body = object_name(raw.ref_issue, "title") or nonempty(raw.ref_commit_sha)
+	elseif raw_type == "add_dependency" or raw_type == "remove_dependency" then
+		entry.body = object_name(raw.dependent_issue, "title") or entry.body
+	end
+
+	return entry
+end
+
+---@param key string
+---@return string, integer|nil
+function M.parse_key(key)
+	local slug, number = key:match("^([^/]+/[^/]+)#(%d+)$")
+	return slug or "", tonumber(number)
+end
+
+return M

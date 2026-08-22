@@ -8,6 +8,7 @@ local icons = require("atlas.ui.shared.icons")
 local templates = require("atlas.issues.templates")
 local api = require("atlas.issues.providers.gitea.api").issues
 local request_scope = require("atlas.core.requests")
+local mapper = require("atlas.issues.providers.gitea.api.mapper")
 
 ---@class GiteaCreateIssueState
 ---@field fields { repo_slug: string, labels: table[], assignees: IssueUser[], milestone: table|nil, due_date: string|nil }
@@ -28,9 +29,12 @@ local function label_hl(hex)
 		return "AtlasTextMuted"
 	end
 	local name = "AtlasGiteaIssueLabel_" .. clean
-	local r = tonumber(clean:sub(1, 2), 16) or 0
-	local g = tonumber(clean:sub(3, 4), 16) or 0
-	local b = tonumber(clean:sub(5, 6), 16) or 0
+	local r = tonumber(clean:sub(1, 2), 16)
+	local g = tonumber(clean:sub(3, 4), 16)
+	local b = tonumber(clean:sub(5, 6), 16)
+	---@cast r number
+	---@cast g number
+	---@cast b number
 	local foreground = (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6 and "#1e1e2e" or "#ffffff"
 	vim.api.nvim_set_hl(0, name, { fg = foreground, bg = "#" .. clean, bold = true })
 	return name
@@ -45,7 +49,7 @@ local function labels_cell(values)
 	local pieces, spans = {}, {}
 	local cursor = 0
 	for _, label in ipairs(values) do
-		local name = tostring(label.name or "")
+		local name = label.name
 		if name ~= "" then
 			if #pieces > 0 then
 				table.insert(pieces, " ")
@@ -69,10 +73,10 @@ end
 local function meta_rows(state)
 	local assignees = {}
 	for _, user in ipairs(state.fields.assignees) do
-		table.insert(assignees, "@" .. tostring(user.account_id or ""))
+		table.insert(assignees, "@" .. user.account_id)
 	end
 	local assignee_text = #assignees > 0 and table.concat(assignees, ", ") or "Unassigned"
-	local milestone = state.fields.milestone and tostring(state.fields.milestone.title or "") or "None"
+	local milestone = state.fields.milestone and state.fields.milestone.title or "None"
 	local due_date = state.fields.due_date or "None"
 	return {
 		{
@@ -159,7 +163,7 @@ local function pick_assignees(state)
 			items = items,
 			selected = state.fields.assignees,
 			key = function(item)
-				return tostring(item.account_id or "")
+				return item.account_id
 			end,
 			format_item = function(item)
 				return string.format("%s %s (@%s)", icons.general("user"), item.display_name, item.account_id)
@@ -169,7 +173,7 @@ local function pick_assignees(state)
 				if state.closed then
 					return
 				end
-				state.fields.assignees = selected or {}
+				state.fields.assignees = selected
 				render_meta(state)
 			end,
 		})
@@ -194,17 +198,17 @@ local function pick_labels(state)
 			items = items,
 			selected = state.fields.labels,
 			key = function(item)
-				return tostring(item.id or item.name or "")
+				return tostring(item.id)
 			end,
 			format_item = function(item)
-				return tostring(item.name or "")
+				return item.name
 			end,
 			title = "Labels",
 			on_done = function(selected)
 				if state.closed then
 					return
 				end
-				state.fields.labels = selected or {}
+				state.fields.labels = selected
 				render_meta(state)
 			end,
 		})
@@ -276,15 +280,10 @@ end
 local function selected_values(state)
 	local labels, assignees = {}, {}
 	for _, label in ipairs(state.fields.labels) do
-		if tonumber(label.id) then
-			table.insert(labels, tonumber(label.id))
-		end
+		table.insert(labels, label.id)
 	end
 	for _, user in ipairs(state.fields.assignees) do
-		local login = tostring(user.account_id or "")
-		if login ~= "" then
-			table.insert(assignees, login)
-		end
+		table.insert(assignees, user.account_id)
 	end
 	return labels, assignees
 end
@@ -377,43 +376,41 @@ local function submit(state)
 	end)
 end
 
----@param raw table[]|nil
+---@param raw table[]
 ---@return IssueUser[]
 local function initial_assignees(raw)
 	local result = {}
-	for _, user in ipairs(raw or {}) do
-		local login = tostring(user.login or user.username or "")
-		if login ~= "" then
-			table.insert(result, {
-				id = tonumber(user.id),
-				account_id = login,
-				display_name = tostring(user.full_name or user.name or login),
-			})
-		end
+	for _, user in ipairs(raw) do
+		local mapped = mapper.to_user(user)
+		---@cast mapped IssueUser
+		table.insert(result, mapped)
 	end
 	return result
 end
 
 ---@param opts { repo_slug: string, issue: Issue|nil, on_done: fun(result: table|nil, err: string|nil)|nil }
 function M.open(opts)
-	if type(opts) ~= "table" or tostring(opts.repo_slug or "") == "" then
-		notify.error("create_issue.open: repo_slug is required")
-		return
-	end
-
 	require("atlas.ui.shared.highlights").setup()
 	require("atlas.pulls.ui.highlights").setup()
 	require("atlas.issues.providers.gitea.highlights").setup()
 
-	local raw = type(opts.issue) == "table" and opts.issue._raw or {}
+	local labels, assignees, milestone, due_date, initial_body = {}, {}, nil, nil, ""
+	if opts.issue then
+		local raw = opts.issue._raw
+		labels = vim.deepcopy(raw.labels)
+		assignees = initial_assignees(raw.assignees)
+		milestone = vim.deepcopy(raw.milestone)
+		due_date = raw.due_date and raw.due_date:match("^%d%d%d%d%-%d%d%-%d%d") or nil
+		initial_body = raw.description
+	end
 	---@type GiteaCreateIssueState
 	local state = {
 		fields = {
 			repo_slug = opts.repo_slug,
-			labels = vim.deepcopy(raw.labels or {}),
-			assignees = initial_assignees(raw.assignees),
-			milestone = type(raw.milestone) == "table" and vim.deepcopy(raw.milestone) or nil,
-			due_date = tostring(raw.due_date or ""):match("^%d%d%d%d%-%d%d%-%d%d"),
+			labels = labels,
+			assignees = assignees,
+			milestone = milestone,
+			due_date = due_date,
 		},
 		issue = opts.issue,
 		layout = {},
@@ -428,8 +425,8 @@ function M.open(opts)
 	form.open(state, {
 		title_label = "Title",
 		body_label = "Description",
-		initial_title = opts.issue and tostring(opts.issue.summary or "") or "",
-		initial_body = tostring(raw.description or ""),
+		initial_title = opts.issue and opts.issue.summary or "",
+		initial_body = initial_body,
 		close = function()
 			confirm_close(state)
 		end,

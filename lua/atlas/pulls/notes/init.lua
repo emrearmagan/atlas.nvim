@@ -269,12 +269,14 @@ function M.resolve_target(value)
 		if owner then
 			provider, repository = "bitbucket", owner .. "/" .. repo
 		else
-			if resolver.provider_for_host(url_host, path) == "gitea" then
-				local configured_path = resolver.path_for_base(parsed, resolver.configured_base("pulls", "gitea"))
-				owner, repo, id = (configured_path or path):match("^/([^/]+)/([^/]+)/pulls/(%d+)/?$")
+			local configured_provider = resolver.provider_for_host(url_host, path, "pulls")
+			if configured_provider == "gitea" or configured_provider == "forgejo" then
+				local configured_path =
+					assert(resolver.path_for_base(parsed, resolver.configured_base("pulls", configured_provider)))
+				owner, repo, id = configured_path:match("^/([^/]+)/([^/]+)/pulls/(%d+)/?$")
 			end
 			if owner then
-				provider, repository = "gitea", owner .. "/" .. repo
+				provider, repository = configured_provider, owner .. "/" .. repo
 			else
 				repository, id = path:match("^/(.-)/%-/merge_requests/(%d+)/?$")
 				provider = repository and "gitlab" or nil

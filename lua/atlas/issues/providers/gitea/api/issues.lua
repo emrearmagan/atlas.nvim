@@ -67,7 +67,7 @@ function M.fetch_user(on_done)
 	end)
 end
 
----@param view AtlasGiteaForgejoIssuesViewConfig
+---@param view AtlasGiteaIssuesViewConfig
 ---@param opts IssuesFetchOpts
 ---@param on_done fun(issues: Issue[]|nil, next_page_token: string|nil, is_last: boolean, err: string|nil)
 function M.list(view, opts, on_done)
@@ -76,20 +76,19 @@ function M.list(view, opts, on_done)
 	local scope = view.scope or ""
 	local has_scoped_filter = scope == "assigned" or scope == "created" or scope == "mentioned"
 	if scope ~= "" and scope ~= "all" and scope ~= "assigned" and scope ~= "created" and scope ~= "mentioned" then
-		on_done(nil, nil, true, "Invalid Gitea/Forgejo issue scope: " .. scope)
+		on_done(nil, nil, true, "Invalid Gitea issue scope: " .. scope)
 		return nil
 	end
 	local repo = vim.trim(view.repo or "")
 	local base = repo_endpoint(repo)
 	if repo ~= "" and not base then
-		on_done(nil, nil, true, "Invalid Gitea/Forgejo repository")
+		on_done(nil, nil, true, "Invalid Gitea repository")
 		return nil
 	end
 	local owner = vim.trim(view.owner or "")
 	local team = vim.trim(view.team or "")
-	local api_type = service.api_type()
 	if team ~= "" and owner == "" then
-		on_done(nil, nil, true, "Gitea/Forgejo issue team filter requires owner")
+		on_done(nil, nil, true, "Gitea issue team filter requires owner")
 		return nil
 	end
 	local endpoint = base and (base .. "/issues") or "/repos/issues/search"
@@ -103,7 +102,6 @@ function M.list(view, opts, on_done)
 		milestones = view.milestones,
 		since = view.since,
 		before = view.before,
-		sort = api_type == "forgejo" and view.sort or nil,
 	}
 
 	if not base then
@@ -112,8 +110,7 @@ function M.list(view, opts, on_done)
 		params.mentioned = scope == "mentioned" or nil
 		params.owner = owner ~= "" and owner or nil
 		params.team = team ~= "" and team or nil
-		params.created_by = api_type == "gitea" and view.created_by or nil
-		params.priority_repo_id = api_type == "forgejo" and view.priority_repo_id or nil
+		params.created_by = view.created_by
 	end
 
 	local function fetch(done)
@@ -155,7 +152,7 @@ end
 function M.get(key, _, on_done)
 	local endpoint, _, slug = issue_endpoint(key)
 	if not endpoint then
-		on_done(nil, "Invalid Gitea/Forgejo issue key: " .. key)
+		on_done(nil, "Invalid Gitea issue key: " .. key)
 		return nil
 	end
 	return service.request("GET", endpoint, nil, function(raw, err)
@@ -179,7 +176,7 @@ function M.create(opts, on_done)
 	local base = repo_endpoint(slug)
 	local title = vim.trim(opts.title)
 	if not base or title == "" then
-		on_done(nil, not base and "Invalid Gitea/Forgejo repository" or "Title is required")
+		on_done(nil, not base and "Invalid Gitea repository" or "Title is required")
 		return nil
 	end
 	return service.request("POST", base .. "/issues", {
@@ -205,7 +202,7 @@ end
 function M.update(key, changes, on_done)
 	local endpoint, _, slug = issue_endpoint(key)
 	if not endpoint then
-		on_done(nil, "Invalid Gitea/Forgejo issue key")
+		on_done(nil, "Invalid Gitea issue key")
 		return nil
 	end
 	return service.request("PATCH", endpoint, changes, function(raw, err)
@@ -223,9 +220,7 @@ end
 ---@param on_done fun(issue: Issue|nil, err: string|nil)
 function M.update_issue(issue, changes, on_done)
 	local payload = vim.tbl_extend("force", {}, changes)
-	if service.api_type() == "gitea" then
-		payload.content_version = issue._raw.content_version
-	end
+	payload.content_version = issue._raw.content_version
 	return M.update(issue.key, payload, on_done)
 end
 
@@ -243,7 +238,7 @@ end
 function M.delete(key, on_done)
 	local endpoint = issue_endpoint(key)
 	if not endpoint then
-		on_done(false, "Invalid Gitea/Forgejo issue key")
+		on_done(false, "Invalid Gitea issue key")
 		return nil
 	end
 	return service.request("DELETE", endpoint, nil, function(_, err)
@@ -257,7 +252,7 @@ end
 function M.set_pinned(key, pinned, on_done)
 	local endpoint = issue_endpoint(key)
 	if not endpoint then
-		on_done(false, "Invalid Gitea/Forgejo issue key")
+		on_done(false, "Invalid Gitea issue key")
 		return nil
 	end
 	return service.request(pinned and "POST" or "DELETE", endpoint .. "/pin", nil, function(_, err)
@@ -265,20 +260,11 @@ function M.set_pinned(key, pinned, on_done)
 	end)
 end
 
----@return boolean
-function M.supports_locking()
-	return service.api_type() == "gitea"
-end
-
 ---@param key string
 ---@param locked boolean
 ---@param reason string|nil
 ---@param on_done fun(ok: boolean, err: string|nil)
 function M.set_locked(key, locked, reason, on_done)
-	if not M.supports_locking() then
-		on_done(false, "Forgejo does not expose issue locking through its REST API")
-		return nil
-	end
 	local endpoint = issue_endpoint(key)
 	if not endpoint then
 		on_done(false, "Invalid Gitea issue key")
@@ -287,7 +273,7 @@ function M.set_locked(key, locked, reason, on_done)
 	local body
 	if locked then
 		reason = vim.trim(reason or "")
-		body = reason ~= "" and { lock_reason = reason } or {}
+		body = reason ~= "" and { lock_reason = reason } or vim.empty_dict()
 	end
 	return service.request(locked and "PUT" or "DELETE", endpoint .. "/lock", body, function(_, err)
 		on_done(err == nil, err)
@@ -317,7 +303,7 @@ end
 function M.list_labels(slug, on_done)
 	local base = repo_endpoint(slug)
 	if not base then
-		on_done(nil, "Invalid Gitea/Forgejo repository")
+		on_done(nil, "Invalid Gitea repository")
 		return nil
 	end
 	return pagination.fetch_all(base .. "/labels", nil, {}, function(raw, err)
@@ -338,7 +324,7 @@ end
 function M.list_assignees(slug, on_done)
 	local base = repo_endpoint(slug)
 	if not base then
-		on_done(nil, "Invalid Gitea/Forgejo repository")
+		on_done(nil, "Invalid Gitea repository")
 		return nil
 	end
 	return service.request("GET", base .. "/assignees", nil, function(raw, err)
@@ -359,7 +345,7 @@ end
 function M.list_milestones(slug, on_done)
 	local base = repo_endpoint(slug)
 	if not base then
-		on_done(nil, "Invalid Gitea/Forgejo repository")
+		on_done(nil, "Invalid Gitea repository")
 		return nil
 	end
 	return pagination.fetch_all(base .. "/milestones", { state = "open" }, {}, function(raw, err)
@@ -381,7 +367,7 @@ end
 function M.update_labels(key, labels, on_done)
 	local endpoint = issue_endpoint(key)
 	if not endpoint then
-		on_done(false, "Invalid Gitea/Forgejo issue key")
+		on_done(false, "Invalid Gitea issue key")
 		return nil
 	end
 	return service.request("PUT", endpoint .. "/labels", { labels = labels }, function(_, err)
@@ -394,7 +380,7 @@ end
 function M.check_subscription(key, on_done)
 	local endpoint = issue_endpoint(key)
 	if not endpoint then
-		on_done(nil, "Invalid Gitea/Forgejo issue key")
+		on_done(nil, "Invalid Gitea issue key")
 		return nil
 	end
 	return service.request("GET", endpoint .. "/subscriptions/check", nil, function(raw, err)
@@ -413,7 +399,7 @@ end
 function M.set_subscription(key, login, subscribe, on_done)
 	local endpoint = issue_endpoint(key)
 	if not endpoint or vim.trim(login) == "" then
-		on_done(false, not endpoint and "Invalid Gitea/Forgejo issue key" or "Missing user login")
+		on_done(false, not endpoint and "Invalid Gitea issue key" or "Missing user login")
 		return nil
 	end
 	local path = endpoint .. "/subscriptions/" .. service.url_encode(login)

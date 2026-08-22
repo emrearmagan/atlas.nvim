@@ -72,7 +72,8 @@
 ---@field bitbucket AtlasBitbucketProviderConfig|nil
 ---@field github AtlasGitHubProviderConfig|nil
 ---@field gitlab AtlasGitLabProviderConfig|nil
----@field gitea AtlasGiteaForgejoProviderConfig|nil
+---@field gitea AtlasGiteaProviderConfig|nil
+---@field forgejo AtlasForgejoProviderConfig|nil
 ---@field jira AtlasJiraProviderConfig|nil
 
 ---@class AtlasPullsConfig
@@ -86,7 +87,8 @@
 ---@field bitbucket AtlasBitbucketPullsConfig|nil
 ---@field github AtlasGitHubPullsConfig|nil
 ---@field gitlab AtlasGitLabPullsConfig|nil
----@field gitea AtlasGiteaForgejoPullsConfig|nil
+---@field gitea AtlasGiteaPullsConfig|nil
+---@field forgejo AtlasForgejoPullsConfig|nil
 
 ---@class AtlasIssuesCustomActionContext
 ---@field issue Issue|nil
@@ -105,7 +107,8 @@
 ---@field custom_actions AtlasIssuesCustomAction[]|nil
 ---@field github AtlasGitHubIssuesConfig|nil
 ---@field gitlab AtlasGitLabIssuesConfig|nil
----@field gitea AtlasGiteaForgejoIssuesConfig|nil
+---@field gitea AtlasGiteaIssuesConfig|nil
+---@field forgejo AtlasForgejoIssuesConfig|nil
 ---@field jira AtlasJiraIssuesConfig|nil
 
 -- Config
@@ -307,7 +310,7 @@ local function migrate_legacy(opts)
 					for key, value in pairs(legacy_config) do
 						local domain_key = key == "views"
 							or key == "bookmarks"
-							or (id == "gitea" and domain == "pulls" and key == "draft_prefix")
+							or ((id == "gitea" or id == "forgejo") and domain == "pulls" and key == "draft_prefix")
 						if domain_key then
 							if domain_config[key] == nil then
 								domain_config[key] = value

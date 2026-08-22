@@ -154,41 +154,40 @@ local function check_gitea()
 	local pulls = config.domain_options("gitea", "pulls")
 	local issues = config.domain_options("gitea", "issues")
 	if pulls == nil and issues == nil then
-		vim.health.info("Gitea / Forgejo not configured")
+		vim.health.info("Gitea not configured")
 		return
 	end
 
-	local provider = config.provider_options("gitea") or {}
-	local label = "Gitea / Forgejo"
-	local base_url = vim.trim(tostring(provider.base_url or ""))
-	if base_url == "" then
-		vim.health.error(label .. " base_url is required")
-	elseif not base_url:match("^https?://[^/]+") then
-		vim.health.error(label .. " base_url must start with http:// or https://")
-	else
-		vim.health.ok(label .. " base_url configured")
+	check_credentials(config.provider_options("gitea") or {}, { "base_url", "token" }, "Gitea")
+	if pulls then
+		check_views(pulls.views, "Gitea pulls")
 	end
-	if vim.trim(tostring(provider.token or "")) == "" then
-		vim.health.error(label .. " token is required")
-	else
-		vim.health.ok(label .. " token configured")
+	if issues then
+		if issues.views == nil then
+			vim.health.ok("Gitea issues: using default views")
+		else
+			check_views(issues.views, "Gitea issues")
+		end
 	end
-	local api_type = tostring(provider.api_type or "gitea")
-	if api_type == "forgejo" or api_type == "gitea" then
-		vim.health.ok(string.format("%s API type: %s", label, api_type))
-	else
-		vim.health.error(string.format("%s api_type must be 'forgejo' or 'gitea'", label))
+end
+
+local function check_forgejo()
+	local pulls = config.domain_options("forgejo", "pulls")
+	local issues = config.domain_options("forgejo", "issues")
+	if pulls == nil and issues == nil then
+		vim.health.info("Forgejo not configured")
+		return
 	end
 
-	for _, entry in ipairs({ { "pulls", pulls }, { "issues", issues } }) do
-		local domain, options = entry[1], entry[2]
-		if options then
-			local domain_label = string.format("%s %s", label, domain)
-			if domain == "issues" and options.views == nil then
-				vim.health.ok(domain_label .. ": using default views")
-			else
-				check_views(options.views, domain_label)
-			end
+	check_credentials(config.provider_options("forgejo") or {}, { "base_url", "token" }, "Forgejo")
+	if pulls then
+		check_views(pulls.views, "Forgejo pulls")
+	end
+	if issues then
+		if issues.views == nil then
+			vim.health.ok("Forgejo issues: using default views")
+		else
+			check_views(issues.views, "Forgejo issues")
 		end
 	end
 end
@@ -254,8 +253,11 @@ function M.check()
 	vim.health.start("GitLab")
 	check_gitlab()
 
-	vim.health.start("Gitea / Forgejo")
+	vim.health.start("Gitea")
 	check_gitea()
+
+	vim.health.start("Forgejo")
+	check_forgejo()
 
 	vim.health.start("Jira")
 	check_jira()

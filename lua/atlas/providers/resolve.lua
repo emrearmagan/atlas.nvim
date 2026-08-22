@@ -192,23 +192,46 @@ end
 ---@param path string|nil
 ---@param ignore_port boolean
 ---@param domain AtlasDomain|nil
----@return AtlasProviderId|nil, AtlasUrlBase|nil
+---@return AtlasProviderId|nil, AtlasUrlBase|nil, boolean ambiguous
 local function configured_provider(host, path, ignore_port, domain)
 	local domains = domain and { domain } or { "pulls", "issues" }
+	local matches = {}
+	local seen = {}
 	for _, provider in ipairs(providers.list()) do
 		for _, current_domain in ipairs(domains) do
-			if provider.domains[current_domain] then
+			if provider.domains[current_domain] and not seen[provider.id] then
 				local base = M.configured_base(current_domain, provider.id)
 				local host_matches = base and base.host == host
 				if ignore_port and base then
 					host_matches = hostname(base.host) == hostname(host)
 				end
 				if host_matches and (path == nil or M.path_for_base({ host = host, path = path }, base) ~= nil) then
-					return provider.id, base
+					seen[provider.id] = true
+					table.insert(matches, { provider = provider.id, base = base })
 				end
 			end
 		end
 	end
+
+	if #matches == 0 then
+		return nil, nil, false
+	end
+	if #matches == 1 then
+		return matches[1].provider, matches[1].base, false
+	end
+	if path == nil then
+		return nil, nil, true
+	end
+
+	-- Prefer the most specific configured web path. This lets two providers
+	-- share an authority when each instance is mounted below a distinct path.
+	table.sort(matches, function(left, right)
+		return #left.base.path > #right.base.path
+	end)
+	if #matches[1].base.path == #matches[2].base.path then
+		return nil, nil, true
+	end
+	return matches[1].provider, matches[1].base, false
 end
 
 ---@param host string
@@ -237,9 +260,12 @@ function M.provider_for_host(host, path, domain)
 	path = path and decode_path(path) or nil
 
 	-- Configured URLs come first so self-hosted providers resolve correctly.
-	local configured = configured_provider(host, path, false, domain)
+	local configured, _, ambiguous = configured_provider(host, path, false, domain)
 	if configured then
 		return configured
+	end
+	if ambiguous then
+		return nil
 	end
 	return provider_for_default_host(host, domain)
 end
@@ -273,13 +299,13 @@ function M.resolve_git_remote(host, repository_path, is_http, domain)
 		}
 	end
 
-	local provider, base = configured_provider(host, nil, true, domain)
+	local provider, base, ambiguous = configured_provider(host, nil, true, domain)
 	if provider and base then
 		return { provider = provider, host = base.host, repository_path = repository_path }
 	end
 	local canonical_host = hostname(host)
 	return {
-		provider = M.provider_for_host(canonical_host, nil, domain),
+		provider = not ambiguous and provider_for_default_host(canonical_host, domain) or nil,
 		host = canonical_host,
 		repository_path = repository_path,
 	}
