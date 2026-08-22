@@ -176,7 +176,7 @@ function M.to_pull_request_details(raw)
 	end
 	local value = json.nilify(raw)
 	pr.description = json.safe_str(value.description) or ""
-	pr.is_subscribed = type(value.subscribed) == "boolean" and value.subscribed or nil
+	pr.is_subscribed = json.nilify(value.subscribed)
 	pr.assignees = normalize_authors(json.safe_table(value.assignees))
 	pr.reviewers = normalize_reviewers(json.safe_table(value.reviewers))
 	pr.labels = normalize_labels(json.safe_table(value.labels))

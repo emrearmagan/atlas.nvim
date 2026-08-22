@@ -27,18 +27,18 @@ local function cursor_entry()
 end
 
 ---@param refresh fun()
----@param fn fun(issue: Issue, refresh: fun())
+---@param fn fun(issue: IssueDetails, refresh: fun())
 local function dispatch_simple(refresh, fn)
-	local issue = panel_state.current_issue
+	local issue = panel_state.current_details
 	if issue then
 		fn(issue, refresh)
 	end
 end
 
 ---@param refresh fun()
----@param fn fun(issue: Issue, entry: table, refresh: fun())
+---@param fn fun(issue: IssueDetails, entry: table, refresh: fun())
 local function dispatch_with_entry(refresh, fn)
-	local issue = panel_state.current_issue
+	local issue = panel_state.current_details
 	local entry = cursor_entry()
 	if issue and entry then
 		fn(issue, entry, refresh)
@@ -90,6 +90,7 @@ end
 ---@param refresh fun()
 function M.setup(buf, refresh)
 	local provider = require("atlas.issues.state").provider
+	local core = provider and provider.capabilities.core
 	local comments = provider and provider.capabilities.comments
 	local items = {}
 
@@ -115,7 +116,7 @@ function M.setup(buf, refresh)
 			})
 		)
 	end
-	if comments and comments.edit_comment then
+	if (comments and comments.edit_comment) or (core and core.update_description) then
 		utils.insert_if(
 			items,
 			from_action("ui.comments.edit", {
@@ -168,8 +169,7 @@ function M.setup(buf, refresh)
 			desc = "Expand / collapse all threads",
 			opts = { nowait = true, silent = true },
 			callback = function()
-				local comments_list = type(state.comments) == "table" and state.comments or {}
-				if state.toggle_all_threads(comment_threads.group_comments(comments_list)) then
+				if state.toggle_all_threads(comment_threads.group_comments(state.comments())) then
 					refresh()
 				end
 			end,

@@ -62,16 +62,6 @@ local function repo_from_target(target)
 end
 
 ---@param target AtlasTarget
-local function open_repo(target)
-	if activate(target) == nil then
-		return
-	end
-	ensure_detail_open()
-	require("atlas.pulls.ui.panel.state").current_panel = "repo"
-	require("atlas.pulls.ui.panel").on_select(nil, repo_from_target(target), { force_refresh = true })
-end
-
----@param target AtlasTarget
 ---@param method string
 ---@param argument any
 ---@param label string
@@ -137,7 +127,7 @@ local function open_issue(target, on_error)
 		return
 	end
 	fetch_and_open(target, "fetch_issue", key, "Issue " .. key, function(issue)
-		require("atlas.issues.ui.panel").on_select(issue, { force_refresh = true })
+		require("atlas.issues.ui.panel").on_select(issue, { force_refresh = true, details = issue })
 	end, on_error)
 end
 
@@ -249,7 +239,7 @@ local function open_number(number, repo_slug)
 end
 
 local openers = {
-	repo = open_repo,
+	repo = activate,
 	pr = open_pr,
 	issue = open_issue,
 }
@@ -272,6 +262,16 @@ end
 ---@param value string
 function M.open(value)
 	request_id = request_id + 1
+	if vim.trim(value) == "." then
+		local info = git.local_repository()
+		if info == nil then
+			notify.error("No supported Git repository found")
+			return
+		end
+		open_target(resolver.target(info, "pulls", "repo", nil))
+		return
+	end
+
 	local result, err = resolver.resolve(value)
 	if result == nil then
 		notify.error(err or "Unsupported Atlas URL")

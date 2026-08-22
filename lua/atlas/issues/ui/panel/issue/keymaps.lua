@@ -92,7 +92,7 @@ function M.register(buf)
 			item("ui.open_actions", {
 				desc = "Open issue actions",
 				callback = function()
-					local issue = panel_state.current_issue
+					local issue = panel_state.current_details or panel_state.current_issue
 					if issue == nil then
 						return
 					end
@@ -111,7 +111,7 @@ function M.register(buf)
 				if M.open_current_line() then
 					return
 				end
-				local issue = panel_state.current_issue
+				local issue = panel_state.current_details or panel_state.current_issue
 				if issue == nil then
 					return
 				end
@@ -126,7 +126,7 @@ function M.register(buf)
 			desc = "Toggle subscription",
 			opts = { nowait = true, silent = true },
 			callback = function()
-				local issue = panel_state.current_issue
+				local issue = panel_state.current_details or panel_state.current_issue
 				if issue == nil then
 					return
 				end
@@ -224,7 +224,7 @@ function M.open_current_line()
 
 	local lnum = vim.api.nvim_win_get_cursor(win)[1]
 	local entry = (panel_state.line_map or {})[lnum]
-	local issue = panel_state.current_issue
+	local issue = panel_state.current_details or panel_state.current_issue
 	if not entry or not issue then
 		return false
 	end

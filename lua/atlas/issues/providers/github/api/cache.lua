@@ -12,7 +12,7 @@ local function invalidate_issue(key)
 
 	for _, with_relationships in ipairs({ false, true }) do
 		cli.delete_mem(
-			string.format("github_issues:get:v2:%s#%d:relationships:%s", slug, number, tostring(with_relationships))
+			string.format("github_issues:get:%s#%d:relationships:%s", slug, number, tostring(with_relationships))
 		)
 	end
 end
@@ -25,7 +25,6 @@ local function invalidate_conversation(key)
 	end
 
 	cli.delete_mem(string.format("github_issues:conversation:%s#%d", slug, number))
-	cli.delete_mem(string.format("github_issues:description:%s#%d", slug, number))
 end
 
 ---@param key string

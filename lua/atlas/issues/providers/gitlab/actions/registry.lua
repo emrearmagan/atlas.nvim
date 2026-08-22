@@ -328,7 +328,7 @@ local function search(_, done)
 					done({ title = issue.key, lines = { err } })
 					return
 				end
-				local description = vim.trim(tostring(detail and detail._raw and detail._raw.description or ""))
+				local description = vim.trim(tostring(detail and detail.description or ""))
 				done({
 					title = issue.key,
 					lines = vim.split(description ~= "" and description or "No description", "\n", { plain = true }),
@@ -350,7 +350,7 @@ local function search(_, done)
 				for _, it in ipairs(items) do
 					table.insert(picker_items, {
 						id = it.key,
-						label = string.format("%s - %s", it.key, it.summary),
+						label = string.format("%s - %s", it.key, it.title),
 						value = it,
 					})
 				end
