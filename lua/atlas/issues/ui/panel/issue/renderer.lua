@@ -80,10 +80,12 @@ function M.render(tab_items, get_tab_module)
 		table.insert(lines, "")
 
 		-- Tab bar
-		local tab_lines, tab_spans =
-			panel_tabs.render(tab_items, panel_state.current_tab, { width = width, padding_x = PADDING_X })
-		utils.append_block(lines, spans, { lines = tab_lines, highlights = tab_spans })
-		table.insert(lines, "")
+		if #tab_items > 1 then
+			local tab_lines, tab_spans =
+				panel_tabs.render(tab_items, panel_state.current_tab, { width = width, padding_x = PADDING_X })
+			utils.append_block(lines, spans, { lines = tab_lines, highlights = tab_spans })
+			table.insert(lines, "")
+		end
 
 		-- Tab content
 		local tab_mod = get_tab_module(panel_state.current_tab)

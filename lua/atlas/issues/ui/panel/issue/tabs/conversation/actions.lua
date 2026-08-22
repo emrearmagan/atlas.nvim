@@ -34,7 +34,7 @@ local function adjust_comment_count(issue, amount)
 		return
 	end
 	raw.comment_count = math.max(0, (tonumber(raw.comment_count) or 0) + amount)
-	require("atlas.issues.ui.main").render()
+	require("atlas.issues.ui.main.controller").update_issue(issue)
 end
 
 ---@param comment IssueComment

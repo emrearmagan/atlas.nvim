@@ -193,8 +193,9 @@ end
 
 ---@param entry IssuesConversationTimelineEntry
 ---@param width integer
+---@param has_next boolean
 ---@param by_entity table<table, IssueConversationItem>
-local function render_entry(entry, width, by_entity)
+local function render_entry(entry, width, has_next, by_entity)
 	if entry.type == "comment" then
 		local thread = entry.thread
 		local root = thread.comment
@@ -219,6 +220,7 @@ local function render_entry(entry, width, by_entity)
 			padding_x = PADDING_X,
 			squash = not state.is_run_expanded(run_id),
 			run_id = run_id,
+			has_next = has_next,
 		})
 		attach_entities(line_map or {}, by_entity)
 		return lines, spans, line_map
@@ -252,11 +254,11 @@ function M.render(_issue, width)
 		return lines, spans, line_map
 	end
 
-	for _, entry in ipairs(entries) do
+	for index, entry in ipairs(entries) do
 		if #lines > 0 then
 			append_connector(lines, spans)
 		end
-		local entry_lines, entry_spans, entry_map = render_entry(entry, width, by_entity)
+		local entry_lines, entry_spans, entry_map = render_entry(entry, width, index < #entries, by_entity)
 		splice(lines, spans, line_map, entry_lines, entry_spans, entry_map)
 	end
 
