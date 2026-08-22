@@ -3,6 +3,7 @@ local activity_api = require("atlas.pulls.providers.gitlab.api.activity")
 local changes_api = require("atlas.pulls.providers.gitlab.api.changes")
 local checks_api = require("atlas.pulls.providers.gitlab.api.checks")
 local comments_api = require("atlas.pulls.providers.gitlab.api.comments")
+local config = require("atlas.config")
 local notifications_api = require("atlas.providers.gitlab.notifications").new("pulls")
 local pipelines_api = require("atlas.pulls.providers.gitlab.api.pipelines")
 local pullrequests_api = require("atlas.pulls.providers.gitlab.api.pullrequests")
@@ -186,8 +187,8 @@ end
 
 ---@return AtlasGitLabPullsViewConfig[]
 local function views()
-	local config = service.gitlab_config()
-	local configured = config.views
+	local options = config.domain_options("gitlab", "pulls") or {}
+	local configured = type(options.views) == "table" and #options.views > 0 and options.views
 		or {
 			{ name = "Assigned", key = "1", scope = "assigned_to_me", state = "opened" },
 			{ name = "Created", key = "2", scope = "created_by_me", state = "opened" },

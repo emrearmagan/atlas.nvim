@@ -278,7 +278,7 @@ end
 ---@return AtlasJiraViewConfig[]
 function M.views()
 	local cfg = require("atlas.issues.providers.jira.api.config").jira_config()
-	local views = cfg.views
+	local views = type(cfg.views) == "table" and #cfg.views > 0 and cfg.views
 		or {
 			{
 				name = "Issues",

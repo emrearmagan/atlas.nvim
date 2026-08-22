@@ -1,4 +1,5 @@
 local GITLAB_REACTION_OPTIONS = require("atlas.ui.shared.emojis").gitlab()
+local config = require("atlas.config")
 local resolver = require("atlas.providers.resolve")
 local notifications_api = require("atlas.providers.gitlab.notifications").new("issues")
 local git = require("atlas.core.git")
@@ -180,8 +181,8 @@ end
 
 ---@return AtlasGitLabIssuesViewConfig[]
 function M.views()
-	local cfg = require("atlas.providers.gitlab.client").issues.gitlab_config()
-	local views = cfg.views
+	local cfg = config.domain_options("gitlab", "issues") or {}
+	local views = type(cfg.views) == "table" and #cfg.views > 0 and cfg.views
 		or {
 			{ name = "Assigned", key = "1", scope = "assigned_to_me", state = "opened" },
 			{ name = "Created", key = "2", scope = "created_by_me", state = "opened" },

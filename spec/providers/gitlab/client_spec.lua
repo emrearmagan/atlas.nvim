@@ -46,7 +46,11 @@ describe("GitLab client", function()
 		end)
 
 		package.preload["atlas.config"] = function()
-			return { options = { pulls = { providers = { gitlab = provider_config } } } }
+			return {
+				provider_options = function(id)
+					return id == "gitlab" and provider_config or nil
+				end,
+			}
 		end
 		package.preload["atlas.core.http"] = function()
 			return {

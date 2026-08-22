@@ -1,5 +1,6 @@
 local M = {}
 
+local config = require("atlas.config")
 local git = require("atlas.core.git")
 local notify = require("atlas.core.notify")
 local picker = require("atlas.picker")
@@ -26,7 +27,7 @@ function M.open(value)
 		no_repository()
 		return
 	end
-	if not providers.domain(info.provider, "pulls") or not providers.options(info.provider, "pulls") then
+	if not providers.domain(info.provider, "pulls") or not config.domain_options(info.provider, "pulls") then
 		no_repository()
 		return
 	end

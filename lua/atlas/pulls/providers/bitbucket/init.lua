@@ -2,6 +2,7 @@ local actions = require("atlas.pulls.providers.bitbucket.actions")
 local activity_api = require("atlas.pulls.providers.bitbucket.api.activity")
 local changes_api = require("atlas.pulls.providers.bitbucket.api.changes")
 local comments_api = require("atlas.pulls.providers.bitbucket.api.comments")
+local config = require("atlas.config")
 local pipelines_api = require("atlas.pulls.providers.bitbucket.api.pipelines")
 local pullrequests_api = require("atlas.pulls.providers.bitbucket.api.pullrequests")
 local repositories_api = require("atlas.pulls.providers.bitbucket.api.repositories")
@@ -250,9 +251,9 @@ end
 
 ---@return AtlasBitbucketViewConfig[]
 local function views()
-	local config = (((require("atlas.config").options or {}).pulls or {}).providers or {}).bitbucket
+	local options = config.domain_options("bitbucket", "pulls")
 	local result = {}
-	for _, view in ipairs((config and config.views) or {}) do
+	for _, view in ipairs((options and options.views) or {}) do
 		table.insert(result, {
 			name = view.name,
 			key = view.key,

@@ -33,9 +33,7 @@ local function new(domain)
 	local client = {}
 
 	function client.github_config()
-		local options = config.options or {}
-		local provider_options = (options[domain] or {}).providers or {}
-		return provider_options.github or {}
+		return config.provider_options("github") or {}
 	end
 
 	function client.cache_ttl()

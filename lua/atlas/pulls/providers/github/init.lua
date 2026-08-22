@@ -2,6 +2,7 @@ local actions = require("atlas.pulls.providers.github.actions")
 local activity_api = require("atlas.pulls.providers.github.api.activity")
 local changes_api = require("atlas.pulls.providers.github.api.changes")
 local checks_api = require("atlas.pulls.providers.github.api.checks")
+local config = require("atlas.config")
 local cli = require("atlas.providers.github.client").pulls
 local comments_api = require("atlas.pulls.providers.github.api.comments")
 local notifications_api = require("atlas.providers.github.notifications").new("pulls")
@@ -132,9 +133,9 @@ end
 
 ---@return AtlasGitHubViewConfig[]
 local function views()
-	local config = ((require("atlas.config").options.pulls or {}).providers or {}).github or {}
-	---@cast config AtlasGitHubConfig
-	local configured = type(config.views) == "table" and #config.views > 0 and config.views
+	local options = config.domain_options("github", "pulls") or {}
+	---@cast options AtlasGitHubPullsConfig
+	local configured = type(options.views) == "table" and #options.views > 0 and options.views
 		or { { name = "Me", key = "1", search = "involves:@me", layout = "compact" } }
 	local resolved = {}
 	for i, view in ipairs(configured) do

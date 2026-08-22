@@ -41,9 +41,13 @@ end
 ---@param arglead string
 ---@return string[]
 local function complete_providers(domain, arglead)
+	local ids = {}
+	for _, provider in ipairs(providers.configured(domain)) do
+		table.insert(ids, provider.id)
+	end
 	return vim.tbl_filter(function(provider)
 		return provider:find(arglead, 1, true) == 1
-	end, require("atlas.providers").ids(domain))
+	end, ids)
 end
 
 ---@param arglead string

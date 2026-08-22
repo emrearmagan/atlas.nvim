@@ -1,5 +1,6 @@
 local M = {}
 
+local config = require("atlas.config")
 local form = require("atlas.ui.popups.form")
 local git_branch = require("atlas.core.git")
 local keymaps = require("atlas.core.keymaps")
@@ -33,7 +34,11 @@ local notify = require("atlas.core.notify")
 ---@param provider_id string
 ---@return PullsProvider|nil, string|nil
 local function load_provider(provider_id)
-	local provider = require("atlas.providers").load(provider_id, "pulls")
+	local providers = require("atlas.providers")
+	if config.domain_options(provider_id, "pulls") == nil then
+		return nil, "Pull request provider not configured: " .. tostring(provider_id)
+	end
+	local provider = providers.load(provider_id, "pulls")
 	if provider == nil then
 		return nil, "Unsupported provider: " .. tostring(provider_id)
 	end

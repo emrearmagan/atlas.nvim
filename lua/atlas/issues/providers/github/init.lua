@@ -1,6 +1,7 @@
 ---@class GitHubIssuesProvider : IssuesProvider
 local M = {}
 
+local config = require("atlas.config")
 local resolver = require("atlas.providers.resolve")
 local request_scope = require("atlas.core.requests")
 local issue_cache = require("atlas.issues.providers.github.api.cache")
@@ -302,15 +303,15 @@ end
 
 ---@return AtlasGitHubIssuesViewConfig[]
 function M.views()
-	local cli = require("atlas.providers.github.client").issues
-	local cfg = cli.github_config()
-	local views = cfg.views or {
-		{
-			name = "Assigned",
-			key = "1",
-			search = "assignee:@me is:open",
-		},
-	}
+	local cfg = config.domain_options("github", "issues") or {}
+	local views = type(cfg.views) == "table" and #cfg.views > 0 and cfg.views
+		or {
+			{
+				name = "Assigned",
+				key = "1",
+				search = "assignee:@me is:open",
+			},
+		}
 	local resolved = {}
 	for i, view in ipairs(views) do
 		resolved[i] = resolve_cur_repo(view)

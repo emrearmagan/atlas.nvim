@@ -1,5 +1,6 @@
 local M = {}
 
+local config = require("atlas.config")
 local icons = require("atlas.ui.shared.icons")
 local utils = require("atlas.ui.shared.utils")
 local ui_utils = require("atlas.ui.utils")
@@ -9,7 +10,7 @@ local ui_utils = require("atlas.ui.utils")
 ---@return string
 function M.key(domain, provider)
 	local providers = require("atlas.providers")
-	local options = providers.options(provider, domain) or {}
+	local options = config.domain_options(provider, domain) or {}
 	local configured = options.bookmarks and options.bookmarks.key
 	local provider_domain = providers.domain(provider, domain)
 	return configured or (provider_domain and provider_domain.bookmark_key) or "S"
@@ -34,7 +35,7 @@ end
 ---@return V[]
 function M.views(provider, domain)
 	local providers = require("atlas.providers")
-	local options = providers.options(provider.id, domain) or {}
+	local options = config.domain_options(provider.id, domain) or {}
 	local bookmarks = options.bookmarks
 	local saved = require("atlas.core.starred").list(domain, provider.id) or {}
 	local views = provider.capabilities.core.views()

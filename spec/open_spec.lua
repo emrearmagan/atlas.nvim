@@ -7,19 +7,21 @@ describe("Atlas target resolver", function()
 	before_each(function()
 		original_options = config.options
 		config.options = {
+			providers = {
+				github = {},
+				gitlab = { base_url = "https://gitlab.example.com" },
+				bitbucket = {},
+				jira = { base_url = "https://jira.example.com" },
+			},
 			pulls = {
-				providers = {
-					github = {},
-					gitlab = { base_url = "https://gitlab.example.com" },
-					bitbucket = {},
-				},
+				github = {},
+				gitlab = {},
+				bitbucket = {},
 			},
 			issues = {
-				providers = {
-					github = {},
-					gitlab = { base_url = "https://gitlab.example.com" },
-					jira = { base_url = "https://jira.example.com" },
-				},
+				github = {},
+				gitlab = {},
+				jira = {},
 			},
 		}
 	end)
@@ -68,9 +70,9 @@ describe("Atlas target resolver", function()
 	end)
 
 	it("discovers repositories from configured provider views", function()
-		config.options.pulls.providers.github.views = { { name = "GitHub", search = "repo:owner/github is:open" } }
-		config.options.pulls.providers.gitlab.views = { { name = "GitLab", project = "owner/gitlab" } }
-		config.options.pulls.providers.bitbucket.views = {
+		config.options.pulls.github.views = { { name = "GitHub", search = "repo:owner/github is:open" } }
+		config.options.pulls.gitlab.views = { { name = "GitLab", project = "owner/gitlab" } }
+		config.options.pulls.bitbucket.views = {
 			{ name = "Bitbucket", targets = { { workspace = "owner", repo = "bitbucket" } } },
 		}
 

@@ -1,5 +1,6 @@
 local M = {}
 
+local config = require("atlas.config")
 local providers = require("atlas.providers")
 
 ---@alias AtlasDomain "pulls"|"issues"
@@ -65,7 +66,10 @@ end
 ---@param provider AtlasProviderId
 ---@return AtlasUrlBase|nil
 function M.configured_base(domain, provider)
-	local options = providers.options(provider, domain)
+	if config.domain_options(provider, domain) == nil then
+		return nil
+	end
+	local options = config.provider_options(provider)
 	if type(options) ~= "table" or type(options.base_url) ~= "string" then
 		return nil
 	end
@@ -161,12 +165,10 @@ end
 ---@param provider AtlasProviderId
 ---@return string
 local function provider_host(provider)
-	for _, domain in ipairs({ "pulls", "issues" }) do
-		local options = providers.options(provider, domain)
-		local host = options and url_host(options.base_url) or nil
-		if host then
-			return host
-		end
+	local options = config.provider_options(provider)
+	local host = options and url_host(options.base_url) or nil
+	if host then
+		return host
 	end
 	return providers[provider].default_host or ""
 end
@@ -182,10 +184,8 @@ function M.provider_for_host(host)
 
 	-- Configured URLs come first so self-hosted providers resolve correctly.
 	for _, provider in ipairs(providers.list()) do
-		for domain in pairs(provider.domains) do
-			if url_host((providers.options(provider.id, domain) or {}).base_url) == host then
-				return provider.id
-			end
+		if url_host((config.provider_options(provider.id) or {}).base_url) == host then
+			return provider.id
 		end
 	end
 
@@ -201,7 +201,7 @@ end
 ---@return boolean
 function M.configured(target)
 	return providers.domain(target.provider, target.domain) ~= nil
-		and providers.options(target.provider, target.domain) ~= nil
+		and config.domain_options(target.provider, target.domain) ~= nil
 end
 
 ---Build the minimal pull request identity needed for a provider fetch.
@@ -220,7 +220,7 @@ end
 ---@param target { provider: AtlasProviderId, domain: AtlasDomain, host: string }
 ---@return string
 function M.base_url(target)
-	local options = providers.options(target.provider, target.domain) or {}
+	local options = config.provider_options(target.provider) or {}
 	local configured = type(options.base_url) == "string" and options.base_url:gsub("/+$", "") or nil
 	if configured and configured ~= "" then
 		return configured
@@ -262,7 +262,7 @@ function M.configured_repositories(repo_slug)
 	local choices, seen = {}, {}
 	for _, provider in ipairs(providers.list()) do
 		for _, domain in ipairs({ "pulls", "issues" }) do
-			local options = providers.options(provider.id, domain)
+			local options = config.domain_options(provider.id, domain)
 			local implementation = options and providers.load(provider.id, domain) or nil
 			if implementation and options and implementation.repositories then
 				for _, slug in ipairs(implementation.repositories(options)) do
@@ -285,7 +285,7 @@ function M.configured_repositories(repo_slug)
 		-- An explicit owner/repo does not need to appear in a configured view.
 		for _, provider in ipairs(providers.list()) do
 			for _, domain in ipairs({ "pulls", "issues" }) do
-				local options = providers.options(provider.id, domain)
+				local options = config.domain_options(provider.id, domain)
 				local implementation = options and providers.load(provider.id, domain) or nil
 				if implementation and implementation.target then
 					table.insert(choices, repo_info(provider.id, repo_slug))

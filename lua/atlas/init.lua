@@ -1,5 +1,6 @@
 local M = {}
 
+local config = require("atlas.config")
 local logger = require("atlas.core.logger")
 local notify = require("atlas.core.notify")
 local picker = require("atlas.picker")
@@ -7,7 +8,7 @@ local providers = require("atlas.providers")
 
 ---@param opts AtlasConfig|nil
 function M.setup(opts)
-	require("atlas.config").setup(opts)
+	config.setup(opts)
 	require("atlas.commands").setup()
 	require("atlas.core.logger").clear()
 end
@@ -39,6 +40,10 @@ end
 ---@param id string
 ---@return PullsProvider|IssuesProvider|nil
 local function load_provider(domain, id)
+	if config.domain_options(id, domain) == nil then
+		notify.error(string.format("%s provider not configured: %s", domain, id))
+		return nil
+	end
 	local provider = providers.load(id, domain)
 	if not provider then
 		notify.error(string.format("Unknown %s provider: %s", domain, id))

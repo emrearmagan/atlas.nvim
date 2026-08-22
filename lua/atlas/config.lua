@@ -68,8 +68,11 @@
 
 -- Configs
 
----@alias AtlasPullsProviders table<string, AtlasBitbucketConfig|AtlasGitHubConfig|AtlasGitLabPullsConfig|table>
----@alias AtlasIssuesProviders table<string, AtlasJiraIssuesConfig|AtlasGitHubIssuesConfig|AtlasGitLabIssuesConfig|table>
+---@class AtlasProvidersConfig
+---@field bitbucket AtlasBitbucketProviderConfig|nil
+---@field github AtlasGitHubProviderConfig|nil
+---@field gitlab AtlasGitLabProviderConfig|nil
+---@field jira AtlasJiraProviderConfig|nil
 
 ---@class AtlasPullsConfig
 ---@field git_transport AtlasGitTransport|nil Git transport for Atlas-managed repositories (default: "ssh").
@@ -79,7 +82,9 @@
 ---@field default_merge_method "merge"|"squash"|nil
 ---@field default_delete_branch boolean|nil
 ---@field custom_actions AtlasPullsCustomAction[]|nil
----@field providers AtlasPullsProviders|nil
+---@field bitbucket AtlasBitbucketPullsConfig|nil
+---@field github AtlasGitHubPullsConfig|nil
+---@field gitlab AtlasGitLabPullsConfig|nil
 
 ---@class AtlasIssuesCustomActionContext
 ---@field issue Issue|nil
@@ -96,7 +101,9 @@
 ---@field max_results number|nil
 ---@field with_relationships boolean|nil
 ---@field custom_actions AtlasIssuesCustomAction[]|nil
----@field providers AtlasIssuesProviders|nil
+---@field github AtlasGitHubIssuesConfig|nil
+---@field gitlab AtlasGitLabIssuesConfig|nil
+---@field jira AtlasJiraIssuesConfig|nil
 
 -- Config
 
@@ -107,6 +114,7 @@
 
 ---@class AtlasConfig
 ---@field ui AtlasUIConfig|nil
+---@field providers AtlasProvidersConfig|nil
 ---@field pulls AtlasPullsConfig|nil
 ---@field issues AtlasIssuesConfig|nil
 ---@field keymaps AtlasKeymapsConfig|nil  -- see core/keymaps.lua for type
@@ -256,11 +264,66 @@ M.options = {
 	},
 }
 
+---@param id AtlasProviderId
+---@return table|nil
+function M.provider_options(id)
+	local providers = type(M.options.providers) == "table" and M.options.providers or nil
+	local options = providers and providers[id] or nil
+	return type(options) == "table" and options or nil
+end
+
+---@param id AtlasProviderId
+---@param domain "pulls"|"issues"
+---@return table|nil
+function M.domain_options(id, domain)
+	local section = type(M.options[domain]) == "table" and M.options[domain] or nil
+	local options = section and section[id] or nil
+	return type(options) == "table" and options or nil
+end
+
 -- Setup
+
+--TODO: Remove with 0.8.0
+local function migrate_legacy(opts)
+	local migrated = false
+	opts.providers = type(opts.providers) == "table" and opts.providers or {}
+
+	for _, domain in ipairs({ "pulls", "issues" }) do
+		local section = type(opts[domain]) == "table" and opts[domain] or nil
+		local legacy = section and section.providers or nil
+		if type(legacy) == "table" then
+			migrated = true
+			section.providers = nil
+			for id, legacy_config in pairs(legacy) do
+				if type(legacy_config) == "table" then
+					local provider_config = type(opts.providers[id]) == "table" and opts.providers[id] or {}
+					local domain_config = type(section[id]) == "table" and section[id] or {}
+					opts.providers[id] = provider_config
+					section[id] = domain_config
+
+					for key, value in pairs(legacy_config) do
+						if key == "views" or key == "bookmarks" then
+							if domain_config[key] == nil then
+								domain_config[key] = value
+							end
+						elseif provider_config[key] == nil then
+							provider_config[key] = value
+						end
+					end
+				end
+			end
+		end
+	end
+
+	if migrated then
+		vim.notify("Deprecated Config", vim.log.levels.WARN)
+	end
+	return opts
+end
 
 ---@param opts AtlasConfig|table|nil
 function M.setup(opts)
-	local resolved = opts or {}
+	local resolved = migrate_legacy(vim.deepcopy(opts or {}))
 	M.options = vim.tbl_deep_extend("force", M.options, resolved)
 	if M.options.ui.global_statusline ~= false then
 		vim.opt.laststatus = 3
