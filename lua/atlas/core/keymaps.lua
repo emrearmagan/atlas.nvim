@@ -80,6 +80,7 @@ local M = {}
 ---@field request_changes? AtlasKeymapValue
 ---@field submit_review? AtlasKeymapValue
 ---@field add_task? AtlasKeymapValue
+---@field comment_templates? AtlasKeymapValue
 ---@field explorer? AtlasPullsReviewExplorerKeymaps
 ---@field diff? AtlasPullsReviewDiffKeymaps
 
@@ -169,6 +170,7 @@ local M = {}
 ---| "pulls.review.request_changes"
 ---| "pulls.review.submit_review"
 ---| "pulls.review.add_task"
+---| "pulls.review.comment_templates"
 ---| "pulls.review.focus_item"
 ---| "pulls.review.explorer.find_file"
 ---| "pulls.review.explorer.next_file"

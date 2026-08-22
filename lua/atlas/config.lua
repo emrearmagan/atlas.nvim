@@ -54,6 +54,13 @@
 ---@field explorer AtlasPullsDiffExplorerConfig|nil
 ---@field review_panel AtlasPullsDiffReviewPanelConfig|nil
 
+---@class AtlasPullsCommentTemplate
+---@field label string
+---@field text string
+
+---@class AtlasPullsCommentTemplatesConfig
+---@field items AtlasPullsCommentTemplate[]
+
 ---@class AtlasPullsCustomActionContext
 ---@field repo_path string|nil
 ---@field pr PullRequest
@@ -78,6 +85,7 @@
 ---@field delete_notes boolean|nil
 ---@field default_merge_method "merge"|"squash"|nil
 ---@field default_delete_branch boolean|nil
+---@field comment_templates AtlasPullsCommentTemplatesConfig|nil
 ---@field custom_actions AtlasPullsCustomAction[]|nil
 ---@field providers AtlasPullsProviders|nil
 
@@ -125,6 +133,19 @@ M.options = {
 		delete_notes = false,
 		default_merge_method = "merge",
 		default_delete_branch = false,
+		comment_templates = {
+			items = {
+				{ label = "Praise", text = "praise: " },
+				{ label = "Nitpick", text = "nitpick: " },
+				{ label = "Suggestion", text = "suggestion: " },
+				{ label = "Issue", text = "issue: " },
+				{ label = "Todo", text = "todo: " },
+				{ label = "Question", text = "question: " },
+				{ label = "Thought", text = "thought: " },
+				{ label = "Chore", text = "chore: " },
+				{ label = "Note", text = "note: " },
+			},
+		},
 		diff = {
 			open_cmd = "AtlasDiff",
 			layout = "inline",
@@ -207,6 +228,7 @@ M.options = {
 				request_changes = "gr",
 				submit_review = "gs",
 				add_task = "<leader>t",
+				comment_templates = "gT",
 				explorer = {
 					find_file = "<leader>ff",
 					next_file = { "]f", "<Tab>" },
