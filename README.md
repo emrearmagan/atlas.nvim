@@ -161,6 +161,15 @@ pulls = {
   default_delete_branch = false,
   git_transport = "ssh", -- "https" or "ssh" for Atlas-managed Git remotes.
 
+  -- replaces the built-in Conventional Comments templates.
+  comment_templates = {
+    items = {
+      { label = "Suggestion", text = "suggestion: " },
+      { label = "Issue", text = "issue: " },
+      { label = "Nitpick", text = "nitpick: " },
+    },
+  },
+
   diff = {
     -- Any command that accepts explicit <base>...<head> Git revisions.
     open_cmd = "AtlasDiff", -- default; for example "DiffviewOpen" or "CodeDiff".
@@ -819,6 +828,7 @@ keymaps = {
       request_changes = "gr",
       submit_review = "gs",
       add_task = "<leader>t",
+      comment_templates = "gT",
       explorer = {
         find_file = "<leader>ff",
         next_file = { "]f", "<Tab>" },
