@@ -5,7 +5,6 @@ local groups = {
 	AtlasGiteaIssueClosed = { fg = "#a371f7", bold = true },
 	AtlasGiteaIssueOpenChip = { fg = "#1e1e2e", bg = "#a6e3a1", bold = true },
 	AtlasGiteaIssueClosedChip = { fg = "#1e1e2e", bg = "#a371f7", bold = true },
-	AtlasGiteaIssueKey = { fg = "#58a6ff", bold = true },
 }
 
 function M.setup()

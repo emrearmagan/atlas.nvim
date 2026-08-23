@@ -43,11 +43,10 @@ end
 ---@param lines string[]
 ---@param line_map table<integer, table>
 ---@param spans table[]
----@param layout "compact"|"grouped"|"plain"
-local function add_pr_reference_spans(lines, line_map, spans, layout)
+local function add_pr_reference_spans(lines, line_map, spans)
 	for line_number, item in pairs(line_map) do
 		if item.kind == "pr" then
-			local reference = (layout == "plain" and item.pr.repo_full_name or "") .. "#" .. tostring(item.pr.id)
+			local reference = "#" .. tostring(item.pr.id)
 			local start_col, end_col = string.find(lines[line_number], reference, 1, true)
 			if start_col and end_col then
 				table.insert(spans, {
@@ -77,7 +76,7 @@ function M.render(pulls, layout, opts)
 		rows = table_data.rows,
 		cell_hl = helper.cell_hl,
 	})
-	add_pr_reference_spans(lines, line_map, spans, layout)
+	add_pr_reference_spans(lines, line_map, spans)
 
 	return { lines = lines, spans = spans, line_map = line_map }
 end

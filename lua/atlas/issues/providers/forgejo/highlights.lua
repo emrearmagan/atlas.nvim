@@ -5,7 +5,6 @@ local groups = {
 	AtlasForgejoIssueClosed = { fg = "#a371f7", bold = true },
 	AtlasForgejoIssueOpenChip = { fg = "#1e1e2e", bg = "#a6e3a1", bold = true },
 	AtlasForgejoIssueClosedChip = { fg = "#1e1e2e", bg = "#a371f7", bold = true },
-	AtlasForgejoIssueKey = { fg = "#58a6ff", bold = true },
 }
 
 function M.setup()

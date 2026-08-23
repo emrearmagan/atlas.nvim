@@ -25,14 +25,14 @@ end
 local function key_label(issue)
 	local raw = issue._raw
 	local number = raw.number
-	local path = raw.project_path
-	return string.format("%s#%d", path, number)
+	return string.format("#%d", number)
 end
 
 ---@param issue Issue
 ---@param is_child boolean
+---@param _layout "plain"|"compact"|nil
 ---@return table
-function M.format_row(issue, is_child)
+function M.format_row(issue, is_child, _layout)
 	local icon = issue.is_pinned and icons.general("pin") or state_icon(issue.status_id)
 	local key = key_label(issue)
 	local title = issue.title
@@ -40,7 +40,8 @@ function M.format_row(issue, is_child)
 	local reporter = issue.reporter and issue.reporter.display_name or "Unknown"
 	return {
 		icon = is_child and "" or icon,
-		name = is_child and ("  " .. icon .. "  " .. key .. "  " .. title) or (key .. "  " .. title),
+		name = is_child and ("  " .. icon .. "  " .. key .. " " .. title) or (key .. " " .. title),
+		_key_label = key,
 		assignee = string.format("%s %s", icons.general("user"), utils.shorten_name(assignee, 20)),
 		reporter = string.format("%s %s", icons.general("user"), utils.shorten_name(reporter, 20)),
 		status = (function()
@@ -84,9 +85,9 @@ function M.cell_hl(row, col, ctx)
 				table.insert(spans, { start_col = first - 1, end_col = last, hl_group = icon_hl })
 			end
 		end
-		local first, last = ctx.text:find(key_label(issue), 1, true)
+		local first, last = ctx.text:find(row._key_label or key_label(issue), 1, true)
 		if first then
-			table.insert(spans, { start_col = first - 1, end_col = last, hl_group = "AtlasGiteaIssueKey" })
+			table.insert(spans, { start_col = first - 1, end_col = last, hl_group = "AtlasTextMuted" })
 		end
 		return #spans > 0 and spans or nil
 	end
