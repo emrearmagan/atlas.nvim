@@ -39,12 +39,11 @@ end
 ---@param table_lines string[]
 ---@param table_map table<integer, table>
 ---@param table_spans table[]
----@param layout "compact"|"grouped"|"plain"
-local function add_pr_reference_spans(table_lines, table_map, table_spans, layout)
+local function add_pr_reference_spans(table_lines, table_map, table_spans)
 	for lnum, item in pairs(table_map or {}) do
 		if item.kind == "pr" then
 			local line = table_lines[lnum] or ""
-			local reference = (layout == "plain" and item.pr.repo_full_name or "") .. "#" .. tostring(item.pr.id)
+			local reference = "#" .. tostring(item.pr.id)
 			local s, e = string.find(line, reference, 1, true)
 			if s and e then
 				table.insert(table_spans, {
@@ -70,7 +69,7 @@ local function build_compact_content(opts, pulls)
 		rows = table_data.rows,
 		cell_hl = helper.cell_hl,
 	})
-	add_pr_reference_spans(tbl_lines, tbl_map, tbl_spans, "compact")
+	add_pr_reference_spans(tbl_lines, tbl_map, tbl_spans)
 	return tbl_lines, tbl_spans, tbl_map
 end
 
@@ -87,7 +86,7 @@ local function build_list_content(opts, pulls, layout)
 		rows = table_data.rows,
 		cell_hl = helper.cell_hl,
 	})
-	add_pr_reference_spans(tbl_lines, tbl_map, tbl_spans, layout)
+	add_pr_reference_spans(tbl_lines, tbl_map, tbl_spans)
 	return tbl_lines, tbl_spans, tbl_map
 end
 

@@ -98,12 +98,11 @@ end
 ---@param lines string[]
 ---@param map table<integer, table>
 ---@param spans table[]
----@param layout "compact"|"grouped"|"plain"
-local function add_pr_reference_spans(lines, map, spans, layout)
+local function add_pr_reference_spans(lines, map, spans)
 	for lnum, item in pairs(map or {}) do
 		if item.kind == "pr" then
 			local line = lines[lnum] or ""
-			local reference = (layout == "plain" and item.pr.repo_full_name or "") .. "!" .. tostring(item.pr.id)
+			local reference = "!" .. tostring(item.pr.id)
 			local s, e = string.find(line, reference, 1, true)
 			if s and e then
 				table.insert(spans, {
@@ -265,7 +264,7 @@ local function list_rows(pulls, layout)
 			end
 			local id_str = tostring(pr.id or "")
 			local title = tostring(pr.title or "")
-			local reference = (grouped and "" or pr.repo_full_name) .. "!" .. id_str
+			local reference = "!" .. id_str
 			local author_name = helper.user_handle(pr.author)
 			local icon = pr_icon_or_spinner(pr)
 			local _, icon_hl = pr_icon_and_hl(pr)
@@ -323,7 +322,7 @@ function M.render(pulls, layout, opts)
 		})
 	end
 
-	add_pr_reference_spans(tbl_lines, tbl_map, tbl_spans, layout)
+	add_pr_reference_spans(tbl_lines, tbl_map, tbl_spans)
 
 	local base = #lines
 	for _, line in ipairs(tbl_lines) do

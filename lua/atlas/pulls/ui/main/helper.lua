@@ -461,7 +461,7 @@ function M.build_list_table(pulls, layout)
 			end
 			local id_str = tostring(pr.id or "")
 			local title = tostring(pr.title or "")
-			local reference = (grouped and "" or pr.repo_full_name) .. "#" .. id_str
+			local reference = "#" .. id_str
 			local author_name = M.user_handle(pr.author)
 			local icon = pr_icon_or_spinner(pr)
 			local _, icon_hl = pr_icon_and_hl(pr)

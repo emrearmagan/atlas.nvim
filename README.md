@@ -43,6 +43,8 @@ Review GitHub, Bitbucket, and GitLab pull requests and manage Jira, GitHub, and 
 ### Using [lazy.nvim](https://github.com/folke/lazy.nvim)
 
 ```lua
+---@module "atlas"
+
 {
   "emrearmagan/atlas.nvim",
   dependencies = {
@@ -52,6 +54,7 @@ Review GitHub, Bitbucket, and GitLab pull requests and manage Jira, GitHub, and 
     "sindrets/diffview.nvim", -- optional; or "dlyongemallo/diffview-plus.nvim"
   },
   -- See Configuration below
+  ---@type AtlasConfig
   opts = {},
 }
 ```
