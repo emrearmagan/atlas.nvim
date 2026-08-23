@@ -6,6 +6,21 @@ local M = {}
 local service = require("atlas.providers.forgejo.client")
 local pagination = require("atlas.providers.forgejo.pagination")
 
+local function cache_scope()
+	return string.format("forgejo:issues:%s", service.base_url())
+end
+
+local function detail_cache_key(key)
+	return cache_scope() .. ":detail:" .. key
+end
+
+local function clear_issue_cache(key)
+	service.clear_cache(cache_scope() .. ":list:")
+	if key then
+		service.delete_memory_cache(detail_cache_key(key))
+	end
+end
+
 ---@param slug string|nil
 ---@return string|nil
 local function repo_endpoint(slug)
@@ -58,12 +73,22 @@ end
 
 ---@param on_done fun(user: IssueUser|nil, err: string|nil)
 function M.fetch_user(on_done)
+	local cache_key = cache_scope() .. ":user"
+	local cached, ok = service.get_cache(cache_key)
+	if ok then
+		on_done(cached, nil)
+		return nil
+	end
 	return service.request("GET", "/user", nil, function(raw, err)
 		if err then
 			on_done(nil, err)
 			return
 		end
-		on_done(mapper.to_user(raw), nil)
+		local result = mapper.to_user(raw)
+		if result then
+			service.set_cache(cache_key, result)
+		end
+		on_done(result, nil)
 	end)
 end
 
@@ -104,16 +129,37 @@ function M.list(view, opts, on_done)
 	end
 
 	local function fetch(done)
-		return service.request("GET", endpoint .. service.query(params), nil, done)
+		local request_endpoint = endpoint .. service.query(params)
+		local cache_key = cache_scope() .. ":list:" .. request_endpoint
+		if not opts.force_load then
+			local cached, ok = service.get_cache(cache_key)
+			if ok then
+				done(cached, nil)
+				return nil
+			end
+		end
+		return service.request("GET", request_endpoint, nil, function(raw, err)
+			if err then
+				done(nil, err)
+				return
+			end
+			local issues = map_issues(raw, base and repo or nil)
+			local has_next = #raw > 0
+			local result = {
+				issues = issues,
+				next_page_token = has_next and tostring(page + 1) or nil,
+				is_last = not has_next,
+			}
+			service.set_cache(cache_key, result)
+			done(result, nil)
+		end)
 	end
-	local function finish(raw, err)
+	local function finish(result, err)
 		if err then
 			on_done(nil, nil, true, err)
 			return
 		end
-		local issues = map_issues(raw, base and repo or nil)
-		local has_next = #raw > 0
-		on_done(issues, has_next and tostring(page + 1) or nil, not has_next, nil)
+		on_done(result.issues, result.next_page_token, result.is_last, nil)
 	end
 
 	if base and has_scoped_filter then
@@ -136,13 +182,21 @@ function M.list(view, opts, on_done)
 end
 
 ---@param key string
----@param _ table|nil
+---@param opts IssuesFetchOpts|nil
 ---@param on_done fun(issue: IssueDetails|nil, err: string|nil)
-function M.get(key, _, on_done)
+function M.get(key, opts, on_done)
 	local endpoint, _, slug = issue_endpoint(key)
 	if not endpoint then
 		on_done(nil, "Invalid Forgejo issue key: " .. key)
 		return nil
+	end
+	local cache_key = detail_cache_key(key)
+	if not (opts and opts.force_load) then
+		local cached, ok = service.get_memory_cache(cache_key)
+		if ok then
+			on_done(cached, nil)
+			return nil
+		end
 	end
 	return service.request("GET", endpoint, nil, function(raw, err)
 		if err then
@@ -154,6 +208,7 @@ function M.get(key, _, on_done)
 			on_done(nil, "The requested number is not an issue")
 			return
 		end
+		service.set_memory_cache(cache_key, issue)
 		on_done(issue, nil)
 	end)
 end
@@ -181,6 +236,7 @@ function M.create(opts, on_done)
 			return
 		end
 		local issue = mapper.to_issue(raw, slug)
+		clear_issue_cache(nil)
 		on_done({ number = issue._raw.number, key = issue.key, url = issue.url, issue = issue }, nil)
 	end)
 end
@@ -200,6 +256,7 @@ function M.update(key, changes, on_done)
 			return
 		end
 		local issue = mapper.to_issue(raw, slug)
+		clear_issue_cache(key)
 		on_done(issue, nil)
 	end)
 end
@@ -229,6 +286,9 @@ function M.delete(key, on_done)
 		return nil
 	end
 	return service.request("DELETE", endpoint, nil, function(_, err)
+		if not err then
+			clear_issue_cache(key)
+		end
 		on_done(err == nil, err)
 	end)
 end
@@ -243,6 +303,9 @@ function M.set_pinned(key, pinned, on_done)
 		return nil
 	end
 	return service.request(pinned and "POST" or "DELETE", endpoint .. "/pin", nil, function(_, err)
+		if not err then
+			clear_issue_cache(key)
+		end
 		on_done(err == nil, err)
 	end)
 end
@@ -338,6 +401,9 @@ function M.update_labels(key, labels, on_done)
 		return nil
 	end
 	return service.request("PUT", endpoint .. "/labels", { labels = labels }, function(_, err)
+		if not err then
+			clear_issue_cache(key)
+		end
 		on_done(err == nil, err)
 	end)
 end

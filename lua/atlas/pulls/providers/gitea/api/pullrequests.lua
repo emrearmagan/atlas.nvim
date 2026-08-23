@@ -201,13 +201,21 @@ local function list_cache_key(view, opts, global)
 end
 
 function M.fetch_user(on_done)
+	local cache_key = cache_scope() .. ":user"
+	local cached, ok = service.get_cache(cache_key)
+	if ok then
+		on_done(cached, nil)
+		return nil
+	end
 	return service.request("GET", "/user", nil, function(raw, err)
 		if err then
 			on_done(nil, err)
 			return
 		end
 		local user = mapper.author(raw)
-		on_done({ id = user.id, name = user.name, username = user.username }, nil)
+		local result = { id = user.id, name = user.name, username = user.username }
+		service.set_cache(cache_key, result)
+		on_done(result, nil)
 	end)
 end
 
