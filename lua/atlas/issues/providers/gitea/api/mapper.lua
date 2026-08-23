@@ -121,9 +121,9 @@ function M.to_issue(raw, scoped_slug)
 	local url = raw.html_url
 	local slug = scoped_slug or repository_slug(raw.repository)
 	local state = raw.state
-	local assignees = json.nilify(raw.assignees) or {}
+	local raw_assignees = json.nilify(raw.assignees) or {}
 	local issue_labels = labels(json.nilify(raw.labels) or {})
-	local milestone = json.nilify(raw.milestone)
+	local raw_milestone = json.nilify(raw.milestone)
 	local reporter = user(raw.user)
 	local original_author = nonempty(raw.original_author)
 	if not reporter and original_author then
@@ -144,7 +144,7 @@ function M.to_issue(raw, scoped_slug)
 		status_id = state,
 		type = nil,
 		priority = nil,
-		assignee = user(assignees[1]),
+		assignee = user(raw_assignees[1]),
 		reporter = reporter,
 		story_points = nil,
 		duedate = display_due_date,
@@ -163,8 +163,8 @@ function M.to_issue(raw, scoped_slug)
 			is_locked = json.nilify(raw.is_locked),
 			due_date = due_date,
 			labels = issue_labels,
-			assignees = assignees,
-			milestone = milestone,
+			assignees = raw_assignees,
+			milestone = raw_milestone,
 			comment_count = raw.comments,
 		},
 	}

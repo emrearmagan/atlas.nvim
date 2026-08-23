@@ -1,5 +1,5 @@
-local service = require("atlas.providers.forgejo.client").pulls
-local pagination = require("atlas.providers.forgejo.pagination").pulls
+local service = require("atlas.providers.forgejo.client")
+local pagination = require("atlas.providers.forgejo.pagination")
 local mapper = require("atlas.pulls.providers.forgejo.api.mapper")
 local request_scope = require("atlas.core.requests")
 
@@ -51,7 +51,7 @@ function M.comment_context(pr, inline)
 	return context, nil
 end
 
----@param mapper table
+---@param comment_mapper table
 ---@param pr PullRequest
 ---@param raw_comment table
 ---@param commit_id string
@@ -59,7 +59,7 @@ end
 ---@param pending_body string|nil
 ---@param on_done fun(comment: PullsComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.create_comment(mapper, pr, raw_comment, commit_id, opts, pending_body, on_done)
+function M.create_comment(comment_mapper, pr, raw_comment, commit_id, opts, pending_body, on_done)
 	local base = assert(M.endpoint(pr))
 	local pending = opts and opts.pending == true or false
 	local target_review = opts and opts.review or nil
@@ -101,7 +101,7 @@ function M.create_comment(mapper, pr, raw_comment, commit_id, opts, pending_body
 					newest_id = id
 				end
 			end
-			on_done(mapper.to_comment(newest, raw_review), nil)
+			on_done(comment_mapper.to_comment(newest, raw_review), nil)
 		end)
 	end)
 	return requests
@@ -220,10 +220,10 @@ local function fetch_comments(pr, on_done)
 end
 
 ---@param pr PullRequest
----@param opts { force_refresh: boolean|nil }|nil
+---@param _opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(data: PullsReviewData|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch(pr, opts, on_done)
+function M.fetch(pr, _opts, on_done)
 	return fetch_comments(pr, function(comments, err, raw_reviews)
 		if err then
 			on_done(nil, err)

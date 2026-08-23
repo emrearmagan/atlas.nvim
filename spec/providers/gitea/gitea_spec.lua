@@ -19,7 +19,7 @@ local function load_api(module, service)
 	package.loaded[module] = nil
 	package.loaded[CLIENT] = nil
 	package.preload[CLIENT] = function()
-		return { pulls = service }
+		return service
 	end
 	return require(module)
 end

@@ -1,6 +1,6 @@
-local service = require("atlas.providers.forgejo.client").pulls
+local service = require("atlas.providers.forgejo.client")
 local config = require("atlas.config")
-local pagination = require("atlas.providers.forgejo.pagination").pulls
+local pagination = require("atlas.providers.forgejo.pagination")
 local mapper = require("atlas.pulls.providers.forgejo.api.mapper")
 local request_scope = require("atlas.core.requests")
 

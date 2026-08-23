@@ -1,6 +1,7 @@
 require("atlas.issues.providers.gitea.config")
 
 local api = require("atlas.issues.providers.gitea.api")
+local notifications_api = require("atlas.providers.gitea.notifications")
 local resolver = require("atlas.providers.resolve")
 local request_scope = require("atlas.core.requests")
 
@@ -264,13 +265,6 @@ local comments = {
 	end,
 }
 
----@type AtlasNotificationsCapability
-local notifications = {
-	fetch = api.notifications.fetch,
-	mark_read = api.notifications.mark_read,
-	mark_done = api.notifications.mark_done,
-}
-
 return {
 	resolve = M.resolve,
 	search_view = M.search_view,
@@ -286,7 +280,7 @@ return {
 			views = M.views,
 		},
 		comments = comments,
-		notifications = notifications,
+		notifications = notifications_api,
 		actions = require("atlas.issues.providers.gitea.actions"),
 		ui = {
 			setup = require("atlas.issues.providers.gitea.highlights").setup,

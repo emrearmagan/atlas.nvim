@@ -1,7 +1,7 @@
 local providers = require("atlas.pulls.providers")
 local pipeline_api = require("atlas.pulls.providers.forgejo.api.pipelines")
 local pullrequests = require("atlas.pulls.providers.forgejo.api.pullrequests")
-local service = require("atlas.providers.forgejo.client").pulls
+local service = require("atlas.providers.forgejo.client")
 local request_scope = require("atlas.core.requests")
 
 local M = {}

@@ -4,7 +4,7 @@ local checks_api = require("atlas.pulls.providers.forgejo.api.checks")
 local comments_api = require("atlas.pulls.providers.forgejo.api.comments")
 local commits_api = require("atlas.pulls.providers.forgejo.api.commits")
 local files_api = require("atlas.pulls.providers.forgejo.api.files")
-local notifications_api = require("atlas.providers.forgejo.notifications").new("pulls")
+local notifications_api = require("atlas.providers.forgejo.notifications")
 local pipelines_api = require("atlas.pulls.providers.forgejo.api.pipelines")
 local pullrequests_api = require("atlas.pulls.providers.forgejo.api.pullrequests")
 local repositories_api = require("atlas.pulls.providers.forgejo.api.repositories")
@@ -267,12 +267,6 @@ local repository = {
 	delete_branch = repositories_api.delete_branch,
 }
 
-local notifications = {
-	fetch = notifications_api.fetch,
-	mark_read = notifications_api.mark_read,
-	mark_done = notifications_api.mark_done,
-}
-
 local actions = require("atlas.pulls.providers.forgejo.actions")
 local panel = require("atlas.pulls.providers.forgejo.ui.panel")
 
@@ -312,7 +306,7 @@ return {
 			fetch_job_log = pipelines_api.fetch_job_log,
 			actions = require("atlas.pulls.providers.forgejo.actions.pipelines"),
 		},
-		notifications = notifications,
+		notifications = notifications_api,
 		actions = actions,
 		ui = {
 			setup = require("atlas.providers.forgejo.highlights").setup,
