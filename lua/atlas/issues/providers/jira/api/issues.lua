@@ -30,6 +30,14 @@ local function search_fields()
 	}
 end
 
+local function detail_fields()
+	local fields = search_fields()
+	table.insert(fields, "description")
+	table.insert(fields, "created")
+	table.insert(fields, "labels")
+	return fields
+end
+
 ---@param str string
 ---@return string
 local function url_encode(str)
@@ -80,7 +88,7 @@ function M.search_issues(jql, on_done, opts)
 	local ttl = service.cache_ttl()
 	local page_token = opts.next_page_token or ""
 	local page_size = math.max(1, tonumber(opts.max_results) or 50)
-	local cache_key = "jira:search:" .. jql .. ":page:" .. page_token .. ":size:" .. tostring(page_size)
+	local cache_key = "jira:search:v2:" .. jql .. ":page:" .. page_token .. ":size:" .. tostring(page_size)
 
 	if not opts.force_load then
 		local cached = cache.get(cache_key)
@@ -126,7 +134,7 @@ end
 ---@class JiraIssuePickerItem
 ---@field id string
 ---@field key string
----@field summary string
+---@field title string
 
 ---@param query string
 ---@param on_done fun(items: JiraIssuePickerItem[]|nil, err: string|nil)
@@ -163,11 +171,11 @@ function M.search_issue(query, on_done, opts)
 			for _, issue in ipairs(section.issues or {}) do
 				local key = tostring(issue.key or "")
 				if key ~= "" then
-					local summary = tostring(issue.summaryText or issue.summary or "")
+					local title = tostring(issue.summaryText or issue.summary or "")
 					table.insert(items, {
 						id = tostring(issue.id or key),
 						key = key,
-						summary = summary,
+						title = title,
 					})
 				end
 			end
@@ -182,15 +190,25 @@ function M.search_issue(query, on_done, opts)
 end
 
 ---@param issue_key string
----@param callback fun(issue: Issue|nil, err: string|nil)
+---@param callback fun(issue: IssueDetails|nil, err: string|nil)
+---@param opts { force_load?: boolean }|nil
 ---@return { job_id: integer, cancel: fun() }|nil
-function M.get_issue(issue_key, callback)
+function M.get_issue(issue_key, callback, opts)
 	if type(issue_key) ~= "string" or issue_key == "" then
 		callback(nil, "Missing issue key")
 		return nil
 	end
+	opts = opts or {}
+	local cache_key = "jira:issue:" .. issue_key
+	if not opts.force_load then
+		local cached, ok = service.get_memory_cache(cache_key)
+		if ok then
+			callback(cached, nil)
+			return nil
+		end
+	end
 
-	local endpoint = string.format("/issue/%s?fields=%s", issue_key, table.concat(search_fields(), ","))
+	local endpoint = string.format("/issue/%s?fields=%s", issue_key, table.concat(detail_fields(), ","))
 
 	return service.request("GET", endpoint, nil, function(result, err)
 		if err or not result then
@@ -198,7 +216,9 @@ function M.get_issue(issue_key, callback)
 			return
 		end
 
-		callback(normalizer.to_issue(result, story_points_field()), nil)
+		local issue = normalizer.to_issue_details(result, story_points_field())
+		service.set_memory_cache(cache_key, issue)
+		callback(issue, nil)
 	end, {
 		action = "Fetch issue",
 		issue_key = issue_key,

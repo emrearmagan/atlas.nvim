@@ -88,25 +88,16 @@ local function to_string_or_nil(value)
 end
 
 ---@param raw_status any Decoded API value.
----@return string|nil, string|nil, string|nil, string|nil
+---@return string|nil, string|nil
 local function extract_status(raw_status)
 	raw_status = json.nilify(raw_status)
 	if type(raw_status) ~= "table" then
-		return nil, nil, nil, nil
+		return nil, nil
 	end
 
 	local name = safe_get(raw_status, "name")
 	local id = raw_status.id and tostring(raw_status.id) or nil
-	local category = nil
-	local color = nil
-
-	local cat = safe_get(raw_status, "statusCategory")
-	if type(cat) == "table" then
-		category = cat.name
-		color = cat.colorName
-	end
-
-	return name, id, category, color
+	return name, id
 end
 
 ---@param raw_user any Decoded API value.
@@ -138,16 +129,14 @@ local function extract_parent(raw_parent)
 	end
 
 	local pf = raw_parent.fields or {}
-	local status, status_id, status_category, status_color = extract_status(safe_get(pf, "status"))
+	local status, status_id = extract_status(safe_get(pf, "status"))
 
 	return {
 		key = tostring(raw_parent.key),
-		summary = tostring(pf.summary or ""),
+		title = tostring(pf.summary or ""),
 		project = M.to_project(safe_get(pf, "project")),
 		status = status,
 		status_id = status_id,
-		status_category = status_category,
-		status_color = status_color,
 		type = M.to_issue_type(safe_get(pf, "issuetype")),
 		priority = safe_get(pf, "priority", "name"),
 		assignee = normalize_issue_user(safe_get(pf, "assignee")),
@@ -156,6 +145,28 @@ local function extract_parent(raw_parent)
 		duedate = nil,
 		parent = nil,
 	}
+end
+
+---@param raw_labels any
+---@return IssueLabel[]
+local function extract_labels(raw_labels)
+	local labels = {}
+	for _, name in ipairs(json.safe_table(raw_labels)) do
+		if type(name) == "string" and name ~= "" then
+			table.insert(labels, { name = name })
+		end
+	end
+	return labels
+end
+
+---@param value any
+---@return string
+local function extract_description(value)
+	value = json.nilify(value)
+	if type(value) == "table" then
+		return adf.to_markdown(value)
+	end
+	return json.safe_str(value) or ""
 end
 
 ---@param value any
@@ -185,16 +196,14 @@ end
 ---@return Issue
 function M.to_issue(raw, sp_field)
 	local fields = raw.fields or {}
-	local status, status_id, status_category, status_color = extract_status(safe_get(fields, "status"))
+	local status, status_id = extract_status(safe_get(fields, "status"))
 
 	return {
 		key = tostring(raw.key or ""),
-		summary = tostring(fields.summary or ""),
+		title = tostring(fields.summary or ""),
 		project = M.to_project(safe_get(fields, "project")),
 		status = status,
 		status_id = status_id,
-		status_category = status_category,
-		status_color = status_color,
 		type = M.to_issue_type(safe_get(fields, "issuetype")),
 		priority = safe_get(fields, "priority", "name"),
 		assignee = normalize_issue_user(safe_get(fields, "assignee")),
@@ -205,6 +214,24 @@ function M.to_issue(raw, sp_field)
 		is_subscribed = safe_get(fields, "watches", "isWatching") == true,
 		_raw = raw,
 	}
+end
+
+---@param raw table
+---@param sp_field string|nil
+---@return IssueDetails
+function M.to_issue_details(raw, sp_field)
+	local issue = M.to_issue(raw, sp_field)
+	local fields = raw.fields or {}
+	local assignee = normalize_issue_user(safe_get(fields, "assignee"))
+
+	issue.description = extract_description(fields.description)
+	issue.assignees = assignee and { assignee } or {}
+	issue.labels = extract_labels(fields.labels)
+	issue.milestone = nil
+	issue.reactions = nil
+	issue.sub_issues = {}
+	issue.created_at = json.safe_str(fields.created)
+	return issue
 end
 
 ---@param raw_issues table[]

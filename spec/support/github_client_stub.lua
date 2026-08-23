@@ -22,6 +22,10 @@ function M.install(handlers)
 				return nil, false
 			end,
 			set_mem = function() end,
+			delete_mem = function() end,
+			cache_ttl = function()
+				return 300
+			end,
 		}
 		return { pulls = client, issues = client }
 	end

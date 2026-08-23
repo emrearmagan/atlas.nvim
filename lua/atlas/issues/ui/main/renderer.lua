@@ -80,7 +80,7 @@ local function issue_to_row(issue, is_child)
 	if row_data == nil then
 		row_data = {
 			icon = "",
-			name = (issue.key or "") .. " " .. (issue.summary or ""),
+			name = (issue.key or "") .. " " .. (issue.title or ""),
 			assignee = (issue.assignee and issue.assignee.display_name) or "Unassigned",
 			reporter = (issue.reporter and issue.reporter.display_name) or "Unknown",
 			status = string.format(" %s ", issue.status or ""),
@@ -318,22 +318,22 @@ end
 ---@param issue Issue
 ---@return string[], AtlasUIHighlight[]
 local function generic_issue_popup_content(issue)
-	local summary = issue.summary or ""
-	local title = string.format(" %s: %s", issue.key or "", summary)
+	local issue_title = issue.title or ""
+	local title = string.format(" %s: %s", issue.key or "", issue_title)
 	local parent_key = issue.parent and issue.parent.key or nil
-	local parent_summary = issue.parent and issue.parent.summary or nil
+	local parent_title = issue.parent and issue.parent.title or nil
 
 	local lines = { title, "" }
 	---@type AtlasUIHighlight[]
 	local highlights = {
 		{ line = 0, start_col = 1, end_col = 1 + #(issue.key or ""), hl_group = helper.issue_hl(issue.key) },
 	}
-	if summary ~= "" then
+	if issue_title ~= "" then
 		table.insert(highlights, {
 			line = 0,
 			start_col = 3 + #(issue.key or ""),
 			end_col = #lines[1],
-			hl_group = helper.issue_title_hl(summary),
+			hl_group = helper.issue_title_hl(issue_title),
 		})
 	end
 
@@ -380,9 +380,9 @@ local function generic_issue_popup_content(issue)
 
 	if parent_key and parent_key ~= "" then
 		push("Parent", parent_key, helper.issue_hl(parent_key))
-		if parent_summary and parent_summary ~= "" then
+		if parent_title and parent_title ~= "" then
 			local line = #lines
-			table.insert(lines, string.format("           %s", parent_summary))
+			table.insert(lines, string.format("           %s", parent_title))
 			table.insert(highlights, {
 				line = line,
 				start_col = 11,

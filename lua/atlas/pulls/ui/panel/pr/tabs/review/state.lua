@@ -1,37 +1,32 @@
 ---@class PullsReviewTabState
 ---@field data PullsReviewData|nil
 ---@field status string|nil
----@field collapsed_hunks table<string, boolean>
+---@field hunks_by_comment table<string, { hunk: DiffHunk, anchor: integer }>
 ---@field expanded_threads table<string, boolean>
 local M = {
 	data = nil,
 	status = nil,
-	collapsed_hunks = {},
+	hunks_by_comment = {},
 	expanded_threads = {},
 }
 
 function M.reset()
 	M.data = nil
 	M.status = nil
-	M.collapsed_hunks = {}
+	M.hunks_by_comment = {}
 	M.expanded_threads = {}
 end
 
 ---@param root PullsComment
 ---@return boolean
 function M.is_thread_expanded(root)
-	local value = M.expanded_threads[tostring(root.id)]
-	if value ~= nil then
-		return value
-	end
-	return root.state ~= "RESOLVED" and root.state ~= "OUTDATED"
+	return M.expanded_threads[tostring(root.id)] == true
 end
 
 ---@param root PullsComment
 ---@param expanded boolean
 local function set_expanded(root, expanded)
-	local default = root.state ~= "RESOLVED" and root.state ~= "OUTDATED"
-	M.expanded_threads[tostring(root.id)] = expanded == default and nil or expanded
+	M.expanded_threads[tostring(root.id)] = expanded and true or nil
 end
 
 ---@param roots PullsComment[]
@@ -70,35 +65,23 @@ local function thread_roots(comments)
 end
 
 ---@param comments PullsComment[]
----@param hunk_keys string[]
 ---@return boolean
-function M.toggle_all_folds(comments, hunk_keys)
+function M.toggle_all_folds(comments)
 	local roots = thread_roots(comments)
-	if #roots == 0 and #hunk_keys == 0 then
+	if #roots == 0 then
 		return false
 	end
 
-	local collapse = false
+	local expand = false
 	for _, root in ipairs(roots) do
-		if M.is_thread_expanded(root) then
-			collapse = true
+		if not M.is_thread_expanded(root) then
+			expand = true
 			break
-		end
-	end
-	if not collapse then
-		for _, key in ipairs(hunk_keys) do
-			if M.collapsed_hunks[key] ~= true then
-				collapse = true
-				break
-			end
 		end
 	end
 
 	for _, root in ipairs(roots) do
-		set_expanded(root, not collapse)
-	end
-	for _, key in ipairs(hunk_keys) do
-		M.collapsed_hunks[key] = collapse
+		set_expanded(root, expand)
 	end
 	return true
 end

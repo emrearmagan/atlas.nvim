@@ -3,8 +3,6 @@ local M = {}
 
 local icons = require("atlas.ui.shared.icons")
 local header = require("atlas.pulls.ui.panel.components.header")
-local pullrequests = require("atlas.pulls.providers.github.api.pullrequests")
-local spinner = require("atlas.ui.components.spinner")
 
 local MAX_HASH_LEN = 12
 
@@ -18,25 +16,17 @@ end
 
 -- Panel
 
----@param pr PullRequest
+---@param _pr PullRequest
+---@param details PullRequestDetails|nil
 ---@param loading boolean
 ---@return PullsPanelHeaderRow[]
-function M.header_rows(pr, loading)
-	if loading and pr.assignees == nil then
-		return {
-			{
-				k1 = "Assignees:",
-				v1 = spinner.with_text("Loading..."),
-				v1_hl = "AtlasTextMuted",
-				k2 = "",
-				v2 = "",
-				v2_hl = "AtlasTextMuted",
-			},
-		}
+function M.header_rows(_pr, details, loading)
+	if details == nil then
+		return loading and { header.loading_assignee_row() } or {}
 	end
 
 	local logins = {}
-	for _, assignee in ipairs(pr.assignees or {}) do
+	for _, assignee in ipairs(details.assignees or {}) do
 		local login = assignee.username
 		if login ~= "" then
 			table.insert(logins, login)
@@ -47,9 +37,10 @@ function M.header_rows(pr, loading)
 end
 
 ---@param pr PullRequest
----@param loading boolean
+---@param details PullRequestDetails|nil
+---@param _loading boolean
 ---@return PullsPanelChip[]
-function M.chips(pr, loading)
+function M.chips(pr, details, _loading)
 	local chips = {}
 
 	local hash = tostring(pr.source and pr.source.commit_hash or "")
@@ -60,49 +51,16 @@ function M.chips(pr, loading)
 		table.insert(chips, { label = hash, hl = "AtlasTabInactive" })
 	end
 
-	if loading and pr.labels == nil then
-		table.insert(chips, { label = spinner.with_text("Loading labels"), hl = "AtlasTextMuted" })
-	else
-		for _, lbl in ipairs(pr.labels or {}) do
-			local name = tostring(lbl.name or "")
-			if name ~= "" then
-				local color = tostring(lbl.color or "")
-				local hl = color ~= "" and label_hl(color) or "AtlasTabInactive"
-				table.insert(chips, { label = name, hl = hl })
-			end
+	for _, lbl in ipairs((details and details.labels) or {}) do
+		local name = tostring(lbl.name or "")
+		if name ~= "" then
+			local color = tostring(lbl.color or "")
+			local hl = color ~= "" and label_hl(color) or "AtlasTabInactive"
+			table.insert(chips, { label = name, hl = hl })
 		end
 	end
 
 	return chips
-end
-
----@param pr PullRequest
----@param opts { force_refresh: boolean|nil, pr_refreshed: boolean|nil }|nil
----@param on_done fun()
----@return { cancel: fun() }|nil
-function M.fetch_header(pr, opts, on_done)
-	local owner = tostring(pr.workspace or "")
-	local repo = tostring(pr.repo or "")
-	local force = opts and opts.force_refresh == true
-
-	if opts and opts.pr_refreshed then
-		on_done()
-	elseif owner ~= "" and repo ~= "" and pr.id ~= nil then
-		return pullrequests.get_pr(owner, repo, pr.id, function(fresh, err)
-			if not err and type(fresh) == "table" then
-				pr.is_subscribed = fresh.is_subscribed
-				pr.assignees = fresh.assignees
-				pr.reviewers = fresh.reviewers
-				pr.labels = fresh.labels
-				pr.lines_added = fresh.lines_added
-				pr.lines_removed = fresh.lines_removed
-				pr._raw = fresh._raw
-			end
-			on_done()
-		end, { force_load = force })
-	else
-		on_done()
-	end
 end
 
 -- Tabs

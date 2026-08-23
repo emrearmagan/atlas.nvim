@@ -54,6 +54,33 @@ local function render_if_active()
 	require("atlas.pulls.ui.main").render()
 end
 
+---@param updated PullRequest
+---@return boolean, string|nil
+local function replace_pr(updated)
+	local pulls = state.pulls or {}
+	local replaced = false
+	for index, current in ipairs(pulls) do
+		if
+			tostring(current.id) == tostring(updated.id)
+			and tostring(current.repo_full_name) == tostring(updated.repo_full_name)
+		then
+			pulls[index] = updated
+			replaced = true
+			break
+		end
+	end
+
+	if not replaced then
+		return false, nil
+	end
+	state.pulls = mark_starred(pulls)
+	if not updated.is_starred then
+		return true, nil
+	end
+	local _, err = starred.add(updated, state.provider.id, helper.repo(updated))
+	return true, err
+end
+
 local loading_spinner = spinner.create({
 	interval_ms = 120,
 	on_tick = function(frame)
@@ -409,7 +436,7 @@ function M.refresh_current_view(on_done, focus_pr)
 			if focus_pr and not focused then
 				panel.close()
 			elseif type(item) == "table" and item.kind == "pr" and item.pr then
-				panel.on_select(item.pr, item.repo, { force_refresh = true, pr_refreshed = true })
+				panel.on_select(item.pr, item.repo, { force_refresh = true })
 			else
 				panel.close()
 			end
@@ -424,6 +451,16 @@ function M.refresh_current_view(on_done, focus_pr)
 	else
 		load_active_view({ force_load = true }, finish)
 	end
+end
+
+---@param pr PullRequest
+---@return boolean, string|nil
+function M.update_pr(pr)
+	local updated, err = replace_pr(pr)
+	if updated then
+		render_if_active()
+	end
+	return updated, err
 end
 
 ---@param pr PullRequest|nil
@@ -471,20 +508,7 @@ function M.refresh_pr(pr, on_done)
 			return
 		end
 
-		local pulls = state.pulls or {}
-		for i, current in ipairs(pulls) do
-			if tostring(current.id) == tostring(pr_id) and tostring(current.repo_full_name) == repo_id then
-				pulls[i] = fetched_pr
-				break
-			end
-		end
-
-		state.pulls = mark_starred(pulls)
-		local snapshot_err
-		if fetched_pr.is_starred then
-			local _, err = starred.add(fetched_pr, state.provider.id, helper.repo(fetched_pr))
-			snapshot_err = err
-		end
+		local _, snapshot_err = replace_pr(fetched_pr)
 		end_pr_reload(repo_id, pr_id)
 
 		local pr_panel_state = require("atlas.pulls.ui.panel.pr.state")
@@ -498,7 +522,7 @@ function M.refresh_pr(pr, on_done)
 		then
 			panel.on_select(fetched_pr, pr_panel_state.current_repo, {
 				force_refresh = true,
-				pr_refreshed = true,
+				details = fetched_pr,
 			})
 		end
 

@@ -36,7 +36,7 @@ end
 ---@param is_child boolean
 ---@return table
 function M.format_row(issue, is_child)
-	local title = issue.summary or ""
+	local title = issue.title or ""
 	local label = key_label(issue)
 
 	local is_pinned = issue.is_pinned == true
@@ -137,20 +137,20 @@ end
 ---@return string[], AtlasUIHighlight[]
 function M.issue_popup_content(issue)
 	local raw = issue._raw or {}
-	local summary = issue.summary or ""
+	local title = issue.title or ""
 	local key = issue.key or ""
 
-	local lines = { string.format(" %s: %s", key, summary), "" }
+	local lines = { string.format(" %s: %s", key, title), "" }
 	---@type AtlasUIHighlight[]
 	local highlights = {
 		{ line = 0, start_col = 1, end_col = 1 + #key, hl_group = helper.issue_hl(key) },
 	}
-	if summary ~= "" then
+	if title ~= "" then
 		table.insert(highlights, {
 			line = 0,
 			start_col = 3 + #key,
 			end_col = #lines[1],
-			hl_group = helper.issue_title_hl(summary),
+			hl_group = helper.issue_title_hl(title),
 		})
 	end
 

@@ -30,6 +30,9 @@ local function context(overrides)
 			table.insert(notifications, { level = level, message = message })
 		end,
 	}
+	ctx.provider.capabilities.core.fetch_description = function(_, _, on_done)
+		on_done(ctx.pr.description, nil)
+	end
 	for key, value in pairs(overrides or {}) do
 		ctx[key] = value
 	end

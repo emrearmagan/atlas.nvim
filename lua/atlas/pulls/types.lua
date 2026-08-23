@@ -40,7 +40,6 @@
 
 ---@class PullRequest : PullRequestRef
 ---@field title string
----@field description string
 ---@field state "open"|"merged"|"declined"|"draft"
 ---@field author PullsAuthor
 ---@field source PullsRef
@@ -53,15 +52,19 @@
 ---@field provider string
 ---@field workspace string
 ---@field repo string
----@field is_subscribed boolean|nil
 ---@field is_starred boolean|nil
----@field reactions table<string, integer>|nil
----@field assignees PullsAuthor[]|nil
 ---@field reviewers PullsReviewer[]|nil
----@field labels PullsLabel[]|nil
 ---@field lines_added number|nil
 ---@field lines_removed number|nil
 ---@field _raw table
+
+---@class PullRequestDetails : PullRequest
+---@field description string
+---@field is_subscribed boolean|nil
+---@field reactions table<string, integer>|nil
+---@field assignees PullsAuthor[]|nil
+---@field reviewers PullsReviewer[]
+---@field labels PullsLabel[]|nil
 
 --------------------------------------------------------------------------------
 -- User (current authenticated user)
@@ -134,7 +137,8 @@
 
 ---@class PullsReviewer: PullsAuthor
 ---@field provider_id string|nil Identifier used when updating the reviewer list.
----@field decision "approved"|"changes_requested"|"pending"
+---@field role "reviewer"|"participant"
+---@field decision "approved"|"changes_requested"|"reviewed"|"pending"
 
 --------------------------------------------------------------------------------
 -- Pipeline
@@ -239,8 +243,6 @@
 ---@field resolved_by PullsAuthor|nil
 ---@field inline PullsInlineCommentPosition|nil
 ---@field file PullsFileCommentPosition|nil
----@field inline_hunk DiffHunk|nil                       -- surrounding diff context for inline comments
----@field inline_hunk_anchor integer|nil                 -- line coordinate inside inline_hunk
 ---@field is_task boolean|nil                            -- true = render as task (checkbox)
 ---@field task_label string|nil                          -- display name override; defaults to "Task"
 ---@field state "PENDING"|"RESOLVED"|"DELETED"|"OUTDATED"|nil -- primary state; nil = active/open
@@ -259,14 +261,40 @@
 ---@field commit_hash string|nil
 ---@field pending boolean
 
+---@alias PullsReviewHistoryState "approved"|"changes_requested"|"commented"|"dismissed"|"reviewed"|"unapproved"
+
+---@class PullsReviewHistoryEntry
+---@field id string|nil
+---@field author PullsAuthor|nil
+---@field state PullsReviewHistoryState
+---@field submitted_on string
+---@field body string|nil
+---@field commit_hash string|nil
+---@field url string|nil
+---@field previous_state PullsReviewHistoryState|nil
+
 ---@class PullsReviewData
 ---@field review PullsReview
 ---@field comments PullsComment[]
 ---@field tasks PullsComment[]
+---@field reviewers PullsReviewer[]
+---@field history PullsReviewHistoryEntry[]
 
 ---@class PullsReviewContext
 ---@field authors PullsAuthor[]
 ---@field reviewed_files table<string, boolean>|nil
+
+--------------------------------------------------------------------------------
+-- Conversation
+--------------------------------------------------------------------------------
+
+---@alias PullsConversationItemKind "comment"|"review"|"description"|"activity"
+
+---@class PullsConversationItem
+---@field id string
+---@field kind PullsConversationItemKind
+---@field created_on string
+---@field entity PullsComment|PullsReviewHistoryEntry|PullRequestDetails|PullsActivityEntry
 
 --------------------------------------------------------------------------------
 -- Commit

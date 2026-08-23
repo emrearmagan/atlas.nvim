@@ -56,6 +56,7 @@ function M.render(tab_items, get_tab_module)
 	end
 
 	local pr = panel_state.current_pr
+	local details = panel_state.current_details
 	local width = vim.api.nvim_win_get_width(win)
 	local winbar_items = {}
 	if pr ~= nil then
@@ -70,9 +71,9 @@ function M.render(tab_items, get_tab_module)
 				winbar_items[#winbar_items + 1] = string.format("%%#AtlasLogError#-%d%%*", deletions)
 			end
 		end
-		if pr.is_subscribed ~= nil then
-			local bell, bell_hl = icons.general(pr.is_subscribed and "bell" or "bell_no")
-			if pr.is_subscribed then
+		if details and details.is_subscribed ~= nil then
+			local bell, bell_hl = icons.general(details.is_subscribed and "bell" or "bell_no")
+			if details.is_subscribed then
 				bell_hl = "AtlasLogInfo"
 			end
 			winbar_items[#winbar_items + 1] = string.format("%%#%s#%s%%*", bell_hl, bell)
@@ -94,15 +95,20 @@ function M.render(tab_items, get_tab_module)
 		local state = require("atlas.pulls.state")
 		local provider = state.provider
 		local panel = provider and provider.capabilities.ui and provider.capabilities.ui.panel
-		local extra_rows = panel and panel.header_rows and panel.header_rows(pr, panel_state.header_loading) or nil
-		local extra_chips = panel and panel.chips and panel.chips(pr, panel_state.header_loading) or nil
+		local extra_rows = panel and panel.header_rows and panel.header_rows(pr, details, panel_state.header_loading)
+			or nil
+		local extra_chips = panel and panel.chips and panel.chips(pr, details, panel_state.header_loading) or nil
 
 		-- Header
 		local h_lines, h_spans = header.render(pr, width, extra_rows)
 		utils.append_block(lines, spans, { lines = h_lines, highlights = h_spans })
 
 		-- Chips
-		local chip_line, chip_spans = chips.render(pr, { extra_chips = extra_chips, pipelines = panel_state.pipelines })
+		local chip_line, chip_spans = chips.render(details or pr, {
+			extra_chips = extra_chips,
+			pipelines = panel_state.pipelines,
+			loading = panel_state.header_loading or panel_state.pipelines == "loading",
+		})
 		table.insert(lines, chip_line)
 		local chip_base = #lines - 1
 		for _, span in ipairs(chip_spans) do
@@ -116,10 +122,12 @@ function M.render(tab_items, get_tab_module)
 		table.insert(lines, "")
 
 		-- Tab bar
-		local tab_lines, tab_spans =
-			panel_tabs.render(tab_items, panel_state.current_tab, { width = width, padding_x = PADDING_X })
-		utils.append_block(lines, spans, { lines = tab_lines, highlights = tab_spans })
-		table.insert(lines, "")
+		if #tab_items > 1 then
+			local tab_lines, tab_spans =
+				panel_tabs.render(tab_items, panel_state.current_tab, { width = width, padding_x = PADDING_X })
+			utils.append_block(lines, spans, { lines = tab_lines, highlights = tab_spans })
+			table.insert(lines, "")
+		end
 
 		-- Tab content
 		local tab_mod = get_tab_module(panel_state.current_tab)

@@ -294,6 +294,10 @@ local function comment_item(comment, opts, is_root)
 	end
 	local user_icon, user_icon_hl = icons.general("user")
 	local additional = utils.relative_time(comment.created_on)
+	local additional_hl = nil
+	if opts.additional then
+		additional, additional_hl = opts.additional(comment, additional)
+	end
 	local location = is_root and opts.location and opts.location(comment) or ""
 	if location ~= "" then
 		additional = additional ~= "" and (additional .. "  " .. location) or location
@@ -313,6 +317,7 @@ local function comment_item(comment, opts, is_root)
 		meta = {
 			comment = comment,
 			author_hl_name = author,
+			additional_hl = additional_hl,
 			is_deleted = is_deleted,
 			right_text_hl = marker_hl,
 		},
@@ -334,6 +339,7 @@ local function threads_opts(padding_x, opts)
 
 	return {
 		padding_x = padding_x,
+		show_connectors = false,
 		separator = "─",
 		content_max_lines = content_max_lines,
 		content_truncated_key = opts.content_truncated_key,
@@ -545,6 +551,8 @@ end
 ---@field content_prefix? string
 ---@field content_max_lines? integer|fun(comment: PullsComment): integer|nil
 ---@field content_truncated_key? string
+---@field show_task_label? boolean
+---@field additional? fun(comment: PullsComment, timestamp: string): string, string|table[]|nil
 
 ---@param nodes AtlasReviewThreadNode[]
 ---@param width integer
@@ -574,10 +582,10 @@ function M.render_task_compact(node, width, opts)
 	local item = build_item(node, opts, true, nil)
 	local task = node.comment
 	local label = tostring(task.task_label or "")
-	item.additional = label ~= "" and label or "added a task"
+	item.additional = opts.show_task_label == false and "" or (label ~= "" and label or "added a task")
 	local timestamp = utils.relative_time(task.created_on)
 	if timestamp ~= "" then
-		item.additional = item.additional .. "  " .. timestamp
+		item.additional = item.additional ~= "" and (item.additional .. "  " .. timestamp) or timestamp
 	end
 	return threadsv2.render({ item }, width, threads_opts(opts.padding_x or 1, opts))
 end
@@ -633,7 +641,11 @@ function M.render_compact(node, width, expanded, location, opts)
 	item.icon_hl = expander_hl
 	item.author = "@" .. author_name(comment.author)
 	item.additional = metadata
-	item.right_text, item.meta.right_text_hl = resolution_status(comment, marker, marker_hl)
+	local status = resolution_text(comment) or ""
+	if comment.outdated == true or comment.state == "OUTDATED" then
+		status = status ~= "" and (status .. "  outdated") or "outdated"
+	end
+	item.right_text, item.meta.right_text_hl = status_text(status, marker, marker_hl)
 	item.line_map.tree_key = M.comment_key(comment)
 	item.meta.additional_hl = metadata_hl
 	if not expanded then

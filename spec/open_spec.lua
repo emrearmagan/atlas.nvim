@@ -71,7 +71,7 @@ describe("Atlas target resolver", function()
 		config.options.pulls.providers.github.views = { { name = "GitHub", search = "repo:owner/github is:open" } }
 		config.options.pulls.providers.gitlab.views = { { name = "GitLab", project = "owner/gitlab" } }
 		config.options.pulls.providers.bitbucket.views = {
-			{ name = "Bitbucket", repos = { { workspace = "owner", repo = "bitbucket" } } },
+			{ name = "Bitbucket", targets = { { workspace = "owner", repo = "bitbucket" } } },
 		}
 
 		local found = {}

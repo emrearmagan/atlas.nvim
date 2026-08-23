@@ -9,7 +9,6 @@ local REVIEW_COMMENT_FIELDS = [[
 id
 databaseId
 body
-diffHunk
 url
 createdAt
 author { login ... on User { databaseId } ... on Bot { databaseId } }
@@ -279,7 +278,6 @@ local function edit_pending_comment(pr, comment, node_id, on_done)
 			return
 		end
 		local updated = mapper.to_review_comment(node, mapper.review_thread(comment), comment.parent_id)
-		updated.inline_hunk = updated.inline_hunk or comment.inline_hunk
 		on_done(updated, nil)
 	end, {
 		action = "Edit comment",
@@ -329,31 +327,6 @@ function M.edit_comment(pr, comment, on_done)
 		return nil
 	end
 
-	if tostring(comment.id) == "__body__" then
-		local body = tostring(comment.content_raw or "")
-		return cli.gh({
-			"pr",
-			"edit",
-			tostring(pr.id),
-			"--repo",
-			repo_slug,
-			"--body",
-			body,
-		}, function(_, err)
-			if err then
-				on_done(nil, err)
-				return
-			end
-			pr.description = body
-			on_done(vim.tbl_extend("force", {}, comment, { content_raw = body }), nil)
-		end, {
-			action = "Edit comment",
-			repo = pr.repo_full_name,
-			number = pr.id,
-			comment_id = comment.id,
-		})
-	end
-
 	if comment.state == "PENDING" then
 		local node_id = tostring((comment._raw or {}).comment_id or "")
 		if node_id == "" then
@@ -397,13 +370,6 @@ function M.delete_comment(pr, target, on_done)
 	if repo_slug == "" then
 		vim.schedule(function()
 			on_done(false, "Missing repo")
-		end)
-		return nil
-	end
-
-	if tostring(target.id) == "__body__" then
-		vim.schedule(function()
-			on_done(false, "Cannot delete the pull request description")
 		end)
 		return nil
 	end
@@ -518,7 +484,6 @@ reply_comment = function(pr, parent, content, opts, on_done)
 					local created = mapper.to_comment(result)
 					created.parent_id = root_id
 					created.file = created.file or parent.file
-					created.inline_hunk = created.inline_hunk or parent.inline_hunk
 					created.state = parent.state
 					created.outdated = parent.outdated
 					on_done(created, nil)
@@ -572,7 +537,6 @@ mutation($threadId:ID!,$reviewId:ID,$body:String!){
 				reviews.update(opts.review, review)
 				local created =
 					mapper.to_review_comment(reply, mapper.review_thread(parent), parent.parent_id or parent.id)
-				created.inline_hunk = created.inline_hunk or parent.inline_hunk
 				on_done(created, nil)
 			end, {
 				action = "Reply comment",

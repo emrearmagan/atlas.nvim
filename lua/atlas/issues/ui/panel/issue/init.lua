@@ -3,6 +3,7 @@ local M = {}
 local layout = require("atlas.ui.layout")
 local panel_state = require("atlas.issues.ui.panel.issue.state")
 local renderer = require("atlas.issues.ui.panel.issue.renderer")
+local statusline = require("atlas.ui.statusline")
 
 local SPINNER_INTERVAL_MS = 100
 
@@ -43,7 +44,20 @@ end
 
 local spinner_timer = nil
 ---@type { cancel: fun() }|nil
+local details_request = nil
+---@type { cancel: fun() }|nil
 local header_request = nil
+
+local function cancel_panel_requests()
+	if details_request then
+		details_request.cancel()
+		details_request = nil
+	end
+	if header_request then
+		header_request.cancel()
+		header_request = nil
+	end
+end
 
 local function stop_spinner()
 	if spinner_timer ~= nil then
@@ -153,35 +167,74 @@ local function make_refresh_callback(issue)
 	end
 end
 
+---@type fun(issue: IssueDetails, opts: { force_refresh: boolean|nil }|nil)
+local load_active_tab
+
 ---@param issue Issue
----@param opts { force_refresh: boolean|nil, issue_refreshed: boolean|nil }|nil
-local function fetch_header(issue, opts)
-	if header_request then
-		header_request.cancel()
-		header_request = nil
-	end
+---@param opts { force_refresh: boolean|nil, details: IssueDetails|nil }|nil
+local function fetch_panel_data(issue, opts)
+	cancel_panel_requests()
 
 	local state = require("atlas.issues.state")
 	local provider = state.provider
-	local panel = provider and provider.capabilities.ui and provider.capabilities.ui.panel
-	if panel and panel.fetch_header then
-		local refresh = make_refresh_callback(issue)
-		panel_state.header_loading = true
-		header_request = panel.fetch_header(issue, opts, function()
+	if provider == nil then
+		return
+	end
+
+	local panel = provider.capabilities.ui and provider.capabilities.ui.panel
+	local refresh = make_refresh_callback(issue)
+	local force_refresh = opts and opts.force_refresh == true
+	panel_state.header_loading = true
+
+	---@param details IssueDetails
+	local function use_details(details)
+		if not is_current_issue(issue) then
+			return
+		end
+		panel_state.current_details = details
+		load_active_tab(details, { force_refresh = force_refresh })
+
+		if panel and panel.fetch_header then
+			refresh()
+			header_request = panel.fetch_header(issue, details, opts, function()
+				if not is_current_issue(issue) then
+					return
+				end
+				panel_state.header_loading = false
+				refresh()
+			end)
+		else
+			panel_state.header_loading = false
+			refresh()
+		end
+	end
+
+	if opts and opts.details then
+		use_details(opts.details)
+		return
+	end
+
+	details_request = provider.capabilities.core.fetch_issue(
+		tostring(issue.key or ""),
+		{ force_load = force_refresh },
+		function(details, err)
 			if not is_current_issue(issue) then
 				return
 			end
-			panel_state.header_loading = false
-			refresh()
-		end)
-	else
-		panel_state.header_loading = false
-	end
+			if details == nil then
+				panel_state.header_loading = false
+				statusline.notify("error", tostring(err or "Failed to load issue"))
+				refresh()
+				return
+			end
+			use_details(details)
+		end
+	)
 end
 
----@param issue Issue
+---@param issue IssueDetails
 ---@param opts { force_refresh: boolean|nil }|nil
-local function load_active_tab(issue, opts)
+load_active_tab = function(issue, opts)
 	local tab_mod = get_tab_module(panel_state.current_tab)
 	if tab_mod and tab_mod.on_select then
 		tab_mod.on_select(issue, make_refresh_callback(issue), opts)
@@ -200,7 +253,7 @@ function M.render()
 end
 
 ---@param issue Issue|nil
----@param opts { force_refresh: boolean|nil, issue_refreshed: boolean|nil }|nil
+---@param opts { force_refresh: boolean|nil, details: IssueDetails|nil }|nil
 function M.on_select(issue, opts)
 	opts = opts or {}
 
@@ -214,10 +267,16 @@ function M.on_select(issue, opts)
 	end
 
 	if panel_state.current_issue == nil then
+		panel_state.current_details = nil
 		return
 	end
 
-	local should_fetch = context_changed or opts.force_refresh == true
+	local should_fetch = context_changed
+		or opts.force_refresh == true
+		or (panel_state.current_details == nil and panel_state.header_loading ~= true)
+	if should_fetch then
+		panel_state.current_details = nil
+	end
 
 	if not same_issue and issue ~= nil then
 		local old_key = panel_state.current_tab
@@ -243,8 +302,7 @@ function M.on_select(issue, opts)
 	end
 
 	if should_fetch then
-		fetch_header(panel_state.current_issue, opts)
-		load_active_tab(panel_state.current_issue, { force_refresh = opts.force_refresh == true })
+		fetch_panel_data(panel_state.current_issue, opts)
 		update_spinner()
 	end
 
@@ -268,8 +326,8 @@ function M.next_tab()
 	panel_state.current_tab = tabs[next_idx].key
 	switch_tab_keymaps(old_key, panel_state.current_tab)
 
-	if panel_state.current_issue then
-		load_active_tab(panel_state.current_issue)
+	if panel_state.current_details then
+		load_active_tab(panel_state.current_details)
 		update_spinner()
 	end
 
@@ -296,8 +354,8 @@ function M.prev_tab()
 	panel_state.current_tab = tabs[prev_idx].key
 	switch_tab_keymaps(old_key, panel_state.current_tab)
 
-	if panel_state.current_issue then
-		load_active_tab(panel_state.current_issue)
+	if panel_state.current_details then
+		load_active_tab(panel_state.current_details)
 		update_spinner()
 	end
 
@@ -308,10 +366,7 @@ end
 function M.close()
 	switch_tab_keymaps(panel_state.current_tab, nil)
 	stop_spinner()
-	if header_request then
-		header_request.cancel()
-		header_request = nil
-	end
+	cancel_panel_requests()
 	reset_tabs()
 	panel_state.reset()
 end

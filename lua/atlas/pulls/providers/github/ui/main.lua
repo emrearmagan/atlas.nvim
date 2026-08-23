@@ -54,11 +54,10 @@ local CI_ICON = {
 
 local REVIEW_ICON = {
 	APPROVED = { icons.pulls_status("successful") },
-	CHANGES_REQUESTED = { icons.pulls_status("inprogress") },
+	CHANGES_REQUESTED = { icons.pulls_status("failed") },
 	REVIEW_REQUIRED = { icons.pulls_status("inprogress") },
 }
 
-REVIEW_ICON.CHANGES_REQUESTED[2] = "AtlasTextWarning"
 REVIEW_ICON.REVIEW_REQUIRED[2] = "AtlasTextMuted"
 
 ---@param pr PullRequest
@@ -83,24 +82,9 @@ end
 ---@param pr PullRequest
 ---@return string, string
 local function review_icon_and_hl(pr)
-	if pr.reviewers == nil then
-		return REVIEW_ICON.REVIEW_REQUIRED[1], REVIEW_ICON.REVIEW_REQUIRED[2]
-	end
-	local approved, changes = 0, 0
-	for _, reviewer in ipairs(pr.reviewers) do
-		if reviewer.decision == "approved" then
-			approved = approved + 1
-		elseif reviewer.decision == "changes_requested" then
-			changes = changes + 1
-		end
-	end
-	if changes > 0 then
-		return REVIEW_ICON.CHANGES_REQUESTED[1], REVIEW_ICON.CHANGES_REQUESTED[2]
-	end
-	if approved > 0 then
-		return REVIEW_ICON.APPROVED[1], REVIEW_ICON.APPROVED[2]
-	end
-	return REVIEW_ICON.REVIEW_REQUIRED[1], REVIEW_ICON.REVIEW_REQUIRED[2]
+	local decision = tostring((pr._raw or {}).review_decision or "")
+	local style = REVIEW_ICON[decision] or REVIEW_ICON.REVIEW_REQUIRED
+	return style[1], style[2]
 end
 
 ---@param row table

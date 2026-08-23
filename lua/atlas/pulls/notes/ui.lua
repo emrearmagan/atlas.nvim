@@ -161,6 +161,8 @@ local function ensure_buffer()
 	vim.api.nvim_set_option_value("swapfile", false, { buf = buf })
 	vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
 	vim.api.nvim_set_option_value("filetype", "atlas.notes", { buf = buf })
+	vim.api.nvim_set_option_value("syntax", "OFF", { buf = buf })
+	pcall(vim.treesitter.stop, buf)
 	keymaps.register(buf, actions.new(state, refresh, render))
 	vim.api.nvim_create_autocmd("BufWipeout", {
 		buffer = buf,

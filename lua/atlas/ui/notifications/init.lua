@@ -377,6 +377,8 @@ local function ensure_buf()
 	vim.api.nvim_set_option_value("swapfile", false, { buf = buf })
 	vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
 	vim.api.nvim_set_option_value("filetype", "atlas.notifications", { buf = buf })
+	vim.api.nvim_set_option_value("syntax", "OFF", { buf = buf })
+	pcall(vim.treesitter.stop, buf)
 	register_keymaps(buf)
 	return buf
 end

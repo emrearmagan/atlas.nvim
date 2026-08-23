@@ -117,30 +117,49 @@ local function clone_urls(repository)
 	return https_url ~= "" and https_url or nil, ssh_url ~= "" and ssh_url or nil
 end
 
+---@param participant table
+---@return "approved"|"changes_requested"|nil
+local function participant_decision(participant)
+	local state = tostring(participant.state or ""):lower()
+	if participant.approved == true or state == "approved" then
+		return "approved"
+	end
+	if state == "changes_requested" then
+		return "changes_requested"
+	end
+	return nil
+end
+
+---@param participant table
+---@param decision "approved"|"changes_requested"|"pending"
+---@param role "reviewer"|"participant"
+---@return PullsReviewer
+local function to_reviewer(participant, decision, role)
+	local user = as_table(participant.user) or {}
+	local provider_id = tostring(user.uuid or "")
+	local username = tostring(user.nickname or user.username or "")
+	return {
+		id = tostring(user.account_id or user.uuid or user.id or ""),
+		provider_id = provider_id ~= "" and provider_id or nil,
+		name = tostring(user.display_name or user.name or username),
+		username = username,
+		nickname = username ~= "" and username or nil,
+		decision = decision,
+		role = role,
+	}
+end
+
 ---@param participants table[]|nil
 ---@return PullsReviewer[]
 function M.to_reviewers(participants)
 	local reviewers = {}
 	for _, participant in ipairs(participants or {}) do
-		if tostring(participant.role or ""):upper() == "REVIEWER" then
-			local user = as_table(participant.user) or {}
-			local provider_id = tostring(user.uuid or "")
-			local state = tostring(participant.state or ""):lower()
-			local decision = "pending"
-			if participant.approved == true or state == "approved" then
-				decision = "approved"
-			elseif state == "changes_requested" then
-				decision = "changes_requested"
-			end
-			local username = tostring(user.nickname or user.username or "")
-			table.insert(reviewers, {
-				id = tostring(user.account_id or user.uuid or user.id or ""),
-				provider_id = provider_id ~= "" and provider_id or nil,
-				name = tostring(user.display_name or user.name or username),
-				username = username,
-				nickname = username ~= "" and username or nil,
-				decision = decision,
-			})
+		local role = tostring(participant.role or ""):upper()
+		local decision = participant_decision(participant)
+		if role == "REVIEWER" then
+			table.insert(reviewers, to_reviewer(participant, decision or "pending", "reviewer"))
+		elseif role == "PARTICIPANT" and decision then
+			table.insert(reviewers, to_reviewer(participant, decision, "participant"))
 		end
 	end
 	return reviewers
@@ -170,7 +189,7 @@ local function normalize_pull(item, workspace, repo)
 	return {
 		id = tonumber(pr.id) or 0,
 		title = tostring(pr.title or ""),
-		description = tostring(pr.description or ""),
+		description = type(pr.description) == "string" and pr.description or nil,
 		comments = tonumber(pr.comment_count) or 0,
 		tasks = tonumber(pr.task_count) or 0,
 		author = {
@@ -219,7 +238,7 @@ end
 
 ---@param raw table
 ---@return PullRequest
-local function to_pull_request(raw)
+local function map_summary(raw)
 	local workspace = tostring(raw.workspace or "")
 	local repo = tostring(raw.repo or "")
 	local repo_full_name = tostring(raw.repo_full_name or string.format("%s/%s", workspace, repo))
@@ -234,7 +253,6 @@ local function to_pull_request(raw)
 	return {
 		id = raw.id,
 		title = tostring(raw.title or ""),
-		description = tostring(raw.description or ""),
 		state = map_state(raw.state, raw.is_draft == true),
 		author = {
 			name = tostring(author.name or author.display_name or "Unknown"),
@@ -281,10 +299,22 @@ function M.to_pull_requests_list(result, workspace, repo)
 	local rp = tostring(repo or "")
 
 	for _, item in ipairs(payload.values or {}) do
-		table.insert(out, to_pull_request(normalize_pull(item, ws, rp)))
+		table.insert(out, map_summary(normalize_pull(item, ws, rp)))
 	end
 
 	return out
+end
+
+---@param raw table
+---@param workspace string
+---@param repo string
+---@return PullRequestDetails
+function M.to_pull_request_details(raw, workspace, repo)
+	local normalized = normalize_pull(raw, workspace, repo)
+	local pr = map_summary(normalized)
+	pr.description = tostring(normalized.description or "")
+	pr.reviewers = normalized.reviewers or {}
+	return pr
 end
 
 ---@param user table|nil
@@ -310,6 +340,7 @@ function M.to_activities_list(result)
 		local entry = as_table(item) or {}
 		local update = as_table(entry.update)
 		local approval = as_table(entry.approval)
+		local changes_request = as_table(entry.changes_request)
 		local comment = as_table(entry.comment)
 
 		if update ~= nil then
@@ -325,6 +356,13 @@ function M.to_activities_list(result)
 				date = tostring(approval.date or ""),
 				actor = actor(approval.user),
 				label = "approved",
+			})
+		elseif changes_request ~= nil then
+			table.insert(entries, {
+				kind = "changes_requested",
+				date = tostring(changes_request.date or ""),
+				actor = actor(changes_request.user),
+				label = "requested changes",
 			})
 		elseif comment ~= nil then
 			local content = as_table(comment.content) or {}

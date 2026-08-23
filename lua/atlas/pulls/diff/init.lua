@@ -36,15 +36,10 @@ local function log_result(operation, context, err)
 	end
 end
 
----@class AtlasInitialReview: PullsReviewData
----@field warnings string[]
-
 ---@class AtlasReviewOpenContext
 ---@field provider PullsProvider
 ---@field pr PullRequest
 ---@field current_user PullsUser|nil
----@field review_context PullsReviewContext|nil
----@field initial_review AtlasInitialReview|nil
 ---@field root string|nil
 
 ---@param requested AtlasPullsDiffOpenCommand|string|nil
@@ -144,7 +139,6 @@ local function make_session(session, viewer_id, source, review, commits)
 		session.review_request.cancel()
 		session.review_request = nil
 	end
-	review_api.invalidate(session)
 	session.source = source
 	session.review = review
 	session.commits = commits
@@ -351,23 +345,26 @@ local function start_pr(context, command, refresh, on_done, target, existing)
 			return
 		end
 		view:update(refresh and "Refreshing review..." or "Loading review...")
-		local previous = existing and existing.review or nil
-		local initial = context.initial_review
-		request = review_api.load(
-			{
+		local review = existing and existing.review
+			or {
 				provider = context.provider,
 				pr = context.pr,
-				current_user = previous and previous.current_user or context.current_user,
-				context = previous and previous.context or context.review_context,
-				state = previous and previous.state or (initial and initial.review) or { pending = false },
-				comments = previous and previous.comments or (initial and initial.comments) or {},
-				tasks = previous and previous.tasks or (initial and initial.tasks) or {},
-			},
-			refresh,
-			function(review, warnings)
-				later(load_commits, source, review, warnings)
-			end
-		) or request
+				current_user = context.current_user,
+				context = nil,
+				data = {
+					review = { pending = false },
+					comments = {},
+					tasks = {},
+					reviewers = {},
+					history = {},
+				},
+			}
+		review.provider = context.provider
+		review.pr = context.pr
+		review.current_user = review.current_user or context.current_user
+		request = review_api.load(review, refresh, function(loaded, warnings)
+			later(load_commits, source, loaded, warnings)
+		end) or request
 	end
 
 	local function load_repository()
@@ -440,8 +437,6 @@ function M.open_pull_request(value, requested)
 			provider = provider,
 			pr = resolver.pull_request_ref(target),
 			current_user = nil,
-			review_context = nil,
-			initial_review = nil,
 		},
 		command,
 		true,

@@ -6,7 +6,6 @@ local events = require("atlas.core.events")
 local keymaps = require("atlas.core.keymaps")
 local note_popup = require("atlas.pulls.notes.ui.popup")
 local notes = require("atlas.pulls.diff.notes")
-local review = require("atlas.pulls.diff.review")
 local review_panel = require("atlas.pulls.diff.ui.review_panel")
 local hints = require("atlas.pulls.diff.ui.hints")
 local statusline = require("atlas.pulls.diff.ui.statusline")
@@ -44,9 +43,7 @@ local sessions = {}
 ---@field pr PullRequest
 ---@field current_user PullsUser|nil
 ---@field context PullsReviewContext|nil
----@field state PullsReview
----@field comments PullsComment[]
----@field tasks PullsComment[]
+---@field data PullsReviewData
 
 ---@class AtlasDiffSource
 ---@field root string
@@ -78,7 +75,6 @@ local sessions = {}
 ---@field statusline AtlasDiffStatuslineState
 ---@field review_panel AtlasDiffReviewPanel|nil
 ---@field review_request { cancel: fun() }|nil
----@field review_generation integer
 ---@field note_target AtlasNoteTarget|nil
 ---@field viewer_state table
 ---@field expanded_threads table<string, boolean>
@@ -116,7 +112,6 @@ function M.new(opts)
 		statusline = statusline.new(),
 		review_panel = nil,
 		review_request = nil,
-		review_generation = 0,
 		note_target = note_target,
 		viewer_state = {},
 		expanded_threads = {},
@@ -247,7 +242,6 @@ function M.detach(session, reason)
 		session.review_request.cancel()
 		session.review_request = nil
 	end
-	review.invalidate(session)
 	ui_comments.close_popup(session.id)
 	note_popup.close(session.id)
 	if session.current then
