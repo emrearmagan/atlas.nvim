@@ -80,7 +80,7 @@ end
 function M.configured(domain)
 	local result = {}
 	for _, provider in ipairs(M.list(domain)) do
-		if config.domain_options(provider.id, domain) ~= nil then
+		if config.provider_options(provider.id) ~= nil then
 			table.insert(result, provider)
 		end
 	end

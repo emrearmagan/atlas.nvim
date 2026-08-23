@@ -134,7 +134,7 @@ end
 function M.issues_type(name)
 	local key = tostring(name or "")
 	local default = ICONS.issues.type[key:lower()]
-	local jira = config.domain_options("jira", "issues") and config.provider_options("jira") or {}
+	local jira = config.provider_options("jira") or {}
 	local configured = ((jira.project_config or {}).issue_types or {})[key]
 
 	if configured then

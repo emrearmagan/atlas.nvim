@@ -66,7 +66,7 @@ end
 ---@param provider AtlasProviderId
 ---@return AtlasUrlBase|nil
 function M.configured_base(domain, provider)
-	if config.domain_options(provider, domain) == nil then
+	if providers.domain(provider, domain) == nil or config.provider_options(provider) == nil then
 		return nil
 	end
 	local options = config.provider_options(provider)
@@ -200,8 +200,7 @@ end
 ---@param target AtlasTarget
 ---@return boolean
 function M.configured(target)
-	return providers.domain(target.provider, target.domain) ~= nil
-		and config.domain_options(target.provider, target.domain) ~= nil
+	return providers.domain(target.provider, target.domain) ~= nil and config.provider_options(target.provider) ~= nil
 end
 
 ---Build the minimal pull request identity needed for a provider fetch.
@@ -261,20 +260,22 @@ end
 function M.configured_repositories(repo_slug)
 	local choices, seen = {}, {}
 	for _, provider in ipairs(providers.list()) do
-		for _, domain in ipairs({ "pulls", "issues" }) do
-			local options = config.domain_options(provider.id, domain)
-			local implementation = options and providers.load(provider.id, domain) or nil
-			if implementation and options and implementation.repositories then
-				for _, slug in ipairs(implementation.repositories(options)) do
-					local key = provider.id .. ":" .. tostring(slug)
-					if
-						type(slug) == "string"
-						and slug:match("^[^/]+/.+$")
-						and (repo_slug == nil or slug == repo_slug)
-						and not seen[key]
-					then
-						seen[key] = true
-						table.insert(choices, repo_info(provider.id, slug))
+		if config.provider_options(provider.id) ~= nil then
+			for _, domain in ipairs({ "pulls", "issues" }) do
+				local implementation = providers.load(provider.id, domain)
+				if implementation and implementation.repositories then
+					local options = config.domain_options(provider.id, domain) or {}
+					for _, slug in ipairs(implementation.repositories(options)) do
+						local key = provider.id .. ":" .. tostring(slug)
+						if
+							type(slug) == "string"
+							and slug:match("^[^/]+/.+$")
+							and (repo_slug == nil or slug == repo_slug)
+							and not seen[key]
+						then
+							seen[key] = true
+							table.insert(choices, repo_info(provider.id, slug))
+						end
 					end
 				end
 			end
@@ -284,12 +285,13 @@ function M.configured_repositories(repo_slug)
 	if repo_slug and #choices == 0 then
 		-- An explicit owner/repo does not need to appear in a configured view.
 		for _, provider in ipairs(providers.list()) do
-			for _, domain in ipairs({ "pulls", "issues" }) do
-				local options = config.domain_options(provider.id, domain)
-				local implementation = options and providers.load(provider.id, domain) or nil
-				if implementation and implementation.target then
-					table.insert(choices, repo_info(provider.id, repo_slug))
-					break
+			if config.provider_options(provider.id) ~= nil then
+				for _, domain in ipairs({ "pulls", "issues" }) do
+					local implementation = providers.load(provider.id, domain)
+					if implementation and implementation.target then
+						table.insert(choices, repo_info(provider.id, repo_slug))
+						break
+					end
 				end
 			end
 		end

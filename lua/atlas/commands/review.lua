@@ -27,7 +27,7 @@ function M.open(value)
 		no_repository()
 		return
 	end
-	if not providers.domain(info.provider, "pulls") or not config.domain_options(info.provider, "pulls") then
+	if not providers.domain(info.provider, "pulls") or not config.provider_options(info.provider) then
 		no_repository()
 		return
 	end

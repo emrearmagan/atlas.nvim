@@ -35,13 +35,13 @@ local notify = require("atlas.core.notify")
 ---@return PullsProvider|nil, string|nil
 local function load_provider(provider_id)
 	local providers = require("atlas.providers")
-	if config.domain_options(provider_id, "pulls") == nil then
-		return nil, "Pull request provider not configured: " .. tostring(provider_id)
-	end
-	local provider = providers.load(provider_id, "pulls")
-	if provider == nil then
+	if providers.domain(provider_id, "pulls") == nil then
 		return nil, "Unsupported provider: " .. tostring(provider_id)
 	end
+	if config.provider_options(provider_id) == nil then
+		return nil, "Pull request provider not configured: " .. tostring(provider_id)
+	end
+	local provider = assert(providers.load(provider_id, "pulls"))
 	---@cast provider PullsProvider
 	return provider, nil
 end
