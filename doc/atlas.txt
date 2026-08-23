@@ -207,6 +207,7 @@ Shared config that applies to all pulls providers:
           show_commits = false, -- set true to show commits below changed files initially
           width = 40,
           initial_focus = "explorer", -- "explorer" or "diff"
+          preview = false, -- show a file when the explorer cursor moves onto it
           ignore = { ".git/**", ".jj/**" },
         },
       },
@@ -795,8 +796,9 @@ Defaults live under `keymaps` in `setup()`. Each entry accepts:
           request_changes       = "gr",
           submit_review         = "gs",
           add_task              = "<leader>t",
+          find_file             = "<leader>ff",
           explorer = {
-            find_file             = "<leader>ff",
+            find_file             = { "f", "<leader>ff" },
             next_file             = { "]f", "<Tab>" },
             previous_file         = { "[f", "<S-Tab>" },
             next_unreviewed_file      = "]u",

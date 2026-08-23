@@ -61,6 +61,28 @@ function M.register(session, actions)
 	local run = function(callback)
 		return guard(session, callback)
 	end
+	local find_file = run(function()
+		local files = {}
+		for index, file in ipairs(state.files) do
+			files[index] = { index = index, path = file.path }
+		end
+		picker.find({
+			title = "Changed files",
+			items = files,
+			initial_index = state.pending_index or state.selected_index,
+			key = function(file)
+				return file.path
+			end,
+			format_item = function(file)
+				return file.path
+			end,
+			on_select = function(file)
+				if file then
+					actions.select_file(file.index, true)
+				end
+			end,
+		})
+	end)
 	local navigation = {}
 	add(
 		navigation,
@@ -128,38 +150,15 @@ function M.register(session, actions)
 			opts = { silent = true, nowait = true },
 		})
 	)
-	add(
-		navigation,
-		item("pulls.review.explorer.find_file", {
+	for _, buf in ipairs({ state.panel.buf, state.commits_panel.buf, state.left.buf, state.right.buf }) do
+		local find_action = buf == state.panel.buf and "pulls.review.explorer.find_file" or "pulls.review.find_file"
+		local find_item = item(find_action, {
 			desc = "Find changed file",
 			index = 7,
-			callback = run(function()
-				local files = {}
-				for index, file in ipairs(state.files) do
-					files[index] = { index = index, path = file.path }
-				end
-				picker.find({
-					title = "Changed files",
-					items = files,
-					initial_index = state.pending_index or state.selected_index,
-					key = function(file)
-						return file.path
-					end,
-					format_item = function(file)
-						return file.path
-					end,
-					on_select = function(file)
-						if file then
-							actions.select_file(file.index, true)
-						end
-					end,
-				})
-			end),
+			callback = find_file,
 			opts = { silent = true, nowait = true },
 		})
-	)
 
-	for _, buf in ipairs({ state.panel.buf, state.commits_panel.buf, state.left.buf, state.right.buf }) do
 		local general = {}
 		add(
 			general,
@@ -265,6 +264,9 @@ function M.register(session, actions)
 			help.register("Review", review, { index = 110, buffer = buf })
 		end
 		help.register("Navigation", navigation, { index = 120, buffer = buf })
+		if find_item then
+			help.register("Navigation", { find_item }, { index = 120, buffer = buf })
+		end
 	end
 
 	local panel_actions = {}
