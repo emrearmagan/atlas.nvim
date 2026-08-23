@@ -382,9 +382,13 @@ end
 ---@param remote string
 ---@param refs string[]
 ---@param on_done fun(ok: boolean, err: string|nil)
+---@param on_progress (fun(label: string, percent: integer))|nil
 ---@return { cancel: fun() }
-function M.fetch_refs(root, remote, refs, on_done)
+function M.fetch_refs(root, remote, refs, on_done, on_progress)
 	local args = { "fetch", "--no-tags", remote }
+	if on_progress then
+		table.insert(args, 2, "--progress")
+	end
 	vim.list_extend(args, refs)
 
 	return M.run(args, { cwd = root, text = true }, function(res)
@@ -397,7 +401,7 @@ function M.fetch_refs(root, remote, refs, on_done)
 			return
 		end
 		on_done(true, nil)
-	end)
+	end, on_progress)
 end
 
 ---@param root string

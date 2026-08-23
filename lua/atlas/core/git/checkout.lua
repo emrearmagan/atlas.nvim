@@ -228,8 +228,9 @@ end
 ---@param pr PullRequest
 ---@param repo_path string
 ---@param on_done fun(err: string|nil)
+---@param on_progress (fun(label: string, percent: integer))|nil
 ---@return { cancel: fun() }
-function M.fetch_pr_refs(pr, repo_path, on_done)
+function M.fetch_pr_refs(pr, repo_path, on_done, on_progress)
 	local base_revision, head_revision, revision_err = M.pr_diff_revisions(pr)
 	if not base_revision or not head_revision then
 		return schedule_result(on_done, revision_err)
@@ -275,7 +276,7 @@ function M.fetch_pr_refs(pr, repo_path, on_done)
 				fetch_err = err or "Failed to fetch pull request ref"
 			end
 			finish()
-		end)
+		end, on_progress)
 	end
 
 	if not missing_commit() then
@@ -293,7 +294,7 @@ function M.fetch_pr_refs(pr, repo_path, on_done)
 				fetch_err = err or "Failed to fetch pull request ref"
 			end
 			fetch_head()
-		end)
+		end, on_progress)
 	end
 	return {
 		cancel = function()
@@ -387,6 +388,8 @@ function M.ensure_pr_repository(pr, repo_path, on_progress, on_done)
 				clean_pr_cache()
 			end
 			on_done(path, nil)
+		end, function(phase, percent)
+			on_progress(progress_message("Fetching pull request refs", phase, percent))
 		end)
 	end
 
