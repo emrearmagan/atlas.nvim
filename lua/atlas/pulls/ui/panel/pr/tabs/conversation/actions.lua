@@ -2,7 +2,7 @@ local M = {}
 
 local picker = require("atlas.picker")
 local pull_actions = require("atlas.pulls.actions")
-local statusline = require("atlas.ui.statusline")
+local notify = require("atlas.core.notify")
 local review = require("atlas.pulls.actions.review")
 local state = require("atlas.pulls.ui.panel.pr.tabs.conversation.state")
 
@@ -144,7 +144,7 @@ function M.delete(pr, entry, refresh)
 		return
 	end
 	if item.kind == "description" then
-		statusline.notify("info", "The pull request description cannot be deleted", 1200)
+		notify.info("The pull request description cannot be deleted", { timeout = 1200 })
 		return
 	end
 	if item.kind ~= "comment" then
@@ -176,7 +176,7 @@ function M.react(pr, entry, refresh)
 	end
 	local options = comments.reaction_options or {}
 	if #options == 0 then
-		statusline.notify("warn", "No reactions available for this provider")
+		notify.warn("No reactions available for this provider")
 		return
 	end
 	local target = item.entity
@@ -197,17 +197,17 @@ function M.react(pr, entry, refresh)
 			if selected == nil then
 				return
 			end
-			statusline.notify("loading", "Adding reaction...")
+			notify.loading("Adding reaction...")
 			comments.add_reaction(pr, item, selected.key, function(ok, err)
 				if err then
-					statusline.notify("error", "Reaction failed: " .. tostring(err))
+					notify.error("Reaction failed: " .. tostring(err))
 					return
 				end
 				if ok then
 					target.reactions = target.reactions or {}
 					target.reactions[selected.key] = (tonumber(target.reactions[selected.key]) or 0) + 1
 				end
-				statusline.notify("success", "Reaction added", 1200)
+				notify.success("Reaction added", { timeout = 1200 })
 				refresh()
 			end)
 		end,

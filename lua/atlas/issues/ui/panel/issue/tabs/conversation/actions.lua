@@ -2,7 +2,7 @@ local M = {}
 
 local md_editor = require("atlas.ui.popups.editor")
 local picker = require("atlas.picker")
-local statusline = require("atlas.ui.statusline")
+local notify = require("atlas.core.notify")
 local renderer = require("atlas.issues.ui.panel.issue.tabs.conversation.renderer")
 local state = require("atlas.issues.ui.panel.issue.tabs.conversation.state")
 
@@ -65,20 +65,20 @@ function M.add(issue, refresh)
 				return
 			end
 			local generation = state.generation
-			statusline.notify("loading", "Adding comment...")
+			notify.loading("Adding comment...")
 			comments.add_comment(issue, text, function(created, err)
 				if not state.is_current(generation, issue) then
 					return
 				end
 				if err then
-					statusline.notify("error", "Add comment failed: " .. err)
+					notify.error("Add comment failed: " .. err)
 					return
 				end
 				if created then
 					state.upsert_comment(created)
 					adjust_comment_count(issue, 1)
 				end
-				statusline.notify("success", "Comment added", 1200)
+				notify.success("Comment added", { timeout = 1200 })
 				refresh()
 			end)
 		end,
@@ -126,21 +126,21 @@ function M.reply(issue, entry, refresh)
 			if not text or vim.trim(text) == "" then
 				return
 			end
-			statusline.notify("loading", "Sending reply...")
+			notify.loading("Sending reply...")
 			local generation = state.generation
 			local function done(created, err)
 				if not state.is_current(generation, issue) then
 					return
 				end
 				if err then
-					statusline.notify("error", "Reply failed: " .. err)
+					notify.error("Reply failed: " .. err)
 					return
 				end
 				if created then
 					state.upsert_comment(created)
 					adjust_comment_count(issue, 1)
 				end
-				statusline.notify("success", "Reply added", 1200)
+				notify.success("Reply added", { timeout = 1200 })
 				refresh()
 			end
 			if comments.reply_comment then
@@ -179,22 +179,22 @@ function M.edit(issue, entry, refresh)
 			on_save = function(text)
 				local content = text or ""
 				if content == current then
-					statusline.notify("info", "Description unchanged", 1200)
+					notify.info("Description unchanged", { timeout = 1200 })
 					return
 				end
 				local generation = state.generation
-				statusline.notify("loading", "Updating description...")
+				notify.loading("Updating description...")
 				---@cast issue IssueDetails
 				core.update_description(issue, content, function(ok, err)
 					if not state.is_current(generation, issue) then
 						return
 					end
 					if not ok then
-						statusline.notify("error", "Description update failed: " .. tostring(err or "Unknown error"))
+						notify.error("Description update failed: " .. tostring(err or "Unknown error"))
 						return
 					end
 					issue.description = content
-					statusline.notify("success", "Description updated", 1200)
+					notify.success("Description updated", { timeout = 1200 })
 					refresh()
 				end)
 			end,
@@ -207,7 +207,7 @@ function M.edit(issue, entry, refresh)
 	---@type IssueComment
 	local comment = item.entity
 	if not is_own_comment(comment) then
-		statusline.notify("warn", "You can only edit your own comments")
+		notify.warn("You can only edit your own comments")
 		return
 	end
 	local comments = get_comments()
@@ -226,13 +226,13 @@ function M.edit(issue, entry, refresh)
 				return
 			end
 			local generation = state.generation
-			statusline.notify("loading", "Editing comment...")
+			notify.loading("Editing comment...")
 			comments.edit_comment(issue, comment, text, function(updated, err)
 				if not state.is_current(generation, issue) then
 					return
 				end
 				if err then
-					statusline.notify("error", "Edit failed: " .. err)
+					notify.error("Edit failed: " .. err)
 					return
 				end
 				if updated then
@@ -242,7 +242,7 @@ function M.edit(issue, entry, refresh)
 				else
 					comment.body = text
 				end
-				statusline.notify("success", "Comment updated", 1200)
+				notify.success("Comment updated", { timeout = 1200 })
 				refresh()
 			end)
 		end,
@@ -258,7 +258,7 @@ function M.delete(issue, entry, refresh)
 		return
 	end
 	if item.kind == "description" then
-		statusline.notify("info", "The issue description cannot be deleted", 1200)
+		notify.info("The issue description cannot be deleted", { timeout = 1200 })
 		return
 	end
 	if item.kind ~= "comment" then
@@ -267,7 +267,7 @@ function M.delete(issue, entry, refresh)
 	---@type IssueComment
 	local comment = item.entity
 	if not is_own_comment(comment) then
-		statusline.notify("warn", "You can only delete your own comments")
+		notify.warn("You can only delete your own comments")
 		return
 	end
 	local comments = get_comments()
@@ -281,18 +281,18 @@ function M.delete(issue, entry, refresh)
 			return
 		end
 		local generation = state.generation
-		statusline.notify("loading", "Deleting comment...")
+		notify.loading("Deleting comment...")
 		comments.delete_comment(issue, comment, function(_, err)
 			if not state.is_current(generation, issue) then
 				return
 			end
 			if err then
-				statusline.notify("error", "Delete failed: " .. err)
+				notify.error("Delete failed: " .. err)
 				return
 			end
 			state.remove_comment(comment)
 			adjust_comment_count(issue, -1)
-			statusline.notify("success", "Comment deleted", 1200)
+			notify.success("Comment deleted", { timeout = 1200 })
 			refresh()
 		end)
 	end)
@@ -308,12 +308,12 @@ function M.react(issue, entry, refresh)
 	end
 	local comments = get_comments()
 	if not comments or not comments.add_reaction then
-		statusline.notify("warn", "Provider does not support reactions")
+		notify.warn("Provider does not support reactions")
 		return
 	end
 	local options = comments.reaction_options or {}
 	if #options == 0 then
-		statusline.notify("warn", "No reactions available for this provider")
+		notify.warn("No reactions available for this provider")
 		return
 	end
 	local target = item.entity
@@ -335,20 +335,20 @@ function M.react(issue, entry, refresh)
 				return
 			end
 			local generation = state.generation
-			statusline.notify("loading", "Adding reaction...")
+			notify.loading("Adding reaction...")
 			comments.add_reaction(issue, item, selected.key, function(ok, err)
 				if not state.is_current(generation, issue) then
 					return
 				end
 				if err then
-					statusline.notify("error", "Reaction failed: " .. tostring(err))
+					notify.error("Reaction failed: " .. tostring(err))
 					return
 				end
 				if ok then
 					target.reactions = target.reactions or {}
 					target.reactions[selected.key] = (tonumber(target.reactions[selected.key]) or 0) + 1
 				end
-				statusline.notify("success", "Reaction added", 1200)
+				notify.success("Reaction added", { timeout = 1200 })
 				refresh()
 			end)
 		end,

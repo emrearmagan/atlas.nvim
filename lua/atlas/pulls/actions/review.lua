@@ -2,7 +2,7 @@ local M = {}
 
 local editor = require("atlas.ui.popups.editor")
 local notes = require("atlas.pulls.notes")
-local statusline = require("atlas.ui.statusline")
+local core_notify = require("atlas.core.notify")
 local review_threads = require("atlas.pulls.ui.components.review_threads")
 
 ---@class AtlasReviewActionContext: AtlasPullActionContext
@@ -46,7 +46,7 @@ local function notify(context, level, message, duration)
 		context.notify(level, message, duration)
 		return
 	end
-	statusline.notify(level, message, duration)
+	core_notify.show(level, message, { timeout = duration })
 end
 
 ---@param context AtlasReviewActionContext

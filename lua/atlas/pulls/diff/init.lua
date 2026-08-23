@@ -3,6 +3,7 @@ local M = {}
 local checkout = require("atlas.core.git.checkout")
 local config = require("atlas.config")
 local git = require("atlas.core.git")
+local keymaps = require("atlas.core.keymaps")
 local loading = require("atlas.pulls.diff.ui.loading")
 local logger = require("atlas.core.logger")
 local notes = require("atlas.pulls.diff.notes")
@@ -11,7 +12,7 @@ local providers = require("atlas.providers")
 local resolver = require("atlas.providers.resolve")
 local review_api = require("atlas.pulls.diff.review")
 local session_api = require("atlas.pulls.diff.session")
-local statusline = require("atlas.pulls.diff.ui.statusline")
+local statusline = require("atlas.ui.statusline")
 
 local ADAPTERS = {
 	atlas = require("atlas.pulls.diff.atlas"),
@@ -148,7 +149,10 @@ local function make_session(session, viewer_id, source, review, commits)
 	session.current = nil
 	session.viewer_state = {}
 	session.review_panel = nil
-	session.statusline = statusline.new()
+	session.statusline:dispose()
+	local help_action = viewer_id == "atlas" and "ui.help" or "pulls.external_help"
+	session.help_key = (keymaps.resolve(help_action) or {})[1]
+	session.statusline = statusline.new({ help_key = session.help_key })
 	session.closed = false
 	session.note_target, session.notes = notes.load(review)
 	return session
@@ -212,7 +216,7 @@ local function start_range(opts, on_done, target, existing)
 	session.reload = function(next_target)
 		start_range(opts, function(err)
 			if err then
-				notify.error("Unable to reload diff: " .. err)
+				notify.error("Unable to reload diff: " .. err, { vim_notify = true })
 			end
 		end, next_target, session)
 	end
@@ -299,7 +303,7 @@ local function start_pr(context, command, refresh, on_done, target, existing)
 		session.reload = function(next_target)
 			start_pr(context, command, true, function(err)
 				if err then
-					notify.error("Unable to reload diff: " .. err)
+					notify.error("Unable to reload diff: " .. err, { vim_notify = true })
 				end
 			end, next_target, session)
 		end
@@ -411,25 +415,25 @@ end
 function M.open_pull_request(value, requested)
 	local target, target_err = resolver.resolve(value)
 	if not target then
-		notify.error(target_err or "Invalid pull request URL")
+		notify.error(target_err or "Invalid pull request URL", { vim_notify = true })
 		return nil
 	end
 	if target.domain ~= "pulls" or target.entity ~= "pr" then
-		notify.error("Expected a pull request URL")
+		notify.error("Expected a pull request URL", { vim_notify = true })
 		return nil
 	end
 	if not resolver.configured(target) then
-		notify.error("Pull request provider is not configured: " .. target.provider)
+		notify.error("Pull request provider is not configured: " .. target.provider, { vim_notify = true })
 		return nil
 	end
 	local provider = providers.load(target.provider, target.domain)
 	if not provider then
-		notify.error("Unable to load pull request provider: " .. target.provider)
+		notify.error("Unable to load pull request provider: " .. target.provider, { vim_notify = true })
 		return nil
 	end
 	local command, command_err = configured_command(requested)
 	if not command then
-		notify.error(command_err)
+		notify.error(command_err, { vim_notify = true })
 		return nil
 	end
 	return start_pr(
@@ -442,7 +446,7 @@ function M.open_pull_request(value, requested)
 		true,
 		function(err)
 			if err then
-				notify.error(err)
+				notify.error(err, { vim_notify = true })
 			end
 		end
 	)
@@ -465,7 +469,7 @@ function M.open_argument(value)
 	local base = vim.trim(value:sub(1, separator - 1))
 	local head = vim.trim(value:sub(separator + 3))
 	if base == "" or head == "" then
-		notify.error("Expected an explicit base...head range")
+		notify.error("Expected an explicit base...head range", { vim_notify = true })
 		return
 	end
 	M.open_range({
@@ -475,7 +479,7 @@ function M.open_argument(value)
 		open_cmd = "AtlasDiff",
 	}, function(err)
 		if err then
-			notify.error(err)
+			notify.error(err, { vim_notify = true })
 		end
 	end)
 end

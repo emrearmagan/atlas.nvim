@@ -1,6 +1,6 @@
 local M = {}
 
-local statusline = require("atlas.ui.statusline")
+local notify = require("atlas.core.notify")
 local resolver = require("atlas.core.keymaps")
 local utils = require("atlas.ui.shared.utils")
 local actions = require("atlas.issues.actions")
@@ -216,7 +216,7 @@ function M.register(buf, views)
 			callback = function()
 				local issue = selected_issue()
 				if issue == nil then
-					statusline.notify("warn", "No issue selected")
+					notify.warn("No issue selected")
 					return
 				end
 				actions.run("copy_issue_key", context(issue))
@@ -233,7 +233,7 @@ function M.register(buf, views)
 			callback = function()
 				local issue = selected_issue()
 				if issue == nil then
-					statusline.notify("warn", "No issue selected")
+					notify.warn("No issue selected")
 					return
 				end
 				actions.run("copy_issue_url", context(issue))
@@ -251,7 +251,7 @@ function M.register(buf, views)
 				callback = function()
 					local issue = selected_issue()
 					if issue == nil then
-						statusline.notify("warn", "No issue selected")
+						notify.warn("No issue selected")
 						return
 					end
 					actions.run("transition", context(issue), controller.apply_action_result)
@@ -269,7 +269,7 @@ function M.register(buf, views)
 				callback = function()
 					local issue = selected_issue()
 					if issue == nil then
-						statusline.notify("warn", "No issue selected")
+						notify.warn("No issue selected")
 						return
 					end
 					actions.run("assign", context(issue), controller.apply_action_result)
@@ -287,7 +287,7 @@ function M.register(buf, views)
 				callback = function()
 					local issue = selected_issue()
 					if issue == nil then
-						statusline.notify("warn", "No issue selected")
+						notify.warn("No issue selected")
 						return
 					end
 					actions.run("reporter", context(issue), controller.apply_action_result)
@@ -305,7 +305,7 @@ function M.register(buf, views)
 				callback = function()
 					local issue = selected_issue()
 					if issue == nil then
-						statusline.notify("warn", "No issue selected")
+						notify.warn("No issue selected")
 						return
 					end
 					actions.run("edit_issue", context(issue), controller.apply_action_result)
@@ -323,7 +323,7 @@ function M.register(buf, views)
 			callback = function()
 				local issue = selected_issue()
 				if issue == nil then
-					statusline.notify("warn", "No issue selected")
+					notify.warn("No issue selected")
 					return
 				end
 				actions.run("browse_issue", context(issue))

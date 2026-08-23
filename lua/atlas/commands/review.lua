@@ -11,7 +11,7 @@ local ui_utils = require("atlas.ui.shared.utils")
 local request
 
 local function no_repository()
-	notify.error("No supported Git repository found")
+	notify.error("No supported Git repository found", { vim_notify = true })
 end
 
 ---@param value string|nil
@@ -39,14 +39,14 @@ function M.open(value)
 	if request then
 		request.cancel()
 	end
-	notify.info("Fetching pull requests for " .. info.slug .. "...")
+	notify.info("Fetching pull requests for " .. info.slug .. "...", { vim_notify = true })
 	request = provider.capabilities.core.fetch_pullrequests(view, {
 		force_load = true,
 		state = "open",
 	}, function(pulls, errors)
 		request = nil
 		if errors and #errors > 0 then
-			notify.error(table.concat(errors, "; "))
+			notify.error(table.concat(errors, "; "), { vim_notify = true })
 			return
 		end
 
@@ -57,7 +57,7 @@ function M.open(value)
 			end
 		end
 		if #pull_requests == 0 then
-			notify.info("No open pull requests found for " .. info.slug)
+			notify.info("No open pull requests found for " .. info.slug, { vim_notify = true })
 			return
 		end
 
@@ -111,7 +111,7 @@ function M.open(value)
 					root = root,
 				}, function(err)
 					if err then
-						notify.error("Unable to open diff: " .. tostring(err))
+						notify.error("Unable to open diff: " .. tostring(err), { vim_notify = true })
 					end
 				end)
 			end,

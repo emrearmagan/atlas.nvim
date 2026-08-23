@@ -34,7 +34,7 @@ function M.start()
 	local choices = build_choices()
 
 	if #choices == 0 then
-		notify.error("No issue-capable provider is configured")
+		notify.error("No issue-capable provider is configured", { vim_notify = true })
 		return
 	end
 

@@ -6,7 +6,7 @@ local cli = require("atlas.providers.github.client").pulls
 local notes = require("atlas.pulls.notes")
 local picker = require("atlas.picker")
 local pullrequests = require("atlas.pulls.providers.github.api.pullrequests")
-local statusline = require("atlas.ui.statusline")
+local core_notify = require("atlas.core.notify")
 local github_mapping = require("atlas.providers.github.mapping")
 local users_api = require("atlas.providers.github.users").new("pulls")
 
@@ -27,8 +27,11 @@ end
 ---@param message string
 ---@param duration integer|nil
 local function notify(ctx, level, message, duration)
-	local callback = ctx.notify or statusline.notify
-	callback(level, message, duration)
+	if ctx.notify then
+		ctx.notify(level, message, duration)
+		return
+	end
+	core_notify.show(level, message, { timeout = duration })
 end
 
 ---@type AtlasPullAction[]

@@ -4,7 +4,7 @@ local M = {}
 local utils = require("atlas.ui.shared.utils")
 local icons = require("atlas.ui.shared.icons")
 local spinner = require("atlas.ui.components.spinner")
-local statusline = require("atlas.ui.statusline")
+local notify = require("atlas.core.notify")
 local threads = require("atlas.ui.components.threadsv2")
 local state = require("atlas.pulls.ui.panel.repo.tabs.tags.state")
 local repo_panel_state = require("atlas.pulls.ui.panel.repo.state")
@@ -146,14 +146,14 @@ function M.on_select(repo, refresh, opts)
 
 	stop_request()
 	state.tags = "loading"
-	statusline.notify("loading", string.format("Loading tags for %s...", repo_label))
+	notify.loading(string.format("Loading tags for %s...", repo_label))
 	refresh()
 
 	local provider = require("atlas.pulls.state").provider
 	local repository = provider and provider.capabilities.repository
 	if repository == nil then
 		state.tags = { entries = {} }
-		statusline.notify("error", "Tag listing is not supported by this provider")
+		notify.error("Tag listing is not supported by this provider")
 		refresh()
 		return
 	end
@@ -170,10 +170,10 @@ function M.on_select(repo, refresh, opts)
 		state.repo = active_detail
 		if err then
 			state.tags = tostring(err)
-			statusline.notify("error", string.format("Failed to load tags for %s", repo_label))
+			notify.error(string.format("Failed to load tags for %s", repo_label))
 		else
 			state.tags = tags or { entries = {} }
-			statusline.notify("success", string.format("Tags loaded for %s", repo_label), 1200)
+			notify.success(string.format("Tags loaded for %s", repo_label), { timeout = 1200 })
 		end
 		refresh()
 	end)

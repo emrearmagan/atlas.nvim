@@ -5,7 +5,7 @@ local utils = require("atlas.ui.shared.utils")
 local icons = require("atlas.ui.shared.icons")
 local spinner = require("atlas.ui.components.spinner")
 local threads = require("atlas.ui.components.threadsv2")
-local statusline = require("atlas.ui.statusline")
+local notify = require("atlas.core.notify")
 local state = require("atlas.pulls.ui.panel.pr.tabs.commits.state")
 
 local PADDING_X = 1
@@ -135,17 +135,17 @@ function M.on_select(pr, refresh, opts)
 	if should_fetch and core.fetch_commits then
 		local pr_id = tostring(pr.id or "")
 		state.commits = "loading"
-		statusline.notify("loading", string.format("Loading commits for #%s...", pr_id))
+		notify.loading(string.format("Loading commits for #%s...", pr_id))
 		track(core.fetch_commits(pr, opts, function(commits, err)
 			if err then
 				state.commits = err
-				statusline.notify("error", string.format("Failed to load commits for #%s", pr_id))
+				notify.error(string.format("Failed to load commits for #%s", pr_id))
 				refresh()
 				return
 			end
 
 			state.commits = commits or {}
-			statusline.notify("success", string.format("Commits loaded for #%s", pr_id), 1200)
+			notify.success(string.format("Commits loaded for #%s", pr_id), { timeout = 1200 })
 
 			-- Fetch pipeline statuses for the first N commits
 			if pipelines and pipelines.fetch_commit_status and type(state.commits) == "table" then

@@ -4,7 +4,7 @@ local M = {}
 local diff_parser = require("atlas.core.git.diff_parser")
 local request_scope = require("atlas.core.requests")
 local md_editor = require("atlas.ui.popups.editor")
-local statusline = require("atlas.ui.statusline")
+local notify = require("atlas.core.notify")
 local panel_state = require("atlas.pulls.ui.panel.pr.state")
 local renderer = require("atlas.pulls.ui.panel.pr.tabs.review.renderer")
 local review_threads = require("atlas.pulls.ui.components.review_threads")
@@ -135,7 +135,7 @@ function M.on_select(pr, refresh, opts)
 
 	local pr_id = tostring(pr.id or "")
 	state.status = "loading"
-	statusline.notify("loading", string.format("Loading review for #%s...", pr_id))
+	notify.loading(string.format("Loading review for #%s...", pr_id))
 
 	requests.run(function(done)
 		return reviews.fetch(pr, opts, done)
@@ -146,7 +146,7 @@ function M.on_select(pr, refresh, opts)
 		if err or not data then
 			local message = tostring(err or "Provider returned no review data")
 			state.status = message
-			statusline.notify("error", string.format("Failed to load review for #%s: %s", pr_id, message))
+			notify.error(string.format("Failed to load review for #%s: %s", pr_id, message))
 			refresh()
 			return
 		end
@@ -163,12 +163,12 @@ function M.on_select(pr, refresh, opts)
 		if not needs_diff or not fetch_diff then
 			state.data = data
 			state.status = nil
-			statusline.notify("success", string.format("Review loaded for #%s", pr_id), 1200)
+			notify.success(string.format("Review loaded for #%s", pr_id), { timeout = 1200 })
 			refresh()
 			return
 		end
 
-		statusline.notify("loading", string.format("Loading diff context for #%s...", pr_id))
+		notify.loading(string.format("Loading diff context for #%s...", pr_id))
 		requests.run(function(done)
 			return fetch_diff(pr, opts, done)
 		end, function(files, diff_err)
@@ -177,10 +177,10 @@ function M.on_select(pr, refresh, opts)
 			end
 			if files then
 				set_hunks(data.comments, files)
-				statusline.notify("success", string.format("Review loaded for #%s", pr_id), 1200)
+				notify.success(string.format("Review loaded for #%s", pr_id), { timeout = 1200 })
 			else
 				local message = tostring(diff_err or "Provider returned no diff data")
-				statusline.notify("warn", "Review loaded without diff context: " .. message)
+				notify.warn("Review loaded without diff context: " .. message)
 			end
 			state.data = data
 			state.status = nil
@@ -364,7 +364,7 @@ function M.add_task(pr, refresh)
 	local provider = get_provider()
 	local tasks_capability = provider and provider.capabilities.tasks
 	if not tasks_capability or not tasks_capability.add_task then
-		statusline.notify("error", "Provider does not support tasks")
+		notify.error("Provider does not support tasks")
 		return
 	end
 	local add_task = tasks_capability.add_task
@@ -394,19 +394,19 @@ function M.add_task(pr, refresh)
 		preview = preview,
 		on_save = function(text)
 			if not text or vim.trim(text) == "" then
-				statusline.notify("warn", "Task cannot be empty")
+				notify.warn("Task cannot be empty")
 				return
 			end
-			statusline.notify("loading", "Adding task...")
+			notify.loading("Adding task...")
 			add_task(pr, text, parent, function(task, err)
 				if err then
-					statusline.notify("error", tostring(err))
+					notify.error(tostring(err))
 					return
 				end
 				if task then
 					table.insert(tasks, task)
 				end
-				statusline.notify("success", "Task added", 1200)
+				notify.success("Task added", { timeout = 1200 })
 				refresh()
 			end)
 		end,

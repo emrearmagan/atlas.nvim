@@ -41,12 +41,12 @@ end
 ---@return PullsProvider|IssuesProvider|nil
 local function load_provider(domain, id)
 	if config.domain_options(id, domain) == nil then
-		notify.error(string.format("%s provider not configured: %s", domain, id))
+		notify.error(string.format("%s provider not configured: %s", domain, id), { vim_notify = true })
 		return nil
 	end
 	local provider = providers.load(id, domain)
 	if not provider then
-		notify.error(string.format("Unknown %s provider: %s", domain, id))
+		notify.error(string.format("Unknown %s provider: %s", domain, id), { vim_notify = true })
 	end
 	return provider
 end
@@ -106,7 +106,7 @@ function M.open(domain, provider_id, opts)
 
 	local ids = configured_provider_ids(domain)
 	if #ids == 0 then
-		notify.error(string.format("No %s providers configured", domain))
+		notify.error(string.format("No %s providers configured", domain), { vim_notify = true })
 		return
 	end
 	if #ids == 1 then

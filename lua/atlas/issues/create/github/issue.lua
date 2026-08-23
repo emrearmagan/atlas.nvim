@@ -374,7 +374,7 @@ local function submit(issue_state)
 		end
 
 		close(issue_state)
-		notify.info(message)
+		notify.info(message, { vim_notify = true })
 		if type(url) == "string" and url ~= "" then
 			require("atlas.commands.open").open(url)
 		end
@@ -388,13 +388,13 @@ end
 ---@param opts GitHubIssueEditorOpts
 function M.open(opts)
 	if type(opts) ~= "table" then
-		notify.warn("create_issue.open: missing options")
+		notify.warn("create_issue.open: missing options", { vim_notify = true })
 		return
 	end
 
 	local repo_slug = tostring(opts.repo_slug or "")
 	if repo_slug == "" then
-		notify.error("create_issue.open: repo_slug is required")
+		notify.error("create_issue.open: repo_slug is required", { vim_notify = true })
 		return
 	end
 

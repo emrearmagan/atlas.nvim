@@ -6,7 +6,7 @@ local icons = require("atlas.ui.shared.icons")
 local highlights = require("atlas.ui.shared.highlights")
 local spinner = require("atlas.ui.components.spinner")
 local threads = require("atlas.ui.components.threadsv2")
-local statusline = require("atlas.ui.statusline")
+local notify = require("atlas.core.notify")
 local state = require("atlas.issues.ui.panel.issue.tabs.activity.state")
 local request_scope = require("atlas.core.requests")
 
@@ -78,7 +78,7 @@ function M.on_select(issue, refresh, opts)
 	state.issue = issue
 
 	local issue_key = tostring(issue.key or "")
-	statusline.notify("loading", string.format("Loading history for %s...", issue_key))
+	notify.loading(string.format("Loading history for %s...", issue_key))
 
 	requests.run(function(done)
 		return comments.fetch_activity(issue, { force_load = force_refresh }, done)
@@ -87,11 +87,11 @@ function M.on_select(issue, refresh, opts)
 
 		if err then
 			state.error = tostring(err)
-			statusline.notify("error", string.format("Failed to load history for %s", issue_key))
+			notify.error(string.format("Failed to load history for %s", issue_key))
 		else
 			state.entries = entries or {}
 			state.error = nil
-			statusline.notify("success", string.format("History loaded for %s (%d)", issue_key, #state.entries), 1200)
+			notify.success(string.format("History loaded for %s (%d)", issue_key, #state.entries), { timeout = 1200 })
 		end
 
 		refresh()
@@ -164,7 +164,7 @@ function M.deactivate()
 	requests = request_scope.new()
 	if state.is_loading then
 		state.is_loading = false
-		statusline.clear_notice()
+		notify.clear()
 	end
 end
 
