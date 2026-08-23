@@ -7,7 +7,6 @@ local navbar = require("atlas.ui.components.navbar")
 local table_tree = require("atlas.ui.components.table_tree")
 local utils = require("atlas.ui.shared.utils")
 local statusline = require("atlas.ui.statusline")
-local helper = require("atlas.issues.ui.main.helper")
 local icons = require("atlas.ui.shared.icons")
 local STAR_ICON, STAR_ICON_HL = icons.general("star")
 
@@ -338,104 +337,6 @@ function cell_hl(row, col, ctx)
 		table.insert(spans, 1, { start_col = 0, end_col = #STAR_ICON, hl_group = STAR_ICON_HL })
 	end
 	return spans
-end
-
----@param issue Issue
----@return string[], AtlasUIHighlight[]
-local function generic_issue_popup_content(issue)
-	local issue_title = issue.title or ""
-	local title = string.format(" %s: %s", issue.key or "", issue_title)
-	local parent_key = issue.parent and issue.parent.key or nil
-	local parent_title = issue.parent and issue.parent.title or nil
-
-	local lines = { title, "" }
-	---@type AtlasUIHighlight[]
-	local highlights = {
-		{ line = 0, start_col = 1, end_col = 1 + #(issue.key or ""), hl_group = helper.issue_hl(issue.key) },
-	}
-	if issue_title ~= "" then
-		table.insert(highlights, {
-			line = 0,
-			start_col = 3 + #(issue.key or ""),
-			end_col = #lines[1],
-			hl_group = helper.issue_title_hl(issue_title),
-		})
-	end
-
-	---@param label string
-	---@param value string|nil
-	---@param value_hl string|nil
-	local function push(label, value, value_hl)
-		if value == nil or value == "" then
-			return
-		end
-		local line = #lines
-		table.insert(lines, string.format(" %-9s %s", label .. ":", value))
-		table.insert(highlights, { line = line, start_col = 1, end_col = 10, hl_group = "AtlasTextMuted" })
-		if value_hl ~= nil then
-			table.insert(highlights, {
-				line = line,
-				start_col = 11,
-				end_col = #lines[line + 1],
-				hl_group = value_hl,
-			})
-		end
-	end
-
-	local issue_type_name = issue.type and issue.type.name or nil
-	local _, issue_type_hl = icons.issues_type(issue_type_name)
-	local _, priority_hl = icons.issues_priority(issue.priority)
-	push("Type", issue_type_name, issue_type_hl)
-	push("Status", issue.status, helper.status_hl(issue.status_id))
-	push("Priority", issue.priority, priority_hl)
-
-	local assignee_name = issue.assignee and issue.assignee.display_name or nil
-	push("Assignee", assignee_name or "Unassigned", helper.person_hl(assignee_name))
-
-	local reporter_name = issue.reporter and issue.reporter.display_name or nil
-	if reporter_name then
-		push("Reporter", reporter_name, helper.person_hl(reporter_name))
-	end
-
-	push("Due", issue.duedate, "AtlasTextMuted")
-
-	if issue.story_points ~= nil then
-		push("Points", tostring(issue.story_points), "AtlasTextMuted")
-	end
-
-	if parent_key and parent_key ~= "" then
-		push("Parent", parent_key, helper.issue_hl(parent_key))
-		if parent_title and parent_title ~= "" then
-			local line = #lines
-			table.insert(lines, string.format("           %s", parent_title))
-			table.insert(highlights, {
-				line = line,
-				start_col = 11,
-				end_col = #lines[line + 1],
-				hl_group = "Comment",
-			})
-		end
-	end
-
-	local content_width = 1
-	for _, line in ipairs(lines) do
-		content_width = math.max(content_width, vim.fn.strdisplaywidth(line))
-	end
-	lines[2] = " " .. ("━"):rep(content_width)
-	table.insert(highlights, { line = 1, start_col = 0, end_col = #lines[2], hl_group = "AtlasTextMuted" })
-
-	return lines, highlights
-end
-
----@param issue Issue
----@return string[], AtlasUIHighlight[]
-function M.issue_popup_content(issue)
-	local provider = state.provider
-	local ui = provider and provider.capabilities.ui
-	if ui and ui.issue_popup_content then
-		return ui.issue_popup_content(issue)
-	end
-	return generic_issue_popup_content(issue)
 end
 
 ---@param opts { width: integer, height: integer }

@@ -60,16 +60,15 @@ A Neovim plugin for managing pull requests from GitHub, Bitbucket, GitLab, Gitea
 }
 ```
 
-### Using [packer.nvim](https://github.com/wbthomason/packer.nvim)
+### Using [vim.pack](https://neovim.io/doc/user/pack/#vim.pack) (Neovim 0.12+)
 
 ```lua
-use {
-  "emrearmagan/atlas.nvim",
-  config = function()
-    -- See Configuration below
-    require("atlas").setup({})
-  end
-}
+vim.pack.add({
+  "https://github.com/emrearmagan/atlas.nvim",
+})
+
+-- See Configuration below
+require("atlas").setup({})
 ```
 
 > [!tip]
@@ -982,9 +981,6 @@ keymaps = {
         add_note = "<leader>n",
         toggle_resolved = "x",
       },
-    },
-    pipelines = {
-      open = "gd",
     },
     filters = {
       open = "gpo",

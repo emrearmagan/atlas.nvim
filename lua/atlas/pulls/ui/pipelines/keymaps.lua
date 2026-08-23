@@ -27,8 +27,7 @@ end
 ---@param actions { close: fun(), show_logs: fun(), refresh: fun(), open_url: fun(), open_actions: fun() }
 function M.setup_pipelines(buf, title, actions)
 	local items = {}
-	local log_keys = keymaps.resolve("pulls.pipelines.open") or {}
-	vim.list_extend(log_keys, keymaps.resolve("ui.show_details") or {})
+	local log_keys = keymaps.resolve("ui.show_details") or {}
 	vim.list_extend(log_keys, keymaps.resolve("ui.select") or {})
 	if #log_keys > 0 then
 		table.insert(items, {

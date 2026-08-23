@@ -524,8 +524,7 @@ function M.show_issue_details(source_buf)
 		return
 	end
 
-	local renderer = require("atlas.issues.ui.main.renderer")
-	local lines, highlights = renderer.issue_popup_content(issue)
+	local lines, highlights = require("atlas.issues.ui.popup").content(issue)
 	info_popup.show({
 		lines = lines,
 		highlights = highlights,

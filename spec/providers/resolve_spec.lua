@@ -2,7 +2,7 @@ local config = require("atlas.config")
 local git = require("atlas.core.git")
 local resolver = require("atlas.providers.resolve")
 
-describe("Atlas target resolver", function()
+describe("providers.resolve", function()
 	local original_options
 
 	before_each(function()

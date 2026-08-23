@@ -83,9 +83,6 @@ local M = {}
 ---@field explorer? AtlasPullsReviewExplorerKeymaps
 ---@field diff? AtlasPullsReviewDiffKeymaps
 
----@class AtlasPullsPipelinesKeymaps
----@field open? AtlasKeymapValue
-
 ---@class AtlasPullsFilterKeymaps
 ---@field open? AtlasKeymapValue
 ---@field merged? AtlasKeymapValue
@@ -102,7 +99,6 @@ local M = {}
 ---@field edit_reviewers? AtlasKeymapValue
 ---@field edit_assignees? AtlasKeymapValue
 ---@field review? AtlasPullsReviewKeymaps
----@field pipelines? AtlasPullsPipelinesKeymaps
 ---@field filters? AtlasPullsFilterKeymaps
 
 ---@class AtlasIssuesKeymaps
@@ -194,7 +190,6 @@ local M = {}
 ---| "pulls.review.diff.submit_suggestion"
 ---| "pulls.review.diff.add_note"
 ---| "pulls.review.diff.toggle_resolved"
----| "pulls.pipelines.open"
 ---| "pulls.filters.open"
 ---| "pulls.filters.merged"
 ---| "pulls.filters.declined"
@@ -331,7 +326,7 @@ function M.validate()
 		{ "pulls.toggle_repo_issue_state", "pulls.review.diff.toggle_layout" },
 		{ "pulls.checkout", "pulls.review.diff.toggle_compact" },
 		{ "pulls.edit_assignees", "pulls.review.approve" },
-		{ "pulls.open_diff", "pulls.review.focus_item", "pulls.pipelines.open" },
+		{ "pulls.open_diff", "pulls.review.focus_item" },
 		{
 			"ui.comments.react",
 			"pulls.edit_reviewers",

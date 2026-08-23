@@ -25,13 +25,25 @@ local function assert_contract(domain, expected_ids, provider_functions, core_fu
 	assert.same(expected_ids, ids)
 end
 
-describe("provider contracts", function()
+describe("providers contracts", function()
 	it("loads pull request providers", function()
 		assert_contract(
 			"pulls",
 			{ "bitbucket", "forgejo", "gitea", "github", "gitlab" },
 			{ "resolve", "search_view", "target", "repositories" },
-			{ "fetch_user", "fetch_pullrequests", "fetch_pullrequest", "update_description", "decline", "views" }
+			{
+				"fetch_user",
+				"fetch_pullrequests",
+				"fetch_pullrequest",
+				"create_pr",
+				"update_title",
+				"set_draft",
+				"decline",
+				"fetch_default_reviewers",
+				"fetch_description",
+				"update_reviewers",
+				"views",
+			}
 		)
 	end)
 
@@ -48,7 +60,7 @@ describe("provider contracts", function()
 		local provider = assert(providers.load("bitbucket", "pulls"))
 		local reviews = assert(provider.capabilities.reviews)
 
-		assert_functions(reviews, { "submit_review", "approve", "request_changes" }, "bitbucket.pulls.reviews")
+		assert_functions(reviews, { "fetch", "submit_review", "approve", "request_changes" }, "bitbucket.pulls.reviews")
 	end)
 
 	it("exposes notifications for GitHub and GitLab", function()

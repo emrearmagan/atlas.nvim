@@ -72,7 +72,6 @@
 ---@field render (fun(groups: IssuesGroup[], layout: "plain"|"compact", opts: { width: integer }): IssuesMainRenderResult)|nil
 ---@field format_row (fun(issue: Issue, is_child: boolean): table|nil)|nil
 ---@field cell_hl (fun(row: table, col: table, ctx: { text: string, padded: string, width: integer }): table[]|nil)|nil
----@field issue_popup_content (fun(issue: Issue): string[], AtlasUIHighlight[])|nil
 ---@field panel IssuesProviderPanel|nil
 
 --------------------------------------------------------------------------------
