@@ -211,6 +211,10 @@ function M.to_issue(raw, sp_field)
 		story_points = sp_field and extract_story_points(fields[sp_field]) or nil,
 		duedate = to_string_or_nil(fields.duedate),
 		parent = extract_parent(safe_get(fields, "parent")),
+		created_at = json.safe_str(fields.created),
+		updated_at = json.safe_str(fields.updated),
+		closed_at = json.safe_str(fields.resolutiondate),
+		comment_count = tonumber(safe_get(fields, "comment", "total")),
 		is_subscribed = safe_get(fields, "watches", "isWatching") == true,
 		_raw = raw,
 	}
@@ -230,7 +234,6 @@ function M.to_issue_details(raw, sp_field)
 	issue.milestone = nil
 	issue.reactions = nil
 	issue.sub_issues = {}
-	issue.created_at = json.safe_str(fields.created)
 	return issue
 end
 

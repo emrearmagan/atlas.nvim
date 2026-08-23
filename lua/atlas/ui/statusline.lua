@@ -251,6 +251,12 @@ local function notice_style(level)
 	return icons.general(icon_name), highlights[level] or "AtlasFooterText"
 end
 
+---@return boolean
+function M.enabled()
+	local ui = require("atlas.config").options.ui or {}
+	return ui.statusline ~= false
+end
+
 ---@param options AtlasStatuslineOptions|nil
 ---@return AtlasStatusline
 function M.new(options)
@@ -269,7 +275,7 @@ end
 
 ---@param win integer|nil
 function Statusline:attach(win)
-	if self.disposed or not win or not vim.api.nvim_win_is_valid(win) then
+	if not M.enabled() or self.disposed or not win or not vim.api.nvim_win_is_valid(win) then
 		return
 	end
 	instances[self.id] = self
@@ -280,7 +286,8 @@ end
 ---@return boolean
 function Statusline:is_attached(win)
 	win = win or vim.api.nvim_get_current_win()
-	return not self.disposed
+	return M.enabled()
+		and not self.disposed
 		and vim.api.nvim_win_is_valid(win)
 		and vim.api.nvim_get_option_value("statusline", { win = win }) == self.expression
 end
@@ -407,7 +414,8 @@ end
 ---@param source_win integer
 function M.inherit(target_win, source_win)
 	if
-		vim.o.laststatus ~= 3
+		not M.enabled()
+		or vim.o.laststatus ~= 3
 		or not vim.api.nvim_win_is_valid(source_win)
 		or not vim.api.nvim_win_is_valid(target_win)
 	then

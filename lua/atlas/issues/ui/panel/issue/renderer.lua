@@ -67,17 +67,19 @@ function M.render(tab_items, get_tab_module)
 
 		-- Chips
 		local chip_line, chip_spans = chips.render({ extra_chips = extra_chips })
-		table.insert(lines, chip_line)
-		local chip_base = #lines - 1
-		for _, span in ipairs(chip_spans) do
-			table.insert(spans, {
-				line = chip_base,
-				start_col = span.start_col,
-				end_col = span.end_col,
-				hl_group = span.hl_group,
-			})
+		if chip_line ~= "" then
+			table.insert(lines, chip_line)
+			local chip_base = #lines - 1
+			for _, span in ipairs(chip_spans) do
+				table.insert(spans, {
+					line = chip_base,
+					start_col = span.start_col,
+					end_col = span.end_col,
+					hl_group = span.hl_group,
+				})
+			end
+			table.insert(lines, "")
 		end
-		table.insert(lines, "")
 
 		-- Tab bar
 		if #tab_items > 1 then

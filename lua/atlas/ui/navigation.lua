@@ -4,6 +4,14 @@ local ui_state = require("atlas.ui.state")
 
 local DEBOUNCE_MS = 150
 local select_timer = nil
+local autocmd_groups = {}
+
+local function stop_select_timer()
+	if select_timer then
+		select_timer:stop()
+		select_timer = nil
+	end
+end
 
 local function is_selectable(node)
 	if type(node) ~= "table" then
@@ -23,9 +31,7 @@ function M.current_item()
 end
 
 local function on_cursor_moved()
-	if select_timer then
-		select_timer:stop()
-	end
+	stop_select_timer()
 	select_timer = vim.defer_fn(function()
 		select_timer = nil
 		local item = M.current_item()
@@ -33,6 +39,43 @@ local function on_cursor_moved()
 			ui_state.on_select(item)
 		end
 	end, DEBOUNCE_MS)
+end
+
+---@param buf integer
+function M.detach(buf)
+	local group = autocmd_groups[buf]
+	if group then
+		autocmd_groups[buf] = nil
+		pcall(vim.api.nvim_del_augroup_by_id, group)
+	end
+	stop_select_timer()
+end
+
+---@param buf integer
+function M.attach(buf)
+	if not vim.api.nvim_buf_is_valid(buf) then
+		return
+	end
+
+	M.detach(buf)
+	local group = vim.api.nvim_create_augroup("AtlasUINavigation" .. tostring(buf), { clear = true })
+	autocmd_groups[buf] = group
+
+	vim.api.nvim_create_autocmd("CursorMoved", {
+		group = group,
+		buffer = buf,
+		callback = on_cursor_moved,
+	})
+	vim.api.nvim_create_autocmd({ "BufDelete", "BufWipeout" }, {
+		group = group,
+		buffer = buf,
+		once = true,
+		callback = function()
+			if autocmd_groups[buf] == group then
+				M.detach(buf)
+			end
+		end,
+	})
 end
 
 function M.move_cursor(direction)

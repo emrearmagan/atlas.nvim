@@ -108,11 +108,8 @@ function M.to_issue(raw, fallback_slug)
 	local status_name, status_id = normalize_state(raw.state)
 	local author = M.to_user(raw.author)
 
-	local issue_labels = github_mapping.connection_nodes(raw.labels)
 	local issue_assignees = github_mapping.connection_nodes(raw.assignees)
 	local parent = M.to_issue(json.nilify(raw.parent), fallback_slug)
-	local issue_milestone = json.nilify(raw.milestone)
-	local body = json.safe_str(raw.body) or ""
 	local subscription = json.safe_str(raw.viewerSubscription)
 	local is_subscribed = subscription and subscription == "SUBSCRIBED"
 	local created_at = json.safe_str(raw.createdAt) or json.safe_str(raw.created_at) or ""
@@ -141,23 +138,16 @@ function M.to_issue(raw, fallback_slug)
 		duedate = nil,
 		parent = parent,
 		url = url ~= "" and url or nil,
+		created_at = created_at ~= "" and created_at or nil,
+		updated_at = updated_at ~= "" and updated_at or nil,
+		closed_at = closed_at,
+		comment_count = comment_count,
 		is_pinned = raw.isPinned == true,
 		is_subscribed = is_subscribed,
 		_raw = {
 			node_id = json.safe_str(raw.id),
 			number = number,
 			slug = slug,
-			body = body,
-			created_at = created_at,
-			updated_at = updated_at,
-			closed_at = closed_at,
-			labels = issue_labels,
-			assignees = issue_assignees,
-			milestone = issue_milestone,
-			comment_count = comment_count,
-			html_url = url,
-			reactions = github_mapping.reaction_groups(raw.reactionGroups),
-			sub_issues = github_mapping.connection_nodes(raw.subIssues),
 		},
 	}
 	return issue
@@ -184,7 +174,6 @@ function M.to_issue_details(raw, fallback_slug)
 			table.insert(issue.sub_issues, sub_issue)
 		end
 	end
-	issue.created_at = json.safe_str(raw.createdAt) or json.safe_str(raw.created_at)
 	return issue
 end
 

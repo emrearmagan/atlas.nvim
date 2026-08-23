@@ -29,11 +29,10 @@ end
 ---@param issue Issue
 ---@param amount integer
 local function adjust_comment_count(issue, amount)
-	local raw = issue._raw
-	if type(raw) ~= "table" or raw.comment_count == nil then
+	if issue.comment_count == nil then
 		return
 	end
-	raw.comment_count = math.max(0, (tonumber(raw.comment_count) or 0) + amount)
+	issue.comment_count = math.max(0, (tonumber(issue.comment_count) or 0) + amount)
 	require("atlas.issues.ui.main.controller").update_issue(issue)
 end
 

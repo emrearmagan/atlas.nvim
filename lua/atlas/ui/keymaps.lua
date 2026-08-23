@@ -1,6 +1,7 @@
 local M = {}
 
 local help = require("atlas.ui.popups.help")
+local navigation = require("atlas.ui.navigation")
 local resolver = require("atlas.core.keymaps")
 local utils = require("atlas.ui.shared.utils")
 
@@ -44,7 +45,7 @@ function M.register(buf)
 			desc = "Next item",
 			hidden = true,
 			callback = function()
-				require("atlas.ui.navigation").move_cursor("down")
+				navigation.move_cursor("down")
 			end,
 		})
 	)
@@ -55,7 +56,7 @@ function M.register(buf)
 			desc = "Previous item",
 			hidden = true,
 			callback = function()
-				require("atlas.ui.navigation").move_cursor("up")
+				navigation.move_cursor("up")
 			end,
 		})
 	)
@@ -66,7 +67,7 @@ function M.register(buf)
 			desc = "Go to first item",
 			hidden = true,
 			callback = function()
-				require("atlas.ui.navigation").focus_first_item()
+				navigation.focus_first_item()
 			end,
 		})
 	)
@@ -77,7 +78,7 @@ function M.register(buf)
 			desc = "Go to last item",
 			hidden = true,
 			callback = function()
-				require("atlas.ui.navigation").focus_last_item()
+				navigation.focus_last_item()
 			end,
 		})
 	)
@@ -166,11 +167,13 @@ function M.register(buf)
 	)
 
 	M.remove(buf)
+	navigation.attach(buf)
 	help.register("General", items, { index = 210, buffer = buf })
 end
 
 ---@param buf integer
 function M.remove(buf)
+	navigation.detach(buf)
 	local items = {}
 	utils.insert_if(items, remove_item("ui.next_item"))
 	utils.insert_if(items, remove_item("ui.previous_item"))

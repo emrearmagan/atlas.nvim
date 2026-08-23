@@ -119,19 +119,12 @@ function M.to_issue(raw)
 
 	local status_name, status_id = normalize_state(raw.state)
 	local title = json.safe_str(raw.title) or ""
-	local description = json.safe_str(raw.description) or ""
-
-	local labels_raw = json.safe_table(raw.labels) -- list of label-name strings
-	local issue_labels = {}
-	for _, name in ipairs(labels_raw) do
-		if type(name) == "string" and name ~= "" then
-			table.insert(issue_labels, { name = name })
-		end
-	end
 
 	local issue_assignees = json.safe_table(raw.assignees)
-	local issue_milestone = json.nilify(raw.milestone)
 	local project_path = key:match("^(.-)#") or ""
+	local created_at = json.safe_str(raw.created_at)
+	local updated_at = json.safe_str(raw.updated_at)
+	local closed_at = json.safe_str(raw.closed_at)
 
 	---@type Issue
 	local issue = {
@@ -148,21 +141,15 @@ function M.to_issue(raw)
 		duedate = json.safe_str(raw.due_date),
 		parent = nil,
 		url = web_url ~= "" and web_url or nil,
+		created_at = created_at,
+		updated_at = updated_at,
+		closed_at = closed_at,
+		comment_count = tonumber(raw.user_notes_count) or 0,
 		is_subscribed = json.nilify(raw.subscribed),
 		_raw = {
 			iid = iid,
 			project_id = tonumber(raw.project_id),
 			project_path = project_path,
-			description = description,
-			created_at = json.safe_str(raw.created_at) or "",
-			updated_at = json.safe_str(raw.updated_at) or "",
-			closed_at = json.safe_str(raw.closed_at),
-			labels = issue_labels,
-			label_names = labels_raw,
-			assignees = issue_assignees,
-			milestone = issue_milestone,
-			comment_count = tonumber(raw.user_notes_count) or 0,
-			web_url = web_url,
 			confidential = raw.confidential == true,
 			issue_type = json.safe_str(raw.issue_type),
 		},
@@ -184,7 +171,6 @@ function M.to_issue_details(raw)
 	issue.milestone = milestone(raw.milestone)
 	issue.reactions = issue_reactions(raw)
 	issue.sub_issues = {}
-	issue.created_at = json.safe_str(raw.created_at)
 	return issue
 end
 

@@ -108,7 +108,7 @@
 -- Config
 
 ---@class AtlasUIConfig
----@field global_statusline boolean|nil Set one statusline across all windows (default: true)
+---@field statusline boolean|nil Show the Atlas statusline (default: true)
 ---@field picker AtlasPickerName|nil
 ---@field listed_buffer boolean|nil Make the main Atlas dashboard a listed buffer (default: false)
 
@@ -126,7 +126,7 @@ local notify = require("atlas.core.notify")
 ---@type AtlasConfig
 M.options = {
 	ui = {
-		global_statusline = true,
+		statusline = true,
 		picker = "auto",
 		listed_buffer = false,
 	},
@@ -324,7 +324,7 @@ end
 function M.setup(opts)
 	local resolved = migrate_legacy(vim.deepcopy(opts or {}))
 	M.options = vim.tbl_deep_extend("force", M.options, resolved)
-	if M.options.ui.global_statusline ~= false then
+	if M.options.ui.statusline ~= false then
 		vim.opt.laststatus = 3
 	end
 end

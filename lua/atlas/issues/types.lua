@@ -36,6 +36,10 @@
 ---@field duedate string|nil
 ---@field parent Issue|nil
 ---@field url string|nil
+---@field created_at string|nil
+---@field updated_at string|nil
+---@field closed_at string|nil
+---@field comment_count integer|nil
 ---@field is_pinned boolean|nil
 ---@field is_starred boolean|nil
 ---@field is_subscribed boolean|nil
@@ -48,7 +52,6 @@
 ---@field milestone IssueMilestone|nil
 ---@field reactions table<string, integer>|nil
 ---@field sub_issues Issue[]
----@field created_at string|nil
 
 --------------------------------------------------------------------------------
 -- Label

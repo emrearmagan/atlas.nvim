@@ -73,12 +73,11 @@ end
 ---@return table
 local function issue_to_row(issue, is_child, layout)
 	local renderer = require("atlas.issues.providers.github.ui.renderer")
-	local raw = issue._raw or {}
 	local row = renderer.format_row(issue, is_child, layout)
 	if issue.is_starred then
 		row.name = STAR_ICON .. " " .. row.name
 	end
-	row.comments = tostring(tonumber(raw.comment_count) or 0)
+	row.comments = tostring(tonumber(issue.comment_count) or 0)
 	row._item = { kind = "issue", key = issue.key, _issue = issue }
 	row._issue = issue
 	row.children = row.children or {}
@@ -162,8 +161,8 @@ local function compact_issue_to_row(issue)
 	local key_label = number and string.format("#%s", tostring(number)) or tostring(issue.key or "")
 	row.name = string.format("%s%s %s", issue.is_starred and (STAR_ICON .. " ") or "", key_label, issue.title or "")
 	row._compact_key_label = key_label
-	row.created = utils.relative_time(raw.created_at)
-	row.updated = utils.relative_time(raw.updated_at)
+	row.created = utils.relative_time(issue.created_at)
+	row.updated = utils.relative_time(issue.updated_at)
 	row.children = nil
 	return row
 end

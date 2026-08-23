@@ -20,6 +20,7 @@ CONTENTS                                                       *atlas-contents*
      GitHub ................................. |atlas-issues-github|
      GitLab ................................. |atlas-issues-gitlab|
   8. Features ............................... |atlas-features|
+       Statusline ........................... |atlas-statusline|
        Review pull requests ................. |atlas-review-pull-requests|
          Local notes ........................ |atlas-local-notes|
        View pipelines ....................... |atlas-view-pipelines|
@@ -83,8 +84,8 @@ up and what's missing.
 >lua
   require("atlas").setup({
     ui = {
-      -- Use one statusline across all windows.
-      global_statusline = true,
+      -- Global statusline for Atlas. See |atlas-statusline|.
+      statusline = true,
       -- "auto", "default", "snacks", or "fzf-lua".
       picker = "auto",
       -- Make the main Atlas dashboard a listed buffer.
@@ -574,6 +575,29 @@ Same shared `providers.gitlab` auth as |atlas-pulls-gitlab|. Views take a `scope
 
 Atlas keeps the pull request and issue workflows you use throughout the day
 inside Neovim.
+
+STATUSLINE                                                *atlas-statusline*
+
+Atlas comes with its own statusline for key hints, loading progress, and
+notifications. Keeping it enabled is recommended because most interaction
+and feedback goes through it.
+
+If you use lualine, disable its statusline for Atlas buffers so it does not
+replace the Atlas statusline:
+>lua
+  require("lualine").setup({
+    options = {
+      disabled_filetypes = {
+        statusline = { "atlas" },
+        winbar = {},
+      },
+    },
+  })
+<
+
+At some point there will probably an extension for lualine.
+
+------------------------------------------------------------------------------
 
 REVIEW PULL REQUESTS                         *atlas-review-pull-requests*
                                                      *atlas-pulls-review*

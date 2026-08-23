@@ -6,7 +6,6 @@ local picker = require("atlas.picker")
 local notify = require("atlas.core.notify")
 local cli = require("atlas.providers.github.client")
 local issues_api = require("atlas.issues.providers.github.api.issues")
-local users_api = require("atlas.providers.github.users")
 local issue_cache = require("atlas.issues.providers.github.api.cache")
 local normalizer = require("atlas.issues.providers.github.api.mapper")
 
@@ -168,59 +167,49 @@ end
 local function assign(ctx, done)
 	local issue = assert(ctx.issue)
 	local key = tostring(issue.key or "")
-	local slug = issue_slug(issue)
-	if slug == "" then
-		local err = "Could not determine repository"
-		notify.error(err)
-		done(nil, err)
-		return
-	end
 
-	notify.loading("Loading users...")
-	users_api.get_assignable_users(slug, "", function(users, err)
-		if err or users == nil then
-			notify.error(err or "Failed to load users")
-			done(nil, err or "Failed to load users")
+	notify.loading("Loading assignees...")
+	issues_api.get_assignee_options(key, function(current_assignees, assignable_users, assignees_err)
+		if assignees_err or current_assignees == nil or assignable_users == nil then
+			local message = assignees_err or "Failed to load assignees"
+			notify.error(message)
+			done(nil, message)
 			return
 		end
 		notify.clear()
 
-		local items = {}
-		for _, u in ipairs(users) do
-			table.insert(items, { login = u.account_id, name = u.display_name or u.account_id })
-		end
-		if #items == 0 then
+		if #assignable_users == 0 then
 			local message = "No assignable users"
 			notify.warn(message)
 			done(nil, message)
 			return
 		end
 
-		local raw = issue._raw or {}
-		local original = {}
 		local original_set = {}
-		for _, a in ipairs(raw.assignees or {}) do
-			local login = tostring(a.login or "")
+		for _, assignee in ipairs(current_assignees) do
+			local login = tostring(assignee.account_id or "")
 			if login ~= "" then
-				table.insert(original, { login = login, name = a.name or login })
 				original_set[login] = true
 			end
 		end
 
 		picker.multi_select({
-			items = items,
-			selected = vim.deepcopy(original),
+			items = assignable_users,
+			selected = vim.deepcopy(current_assignees),
 			key = function(item)
-				return item.login
+				return tostring(item.account_id or "")
 			end,
 			format_item = function(item)
-				return string.format("%s %s", icons.general("user"), item.name or item.login)
+				return string.format("%s %s", icons.general("user"), item.display_name or item.account_id)
 			end,
 			title = string.format("Assignees for %s", key),
 			on_done = function(selected)
 				local selected_set = {}
-				for _, it in ipairs(selected) do
-					selected_set[it.login] = true
+				for _, item in ipairs(selected) do
+					local login = tostring(item.account_id or "")
+					if login ~= "" then
+						selected_set[login] = true
+					end
 				end
 
 				local adds, removes = {}, {}
@@ -278,13 +267,9 @@ local function labels(ctx, done)
 		return
 	end
 
-	notify.loading("Loading labels...")
-	issues_api.list_labels(slug, function(all_labels, err)
-		if err or all_labels == nil then
-			notify.error(err or "Failed to load labels")
-			done(nil, err or "Failed to load labels")
-			return
-		end
+	---@param details IssueDetails
+	---@param all_labels { name: string, color: string|nil }[]
+	local function open_picker(details, all_labels)
 		notify.clear()
 
 		local items = {}
@@ -298,10 +283,9 @@ local function labels(ctx, done)
 			return
 		end
 
-		local raw = issue._raw or {}
 		local original = {}
 		local original_set = {}
-		for _, label in ipairs(raw.labels or {}) do
+		for _, label in ipairs(details.labels or {}) do
 			local name = tostring(label.name or "")
 			if name ~= "" then
 				table.insert(original, { name = name, color = label.color })
@@ -355,6 +339,26 @@ local function labels(ctx, done)
 				end)
 			end,
 		})
+	end
+
+	notify.loading("Loading labels...")
+	ctx.provider.capabilities.core.fetch_issue(key, { force_load = true }, function(details, details_err)
+		if details_err or details == nil then
+			local message = details_err or "Failed to load issue details"
+			notify.error(message)
+			done(nil, message)
+			return
+		end
+
+		issues_api.list_labels(slug, function(all_labels, labels_err)
+			if labels_err or all_labels == nil then
+				local message = labels_err or "Failed to load labels"
+				notify.error(message)
+				done(nil, message)
+				return
+			end
+			open_picker(details, all_labels)
+		end)
 	end)
 end
 

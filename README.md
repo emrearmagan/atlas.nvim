@@ -93,8 +93,8 @@ require("atlas").setup({})
 ```lua
 {
   ui = {
-    -- Too lazy to manage a statusline per split? Same. Make it global.
-    global_statusline = true,
+    -- Global statusline for Atlas. See the Statusline section below.
+    statusline = true,
     -- "auto", "default", "snacks", or "fzf-lua".
     picker = "auto",
     -- Make the main Atlas dashboard a listed buffer.
@@ -604,6 +604,25 @@ issues = {
 </details>
 
 ## Features
+
+### Statusline
+
+Atlas comes with its own statusline for key hints, loading progress, and notifications. Keeping it enabled is recommended because most interaction and feedback goes through it.
+
+If you use lualine, disable its statusline for Atlas buffers so it does not replace the Atlas statusline:
+
+```lua
+require("lualine").setup({
+  options = {
+    disabled_filetypes = {
+      statusline = { "atlas" },
+      winbar = {},
+    },
+  },
+})
+```
+
+At some point there will probably an extension for lualine.
 
 ### Review Pull Requests
 

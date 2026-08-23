@@ -74,6 +74,17 @@ fragment IssueFields on Issue {
 }
 ]]
 
+local ASSIGNEES_GQL = [[
+query($owner: String!, $repo: String!, $number: Int!) {
+  repository(owner: $owner, name: $repo) {
+    issue(number: $number) {
+      assignees(first: 100) { nodes { login name } }
+    }
+    assignableUsers(first: 100) { nodes { login name } }
+  }
+}
+]]
+
 ---@param query string
 ---@return string
 local function issue_search_query(query)
@@ -112,7 +123,7 @@ function M.search_issues(search, on_done, opts)
 
 	local with_relationships = relationships_enabled(opts)
 	local cache_key =
-		string.format("github_issues:search:%s:%d:relationships:%s", query, limit, tostring(with_relationships))
+		string.format("github_issues:search:v2:%s:%d:relationships:%s", query, limit, tostring(with_relationships))
 	if not opts.force_load then
 		local cached, ok = cli.get_cache(cache_key)
 		if ok then
@@ -204,6 +215,66 @@ function M.get_issue(key, on_done, opts)
 		on_done(issue, nil)
 	end, {
 		action = "Fetch issue",
+		slug = slug,
+		number = number,
+	})
+end
+
+---@param key string
+---@param on_done fun(assignees: IssueUser[]|nil, assignable_users: IssueUser[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.get_assignee_options(key, on_done)
+	local slug, number = normalizer.parse_key(key)
+	if slug == "" or number == nil then
+		on_done(nil, nil, "Invalid issue key: " .. tostring(key))
+		return nil
+	end
+
+	local owner, repo = slug:match("^([^/]+)/(.+)$")
+	if owner == nil or repo == nil then
+		on_done(nil, nil, "Invalid issue repository: " .. tostring(slug))
+		return nil
+	end
+
+	return cli.gh({
+		"api",
+		"graphql",
+		"-f",
+		"query=" .. vim.trim(ASSIGNEES_GQL),
+		"-f",
+		"owner=" .. owner,
+		"-f",
+		"repo=" .. repo,
+		"-F",
+		"number=" .. tostring(number),
+	}, function(result, err)
+		if err or type(result) ~= "table" then
+			on_done(nil, nil, err or "Empty response")
+			return
+		end
+
+		local data = json.nilify(result.data)
+		local repository = type(data) == "table" and json.nilify(data.repository) or nil
+		local issue = type(repository) == "table" and json.nilify(repository.issue) or nil
+		if type(issue) ~= "table" then
+			on_done(nil, nil, "Issue not found: " .. tostring(key))
+			return
+		end
+
+		local function users(connection)
+			local result_users = {}
+			for _, raw in ipairs(json.safe_table(json.safe_table(connection).nodes)) do
+				local user = normalizer.to_user(raw)
+				if user then
+					table.insert(result_users, user)
+				end
+			end
+			return result_users
+		end
+
+		on_done(users(issue.assignees), users(repository.assignableUsers), nil)
+	end, {
+		action = "Fetch issue assignee options",
 		slug = slug,
 		number = number,
 	})

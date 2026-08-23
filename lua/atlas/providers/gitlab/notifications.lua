@@ -61,7 +61,7 @@ function M.fetch(opts, on_done)
 
 	local cache_key = string.format("gitlab:todos:state=%s:per_page=%d", state, per_page)
 	if not opts.force_load then
-		local cached, ok = client.get_cache(cache_key)
+		local cached, ok = client.get_memory_cache(cache_key)
 		if ok then
 			on_done(cached, nil)
 			return nil
@@ -82,7 +82,7 @@ function M.fetch(opts, on_done)
 		for _, raw in ipairs(type(result) == "table" and result or {}) do
 			table.insert(notifications, normalize(raw))
 		end
-		client.set_cache(cache_key, notifications, 60)
+		client.set_memory_cache(cache_key, notifications, 60)
 		on_done(notifications, nil)
 	end)
 end

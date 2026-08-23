@@ -202,7 +202,6 @@ local function reload_view(session)
 		number = vim.wo[win].number,
 		relativenumber = vim.wo[win].relativenumber,
 		statuscolumn = vim.wo[win].statuscolumn,
-		statusline = vim.wo[win].statusline,
 		winbar = vim.wo[win].winbar,
 	}
 	state.reloading = true

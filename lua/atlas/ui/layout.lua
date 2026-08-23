@@ -84,7 +84,9 @@ local function restore_main_options()
 	set_window_option(state.main_win, "scrollbind", options.scrollbind)
 	set_window_option(state.main_win, "cursorbind", options.cursorbind)
 	set_window_option(state.main_win, "winbar", options.winbar)
-	set_window_option(state.main_win, "statusline", options.statusline)
+	if statusline.enabled() then
+		set_window_option(state.main_win, "statusline", options.statusline)
+	end
 	set_window_option(state.main_win, "winhighlight", options.winhighlight)
 	state.main_options = nil
 end

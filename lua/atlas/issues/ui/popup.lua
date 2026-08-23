@@ -35,21 +35,21 @@ local function generic_rows(issue)
 		local value = parent_title ~= "" and (parent_key .. " — " .. parent_title) or parent_key
 		add(rows, "Parent", value, helper.issue_hl(parent_key))
 	end
+	if issue.comment_count ~= nil then
+		add(rows, "Comments", tostring(issue.comment_count))
+	end
+	if type(issue.created_at) == "string" and issue.created_at ~= "" then
+		add(rows, "Created", utils.relative_time(issue.created_at))
+	end
+	if type(issue.updated_at) == "string" and issue.updated_at ~= "" then
+		add(rows, "Updated", utils.relative_time(issue.updated_at))
+	end
 
 	return rows
 end
 
-local function github_rows(issue)
-	local rows = {}
-	local raw = issue._raw or {}
-	add(rows, "Comments", tostring(tonumber(raw.comment_count) or 0))
-	if type(raw.created_at) == "string" and raw.created_at ~= "" then
-		add(rows, "Created", utils.relative_time(raw.created_at))
-	end
-	if type(raw.updated_at) == "string" and raw.updated_at ~= "" then
-		add(rows, "Updated", utils.relative_time(raw.updated_at))
-	end
-	return rows
+local function github_rows(_issue)
+	return {}
 end
 
 local function gitlab_rows(issue)
@@ -61,37 +61,8 @@ local function gitlab_rows(issue)
 		add(rows, "Kind", kind)
 	end
 
-	local assignees = type(raw.assignees) == "table" and raw.assignees or {}
-	if #assignees > 1 then
-		local names = {}
-		for _, assignee in ipairs(assignees) do
-			local username = tostring(assignee.username or assignee.name or "")
-			if username ~= "" then
-				names[#names + 1] = "@" .. username
-			end
-		end
-		add(rows, "Assignees", table.concat(names, ", "))
-	end
-
-	local labels = {}
-	for _, label in ipairs(type(raw.label_names) == "table" and raw.label_names or {}) do
-		if type(label) == "string" and label ~= "" then
-			labels[#labels + 1] = label
-		end
-	end
-	add(rows, "Labels", table.concat(labels, ", "))
-
-	local milestone = type(raw.milestone) == "table" and raw.milestone.title or nil
-	add(rows, "Milestone", milestone)
-	add(rows, "Comments", tostring(tonumber(raw.comment_count) or 0))
 	if raw.confidential == true then
 		add(rows, "Visibility", "Confidential", "AtlasTextWarning")
-	end
-	if type(raw.created_at) == "string" and raw.created_at ~= "" then
-		add(rows, "Created", utils.relative_time(raw.created_at))
-	end
-	if type(raw.updated_at) == "string" and raw.updated_at ~= "" then
-		add(rows, "Updated", utils.relative_time(raw.updated_at))
 	end
 	return rows
 end

@@ -1,7 +1,6 @@
 local M = {}
 
 local service = require("atlas.issues.providers.jira.api.service")
-local cache = require("atlas.core.cache")
 local logger = require("atlas.core.logger")
 
 local CACHE_KEY = "jira:jql:autocompletedata"
@@ -96,13 +95,13 @@ end
 
 ---@return JiraJqlAutocompleteData|nil, boolean
 function M.get_cached_data()
-	local entry = cache.get(CACHE_KEY)
-	if not entry or type(entry.value) ~= "table" then
+	local cached, ok = service.get_memory_cache(CACHE_KEY)
+	if not ok or type(cached) ~= "table" then
 		return nil, false
 	end
 
-	local normalized = normalize_payload(entry.value)
-	cache.set(CACHE_KEY, normalized, service.cache_ttl())
+	local normalized = normalize_payload(cached)
+	service.set_memory_cache(CACHE_KEY, normalized)
 	return normalized, true
 end
 
@@ -128,7 +127,7 @@ function M.get_data(on_done, opts)
 		end
 
 		local normalized = normalize_payload(result)
-		cache.set(CACHE_KEY, normalized, service.cache_ttl())
+		service.set_memory_cache(CACHE_KEY, normalized)
 		on_done(normalized, nil)
 	end, {
 		action = "Fetch jql autocomplete data",

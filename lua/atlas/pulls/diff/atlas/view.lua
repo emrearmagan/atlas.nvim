@@ -498,7 +498,6 @@ function M.create(session, data, target, options)
 	if restore_options then
 		for name, value in pairs({
 			statuscolumn = target.statuscolumn,
-			statusline = target.statusline,
 			winbar = target.winbar,
 		}) do
 			vim.api.nvim_set_option_value(name, value, { win = right_win, scope = "local" })
@@ -579,7 +578,6 @@ function M.replace_with_loading(session)
 		number = state.number,
 		relativenumber = state.relativenumber,
 		statuscolumn = vim.wo[win].statuscolumn,
-		statusline = vim.wo[win].statusline,
 		winbar = vim.wo[win].winbar,
 		diff_lifecycle = state.lifecycle,
 	}

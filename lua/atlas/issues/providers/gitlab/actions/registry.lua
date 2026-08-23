@@ -134,11 +134,21 @@ local function assign(ctx, done)
 		return
 	end
 
-	notify.loading("Loading members...")
-	users_api.list_members(path, "", function(members, err)
-		if err or members == nil then
-			notify.error(err or "Failed to load members")
-			done(nil, err or "Failed to load members")
+	local current_assignees = nil
+	local members = nil
+	local failed = false
+
+	local function fail(message)
+		if failed then
+			return
+		end
+		failed = true
+		notify.error(message)
+		done(nil, message)
+	end
+
+	local function open_picker()
+		if failed or current_assignees == nil or members == nil then
 			return
 		end
 		notify.clear()
@@ -150,13 +160,12 @@ local function assign(ctx, done)
 			return
 		end
 
-		local raw = issue._raw or {}
 		local original = {}
 		local original_set = {}
-		for _, a in ipairs(raw.assignees or {}) do
-			local id = tonumber(a.id)
+		for _, assignee in ipairs(current_assignees) do
+			local id = tonumber(assignee.id)
 			if id then
-				table.insert(original, { id = id, username = a.username, name = a.name or a.username })
+				table.insert(original, assignee)
 				original_set[id] = true
 			end
 		end
@@ -217,6 +226,24 @@ local function assign(ctx, done)
 				end)
 			end,
 		})
+	end
+
+	notify.loading("Loading assignees...")
+	issues_api.get_assignees(key, function(result, err)
+		if err or result == nil then
+			fail(err or "Failed to load current assignees")
+			return
+		end
+		current_assignees = result
+		open_picker()
+	end)
+	users_api.list_members(path, "", function(result, err)
+		if err or result == nil then
+			fail(err or "Failed to load members")
+			return
+		end
+		members = result
+		open_picker()
 	end)
 end
 
@@ -239,13 +266,9 @@ local function labels(ctx, done)
 		return
 	end
 
-	notify.loading("Loading labels...")
-	labels_api.list(path, function(all_labels, err)
-		if err or all_labels == nil then
-			notify.error(err or "Failed to load labels")
-			done(nil, err or "Failed to load labels")
-			return
-		end
+	---@param details IssueDetails
+	---@param all_labels GitLabLabel[]
+	local function open_picker(details, all_labels)
 		notify.clear()
 		if #all_labels == 0 then
 			local message = "No labels available"
@@ -254,12 +277,12 @@ local function labels(ctx, done)
 			return
 		end
 
-		local raw = issue._raw or {}
 		local original = {}
 		local original_set = {}
-		for _, name in ipairs(raw.label_names or {}) do
-			if type(name) == "string" and name ~= "" then
-				table.insert(original, { name = name })
+		for _, label in ipairs(details.labels or {}) do
+			local name = tostring(label.name or "")
+			if name ~= "" then
+				table.insert(original, { name = name, color = label.color })
 				original_set[name] = true
 			end
 		end
@@ -308,6 +331,26 @@ local function labels(ctx, done)
 				end)
 			end,
 		})
+	end
+
+	notify.loading("Loading labels...")
+	ctx.provider.capabilities.core.fetch_issue(key, { force_load = true }, function(details, details_err)
+		if details_err or details == nil then
+			local message = details_err or "Failed to load issue details"
+			notify.error(message)
+			done(nil, message)
+			return
+		end
+
+		labels_api.list(path, function(all_labels, labels_err)
+			if labels_err or all_labels == nil then
+				local message = labels_err or "Failed to load labels"
+				notify.error(message)
+				done(nil, message)
+				return
+			end
+			open_picker(details, all_labels)
+		end)
 	end)
 end
 

@@ -2,7 +2,7 @@ local M = {}
 
 local service = require("atlas.providers.gitlab.client")
 local normalizer = require("atlas.issues.providers.gitlab.api.mapper")
-local LIST_CACHE_PREFIX = "gitlab:issues:list:v2:"
+local LIST_CACHE_PREFIX = "gitlab:issues:list:v3:"
 
 ---@param path string
 ---@param iid integer
@@ -128,6 +128,40 @@ function M.get_issue(key, opts, on_done)
 		on_done(issue, nil)
 	end, {
 		action = "Fetch issue",
+		path = path,
+		iid = iid,
+	})
+end
+
+---@param key string
+---@param on_done fun(assignees: IssueUser[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.get_assignees(key, on_done)
+	local path, iid = normalizer.parse_key(key)
+	if path == "" or iid == nil then
+		on_done(nil, "Invalid issue key: " .. tostring(key))
+		return nil
+	end
+
+	local endpoint = string.format("/projects/%s/issues/%d", service.url_encode(path), iid)
+	return service.request("GET", endpoint, nil, function(result, err)
+		if err or type(result) ~= "table" then
+			on_done(nil, err or "Empty response")
+			return
+		end
+
+		local assignees = {}
+		for _, raw in ipairs(type(result.assignees) == "table" and result.assignees or {}) do
+			local user = normalizer.to_user(raw)
+			local id = tonumber(type(raw) == "table" and raw.id or nil)
+			if user and id then
+				user.id = id
+				table.insert(assignees, user)
+			end
+		end
+		on_done(assignees, nil)
+	end, {
+		action = "Fetch issue assignees",
 		path = path,
 		iid = iid,
 	})
