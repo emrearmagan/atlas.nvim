@@ -223,8 +223,6 @@ function M.views()
 	return resolved
 end
 
-local renderer = require("atlas.issues.providers.gitlab.ui.renderer")
-
 ---@param value string
 ---@param parsed AtlasParsedUrl|nil
 ---@return AtlasTarget|nil, string|nil
@@ -345,8 +343,6 @@ return {
 		actions = require("atlas.issues.providers.gitlab.actions"),
 		ui = {
 			setup = require("atlas.issues.providers.gitlab.highlights").setup,
-			format_row = renderer.format_row,
-			cell_hl = renderer.cell_hl,
 			detail = require("atlas.issues.providers.gitlab.ui.detail"),
 		},
 	},

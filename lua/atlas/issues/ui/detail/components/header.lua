@@ -2,7 +2,7 @@ local M = {}
 
 local icons = require("atlas.ui.shared.icons")
 local table_tree = require("atlas.ui.components.table_tree")
-local helper = require("atlas.issues.ui.dashboard.helper")
+local helper = require("atlas.issues.ui.presentation")
 
 local function text_or(v, fallback)
 	if type(v) == "string" and v ~= "" then

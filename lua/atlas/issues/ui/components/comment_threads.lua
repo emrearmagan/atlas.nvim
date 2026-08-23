@@ -2,7 +2,7 @@ local M = {}
 
 local threadsv2 = require("atlas.ui.components.threadsv2")
 local emojis = require("atlas.ui.shared.emojis")
-local helper = require("atlas.issues.ui.dashboard.helper")
+local helper = require("atlas.issues.ui.presentation")
 local icons = require("atlas.ui.shared.icons")
 local utils = require("atlas.ui.shared.utils")
 

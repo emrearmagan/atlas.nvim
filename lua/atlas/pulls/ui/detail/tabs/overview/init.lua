@@ -8,7 +8,7 @@ local table_tree = require("atlas.ui.components.table_tree")
 local state = require("atlas.pulls.ui.detail.tabs.overview.state")
 local detail_state = require("atlas.pulls.ui.detail.state")
 local keymaps = require("atlas.pulls.ui.detail.tabs.overview.keymaps")
-local presentation = require("atlas.pulls.ui.dashboard.helper")
+local presentation = require("atlas.pulls.ui.presentation")
 local request_scope = require("atlas.core.requests")
 
 local PADDING_X = 1

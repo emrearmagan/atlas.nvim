@@ -1,16 +1,3 @@
---------------------------------------------------------------------------------
--- Main render result
---------------------------------------------------------------------------------
-
----@class PullsMainRenderResult
----@field lines string[]
----@field spans table[]
----@field line_map table<integer, table>
-
---------------------------------------------------------------------------------
--- Provider Interface
---------------------------------------------------------------------------------
-
 ---@class PullsFetchOpts
 ---@field force_load boolean|nil
 ---@field force_refresh boolean|nil
@@ -122,6 +109,5 @@
 
 ---@class PullsUICapability
 ---@field setup fun()|nil
----@field render (fun(pulls: PullRequest[], layout: "compact"|"grouped"|"plain", opts: { width: integer }): PullsMainRenderResult)|nil
 ---@field detail PullsProviderDetail|nil
 ---@field repo_detail PullsProviderRepoDetail|nil

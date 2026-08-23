@@ -5,7 +5,7 @@ local highlights = require("atlas.ui.shared.highlights")
 local spinner = require("atlas.ui.components.spinner")
 local table_tree = require("atlas.ui.components.table_tree")
 local utils = require("atlas.ui.shared.utils")
-local presentation = require("atlas.pulls.ui.dashboard.helper")
+local presentation = require("atlas.pulls.ui.presentation")
 
 ---@return PullsDetailHeaderRow
 function M.loading_assignee_row()

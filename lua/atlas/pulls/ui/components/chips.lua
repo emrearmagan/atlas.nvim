@@ -1,6 +1,6 @@
 local M = {}
 
-local presentation = require("atlas.pulls.ui.dashboard.helper")
+local presentation = require("atlas.pulls.ui.presentation")
 local providers = require("atlas.pulls.providers")
 local icons = require("atlas.ui.shared.icons")
 local utils = require("atlas.ui.shared.utils")

@@ -309,7 +309,6 @@ return {
 		actions = actions,
 		ui = {
 			setup = require("atlas.pulls.providers.github.highlights").setup,
-			render = require("atlas.pulls.providers.github.ui.main").render,
 			detail = require("atlas.pulls.providers.github.ui.detail"),
 			repo_detail = require("atlas.pulls.providers.github.ui.repo_detail"),
 		},

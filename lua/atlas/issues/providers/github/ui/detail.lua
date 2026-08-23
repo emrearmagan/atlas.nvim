@@ -2,7 +2,7 @@
 local M = {}
 
 local icons = require("atlas.ui.shared.icons")
-local helper = require("atlas.issues.ui.dashboard.helper")
+local helper = require("atlas.issues.ui.presentation")
 local spinner = require("atlas.ui.components.spinner")
 
 ---@param body string|nil

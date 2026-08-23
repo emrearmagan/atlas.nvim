@@ -3,7 +3,7 @@ local M = {}
 local utils = require("atlas.ui.shared.utils")
 local icons = require("atlas.ui.shared.icons")
 local threads = require("atlas.ui.components.threadsv2")
-local helper = require("atlas.issues.ui.dashboard.helper")
+local helper = require("atlas.issues.ui.presentation")
 
 local COLLAPSE_KEEP = 2
 local COLLAPSE_THRESHOLD = 4

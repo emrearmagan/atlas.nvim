@@ -1,6 +1,6 @@
 local M = {}
 
-local helper = require("atlas.pulls.ui.dashboard.helper")
+local presentation = require("atlas.pulls.ui.presentation")
 local icons = require("atlas.ui.shared.icons")
 local utils = require("atlas.ui.shared.utils")
 
@@ -18,15 +18,15 @@ end
 
 local function generic_rows(pr)
 	local state = tostring(pr.state or "-")
-	local author = helper.user_handle(pr.author)
+	local author = presentation.user_handle(pr.author)
 	local repo = tostring(pr.repo_full_name or "")
 	local branch = tostring((pr.source or {}).branch or "?")
 		.. " → "
 		.. tostring((pr.destination or {}).branch or "?")
 	return {
-		{ "State", state, helper.pr_state_hl(state) },
-		{ "Author", author, helper.author_hl(author) },
-		{ "Repo", repo ~= "" and repo or "-", repo ~= "" and helper.repo_hl(repo) or "AtlasTextMuted" },
+		{ "State", state, presentation.pr_state_hl(state) },
+		{ "Author", author, presentation.author_hl(author) },
+		{ "Repo", repo ~= "" and repo or "-", repo ~= "" and presentation.repo_hl(repo) or "AtlasTextMuted" },
 		{ "Branch", branch, "AtlasTextMuted" },
 		{ "Comments", tostring(pr.comments_count or 0), "AtlasTextMuted" },
 		{ "Created", utils.relative_time(pr.created_on), "AtlasTextMuted" },
@@ -104,7 +104,7 @@ local function gitlab_rows(pr)
 
 	local reviewers = {}
 	for _, reviewer in ipairs(pr.reviewers or {}) do
-		local name = helper.user_handle(reviewer)
+		local name = presentation.user_handle(reviewer)
 		if name ~= "" then
 			reviewers[#reviewers + 1] = "@" .. name
 		end

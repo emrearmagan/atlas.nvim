@@ -1,14 +1,307 @@
 local M = {}
 
-local state = require("atlas.pulls.state")
-local helper = require("atlas.pulls.ui.dashboard.helper")
 local header = require("atlas.ui.components.header")
 local icons = require("atlas.ui.shared.icons")
 local navbar = require("atlas.ui.components.navbar")
+local presentation = require("atlas.pulls.ui.presentation")
+local providers = require("atlas.pulls.ui.dashboard.providers")
+local state = require("atlas.pulls.state")
+local statusline = require("atlas.ui.statusline")
 local table_tree = require("atlas.ui.components.table_tree")
 local ui_utils = require("atlas.ui.utils")
 local utils = require("atlas.ui.shared.utils")
-local statusline = require("atlas.ui.statusline")
+
+local PR_ICON, PR_ICON_HL = icons.pulls("pr")
+local MERGED_PR_ICON, MERGED_PR_ICON_HL = icons.pulls("merged_pr")
+local DECLINED_PR_ICON, DECLINED_PR_ICON_HL = icons.pulls("declined_pr")
+local REPO_ICON = icons.pulls("repo")
+local STAR_ICON, STAR_ICON_HL = icons.general("star")
+
+local PR_STATE_ICON = {
+	open = { PR_ICON, PR_ICON_HL },
+	draft = { PR_ICON, "AtlasPRDraft" },
+	merged = { MERGED_PR_ICON, MERGED_PR_ICON_HL },
+	declined = { DECLINED_PR_ICON, DECLINED_PR_ICON_HL },
+}
+
+---@param pr PullRequest
+---@return string, string
+local function pr_icon(pr)
+	local style = PR_STATE_ICON[tostring(pr.state or ""):lower()] or PR_STATE_ICON.open
+	return style[1], style[2]
+end
+
+---@param pr PullRequest
+---@return string
+local function displayed_pr_icon(pr)
+	if state.is_pr_reloading(pr.repo_full_name, pr.id) then
+		return state.reload_spinner_frame or "⠋"
+	end
+	return pr_icon(pr)
+end
+
+---@param pulls PullRequest[]
+---@return PullRequest[]
+local function starred_first(pulls)
+	local starred, rest = {}, {}
+	for _, pr in ipairs(pulls) do
+		table.insert(pr.is_starred and starred or rest, pr)
+	end
+	return vim.list_extend(starred, rest)
+end
+
+---@param pulls PullRequest[]
+---@return { repo: PullsRepo, pulls: PullRequest[] }[]
+local function group_by_repo(pulls)
+	local groups, by_repo = {}, {}
+	for _, pr in ipairs(pulls) do
+		local group = by_repo[pr.repo_full_name]
+		if group == nil then
+			group = { repo = presentation.repo(pr), pulls = {} }
+			by_repo[pr.repo_full_name] = group
+			table.insert(groups, group)
+		end
+		table.insert(group.pulls, pr)
+	end
+	return groups
+end
+
+---@param pulls PullRequest[]
+---@return table[]
+local function statusline_items(pulls)
+	local repo_names, seen = {}, {}
+	for _, pr in ipairs(pulls) do
+		local name = pr.repo_full_name
+		if name ~= nil and name ~= "" and not seen[name] then
+			seen[name] = true
+			table.insert(repo_names, name)
+		end
+	end
+	local items = {
+		{
+			text = string.format("%s %d PR%s", PR_ICON, #pulls, #pulls == 1 and "" or "s"),
+			hl_group = "AtlasFooterInfo",
+		},
+	}
+	local user = state.current_user or {}
+	local user_name = tostring(user.username or user.name or "")
+	if user_name ~= "" then
+		table.insert(items, {
+			text = string.format("%s @%s", icons.general("user"), user_name),
+			hl_group = "AtlasFooterText",
+			priority = 50,
+			min_width = 8,
+		})
+	end
+	if #repo_names > 0 then
+		table.insert(items, {
+			text = string.format("%s %s", REPO_ICON, table.concat(repo_names, ", ")),
+			hl_group = "AtlasFooterText",
+			priority = 10,
+			min_width = 8,
+		})
+	end
+	return items
+end
+
+---@param row table
+---@param col table
+---@param ctx { text: string, padded: string, width: integer }
+---@param display table
+---@return table[]|nil
+local function cell_hl(row, col, ctx, display)
+	local provider_hl = display.highlight(row, col, ctx)
+	if provider_hl ~= nil then
+		return provider_hl
+	end
+	if col.key == "repo_pr" and ctx.text:find(STAR_ICON, 1, true) == 1 then
+		return { { start_col = 0, end_col = #STAR_ICON, hl_group = STAR_ICON_HL } }
+	end
+	if col.key == "name" and row.kind == "repo" then
+		return { { start_col = 0, end_col = #ctx.text, hl_group = "AtlasSectionHeader" } }
+	end
+	if col.key == "name" and row.kind == "pr" then
+		local icon_hl = row._pr_reloading and "AtlasTextMuted" or (row._pr_icon_hl or "AtlasPROpen")
+		local icon = row._pr_icon_str or PR_ICON
+		local spans = {}
+		if ctx.text:find(icon .. " " .. STAR_ICON .. " ", 1, true) == 1 then
+			table.insert(spans, {
+				start_col = #icon + 1,
+				end_col = #icon + 1 + #STAR_ICON,
+				hl_group = STAR_ICON_HL,
+			})
+		end
+		local start = ctx.text:find(icon, 1, true)
+		if start ~= nil then
+			start = start - 1
+			table.insert(spans, { start_col = start, end_col = start + #icon, hl_group = icon_hl })
+			return spans
+		end
+		table.insert(spans, {
+			start_col = 0,
+			end_col = #(state.reload_spinner_frame or "⠋"),
+			hl_group = icon_hl,
+		})
+		return spans
+	end
+	if col.key == "pr_icon" then
+		local hl = row.kind == "pr" and (row._pr_reloading and "AtlasTextMuted" or row._pr_icon_hl) or "AtlasTextMuted"
+		return { { start_col = 0, end_col = #ctx.padded, hl_group = hl } }
+	end
+	if col.key == "created" or col.key == "updated" or (row.kind == "meta" and col.key == "repo_pr") then
+		return { { start_col = 0, end_col = #ctx.padded, hl_group = "AtlasTextMuted" } }
+	end
+	if col.key == "author" then
+		return {
+			{
+				start_col = 0,
+				end_col = #ctx.padded,
+				hl_group = presentation.author_hl(row.author_hl or row.author),
+			},
+		}
+	end
+end
+
+---@param row table
+---@param values table
+local function add_values(row, values)
+	for key, value in pairs(values) do
+		row[key] = value
+	end
+end
+
+---@param pulls PullRequest[]
+---@param display table
+---@return table[]
+local function compact_rows(pulls, display)
+	local rows = {}
+	for _, pr in ipairs(pulls) do
+		local repo = presentation.repo(pr)
+		local icon, icon_hl = pr_icon(pr)
+		local author = presentation.user_handle(pr.author)
+		local row = {
+			kind = "pr",
+			pr_icon = displayed_pr_icon(pr),
+			_pr_reloading = state.is_pr_reloading(pr.repo_full_name, pr.id),
+			_pr_icon_str = icon,
+			_pr_icon_hl = icon_hl,
+			repo_pr = (pr.is_starred and STAR_ICON .. " " or "")
+				.. display.reference
+				.. tostring(pr.id or "")
+				.. " "
+				.. tostring(pr.title or ""),
+			conversation = tostring(pr.comments_count or 0),
+			author = string.format("%s %s", icons.general("user"), utils.shorten_name(author, 20)),
+			author_hl = author,
+			created = utils.relative_time(pr.created_on),
+			updated = utils.relative_time(pr.updated_on),
+			_item = { kind = "pr", id = pr.id, repo = repo, pr = pr },
+		}
+		add_values(row, display.values(pr))
+		table.insert(rows, row)
+		table.insert(rows, {
+			kind = "meta",
+			pr_icon = "",
+			repo_pr = repo.name,
+			separator = true,
+			_item = { kind = "pr_meta", id = pr.id, repo = repo, pr = pr },
+		})
+	end
+	return rows
+end
+
+---@param pulls PullRequest[]
+---@param layout "grouped"|"plain"
+---@param display table
+---@return table[]
+local function list_rows(pulls, layout, display)
+	local grouped = layout == "grouped"
+	local groups = group_by_repo(pulls)
+	if not grouped then
+		groups = {}
+		for _, pr in ipairs(pulls) do
+			table.insert(groups, { repo = presentation.repo(pr), pulls = { pr } })
+		end
+	end
+
+	local rows = {}
+	for group_index, group in ipairs(groups) do
+		if grouped then
+			if group_index > 1 then
+				table.insert(rows, { kind = "spacer" })
+			end
+			table.insert(rows, {
+				kind = "repo",
+				name = group.repo.name,
+				_item = { kind = "repo", repo = group.repo },
+			})
+			table.insert(rows, { kind = "spacer" })
+		end
+		for pr_index, pr in ipairs(group.pulls) do
+			if not grouped and #rows > 0 then
+				table.insert(rows, { kind = "spacer" })
+			end
+			local repo = group.repo
+			local icon = displayed_pr_icon(pr)
+			local _, icon_hl = pr_icon(pr)
+			local author = presentation.user_handle(pr.author)
+			local row = {
+				kind = "pr",
+				_pr_reloading = state.is_pr_reloading(pr.repo_full_name, pr.id),
+				_pr_icon_str = icon,
+				_pr_icon_hl = icon_hl,
+				name = icon .. " " .. (pr.is_starred and STAR_ICON .. " " or "") .. display.reference .. tostring(
+					pr.id or ""
+				) .. " " .. tostring(pr.title or ""),
+				conversation = tostring(pr.comments_count or 0),
+				author = string.format("%s %s", icons.general("user"), utils.shorten_name(author, 20)),
+				author_hl = author,
+				created = utils.relative_time(pr.created_on),
+				updated = utils.relative_time(pr.updated_on),
+				_item = { kind = "pr", id = pr.id, repo = repo, pr = pr },
+			}
+			add_values(row, display.values(pr))
+			table.insert(rows, row)
+			if grouped and pr_index < #group.pulls then
+				table.insert(rows, { kind = "spacer" })
+			end
+		end
+	end
+	return rows
+end
+
+---@param pulls PullRequest[]
+---@param layout "compact"|"grouped"|"plain"
+---@param width integer
+---@param display table
+---@return string[], table[], table<integer, table>
+local function render_table(pulls, layout, width, display)
+	local compact = layout ~= "grouped" and layout ~= "plain"
+	local lines, line_map, spans = table_tree.render({
+		width = width,
+		margin = 1,
+		columns = compact and display.columns.compact or display.columns.list,
+		rows = compact and compact_rows(pulls, display) or list_rows(pulls, layout, display),
+		cell_hl = function(row, col, ctx)
+			return cell_hl(row, col, ctx, display)
+		end,
+	})
+	for lnum, item in pairs(line_map) do
+		if item.kind == "pr" then
+			local reference = display.reference .. tostring(item.pr.id)
+			local start, finish = lines[lnum]:find(reference, 1, true)
+			if start ~= nil then
+				table.insert(spans, {
+					line = lnum - 1,
+					start_col = start - 1,
+					end_col = finish,
+					hl_group = "AtlasTextMuted",
+				})
+			end
+		end
+	end
+	return lines, spans, line_map
+end
 
 ---@param lines string[]
 ---@param text string
@@ -33,7 +326,6 @@ local function append_search_text(lines, spans)
 	if type(view) ~= "table" or view._kind ~= nil or state.provider == nil then
 		return
 	end
-
 	local text = state.provider.capabilities.core.search_query(view, {})
 	if text == "" then
 		return
@@ -44,139 +336,56 @@ local function append_search_text(lines, spans)
 	table.insert(lines, "")
 end
 
----@param table_lines string[]
----@param table_map table<integer, table>
----@param table_spans table[]
-local function add_pr_reference_spans(table_lines, table_map, table_spans)
-	for lnum, item in pairs(table_map or {}) do
-		if item.kind == "pr" then
-			local line = table_lines[lnum] or ""
-			local reference = "#" .. tostring(item.pr.id)
-			local s, e = string.find(line, reference, 1, true)
-			if s and e then
-				table.insert(table_spans, {
-					line = lnum - 1,
-					start_col = s - 1,
-					end_col = e,
-					hl_group = "AtlasTextMuted",
-				})
-			end
-		end
-	end
-end
-
----@param opts { width: integer }
----@param pulls PullRequest[]
----@return string[], table[], table<integer, table>
-local function build_compact_content(opts, pulls)
-	local table_data = helper.build_compact_table(pulls)
-	local tbl_lines, tbl_map, tbl_spans = table_tree.render({
-		width = opts.width,
-		margin = 1,
-		columns = table_data.columns,
-		rows = table_data.rows,
-		cell_hl = helper.cell_hl,
-	})
-	add_pr_reference_spans(tbl_lines, tbl_map, tbl_spans)
-	return tbl_lines, tbl_spans, tbl_map
-end
-
----@param opts { width: integer }
----@param pulls PullRequest[]
----@param layout "grouped"|"plain"
----@return string[], table[], table<integer, table>
-local function build_list_content(opts, pulls, layout)
-	local table_data = helper.build_list_table(pulls, layout)
-	local tbl_lines, tbl_map, tbl_spans = table_tree.render({
-		width = opts.width,
-		margin = 1,
-		columns = table_data.columns,
-		rows = table_data.rows,
-		cell_hl = helper.cell_hl,
-	})
-	add_pr_reference_spans(tbl_lines, tbl_map, tbl_spans)
-	return tbl_lines, tbl_spans, tbl_map
-end
-
 ---@param lines string[]
 ---@param spans table[]
 ---@param width integer
 local function render_header(lines, spans, width)
-	---@param v AtlasPullsViewConfig|nil
-	---@return string
-	local function view_id_str(v)
-		if v == nil then
-			return ""
-		end
-		return tostring(v.key or v.name or "")
+	local function view_id(view)
+		return view and tostring(view.key or view.name or "") or ""
 	end
-
 	local icon = state.provider and state.provider.icon or icons.fallback()
 	local title = state.provider and state.provider.name or "Atlas"
-	local hl_group = state.provider and state.provider.hl_group or "Title"
+	local hl = state.provider and state.provider.hl_group or "Title"
+	utils.append_block(lines, spans, header.render({ width = width, icon = icon, title = title, hl_group = hl }))
 
-	utils.append_block(
-		lines,
-		spans,
-		header.render({
-			width = width,
-			icon = icon,
-			title = title,
-			hl_group = hl_group,
-		})
-	)
-
-	local views = state.provider and require("atlas.ui.shared.bookmarks_view").views(state.provider, "pulls") or {}
-	local nav_source = {}
-	for _, v in ipairs(views or {}) do
-		table.insert(nav_source, v)
-	end
-
-	local active = state.active_view
-	local active_id = view_id_str(active)
-	local exists = false
-	for _, v in ipairs(nav_source) do
-		if view_id_str(v) == active_id then
-			exists = true
+	local source = state.provider and require("atlas.ui.shared.bookmarks_view").views(state.provider, "pulls") or {}
+	local views = vim.list_extend({}, source)
+	local active_id = view_id(state.active_view)
+	local found = false
+	for _, view in ipairs(views) do
+		if view_id(view) == active_id then
+			found = true
 			break
 		end
 	end
-	if active ~= nil and active_id ~= "" and not exists then
-		table.insert(nav_source, active)
+	if state.active_view ~= nil and active_id ~= "" and not found then
+		table.insert(views, state.active_view)
 	end
-
 	local nav_items = {}
-	for _, v in ipairs(nav_source) do
-		local label = v.key and string.format("%s (%s)", v.name, v.key) or v.name
+	for _, view in ipairs(views) do
 		table.insert(nav_items, {
-			label = label,
-			active = view_id_str(v) == active_id,
+			label = view.key and string.format("%s (%s)", view.name, view.key) or view.name,
+			active = view_id(view) == active_id,
 		})
 	end
 
 	local actions = {}
-
-	local STATUS_ORDER = { "OPEN", "MERGED", "DECLINED" }
-	for _, s in ipairs(STATUS_ORDER) do
-		local label = s:sub(1, 1):upper() .. s:sub(2):lower()
-		local hl = state.status_filters[s] and "AtlasLogInfo" or "AtlasTextMuted"
-		table.insert(actions, { label = label, hl_group = hl })
+	for _, status in ipairs({ "OPEN", "MERGED", "DECLINED" }) do
+		local label = status:sub(1, 1):upper() .. status:sub(2):lower()
+		table.insert(actions, {
+			label = label,
+			hl_group = state.status_filters[status] and "AtlasLogInfo" or "AtlasTextMuted",
+		})
 	end
-
 	if state.provider and state.provider.capabilities.notifications then
 		table.insert(actions, { label = "|", hl_group = "AtlasTextMuted" })
-		local notif_state = require("atlas.ui.notifications.state")
-		local count = notif_state.unread_count or 0
-		local bell_icon, bell_hl
-		if count > 0 then
-			bell_icon, bell_hl = icons.general("bell_unread")
-		else
-			bell_icon, bell_hl = icons.general("bell")
-		end
-		local bell_label = count > 0 and string.format("%s %d", bell_icon, count) or bell_icon
-		table.insert(actions, { label = bell_label, hl_group = bell_hl })
+		local count = require("atlas.ui.notifications.state").unread_count or 0
+		local bell, bell_hl = icons.general(count > 0 and "bell_unread" or "bell")
+		table.insert(actions, {
+			label = count > 0 and string.format("%s %d", bell, count) or bell,
+			hl_group = bell_hl,
+		})
 	end
-
 	utils.append_block(
 		lines,
 		spans,
@@ -184,19 +393,19 @@ local function render_header(lines, spans, width)
 			width = width,
 			items = nav_items,
 			actions = actions,
-			active_hl = state.provider and state.provider.hl_group or "Title",
+			active_hl = hl,
 		})
 	)
 end
 
 ---@param opts { width: integer, height: integer }
----@return string[] lines, table[] spans, table<integer, table> line_map
+---@return string[], table[], table<integer, table>
 function M.render(opts)
-	local lines, spans = {}, {}
-	local line_map = {}
-	local pulls = helper.starred_first(state.pulls or {})
-	local loading_text = string.format("%s Loading...", state.reload_spinner_frame or "⠋")
-	statusline.set_items(helper.build_statusline_items(pulls, state.current_user))
+	local lines, spans, line_map = {}, {}, {}
+	local pulls = starred_first(state.pulls or {})
+	local display = providers.get(state.provider and state.provider.id)
+	local loading = string.format("%s Loading...", state.reload_spinner_frame or "⠋")
+	statusline.set_items(statusline_items(pulls))
 
 	table.insert(lines, "")
 	render_header(lines, spans, opts.width)
@@ -213,74 +422,46 @@ function M.render(opts)
 			opts.width,
 			active._starred
 		)
-
 		if state.error then
-			local error_text = tostring(state.error or ""):gsub("[\r\n]+", " | ")
-			local err_line = "Error: " .. error_text
+			local text = "Error: " .. tostring(state.error):gsub("[\r\n]+", " | ")
 			table.insert(lines, "")
 			utils.append_block(lines, spans, {
-				lines = { err_line },
-				highlights = {
-					{ line = 0, start_col = 0, end_col = #err_line, hl_group = "AtlasLogError" },
-				},
+				lines = { text },
+				highlights = { { line = 0, start_col = 0, end_col = #text, hl_group = "AtlasLogError" } },
 			})
 		elseif state.is_loading then
 			table.insert(lines, "")
-			append_centered_loading(lines, loading_text, opts.width, opts.height)
+			append_centered_loading(lines, loading, opts.width, opts.height)
 		elseif #pulls > 0 then
 			table.insert(lines, "")
-			local body_lines, body_spans, body_map
-			local ui = state.provider and state.provider.capabilities.ui
-			if ui and ui.render then
-				local result = ui.render(pulls, "grouped", { width = opts.width })
-				body_lines, body_spans, body_map = result.lines, result.spans, result.line_map
-			else
-				body_lines, body_spans, body_map = build_list_content(opts, pulls, "grouped")
-			end
-			local body_base = #lines
+			local body_lines, body_spans, body_map = render_table(pulls, "grouped", opts.width, display)
+			local base = #lines
 			utils.append_block(lines, spans, { lines = body_lines, highlights = body_spans })
-			for lnum, node in pairs(body_map) do
-				line_map[body_base + lnum] = node
+			for lnum, item in pairs(body_map) do
+				line_map[base + lnum] = item
 			end
 		end
-
 		return lines, spans, line_map
 	end
 
 	append_search_text(lines, spans)
-
 	if state.error then
-		local error_text = tostring(state.error or ""):gsub("[\r\n]+", " | ")
-		local err_line = "Error: " .. error_text
+		local text = "Error: " .. tostring(state.error):gsub("[\r\n]+", " | ")
 		utils.append_block(lines, spans, {
-			lines = { err_line },
-			highlights = {
-				{ line = 0, start_col = 0, end_col = #err_line, hl_group = "AtlasLogError" },
-			},
+			lines = { text },
+			highlights = { { line = 0, start_col = 0, end_col = #text, hl_group = "AtlasLogError" } },
 		})
 	elseif state.is_loading then
-		append_centered_loading(lines, loading_text, opts.width, opts.height)
+		append_centered_loading(lines, loading, opts.width, opts.height)
 	else
 		local layout = state.active_view and state.active_view.layout or "compact"
-		local body_lines, body_spans, body_map
-
-		local ui = state.provider and state.provider.capabilities.ui
-		if ui and ui.render then
-			local result = ui.render(pulls, layout, { width = opts.width })
-			body_lines, body_spans, body_map = result.lines, result.spans, result.line_map
-		elseif layout == "grouped" or layout == "plain" then
-			body_lines, body_spans, body_map = build_list_content(opts, pulls, layout)
-		else
-			body_lines, body_spans, body_map = build_compact_content(opts, pulls)
-		end
-
-		local body_base = #lines
+		local body_lines, body_spans, body_map = render_table(pulls, layout, opts.width, display)
+		local base = #lines
 		utils.append_block(lines, spans, { lines = body_lines, highlights = body_spans })
-		for lnum, node in pairs(body_map) do
-			line_map[body_base + lnum] = node
+		for lnum, item in pairs(body_map) do
+			line_map[base + lnum] = item
 		end
 	end
-
 	return lines, spans, line_map
 end
 

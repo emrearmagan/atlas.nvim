@@ -1,7 +1,7 @@
 local M = {}
 
 local state = require("atlas.issues.state")
-local helper = require("atlas.issues.ui.dashboard.helper")
+local helper = require("atlas.issues.ui.presentation")
 local icons = require("atlas.ui.shared.icons")
 local utils = require("atlas.ui.shared.utils")
 

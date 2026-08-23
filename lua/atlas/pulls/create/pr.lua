@@ -7,7 +7,7 @@ local keymaps = require("atlas.core.keymaps")
 local logger = require("atlas.core.logger")
 local picker = require("atlas.picker")
 local description = require("atlas.pulls.create.description")
-local pulls_helper = require("atlas.pulls.ui.dashboard.helper")
+local presentation = require("atlas.pulls.ui.presentation")
 local notify = require("atlas.core.notify")
 
 ---@class CreatePRFields
@@ -104,11 +104,11 @@ local function meta_rows(pr_state)
 
 	local branch_value = string.format("%s → %s", head, base)
 	local status = draft and "DRAFT" or "READY"
-	local status_hl = draft and pulls_helper.pr_state_hl("draft") or pulls_helper.pr_state_hl("open")
+	local status_hl = draft and presentation.pr_state_hl("draft") or presentation.pr_state_hl("open")
 	local commit_label = commit_count == 1 and "1 commit" or string.format("%d commits", commit_count)
 
 	return {
-		{ "Repo:", { text = repo, hl = pulls_helper.repo_hl(repo) }, "Status:", { text = status, hl = status_hl } },
+		{ "Repo:", { text = repo, hl = presentation.repo_hl(repo) }, "Status:", { text = status, hl = status_hl } },
 		{ "Branch:", branch_value, "Commits:", commit_label },
 		{ "Reviewers:", reviewers_value(pr_state), "", "" },
 	}

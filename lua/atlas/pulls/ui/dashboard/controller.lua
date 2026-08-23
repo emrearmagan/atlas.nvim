@@ -4,13 +4,14 @@ local notify = require("atlas.core.notify")
 local spinner = require("atlas.ui.components.spinner")
 local state = require("atlas.pulls.state")
 local dashboard_host = require("atlas.ui.dashboard")
-local helper = require("atlas.pulls.ui.dashboard.helper")
+local presentation = require("atlas.pulls.ui.presentation")
 local navigation = require("atlas.ui.navigation")
 local info_popup = require("atlas.ui.popups.info")
+local requests = require("atlas.core.requests")
 local starred = require("atlas.core.starred")
 
-local active_pullrequests_handle = nil
-local active_pr_reload_handles = {}
+local active_requests = requests.new()
+local pr_reload_requests = requests.new()
 
 ---@param pulls PullRequest[]
 ---@return PullRequest[]
@@ -73,7 +74,7 @@ local function replace_pr(updated)
 	if not updated.is_starred then
 		return true, nil
 	end
-	local _, err = starred.add(updated, state.provider.id, helper.repo(updated))
+	local _, err = starred.add(updated, state.provider.id, presentation.repo(updated))
 	return true, err
 end
 
@@ -137,27 +138,16 @@ local function end_pr_reload(repo_id, pr_id)
 	render_if_active()
 end
 
-local function cancel_pr_reload_handles()
-	for _, handle in ipairs(active_pr_reload_handles) do
-		if handle ~= nil and handle.cancel then
-			pcall(handle.cancel)
-		end
-	end
-	active_pr_reload_handles = {}
-end
-
 local function reset_reload_state()
 	stop_loading_spinner()
 	state.reloading_pr_keys = {}
 end
 
 local function cancel_active_requests()
-	if active_pullrequests_handle ~= nil and active_pullrequests_handle.cancel then
-		pcall(active_pullrequests_handle.cancel)
-	end
-	active_pullrequests_handle = nil
-
-	cancel_pr_reload_handles()
+	active_requests.cancel()
+	active_requests = requests.new()
+	pr_reload_requests.cancel()
+	pr_reload_requests = requests.new()
 	reset_reload_state()
 end
 
@@ -205,14 +195,9 @@ local function load_starred(view, on_done)
 	end
 end
 
----@return integer
-local function next_request_token()
-	state.request_seq = (state.request_seq or 0) + 1
-	return state.request_seq
-end
-
+---@param scope AtlasRequestScope
 ---@param on_done fun(err: string|nil)
-local function get_current_user(on_done)
+local function get_current_user(scope, on_done)
 	if state.current_user ~= nil then
 		on_done(nil)
 		return
@@ -222,7 +207,9 @@ local function get_current_user(on_done)
 		on_done("no provider")
 		return
 	end
-	provider.capabilities.core.fetch_user(function(user, err)
+	scope.run(function(done)
+		return provider.capabilities.core.fetch_user(done)
+	end, function(user, err)
 		if err ~= nil then
 			on_done(tostring(err))
 			return
@@ -263,10 +250,8 @@ local function load_active_view(opts, on_done)
 		return
 	end
 
-	local target_view_id = helper.view_id(target_view)
-	local token = next_request_token()
-	state.latest_request_tokens[target_view_id] = token
 	cancel_active_requests()
+	local load_requests = active_requests
 
 	state.is_loading = true
 	state.error = nil
@@ -274,23 +259,9 @@ local function load_active_view(opts, on_done)
 	notify.loading("Loading pull requests...")
 	render_if_active()
 
-	---@return boolean
-	local function is_stale_request()
-		if not helper.same_view(state.active_view, target_view) then
-			return true
-		end
-		if state.latest_request_tokens[target_view_id] ~= token then
-			return true
-		end
-		return false
-	end
-
 	---@param pulls PullRequest[]
 	---@param err string[]|string|nil
 	local function finalize_fetch(pulls, err)
-		if is_stale_request() then
-			return
-		end
 		state.is_loading = false
 		sync_loading_spinner()
 		state.current_view = state.active_view
@@ -325,24 +296,13 @@ local function load_active_view(opts, on_done)
 	end
 
 	local function fetch_pull_requests()
-		if is_stale_request() then
-			return
-		end
-		active_pullrequests_handle = core.fetch_pullrequests(
-			target_view,
-			{ force_load = opts.force_load == true },
-			function(pulls, err)
-				active_pullrequests_handle = nil
-				finalize_fetch(pulls, err)
-			end
-		)
+		load_requests.run(function(done)
+			return core.fetch_pullrequests(target_view, { force_load = opts.force_load == true }, done)
+		end, finalize_fetch)
 	end
 
 	if state.current_user == nil then
-		get_current_user(function(user_err)
-			if is_stale_request() then
-				return
-			end
+		get_current_user(load_requests, function(user_err)
 			if user_err then
 				notify.warn(string.format("Failed to fetch current user: %s", tostring(user_err)))
 			else
@@ -369,6 +329,7 @@ local function load_bookmark(view, force_load, on_done)
 	end
 
 	cancel_active_requests()
+	local load_requests = active_requests
 	state.is_loading = true
 	state.error = nil
 	state.pulls = nil
@@ -377,33 +338,30 @@ local function load_bookmark(view, force_load, on_done)
 	notify.loading("Running query...")
 	render_if_active()
 
-	active_pullrequests_handle = provider.capabilities.core.fetch_pullrequests(
-		view,
-		{ force_load = force_load },
-		function(pulls, err)
-			active_pullrequests_handle = nil
-			state.is_loading = false
-			sync_loading_spinner()
-			local first_err = type(err) == "table" and err[1] or err
-			if first_err and #pulls == 0 then
-				state.error = tostring(first_err)
-				state.pulls = {}
-				notify.error(string.format("Query failed: %s", state.error))
+	load_requests.run(function(done)
+		return provider.capabilities.core.fetch_pullrequests(view, { force_load = force_load }, done)
+	end, function(pulls, err)
+		state.is_loading = false
+		sync_loading_spinner()
+		local first_err = type(err) == "table" and err[1] or err
+		if first_err and #pulls == 0 then
+			state.error = tostring(first_err)
+			state.pulls = {}
+			notify.error(string.format("Query failed: %s", state.error))
+		else
+			state.error = nil
+			state.pulls = mark_starred(pulls)
+			if first_err then
+				notify.warn(string.format("Some repositories failed: %s", tostring(first_err)))
 			else
-				state.error = nil
-				state.pulls = mark_starred(pulls)
-				if first_err then
-					notify.warn(string.format("Some repositories failed: %s", tostring(first_err)))
-				else
-					notify.success("Pull requests loaded", { timeout = 1200 })
-				end
-			end
-			render_if_active()
-			if on_done then
-				on_done()
+				notify.success("Pull requests loaded", { timeout = 1200 })
 			end
 		end
-	)
+		render_if_active()
+		if on_done then
+			on_done()
+		end
+	end)
 end
 
 ---@param on_done fun()|nil
@@ -496,15 +454,9 @@ function M.refresh_pr(pr, on_done)
 	notify.loading(string.format("Reloading PR #%s...", tostring(pr_id)))
 	begin_pr_reload(repo_id, pr_id)
 
-	local reload_handle = nil
-	reload_handle = core.fetch_pullrequest(pr, { force_load = true }, function(fetched_pr, err)
-		for i = #active_pr_reload_handles, 1, -1 do
-			if active_pr_reload_handles[i] == reload_handle then
-				table.remove(active_pr_reload_handles, i)
-				break
-			end
-		end
-
+	pr_reload_requests.run(function(done)
+		return core.fetch_pullrequest(pr, { force_load = true }, done)
+	end, function(fetched_pr, err)
 		if err ~= nil or fetched_pr == nil then
 			end_pr_reload(repo_id, pr_id)
 			notify.error(tostring(err or "Failed to reload PR"))
@@ -537,7 +489,6 @@ function M.refresh_pr(pr, on_done)
 		end
 		on_done()
 	end)
-	table.insert(active_pr_reload_handles, reload_handle)
 end
 
 ---@param source_buf integer|nil
@@ -635,7 +586,6 @@ function M.toggle_status_filter(status)
 end
 
 function M.dispose()
-	state.latest_request_tokens = {}
 	state.is_loading = false
 	cancel_active_requests()
 end

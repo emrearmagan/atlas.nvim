@@ -304,7 +304,7 @@ function M.to_comments_list(raw, context)
 end
 
 local icons = require("atlas.ui.shared.icons")
-local helper = require("atlas.issues.ui.dashboard.helper")
+local helper = require("atlas.issues.ui.presentation")
 
 local FIELD_LABELS = {
 	Comment = "a comment",

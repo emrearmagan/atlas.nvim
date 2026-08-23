@@ -8,6 +8,7 @@ local table_tree = require("atlas.ui.components.table_tree")
 local utils = require("atlas.ui.shared.utils")
 local statusline = require("atlas.ui.statusline")
 local icons = require("atlas.ui.shared.icons")
+local providers = require("atlas.issues.ui.dashboard.providers")
 local STAR_ICON, STAR_ICON_HL = icons.general("star")
 
 ---@param view IssuesViewConfig|nil
@@ -54,21 +55,8 @@ end
 ---@param layout "plain"|"compact"
 ---@return table
 local function issue_to_row(issue, is_child, layout)
-	local provider = state.provider
-	local row_data
-	local ui = provider and provider.capabilities.ui
-	if ui and ui.format_row then
-		row_data = ui.format_row(issue, is_child == true, layout)
-	end
-	if row_data == nil then
-		row_data = {
-			icon = "",
-			name = (issue.key or "") .. " " .. (issue.title or ""),
-			assignee = (issue.assignee and issue.assignee.display_name) or "Unassigned",
-			reporter = (issue.reporter and issue.reporter.display_name) or "Unknown",
-			status = string.format(" %s ", issue.status or ""),
-		}
-	end
+	local display = providers.get(state.provider and state.provider.id)
+	local row_data = display.values(issue, is_child == true, layout)
 
 	if issue.is_starred then
 		row_data.name = STAR_ICON .. " " .. row_data.name
@@ -79,9 +67,20 @@ local function issue_to_row(issue, is_child, layout)
 	return row_data
 end
 
+---@param columns table[]
+---@return table
+local function blank_row(columns)
+	local row = {}
+	for _, column in ipairs(columns) do
+		row[column.key] = ""
+	end
+	return row
+end
+
 ---@param issue_groups IssuesGroup[]
+---@param columns table[]
 ---@return table[]
-local function issues_to_rows(issue_groups)
+local function issues_to_rows(issue_groups, columns)
 	local rows = {}
 	for i, group in ipairs(issue_groups) do
 		local children = group.children or {}
@@ -100,15 +99,10 @@ local function issues_to_rows(issue_groups)
 		table.insert(rows, root_row)
 
 		if i < #issue_groups then
-			table.insert(rows, {
-				kind = "separator",
-				icon = "",
-				name = "",
-				assignee = "",
-				reporter = "",
-				status = "",
-				children = {},
-			})
+			local separator = blank_row(columns)
+			separator.kind = "separator"
+			separator.children = {}
+			table.insert(rows, separator)
 		end
 	end
 	return rows
@@ -134,44 +128,21 @@ local cell_hl
 ---@param issue_groups IssuesGroup[]
 ---@return string[], table<integer, table>, table[]
 local function render_issue_table(opts, issue_groups)
-	local rows = issues_to_rows(issue_groups)
+	local display = providers.get(state.provider and state.provider.id)
+	local columns = display.columns("plain")
+	local rows = issues_to_rows(issue_groups, columns)
 	if state.is_loading then
-		table.insert(rows, {
-			icon = "",
-			name = "",
-			assignee = "",
-			reporter = "",
-			status = "",
-		})
-		table.insert(rows, {
-			icon = state.reload_spinner_frame or "⠋",
-			name = "Loading...",
-			assignee = "",
-			reporter = "",
-			status = "",
-		})
+		table.insert(rows, blank_row(columns))
+		local loading = blank_row(columns)
+		loading.icon = state.reload_spinner_frame or "⠋"
+		loading.name = "Loading..."
+		table.insert(rows, loading)
 	end
 
 	return table_tree.render({
 		width = opts.width,
 		margin = 1,
-		columns = {
-			{ key = "icon", name = "", can_grow = false, align = "center" },
-			{ key = "name", name = "Issue" },
-			{
-				key = "assignee",
-				name = string.format("%s Assignee", icons.general("user")),
-				max_width = 22,
-				can_grow = false,
-			},
-			{
-				key = "reporter",
-				name = string.format("%s Reporter", icons.general("user")),
-				max_width = 22,
-				can_grow = false,
-			},
-			{ key = "status", name = " Status", can_grow = false },
-		},
+		columns = columns,
 		rows = rows,
 		tree = {
 			column_key = "icon",
@@ -191,32 +162,6 @@ local function render_issue_table(opts, issue_groups)
 		},
 		cell_hl = cell_hl,
 	})
-end
-
----@return table[]
-local function compact_columns()
-	return {
-		{ key = "icon", name = "", can_grow = false, align = "center" },
-		{ key = "name", name = "Issue" },
-		{
-			key = "assignee",
-			name = string.format("%s Assignee", icons.general("user")),
-			max_width = 22,
-			can_grow = false,
-		},
-		{
-			key = "reporter",
-			name = string.format("%s Reporter", icons.general("user")),
-			max_width = 22,
-			can_grow = false,
-		},
-		{ key = "status", name = " Status", can_grow = false },
-	}
-end
-
----@return table
-local function compact_blank_row()
-	return { icon = "", name = "", assignee = "", reporter = "", status = "" }
 end
 
 ---@param issue Issue
@@ -245,17 +190,22 @@ local function issue_meta_text(issue)
 end
 
 ---@param issues Issue[]|nil
----@return table[]
+---@return table[], table[]
 local function compact_rows(issues)
+	local display = providers.get(state.provider and state.provider.id)
+	local columns = display.columns("compact")
 	local rows = {}
 	for _, issue in ipairs(issues or {}) do
 		local row = issue_to_row(issue, false, "compact")
 		row.children = nil
 		table.insert(rows, row)
 
-		local meta_text = issue_meta_text(issue)
+		local meta_text = row._meta
+		if meta_text == nil then
+			meta_text = issue_meta_text(issue)
+		end
 		if meta_text ~= "" then
-			local meta = compact_blank_row()
+			local meta = blank_row(columns)
 			meta.kind = "meta"
 			meta.name = meta_text
 			meta.separator = true
@@ -266,17 +216,17 @@ local function compact_rows(issues)
 		end
 	end
 
-	return rows
+	return rows, columns
 end
 
 ---@param opts { width: integer }
 ---@param issues Issue[]|nil
 ---@return string[], table<integer, table>, table[]
 local function render_compact_table(opts, issues)
-	local rows = compact_rows(issues)
+	local rows, columns = compact_rows(issues)
 	if state.is_loading then
-		table.insert(rows, compact_blank_row())
-		local loading = compact_blank_row()
+		table.insert(rows, blank_row(columns))
+		local loading = blank_row(columns)
 		loading.icon = state.reload_spinner_frame or "⠋"
 		loading.name = "Loading..."
 		table.insert(rows, loading)
@@ -285,7 +235,7 @@ local function render_compact_table(opts, issues)
 	return table_tree.render({
 		width = opts.width,
 		margin = 1,
-		columns = compact_columns(),
+		columns = columns,
 		rows = rows,
 		cell_hl = cell_hl,
 	})
@@ -302,12 +252,8 @@ function cell_hl(row, col, ctx)
 	if col.key == "icon" and row._fold_icon_hl then
 		return { { start_col = 0, end_col = #ctx.padded, hl_group = row._fold_icon_hl } }
 	end
-	local provider = state.provider
-	local ui = provider and provider.capabilities.ui
-	local spans
-	if ui and ui.cell_hl then
-		spans = ui.cell_hl(row, col, ctx)
-	end
+	local display = providers.get(state.provider and state.provider.id)
+	local spans = display.highlights and display.highlights(row, col, ctx) or nil
 	if col.key == "name" and row._issue and row._issue.is_starred then
 		spans = spans or {}
 		table.insert(spans, 1, { start_col = 0, end_col = #STAR_ICON, hl_group = STAR_ICON_HL })
@@ -441,16 +387,7 @@ function M.render(opts)
 			table.insert(lines, "Loading...")
 		elseif #issues > 0 or #issue_groups > 0 then
 			table.insert(lines, "")
-			local tbl_lines, tbl_spans, tbl_map
-			local ui = provider and provider.capabilities.ui
-			if ui and ui.render then
-				local result = ui.render(issue_groups, "plain", { width = opts.width })
-				tbl_lines = result.lines or {}
-				tbl_spans = result.spans or {}
-				tbl_map = result.line_map or {}
-			else
-				tbl_lines, tbl_map, tbl_spans = render_issue_table(opts, issue_groups)
-			end
+			local tbl_lines, tbl_map, tbl_spans = render_issue_table(opts, issue_groups)
 			local table_base = #lines
 			utils.append_block(lines, spans, { lines = tbl_lines, highlights = tbl_spans })
 			for lnum, node in pairs(tbl_map) do
@@ -483,13 +420,7 @@ function M.render(opts)
 			table.insert(lines, "No issues found.")
 		else
 			local tbl_lines, tbl_spans, tbl_map
-			local ui = provider and provider.capabilities.ui
-			if ui and ui.render then
-				local result = ui.render(issue_groups, layout, { width = opts.width })
-				tbl_lines = result.lines or {}
-				tbl_spans = result.spans or {}
-				tbl_map = result.line_map or {}
-			elseif layout == "compact" then
+			if layout == "compact" then
 				tbl_lines, tbl_map, tbl_spans = render_compact_table(opts, issues)
 			else
 				tbl_lines, tbl_map, tbl_spans = render_issue_table(opts, issue_groups)

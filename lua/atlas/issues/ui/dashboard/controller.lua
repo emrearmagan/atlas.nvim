@@ -7,12 +7,46 @@ local state = require("atlas.issues.state")
 local dashboard_host = require("atlas.ui.dashboard")
 local navigation = require("atlas.ui.navigation")
 local info_popup = require("atlas.ui.popups.info")
-local helper = require("atlas.issues.ui.dashboard.helper")
 local requests = require("atlas.core.requests")
 local starred = require("atlas.core.starred")
 
 local active_requests = requests.new()
 local issue_reload_requests = requests.new()
+
+---@param issues Issue[]
+---@return IssuesGroup[]
+local function build_issue_tree(issues)
+	local by_key = {}
+	for _, issue in ipairs(issues or {}) do
+		if type(issue) == "table" and type(issue.key) == "string" and issue.key ~= "" then
+			by_key[issue.key] = { issue = issue, children = {} }
+		end
+	end
+
+	for _, issue in ipairs(issues or {}) do
+		if type(issue) == "table" and type(issue.parent) == "table" then
+			local parent = by_key[tostring(issue.parent.key or "")]
+			if parent then
+				table.insert(parent.children, issue)
+			end
+		end
+	end
+
+	local roots = {}
+	for _, issue in ipairs(issues or {}) do
+		if type(issue) == "table" then
+			local parent_key = type(issue.parent) == "table" and tostring(issue.parent.key or "") or ""
+			if by_key[parent_key] == nil then
+				local group = by_key[tostring(issue.key or "")]
+				if group then
+					table.insert(roots, group)
+				end
+			end
+		end
+	end
+
+	return roots
+end
 
 local function render_if_active()
 	local provider = state.provider
@@ -141,7 +175,7 @@ local function set_issues(issues)
 	local sorted = starred_first(issues, function(issue)
 		return issue.is_starred == true
 	end)
-	local groups = helper.build_issue_tree(sorted)
+	local groups = build_issue_tree(sorted)
 	groups = starred_first(groups, function(group)
 		if group.issue.is_starred then
 			return true
@@ -214,7 +248,6 @@ local function load_active_view(opts, on_done)
 		state.issues = nil
 		state.issue_tree = nil
 		state.current_view = state.active_view
-		state.line_map = {}
 		render_if_active()
 		on_done()
 		return
@@ -227,7 +260,6 @@ local function load_active_view(opts, on_done)
 	state.error = nil
 	state.issues = nil
 	state.issue_tree = nil
-	state.line_map = {}
 	notify.loading("Loading issues...")
 	if not refresh_status_spinner:is_running() then
 		refresh_status_spinner:start()
@@ -365,7 +397,7 @@ local function load_bookmark(view, force_load, on_done)
 				table.insert(issues, item.item)
 			end
 			state.issues = issues
-			state.issue_tree = helper.build_issue_tree(issues)
+			state.issue_tree = build_issue_tree(issues)
 		end
 		render_if_active()
 		if on_done then

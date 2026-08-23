@@ -369,7 +369,6 @@ return {
 		actions = actions,
 		ui = {
 			setup = require("atlas.pulls.providers.gitlab.highlights").setup,
-			render = require("atlas.pulls.providers.gitlab.ui.main").render,
 			detail = require("atlas.pulls.providers.gitlab.ui.detail"),
 			repo_detail = require("atlas.pulls.providers.gitlab.ui.repo_detail"),
 		},

@@ -300,8 +300,6 @@ function M.views()
 	return views
 end
 
-local renderer = require("atlas.issues.providers.jira.ui.renderer")
-
 return {
 	resolve = resolve_target,
 	search_view = search_view,
@@ -329,8 +327,6 @@ return {
 		actions = require("atlas.issues.providers.jira.actions"),
 		ui = {
 			setup = require("atlas.issues.providers.jira.highlights").setup,
-			format_row = renderer.format_row,
-			cell_hl = renderer.cell_hl,
 			detail = require("atlas.issues.providers.jira.ui.detail"),
 		},
 	},

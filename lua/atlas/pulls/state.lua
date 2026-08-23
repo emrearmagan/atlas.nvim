@@ -6,8 +6,6 @@
 ---@field current_user PullsUser|nil
 ---@field pulls PullRequest[]|nil
 ---@field provider PullsProvider|nil
----@field latest_request_tokens table
----@field request_seq number
 ---@field reloading_pr_keys table<string, integer>
 ---@field reload_spinner_frame string
 ---@field status_filters table<string, boolean>
@@ -19,8 +17,6 @@ local M = {
 	current_user = nil,
 	pulls = nil,
 	provider = nil,
-	latest_request_tokens = {},
-	request_seq = 0,
 	reloading_pr_keys = {},
 	reload_spinner_frame = "⠋",
 	status_filters = { OPEN = true, MERGED = false, DECLINED = false },

@@ -6,7 +6,6 @@
 ---@field current_user IssueUser|nil
 ---@field issues Issue[]|nil
 ---@field issue_tree IssuesGroup[]|nil
----@field line_map table<integer, table>
 ---@field collapsed_issue_keys table<string, boolean>
 ---@field provider IssuesProvider|nil
 ---@field reloading_issue_keys table<string, integer>
@@ -19,7 +18,6 @@ local M = {
 	current_user = nil,
 	issues = nil,
 	issue_tree = nil,
-	line_map = {},
 	collapsed_issue_keys = {},
 	provider = nil,
 	reloading_issue_keys = {},
