@@ -10,11 +10,28 @@ local pullrequests_api = require("atlas.pulls.providers.forgejo.api.pullrequests
 local repositories_api = require("atlas.pulls.providers.forgejo.api.repositories")
 local reviews_api = require("atlas.pulls.providers.forgejo.api.reviews")
 local resolver = require("atlas.providers.resolve")
+local git = require("atlas.core.git")
 
----@param view { repo: string|nil, search: string|nil }
+---@param view AtlasForgejoPullsSearchConfig
+---@return AtlasForgejoPullsSearchConfig
+local function resolve_cur_repo(view)
+	if not view.current_repo then
+		return view
+	end
+	local info = git.local_repository(nil, "pulls")
+	if not info or info.provider ~= "forgejo" then
+		return view
+	end
+	local resolved = vim.tbl_extend("force", {}, view)
+	resolved.repo = info.slug
+	return resolved
+end
+
+---@param view AtlasForgejoPullsSearchConfig
 ---@param opts PullsFetchOpts
 ---@param on_done fun(pulls: PullRequest[], err: string[]|nil)
 local function fetch_pullrequests(view, opts, on_done)
+	view = resolve_cur_repo(view)
 	local filters = require("atlas.pulls.state").status_filters or {}
 	local statuses = {}
 	local explicit_status = opts.state and opts.state:upper() or nil
@@ -127,7 +144,10 @@ end
 local function views()
 	local cfg = require("atlas.config").domain_options("forgejo", "pulls") or {}
 	local configured = cfg.views or {}
-	return #configured > 0 and configured or { { name = "Pull Requests", key = "1", layout = "compact" } }
+	if #configured == 0 then
+		configured = { { name = "Pull Requests", key = "1", layout = "compact" } }
+	end
+	return vim.tbl_map(resolve_cur_repo, configured)
 end
 
 ---@param value string

@@ -6,6 +6,7 @@ require("atlas.providers.forgejo.config")
 ---@field scope "assigned"|"created"|"mentioned"|"all"|nil
 ---@field search string|nil
 ---@field labels string|nil
+---@field current_repo boolean|nil
 ---@field extra_params table<string, string|number|boolean>|nil
 
 ---@class AtlasForgejoIssuesViewConfig : AtlasIssuesViewConfig, AtlasForgejoIssuesSearchConfig

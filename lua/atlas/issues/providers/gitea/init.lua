@@ -4,15 +4,31 @@ local api = require("atlas.issues.providers.gitea.api")
 local notifications_api = require("atlas.providers.gitea.notifications")
 local resolver = require("atlas.providers.resolve")
 local request_scope = require("atlas.core.requests")
+local git = require("atlas.core.git")
 
 local M = {}
 local REACTION_OPTIONS = require("atlas.ui.shared.emojis").github()
 
 ---@param view AtlasGiteaIssuesViewConfig
+---@return AtlasGiteaIssuesViewConfig
+local function resolve_cur_repo(view)
+	if not view.current_repo then
+		return view
+	end
+	local info = git.local_repository(nil, "issues")
+	if not info or info.provider ~= "gitea" then
+		return view
+	end
+	local resolved = vim.tbl_extend("force", {}, view)
+	resolved.repo = info.slug
+	return resolved
+end
+
+---@param view AtlasGiteaIssuesViewConfig
 ---@param opts IssuesFetchOpts
 ---@param on_done fun(issues: Issue[], next_page_token: string|nil, is_last: boolean, err: string|nil)
 function M.fetch_issues(view, opts, on_done)
-	return api.issues.list(view, opts, function(issues, next_page_token, is_last, err)
+	return api.issues.list(resolve_cur_repo(view), opts, function(issues, next_page_token, is_last, err)
 		if err then
 			on_done({}, next_page_token, is_last, err)
 			return
@@ -145,7 +161,8 @@ function M.views()
 			{ name = "Created", key = "2", scope = "created", state = "open" },
 		}
 	end
-	return views
+	local resolved = vim.tbl_map(resolve_cur_repo, views)
+	return resolved
 end
 
 ---@param value string

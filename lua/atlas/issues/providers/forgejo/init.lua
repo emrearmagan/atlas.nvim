@@ -6,16 +6,32 @@ local comments_api = require("atlas.issues.providers.forgejo.api.comments")
 local issues_api = require("atlas.issues.providers.forgejo.api.issues")
 local timeline_api = require("atlas.issues.providers.forgejo.api.timeline")
 local notifications_api = require("atlas.providers.forgejo.notifications")
+local git = require("atlas.core.git")
 
 ---@class ForgejoIssuesProvider : IssuesProvider
 local M = {}
 local REACTION_OPTIONS = require("atlas.ui.shared.emojis").github()
 
 ---@param view AtlasForgejoIssuesViewConfig
+---@return AtlasForgejoIssuesViewConfig
+local function resolve_cur_repo(view)
+	if not view.current_repo then
+		return view
+	end
+	local info = git.local_repository(nil, "issues")
+	if not info or info.provider ~= "forgejo" then
+		return view
+	end
+	local resolved = vim.tbl_extend("force", {}, view)
+	resolved.repo = info.slug
+	return resolved
+end
+
+---@param view AtlasForgejoIssuesViewConfig
 ---@param opts IssuesFetchOpts
 ---@param on_done fun(issues: Issue[], next_page_token: string|nil, is_last: boolean, err: string|nil)
 function M.fetch_issues(view, opts, on_done)
-	return issues_api.list(view, opts, function(issues, next_page_token, is_last, err)
+	return issues_api.list(resolve_cur_repo(view), opts, function(issues, next_page_token, is_last, err)
 		if err then
 			on_done({}, next_page_token, is_last, err)
 			return
@@ -150,7 +166,7 @@ function M.views()
 			{ name = "Created", key = "2", scope = "created", state = "open" },
 		}
 	end
-	return views
+	return vim.tbl_map(resolve_cur_repo, views)
 end
 
 ---@param value string

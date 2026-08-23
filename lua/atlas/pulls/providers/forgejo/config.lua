@@ -32,6 +32,7 @@ require("atlas.providers.forgejo.config")
 ---@class AtlasForgejoPullsSearchConfig
 ---@field repo string|nil
 ---@field search string|nil Pull request search text.
+---@field current_repo boolean|nil
 
 ---@class AtlasForgejoPullsViewConfig : AtlasPullsViewConfig, AtlasForgejoPullsSearchConfig
 
