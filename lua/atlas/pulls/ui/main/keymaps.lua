@@ -1,6 +1,6 @@
 local M = {}
 
-local statusline = require("atlas.ui.statusline")
+local notify = require("atlas.core.notify")
 local resolver = require("atlas.core.keymaps")
 local utils = require("atlas.ui.shared.utils")
 local actions = require("atlas.pulls.actions")
@@ -47,7 +47,7 @@ function M.register(buf, views)
 		local pr = selected_pr()
 
 		if needs_pr and not pr then
-			statusline.notify("warn", "No PR selected")
+			notify.warn("No PR selected")
 			return
 		end
 		if state.provider then
@@ -203,7 +203,7 @@ function M.register(buf, views)
 			callback = function()
 				local pr, repo = selected_pr()
 				if pr == nil or repo == nil then
-					statusline.notify("warn", "No PR selected")
+					notify.warn("No PR selected")
 					return
 				end
 				require("atlas.pulls.ui.main.controller").toggle_star(pr, repo)
@@ -259,7 +259,7 @@ function M.register(buf, views)
 			callback = function()
 				local pr = selected_pr()
 				if pr == nil then
-					statusline.notify("warn", "No PR selected")
+					notify.warn("No PR selected")
 					return
 				end
 				require("atlas.pulls.ui.main.controller").refresh_pr(pr)
@@ -288,7 +288,7 @@ function M.register(buf, views)
 			callback = function()
 				local pr, repo = selected_pr()
 				if pr == nil or repo == nil then
-					statusline.notify("warn", "No repository selected")
+					notify.warn("No repository selected")
 					return
 				end
 

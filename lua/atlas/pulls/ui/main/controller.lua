@@ -1,6 +1,6 @@
 local M = {}
 
-local statusline = require("atlas.ui.statusline")
+local notify = require("atlas.core.notify")
 local spinner = require("atlas.ui.components.spinner")
 local state = require("atlas.pulls.state")
 local layout = require("atlas.ui.layout")
@@ -247,7 +247,7 @@ local function load_active_view(opts, on_done)
 
 	local target_view = state.active_view
 	if target_view == nil then
-		statusline.notify("error", "No active view selected")
+		notify.error("No active view selected")
 		on_done()
 		return
 	end
@@ -272,7 +272,7 @@ local function load_active_view(opts, on_done)
 	state.is_loading = true
 	state.error = nil
 	sync_loading_spinner()
-	statusline.notify("loading", "Loading pull requests...")
+	notify.loading("Loading pull requests...")
 	render_if_active()
 
 	---@return boolean
@@ -309,16 +309,16 @@ local function load_active_view(opts, on_done)
 			if has_pulls then
 				state.error = nil
 				state.pulls = mark_starred(pulls)
-				statusline.notify("warn", string.format("Some repositories failed: %s", tostring(first_err)))
+				notify.warn(string.format("Some repositories failed: %s", tostring(first_err)))
 			else
 				state.error = tostring(first_err)
 				state.pulls = {}
-				statusline.notify("error", string.format("Failed to fetch pull requests: %s", tostring(first_err)))
+				notify.error(string.format("Failed to fetch pull requests: %s", tostring(first_err)))
 			end
 		else
 			state.error = nil
 			state.pulls = mark_starred(pulls)
-			statusline.notify("success", "Pull requests loaded", 1200)
+			notify.success("Pull requests loaded", { timeout = 1200 })
 		end
 
 		render_if_active()
@@ -345,7 +345,7 @@ local function load_active_view(opts, on_done)
 				return
 			end
 			if user_err then
-				statusline.notify("warn", string.format("Failed to fetch current user: %s", tostring(user_err)))
+				notify.warn(string.format("Failed to fetch current user: %s", tostring(user_err)))
 			else
 				render_if_active()
 			end
@@ -375,7 +375,7 @@ local function load_bookmark(view, force_load, on_done)
 	state.pulls = nil
 	state.current_view = view
 	sync_loading_spinner()
-	statusline.notify("loading", "Running query...")
+	notify.loading("Running query...")
 	render_if_active()
 
 	active_pullrequests_handle = provider.capabilities.core.fetch_pullrequests(
@@ -389,14 +389,14 @@ local function load_bookmark(view, force_load, on_done)
 			if first_err and #pulls == 0 then
 				state.error = tostring(first_err)
 				state.pulls = {}
-				statusline.notify("error", string.format("Query failed: %s", state.error))
+				notify.error(string.format("Query failed: %s", state.error))
 			else
 				state.error = nil
 				state.pulls = mark_starred(pulls)
 				if first_err then
-					statusline.notify("warn", string.format("Some repositories failed: %s", tostring(first_err)))
+					notify.warn(string.format("Some repositories failed: %s", tostring(first_err)))
 				else
-					statusline.notify("success", "Pull requests loaded", 1200)
+					notify.success("Pull requests loaded", { timeout = 1200 })
 				end
 			end
 			render_if_active()
@@ -469,7 +469,7 @@ function M.refresh_pr(pr, on_done)
 	on_done = on_done or function() end
 
 	if pr == nil or pr.id == nil then
-		statusline.notify("warn", "No PR selected")
+		notify.warn("No PR selected")
 		on_done()
 		return
 	end
@@ -477,7 +477,7 @@ function M.refresh_pr(pr, on_done)
 	local provider = state.provider
 	local core = provider and provider.capabilities.core
 	if core == nil or core.fetch_pullrequest == nil then
-		statusline.notify("warn", "Provider does not support single PR refresh")
+		notify.warn("Provider does not support single PR refresh")
 		on_done()
 		return
 	end
@@ -489,7 +489,7 @@ function M.refresh_pr(pr, on_done)
 		return
 	end
 
-	statusline.notify("loading", string.format("Reloading PR #%s...", tostring(pr_id)))
+	notify.loading(string.format("Reloading PR #%s...", tostring(pr_id)))
 	begin_pr_reload(repo_id, pr_id)
 
 	local reload_handle = nil
@@ -503,7 +503,7 @@ function M.refresh_pr(pr, on_done)
 
 		if err ~= nil or fetched_pr == nil then
 			end_pr_reload(repo_id, pr_id)
-			statusline.notify("error", tostring(err or "Failed to reload PR"))
+			notify.error(tostring(err or "Failed to reload PR"))
 			on_done()
 			return
 		end
@@ -527,9 +527,9 @@ function M.refresh_pr(pr, on_done)
 		end
 
 		if snapshot_err then
-			statusline.notify("warn", snapshot_err)
+			notify.warn(snapshot_err)
 		else
-			statusline.notify("success", string.format("Reloaded PR #%s", tostring(pr_id)), 1200)
+			notify.success(string.format("Reloaded PR #%s", tostring(pr_id)), { timeout = 1200 })
 		end
 		on_done()
 	end)
@@ -540,13 +540,13 @@ end
 function M.show_pr_details(source_buf)
 	local node = navigation.current_item()
 	if type(node) ~= "table" or (node.kind ~= "pr" and node.kind ~= "pr_meta") then
-		statusline.notify("warn", "No PR selected")
+		notify.warn("No PR selected")
 		return
 	end
 
 	local pr = node.pr
 	if type(pr) ~= "table" then
-		statusline.notify("warn", "No PR selected")
+		notify.warn("No PR selected")
 		return
 	end
 
@@ -563,12 +563,12 @@ end
 function M.toggle_star(pr, repo)
 	local now_starred, err = starred.toggle(pr, state.provider.id, repo)
 	if now_starred == nil then
-		statusline.notify("error", err or "Unable to update starred pull request")
+		notify.error(err or "Unable to update starred pull request")
 		return
 	end
 
 	pr.is_starred = now_starred
-	statusline.notify("success", now_starred and "Pull request starred" or "Pull request unstarred", 1200)
+	notify.success(now_starred and "Pull request starred" or "Pull request unstarred", { timeout = 1200 })
 
 	local current_view = state.current_view
 	if current_view and current_view._kind == "starred" then
@@ -620,7 +620,7 @@ function M.toggle_status_filter(status)
 		end
 	end
 	if state.status_filters[status] and active_count <= 1 then
-		statusline.notify("warn", "At least one status filter must remain active")
+		notify.warn("At least one status filter must remain active")
 		return
 	end
 

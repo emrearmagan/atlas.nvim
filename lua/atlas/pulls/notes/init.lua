@@ -426,12 +426,12 @@ function M.clear_for_pull_request(pr)
 	end
 	local target, target_err = M.target_for_pull_request(pr)
 	if not target then
-		notify.warn(target_err or "Unable to find local notes")
+		notify.warn(target_err or "Unable to find local notes", { vim_notify = true })
 		return
 	end
 	local ok, err = M.clear(target)
 	if not ok then
-		notify.warn(err or "Unable to delete local notes")
+		notify.warn(err or "Unable to delete local notes", { vim_notify = true })
 		return
 	end
 	local ui = package.loaded["atlas.pulls.notes.ui"]

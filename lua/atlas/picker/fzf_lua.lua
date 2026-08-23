@@ -205,7 +205,7 @@ function M.open(request)
 						return
 					end
 					if err then
-						notify.error(err)
+						notify.error(err, { vim_notify = true })
 					end
 					set_items(items)
 					write_items(done)

@@ -1,6 +1,6 @@
 local M = {}
 
-local statusline = require("atlas.ui.statusline")
+local notify = require("atlas.core.notify")
 local help = require("atlas.ui.popups.help")
 local resolver = require("atlas.core.keymaps")
 local utils = require("atlas.ui.shared.utils")
@@ -210,11 +210,11 @@ function M.open_current_line()
 
 	local url = repo_url(repo)
 	if url == nil or url == "" then
-		statusline.notify("warn", "No repository URL available")
+		notify.warn("No repository URL available")
 		return false
 	end
 	vim.ui.open(url)
-	statusline.notify("info", "Opened repository in browser")
+	notify.info("Opened repository in browser")
 	return true
 end
 

@@ -137,7 +137,7 @@ local function refresh()
 		documents, err = notes.documents()
 	end
 	if not documents then
-		notify.error(err or "Unable to read notes")
+		notify.error(err or "Unable to read notes", { vim_notify = true })
 		return
 	end
 	state.documents = documents
@@ -186,7 +186,7 @@ function M.open(opts)
 		target, err = notes.resolve_target(opts.target)
 	end
 	if err then
-		notify.error(err)
+		notify.error(err, { vim_notify = true })
 		return
 	end
 
@@ -224,13 +224,13 @@ function M.clear_all()
 		end
 		local cleared, err = notes.clear_all()
 		if not cleared then
-			notify.error(err or "Unable to delete local notes")
+			notify.error(err or "Unable to delete local notes", { vim_notify = true })
 			return
 		end
 		state.documents = {}
 		state.expanded = {}
 		render()
-		notify.info("Local review notes deleted")
+		notify.info("Local review notes deleted", { vim_notify = true })
 	end)
 end
 

@@ -327,7 +327,7 @@ local function migrate_legacy(opts)
 	end
 
 	if migrated then
-		notify.warn("Deprecated Config")
+		notify.warn("Deprecated Config", { vim_notify = true })
 	end
 	return opts
 end

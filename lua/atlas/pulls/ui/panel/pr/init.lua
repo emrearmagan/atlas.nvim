@@ -6,7 +6,7 @@ local panel_state = require("atlas.pulls.ui.panel.pr.state")
 local renderer = require("atlas.pulls.ui.panel.pr.renderer")
 local panel_keymaps = require("atlas.pulls.ui.panel.keymaps")
 local icons = require("atlas.ui.shared.icons")
-local statusline = require("atlas.ui.statusline")
+local notify = require("atlas.core.notify")
 local overview_icon, overview_icon_hl = icons.general("overview")
 
 local SPINNER_INTERVAL_MS = 100
@@ -273,7 +273,7 @@ local function fetch_panel_data(pr, opts)
 			end
 			if details == nil then
 				panel_state.header_loading = false
-				statusline.notify("error", tostring(err or "Failed to load pull request"))
+				notify.error(tostring(err or "Failed to load pull request"))
 				refresh()
 				return
 			end

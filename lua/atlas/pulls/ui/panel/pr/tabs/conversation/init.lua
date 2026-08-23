@@ -4,7 +4,7 @@ local M = {}
 local state = require("atlas.pulls.ui.panel.pr.tabs.conversation.state")
 local renderer = require("atlas.pulls.ui.panel.pr.tabs.conversation.renderer")
 local keymaps = require("atlas.pulls.ui.panel.pr.tabs.conversation.keymaps")
-local statusline = require("atlas.ui.statusline")
+local notify = require("atlas.core.notify")
 
 ---@return PullsProvider|nil
 local function get_provider()
@@ -32,7 +32,7 @@ function M.on_select(pr, refresh, opts)
 
 	local id = tostring(pr.id or "")
 	state.items = "loading"
-	statusline.notify("loading", string.format("Loading conversation for #%s...", id))
+	notify.loading(string.format("Loading conversation for #%s...", id))
 
 	state.requests.run(function(done)
 		return comments.fetch_conversation(pr, opts, done)
@@ -56,9 +56,9 @@ function M.on_select(pr, refresh, opts)
 			end
 			local message = result and "Conversation for #%s partially failed: %s"
 				or "Failed to load conversation for #%s: %s"
-			statusline.notify("error", string.format(message, id, tostring(err)))
+			notify.error(string.format(message, id, tostring(err)))
 		else
-			statusline.notify("success", string.format("Conversation loaded for #%s", id), 1200)
+			notify.success(string.format("Conversation loaded for #%s", id), { timeout = 1200 })
 		end
 		refresh()
 	end)

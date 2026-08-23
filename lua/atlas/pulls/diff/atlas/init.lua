@@ -8,6 +8,7 @@ local explorer = require("atlas.pulls.diff.atlas.explorer")
 local git = require("atlas.pulls.diff.atlas.git")
 local keymaps = require("atlas.pulls.diff.atlas.keymaps")
 local logger = require("atlas.core.logger")
+local notify = require("atlas.core.notify")
 local notes = require("atlas.pulls.diff.notes")
 local position = require("atlas.pulls.diff.position")
 local pulls_highlights = require("atlas.pulls.ui.highlights")
@@ -15,7 +16,6 @@ local review_panel = require("atlas.pulls.diff.ui.review_panel")
 local review = require("atlas.pulls.diff.review")
 local session_api = require("atlas.pulls.diff.session")
 local shared_highlights = require("atlas.ui.shared.highlights")
-local statusline = require("atlas.pulls.diff.ui.statusline")
 local view = require("atlas.pulls.diff.atlas.view")
 
 ---@param session AtlasDiffSession
@@ -522,7 +522,7 @@ function M.open(session, loading_view, on_done)
 			session_api.attach(session, {
 				tabpage = state.tabpage,
 				notify = function(level, message, duration)
-					statusline.notify(session.statusline, level, message, duration)
+					notify.show(level, message, { timeout = duration })
 				end,
 				focus_item = function(item, focus_diff)
 					focus_item(session, item, focus_diff)

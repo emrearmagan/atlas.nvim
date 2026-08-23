@@ -4,7 +4,7 @@ local M = {}
 local state = require("atlas.issues.ui.panel.issue.tabs.conversation.state")
 local renderer = require("atlas.issues.ui.panel.issue.tabs.conversation.renderer")
 local keymaps = require("atlas.issues.ui.panel.issue.tabs.conversation.keymaps")
-local statusline = require("atlas.ui.statusline")
+local notify = require("atlas.core.notify")
 
 ---@return IssuesProvider|nil
 local function get_provider()
@@ -13,7 +13,7 @@ end
 
 function M.reset()
 	state.reset()
-	statusline.clear_notice()
+	notify.clear()
 end
 
 ---@param issue IssueDetails
@@ -33,7 +33,7 @@ function M.on_select(issue, refresh, opts)
 
 	local key = tostring(issue.key or "")
 	state.items = "loading"
-	statusline.notify("loading", string.format("Loading conversation for %s...", key))
+	notify.loading(string.format("Loading conversation for %s...", key))
 
 	state.requests.run(function(done)
 		return comments.fetch_conversation(issue, opts, done)
@@ -57,9 +57,9 @@ function M.on_select(issue, refresh, opts)
 			end
 			local message = result and "Conversation for %s partially failed: %s"
 				or "Failed to load conversation for %s: %s"
-			statusline.notify("error", string.format(message, key, tostring(err)))
+			notify.error(string.format(message, key, tostring(err)))
 		else
-			statusline.notify("success", string.format("Conversation loaded for %s", key), 1200)
+			notify.success(string.format("Conversation loaded for %s", key), { timeout = 1200 })
 		end
 		refresh()
 	end)
@@ -107,7 +107,7 @@ function M.deactivate(buf)
 		keymaps.teardown(buf)
 	end
 	state.deactivate()
-	statusline.clear_notice()
+	notify.clear()
 end
 
 return M

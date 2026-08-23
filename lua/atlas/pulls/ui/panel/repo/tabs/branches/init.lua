@@ -5,7 +5,7 @@ local utils = require("atlas.ui.shared.utils")
 local icons = require("atlas.ui.shared.icons")
 local layout = require("atlas.ui.layout")
 local spinner = require("atlas.ui.components.spinner")
-local statusline = require("atlas.ui.statusline")
+local notify = require("atlas.core.notify")
 local threads = require("atlas.ui.components.threadsv2")
 local state = require("atlas.pulls.ui.panel.repo.tabs.branches.state")
 local repo_panel_state = require("atlas.pulls.ui.panel.repo.state")
@@ -157,14 +157,14 @@ function M.on_select(repo, refresh, opts)
 
 	stop_request()
 	state.branches = "loading"
-	statusline.notify("loading", string.format("Loading branches for %s...", repo_label))
+	notify.loading(string.format("Loading branches for %s...", repo_label))
 	refresh()
 
 	local provider = require("atlas.pulls.state").provider
 	local repository = provider and provider.capabilities.repository
 	if repository == nil then
 		state.branches = { entries = {} }
-		statusline.notify("error", "Branch listing is not supported by this provider")
+		notify.error("Branch listing is not supported by this provider")
 		refresh()
 		return
 	end
@@ -181,10 +181,10 @@ function M.on_select(repo, refresh, opts)
 		state.repo = active_detail
 		if err then
 			state.branches = tostring(err)
-			statusline.notify("error", string.format("Failed to load branches for %s", repo_label))
+			notify.error(string.format("Failed to load branches for %s", repo_label))
 		else
 			state.branches = branches or { entries = {} }
-			statusline.notify("success", string.format("Branches loaded for %s", repo_label), 1200)
+			notify.success(string.format("Branches loaded for %s", repo_label), { timeout = 1200 })
 		end
 		refresh()
 	end)
@@ -214,7 +214,7 @@ function M.delete_current_branch(refresh)
 	local provider = require("atlas.pulls.state").provider
 	local repository = provider and provider.capabilities.repository
 	if repository == nil or not repository.delete_branch then
-		statusline.notify("error", "Branch deletion is not supported by this provider")
+		notify.error("Branch deletion is not supported by this provider")
 		return
 	end
 
@@ -222,17 +222,17 @@ function M.delete_current_branch(refresh)
 	local branch = entry and entry.item and entry.item.obj and entry.item.obj.branch
 	local repo = state.repo
 	if type(repo) ~= "table" or type(branch) ~= "table" then
-		statusline.notify("warn", "No branch selected")
+		notify.warn("No branch selected")
 		return
 	end
 
 	local branch_name = tostring(branch.name or "")
 	if branch_name == "" then
-		statusline.notify("warn", "Branch name is missing")
+		notify.warn("Branch name is missing")
 		return
 	end
 	if branch_name == tostring(repo.default_branch or "") then
-		statusline.notify("warn", "Refusing to delete the default branch")
+		notify.warn("Refusing to delete the default branch")
 		return
 	end
 
@@ -242,11 +242,11 @@ function M.delete_current_branch(refresh)
 			return
 		end
 
-		statusline.notify("loading", string.format("Deleting branch %s...", branch_name))
+		notify.loading(string.format("Deleting branch %s...", branch_name))
 		delete_request = repository.delete_branch(repo, branch, function(ok, err)
 			delete_request = nil
 			if err ~= nil then
-				statusline.notify("error", "Delete branch failed: " .. tostring(err))
+				notify.error("Delete branch failed: " .. tostring(err))
 				return
 			end
 
@@ -262,7 +262,7 @@ function M.delete_current_branch(refresh)
 				state.branches = { entries = entries }
 			end
 
-			statusline.notify("success", string.format("Deleted branch %s", branch_name), 1200)
+			notify.success(string.format("Deleted branch %s", branch_name), { timeout = 1200 })
 			refresh()
 		end)
 	end)

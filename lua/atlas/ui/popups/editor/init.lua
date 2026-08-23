@@ -1,6 +1,7 @@
 local M = {}
 
 local keymaps = require("atlas.core.keymaps")
+local notify = require("atlas.core.notify")
 local utils = require("atlas.ui.shared.utils")
 local statusline = require("atlas.ui.statusline")
 local virtual_lines = require("atlas.ui.components.virtual_lines")
@@ -117,7 +118,7 @@ function M.open(opts)
 
 	local key = tostring(opts.key or "")
 	if key == "" then
-		statusline.notify("warn", "Missing editor key")
+		notify.warn("Missing editor key")
 		return nil, nil
 	end
 	local source_win = vim.api.nvim_get_current_win()
@@ -375,7 +376,7 @@ function M.open(opts)
 				get_text = get_text,
 			})
 			if not ok then
-				statusline.notify("error", tostring(err or "Markdown action failed"))
+				notify.error(tostring(err or "Markdown action failed"))
 			end
 		end, { buffer = buf, silent = true, nowait = true, desc = action.description })
 	end

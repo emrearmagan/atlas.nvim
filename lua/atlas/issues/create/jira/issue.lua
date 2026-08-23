@@ -573,7 +573,7 @@ function M.open(on_submit, opts, editor_opts)
 			state.current_user_handle = nil
 			state.current_user_loading = false
 			if err then
-				form.notify("warn", "Failed to load reporter: " .. err, 2000)
+				form.notify("warn", "Failed to load reporter: " .. err, { timeout = 2000 })
 			else
 				state.current_user = user
 			end
@@ -592,7 +592,7 @@ function M.open(on_submit, opts, editor_opts)
 				state.assignees_handle = nil
 
 				if err then
-					form.notify("warn", "Failed to load assignees: " .. err, 2000)
+					form.notify("warn", "Failed to load assignees: " .. err, { timeout = 2000 })
 					state.assignees = {}
 				else
 					state.assignees = users or {}
@@ -609,7 +609,7 @@ function M.open(on_submit, opts, editor_opts)
 			state.issue_types_handle = nil
 
 			if err then
-				form.notify("warn", "Failed to load issue types: " .. err, 2000)
+				form.notify("warn", "Failed to load issue types: " .. err, { timeout = 2000 })
 				state.issue_types = {}
 				state.fields.issue_type = nil
 			else

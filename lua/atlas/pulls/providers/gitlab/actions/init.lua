@@ -2,7 +2,7 @@ local M = {}
 
 local registry = require("atlas.pulls.providers.gitlab.actions.registry")
 local logger = require("atlas.core.logger")
-local statusline = require("atlas.ui.statusline")
+local core_notify = require("atlas.core.notify")
 
 ---@alias AtlasGitLabActionId
 ---| AtlasPullActionId
@@ -45,8 +45,11 @@ function M.run(id, ctx, on_done)
 	end
 	if not available then
 		local err = tostring(available_err or string.format("Action is not available: %s", tostring(id)))
-		local notify = ctx.notify or statusline.notify
-		notify("warn", err)
+		if ctx.notify then
+			ctx.notify("warn", err)
+		else
+			core_notify.warn(err)
+		end
 		on_done(nil, err)
 		return false
 	end

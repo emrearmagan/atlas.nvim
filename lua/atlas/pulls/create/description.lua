@@ -118,10 +118,10 @@ end
 
 ---@return string|nil
 local function jira_url()
-	if config.domain_options("jira", "issues") == nil then
+	local jira = config.provider_options("jira")
+	if jira == nil then
 		return nil
 	end
-	local jira = config.provider_options("jira") or {}
 	local base_url = vim.trim(jira.base_url or ""):gsub("/+$", "")
 	if base_url == "" then
 		return nil

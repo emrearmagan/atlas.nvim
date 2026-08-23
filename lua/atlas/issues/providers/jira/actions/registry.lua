@@ -3,7 +3,6 @@ local M = {}
 local actions = require("atlas.issues.actions")
 local icons = require("atlas.ui.shared.icons")
 local picker = require("atlas.picker")
-local statusline = require("atlas.ui.statusline")
 local issues_api = require("atlas.issues.providers.jira.api.issues")
 local adf = require("atlas.issues.providers.jira.converted.adf")
 local notify = require("atlas.core.notify")
@@ -111,18 +110,17 @@ local function transition(ctx, done)
 		end,
 		on_select = function(item)
 			local selected = item.value
-			statusline.notify("loading", string.format("Transitioning %s...", issue_key))
+			notify.loading(string.format("Transitioning %s...", issue_key))
 			transitions_api.transition_issue(issue_key, selected.id, function(ok, err)
 				if not ok then
-					statusline.notify("error", err or "Transition failed")
+					notify.error(err or "Transition failed")
 					done(nil, err or "Transition failed")
 					return
 				end
 
-				statusline.notify(
-					"success",
+				notify.success(
 					string.format("Transitioned %s to %s", issue_key, selected.name or ""),
-					1200
+					{ timeout = 1200 }
 				)
 				done({ issue_key = issue_key }, nil)
 			end)
@@ -217,21 +215,21 @@ local function assign(ctx, done)
 		end,
 		on_select = function(item)
 			local selected = item.value
-			statusline.notify("loading", string.format("Assigning %s...", issue_key))
+			notify.loading(string.format("Assigning %s...", issue_key))
 			users_api.assign_issue(issue_key, selected.account_id, function(ok, err)
 				if not ok then
-					statusline.notify("error", err or "Assign failed")
+					notify.error(err or "Assign failed")
 					done(nil, err or "Assign failed")
 					return
 				end
 
 				if selected.account_id == nil then
-					statusline.notify("success", string.format("Unassigned %s", issue_key), 1200)
+					notify.success(string.format("Unassigned %s", issue_key), { timeout = 1200 })
 					done({ issue_key = issue_key }, nil)
 					return
 				end
 
-				statusline.notify("success", string.format("Assigned %s to %s", issue_key, selected.display_name), 1200)
+				notify.success(string.format("Assigned %s to %s", issue_key, selected.display_name), { timeout = 1200 })
 				done({ issue_key = issue_key }, nil)
 			end)
 		end,
@@ -284,18 +282,17 @@ local function reporter(ctx, done)
 		end,
 		on_select = function(item)
 			local selected = item.value
-			statusline.notify("loading", string.format("Changing reporter for %s...", issue_key))
+			notify.loading(string.format("Changing reporter for %s...", issue_key))
 			users_api.change_reporter(issue_key, selected.account_id, function(ok, err)
 				if not ok then
-					statusline.notify("error", err or "Reporter change failed")
+					notify.error(err or "Reporter change failed")
 					done(nil, err or "Reporter change failed")
 					return
 				end
 
-				statusline.notify(
-					"success",
+				notify.success(
 					string.format("Reporter for %s changed to %s", issue_key, selected.display_name),
-					1200
+					{ timeout = 1200 }
 				)
 				done({ issue_key = issue_key }, nil)
 			end)
@@ -331,15 +328,15 @@ local function delete_issue(ctx, done)
 			return
 		end
 
-		statusline.notify("loading", string.format("Deleting %s...", issue_key))
+		notify.loading(string.format("Deleting %s...", issue_key))
 		issues_api.delete_issue(issue_key, function(ok, err)
 			if not ok then
-				statusline.notify("error", err or "Delete failed")
+				notify.error(err or "Delete failed")
 				done(nil, err or "Delete failed")
 				return
 			end
 
-			statusline.notify("success", string.format("Deleted %s", issue_key), 1200)
+			notify.success(string.format("Deleted %s", issue_key), { timeout = 1200 })
 			done({ issue_key = issue_key, removed = true }, nil)
 		end)
 	end)
@@ -381,17 +378,17 @@ local function edit_issue(ctx, done)
 				payload.assignee = vim.NIL
 			end
 
-			statusline.notify("loading", string.format("Updating issue %s...", issue_key))
+			notify.loading(string.format("Updating issue %s...", issue_key))
 			issues_api.update_issue(issue_key, payload, function(ok, err)
 				if not ok then
 					local message = err or "Failed to update issue"
-					statusline.notify("error", message)
+					notify.error(message)
 					submit_done(false, message)
 					done(nil, message)
 					return
 				end
 
-				statusline.notify("success", string.format("Updated %s", issue_key), 1200)
+				notify.success(string.format("Updated %s", issue_key), { timeout = 1200 })
 				submit_done(true, nil)
 				vim.schedule(function()
 					done({ issue_key = issue_key }, nil)
@@ -414,15 +411,15 @@ local function edit_issue(ctx, done)
 		})
 	end
 
-	statusline.notify("loading", string.format("Loading description for %s...", issue_key))
+	notify.loading(string.format("Loading description for %s...", issue_key))
 	issues_api.get_issue_description(issue_key, function(description, err)
 		if err then
-			statusline.notify("warn", string.format("Failed loading description for %s", issue_key), 1200)
+			notify.warn(string.format("Failed loading description for %s", issue_key), { timeout = 1200 })
 			open_editor("")
 			return
 		end
 
-		statusline.notify("success", string.format("Loaded description for %s", issue_key), 1200)
+		notify.success(string.format("Loaded description for %s", issue_key), { timeout = 1200 })
 		if type(description) == "table" then
 			open_editor(adf.to_markdown(description))
 			return
@@ -462,7 +459,7 @@ local function create_issue(context, done)
 			elseif issue_type_name ~= "" then
 				api_fields.issuetype = { name = issue_type_name }
 			else
-				statusline.notify("error", "Issue type is required")
+				notify.error("Issue type is required")
 				submit_done(false, "Issue type is required")
 				done(nil, "Issue type is required")
 				return
@@ -500,7 +497,7 @@ local function create_issue(context, done)
 							commit_create(retry, true)
 							return
 						end
-						statusline.notify("error", err)
+						notify.error(err)
 						submit_done(false, err)
 						done(nil, err)
 						return
@@ -511,12 +508,18 @@ local function create_issue(context, done)
 							local update = { description = raw_desc }
 							issues_api.update_issue(result.key, update, function(ok)
 								if ok then
-									notify.info(string.format("Created %s", result.key), { timeout = 2000 })
+									notify.info(
+										string.format("Created %s", result.key),
+										{ timeout = 2000, vim_notify = true }
+									)
 									submit_done(true, nil)
 									done({ issue_key = result.key }, nil)
 									open_created_issue(result.key)
 								else
-									notify.warn("Issue created but failed to set description", { timeout = 3000 })
+									notify.warn(
+										"Issue created but failed to set description",
+										{ timeout = 3000, vim_notify = true }
+									)
 									submit_done(true, "Description not set")
 									done({ issue_key = result.key }, nil)
 									open_created_issue(result.key)
@@ -525,14 +528,14 @@ local function create_issue(context, done)
 							return
 						end
 
-						notify.info(string.format("Created %s", result.key), { timeout = 2000 })
+						notify.info(string.format("Created %s", result.key), { timeout = 2000, vim_notify = true })
 						submit_done(true, nil)
 						done({ issue_key = result.key }, nil)
 						open_created_issue(result.key)
 						return
 					end
 
-					statusline.notify("error", "Invalid response")
+					notify.error("Invalid response")
 					submit_done(false, "Invalid response")
 					done(nil, "Invalid response")
 				end)
@@ -647,7 +650,7 @@ local function create_issue(context, done)
 			run_create(item.value.key)
 		end,
 		on_cancel = function()
-			notify.info("Create issue cancelled", { timeout = 1200 })
+			notify.info("Create issue cancelled", { timeout = 1200, vim_notify = true })
 			done(nil, nil)
 		end,
 	})
@@ -703,7 +706,7 @@ local function search_issue(_, done)
 			local issue = item.value
 			local issue_key = tostring((issue or {}).key or "")
 			if issue_key == "" then
-				statusline.notify("error", "Selected issue is missing key")
+				notify.error("Selected issue is missing key")
 				done(nil, "Selected issue is missing key")
 				return
 			end
@@ -738,13 +741,13 @@ local function browse_issue(ctx, done)
 	local base_url = tostring(config.jira_config().base_url or ""):gsub("/$", "")
 	local issue_key = tostring(issue.key or "")
 	if base_url == "" or issue_key == "" then
-		statusline.notify("error", "No URL found for issue")
+		notify.error("No URL found for issue")
 		done(nil, "No URL found for issue")
 		return
 	end
 
 	vim.ui.open(string.format("%s/browse/%s", base_url, issue_key))
-	statusline.notify("success", string.format("Opened %s in browser", issue_key), 1200)
+	notify.success(string.format("Opened %s in browser", issue_key), { timeout = 1200 })
 	done(nil, nil)
 end
 
@@ -763,14 +766,14 @@ local function copy_issue_url(ctx, done)
 	local issue_key = tostring(issue.key or "")
 	local url = (base_url ~= "" and issue_key ~= "") and string.format("%s/browse/%s", base_url, issue_key) or ""
 	if url == "" then
-		statusline.notify("error", "No URL found for issue")
+		notify.error("No URL found for issue")
 		done(nil, "No URL found for issue")
 		return
 	end
 
 	vim.fn.setreg("+", url)
 	vim.fn.setreg('"', url)
-	statusline.notify("success", "Copied issue URL", 1200)
+	notify.success("Copied issue URL", { timeout = 1200 })
 	done(nil, nil)
 end
 
@@ -789,16 +792,16 @@ local function toggle_subscription(ctx, done)
 	local svc = require("atlas.issues.providers.jira.api.service")
 	local issue = assert(ctx.issue)
 	local issue_key = tostring(issue.key or "")
-	statusline.notify("loading", issue.is_subscribed and "Unsubscribing..." or "Subscribing...")
+	notify.loading(issue.is_subscribed and "Unsubscribing..." or "Subscribing...")
 
 	local function finish(subscribed, err)
 		if err then
-			statusline.notify("error", tostring(err))
+			notify.error(tostring(err))
 			done(nil, tostring(err))
 			return
 		end
 		issue.is_subscribed = subscribed == true
-		statusline.notify("success", issue.is_subscribed and "Subscribed" or "Unsubscribed", 1200)
+		notify.success(issue.is_subscribed and "Subscribed" or "Unsubscribed", { timeout = 1200 })
 		done({ issue_key = issue.key }, nil)
 	end
 

@@ -2,12 +2,12 @@ local M = {}
 
 local config = require("atlas.config")
 local keymaps = require("atlas.core.keymaps")
+local core_notify = require("atlas.core.notify")
 local comments = require("atlas.pulls.diff.comments")
 local position = require("atlas.pulls.diff.position")
 local review_keymaps = require("atlas.pulls.diff.keymaps")
 local review_panel = require("atlas.pulls.diff.ui.review_panel")
 local session_api = require("atlas.pulls.diff.session")
-local statusline = require("atlas.pulls.diff.ui.statusline")
 
 local READY_RETRIES = 80
 
@@ -151,7 +151,7 @@ local function open_review_panel(session, focus)
 	end
 	local win = review_panel.open(panel, anchor, focus)
 	if win then
-		statusline.attach(win)
+		session.statusline:attach(win)
 	end
 	return win ~= nil
 end
@@ -430,9 +430,9 @@ local function sync(session)
 		},
 	}
 
-	statusline.attach(left_win)
-	statusline.attach(right_win)
-	statusline.attach(explorer.winid)
+	session.statusline:attach(left_win)
+	session.statusline:attach(right_win)
+	session.statusline:attach(explorer.winid)
 	session_api.set_current(session, current)
 	session_api.review_attached(session)
 	if buffers_changed then
@@ -573,7 +573,7 @@ local function attach(session, lifecycle, tabpage)
 	session_api.attach(session, {
 		tabpage = tabpage,
 		notify = function(level, message, duration)
-			statusline.notify(session.statusline, level, message, duration)
+			core_notify.show(level, message, { timeout = duration })
 		end,
 		focus_item = function(item, focus_diff)
 			focus_item(session, item, focus_diff)
@@ -601,7 +601,7 @@ local function attach(session, lifecycle, tabpage)
 		codediff and codediff.modified_win,
 		explorer and explorer.winid,
 	}) do
-		statusline.attach(win)
+		session.statusline:attach(win)
 	end
 	local buffers = panel and { panel.buf } or {}
 	for _, buf in pairs({

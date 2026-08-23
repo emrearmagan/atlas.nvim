@@ -3,7 +3,7 @@ local M = {}
 local layout = require("atlas.ui.layout")
 local panel_state = require("atlas.issues.ui.panel.issue.state")
 local renderer = require("atlas.issues.ui.panel.issue.renderer")
-local statusline = require("atlas.ui.statusline")
+local notify = require("atlas.core.notify")
 
 local SPINNER_INTERVAL_MS = 100
 
@@ -223,7 +223,7 @@ local function fetch_panel_data(issue, opts)
 			end
 			if details == nil then
 				panel_state.header_loading = false
-				statusline.notify("error", tostring(err or "Failed to load issue"))
+				notify.error(tostring(err or "Failed to load issue"))
 				refresh()
 				return
 			end
