@@ -325,7 +325,6 @@ return {
 			setup = require("atlas.issues.providers.jira.highlights").setup,
 			format_row = renderer.format_row,
 			cell_hl = renderer.cell_hl,
-			issue_popup_content = renderer.issue_popup_content,
 			panel = require("atlas.issues.providers.jira.ui.panel"),
 		},
 	},

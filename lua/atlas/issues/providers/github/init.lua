@@ -383,7 +383,6 @@ return {
 			render = require("atlas.issues.providers.github.ui.main").render,
 			format_row = renderer.format_row,
 			cell_hl = renderer.cell_hl,
-			issue_popup_content = renderer.issue_popup_content,
 			panel = require("atlas.issues.providers.github.ui.panel"),
 		},
 	},
