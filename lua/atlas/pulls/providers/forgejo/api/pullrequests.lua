@@ -318,24 +318,6 @@ function api.get(ref, opts, on_done)
 	return requests
 end
 
----@param ref PullRequestRef
----@param on_done fun(pr: PullRequest|nil, err: string|nil)
----@return { cancel: fun() }|nil
-local function fetch_summary(ref, on_done)
-	local endpoint = pull_endpoint(ref)
-	if not endpoint then
-		on_done(nil, "Invalid Forgejo repository")
-		return nil
-	end
-	return service.request("GET", endpoint, nil, function(raw, err)
-		if err then
-			on_done(nil, err)
-			return
-		end
-		on_done(mapper.to_pull_request(raw), nil)
-	end)
-end
-
 function api.description(pr, opts, on_done)
 	opts = opts or {}
 	if opts.force_refresh ~= true and pr.description ~= nil then
@@ -854,28 +836,12 @@ function api.search_global(view, opts, on_done)
 			on_done(nil, err)
 			return
 		end
-		local refs, starts = {}, {}
-		for index, value in ipairs(raw) do
-			local ref = mapper.to_search_pull_request(value)
-			refs[index] = ref
-			starts[tostring(index)] = function(done)
-				return fetch_summary(ref, done)
-			end
+		local prs = {}
+		for _, value in ipairs(raw) do
+			table.insert(prs, mapper.to_search_pull_request(value))
 		end
-		requests.all(starts, function(values, errors)
-			local prs = {}
-			for index = 1, #refs do
-				local key = tostring(index)
-				local pr = values[key]
-				if errors[key] then
-					on_done(nil, errors[key])
-					return
-				end
-				table.insert(prs, pr)
-			end
-			service.set_cache(cache_key, prs)
-			on_done(prs, nil)
-		end)
+		service.set_cache(cache_key, prs)
+		on_done(prs, nil)
 	end)
 	return { cancel = requests.cancel }
 end

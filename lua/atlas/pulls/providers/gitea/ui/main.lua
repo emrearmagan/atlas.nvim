@@ -34,25 +34,49 @@ local function diff_stats(pr)
 		}
 end
 
----@param columns table[]
+---@param layout "compact"|"grouped"|"plain"
 ---@param include_diff boolean
 ---@return table[]
-local function columns_without_tasks(columns, include_diff)
-	local result = {}
-	for _, column in ipairs(columns) do
-		if column.key ~= "tasks" then
-			if include_diff and column.key == "created" then
-				table.insert(result, {
-					key = "diff",
-					name = icons.pulls("changes"),
-					max_width = 15,
-					can_grow = false,
-					header_hl = "AtlasColumnHeader",
-				})
-			end
-			table.insert(result, column)
-		end
+local function columns(layout, include_diff)
+	local result = {
+		layout == "compact"
+				and { key = "pr_icon", name = "", min_width = 1, can_grow = false, header_hl = "AtlasColumnHeader" }
+			or { key = "name", name = "Title", min_width = 42, header_hl = "AtlasColumnHeader" },
+	}
+	if layout == "compact" then
+		table.insert(result, { key = "repo_pr", name = "Title", min_width = 42, header_hl = "AtlasColumnHeader" })
 	end
+	table.insert(result, {
+		key = "conversation",
+		name = icons.general("conversation"),
+		min_width = 2,
+		can_grow = false,
+		header_hl = "AtlasColumnHeader",
+	})
+	table.insert(result, {
+		key = "author",
+		name = string.format("%s Author", icons.general("user")),
+		min_width = 3,
+		can_grow = false,
+		header_hl = "AtlasColumnHeader",
+	})
+	if include_diff then
+		table.insert(result, {
+			key = "diff",
+			name = icons.pulls("changes"),
+			max_width = 15,
+			can_grow = false,
+			header_hl = "AtlasColumnHeader",
+		})
+	end
+	table.insert(
+		result,
+		{ key = "created", name = icons.general("created"), can_grow = false, header_hl = "AtlasColumnHeader" }
+	)
+	table.insert(
+		result,
+		{ key = "updated", name = icons.general("updated"), can_grow = false, header_hl = "AtlasColumnHeader" }
+	)
 	return result
 end
 
@@ -106,7 +130,7 @@ function M.render(pulls, layout, opts)
 	local table_data = layout == "compact" and helper.build_compact_table(pulls)
 		or helper.build_list_table(pulls, layout)
 	local include_diff = has_diff_stats(pulls)
-	table_data.columns = columns_without_tasks(table_data.columns, include_diff)
+	table_data.columns = columns(layout, include_diff)
 	if include_diff then
 		add_diff_stats(table_data.rows)
 	end
