@@ -118,30 +118,30 @@ end
 ---@param url string Full URL
 ---@param headers table<string, string> HTTP headers
 ---@param data? string JSON data for POST/PUT
----@param callback fun(result?: table, err?: string)
+---@param callback fun(result?: table, err?: string, status?: integer)
 ---@return { job_id: integer, cancel: fun() }
 function M.curl_request(method, url, headers, data, callback)
 	return curl_fetch(method, url, headers, data, function(body, http_status, err)
 		if err ~= nil then
-			callback(nil, err)
+			callback(nil, err, http_status)
 			return
 		end
 
 		if body == nil or body == "" then
 			if http_status ~= nil and http_status >= 200 and http_status < 300 then
-				callback({ __http_status = http_status }, nil)
+				callback({ __http_status = http_status }, nil, http_status)
 				return
 			end
-			callback(nil, string.format("HTTP %s", tostring(http_status or "?")))
+			callback(nil, string.format("HTTP %s", tostring(http_status or "?")), http_status)
 			return
 		end
 
 		if http_status ~= nil and (http_status < 200 or http_status >= 300) then
 			local response_text = one_line(body)
 			if response_text == "" then
-				callback(nil, string.format("HTTP %d", http_status))
+				callback(nil, string.format("HTTP %d", http_status), http_status)
 			else
-				callback(nil, string.format("HTTP %d: %s", http_status, response_text))
+				callback(nil, string.format("HTTP %d: %s", http_status, response_text), http_status)
 			end
 			return
 		end
@@ -154,7 +154,8 @@ function M.curl_request(method, url, headers, data, callback)
 					"Failed to parse JSON response (HTTP %s): %s",
 					tostring(http_status or "?"),
 					one_line(result)
-				)
+				),
+				http_status
 			)
 			return
 		end
@@ -163,7 +164,7 @@ function M.curl_request(method, url, headers, data, callback)
 			result.__http_status = http_status
 		end
 
-		callback(result, nil)
+		callback(result, nil, http_status)
 	end)
 end
 
@@ -171,21 +172,21 @@ end
 ---@param url string
 ---@param headers table<string, string>
 ---@param data? string
----@param callback fun(result?: string, err?: string)
+---@param callback fun(result?: string, err?: string, status?: integer)
 ---@return { job_id: integer, cancel: fun() }
 function M.curl_text_request(method, url, headers, data, callback)
 	return curl_fetch(method, url, headers, data, function(body, http_status, err)
 		if err ~= nil then
-			callback(nil, err)
+			callback(nil, err, http_status)
 			return
 		end
 
 		if http_status ~= nil and (http_status < 200 or http_status >= 300) then
-			callback(nil, string.format("HTTP %d", http_status))
+			callback(nil, string.format("HTTP %d", http_status), http_status)
 			return
 		end
 
-		callback(body or "", nil)
+		callback(body or "", nil, http_status)
 	end, true)
 end
 

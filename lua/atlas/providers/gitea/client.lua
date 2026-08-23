@@ -130,7 +130,7 @@ end
 ---@param method string
 ---@param endpoint string
 ---@param data table|nil
----@param on_done fun(result: any, err: string|nil)
+---@param on_done fun(result: any, err: string|nil, status?: integer)
 ---@return { job_id: integer, cancel: fun() }|nil
 function client.request(method, endpoint, data, on_done)
 	local _, auth_err = client.get_auth()
@@ -153,23 +153,23 @@ function client.request(method, endpoint, data, on_done)
 		endpoint = endpoint,
 		method = method,
 	})
-	return http.curl_request(method, client.url(endpoint), client.headers(), payload, function(result, err)
+	return http.curl_request(method, client.url(endpoint), client.headers(), payload, function(result, err, status)
 		if err then
 			logger.logerror("Gitea request failed", {
 				endpoint = endpoint,
 				method = method,
 				error = err,
 			})
-			on_done(nil, err)
+			on_done(nil, err, status)
 			return
 		end
-		on_done(result, nil)
+		on_done(result, nil, status)
 	end)
 end
 
 ---@param method string
 ---@param endpoint string
----@param on_done fun(result: string|nil, err: string|nil)
+---@param on_done fun(result: string|nil, err: string|nil, status?: integer)
 ---@return { job_id: integer, cancel: fun() }|nil
 function client.request_text(method, endpoint, on_done)
 	local _, auth_err = client.get_auth()
@@ -187,17 +187,17 @@ function client.request_text(method, endpoint, on_done)
 		endpoint = endpoint,
 		method = method,
 	})
-	return http.curl_text_request(method, client.url(endpoint), client.headers(), nil, function(result, err)
+	return http.curl_text_request(method, client.url(endpoint), client.headers(), nil, function(result, err, status)
 		if err then
 			logger.logerror("Gitea request failed", {
 				endpoint = endpoint,
 				method = method,
 				error = err,
 			})
-			on_done(nil, err)
+			on_done(nil, err, status)
 			return
 		end
-		on_done(result, nil)
+		on_done(result, nil, status)
 	end)
 end
 

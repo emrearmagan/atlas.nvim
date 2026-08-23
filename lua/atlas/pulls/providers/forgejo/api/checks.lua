@@ -52,12 +52,16 @@ local function fetch_branch_protection(pr, on_done)
 			return
 		end
 		local rule = vim.trim(tostring(raw.effective_branch_protection_name or ""))
+		if rule == "" then
+			on_done(branch_protection(raw), nil)
+			return
+		end
 		requests.run(function(done)
 			return service.request("GET", base .. "/branch_protections/" .. service.url_encode(rule), nil, done)
-		end, function(value, rule_err)
+		end, function(value, rule_err, status)
 			if rule_err then
-				if rule_err:match("^HTTP 404") then
-					on_done(false, nil)
+				if status == 403 or status == 404 then
+					on_done(branch_protection(raw), nil)
 				else
 					on_done(nil, rule_err)
 				end
