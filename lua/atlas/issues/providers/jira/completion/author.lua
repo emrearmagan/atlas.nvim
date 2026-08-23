@@ -6,8 +6,8 @@ local M = {}
 
 ---@return JiraMentionUser[]
 local function collect_users()
-	local conversation_state = require("atlas.issues.ui.panel.issue.tabs.conversation.state")
-	local panel_state = require("atlas.issues.ui.panel.issue.state")
+	local conversation_state = require("atlas.issues.ui.detail.tabs.conversation.state")
+	local panel_state = require("atlas.issues.ui.detail.state")
 	local issues_state = require("atlas.issues.state")
 
 	local seen = {}

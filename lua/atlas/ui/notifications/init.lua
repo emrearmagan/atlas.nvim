@@ -9,8 +9,6 @@ local state = require("atlas.ui.notifications.state")
 
 ---@type PullsProvider|IssuesProvider|nil
 local current_provider = nil
----@type fun()|nil
-local current_refresh = nil
 
 ---@param provider PullsProvider|IssuesProvider
 function M.set_provider(provider)
@@ -20,21 +18,8 @@ function M.set_provider(provider)
 	current_provider = provider
 end
 
----Pushed by the layout host so the popup can re-render the surrounding UI
----after mark-read / mark-done.
----@param fn fun()
-function M.set_refresh(fn)
-	current_refresh = fn
-end
-
 local function refresh_main()
-	local ok_layout, layout = pcall(require, "atlas.ui.layout")
-	if not ok_layout or not layout.is_open() then
-		return
-	end
-	if current_refresh then
-		pcall(current_refresh)
-	end
+	require("atlas.ui.dashboard").render()
 end
 
 ---@param action_id AtlasKeymapActionId|string
@@ -241,6 +226,9 @@ local function load(force_load)
 
 	active_handle = notifications_api.fetch({ force_load = force_load }, function(notifications, err)
 		active_handle = nil
+		if current_provider ~= provider then
+			return
+		end
 		state.is_loading = false
 		if err then
 			state.error = tostring(err)
@@ -448,23 +436,22 @@ function M.open()
 	end
 end
 
----@param opts { force_load: boolean|nil }|nil
----@param on_done fun(unread_count: integer, err: string|nil)|nil
-function M.refresh_in_background(opts, on_done)
+---@param opts { force_load: boolean|nil, on_done: fun()|nil }|nil
+function M.refresh(opts)
 	opts = opts or {}
-	on_done = on_done or function() end
 
 	local provider = current_provider
 	if provider == nil or provider.capabilities.notifications == nil then
-		on_done(0, "Provider has no notification support")
 		return
 	end
 	local notifications_api = provider.capabilities.notifications
 	---@cast notifications_api AtlasNotificationsCapability
 
 	notifications_api.fetch({ force_load = opts.force_load == true }, function(notifications, err)
+		if current_provider ~= provider then
+			return
+		end
 		if err then
-			on_done(state.unread_count, tostring(err))
 			return
 		end
 		state.set_notifications(notifications)
@@ -472,7 +459,9 @@ function M.refresh_in_background(opts, on_done)
 		if M.is_open() then
 			rerender()
 		end
-		on_done(state.unread_count, nil)
+		if opts.on_done then
+			opts.on_done()
+		end
 	end)
 end
 

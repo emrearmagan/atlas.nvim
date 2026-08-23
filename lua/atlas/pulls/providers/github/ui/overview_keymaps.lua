@@ -27,14 +27,14 @@ local function run_action(id, pr)
 			pr = pr,
 			current_user = state.current_user,
 		}, function(result)
-			require("atlas.pulls.ui.main.controller").apply_action_result(pr, result)
+			require("atlas.pulls.ui.dashboard.controller").apply_action_result(pr, result)
 		end)
 	end
 end
 
 ---@param buf integer
 function M.register(buf)
-	local panel_state = require("atlas.pulls.ui.panel.pr.state")
+	local detail_state = require("atlas.pulls.ui.detail.state")
 	local items = {}
 	utils.insert_if(
 		items,
@@ -42,7 +42,7 @@ function M.register(buf)
 			desc = "Edit reviewers",
 			opts = { nowait = true },
 			callback = function()
-				local pr = panel_state.current_pr
+				local pr = detail_state.current_pr
 				if pr == nil then
 					return
 				end
@@ -56,7 +56,7 @@ function M.register(buf)
 			desc = "Edit assignees",
 			opts = { nowait = true },
 			callback = function()
-				local pr = panel_state.current_pr
+				local pr = detail_state.current_pr
 				if pr == nil then
 					return
 				end

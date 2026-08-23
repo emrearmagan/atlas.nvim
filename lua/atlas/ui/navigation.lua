@@ -21,8 +21,7 @@ local function is_selectable(node)
 end
 
 function M.current_item()
-	local layout = require("atlas.ui.layout")
-	local win = layout.win_id("main")
+	local win = require("atlas.ui.dashboard").win()
 	if win == nil or not vim.api.nvim_win_is_valid(win) then
 		return nil
 	end
@@ -34,9 +33,12 @@ local function on_cursor_moved()
 	stop_select_timer()
 	select_timer = vim.defer_fn(function()
 		select_timer = nil
+		if not require("atlas.ui.dashboard").is_active() then
+			return
+		end
 		local item = M.current_item()
-		if ui_state.on_select then
-			ui_state.on_select(item)
+		if ui_state.domain then
+			require("atlas." .. ui_state.domain .. ".ui.dashboard").select(item)
 		end
 	end, DEBOUNCE_MS)
 end
@@ -79,9 +81,9 @@ function M.attach(buf)
 end
 
 function M.move_cursor(direction)
-	local layout = require("atlas.ui.layout")
-	local win = layout.win_id("main")
-	local buf = layout.buf_id("main")
+	local dashboard = require("atlas.ui.dashboard")
+	local win = dashboard.win()
+	local buf = dashboard.buf()
 	if win == nil or not vim.api.nvim_win_is_valid(win) then
 		return
 	end
@@ -114,9 +116,9 @@ end
 ---@param predicate fun(item: table): boolean
 ---@return boolean
 function M.focus_item(predicate)
-	local layout = require("atlas.ui.layout")
-	local win = layout.win_id("main")
-	local buf = layout.buf_id("main")
+	local dashboard = require("atlas.ui.dashboard")
+	local win = dashboard.win()
+	local buf = dashboard.buf()
 	if win == nil or not vim.api.nvim_win_is_valid(win) then
 		return false
 	end
@@ -143,9 +145,9 @@ function M.focus_first_item()
 end
 
 function M.focus_last_item()
-	local layout = require("atlas.ui.layout")
-	local win = layout.win_id("main")
-	local buf = layout.buf_id("main")
+	local dashboard = require("atlas.ui.dashboard")
+	local win = dashboard.win()
+	local buf = dashboard.buf()
 	if win == nil or not vim.api.nvim_win_is_valid(win) then
 		return
 	end

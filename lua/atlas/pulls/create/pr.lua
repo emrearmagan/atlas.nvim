@@ -7,7 +7,7 @@ local keymaps = require("atlas.core.keymaps")
 local logger = require("atlas.core.logger")
 local picker = require("atlas.picker")
 local description = require("atlas.pulls.create.description")
-local pulls_helper = require("atlas.pulls.ui.main.helper")
+local pulls_helper = require("atlas.pulls.ui.dashboard.helper")
 local notify = require("atlas.core.notify")
 
 ---@class CreatePRFields
@@ -338,7 +338,7 @@ local function on_success(pr_state, result)
 
 	notify.info("PR created", { vim_notify = true })
 	pcall(function()
-		require("atlas.pulls.ui.main.controller").refresh_current_view()
+		require("atlas.pulls.ui.dashboard.controller").refresh_current_view()
 	end)
 end
 

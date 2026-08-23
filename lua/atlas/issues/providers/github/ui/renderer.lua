@@ -2,7 +2,7 @@ local M = {}
 
 local icons = require("atlas.ui.shared.icons")
 local utils = require("atlas.ui.shared.utils")
-local helper = require("atlas.issues.ui.main.helper")
+local helper = require("atlas.issues.ui.dashboard.helper")
 local state = require("atlas.issues.state")
 
 ---@param status_id string|nil

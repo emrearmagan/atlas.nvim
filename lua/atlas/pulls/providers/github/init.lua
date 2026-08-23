@@ -310,8 +310,8 @@ return {
 		ui = {
 			setup = require("atlas.pulls.providers.github.highlights").setup,
 			render = require("atlas.pulls.providers.github.ui.main").render,
-			panel = require("atlas.pulls.providers.github.ui.panel"),
-			repo_panel = require("atlas.pulls.providers.github.ui.repo_panel"),
+			detail = require("atlas.pulls.providers.github.ui.detail"),
+			repo_detail = require("atlas.pulls.providers.github.ui.repo_detail"),
 		},
 	},
 }

@@ -5,6 +5,11 @@ local navigation = require("atlas.ui.navigation")
 local resolver = require("atlas.core.keymaps")
 local utils = require("atlas.ui.shared.utils")
 
+local function domain_dashboard()
+	local domain = require("atlas.ui.state").domain
+	return domain and require("atlas." .. domain .. ".ui.dashboard") or nil
+end
+
 ---@param action_id AtlasKeymapActionId|string
 ---@param map_item table
 ---@return table|nil
@@ -103,7 +108,7 @@ function M.register(buf)
 				if help.is_open() then
 					return
 				end
-				require("atlas.ui.layout").close()
+				require("atlas.ui.dashboard").close()
 			end,
 		})
 	)
@@ -113,14 +118,9 @@ function M.register(buf)
 		item("ui.toggle_panel", {
 			desc = "Toggle detail panel",
 			callback = function()
-				local layout_mod = require("atlas.ui.layout")
-				local ui_st = require("atlas.ui.state")
-				local was_open = layout_mod.win_id("detail") ~= nil
-				layout_mod.toggle_detail()
-				if not was_open then
-					if ui_st.on_panel_open then
-						ui_st.on_panel_open()
-					end
+				local dashboard = domain_dashboard()
+				if dashboard then
+					dashboard.toggle_detail()
 				end
 			end,
 		})
@@ -132,10 +132,9 @@ function M.register(buf)
 			desc = "Next panel tab",
 			opts = { nowait = true },
 			callback = function()
-				local layout_mod = require("atlas.ui.layout")
-				local ui_st = require("atlas.ui.state")
-				if layout_mod.win_id("detail") ~= nil and ui_st.on_panel_next_tab then
-					ui_st.on_panel_next_tab()
+				local dashboard = domain_dashboard()
+				if dashboard then
+					dashboard.next_detail_tab()
 				end
 			end,
 		})
@@ -147,10 +146,9 @@ function M.register(buf)
 			desc = "Previous panel tab",
 			opts = { nowait = true },
 			callback = function()
-				local layout_mod = require("atlas.ui.layout")
-				local ui_st = require("atlas.ui.state")
-				if layout_mod.win_id("detail") ~= nil and ui_st.on_panel_prev_tab then
-					ui_st.on_panel_prev_tab()
+				local dashboard = domain_dashboard()
+				if dashboard then
+					dashboard.prev_detail_tab()
 				end
 			end,
 		})

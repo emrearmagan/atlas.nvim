@@ -123,5 +123,5 @@
 ---@class PullsUICapability
 ---@field setup fun()|nil
 ---@field render (fun(pulls: PullRequest[], layout: "compact"|"grouped"|"plain", opts: { width: integer }): PullsMainRenderResult)|nil
----@field panel PullsProviderPRPanel|nil
----@field repo_panel PullsProviderRepoPanel|nil
+---@field detail PullsProviderDetail|nil
+---@field repo_detail PullsProviderRepoDetail|nil

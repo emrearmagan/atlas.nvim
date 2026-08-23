@@ -24,7 +24,7 @@ local function bootstrap_common()
 	require("atlas.ui.popups.help").register_command(
 		"Commands",
 		commands,
-		{ index = 999, buffer = require("atlas.ui.layout").buf_id("main") }
+		{ index = 999, buffer = require("atlas.ui.dashboard").buf() }
 	)
 end
 
@@ -55,40 +55,18 @@ end
 ---@param id string
 ---@param opts? { initial_view?: table }
 local function open_with_provider(domain, id, opts)
-	local layout = require("atlas.ui.layout")
-
-	layout.ensure_open()
-	bootstrap_common()
 	local provider = load_provider(domain, id)
 	if provider == nil then
 		return
 	end
 
+	require("atlas.ui.dashboard").open(domain, provider.id)
+	bootstrap_common()
 	if domain == "pulls" then
 		---@cast provider PullsProvider
-		layout.set_context(function()
-			require("atlas.pulls").dispose()
-		end, { domain = domain, provider = provider.id })
-		layout.set_render_callback(function()
-			require("atlas.pulls").render()
-			local panel = require("atlas.pulls.ui.panel")
-			if panel.is_open() then
-				panel.render()
-			end
-		end)
 		require("atlas.pulls").init(provider, opts)
 	else
 		---@cast provider IssuesProvider
-		layout.set_context(function()
-			require("atlas.issues").dispose()
-		end, { domain = domain, provider = provider.id })
-		layout.set_render_callback(function()
-			require("atlas.issues").render()
-			local panel = require("atlas.issues.ui.panel")
-			if panel.is_open() then
-				panel.render()
-			end
-		end)
 		require("atlas.issues").init(provider, opts)
 	end
 end

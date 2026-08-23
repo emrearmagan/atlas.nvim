@@ -73,23 +73,23 @@
 ---@field render (fun(groups: IssuesGroup[], layout: "plain"|"compact", opts: { width: integer }): IssuesMainRenderResult)|nil
 ---@field format_row (fun(issue: Issue, is_child: boolean, layout: "plain"|"compact"): table|nil)|nil
 ---@field cell_hl (fun(row: table, col: table, ctx: { text: string, padded: string, width: integer }): table[]|nil)|nil
----@field panel IssuesProviderPanel|nil
+---@field detail IssuesProviderDetail|nil
 
 --------------------------------------------------------------------------------
--- Panel interface
+-- Detail interface
 --------------------------------------------------------------------------------
 
----@class IssuesProviderPanel
----@field header_rows (fun(issue: Issue, details: IssueDetails|nil, loading: boolean): IssuesPanelHeaderRow[])|nil
----@field chips (fun(issue: Issue, details: IssueDetails|nil, loading: boolean): IssuesPanelChip[])|nil
----@field tabs (fun(): IssuesPanelTab[])|nil
+---@class IssuesProviderDetail
+---@field header_rows (fun(issue: Issue, details: IssueDetails|nil, loading: boolean): IssuesDetailHeaderRow[])|nil
+---@field chips (fun(issue: Issue, details: IssueDetails|nil, loading: boolean): IssuesDetailChip[])|nil
+---@field tabs (fun(): IssuesDetailTab[])|nil
 ---@field fetch_header (fun(issue: Issue, details: IssueDetails, opts: { force_refresh: boolean|nil }|nil, on_done: fun()): { cancel: fun() }|nil)|nil
 
 --------------------------------------------------------------------------------
--- Panel types
+-- Detail types
 --------------------------------------------------------------------------------
 
----@class IssuesPanelHeaderRow
+---@class IssuesDetailHeaderRow
 ---@field k1 string
 ---@field v1 string
 ---@field v1_hl string|table[]|nil hl group name, or list of {start_col, end_col, hl_group} relative to the v1 cell
@@ -97,11 +97,11 @@
 ---@field v2 string
 ---@field v2_hl string|table[]|nil hl group name, or list of {start_col, end_col, hl_group} relative to the v2 cell
 
----@class IssuesPanelChip
+---@class IssuesDetailChip
 ---@field label string
 ---@field hl string|nil
 
----@class IssuesPanelTabModule
+---@class IssuesDetailTabModule
 ---@field render fun(issue: IssueDetails, width: integer): string[], table[], table<integer, table>|nil
 ---@field on_select (fun(issue: IssueDetails, refresh: fun(), opts: { force_refresh: boolean|nil }|nil))|nil
 ---@field reset (fun())|nil
@@ -111,9 +111,9 @@
 ---@field is_selectable_line (fun(lnum: integer, entry: table): boolean)|nil
 ---@field on_enter (fun(issue: Issue, entry: table): boolean|nil)|nil
 
----@class IssuesPanelTab
+---@class IssuesDetailTab
 ---@field key string
 ---@field label string
 ---@field icon string|nil
 ---@field icon_hl string|nil
----@field mod IssuesPanelTabModule
+---@field mod IssuesDetailTabModule

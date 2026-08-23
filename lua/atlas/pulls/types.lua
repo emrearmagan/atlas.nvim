@@ -309,3 +309,65 @@
 ---@field date string
 ---@field html_url string|nil
 ---@field statuses_url string|nil
+
+--------------------------------------------------------------------------------
+-- Detail UI
+--------------------------------------------------------------------------------
+
+---@class PullsDetailHeaderRow
+---@field k1 string
+---@field k1_hl? string
+---@field v1 string
+---@field v1_hl string|table[] hl group name, or list of {start_col, end_col, hl_group} relative to the v1 cell
+---@field k2 string
+---@field k2_hl? string
+---@field v2 string
+---@field v2_hl string|table[] hl group name, or list of {start_col, end_col, hl_group} relative to the v2 cell
+
+---@class PullsDetailChip
+---@field label string
+---@field hl string|nil
+
+---@class PullsProviderDetail
+---@field header_rows (fun(pr: PullRequest, details: PullRequestDetails|nil, loading: boolean): PullsDetailHeaderRow[])|nil
+---@field chips (fun(pr: PullRequest, details: PullRequestDetails|nil, loading: boolean): PullsDetailChip[])|nil
+---@field tabs (fun(): PullsDetailTab[])|nil
+---@field fetch_header (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun()): { cancel: fun() }|nil)|nil
+
+---@class PullsDetailTabModule
+---@field render fun(pr: PullRequest, width: integer): string[], table[], table<integer, table>|nil
+---@field on_select (fun(pr: PullRequest, refresh: fun(), opts: { force_refresh: boolean|nil }|nil))|nil
+---@field reset (fun())|nil
+---@field activate (fun(buf: integer|nil, refresh: fun()|nil))|nil
+---@field deactivate (fun(buf: integer|nil))|nil
+---@field is_loading (fun(): boolean)|nil
+---@field is_selectable_line (fun(lnum: integer, entry: table): boolean)|nil
+---@field on_enter (fun(pr: PullRequest, entry: table): boolean|nil)|nil
+
+---@class PullsDetailTab
+---@field key string
+---@field label string
+---@field icon string|nil
+---@field icon_hl string|nil
+---@field mod PullsDetailTabModule
+---@field keymaps { register: fun(buf: integer), remove: fun(buf: integer) }|nil provider-specific keymaps registered while this tab is active
+
+---@class PullsProviderRepoDetail
+---@field tabs (fun(): PullsRepoDetailTab[])|nil
+
+---@class PullsRepoDetailTabModule
+---@field render fun(repo: PullsRepo, width: integer): string[], table[], table<integer, table>|nil
+---@field on_select (fun(repo: PullsRepo, refresh: fun(), opts: { force_refresh: boolean|nil }|nil))|nil
+---@field reset (fun())|nil
+---@field activate (fun(buf: integer|nil, refresh: fun()|nil))|nil
+---@field deactivate (fun(buf: integer|nil))|nil
+---@field is_loading (fun(): boolean)|nil
+---@field is_selectable_line (fun(lnum: integer, entry: table): boolean)|nil
+---@field on_enter (fun(repo: PullsRepo, entry: table): boolean|nil)|nil
+
+---@class PullsRepoDetailTab
+---@field key string
+---@field label string
+---@field icon string|nil
+---@field icon_hl string|nil
+---@field mod PullsRepoDetailTabModule

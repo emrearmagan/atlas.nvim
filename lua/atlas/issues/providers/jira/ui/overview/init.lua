@@ -1,4 +1,4 @@
----@class JiraIssuesOverviewTab : IssuesPanelTabModule
+---@class JiraIssuesOverviewTab : IssuesDetailTabModule
 local M = {}
 
 local utils = require("atlas.ui.shared.utils")

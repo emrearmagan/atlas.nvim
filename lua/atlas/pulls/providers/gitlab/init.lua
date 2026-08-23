@@ -370,8 +370,8 @@ return {
 		ui = {
 			setup = require("atlas.pulls.providers.gitlab.highlights").setup,
 			render = require("atlas.pulls.providers.gitlab.ui.main").render,
-			panel = require("atlas.pulls.providers.gitlab.ui.panel"),
-			repo_panel = require("atlas.pulls.providers.gitlab.ui.repo_panel"),
+			detail = require("atlas.pulls.providers.gitlab.ui.detail"),
+			repo_detail = require("atlas.pulls.providers.gitlab.ui.repo_detail"),
 		},
 	},
 }
