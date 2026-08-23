@@ -85,33 +85,22 @@ function M.list(view, opts, on_done)
 		on_done(nil, nil, true, "Invalid Forgejo repository")
 		return nil
 	end
-	local owner = vim.trim(view.owner or "")
-	local team = vim.trim(view.team or "")
-	if team ~= "" and owner == "" then
-		on_done(nil, nil, true, "Forgejo issue team filter requires owner")
-		return nil
+	local params = {}
+	for key, value in pairs(view.extra_params or {}) do
+		params[key] = value
 	end
 	local endpoint = base and (base .. "/issues") or "/repos/issues/search"
-	local params = {
-		state = view.state or "open",
-		type = "issues",
-		page = page,
-		limit = limit,
-		q = view.search,
-		labels = view.labels,
-		milestones = view.milestones,
-		since = view.since,
-		before = view.before,
-		sort = view.sort,
-	}
+	params.state = view.state or "open"
+	params.type = "issues"
+	params.page = page
+	params.limit = limit
+	params.q = view.search
+	params.labels = view.labels
 
 	if not base then
 		params.assigned = scope == "assigned" or nil
 		params.created = scope == "created" or nil
 		params.mentioned = scope == "mentioned" or nil
-		params.owner = owner ~= "" and owner or nil
-		params.team = team ~= "" and team or nil
-		params.priority_repo_id = view.priority_repo_id
 	end
 
 	local function fetch(done)
@@ -123,7 +112,6 @@ function M.list(view, opts, on_done)
 			return
 		end
 		local issues = map_issues(raw, base and repo or nil)
-		-- The instance may clamp `limit` below Atlas's requested size.
 		local has_next = #raw > 0
 		on_done(issues, has_next and tostring(page + 1) or nil, not has_next, nil)
 	end

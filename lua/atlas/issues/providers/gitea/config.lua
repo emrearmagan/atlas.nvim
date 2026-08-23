@@ -6,12 +6,7 @@ require("atlas.providers.gitea.config")
 ---@field scope "assigned"|"created"|"mentioned"|"all"|nil
 ---@field search string|nil
 ---@field labels string|nil
----@field milestones string|nil
----@field since string|nil RFC 3339 timestamp.
----@field before string|nil RFC 3339 timestamp.
----@field owner string|nil Owner filter for cross-repository views.
----@field team string|nil Team filter for cross-repository views.
----@field created_by string|nil Gitea-only creator filter for cross-repository views.
+---@field extra_params table<string, string|number|boolean>|nil
 
 ---@class AtlasGiteaIssuesViewConfig : AtlasIssuesViewConfig, AtlasGiteaIssuesSearchConfig
 
