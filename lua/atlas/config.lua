@@ -246,9 +246,6 @@ M.options = {
 					toggle_resolved = "x",
 				},
 			},
-			pipelines = {
-				open = "gd",
-			},
 			filters = {
 				open = "gpo",
 				merged = "gpm",

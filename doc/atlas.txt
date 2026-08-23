@@ -863,9 +863,6 @@ Defaults live under `keymaps` in `setup()`. Each entry accepts:
             toggle_resolved       = "x",
           },
         },
-        pipelines = {
-          open = "gd",
-        },
         filters = {
           open                   = "gpo",
           merged                 = "gpm",
