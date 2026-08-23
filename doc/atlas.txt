@@ -54,15 +54,14 @@ With lazy.nvim:
     opts = {},
   }
 <
-With packer.nvim:
+With vim.pack (Neovim 0.12+):
 >lua
-  use {
-    "emrearmagan/atlas.nvim",
-    config = function()
-      -- See |atlas-configuration|.
-      require("atlas").setup({})
-    end,
-  }
+  vim.pack.add({
+    "https://github.com/emrearmagan/atlas.nvim",
+  })
+
+  -- See |atlas-configuration|.
+  require("atlas").setup({})
 <
 
 ==============================================================================

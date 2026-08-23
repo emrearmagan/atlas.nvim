@@ -56,16 +56,15 @@ Review GitHub, Bitbucket, and GitLab pull requests and manage Jira, GitHub, and 
 }
 ```
 
-### Using [packer.nvim](https://github.com/wbthomason/packer.nvim)
+### Using [vim.pack](https://neovim.io/doc/user/pack/#vim.pack) (Neovim 0.12+)
 
 ```lua
-use {
-  "emrearmagan/atlas.nvim",
-  config = function()
-    -- See Configuration below
-    require("atlas").setup({})
-  end
-}
+vim.pack.add({
+  "https://github.com/emrearmagan/atlas.nvim",
+})
+
+-- See Configuration below
+require("atlas").setup({})
 ```
 
 > [!tip]
