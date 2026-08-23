@@ -27,20 +27,11 @@ describe("gitlab pullrequests.update_description", function()
 		calls = {}
 		package.loaded[module_name] = nil
 		package.loaded["atlas.providers.gitlab.client"] = nil
-		package.preload["atlas.pulls.providers.gitlab.api.mapper"] = function()
-			return {
-				to_pull_request_details = function(raw)
-					return raw
-				end,
-			}
-		end
 	end)
 
 	after_each(function()
 		package.preload["atlas.providers.gitlab.client"] = nil
 		package.loaded["atlas.providers.gitlab.client"] = nil
-		package.preload["atlas.pulls.providers.gitlab.api.mapper"] = nil
-		package.loaded["atlas.pulls.providers.gitlab.api.mapper"] = nil
 		package.loaded[module_name] = nil
 	end)
 
@@ -64,7 +55,7 @@ describe("gitlab pullrequests.update_description", function()
 	it("PUTs the new description to the merge request endpoint", function()
 		stub_service(function(method, endpoint, payload, callback)
 			table.insert(calls, { method = method, endpoint = endpoint, payload = payload })
-			callback({ description = "Normalized by GitLab" }, nil)
+			callback({ iid = 12, description = "Normalized by GitLab" }, nil)
 		end)
 		local api = fresh_module()
 		local pr = { id = 12, repo_full_name = "group/project", description = "Old body" }
@@ -98,7 +89,7 @@ describe("gitlab pullrequests.update_description", function()
 	it("clears the description when given an empty body", function()
 		stub_service(function(_, _, payload, callback)
 			table.insert(calls, { payload = payload })
-			callback({ description = "" }, nil)
+			callback({ iid = 12, description = "" }, nil)
 		end)
 		local api = fresh_module()
 		local pr = { id = 12, repo_full_name = "group/project", description = "Old body" }

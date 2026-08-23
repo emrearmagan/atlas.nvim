@@ -7,7 +7,6 @@ local original = {
 	writefile = vim.fn.writefile,
 	delete = vim.fn.delete,
 	mkdir = vim.fn.mkdir,
-	isdirectory = vim.fn.isdirectory,
 	encode = vim.json.encode,
 	decode = vim.json.decode,
 }
@@ -31,7 +30,7 @@ local function refs(items)
 	return result
 end
 
-describe("starred items", function()
+describe("core.starred", function()
 	local starred
 	local stored
 	local pending
@@ -75,9 +74,6 @@ describe("starred items", function()
 		vim.fn.mkdir = function()
 			return 1
 		end
-		vim.fn.isdirectory = function()
-			return 1
-		end
 		vim.json.encode = function(value)
 			pending = copy(value)
 			return "json"
@@ -99,7 +95,6 @@ describe("starred items", function()
 		vim.fn.writefile = original.writefile
 		vim.fn.delete = original.delete
 		vim.fn.mkdir = original.mkdir
-		vim.fn.isdirectory = original.isdirectory
 		vim.json.encode = original.encode
 		vim.json.decode = original.decode
 		package.loaded["atlas.core.starred"] = nil

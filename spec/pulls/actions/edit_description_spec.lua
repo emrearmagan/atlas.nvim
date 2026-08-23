@@ -39,7 +39,7 @@ local function context(overrides)
 	return ctx, notifications
 end
 
-describe("pulls edit_description action", function()
+describe("pulls.actions.edit_description", function()
 	local editor, opened, actions
 
 	before_each(function()

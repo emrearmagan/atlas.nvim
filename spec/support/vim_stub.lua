@@ -27,11 +27,6 @@ _G.vim = {
 		return result
 	end,
 
-	-- vim.inspect / vim.fn stubs used by various modules
-	inspect = function(v)
-		return tostring(v)
-	end,
-
 	-- vim.schedule(fn) -> run immediately; specs are single-threaded
 	schedule = function(fn)
 		fn()
@@ -110,23 +105,11 @@ _G.vim = {
 	},
 
 	fn = {
-		expand = function(x)
-			if x == "~" then
-				return os.getenv("HOME") or ""
-			end
-			return x
-		end,
 		fnamemodify = function(path, _)
 			return path
 		end,
-		isdirectory = function(_)
-			return 1
-		end,
 		stdpath = function(_)
 			return "/tmp"
-		end,
-		writefile = function(_, _, _)
-			return 0
 		end,
 	},
 }

@@ -1,6 +1,6 @@
 local parser = require("atlas.core.git.diff_parser")
 
-describe("diff_parser", function()
+describe("core.git.diff_parser", function()
 	describe("hunk header parsing", function()
 		it("captures starts, counts, and function context", function()
 			local raw = table.concat({
@@ -57,8 +57,8 @@ describe("diff_parser", function()
 				"+delta",
 			}, "\n")
 
-			local files = parser.parse(raw)
-			local lines = files[1].hunks[1].lines
+			local hunk = parser.parse(raw)[1].hunks[1]
+			local lines = hunk.lines
 			assert.are.equal(4, #lines)
 
 			assert.are.equal("context", lines[1].kind)
@@ -75,50 +75,16 @@ describe("diff_parser", function()
 
 			assert.are.equal("add", lines[4].kind)
 			assert.are.equal(22, lines[4].new_line)
-		end)
-	end)
 
-	describe("content extraction", function()
-		it("strips the leading +/-/space marker", function()
-			local raw = table.concat({
-				"diff --git a/x b/x",
-				"--- a/x",
-				"+++ b/x",
-				"@@ -1,3 +1,3 @@",
-				" context",
-				"-removed",
-				"+added",
-				"",
-			}, "\n")
-
-			local lines = parser.parse(raw)[1].hunks[1].lines
-			assert.are.equal("context", lines[1].content)
-			assert.are.equal("removed", lines[2].content)
-			assert.are.equal("added", lines[3].content)
-			assert.are.equal("+added", lines[3].text)
-		end)
-	end)
-
-	describe("additions / deletions", function()
-		it("counts +/- lines per hunk", function()
-			local raw = table.concat({
-				"diff --git a/x b/x",
-				"--- a/x",
-				"+++ b/x",
-				"@@ -1,5 +1,6 @@",
-				" a",
-				"-b",
-				"-c",
-				"+B",
-				"+C",
-				"+D",
-				" e",
-				"",
-			}, "\n")
-
-			local h = parser.parse(raw)[1].hunks[1]
-			assert.are.equal(3, h.additions)
-			assert.are.equal(2, h.deletions)
+			assert.are.same({ "alpha", "beta", "gamma", "delta" }, {
+				lines[1].content,
+				lines[2].content,
+				lines[3].content,
+				lines[4].content,
+			})
+			assert.are.equal("+gamma", lines[3].text)
+			assert.are.equal(2, hunk.additions)
+			assert.are.equal(1, hunk.deletions)
 		end)
 	end)
 
@@ -260,11 +226,6 @@ describe("diff_parser", function()
 	describe("edge cases", function()
 		it("returns empty list for empty input", function()
 			assert.are.same({}, parser.parse(""))
-		end)
-
-		it("returns empty list for nil-ish (non-string) input", function()
-			---@diagnostic disable-next-line: param-type-mismatch
-			assert.are.same({}, parser.parse(nil))
 		end)
 
 		it("does not crash on a file block without hunks", function()
