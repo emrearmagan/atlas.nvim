@@ -168,9 +168,9 @@ end
 
 ---@return AtlasGiteaIssuesViewConfig[]
 function M.views()
-	local cfg = require("atlas.providers").options("gitea", "issues") or {}
-	local views = cfg.views
-	if views == nil then
+	local cfg = require("atlas.config").domain_options("gitea", "issues") or {}
+	local views = cfg.views or {}
+	if #views == 0 then
 		views = {
 			{ name = "Assigned", key = "1", scope = "assigned", state = "open" },
 			{ name = "Created", key = "2", scope = "created", state = "open" },

@@ -125,8 +125,9 @@ end
 
 ---@return AtlasGiteaPullsViewConfig[]
 local function views()
-	local cfg = require("atlas.config").domain_options("gitea", "pulls")
-	return cfg.views or {}
+	local cfg = require("atlas.config").domain_options("gitea", "pulls") or {}
+	local configured = cfg.views or {}
+	return #configured > 0 and configured or { { name = "Pull Requests", key = "1", layout = "compact" } }
 end
 
 ---@param value string

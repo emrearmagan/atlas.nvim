@@ -56,27 +56,6 @@ local function check_views(views, label)
 	end
 end
 
----@param id AtlasProviderId
-local function check_provider_views(id)
-	local provider = providers[id]
-	if not provider then
-		return
-	end
-
-	for _, domain in ipairs({ "pulls", "issues" }) do
-		if provider.domains[domain] then
-			local options = config.domain_options(id, domain) or {}
-			local views = options.views or {}
-			local label = string.format("%s %s", provider.name, domain)
-			if #views == 0 then
-				vim.health.ok(string.format("%s: using default views", label))
-			else
-				check_views(views, label)
-			end
-		end
-	end
-end
-
 local function check_pulls()
 	local pulls = config.options and config.options.pulls or nil
 	if not pulls then
@@ -112,22 +91,23 @@ local function check_pulls()
 end
 
 local function check_bitbucket()
-	local provider = config.provider_options("bitbucket")
-	if provider == nil then
+	local pulls = config.domain_options("bitbucket", "pulls")
+	if pulls == nil then
 		vim.health.info("Bitbucket not configured")
 		return
 	end
 
-	check_credentials(provider, { "user", "token" }, "Bitbucket")
-	check_provider_views("bitbucket")
+	check_credentials(config.provider_options("bitbucket") or {}, { "user", "token" }, "Bitbucket")
+	check_views(pulls.views, "Bitbucket pulls")
 end
 
 local function check_github()
-	if config.provider_options("github") == nil then
+	local pulls = config.domain_options("github", "pulls")
+	local issues = config.domain_options("github", "issues")
+	if pulls == nil and issues == nil then
 		vim.health.info("GitHub not configured")
 		return
 	end
-	check_provider_views("github")
 
 	if vim.fn.executable("gh") ~= 1 then
 		vim.health.error("gh CLI not found", { "Install from https://cli.github.com" })
@@ -140,70 +120,91 @@ local function check_github()
 		return
 	end
 	vim.health.ok("gh authenticated")
+
+	if pulls then
+		check_views(pulls.views, "GitHub pulls")
+	end
+	if issues then
+		check_views(issues.views, "GitHub issues")
+	end
 end
 
 local function check_gitlab()
-	local provider = config.provider_options("gitlab")
-	if provider == nil then
+	local pulls = config.domain_options("gitlab", "pulls")
+	local issues = config.domain_options("gitlab", "issues")
+	if pulls == nil and issues == nil then
 		vim.health.info("GitLab not configured")
 		return
 	end
 
-	check_credentials(provider, { "base_url", "token" }, "GitLab")
-	check_https_url(provider.base_url, "providers.gitlab.base_url")
-	check_provider_views("gitlab")
+	local provider = config.provider_options("gitlab") or {}
+	if pulls then
+		check_credentials(provider, { "base_url", "token" }, "GitLab pulls")
+		check_https_url(provider.base_url, "providers.gitlab.base_url")
+		check_views(pulls.views, "GitLab pulls")
+	end
+	if issues then
+		check_credentials(provider, { "base_url", "token" }, "GitLab issues")
+		check_https_url(provider.base_url, "providers.gitlab.base_url")
+		check_views(issues.views, "GitLab issues")
+	end
 end
 
 local function check_gitea()
-	local pulls = providers.options("gitea", "pulls")
-	local issues = providers.options("gitea", "issues")
-	if pulls == nil and issues == nil then
-		vim.health.info("Gitea / Forgejo not configured")
+	local provider = config.provider_options("gitea")
+	if provider == nil then
+		vim.health.info("Gitea not configured")
 		return
 	end
 
-	for _, entry in ipairs({ { "pulls", pulls }, { "issues", issues } }) do
-		local domain, options = entry[1], entry[2]
-		if options then
-			local label = string.format("Gitea / Forgejo %s", domain)
-			local base_url = vim.trim(tostring(options.base_url or ""))
-			if base_url == "" then
-				vim.health.error(label .. " base_url is required")
-			elseif not base_url:match("^https?://[^/]+") then
-				vim.health.error(label .. " base_url must start with http:// or https://")
-			else
-				vim.health.ok(label .. " base_url configured")
-			end
-			if vim.trim(tostring(options.token or "")) == "" then
-				vim.health.error(label .. " token is required")
-			else
-				vim.health.ok(label .. " token configured")
-			end
-			local api_type = tostring(options.api_type or "gitea")
-			if api_type == "forgejo" or api_type == "gitea" then
-				vim.health.ok(string.format("%s API type: %s", label, api_type))
-			else
-				vim.health.error(string.format("%s api_type must be 'forgejo' or 'gitea'", label))
-			end
-			if domain == "issues" and options.views == nil then
-				vim.health.ok(label .. ": using default views")
-			else
-				check_views(options.views, label)
-			end
-		end
+	check_credentials(provider, { "base_url", "token" }, "Gitea")
+	local pulls = config.domain_options("gitea", "pulls") or {}
+	if pulls.views and #pulls.views > 0 then
+		check_views(pulls.views, "Gitea pulls")
+	else
+		vim.health.ok("Gitea pulls: using default views")
+	end
+	local issues = config.domain_options("gitea", "issues") or {}
+	if issues.views and #issues.views > 0 then
+		check_views(issues.views, "Gitea issues")
+	else
+		vim.health.ok("Gitea issues: using default views")
+	end
+end
+
+local function check_forgejo()
+	local provider = config.provider_options("forgejo")
+	if provider == nil then
+		vim.health.info("Forgejo not configured")
+		return
+	end
+
+	check_credentials(provider, { "base_url", "token" }, "Forgejo")
+	local pulls = config.domain_options("forgejo", "pulls") or {}
+	if pulls.views and #pulls.views > 0 then
+		check_views(pulls.views, "Forgejo pulls")
+	else
+		vim.health.ok("Forgejo pulls: using default views")
+	end
+	local issues = config.domain_options("forgejo", "issues") or {}
+	if issues.views and #issues.views > 0 then
+		check_views(issues.views, "Forgejo issues")
+	else
+		vim.health.ok("Forgejo issues: using default views")
 	end
 end
 
 local function check_jira()
-	local provider = config.provider_options("jira")
-	if provider == nil then
+	local issues = config.domain_options("jira", "issues")
+	if issues == nil then
 		vim.health.info("Jira not configured")
 		return
 	end
 
+	local provider = config.provider_options("jira") or {}
 	check_credentials(provider, { "email", "token" }, "Jira")
 	check_https_url(provider.base_url, "providers.jira.base_url")
-	check_provider_views("jira")
+	check_views(issues.views, "Jira")
 end
 
 local function validate_keymaps()
@@ -254,8 +255,11 @@ function M.check()
 	vim.health.start("GitLab")
 	check_gitlab()
 
-	vim.health.start("Gitea / Forgejo")
+	vim.health.start("Gitea")
 	check_gitea()
+
+	vim.health.start("Forgejo")
+	check_forgejo()
 
 	vim.health.start("Jira")
 	check_jira()

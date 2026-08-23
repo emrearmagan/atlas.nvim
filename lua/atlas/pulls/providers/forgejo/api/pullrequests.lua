@@ -6,8 +6,17 @@ local request_scope = require("atlas.core.requests")
 
 local api = {}
 
+local function cache_scope()
+	return string.format("forgejo:pulls:%s", service.base_url())
+end
+
+local function invalidate_list_cache()
+	service.clear_cache(cache_scope() .. ":list:")
+end
+
 local function draft_prefix()
-	local prefix = vim.trim(config.domain_options("forgejo", "pulls").draft_prefix or "")
+	local options = config.domain_options("forgejo", "pulls") or {}
+	local prefix = vim.trim(options.draft_prefix or "")
 	return prefix ~= "" and prefix or "WIP:"
 end
 
@@ -137,6 +146,7 @@ local function create(opts, on_done)
 			on_done(nil, request_err)
 			return
 		end
+		invalidate_list_cache()
 		local result = { id = raw.number, url = raw.html_url, message = "Pull request created" }
 		local warnings = {}
 		if (raw.draft == true) ~= (opts.draft == true) then
@@ -172,10 +182,6 @@ local function create(opts, on_done)
 end
 
 api.create = create
-
-local function cache_scope()
-	return string.format("forgejo:pulls:%s", service.base_url())
-end
 
 local function detail_cache_key(pr)
 	return string.format("%s:pr:%s:%s", cache_scope(), pr.repo_full_name, tostring(pr.id))
@@ -465,6 +471,7 @@ local function patch_title(pr, title, on_done)
 		pr.state = updated.state
 		pr._raw = updated._raw
 		service.delete_memory_cache(detail_cache_key(pr))
+		invalidate_list_cache()
 		on_done(true, nil)
 	end)
 end
@@ -551,6 +558,7 @@ function api.update_description(pr, description, on_done)
 		pr.description = updated.description
 		pr._raw = updated._raw
 		service.delete_memory_cache(detail_cache_key(pr))
+		invalidate_list_cache()
 		on_done(true, nil)
 	end)
 end
@@ -599,6 +607,7 @@ function api.update_reviewers(pr, selected, original, on_done)
 	return run_requests(requests, function(ok, err)
 		if ok then
 			service.delete_memory_cache(detail_cache_key(pr))
+			invalidate_list_cache()
 		end
 		on_done(ok, err)
 	end)
@@ -653,6 +662,7 @@ function api.update_assignees(pr, assignees, on_done)
 		local updated = mapper.to_pull_request_details(raw)
 		pr.assignees, pr._raw = updated.assignees, updated._raw
 		service.delete_memory_cache(detail_cache_key(pr))
+		invalidate_list_cache()
 		on_done(true, nil)
 	end)
 end
@@ -674,6 +684,7 @@ function api.update_labels(pr, labels, on_done)
 		local updated = mapper.to_pull_request_details(raw)
 		pr.labels, pr._raw = updated.labels, updated._raw
 		service.delete_memory_cache(detail_cache_key(pr))
+		invalidate_list_cache()
 		on_done(true, nil)
 	end)
 end
@@ -738,6 +749,7 @@ function api.set_state(pr, state, on_done)
 		end
 		local updated = mapper.to_pull_request_details(raw)
 		service.delete_memory_cache(detail_cache_key(pr))
+		invalidate_list_cache()
 		on_done(updated, nil)
 	end)
 end
@@ -768,6 +780,7 @@ function api.update_branch(pr, style, on_done)
 	return service.request("POST", endpoint .. "/update" .. service.query({ style = style }), nil, function(_, err)
 		if not err then
 			service.delete_memory_cache(detail_cache_key(pr))
+			invalidate_list_cache()
 		end
 		on_done(err == nil, err)
 	end)
@@ -793,6 +806,7 @@ function api.merge(pr, opts, on_done)
 	}, function(_, err)
 		if not err then
 			service.delete_memory_cache(detail_cache_key(pr))
+			invalidate_list_cache()
 		end
 		on_done(err == nil, err)
 	end)

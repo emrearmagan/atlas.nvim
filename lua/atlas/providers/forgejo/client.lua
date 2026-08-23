@@ -46,6 +46,10 @@ local function new(domain)
 		cache.set(key, value, client.cache_ttl())
 	end
 
+	function client.clear_cache(prefix)
+		cache.clear_prefix(prefix)
+	end
+
 	function client.get_memory_cache(key)
 		local entry = memory_cache.get(key)
 		return entry and entry.value or nil, entry ~= nil and entry.value ~= nil
