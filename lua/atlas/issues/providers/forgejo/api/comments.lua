@@ -2,8 +2,8 @@ local mapper = require("atlas.issues.providers.forgejo.api.mapper")
 local json = require("atlas.core.json")
 
 local M = {}
-local service = require("atlas.providers.forgejo.client").issues
-local pagination = require("atlas.providers.forgejo.pagination").issues
+local service = require("atlas.providers.forgejo.client")
+local pagination = require("atlas.providers.forgejo.pagination")
 
 ---@param key string
 ---@return string|nil, integer|nil

@@ -1,7 +1,7 @@
 local providers = require("atlas.pulls.providers")
 local pipeline_api = require("atlas.pulls.providers.gitea.api.pipelines")
 local pullrequests = require("atlas.pulls.providers.gitea.api.pullrequests")
-local service = require("atlas.providers.gitea.client").pulls
+local service = require("atlas.providers.gitea.client")
 local request_scope = require("atlas.core.requests")
 
 local M = {}

@@ -5,7 +5,7 @@ local request_scope = require("atlas.core.requests")
 local comments_api = require("atlas.issues.providers.forgejo.api.comments")
 local issues_api = require("atlas.issues.providers.forgejo.api.issues")
 local timeline_api = require("atlas.issues.providers.forgejo.api.timeline")
-local notifications_api = require("atlas.providers.forgejo.notifications").new("issues")
+local notifications_api = require("atlas.providers.forgejo.notifications")
 
 ---@class ForgejoIssuesProvider : IssuesProvider
 local M = {}
@@ -270,13 +270,6 @@ local comments = {
 	end,
 }
 
----@type AtlasNotificationsCapability
-local notifications = {
-	fetch = notifications_api.fetch,
-	mark_read = notifications_api.mark_read,
-	mark_done = notifications_api.mark_done,
-}
-
 local provider_actions = require("atlas.issues.providers.forgejo.actions")
 local panel = require("atlas.issues.providers.forgejo.ui.panel")
 
@@ -295,7 +288,7 @@ return {
 			views = M.views,
 		},
 		comments = comments,
-		notifications = notifications,
+		notifications = notifications_api,
 		actions = provider_actions,
 		ui = {
 			setup = require("atlas.issues.providers.forgejo.highlights").setup,

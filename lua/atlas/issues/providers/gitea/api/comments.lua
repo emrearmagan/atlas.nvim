@@ -1,5 +1,5 @@
-local service = require("atlas.providers.gitea.client").issues
-local pagination = require("atlas.providers.gitea.pagination").issues
+local service = require("atlas.providers.gitea.client")
+local pagination = require("atlas.providers.gitea.pagination")
 local mapper = require("atlas.issues.providers.gitea.api.mapper")
 local json = require("atlas.core.json")
 

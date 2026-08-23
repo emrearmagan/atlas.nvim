@@ -3,8 +3,8 @@ local request_scope = require("atlas.core.requests")
 local mapper = require("atlas.issues.providers.forgejo.api.mapper")
 
 local M = {}
-local service = require("atlas.providers.forgejo.client").issues
-local pagination = require("atlas.providers.forgejo.pagination").issues
+local service = require("atlas.providers.forgejo.client")
+local pagination = require("atlas.providers.forgejo.pagination")
 
 ---@param slug string|nil
 ---@return string|nil

@@ -1,5 +1,5 @@
-local service = require("atlas.providers.forgejo.client").pulls
-local pagination = require("atlas.providers.forgejo.pagination").pulls
+local service = require("atlas.providers.forgejo.client")
+local pagination = require("atlas.providers.forgejo.pagination")
 local mapper = require("atlas.pulls.providers.forgejo.api.mapper")
 local reviews = require("atlas.pulls.providers.forgejo.api.reviews")
 local pullrequests = require("atlas.pulls.providers.forgejo.api.pullrequests")
@@ -225,12 +225,12 @@ function M.add(pr, content, opts, on_done)
 	local parent = opts and opts.parent or nil
 	if parent and parent.inline then
 		local raw = parent._raw
-		local review_id = tostring(raw.review_id or "")
+		local parent_review_id = tostring(raw.review_id or "")
 		local inline = parent.inline
 		local path = inline.path
 		local new_line = tonumber(inline.start_to or inline.to)
 		local old_line = tonumber(inline.start_from or inline.from)
-		if not review_id:match("^%d+$") or path == "" or (not new_line and not old_line) then
+		if not parent_review_id:match("^%d+$") or path == "" or (not new_line and not old_line) then
 			on_done(nil, "Invalid Forgejo review comment")
 			return nil
 		end
@@ -250,14 +250,14 @@ function M.add(pr, content, opts, on_done)
 		end
 		return service.request(
 			"POST",
-			string.format("%s/pulls/%s/reviews/%s/comments", base, pr.id, review_id),
+			string.format("%s/pulls/%s/reviews/%s/comments", base, pr.id, parent_review_id),
 			payload,
 			function(value, err)
 				if err then
 					on_done(nil, err)
 					return
 				end
-				local created = mapper.to_comment(value, { id = review_id })
+				local created = mapper.to_comment(value, { id = parent_review_id })
 				created.parent_id = parent.parent_id or parent.id
 				created.inline = created.inline or parent.inline
 				created.inline_hunk = created.inline_hunk or parent.inline_hunk
