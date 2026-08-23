@@ -133,12 +133,9 @@ describe("Atlas target resolver", function()
 
 	it("resolves Git remotes for the requested domain", function()
 		local pulls = assert(git.parse_remote_url("http://localhost:3000/owner/repo.git", "pulls"))
-		config.options.pulls.gitea = nil
-		local disabled_pulls = assert(git.parse_remote_url("http://localhost:3000/owner/repo.git", "pulls"))
 		local issues = assert(git.parse_remote_url("http://localhost:3000/owner/repo.git", "issues"))
 
 		assert.are.equal("gitea", pulls.provider)
-		assert.are.equal("unknown", disabled_pulls.provider)
 		assert.are.equal("gitea", issues.provider)
 	end)
 

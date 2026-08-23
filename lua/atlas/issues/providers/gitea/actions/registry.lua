@@ -83,7 +83,7 @@ end
 ---@return string[]
 local function configured_repositories()
 	---@type AtlasGiteaIssuesConfig
-	local options = require("atlas.config").domain_options("gitea", "issues")
+	local options = require("atlas.config").domain_options("gitea", "issues") or {}
 	local result, seen = {}, {}
 	---@param value AtlasGiteaIssuesSearchConfig
 	local function add(value)

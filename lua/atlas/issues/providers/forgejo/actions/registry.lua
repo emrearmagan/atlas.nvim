@@ -85,7 +85,7 @@ end
 ---@return string[]
 local function configured_repositories()
 	---@type AtlasForgejoIssuesConfig
-	local options = config.domain_options("forgejo", "issues")
+	local options = config.domain_options("forgejo", "issues") or {}
 	local result, seen = {}, {}
 	---@param value AtlasForgejoIssuesSearchConfig
 	local function add(value)

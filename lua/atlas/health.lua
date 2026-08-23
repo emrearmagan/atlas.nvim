@@ -151,44 +151,46 @@ local function check_gitlab()
 end
 
 local function check_gitea()
-	local pulls = config.domain_options("gitea", "pulls")
-	local issues = config.domain_options("gitea", "issues")
-	if pulls == nil and issues == nil then
+	local provider = config.provider_options("gitea")
+	if provider == nil then
 		vim.health.info("Gitea not configured")
 		return
 	end
 
-	check_credentials(config.provider_options("gitea") or {}, { "base_url", "token" }, "Gitea")
-	if pulls then
+	check_credentials(provider, { "base_url", "token" }, "Gitea")
+	local pulls = config.domain_options("gitea", "pulls") or {}
+	if pulls.views and #pulls.views > 0 then
 		check_views(pulls.views, "Gitea pulls")
+	else
+		vim.health.ok("Gitea pulls: using default views")
 	end
-	if issues then
-		if issues.views == nil then
-			vim.health.ok("Gitea issues: using default views")
-		else
-			check_views(issues.views, "Gitea issues")
-		end
+	local issues = config.domain_options("gitea", "issues") or {}
+	if issues.views and #issues.views > 0 then
+		check_views(issues.views, "Gitea issues")
+	else
+		vim.health.ok("Gitea issues: using default views")
 	end
 end
 
 local function check_forgejo()
-	local pulls = config.domain_options("forgejo", "pulls")
-	local issues = config.domain_options("forgejo", "issues")
-	if pulls == nil and issues == nil then
+	local provider = config.provider_options("forgejo")
+	if provider == nil then
 		vim.health.info("Forgejo not configured")
 		return
 	end
 
-	check_credentials(config.provider_options("forgejo") or {}, { "base_url", "token" }, "Forgejo")
-	if pulls then
+	check_credentials(provider, { "base_url", "token" }, "Forgejo")
+	local pulls = config.domain_options("forgejo", "pulls") or {}
+	if pulls.views and #pulls.views > 0 then
 		check_views(pulls.views, "Forgejo pulls")
+	else
+		vim.health.ok("Forgejo pulls: using default views")
 	end
-	if issues then
-		if issues.views == nil then
-			vim.health.ok("Forgejo issues: using default views")
-		else
-			check_views(issues.views, "Forgejo issues")
-		end
+	local issues = config.domain_options("forgejo", "issues") or {}
+	if issues.views and #issues.views > 0 then
+		check_views(issues.views, "Forgejo issues")
+	else
+		vim.health.ok("Forgejo issues: using default views")
 	end
 end
 

@@ -30,7 +30,7 @@ function M.new(domain)
 		end
 
 		local repo = repository.full_name
-		local state = subject.state
+		local state = subject.state or ""
 		local subtitle = repo
 		if state ~= "" then
 			subtitle = subtitle ~= "" and (subtitle .. "  ·  " .. state) or state
@@ -59,7 +59,7 @@ function M.new(domain)
 			local endpoint = "/notifications"
 				.. service.query({
 					all = false,
-					["status-types"] = "unread",
+					["status-types"] = { "unread", "pinned" },
 					page = page,
 					limit = page_size,
 				})
