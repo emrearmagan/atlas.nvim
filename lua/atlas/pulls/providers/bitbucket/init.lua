@@ -133,6 +133,44 @@ local function repositories(options)
 	return result
 end
 
+---@param opts PullsFetchOpts
+---@return string[]
+local function active_statuses(opts)
+	local statuses = {}
+	if opts.state then
+		statuses = { opts.state:upper() }
+	else
+		for status, enabled in pairs(require("atlas.pulls.state").status_filters or {}) do
+			if enabled then
+				table.insert(statuses, status)
+			end
+		end
+	end
+	if #statuses == 0 then
+		statuses = { "OPEN" }
+	end
+	return statuses
+end
+
+---@param view AtlasPullsViewConfig
+---@param opts PullsFetchOpts
+---@return string
+local function search_query(view, opts)
+	---@cast view AtlasBitbucketViewConfig
+	local parts = {}
+	for _, target_ref in ipairs(view_targets(view)) do
+		if target_ref.repo then
+			table.insert(parts, string.format("repo:%s/%s", target_ref.workspace, target_ref.repo))
+		else
+			table.insert(parts, string.format("project:%s/%s", target_ref.workspace, target_ref.project))
+		end
+	end
+	for _, status in ipairs(active_statuses(opts)) do
+		table.insert(parts, string.format("is:%s", status:lower()))
+	end
+	return table.concat(parts, " ")
+end
+
 ---@param view AtlasPullsViewConfig
 ---@param opts PullsFetchOpts
 ---@param on_done fun(pulls: PullRequest[], err: string[]|nil)
@@ -140,32 +178,7 @@ end
 local function fetch_pullrequests(view, opts, on_done)
 	---@cast view AtlasBitbucketViewConfig
 	local targets = view_targets(view)
-	local active_statuses = {}
-	if opts.state then
-		active_statuses = { opts.state:upper() }
-	else
-		for status, enabled in pairs(require("atlas.pulls.state").status_filters or {}) do
-			if enabled then
-				table.insert(active_statuses, status)
-			end
-		end
-	end
-	if #active_statuses == 0 then
-		active_statuses = { "OPEN" }
-	end
-
-	local parts = {}
-	for _, target_ref in ipairs(targets) do
-		if target_ref.repo then
-			table.insert(parts, string.format("repo:%s/%s", target_ref.workspace, target_ref.repo))
-		else
-			table.insert(parts, string.format("project:%s/%s", target_ref.workspace, target_ref.project))
-		end
-	end
-	for _, status in ipairs(active_statuses) do
-		table.insert(parts, string.format("is:%s", status:lower()))
-	end
-	require("atlas.pulls.state").last_search_query = table.concat(parts, " ")
+	local statuses = active_statuses(opts)
 
 	local function finish(pulls, err)
 		if type(view.filter) ~= "function" then
@@ -218,7 +231,7 @@ local function fetch_pullrequests(view, opts, on_done)
 			return pullrequests_api.fetch_pullrequests(repos, {
 				force_load = opts.force_load == true,
 				pagelen = opts.pagelen,
-				statuses = active_statuses,
+				statuses = statuses,
 			}, done)
 		end, function(pulls, fetch_errors)
 			vim.list_extend(errors, fetch_errors or {})
@@ -276,6 +289,7 @@ return {
 	capabilities = {
 		core = {
 			fetch_user = users_api.fetch_current_user,
+			search_query = search_query,
 			fetch_pullrequests = fetch_pullrequests,
 			fetch_pullrequest = pullrequests_api.fetch_pullrequest,
 			fetch_description = pullrequests_api.fetch_description,

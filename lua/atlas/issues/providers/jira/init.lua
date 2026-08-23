@@ -4,6 +4,13 @@ local M = {}
 local resolver = require("atlas.providers.resolve")
 local request_scope = require("atlas.core.requests")
 
+---@param view IssuesViewConfig
+---@return string
+function M.search_query(view)
+	---@cast view AtlasJiraViewConfig
+	return tostring(view.jql or view.search or "")
+end
+
 ---@param value string
 ---@param parsed AtlasParsedUrl|nil
 ---@return AtlasTarget|nil, string|nil
@@ -140,9 +147,7 @@ end
 ---@return { cancel: fun() }|nil
 function M.fetch_issues(view, opts, on_done)
 	local issues_api = require("atlas.issues.providers.jira.api.issues")
-	---@cast view AtlasJiraViewConfig
-
-	local jql = tostring(view and (view.jql or view.search) or "")
+	local jql = M.search_query(view)
 	if jql == "" then
 		on_done({}, nil, true, "Missing Jira view JQL")
 		return nil
@@ -304,6 +309,7 @@ return {
 	capabilities = {
 		core = {
 			fetch_user = require("atlas.issues.providers.jira.api.users").get_myself,
+			search_query = M.search_query,
 			fetch_issues = M.fetch_issues,
 			fetch_issue = M.fetch_issue,
 			views = M.views,

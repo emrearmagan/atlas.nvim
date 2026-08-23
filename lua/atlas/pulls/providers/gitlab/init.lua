@@ -13,15 +13,20 @@ local users_api = require("atlas.pulls.providers.gitlab.api.users")
 local resolver = require("atlas.providers.resolve")
 local git = require("atlas.core.git")
 
----@param view AtlasPullsViewConfig
 ---@param opts PullsFetchOpts
----@param on_done fun(pulls: PullRequest[], err: string[]|nil)
----@return { cancel: fun() }|nil
-local function fetch_pullrequests(view, opts, on_done)
-	---@cast view AtlasGitLabPullsViewConfig
+---@return string
+local function fetch_state(opts)
 	local filters = require("atlas.pulls.state").status_filters or {}
 	local states = { open = "opened", merged = "merged", declined = "closed" }
-	local state = states[opts.state] or (filters.MERGED and "merged" or (filters.DECLINED and "closed" or "opened"))
+	return states[opts.state] or (filters.MERGED and "merged" or (filters.DECLINED and "closed" or "opened"))
+end
+
+---@param view AtlasPullsViewConfig
+---@param opts PullsFetchOpts
+---@return string
+local function search_query(view, opts)
+	---@cast view AtlasGitLabPullsViewConfig
+	local state = fetch_state(opts)
 	local parts = { string.format("is:%s", state) }
 	for _, field in ipairs({
 		"project",
@@ -39,12 +44,19 @@ local function fetch_pullrequests(view, opts, on_done)
 	if view.search and view.search ~= "" then
 		table.insert(parts, tostring(view.search))
 	end
-	require("atlas.pulls.state").last_search_query = table.concat(parts, " ")
+	return table.concat(parts, " ")
+end
 
+---@param view AtlasPullsViewConfig
+---@param opts PullsFetchOpts
+---@param on_done fun(pulls: PullRequest[], err: string[]|nil)
+---@return { cancel: fun() }|nil
+local function fetch_pullrequests(view, opts, on_done)
+	---@cast view AtlasGitLabPullsViewConfig
 	return pullrequests_api.fetch_pullrequests(view, {
 		force_load = opts and opts.force_load == true or false,
 		pagelen = opts and opts.pagelen or 50,
-		state = state,
+		state = fetch_state(opts),
 	}, function(pulls, err)
 		if err then
 			on_done({}, { err })
@@ -304,6 +316,7 @@ return {
 	capabilities = {
 		core = {
 			fetch_user = users_api.fetch_user,
+			search_query = search_query,
 			fetch_pullrequests = fetch_pullrequests,
 			fetch_pullrequest = fetch_pullrequest,
 			create_pr = create_pr,

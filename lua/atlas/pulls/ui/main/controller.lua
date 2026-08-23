@@ -171,7 +171,6 @@ local function load_starred(view, on_done)
 	cancel_active_requests()
 	state.is_loading = false
 	state.error = nil
-	state.last_search_query = nil
 	state.current_view = view
 
 	local records, err = starred.list("pulls", state.provider.id)
@@ -257,7 +256,6 @@ local function load_active_view(opts, on_done)
 		state.is_loading = false
 		state.error = nil
 		state.pulls = nil
-		state.last_search_query = nil
 		state.current_view = state.active_view
 		render_if_active()
 		on_done()

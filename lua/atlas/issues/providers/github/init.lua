@@ -8,12 +8,22 @@ local notifications_api = require("atlas.providers.github.notifications")
 local git = require("atlas.core.git")
 
 ---@param view IssuesViewConfig
+---@return string
+function M.search_query(view)
+	---@cast view AtlasGitHubIssuesViewConfig
+	local search = tostring(view.search or "")
+	if search ~= "" and not search:lower():find("is:issue", 1, true) then
+		search = search .. " is:issue"
+	end
+	return search
+end
+
+---@param view IssuesViewConfig
 ---@param opts IssuesFetchOpts
 ---@param on_done fun(issues: Issue[], next_page_token: string|nil, is_last: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_issues(view, opts, on_done)
-	---@cast view AtlasGitHubIssuesViewConfig
-	local search = tostring(view and view.search or "")
+	local search = M.search_query(view)
 	if search == "" then
 		on_done({}, nil, true, "Missing search query for GitHub view")
 		return nil
@@ -358,6 +368,7 @@ return {
 	capabilities = {
 		core = {
 			fetch_user = require("atlas.issues.providers.github.api.users").get_user,
+			search_query = M.search_query,
 			fetch_issues = M.fetch_issues,
 			fetch_issue = M.fetch_issue,
 			update_description = M.update_description,

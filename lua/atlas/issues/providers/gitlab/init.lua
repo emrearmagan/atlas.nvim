@@ -8,6 +8,32 @@ local git = require("atlas.core.git")
 local M = {}
 
 ---@param view IssuesViewConfig
+---@return string
+function M.search_query(view)
+	---@cast view AtlasGitLabIssuesViewConfig
+	local parts = { "is:" .. tostring(view.state or "opened") }
+	for _, field in ipairs({ "project", "scope", "labels", "milestone", "assignee_username", "author_username" }) do
+		local value = view[field]
+		if value ~= nil and value ~= "" then
+			table.insert(parts, string.format("%s:%s", field:gsub("_username$", ""), tostring(value)))
+		end
+	end
+	if view.search and view.search ~= "" then
+		table.insert(parts, tostring(view.search))
+	end
+
+	local extra_keys = vim.tbl_keys(view.extra_params or {})
+	table.sort(extra_keys)
+	for _, key in ipairs(extra_keys) do
+		local value = view.extra_params[key]
+		if value ~= nil and value ~= "" then
+			table.insert(parts, string.format("%s:%s", key, tostring(value)))
+		end
+	end
+	return table.concat(parts, " ")
+end
+
+---@param view IssuesViewConfig
 ---@param opts IssuesFetchOpts
 ---@param on_done fun(issues: Issue[], next_page_token: string|nil, is_last: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
@@ -299,6 +325,7 @@ return {
 	capabilities = {
 		core = {
 			fetch_user = require("atlas.issues.providers.gitlab.api.users").get_user,
+			search_query = M.search_query,
 			fetch_issues = M.fetch_issues,
 			fetch_issue = M.fetch_issue,
 			update_description = M.update_description,

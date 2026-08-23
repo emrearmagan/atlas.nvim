@@ -27,16 +27,12 @@ end
 
 ---@param view AtlasPullsViewConfig
 ---@param opts PullsFetchOpts
----@param on_done fun(pulls: PullRequest[], err: string[]|nil)
----@return { cancel: fun() }|nil
-local function fetch_pullrequests(view, opts, on_done)
+---@return string
+local function search_query(view, opts)
 	---@cast view AtlasGitHubViewConfig
 	local search = view.search or ""
 	if search == "" then
-		vim.schedule(function()
-			on_done({}, { "No search query configured for view" })
-		end)
-		return nil
+		return ""
 	end
 
 	local query = search:find("is:pr") and search or "is:pr " .. search
@@ -52,7 +48,21 @@ local function fetch_pullrequests(view, opts, on_done)
 		query = query .. " is:closed"
 	end
 
-	require("atlas.pulls.state").last_search_query = query
+	return query
+end
+
+---@param view AtlasPullsViewConfig
+---@param opts PullsFetchOpts
+---@param on_done fun(pulls: PullRequest[], err: string[]|nil)
+---@return { cancel: fun() }|nil
+local function fetch_pullrequests(view, opts, on_done)
+	local query = search_query(view, opts)
+	if query == "" then
+		vim.schedule(function()
+			on_done({}, { "No search query configured for view" })
+		end)
+		return nil
+	end
 	return pullrequests_api.search_prs(query, on_done, {
 		force_load = opts.force_load == true,
 		limit = opts.pagelen,
@@ -243,6 +253,7 @@ return {
 	capabilities = {
 		core = {
 			fetch_user = fetch_user,
+			search_query = search_query,
 			fetch_pullrequests = fetch_pullrequests,
 			fetch_pullrequest = fetch_pullrequest,
 			create_pr = pullrequests_api.create_pr,

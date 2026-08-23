@@ -26,7 +26,15 @@ end
 ---@param lines string[]
 ---@param spans table[]
 local function append_search_text(lines, spans)
-	local text = tostring(state.last_search_query or "")
+	local view = state.active_view
+	if type(view) == "table" and view._kind == "bookmarks" then
+		view = state.current_view
+	end
+	if type(view) ~= "table" or view._kind ~= nil or state.provider == nil then
+		return
+	end
+
+	local text = state.provider.capabilities.core.search_query(view, {})
 	if text == "" then
 		return
 	end

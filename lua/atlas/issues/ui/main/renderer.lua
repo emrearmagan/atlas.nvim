@@ -29,27 +29,10 @@ end
 ---@param view IssuesViewConfig|nil
 ---@return string
 local function search_text(view)
-	if type(view) ~= "table" then
+	if type(view) ~= "table" or view._kind ~= nil or state.provider == nil then
 		return ""
 	end
-
-	local provider_id = state.provider and state.provider.id or ""
-	if provider_id == "github" then
-		local search = tostring(view.search or "")
-		if search ~= "" and not search:lower():find("is:issue", 1, true) then
-			search = search .. " is:issue"
-		end
-		return search
-	end
-
-	local jira_view = view
-	---@cast jira_view AtlasJiraViewConfig
-	local jql = tostring(jira_view.jql or "")
-	if jql ~= "" then
-		return jql
-	end
-
-	return tostring(view.search or "")
+	return state.provider.capabilities.core.search_query(view, {})
 end
 
 ---@param lines string[]
