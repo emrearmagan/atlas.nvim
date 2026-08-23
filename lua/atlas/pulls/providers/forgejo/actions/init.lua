@@ -2,7 +2,7 @@ local M = {}
 
 local logger = require("atlas.core.logger")
 local registry = require("atlas.pulls.providers.forgejo.actions.registry")
-local statusline = require("atlas.ui.statusline")
+local notify = require("atlas.core.notify")
 
 ---@alias AtlasForgejoActionId
 ---| AtlasPullActionId
@@ -49,8 +49,11 @@ function M.run(id, ctx, on_done)
 	if not available then
 		local err = tostring(available_err or string.format("Action is not available: %s", tostring(id)))
 		logger.logwarn("forgejo.pulls.action.unavailable", { action_id = tostring(id), error = err })
-		local notify = ctx.notify or statusline.notify
-		notify("warn", err)
+		if ctx.notify then
+			ctx.notify("warn", err)
+		else
+			notify.warn(err)
+		end
 		on_done(nil, err)
 		return false
 	end

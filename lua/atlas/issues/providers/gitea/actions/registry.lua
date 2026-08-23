@@ -3,7 +3,7 @@ local M = {}
 local actions = require("atlas.issues.actions")
 local icons = require("atlas.ui.shared.icons")
 local picker = require("atlas.picker")
-local statusline = require("atlas.ui.statusline")
+local notify = require("atlas.core.notify")
 local api = require("atlas.issues.providers.gitea.api").issues
 local create_issue = require("atlas.issues.create.gitea.issue")
 local search = require("atlas.issues.providers.gitea.completion.search")
@@ -126,13 +126,13 @@ end
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function edit_assignees(issue, done)
 	local slug = issue_slug(issue)
-	statusline.notify("loading", "Loading assignees...")
+	notify.loading("Loading assignees...")
 	api.list_assignees(slug, function(users, err)
 		if err then
 			done(nil, err)
 			return
 		end
-		statusline.clear_notice()
+		notify.clear()
 		local selected, current_logins = {}, {}
 		local by_login = {}
 		for _, item in ipairs(users) do
@@ -164,13 +164,13 @@ local function edit_assignees(issue, done)
 					done(nil, nil)
 					return
 				end
-				statusline.notify("loading", "Updating assignees...")
+				notify.loading("Updating assignees...")
 				api.update_assignees(issue.key, logins, function(ok, update_err)
 					if not ok then
 						done(nil, update_err)
 						return
 					end
-					statusline.notify("success", "Assignees updated", 1200)
+					notify.success("Assignees updated", { timeout = 1200 })
 					done({ issue_key = issue.key }, nil)
 				end)
 			end,
@@ -182,13 +182,13 @@ end
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function edit_labels(issue, done)
 	local slug = issue_slug(issue)
-	statusline.notify("loading", "Loading labels...")
+	notify.loading("Loading labels...")
 	api.list_labels(slug, function(labels, err)
 		if err then
 			done(nil, err)
 			return
 		end
-		statusline.clear_notice()
+		notify.clear()
 		local selected, current_ids, by_name = {}, {}, {}
 		for _, item in ipairs(labels) do
 			by_name[item.name] = item
@@ -218,13 +218,13 @@ local function edit_labels(issue, done)
 					done(nil, nil)
 					return
 				end
-				statusline.notify("loading", "Updating labels...")
+				notify.loading("Updating labels...")
 				api.update_labels(issue.key, ids, function(ok, update_err)
 					if not ok then
 						done(nil, update_err)
 						return
 					end
-					statusline.notify("success", "Labels updated", 1200)
+					notify.success("Labels updated", { timeout = 1200 })
 					done({ issue_key = issue.key }, nil)
 				end)
 			end,
@@ -235,13 +235,13 @@ end
 ---@param issue Issue
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function edit_milestone(issue, done)
-	statusline.notify("loading", "Loading milestones...")
+	notify.loading("Loading milestones...")
 	api.list_milestones(issue_slug(issue), function(milestones, err)
 		if err then
 			done(nil, err)
 			return
 		end
-		statusline.clear_notice()
+		notify.clear()
 		local choices = { { id = nil, title = "None" } }
 		vim.list_extend(choices, milestones)
 		picker.select({
@@ -260,13 +260,13 @@ local function edit_milestone(issue, done)
 					done(nil, nil)
 					return
 				end
-				statusline.notify("loading", "Updating milestone...")
+				notify.loading("Updating milestone...")
 				api.update_milestone(issue.key, choice.id, function(ok, update_err)
 					if not ok then
 						done(nil, update_err)
 						return
 					end
-					statusline.notify("success", choice.id and "Milestone updated" or "Milestone removed", 1200)
+					notify.success(choice.id and "Milestone updated" or "Milestone removed", { timeout = 1200 })
 					done({ issue_key = issue.key }, nil)
 				end)
 			end,
@@ -295,14 +295,14 @@ local function toggle_subscription(ctx, done)
 	local function update(subscribed)
 		with_login(function(user_login)
 			local next_state = not subscribed
-			statusline.notify("loading", next_state and "Subscribing..." or "Unsubscribing...")
+			notify.loading(next_state and "Subscribing..." or "Unsubscribing...")
 			api.set_subscription(issue.key, user_login, next_state, function(ok, err)
 				if not ok then
 					done(nil, err)
 					return
 				end
 				issue.is_subscribed = next_state
-				statusline.notify("success", next_state and "Subscribed" or "Unsubscribed", 1200)
+				notify.success(next_state and "Subscribed" or "Unsubscribed", { timeout = 1200 })
 				done({ issue_key = issue.key }, nil)
 			end)
 		end)
@@ -327,14 +327,14 @@ end
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function set_locked(ctx, locked, reason, done)
 	local issue = assert(ctx.issue)
-	statusline.notify("loading", (locked and "Locking " or "Unlocking ") .. issue.key .. "...")
+	notify.loading((locked and "Locking " or "Unlocking ") .. issue.key .. "...")
 	api.set_locked(issue.key, locked, reason, function(ok, err)
 		if not ok then
 			done(nil, err)
 			return
 		end
 		issue._raw.is_locked = locked
-		statusline.notify("success", (locked and "Locked " or "Unlocked ") .. issue.key, 1200)
+		notify.success((locked and "Locked " or "Unlocked ") .. issue.key, { timeout = 1200 })
 		done({ issue_key = issue.key }, nil)
 	end)
 end
@@ -359,13 +359,13 @@ register({
 		return ctx.issue.status_id ~= "closed", "Issue is already closed"
 	end,
 	run = function(ctx, done)
-		statusline.notify("loading", "Closing " .. ctx.issue.key .. "...")
+		notify.loading("Closing " .. ctx.issue.key .. "...")
 		api.set_state(ctx.issue.key, "closed", function(ok, err)
 			if not ok then
 				done(nil, err)
 				return
 			end
-			statusline.notify("success", "Closed " .. ctx.issue.key, 1200)
+			notify.success("Closed " .. ctx.issue.key, { timeout = 1200 })
 			done({ issue_key = ctx.issue.key }, nil)
 		end)
 	end,
@@ -382,13 +382,13 @@ register({
 		return ctx.issue.status_id == "closed", "Issue is not closed"
 	end,
 	run = function(ctx, done)
-		statusline.notify("loading", "Reopening " .. ctx.issue.key .. "...")
+		notify.loading("Reopening " .. ctx.issue.key .. "...")
 		api.set_state(ctx.issue.key, "open", function(ok, err)
 			if not ok then
 				done(nil, err)
 				return
 			end
-			statusline.notify("success", "Reopened " .. ctx.issue.key, 1200)
+			notify.success("Reopened " .. ctx.issue.key, { timeout = 1200 })
 			done({ issue_key = ctx.issue.key }, nil)
 		end)
 	end,
@@ -423,14 +423,14 @@ register({
 		return ctx.issue.is_pinned ~= true, "Issue is already pinned"
 	end,
 	run = function(ctx, done)
-		statusline.notify("loading", "Pinning " .. ctx.issue.key .. "...")
+		notify.loading("Pinning " .. ctx.issue.key .. "...")
 		api.set_pinned(ctx.issue.key, true, function(ok, err)
 			if not ok then
 				done(nil, err)
 				return
 			end
 			ctx.issue.is_pinned = true
-			statusline.notify("success", "Pinned " .. ctx.issue.key, 1200)
+			notify.success("Pinned " .. ctx.issue.key, { timeout = 1200 })
 			done({ issue_key = ctx.issue.key }, nil)
 		end)
 	end,
@@ -447,14 +447,14 @@ register({
 		return ctx.issue.is_pinned == true, "Issue is not pinned"
 	end,
 	run = function(ctx, done)
-		statusline.notify("loading", "Unpinning " .. ctx.issue.key .. "...")
+		notify.loading("Unpinning " .. ctx.issue.key .. "...")
 		api.set_pinned(ctx.issue.key, false, function(ok, err)
 			if not ok then
 				done(nil, err)
 				return
 			end
 			ctx.issue.is_pinned = false
-			statusline.notify("success", "Unpinned " .. ctx.issue.key, 1200)
+			notify.success("Unpinned " .. ctx.issue.key, { timeout = 1200 })
 			done({ issue_key = ctx.issue.key }, nil)
 		end)
 	end,
@@ -557,13 +557,13 @@ register({
 				done(nil, nil)
 				return
 			end
-			statusline.notify("loading", "Deleting " .. ctx.issue.key .. "...")
+			notify.loading("Deleting " .. ctx.issue.key .. "...")
 			api.delete(ctx.issue.key, function(ok, err)
 				if not ok then
 					done(nil, err)
 					return
 				end
-				statusline.notify("success", "Deleted " .. ctx.issue.key, 1200)
+				notify.success("Deleted " .. ctx.issue.key, { timeout = 1200 })
 				done({ issue_key = ctx.issue.key, removed = true }, nil)
 			end)
 		end)

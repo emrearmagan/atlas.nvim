@@ -1,6 +1,6 @@
 local registry = require("atlas.pulls.providers.gitea.actions.registry")
 local logger = require("atlas.core.logger")
-local statusline = require("atlas.ui.statusline")
+local notify = require("atlas.core.notify")
 
 local M = { items = registry.items }
 
@@ -38,8 +38,11 @@ function M.run(id, ctx, on_done)
 	if not available then
 		local err = available_err or string.format("Action is not available: %s", id)
 		logger.logwarn("gitea.pulls.action.unavailable", { action_id = id, error = err })
-		local notify = ctx.notify or statusline.notify
-		notify("warn", err)
+		if ctx.notify then
+			ctx.notify("warn", err)
+		else
+			notify.warn(err)
+		end
 		on_done(nil, err)
 		return false
 	end

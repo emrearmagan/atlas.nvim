@@ -261,7 +261,7 @@ local function pick_due_date(state)
 		end
 		value = vim.trim(value)
 		if value ~= "" and not value:match("^%d%d%d%d%-%d%d%-%d%d$") then
-			form.notify("warn", "Due date must use YYYY-MM-DD", 1500)
+			form.notify("warn", "Due date must use YYYY-MM-DD", { timeout = 1500 })
 			return
 		end
 		state.fields.due_date = value ~= "" and value or nil
@@ -307,7 +307,7 @@ local function submit(state)
 	end
 	local title = vim.trim(form.get_title(state.layout))
 	if title == "" then
-		form.notify("warn", "Title is required", 1500)
+		form.notify("warn", "Title is required", { timeout = 1500 })
 		return
 	end
 	local labels, assignees = selected_values(state)

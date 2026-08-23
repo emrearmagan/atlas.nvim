@@ -5,7 +5,7 @@ local actions = require("atlas.pulls.actions")
 local action_utils = require("atlas.pulls.actions.utils")
 local notes = require("atlas.pulls.notes")
 local picker = require("atlas.picker")
-local statusline = require("atlas.ui.statusline")
+local core_notify = require("atlas.core.notify")
 
 local M = {}
 
@@ -60,7 +60,11 @@ end
 ---@param message string
 ---@param duration integer|nil
 local function notify(ctx, level, message, duration)
-	(ctx.notify or statusline.notify)(level, message, duration)
+	if ctx.notify then
+		ctx.notify(level, message, duration)
+		return
+	end
+	core_notify.show(level, message, { timeout = duration })
 end
 
 ---@param values table[]|nil

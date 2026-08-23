@@ -1,7 +1,7 @@
 local M = {}
 
 local registry = require("atlas.issues.providers.gitea.actions.registry")
-local statusline = require("atlas.ui.statusline")
+local notify = require("atlas.core.notify")
 
 ---@alias AtlasGiteaIssueActionId
 ---| AtlasIssueActionId
@@ -34,7 +34,7 @@ function M.run(action_id, ctx, on_done)
 	local action = registry.find(action_id)
 	if not action then
 		local err = string.format("Unknown action: %s", action_id)
-		statusline.notify("warn", err)
+		notify.warn(err)
 		on_done(nil, err)
 		return false
 	end
@@ -44,13 +44,13 @@ function M.run(action_id, ctx, on_done)
 	end
 	if not available then
 		err = err or "Action is not available"
-		statusline.notify("warn", err)
+		notify.warn(err)
 		on_done(nil, err)
 		return false
 	end
 	action.run(ctx, function(result, run_err)
 		if run_err then
-			statusline.notify("error", run_err)
+			notify.error(run_err)
 		end
 		on_done(result, run_err)
 	end)
