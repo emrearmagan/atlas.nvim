@@ -444,9 +444,12 @@ function M.refresh_current_view(on_done, focus_issue_key)
 		local item = navigation.current_item()
 		local panel = require("atlas.issues.ui.panel")
 		if panel.is_open() then
-			if focus_issue_key and not focused then
-				panel.close()
-			elseif type(item) == "table" and item.kind == "issue" and item._issue then
+			if
+				not (focus_issue_key and not focused)
+				and type(item) == "table"
+				and item.kind == "issue"
+				and item._issue
+			then
 				panel.on_select(item._issue, { force_refresh = true })
 			else
 				panel.close()

@@ -144,9 +144,9 @@ local function assign(ctx, done)
 		notify.clear()
 
 		if #members == 0 then
-			local err = "No assignable members"
-			notify.warn(err)
-			done(nil, err)
+			local message = "No assignable members"
+			notify.warn(message)
+			done(nil, message)
 			return
 		end
 
@@ -248,9 +248,9 @@ local function labels(ctx, done)
 		end
 		notify.clear()
 		if #all_labels == 0 then
-			local err = "No labels available"
-			notify.warn(err)
-			done(nil, err)
+			local message = "No labels available"
+			notify.warn(message)
+			done(nil, message)
 			return
 		end
 
@@ -321,15 +321,15 @@ local function search(_, done)
 		format_item = function(item)
 			return string.format("%s %s", icons.fallback(), tostring(item.label or ""))
 		end,
-		preview_item = function(item, done)
+		preview_item = function(item, preview_done)
 			local issue = item.value
 			return issues_api.get_issue(issue.key, {}, function(detail, err)
 				if err then
-					done({ title = issue.key, lines = { err } })
+					preview_done({ title = issue.key, lines = { err } })
 					return
 				end
 				local description = vim.trim(tostring(detail and detail.description or ""))
-				done({
+				preview_done({
 					title = issue.key,
 					lines = vim.split(description ~= "" and description or "No description", "\n", { plain = true }),
 				})
@@ -450,7 +450,7 @@ end
 ---@param ctx AtlasIssueActionContext
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function toggle_subscription(ctx, done)
-	local service = require("atlas.providers.gitlab.client").issues
+	local service = require("atlas.providers.gitlab.client")
 	local issue = assert(ctx.issue)
 	local raw = issue._raw or {}
 	local path = tostring(raw.project_path or "")

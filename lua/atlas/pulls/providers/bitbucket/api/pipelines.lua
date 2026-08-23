@@ -129,13 +129,13 @@ function M.fetch_pipelines(pr, opts, on_done)
 		local pipelines = {}
 		local pipeline_jobs = {}
 		for _, status in ipairs((result or {}).values or {}) do
-			local url = tostring(status.url or "")
-			local id = pipeline_id(url)
+			local pipeline_url = tostring(status.url or "")
+			local id = pipeline_id(pipeline_url)
 			local pipeline = {
 				name = tostring(status.name or status.key or ""),
 				state = tostring(status.state or ""):upper(),
 				provider_state = tostring(status.state or ""),
-				url = url ~= "" and url or nil,
+				url = pipeline_url ~= "" and pipeline_url or nil,
 				key = tostring(status.key or ""),
 				provider_id = id,
 				commit_hash = commit_hash,

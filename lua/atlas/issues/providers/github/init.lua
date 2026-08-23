@@ -4,7 +4,7 @@ local M = {}
 local config = require("atlas.config")
 local resolver = require("atlas.providers.resolve")
 local issue_cache = require("atlas.issues.providers.github.api.cache")
-local notifications_api = require("atlas.providers.github.notifications").new("issues")
+local notifications_api = require("atlas.providers.github.notifications")
 local git = require("atlas.core.git")
 
 ---@param view IssuesViewConfig
@@ -76,7 +76,7 @@ function M.update_description(issue, content, on_done)
 		return nil
 	end
 
-	local cli = require("atlas.providers.github.client").issues
+	local cli = require("atlas.providers.github.client")
 	return cli.gh({
 		"issue",
 		"edit",
@@ -203,7 +203,7 @@ function M.add_reaction(issue, item, key, on_done)
 		return nil
 	end
 
-	local cli = require("atlas.providers.github.client").issues
+	local cli = require("atlas.providers.github.client")
 	return cli.api("POST", endpoint, { content = key }, function(_, err)
 		if err then
 			on_done(false, err)
@@ -372,11 +372,7 @@ return {
 			delete_comment = M.delete_comment,
 			add_reaction = M.add_reaction,
 		},
-		notifications = {
-			fetch = notifications_api.fetch,
-			mark_read = notifications_api.mark_read,
-			mark_done = notifications_api.mark_done,
-		},
+		notifications = notifications_api,
 		actions = require("atlas.issues.providers.github.actions"),
 		ui = {
 			setup = require("atlas.issues.providers.github.highlights").setup,

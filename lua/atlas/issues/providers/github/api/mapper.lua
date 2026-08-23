@@ -108,10 +108,10 @@ function M.to_issue(raw, fallback_slug)
 	local status_name, status_id = normalize_state(raw.state)
 	local author = M.to_user(raw.author)
 
-	local labels = github_mapping.connection_nodes(raw.labels)
-	local assignees = github_mapping.connection_nodes(raw.assignees)
+	local issue_labels = github_mapping.connection_nodes(raw.labels)
+	local issue_assignees = github_mapping.connection_nodes(raw.assignees)
 	local parent = M.to_issue(json.nilify(raw.parent), fallback_slug)
-	local milestone = json.nilify(raw.milestone)
+	local issue_milestone = json.nilify(raw.milestone)
 	local body = json.safe_str(raw.body) or ""
 	local subscription = json.safe_str(raw.viewerSubscription)
 	local is_subscribed = subscription and subscription == "SUBSCRIBED"
@@ -135,7 +135,7 @@ function M.to_issue(raw, fallback_slug)
 		status_id = status_id,
 		type = nil,
 		priority = nil,
-		assignee = first_assignee(assignees),
+		assignee = first_assignee(issue_assignees),
 		reporter = author,
 		story_points = nil,
 		duedate = nil,
@@ -151,9 +151,9 @@ function M.to_issue(raw, fallback_slug)
 			created_at = created_at,
 			updated_at = updated_at,
 			closed_at = closed_at,
-			labels = labels,
-			assignees = assignees,
-			milestone = milestone,
+			labels = issue_labels,
+			assignees = issue_assignees,
+			milestone = issue_milestone,
 			comment_count = comment_count,
 			html_url = url,
 			reactions = github_mapping.reaction_groups(raw.reactionGroups),
@@ -328,8 +328,8 @@ function M.to_timeline_entry(raw)
 		local verb = event == "assigned" and "assigned" or "unassigned"
 		entry.label = login ~= "" and (verb .. " " .. login) or verb
 	elseif event == "milestoned" or event == "demilestoned" then
-		local milestone = json.nilify(raw.milestone)
-		local title = type(milestone) == "table" and (json.safe_str(milestone.title) or "") or ""
+		local event_milestone = json.nilify(raw.milestone)
+		local title = type(event_milestone) == "table" and (json.safe_str(event_milestone.title) or "") or ""
 		local verb = event == "milestoned" and "added milestone" or "removed milestone"
 		entry.label = title ~= "" and (verb .. ": " .. title) or verb
 	elseif event == "renamed" then

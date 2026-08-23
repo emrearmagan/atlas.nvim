@@ -309,7 +309,7 @@ function M.jump(session, direction)
 		end
 	end
 	vim.api.nvim_win_set_cursor(win, { target, 0 })
-	vim.cmd.normal({ "zvzz", bang = true })
+	vim.cmd.normal({ args = { "zv" }, bang = true })
 end
 
 ---@param session AtlasDiffSession

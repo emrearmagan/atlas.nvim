@@ -2,7 +2,7 @@ local M = {}
 
 local comments_api = require("atlas.pulls.providers.gitlab.api.comments")
 local json = require("atlas.core.json")
-local service = require("atlas.providers.gitlab.client").pulls
+local service = require("atlas.providers.gitlab.client")
 
 local REVIEW_METADATA_QUERY = [[
 query($path:ID!,$iid:String!,$after:String){
@@ -324,15 +324,15 @@ function M.fetch(pr, opts, on_done)
 			return
 		end
 		local comments = {}
-		local pending = false
+		local has_pending = false
 		for _, comment in ipairs(result) do
-			pending = pending or comment.state == "PENDING"
+			has_pending = has_pending or comment.state == "PENDING"
 			if comment.inline or comment.file then
 				table.insert(comments, comment)
 			end
 		end
 		review_data = {
-			review = { id = nil, commit_hash = nil, pending = pending },
+			review = { id = nil, commit_hash = nil, pending = has_pending },
 			comments = comments,
 			tasks = {},
 		}

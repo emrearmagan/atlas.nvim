@@ -190,8 +190,8 @@ function M.react(pr, entry, refresh)
 	picker.select({
 		title = "Add reaction",
 		items = choices,
-		format_item = function(item)
-			return item.label
+		format_item = function(choice)
+			return choice.label
 		end,
 		on_select = function(selected)
 			if selected == nil then

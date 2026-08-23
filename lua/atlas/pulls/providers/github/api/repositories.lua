@@ -1,7 +1,7 @@
 local M = {}
 
 local request_scope = require("atlas.core.requests")
-local cli = require("atlas.providers.github.client").pulls
+local cli = require("atlas.providers.github.client")
 local json = require("atlas.core.json")
 
 local ISSUE_TYPE_COLORS = {

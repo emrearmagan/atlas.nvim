@@ -242,7 +242,7 @@ local function reveal_pending_selection(session)
 	local line = math.min(pending.line, vim.api.nvim_buf_line_count(vim.api.nvim_win_get_buf(win)))
 	vim.api.nvim_win_set_cursor(win, { line, 0 })
 	vim.api.nvim_win_call(win, function()
-		pcall(vim.cmd.normal, { "zvzz", bang = true })
+		pcall(vim.cmd.normal, { args = { "zv" }, bang = true })
 	end)
 	if vim.api.nvim_get_current_tabpage() == state.tabpage then
 		if pending.focus_diff then

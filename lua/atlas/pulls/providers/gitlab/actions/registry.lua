@@ -8,7 +8,7 @@ local core_notify = require("atlas.core.notify")
 local notes = require("atlas.pulls.notes")
 local pullrequests_api = require("atlas.pulls.providers.gitlab.api.pullrequests")
 local users_api = require("atlas.pulls.providers.gitlab.api.users")
-local service = require("atlas.providers.gitlab.client").pulls
+local service = require("atlas.providers.gitlab.client")
 
 ---@param ctx AtlasPullActionContext
 ---@return boolean

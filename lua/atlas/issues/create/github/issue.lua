@@ -6,7 +6,7 @@ local picker = require("atlas.picker")
 local icons = require("atlas.ui.shared.icons")
 local highlights = require("atlas.ui.shared.highlights")
 local request_scope = require("atlas.core.requests")
-local users_api = require("atlas.providers.github.users").new("issues")
+local users_api = require("atlas.providers.github.users")
 local templates = require("atlas.issues.templates")
 
 ---@class CreateIssueLabel

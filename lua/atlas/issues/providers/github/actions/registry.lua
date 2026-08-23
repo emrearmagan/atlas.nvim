@@ -4,9 +4,9 @@ local actions = require("atlas.issues.actions")
 local icons = require("atlas.ui.shared.icons")
 local picker = require("atlas.picker")
 local notify = require("atlas.core.notify")
-local cli = require("atlas.providers.github.client").issues
+local cli = require("atlas.providers.github.client")
 local issues_api = require("atlas.issues.providers.github.api.issues")
-local users_api = require("atlas.providers.github.users").new("issues")
+local users_api = require("atlas.providers.github.users")
 local issue_cache = require("atlas.issues.providers.github.api.cache")
 local normalizer = require("atlas.issues.providers.github.api.mapper")
 
@@ -190,9 +190,9 @@ local function assign(ctx, done)
 			table.insert(items, { login = u.account_id, name = u.display_name or u.account_id })
 		end
 		if #items == 0 then
-			local err = "No assignable users"
-			notify.warn(err)
-			done(nil, err)
+			local message = "No assignable users"
+			notify.warn(message)
+			done(nil, message)
 			return
 		end
 
@@ -292,9 +292,9 @@ local function labels(ctx, done)
 			table.insert(items, { name = label.name, color = label.color })
 		end
 		if #items == 0 then
-			local err = "No labels available"
-			notify.warn(err)
-			done(nil, err)
+			local message = "No labels available"
+			notify.warn(message)
+			done(nil, message)
 			return
 		end
 
@@ -473,7 +473,7 @@ local function toggle_subscription(ctx, done)
 	local gql =
 		"mutation($id: ID!, $state: SubscriptionState!) { updateSubscription(input: { subscribableId: $id, state: $state }) { subscribable { ... on Issue { viewerSubscription } } } }"
 	notify.loading(issue.is_subscribed and "Unsubscribing..." or "Subscribing...")
-	require("atlas.providers.github.client").issues.gh(
+	require("atlas.providers.github.client").gh(
 		{ "api", "graphql", "-F", "id=" .. node_id, "-f", "state=" .. next_state, "-f", "query=" .. gql },
 		function(_, err)
 			if err then

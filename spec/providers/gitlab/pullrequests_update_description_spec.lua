@@ -9,13 +9,11 @@ end
 local function stub_service(request)
 	package.preload["atlas.providers.gitlab.client"] = function()
 		return {
-			pulls = {
-				request = request,
-				url_encode = function(value)
-					return (tostring(value):gsub("/", "%%2F"))
-				end,
-				delete_memory_cache = function() end,
-			},
+			request = request,
+			url_encode = function(value)
+				return (tostring(value):gsub("/", "%%2F"))
+			end,
+			delete_memory_cache = function() end,
 		}
 	end
 end

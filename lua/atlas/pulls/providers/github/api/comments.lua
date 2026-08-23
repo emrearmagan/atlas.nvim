@@ -1,6 +1,6 @@
 local M = {}
 
-local cli = require("atlas.providers.github.client").pulls
+local cli = require("atlas.providers.github.client")
 local json = require("atlas.core.json")
 local mapper = require("atlas.pulls.providers.github.api.mapper")
 local reviews = require("atlas.pulls.providers.github.api.reviews")

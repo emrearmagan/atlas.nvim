@@ -58,3 +58,15 @@ jobs:
           token: ${{ github.token }}
           version: v2.5.2
           args: --check lua spec
+
+  selene:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Check Lua
+        uses: NTBBloodbath/selene-action@v1.0.0
+        with:
+          token: ${{ github.token }}
+          version: 0.31.0
+          args: lua spec

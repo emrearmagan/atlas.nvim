@@ -1,6 +1,6 @@
 local M = {}
 
-local cli = require("atlas.providers.github.client").pulls
+local cli = require("atlas.providers.github.client")
 local json = require("atlas.core.json")
 local mapper = require("atlas.pulls.providers.github.api.mapper")
 local github_mapping = require("atlas.providers.github.mapping")
@@ -684,10 +684,10 @@ local function fetch_review_details(pr, opts, on_done)
 end
 
 ---@param pr PullRequest
----@param opts { force_refresh: boolean|nil }|nil
+---@param _opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(result: { review: PullsReview, comments: PullsComment[] }|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-local function fetch_comments(pr, opts, on_done)
+local function fetch_comments(pr, _opts, on_done)
 	local owner, name = tostring(pr.repo_full_name or ""):match("^([^/]+)/([^/]+)$")
 	if owner == nil or name == nil then
 		vim.schedule(function()
@@ -762,10 +762,10 @@ local function fetch_comments(pr, opts, on_done)
 end
 
 ---@param pr PullRequest
----@param opts { force_refresh: boolean|nil }|nil
+---@param _opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(tasks: PullsComment[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-local function fetch_tasks(pr, opts, on_done)
+local function fetch_tasks(pr, _opts, on_done)
 	local repo_slug = pr.repo_full_name or ""
 	if repo_slug == "" then
 		vim.schedule(function()
