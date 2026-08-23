@@ -37,6 +37,7 @@
 ---@field show_commits boolean|nil
 ---@field width integer|nil
 ---@field initial_focus "explorer"|"diff"|nil
+---@field preview boolean|nil
 ---@field ignore string[]|nil
 
 ---@class AtlasPullsDiffReviewPanelConfig
@@ -162,6 +163,7 @@ M.options = {
 				show_commits = false,
 				width = 40,
 				initial_focus = "explorer",
+				preview = false,
 				ignore = { ".git/**", ".jj/**" },
 			},
 		},
@@ -229,8 +231,9 @@ M.options = {
 				submit_review = "gs",
 				add_task = "<leader>t",
 				comment_templates = "gT",
+				find_file = "<leader>ff",
 				explorer = {
-					find_file = "<leader>ff",
+					find_file = { "f", "<leader>ff" },
 					next_file = { "]f", "<Tab>" },
 					previous_file = { "[f", "<S-Tab>" },
 					next_unreviewed_file = "]u",

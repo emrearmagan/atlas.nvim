@@ -189,6 +189,7 @@ pulls = {
       show_commits = false, -- Set true to show commits below changed files initially.
       width = 40,
       initial_focus = "explorer", -- "explorer" or "diff".
+      preview = false, -- Show a file as soon as the explorer cursor moves onto it.
       ignore = { ".git/**", ".jj/**" },
     },
   },
@@ -829,8 +830,9 @@ keymaps = {
       submit_review = "gs",
       add_task = "<leader>t",
       comment_templates = "gT",
+      find_file = "<leader>ff",
       explorer = {
-        find_file = "<leader>ff",
+        find_file = { "f", "<leader>ff" },
         next_file = { "]f", "<Tab>" },
         previous_file = { "[f", "<S-Tab>" },
         next_unreviewed_file = "]u",

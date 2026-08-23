@@ -92,6 +92,24 @@ local function select_file(session, index, on_loaded)
 end
 
 ---@param session AtlasDiffSession
+---@param index integer
+local function preview_file(session, index)
+	local state = session.viewer_state --[[@as AtlasNativeDiffState]]
+	if index == state.pending_index then
+		return
+	end
+	if index == state.selected_index then
+		if state.pending_index then
+			cancel_job(session)
+			state.pending_index = nil
+			explorer.render(session, state.annotated_paths)
+		end
+		return
+	end
+	select_file(session, index)
+end
+
+---@param session AtlasDiffSession
 ---@param path string
 ---@return integer|nil
 local function file_index(session, path)
@@ -437,6 +455,9 @@ local function register_events(session)
 			end)
 		end,
 	})
+	explorer.attach(session, state.group, function(index)
+		preview_file(session, index)
+	end)
 	vim.api.nvim_create_autocmd({ "WinResized", "TabEnter" }, {
 		group = state.group,
 		callback = function()

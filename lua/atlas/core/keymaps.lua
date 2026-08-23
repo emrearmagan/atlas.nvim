@@ -81,6 +81,7 @@ local M = {}
 ---@field submit_review? AtlasKeymapValue
 ---@field add_task? AtlasKeymapValue
 ---@field comment_templates? AtlasKeymapValue
+---@field find_file? AtlasKeymapValue
 ---@field explorer? AtlasPullsReviewExplorerKeymaps
 ---@field diff? AtlasPullsReviewDiffKeymaps
 
@@ -172,6 +173,7 @@ local M = {}
 ---| "pulls.review.add_task"
 ---| "pulls.review.comment_templates"
 ---| "pulls.review.focus_item"
+---| "pulls.review.find_file"
 ---| "pulls.review.explorer.find_file"
 ---| "pulls.review.explorer.next_file"
 ---| "pulls.review.explorer.previous_file"
@@ -326,6 +328,7 @@ function M.validate()
 	-- TODO: Give these actions unique default mappings.
 	---@type AtlasKeymapActionId[][]
 	local ALLOWED_CONFLICTS = {
+		{ "pulls.review.find_file", "pulls.review.explorer.find_file" },
 		{ "ui.next_panel_tab", "pulls.review.explorer.next_file" },
 		{ "ui.previous_panel_tab", "pulls.review.explorer.previous_file" },
 		{ "ui.comments.reply", "pulls.review.diff.add_comment", "issues.create_issue" },
