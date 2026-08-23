@@ -1,5 +1,6 @@
 local service = require("atlas.providers.forgejo.client").pulls
 local pagination = require("atlas.pulls.providers.forgejo.api.pagination")
+local json = require("atlas.core.json")
 
 local M = {}
 
@@ -56,14 +57,14 @@ function M.fetch(pr, opts, on_done)
 		for _, value in ipairs(raw) do
 			local commit = value.commit
 			local author = commit.author
-			local account = value.author
+			local account = json.nilify(value.author)
 			local hash = value.sha
-			local login = account.login or ""
+			local login = account and account.login or ""
 			table.insert(commits, {
 				hash = hash,
 				short_hash = hash:sub(1, 7),
 				message = commit.message or "",
-				author_name = author.name or account.full_name or account.login or "",
+				author_name = author.name or (account and (account.full_name or account.login)) or "",
 				author_nickname = login ~= "" and login or nil,
 				date = author.date or value.created or "",
 				html_url = value.html_url,
