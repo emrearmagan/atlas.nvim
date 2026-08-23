@@ -1,5 +1,5 @@
 local service = require("atlas.providers.gitea.client").pulls
-local pagination = require("atlas.pulls.providers.gitea.api.pagination")
+local pagination = require("atlas.providers.gitea.pagination").pulls
 
 local M = {}
 

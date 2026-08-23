@@ -3,7 +3,7 @@ local json = require("atlas.core.json")
 
 local M = {}
 local service = require("atlas.providers.forgejo.client").issues
-local pagination = require("atlas.issues.providers.forgejo.api.pagination")
+local pagination = require("atlas.providers.forgejo.pagination").issues
 
 ---@param key string
 ---@return string|nil, integer|nil
