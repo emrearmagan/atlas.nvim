@@ -11,7 +11,7 @@ function M.fetch_user(on_done, opts)
 	local cache_key = "github:user:me"
 
 	if not opts.force_load then
-		local cached, ok = cli.get_mem(cache_key)
+		local cached, ok = cli.get_cache(cache_key)
 		if ok then
 			on_done(cached, nil)
 			return nil
@@ -25,7 +25,7 @@ function M.fetch_user(on_done, opts)
 		end
 
 		local user = mapper.to_user(result)
-		cli.set_mem(cache_key, user, cli.cache_ttl())
+		cli.set_cache(cache_key, user)
 		on_done(user, nil)
 	end, {
 		action = "Fetch current user",

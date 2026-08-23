@@ -1,6 +1,7 @@
 local M = {}
 
 local service = require("atlas.pulls.providers.bitbucket.api.service")
+local cache = require("atlas.core.cache")
 local memory_cache = require("atlas.core.memory_cache")
 local logger = require("atlas.core.logger")
 
@@ -14,7 +15,7 @@ function M.fetch_current_user(on_done)
 	end
 
 	local cachekey = string.format("bitbucket:user_profile:%s", user)
-	local cached = memory_cache.get(cachekey)
+	local cached = cache.get(cachekey)
 	if cached and cached.value then
 		logger.loginfo("Bitbucket current user cache hit", { user = user })
 		on_done(cached.value, nil)
@@ -38,7 +39,7 @@ function M.fetch_current_user(on_done)
 		logger.loginfo("Bitbucket current user fetch success", {
 			display_name = current_user.name,
 		})
-		memory_cache.set(cachekey, current_user, 86400)
+		cache.set(cachekey, current_user, 86400)
 		on_done(current_user, nil)
 	end, {
 		action = "Bitbucket current user fetch",

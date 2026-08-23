@@ -7,7 +7,7 @@ local normalizer = require("atlas.issues.providers.gitlab.api.mapper")
 ---@return { cancel: fun() }|nil
 function M.get_user(on_done)
 	local cache_key = "gitlab:user:me"
-	local cached, ok = service.get_memory_cache(cache_key)
+	local cached, ok = service.get_cache(cache_key)
 	if ok then
 		on_done(cached, nil)
 		return nil
@@ -20,7 +20,7 @@ function M.get_user(on_done)
 		end
 		local user = normalizer.to_user(result)
 		if user then
-			service.set_memory_cache(cache_key, user)
+			service.set_cache(cache_key, user)
 		end
 		on_done(user, nil)
 	end, {

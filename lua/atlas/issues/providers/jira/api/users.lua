@@ -1,6 +1,7 @@
 local M = {}
 
 local service = require("atlas.issues.providers.jira.api.service")
+local cache = require("atlas.core.cache")
 local config = require("atlas.issues.providers.jira.api.config")
 
 ---@param str string
@@ -15,6 +16,13 @@ end
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.get_myself(callback)
 	local jira = config.jira_config()
+	local cache_key = string.format("jira:user:me:%s:%s", tostring(jira.base_url or ""), tostring(jira.email or ""))
+	local cached = cache.get(cache_key)
+	if cached and type(cached.value) == "table" then
+		callback(cached.value, nil)
+		return nil
+	end
+
 	return service.request("GET", "/myself", nil, function(result, err)
 		if err or not result then
 			callback(nil, err or "Empty response")
@@ -31,6 +39,7 @@ function M.get_myself(callback)
 			user.account_id = tostring(result.accountId or "")
 		end
 
+		cache.set(cache_key, user, service.cache_ttl())
 		callback(user, nil)
 	end, {
 		action = "Fetch current user",

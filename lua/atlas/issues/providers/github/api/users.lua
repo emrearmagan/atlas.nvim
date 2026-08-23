@@ -7,7 +7,7 @@ local normalizer = require("atlas.issues.providers.github.api.mapper")
 ---@return { cancel: fun() }|nil
 function M.get_user(on_done)
 	local cache_key = "github_issues:myself"
-	local cached, ok = cli.get_mem(cache_key)
+	local cached, ok = cli.get_cache(cache_key)
 	if ok then
 		on_done(cached, nil)
 		return nil
@@ -20,7 +20,7 @@ function M.get_user(on_done)
 		end
 		local user = normalizer.to_user(result)
 		if user then
-			cli.set_mem(cache_key, user, cli.cache_ttl())
+			cli.set_cache(cache_key, user)
 		end
 		on_done(user, nil)
 	end, {
