@@ -68,26 +68,26 @@ local function status_text(text, marker, marker_hl)
 		return marker, marker_hl
 	end
 	local separator = marker ~= "" and "  " or ""
-	local highlights = {
+	local status_highlights = {
 		{ start_col = 0, end_col = #text, hl_group = "AtlasTextMuted" },
 	}
 	local offset = #text + #separator
 	if type(marker_hl) == "table" then
 		for _, highlight in ipairs(marker_hl) do
-			table.insert(highlights, {
+			table.insert(status_highlights, {
 				start_col = offset + highlight.start_col,
 				end_col = offset + highlight.end_col,
 				hl_group = highlight.hl_group,
 			})
 		end
 	elseif marker ~= "" and marker_hl then
-		table.insert(highlights, {
+		table.insert(status_highlights, {
 			start_col = offset,
 			end_col = offset + #marker,
 			hl_group = marker_hl,
 		})
 	end
-	return text .. separator .. marker, highlights
+	return text .. separator .. marker, status_highlights
 end
 
 ---@param comment PullsComment

@@ -433,12 +433,10 @@ function M.refresh_current_view(on_done, focus_pr)
 		local item = navigation.current_item()
 		local panel = require("atlas.pulls.ui.panel")
 		if require("atlas.pulls.ui.panel.state").current_panel == "pr" and panel.is_open() then
-			if focus_pr and not focused then
+			if (focus_pr and not focused) or type(item) ~= "table" or item.kind ~= "pr" or not item.pr then
 				panel.close()
-			elseif type(item) == "table" and item.kind == "pr" and item.pr then
-				panel.on_select(item.pr, item.repo, { force_refresh = true })
 			else
-				panel.close()
+				panel.on_select(item.pr, item.repo, { force_refresh = true })
 			end
 		end
 		if on_done ~= nil then

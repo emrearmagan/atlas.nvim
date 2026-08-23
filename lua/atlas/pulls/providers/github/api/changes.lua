@@ -1,12 +1,12 @@
 local M = {}
 
-local cli = require("atlas.providers.github.client").pulls
+local cli = require("atlas.providers.github.client")
 
 ---@param pr PullRequest
----@param opts { force_refresh: boolean|nil }|nil
+---@param _opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(commits: PullsCommit[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_commits(pr, opts, on_done)
+function M.fetch_commits(pr, _opts, on_done)
 	local repo_slug = pr.repo_full_name or ""
 	if repo_slug == "" then
 		vim.schedule(function()
@@ -56,10 +56,10 @@ function M.fetch_commits(pr, opts, on_done)
 end
 
 ---@param pr PullRequest
----@param opts { force_refresh: boolean|nil }|nil
+---@param _opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(files: DiffFile[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_diff(pr, opts, on_done)
+function M.fetch_diff(pr, _opts, on_done)
 	local repo_slug = pr.repo_full_name or ""
 	if repo_slug == "" then
 		vim.schedule(function()

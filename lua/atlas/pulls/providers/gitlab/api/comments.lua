@@ -1,7 +1,7 @@
 local M = {}
 
 local json = require("atlas.core.json")
-local service = require("atlas.providers.gitlab.client").pulls
+local service = require("atlas.providers.gitlab.client")
 local mapper = require("atlas.pulls.providers.gitlab.api.mapper")
 
 local GENERAL_COMMENTS_QUERY = [[

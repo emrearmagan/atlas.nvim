@@ -122,15 +122,15 @@ function M.to_issue(raw)
 	local description = json.safe_str(raw.description) or ""
 
 	local labels_raw = json.safe_table(raw.labels) -- list of label-name strings
-	local labels = {}
+	local issue_labels = {}
 	for _, name in ipairs(labels_raw) do
 		if type(name) == "string" and name ~= "" then
-			table.insert(labels, { name = name })
+			table.insert(issue_labels, { name = name })
 		end
 	end
 
-	local assignees = json.safe_table(raw.assignees)
-	local milestone = json.nilify(raw.milestone)
+	local issue_assignees = json.safe_table(raw.assignees)
+	local issue_milestone = json.nilify(raw.milestone)
 	local project_path = key:match("^(.-)#") or ""
 
 	---@type Issue
@@ -142,7 +142,7 @@ function M.to_issue(raw)
 		status_id = status_id,
 		type = nil,
 		priority = nil,
-		assignee = first_assignee(assignees),
+		assignee = first_assignee(issue_assignees),
 		reporter = M.to_user(raw.author),
 		story_points = tonumber(json.nilify(raw.weight)),
 		duedate = json.safe_str(raw.due_date),
@@ -157,10 +157,10 @@ function M.to_issue(raw)
 			created_at = json.safe_str(raw.created_at) or "",
 			updated_at = json.safe_str(raw.updated_at) or "",
 			closed_at = json.safe_str(raw.closed_at),
-			labels = labels,
+			labels = issue_labels,
 			label_names = labels_raw,
-			assignees = assignees,
-			milestone = milestone,
+			assignees = issue_assignees,
+			milestone = issue_milestone,
 			comment_count = tonumber(raw.user_notes_count) or 0,
 			web_url = web_url,
 			confidential = raw.confidential == true,

@@ -1,6 +1,6 @@
 local M = {}
 
-local service = require("atlas.providers.gitlab.client").issues
+local service = require("atlas.providers.gitlab.client")
 local normalizer = require("atlas.issues.providers.gitlab.api.mapper")
 
 ---@param on_done fun(user: IssueUser|nil, err: string|nil)

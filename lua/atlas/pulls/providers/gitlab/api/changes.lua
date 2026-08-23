@@ -1,6 +1,6 @@
 local M = {}
 
-local service = require("atlas.providers.gitlab.client").pulls
+local service = require("atlas.providers.gitlab.client")
 local diff_parser = require("atlas.core.git.diff_parser")
 
 ---@param pr PullRequest

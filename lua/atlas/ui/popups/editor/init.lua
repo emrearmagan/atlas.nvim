@@ -37,7 +37,7 @@ end
 ---@param findstart integer
 ---@param base string
 ---@return integer|table[]
-function _G.__atlas_markdown_complete(findstart, base)
+_G.__atlas_markdown_complete = function(findstart, base)
 	local buf = vim.api.nvim_get_current_buf()
 	local provider = completion_provider_by_buf[buf]
 	if type(provider) ~= "table" then

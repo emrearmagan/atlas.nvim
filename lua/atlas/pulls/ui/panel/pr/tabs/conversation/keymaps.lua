@@ -179,8 +179,8 @@ function M.setup(buf, refresh)
 		opts = { nowait = true, silent = true },
 		callback = function()
 			local comments = state.comments(false)
-			local tasks = state.comments(true)
-			if state.toggle_all_threads(review_threads.group_comments(comments, tasks)) then
+			local task_comments = state.comments(true)
+			if state.toggle_all_threads(review_threads.group_comments(comments, task_comments)) then
 				refresh()
 			end
 		end,

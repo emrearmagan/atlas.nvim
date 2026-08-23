@@ -1,7 +1,7 @@
 local GITLAB_REACTION_OPTIONS = require("atlas.ui.shared.emojis").gitlab()
 local config = require("atlas.config")
 local resolver = require("atlas.providers.resolve")
-local notifications_api = require("atlas.providers.gitlab.notifications").new("issues")
+local notifications_api = require("atlas.providers.gitlab.notifications")
 local git = require("atlas.core.git")
 
 ---@class GitLabIssuesProvider : IssuesProvider
@@ -314,11 +314,7 @@ return {
 			delete_comment = M.delete_comment,
 			add_reaction = M.add_reaction,
 		},
-		notifications = {
-			fetch = notifications_api.fetch,
-			mark_read = notifications_api.mark_read,
-			mark_done = notifications_api.mark_done,
-		},
+		notifications = notifications_api,
 		actions = require("atlas.issues.providers.gitlab.actions"),
 		ui = {
 			setup = require("atlas.issues.providers.gitlab.highlights").setup,

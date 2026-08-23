@@ -8,10 +8,8 @@ function M.install(handlers)
 	package.loaded[MODULE] = nil
 	package.preload[MODULE] = function()
 		return {
-			pulls = {
-				gh = handlers.gh or function() end,
-				api = handlers.api or function() end,
-			},
+			gh = handlers.gh or function() end,
+			api = handlers.api or function() end,
 		}
 	end
 end

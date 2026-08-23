@@ -123,7 +123,7 @@ end
 local function reveal_line(win, line, focus_diff)
 	vim.api.nvim_win_set_cursor(win, { line, 0 })
 	vim.api.nvim_win_call(win, function()
-		pcall(vim.cmd.normal, { "zvzz", bang = true })
+		pcall(vim.cmd.normal, { args = { "zv" }, bang = true })
 	end)
 	if focus_diff then
 		vim.api.nvim_set_current_win(win)
@@ -136,8 +136,8 @@ end
 local function focus_item(session, item, focus_diff)
 	local comment = item.comment
 	local note = item.note
-	local target = comment and (comment.file or comment.inline) or nil
-	local path = note and note.file_path or (target and (target.path or target.old_path))
+	local comment_target = comment and (comment.file or comment.inline) or nil
+	local path = note and note.file_path or (comment_target and (comment_target.path or comment_target.old_path))
 	local index = path and file_index(session, path) or nil
 	if not index then
 		session_api.notify(session, "info", "This review item's file is no longer in the diff")
@@ -310,7 +310,7 @@ local function navigate_hunk(session, direction)
 		end
 	end
 	vim.api.nvim_win_set_cursor(target.win, { destination, 0 })
-	vim.cmd.normal({ "zvzz", bang = true })
+	vim.cmd.normal({ args = { "zv" }, bang = true })
 end
 
 ---@param session AtlasDiffSession

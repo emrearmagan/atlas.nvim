@@ -100,7 +100,7 @@ local sessions = {}
 local function statusline_items(session)
 	local review = session.review
 	local pr = review and review.pr
-	local comments = review and review.data.comments or {}
+	local review_comments = review and review.data.comments or {}
 	local identity = pr and string.format("#%s %s", tostring(pr.id), tostring(pr.title))
 		or string.format(
 			"%s...%s",
@@ -115,9 +115,9 @@ local function statusline_items(session)
 		items[#items + 1] = { text = string.format("+%d", state.additions), hl_group = "AtlasFooterSuccess" }
 		items[#items + 1] = { text = string.format("-%d", state.deletions), hl_group = "AtlasFooterError" }
 	end
-	if #comments > 0 then
+	if #review_comments > 0 then
 		items[#items + 1] = {
-			text = string.format("%s %d", icons.general("comment"), #comments),
+			text = string.format("%s %d", icons.general("comment"), #review_comments),
 			hl_group = "AtlasFooterInfo",
 			align = "right",
 			priority = 30,
@@ -132,7 +132,7 @@ local function statusline_items(session)
 		}
 	end
 	local pending = 0
-	for _, comment in ipairs(comments) do
+	for _, comment in ipairs(review_comments) do
 		if comment.state == "PENDING" then
 			pending = pending + 1
 		end

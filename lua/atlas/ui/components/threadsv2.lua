@@ -620,9 +620,7 @@ local function render_linked(lines, spans, line_map, item, depth, branch_prefix,
 	-- aligns beneath the header.  Non-last items show │, the last item
 	-- uses matching whitespace so the column stays consistent.
 	if depth == 0 then
-		if not show_connectors then
-			pfx.body_prefix = pfx.pad .. "  "
-		elseif is_last_root then
+		if not show_connectors or is_last_root then
 			pfx.body_prefix = pfx.pad .. "  "
 		else
 			pfx.body_prefix = pfx.pad .. "│ "

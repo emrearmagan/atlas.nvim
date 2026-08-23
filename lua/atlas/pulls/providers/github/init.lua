@@ -3,9 +3,9 @@ local activity_api = require("atlas.pulls.providers.github.api.activity")
 local changes_api = require("atlas.pulls.providers.github.api.changes")
 local checks_api = require("atlas.pulls.providers.github.api.checks")
 local config = require("atlas.config")
-local cli = require("atlas.providers.github.client").pulls
+local cli = require("atlas.providers.github.client")
 local comments_api = require("atlas.pulls.providers.github.api.comments")
-local notifications_api = require("atlas.providers.github.notifications").new("pulls")
+local notifications_api = require("atlas.providers.github.notifications")
 local pipelines_api = require("atlas.pulls.providers.github.api.pipelines")
 local pullrequests_api = require("atlas.pulls.providers.github.api.pullrequests")
 local repositories_api = require("atlas.pulls.providers.github.api.repositories")
@@ -294,11 +294,7 @@ return {
 			fetch_job_log = pipelines_api.fetch_job_log,
 			actions = require("atlas.pulls.providers.github.actions.pipelines"),
 		},
-		notifications = {
-			fetch = notifications_api.fetch,
-			mark_read = notifications_api.mark_read,
-			mark_done = notifications_api.mark_done,
-		},
+		notifications = notifications_api,
 		actions = actions,
 		ui = {
 			setup = require("atlas.pulls.providers.github.highlights").setup,

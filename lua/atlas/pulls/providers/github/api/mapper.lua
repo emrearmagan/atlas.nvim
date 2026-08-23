@@ -545,26 +545,26 @@ function M.to_review_comment(node, thread, fallback_parent)
 	return result
 end
 
----@param comment PullsComment
+---@param review_comment PullsComment
 ---@return table
-function M.review_thread(comment)
-	local inline = comment.inline or {}
-	local file = comment.file
+function M.review_thread(review_comment)
+	local inline = review_comment.inline or {}
+	local file = review_comment.file
 	local side = not file and (inline.to ~= nil and "RIGHT" or "LEFT") or nil
 	local start_side = not file and (inline.start_to ~= nil and "RIGHT" or (inline.start_from ~= nil and "LEFT" or nil))
 		or nil
 	return {
-		id = tostring(comment.thread_id or ""),
+		id = tostring(review_comment.thread_id or ""),
 		subjectType = file and "FILE" or "LINE",
 		path = file and file.path or inline.path,
 		line = inline.to,
 		startLine = inline.start_to,
-		originalLine = (comment._raw or {}).original_line or inline.from,
+		originalLine = (review_comment._raw or {}).original_line or inline.from,
 		originalStartLine = inline.start_from,
 		diffSide = side,
 		startDiffSide = start_side,
-		isResolved = comment.state == "RESOLVED",
-		isOutdated = comment.outdated == true or comment.state == "OUTDATED",
+		isResolved = review_comment.state == "RESOLVED",
+		isOutdated = review_comment.outdated == true or review_comment.state == "OUTDATED",
 	}
 end
 

@@ -80,7 +80,7 @@ describe("GitLab client", function()
 	it("preserves self-hosted path prefixes for REST and GraphQL", function()
 		provider_config.base_url = "https://gitlab.example.com/company/gitlab///"
 		provider_config.token = "secret"
-		local client = load_client().pulls
+		local client = load_client()
 
 		client.request("GET", "/projects", nil, function() end)
 		client.graphql("query { currentUser { id } }", nil, function() end)
@@ -90,7 +90,7 @@ describe("GitLab client", function()
 	end)
 
 	it("requires GraphQL authentication", function()
-		local client = load_client().pulls
+		local client = load_client()
 		local auth_err
 		client.graphql("query { currentUser { id } }", nil, function(_, err)
 			auth_err = err

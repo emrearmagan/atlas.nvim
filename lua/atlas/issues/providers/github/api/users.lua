@@ -1,6 +1,6 @@
 local M = {}
 
-local cli = require("atlas.providers.github.client").issues
+local cli = require("atlas.providers.github.client")
 local normalizer = require("atlas.issues.providers.github.api.mapper")
 
 ---@param on_done fun(user: IssueUser|nil, err: string|nil)

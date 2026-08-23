@@ -124,9 +124,9 @@ local function repositories(options)
 		table.insert(views, bookmark)
 	end
 	for _, view in ipairs(views) do
-		for _, target in ipairs(view_targets(view)) do
-			if target.repo then
-				table.insert(result, target.workspace .. "/" .. target.repo)
+		for _, view_target in ipairs(view_targets(view)) do
+			if view_target.repo then
+				table.insert(result, view_target.workspace .. "/" .. view_target.repo)
 			end
 		end
 	end

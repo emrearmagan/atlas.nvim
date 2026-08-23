@@ -171,7 +171,7 @@ local function finish_pending_jump(session)
 	line = math.min(line, vim.api.nvim_buf_line_count(target.buf))
 	vim.api.nvim_win_set_cursor(target.win, { line, 0 })
 	vim.api.nvim_win_call(target.win, function()
-		pcall(vim.cmd.normal, { "zvzz", bang = true })
+		pcall(vim.cmd.normal, { args = { "zv" }, bang = true })
 	end)
 	if vim.api.nvim_get_current_tabpage() == session.tabpage then
 		if pending.focus_diff then

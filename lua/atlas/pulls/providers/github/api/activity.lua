@@ -1,6 +1,6 @@
 local M = {}
 
-local cli = require("atlas.providers.github.client").pulls
+local cli = require("atlas.providers.github.client")
 local mapper = require("atlas.pulls.providers.github.api.mapper")
 
 ---@param entries PullsActivityEntry[]

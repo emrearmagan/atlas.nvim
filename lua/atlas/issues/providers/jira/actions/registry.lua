@@ -66,8 +66,8 @@ local function transition(ctx, done)
 		title = string.format("Transition %s", issue_key),
 		debounce_ms = 0,
 		format_item = function(item)
-			local transition = item.value
-			local category = type(transition) == "table" and transition.to_status_category or nil
+			local transition_value = item.value
+			local category = type(transition_value) == "table" and transition_value.to_status_category or nil
 			local icon = (category and status_category_icons[category]) or icons.fallback()
 			return string.format("%s %s", icon, item.label)
 		end,
@@ -95,13 +95,13 @@ local function transition(ctx, done)
 				end
 
 				all_items = {}
-				for _, transition in ipairs(transitions) do
-					local to_status = tostring((transition and transition.to_status_name) or "")
+				for _, candidate in ipairs(transitions) do
+					local to_status = tostring((candidate and candidate.to_status_name) or "")
 					if current_status == "" or to_status == "" or to_status ~= current_status then
 						table.insert(all_items, {
-							id = tostring(transition.id or ""),
-							label = tostring(transition.name or ""),
-							value = transition,
+							id = tostring(candidate.id or ""),
+							label = tostring(candidate.name or ""),
+							value = candidate,
 						})
 					end
 				end

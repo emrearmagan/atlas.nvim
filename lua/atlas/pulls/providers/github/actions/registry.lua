@@ -2,13 +2,13 @@ local M = {}
 
 local actions = require("atlas.pulls.actions")
 local action_utils = require("atlas.pulls.actions.utils")
-local cli = require("atlas.providers.github.client").pulls
+local cli = require("atlas.providers.github.client")
 local notes = require("atlas.pulls.notes")
 local picker = require("atlas.picker")
 local pullrequests = require("atlas.pulls.providers.github.api.pullrequests")
 local core_notify = require("atlas.core.notify")
 local github_mapping = require("atlas.providers.github.mapping")
-local users_api = require("atlas.providers.github.users").new("pulls")
+local users_api = require("atlas.providers.github.users")
 
 ---@param ctx AtlasPullActionContext
 ---@return boolean

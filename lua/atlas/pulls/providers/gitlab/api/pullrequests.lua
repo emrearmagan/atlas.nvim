@@ -1,6 +1,6 @@
 local M = {}
 
-local service = require("atlas.providers.gitlab.client").pulls
+local service = require("atlas.providers.gitlab.client")
 local mapper = require("atlas.pulls.providers.gitlab.api.mapper")
 local reviews_api = require("atlas.pulls.providers.gitlab.api.reviews")
 

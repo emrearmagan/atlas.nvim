@@ -1,7 +1,7 @@
 local M = {}
 
 local json = require("atlas.core.json")
-local service = require("atlas.providers.gitlab.client").issues
+local service = require("atlas.providers.gitlab.client")
 
 ---@class GitLabLabel
 ---@field id integer
