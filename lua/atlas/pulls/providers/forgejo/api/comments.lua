@@ -203,42 +203,8 @@ function M.fetch(pr, opts, on_done)
 				on_done({ comments = {}, events = events }, nil)
 				return
 			end
-			local starts = {}
-			for index, comment in ipairs(comments) do
-				local target = reactions_endpoint(base, pr, comment)
-				if target then
-					starts[tostring(index)] = function(done)
-						local function mapped(values, reactions_err)
-							if reactions_err then
-								done(nil, reactions_err)
-								return
-							end
-							done(mapper.reaction_counts(values), nil)
-						end
-						if comment.id == "__body__" then
-							return pagination.fetch_all(target, nil, {}, mapped)
-						end
-						return service.request("GET", target, nil, mapped)
-					end
-				end
-			end
-			requests.all(starts, function(values, errors)
-				local _, reactions_err = next(errors)
-				if reactions_err then
-					on_done(nil, reactions_err)
-					return
-				end
-				for index, reactions in pairs(values) do
-					local comment = comments[tonumber(index)]
-					if comment then
-						comment.reactions = reactions
-						if comment.id == "__body__" then
-							pr.reactions = reactions
-						end
-					end
-				end
-				on_done({ comments = comments, events = events }, nil)
-			end)
+			-- TODO: Figure out how the fuck to load reactions without N+1 requests.
+			on_done({ comments = comments, events = events }, nil)
 		end)
 	end)
 	return requests

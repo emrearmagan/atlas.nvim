@@ -16,7 +16,6 @@ function M.fetch_all(endpoint, params, opts, on_done)
 	local max_items = opts.max_items
 	local page = 1
 	local values = {}
-	local empty_pages = 0
 	local requests = request_scope.new()
 	local finished = false
 
@@ -61,16 +60,7 @@ function M.fetch_all(endpoint, params, opts, on_done)
 				end
 			end
 
-			if opts.post_filtered then
-				empty_pages = #items == 0 and empty_pages + 1 or 0
-				-- Timeline and review rows are paginated before the server removes
-				-- hidden entries. Scan past one empty page because later pages may
-				-- still contain visible rows.
-				if empty_pages >= 2 then
-					finish(values, nil)
-					return
-				end
-			elseif #items < page_size then
+			if #items == 0 or (not opts.post_filtered and #items < page_size) then
 				finish(values, nil)
 				return
 			end

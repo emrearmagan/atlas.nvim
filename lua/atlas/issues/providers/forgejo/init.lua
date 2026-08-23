@@ -33,40 +33,26 @@ end
 ---@param opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(items: IssueConversationItem[]|nil, err: string|nil)
 function M.fetch_conversation(issue, opts, on_done)
-	local requests = request_scope.new()
-	requests.run(function(done)
-		return timeline_api.list(issue.key, opts, done)
-	end, function(result, err)
+	return timeline_api.list(issue.key, opts, function(result, err)
 		if err then
 			on_done(nil, err)
 			return
 		end
 		local items = {}
-		local reaction_targets = {}
 		if issue.description ~= "" then
-			local item = {
+			table.insert(items, {
 				id = "description:" .. issue.key,
 				kind = "description",
 				created_at = issue.created_at or "",
 				entity = issue,
-			}
-			table.insert(items, item)
-			table.insert(reaction_targets, {
-				comment_id = "__body__",
-				item = item,
 			})
 		end
 		for _, comment in ipairs(result.comments) do
-			local item = {
+			table.insert(items, {
 				id = "comment:" .. comment.id,
 				kind = "comment",
 				created_at = comment.created or "",
 				entity = comment,
-			}
-			table.insert(items, item)
-			table.insert(reaction_targets, {
-				comment_id = comment.id,
-				item = item,
 			})
 		end
 		for index, entry in ipairs(result.events) do
@@ -77,29 +63,9 @@ function M.fetch_conversation(issue, opts, on_done)
 				entity = entry,
 			})
 		end
-
-		local function load_reactions(index)
-			local target = reaction_targets[index]
-			if not target then
-				on_done(items, nil)
-				return
-			end
-			requests.run(function(done)
-				return comments_api.list_reactions(issue.key, target.comment_id, done)
-			end, function(reactions)
-				if target.item.kind == "description" then
-					issue.reactions = reactions
-				else
-					local comment = target.item.entity
-					---@cast comment IssueComment
-					comment.reactions = reactions
-				end
-				load_reactions(index + 1)
-			end)
-		end
-		load_reactions(1)
+		-- TODO: Figure out how the fuck to load reactions without N+1 requests.
+		on_done(items, nil)
 	end)
-	return requests
 end
 
 ---@param issue IssueDetails

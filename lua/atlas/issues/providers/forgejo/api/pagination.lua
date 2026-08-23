@@ -11,7 +11,6 @@ local service = require("atlas.providers.forgejo.client").issues
 function M.fetch_all(endpoint, params, opts, on_done)
 	local page = 1
 	local values = {}
-	local empty_pages = 0
 	local requests = request_scope.new()
 	local finished = false
 
@@ -39,13 +38,7 @@ function M.fetch_all(endpoint, params, opts, on_done)
 			-- Forgejo returns JSON null after the final timeline page.
 			local items = result == vim.NIL and {} or result
 			vim.list_extend(values, items)
-			if opts.post_filtered then
-				empty_pages = #items == 0 and empty_pages + 1 or 0
-				if empty_pages >= 2 then
-					finish(values, nil)
-					return
-				end
-			elseif #items < 50 then
+			if #items == 0 or (not opts.post_filtered and #items < 50) then
 				finish(values, nil)
 				return
 			end
