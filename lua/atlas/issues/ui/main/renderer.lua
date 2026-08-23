@@ -35,6 +35,31 @@ local function search_text(view)
 	end
 
 	local provider_id = state.provider and state.provider.id or ""
+	if provider_id == "gitea" or provider_id == "forgejo" then
+		if view._kind == "bookmarks" or view._kind == "starred" then
+			return ""
+		end
+		local repo = vim.trim(view.repo or "")
+		local parts = { repo ~= "" and ("repo:" .. repo) or "type:issues", "is:" .. (view.state or "open") }
+		local scope = view.scope or ""
+		if scope ~= "" and scope ~= "all" then
+			table.insert(parts, "scope:" .. scope)
+		end
+		local labels = vim.trim(view.labels or "")
+		if labels ~= "" then
+			table.insert(parts, "labels:" .. labels)
+		end
+		local extra_keys = vim.tbl_keys(view.extra_params or {})
+		table.sort(extra_keys)
+		for _, key in ipairs(extra_keys) do
+			table.insert(parts, key .. ":" .. tostring(view.extra_params[key]))
+		end
+		local search = vim.trim(view.search or "")
+		if search ~= "" then
+			table.insert(parts, search)
+		end
+		return table.concat(parts, " ")
+	end
 	if provider_id == "github" then
 		local search = tostring(view.search or "")
 		if search ~= "" and not search:lower():find("is:issue", 1, true) then
