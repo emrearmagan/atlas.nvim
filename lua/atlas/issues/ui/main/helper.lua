@@ -16,7 +16,7 @@ function M.issue_hl(key)
 		return "LineNr"
 	end
 	if lower:find("#", 1, true) then
-		return "AtlasGHIssueKey"
+		return "AtlasTextMuted"
 	end
 
 	return "AtlasJiraKey"

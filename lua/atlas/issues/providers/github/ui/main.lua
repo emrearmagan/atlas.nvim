@@ -69,11 +69,12 @@ end
 
 ---@param issue Issue
 ---@param is_child boolean
+---@param layout "plain"|"compact"
 ---@return table
-local function issue_to_row(issue, is_child)
+local function issue_to_row(issue, is_child, layout)
 	local renderer = require("atlas.issues.providers.github.ui.renderer")
 	local raw = issue._raw or {}
-	local row = renderer.format_row(issue, is_child)
+	local row = renderer.format_row(issue, is_child, layout)
 	if issue.is_starred then
 		row.name = STAR_ICON .. " " .. row.name
 	end
@@ -90,9 +91,15 @@ end
 local function rows(issue_groups, opts)
 	local out = {}
 	for i, group in ipairs(issue_groups or {}) do
-		local root_row = issue_to_row(group.issue, false)
-		for _, child in ipairs(group.children or {}) do
-			table.insert(root_row.children, issue_to_row(child, true))
+		local root_row = issue_to_row(group.issue, false, "plain")
+		local children = group.children or {}
+		for _, child in ipairs(children) do
+			table.insert(root_row.children, issue_to_row(child, true, "plain"))
+		end
+		if #children > 0 then
+			local issue_key = tostring(group.issue.key or "")
+			local collapsed = (state.collapsed_issue_keys or {})[issue_key] == true
+			root_row.icon, root_row._fold_icon_hl = icons.general(collapsed and "fold_closed" or "fold_open")
 		end
 		table.insert(out, root_row)
 
@@ -150,7 +157,7 @@ end
 ---@return table
 local function compact_issue_to_row(issue)
 	local raw = issue._raw or {}
-	local row = issue_to_row(issue, false)
+	local row = issue_to_row(issue, false, "compact")
 	local number = tonumber(raw.number) or tostring(issue.key or ""):match("#(%d+)$")
 	local key_label = number and string.format("#%s", tostring(number)) or tostring(issue.key or "")
 	row.name = string.format("%s%s %s", issue.is_starred and (STAR_ICON .. " ") or "", key_label, issue.title or "")
@@ -167,14 +174,24 @@ end
 local function compact_rows(issues, opts)
 	local out = {}
 	for _, issue in ipairs(issues or {}) do
-		table.insert(out, compact_issue_to_row(issue))
+		local row = compact_issue_to_row(issue)
+		table.insert(out, row)
 
-		local meta = compact_blank_row()
-		meta.kind = "meta"
-		meta.name = tostring(issue.key or "")
-		meta.separator = true
-		meta._item = { kind = "issue_meta", key = issue.key, _issue = issue }
-		table.insert(out, meta)
+		local raw = issue._raw or {}
+		local repository = tostring(raw.slug or "")
+		if repository == "" then
+			repository = tostring(issue.key or ""):match("^(.-)#%d+$") or ""
+		end
+		if repository ~= "" then
+			local meta = compact_blank_row()
+			meta.kind = "meta"
+			meta.name = repository
+			meta.separator = true
+			meta._item = { kind = "issue_meta", key = issue.key, _issue = issue }
+			table.insert(out, meta)
+		else
+			row.separator = true
+		end
 	end
 
 	if opts and opts.loading then
@@ -186,17 +203,6 @@ local function compact_rows(issues, opts)
 	end
 
 	return out
-end
-
----@param issue_groups IssuesGroup[]|nil
----@return boolean
-local function should_show_indicator(issue_groups)
-	for _, group in ipairs(issue_groups or {}) do
-		if #(group.children or {}) > 0 then
-			return true
-		end
-	end
-	return false
 end
 
 ---@param issue_groups IssuesGroup[]|nil
@@ -227,6 +233,9 @@ local function cell_hl(row, col, ctx)
 	if row.kind == "meta" then
 		return { { start_col = 0, end_col = #ctx.padded, hl_group = "AtlasTextMuted" } }
 	end
+	if col.key == "icon" and row._fold_icon_hl then
+		return { { start_col = 0, end_col = #ctx.padded, hl_group = row._fold_icon_hl } }
+	end
 	if col.key == "name" and type(row._compact_key_label) == "string" then
 		local key_label = row._compact_key_label
 		local s, e = ctx.text:find(key_label, 1, true)
@@ -235,7 +244,7 @@ local function cell_hl(row, col, ctx)
 			if row._issue and row._issue.is_starred then
 				table.insert(spans, { start_col = 0, end_col = #STAR_ICON, hl_group = STAR_ICON_HL })
 			end
-			table.insert(spans, { start_col = s - 1, end_col = e, hl_group = "AtlasGHIssueKey" })
+			table.insert(spans, { start_col = s - 1, end_col = e, hl_group = "AtlasTextMuted" })
 			local title_start = e + 2
 			if title_start <= #ctx.text then
 				table.insert(spans, { start_col = title_start - 1, end_col = #ctx.text, hl_group = "Normal" })
@@ -313,7 +322,7 @@ function M.render(issue_groups, layout, opts)
 			children_key = "children",
 			default_expanded = true,
 			indent = "",
-			show_indicator = should_show_indicator(issue_groups),
+			show_indicator = false,
 			leaf_prefix = "",
 			is_expanded = function(row)
 				local issue = row._issue

@@ -68,13 +68,14 @@ end
 
 ---@param issue Issue
 ---@param is_child boolean|nil
+---@param layout "plain"|"compact"
 ---@return table
-local function issue_to_row(issue, is_child)
+local function issue_to_row(issue, is_child, layout)
 	local provider = state.provider
 	local row_data
 	local ui = provider and provider.capabilities.ui
 	if ui and ui.format_row then
-		row_data = ui.format_row(issue, is_child == true)
+		row_data = ui.format_row(issue, is_child == true, layout)
 	end
 	if row_data == nil then
 		row_data = {
@@ -101,10 +102,16 @@ local function issues_to_rows(issue_groups)
 	local rows = {}
 	for i, group in ipairs(issue_groups) do
 		local children = group.children or {}
-		local root_row = issue_to_row(group.issue, false)
+		local root_row = issue_to_row(group.issue, false, "plain")
 
 		for _, child in ipairs(children) do
-			table.insert(root_row.children, issue_to_row(child, true))
+			table.insert(root_row.children, issue_to_row(child, true, "plain"))
+		end
+		local provider_id = state.provider and state.provider.id or ""
+		if #children > 0 and provider_id ~= "jira" then
+			local issue_key = tostring(group.issue.key or "")
+			local collapsed = (state.collapsed_issue_keys or {})[issue_key] == true
+			root_row.icon, root_row._fold_icon_hl = icons.general(collapsed and "fold_closed" or "fold_open")
 		end
 
 		table.insert(rows, root_row)
@@ -127,6 +134,9 @@ end
 ---@param issue_groups IssuesGroup[]
 ---@return boolean
 local function should_show_indicator(issue_groups)
+	if not state.provider or state.provider.id ~= "jira" then
+		return false
+	end
 	for _, group in ipairs(issue_groups or {}) do
 		if #(group.children or {}) > 0 then
 			return true
@@ -142,7 +152,6 @@ local cell_hl
 ---@return string[], table<integer, table>, table[]
 local function render_issue_table(opts, issue_groups)
 	local rows = issues_to_rows(issue_groups)
-	local show_tree_indicator = should_show_indicator(issue_groups)
 	if state.is_loading then
 		table.insert(rows, {
 			icon = "",
@@ -186,7 +195,7 @@ local function render_issue_table(opts, issue_groups)
 			children_key = "children",
 			default_expanded = true,
 			indent = "",
-			show_indicator = show_tree_indicator,
+			show_indicator = should_show_indicator(issue_groups),
 			leaf_prefix = "",
 			is_expanded = function(row)
 				local issue = row._issue
@@ -231,6 +240,10 @@ end
 ---@return string
 local function issue_meta_text(issue)
 	local parts = {}
+	local repository = tostring(issue.key or ""):match("^(.-)#%d+$")
+	if repository and repository ~= "" then
+		table.insert(parts, repository)
+	end
 	local type_name = issue.type and tostring(issue.type.name or "") or ""
 	if type_name ~= "" then
 		table.insert(parts, type_name)
@@ -245,9 +258,6 @@ local function issue_meta_text(issue)
 	if issue.story_points ~= nil then
 		table.insert(parts, string.format("%s pts", tostring(issue.story_points)))
 	end
-	if #parts == 0 then
-		return tostring(issue.key or "")
-	end
 	return table.concat(parts, "  ")
 end
 
@@ -256,16 +266,21 @@ end
 local function compact_rows(issues)
 	local rows = {}
 	for _, issue in ipairs(issues or {}) do
-		local row = issue_to_row(issue, false)
+		local row = issue_to_row(issue, false, "compact")
 		row.children = nil
 		table.insert(rows, row)
 
-		local meta = compact_blank_row()
-		meta.kind = "meta"
-		meta.name = issue_meta_text(issue)
-		meta.separator = true
-		meta._item = { kind = "issue_meta", key = issue.key, _issue = issue }
-		table.insert(rows, meta)
+		local meta_text = issue_meta_text(issue)
+		if meta_text ~= "" then
+			local meta = compact_blank_row()
+			meta.kind = "meta"
+			meta.name = meta_text
+			meta.separator = true
+			meta._item = { kind = "issue_meta", key = issue.key, _issue = issue }
+			table.insert(rows, meta)
+		else
+			row.separator = true
+		end
 	end
 
 	return rows
@@ -300,6 +315,9 @@ end
 function cell_hl(row, col, ctx)
 	if row.kind == "meta" then
 		return { { start_col = 0, end_col = #ctx.padded, hl_group = "AtlasTextMuted" } }
+	end
+	if col.key == "icon" and row._fold_icon_hl then
+		return { { start_col = 0, end_col = #ctx.padded, hl_group = row._fold_icon_hl } }
 	end
 	local provider = state.provider
 	local ui = provider and provider.capabilities.ui

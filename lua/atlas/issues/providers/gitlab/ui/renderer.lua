@@ -28,20 +28,20 @@ end
 local function key_label(issue)
 	local raw = issue._raw or {}
 	local iid = raw.iid or 0
-	local path = tostring(raw.project_path or "")
-	return path ~= "" and string.format("%s#%d", path, iid) or string.format("#%d", iid)
+	return string.format("#%d", iid)
 end
 
 ---@param issue Issue
 ---@param is_child boolean
+---@param _layout "plain"|"compact"|nil
 ---@return table
-function M.format_row(issue, is_child)
+function M.format_row(issue, is_child, _layout)
 	local title = issue.title or ""
 	local label = key_label(issue)
 
 	local row_icon = state_icon(issue.status_id)
 
-	local name = is_child and ("  " .. row_icon .. "  " .. label .. "  " .. title) or (label .. "  " .. title)
+	local name = is_child and ("  " .. row_icon .. "  " .. label .. " " .. title) or (label .. " " .. title)
 
 	local assignee_name = issue.assignee and issue.assignee.display_name or "Unassigned"
 	local reporter_name = issue.reporter and issue.reporter.display_name or "Unknown"
@@ -49,6 +49,7 @@ function M.format_row(issue, is_child)
 	return {
 		icon = is_child and "" or row_icon,
 		name = name,
+		_key_label = label,
 		assignee = string.format("%s %s", icons.general("user"), utils.shorten_name(assignee_name, 20)),
 		reporter = string.format("%s %s", icons.general("user"), utils.shorten_name(reporter_name, 20)),
 		status = (function()
@@ -94,10 +95,10 @@ function M.cell_hl(row, col, ctx)
 			end
 		end
 
-		local label = key_label(issue)
+		local label = row._key_label or key_label(issue)
 		local s, e = ctx.text:find(label, 1, true)
 		if s and e then
-			table.insert(spans, { start_col = s - 1, end_col = e, hl_group = "AtlasGLIssueKey" })
+			table.insert(spans, { start_col = s - 1, end_col = e, hl_group = "AtlasTextMuted" })
 			local title_start = e + 2
 			if title_start <= #ctx.text then
 				table.insert(spans, { start_col = title_start - 1, end_col = #ctx.text, hl_group = "Normal" })
