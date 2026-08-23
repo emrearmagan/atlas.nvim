@@ -110,6 +110,8 @@ end
 
 local provider_rows = {
 	github = github_rows,
+	gitea = github_rows,
+	forgejo = github_rows,
 	gitlab = gitlab_rows,
 	jira = jira_rows,
 }
