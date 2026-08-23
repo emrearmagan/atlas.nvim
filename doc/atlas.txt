@@ -12,17 +12,15 @@ CONTENTS                                                       *atlas-contents*
   4. Configuration .......................... |atlas-configuration|
   5. Commands ............................... |atlas-commands|
   6. Pulls .................................. |atlas-pulls|
-       Configuration ........................ |atlas-pulls-configuration|
-       GitHub ............................... |atlas-pulls-github|
-       Bitbucket ............................ |atlas-pulls-bitbucket|
-       GitLab ............................... |atlas-pulls-gitlab|
-       Gitea / Forgejo ...................... |atlas-pulls-gitea|
+     GitHub ................................. |atlas-pulls-github|
+     Bitbucket .............................. |atlas-pulls-bitbucket|
+     GitLab ................................. |atlas-pulls-gitlab|
+     Gitea / Forgejo ........................ |atlas-pulls-gitea|
   7. Issues ................................. |atlas-issues|
-       Configuration ........................ |atlas-issues-configuration|
-       Jira ................................. |atlas-issues-jira|
-       GitHub ............................... |atlas-issues-github|
-       GitLab ............................... |atlas-issues-gitlab|
-       Gitea / Forgejo ...................... |atlas-issues-gitea|
+     Jira ................................... |atlas-issues-jira|
+     GitHub ................................. |atlas-issues-github|
+     GitLab ................................. |atlas-issues-gitlab|
+     Gitea / Forgejo ........................ |atlas-issues-gitea|
   8. Features ............................... |atlas-features|
        Review pull requests ................. |atlas-review-pull-requests|
          Local notes ........................ |atlas-local-notes|
@@ -645,9 +643,8 @@ Same shared `providers.gitlab` auth as |atlas-pulls-gitlab|. Views take a `scope
 ------------------------------------------------------------------------------
 GITEA / FORGEJO ISSUES           *atlas-issues-gitea* *atlas-issues-forgejo*
 
-Issues reuse the matching instance credentials from `providers.gitea` or
-`providers.forgejo`; only their views and bookmarks belong under `issues.gitea`
-or `issues.forgejo`.
+Views support `repo`, `state`, `scope`, `search`, and `labels`. Pass other API
+query parameters through `extra_params`.
 
 >lua
   issues = {
@@ -656,6 +653,8 @@ or `issues.forgejo`.
       views = {
         { name = "Open", key = "1", repo = "owner/repository",
           state = "open" },
+        { name = "Organization", key = "2", state = "open",
+          extra_params = { owner = "owner", team = "developers" } },
       },
     },
     ---@type AtlasForgejoIssuesConfig
@@ -663,6 +662,8 @@ or `issues.forgejo`.
       views = {
         { name = "Open", key = "2", repo = "owner/forgejo-repository",
           state = "open" },
+        { name = "Organization", key = "3", state = "open",
+          extra_params = { owner = "owner", team = "developers" } },
       },
     },
   }

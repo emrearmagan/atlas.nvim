@@ -255,43 +255,20 @@ function M.resolve_target(value)
 		return normalize_target({ provider = provider, host = host, repository = repository, id = id })
 	end
 
-	local parsed = resolver.parse_url(value)
-	if not parsed then
+	local target, resolve_error = resolver.resolve(value)
+	if not target then
+		return nil, resolve_error
+	end
+	if target.domain ~= "pulls" or target.entity ~= "pr" then
 		return nil, "Expected a pull request URL or canonical reference"
 	end
-	local url_host, path = parsed.host, parsed.path
-	local owner, repo
-	owner, repo, id = path:match("^/([^/]+)/([^/]+)/pull/(%d+)/?$")
-	if owner then
-		provider, repository = "github", owner .. "/" .. repo
-	else
-		owner, repo, id = path:match("^/([^/]+)/([^/]+)/pull%-requests/(%d+)/?$")
-		if owner then
-			provider, repository = "bitbucket", owner .. "/" .. repo
-		else
-			local configured_provider = resolver.provider_for_host(url_host, path, "pulls")
-			if configured_provider == "gitea" or configured_provider == "forgejo" then
-				local configured_path =
-					assert(resolver.path_for_base(parsed, resolver.configured_base("pulls", configured_provider)))
-				owner, repo, id = configured_path:match("^/([^/]+)/([^/]+)/pulls/(%d+)/?$")
-			end
-			if owner then
-				provider, repository = configured_provider, owner .. "/" .. repo
-			else
-				repository, id = path:match("^/(.-)/%-/merge_requests/(%d+)/?$")
-				provider = repository and "gitlab" or nil
-			end
-		end
-	end
-	if not provider or not repository or not id then
-		return nil, "Unsupported pull request URL"
-	end
+	local ref = resolver.pull_request_ref(target)
 	return normalize_target({
-		provider = provider,
-		host = url_host,
-		repository = repository,
-		id = id,
-		url = value,
+		provider = target.provider,
+		host = target.host,
+		repository = ref.repo_full_name,
+		id = ref.id,
+		url = target.url,
 	})
 end
 

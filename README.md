@@ -28,17 +28,15 @@ A Neovim plugin for managing pull requests from GitHub, Bitbucket, GitLab, Gitea
 - [Configuration](#configuration)
 - [Commands](#commands)
 - [Pulls](#pulls)
-  - [Configuration](#pulls-configuration)
-    - [GitHub](#github)
-    - [Bitbucket](#bitbucket)
-    - [GitLab](#gitlab)
-    - [Gitea / Forgejo](#gitea-forgejo)
+  - [GitHub](#github)
+  - [Bitbucket](#bitbucket)
+  - [GitLab](#gitlab)
+  - [Gitea / Forgejo](#gitea-forgejo)
 - [Issues](#issues)
-  - [Configuration](#issue-configuration)
-    - [Jira](#jira)
-    - [GitHub](#github-issues)
-    - [GitLab](#gitlab-issues)
-    - [Gitea / Forgejo](#gitea-forgejo-issues)
+  - [Jira](#jira)
+  - [GitHub](#github-issues)
+  - [GitLab](#gitlab-issues)
+  - [Gitea / Forgejo](#gitea-forgejo-issues)
 - [Features](#features)
 - [Events](#events)
 - [Keymaps](#keymaps)
@@ -683,9 +681,8 @@ issues = {
 <details>
 <summary><strong>Gitea / Forgejo Issues</strong></summary>
 
-Issues reuse the matching instance credentials from `providers.gitea` or
-`providers.forgejo`; only their views and bookmarks belong under `issues.gitea`
-or `issues.forgejo`.
+Views support `repo`, `state`, `scope`, `search`, and `labels`. Pass other API
+query parameters through `extra_params`.
 
 ```lua
 issues = {
@@ -693,12 +690,16 @@ issues = {
   gitea = {
     views = {
       { name = "Open", key = "1", repo = "owner/repository", state = "open" },
+      { name = "Organization", key = "2", state = "open",
+        extra_params = { owner = "owner", team = "developers" } },
     },
   },
   ---@type AtlasForgejoIssuesConfig
   forgejo = {
     views = {
       { name = "Open", key = "2", repo = "owner/forgejo-repository", state = "open" },
+      { name = "Organization", key = "3", state = "open",
+        extra_params = { owner = "owner", team = "developers" } },
     },
   },
 },

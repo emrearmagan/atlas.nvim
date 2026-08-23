@@ -207,7 +207,8 @@ local function resolve_target(value, parsed)
 	if parsed == nil then
 		return nil, nil
 	end
-	local path = resolver.path_for_base(parsed, resolver.configured_base("pulls", "gitlab"))
+	local base = resolver.configured_base("pulls", "gitlab") or { host = "gitlab.com", path = "" }
+	local path = resolver.path_for_base(parsed, base)
 	if path == nil then
 		return nil, nil
 	end

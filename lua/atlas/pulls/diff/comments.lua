@@ -10,7 +10,7 @@ local ui = require("atlas.pulls.diff.ui.comments")
 
 local ACTIONS = {
 	add_comment = function(context, comment, on_done)
-		return actions.add_comment(context, { parent = comment }, on_done)
+		return actions.add_comment(context, { parent = comment, pending = true }, on_done)
 	end,
 	edit = actions.edit_comment,
 	delete = actions.delete_comment,
