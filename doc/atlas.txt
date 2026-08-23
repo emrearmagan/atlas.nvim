@@ -163,8 +163,8 @@ up and what's missing.
         Search configured pull-request and issue providers.
 
 :Atlas open <target>
-        Open a provider URL, Jira key, `owner/repo#number`, or PR/issue
-        number. Use `.` to open the current Git repository.
+        Open a provider URL or Jira key. A PR/issue number is resolved in the
+        current Git repository. Use `.` to open the current Git repository.
 
 :Atlas clear
 :Atlas logs

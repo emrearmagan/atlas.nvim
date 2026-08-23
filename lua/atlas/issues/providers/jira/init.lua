@@ -1,7 +1,6 @@
 ---@class JiraProvider : IssuesProvider
 local M = {}
 
-local resolver = require("atlas.providers.resolve")
 local request_scope = require("atlas.core.requests")
 
 ---@param view IssuesViewConfig
@@ -9,46 +8,6 @@ local request_scope = require("atlas.core.requests")
 function M.search_query(view)
 	---@cast view AtlasJiraViewConfig
 	return tostring(view.jql or view.search or "")
-end
-
----@param value string
----@param parsed AtlasParsedUrl|nil
----@return AtlasTarget|nil, string|nil
-local function resolve_target(value, parsed)
-	local reference = value:upper():match("^([A-Z][A-Z0-9_]*%-%d+)$")
-	if reference then
-		local base_url = resolver.base_url({ provider = "jira", domain = "issues", host = "" })
-		return {
-			provider = "jira",
-			domain = "issues",
-			entity = "issue",
-			host = base_url:match("^https?://([^/]+)") or "",
-			issue_key = reference,
-			url = base_url .. "/browse/" .. reference,
-		}
-	end
-
-	if parsed == nil then
-		return nil, nil
-	end
-	local path = resolver.path_for_base(parsed, resolver.configured_base("issues", "jira"))
-	if path == nil then
-		return nil, nil
-	end
-
-	local issue_key, tail = path:match("^/browse/([A-Z][A-Z0-9_]*%-%d+)(.*)$")
-	if issue_key == nil or not resolver.valid_tail(tail) then
-		return nil, "Unsupported Jira URL. Expected a /browse/KEY issue URL"
-	end
-
-	return {
-		provider = "jira",
-		domain = "issues",
-		entity = "issue",
-		url = value,
-		host = parsed.host,
-		issue_key = issue_key,
-	}
 end
 
 ---@param target AtlasTarget
@@ -301,7 +260,6 @@ function M.views()
 end
 
 return {
-	resolve = resolve_target,
 	search_view = search_view,
 	issue_key = target_issue_key,
 	capabilities = {

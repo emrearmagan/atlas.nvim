@@ -574,6 +574,7 @@ function M.start()
 		return
 	end
 	local base = git_branch.default_branch(root, "origin") or "main"
+	local repo_full_name = assert(info.repo_full_name, "Repository target missing repo_full_name")
 
 	if head == base then
 		notify.warn(string.format("HEAD '%s' is the default branch — switch to a feature branch first", head), {
@@ -592,7 +593,7 @@ function M.start()
 		end
 	end
 
-	local initial, description_err = description.build(root, info.slug, base, head)
+	local initial, description_err = description.build(root, repo_full_name, base, head)
 	if not initial then
 		notify.error(description_err or "Unable to build pull request description", { vim_notify = true })
 		return
@@ -600,7 +601,7 @@ function M.start()
 
 	M.open({
 		provider = provider,
-		repo_slug = info.slug,
+		repo_slug = repo_full_name,
 		repo_root = root,
 		head = head,
 		base = base,

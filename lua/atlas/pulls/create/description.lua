@@ -135,7 +135,7 @@ local function links(root)
 	local remote = git.local_repository(root)
 	return {
 		provider = remote and remote.provider or nil,
-		repo_url = remote and string.format("https://%s/%s", remote.host, remote.slug) or nil,
+		repo_url = remote and remote.url or nil,
 		jira_url = jira_url(),
 		urls = (remote and URL_PATHS[remote.provider]) or {},
 	}

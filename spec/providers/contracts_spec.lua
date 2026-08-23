@@ -25,31 +25,26 @@ end
 
 describe("providers contracts", function()
 	it("loads pull request providers", function()
-		assert_contract(
-			"pulls",
-			{ "bitbucket", "github", "gitlab" },
-			{ "resolve", "search_view", "target", "repositories" },
-			{
-				"fetch_user",
-				"fetch_pullrequests",
-				"fetch_pullrequest",
-				"create_pr",
-				"update_title",
-				"set_draft",
-				"decline",
-				"fetch_default_reviewers",
-				"fetch_description",
-				"update_reviewers",
-				"views",
-			}
-		)
+		assert_contract("pulls", { "bitbucket", "github", "gitlab" }, { "search_view" }, {
+			"fetch_user",
+			"fetch_pullrequests",
+			"fetch_pullrequest",
+			"create_pr",
+			"update_title",
+			"set_draft",
+			"decline",
+			"fetch_default_reviewers",
+			"fetch_description",
+			"update_reviewers",
+			"views",
+		})
 	end)
 
 	it("loads issue providers", function()
 		assert_contract(
 			"issues",
 			{ "github", "gitlab", "jira" },
-			{ "resolve", "search_view", "issue_key" },
+			{ "search_view", "issue_key" },
 			{ "fetch_user", "fetch_issues", "fetch_issue", "views" }
 		)
 	end)

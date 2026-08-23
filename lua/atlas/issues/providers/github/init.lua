@@ -2,7 +2,6 @@
 local M = {}
 
 local config = require("atlas.config")
-local resolver = require("atlas.providers.resolve")
 local issue_cache = require("atlas.issues.providers.github.api.cache")
 local notifications_api = require("atlas.providers.github.notifications")
 local git = require("atlas.core.git")
@@ -247,12 +246,12 @@ local function resolve_cur_repo(view)
 	end
 	local root = git.repo_root()
 	local info = git.local_repository(root)
-	if not info then
+	if not info or info.provider ~= "github" then
 		return view
 	end
 	local resolved = vim.tbl_extend("force", {}, view)
-	local additional = (view.search and vim.search ~= "") and (" " .. view.search) or ""
-	resolved.search = string.format("repo:%s%s", info.slug, additional)
+	local additional = (view.search and view.search ~= "") and (" " .. view.search) or ""
+	resolved.search = string.format("repo:%s%s", info.repo_full_name, additional)
 	return resolved
 end
 
@@ -272,34 +271,6 @@ function M.views()
 		resolved[i] = resolve_cur_repo(view)
 	end
 	return resolved
-end
-
----@param value string
----@param parsed AtlasParsedUrl|nil
----@return AtlasTarget|nil, string|nil
-function M.resolve(value, parsed)
-	if parsed == nil or parsed.host ~= "github.com" then
-		return nil, nil
-	end
-
-	local owner, repo, number, tail = parsed.path:match("^/([^/]+)/([^/]+)/issues/(%d+)(.*)$")
-	if owner then
-		if not resolver.valid_tail(tail) then
-			return nil, "Unsupported GitHub issue URL"
-		end
-		return {
-			provider = "github",
-			domain = "issues",
-			entity = "issue",
-			url = value,
-			host = parsed.host,
-			owner = owner,
-			repo = repo,
-			number = tonumber(number),
-		}
-	end
-
-	return nil, "Unsupported GitHub URL. Expected a repository, issue, or pull request URL"
 end
 
 ---@param target AtlasTarget
@@ -325,44 +296,9 @@ function M.issue_key(target)
 	end
 end
 
----@param info AtlasGitRemoteInfo
----@param domain AtlasDomain
----@param entity AtlasEntity
----@param number integer
----@param base_url string
----@return AtlasTarget
-function M.target(info, domain, entity, number, base_url)
-	local owner, repo = info.slug:match("^(.+)/([^/]+)$")
-	return {
-		provider = "github",
-		domain = domain,
-		entity = entity,
-		host = info.host,
-		owner = owner,
-		repo = repo,
-		number = number,
-		url = string.format("%s/%s/%s/%s/%d", base_url, owner, repo, entity == "pr" and "pull" or "issues", number),
-	}
-end
-
----@param options table
----@return string[]
-function M.repositories(options)
-	local result = {}
-	for _, view in ipairs(options.views or {}) do
-		for slug in tostring(view.search or ""):gmatch("repo:([%w._/-]+)") do
-			table.insert(result, slug)
-		end
-	end
-	return result
-end
-
 return {
-	resolve = M.resolve,
 	search_view = M.search_view,
 	issue_key = M.issue_key,
-	target = M.target,
-	repositories = M.repositories,
 	capabilities = {
 		core = {
 			fetch_user = require("atlas.issues.providers.github.api.users").get_user,

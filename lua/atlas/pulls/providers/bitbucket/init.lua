@@ -10,7 +10,6 @@ local reviews_api = require("atlas.pulls.providers.bitbucket.api.reviews")
 local tasks_api = require("atlas.pulls.providers.bitbucket.api.tasks")
 local users_api = require("atlas.pulls.providers.bitbucket.api.users")
 local request_scope = require("atlas.core.requests")
-local resolver = require("atlas.providers.resolve")
 local git = require("atlas.core.git")
 
 ---@param view AtlasBitbucketViewConfig|AtlasBitbucketBookmarkConfig
@@ -19,65 +18,14 @@ local function view_targets(view)
 	-- `targets` used to be called `repos` so thats why :)
 	if view.current_repo then
 		local info = git.local_repository()
-		if info then
-			return { { workspace = info.owner, repo = info.repo } }
+		if info and info.provider == "bitbucket" then
+			local workspace, repo = info.repo_full_name:match("^([^/]+)/(.+)$")
+			if workspace then
+				return { { workspace = workspace, repo = repo } }
+			end
 		end
 	end
 	return view.targets or view.repos or {}
-end
-
----@param value string
----@param parsed AtlasParsedUrl|nil
----@return AtlasTarget|nil, string|nil
-local function resolve_target(value, parsed)
-	if parsed == nil then
-		return nil, nil
-	end
-	if parsed.host == "bitbucket.org" then
-		local workspace, repo, number, tail = parsed.path:match("^/([^/]+)/([^/]+)/pull%-requests/(%d+)(.*)$")
-		if workspace then
-			if not resolver.valid_tail(tail) then
-				return nil, "Unsupported Bitbucket pull request URL"
-			end
-			return {
-				provider = "bitbucket",
-				domain = "pulls",
-				entity = "pr",
-				url = value,
-				host = parsed.host,
-				workspace = workspace,
-				owner = workspace,
-				repo = repo,
-				number = tonumber(number),
-			}
-		end
-
-		workspace, repo = parsed.path:match("^/([^/]+)/([^/]+)$")
-		if workspace then
-			return {
-				provider = "bitbucket",
-				domain = "pulls",
-				entity = "repo",
-				url = value,
-				host = parsed.host,
-				workspace = workspace,
-				owner = workspace,
-				repo = repo,
-			}
-		end
-
-		return nil, "Unsupported Bitbucket URL. Expected a Cloud repository or pull request URL"
-	end
-
-	local project, repo, number, tail = parsed.path:match("^/projects/([^/]+)/repos/([^/]+)/pull%-requests/(%d+)(.*)$")
-	local server_pr = project and repo and number and resolver.valid_tail(tail)
-	local server_repo = parsed.path:match("^/projects/[^/]+/repos/[^/]+$")
-	if server_pr or server_repo then
-		return nil,
-			"Bitbucket Server/Data Center URLs are recognized, but this Atlas provider currently supports Bitbucket Cloud only"
-	end
-
-	return nil, nil
 end
 
 ---@param target AtlasTarget
@@ -88,49 +36,6 @@ local function search_view(target)
 		layout = "compact",
 		targets = { { workspace = target.workspace, repo = target.repo } },
 	}
-end
-
----@param info AtlasGitRemoteInfo
----@param domain AtlasDomain
----@param entity AtlasEntity
----@param number integer|nil
----@param base_url string
----@return AtlasTarget
-local function target(info, domain, entity, number, base_url)
-	local owner, repo = info.slug:match("^(.+)/([^/]+)$")
-	local url = string.format("%s/%s", base_url, info.slug)
-	if entity ~= "repo" then
-		url = string.format("%s/pull-requests/%d", url, assert(number))
-	end
-	return {
-		provider = "bitbucket",
-		domain = domain,
-		entity = entity,
-		host = info.host,
-		owner = owner,
-		workspace = owner,
-		repo = repo,
-		number = number,
-		url = url,
-	}
-end
-
----@param options table
----@return string[]
-local function repositories(options)
-	local result = {}
-	local views = vim.list_extend({}, options.views or {})
-	for _, bookmark in pairs((options.bookmarks or {}).items or {}) do
-		table.insert(views, bookmark)
-	end
-	for _, view in ipairs(views) do
-		for _, view_target in ipairs(view_targets(view)) do
-			if view_target.repo then
-				table.insert(result, view_target.workspace .. "/" .. view_target.repo)
-			end
-		end
-	end
-	return result
 end
 
 ---@param opts PullsFetchOpts
@@ -282,10 +187,7 @@ local function views()
 end
 
 return {
-	resolve = resolve_target,
 	search_view = search_view,
-	target = target,
-	repositories = repositories,
 	capabilities = {
 		core = {
 			fetch_user = users_api.fetch_current_user,

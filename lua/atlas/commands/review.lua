@@ -5,7 +5,6 @@ local git = require("atlas.core.git")
 local notify = require("atlas.core.notify")
 local picker = require("atlas.picker")
 local providers = require("atlas.providers")
-local resolver = require("atlas.providers.resolve")
 local ui_utils = require("atlas.ui.shared.utils")
 
 local request
@@ -34,12 +33,12 @@ function M.open(value)
 
 	local provider = assert(providers.load(info.provider, "pulls"))
 	---@cast provider PullsProvider
-	local target = resolver.target(info, "pulls", "repo", nil)
-	local view = provider.search_view(target)
+	local repo_full_name = assert(info.repo_full_name, "Repository target missing repo_full_name")
+	local view = provider.search_view(info)
 	if request then
 		request.cancel()
 	end
-	notify.info("Fetching pull requests for " .. info.slug .. "...", { vim_notify = true })
+	notify.info("Fetching pull requests for " .. repo_full_name .. "...", { vim_notify = true })
 	request = provider.capabilities.core.fetch_pullrequests(view, {
 		force_load = true,
 		state = "open",
@@ -57,7 +56,7 @@ function M.open(value)
 			end
 		end
 		if #pull_requests == 0 then
-			notify.info("No open pull requests found for " .. info.slug, { vim_notify = true })
+			notify.info("No open pull requests found for " .. repo_full_name, { vim_notify = true })
 			return
 		end
 

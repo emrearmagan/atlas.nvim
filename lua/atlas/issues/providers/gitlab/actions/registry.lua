@@ -431,8 +431,8 @@ local function create_issue(ctx, done)
 		if root then
 			local remote = git.remote_url(root, "origin")
 			local info = remote and git.parse_remote_url(remote) or nil
-			if info and info.provider == "gitlab" and info.slug and info.slug ~= "" then
-				resolved = info.slug
+			if info and info.provider == "gitlab" and info.repo_full_name and info.repo_full_name ~= "" then
+				resolved = info.repo_full_name
 			end
 		end
 	end

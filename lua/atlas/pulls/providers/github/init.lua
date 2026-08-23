@@ -11,7 +11,6 @@ local pullrequests_api = require("atlas.pulls.providers.github.api.pullrequests"
 local repositories_api = require("atlas.pulls.providers.github.api.repositories")
 local reviews_api = require("atlas.pulls.providers.github.api.reviews")
 local users_api = require("atlas.pulls.providers.github.api.users")
-local resolver = require("atlas.providers.resolve")
 local git = require("atlas.core.git")
 
 ---@param on_done fun(user: PullsUser|nil, err: string|nil)
@@ -132,12 +131,12 @@ local function resolve_cur_repo(view)
 	end
 	local root = git.repo_root()
 	local info = git.local_repository(root)
-	if not info then
+	if not info or info.provider ~= "github" then
 		return view
 	end
 	local resolved = vim.tbl_extend("force", {}, view)
-	local additional = (view.search and vim.search ~= "") and (" " .. view.search) or ""
-	resolved.search = string.format("repo:%s%s", info.slug, additional)
+	local additional = (view.search and view.search ~= "") and (" " .. view.search) or ""
+	resolved.search = string.format("repo:%s%s", info.repo_full_name, additional)
 	return resolved
 end
 
@@ -154,47 +153,6 @@ local function views()
 	return resolved
 end
 
----@param value string
----@param parsed AtlasParsedUrl|nil
----@return AtlasTarget|nil, string|nil
-local function resolve_target(value, parsed)
-	if parsed == nil or parsed.host ~= "github.com" then
-		return nil, nil
-	end
-
-	local owner, repo, number, tail = parsed.path:match("^/([^/]+)/([^/]+)/pull/(%d+)(.*)$")
-	if owner then
-		if not resolver.valid_tail(tail) then
-			return nil, "Unsupported GitHub pull request URL"
-		end
-		return {
-			provider = "github",
-			domain = "pulls",
-			entity = "pr",
-			url = value,
-			host = parsed.host,
-			owner = owner,
-			repo = repo,
-			number = tonumber(number),
-		}
-	end
-
-	owner, repo = parsed.path:match("^/([^/]+)/([^/]+)$")
-	if owner then
-		return {
-			provider = "github",
-			domain = "pulls",
-			entity = "repo",
-			url = value,
-			host = parsed.host,
-			owner = owner,
-			repo = repo,
-		}
-	end
-
-	return nil, "Unsupported GitHub URL. Expected a repository, issue, or pull request URL"
-end
-
 ---@param target AtlasTarget
 ---@return AtlasPullsViewConfig
 local function search_view(target)
@@ -209,47 +167,8 @@ local function search_view(target)
 	}
 end
 
----@param info AtlasGitRemoteInfo
----@param domain AtlasDomain
----@param entity AtlasEntity
----@param number integer|nil
----@param base_url string
----@return AtlasTarget
-local function target(info, domain, entity, number, base_url)
-	local owner, repo = info.slug:match("^(.+)/([^/]+)$")
-	local url = string.format("%s/%s/%s", base_url, owner, repo)
-	if entity ~= "repo" then
-		url = string.format("%s/%s/%d", url, entity == "pr" and "pull" or "issues", assert(number))
-	end
-	return {
-		provider = "github",
-		domain = domain,
-		entity = entity,
-		host = info.host,
-		owner = owner,
-		repo = repo,
-		number = number,
-		url = url,
-	}
-end
-
----@param options table
----@return string[]
-local function repositories(options)
-	local result = {}
-	for _, view in ipairs(options.views or {}) do
-		for slug in tostring(view.search or ""):gmatch("repo:([%w._/-]+)") do
-			table.insert(result, slug)
-		end
-	end
-	return result
-end
-
 return {
-	resolve = resolve_target,
 	search_view = search_view,
-	target = target,
-	repositories = repositories,
 	capabilities = {
 		core = {
 			fetch_user = fetch_user,

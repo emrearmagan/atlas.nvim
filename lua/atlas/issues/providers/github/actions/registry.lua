@@ -59,7 +59,7 @@ local function create_issue_slug(ctx)
 	if info.provider ~= "github" then
 		return nil, "Current repository is not hosted on GitHub"
 	end
-	return info.slug, nil
+	return info.repo_full_name, nil
 end
 
 ---@type AtlasIssueAction[]

@@ -1,5 +1,7 @@
 local M = {}
 
+local providers = require("atlas.providers")
+
 local function trim(s)
 	if type(s) ~= "string" then
 		return ""
@@ -248,63 +250,22 @@ function M.remote_url(root, remote)
 	return url, nil
 end
 
----@class AtlasGitRemoteInfo
----@field host string -- e.g. "github.com" / "bitbucket.org" / "gitlab.com"
----@field provider string
----@field slug string -- "owner/repo" or nested "group/subgroup/repo" (without .git)
----@field owner string
----@field repo string
----@field url string -- original remote URL
-
----@param url string
----@return AtlasGitRemoteInfo|nil info, string|nil err
-function M.parse_remote_url(url)
-	if type(url) ~= "string" or url == "" then
-		return nil, "Empty remote URL"
+---@param remote string
+---@return AtlasTarget|nil target, string|nil err
+function M.parse_remote_url(remote)
+	local target, err = providers.resolve(remote)
+	if target and target.entity == "repo" then
+		return target
 	end
-
-	local host, path
-	-- ssh form: git@github.com:owner/repo.git
-	host, path = url:match("^[%w_-]+@([^:]+):(.+)$")
-	if host == nil then
-		-- https form: https://github.com/owner/repo(.git)
-		host, path = url:match("^https?://[^/]-([^/@]+)/(.+)$")
-		if host == nil then
-			-- git:// or ssh://
-			host, path = url:match("^[%w]+://[^/]-([^/@]+)/(.+)$")
-		end
-	end
-
-	if host == nil or path == nil then
-		return nil, string.format("Could not parse remote URL: %s", url)
-	end
-
-	path = path:gsub("%.git$", "")
-	local owner, repo = path:match("^([^/]+)/(.+)$")
-	if owner == nil or repo == nil then
-		return nil, string.format("Could not parse owner/repo from: %s", url)
-	end
-
-	local provider = require("atlas.providers.resolve").provider_for_host(host) or "unknown"
-
-	return {
-		host = host,
-		provider = provider,
-		slug = owner .. "/" .. repo,
-		owner = owner,
-		repo = repo,
-		url = url,
-	},
-		nil
+	return nil, err or "Expected a supported Git repository remote"
 end
 
 ---@param cwd string|nil
----@return AtlasGitRemoteInfo|nil
+---@return AtlasTarget|nil
 function M.local_repository(cwd)
 	local root = M.repo_root(cwd)
 	local remote_url = root and M.remote_url(root, "origin") or nil
-	local info = remote_url and M.parse_remote_url(remote_url) or nil
-	return info and info.provider ~= "unknown" and info or nil
+	return remote_url and M.parse_remote_url(remote_url) or nil
 end
 
 ---@param root string

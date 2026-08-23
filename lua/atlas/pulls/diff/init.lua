@@ -9,7 +9,6 @@ local logger = require("atlas.core.logger")
 local notes = require("atlas.pulls.diff.notes")
 local notify = require("atlas.core.notify")
 local providers = require("atlas.providers")
-local resolver = require("atlas.providers.resolve")
 local review_api = require("atlas.pulls.diff.review")
 local session_api = require("atlas.pulls.diff.session")
 local statusline = require("atlas.ui.statusline")
@@ -67,13 +66,15 @@ local function repository_path(context)
 	end
 	local cwd = vim.fn.getcwd()
 	local current = git.local_repository(cwd)
-	local target = resolver.resolve(pr.link.html)
+	local current_repo = current and current.repo_full_name or nil
+	local target = providers.resolve(pr.link.html)
 	if
 		current
+		and current_repo
 		and target
 		and current.provider == target.provider
 		and current.host:lower() == target.host:lower()
-		and current.slug:lower() == pr.repo_full_name:lower()
+		and current_repo:lower() == pr.repo_full_name:lower()
 	then
 		return git.repo_root(cwd)
 	end
@@ -413,7 +414,7 @@ end
 ---@param requested AtlasPullsDiffOpenCommand|string|nil
 ---@return { cancel: fun() }|nil
 function M.open_pull_request(value, requested)
-	local target, target_err = resolver.resolve(value)
+	local target, target_err = providers.resolve(value)
 	if not target then
 		notify.error(target_err or "Invalid pull request URL", { vim_notify = true })
 		return nil
@@ -422,7 +423,7 @@ function M.open_pull_request(value, requested)
 		notify.error("Expected a pull request URL", { vim_notify = true })
 		return nil
 	end
-	if not resolver.configured(target) then
+	if config.provider_options(target.provider) == nil then
 		notify.error("Pull request provider is not configured: " .. target.provider, { vim_notify = true })
 		return nil
 	end
@@ -431,15 +432,17 @@ function M.open_pull_request(value, requested)
 		notify.error("Unable to load pull request provider: " .. target.provider, { vim_notify = true })
 		return nil
 	end
+	---@cast provider PullsProvider
 	local command, command_err = configured_command(requested)
 	if not command then
 		notify.error(command_err, { vim_notify = true })
 		return nil
 	end
+	local ref = target --[[@as PullRequestRef]]
 	return start_pr(
 		{
 			provider = provider,
-			pr = resolver.pull_request_ref(target),
+			pr = ref,
 			current_user = nil,
 		},
 		command,

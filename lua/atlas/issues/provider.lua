@@ -15,11 +15,8 @@
 ---@field name string
 ---@field icon string
 ---@field hl_group string
----@field resolve fun(value: string, parsed: AtlasParsedUrl|nil): AtlasTarget|nil, string|nil
 ---@field search_view fun(target: AtlasTarget): IssuesViewConfig
 ---@field issue_key fun(target: AtlasTarget): string|nil
----@field target (fun(info: AtlasGitRemoteInfo, domain: AtlasDomain, entity: AtlasEntity, number: integer, base_url: string): AtlasTarget)|nil
----@field repositories (fun(options: table): string[])|nil
 ---@field capabilities IssuesProviderCapabilities
 
 ---@class IssuesProviderCapabilities

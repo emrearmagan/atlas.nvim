@@ -2,7 +2,6 @@ local M = {}
 
 local shared_detail = require("atlas.ui.detail")
 local providers = require("atlas.providers")
-local resolver = require("atlas.providers.resolve")
 local detail_state = require("atlas.pulls.ui.detail.state")
 local renderer = require("atlas.pulls.ui.detail.renderer")
 local detail_keymaps = require("atlas.pulls.ui.detail.keymaps")
@@ -462,7 +461,7 @@ function M.open(input, opts)
 		return
 	end
 
-	local ref = resolver.pull_request_ref(target)
+	local ref = target --[[@as PullRequestRef]]
 	cancel_requests()
 	stop_spinner()
 	detail_state.current_pr = nil

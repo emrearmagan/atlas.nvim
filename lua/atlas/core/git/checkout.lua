@@ -310,8 +310,8 @@ end
 ---@return string|nil cache_path
 ---@return string|nil remote_url
 local function cached_pr_repository(pr)
-	local resolver = require("atlas.providers.resolve")
-	local target = resolver.resolve(pr.link.html)
+	local providers = require("atlas.providers")
+	local target = providers.resolve(pr.link.html)
 	if not target or target.domain ~= "pulls" or target.entity ~= "pr" then
 		return nil, nil
 	end
@@ -330,8 +330,7 @@ local function cached_pr_repository(pr)
 	if transport == "ssh" then
 		return cache_path, string.format("git@%s:%s.git", target.host, repository)
 	end
-	local base_url = resolver.base_url(target):gsub("/+$", "")
-	return cache_path, string.format("%s/%s.git", base_url, repository)
+	return cache_path, target.repository_url
 end
 
 local PR_CACHE_MAX_AGE = 7 * 24 * 60 * 60

@@ -17,10 +17,7 @@
 ---@field name string
 ---@field icon string
 ---@field hl_group string
----@field resolve fun(value: string, parsed: AtlasParsedUrl|nil): AtlasTarget|nil, string|nil
 ---@field search_view fun(target: AtlasTarget): AtlasPullsViewConfig
----@field target fun(info: AtlasGitRemoteInfo, domain: AtlasDomain, entity: AtlasEntity, number: integer|nil, base_url: string): AtlasTarget
----@field repositories fun(options: table): string[]
 ---@field capabilities PullsProviderCapabilities
 
 ---@class PullsProviderCapabilities

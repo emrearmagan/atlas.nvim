@@ -10,7 +10,6 @@ local pullrequests_api = require("atlas.pulls.providers.gitlab.api.pullrequests"
 local repositories_api = require("atlas.pulls.providers.gitlab.api.repositories")
 local reviews_api = require("atlas.pulls.providers.gitlab.api.reviews")
 local users_api = require("atlas.pulls.providers.gitlab.api.users")
-local resolver = require("atlas.providers.resolve")
 local git = require("atlas.core.git")
 
 ---@param opts PullsFetchOpts
@@ -187,11 +186,11 @@ local function resolve_cur_repo(view)
 	end
 	local root = git.repo_root()
 	local info = git.local_repository(root)
-	if not info then
+	if not info or info.provider ~= "gitlab" then
 		return view
 	end
 	local resolved = vim.tbl_extend("force", {}, view)
-	resolved.project = info.slug
+	resolved.project = info.repo_full_name
 	resolved.scope = view.scope or "all"
 	return resolved
 end
@@ -211,57 +210,6 @@ local function views()
 	return resolved
 end
 
----@param value string
----@param parsed AtlasParsedUrl|nil
----@return AtlasTarget|nil, string|nil
-local function resolve_target(value, parsed)
-	if parsed == nil then
-		return nil, nil
-	end
-	local path = resolver.path_for_base(parsed, resolver.configured_base("pulls", "gitlab"))
-	if path == nil then
-		return nil, nil
-	end
-
-	local project_path, number, tail = path:match("^/(.-)/%-/merge_requests/(%d+)(.*)$")
-	local owner, repo = resolver.split_project(project_path)
-	if owner then
-		if not resolver.valid_tail(tail) then
-			return nil, "Unsupported GitLab merge request URL"
-		end
-		return {
-			provider = "gitlab",
-			domain = "pulls",
-			entity = "pr",
-			url = value,
-			host = parsed.host,
-			owner = owner,
-			repo = repo,
-			project_path = project_path,
-			number = tonumber(number),
-		}
-	end
-
-	if not path:find("/-/", 1, true) then
-		project_path = path:match("^/(.+/.+)$")
-		owner, repo = resolver.split_project(project_path)
-		if owner then
-			return {
-				provider = "gitlab",
-				domain = "pulls",
-				entity = "repo",
-				url = value,
-				host = parsed.host,
-				owner = owner,
-				repo = repo,
-				project_path = project_path,
-			}
-		end
-	end
-
-	return nil, "Unsupported GitLab URL. Expected a repository, issue, or merge request URL"
-end
-
 ---@param target AtlasTarget
 ---@return AtlasPullsViewConfig
 local function search_view(target)
@@ -273,46 +221,8 @@ local function search_view(target)
 	}
 end
 
----@param info AtlasGitRemoteInfo
----@param domain AtlasDomain
----@param entity AtlasEntity
----@param number integer|nil
----@param base_url string
----@return AtlasTarget
-local function target(info, domain, entity, number, base_url)
-	local owner, repo = info.slug:match("^(.+)/([^/]+)$")
-	local url = string.format("%s/%s", base_url, info.slug)
-	if entity ~= "repo" then
-		url = string.format("%s/-/%s/%d", url, entity == "pr" and "merge_requests" or "issues", assert(number))
-	end
-	return {
-		provider = "gitlab",
-		domain = domain,
-		entity = entity,
-		host = info.host,
-		owner = owner,
-		repo = repo,
-		project_path = info.slug,
-		number = number,
-		url = url,
-	}
-end
-
----@param options table
----@return string[]
-local function repositories(options)
-	local result = {}
-	for _, view in ipairs(options.views or {}) do
-		table.insert(result, view.project)
-	end
-	return result
-end
-
 return {
-	resolve = resolve_target,
 	search_view = search_view,
-	target = target,
-	repositories = repositories,
 	capabilities = {
 		core = {
 			fetch_user = users_api.fetch_user,
