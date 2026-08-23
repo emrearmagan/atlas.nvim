@@ -1,1 +1,4 @@
-std = "luajit+vim"
+std = "vim"
+
+[config]
+global_usage = { ignore_pattern = "^(vim|__atlas_markdown_complete)$" }

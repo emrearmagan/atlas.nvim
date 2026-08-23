@@ -71,7 +71,7 @@ function M.init(provider, opts)
 		ui.setup()
 	end
 
-	local views = capabilities.core.views()
+	local views = require("atlas.ui.shared.bookmarks_view").views(provider, "issues")
 	state.active_view = (opts and opts.initial_view) or views[1]
 
 	statusline.clear_items()

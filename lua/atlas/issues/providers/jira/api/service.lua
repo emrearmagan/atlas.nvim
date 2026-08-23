@@ -15,7 +15,7 @@ function M.get_auth()
 	if not base_url or base_url == "" or not email or email == "" or not token or token == "" then
 		return "",
 			"",
-			"Missing Jira credentials in config (issues.providers.jira.base_url, issues.providers.jira.email, issues.providers.jira.token)"
+			"Missing Jira credentials in config (providers.jira.base_url, providers.jira.email, providers.jira.token)"
 	end
 
 	return base_url, email, nil

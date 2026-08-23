@@ -1,4 +1,4 @@
-*atlas.txt*  Pull requests and issues from Neovim   Last change: 2026 Aug 16
+*atlas.txt*  Pull requests and issues from Neovim   Last change: 2026 Aug 22
 
 Author: Emre Armagan
 License: MIT
@@ -12,17 +12,15 @@ CONTENTS                                                       *atlas-contents*
   4. Configuration .......................... |atlas-configuration|
   5. Commands ............................... |atlas-commands|
   6. Pulls .................................. |atlas-pulls|
-       Configuration ........................ |atlas-pulls-configuration|
-       GitHub ............................... |atlas-pulls-github|
-       Bitbucket ............................ |atlas-pulls-bitbucket|
-       GitLab ............................... |atlas-pulls-gitlab|
-       Gitea / Forgejo ...................... |atlas-pulls-gitea|
+     GitHub ................................. |atlas-pulls-github|
+     Bitbucket .............................. |atlas-pulls-bitbucket|
+     GitLab ................................. |atlas-pulls-gitlab|
+     Gitea / Forgejo ........................ |atlas-pulls-gitea|
   7. Issues ................................. |atlas-issues|
-       Configuration ........................ |atlas-issues-configuration|
-       Jira ................................. |atlas-issues-jira|
-       GitHub ............................... |atlas-issues-github|
-       GitLab ............................... |atlas-issues-gitlab|
-       Gitea / Forgejo ...................... |atlas-issues-gitea|
+     Jira ................................... |atlas-issues-jira|
+     GitHub ................................. |atlas-issues-github|
+     GitLab ................................. |atlas-issues-gitlab|
+     Gitea / Forgejo ........................ |atlas-issues-gitea|
   8. Features ............................... |atlas-features|
        Review pull requests ................. |atlas-review-pull-requests|
          Local notes ........................ |atlas-local-notes|
@@ -58,15 +56,14 @@ With lazy.nvim:
     opts = {},
   }
 <
-With packer.nvim:
+With vim.pack (Neovim 0.12+):
 >lua
-  use {
-    "emrearmagan/atlas.nvim",
-    config = function()
-      -- See |atlas-configuration|.
-      require("atlas").setup({})
-    end,
-  }
+  vim.pack.add({
+    "https://github.com/emrearmagan/atlas.nvim",
+  })
+
+  -- See |atlas-configuration|.
+  require("atlas").setup({})
 <
 
 ==============================================================================
@@ -97,28 +94,49 @@ up and what's missing.
       listed_buffer = false,
     },
 
+    providers = {
+      ---@type AtlasBitbucketProviderConfig
+      bitbucket = {},
+      ---@type AtlasGitHubProviderConfig
+      github = {},
+      ---@type AtlasGitLabProviderConfig
+      gitlab = {},
+      ---@type AtlasGiteaProviderConfig
+      gitea = {},
+      ---@type AtlasForgejoProviderConfig
+      forgejo = {},
+      ---@type AtlasJiraProviderConfig
+      jira = {},
+    },
+
     pulls = {
       -- See |atlas-pulls-configuration|.
-      providers = {
-        bitbucket = {}, -- see |atlas-pulls-bitbucket|
-        github = {},    -- see |atlas-pulls-github|
-        gitlab = {},    -- see |atlas-pulls-gitlab|
-        gitea = {},     -- see |atlas-pulls-gitea|
-      },
+      ---@type AtlasBitbucketPullsConfig
+      bitbucket = {}, -- |atlas-pulls-bitbucket|
+      ---@type AtlasGitHubPullsConfig
+      github = {},    -- |atlas-pulls-github|
+      ---@type AtlasGitLabPullsConfig
+      gitlab = {},    -- |atlas-pulls-gitlab|
+      ---@type AtlasGiteaPullsConfig
+      gitea = {},     -- |atlas-pulls-gitea|
+      ---@type AtlasForgejoPullsConfig
+      forgejo = {},   -- |atlas-pulls-forgejo|
     },
     issues = {
       -- See |atlas-issues-configuration|.
-      providers = {
-        jira = {},   -- see |atlas-issues-jira|
-        github = {}, -- see |atlas-issues-github|
-        gitlab = {}, -- see |atlas-issues-gitlab|
-        gitea = {},  -- see |atlas-issues-gitea|
-      },
+      ---@type AtlasJiraIssuesConfig
+      jira = {},   -- |atlas-issues-jira|
+      ---@type AtlasGitHubIssuesConfig
+      github = {}, -- |atlas-issues-github|
+      ---@type AtlasGitLabIssuesConfig
+      gitlab = {}, -- |atlas-issues-gitlab|
+      ---@type AtlasGiteaIssuesConfig
+      gitea = {},  -- |atlas-issues-gitea|
+      ---@type AtlasForgejoIssuesConfig
+      forgejo = {}, -- |atlas-issues-forgejo|
     },
   })
 <
-Only the providers listed in `setup()` are loaded. No provider is enabled by
-default.
 
 ==============================================================================
 5. COMMANDS                                                    *atlas-commands*
@@ -145,6 +163,12 @@ default.
 :Atlas clear notes
 	Open the local-notes manager or delete all local notes.
 
+:Atlas clear cache
+	Delete cached data and cloned repositories.
+
+:Atlas clear stars
+	Delete all locally starred pull requests and issues.
+
 :Atlas create pr
 :Atlas create issue
 	Start the pull-request or issue creation flow.
@@ -154,12 +178,12 @@ default.
 
 :Atlas open <target>
         Open a provider URL, Jira key, `owner/repo#number`, or PR/issue
-        number.
+        number. Use `.` to open the current Git repository.
 
 :Atlas clear
 :Atlas logs
-	Clear Atlas caches, cloned repositories, local notes, and logs, or toggle
-	the Atlas log buffer.
+	Clear Atlas caches, cloned repositories, local notes, starred items, and
+	logs, or toggle the Atlas log buffer.
 
                                                                    *:AtlasDiff*
 :AtlasDiff <base>...<head>
@@ -186,11 +210,15 @@ Shared config that applies to all pulls providers:
       delete_notes = false, -- delete local notes after approval or merge
       default_merge_method = "merge", -- "merge" or "squash"
       default_delete_branch = false,
+      git_transport = "ssh", -- "https" or "ssh" for Atlas-managed Git remotes.
       diff = {
         -- Any command that accepts explicit <base>...<head> Git revisions.
         open_cmd = "AtlasDiff", -- default; e.g. "DiffviewOpen" or "CodeDiff"
         show_review_panel = false, -- set true to show the review panel initially
         comment_display = "virtual_lines", -- or compact "virtual_text" hints
+        review_panel = {
+          height = 15,
+        },
 
         -- AtlasDiff options; external viewers use their own configuration.
         layout = "inline", -- "inline" or "side-by-side"
@@ -232,26 +260,31 @@ Uses the `gh` CLI. No tokens to configure in the plugin - run
 GitHub search expression.
 
 >lua
+  providers = {
+    ---@type AtlasGitHubProviderConfig
+    github = {
+      cache_ttl = 300,
+    },
+  }
+
   pulls = {
-    providers = {
-      github = {
-        cache_ttl = 300,
-        views = {
-          { name = "My PRs", key = "1", layout = "plain",
-            search = "author:@me sort:updated-desc" },
-          { name = "Team",   key = "2", layout = "compact",
-            search = "org:your-org sort:updated-desc" },
-          { name = "Repo",   key = "3", layout = "plain",
-            search = "repo:your-org/your-repo" },
-        },
-        bookmarks = {
-          -- key   = "S",      -- default
-          -- label = "Search", -- default
-          items = {
-            ["Drafts"]           = "is:pr is:draft author:@me",
-            ["Recently merged"]  = "is:pr is:merged author:@me sort:updated-desc",
-            ["Review requested"] = "is:pr is:open review-requested:@me",
-          },
+    ---@type AtlasGitHubPullsConfig
+    github = {
+      views = {
+        { name = "My PRs", key = "1", layout = "plain", -- "compact", "grouped", or "plain"
+          search = "author:@me sort:updated-desc" },
+        { name = "Team",   key = "2", layout = "compact",
+          search = "org:your-org sort:updated-desc" },
+        { name = "Repo",   key = "3", layout = "grouped",
+          search = "repo:your-org/your-repo" },
+      },
+      bookmarks = {
+        -- key   = "S",      -- default
+        -- label = "Search", -- default
+        items = {
+          ["Drafts"]           = "is:pr is:draft author:@me",
+          ["Recently merged"]  = "is:pr is:merged author:@me sort:updated-desc",
+          ["Review requested"] = "is:pr is:open review-requested:@me",
         },
       },
     },
@@ -261,78 +294,109 @@ GitHub search expression.
 ------------------------------------------------------------------------------
 BITBUCKET PULLS                                        *atlas-pulls-bitbucket*
 
-Bitbucket Cloud only. Auth uses an app password (or API token). Views are
-scoped to one or more `workspace/repo` pairs - Bitbucket doesn't have a
-cross-workspace search like GitHub does.
+Bitbucket Cloud only. Auth uses an app password (or API token). Views target
+individual `workspace/repo` repositories or every repository in a
+`workspace/project` - Bitbucket doesn't have a cross-workspace search like
+GitHub does.
 
 >lua
+  providers = {
+    ---@type AtlasBitbucketProviderConfig
+    bitbucket = {
+      user      = vim.env.BITBUCKET_USER,
+      token     = vim.env.BITBUCKET_TOKEN,
+      cache_ttl = 300,
+    },
+  }
+
   pulls = {
-    providers = {
-      bitbucket = {
-        user      = vim.env.BITBUCKET_USER,
-        token     = vim.env.BITBUCKET_TOKEN,
-        cache_ttl = 300,
-        views = {
-          {
-            name   = "Me",
-            key    = "M",
-            layout = "compact",
-            repos  = { { workspace = "your-workspace", repo = "atlas" } },
-            ---@param pr PullRequest
-            ---@param ctx { user: PullsUser|nil }
-            filter = function(pr, ctx)
-              local user = ctx.user
-              return pr.author and user and pr.author.id == user.id
-            end,
+    ---@type AtlasBitbucketPullsConfig
+    bitbucket = {
+      views = {
+        {
+          name   = "Me",
+          key    = "M",
+          layout = "compact", -- "compact", "grouped", or "plain"
+          targets = {
+            { workspace = "your-workspace", repo = "standalone-repo" },
+            { workspace = "your-workspace", project = "CORE" },
           },
-          {
-            name   = "Team",
-            key    = "1",
-            layout = "plain",
-            repos  = {
+          ---@param pr PullRequest
+          ---@param ctx { user: PullsUser|nil }
+          filter = function(pr, ctx)
+            local user = ctx.user
+            return pr.author and user and pr.author.id == user.id
+          end,
+        },
+        {
+          name   = "Team",
+          key    = "1",
+          layout = "grouped",
+          targets = {
+            { workspace = "your-workspace", project = "TEAM" },
+          },
+        },
+      },
+      bookmarks = {
+        -- key   = "S",      -- default
+        -- label = "Search", -- default
+        items = {
+          ["Atlas"] = {
+            targets = {
               { workspace = "your-workspace", repo = "atlas" },
-              { workspace = "your-workspace", repo = "other-repo" },
+              { workspace = "your-workspace", project = "ATLAS" },
             },
+            filter = function(pr)
+              return pr.state ~= "draft"
+            end,
           },
         },
       },
     },
   }
 <
-View `filter` is a per-PR predicate. Use it to keep a view scoped to a set
-of repos but narrowed further at runtime (e.g. PRs you authored).
+Each target selects one repository with `repo`, or every repository in a
+project with its `project` key. View and bookmark `filter` callbacks narrow
+the result further at runtime (e.g. PRs you authored).
 
 ------------------------------------------------------------------------------
 GITLAB PULLS                                              *atlas-pulls-gitlab*
 
-Auth uses a Personal Access Token with the `api` scope. Set `base_url` to
-`https://gitlab.com` for the SaaS or your self-hosted URL. Views can be
-scoped to assigned/created/all, to a single project, or to a whole group.
+Auth uses a Personal Access Token with the `api` scope. Set
+`providers.gitlab.base_url` to `https://gitlab.com` for the SaaS or your
+self-hosted URL. Views can be scoped to assigned/created/all, to a single
+project, or to a whole group.
 Self-hosted GitLab has not been tested yet.
 
 >lua
+  providers = {
+    ---@type AtlasGitLabProviderConfig
+    gitlab = {
+      base_url  = "https://gitlab.com",
+      token     = vim.env.GITLAB_TOKEN,
+      cache_ttl = 300,
+    },
+  }
+
   pulls = {
-    providers = {
-      gitlab = {
-        base_url  = "https://gitlab.com",
-        token     = vim.env.GITLAB_TOKEN,
-        cache_ttl = 300,
-        views = {
-          { name = "Assigned",  key = "1", scope = "assigned_to_me" },
-          { name = "Reviewing", key = "3", scope = "all",
-            extra_params = { reviewer_id = "Me" } },
-          -- One project:
-          { name = "GitLab",    key = "G", project = "gitlab-org/gitlab" },
-          -- All projects in a group:
-          { name = "GitLab Org", key = "O", group = "gitlab-org" },
-        },
-        bookmarks = {
-          -- key   = "S",      -- default
-          -- label = "Search", -- default
-          items = {
-            ["Reviewing"]    = { scope = "all", extra_params = { reviewer_id = "Me" } },
-            ["Merged by me"] = { scope = "all", state = "merged", author_username = "me" },
-          },
+    ---@type AtlasGitLabPullsConfig
+    gitlab = {
+      views = {
+        { name = "Assigned",  key = "1", layout = "grouped", -- "compact", "grouped", or "plain"
+          scope = "assigned_to_me" },
+        { name = "Reviewing", key = "3", scope = "all",
+          extra_params = { reviewer_id = "Me" } },
+        -- One project:
+        { name = "GitLab",    key = "G", project = "gitlab-org/gitlab" },
+        -- All projects in a group:
+        { name = "GitLab Org", key = "O", group = "gitlab-org" },
+      },
+      bookmarks = {
+        -- key   = "S",      -- default
+        -- label = "Search", -- default
+        items = {
+          ["Reviewing"]    = { scope = "all", extra_params = { reviewer_id = "Me" } },
+          ["Merged by me"] = { scope = "all", state = "merged", author_username = "me" },
         },
       },
     },
@@ -342,42 +406,55 @@ Self-hosted GitLab has not been tested yet.
 anything not covered by the explicit view fields.
 
 ------------------------------------------------------------------------------
-GITEA / FORGEJO PULLS                                  *atlas-pulls-gitea*
-
-Use the `gitea` provider with a `base_url` and `token`. `api_type` defaults to
-`"gitea"`; set it to `"forgejo"` for Forgejo.
+GITEA / FORGEJO PULLS             *atlas-pulls-gitea* *atlas-pulls-forgejo*
 
 >lua
-  pulls = {
-    providers = {
-      ---@type AtlasGiteaForgejoPullsConfig
-      gitea = {
-        api_type = "gitea", -- or "forgejo"
-        base_url = "https://git.example.com",
-        token = vim.env.GITEA_TOKEN,
-        cache_ttl = 300,
-        draft_prefix = "WIP:",
+  providers = {
+    ---@type AtlasGiteaProviderConfig
+    gitea = {
+      base_url = "http://localhost:3001",
+      token = vim.env.GITEA_TOKEN,
+      cache_ttl = 300,
+    },
+    ---@type AtlasForgejoProviderConfig
+    forgejo = {
+      base_url = "http://localhost:3000",
+      token = vim.env.FORGEJO_TOKEN,
+      cache_ttl = 300,
+    },
+  },
 
-        views = {
-          {
-            name = "Repository",
-            key = "1",
-            layout = "compact",
+  pulls = {
+    ---@type AtlasGiteaPullsConfig
+    gitea = {
+      draft_prefix = "WIP:",
+
+      views = {
+        {
+          name = "Repository",
+          key = "1",
+          layout = "compact",
+          repo = "owner/repository",
+          search = "authentication",
+        },
+      },
+
+      bookmarks = {
+        key = "S",
+        label = "Search",
+        items = {
+          ["Authentication"] = {
             repo = "owner/repository",
             search = "authentication",
           },
         },
-
-        bookmarks = {
-          key = "S",
-          label = "Search",
-          items = {
-            ["Authentication"] = {
-              repo = "owner/repository",
-              search = "authentication",
-            },
-          },
-        },
+      },
+    },
+    ---@type AtlasForgejoPullsConfig
+    forgejo = {
+      views = {
+        { name = "Repository", key = "2",
+          repo = "owner/forgejo-repository" },
       },
     },
   }
@@ -418,29 +495,34 @@ The Markdown editor for Jira descriptions and comments is experimental. The
 overview tab can toggle between Markdown and ADF to inspect the conversion.
 
 >lua
+  providers = {
+    ---@type AtlasJiraProviderConfig
+    jira = {
+      base_url  = "https://your-site.atlassian.net",
+      email     = "you@example.com",
+      token     = "your_jira_api_token",
+      auth_method = "basic", -- "basic" or "bearer", defaults to "basic"
+      api_type  = "cloud", -- "cloud" (v3) or "server" (v2), defaults to "cloud"
+      cache_ttl = 300,
+    },
+  }
+
   issues = {
-    providers = {
-      jira = {
-        base_url  = "https://your-site.atlassian.net",
-        email     = "you@example.com",
-        token     = "your_jira_api_token",
-        auth_method = "basic", -- "basic" or "bearer", defaults to "basic"
-        api_type  = "cloud", -- "cloud" (v3) or "server" (v2), defaults to "cloud"
-        cache_ttl = 300,
-        views = {
-          { name = "My Board",  key = "M", layout = "plain",
-            jql = "project = KAN AND assignee = currentUser() ORDER BY updated DESC" },
-          { name = "Team Board", key = "T", layout = "compact",
-            jql = "project = KAN ORDER BY updated DESC" },
-        },
-        bookmarks = {
-          -- key   = "J",   -- default
-          -- label = "JQL", -- default
-          items = {
-            ["Backlog"]     = "project = KAN AND statusCategory != Done AND (sprint IS EMPTY OR sprint NOT IN openSprints()) ORDER BY Rank ASC",
-            ["Next sprint"] = "project = KAN AND sprint in futureSprints() ORDER BY Rank ASC",
-            ["My open"]     = "assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC",
-          },
+    ---@type AtlasJiraIssuesConfig
+    jira = {
+      views = {
+        { name = "My Board",  key = "M", layout = "plain",
+          jql = "project = KAN AND assignee = currentUser() ORDER BY updated DESC" },
+        { name = "Team Board", key = "T", layout = "compact",
+          jql = "project = KAN ORDER BY updated DESC" },
+      },
+      bookmarks = {
+        -- key   = "J",   -- default
+        -- label = "JQL", -- default
+        items = {
+          ["Backlog"]     = "project = KAN AND statusCategory != Done AND (sprint IS EMPTY OR sprint NOT IN openSprints()) ORDER BY Rank ASC",
+          ["Next sprint"] = "project = KAN AND sprint in futureSprints() ORDER BY Rank ASC",
+          ["My open"]     = "assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC",
         },
       },
     },
@@ -449,29 +531,28 @@ overview tab can toggle between Markdown and ADF to inspect the conversion.
 
 Jira display settings and custom fields are grouped by project key:
 >lua
-  issues = {
-    providers = {
-      jira = {
-        project_config = {
-          -- Global story points field. Defaults to "customfield_10016".
-          story_points_field = "customfield_10016",
-          issue_types = {
-            ["Maintenance"] = { icon = "", hl_group = "AtlasTextWarning" },
-            ["Infrastructure"] = { icon = "󰒋", hl_group = "AtlasLogInfo" },
-          },
+  providers = {
+    ---@type AtlasJiraProviderConfig
+    jira = {
+      project_config = {
+        -- Global story points field. Defaults to "customfield_10016".
+        story_points_field = "customfield_10016",
+        issue_types = {
+          ["Maintenance"] = { icon = "", hl_group = "AtlasTextWarning" },
+          ["Infrastructure"] = { icon = "󰒋", hl_group = "AtlasLogInfo" },
+        },
 
-          KAN = {
-            customfield_10003 = {
-              name   = "Approvers",
-              format = function(value)
-                if type(value) ~= "table" or #value == 0 then
-                  return nil -- nil hides the field
-                end
-                return table.concat(value, ", ")
-              end,
-              hl_group = "AtlasChipActive",
-              display  = "chip", -- "chip" or "table"
-            },
+        KAN = {
+          customfield_10003 = {
+            name   = "Approvers",
+            format = function(value)
+              if type(value) ~= "table" or #value == 0 then
+                return nil -- nil hides the field
+              end
+              return table.concat(value, ", ")
+            end,
+            hl_group = "AtlasChipActive",
+            display  = "chip", -- "chip" or "table"
           },
         },
       },
@@ -486,25 +567,30 @@ Reuses the `gh` CLI auth from |atlas-pulls-github|. Views use any GitHub
 issue search expression.
 
 >lua
+  providers = {
+    ---@type AtlasGitHubProviderConfig
+    github = {
+      cache_ttl = 300,
+    },
+  }
+
   issues = {
-    providers = {
-      github = {
-        cache_ttl = 300,
-        views = {
-          { name = "Assigned", key = "1", layout = "plain",
-            search = "assignee:@me is:open" },
-          { name = "Created",  key = "2", layout = "compact",
-            search = "author:@me is:open" },
-          { name = "Mentions", key = "3", layout = "plain",
-            search = "mentions:@me is:open" },
-        },
-        bookmarks = {
-          -- key   = "S",      -- default
-          -- label = "Search", -- default
-          items = {
-            ["Bugs"]            = "is:issue is:open label:bug",
-            ["Recently closed"] = "is:issue is:closed author:@me sort:updated-desc",
-          },
+    ---@type AtlasGitHubIssuesConfig
+    github = {
+      views = {
+        { name = "Assigned", key = "1", layout = "plain",
+          search = "assignee:@me is:open" },
+        { name = "Created",  key = "2", layout = "compact",
+          search = "author:@me is:open" },
+        { name = "Mentions", key = "3", layout = "plain",
+          search = "mentions:@me is:open" },
+      },
+      bookmarks = {
+        -- key   = "S",      -- default
+        -- label = "Search", -- default
+        items = {
+          ["Bugs"]            = "is:issue is:open label:bug",
+          ["Recently closed"] = "is:issue is:closed author:@me sort:updated-desc",
         },
       },
     },
@@ -514,34 +600,39 @@ issue search expression.
 ------------------------------------------------------------------------------
 GITLAB ISSUES                                            *atlas-issues-gitlab*
 
-Same auth model as |atlas-pulls-gitlab|. Views take a `scope`
+Same shared `providers.gitlab` auth as |atlas-pulls-gitlab|. Views take a `scope`
 (`assigned_to_me`, `created_by_me`, `all`) and a `state` (`opened`,
 `closed`). Anything else goes through `extra_params`.
 
 >lua
+  providers = {
+    ---@type AtlasGitLabProviderConfig
+    gitlab = {
+      base_url  = "https://gitlab.com",
+      token     = vim.env.GITLAB_TOKEN,
+      cache_ttl = 300,
+    },
+  }
+
   issues = {
-    providers = {
-      gitlab = {
-        base_url  = "https://gitlab.com",
-        token     = vim.env.GITLAB_TOKEN,
-        cache_ttl = 300,
-        views = {
-          { name = "Assigned", key = "1",
-            scope = "assigned_to_me", state = "opened" },
-          { name = "Created",  key = "2",
-            scope = "created_by_me", state = "opened" },
-          { name = "All open", key = "3",
-            scope = "all", state = "opened",
-            extra_params = { ["not[labels]"] = "wontfix" } },
-        },
-        bookmarks = {
-          -- key   = "S",      -- default
-          -- label = "Search", -- default
-          items = {
-            ["No labels"] = { scope = "all", state = "opened",
-                              extra_params = { ["not[labels]"] = "*" } },
-            ["Closed"]    = { scope = "created_by_me", state = "closed" },
-          },
+    ---@type AtlasGitLabIssuesConfig
+    gitlab = {
+      views = {
+        { name = "Assigned", key = "1",
+          scope = "assigned_to_me", state = "opened" },
+        { name = "Created",  key = "2",
+          scope = "created_by_me", state = "opened" },
+        { name = "All open", key = "3",
+          scope = "all", state = "opened",
+          extra_params = { ["not[labels]"] = "wontfix" } },
+      },
+      bookmarks = {
+        -- key   = "S",      -- default
+        -- label = "Search", -- default
+        items = {
+          ["No labels"] = { scope = "all", state = "opened",
+                            extra_params = { ["not[labels]"] = "*" } },
+          ["Closed"]    = { scope = "created_by_me", state = "closed" },
         },
       },
     },
@@ -549,21 +640,29 @@ Same auth model as |atlas-pulls-gitlab|. Views take a `scope`
 <
 
 ------------------------------------------------------------------------------
-GITEA / FORGEJO ISSUES                                *atlas-issues-gitea*
+GITEA / FORGEJO ISSUES           *atlas-issues-gitea* *atlas-issues-forgejo*
 
-Issues use the same `gitea` provider configuration.
+Views support `repo`, `state`, `scope`, `search`, and `labels`. Pass other API
+query parameters through `extra_params`.
 
 >lua
   issues = {
-    providers = {
-      gitea = {
-        api_type = "gitea", -- or "forgejo"
-        base_url = "https://git.example.com",
-        token = vim.env.GITEA_TOKEN,
-        views = {
-          { name = "Open", key = "1", repo = "owner/repository",
-            state = "open" },
-        },
+    ---@type AtlasGiteaIssuesConfig
+    gitea = {
+      views = {
+        { name = "Open", key = "1", repo = "owner/repository",
+          state = "open" },
+        { name = "Organization", key = "2", state = "open",
+          extra_params = { owner = "owner", team = "developers" } },
+      },
+    },
+    ---@type AtlasForgejoIssuesConfig
+    forgejo = {
+      views = {
+        { name = "Open", key = "2", repo = "owner/forgejo-repository",
+          state = "open" },
+        { name = "Organization", key = "3", state = "open",
+          extra_params = { owner = "owner", team = "developers" } },
       },
     },
   }
@@ -666,7 +765,9 @@ BOOKMARKS                                                      *atlas-bookmarks*
 Turn frequently used provider searches or Jira JQL into named shortcuts. Use
 bookmarks for review queues, recurring project views, and the searches you
 return to throughout the day. Bookmarks appear alongside your configured
-views.
+views. Press `*` on a pull request
+or issue to star it. Starred items stay at the top of lists and appear in the
+first bookmark entry.
 
 ------------------------------------------------------------------------------
 CUSTOM ACTIONS                                    *atlas-custom-actions*
@@ -723,7 +824,7 @@ to your own tooling. They appear in the action menu (default `A`).
         ---@param ctx AtlasIssuesCustomActionContext
         ---@param done fun(ok: boolean|nil, message: string|nil)
         run = function(issue, ctx, done)
-          local branch = string.format("%s/%s", issue.key, issue.summary:lower():gsub("%s+", "-"))
+          local branch = string.format("%s/%s", issue.key, issue.title:lower():gsub("%s+", "-"))
           vim.fn.setreg("+", branch)
           done(true, "Copied: " .. branch)
         end,
@@ -790,6 +891,7 @@ Defaults live under `keymaps` in `setup()`. Each entry accepts:
           mark_done = "d",
         },
         toggle_subscription     = "gS",
+        toggle_star             = "*",
         refresh                 = "r",
         refresh_view            = "R",
         open_actions            = "A",
@@ -798,6 +900,13 @@ Defaults live under `keymaps` in `setup()`. Each entry accepts:
         copy_url                = "Y",
         show_details            = "K",
         search                  = "?",
+      },
+      picker = {
+        next_item    = { "<Down>", "<C-n>", "<C-j>" },
+        previous_item = { "<Up>", "<C-p>", "<C-k>" },
+        select       = { "<CR>", "<C-s>" },
+        toggle       = "<Tab>",
+        close        = { "q", "<Esc>" },
       },
       issues = {
         transition_issue = "gs",
@@ -835,7 +944,7 @@ Defaults live under `keymaps` in `setup()`. Each entry accepts:
           },
           diff = {
             toggle_layout         = "t",
-            toggle_compact        = "u",
+            toggle_compact        = "gc",
             next_hunk             = "]h",
             previous_hunk         = "[h",
             toggle_review_panel   = "gR",
@@ -851,9 +960,6 @@ Defaults live under `keymaps` in `setup()`. Each entry accepts:
             add_note              = "<leader>n",
             toggle_resolved       = "x",
           },
-        },
-        pipelines = {
-          open = "gd",
         },
         filters = {
           open                   = "gpo",

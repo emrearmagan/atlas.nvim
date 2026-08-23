@@ -6,7 +6,7 @@ local panel_state = require("atlas.pulls.ui.panel.repo.state")
 local renderer = require("atlas.pulls.ui.panel.repo.renderer")
 local panel_keymaps = require("atlas.pulls.ui.panel.keymaps")
 local icons = require("atlas.ui.shared.icons")
-local statusline = require("atlas.ui.statusline")
+local notify = require("atlas.core.notify")
 
 local overview_icon, overview_icon_hl = icons.general("overview")
 local branch_icon, branch_icon_hl = icons.pulls("branch")
@@ -226,7 +226,7 @@ function M.on_select(repo, opts)
 				panel_state.current_repo_details = details
 			else
 				panel_state.current_repo_details = tostring(err or "Unknown error")
-				statusline.notify("error", "Failed to load repository: " .. tostring(err or "Unknown error"))
+				notify.error("Failed to load repository: " .. tostring(err or "Unknown error"))
 			end
 			update_spinner()
 			notify_tab(panel_state.current_repo, opts)

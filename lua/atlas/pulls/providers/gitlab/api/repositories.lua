@@ -1,7 +1,7 @@
 local M = {}
 
 local request_scope = require("atlas.core.requests")
-local service = require("atlas.providers.gitlab.client").pulls
+local service = require("atlas.providers.gitlab.client")
 local http = require("atlas.core.http")
 local config = require("atlas.config")
 local json = require("atlas.core.json")

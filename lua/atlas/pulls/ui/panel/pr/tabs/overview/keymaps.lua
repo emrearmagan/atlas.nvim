@@ -50,9 +50,11 @@ function M.setup(buf, refresh)
 			end,
 		})
 	)
-	utils.insert_if(
-		items,
-		item("pulls.pipelines.open", {
+	local open_keys = resolver.resolve("ui.show_details") or {}
+	vim.list_extend(open_keys, resolver.resolve("ui.select") or {})
+	if #open_keys > 0 then
+		table.insert(items, {
+			key = open_keys,
 			desc = "Show pipeline details",
 			opts = { nowait = true, silent = true },
 			callback = function()
@@ -66,7 +68,7 @@ function M.setup(buf, refresh)
 				end
 			end,
 		})
-	)
+	end
 	help.register("Panel", items, { index = 212, buffer = buf })
 end
 
@@ -74,7 +76,11 @@ end
 function M.teardown(buf)
 	local items = {}
 	utils.insert_if(items, remove_item("ui.toggle_fold"))
-	utils.insert_if(items, remove_item("pulls.pipelines.open"))
+	local open_keys = resolver.resolve("ui.show_details") or {}
+	vim.list_extend(open_keys, resolver.resolve("ui.select") or {})
+	if #open_keys > 0 then
+		table.insert(items, { key = open_keys })
+	end
 	help.remove("Panel", items, { buffer = buf })
 end
 

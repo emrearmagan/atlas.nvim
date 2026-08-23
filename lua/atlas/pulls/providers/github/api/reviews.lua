@@ -1,6 +1,6 @@
 local M = {}
 
-local cli = require("atlas.providers.github.client").pulls
+local cli = require("atlas.providers.github.client")
 local json = require("atlas.core.json")
 local mapper = require("atlas.pulls.providers.github.api.mapper")
 local github_mapping = require("atlas.providers.github.mapping")
@@ -33,7 +33,6 @@ query($owner:String!,$name:String!,$number:Int!,$endCursor:String){
               id
               databaseId
               body
-              diffHunk
               url
               createdAt
               author{login ... on User{databaseId} ... on Bot{databaseId}}
@@ -56,10 +55,69 @@ query($owner:String!,$repo:String!,$number:Int!,$endCursor:String){
       id
       assignees(first:100){nodes{id login name}}
       reviews(first:100){nodes{author{login}}}
-      reviewRequests(first:100){nodes{requestedReviewer{... on User{id login name}}}}
+      reviewRequests(first:100){
+        nodes{
+          requestedReviewer{
+            ... on User{id login name}
+            ... on Bot{id login}
+            ... on Mannequin{id login name}
+            ... on Team{id name slug organization{login}}
+            ... on EnterpriseTeam{id name slug combinedSlug}
+          }
+        }
+      }
       files(first:100,after:$endCursor){
         pageInfo{hasNextPage endCursor}
         nodes{path viewerViewedState}
+      }
+    }
+  }
+}
+]]
+
+local REVIEW_DETAILS_QUERY = [[
+query($owner:String!,$name:String!,$number:Int!,$endCursor:String){
+  repository(owner:$owner,name:$name){
+    pullRequest(number:$number){
+      reviews(first:100,after:$endCursor){
+        pageInfo{hasNextPage endCursor}
+        nodes{
+          id
+          state
+          submittedAt
+          updatedAt
+          body
+          url
+          commit{oid}
+          author{login ... on User{id name} ... on Bot{id}}
+        }
+      }
+      latestOpinionatedReviews(first:100){
+        nodes{id state author{login ... on User{id name} ... on Bot{id}}}
+      }
+      reviewRequests(first:100){
+        nodes{
+          requestedReviewer{
+            ... on User{id login name}
+            ... on Bot{id login}
+            ... on Mannequin{id login name}
+            ... on Team{id name slug organization{login}}
+            ... on EnterpriseTeam{id name slug combinedSlug}
+          }
+        }
+      }
+      reviewRequestEvents:timelineItems(last:100,itemTypes:[REVIEW_REQUESTED_EVENT]){
+        nodes{
+          ... on ReviewRequestedEvent{
+            requestedReviewer{
+              ... on User{id login name}
+              ... on Bot{id login}
+              ... on Mannequin{id login name}
+              ... on Team{id name slug organization{login}}
+              ... on EnterpriseTeam{id name slug combinedSlug}
+            }
+          }
+        }
       }
     }
   }
@@ -87,6 +145,37 @@ local function from_node(node)
 		commit_hash = node and tostring((node.commit or {}).oid or "") ~= "" and tostring(node.commit.oid) or nil,
 		pending = node ~= nil and node.state == "PENDING",
 	}
+end
+
+---@param raw table|nil
+---@return PullsAuthor|nil
+local function review_author(raw)
+	raw = json.nilify(raw)
+	if type(raw) ~= "table" then
+		return nil
+	end
+	local user = github_mapping.identity(raw) or { id = "", login = "", name = "" }
+	local slug = json.safe_str(raw.slug) or ""
+	local organization = json.safe_table(raw.organization)
+	local organization_login = json.safe_str(organization.login) or ""
+	local team = json.safe_str(raw.combinedSlug)
+		or (organization_login ~= "" and slug ~= "" and organization_login .. "/" .. slug or slug)
+	local login = user.login ~= "" and user.login or team
+	if not login or login == "" then
+		return nil
+	end
+	return {
+		id = user.id ~= "" and user.id or login,
+		name = user.name ~= "" and user.name or (json.safe_str(raw.name) or login),
+		username = login,
+		nickname = login,
+	}
+end
+
+---@param pr PullRequest
+---@return string
+local function review_details_cache_key(pr)
+	return string.format("github:review-details:%s:%s", pr.repo_full_name, tostring(pr.id))
 end
 
 ---@param review PullsReview|nil
@@ -251,6 +340,7 @@ local function finish(pr, review, event, body, on_done)
 	local function done(ok, err)
 		if ok then
 			M.update(review, nil)
+			cli.delete_mem(review_details_cache_key(pr))
 		end
 		on_done(ok, err)
 	end
@@ -343,6 +433,7 @@ function M.discard(pr, review, on_done)
 			return
 		end
 		M.update(review, nil)
+		cli.delete_mem(review_details_cache_key(pr))
 		on_done(true, nil)
 	end, {
 		action = "Discard review",
@@ -357,15 +448,246 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.request_changes(pr, review, body, on_done)
-	local message = vim.trim(body) == "" and "Changes requested" or body
-	return finish(pr, review, "REQUEST_CHANGES", message, on_done)
+	return finish(pr, review, "REQUEST_CHANGES", body, on_done)
+end
+
+local HISTORY_STATES = {
+	APPROVED = "approved",
+	CHANGES_REQUESTED = "changes_requested",
+	COMMENTED = "commented",
+	DISMISSED = "dismissed",
+}
+
+local UPDATE_REVIEW_MUTATION = [[
+mutation($reviewId:ID!,$body:String!){
+  updatePullRequestReview(input:{pullRequestReviewId:$reviewId,body:$body}){
+    clientMutationId
+  }
+}
+]]
+
+---@param pr PullRequest
+---@param review_id string
+---@param body string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.edit_review(pr, review_id, body, on_done)
+	if review_id == "" then
+		vim.schedule(function()
+			on_done(false, "Missing review id")
+		end)
+		return nil
+	end
+
+	return cli.gh({
+		"api",
+		"graphql",
+		"-f",
+		"reviewId=" .. review_id,
+		"-f",
+		"body=" .. body,
+		"-f",
+		"query=" .. UPDATE_REVIEW_MUTATION,
+	}, function(_, err)
+		if err then
+			on_done(false, err)
+			return
+		end
+		cli.delete_mem(review_details_cache_key(pr))
+		on_done(true, nil)
+	end, {
+		action = "Edit review",
+		repo = pr.repo_full_name,
+		number = pr.id,
+		review_id = review_id,
+	})
+end
+
+---@param author PullsAuthor
+---@param decision "approved"|"changes_requested"|"pending"
+---@param role "reviewer"|"participant"
+---@return PullsReviewer
+local function reviewer(author, decision, role)
+	return {
+		id = author.id,
+		provider_id = author.username,
+		name = author.name,
+		username = author.username,
+		nickname = author.nickname,
+		decision = decision,
+		role = role,
+	}
+end
+
+---@param pull_request table
+---@return PullsReviewer[]
+local function current_reviewers(pull_request)
+	local reviewers, by_login = {}, {}
+	local requested = {}
+	for _, node in ipairs(((pull_request.reviewRequestEvents or {}).nodes or {})) do
+		local author = review_author(node.requestedReviewer)
+		if author then
+			requested[tostring(author.username):lower()] = true
+		end
+	end
+
+	local function add(author, decision, role)
+		if not author then
+			return
+		end
+		local key = tostring(author.username):lower()
+		if requested[key] then
+			role = "reviewer"
+		end
+		local current = by_login[key]
+		if current then
+			current.decision = decision
+			current.role = role
+			return
+		end
+		current = reviewer(author, decision, role)
+		by_login[key] = current
+		table.insert(reviewers, current)
+	end
+
+	for _, node in ipairs(((pull_request.latestOpinionatedReviews or {}).nodes or {})) do
+		local state = tostring(node.state or "")
+		if state == "APPROVED" then
+			add(review_author(node.author), "approved", "participant")
+		elseif state == "CHANGES_REQUESTED" then
+			add(review_author(node.author), "changes_requested", "participant")
+		end
+	end
+	for _, node in ipairs(((pull_request.reviewRequests or {}).nodes or {})) do
+		add(review_author(node.requestedReviewer), "pending", "reviewer")
+	end
+	return reviewers
+end
+
+---@param pages table[]
+---@return { reviewers: PullsReviewer[], history: PullsReviewHistoryEntry[] }|nil
+local function review_details(pages)
+	local pull_request
+	local history = {}
+	for _, page in ipairs(pages) do
+		local data = json.nilify(page.data)
+		local repository = data and json.nilify(data.repository)
+		local current = repository and json.nilify(repository.pullRequest)
+		if not current then
+			return nil
+		end
+		pull_request = pull_request or current
+		for _, node in ipairs(((current.reviews or {}).nodes or {})) do
+			local state = HISTORY_STATES[tostring(node.state or "")]
+			local body = json.safe_str(node.body) or ""
+			if vim.trim(body) == "" then
+				body = nil
+			end
+			if state then
+				local id = json.safe_str(node.id)
+				local commit_hash = json.safe_str(json.safe_table(node.commit).oid)
+				local url = json.safe_str(node.url)
+				local submitted_on = state == "dismissed" and json.safe_str(node.updatedAt)
+					or json.safe_str(node.submittedAt)
+				table.insert(history, {
+					id = id,
+					author = review_author(node.author),
+					state = state,
+					submitted_on = submitted_on or "",
+					body = body,
+					commit_hash = commit_hash,
+					url = url,
+				})
+			end
+		end
+	end
+	if not pull_request then
+		return nil
+	end
+	table.sort(history, function(left, right)
+		if left.submitted_on ~= right.submitted_on then
+			return left.submitted_on < right.submitted_on
+		end
+		return tostring(left.id or "") < tostring(right.id or "")
+	end)
+	-- Keep the latest empty dismissal per author the older ones only add noise.
+	local latest = {}
+	for index, entry in ipairs(history) do
+		if entry.author then
+			latest[entry.author.id] = index
+		end
+	end
+	local visible = {}
+	for index, entry in ipairs(history) do
+		local latest_for_author = entry.author and latest[entry.author.id] == index
+		local empty_commented = entry.state == "commented" and not entry.body
+		local old_empty_dismissal = entry.state == "dismissed" and not entry.body and not latest_for_author
+		if not empty_commented and not old_empty_dismissal then
+			table.insert(visible, entry)
+		end
+	end
+	return { reviewers = current_reviewers(pull_request), history = visible }
 end
 
 ---@param pr PullRequest
 ---@param opts { force_refresh: boolean|nil }|nil
+---@param on_done fun(result: { reviewers: PullsReviewer[], history: PullsReviewHistoryEntry[] }|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+local function fetch_review_details(pr, opts, on_done)
+	local owner, name = tostring(pr.repo_full_name or ""):match("^([^/]+)/([^/]+)$")
+	if not owner or not name then
+		vim.schedule(function()
+			on_done(nil, "Missing repo")
+		end)
+		return nil
+	end
+
+	local cache_key = review_details_cache_key(pr)
+	if not (opts or {}).force_refresh then
+		local cached, ok = cli.get_mem(cache_key)
+		if ok then
+			on_done(cached, nil)
+			return nil
+		end
+	end
+
+	return cli.gh({
+		"api",
+		"graphql",
+		"--paginate",
+		"--slurp",
+		"-F",
+		"owner=" .. owner,
+		"-F",
+		"name=" .. name,
+		"-F",
+		"number=" .. tostring(pr.id),
+		"-f",
+		"query=" .. REVIEW_DETAILS_QUERY,
+	}, function(result, err)
+		if err or type(result) ~= "table" then
+			on_done(nil, err or "Failed to fetch review history")
+			return
+		end
+		local details = review_details(result)
+		if not details then
+			on_done(nil, "Missing pull request review history")
+			return
+		end
+		cli.set_mem(cache_key, details, cli.cache_ttl())
+		on_done(details, nil)
+	end, {
+		action = "Fetch PR review history",
+		repo = pr.repo_full_name,
+		number = pr.id,
+	})
+end
+
+---@param pr PullRequest
+---@param _opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(result: { review: PullsReview, comments: PullsComment[] }|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-local function fetch_comments(pr, opts, on_done)
+local function fetch_comments(pr, _opts, on_done)
 	local owner, name = tostring(pr.repo_full_name or ""):match("^([^/]+)/([^/]+)$")
 	if owner == nil or name == nil then
 		vim.schedule(function()
@@ -423,7 +745,6 @@ local function fetch_comments(pr, opts, on_done)
 				table.insert(comments, mapper.to_review_comment(node, thread, root_id))
 			end
 		end
-		mapper.normalize_inline_hunks(comments)
 		table.sort(comments, function(a, b)
 			local left = tostring(a.created_on or "")
 			local right = tostring(b.created_on or "")
@@ -441,10 +762,10 @@ local function fetch_comments(pr, opts, on_done)
 end
 
 ---@param pr PullRequest
----@param opts { force_refresh: boolean|nil }|nil
+---@param _opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(tasks: PullsComment[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-local function fetch_tasks(pr, opts, on_done)
+local function fetch_tasks(pr, _opts, on_done)
 	local repo_slug = pr.repo_full_name or ""
 	if repo_slug == "" then
 		vim.schedule(function()
@@ -487,22 +808,24 @@ end
 ---@param on_done fun(data: PullsReviewData|nil, err: string|nil)
 ---@return { cancel: fun() }
 function M.fetch(pr, opts, on_done)
-	local remaining = 2
-	local review_result, tasks_result
-	local review_err
+	local remaining = 3
+	local review_result, tasks_result, details_result
+	local review_err, details_err
 	local function finish_fetch()
 		remaining = remaining - 1
 		if remaining > 0 then
 			return
 		end
-		if review_err then
-			on_done(nil, review_err)
+		if review_err or details_err then
+			on_done(nil, review_err or details_err)
 			return
 		end
 		on_done({
 			review = review_result.review,
 			comments = review_result.comments,
 			tasks = tasks_result,
+			reviewers = details_result.reviewers,
+			history = details_result.history,
 		}, nil)
 	end
 
@@ -515,6 +838,11 @@ function M.fetch(pr, opts, on_done)
 		tasks_result = tasks or {}
 		finish_fetch()
 	end)
+	local details_handle = fetch_review_details(pr, opts, function(result, err)
+		details_result = result or { reviewers = {}, history = {} }
+		details_err = err
+		finish_fetch()
+	end)
 
 	return {
 		cancel = function()
@@ -523,6 +851,9 @@ function M.fetch(pr, opts, on_done)
 			end
 			if tasks_handle then
 				tasks_handle.cancel()
+			end
+			if details_handle then
+				details_handle.cancel()
 			end
 		end,
 	}
@@ -685,22 +1016,6 @@ function M.start(pr, review, on_done)
 	end, function(err)
 		on_done(false, err)
 	end)
-end
-
----@param raw table|nil
----@return PullsAuthor|nil
-local function review_author(raw)
-	raw = json.nilify(raw)
-	if not raw or tostring(raw.login or "") == "" then
-		return nil
-	end
-	local login = tostring(raw.login)
-	return {
-		id = tostring(raw.id or login),
-		name = tostring(raw.name or login),
-		username = login,
-		nickname = login,
-	}
 end
 
 ---@param pr PullRequest

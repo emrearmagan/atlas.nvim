@@ -23,10 +23,10 @@ end
 ---@param issue Issue
 ---@return string
 local function key_label(issue)
-	local raw = issue._raw or {}
-	local number = tonumber(raw.number) or 0
-	local path = tostring(raw.project_path or "")
-	return path ~= "" and string.format("%s#%d", path, number) or string.format("#%d", number)
+	local raw = issue._raw
+	local number = raw.number
+	local path = raw.project_path
+	return string.format("%s#%d", path, number)
 end
 
 ---@param issue Issue
@@ -35,7 +35,7 @@ end
 function M.format_row(issue, is_child)
 	local icon = issue.is_pinned and icons.general("pin") or state_icon(issue.status_id)
 	local key = key_label(issue)
-	local title = tostring(issue.summary or "")
+	local title = issue.title
 	local assignee = issue.assignee and issue.assignee.display_name or "Unassigned"
 	local reporter = issue.reporter and issue.reporter.display_name or "Unknown"
 	return {
@@ -44,11 +44,11 @@ function M.format_row(issue, is_child)
 		assignee = string.format("%s %s", icons.general("user"), utils.shorten_name(assignee, 20)),
 		reporter = string.format("%s %s", icons.general("user"), utils.shorten_name(reporter, 20)),
 		status = (function()
-			local issue_key = tostring(issue.key or "")
+			local issue_key = issue.key
 			if issue_key ~= "" and state.is_issue_reloading(issue_key) then
 				return string.format(" %s ", state.reload_spinner_frame or "⠋")
 			end
-			return string.format(" %s ", issue.status or "")
+			return string.format(" %s ", issue.status)
 		end)(),
 	}
 end
@@ -59,7 +59,7 @@ end
 ---@return table[]|nil
 function M.cell_hl(row, col, ctx)
 	local issue = row._issue
-	if type(issue) ~= "table" then
+	if not issue then
 		return nil
 	end
 
@@ -74,7 +74,7 @@ function M.cell_hl(row, col, ctx)
 
 	if col.key == "name" then
 		local spans = {}
-		if (tonumber(row._tv2_depth) or 0) > 0 then
+		if (row._tv2_depth or 0) > 0 then
 			local icon, icon_hl = state_icon(issue.status_id)
 			if issue.is_pinned then
 				icon, icon_hl = icons.general("pin"), "AtlasTextWarning"
@@ -92,7 +92,7 @@ function M.cell_hl(row, col, ctx)
 	end
 
 	if col.key == "status" then
-		local issue_key = tostring(issue.key or "")
+		local issue_key = issue.key
 		local hl = issue_key ~= "" and state.is_issue_reloading(issue_key) and "AtlasTextMuted"
 			or state_chip_hl(issue.status_id)
 		return { { start_col = 0, end_col = #ctx.padded, hl_group = hl } }

@@ -34,7 +34,7 @@ local function activate(target)
 	require("atlas").open(target.domain, target.provider, { initial_view = implementation.search_view(target) })
 	local provider = current_provider(target.domain)
 	if provider == nil then
-		notify.error("Failed to load provider: " .. target.provider)
+		notify.error("Failed to load provider: " .. target.provider, { vim_notify = true })
 	end
 	return provider
 end
@@ -62,16 +62,6 @@ local function repo_from_target(target)
 end
 
 ---@param target AtlasTarget
-local function open_repo(target)
-	if activate(target) == nil then
-		return
-	end
-	ensure_detail_open()
-	require("atlas.pulls.ui.panel.state").current_panel = "repo"
-	require("atlas.pulls.ui.panel").on_select(nil, repo_from_target(target), { force_refresh = true })
-end
-
----@param target AtlasTarget
 ---@param method string
 ---@param argument any
 ---@param label string
@@ -94,7 +84,7 @@ local function fetch_and_open(target, method, argument, label, on_success, on_er
 		if on_error then
 			on_error(message)
 		else
-			notify.error(message)
+			notify.error(message, { vim_notify = true })
 		end
 		return
 	end
@@ -108,7 +98,7 @@ local function fetch_and_open(target, method, argument, label, on_success, on_er
 			if on_error then
 				on_error(message)
 			else
-				notify.error("Failed to open " .. label:lower() .. ": " .. message)
+				notify.error("Failed to open " .. label:lower() .. ": " .. message, { vim_notify = true })
 			end
 			return
 		end
@@ -118,7 +108,9 @@ local function fetch_and_open(target, method, argument, label, on_success, on_er
 			end
 			return
 		end
-		notify.info(string.format("Opening %s %s...", provider.name or target.provider, label:lower()))
+		notify.info(string.format("Opening %s %s...", provider.name or target.provider, label:lower()), {
+			vim_notify = true,
+		})
 		ensure_detail_open()
 		on_success(result)
 	end)
@@ -132,12 +124,12 @@ local function open_issue(target, on_error)
 		if on_error then
 			on_error("could not determine issue key")
 		else
-			notify.error("Could not determine issue key")
+			notify.error("Could not determine issue key", { vim_notify = true })
 		end
 		return
 	end
 	fetch_and_open(target, "fetch_issue", key, "Issue " .. key, function(issue)
-		require("atlas.issues.ui.panel").on_select(issue, { force_refresh = true })
+		require("atlas.issues.ui.panel").on_select(issue, { force_refresh = true, details = issue })
 	end, on_error)
 end
 
@@ -178,7 +170,7 @@ local function open_number_for_repo(number, info, on_error)
 	elseif on_error then
 		on_error("provider not configured")
 	else
-		notify.error("Provider not configured for repository: " .. info.provider)
+		notify.error("Provider not configured for repository: " .. info.provider, { vim_notify = true })
 	end
 end
 
@@ -215,7 +207,7 @@ local function try_repositories(choices, number)
 		end
 		local choice = choices[index]
 		if choice == nil then
-			notify.error("Reference not found in any configured provider")
+			notify.error("Reference not found in any configured provider", { vim_notify = true })
 			return
 		end
 		open_number_for_repo(number, choice, function()
@@ -236,7 +228,9 @@ local function open_number(number, repo_slug)
 
 	local choices = resolver.configured_repositories(repo_slug)
 	if #choices == 0 then
-		notify.error("Could not determine a configured repository; use owner/repo#number or a full URL")
+		notify.error("Could not determine a configured repository; use owner/repo#number or a full URL", {
+			vim_notify = true,
+		})
 		return
 	end
 	if repo_slug then
@@ -249,7 +243,7 @@ local function open_number(number, repo_slug)
 end
 
 local openers = {
-	repo = open_repo,
+	repo = activate,
 	pr = open_pr,
 	issue = open_issue,
 }
@@ -257,13 +251,15 @@ local openers = {
 ---@param target AtlasTarget
 local function open_target(target)
 	if not resolver.configured(target) then
-		notify.error(string.format("Provider not configured for %s: %s", target.domain, target.provider))
+		notify.error(string.format("Provider not configured for %s: %s", target.domain, target.provider), {
+			vim_notify = true,
+		})
 		return
 	end
 
 	local opener = openers[target.entity]
 	if opener == nil then
-		notify.error("Unsupported Atlas URL entity: " .. tostring(target.entity))
+		notify.error("Unsupported Atlas URL entity: " .. tostring(target.entity), { vim_notify = true })
 		return
 	end
 	opener(target)
@@ -272,13 +268,23 @@ end
 ---@param value string
 function M.open(value)
 	request_id = request_id + 1
-	local result, err = resolver.resolve(value)
-	if result == nil then
-		notify.error(err or "Unsupported Atlas URL")
+	if vim.trim(value) == "." then
+		local info = git.local_repository()
+		if info == nil then
+			notify.error("No supported Git repository found", { vim_notify = true })
+			return
+		end
+		open_target(resolver.target(info, "pulls", "repo", nil))
 		return
 	end
 
-	notify.info("Resolving " .. tostring(value) .. "...")
+	local result, err = resolver.resolve(value)
+	if result == nil then
+		notify.error(err or "Unsupported Atlas URL", { vim_notify = true })
+		return
+	end
+
+	notify.info("Resolving " .. tostring(value) .. "...", { vim_notify = true })
 	if result.domain then
 		---@cast result AtlasTarget
 		open_target(result)

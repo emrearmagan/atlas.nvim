@@ -41,9 +41,13 @@ end
 ---@param arglead string
 ---@return string[]
 local function complete_providers(domain, arglead)
+	local ids = {}
+	for _, provider in ipairs(providers.configured(domain)) do
+		table.insert(ids, provider.id)
+	end
 	return vim.tbl_filter(function(provider)
 		return provider:find(arglead, 1, true) == 1
-	end, require("atlas.providers").ids(domain))
+	end, ids)
 end
 
 ---@param arglead string
@@ -107,7 +111,10 @@ M.register({
 
 M.register({
 	name = "open",
-	description = "Open a URL or reference",
+	description = "Open a URL, reference, or the current repository",
+	complete = function(arglead)
+		return complete_options(arglead, { "." })
+	end,
 	run = function(args)
 		with_argument(args, "Open: ", require("atlas.commands.open").open)
 	end,
@@ -127,7 +134,7 @@ M.register({
 			elseif kind == "issue" then
 				require("atlas.issues.create").start()
 			else
-				notify.error("Usage: :Atlas create <pr|issue>")
+				notify.error("Usage: :Atlas create <pr|issue>", { vim_notify = true })
 			end
 		end
 
@@ -163,26 +170,57 @@ M.register({
 	end,
 })
 
+local function clear_caches()
+	require("atlas.core.cache").clear_all()
+	require("atlas.core.memory_cache").clear_all()
+end
+
 M.register({
 	name = "clear",
-	usage = "clear [notes]",
-	description = "Clear Atlas data or local notes",
+	usage = "clear [cache|notes|stars]",
+	description = "Clear Atlas data, caches, local notes, or starred items",
 	complete = function(arglead)
-		return complete_options(arglead, { "notes" })
+		return complete_options(arglead, { "cache", "notes", "stars" })
 	end,
 	run = function(args)
 		local target = args[1] and args[1]:lower() or nil
+		if target == "cache" then
+			vim.ui.input({ prompt = "Delete Atlas caches and cloned repositories? [y/N]: " }, function(answer)
+				answer = vim.trim(tostring(answer or "")):lower()
+				if answer ~= "y" and answer ~= "yes" then
+					return
+				end
+				clear_caches()
+				notify.info("Atlas caches cleared", { vim_notify = true })
+			end)
+			return
+		end
 		if target == "notes" then
 			require("atlas.pulls.notes.ui").clear_all()
 			return
 		end
+		if target == "stars" then
+			vim.ui.input({ prompt = "Delete all starred items? [y/N]: " }, function(answer)
+				answer = vim.trim(tostring(answer or "")):lower()
+				if answer ~= "y" and answer ~= "yes" then
+					return
+				end
+				local cleared, err = require("atlas.core.starred").clear_all()
+				if not cleared then
+					notify.error(err or "Unable to delete starred items", { vim_notify = true })
+					return
+				end
+				notify.info("Starred items deleted", { vim_notify = true })
+			end)
+			return
+		end
 		if target then
-			notify.error("Usage: :Atlas clear [notes]")
+			notify.error("Usage: :Atlas clear [cache|notes|stars]", { vim_notify = true })
 			return
 		end
 
 		vim.ui.input(
-			{ prompt = "Delete Atlas caches, cloned repositories, local notes, and logs? [y/N]: " },
+			{ prompt = "Delete Atlas caches, cloned repositories, local notes, starred items, and logs? [y/N]: " },
 			function(answer)
 				answer = vim.trim(tostring(answer or "")):lower()
 				if answer ~= "y" and answer ~= "yes" then
@@ -190,17 +228,21 @@ M.register({
 				end
 				local cleared, err = require("atlas.pulls.notes").clear_all()
 				if not cleared then
-					notify.error(err or "Unable to delete local notes")
+					notify.error(err or "Unable to delete local notes", { vim_notify = true })
 					return
 				end
-				require("atlas.core.cache").clear_all()
-				require("atlas.core.memory_cache").clear_all()
+				local stars_cleared, stars_err = require("atlas.core.starred").clear_all()
+				if not stars_cleared then
+					notify.error(stars_err or "Unable to delete starred items", { vim_notify = true })
+					return
+				end
+				clear_caches()
 				require("atlas.core.logger").clear()
 				local notes_ui = package.loaded["atlas.pulls.notes.ui"]
 				if notes_ui then
 					notes_ui.refresh()
 				end
-				notify.info("Atlas data cleared")
+				notify.info("Atlas data cleared", { vim_notify = true })
 			end
 		)
 	end,
@@ -236,19 +278,21 @@ local function pick_command()
 			---@cast domain "pulls"|"issues"
 			for _, provider in ipairs(providers.configured(domain)) do
 				local label = domain == "pulls" and "pull requests" or "issues"
-				add(command, { provider.id }, string.format("Open %s %s", provider.name(domain), label))
+				add(command, { provider.id }, string.format("Open %s %s", provider.name, label))
 			end
 		elseif command.name == "search" then
 			for _, provider_id in ipairs(assert(command.complete)("")) do
 				local provider = providers[provider_id]
-				add(command, { provider_id }, "Search " .. (provider and provider.name(nil) or provider_id))
+				add(command, { provider_id }, "Search " .. (provider and provider.name or provider_id))
 			end
 		elseif command.name == "create" then
 			add(command, { "pr" }, "Create a pull request")
 			add(command, { "issue" }, "Create an issue")
 		elseif command.name == "clear" then
-			add(command, {}, "Clear caches, clones, notes, and logs")
+			add(command, {}, "Clear caches, clones, notes, stars, and logs")
+			add(command, { "cache" }, "Clear caches and cloned repositories")
 			add(command, { "notes" }, "Clear local review notes")
+			add(command, { "stars" }, "Clear starred items")
 		else
 			add(command, {}, command.description)
 		end
@@ -282,7 +326,7 @@ function M.run(args)
 
 	local command = find_command(args[1]:lower())
 	if command == nil then
-		notify.error("Unknown command: " .. args[1])
+		notify.error("Unknown command: " .. args[1], { vim_notify = true })
 		return
 	end
 

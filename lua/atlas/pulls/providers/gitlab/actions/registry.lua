@@ -4,11 +4,11 @@ local actions = require("atlas.pulls.actions")
 local action_utils = require("atlas.pulls.actions.utils")
 local icons = require("atlas.ui.shared.icons")
 local picker = require("atlas.picker")
-local statusline = require("atlas.ui.statusline")
+local core_notify = require("atlas.core.notify")
 local notes = require("atlas.pulls.notes")
 local pullrequests_api = require("atlas.pulls.providers.gitlab.api.pullrequests")
 local users_api = require("atlas.pulls.providers.gitlab.api.users")
-local service = require("atlas.providers.gitlab.client").pulls
+local service = require("atlas.providers.gitlab.client")
 
 ---@param ctx AtlasPullActionContext
 ---@return boolean
@@ -43,8 +43,11 @@ end
 ---@param message string
 ---@param duration integer|nil
 local function notify(ctx, level, message, duration)
-	local callback = ctx.notify or statusline.notify
-	callback(level, message, duration)
+	if ctx.notify then
+		ctx.notify(level, message, duration)
+		return
+	end
+	core_notify.show(level, message, { timeout = duration })
 end
 
 ---@type AtlasPullAction[]
@@ -155,81 +158,99 @@ local function edit_assignees(ctx, done)
 		return
 	end
 
-	notify(ctx, "loading", "Loading members...")
-	users_api.list_members(path, "", function(members, err)
-		if err or members == nil then
-			notify(ctx, "error", err or "Failed to load members")
-			done(nil, err or "Failed to load members")
-			return
-		end
-		if #members == 0 then
-			notify(ctx, "warn", "No assignable members")
-			done(nil, "No assignable members")
-			return
-		end
-		notify(ctx, "success", "Members loaded", 1200)
-
-		local original = {}
-		local original_set = {}
-		for _, a in ipairs(pr.assignees or {}) do
-			local id = tonumber(a.id)
-			if id then
-				table.insert(original, { id = id, username = a.username, name = a.name or a.username })
-				original_set[id] = true
+	local function open_picker()
+		users_api.list_members(path, "", function(members, err)
+			if err or members == nil then
+				notify(ctx, "error", err or "Failed to load members")
+				done(nil, err or "Failed to load members")
+				return
 			end
-		end
+			if #members == 0 then
+				notify(ctx, "warn", "No assignable members")
+				done(nil, "No assignable members")
+				return
+			end
+			notify(ctx, "success", "Members loaded", 1200)
 
-		picker.multi_select({
-			items = members,
-			selected = vim.deepcopy(original),
-			key = function(item)
-				return tostring(item.id or "")
-			end,
-			format_item = function(item)
-				return string.format("%s %s (@%s)", icons.general("user"), item.name or item.username, item.username)
-			end,
-			title = string.format("Assignees for %s", pr_label(pr)),
-			on_done = function(selected)
-				local final_ids = {}
-				local final_set = {}
-				for _, it in ipairs(selected) do
-					local id = tonumber(it.id)
-					if id then
-						table.insert(final_ids, id)
-						final_set[id] = true
-					end
+			local original = {}
+			local original_set = {}
+			for _, a in ipairs(pr.assignees or {}) do
+				local id = tonumber(a.id)
+				if id then
+					table.insert(original, { id = id, username = a.username, name = a.name or a.username })
+					original_set[id] = true
 				end
+			end
 
-				local changed = false
-				if #final_ids ~= #original then
-					changed = true
-				else
-					for id, _ in pairs(original_set) do
-						if not final_set[id] then
-							changed = true
-							break
+			picker.multi_select({
+				items = members,
+				selected = vim.deepcopy(original),
+				key = function(item)
+					return tostring(item.id or "")
+				end,
+				format_item = function(item)
+					return string.format(
+						"%s %s (@%s)",
+						icons.general("user"),
+						item.name or item.username,
+						item.username
+					)
+				end,
+				title = string.format("Assignees for %s", pr_label(pr)),
+				on_done = function(selected)
+					local final_ids = {}
+					local final_set = {}
+					for _, it in ipairs(selected) do
+						local id = tonumber(it.id)
+						if id then
+							table.insert(final_ids, id)
+							final_set[id] = true
 						end
 					end
-				end
 
-				if not changed then
-					done({ changed_pr = false, message = "No changes" }, nil)
-					return
-				end
+					local changed = false
+					if #final_ids ~= #original then
+						changed = true
+					else
+						for id, _ in pairs(original_set) do
+							if not final_set[id] then
+								changed = true
+								break
+							end
+						end
+					end
 
-				notify(ctx, "loading", string.format("Updating assignees on %s...", pr_label(pr)))
-				pullrequests_api.update_assignees(pr, final_ids, function(ok, set_err)
-					if not ok then
-						notify(ctx, "error", set_err or "Failed")
-						done(nil, set_err or "Failed")
+					if not changed then
+						done({ changed_pr = false, message = "No changes" }, nil)
 						return
 					end
-					local msg = string.format("%d assignee(s)", #final_ids)
-					notify(ctx, "success", msg, 1200)
-					done({ changed_pr = true, message = msg }, nil)
-				end)
-			end,
-		})
+
+					notify(ctx, "loading", string.format("Updating assignees on %s...", pr_label(pr)))
+					pullrequests_api.update_assignees(pr, final_ids, function(ok, set_err)
+						if not ok then
+							notify(ctx, "error", set_err or "Failed")
+							done(nil, set_err or "Failed")
+							return
+						end
+						local msg = string.format("%d assignee(s)", #final_ids)
+						notify(ctx, "success", msg, 1200)
+						done({ changed_pr = true, message = msg }, nil)
+					end)
+				end,
+			})
+		end)
+	end
+
+	notify(ctx, "loading", "Loading members...")
+	pullrequests_api.fetch_pullrequest(pr, { force_load = false }, function(details, err)
+		if err or details == nil then
+			local message = tostring(err or "Failed to load merge request")
+			notify(ctx, "error", message)
+			done(nil, message)
+			return
+		end
+		pr = details
+		open_picker()
 	end)
 end
 
@@ -310,22 +331,33 @@ local function toggle_subscription(ctx, done)
 		done(nil, "Invalid MR identifier")
 		return
 	end
-	local action = pr.is_subscribed == true and "unsubscribe" or "subscribe"
-	local endpoint = string.format("/projects/%s/merge_requests/%d/%s", service.url_encode(path), iid, action)
-	notify(ctx, "loading", pr.is_subscribed and "Unsubscribing..." or "Subscribing...")
-	service.request("POST", endpoint, nil, function(result, err)
-		if err then
-			notify(ctx, "error", tostring(err))
-			done(nil, tostring(err))
+	pullrequests_api.fetch_pullrequest(pr, { force_load = false }, function(details, fetch_err)
+		if fetch_err or details == nil then
+			local message = tostring(fetch_err or "Failed to load merge request")
+			notify(ctx, "error", message)
+			done(nil, message)
 			return
 		end
-		local subscribed = type(result) == "table" and result.subscribed
-		if type(subscribed) ~= "boolean" then
-			subscribed = action == "subscribe"
-		end
-		pr.is_subscribed = subscribed == true
-		notify(ctx, "success", pr.is_subscribed and "Subscribed" or "Unsubscribed", 1200)
-		done({ changed_pr = true, message = pr.is_subscribed and "Subscribed" or "Unsubscribed" }, nil)
+		local action = details.is_subscribed == true and "unsubscribe" or "subscribe"
+		local endpoint = string.format("/projects/%s/merge_requests/%d/%s", service.url_encode(path), iid, action)
+		notify(ctx, "loading", details.is_subscribed and "Unsubscribing..." or "Subscribing...")
+		service.request("POST", endpoint, nil, function(result, err)
+			if err then
+				notify(ctx, "error", tostring(err))
+				done(nil, tostring(err))
+				return
+			end
+			local subscribed = type(result) == "table" and result.subscribed
+			if type(subscribed) ~= "boolean" then
+				subscribed = action == "subscribe"
+			end
+			details.is_subscribed = subscribed == true
+			notify(ctx, "success", details.is_subscribed and "Subscribed" or "Unsubscribed", 1200)
+			done({
+				changed_pr = true,
+				message = details.is_subscribed and "Subscribed" or "Unsubscribed",
+			}, nil)
+		end)
 	end)
 end
 

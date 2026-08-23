@@ -1,6 +1,5 @@
-local service = require("atlas.providers.gitea.client").issues
-local json = require("atlas.core.json")
-local pagination = require("atlas.issues.providers.gitea.api.pagination")
+local service = require("atlas.providers.gitea.client")
+local pagination = require("atlas.providers.gitea.pagination")
 local mapper = require("atlas.issues.providers.gitea.api.mapper")
 
 local M = {}
@@ -23,12 +22,11 @@ end
 function M.list(key, _, on_done)
 	local path = endpoint(key)
 	if path == nil then
-		on_done(nil, "Invalid Gitea/Forgejo issue key")
+		on_done(nil, "Invalid Gitea issue key")
 		return nil
 	end
 
 	return pagination.fetch_all(path, nil, {
-		invalid_response = "Invalid Gitea/Forgejo timeline response",
 		post_filtered = true,
 	}, function(values, err)
 		if err then
@@ -37,18 +35,12 @@ function M.list(key, _, on_done)
 		end
 
 		local result = { comments = {}, events = {} }
-		for _, raw in ipairs(values or {}) do
-			local raw_type = json.safe_str(raw.type)
+		for _, raw in ipairs(values) do
+			local raw_type = raw.type
 			if raw_type == "comment" then
-				local comment = mapper.to_comment(raw)
-				if comment then
-					table.insert(result.comments, comment)
-				end
+				table.insert(result.comments, mapper.to_comment(raw))
 			else
-				local entry = mapper.to_timeline_entry(raw)
-				if entry then
-					table.insert(result.events, entry)
-				end
+				table.insert(result.events, mapper.to_timeline_entry(raw))
 			end
 		end
 		on_done(result, nil)

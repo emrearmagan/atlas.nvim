@@ -45,10 +45,20 @@ local function normalize_reviewers(values)
 				username = author.username,
 				nickname = author.nickname,
 				decision = "pending",
+				role = "reviewer",
 			})
 		end
 	end
 	return reviewers
+end
+
+---@param values any
+---@return PullsReviewer[]|nil
+local function normalize_optional_reviewers(values)
+	if json.nilify(values) == nil then
+		return nil
+	end
+	return normalize_reviewers(json.safe_table(values))
 end
 
 ---@param values table
@@ -85,7 +95,7 @@ end
 
 ---@param raw any Decoded API value.
 ---@return PullRequest|nil
-function M.to_pull_request(raw)
+local function map_summary(raw)
 	raw = json.nilify(raw)
 	if type(raw) ~= "table" then
 		return nil
@@ -123,7 +133,6 @@ function M.to_pull_request(raw)
 	return {
 		id = iid,
 		title = json.safe_str(raw.title) or "",
-		description = json.safe_str(raw.description) or "",
 		state = normalize_state(raw),
 		author = normalize_author(raw.author),
 		source = {
@@ -141,10 +150,7 @@ function M.to_pull_request(raw)
 		workspace = workspace,
 		repo = repo,
 		repo_full_name = project_path,
-		is_subscribed = type(raw.subscribed) == "boolean" and raw.subscribed or nil,
-		assignees = normalize_authors(json.safe_table(raw.assignees)),
-		reviewers = normalize_reviewers(json.safe_table(raw.reviewers)),
-		labels = normalize_labels(json.safe_table(raw.labels)),
+		reviewers = normalize_optional_reviewers(raw.reviewers),
 		_raw = {
 			merge_status = json.safe_str(raw.merge_status),
 			detailed_merge_status = json.safe_str(raw.detailed_merge_status),
@@ -155,37 +161,39 @@ function M.to_pull_request(raw)
 	}
 end
 
----@param raw_list table[]|nil
----@return PullsGroup[] groups grouped by repo_full_name
-function M.to_pull_request_groups(raw_list)
-	local by_repo = {}
-	local order = {}
-	for _, raw in ipairs(raw_list or {}) do
+---@param raw any Decoded API value.
+---@return PullRequest|nil
+function M.to_pull_request(raw)
+	return map_summary(raw)
+end
+
+---@param raw any Decoded API value.
+---@return PullRequestDetails|nil
+function M.to_pull_request_details(raw)
+	local pr = map_summary(raw)
+	if pr == nil then
+		return nil
+	end
+	local value = json.nilify(raw)
+	pr.description = json.safe_str(value.description) or ""
+	pr.is_subscribed = json.nilify(value.subscribed)
+	pr.assignees = normalize_authors(json.safe_table(value.assignees))
+	pr.reviewers = normalize_reviewers(json.safe_table(value.reviewers))
+	pr.labels = normalize_labels(json.safe_table(value.labels))
+	return pr
+end
+
+---@param raw_list table[]
+---@return PullRequest[]
+function M.to_pull_requests(raw_list)
+	local pulls = {}
+	for _, raw in ipairs(raw_list) do
 		local pr = M.to_pull_request(raw)
-		if pr ~= nil then
-			local key = pr.repo_full_name ~= "" and pr.repo_full_name or "unknown"
-			if not by_repo[key] then
-				by_repo[key] = {
-					repo = {
-						id = key,
-						name = pr.repo,
-						owner = pr.workspace,
-						repo_name = pr.repo,
-						html_url = nil,
-					},
-					prs = {},
-				}
-				table.insert(order, key)
-			end
-			table.insert(by_repo[key].prs, pr)
+		if pr then
+			table.insert(pulls, pr)
 		end
 	end
-
-	local groups = {}
-	for _, key in ipairs(order) do
-		table.insert(groups, by_repo[key])
-	end
-	return groups
+	return pulls
 end
 
 ---@param raw any Decoded API value.
@@ -260,6 +268,7 @@ local function to_inline_position(position)
 		to = new_line,
 		start_from = tonumber(start.old_line),
 		start_to = tonumber(start.new_line),
+		commit_hash = json.safe_str(position.head_sha),
 	}
 end
 
@@ -287,6 +296,13 @@ function M.to_comment(note, discussion_first_id, discussion_id, resolved)
 	local original_position = type(note.original_position) == "table" and note.original_position or nil
 	local outdated = position == nil and original_position ~= nil
 	position = position or original_position
+	local diff_refs = position
+			and {
+				base_sha = json.safe_str(position.base_sha),
+				start_sha = json.safe_str(position.start_sha),
+				head_sha = json.safe_str(position.head_sha),
+			}
+		or nil
 	local file, inline
 	local position_type = position and tostring(position.position_type or "text") or ""
 	if position_type == "text" then
@@ -320,6 +336,7 @@ function M.to_comment(note, discussion_first_id, discussion_id, resolved)
 		outdated = outdated,
 		reactions = reaction_counts(note.award_emoji),
 		html_url = json.safe_str(note.web_url),
+		_raw = diff_refs and { diff_refs = diff_refs } or nil,
 	}
 end
 
@@ -337,7 +354,7 @@ function M.to_draft_comment(draft, discussion_first_id)
 		comment.author = { name = "You", nickname = nil, username = "", id = tostring(draft.author_id) }
 	end
 	comment.state = "PENDING"
-	comment._raw = { draft_note_id = draft.id }
+	comment._raw = vim.tbl_extend("force", comment._raw or {}, { draft_note_id = draft.id })
 	return comment
 end
 

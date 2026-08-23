@@ -27,6 +27,7 @@ local EVENT = {
 	unapproval = icons.pulls_status("inprogress"),
 	changes_requested = icons.pulls_status("inprogress"),
 	review = icons.pulls("activity"),
+	review_dismissed = icons.pulls_status("stopped"),
 	comment = icons.general("user"),
 	comment_deleted = icons.general("delete"),
 	closed = icons.pulls("declined_pr"),

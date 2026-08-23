@@ -384,7 +384,7 @@ line_handlers.blockquote = {
 	match = function(line)
 		return line:match("^>%s?") ~= nil
 	end,
-	parse = function(line, ctx)
+	parse = function(_, ctx)
 		local content_lines = {}
 		while ctx.i <= #ctx.lines and ctx.lines[ctx.i]:match("^>%s?") do
 			table.insert(content_lines, (ctx.lines[ctx.i]:gsub("^>%s?", "")))
@@ -409,7 +409,7 @@ line_handlers.bulletList = {
 	match = function(line)
 		return line:match("^%*%s+") ~= nil
 	end,
-	parse = function(line, ctx)
+	parse = function(_, ctx)
 		local items = {}
 
 		while ctx.i <= #ctx.lines and ctx.lines[ctx.i]:match("^%*%s+") do

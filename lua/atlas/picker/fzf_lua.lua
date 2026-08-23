@@ -25,7 +25,7 @@ function M.open(request)
 	local selected = {}
 	local selected_keys = {}
 
-	local function select(item)
+	local function toggle_selection(item)
 		local key = request.key(item)
 		if selected[key] then
 			selected[key] = nil
@@ -42,7 +42,7 @@ function M.open(request)
 	end
 
 	for _, item in ipairs(request.selected) do
-		select(item)
+		toggle_selection(item)
 	end
 
 	local function selected_items()
@@ -129,7 +129,7 @@ function M.open(request)
 			if not item then
 				return
 			end
-			select(item)
+			toggle_selection(item)
 		end
 		opts.actions.tab = { fn = toggle, reload = true, field_index = "{}" }
 		opts.actions["ctrl-space"] = { fn = toggle, reload = true, field_index = "{}" }
@@ -205,7 +205,7 @@ function M.open(request)
 						return
 					end
 					if err then
-						notify.error(err)
+						notify.error(err, { vim_notify = true })
 					end
 					set_items(items)
 					write_items(done)

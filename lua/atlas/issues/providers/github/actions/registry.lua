@@ -3,10 +3,10 @@ local M = {}
 local actions = require("atlas.issues.actions")
 local icons = require("atlas.ui.shared.icons")
 local picker = require("atlas.picker")
-local statusline = require("atlas.ui.statusline")
-local cli = require("atlas.providers.github.client").issues
+local notify = require("atlas.core.notify")
+local cli = require("atlas.providers.github.client")
 local issues_api = require("atlas.issues.providers.github.api.issues")
-local users_api = require("atlas.providers.github.users").new("issues")
+local users_api = require("atlas.providers.github.users")
 local issue_cache = require("atlas.issues.providers.github.api.cache")
 local normalizer = require("atlas.issues.providers.github.api.mapper")
 
@@ -86,14 +86,14 @@ end
 local function close(ctx, done)
 	local issue = assert(ctx.issue)
 	local key = tostring(issue.key or "")
-	statusline.notify("loading", string.format("Closing %s...", key))
+	notify.loading(string.format("Closing %s...", key))
 	issues_api.set_state(key, "closed", function(ok, err)
 		if not ok then
-			statusline.notify("error", err or "Close failed")
+			notify.error(err or "Close failed")
 			done(nil, err or "Close failed")
 			return
 		end
-		statusline.notify("success", string.format("Closed %s", key), 1200)
+		notify.success(string.format("Closed %s", key), { timeout = 1200 })
 		done({ issue_key = key }, nil)
 	end)
 end
@@ -112,14 +112,14 @@ end
 local function reopen(ctx, done)
 	local issue = assert(ctx.issue)
 	local key = tostring(issue.key or "")
-	statusline.notify("loading", string.format("Reopening %s...", key))
+	notify.loading(string.format("Reopening %s...", key))
 	issues_api.set_state(key, "open", function(ok, err)
 		if not ok then
-			statusline.notify("error", err or "Reopen failed")
+			notify.error(err or "Reopen failed")
 			done(nil, err or "Reopen failed")
 			return
 		end
-		statusline.notify("success", string.format("Reopened %s", key), 1200)
+		notify.success(string.format("Reopened %s", key), { timeout = 1200 })
 		done({ issue_key = key }, nil)
 	end)
 end
@@ -171,28 +171,28 @@ local function assign(ctx, done)
 	local slug = issue_slug(issue)
 	if slug == "" then
 		local err = "Could not determine repository"
-		statusline.notify("error", err)
+		notify.error(err)
 		done(nil, err)
 		return
 	end
 
-	statusline.notify("loading", "Loading users...")
+	notify.loading("Loading users...")
 	users_api.get_assignable_users(slug, "", function(users, err)
 		if err or users == nil then
-			statusline.notify("error", err or "Failed to load users")
+			notify.error(err or "Failed to load users")
 			done(nil, err or "Failed to load users")
 			return
 		end
-		statusline.clear_notice()
+		notify.clear()
 
 		local items = {}
 		for _, u in ipairs(users) do
 			table.insert(items, { login = u.account_id, name = u.display_name or u.account_id })
 		end
 		if #items == 0 then
-			local err = "No assignable users"
-			statusline.notify("warn", err)
-			done(nil, err)
+			local message = "No assignable users"
+			notify.warn(message)
+			done(nil, message)
 			return
 		end
 
@@ -240,15 +240,15 @@ local function assign(ctx, done)
 					return
 				end
 
-				statusline.notify("loading", string.format("Updating assignees on %s...", key))
+				notify.loading(string.format("Updating assignees on %s...", key))
 				issues_api.update_assignees(key, { add = adds, remove = removes }, function(ok, set_err)
 					if not ok then
-						statusline.notify("error", set_err or "Failed")
+						notify.error(set_err or "Failed")
 						done(nil, set_err or "Failed")
 						return
 					end
 					local msg = string.format("+%d / -%d assignee(s)", #adds, #removes)
-					statusline.notify("success", msg, 1200)
+					notify.success(msg, { timeout = 1200 })
 					done({ issue_key = key }, nil)
 				end)
 			end,
@@ -273,28 +273,28 @@ local function labels(ctx, done)
 	local slug = issue_slug(issue)
 	if slug == "" then
 		local err = "Could not determine repository"
-		statusline.notify("error", err)
+		notify.error(err)
 		done(nil, err)
 		return
 	end
 
-	statusline.notify("loading", "Loading labels...")
+	notify.loading("Loading labels...")
 	issues_api.list_labels(slug, function(all_labels, err)
 		if err or all_labels == nil then
-			statusline.notify("error", err or "Failed to load labels")
+			notify.error(err or "Failed to load labels")
 			done(nil, err or "Failed to load labels")
 			return
 		end
-		statusline.clear_notice()
+		notify.clear()
 
 		local items = {}
 		for _, label in ipairs(all_labels) do
 			table.insert(items, { name = label.name, color = label.color })
 		end
 		if #items == 0 then
-			local err = "No labels available"
-			statusline.notify("warn", err)
-			done(nil, err)
+			local message = "No labels available"
+			notify.warn(message)
+			done(nil, message)
 			return
 		end
 
@@ -342,15 +342,15 @@ local function labels(ctx, done)
 					return
 				end
 
-				statusline.notify("loading", string.format("Updating labels on %s...", key))
+				notify.loading(string.format("Updating labels on %s...", key))
 				issues_api.update_labels(key, { add = adds, remove = removes }, function(ok, set_err)
 					if not ok then
-						statusline.notify("error", set_err or "Failed")
+						notify.error(set_err or "Failed")
 						done(nil, set_err or "Failed")
 						return
 					end
 					local msg = string.format("+%d / -%d label(s)", #adds, #removes)
-					statusline.notify("success", msg, 1200)
+					notify.success(msg, { timeout = 1200 })
 					done({ issue_key = key }, nil)
 				end)
 			end,
@@ -364,7 +364,7 @@ local function create_issue(ctx, done)
 	local slug, slug_err = create_issue_slug(ctx)
 	if slug == nil or slug == "" then
 		local err = slug_err or "Could not determine repository"
-		statusline.notify("error", err)
+		notify.error(err)
 		done(nil, err)
 		return
 	end
@@ -472,18 +472,18 @@ local function toggle_subscription(ctx, done)
 	local next_state = issue.is_subscribed == true and "UNSUBSCRIBED" or "SUBSCRIBED"
 	local gql =
 		"mutation($id: ID!, $state: SubscriptionState!) { updateSubscription(input: { subscribableId: $id, state: $state }) { subscribable { ... on Issue { viewerSubscription } } } }"
-	statusline.notify("loading", issue.is_subscribed and "Unsubscribing..." or "Subscribing...")
-	require("atlas.providers.github.client").issues.gh(
+	notify.loading(issue.is_subscribed and "Unsubscribing..." or "Subscribing...")
+	require("atlas.providers.github.client").gh(
 		{ "api", "graphql", "-F", "id=" .. node_id, "-f", "state=" .. next_state, "-f", "query=" .. gql },
 		function(_, err)
 			if err then
-				statusline.notify("error", tostring(err))
+				notify.error(tostring(err))
 				done(nil, tostring(err))
 				return
 			end
 			issue_cache.invalidate(tostring(issue.key or ""))
 			issue.is_subscribed = (next_state == "SUBSCRIBED")
-			statusline.notify("success", issue.is_subscribed and "Subscribed" or "Unsubscribed", 1200)
+			notify.success(issue.is_subscribed and "Subscribed" or "Unsubscribed", { timeout = 1200 })
 			done({ issue_key = issue.key }, nil)
 		end
 	)

@@ -59,13 +59,6 @@ local function resolution_text(comment)
 	return text
 end
 
----@param comment PullsComment
----@return { text: string, hl_group: string }|nil
-local function resolution_footer(comment)
-	local text = resolution_text(comment)
-	return text and { text = text, hl_group = "AtlasTextMuted" } or nil
-end
-
 ---@param text string
 ---@param marker string
 ---@param marker_hl string|table[]|nil
@@ -75,26 +68,26 @@ local function status_text(text, marker, marker_hl)
 		return marker, marker_hl
 	end
 	local separator = marker ~= "" and "  " or ""
-	local highlights = {
+	local status_highlights = {
 		{ start_col = 0, end_col = #text, hl_group = "AtlasTextMuted" },
 	}
 	local offset = #text + #separator
 	if type(marker_hl) == "table" then
 		for _, highlight in ipairs(marker_hl) do
-			table.insert(highlights, {
+			table.insert(status_highlights, {
 				start_col = offset + highlight.start_col,
 				end_col = offset + highlight.end_col,
 				hl_group = highlight.hl_group,
 			})
 		end
 	elseif marker ~= "" and marker_hl then
-		table.insert(highlights, {
+		table.insert(status_highlights, {
 			start_col = offset,
 			end_col = offset + #marker,
 			hl_group = marker_hl,
 		})
 	end
-	return text .. separator .. marker, highlights
+	return text .. separator .. marker, status_highlights
 end
 
 ---@param comment PullsComment
@@ -204,10 +197,6 @@ local function comment_item(comment, opts, is_root)
 		local timestamp = utils.relative_time(comment.created_on)
 		local additional = timestamp ~= "" and ("TASK  " .. timestamp) or "TASK"
 		local footer_items = {}
-		local resolution = resolution_footer(comment)
-		if resolution then
-			table.insert(footer_items, resolution)
-		end
 		local edit_key = is_root and opts.action_keys and opts.action_keys.edit
 		if edit_key then
 			table.insert(footer_items, {
@@ -231,6 +220,7 @@ local function comment_item(comment, opts, is_root)
 
 		local user_icon, user_icon_hl = icons.general("user")
 		local marker, marker_hl = M.status_marker(comment)
+		marker, marker_hl = resolution_status(comment, marker, marker_hl)
 		return {
 			icon = user_icon,
 			icon_hl = user_icon_hl,
@@ -304,6 +294,10 @@ local function comment_item(comment, opts, is_root)
 	end
 	local user_icon, user_icon_hl = icons.general("user")
 	local additional = utils.relative_time(comment.created_on)
+	local additional_hl = nil
+	if opts.additional then
+		additional, additional_hl = opts.additional(comment, additional)
+	end
 	local location = is_root and opts.location and opts.location(comment) or ""
 	if location ~= "" then
 		additional = additional ~= "" and (additional .. "  " .. location) or location
@@ -323,6 +317,7 @@ local function comment_item(comment, opts, is_root)
 		meta = {
 			comment = comment,
 			author_hl_name = author,
+			additional_hl = additional_hl,
 			is_deleted = is_deleted,
 			right_text_hl = marker_hl,
 		},
@@ -344,9 +339,10 @@ local function threads_opts(padding_x, opts)
 
 	return {
 		padding_x = padding_x,
+		show_connectors = false,
 		separator = "─",
 		content_max_lines = content_max_lines,
-		content_truncated_text = opts.content_truncated_text,
+		content_truncated_key = opts.content_truncated_key,
 		content_prefix = opts.content_prefix,
 		additional_hl = function(item)
 			return item.meta.additional_hl or "AtlasTextMuted"
@@ -554,7 +550,9 @@ end
 ---@field location? fun(comment: PullsComment): string
 ---@field content_prefix? string
 ---@field content_max_lines? integer|fun(comment: PullsComment): integer|nil
----@field content_truncated_text? string
+---@field content_truncated_key? string
+---@field show_task_label? boolean
+---@field additional? fun(comment: PullsComment, timestamp: string): string, string|table[]|nil
 
 ---@param nodes AtlasReviewThreadNode[]
 ---@param width integer
@@ -584,9 +582,11 @@ function M.render_task_compact(node, width, opts)
 	local item = build_item(node, opts, true, nil)
 	local task = node.comment
 	local label = tostring(task.task_label or "")
-	item.additional = label ~= "" and label or "added a task"
-	local marker, marker_hl = M.status_marker(task)
-	item.right_text, item.meta.right_text_hl = status_text(utils.relative_time(task.created_on), marker, marker_hl)
+	item.additional = opts.show_task_label == false and "" or (label ~= "" and label or "added a task")
+	local timestamp = utils.relative_time(task.created_on)
+	if timestamp ~= "" then
+		item.additional = item.additional ~= "" and (item.additional .. "  " .. timestamp) or timestamp
+	end
 	return threadsv2.render({ item }, width, threads_opts(opts.padding_x or 1, opts))
 end
 
@@ -614,9 +614,6 @@ function M.render_compact(node, width, expanded, location, opts)
 			hl = "AtlasTextMuted",
 		},
 	}
-	if comment.is_task then
-		table.insert(fields, { text = marker, hl = marker_hl })
-	end
 	local metadata, metadata_hl = "", {}
 	for _, field in ipairs(fields) do
 		if field.text ~= "" then
@@ -644,11 +641,11 @@ function M.render_compact(node, width, expanded, location, opts)
 	item.icon_hl = expander_hl
 	item.author = "@" .. author_name(comment.author)
 	item.additional = metadata
-	if comment.is_task then
-		item.right_text = ""
-	else
-		item.right_text, item.meta.right_text_hl = resolution_status(comment, marker, marker_hl)
+	local status = resolution_text(comment) or ""
+	if comment.outdated == true or comment.state == "OUTDATED" then
+		status = status ~= "" and (status .. "  outdated") or "outdated"
 	end
+	item.right_text, item.meta.right_text_hl = status_text(status, marker, marker_hl)
 	item.line_map.tree_key = M.comment_key(comment)
 	item.meta.additional_hl = metadata_hl
 	if not expanded then
@@ -656,13 +653,9 @@ function M.render_compact(node, width, expanded, location, opts)
 		item.content_block = nil
 		item.children = {}
 		item.footer_items = {}
-		local resolution = comment.is_task and resolution_footer(comment) or nil
-		if resolution ~= nil then
-			table.insert(item.footer_items, resolution)
-		end
 	end
 
-	return threadsv2.render({ item }, width, threads_opts(0, opts))
+	return threadsv2.render({ item }, math.max(1, width - 2), threads_opts(0, opts))
 end
 
 ---@param comment PullsComment

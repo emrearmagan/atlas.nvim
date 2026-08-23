@@ -1,6 +1,8 @@
 local GITLAB_REACTION_OPTIONS = require("atlas.ui.shared.emojis").gitlab()
+local config = require("atlas.config")
 local resolver = require("atlas.providers.resolve")
-local notifications_api = require("atlas.providers.gitlab.notifications").new("issues")
+local notifications_api = require("atlas.providers.gitlab.notifications")
+local git = require("atlas.core.git")
 
 ---@class GitLabIssuesProvider : IssuesProvider
 local M = {}
@@ -26,7 +28,7 @@ end
 
 ---@param key string
 ---@param opts IssuesFetchOpts|nil
----@param on_done fun(issue: Issue|nil, err: string|nil)
+---@param on_done fun(issue: IssueDetails|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_issue(key, opts, on_done)
 	return require("atlas.issues.providers.gitlab.api.issues").get_issue(key, opts, on_done)
@@ -40,9 +42,9 @@ function M.fetch_activity(issue, opts, on_done)
 	return require("atlas.issues.providers.gitlab.api.notes").list_history(tostring(issue.key or ""), opts, on_done)
 end
 
----@param issue Issue
+---@param issue IssueDetails
 ---@param opts { force_refresh: boolean|nil }|nil
----@param on_done fun(result: { comments: IssueComment[], events: IssueActivityEntry[] }|nil, err: string|nil)
+---@param on_done fun(items: IssueConversationItem[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_conversation(issue, opts, on_done)
 	opts = opts or {}
@@ -59,23 +61,49 @@ function M.fetch_conversation(issue, opts, on_done)
 			on_done(nil, err)
 			return
 		end
-		local comments = {}
-		local raw = issue._raw or {}
-		local description = tostring(raw.description or "")
-		if description ~= "" then
-			table.insert(comments, {
-				id = "__body__",
-				url = issue.url,
-				author = issue.reporter,
-				body = description,
-				created = raw.created_at or "",
+		local items = {}
+		if issue.description ~= "" then
+			table.insert(items, {
+				id = "description:" .. tostring(issue.key),
+				kind = "description",
+				created_at = issue.created_at or "",
+				entity = issue,
 			})
 		end
-		vim.list_extend(comments, result.comments)
-		on_done({
-			comments = comments,
-			events = result.events,
-		}, nil)
+		for _, comment in ipairs(result.comments or {}) do
+			table.insert(items, {
+				id = "comment:" .. tostring(comment.id),
+				kind = "comment",
+				created_at = comment.created or "",
+				entity = comment,
+			})
+		end
+		for index, entry in ipairs(result.events or {}) do
+			table.insert(items, {
+				id = table.concat({ "activity", entry.date or "", index }, ":"),
+				kind = "activity",
+				created_at = entry.date or "",
+				entity = entry,
+			})
+		end
+		on_done(items, nil)
+	end)
+end
+
+---@param issue IssueDetails
+---@param content string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.update_description(issue, content, on_done)
+	local key = tostring(issue.key or "")
+	local issues_api = require("atlas.issues.providers.gitlab.api.issues")
+	return issues_api.update_description(key, content, function(ok, err)
+		if not ok then
+			on_done(false, err)
+			return
+		end
+		issue.description = content
+		on_done(true, nil)
 	end)
 end
 
@@ -105,31 +133,6 @@ end
 ---@return { cancel: fun() }|nil
 function M.edit_comment(issue, comment, content, on_done)
 	local key = tostring(issue.key or "")
-	if tostring(comment.id) == "__body__" then
-		local raw = issue._raw or {}
-		local project = tonumber(raw.project_id)
-		local iid = tonumber(raw.iid)
-		if project == nil or iid == nil then
-			on_done(nil, "Invalid issue")
-			return nil
-		end
-		local service = require("atlas.providers.gitlab.client").issues
-		local endpoint = string.format("/projects/%d/issues/%d", project, iid)
-		return service.request("PUT", endpoint, { description = content }, function(_, err)
-			if err then
-				on_done(nil, err)
-				return
-			end
-			raw.description = content
-			on_done({
-				id = "__body__",
-				url = issue.url,
-				author = issue.reporter,
-				body = content,
-				created = raw.created_at or "",
-			}, nil)
-		end)
-	end
 	return require("atlas.issues.providers.gitlab.api.notes").edit(key, comment, content, on_done)
 end
 
@@ -138,37 +141,60 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.delete_comment(issue, comment, on_done)
-	if tostring(comment.id) == "__body__" then
-		on_done(false, "Cannot delete the issue description")
-		return nil
-	end
 	local key = tostring(issue.key or "")
 	return require("atlas.issues.providers.gitlab.api.notes").delete(key, comment, on_done)
 end
 
 ---@param issue Issue
----@param comment IssueComment
+---@param item IssueConversationItem
 ---@param key string
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.add_reaction(issue, comment, key, on_done)
-	if tostring(comment.id) == "__body__" then
+function M.add_reaction(issue, item, key, on_done)
+	if item.kind == "description" then
 		on_done(false, "Reactions on the issue description are not supported on GitLab")
 		return nil
 	end
+	if item.kind ~= "comment" then
+		on_done(false, "Reactions are only supported on comments")
+		return nil
+	end
+	local comment = item.entity
+	---@cast comment IssueComment
 	local issue_key = tostring(issue.key or "")
 	return require("atlas.issues.providers.gitlab.api.notes").add_reaction(issue_key, comment.id, key, on_done)
 end
 
+---@param view AtlasGitLabIssuesViewConfig
+---@return AtlasGitLabIssuesViewConfig
+local function resolve_cur_repo(view)
+	if not view.current_repo then
+		return view
+	end
+	local root = git.repo_root()
+	local info = git.local_repository(root)
+	if not info then
+		return view
+	end
+	local resolved = vim.tbl_extend("force", {}, view)
+	resolved.project = info.slug
+	resolved.scope = view.scope or "all"
+	return resolved
+end
+
 ---@return AtlasGitLabIssuesViewConfig[]
 function M.views()
-	local cfg = require("atlas.providers.gitlab.client").issues.gitlab_config()
-	local views = cfg.views
+	local cfg = config.domain_options("gitlab", "issues") or {}
+	local views = type(cfg.views) == "table" and #cfg.views > 0 and cfg.views
 		or {
 			{ name = "Assigned", key = "1", scope = "assigned_to_me", state = "opened" },
 			{ name = "Created", key = "2", scope = "created_by_me", state = "opened" },
 		}
-	return require("atlas.ui.shared.bookmarks_view").append_to_views(views, cfg.bookmarks, "S", "Search")
+	local resolved = {}
+	for i, view in ipairs(views) do
+		resolved[i] = resolve_cur_repo(view)
+	end
+	return resolved
 end
 
 local renderer = require("atlas.issues.providers.gitlab.ui.renderer")
@@ -275,6 +301,7 @@ return {
 			fetch_user = require("atlas.issues.providers.gitlab.api.users").get_user,
 			fetch_issues = M.fetch_issues,
 			fetch_issue = M.fetch_issue,
+			update_description = M.update_description,
 			views = M.views,
 		},
 		comments = {
@@ -287,11 +314,7 @@ return {
 			delete_comment = M.delete_comment,
 			add_reaction = M.add_reaction,
 		},
-		notifications = {
-			fetch = notifications_api.fetch,
-			mark_read = notifications_api.mark_read,
-			mark_done = notifications_api.mark_done,
-		},
+		notifications = notifications_api,
 		actions = require("atlas.issues.providers.gitlab.actions"),
 		ui = {
 			setup = require("atlas.issues.providers.gitlab.highlights").setup,

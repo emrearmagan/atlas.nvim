@@ -1,31 +1,50 @@
 -- Example:
 --   require("atlas").setup({
+--     providers = {
+--       ---@type AtlasBitbucketProviderConfig
+--       bitbucket = {
+--         user  = vim.env.BITBUCKET_USER,
+--         token = vim.env.BITBUCKET_TOKEN,
+--         cache_ttl = 300,
+--       },
+--     },
 --     pulls = {
---       providers = {
---         bitbucket = {
---           user  = vim.env.BITBUCKET_USER,
---           token = vim.env.BITBUCKET_TOKEN,
---           cache_ttl = 300,
---           views = {
---             {
---               name = "All",
---               key  = "1",
---               repos = {
---                 { workspace = "acme", repo = "core" },
---                 { workspace = "acme", repo = "web" },
---               },
+--       ---@type AtlasBitbucketPullsConfig
+--       bitbucket = {
+--         views = {
+--           {
+--             name = "All",
+--             key  = "1",
+--             targets = {
+--               { workspace = "acme", repo = "core" },
+--               { workspace = "acme", project = "WEB" },
 --             },
---             {
---               name = "Reviewing",
---               key  = "2",
---               layout = "compact",
---               repos = { { workspace = "acme", repo = "core" } },
---               filter = function(pr, ctx)
---                 if ctx.user == nil then return true end
---                 for _, reviewer in ipairs(pr.reviewers or {}) do
---                   if reviewer.username == ctx.user.username then return true end
---                 end
---                 return false
+--           },
+--           {
+--             name = "Reviewing",
+--             key  = "2",
+--             layout = "compact",
+--             targets = { { workspace = "acme", project = "CORE" } },
+--             filter = function(pr, ctx)
+--               if ctx.user == nil then return true end
+--               for _, reviewer in ipairs(pr.reviewers or {}) do
+--                 if reviewer.username == ctx.user.username then return true end
+--               end
+--               return false
+--             end,
+--           },
+--         },
+--         bookmarks = {
+--           -- key   = "S",      -- default
+--           -- label = "Search", -- default
+--           items = {
+--             ["Core"] = {
+--               targets = {
+--                 { workspace = "acme", repo = "standalone" },
+--                 { workspace = "acme", project = "CORE" },
+--               },
+--               filter = function(pr)
+--                 return pr.state ~= "draft"
 --               end,
 --             },
 --           },
@@ -34,17 +53,37 @@
 --     },
 --   })
 
----@class AtlasBitbucketRepoRef
+---@class AtlasBitbucketRepoTarget
 ---@field workspace string
 ---@field repo string
 
+---@class AtlasBitbucketProjectTarget
+---@field workspace string
+---@field project string
+
+---@alias AtlasBitbucketTarget AtlasBitbucketRepoTarget|AtlasBitbucketProjectTarget
+
 ---@class AtlasBitbucketViewConfig : AtlasPullsViewConfig
----@field repos AtlasBitbucketRepoRef[]|nil
+---@field targets AtlasBitbucketTarget[]
 ---@field filter? fun(pr: PullRequest, ctx: { user: PullsUser|nil }): boolean|nil
 ---@field status? "OPEN"|"MERGED"|"DECLINED"|"SUPERSEDED"
+---@field current_repo boolean|nil
 
----@class AtlasBitbucketConfig
+---@class AtlasBitbucketBookmarkConfig
+---@field layout "compact"|"grouped"|"plain"|nil
+---@field targets AtlasBitbucketTarget[]
+---@field filter? fun(pr: PullRequest, ctx: { user: PullsUser|nil }): boolean|nil
+
+---@class AtlasBitbucketBookmarksConfig
+---@field key string|nil    -- default "S"
+---@field label string|nil  -- default "Search"
+---@field items table<string, AtlasBitbucketBookmarkConfig>|nil
+
+---@class AtlasBitbucketProviderConfig
 ---@field user string
 ---@field token string
 ---@field cache_ttl number|nil
+
+---@class AtlasBitbucketPullsConfig
 ---@field views AtlasBitbucketViewConfig[]|nil
+---@field bookmarks AtlasBitbucketBookmarksConfig|nil

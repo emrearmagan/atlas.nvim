@@ -92,7 +92,7 @@ local function finder(request)
 				return
 			end
 			if fetch_err then
-				notify.error(fetch_err)
+				notify.error(fetch_err, { vim_notify = true })
 			end
 			for _, item in ipairs(result) do
 				add(entry(request, item))

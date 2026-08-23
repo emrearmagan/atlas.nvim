@@ -2,13 +2,13 @@ local M = {}
 
 local actions = require("atlas.pulls.actions")
 local action_utils = require("atlas.pulls.actions.utils")
-local cli = require("atlas.providers.github.client").pulls
+local cli = require("atlas.providers.github.client")
 local notes = require("atlas.pulls.notes")
 local picker = require("atlas.picker")
 local pullrequests = require("atlas.pulls.providers.github.api.pullrequests")
-local statusline = require("atlas.ui.statusline")
+local core_notify = require("atlas.core.notify")
 local github_mapping = require("atlas.providers.github.mapping")
-local users_api = require("atlas.providers.github.users").new("pulls")
+local users_api = require("atlas.providers.github.users")
 
 ---@param ctx AtlasPullActionContext
 ---@return boolean
@@ -27,8 +27,11 @@ end
 ---@param message string
 ---@param duration integer|nil
 local function notify(ctx, level, message, duration)
-	local callback = ctx.notify or statusline.notify
-	callback(level, message, duration)
+	if ctx.notify then
+		ctx.notify(level, message, duration)
+		return
+	end
+	core_notify.show(level, message, { timeout = duration })
 end
 
 ---@type AtlasPullAction[]
@@ -172,92 +175,106 @@ local function edit_assignees(ctx, done)
 	end
 
 	local slug = repo_slug(ctx)
-	notify(ctx, "loading", "Loading assignees...")
-	users_api.get_assignable_users(slug, nil, function(items, err)
-		if err then
-			notify(ctx, "error", string.format("Failed to load assignees: %s", tostring(err)))
-			done(nil, tostring(err))
-			return
-		end
-
-		items = type(items) == "table" and items or {}
-		if #items == 0 then
-			notify(ctx, "warn", "No assignees available")
-			done({ changed_pr = false, message = "No assignees available" }, nil)
-			return
-		end
-
-		local original = {}
-		local original_set = {}
-		for _, assignee in ipairs(pr.assignees or {}) do
-			local login = assignee.username
-			if login ~= "" and not original_set[login] then
-				original_set[login] = true
-				table.insert(original, { account_id = login, display_name = assignee.name, email = "" })
+	local function open_picker()
+		users_api.get_assignable_users(slug, nil, function(items, err)
+			if err then
+				notify(ctx, "error", string.format("Failed to load assignees: %s", tostring(err)))
+				done(nil, tostring(err))
+				return
 			end
-		end
-		notify(ctx, "success", "Assignees loaded", 1200)
 
-		picker.multi_select({
-			items = items,
-			selected = vim.deepcopy(original),
-			key = function(item)
-				return item.account_id
-			end,
-			format_item = function(item)
-				return string.format(
-					"@%s%s",
-					item.account_id,
-					item.display_name and item.display_name ~= item.account_id and (" — " .. item.display_name) or ""
-				)
-			end,
-			title = string.format("Assignees for PR #%s", tostring(pr.id or "")),
-			on_done = function(selected)
-				local selected_set = {}
-				for _, item in ipairs(selected) do
-					selected_set[item.account_id] = true
+			items = type(items) == "table" and items or {}
+			if #items == 0 then
+				notify(ctx, "warn", "No assignees available")
+				done({ changed_pr = false, message = "No assignees available" }, nil)
+				return
+			end
+
+			local original = {}
+			local original_set = {}
+			for _, assignee in ipairs(pr.assignees or {}) do
+				local login = assignee.username
+				if login ~= "" and not original_set[login] then
+					original_set[login] = true
+					table.insert(original, { account_id = login, display_name = assignee.name, email = "" })
 				end
+			end
+			notify(ctx, "success", "Assignees loaded", 1200)
 
-				local adds, removes = {}, {}
-				for login in pairs(selected_set) do
-					if not original_set[login] then
-						table.insert(adds, login)
+			picker.multi_select({
+				items = items,
+				selected = vim.deepcopy(original),
+				key = function(item)
+					return item.account_id
+				end,
+				format_item = function(item)
+					return string.format(
+						"@%s%s",
+						item.account_id,
+						item.display_name and item.display_name ~= item.account_id and (" — " .. item.display_name)
+							or ""
+					)
+				end,
+				title = string.format("Assignees for PR #%s", tostring(pr.id or "")),
+				on_done = function(selected)
+					local selected_set = {}
+					for _, item in ipairs(selected) do
+						selected_set[item.account_id] = true
 					end
-				end
-				for login in pairs(original_set) do
-					if not selected_set[login] then
-						table.insert(removes, login)
+
+					local adds, removes = {}, {}
+					for login in pairs(selected_set) do
+						if not original_set[login] then
+							table.insert(adds, login)
+						end
 					end
-				end
+					for login in pairs(original_set) do
+						if not selected_set[login] then
+							table.insert(removes, login)
+						end
+					end
 
-				if #adds == 0 and #removes == 0 then
-					done({ changed_pr = false, message = "No changes" }, nil)
-					return
-				end
-
-				local args = { "pr", "edit", tostring(pr.id), "--repo", slug }
-				for _, login in ipairs(adds) do
-					table.insert(args, "--add-assignee")
-					table.insert(args, login)
-				end
-				for _, login in ipairs(removes) do
-					table.insert(args, "--remove-assignee")
-					table.insert(args, login)
-				end
-
-				notify(ctx, "loading", string.format("Updating assignees on PR #%s...", tostring(pr.id or "")))
-				cli.gh(args, function(_, edit_err)
-					if edit_err then
-						notify(ctx, "error", string.format("Update assignees failed: %s", tostring(edit_err)))
-						done(nil, tostring(edit_err))
+					if #adds == 0 and #removes == 0 then
+						done({ changed_pr = false, message = "No changes" }, nil)
 						return
 					end
-					local message = string.format("+%d / -%d assignee(s)", #adds, #removes)
-					notify(ctx, "success", message, 1200)
-					done({ changed_pr = true, message = message }, nil)
-				end)
-			end,
-		})
+
+					local args = { "pr", "edit", tostring(pr.id), "--repo", slug }
+					for _, login in ipairs(adds) do
+						table.insert(args, "--add-assignee")
+						table.insert(args, login)
+					end
+					for _, login in ipairs(removes) do
+						table.insert(args, "--remove-assignee")
+						table.insert(args, login)
+					end
+
+					notify(ctx, "loading", string.format("Updating assignees on PR #%s...", tostring(pr.id or "")))
+					cli.gh(args, function(_, edit_err)
+						if edit_err then
+							notify(ctx, "error", string.format("Update assignees failed: %s", tostring(edit_err)))
+							done(nil, tostring(edit_err))
+							return
+						end
+						local message = string.format("+%d / -%d assignee(s)", #adds, #removes)
+						notify(ctx, "success", message, 1200)
+						done({ changed_pr = true, message = message }, nil)
+					end)
+				end,
+			})
+		end)
+	end
+
+	notify(ctx, "loading", "Loading assignees...")
+	pullrequests.get_pr(pr.workspace, pr.repo, pr.id, function(details, err)
+		if err or details == nil then
+			local message = tostring(err or "Failed to load pull request")
+			notify(ctx, "error", "Failed to load assignees: " .. message)
+			done(nil, message)
+			return
+		end
+		pr = details
+		open_picker()
 	end)
 end
 ---@param ctx AtlasPullActionContext
@@ -479,25 +496,35 @@ local function toggle_subscription(ctx, done)
 		done(nil, "No PR selected")
 		return
 	end
-	local raw = pr._raw
-	local node_id = github_mapping.node_id(raw) or ""
-	local next_state = pr.is_subscribed == true and "UNSUBSCRIBED" or "SUBSCRIBED"
-	local gql =
-		"mutation($id: ID!, $state: SubscriptionState!) { updateSubscription(input: { subscribableId: $id, state: $state }) { subscribable { ... on PullRequest { viewerSubscription } } } }"
-	notify(ctx, "loading", pr.is_subscribed and "Unsubscribing..." or "Subscribing...")
-	cli.gh(
-		{ "api", "graphql", "-F", "id=" .. node_id, "-f", "state=" .. next_state, "-f", "query=" .. gql },
-		function(_, err)
-			if err then
-				notify(ctx, "error", tostring(err))
-				done(nil, tostring(err))
-				return
-			end
-			pr.is_subscribed = (next_state == "SUBSCRIBED")
-			notify(ctx, "success", pr.is_subscribed and "Subscribed" or "Unsubscribed", 1200)
-			done({ changed_pr = true, message = pr.is_subscribed and "Subscribed" or "Unsubscribed" }, nil)
+	pullrequests.get_pr(pr.workspace, pr.repo, pr.id, function(details, fetch_err)
+		if fetch_err or details == nil then
+			local message = tostring(fetch_err or "Failed to load pull request")
+			notify(ctx, "error", message)
+			done(nil, message)
+			return
 		end
-	)
+		local node_id = github_mapping.node_id(details._raw) or ""
+		local next_state = details.is_subscribed == true and "UNSUBSCRIBED" or "SUBSCRIBED"
+		local gql =
+			"mutation($id: ID!, $state: SubscriptionState!) { updateSubscription(input: { subscribableId: $id, state: $state }) { subscribable { ... on PullRequest { viewerSubscription } } } }"
+		notify(ctx, "loading", details.is_subscribed and "Unsubscribing..." or "Subscribing...")
+		cli.gh(
+			{ "api", "graphql", "-F", "id=" .. node_id, "-f", "state=" .. next_state, "-f", "query=" .. gql },
+			function(_, err)
+				if err then
+					notify(ctx, "error", tostring(err))
+					done(nil, tostring(err))
+					return
+				end
+				details.is_subscribed = (next_state == "SUBSCRIBED")
+				notify(ctx, "success", details.is_subscribed and "Subscribed" or "Unsubscribed", 1200)
+				done({
+					changed_pr = true,
+					message = details.is_subscribed and "Subscribed" or "Unsubscribed",
+				}, nil)
+			end
+		)
+	end)
 end
 
 register({

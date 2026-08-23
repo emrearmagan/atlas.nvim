@@ -3,6 +3,7 @@ local M = {}
 local icons = require("atlas.ui.shared.icons")
 local state = require("atlas.issues.state")
 local utils = require("atlas.ui.shared.utils")
+local STAR_ICON, STAR_ICON_HL = icons.general("star")
 
 ---@return table[]
 local function plain_columns()
@@ -73,6 +74,9 @@ local function issue_to_row(issue, is_child)
 	local renderer = require("atlas.issues.providers.github.ui.renderer")
 	local raw = issue._raw or {}
 	local row = renderer.format_row(issue, is_child)
+	if issue.is_starred then
+		row.name = STAR_ICON .. " " .. row.name
+	end
 	row.comments = tostring(tonumber(raw.comment_count) or 0)
 	row._item = { kind = "issue", key = issue.key, _issue = issue }
 	row._issue = issue
@@ -130,7 +134,16 @@ end
 
 ---@return table
 local function compact_blank_row()
-	return { icon = "", name = "", comments = "", assignee = "", reporter = "", created = "", updated = "", status = "" }
+	return {
+		icon = "",
+		name = "",
+		comments = "",
+		assignee = "",
+		reporter = "",
+		created = "",
+		updated = "",
+		status = "",
+	}
 end
 
 ---@param issue Issue
@@ -140,7 +153,7 @@ local function compact_issue_to_row(issue)
 	local row = issue_to_row(issue, false)
 	local number = tonumber(raw.number) or tostring(issue.key or ""):match("#(%d+)$")
 	local key_label = number and string.format("#%s", tostring(number)) or tostring(issue.key or "")
-	row.name = string.format("%s %s", key_label, issue.summary or "")
+	row.name = string.format("%s%s %s", issue.is_starred and (STAR_ICON .. " ") or "", key_label, issue.title or "")
 	row._compact_key_label = key_label
 	row.created = utils.relative_time(raw.created_at)
 	row.updated = utils.relative_time(raw.updated_at)
@@ -214,12 +227,15 @@ local function cell_hl(row, col, ctx)
 	if row.kind == "meta" then
 		return { { start_col = 0, end_col = #ctx.padded, hl_group = "AtlasTextMuted" } }
 	end
-
 	if col.key == "name" and type(row._compact_key_label) == "string" then
 		local key_label = row._compact_key_label
 		local s, e = ctx.text:find(key_label, 1, true)
 		if s and e then
-			local spans = { { start_col = s - 1, end_col = e, hl_group = "AtlasGHIssueKey" } }
+			local spans = {}
+			if row._issue and row._issue.is_starred then
+				table.insert(spans, { start_col = 0, end_col = #STAR_ICON, hl_group = STAR_ICON_HL })
+			end
+			table.insert(spans, { start_col = s - 1, end_col = e, hl_group = "AtlasGHIssueKey" })
 			local title_start = e + 2
 			if title_start <= #ctx.text then
 				table.insert(spans, { start_col = title_start - 1, end_col = #ctx.text, hl_group = "Normal" })
@@ -236,7 +252,12 @@ local function cell_hl(row, col, ctx)
 		return { { start_col = 0, end_col = #ctx.padded, hl_group = "AtlasTextMuted" } }
 	end
 
-	return require("atlas.issues.providers.github.ui.renderer").cell_hl(row, col, ctx)
+	local spans = require("atlas.issues.providers.github.ui.renderer").cell_hl(row, col, ctx)
+	if col.key == "name" and row._issue and row._issue.is_starred then
+		spans = spans or {}
+		table.insert(spans, 1, { start_col = 0, end_col = #STAR_ICON, hl_group = STAR_ICON_HL })
+	end
+	return spans
 end
 
 ---@param issue_groups IssuesGroup[]|nil

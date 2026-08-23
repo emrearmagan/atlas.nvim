@@ -4,16 +4,24 @@
 
 -- Pulls Provider Config
 
+---@alias AtlasGitTransport "https"|"ssh"
+
 ---@class AtlasPullsViewConfig
 ---@field name string
 ---@field key string|nil
----@field layout "compact"|"plain"|nil
+---@field layout "compact"|"grouped"|"plain"|nil
+---@field _kind "bookmarks"|"starred"|nil
+---@field _bookmarks table<string, any>|nil
+---@field _starred { domain: "pulls", provider: string }|nil
 
 ---@class AtlasIssuesViewConfig
 ---@field name string
 ---@field key string|nil
 ---@field layout "plain"|"compact"|nil
 ---@field search string|nil
+---@field _kind "bookmarks"|"starred"|nil
+---@field _bookmarks table<string, any>|nil
+---@field _starred { domain: "issues", provider: string }|nil
 
 ---@class AtlasPullsRepoConfig
 ---@field settings table<string, AtlasPullsRepoSettings>|nil
@@ -31,6 +39,9 @@
 ---@field initial_focus "explorer"|"diff"|nil
 ---@field ignore string[]|nil
 
+---@class AtlasPullsDiffReviewPanelConfig
+---@field height integer|nil
+
 ---@alias AtlasPullsDiffOpenCommand "AtlasDiff"|"DiffviewOpen"|"CodeDiff"
 
 ---@class AtlasPullsDiffConfig
@@ -41,6 +52,7 @@
 ---@field show_review_panel boolean|nil
 ---@field comment_display "virtual_lines"|"virtual_text"|nil Initial comment and note display mode.
 ---@field explorer AtlasPullsDiffExplorerConfig|nil
+---@field review_panel AtlasPullsDiffReviewPanelConfig|nil
 
 ---@class AtlasPullsCustomActionContext
 ---@field repo_path string|nil
@@ -56,17 +68,27 @@
 
 -- Configs
 
----@alias AtlasPullsProviders table<string, AtlasBitbucketConfig|AtlasGitHubConfig|AtlasGitLabPullsConfig|AtlasGiteaForgejoPullsConfig|table>
----@alias AtlasIssuesProviders table<string, AtlasJiraIssuesConfig|AtlasGitHubIssuesConfig|AtlasGitLabIssuesConfig|AtlasGiteaForgejoIssuesConfig|table>
+---@class AtlasProvidersConfig
+---@field bitbucket AtlasBitbucketProviderConfig|nil
+---@field github AtlasGitHubProviderConfig|nil
+---@field gitlab AtlasGitLabProviderConfig|nil
+---@field gitea AtlasGiteaProviderConfig|nil
+---@field forgejo AtlasForgejoProviderConfig|nil
+---@field jira AtlasJiraProviderConfig|nil
 
 ---@class AtlasPullsConfig
+---@field git_transport AtlasGitTransport|nil Git transport for Atlas-managed repositories (default: "ssh").
 ---@field repo_config AtlasPullsRepoConfig|nil
 ---@field diff AtlasPullsDiffConfig|nil
 ---@field delete_notes boolean|nil
 ---@field default_merge_method "merge"|"squash"|nil
 ---@field default_delete_branch boolean|nil
 ---@field custom_actions AtlasPullsCustomAction[]|nil
----@field providers AtlasPullsProviders|nil
+---@field bitbucket AtlasBitbucketPullsConfig|nil
+---@field github AtlasGitHubPullsConfig|nil
+---@field gitlab AtlasGitLabPullsConfig|nil
+---@field gitea AtlasGiteaPullsConfig|nil
+---@field forgejo AtlasForgejoPullsConfig|nil
 
 ---@class AtlasIssuesCustomActionContext
 ---@field issue Issue|nil
@@ -83,7 +105,11 @@
 ---@field max_results number|nil
 ---@field with_relationships boolean|nil
 ---@field custom_actions AtlasIssuesCustomAction[]|nil
----@field providers AtlasIssuesProviders|nil
+---@field github AtlasGitHubIssuesConfig|nil
+---@field gitlab AtlasGitLabIssuesConfig|nil
+---@field gitea AtlasGiteaIssuesConfig|nil
+---@field forgejo AtlasForgejoIssuesConfig|nil
+---@field jira AtlasJiraIssuesConfig|nil
 
 -- Config
 
@@ -94,11 +120,14 @@
 
 ---@class AtlasConfig
 ---@field ui AtlasUIConfig|nil
+---@field providers AtlasProvidersConfig|nil
 ---@field pulls AtlasPullsConfig|nil
 ---@field issues AtlasIssuesConfig|nil
 ---@field keymaps AtlasKeymapsConfig|nil  -- see core/keymaps.lua for type
 
 local M = {}
+
+local notify = require("atlas.core.notify")
 
 ---@type AtlasConfig
 M.options = {
@@ -108,6 +137,7 @@ M.options = {
 		listed_buffer = false,
 	},
 	pulls = {
+		git_transport = "ssh",
 		delete_notes = false,
 		default_merge_method = "merge",
 		default_delete_branch = false,
@@ -118,6 +148,9 @@ M.options = {
 			compact_context_lines = 3,
 			show_review_panel = false,
 			comment_display = "virtual_lines",
+			review_panel = {
+				height = 15,
+			},
 			explorer = {
 				grouped = true,
 				hidden = false,
@@ -157,6 +190,7 @@ M.options = {
 				mark_done = "d",
 			},
 			toggle_subscription = "gS",
+			toggle_star = "*",
 			refresh = "r",
 			refresh_view = "R",
 			open_actions = "A",
@@ -165,6 +199,13 @@ M.options = {
 			copy_url = "Y",
 			show_details = "K",
 			search = "?",
+		},
+		picker = {
+			next_item = { "<Down>", "<C-n>", "<C-j>" },
+			previous_item = { "<Up>", "<C-p>", "<C-k>" },
+			select = { "<CR>", "<C-s>" },
+			toggle = "<Tab>",
+			close = { "q", "<Esc>" },
 		},
 		pulls = {
 			open_diff = "gd",
@@ -194,7 +235,7 @@ M.options = {
 				},
 				diff = {
 					toggle_layout = "t",
-					toggle_compact = "u",
+					toggle_compact = "gc",
 					next_hunk = "]h",
 					previous_hunk = "[h",
 					toggle_review_panel = "gR",
@@ -210,9 +251,6 @@ M.options = {
 					add_note = "<leader>n",
 					toggle_resolved = "x",
 				},
-			},
-			pipelines = {
-				open = "gd",
 			},
 			filters = {
 				open = "gpo",
@@ -231,11 +269,69 @@ M.options = {
 	},
 }
 
+---@param id AtlasProviderId
+---@return table|nil
+function M.provider_options(id)
+	local providers = type(M.options.providers) == "table" and M.options.providers or nil
+	local options = providers and providers[id] or nil
+	return type(options) == "table" and options or nil
+end
+
+---@param id AtlasProviderId
+---@param domain "pulls"|"issues"
+---@return table|nil
+function M.domain_options(id, domain)
+	local section = type(M.options[domain]) == "table" and M.options[domain] or nil
+	local options = section and section[id] or nil
+	return type(options) == "table" and options or nil
+end
+
 -- Setup
+
+--TODO: Remove with 0.8.0
+local function migrate_legacy(opts)
+	local migrated = false
+	opts.providers = type(opts.providers) == "table" and opts.providers or {}
+
+	for _, domain in ipairs({ "pulls", "issues" }) do
+		local section = type(opts[domain]) == "table" and opts[domain] or nil
+		local legacy = section and section.providers or nil
+		if type(legacy) == "table" then
+			migrated = true
+			section.providers = nil
+			for id, legacy_config in pairs(legacy) do
+				if type(legacy_config) == "table" then
+					local provider_config = type(opts.providers[id]) == "table" and opts.providers[id] or {}
+					local domain_config = type(section[id]) == "table" and section[id] or {}
+					opts.providers[id] = provider_config
+					section[id] = domain_config
+
+					for key, value in pairs(legacy_config) do
+						local domain_key = key == "views"
+							or key == "bookmarks"
+							or ((id == "gitea" or id == "forgejo") and domain == "pulls" and key == "draft_prefix")
+						if domain_key then
+							if domain_config[key] == nil then
+								domain_config[key] = value
+							end
+						elseif provider_config[key] == nil then
+							provider_config[key] = value
+						end
+					end
+				end
+			end
+		end
+	end
+
+	if migrated then
+		notify.warn("Deprecated Config", { vim_notify = true })
+	end
+	return opts
+end
 
 ---@param opts AtlasConfig|table|nil
 function M.setup(opts)
-	local resolved = opts or {}
+	local resolved = migrate_legacy(vim.deepcopy(opts or {}))
 	M.options = vim.tbl_deep_extend("force", M.options, resolved)
 	if M.options.ui.global_statusline ~= false then
 		vim.opt.laststatus = 3

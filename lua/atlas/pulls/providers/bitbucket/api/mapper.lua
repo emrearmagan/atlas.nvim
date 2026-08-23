@@ -99,8 +99,9 @@ local function link_href(links, key)
 end
 
 ---@param repository table|nil
----@return string
-local function clone_url(repository)
+---@return string|nil https_url
+---@return string|nil ssh_url
+local function clone_urls(repository)
 	repository = as_table(repository) or {}
 	local links = as_table(repository.links) or {}
 	local https_url, ssh_url
@@ -113,14 +114,39 @@ local function clone_url(repository)
 			ssh_url = href
 		end
 	end
-	if https_url and https_url ~= "" then
-		return https_url
+	return https_url ~= "" and https_url or nil, ssh_url ~= "" and ssh_url or nil
+end
+
+---@param participant table
+---@return "approved"|"changes_requested"|nil
+local function participant_decision(participant)
+	local state = tostring(participant.state or ""):lower()
+	if participant.approved == true or state == "approved" then
+		return "approved"
 	end
-	if ssh_url and ssh_url ~= "" then
-		return ssh_url
+	if state == "changes_requested" then
+		return "changes_requested"
 	end
-	local full_name = tostring(repository.full_name or "")
-	return full_name ~= "" and string.format("https://bitbucket.org/%s.git", full_name) or ""
+	return nil
+end
+
+---@param participant table
+---@param decision "approved"|"changes_requested"|"pending"
+---@param role "reviewer"|"participant"
+---@return PullsReviewer
+local function to_reviewer(participant, decision, role)
+	local user = as_table(participant.user) or {}
+	local provider_id = tostring(user.uuid or "")
+	local username = tostring(user.nickname or user.username or "")
+	return {
+		id = tostring(user.account_id or user.uuid or user.id or ""),
+		provider_id = provider_id ~= "" and provider_id or nil,
+		name = tostring(user.display_name or user.name or username),
+		username = username,
+		nickname = username ~= "" and username or nil,
+		decision = decision,
+		role = role,
+	}
 end
 
 ---@param participants table[]|nil
@@ -128,25 +154,12 @@ end
 function M.to_reviewers(participants)
 	local reviewers = {}
 	for _, participant in ipairs(participants or {}) do
-		if tostring(participant.role or ""):upper() == "REVIEWER" then
-			local user = as_table(participant.user) or {}
-			local provider_id = tostring(user.uuid or "")
-			local state = tostring(participant.state or ""):lower()
-			local decision = "pending"
-			if participant.approved == true or state == "approved" then
-				decision = "approved"
-			elseif state == "changes_requested" then
-				decision = "changes_requested"
-			end
-			local username = tostring(user.nickname or user.username or "")
-			table.insert(reviewers, {
-				id = tostring(user.account_id or user.uuid or user.id or ""),
-				provider_id = provider_id ~= "" and provider_id or nil,
-				name = tostring(user.display_name or user.name or username),
-				username = username,
-				nickname = username ~= "" and username or nil,
-				decision = decision,
-			})
+		local role = tostring(participant.role or ""):upper()
+		local decision = participant_decision(participant)
+		if role == "REVIEWER" then
+			table.insert(reviewers, to_reviewer(participant, decision or "pending", "reviewer"))
+		elseif role == "PARTICIPANT" and decision then
+			table.insert(reviewers, to_reviewer(participant, decision, "participant"))
 		end
 	end
 	return reviewers
@@ -167,13 +180,16 @@ local function normalize_pull(item, workspace, repo)
 	local source_repository = as_table(source.repository) or {}
 	local destination_branch = as_table(destination.branch) or {}
 	local destination_commit = as_table(destination.commit) or {}
+	local destination_repository = as_table(destination.repository) or {}
+	local source_https_url, source_ssh_url = clone_urls(source_repository)
+	local destination_https_url, destination_ssh_url = clone_urls(destination_repository)
 	local participants = as_table(pr.participants)
 	local repo_full_name = (workspace ~= "" and repo ~= "") and string.format("%s/%s", workspace, repo) or ""
 
 	return {
 		id = tonumber(pr.id) or 0,
 		title = tostring(pr.title or ""),
-		description = tostring(pr.description or ""),
+		description = type(pr.description) == "string" and pr.description or nil,
 		comments = tonumber(pr.comment_count) or 0,
 		tasks = tonumber(pr.task_count) or 0,
 		author = {
@@ -200,12 +216,15 @@ local function normalize_pull(item, workspace, repo)
 		destination = {
 			branch = tostring(destination_branch.name or ""),
 			commit_hash = tostring(destination_commit.hash or ""),
+			https_url = destination_https_url,
+			ssh_url = destination_ssh_url,
 		},
 		source = {
 			branch = tostring(source_branch.name or ""),
 			commit_hash = tostring(source_commit.hash or ""),
 			repo_full_name = tostring(source_repository.full_name or ""),
-			clone_url = clone_url(source_repository),
+			https_url = source_https_url,
+			ssh_url = source_ssh_url,
 		},
 		close_source_branch = pr.close_source_branch == true,
 		created_on = tostring(pr.created_on or ""),
@@ -219,7 +238,7 @@ end
 
 ---@param raw table
 ---@return PullRequest
-local function to_pull_request(raw)
+local function map_summary(raw)
 	local workspace = tostring(raw.workspace or "")
 	local repo = tostring(raw.repo or "")
 	local repo_full_name = tostring(raw.repo_full_name or string.format("%s/%s", workspace, repo))
@@ -234,7 +253,6 @@ local function to_pull_request(raw)
 	return {
 		id = raw.id,
 		title = tostring(raw.title or ""),
-		description = tostring(raw.description or ""),
 		state = map_state(raw.state, raw.is_draft == true),
 		author = {
 			name = tostring(author.name or author.display_name or "Unknown"),
@@ -244,11 +262,14 @@ local function to_pull_request(raw)
 		source = {
 			branch = source_branch,
 			commit_hash = tostring(source.commit_hash or ""),
-			fetch_remote = source_is_fork and source.clone_url or nil,
+			https_url = source_is_fork and tostring(source.https_url or "") or nil,
+			ssh_url = source_is_fork and tostring(source.ssh_url or "") or nil,
 		},
 		destination = {
 			branch = tostring((raw.destination or {}).branch or ""),
 			commit_hash = tostring((raw.destination or {}).commit_hash or ""),
+			https_url = (raw.destination or {}).https_url,
+			ssh_url = (raw.destination or {}).ssh_url,
 		},
 		comments_count = tonumber(raw.comments) or 0,
 		tasks_count = tonumber(raw.tasks) or 0,
@@ -278,10 +299,22 @@ function M.to_pull_requests_list(result, workspace, repo)
 	local rp = tostring(repo or "")
 
 	for _, item in ipairs(payload.values or {}) do
-		table.insert(out, to_pull_request(normalize_pull(item, ws, rp)))
+		table.insert(out, map_summary(normalize_pull(item, ws, rp)))
 	end
 
 	return out
+end
+
+---@param raw table
+---@param workspace string
+---@param repo string
+---@return PullRequestDetails
+function M.to_pull_request_details(raw, workspace, repo)
+	local normalized = normalize_pull(raw, workspace, repo)
+	local pr = map_summary(normalized)
+	pr.description = tostring(normalized.description or "")
+	pr.reviewers = normalized.reviewers or {}
+	return pr
 end
 
 ---@param user table|nil
@@ -307,6 +340,7 @@ function M.to_activities_list(result)
 		local entry = as_table(item) or {}
 		local update = as_table(entry.update)
 		local approval = as_table(entry.approval)
+		local changes_request = as_table(entry.changes_request)
 		local comment = as_table(entry.comment)
 
 		if update ~= nil then
@@ -322,6 +356,13 @@ function M.to_activities_list(result)
 				date = tostring(approval.date or ""),
 				actor = actor(approval.user),
 				label = "approved",
+			})
+		elseif changes_request ~= nil then
+			table.insert(entries, {
+				kind = "changes_requested",
+				date = tostring(changes_request.date or ""),
+				actor = actor(changes_request.user),
+				label = "requested changes",
 			})
 		elseif comment ~= nil then
 			local content = as_table(comment.content) or {}
@@ -367,27 +408,6 @@ function M.to_commits_list(result)
 	end
 
 	return entries
-end
-
----@param prs PullRequest[]
----@return PullsGroup[]
-function M.to_pull_request_groups(prs)
-	local by_repo = {}
-	local groups = {}
-	for _, pr in ipairs(prs or {}) do
-		local key = pr.repo_full_name or ""
-		local group = by_repo[key]
-		if not group then
-			group = {
-				repo = { id = key, name = key, owner = pr.workspace, repo_name = pr.repo },
-				prs = {},
-			}
-			by_repo[key] = group
-			table.insert(groups, group)
-		end
-		table.insert(group.prs, pr)
-	end
-	return groups
 end
 
 ---@param raw_inline table|nil

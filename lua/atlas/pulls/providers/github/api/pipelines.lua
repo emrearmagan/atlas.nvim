@@ -1,7 +1,7 @@
 local M = {}
 
 local providers = require("atlas.pulls.providers")
-local cli = require("atlas.providers.github.client").pulls
+local cli = require("atlas.providers.github.client")
 local json = require("atlas.core.json")
 
 ---@param url string|nil

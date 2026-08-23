@@ -1,5 +1,6 @@
 ---@class PullsPanelState
 ---@field current_pr PullRequest|nil
+---@field current_details PullRequestDetails|nil
 ---@field current_repo PullsRepo|nil
 ---@field current_tab string|nil
 ---@field line_map table<integer, table>
@@ -8,6 +9,7 @@
 ---@field header_loading boolean
 local M = {
 	current_pr = nil,
+	current_details = nil,
 	current_repo = nil,
 	current_tab = nil,
 	line_map = {},
@@ -18,6 +20,7 @@ local M = {
 
 function M.reset()
 	M.current_pr = nil
+	M.current_details = nil
 	M.current_repo = nil
 	M.current_tab = "overview"
 	M.line_map = {}

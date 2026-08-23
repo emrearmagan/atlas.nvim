@@ -7,8 +7,8 @@ local navbar = require("atlas.ui.components.navbar")
 local table_tree = require("atlas.ui.components.table_tree")
 local utils = require("atlas.ui.shared.utils")
 local statusline = require("atlas.ui.statusline")
-local helper = require("atlas.issues.ui.main.helper")
 local icons = require("atlas.ui.shared.icons")
+local STAR_ICON, STAR_ICON_HL = icons.general("star")
 
 ---@param view IssuesViewConfig|nil
 ---@return string
@@ -34,6 +34,31 @@ local function search_text(view)
 	end
 
 	local provider_id = state.provider and state.provider.id or ""
+	if provider_id == "gitea" or provider_id == "forgejo" then
+		if view._kind == "bookmarks" or view._kind == "starred" then
+			return ""
+		end
+		local repo = vim.trim(view.repo or "")
+		local parts = { repo ~= "" and ("repo:" .. repo) or "type:issues", "is:" .. (view.state or "open") }
+		local scope = view.scope or ""
+		if scope ~= "" and scope ~= "all" then
+			table.insert(parts, "scope:" .. scope)
+		end
+		local labels = vim.trim(view.labels or "")
+		if labels ~= "" then
+			table.insert(parts, "labels:" .. labels)
+		end
+		local extra_keys = vim.tbl_keys(view.extra_params or {})
+		table.sort(extra_keys)
+		for _, key in ipairs(extra_keys) do
+			table.insert(parts, key .. ":" .. tostring(view.extra_params[key]))
+		end
+		local search = vim.trim(view.search or "")
+		if search ~= "" then
+			table.insert(parts, search)
+		end
+		return table.concat(parts, " ")
+	end
 	if provider_id == "github" then
 		local search = tostring(view.search or "")
 		if search ~= "" and not search:lower():find("is:issue", 1, true) then
@@ -79,13 +104,16 @@ local function issue_to_row(issue, is_child)
 	if row_data == nil then
 		row_data = {
 			icon = "",
-			name = (issue.key or "") .. " " .. (issue.summary or ""),
+			name = (issue.key or "") .. " " .. (issue.title or ""),
 			assignee = (issue.assignee and issue.assignee.display_name) or "Unassigned",
 			reporter = (issue.reporter and issue.reporter.display_name) or "Unknown",
 			status = string.format(" %s ", issue.status or ""),
 		}
 	end
 
+	if issue.is_starred then
+		row_data.name = STAR_ICON .. " " .. row_data.name
+	end
 	row_data._item = { kind = "issue", key = issue.key, _issue = issue }
 	row_data._issue = issue
 	row_data.children = row_data.children or {}
@@ -298,111 +326,17 @@ function cell_hl(row, col, ctx)
 	if row.kind == "meta" then
 		return { { start_col = 0, end_col = #ctx.padded, hl_group = "AtlasTextMuted" } }
 	end
-
 	local provider = state.provider
 	local ui = provider and provider.capabilities.ui
+	local spans
 	if ui and ui.cell_hl then
-		return ui.cell_hl(row, col, ctx)
+		spans = ui.cell_hl(row, col, ctx)
 	end
-	return nil
-end
-
----@param issue Issue
----@return string[], AtlasUIHighlight[]
-local function generic_issue_popup_content(issue)
-	local summary = issue.summary or ""
-	local title = string.format(" %s: %s", issue.key or "", summary)
-	local parent_key = issue.parent and issue.parent.key or nil
-	local parent_summary = issue.parent and issue.parent.summary or nil
-
-	local lines = { title, "" }
-	---@type AtlasUIHighlight[]
-	local highlights = {
-		{ line = 0, start_col = 1, end_col = 1 + #(issue.key or ""), hl_group = helper.issue_hl(issue.key) },
-	}
-	if summary ~= "" then
-		table.insert(highlights, {
-			line = 0,
-			start_col = 3 + #(issue.key or ""),
-			end_col = #lines[1],
-			hl_group = helper.issue_title_hl(summary),
-		})
+	if col.key == "name" and row._issue and row._issue.is_starred then
+		spans = spans or {}
+		table.insert(spans, 1, { start_col = 0, end_col = #STAR_ICON, hl_group = STAR_ICON_HL })
 	end
-
-	---@param label string
-	---@param value string|nil
-	---@param value_hl string|nil
-	local function push(label, value, value_hl)
-		if value == nil or value == "" then
-			return
-		end
-		local line = #lines
-		table.insert(lines, string.format(" %-9s %s", label .. ":", value))
-		table.insert(highlights, { line = line, start_col = 1, end_col = 10, hl_group = "AtlasTextMuted" })
-		if value_hl ~= nil then
-			table.insert(highlights, {
-				line = line,
-				start_col = 11,
-				end_col = #lines[line + 1],
-				hl_group = value_hl,
-			})
-		end
-	end
-
-	local issue_type_name = issue.type and issue.type.name or nil
-	local _, issue_type_hl = icons.issues_type(issue_type_name)
-	local _, priority_hl = icons.issues_priority(issue.priority)
-	push("Type", issue_type_name, issue_type_hl)
-	push("Status", issue.status, helper.status_hl(issue.status_id))
-	push("Priority", issue.priority, priority_hl)
-
-	local assignee_name = issue.assignee and issue.assignee.display_name or nil
-	push("Assignee", assignee_name or "Unassigned", helper.person_hl(assignee_name))
-
-	local reporter_name = issue.reporter and issue.reporter.display_name or nil
-	if reporter_name then
-		push("Reporter", reporter_name, helper.person_hl(reporter_name))
-	end
-
-	push("Due", issue.duedate, "AtlasTextMuted")
-
-	if issue.story_points ~= nil then
-		push("Points", tostring(issue.story_points), "AtlasTextMuted")
-	end
-
-	if parent_key and parent_key ~= "" then
-		push("Parent", parent_key, helper.issue_hl(parent_key))
-		if parent_summary and parent_summary ~= "" then
-			local line = #lines
-			table.insert(lines, string.format("           %s", parent_summary))
-			table.insert(highlights, {
-				line = line,
-				start_col = 11,
-				end_col = #lines[line + 1],
-				hl_group = "Comment",
-			})
-		end
-	end
-
-	local content_width = 1
-	for _, line in ipairs(lines) do
-		content_width = math.max(content_width, vim.fn.strdisplaywidth(line))
-	end
-	lines[2] = " " .. ("━"):rep(content_width)
-	table.insert(highlights, { line = 1, start_col = 0, end_col = #lines[2], hl_group = "AtlasTextMuted" })
-
-	return lines, highlights
-end
-
----@param issue Issue
----@return string[], AtlasUIHighlight[]
-function M.issue_popup_content(issue)
-	local provider = state.provider
-	local ui = provider and provider.capabilities.ui
-	if ui and ui.issue_popup_content then
-		return ui.issue_popup_content(issue)
-	end
-	return generic_issue_popup_content(issue)
+	return spans
 end
 
 ---@param opts { width: integer, height: integer }
@@ -427,7 +361,7 @@ function M.render(opts)
 	end
 	statusline.set_items(statusline_items)
 
-	local views = provider and provider.capabilities.core.views() or {}
+	local views = provider and require("atlas.ui.shared.bookmarks_view").views(provider, "issues") or {}
 	local active = state.active_view
 	local active_id = view_id(active)
 
@@ -506,7 +440,14 @@ function M.render(opts)
 
 	if type(active) == "table" and active._kind == "bookmarks" then
 		append_search_text(lines, spans, search_text(state.current_view))
-		require("atlas.ui.shared.bookmarks_view").render(lines, spans, line_map, active._bookmarks or {}, opts.width)
+		require("atlas.ui.shared.bookmarks_view").render(
+			lines,
+			spans,
+			line_map,
+			active._bookmarks or {},
+			opts.width,
+			active._starred
+		)
 
 		local issues = state.issues or {}
 		local issue_groups = state.issue_tree or {}

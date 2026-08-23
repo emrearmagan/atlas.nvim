@@ -1,7 +1,7 @@
 local M = {}
 
 local config = require("atlas.config")
-local statusline = require("atlas.ui.statusline")
+local notify = require("atlas.core.notify")
 local status_spinner = require("atlas.ui.components.spinner")
 local state = require("atlas.issues.state")
 local layout = require("atlas.ui.layout")
@@ -9,6 +9,7 @@ local navigation = require("atlas.ui.navigation")
 local info_popup = require("atlas.ui.popups.info")
 local helper = require("atlas.issues.ui.main.helper")
 local requests = require("atlas.core.requests")
+local starred = require("atlas.core.starred")
 
 local active_requests = requests.new()
 local issue_reload_requests = requests.new()
@@ -100,7 +101,7 @@ local function fetch_current_user(provider, scope)
 		return provider.capabilities.core.fetch_user(done)
 	end, function(user, err)
 		if err then
-			statusline.notify("warn", string.format("Failed to fetch current user: %s", tostring(err)))
+			notify.warn(string.format("Failed to fetch current user: %s", tostring(err)))
 			return
 		end
 		state.current_user = user
@@ -115,6 +116,75 @@ end
 ---@return AtlasIssuesConfig
 local function issues_config()
 	return (config.options and config.options.issues) or {}
+end
+
+---@generic T
+---@param items T[]
+---@param is_starred fun(item: T): boolean
+---@return T[]
+local function starred_first(items, is_starred)
+	local first, rest = {}, {}
+	for _, item in ipairs(items) do
+		table.insert(is_starred(item) and first or rest, item)
+	end
+	vim.list_extend(first, rest)
+	return first
+end
+
+---@param issues Issue[]
+local function set_issues(issues)
+	local saved_by_ref = {}
+	local saved = starred.list("issues", state.provider.id) or {}
+	for _, item in ipairs(saved) do
+		saved_by_ref[item.ref] = true
+	end
+
+	for _, issue in ipairs(issues) do
+		issue.is_starred = saved_by_ref[starred.ref(issue, state.provider.id)] == true
+	end
+
+	local sorted = starred_first(issues, function(issue)
+		return issue.is_starred == true
+	end)
+	local groups = helper.build_issue_tree(sorted)
+	groups = starred_first(groups, function(group)
+		if group.issue.is_starred then
+			return true
+		end
+		for _, child in ipairs(group.children) do
+			if child.is_starred then
+				return true
+			end
+		end
+		return false
+	end)
+
+	state.issues = sorted
+	state.issue_tree = groups
+end
+
+---@param issue Issue
+---@return string|nil
+local function save_starred_issue(issue)
+	if not issue.is_starred then
+		return nil
+	end
+	local _, err = starred.add(issue, state.provider.id)
+	return err
+end
+
+---@param updated Issue
+---@return boolean, string|nil
+local function replace_issue(updated)
+	local issues = state.issues or {}
+	for index, current in ipairs(issues) do
+		if current.key == updated.key then
+			issues[index] = updated
+			set_issues(issues)
+			return true, save_starred_issue(updated)
+		end
+	end
+	return false, nil
 end
 
 ---@param opts { force_load: boolean }|nil
@@ -133,7 +203,7 @@ local function load_active_view(opts, on_done)
 	if target_view == nil then
 		state.is_loading = false
 		state.error = "No issues views configured"
-		statusline.notify("error", state.error)
+		notify.error(state.error)
 		render_if_active()
 		on_done()
 		return
@@ -163,7 +233,7 @@ local function load_active_view(opts, on_done)
 	state.issues = nil
 	state.issue_tree = nil
 	state.line_map = {}
-	statusline.notify("loading", "Loading issues...")
+	notify.loading("Loading issues...")
 	if not refresh_status_spinner:is_running() then
 		refresh_status_spinner:start()
 	end
@@ -184,14 +254,13 @@ local function load_active_view(opts, on_done)
 
 		if #issues > 0 then
 			state.error = nil
-			state.issues = issues
-			state.issue_tree = helper.build_issue_tree(issues)
-			statusline.notify("warn", string.format("Stopped at %d issues: %s", #issues, tostring(err)))
+			set_issues(issues)
+			notify.warn(string.format("Stopped at %d issues: %s", #issues, tostring(err)))
 		else
 			state.error = tostring(err)
 			state.issues = nil
 			state.issue_tree = nil
-			statusline.notify("error", string.format("Failed to fetch issues: %s", tostring(err)))
+			notify.error(string.format("Failed to fetch issues: %s", tostring(err)))
 		end
 
 		render_if_active()
@@ -201,11 +270,10 @@ local function load_active_view(opts, on_done)
 	local function finalize_fetch_success(issues)
 		state.current_view = state.active_view
 		state.error = nil
-		state.issues = issues
-		state.issue_tree = helper.build_issue_tree(issues)
+		set_issues(issues)
 		finish_loading()
 
-		statusline.notify("success", string.format("Loaded %d issues", #issues), 1200)
+		notify.success(string.format("Loaded %d issues", #issues), { timeout = 1200 })
 		render_if_active()
 		on_done()
 	end
@@ -243,8 +311,7 @@ local function load_active_view(opts, on_done)
 
 			state.current_view = state.active_view
 			state.error = nil
-			state.issues = issues
-			state.issue_tree = helper.build_issue_tree(issues)
+			set_issues(issues)
 			render_if_active()
 
 			if #issues >= max_results then
@@ -274,6 +341,43 @@ local function load_bookmark(view, force_load, on_done)
 	end
 
 	cancel_active_requests()
+	if view._kind == "starred" then
+		state.is_loading = false
+		state.error = nil
+		state.current_view = view
+		local saved, err = starred.list("issues", provider.id)
+		if err then
+			state.error = err
+			set_issues({})
+		elseif #saved == 0 then
+			if layout.win_id("detail") then
+				layout.toggle_detail()
+			end
+			if next(state.active_view._bookmarks) == nil then
+				M.switch_view(require("atlas.ui.shared.bookmarks_view").views(provider, "issues")[1])
+				return
+			end
+			state.current_view = state.active_view
+			state.issues = nil
+			state.issue_tree = nil
+		else
+			local issues = {}
+			for _, item in ipairs(saved) do
+				item.item.title = item.item.title or item.item.summary or ""
+				item.item.summary = nil
+				item.item.is_starred = true
+				table.insert(issues, item.item)
+			end
+			state.issues = issues
+			state.issue_tree = helper.build_issue_tree(issues)
+		end
+		render_if_active()
+		if on_done then
+			on_done()
+		end
+		return
+	end
+
 	local load_requests = active_requests
 	fetch_current_user(provider, load_requests)
 	state.is_loading = true
@@ -281,7 +385,7 @@ local function load_bookmark(view, force_load, on_done)
 	state.issues = nil
 	state.issue_tree = nil
 	state.current_view = view
-	statusline.notify("loading", "Running query...")
+	notify.loading("Running query...")
 	render_if_active()
 
 	load_requests.run(function(done)
@@ -294,12 +398,11 @@ local function load_bookmark(view, force_load, on_done)
 		state.is_loading = false
 		if err then
 			state.error = tostring(err)
-			statusline.notify("error", string.format("Query failed: %s", state.error))
+			notify.error(string.format("Query failed: %s", state.error))
 		else
 			state.error = nil
-			state.issues = issues or {}
-			state.issue_tree = helper.build_issue_tree(issues or {})
-			statusline.notify("success", string.format("Loaded %d issues", #(issues or {})), 1200)
+			set_issues(issues or {})
+			notify.success(string.format("Loaded %d issues", #(issues or {})), { timeout = 1200 })
 		end
 		render_if_active()
 		if on_done then
@@ -341,10 +444,13 @@ function M.refresh_current_view(on_done, focus_issue_key)
 		local item = navigation.current_item()
 		local panel = require("atlas.issues.ui.panel")
 		if panel.is_open() then
-			if focus_issue_key and not focused then
-				panel.close()
-			elseif type(item) == "table" and item.kind == "issue" and item._issue then
-				panel.on_select(item._issue, { force_refresh = true, issue_refreshed = true })
+			if
+				not (focus_issue_key and not focused)
+				and type(item) == "table"
+				and item.kind == "issue"
+				and item._issue
+			then
+				panel.on_select(item._issue, { force_refresh = true })
 			else
 				panel.close()
 			end
@@ -384,22 +490,44 @@ function M.run_bookmark(name, value)
 	load_bookmark(view, false)
 end
 
+---@param issue Issue|nil
+function M.toggle_issue_star(issue)
+	if issue == nil then
+		notify.warn("No issue selected")
+		return
+	end
+
+	local now_starred, err = starred.toggle(issue, state.provider.id)
+	if now_starred == nil then
+		notify.error(tostring(err or "Unable to update starred issue"))
+		return
+	end
+
+	local starred_view = state.current_view and state.current_view._kind == "starred"
+	notify.success(now_starred and "Issue starred" or "Issue unstarred", { timeout = 1200 })
+	if starred_view then
+		load_bookmark(state.current_view, false)
+		return
+	end
+	set_issues(state.issues or {})
+	render_if_active()
+end
+
 ---@param source_buf integer|nil
 function M.show_issue_details(source_buf)
 	local node = navigation.current_item()
 	if type(node) ~= "table" or node.kind ~= "issue" then
-		statusline.notify("warn", "No issue selected")
+		notify.warn("No issue selected")
 		return
 	end
 
 	local issue = type(node._issue) == "table" and node._issue or nil
 	if issue == nil then
-		statusline.notify("warn", "Issue payload missing on line")
+		notify.warn("Issue payload missing on line")
 		return
 	end
 
-	local renderer = require("atlas.issues.ui.main.renderer")
-	local lines, highlights = renderer.issue_popup_content(issue)
+	local lines, highlights = require("atlas.issues.ui.popup").content(issue)
 	info_popup.show({
 		lines = lines,
 		highlights = highlights,
@@ -423,6 +551,16 @@ function M.apply_action_result(result)
 	M.refresh_current_view(nil, result.issue_key)
 end
 
+---@param issue Issue
+---@return boolean, string|nil
+function M.update_issue(issue)
+	local updated, err = replace_issue(issue)
+	if updated then
+		render_if_active()
+	end
+	return updated, err
+end
+
 ---@param issue Issue|string|nil
 ---@param on_done fun()|nil
 function M.refresh_issue(issue, on_done)
@@ -430,7 +568,7 @@ function M.refresh_issue(issue, on_done)
 
 	local issue_key = type(issue) == "table" and tostring(issue.key or "") or (type(issue) == "string" and issue or "")
 	if issue_key == "" then
-		statusline.notify("warn", "Issue key missing")
+		notify.warn("Issue key missing")
 		on_done()
 		return
 	end
@@ -445,7 +583,7 @@ function M.refresh_issue(issue, on_done)
 		return
 	end
 
-	statusline.notify("loading", string.format("Reloading %s...", issue_key))
+	notify.loading(string.format("Reloading %s...", issue_key))
 	begin_issue_reload(issue_key)
 
 	local active_view = type(state.active_view) == "table" and state.active_view or {}
@@ -458,36 +596,31 @@ function M.refresh_issue(issue, on_done)
 	end, function(fetched_issue, err)
 		if err ~= nil or fetched_issue == nil then
 			end_issue_reload(issue_key)
-			statusline.notify("error", tostring(err or "Failed to reload issue"))
+			notify.error(tostring(err or "Failed to reload issue"))
 			on_done()
 			return
 		end
 
-		local issues = state.issues or {}
-		local replaced = false
-		for i, existing in ipairs(issues) do
-			if type(existing) == "table" and existing.key == issue_key then
-				issues[i] = fetched_issue
-				replaced = true
-				break
-			end
-		end
-
+		local replaced, snapshot_err = replace_issue(fetched_issue)
 		if not replaced then
+			local issues = state.issues or {}
 			table.insert(issues, fetched_issue)
+			set_issues(issues)
+			snapshot_err = save_starred_issue(fetched_issue)
 		end
-
-		state.issues = issues
-		state.issue_tree = helper.build_issue_tree(issues)
 		end_issue_reload(issue_key)
 
 		local panel = require("atlas.issues.ui.panel")
 		local panel_issue = require("atlas.issues.ui.panel.issue.state").current_issue
 		if panel.is_open() and panel_issue and tostring(panel_issue.key or "") == issue_key then
-			panel.on_select(fetched_issue, { force_refresh = true, issue_refreshed = true })
+			panel.on_select(fetched_issue, { force_refresh = true, details = fetched_issue })
 		end
 
-		statusline.notify("success", string.format("Reloaded %s", issue_key), 1200)
+		if snapshot_err then
+			notify.warn(snapshot_err)
+		else
+			notify.success(string.format("Reloaded %s", issue_key), { timeout = 1200 })
+		end
 		on_done()
 	end)
 end
@@ -510,7 +643,7 @@ end
 function M.refresh_current_issue(on_done)
 	local node = navigation.current_item()
 	if type(node) ~= "table" or node.kind ~= "issue" then
-		statusline.notify("warn", "No issue selected")
+		notify.warn("No issue selected")
 		if on_done then
 			on_done()
 		end

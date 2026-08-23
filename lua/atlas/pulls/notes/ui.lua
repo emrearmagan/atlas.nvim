@@ -137,7 +137,7 @@ local function refresh()
 		documents, err = notes.documents()
 	end
 	if not documents then
-		notify.error(err or "Unable to read notes")
+		notify.error(err or "Unable to read notes", { vim_notify = true })
 		return
 	end
 	state.documents = documents
@@ -160,7 +160,9 @@ local function ensure_buffer()
 	vim.api.nvim_set_option_value("bufhidden", "wipe", { buf = buf })
 	vim.api.nvim_set_option_value("swapfile", false, { buf = buf })
 	vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
-	vim.api.nvim_set_option_value("filetype", "atlas-notes", { buf = buf })
+	vim.api.nvim_set_option_value("filetype", "atlas.notes", { buf = buf })
+	vim.api.nvim_set_option_value("syntax", "OFF", { buf = buf })
+	pcall(vim.treesitter.stop, buf)
 	keymaps.register(buf, actions.new(state, refresh, render))
 	vim.api.nvim_create_autocmd("BufWipeout", {
 		buffer = buf,
@@ -184,7 +186,7 @@ function M.open(opts)
 		target, err = notes.resolve_target(opts.target)
 	end
 	if err then
-		notify.error(err)
+		notify.error(err, { vim_notify = true })
 		return
 	end
 
@@ -222,13 +224,13 @@ function M.clear_all()
 		end
 		local cleared, err = notes.clear_all()
 		if not cleared then
-			notify.error(err or "Unable to delete local notes")
+			notify.error(err or "Unable to delete local notes", { vim_notify = true })
 			return
 		end
 		state.documents = {}
 		state.expanded = {}
 		render()
-		notify.info("Local review notes deleted")
+		notify.info("Local review notes deleted", { vim_notify = true })
 	end)
 end
 

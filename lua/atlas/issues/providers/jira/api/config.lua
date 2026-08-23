@@ -2,12 +2,13 @@ local M = {}
 
 local config = require("atlas.config")
 
----@return AtlasJiraIssuesConfig
+---@return AtlasJiraConfig
 function M.jira_config()
-	local opts = config.options
-	local issues = opts and opts.issues or nil
-	local jira_config = (issues and issues.providers and issues.providers.jira) or {}
-	---@cast jira_config AtlasJiraIssuesConfig
+	local jira_config = vim.tbl_extend("force", {}, config.provider_options("jira") or {})
+	local issues_config = config.domain_options("jira", "issues") or {}
+	jira_config.views = issues_config.views
+	jira_config.bookmarks = issues_config.bookmarks
+	---@cast jira_config AtlasJiraConfig
 
 	jira_config.auth_method = jira_config.auth_method or "basic"
 	jira_config.api_type = jira_config.api_type or "cloud"

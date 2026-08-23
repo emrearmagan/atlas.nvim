@@ -169,12 +169,12 @@ function M.fetch_issues(view, opts, on_done)
 end
 
 ---@param issue_key string
----@param _opts IssuesFetchOpts|nil
----@param on_done fun(issue: Issue|nil, err: string|nil)
+---@param opts IssuesFetchOpts|nil
+---@param on_done fun(issue: IssueDetails|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_issue(issue_key, _opts, on_done)
+function M.fetch_issue(issue_key, opts, on_done)
 	local issues_api = require("atlas.issues.providers.jira.api.issues")
-	return issues_api.get_issue(issue_key, on_done)
+	return issues_api.get_issue(issue_key, on_done, { force_load = opts and opts.force_load == true })
 end
 
 ---@param issue Issue
@@ -224,7 +224,7 @@ end
 
 ---@param issue Issue
 ---@param opts { force_refresh: boolean|nil }|nil
----@param on_done fun(result: { comments: IssueComment[], events: IssueActivityEntry[] }|nil, err: string|nil)
+---@param on_done fun(items: IssueConversationItem[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_conversation(issue, opts, on_done)
 	opts = opts or {}
@@ -241,10 +241,16 @@ function M.fetch_conversation(issue, opts, on_done)
 			on_done(nil, err)
 			return
 		end
-		on_done({
-			comments = comments or {},
-			events = {},
-		}, nil)
+		local items = {}
+		for _, comment in ipairs(comments or {}) do
+			table.insert(items, {
+				id = "comment:" .. tostring(comment.id),
+				kind = "comment",
+				created_at = comment.created or "",
+				entity = comment,
+			})
+		end
+		on_done(items, nil)
 	end)
 end
 
@@ -278,7 +284,7 @@ end
 ---@return AtlasJiraViewConfig[]
 function M.views()
 	local cfg = require("atlas.issues.providers.jira.api.config").jira_config()
-	local views = cfg.views
+	local views = type(cfg.views) == "table" and #cfg.views > 0 and cfg.views
 		or {
 			{
 				name = "Issues",
@@ -286,7 +292,7 @@ function M.views()
 				jql = "assignee = currentUser() AND resolution = Unresolved ORDER BY updated DESC",
 			},
 		}
-	return require("atlas.ui.shared.bookmarks_view").append_to_views(views, cfg.bookmarks, "J", "JQL")
+	return views
 end
 
 local renderer = require("atlas.issues.providers.jira.ui.renderer")
@@ -319,7 +325,6 @@ return {
 			setup = require("atlas.issues.providers.jira.highlights").setup,
 			format_row = renderer.format_row,
 			cell_hl = renderer.cell_hl,
-			issue_popup_content = renderer.issue_popup_content,
 			panel = require("atlas.issues.providers.jira.ui.panel"),
 		},
 	},

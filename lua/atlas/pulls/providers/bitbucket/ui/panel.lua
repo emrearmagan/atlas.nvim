@@ -6,9 +6,10 @@ local icons = require("atlas.ui.shared.icons")
 local MAX_HASH_LEN = 12
 
 ---@param pr PullRequest
+---@param _details PullRequestDetails|nil
 ---@param _loading boolean
 ---@return PullsPanelHeaderRow[]
-function M.header_rows(pr, _loading)
+function M.header_rows(pr, _details, _loading)
 	local raw = pr._raw
 	local rows = {}
 
@@ -33,9 +34,10 @@ function M.header_rows(pr, _loading)
 end
 
 ---@param pr PullRequest
+---@param _details PullRequestDetails|nil
 ---@param _loading boolean
 ---@return PullsPanelChip[]
-function M.chips(pr, _loading)
+function M.chips(pr, _details, _loading)
 	local chips = {}
 
 	local hash = tostring(pr.source and pr.source.commit_hash or "")

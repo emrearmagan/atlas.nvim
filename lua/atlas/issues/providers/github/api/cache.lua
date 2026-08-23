@@ -1,6 +1,6 @@
 local M = {}
 
-local cli = require("atlas.providers.github.client").issues
+local cli = require("atlas.providers.github.client")
 local normalizer = require("atlas.issues.providers.github.api.mapper")
 
 ---@param key string
@@ -12,7 +12,7 @@ local function invalidate_issue(key)
 
 	for _, with_relationships in ipairs({ false, true }) do
 		cli.delete_mem(
-			string.format("github_issues:get:v2:%s#%d:relationships:%s", slug, number, tostring(with_relationships))
+			string.format("github_issues:get:%s#%d:relationships:%s", slug, number, tostring(with_relationships))
 		)
 	end
 end

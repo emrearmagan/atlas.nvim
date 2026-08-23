@@ -1,7 +1,7 @@
 ---@class PullsRepoIssuesTab : PullsRepoPanelTabModule
 local M = {}
 
-local statusline = require("atlas.ui.statusline")
+local notify = require("atlas.core.notify")
 local help = require("atlas.ui.popups.help")
 local resolver = require("atlas.core.keymaps")
 local pulls_state = require("atlas.pulls.state")
@@ -61,7 +61,7 @@ local function fetch_issues(details, refresh, force_load)
 	local label = tostring(details.full_name or "")
 	state.repo_key = key
 	state.issues = "loading"
-	statusline.notify("loading", string.format("Loading issues for %s...", label))
+	notify.loading(string.format("Loading issues for %s...", label))
 	refresh()
 
 	local repository = pulls_state.provider.capabilities.repository
@@ -74,11 +74,11 @@ local function fetch_issues(details, refresh, force_load)
 		end
 		if err then
 			state.issues = tostring(err)
-			statusline.notify("error", string.format("Failed to load issues for %s", label))
+			notify.error(string.format("Failed to load issues for %s", label))
 		else
 			state.issues = result and result.entries or {}
 			state.counts = result and result.counts or nil
-			statusline.notify("success", string.format("Issues loaded for %s", label), 1200)
+			notify.success(string.format("Issues loaded for %s", label), { timeout = 1200 })
 		end
 		refresh()
 	end)

@@ -27,10 +27,10 @@
 --------------------------------------------------------------------------------
 
 ---@class PullsProviderPRPanel
----@field header_rows (fun(pr: PullRequest, loading: boolean): PullsPanelHeaderRow[])|nil
----@field chips (fun(pr: PullRequest, loading: boolean): PullsPanelChip[])|nil
+---@field header_rows (fun(pr: PullRequest, details: PullRequestDetails|nil, loading: boolean): PullsPanelHeaderRow[])|nil
+---@field chips (fun(pr: PullRequest, details: PullRequestDetails|nil, loading: boolean): PullsPanelChip[])|nil
 ---@field tabs (fun(): PullsPRPanelTab[])|nil
----@field fetch_header (fun(pr: PullRequest, opts: { force_refresh: boolean|nil, pr_refreshed: boolean|nil }|nil, on_done: fun()): { cancel: fun() }|nil)|nil
+---@field fetch_header (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun()): { cancel: fun() }|nil)|nil
 
 ---@class PullsPRPanelKeymaps
 ---@field register fun(buf: integer)

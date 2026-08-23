@@ -6,7 +6,6 @@ local explorer = require("atlas.pulls.diff.atlas.explorer")
 local renderer = require("atlas.pulls.diff.atlas.renderer")
 local review_panel = require("atlas.pulls.diff.ui.review_panel")
 local session_api = require("atlas.pulls.diff.session")
-local statusline = require("atlas.pulls.diff.ui.statusline")
 
 ---@class AtlasNativeDiffOptions
 ---@field layout AtlasDiffLayout
@@ -230,7 +229,7 @@ function M.configure_content_window(session, win)
 		marker_hl,
 		marker
 	)
-	statusline.attach(win)
+	session.statusline:attach(win)
 end
 
 ---@param session AtlasDiffSession
@@ -325,7 +324,7 @@ function M.open_commits(session)
 	state.commits_panel.win = split_window(state.panel.win, state.commits_panel.buf, "below", height)
 	explorer.configure_window(state.commits_panel.win)
 	vim.wo[state.commits_panel.win].winfixheight = true
-	statusline.attach(state.commits_panel.win)
+	session.statusline:attach(state.commits_panel.win)
 	commits.render(session)
 end
 
@@ -378,7 +377,7 @@ function M.toggle_explorer(session)
 	end
 	state.panel.win = split_window(anchor, state.panel.buf, "left", explorer.width(session))
 	explorer.configure_window(state.panel.win)
-	statusline.attach(state.panel.win)
+	session.statusline:attach(state.panel.win)
 	explorer.render(session, state.annotated_paths)
 	M.open_commits(session)
 end
@@ -398,7 +397,7 @@ function M.toggle_review_panel(session, focus)
 	if anchor and vim.api.nvim_win_is_valid(anchor) then
 		local win = review_panel.open(panel, anchor, focus ~= false)
 		if win then
-			statusline.attach(win)
+			session.statusline:attach(win)
 		end
 	end
 end
@@ -477,8 +476,12 @@ function M.create(session, data, target, options)
 	local left_buf = create_buffer(nil, "nowrite")
 	local panel_buf = create_buffer(string.format("atlas-diff://%d/files", tabpage))
 	local commits_buf = create_buffer(string.format("atlas-diff://%d/commits", tabpage))
-	vim.bo[panel_buf].filetype = "atlas-diff-files"
-	vim.bo[commits_buf].filetype = "atlas-diff-commits"
+	vim.bo[panel_buf].filetype = "atlas.diff-files"
+	vim.bo[panel_buf].syntax = "OFF"
+	pcall(vim.treesitter.stop, panel_buf)
+	vim.bo[commits_buf].filetype = "atlas.diff-commits"
+	vim.bo[commits_buf].syntax = "OFF"
+	pcall(vim.treesitter.stop, commits_buf)
 	vim.api.nvim_win_set_buf(right_win, right_buf)
 	if launcher_buf and vim.api.nvim_buf_is_valid(launcher_buf) then
 		vim.api.nvim_buf_delete(launcher_buf, { force = true })
@@ -542,7 +545,7 @@ function M.create(session, data, target, options)
 	}
 	explorer.configure(session)
 	if panel_win then
-		statusline.attach(panel_win)
+		session.statusline:attach(panel_win)
 	end
 	M.set_document(session, data.document)
 	M.open_commits(session)

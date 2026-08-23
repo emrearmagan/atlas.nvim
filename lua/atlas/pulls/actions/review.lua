@@ -2,7 +2,7 @@ local M = {}
 
 local editor = require("atlas.ui.popups.editor")
 local notes = require("atlas.pulls.notes")
-local statusline = require("atlas.ui.statusline")
+local core_notify = require("atlas.core.notify")
 local review_threads = require("atlas.pulls.ui.components.review_threads")
 
 ---@class AtlasReviewActionContext: AtlasPullActionContext
@@ -10,6 +10,8 @@ local review_threads = require("atlas.pulls.ui.components.review_threads")
 ---@field items PullsComment[]|nil
 ---@field data PullsReviewData|nil
 ---@field completion AtlasMarkdownCompletionProvider|nil
+---@field upsert_comment (fun(comment: PullsComment))|nil
+---@field remove_comment (fun(comment: PullsComment))|nil
 
 ---@param provider PullsProvider
 ---@param pr PullRequest
@@ -44,12 +46,17 @@ local function notify(context, level, message, duration)
 		context.notify(level, message, duration)
 		return
 	end
-	statusline.notify(level, message, duration)
+	core_notify.show(level, message, { timeout = duration })
 end
 
----@param items PullsComment[]
+---@param context AtlasReviewActionContext
 ---@param comment PullsComment
-local function upsert_comment(items, comment)
+local function upsert_comment(context, comment)
+	if context.upsert_comment then
+		context.upsert_comment(comment)
+		return
+	end
+	local items = assert(context.items)
 	for index, existing in ipairs(items) do
 		if tostring(existing.id) == tostring(comment.id) then
 			items[index] = comment
@@ -139,8 +146,8 @@ function M.add_comment(context, opts, on_done)
 					on_done(nil, err)
 					return
 				end
-				if created and context.items then
-					upsert_comment(context.items, created)
+				if created then
+					upsert_comment(context, created)
 				end
 				if pending and context.data then
 					context.data.review.pending = true
@@ -153,16 +160,24 @@ function M.add_comment(context, opts, on_done)
 	return true
 end
 
----@param items PullsComment[]
+---@param context AtlasReviewActionContext
 ---@param comment PullsComment
-local function remove_comment(items, comment)
+local function remove_comment(context, comment)
+	local items = assert(context.items)
 	local id = tostring(comment.id)
 	for _, existing in ipairs(items) do
 		if tostring(existing.parent_id or "") == id then
 			comment.content_raw = ""
 			comment.state = "DELETED"
+			if context.upsert_comment then
+				context.upsert_comment(comment)
+			end
 			return
 		end
+	end
+	if context.remove_comment then
+		context.remove_comment(comment)
+		return
 	end
 	for index = #items, 1, -1 do
 		local existing = items[index]
@@ -191,8 +206,6 @@ function M.edit_comment(context, comment, on_done)
 		on_done(nil, message)
 		return false
 	end
-	local items = assert(context.items)
-
 	open_editor(context, {
 		key = "pr-comment-edit",
 		title = comment.is_task and " Edit Task " or " Edit Comment ",
@@ -212,7 +225,7 @@ function M.edit_comment(context, comment, on_done)
 				local message = comment.is_task and "Task updated" or "Comment updated"
 				notify(context, "success", message, 1200)
 				if updated then
-					upsert_comment(items, updated)
+					upsert_comment(context, updated)
 				end
 				on_done({ changed_pr = false, message = message }, nil)
 			end
@@ -221,6 +234,42 @@ function M.edit_comment(context, comment, on_done)
 			else
 				update(context.pr, desired, callback)
 			end
+		end,
+	})
+	return true
+end
+
+---@param context AtlasReviewActionContext
+---@param entry PullsReviewHistoryEntry
+---@param on_done fun(result: PullsActionResult|nil, err: string|nil)
+---@return boolean handled
+function M.edit_review(context, entry, on_done)
+	local reviews = context.provider.capabilities.reviews
+	local update = reviews and reviews.edit_review
+	if not update or not entry.id or vim.trim(entry.body or "") == "" then
+		local message = "This review cannot be edited"
+		notify(context, "error", message)
+		on_done(nil, message)
+		return false
+	end
+
+	open_editor(context, {
+		key = "pr-review-edit",
+		title = " Edit Review ",
+		initial_text = entry.body or "",
+		on_save = function(text)
+			notify(context, "loading", "Editing review...")
+			update(context.pr, entry.id, text, function(ok, err)
+				if err or not ok then
+					err = err or "Failed to update review"
+					notify(context, "error", "Edit failed: " .. err)
+					on_done(nil, err)
+					return
+				end
+				entry.body = text
+				notify(context, "success", "Review updated", 1200)
+				on_done({ changed_pr = false, message = "Review updated" }, nil)
+			end)
 		end,
 	})
 	return true
@@ -245,8 +294,6 @@ function M.delete_comment(context, comment, on_done)
 		on_done(nil, message)
 		return false
 	end
-	local items = assert(context.items)
-
 	vim.ui.input({ prompt = comment.is_task and "Delete task? [y/N]: " or "Delete comment? [y/N]: " }, function(input)
 		local confirmed = input and vim.trim(input):lower()
 		if confirmed ~= "y" and confirmed ~= "yes" then
@@ -272,15 +319,17 @@ function M.delete_comment(context, comment, on_done)
 						context.data.review = data.review
 						context.data.comments = data.comments
 						context.data.tasks = data.tasks
+						context.data.reviewers = data.reviewers
+						context.data.history = data.history
 					else
-						remove_comment(items, comment)
+						remove_comment(context, comment)
 					end
 					notify(context, "success", message, 1200)
 					on_done({ changed_pr = false, message = message }, nil)
 				end)
 				return
 			end
-			remove_comment(items, comment)
+			remove_comment(context, comment)
 			notify(context, "success", message, 1200)
 			on_done({ changed_pr = false, message = message }, nil)
 		end
@@ -306,8 +355,6 @@ function M.toggle_task(context, comment, on_done)
 		on_done(nil, message)
 		return false
 	end
-	local items = assert(context.items)
-
 	local is_resolved = comment.state == "RESOLVED"
 	local desired = vim.deepcopy(comment)
 	if is_resolved then
@@ -325,7 +372,7 @@ function M.toggle_task(context, comment, on_done)
 		local message = is_resolved and "Task reopened" or "Task resolved"
 		notify(context, "success", message, 1200)
 		if updated then
-			upsert_comment(items, updated)
+			upsert_comment(context, updated)
 		end
 		on_done({ changed_pr = false, message = message }, nil)
 	end)
@@ -356,7 +403,7 @@ function M.toggle_resolved(context, comment, on_done)
 		end
 		local message = resolved and "Thread resolved" or "Thread reopened"
 		notify(context, "success", message, 1200)
-		comment.state = resolved and "RESOLVED" or nil
+		comment.state = resolved and "RESOLVED" or (comment.outdated and "OUTDATED" or nil)
 		on_done({ changed_pr = false, message = message }, nil)
 	end)
 	return true

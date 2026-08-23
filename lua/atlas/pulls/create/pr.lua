@@ -1,5 +1,6 @@
 local M = {}
 
+local config = require("atlas.config")
 local form = require("atlas.ui.popups.form")
 local git_branch = require("atlas.core.git")
 local keymaps = require("atlas.core.keymaps")
@@ -33,10 +34,14 @@ local notify = require("atlas.core.notify")
 ---@param provider_id string
 ---@return PullsProvider|nil, string|nil
 local function load_provider(provider_id)
-	local provider = require("atlas.providers").load(provider_id, "pulls")
-	if provider == nil then
+	local providers = require("atlas.providers")
+	if providers.domain(provider_id, "pulls") == nil then
 		return nil, "Unsupported provider: " .. tostring(provider_id)
 	end
+	if config.provider_options(provider_id) == nil then
+		return nil, "Pull request provider not configured: " .. tostring(provider_id)
+	end
+	local provider = assert(providers.load(provider_id, "pulls"))
 	---@cast provider PullsProvider
 	return provider, nil
 end
@@ -329,13 +334,13 @@ local function on_success(pr_state, result)
 	end
 	local url = result and result.url or nil
 	if type(url) == "string" and url ~= "" then
-		notify.info(message .. ": " .. url)
+		notify.info(message .. ": " .. url, { vim_notify = true })
 		pcall(vim.fn.setreg, "+", url)
 		require("atlas.commands.open").open(url)
 		return
 	end
 
-	notify.info(message)
+	notify.info(message, { vim_notify = true })
 	pcall(function()
 		require("atlas.pulls.ui.main.controller").refresh_current_view()
 	end)
@@ -551,31 +556,33 @@ end
 function M.start()
 	local root, root_err = git_branch.repo_root(nil)
 	if not root then
-		notify.error(root_err or "Not in a git repository")
+		notify.error(root_err or "Not in a git repository", { vim_notify = true })
 		return
 	end
 
 	local head, head_err = git_branch.current_branch(root)
 	if not head then
-		notify.error(head_err or "Could not detect current branch")
+		notify.error(head_err or "Could not detect current branch", { vim_notify = true })
 		return
 	end
 
 	local info = git_branch.local_repository(root, "pulls")
 	if not info then
-		notify.error("Could not resolve the origin repository")
+		notify.error("Could not resolve the origin repository", { vim_notify = true })
 		return
 	end
 
 	local provider, provider_err = load_provider(info.provider)
 	if not provider then
-		notify.error(provider_err or "Provider unavailable")
+		notify.error(provider_err or "Provider unavailable", { vim_notify = true })
 		return
 	end
 	local base = git_branch.default_branch(root, "origin") or "main"
 
 	if head == base then
-		notify.warn(string.format("HEAD '%s' is the default branch — switch to a feature branch first", head))
+		notify.warn(string.format("HEAD '%s' is the default branch — switch to a feature branch first", head), {
+			vim_notify = true,
+		})
 		return
 	end
 
@@ -591,7 +598,7 @@ function M.start()
 
 	local initial, description_err = description.build(root, info.slug, base, head)
 	if not initial then
-		notify.error(description_err or "Unable to build pull request description")
+		notify.error(description_err or "Unable to build pull request description", { vim_notify = true })
 		return
 	end
 

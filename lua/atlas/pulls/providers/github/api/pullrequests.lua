@@ -1,6 +1,6 @@
 local M = {}
 
-local cli = require("atlas.providers.github.client").pulls
+local cli = require("atlas.providers.github.client")
 local mapper = require("atlas.pulls.providers.github.api.mapper")
 local logger = require("atlas.core.logger")
 local memory_cache = require("atlas.core.memory_cache")
@@ -9,14 +9,39 @@ local json = require("atlas.core.json")
 local GET_PR_GQL = [[
 query($owner: String!, $repo: String!, $number: Int!) {
   repository(owner: $owner, name: $repo) {
+    name nameWithOwner url sshUrl
     pullRequest(number: $number) {
-      id number title state isDraft viewerSubscription
+      id number title state isDraft viewerSubscription reviewDecision
       createdAt updatedAt url body
       reactionGroups { content reactors { totalCount } }
       additions deletions
       labels(first: 10) { nodes { name color } }
-      latestOpinionatedReviews(last: 10) {
-        nodes { state author { login ... on User { name } } }
+      latestOpinionatedReviews(last: 100) {
+        nodes { state author { login ... on User { id name } } }
+      }
+      reviewRequests(first: 100) {
+        nodes {
+          requestedReviewer {
+            ... on User { id login name }
+            ... on Bot { id login }
+            ... on Mannequin { id login name }
+            ... on Team { id name slug organization { login } }
+            ... on EnterpriseTeam { id name slug combinedSlug }
+          }
+        }
+      }
+      reviewRequestEvents: timelineItems(last: 100, itemTypes: [REVIEW_REQUESTED_EVENT]) {
+        nodes {
+          ... on ReviewRequestedEvent {
+            requestedReviewer {
+              ... on User { id login name }
+              ... on Bot { id login }
+              ... on Mannequin { id login name }
+              ... on Team { id name slug organization { login } }
+              ... on EnterpriseTeam { id name slug combinedSlug }
+            }
+          }
+        }
       }
       assignees(first: 10) { nodes { id login name } }
       author { login ... on User { name } }
@@ -35,17 +60,13 @@ query($search: String!, $limit: Int!) {
   search(query: $search, type: ISSUE, first: $limit) {
     nodes {
       ... on PullRequest {
-        id number title state isDraft
+        id number title state isDraft reviewDecision
         createdAt updatedAt url
         additions deletions
-        reactionGroups { content reactors { totalCount } }
-        latestOpinionatedReviews(last: 10) {
-          nodes { state author { login ... on User { name } } }
-        }
         author { login ... on User { name } }
         headRefName baseRefName headRefOid baseRefOid
         totalCommentsCount
-        repository { name nameWithOwner }
+        repository { name nameWithOwner url sshUrl }
         commits(last: 1) {
           nodes { commit { statusCheckRollup { state } } }
         }
@@ -56,13 +77,13 @@ query($search: String!, $limit: Int!) {
 ]]
 
 ---@param search string
----@param on_done fun(groups: PullsGroup[], err: string[]|nil)
+---@param on_done fun(pulls: PullRequest[], err: string[]|nil)
 ---@param opts { force_load?: boolean, limit?: number }|nil
 ---@return { cancel: fun() }|nil
 function M.search_prs(search, on_done, opts)
 	opts = opts or {}
 	local limit = math.max(1, tonumber(opts.limit) or 50)
-	local cache_key = string.format("github:search:%s:limit:%d", search, limit)
+	local cache_key = string.format("github:pulls:search:%s:limit:%d", search, limit)
 
 	if not opts.force_load then
 		local cached, ok = cli.get_cache(cache_key)
@@ -88,11 +109,9 @@ function M.search_prs(search, on_done, opts)
 		end
 
 		local prs = mapper.to_search_results_from_graphql(result.data.search.nodes or {})
-		local groups = mapper.to_pull_request_groups(prs)
-
-		cli.set_cache(cache_key, groups)
-		logger.loginfo("GitHub GraphQL search complete", { count = #prs, groups = #groups })
-		on_done(groups, nil)
+		cli.set_cache(cache_key, prs)
+		logger.loginfo("GitHub GraphQL search complete", { count = #prs })
+		on_done(prs, nil)
 	end, {
 		action = "Search PRs",
 		search = search,
@@ -103,7 +122,7 @@ end
 ---@param owner string
 ---@param repo string
 ---@param number number|string
----@param on_done fun(pr: PullRequest|nil, err: string|nil)
+---@param on_done fun(pr: PullRequestDetails|nil, err: string|nil)
 ---@param opts { force_load?: boolean }|nil
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.get_pr(owner, repo, number, on_done, opts)
@@ -143,8 +162,13 @@ function M.get_pr(owner, repo, number, on_done, opts)
 			return
 		end
 
-		pr_raw.repository = { name = repo, nameWithOwner = repo_slug }
-		local pr = mapper.to_pull_request(pr_raw)
+		pr_raw.repository = {
+			name = repository.name or repo,
+			nameWithOwner = repository.nameWithOwner or repo_slug,
+			url = repository.url,
+			sshUrl = repository.sshUrl,
+		}
+		local pr = mapper.to_pull_request_details(pr_raw)
 		cli.set_mem(cache_key, pr)
 		on_done(pr, nil)
 	end, {
@@ -339,117 +363,29 @@ function M.decline(pr, on_done)
 	})
 end
 
----@return { login: string, state: "APPROVED"|"CHANGES_REQUESTED"|"COMMENTED"|"DISMISSED" }[], string[]
-local function parse_reviews(result)
-	local latest = {}
-	local order = {}
-	for _, review in ipairs(result.reviews or {}) do
-		local author = json.nilify(review.author)
-		local login = author and tostring(author.login or "") or ""
-		local state = tostring(review.state or ""):upper()
-		if login ~= "" and state ~= "PENDING" then
-			local at = tostring(review.submittedAt or "")
-			local prev = latest[login]
-			if prev == nil then
-				table.insert(order, login)
-				latest[login] = { state = state, at = at }
-			elseif at >= prev.at then
-				latest[login] = { state = state, at = at }
-			end
-		end
-	end
-
-	local reviews = {}
-	for _, login in ipairs(order) do
-		table.insert(reviews, { login = login, state = latest[login].state })
-	end
-
-	local pending = {}
-	for _, req in ipairs(result.reviewRequests or {}) do
-		local login = tostring(req.login or "")
-		if login ~= "" and latest[login] == nil then
-			table.insert(pending, login)
-		end
-	end
-
-	return reviews, pending
-end
-
 ---@param pr PullRequest
 ---@param opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(reviewers: PullsReviewer[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.get_reviewers(pr, opts, on_done)
 	local repo_slug = pr.repo_full_name or ""
-	if repo_slug == "" then
+	local owner, repo = repo_slug:match("^([^/]+)/([^/]+)$")
+	if owner == nil or repo == nil then
 		vim.schedule(function()
 			on_done(nil, "Missing repo")
 		end)
 		return nil
 	end
 
-	local cache_key = string.format("github:reviewers:%s:%s", repo_slug, tostring(pr.id))
 	opts = opts or {}
-
-	if not opts.force_refresh then
-		local cached, ok = cli.get_mem(cache_key)
-		if ok then
-			on_done(cached, nil)
-			return nil
-		end
-	end
-
-	return cli.gh({
-		"pr",
-		"view",
-		tostring(pr.id),
-		"--repo",
-		repo_slug,
-		"--json",
-		"reviews,reviewRequests",
-	}, function(result, err)
-		if err or type(result) ~= "table" then
+	return M.get_pr(owner, repo, pr.id, function(fresh, err)
+		if err or fresh == nil then
 			on_done(nil, err or "Failed to fetch reviewers")
 			return
 		end
-
-		local reviews, pending = parse_reviews(result)
-
-		local reviewers = {}
-		for _, r in ipairs(reviews) do
-			local decision = "pending"
-			if r.state == "APPROVED" then
-				decision = "approved"
-			elseif r.state == "CHANGES_REQUESTED" then
-				decision = "changes_requested"
-			end
-			table.insert(reviewers, {
-				id = r.login,
-				provider_id = r.login,
-				name = r.login,
-				username = r.login,
-				nickname = r.login,
-				decision = decision,
-			})
-		end
-		for _, login in ipairs(pending) do
-			table.insert(reviewers, {
-				id = login,
-				provider_id = login,
-				name = login,
-				username = login,
-				nickname = login,
-				decision = "pending",
-			})
-		end
-
-		cli.set_mem(cache_key, reviewers)
-		on_done(reviewers, nil)
-	end, {
-		action = "Fetch PR reviewers",
-		repo = repo_slug,
-		number = pr.id,
-	})
+		pr.reviewers = fresh.reviewers
+		on_done(pr.reviewers or {}, nil)
+	end, { force_load = opts.force_refresh == true })
 end
 
 ---@param opts { repo_slug: string, repo_root: string|nil, head: string, base: string, pr: PullRequest|nil }
@@ -500,16 +436,18 @@ function M.fetch_default_reviewers(opts, on_done)
 					return
 				end
 				for _, item in ipairs(current or {}) do
-					local login = item.nickname or item.name
-					local reviewer = by_login[login]
-					if reviewer then
-						reviewer.selected = true
-					else
-						table.insert(reviewers, {
-							label = "@" .. login,
-							provider_id = login,
-							selected = true,
-						})
+					if item.role == "reviewer" then
+						local login = item.nickname or item.name
+						local reviewer = by_login[login]
+						if reviewer then
+							reviewer.selected = true
+						else
+							table.insert(reviewers, {
+								label = "@" .. login,
+								provider_id = login,
+								selected = true,
+							})
+						end
 					end
 				end
 				on_done(reviewers, nil)
@@ -576,8 +514,9 @@ function M.update_reviewers(pr, selected, original, on_done)
 			on_done(false, err)
 			return
 		end
-		memory_cache.delete(string.format("github:reviewers:%s:%s", repo_slug, tostring(pr.id)))
+		memory_cache.delete(string.format("github:pr:%s:%s", repo_slug, tostring(pr.id)))
 		memory_cache.delete(string.format("github:review-context:%s:%s", repo_slug, tostring(pr.id)))
+		memory_cache.delete(string.format("github:review-details:%s:%s", repo_slug, tostring(pr.id)))
 		on_done(true, nil)
 	end, {
 		action = "Update PR reviewers",

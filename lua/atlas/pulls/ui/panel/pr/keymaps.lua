@@ -237,8 +237,8 @@ function M.register(buf)
 					end
 					local current = action_context(pr)
 					if current then
-						actions.run("toggle_subscription", current, function()
-							require("atlas.pulls.ui.panel").render()
+						actions.run("toggle_subscription", current, function(result)
+							require("atlas.pulls.ui.main.controller").apply_action_result(pr, result)
 						end)
 					end
 				end,

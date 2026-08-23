@@ -3,7 +3,6 @@ local M = {}
 
 local header = require("atlas.pulls.ui.panel.components.header")
 local pullrequests_api = require("atlas.pulls.providers.gitlab.api.pullrequests")
-local spinner = require("atlas.ui.components.spinner")
 local icons = require("atlas.ui.shared.icons")
 
 local state = {
@@ -14,12 +13,17 @@ local function reset_state()
 	state.labels_by_name = nil
 end
 
----@param pr PullRequest
----@param _loading boolean
+---@param _pr PullRequest
+---@param details PullRequestDetails|nil
+---@param loading boolean
 ---@return PullsPanelHeaderRow[]
-function M.header_rows(pr, _loading)
+function M.header_rows(_pr, details, loading)
+	if details == nil then
+		return loading and { header.loading_assignee_row() } or {}
+	end
+
 	local logins = {}
-	for _, assignee in ipairs(pr.assignees or {}) do
+	for _, assignee in ipairs(details.assignees or {}) do
 		local login = tostring(assignee.username or assignee.name or "")
 		if login ~= "" then
 			table.insert(logins, login)
@@ -29,18 +33,18 @@ function M.header_rows(pr, _loading)
 	return { header.assignee_row(logins) }
 end
 
----@param pr PullRequest
+---@param _pr PullRequest
+---@param details PullRequestDetails|nil
 ---@param loading boolean
 ---@return PullsPanelChip[]
-function M.chips(pr, loading)
-	local chips = {}
-	if loading and state.labels_by_name == nil then
-		table.insert(chips, { label = spinner.with_text("Loading labels"), hl = "AtlasTextMuted" })
-		return chips
+function M.chips(_pr, details, loading)
+	if details == nil or (loading and state.labels_by_name == nil) then
+		return {}
 	end
 
+	local chips = {}
 	local MAX_LABELS = 10
-	local labels = pr.labels or {}
+	local labels = details.labels or {}
 	local by_name = state.labels_by_name or {}
 	local shown = 0
 	for _, label in ipairs(labels) do
@@ -75,7 +79,7 @@ function M.chips(pr, loading)
 end
 
 ---@param pr PullRequest
----@param opts { force_refresh: boolean|nil, pr_refreshed: boolean|nil }|nil
+---@param opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun()
 ---@return { cancel: fun() }|nil
 function M.fetch_header(pr, opts, on_done)
@@ -83,60 +87,15 @@ function M.fetch_header(pr, opts, on_done)
 
 	local force = opts and opts.force_refresh == true
 	local project_path = pr.repo_full_name
-	local fetch_labels = project_path ~= ""
-	local fetch_details = not (opts and opts.pr_refreshed)
-	local pending = (fetch_labels and 1 or 0) + (fetch_details and 1 or 0)
-	local requests = {}
-
-	if pending == 0 then
+	if project_path == "" then
 		on_done()
-		return
+		return nil
 	end
 
-	local function complete()
-		pending = pending - 1
-		if pending == 0 then
-			on_done()
-		end
-	end
-
-	if fetch_labels then
-		local request = pullrequests_api.fetch_project_labels(
-			project_path,
-			{ force_refresh = force },
-			function(by_name, _)
-				state.labels_by_name = by_name or {}
-				complete()
-			end
-		)
-		if request then
-			table.insert(requests, request)
-		end
-	end
-
-	if fetch_details then
-		local request = pullrequests_api.fetch_pullrequest(pr, { force_refresh = force }, function(fresh, err)
-			if not err and type(fresh) == "table" then
-				pr.is_subscribed = fresh.is_subscribed
-				pr.assignees = fresh.assignees
-				pr.reviewers = fresh.reviewers
-				pr.labels = fresh.labels
-				pr._raw = fresh._raw
-			end
-			complete()
-		end)
-		if request then
-			table.insert(requests, request)
-		end
-	end
-
-	return {
-		cancel = function()
-			for _, request in ipairs(requests) do
-				request.cancel()
-			end
-		end,
-	}
+	return pullrequests_api.fetch_project_labels(project_path, { force_refresh = force }, function(by_name, _)
+		state.labels_by_name = by_name or {}
+		on_done()
+	end)
 end
 
 ---@return PullsPRPanelTab[]

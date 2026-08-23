@@ -1,6 +1,8 @@
 local M = {}
 
 local keymaps = require("atlas.core.keymaps")
+local notify = require("atlas.core.notify")
+local utils = require("atlas.ui.shared.utils")
 local statusline = require("atlas.ui.statusline")
 local virtual_lines = require("atlas.ui.components.virtual_lines")
 
@@ -35,7 +37,7 @@ end
 ---@param findstart integer
 ---@param base string
 ---@return integer|table[]
-function _G.__atlas_markdown_complete(findstart, base)
+_G.__atlas_markdown_complete = function(findstart, base)
 	local buf = vim.api.nvim_get_current_buf()
 	local provider = completion_provider_by_buf[buf]
 	if type(provider) ~= "table" then
@@ -116,7 +118,7 @@ function M.open(opts)
 
 	local key = tostring(opts.key or "")
 	if key == "" then
-		statusline.notify("warn", "Missing editor key")
+		notify.warn("Missing editor key")
 		return nil, nil
 	end
 	local source_win = vim.api.nvim_get_current_win()
@@ -133,7 +135,7 @@ function M.open(opts)
 	local name = string.format("atlas://editor/%s.md", key)
 	pcall(vim.api.nvim_buf_set_name, buf, name)
 
-	local lines = vim.split(tostring(opts.initial_text or ""), "\n", { plain = true })
+	local lines = vim.split(utils.normalize_newlines(opts.initial_text), "\n", { plain = true })
 	if #lines == 0 then
 		lines = { "" }
 	end
@@ -374,7 +376,7 @@ function M.open(opts)
 				get_text = get_text,
 			})
 			if not ok then
-				statusline.notify("error", tostring(err or "Markdown action failed"))
+				notify.error(tostring(err or "Markdown action failed"))
 			end
 		end, { buffer = buf, silent = true, nowait = true, desc = action.description })
 	end

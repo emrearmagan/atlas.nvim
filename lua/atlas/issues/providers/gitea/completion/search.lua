@@ -2,7 +2,7 @@ local M = {}
 
 ---@param query string
 local function run(query)
-	query = vim.trim(tostring(query or ""))
+	query = vim.trim(query)
 	if query == "" then
 		return
 	end

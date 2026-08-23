@@ -67,15 +67,15 @@ function M.new(state, refresh, render)
 	local function edit_note()
 		local selected = selected_item(state)
 		if not selected or not selected.note then
-			notify.warn("Select a note to edit")
+			notify.warn("Select a note to edit", { vim_notify = true })
 			return
 		end
 		editor.edit(selected.target, selected.note, function(updated, err)
 			if not updated then
-				notify.error(err or "Unable to update note")
+				notify.error(err or "Unable to update note", { vim_notify = true })
 				return
 			end
-			notify.info("Note updated")
+			notify.info("Note updated", { vim_notify = true })
 			refresh()
 		end)
 	end
@@ -83,7 +83,7 @@ function M.new(state, refresh, render)
 	local function delete_note()
 		local selected = selected_notes(state)
 		if #selected == 0 then
-			notify.warn("Select a note to delete")
+			notify.warn("Select a note to delete", { vim_notify = true })
 			return
 		end
 		local prompt = #selected == 1 and "Delete note? [y/N]: " or string.format("Delete %d notes? [y/N]: ", #selected)
@@ -95,12 +95,14 @@ function M.new(state, refresh, render)
 			for _, item in ipairs(selected) do
 				local deleted, err = notes.delete(item.target, item.note.id)
 				if not deleted then
-					notify.error(err or "Unable to delete note")
+					notify.error(err or "Unable to delete note", { vim_notify = true })
 					refresh()
 					return
 				end
 			end
-			notify.info(#selected == 1 and "Note deleted" or string.format("%d notes deleted", #selected))
+			notify.info(#selected == 1 and "Note deleted" or string.format("%d notes deleted", #selected), {
+				vim_notify = true,
+			})
 			refresh()
 		end)
 	end

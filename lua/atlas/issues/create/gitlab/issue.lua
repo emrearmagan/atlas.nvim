@@ -233,7 +233,7 @@ end
 ---@param issue_state GitLabCreateIssueState
 local function pick_assignees(issue_state)
 	if not issue_state.pickers.list_assignees then
-		form.notify("warn", "Assignee picker not available", 1500)
+		form.notify("warn", "Assignee picker not available", { timeout = 1500 })
 		return
 	end
 
@@ -244,7 +244,7 @@ local function pick_assignees(issue_state)
 			return
 		end
 		if type(items) ~= "table" or #items == 0 then
-			form.notify("warn", "No assignable members", 1500)
+			form.notify("warn", "No assignable members", { timeout = 1500 })
 			return
 		end
 		form.clear_notice()
@@ -274,7 +274,7 @@ end
 ---@param issue_state GitLabCreateIssueState
 local function pick_labels(issue_state)
 	if not issue_state.pickers.list_labels then
-		form.notify("warn", "Label picker not available", 1500)
+		form.notify("warn", "Label picker not available", { timeout = 1500 })
 		return
 	end
 
@@ -285,7 +285,7 @@ local function pick_labels(issue_state)
 			return
 		end
 		if type(items) ~= "table" or #items == 0 then
-			form.notify("warn", "No labels available", 1500)
+			form.notify("warn", "No labels available", { timeout = 1500 })
 			return
 		end
 		form.clear_notice()
@@ -310,7 +310,7 @@ end
 ---@param issue_state GitLabCreateIssueState
 local function pick_milestone(issue_state)
 	if not issue_state.pickers.list_milestones then
-		form.notify("warn", "Milestone picker not available", 1500)
+		form.notify("warn", "Milestone picker not available", { timeout = 1500 })
 		return
 	end
 
@@ -358,7 +358,7 @@ local function submit(issue_state)
 
 	local title = get_title(issue_state)
 	if title == "" then
-		form.notify("warn", "Title is required", 1500)
+		form.notify("warn", "Title is required", { timeout = 1500 })
 		return
 	end
 
@@ -415,7 +415,7 @@ local function submit(issue_state)
 		end
 
 		close(issue_state)
-		notify.info(message, { timeout = 1200 })
+		notify.info(message, { timeout = 1200, vim_notify = true })
 		if type(url) == "string" and url ~= "" then
 			require("atlas.commands.open").open(url)
 		end
@@ -429,13 +429,13 @@ end
 ---@param opts GitLabIssueEditorOpts
 function M.open(opts)
 	if type(opts) ~= "table" then
-		notify.warn("create_issue.open: missing options", { timeout = 1500 })
+		notify.warn("create_issue.open: missing options", { timeout = 1500, vim_notify = true })
 		return
 	end
 
 	local project_path = tostring(opts.project_path or "")
 	if project_path == "" then
-		notify.error("create_issue.open: project_path is required")
+		notify.error("create_issue.open: project_path is required", { vim_notify = true })
 		return
 	end
 

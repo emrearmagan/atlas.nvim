@@ -42,4 +42,21 @@ describe("GitLab comment resolution metadata", function()
 		assert.is_nil(comment.resolved_on)
 		assert.is_nil(comment.resolved_by)
 	end)
+
+	it("keeps the original multiline location of outdated comments", function()
+		local note = resolved_note()
+		note.original_position = {
+			position_type = "text",
+			old_path = "old.lua",
+			new_path = "new.lua",
+			new_line = 15,
+			line_range = { start = { new_line = 13 } },
+		}
+		local comment = mapper.to_comment(note, 101, "discussion-1", false)
+
+		assert.are.equal("OUTDATED", comment.state)
+		assert.are.equal("new.lua", comment.inline.path)
+		assert.are.equal(13, comment.inline.start_to)
+		assert.are.equal(15, comment.inline.to)
+	end)
 end)

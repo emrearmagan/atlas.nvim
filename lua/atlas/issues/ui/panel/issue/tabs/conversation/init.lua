@@ -4,7 +4,7 @@ local M = {}
 local state = require("atlas.issues.ui.panel.issue.tabs.conversation.state")
 local renderer = require("atlas.issues.ui.panel.issue.tabs.conversation.renderer")
 local keymaps = require("atlas.issues.ui.panel.issue.tabs.conversation.keymaps")
-local statusline = require("atlas.ui.statusline")
+local notify = require("atlas.core.notify")
 
 ---@return IssuesProvider|nil
 local function get_provider()
@@ -13,10 +13,10 @@ end
 
 function M.reset()
 	state.reset()
-	statusline.clear_notice()
+	notify.clear()
 end
 
----@param issue Issue
+---@param issue IssueDetails
 ---@param refresh fun()
 ---@param opts { force_refresh: boolean|nil }|nil
 function M.on_select(issue, refresh, opts)
@@ -26,16 +26,14 @@ function M.on_select(issue, refresh, opts)
 	local provider = get_provider()
 	local comments = provider and provider.capabilities.comments
 	if not comments or not comments.fetch_conversation then
-		state.comments = {}
-		state.activity = {}
+		state.items = {}
 		refresh()
 		return
 	end
 
 	local key = tostring(issue.key or "")
-	state.comments = "loading"
-	state.activity = "loading"
-	statusline.notify("loading", string.format("Loading conversation for %s...", key))
+	state.items = "loading"
+	notify.loading(string.format("Loading conversation for %s...", key))
 
 	state.requests.run(function(done)
 		return comments.fetch_conversation(issue, opts, done)
@@ -43,22 +41,25 @@ function M.on_select(issue, refresh, opts)
 		if not state.is_current(generation, issue) then
 			return
 		end
-		if err then
-			state.comments = {}
-			state.activity = {}
-			state.error = tostring(err)
-			statusline.notify("error", string.format("Failed to load conversation for %s", key))
-		else
-			result = result or {}
-			state.comments = {}
-			for _, comment in ipairs(result.comments or {}) do
-				if not comment.deleted then
-					table.insert(state.comments, comment)
+		state.items = {}
+		if result then
+			for _, item in ipairs(result) do
+				if item.kind ~= "comment" or item.entity.deleted ~= true then
+					table.insert(state.items, item)
 				end
 			end
-			state.activity = result.events or {}
-			state.error = nil
-			statusline.notify("success", string.format("Conversation loaded for %s", key), 1200)
+		end
+
+		state.error = nil
+		if err then
+			if not result then
+				state.error = tostring(err)
+			end
+			local message = result and "Conversation for %s partially failed: %s"
+				or "Failed to load conversation for %s: %s"
+			notify.error(string.format(message, key, tostring(err)))
+		else
+			notify.success(string.format("Conversation loaded for %s", key), { timeout = 1200 })
 		end
 		refresh()
 	end)
@@ -69,18 +70,23 @@ M.render = renderer.render
 ---@param _lnum integer
 ---@param entry table
 function M.is_selectable_line(_lnum, entry) ---@diagnostic disable-line: unused-local
-	return entry.entity_kind == "comment" or entry.activity_entry ~= nil or entry.kind == "activity_gap"
+	return entry.conversation_item ~= nil or entry.kind == "activity_gap"
 end
 
 ---@param _issue Issue
 ---@param entry table
-function M.on_enter(_issue, entry) ---@diagnostic disable-line: unused-local
-	if entry and entry.entity_kind == "comment" and entry.comment then
-		local url = tostring(entry.comment.url or "")
-		if url ~= "" then
-			vim.ui.open(url)
-			return true
-		end
+function M.on_enter(_issue, entry)
+	local item = entry and entry.conversation_item or nil
+	if not item then
+		return
+	end
+	if item.kind ~= "description" and item.kind ~= "comment" then
+		return
+	end
+	local url = tostring(item.entity.url or "")
+	if url ~= "" then
+		vim.ui.open(url)
+		return true
 	end
 end
 
@@ -101,7 +107,7 @@ function M.deactivate(buf)
 		keymaps.teardown(buf)
 	end
 	state.deactivate()
-	statusline.clear_notice()
+	notify.clear()
 end
 
 return M

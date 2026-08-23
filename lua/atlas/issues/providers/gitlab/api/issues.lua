@@ -1,19 +1,33 @@
 local M = {}
 
-local service = require("atlas.providers.gitlab.client").issues
+local service = require("atlas.providers.gitlab.client")
 local normalizer = require("atlas.issues.providers.gitlab.api.mapper")
+local LIST_CACHE_PREFIX = "gitlab:issues:list:v2:"
+
+---@param path string
+---@param iid integer
+local function invalidate_issue(path, iid)
+	service.delete_memory_cache(string.format("gitlab:issue:%s#%d", path, iid))
+	service.clear_cache(LIST_CACHE_PREFIX)
+end
 
 ---@param params table<string, any>
 ---@return string
 local function build_query(params)
-	local parts = {}
+	local keys = {}
 	for k, v in pairs(params or {}) do
 		if v ~= nil and v ~= "" then
-			table.insert(parts, k .. "=" .. service.url_encode(tostring(v)))
+			table.insert(keys, k)
 		end
 	end
-	if #parts == 0 then
+	if #keys == 0 then
 		return ""
+	end
+	table.sort(keys)
+
+	local parts = {}
+	for _, key in ipairs(keys) do
+		table.insert(parts, key .. "=" .. service.url_encode(tostring(params[key])))
 	end
 	return "?" .. table.concat(parts, "&")
 end
@@ -24,6 +38,7 @@ end
 ---@return { cancel: fun() }|nil
 function M.list_issues(view, opts, on_done)
 	opts = opts or {}
+	local scoped_project = view.project ~= nil and tostring(view.project) ~= ""
 	local params = {
 		scope = view.scope or "assigned_to_me",
 		state = view.state or "opened",
@@ -52,8 +67,10 @@ function M.list_issues(view, opts, on_done)
 		end
 	end
 
-	local endpoint = "/issues" .. build_query(params)
-	local cache_key = "gitlab:issues:list:" .. endpoint
+	local endpoint = (
+		scoped_project and string.format("/projects/%s/issues", service.url_encode(tostring(view.project))) or "/issues"
+	) .. build_query(params)
+	local cache_key = LIST_CACHE_PREFIX .. endpoint
 
 	if not opts.force_load then
 		local cached, ok = service.get_cache(cache_key)
@@ -79,7 +96,7 @@ end
 
 ---@param key string
 ---@param opts { force_load?: boolean }|nil
----@param on_done fun(issue: Issue|nil, err: string|nil)
+---@param on_done fun(issue: IssueDetails|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.get_issue(key, opts, on_done)
 	opts = opts or {}
@@ -104,13 +121,39 @@ function M.get_issue(key, opts, on_done)
 			on_done(nil, err)
 			return
 		end
-		local issue = normalizer.to_issue(result)
+		local issue = normalizer.to_issue_details(result)
 		if issue then
 			service.set_memory_cache(cache_key, issue)
 		end
 		on_done(issue, nil)
 	end, {
 		action = "Fetch issue",
+		path = path,
+		iid = iid,
+	})
+end
+
+---@param key string
+---@param description string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.update_description(key, description, on_done)
+	local path, iid = normalizer.parse_key(key)
+	if path == "" or iid == nil then
+		on_done(false, "Invalid issue key")
+		return nil
+	end
+
+	local endpoint = string.format("/projects/%s/issues/%d", service.url_encode(path), iid)
+	return service.request("PUT", endpoint, { description = description }, function(_, err)
+		if err then
+			on_done(false, err)
+			return
+		end
+		invalidate_issue(path, iid)
+		on_done(true, nil)
+	end, {
+		action = "Update issue description",
 		path = path,
 		iid = iid,
 	})
@@ -132,7 +175,7 @@ function M.set_state(key, state_event, on_done)
 			on_done(false, err)
 			return
 		end
-		service.delete_memory_cache(string.format("gitlab:issue:%s#%d", path, iid))
+		invalidate_issue(path, iid)
 		on_done(true, nil)
 	end, {
 		action = "Issue state change",
@@ -171,7 +214,7 @@ function M.update_labels(key, diff, on_done)
 			on_done(false, err)
 			return
 		end
-		service.delete_memory_cache(string.format("gitlab:issue:%s#%d", path, iid))
+		invalidate_issue(path, iid)
 		on_done(true, nil)
 	end, {
 		action = "Update labels",
@@ -205,7 +248,7 @@ function M.set_assignee_ids(key, ids, on_done)
 			on_done(false, err)
 			return
 		end
-		service.delete_memory_cache(string.format("gitlab:issue:%s#%d", path, iid))
+		invalidate_issue(path, iid)
 		on_done(true, nil)
 	end, {
 		action = "Set assignees",
@@ -280,6 +323,7 @@ function M.create_issue(opts, on_done)
 		local issue = normalizer.to_issue(result)
 		local iid = (issue and issue._raw and issue._raw.iid) or tonumber(result.iid)
 		local key = (issue and issue.key) or (iid and string.format("%s#%d", path, iid) or nil)
+		service.clear_cache(LIST_CACHE_PREFIX)
 		on_done({
 			key = key,
 			iid = iid,
@@ -294,7 +338,7 @@ end
 
 ---@param query string
 ---@param opts { force_load?: boolean, max_results?: number }|nil
----@param on_done fun(items: { id: any, key: string, summary: string, url: string|nil }[]|nil, err: string|nil)
+---@param on_done fun(items: { id: any, key: string, title: string, url: string|nil }[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.search_issues_picker(query, opts, on_done)
 	opts = opts or {}
@@ -319,7 +363,7 @@ function M.search_issues_picker(query, opts, on_done)
 			table.insert(items, {
 				id = issue.key,
 				key = issue.key,
-				summary = issue.summary,
+				title = issue.title,
 				url = issue.url,
 			})
 		end

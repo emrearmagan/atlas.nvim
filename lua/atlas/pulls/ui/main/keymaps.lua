@@ -1,6 +1,6 @@
 local M = {}
 
-local statusline = require("atlas.ui.statusline")
+local notify = require("atlas.core.notify")
 local resolver = require("atlas.core.keymaps")
 local utils = require("atlas.ui.shared.utils")
 local actions = require("atlas.pulls.actions")
@@ -47,7 +47,7 @@ function M.register(buf, views)
 		local pr = selected_pr()
 
 		if needs_pr and not pr then
-			statusline.notify("warn", "No PR selected")
+			notify.warn("No PR selected")
 			return
 		end
 		if state.provider then
@@ -65,7 +65,7 @@ function M.register(buf, views)
 	local items = {}
 
 	for _, view in ipairs(views or {}) do
-		if view.key ~= nil and view.key ~= "" then
+		if view._kind ~= "bookmarks" and view.key ~= nil and view.key ~= "" then
 			local v = view
 			table.insert(items, {
 				key = v.key,
@@ -77,6 +77,23 @@ function M.register(buf, views)
 				end,
 			})
 		end
+	end
+
+	local bookmark_key = state.provider and require("atlas.ui.shared.bookmarks_view").key("pulls", state.provider.id)
+	if bookmark_key then
+		table.insert(items, {
+			key = bookmark_key,
+			desc = "Switch to bookmarks",
+			hidden = true,
+			callback = function()
+				for _, view in ipairs(require("atlas.ui.shared.bookmarks_view").views(state.provider, "pulls")) do
+					if view._kind == "bookmarks" then
+						require("atlas.pulls.ui.main.controller").switch_view(view)
+						return
+					end
+				end
+			end,
+		})
 	end
 
 	utils.insert_if(
@@ -181,6 +198,21 @@ function M.register(buf, views)
 
 	utils.insert_if(
 		items,
+		item("ui.toggle_star", {
+			desc = "Star or unstar PR",
+			callback = function()
+				local pr, repo = selected_pr()
+				if pr == nil or repo == nil then
+					notify.warn("No PR selected")
+					return
+				end
+				require("atlas.pulls.ui.main.controller").toggle_star(pr, repo)
+			end,
+		})
+	)
+
+	utils.insert_if(
+		items,
 		item("pulls.open_diff", {
 			desc = "Open PR diff",
 			opts = { nowait = true },
@@ -227,7 +259,7 @@ function M.register(buf, views)
 			callback = function()
 				local pr = selected_pr()
 				if pr == nil then
-					statusline.notify("warn", "No PR selected")
+					notify.warn("No PR selected")
 					return
 				end
 				require("atlas.pulls.ui.main.controller").refresh_pr(pr)
@@ -256,7 +288,7 @@ function M.register(buf, views)
 			callback = function()
 				local pr, repo = selected_pr()
 				if pr == nil or repo == nil then
-					statusline.notify("warn", "No repository selected")
+					notify.warn("No repository selected")
 					return
 				end
 

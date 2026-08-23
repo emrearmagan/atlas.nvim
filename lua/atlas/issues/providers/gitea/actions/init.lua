@@ -1,9 +1,9 @@
 local M = {}
 
 local registry = require("atlas.issues.providers.gitea.actions.registry")
-local statusline = require("atlas.ui.statusline")
+local notify = require("atlas.core.notify")
 
----@alias AtlasGiteaForgejoIssueActionId
+---@alias AtlasGiteaIssueActionId
 ---| AtlasIssueActionId
 ---| "close"
 ---| "reopen"
@@ -18,7 +18,7 @@ local statusline = require("atlas.ui.statusline")
 
 M.items = registry.items
 
----@param action_id AtlasGiteaForgejoIssueActionId
+---@param action_id AtlasGiteaIssueActionId
 ---@param ctx AtlasIssueActionContext
 ---@return boolean
 function M.is_available(action_id, ctx)
@@ -26,15 +26,15 @@ function M.is_available(action_id, ctx)
 	return action ~= nil and (action.is_available == nil or action.is_available(ctx) == true)
 end
 
----@param action_id AtlasGiteaForgejoIssueActionId
+---@param action_id AtlasGiteaIssueActionId
 ---@param ctx AtlasIssueActionContext
 ---@param on_done fun(result: IssuesActionResult|nil, err: string|nil)
 ---@return boolean handled
 function M.run(action_id, ctx, on_done)
 	local action = registry.find(action_id)
 	if not action then
-		local err = string.format("Unknown action: %s", tostring(action_id))
-		statusline.notify("warn", err)
+		local err = string.format("Unknown action: %s", action_id)
+		notify.warn(err)
 		on_done(nil, err)
 		return false
 	end
@@ -43,14 +43,14 @@ function M.run(action_id, ctx, on_done)
 		available, err = action.is_available(ctx)
 	end
 	if not available then
-		err = tostring(err or "Action is not available")
-		statusline.notify("warn", err)
+		err = err or "Action is not available"
+		notify.warn(err)
 		on_done(nil, err)
 		return false
 	end
 	action.run(ctx, function(result, run_err)
 		if run_err then
-			statusline.notify("error", tostring(run_err))
+			notify.error(run_err)
 		end
 		on_done(result, run_err)
 	end)

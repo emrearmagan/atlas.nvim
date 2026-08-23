@@ -19,8 +19,6 @@
 ---@field with_relationships boolean|nil
 
 ---@class IssuesViewConfig : AtlasIssuesViewConfig
----@field _kind "bookmarks"|nil
----@field _bookmarks table<string, any>|nil
 
 ---@class IssuesProvider
 ---@field id string
@@ -44,18 +42,19 @@
 ---@class IssuesCoreCapability
 ---@field fetch_user fun(on_done: fun(user: IssueUser|nil, err: string|nil)): { cancel: fun() }|nil
 ---@field fetch_issues fun(view: IssuesViewConfig, opts: IssuesFetchOpts, on_done: fun(issues: Issue[], next_page_token: string|nil, is_last: boolean, err: string|nil)): { cancel: fun() }|nil
----@field fetch_issue fun(issue_key: string, opts: IssuesFetchOpts|nil, on_done: fun(issue: Issue|nil, err: string|nil)): { cancel: fun() }|nil
+---@field fetch_issue fun(issue_key: string, opts: IssuesFetchOpts|nil, on_done: fun(issue: IssueDetails|nil, err: string|nil)): { cancel: fun() }|nil
+---@field update_description (fun(issue: IssueDetails, content: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field views fun(): IssuesViewConfig[]
 ---@field refresh fun()|nil
 
 ---@class IssuesCommentsCapability
 ---@field fetch_activity (fun(issue: Issue, opts: IssuesFetchOpts|nil, on_done: fun(entries: IssueActivityEntry[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
----@field fetch_conversation (fun(issue: Issue, opts: { force_refresh: boolean|nil }|nil, on_done: fun(result: { comments: IssueComment[], events: IssueActivityEntry[] }|nil, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field fetch_conversation (fun(issue: IssueDetails, opts: { force_refresh: boolean|nil }|nil, on_done: fun(items: IssueConversationItem[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field add_comment (fun(issue: Issue, content: string, on_done: fun(comment: IssueComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field reply_comment (fun(issue: Issue, parent: IssueComment, content: string, on_done: fun(comment: IssueComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field edit_comment (fun(issue: Issue, comment: IssueComment, content: string, on_done: fun(comment: IssueComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field delete_comment (fun(issue: Issue, comment: IssueComment, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
----@field add_reaction (fun(issue: Issue, comment: IssueComment, key: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field add_reaction (fun(issue: Issue, item: IssueConversationItem, key: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field reaction_options IssueReactionOption[]|nil
 ---@field comment_completion (fun(): AtlasMarkdownCompletionProvider|nil)|nil
 
@@ -73,7 +72,6 @@
 ---@field render (fun(groups: IssuesGroup[], layout: "plain"|"compact", opts: { width: integer }): IssuesMainRenderResult)|nil
 ---@field format_row (fun(issue: Issue, is_child: boolean): table|nil)|nil
 ---@field cell_hl (fun(row: table, col: table, ctx: { text: string, padded: string, width: integer }): table[]|nil)|nil
----@field issue_popup_content (fun(issue: Issue): string[], AtlasUIHighlight[])|nil
 ---@field panel IssuesProviderPanel|nil
 
 --------------------------------------------------------------------------------
@@ -81,10 +79,10 @@
 --------------------------------------------------------------------------------
 
 ---@class IssuesProviderPanel
----@field header_rows (fun(issue: Issue, loading: boolean): IssuesPanelHeaderRow[])|nil
----@field chips (fun(issue: Issue, loading: boolean): IssuesPanelChip[])|nil
+---@field header_rows (fun(issue: Issue, details: IssueDetails|nil, loading: boolean): IssuesPanelHeaderRow[])|nil
+---@field chips (fun(issue: Issue, details: IssueDetails|nil, loading: boolean): IssuesPanelChip[])|nil
 ---@field tabs (fun(): IssuesPanelTab[])|nil
----@field fetch_header (fun(issue: Issue, opts: { force_refresh: boolean|nil, issue_refreshed: boolean|nil }|nil, on_done: fun()): { cancel: fun() }|nil)|nil
+---@field fetch_header (fun(issue: Issue, details: IssueDetails, opts: { force_refresh: boolean|nil }|nil, on_done: fun()): { cancel: fun() }|nil)|nil
 
 --------------------------------------------------------------------------------
 -- Panel types
@@ -103,8 +101,8 @@
 ---@field hl string|nil
 
 ---@class IssuesPanelTabModule
----@field render fun(issue: Issue, width: integer): string[], table[], table<integer, table>|nil
----@field on_select (fun(issue: Issue, refresh: fun(), opts: { force_refresh: boolean|nil }|nil))|nil
+---@field render fun(issue: IssueDetails, width: integer): string[], table[], table<integer, table>|nil
+---@field on_select (fun(issue: IssueDetails, refresh: fun(), opts: { force_refresh: boolean|nil }|nil))|nil
 ---@field reset (fun())|nil
 ---@field activate (fun(buf: integer|nil, refresh: fun()|nil))|nil
 ---@field deactivate (fun(buf: integer|nil))|nil

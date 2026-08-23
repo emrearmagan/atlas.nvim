@@ -1,24 +1,28 @@
 -- Example:
 --   require("atlas").setup({
+--     providers = {
+--       ---@type AtlasGitLabProviderConfig
+--       gitlab = {
+--         base_url = "https://gitlab.com",
+--         token    = vim.env.GITLAB_TOKEN,
+--         cache_ttl = 300,
+--       },
+--     },
 --     issues = {
---       providers = {
---         gitlab = {
---           base_url = "https://gitlab.com",
---           token    = vim.env.GITLAB_TOKEN,
---           cache_ttl = 300,
---           views = {
---             { name = "Assigned", key = "1", scope = "assigned_to_me", state = "opened" },
---             { name = "Created",  key = "2", scope = "created_by_me",  state = "opened" },
---             { name = "All open", key = "3", scope = "all",            state = "opened" },
---           },
---           bookmarks = {
---             -- key   = "S",      -- default
---             -- label = "Search", -- default
---             items = {
---               ["No labels"] = { scope = "all", state = "opened",
---                                 extra_params = { ["not[labels]"] = "*" } },
---               ["Closed"]    = { scope = "created_by_me", state = "closed" },
---             },
+--       ---@type AtlasGitLabIssuesConfig
+--       gitlab = {
+--         views = {
+--           { name = "Assigned", key = "1", scope = "assigned_to_me", state = "opened" },
+--           { name = "Created",  key = "2", scope = "created_by_me",  state = "opened" },
+--           { name = "All open", key = "3", scope = "all",            state = "opened" },
+--         },
+--         bookmarks = {
+--           -- key   = "S",      -- default
+--           -- label = "Search", -- default
+--           items = {
+--             ["No labels"] = { scope = "all", state = "opened",
+--                               extra_params = { ["not[labels]"] = "*" } },
+--             ["Closed"]    = { scope = "created_by_me", state = "closed" },
 --           },
 --         },
 --       },
@@ -47,6 +51,7 @@
 ---@field extra_params table<string, string>|nil
 
 ---@class AtlasGitLabIssuesViewConfig : IssuesViewConfig, AtlasGitLabIssuesSearchConfig
+---@field current_repo boolean|nil
 
 ---@class AtlasGitLabIssuesBookmarksConfig
 ---@field key string|nil    -- default "S"
@@ -54,8 +59,5 @@
 ---@field items table<string, AtlasGitLabIssuesSearchConfig>|nil
 
 ---@class AtlasGitLabIssuesConfig
----@field base_url string
----@field token string
----@field cache_ttl number|nil
 ---@field views AtlasGitLabIssuesViewConfig[]|nil
 ---@field bookmarks AtlasGitLabIssuesBookmarksConfig|nil

@@ -1,17 +1,18 @@
 local M = {}
 
----@alias AtlasPullsProviderId "bitbucket"|"github"|"gitlab"|"gitea"
----@alias AtlasIssuesProviderId "jira"|"github"|"gitlab"|"gitea"
+---@alias AtlasPullsProviderId "bitbucket"|"github"|"gitlab"|"gitea"|"forgejo"
+---@alias AtlasIssuesProviderId "jira"|"github"|"gitlab"|"gitea"|"forgejo"
 ---@alias AtlasProviderId AtlasPullsProviderId|AtlasIssuesProviderId
 
 ---@class AtlasProviderDomain
 ---@field module string
+---@field icon AtlasIconStyle|nil
 ---@field bookmark_key string|nil
+---@field bookmark_label string|nil
 
 ---@class AtlasProvider
 ---@field id AtlasProviderId
----@field name fun(domain: "pulls"|"issues"|nil): string
----@field icon fun(domain: "pulls"|"issues"): AtlasIconStyle
+---@field name string
 ---@field default_host string|nil
 ---@field domains table<"pulls"|"issues", AtlasProviderDomain>
 
@@ -64,31 +65,22 @@ function M.load(id, domain)
 		return nil
 	end
 	local implementation = require(provider_domain.module)
-	local icon = provider.icon(domain)
 	implementation.id = id
-	implementation.name = provider.name(domain)
-	implementation.icon = icon.icon
-	implementation.hl_group = icon.hl_group
+	implementation.name = provider.name
+	if provider_domain.icon then
+		implementation.icon = provider_domain.icon.icon
+		implementation.hl_group = provider_domain.icon.hl_group
+	end
 	return implementation
-end
-
----@param id AtlasProviderId
----@param domain "pulls"|"issues"
----@return table|nil
-function M.options(id, domain)
-	local config = require("atlas.config").options or {}
-	local domain_options = type(config[domain]) == "table" and config[domain] or nil
-	local provider_options = domain_options and domain_options.providers or nil
-	local result = type(provider_options) == "table" and provider_options[id] or nil
-	return type(result) == "table" and result or nil
 end
 
 ---@param domain "pulls"|"issues"
 ---@return AtlasProvider[]
 function M.configured(domain)
+	local config = require("atlas.config")
 	local result = {}
 	for _, provider in ipairs(M.list(domain)) do
-		if M.options(provider.id, domain) ~= nil then
+		if config.provider_options(provider.id) ~= nil then
 			table.insert(result, provider)
 		end
 	end
@@ -97,36 +89,30 @@ end
 
 add({
 	id = "jira",
-	name = function()
-		return "Jira"
-	end,
-	icon = function()
-		return { icon = "󰌃", hl_group = "AtlasJiraTheme" }
-	end,
+	name = "Jira",
 	domains = {
 		issues = {
 			module = "atlas.issues.providers.jira",
+			icon = { icon = "󰌃", hl_group = "AtlasJiraTheme" },
 			bookmark_key = "J",
+			bookmark_label = "JQL",
 		},
 	},
 })
 
 add({
 	id = "github",
-	name = function()
-		return "GitHub"
-	end,
-	icon = function()
-		return { icon = "", hl_group = "AtlasGitHubTheme" }
-	end,
+	name = "GitHub",
 	default_host = "github.com",
 	domains = {
 		pulls = {
 			module = "atlas.pulls.providers.github",
+			icon = { icon = "", hl_group = "AtlasGitHubTheme" },
 			bookmark_key = "S",
 		},
 		issues = {
 			module = "atlas.issues.providers.github",
+			icon = { icon = "", hl_group = "AtlasGitHubTheme" },
 			bookmark_key = "S",
 		},
 	},
@@ -134,36 +120,30 @@ add({
 
 add({
 	id = "bitbucket",
-	name = function()
-		return "Bitbucket"
-	end,
-	icon = function()
-		return { icon = "", hl_group = "AtlasBitbucketTheme" }
-	end,
+	name = "Bitbucket",
 	default_host = "bitbucket.org",
 	domains = {
 		pulls = {
 			module = "atlas.pulls.providers.bitbucket",
+			icon = { icon = "", hl_group = "AtlasBitbucketTheme" },
+			bookmark_key = "S",
 		},
 	},
 })
 
 add({
 	id = "gitlab",
-	name = function()
-		return "GitLab"
-	end,
-	icon = function()
-		return { icon = "", hl_group = "AtlasGitLabTheme" }
-	end,
+	name = "GitLab",
 	default_host = "gitlab.com",
 	domains = {
 		pulls = {
 			module = "atlas.pulls.providers.gitlab",
+			icon = { icon = "", hl_group = "AtlasGitLabTheme" },
 			bookmark_key = "S",
 		},
 		issues = {
 			module = "atlas.issues.providers.gitlab",
+			icon = { icon = "", hl_group = "AtlasGitLabTheme" },
 			bookmark_key = "S",
 		},
 	},
@@ -171,27 +151,33 @@ add({
 
 add({
 	id = "gitea",
-	name = function(domain)
-		if domain == nil then
-			return "Gitea / Forgejo"
-		end
-		local options = M.options("gitea", domain) or {}
-		return options.api_type == "forgejo" and "Forgejo" or "Gitea"
-	end,
-	icon = function(domain)
-		local options = M.options("gitea", domain) or {}
-		if options.api_type == "forgejo" then
-			return { icon = "", hl_group = "AtlasForgejoTheme" }
-		end
-		return { icon = "", hl_group = "AtlasGiteaTheme" }
-	end,
+	name = "Gitea",
 	domains = {
 		pulls = {
 			module = "atlas.pulls.providers.gitea",
+			icon = { icon = "", hl_group = "AtlasGiteaTheme" },
 			bookmark_key = "S",
 		},
 		issues = {
 			module = "atlas.issues.providers.gitea",
+			icon = { icon = "", hl_group = "AtlasGiteaTheme" },
+			bookmark_key = "S",
+		},
+	},
+})
+
+add({
+	id = "forgejo",
+	name = "Forgejo",
+	domains = {
+		pulls = {
+			module = "atlas.pulls.providers.forgejo",
+			icon = { icon = "", hl_group = "AtlasForgejoTheme" },
+			bookmark_key = "S",
+		},
+		issues = {
+			module = "atlas.issues.providers.forgejo",
+			icon = { icon = "", hl_group = "AtlasForgejoTheme" },
 			bookmark_key = "S",
 		},
 	},

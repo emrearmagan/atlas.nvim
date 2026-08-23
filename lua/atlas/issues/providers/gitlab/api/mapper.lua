@@ -32,6 +32,60 @@ local function first_assignee(raw_assignees)
 	return nil
 end
 
+---@param raw_assignees table[]|nil
+---@return IssueUser[]
+local function assignees(raw_assignees)
+	local users = {}
+	for _, raw in ipairs(json.safe_table(raw_assignees)) do
+		local user = M.to_user(raw)
+		if user then
+			table.insert(users, user)
+		end
+	end
+	return users
+end
+
+---@param raw_labels table[]|nil
+---@return IssueLabel[]
+local function labels(raw_labels)
+	local result = {}
+	for _, raw in ipairs(json.safe_table(raw_labels)) do
+		local name = type(raw) == "string" and raw or json.safe_str(raw.name)
+		if name and name ~= "" then
+			table.insert(result, {
+				name = name,
+				color = type(raw) == "table" and json.safe_str(raw.color) or nil,
+			})
+		end
+	end
+	return result
+end
+
+---@param raw any
+---@return IssueMilestone|nil
+local function milestone(raw)
+	raw = json.nilify(raw)
+	if type(raw) ~= "table" then
+		return nil
+	end
+	local title = json.safe_str(raw.title)
+	if title == nil then
+		return nil
+	end
+	return { title = title }
+end
+
+---@param raw table
+---@return table<string, integer>|nil
+local function issue_reactions(raw)
+	local upvotes = tonumber(raw.upvotes) or 0
+	local downvotes = tonumber(raw.downvotes) or 0
+	if upvotes == 0 and downvotes == 0 then
+		return nil
+	end
+	return { thumbsup = upvotes, thumbsdown = downvotes }
+end
+
 ---@param state string|nil
 ---@return string, string
 local function normalize_state(state)
@@ -68,36 +122,33 @@ function M.to_issue(raw)
 	local description = json.safe_str(raw.description) or ""
 
 	local labels_raw = json.safe_table(raw.labels) -- list of label-name strings
-	local labels = {}
+	local issue_labels = {}
 	for _, name in ipairs(labels_raw) do
 		if type(name) == "string" and name ~= "" then
-			table.insert(labels, { name = name })
+			table.insert(issue_labels, { name = name })
 		end
 	end
 
-	local assignees = json.safe_table(raw.assignees)
-	local milestone = json.nilify(raw.milestone)
-
+	local issue_assignees = json.safe_table(raw.assignees)
+	local issue_milestone = json.nilify(raw.milestone)
 	local project_path = key:match("^(.-)#") or ""
 
 	---@type Issue
 	local issue = {
 		key = key,
-		summary = title,
+		title = title,
 		project = nil,
 		status = status_name,
 		status_id = status_id,
-		status_category = nil,
-		status_color = nil,
 		type = nil,
 		priority = nil,
-		assignee = first_assignee(assignees),
+		assignee = first_assignee(issue_assignees),
 		reporter = M.to_user(raw.author),
 		story_points = tonumber(json.nilify(raw.weight)),
 		duedate = json.safe_str(raw.due_date),
 		parent = nil,
 		url = web_url ~= "" and web_url or nil,
-		is_subscribed = type(raw.subscribed) == "boolean" and raw.subscribed or nil,
+		is_subscribed = json.nilify(raw.subscribed),
 		_raw = {
 			iid = iid,
 			project_id = tonumber(raw.project_id),
@@ -106,16 +157,34 @@ function M.to_issue(raw)
 			created_at = json.safe_str(raw.created_at) or "",
 			updated_at = json.safe_str(raw.updated_at) or "",
 			closed_at = json.safe_str(raw.closed_at),
-			labels = labels,
+			labels = issue_labels,
 			label_names = labels_raw,
-			assignees = assignees,
-			milestone = milestone,
+			assignees = issue_assignees,
+			milestone = issue_milestone,
 			comment_count = tonumber(raw.user_notes_count) or 0,
 			web_url = web_url,
 			confidential = raw.confidential == true,
 			issue_type = json.safe_str(raw.issue_type),
 		},
 	}
+	return issue
+end
+
+---@param raw any Decoded API value.
+---@return IssueDetails|nil
+function M.to_issue_details(raw)
+	local issue = M.to_issue(raw)
+	if issue == nil then
+		return nil
+	end
+
+	issue.description = json.safe_str(raw.description) or ""
+	issue.assignees = assignees(raw.assignees)
+	issue.labels = labels(raw.labels)
+	issue.milestone = milestone(raw.milestone)
+	issue.reactions = issue_reactions(raw)
+	issue.sub_issues = {}
+	issue.created_at = json.safe_str(raw.created_at)
 	return issue
 end
 

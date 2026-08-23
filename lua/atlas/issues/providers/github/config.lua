@@ -1,22 +1,26 @@
 -- Example:
 --   require("atlas").setup({
+--     providers = {
+--       ---@type AtlasGitHubProviderConfig
+--       github = {
+--         cache_ttl = 300,
+--       },
+--     },
 --     issues = {
---       providers = {
---         github = {
---           cache_ttl = 300,
---           views = {
---             { name = "Assigned", key = "1", search = "assignee:@me is:open" },
---             { name = "Created",  key = "2", search = "author:@me is:open" },
---             { name = "Mention",  key = "3", search = "mentions:@me is:open" },
---             { name = "Updated",  key = "4", search = "involves:@me sort:updated-desc" },
---           },
---           bookmarks = {
---             -- key   = "S",      -- default
---             -- label = "Search", -- default
---             items = {
---               ["Bugs"]       = "is:issue is:open label:bug",
---               ["Recently closed"] = "is:issue is:closed author:@me sort:updated-desc",
---             },
+--       ---@type AtlasGitHubIssuesConfig
+--       github = {
+--         views = {
+--           { name = "Assigned", key = "1", search = "assignee:@me is:open" },
+--           { name = "Created",  key = "2", search = "author:@me is:open" },
+--           { name = "Mention",  key = "3", search = "mentions:@me is:open" },
+--           { name = "Updated",  key = "4", search = "involves:@me sort:updated-desc" },
+--         },
+--         bookmarks = {
+--           -- key   = "S",      -- default
+--           -- label = "Search", -- default
+--           items = {
+--             ["Bugs"]       = "is:issue is:open label:bug",
+--             ["Recently closed"] = "is:issue is:closed author:@me sort:updated-desc",
 --           },
 --         },
 --       },
@@ -25,6 +29,7 @@
 
 ---@class AtlasGitHubIssuesViewConfig : IssuesViewConfig
 ---@field search string
+---@field current_repo boolean|nil
 
 ---@class AtlasGitHubIssuesBookmarksConfig
 ---@field key string|nil    -- default "S"
@@ -32,6 +37,5 @@
 ---@field items table<string, string>|nil
 
 ---@class AtlasGitHubIssuesConfig
----@field cache_ttl number|nil
 ---@field views AtlasGitHubIssuesViewConfig[]|nil
 ---@field bookmarks AtlasGitHubIssuesBookmarksConfig|nil

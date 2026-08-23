@@ -3,7 +3,7 @@ local M = {}
 local git_checkout = require("atlas.core.git.checkout")
 local icons = require("atlas.ui.shared.icons")
 local logger = require("atlas.core.logger")
-local statusline = require("atlas.ui.statusline")
+local core_notify = require("atlas.core.notify")
 
 ---@param context AtlasPullActionContext
 ---@return boolean
@@ -16,7 +16,11 @@ end
 ---@param message string
 ---@param duration integer|nil
 local function notify(context, level, message, duration)
-	(context.notify or statusline.notify)(level, message, duration)
+	if context.notify then
+		context.notify(level, message, duration)
+		return
+	end
+	core_notify.show(level, message, { timeout = duration })
 end
 
 ---@param item AtlasPullsCustomAction

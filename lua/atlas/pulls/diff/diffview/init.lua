@@ -3,13 +3,13 @@ local M = {}
 local comments = require("atlas.pulls.diff.comments")
 local config = require("atlas.config")
 local keymaps = require("atlas.core.keymaps")
+local notify = require("atlas.core.notify")
 local hints = require("atlas.pulls.diff.ui.hints")
 local notes = require("atlas.pulls.diff.notes")
 local position = require("atlas.pulls.diff.position")
 local review_keymaps = require("atlas.pulls.diff.keymaps")
 local review_panel = require("atlas.pulls.diff.ui.review_panel")
 local session_api = require("atlas.pulls.diff.session")
-local statusline = require("atlas.pulls.diff.ui.statusline")
 local ui_comments = require("atlas.pulls.diff.ui.comments")
 
 ---@type table<string, DiffFileStatus>
@@ -110,7 +110,7 @@ local function open_review_panel(session, focus)
 	end
 	local win = review_panel.open(session.review_panel, anchor, focus)
 	if win then
-		statusline.attach(win)
+		session.statusline:attach(win)
 	end
 	return win ~= nil
 end
@@ -171,7 +171,7 @@ local function finish_pending_jump(session)
 	line = math.min(line, vim.api.nvim_buf_line_count(target.buf))
 	vim.api.nvim_win_set_cursor(target.win, { line, 0 })
 	vim.api.nvim_win_call(target.win, function()
-		pcall(vim.cmd.normal, { "zvzz", bang = true })
+		pcall(vim.cmd.normal, { args = { "zv" }, bang = true })
 	end)
 	if vim.api.nvim_get_current_tabpage() == session.tabpage then
 		if pending.focus_diff then
@@ -358,8 +358,8 @@ local function sync(session)
 		right = { buf = layout.b.file.bufnr, win = layout.b.id },
 	}
 	state.suspended = false
-	statusline.attach(current_view.left.win)
-	statusline.attach(current_view.right.win)
+	session.statusline:attach(current_view.left.win)
+	session.statusline:attach(current_view.right.win)
 	session_api.set_current(session, current_view)
 	session_api.review_attached(session)
 	if buffers_changed then
@@ -500,7 +500,7 @@ local function attach(session, view, tabpage)
 	session_api.attach(session, {
 		tabpage = tabpage,
 		notify = function(level, message, duration)
-			statusline.notify(session.statusline, level, message, duration)
+			notify.show(level, message, { timeout = duration })
 		end,
 		focus_item = function(item, focus_diff)
 			focus_item(session, item, focus_diff)

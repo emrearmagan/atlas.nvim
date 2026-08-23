@@ -1,5 +1,6 @@
 local M = {}
 
+local config = require("atlas.config")
 local providers = require("atlas.providers")
 
 ---@class AtlasIconStyle
@@ -35,7 +36,7 @@ local ICONS = {
 		pin = { icon = "󰐃", hl_group = "AtlasTextNote" },
 		dot = { icon = "●", hl_group = "AtlasTextMuted" },
 		activity_more = { icon = "󰉺", hl_group = "AtlasTextMuted" },
-		star = { icon = "", hl_group = "AtlasTextWarning" },
+		star = { icon = "󰓎", hl_group = "AtlasTextWarning" },
 		watching = { icon = "", hl_group = "AtlasTextPositive" },
 		arrow_up = { icon = "", hl_group = "AtlasTextMuted" },
 		arrow_right = { icon = "", hl_group = "AtlasTextMuted" },
@@ -133,8 +134,7 @@ end
 function M.issues_type(name)
 	local key = tostring(name or "")
 	local default = ICONS.issues.type[key:lower()]
-	local options = require("atlas.config").options or {}
-	local jira = (((options.issues or {}).providers or {}).jira or {})
+	local jira = config.provider_options("jira") or {}
 	local configured = ((jira.project_config or {}).issue_types or {})[key]
 
 	if configured then
@@ -163,10 +163,10 @@ end
 ---@param name string
 ---@return string, string
 function M.issues_provider(provider_id, name)
-	local provider = providers[provider_id]
+	local provider_domain = providers.domain(provider_id, "issues")
 	local style = nil
-	if name == "provider" and provider then
-		style = provider.icon("issues")
+	if name == "provider" and provider_domain then
+		style = provider_domain.icon
 	end
 	return get(style, ICONS.issues[name] or ICONS.pulls[name] or ICONS.general[name])
 end

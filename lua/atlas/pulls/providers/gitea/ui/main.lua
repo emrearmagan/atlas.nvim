@@ -4,14 +4,12 @@ local helper = require("atlas.pulls.ui.main.helper")
 local icons = require("atlas.ui.shared.icons")
 local table_tree = require("atlas.ui.components.table_tree")
 
----@param groups PullsGroup[]|nil
+---@param pulls PullRequest[]
 ---@return boolean
-local function has_diff_stats(groups)
-	for _, group in ipairs(groups or {}) do
-		for _, pr in ipairs(group.prs or {}) do
-			if type(pr.lines_added) == "number" or type(pr.lines_removed) == "number" then
-				return true
-			end
+local function has_diff_stats(pulls)
+	for _, pr in ipairs(pulls) do
+		if pr.lines_added ~= nil or pr.lines_removed ~= nil then
+			return true
 		end
 	end
 	return false
@@ -20,8 +18,8 @@ end
 ---@param pr PullRequest
 ---@return string, table[]
 local function diff_stats(pr)
-	local additions = type(pr.lines_added) == "number" and pr.lines_added or 0
-	local deletions = type(pr.lines_removed) == "number" and pr.lines_removed or 0
+	local additions = pr.lines_added or 0
+	local deletions = pr.lines_removed or 0
 	if additions + deletions == 0 then
 		return "", {}
 	end
@@ -36,25 +34,49 @@ local function diff_stats(pr)
 		}
 end
 
----@param columns table[]
+---@param layout "compact"|"grouped"|"plain"
 ---@param include_diff boolean
 ---@return table[]
-local function columns_without_tasks(columns, include_diff)
-	local result = {}
-	for _, column in ipairs(columns) do
-		if column.key ~= "tasks" then
-			if include_diff and column.key == "created" then
-				table.insert(result, {
-					key = "diff",
-					name = icons.pulls("changes"),
-					max_width = 15,
-					can_grow = false,
-					header_hl = "AtlasColumnHeader",
-				})
-			end
-			table.insert(result, column)
-		end
+local function columns(layout, include_diff)
+	local result = {
+		layout == "compact"
+				and { key = "pr_icon", name = "", min_width = 1, can_grow = false, header_hl = "AtlasColumnHeader" }
+			or { key = "name", name = "Title", min_width = 42, header_hl = "AtlasColumnHeader" },
+	}
+	if layout == "compact" then
+		table.insert(result, { key = "repo_pr", name = "Title", min_width = 42, header_hl = "AtlasColumnHeader" })
 	end
+	table.insert(result, {
+		key = "conversation",
+		name = icons.general("conversation"),
+		min_width = 2,
+		can_grow = false,
+		header_hl = "AtlasColumnHeader",
+	})
+	table.insert(result, {
+		key = "author",
+		name = string.format("%s Author", icons.general("user")),
+		min_width = 3,
+		can_grow = false,
+		header_hl = "AtlasColumnHeader",
+	})
+	if include_diff then
+		table.insert(result, {
+			key = "diff",
+			name = icons.pulls("changes"),
+			max_width = 15,
+			can_grow = false,
+			header_hl = "AtlasColumnHeader",
+		})
+	end
+	table.insert(
+		result,
+		{ key = "created", name = icons.general("created"), can_grow = false, header_hl = "AtlasColumnHeader" }
+	)
+	table.insert(
+		result,
+		{ key = "updated", name = icons.general("updated"), can_grow = false, header_hl = "AtlasColumnHeader" }
+	)
 	return result
 end
 
@@ -85,9 +107,9 @@ end
 ---@param line_map table<integer, table>
 ---@param spans table[]
 local function add_pr_id_spans(lines, line_map, spans)
-	for line_number, item in pairs(line_map or {}) do
-		if type(item) == "table" and item.kind == "pr" then
-			local start_col, end_col = string.find(lines[line_number] or "", "#%d+")
+	for line_number, item in pairs(line_map) do
+		if item.kind == "pr" then
+			local start_col, end_col = string.find(lines[line_number], "#%d+")
 			if start_col and end_col then
 				table.insert(spans, {
 					line = line_number - 1,
@@ -100,14 +122,15 @@ local function add_pr_id_spans(lines, line_map, spans)
 	end
 end
 
----@param groups PullsGroup[]
----@param layout string
+---@param pulls PullRequest[]
+---@param layout "compact"|"grouped"|"plain"
 ---@param opts { width: integer }
 ---@return PullsMainRenderResult
-function M.render(groups, layout, opts)
-	local table_data = layout == "plain" and helper.build_plain_tree_table(groups) or helper.build_compact_table(groups)
-	local include_diff = has_diff_stats(groups)
-	table_data.columns = columns_without_tasks(table_data.columns, include_diff)
+function M.render(pulls, layout, opts)
+	local table_data = layout == "compact" and helper.build_compact_table(pulls)
+		or helper.build_list_table(pulls, layout)
+	local include_diff = has_diff_stats(pulls)
+	table_data.columns = columns(layout, include_diff)
 	if include_diff then
 		add_diff_stats(table_data.rows)
 	end

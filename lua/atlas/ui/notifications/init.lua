@@ -1,5 +1,6 @@
 local M = {}
 
+local notify = require("atlas.core.notify")
 local statusline = require("atlas.ui.statusline")
 local icons = require("atlas.ui.shared.icons")
 local resolver = require("atlas.core.keymaps")
@@ -243,7 +244,7 @@ local function load(force_load)
 		state.is_loading = false
 		if err then
 			state.error = tostring(err)
-			statusline.notify("error", string.format("Failed to fetch notifications: %s", tostring(err)))
+			notify.error(string.format("Failed to fetch notifications: %s", tostring(err)))
 		else
 			state.error = nil
 			state.set_notifications(notifications)
@@ -262,15 +263,15 @@ end
 
 local function open_in_browser(notification)
 	if notification == nil or not notification.url or notification.url == "" then
-		statusline.notify("warn", "Notification has no URL")
+		notify.warn("Notification has no URL")
 		return
 	end
 	local ok, err = pcall(vim.ui.open, notification.url)
 	if not ok then
-		statusline.notify("error", string.format("Failed to open URL: %s", tostring(err)))
+		notify.error(string.format("Failed to open URL: %s", tostring(err)))
 		return
 	end
-	statusline.notify("info", "Opened in browser")
+	notify.info("Opened in browser")
 end
 
 local function mark_read(notification)
@@ -284,18 +285,18 @@ local function mark_read(notification)
 	local provider = current_provider
 	local notifications = provider and provider.capabilities.notifications
 	if notifications == nil then
-		statusline.notify("warn", "Provider does not support marking as read")
+		notify.warn("Provider does not support marking as read")
 		return
 	end
 
-	statusline.notify("loading", "Marking as read...")
+	notify.loading("Marking as read...")
 	notifications.mark_read(notification.id, function(ok, err)
 		if not ok then
-			statusline.notify("error", string.format("Failed to mark as read: %s", tostring(err)))
+			notify.error(string.format("Failed to mark as read: %s", tostring(err)))
 			return
 		end
 		state.mark_local_read(notification.id)
-		statusline.notify("success", "Marked as read", 1200)
+		notify.success("Marked as read", { timeout = 1200 })
 		rerender()
 		refresh_main()
 	end)
@@ -308,18 +309,18 @@ local function mark_done(notification)
 	local provider = current_provider
 	local notifications = provider and provider.capabilities.notifications
 	if notifications == nil then
-		statusline.notify("warn", "Provider does not support marking as done")
+		notify.warn("Provider does not support marking as done")
 		return
 	end
 
-	statusline.notify("loading", "Marking as done...")
+	notify.loading("Marking as done...")
 	notifications.mark_done(notification.id, function(ok, err)
 		if not ok then
-			statusline.notify("error", string.format("Failed to mark as done: %s", tostring(err)))
+			notify.error(string.format("Failed to mark as done: %s", tostring(err)))
 			return
 		end
 		state.remove_local(notification.id)
-		statusline.notify("success", "Marked as done", 1200)
+		notify.success("Marked as done", { timeout = 1200 })
 		rerender()
 		refresh_main()
 	end)
@@ -376,7 +377,9 @@ local function ensure_buf()
 	vim.api.nvim_set_option_value("bufhidden", "wipe", { buf = buf })
 	vim.api.nvim_set_option_value("swapfile", false, { buf = buf })
 	vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
-	vim.api.nvim_set_option_value("filetype", "atlas-notifications", { buf = buf })
+	vim.api.nvim_set_option_value("filetype", "atlas.notifications", { buf = buf })
+	vim.api.nvim_set_option_value("syntax", "OFF", { buf = buf })
+	pcall(vim.treesitter.stop, buf)
 	register_keymaps(buf)
 	return buf
 end
@@ -389,11 +392,11 @@ function M.open()
 
 	local provider = current_provider
 	if provider == nil then
-		statusline.notify("warn", "No active provider")
+		notify.warn("No active provider")
 		return
 	end
 	if provider.capabilities.notifications == nil then
-		statusline.notify("warn", string.format("%s does not support notifications", provider.name or "Provider"))
+		notify.warn(string.format("%s does not support notifications", provider.name or "Provider"))
 		return
 	end
 

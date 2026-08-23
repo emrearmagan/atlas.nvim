@@ -8,7 +8,7 @@ local pullrequests = require("atlas.pulls.providers.bitbucket.api.pullrequests")
 local reviews = require("atlas.pulls.providers.bitbucket.api.reviews")
 local users_api = require("atlas.pulls.providers.bitbucket.api.users")
 local repositories = require("atlas.pulls.providers.bitbucket.api.repositories")
-local statusline = require("atlas.ui.statusline")
+local core_notify = require("atlas.core.notify")
 
 ---@param ctx AtlasPullActionContext
 ---@return boolean
@@ -21,8 +21,11 @@ end
 ---@param message string
 ---@param duration integer|nil
 local function notify(ctx, level, message, duration)
-	local callback = ctx.notify or statusline.notify
-	callback(level, message, duration)
+	if ctx.notify then
+		ctx.notify(level, message, duration)
+		return
+	end
+	core_notify.show(level, message, { timeout = duration })
 end
 
 ---@type AtlasPullAction[]
@@ -167,7 +170,7 @@ local function search(ctx, done)
 						name = "Search",
 						key = nil,
 						layout = "compact",
-						repos = {
+						targets = {
 							{
 								workspace = tostring(repo.owner or ""),
 								repo = tostring(repo.repo_name or ""),

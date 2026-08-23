@@ -450,7 +450,7 @@ function M.open(pr, provider, selection)
 		pipeline = selection.pipeline,
 		job = selection.job,
 		win = vim.api.nvim_get_current_win(),
-		buf = utils.buffer.create(string.format("atlas://pipeline-job-log/%d", tab), ""),
+		buf = utils.buffer.create(string.format("atlas://pipeline-job-log/%d", tab), "atlas.pipeline-log"),
 		status = "loading",
 		log = "",
 		error = "",

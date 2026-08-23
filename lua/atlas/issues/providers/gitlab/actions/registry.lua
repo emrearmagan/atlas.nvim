@@ -3,7 +3,7 @@ local M = {}
 local actions = require("atlas.issues.actions")
 local icons = require("atlas.ui.shared.icons")
 local picker = require("atlas.picker")
-local statusline = require("atlas.ui.statusline")
+local notify = require("atlas.core.notify")
 local issues_api = require("atlas.issues.providers.gitlab.api.issues")
 local users_api = require("atlas.issues.providers.gitlab.api.users")
 local labels_api = require("atlas.issues.providers.gitlab.api.labels")
@@ -51,14 +51,14 @@ end
 local function close(ctx, done)
 	local issue = assert(ctx.issue)
 	local key = tostring(issue.key or "")
-	statusline.notify("loading", string.format("Closing %s...", key))
+	notify.loading(string.format("Closing %s...", key))
 	issues_api.set_state(key, "close", function(ok, err)
 		if not ok then
-			statusline.notify("error", err or "Close failed")
+			notify.error(err or "Close failed")
 			done(nil, err or "Close failed")
 			return
 		end
-		statusline.notify("success", string.format("Closed %s", key), 1200)
+		notify.success(string.format("Closed %s", key), { timeout = 1200 })
 		done({ issue_key = key }, nil)
 	end)
 end
@@ -77,14 +77,14 @@ end
 local function reopen(ctx, done)
 	local issue = assert(ctx.issue)
 	local key = tostring(issue.key or "")
-	statusline.notify("loading", string.format("Reopening %s...", key))
+	notify.loading(string.format("Reopening %s...", key))
 	issues_api.set_state(key, "reopen", function(ok, err)
 		if not ok then
-			statusline.notify("error", err or "Reopen failed")
+			notify.error(err or "Reopen failed")
 			done(nil, err or "Reopen failed")
 			return
 		end
-		statusline.notify("success", string.format("Reopened %s", key), 1200)
+		notify.success(string.format("Reopened %s", key), { timeout = 1200 })
 		done({ issue_key = key }, nil)
 	end)
 end
@@ -102,15 +102,15 @@ local function transition(ctx, done)
 	local key = tostring(issue.key or "")
 	local target = issue.status_id == "closed" and "reopen" or "close"
 	local label = target == "close" and "Closing" or "Reopening"
-	statusline.notify("loading", string.format("%s %s...", label, key))
+	notify.loading(string.format("%s %s...", label, key))
 	issues_api.set_state(key, target, function(ok, err)
 		if not ok then
-			statusline.notify("error", err or (label .. " failed"))
+			notify.error(err or (label .. " failed"))
 			done(nil, err or (label .. " failed"))
 			return
 		end
 		local msg = target == "close" and "Closed" or "Reopened"
-		statusline.notify("success", string.format("%s %s", msg, key), 1200)
+		notify.success(string.format("%s %s", msg, key), { timeout = 1200 })
 		done({ issue_key = key }, nil)
 	end)
 end
@@ -129,24 +129,24 @@ local function assign(ctx, done)
 	local path = issue_path(issue)
 	if path == "" then
 		local err = "Could not determine project path"
-		statusline.notify("error", err)
+		notify.error(err)
 		done(nil, err)
 		return
 	end
 
-	statusline.notify("loading", "Loading members...")
+	notify.loading("Loading members...")
 	users_api.list_members(path, "", function(members, err)
 		if err or members == nil then
-			statusline.notify("error", err or "Failed to load members")
+			notify.error(err or "Failed to load members")
 			done(nil, err or "Failed to load members")
 			return
 		end
-		statusline.clear_notice()
+		notify.clear()
 
 		if #members == 0 then
-			local err = "No assignable members"
-			statusline.notify("warn", err)
-			done(nil, err)
+			local message = "No assignable members"
+			notify.warn(message)
+			done(nil, message)
 			return
 		end
 
@@ -204,15 +204,15 @@ local function assign(ctx, done)
 					return
 				end
 
-				statusline.notify("loading", string.format("Updating assignees on %s...", key))
+				notify.loading(string.format("Updating assignees on %s...", key))
 				issues_api.set_assignee_ids(key, final_ids, function(ok, set_err)
 					if not ok then
-						statusline.notify("error", set_err or "Failed")
+						notify.error(set_err or "Failed")
 						done(nil, set_err or "Failed")
 						return
 					end
 					local msg = string.format("%d assignee(s)", #final_ids)
-					statusline.notify("success", msg, 1200)
+					notify.success(msg, { timeout = 1200 })
 					done({ issue_key = key }, nil)
 				end)
 			end,
@@ -234,23 +234,23 @@ local function labels(ctx, done)
 	local path = issue_path(issue)
 	if path == "" then
 		local err = "Could not determine project path"
-		statusline.notify("error", err)
+		notify.error(err)
 		done(nil, err)
 		return
 	end
 
-	statusline.notify("loading", "Loading labels...")
+	notify.loading("Loading labels...")
 	labels_api.list(path, function(all_labels, err)
 		if err or all_labels == nil then
-			statusline.notify("error", err or "Failed to load labels")
+			notify.error(err or "Failed to load labels")
 			done(nil, err or "Failed to load labels")
 			return
 		end
-		statusline.clear_notice()
+		notify.clear()
 		if #all_labels == 0 then
-			local err = "No labels available"
-			statusline.notify("warn", err)
-			done(nil, err)
+			local message = "No labels available"
+			notify.warn(message)
+			done(nil, message)
 			return
 		end
 
@@ -295,15 +295,15 @@ local function labels(ctx, done)
 					return
 				end
 
-				statusline.notify("loading", string.format("Updating labels on %s...", key))
+				notify.loading(string.format("Updating labels on %s...", key))
 				issues_api.update_labels(key, { add = adds, remove = removes }, function(ok, set_err)
 					if not ok then
-						statusline.notify("error", set_err or "Failed")
+						notify.error(set_err or "Failed")
 						done(nil, set_err or "Failed")
 						return
 					end
 					local msg = string.format("+%d / -%d label(s)", #adds, #removes)
-					statusline.notify("success", msg, 1200)
+					notify.success(msg, { timeout = 1200 })
 					done({ issue_key = key }, nil)
 				end)
 			end,
@@ -321,15 +321,15 @@ local function search(_, done)
 		format_item = function(item)
 			return string.format("%s %s", icons.fallback(), tostring(item.label or ""))
 		end,
-		preview_item = function(item, done)
+		preview_item = function(item, preview_done)
 			local issue = item.value
 			return issues_api.get_issue(issue.key, {}, function(detail, err)
 				if err then
-					done({ title = issue.key, lines = { err } })
+					preview_done({ title = issue.key, lines = { err } })
 					return
 				end
-				local description = vim.trim(tostring(detail and detail._raw and detail._raw.description or ""))
-				done({
+				local description = vim.trim(tostring(detail and detail.description or ""))
+				preview_done({
 					title = issue.key,
 					lines = vim.split(description ~= "" and description or "No description", "\n", { plain = true }),
 				})
@@ -350,7 +350,7 @@ local function search(_, done)
 				for _, it in ipairs(items) do
 					table.insert(picker_items, {
 						id = it.key,
-						label = string.format("%s - %s", it.key, it.summary),
+						label = string.format("%s - %s", it.key, it.title),
 						value = it,
 					})
 				end
@@ -362,7 +362,7 @@ local function search(_, done)
 			local url = item.value and item.value.url
 			if not url or url == "" then
 				local err = "Selected issue is missing URL"
-				statusline.notify("error", err)
+				notify.error(err)
 				done(nil, err)
 				return
 			end
@@ -450,17 +450,17 @@ end
 ---@param ctx AtlasIssueActionContext
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function toggle_subscription(ctx, done)
-	local service = require("atlas.providers.gitlab.client").issues
+	local service = require("atlas.providers.gitlab.client")
 	local issue = assert(ctx.issue)
 	local raw = issue._raw or {}
 	local path = tostring(raw.project_path or "")
 	local iid = tonumber(raw.iid)
 	local action = issue.is_subscribed == true and "unsubscribe" or "subscribe"
 	local endpoint = string.format("/projects/%s/issues/%d/%s", service.url_encode(path), iid, action)
-	statusline.notify("loading", issue.is_subscribed and "Unsubscribing..." or "Subscribing...")
+	notify.loading(issue.is_subscribed and "Unsubscribing..." or "Subscribing...")
 	service.request("POST", endpoint, nil, function(result, err)
 		if err then
-			statusline.notify("error", tostring(err))
+			notify.error(tostring(err))
 			done(nil, tostring(err))
 			return
 		end
@@ -469,7 +469,7 @@ local function toggle_subscription(ctx, done)
 			subscribed = action == "subscribe"
 		end
 		issue.is_subscribed = subscribed == true
-		statusline.notify("success", issue.is_subscribed and "Subscribed" or "Unsubscribed", 1200)
+		notify.success(issue.is_subscribed and "Subscribed" or "Unsubscribed", { timeout = 1200 })
 		done({ issue_key = issue.key }, nil)
 	end)
 end

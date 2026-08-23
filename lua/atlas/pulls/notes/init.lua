@@ -255,41 +255,20 @@ function M.resolve_target(value)
 		return normalize_target({ provider = provider, host = host, repository = repository, id = id })
 	end
 
-	local parsed = resolver.parse_url(value)
-	if not parsed then
+	local target, resolve_error = resolver.resolve(value)
+	if not target then
+		return nil, resolve_error
+	end
+	if target.domain ~= "pulls" or target.entity ~= "pr" then
 		return nil, "Expected a pull request URL or canonical reference"
 	end
-	local url_host, path = parsed.host, parsed.path
-	local owner, repo
-	owner, repo, id = path:match("^/([^/]+)/([^/]+)/pull/(%d+)/?$")
-	if owner then
-		provider, repository = "github", owner .. "/" .. repo
-	else
-		owner, repo, id = path:match("^/([^/]+)/([^/]+)/pull%-requests/(%d+)/?$")
-		if owner then
-			provider, repository = "bitbucket", owner .. "/" .. repo
-		else
-			if resolver.provider_for_host(url_host, path) == "gitea" then
-				local configured_path = resolver.path_for_base(parsed, resolver.configured_base("pulls", "gitea"))
-				owner, repo, id = (configured_path or path):match("^/([^/]+)/([^/]+)/pulls/(%d+)/?$")
-			end
-			if owner then
-				provider, repository = "gitea", owner .. "/" .. repo
-			else
-				repository, id = path:match("^/(.-)/%-/merge_requests/(%d+)/?$")
-				provider = repository and "gitlab" or nil
-			end
-		end
-	end
-	if not provider or not repository or not id then
-		return nil, "Unsupported pull request URL"
-	end
+	local ref = resolver.pull_request_ref(target)
 	return normalize_target({
-		provider = provider,
-		host = url_host,
-		repository = repository,
-		id = id,
-		url = value,
+		provider = target.provider,
+		host = target.host,
+		repository = ref.repo_full_name,
+		id = ref.id,
+		url = target.url,
 	})
 end
 
@@ -424,12 +403,12 @@ function M.clear_for_pull_request(pr)
 	end
 	local target, target_err = M.target_for_pull_request(pr)
 	if not target then
-		notify.warn(target_err or "Unable to find local notes")
+		notify.warn(target_err or "Unable to find local notes", { vim_notify = true })
 		return
 	end
 	local ok, err = M.clear(target)
 	if not ok then
-		notify.warn(err or "Unable to delete local notes")
+		notify.warn(err or "Unable to delete local notes", { vim_notify = true })
 		return
 	end
 	local ui = package.loaded["atlas.pulls.notes.ui"]

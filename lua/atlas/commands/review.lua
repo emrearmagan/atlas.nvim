@@ -1,5 +1,6 @@
 local M = {}
 
+local config = require("atlas.config")
 local git = require("atlas.core.git")
 local notify = require("atlas.core.notify")
 local picker = require("atlas.picker")
@@ -10,7 +11,7 @@ local ui_utils = require("atlas.ui.shared.utils")
 local request
 
 local function no_repository()
-	notify.error("No supported Git repository found")
+	notify.error("No supported Git repository found", { vim_notify = true })
 end
 
 ---@param value string|nil
@@ -26,7 +27,7 @@ function M.open(value)
 		no_repository()
 		return
 	end
-	if not providers.domain(info.provider, "pulls") or not providers.options(info.provider, "pulls") then
+	if not providers.domain(info.provider, "pulls") or not config.provider_options(info.provider) then
 		no_repository()
 		return
 	end
@@ -38,27 +39,25 @@ function M.open(value)
 	if request then
 		request.cancel()
 	end
-	notify.info("Fetching pull requests for " .. info.slug .. "...")
+	notify.info("Fetching pull requests for " .. info.slug .. "...", { vim_notify = true })
 	request = provider.capabilities.core.fetch_pullrequests(view, {
 		force_load = true,
 		state = "open",
-	}, function(groups, errors)
+	}, function(pulls, errors)
 		request = nil
 		if errors and #errors > 0 then
-			notify.error(table.concat(errors, "; "))
+			notify.error(table.concat(errors, "; "), { vim_notify = true })
 			return
 		end
 
 		local pull_requests = {}
-		for _, group in ipairs(groups or {}) do
-			for _, pr in ipairs(group.prs or {}) do
-				if pr.state == "open" or pr.state == "draft" then
-					table.insert(pull_requests, pr)
-				end
+		for _, pr in ipairs(pulls) do
+			if pr.state == "open" or pr.state == "draft" then
+				table.insert(pull_requests, pr)
 			end
 		end
 		if #pull_requests == 0 then
-			notify.info("No open pull requests found for " .. info.slug)
+			notify.info("No open pull requests found for " .. info.slug, { vim_notify = true })
 			return
 		end
 
@@ -112,7 +111,7 @@ function M.open(value)
 					root = root,
 				}, function(err)
 					if err then
-						notify.error("Unable to open diff: " .. tostring(err))
+						notify.error("Unable to open diff: " .. tostring(err), { vim_notify = true })
 					end
 				end)
 			end,

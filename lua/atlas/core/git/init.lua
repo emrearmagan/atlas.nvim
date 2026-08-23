@@ -249,7 +249,7 @@ function M.remote_url(root, remote)
 end
 
 ---@class AtlasGitRemoteInfo
----@field host string Canonical provider web authority.
+---@field host string -- e.g. "github.com" / "bitbucket.org" / "gitlab.com"
 ---@field provider string
 ---@field slug string -- "owner/repo" or nested "group/subgroup/repo" (without .git)
 ---@field owner string

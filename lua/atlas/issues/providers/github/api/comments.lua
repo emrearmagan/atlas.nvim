@@ -1,7 +1,7 @@
 local M = {}
 
 local cache = require("atlas.issues.providers.github.api.cache")
-local cli = require("atlas.providers.github.client").issues
+local cli = require("atlas.providers.github.client")
 local normalizer = require("atlas.issues.providers.github.api.mapper")
 
 ---@param key string

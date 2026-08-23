@@ -102,9 +102,9 @@ function M.render_meta(state, rows)
 		fill = false,
 		cell_hl = function(row, col)
 			local text = row[col.key] or ""
-			local spans = row._spans and row._spans[col.key]
-			if spans then
-				return spans
+			local cell_spans = row._spans and row._spans[col.key]
+			if cell_spans then
+				return cell_spans
 			end
 
 			local hl = row._hls and row._hls[col.key]

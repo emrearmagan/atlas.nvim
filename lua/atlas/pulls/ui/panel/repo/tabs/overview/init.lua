@@ -86,9 +86,9 @@ function M.deactivate()
 	local layout = require("atlas.ui.layout")
 	local buf = layout.buf_id("detail")
 	if buf ~= nil and vim.api.nvim_buf_is_valid(buf) then
-		pcall(vim.treesitter.stop, buf)
+		vim.api.nvim_set_option_value("filetype", "atlas.detail", { buf = buf })
 		vim.api.nvim_set_option_value("syntax", "OFF", { buf = buf })
-		vim.api.nvim_set_option_value("filetype", "", { buf = buf })
+		pcall(vim.treesitter.stop, buf)
 	end
 end
 

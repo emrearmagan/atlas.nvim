@@ -7,6 +7,14 @@ local api_utils = require("atlas.core.utils")
 local mapper = require("atlas.pulls.providers.bitbucket.api.mapper")
 local as_table = api_utils.as_table
 
+---@param value string
+---@return string
+local function url_encode(value)
+	return (value:gsub("([^%w%-_.~])", function(char)
+		return string.format("%%%02X", string.byte(char))
+	end))
+end
+
 ---@param repo PullsRepo
 ---@return string|nil
 local function configured_readme_path(repo)
@@ -111,6 +119,52 @@ function M.fetch_workspace_repositories(workspace, search, on_done)
 		workspace = workspace,
 		search = term,
 	})
+end
+
+---@param project AtlasBitbucketProjectTarget
+---@param opts PullsFetchOpts
+---@param on_done fun(repositories: AtlasBitbucketRepoTarget[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_project_repositories(project, opts, on_done)
+	local workspace = project.workspace
+	local project_key = project.project
+
+	local cache_key = string.format("bitbucket:project_repos:%s/%s", workspace, project_key)
+	if opts.force_load ~= true then
+		local cached, ok = service.get_cache(cache_key)
+		if ok then
+			on_done(cached, nil)
+			return nil
+		end
+	end
+
+	local query = url_encode(string.format('project.key="%s"', project_key))
+	local endpoint =
+		string.format("/repositories/%s?q=%s&pagelen=100&fields=values.slug,next", url_encode(workspace), query)
+	return service.fetch_all_values(endpoint, function(result, err)
+		if err then
+			logger.logerror("Bitbucket project repository fetch failed", {
+				workspace = workspace,
+				project = project_key,
+				error = err,
+			})
+			on_done(nil, err)
+			return
+		end
+
+		local repositories = {}
+		for _, raw in ipairs(result.values) do
+			table.insert(repositories, { workspace = workspace, repo = raw.slug })
+		end
+
+		service.set_cache(cache_key, repositories, service.cache_ttl())
+		logger.loginfo("Bitbucket project repository fetch success", {
+			workspace = workspace,
+			project = project_key,
+			repo_count = #repositories,
+		})
+		on_done(repositories, nil)
+	end)
 end
 
 ---@param repo PullsRepo

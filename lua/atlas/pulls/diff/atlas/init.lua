@@ -8,6 +8,7 @@ local explorer = require("atlas.pulls.diff.atlas.explorer")
 local git = require("atlas.pulls.diff.atlas.git")
 local keymaps = require("atlas.pulls.diff.atlas.keymaps")
 local logger = require("atlas.core.logger")
+local notify = require("atlas.core.notify")
 local notes = require("atlas.pulls.diff.notes")
 local position = require("atlas.pulls.diff.position")
 local pulls_highlights = require("atlas.pulls.ui.highlights")
@@ -15,7 +16,6 @@ local review_panel = require("atlas.pulls.diff.ui.review_panel")
 local review = require("atlas.pulls.diff.review")
 local session_api = require("atlas.pulls.diff.session")
 local shared_highlights = require("atlas.ui.shared.highlights")
-local statusline = require("atlas.pulls.diff.ui.statusline")
 local view = require("atlas.pulls.diff.atlas.view")
 
 ---@param session AtlasDiffSession
@@ -123,7 +123,7 @@ end
 local function reveal_line(win, line, focus_diff)
 	vim.api.nvim_win_set_cursor(win, { line, 0 })
 	vim.api.nvim_win_call(win, function()
-		pcall(vim.cmd.normal, { "zvzz", bang = true })
+		pcall(vim.cmd.normal, { args = { "zv" }, bang = true })
 	end)
 	if focus_diff then
 		vim.api.nvim_set_current_win(win)
@@ -136,8 +136,8 @@ end
 local function focus_item(session, item, focus_diff)
 	local comment = item.comment
 	local note = item.note
-	local target = comment and (comment.file or comment.inline) or nil
-	local path = note and note.file_path or (target and (target.path or target.old_path))
+	local comment_target = comment and (comment.file or comment.inline) or nil
+	local path = note and note.file_path or (comment_target and (comment_target.path or comment_target.old_path))
 	local index = path and file_index(session, path) or nil
 	if not index then
 		session_api.notify(session, "info", "This review item's file is no longer in the diff")
@@ -310,7 +310,7 @@ local function navigate_hunk(session, direction)
 		end
 	end
 	vim.api.nvim_win_set_cursor(target.win, { destination, 0 })
-	vim.cmd.normal({ "zvzz", bang = true })
+	vim.cmd.normal({ args = { "zv" }, bang = true })
 end
 
 ---@param session AtlasDiffSession
@@ -522,7 +522,7 @@ function M.open(session, loading_view, on_done)
 			session_api.attach(session, {
 				tabpage = state.tabpage,
 				notify = function(level, message, duration)
-					statusline.notify(session.statusline, level, message, duration)
+					notify.show(level, message, { timeout = duration })
 				end,
 				focus_item = function(item, focus_diff)
 					focus_item(session, item, focus_diff)

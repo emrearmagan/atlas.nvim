@@ -5,6 +5,7 @@ local keymaps = require("atlas.pulls.ui.pipelines.keymaps")
 local logs = require("atlas.pulls.ui.pipelines.logs")
 local renderer = require("atlas.pulls.ui.pipelines.renderer")
 local statusline = require("atlas.ui.statusline")
+local notify = require("atlas.core.notify")
 local spinner = require("atlas.ui.components.spinner")
 local utils = require("atlas.ui.shared.utils")
 
@@ -42,7 +43,7 @@ end
 ---@param spans table[]
 ---@return integer
 local function create_buffer(name, lines, spans)
-	local buf = utils.buffer.create(name, "")
+	local buf = utils.buffer.create(name, "atlas.pipelines")
 	set_buffer_content(buf, lines, spans)
 	return buf
 end
@@ -111,12 +112,12 @@ end
 ---@param url string|nil
 local function open_url(url)
 	if type(url) ~= "string" or url == "" then
-		statusline.notify("warn", "No pipeline URL available")
+		notify.warn("No pipeline URL available")
 		return
 	end
 	local ok, result, err = pcall(vim.ui.open, url)
 	if not ok or (result == nil and err ~= nil) then
-		statusline.notify("error", string.format("Failed to open URL: %s", tostring(ok and err or result)))
+		notify.error(string.format("Failed to open URL: %s", tostring(ok and err or result)))
 		return
 	end
 end
@@ -240,7 +241,7 @@ local function reload_pipelines(session, delay_ms, force_refresh)
 	local provider = session.provider
 	local pipelines_capability = provider and provider.capabilities.pipelines
 	if not pipelines_capability then
-		statusline.notify("warn", "Pipeline refresh is not supported by this provider")
+		notify.warn("Pipeline refresh is not supported by this provider")
 		return
 	end
 
@@ -258,7 +259,7 @@ local function reload_pipelines(session, delay_ms, force_refresh)
 				session.refreshing = false
 				stop_pipeline_spinner(session)
 				render_pipelines(session, session.pipelines)
-				statusline.notify("error", string.format("Failed to refresh pipelines: %s", tostring(err)))
+				notify.error(string.format("Failed to refresh pipelines: %s", tostring(err)))
 				return
 			end
 
@@ -271,10 +272,7 @@ local function reload_pipelines(session, delay_ms, force_refresh)
 					stop_pipeline_spinner(session)
 					render_pipelines(session, details)
 					if details_err then
-						statusline.notify(
-							"error",
-							string.format("Failed to load pipeline details: %s", tostring(details_err))
-						)
+						notify.error(string.format("Failed to load pipeline details: %s", tostring(details_err)))
 					end
 				end
 			)
@@ -292,7 +290,7 @@ end
 ---@param selection PullsPipelineSelection|nil
 local function open_pipeline_actions(session, selection)
 	if not selection then
-		statusline.notify("warn", "No pipeline selected")
+		notify.warn("No pipeline selected")
 		return
 	end
 
@@ -303,7 +301,7 @@ local function open_pipeline_actions(session, selection)
 				return
 			end
 			if err then
-				statusline.notify("error", string.format("%s failed: %s", action.label, tostring(err)))
+				notify.error(string.format("%s failed: %s", action.label, tostring(err)))
 				return
 			end
 			reload_pipelines(session, ACTION_REFRESH_DELAY_MS)
@@ -351,7 +349,7 @@ function M.open(pr, pipelines, selected_pipeline, selected_job)
 	end
 	local pipeline_win = layout.win_id("detail")
 	if not valid_win(pipeline_win) then
-		statusline.notify("error", "Failed to open the pipeline pane")
+		notify.error("Failed to open the pipeline pane")
 		return
 	end
 
@@ -421,7 +419,7 @@ function M.open(pr, pipelines, selected_pipeline, selected_job)
 			stop_pipeline_spinner(session)
 			render_pipelines(session, details)
 			if err then
-				statusline.notify("error", string.format("Failed to load pipeline details: %s", tostring(err)))
+				notify.error(string.format("Failed to load pipeline details: %s", tostring(err)))
 			end
 		end)
 	end

@@ -1,23 +1,27 @@
 -- Example:
 --   require("atlas").setup({
+--     providers = {
+--       ---@type AtlasGitHubProviderConfig
+--       github = {
+--         cache_ttl = 300,
+--       },
+--     },
 --     pulls = {
---       providers = {
---         github = {
---           cache_ttl = 300,
---           views = {
---             { name = "Assigned",  key = "1", search = "is:pr assignee:@me archived:false" },
---             { name = "Authored",  key = "2", search = "is:pr author:@me archived:false" },
---             { name = "Reviewing", key = "3", search = "is:pr review-requested:@me archived:false" },
---             { name = "Reviewed",  key = "4", search = "is:pr reviewed-by:@me archived:false" },
---             { name = "Mention",   key = "5", search = "is:pr mentions:@me archived:false" },
---           },
---           bookmarks = {
---             -- key   = "S",      -- default
---             -- label = "Search", -- default
---             items = {
---               ["Drafts"]          = "is:pr is:draft author:@me",
---               ["Recently merged"] = "is:pr is:merged author:@me sort:updated-desc",
---             },
+--       ---@type AtlasGitHubPullsConfig
+--       github = {
+--         views = {
+--           { name = "Assigned",  key = "1", search = "is:pr assignee:@me archived:false" },
+--           { name = "Authored",  key = "2", search = "is:pr author:@me archived:false" },
+--           { name = "Reviewing", key = "3", search = "is:pr review-requested:@me archived:false" },
+--           { name = "Reviewed",  key = "4", search = "is:pr reviewed-by:@me archived:false" },
+--           { name = "Mention",   key = "5", search = "is:pr mentions:@me archived:false" },
+--         },
+--         bookmarks = {
+--           -- key   = "S",      -- default
+--           -- label = "Search", -- default
+--           items = {
+--             ["Drafts"]          = "is:pr is:draft author:@me",
+--             ["Recently merged"] = "is:pr is:merged author:@me sort:updated-desc",
 --           },
 --         },
 --       },
@@ -26,13 +30,16 @@
 
 ---@class AtlasGitHubViewConfig : AtlasPullsViewConfig
 ---@field search string
+---@field current_repo boolean|nil
 
 ---@class AtlasGitHubBookmarksConfig
 ---@field key string|nil    -- default "S"
 ---@field label string|nil  -- default "Search"
 ---@field items table<string, string>|nil
 
----@class AtlasGitHubConfig
+---@class AtlasGitHubProviderConfig
 ---@field cache_ttl number|nil
+
+---@class AtlasGitHubPullsConfig
 ---@field views AtlasGitHubViewConfig[]|nil
 ---@field bookmarks AtlasGitHubBookmarksConfig|nil

@@ -6,6 +6,7 @@ local panel_state = require("atlas.pulls.ui.panel.pr.state")
 local renderer = require("atlas.pulls.ui.panel.pr.renderer")
 local panel_keymaps = require("atlas.pulls.ui.panel.keymaps")
 local icons = require("atlas.ui.shared.icons")
+local notify = require("atlas.core.notify")
 local overview_icon, overview_icon_hl = icons.general("overview")
 
 local SPINNER_INTERVAL_MS = 100
@@ -198,6 +199,15 @@ local function make_refresh_callback(pr)
 	end
 end
 
+---@param pr PullRequest
+---@param opts { force_refresh: boolean|nil }|nil
+local function load_active_tab(pr, opts)
+	local tab_mod = get_tab_module(panel_state.current_tab)
+	if tab_mod and tab_mod.on_select then
+		tab_mod.on_select(pr, make_refresh_callback(pr), opts)
+	end
+end
+
 ---@type { cancel: fun() }[]
 local panel_requests = {}
 
@@ -216,7 +226,7 @@ local function track_panel_request(request)
 end
 
 ---@param pr PullRequest
----@param opts { force_refresh: boolean|nil, pr_refreshed: boolean|nil }|nil
+---@param opts { force_refresh: boolean|nil, details: PullRequestDetails|nil }|nil
 local function fetch_panel_data(pr, opts)
 	cancel_panel_requests()
 
@@ -227,22 +237,50 @@ local function fetch_panel_data(pr, opts)
 	end
 
 	local refresh = make_refresh_callback(pr)
-	local panel = provider and provider.capabilities.ui and provider.capabilities.ui.panel
-	if panel and panel.fetch_header then
-		panel_state.header_loading = true
-		track_panel_request(panel.fetch_header(pr, opts, function()
+	local force_refresh = opts and opts.force_refresh == true
+	local core = provider.capabilities.core
+	local panel = provider.capabilities.ui and provider.capabilities.ui.panel
+	panel_state.header_loading = true
+
+	---@param details PullRequestDetails
+	local function use_details(details)
+		if not is_current_pr(pr) then
+			return
+		end
+		panel_state.current_details = details
+
+		if panel and panel.fetch_header then
+			refresh()
+			track_panel_request(panel.fetch_header(details, opts, function()
+				if not is_current_pr(pr) then
+					return
+				end
+				panel_state.header_loading = false
+				refresh()
+			end))
+		else
+			panel_state.header_loading = false
+			refresh()
+		end
+	end
+
+	if opts and opts.details then
+		use_details(opts.details)
+	else
+		track_panel_request(core.fetch_pullrequest(pr, { force_load = force_refresh }, function(details, err)
 			if not is_current_pr(pr) then
 				return
 			end
-			panel_state.header_loading = false
-			refresh()
+			if details == nil then
+				panel_state.header_loading = false
+				notify.error(tostring(err or "Failed to load pull request"))
+				refresh()
+				return
+			end
+			use_details(details)
 		end))
-	else
-		panel_state.header_loading = false
 	end
 
-	local force_refresh = opts and opts.force_refresh == true
-	local core = provider.capabilities.core
 	if core.fetch_diffstat then
 		panel_state.diffstat = "loading"
 		track_panel_request(core.fetch_diffstat(pr, { force_refresh = force_refresh }, function(entries, err)
@@ -267,15 +305,6 @@ local function fetch_panel_data(pr, opts)
 	end
 end
 
----@param pr PullRequest
----@param opts { force_refresh: boolean|nil }|nil
-local function load_active_tab(pr, opts)
-	local tab_mod = get_tab_module(panel_state.current_tab)
-	if tab_mod and tab_mod.on_select then
-		tab_mod.on_select(pr, make_refresh_callback(pr), opts)
-	end
-end
-
 -- Public API
 
 ---@return boolean
@@ -289,7 +318,7 @@ end
 
 ---@param pr PullRequest|nil
 ---@param repo PullsRepo|nil
----@param opts { force_refresh: boolean|nil, pr_refreshed: boolean|nil }|nil
+---@param opts { force_refresh: boolean|nil, details: PullRequestDetails|nil }|nil
 function M.on_select(pr, repo, opts)
 	opts = opts or {}
 
@@ -302,11 +331,18 @@ function M.on_select(pr, repo, opts)
 		and tostring(panel_state.current_repo.id or panel_state.current_repo.name or "")
 			== tostring(repo.id or repo.name or "")
 	local context_changed = (pr ~= nil and not same_pr) or (repo ~= nil and not same_repo)
+	local should_fetch = context_changed
+		or opts.force_refresh == true
+		or (panel_state.current_details == nil and panel_state.header_loading ~= true)
 
 	panel_state.current_pr = pr
 	panel_state.current_repo = repo
 	if panel_state.current_pr == nil then
+		panel_state.current_details = nil
 		return
+	end
+	if should_fetch then
+		panel_state.current_details = nil
 	end
 
 	local buf = layout.buf_id("detail")
@@ -314,8 +350,6 @@ function M.on_select(pr, repo, opts)
 		panel_keymaps.register(buf)
 	end
 	activate_current_tab()
-
-	local should_fetch = context_changed or opts.force_refresh == true
 
 	if not same_pr and pr ~= nil then
 		local old_key = panel_state.current_tab
@@ -334,8 +368,8 @@ function M.on_select(pr, repo, opts)
 	end
 
 	if should_fetch then
-		fetch_panel_data(panel_state.current_pr, opts)
 		load_active_tab(panel_state.current_pr, { force_refresh = opts.force_refresh == true })
+		fetch_panel_data(panel_state.current_pr, opts)
 		update_spinner()
 	end
 
@@ -415,6 +449,9 @@ end
 function M.deactivate()
 	switch_tab_keymaps(panel_state.current_tab, nil)
 	stop_spinner()
+	cancel_panel_requests()
+	panel_state.current_details = nil
+	panel_state.header_loading = false
 end
 
 return M

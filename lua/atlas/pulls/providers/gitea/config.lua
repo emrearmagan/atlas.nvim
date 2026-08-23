@@ -1,53 +1,47 @@
--- One Atlas provider supports both API implementations:
---
--- gitea = {
---   api_type = "gitea", -- or "forgejo"
---   base_url = "https://git.example.com",
---   token = vim.env.GITEA_TOKEN,
---   cache_ttl = 300,
---   draft_prefix = "WIP:",
---   views = {
---     {
---       name = "Repository",
---       key = "1",
---       layout = "compact",
---       repo = "owner/repository",
---       search = "authentication",
+-- providers = {
+--   gitea = {
+--     base_url = "https://gitea.example.com",
+--     token = vim.env.GITEA_TOKEN,
+--     cache_ttl = 300,
+--   },
+-- },
+-- pulls = {
+--   gitea = {
+--     draft_prefix = "WIP:",
+--     views = {
+--       {
+--         name = "Repository",
+--         key = "1",
+--         layout = "compact",
+--         repo = "owner/repository",
+--         search = "authentication",
+--       },
+--     },
+--     bookmarks = {
+--       key = "S",
+--       label = "Search",
+--       items = {
+--         ["Authentication"] = { repo = "owner/repository", search = "authentication" },
+--       },
 --     },
 --   },
---   bookmarks = {
---     key = "S",
---     label = "Search",
---     items = {
---       ["Authentication"] = { repo = "owner/repository", search = "authentication" },
---     },
---   },
--- }
+-- },
 
 require("atlas.providers.gitea.config")
 
----@class AtlasGiteaForgejoPullsSearchConfig
----@field repo string
+---@class AtlasGiteaPullsSearchConfig
+---@field repo string|nil
 ---@field search string|nil Pull request search text.
-
----@class AtlasGiteaForgejoPullsViewConfig : AtlasPullsViewConfig, AtlasGiteaForgejoPullsSearchConfig
 ---@field current_repo boolean|nil
 
----@class AtlasGiteaForgejoPullsBookmarksConfig
+---@class AtlasGiteaPullsViewConfig : AtlasPullsViewConfig, AtlasGiteaPullsSearchConfig
+
+---@class AtlasGiteaPullsBookmarksConfig
 ---@field key string|nil
 ---@field label string|nil
----@field items table<string, AtlasGiteaForgejoPullsSearchConfig>|nil
+---@field items table<string, AtlasGiteaPullsSearchConfig>|nil
 
----@class AtlasGiteaPullsConfig : AtlasGiteaForgejoConfig
----@field api_type "gitea"|nil Defaults to Gitea.
+---@class AtlasGiteaPullsConfig
 ---@field draft_prefix string|nil Enabled server prefix used to mark pull requests as drafts. Defaults to `WIP:`.
----@field views AtlasGiteaForgejoPullsViewConfig[]|nil
----@field bookmarks AtlasGiteaForgejoPullsBookmarksConfig|nil
-
----@class AtlasForgejoPullsConfig : AtlasGiteaForgejoConfig
----@field api_type "forgejo"
----@field draft_prefix string|nil Enabled server prefix used to mark pull requests as drafts. Defaults to `WIP:`.
----@field views AtlasGiteaForgejoPullsViewConfig[]|nil
----@field bookmarks AtlasGiteaForgejoPullsBookmarksConfig|nil
-
----@alias AtlasGiteaForgejoPullsConfig AtlasGiteaPullsConfig|AtlasForgejoPullsConfig
+---@field views AtlasGiteaPullsViewConfig[]|nil
+---@field bookmarks AtlasGiteaPullsBookmarksConfig|nil

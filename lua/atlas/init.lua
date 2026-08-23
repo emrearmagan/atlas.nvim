@@ -1,5 +1,6 @@
 local M = {}
 
+local config = require("atlas.config")
 local logger = require("atlas.core.logger")
 local notify = require("atlas.core.notify")
 local picker = require("atlas.picker")
@@ -7,7 +8,7 @@ local providers = require("atlas.providers")
 
 ---@param opts AtlasConfig|nil
 function M.setup(opts)
-	require("atlas.config").setup(opts)
+	config.setup(opts)
 	require("atlas.commands").setup()
 	require("atlas.core.logger").clear()
 end
@@ -39,11 +40,15 @@ end
 ---@param id string
 ---@return PullsProvider|IssuesProvider|nil
 local function load_provider(domain, id)
-	local provider = providers.load(id, domain)
-	if not provider then
-		notify.error(string.format("Unknown %s provider: %s", domain, id))
+	if providers.domain(id, domain) == nil then
+		notify.error(string.format("Unknown %s provider: %s", domain, id), { vim_notify = true })
+		return nil
 	end
-	return provider
+	if config.provider_options(id) == nil then
+		notify.error(string.format("%s provider not configured: %s", domain, id), { vim_notify = true })
+		return nil
+	end
+	return providers.load(id, domain)
 end
 
 ---@param domain "pulls"|"issues"
@@ -101,7 +106,7 @@ function M.open(domain, provider_id, opts)
 
 	local ids = configured_provider_ids(domain)
 	if #ids == 0 then
-		notify.error(string.format("No %s providers configured", domain))
+		notify.error(string.format("No %s providers configured", domain), { vim_notify = true })
 		return
 	end
 	if #ids == 1 then
@@ -114,7 +119,7 @@ function M.open(domain, provider_id, opts)
 		items = ids,
 		format_item = function(id)
 			local provider = providers[id]
-			return provider and provider.name(domain) or id
+			return provider and provider.name or id
 		end,
 		on_select = function(choice)
 			if choice == nil then

@@ -1,5 +1,6 @@
 local M = {}
 
+local config = require("atlas.config")
 local providers = require("atlas.providers")
 
 ---@alias AtlasDomain "pulls"|"issues"
@@ -75,7 +76,10 @@ end
 ---@param provider AtlasProviderId
 ---@return AtlasUrlBase|nil
 function M.configured_base(domain, provider)
-	local options = providers.options(provider, domain)
+	if providers.domain(provider, domain) == nil or config.provider_options(provider) == nil then
+		return nil
+	end
+	local options = config.provider_options(provider)
 	if type(options) ~= "table" or type(options.base_url) ~= "string" then
 		return nil
 	end
@@ -188,23 +192,46 @@ end
 ---@param path string|nil
 ---@param ignore_port boolean
 ---@param domain AtlasDomain|nil
----@return AtlasProviderId|nil, AtlasUrlBase|nil
+---@return AtlasProviderId|nil, AtlasUrlBase|nil, boolean ambiguous
 local function configured_provider(host, path, ignore_port, domain)
 	local domains = domain and { domain } or { "pulls", "issues" }
+	local matches = {}
+	local seen = {}
 	for _, provider in ipairs(providers.list()) do
 		for _, current_domain in ipairs(domains) do
-			if provider.domains[current_domain] then
+			if provider.domains[current_domain] and not seen[provider.id] then
 				local base = M.configured_base(current_domain, provider.id)
 				local host_matches = base and base.host == host
 				if ignore_port and base then
 					host_matches = hostname(base.host) == hostname(host)
 				end
 				if host_matches and (path == nil or M.path_for_base({ host = host, path = path }, base) ~= nil) then
-					return provider.id, base
+					seen[provider.id] = true
+					table.insert(matches, { provider = provider.id, base = base })
 				end
 			end
 		end
 	end
+
+	if #matches == 0 then
+		return nil, nil, false
+	end
+	if #matches == 1 then
+		return matches[1].provider, matches[1].base, false
+	end
+	if path == nil then
+		return nil, nil, true
+	end
+
+	-- Prefer the most specific configured web path. This lets two providers
+	-- share an authority when each instance is mounted below a distinct path.
+	table.sort(matches, function(left, right)
+		return #left.base.path > #right.base.path
+	end)
+	if #matches[1].base.path == #matches[2].base.path then
+		return nil, nil, true
+	end
+	return matches[1].provider, matches[1].base, false
 end
 
 ---@param host string
@@ -233,9 +260,12 @@ function M.provider_for_host(host, path, domain)
 	path = path and decode_path(path) or nil
 
 	-- Configured URLs come first so self-hosted providers resolve correctly.
-	local configured = configured_provider(host, path, false, domain)
+	local configured, _, ambiguous = configured_provider(host, path, false, domain)
 	if configured then
 		return configured
+	end
+	if ambiguous then
+		return nil
 	end
 	return provider_for_default_host(host, domain)
 end
@@ -269,13 +299,13 @@ function M.resolve_git_remote(host, repository_path, is_http, domain)
 		}
 	end
 
-	local provider, base = configured_provider(host, nil, true, domain)
+	local provider, base, ambiguous = configured_provider(host, nil, true, domain)
 	if provider and base then
 		return { provider = provider, host = base.host, repository_path = repository_path }
 	end
 	local canonical_host = hostname(host)
 	return {
-		provider = M.provider_for_host(canonical_host, nil, domain),
+		provider = not ambiguous and provider_for_default_host(canonical_host, domain) or nil,
 		host = canonical_host,
 		repository_path = repository_path,
 	}
@@ -284,8 +314,7 @@ end
 ---@param target AtlasTarget
 ---@return boolean
 function M.configured(target)
-	return providers.domain(target.provider, target.domain) ~= nil
-		and providers.options(target.provider, target.domain) ~= nil
+	return providers.domain(target.provider, target.domain) ~= nil and config.provider_options(target.provider) ~= nil
 end
 
 ---Build the minimal pull request identity needed for a provider fetch.
@@ -304,7 +333,7 @@ end
 ---@param target { provider: AtlasProviderId, domain: AtlasDomain, host: string }
 ---@return string
 function M.base_url(target)
-	local options = providers.options(target.provider, target.domain) or {}
+	local options = config.provider_options(target.provider) or {}
 	local configured = type(options.base_url) == "string" and options.base_url:gsub("/+$", "") or nil
 	if configured and configured ~= "" then
 		return configured
@@ -345,20 +374,22 @@ end
 function M.configured_repositories(repo_slug)
 	local choices, seen = {}, {}
 	for _, provider in ipairs(providers.list()) do
-		for _, domain in ipairs({ "pulls", "issues" }) do
-			local options = providers.options(provider.id, domain)
-			local implementation = options and providers.load(provider.id, domain) or nil
-			if implementation and options and implementation.repositories then
-				for _, slug in ipairs(implementation.repositories(options)) do
-					local key = provider.id .. ":" .. tostring(slug)
-					if
-						type(slug) == "string"
-						and slug:match("^[^/]+/.+$")
-						and (repo_slug == nil or slug == repo_slug)
-						and not seen[key]
-					then
-						seen[key] = true
-						table.insert(choices, repo_info(provider.id, slug))
+		if config.provider_options(provider.id) ~= nil then
+			for _, domain in ipairs({ "pulls", "issues" }) do
+				local implementation = providers.load(provider.id, domain)
+				if implementation and implementation.repositories then
+					local options = config.domain_options(provider.id, domain) or {}
+					for _, slug in ipairs(implementation.repositories(options)) do
+						local key = provider.id .. ":" .. tostring(slug)
+						if
+							type(slug) == "string"
+							and slug:match("^[^/]+/.+$")
+							and (repo_slug == nil or slug == repo_slug)
+							and not seen[key]
+						then
+							seen[key] = true
+							table.insert(choices, repo_info(provider.id, slug))
+						end
 					end
 				end
 			end
@@ -368,12 +399,13 @@ function M.configured_repositories(repo_slug)
 	if repo_slug and #choices == 0 then
 		-- An explicit owner/repo does not need to appear in a configured view.
 		for _, provider in ipairs(providers.list()) do
-			for _, domain in ipairs({ "pulls", "issues" }) do
-				local options = providers.options(provider.id, domain)
-				local implementation = options and providers.load(provider.id, domain) or nil
-				if implementation and implementation.target then
-					table.insert(choices, repo_info(provider.id, repo_slug))
-					break
+			if config.provider_options(provider.id) ~= nil then
+				for _, domain in ipairs({ "pulls", "issues" }) do
+					local implementation = providers.load(provider.id, domain)
+					if implementation and implementation.target then
+						table.insert(choices, repo_info(provider.id, repo_slug))
+						break
+					end
 				end
 			end
 		end
