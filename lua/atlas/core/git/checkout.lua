@@ -9,7 +9,7 @@ local LUA_PATTERN_SPECIALS = "[%^%$%(%)%%%.%[%]%+%-%?]"
 ---@return AtlasGitTransport transport
 local function configured_git_transport()
 	local value = ((config.options or {}).pulls or {}).git_transport
-	return value == "https" and "https" or "ssh"
+	return value == "ssh" and "ssh" or "https"
 end
 
 local function star_count(s)

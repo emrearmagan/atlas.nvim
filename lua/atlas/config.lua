@@ -75,7 +75,7 @@
 ---@field jira AtlasJiraProviderConfig|nil
 
 ---@class AtlasPullsConfig
----@field git_transport AtlasGitTransport|nil Git transport for Atlas-managed repositories (default: "ssh").
+---@field git_transport AtlasGitTransport|nil Git transport for Atlas-managed repositories (default: "https").
 ---@field repo_config AtlasPullsRepoConfig|nil
 ---@field diff AtlasPullsDiffConfig|nil
 ---@field delete_notes boolean|nil
@@ -131,7 +131,7 @@ M.options = {
 		listed_buffer = false,
 	},
 	pulls = {
-		git_transport = "ssh",
+		git_transport = "https",
 		delete_notes = false,
 		default_merge_method = "merge",
 		default_delete_branch = false,
