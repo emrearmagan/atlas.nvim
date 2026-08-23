@@ -7,7 +7,7 @@ local picker = require("atlas.picker")
 local pullrequests = require("atlas.pulls.providers.forgejo.api.pullrequests")
 local repositories = require("atlas.pulls.providers.forgejo.api.repositories")
 local search = require("atlas.pulls.providers.forgejo.completion.search")
-local statusline = require("atlas.ui.statusline")
+local core_notify = require("atlas.core.notify")
 
 ---@param ctx AtlasPullActionContext
 ---@return boolean
@@ -60,7 +60,11 @@ end
 ---@param message string
 ---@param duration integer|nil
 local function notify(ctx, level, message, duration)
-	(ctx.notify or statusline.notify)(level, message, duration)
+	if ctx.notify then
+		ctx.notify(level, message, duration)
+		return
+	end
+	core_notify.show(level, message, { timeout = duration })
 end
 
 ---@param values table[]|nil
