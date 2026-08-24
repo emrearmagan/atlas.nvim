@@ -60,6 +60,7 @@
 ---@field text string
 
 ---@class AtlasPullsCommentTemplatesConfig
+---@field insert_mode boolean|nil
 ---@field items AtlasPullsCommentTemplate[]
 
 ---@class AtlasPullsCustomActionContext
@@ -135,6 +136,7 @@ M.options = {
 		default_merge_method = "merge",
 		default_delete_branch = false,
 		comment_templates = {
+			insert_mode = true,
 			items = {
 				{ label = "Praise", text = "praise: " },
 				{ label = "Nitpick", text = "nitpick: " },

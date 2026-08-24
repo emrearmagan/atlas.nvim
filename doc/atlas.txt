@@ -190,6 +190,7 @@ Shared config that applies to all pulls providers:
       git_transport = "ssh", -- "https" or "ssh" for Atlas-managed Git remotes.
       -- replaces the built-in Conventional Comments templates.
       comment_templates = {
+        insert_mode = true, -- enter Insert mode after applying a template
         items = {
           { label = "Suggestion", text = "suggestion: " },
           { label = "Issue", text = "issue: " },

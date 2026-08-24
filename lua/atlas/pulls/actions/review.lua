@@ -77,7 +77,9 @@ local function comment_template_action()
 				on_select = function(template)
 					if template then
 						context.set_text(template.text .. context.get_text())
-						vim.cmd("startinsert!")
+						if config.options.pulls.comment_templates.insert_mode then
+							vim.cmd("startinsert!")
+						end
 					end
 				end,
 			})

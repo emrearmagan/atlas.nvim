@@ -163,6 +163,7 @@ pulls = {
 
   -- replaces the built-in Conventional Comments templates.
   comment_templates = {
+    insert_mode = true, -- Enter Insert mode after applying a template.
     items = {
       { label = "Suggestion", text = "suggestion: " },
       { label = "Issue", text = "issue: " },
