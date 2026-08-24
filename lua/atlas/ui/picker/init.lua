@@ -28,9 +28,9 @@ local config = require("atlas.config")
 ---@field on_cancel (fun())|nil
 
 local picker_modules = {
-	default = "atlas.picker.atlas",
-	snacks = "atlas.picker.snacks",
-	["fzf-lua"] = "atlas.picker.fzf_lua",
+	default = "atlas.ui.picker.atlas",
+	snacks = "atlas.ui.picker.snacks",
+	["fzf-lua"] = "atlas.ui.picker.fzf_lua",
 }
 
 ---@param name string

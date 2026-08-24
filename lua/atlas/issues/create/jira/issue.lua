@@ -7,7 +7,7 @@ local users_api = require("atlas.issues.providers.jira.api.users")
 local issues_api = require("atlas.issues.providers.jira.api.issues")
 local templates = require("atlas.issues.templates")
 local spinner = require("atlas.ui.components.spinner")
-local picker = require("atlas.picker")
+local picker = require("atlas.ui.picker")
 
 ---@class IssueEditorFields
 ---@field summary string

@@ -2,7 +2,7 @@ local M = {}
 
 local markdown_editor = require("atlas.ui.popups.editor")
 local notify = require("atlas.core.notify")
-local picker = require("atlas.picker")
+local picker = require("atlas.ui.picker")
 local templates_root = vim.fn.stdpath("data") .. "/atlas/issues/templates"
 
 ---@class IssueTemplateInfo

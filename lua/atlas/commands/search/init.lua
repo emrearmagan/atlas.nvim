@@ -2,7 +2,7 @@ local M = {}
 
 local config = require("atlas.config")
 local notify = require("atlas.core.notify")
-local picker = require("atlas.picker")
+local picker = require("atlas.ui.picker")
 local providers = require("atlas.providers")
 
 local domain_labels = {

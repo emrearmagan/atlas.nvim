@@ -2,7 +2,7 @@ local M = {}
 
 local git_checkout = require("atlas.core.git.checkout")
 local md_editor = require("atlas.ui.popups.editor")
-local picker = require("atlas.picker")
+local picker = require("atlas.ui.picker")
 local review = require("atlas.pulls.actions.review")
 local utils = require("atlas.pulls.actions.utils")
 local ui_utils = require("atlas.ui.shared.utils")

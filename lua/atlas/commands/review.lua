@@ -3,7 +3,7 @@ local M = {}
 local config = require("atlas.config")
 local git = require("atlas.core.git")
 local notify = require("atlas.core.notify")
-local picker = require("atlas.picker")
+local picker = require("atlas.ui.picker")
 local providers = require("atlas.providers")
 local ui_utils = require("atlas.ui.shared.utils")
 

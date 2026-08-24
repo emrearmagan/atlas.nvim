@@ -2,7 +2,7 @@ local M = {}
 
 local actions = require("atlas.issues.actions")
 local icons = require("atlas.ui.shared.icons")
-local picker = require("atlas.picker")
+local picker = require("atlas.ui.picker")
 local issues_api = require("atlas.issues.providers.jira.api.issues")
 local adf = require("atlas.issues.providers.jira.converted.adf")
 local notify = require("atlas.core.notify")

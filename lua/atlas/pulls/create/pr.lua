@@ -5,10 +5,31 @@ local form = require("atlas.ui.popups.form")
 local git_branch = require("atlas.core.git")
 local keymaps = require("atlas.core.keymaps")
 local logger = require("atlas.core.logger")
-local picker = require("atlas.picker")
+local picker = require("atlas.ui.picker")
 local description = require("atlas.pulls.create.description")
 local presentation = require("atlas.pulls.ui.presentation")
 local notify = require("atlas.core.notify")
+
+---@class PullsCreatePRReviewer
+---@field label string
+---@field provider_id string
+---@field selected boolean|nil
+---@field default boolean|nil
+
+---@class PullsCreatePROpts
+---@field repo_slug string
+---@field title string
+---@field body string
+---@field head string
+---@field base string
+---@field draft boolean|nil
+---@field repo_root string|nil
+---@field reviewers PullsCreatePRReviewer[]|nil
+
+---@class PullsCreatePRResult
+---@field id string|number|nil
+---@field url string|nil
+---@field message string|nil
 
 ---@class CreatePRFields
 ---@field repo_slug string         -- "owner/repo"

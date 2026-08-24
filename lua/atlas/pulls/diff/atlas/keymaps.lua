@@ -2,7 +2,7 @@ local M = {}
 
 local explorer = require("atlas.pulls.diff.atlas.explorer")
 local help = require("atlas.ui.popups.help")
-local picker = require("atlas.picker")
+local picker = require("atlas.ui.picker")
 local resolver = require("atlas.core.keymaps")
 local review_keymaps = require("atlas.pulls.diff.keymaps")
 local review_panel = require("atlas.pulls.diff.ui.review_panel")

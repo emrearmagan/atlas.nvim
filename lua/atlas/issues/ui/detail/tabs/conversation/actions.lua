@@ -1,7 +1,7 @@
 local M = {}
 
 local md_editor = require("atlas.ui.popups.editor")
-local picker = require("atlas.picker")
+local picker = require("atlas.ui.picker")
 local notify = require("atlas.core.notify")
 local renderer = require("atlas.issues.ui.detail.tabs.conversation.renderer")
 local state = require("atlas.issues.ui.detail.tabs.conversation.state")

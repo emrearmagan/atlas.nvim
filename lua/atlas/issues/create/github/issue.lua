@@ -2,7 +2,7 @@ local M = {}
 
 local form = require("atlas.ui.popups.form")
 local notify = require("atlas.core.notify")
-local picker = require("atlas.picker")
+local picker = require("atlas.ui.picker")
 local icons = require("atlas.ui.shared.icons")
 local highlights = require("atlas.ui.shared.highlights")
 local request_scope = require("atlas.core.requests")

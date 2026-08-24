@@ -1,7 +1,7 @@
 local M = {}
 
 local notify = require("atlas.core.notify")
-local picker = require("atlas.picker")
+local picker = require("atlas.ui.picker")
 local providers = require("atlas.providers")
 
 ---@return { label: string, provider: IssuesProvider }[]

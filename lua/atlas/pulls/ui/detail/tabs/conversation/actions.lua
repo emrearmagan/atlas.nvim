@@ -1,6 +1,6 @@
 local M = {}
 
-local picker = require("atlas.picker")
+local picker = require("atlas.ui.picker")
 local pull_actions = require("atlas.pulls.actions")
 local notify = require("atlas.core.notify")
 local review = require("atlas.pulls.actions.review")

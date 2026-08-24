@@ -1,6 +1,6 @@
 local M = {}
 
-local picker = require("atlas.picker")
+local picker = require("atlas.ui.picker")
 local notify = require("atlas.core.notify")
 
 ---@class PullsPipelineActionContext
