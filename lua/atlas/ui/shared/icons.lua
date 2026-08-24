@@ -137,7 +137,10 @@ function M.issues_type(name, provider_id)
 	if provider_id == "shortcut" then
 		key = key == "feature" and "story" or key == "chore" and "task" or key
 		local style = ICONS.issues.type[key]
-		return style and get(style) or "", "AtlasTextMuted"
+		if style then
+			return get(style)
+		end
+		return "", "AtlasTextMuted"
 	end
 
 	local default = ICONS.issues.type[key:lower()]
