@@ -267,9 +267,9 @@ local function labels(ctx, done)
 		return
 	end
 
-	---@param details IssueDetails
+	---@param current_labels IssueLabel[]
 	---@param all_labels { name: string, color: string|nil }[]
-	local function open_picker(details, all_labels)
+	local function open_picker(current_labels, all_labels)
 		notify.clear()
 
 		local items = {}
@@ -285,7 +285,7 @@ local function labels(ctx, done)
 
 		local original = {}
 		local original_set = {}
-		for _, label in ipairs(details.labels or {}) do
+		for _, label in ipairs(current_labels) do
 			local name = tostring(label.name or "")
 			if name ~= "" then
 				table.insert(original, { name = name, color = label.color })
@@ -342,9 +342,9 @@ local function labels(ctx, done)
 	end
 
 	notify.loading("Loading labels...")
-	ctx.provider.capabilities.core.fetch_issue(key, { force_load = true }, function(details, details_err)
-		if details_err or details == nil then
-			local message = details_err or "Failed to load issue details"
+	issues_api.fetch_issue_labels(key, function(current_labels, current_err)
+		if current_err or current_labels == nil then
+			local message = current_err or "Failed to load issue labels"
 			notify.error(message)
 			done(nil, message)
 			return
@@ -357,7 +357,7 @@ local function labels(ctx, done)
 				done(nil, message)
 				return
 			end
-			open_picker(details, all_labels)
+			open_picker(current_labels, all_labels)
 		end)
 	end)
 end

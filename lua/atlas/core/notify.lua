@@ -12,6 +12,12 @@ local M = {}
 function M.show(level, message, opts)
 	opts = opts or {}
 	message = tostring(message)
+	if vim.in_fast_event() then
+		vim.schedule(function()
+			M.show(level, message, opts)
+		end)
+		return
+	end
 
 	local statusline = require("atlas.ui.statusline")
 	local attached = statusline.is_attached()

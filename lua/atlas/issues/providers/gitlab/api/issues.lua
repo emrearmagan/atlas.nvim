@@ -322,6 +322,46 @@ function M.update_labels(key, diff, on_done)
 end
 
 ---@param key string
+---@param on_done fun(labels: IssueLabel[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_issue_labels(key, on_done)
+	local path, iid = normalizer.parse_key(key)
+	if path == "" or iid == nil then
+		on_done(nil, "Invalid issue key: " .. tostring(key))
+		return nil
+	end
+
+	return service.graphql(ISSUE_LABELS_GQL, { path = path, iid = tostring(iid) }, function(data, err)
+		if err then
+			on_done(nil, err)
+			return
+		end
+
+		data = json.nilify(data)
+		local project = type(data) == "table" and json.nilify(data.project) or nil
+		local issue = type(project) == "table" and json.nilify(project.issue) or nil
+		if type(issue) ~= "table" then
+			on_done(nil, "Issue not found")
+			return
+		end
+
+		local connection = json.nilify(issue.labels)
+		local labels = {}
+		for _, raw in ipairs(type(connection) == "table" and json.safe_table(connection.nodes) or {}) do
+			local name = json.safe_str(raw.title)
+			if name then
+				table.insert(labels, { name = name, color = json.safe_str(raw.color) })
+			end
+		end
+		on_done(labels, nil)
+	end, {
+		action = "Fetch issue labels",
+		path = path,
+		iid = iid,
+	})
+end
+
+---@param key string
 ---@param ids integer[]
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil

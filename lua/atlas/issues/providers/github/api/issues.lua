@@ -460,6 +460,51 @@ function M.update_labels(key, diff, on_done)
 	})
 end
 
+---@param endpoint string
+---@param context table
+---@param on_done fun(labels: { name: string, color: string|nil, description: string|nil }[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+local function fetch_labels(endpoint, context, on_done)
+	return cli.gh({ "api", "--paginate", "--slurp", endpoint }, function(result, err)
+		if err or type(result) ~= "table" then
+			on_done(nil, err or "Failed to fetch labels")
+			return
+		end
+
+		local labels = {}
+		for _, page in ipairs(result) do
+			for _, raw in ipairs(page) do
+				local name = json.safe_str(raw.name)
+				if name then
+					table.insert(labels, {
+						name = name,
+						color = json.safe_str(raw.color),
+						description = json.safe_str(raw.description),
+					})
+				end
+			end
+		end
+		on_done(labels, nil)
+	end, context)
+end
+
+---@param key string
+---@param on_done fun(labels: IssueLabel[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_issue_labels(key, on_done)
+	local slug, number = normalizer.parse_key(key)
+	if slug == "" or number == nil then
+		on_done(nil, "Invalid issue key: " .. tostring(key))
+		return nil
+	end
+
+	return fetch_labels(string.format("repos/%s/issues/%d/labels?per_page=100", slug, number), {
+		action = "Fetch issue labels",
+		slug = slug,
+		number = number,
+	}, on_done)
+end
+
 ---@param slug string
 ---@param on_done fun(labels: { name: string, color: string|nil, description: string|nil }[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
@@ -471,35 +516,10 @@ function M.list_labels(slug, on_done)
 		return nil
 	end
 
-	return cli.gh({
-		"api",
-		"--paginate",
-		"--slurp",
-		string.format("repos/%s/labels?per_page=100", slug),
-	}, function(result, err)
-		if err or type(result) ~= "table" then
-			on_done(nil, err or "Failed to fetch labels")
-			return
-		end
-
-		local list = {}
-		for _, page in ipairs(result) do
-			for _, raw in ipairs(page) do
-				local name = json.safe_str(raw.name)
-				if name then
-					table.insert(list, {
-						name = name,
-						color = json.safe_str(raw.color),
-						description = json.safe_str(raw.description),
-					})
-				end
-			end
-		end
-		on_done(list, nil)
-	end, {
+	return fetch_labels(string.format("repos/%s/labels?per_page=100", slug), {
 		action = "Fetch repo labels",
 		slug = slug,
-	})
+	}, on_done)
 end
 
 ---@class GitHubMilestone
