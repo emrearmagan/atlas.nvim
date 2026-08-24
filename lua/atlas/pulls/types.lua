@@ -45,7 +45,6 @@
 ---@field source PullsRef
 ---@field destination PullsRef
 ---@field comments_count number
----@field tasks_count number
 ---@field created_on string
 ---@field updated_on string
 ---@field link PullsLink
@@ -54,9 +53,6 @@
 ---@field repo string
 ---@field is_starred boolean|nil
 ---@field reviewers PullsReviewer[]|nil
----@field lines_added number|nil
----@field lines_removed number|nil
----@field _raw table
 
 ---@class PullRequestDetails : PullRequest
 ---@field description string

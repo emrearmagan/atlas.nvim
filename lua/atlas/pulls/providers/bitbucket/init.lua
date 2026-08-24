@@ -1,3 +1,22 @@
+---@class BitbucketPullRequestLinks
+---@field html string|nil
+---@field self string|nil
+---@field merge string|nil
+---@field decline string|nil
+---@field commits string|nil
+---@field approve string|nil
+---@field request_changes string|nil
+---@field diff string|nil
+---@field diffstat string|nil
+---@field comments string|nil
+---@field activity string|nil
+---@field statuses string|nil
+
+---@class BitbucketPullRequest : PullRequest
+---@field tasks_count number
+---@field close_source_branch boolean|nil
+---@field links BitbucketPullRequestLinks
+
 local actions = require("atlas.pulls.providers.bitbucket.actions")
 local activity_api = require("atlas.pulls.providers.bitbucket.api.activity")
 local changes_api = require("atlas.pulls.providers.bitbucket.api.changes")

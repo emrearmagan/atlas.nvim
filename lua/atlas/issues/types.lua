@@ -8,17 +8,6 @@
 ---@field display_name string
 
 --------------------------------------------------------------------------------
--- Project
---------------------------------------------------------------------------------
-
----@class IssueProject
----@field id string
----@field key string
----@field name string
----@field self string
----@field category table|nil
-
---------------------------------------------------------------------------------
 -- Issue
 --------------------------------------------------------------------------------
 
@@ -28,11 +17,9 @@
 
 ---@class Issue : IssueRef
 ---@field title string
----@field project IssueProject|nil
 ---@field status string|nil
 ---@field status_id string|nil
 ---@field type IssueType|nil
----@field priority string|nil
 ---@field assignee IssueUser|nil
 ---@field reporter IssueUser|nil
 ---@field story_points number|nil
@@ -43,10 +30,8 @@
 ---@field updated_at string|nil
 ---@field closed_at string|nil
 ---@field comment_count integer|nil
----@field is_pinned boolean|nil
 ---@field is_starred boolean|nil
 ---@field is_subscribed boolean|nil
----@field _raw table|nil
 
 ---@class IssueDetails : Issue
 ---@field description string
@@ -55,6 +40,7 @@
 ---@field milestone IssueMilestone|nil
 ---@field reactions table<string, integer>|nil
 ---@field sub_issues Issue[]
+---@field _raw table|nil
 
 --------------------------------------------------------------------------------
 -- Label

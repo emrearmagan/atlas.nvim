@@ -7,25 +7,12 @@ local notify = require("atlas.core.notify")
 local issues_api = require("atlas.issues.providers.gitlab.api.issues")
 local users_api = require("atlas.issues.providers.gitlab.api.users")
 local labels_api = require("atlas.issues.providers.gitlab.api.labels")
-local normalizer = require("atlas.issues.providers.gitlab.api.mapper")
 
 ---@param ctx AtlasIssueActionContext
 ---@return boolean
 local function has_issue(ctx)
 	local issue = ctx.issue
 	return issue ~= nil and tostring(issue.key or "") ~= ""
-end
-
----@param issue Issue
----@return string
-local function issue_path(issue)
-	local raw = issue._raw or {}
-	local path = tostring(raw.project_path or "")
-	if path ~= "" then
-		return path
-	end
-	local from_key, _ = normalizer.parse_key(tostring(issue.key or ""))
-	return from_key
 end
 
 ---@type AtlasIssueAction[]
@@ -125,8 +112,9 @@ end
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function assign(ctx, done)
 	local issue = assert(ctx.issue)
+	---@cast issue GitLabIssue
 	local key = tostring(issue.key or "")
-	local path = issue_path(issue)
+	local path = issue.project_path
 	if path == "" then
 		local err = "Could not determine project path"
 		notify.error(err)
@@ -257,8 +245,9 @@ end
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function labels(ctx, done)
 	local issue = assert(ctx.issue)
+	---@cast issue GitLabIssue
 	local key = tostring(issue.key or "")
-	local path = issue_path(issue)
+	local path = issue.project_path
 	if path == "" then
 		local err = "Could not determine project path"
 		notify.error(err)
@@ -417,7 +406,9 @@ end
 local function create_issue(ctx, done)
 	local resolved = ctx.project_path or ""
 	if resolved == "" and has_issue(ctx) then
-		resolved = issue_path(assert(ctx.issue))
+		local issue = assert(ctx.issue)
+		---@cast issue GitLabIssue
+		resolved = issue.project_path
 	end
 	if resolved == "" then
 		local git = require("atlas.core.git")
@@ -475,10 +466,8 @@ local function toggle_subscription_available(ctx)
 		return false, "No issue selected"
 	end
 	local issue = assert(ctx.issue)
-	local raw = issue._raw or {}
-	local iid = tonumber(raw.iid)
-	local path = tostring(raw.project_path or "")
-	if iid == nil or path == "" then
+	---@cast issue GitLabIssue
+	if issue.project_path == "" then
 		return false, "Invalid issue identifier"
 	end
 	return true, nil
@@ -489,11 +478,10 @@ end
 local function toggle_subscription(ctx, done)
 	local service = require("atlas.providers.gitlab.client")
 	local issue = assert(ctx.issue)
-	local raw = issue._raw or {}
-	local path = tostring(raw.project_path or "")
-	local iid = tonumber(raw.iid)
+	---@cast issue GitLabIssue
 	local action = issue.is_subscribed == true and "unsubscribe" or "subscribe"
-	local endpoint = string.format("/projects/%s/issues/%d/%s", service.url_encode(path), iid, action)
+	local endpoint =
+		string.format("/projects/%s/issues/%d/%s", service.url_encode(issue.project_path), issue.iid, action)
 	notify.loading(issue.is_subscribed and "Unsubscribing..." or "Subscribing...")
 	service.request("POST", endpoint, nil, function(result, err)
 		if err then

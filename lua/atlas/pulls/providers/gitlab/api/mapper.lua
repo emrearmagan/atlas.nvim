@@ -94,7 +94,7 @@ local function normalize_state(mr)
 end
 
 ---@param raw any Decoded API value.
----@return PullRequest|nil
+---@return GitLabPullRequest|nil
 local function map_summary(raw)
 	raw = json.nilify(raw)
 	if type(raw) ~= "table" then
@@ -129,7 +129,7 @@ local function map_summary(raw)
 	local head_sha = type(diff_refs) == "table" and json.safe_str(diff_refs.head_sha) or nil
 	local base_sha = type(diff_refs) == "table" and json.safe_str(diff_refs.base_sha) or nil
 
-	---@type PullRequest
+	---@type GitLabPullRequest
 	return {
 		id = iid,
 		title = json.safe_str(raw.title) or "",
@@ -142,7 +142,6 @@ local function map_summary(raw)
 		},
 		destination = { branch = target_branch, commit_hash = base_sha or "" },
 		comments_count = tonumber(raw.user_notes_count) or 0,
-		tasks_count = 0,
 		created_on = json.safe_str(raw.created_at) or "",
 		updated_on = json.safe_str(raw.updated_at) or "",
 		link = { html = json.safe_str(raw.web_url) or "" },
@@ -151,18 +150,16 @@ local function map_summary(raw)
 		repo = repo,
 		repo_full_name = project_path,
 		reviewers = normalize_optional_reviewers(raw.reviewers),
-		_raw = {
-			merge_status = json.safe_str(raw.merge_status),
-			detailed_merge_status = json.safe_str(raw.detailed_merge_status),
-			blocking_discussions_resolved = json.nilify(raw.blocking_discussions_resolved),
-			has_conflicts = raw.has_conflicts == true,
-			diff_refs = diff_refs,
-		},
+		merge_status = json.safe_str(raw.merge_status),
+		detailed_merge_status = json.safe_str(raw.detailed_merge_status),
+		blocking_discussions_resolved = json.nilify(raw.blocking_discussions_resolved),
+		has_conflicts = raw.has_conflicts == true,
+		diff_refs = diff_refs,
 	}
 end
 
 ---@param raw any Decoded API value.
----@return PullRequest|nil
+---@return GitLabPullRequest|nil
 function M.to_pull_request(raw)
 	return map_summary(raw)
 end

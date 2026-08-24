@@ -10,7 +10,8 @@ local service = require("atlas.pulls.providers.bitbucket.api.service")
 ---@param on_done fun(entries: PullsDiffstatEntry[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_diffstat(pr, opts, on_done)
-	local diffstat_url = tostring((pr._raw.links or {}).diffstat or "")
+	---@cast pr BitbucketPullRequest
+	local diffstat_url = tostring(pr.links.diffstat or "")
 	if diffstat_url == "" then
 		on_done({}, nil)
 		return nil
@@ -62,7 +63,8 @@ end
 ---@param on_done fun(commits: PullsCommit[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_commits(pr, opts, on_done)
-	local commits_url = tostring((pr._raw.links or {}).commits or "")
+	---@cast pr BitbucketPullRequest
+	local commits_url = tostring(pr.links.commits or "")
 	if commits_url == "" then
 		on_done({}, nil)
 		return nil
@@ -96,7 +98,8 @@ end
 ---@param on_done fun(files: DiffFile[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_diff(pr, _opts, on_done)
-	local diff_url = tostring((pr._raw.links or {}).diff or "")
+	---@cast pr BitbucketPullRequest
+	local diff_url = tostring(pr.links.diff or "")
 	if diff_url == "" then
 		on_done({}, nil)
 		return nil

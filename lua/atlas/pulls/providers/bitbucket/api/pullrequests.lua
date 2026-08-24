@@ -8,17 +8,11 @@ local request_scope = require("atlas.core.requests")
 local state = require("atlas.pulls.providers.bitbucket.state")
 
 ---@param pr PullRequest
----@param key string
----@return string
-local function pr_link(pr, key)
-	return tostring((pr._raw.links or {})[key] or "")
-end
-
----@param pr PullRequest
 ---@param action "merge"|"decline"
 ---@return boolean
 function M.has_action(pr, action)
-	return pr_link(pr, action) ~= ""
+	---@cast pr BitbucketPullRequest
+	return tostring(pr.links[action] or "") ~= ""
 end
 
 ---@param workspace string
@@ -232,19 +226,19 @@ function M.fetch_by_refs(refs, _opts, on_done)
 	return requests
 end
 
----@param pr PullRequestRef
+---@param ref PullRequestRef
 ---@param opts? { force_load?: boolean }
 ---@param on_done fun(detail: PullRequestDetails|nil, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
-function M.fetch_pullrequest(pr, opts, on_done)
+function M.fetch_pullrequest(ref, opts, on_done)
 	opts = opts or {}
-	local workspace, repo = pr.repo_full_name:match("^([^/]+)/(.+)$")
+	local workspace, repo = ref.repo_full_name:match("^([^/]+)/(.+)$")
 	if workspace == nil or repo == nil then
 		on_done(nil, "PR missing workspace/repo info")
 		return nil
 	end
 
-	local key = string.format("bitbucket:pr:detail:%s/%s/%s", workspace, repo, tostring(pr.id))
+	local key = string.format("bitbucket:pr:detail:%s/%s/%s", workspace, repo, tostring(ref.id))
 	if opts.force_load ~= true then
 		local cached, ok = service.get_cache(key)
 		if ok then
@@ -253,7 +247,7 @@ function M.fetch_pullrequest(pr, opts, on_done)
 		end
 	end
 
-	local endpoint = string.format("/repositories/%s/%s/pullrequests/%s", workspace, repo, tostring(pr.id))
+	local endpoint = string.format("/repositories/%s/%s/pullrequests/%s", workspace, repo, tostring(ref.id))
 	return service.request("GET", endpoint, nil, nil, function(result, err)
 		if err then
 			on_done(nil, err)
@@ -271,8 +265,8 @@ end
 ---@param on_done fun(description: string|nil, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.fetch_description(pr, _opts, on_done)
-	local workspace, repo = pr.repo_full_name:match("^([^/]+)/(.+)$")
-	if workspace == nil or repo == nil then
+	local workspace, repo = pr.workspace, pr.repo
+	if workspace == "" or repo == "" then
 		on_done(nil, "PR missing workspace/repo info")
 		return nil
 	end
@@ -293,7 +287,8 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
 local function update_pullrequest(pr, fields, on_done)
-	local url = pr_link(pr, "self")
+	---@cast pr BitbucketPullRequest
+	local url = tostring(pr.links.self or "")
 	if url == "" then
 		on_done(false, "No pull request URL available")
 		return nil
@@ -338,7 +333,8 @@ end
 ---@param on_done fun(result: table|nil, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.merge(pr, opts, on_done)
-	local merge_url = pr_link(pr, "merge")
+	---@cast pr BitbucketPullRequest
+	local merge_url = tostring(pr.links.merge or "")
 	if merge_url == "" then
 		on_done(nil, "No merge URL available")
 		return nil
@@ -370,7 +366,8 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.decline(pr, on_done)
-	local url = pr_link(pr, "decline")
+	---@cast pr BitbucketPullRequest
+	local url = tostring(pr.links.decline or "")
 	if url == "" then
 		on_done(false, "No decline URL available")
 		return nil
@@ -389,8 +386,8 @@ end
 ---@param on_done fun(participants: table[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 local function fetch_participants(pr, on_done)
-	local raw = pr._raw
-	local self_url = tostring((raw.links or {}).self or "")
+	---@cast pr BitbucketPullRequest
+	local self_url = tostring(pr.links.self or "")
 	if self_url == "" then
 		on_done(nil, "No PR self link available")
 		return nil
@@ -432,7 +429,8 @@ end
 ---@param on_done fun(reviewers: PullsReviewer[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_review_participants(pr, opts, on_done)
-	local self_url = tostring(((pr._raw or {}).links or {}).self or "")
+	---@cast pr BitbucketPullRequest
+	local self_url = tostring(pr.links.self or "")
 	local key = "bitbucket:pr:review-participants:" .. self_url
 	if not (opts or {}).force_refresh then
 		local cached, ok = service.get_cache(key)

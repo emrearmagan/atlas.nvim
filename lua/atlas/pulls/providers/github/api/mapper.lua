@@ -196,7 +196,7 @@ function M.to_reviewers(raw)
 end
 
 ---@param raw table
----@return PullRequest
+---@return GitHubPullRequest
 local function map_summary(raw)
 	local number = tostring(raw.number or "")
 	local author = pull_author(raw.author)
@@ -217,6 +217,9 @@ local function map_summary(raw)
 	if repository_url and repository_url ~= "" and not repository_url:match("%.git$") then
 		repository_url = repository_url .. ".git"
 	end
+	local first_commit = json.safe_table(json.safe_table(json.safe_table(raw.commits).nodes)[1])
+	local commit = json.safe_table(first_commit.commit)
+	local check_status = json.safe_str(json.safe_table(commit.statusCheckRollup).state)
 
 	return {
 		id = number,
@@ -240,7 +243,6 @@ local function map_summary(raw)
 			or (type(raw.comments) == "table" and #raw.comments)
 			or tonumber(raw.comments)
 			or 0,
-		tasks_count = 0,
 		created_on = tostring(raw.createdAt or ""),
 		updated_on = tostring(raw.updatedAt or ""),
 		link = {
@@ -251,18 +253,16 @@ local function map_summary(raw)
 		repo = repo_name,
 		repo_full_name = repo_full_name,
 		reviewers = reviewers,
+		node_id = json.safe_str(raw.id),
+		review_decision = json.safe_str(raw.reviewDecision),
+		check_status = check_status,
 		lines_added = tonumber(raw.additions),
 		lines_removed = tonumber(raw.deletions),
-		_raw = {
-			node_id = json.safe_str(raw.id),
-			commits = json.nilify(raw.commits),
-			review_decision = json.safe_str(raw.reviewDecision),
-		},
 	}
 end
 
 ---@param raw table
----@return PullRequest
+---@return GitHubPullRequest
 function M.to_pull_request(raw)
 	return map_summary(raw)
 end

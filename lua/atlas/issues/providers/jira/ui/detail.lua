@@ -18,6 +18,7 @@ local state = {
 ---@return IssuesDetailHeaderRow[]
 function M.header_rows(issue, details, loading)
 	local data = details or issue
+	---@cast data JiraIssue
 	local user_icon = icons.general("user")
 	local priority = tostring(data.priority or "-")
 	local priority_icon, priority_hl = icons.issues_priority(priority)
@@ -132,6 +133,7 @@ end
 ---@param on_done fun()
 ---@return { cancel: fun() }|nil
 function M.fetch_header(_issue, details, opts, on_done)
+	---@cast details JiraIssue
 	local function finish(custom_fields)
 		state.custom_fields = custom_fields
 		on_done()

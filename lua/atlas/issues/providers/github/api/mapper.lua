@@ -114,10 +114,10 @@ end
 
 ---@param raw any Decoded API value.
 ---@param fallback_slug string|nil
----@return Issue|nil
+---@return GitHubIssue|nil
 function M.to_issue(raw, fallback_slug)
 	raw = json.nilify(raw)
-	local ref, slug, number = issue_identity(raw, fallback_slug)
+	local ref, repo_full_name, number = issue_identity(raw, fallback_slug)
 	if ref == nil or number == nil then
 		return nil
 	end
@@ -140,15 +140,15 @@ function M.to_issue(raw, fallback_slug)
 		or (type(comments_field) == "table" and #comments_field)
 		or 0
 
-	---@type Issue
+	---@type GitHubIssue
 	local issue = {
 		key = ref.key,
+		repo_full_name = repo_full_name,
+		number = number,
 		title = ref.title or "",
-		project = nil,
 		status = status_name,
 		status_id = status_id,
 		type = nil,
-		priority = nil,
 		assignee = first_assignee(issue_assignees),
 		reporter = author,
 		story_points = nil,
@@ -161,11 +161,7 @@ function M.to_issue(raw, fallback_slug)
 		comment_count = comment_count,
 		is_pinned = raw.isPinned == true,
 		is_subscribed = is_subscribed,
-		_raw = {
-			node_id = json.safe_str(raw.id),
-			number = number,
-			slug = slug,
-		},
+		node_id = json.safe_str(raw.id),
 	}
 	return issue
 end

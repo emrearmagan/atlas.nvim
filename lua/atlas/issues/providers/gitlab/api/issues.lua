@@ -488,7 +488,7 @@ function M.create_issue(opts, on_done)
 		end
 
 		local issue = normalizer.to_issue(result)
-		local iid = (issue and issue._raw and issue._raw.iid) or tonumber(result.iid)
+		local iid = issue and issue.iid
 		local key = (issue and issue.key) or (iid and string.format("%s#%d", path, iid) or nil)
 		service.clear_cache(LIST_CACHE_PREFIX)
 		on_done({

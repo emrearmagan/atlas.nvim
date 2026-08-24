@@ -96,8 +96,20 @@ local function normalize_state(state)
 	return "Open", "open"
 end
 
+---@param raw_type any
+---@return IssueType|nil
+local function to_issue_type(raw_type)
+	local id = json.safe_str(raw_type)
+	if id == nil or id == "" then
+		return nil
+	end
+	local name = id:gsub("_", " ")
+	name = name:sub(1, 1):upper() .. name:sub(2)
+	return { id = id, name = name, subtask = false }
+end
+
 ---@param raw any Decoded API value.
----@return Issue|nil
+---@return GitLabIssue|nil
 function M.to_issue(raw)
 	raw = json.nilify(raw)
 	if type(raw) ~= "table" then
@@ -112,29 +124,29 @@ function M.to_issue(raw)
 	local web_url = json.safe_str(raw.web_url) or ""
 	local refs = json.nilify(raw.references)
 	local key = type(refs) == "table" and json.safe_str(refs.full) or nil
+	local project_path = key and key:match("^(.-)#%d+$") or nil
 	if not key or key == "" then
-		local extracted = web_url:match("^https?://[^/]+/(.+)/%-/issues/")
-		key = extracted and (extracted .. "#" .. tostring(iid)) or string.format("#%d", iid)
+		project_path = web_url:match("^https?://[^/]+/(.+)/%-/issues/")
+		key = project_path and (project_path .. "#" .. tostring(iid)) or string.format("#%d", iid)
 	end
 
 	local status_name, status_id = normalize_state(raw.state)
 	local title = json.safe_str(raw.title) or ""
 
 	local issue_assignees = json.safe_table(raw.assignees)
-	local project_path = key:match("^(.-)#") or ""
 	local created_at = json.safe_str(raw.created_at)
 	local updated_at = json.safe_str(raw.updated_at)
 	local closed_at = json.safe_str(raw.closed_at)
 
-	---@type Issue
+	---@type GitLabIssue
 	local issue = {
 		key = key,
+		project_path = project_path or "",
+		iid = iid,
 		title = title,
-		project = nil,
 		status = status_name,
 		status_id = status_id,
-		type = nil,
-		priority = nil,
+		type = to_issue_type(raw.issue_type),
 		assignee = first_assignee(issue_assignees),
 		reporter = M.to_user(raw.author),
 		story_points = tonumber(json.nilify(raw.weight)),
@@ -146,14 +158,7 @@ function M.to_issue(raw)
 		closed_at = closed_at,
 		comment_count = tonumber(raw.user_notes_count) or 0,
 		is_subscribed = json.nilify(raw.subscribed),
-		_raw = {
-			id = tonumber(raw.id),
-			iid = iid,
-			project_id = tonumber(raw.project_id),
-			project_path = project_path,
-			confidential = raw.confidential == true,
-			issue_type = json.safe_str(raw.issue_type),
-		},
+		confidential = raw.confidential == true,
 	}
 	return issue
 end

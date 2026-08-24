@@ -105,14 +105,12 @@ local function github()
 		reference = "#",
 		columns = columns(icons.general("conversation"), { ci_column, review_column }, { diff_column }),
 		values = function(pr)
-			local ok, status = pcall(function()
-				return pr._raw.commits.nodes[1].commit.statusCheckRollup.state
-			end)
+			---@cast pr GitHubPullRequest
 			local ci = { icons.pulls_status("inprogress"), "AtlasTextMuted" }
-			if ok and type(status) == "string" then
-				ci = ci_icons[status:upper()] or ci
+			if pr.check_status then
+				ci = ci_icons[pr.check_status:upper()] or ci
 			end
-			local review = review_icons[tostring((pr._raw or {}).review_decision or "")] or review_icons.REVIEW_REQUIRED
+			local review = review_icons[tostring(pr.review_decision or "")] or review_icons.REVIEW_REQUIRED
 			local diff, diff_hl = diff_stats(pr.lines_added or 0, pr.lines_removed or 0)
 			return {
 				ci = ci[1],
@@ -183,8 +181,8 @@ local function gitlab()
 		reference = "!",
 		columns = columns(icons.general("comment"), { ci_column }, {}),
 		values = function(pr)
-			local raw = pr._raw
-			local status = tostring(raw.detailed_merge_status or raw.merge_status or ""):lower()
+			---@cast pr GitLabPullRequest
+			local status = tostring(pr.detailed_merge_status or pr.merge_status or ""):lower()
 			if status == "" then
 				return { ci = "", ci_hl = "AtlasTextMuted" }
 			end
@@ -226,6 +224,7 @@ local function bitbucket()
 		reference = "#",
 		columns = columns(icons.general("conversation"), { task_column, review_column }, {}),
 		values = function(pr)
+			---@cast pr BitbucketPullRequest
 			local decision = "pending"
 			for _, reviewer in ipairs(pr.reviewers or {}) do
 				if reviewer.decision == "changes_requested" then

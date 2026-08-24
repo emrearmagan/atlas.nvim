@@ -10,12 +10,12 @@ local MAX_HASH_LEN = 12
 ---@param _loading boolean
 ---@return PullsDetailHeaderRow[]
 function M.header_rows(pr, _details, _loading)
-	local raw = pr._raw
+	---@cast pr BitbucketPullRequest
 	local rows = {}
 
-	if raw.close_source_branch ~= nil then
+	if pr.close_source_branch ~= nil then
 		local state_icon, state_icon_hl
-		if raw.close_source_branch then
+		if pr.close_source_branch then
 			state_icon, state_icon_hl = icons.general("success")
 		else
 			state_icon, state_icon_hl = icons.general("error")

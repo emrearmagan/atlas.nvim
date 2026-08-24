@@ -1,3 +1,15 @@
+---@class GitLabPullRequestDiffRefs
+---@field base_sha string|nil
+---@field head_sha string|nil
+---@field start_sha string|nil
+
+---@class GitLabPullRequest : PullRequest
+---@field merge_status string|nil
+---@field detailed_merge_status string|nil
+---@field blocking_discussions_resolved boolean|nil
+---@field has_conflicts boolean
+---@field diff_refs GitLabPullRequestDiffRefs|nil
+
 local actions = require("atlas.pulls.providers.gitlab.actions")
 local activity_api = require("atlas.pulls.providers.gitlab.api.activity")
 local changes_api = require("atlas.pulls.providers.gitlab.api.changes")

@@ -40,8 +40,8 @@ end
 ---@param on_done fun(comments: PullsComment[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 local function fetch_comments(pr, opts, query, on_done)
-	local raw = pr._raw
-	local comments_url = tostring((raw.links or {}).comments or "")
+	---@cast pr BitbucketPullRequest
+	local comments_url = tostring(pr.links.comments or "")
 	if comments_url == "" then
 		on_done({}, nil)
 		return nil
@@ -96,8 +96,8 @@ end
 ---@param on_done fun(comment: PullsComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.add_comment(pr, content, opts, on_done)
-	local raw = pr._raw
-	local comments_url = tostring((raw.links or {}).comments or "")
+	---@cast pr BitbucketPullRequest
+	local comments_url = tostring(pr.links.comments or "")
 	if comments_url == "" then
 		on_done(nil, "No comments URL available")
 		return nil
@@ -130,8 +130,8 @@ end
 ---@param on_done fun(comment: PullsComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.edit_comment(pr, comment, on_done)
-	local raw = pr._raw
-	local comments_url = tostring((raw.links or {}).comments or "")
+	---@cast pr BitbucketPullRequest
+	local comments_url = tostring(pr.links.comments or "")
 	if comments_url == "" then
 		on_done(nil, "No comments URL available")
 		return nil
@@ -159,8 +159,8 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.delete_comment(pr, comment, on_done)
-	local raw = pr._raw
-	local comments_url = tostring((raw.links or {}).comments or "")
+	---@cast pr BitbucketPullRequest
+	local comments_url = tostring(pr.links.comments or "")
 	if comments_url == "" then
 		on_done(false, "No comments URL available")
 		return nil
@@ -183,8 +183,8 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.set_thread_resolved(pr, root, resolved, on_done)
-	local raw = pr._raw
-	local comments_url = tostring((raw.links or {}).comments or "")
+	---@cast pr BitbucketPullRequest
+	local comments_url = tostring(pr.links.comments or "")
 	if comments_url == "" then
 		on_done(false, "No comments URL available")
 		return nil

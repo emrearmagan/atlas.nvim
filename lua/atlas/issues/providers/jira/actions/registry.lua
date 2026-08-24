@@ -141,6 +141,7 @@ end
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function assign(ctx, done)
 	local issue = assert(ctx.issue)
+	---@cast issue JiraIssue
 
 	local issue_key = issue.key
 	local issue_project_key = issue.project and issue.project.key or nil
@@ -352,6 +353,7 @@ end
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function edit_issue(ctx, done)
 	local issue = assert(ctx.issue)
+	---@cast issue JiraIssue
 
 	local issue_key = issue.key
 	local md_to_adf = require("atlas.issues.providers.jira.converted.markdown")

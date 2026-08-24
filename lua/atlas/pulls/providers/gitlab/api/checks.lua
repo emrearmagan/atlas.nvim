@@ -4,13 +4,13 @@ local providers = require("atlas.pulls.providers")
 local pipelines_api = require("atlas.pulls.providers.gitlab.api.pipelines")
 local pullrequests_api = require("atlas.pulls.providers.gitlab.api.pullrequests")
 
----@param raw table
+---@param pr GitLabPullRequest
 ---@param draft boolean
 ---@return PullsMergeCheck[]
-local function parse_merge_checks(raw, draft)
+local function parse_merge_checks(pr, draft)
 	local checks = {}
-	local dms = tostring(raw.detailed_merge_status or ""):lower()
-	local has_conflicts = raw.has_conflicts == true
+	local dms = tostring(pr.detailed_merge_status or ""):lower()
+	local has_conflicts = pr.has_conflicts == true
 
 	if draft then
 		table.insert(checks, {
@@ -36,7 +36,7 @@ local function parse_merge_checks(raw, draft)
 		})
 	end
 
-	if raw.blocking_discussions_resolved == false or dms == "discussions_not_resolved" then
+	if pr.blocking_discussions_resolved == false or dms == "discussions_not_resolved" then
 		table.insert(checks, {
 			key = "discussions",
 			state = "failed",
@@ -140,7 +140,9 @@ function M.fetch(pr, opts, on_done)
 			on_done(nil, first_err or "Failed to fetch merge checks")
 			return
 		end
-		local checks = parse_merge_checks((mr and mr._raw) or {}, (mr or pr).state == "draft")
+		local current = mr or pr
+		---@cast current GitLabPullRequest
+		local checks = parse_merge_checks(current, current.state == "draft")
 		local bc = providers.pipelines_check(pipelines_result, "Pipelines")
 		if bc then
 			table.insert(checks, bc)

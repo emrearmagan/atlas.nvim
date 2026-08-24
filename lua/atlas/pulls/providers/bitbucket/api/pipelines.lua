@@ -88,8 +88,8 @@ end
 ---@param on_done fun(pipelines: PullsPipeline[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_pipelines(pr, opts, on_done)
-	local raw = pr._raw
-	local statuses_url = tostring((raw.links or {}).statuses or "")
+	---@cast pr BitbucketPullRequest
+	local statuses_url = tostring(pr.links.statuses or "")
 	local commit_hash = tostring((pr.source or {}).commit_hash or "")
 	if statuses_url == "" then
 		on_done({}, nil)

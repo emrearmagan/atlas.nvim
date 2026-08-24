@@ -438,9 +438,8 @@ end
 ---@param on_done fun(reviewers: PullsReviewer[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.get_reviewers(pr, opts, on_done)
-	local repo_slug = pr.repo_full_name or ""
-	local owner, repo = repo_slug:match("^([^/]+)/([^/]+)$")
-	if owner == nil or repo == nil then
+	local owner, repo = pr.workspace, pr.repo
+	if owner == "" or repo == "" then
 		vim.schedule(function()
 			on_done(nil, "Missing repo")
 		end)

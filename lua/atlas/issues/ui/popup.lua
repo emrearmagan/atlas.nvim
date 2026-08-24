@@ -16,13 +16,11 @@ local function generic_rows(issue)
 	local rows = {}
 	local issue_type = issue.type and issue.type.name or nil
 	local _, issue_type_hl = icons.issues_type(issue_type)
-	local _, priority_hl = icons.issues_priority(issue.priority)
 	local assignee = issue.assignee and issue.assignee.display_name or nil
 	local reporter = issue.reporter and issue.reporter.display_name or nil
 
 	add(rows, "Type", issue_type, issue_type_hl)
 	add(rows, "Status", issue.status, helper.status_hl(issue.status_id))
-	add(rows, "Priority", issue.priority, priority_hl)
 	add(rows, "Assignee", assignee or "Unassigned", helper.person_hl(assignee))
 	add(rows, "Reporter", reporter, helper.person_hl(reporter))
 	add(rows, "Due", issue.duedate)
@@ -54,14 +52,8 @@ end
 
 local function gitlab_rows(issue)
 	local rows = {}
-	local raw = issue._raw or {}
-	local kind = tostring(raw.issue_type or ""):gsub("_", " ")
-	if kind ~= "" then
-		kind = kind:sub(1, 1):upper() .. kind:sub(2)
-		add(rows, "Kind", kind)
-	end
-
-	if raw.confidential == true then
+	---@cast issue GitLabIssue
+	if issue.confidential == true then
 		add(rows, "Visibility", "Confidential", "AtlasTextWarning")
 	end
 	return rows
@@ -69,6 +61,9 @@ end
 
 local function jira_rows(issue)
 	local rows = {}
+	---@cast issue JiraIssue
+	local _, priority_hl = icons.issues_priority(issue.priority)
+	add(rows, "Priority", issue.priority, priority_hl)
 	local project = issue.project
 	if project then
 		add(rows, "Project", project.name ~= "" and project.name or project.key)

@@ -76,7 +76,8 @@ end
 ---@param on_done fun(entries: PullsActivityEntry[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_activity(pr, _opts, on_done)
-	local activity_url = tostring((pr._raw.links or {}).activity or "")
+	---@cast pr BitbucketPullRequest
+	local activity_url = tostring(pr.links.activity or "")
 	if activity_url == "" then
 		on_done({}, nil)
 		return nil

@@ -285,6 +285,7 @@ end
 ---@param on_done fun(data: PullsReviewData|nil, err: string|nil)
 ---@return { cancel: fun() }
 function M.fetch(pr, opts, on_done)
+	---@cast pr GitLabPullRequest
 	local comments_request
 	local metadata_request
 	local cancelled = false
@@ -309,7 +310,7 @@ function M.fetch(pr, opts, on_done)
 		review_data.history = metadata.history
 		mark_outdated(review_data.comments, metadata.diff_refs)
 		if complete_diff_refs(metadata.diff_refs) then
-			pr._raw.diff_refs = metadata.diff_refs
+			pr.diff_refs = metadata.diff_refs
 		end
 		on_done(review_data, nil)
 	end

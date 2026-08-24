@@ -1,3 +1,10 @@
+---@class GitHubPullRequest : PullRequest
+---@field node_id string|nil
+---@field review_decision string|nil
+---@field check_status string|nil
+---@field lines_added number|nil
+---@field lines_removed number|nil
+
 local actions = require("atlas.pulls.providers.github.actions")
 local activity_api = require("atlas.pulls.providers.github.api.activity")
 local changes_api = require("atlas.pulls.providers.github.api.changes")
@@ -76,19 +83,19 @@ local function fetch_by_refs(refs, _opts, on_done)
 	return pullrequests_api.fetch_by_refs(refs, on_done)
 end
 
----@param pr PullRequestRef
+---@param ref PullRequestRef
 ---@param opts PullsFetchOpts
 ---@param on_done fun(pr: PullRequestDetails|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-local function fetch_pullrequest(pr, opts, on_done)
-	local owner, repo = pr.repo_full_name:match("^([^/]+)/(.+)$")
+local function fetch_pullrequest(ref, opts, on_done)
+	local owner, repo = ref.repo_full_name:match("^([^/]+)/(.+)$")
 	if owner == nil or repo == nil then
 		vim.schedule(function()
 			on_done(nil, "Missing repository info")
 		end)
 		return nil
 	end
-	return pullrequests_api.get_pr(owner, repo, pr.id, on_done, { force_load = opts.force_load == true })
+	return pullrequests_api.get_pr(owner, repo, ref.id, on_done, { force_load = opts.force_load == true })
 end
 
 ---@param pr PullRequest

@@ -1,3 +1,9 @@
+---@class GitHubIssue : Issue
+---@field repo_full_name string
+---@field number integer
+---@field node_id string|nil
+---@field is_pinned boolean
+
 local M = {}
 
 local config = require("atlas.config")
@@ -38,6 +44,7 @@ function M.fetch_issues(view, opts, on_done)
 
 		local pinned, rest = {}, {}
 		for _, issue in ipairs(issues or {}) do
+			---@cast issue GitHubIssue
 			if issue.is_pinned == true then
 				table.insert(pinned, issue)
 			else
@@ -84,10 +91,10 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.update_description(issue, content, on_done)
-	local raw = issue._raw or {}
-	local slug = tostring(raw.slug or "")
-	local number = tonumber(raw.number)
-	if slug == "" or number == nil then
+	---@cast issue GitHubIssue
+	local slug = issue.repo_full_name
+	local number = issue.number
+	if slug == "" then
 		on_done(false, "Invalid issue")
 		return nil
 	end
@@ -199,9 +206,9 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.add_reaction(issue, item, key, on_done)
-	local raw = issue._raw or {}
-	local slug = tostring(raw.slug or "")
-	local number = tonumber(raw.number)
+	---@cast issue GitHubIssue
+	local slug = issue.repo_full_name
+	local number = issue.number
 	if slug == "" then
 		on_done(false, "Invalid issue")
 		return nil
@@ -209,10 +216,6 @@ function M.add_reaction(issue, item, key, on_done)
 
 	local endpoint
 	if item.kind == "description" then
-		if number == nil then
-			on_done(false, "Invalid issue")
-			return nil
-		end
 		endpoint = string.format("repos/%s/issues/%d/reactions", slug, number)
 	elseif item.kind == "comment" then
 		local comment = item.entity

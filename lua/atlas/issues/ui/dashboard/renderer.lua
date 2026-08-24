@@ -168,7 +168,15 @@ end
 ---@return string
 local function issue_meta_text(issue)
 	local parts = {}
-	local repository = tostring(issue.key or ""):match("^(.-)#%d+$")
+	local provider_id = state.provider and state.provider.id
+	local repository
+	if provider_id == "github" then
+		---@cast issue GitHubIssue
+		repository = issue.repo_full_name
+	elseif provider_id == "gitlab" then
+		---@cast issue GitLabIssue
+		repository = issue.project_path
+	end
 	if repository and repository ~= "" then
 		table.insert(parts, repository)
 	end
@@ -176,8 +184,11 @@ local function issue_meta_text(issue)
 	if type_name ~= "" then
 		table.insert(parts, type_name)
 	end
-	if issue.priority and issue.priority ~= "" then
-		table.insert(parts, issue.priority)
+	if provider_id == "jira" then
+		---@cast issue JiraIssue
+		if issue.priority and issue.priority ~= "" then
+			table.insert(parts, issue.priority)
+		end
 	end
 	local due = utils.format_date(issue.duedate)
 	if due ~= "" then

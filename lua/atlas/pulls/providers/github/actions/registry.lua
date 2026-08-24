@@ -7,19 +7,12 @@ local notes = require("atlas.pulls.notes")
 local picker = require("atlas.ui.picker")
 local pullrequests = require("atlas.pulls.providers.github.api.pullrequests")
 local core_notify = require("atlas.core.notify")
-local github_mapping = require("atlas.providers.github.mapping")
 local users_api = require("atlas.providers.github.users")
 
 ---@param ctx AtlasPullActionContext
 ---@return boolean
 local function has_pr(ctx)
 	return ctx.pr ~= nil and ctx.pr.id ~= nil
-end
-
----@param ctx AtlasPullActionContext
----@return string
-local function repo_slug(ctx)
-	return tostring((ctx.pr or {}).repo_full_name or "")
 end
 
 ---@param ctx AtlasPullActionContext
@@ -49,7 +42,7 @@ local function review_available(ctx)
 	if not has_pr(ctx) or ctx.pr == nil then
 		return false, "No PR selected"
 	end
-	if repo_slug(ctx) == "" then
+	if ctx.pr.repo_full_name == "" then
 		return false, "Missing repository info"
 	end
 	if ctx.pr.state ~= "open" and ctx.pr.state ~= "draft" then
@@ -64,7 +57,7 @@ local function merge_available(ctx)
 	if not has_pr(ctx) or ctx.pr == nil then
 		return false, "No PR selected"
 	end
-	if repo_slug(ctx) == "" then
+	if ctx.pr.repo_full_name == "" then
 		return false, "Missing repository info"
 	end
 	if ctx.pr.state ~= "open" then
@@ -82,7 +75,7 @@ local function merge(ctx, done)
 		return
 	end
 
-	local slug = repo_slug(ctx)
+	local slug = pr.repo_full_name
 	local options = action_utils.merge_options()
 	local label = options.method == "squash" and "squash merge" or "merge"
 	vim.ui.input({
@@ -121,7 +114,7 @@ local function reopen_available(ctx)
 	if not has_pr(ctx) or ctx.pr == nil then
 		return false, "No PR selected"
 	end
-	if repo_slug(ctx) == "" then
+	if ctx.pr.repo_full_name == "" then
 		return false, "Missing repository info"
 	end
 	if tostring(ctx.pr.state or ""):lower() ~= "declined" then
@@ -138,6 +131,7 @@ local function reopen(ctx, done)
 		done(nil, "No PR selected")
 		return
 	end
+	local slug = pr.repo_full_name
 
 	notify(ctx, "loading", "Reopening PR...")
 	cli.gh({
@@ -145,7 +139,7 @@ local function reopen(ctx, done)
 		"reopen",
 		tostring(pr.id),
 		"--repo",
-		repo_slug(ctx),
+		slug,
 	}, function(_, err)
 		if err then
 			notify(ctx, "error", string.format("Reopen failed: %s", tostring(err)))
@@ -157,7 +151,7 @@ local function reopen(ctx, done)
 		done({ changed_pr = true, message = "Reopened" }, nil)
 	end, {
 		action = "Reopen PR",
-		repo = repo_slug(ctx),
+		repo = slug,
 		number = pr.id,
 	})
 end
@@ -168,7 +162,7 @@ local function edit_assignees_available(ctx)
 	if not has_pr(ctx) or ctx.pr == nil then
 		return false, "No PR selected"
 	end
-	if repo_slug(ctx) == "" then
+	if ctx.pr.repo_full_name == "" then
 		return false, "Missing repository info"
 	end
 	return true, nil
@@ -183,7 +177,7 @@ local function edit_assignees(ctx, done)
 		return
 	end
 
-	local slug = repo_slug(ctx)
+	local slug = pr.repo_full_name
 	local function open_picker()
 		users_api.get_assignable_users(slug, nil, function(items, err)
 			if err then
@@ -298,7 +292,7 @@ local function edit_labels_available(ctx)
 	if not has_pr(ctx) or ctx.pr == nil then
 		return false, "No PR selected"
 	end
-	if repo_slug(ctx) == "" then
+	if ctx.pr.repo_full_name == "" then
 		return false, "Missing repository info"
 	end
 	return true, nil
@@ -312,7 +306,7 @@ local function edit_labels(ctx, done)
 		done(nil, "No PR selected")
 		return
 	end
-	local slug = repo_slug(ctx)
+	local slug = pr.repo_full_name
 
 	notify(ctx, "loading", "Loading labels...")
 	pullrequests.get_pr(pr.workspace, pr.repo, pr.id, function(current, current_err)
@@ -406,7 +400,7 @@ local function create_issue_available(ctx)
 	if not has_pr(ctx) or ctx.pr == nil then
 		return false, "No PR selected"
 	end
-	if repo_slug(ctx) == "" then
+	if ctx.pr.repo_full_name == "" then
 		return false, "Missing repository info"
 	end
 	return true, nil
@@ -415,7 +409,12 @@ end
 ---@param ctx AtlasPullActionContext
 ---@param done fun(result: PullsActionResult|nil, err: string|nil)
 local function create_issue(ctx, done)
-	local slug = repo_slug(ctx)
+	local pr = ctx.pr
+	if pr == nil then
+		done(nil, "No PR selected")
+		return
+	end
+	local slug = pr.repo_full_name
 	if slug == "" then
 		done(nil, "Missing repository info")
 		return
@@ -499,8 +498,9 @@ local function toggle_subscription_available(ctx)
 	if not has_pr(ctx) or ctx.pr == nil then
 		return false, "No PR selected"
 	end
-	local raw = ctx.pr._raw
-	if github_mapping.node_id(raw) == nil then
+	local pr = ctx.pr
+	---@cast pr GitHubPullRequest
+	if not pr.node_id or pr.node_id == "" then
 		return false, "Missing PR node id"
 	end
 	return true, nil
@@ -514,6 +514,7 @@ local function toggle_subscription(ctx, done)
 		done(nil, "No PR selected")
 		return
 	end
+	---@cast pr GitHubPullRequest
 	pullrequests.get_pr(pr.workspace, pr.repo, pr.id, function(details, fetch_err)
 		if fetch_err or details == nil then
 			local message = tostring(fetch_err or "Failed to load pull request")
@@ -521,7 +522,8 @@ local function toggle_subscription(ctx, done)
 			done(nil, message)
 			return
 		end
-		local node_id = github_mapping.node_id(details._raw) or ""
+		local github_pr = details --[[@as GitHubPullRequest]]
+		local node_id = github_pr.node_id or ""
 		local next_state = details.is_subscribed == true and "UNSUBSCRIBED" or "SUBSCRIBED"
 		local gql =
 			"mutation($id: ID!, $state: SubscriptionState!) { updateSubscription(input: { subscribableId: $id, state: $state }) { subscribable { ... on PullRequest { viewerSubscription } } } }"

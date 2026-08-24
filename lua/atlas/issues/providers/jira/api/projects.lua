@@ -6,7 +6,7 @@ local config = require("atlas.issues.providers.jira.api.config")
 
 ---@class JiraProjectGroup
 ---@field category table|nil
----@field projects IssueProject[]
+---@field projects JiraIssueProject[]
 
 ---@param opts { maxResults?: integer, total?: integer, status?: string, query?: string }|nil
 ---@param callback fun(groups: JiraProjectGroup[]|nil, err: string|nil)

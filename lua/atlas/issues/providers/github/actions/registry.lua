@@ -7,25 +7,12 @@ local notify = require("atlas.core.notify")
 local cli = require("atlas.providers.github.client")
 local issues_api = require("atlas.issues.providers.github.api.issues")
 local issue_cache = require("atlas.issues.providers.github.api.cache")
-local normalizer = require("atlas.issues.providers.github.api.mapper")
 
 ---@param ctx AtlasIssueActionContext
 ---@return boolean
 local function has_issue(ctx)
 	local issue = ctx.issue
 	return issue ~= nil and tostring(issue.key or "") ~= ""
-end
-
----@param issue Issue
----@return string
-local function issue_slug(issue)
-	local raw = issue._raw or {}
-	local slug = tostring(raw.slug or "")
-	if slug ~= "" then
-		return slug
-	end
-	local from_key, _ = normalizer.parse_key(tostring(issue.key or ""))
-	return from_key
 end
 
 ---@param ctx AtlasIssueActionContext
@@ -37,9 +24,10 @@ local function create_issue_slug(ctx)
 	end
 
 	if has_issue(ctx) then
-		local slug = issue_slug(assert(ctx.issue))
-		if slug ~= "" then
-			return slug, nil
+		local issue = assert(ctx.issue)
+		---@cast issue GitHubIssue
+		if issue.repo_full_name ~= "" then
+			return issue.repo_full_name, nil
 		end
 	end
 
@@ -258,8 +246,9 @@ end
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function labels(ctx, done)
 	local issue = assert(ctx.issue)
+	---@cast issue GitHubIssue
 	local key = tostring(issue.key or "")
-	local slug = issue_slug(issue)
+	local slug = issue.repo_full_name
 	if slug == "" then
 		local err = "Could not determine repository"
 		notify.error(err)
@@ -463,8 +452,8 @@ local function toggle_subscription_available(ctx)
 		return false, "No issue selected"
 	end
 	local issue = assert(ctx.issue)
-	local raw = issue._raw or {}
-	if tostring(raw.node_id or "") == "" then
+	---@cast issue GitHubIssue
+	if tostring(issue.node_id or "") == "" then
 		return false, "Missing issue node id"
 	end
 	return true, nil
@@ -474,8 +463,8 @@ end
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function toggle_subscription(ctx, done)
 	local issue = assert(ctx.issue)
-	local raw = issue._raw or {}
-	local node_id = tostring(raw.node_id or "")
+	---@cast issue GitHubIssue
+	local node_id = tostring(issue.node_id or "")
 	local next_state = issue.is_subscribed == true and "UNSUBSCRIBED" or "SUBSCRIBED"
 	local gql =
 		"mutation($id: ID!, $state: SubscriptionState!) { updateSubscription(input: { subscribableId: $id, state: $state }) { subscribable { ... on Issue { viewerSubscription } } } }"

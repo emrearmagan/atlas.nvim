@@ -18,14 +18,8 @@ end
 
 ---@param pr PullRequest
 ---@return string
-local function project_path(pr)
-	return pr.repo_full_name
-end
-
----@param pr PullRequest
----@return string
 local function pr_label(pr)
-	local path = project_path(pr)
+	local path = pr.repo_full_name
 	if path ~= "" then
 		return string.format("%s!%s", path, tostring(pr.id or ""))
 	end
@@ -152,7 +146,7 @@ end
 ---@param done fun(result: PullsActionResult|nil, err: string|nil)
 local function edit_assignees(ctx, done)
 	local pr = ctx.pr
-	local path = project_path(pr)
+	local path = pr.repo_full_name
 	if path == "" then
 		done(nil, "Could not determine project path")
 		return
@@ -314,7 +308,7 @@ local function toggle_subscription_available(ctx)
 	if not has_pr(ctx) then
 		return false, "No MR selected"
 	end
-	local path = project_path(ctx.pr)
+	local path = ctx.pr.repo_full_name
 	if path == "" then
 		return false, "Missing project path"
 	end
@@ -325,7 +319,7 @@ end
 ---@param done fun(result: PullsActionResult|nil, err: string|nil)
 local function toggle_subscription(ctx, done)
 	local pr = ctx.pr
-	local path = project_path(pr)
+	local path = pr.repo_full_name
 	local iid = tonumber(pr.id)
 	if iid == nil then
 		done(nil, "Invalid MR identifier")

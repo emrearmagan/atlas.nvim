@@ -237,7 +237,7 @@ local function normalize_pull(item, workspace, repo)
 end
 
 ---@param raw table
----@return PullRequest
+---@return BitbucketPullRequest
 local function map_summary(raw)
 	local workspace = tostring(raw.workspace or "")
 	local repo = tostring(raw.repo or "")
@@ -281,17 +281,15 @@ local function map_summary(raw)
 		repo = repo,
 		repo_full_name = repo_full_name,
 		reviewers = raw.reviewers,
-		_raw = {
-			links = links,
-			close_source_branch = raw.close_source_branch,
-		},
+		links = links,
+		close_source_branch = raw.close_source_branch,
 	}
 end
 
 ---@param raw table
 ---@param workspace string
 ---@param repo string
----@return PullRequest
+---@return BitbucketPullRequest
 function M.to_pull_request(raw, workspace, repo)
 	return map_summary(normalize_pull(raw, workspace, repo))
 end
@@ -299,7 +297,7 @@ end
 ---@param result table|nil
 ---@param workspace string|nil
 ---@param repo string|nil
----@return PullRequest[]
+---@return BitbucketPullRequest[]
 function M.to_pull_requests_list(result, workspace, repo)
 	local payload = as_table(result) or {}
 	local out = {}

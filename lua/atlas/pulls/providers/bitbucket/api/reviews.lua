@@ -6,17 +6,11 @@ local service = require("atlas.pulls.providers.bitbucket.api.service")
 local tasks = require("atlas.pulls.providers.bitbucket.api.tasks")
 
 ---@param pr PullRequest
----@param key "approve"|"request_changes"
----@return string
-local function action_url(pr, key)
-	return tostring((pr._raw.links or {})[key] or "")
-end
-
----@param pr PullRequest
 ---@param action "approve"|"request_changes"
 ---@return boolean
 function M.has_action(pr, action)
-	return action_url(pr, action) ~= ""
+	---@cast pr BitbucketPullRequest
+	return tostring(pr.links[action] or "") ~= ""
 end
 
 ---@param pr PullRequest
@@ -93,7 +87,8 @@ end
 ---@param on_done fun(history: PullsReviewHistoryEntry[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 local function fetch_review_history(pr, opts, on_done)
-	local activity_url = tostring((pr._raw.links or {}).activity or "")
+	---@cast pr BitbucketPullRequest
+	local activity_url = tostring(pr.links.activity or "")
 	if activity_url == "" then
 		on_done({}, nil)
 		return nil
@@ -212,7 +207,8 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.approve(pr, _review, body, on_done)
-	local url = action_url(pr, "approve")
+	---@cast pr BitbucketPullRequest
+	local url = tostring(pr.links.approve or "")
 	if url == "" then
 		on_done(false, "No approve URL available")
 		return nil
@@ -239,7 +235,8 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.request_changes(pr, _review, body, on_done)
-	local url = action_url(pr, "request_changes")
+	---@cast pr BitbucketPullRequest
+	local url = tostring(pr.links.request_changes or "")
 	if url == "" then
 		on_done(false, "No request changes URL available")
 		return nil

@@ -35,23 +35,19 @@ local function generic_rows(pr)
 end
 
 local function github_rows(pr)
+	---@cast pr GitHubPullRequest
 	local rows = {}
-	local raw = pr._raw or {}
 	local review = {
 		APPROVED = "successful",
 		CHANGES_REQUESTED = "failed",
 		REVIEW_REQUIRED = "inprogress",
 	}
-	local review_status = review[tostring(raw.review_decision or ""):upper()]
+	local review_status = review[tostring(pr.review_decision or ""):upper()]
 	if review_status then
 		local value, hl_group = icons.pulls_status(review_status)
 		add(rows, "Review", value, hl_group)
 	end
 
-	local commits = type(raw.commits) == "table" and raw.commits or {}
-	local nodes = type(commits.nodes) == "table" and commits.nodes or {}
-	local commit = type(nodes[1]) == "table" and nodes[1].commit or nil
-	local rollup = type(commit) == "table" and commit.statusCheckRollup or nil
 	local build = {
 		SUCCESS = "successful",
 		FAILURE = "failed",
@@ -59,7 +55,7 @@ local function github_rows(pr)
 		PENDING = "inprogress",
 		EXPECTED = "inprogress",
 	}
-	local build_status = type(rollup) == "table" and build[tostring(rollup.state or ""):upper()] or nil
+	local build_status = pr.check_status and build[pr.check_status:upper()] or nil
 	if build_status then
 		local value, hl_group = icons.pulls_status(build_status)
 		add(rows, "Build", value, hl_group)
@@ -72,9 +68,9 @@ local function github_rows(pr)
 end
 
 local function gitlab_rows(pr)
+	---@cast pr GitLabPullRequest
 	local rows = {}
-	local raw = pr._raw or {}
-	local merge_status = tostring(raw.detailed_merge_status or raw.merge_status or ""):lower()
+	local merge_status = tostring(pr.detailed_merge_status or pr.merge_status or ""):lower()
 	if merge_status ~= "" then
 		local kind = "unknown"
 		if merge_status == "mergeable" or merge_status == "can_be_merged" then
@@ -114,6 +110,7 @@ local function gitlab_rows(pr)
 end
 
 local function bitbucket_rows(pr)
+	---@cast pr BitbucketPullRequest
 	local rows = {}
 	local approved, changes_requested, total = 0, 0, 0
 	for _, reviewer in ipairs(pr.reviewers or {}) do

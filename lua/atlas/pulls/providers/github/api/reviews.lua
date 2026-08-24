@@ -292,8 +292,8 @@ query($owner:String!,$name:String!,$number:Int!){
 ---@param on_done fun(pull_request_id: string|nil, review: table|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 local function find_pending(pr, on_done)
-	local owner, name = pr.repo_full_name:match("^([^/]+)/([^/]+)$")
-	if owner == nil or name == nil then
+	local owner, name = pr.workspace, pr.repo
+	if owner == "" or name == "" then
 		on_done(nil, nil, "Missing repo")
 		return nil
 	end
@@ -334,6 +334,7 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 local function finish(pr, review, event, body, on_done)
+	---@cast pr GitHubPullRequest
 	local function done(ok, err)
 		if ok then
 			M.update(review, nil)
@@ -346,7 +347,7 @@ local function finish(pr, review, event, body, on_done)
 		return submit_pending(pr, review.id, event, body, done)
 	end
 	if review and not review.pending then
-		local pull_request_id = github_mapping.node_id(pr._raw) or ""
+		local pull_request_id = pr.node_id or ""
 		if pull_request_id == "" then
 			done(false, "Missing pull request node id")
 			return nil
@@ -579,8 +580,8 @@ end
 ---@param on_done fun(result: { reviewers: PullsReviewer[], history: PullsReviewHistoryEntry[] }|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 local function fetch_review_details(pr, opts, on_done)
-	local owner, name = tostring(pr.repo_full_name or ""):match("^([^/]+)/([^/]+)$")
-	if not owner or not name then
+	local owner, name = pr.workspace, pr.repo
+	if owner == "" or name == "" then
 		vim.schedule(function()
 			on_done(nil, "Missing repo")
 		end)
@@ -633,8 +634,9 @@ end
 ---@param on_done fun(result: { review: PullsReview, comments: PullsComment[] }|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 local function fetch_comments(pr, _opts, on_done)
-	local owner, name = tostring(pr.repo_full_name or ""):match("^([^/]+)/([^/]+)$")
-	if owner == nil or name == nil then
+	---@cast pr GitHubPullRequest
+	local owner, name = pr.workspace, pr.repo
+	if owner == "" or name == "" then
 		vim.schedule(function()
 			on_done(nil, "Missing repo")
 		end)
@@ -681,7 +683,7 @@ local function fetch_comments(pr, _opts, on_done)
 			return
 		end
 
-		pr._raw.node_id = tostring(pull_request.id or "")
+		pr.node_id = tostring(pull_request.id or "")
 		local comments = {}
 		for _, thread in ipairs(threads) do
 			local nodes = thread.comments and thread.comments.nodes or {}
@@ -810,7 +812,8 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.set_file_reviewed(pr, path, reviewed, on_done)
-	local pull_request_id = github_mapping.node_id(pr._raw)
+	---@cast pr GitHubPullRequest
+	local pull_request_id = pr.node_id
 	if not pull_request_id then
 		on_done(false, "Missing pull request node id")
 		return nil
@@ -849,6 +852,7 @@ mutation($pullRequestId:ID!,$commitOID:GitObjectID){
 ---@param on_error fun(err: string)
 ---@return { cancel: fun() }|nil
 function M.with_pending(pr, review, commit_oid, use_review, on_error)
+	---@cast pr GitHubPullRequest
 	local function use(value)
 		if commit_oid ~= "" and value.commit_hash and commit_oid ~= value.commit_hash then
 			on_error("Pending review belongs to a different commit")
@@ -910,7 +914,7 @@ function M.with_pending(pr, review, commit_oid, use_review, on_error)
 		}
 	end
 
-	local pull_request_id = github_mapping.node_id(pr._raw) or ""
+	local pull_request_id = pr.node_id or ""
 	if review and not review.pending then
 		if pull_request_id == "" then
 			on_error("Missing pull request node id")
@@ -968,9 +972,10 @@ end
 ---@param on_done fun(context: PullsReviewContext|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_context(pr, opts, on_done)
-	local repo_slug = pr.repo_full_name or ""
-	local owner, repo = repo_slug:match("^([^/]+)/(.+)$")
-	if not owner or not repo then
+	---@cast pr GitHubPullRequest
+	local repo_slug = pr.repo_full_name
+	local owner, repo = pr.workspace, pr.repo
+	if owner == "" or repo == "" then
 		vim.schedule(function()
 			on_done(nil, "Missing repository info")
 		end)
@@ -1025,7 +1030,7 @@ function M.fetch_context(pr, opts, on_done)
 			on_done(nil, "Failed to fetch review context")
 			return
 		end
-		pr._raw.node_id = tostring(pull_request.id or "")
+		pr.node_id = tostring(pull_request.id or "")
 
 		local authors = {}
 		local seen = {}

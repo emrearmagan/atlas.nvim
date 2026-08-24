@@ -1,3 +1,8 @@
+---@class GitLabIssue : Issue
+---@field project_path string
+---@field iid integer
+---@field confidential boolean
+
 local GITLAB_REACTION_OPTIONS = require("atlas.ui.shared.emojis").gitlab()
 local config = require("atlas.config")
 local notifications_api = require("atlas.providers.gitlab.notifications")

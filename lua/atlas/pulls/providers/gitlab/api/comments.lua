@@ -326,7 +326,7 @@ function M.fetch_general(pr, opts, on_done)
 end
 
 ---@param value any Decoded API value.
----@return { base_sha: string, head_sha: string, start_sha: string }|nil
+---@return GitLabPullRequestDiffRefs|nil
 local function normalize_diff_refs(value)
 	value = json.safe_table(value)
 	local refs = {
@@ -350,6 +350,7 @@ end
 ---@param on_done fun(comment: PullsComment|nil, err: string|nil)
 ---@return { cancel: fun() }
 local function add_positioned_comment(pr, path, iid, content, target, file_level, pending, on_done)
+	---@cast pr GitLabPullRequest
 	local cancelled = false
 	local request
 	local function track(handle)
@@ -416,8 +417,7 @@ local function add_positioned_comment(pr, path, iid, content, target, file_level
 		end))
 	end
 
-	local raw = pr._raw
-	local refs = normalize_diff_refs(raw.diff_refs)
+	local refs = normalize_diff_refs(pr.diff_refs)
 	if refs and target.commit_hash and refs.head_sha ~= target.commit_hash then
 		refs = nil
 	end
@@ -440,7 +440,7 @@ local function add_positioned_comment(pr, path, iid, content, target, file_level
 				finish(nil, "Merge request head changed")
 				return
 			end
-			raw.diff_refs = latest_refs
+			pr.diff_refs = latest_refs
 			create(latest_refs)
 		end))
 	end

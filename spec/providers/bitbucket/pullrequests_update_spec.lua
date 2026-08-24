@@ -36,7 +36,7 @@ describe("bitbucket pull request updates", function()
 		local api = fresh_module()
 
 		local ok, err
-		api.update_description({ id = 5, _raw = { links = {} } }, "New body", function(success, e)
+		api.update_description({ id = 5, links = {} }, "New body", function(success, e)
 			ok, err = success, e
 		end)
 
@@ -55,7 +55,7 @@ describe("bitbucket pull request updates", function()
 		local api = fresh_module()
 		local pr = {
 			id = 5,
-			_raw = { links = { self = "https://api.bitbucket.org/2.0/repositories/ws/repo/pullrequests/5" } },
+			links = { self = "https://api.bitbucket.org/2.0/repositories/ws/repo/pullrequests/5" },
 		}
 
 		api.update_title(pr, "New title", function(success, err)
@@ -82,7 +82,7 @@ describe("bitbucket pull request updates", function()
 		local api = fresh_module()
 
 		local ok, err
-		api.update_description({ id = 5, _raw = { links = { self = "url" } } }, "New body", function(success, e)
+		api.update_description({ id = 5, links = { self = "url" } }, "New body", function(success, e)
 			ok, err = success, e
 		end)
 

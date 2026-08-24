@@ -1,3 +1,14 @@
+---@class JiraIssueProject
+---@field id string
+---@field key string
+---@field name string
+---@field self string
+---@field category table|nil
+
+---@class JiraIssue : Issue
+---@field project JiraIssueProject|nil
+---@field priority string|nil
+
 local M = {}
 
 ---@param view IssuesViewConfig

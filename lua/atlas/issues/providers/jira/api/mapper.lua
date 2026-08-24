@@ -3,7 +3,7 @@ local adf = require("atlas.issues.providers.jira.converted.adf")
 local json = require("atlas.core.json")
 
 ---@param raw_project any Decoded API value.
----@return IssueProject|nil
+---@return JiraIssueProject|nil
 function M.to_project(raw_project)
 	if type(raw_project) ~= "table" then
 		return nil
@@ -181,7 +181,7 @@ end
 
 ---@param raw table
 ---@param sp_field string|nil
----@return Issue
+---@return JiraIssue
 function M.to_issue(raw, sp_field)
 	local fields = raw.fields or {}
 	local status, status_id = extract_status(safe_get(fields, "status"))
@@ -204,7 +204,6 @@ function M.to_issue(raw, sp_field)
 		closed_at = json.safe_str(fields.resolutiondate),
 		comment_count = tonumber(safe_get(fields, "comment", "total")),
 		is_subscribed = safe_get(fields, "watches", "isWatching") == true,
-		_raw = raw,
 	}
 end
 
@@ -213,6 +212,7 @@ end
 ---@return IssueDetails
 function M.to_issue_details(raw, sp_field)
 	local issue = M.to_issue(raw, sp_field)
+	---@cast issue IssueDetails
 	local fields = raw.fields or {}
 	local assignee = normalize_issue_user(safe_get(fields, "assignee"))
 
@@ -222,6 +222,7 @@ function M.to_issue_details(raw, sp_field)
 	issue.milestone = nil
 	issue.reactions = nil
 	issue.sub_issues = {}
+	issue._raw = raw
 	return issue
 end
 

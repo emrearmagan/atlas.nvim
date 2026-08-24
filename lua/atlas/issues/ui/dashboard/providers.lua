@@ -70,10 +70,9 @@ local function github()
 		return status_id == "closed" and "AtlasGHIssueClosedChip" or "AtlasGHIssueOpenChip"
 	end
 
+	---@param issue GitHubIssue
 	local function key_label(issue)
-		local key = tostring(issue.key or "")
-		local number = tonumber((issue._raw or {}).number) or tonumber(key:match("#(%d+)$"))
-		return number and string.format("#%d", number) or key
+		return string.format("#%d", issue.number)
 	end
 
 	local function github_columns(layout)
@@ -126,6 +125,7 @@ local function github()
 	end
 
 	local function values(issue, is_child, layout)
+		---@cast issue GitHubIssue
 		local label = key_label(issue)
 		local is_pinned = issue.is_pinned == true
 		local row_icon = is_pinned and icons.general("pin") or state_icon(issue.status_id)
@@ -144,8 +144,7 @@ local function github()
 		if layout == "compact" then
 			result.created = utils.relative_time(issue.created_at)
 			result.updated = utils.relative_time(issue.updated_at)
-			local repository = tostring((issue._raw or {}).slug or "")
-			result._meta = repository ~= "" and repository or (tostring(issue.key or ""):match("^(.-)#%d+$") or "")
+			result._meta = issue.repo_full_name
 		end
 		return result
 	end
@@ -155,6 +154,7 @@ local function github()
 		if issue == nil then
 			return nil
 		end
+		---@cast issue GitHubIssue
 
 		if col.key == "icon" then
 			local icon, icon_hl
@@ -226,13 +226,13 @@ local function gitlab()
 		return status_id == "closed" and "AtlasGLIssueClosedChip" or "AtlasGLIssueOpenChip"
 	end
 
+	---@param issue GitLabIssue
 	local function key_label(issue)
-		local key = tostring(issue.key or "")
-		local number = tonumber((issue._raw or {}).iid) or tonumber(key:match("#(%d+)$"))
-		return number and string.format("#%d", number) or key
+		return string.format("#%d", issue.iid)
 	end
 
 	local function values(issue, is_child)
+		---@cast issue GitLabIssue
 		local label = key_label(issue)
 		local row_icon = state_icon(issue.status_id)
 		return {
@@ -251,6 +251,7 @@ local function gitlab()
 		if issue == nil then
 			return nil
 		end
+		---@cast issue GitLabIssue
 
 		if col.key == "icon" then
 			local icon, icon_hl = state_icon(issue.status_id)
@@ -300,6 +301,7 @@ end
 
 local function jira()
 	local function values(issue, is_child)
+		---@cast issue JiraIssue
 		local type_icon = icons.issues_type(issue.type and issue.type.name or nil)
 		local title = is_child and (type_icon .. " " .. issue.key .. " " .. issue.title)
 			or (issue.key .. " " .. issue.title)
@@ -325,6 +327,7 @@ local function jira()
 		if issue == nil then
 			return nil
 		end
+		---@cast issue JiraIssue
 
 		local issue_type = issue.type and issue.type.name or nil
 		if col.key == "name" then
