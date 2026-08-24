@@ -1,7 +1,6 @@
 local M = {}
 
 local service = require("atlas.pulls.providers.bitbucket.api.service")
-local logger = require("atlas.core.logger")
 local config = require("atlas.config")
 local api_utils = require("atlas.core.utils")
 local mapper = require("atlas.pulls.providers.bitbucket.api.mapper")
@@ -65,7 +64,13 @@ local function fetch_readme(owner, repo_name, ref, readme_path, on_done)
 		end
 
 		on_done(tostring(result or ""), nil)
-	end)
+	end, {
+		action = "Fetch repository README",
+		owner = owner,
+		repo = repo_name,
+		ref = ref,
+		path = path,
+	})
 end
 
 ---@param workspace string
@@ -91,11 +96,6 @@ function M.fetch_workspace_repositories(workspace, search, on_done)
 
 	return service.request("GET", endpoint, nil, nil, function(result, err)
 		if err then
-			logger.logerror("Bitbucket repo fetch failed", {
-				workspace = workspace,
-				search = term,
-				error = err,
-			})
 			on_done(nil, err)
 			return
 		end
@@ -107,15 +107,9 @@ function M.fetch_workspace_repositories(workspace, search, on_done)
 			table.insert(repositories, mapper.to_repo_details(raw, workspace))
 		end
 
-		logger.loginfo("Bitbucket repo fetch success", {
-			workspace = workspace,
-			search = term,
-			repo_count = #repositories,
-		})
-
 		on_done(repositories, nil)
 	end, {
-		action = "Bitbucket repo fetch",
+		action = "Fetch repositories",
 		workspace = workspace,
 		search = term,
 	})
@@ -143,11 +137,6 @@ function M.fetch_project_repositories(project, opts, on_done)
 		string.format("/repositories/%s?q=%s&pagelen=100&fields=values.slug,next", url_encode(workspace), query)
 	return service.fetch_all_values(endpoint, function(result, err)
 		if err then
-			logger.logerror("Bitbucket project repository fetch failed", {
-				workspace = workspace,
-				project = project_key,
-				error = err,
-			})
 			on_done(nil, err)
 			return
 		end
@@ -158,13 +147,12 @@ function M.fetch_project_repositories(project, opts, on_done)
 		end
 
 		service.set_cache(cache_key, repositories, service.cache_ttl())
-		logger.loginfo("Bitbucket project repository fetch success", {
-			workspace = workspace,
-			project = project_key,
-			repo_count = #repositories,
-		})
 		on_done(repositories, nil)
-	end)
+	end, {
+		action = "Fetch project repositories",
+		workspace = workspace,
+		project = project_key,
+	})
 end
 
 ---@param repo PullsRepo
@@ -209,13 +197,7 @@ function M.fetch_detail(repo, opts, on_done)
 			if cancelled then
 				return
 			end
-			if readme_err ~= nil then
-				logger.logerror("Bitbucket repo readme fetch failed", {
-					owner = owner,
-					repo = repo_name,
-					error = readme_err,
-				})
-			else
+			if readme_err == nil then
 				detail.readme = readme
 			end
 			on_done(detail, nil)
@@ -320,12 +302,6 @@ function M.fetch_tags(tags_url, opts, on_done)
 		end
 
 		local values = (as_table(result) or {}).values or {}
-		local first = as_table(values[1]) or {}
-		logger.loginfo("Bitbucket repo tags fetched", {
-			url = url,
-			count = #values,
-			first_tag = tostring(first.name or ""),
-		})
 
 		local entries = {}
 		for _, item in ipairs(values) do
@@ -345,7 +321,7 @@ function M.fetch_tags(tags_url, opts, on_done)
 		local tags = { entries = entries }
 		service.set_cache(key, tags, service.cache_ttl())
 		on_done(tags, nil)
-	end)
+	end, { action = "Fetch repository tags" })
 end
 
 ---@param repo PullsRepoDetails

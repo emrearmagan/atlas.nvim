@@ -106,7 +106,12 @@ local function merge(ctx, done)
 			notify(ctx, "success", "Merge succeeded", 1200)
 			notes.clear_for_pull_request(pr)
 			done({ changed_pr = true, message = "Merged" }, nil)
-		end)
+		end, {
+			action = "Merge PR",
+			repo = slug,
+			number = pr.id,
+			method = options.method,
+		})
 	end)
 end
 
@@ -150,7 +155,11 @@ local function reopen(ctx, done)
 
 		notify(ctx, "success", "PR reopened", 1200)
 		done({ changed_pr = true, message = "Reopened" }, nil)
-	end)
+	end, {
+		action = "Reopen PR",
+		repo = repo_slug(ctx),
+		number = pr.id,
+	})
 end
 
 ---@param ctx AtlasPullActionContext
@@ -259,7 +268,13 @@ local function edit_assignees(ctx, done)
 						local message = string.format("+%d / -%d assignee(s)", #adds, #removes)
 						notify(ctx, "success", message, 1200)
 						done({ changed_pr = true, message = message }, nil)
-					end)
+					end, {
+						action = "Update PR assignees",
+						repo = slug,
+						number = pr.id,
+						added = #adds,
+						removed = #removes,
+					})
 				end,
 			})
 		end)
@@ -441,7 +456,10 @@ local function search(ctx, done)
 					end
 				end
 				fetch_done(list, nil)
-			end)
+			end, {
+				action = "Search repositories",
+				query = query,
+			})
 		end,
 		on_select = function(item)
 			local repo = item.id
@@ -522,7 +540,12 @@ local function toggle_subscription(ctx, done)
 					changed_pr = true,
 					message = details.is_subscribed and "Subscribed" or "Unsubscribed",
 				}, nil)
-			end
+			end,
+			{
+				action = details.is_subscribed and "Unsubscribe from PR" or "Subscribe to PR",
+				repo = details.repo_full_name,
+				number = details.id,
+			}
 		)
 	end)
 end

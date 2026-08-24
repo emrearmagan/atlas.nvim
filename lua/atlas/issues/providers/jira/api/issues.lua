@@ -4,7 +4,6 @@ local service = require("atlas.issues.providers.jira.api.service")
 local normalizer = require("atlas.issues.providers.jira.api.mapper")
 local cache = require("atlas.core.cache")
 local json = require("atlas.core.json")
-local logger = require("atlas.core.logger")
 local config = require("atlas.issues.providers.jira.api.config")
 
 local CACHE_TTL = 300
@@ -93,7 +92,6 @@ function M.search_issues(jql, on_done, opts)
 	if not opts.force_load then
 		local cached = cache.get(cache_key)
 		if cached and cached.value then
-			logger.loginfo("Jira search cache hit", { jql = jql })
 			on_done(cached.value, nil)
 			return nil
 		end
@@ -119,11 +117,6 @@ function M.search_issues(jql, on_done, opts)
 		}
 
 		cache.set(cache_key, page, ttl)
-		logger.loginfo("Jira search page complete", {
-			jql = jql,
-			count = #page.issues,
-			is_last = page.isLast,
-		})
 		on_done(page, nil)
 	end, {
 		action = "Search issues",
@@ -326,10 +319,6 @@ function M.get_issue_detail(issue_key, on_done, opts)
 
 	return search_jql_request(data, function(result, err)
 		if err or not result then
-			logger.logerror("Jira detail fetch failed", {
-				issue_key = issue_key,
-				error = err or "Empty response",
-			})
 			on_done(nil, err or "Empty response")
 			return
 		end
@@ -344,12 +333,6 @@ function M.get_issue_detail(issue_key, on_done, opts)
 				custom_fields[field_id] = raw_fields[field_id]
 			end
 		end
-
-		logger.loginfo("Jira detail fetch complete", {
-			issue_key = issue_key,
-			has_description = raw_fields.description ~= nil,
-			custom_field_count = custom_fields and #extra or 0,
-		})
 
 		local detail = {
 			description = raw_fields.description,

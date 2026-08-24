@@ -49,7 +49,6 @@ function M.run(id, ctx, on_done)
 	end
 	if not available then
 		local err = tostring(available_err or string.format("Action is not available: %s", tostring(id)))
-		logger.logwarn("github.action.unavailable", { action_id = tostring(id), error = err })
 		if ctx.notify then
 			ctx.notify("warn", err)
 		else

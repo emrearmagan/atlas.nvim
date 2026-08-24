@@ -58,9 +58,10 @@ end
 
 ---@param pr PullRequest
 ---@param endpoint string
+---@param action string
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-local function post_pipeline_action(pr, endpoint, on_done)
+local function post_pipeline_action(pr, endpoint, action, on_done)
 	local repo_slug = tostring(pr.repo_full_name or "")
 	if repo_slug == "" then
 		on_done(false, "Missing repo")
@@ -68,7 +69,11 @@ local function post_pipeline_action(pr, endpoint, on_done)
 	end
 	return cli.gh({ "api", "-X", "POST", string.format("repos/%s/%s", repo_slug, endpoint) }, function(_, err)
 		on_done(err == nil, err)
-	end)
+	end, {
+		action = action,
+		repo = repo_slug,
+		endpoint = endpoint,
+	})
 end
 
 ---@param pr PullRequest
@@ -83,7 +88,12 @@ function M.rerun(pr, pipeline, failed_only, on_done)
 		return nil
 	end
 	local action = failed_only and "rerun-failed-jobs" or "rerun"
-	return post_pipeline_action(pr, string.format("actions/runs/%d/%s", run_id, action), on_done)
+	return post_pipeline_action(
+		pr,
+		string.format("actions/runs/%d/%s", run_id, action),
+		failed_only and "Rerun failed pipeline jobs" or "Rerun pipeline",
+		on_done
+	)
 end
 
 ---@param pr PullRequest
@@ -96,7 +106,7 @@ function M.cancel(pr, pipeline, on_done)
 		on_done(false, "Missing workflow run ID")
 		return nil
 	end
-	return post_pipeline_action(pr, string.format("actions/runs/%d/cancel", run_id), on_done)
+	return post_pipeline_action(pr, string.format("actions/runs/%d/cancel", run_id), "Cancel pipeline", on_done)
 end
 
 ---@param pr PullRequest
@@ -109,7 +119,7 @@ function M.rerun_job(pr, job, on_done)
 		on_done(false, "Missing workflow job ID")
 		return nil
 	end
-	return post_pipeline_action(pr, string.format("actions/jobs/%d/rerun", job_id), on_done)
+	return post_pipeline_action(pr, string.format("actions/jobs/%d/rerun", job_id), "Rerun pipeline job", on_done)
 end
 
 ---@param pr PullRequest
@@ -222,7 +232,11 @@ function M.fetch(pr, opts, on_done)
 
 		cli.set_mem(cache_key, pipelines)
 		on_done(pipelines, nil)
-	end)
+	end, {
+		action = "Fetch PR pipelines",
+		repo = repo_slug,
+		number = pr.id,
+	})
 end
 
 ---@param pr PullRequest

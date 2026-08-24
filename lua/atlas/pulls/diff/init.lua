@@ -28,11 +28,9 @@ local VIEWERS = {
 ---@param operation string
 ---@param context table
 ---@param err string|nil
-local function log_result(operation, context, err)
+local function log_error(operation, context, err)
 	if err then
 		logger.logerror(operation .. " failed", vim.tbl_extend("force", {}, context, { error = tostring(err) }))
-	else
-		logger.loginfo(operation .. " ready", context)
 	end
 end
 
@@ -202,7 +200,7 @@ local function start_range(opts, on_done, target, existing)
 	if not viewer_id then
 		local err = open_external(command, { root = root, base_revision = base, head_revision = head })
 		view:finish()
-		log_result(operation, log, err)
+		log_error(operation, log, err)
 		if on_done then
 			on_done(err)
 		end
@@ -225,7 +223,7 @@ local function start_range(opts, on_done, target, existing)
 		if cancelled then
 			return
 		end
-		log_result(operation, log, err)
+		log_error(operation, log, err)
 		if on_done then
 			on_done(err)
 		end
@@ -274,7 +272,7 @@ local function start_pr(context, command, refresh, on_done, target, existing)
 			return
 		end
 		finished = true
-		log_result(operation, log, err)
+		log_error(operation, log, err)
 		if on_done then
 			on_done(err)
 		end

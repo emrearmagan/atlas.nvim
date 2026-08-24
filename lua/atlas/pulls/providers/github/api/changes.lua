@@ -52,7 +52,11 @@ function M.fetch_commits(pr, _opts, on_done)
 		end
 
 		on_done(commits, nil)
-	end)
+	end, {
+		action = "Fetch PR commits",
+		repo = repo_slug,
+		number = pr.id,
+	})
 end
 
 ---@param pr PullRequest
@@ -85,7 +89,11 @@ function M.fetch_diff(pr, _opts, on_done)
 		local files = diff_parser.parse(diff_text)
 
 		on_done(files, nil)
-	end)
+	end, {
+		action = "Fetch PR diff",
+		repo = repo_slug,
+		number = pr.id,
+	})
 end
 
 ---@param pr PullRequest

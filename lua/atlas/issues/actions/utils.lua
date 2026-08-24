@@ -21,6 +21,14 @@ local function custom_action(item)
 		run = function(context, done)
 			notify.loading(string.format("Running %s...", item.label))
 			local finished = false
+			local function log_failure(err)
+				logger.logerror("Custom issue action failed", {
+					action_id = item.id,
+					action = item.label,
+					issue_key = context.issue and context.issue.key or nil,
+					error = err,
+				})
+			end
 			local function complete(ok, message)
 				if finished then
 					return
@@ -29,6 +37,7 @@ local function custom_action(item)
 				vim.schedule(function()
 					if ok == false then
 						local err = message or (item.label .. " failed")
+						log_failure(err)
 						notify.error(err)
 						done(nil, err)
 						return
@@ -45,8 +54,12 @@ local function custom_action(item)
 				output = require("atlas.ui.popups.live").create,
 			}, complete)
 			if not ok then
-				logger.logerror(string.format("Custom issue action '%s' failed: %s", item.label, tostring(err)))
-				complete(false, "Custom action failed: " .. tostring(err))
+				local message = "Custom action failed: " .. tostring(err)
+				if finished then
+					log_failure(message)
+				else
+					complete(false, message)
+				end
 			end
 		end,
 	}

@@ -65,8 +65,13 @@ end
 ---@param ctx table|nil
 ---@return { job_id: integer, cancel: fun() }|nil
 local function run(args, parse_json, callback, ctx)
+	local log = vim.tbl_extend("keep", {}, ctx or {})
+	local message = log.action or "GitHub CLI"
+	log.action = nil
+	logger.loginfo(message, log)
+
 	if vim.fn.executable("gh") ~= 1 then
-		logger.logerror("GitHub CLI unavailable", { error = "gh executable not found" })
+		logger.logerror(message .. " failed", vim.tbl_extend("force", {}, log, { error = "gh executable not found" }))
 		vim.schedule(function()
 			callback(nil, "gh CLI not found. Install from https://cli.github.com")
 		end)
@@ -74,11 +79,6 @@ local function run(args, parse_json, callback, ctx)
 	end
 
 	local cmd = vim.list_extend({ "gh" }, args)
-	local log = vim.tbl_extend("keep", {}, ctx or {})
-	local message = log.action or "GitHub CLI"
-	log.action = nil
-	logger.loginfo(message, log)
-
 	local cancelled = false
 	local function on_exit(result)
 		vim.schedule(function()

@@ -128,7 +128,12 @@ local function add_reaction(pr, item, key, on_done)
 	end
 	return cli.gh({ "api", "-X", "POST", endpoint, "-f", "content=" .. key }, function(_, err)
 		on_done(err == nil, err)
-	end)
+	end, {
+		action = "Add PR reaction",
+		repo = repo_slug,
+		number = pr.id,
+		reaction = key,
+	})
 end
 
 ---@param view AtlasGitHubViewConfig

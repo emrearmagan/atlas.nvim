@@ -89,7 +89,11 @@ local function fetch_merge_state(pr, opts, on_done)
 		}
 		cli.set_mem(cache_key, out)
 		on_done(out, nil)
-	end)
+	end, {
+		action = "Fetch PR merge state",
+		repo = repo_slug,
+		number = pr.id,
+	})
 end
 
 ---@param mc table  result from get_merge_checks

@@ -107,7 +107,11 @@ function M.fetch(opts, on_done)
 
 		client.set_mem(cache_key, notifications, 60)
 		on_done(notifications, nil)
-	end)
+	end, {
+		action = "Fetch notifications",
+		all = all,
+		limit = per_page,
+	})
 end
 
 ---@param thread_id string
@@ -120,7 +124,10 @@ function M.mark_read(thread_id, on_done)
 			return
 		end
 		on_done(true, nil)
-	end)
+	end, {
+		action = "Mark notification read",
+		thread_id = thread_id,
+	})
 end
 
 ---@param thread_id string
@@ -133,7 +140,10 @@ function M.mark_done(thread_id, on_done)
 			return
 		end
 		on_done(true, nil)
-	end)
+	end, {
+		action = "Mark notification done",
+		thread_id = thread_id,
+	})
 end
 
 return M

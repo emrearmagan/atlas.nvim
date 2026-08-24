@@ -77,7 +77,11 @@ local function select_file(session, index, on_loaded)
 			state.pending_index = nil
 			explorer.render(session, state.annotated_paths)
 			local message = tostring(err or "Unable to load file diff")
-			logger.logerror("diff.file failed", { path = state.files[index].path, error = message })
+			logger.logerror("diff.file failed", {
+				root = session.source.root,
+				path = state.files[index].path,
+				error = message,
+			})
 			session_api.notify(session, "error", message)
 			return
 		end

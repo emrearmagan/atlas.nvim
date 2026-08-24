@@ -2,10 +2,8 @@ local M = {}
 
 local request_scope = require("atlas.core.requests")
 local service = require("atlas.providers.gitlab.client")
-local http = require("atlas.core.http")
 local config = require("atlas.config")
 local json = require("atlas.core.json")
-local logger = require("atlas.core.logger")
 
 ---@param repo PullsRepo
 ---@return string
@@ -107,25 +105,19 @@ function M.fetch_detail(repo, opts, on_done)
 		end
 
 		local readme_path = configured_readme_path(repo)
-		local readme_url = service.url(
-			string.format(
-				"/projects/%d/repository/files/%s/raw?ref=%s",
-				project_id,
-				service.url_encode(readme_path),
-				service.url_encode(default_branch)
-			)
+		local readme_endpoint = string.format(
+			"/projects/%d/repository/files/%s/raw?ref=%s",
+			project_id,
+			service.url_encode(readme_path),
+			service.url_encode(default_branch)
 		)
-		logger.loginfo("Fetch GitLab repository README", { repo = path, path = readme_path })
 		requests.run(function(done)
-			return http.curl_text_request("GET", readme_url, service.build_headers(), nil, done)
-		end, function(body, readme_err)
-			if readme_err then
-				logger.logwarn("GitLab repository README fetch failed", {
-					repo = path,
-					path = readme_path,
-					error = tostring(readme_err),
-				})
-			end
+			return service.request_text("GET", readme_endpoint, done, {
+				action = "Fetch repository README",
+				repo = path,
+				path = readme_path,
+			})
+		end, function(body, _)
 			if type(body) == "string" and body ~= "" then
 				details.readme = body
 			end

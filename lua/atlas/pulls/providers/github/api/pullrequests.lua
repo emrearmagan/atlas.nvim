@@ -2,7 +2,6 @@ local M = {}
 
 local cli = require("atlas.providers.github.client")
 local mapper = require("atlas.pulls.providers.github.api.mapper")
-local logger = require("atlas.core.logger")
 local memory_cache = require("atlas.core.memory_cache")
 local json = require("atlas.core.json")
 
@@ -114,7 +113,6 @@ function M.search_prs(search, on_done, opts)
 
 		local prs = mapper.to_search_results_from_graphql(result.data.search.nodes or {})
 		cli.set_cache(cache_key, prs)
-		logger.loginfo("GitHub GraphQL search complete", { count = #prs })
 		on_done(prs, nil)
 	end, {
 		action = "Search PRs",
@@ -524,7 +522,11 @@ function M.fetch_default_reviewers(opts, on_done)
 				end
 				on_done(reviewers, nil)
 			end)
-		end
+		end,
+		{
+			action = "Fetch default reviewers",
+			repo = slug,
+		}
 	)
 end
 

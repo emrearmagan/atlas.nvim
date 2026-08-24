@@ -44,7 +44,6 @@ local function fetch_pullrequests_single(workspace, repo, opts, on_done)
 	if not opts.force then
 		local cached, ok = service.get_persistent_cache(key)
 		if ok then
-			logger.loginfo("Bitbucket cache hit", { workspace = workspace, repo = repo })
 			on_done(cached, nil)
 			return nil
 		end
@@ -70,15 +69,8 @@ local function fetch_pullrequests_single(workspace, repo, opts, on_done)
 
 		local normalized = mapper.to_pull_requests_list(result, workspace, repo)
 		service.set_persistent_cache(key, normalized, opts.cache_ttl)
-		logger.loginfo("Fetch success", {
-			workspace = workspace,
-			repo = repo,
-			pr_count = #normalized,
-			cached = true,
-		})
-
 		on_done(normalized, nil)
-	end, { action = "Fetching pull requests", workspace = workspace, repo = repo })
+	end, { action = "Fetch pull requests", workspace = workspace, repo = repo })
 end
 
 ---@param view_repos AtlasBitbucketRepoTarget[]
@@ -92,14 +84,10 @@ function M.fetch_pullrequests(view_repos, opts, on_done)
 		return nil
 	end
 
-	logger.loginfo("Bitbucket batch fetch start", {
-		repo_count = #view_repos,
-	})
-
 	local ttl = service.cache_ttl()
 	local _, _, auth_err = service.get_auth()
 	if auth_err then
-		logger.logerror("Bitbucket auth missing", { error = auth_err })
+		logger.logerror("Fetch pull requests failed", { repo_count = #view_repos, error = auth_err })
 		on_done({}, { tostring(auth_err) })
 		return nil
 	end
@@ -146,11 +134,6 @@ function M.fetch_pullrequests(view_repos, opts, on_done)
 				vim.list_extend(all_prs, results[result_index])
 			end
 
-			logger.loginfo("Bitbucket batch fetch completed", {
-				repo_count = #view_repos,
-				pr_count = #all_prs,
-				error_count = #errors,
-			})
 			if #errors > 0 then
 				on_done(all_prs, errors)
 			else

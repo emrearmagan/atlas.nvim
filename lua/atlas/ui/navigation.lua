@@ -9,6 +9,7 @@ local autocmd_groups = {}
 local function stop_select_timer()
 	if select_timer then
 		select_timer:stop()
+		select_timer:close()
 		select_timer = nil
 	end
 end

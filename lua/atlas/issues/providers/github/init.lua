@@ -109,7 +109,11 @@ function M.update_description(issue, content, on_done)
 		issue_cache.invalidate(tostring(issue.key or ""))
 		issue.description = content
 		on_done(true, nil)
-	end)
+	end, {
+		action = "Update issue description",
+		slug = slug,
+		number = number,
+	})
 end
 
 ---@param issue Issue
@@ -227,7 +231,11 @@ function M.add_reaction(issue, item, key, on_done)
 		end
 		issue_cache.invalidate(tostring(issue.key or ""))
 		on_done(true, nil)
-	end)
+	end, {
+		action = "Add issue reaction",
+		key = issue.key,
+		reaction = key,
+	})
 end
 
 ---@param issue Issue

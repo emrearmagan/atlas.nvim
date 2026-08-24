@@ -147,14 +147,14 @@ function M.request(method, url, headers, body, callback, ctx)
 	return http.curl_request(method, full_url, request_headers, body, function(result, err)
 		if err then
 			local safe_err = sanitize_error(err)
-			logger.logerror("Bitbucket request failed", vim.tbl_extend("force", {}, log, { error = safe_err }))
+			logger.logerror(message .. " failed", vim.tbl_extend("force", {}, log, { error = safe_err }))
 			callback(nil, safe_err)
 			return
 		end
 
 		if type(result) ~= "table" then
 			logger.logerror(
-				"Bitbucket response invalid",
+				message .. " failed",
 				vim.tbl_extend("force", {}, log, { error = "Response is not a JSON object" })
 			)
 			callback(nil, "Bitbucket response is not a JSON object")
@@ -164,7 +164,7 @@ function M.request(method, url, headers, body, callback, ctx)
 		local api_err = M.api_error_message(result)
 		if api_err then
 			api_err = sanitize_error(api_err)
-			logger.logerror("Bitbucket API error", vim.tbl_extend("force", {}, log, { error = api_err }))
+			logger.logerror(message .. " failed", vim.tbl_extend("force", {}, log, { error = api_err }))
 			callback(nil, api_err)
 			return
 		end
@@ -175,8 +175,9 @@ end
 
 ---@param url string
 ---@param on_done fun(result: { values: table[] }|nil, err: string|nil)
+---@param ctx table|nil
 ---@return { cancel: fun() }
-function M.fetch_all_values(url, on_done)
+function M.fetch_all_values(url, on_done, ctx)
 	local values = {}
 	local current
 	local cancelled = false
@@ -200,7 +201,7 @@ function M.fetch_all_values(url, on_done)
 				return
 			end
 			fetch_page(next_url)
-		end)
+		end, ctx)
 	end
 
 	fetch_page(url)
@@ -251,7 +252,7 @@ function M.request_text(method, url, headers, body, callback, ctx)
 	return http.curl_text_request(method, full_url, request_headers, body, function(text, err)
 		if err then
 			local safe_err = sanitize_error(err)
-			logger.logerror("Bitbucket request failed", vim.tbl_extend("force", {}, log, { error = safe_err }))
+			logger.logerror(message .. " failed", vim.tbl_extend("force", {}, log, { error = safe_err }))
 			callback(nil, safe_err)
 			return
 		end

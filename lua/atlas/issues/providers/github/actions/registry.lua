@@ -436,7 +436,10 @@ local function search(_, done)
 					end
 				end
 				fetch_done(items, nil)
-			end)
+			end, {
+				action = "Search repositories",
+				query = query,
+			})
 		end,
 		on_select = function(item)
 			---@type AtlasGitHubIssuesViewConfig
@@ -489,7 +492,11 @@ local function toggle_subscription(ctx, done)
 			issue.is_subscribed = (next_state == "SUBSCRIBED")
 			notify.success(issue.is_subscribed and "Subscribed" or "Unsubscribed", { timeout = 1200 })
 			done({ issue_key = issue.key }, nil)
-		end
+		end,
+		{
+			action = issue.is_subscribed and "Unsubscribe from issue" or "Subscribe to issue",
+			key = issue.key,
+		}
 	)
 end
 
