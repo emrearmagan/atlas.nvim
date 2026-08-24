@@ -1,5 +1,10 @@
+---@class AzurePullRequest : PullRequest
+---@field merge_status string|nil
+
 local config = require("atlas.config")
 local search_query = require("atlas.providers.azure.query")
+local pullrequests_api = require("atlas.pulls.providers.azure.api.pullrequests")
+local users_api = require("atlas.pulls.providers.azure.api.users")
 
 ---@return AtlasAzurePullsViewConfig[]
 local function views()
@@ -23,11 +28,12 @@ return {
 	views = views,
 	view_for_target = view_for_target,
 	resolve_search = search_query.query,
-	-- TODO: add me
 	capabilities = {
 		core = {
-			-- fetch_user = users_api.fetch_user,
-			-- fetch_pullrequests = pullrequests_api.fetch_pullrequests,
+			fetch_user = users_api.fetch_user,
+			fetch_pullrequests = function(view, opts, on_done)
+				return pullrequests_api.fetch_states(view, search_query.api_states(view), opts, on_done)
+			end,
 			-- fetch_by_refs = pullrequests_api.fetch_by_refs,
 			-- fetch_pullrequest = pullrequests_api.fetch_pullrequest,
 			-- create_pr = pullrequests_api.create_pr,

@@ -1,5 +1,6 @@
 local M = {}
 
+local API_STATES = { open = "active", merged = "completed", declined = "abandoned" }
 local FIELDS = { "project", "repository", "scope" }
 
 ---@param parts string[]
@@ -30,13 +31,25 @@ function M.query(view)
 	local extra_fields = vim.tbl_keys(extra_params)
 	table.sort(extra_fields)
 	for _, field in ipairs(extra_fields) do
-		append_field(parts, "param." .. field, extra_params[field])
-	end
-
-	if view.search and view.search ~= "" then
-		append_field(parts, "search", view.search)
+		if field ~= "searchCriteria.status" and field ~= "$top" and field ~= "$skip" then
+			append_field(parts, "param." .. field, extra_params[field])
+		end
 	end
 	return table.concat(parts, " "), states
+end
+
+---@param view AtlasPullsViewConfig
+---@return string[]
+function M.api_states(view)
+	local states = view._states or { "open" }
+	if #states == 3 then
+		return { "all" }
+	end
+	local api_states = {}
+	for _, state in ipairs(states) do
+		table.insert(api_states, API_STATES[state])
+	end
+	return api_states
 end
 
 return M

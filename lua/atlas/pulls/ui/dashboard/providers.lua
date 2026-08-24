@@ -2,7 +2,7 @@ local M = {}
 
 local icons = require("atlas.ui.shared.icons")
 
-local function columns(conversation, before_author, after_author)
+local function columns(conversation, before_author, after_author, show_updated)
 	local function build(title_key, compact)
 		local result = {}
 		if compact then
@@ -15,13 +15,15 @@ local function columns(conversation, before_author, after_author)
 			})
 		end
 		table.insert(result, { key = title_key, name = "Title", min_width = 42, header_hl = "AtlasColumnHeader" })
-		table.insert(result, {
-			key = "conversation",
-			name = conversation,
-			min_width = 2,
-			can_grow = false,
-			header_hl = "AtlasColumnHeader",
-		})
+		if conversation then
+			table.insert(result, {
+				key = "conversation",
+				name = conversation,
+				min_width = 2,
+				can_grow = false,
+				header_hl = "AtlasColumnHeader",
+			})
+		end
 		vim.list_extend(result, before_author)
 		table.insert(result, {
 			key = "author",
@@ -37,12 +39,14 @@ local function columns(conversation, before_author, after_author)
 			can_grow = false,
 			header_hl = "AtlasColumnHeader",
 		})
-		table.insert(result, {
-			key = "updated",
-			name = icons.general("updated"),
-			can_grow = false,
-			header_hl = "AtlasColumnHeader",
-		})
+		if show_updated ~= false then
+			table.insert(result, {
+				key = "updated",
+				name = icons.general("updated"),
+				can_grow = false,
+				header_hl = "AtlasColumnHeader",
+			})
+		end
 		return result
 	end
 
@@ -250,6 +254,67 @@ local function bitbucket()
 	}
 end
 
+local function azure()
+	local merge_icons = {
+		notSet = { icons.pulls_status("unknown") },
+		queued = { icons.pulls_status("inprogress") },
+		conflicts = { icons.pulls_status("failed") },
+		succeeded = { icons.pulls_status("successful") },
+		rejectedByPolicy = { icons.pulls_status("failed") },
+		failure = { icons.pulls_status("failed") },
+	}
+	local review_icons = {
+		approved = { icons.pulls_status("successful") },
+		changes_requested = { icons.pulls_status("failed") },
+		pending = { icons.pulls_status("inprogress"), "AtlasTextMuted" },
+	}
+	local merge_column = {
+		key = "merge",
+		name = icons.action("merge"),
+		min_width = 1,
+		can_grow = false,
+		header_hl = "AtlasColumnHeader",
+	}
+	local review_column = {
+		key = "review",
+		name = icons.general("success"),
+		min_width = 1,
+		can_grow = false,
+		header_hl = "AtlasColumnHeader",
+	}
+
+	return {
+		reference = "!",
+		columns = columns(nil, { merge_column, review_column }, {}, false),
+		values = function(pr)
+			---@cast pr AzurePullRequest
+			local merge = merge_icons[pr.merge_status] or merge_icons.notSet
+			local decision = "pending"
+			for _, reviewer in ipairs(pr.reviewers or {}) do
+				if reviewer.decision == "changes_requested" then
+					decision = "changes_requested"
+				elseif reviewer.decision == "approved" and decision == "pending" then
+					decision = "approved"
+				end
+			end
+			local review = review_icons[decision]
+			return {
+				merge = merge[1],
+				merge_hl = merge[2] or "AtlasTextMuted",
+				review = review[1],
+				review_hl = review[2] or "AtlasTextMuted",
+			}
+		end,
+		highlight = function(row, col, ctx)
+			if col.key == "merge" or col.key == "review" then
+				local empty = row.kind == "meta" or row.kind == "repo"
+				local hl = empty and "" or (row[col.key .. "_hl"] or "AtlasTextMuted")
+				return { { start_col = 0, end_col = #ctx.padded, hl_group = hl } }
+			end
+		end,
+	}
+end
+
 local function default()
 	return {
 		reference = "#",
@@ -262,6 +327,7 @@ local function default()
 end
 
 local displays = {
+	azure = azure(),
 	bitbucket = bitbucket(),
 	github = github(),
 	gitlab = gitlab(),
