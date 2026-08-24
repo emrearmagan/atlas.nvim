@@ -2,7 +2,7 @@ local M = {}
 local config = require("atlas.config")
 local url = require("atlas.providers.url")
 
----@alias AtlasPullsProviderId "bitbucket"|"github"|"gitlab"
+---@alias AtlasPullsProviderId "azure"|"bitbucket"|"github"|"gitlab"
 ---@alias AtlasIssuesProviderId "jira"|"github"|"gitlab"
 ---@alias AtlasProviderId AtlasPullsProviderId|AtlasIssuesProviderId
 ---@alias AtlasDomain "pulls"|"issues"
@@ -18,6 +18,7 @@ local url = require("atlas.providers.url")
 ---@field repo string|nil
 ---@field project_path string|nil
 ---@field workspace string|nil
+---@field organization string|nil
 ---@field number integer|nil
 ---@field id string|number|nil
 ---@field repo_full_name string|nil
@@ -114,6 +115,18 @@ function M.configured(domain)
 	end
 	return result
 end
+
+add({
+	id = "azure",
+	name = "Azure DevOps",
+	resolver = require("atlas.providers.azure.resolve"),
+	domains = {
+		pulls = {
+			module = "atlas.pulls.providers.azure",
+			icon = { icon = "", hl_group = "AtlasAzureTheme" },
+		},
+	},
+})
 
 add({
 	id = "jira",
