@@ -2,19 +2,14 @@ local M = {}
 
 local md_editor = require("atlas.ui.popups.editor")
 local picker = require("atlas.ui.picker")
+local comment_threads = require("atlas.issues.ui.components.comment_threads")
 local notify = require("atlas.core.notify")
-local renderer = require("atlas.issues.ui.detail.tabs.conversation.renderer")
 local state = require("atlas.issues.ui.detail.tabs.conversation.state")
-local detail_state = require("atlas.issues.ui.detail.state")
-
----@return IssuesProvider|nil
-local function get_provider()
-	return detail_state.provider
-end
+local detail = require("atlas.issues.ui.detail.state")
 
 ---@return IssuesCommentsCapability|nil
 local function get_comments()
-	local provider = get_provider()
+	local provider = detail.provider
 	return provider and provider.capabilities.comments or nil
 end
 
@@ -22,7 +17,10 @@ end
 local function get_completion()
 	local comments = get_comments()
 	if comments and comments.comment_completion then
-		return comments.comment_completion()
+		return comments.comment_completion({
+			issue = detail.current_details or detail.current_issue,
+			comments = state.comments(),
+		})
 	end
 	return nil
 end
@@ -34,7 +32,7 @@ local function adjust_comment_count(issue, amount)
 		return
 	end
 	issue.comment_count = math.max(0, (tonumber(issue.comment_count) or 0) + amount)
-	local on_update = detail_state.on_update
+	local on_update = detail.on_update
 	if on_update then
 		on_update(issue, nil)
 	end
@@ -113,7 +111,7 @@ function M.reply(issue, entry, refresh)
 		height_ratio = 0.18,
 		initial_text = initial_text,
 		completion = completion,
-		preview = renderer.render_comment(comment, math.max(math.floor(vim.o.columns * 0.5), 80)),
+		preview = comment_threads.render_comment(comment, math.max(math.floor(vim.o.columns * 0.5), 80)),
 		on_save = function(text)
 			if not text or vim.trim(text) == "" then
 				return
@@ -152,7 +150,7 @@ function M.edit(issue, entry, refresh)
 		return
 	end
 	if item.kind == "description" then
-		local provider = get_provider()
+		local provider = detail.provider
 		local core = provider and provider.capabilities.core
 		if not core or not core.update_description then
 			return
@@ -168,14 +166,14 @@ function M.edit(issue, entry, refresh)
 			initial_text = current,
 			completion = get_completion(),
 			on_save = function(text)
-				local content = text or ""
-				if content == current then
+				local updated_description = text or ""
+				if updated_description == current then
 					notify.info("Description unchanged", { timeout = 1200 })
 					return
 				end
 				notify.loading("Updating description...")
 				---@cast issue IssueDetails
-				core.update_description(issue, content, function(ok, err)
+				core.update_description(issue, updated_description, function(ok, err)
 					if not state.is_current(issue) then
 						return
 					end
@@ -183,7 +181,7 @@ function M.edit(issue, entry, refresh)
 						notify.error("Description update failed: " .. tostring(err or "Unknown error"))
 						return
 					end
-					issue.description = content
+					issue.description = updated_description
 					notify.success("Description updated", { timeout = 1200 })
 					refresh()
 				end)

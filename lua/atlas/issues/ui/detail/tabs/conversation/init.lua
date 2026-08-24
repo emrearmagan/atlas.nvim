@@ -1,29 +1,25 @@
 local M = {}
 
-local state = require("atlas.issues.ui.detail.tabs.conversation.state")
-local detail_state = require("atlas.issues.ui.detail.state")
 local renderer = require("atlas.issues.ui.detail.tabs.conversation.renderer")
 local keymaps = require("atlas.issues.ui.detail.tabs.conversation.keymaps")
+local state = require("atlas.issues.ui.detail.tabs.conversation.state")
+local detail = require("atlas.issues.ui.detail.state")
 local notify = require("atlas.core.notify")
-
----@return IssuesProvider|nil
-local function get_provider()
-	return detail_state.provider
-end
 
 function M.reset()
 	state.reset()
 	notify.clear()
 end
 
----@param issue IssueDetails
+---@param issue Issue
 ---@param refresh fun()
 ---@param opts { force_refresh: boolean|nil }|nil
 function M.on_select(issue, refresh, opts)
 	state.activate(issue)
+	notify.clear()
 	opts = opts or {}
 
-	local provider = get_provider()
+	local provider = detail.provider
 	local comments = provider and provider.capabilities.comments
 	if not comments or not comments.fetch_conversation then
 		state.items = {}
@@ -34,7 +30,6 @@ function M.on_select(issue, refresh, opts)
 	local key = tostring(issue.key or "")
 	state.items = "loading"
 	notify.loading(string.format("Loading conversation for %s...", key))
-
 	state.requests.run(function(done)
 		return comments.fetch_conversation(issue, opts, done)
 	end, function(result, err)
@@ -65,22 +60,23 @@ function M.on_select(issue, refresh, opts)
 	end)
 end
 
+---@param issue IssueDetails
+---@param width integer
 M.render = renderer.render
 
 ---@param _lnum integer
 ---@param entry table
-function M.is_selectable_line(_lnum, entry) ---@diagnostic disable-line: unused-local
+---@return boolean
+function M.is_selectable_line(_lnum, entry)
 	return entry.conversation_item ~= nil or entry.kind == "activity_gap"
 end
 
 ---@param _issue Issue
 ---@param entry table
+---@return boolean|nil
 function M.on_enter(_issue, entry)
 	local item = entry and entry.conversation_item or nil
-	if not item then
-		return
-	end
-	if item.kind ~= "description" and item.kind ~= "comment" then
+	if not item or (item.kind ~= "description" and item.kind ~= "comment") then
 		return
 	end
 	local url = tostring(item.entity.url or "")
@@ -92,20 +88,18 @@ end
 
 ---@return boolean
 function M.is_loading()
-	return state.any_loading()
+	return state.is_loading()
 end
 
+---@param buf integer
+---@param refresh fun()
 function M.activate(buf, refresh)
-	if buf == nil or refresh == nil then
-		return
-	end
 	keymaps.setup(buf, refresh)
 end
 
+---@param buf integer
 function M.deactivate(buf)
-	if buf ~= nil then
-		keymaps.teardown(buf)
-	end
+	keymaps.teardown(buf)
 	state.deactivate()
 	notify.clear()
 end

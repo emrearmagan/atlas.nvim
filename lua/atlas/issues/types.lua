@@ -39,8 +39,6 @@
 ---@field labels IssueLabel[]
 ---@field milestone IssueMilestone|nil
 ---@field reactions table<string, integer>|nil
----@field sub_issues Issue[]
----@field _raw table|nil
 
 --------------------------------------------------------------------------------
 -- Label
@@ -56,9 +54,6 @@
 
 ---@class IssueMilestone
 ---@field title string
----@field progress_percentage number|nil
----@field open_issues integer|nil
----@field closed_issues integer|nil
 
 --------------------------------------------------------------------------------
 -- Group
@@ -139,7 +134,7 @@
 ---@field id string
 ---@field kind IssueConversationItemKind
 ---@field created_at string
----@field entity IssueComment|IssueDetails|IssueActivityEntry
+---@field entity IssueComment|Issue|IssueActivityEntry
 
 ---@class IssueReactionOption
 ---@field key string

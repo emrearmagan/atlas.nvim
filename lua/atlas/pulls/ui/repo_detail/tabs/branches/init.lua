@@ -5,25 +5,27 @@ local icons = require("atlas.ui.shared.icons")
 local spinner = require("atlas.ui.components.spinner")
 local notify = require("atlas.core.notify")
 local threads = require("atlas.ui.components.threadsv2")
-local repo_detail_state = require("atlas.pulls.ui.repo_detail.state")
+local detail = require("atlas.pulls.ui.repo_detail.state")
 local core_utils = require("atlas.core.utils")
 local keymaps = require("atlas.pulls.ui.repo_detail.tabs.branches.keymaps")
 local request_scope = require("atlas.core.requests")
 
 local PADDING_X = 1
 
-local requests = request_scope.new()
-local state = { repo = nil, branches = nil, line_map = {} }
+---@class PullsRepoBranchesTabState
+---@field repo PullsRepoDetails|nil
+---@field branches PullsRepoBranches|"loading"|string|nil
+---@field requests AtlasRequestScope
+local state = { repo = nil, branches = nil, requests = request_scope.new() }
 
 local function reset_state()
 	state.repo = nil
 	state.branches = nil
-	state.line_map = {}
 end
 
 local function stop_requests()
-	requests.cancel()
-	requests = request_scope.new()
+	state.requests.cancel()
+	state.requests = request_scope.new()
 end
 
 function M.reset()
@@ -33,12 +35,19 @@ end
 
 ---@return table|nil
 local function cursor_entry()
-	local win = repo_detail_state.win
+	local win = detail.win
 	if win == nil or not vim.api.nvim_win_is_valid(win) then
 		return nil
 	end
 	local lnum = vim.api.nvim_win_get_cursor(win)[1]
-	return (repo_detail_state.line_map or {})[lnum]
+	return (detail.line_map or {})[lnum]
+end
+
+---@param repo PullsRepo|nil
+---@return boolean
+local function is_current_repo(repo)
+	local current = detail.current_repo
+	return current ~= nil and tostring(current.id or "") == tostring(repo and repo.id or "")
 end
 
 ---@param repo PullsRepoDetails
@@ -76,7 +85,7 @@ function M.render(_repo, width)
 	local line_map = {}
 
 	if state.branches == nil then
-		if repo_detail_state.current_repo_details == "loading" then
+		if detail.current_repo_details == "loading" then
 			utils.push(lines, spans, spinner.with_text("Loading repository details..."), "AtlasTextMuted", PADDING_X)
 		end
 		return lines, spans, line_map
@@ -117,7 +126,6 @@ function M.render(_repo, width)
 
 	utils.append_block(lines, spans, { lines = thread_lines, highlights = thread_spans })
 	line_map = thread_map or {}
-	state.line_map = line_map
 	return lines, spans, line_map
 end
 
@@ -126,31 +134,31 @@ end
 ---@param opts PullsFetchOpts|nil
 function M.on_select(repo, refresh, opts)
 	opts = opts or {}
-	local detail = require("atlas.pulls.ui.repo_detail.state").current_repo_details
+	local repo_details = detail.current_repo_details
 	if repo == nil then
 		reset_state()
 		refresh()
 		return
 	end
-	if detail == "loading" then
+	if repo_details == "loading" then
 		state.branches = "loading"
 		refresh()
 		return
 	end
-	if type(detail) ~= "table" then
+	if type(repo_details) ~= "table" then
 		reset_state()
 		refresh()
 		return
 	end
 
 	local prev_name = state.repo and state.repo.full_name or ""
-	local next_name = tostring(detail.full_name or "")
+	local next_name = tostring(repo_details.full_name or "")
 	local repo_label = next_name ~= "" and next_name or tostring(repo.name or repo.id or "")
 	local should_fetch = opts.force_refresh == true
 		or state.branches == nil
 		or state.branches == "loading"
 		or prev_name ~= next_name
-	state.repo = detail
+	state.repo = repo_details
 	if not should_fetch then
 		refresh()
 		return
@@ -161,7 +169,7 @@ function M.on_select(repo, refresh, opts)
 	notify.loading(string.format("Loading branches for %s...", repo_label))
 	refresh()
 
-	local provider = require("atlas.pulls.ui.repo_detail.state").provider
+	local provider = detail.provider
 	local repository = provider and provider.capabilities.repository
 	if repository == nil then
 		state.branches = { entries = {} }
@@ -170,13 +178,13 @@ function M.on_select(repo, refresh, opts)
 		return
 	end
 
-	requests.run(function(done)
-		return repository.fetch_branches(detail, {
+	state.requests.run(function(done)
+		return repository.fetch_branches(repo_details, {
 			force_load = opts.force_load == true or opts.force_refresh == true,
 			pagelen = opts.pagelen,
 		}, done)
 	end, function(branches, err)
-		local active_detail = require("atlas.pulls.ui.repo_detail.state").current_repo_details
+		local active_detail = detail.current_repo_details
 		if type(active_detail) ~= "table" or tostring(active_detail.full_name or "") ~= next_name then
 			return
 		end
@@ -213,7 +221,7 @@ end
 
 ---@param refresh fun()
 function M.delete_current_branch(refresh)
-	local provider = require("atlas.pulls.ui.repo_detail.state").provider
+	local provider = detail.provider
 	local repository = provider and provider.capabilities.repository
 	if repository == nil or not repository.delete_branch then
 		notify.error("Branch deletion is not supported by this provider")
@@ -238,17 +246,21 @@ function M.delete_current_branch(refresh)
 		return
 	end
 
+	local current_repo = detail.current_repo
 	vim.ui.input({ prompt = string.format("Delete branch '%s'? [y/N]: ", branch_name) }, function(input)
 		local confirmed = input and vim.trim(input):lower()
-		if confirmed ~= "y" and confirmed ~= "yes" then
+		if (confirmed ~= "y" and confirmed ~= "yes") or not is_current_repo(current_repo) then
 			return
 		end
 
 		notify.loading(string.format("Deleting branch %s...", branch_name))
 		stop_requests()
-		requests.run(function(done)
+		state.requests.run(function(done)
 			return repository.delete_branch(repo, branch, done)
 		end, function(ok, err)
+			if not is_current_repo(current_repo) then
+				return
+			end
 			if err ~= nil then
 				notify.error("Delete branch failed: " .. tostring(err))
 				return

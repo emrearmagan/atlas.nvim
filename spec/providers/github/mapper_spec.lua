@@ -1,4 +1,5 @@
 local normalizer = require("atlas.pulls.providers.github.api.mapper")
+local issue_mapper = require("atlas.issues.providers.github.api.mapper")
 
 local function base_raw()
 	return {
@@ -23,6 +24,45 @@ local function base_raw()
 		author = { login = "octocat", name = "Octo Cat", id = "1" },
 	}
 end
+
+describe("GitHub issue mapping", function()
+	local function issue_raw()
+		return {
+			id = "I_1",
+			number = 42,
+			title = "My issue",
+			state = "OPEN",
+			repository = { nameWithOwner = "owner/repo" },
+		}
+	end
+
+	it("keeps the GitHub issue identity on details", function()
+		local issue = issue_mapper.to_issue_details(issue_raw())
+
+		assert.equal("owner/repo", issue.repo_full_name)
+		assert.equal(42, issue.number)
+		assert.equal("I_1", issue.node_id)
+	end)
+
+	it("maps GitHub milestone progress and sub-issues", function()
+		local raw = issue_raw()
+		raw.milestone = {
+			title = "v1",
+			progressPercentage = 50,
+			openIssues = { totalCount = 1 },
+			closedIssues = { totalCount = 1 },
+		}
+		raw.subIssues = { nodes = { vim.tbl_extend("force", issue_raw(), { id = "I_2", number = 43 }) } }
+
+		local issue = issue_mapper.to_issue_details(raw)
+
+		assert.equal(50, issue.milestone.progress_percentage)
+		assert.equal(1, issue.milestone.open_issues)
+		assert.equal(1, issue.milestone.closed_issues)
+		assert.equal("owner/repo#43", issue.sub_issues[1].key)
+		assert.equal(43, issue.sub_issues[1].number)
+	end)
+end)
 
 describe("normalize_pr author.name", function()
 	it("uses author.name when it is a normal string", function()
@@ -52,6 +92,20 @@ describe("GitHub Git remote mapping", function()
 
 		assert.equal("https://github.com/owner/repo.git", pr.destination.https_url)
 		assert.equal("git@github.com:owner/repo.git", pr.destination.ssh_url)
+	end)
+end)
+
+describe("GitHub pull request details", function()
+	it("keeps GitHub metadata and reactions on the detail type", function()
+		local raw = base_raw()
+		raw.id = "PR_42"
+		raw.reactionGroups = { { content = "THUMBS_UP", reactors = { totalCount = 2 } } }
+
+		local pr = normalizer.to_pull_request_details(raw)
+
+		assert.equal("PR_42", pr.node_id)
+		assert.equal(2, pr.reactions["+1"])
+		assert.equal("Description", pr.description)
 	end)
 end)
 

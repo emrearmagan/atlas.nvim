@@ -1,87 +1,79 @@
 local M = {}
 
-local shared_detail = require("atlas.ui.detail")
-local detail_state = require("atlas.issues.ui.detail.state")
+local detail_ui = require("atlas.ui.detail")
 local renderer = require("atlas.issues.ui.detail.renderer")
 local notify = require("atlas.core.notify")
-local providers = require("atlas.providers")
 local request_scope = require("atlas.core.requests")
+local state = require("atlas.issues.ui.detail.state")
 
 local SPINNER_INTERVAL_MS = 100
 
----@return IssuesDetailTab[]
-local function get_tabs()
-	local provider = detail_state.provider
-	local detail = provider and provider.capabilities.ui and provider.capabilities.ui.detail
-	return detail and detail.tabs and detail.tabs() or {}
-end
+---@type IssueRef|nil
+local pending_ref = nil
 
----@param tab_key string
+---@param tab_key string|nil
 ---@return IssuesDetailTabModule|nil
-local function get_tab_module(tab_key)
-	for _, tab in ipairs(get_tabs()) do
+local function tab_module(tab_key)
+	for _, tab in ipairs(state.tabs) do
 		if tab.key == tab_key then
 			return tab.mod
 		end
 	end
-	return nil
 end
 
 local function reset_tabs()
-	for _, tab in ipairs(get_tabs()) do
+	for _, tab in ipairs(state.tabs) do
 		if tab.mod.reset then
 			tab.mod.reset()
 		end
 	end
 end
 
--- Loading spinner
-
-local spinner_timer = nil
-local requests = request_scope.new()
-
 local function cancel_requests()
-	requests.cancel()
-	requests = request_scope.new()
+	state.requests.cancel()
+	state.requests = request_scope.new()
 end
 
 local function stop_spinner()
-	if spinner_timer ~= nil then
-		spinner_timer:stop()
-		spinner_timer:close()
-		spinner_timer = nil
+	if state.spinner_timer ~= nil then
+		state.spinner_timer:stop()
+		state.spinner_timer:close()
+		state.spinner_timer = nil
 	end
 end
 
 local function is_loading()
-	local issue = detail_state.current_issue
-	if issue == nil then
-		return false
-	end
-	if detail_state.header_loading then
+	if state.details_loading then
 		return true
 	end
-	local tab = get_tab_module(detail_state.current_tab)
+	if state.current_issue == nil then
+		return false
+	end
+	local tab = tab_module(state.current_tab)
 	return tab ~= nil and tab.is_loading ~= nil and tab.is_loading()
 end
 
+local function render()
+	renderer.render(state.tabs, tab_module)
+end
+
 local function start_spinner()
-	if spinner_timer ~= nil then
+	if state.spinner_timer ~= nil then
 		return
 	end
-	spinner_timer = vim.loop.new_timer()
-	if spinner_timer == nil then
+	state.spinner_timer = vim.loop.new_timer()
+	if state.spinner_timer == nil then
 		return
 	end
-	spinner_timer:start(
+	state.spinner_timer:start(
 		SPINNER_INTERVAL_MS,
 		SPINNER_INTERVAL_MS,
 		vim.schedule_wrap(function()
-			if not shared_detail.is_showing("issues") or not is_loading() then
+			if not detail_ui.is_showing("issues") or not is_loading() then
 				stop_spinner()
 				return
 			end
-			M.render()
+			render()
 		end)
 	)
 end
@@ -94,342 +86,288 @@ local function update_spinner()
 	end
 end
 
--- Helper
-
-local function refresh()
-	if shared_detail.is_showing("issues") then
-		M.render()
+local function render_if_open()
+	if detail_ui.is_showing("issues") then
+		render()
 	end
 end
 
-local function scroll_to_top()
-	local win = detail_state.win
-	if win and vim.api.nvim_win_is_valid(win) then
-		vim.api.nvim_win_set_cursor(win, { 1, 0 })
+---@param tab_key string|nil
+local function set_tab(tab_key)
+	local old_key = state.current_tab
+	if old_key == tab_key then
+		return
 	end
-end
 
----@param old_key string|nil
----@param new_key string|nil
-local function switch_tab_keymaps(old_key, new_key)
-	local buf = detail_state.buf
+	local buf = state.buf
 	if buf == nil or not vim.api.nvim_buf_is_valid(buf) then
+		state.current_tab = tab_key
 		return
 	end
 
 	if old_key then
-		local old_mod = get_tab_module(old_key)
-		if old_mod and old_mod.deactivate and old_key ~= new_key then
-			old_mod.deactivate(buf)
+		local old_tab = tab_module(old_key)
+		if old_tab and old_tab.deactivate then
+			old_tab.deactivate(buf)
 		end
 	end
 
-	if new_key then
-		local new_mod = get_tab_module(new_key)
-		if new_mod and new_mod.activate and old_key ~= new_key then
-			new_mod.activate(buf, refresh)
+	state.current_tab = tab_key
+	if tab_key then
+		local new_tab = tab_module(tab_key)
+		if new_tab and new_tab.activate then
+			new_tab.activate(buf, render_if_open)
 		end
 	end
 end
 
----@param issue Issue|nil
+---@param left IssueRef|nil
+---@param right IssueRef|nil
 ---@return boolean
-local function is_current_issue(issue)
-	local current = detail_state.current_issue
-	return current ~= nil and tostring(current.key or "") == tostring(issue and issue.key or "")
+local function same_ref(left, right)
+	return left ~= nil and tostring(left.key or "") == tostring(right and right.key or "")
 end
 
----@param issue Issue|nil
+---@param issue Issue
 ---@return fun()
-local function make_refresh_callback(issue)
+local function refresh_callback(issue)
 	return function()
-		if not is_current_issue(issue) then
+		if not same_ref(state.current_issue, issue) then
 			return
 		end
 		update_spinner()
-		if shared_detail.is_showing("issues") then
-			M.render()
-		end
+		render_if_open()
 	end
 end
 
----@type fun(issue: IssueDetails, opts: { force_refresh: boolean|nil }|nil)
-local load_active_tab
+---@param issue Issue
+---@param opts { force_refresh: boolean|nil }|nil
+local function load_active_tab(issue, opts)
+	local tab = tab_module(state.current_tab)
+	if tab and tab.on_select then
+		tab.on_select(issue, refresh_callback(issue), opts)
+	end
+end
 
 ---@param issue Issue
----@param opts { force_refresh: boolean|nil, details: IssueDetails|nil }|nil
-local function fetch_details(issue, opts)
-	cancel_requests()
-
-	local provider = detail_state.provider
+---@param details IssueDetails|nil
+---@param force_refresh boolean
+local function load_issue(issue, details, force_refresh)
+	local provider = state.provider
 	if provider == nil then
 		return
 	end
 
-	local provider_detail = provider.capabilities.ui and provider.capabilities.ui.detail
-	local tab_refresh = make_refresh_callback(issue)
-	local force_refresh = opts and opts.force_refresh == true
-	detail_state.header_loading = true
+	local refresh = refresh_callback(issue)
+	state.details_loading = true
 
-	---@param details IssueDetails
-	local function use_details(details)
-		if not is_current_issue(issue) then
-			return
-		end
-		detail_state.current_details = details
+	if details then
+		state.current_details = details
+		state.details_loading = false
 		load_active_tab(details, { force_refresh = force_refresh })
-
-		if provider_detail and provider_detail.fetch_header then
-			tab_refresh()
-			requests.run(function(done)
-				return provider_detail.fetch_header(issue, details, opts, done)
-			end, function()
-				if not is_current_issue(issue) then
-					return
-				end
-				detail_state.header_loading = false
-				tab_refresh()
-			end)
-		else
-			detail_state.header_loading = false
-			tab_refresh()
-		end
-	end
-
-	if opts and opts.details then
-		use_details(opts.details)
 		return
 	end
 
-	requests.run(function(done)
+	load_active_tab(issue, { force_refresh = force_refresh })
+	state.requests.run(function(done)
 		return provider.capabilities.core.fetch_issue(issue, { force_load = force_refresh }, done)
-	end, function(details, err)
-		if not is_current_issue(issue) then
+	end, function(fetched_details, err)
+		if state.provider ~= provider or not same_ref(state.current_issue, issue) then
 			return
 		end
-		if details == nil then
-			detail_state.header_loading = false
+		state.details_loading = false
+		if fetched_details == nil then
 			notify.error(tostring(err or "Failed to load issue"))
-			tab_refresh()
+			refresh()
 			return
 		end
-		use_details(details)
+		state.current_details = fetched_details
+		refresh()
 	end)
 end
 
----@param issue IssueDetails
----@param opts { force_refresh: boolean|nil }|nil
-load_active_tab = function(issue, opts)
-	local tab_mod = get_tab_module(detail_state.current_tab)
-	if tab_mod and tab_mod.on_select then
-		tab_mod.on_select(issue, make_refresh_callback(issue), opts)
+local function clear_issue()
+	stop_spinner()
+	cancel_requests()
+	reset_tabs()
+	pending_ref = nil
+	state.current_issue = nil
+	state.current_details = nil
+	state.details_loading = false
+	state.line_map = {}
+end
+
+---@param issue Issue
+---@param details IssueDetails|nil
+---@param force_refresh boolean
+local function show_issue(issue, details, force_refresh)
+	state.current_issue = issue
+	pending_ref = nil
+	load_issue(issue, details, force_refresh)
+	update_spinner()
+	render()
+end
+
+---@param provider IssuesProvider
+local function set_provider(provider)
+	if state.provider == provider then
+		return
+	end
+
+	set_tab(nil)
+	clear_issue()
+	state.provider = provider
+	state.provider_detail = provider.capabilities.ui and provider.capabilities.ui.detail or nil
+	state.tabs = state.provider_detail and state.provider_detail.tabs and state.provider_detail.tabs() or {}
+
+	local first_tab = state.tabs[1]
+	set_tab(first_tab and first_tab.key or nil)
+	if state.buf and vim.api.nvim_buf_is_valid(state.buf) then
+		require("atlas.issues.ui.detail.keymaps").register(state.buf)
 	end
 end
 
 local function cleanup()
-	local buf = detail_state.buf
-	switch_tab_keymaps(detail_state.current_tab, nil)
+	local buf = state.buf
+	set_tab(nil)
 	if buf and vim.api.nvim_buf_is_valid(buf) then
 		require("atlas.issues.ui.detail.keymaps").remove(buf)
 	end
 	stop_spinner()
-	cancel_requests()
 	reset_tabs()
-	detail_state.reset()
+	pending_ref = nil
+	state.reset()
 end
-
--- Public API
 
 ---@return boolean
 function M.is_open()
-	return shared_detail.is_showing("issues", vim.api.nvim_get_current_tabpage())
+	return detail_ui.is_showing("issues")
 end
 
-function M.render()
-	renderer.render(get_tabs(), get_tab_module)
-end
-
----@param issue Issue|nil
----@param opts { force_refresh: boolean|nil, details: IssueDetails|nil }|nil
+---@param issue Issue
+---@param opts { force_refresh: boolean|nil }|nil
 function M.select(issue, opts)
+	if not M.is_open() then
+		return
+	end
 	opts = opts or {}
 
-	local same_issue = issue ~= nil
-		and detail_state.current_issue ~= nil
-		and tostring(detail_state.current_issue.key) == tostring(issue.key)
-	local context_changed = issue ~= nil and not same_issue
-
-	if issue ~= nil then
-		detail_state.current_issue = issue
-	end
-
-	if detail_state.current_issue == nil then
-		detail_state.current_details = nil
+	if
+		same_ref(state.current_issue, issue)
+		and opts.force_refresh ~= true
+		and (state.details_loading or state.current_details)
+	then
+		state.current_issue = issue
+		render()
 		return
 	end
 
-	if detail_state.buf and vim.api.nvim_buf_is_valid(detail_state.buf) then
-		require("atlas.issues.ui.detail.keymaps").register(detail_state.buf)
+	clear_issue()
+	local details = nil
+	if opts.force_refresh ~= true and issue.description ~= nil then
+		details = issue --[[@as IssueDetails]]
 	end
-
-	local should_fetch = context_changed
-		or opts.force_refresh == true
-		or (detail_state.current_details == nil and detail_state.header_loading ~= true)
-	if should_fetch then
-		detail_state.current_details = nil
-	end
-
-	if not same_issue and issue ~= nil then
-		local old_key = detail_state.current_tab
-		local tabs = get_tabs()
-		local valid = false
-		for _, t in ipairs(tabs) do
-			if t.key == detail_state.current_tab then
-				valid = true
-				break
-			end
-		end
-		if not valid then
-			detail_state.current_tab = tabs[1] and tabs[1].key or nil
-		end
-		switch_tab_keymaps(old_key, detail_state.current_tab)
-		stop_spinner()
-	else
-		switch_tab_keymaps(nil, detail_state.current_tab)
-	end
-
-	if context_changed or opts.force_refresh == true then
-		reset_tabs()
-	end
-
-	if should_fetch then
-		fetch_details(detail_state.current_issue, opts)
-		update_spinner()
-	end
-
-	if shared_detail.is_showing("issues") then
-		M.render()
-	end
+	show_issue(issue, details, opts.force_refresh == true)
 end
 
----@param input Issue|AtlasTarget
----@param opts { provider: IssuesProvider|nil, current_user: IssueUser|nil, force_refresh: boolean|nil, on_update: fun(issue: Issue|nil, result: IssuesActionResult|nil)|nil }|nil
+---@param input Issue|IssueRef
+---@param opts { provider: IssuesProvider|nil, force_refresh: boolean|nil, on_update: fun(issue: Issue|nil, result: IssuesActionResult|nil)|nil }|nil
 function M.open(input, opts)
 	opts = opts or {}
-
-	---@type AtlasTarget|nil
-	local target
-	if input.domain == "issues" then
-		---@cast input AtlasTarget
-		target = input
-	end
-	local provider = opts.provider or (target and providers.load(target.provider, "issues")) or detail_state.provider
+	local provider = opts.provider or state.provider
 	---@cast provider IssuesProvider|nil
 	if provider == nil then
 		notify.error("Issue provider unavailable")
 		return
 	end
-	local previous_provider = detail_state.provider
-	if previous_provider and previous_provider ~= provider then
-		switch_tab_keymaps(detail_state.current_tab, nil)
-		stop_spinner()
-		cancel_requests()
-		reset_tabs()
-		detail_state.current_issue = nil
-		detail_state.current_details = nil
-		detail_state.current_tab = nil
-		detail_state.header_loading = false
-	end
-	detail_state.win, detail_state.buf = shared_detail.open("issues", cleanup, M.render)
-	detail_state.provider = provider
-	detail_state.current_user = opts.current_user
-		or (previous_provider == provider and detail_state.current_user or nil)
-	detail_state.on_update = opts.on_update
+
+	state.win, state.buf = detail_ui.open("issues", cleanup, render)
+	set_provider(provider)
+	state.on_update = opts.on_update
 
 	local ui = provider.capabilities.ui
 	if ui and ui.setup then
 		ui.setup()
 	end
 
-	if detail_state.current_user == nil then
-		provider.capabilities.core.fetch_user(function(user)
-			if detail_state.provider == provider then
-				detail_state.current_user = user
-				refresh()
-			end
-		end)
+	---@type Issue|nil
+	local issue = nil
+	if input.title ~= nil then
+		issue = input --[[@as Issue]]
 	end
-
-	if target == nil then
-		---@cast input Issue
-		M.select(input, {
-			force_refresh = opts.force_refresh,
-			details = input.description ~= nil and input or nil,
-		})
+	if issue then
+		M.select(issue, { force_refresh = opts.force_refresh })
 		return
 	end
 
-	local ref = provider.issue_ref(target)
-	if ref == nil then
-		notify.error("Could not determine issue key")
+	local ref = input
+	if
+		opts.force_refresh ~= true
+		and same_ref(state.current_issue or pending_ref, ref)
+		and (state.details_loading or state.current_details)
+	then
+		render()
 		return
 	end
 
-	---@type Issue
-	local issue = { key = ref.key, title = ref.title or "Loading issue...", url = target.url }
-	M.select(issue, { force_refresh = opts.force_refresh })
-end
-
-function M.refresh()
-	if detail_state.current_issue then
-		M.select(detail_state.current_issue, { force_refresh = true })
-	end
-end
-
----@param result IssuesActionResult|nil
-function M.action_result(result)
-	if result == nil or result.issue_key == nil then
-		return
-	end
-	if result.removed then
-		if detail_state.on_update then
-			detail_state.on_update(nil, result)
+	clear_issue()
+	pending_ref = ref
+	state.details_loading = true
+	update_spinner()
+	render()
+	state.requests.run(function(done)
+		return provider.capabilities.core.fetch_issue(ref, { force_load = opts.force_refresh == true }, done)
+	end, function(loaded_issue, err)
+		if state.provider ~= provider or not same_ref(pending_ref, ref) then
+			return
 		end
-		M.close()
+		if loaded_issue == nil then
+			pending_ref = nil
+			state.details_loading = false
+			update_spinner()
+			render()
+			notify.error(tostring(err or "Failed to load issue"))
+			return
+		end
+		show_issue(loaded_issue, loaded_issue, opts.force_refresh == true)
+	end)
+end
+
+---@param ref IssueRef|nil
+function M.refresh(ref)
+	if not M.is_open() or state.current_issue == nil then
 		return
 	end
-	if detail_state.on_update then
-		detail_state.on_update(nil, result)
-	else
-		M.refresh()
+	if ref ~= nil and not same_ref(state.current_issue, ref) then
+		return
 	end
+	M.select(state.current_issue, { force_refresh = true })
 end
 
 ---@param step 1|-1
 local function change_tab(step)
-	local tabs = get_tabs()
-	if #tabs == 0 then
+	local items = state.tabs
+	if #items == 0 then
 		return
 	end
-	local old_key = detail_state.current_tab
-	local idx = 1
-	for i, tab in ipairs(tabs) do
-		if tab.key == old_key then
-			idx = i
+	local index = 1
+	for i, tab in ipairs(items) do
+		if tab.key == state.current_tab then
+			index = i
 			break
 		end
 	end
 
-	detail_state.current_tab = tabs[(idx - 1 + step) % #tabs + 1].key
-	switch_tab_keymaps(old_key, detail_state.current_tab)
-
-	if detail_state.current_details then
-		load_active_tab(detail_state.current_details)
+	set_tab(items[(index - 1 + step) % #items + 1].key)
+	local issue = state.current_details or state.current_issue
+	if issue then
+		load_active_tab(issue)
 		update_spinner()
 	end
-
-	M.render()
-	scroll_to_top()
+	render()
+	if state.win and vim.api.nvim_win_is_valid(state.win) then
+		vim.api.nvim_win_set_cursor(state.win, { 1, 0 })
+	end
 end
 
 function M.next_tab()
@@ -441,8 +379,8 @@ function M.prev_tab()
 end
 
 function M.close()
-	if shared_detail.is_showing("issues") then
-		shared_detail.close()
+	if M.is_open() then
+		detail_ui.close()
 	end
 end
 

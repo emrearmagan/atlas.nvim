@@ -5,6 +5,9 @@
 ---@field lines_added number|nil
 ---@field lines_removed number|nil
 
+---@class GitHubPullRequestDetails : PullRequestDetails, GitHubPullRequest
+---@field reactions table<string, integer>|nil
+
 local actions = require("atlas.pulls.providers.github.actions")
 local activity_api = require("atlas.pulls.providers.github.api.activity")
 local changes_api = require("atlas.pulls.providers.github.api.changes")

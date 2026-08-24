@@ -7,29 +7,20 @@ local table_tree = require("atlas.ui.components.table_tree")
 local utils = require("atlas.ui.shared.utils")
 local presentation = require("atlas.pulls.ui.presentation")
 
----@return PullsDetailHeaderRow
-function M.loading_assignee_row()
-	return {
-		k1 = "Assignees:",
-		v1 = spinner.with_text("Loading..."),
-		v1_hl = "AtlasTextMuted",
-		k2 = "",
-		v2 = "",
-		v2_hl = "AtlasTextMuted",
-	}
+---@param label string
+---@return PullsDetailHeaderField
+function M.loading_field(label)
+	return { label = label, value = spinner.with_text("Loading..."), hl = "AtlasTextMuted" }
 end
 
 ---@param logins string[]
----@return PullsDetailHeaderRow
-function M.assignee_row(logins)
+---@return PullsDetailHeaderField
+function M.assignee_field(logins)
 	if #logins == 0 then
 		return {
-			k1 = "Assignees:",
-			v1 = "Unassigned",
-			v1_hl = "AtlasTextMuted",
-			k2 = "",
-			v2 = "",
-			v2_hl = "AtlasTextMuted",
+			label = "Assignees",
+			value = "Unassigned",
+			hl = "AtlasTextMuted",
 		}
 	end
 
@@ -56,13 +47,22 @@ function M.assignee_row(logins)
 	end
 
 	return {
-		k1 = "Assignees:",
-		v1 = table.concat(parts, ", "),
-		v1_hl = spans,
-		k2 = "",
-		v2 = "",
-		v2_hl = "AtlasTextMuted",
+		label = "Assignees",
+		value = table.concat(parts, ", "),
+		hl = spans,
 	}
+end
+
+---@param text string
+---@param hl string|table[]|nil
+---@return table[]|nil
+local function value_hl_spans(text, hl)
+	if type(hl) == "table" then
+		return #hl > 0 and hl or nil
+	end
+	if type(hl) == "string" and hl ~= "" then
+		return { { start_col = 0, end_col = #text, hl_group = hl } }
+	end
 end
 
 ---@param spans table[]
@@ -89,9 +89,9 @@ end
 
 ---@param pr PullRequest
 ---@param width integer
----@param extra_rows PullsDetailHeaderRow[]|nil
+---@param extra_fields PullsDetailHeaderField[]|nil
 ---@return string[], table[]
-function M.render(pr, width, extra_rows)
+function M.render(pr, width, extra_fields)
 	local author_name = presentation.user_handle(pr.author)
 	local created_text = utils.relative_time_text(pr.created_on)
 	local repo_name = tostring(pr.repo_full_name or "")
@@ -115,27 +115,40 @@ function M.render(pr, width, extra_rows)
 
 	local updated_text = utils.relative_time_text(pr.updated_on)
 
-	local rows = {
+	local fields = {
 		{
-			k1 = "Repo:",
-			v1 = string.format("%s %s", icons.pulls("repo"), repo_name),
-			v1_hl = highlights.dynamic_for(repo_name) or "AtlasTextMuted",
-			k2 = "Updated:",
-			v2 = updated_text,
-			v2_hl = "AtlasTextMuted",
+			label = "Repo",
+			value = string.format("%s %s", icons.pulls("repo"), repo_name),
+			hl = highlights.dynamic_for(repo_name) or "AtlasTextMuted",
 		},
 		{
-			k1 = "Branch:",
-			v1 = string.format("%s %s → %s", icons.pulls("branch"), src, dst),
-			v1_hl = "AtlasTextMuted",
-			k2 = "",
-			v2 = "",
-			v2_hl = "AtlasTextMuted",
+			label = "Updated",
+			value = updated_text,
+			hl = "AtlasTextMuted",
 		},
 	}
 
-	for _, row in ipairs(extra_rows or {}) do
-		table.insert(rows, row)
+	for _, field in ipairs(extra_fields or {}) do
+		table.insert(fields, field)
+	end
+	table.insert(fields, {
+		label = "Branch",
+		value = string.format("%s %s → %s", icons.pulls("branch"), src, dst),
+		hl = "AtlasTextMuted",
+	})
+
+	local rows = {}
+	for index = 1, #fields, 2 do
+		local left = fields[index]
+		local right = fields[index + 1]
+		table.insert(rows, {
+			k1 = left.label .. ":",
+			v1 = left.value,
+			v1_hl = left.hl,
+			k2 = right and (right.label .. ":") or "",
+			v2 = right and right.value or "",
+			v2_hl = right and right.hl or nil,
+		})
 	end
 
 	local tbl_lines, _, tbl_spans = table_tree.render({
@@ -157,16 +170,10 @@ function M.render(pr, width, extra_rows)
 				return { { start_col = 0, end_col = #label, hl_group = "AtlasTextMuted" } }
 			end
 			if col.key == "v1" then
-				if type(row.v1_hl) == "table" then
-					return row.v1_hl
-				end
-				return { { start_col = 0, end_col = #row.v1, hl_group = row.v1_hl } }
+				return value_hl_spans(row.v1, row.v1_hl)
 			end
-			if col.key == "v2" then
-				if type(row.v2_hl) == "table" then
-					return row.v2_hl
-				end
-				return { { start_col = 0, end_col = #row.v2, hl_group = row.v2_hl } }
+			if col.key == "v2" and row.v2 ~= "" then
+				return value_hl_spans(row.v2, row.v2_hl)
 			end
 			return nil
 		end,
@@ -226,9 +233,8 @@ end
 
 ---@param repo PullsRepo
 ---@param width integer
----@param extra_rows PullsDetailHeaderRow[]|nil
 ---@return string[], table[]
-function M.render_repo(repo, width, extra_rows)
+function M.render_repo(repo, width)
 	local full_name = repo_full_name(repo)
 	local workspace = repo_workspace(repo)
 	local created_text = utils.relative_time_text(tostring(repo.created_on or ""))
@@ -288,10 +294,6 @@ function M.render_repo(repo, width, extra_rows)
 			v2 = "",
 			v2_hl = "AtlasTextMuted",
 		})
-	end
-
-	for _, row in ipairs(extra_rows or {}) do
-		table.insert(rows, row)
 	end
 
 	if #rows > 0 then

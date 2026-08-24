@@ -4,7 +4,7 @@ local diff_parser = require("atlas.core.git.diff_parser")
 local request_scope = require("atlas.core.requests")
 local md_editor = require("atlas.ui.popups.editor")
 local notify = require("atlas.core.notify")
-local detail_state = require("atlas.pulls.ui.detail.state")
+local detail = require("atlas.pulls.ui.detail.state")
 local renderer = require("atlas.pulls.ui.detail.tabs.review.renderer")
 local review_threads = require("atlas.pulls.ui.components.review_threads")
 local state = require("atlas.pulls.ui.detail.tabs.review.state")
@@ -23,10 +23,10 @@ local THREAD_ACTIONS = {
 
 ---@return AtlasMarkdownCompletionProvider|nil
 local function author_completion()
-	local provider = require("atlas.pulls.ui.detail.state").provider
+	local provider = detail.provider
 	local comments_capability = provider and provider.capabilities.comments
 	local data = state.data
-	local pr = require("atlas.pulls.ui.detail.state").current_details
+	local pr = detail.current_details
 	if not provider or not pr or not data or not comments_capability or not comments_capability.comment_completion then
 		return nil
 	end
@@ -41,28 +41,17 @@ local function author_completion()
 	})
 end
 
-local requests = request_scope.new()
-local tab_active = false
-
 ---@param pr PullRequest
 ---@return boolean
 local function is_current(pr)
-	local current = detail_state.current_pr
-	return tab_active
-		and current ~= nil
-		and tostring(current.id or "") == tostring(pr.id or "")
-		and tostring(current.repo_full_name or "") == tostring(pr.repo_full_name or "")
+	return state.current_pr ~= nil
+		and tostring(state.current_pr.id or "") == tostring(pr.id or "")
+		and tostring(state.current_pr.repo_full_name or "") == tostring(pr.repo_full_name or "")
 end
 
 function M.reset()
-	requests.cancel()
-	requests = request_scope.new()
 	state.reset()
-end
-
----@return PullsProvider|nil
-local function get_provider()
-	return require("atlas.pulls.ui.detail.state").provider
+	notify.clear()
 end
 
 ---@param comments PullsComment[]
@@ -112,8 +101,9 @@ end
 ---@param opts { force_refresh: boolean|nil }|nil
 function M.on_select(pr, refresh, opts)
 	M.reset()
+	state.current_pr = pr
 
-	local provider = get_provider()
+	local provider = detail.provider
 	local reviews = provider and provider.capabilities.reviews
 	if reviews == nil then
 		state.status = "Pull request provider is not available"
@@ -125,7 +115,7 @@ function M.on_select(pr, refresh, opts)
 	state.status = "loading"
 	notify.loading(string.format("Loading review for #%s...", pr_id))
 
-	requests.run(function(done)
+	state.requests.run(function(done)
 		return reviews.fetch(pr, opts, done)
 	end, function(data, err)
 		if not is_current(pr) then
@@ -157,7 +147,7 @@ function M.on_select(pr, refresh, opts)
 		end
 
 		notify.loading(string.format("Loading diff context for #%s...", pr_id))
-		requests.run(function(done)
+		state.requests.run(function(done)
 			return fetch_diff(pr, opts, done)
 		end, function(files, diff_err)
 			if not is_current(pr) then
@@ -177,7 +167,7 @@ function M.on_select(pr, refresh, opts)
 	end)
 end
 
----@param _pr PullRequest
+---@param _pr PullRequestDetails
 ---@param width integer
 ---@return string[], table[], table<integer, table>|nil
 function M.render(_pr, width)
@@ -218,10 +208,9 @@ function M.on_enter(_pr, entry)
 	end
 end
 
----@param _pr PullRequest
 ---@param entry table|nil
 ---@param buf integer
-function M.show_details(_pr, entry, buf)
+function M.show_details(entry, buf)
 	local task = entry and entry.entity_kind == "task" and entry.comment or nil
 	if task == nil then
 		return
@@ -249,31 +238,26 @@ end
 
 ---@return boolean
 function M.is_loading()
-	return state.any_loading()
+	return state.status == "loading"
 end
 
 function M.activate(buf, refresh)
-	if buf == nil or refresh == nil then
-		return
-	end
-	tab_active = true
 	keymaps.setup(buf, refresh)
 end
 
 function M.deactivate(buf)
-	tab_active = false
-	if buf ~= nil then
-		keymaps.teardown(buf)
-	end
-	requests.cancel()
-	requests = request_scope.new()
+	state.current_pr = nil
+	keymaps.teardown(buf)
+	state.requests.cancel()
+	state.requests = request_scope.new()
+	notify.clear()
 end
 
 ---@param pr PullRequest
 ---@param key "comments"|"tasks"
 ---@return AtlasReviewActionContext|nil
 local function action_context(pr, key)
-	local provider = get_provider()
+	local provider = detail.provider
 	local data = state.data
 	if not provider or not data then
 		return nil
@@ -285,6 +269,11 @@ local function action_context(pr, key)
 		items = items,
 		data = data,
 		completion = author_completion(),
+		notify = function(level, message, duration)
+			if is_current(pr) then
+				notify.show(level, message, { timeout = duration })
+			end
+		end,
 	}
 end
 
@@ -298,17 +287,22 @@ local function run_comment_action(action, pr, entry, refresh)
 	local comment = entry and entry.comment
 	local context = comment and action_context(pr, comment.is_task and "tasks" or "comments") or nil
 	if comment and context then
-		local on_done = function(result, err)
-			if result and not err then
-				if result.changed_pr then
-					require("atlas.pulls.ui.detail").action_result(pr, result)
-				else
-					refresh()
-				end
-			end
-		end
 		local handler = THREAD_ACTIONS[action]
 		if handler then
+			local on_update = detail.on_update
+			local on_done = function(result, err)
+				if result and not err then
+					if result.changed_pr then
+						if on_update then
+							on_update(pr, result)
+						else
+							require("atlas.pulls.ui.detail").select(pr, { force_refresh = true })
+						end
+					elseif is_current(pr) then
+						refresh()
+					end
+				end
+			end
 			handler(context, comment, on_done)
 		end
 	end
@@ -348,7 +342,7 @@ end
 ---@param pr PullRequest
 ---@param refresh fun()
 function M.add_task(pr, refresh)
-	local provider = get_provider()
+	local provider = detail.provider
 	local tasks_capability = provider and provider.capabilities.tasks
 	if not tasks_capability or not tasks_capability.add_task then
 		notify.error("Provider does not support tasks")
@@ -361,11 +355,11 @@ function M.add_task(pr, refresh)
 	end
 	local tasks = data.tasks
 
-	local win = require("atlas.pulls.ui.detail.state").win
+	local win = detail.win
 	local parent = nil
 	if win and vim.api.nvim_win_is_valid(win) then
 		local lnum = vim.api.nvim_win_get_cursor(win)[1]
-		local ent = (detail_state.line_map or {})[lnum]
+		local ent = (detail.line_map or {})[lnum]
 		if ent and ent.comment and not ent.comment.is_task then
 			parent = ent.comment
 		end
@@ -380,12 +374,18 @@ function M.add_task(pr, refresh)
 		title = " Add Task ",
 		preview = preview,
 		on_save = function(text)
+			if not is_current(pr) then
+				return
+			end
 			if not text or vim.trim(text) == "" then
 				notify.warn("Task cannot be empty")
 				return
 			end
 			notify.loading("Adding task...")
 			add_task(pr, text, parent, function(task, err)
+				if not is_current(pr) then
+					return
+				end
 				if err then
 					notify.error(tostring(err))
 					return

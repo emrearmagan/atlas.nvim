@@ -849,8 +849,6 @@ Defaults live under `keymaps` in `setup()`. Each entry accepts:
         toggle_repo_issue_state = "t",
         edit_title             = "T",
         edit_description       = "D",
-        edit_reviewers         = "gr",
-        edit_assignees         = "ga",
         review = {
           focus_item            = "gd",
           approve               = "ga",

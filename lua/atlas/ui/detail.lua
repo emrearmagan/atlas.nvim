@@ -4,13 +4,14 @@ local statusline = require("atlas.ui.statusline")
 local utils = require("atlas.ui.shared.utils")
 
 local state = {
-	view = nil,
+	kind = nil,
 	win = nil,
 	buf = nil,
 	cleanup = nil,
 	render = nil,
 }
 
+---@param win integer
 local function configure(win)
 	for name, value in pairs({
 		number = false,
@@ -39,6 +40,8 @@ local function reset_content()
 		vim.api.nvim_set_option_value("modifiable", true, { buf = state.buf })
 		vim.api.nvim_buf_clear_namespace(state.buf, -1, 0, -1)
 		vim.api.nvim_buf_set_lines(state.buf, 0, -1, false, {})
+		vim.api.nvim_set_option_value("filetype", "atlas.detail", { buf = state.buf })
+		vim.api.nvim_set_option_value("syntax", "OFF", { buf = state.buf })
 		vim.api.nvim_set_option_value("modifiable", false, { buf = state.buf })
 	end
 	if utils.window.valid(state.win) then
@@ -48,16 +51,12 @@ end
 
 local function deactivate()
 	local cleanup = state.cleanup
-	state.view = nil
+	state.kind = nil
 	state.cleanup = nil
 	state.render = nil
 	if cleanup then
 		cleanup()
 	end
-end
-
-local function render_dashboard()
-	require("atlas.ui.dashboard").render()
 end
 
 local function create()
@@ -82,17 +81,17 @@ local function create()
 				deactivate()
 				state.win = nil
 				state.buf = nil
-				render_dashboard()
+				require("atlas.ui.dashboard").render()
 			end
 		end,
 	})
 end
 
----@param view "issues"|"pulls"|"repo"
+---@param kind "issues"|"pulls"|"repo"
 ---@param cleanup fun()
 ---@param render fun()
 ---@return integer win, integer buf
-function M.open(view, cleanup, render)
+function M.open(kind, cleanup, render)
 	require("atlas.ui.shared.highlights").setup()
 	if M.is_open() and vim.api.nvim_win_get_tabpage(state.win) ~= vim.api.nvim_get_current_tabpage() then
 		M.close()
@@ -102,12 +101,12 @@ function M.open(view, cleanup, render)
 		state.win = nil
 		state.buf = nil
 		create()
-	elseif state.view ~= view then
+	elseif state.kind ~= kind then
 		deactivate()
 		reset_content()
 	end
 
-	state.view = view
+	state.kind = kind
 	state.cleanup = cleanup
 	state.render = render
 	return state.win, state.buf
@@ -122,11 +121,11 @@ function M.is_open(tab)
 		and (tab == nil or vim.api.nvim_win_get_tabpage(state.win) == tab)
 end
 
----@param view "issues"|"pulls"|"repo"
+---@param kind "issues"|"pulls"|"repo"
 ---@param tab integer|nil
 ---@return boolean
-function M.is_showing(view, tab)
-	return M.is_open(tab) and state.view == view
+function M.is_showing(kind, tab)
+	return M.is_open(tab) and state.kind == kind
 end
 
 ---@param tab integer|nil
@@ -144,7 +143,7 @@ function M.close(tab)
 		vim.api.nvim_win_close(win, true)
 	end
 	utils.buffer.delete(buf)
-	render_dashboard()
+	require("atlas.ui.dashboard").render()
 end
 
 vim.api.nvim_create_autocmd("VimResized", {

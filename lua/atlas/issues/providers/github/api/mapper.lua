@@ -52,7 +52,7 @@ local function labels(raw_labels)
 end
 
 ---@param raw any
----@return IssueMilestone|nil
+---@return GitHubIssueMilestone|nil
 local function milestone(raw)
 	raw = json.nilify(raw)
 	if type(raw) ~= "table" then
@@ -168,12 +168,13 @@ end
 
 ---@param raw any Decoded API value.
 ---@param fallback_slug string|nil
----@return IssueDetails|nil
+---@return GitHubIssueDetails|nil
 function M.to_issue_details(raw, fallback_slug)
 	local issue = M.to_issue(raw, fallback_slug)
 	if issue == nil then
 		return nil
 	end
+	---@cast issue GitHubIssueDetails
 
 	issue.description = json.safe_str(raw.body) or ""
 	issue.assignees = assignees(github_mapping.connection_nodes(raw.assignees))

@@ -6,37 +6,22 @@ local highlights = require("atlas.ui.shared.highlights")
 local spinner = require("atlas.ui.components.spinner")
 local threads = require("atlas.ui.components.threadsv2")
 local notify = require("atlas.core.notify")
-local detail_state = require("atlas.issues.ui.detail.state")
+local detail = require("atlas.issues.ui.detail.state")
 local request_scope = require("atlas.core.requests")
 
 local PADDING_X = 1
-local requests = request_scope.new()
+
+---@class IssuesActivityTabState
+---@field entries IssueActivityEntry[]|nil
+---@field error string|nil
+---@field loading boolean
+---@field requests AtlasRequestScope
 local state = {
-	issue = nil,
 	entries = nil,
 	error = nil,
-	is_loading = false,
-	line_map = {},
+	loading = false,
+	requests = request_scope.new(),
 }
-
-local function reset_state()
-	state.issue = nil
-	state.entries = nil
-	state.error = nil
-	state.is_loading = false
-	state.line_map = {}
-end
-
-function M.reset()
-	requests.cancel()
-	requests = request_scope.new()
-	reset_state()
-end
-
----@return IssuesProvider|nil
-local function get_provider()
-	return detail_state.provider
-end
 
 ---@param entries IssueActivityEntry[]|nil
 ---@return AtlasThreadV2Item[]
@@ -71,12 +56,20 @@ local function content_hl(item, row, row_index)
 	return entry.body_hl(row, row_index)
 end
 
+function M.reset()
+	state.requests.cancel()
+	state.requests = request_scope.new()
+	state.entries = nil
+	state.error = nil
+	state.loading = false
+end
+
 ---@param issue Issue
 ---@param refresh fun()
 ---@param opts { force_refresh: boolean|nil }|nil
 function M.on_select(issue, refresh, opts)
 	opts = opts or {}
-	local provider = get_provider()
+	local provider = detail.provider
 	local comments = provider and provider.capabilities.comments
 	if not comments or not comments.fetch_activity then
 		return
@@ -88,26 +81,24 @@ function M.on_select(issue, refresh, opts)
 	end
 
 	M.reset()
-	state.is_loading = true
-	state.issue = issue
+	state.loading = true
 
 	local issue_key = tostring(issue.key or "")
 	notify.loading(string.format("Loading history for %s...", issue_key))
-
-	requests.run(function(done)
+	state.requests.run(function(done)
 		return comments.fetch_activity(issue, { force_load = force_refresh }, done)
 	end, function(entries, err)
-		state.is_loading = false
-
+		state.loading = false
 		if err then
 			state.error = tostring(err)
 			notify.error(string.format("Failed to load history for %s", issue_key))
 		else
 			state.entries = entries or {}
 			state.error = nil
-			notify.success(string.format("History loaded for %s (%d)", issue_key, #state.entries), { timeout = 1200 })
+			notify.success(string.format("History loaded for %s (%d)", issue_key, #state.entries), {
+				timeout = 1200,
+			})
 		end
-
 		refresh()
 	end)
 end
@@ -119,7 +110,7 @@ function M.render(_issue, width)
 	local lines = {}
 	local spans = {}
 
-	if state.is_loading then
+	if state.loading then
 		utils.push(lines, spans, spinner.with_text("Loading history..."), "AtlasTextMuted", PADDING_X)
 		return lines, spans, {}
 	end
@@ -127,23 +118,20 @@ function M.render(_issue, width)
 		utils.push(lines, spans, state.error, "AtlasLogError", PADDING_X)
 		return lines, spans, {}
 	end
-
 	if not state.entries or #state.entries == 0 then
 		utils.push(lines, spans, "No history.", "AtlasTextMuted", PADDING_X)
 		return lines, spans, {}
 	end
 
 	local thread_items = to_thread_items(state.entries)
-
-	local t_lines, t_spans, t_line_map = threads.render(thread_items, width, {
+	local thread_lines, thread_spans, thread_line_map = threads.render(thread_items, width, {
 		padding_x = PADDING_X,
 		mode = "tree",
 		author_hl = function(_, author)
 			return highlights.dynamic_for(author)
 		end,
 		icon_hl_fn = function(item)
-			local author = tostring(item.author or "")
-			return highlights.dynamic_for(author)
+			return highlights.dynamic_for(tostring(item.author or ""))
 		end,
 		additional_hl = function()
 			return "AtlasTextMuted"
@@ -151,13 +139,11 @@ function M.render(_issue, width)
 		content_hl = content_hl,
 	})
 
-	utils.append_block(lines, spans, { lines = t_lines, highlights = t_spans })
-
+	utils.append_block(lines, spans, { lines = thread_lines, highlights = thread_spans })
 	local line_map = {}
-	for lnum, entry in pairs(t_line_map or {}) do
-		line_map[#lines - #t_lines + lnum] = entry
+	for lnum, entry in pairs(thread_line_map or {}) do
+		line_map[#lines - #thread_lines + lnum] = entry
 	end
-
 	return lines, spans, line_map
 end
 
@@ -170,14 +156,14 @@ end
 
 ---@return boolean
 function M.is_loading()
-	return state.is_loading
+	return state.loading
 end
 
 function M.deactivate()
-	requests.cancel()
-	requests = request_scope.new()
-	if state.is_loading then
-		state.is_loading = false
+	state.requests.cancel()
+	state.requests = request_scope.new()
+	if state.loading then
+		state.loading = false
 		notify.clear()
 	end
 end

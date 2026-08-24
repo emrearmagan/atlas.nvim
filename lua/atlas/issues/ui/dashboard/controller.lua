@@ -135,10 +135,6 @@ local function fetch_current_user(provider, scope)
 		end
 		state.current_user = user
 		render_if_active()
-		local detail = require("atlas.issues.ui.detail")
-		if dashboard_host.is_active("issues", provider.id) and detail.is_open() then
-			detail.render()
-		end
 	end)
 end
 
@@ -648,14 +644,18 @@ function M.apply_action_result(result)
 		return
 	end
 
-	for _, issue in ipairs(state.issues or {}) do
-		if issue.key == result.issue_key and not result.removed then
-			M.refresh_issue(result.issue_key)
-			return
+	local issue
+	for _, candidate in ipairs(state.issues or {}) do
+		if candidate.key == result.issue_key then
+			issue = candidate
+			break
 		end
 	end
-
-	M.refresh_current_view(nil, result.issue_key)
+	if issue and not result.removed then
+		M.refresh_issue(issue)
+	else
+		M.refresh_current_view()
+	end
 end
 
 ---@param issue Issue
@@ -693,21 +693,29 @@ function M.refresh_issue(issue, on_done)
 	notify.loading(string.format("Reloading %s...", issue_key))
 	begin_issue_reload(issue_key)
 
-	local active_view = type(state.active_view) == "table" and state.active_view or {}
+	local current_issue = type(issue) == "table" and issue or nil
+	if current_issue == nil then
+		for _, candidate in ipairs(state.issues or {}) do
+			if candidate.key == issue_key then
+				current_issue = candidate
+				break
+			end
+		end
+	end
 	---@type IssueRef
-	local ref = type(issue) == "table" and issue or { key = issue_key }
+	local ref = current_issue or { key = issue_key }
 	issue_reload_requests.run(function(done)
-		return provider.capabilities.core.fetch_issue(
-			ref,
-			{ force_load = true, layout = active_view.layout or "plain" },
-			done
-		)
-	end, function(fetched_issue, err)
+		return provider.capabilities.core.fetch_by_refs({ ref }, { force_load = true }, done)
+	end, function(fetched_issues, err)
+		local fetched_issue = fetched_issues and fetched_issues[1]
 		if err ~= nil or fetched_issue == nil then
 			end_issue_reload(issue_key)
 			notify.error(tostring(err or "Failed to reload issue"))
 			on_done()
 			return
+		end
+		if fetched_issue.parent == nil and current_issue then
+			fetched_issue.parent = current_issue.parent
 		end
 
 		local replaced, snapshot_err = replace_issue(fetched_issue)
@@ -719,12 +727,6 @@ function M.refresh_issue(issue, on_done)
 		end
 		end_issue_reload(issue_key)
 
-		local detail = require("atlas.issues.ui.detail")
-		local detail_issue = require("atlas.issues.ui.detail.state").current_issue
-		if detail.is_open() and detail_issue and tostring(detail_issue.key or "") == issue_key then
-			detail.select(fetched_issue, { force_refresh = true, details = fetched_issue })
-		end
-
 		if snapshot_err then
 			notify.warn(snapshot_err)
 		else
@@ -732,6 +734,8 @@ function M.refresh_issue(issue, on_done)
 		end
 		on_done()
 	end)
+
+	require("atlas.issues.ui.detail").refresh(ref)
 end
 
 function M.toggle_current_issue_collapsed()

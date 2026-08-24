@@ -209,10 +209,11 @@ end
 
 ---@param raw table
 ---@param sp_field string|nil
----@return IssueDetails
-function M.to_issue_details(raw, sp_field)
+---@param project_config AtlasJiraProjectFieldsConfig|nil
+---@return JiraIssueDetails
+function M.to_issue_details(raw, sp_field, project_config)
 	local issue = M.to_issue(raw, sp_field)
-	---@cast issue IssueDetails
+	---@cast issue JiraIssueDetails
 	local fields = raw.fields or {}
 	local assignee = normalize_issue_user(safe_get(fields, "assignee"))
 
@@ -221,8 +222,22 @@ function M.to_issue_details(raw, sp_field)
 	issue.labels = extract_labels(fields.labels)
 	issue.milestone = nil
 	issue.reactions = nil
-	issue.sub_issues = {}
-	issue._raw = raw
+	issue.raw_description = json.nilify(fields.description)
+	issue.custom_fields = {}
+	for field_id, field_config in pairs(project_config or {}) do
+		local value = json.nilify(fields[field_id])
+		if value ~= nil then
+			local formatted = field_config.format(value)
+			if formatted and formatted ~= "" then
+				table.insert(issue.custom_fields, {
+					name = field_config.name or field_id,
+					formatted = formatted,
+					hl_group = field_config.hl_group,
+					display = field_config.display or "chip",
+				})
+			end
+		end
+	end
 	return issue
 end
 

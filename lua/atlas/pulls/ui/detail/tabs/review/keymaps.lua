@@ -21,19 +21,19 @@ end
 ---@param refresh fun()
 function M.setup(buf, refresh)
 	local tab = require("atlas.pulls.ui.detail.tabs.review")
-	local detail_state = require("atlas.pulls.ui.detail.state")
-	local provider = detail_state.provider
+	local detail = require("atlas.pulls.ui.detail.state")
+	local provider = detail.provider
 	local tasks = provider and provider.capabilities.tasks
 	local edit_description = tasks and tasks.edit_task and "Edit comment / task" or "Edit comment"
 	local delete_description = tasks and tasks.delete_task and "Delete comment / task" or "Delete comment"
 
 	local function cursor_entry()
-		local win = detail_state.win
+		local win = detail.win
 		if win == nil or not vim.api.nvim_win_is_valid(win) then
 			return nil
 		end
 		local lnum = vim.api.nvim_win_get_cursor(win)[1]
-		return (detail_state.line_map or {})[lnum]
+		return (detail.line_map or {})[lnum]
 	end
 
 	local items = {}
@@ -43,7 +43,7 @@ function M.setup(buf, refresh)
 			desc = "Reply to comment",
 			opts = { nowait = true, silent = true },
 			callback = function()
-				local pr = detail_state.current_pr
+				local pr = detail.current_details or detail.current_pr
 				local entry = cursor_entry()
 				if pr and entry then
 					tab.reply_comment(pr, entry, refresh)
@@ -57,7 +57,7 @@ function M.setup(buf, refresh)
 			desc = edit_description,
 			opts = { nowait = true, silent = true },
 			callback = function()
-				local pr = detail_state.current_pr
+				local pr = detail.current_details or detail.current_pr
 				local entry = cursor_entry()
 				if pr and entry then
 					tab.edit_comment(pr, entry, refresh)
@@ -72,7 +72,7 @@ function M.setup(buf, refresh)
 				desc = "Add task",
 				opts = { nowait = true, silent = true },
 				callback = function()
-					local pr = detail_state.current_pr
+					local pr = detail.current_details or detail.current_pr
 					if pr then
 						tab.add_task(pr, refresh)
 					end
@@ -86,7 +86,7 @@ function M.setup(buf, refresh)
 			desc = delete_description,
 			opts = { nowait = true, silent = true },
 			callback = function()
-				local pr = detail_state.current_pr
+				local pr = detail.current_details or detail.current_pr
 				local entry = cursor_entry()
 				if pr and entry then
 					tab.delete_comment(pr, entry, refresh)
@@ -100,7 +100,7 @@ function M.setup(buf, refresh)
 			desc = "Toggle resolved",
 			opts = { nowait = true, silent = true },
 			callback = function()
-				local pr = detail_state.current_pr
+				local pr = detail.current_details or detail.current_pr
 				local entry = cursor_entry()
 				if pr and entry then
 					tab.toggle_resolved(pr, entry, refresh)
@@ -114,10 +114,7 @@ function M.setup(buf, refresh)
 			desc = "Show details",
 			opts = { nowait = true, silent = true },
 			callback = function()
-				local pr = detail_state.current_pr
-				if pr then
-					tab.show_details(pr, cursor_entry(), buf)
-				end
+				tab.show_details(cursor_entry(), buf)
 			end,
 		})
 	)
@@ -168,11 +165,11 @@ function M.setup(buf, refresh)
 			desc = "Next hunk",
 			opts = { nowait = true, silent = true },
 			callback = function()
-				local win = detail_state.win
+				local win = detail.win
 				if win == nil or not vim.api.nvim_win_is_valid(win) then
 					return
 				end
-				local map = detail_state.line_map or {}
+				local map = detail.line_map or {}
 				local lnum = vim.api.nvim_win_get_cursor(win)[1]
 				local last = vim.api.nvim_buf_line_count(vim.api.nvim_win_get_buf(win))
 				for ln = lnum + 1, last do
@@ -191,11 +188,11 @@ function M.setup(buf, refresh)
 			desc = "Previous hunk",
 			opts = { nowait = true, silent = true },
 			callback = function()
-				local win = detail_state.win
+				local win = detail.win
 				if win == nil or not vim.api.nvim_win_is_valid(win) then
 					return
 				end
-				local map = detail_state.line_map or {}
+				local map = detail.line_map or {}
 				local lnum = vim.api.nvim_win_get_cursor(win)[1]
 				for ln = lnum - 1, 1, -1 do
 					local e = map[ln]

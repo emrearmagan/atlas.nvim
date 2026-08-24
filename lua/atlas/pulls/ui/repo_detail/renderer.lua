@@ -1,7 +1,7 @@
 local M = {}
 
 local utils = require("atlas.ui.shared.utils")
-local detail_state = require("atlas.pulls.ui.repo_detail.state")
+local state = require("atlas.pulls.ui.repo_detail.state")
 local detail_header = require("atlas.pulls.ui.components.header")
 local detail_chips = require("atlas.pulls.ui.components.chips")
 local detail_tabs = require("atlas.pulls.ui.components.tabs")
@@ -37,8 +37,8 @@ end
 ---@param tab_items PullsRepoDetailTab[]
 ---@param get_tab_module fun(key: string): PullsRepoDetailTabModule|nil
 function M.render(tab_items, get_tab_module)
-	local buf = detail_state.buf
-	local win = detail_state.win
+	local buf = state.buf
+	local win = state.win
 	if buf == nil or not vim.api.nvim_buf_is_valid(buf) then
 		return
 	end
@@ -47,52 +47,46 @@ function M.render(tab_items, get_tab_module)
 	end
 	vim.api.nvim_set_option_value("winbar", " ", { win = win })
 
-	local repo = detail_state.current_repo
-	local repo_details = type(detail_state.current_repo_details) == "table" and detail_state.current_repo_details or nil
+	local repo = state.current_repo
+	local repo_details = type(state.current_repo_details) == "table" and state.current_repo_details or nil
 	local width = vim.api.nvim_win_get_width(win)
 	local lines = {}
 	local spans = {}
 
 	if repo == nil then
 		lines = { "", "  Nothing selected..." }
-		detail_state.line_map = {}
+		state.line_map = {}
 	else
-		local header_lines, header_spans = detail_header.render_repo(repo_details or repo, width, nil)
+		local header_lines, header_spans = detail_header.render_repo(repo_details or repo, width)
 		utils.append_block(lines, spans, { lines = header_lines, highlights = header_spans })
 
-		local chip_line, chip_spans
-		if detail_state.current_repo_details == "loading" and repo_details == nil then
-			chip_line, chip_spans = detail_chips.render_loading("Loading repo details...", { padding_x = PADDING_X })
+		local chip_lines, chip_spans
+		if state.current_repo_details == "loading" and repo_details == nil then
+			chip_lines, chip_spans =
+				detail_chips.render_loading("Loading repo details...", { width = width, padding_x = PADDING_X })
 		elseif repo_details ~= nil then
-			chip_line, chip_spans = detail_chips.render_repo(repo_details, { padding_x = PADDING_X })
+			chip_lines, chip_spans = detail_chips.render_repo(repo_details, { width = width, padding_x = PADDING_X })
 		else
-			chip_line, chip_spans = "", {}
+			chip_lines, chip_spans = {}, {}
 		end
-		table.insert(lines, chip_line)
-		for _, span in ipairs(chip_spans) do
-			table.insert(spans, {
-				line = #lines - 1,
-				start_col = span.start_col,
-				end_col = span.end_col,
-				hl_group = span.hl_group,
-			})
+		if #chip_lines > 0 then
+			utils.append_block(lines, spans, { lines = chip_lines, highlights = chip_spans })
+			table.insert(lines, "")
 		end
-		table.insert(lines, "")
 
 		if #tab_items > 1 then
 			local tab_lines, tab_spans =
-				detail_tabs.render(tab_items, detail_state.current_tab, { width = width, padding_x = PADDING_X })
+				detail_tabs.render(tab_items, state.current_tab, { width = width, padding_x = PADDING_X })
 			utils.append_block(lines, spans, { lines = tab_lines, highlights = tab_spans })
 			table.insert(lines, "")
 		end
 
-		local tab_mod = get_tab_module(detail_state.current_tab)
+		local tab_mod = get_tab_module(state.current_tab)
 		local content_offset = #lines
-		local detail_error = type(detail_state.current_repo_details) == "string"
-			and detail_state.current_repo_details ~= "loading"
+		local detail_error = type(state.current_repo_details) == "string" and state.current_repo_details ~= "loading"
 		if detail_error then
-			utils.push(lines, spans, detail_state.current_repo_details, "AtlasLogError", PADDING_X)
-			detail_state.line_map = {}
+			utils.push(lines, spans, state.current_repo_details, "AtlasLogError", PADDING_X)
+			state.line_map = {}
 		elseif tab_mod then
 			local tab_lines_c, tab_spans_c, tab_line_map = tab_mod.render(repo, width)
 			utils.append_block(lines, spans, { lines = tab_lines_c, highlights = tab_spans_c })
@@ -100,9 +94,9 @@ function M.render(tab_items, get_tab_module)
 			for lnum, entry in pairs(tab_line_map or {}) do
 				adjusted[content_offset + lnum] = entry
 			end
-			detail_state.line_map = adjusted
+			state.line_map = adjusted
 		else
-			detail_state.line_map = {}
+			state.line_map = {}
 		end
 	end
 

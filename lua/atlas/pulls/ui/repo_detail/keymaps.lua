@@ -4,6 +4,16 @@ local notify = require("atlas.core.notify")
 local help = require("atlas.ui.popups.help")
 local resolver = require("atlas.core.keymaps")
 local utils = require("atlas.ui.shared.utils")
+local state = require("atlas.pulls.ui.repo_detail.state")
+
+---@return PullsRepoDetailTabModule|nil
+local function current_tab_module()
+	for _, tab in ipairs(state.tabs) do
+		if tab.key == state.current_tab then
+			return tab.mod
+		end
+	end
+end
 
 ---@param action_id AtlasKeymapActionId|string
 ---@param map_item table
@@ -41,6 +51,33 @@ local function repo_url(repo)
 		return url
 	end
 	return nil
+end
+
+---@return boolean
+local function open_current_line()
+	local win = state.win
+	if win == nil or not vim.api.nvim_win_is_valid(win) then
+		return false
+	end
+
+	local lnum = vim.api.nvim_win_get_cursor(win)[1]
+	local entry = (state.line_map or {})[lnum]
+	local details = state.current_repo_details
+	local repo = type(details) == "table" and details or state.current_repo
+
+	local tab = current_tab_module()
+	if entry and repo and tab and tab.on_enter and tab.on_enter(repo, entry) then
+		return true
+	end
+
+	local url = repo_url(repo)
+	if url == nil or url == "" then
+		notify.warn("No repository URL available")
+		return false
+	end
+	vim.ui.open(url)
+	notify.info("Opened repository in browser")
+	return true
 end
 
 ---@param buf integer
@@ -123,7 +160,7 @@ function M.register(buf)
 			desc = "Open in browser",
 			opts = { nowait = true, silent = true },
 			callback = function()
-				M.open_current_line()
+				open_current_line()
 			end,
 		})
 	)
@@ -176,33 +213,6 @@ function M.register(buf)
 	)
 
 	help.register("General", general, { index = 300, buffer = buf })
-end
-
----@return boolean
-function M.open_current_line()
-	local detail_state = require("atlas.pulls.ui.repo_detail.state")
-	local win = detail_state.win
-	if win == nil or not vim.api.nvim_win_is_valid(win) then
-		return false
-	end
-
-	local lnum = vim.api.nvim_win_get_cursor(win)[1]
-	local entry = (detail_state.line_map or {})[lnum]
-	local details = detail_state.current_repo_details
-	local repo = type(details) == "table" and details or detail_state.current_repo
-
-	if entry and require("atlas.pulls.ui.repo_detail").open_entry(entry) then
-		return true
-	end
-
-	local url = repo_url(repo)
-	if url == nil or url == "" then
-		notify.warn("No repository URL available")
-		return false
-	end
-	vim.ui.open(url)
-	notify.info("Opened repository in browser")
-	return true
 end
 
 ---@param buf integer

@@ -26,9 +26,9 @@ end
 
 ---@param issue Issue
 ---@param width integer
----@param extra_rows IssuesDetailHeaderRow[]|nil
+---@param fields IssuesDetailHeaderField[]|nil
 ---@return string[], table[]
-function M.render(issue, width, extra_rows)
+function M.render(issue, width, fields)
 	local issue_type = type(issue.type) == "table" and issue.type.name or "Issue"
 	local key = text_or(issue.key, "")
 	local title = text_or(issue.title, "")
@@ -56,8 +56,17 @@ function M.render(issue, width, extra_rows)
 	end
 
 	local rows = {}
-	for _, row in ipairs(extra_rows or {}) do
-		table.insert(rows, row)
+	for index = 1, #(fields or {}), 2 do
+		local left = fields[index]
+		local right = fields[index + 1]
+		table.insert(rows, {
+			k1 = left.label .. ":",
+			v1 = left.value,
+			v1_hl = left.hl,
+			k2 = right and (right.label .. ":") or "",
+			v2 = right and right.value or "",
+			v2_hl = right and right.hl or nil,
+		})
 	end
 
 	local table_lines, table_spans = {}, {}

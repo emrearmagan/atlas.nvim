@@ -163,7 +163,7 @@ function M.search_issues(search, on_done, opts)
 end
 
 ---@param key string
----@param on_done fun(issue: IssueDetails|nil, err: string|nil)
+---@param on_done fun(issue: GitHubIssueDetails|nil, err: string|nil)
 ---@param opts { force_load?: boolean, with_relationships?: boolean, layout?: "plain"|"compact" }|nil
 ---@return { cancel: fun() }|nil
 function M.get_issue(key, on_done, opts)

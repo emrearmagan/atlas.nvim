@@ -6,12 +6,13 @@ local icons = require("atlas.ui.shared.icons")
 local MAX_HASH_LEN = 12
 
 ---@param pr PullRequest
----@param _details PullRequestDetails|nil
+---@param details PullRequestDetails|nil
 ---@param _loading boolean
----@return PullsDetailHeaderRow[]
-function M.header_rows(pr, _details, _loading)
-	---@cast pr BitbucketPullRequest
-	local rows = {}
+---@return PullsDetailHeaderField[]
+function M.header_fields(pr, details, _loading)
+	pr = details or pr
+	---@cast pr BitbucketPullRequestDetails|BitbucketPullRequest
+	local fields = {}
 
 	if pr.close_source_branch ~= nil then
 		local state_icon, state_icon_hl
@@ -20,27 +21,25 @@ function M.header_rows(pr, _details, _loading)
 		else
 			state_icon, state_icon_hl = icons.general("error")
 		end
-		table.insert(rows, {
-			k1 = "Close source:",
-			v1 = state_icon,
-			v1_hl = state_icon_hl,
-			k2 = "",
-			v2 = "",
-			v2_hl = "AtlasTextMuted",
+		table.insert(fields, {
+			label = "Close source",
+			value = state_icon,
+			hl = state_icon_hl,
 		})
 	end
 
-	return rows
+	return fields
 end
 
 ---@param pr PullRequest
----@param _details PullRequestDetails|nil
+---@param details PullRequestDetails|nil
 ---@param _loading boolean
 ---@return PullsDetailChip[]
-function M.chips(pr, _details, _loading)
+function M.chips(pr, details, _loading)
 	local chips = {}
+	local data = details or pr
 
-	local hash = tostring(pr.source and pr.source.commit_hash or "")
+	local hash = tostring(data.source and data.source.commit_hash or "")
 	if hash ~= "" then
 		if #hash > MAX_HASH_LEN then
 			hash = hash:sub(1, MAX_HASH_LEN)
@@ -61,29 +60,25 @@ function M.tabs()
 		{
 			key = "overview",
 			label = "Overview",
-			icon = overview_icon,
-			icon_hl = overview_hl,
+			icon = { icon = overview_icon, hl_group = overview_hl },
 			mod = require("atlas.pulls.ui.detail.tabs.overview"),
 		},
 		{
 			key = "conversation",
 			label = "Conversation",
-			icon = conversation_icon,
-			icon_hl = conversation_hl,
+			icon = { icon = conversation_icon, hl_group = conversation_hl },
 			mod = require("atlas.pulls.ui.detail.tabs.conversation"),
 		},
 		{
 			key = "review",
 			label = "Review",
-			icon = review_icon,
-			icon_hl = review_hl,
+			icon = { icon = review_icon, hl_group = review_hl },
 			mod = require("atlas.pulls.ui.detail.tabs.review"),
 		},
 		{
 			key = "commits",
 			label = "Commits",
-			icon = commit_icon,
-			icon_hl = commit_hl,
+			icon = { icon = commit_icon, hl_group = commit_hl },
 			mod = require("atlas.pulls.ui.detail.tabs.commits"),
 		},
 	}

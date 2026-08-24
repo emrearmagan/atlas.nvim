@@ -268,9 +268,10 @@ function M.to_pull_request(raw)
 end
 
 ---@param raw table
----@return PullRequestDetails
+---@return GitHubPullRequestDetails
 function M.to_pull_request_details(raw)
 	local pr = map_summary(raw)
+	---@cast pr GitHubPullRequestDetails
 	local subscription = tostring(raw.viewerSubscription or "")
 	pr.description = tostring(raw.body or "")
 	if subscription ~= "" then

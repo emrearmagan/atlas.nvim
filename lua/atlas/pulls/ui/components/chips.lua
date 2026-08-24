@@ -7,38 +7,56 @@ local utils = require("atlas.ui.shared.utils")
 local spinner = require("atlas.ui.components.spinner")
 
 ---@param chips PullsDetailChip[]
----@param opts { padding_x?: integer }|nil
----@return string, table[]
+---@param opts { width: integer, padding_x?: integer }
+---@return string[], table[]
 local function render_chips(chips, opts)
-	opts = opts or {}
 	local pad = math.max(0, opts.padding_x or 1)
-	local line = string.rep(" ", pad)
+	local padding = string.rep(" ", pad)
+	local width = math.max(1, opts.width)
+	local lines = {}
+	local line = padding
 	local spans = {}
-	local col = pad
+	local line_width = pad
+	local has_chip = false
 
 	for _, chip in ipairs(chips) do
 		if chip ~= nil then
 			local label = string.format(" %s ", chip.label)
-			line = line .. label .. " "
+			local gap = has_chip and " " or ""
+			if has_chip and line_width + vim.api.nvim_strwidth(gap .. label) > width then
+				table.insert(lines, line)
+				line = padding
+				line_width = pad
+				gap = ""
+				has_chip = false
+			end
+
+			line = line .. gap
+			local start_col = #line
+			line = line .. label
 			if chip.hl ~= nil then
 				table.insert(spans, {
-					start_col = col,
-					end_col = col + #label,
+					line = #lines,
+					start_col = start_col,
+					end_col = start_col + #label,
 					hl_group = chip.hl,
 				})
 			end
-			col = col + #label + 1
+			line_width = vim.api.nvim_strwidth(line)
+			has_chip = true
 		end
 	end
 
-	return line, spans
+	if has_chip then
+		table.insert(lines, line)
+	end
+	return lines, spans
 end
 
 ---@param pr PullRequest
----@param opts { padding_x?: integer, extra_chips?: PullsDetailChip[], pipelines?: PullsPipeline[]|"loading"|string, loading?: boolean }|nil
----@return string, table[]
+---@param opts { width: integer, padding_x?: integer, extra_chips?: PullsDetailChip[], pipelines?: PullsPipeline[]|"loading"|string, loading?: boolean }
+---@return string[], table[]
 function M.render(pr, opts)
-	opts = opts or {}
 	local chips = {
 		{ label = tostring(pr.state or "UNKNOWN"), hl = presentation.pr_state_hl(pr.state) },
 	}
@@ -64,10 +82,9 @@ function M.render(pr, opts)
 end
 
 ---@param repo PullsRepoDetails
----@param opts { padding_x?: integer, extra_chips?: PullsDetailChip[] }|nil
----@return string, table[]
+---@param opts { width: integer, padding_x?: integer, extra_chips?: PullsDetailChip[] }
+---@return string[], table[]
 function M.render_repo(repo, opts)
-	opts = opts or {}
 	local chips = {
 		{
 			label = string.format("%s %s", icons.pulls("file"), utils.human_size(repo.size)),
@@ -89,8 +106,8 @@ function M.render_repo(repo, opts)
 end
 
 ---@param text string|nil
----@param opts { padding_x?: integer }|nil
----@return string, table[]
+---@param opts { width: integer, padding_x?: integer }
+---@return string[], table[]
 function M.render_loading(text, opts)
 	return render_chips({ { label = spinner.with_text(text or "Loading..."), hl = "AtlasTextMuted" } }, opts)
 end

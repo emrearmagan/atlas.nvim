@@ -3,7 +3,7 @@ local M = {}
 local help = require("atlas.ui.popups.help")
 local resolver = require("atlas.core.keymaps")
 local utils = require("atlas.ui.shared.utils")
-local detail_state = require("atlas.pulls.ui.detail.state")
+local detail = require("atlas.pulls.ui.detail.state")
 local state = require("atlas.pulls.ui.detail.tabs.overview.state")
 
 ---@param action_id AtlasKeymapActionId|string
@@ -40,7 +40,7 @@ function M.setup(buf, refresh)
 			opts = { nowait = true, silent = true },
 			callback = function()
 				local lnum = vim.api.nvim_win_get_cursor(0)[1]
-				local entry = (detail_state.line_map or {})[lnum]
+				local entry = (detail.line_map or {})[lnum]
 				if entry and entry.kind == "pipeline" and entry.pipeline and state.toggle_pipeline(entry.pipeline) then
 					refresh()
 				elseif entry and entry.kind == "description" then
@@ -59,12 +59,11 @@ function M.setup(buf, refresh)
 			opts = { nowait = true, silent = true },
 			callback = function()
 				local lnum = vim.api.nvim_win_get_cursor(0)[1]
-				local entry = (detail_state.line_map or {})[lnum]
-				local pr = detail_state.current_pr
+				local entry = (detail.line_map or {})[lnum]
+				local pr = detail.current_pr
 				if pr and entry and entry.kind == "pipeline" and entry.pipeline then
-					local pipelines = type(detail_state.pipelines) == "table" and detail_state.pipelines
-						or { entry.pipeline }
-					require("atlas.pulls.ui.pipelines").open(pr, detail_state.provider, {
+					local pipelines = type(detail.pipelines) == "table" and detail.pipelines or { entry.pipeline }
+					require("atlas.pulls.ui.pipelines").open(pr, detail.provider, {
 						pipelines = pipelines,
 						selected_pipeline = entry.pipeline,
 						selected_job = entry.job,

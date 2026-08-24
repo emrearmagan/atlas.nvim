@@ -9,6 +9,16 @@
 ---@field project JiraIssueProject|nil
 ---@field priority string|nil
 
+---@class JiraIssueCustomField
+---@field name string
+---@field formatted string
+---@field hl_group string|nil
+---@field display "chip"|"table"
+
+---@class JiraIssueDetails : IssueDetails, JiraIssue
+---@field raw_description table|string|nil
+---@field custom_fields JiraIssueCustomField[]
+
 local M = {}
 
 ---@param view IssuesViewConfig
@@ -234,8 +244,8 @@ return {
 			reply_comment = M.reply_comment,
 			edit_comment = M.edit_comment,
 			delete_comment = M.delete_comment,
-			comment_completion = function()
-				return require("atlas.issues.providers.jira.completion.author").build_completion()
+			comment_completion = function(opts)
+				return require("atlas.issues.providers.jira.completion.author").build_completion(opts)
 			end,
 		},
 		actions = require("atlas.issues.providers.jira.actions"),

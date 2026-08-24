@@ -7,12 +7,6 @@ local state = require("atlas.pulls.ui.repo_detail.state")
 local PADDING_X = 1
 local PADDING = string.rep(" ", PADDING_X)
 
----@param text string
----@return string
-local function with_padding(text)
-	return PADDING .. tostring(text or "")
-end
-
 ---@param title string
 ---@param value string|nil
 ---@param width integer
@@ -31,7 +25,7 @@ local function render_text_block(title, value, width, lines, spans)
 	local content_width = math.max(10, width - (PADDING_X * 2))
 	for _, line in ipairs(utils.sanitize_lines(content)) do
 		for _, chunk in ipairs(utils.wrap_line(line, content_width)) do
-			table.insert(lines, with_padding(chunk))
+			table.insert(lines, PADDING .. chunk)
 		end
 	end
 	table.insert(lines, "")

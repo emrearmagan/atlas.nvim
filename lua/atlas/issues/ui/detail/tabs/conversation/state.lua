@@ -3,13 +3,14 @@ local utils = require("atlas.ui.shared.utils")
 
 local MAX_COMMENT_LINES = 8
 
----@class IssuesConversationTabState
+---@class IssuesConversationState
 ---@field items IssueConversationItem[]|"loading"|nil
 ---@field error string|nil
 ---@field collapsed table<string, boolean>
 ---@field expanded_comments table<string, boolean>
 ---@field expanded_runs table<string, boolean>
 ---@field requests AtlasRequestScope
+---@field current_issue Issue|nil
 local M = {
 	items = nil,
 	error = nil,
@@ -17,12 +18,11 @@ local M = {
 	expanded_comments = {},
 	expanded_runs = {},
 	requests = request_scope.new(),
+	current_issue = nil,
 }
 
-local current_issue = nil
-
 function M.reset()
-	current_issue = nil
+	M.current_issue = nil
 	M.requests.cancel()
 	M.requests = request_scope.new()
 	M.items = nil
@@ -35,11 +35,11 @@ end
 ---@param issue Issue
 function M.activate(issue)
 	M.reset()
-	current_issue = issue
+	M.current_issue = issue
 end
 
 function M.deactivate()
-	current_issue = nil
+	M.current_issue = nil
 	M.requests.cancel()
 	M.requests = request_scope.new()
 end
@@ -47,7 +47,7 @@ end
 ---@param issue Issue
 ---@return boolean
 function M.is_current(issue)
-	return current_issue ~= nil and tostring(current_issue.key or "") == tostring(issue.key or "")
+	return M.current_issue ~= nil and tostring(M.current_issue.key or "") == tostring(issue.key or "")
 end
 
 ---@param run_id any
@@ -63,7 +63,7 @@ function M.is_run_expanded(run_id)
 end
 
 ---@return boolean
-function M.any_loading()
+function M.is_loading()
 	return M.items == "loading"
 end
 

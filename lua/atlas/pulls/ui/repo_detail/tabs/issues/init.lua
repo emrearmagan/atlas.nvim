@@ -3,12 +3,17 @@ local M = {}
 local notify = require("atlas.core.notify")
 local help = require("atlas.ui.popups.help")
 local resolver = require("atlas.core.keymaps")
-local repo_detail_state = require("atlas.pulls.ui.repo_detail.state")
+local detail = require("atlas.pulls.ui.repo_detail.state")
 local renderer = require("atlas.pulls.ui.repo_detail.tabs.issues.renderer")
 local request_scope = require("atlas.core.requests")
 
-local requests = request_scope.new()
-local state = { issues = nil, filter = "open", counts = nil, repo_key = nil }
+---@class PullsRepoIssuesTabState
+---@field issues PullsRepoIssue[]|"loading"|string|nil
+---@field filter "open"|"closed"
+---@field counts { open: integer, closed: integer }|nil
+---@field repo_key string|nil
+---@field requests AtlasRequestScope
+local state = { issues = nil, filter = "open", counts = nil, repo_key = nil, requests = request_scope.new() }
 
 local function reset_state()
 	state.issues = nil
@@ -18,8 +23,8 @@ local function reset_state()
 end
 
 local function stop_requests()
-	requests.cancel()
-	requests = request_scope.new()
+	state.requests.cancel()
+	state.requests = request_scope.new()
 end
 
 function M.reset()
@@ -30,7 +35,7 @@ end
 ---@param repo PullsRepoDetails
 ---@return string
 local function repo_key(repo)
-	return repo_detail_state.provider.id .. ":" .. tostring(repo.full_name or "")
+	return detail.provider.id .. ":" .. tostring(repo.full_name or "")
 end
 
 ---@param color string
@@ -49,7 +54,7 @@ end
 ---@param width integer
 ---@return string[], table[], table<integer, table>
 function M.render(_repo, width)
-	return renderer.render(state, width, repo_detail_state.current_repo_details == "loading", issue_type_hl)
+	return renderer.render(state, width, detail.current_repo_details == "loading", issue_type_hl)
 end
 
 ---@param details PullsRepoDetails
@@ -67,12 +72,12 @@ local function fetch_issues(details, refresh, force_load)
 	notify.loading(string.format("Loading issues for %s...", label))
 	refresh()
 
-	local repository = repo_detail_state.provider.capabilities.repository
+	local repository = detail.provider.capabilities.repository
 	local run = assert(repository.fetch_issues)
-	requests.run(function(done)
+	state.requests.run(function(done)
 		return run(details, state.filter, { force_load = force_load }, done)
 	end, function(result, err)
-		local current = repo_detail_state.current_repo_details
+		local current = detail.current_repo_details
 		if type(current) ~= "table" or repo_key(current) ~= key then
 			return
 		end
@@ -93,7 +98,7 @@ end
 ---@param opts PullsFetchOpts|nil
 function M.on_select(repo, refresh, opts)
 	opts = opts or {}
-	local details = repo_detail_state.current_repo_details
+	local details = detail.current_repo_details
 	if repo == nil then
 		M.reset()
 		refresh()
@@ -146,10 +151,10 @@ function M.on_enter(_repo, entry)
 end
 
 ---@param refresh fun()
-function M.toggle_filter(refresh)
+local function toggle_filter(refresh)
 	state.filter = state.filter == "open" and "closed" or "open"
 	state.issues = nil
-	M.on_select(repo_detail_state.current_repo, refresh, { force_refresh = true })
+	M.on_select(detail.current_repo, refresh, { force_refresh = true })
 end
 
 ---@param buf integer
@@ -163,7 +168,7 @@ function M.activate(buf, refresh)
 			desc = "Toggle open/closed",
 			opts = { nowait = true, silent = true },
 			callback = function()
-				M.toggle_filter(refresh)
+				toggle_filter(refresh)
 			end,
 		})
 	end

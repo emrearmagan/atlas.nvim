@@ -4,6 +4,15 @@
 ---@field node_id string|nil
 ---@field is_pinned boolean
 
+---@class GitHubIssueMilestone : IssueMilestone
+---@field progress_percentage number|nil
+---@field open_issues integer|nil
+---@field closed_issues integer|nil
+
+---@class GitHubIssueDetails : IssueDetails, GitHubIssue
+---@field milestone GitHubIssueMilestone|nil
+---@field sub_issues GitHubIssue[]
+
 local M = {}
 
 local config = require("atlas.config")
@@ -91,7 +100,7 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.update_description(issue, content, on_done)
-	---@cast issue GitHubIssue
+	---@cast issue GitHubIssueDetails
 	local slug = issue.repo_full_name
 	local number = issue.number
 	if slug == "" then
@@ -151,7 +160,7 @@ function M.delete_comment(issue, comment, on_done)
 	return require("atlas.issues.providers.github.api.comments").delete(key, tostring(comment.id), on_done)
 end
 
----@param issue IssueDetails
+---@param issue Issue
 ---@param opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(items: IssueConversationItem[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
@@ -171,14 +180,12 @@ function M.fetch_conversation(issue, opts, on_done)
 		end
 
 		local items = {}
-		if issue.description ~= "" then
-			table.insert(items, {
-				id = "description:" .. tostring(issue.key),
-				kind = "description",
-				created_at = issue.created_at or "",
-				entity = issue,
-			})
-		end
+		table.insert(items, {
+			id = "description:" .. tostring(issue.key),
+			kind = "description",
+			created_at = issue.created_at or "",
+			entity = issue,
+		})
 		for _, comment in ipairs(result.comments or {}) do
 			table.insert(items, {
 				id = "comment:" .. tostring(comment.id),

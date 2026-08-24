@@ -1,12 +1,12 @@
 local M = {}
 
-local detail_state = require("atlas.pulls.ui.detail.state")
+local state = require("atlas.pulls.ui.detail.state")
 
 ---@return integer|nil win
 ---@return integer|nil buf
 local function detail_win_buf()
-	local win = detail_state.win
-	local buf = detail_state.buf
+	local win = state.win
+	local buf = state.buf
 	if win == nil or not vim.api.nvim_win_is_valid(win) then
 		return nil, nil
 	end
@@ -18,22 +18,17 @@ end
 
 ---@return PullsDetailTabModule|nil
 local function current_tab_mod()
-	local provider = detail_state.provider
-	local provider_detail = provider and provider.capabilities.ui and provider.capabilities.ui.detail
-	if provider_detail and provider_detail.tabs then
-		for _, tab in ipairs(provider_detail.tabs() or {}) do
-			if tab.key == detail_state.current_tab then
-				return tab.mod
-			end
+	for _, tab in ipairs(state.tabs) do
+		if tab.key == state.current_tab then
+			return tab.mod
 		end
 	end
-	return nil
 end
 
 ---@param lnum integer
 ---@return boolean
 local function is_selectable(lnum)
-	local line_map = detail_state.line_map or {}
+	local line_map = state.line_map or {}
 	local entry = line_map[lnum]
 	if entry == nil then
 		return false

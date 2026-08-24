@@ -5,23 +5,25 @@ local icons = require("atlas.ui.shared.icons")
 local spinner = require("atlas.ui.components.spinner")
 local notify = require("atlas.core.notify")
 local threads = require("atlas.ui.components.threadsv2")
-local repo_detail_state = require("atlas.pulls.ui.repo_detail.state")
+local detail = require("atlas.pulls.ui.repo_detail.state")
 local request_scope = require("atlas.core.requests")
 
 local PADDING_X = 1
 
-local requests = request_scope.new()
-local state = { repo = nil, tags = nil, line_map = {} }
+---@class PullsRepoTagsTabState
+---@field repo PullsRepoDetails|nil
+---@field tags PullsRepoTags|"loading"|string|nil
+---@field requests AtlasRequestScope
+local state = { repo = nil, tags = nil, requests = request_scope.new() }
 
 local function reset_state()
 	state.repo = nil
 	state.tags = nil
-	state.line_map = {}
 end
 
 local function stop_requests()
-	requests.cancel()
-	requests = request_scope.new()
+	state.requests.cancel()
+	state.requests = request_scope.new()
 end
 
 function M.reset()
@@ -72,7 +74,7 @@ function M.render(_repo, width)
 	local line_map = {}
 
 	if state.tags == nil then
-		if repo_detail_state.current_repo_details == "loading" then
+		if detail.current_repo_details == "loading" then
 			utils.push(lines, spans, spinner.with_text("Loading repository details..."), "AtlasTextMuted", PADDING_X)
 		end
 		return lines, spans, line_map
@@ -113,7 +115,6 @@ function M.render(_repo, width)
 
 	utils.append_block(lines, spans, { lines = thread_lines, highlights = thread_spans })
 	line_map = thread_map or {}
-	state.line_map = line_map
 	return lines, spans, line_map
 end
 
@@ -122,31 +123,31 @@ end
 ---@param opts PullsFetchOpts|nil
 function M.on_select(repo, refresh, opts)
 	opts = opts or {}
-	local detail = require("atlas.pulls.ui.repo_detail.state").current_repo_details
+	local repo_details = detail.current_repo_details
 	if repo == nil then
 		reset_state()
 		refresh()
 		return
 	end
-	if detail == "loading" then
+	if repo_details == "loading" then
 		state.tags = "loading"
 		refresh()
 		return
 	end
-	if type(detail) ~= "table" then
+	if type(repo_details) ~= "table" then
 		reset_state()
 		refresh()
 		return
 	end
 
 	local prev_name = state.repo and state.repo.full_name or ""
-	local next_name = tostring(detail.full_name or "")
+	local next_name = tostring(repo_details.full_name or "")
 	local repo_label = next_name ~= "" and next_name or tostring(repo.name or repo.id or "")
 	local should_fetch = opts.force_refresh == true
 		or state.tags == nil
 		or state.tags == "loading"
 		or prev_name ~= next_name
-	state.repo = detail
+	state.repo = repo_details
 	if not should_fetch then
 		refresh()
 		return
@@ -157,7 +158,7 @@ function M.on_select(repo, refresh, opts)
 	notify.loading(string.format("Loading tags for %s...", repo_label))
 	refresh()
 
-	local provider = require("atlas.pulls.ui.repo_detail.state").provider
+	local provider = detail.provider
 	local repository = provider and provider.capabilities.repository
 	if repository == nil then
 		state.tags = { entries = {} }
@@ -166,13 +167,13 @@ function M.on_select(repo, refresh, opts)
 		return
 	end
 
-	requests.run(function(done)
-		return repository.fetch_tags(detail, {
+	state.requests.run(function(done)
+		return repository.fetch_tags(repo_details, {
 			force_load = opts.force_load == true or opts.force_refresh == true,
 			pagelen = opts.pagelen,
 		}, done)
 	end, function(tags, err)
-		local active_detail = require("atlas.pulls.ui.repo_detail.state").current_repo_details
+		local active_detail = detail.current_repo_details
 		if type(active_detail) ~= "table" or tostring(active_detail.full_name or "") ~= next_name then
 			return
 		end

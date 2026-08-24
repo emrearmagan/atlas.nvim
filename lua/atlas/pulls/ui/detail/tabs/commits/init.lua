@@ -6,32 +6,44 @@ local spinner = require("atlas.ui.components.spinner")
 local threads = require("atlas.ui.components.threadsv2")
 local notify = require("atlas.core.notify")
 local request_scope = require("atlas.core.requests")
+local detail = require("atlas.pulls.ui.detail.state")
 
 local PADDING_X = 1
 local MAX_STATUS_COMMITS = 5
 
-local requests = request_scope.new()
+---@class PullsCommitsTabState
+---@field current_pr PullRequest|nil
+---@field commits PullsCommit[]|"loading"|string|nil
+---@field status_by_hash table<string, string>
+---@field url_by_hash table<string, string>
+---@field requests AtlasRequestScope
 local state = {
+	current_pr = nil,
 	commits = nil,
 	status_by_hash = {},
 	url_by_hash = {},
+	requests = request_scope.new(),
 }
 
----@return PullsProvider|nil
-local function get_provider()
-	return require("atlas.pulls.ui.detail.state").provider
-end
-
 local function reset_requests()
-	requests.cancel()
-	requests = request_scope.new()
+	state.requests.cancel()
+	state.requests = request_scope.new()
 end
 
 function M.reset()
 	reset_requests()
+	state.current_pr = nil
 	state.commits = nil
 	state.status_by_hash = {}
 	state.url_by_hash = {}
+end
+
+---@param pr PullRequest
+---@return boolean
+local function is_current(pr)
+	return state.current_pr ~= nil
+		and tostring(state.current_pr.id or "") == tostring(pr.id or "")
+		and tostring(state.current_pr.repo_full_name or "") == tostring(pr.repo_full_name or "")
 end
 
 ---@param state_name string|nil
@@ -110,7 +122,7 @@ end
 function M.on_select(pr, refresh, opts)
 	opts = opts or {}
 
-	local provider = get_provider()
+	local provider = detail.provider
 	if not provider then
 		return
 	end
@@ -119,57 +131,64 @@ function M.on_select(pr, refresh, opts)
 
 	local force_refresh = opts.force_refresh == true
 	local should_fetch = force_refresh
+		or not is_current(pr)
 		or state.commits == nil
 		or state.commits == "loading"
 		or type(state.commits) == "string"
 
-	if should_fetch then
-		M.reset()
+	if not should_fetch or not core.fetch_commits then
+		return
 	end
 
-	if should_fetch and core.fetch_commits then
-		local pr_id = tostring(pr.id or "")
-		state.commits = "loading"
-		notify.loading(string.format("Loading commits for #%s...", pr_id))
-		requests.run(function(done)
-			return core.fetch_commits(pr, opts, done)
-		end, function(commits, err)
-			if err then
-				state.commits = err
-				notify.error(string.format("Failed to load commits for #%s", pr_id))
-				refresh()
-				return
-			end
+	M.reset()
+	state.current_pr = pr
+	local pr_id = tostring(pr.id or "")
+	state.commits = "loading"
+	notify.loading(string.format("Loading commits for #%s...", pr_id))
+	state.requests.run(function(done)
+		return core.fetch_commits(pr, opts, done)
+	end, function(commits, err)
+		if not is_current(pr) then
+			return
+		end
+		if err then
+			state.commits = tostring(err)
+			notify.error(string.format("Failed to load commits for #%s", pr_id))
+			refresh()
+			return
+		end
 
-			state.commits = commits or {}
-			notify.success(string.format("Commits loaded for #%s", pr_id), { timeout = 1200 })
+		state.commits = commits or {}
+		notify.success(string.format("Commits loaded for #%s", pr_id), { timeout = 1200 })
 
-			-- Fetch pipeline statuses for the first N commits
-			if pipelines and pipelines.fetch_commit_status and type(state.commits) == "table" then
-				local count = math.min(MAX_STATUS_COMMITS, #state.commits)
-				for i = 1, count do
-					local commit = state.commits[i]
-					local hash = tostring(commit.hash or "")
-					if hash ~= "" then
-						state.status_by_hash[hash] = "loading"
-						requests.run(function(done)
-							return pipelines.fetch_commit_status(commit, opts, done)
-						end, function(status, url, status_err)
-							if status_err then
-								state.status_by_hash[hash] = "unknown"
-							else
-								state.status_by_hash[hash] = status or "unknown"
-								state.url_by_hash[hash] = url
-							end
-							refresh()
-						end)
-					end
+		-- Fetch pipeline statuses for the first N commits
+		if pipelines and pipelines.fetch_commit_status and type(state.commits) == "table" then
+			local count = math.min(MAX_STATUS_COMMITS, #state.commits)
+			for i = 1, count do
+				local commit = state.commits[i]
+				local hash = tostring(commit.hash or "")
+				if hash ~= "" then
+					state.status_by_hash[hash] = "loading"
+					state.requests.run(function(done)
+						return pipelines.fetch_commit_status(commit, opts, done)
+					end, function(status, url, status_err)
+						if not is_current(pr) then
+							return
+						end
+						if status_err then
+							state.status_by_hash[hash] = "unknown"
+						else
+							state.status_by_hash[hash] = status or "unknown"
+							state.url_by_hash[hash] = url
+						end
+						refresh()
+					end)
 				end
 			end
+		end
 
-			refresh()
-		end)
-	end
+		refresh()
+	end)
 end
 
 ---@param _pr PullRequest
@@ -275,7 +294,8 @@ function M.is_loading()
 end
 
 function M.deactivate()
-	reset_requests()
+	M.reset()
+	notify.clear()
 end
 
 return M

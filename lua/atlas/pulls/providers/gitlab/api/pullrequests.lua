@@ -219,43 +219,72 @@ function M.fetch_pullrequest(pr, opts, on_done)
 		end
 	end
 
+	local requests = request_scope.new()
 	local endpoint = string.format("/projects/%s/merge_requests/%d", service.url_encode(path), iid)
-	return service.request("GET", endpoint, nil, function(result, err)
-		if err then
-			on_done(nil, err)
+	requests.all({
+		details = function(done)
+			return service.request("GET", endpoint, nil, done, {
+				action = "Get MR",
+				project_path = path,
+				iid = iid,
+			})
+		end,
+		labels = function(done)
+			return M.fetch_project_labels(path, { force_refresh = opts.force_load or opts.force_refresh }, done)
+		end,
+	}, function(values, errors)
+		if errors.details then
+			on_done(nil, errors.details)
 			return
 		end
-		local mr = mapper.to_pull_request_details(result)
-		if mr then
-			service.set_memory_cache(cache_key, mr)
+		local mr = mapper.to_pull_request_details(values.details)
+		if mr == nil then
+			on_done(nil, "Merge request not found")
+			return
 		end
-		on_done(mr, nil)
-	end, {
-		action = "Get MR",
-		project_path = path,
-		iid = iid,
-	})
-end
 
----@param pr PullRequest
----@param opts { force_refresh?: boolean }|nil
----@param on_done fun(description: string|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.fetch_description(pr, opts, on_done)
-	opts = opts or {}
-	return M.fetch_pullrequest(pr, { force_load = opts.force_refresh == true }, function(mr, err)
-		if err or mr == nil then
-			on_done(nil, err)
-			return
+		local by_name = values.labels
+		for _, label in ipairs(mr.labels or {}) do
+			local meta = by_name and by_name[label.name]
+			if meta then
+				label.color = meta.color
+				label.text_color = meta.text_color
+			end
 		end
-		on_done(tostring(mr.description or ""), nil)
+		service.set_memory_cache(cache_key, mr)
+		on_done(mr, nil)
 	end)
+	return requests
 end
 
 ---@param pr PullRequest
 ---@return string project_path, integer|nil iid
 local function project_iid(pr)
 	return pr.repo_full_name, tonumber(pr.id)
+end
+
+---@param pr PullRequest
+---@param _opts { force_refresh?: boolean }|nil
+---@param on_done fun(description: string|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_description(pr, _opts, on_done)
+	local path, iid = project_iid(pr)
+	if path == "" or iid == nil then
+		on_done(nil, "Invalid MR identifier")
+		return nil
+	end
+	local endpoint = string.format("/projects/%s/merge_requests/%d", service.url_encode(path), iid)
+	return service.request("GET", endpoint, nil, function(result, err)
+		if err then
+			on_done(nil, err)
+			return
+		end
+		on_done(type(result.description) == "string" and result.description or "", nil)
+	end, {
+		action = "Fetch MR description",
+		project_path = path,
+		iid = iid,
+	})
 end
 
 ---@param pr PullRequest

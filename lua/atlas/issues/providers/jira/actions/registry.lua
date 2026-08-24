@@ -149,7 +149,7 @@ local function assign(ctx, done)
 
 	local function to_picker_items(users)
 		local items = {}
-		local current_user = issues_state.current_user
+		local current_user = ctx.current_user
 		local current_user_account_id = current_user and current_user.account_id or nil
 		local current_user_item = nil
 		local seen_current_user = false
@@ -830,8 +830,7 @@ local function toggle_subscription(ctx, done)
 		)
 	end
 
-	local st = require("atlas.issues.state")
-	local current = st.current_user
+	local current = ctx.current_user
 	if current and tostring(current.account_id or "") ~= "" then
 		unsubscribe(current.account_id)
 		return

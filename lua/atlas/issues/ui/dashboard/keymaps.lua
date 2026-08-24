@@ -122,7 +122,8 @@ function M.register(buf, views)
 				desc = "Create issue",
 				index = 2,
 				callback = function()
-					actions.run("create_issue", context(selected_issue()), controller.apply_action_result)
+					local issue = selected_issue()
+					actions.run("create_issue", context(issue), controller.apply_action_result)
 				end,
 			})
 		)

@@ -181,7 +181,7 @@ end
 
 ---@param key string
 ---@param opts { force_load?: boolean }|nil
----@param on_done fun(issue: IssueDetails|nil, err: string|nil)
+---@param on_done fun(issue: GitLabIssueDetails|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.get_issue(key, opts, on_done)
 	opts = opts or {}

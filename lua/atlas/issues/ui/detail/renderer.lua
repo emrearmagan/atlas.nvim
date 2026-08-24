@@ -2,10 +2,10 @@ local M = {}
 
 local utils = require("atlas.ui.shared.utils")
 local spinner = require("atlas.ui.components.spinner")
-local detail_state = require("atlas.issues.ui.detail.state")
 local header = require("atlas.issues.ui.detail.components.header")
 local chips = require("atlas.issues.ui.detail.components.chips")
 local tabs = require("atlas.ui.components.tabs")
+local state = require("atlas.issues.ui.detail.state")
 
 local ns = vim.api.nvim_create_namespace("atlas.issues.provider_detail")
 
@@ -30,63 +30,53 @@ local function apply_spans(buf, spans)
 	end
 end
 
----@param tab_items IssuesDetailTab[]
----@param get_tab_module fun(key: string): IssuesDetailTabModule|nil
+---@param tab_items IssuesDetailTabDefinition[]
+---@param get_tab_module fun(key: string|nil): IssuesDetailTabModule|nil
 function M.render(tab_items, get_tab_module)
-	local buf = detail_state.buf
-	local win = detail_state.win
-	if buf == nil or not vim.api.nvim_buf_is_valid(buf) then
+	local buf = state.buf
+	local win = state.win
+	if buf == nil or win == nil then
 		return
 	end
-	if win == nil or not vim.api.nvim_win_is_valid(win) then
+	if not vim.api.nvim_buf_is_valid(buf) or not vim.api.nvim_win_is_valid(win) then
 		return
 	end
 
-	local issue = detail_state.current_issue
-	local details = detail_state.current_details
+	local issue = state.current_issue
+	local details = state.current_details
 	local width = vim.api.nvim_win_get_width(win)
-
 	local lines = {}
 	local spans = {}
 
 	if issue == nil then
-		lines = { "", "  Nothing selected..." }
-		detail_state.line_map = {}
+		if state.details_loading then
+			utils.push(lines, spans, spinner.with_text("Loading issue..."), "AtlasTextMuted", PADDING_X)
+		else
+			lines = { "", "  Nothing selected..." }
+		end
+		state.line_map = {}
 	else
-		local provider = detail_state.provider
-		local provider_detail = provider and provider.capabilities.ui and provider.capabilities.ui.detail
-		local extra_rows = provider_detail
-				and provider_detail.header_rows
-				and provider_detail.header_rows(issue, details, detail_state.header_loading)
-			or nil
+		local provider_detail = state.provider_detail
+		local extra_fields = provider_detail
+				and provider_detail.header_fields
+				and provider_detail.header_fields(issue, details, state.details_loading)
+			or {}
 		local extra_chips = provider_detail
 				and provider_detail.chips
-				and provider_detail.chips(issue, details, detail_state.header_loading)
-			or nil
+				and provider_detail.chips(issue, details, state.details_loading)
+			or {}
 
-		-- Header
-		local h_lines, h_spans = header.render(details or issue, width, extra_rows)
-		utils.append_block(lines, spans, { lines = h_lines, highlights = h_spans })
+		local header_lines, header_spans = header.render(details or issue, width, extra_fields)
+		utils.append_block(lines, spans, { lines = header_lines, highlights = header_spans })
 
-		-- Chips
-		local chip_line, chip_spans = chips.render({ extra_chips = extra_chips })
-		if chip_line ~= "" then
-			table.insert(lines, chip_line)
-			local chip_base = #lines - 1
-			for _, span in ipairs(chip_spans) do
-				table.insert(spans, {
-					line = chip_base,
-					start_col = span.start_col,
-					end_col = span.end_col,
-					hl_group = span.hl_group,
-				})
-			end
+		local chip_lines, chip_spans = chips.render({ width = width, extra_chips = extra_chips })
+		if #chip_lines > 0 then
+			utils.append_block(lines, spans, { lines = chip_lines, highlights = chip_spans })
 			table.insert(lines, "")
 		end
 
-		-- Tab bar
 		if #tab_items > 1 then
-			local tab_lines, tab_spans = tabs.render(tab_items, detail_state.current_tab, width, {
+			local tab_lines, tab_spans = tabs.render(tab_items, state.current_tab, width, {
 				inactive_hl = "AtlasTextMuted",
 				gap = " ",
 				padding_x = PADDING_X,
@@ -95,26 +85,25 @@ function M.render(tab_items, get_tab_module)
 			table.insert(lines, "")
 		end
 
-		-- Tab content
-		local tab_mod = get_tab_module(detail_state.current_tab)
+		local tab_mod = get_tab_module(state.current_tab)
+
 		local content_offset = #lines
 		if tab_mod and tab_mod.render and details then
-			local tab_lines_c, tab_spans_c, tab_line_map = tab_mod.render(details, width)
-			utils.append_block(lines, spans, { lines = tab_lines_c, highlights = tab_spans_c })
+			local tab_lines, tab_spans, tab_line_map = tab_mod.render(details, width)
+			utils.append_block(lines, spans, { lines = tab_lines, highlights = tab_spans })
 
 			local adjusted = {}
 			for lnum, entry in pairs(tab_line_map or {}) do
 				adjusted[content_offset + lnum] = entry
 			end
-			detail_state.line_map = adjusted
+			state.line_map = adjusted
 		elseif details == nil then
-			local text = detail_state.header_loading and spinner.with_text("Loading issue...")
-				or "Issue details unavailable."
+			local text = state.details_loading and spinner.with_text("Loading issue...") or "Issue details unavailable."
 			utils.push(lines, spans, text, "AtlasTextMuted", PADDING_X)
-			detail_state.line_map = {}
+			state.line_map = {}
 		else
-			table.insert(lines, "  Unknown tab: " .. tostring(detail_state.current_tab))
-			detail_state.line_map = {}
+			table.insert(lines, "  Unknown tab: " .. tostring(state.current_tab))
+			state.line_map = {}
 		end
 	end
 

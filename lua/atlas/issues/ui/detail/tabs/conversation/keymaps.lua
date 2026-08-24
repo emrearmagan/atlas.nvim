@@ -3,10 +3,10 @@ local M = {}
 local help = require("atlas.ui.popups.help")
 local resolver = require("atlas.core.keymaps")
 local utils = require("atlas.ui.shared.utils")
-local detail_state = require("atlas.issues.ui.detail.state")
 local comment_threads = require("atlas.issues.ui.components.comment_threads")
-local state = require("atlas.issues.ui.detail.tabs.conversation.state")
 local actions = require("atlas.issues.ui.detail.tabs.conversation.actions")
+local detail = require("atlas.issues.ui.detail.state")
+local state = require("atlas.issues.ui.detail.tabs.conversation.state")
 
 local COMMENT_ACTIONS = {
 	"ui.comments.add",
@@ -17,18 +17,18 @@ local COMMENT_ACTIONS = {
 }
 
 local function cursor_entry()
-	local win = detail_state.win
+	local win = detail.win
 	if win == nil or not vim.api.nvim_win_is_valid(win) then
 		return nil
 	end
 	local lnum = vim.api.nvim_win_get_cursor(win)[1]
-	return (detail_state.line_map or {})[lnum]
+	return detail.line_map[lnum]
 end
 
 ---@param refresh fun()
 ---@param fn fun(issue: IssueDetails, refresh: fun())
 local function dispatch_simple(refresh, fn)
-	local issue = detail_state.current_details
+	local issue = detail.current_details
 	if issue then
 		fn(issue, refresh)
 	end
@@ -37,7 +37,7 @@ end
 ---@param refresh fun()
 ---@param fn fun(issue: IssueDetails, entry: table, refresh: fun())
 local function dispatch_with_entry(refresh, fn)
-	local issue = detail_state.current_details
+	local issue = detail.current_details
 	local entry = cursor_entry()
 	if issue and entry then
 		fn(issue, entry, refresh)
@@ -88,7 +88,7 @@ end
 ---@param buf integer
 ---@param refresh fun()
 function M.setup(buf, refresh)
-	local provider = detail_state.provider
+	local provider = detail.provider
 	local core = provider and provider.capabilities.core
 	local comments = provider and provider.capabilities.comments
 	local items = {}

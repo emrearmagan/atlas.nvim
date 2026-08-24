@@ -438,7 +438,7 @@ function M.refresh_pr(pr, on_done)
 
 	local provider = state.provider
 	local core = provider and provider.capabilities.core
-	if core == nil or core.fetch_pullrequest == nil then
+	if core == nil or core.fetch_by_refs == nil then
 		notify.warn("Provider does not support single PR refresh")
 		on_done()
 		return
@@ -455,8 +455,9 @@ function M.refresh_pr(pr, on_done)
 	begin_pr_reload(repo_id, pr_id)
 
 	pr_reload_requests.run(function(done)
-		return core.fetch_pullrequest(pr, { force_load = true }, done)
-	end, function(fetched_pr, err)
+		return core.fetch_by_refs({ pr }, { force_load = true }, done)
+	end, function(fetched_prs, err)
+		local fetched_pr = fetched_prs and fetched_prs[1]
 		if err ~= nil or fetched_pr == nil then
 			end_pr_reload(repo_id, pr_id)
 			notify.error(tostring(err or "Failed to reload PR"))
@@ -467,21 +468,6 @@ function M.refresh_pr(pr, on_done)
 		local _, snapshot_err = replace_pr(fetched_pr)
 		end_pr_reload(repo_id, pr_id)
 
-		local detail_state = require("atlas.pulls.ui.detail.state")
-		local detail_pr = detail_state.current_pr
-		local detail = require("atlas.pulls.ui.detail")
-		if
-			detail.is_open()
-			and detail_pr ~= nil
-			and tostring(detail_pr.id) == tostring(pr_id)
-			and tostring(detail_pr.repo_full_name) == repo_id
-		then
-			detail.select(fetched_pr, {
-				force_refresh = true,
-				details = fetched_pr,
-			})
-		end
-
 		if snapshot_err then
 			notify.warn(snapshot_err)
 		else
@@ -489,6 +475,8 @@ function M.refresh_pr(pr, on_done)
 		end
 		on_done()
 	end)
+
+	require("atlas.pulls.ui.detail").refresh(pr)
 end
 
 ---@param source_buf integer|nil
@@ -505,7 +493,7 @@ function M.show_pr_details(source_buf)
 		return
 	end
 
-	local lines, highlights = require("atlas.pulls.ui.popup").content(pr)
+	local lines, highlights = require("atlas.pulls.ui.dashboard.popup").content(pr)
 	info_popup.show({
 		lines = lines,
 		highlights = highlights,

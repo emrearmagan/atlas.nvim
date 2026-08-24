@@ -164,19 +164,19 @@ function M.to_issue(raw)
 end
 
 ---@param raw any Decoded API value.
----@return IssueDetails|nil
+---@return GitLabIssueDetails|nil
 function M.to_issue_details(raw)
 	local issue = M.to_issue(raw)
 	if issue == nil then
 		return nil
 	end
 
+	---@cast issue GitLabIssueDetails
 	issue.description = json.safe_str(raw.description) or ""
 	issue.assignees = assignees(raw.assignees)
 	issue.labels = labels(raw.labels)
 	issue.milestone = milestone(raw.milestone)
 	issue.reactions = issue_reactions(raw)
-	issue.sub_issues = {}
 	return issue
 end
 

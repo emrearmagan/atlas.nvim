@@ -45,7 +45,6 @@ local function open_detail(pr)
 	local state = require("atlas.pulls.state")
 	require("atlas.pulls.ui.detail").open(pr, {
 		provider = state.provider,
-		current_user = state.current_user,
 		on_update = require("atlas.pulls.ui.dashboard.controller").apply_action_result,
 	})
 end

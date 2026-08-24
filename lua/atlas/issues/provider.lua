@@ -38,14 +38,14 @@
 
 ---@class IssuesCommentsCapability
 ---@field fetch_activity (fun(issue: Issue, opts: IssuesFetchOpts|nil, on_done: fun(entries: IssueActivityEntry[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
----@field fetch_conversation (fun(issue: IssueDetails, opts: { force_refresh: boolean|nil }|nil, on_done: fun(items: IssueConversationItem[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field fetch_conversation (fun(issue: Issue, opts: { force_refresh: boolean|nil }|nil, on_done: fun(items: IssueConversationItem[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field add_comment (fun(issue: Issue, content: string, on_done: fun(comment: IssueComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field reply_comment (fun(issue: Issue, parent: IssueComment, content: string, on_done: fun(comment: IssueComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field edit_comment (fun(issue: Issue, comment: IssueComment, content: string, on_done: fun(comment: IssueComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field delete_comment (fun(issue: Issue, comment: IssueComment, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field add_reaction (fun(issue: Issue, item: IssueConversationItem, key: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field reaction_options IssueReactionOption[]|nil
----@field comment_completion (fun(): AtlasMarkdownCompletionProvider|nil)|nil
+---@field comment_completion (fun(opts: { issue: Issue|nil, comments: IssueComment[], current_user: IssueUser|nil }): AtlasMarkdownCompletionProvider|nil)|nil
 
 ---@class IssuesActionsCapability
 ---@field items AtlasIssueAction[]
@@ -65,22 +65,18 @@
 --------------------------------------------------------------------------------
 
 ---@class IssuesProviderDetail
----@field header_rows (fun(issue: Issue, details: IssueDetails|nil, loading: boolean): IssuesDetailHeaderRow[])|nil
+---@field header_fields (fun(issue: Issue, details: IssueDetails|nil, loading: boolean): IssuesDetailHeaderField[])|nil
 ---@field chips (fun(issue: Issue, details: IssueDetails|nil, loading: boolean): IssuesDetailChip[])|nil
----@field tabs (fun(): IssuesDetailTab[])|nil
----@field fetch_header (fun(issue: Issue, details: IssueDetails, opts: { force_refresh: boolean|nil }|nil, on_done: fun()): { cancel: fun() }|nil)|nil
+---@field tabs (fun(): IssuesDetailTabDefinition[])|nil
 
 --------------------------------------------------------------------------------
 -- Detail types
 --------------------------------------------------------------------------------
 
----@class IssuesDetailHeaderRow
----@field k1 string
----@field v1 string
----@field v1_hl string|table[]|nil hl group name, or list of {start_col, end_col, hl_group} relative to the v1 cell
----@field k2 string
----@field v2 string
----@field v2_hl string|table[]|nil hl group name, or list of {start_col, end_col, hl_group} relative to the v2 cell
+---@class IssuesDetailHeaderField
+---@field label string
+---@field value string
+---@field hl string|table[]|nil hl group name, or list of {start_col, end_col, hl_group} relative to the value
 
 ---@class IssuesDetailChip
 ---@field label string
@@ -88,17 +84,16 @@
 
 ---@class IssuesDetailTabModule
 ---@field render fun(issue: IssueDetails, width: integer): string[], table[], table<integer, table>|nil
----@field on_select (fun(issue: IssueDetails, refresh: fun(), opts: { force_refresh: boolean|nil }|nil))|nil
----@field reset (fun())|nil
----@field activate (fun(buf: integer|nil, refresh: fun()|nil))|nil
----@field deactivate (fun(buf: integer|nil))|nil
+---@field on_select (fun(issue: Issue, refresh: fun(), opts: { force_refresh: boolean|nil }|nil))|nil
+---@field reset fun()|nil
+---@field activate (fun(buf: integer, refresh: fun()))|nil
+---@field deactivate (fun(buf: integer))|nil
 ---@field is_loading (fun(): boolean)|nil
 ---@field is_selectable_line (fun(lnum: integer, entry: table): boolean)|nil
 ---@field on_enter (fun(issue: Issue, entry: table): boolean|nil)|nil
 
----@class IssuesDetailTab
+---@class IssuesDetailTabDefinition
 ---@field key string
 ---@field label string
----@field icon string|nil
----@field icon_hl string|nil
+---@field icon AtlasIconStyle|nil
 ---@field mod IssuesDetailTabModule

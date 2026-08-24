@@ -6,8 +6,8 @@ local spinner = require("atlas.ui.components.spinner")
 local box = require("atlas.ui.components.box")
 local comment_threads = require("atlas.issues.ui.components.comment_threads")
 local activity_component = require("atlas.issues.ui.detail.components.activity")
+local detail = require("atlas.issues.ui.detail.state")
 local state = require("atlas.issues.ui.detail.tabs.conversation.state")
-local detail_state = require("atlas.issues.ui.detail.state")
 
 local PADDING_X = 1
 local PADDING = string.rep(" ", PADDING_X)
@@ -50,7 +50,7 @@ end
 ---@param collapsed boolean
 ---@param width integer
 local function render_thread(thread, collapsed, width)
-	local provider = detail_state.provider
+	local provider = detail.provider
 	local comments = provider and provider.capabilities.comments
 	local inner = math.max(1, width - (PADDING_X * 2) - 4)
 	local fold_keys = keymaps.resolve("ui.toggle_fold")
@@ -61,7 +61,9 @@ local function render_thread(thread, collapsed, width)
 		end,
 		padding_x = 0,
 		reaction_options = comments and comments.reaction_options,
-		content_max_lines = fold_key and state.comment_max_lines or nil,
+		content_max_lines = fold_key and function(comment)
+			return state.comment_max_lines(comment)
+		end or nil,
 		content_truncated_key = fold_key,
 	})
 	local result = box.render({ { lines = lines, spans = spans, line_map = line_map } }, {
@@ -229,9 +231,9 @@ local function render_entry(entry, width, has_next, by_entity)
 	return {}, {}, {}
 end
 
----@param _issue IssueDetails
+---@param issue IssueDetails
 ---@param width integer
-function M.render(_issue, width)
+function M.render(issue, width)
 	local lines, spans, line_map = {}, {}, {}
 
 	if state.error then
@@ -248,7 +250,20 @@ function M.render(_issue, width)
 	end
 
 	---@cast state.items IssueConversationItem[]
-	local entries, by_entity = build_timeline(state.items)
+	local items = {}
+	for _, item in ipairs(state.items) do
+		if item.kind == "description" and issue.description ~= "" then
+			table.insert(items, {
+				id = item.id,
+				kind = item.kind,
+				created_at = item.created_at,
+				entity = issue,
+			})
+		elseif item.kind ~= "description" then
+			table.insert(items, item)
+		end
+	end
+	local entries, by_entity = build_timeline(items)
 
 	if #entries == 0 then
 		utils.push(lines, spans, "No conversation yet.", "AtlasTextMuted", PADDING_X)
@@ -265,7 +280,5 @@ function M.render(_issue, width)
 
 	return lines, spans, line_map
 end
-
-M.render_comment = comment_threads.render_comment
 
 return M

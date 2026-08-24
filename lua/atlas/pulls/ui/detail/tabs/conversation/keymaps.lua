@@ -3,7 +3,7 @@ local M = {}
 local help = require("atlas.ui.popups.help")
 local resolver = require("atlas.core.keymaps")
 local utils = require("atlas.ui.shared.utils")
-local detail_state = require("atlas.pulls.ui.detail.state")
+local detail = require("atlas.pulls.ui.detail.state")
 local review_threads = require("atlas.pulls.ui.components.review_threads")
 local state = require("atlas.pulls.ui.detail.tabs.conversation.state")
 local actions = require("atlas.pulls.ui.detail.tabs.conversation.actions")
@@ -17,18 +17,18 @@ local COMMENT_ACTIONS = {
 }
 
 local function cursor_entry()
-	local win = detail_state.win
+	local win = detail.win
 	if win == nil or not vim.api.nvim_win_is_valid(win) then
 		return nil
 	end
 	local lnum = vim.api.nvim_win_get_cursor(win)[1]
-	return (detail_state.line_map or {})[lnum]
+	return (detail.line_map or {})[lnum]
 end
 
 ---@param refresh fun()
 ---@param fn fun(pr: PullRequest, refresh: fun())
 local function dispatch_simple(refresh, fn)
-	local pr = detail_state.current_details or detail_state.current_pr
+	local pr = detail.current_details or detail.current_pr
 	if pr == nil then
 		return
 	end
@@ -38,7 +38,7 @@ end
 ---@param refresh fun()
 ---@param fn fun(pr: PullRequest, entry: table, refresh: fun())
 local function dispatch_with_entry(refresh, fn)
-	local pr = detail_state.current_details or detail_state.current_pr
+	local pr = detail.current_details or detail.current_pr
 	if pr == nil then
 		return
 	end
@@ -96,7 +96,7 @@ end
 ---@param buf integer
 ---@param refresh fun()
 function M.setup(buf, refresh)
-	local provider = detail_state.provider
+	local provider = detail.provider
 	local tasks = provider and provider.capabilities.tasks
 	local has_tasks = tasks and tasks.edit_task ~= nil
 	local items = {}
@@ -204,7 +204,7 @@ function M.teardown(buf)
 	if toggle_all_keys ~= nil then
 		table.insert(items, { key = #toggle_all_keys == 1 and toggle_all_keys[1] or toggle_all_keys })
 	end
-	local provider = detail_state.provider
+	local provider = detail.provider
 	local tasks = provider and provider.capabilities.tasks
 	if tasks and tasks.edit_task then
 		local toggle_task_keys = resolver.resolve("pulls.review.diff.toggle_resolved")

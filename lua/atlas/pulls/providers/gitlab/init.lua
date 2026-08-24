@@ -10,6 +10,12 @@
 ---@field has_conflicts boolean
 ---@field diff_refs GitLabPullRequestDiffRefs|nil
 
+---@class GitLabPullsLabel : PullsLabel
+---@field text_color string|nil
+
+---@class GitLabPullRequestDetails : PullRequestDetails, GitLabPullRequest
+---@field labels GitLabPullsLabel[]
+
 local actions = require("atlas.pulls.providers.gitlab.actions")
 local activity_api = require("atlas.pulls.providers.gitlab.api.activity")
 local changes_api = require("atlas.pulls.providers.gitlab.api.changes")

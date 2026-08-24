@@ -1,8 +1,8 @@
 local M = {}
 
-local shared_detail = require("atlas.ui.detail")
+local detail_ui = require("atlas.ui.detail")
 local providers = require("atlas.providers")
-local detail_state = require("atlas.pulls.ui.detail.state")
+local state = require("atlas.pulls.ui.detail.state")
 local renderer = require("atlas.pulls.ui.detail.renderer")
 local detail_keymaps = require("atlas.pulls.ui.detail.keymaps")
 local icons = require("atlas.ui.shared.icons")
@@ -16,86 +16,71 @@ local DEFAULT_TABS = {
 	{
 		key = "overview",
 		label = "Overview",
-		icon = overview_icon,
-		icon_hl = overview_icon_hl,
+		icon = { icon = overview_icon, hl_group = overview_icon_hl },
 		mod = require("atlas.pulls.ui.detail.tabs.overview"),
 	},
 }
 
----@return PullsDetailTab[]
-local function get_tabs()
-	local provider = detail_state.provider
-	local detail = provider and provider.capabilities.ui and provider.capabilities.ui.detail
-	local tabs = detail and detail.tabs and detail.tabs()
-	return tabs and #tabs > 0 and tabs or DEFAULT_TABS
-end
-
----@param tab_key string
----@return PullsDetailTab|nil
-local function get_tab(tab_key)
-	for _, tab in ipairs(get_tabs()) do
-		if tab.key == tab_key then
-			return tab
-		end
-	end
-	return nil
-end
-
 ---@param tab_key string
 ---@return PullsDetailTabModule|nil
-local function get_tab_module(tab_key)
-	local tab = get_tab(tab_key)
-	return tab and tab.mod or nil
+local function tab_module(tab_key)
+	for _, tab in ipairs(state.tabs) do
+		if tab.key == tab_key then
+			return tab.mod
+		end
+	end
 end
 
 local function reset_tabs()
-	for _, tab in ipairs(get_tabs()) do
+	for _, tab in ipairs(state.tabs) do
 		if tab.mod.reset then
 			tab.mod.reset()
 		end
 	end
 end
 
+local function render()
+	renderer.render(state.tabs, tab_module)
+end
+
 -- Loading spinner
 
-local spinner_timer = nil
-
 local function stop_spinner()
-	if spinner_timer ~= nil then
-		spinner_timer:stop()
-		spinner_timer:close()
-		spinner_timer = nil
+	if state.spinner_timer ~= nil then
+		state.spinner_timer:stop()
+		state.spinner_timer:close()
+		state.spinner_timer = nil
 	end
 end
 
 local function is_loading()
-	if detail_state.current_pr == nil then
-		return false
-	end
-	if detail_state.header_loading or detail_state.diffstat == "loading" or detail_state.pipelines == "loading" then
+	if state.details_loading or state.diffstat == "loading" or state.pipelines == "loading" then
 		return true
 	end
-	local tab = get_tab_module(detail_state.current_tab)
+	if state.current_pr == nil then
+		return false
+	end
+	local tab = tab_module(state.current_tab)
 	return tab ~= nil and tab.is_loading ~= nil and tab.is_loading()
 end
 
 local function start_spinner()
-	if spinner_timer ~= nil then
+	if state.spinner_timer ~= nil then
 		return
 	end
-	spinner_timer = vim.loop.new_timer()
-	if spinner_timer == nil then
+	state.spinner_timer = vim.loop.new_timer()
+	if state.spinner_timer == nil then
 		return
 	end
-	spinner_timer:start(
+	state.spinner_timer:start(
 		SPINNER_INTERVAL_MS,
 		SPINNER_INTERVAL_MS,
 		vim.schedule_wrap(function()
-			if not shared_detail.is_showing("pulls") or not is_loading() then
+			if not detail_ui.is_showing("pulls") or not is_loading() then
 				stop_spinner()
 				return
 			end
-			M.render()
+			render()
 		end)
 	)
 end
@@ -108,334 +93,252 @@ local function update_spinner()
 	end
 end
 
--- Helper
-
-local function refresh()
-	if shared_detail.is_showing("pulls") then
-		M.render()
+local function render_if_open()
+	if detail_ui.is_showing("pulls") then
+		render()
 	end
 end
 
-local function scroll_to_top()
-	local win = detail_state.win
-	if win and vim.api.nvim_win_is_valid(win) then
-		vim.api.nvim_win_set_cursor(win, { 1, 0 })
-	end
-end
-
-local function activate_current_tab()
-	local buf = detail_state.buf
-	local tab = get_tab(detail_state.current_tab)
-	if tab == nil then
+---@param tab_key string|nil
+local function set_tab(tab_key)
+	local old_key = state.current_tab
+	if old_key == tab_key then
 		return
 	end
-	if tab.mod.activate then
-		tab.mod.activate(buf, refresh)
-	end
-	if buf ~= nil and vim.api.nvim_buf_is_valid(buf) and tab.keymaps then
-		tab.keymaps.register(buf)
-	end
-end
 
----@param old_key string|nil
----@param new_key string|nil
-local function switch_tab_keymaps(old_key, new_key)
-	local buf = detail_state.buf
+	local buf = state.buf
 	if buf == nil or not vim.api.nvim_buf_is_valid(buf) then
+		state.current_tab = tab_key
 		return
 	end
 
-	if old_key and old_key ~= new_key then
-		local old_tab = get_tab(old_key)
-		if old_tab then
-			if old_tab.keymaps then
-				old_tab.keymaps.remove(buf)
-			end
-			if old_tab.mod.deactivate then
-				old_tab.mod.deactivate(buf)
-			end
+	if old_key then
+		local old_tab = tab_module(old_key)
+		if old_tab and old_tab.deactivate then
+			old_tab.deactivate(buf)
 		end
-		require("atlas.pulls.ui.detail.keymaps").register(buf)
 	end
 
-	if new_key and old_key ~= new_key then
-		local new_tab = get_tab(new_key)
-		if new_tab then
-			if new_tab.mod.activate then
-				new_tab.mod.activate(buf, refresh)
-			end
-			if new_tab.keymaps then
-				new_tab.keymaps.register(buf)
-			end
+	state.current_tab = tab_key
+	if tab_key then
+		local new_tab = tab_module(tab_key)
+		if new_tab and new_tab.activate then
+			new_tab.activate(buf, render_if_open)
 		end
 	end
 end
 
----@param pr PullRequest|nil
+---@param left PullRequestRef|nil
+---@param right PullRequestRef|nil
 ---@return boolean
-local function is_current_pr(pr)
-	local current = detail_state.current_pr
-	return current ~= nil
-		and tostring(current.id or "") == tostring(pr and pr.id or "")
-		and tostring(current.repo_full_name or "") == tostring(pr and pr.repo_full_name or "")
+local function same_ref(left, right)
+	return left ~= nil
+		and tostring(left.id or "") == tostring(right and right.id or "")
+		and tostring(left.repo_full_name or "") == tostring(right and right.repo_full_name or "")
 end
 
----@param pr PullRequest|nil
+---@type PullRequestRef|nil
+local pending_ref = nil
+
+---@param pr PullRequest
 ---@return fun()
-local function make_refresh_callback(pr)
+local function refresh_callback(pr)
 	return function()
-		if not is_current_pr(pr) then
+		if not same_ref(state.current_pr, pr) then
 			return
 		end
 		update_spinner()
-		if shared_detail.is_showing("pulls") then
-			M.render()
-		end
+		render_if_open()
 	end
 end
 
 ---@param pr PullRequest
 ---@param opts { force_refresh: boolean|nil }|nil
 local function load_active_tab(pr, opts)
-	local tab_mod = get_tab_module(detail_state.current_tab)
+	local tab_mod = tab_module(state.current_tab)
 	if tab_mod and tab_mod.on_select then
-		tab_mod.on_select(pr, make_refresh_callback(pr), opts)
+		tab_mod.on_select(pr, refresh_callback(pr), opts)
 	end
 end
-
-local requests = request_scope.new()
-local target_message = nil
 
 local function cancel_requests()
-	requests.cancel()
-	requests = request_scope.new()
-end
-
----@param message string
-local function render_target_message(message)
-	local buf = detail_state.buf
-	local win = detail_state.win
-	if buf == nil or not vim.api.nvim_buf_is_valid(buf) then
-		return
-	end
-	if win == nil or not vim.api.nvim_win_is_valid(win) then
-		return
-	end
-
-	detail_state.line_map = {}
-	vim.api.nvim_set_option_value("winbar", "", { win = win, scope = "local" })
-	vim.api.nvim_set_option_value("modifiable", true, { buf = buf })
-	vim.api.nvim_buf_clear_namespace(buf, -1, 0, -1)
-	vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "", "  " .. message })
-	vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
+	state.requests.cancel()
+	state.requests = request_scope.new()
 end
 
 ---@param pr PullRequest
----@param opts { force_refresh: boolean|nil, details: PullRequestDetails|nil }|nil
-local function fetch_details(pr, opts)
-	cancel_requests()
-
-	local provider = detail_state.provider
+---@param details PullRequestDetails|nil
+---@param force_refresh boolean
+local function load_pr(pr, details, force_refresh)
+	local provider = state.provider
 	if provider == nil then
 		return
 	end
 
-	local tab_refresh = make_refresh_callback(pr)
-	local force_refresh = opts and opts.force_refresh == true
+	local tab_refresh = refresh_callback(pr)
 	local core = provider.capabilities.core
-	local provider_detail = provider.capabilities.ui and provider.capabilities.ui.detail
-	detail_state.header_loading = true
+	state.details_loading = true
 
-	---@param details PullRequestDetails
-	local function use_details(details)
-		if not is_current_pr(pr) then
-			return
-		end
-		detail_state.current_details = details
-
-		if provider_detail and provider_detail.fetch_header then
-			tab_refresh()
-			requests.run(function(done)
-				return provider_detail.fetch_header(details, opts, done)
-			end, function()
-				if not is_current_pr(pr) then
-					return
-				end
-				detail_state.header_loading = false
-				tab_refresh()
-			end)
-		else
-			detail_state.header_loading = false
-			tab_refresh()
-		end
-	end
-
-	if opts and opts.details then
-		use_details(opts.details)
+	if details then
+		state.current_details = details
+		state.details_loading = false
+		load_active_tab(details, { force_refresh = force_refresh })
 	else
-		requests.run(function(done)
+		-- Start the active tab request alongside the details request. Targets are
+		-- hydrated before reaching this function, so their requests remain sequential.
+		load_active_tab(pr, { force_refresh = force_refresh })
+		state.requests.run(function(done)
 			return core.fetch_pullrequest(pr, { force_load = force_refresh }, done)
-		end, function(details, err)
-			if not is_current_pr(pr) then
+		end, function(fetched_details, err)
+			if not same_ref(state.current_pr, pr) then
 				return
 			end
-			if details == nil then
-				detail_state.header_loading = false
+			if fetched_details == nil then
+				state.details_loading = false
 				notify.error(tostring(err or "Failed to load pull request"))
 				tab_refresh()
 				return
 			end
-			use_details(details)
+			state.current_details = fetched_details
+			state.details_loading = false
+			tab_refresh()
 		end)
 	end
 
 	if core.fetch_diffstat then
-		detail_state.diffstat = "loading"
-		requests.run(function(done)
+		state.diffstat = "loading"
+		state.requests.run(function(done)
 			return core.fetch_diffstat(pr, { force_refresh = force_refresh }, done)
 		end, function(entries, err)
-			if not is_current_pr(pr) then
+			if not same_ref(state.current_pr, pr) then
 				return
 			end
-			detail_state.diffstat = err and err or (entries or {})
+			state.diffstat = err and err or (entries or {})
 			tab_refresh()
 		end)
 	end
 
 	local pipelines = provider.capabilities.pipelines
 	if pipelines then
-		detail_state.pipelines = "loading"
-		requests.run(function(done)
+		state.pipelines = "loading"
+		state.requests.run(function(done)
 			return pipelines.fetch(pr, { force_refresh = force_refresh }, done)
 		end, function(items, err)
-			if not is_current_pr(pr) then
+			if not same_ref(state.current_pr, pr) then
 				return
 			end
-			detail_state.pipelines = err and err or (items or {})
+			state.pipelines = err and err or (items or {})
 			tab_refresh()
 		end)
 	end
 end
 
+local function clear_pr()
+	cancel_requests()
+	stop_spinner()
+	reset_tabs()
+	pending_ref = nil
+	state.current_pr = nil
+	state.current_details = nil
+	state.diffstat = nil
+	state.pipelines = nil
+	state.details_loading = false
+	state.line_map = {}
+end
+
+---@param pr PullRequest
+---@param details PullRequestDetails|nil
+---@param force_refresh boolean
+local function show_pr(pr, details, force_refresh)
+	state.current_pr = pr
+	pending_ref = nil
+	load_pr(pr, details, force_refresh)
+	update_spinner()
+	render()
+end
+
+---@param provider PullsProvider
+local function set_provider(provider)
+	if state.provider == provider then
+		return
+	end
+
+	set_tab(nil)
+	clear_pr()
+	state.provider = provider
+	local detail = provider.capabilities.ui and provider.capabilities.ui.detail
+	local provider_tabs = detail and detail.tabs and detail.tabs()
+	state.tabs = provider_tabs and #provider_tabs > 0 and provider_tabs or DEFAULT_TABS
+
+	local first_tab = state.tabs[1]
+	set_tab(first_tab and first_tab.key or nil)
+	if state.buf and vim.api.nvim_buf_is_valid(state.buf) then
+		detail_keymaps.register(state.buf)
+	end
+end
+
 local function cleanup()
-	local buf = detail_state.buf
-	switch_tab_keymaps(detail_state.current_tab, nil)
+	local buf = state.buf
+	set_tab(nil)
 	if buf and vim.api.nvim_buf_is_valid(buf) then
 		detail_keymaps.remove(buf)
 	end
 	stop_spinner()
-	cancel_requests()
 	reset_tabs()
-	detail_state.reset()
-	target_message = nil
+	pending_ref = nil
+	state.reset()
 end
 
 -- Public API
 
 ---@return boolean
 function M.is_open()
-	return shared_detail.is_showing("pulls", vim.api.nvim_get_current_tabpage())
+	return detail_ui.is_showing("pulls")
 end
 
-function M.render()
-	if target_message ~= nil then
-		render_target_message(target_message)
-		return
-	end
-	renderer.render(get_tabs(), get_tab_module)
-end
-
----@param pr PullRequest|nil
----@param opts { force_refresh: boolean|nil, details: PullRequestDetails|nil }|nil
+---@param pr PullRequest
+---@param opts { force_refresh: boolean|nil }|nil
 function M.select(pr, opts)
-	opts = opts or {}
-	target_message = nil
-
-	local same_pr = pr ~= nil
-		and detail_state.current_pr ~= nil
-		and tostring(detail_state.current_pr.id) == tostring(pr.id)
-		and tostring(detail_state.current_pr.repo_full_name) == tostring(pr.repo_full_name)
-	local context_changed = pr ~= nil and not same_pr
-	local should_fetch = context_changed
-		or opts.force_refresh == true
-		or (detail_state.current_details == nil and detail_state.header_loading ~= true)
-
-	detail_state.current_pr = pr
-	if detail_state.current_pr == nil then
-		detail_state.current_details = nil
+	if not M.is_open() then
 		return
 	end
-	if should_fetch then
-		detail_state.current_details = nil
+	opts = opts or {}
+
+	local same_pr = same_ref(state.current_pr, pr)
+	if same_pr and opts.force_refresh ~= true and (state.details_loading or state.current_details) then
+		state.current_pr = pr
+		render()
+		return
 	end
 
-	local buf = detail_state.buf
-	if buf then
-		detail_keymaps.register(buf)
+	clear_pr()
+	local details = nil
+	if opts.force_refresh ~= true and pr.description ~= nil then
+		details = pr --[[@as PullRequestDetails]]
 	end
-	activate_current_tab()
-
-	if not same_pr and pr ~= nil then
-		local old_key = detail_state.current_tab
-		if detail_state.current_tab == nil then
-			detail_state.current_tab = get_tabs()[1].key
-		end
-		switch_tab_keymaps(old_key, detail_state.current_tab)
-		stop_spinner()
-	end
-
-	if context_changed or opts.force_refresh == true then
-		reset_tabs()
-		detail_state.diffstat = nil
-		detail_state.pipelines = nil
-		detail_state.header_loading = false
-	end
-
-	if should_fetch then
-		load_active_tab(detail_state.current_pr, { force_refresh = opts.force_refresh == true })
-		fetch_details(detail_state.current_pr, opts)
-		update_spinner()
-	end
-
-	if shared_detail.is_showing("pulls") then
-		M.render()
-	end
+	show_pr(pr, details, opts.force_refresh == true)
 end
 
----@param input PullRequest|AtlasTarget
----@param opts { provider: PullsProvider|nil, current_user: PullsUser|nil, force_refresh: boolean|nil, on_update: fun(pr: PullRequest, result: PullsActionResult|nil)|nil }|nil
+---@param input PullRequest|PullRequestRef
+---@param opts { provider: PullsProvider|nil, force_refresh: boolean|nil, on_update: fun(pr: PullRequest, result: PullsActionResult|nil)|nil }|nil
 function M.open(input, opts)
 	opts = opts or {}
 
-	---@type AtlasTarget|nil
-	local target
-	if input.domain == "pulls" then
-		---@cast input AtlasTarget
-		target = input
+	---@type PullRequest|nil
+	local pr = nil
+	if input.title ~= nil then
+		pr = input --[[@as PullRequest]]
 	end
-	local provider_id = target and target.provider or input.provider
-	local provider = opts.provider or (provider_id and providers.load(provider_id, "pulls")) or detail_state.provider
+	local provider_id = pr and pr.provider or nil
+	local provider = opts.provider or (provider_id and providers.load(provider_id, "pulls")) or state.provider
 	---@cast provider PullsProvider|nil
 	if provider == nil then
 		notify.error("Pull request provider unavailable")
 		return
 	end
-	local previous_provider = detail_state.provider
-	if previous_provider and previous_provider ~= provider then
-		switch_tab_keymaps(detail_state.current_tab, nil)
-		stop_spinner()
-		cancel_requests()
-		reset_tabs()
-		detail_state.current_pr = nil
-		detail_state.current_details = nil
-		detail_state.current_tab = "overview"
-		detail_state.header_loading = false
-	end
-	detail_state.win, detail_state.buf = shared_detail.open("pulls", cleanup, M.render)
-	detail_state.provider = provider
-	detail_state.current_user = opts.current_user
-		or (previous_provider == provider and detail_state.current_user or nil)
-	detail_state.on_update = opts.on_update
+	state.win, state.buf = detail_ui.open("pulls", cleanup, render)
+	set_provider(provider)
+	state.on_update = opts.on_update
 
 	require("atlas.pulls.ui.highlights").setup()
 	local ui = provider.capabilities.ui
@@ -443,90 +346,81 @@ function M.open(input, opts)
 		ui.setup()
 	end
 
-	if detail_state.current_user == nil then
-		provider.capabilities.core.fetch_user(function(user)
-			if detail_state.provider == provider then
-				detail_state.current_user = user
-				refresh()
-			end
-		end)
-	end
-
-	if target == nil then
-		---@cast input PullRequest
-		M.select(input, {
-			force_refresh = opts.force_refresh,
-			details = input.description ~= nil and input or nil,
-		})
+	if pr then
+		M.select(pr, { force_refresh = opts.force_refresh })
 		return
 	end
 
-	local ref = target --[[@as PullRequestRef]]
-	cancel_requests()
-	stop_spinner()
-	detail_state.current_pr = nil
-	detail_state.current_details = nil
-	detail_state.diffstat = nil
-	detail_state.pipelines = nil
-	detail_state.header_loading = true
-	detail_state.line_map = {}
-	target_message = "Loading pull request..."
-	detail_keymaps.register(detail_state.buf)
-	M.render()
-	requests.run(function(done)
+	local ref = input
+	if
+		opts.force_refresh ~= true
+		and same_ref(state.current_pr or pending_ref, ref)
+		and (state.details_loading or state.current_details)
+	then
+		render()
+		return
+	end
+
+	clear_pr()
+	pending_ref = ref
+	state.details_loading = true
+	update_spinner()
+	render()
+	state.requests.run(function(done)
 		return provider.capabilities.core.fetch_pullrequest(ref, { force_load = opts.force_refresh == true }, done)
-	end, function(pr, err)
-		if pr == nil then
-			detail_state.header_loading = false
-			target_message = tostring(err or "Failed to load pull request")
-			M.render()
-			notify.error(target_message)
+	end, function(loaded_pr, err)
+		if state.provider ~= provider or not same_ref(pending_ref, ref) then
 			return
 		end
-		M.select(pr, { details = pr })
+		if loaded_pr == nil then
+			pending_ref = nil
+			state.details_loading = false
+			update_spinner()
+			render()
+			notify.error(tostring(err or "Failed to load pull request"))
+			return
+		end
+		show_pr(loaded_pr, loaded_pr, opts.force_refresh == true)
 	end)
 end
 
-function M.refresh()
-	if detail_state.current_pr then
-		M.select(detail_state.current_pr, { force_refresh = true })
-	end
-end
-
----@param pr PullRequest
----@param result PullsActionResult|nil
-function M.action_result(pr, result)
-	if result and result.changed_pr then
-		if detail_state.on_update then
-			detail_state.on_update(pr, result)
-		else
-			M.select(pr, { force_refresh = true })
-		end
+---@param ref PullRequestRef|nil
+function M.refresh(ref)
+	if M.is_open() and state.current_pr and (ref == nil or same_ref(state.current_pr, ref)) then
+		M.select(state.current_pr, { force_refresh = true })
 	end
 end
 
 ---@param step 1|-1
 local function change_tab(step)
-	local tabs = get_tabs()
-	local old_key = detail_state.current_tab
+	if not M.is_open() then
+		return
+	end
+	local items = state.tabs
+	if #items == 0 then
+		return
+	end
+	local old_key = state.current_tab
 	local idx = 1
-	for i, tab in ipairs(tabs) do
+	for i, tab in ipairs(items) do
 		if tab.key == old_key then
 			idx = i
 			break
 		end
 	end
 
-	detail_state.current_tab = tabs[(idx - 1 + step) % #tabs + 1].key
-	switch_tab_keymaps(old_key, detail_state.current_tab)
+	set_tab(items[(idx - 1 + step) % #items + 1].key)
 
-	if detail_state.current_pr then
-		load_active_tab(detail_state.current_pr)
+	local pr = state.current_details or state.current_pr
+	if pr then
+		load_active_tab(pr)
 		update_spinner()
 	end
 
-	M.render()
-	scroll_to_top()
+	render()
+	if state.win and vim.api.nvim_win_is_valid(state.win) then
+		vim.api.nvim_win_set_cursor(state.win, { 1, 0 })
+	end
 end
 
 function M.next_tab()
@@ -538,8 +432,8 @@ function M.prev_tab()
 end
 
 function M.close()
-	if shared_detail.is_showing("pulls") then
-		shared_detail.close()
+	if M.is_open() then
+		detail_ui.close()
 	end
 end
 

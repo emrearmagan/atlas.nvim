@@ -46,12 +46,11 @@ local function open_detail(issue)
 	local controller = require("atlas.issues.ui.dashboard.controller")
 	require("atlas.issues.ui.detail").open(issue, {
 		provider = state.provider,
-		current_user = state.current_user,
 		on_update = function(updated, result)
-			if updated then
-				controller.update_issue(updated)
-			elseif result then
+			if result then
 				controller.apply_action_result(result)
+			elseif updated then
+				controller.update_issue(updated)
 			end
 		end,
 	})

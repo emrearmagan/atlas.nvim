@@ -5,16 +5,12 @@ local pull_actions = require("atlas.pulls.actions")
 local notify = require("atlas.core.notify")
 local review = require("atlas.pulls.actions.review")
 local state = require("atlas.pulls.ui.detail.tabs.conversation.state")
-
----@return PullsProvider|nil
-local function get_provider()
-	return require("atlas.pulls.ui.detail.state").provider
-end
+local detail = require("atlas.pulls.ui.detail.state")
 
 ---@param pr PullRequest
 ---@return AtlasMarkdownCompletionProvider|nil
 local function author_completion(pr)
-	local provider = get_provider()
+	local provider = detail.provider
 	local comments_capability = provider and provider.capabilities.comments
 	if not comments_capability or not comments_capability.comment_completion then
 		return nil
@@ -34,7 +30,7 @@ end
 ---@param comment PullsComment|nil
 ---@return AtlasReviewActionContext|nil
 local function action_context(pr, comment)
-	local provider = get_provider()
+	local provider = detail.provider
 	if not provider then
 		return nil
 	end
@@ -44,22 +40,47 @@ local function action_context(pr, comment)
 		pr = pr,
 		items = items,
 		completion = author_completion(pr),
-		upsert_comment = state.upsert_comment,
-		remove_comment = state.remove_comment,
+		upsert_comment = function(created)
+			if state.is_current(pr) then
+				state.upsert_comment(created)
+			end
+		end,
+		remove_comment = function(removed)
+			if state.is_current(pr) then
+				state.remove_comment(removed)
+			end
+		end,
+		notify = function(level, message, duration)
+			if state.is_current(pr) then
+				notify.show(level, message, { timeout = duration })
+			end
+		end,
 	}
+end
+
+---@param pr PullRequest
+---@param on_update (fun(pr: PullRequest, result: PullsActionResult|nil))|nil
+---@param result PullsActionResult
+local function complete_action(pr, on_update, result)
+	if on_update then
+		on_update(pr, result)
+	else
+		require("atlas.pulls.ui.detail").select(pr, { force_refresh = true })
+	end
 end
 
 ---@param pr PullRequest
 ---@param refresh fun()
 ---@return fun(result: PullsActionResult|nil, err: string|nil)
 local function on_done(pr, refresh)
+	local on_update = detail.on_update
 	return function(result, err)
 		if not result or err then
 			return
 		end
 		if result.changed_pr then
-			require("atlas.pulls.ui.detail").action_result(pr, result)
-		else
+			complete_action(pr, on_update, result)
+		elseif state.is_current(pr) then
 			refresh()
 		end
 	end
@@ -118,7 +139,7 @@ function M.edit(pr, entry, refresh)
 		return
 	end
 	if item.kind == "description" then
-		local provider = get_provider()
+		local provider = detail.provider
 		if provider then
 			pull_actions.run("edit_description", { provider = provider, pr = pr }, on_done(pr, refresh))
 		end
@@ -166,10 +187,17 @@ function M.react(pr, entry, refresh)
 	if not item or (item.kind ~= "comment" and item.kind ~= "description") then
 		return
 	end
-	if item.kind == "description" and item.entity.reactions == nil then
-		return
+	local provider = detail.provider
+	if item.kind == "description" then
+		if provider == nil or provider.id ~= "github" then
+			return
+		end
+		---@type GitHubPullRequestDetails
+		local details = item.entity
+		if details.reactions == nil then
+			return
+		end
 	end
-	local provider = get_provider()
 	local comments = provider and provider.capabilities.comments
 	if not comments or not comments.add_reaction then
 		return
@@ -199,6 +227,9 @@ function M.react(pr, entry, refresh)
 			end
 			notify.loading("Adding reaction...")
 			comments.add_reaction(pr, item, selected.key, function(ok, err)
+				if not state.is_current(pr) then
+					return
+				end
 				if err then
 					notify.error("Reaction failed: " .. tostring(err))
 					return

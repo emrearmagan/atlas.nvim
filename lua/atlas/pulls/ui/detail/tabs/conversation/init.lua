@@ -4,14 +4,11 @@ local state = require("atlas.pulls.ui.detail.tabs.conversation.state")
 local renderer = require("atlas.pulls.ui.detail.tabs.conversation.renderer")
 local keymaps = require("atlas.pulls.ui.detail.tabs.conversation.keymaps")
 local notify = require("atlas.core.notify")
-
----@return PullsProvider|nil
-local function get_provider()
-	return require("atlas.pulls.ui.detail.state").provider
-end
+local detail = require("atlas.pulls.ui.detail.state")
 
 function M.reset()
 	state.reset()
+	notify.clear()
 end
 
 ---@param pr PullRequest
@@ -19,9 +16,10 @@ end
 ---@param opts { force_refresh: boolean|nil }|nil
 function M.on_select(pr, refresh, opts)
 	state.activate(pr)
+	notify.clear()
 	opts = opts or {}
 
-	local provider = get_provider()
+	local provider = detail.provider
 	local comments = provider and provider.capabilities.comments
 	if not comments or not comments.fetch_conversation then
 		state.items = {}
@@ -89,21 +87,20 @@ end
 
 ---@return boolean
 function M.is_loading()
-	return state.any_loading()
+	return state.items == "loading"
 end
 
+---@param buf integer
+---@param refresh fun()
 function M.activate(buf, refresh)
-	if buf == nil or refresh == nil then
-		return
-	end
 	keymaps.setup(buf, refresh)
 end
 
+---@param buf integer
 function M.deactivate(buf)
-	if buf ~= nil then
-		keymaps.teardown(buf)
-	end
+	keymaps.teardown(buf)
 	state.deactivate()
+	notify.clear()
 end
 
 return M

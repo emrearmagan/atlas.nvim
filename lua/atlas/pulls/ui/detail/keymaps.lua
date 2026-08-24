@@ -3,37 +3,61 @@ local M = {}
 local help = require("atlas.ui.popups.help")
 local resolver = require("atlas.core.keymaps")
 local utils = require("atlas.ui.shared.utils")
-local detail_state = require("atlas.pulls.ui.detail.state")
+local state = require("atlas.pulls.ui.detail.state")
 local actions = require("atlas.pulls.actions")
+local notify = require("atlas.core.notify")
 
 ---@param pr PullRequest
 ---@param buf integer|nil
 ---@return AtlasPullActionContext|nil
 local function action_context(pr, buf)
-	local provider = detail_state.provider
+	local provider = state.provider
 	if not provider then
 		return nil
 	end
 	return {
 		provider = provider,
 		pr = pr,
-		current_user = detail_state.current_user,
 		buf = buf,
+		notify = function(level, message, duration)
+			notify.show(level, message, { timeout = duration })
+		end,
 	}
+end
+
+---@param pr PullRequest
+---@param on_update (fun(pr: PullRequest, result: PullsActionResult|nil))|nil
+---@param result PullsActionResult|nil
+local function complete_action(pr, on_update, result)
+	if not result or not result.changed_pr then
+		return
+	end
+	if on_update then
+		on_update(pr, result)
+	else
+		require("atlas.pulls.ui.detail").select(pr, { force_refresh = true })
+	end
 end
 
 ---@return PullsDetailTabModule|nil
 local function current_tab_mod()
-	local provider = detail_state.provider
-	local provider_detail = provider and provider.capabilities.ui and provider.capabilities.ui.detail
-	if provider_detail and provider_detail.tabs then
-		for _, tab in ipairs(provider_detail.tabs() or {}) do
-			if tab.key == detail_state.current_tab then
-				return tab.mod
-			end
+	for _, tab in ipairs(state.tabs) do
+		if tab.key == state.current_tab then
+			return tab.mod
 		end
 	end
-	return nil
+end
+
+---@param action_id string
+---@return boolean
+local function supports_action(action_id)
+	local capability = state.provider and state.provider.capabilities.actions
+	for _, action in ipairs(capability and capability.items or {}) do
+		if action.id == action_id then
+			return true
+		end
+	end
+	return false
 end
 
 ---@param action_id AtlasKeymapActionId|string
@@ -58,6 +82,27 @@ local function remove_item(action_id)
 		return nil
 	end
 	return { key = (#keys == 1 and keys[1] or keys) }
+end
+
+---@return boolean
+local function open_current_line()
+	local win = state.win
+	if win == nil or not vim.api.nvim_win_is_valid(win) then
+		return false
+	end
+
+	local lnum = vim.api.nvim_win_get_cursor(win)[1]
+	local entry = (state.line_map or {})[lnum]
+	local pr = state.current_details or state.current_pr
+	if not entry or not pr then
+		return false
+	end
+
+	local tab_mod = current_tab_mod()
+	if tab_mod and tab_mod.on_enter then
+		return tab_mod.on_enter(pr, entry) == true
+	end
+	return false
 end
 
 ---@param buf integer
@@ -93,10 +138,10 @@ function M.register(buf)
 			desc = "Open in browser",
 			opts = { nowait = true, silent = true },
 			callback = function()
-				if M.open_current_line() then
+				if open_current_line() then
 					return
 				end
-				local pr = detail_state.current_pr
+				local pr = state.current_details or state.current_pr
 				if pr == nil then
 					return
 				end
@@ -118,20 +163,21 @@ function M.register(buf)
 	utils.insert_if(items, item("ui.refresh", refresh_item))
 	utils.insert_if(items, item("ui.refresh_view", refresh_item))
 
-	if detail_state.provider then
+	if state.provider and state.provider.capabilities.actions then
 		utils.insert_if(
 			items,
 			item("ui.open_actions", {
 				desc = "Open PR actions",
 				callback = function()
-					local pr = detail_state.current_pr
+					local pr = state.current_details or state.current_pr
 					if pr == nil then
 						return
 					end
 					local context = action_context(pr, buf)
 					if context then
+						local on_update = state.on_update
 						actions.open(context, function(result)
-							require("atlas.pulls.ui.detail").action_result(pr, result)
+							complete_action(pr, on_update, result)
 						end)
 					end
 				end,
@@ -145,7 +191,7 @@ function M.register(buf)
 			desc = "Open PR diff",
 			opts = { nowait = true },
 			callback = function()
-				local pr = detail_state.current_pr
+				local pr = state.current_details or state.current_pr
 				if pr == nil then
 					return
 				end
@@ -163,7 +209,7 @@ function M.register(buf)
 			desc = "Checkout PR branch",
 			opts = { nowait = true },
 			callback = function()
-				local pr = detail_state.current_pr
+				local pr = state.current_details or state.current_pr
 				if pr == nil then
 					return
 				end
@@ -175,22 +221,22 @@ function M.register(buf)
 		})
 	)
 
-	local context = detail_state.current_pr and action_context(detail_state.current_pr) or nil
-	if context and actions.is_available("edit_title", context) then
+	if supports_action("edit_title") then
 		utils.insert_if(
 			items,
 			item("pulls.edit_title", {
 				desc = "Edit PR title",
 				opts = { nowait = true, silent = true },
 				callback = function()
-					local pr = detail_state.current_pr
+					local pr = state.current_details or state.current_pr
 					if pr == nil then
 						return
 					end
 					local current = action_context(pr)
 					if current then
+						local on_update = state.on_update
 						actions.run("edit_title", current, function(result)
-							require("atlas.pulls.ui.detail").action_result(pr, result)
+							complete_action(pr, on_update, result)
 						end)
 					end
 				end,
@@ -198,21 +244,22 @@ function M.register(buf)
 		)
 	end
 
-	if context and actions.is_available("edit_description", context) then
+	if supports_action("edit_description") then
 		utils.insert_if(
 			items,
 			item("pulls.edit_description", {
 				desc = "Edit PR description",
 				opts = { nowait = true, silent = true },
 				callback = function()
-					local pr = detail_state.current_pr
+					local pr = state.current_details or state.current_pr
 					if pr == nil then
 						return
 					end
 					local current = action_context(pr)
 					if current then
+						local on_update = state.on_update
 						actions.run("edit_description", current, function(result)
-							require("atlas.pulls.ui.detail").action_result(pr, result)
+							complete_action(pr, on_update, result)
 						end)
 					end
 				end,
@@ -220,21 +267,22 @@ function M.register(buf)
 		)
 	end
 
-	if context and actions.is_available("toggle_subscription", context) then
+	if supports_action("toggle_subscription") then
 		utils.insert_if(
 			items,
 			item("ui.toggle_subscription", {
 				desc = "Toggle subscription",
 				opts = { nowait = true, silent = true },
 				callback = function()
-					local pr = detail_state.current_pr
+					local pr = state.current_details or state.current_pr
 					if pr == nil then
 						return
 					end
 					local current = action_context(pr)
 					if current then
+						local on_update = state.on_update
 						actions.run("toggle_subscription", current, function(result)
-							require("atlas.pulls.ui.detail").action_result(pr, result)
+							complete_action(pr, on_update, result)
 						end)
 					end
 				end,
@@ -307,27 +355,6 @@ function M.register(buf)
 	)
 
 	help.register("General", general, { index = 300, buffer = buf })
-end
-
----@return boolean
-function M.open_current_line()
-	local win = detail_state.win
-	if win == nil or not vim.api.nvim_win_is_valid(win) then
-		return false
-	end
-
-	local lnum = vim.api.nvim_win_get_cursor(win)[1]
-	local entry = (detail_state.line_map or {})[lnum]
-	local pr = detail_state.current_pr
-	if not entry or not pr then
-		return false
-	end
-
-	local tab_mod = current_tab_mod()
-	if tab_mod and tab_mod.on_enter then
-		return tab_mod.on_enter(pr, entry) == true
-	end
-	return false
 end
 
 ---@param buf integer

@@ -1,4 +1,55 @@
+local issue_mapper = require("atlas.issues.providers.gitlab.api.mapper")
 local mapper = require("atlas.pulls.providers.gitlab.api.mapper")
+
+describe("GitLab issue mapper", function()
+	it("maps provider fields directly onto issues", function()
+		local issue = issue_mapper.to_issue({
+			iid = 42,
+			references = { full = "group/project#42" },
+			title = "Provider types",
+			state = "opened",
+			confidential = true,
+		})
+
+		assert.are.equal("group/project", issue.project_path)
+		assert.are.equal(42, issue.iid)
+		assert.is_true(issue.confidential)
+	end)
+
+	it("keeps provider fields on issue details", function()
+		local issue = issue_mapper.to_issue_details({
+			iid = 7,
+			references = { full = "group/project#7" },
+			title = "Details",
+			description = "Hydrated description",
+			state = "opened",
+		})
+
+		assert.are.equal("group/project", issue.project_path)
+		assert.are.equal(7, issue.iid)
+		assert.are.equal("Hydrated description", issue.description)
+	end)
+end)
+
+describe("GitLab pull request details", function()
+	it("keeps GitLab metadata on the detail type", function()
+		local pr = mapper.to_pull_request_details({
+			iid = 7,
+			references = { full = "group/project!7" },
+			title = "Typed details",
+			description = "Description",
+			state = "opened",
+			detailed_merge_status = "mergeable",
+			diff_refs = { base_sha = "base", head_sha = "head", start_sha = "start" },
+			labels = { "backend" },
+		})
+
+		assert.equal("group/project", pr.repo_full_name)
+		assert.equal("mergeable", pr.detailed_merge_status)
+		assert.equal("start", pr.diff_refs.start_sha)
+		assert.equal("backend", pr.labels[1].name)
+	end)
+end)
 
 describe("GitLab comment resolution metadata", function()
 	local function resolved_note()

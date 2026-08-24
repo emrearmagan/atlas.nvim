@@ -9,7 +9,7 @@ local threads = require("atlas.ui.components.threadsv2")
 local review_threads = require("atlas.pulls.ui.components.review_threads")
 local activity_component = require("atlas.pulls.ui.detail.components.activity")
 local state = require("atlas.pulls.ui.detail.tabs.conversation.state")
-local detail_state = require("atlas.pulls.ui.detail.state")
+local detail = require("atlas.pulls.ui.detail.state")
 
 local PADDING_X = 1
 local PADDING = string.rep(" ", PADDING_X)
@@ -54,7 +54,7 @@ end
 ---@param collapsed boolean
 ---@param width integer
 local function render_thread(thread, collapsed, width)
-	local provider = require("atlas.pulls.ui.detail.state").provider
+	local provider = detail.provider
 	local comments = provider and provider.capabilities.comments
 	local inner = math.max(1, width - (PADDING_X * 2) - 4)
 	local fold_keys = keymaps.resolve("ui.toggle_fold")
@@ -249,13 +249,19 @@ end
 local function render_description(item, width)
 	---@type PullRequestDetails
 	local pr = item.entity
+	local reactions
+	local provider = detail.provider
+	if provider and provider.id == "github" then
+		---@cast pr GitHubPullRequestDetails
+		reactions = pr.reactions
+	end
 	---@type PullsComment
 	local comment = {
 		id = item.id,
 		author = pr.author,
 		content_raw = pr.description or "",
 		created_on = pr.created_on,
-		reactions = pr.reactions,
+		reactions = reactions,
 	}
 	local lines, spans, line_map = render_thread({ comment = comment, children = {} }, false, width)
 	attach_item(line_map, item)
@@ -327,7 +333,7 @@ function M.render(_pr, width)
 
 	---@cast state.items PullsConversationItem[]
 	local items = state.items
-	local details = detail_state.current_details
+	local details = detail.current_details
 	if details and details.description ~= "" then
 		items = {
 			{

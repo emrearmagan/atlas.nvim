@@ -3,6 +3,8 @@
 ---@field iid integer
 ---@field confidential boolean
 
+---@class GitLabIssueDetails : IssueDetails, GitLabIssue
+
 local GITLAB_REACTION_OPTIONS = require("atlas.ui.shared.emojis").gitlab()
 local config = require("atlas.config")
 local notifications_api = require("atlas.providers.gitlab.notifications")
@@ -81,7 +83,7 @@ function M.fetch_activity(issue, opts, on_done)
 	return require("atlas.issues.providers.gitlab.api.notes").list_history(tostring(issue.key or ""), opts, on_done)
 end
 
----@param issue IssueDetails
+---@param issue Issue
 ---@param opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(items: IssueConversationItem[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
@@ -101,14 +103,12 @@ function M.fetch_conversation(issue, opts, on_done)
 			return
 		end
 		local items = {}
-		if issue.description ~= "" then
-			table.insert(items, {
-				id = "description:" .. tostring(issue.key),
-				kind = "description",
-				created_at = issue.created_at or "",
-				entity = issue,
-			})
-		end
+		table.insert(items, {
+			id = "description:" .. tostring(issue.key),
+			kind = "description",
+			created_at = issue.created_at or "",
+			entity = issue,
+		})
 		for _, comment in ipairs(result.comments or {}) do
 			table.insert(items, {
 				id = "comment:" .. tostring(comment.id),

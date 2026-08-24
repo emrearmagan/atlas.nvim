@@ -31,8 +31,9 @@ end
 ---@param issue Issue
 ---@param details IssueDetails|nil
 ---@param loading boolean
----@return IssuesDetailHeaderRow[]
-function M.header_rows(issue, details, loading)
+---@return IssuesDetailHeaderField[]
+function M.header_fields(issue, details, loading)
+	---@cast details GitLabIssueDetails|nil
 	local data = details or issue
 	local user_icon = icons.general("user")
 
@@ -53,38 +54,33 @@ function M.header_rows(issue, details, loading)
 		assignee_hl = "AtlasTextMuted"
 	end
 
-	local rows = {
+	local fields = {
 		{
-			k1 = "Status:",
-			v1 = tostring(data.status or "Open"),
-			v1_hl = state_chip_hl(data.status_id),
-			k2 = "Author:",
-			v2 = string.format("%s %s", user_icon, reporter_name),
-			v2_hl = helper.person_hl(reporter_name),
+			label = "Status",
+			value = tostring(data.status or "Open"),
+			hl = state_chip_hl(data.status_id),
 		},
 		{
-			k1 = "Assignee:",
-			v1 = assignee_text,
-			v1_hl = assignee_hl,
-			k2 = milestone_text ~= "" and "Milestone:" or "",
-			v2 = milestone_text,
-			v2_hl = milestone_text ~= "" and "AtlasTextMuted" or nil,
+			label = "Author",
+			value = string.format("%s %s", user_icon, reporter_name),
+			hl = helper.person_hl(reporter_name),
 		},
+		{ label = "Assignee", value = assignee_text, hl = assignee_hl },
 	}
+	if milestone_text ~= "" then
+		table.insert(fields, { label = "Milestone", value = milestone_text, hl = "AtlasTextMuted" })
+	end
 
 	local created_at = details and details.created_at or ""
 	if created_at ~= "" then
-		table.insert(rows, {
-			k1 = "Opened:",
-			v1 = utils.relative_time_text(created_at) or created_at,
-			v1_hl = "AtlasTextMuted",
-			k2 = "",
-			v2 = "",
-			v2_hl = nil,
+		table.insert(fields, {
+			label = "Opened",
+			value = utils.relative_time_text(created_at) or created_at,
+			hl = "AtlasTextMuted",
 		})
 	end
 
-	return rows
+	return fields
 end
 
 ---@param hex string|nil
@@ -109,6 +105,7 @@ end
 ---@param loading boolean
 ---@return IssuesDetailChip[]
 function M.chips(_issue, details, loading)
+	---@cast details GitLabIssueDetails|nil
 	local chips = {}
 	if loading then
 		table.insert(chips, { label = spinner.with_text("Loading..."), hl = "AtlasTextMuted" })
@@ -124,15 +121,14 @@ function M.chips(_issue, details, loading)
 	return chips
 end
 
----@return IssuesDetailTab[]
+---@return IssuesDetailTabDefinition[]
 function M.tabs()
 	local conversation_icon, conversation_hl = icons.general("conversation")
 	return {
 		{
 			key = "conversation",
 			label = "Conversation",
-			icon = conversation_icon,
-			icon_hl = conversation_hl,
+			icon = { icon = conversation_icon, hl_group = conversation_hl },
 			mod = require("atlas.issues.ui.detail.tabs.conversation"),
 		},
 	}

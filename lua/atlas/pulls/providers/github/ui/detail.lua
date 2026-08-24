@@ -19,10 +19,10 @@ end
 ---@param _pr PullRequest
 ---@param details PullRequestDetails|nil
 ---@param loading boolean
----@return PullsDetailHeaderRow[]
-function M.header_rows(_pr, details, loading)
+---@return PullsDetailHeaderField[]
+function M.header_fields(_pr, details, loading)
 	if details == nil then
-		return loading and { header.loading_assignee_row() } or {}
+		return loading and { header.loading_field("Assignees") } or {}
 	end
 
 	local logins = {}
@@ -33,7 +33,7 @@ function M.header_rows(_pr, details, loading)
 		end
 	end
 
-	return { header.assignee_row(logins) }
+	return { header.assignee_field(logins) }
 end
 
 ---@param pr PullRequest
@@ -42,8 +42,9 @@ end
 ---@return PullsDetailChip[]
 function M.chips(pr, details, _loading)
 	local chips = {}
+	local data = details or pr
 
-	local hash = tostring(pr.source and pr.source.commit_hash or "")
+	local hash = tostring(data.source and data.source.commit_hash or "")
 	if hash ~= "" then
 		if #hash > MAX_HASH_LEN then
 			hash = hash:sub(1, MAX_HASH_LEN)
@@ -75,30 +76,25 @@ function M.tabs()
 		{
 			key = "overview",
 			label = "Overview",
-			icon = overview_icon,
-			icon_hl = overview_hl,
+			icon = { icon = overview_icon, hl_group = overview_hl },
 			mod = require("atlas.pulls.ui.detail.tabs.overview"),
-			keymaps = require("atlas.pulls.providers.github.ui.overview_keymaps"),
 		},
 		{
 			key = "conversation",
 			label = "Conversation",
-			icon = conversation_icon,
-			icon_hl = conversation_hl,
+			icon = { icon = conversation_icon, hl_group = conversation_hl },
 			mod = require("atlas.pulls.ui.detail.tabs.conversation"),
 		},
 		{
 			key = "review",
 			label = "Review",
-			icon = review_icon,
-			icon_hl = review_hl,
+			icon = { icon = review_icon, hl_group = review_hl },
 			mod = require("atlas.pulls.ui.detail.tabs.review"),
 		},
 		{
 			key = "commits",
 			label = "Commits",
-			icon = commit_icon,
-			icon_hl = commit_hl,
+			icon = { icon = commit_icon, hl_group = commit_hl },
 			mod = require("atlas.pulls.ui.detail.tabs.commits"),
 		},
 	}

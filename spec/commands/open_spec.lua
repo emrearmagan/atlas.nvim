@@ -131,16 +131,23 @@ describe("commands.open", function()
 		end
 	end)
 
-	it("routes a direct target to detail without fetching it", function()
+	it("routes a direct target to detail as a pull request ref", function()
 		local value = "https://github.com/owner/repo/pull/42"
-		local target = { provider = "github", domain = "pulls", entity = "pr", number = 42 }
+		local target = {
+			provider = "github",
+			domain = "pulls",
+			entity = "pr",
+			id = 42,
+			number = 42,
+			repo_full_name = "owner/repo",
+		}
 		resolved[value] = target
 
 		command.open(value)
 
 		assert.same({ value }, calls.resolve)
 		assert.are.equal(0, #calls.fetch)
-		assert.are.equal(target, calls.pull_detail[1].entity)
+		assert.same({ id = 42, repo_full_name = "owner/repo" }, calls.pull_detail[1].entity)
 	end)
 
 	it("opens dot as the current repository dashboard", function()

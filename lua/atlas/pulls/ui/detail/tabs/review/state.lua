@@ -1,13 +1,19 @@
----@class PullsReviewTabState
+local request_scope = require("atlas.core.requests")
+
+---@class PullsReviewState
 ---@field data PullsReviewData|nil
 ---@field status string|nil
 ---@field hunks_by_comment table<string, { hunk: DiffHunk, anchor: integer }>
 ---@field expanded_threads table<string, boolean>
+---@field requests AtlasRequestScope
+---@field current_pr PullRequest|nil
 local M = {
 	data = nil,
 	status = nil,
 	hunks_by_comment = {},
 	expanded_threads = {},
+	requests = request_scope.new(),
+	current_pr = nil,
 }
 
 function M.reset()
@@ -15,6 +21,9 @@ function M.reset()
 	M.status = nil
 	M.hunks_by_comment = {}
 	M.expanded_threads = {}
+	M.requests.cancel()
+	M.requests = request_scope.new()
+	M.current_pr = nil
 end
 
 ---@param root PullsComment
@@ -84,11 +93,6 @@ function M.toggle_all_folds(comments)
 		set_expanded(root, expand)
 	end
 	return true
-end
-
----@return boolean
-function M.any_loading()
-	return M.status == "loading"
 end
 
 return M

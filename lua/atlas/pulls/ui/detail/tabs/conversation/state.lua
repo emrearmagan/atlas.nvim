@@ -3,13 +3,14 @@ local utils = require("atlas.ui.shared.utils")
 
 local MAX_COMMENT_LINES = 8
 
----@class PullsConversationTabState
+---@class PullsConversationState
 ---@field items PullsConversationItem[]|"loading"|nil
 ---@field error string|nil
 ---@field collapsed table<string, boolean>
 ---@field expanded_comments table<string, boolean>
 ---@field expanded_runs table<string, boolean>
 ---@field requests AtlasRequestScope
+---@field current_pr PullRequest|nil
 local M = {
 	items = nil,
 	error = nil,
@@ -17,12 +18,11 @@ local M = {
 	expanded_comments = {},
 	expanded_runs = {},
 	requests = request_scope.new(),
+	current_pr = nil,
 }
 
-local current_pr = nil
-
 function M.reset()
-	current_pr = nil
+	M.current_pr = nil
 	M.requests.cancel()
 	M.requests = request_scope.new()
 	M.items = nil
@@ -35,11 +35,11 @@ end
 ---@param pr PullRequest
 function M.activate(pr)
 	M.reset()
-	current_pr = pr
+	M.current_pr = pr
 end
 
 function M.deactivate()
-	current_pr = nil
+	M.current_pr = nil
 	M.requests.cancel()
 	M.requests = request_scope.new()
 end
@@ -47,9 +47,9 @@ end
 ---@param pr PullRequest
 ---@return boolean
 function M.is_current(pr)
-	return current_pr ~= nil
-		and tostring(current_pr.id or "") == tostring(pr.id or "")
-		and tostring(current_pr.repo_full_name or "") == tostring(pr.repo_full_name or "")
+	return M.current_pr ~= nil
+		and tostring(M.current_pr.id or "") == tostring(pr.id or "")
+		and tostring(M.current_pr.repo_full_name or "") == tostring(pr.repo_full_name or "")
 end
 
 ---@param run_id any
@@ -62,11 +62,6 @@ end
 ---@return boolean
 function M.is_run_expanded(run_id)
 	return M.expanded_runs[tostring(run_id)] == true
-end
-
----@return boolean
-function M.any_loading()
-	return M.items == "loading"
 end
 
 ---@param is_task boolean
@@ -125,7 +120,7 @@ end
 
 ---@param comment PullsComment
 ---@return boolean
-function M.is_comment_long(comment)
+local function is_comment_long(comment)
 	if comment.is_task or comment.state == "DELETED" then
 		return false
 	end
@@ -139,14 +134,14 @@ end
 
 ---@param comment PullsComment
 ---@return boolean
-function M.is_comment_expanded(comment)
+local function is_comment_expanded(comment)
 	return M.expanded_comments[comment_key(comment)] == true
 end
 
 ---@param comment PullsComment
 ---@return integer|nil
 function M.comment_max_lines(comment)
-	if M.is_comment_long(comment) and not M.is_comment_expanded(comment) then
+	if is_comment_long(comment) and not is_comment_expanded(comment) then
 		return MAX_COMMENT_LINES
 	end
 	return nil
@@ -155,7 +150,7 @@ end
 ---@param comment PullsComment
 ---@return boolean toggled
 function M.toggle_comment(comment)
-	if not M.is_comment_long(comment) then
+	if not is_comment_long(comment) then
 		return false
 	end
 	local key = comment_key(comment)

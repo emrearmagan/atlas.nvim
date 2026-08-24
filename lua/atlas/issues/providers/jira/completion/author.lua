@@ -4,12 +4,9 @@ local M = {}
 ---@field id string
 ---@field label string
 
+---@param opts { issue: Issue|nil, comments: IssueComment[], current_user: IssueUser|nil }
 ---@return JiraMentionUser[]
-local function collect_users()
-	local conversation_state = require("atlas.issues.ui.detail.tabs.conversation.state")
-	local panel_state = require("atlas.issues.ui.detail.state")
-	local issues_state = require("atlas.issues.state")
-
+local function collect_users(opts)
 	local seen = {}
 	---@type JiraMentionUser[]
 	local users = {}
@@ -29,14 +26,10 @@ local function collect_users()
 		table.insert(users, { id = id, label = label })
 	end
 
-	add(issues_state.current_user)
-	add((panel_state.current_issue or {}).assignee)
-	add((panel_state.current_issue or {}).reporter)
-	for _, issue in ipairs(issues_state.issues or {}) do
-		add((issue or {}).assignee)
-		add((issue or {}).reporter)
-	end
-	for _, comment in ipairs(conversation_state.comments()) do
+	add(opts.current_user)
+	add((opts.issue or {}).assignee)
+	add((opts.issue or {}).reporter)
+	for _, comment in ipairs(opts.comments) do
 		add(comment.author)
 	end
 
@@ -47,10 +40,11 @@ local function collect_users()
 	return users
 end
 
+---@param opts { issue: Issue|nil, comments: IssueComment[], current_user: IssueUser|nil }
 ---@return table<string, JiraMentionUser>
-local function build_map()
+local function build_map(opts)
 	local map = {}
-	for _, user in ipairs(collect_users()) do
+	for _, user in ipairs(collect_users(opts)) do
 		local id = vim.trim(tostring(user.id or ""))
 		local label = vim.trim(tostring(user.label or ""))
 		if id ~= "" and label ~= "" then
@@ -97,8 +91,9 @@ local function resolve_mention(author)
 	return string.format("[@%s](atlas-mention:%s)", mention_label, mention_id)
 end
 
+---@param opts { issue: Issue|nil, comments: IssueComment[], current_user: IssueUser|nil }
 ---@return AtlasMarkdownCompletionProvider
-function M.build_completion()
+function M.build_completion(opts)
 	return {
 		trigger = "@",
 		find_start = function(before)
@@ -110,7 +105,7 @@ function M.build_completion()
 		end,
 		complete = function(base)
 			local query = vim.trim(tostring(base or "")):gsub("^@", ""):lower()
-			local mention_map = build_map()
+			local mention_map = build_map(opts)
 			local matches = {}
 			for _, user in pairs(mention_map) do
 				local id = tostring((user or {}).id or "")

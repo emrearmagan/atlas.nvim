@@ -65,7 +65,7 @@ local function assignees_display(assignees)
 	return table.concat(parts), spans
 end
 
----@param milestone IssueMilestone|nil
+---@param milestone GitHubIssueMilestone|nil
 ---@return string
 local function milestone_display(milestone)
 	if milestone == nil then
@@ -98,28 +98,20 @@ local function milestone_display(milestone)
 	return title
 end
 
--- Header rows
+-- Header fields
 
 ---@param issue Issue
 ---@param details IssueDetails|nil
 ---@param loading boolean
----@return IssuesDetailHeaderRow[]
-function M.header_rows(issue, details, loading)
+---@return IssuesDetailHeaderField[]
+function M.header_fields(issue, details, loading)
+	---@cast issue GitHubIssue
+	---@cast details GitHubIssueDetails|nil
 	local data = details or issue
 	local reporter_name = data.reporter and tostring(data.reporter.display_name or "") or ""
 	if reporter_name == "" then
 		reporter_name = "Unknown"
 	end
-
-	local status_cell = {
-		k1 = "Status:",
-		v1 = tostring(data.status or "Open"),
-		v1_hl = data.status_id == "closed" and "AtlasGHIssueClosedChip" or "AtlasGHIssueOpenChip",
-
-		k2 = "Reporter:",
-		v2 = string.format("%s %s", icons.general("user"), reporter_name),
-		v2_hl = helper.person_hl(reporter_name),
-	}
 
 	local assignees = details and details.assignees or (issue.assignee and { issue.assignee } or {})
 	local assignees_text, assignees_hl = assignees_display(assignees)
@@ -128,19 +120,32 @@ function M.header_rows(issue, details, loading)
 		assignees_hl = "AtlasTextMuted"
 	end
 
-	local right_cells = {}
+	local fields = {
+		{
+			label = "Status",
+			value = tostring(data.status or "Open"),
+			hl = data.status_id == "closed" and "AtlasGHIssueClosedChip" or "AtlasGHIssueOpenChip",
+		},
+		{
+			label = "Reporter",
+			value = string.format("%s %s", icons.general("user"), reporter_name),
+			hl = helper.person_hl(reporter_name),
+		},
+		{ label = "Assignee", value = assignees_text, hl = assignees_hl },
+	}
+
 	local parent = data.parent
 	if parent and parent.key then
 		local pkey = tostring(parent.key)
 		local title = tostring(parent.title or "")
 		local text = title ~= "" and string.format("%s %s", pkey, title) or pkey
 		local hl = helper.issue_hl and helper.issue_hl(pkey) or "AtlasTextMuted"
-		table.insert(right_cells, { k = "Parent:", v = text, hl = hl })
+		table.insert(fields, { label = "Parent", value = text, hl = hl })
 	end
 
 	local milestone_text = milestone_display(details and details.milestone or nil)
 	if milestone_text ~= "" then
-		table.insert(right_cells, { k = "Milestone:", v = milestone_text, hl = "AtlasTextMuted" })
+		table.insert(fields, { label = "Milestone", value = milestone_text, hl = "AtlasTextMuted" })
 	end
 
 	local subs = details and details.sub_issues or {}
@@ -151,42 +156,23 @@ function M.header_rows(issue, details, loading)
 				closed = closed + 1
 			end
 		end
-		table.insert(right_cells, {
-			k = "Sub-issues:",
-			v = string.format("%s %d/%d", icons.issues("issue"), closed, #subs),
+		table.insert(fields, {
+			label = "Sub-issues",
+			value = string.format("%s %d/%d", icons.issues("issue"), closed, #subs),
 			hl = closed == #subs and "AtlasTextPositive" or "AtlasTextMuted",
 		})
 	end
 
 	local completed, total = task_progress(details and details.description or nil)
 	if total > 0 then
-		table.insert(right_cells, {
-			k = "Tasks:",
-			v = string.format("%s %d/%d", icons.pulls("tasks"), completed, total),
+		table.insert(fields, {
+			label = "Tasks",
+			value = string.format("%s %d/%d", icons.pulls("tasks"), completed, total),
 			hl = completed == total and "AtlasTextPositive" or "AtlasTextWarning",
 		})
 	end
 
-	local function pop_right()
-		local c = table.remove(right_cells, 1)
-		if c == nil then
-			return "", "", nil
-		end
-		return c.k, c.v, c.hl
-	end
-
-	local rk, rv, rh = pop_right()
-	local rows = {
-		status_cell,
-		{ k1 = "Assignee:", v1 = assignees_text, v1_hl = assignees_hl, k2 = rk, v2 = rv, v2_hl = rh },
-	}
-
-	while #right_cells > 0 do
-		local k, v, hl = pop_right()
-		table.insert(rows, { k1 = "", v1 = "", v1_hl = nil, k2 = k, v2 = v, v2_hl = hl })
-	end
-
-	return rows
+	return fields
 end
 
 -- Chips: labels
@@ -208,6 +194,7 @@ end
 ---@param loading boolean
 ---@return IssuesDetailChip[]
 function M.chips(_issue, details, loading)
+	---@cast details GitHubIssueDetails|nil
 	local chips = {}
 	if loading then
 		table.insert(chips, { label = spinner.with_text("Loading..."), hl = "AtlasTextMuted" })
@@ -224,15 +211,14 @@ function M.chips(_issue, details, loading)
 	return chips
 end
 
----@return IssuesDetailTab[]
+---@return IssuesDetailTabDefinition[]
 function M.tabs()
 	local conversation_icon, conversation_hl = icons.general("conversation")
 	return {
 		{
 			key = "conversation",
 			label = "Conversation",
-			icon = conversation_icon,
-			icon_hl = conversation_hl,
+			icon = { icon = conversation_icon, hl_group = conversation_hl },
 			mod = require("atlas.issues.ui.detail.tabs.conversation"),
 		},
 	}

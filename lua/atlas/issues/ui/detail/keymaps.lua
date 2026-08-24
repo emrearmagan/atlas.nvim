@@ -3,21 +3,37 @@ local M = {}
 local help = require("atlas.ui.popups.help")
 local resolver = require("atlas.core.keymaps")
 local utils = require("atlas.ui.shared.utils")
-local detail_state = require("atlas.issues.ui.detail.state")
 local actions = require("atlas.issues.actions")
+local state = require("atlas.issues.ui.detail.state")
 
 ---@return IssuesDetailTabModule|nil
 local function current_tab_mod()
-	local provider = detail_state.provider
-	local provider_detail = provider and provider.capabilities.ui and provider.capabilities.ui.detail
-	if provider_detail and provider_detail.tabs then
-		for _, tab in ipairs(provider_detail.tabs() or {}) do
-			if tab.key == detail_state.current_tab then
-				return tab.mod
-			end
+	for _, tab in ipairs(state.tabs) do
+		if tab.key == state.current_tab then
+			return tab.mod
 		end
 	end
-	return nil
+end
+
+---@return boolean
+local function open_current_line()
+	local win = state.win
+	if win == nil or not vim.api.nvim_win_is_valid(win) then
+		return false
+	end
+
+	local lnum = vim.api.nvim_win_get_cursor(win)[1]
+	local entry = state.line_map[lnum]
+	local issue = state.current_details or state.current_issue
+	if not entry or not issue then
+		return false
+	end
+
+	local tab = current_tab_mod()
+	if tab and tab.on_enter then
+		return tab.on_enter(issue, entry) == true
+	end
+	return false
 end
 
 ---@param action_id AtlasKeymapActionId|string
@@ -47,9 +63,9 @@ end
 function M.register(buf)
 	local items = {}
 	local nav = require("atlas.issues.ui.detail.navigation")
-	local provider = assert(detail_state.provider)
+	local provider = assert(state.provider)
 	local function context(issue)
-		return { provider = provider, issue = issue, current_user = detail_state.current_user }
+		return { provider = provider, issue = issue }
 	end
 
 	utils.insert_if(
@@ -90,11 +106,20 @@ function M.register(buf)
 			item("ui.open_actions", {
 				desc = "Open issue actions",
 				callback = function()
-					local issue = detail_state.current_details or detail_state.current_issue
+					local issue = state.current_details or state.current_issue
 					if issue == nil then
 						return
 					end
-					actions.open(context(issue), require("atlas.issues.ui.detail").action_result)
+					local on_update = state.on_update
+					actions.open(context(issue), function(result)
+						if result and result.issue_key then
+							if on_update then
+								on_update(issue, result)
+							else
+								require("atlas.issues.ui.detail").select(issue, { force_refresh = true })
+							end
+						end
+					end)
 				end,
 			})
 		)
@@ -106,14 +131,13 @@ function M.register(buf)
 			desc = "Open issue in browser",
 			opts = { nowait = true },
 			callback = function()
-				if M.open_current_line() then
+				if open_current_line() then
 					return
 				end
-				local issue = detail_state.current_details or detail_state.current_issue
-				if issue == nil then
-					return
+				local issue = state.current_details or state.current_issue
+				if issue then
+					actions.run("browse_issue", context(issue))
 				end
-				actions.run("browse_issue", context(issue))
 			end,
 		})
 	)
@@ -124,11 +148,19 @@ function M.register(buf)
 			desc = "Toggle subscription",
 			opts = { nowait = true, silent = true },
 			callback = function()
-				local issue = detail_state.current_details or detail_state.current_issue
-				if issue == nil then
-					return
+				local issue = state.current_details or state.current_issue
+				if issue then
+					local on_update = state.on_update
+					actions.run("toggle_subscription", context(issue), function(result)
+						if result and result.issue_key then
+							if on_update then
+								on_update(issue, result)
+							else
+								require("atlas.issues.ui.detail").select(issue, { force_refresh = true })
+							end
+						end
+					end)
 				end
-				actions.run("toggle_subscription", context(issue), require("atlas.issues.ui.detail").action_result)
 			end,
 		})
 	)
@@ -142,9 +174,7 @@ function M.register(buf)
 			desc = "Next detail tab",
 			opts = { nowait = true },
 			callback = function()
-				if require("atlas.issues.ui.detail").is_open() then
-					require("atlas.issues.ui.detail").next_tab()
-				end
+				require("atlas.issues.ui.detail").next_tab()
 			end,
 		})
 	)
@@ -155,9 +185,7 @@ function M.register(buf)
 			desc = "Previous detail tab",
 			opts = { nowait = true },
 			callback = function()
-				if require("atlas.issues.ui.detail").is_open() then
-					require("atlas.issues.ui.detail").prev_tab()
-				end
+				require("atlas.issues.ui.detail").prev_tab()
 			end,
 		})
 	)
@@ -189,36 +217,14 @@ function M.register(buf)
 			desc = "Close detail panel",
 			opts = { nowait = true, silent = true },
 			callback = function()
-				if help.is_open() then
-					return
+				if not help.is_open() then
+					require("atlas.issues.ui.detail").close()
 				end
-				require("atlas.issues.ui.detail").close()
 			end,
 		})
 	)
 
 	help.register("General", general, { index = 300, buffer = buf })
-end
-
----@return boolean
-function M.open_current_line()
-	local win = detail_state.win
-	if win == nil or not vim.api.nvim_win_is_valid(win) then
-		return false
-	end
-
-	local lnum = vim.api.nvim_win_get_cursor(win)[1]
-	local entry = (detail_state.line_map or {})[lnum]
-	local issue = detail_state.current_details or detail_state.current_issue
-	if not entry or not issue then
-		return false
-	end
-
-	local tab_mod = current_tab_mod()
-	if tab_mod and tab_mod.on_enter then
-		return tab_mod.on_enter(issue, entry) == true
-	end
-	return false
 end
 
 ---@param buf integer

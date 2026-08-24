@@ -7,6 +7,7 @@ local diff = require("atlas.ui.components.diff_hunks")
 local keymaps = require("atlas.core.keymaps")
 local review_threads = require("atlas.pulls.ui.components.review_threads")
 local state = require("atlas.pulls.ui.detail.tabs.review.state")
+local detail = require("atlas.pulls.ui.detail.state")
 
 local PADDING_X = 1
 
@@ -49,7 +50,7 @@ end
 local function emit_thread_box(lines, spans, line_map, nodes, width)
 	local inner = math.max(1, width - 4)
 	local toggle_keys = keymaps.resolve("pulls.review.diff.toggle_resolved")
-	local provider = require("atlas.pulls.ui.detail.state").provider
+	local provider = detail.provider
 	local comments = provider and provider.capabilities.comments
 	local thread_lines, thread_spans, thread_map = review_threads.render(nodes, inner, {
 		expanded = function(root)

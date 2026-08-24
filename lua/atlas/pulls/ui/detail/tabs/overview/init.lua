@@ -6,7 +6,7 @@ local spinner = require("atlas.ui.components.spinner")
 local box = require("atlas.ui.components.box")
 local table_tree = require("atlas.ui.components.table_tree")
 local state = require("atlas.pulls.ui.detail.tabs.overview.state")
-local detail_state = require("atlas.pulls.ui.detail.state")
+local detail = require("atlas.pulls.ui.detail.state")
 local keymaps = require("atlas.pulls.ui.detail.tabs.overview.keymaps")
 local presentation = require("atlas.pulls.ui.presentation")
 local request_scope = require("atlas.core.requests")
@@ -15,16 +15,18 @@ local PADDING_X = 1
 local PADDING = string.rep(" ", PADDING_X)
 local MAX_DESCRIPTION_LINES = 15
 
-local requests = request_scope.new()
-
----@return PullsProvider|nil
-local function get_provider()
-	return require("atlas.pulls.ui.detail.state").provider
+---@param pr PullRequest
+---@return boolean
+local function is_current(pr)
+	local current = detail.current_pr
+	return current ~= nil
+		and tostring(current.id or "") == tostring(pr.id or "")
+		and tostring(current.repo_full_name or "") == tostring(pr.repo_full_name or "")
 end
 
 local function reset_requests()
-	requests.cancel()
-	requests = request_scope.new()
+	state.requests.cancel()
+	state.requests = request_scope.new()
 end
 
 function M.reset()
@@ -38,7 +40,7 @@ end
 function M.on_select(pr, refresh, opts)
 	opts = opts or {}
 
-	local provider = get_provider()
+	local provider = detail.provider
 	if not provider then
 		return
 	end
@@ -64,9 +66,12 @@ function M.on_select(pr, refresh, opts)
 	end
 
 	if should_fetch_reviewers then
-		requests.run(function(done)
+		state.requests.run(function(done)
 			return core.fetch_reviewers(pr, opts, done)
 		end, function(reviewers, err)
+			if not is_current(pr) then
+				return
+			end
 			if err then
 				state.reviewers = err
 			else
@@ -77,9 +82,12 @@ function M.on_select(pr, refresh, opts)
 	end
 
 	if should_fetch_merge_checks then
-		requests.run(function(done)
+		state.requests.run(function(done)
 			return core.fetch_merge_checks(pr, opts, done)
 		end, function(checks, err)
+			if not is_current(pr) then
+				return
+			end
 			if err then
 				state.merge_checks = err
 			else
@@ -149,7 +157,7 @@ local function decision_content(decisions, groups, width)
 	return { lines = box_lines, spans = box_spans }
 end
 
----@param pr PullRequest
+---@param pr PullRequestDetails
 ---@param width integer
 ---@param lines string[]
 ---@param spans table[]
@@ -301,11 +309,11 @@ end
 ---@param spans table[]
 ---@param line_map table<integer, table>
 local function render_pipelines(_pr, width, lines, spans, line_map)
-	if detail_state.pipelines == nil then
+	if detail.pipelines == nil then
 		return
 	end
 
-	if detail_state.pipelines == "loading" then
+	if detail.pipelines == "loading" then
 		utils.push(lines, spans, "Pipelines", "AtlasColumnHeader", PADDING_X)
 		local loading_text = spinner.with_text("Loading pipelines...")
 		utils.append_block(
@@ -322,9 +330,9 @@ local function render_pipelines(_pr, width, lines, spans, line_map)
 		return
 	end
 
-	if type(detail_state.pipelines) == "string" then
+	if type(detail.pipelines) == "string" then
 		utils.push(lines, spans, "Pipelines", "AtlasColumnHeader", PADDING_X)
-		local err_text = detail_state.pipelines
+		local err_text = detail.pipelines
 		utils.append_block(
 			lines,
 			spans,
@@ -339,7 +347,7 @@ local function render_pipelines(_pr, width, lines, spans, line_map)
 		return
 	end
 
-	local entries = detail_state.pipelines
+	local entries = detail.pipelines
 
 	if #entries == 0 then
 		return
@@ -545,10 +553,10 @@ local function render_merge_check_group(check, width)
 		end
 	end
 
-	for _, detail in ipairs(check.details or {}) do
+	for _, message in ipairs(check.details or {}) do
 		local indent = "  "
 		local detail_width = math.max(2, content_width - vim.api.nvim_strwidth(indent))
-		for _, detail_line in ipairs(utils.wrap_line(detail, detail_width)) do
+		for _, detail_line in ipairs(utils.wrap_line(message, detail_width)) do
 			local text = indent .. detail_line
 			table.insert(lines, text)
 			table.insert(spans, { line = #lines - 1, start_col = 0, end_col = #text, hl_group = "AtlasTextMuted" })
@@ -638,9 +646,7 @@ function M.render(pr, width)
 	local spans = {}
 	local line_map = {}
 
-	if detail_state.current_details then
-		render_description(detail_state.current_details, width, lines, spans, line_map)
-	end
+	render_description(pr, width, lines, spans, line_map)
 	render_reviewers(pr, width, lines, spans)
 	render_merge_checks(pr, width, lines, spans)
 	render_pipelines(pr, width, lines, spans, line_map)
@@ -667,7 +673,7 @@ end
 
 ---@return boolean
 function M.is_loading()
-	return state.any_loading()
+	return state.reviewers == "loading" or state.merge_checks == "loading"
 end
 
 function M.activate(buf, refresh)

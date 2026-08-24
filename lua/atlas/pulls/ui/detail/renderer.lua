@@ -1,11 +1,12 @@
 local M = {}
 
 local utils = require("atlas.ui.shared.utils")
-local detail_state = require("atlas.pulls.ui.detail.state")
+local state = require("atlas.pulls.ui.detail.state")
 local header = require("atlas.pulls.ui.components.header")
 local chips = require("atlas.pulls.ui.components.chips")
 local detail_tabs = require("atlas.pulls.ui.components.tabs")
 local icons = require("atlas.ui.shared.icons")
+local spinner = require("atlas.ui.components.spinner")
 
 local ns = vim.api.nvim_create_namespace("atlas.provider_detail")
 
@@ -45,8 +46,8 @@ end
 ---@param tab_items PullsDetailTab[]
 ---@param get_tab_module fun(key: string): PullsDetailTabModule|nil
 function M.render(tab_items, get_tab_module)
-	local buf = detail_state.buf
-	local win = detail_state.win
+	local buf = state.buf
+	local win = state.win
 	if buf == nil or not vim.api.nvim_buf_is_valid(buf) then
 		return
 	end
@@ -54,14 +55,14 @@ function M.render(tab_items, get_tab_module)
 		return
 	end
 
-	local pr = detail_state.current_pr
-	local details = detail_state.current_details
+	local pr = state.current_pr
+	local details = state.current_details
 	local width = vim.api.nvim_win_get_width(win)
 	local winbar_items = {}
 	if pr ~= nil then
-		if type(detail_state.diffstat) == "table" then
+		if type(state.diffstat) == "table" then
 			local additions, deletions = 0, 0
-			for _, entry in ipairs(detail_state.diffstat) do
+			for _, entry in ipairs(state.diffstat) do
 				additions = additions + (tonumber(entry.lines_added) or 0)
 				deletions = deletions + (tonumber(entry.lines_removed) or 0)
 			end
@@ -88,55 +89,53 @@ function M.render(tab_items, get_tab_module)
 	local spans = {}
 
 	if pr == nil then
-		lines = { "", "  Nothing selected..." }
-		detail_state.line_map = {}
+		if state.details_loading then
+			utils.push(lines, spans, spinner.with_text("Loading pull request..."), "AtlasTextMuted", PADDING_X)
+		else
+			lines = { "", "  Nothing selected..." }
+		end
+		state.line_map = {}
 	else
-		local provider = detail_state.provider
+		local provider = state.provider
 		local provider_detail = provider and provider.capabilities.ui and provider.capabilities.ui.detail
-		local extra_rows = provider_detail
-				and provider_detail.header_rows
-				and provider_detail.header_rows(pr, details, detail_state.header_loading)
-			or nil
+		local extra_fields = provider_detail
+				and provider_detail.header_fields
+				and provider_detail.header_fields(pr, details, state.details_loading)
+			or {}
 		local extra_chips = provider_detail
 				and provider_detail.chips
-				and provider_detail.chips(pr, details, detail_state.header_loading)
-			or nil
+				and provider_detail.chips(pr, details, state.details_loading)
+			or {}
 
 		-- Header
-		local h_lines, h_spans = header.render(pr, width, extra_rows)
+		local h_lines, h_spans = header.render(details or pr, width, extra_fields)
 		utils.append_block(lines, spans, { lines = h_lines, highlights = h_spans })
 
 		-- Chips
-		local chip_line, chip_spans = chips.render(details or pr, {
+		local chip_lines, chip_spans = chips.render(details or pr, {
+			width = width,
 			extra_chips = extra_chips,
-			pipelines = detail_state.pipelines,
-			loading = detail_state.header_loading or detail_state.pipelines == "loading",
+			pipelines = state.pipelines,
+			loading = state.details_loading or state.pipelines == "loading",
 		})
-		table.insert(lines, chip_line)
-		local chip_base = #lines - 1
-		for _, span in ipairs(chip_spans) do
-			table.insert(spans, {
-				line = chip_base,
-				start_col = span.start_col,
-				end_col = span.end_col,
-				hl_group = span.hl_group,
-			})
+		if #chip_lines > 0 then
+			utils.append_block(lines, spans, { lines = chip_lines, highlights = chip_spans })
+			table.insert(lines, "")
 		end
-		table.insert(lines, "")
 
 		-- Tab bar
 		if #tab_items > 1 then
 			local tab_lines, tab_spans =
-				detail_tabs.render(tab_items, detail_state.current_tab, { width = width, padding_x = PADDING_X })
+				detail_tabs.render(tab_items, state.current_tab, { width = width, padding_x = PADDING_X })
 			utils.append_block(lines, spans, { lines = tab_lines, highlights = tab_spans })
 			table.insert(lines, "")
 		end
 
 		-- Tab content
-		local tab_mod = get_tab_module(detail_state.current_tab)
+		local tab_mod = get_tab_module(state.current_tab)
 		local content_offset = #lines
-		if tab_mod then
-			local tab_lines_c, tab_spans_c, tab_line_map = tab_mod.render(pr, width)
+		if tab_mod and details then
+			local tab_lines_c, tab_spans_c, tab_line_map = tab_mod.render(details, width)
 			utils.append_block(lines, spans, { lines = tab_lines_c, highlights = tab_spans_c })
 
 			-- Offset line_map keys to match buffer line numbers (1-indexed)
@@ -144,10 +143,15 @@ function M.render(tab_items, get_tab_module)
 			for lnum, entry in pairs(tab_line_map or {}) do
 				adjusted[content_offset + lnum] = entry
 			end
-			detail_state.line_map = adjusted
+			state.line_map = adjusted
+		elseif details == nil then
+			local text = state.details_loading and spinner.with_text("Loading pull request...")
+				or "Pull request details unavailable."
+			utils.push(lines, spans, text, "AtlasTextMuted", PADDING_X)
+			state.line_map = {}
 		else
-			table.insert(lines, "  Unknown tab: " .. tostring(detail_state.current_tab))
-			detail_state.line_map = {}
+			table.insert(lines, "  Unknown tab: " .. tostring(state.current_tab))
+			state.line_map = {}
 		end
 	end
 

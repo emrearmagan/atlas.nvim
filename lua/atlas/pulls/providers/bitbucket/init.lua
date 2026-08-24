@@ -17,6 +17,8 @@
 ---@field close_source_branch boolean|nil
 ---@field links BitbucketPullRequestLinks
 
+---@class BitbucketPullRequestDetails : PullRequestDetails, BitbucketPullRequest
+
 local actions = require("atlas.pulls.providers.bitbucket.actions")
 local activity_api = require("atlas.pulls.providers.bitbucket.api.activity")
 local changes_api = require("atlas.pulls.providers.bitbucket.api.changes")

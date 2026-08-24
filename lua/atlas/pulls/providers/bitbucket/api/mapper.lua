@@ -226,7 +226,7 @@ local function normalize_pull(item, workspace, repo)
 			https_url = source_https_url,
 			ssh_url = source_ssh_url,
 		},
-		close_source_branch = pr.close_source_branch == true,
+		close_source_branch = type(pr.close_source_branch) == "boolean" and pr.close_source_branch or nil,
 		created_on = tostring(pr.created_on or ""),
 		updated_on = tostring(pr.updated_on or ""),
 		reviewers = participants and M.to_reviewers(participants) or nil,
@@ -314,10 +314,11 @@ end
 ---@param raw table
 ---@param workspace string
 ---@param repo string
----@return PullRequestDetails
+---@return BitbucketPullRequestDetails
 function M.to_pull_request_details(raw, workspace, repo)
 	local normalized = normalize_pull(raw, workspace, repo)
 	local pr = map_summary(normalized)
+	---@cast pr BitbucketPullRequestDetails
 	pr.description = tostring(normalized.description or "")
 	pr.reviewers = normalized.reviewers or {}
 	return pr

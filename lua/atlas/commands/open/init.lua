@@ -25,11 +25,14 @@ local function open_target(target, provider, entity)
 	elseif target.entity == "pr" then
 		---@cast entity PullRequest|nil
 		---@cast provider PullsProvider|nil
-		require("atlas.pulls.ui.detail").open(entity or target, { provider = provider })
+		require("atlas.pulls.ui.detail").open(
+			entity or { id = assert(target.id), repo_full_name = assert(target.repo_full_name) },
+			{ provider = provider }
+		)
 	elseif target.entity == "issue" then
 		---@cast entity Issue|nil
 		---@cast provider IssuesProvider|nil
-		require("atlas.issues.ui.detail").open(entity or target, { provider = provider })
+		require("atlas.issues.ui.detail").open(entity or assert(provider.issue_ref(target)), { provider = provider })
 	else
 		notify.error("Unsupported Atlas target: " .. tostring(target.entity), { vim_notify = true })
 	end
@@ -41,7 +44,8 @@ local function fetch_candidate(target, on_done)
 	local provider = assert(providers.load(target.provider, target.domain))
 	if target.domain == "pulls" then
 		---@cast provider PullsProvider
-		local ref = target --[[@as PullRequestRef]]
+		---@type PullRequestRef
+		local ref = { id = assert(target.id), repo_full_name = assert(target.repo_full_name) }
 		requests.run(function(done)
 			return provider.capabilities.core.fetch_by_refs({ ref }, { force_load = true }, done)
 		end, function(pulls, err)

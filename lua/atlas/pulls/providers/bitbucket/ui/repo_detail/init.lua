@@ -12,22 +12,19 @@ function M.tabs()
 		{
 			key = "overview",
 			label = "Overview",
-			icon = overview_icon,
-			icon_hl = overview_hl,
+			icon = { icon = overview_icon, hl_group = overview_hl },
 			mod = require("atlas.pulls.ui.repo_detail.tabs.overview"),
 		},
 		{
 			key = "branches",
 			label = "Branches",
-			icon = branch_icon,
-			icon_hl = branch_hl,
+			icon = { icon = branch_icon, hl_group = branch_hl },
 			mod = require("atlas.pulls.ui.repo_detail.tabs.branches"),
 		},
 		{
 			key = "tags",
 			label = "Tags",
-			icon = tag_icon,
-			icon_hl = tag_hl,
+			icon = { icon = tag_icon, hl_group = tag_hl },
 			mod = require("atlas.pulls.ui.repo_detail.tabs.tags"),
 		},
 	}

@@ -165,12 +165,13 @@ function M.to_pull_request(raw)
 end
 
 ---@param raw any Decoded API value.
----@return PullRequestDetails|nil
+---@return GitLabPullRequestDetails|nil
 function M.to_pull_request_details(raw)
 	local pr = map_summary(raw)
 	if pr == nil then
 		return nil
 	end
+	---@cast pr GitLabPullRequestDetails
 	local value = json.nilify(raw)
 	pr.description = json.safe_str(value.description) or ""
 	pr.is_subscribed = json.nilify(value.subscribed)
