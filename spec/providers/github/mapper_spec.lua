@@ -58,7 +58,7 @@ end)
 describe("GitHub reviewer decisions", function()
 	it("keeps an active review request pending after an earlier decision", function()
 		local raw = base_raw()
-		raw.latestOpinionatedReviews = {
+		raw.reviews = {
 			nodes = {
 				{ state = "APPROVED", author = { id = "2", login = "reviewer", name = "Reviewer" } },
 			},
@@ -72,6 +72,36 @@ describe("GitHub reviewer decisions", function()
 		local pr = normalizer.to_pull_request(raw)
 
 		assert.equal("pending", pr.reviewers[1].decision)
+	end)
+
+	it("keeps an approval after a later comment", function()
+		local raw = base_raw()
+		raw.reviews = {
+			nodes = {
+				{ state = "APPROVED", author = { id = "2", login = "reviewer", name = "Reviewer" } },
+				{ state = "COMMENTED", author = { id = "2", login = "reviewer", name = "Reviewer" } },
+			},
+		}
+
+		local pr = normalizer.to_pull_request(raw)
+
+		assert.equal(1, #pr.reviewers)
+		assert.equal("approved", pr.reviewers[1].decision)
+		assert.equal("participant", pr.reviewers[1].role)
+	end)
+
+	it("removes a dismissed decision", function()
+		local raw = base_raw()
+		raw.reviews = {
+			nodes = {
+				{ state = "APPROVED", author = { id = "2", login = "reviewer", name = "Reviewer" } },
+				{ state = "DISMISSED", author = { id = "2", login = "reviewer", name = "Reviewer" } },
+			},
+		}
+
+		local pr = normalizer.to_pull_request(raw)
+
+		assert.same({}, pr.reviewers)
 	end)
 end)
 

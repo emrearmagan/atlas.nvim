@@ -99,6 +99,17 @@ local function upsert_reviewer(reviewers, reviewer)
 	table.insert(reviewers, reviewer)
 end
 
+---@param reviewers PullsReviewer[]
+---@param reviewer PullsReviewer
+local function remove_reviewer(reviewers, reviewer)
+	for index, existing in ipairs(reviewers) do
+		if same_reviewer(existing, reviewer) then
+			table.remove(reviewers, index)
+			return
+		end
+	end
+end
+
 ---@param raw any
 ---@param decision "approved"|"changes_requested"|"pending"
 ---@param role "reviewer"|"participant"
@@ -134,14 +145,15 @@ local function pull_reviewer(raw, decision, role)
 end
 
 ---@param raw table
----@return PullRequest
-local function map_summary(raw)
-	local number = tostring(raw.number or "")
-	local author = pull_author(raw.author)
-
-	local has_reviews = json.nilify(raw.latestOpinionatedReviews) ~= nil
+---@return PullsReviewer[]|nil
+function M.to_reviewers(raw)
+	local has_reviews = json.nilify(raw.reviews) ~= nil
 	local has_requests = json.nilify(raw.reviewRequests) ~= nil
 	local reviewers = (has_reviews or has_requests) and {} or nil
+	if reviewers == nil then
+		return nil
+	end
+
 	local requested = {}
 	for _, node in ipairs(github_mapping.connection_nodes(raw.reviewRequestEvents)) do
 		local reviewer = pull_reviewer(node.requestedReviewer, "pending", "reviewer")
@@ -159,26 +171,36 @@ local function map_summary(raw)
 		end
 	end
 
-	local function add_review(node)
+	for _, node in ipairs(github_mapping.connection_nodes(raw.reviews)) do
 		local state = tostring(node.state or ""):upper()
 		local decision = state == "APPROVED" and "approved"
 			or state == "CHANGES_REQUESTED" and "changes_requested"
 			or nil
-		local reviewer = decision and pull_reviewer(node.author, decision, "participant") or nil
+		local reviewer = pull_reviewer(node.author, decision or "pending", "participant")
 		if reviewer then
-			if requested[tostring(reviewer.provider_id):lower()] then
-				reviewer.role = "reviewer"
+			if state == "DISMISSED" then
+				remove_reviewer(reviewers, reviewer)
+			elseif decision then
+				if requested[tostring(reviewer.provider_id):lower()] then
+					reviewer.role = "reviewer"
+				end
+				upsert_reviewer(reviewers, reviewer)
 			end
-			upsert_reviewer(reviewers, reviewer)
 		end
 	end
 
-	for _, node in ipairs(github_mapping.connection_nodes(raw.latestOpinionatedReviews)) do
-		add_review(node)
-	end
 	for _, reviewer in ipairs(active) do
 		upsert_reviewer(reviewers, reviewer)
 	end
+	return reviewers
+end
+
+---@param raw table
+---@return PullRequest
+local function map_summary(raw)
+	local number = tostring(raw.number or "")
+	local author = pull_author(raw.author)
+	local reviewers = M.to_reviewers(raw)
 
 	local state = "open"
 	local raw_state = tostring(raw.state or ""):upper()

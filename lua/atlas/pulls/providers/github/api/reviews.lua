@@ -92,9 +92,6 @@ query($owner:String!,$name:String!,$number:Int!,$endCursor:String){
           author{login ... on User{id name} ... on Bot{id}}
         }
       }
-      latestOpinionatedReviews(first:100){
-        nodes{id state author{login ... on User{id name} ... on Bot{id}}}
-      }
       reviewRequests(first:100){
         nodes{
           requestedReviewer{
@@ -503,72 +500,12 @@ function M.edit_review(pr, review_id, body, on_done)
 	})
 end
 
----@param author PullsAuthor
----@param decision "approved"|"changes_requested"|"pending"
----@param role "reviewer"|"participant"
----@return PullsReviewer
-local function reviewer(author, decision, role)
-	return {
-		id = author.id,
-		provider_id = author.username,
-		name = author.name,
-		username = author.username,
-		nickname = author.nickname,
-		decision = decision,
-		role = role,
-	}
-end
-
----@param pull_request table
----@return PullsReviewer[]
-local function current_reviewers(pull_request)
-	local reviewers, by_login = {}, {}
-	local requested = {}
-	for _, node in ipairs(((pull_request.reviewRequestEvents or {}).nodes or {})) do
-		local author = review_author(node.requestedReviewer)
-		if author then
-			requested[tostring(author.username):lower()] = true
-		end
-	end
-
-	local function add(author, decision, role)
-		if not author then
-			return
-		end
-		local key = tostring(author.username):lower()
-		if requested[key] then
-			role = "reviewer"
-		end
-		local current = by_login[key]
-		if current then
-			current.decision = decision
-			current.role = role
-			return
-		end
-		current = reviewer(author, decision, role)
-		by_login[key] = current
-		table.insert(reviewers, current)
-	end
-
-	for _, node in ipairs(((pull_request.latestOpinionatedReviews or {}).nodes or {})) do
-		local state = tostring(node.state or "")
-		if state == "APPROVED" then
-			add(review_author(node.author), "approved", "participant")
-		elseif state == "CHANGES_REQUESTED" then
-			add(review_author(node.author), "changes_requested", "participant")
-		end
-	end
-	for _, node in ipairs(((pull_request.reviewRequests or {}).nodes or {})) do
-		add(review_author(node.requestedReviewer), "pending", "reviewer")
-	end
-	return reviewers
-end
-
 ---@param pages table[]
 ---@return { reviewers: PullsReviewer[], history: PullsReviewHistoryEntry[] }|nil
 local function review_details(pages)
 	local pull_request
 	local history = {}
+	local review_nodes = {}
 	for _, page in ipairs(pages) do
 		local data = json.nilify(page.data)
 		local repository = data and json.nilify(data.repository)
@@ -578,6 +515,7 @@ local function review_details(pages)
 		end
 		pull_request = pull_request or current
 		for _, node in ipairs(((current.reviews or {}).nodes or {})) do
+			table.insert(review_nodes, node)
 			local state = HISTORY_STATES[tostring(node.state or "")]
 			local body = json.safe_str(node.body) or ""
 			if vim.trim(body) == "" then
@@ -626,7 +564,14 @@ local function review_details(pages)
 			table.insert(visible, entry)
 		end
 	end
-	return { reviewers = current_reviewers(pull_request), history = visible }
+	return {
+		reviewers = mapper.to_reviewers({
+			reviews = { nodes = review_nodes },
+			reviewRequests = pull_request.reviewRequests,
+			reviewRequestEvents = pull_request.reviewRequestEvents,
+		}) or {},
+		history = visible,
+	}
 end
 
 ---@param pr PullRequest

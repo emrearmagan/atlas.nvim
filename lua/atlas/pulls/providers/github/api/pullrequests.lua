@@ -15,7 +15,7 @@ query($owner: String!, $repo: String!, $number: Int!) {
       reactionGroups { content reactors { totalCount } }
       additions deletions
       labels(first: 10) { nodes { name color } }
-      latestOpinionatedReviews(last: 100) {
+      reviews(last: 100) {
         nodes { state author { login ... on User { id name } } }
       }
       reviewRequests(first: 100) {
@@ -239,7 +239,7 @@ function M.get_pr(owner, repo, number, on_done, opts)
 			sshUrl = repository.sshUrl,
 		}
 		local pr = mapper.to_pull_request_details(pr_raw)
-		cli.set_mem(cache_key, pr)
+		cli.set_mem(cache_key, pr, cli.cache_ttl())
 		on_done(pr, nil)
 	end, {
 		action = "Fetch PR",
