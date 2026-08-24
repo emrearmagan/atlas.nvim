@@ -66,8 +66,15 @@ end
 ---@class AtlasMarkdownEditorAction
 ---@field key string
 ---@field description string|nil
----@field callback fun(ctx: { buf: integer, win: integer, close: fun(), get_text: fun(): string })
+---@field callback fun(ctx: AtlasMarkdownEditorActionContext)
 ---@field mode string|string[]|nil
+
+---@class AtlasMarkdownEditorActionContext
+---@field buf integer
+---@field win integer
+---@field close fun()
+---@field get_text fun(): string
+---@field set_text fun(text: string)
 
 ---@class AtlasMarkdownEditorPreview
 ---@field lines string[]
@@ -176,15 +183,9 @@ function M.open(opts)
 		table.insert(footer_items, string.format("%s save+close", table.concat(submit_keys, " / ")))
 	end
 	for _, action in ipairs(opts.actions or {}) do
-		local action_key = action.key
 		local description = action.description
-		if
-			type(action_key) == "string"
-			and action_key ~= ""
-			and type(description) == "string"
-			and description ~= ""
-		then
-			table.insert(footer_items, string.format("%s %s", action_key, description))
+		if description and description ~= "" then
+			table.insert(footer_items, string.format("%s %s", action.key, description))
 		end
 	end
 
@@ -339,6 +340,18 @@ function M.open(opts)
 		return table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
 	end
 
+	local function set_text(text)
+		local lines = vim.split(utils.normalize_newlines(text), "\n", { plain = true })
+		if #lines == 0 then
+			lines = { "" }
+		end
+		vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+		vim.api.nvim_win_set_cursor(win, { #lines, #lines[#lines] })
+		if preview then
+			reveal_preview()
+		end
+	end
+
 	for _, close_key in ipairs(close_keys) do
 		vim.keymap.set("n", close_key, function()
 			if opts.on_cancel then
@@ -373,6 +386,7 @@ function M.open(opts)
 				win = win,
 				close = close_editor,
 				get_text = get_text,
+				set_text = set_text,
 			})
 			if not ok then
 				statusline.notify("error", tostring(err or "Markdown action failed"))
