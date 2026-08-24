@@ -339,6 +339,7 @@ function M.open(opts)
 	local function get_text()
 		return table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
 	end
+
 	local function set_text(text)
 		local lines = vim.split(utils.normalize_newlines(text), "\n", { plain = true })
 		if #lines == 0 then
@@ -346,6 +347,9 @@ function M.open(opts)
 		end
 		vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
 		vim.api.nvim_win_set_cursor(win, { #lines, #lines[#lines] })
+		if preview then
+			reveal_preview()
+		end
 	end
 
 	for _, close_key in ipairs(close_keys) do
