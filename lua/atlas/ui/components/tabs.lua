@@ -2,13 +2,7 @@ local utils = require("atlas.ui.shared.utils")
 
 local M = {}
 
----@class AtlasTabItem
----@field key string
----@field label string
----@field icon? string
----@field icon_hl? string
-
----@param items AtlasTabItem[]
+---@param items { key: string, label: string, icon: string|nil, icon_hl: string|nil }[]
 ---@param active_tab string
 ---@param width integer
 ---@param opts? { inactive_hl?: string, active_hl?: string, gap?: string, divider_hl?: string, padding_x?: integer }

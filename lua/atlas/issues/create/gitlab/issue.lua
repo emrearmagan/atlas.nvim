@@ -422,11 +422,7 @@ local function submit(issue_state)
 	end)
 end
 
----@class GitLabIssueEditorOpts
----@field project_path string
----@field on_done fun(result: GitLabIssueEditorResult|nil, err: string|nil)|nil
-
----@param opts GitLabIssueEditorOpts
+---@param opts { project_path: string, on_done: fun(result: GitLabIssueEditorResult|nil, err: string|nil)|nil }
 function M.open(opts)
 	if type(opts) ~= "table" then
 		notify.warn("create_issue.open: missing options", { timeout = 1500, vim_notify = true })

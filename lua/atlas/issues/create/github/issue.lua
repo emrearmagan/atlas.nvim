@@ -381,11 +381,7 @@ local function submit(issue_state)
 	end)
 end
 
----@class GitHubIssueEditorOpts
----@field repo_slug string
----@field on_done fun(result: GitHubIssueEditorResult|nil, err: string|nil)|nil
-
----@param opts GitHubIssueEditorOpts
+---@param opts { repo_slug: string, on_done: fun(result: GitHubIssueEditorResult|nil, err: string|nil)|nil }
 function M.open(opts)
 	if type(opts) ~= "table" then
 		notify.warn("create_issue.open: missing options", { vim_notify = true })

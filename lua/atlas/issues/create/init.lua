@@ -4,11 +4,7 @@ local notify = require("atlas.core.notify")
 local picker = require("atlas.picker")
 local providers = require("atlas.providers")
 
----@class AtlasCreateIssueChoice
----@field label string
----@field provider IssuesProvider
-
----@return AtlasCreateIssueChoice[]
+---@return { label: string, provider: IssuesProvider }[]
 local function build_choices()
 	local choices = {}
 	local actions = require("atlas.issues.actions")

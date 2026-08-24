@@ -2,6 +2,7 @@ local M = {}
 
 local service = require("atlas.providers.gitlab.client")
 local normalizer = require("atlas.issues.providers.gitlab.api.mapper")
+local request_scope = require("atlas.core.requests")
 local LIST_CACHE_PREFIX = "gitlab:issues:list:v3:"
 
 ---@param path string
@@ -16,7 +17,7 @@ end
 local function build_query(params)
 	local keys = {}
 	for k, v in pairs(params or {}) do
-		if v ~= nil and v ~= "" then
+		if (type(v) == "table" and #v > 0) or (type(v) ~= "table" and v ~= nil and v ~= "") then
 			table.insert(keys, k)
 		end
 	end
@@ -27,7 +28,16 @@ local function build_query(params)
 
 	local parts = {}
 	for _, key in ipairs(keys) do
-		table.insert(parts, key .. "=" .. service.url_encode(tostring(params[key])))
+		local value = params[key]
+		if type(value) == "table" then
+			for _, item in ipairs(value) do
+				if item ~= nil and item ~= "" then
+					table.insert(parts, key .. "=" .. service.url_encode(tostring(item)))
+				end
+			end
+		else
+			table.insert(parts, key .. "=" .. service.url_encode(tostring(value)))
+		end
 	end
 	return "?" .. table.concat(parts, "&")
 end
@@ -92,6 +102,58 @@ function M.list_issues(view, opts, on_done)
 		action = "List issues",
 		endpoint = endpoint,
 	})
+end
+
+---@param keys string[]
+---@param opts { force_load?: boolean }|nil
+---@param on_done fun(issues: Issue[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_by_keys(keys, opts, on_done)
+	opts = opts or {}
+	if #keys == 0 then
+		on_done({}, nil)
+		return nil
+	end
+
+	local iids_by_project = {}
+	for _, key in ipairs(keys) do
+		local path, iid = normalizer.parse_key(key)
+		if path == "" or iid == nil then
+			on_done(nil, "Invalid issue key: " .. tostring(key))
+			return nil
+		end
+		iids_by_project[path] = iids_by_project[path] or {}
+		table.insert(iids_by_project[path], iid)
+	end
+
+	local starts = {}
+	for path, iids in pairs(iids_by_project) do
+		starts[path] = function(done)
+			return M.list_issues({
+				project = path,
+				scope = "all",
+				state = "all",
+				extra_params = { ["iids[]"] = iids },
+			}, {
+				force_load = opts.force_load == true,
+				max_results = #iids,
+			}, done)
+		end
+	end
+
+	local requests = request_scope.new()
+	requests.all(starts, function(values, errors)
+		local issues = {}
+		for path in pairs(iids_by_project) do
+			if errors[path] then
+				on_done(nil, errors[path])
+				return
+			end
+			vim.list_extend(issues, values[path] or {})
+		end
+		on_done(issues, nil)
+	end)
+	return requests
 end
 
 ---@param key string

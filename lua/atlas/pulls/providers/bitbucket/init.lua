@@ -193,6 +193,7 @@ return {
 			fetch_user = users_api.fetch_current_user,
 			search_query = search_query,
 			fetch_pullrequests = fetch_pullrequests,
+			fetch_by_refs = pullrequests_api.fetch_by_refs,
 			fetch_pullrequest = pullrequests_api.fetch_pullrequest,
 			fetch_description = pullrequests_api.fetch_description,
 			create_pr = pullrequests_api.create_pr,

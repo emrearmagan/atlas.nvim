@@ -288,6 +288,14 @@ local function map_summary(raw)
 	}
 end
 
+---@param raw table
+---@param workspace string
+---@param repo string
+---@return PullRequest
+function M.to_pull_request(raw, workspace, repo)
+	return map_summary(normalize_pull(raw, workspace, repo))
+end
+
 ---@param result table|nil
 ---@param workspace string|nil
 ---@param repo string|nil
@@ -299,7 +307,7 @@ function M.to_pull_requests_list(result, workspace, repo)
 	local rp = tostring(repo or "")
 
 	for _, item in ipairs(payload.values or {}) do
-		table.insert(out, map_summary(normalize_pull(item, ws, rp)))
+		table.insert(out, M.to_pull_request(item, ws, rp))
 	end
 
 	return out

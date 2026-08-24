@@ -1,12 +1,8 @@
 local M = {}
 
----@class AtlasVirtualLinesOptions
----@field width integer|nil
----@field background_hl_group string|nil
-
 ---@param lines string[]
 ---@param highlights AtlasUIHighlight[]|nil
----@param opts AtlasVirtualLinesOptions|nil
+---@param opts { width: integer|nil, background_hl_group: string|nil }|nil
 ---@return [string, string|string[]][][]
 function M.render(lines, highlights, opts)
 	opts = opts or {}

@@ -486,7 +486,7 @@ end
 
 ---@param on_submit fun(fields: IssueEditorFields, done: fun(ok: boolean, err: string|nil))|nil
 ---@param opts IssueEditorFields
----@param editor_opts { preview_fn?: fun(markdown: string): string, current_user?: IssueUser }|nil
+---@param editor_opts { preview_fn: (fun(markdown: string): string)|nil, current_user: IssueUser|nil }|nil
 function M.open(on_submit, opts, editor_opts)
 	if valid_win(state.layout.editor_win) then
 		close_ui()

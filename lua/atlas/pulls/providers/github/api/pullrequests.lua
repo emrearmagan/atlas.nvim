@@ -55,26 +55,30 @@ query($owner: String!, $repo: String!, $number: Int!) {
 }
 ]]
 
+local PULL_REQUEST_FIELDS_GQL = [[
+fragment PullRequestFields on PullRequest {
+  id number title state isDraft reviewDecision
+  createdAt updatedAt url
+  additions deletions
+  author { login ... on User { name } }
+  headRefName baseRefName headRefOid baseRefOid
+  totalCommentsCount
+  repository { name nameWithOwner url sshUrl }
+  commits(last: 1) {
+    nodes { commit { statusCheckRollup { state } } }
+  }
+}
+]]
+
 local SEARCH_GQL = [[
 query($search: String!, $limit: Int!) {
   search(query: $search, type: ISSUE, first: $limit) {
     nodes {
-      ... on PullRequest {
-        id number title state isDraft reviewDecision
-        createdAt updatedAt url
-        additions deletions
-        author { login ... on User { name } }
-        headRefName baseRefName headRefOid baseRefOid
-        totalCommentsCount
-        repository { name nameWithOwner url sshUrl }
-        commits(last: 1) {
-          nodes { commit { statusCheckRollup { state } } }
-        }
-      }
+      ... on PullRequest { ...PullRequestFields }
     }
   }
 }
-]]
+]] .. PULL_REQUEST_FIELDS_GQL
 
 ---@param search string
 ---@param on_done fun(pulls: PullRequest[], err: string[]|nil)
@@ -116,6 +120,74 @@ function M.search_prs(search, on_done, opts)
 		action = "Search PRs",
 		search = search,
 		limit = limit,
+	})
+end
+
+---@param refs PullRequestRef[]
+---@param on_done fun(pulls: PullRequest[], err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_by_refs(refs, on_done)
+	if #refs == 0 then
+		on_done({}, nil)
+		return nil
+	end
+
+	local variables = {}
+	local selections = {}
+	local args = { "api", "graphql" }
+	for index, ref in ipairs(refs) do
+		local owner, repo = ref.repo_full_name:match("^([^/]+)/(.+)$")
+		if owner == nil or repo == nil then
+			on_done({}, "Missing repository info")
+			return nil
+		end
+		table.insert(variables, string.format("$owner%d: String!", index))
+		table.insert(variables, string.format("$repo%d: String!", index))
+		table.insert(variables, string.format("$number%d: Int!", index))
+		table.insert(
+			selections,
+			string.format(
+				"  item%d: repository(owner: $owner%d, name: $repo%d) { pullRequest(number: $number%d) { ...PullRequestFields } }",
+				index,
+				index,
+				index,
+				index
+			)
+		)
+		table.insert(args, "-f")
+		table.insert(args, string.format("owner%d=%s", index, owner))
+		table.insert(args, "-f")
+		table.insert(args, string.format("repo%d=%s", index, repo))
+		table.insert(args, "-F")
+		table.insert(args, string.format("number%d=%s", index, tostring(ref.id)))
+	end
+
+	local query = string.format(
+		"query(%s) {\n%s\n}\n%s",
+		table.concat(variables, ", "),
+		table.concat(selections, "\n"),
+		PULL_REQUEST_FIELDS_GQL
+	)
+	table.insert(args, "-f")
+	table.insert(args, "query=" .. query)
+
+	return cli.gh(args, function(result, err)
+		if err or type(result) ~= "table" then
+			on_done({}, err or "Failed to fetch pull requests")
+			return
+		end
+
+		local nodes = {}
+		for index = 1, #refs do
+			local repository = result.data["item" .. index]
+			if type(repository) == "table" and type(repository.pullRequest) == "table" then
+				table.insert(nodes, repository.pullRequest)
+			end
+		end
+		on_done(mapper.to_search_results_from_graphql(nodes), nil)
+	end, {
+		action = "Fetch PRs by refs",
+		count = #refs,
 	})
 end
 

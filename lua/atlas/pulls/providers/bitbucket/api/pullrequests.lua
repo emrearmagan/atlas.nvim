@@ -4,6 +4,7 @@ local config = require("atlas.config")
 local service = require("atlas.pulls.providers.bitbucket.api.service")
 local mapper = require("atlas.pulls.providers.bitbucket.api.mapper")
 local logger = require("atlas.core.logger")
+local request_scope = require("atlas.core.requests")
 local state = require("atlas.pulls.providers.bitbucket.state")
 
 ---@param pr PullRequest
@@ -193,6 +194,59 @@ function M.fetch_pullrequests(view_repos, opts, on_done)
 	return {
 		cancel = cancel_all,
 	}
+end
+
+---@param refs PullRequestRef[]
+---@param _opts PullsFetchOpts
+---@param on_done fun(pulls: PullRequest[], err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_by_refs(refs, _opts, on_done)
+	if #refs == 0 then
+		on_done({}, nil)
+		return nil
+	end
+
+	local parsed = {}
+	for index, ref in ipairs(refs) do
+		local workspace, repo = tostring(ref.repo_full_name or ""):match("^([^/]+)/(.+)$")
+		if workspace == nil or repo == nil then
+			on_done({}, "PR missing workspace/repo info")
+			return nil
+		end
+		parsed[index] = { ref = ref, workspace = workspace, repo = repo }
+	end
+
+	local requests = request_scope.new()
+	local starts = {}
+	for index, item in ipairs(parsed) do
+		starts[index] = function(done)
+			local endpoint =
+				string.format("/repositories/%s/%s/pullrequests/%s", item.workspace, item.repo, tostring(item.ref.id))
+			return service.request("GET", endpoint, nil, nil, function(result, err)
+				if err then
+					done(nil, err)
+					return
+				end
+				local pull = mapper.to_pull_request(result, item.workspace, item.repo)
+				done(pull, nil)
+			end)
+		end
+	end
+
+	requests.all(starts, function(values, errors)
+		local pulls = {}
+		for index = 1, #parsed do
+			if errors[index] then
+				on_done({}, errors[index])
+				return
+			end
+			if values[index] then
+				table.insert(pulls, values[index])
+			end
+		end
+		on_done(pulls, nil)
+	end)
+	return requests
 end
 
 ---@param pr PullRequestRef

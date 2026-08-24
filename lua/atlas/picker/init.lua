@@ -61,8 +61,8 @@ end
 --- items: any[],
 --- kind: string|nil,
 --- format_item: (fun(item: any): string)|nil,
---- on_select: fun(item: any|nil, index: integer|nil),
---- }
+--- on_select: (fun(item: any|nil, index: integer|nil)),
+---}
 function M.select(opts)
 	vim.ui.select(opts.items, {
 		prompt = opts.title,
@@ -71,14 +71,7 @@ function M.select(opts)
 	}, opts.on_select)
 end
 
----@param opts {
---- title: string,
---- items: any[],
---- key: fun(item: any): string,
---- format_item: AtlasPickerFormatItem,
---- initial_index: integer|nil,
---- on_select: fun(item: any|nil),
---- }
+---@param opts { title: string, items: any[], key: (fun(item: any): string), format_item: AtlasPickerFormatItem, initial_index: integer|nil, on_select: (fun(item: any|nil)) }
 function M.find(opts)
 	open_backend({
 		title = opts.title,
@@ -95,14 +88,7 @@ function M.find(opts)
 	})
 end
 
----@param opts {
---- title: string,
---- items: any[],
---- key: fun(item: any): string,
---- format_item: AtlasPickerFormatItem,
---- preview_item: AtlasPickerPreviewItem,
---- on_select: fun(item: any|nil),
---- }
+---@param opts { title: string, items: any[], key: (fun(item: any): string), format_item: AtlasPickerFormatItem, preview_item: AtlasPickerPreviewItem, on_select: (fun(item: any|nil)) }
 function M.select_with_preview(opts)
 	open_backend({
 		title = opts.title,
@@ -119,14 +105,7 @@ function M.select_with_preview(opts)
 	})
 end
 
----@param opts {
---- title: string,
---- items: any[],
---- selected: any[],
---- key: fun(item: any): string,
---- format_item: AtlasPickerFormatItem,
---- on_done: fun(selected: any[]),
---- }
+---@param opts { title: string, items: any[], selected: any[], key: (fun(item: any): string), format_item: AtlasPickerFormatItem, on_done: (fun(selected: any[])) }
 function M.multi_select(opts)
 	local available = {}
 	for _, item in ipairs(opts.items) do
@@ -167,9 +146,9 @@ end
 --- format_item: AtlasPickerFormatItem,
 --- preview_item: AtlasPickerPreviewItem|nil,
 --- fetch: AtlasPickerFetch,
---- on_select: fun(item: any),
---- on_cancel: fun()|nil,
---- }
+--- on_select: (fun(item: any)),
+--- on_cancel: (fun())|nil,
+---}
 function M.search(opts)
 	open_backend({
 		title = opts.title,

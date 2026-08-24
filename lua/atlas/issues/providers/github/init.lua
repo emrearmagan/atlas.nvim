@@ -1,4 +1,3 @@
----@class GitHubIssuesProvider : IssuesProvider
 local M = {}
 
 local config = require("atlas.config")
@@ -54,6 +53,14 @@ function M.fetch_issues(view, opts, on_done)
 		limit = limit,
 		with_relationships = layout ~= "compact",
 	})
+end
+
+---@param keys string[]
+---@param _opts IssuesFetchOpts|nil
+---@param on_done fun(issues: Issue[], err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_by_keys(keys, _opts, on_done)
+	return require("atlas.issues.providers.github.api.issues").fetch_by_keys(keys, on_done)
 end
 
 ---@param key string
@@ -304,6 +311,7 @@ return {
 			fetch_user = require("atlas.issues.providers.github.api.users").get_user,
 			search_query = M.search_query,
 			fetch_issues = M.fetch_issues,
+			fetch_by_keys = M.fetch_by_keys,
 			fetch_issue = M.fetch_issue,
 			update_description = M.update_description,
 			views = M.views,

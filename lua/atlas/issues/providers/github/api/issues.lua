@@ -5,6 +5,17 @@ local cache = require("atlas.issues.providers.github.api.cache")
 local normalizer = require("atlas.issues.providers.github.api.mapper")
 local json = require("atlas.core.json")
 
+local ISSUE_FIELDS_GQL = [[
+fragment IssueFields on Issue {
+  number title state isPinned
+  createdAt updatedAt url
+  repository { nameWithOwner }
+  author { login ... on User { name } }
+  assignees(first: 1) { nodes { login name } }
+  comments { totalCount }
+}
+]]
+
 local SEARCH_GQL = [[
 query($search: String!, $limit: Int!, $withRelationships: Boolean!) {
   search(query: $search, type: ISSUE, first: $limit) {
@@ -22,16 +33,7 @@ query($search: String!, $limit: Int!, $withRelationships: Boolean!) {
     }
   }
 }
-
-fragment IssueFields on Issue {
-  number title state isPinned
-  createdAt updatedAt url
-  repository { nameWithOwner }
-  author { login ... on User { name } }
-  assignees(first: 1) { nodes { login name } }
-  comments { totalCount }
-}
-]]
+]] .. ISSUE_FIELDS_GQL
 
 local DETAIL_GQL = [[
 query($owner: String!, $repo: String!, $number: Int!, $withRelationships: Boolean!) {
@@ -217,6 +219,90 @@ function M.get_issue(key, on_done, opts)
 		action = "Fetch issue",
 		slug = slug,
 		number = number,
+	})
+end
+
+---@param keys string[]
+---@param on_done fun(issues: Issue[], err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_by_keys(keys, on_done)
+	local refs = {}
+
+	for _, key in ipairs(keys) do
+		local slug, number = normalizer.parse_key(key)
+		local owner, repo = slug:match("^([^/]+)/(.+)$")
+		if number == nil or owner == nil or repo == nil then
+			on_done({}, "Invalid issue key: " .. tostring(key))
+			return nil
+		end
+		table.insert(refs, { slug = slug, owner = owner, repo = repo, number = number })
+	end
+
+	if #refs == 0 then
+		on_done({}, nil)
+		return nil
+	end
+
+	local variables = {}
+	local selections = {}
+	local args = { "api", "graphql" }
+	for index, ref in ipairs(refs) do
+		ref.alias = "item" .. index
+		table.insert(variables, string.format("$owner%d: String!", index))
+		table.insert(variables, string.format("$repo%d: String!", index))
+		table.insert(variables, string.format("$number%d: Int!", index))
+		table.insert(
+			selections,
+			string.format(
+				"  %s: repository(owner: $owner%d, name: $repo%d) { issue(number: $number%d) { ...IssueFields } }",
+				ref.alias,
+				index,
+				index,
+				index
+			)
+		)
+		table.insert(args, "-f")
+		table.insert(args, string.format("owner%d=%s", index, ref.owner))
+		table.insert(args, "-f")
+		table.insert(args, string.format("repo%d=%s", index, ref.repo))
+		table.insert(args, "-F")
+		table.insert(args, string.format("number%d=%d", index, ref.number))
+	end
+
+	local query = string.format(
+		"query(%s) {\n%s\n}\n%s",
+		table.concat(variables, ", "),
+		table.concat(selections, "\n"),
+		ISSUE_FIELDS_GQL
+	)
+	table.insert(args, "-f")
+	table.insert(args, "query=" .. query)
+
+	return cli.gh(args, function(result, err)
+		if err or type(result) ~= "table" then
+			on_done({}, err or "Failed to fetch issues")
+			return
+		end
+
+		local data = json.nilify(result.data)
+		if type(data) ~= "table" then
+			on_done({}, "Empty response")
+			return
+		end
+
+		local issues = {}
+		for _, ref in ipairs(refs) do
+			local repository = json.nilify(data[ref.alias])
+			local raw = type(repository) == "table" and json.nilify(repository.issue) or nil
+			local issue = normalizer.to_issue(raw, ref.slug)
+			if issue then
+				table.insert(issues, issue)
+			end
+		end
+		on_done(issues, nil)
+	end, {
+		action = "Fetch issues by keys",
+		count = #refs,
 	})
 end
 

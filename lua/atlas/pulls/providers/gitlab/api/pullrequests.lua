@@ -2,6 +2,7 @@ local M = {}
 
 local service = require("atlas.providers.gitlab.client")
 local mapper = require("atlas.pulls.providers.gitlab.api.mapper")
+local request_scope = require("atlas.core.requests")
 local reviews_api = require("atlas.pulls.providers.gitlab.api.reviews")
 
 ---@param params table<string, any>
@@ -9,7 +10,13 @@ local reviews_api = require("atlas.pulls.providers.gitlab.api.reviews")
 local function build_query(params)
 	local parts = {}
 	for k, v in pairs(params or {}) do
-		if v ~= nil and v ~= "" then
+		if type(v) == "table" then
+			for _, item in ipairs(v) do
+				if item ~= nil and item ~= "" then
+					table.insert(parts, k .. "=" .. service.url_encode(tostring(item)))
+				end
+			end
+		elseif v ~= nil and v ~= "" then
 			table.insert(parts, k .. "=" .. service.url_encode(tostring(v)))
 		end
 	end
@@ -93,6 +100,59 @@ function M.fetch_pullrequests(view, opts, on_done)
 		action = "List MRs",
 		endpoint = endpoint,
 	})
+end
+
+---@param refs PullRequestRef[]
+---@param opts PullsFetchOpts|nil
+---@param on_done fun(pulls: PullRequest[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_by_refs(refs, opts, on_done)
+	opts = opts or {}
+	if #refs == 0 then
+		on_done({}, nil)
+		return nil
+	end
+
+	local iids_by_project = {}
+	for _, ref in ipairs(refs) do
+		local path = tostring(ref.repo_full_name or "")
+		local iid = tonumber(ref.id)
+		if path == "" or iid == nil then
+			on_done(nil, "Invalid MR identifier")
+			return nil
+		end
+		iids_by_project[path] = iids_by_project[path] or {}
+		table.insert(iids_by_project[path], iid)
+	end
+
+	local starts = {}
+	for path, iids in pairs(iids_by_project) do
+		starts[path] = function(done)
+			return M.fetch_pullrequests({
+				project = path,
+				scope = "all",
+				extra_params = { ["iids[]"] = iids },
+			}, {
+				force_load = opts.force_load == true,
+				pagelen = #iids,
+				state = "all",
+			}, done)
+		end
+	end
+
+	local requests = request_scope.new()
+	requests.all(starts, function(values, errors)
+		local pulls = {}
+		for path in pairs(iids_by_project) do
+			if errors[path] then
+				on_done(nil, errors[path])
+				return
+			end
+			vim.list_extend(pulls, values[path] or {})
+		end
+		on_done(pulls, nil)
+	end)
+	return requests
 end
 
 ---@param project_path string

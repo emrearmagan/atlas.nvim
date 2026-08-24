@@ -10,7 +10,7 @@ local requests = request_scope.new()
 
 ---@param target AtlasTarget
 ---@param provider IssuesProvider|PullsProvider|nil
----@param entity IssueDetails|PullRequestDetails|nil
+---@param entity Issue|PullRequest|nil
 local function open_target(target, provider, entity)
 	provider = provider or providers.load(target.provider, target.domain)
 	if provider == nil or config.provider_options(target.provider) == nil then
@@ -23,11 +23,11 @@ local function open_target(target, provider, entity)
 	if target.entity == "repo" then
 		require("atlas").open(target.domain, target.provider, { initial_view = provider.search_view(target) })
 	elseif target.entity == "pr" then
-		---@cast entity PullRequestDetails|nil
+		---@cast entity PullRequest|nil
 		---@cast provider PullsProvider|nil
 		require("atlas.pulls.ui.detail").open(entity or target, { provider = provider })
 	elseif target.entity == "issue" then
-		---@cast entity IssueDetails|nil
+		---@cast entity Issue|nil
 		---@cast provider IssuesProvider|nil
 		require("atlas.issues.ui.detail").open(entity or target, { provider = provider })
 	else
@@ -36,16 +36,16 @@ local function open_target(target, provider, entity)
 end
 
 ---@param target AtlasTarget
----@param on_done fun(entity: IssueDetails|PullRequestDetails|nil, provider: IssuesProvider|PullsProvider, err: string|nil)
-local function fetch(target, on_done)
+---@param on_done fun(entity: Issue|PullRequest|nil, provider: IssuesProvider|PullsProvider, err: string|nil)
+local function fetch_candidate(target, on_done)
 	local provider = assert(providers.load(target.provider, target.domain))
 	if target.domain == "pulls" then
 		---@cast provider PullsProvider
 		local ref = target --[[@as PullRequestRef]]
 		requests.run(function(done)
-			return provider.capabilities.core.fetch_pullrequest(ref, { force_load = true }, done)
-		end, function(pr, err)
-			on_done(pr, provider, err)
+			return provider.capabilities.core.fetch_by_refs({ ref }, { force_load = true }, done)
+		end, function(pulls, err)
+			on_done(pulls and pulls[1] or nil, provider, err)
 		end)
 		return
 	end
@@ -57,15 +57,15 @@ local function fetch(target, on_done)
 		return
 	end
 	requests.run(function(done)
-		return provider.capabilities.core.fetch_issue(key, { force_load = true }, done)
-	end, function(issue, err)
-		on_done(issue, provider, err)
+		return provider.capabilities.core.fetch_by_keys({ key }, { force_load = true }, done)
+	end, function(issues, err)
+		on_done(issues and issues[1] or nil, provider, err)
 	end)
 end
 
 ---@param number integer
 ---@param repository AtlasTarget
----@param on_done fun(target: AtlasTarget|nil, provider: IssuesProvider|PullsProvider|nil, entity: IssueDetails|PullRequestDetails|nil, err: string|nil)
+---@param on_done fun(target: AtlasTarget|nil, provider: IssuesProvider|PullsProvider|nil, entity: Issue|PullRequest|nil, err: string|nil)
 local function fetch_repository_number(number, repository, on_done)
 	local candidates = {}
 	for _, domain in ipairs({ "pulls", "issues" }) do
@@ -87,7 +87,7 @@ local function fetch_repository_number(number, repository, on_done)
 			on_done(nil, nil, nil, last_err or "Reference not found")
 			return
 		end
-		fetch(target, function(entity, provider, err)
+		fetch_candidate(target, function(entity, provider, err)
 			if entity then
 				on_done(target, provider, entity, nil)
 			else

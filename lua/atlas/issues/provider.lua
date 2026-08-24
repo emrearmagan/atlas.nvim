@@ -30,6 +30,7 @@
 ---@field fetch_user fun(on_done: fun(user: IssueUser|nil, err: string|nil)): { cancel: fun() }|nil
 ---@field search_query fun(view: IssuesViewConfig, opts: IssuesFetchOpts): string
 ---@field fetch_issues fun(view: IssuesViewConfig, opts: IssuesFetchOpts, on_done: fun(issues: Issue[], next_page_token: string|nil, is_last: boolean, err: string|nil)): { cancel: fun() }|nil
+---@field fetch_by_keys fun(keys: string[], opts: IssuesFetchOpts, on_done: fun(issues: Issue[], err: string|nil)): { cancel: fun() }|nil
 ---@field fetch_issue fun(issue_key: string, opts: IssuesFetchOpts|nil, on_done: fun(issue: IssueDetails|nil, err: string|nil)): { cancel: fun() }|nil
 ---@field update_description (fun(issue: IssueDetails, content: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field views fun(): IssuesViewConfig[]

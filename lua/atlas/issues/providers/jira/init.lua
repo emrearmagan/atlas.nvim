@@ -1,4 +1,3 @@
----@class JiraProvider : IssuesProvider
 local M = {}
 
 local request_scope = require("atlas.core.requests")
@@ -130,6 +129,30 @@ function M.fetch_issues(view, opts, on_done)
 		end)
 	end)
 	return requests
+end
+
+---@param keys string[]
+---@param opts IssuesFetchOpts|nil
+---@param on_done fun(issues: Issue[], err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_by_keys(keys, opts, on_done)
+	if #keys == 0 then
+		on_done({}, nil)
+		return nil
+	end
+
+	local quoted = {}
+	for _, key in ipairs(keys) do
+		table.insert(quoted, string.format('"%s"', key:gsub('"', '\\"')))
+	end
+
+	local issues_api = require("atlas.issues.providers.jira.api.issues")
+	return issues_api.search_issues("key in (" .. table.concat(quoted, ",") .. ")", function(page, err)
+		on_done(page and page.issues or {}, err)
+	end, {
+		force_load = opts and opts.force_load == true,
+		max_results = #keys,
+	})
 end
 
 ---@param issue_key string
@@ -267,6 +290,7 @@ return {
 			fetch_user = require("atlas.issues.providers.jira.api.users").get_myself,
 			search_query = M.search_query,
 			fetch_issues = M.fetch_issues,
+			fetch_by_keys = M.fetch_by_keys,
 			fetch_issue = M.fetch_issue,
 			views = M.views,
 			refresh = M.on_refresh,

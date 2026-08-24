@@ -287,10 +287,6 @@ local function is_table_separator(line)
 	return true
 end
 
----@class MdLineContext
----@field lines string[]
----@field i integer
-
 local line_handlers = {}
 
 -- ```lang

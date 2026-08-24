@@ -441,12 +441,8 @@ function M.ensure_pr_repository(pr, repo_path, on_progress, on_done)
 	return handle
 end
 
----@class CheckoutResult
----@field repo_path string
----@field local_branch string
-
 ---@param pr PullRequest|nil
----@param on_done fun(result: CheckoutResult|nil, err: string|nil)
+---@param on_done fun(result: { repo_path: string, local_branch: string }|nil, err: string|nil)
 function M.checkout_pr(pr, on_done)
 	on_done = on_done or function() end
 

@@ -3,7 +3,6 @@ local config = require("atlas.config")
 local notifications_api = require("atlas.providers.gitlab.notifications")
 local git = require("atlas.core.git")
 
----@class GitLabIssuesProvider : IssuesProvider
 local M = {}
 
 ---@param view IssuesViewConfig
@@ -48,6 +47,16 @@ function M.fetch_issues(view, opts, on_done)
 			return
 		end
 		on_done(issues or {}, nil, true, nil)
+	end)
+end
+
+---@param keys string[]
+---@param opts IssuesFetchOpts|nil
+---@param on_done fun(issues: Issue[], err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_by_keys(keys, opts, on_done)
+	return require("atlas.issues.providers.gitlab.api.issues").fetch_by_keys(keys, opts, function(issues, err)
+		on_done(issues or {}, err)
 	end)
 end
 
@@ -250,6 +259,7 @@ return {
 			fetch_user = require("atlas.issues.providers.gitlab.api.users").get_user,
 			search_query = M.search_query,
 			fetch_issues = M.fetch_issues,
+			fetch_by_keys = M.fetch_by_keys,
 			fetch_issue = M.fetch_issue,
 			update_description = M.update_description,
 			views = M.views,

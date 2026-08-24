@@ -11,9 +11,6 @@ local M = {}
 local BUFFER_NAME = "atlas://notes"
 local namespace = vim.api.nvim_create_namespace("atlas.notes")
 
----@class AtlasNotesUIOptions
----@field target string|nil
-
 ---@class AtlasNotesUIState
 ---@field buf integer|nil
 ---@field win integer|nil
@@ -177,7 +174,7 @@ local function ensure_buffer()
 	return buf
 end
 
----@param opts AtlasNotesUIOptions|nil
+---@param opts { target: string|nil }|nil
 function M.open(opts)
 	opts = opts or {}
 	require("atlas.ui.shared.highlights").setup()

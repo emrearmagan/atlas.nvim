@@ -53,9 +53,10 @@ describe("commands.open", function()
 			end,
 			capabilities = {
 				core = {
-					fetch_pullrequest = function(ref, opts, done)
+					fetch_by_refs = function(refs, opts, done)
+						local ref = refs[1]
 						table.insert(calls.fetch, { domain = "pulls", ref = ref, opts = opts })
-						done(pull_result, pull_error)
+						done(pull_result and { pull_result } or {}, pull_error)
 					end,
 				},
 			},
@@ -66,9 +67,10 @@ describe("commands.open", function()
 			end,
 			capabilities = {
 				core = {
-					fetch_issue = function(key, opts, done)
+					fetch_by_keys = function(keys, opts, done)
+						local key = keys[1]
 						table.insert(calls.fetch, { domain = "issues", key = key, opts = opts })
-						done(issue_result, issue_error)
+						done(issue_result and { issue_result } or {}, issue_error)
 					end,
 				},
 			},

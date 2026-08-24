@@ -73,6 +73,16 @@ local function fetch_pullrequest(pr, opts, on_done)
 	return pullrequests_api.fetch_pullrequest(pr, { force_load = opts and opts.force_load == true or false }, on_done)
 end
 
+---@param refs PullRequestRef[]
+---@param opts PullsFetchOpts
+---@param on_done fun(pulls: PullRequest[], err: string|nil)
+---@return { cancel: fun() }|nil
+local function fetch_by_refs(refs, opts, on_done)
+	return pullrequests_api.fetch_by_refs(refs, opts, function(pulls, err)
+		on_done(pulls or {}, err)
+	end)
+end
+
 ---@param pr PullRequest
 ---@param opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(items: PullsConversationItem[]|nil, err: string|nil)
@@ -228,6 +238,7 @@ return {
 			fetch_user = users_api.fetch_user,
 			search_query = search_query,
 			fetch_pullrequests = fetch_pullrequests,
+			fetch_by_refs = fetch_by_refs,
 			fetch_pullrequest = fetch_pullrequest,
 			create_pr = create_pr,
 			fetch_reviewers = pullrequests_api.fetch_reviewers,

@@ -68,6 +68,14 @@ local function fetch_pullrequests(view, opts, on_done)
 	})
 end
 
+---@param refs PullRequestRef[]
+---@param _opts PullsFetchOpts
+---@param on_done fun(pulls: PullRequest[], err: string|nil)
+---@return { cancel: fun() }|nil
+local function fetch_by_refs(refs, _opts, on_done)
+	return pullrequests_api.fetch_by_refs(refs, on_done)
+end
+
 ---@param pr PullRequestRef
 ---@param opts PullsFetchOpts
 ---@param on_done fun(pr: PullRequestDetails|nil, err: string|nil)
@@ -174,6 +182,7 @@ return {
 			fetch_user = fetch_user,
 			search_query = search_query,
 			fetch_pullrequests = fetch_pullrequests,
+			fetch_by_refs = fetch_by_refs,
 			fetch_pullrequest = fetch_pullrequest,
 			create_pr = pullrequests_api.create_pr,
 			fetch_default_reviewers = pullrequests_api.fetch_default_reviewers,
