@@ -1,7 +1,5 @@
 local M = {}
 
-local request_scope = require("atlas.core.requests")
-
 ---@param view IssuesViewConfig
 ---@return string
 function M.search_query(view)
@@ -16,87 +14,16 @@ local function search_view(target)
 end
 
 ---@param target AtlasTarget
----@return string|nil
-local function target_issue_key(target)
-	return target.issue_key
+---@return IssueRef|nil
+local function target_issue_ref(target)
+	if target.issue_key then
+		return { key = target.issue_key }
+	end
 end
 
 function M.on_refresh()
 	local service = require("atlas.issues.providers.jira.api.service")
 	service.clear_memory_cache()
-end
-
----@param issues_config AtlasIssuesConfig
----@param opts IssuesFetchOpts|nil
----@return boolean
-local function relationships_enabled(issues_config, opts)
-	if opts and (opts.with_relationships == false or opts.layout == "compact") then
-		return false
-	end
-	return issues_config.with_relationships ~= false
-end
-
----@param issues Issue[]
----@param opts IssuesFetchOpts
----@param requests AtlasRequestScope
----@param on_done fun(enriched: Issue[])
-local function enrich_with_parents(issues, opts, requests, on_done)
-	local issues_cfg = require("atlas.config").options.issues or {}
-	if not relationships_enabled(issues_cfg, opts) then
-		on_done(issues)
-		return
-	end
-
-	local existing = {}
-	for _, issue in ipairs(issues or {}) do
-		if issue.key ~= "" then
-			existing[issue.key] = true
-		end
-	end
-
-	local missing = {}
-	local seen = {}
-	for _, issue in ipairs(issues or {}) do
-		if issue.parent then
-			local pk = tostring(issue.parent.key or "")
-			if pk ~= "" and not existing[pk] and not seen[pk] then
-				seen[pk] = true
-				table.insert(missing, pk)
-			end
-		end
-	end
-
-	if #missing == 0 then
-		on_done(issues)
-		return
-	end
-
-	local escaped = {}
-	for _, key in ipairs(missing) do
-		table.insert(escaped, string.format('"%s"', key:gsub('"', '\\"')))
-	end
-	local parent_jql = "key in (" .. table.concat(escaped, ",") .. ")"
-
-	local issues_api = require("atlas.issues.providers.jira.api.issues")
-	requests.run(function(done)
-		return issues_api.search_issues(parent_jql, done, {
-			force_load = opts and opts.force_load == true or false,
-			max_results = #missing,
-		})
-	end, function(page, err)
-		if err or page == nil then
-			on_done(issues)
-			return
-		end
-		for _, parent in ipairs(page.issues or {}) do
-			local pk = tostring(parent.key or "")
-			if pk ~= "" and not existing[pk] then
-				existing[pk] = true
-				table.insert(issues, parent)
-			end
-		end
-		on_done(issues)
-	end)
 end
 
 ---@param view IssuesViewConfig
@@ -111,39 +38,33 @@ function M.fetch_issues(view, opts, on_done)
 		return nil
 	end
 
-	local requests = request_scope.new()
-	requests.run(function(done)
-		return issues_api.search_issues(jql, done, {
-			force_load = opts and opts.force_load == true or false,
-			next_page_token = opts and opts.next_page_token or nil,
-			max_results = opts and opts.max_results or nil,
-		})
-	end, function(page, err)
+	return issues_api.search_issues(jql, function(page, err)
 		if err or page == nil then
 			on_done({}, nil, true, err or "Failed to fetch issues")
 			return
 		end
 
-		enrich_with_parents(page.issues or {}, opts or {}, requests, function(enriched)
-			on_done(enriched, page.nextPageToken, page.isLast == true, nil)
-		end)
-	end)
-	return requests
+		on_done(page.issues or {}, page.nextPageToken, page.isLast == true, nil)
+	end, {
+		force_load = opts and opts.force_load == true or false,
+		next_page_token = opts and opts.next_page_token or nil,
+		max_results = opts and opts.max_results or nil,
+	})
 end
 
----@param keys string[]
+---@param refs IssueRef[]
 ---@param opts IssuesFetchOpts|nil
 ---@param on_done fun(issues: Issue[], err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_by_keys(keys, opts, on_done)
-	if #keys == 0 then
+function M.fetch_by_refs(refs, opts, on_done)
+	if #refs == 0 then
 		on_done({}, nil)
 		return nil
 	end
 
 	local quoted = {}
-	for _, key in ipairs(keys) do
-		table.insert(quoted, string.format('"%s"', key:gsub('"', '\\"')))
+	for _, ref in ipairs(refs) do
+		table.insert(quoted, string.format('"%s"', ref.key:gsub('"', '\\"')))
 	end
 
 	local issues_api = require("atlas.issues.providers.jira.api.issues")
@@ -151,17 +72,17 @@ function M.fetch_by_keys(keys, opts, on_done)
 		on_done(page and page.issues or {}, err)
 	end, {
 		force_load = opts and opts.force_load == true,
-		max_results = #keys,
+		max_results = #refs,
 	})
 end
 
----@param issue_key string
+---@param ref IssueRef
 ---@param opts IssuesFetchOpts|nil
 ---@param on_done fun(issue: IssueDetails|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_issue(issue_key, opts, on_done)
+function M.fetch_issue(ref, opts, on_done)
 	local issues_api = require("atlas.issues.providers.jira.api.issues")
-	return issues_api.get_issue(issue_key, on_done, { force_load = opts and opts.force_load == true })
+	return issues_api.get_issue(ref.key, on_done, { force_load = opts and opts.force_load == true })
 end
 
 ---@param issue Issue
@@ -284,13 +205,13 @@ end
 
 return {
 	search_view = search_view,
-	issue_key = target_issue_key,
+	issue_ref = target_issue_ref,
 	capabilities = {
 		core = {
 			fetch_user = require("atlas.issues.providers.jira.api.users").get_myself,
 			search_query = M.search_query,
 			fetch_issues = M.fetch_issues,
-			fetch_by_keys = M.fetch_by_keys,
+			fetch_by_refs = M.fetch_by_refs,
 			fetch_issue = M.fetch_issue,
 			views = M.views,
 			refresh = M.on_refresh,

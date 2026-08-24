@@ -22,8 +22,11 @@
 -- Issue
 --------------------------------------------------------------------------------
 
----@class Issue
+---@class IssueRef
 ---@field key string
+---@field title string|nil
+
+---@class Issue : IssueRef
 ---@field title string
 ---@field project IssueProject|nil
 ---@field status string|nil
@@ -34,7 +37,7 @@
 ---@field reporter IssueUser|nil
 ---@field story_points number|nil
 ---@field duedate string|nil
----@field parent Issue|nil
+---@field parent IssueRef|nil
 ---@field url string|nil
 ---@field created_at string|nil
 ---@field updated_at string|nil

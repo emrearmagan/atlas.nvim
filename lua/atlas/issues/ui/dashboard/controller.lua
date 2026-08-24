@@ -147,6 +147,51 @@ local function issues_config()
 	return (config.options and config.options.issues) or {}
 end
 
+---@param view IssuesViewConfig
+---@return boolean
+local function relationships_enabled(view)
+	return view.layout ~= "compact" and issues_config().with_relationships ~= false
+end
+
+---@param issues Issue[]
+---@return IssueRef[]
+local function missing_parent_refs(issues)
+	local existing = {}
+	for _, issue in ipairs(issues) do
+		existing[issue.key] = true
+	end
+
+	local refs = {}
+	local seen = {}
+	for _, issue in ipairs(issues) do
+		local parent = issue.parent
+		local key = parent and parent.key
+		if key and not existing[key] and not seen[key] then
+			seen[key] = true
+			table.insert(refs, parent)
+		end
+	end
+	return refs
+end
+
+---@param issues Issue[]
+---@param additions Issue[]
+---@return Issue[]
+local function merge_issues(issues, additions)
+	local existing = {}
+	for _, issue in ipairs(issues) do
+		existing[issue.key] = true
+	end
+
+	for _, issue in ipairs(additions) do
+		if not existing[issue.key] then
+			existing[issue.key] = true
+			table.insert(issues, issue)
+		end
+	end
+	return issues
+end
+
 ---@generic T
 ---@param items T[]
 ---@param is_starred fun(item: T): boolean
@@ -214,6 +259,37 @@ local function replace_issue(updated)
 		end
 	end
 	return false, nil
+end
+
+---@param provider IssuesProvider
+---@param view IssuesViewConfig
+---@param issues Issue[]
+---@param force_load boolean
+---@param scope AtlasRequestScope
+---@param on_done fun(issues: Issue[])
+local function fetch_missing_parents(provider, view, issues, force_load, scope, on_done)
+	local fetch = provider.capabilities.core.fetch_by_refs
+	if not relationships_enabled(view) then
+		on_done(issues)
+		return
+	end
+
+	local refs = missing_parent_refs(issues)
+	if #refs == 0 then
+		on_done(issues)
+		return
+	end
+
+	scope.run(function(done)
+		return fetch(refs, { force_load = force_load }, done)
+	end, function(parents, err)
+		if err then
+			notify.warn("Failed to fetch parent issues: " .. tostring(err))
+			on_done(issues)
+			return
+		end
+		on_done(merge_issues(issues, parents))
+	end)
 end
 
 ---@param opts { force_load: boolean }|nil
@@ -297,12 +373,14 @@ local function load_active_view(opts, on_done)
 	local function finalize_fetch_success(issues)
 		state.current_view = state.active_view
 		state.error = nil
-		set_issues(issues)
-		finish_loading()
+		fetch_missing_parents(provider, target_view, issues, opts.force_load == true, load_requests, function(enriched)
+			set_issues(enriched)
+			finish_loading()
 
-		notify.success(string.format("Loaded %d issues", #issues), { timeout = 1200 })
-		render_if_active()
-		on_done()
+			notify.success(string.format("Loaded %d issues", #enriched), { timeout = 1200 })
+			render_if_active()
+			on_done()
+		end)
 	end
 
 	local configured_max = tonumber(issues_config().max_results)
@@ -322,6 +400,7 @@ local function load_active_view(opts, on_done)
 				next_page_token = next_page_token,
 				max_results = remaining,
 				layout = target_view.layout or "plain",
+				with_relationships = relationships_enabled(target_view),
 			}, done)
 		end, function(page_issues, next_token, is_last, err)
 			if err ~= nil then
@@ -589,7 +668,7 @@ function M.update_issue(issue)
 	return updated, err
 end
 
----@param issue Issue|string|nil
+---@param issue IssueRef|string|nil
 ---@param on_done fun()|nil
 function M.refresh_issue(issue, on_done)
 	on_done = on_done or function() end
@@ -615,9 +694,11 @@ function M.refresh_issue(issue, on_done)
 	begin_issue_reload(issue_key)
 
 	local active_view = type(state.active_view) == "table" and state.active_view or {}
+	---@type IssueRef
+	local ref = type(issue) == "table" and issue or { key = issue_key }
 	issue_reload_requests.run(function(done)
 		return provider.capabilities.core.fetch_issue(
-			issue_key,
+			ref,
 			{ force_load = true, layout = active_view.layout or "plain" },
 			done
 		)

@@ -51,13 +51,13 @@ local function fetch_candidate(target, on_done)
 	end
 
 	---@cast provider IssuesProvider
-	local key = provider.issue_key(target)
-	if key == nil then
+	local ref = provider.issue_ref(target)
+	if ref == nil then
 		on_done(nil, provider, "Could not determine issue key")
 		return
 	end
 	requests.run(function(done)
-		return provider.capabilities.core.fetch_by_keys({ key }, { force_load = true }, done)
+		return provider.capabilities.core.fetch_by_refs({ ref }, { force_load = true }, done)
 	end, function(issues, err)
 		on_done(issues and issues[1] or nil, provider, err)
 	end)

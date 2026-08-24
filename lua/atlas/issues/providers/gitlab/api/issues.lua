@@ -3,7 +3,28 @@ local M = {}
 local service = require("atlas.providers.gitlab.client")
 local normalizer = require("atlas.issues.providers.gitlab.api.mapper")
 local request_scope = require("atlas.core.requests")
+local json = require("atlas.core.json")
 local LIST_CACHE_PREFIX = "gitlab:issues:list:v3:"
+
+local ISSUE_LABELS_GQL = [[
+query($path: ID!, $iid: String!) {
+  project(fullPath: $path) {
+    issue(iid: $iid) {
+      labels(first: 100) { nodes { title color } }
+    }
+  }
+}
+]]
+
+local ISSUE_ASSIGNEES_GQL = [[
+query($path: ID!, $iid: String!) {
+  project(fullPath: $path) {
+    issue(iid: $iid) {
+      assignees(first: 100) { nodes { id username name } }
+    }
+  }
+}
+]]
 
 ---@param path string
 ---@param iid integer
@@ -95,6 +116,8 @@ function M.list_issues(view, opts, on_done)
 			on_done(nil, err)
 			return
 		end
+		-- TODO: GitLab's /issues REST API does not include parent refs. We either need to switch this
+		-- to GraphQL and map the view config, or make another request here to fetch those refs.
 		local issues = normalizer.to_issues_list(result)
 		service.set_cache(cache_key, issues)
 		on_done(issues, nil)
@@ -104,22 +127,22 @@ function M.list_issues(view, opts, on_done)
 	})
 end
 
----@param keys string[]
+---@param refs IssueRef[]
 ---@param opts { force_load?: boolean }|nil
 ---@param on_done fun(issues: Issue[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_by_keys(keys, opts, on_done)
+function M.fetch_by_refs(refs, opts, on_done)
 	opts = opts or {}
-	if #keys == 0 then
+	if #refs == 0 then
 		on_done({}, nil)
 		return nil
 	end
 
 	local iids_by_project = {}
-	for _, key in ipairs(keys) do
-		local path, iid = normalizer.parse_key(key)
+	for _, ref in ipairs(refs) do
+		local path, iid = normalizer.parse_key(ref.key)
 		if path == "" or iid == nil then
-			on_done(nil, "Invalid issue key: " .. tostring(key))
+			on_done(nil, "Invalid issue key: " .. tostring(ref.key))
 			return nil
 		end
 		iids_by_project[path] = iids_by_project[path] or {}
@@ -205,17 +228,25 @@ function M.get_assignees(key, on_done)
 		return nil
 	end
 
-	local endpoint = string.format("/projects/%s/issues/%d", service.url_encode(path), iid)
-	return service.request("GET", endpoint, nil, function(result, err)
-		if err or type(result) ~= "table" then
-			on_done(nil, err or "Empty response")
+	return service.graphql(ISSUE_ASSIGNEES_GQL, { path = path, iid = tostring(iid) }, function(data, err)
+		if err then
+			on_done(nil, err)
 			return
 		end
 
+		data = json.nilify(data)
+		local project = type(data) == "table" and json.nilify(data.project) or nil
+		local issue = type(project) == "table" and json.nilify(project.issue) or nil
+		if type(issue) ~= "table" then
+			on_done(nil, "Issue not found")
+			return
+		end
+
+		local connection = json.nilify(issue.assignees)
 		local assignees = {}
-		for _, raw in ipairs(type(result.assignees) == "table" and result.assignees or {}) do
+		for _, raw in ipairs(type(connection) == "table" and json.safe_table(connection.nodes) or {}) do
 			local user = normalizer.to_user(raw)
-			local id = tonumber(type(raw) == "table" and raw.id or nil)
+			local id = tonumber((json.safe_str(raw.id) or ""):match("(%d+)$"))
 			if user and id then
 				user.id = id
 				table.insert(assignees, user)
@@ -474,7 +505,7 @@ end
 
 ---@param query string
 ---@param opts { force_load?: boolean, max_results?: number }|nil
----@param on_done fun(items: { id: any, key: string, title: string, url: string|nil }[]|nil, err: string|nil)
+---@param on_done fun(items: { id: any, key: string, title: string, url: string|nil, description: string }[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.search_issues_picker(query, opts, on_done)
 	opts = opts or {}
@@ -493,15 +524,18 @@ function M.search_issues_picker(query, opts, on_done)
 			on_done(nil, err)
 			return
 		end
-		local issues = normalizer.to_issues_list(result)
 		local items = {}
-		for _, issue in ipairs(issues) do
-			table.insert(items, {
-				id = issue.key,
-				key = issue.key,
-				title = issue.title,
-				url = issue.url,
-			})
+		for _, raw in ipairs(json.safe_table(result)) do
+			local issue = normalizer.to_issue(raw)
+			if issue then
+				table.insert(items, {
+					id = issue.key,
+					key = issue.key,
+					title = issue.title,
+					url = issue.url,
+					description = json.safe_str(raw.description) or "",
+				})
+			end
 		end
 		on_done(items, nil)
 	end, {

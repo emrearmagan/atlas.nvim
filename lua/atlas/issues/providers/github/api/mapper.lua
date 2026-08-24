@@ -82,34 +82,51 @@ end
 
 ---@param raw any Decoded API value.
 ---@param fallback_slug string|nil
----@return Issue|nil
-function M.to_issue(raw, fallback_slug)
+---@return IssueRef|nil, string, integer|nil
+local function issue_identity(raw, fallback_slug)
 	raw = json.nilify(raw)
 	if type(raw) ~= "table" then
-		return nil
+		return nil, "", nil
 	end
 
 	local number = tonumber(raw.number)
 	if number == nil then
-		return nil
+		return nil, "", nil
 	end
 
 	local _, _, slug = github_mapping.repository(raw.repository, fallback_slug)
 	local url = json.safe_str(raw.url) or json.safe_str(raw.html_url) or ""
 	if slug == "" then
-		local extracted = url:match("github%.com/([^/]+/[^/]+)/issues/")
-		if extracted then
-			slug = extracted
-		end
+		slug = url:match("github%.com/([^/]+/[^/]+)/issues/") or ""
 	end
 
 	local key = slug ~= "" and string.format("%s#%d", slug, number) or string.format("#%d", number)
-	local title = json.safe_str(raw.title) or ""
+	return { key = key, title = json.safe_str(raw.title) }, slug, number
+end
+
+---@param raw any Decoded API value.
+---@param fallback_slug string|nil
+---@return IssueRef|nil
+local function to_issue_ref(raw, fallback_slug)
+	local ref = issue_identity(raw, fallback_slug)
+	return ref
+end
+
+---@param raw any Decoded API value.
+---@param fallback_slug string|nil
+---@return Issue|nil
+function M.to_issue(raw, fallback_slug)
+	raw = json.nilify(raw)
+	local ref, slug, number = issue_identity(raw, fallback_slug)
+	if ref == nil or number == nil then
+		return nil
+	end
+	local url = json.safe_str(raw.url) or json.safe_str(raw.html_url) or ""
 	local status_name, status_id = normalize_state(raw.state)
 	local author = M.to_user(raw.author)
 
 	local issue_assignees = github_mapping.connection_nodes(raw.assignees)
-	local parent = M.to_issue(json.nilify(raw.parent), fallback_slug)
+	local parent = to_issue_ref(json.nilify(raw.parent), fallback_slug)
 	local subscription = json.safe_str(raw.viewerSubscription)
 	local is_subscribed = subscription and subscription == "SUBSCRIBED"
 	local created_at = json.safe_str(raw.createdAt) or json.safe_str(raw.created_at) or ""
@@ -125,8 +142,8 @@ function M.to_issue(raw, fallback_slug)
 
 	---@type Issue
 	local issue = {
-		key = key,
-		title = title,
+		key = ref.key,
+		title = ref.title or "",
 		project = nil,
 		status = status_name,
 		status_id = status_id,
@@ -195,13 +212,12 @@ function M.to_search_results(nodes)
 	for _, raw in ipairs(nodes or {}) do
 		local issue = M.to_issue(raw, nil)
 		if type(issue) == "table" then
-			insert_issue(issue.parent)
 			insert_issue(issue)
 
 			for _, child_raw in ipairs(github_mapping.connection_nodes(raw.subIssues)) do
 				local child = M.to_issue(child_raw, nil)
 				if type(child) == "table" and child.parent == nil then
-					child.parent = issue
+					child.parent = { key = issue.key, title = issue.title }
 				end
 				insert_issue(child)
 			end

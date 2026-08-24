@@ -121,7 +121,7 @@ local function normalize_issue_user(raw_user)
 end
 
 ---@param raw_parent any Decoded API value.
----@return Issue|nil
+---@return IssueRef|nil
 local function extract_parent(raw_parent)
 	raw_parent = json.nilify(raw_parent)
 	if type(raw_parent) ~= "table" or not raw_parent.key then
@@ -129,21 +129,9 @@ local function extract_parent(raw_parent)
 	end
 
 	local pf = raw_parent.fields or {}
-	local status, status_id = extract_status(safe_get(pf, "status"))
-
 	return {
 		key = tostring(raw_parent.key),
-		title = tostring(pf.summary or ""),
-		project = M.to_project(safe_get(pf, "project")),
-		status = status,
-		status_id = status_id,
-		type = M.to_issue_type(safe_get(pf, "issuetype")),
-		priority = safe_get(pf, "priority", "name"),
-		assignee = normalize_issue_user(safe_get(pf, "assignee")),
-		reporter = normalize_issue_user(safe_get(pf, "reporter")),
-		story_points = nil,
-		duedate = nil,
-		parent = nil,
+		title = json.safe_str(pf.summary),
 	}
 end
 

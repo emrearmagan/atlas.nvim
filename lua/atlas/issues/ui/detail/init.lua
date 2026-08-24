@@ -202,7 +202,7 @@ local function fetch_details(issue, opts)
 	end
 
 	requests.run(function(done)
-		return provider.capabilities.core.fetch_issue(tostring(issue.key or ""), { force_load = force_refresh }, done)
+		return provider.capabilities.core.fetch_issue(issue, { force_load = force_refresh }, done)
 	end, function(details, err)
 		if not is_current_issue(issue) then
 			return
@@ -369,14 +369,14 @@ function M.open(input, opts)
 		return
 	end
 
-	local key = provider.issue_key(target)
-	if key == nil then
+	local ref = provider.issue_ref(target)
+	if ref == nil then
 		notify.error("Could not determine issue key")
 		return
 	end
 
 	---@type Issue
-	local issue = { key = key, title = "Loading issue...", url = target.url }
+	local issue = { key = ref.key, title = ref.title or "Loading issue...", url = target.url }
 	M.select(issue, { force_refresh = opts.force_refresh })
 end
 

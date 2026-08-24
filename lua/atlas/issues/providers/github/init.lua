@@ -55,19 +55,19 @@ function M.fetch_issues(view, opts, on_done)
 	})
 end
 
----@param keys string[]
+---@param refs IssueRef[]
 ---@param _opts IssuesFetchOpts|nil
 ---@param on_done fun(issues: Issue[], err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_by_keys(keys, _opts, on_done)
-	return require("atlas.issues.providers.github.api.issues").fetch_by_keys(keys, on_done)
+function M.fetch_by_refs(refs, _opts, on_done)
+	return require("atlas.issues.providers.github.api.issues").fetch_by_refs(refs, on_done)
 end
 
----@param key string
+---@param ref IssueRef
 ---@param opts IssuesFetchOpts|nil
 ---@param on_done fun(issue: IssueDetails|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_issue(key, opts, on_done)
+function M.fetch_issue(ref, opts, on_done)
 	opts = opts or {}
 	local api_opts = {}
 	for k, v in pairs(opts) do
@@ -76,7 +76,7 @@ function M.fetch_issue(key, opts, on_done)
 	if api_opts.layout == "compact" then
 		api_opts.with_relationships = false
 	end
-	return require("atlas.issues.providers.github.api.issues").get_issue(key, on_done, api_opts)
+	return require("atlas.issues.providers.github.api.issues").get_issue(ref.key, on_done, api_opts)
 end
 
 ---@param issue IssueDetails
@@ -304,22 +304,22 @@ function M.search_view(target)
 end
 
 ---@param target AtlasTarget
----@return string|nil
-function M.issue_key(target)
+---@return IssueRef|nil
+function M.issue_ref(target)
 	if target.owner and target.repo and target.number then
-		return string.format("%s/%s#%d", target.owner, target.repo, target.number)
+		return { key = string.format("%s/%s#%d", target.owner, target.repo, target.number) }
 	end
 end
 
 return {
 	search_view = M.search_view,
-	issue_key = M.issue_key,
+	issue_ref = M.issue_ref,
 	capabilities = {
 		core = {
 			fetch_user = require("atlas.issues.providers.github.api.users").get_user,
 			search_query = M.search_query,
 			fetch_issues = M.fetch_issues,
-			fetch_by_keys = M.fetch_by_keys,
+			fetch_by_refs = M.fetch_by_refs,
 			fetch_issue = M.fetch_issue,
 			update_description = M.update_description,
 			views = M.views,

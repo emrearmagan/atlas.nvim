@@ -62,14 +62,14 @@ describe("commands.open", function()
 			},
 		}
 		local issue_provider = {
-			issue_key = function(target)
-				return "ISSUE-" .. tostring(target.number)
+			issue_ref = function(target)
+				return { key = "ISSUE-" .. tostring(target.number) }
 			end,
 			capabilities = {
 				core = {
-					fetch_by_keys = function(keys, opts, done)
-						local key = keys[1]
-						table.insert(calls.fetch, { domain = "issues", key = key, opts = opts })
+					fetch_by_refs = function(refs, opts, done)
+						local ref = refs[1]
+						table.insert(calls.fetch, { domain = "issues", ref = ref, opts = opts })
 						done(issue_result and { issue_result } or {}, issue_error)
 					end,
 				},

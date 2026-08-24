@@ -16,24 +16,31 @@ fragment IssueFields on Issue {
 }
 ]]
 
+local ISSUE_REF_FIELDS_GQL = [[
+fragment IssueRefFields on Issue {
+  number title
+  repository { nameWithOwner }
+}
+]]
+
 local SEARCH_GQL = [[
 query($search: String!, $limit: Int!, $withRelationships: Boolean!) {
   search(query: $search, type: ISSUE, first: $limit) {
     nodes {
       ... on Issue {
         ...IssueFields
-        parent @include(if: $withRelationships) { ...IssueFields }
+        parent @include(if: $withRelationships) { ...IssueRefFields }
         subIssues(first: 20) @include(if: $withRelationships) {
           nodes {
             ...IssueFields
-            parent { ...IssueFields }
+            parent { ...IssueRefFields }
           }
         }
       }
     }
   }
 }
-]] .. ISSUE_FIELDS_GQL
+]] .. ISSUE_FIELDS_GQL .. ISSUE_REF_FIELDS_GQL
 
 local DETAIL_GQL = [[
 query($owner: String!, $repo: String!, $number: Int!, $withRelationships: Boolean!) {
@@ -42,18 +49,12 @@ query($owner: String!, $repo: String!, $number: Int!, $withRelationships: Boolea
       ...IssueFields
       body
       reactionGroups { content reactors { totalCount } }
-      parent @include(if: $withRelationships) {
-        ...IssueFields
-        reactionGroups { content reactors { totalCount } }
-      }
+      parent @include(if: $withRelationships) { ...IssueRefFields }
       subIssues(first: 20) @include(if: $withRelationships) {
         nodes {
           ...IssueFields
           reactionGroups { content reactors { totalCount } }
-          parent {
-            ...IssueFields
-            reactionGroups { content reactors { totalCount } }
-          }
+          parent { ...IssueRefFields }
         }
       }
     }
@@ -74,7 +75,7 @@ fragment IssueFields on Issue {
   }
   comments { totalCount }
 }
-]]
+]] .. ISSUE_REF_FIELDS_GQL
 
 local ASSIGNEES_GQL = [[
 query($owner: String!, $repo: String!, $number: Int!) {
@@ -125,7 +126,7 @@ function M.search_issues(search, on_done, opts)
 
 	local with_relationships = relationships_enabled(opts)
 	local cache_key =
-		string.format("github_issues:search:v2:%s:%d:relationships:%s", query, limit, tostring(with_relationships))
+		string.format("github_issues:search:v3:%s:%d:relationships:%s", query, limit, tostring(with_relationships))
 	if not opts.force_load then
 		local cached, ok = cli.get_cache(cache_key)
 		if ok then
@@ -222,23 +223,23 @@ function M.get_issue(key, on_done, opts)
 	})
 end
 
----@param keys string[]
+---@param refs IssueRef[]
 ---@param on_done fun(issues: Issue[], err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_by_keys(keys, on_done)
-	local refs = {}
+function M.fetch_by_refs(refs, on_done)
+	local queries = {}
 
-	for _, key in ipairs(keys) do
-		local slug, number = normalizer.parse_key(key)
+	for _, ref in ipairs(refs) do
+		local slug, number = normalizer.parse_key(ref.key)
 		local owner, repo = slug:match("^([^/]+)/(.+)$")
 		if number == nil or owner == nil or repo == nil then
-			on_done({}, "Invalid issue key: " .. tostring(key))
+			on_done({}, "Invalid issue key: " .. tostring(ref.key))
 			return nil
 		end
-		table.insert(refs, { slug = slug, owner = owner, repo = repo, number = number })
+		table.insert(queries, { slug = slug, owner = owner, repo = repo, number = number })
 	end
 
-	if #refs == 0 then
+	if #queries == 0 then
 		on_done({}, nil)
 		return nil
 	end
@@ -246,7 +247,7 @@ function M.fetch_by_keys(keys, on_done)
 	local variables = {}
 	local selections = {}
 	local args = { "api", "graphql" }
-	for index, ref in ipairs(refs) do
+	for index, ref in ipairs(queries) do
 		ref.alias = "item" .. index
 		table.insert(variables, string.format("$owner%d: String!", index))
 		table.insert(variables, string.format("$repo%d: String!", index))
@@ -291,7 +292,7 @@ function M.fetch_by_keys(keys, on_done)
 		end
 
 		local issues = {}
-		for _, ref in ipairs(refs) do
+		for _, ref in ipairs(queries) do
 			local repository = json.nilify(data[ref.alias])
 			local raw = type(repository) == "table" and json.nilify(repository.issue) or nil
 			local issue = normalizer.to_issue(raw, ref.slug)
@@ -301,7 +302,7 @@ function M.fetch_by_keys(keys, on_done)
 		end
 		on_done(issues, nil)
 	end, {
-		action = "Fetch issues by keys",
+		action = "Fetch issues by refs",
 		count = #refs,
 	})
 end

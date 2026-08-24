@@ -147,6 +147,7 @@ function M.to_issue(raw)
 		comment_count = tonumber(raw.user_notes_count) or 0,
 		is_subscribed = json.nilify(raw.subscribed),
 		_raw = {
+			id = tonumber(raw.id),
 			iid = iid,
 			project_id = tonumber(raw.project_id),
 			project_path = project_path,
