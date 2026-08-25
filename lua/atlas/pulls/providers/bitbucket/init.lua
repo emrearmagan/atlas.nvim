@@ -33,22 +33,6 @@ local users_api = require("atlas.pulls.providers.bitbucket.api.users")
 local request_scope = require("atlas.core.requests")
 local git = require("atlas.core.git")
 
----@param view AtlasBitbucketViewConfig|AtlasBitbucketBookmarkConfig
----@return AtlasBitbucketTarget[]
-local function view_targets(view)
-	-- `targets` used to be called `repos` so thats why :)
-	if view.current_repo then
-		local info = git.local_repository()
-		if info and info.provider == "bitbucket" then
-			local workspace, repo = info.repo_full_name:match("^([^/]+)/(.+)$")
-			if workspace then
-				return { { workspace = workspace, repo = repo } }
-			end
-		end
-	end
-	return view.targets or view.repos or {}
-end
-
 ---@param target AtlasTarget
 ---@return AtlasBitbucketViewConfig
 local function search_view(target)
@@ -84,7 +68,7 @@ end
 local function search_query(view, opts)
 	---@cast view AtlasBitbucketViewConfig
 	local parts = {}
-	for _, target_ref in ipairs(view_targets(view)) do
+	for _, target_ref in ipairs(view.targets or view.repos or {}) do
 		if target_ref.repo then
 			table.insert(parts, string.format("repo:%s/%s", target_ref.workspace, target_ref.repo))
 		else
@@ -103,7 +87,7 @@ end
 ---@return { cancel: fun() }|nil
 local function fetch_pullrequests(view, opts, on_done)
 	---@cast view AtlasBitbucketViewConfig
-	local targets = view_targets(view)
+	local targets = view.targets or view.repos or {}
 	local statuses = active_statuses(opts)
 
 	local function finish(pulls, err)
@@ -190,16 +174,24 @@ end
 
 ---@return AtlasBitbucketViewConfig[]
 local function views()
-	local options = config.domain_options("bitbucket", "pulls")
+	local options = config.domain_options("bitbucket", "pulls") or {}
+	local configured = options.views or {}
+	local current_repo
+	for _, view in ipairs(configured) do
+		if view.current_repo then
+			local target = git.local_repository()
+			if target and target.provider == "bitbucket" and target.workspace and target.repo then
+				current_repo = { workspace = target.workspace, repo = target.repo }
+			end
+			break
+		end
+	end
 	local result = {}
-	for _, view in ipairs((options and options.views) or {}) do
-		table.insert(result, {
-			name = view.name,
-			key = view.key,
-			layout = view.layout,
-			targets = view_targets(view),
-			filter = view.filter,
-		})
+	for i, view in ipairs(configured) do
+		result[i] = vim.tbl_extend("force", {}, view)
+		if view.current_repo and current_repo then
+			result[i].targets = { current_repo }
+		end
 	end
 	if #result == 0 then
 		table.insert(result, { name = "Pull Requests", key = "1", layout = "compact", targets = {} })
@@ -208,6 +200,7 @@ local function views()
 end
 
 return {
+	views = views,
 	search_view = search_view,
 	capabilities = {
 		core = {
@@ -229,7 +222,6 @@ return {
 			fetch_activity = activity_api.fetch_activity,
 			fetch_commits = changes_api.fetch_commits,
 			fetch_diff = changes_api.fetch_diff,
-			views = views,
 		},
 		comments = {
 			comment_completion = require("atlas.providers.bitbucket.completion.author").for_pulls,

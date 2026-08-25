@@ -3,6 +3,7 @@ local M = {}
 local notify = require("atlas.core.notify")
 local resolver = require("atlas.core.keymaps")
 local utils = require("atlas.ui.shared.utils")
+local bookmarks = require("atlas.ui.shared.bookmarks")
 local actions = require("atlas.pulls.actions")
 local registrations = {}
 
@@ -81,14 +82,14 @@ function M.register(buf, views)
 		end
 	end
 
-	local bookmark_key = state.provider and require("atlas.ui.shared.bookmarks_view").key("pulls", state.provider.id)
+	local bookmark_key = state.provider and bookmarks.key("pulls", state.provider.id)
 	if bookmark_key then
 		table.insert(items, {
 			key = bookmark_key,
 			desc = "Switch to bookmarks",
 			hidden = true,
 			callback = function()
-				for _, view in ipairs(require("atlas.ui.shared.bookmarks_view").views(state.provider, "pulls")) do
+				for _, view in ipairs(bookmarks.views(state.provider.id, "pulls", state.provider_views)) do
 					if view._kind == "bookmarks" then
 						require("atlas.pulls.ui.dashboard.controller").switch_view(view)
 						return

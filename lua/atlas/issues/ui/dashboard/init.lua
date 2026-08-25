@@ -100,6 +100,7 @@ function M.init(provider, opts)
 		state.current_user = nil
 	end
 	state.provider = provider
+	state.provider_views = provider.views()
 
 	local notifications = require("atlas.ui.notifications")
 	notifications.set_provider(provider)
@@ -114,7 +115,7 @@ function M.init(provider, opts)
 		ui.setup()
 	end
 
-	local views = require("atlas.ui.shared.bookmarks_view").views(provider, "issues")
+	local views = require("atlas.ui.shared.bookmarks").views(provider.id, "issues", state.provider_views)
 	state.active_view = (opts and opts.initial_view) or views[1]
 
 	statusline.clear_items()

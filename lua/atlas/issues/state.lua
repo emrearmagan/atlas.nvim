@@ -8,6 +8,7 @@
 ---@field issue_tree IssuesGroup[]|nil
 ---@field collapsed_issue_keys table<string, boolean>
 ---@field provider IssuesProvider|nil
+---@field provider_views IssuesViewConfig[]
 ---@field reloading_issue_keys table<string, integer>
 ---@field reload_spinner_frame string
 local M = {
@@ -20,6 +21,7 @@ local M = {
 	issue_tree = nil,
 	collapsed_issue_keys = {},
 	provider = nil,
+	provider_views = {},
 	reloading_issue_keys = {},
 	reload_spinner_frame = "⠋",
 }

@@ -2,6 +2,7 @@ local M = {}
 
 local config = require("atlas.config")
 local icons = require("atlas.ui.shared.icons")
+local providers = require("atlas.providers")
 local utils = require("atlas.ui.shared.utils")
 local ui_utils = require("atlas.ui.utils")
 
@@ -9,7 +10,6 @@ local ui_utils = require("atlas.ui.utils")
 ---@param provider string
 ---@return string
 function M.key(domain, provider)
-	local providers = require("atlas.providers")
 	local options = config.domain_options(provider, domain) or {}
 	local configured = options.bookmarks and options.bookmarks.key
 	local provider_domain = providers.domain(provider, domain)
@@ -30,30 +30,29 @@ local function sorted_items(items)
 end
 
 ---@generic V
----@param provider PullsProvider|IssuesProvider
+---@param provider AtlasProviderId
 ---@param domain "pulls"|"issues"
+---@param base_views V[]
 ---@return V[]
-function M.views(provider, domain)
-	local providers = require("atlas.providers")
-	local options = config.domain_options(provider.id, domain) or {}
+function M.views(provider, domain, base_views)
+	local options = config.domain_options(provider, domain) or {}
 	local bookmarks = options.bookmarks
-	local saved = require("atlas.core.starred").list(domain, provider.id) or {}
-	local views = provider.capabilities.core.views()
+	local saved = require("atlas.core.starred").list(domain, provider) or {}
 	if (bookmarks == nil or next(bookmarks.items or {}) == nil) and #saved == 0 then
-		return views
+		return base_views
 	end
 
-	local provider_domain = providers.domain(provider.id, domain)
-	local out = vim.list_extend({}, views)
+	local provider_domain = providers.domain(provider, domain)
+	local out = vim.list_extend({}, base_views)
 	table.insert(out, {
 		name = tostring(
 			(bookmarks and bookmarks.label) or (provider_domain and provider_domain.bookmark_label) or "Search"
 		),
-		key = tostring(M.key(domain, provider.id)),
+		key = tostring(M.key(domain, provider)),
 		layout = domain == "pulls" and "grouped" or "plain",
 		_kind = "bookmarks",
 		_bookmarks = (bookmarks and bookmarks.items) or {},
-		_starred = { domain = domain, provider = provider.id },
+		_starred = { domain = domain, provider = provider },
 	})
 	return out
 end

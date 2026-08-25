@@ -8,6 +8,7 @@ local providers = require("atlas.pulls.ui.dashboard.providers")
 local state = require("atlas.pulls.state")
 local statusline = require("atlas.ui.statusline")
 local table_tree = require("atlas.ui.components.table_tree")
+local bookmarks = require("atlas.ui.shared.bookmarks")
 local ui_utils = require("atlas.ui.utils")
 local utils = require("atlas.ui.shared.utils")
 
@@ -348,7 +349,7 @@ local function render_header(lines, spans, width)
 	local hl = state.provider and state.provider.hl_group or "Title"
 	utils.append_block(lines, spans, header.render({ width = width, icon = icon, title = title, hl_group = hl }))
 
-	local source = state.provider and require("atlas.ui.shared.bookmarks_view").views(state.provider, "pulls") or {}
+	local source = bookmarks.views(state.provider.id, "pulls", state.provider_views)
 	local views = vim.list_extend({}, source)
 	local active_id = view_id(state.active_view)
 	local found = false
@@ -414,14 +415,7 @@ function M.render(opts)
 	local active = state.active_view
 	if type(active) == "table" and active._kind == "bookmarks" then
 		append_search_text(lines, spans)
-		require("atlas.ui.shared.bookmarks_view").render(
-			lines,
-			spans,
-			line_map,
-			active._bookmarks or {},
-			opts.width,
-			active._starred
-		)
+		bookmarks.render(lines, spans, line_map, active._bookmarks or {}, opts.width, active._starred)
 		if state.error then
 			local text = "Error: " .. tostring(state.error):gsub("[\r\n]+", " | ")
 			table.insert(lines, "")

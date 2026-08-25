@@ -457,7 +457,7 @@ local function load_bookmark(view, force_load, on_done)
 				detail.close()
 			end
 			if next(state.active_view._bookmarks) == nil then
-				M.switch_view(require("atlas.ui.shared.bookmarks_view").views(provider, "issues")[1])
+				M.switch_view(state.provider_views[1])
 				return
 			end
 			state.current_view = state.active_view

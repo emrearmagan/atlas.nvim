@@ -174,7 +174,7 @@ local function load_starred(view, on_done)
 				repo_detail.close()
 			end
 			if next(state.active_view._bookmarks) == nil then
-				M.switch_view(require("atlas.ui.shared.bookmarks_view").views(state.provider, "pulls")[1])
+				M.switch_view(state.provider_views[1])
 				return
 			end
 			state.current_view = state.active_view

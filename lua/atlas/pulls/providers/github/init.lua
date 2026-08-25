@@ -146,32 +146,31 @@ local function add_reaction(pr, item, key, on_done)
 	})
 end
 
----@param view AtlasGitHubViewConfig
----@return AtlasGitHubViewConfig
-local function resolve_cur_repo(view)
-	if not view.current_repo then
-		return view
-	end
-	local root = git.repo_root()
-	local info = git.local_repository(root)
-	if not info or info.provider ~= "github" then
-		return view
-	end
-	local resolved = vim.tbl_extend("force", {}, view)
-	local additional = (view.search and view.search ~= "") and (" " .. view.search) or ""
-	resolved.search = string.format("repo:%s%s", info.repo_full_name, additional)
-	return resolved
-end
-
 ---@return AtlasGitHubViewConfig[]
 local function views()
 	local options = config.domain_options("github", "pulls") or {}
 	---@cast options AtlasGitHubPullsConfig
-	local configured = type(options.views) == "table" and #options.views > 0 and options.views
-		or { { name = "Me", key = "1", search = "involves:@me", layout = "compact" } }
+	local configured = options.views
+	if not configured or #configured == 0 then
+		configured = { { name = "Me", key = "1", search = "involves:@me", layout = "compact" } }
+	end
+	local repo
+	for _, view in ipairs(configured) do
+		if view.current_repo then
+			local target = git.local_repository()
+			if target and target.provider == "github" then
+				repo = target.repo_full_name
+			end
+			break
+		end
+	end
 	local resolved = {}
 	for i, view in ipairs(configured) do
-		resolved[i] = resolve_cur_repo(view)
+		resolved[i] = vim.tbl_extend("force", {}, view)
+		if view.current_repo and repo then
+			local additional = (view.search and view.search ~= "") and (" " .. view.search) or ""
+			resolved[i].search = string.format("repo:%s%s", repo, additional)
+		end
 	end
 	return resolved
 end
@@ -191,6 +190,7 @@ local function search_view(target)
 end
 
 return {
+	views = views,
 	search_view = search_view,
 	capabilities = {
 		core = {
@@ -213,7 +213,6 @@ return {
 			fetch_activity = activity_api.fetch_activity,
 			fetch_commits = changes_api.fetch_commits,
 			fetch_diff = changes_api.fetch_diff,
-			views = views,
 		},
 		comments = {
 			reaction_options = require("atlas.ui.shared.emojis").github(),

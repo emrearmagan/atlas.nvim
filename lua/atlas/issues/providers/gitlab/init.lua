@@ -204,34 +204,33 @@ function M.add_reaction(issue, item, key, on_done)
 	return require("atlas.issues.providers.gitlab.api.notes").add_reaction(issue_key, comment.id, key, on_done)
 end
 
----@param view AtlasGitLabIssuesViewConfig
----@return AtlasGitLabIssuesViewConfig
-local function resolve_cur_repo(view)
-	if not view.current_repo then
-		return view
-	end
-	local root = git.repo_root()
-	local info = git.local_repository(root)
-	if not info or info.provider ~= "gitlab" then
-		return view
-	end
-	local resolved = vim.tbl_extend("force", {}, view)
-	resolved.project = info.repo_full_name
-	resolved.scope = view.scope or "all"
-	return resolved
-end
-
 ---@return AtlasGitLabIssuesViewConfig[]
 function M.views()
 	local cfg = config.domain_options("gitlab", "issues") or {}
-	local views = type(cfg.views) == "table" and #cfg.views > 0 and cfg.views
-		or {
+	local views = cfg.views
+	if not views or #views == 0 then
+		views = {
 			{ name = "Assigned", key = "1", scope = "assigned_to_me", state = "opened" },
 			{ name = "Created", key = "2", scope = "created_by_me", state = "opened" },
 		}
+	end
+	local repo
+	for _, view in ipairs(views) do
+		if view.current_repo then
+			local target = git.local_repository()
+			if target and target.provider == "gitlab" then
+				repo = target.repo_full_name
+			end
+			break
+		end
+	end
 	local resolved = {}
 	for i, view in ipairs(views) do
-		resolved[i] = resolve_cur_repo(view)
+		resolved[i] = vim.tbl_extend("force", {}, view)
+		if view.current_repo and repo then
+			resolved[i].project = repo
+			resolved[i].scope = view.scope or "all"
+		end
 	end
 	return resolved
 end
@@ -257,6 +256,7 @@ function M.issue_ref(target)
 end
 
 return {
+	views = M.views,
 	search_view = M.search_view,
 	issue_ref = M.issue_ref,
 	capabilities = {
@@ -267,7 +267,6 @@ return {
 			fetch_by_refs = M.fetch_by_refs,
 			fetch_issue = M.fetch_issue,
 			update_description = M.update_description,
-			views = M.views,
 		},
 		comments = {
 			reaction_options = GITLAB_REACTION_OPTIONS,

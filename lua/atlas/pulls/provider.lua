@@ -17,6 +17,7 @@
 ---@field name string
 ---@field icon string
 ---@field hl_group string
+---@field views fun(): AtlasPullsViewConfig[]
 ---@field search_view fun(target: AtlasTarget): AtlasPullsViewConfig
 ---@field capabilities PullsProviderCapabilities
 
@@ -51,8 +52,6 @@
 ---@field fetch_activity (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(entries: PullsActivityEntry[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field fetch_commits (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(commits: PullsCommit[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field fetch_diff (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(files: DiffFile[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
----@field views fun(): AtlasPullsViewConfig[]
-
 ---@class PullsAddCommentOpts
 ---@field parent PullsComment|nil          -- reply to this comment
 ---@field inline PullsInlineCommentPosition|nil

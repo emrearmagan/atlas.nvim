@@ -20,6 +20,7 @@
 ---@field name string
 ---@field icon string
 ---@field hl_group string
+---@field views fun(): IssuesViewConfig[]
 ---@field search_view fun(target: AtlasTarget): IssuesViewConfig
 ---@field issue_ref fun(target: AtlasTarget): IssueRef|nil
 ---@field capabilities IssuesProviderCapabilities
@@ -38,7 +39,6 @@
 ---@field fetch_by_refs fun(refs: IssueRef[], opts: IssuesFetchOpts, on_done: fun(issues: Issue[], err: string|nil)): { cancel: fun() }|nil
 ---@field fetch_issue fun(ref: IssueRef, opts: IssuesFetchOpts|nil, on_done: fun(issue: IssueDetails|nil, err: string|nil)): { cancel: fun() }|nil
 ---@field update_description (fun(issue: IssueDetails, content: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
----@field views fun(): IssuesViewConfig[]
 ---@field refresh fun()|nil
 
 ---@class IssuesCommentsCapability

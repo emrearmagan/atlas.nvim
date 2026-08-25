@@ -263,37 +263,36 @@ function M.fetch_activity(issue, opts, on_done)
 	end, { force_load = opts and opts.force_load == true or false })
 end
 
----@param view AtlasGitHubIssuesViewConfig
----@return AtlasGitHubIssuesViewConfig
-local function resolve_cur_repo(view)
-	if not view.current_repo then
-		return view
-	end
-	local root = git.repo_root()
-	local info = git.local_repository(root)
-	if not info or info.provider ~= "github" then
-		return view
-	end
-	local resolved = vim.tbl_extend("force", {}, view)
-	local additional = (view.search and view.search ~= "") and (" " .. view.search) or ""
-	resolved.search = string.format("repo:%s%s", info.repo_full_name, additional)
-	return resolved
-end
-
 ---@return AtlasGitHubIssuesViewConfig[]
 function M.views()
 	local cfg = config.domain_options("github", "issues") or {}
-	local views = type(cfg.views) == "table" and #cfg.views > 0 and cfg.views
-		or {
+	local views = cfg.views
+	if not views or #views == 0 then
+		views = {
 			{
 				name = "Assigned",
 				key = "1",
 				search = "assignee:@me is:open",
 			},
 		}
+	end
+	local repo
+	for _, view in ipairs(views) do
+		if view.current_repo then
+			local target = git.local_repository()
+			if target and target.provider == "github" then
+				repo = target.repo_full_name
+			end
+			break
+		end
+	end
 	local resolved = {}
 	for i, view in ipairs(views) do
-		resolved[i] = resolve_cur_repo(view)
+		resolved[i] = vim.tbl_extend("force", {}, view)
+		if view.current_repo and repo then
+			local additional = (view.search and view.search ~= "") and (" " .. view.search) or ""
+			resolved[i].search = string.format("repo:%s%s", repo, additional)
+		end
 	end
 	return resolved
 end
@@ -322,6 +321,7 @@ function M.issue_ref(target)
 end
 
 return {
+	views = M.views,
 	search_view = M.search_view,
 	issue_ref = M.issue_ref,
 	capabilities = {
@@ -332,7 +332,6 @@ return {
 			fetch_by_refs = M.fetch_by_refs,
 			fetch_issue = M.fetch_issue,
 			update_description = M.update_description,
-			views = M.views,
 		},
 		comments = {
 			reaction_options = require("atlas.ui.shared.emojis").github(),

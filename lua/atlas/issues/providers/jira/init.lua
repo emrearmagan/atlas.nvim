@@ -213,18 +213,21 @@ end
 ---@return AtlasJiraViewConfig[]
 function M.views()
 	local cfg = require("atlas.issues.providers.jira.api.config").jira_config()
-	local views = type(cfg.views) == "table" and #cfg.views > 0 and cfg.views
-		or {
+	local views = cfg.views
+	if not views or #views == 0 then
+		views = {
 			{
 				name = "Issues",
 				key = "1",
 				jql = "assignee = currentUser() AND resolution = Unresolved ORDER BY updated DESC",
 			},
 		}
+	end
 	return views
 end
 
 return {
+	views = M.views,
 	search_view = search_view,
 	issue_ref = target_issue_ref,
 	capabilities = {
@@ -234,7 +237,6 @@ return {
 			fetch_issues = M.fetch_issues,
 			fetch_by_refs = M.fetch_by_refs,
 			fetch_issue = M.fetch_issue,
-			views = M.views,
 			refresh = M.on_refresh,
 		},
 		comments = {

@@ -6,6 +6,7 @@
 ---@field current_user PullsUser|nil
 ---@field pulls PullRequest[]|nil
 ---@field provider PullsProvider|nil
+---@field provider_views AtlasPullsViewConfig[]
 ---@field reloading_pr_keys table<string, integer>
 ---@field reload_spinner_frame string
 ---@field status_filters table<string, boolean>
@@ -17,6 +18,7 @@ local M = {
 	current_user = nil,
 	pulls = nil,
 	provider = nil,
+	provider_views = {},
 	reloading_pr_keys = {},
 	reload_spinner_frame = "⠋",
 	status_filters = { OPEN = true, MERGED = false, DECLINED = false },
