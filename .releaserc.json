@@ -15,6 +15,11 @@
           {
             "type": "feat",
             "release": "patch"
+          },
+          {
+            "type": "chore",
+            "scope": "release",
+            "release": "patch"
           }
         ]
       }
