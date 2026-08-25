@@ -1,7 +1,8 @@
 local M = {}
 
-local service = require("atlas.providers.gitlab.client").issues
+local service = require("atlas.providers.gitlab.client")
 local normalizer = require("atlas.issues.providers.gitlab.api.mapper")
+local json = require("atlas.core.json")
 
 local GQL_DISCUSSIONS = [[
 	query ($fullPath: ID!, $iid: String!) {
@@ -41,13 +42,13 @@ local function discussions_cache_key(path, iid)
 	return string.format("gitlab:discussions:%s#%d", path, iid)
 end
 
----@param key string
+---@param issue Issue
 ---@param opts { force_load?: boolean }|nil
 ---@param on_done fun(discussions: table[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-local function fetch_discussions(key, opts, on_done)
+local function fetch_discussions(issue, opts, on_done)
 	opts = opts or {}
-	local path, iid = normalizer.parse_key(key)
+	local path, iid = normalizer.parse_key(tostring(issue.key or ""))
 	if path == "" or iid == nil then
 		on_done(nil, "Invalid issue key")
 		return nil
@@ -67,12 +68,10 @@ local function fetch_discussions(key, opts, on_done)
 			on_done(nil, err)
 			return
 		end
-		local nodes = data
-				and data.project
-				and data.project.issue
-				and data.project.issue.discussions
-				and data.project.issue.discussions.nodes
-			or {}
+		local project = json.safe_table(data).project
+		local raw_issue = json.safe_table(project).issue
+		local discussions = json.safe_table(raw_issue).discussions
+		local nodes = json.safe_table(json.safe_table(discussions).nodes)
 		service.set_memory_cache(cache_key, nodes)
 		on_done(nodes, nil)
 	end, {
@@ -87,10 +86,11 @@ end
 local function map_discussions(discussions)
 	local comments = {}
 	local events = {}
-	for _, discussion in ipairs(discussions) do
+	for _, discussion_value in ipairs(discussions) do
+		local discussion = json.safe_table(discussion_value)
 		local discussion_id = id_tail(discussion.id)
 		local first_id = nil
-		for _, raw in ipairs(discussion.notes.nodes) do
+		for _, raw in ipairs(json.safe_table(json.safe_table(discussion.notes).nodes)) do
 			if raw.system == true then
 				local entry = normalizer.to_activity_from_note(raw)
 				if entry then
@@ -108,12 +108,12 @@ local function map_discussions(discussions)
 	return comments, events
 end
 
----@param key string
+---@param issue Issue
 ---@param opts { force_load?: boolean }|nil
 ---@param on_done fun(result: { comments: IssueComment[], events: IssueActivityEntry[] }|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.list_conversation(key, opts, on_done)
-	return fetch_discussions(key, opts, function(discussions, err)
+function M.list_conversation(issue, opts, on_done)
+	return fetch_discussions(issue, opts, function(discussions, err)
 		if err or discussions == nil then
 			on_done(nil, err)
 			return
@@ -123,32 +123,17 @@ function M.list_conversation(key, opts, on_done)
 	end)
 end
 
----@param key string
----@param opts { force_load?: boolean }|nil
----@param on_done fun(entries: IssueActivityEntry[]|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.list_history(key, opts, on_done)
-	return fetch_discussions(key, opts, function(discussions, err)
-		if err or discussions == nil then
-			on_done(nil, err)
-			return
-		end
-		local _, events = map_discussions(discussions)
-		on_done(events, nil)
-	end)
-end
-
----@param key string
+---@param issue Issue
 ---@param body string
 ---@param on_done fun(comment: IssueComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.add(key, body, on_done)
-	local path, iid = normalizer.parse_key(key)
+function M.add_comment(issue, body, on_done)
+	local path, iid = normalizer.parse_key(tostring(issue.key or ""))
 	if path == "" or iid == nil then
 		on_done(nil, "Invalid issue key")
 		return nil
 	end
-	if type(body) ~= "string" or vim.trim(body) == "" then
+	if vim.trim(body) == "" then
 		on_done(nil, "Comment cannot be empty")
 		return nil
 	end
@@ -159,8 +144,9 @@ function M.add(key, body, on_done)
 			on_done(nil, err)
 			return
 		end
+		result = json.safe_table(result)
 		local discussion_id = tostring(result.id or "")
-		local notes = result.notes
+		local notes = json.safe_table(result.notes)
 		local comment = normalizer.to_comment_from_note(notes[1], nil, discussion_id)
 		if comment == nil then
 			on_done(nil, "GitLab did not return the created comment")
@@ -175,24 +161,24 @@ function M.add(key, body, on_done)
 	})
 end
 
----@param key string
+---@param issue Issue
 ---@param parent IssueComment
 ---@param body string
 ---@param on_done fun(comment: IssueComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.reply_in_discussion(key, parent, body, on_done)
-	local path, iid = normalizer.parse_key(key)
+function M.reply_comment(issue, parent, body, on_done)
+	local path, iid = normalizer.parse_key(tostring(issue.key or ""))
 	if path == "" or iid == nil then
 		on_done(nil, "Invalid issue key")
 		return nil
 	end
-	if type(body) ~= "string" or vim.trim(body) == "" then
+	if vim.trim(body) == "" then
 		on_done(nil, "Comment cannot be empty")
 		return nil
 	end
 	local discussion_id = parent._raw and tostring(parent._raw.discussion_id or "") or ""
 	if discussion_id == "" then
-		return M.add(key, body, on_done)
+		return M.add_comment(issue, body, on_done)
 	end
 
 	local endpoint =
@@ -212,18 +198,18 @@ function M.reply_in_discussion(key, parent, body, on_done)
 	})
 end
 
----@param key string
+---@param issue Issue
 ---@param comment IssueComment
 ---@param body string
 ---@param on_done fun(comment: IssueComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.edit(key, comment, body, on_done)
-	local path, iid = normalizer.parse_key(key)
+function M.edit_comment(issue, comment, body, on_done)
+	local path, iid = normalizer.parse_key(tostring(issue.key or ""))
 	if path == "" or iid == nil then
 		on_done(nil, "Invalid issue key")
 		return nil
 	end
-	if type(body) ~= "string" or vim.trim(body) == "" then
+	if vim.trim(body) == "" then
 		on_done(nil, "Comment cannot be empty")
 		return nil
 	end
@@ -258,12 +244,12 @@ function M.edit(key, comment, body, on_done)
 	})
 end
 
----@param key string
+---@param issue Issue
 ---@param comment IssueComment
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.delete(key, comment, on_done)
-	local path, iid = normalizer.parse_key(key)
+function M.delete_comment(issue, comment, on_done)
+	local path, iid = normalizer.parse_key(tostring(issue.key or ""))
 	if path == "" or iid == nil then
 		on_done(false, "Invalid issue key")
 		return nil
@@ -296,13 +282,20 @@ function M.delete(key, comment, on_done)
 	})
 end
 
----@param key string
----@param note_id string|number
+---@param issue Issue
+---@param item IssueConversationItem
 ---@param name string
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.add_reaction(key, note_id, name, on_done)
-	local path, iid = normalizer.parse_key(key)
+function M.add_reaction(issue, item, name, on_done)
+	if item.kind ~= "comment" then
+		on_done(false, "Reactions are only supported on comments")
+		return nil
+	end
+	local comment = item.entity
+	---@cast comment IssueComment
+	local note_id = comment.id
+	local path, iid = normalizer.parse_key(tostring(issue.key or ""))
 	if path == "" or iid == nil then
 		on_done(false, "Invalid issue key")
 		return nil

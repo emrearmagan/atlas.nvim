@@ -8,47 +8,36 @@
 ---@field display_name string
 
 --------------------------------------------------------------------------------
--- Project
---------------------------------------------------------------------------------
-
----@class IssueProject
----@field id string
----@field key string
----@field name string
----@field self string
----@field category table|nil
-
---------------------------------------------------------------------------------
 -- Issue
 --------------------------------------------------------------------------------
 
----@class Issue
+---@class IssueRef
 ---@field key string
+---@field title string|nil
+
+---@class Issue : IssueRef
 ---@field title string
----@field project IssueProject|nil
 ---@field status string|nil
 ---@field status_id string|nil
 ---@field type IssueType|nil
----@field priority string|nil
 ---@field assignee IssueUser|nil
 ---@field reporter IssueUser|nil
 ---@field story_points number|nil
 ---@field duedate string|nil
----@field parent Issue|nil
+---@field parent IssueRef|nil
 ---@field url string|nil
----@field is_pinned boolean|nil
+---@field created_at string|nil
+---@field updated_at string|nil
+---@field closed_at string|nil
+---@field comment_count integer|nil
 ---@field is_starred boolean|nil
 ---@field is_subscribed boolean|nil
----@field _raw table|nil
 
----@class IssueDetails : Issue
+---@class IssueDetails
 ---@field description string
 ---@field assignees IssueUser[]
 ---@field labels IssueLabel[]
 ---@field milestone IssueMilestone|nil
----@field reactions table<string, integer>|nil
----@field sub_issues Issue[]
----@field created_at string|nil
 
 --------------------------------------------------------------------------------
 -- Label
@@ -64,9 +53,6 @@
 
 ---@class IssueMilestone
 ---@field title string
----@field progress_percentage number|nil
----@field open_issues integer|nil
----@field closed_issues integer|nil
 
 --------------------------------------------------------------------------------
 -- Group
@@ -141,13 +127,13 @@
 ---@field deleted boolean|nil
 ---@field always_render boolean|nil
 
----@alias IssueConversationItemKind "comment"|"description"|"activity"
+---@alias IssueConversationItemKind "comment"|"activity"
 
 ---@class IssueConversationItem
 ---@field id string
 ---@field kind IssueConversationItemKind
 ---@field created_at string
----@field entity IssueComment|IssueDetails|IssueActivityEntry
+---@field entity IssueComment|IssueActivityEntry
 
 ---@class IssueReactionOption
 ---@field key string

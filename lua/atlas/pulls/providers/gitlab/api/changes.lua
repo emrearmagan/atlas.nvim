@@ -1,7 +1,8 @@
 local M = {}
 
-local service = require("atlas.providers.gitlab.client").pulls
+local service = require("atlas.providers.gitlab.client")
 local diff_parser = require("atlas.core.git.diff_parser")
+local json = require("atlas.core.json")
 
 ---@param pr PullRequest
 ---@return string project_path, integer|nil iid
@@ -39,7 +40,8 @@ function M.fetch_commits(pr, opts, on_done)
 			return
 		end
 		local commits = {}
-		for _, raw in ipairs(result) do
+		for _, raw_value in ipairs(json.safe_table(result)) do
+			local raw = json.safe_table(raw_value)
 			local hash = tostring(raw.id or "")
 			local short = tostring(raw.short_id or (hash ~= "" and hash:sub(1, 8) or ""))
 			local title = tostring(raw.title or raw.message or "")
@@ -50,12 +52,16 @@ function M.fetch_commits(pr, opts, on_done)
 				author_name = tostring(raw.author_name or ""),
 				author_nickname = nil,
 				date = tostring(raw.authored_date or raw.committed_date or ""),
-				html_url = type(raw.web_url) == "string" and raw.web_url or nil,
+				html_url = json.safe_str(raw.web_url),
 			})
 		end
 		service.set_memory_cache(cache_key, commits)
 		on_done(commits, nil)
-	end)
+	end, {
+		action = "Fetch MR commits",
+		project_path = path,
+		iid = iid,
+	})
 end
 
 ---@param change table
@@ -106,13 +112,17 @@ function M.fetch_diff(pr, opts, on_done)
 			return
 		end
 		local parts = {}
-		for _, change in ipairs(result.changes) do
+		for _, change in ipairs(json.safe_table(json.safe_table(result).changes)) do
 			table.insert(parts, rebuild_unified_diff(change))
 		end
 		local files = diff_parser.parse(table.concat(parts, "\n"))
 		service.set_memory_cache(cache_key, files)
 		on_done(files, nil)
-	end)
+	end, {
+		action = "Fetch MR diff",
+		project_path = path,
+		iid = iid,
+	})
 end
 
 ---@param pr PullRequest

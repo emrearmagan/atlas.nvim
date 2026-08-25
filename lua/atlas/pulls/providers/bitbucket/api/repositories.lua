@@ -1,10 +1,10 @@
 local M = {}
 
 local service = require("atlas.pulls.providers.bitbucket.api.service")
-local logger = require("atlas.core.logger")
 local config = require("atlas.config")
 local api_utils = require("atlas.core.utils")
 local mapper = require("atlas.pulls.providers.bitbucket.api.mapper")
+local request_scope = require("atlas.core.requests")
 local as_table = api_utils.as_table
 
 ---@param value string
@@ -65,7 +65,13 @@ local function fetch_readme(owner, repo_name, ref, readme_path, on_done)
 		end
 
 		on_done(tostring(result or ""), nil)
-	end)
+	end, {
+		action = "Fetch repository README",
+		owner = owner,
+		repo = repo_name,
+		ref = ref,
+		path = path,
+	})
 end
 
 ---@param workspace string
@@ -73,7 +79,7 @@ end
 ---@param on_done fun(repositories: PullsRepoDetails[]|nil, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.fetch_workspace_repositories(workspace, search, on_done)
-	if type(workspace) ~= "string" or workspace == "" then
+	if workspace == "" then
 		on_done(nil, "Missing workspace slug")
 		return nil
 	end
@@ -91,11 +97,6 @@ function M.fetch_workspace_repositories(workspace, search, on_done)
 
 	return service.request("GET", endpoint, nil, nil, function(result, err)
 		if err then
-			logger.logerror("Bitbucket repo fetch failed", {
-				workspace = workspace,
-				search = term,
-				error = err,
-			})
 			on_done(nil, err)
 			return
 		end
@@ -107,15 +108,9 @@ function M.fetch_workspace_repositories(workspace, search, on_done)
 			table.insert(repositories, mapper.to_repo_details(raw, workspace))
 		end
 
-		logger.loginfo("Bitbucket repo fetch success", {
-			workspace = workspace,
-			search = term,
-			repo_count = #repositories,
-		})
-
 		on_done(repositories, nil)
 	end, {
-		action = "Bitbucket repo fetch",
+		action = "Fetch repositories",
 		workspace = workspace,
 		search = term,
 	})
@@ -143,11 +138,6 @@ function M.fetch_project_repositories(project, opts, on_done)
 		string.format("/repositories/%s?q=%s&pagelen=100&fields=values.slug,next", url_encode(workspace), query)
 	return service.fetch_all_values(endpoint, function(result, err)
 		if err then
-			logger.logerror("Bitbucket project repository fetch failed", {
-				workspace = workspace,
-				project = project_key,
-				error = err,
-			})
 			on_done(nil, err)
 			return
 		end
@@ -158,21 +148,19 @@ function M.fetch_project_repositories(project, opts, on_done)
 		end
 
 		service.set_cache(cache_key, repositories, service.cache_ttl())
-		logger.loginfo("Bitbucket project repository fetch success", {
-			workspace = workspace,
-			project = project_key,
-			repo_count = #repositories,
-		})
 		on_done(repositories, nil)
-	end)
+	end, {
+		action = "Fetch project repositories",
+		workspace = workspace,
+		project = project_key,
+	})
 end
 
 ---@param repo PullsRepo
----@param opts PullsFetchOpts
+---@param _opts PullsFetchOpts
 ---@param on_done fun(repo: PullsRepoDetails|nil, err: string|nil)
----@return { job_id: integer, cancel: fun() }|nil
-function M.fetch_detail(repo, opts, on_done)
-	opts = opts or {}
+---@return { cancel: fun() }|nil
+function M.fetch_detail(repo, _opts, on_done)
 	local owner = tostring(repo.owner or "")
 	local repo_name = tostring(repo.repo_name or "")
 
@@ -181,21 +169,15 @@ function M.fetch_detail(repo, opts, on_done)
 		return nil
 	end
 
-	local current = nil
-	local cancelled = false
 	local endpoint = string.format("/repositories/%s/%s", owner, repo_name)
-
-	local function cancel()
-		cancelled = true
-		if current ~= nil and current.cancel then
-			pcall(current.cancel)
-		end
-	end
-
-	current = service.request("GET", endpoint, nil, nil, function(result, err)
-		if cancelled then
-			return
-		end
+	local requests = request_scope.new()
+	requests.run(function(done)
+		return service.request("GET", endpoint, nil, nil, done, {
+			action = "Fetch repository details",
+			owner = owner,
+			repo = repo_name,
+		})
+	end, function(result, err)
 		if err then
 			on_done(nil, err)
 			return
@@ -205,45 +187,28 @@ function M.fetch_detail(repo, opts, on_done)
 		local readme_path = configured_readme_path(repo)
 		local ref = tostring(detail.default_branch or "")
 
-		current = fetch_readme(owner, repo_name, ref, readme_path, function(readme, readme_err)
-			if cancelled then
-				return
-			end
-			if readme_err ~= nil then
-				logger.logerror("Bitbucket repo readme fetch failed", {
-					owner = owner,
-					repo = repo_name,
-					error = readme_err,
-				})
-			else
+		requests.run(function(done)
+			return fetch_readme(owner, repo_name, ref, readme_path, done)
+		end, function(readme, readme_err)
+			if readme_err == nil then
 				detail.readme = readme
 			end
 			on_done(detail, nil)
 		end)
-
-		if current == nil then
-			on_done(detail, nil)
-		end
 	end)
-
-	if current == nil then
-		return nil
-	end
-
-	return {
-		job_id = current.job_id,
-		cancel = cancel,
-	}
+	return requests
 end
 
----@param branches_url string
+---@param repo PullsRepoDetails
 ---@param opts PullsFetchOpts
 ---@param on_done fun(branches: PullsRepoBranches|nil, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
-function M.fetch_branches(branches_url, opts, on_done)
+function M.fetch_branches(repo, opts, on_done)
+	---@cast repo BitbucketPullsRepoDetails
 	opts = opts or {}
+	local branches_url = repo.branches_url
 
-	if type(branches_url) ~= "string" or branches_url == "" then
+	if branches_url == "" then
 		on_done(nil, "Missing branches URL")
 		return nil
 	end
@@ -287,17 +252,19 @@ function M.fetch_branches(branches_url, opts, on_done)
 		local branches = { entries = entries }
 		service.set_cache(key, branches, service.cache_ttl())
 		on_done(branches, nil)
-	end)
+	end, { action = "Fetch repository branches", repo = repo.full_name or repo.name })
 end
 
----@param tags_url string
+---@param repo PullsRepoDetails
 ---@param opts PullsFetchOpts
 ---@param on_done fun(tags: PullsRepoTags|nil, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
-function M.fetch_tags(tags_url, opts, on_done)
+function M.fetch_tags(repo, opts, on_done)
+	---@cast repo BitbucketPullsRepoDetails
 	opts = opts or {}
+	local tags_url = repo.tags_url
 
-	if type(tags_url) ~= "string" or tags_url == "" then
+	if tags_url == "" then
 		on_done(nil, "Missing tags URL")
 		return nil
 	end
@@ -320,12 +287,6 @@ function M.fetch_tags(tags_url, opts, on_done)
 		end
 
 		local values = (as_table(result) or {}).values or {}
-		local first = as_table(values[1]) or {}
-		logger.loginfo("Bitbucket repo tags fetched", {
-			url = url,
-			count = #values,
-			first_tag = tostring(first.name or ""),
-		})
 
 		local entries = {}
 		for _, item in ipairs(values) do
@@ -345,7 +306,7 @@ function M.fetch_tags(tags_url, opts, on_done)
 		local tags = { entries = entries }
 		service.set_cache(key, tags, service.cache_ttl())
 		on_done(tags, nil)
-	end)
+	end, { action = "Fetch repository tags", repo = repo.full_name or repo.name })
 end
 
 ---@param repo PullsRepoDetails
@@ -353,14 +314,8 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.delete_branch(repo, branch, on_done)
-	local owner = tostring(repo.owner or "")
-	local repo_name = tostring(repo.repo_name or "")
 	local branch_name = tostring(branch.name or "")
 
-	if owner == "" or repo_name == "" then
-		on_done(false, "Repository missing owner/name")
-		return nil
-	end
 	if branch_name == "" then
 		on_done(false, "Branch name is missing")
 		return nil
@@ -380,7 +335,7 @@ function M.delete_branch(repo, branch, on_done)
 
 		service.clear_cache()
 		on_done(true, nil)
-	end)
+	end, { action = "Delete repository branch", repo = repo.full_name or repo.name, branch = branch_name })
 end
 
 return M

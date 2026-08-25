@@ -1,8 +1,28 @@
 local M = {}
+local config = require("atlas.config")
+local url = require("atlas.providers.url")
 
 ---@alias AtlasPullsProviderId "bitbucket"|"github"|"gitlab"
 ---@alias AtlasIssuesProviderId "jira"|"github"|"gitlab"
 ---@alias AtlasProviderId AtlasPullsProviderId|AtlasIssuesProviderId
+---@alias AtlasDomain "pulls"|"issues"
+---@alias AtlasEntity "pr"|"issue"|"repo"
+
+---@class AtlasTarget
+---@field provider AtlasProviderId
+---@field domain AtlasDomain
+---@field entity AtlasEntity
+---@field url string
+---@field host string
+---@field owner string|nil
+---@field repo string|nil
+---@field project_path string|nil
+---@field workspace string|nil
+---@field number integer|nil
+---@field id string|number|nil
+---@field repo_full_name string|nil
+---@field repository_url string|nil
+---@field issue_key string|nil
 
 ---@class AtlasProviderDomain
 ---@field module string
@@ -13,7 +33,7 @@ local M = {}
 ---@class AtlasProvider
 ---@field id AtlasProviderId
 ---@field name string
----@field default_host string|nil
+---@field resolver { resolve: fun(value: string, parsed: AtlasParsedUrl|nil): AtlasTarget|nil, string|nil }
 ---@field domains table<"pulls"|"issues", AtlasProviderDomain>
 
 ---@type AtlasProvider[]
@@ -33,16 +53,6 @@ function M.list(domain)
 		if domain == nil or provider.domains[domain] ~= nil then
 			table.insert(result, provider)
 		end
-	end
-	return result
-end
-
----@param domain "pulls"|"issues"|nil
----@return AtlasProviderId[]
-function M.ids(domain)
-	local result = {}
-	for _, provider in ipairs(M.list(domain)) do
-		table.insert(result, provider.id)
 	end
 	return result
 end
@@ -74,15 +84,23 @@ function M.load(id, domain)
 	return implementation
 end
 
----@param id AtlasProviderId
----@param domain "pulls"|"issues"
----@return table|nil
-function M.options(id, domain)
-	local config = require("atlas.config").options or {}
-	local domain_options = type(config[domain]) == "table" and config[domain] or nil
-	local provider_options = domain_options and domain_options.providers or nil
-	local result = type(provider_options) == "table" and provider_options[id] or nil
-	return type(result) == "table" and result or nil
+---@param value string
+---@return AtlasTarget|nil, string|nil
+function M.resolve(value)
+	local cleaned = tostring(value or ""):gsub("^%s+", ""):gsub("%s+$", "")
+	cleaned = cleaned:match("^<(.*)>$") or cleaned
+
+	local parsed, parse_err = url.parse(cleaned)
+	local resolve_err
+	for _, provider in ipairs(all) do
+		local target, err = provider.resolver.resolve(cleaned, parsed)
+		if target then
+			return target
+		end
+		resolve_err = resolve_err or err
+	end
+
+	return nil, resolve_err or (parsed and "Unsupported Atlas URL") or parse_err or "Unsupported Atlas target"
 end
 
 ---@param domain "pulls"|"issues"
@@ -90,7 +108,7 @@ end
 function M.configured(domain)
 	local result = {}
 	for _, provider in ipairs(M.list(domain)) do
-		if M.options(provider.id, domain) ~= nil then
+		if config.provider_options(provider.id) ~= nil then
 			table.insert(result, provider)
 		end
 	end
@@ -100,6 +118,7 @@ end
 add({
 	id = "jira",
 	name = "Jira",
+	resolver = require("atlas.providers.jira.resolve"),
 	domains = {
 		issues = {
 			module = "atlas.issues.providers.jira",
@@ -113,7 +132,7 @@ add({
 add({
 	id = "github",
 	name = "GitHub",
-	default_host = "github.com",
+	resolver = require("atlas.providers.github.resolve"),
 	domains = {
 		pulls = {
 			module = "atlas.pulls.providers.github",
@@ -131,7 +150,7 @@ add({
 add({
 	id = "bitbucket",
 	name = "Bitbucket",
-	default_host = "bitbucket.org",
+	resolver = require("atlas.providers.bitbucket.resolve"),
 	domains = {
 		pulls = {
 			module = "atlas.pulls.providers.bitbucket",
@@ -144,7 +163,7 @@ add({
 add({
 	id = "gitlab",
 	name = "GitLab",
-	default_host = "gitlab.com",
+	resolver = require("atlas.providers.gitlab.resolve"),
 	domains = {
 		pulls = {
 			module = "atlas.pulls.providers.gitlab",

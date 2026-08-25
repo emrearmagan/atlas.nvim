@@ -2,10 +2,6 @@ local M = {}
 
 local keymaps = require("atlas.core.keymaps")
 
----@class AtlasLiveCommandOptions
----@field cwd string|nil
----@field env table<string, string|number>|nil
-
 ---@class AtlasLiveOutput
 local Output = {}
 Output.__index = Output
@@ -117,7 +113,7 @@ end
 
 ---@param cmd string[]
 ---@param on_exit fun(code: integer)|nil
----@param opts AtlasLiveCommandOptions|nil
+---@param opts { cwd: string|nil, env: table<string, string|number>|nil }|nil
 function Output:run(cmd, on_exit, opts)
 	opts = opts or {}
 

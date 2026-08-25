@@ -2,13 +2,7 @@ local utils = require("atlas.ui.shared.utils")
 
 local M = {}
 
----@class AtlasTabItem
----@field key string
----@field label string
----@field icon? string
----@field icon_hl? string
-
----@param items AtlasTabItem[]
+---@param items { key: string, label: string, icon: AtlasIconStyle|nil }[]
 ---@param active_tab string
 ---@param width integer
 ---@param opts? { inactive_hl?: string, active_hl?: string, gap?: string, divider_hl?: string, padding_x?: integer }
@@ -27,9 +21,10 @@ function M.render(items, active_tab, width, opts)
 	local spans = {}
 	local col = 0
 
-	for i, tab in ipairs(items or {}) do
-		local icon = type(tab.icon) == "string" and tab.icon ~= "" and (tab.icon .. " ") or ""
-		local part = string.format("%s%s ", icon, tab.label or "")
+	for i, tab in ipairs(items) do
+		local icon = tab.icon and tab.icon.icon or ""
+		local icon_text = icon ~= "" and (icon .. " ") or ""
+		local part = string.format("%s%s ", icon_text, tab.label)
 		line = line .. part
 
 		---@type string|nil
@@ -43,6 +38,15 @@ function M.render(items, active_tab, width, opts)
 				start_col = col,
 				end_col = col + #part,
 				hl_group = hl,
+			})
+		end
+		local icon_hl = tab.icon and tab.icon.hl_group or nil
+		if icon ~= "" and icon_hl and icon_hl ~= "" then
+			table.insert(spans, {
+				line = 0,
+				start_col = col,
+				end_col = col + #icon,
+				hl_group = icon_hl,
 			})
 		end
 		col = col + #part

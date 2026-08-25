@@ -1,9 +1,32 @@
 -- Minimal stub for the `vim` global so specs can run outside Neovim via busted.
 -- Loaded once as a busted helper (--helper=spec/support/vim_stub.lua).
--- Individual spec files no longer need their own `if _G.vim == nil then` blocks.
+-- Individual spec files no longer need their own `if vim == nil then` blocks.
 
-if _G.vim ~= nil then
+if vim ~= nil then
 	return
+end
+
+local function json_encode(value)
+	local value_type = type(value)
+	if value_type == "string" then
+		return '"' .. value:gsub('[\\"]', "\\%0"):gsub("\n", "\\n") .. '"'
+	elseif value_type == "number" or value_type == "boolean" then
+		return tostring(value)
+	elseif value_type == "table" then
+		local keys = {}
+		for key in pairs(value) do
+			table.insert(keys, key)
+		end
+		table.sort(keys, function(a, b)
+			return tostring(a) < tostring(b)
+		end)
+		local parts = {}
+		for _, key in ipairs(keys) do
+			table.insert(parts, string.format('"%s":%s', tostring(key), json_encode(value[key])))
+		end
+		return "{" .. table.concat(parts, ",") .. "}"
+	end
+	return "null"
 end
 
 _G.vim = {
@@ -27,11 +50,6 @@ _G.vim = {
 		return result
 	end,
 
-	-- vim.inspect / vim.fn stubs used by various modules
-	inspect = function(v)
-		return tostring(v)
-	end,
-
 	-- vim.schedule(fn) -> run immediately; specs are single-threaded
 	schedule = function(fn)
 		fn()
@@ -52,9 +70,7 @@ _G.vim = {
 		local out = {}
 		for index = 1, select("#", ...) do
 			for k, v in pairs(select(index, ...) or {}) do
-				if out[k] == nil then
-					out[k] = v
-				elseif behavior == "force" then
+				if out[k] == nil or behavior == "force" then
 					out[k] = v
 				elseif behavior == "error" then
 					error("vim.tbl_extend: key found in more than one map: " .. tostring(k))
@@ -84,49 +100,14 @@ _G.vim = {
 	env = { HOME = os.getenv("HOME") or "" },
 
 	-- vim.json.encode(value) -> minimal JSON encoder for plain Lua values
-	json = {
-		encode = function(value)
-			local t = type(value)
-			if t == "string" then
-				return '"' .. value:gsub('[\\"]', "\\%0"):gsub("\n", "\\n") .. '"'
-			elseif t == "number" or t == "boolean" then
-				return tostring(value)
-			elseif t == "table" then
-				local keys = {}
-				for k in pairs(value) do
-					table.insert(keys, k)
-				end
-				table.sort(keys, function(a, b)
-					return tostring(a) < tostring(b)
-				end)
-				local parts = {}
-				for _, k in ipairs(keys) do
-					table.insert(parts, string.format('"%s":%s', tostring(k), _G.vim.json.encode(value[k])))
-				end
-				return "{" .. table.concat(parts, ",") .. "}"
-			end
-			return "null"
-		end,
-	},
+	json = { encode = json_encode },
 
 	fn = {
-		expand = function(x)
-			if x == "~" then
-				return os.getenv("HOME") or ""
-			end
-			return x
-		end,
 		fnamemodify = function(path, _)
 			return path
 		end,
-		isdirectory = function(_)
-			return 1
-		end,
 		stdpath = function(_)
 			return "/tmp"
-		end,
-		writefile = function(_, _, _)
-			return 0
 		end,
 	},
 }

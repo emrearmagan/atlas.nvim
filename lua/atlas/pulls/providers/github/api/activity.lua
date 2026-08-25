@@ -1,6 +1,6 @@
 local M = {}
 
-local cli = require("atlas.providers.github.client").pulls
+local cli = require("atlas.providers.github.client")
 local mapper = require("atlas.pulls.providers.github.api.mapper")
 
 ---@param entries PullsActivityEntry[]
@@ -61,31 +61,6 @@ local function fetch_timeline(pr, on_done)
 			number = pr.id,
 		}
 	)
-end
-
----@param pr PullRequest
----@param opts { force_refresh: boolean|nil }|nil
----@param on_done fun(entries: PullsActivityEntry[]|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.fetch_activity(pr, _opts, on_done)
-	return fetch_timeline(pr, function(pages, err)
-		if not pages then
-			on_done(nil, err)
-			return
-		end
-		local entries = {}
-		for _, page in ipairs(pages) do
-			for _, item in ipairs(page) do
-				if item.event ~= "commented" then
-					local entry = mapper.to_activity(item)
-					if entry then
-						table.insert(entries, entry)
-					end
-				end
-			end
-		end
-		on_done(squash_commits(entries), nil)
-	end)
 end
 
 ---@param pr PullRequest

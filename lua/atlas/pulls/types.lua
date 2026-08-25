@@ -45,7 +45,6 @@
 ---@field source PullsRef
 ---@field destination PullsRef
 ---@field comments_count number
----@field tasks_count number
 ---@field created_on string
 ---@field updated_on string
 ---@field link PullsLink
@@ -54,16 +53,11 @@
 ---@field repo string
 ---@field is_starred boolean|nil
 ---@field reviewers PullsReviewer[]|nil
----@field lines_added number|nil
----@field lines_removed number|nil
----@field _raw table
 
----@class PullRequestDetails : PullRequest
+---@class PullRequestDetails
 ---@field description string
 ---@field is_subscribed boolean|nil
----@field reactions table<string, integer>|nil
 ---@field assignees PullsAuthor[]|nil
----@field reviewers PullsReviewer[]
 ---@field labels PullsLabel[]|nil
 
 --------------------------------------------------------------------------------
@@ -98,7 +92,6 @@
 ---@field default_branch string|nil
 ---@field is_private boolean|nil
 ---@field readme string|nil
----@field _raw table|nil
 
 ---@class PullsRepoBranch
 ---@field name string
@@ -144,35 +137,29 @@
 -- Pipeline
 --------------------------------------------------------------------------------
 
+---@alias PullsPipelineState "UNKNOWN"|"STOPPED"|"SUCCESSFUL"|"INPROGRESS"|"FAILED"
+
 ---@class PullsPipeline
+---@field id string
 ---@field name string
----@field state string
+---@field state PullsPipelineState
 ---@field provider_state string|nil
 ---@field url string|nil
----@field key string|nil
----@field provider_id string|nil
----@field commit_hash string|nil
+---@field job_count integer|nil
+---@field stages PullsPipelineStage[]
+
+---@class PullsPipelineStage
+---@field name string|nil Nil when the provider has no native stage hierarchy.
+---@field state PullsPipelineState
 ---@field jobs PullsPipelineJob[]
 
 ---@class PullsPipelineJob
----@field id string|integer
+---@field id string
 ---@field name string
----@field state string
+---@field state PullsPipelineState
 ---@field provider_state string|nil
 ---@field url string|nil
----@field stage string|nil
 ---@field started_at string|nil
----@field completed_at string|nil
----@field duration number|nil Seconds
----@field steps PullsPipelineStep[]|nil
-
----@class PullsPipelineStep
----@field id string|integer
----@field name string
----@field state string
----@field provider_state string|nil
----@field started_at string|nil
----@field completed_at string|nil
 ---@field duration number|nil Seconds
 
 --------------------------------------------------------------------------------
@@ -281,20 +268,20 @@
 ---@field history PullsReviewHistoryEntry[]
 
 ---@class PullsReviewContext
----@field authors PullsAuthor[]
+---@field mention_candidates PullsAuthor[]
 ---@field reviewed_files table<string, boolean>|nil
 
 --------------------------------------------------------------------------------
 -- Conversation
 --------------------------------------------------------------------------------
 
----@alias PullsConversationItemKind "comment"|"review"|"description"|"activity"
+---@alias PullsConversationItemKind "comment"|"review"|"activity"
 
 ---@class PullsConversationItem
 ---@field id string
 ---@field kind PullsConversationItemKind
 ---@field created_on string
----@field entity PullsComment|PullsReviewHistoryEntry|PullRequestDetails|PullsActivityEntry
+---@field entity PullsComment|PullsReviewHistoryEntry|PullsActivityEntry
 
 --------------------------------------------------------------------------------
 -- Commit
@@ -309,3 +296,56 @@
 ---@field date string
 ---@field html_url string|nil
 ---@field statuses_url string|nil
+
+--------------------------------------------------------------------------------
+-- Detail UI
+--------------------------------------------------------------------------------
+
+---@class PullsDetailHeaderField
+---@field label string
+---@field value string
+---@field hl string|table[]|nil hl group name, or list of {start_col, end_col, hl_group} relative to the value
+
+---@class PullsDetailChip
+---@field label string
+---@field hl string|nil
+
+---@class PullsProviderDetail
+---@field header_fields (fun(pr: PullRequest, details: PullRequestDetails|nil, loading: boolean): PullsDetailHeaderField[])|nil
+---@field chips (fun(pr: PullRequest, details: PullRequestDetails|nil, loading: boolean): PullsDetailChip[])|nil
+---@field tabs (fun(): PullsDetailTab[])|nil
+
+---@class PullsDetailTabModule
+---@field render fun(pr: PullRequest, details: PullRequestDetails|nil, width: integer): string[], table[], table<integer, table>|nil
+---@field on_select (fun(pr: PullRequest, refresh: fun(), opts: { force_refresh: boolean|nil }|nil))|nil
+---@field reset (fun())|nil
+---@field activate (fun(buf: integer, refresh: fun()))|nil
+---@field deactivate (fun(buf: integer))|nil
+---@field is_loading (fun(): boolean)|nil
+---@field is_selectable_line (fun(lnum: integer, entry: table): boolean)|nil
+---@field on_enter (fun(pr: PullRequest, entry: table): boolean|nil)|nil
+
+---@class PullsDetailTab
+---@field key string
+---@field label string
+---@field icon AtlasIconStyle|nil
+---@field mod PullsDetailTabModule
+
+---@class PullsProviderRepoDetail
+---@field tabs (fun(): PullsRepoDetailTab[])|nil
+
+---@class PullsRepoDetailTabModule
+---@field render fun(repo: PullsRepo, width: integer): string[], table[], table<integer, table>|nil
+---@field on_select (fun(repo: PullsRepo, refresh: fun(), opts: { force_refresh: boolean|nil }|nil))|nil
+---@field reset (fun())|nil
+---@field activate (fun(buf: integer, refresh: fun()))|nil
+---@field deactivate (fun(buf: integer))|nil
+---@field is_loading (fun(): boolean)|nil
+---@field is_selectable_line (fun(lnum: integer, entry: table): boolean)|nil
+---@field on_enter (fun(repo: PullsRepo, entry: table): boolean|nil)|nil
+
+---@class PullsRepoDetailTab
+---@field key string
+---@field label string
+---@field icon AtlasIconStyle|nil
+---@field mod PullsRepoDetailTabModule

@@ -9,13 +9,11 @@ end
 local function stub_service(request)
 	package.preload["atlas.providers.gitlab.client"] = function()
 		return {
-			pulls = {
-				request = request,
-				url_encode = function(value)
-					return (tostring(value):gsub("/", "%%2F"))
-				end,
-				delete_memory_cache = function() end,
-			},
+			request = request,
+			url_encode = function(value)
+				return (tostring(value):gsub("/", "%%2F"))
+			end,
+			delete_memory_cache = function() end,
 		}
 	end
 end
@@ -27,20 +25,11 @@ describe("gitlab pullrequests.update_description", function()
 		calls = {}
 		package.loaded[module_name] = nil
 		package.loaded["atlas.providers.gitlab.client"] = nil
-		package.preload["atlas.pulls.providers.gitlab.api.mapper"] = function()
-			return {
-				to_pull_request_details = function(raw)
-					return raw
-				end,
-			}
-		end
 	end)
 
 	after_each(function()
 		package.preload["atlas.providers.gitlab.client"] = nil
 		package.loaded["atlas.providers.gitlab.client"] = nil
-		package.preload["atlas.pulls.providers.gitlab.api.mapper"] = nil
-		package.loaded["atlas.pulls.providers.gitlab.api.mapper"] = nil
 		package.loaded[module_name] = nil
 	end)
 
@@ -64,10 +53,10 @@ describe("gitlab pullrequests.update_description", function()
 	it("PUTs the new description to the merge request endpoint", function()
 		stub_service(function(method, endpoint, payload, callback)
 			table.insert(calls, { method = method, endpoint = endpoint, payload = payload })
-			callback({ description = "Normalized by GitLab" }, nil)
+			callback({ iid = 12, description = "Normalized by GitLab" }, nil)
 		end)
 		local api = fresh_module()
-		local pr = { id = 12, repo_full_name = "group/project", description = "Old body" }
+		local pr = { id = 12, repo_full_name = "group/project" }
 
 		local ok, err
 		api.update_description(pr, "New body", function(success, e)
@@ -80,28 +69,30 @@ describe("gitlab pullrequests.update_description", function()
 		assert.equal("PUT", calls[1].method)
 		assert.equal("/projects/group%2Fproject/merge_requests/12", calls[1].endpoint)
 		assert.same({ description = "New body" }, calls[1].payload)
-		assert.equal("Normalized by GitLab", pr.description)
 	end)
 
-	it("falls back to the submitted description when the API returns no body", function()
+	it("accepts an empty update response", function()
 		stub_service(function(_, _, _, callback)
 			callback(nil, nil)
 		end)
 		local api = fresh_module()
-		local pr = { id = 12, repo_full_name = "group/project", description = "Old body" }
+		local pr = { id = 12, repo_full_name = "group/project" }
 
-		api.update_description(pr, "New body", function() end)
+		local ok
+		api.update_description(pr, "New body", function(success)
+			ok = success
+		end)
 
-		assert.equal("New body", pr.description)
+		assert.is_true(ok)
 	end)
 
 	it("clears the description when given an empty body", function()
 		stub_service(function(_, _, payload, callback)
 			table.insert(calls, { payload = payload })
-			callback({ description = "" }, nil)
+			callback({ iid = 12, description = "" }, nil)
 		end)
 		local api = fresh_module()
-		local pr = { id = 12, repo_full_name = "group/project", description = "Old body" }
+		local pr = { id = 12, repo_full_name = "group/project" }
 
 		local ok
 		api.update_description(pr, "", function(success)
@@ -110,7 +101,6 @@ describe("gitlab pullrequests.update_description", function()
 
 		assert.is_true(ok)
 		assert.same({ description = "" }, calls[1].payload)
-		assert.equal("", pr.description)
 	end)
 
 	it("propagates errors from the request", function()
@@ -118,7 +108,7 @@ describe("gitlab pullrequests.update_description", function()
 			callback(nil, "boom")
 		end)
 		local api = fresh_module()
-		local pr = { id = 12, repo_full_name = "group/project", description = "Old body" }
+		local pr = { id = 12, repo_full_name = "group/project" }
 
 		local ok, err
 		api.update_description(pr, "New body", function(success, e)
@@ -127,6 +117,5 @@ describe("gitlab pullrequests.update_description", function()
 
 		assert.is_false(ok)
 		assert.equal("boom", err)
-		assert.equal("Old body", pr.description)
 	end)
 end)

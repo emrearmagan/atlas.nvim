@@ -1,4 +1,3 @@
----@class JiraIssuesOverviewTab : IssuesPanelTabModule
 local M = {}
 
 local utils = require("atlas.ui.shared.utils")
@@ -9,18 +8,20 @@ local state = require("atlas.issues.providers.jira.ui.overview.state")
 local PADDING_X = 1
 local PADDING = string.rep(" ", PADDING_X)
 
--- Render
-
----@param issue IssueDetails
+---@param _issue Issue
+---@param details IssueDetails|nil
 ---@param width integer
 ---@return string[], table[], table<integer, table>|nil
-function M.render(issue, width)
+function M.render(_issue, details, width)
+	if details == nil then
+		return {}, {}, {}
+	end
+	---@cast details JiraIssueDetails
 	local lines = {}
 	local spans = {}
 	local line_map = {}
-	local raw_description = ((issue._raw or {}).fields or {}).description
+	local raw_description = details.raw_description
 
-	-- Description header + mode chip on same line
 	local label = "Description"
 	local mode_text = state.view_mode == "raw" and "Raw (m)" or "Markdown (m)"
 	local chip = " " .. mode_text .. " "
@@ -29,32 +30,31 @@ function M.render(issue, width)
 
 	table.insert(lines, header_line)
 	local hline = #lines - 1
-	table.insert(
-		spans,
-		{ line = hline, start_col = PADDING_X, end_col = PADDING_X + #label, hl_group = "AtlasTextMuted" }
-	)
-	table.insert(
-		spans,
-		{ line = hline, start_col = #header_line - #chip, end_col = #header_line, hl_group = "AtlasChipActive" }
-	)
+	table.insert(spans, {
+		line = hline,
+		start_col = PADDING_X,
+		end_col = PADDING_X + #label,
+		hl_group = "AtlasTextMuted",
+	})
+	table.insert(spans, {
+		line = hline,
+		start_col = #header_line - #chip,
+		end_col = #header_line,
+		hl_group = "AtlasChipActive",
+	})
 
-	-- Description content
 	if state.view_mode == "raw" then
-		local raw_text
-		if type(raw_description) == "table" then
-			raw_text = vim.inspect(raw_description)
-		else
-			raw_text = tostring(raw_description or "")
-		end
+		local raw_text = type(raw_description) == "table" and vim.inspect(raw_description)
+			or tostring(raw_description or "")
 		for _, line in ipairs(vim.split(raw_text, "\n", { plain = true })) do
 			table.insert(lines, PADDING .. line)
 		end
 	else
-		local md = tostring(issue.description or "")
-		if md == "" then
+		local description = tostring(details.description or "")
+		if description == "" then
 			utils.push(lines, spans, "No description", "AtlasTextMuted", PADDING_X)
 		else
-			for _, line in ipairs(utils.sanitize_lines(md)) do
+			for _, line in ipairs(utils.sanitize_lines(description)) do
 				table.insert(lines, PADDING .. line)
 			end
 		end
@@ -65,9 +65,6 @@ end
 
 ---@param buf integer
 local function apply_filetype(buf)
-	if not (buf and vim.api.nvim_buf_is_valid(buf)) then
-		return
-	end
 	if state.view_mode == "markdown" then
 		vim.api.nvim_set_option_value("filetype", "markdown", { buf = buf })
 		vim.api.nvim_set_option_value("syntax", "markdown", { buf = buf })
@@ -78,10 +75,12 @@ local function apply_filetype(buf)
 	end
 end
 
+---@param buf integer
+---@param refresh fun()
 function M.activate(buf, refresh)
 	apply_filetype(buf)
 	local keys = keymaps.resolve("issues.toggle_description_mode")
-	if buf and vim.api.nvim_buf_is_valid(buf) and keys then
+	if keys then
 		help.register("Panel", {
 			{
 				key = #keys == 1 and keys[1] or keys,
@@ -90,25 +89,22 @@ function M.activate(buf, refresh)
 				callback = function()
 					state.view_mode = state.view_mode == "raw" and "markdown" or "raw"
 					apply_filetype(buf)
-					if refresh then
-						refresh()
-					end
+					refresh()
 				end,
 			},
 		}, { index = 212, buffer = buf })
 	end
 end
 
+---@param buf integer
 function M.deactivate(buf)
-	if buf and vim.api.nvim_buf_is_valid(buf) then
-		local keys = keymaps.resolve("issues.toggle_description_mode")
-		if keys then
-			help.remove("Panel", { { key = #keys == 1 and keys[1] or keys } }, { buffer = buf })
-		end
-		vim.api.nvim_set_option_value("filetype", "atlas.detail", { buf = buf })
-		vim.api.nvim_set_option_value("syntax", "OFF", { buf = buf })
-		pcall(vim.treesitter.stop, buf)
+	local keys = keymaps.resolve("issues.toggle_description_mode")
+	if keys then
+		help.remove("Panel", { { key = #keys == 1 and keys[1] or keys } }, { buffer = buf })
 	end
+	vim.api.nvim_set_option_value("filetype", "atlas.detail", { buf = buf })
+	vim.api.nvim_set_option_value("syntax", "OFF", { buf = buf })
+	pcall(vim.treesitter.stop, buf)
 end
 
 return M

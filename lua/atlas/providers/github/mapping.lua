@@ -46,8 +46,8 @@ function M.reaction_groups(groups)
 	local reactions
 	for _, group in ipairs(json.safe_table(groups)) do
 		group = json.safe_table(group)
-		local users = json.nilify(group.reactors) or json.nilify(group.users)
-		local count = type(users) == "table" and tonumber(users.totalCount) or 0
+		local users = json.safe_table(json.nilify(group.reactors) or json.nilify(group.users))
+		local count = tonumber(users.totalCount) or 0
 		local name = REACTION_KEY[json.safe_str(group.content) or ""]
 		if name and count > 0 then
 			reactions = reactions or {}
@@ -78,16 +78,13 @@ end
 function M.repository(raw, fallback)
 	local full_name = ""
 	local name = ""
-	raw = json.nilify(raw)
-	if type(raw) == "table" then
-		full_name = json.safe_str(raw.nameWithOwner) or json.safe_str(raw.full_name) or ""
-		name = json.safe_str(raw.name) or ""
-		if full_name == "" then
-			local owner = json.nilify(raw.owner)
-			owner = type(owner) == "table" and (json.safe_str(owner.login) or "") or ""
-			if owner ~= "" and name ~= "" then
-				full_name = owner .. "/" .. name
-			end
+	raw = json.safe_table(raw)
+	full_name = json.safe_str(raw.nameWithOwner) or json.safe_str(raw.full_name) or ""
+	name = json.safe_str(raw.name) or ""
+	if full_name == "" then
+		local owner = json.safe_str(json.safe_table(raw.owner).login) or ""
+		if owner ~= "" and name ~= "" then
+			full_name = owner .. "/" .. name
 		end
 	end
 	if full_name == "" then
@@ -100,27 +97,11 @@ end
 ---@param value any
 ---@return table
 function M.connection_nodes(value)
-	value = json.nilify(value)
-	if type(value) == "table" and type(value.nodes) == "table" then
-		return value.nodes
+	value = json.safe_table(value)
+	if json.nilify(value.nodes) ~= nil then
+		return json.safe_table(value.nodes)
 	end
-	return json.safe_table(value)
-end
-
----@param raw table|nil
----@return string|nil
-function M.node_id(raw)
-	if type(raw) ~= "table" then
-		return nil
-	end
-	local node_id = json.safe_str(raw.node_id)
-	if node_id and node_id ~= "" then
-		return node_id
-	end
-	if type(raw.id) == "string" and raw.id ~= "" then
-		return raw.id
-	end
-	return nil
+	return value
 end
 
 return M

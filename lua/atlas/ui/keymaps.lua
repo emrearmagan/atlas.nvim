@@ -1,8 +1,14 @@
 local M = {}
 
 local help = require("atlas.ui.popups.help")
+local navigation = require("atlas.ui.navigation")
 local resolver = require("atlas.core.keymaps")
 local utils = require("atlas.ui.shared.utils")
+
+local function domain_dashboard()
+	local domain = require("atlas.ui.state").domain
+	return domain and require("atlas." .. domain .. ".ui.dashboard") or nil
+end
 
 ---@param action_id AtlasKeymapActionId|string
 ---@param map_item table
@@ -44,7 +50,7 @@ function M.register(buf)
 			desc = "Next item",
 			hidden = true,
 			callback = function()
-				require("atlas.ui.navigation").move_cursor("down")
+				navigation.move_cursor("down")
 			end,
 		})
 	)
@@ -55,7 +61,7 @@ function M.register(buf)
 			desc = "Previous item",
 			hidden = true,
 			callback = function()
-				require("atlas.ui.navigation").move_cursor("up")
+				navigation.move_cursor("up")
 			end,
 		})
 	)
@@ -66,7 +72,7 @@ function M.register(buf)
 			desc = "Go to first item",
 			hidden = true,
 			callback = function()
-				require("atlas.ui.navigation").focus_first_item()
+				navigation.focus_first_item()
 			end,
 		})
 	)
@@ -77,7 +83,7 @@ function M.register(buf)
 			desc = "Go to last item",
 			hidden = true,
 			callback = function()
-				require("atlas.ui.navigation").focus_last_item()
+				navigation.focus_last_item()
 			end,
 		})
 	)
@@ -102,7 +108,7 @@ function M.register(buf)
 				if help.is_open() then
 					return
 				end
-				require("atlas.ui.layout").close()
+				require("atlas.ui.dashboard").close()
 			end,
 		})
 	)
@@ -112,14 +118,9 @@ function M.register(buf)
 		item("ui.toggle_panel", {
 			desc = "Toggle detail panel",
 			callback = function()
-				local layout_mod = require("atlas.ui.layout")
-				local ui_st = require("atlas.ui.state")
-				local was_open = layout_mod.win_id("detail") ~= nil
-				layout_mod.toggle_detail()
-				if not was_open then
-					if ui_st.on_panel_open then
-						ui_st.on_panel_open()
-					end
+				local dashboard = domain_dashboard()
+				if dashboard then
+					dashboard.toggle_detail()
 				end
 			end,
 		})
@@ -131,10 +132,9 @@ function M.register(buf)
 			desc = "Next panel tab",
 			opts = { nowait = true },
 			callback = function()
-				local layout_mod = require("atlas.ui.layout")
-				local ui_st = require("atlas.ui.state")
-				if layout_mod.win_id("detail") ~= nil and ui_st.on_panel_next_tab then
-					ui_st.on_panel_next_tab()
+				local dashboard = domain_dashboard()
+				if dashboard then
+					dashboard.next_detail_tab()
 				end
 			end,
 		})
@@ -146,10 +146,9 @@ function M.register(buf)
 			desc = "Previous panel tab",
 			opts = { nowait = true },
 			callback = function()
-				local layout_mod = require("atlas.ui.layout")
-				local ui_st = require("atlas.ui.state")
-				if layout_mod.win_id("detail") ~= nil and ui_st.on_panel_prev_tab then
-					ui_st.on_panel_prev_tab()
+				local dashboard = domain_dashboard()
+				if dashboard then
+					dashboard.prev_detail_tab()
 				end
 			end,
 		})
@@ -166,11 +165,13 @@ function M.register(buf)
 	)
 
 	M.remove(buf)
+	navigation.attach(buf)
 	help.register("General", items, { index = 210, buffer = buf })
 end
 
 ---@param buf integer
 function M.remove(buf)
+	navigation.detach(buf)
 	local items = {}
 	utils.insert_if(items, remove_item("ui.next_item"))
 	utils.insert_if(items, remove_item("ui.previous_item"))

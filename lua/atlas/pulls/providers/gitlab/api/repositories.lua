@@ -1,11 +1,9 @@
 local M = {}
 
 local request_scope = require("atlas.core.requests")
-local service = require("atlas.providers.gitlab.client").pulls
-local http = require("atlas.core.http")
+local service = require("atlas.providers.gitlab.client")
 local config = require("atlas.config")
 local json = require("atlas.core.json")
-local logger = require("atlas.core.logger")
 
 ---@param repo PullsRepo
 ---@return string
@@ -65,12 +63,16 @@ function M.fetch_detail(repo, opts, on_done)
 	local endpoint = string.format("/projects/%s?statistics=true", service.url_encode(path))
 	local requests = request_scope.new()
 	requests.run(function(done)
-		return service.request("GET", endpoint, nil, done)
+		return service.request("GET", endpoint, nil, done, {
+			action = "Fetch repository",
+			repo = path,
+		})
 	end, function(result, err)
 		if err then
 			on_done(nil, err)
 			return
 		end
+		result = json.safe_table(result)
 
 		local name = json.safe_str(result.path) or tostring(repo.repo_name or repo.name or "")
 		local full_path = json.safe_str(result.path_with_namespace) or path
@@ -95,7 +97,6 @@ function M.fetch_detail(repo, opts, on_done)
 			stars = tonumber(result.star_count) or nil,
 			forks = tonumber(result.forks_count) or nil,
 			watchers = nil,
-			_raw = result,
 		}
 
 		local project_id = tonumber(result.id)
@@ -107,26 +108,20 @@ function M.fetch_detail(repo, opts, on_done)
 		end
 
 		local readme_path = configured_readme_path(repo)
-		local readme_url = service.url(
-			string.format(
-				"/projects/%d/repository/files/%s/raw?ref=%s",
-				project_id,
-				service.url_encode(readme_path),
-				service.url_encode(default_branch)
-			)
+		local readme_endpoint = string.format(
+			"/projects/%d/repository/files/%s/raw?ref=%s",
+			project_id,
+			service.url_encode(readme_path),
+			service.url_encode(default_branch)
 		)
-		logger.loginfo("Fetch GitLab repository README", { repo = path, path = readme_path })
 		requests.run(function(done)
-			return http.curl_text_request("GET", readme_url, service.build_headers(), nil, done)
-		end, function(body, readme_err)
-			if readme_err then
-				logger.logwarn("GitLab repository README fetch failed", {
-					repo = path,
-					path = readme_path,
-					error = tostring(readme_err),
-				})
-			end
-			if type(body) == "string" and body ~= "" then
+			return service.request_text("GET", readme_endpoint, done, {
+				action = "Fetch repository README",
+				repo = path,
+				path = readme_path,
+			})
+		end, function(body, _)
+			if body and body ~= "" then
 				details.readme = body
 			end
 			service.set_memory_cache(cache_key, details)
@@ -167,8 +162,9 @@ function M.fetch_branches(repo, opts, on_done)
 		end
 
 		local entries = {}
-		for _, branch in ipairs(result) do
-			local commit = branch.commit
+		for _, branch_value in ipairs(json.safe_table(result)) do
+			local branch = json.safe_table(branch_value)
+			local commit = json.safe_table(branch.commit)
 			table.insert(entries, {
 				name = json.safe_str(branch.name) or "",
 				hash = (json.safe_str(commit.short_id) or json.safe_str(commit.id) or ""):sub(1, 8),
@@ -181,7 +177,10 @@ function M.fetch_branches(repo, opts, on_done)
 		local branches = { entries = entries }
 		service.set_memory_cache(cache_key, branches)
 		on_done(branches, nil)
-	end)
+	end, {
+		action = "Fetch repository branches",
+		repo = path,
+	})
 end
 
 ---@param repo PullsRepoDetails
@@ -215,8 +214,9 @@ function M.fetch_tags(repo, opts, on_done)
 		end
 
 		local entries = {}
-		for _, tag in ipairs(result) do
-			local commit = tag.commit
+		for _, tag_value in ipairs(json.safe_table(result)) do
+			local tag = json.safe_table(tag_value)
+			local commit = json.safe_table(tag.commit)
 			table.insert(entries, {
 				name = json.safe_str(tag.name) or "",
 				hash = (json.safe_str(commit.short_id) or json.safe_str(commit.id) or ""):sub(1, 8),
@@ -229,7 +229,10 @@ function M.fetch_tags(repo, opts, on_done)
 		local tags = { entries = entries }
 		service.set_memory_cache(cache_key, tags)
 		on_done(tags, nil)
-	end)
+	end, {
+		action = "Fetch repository tags",
+		repo = path,
+	})
 end
 
 ---@param repo PullsRepoDetails
@@ -254,11 +257,18 @@ function M.fetch_issues(repo, state, _opts, on_done)
 				project,
 				api_state
 			)
-			return service.request("GET", endpoint, nil, done)
+			return service.request("GET", endpoint, nil, done, {
+				action = "Fetch repository issues",
+				repo = path,
+				state = state,
+			})
 		end,
 		statistics = function(done)
 			local endpoint = string.format("/projects/%s/issues_statistics", project)
-			return service.request("GET", endpoint, nil, done)
+			return service.request("GET", endpoint, nil, done, {
+				action = "Fetch repository issue statistics",
+				repo = path,
+			})
 		end,
 	}, function(results, errors)
 		if errors.issues then
@@ -267,13 +277,14 @@ function M.fetch_issues(repo, state, _opts, on_done)
 		end
 
 		local entries = {}
-		for _, raw in ipairs(results.issues or {}) do
-			local author = json.nilify(raw.author)
+		for _, raw_value in ipairs(json.safe_table(results.issues)) do
+			local raw = json.safe_table(raw_value)
+			local author = json.safe_table(raw.author)
 			table.insert(entries, {
 				number = raw.iid,
 				title = json.safe_str(raw.title) or "",
 				state = (json.safe_str(raw.state) or ""):lower() == "closed" and "closed" or "open",
-				author = author and (json.safe_str(author.username) or json.safe_str(author.name) or "") or "",
+				author = json.safe_str(author.username) or json.safe_str(author.name) or "",
 				created_at = json.safe_str(raw.created_at) or "",
 				comments = tonumber(raw.user_notes_count) or 0,
 				url = json.safe_str(raw.web_url) or "",
@@ -283,7 +294,7 @@ function M.fetch_issues(repo, state, _opts, on_done)
 		local counts
 		local statistics = json.nilify(results.statistics)
 		if statistics then
-			local raw_counts = statistics.statistics.counts
+			local raw_counts = json.safe_table(json.safe_table(statistics.statistics).counts)
 			counts = {
 				open = tonumber(raw_counts.opened) or 0,
 				closed = tonumber(raw_counts.closed) or 0,
@@ -318,7 +329,11 @@ function M.delete_branch(repo, branch, on_done)
 		end
 		service.delete_memory_cache(string.format("gitlab:branches:%s", path))
 		on_done(true, nil)
-	end)
+	end, {
+		action = "Delete repository branch",
+		repo = path,
+		branch = name,
+	})
 end
 
 return M

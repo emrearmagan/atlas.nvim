@@ -223,8 +223,9 @@ end
 
 ---@param files DiffFile[]
 ---@param options AtlasNativeDiffExplorerOptions
+---@param reviewed_files table<string, boolean>|nil
 ---@return DiffFile[]
-function M.filter(files, options)
+function M.filter(files, options, reviewed_files)
 	local patterns = {}
 	for _, pattern in ipairs(options.ignore) do
 		local ok, regex = pcall(vim.fn.glob2regpat, pattern)
@@ -241,7 +242,7 @@ function M.filter(files, options)
 		return true
 	end, files)
 	local result = {}
-	for _, index in ipairs(ordered_indices(visible, options.grouped, {})) do
+	for _, index in ipairs(ordered_indices(visible, options.grouped, reviewed_files or {})) do
 		table.insert(result, visible[index])
 	end
 	return result

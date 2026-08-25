@@ -9,9 +9,10 @@ local function normalize_author(raw)
 	if type(raw) == "table" then
 		local username = json.safe_str(raw.username) or "unknown"
 		local name = json.safe_str(raw.name) or ""
+		local id = tostring(raw.id or "")
 		return {
 			name = name ~= "" and name or username,
-			id = tostring(raw.id or ""),
+			id = id:match("([^/]+)$") or id,
 			username = username,
 			nickname = username,
 		}
@@ -71,6 +72,7 @@ local function normalize_labels(values)
 			table.insert(labels, {
 				name = name,
 				color = type(raw) == "table" and json.safe_str(raw.color) or nil,
+				text_color = type(raw) == "table" and json.safe_str(raw.text_color) or nil,
 			})
 		end
 	end
@@ -94,8 +96,8 @@ local function normalize_state(mr)
 end
 
 ---@param raw any Decoded API value.
----@return PullRequest|nil
-local function map_summary(raw)
+---@return GitLabPullRequest|nil
+function M.to_pull_request(raw)
 	raw = json.nilify(raw)
 	if type(raw) ~= "table" then
 		return nil
@@ -129,7 +131,7 @@ local function map_summary(raw)
 	local head_sha = type(diff_refs) == "table" and json.safe_str(diff_refs.head_sha) or nil
 	local base_sha = type(diff_refs) == "table" and json.safe_str(diff_refs.base_sha) or nil
 
-	---@type PullRequest
+	---@type GitLabPullRequest
 	return {
 		id = iid,
 		title = json.safe_str(raw.title) or "",
@@ -142,7 +144,6 @@ local function map_summary(raw)
 		},
 		destination = { branch = target_branch, commit_hash = base_sha or "" },
 		comments_count = tonumber(raw.user_notes_count) or 0,
-		tasks_count = 0,
 		created_on = json.safe_str(raw.created_at) or "",
 		updated_on = json.safe_str(raw.updated_at) or "",
 		link = { html = json.safe_str(raw.web_url) or "" },
@@ -150,44 +151,34 @@ local function map_summary(raw)
 		workspace = workspace,
 		repo = repo,
 		repo_full_name = project_path,
-		reviewers = normalize_optional_reviewers(raw.reviewers),
-		_raw = {
-			merge_status = json.safe_str(raw.merge_status),
-			detailed_merge_status = json.safe_str(raw.detailed_merge_status),
-			blocking_discussions_resolved = json.nilify(raw.blocking_discussions_resolved),
-			has_conflicts = raw.has_conflicts == true,
-			diff_refs = diff_refs,
-		},
+		reviewers = normalize_optional_reviewers(json.safe_table(raw.reviewers).nodes or raw.reviewers),
+		merge_status = json.safe_str(raw.merge_status),
+		detailed_merge_status = json.safe_str(raw.detailed_merge_status),
+		diff_refs = diff_refs,
 	}
 end
 
 ---@param raw any Decoded API value.
----@return PullRequest|nil
-function M.to_pull_request(raw)
-	return map_summary(raw)
-end
-
----@param raw any Decoded API value.
----@return PullRequestDetails|nil
+---@return GitLabPullRequestDetails|nil
 function M.to_pull_request_details(raw)
-	local pr = map_summary(raw)
-	if pr == nil then
+	local value = json.nilify(raw)
+	if type(value) ~= "table" then
 		return nil
 	end
-	local value = json.nilify(raw)
-	pr.description = json.safe_str(value.description) or ""
-	pr.is_subscribed = json.nilify(value.subscribed)
-	pr.assignees = normalize_authors(json.safe_table(value.assignees))
-	pr.reviewers = normalize_reviewers(json.safe_table(value.reviewers))
-	pr.labels = normalize_labels(json.safe_table(value.labels))
-	return pr
+	---@type GitLabPullRequestDetails
+	return {
+		description = json.safe_str(value.description) or "",
+		is_subscribed = json.nilify(value.subscribed),
+		assignees = normalize_authors(json.safe_table(json.safe_table(value.assignees).nodes or value.assignees)),
+		labels = normalize_labels(json.safe_table(json.safe_table(value.labels).nodes or value.labels)),
+	}
 end
 
 ---@param raw_list table[]
 ---@return PullRequest[]
 function M.to_pull_requests(raw_list)
 	local pulls = {}
-	for _, raw in ipairs(raw_list) do
+	for _, raw in ipairs(json.safe_table(raw_list)) do
 		local pr = M.to_pull_request(raw)
 		if pr then
 			table.insert(pulls, pr)
@@ -359,8 +350,8 @@ function M.to_draft_comment(draft, discussion_first_id)
 end
 
 ---@param note table
----@return PullsActivityEntry|nil
-function M.to_inline_thread_activity(note)
+---@return GitLabPullsActivityEntry|nil
+local function to_inline_thread_activity(note)
 	if note.system == true then
 		return nil
 	end
@@ -378,7 +369,7 @@ function M.to_inline_thread_activity(note)
 		actor = actor_from(note.author),
 		date = tostring(note.created_at or ""),
 		label = string.format("started a review thread on %s:%d", inline.path, line),
-		_raw = { gitlab_inline_thread_activity = true },
+		inline_thread = true,
 	}
 end
 
@@ -386,7 +377,7 @@ end
 ---@return PullsActivityEntry|nil
 function M.to_activity(note)
 	if note.system ~= true then
-		return M.to_inline_thread_activity(note)
+		return to_inline_thread_activity(note)
 	end
 	local body = tostring(note.body or "")
 	if body == "" then

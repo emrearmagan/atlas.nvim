@@ -22,15 +22,10 @@
 ---@field action fun()
 ---@field desc string
 
----@class AtlasFormMetaSpan
----@field start_col integer
----@field end_col integer
----@field hl_group string
-
 ---@class AtlasFormMetaCell
 ---@field text string
 ---@field hl string|nil
----@field spans AtlasFormMetaSpan[]|nil
+---@field spans { start_col: integer, end_col: integer, hl_group: string }[]|nil
 
 ---@alias AtlasFormMetaRow (string|AtlasFormMetaCell)[]
 

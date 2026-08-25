@@ -40,8 +40,8 @@ end
 ---@param on_done fun(comments: PullsComment[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 local function fetch_comments(pr, opts, query, on_done)
-	local raw = pr._raw
-	local comments_url = tostring((raw.links or {}).comments or "")
+	---@cast pr BitbucketPullRequest
+	local comments_url = tostring(pr.links.comments or "")
 	if comments_url == "" then
 		on_done({}, nil)
 		return nil
@@ -71,7 +71,7 @@ local function fetch_comments(pr, opts, query, on_done)
 		local comments = mapper.to_comments_list(result)
 		service.set_cache(key, comments, service.cache_ttl())
 		on_done(comments, nil)
-	end)
+	end, { action = "Fetch PR comments", repo = pr.repo_full_name, id = pr.id })
 end
 
 ---@param pr PullRequest
@@ -96,8 +96,8 @@ end
 ---@param on_done fun(comment: PullsComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.add_comment(pr, content, opts, on_done)
-	local raw = pr._raw
-	local comments_url = tostring((raw.links or {}).comments or "")
+	---@cast pr BitbucketPullRequest
+	local comments_url = tostring(pr.links.comments or "")
 	if comments_url == "" then
 		on_done(nil, "No comments URL available")
 		return nil
@@ -122,7 +122,7 @@ function M.add_comment(pr, content, opts, on_done)
 			return
 		end
 		on_done(comment, nil)
-	end)
+	end, { action = "Add PR comment", repo = pr.repo_full_name, id = pr.id })
 end
 
 ---@param pr PullRequest
@@ -130,8 +130,8 @@ end
 ---@param on_done fun(comment: PullsComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.edit_comment(pr, comment, on_done)
-	local raw = pr._raw
-	local comments_url = tostring((raw.links or {}).comments or "")
+	---@cast pr BitbucketPullRequest
+	local comments_url = tostring(pr.links.comments or "")
 	if comments_url == "" then
 		on_done(nil, "No comments URL available")
 		return nil
@@ -151,7 +151,7 @@ function M.edit_comment(pr, comment, on_done)
 			return
 		end
 		on_done(vim.tbl_extend("force", {}, comment, updated), nil)
-	end)
+	end, { action = "Edit PR comment", repo = pr.repo_full_name, id = pr.id, comment_id = comment.id })
 end
 
 ---@param pr PullRequest
@@ -159,8 +159,8 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.delete_comment(pr, comment, on_done)
-	local raw = pr._raw
-	local comments_url = tostring((raw.links or {}).comments or "")
+	---@cast pr BitbucketPullRequest
+	local comments_url = tostring(pr.links.comments or "")
 	if comments_url == "" then
 		on_done(false, "No comments URL available")
 		return nil
@@ -174,7 +174,7 @@ function M.delete_comment(pr, comment, on_done)
 		end
 		service.clear_cache()
 		on_done(true, nil)
-	end)
+	end, { action = "Delete PR comment", repo = pr.repo_full_name, id = pr.id, comment_id = comment.id })
 end
 
 ---@param pr PullRequest
@@ -183,8 +183,8 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.set_thread_resolved(pr, root, resolved, on_done)
-	local raw = pr._raw
-	local comments_url = tostring((raw.links or {}).comments or "")
+	---@cast pr BitbucketPullRequest
+	local comments_url = tostring(pr.links.comments or "")
 	if comments_url == "" then
 		on_done(false, "No comments URL available")
 		return nil
@@ -196,7 +196,12 @@ function M.set_thread_resolved(pr, root, resolved, on_done)
 			service.clear_cache()
 		end
 		on_done(err == nil, err)
-	end)
+	end, {
+		action = resolved and "Resolve PR thread" or "Reopen PR thread",
+		repo = pr.repo_full_name,
+		id = pr.id,
+		comment_id = root.parent_id or root.id,
+	})
 end
 
 return M

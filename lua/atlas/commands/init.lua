@@ -1,7 +1,7 @@
 local M = {}
 
 local notify = require("atlas.core.notify")
-local picker = require("atlas.picker")
+local picker = require("atlas.ui.picker")
 local providers = require("atlas.providers")
 local ui_utils = require("atlas.ui.utils")
 
@@ -41,9 +41,13 @@ end
 ---@param arglead string
 ---@return string[]
 local function complete_providers(domain, arglead)
+	local ids = {}
+	for _, provider in ipairs(providers.configured(domain)) do
+		table.insert(ids, provider.id)
+	end
 	return vim.tbl_filter(function(provider)
 		return provider:find(arglead, 1, true) == 1
-	end, require("atlas.providers").ids(domain))
+	end, ids)
 end
 
 ---@param arglead string
@@ -130,7 +134,7 @@ M.register({
 			elseif kind == "issue" then
 				require("atlas.issues.create").start()
 			else
-				notify.error("Usage: :Atlas create <pr|issue>")
+				notify.error("Usage: :Atlas create <pr|issue>", { vim_notify = true })
 			end
 		end
 
@@ -187,7 +191,7 @@ M.register({
 					return
 				end
 				clear_caches()
-				notify.info("Atlas caches cleared")
+				notify.info("Atlas caches cleared", { vim_notify = true })
 			end)
 			return
 		end
@@ -203,15 +207,15 @@ M.register({
 				end
 				local cleared, err = require("atlas.core.starred").clear_all()
 				if not cleared then
-					notify.error(err or "Unable to delete starred items")
+					notify.error(err or "Unable to delete starred items", { vim_notify = true })
 					return
 				end
-				notify.info("Starred items deleted")
+				notify.info("Starred items deleted", { vim_notify = true })
 			end)
 			return
 		end
 		if target then
-			notify.error("Usage: :Atlas clear [cache|notes|stars]")
+			notify.error("Usage: :Atlas clear [cache|notes|stars]", { vim_notify = true })
 			return
 		end
 
@@ -224,12 +228,12 @@ M.register({
 				end
 				local cleared, err = require("atlas.pulls.notes").clear_all()
 				if not cleared then
-					notify.error(err or "Unable to delete local notes")
+					notify.error(err or "Unable to delete local notes", { vim_notify = true })
 					return
 				end
 				local stars_cleared, stars_err = require("atlas.core.starred").clear_all()
 				if not stars_cleared then
-					notify.error(stars_err or "Unable to delete starred items")
+					notify.error(stars_err or "Unable to delete starred items", { vim_notify = true })
 					return
 				end
 				clear_caches()
@@ -238,7 +242,7 @@ M.register({
 				if notes_ui then
 					notes_ui.refresh()
 				end
-				notify.info("Atlas data cleared")
+				notify.info("Atlas data cleared", { vim_notify = true })
 			end
 		)
 	end,
@@ -322,7 +326,7 @@ function M.run(args)
 
 	local command = find_command(args[1]:lower())
 	if command == nil then
-		notify.error("Unknown command: " .. args[1])
+		notify.error("Unknown command: " .. args[1], { vim_notify = true })
 		return
 	end
 

@@ -2,12 +2,8 @@ local M = {}
 
 local service = require("atlas.issues.providers.jira.api.service")
 local normalizer = require("atlas.issues.providers.jira.api.mapper")
-local cache = require("atlas.core.cache")
 local json = require("atlas.core.json")
-local logger = require("atlas.core.logger")
 local config = require("atlas.issues.providers.jira.api.config")
-
-local CACHE_TTL = 300
 
 local function story_points_field()
 	local project_config = config.jira_config().project_config or {}
@@ -26,15 +22,29 @@ local function search_fields()
 		"issuetype",
 		"duedate",
 		"watches",
+		"created",
+		"updated",
+		"resolutiondate",
 		story_points_field(),
 	}
 end
 
-local function detail_fields()
-	local fields = search_fields()
-	table.insert(fields, "description")
-	table.insert(fields, "created")
-	table.insert(fields, "labels")
+---@param project_config AtlasJiraProjectFieldsConfig
+---@return string[]
+local function custom_field_ids(project_config)
+	local ids = {}
+	for field_id in pairs(project_config) do
+		table.insert(ids, field_id)
+	end
+	table.sort(ids)
+	return ids
+end
+
+---@param extra_fields string[]
+---@return string[]
+local function detail_fields(extra_fields)
+	local fields = { "description", "labels" }
+	vim.list_extend(fields, extra_fields)
 	return fields
 end
 
@@ -68,9 +78,7 @@ local function search_jql_request(data, on_done, ctx)
 			on_done(result, err)
 		end, ctx)
 	else
-		return service.request("POST", "/search/jql", data, function(result, err)
-			on_done(result, err)
-		end, ctx)
+		return service.request("POST", "/search/jql", data, on_done, ctx)
 	end
 end
 
@@ -85,16 +93,14 @@ end
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.search_issues(jql, on_done, opts)
 	opts = opts or {}
-	local ttl = service.cache_ttl()
 	local page_token = opts.next_page_token or ""
 	local page_size = math.max(1, tonumber(opts.max_results) or 50)
 	local cache_key = "jira:search:v2:" .. jql .. ":page:" .. page_token .. ":size:" .. tostring(page_size)
 
 	if not opts.force_load then
-		local cached = cache.get(cache_key)
-		if cached and cached.value then
-			logger.loginfo("Jira search cache hit", { jql = jql })
-			on_done(cached.value, nil)
+		local cached = service.get_cache(cache_key)
+		if cached then
+			on_done(cached, nil)
 			return nil
 		end
 	end
@@ -118,12 +124,7 @@ function M.search_issues(jql, on_done, opts)
 			isLast = result.isLast == true,
 		}
 
-		cache.set(cache_key, page, ttl)
-		logger.loginfo("Jira search page complete", {
-			jql = jql,
-			count = #page.issues,
-			is_last = page.isLast,
-		})
+		service.set_cache(cache_key, page)
 		on_done(page, nil)
 	end, {
 		action = "Search issues",
@@ -189,17 +190,18 @@ function M.search_issue(query, on_done, opts)
 	})
 end
 
----@param issue_key string
----@param callback fun(issue: IssueDetails|nil, err: string|nil)
----@param opts { force_load?: boolean }|nil
+---@param ref IssueRef
+---@param opts IssuesFetchOpts|nil
+---@param callback fun(details: IssueDetails|nil, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
-function M.get_issue(issue_key, callback, opts)
-	if type(issue_key) ~= "string" or issue_key == "" then
+function M.fetch_issue(ref, opts, callback)
+	local issue_key = tostring(ref.key or "")
+	if issue_key == "" then
 		callback(nil, "Missing issue key")
 		return nil
 	end
 	opts = opts or {}
-	local cache_key = "jira:issue:" .. issue_key
+	local cache_key = "jira:issue-details:" .. issue_key
 	if not opts.force_load then
 		local cached, ok = service.get_memory_cache(cache_key)
 		if ok then
@@ -208,7 +210,10 @@ function M.get_issue(issue_key, callback, opts)
 		end
 	end
 
-	local endpoint = string.format("/issue/%s?fields=%s", issue_key, table.concat(detail_fields(), ","))
+	local project_key = issue_key:match("^([^-]+)-")
+	local project_config = (config.jira_config().project_config or {})[project_key] or {}
+	local extra_fields = custom_field_ids(project_config)
+	local endpoint = string.format("/issue/%s?fields=%s", issue_key, table.concat(detail_fields(extra_fields), ","))
 
 	return service.request("GET", endpoint, nil, function(result, err)
 		if err or not result then
@@ -216,9 +221,9 @@ function M.get_issue(issue_key, callback, opts)
 			return
 		end
 
-		local issue = normalizer.to_issue_details(result, story_points_field())
-		service.set_memory_cache(cache_key, issue)
-		callback(issue, nil)
+		local details = normalizer.to_issue_details(result, project_config)
+		service.set_memory_cache(cache_key, details)
+		callback(details, nil)
 	end, {
 		action = "Fetch issue",
 		issue_key = issue_key,
@@ -232,7 +237,7 @@ end
 ---@param opts { force_load?: boolean }|nil
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.get_issue_history_page(issue_key, start_at, max_results, on_done, opts)
-	if type(issue_key) ~= "string" or issue_key == "" then
+	if issue_key == "" then
 		on_done(nil, "Missing issue key")
 		return nil
 	end
@@ -271,7 +276,7 @@ function M.get_issue_history_page(issue_key, start_at, max_results, on_done, opt
 		end
 
 		local page = normalizer.to_history_page(raw, start, size)
-		service.set_memory_cache(cache_key, page, CACHE_TTL)
+		service.set_memory_cache(cache_key, page)
 		on_done(page, nil)
 	end, {
 		action = "Fetch issue history page",
@@ -281,170 +286,10 @@ function M.get_issue_history_page(issue_key, start_at, max_results, on_done, opt
 	})
 end
 
----@class JiraIssueDetailResult
----@field description any
----@field custom_fields table<string, any>|nil
-
----@param issue_key string
----@param on_done fun(detail: JiraIssueDetailResult|nil, err: string|nil)
----@param opts { extra_fields?: string[], force_load?: boolean }|nil
+---@param fields table
+---@param callback fun(result: table|nil, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
-function M.get_issue_detail(issue_key, on_done, opts)
-	if type(issue_key) ~= "string" or issue_key == "" then
-		on_done(nil, "Missing issue key")
-		return nil
-	end
-
-	opts = opts or {}
-	local fields = { "description" }
-	local extra = opts.extra_fields or {}
-	for _, f in ipairs(extra) do
-		table.insert(fields, f)
-	end
-
-	local fields_suffix = "description"
-	if #extra > 0 then
-		local sorted_extra = vim.deepcopy(extra)
-		table.sort(sorted_extra)
-		fields_suffix = "description+" .. table.concat(sorted_extra, ",")
-	end
-
-	local cache_key = string.format("jira:panel:detail:%s:fields:%s", issue_key, fields_suffix)
-	if not opts.force_load then
-		local cached_detail, ok = service.get_memory_cache(cache_key)
-		if ok then
-			on_done(cached_detail, nil)
-			return nil
-		end
-	end
-
-	local data = {
-		jql = "key = " .. issue_key,
-		fields = fields,
-		maxResults = 1,
-	}
-
-	return search_jql_request(data, function(result, err)
-		if err or not result then
-			logger.logerror("Jira detail fetch failed", {
-				issue_key = issue_key,
-				error = err or "Empty response",
-			})
-			on_done(nil, err or "Empty response")
-			return
-		end
-
-		local first_issue = (result.issues or {})[1]
-		local raw_fields = first_issue and first_issue.fields or {}
-
-		local custom_fields = nil
-		if #extra > 0 then
-			custom_fields = {}
-			for _, field_id in ipairs(extra) do
-				custom_fields[field_id] = raw_fields[field_id]
-			end
-		end
-
-		logger.loginfo("Jira detail fetch complete", {
-			issue_key = issue_key,
-			has_description = raw_fields.description ~= nil,
-			custom_field_count = custom_fields and #extra or 0,
-		})
-
-		local detail = {
-			description = raw_fields.description,
-			custom_fields = custom_fields,
-		}
-
-		service.set_memory_cache(cache_key, detail, CACHE_TTL)
-		on_done(detail, nil)
-	end, {
-		action = "Fetch issue detail",
-		issue_key = issue_key,
-		fields = fields,
-	})
-end
-
----@param issue_key string
----@param fields string[]
----@param on_done fun(values: table<string, any>|nil, err: string|nil)
----@param opts { force_load?: boolean }|nil
----@return { job_id: integer, cancel: fun() }|nil
-function M.get_custom_fields(issue_key, fields, on_done, opts)
-	if type(issue_key) ~= "string" or issue_key == "" then
-		on_done(nil, "Missing issue key")
-		return nil
-	end
-
-	if #fields == 0 then
-		on_done({}, nil)
-		return nil
-	end
-
-	opts = opts or {}
-	local sorted = vim.deepcopy(fields)
-	table.sort(sorted)
-	local cache_key = string.format("jira:panel:custom_fields:%s:%s", issue_key, table.concat(sorted, ","))
-
-	if not opts.force_load then
-		local cached, ok = service.get_memory_cache(cache_key)
-		if ok then
-			on_done(cached, nil)
-			return nil
-		end
-	end
-
-	local data = {
-		jql = "key = " .. issue_key,
-		fields = fields,
-		maxResults = 1,
-	}
-
-	return search_jql_request(data, function(result, err)
-		if err or not result then
-			on_done(nil, err or "Empty response")
-			return
-		end
-
-		local raw_fields = ((result.issues or {})[1] or {}).fields or {}
-		local values = {}
-		for _, field_id in ipairs(fields) do
-			values[field_id] = raw_fields[field_id]
-		end
-
-		service.set_memory_cache(cache_key, values, CACHE_TTL)
-		on_done(values, nil)
-	end, {
-		action = "Fetch custom fields",
-		issue_key = issue_key,
-		fields = fields,
-	})
-end
-
----@param issue_key string
----@param on_done fun(description: any, err: string|nil)
----@param opts { force_load?: boolean }|nil
----@return { job_id: integer, cancel: fun() }|nil
-function M.get_issue_description(issue_key, on_done, opts)
-	return M.get_issue_detail(issue_key, function(detail, err)
-		if err or not detail then
-			on_done(nil, err)
-			return
-		end
-		on_done(detail.description, nil)
-	end, opts)
-end
-
 function M.create_issue(fields, callback)
-	if type(callback) ~= "function" then
-		return nil
-	end
-
-	if type(fields) ~= "table" then
-		callback(nil, "Missing fields")
-		return nil
-	end
-
 	if not fields.summary or fields.summary == "" then
 		callback(nil, "Missing summary")
 		return nil
@@ -489,17 +334,8 @@ end
 ---@param callback fun(ok: boolean, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.update_issue(issue_key, fields, callback)
-	if type(callback) ~= "function" then
-		return nil
-	end
-
-	if type(issue_key) ~= "string" or issue_key == "" then
+	if issue_key == "" then
 		callback(false, "Missing issue key")
-		return nil
-	end
-
-	if type(fields) ~= "table" then
-		callback(false, "Missing fields")
 		return nil
 	end
 
@@ -523,11 +359,7 @@ end
 ---@param callback fun(ok: boolean, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.delete_issue(issue_key, callback)
-	if type(callback) ~= "function" then
-		return nil
-	end
-
-	if type(issue_key) ~= "string" or issue_key == "" then
+	if issue_key == "" then
 		callback(false, "Missing issue key")
 		return nil
 	end
@@ -551,12 +383,12 @@ end
 ---@param callback fun(issue_types: IssueType[]|nil, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.get_create_meta(project_key, callback)
-	if type(project_key) ~= "string" or project_key == "" then
+	if project_key == "" then
 		callback(nil, "Missing project key")
 		return nil
 	end
 
-	local escaped_key = vim.fn.escape(project_key, "&=?")
+	local escaped_key = url_encode(project_key)
 
 	if config.jira_config().api_type == "server" then
 		local endpoint = string.format("/issue/createmeta/%s/issuetypes", escaped_key)

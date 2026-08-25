@@ -1,14 +1,10 @@
 local M = {}
 
 local notify = require("atlas.core.notify")
-local picker = require("atlas.picker")
+local picker = require("atlas.ui.picker")
 local providers = require("atlas.providers")
 
----@class AtlasCreateIssueChoice
----@field label string
----@field provider IssuesProvider
-
----@return AtlasCreateIssueChoice[]
+---@return { label: string, provider: IssuesProvider }[]
 local function build_choices()
 	local choices = {}
 	local actions = require("atlas.issues.actions")
@@ -34,7 +30,7 @@ function M.start()
 	local choices = build_choices()
 
 	if #choices == 0 then
-		notify.error("No issue-capable provider is configured")
+		notify.error("No issue-capable provider is configured", { vim_notify = true })
 		return
 	end
 

@@ -1,6 +1,7 @@
 local M = {}
 
 local keymaps = require("atlas.core.keymaps")
+local notify = require("atlas.core.notify")
 local utils = require("atlas.ui.shared.utils")
 local statusline = require("atlas.ui.statusline")
 local virtual_lines = require("atlas.ui.components.virtual_lines")
@@ -36,7 +37,7 @@ end
 ---@param findstart integer
 ---@param base string
 ---@return integer|table[]
-function _G.__atlas_markdown_complete(findstart, base)
+_G.__atlas_markdown_complete = function(findstart, base)
 	local buf = vim.api.nvim_get_current_buf()
 	local provider = completion_provider_by_buf[buf]
 	if type(provider) ~= "table" then
@@ -124,7 +125,7 @@ function M.open(opts)
 
 	local key = tostring(opts.key or "")
 	if key == "" then
-		statusline.notify("warn", "Missing editor key")
+		notify.warn("Missing editor key")
 		return nil, nil
 	end
 	local source_win = vim.api.nvim_get_current_win()
@@ -341,12 +342,12 @@ function M.open(opts)
 	end
 
 	local function set_text(text)
-		local lines = vim.split(utils.normalize_newlines(text), "\n", { plain = true })
-		if #lines == 0 then
-			lines = { "" }
+		local new_lines = vim.split(utils.normalize_newlines(text), "\n", { plain = true })
+		if #new_lines == 0 then
+			new_lines = { "" }
 		end
-		vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-		vim.api.nvim_win_set_cursor(win, { #lines, #lines[#lines] })
+		vim.api.nvim_buf_set_lines(buf, 0, -1, false, new_lines)
+		vim.api.nvim_win_set_cursor(win, { #new_lines, #new_lines[#new_lines] })
 		if preview then
 			reveal_preview()
 		end
@@ -389,7 +390,7 @@ function M.open(opts)
 				set_text = set_text,
 			})
 			if not ok then
-				statusline.notify("error", tostring(err or "Markdown action failed"))
+				notify.error(tostring(err or "Markdown action failed"))
 			end
 		end, { buffer = buf, silent = true, nowait = true, desc = action.description })
 	end

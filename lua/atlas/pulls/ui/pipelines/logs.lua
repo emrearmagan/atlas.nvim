@@ -202,6 +202,7 @@ end
 ---@field pr PullRequest
 ---@field provider PullsProvider|nil
 ---@field pipeline PullsPipeline
+---@field stage PullsPipelineStage|nil
 ---@field job PullsPipelineJob
 ---@field win integer
 ---@field buf integer
@@ -223,13 +224,6 @@ local function duration_text(seconds)
 		return string.format("%ds", math.floor(value))
 	end
 	return utils.human_duration(value)
-end
-
----@param pipeline PullsPipeline
----@return string
-local function pipeline_name(pipeline)
-	local name = tostring(pipeline.name or pipeline.key or "")
-	return name ~= "" and name or "Pipeline"
 end
 
 ---@param state string
@@ -275,14 +269,18 @@ local function render(session)
 	local state = tostring(session.job.state or "UNKNOWN"):upper()
 	local status_icon, status_hl = icons.pulls_status(state:lower())
 	local status = status_text(state)
-	local name = tostring(session.job.name or "Job")
+	local name = session.job.name
 	local icon_start = 2
 	local name_start = icon_start + #status_icon + 1
 	local status_start = name_start + #name + 2
 	local title = string.format("  %s %s  %s", status_icon, name, status)
 
-	local pipeline = pipeline_name(session.pipeline)
+	local pipeline = session.pipeline.name
 	local metadata = { pipeline }
+	local stage_name = session.stage and session.stage.name or ""
+	if stage_name ~= "" then
+		table.insert(metadata, stage_name)
+	end
 	local duration = duration_text(session.job.duration)
 	if duration ~= "" then
 		table.insert(metadata, duration)
@@ -448,6 +446,7 @@ function M.open(pr, provider, selection)
 		pr = pr,
 		provider = provider,
 		pipeline = selection.pipeline,
+		stage = selection.stage,
 		job = selection.job,
 		win = vim.api.nvim_get_current_win(),
 		buf = utils.buffer.create(string.format("atlas://pipeline-job-log/%d", tab), "atlas.pipeline-log"),

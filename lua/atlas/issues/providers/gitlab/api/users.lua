@@ -1,13 +1,14 @@
 local M = {}
 
-local service = require("atlas.providers.gitlab.client").issues
+local service = require("atlas.providers.gitlab.client")
 local normalizer = require("atlas.issues.providers.gitlab.api.mapper")
+local json = require("atlas.core.json")
 
 ---@param on_done fun(user: IssueUser|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.get_user(on_done)
 	local cache_key = "gitlab:user:me"
-	local cached, ok = service.get_memory_cache(cache_key)
+	local cached, ok = service.get_cache(cache_key)
 	if ok then
 		on_done(cached, nil)
 		return nil
@@ -20,7 +21,7 @@ function M.get_user(on_done)
 		end
 		local user = normalizer.to_user(result)
 		if user then
-			service.set_memory_cache(cache_key, user)
+			service.set_cache(cache_key, user)
 		end
 		on_done(user, nil)
 	end, {
@@ -33,7 +34,7 @@ end
 ---@param on_done fun(users: IssueUser[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.list_members(project_path, query, on_done)
-	if type(project_path) ~= "string" or project_path == "" then
+	if project_path == "" then
 		on_done(nil, "Missing project path")
 		return nil
 	end
@@ -49,7 +50,7 @@ function M.list_members(project_path, query, on_done)
 			return
 		end
 		local out = {}
-		for _, raw in ipairs(result) do
+		for _, raw in ipairs(json.safe_table(result)) do
 			local user = normalizer.to_user(raw)
 			local id = tonumber(raw and raw.id)
 			if user and id then

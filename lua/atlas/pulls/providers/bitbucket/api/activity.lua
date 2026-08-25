@@ -75,8 +75,9 @@ end
 ---@param _opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(entries: PullsActivityEntry[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_activity(pr, _opts, on_done)
-	local activity_url = tostring((pr._raw.links or {}).activity or "")
+local function fetch_activity(pr, _opts, on_done)
+	---@cast pr BitbucketPullRequest
+	local activity_url = tostring(pr.links.activity or "")
 	if activity_url == "" then
 		on_done({}, nil)
 		return nil
@@ -90,7 +91,7 @@ function M.fetch_activity(pr, _opts, on_done)
 			return
 		end
 		on_done(mapper.to_activities_list(result), nil)
-	end)
+	end, { action = "Fetch PR activity", repo = pr.repo_full_name, id = pr.id })
 end
 
 ---@param pr PullRequest
@@ -107,7 +108,7 @@ function M.fetch_conversation(pr, opts, on_done)
 			return tasks.fetch_tasks(pr, opts, done)
 		end,
 		events = function(done)
-			return M.fetch_activity(pr, opts, done)
+			return fetch_activity(pr, opts, done)
 		end,
 	}, function(values, errors)
 		if errors.comments and errors.tasks and errors.events then

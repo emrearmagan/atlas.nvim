@@ -63,7 +63,6 @@ end
 ---@field number boolean
 ---@field relativenumber boolean
 ---@field statuscolumn string
----@field statusline string
 ---@field winbar string
 ---@field diff_lifecycle AtlasDiffLifecycle|nil
 ---@field on_abandon (fun(reason: string))|nil
@@ -86,11 +85,11 @@ end
 function M.open(message, on_cancel, target)
 	local tabpage, win, buf
 	local number, relativenumber
-	local statuscolumn, statusline, winbar, diff_lifecycle, on_abandon
+	local statuscolumn, winbar, diff_lifecycle, on_abandon
 	if target then
 		tabpage, win, buf = target.tabpage, target.win, target.buf
 		number, relativenumber = target.number, target.relativenumber
-		statuscolumn, statusline, winbar = target.statuscolumn, target.statusline, target.winbar
+		statuscolumn, winbar = target.statuscolumn, target.winbar
 		diff_lifecycle = target.diff_lifecycle
 		on_abandon = target.on_abandon
 		vim.api.nvim_set_current_tabpage(tabpage)
@@ -98,7 +97,6 @@ function M.open(message, on_cancel, target)
 	else
 		local source_win = vim.api.nvim_get_current_win()
 		statuscolumn = vim.wo[source_win].statuscolumn
-		statusline = vim.wo[source_win].statusline
 		winbar = vim.wo[source_win].winbar
 		vim.cmd("tabnew")
 		tabpage = vim.api.nvim_get_current_tabpage()
@@ -115,7 +113,7 @@ function M.open(message, on_cancel, target)
 	pcall(vim.treesitter.stop, buf)
 	vim.bo[buf].swapfile = false
 	vim.bo[buf].undolevels = -1
-	for name, value in pairs({
+	local window_options = {
 		cursorline = false,
 		diff = false,
 		foldcolumn = "0",
@@ -123,10 +121,10 @@ function M.open(message, on_cancel, target)
 		relativenumber = false,
 		signcolumn = "no",
 		statuscolumn = "",
-		statusline = " ",
 		winbar = " ",
 		wrap = false,
-	}) do
+	}
+	for name, value in pairs(window_options) do
 		vim.api.nvim_set_option_value(name, value, { win = win, scope = "local" })
 	end
 
@@ -185,7 +183,6 @@ function M.open(message, on_cancel, target)
 			number = number,
 			relativenumber = relativenumber,
 			statuscolumn = statuscolumn,
-			statusline = statusline,
 			winbar = winbar,
 			diff_lifecycle = diff_lifecycle,
 			on_abandon = on_abandon,

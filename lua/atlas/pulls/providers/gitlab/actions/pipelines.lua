@@ -37,7 +37,7 @@ return {
 		id = "retry_pipeline",
 		label = "Retry pipeline",
 		is_available = function(ctx)
-			return tonumber(ctx.pipeline.provider_id) ~= nil and can_retry(ctx.pipeline)
+			return tonumber(ctx.pipeline.id) ~= nil and can_retry(ctx.pipeline)
 		end,
 		run = function(ctx, done)
 			pipelines.retry(ctx.pr, ctx.pipeline, function(_, err)
@@ -50,7 +50,7 @@ return {
 		label = "Cancel pipeline",
 		confirm = "Cancel this pipeline?",
 		is_available = function(ctx)
-			return tonumber(ctx.pipeline.provider_id) ~= nil and can_cancel(ctx.pipeline)
+			return tonumber(ctx.pipeline.id) ~= nil and can_cancel(ctx.pipeline)
 		end,
 		run = function(ctx, done)
 			pipelines.cancel(ctx.pr, ctx.pipeline, function(_, err)

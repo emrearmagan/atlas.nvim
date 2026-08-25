@@ -5,8 +5,6 @@ local normalizer = require("atlas.issues.providers.jira.api.mapper")
 local markdown = require("atlas.issues.providers.jira.converted.markdown")
 local config = require("atlas.issues.providers.jira.api.config")
 
-local PANEL_CACHE_TTL = 300
-
 ---@param raw table
 ---@param issue_key string
 ---@return IssueComment[]
@@ -46,7 +44,7 @@ function M.get_comments_page(issue_key, start_at, max_results, callback, opts)
 		end
 
 		local comments = map_comments(result, issue_key)
-		service.set_memory_cache(cache_key, comments, PANEL_CACHE_TTL)
+		service.set_memory_cache(cache_key, comments)
 		callback(comments, nil)
 	end, {
 		action = "Fetch comments page",
@@ -105,17 +103,13 @@ end
 ---@param callback fun(comment: IssueComment|nil, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.edit_comment(issue_key, comment_id, comment, callback)
-	if type(callback) ~= "function" then
-		return nil
-	end
-
 	local id = tostring(comment_id or "")
 	if id == "" then
 		callback(nil, "Missing comment id")
 		return nil
 	end
 
-	local body = type(comment) == "string" and comment or ""
+	local body = comment
 	if vim.trim(body) == "" then
 		callback(nil, "Comment cannot be empty")
 		return nil

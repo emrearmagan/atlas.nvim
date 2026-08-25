@@ -3,15 +3,16 @@ local M = {}
 local checkout = require("atlas.core.git.checkout")
 local config = require("atlas.config")
 local git = require("atlas.core.git")
+local keymaps = require("atlas.core.keymaps")
 local loading = require("atlas.pulls.diff.ui.loading")
 local logger = require("atlas.core.logger")
 local notes = require("atlas.pulls.diff.notes")
 local notify = require("atlas.core.notify")
 local providers = require("atlas.providers")
-local resolver = require("atlas.providers.resolve")
+local request_scope = require("atlas.core.requests")
 local review_api = require("atlas.pulls.diff.review")
 local session_api = require("atlas.pulls.diff.session")
-local statusline = require("atlas.pulls.diff.ui.statusline")
+local statusline = require("atlas.ui.statusline")
 
 local ADAPTERS = {
 	atlas = require("atlas.pulls.diff.atlas"),
@@ -28,17 +29,15 @@ local VIEWERS = {
 ---@param operation string
 ---@param context table
 ---@param err string|nil
-local function log_result(operation, context, err)
+local function log_error(operation, context, err)
 	if err then
 		logger.logerror(operation .. " failed", vim.tbl_extend("force", {}, context, { error = tostring(err) }))
-	else
-		logger.loginfo(operation .. " ready", context)
 	end
 end
 
 ---@class AtlasReviewOpenContext
 ---@field provider PullsProvider
----@field pr PullRequest
+---@field ref PullRequestRef
 ---@field current_user PullsUser|nil
 ---@field root string|nil
 
@@ -58,21 +57,23 @@ end
 
 -- Prefer an existing checkout; nil makes Atlas use its shared cache.
 ---@param context AtlasReviewOpenContext
+---@param pr PullRequest
 ---@return string|nil
-local function repository_path(context)
-	local pr = context.pr
+local function repository_path(context, pr)
 	if context.root then
 		return context.root
 	end
 	local cwd = vim.fn.getcwd()
 	local current = git.local_repository(cwd)
-	local target = resolver.resolve(pr.link.html)
+	local current_repo = current and current.repo_full_name or nil
+	local target = providers.resolve(pr.link.html)
 	if
 		current
+		and current_repo
 		and target
 		and current.provider == target.provider
 		and current.host:lower() == target.host:lower()
-		and current.slug:lower() == pr.repo_full_name:lower()
+		and current_repo:lower() == pr.repo_full_name:lower()
 	then
 		return git.repo_root(cwd)
 	end
@@ -148,7 +149,10 @@ local function make_session(session, viewer_id, source, review, commits)
 	session.current = nil
 	session.viewer_state = {}
 	session.review_panel = nil
-	session.statusline = statusline.new()
+	session.statusline:dispose()
+	local help_action = viewer_id == "atlas" and "ui.help" or "pulls.external_help"
+	session.help_key = (keymaps.resolve(help_action) or {})[1]
+	session.statusline = statusline.new({ help_key = session.help_key })
 	session.closed = false
 	session.note_target, session.notes = notes.load(review)
 	return session
@@ -197,7 +201,7 @@ local function start_range(opts, on_done, target, existing)
 	if not viewer_id then
 		local err = open_external(command, { root = root, base_revision = base, head_revision = head })
 		view:finish()
-		log_result(operation, log, err)
+		log_error(operation, log, err)
 		if on_done then
 			on_done(err)
 		end
@@ -212,7 +216,7 @@ local function start_range(opts, on_done, target, existing)
 	session.reload = function(next_target)
 		start_range(opts, function(err)
 			if err then
-				notify.error("Unable to reload diff: " .. err)
+				notify.error("Unable to reload diff: " .. err, { vim_notify = true })
 			end
 		end, next_target, session)
 	end
@@ -220,7 +224,7 @@ local function start_range(opts, on_done, target, existing)
 		if cancelled then
 			return
 		end
-		log_result(operation, log, err)
+		log_error(operation, log, err)
 		if on_done then
 			on_done(err)
 		end
@@ -246,8 +250,8 @@ local function start_pr(context, command, refresh, on_done, target, existing)
 	local log = {
 		viewer = viewer_id or command,
 		provider = context.provider.id,
-		repo = context.pr.repo_full_name,
-		pr_id = context.pr.id,
+		repo = context.ref.repo_full_name,
+		pr_id = context.ref.id,
 	}
 	logger.loginfo(operation, log)
 	local request = { cancel = function() end }
@@ -269,7 +273,7 @@ local function start_pr(context, command, refresh, on_done, target, existing)
 			return
 		end
 		finished = true
-		log_result(operation, log, err)
+		log_error(operation, log, err)
 		if on_done then
 			on_done(err)
 		end
@@ -299,7 +303,7 @@ local function start_pr(context, command, refresh, on_done, target, existing)
 		session.reload = function(next_target)
 			start_pr(context, command, true, function(err)
 				if err then
-					notify.error("Unable to reload diff: " .. err)
+					notify.error("Unable to reload diff: " .. err, { vim_notify = true })
 				end
 			end, next_target, session)
 		end
@@ -308,93 +312,99 @@ local function start_pr(context, command, refresh, on_done, target, existing)
 		end) or request
 	end
 
-	---@param source AtlasDiffSource
-	---@param review AtlasDiffReview|nil
-	---@param warnings string[]
-	local function load_commits(source, review, warnings)
-		log.root = source.root
-		log.base_revision = source.base_revision
-		log.head_revision = source.head_revision
-		if not viewer_id then
-			local err = open_external(command, source)
-			view:finish()
-			complete(err)
-			return
-		end
+	---@param pr PullRequest
+	local function load_data(pr)
 		local core = context.provider.capabilities.core
-		if viewer_id ~= "atlas" or not core.fetch_commits then
-			launch(source, review, {}, warnings)
-			return
-		end
+		local pending = request_scope.new()
+		request = pending
+		local starts = {}
+		local repo_path = repository_path(context, pr)
 
-		view:update(refresh and "Refreshing commits..." or "Loading commits...")
-		request = core.fetch_commits(context.pr, refresh and { force_refresh = true } or {}, function(commits, err)
-			later(function()
-				if err then
-					warnings[#warnings + 1] = "Unable to load commits: " .. tostring(err)
-				end
-				launch(source, review, commits or {}, warnings)
-			end)
-		end) or request
-	end
-
-	---@param source AtlasDiffSource
-	local function load_review(source)
-		if not viewer_id then
-			load_commits(source, nil, {})
-			return
-		end
-		view:update(refresh and "Refreshing review..." or "Loading review...")
-		local review = existing and existing.review
-			or {
-				provider = context.provider,
-				pr = context.pr,
-				current_user = context.current_user,
-				context = nil,
-				data = {
-					review = { pending = false },
-					comments = {},
-					tasks = {},
-					reviewers = {},
-					history = {},
-				},
-			}
-		review.provider = context.provider
-		review.pr = context.pr
-		review.current_user = review.current_user or context.current_user
-		request = review_api.load(review, refresh, function(loaded, warnings)
-			later(load_commits, source, loaded, warnings)
-		end) or request
-	end
-
-	local function load_repository()
-		request = checkout.ensure_pr_repository(context.pr, repository_path(context), function(message)
-			view:update(message)
-		end, function(root, err)
-			later(function()
+		starts.repository = function(done)
+			return checkout.ensure_pr_repository(pr, repo_path, function(message)
+				view:update(message)
+			end, function(root, err)
 				if not root then
-					fail(tostring(err or "Unable to load pull request repository"))
+					pending.cancel()
+					later(fail, tostring(err or "Unable to load pull request repository"))
 					return
 				end
-				local base, head, revision_err = checkout.pr_diff_revisions(context.pr)
+				local base, head, revision_err = checkout.pr_diff_revisions(pr)
 				if not base or not head then
-					fail(tostring(revision_err or "Unable to resolve pull request revisions"))
+					pending.cancel()
+					later(fail, tostring(revision_err or "Unable to resolve pull request revisions"))
 					return
 				end
-				load_review({ root = root, base_revision = base, head_revision = head })
+				done({ root = root, base_revision = base, head_revision = head }, nil)
 			end)
-		end) or request
+		end
+
+		if viewer_id then
+			local review = existing and existing.review
+				or {
+					provider = context.provider,
+					pr = pr,
+					current_user = context.current_user,
+					context = nil,
+					data = {
+						review = { pending = false },
+						comments = {},
+						tasks = {},
+						reviewers = {},
+						history = {},
+					},
+				}
+			review.provider = context.provider
+			review.pr = pr
+			review.current_user = review.current_user or context.current_user
+			starts.review = function(done)
+				return review_api.load(review, refresh, function(loaded, warnings)
+					done({ review = loaded, warnings = warnings }, nil)
+				end)
+			end
+		end
+
+		if viewer_id == "atlas" and core.fetch_commits then
+			starts.commits = function(done)
+				return core.fetch_commits(pr, { force_refresh = true }, done)
+			end
+		end
+
+		view:update(refresh and "Refreshing diff data..." or "Loading diff data...")
+		pending.all(starts, function(values, errors)
+			later(function()
+				local source = values.repository
+				log.root = source.root
+				log.base_revision = source.base_revision
+				log.head_revision = source.head_revision
+
+				if not viewer_id then
+					local err = open_external(command, source)
+					view:finish()
+					complete(err)
+					return
+				end
+
+				local review_result = values.review or { review = nil, warnings = {} }
+				local warnings = review_result.warnings
+				if errors.commits then
+					warnings[#warnings + 1] = "Unable to load commits: " .. tostring(errors.commits)
+				end
+				launch(source, review_result.review, values.commits or {}, warnings)
+			end)
+		end)
 	end
 
 	view:update(refresh and "Refreshing pull request..." or "Loading pull request...")
-	request = context.provider.capabilities.core.fetch_pullrequest(context.pr, { force_load = true }, function(pr, err)
+	local core = context.provider.capabilities.core
+	request = core.fetch_by_refs({ context.ref }, { force_load = refresh }, function(pulls, err)
 		later(function()
-			if not pr then
+			local pr = pulls and pulls[1] or nil
+			if pr == nil then
 				fail(tostring(err or "Unable to load pull request"))
 				return
 			end
-			context.pr = pr
-			load_repository()
+			load_data(pr)
 		end)
 	end) or request
 	return {
@@ -409,40 +419,42 @@ end
 ---@param requested AtlasPullsDiffOpenCommand|string|nil
 ---@return { cancel: fun() }|nil
 function M.open_pull_request(value, requested)
-	local target, target_err = resolver.resolve(value)
+	local target, target_err = providers.resolve(value)
 	if not target then
-		notify.error(target_err or "Invalid pull request URL")
+		notify.error(target_err or "Invalid pull request URL", { vim_notify = true })
 		return nil
 	end
 	if target.domain ~= "pulls" or target.entity ~= "pr" then
-		notify.error("Expected a pull request URL")
+		notify.error("Expected a pull request URL", { vim_notify = true })
 		return nil
 	end
-	if not resolver.configured(target) then
-		notify.error("Pull request provider is not configured: " .. target.provider)
+	if config.provider_options(target.provider) == nil then
+		notify.error("Pull request provider is not configured: " .. target.provider, { vim_notify = true })
 		return nil
 	end
 	local provider = providers.load(target.provider, target.domain)
 	if not provider then
-		notify.error("Unable to load pull request provider: " .. target.provider)
+		notify.error("Unable to load pull request provider: " .. target.provider, { vim_notify = true })
 		return nil
 	end
+	---@cast provider PullsProvider
 	local command, command_err = configured_command(requested)
 	if not command then
-		notify.error(command_err)
+		notify.error(command_err, { vim_notify = true })
 		return nil
 	end
+	local ref = target --[[@as PullRequestRef]]
 	return start_pr(
 		{
 			provider = provider,
-			pr = resolver.pull_request_ref(target),
+			ref = ref,
 			current_user = nil,
 		},
 		command,
 		true,
 		function(err)
 			if err then
-				notify.error(err)
+				notify.error(err, { vim_notify = true })
 			end
 		end
 	)
@@ -465,17 +477,22 @@ function M.open_argument(value)
 	local base = vim.trim(value:sub(1, separator - 1))
 	local head = vim.trim(value:sub(separator + 3))
 	if base == "" or head == "" then
-		notify.error("Expected an explicit base...head range")
+		notify.error("Expected an explicit base...head range", { vim_notify = true })
+		return
+	end
+	local root, root_err = git.repo_root(vim.fn.getcwd())
+	if not root then
+		notify.error(root_err or "Unable to resolve repository root", { vim_notify = true })
 		return
 	end
 	M.open_range({
-		git_root = vim.fn.getcwd(),
+		git_root = root,
 		base_revision = base,
 		head_revision = head,
 		open_cmd = "AtlasDiff",
 	}, function(err)
 		if err then
-			notify.error(err)
+			notify.error(err, { vim_notify = true })
 		end
 	end)
 end

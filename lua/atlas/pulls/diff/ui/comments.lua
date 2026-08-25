@@ -101,10 +101,10 @@ function M.render_comments(context, buf, by_line, above_lines)
 					end
 				end
 			end
-			local virtual_lines = M.thread_lines(context, buf, list)
-			sizes[line] = #virtual_lines
+			local rendered_lines = M.thread_lines(context, buf, list)
+			sizes[line] = #rendered_lines
 			vim.api.nvim_buf_set_extmark(buf, namespace, line - 1, 0, {
-				virt_lines = virtual_lines,
+				virt_lines = rendered_lines,
 				virt_lines_above = above_lines[line] == true,
 				virt_lines_leftcol = true,
 				number_hl_group = "CursorLineNr",
@@ -125,9 +125,9 @@ function M.render_file_comments(context, buf, list)
 	if #list == 0 or not vim.api.nvim_buf_is_valid(buf) then
 		return 0
 	end
-	local virtual_lines = M.thread_lines(context, buf, list)
+	local rendered_lines = M.thread_lines(context, buf, list)
 	vim.api.nvim_buf_set_extmark(buf, namespace, 0, 0, {
-		virt_lines = virtual_lines,
+		virt_lines = rendered_lines,
 		virt_lines_above = true,
 		virt_lines_leftcol = true,
 		priority = 1100,
@@ -137,14 +137,14 @@ function M.render_file_comments(context, buf, list)
 		for _, win in ipairs(vim.fn.win_findbuf(buf)) do
 			local view = vim.api.nvim_win_call(win, vim.fn.winsaveview)
 			if view.topline == 1 then
-				view.topfill = #virtual_lines
+				view.topfill = #rendered_lines
 				vim.api.nvim_win_call(win, function()
 					vim.fn.winrestview(view)
 				end)
 			end
 		end
 	end)
-	return #virtual_lines
+	return #rendered_lines
 end
 
 ---@param buf integer
@@ -155,12 +155,12 @@ function M.pad(buf, line, count, above)
 	if count <= 0 then
 		return
 	end
-	local virtual_lines = {}
+	local padding_lines = {}
 	for _ = 1, count do
-		virtual_lines[#virtual_lines + 1] = { { "", "Normal" } }
+		padding_lines[#padding_lines + 1] = { { "", "Normal" } }
 	end
 	vim.api.nvim_buf_set_extmark(buf, namespace, line - 1, 0, {
-		virt_lines = virtual_lines,
+		virt_lines = padding_lines,
 		virt_lines_above = above,
 		virt_lines_leftcol = true,
 		priority = 1090,

@@ -65,7 +65,7 @@ function M.fetch_tasks(pr, opts, on_done)
 		end)
 		service.set_cache(key, tasks, service.cache_ttl())
 		on_done(tasks, nil)
-	end)
+	end, { action = "Fetch PR tasks", repo = pr.repo_full_name, id = pr.id })
 end
 
 ---@param pr PullRequest
@@ -96,7 +96,7 @@ function M.add_task(pr, content, parent, on_done)
 			return
 		end
 		on_done(task, nil)
-	end)
+	end, { action = "Add PR task", repo = pr.repo_full_name, id = pr.id })
 end
 
 ---@param task PullsComment
@@ -110,7 +110,7 @@ function M.edit_task(task, on_done)
 	end
 
 	local payload = { state = task.state == "RESOLVED" and "RESOLVED" or "UNRESOLVED" }
-	if task.content_raw and task.content_raw ~= "" then
+	if task.content_raw ~= "" then
 		payload.content = { raw = task.content_raw }
 	end
 	return service.request("PUT", url, nil, vim.json.encode(payload), function(result, err)
@@ -125,7 +125,7 @@ function M.edit_task(task, on_done)
 			return
 		end
 		on_done(updated, nil)
-	end)
+	end, { action = "Edit PR task", task_id = task.id })
 end
 
 ---@param task PullsComment
@@ -143,7 +143,7 @@ function M.delete_task(task, on_done)
 			service.clear_cache()
 		end
 		on_done(err == nil, err)
-	end)
+	end, { action = "Delete PR task", task_id = task.id })
 end
 
 return M

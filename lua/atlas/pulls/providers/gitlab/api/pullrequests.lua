@@ -1,18 +1,66 @@
 local M = {}
 
-local service = require("atlas.providers.gitlab.client").pulls
+local service = require("atlas.providers.gitlab.client")
 local mapper = require("atlas.pulls.providers.gitlab.api.mapper")
+local request_scope = require("atlas.core.requests")
 local reviews_api = require("atlas.pulls.providers.gitlab.api.reviews")
+local json = require("atlas.core.json")
+
+local MR_DETAILS_QUERY = [[
+query($path:ID!,$iid:String!){
+  project(fullPath:$path){
+    mergeRequest(iid:$iid){
+      description
+      subscribed
+      assignees(first:100){nodes{id name username}}
+      labels(first:100){nodes{name:title color text_color:textColor}}
+    }
+  }
+}
+]]
+
+local MR_SUMMARIES_QUERY = [[
+query($path:ID!,$iids:[String!]!){
+  project(fullPath:$path){
+    mergeRequests(iids:$iids,first:100){
+      nodes{
+        iid
+        title
+        state
+        draft
+        author{id name username}
+        source_branch:sourceBranch
+        target_branch:targetBranch
+        diff_refs:diffRefs{base_sha:baseSha start_sha:startSha head_sha:headSha}
+        user_notes_count:userNotesCount
+        created_at:createdAt
+        updated_at:updatedAt
+        web_url:webUrl
+        merge_status:mergeStatus
+        detailed_merge_status:detailedMergeStatus
+        reviewers(first:100){nodes{id name username}}
+      }
+    }
+  }
+}
+]]
 
 ---@param params table<string, any>
 ---@return string
 local function build_query(params)
 	local parts = {}
-	for k, v in pairs(params or {}) do
-		if v ~= nil and v ~= "" then
+	for k, v in pairs(params) do
+		if type(v) == "table" then
+			for _, item in ipairs(v) do
+				if item ~= nil and item ~= "" then
+					table.insert(parts, k .. "=" .. service.url_encode(tostring(item)))
+				end
+			end
+		elseif v ~= nil and v ~= "" then
 			table.insert(parts, k .. "=" .. service.url_encode(tostring(v)))
 		end
 	end
+	table.sort(parts)
 	if #parts == 0 then
 		return ""
 	end
@@ -55,10 +103,8 @@ function M.fetch_pullrequests(view, opts, on_done)
 	if view.search and view.search ~= "" then
 		params.search = view.search
 	end
-	if type(view.extra_params) == "table" then
-		for k, v in pairs(view.extra_params) do
-			params[k] = v
-		end
+	for k, v in pairs(view.extra_params or {}) do
+		params[k] = v
 	end
 
 	local endpoint
@@ -95,46 +141,78 @@ function M.fetch_pullrequests(view, opts, on_done)
 	})
 end
 
----@param project_path string
----@param opts { force_refresh?: boolean }|nil
----@param on_done fun(by_name: table<string, { color: string|nil, text_color: string|nil }>|nil, err: string|nil)
+---@param refs PullRequestRef[]
+---@param opts PullsFetchOpts|nil
+---@param on_done fun(pulls: PullRequest[], err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_project_labels(project_path, opts, on_done)
+function M.fetch_by_refs(refs, opts, on_done)
 	opts = opts or {}
-	if project_path == nil or project_path == "" then
-		on_done(nil, "Missing project_path")
+	if #refs == 0 then
+		on_done({}, nil)
 		return nil
 	end
-	local cache_key = "gitlab_pulls:labels:" .. project_path
-	if not opts.force_refresh then
-		local cached, ok = service.get_memory_cache(cache_key)
-		if ok then
-			on_done(cached, nil)
+
+	local iids_by_project = {}
+	for _, ref in ipairs(refs) do
+		local path = tostring(ref.repo_full_name or "")
+		local iid = tonumber(ref.id)
+		if path == "" or iid == nil then
+			on_done({}, "Invalid MR identifier")
 			return nil
 		end
+		iids_by_project[path] = iids_by_project[path] or {}
+		table.insert(iids_by_project[path], iid)
 	end
-	local endpoint = string.format("/projects/%s/labels?per_page=100", service.url_encode(project_path))
-	return service.request("GET", endpoint, nil, function(result, err)
-		if err then
-			on_done(nil, err)
-			return
-		end
-		local by_name = {}
-		for _, item in ipairs(result) do
-			local name = type(item.name) == "string" and item.name or nil
-			if name then
-				by_name[name] = {
-					color = type(item.color) == "string" and item.color or nil,
-					text_color = type(item.text_color) == "string" and item.text_color or nil,
-				}
+
+	local starts = {}
+	for path, iids in pairs(iids_by_project) do
+		starts[path] = function(done)
+			local sorted_iids = vim.deepcopy(iids)
+			table.sort(sorted_iids)
+			local cache_key = string.format("gitlab_pulls:refs:%s!%s", path, table.concat(sorted_iids, ","))
+			if not (opts.force_load or opts.force_refresh) then
+				local cached, ok = service.get_memory_cache(cache_key)
+				if ok then
+					done(cached, nil)
+					return nil
+				end
 			end
+			local string_iids = vim.tbl_map(tostring, iids)
+			return service.graphql(MR_SUMMARIES_QUERY, { path = path, iids = string_iids }, function(result, err)
+				if err then
+					done(nil, err)
+					return
+				end
+				local project = json.nilify(json.safe_table(result).project)
+				local nodes = project and json.nilify(json.safe_table(json.safe_table(project).mergeRequests).nodes)
+				if nodes == nil then
+					done(nil, "Project or merge requests not found")
+					return
+				end
+				local pulls = mapper.to_pull_requests(nodes)
+				service.set_memory_cache(cache_key, pulls)
+				done(pulls, nil)
+			end, {
+				action = "Fetch MR summaries",
+				project_path = path,
+				count = #iids,
+			})
 		end
-		service.set_memory_cache(cache_key, by_name)
-		on_done(by_name, nil)
-	end, {
-		action = "Fetch project labels",
-		project_path = project_path,
-	})
+	end
+
+	local requests = request_scope.new()
+	requests.all(starts, function(values, errors)
+		local pulls = {}
+		for path in pairs(iids_by_project) do
+			if errors[path] then
+				on_done({}, errors[path])
+				return
+			end
+			vim.list_extend(pulls, values[path] or {})
+		end
+		on_done(pulls, nil)
+	end)
+	return requests
 end
 
 ---@param pr PullRequestRef
@@ -150,7 +228,7 @@ function M.fetch_pullrequest(pr, opts, on_done)
 		return nil
 	end
 
-	local cache_key = string.format("gitlab_pulls:get:%s!%d", path, iid)
+	local cache_key = string.format("gitlab_pulls:details:%s!%d", path, iid)
 	if not (opts.force_load or opts.force_refresh) then
 		local cached, ok = service.get_memory_cache(cache_key)
 		if ok then
@@ -159,37 +237,24 @@ function M.fetch_pullrequest(pr, opts, on_done)
 		end
 	end
 
-	local endpoint = string.format("/projects/%s/merge_requests/%d", service.url_encode(path), iid)
-	return service.request("GET", endpoint, nil, function(result, err)
+	return service.graphql(MR_DETAILS_QUERY, { path = path, iid = tostring(iid) }, function(result, err)
 		if err then
 			on_done(nil, err)
 			return
 		end
-		local mr = mapper.to_pull_request_details(result)
-		if mr then
-			service.set_memory_cache(cache_key, mr)
+		local project = json.safe_table(result).project
+		local details = mapper.to_pull_request_details(json.safe_table(project).mergeRequest)
+		if details == nil then
+			on_done(nil, "Merge request not found")
+			return
 		end
-		on_done(mr, nil)
+		service.set_memory_cache(cache_key, details)
+		on_done(details, nil)
 	end, {
-		action = "Get MR",
+		action = "Fetch MR details",
 		project_path = path,
 		iid = iid,
 	})
-end
-
----@param pr PullRequest
----@param opts { force_refresh?: boolean }|nil
----@param on_done fun(description: string|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.fetch_description(pr, opts, on_done)
-	opts = opts or {}
-	return M.fetch_pullrequest(pr, { force_load = opts.force_refresh == true }, function(mr, err)
-		if err or mr == nil then
-			on_done(nil, err)
-			return
-		end
-		on_done(tostring(mr.description or ""), nil)
-	end)
 end
 
 ---@param pr PullRequest
@@ -199,34 +264,58 @@ local function project_iid(pr)
 end
 
 ---@param pr PullRequest
-local function bust_caches(pr)
-	local path, iid = project_iid(pr)
-	if path == "" or iid == nil then
-		return
-	end
-	service.delete_memory_cache(string.format("gitlab_pulls:get:%s!%d", path, iid))
-	service.delete_memory_cache(string.format("gitlab_pulls:reviewers:%s!%d", path, iid))
-	service.delete_memory_cache(string.format("gitlab_pulls:review_metadata:%s!%d", path, iid))
-end
-
----@param pr PullRequest
----@param payload table
----@param on_done fun(pr: PullRequestDetails|nil, err: string|nil)
+---@param _opts { force_refresh?: boolean }|nil
+---@param on_done fun(description: string|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.update(pr, payload, on_done)
+function M.fetch_description(pr, _opts, on_done)
 	local path, iid = project_iid(pr)
 	if path == "" or iid == nil then
 		on_done(nil, "Invalid MR identifier")
 		return nil
 	end
 	local endpoint = string.format("/projects/%s/merge_requests/%d", service.url_encode(path), iid)
-	return service.request("PUT", endpoint, payload, function(result, err)
+	return service.request("GET", endpoint, nil, function(result, err)
 		if err then
 			on_done(nil, err)
 			return
 		end
-		bust_caches(pr)
-		on_done(mapper.to_pull_request_details(result), nil)
+		on_done(json.safe_str(json.safe_table(result).description) or "", nil)
+	end, {
+		action = "Fetch MR description",
+		project_path = path,
+		iid = iid,
+	})
+end
+
+---@param pr PullRequest
+local function invalidate_detail_caches(pr)
+	local path, iid = project_iid(pr)
+	if path == "" or iid == nil then
+		return
+	end
+	service.delete_memory_cache(string.format("gitlab_pulls:details:%s!%d", path, iid))
+	service.delete_memory_cache(string.format("gitlab_pulls:reviewers:%s!%d", path, iid))
+	service.delete_memory_cache(string.format("gitlab_pulls:review_metadata:%s!%d", path, iid))
+end
+
+---@param pr PullRequest
+---@param payload table
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+local function update(pr, payload, on_done)
+	local path, iid = project_iid(pr)
+	if path == "" or iid == nil then
+		on_done(false, "Invalid MR identifier")
+		return nil
+	end
+	local endpoint = string.format("/projects/%s/merge_requests/%d", service.url_encode(path), iid)
+	return service.request("PUT", endpoint, payload, function(_, err)
+		if err then
+			on_done(false, err)
+			return
+		end
+		invalidate_detail_caches(pr)
+		on_done(true, nil)
 	end, {
 		action = "Update MR",
 		project_path = path,
@@ -239,20 +328,14 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.set_state(pr, state_event, on_done)
-	return M.update(pr, { state_event = state_event }, function(_, err)
-		if err then
-			on_done(false, err)
-			return
-		end
-		on_done(true, nil)
-	end)
+	return update(pr, { state_event = state_event }, on_done)
 end
 
 ---@param pr PullRequest
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.decline(pr, on_done)
-	return M.set_state(pr, "close", on_done)
+	return update(pr, { state_event = "close" }, on_done)
 end
 
 ---@param pr PullRequest
@@ -260,13 +343,7 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.update_title(pr, title, on_done)
-	return M.update(pr, { title = title }, function(_, err)
-		if err then
-			on_done(false, err)
-			return
-		end
-		on_done(true, nil)
-	end)
+	return update(pr, { title = title }, on_done)
 end
 
 ---@param pr PullRequest
@@ -274,16 +351,7 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.update_description(pr, description, on_done)
-	return M.update(pr, { description = description }, function(updated, err)
-		if err then
-			on_done(false, err)
-			return
-		end
-		if pr.description ~= nil then
-			pr.description = updated and updated.description or description
-		end
-		on_done(true, nil)
-	end)
+	return update(pr, { description = description }, on_done)
 end
 
 ---@param pr PullRequest
@@ -300,13 +368,13 @@ function M.set_draft(pr, draft, on_done)
 		title = "Draft: " .. title
 	end
 
-	return M.update(pr, { title = title }, function(updated, err)
-		if err then
+	return update(pr, { title = title }, function(ok, err)
+		if not ok then
 			on_done(false, err)
 			return
 		end
-		pr.title = updated and updated.title or title
-		pr.state = updated and updated.state or (draft and "draft" or "open")
+		pr.title = title
+		pr.state = draft and "draft" or "open"
 		on_done(true, nil)
 	end)
 end
@@ -324,34 +392,69 @@ function M.fetch_default_reviewers(opts, on_done)
 	end
 
 	local endpoint = string.format("/projects/%s/members/all?per_page=100", service.url_encode(slug))
-	return service.request("GET", endpoint, nil, function(result, err)
+	local starts = {
+		members = function(done)
+			return service.request("GET", endpoint, nil, done, {
+				action = "Fetch default reviewers",
+				project_path = slug,
+			})
+		end,
+	}
+	if opts.pr then
+		starts.current = function(done)
+			return reviews_api.fetch_reviewers(opts.pr, { force_refresh = true }, done)
+		end
+	end
+
+	local requests = request_scope.new()
+	requests.all(starts, function(values, errors)
+		local err = errors.members or errors.current
 		if err then
 			on_done(nil, err)
 			return
 		end
 
+		local current_reviewers = values.current or {}
 		local selected = {}
-		for _, reviewer in ipairs((opts.pr and opts.pr.reviewers) or {}) do
-			if reviewer.role == "reviewer" then
-				selected[tostring(reviewer.username or ""):lower()] = true
+		for _, reviewer in ipairs(current_reviewers) do
+			local username = tostring(reviewer.username or "")
+			if reviewer.role == "reviewer" and username ~= "" then
+				selected[username:lower()] = reviewer
 			end
 		end
 
 		local reviewers = {}
-		for _, raw in ipairs(result) do
-			local login = tostring(raw.username or "")
+		local candidates = {}
+		for _, raw in ipairs(values.members or {}) do
+			local username = tostring(raw.username or "")
 			local id = tonumber(raw.id)
-			if login ~= "" and id then
+			if username ~= "" and id then
+				local key = username:lower()
+				candidates[key] = true
 				table.insert(reviewers, {
-					label = "@" .. login,
+					label = "@" .. username,
 					provider_id = tostring(id),
-					selected = selected[login:lower()] == true,
+					selected = selected[key] ~= nil,
+					default = false,
+				})
+			end
+		end
+		for _, reviewer in ipairs(current_reviewers) do
+			local key = tostring(reviewer.username or ""):lower()
+			local raw_id = tostring(reviewer.provider_id or reviewer.id or "")
+			local id = raw_id:match("([^/]+)$") or raw_id
+			if selected[key] and not candidates[key] and tonumber(id) then
+				table.insert(reviewers, {
+					label = "@" .. tostring(reviewer.username),
+					provider_id = id,
+					selected = true,
 					default = false,
 				})
 			end
 		end
 		on_done(reviewers, nil)
 	end)
+	return requests
 end
 
 ---@param pr PullRequest
@@ -369,13 +472,7 @@ function M.update_reviewers(pr, reviewers, _original_reviewers, on_done)
 	end
 	-- GitLab requires non-empty array; pass {0} to clear.
 	local body = { reviewer_ids = (#ids == 0) and { 0 } or ids }
-	return M.update(pr, body, function(_, err)
-		if err then
-			on_done(false, err)
-			return
-		end
-		on_done(true, nil)
-	end)
+	return update(pr, body, on_done)
 end
 
 ---@param pr PullRequest
@@ -384,23 +481,11 @@ end
 ---@return { cancel: fun() }|nil
 function M.update_assignees(pr, ids, on_done)
 	local body = { assignee_ids = (#ids == 0) and { 0 } or ids }
-	return M.update(pr, body, function(_, err)
-		if err then
-			on_done(false, err)
-			return
-		end
-		on_done(true, nil)
-	end)
+	return update(pr, body, on_done)
 end
 
----@class GitLabMergeOpts
----@field squash boolean|nil
----@field should_remove_source_branch boolean|nil
----@field merge_commit_message string|nil
----@field squash_commit_message string|nil
-
 ---@param pr PullRequest
----@param opts GitLabMergeOpts|nil
+---@param opts { squash: boolean|nil, should_remove_source_branch: boolean|nil, merge_commit_message: string|nil, squash_commit_message: string|nil }|nil
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.merge(pr, opts, on_done)
@@ -417,10 +502,10 @@ function M.merge(pr, opts, on_done)
 	if opts.should_remove_source_branch ~= nil then
 		body.should_remove_source_branch = opts.should_remove_source_branch == true
 	end
-	if type(opts.merge_commit_message) == "string" and opts.merge_commit_message ~= "" then
+	if opts.merge_commit_message and opts.merge_commit_message ~= "" then
 		body.merge_commit_message = opts.merge_commit_message
 	end
-	if type(opts.squash_commit_message) == "string" and opts.squash_commit_message ~= "" then
+	if opts.squash_commit_message and opts.squash_commit_message ~= "" then
 		body.squash_commit_message = opts.squash_commit_message
 	end
 
@@ -430,52 +515,32 @@ function M.merge(pr, opts, on_done)
 			on_done(false, err)
 			return
 		end
-		bust_caches(pr)
+		invalidate_detail_caches(pr)
 		on_done(true, nil)
-	end)
+	end, {
+		action = "Merge MR",
+		project_path = path,
+		iid = iid,
+	})
 end
 
----@class GitLabCreateMrOpts
----@field project_path string
----@field source_branch string
----@field target_branch string
----@field title string
----@field description string|nil
----@field draft boolean|nil
----@field remove_source_branch boolean|nil
----@field squash boolean|nil
----@field assignee_ids integer[]|nil
----@field reviewer_ids integer[]|nil
----@field labels string[]|nil
----@field milestone_id integer|nil
----@field target_project_id integer|nil
-
----@class GitLabCreateMrResult
----@field iid integer|nil
----@field id string|number|nil
----@field url string|nil
-
----@param opts GitLabCreateMrOpts
----@param on_done fun(result: GitLabCreateMrResult|nil, err: string|nil)
+---@param opts PullsCreatePROpts
+---@param on_done fun(result: PullsCreatePRResult|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.create(opts, on_done)
-	if type(opts) ~= "table" then
-		on_done(nil, "Missing options")
-		return nil
-	end
-	local path = tostring(opts.project_path or "")
+function M.create_pr(opts, on_done)
+	local path = tostring(opts.repo_slug or "")
 	if path == "" then
-		on_done(nil, "Missing project_path")
+		on_done(nil, "Missing repository slug")
 		return nil
 	end
-	local source = tostring(opts.source_branch or "")
+	local source = tostring(opts.head or "")
 	if source == "" then
-		on_done(nil, "Missing source_branch")
+		on_done(nil, "Missing source branch")
 		return nil
 	end
-	local target = tostring(opts.target_branch or "")
+	local target = tostring(opts.base or "")
 	if target == "" then
-		on_done(nil, "Missing target_branch")
+		on_done(nil, "Missing target branch")
 		return nil
 	end
 	local title = tostring(opts.title or "")
@@ -493,30 +558,17 @@ function M.create(opts, on_done)
 		source_branch = source,
 		target_branch = target,
 		title = title,
+		description = opts.body,
 	}
-	if type(opts.description) == "string" and opts.description ~= "" then
-		payload.description = opts.description
+	local reviewer_ids = {}
+	for _, reviewer in ipairs(opts.reviewers or {}) do
+		local id = tonumber(reviewer.provider_id)
+		if id then
+			table.insert(reviewer_ids, id)
+		end
 	end
-	if type(opts.assignee_ids) == "table" and #opts.assignee_ids > 0 then
-		payload.assignee_ids = opts.assignee_ids
-	end
-	if type(opts.reviewer_ids) == "table" and #opts.reviewer_ids > 0 then
-		payload.reviewer_ids = opts.reviewer_ids
-	end
-	if type(opts.labels) == "table" and #opts.labels > 0 then
-		payload.labels = table.concat(opts.labels, ",")
-	end
-	if type(opts.milestone_id) == "number" then
-		payload.milestone_id = opts.milestone_id
-	end
-	if opts.remove_source_branch ~= nil then
-		payload.remove_source_branch = opts.remove_source_branch == true
-	end
-	if opts.squash ~= nil then
-		payload.squash = opts.squash == true
-	end
-	if type(opts.target_project_id) == "number" then
-		payload.target_project_id = opts.target_project_id
+	if #reviewer_ids > 0 then
+		payload.reviewer_ids = reviewer_ids
 	end
 
 	local endpoint = string.format("/projects/%s/merge_requests", service.url_encode(path))
@@ -527,11 +579,15 @@ function M.create(opts, on_done)
 			return
 		end
 		local mr = mapper.to_pull_request(result)
-		local iid = (mr and tonumber(mr.id)) or tonumber(result.iid)
+		if mr == nil then
+			on_done(nil, "GitLab returned an invalid merge request")
+			return
+		end
+		local iid = tonumber(mr.id)
 		on_done({
-			iid = iid,
 			id = iid,
-			url = (mr and mr.link and mr.link.html) or (type(result.web_url) == "string" and result.web_url or nil),
+			url = mr.link.html,
+			message = "Merge request created",
 		}, nil)
 	end, {
 		action = "Create MR",
@@ -540,21 +596,6 @@ function M.create(opts, on_done)
 		target = target,
 		draft = opts.draft == true,
 	})
-end
-
----@param pr PullRequest
----@param opts { force_refresh?: boolean }|nil
----@param on_done fun(reviewers: PullsReviewer[]|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.fetch_reviewers(pr, opts, on_done)
-	return reviews_api.fetch_reviewers(pr, opts, function(reviewers, err)
-		if err or reviewers == nil then
-			on_done(nil, err or "Failed to fetch reviewers")
-			return
-		end
-		pr.reviewers = reviewers
-		on_done(reviewers, nil)
-	end)
 end
 
 return M

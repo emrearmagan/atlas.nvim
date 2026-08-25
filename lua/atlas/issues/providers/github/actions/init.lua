@@ -1,7 +1,7 @@
 local M = {}
 
 local registry = require("atlas.issues.providers.github.actions.registry")
-local statusline = require("atlas.ui.statusline")
+local notify = require("atlas.core.notify")
 
 ---@alias AtlasGitHubIssueActionId
 ---| AtlasIssueActionId
@@ -28,7 +28,7 @@ function M.run(action_id, ctx, on_done)
 	local action = registry.find(action_id)
 	if action == nil then
 		local err = string.format("Unknown action: %s", tostring(action_id))
-		statusline.notify("warn", err)
+		notify.warn(err)
 		on_done(nil, err)
 		return false
 	end
@@ -39,7 +39,7 @@ function M.run(action_id, ctx, on_done)
 	end
 	if not available then
 		err = tostring(err or "Action is not available")
-		statusline.notify("warn", err)
+		notify.warn(err)
 		on_done(nil, err)
 		return false
 	end

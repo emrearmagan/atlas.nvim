@@ -1,4 +1,5 @@
 local normalizer = require("atlas.pulls.providers.github.api.mapper")
+local issue_mapper = require("atlas.issues.providers.github.api.mapper")
 
 local function base_raw()
 	return {
@@ -23,6 +24,48 @@ local function base_raw()
 		author = { login = "octocat", name = "Octo Cat", id = "1" },
 	}
 end
+
+describe("GitHub issue mapping", function()
+	local function issue_raw()
+		return {
+			id = "I_1",
+			number = 42,
+			title = "My issue",
+			state = "OPEN",
+			repository = { nameWithOwner = "owner/repo" },
+		}
+	end
+
+	it("maps only supplemental issue details", function()
+		local details = issue_mapper.to_issue_details(vim.tbl_extend("force", issue_raw(), {
+			body = "Description",
+		}))
+
+		assert.equal("Description", details.description)
+		assert.is_nil(details.repo_full_name)
+		assert.is_nil(details.number)
+		assert.is_nil(details.node_id)
+	end)
+
+	it("maps GitHub milestone progress and sub-issues", function()
+		local raw = issue_raw()
+		raw.milestone = {
+			title = "v1",
+			progressPercentage = 50,
+			openIssues = { totalCount = 1 },
+			closedIssues = { totalCount = 1 },
+		}
+		raw.subIssues = { nodes = { vim.tbl_extend("force", issue_raw(), { id = "I_2", number = 43 }) } }
+
+		local details = issue_mapper.to_issue_details(raw)
+
+		assert.equal(50, details.milestone.progress_percentage)
+		assert.equal(1, details.milestone.open_issues)
+		assert.equal(1, details.milestone.closed_issues)
+		assert.equal("owner/repo#43", details.sub_issues[1].key)
+		assert.equal(43, details.sub_issues[1].number)
+	end)
+end)
 
 describe("normalize_pr author.name", function()
 	it("uses author.name when it is a normal string", function()
@@ -55,10 +98,21 @@ describe("GitHub Git remote mapping", function()
 	end)
 end)
 
+describe("GitHub pull request details", function()
+	it("maps only supplemental pull request fields", function()
+		local raw = base_raw()
+
+		local details = normalizer.to_pull_request_details(raw)
+
+		assert.equal("Description", details.description)
+		assert.is_nil(rawget(details, "id"))
+	end)
+end)
+
 describe("GitHub reviewer decisions", function()
 	it("keeps an active review request pending after an earlier decision", function()
 		local raw = base_raw()
-		raw.latestOpinionatedReviews = {
+		raw.reviews = {
 			nodes = {
 				{ state = "APPROVED", author = { id = "2", login = "reviewer", name = "Reviewer" } },
 			},
@@ -72,6 +126,36 @@ describe("GitHub reviewer decisions", function()
 		local pr = normalizer.to_pull_request(raw)
 
 		assert.equal("pending", pr.reviewers[1].decision)
+	end)
+
+	it("keeps an approval after a later comment", function()
+		local raw = base_raw()
+		raw.reviews = {
+			nodes = {
+				{ state = "APPROVED", author = { id = "2", login = "reviewer", name = "Reviewer" } },
+				{ state = "COMMENTED", author = { id = "2", login = "reviewer", name = "Reviewer" } },
+			},
+		}
+
+		local pr = normalizer.to_pull_request(raw)
+
+		assert.equal(1, #pr.reviewers)
+		assert.equal("approved", pr.reviewers[1].decision)
+		assert.equal("participant", pr.reviewers[1].role)
+	end)
+
+	it("removes a dismissed decision", function()
+		local raw = base_raw()
+		raw.reviews = {
+			nodes = {
+				{ state = "APPROVED", author = { id = "2", login = "reviewer", name = "Reviewer" } },
+				{ state = "DISMISSED", author = { id = "2", login = "reviewer", name = "Reviewer" } },
+			},
+		}
+
+		local pr = normalizer.to_pull_request(raw)
+
+		assert.same({}, pr.reviewers)
 	end)
 end)
 

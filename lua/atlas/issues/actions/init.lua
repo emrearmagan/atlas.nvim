@@ -1,6 +1,6 @@
 local M = {}
 
-local picker = require("atlas.picker")
+local picker = require("atlas.ui.picker")
 local templates = require("atlas.issues.templates")
 local utils = require("atlas.issues.actions.utils")
 

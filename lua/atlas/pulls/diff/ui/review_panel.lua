@@ -282,20 +282,20 @@ local function render_reviewer(item, width, expanded, history_expanded, head_rev
 	else
 		state_icon, state_label, state_hl = review_state(history[#history].state)
 	end
-	local previous = false
+	local is_previous = false
 	if item.reviewer and item.reviewer.decision ~= "pending" then
 		for index = #history, 1, -1 do
 			local entry = history[index]
 			if entry.state == item.reviewer.decision then
-				previous = entry.commit_hash and head_revision and entry.commit_hash ~= head_revision
+				is_previous = entry.commit_hash and head_revision and entry.commit_hash ~= head_revision
 				break
 			end
 		end
 	end
-	local previous_text = previous and "  previous commit" or ""
-	local prefix = expander .. " " .. user_icon .. " "
+	local previous_text = is_previous and "  previous commit" or ""
+	local reviewer_prefix = expander .. " " .. user_icon .. " "
 	local suffix = state_icon .. " " .. state_label .. previous_text
-	local name_width = math.max(1, width - vim.api.nvim_strwidth(prefix) - vim.api.nvim_strwidth(suffix) - 2)
+	local name_width = math.max(1, width - vim.api.nvim_strwidth(reviewer_prefix) - vim.api.nvim_strwidth(suffix) - 2)
 	local name = utils.truncate(reviewer_name(item.author), name_width)
 	local line = ""
 	local marks = {}
@@ -327,16 +327,19 @@ local function render_reviewer(item, width, expanded, history_expanded, head_rev
 		local icon, _, hl = review_state(entry.state)
 		local status = show_status and icon or ""
 		local details = utils.relative_time(entry.submitted_on)
-		local previous = show_status and entry.commit_hash and head_revision and entry.commit_hash ~= head_revision
-		if previous then
+		local is_previous_entry = show_status
+			and entry.commit_hash
+			and head_revision
+			and entry.commit_hash ~= head_revision
+		if is_previous_entry then
 			details = details ~= "" and details .. "  previous commit" or "previous commit"
 		end
 		local body = entry.body and vim.trim(entry.body:gsub("%s+", " ")) or ""
 		if full_body and body ~= "" then
-			local prefix = status ~= "" and (status .. "  ") or ""
-			local continuation = string.rep(" ", vim.api.nvim_strwidth(prefix))
-			for index, row in ipairs(utils.wrap_line(body, math.max(1, width - vim.api.nvim_strwidth(prefix)))) do
-				local text = (index == 1 and prefix or continuation) .. row
+			local body_prefix = status ~= "" and (status .. "  ") or ""
+			local continuation = string.rep(" ", vim.api.nvim_strwidth(body_prefix))
+			for index, row in ipairs(utils.wrap_line(body, math.max(1, width - vim.api.nvim_strwidth(body_prefix)))) do
+				local text = (index == 1 and body_prefix or continuation) .. row
 				table.insert(lines, text)
 				line_map[#lines] = { reviewer = item, review_history = entry, tree_key = key }
 				if index == 1 and status ~= "" then
@@ -984,9 +987,7 @@ function M.register_keymaps(panel)
 			panel_items(panel_data(session))
 		local keys, history_keys = {}, {}
 		for _, reviewer in ipairs(reviewers) do
-			if reviewer.kind == "awaiting_reviewers" then
-				table.insert(keys, reviewer.key)
-			elseif #reviewer.history > 0 then
+			if reviewer.kind == "awaiting_reviewers" or #reviewer.history > 0 then
 				table.insert(keys, reviewer.key)
 			end
 			if #reviewer.history > 1 then

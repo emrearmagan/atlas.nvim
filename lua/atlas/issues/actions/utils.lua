@@ -2,7 +2,7 @@ local M = {}
 
 local icons = require("atlas.ui.shared.icons")
 local logger = require("atlas.core.logger")
-local statusline = require("atlas.ui.statusline")
+local notify = require("atlas.core.notify")
 
 ---@param context AtlasIssueActionContext
 ---@return boolean
@@ -19,8 +19,16 @@ local function custom_action(item)
 		custom = true,
 		is_available = has_issue,
 		run = function(context, done)
-			statusline.notify("loading", string.format("Running %s...", item.label))
+			notify.loading(string.format("Running %s...", item.label))
 			local finished = false
+			local function log_failure(err)
+				logger.logerror("Custom issue action failed", {
+					action_id = item.id,
+					action = item.label,
+					issue_key = context.issue and context.issue.key or nil,
+					error = err,
+				})
+			end
 			local function complete(ok, message)
 				if finished then
 					return
@@ -29,12 +37,13 @@ local function custom_action(item)
 				vim.schedule(function()
 					if ok == false then
 						local err = message or (item.label .. " failed")
-						statusline.notify("error", err)
+						log_failure(err)
+						notify.error(err)
 						done(nil, err)
 						return
 					end
 					local result = message or (item.label .. " done")
-					statusline.notify("success", result)
+					notify.success(result)
 					done({ issue_key = context.issue and context.issue.key or nil }, nil)
 				end)
 			end
@@ -45,8 +54,12 @@ local function custom_action(item)
 				output = require("atlas.ui.popups.live").create,
 			}, complete)
 			if not ok then
-				logger.logerror(string.format("Custom issue action '%s' failed: %s", item.label, tostring(err)))
-				complete(false, "Custom action failed: " .. tostring(err))
+				local message = "Custom action failed: " .. tostring(err)
+				if finished then
+					log_failure(message)
+				else
+					complete(false, message)
+				end
 			end
 		end,
 	}
@@ -80,12 +93,12 @@ M.browse_issue = {
 	run = function(context, done)
 		local url = tostring(context.issue and context.issue.url or "")
 		if url == "" then
-			statusline.notify("warn", "No URL available")
+			notify.warn("No URL available")
 			done(nil, "No URL available")
 			return
 		end
 		vim.ui.open(url)
-		statusline.notify("info", "Opened in browser")
+		notify.info("Opened in browser")
 		done(nil, nil)
 	end,
 }
@@ -99,7 +112,7 @@ M.copy_issue_key = {
 		local key = tostring(context.issue and context.issue.key or "")
 		vim.fn.setreg("+", key)
 		vim.fn.setreg('"', key)
-		statusline.notify("success", "Copied issue key", 1200)
+		notify.success("Copied issue key", { timeout = 1200 })
 		done(nil, nil)
 	end,
 }
@@ -112,13 +125,13 @@ M.copy_issue_url = {
 	run = function(context, done)
 		local url = tostring(context.issue and context.issue.url or "")
 		if url == "" then
-			statusline.notify("warn", "No URL available")
+			notify.warn("No URL available")
 			done(nil, "No URL available")
 			return
 		end
 		vim.fn.setreg("+", url)
 		vim.fn.setreg('"', url)
-		statusline.notify("success", "Copied issue URL", 1200)
+		notify.success("Copied issue URL", { timeout = 1200 })
 		done(nil, nil)
 	end,
 }

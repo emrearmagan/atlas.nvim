@@ -32,13 +32,13 @@ end
 ---@return AtlasCommentRendererContext|nil
 local function render_context(session)
 	local current = session.current
-	local review = session.review
-	if not current or not review then
+	local current_review = session.review
+	if not current or not current_review then
 		return nil
 	end
-	local capability = review.provider.capabilities.comments
+	local capability = current_review.provider.capabilities.comments
 	return {
-		threads = review_threads.group_comments(review.data.comments, review.data.tasks),
+		threads = review_threads.group_comments(current_review.data.comments, current_review.data.tasks),
 		expanded_threads = session.expanded_threads,
 		old_path = current.document.old.path,
 		new_path = current.document.new.path,
@@ -110,8 +110,8 @@ end
 ---@return table<string, { comments: boolean, notes: boolean }>
 function M.annotated_paths(session)
 	local paths = {}
-	local review = session.review
-	for _, comment in ipairs(review and review.data.comments or {}) do
+	local current_review = session.review
+	for _, comment in ipairs(current_review and current_review.data.comments or {}) do
 		local target = comment.file or comment.inline
 		if target then
 			paths[target.path] = paths[target.path] or { comments = false, notes = false }
@@ -408,8 +408,8 @@ function M.open_at_cursor(session, buf)
 	end
 	local owner = session.id
 	local function open(current_nodes)
-		local review = session.review
-		local capability = review and review.provider.capabilities.comments
+		local current_review = session.review
+		local capability = current_review and current_review.provider.capabilities.comments
 		ui.open_popup({
 			nodes = current_nodes,
 			owner = owner,
@@ -504,7 +504,7 @@ function M.jump(session, buf, direction)
 		vim.api.nvim_set_current_win(win)
 		vim.api.nvim_win_set_cursor(win, { target.line, 0 })
 		local folded = vim.fn.foldclosed(target.line) ~= -1
-		vim.cmd.normal({ "zvzz", bang = true })
+		vim.cmd.normal({ args = { "zv" }, bang = true })
 		if folded and session.current.layout == "side-by-side" then
 			local other = target.side == "LEFT" and session.current.right.win or session.current.left.win
 			if other and vim.api.nvim_win_is_valid(other) then
@@ -512,7 +512,7 @@ function M.jump(session, buf, direction)
 				vim.api.nvim_win_call(other, function()
 					local previous = vim.api.nvim_win_get_cursor(other)
 					vim.api.nvim_win_set_cursor(other, { line, 0 })
-					vim.cmd.normal({ "zv", bang = true })
+					vim.cmd.normal({ args = { "zv" }, bang = true })
 					vim.api.nvim_win_set_cursor(other, previous)
 				end)
 			end
@@ -633,9 +633,9 @@ function M.open_in_browser(session, buf)
 			return
 		end
 	end
-	local review = session.review
-	if review and review.pr.link and review.pr.link.html then
-		vim.ui.open(review.pr.link.html)
+	local current_review = session.review
+	if current_review and current_review.pr.link and current_review.pr.link.html then
+		vim.ui.open(current_review.pr.link.html)
 	end
 end
 

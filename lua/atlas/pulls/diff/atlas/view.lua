@@ -6,7 +6,6 @@ local explorer = require("atlas.pulls.diff.atlas.explorer")
 local renderer = require("atlas.pulls.diff.atlas.renderer")
 local review_panel = require("atlas.pulls.diff.ui.review_panel")
 local session_api = require("atlas.pulls.diff.session")
-local statusline = require("atlas.pulls.diff.ui.statusline")
 
 ---@class AtlasNativeDiffOptions
 ---@field layout AtlasDiffLayout
@@ -196,6 +195,7 @@ function M.configure_content_window(session, win)
 	end
 	local state = session.viewer_state
 	local side_by_side = state.layout == "side-by-side" and state.left.win ~= nil and state.right.win ~= nil
+	local is_left = vim.api.nvim_win_get_buf(win) == state.left.buf
 	local options = vim.wo[win][0]
 	options.colorcolumn = ""
 	options.cursorbind = false
@@ -211,10 +211,15 @@ function M.configure_content_window(session, win)
 	options.diff = side_by_side
 	options.scrollbind = side_by_side
 	options.wrap = false
-	options.winhighlight = ""
+	-- Neovim marks lines that only exist in either buffer as DiffAdd. In the old buffer those are removals.
+	-- Mostly taken from Diffview.nvim:
+	-- https://github.com/sindrets/diffview.nvim/blob/main/lua/diffview/scene/views/standard/standard_view.lua
+	options.winhighlight = side_by_side
+			and (is_left and "DiffAdd:AtlasDiffRemoveLine,DiffDelete:AtlasDiffDeleteFiller" or "DiffAdd:AtlasDiffAddLine,DiffDelete:AtlasDiffDeleteFiller")
+		or ""
 
 	local file = state.files[state.selected_index]
-	local path = vim.api.nvim_win_get_buf(win) == state.left.buf and state.document.old.path or state.document.new.path
+	local path = is_left and state.document.old.path or state.document.new.path
 	local additions, deletions = diff.file_stats(file)
 	local marker = file.status == "unknown" and "?" or file.status:sub(1, 1):upper()
 	local marker_hl = file.status == "added" and "AtlasTextPositive"
@@ -230,7 +235,7 @@ function M.configure_content_window(session, win)
 		marker_hl,
 		marker
 	)
-	statusline.attach(win)
+	session.statusline:attach(win)
 end
 
 ---@param session AtlasDiffSession
@@ -325,7 +330,7 @@ function M.open_commits(session)
 	state.commits_panel.win = split_window(state.panel.win, state.commits_panel.buf, "below", height)
 	explorer.configure_window(state.commits_panel.win)
 	vim.wo[state.commits_panel.win].winfixheight = true
-	statusline.attach(state.commits_panel.win)
+	session.statusline:attach(state.commits_panel.win)
 	commits.render(session)
 end
 
@@ -378,7 +383,7 @@ function M.toggle_explorer(session)
 	end
 	state.panel.win = split_window(anchor, state.panel.buf, "left", explorer.width(session))
 	explorer.configure_window(state.panel.win)
-	statusline.attach(state.panel.win)
+	session.statusline:attach(state.panel.win)
 	explorer.render(session, state.annotated_paths)
 	M.open_commits(session)
 end
@@ -398,7 +403,7 @@ function M.toggle_review_panel(session, focus)
 	if anchor and vim.api.nvim_win_is_valid(anchor) then
 		local win = review_panel.open(panel, anchor, focus ~= false)
 		if win then
-			statusline.attach(win)
+			session.statusline:attach(win)
 		end
 	end
 end
@@ -499,7 +504,6 @@ function M.create(session, data, target, options)
 	if restore_options then
 		for name, value in pairs({
 			statuscolumn = target.statuscolumn,
-			statusline = target.statusline,
 			winbar = target.winbar,
 		}) do
 			vim.api.nvim_set_option_value(name, value, { win = right_win, scope = "local" })
@@ -546,7 +550,7 @@ function M.create(session, data, target, options)
 	}
 	explorer.configure(session)
 	if panel_win then
-		statusline.attach(panel_win)
+		session.statusline:attach(panel_win)
 	end
 	M.set_document(session, data.document)
 	M.open_commits(session)
@@ -580,7 +584,6 @@ function M.replace_with_loading(session)
 		number = state.number,
 		relativenumber = state.relativenumber,
 		statuscolumn = vim.wo[win].statuscolumn,
-		statusline = vim.wo[win].statusline,
 		winbar = vim.wo[win].winbar,
 		diff_lifecycle = state.lifecycle,
 	}

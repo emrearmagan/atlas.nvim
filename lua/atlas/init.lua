@@ -1,13 +1,14 @@
 local M = {}
 
+local config = require("atlas.config")
 local logger = require("atlas.core.logger")
 local notify = require("atlas.core.notify")
-local picker = require("atlas.picker")
+local picker = require("atlas.ui.picker")
 local providers = require("atlas.providers")
 
 ---@param opts AtlasConfig|nil
 function M.setup(opts)
-	require("atlas.config").setup(opts)
+	config.setup(opts)
 	require("atlas.commands").setup()
 	require("atlas.core.logger").clear()
 end
@@ -23,7 +24,7 @@ local function bootstrap_common()
 	require("atlas.ui.popups.help").register_command(
 		"Commands",
 		commands,
-		{ index = 999, buffer = require("atlas.ui.layout").buf_id("main") }
+		{ index = 999, buffer = require("atlas.ui.dashboard").buf() }
 	)
 end
 
@@ -39,51 +40,33 @@ end
 ---@param id string
 ---@return PullsProvider|IssuesProvider|nil
 local function load_provider(domain, id)
-	local provider = providers.load(id, domain)
-	if not provider then
-		notify.error(string.format("Unknown %s provider: %s", domain, id))
+	if providers.domain(id, domain) == nil then
+		notify.error(string.format("Unknown %s provider: %s", domain, id), { vim_notify = true })
+		return nil
 	end
-	return provider
+	if config.provider_options(id) == nil then
+		notify.error(string.format("%s provider not configured: %s", domain, id), { vim_notify = true })
+		return nil
+	end
+	return providers.load(id, domain)
 end
 
 ---@param domain "pulls"|"issues"
 ---@param id string
 ---@param opts? { initial_view?: table }
 local function open_with_provider(domain, id, opts)
-	local layout = require("atlas.ui.layout")
-
-	layout.ensure_open()
-	bootstrap_common()
 	local provider = load_provider(domain, id)
 	if provider == nil then
 		return
 	end
 
+	require("atlas.ui.dashboard").open(domain, provider.id)
+	bootstrap_common()
 	if domain == "pulls" then
 		---@cast provider PullsProvider
-		layout.set_context(function()
-			require("atlas.pulls").dispose()
-		end, { domain = domain, provider = provider.id })
-		layout.set_render_callback(function()
-			require("atlas.pulls").render()
-			local panel = require("atlas.pulls.ui.panel")
-			if panel.is_open() then
-				panel.render()
-			end
-		end)
 		require("atlas.pulls").init(provider, opts)
 	else
 		---@cast provider IssuesProvider
-		layout.set_context(function()
-			require("atlas.issues").dispose()
-		end, { domain = domain, provider = provider.id })
-		layout.set_render_callback(function()
-			require("atlas.issues").render()
-			local panel = require("atlas.issues.ui.panel")
-			if panel.is_open() then
-				panel.render()
-			end
-		end)
 		require("atlas.issues").init(provider, opts)
 	end
 end
@@ -101,7 +84,7 @@ function M.open(domain, provider_id, opts)
 
 	local ids = configured_provider_ids(domain)
 	if #ids == 0 then
-		notify.error(string.format("No %s providers configured", domain))
+		notify.error(string.format("No %s providers configured", domain), { vim_notify = true })
 		return
 	end
 	if #ids == 1 then
