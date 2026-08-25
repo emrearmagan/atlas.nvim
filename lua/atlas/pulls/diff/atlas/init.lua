@@ -515,7 +515,7 @@ function M.open(session, loading_view, on_done)
 		base_revision = session.source.base_revision,
 		head_revision = session.source.head_revision,
 		filter = function(files)
-			return explorer.filter(files, explorer_options)
+			return explorer.filter(files, explorer_options, session.reviewed_files)
 		end,
 		on_progress = function(message)
 			loading_view:update(message)
