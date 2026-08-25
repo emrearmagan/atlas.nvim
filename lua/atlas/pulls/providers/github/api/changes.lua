@@ -97,68 +97,21 @@ function M.fetch_diff(pr, _opts, on_done)
 end
 
 ---@param pr PullRequest
----@param opts { force_refresh: boolean|nil }|nil
+---@param _opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(entries: PullsDiffstatEntry[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_diffstat(pr, opts, on_done)
-	local repo_slug = pr.repo_full_name or ""
-	if repo_slug == "" then
-		vim.schedule(function()
-			on_done(nil, "Missing repo")
-		end)
-		return nil
-	end
-
-	local cache_key = string.format("github:diffstat:%s:%s", repo_slug, tostring(pr.id))
-	opts = opts or {}
-	if not opts.force_refresh then
-		local cached, ok = cli.get_mem(cache_key)
-		if ok then
-			on_done(cached, nil)
-			return nil
-		end
-	end
-
-	return cli.gh({
-		"pr",
-		"view",
-		tostring(pr.id),
-		"--repo",
-		repo_slug,
-		"--json",
-		"files",
-	}, function(result, err)
-		if err or type(result) ~= "table" then
-			on_done(nil, err or "Failed to fetch files")
-			return
-		end
-
-		local entries = {}
-		for _, file in ipairs(result.files or {}) do
-			local additions = tonumber(file.additions) or 0
-			local deletions = tonumber(file.deletions) or 0
-			local status = "modified"
-			if additions > 0 and deletions == 0 then
-				status = "added"
-			elseif additions == 0 and deletions > 0 then
-				status = "removed"
-			end
-			table.insert(entries, {
-				status = status,
-				path = tostring(file.path or ""),
-				old_path = nil,
-				lines_added = additions,
-				lines_removed = deletions,
-			})
-		end
-
-		cli.set_mem(cache_key, entries)
-		on_done(entries, nil)
-	end, {
-		action = "Fetch PR diffstat",
-		repo = repo_slug,
-		number = pr.id,
-	})
+function M.fetch_diffstat(pr, _opts, on_done)
+	---@cast pr GitHubPullRequest
+	on_done({
+		{
+			status = "modified",
+			path = "",
+			old_path = nil,
+			lines_added = pr.lines_added,
+			lines_removed = pr.lines_removed,
+		},
+	}, nil)
+	return nil
 end
 
 return M
