@@ -167,7 +167,7 @@ M.options = {
 			show_review_panel = false,
 			comment_display = "virtual_lines",
 			review_panel = {
-				height = 10,
+				height = 15,
 			},
 			explorer = {
 				grouped = true,

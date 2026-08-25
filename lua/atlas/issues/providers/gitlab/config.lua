@@ -40,6 +40,7 @@
 
 ---@class AtlasGitLabIssuesSearchConfig
 ---@field scope "created_by_me"|"assigned_to_me"|"all"|nil
+---@field project string|number|nil
 ---@field state "opened"|"closed"|"all"|nil
 ---@field labels string|nil
 ---@field milestone string|nil

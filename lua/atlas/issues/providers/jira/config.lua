@@ -78,7 +78,7 @@
 
 ---@class AtlasJiraProviderConfig
 ---@field base_url string
----@field email string
+---@field email string|nil Required for basic authentication.
 ---@field token string
 ---@field api_type string|nil
 ---@field auth_method "basic"|"bearer"|nil

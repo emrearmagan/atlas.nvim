@@ -318,29 +318,34 @@ function M.fetch_details(pr, pipeline, _opts, on_done)
 	end
 
 	local endpoint = string.format("repos/%s/actions/runs/%d/jobs?per_page=100", repo_slug, run_id)
-	return cli.gh({ "api", endpoint }, function(result, err)
+	return cli.gh({ "api", endpoint, "--paginate", "--slurp" }, function(result, err)
 		if err or type(result) ~= "table" then
 			on_done(nil, err or "Failed to fetch pipeline details")
 			return
 		end
 
 		local jobs = {}
-		for _, raw_job in ipairs(result.jobs or {}) do
-			local job_id = json.safe_str(raw_job.id) or ""
-			local job = {
-				id = job_id,
-				name = tostring(raw_job.name or "Job"),
-				state = detail_state(raw_job.status, raw_job.conclusion),
-				provider_state = json.safe_str(raw_job.conclusion) or json.safe_str(raw_job.status) or "",
-				url = json.safe_str(raw_job.html_url),
-				started_at = raw_job.started_at,
-				duration = duration(raw_job.started_at, raw_job.completed_at),
-			}
-			table.insert(jobs, job)
+		local total_count
+		local pages = result.jobs and { result } or result
+		for _, page in ipairs(pages) do
+			total_count = total_count or tonumber(page.total_count)
+			for _, raw_job in ipairs(page.jobs or {}) do
+				local job_id = json.safe_str(raw_job.id) or ""
+				local job = {
+					id = job_id,
+					name = tostring(raw_job.name or "Job"),
+					state = detail_state(raw_job.status, raw_job.conclusion),
+					provider_state = json.safe_str(raw_job.conclusion) or json.safe_str(raw_job.status) or "",
+					url = json.safe_str(raw_job.html_url),
+					started_at = raw_job.started_at,
+					duration = duration(raw_job.started_at, raw_job.completed_at),
+				}
+				table.insert(jobs, job)
+			end
 		end
 
 		local detailed = vim.tbl_extend("force", {}, pipeline)
-		detailed.job_count = #jobs
+		detailed.job_count = total_count or #jobs
 		detailed.stages = {
 			{
 				name = nil,

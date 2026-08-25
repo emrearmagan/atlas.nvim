@@ -296,7 +296,7 @@ At some point there will probably an extension for lualine.
     ---@type AtlasJiraProviderConfig
     jira = {
       base_url = "https://your-site.atlassian.net",
-      email = "you@example.com",
+      email = "you@example.com", -- Required for basic authentication only.
       --- See: https://support.atlassian.com/atlassian-account/docs/manage-api-tokens-for-your-atlassian-account/
       token = "your_jira_api_token",
       auth_method = "basic", -- "basic" or "bearer", defaults to "basic". If using bearer, set `token` to your API token.

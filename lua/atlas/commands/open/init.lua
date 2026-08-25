@@ -32,7 +32,12 @@ local function open_target(target, provider, entity)
 	elseif target.entity == "issue" then
 		---@cast entity Issue|nil
 		---@cast provider IssuesProvider|nil
-		require("atlas.issues.ui.detail").open(entity or assert(provider.issue_ref(target)), { provider = provider })
+		local detail = require("atlas.issues.ui.detail")
+		if entity then
+			detail.open(entity, { provider = provider })
+		else
+			detail.open_ref(assert(provider.issue_ref(target)), { provider = provider })
+		end
 	else
 		notify.error("Unsupported Atlas target: " .. tostring(target.entity), { vim_notify = true })
 	end

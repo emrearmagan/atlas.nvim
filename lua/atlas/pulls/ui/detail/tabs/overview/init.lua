@@ -30,7 +30,6 @@ local function reset_requests()
 end
 
 function M.reset()
-	reset_requests()
 	state.reset()
 end
 

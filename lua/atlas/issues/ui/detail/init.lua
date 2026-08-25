@@ -258,15 +258,15 @@ function M.select(issue, opts)
 	load_details(issue, opts.force_refresh == true)
 end
 
----@param input Issue|IssueRef
 ---@param opts { provider: IssuesProvider|nil, force_refresh: boolean|nil, on_update: fun(issue: Issue|nil, result: IssuesActionResult|nil)|nil }|nil
-function M.open(input, opts)
+---@return IssuesProvider|nil, boolean force_refresh
+local function prepare_open(opts)
 	opts = opts or {}
 	local provider = opts.provider or state.provider
 	---@cast provider IssuesProvider|nil
 	if provider == nil then
 		notify.error("Issue provider unavailable")
-		return
+		return nil, false
 	end
 
 	state.win, state.buf = detail_ui.open("issues", cleanup, render)
@@ -277,20 +277,28 @@ function M.open(input, opts)
 	if ui and ui.setup then
 		ui.setup()
 	end
+	return provider, opts.force_refresh == true
+end
 
-	---@type Issue|nil
-	local issue = nil
-	if input.title ~= nil then
-		issue = input --[[@as Issue]]
-	end
-	if issue then
-		M.select(issue, { force_refresh = opts.force_refresh })
+---@param issue Issue
+---@param opts { provider: IssuesProvider|nil, force_refresh: boolean|nil, on_update: fun(issue: Issue|nil, result: IssuesActionResult|nil)|nil }|nil
+function M.open(issue, opts)
+	local provider, force_refresh = prepare_open(opts)
+	if provider == nil then
 		return
 	end
+	M.select(issue, { force_refresh = force_refresh })
+end
 
-	local ref = input
+---@param ref IssueRef
+---@param opts { provider: IssuesProvider|nil, force_refresh: boolean|nil, on_update: fun(issue: Issue|nil, result: IssuesActionResult|nil)|nil }|nil
+function M.open_ref(ref, opts)
+	local provider, force_refresh = prepare_open(opts)
+	if provider == nil then
+		return
+	end
 	if
-		opts.force_refresh ~= true
+		not force_refresh
 		and same_ref(state.current_issue or pending_ref, ref)
 		and (state.issue_loading or state.details_loading or state.current_details)
 	then
@@ -301,15 +309,11 @@ function M.open(input, opts)
 	clear_issue()
 	pending_ref = ref
 	state.issue_loading = true
-	load_details(ref, opts.force_refresh == true)
+	load_details(ref, force_refresh)
 	update_spinner()
 	render()
 	state.requests.run(function(done)
-		return provider.capabilities.core.fetch_by_refs(
-			{ ref },
-			{ force_load = opts.force_refresh == true, max_results = 1 },
-			done
-		)
+		return provider.capabilities.core.fetch_by_refs({ ref }, { force_load = force_refresh, max_results = 1 }, done)
 	end, function(issues, err)
 		if state.provider ~= provider or not same_ref(pending_ref, ref) then
 			return
@@ -325,7 +329,7 @@ function M.open(input, opts)
 			notify.error(tostring(err or "Failed to load issue"))
 			return
 		end
-		show_issue(loaded_issue, opts.force_refresh == true)
+		show_issue(loaded_issue, force_refresh)
 	end)
 end
 
@@ -333,7 +337,7 @@ function M.refresh()
 	if not M.is_open() or state.current_issue == nil then
 		return
 	end
-	M.open({ key = state.current_issue.key }, {
+	M.open_ref({ key = state.current_issue.key }, {
 		provider = state.provider,
 		force_refresh = true,
 		on_update = state.on_update,

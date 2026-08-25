@@ -196,7 +196,7 @@ function M.fetch_details(pr, pipeline, _opts, on_done)
 	end
 
 	local endpoint = string.format("/projects/%s/pipelines/%d/jobs?per_page=100", service.url_encode(path), pipeline_id)
-	return service.request("GET", endpoint, nil, function(result, err)
+	return service.fetch_all_pages(endpoint, function(result, err)
 		if err then
 			on_done(nil, err)
 			return

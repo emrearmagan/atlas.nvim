@@ -10,13 +10,14 @@ local logger = require("atlas.core.logger")
 local function get_auth()
 	local jira = config.jira_config()
 	local base_url = jira.base_url
-	local email = jira.email
+	local email = jira.email or ""
 	local token = jira.token
 
-	if not base_url or base_url == "" or not email or email == "" or not token or token == "" then
-		return "",
-			"",
-			"Missing Jira credentials in config (providers.jira.base_url, providers.jira.email, providers.jira.token)"
+	if not base_url or base_url == "" or not token or token == "" then
+		return "", "", "Missing Jira credentials in config (providers.jira.base_url, providers.jira.token)"
+	end
+	if jira.auth_method ~= "bearer" and email == "" then
+		return "", "", "Missing Jira credentials in config (providers.jira.email)"
 	end
 
 	return base_url, email, nil

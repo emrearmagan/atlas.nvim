@@ -105,7 +105,7 @@ up and what's missing.
       ---@type AtlasJiraProviderConfig
       jira = {
         base_url = "https://your-site.atlassian.net",
-        email = "you@example.com",
+        email = "you@example.com", -- Required for basic authentication only.
         -- https://support.atlassian.com/atlassian-account/docs/manage-api-tokens-for-your-atlassian-account/
         token = "your_jira_api_token",
         auth_method = "basic", -- "basic" or "bearer"
