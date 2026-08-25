@@ -9,6 +9,11 @@
 --         api_type = "cloud",
 --         auth_method = "basic", -- "basic" | "bearer"
 --         cache_ttl = 300,
+--       },
+--     },
+--     issues = {
+--       ---@type AtlasJiraIssuesConfig
+--       jira = {
 --
 --         -- Global Jira display settings and per-project custom fields
 --         project_config = {
@@ -26,11 +31,6 @@
 --             },
 --           },
 --         },
---       },
---     },
---     issues = {
---       ---@type AtlasJiraIssuesConfig
---       jira = {
 --         views = {
 --           { name = "Open",       key = "1", jql = "assignee = currentUser() AND resolution = Unresolved ORDER BY updated DESC" },
 --           { name = "Reported",   key = "2", jql = "reporter = currentUser() AND resolution = Unresolved ORDER BY updated DESC" },
@@ -83,9 +83,9 @@
 ---@field api_type string|nil
 ---@field auth_method "basic"|"bearer"|nil
 ---@field cache_ttl number|nil Cache lifetime in seconds. Set to 0 to disable caching.
----@field project_config AtlasJiraProjectConfig|nil
 
 ---@class AtlasJiraIssuesConfig
+---@field project_config AtlasJiraProjectConfig|nil
 ---@field views AtlasJiraViewConfig[]|nil
 ---@field bookmarks AtlasJiraBookmarksConfig|nil
 

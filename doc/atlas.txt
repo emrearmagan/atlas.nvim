@@ -111,29 +111,6 @@ up and what's missing.
         auth_method = "basic", -- "basic" or "bearer"
         api_type = "cloud", -- "cloud" (v3) or "server" (v2)
         cache_ttl = 300, -- Set to 0 to disable caching.
-
-        project_config = {
-          -- Global story points field. Defaults to "customfield_10016".
-          story_points_field = "customfield_10016",
-          issue_types = {
-            ["Maintenance"] = { icon = "", hl_group = "AtlasTextWarning" },
-            ["Infrastructure"] = { icon = "󰒋", hl_group = "AtlasLogInfo" },
-          },
-
-          KAN = {
-            customfield_10003 = {
-              name = "Approvers",
-              format = function(value)
-                if type(value) ~= "table" or #value == 0 then
-                  return nil -- nil hides the field
-                end
-                return table.concat(value, ", ")
-              end,
-              hl_group = "AtlasChipActive",
-              display = "chip", -- "chip" or "table"
-            },
-          },
-        },
       },
     },
 
@@ -567,6 +544,28 @@ overview tab can toggle between Markdown and ADF to inspect the conversion.
   issues = {
     ---@type AtlasJiraIssuesConfig
     jira = {
+      project_config = {
+        -- Global story points field. Defaults to "customfield_10016".
+        story_points_field = "customfield_10016",
+        issue_types = {
+          ["Maintenance"] = { icon = "", hl_group = "AtlasTextWarning" },
+          ["Infrastructure"] = { icon = "󰒋", hl_group = "AtlasLogInfo" },
+        },
+
+        KAN = {
+          customfield_10003 = {
+            name = "Approvers",
+            format = function(value)
+              if type(value) ~= "table" or #value == 0 then
+                return nil -- nil hides the field
+              end
+              return table.concat(value, ", ")
+            end,
+            hl_group = "AtlasChipActive",
+            display = "chip", -- "chip" or "table"
+          },
+        },
+      },
       views = {
         { name = "My Board",  key = "M", layout = "plain",
           jql = "project = KAN AND assignee = currentUser() ORDER BY updated DESC" },
@@ -587,7 +586,7 @@ overview tab can toggle between Markdown and ADF to inspect the conversion.
 <
 
 Jira display settings and custom fields are grouped by project key under
-`providers.jira.project_config`; see |atlas-configuration|.
+`issues.jira.project_config`.
 
 ------------------------------------------------------------------------------
 GITHUB ISSUES                                            *atlas-issues-github*

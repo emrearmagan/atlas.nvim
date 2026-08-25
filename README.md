@@ -302,29 +302,6 @@ At some point there will probably an extension for lualine.
       auth_method = "basic", -- "basic" or "bearer", defaults to "basic". If using bearer, set `token` to your API token.
       api_type = "cloud", -- either "cloud" or "server", defaults to "cloud". Cloud API is v3, server API is v2
       cache_ttl = 300, -- Set to 0 to disable caching.
-
-      project_config = {
-        -- The Jira custom field ID used for story points. Defaults to "customfield_10016".
-        story_points_field = "customfield_10016",
-        issue_types = {
-          ["Maintenance"] = { icon = "", hl_group = "AtlasTextWarning" },
-          ["Infrastructure"] = { icon = "󰒋", hl_group = "AtlasLogInfo" },
-        },
-
-        KAN = {
-          customfield_10003 = {
-            name = "Approvers",
-            format = function(value)
-              if type(value) ~= "table" or #value == 0 then
-                return nil -- nil hides the field
-              end
-              return table.concat(value, ", ")
-            end,
-            hl_group = "AtlasChipActive",
-            display = "chip", -- "chip" or "table"
-          },
-        },
-      },
     },
   },
 
@@ -630,6 +607,29 @@ issues = {
         ["Backlog"]     = "project = KAN AND statusCategory != Done AND (sprint IS EMPTY OR sprint NOT IN openSprints()) ORDER BY Rank ASC",
         ["Next sprint"] = "project = KAN AND sprint in futureSprints() ORDER BY Rank ASC",
         ["My open"]     = "assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC",
+      },
+    },
+
+    project_config = {
+      -- The Jira custom field ID used for story points. Defaults to "customfield_10016".
+      story_points_field = "customfield_10016",
+      issue_types = {
+        ["Maintenance"] = { icon = "", hl_group = "AtlasTextWarning" },
+        ["Infrastructure"] = { icon = "󰒋", hl_group = "AtlasLogInfo" },
+      },
+
+      KAN = {
+        customfield_10003 = {
+          name = "Approvers",
+          format = function(value)
+            if type(value) ~= "table" or #value == 0 then
+              return nil -- nil hides the field
+            end
+            return table.concat(value, ", ")
+          end,
+          hl_group = "AtlasChipActive",
+          display = "chip", -- "chip" or "table"
+        },
       },
     },
   },

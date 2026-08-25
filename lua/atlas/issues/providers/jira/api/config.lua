@@ -6,6 +6,7 @@ local config = require("atlas.config")
 function M.jira_config()
 	local jira_config = vim.tbl_extend("force", {}, config.provider_options("jira") or {})
 	local issues_config = config.domain_options("jira", "issues") or {}
+	jira_config.project_config = issues_config.project_config
 	jira_config.views = issues_config.views
 	jira_config.bookmarks = issues_config.bookmarks
 	---@cast jira_config AtlasJiraConfig
