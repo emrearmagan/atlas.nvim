@@ -1,3 +1,5 @@
+local virtual_lines = require("atlas.ui.components.virtual_lines")
+
 local M = {}
 
 local namespace = vim.api.nvim_create_namespace("atlas_diff_native")
@@ -92,17 +94,30 @@ function M.inline_deleted_lines(document, right_buf, comments, hints)
 	end
 	local win = vim.fn.win_findbuf(right_buf)[1]
 	local textoff = win and vim.fn.getwininfo(win)[1].textoff or 0
+	local width = win and vim.api.nvim_win_get_width(win) or 0
 	for _, hunk in ipairs(document.changes) do
 		if hunk.old_count > 0 then
-			local virtual_lines = {}
+			local rows = {}
 			for line = hunk.old_start, hunk.old_start + hunk.old_count - 1 do
-				local row = {
-					{ string.rep(" ", textoff), "Normal" },
-					{ document.old.lines[line] or "", "AtlasDiffRemoveLine" },
-				}
-				vim.list_extend(row, (hints and hints[line]) or {})
-				table.insert(virtual_lines, row)
-				vim.list_extend(virtual_lines, (comments and comments[line]) or {})
+				local content = document.old.lines[line] or ""
+				local highlights = {}
+				for _, chunk in ipairs((hints and hints[line]) or {}) do
+					local start_col = #content
+					content = content .. chunk[1]
+					table.insert(highlights, {
+						line = 0,
+						start_col = start_col,
+						end_col = #content,
+						hl_group = chunk[2],
+					})
+				end
+				local row = virtual_lines.render({ content }, highlights, {
+					width = math.max(0, width - textoff),
+					background_hl_group = "AtlasDiffRemoveLine",
+				})[1]
+				table.insert(row, 1, { string.rep(" ", textoff), "Normal" })
+				table.insert(rows, row)
+				vim.list_extend(rows, (comments and comments[line]) or {})
 			end
 			local line_count = vim.api.nvim_buf_line_count(right_buf)
 			local anchor = math.max(0, line_count - 1)
@@ -113,7 +128,7 @@ function M.inline_deleted_lines(document, right_buf, comments, hints)
 				anchor, above = math.max(0, hunk.new_start), true
 			end
 			vim.api.nvim_buf_set_extmark(right_buf, inline_namespace, anchor, 0, {
-				virt_lines = virtual_lines,
+				virt_lines = rows,
 				virt_lines_above = above,
 				virt_lines_leftcol = true,
 				priority = 90,

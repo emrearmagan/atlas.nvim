@@ -19,6 +19,7 @@ local groups = {
 
 	AtlasDiffAddLine = { link = "DiffAdd" },
 	AtlasDiffChangeLine = { link = "DiffChange" },
+	AtlasDiffDeleteFiller = { link = "Comment" },
 	AtlasDiffRemoveLine = { link = "DiffDelete" },
 }
 

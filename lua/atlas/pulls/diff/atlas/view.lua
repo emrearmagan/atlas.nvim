@@ -195,6 +195,7 @@ function M.configure_content_window(session, win)
 	end
 	local state = session.viewer_state
 	local side_by_side = state.layout == "side-by-side" and state.left.win ~= nil and state.right.win ~= nil
+	local is_left = vim.api.nvim_win_get_buf(win) == state.left.buf
 	local options = vim.wo[win][0]
 	options.colorcolumn = ""
 	options.cursorbind = false
@@ -210,10 +211,15 @@ function M.configure_content_window(session, win)
 	options.diff = side_by_side
 	options.scrollbind = side_by_side
 	options.wrap = false
-	options.winhighlight = ""
+	-- Neovim marks lines that only exist in either buffer as DiffAdd. In the old buffer those are removals.
+	-- Mostly taken from Diffview.nvim:
+	-- https://github.com/sindrets/diffview.nvim/blob/main/lua/diffview/scene/views/standard/standard_view.lua
+	options.winhighlight = side_by_side
+			and (is_left and "DiffAdd:AtlasDiffRemoveLine,DiffDelete:AtlasDiffDeleteFiller" or "DiffAdd:AtlasDiffAddLine,DiffDelete:AtlasDiffDeleteFiller")
+		or ""
 
 	local file = state.files[state.selected_index]
-	local path = vim.api.nvim_win_get_buf(win) == state.left.buf and state.document.old.path or state.document.new.path
+	local path = is_left and state.document.old.path or state.document.new.path
 	local additions, deletions = diff.file_stats(file)
 	local marker = file.status == "unknown" and "?" or file.status:sub(1, 1):upper()
 	local marker_hl = file.status == "added" and "AtlasTextPositive"
