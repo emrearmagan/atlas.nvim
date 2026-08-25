@@ -13,6 +13,7 @@ local statusline = require("atlas.ui.statusline")
 local ui_comments = require("atlas.pulls.diff.ui.comments")
 
 local sessions = {}
+local review_progress = { "󰝦", "󰪞", "󰪟", "󰪠", "󰪡", "󰪢", "󰪣", "󰪤", "󰪥" }
 
 ---@alias AtlasDiffLayout "side-by-side"|"inline"
 
@@ -114,6 +115,26 @@ local function statusline_items(session)
 	if state.additions and state.deletions then
 		items[#items + 1] = { text = string.format("+%d", state.additions), hl_group = "AtlasFooterSuccess" }
 		items[#items + 1] = { text = string.format("-%d", state.deletions), hl_group = "AtlasFooterError" }
+	end
+	local files = state.files
+	if review and type(files) == "table" and #files > 0 then
+		local reviewed = 0
+		for _, file in ipairs(files) do
+			if session.reviewed_files[file.path] then
+				reviewed = reviewed + 1
+			end
+		end
+		items[#items + 1] = {
+			text = string.format(
+				"%s %d / %d reviewed",
+				review_progress[math.ceil(reviewed / #files * 8) + 1],
+				reviewed,
+				#files
+			),
+			hl_group = reviewed == #files and "AtlasFooterSuccess" or "AtlasFooterInfo",
+			align = "right",
+			priority = 40,
+		}
 	end
 	if #review_comments > 0 then
 		items[#items + 1] = {

@@ -244,6 +244,7 @@ local function toggle_file_reviewed(session)
 	else
 		explorer.render(session, state.annotated_paths)
 	end
+	session:render()
 	local line = explorer.line_for_file(session, index)
 	if line and state.panel.win and vim.api.nvim_win_is_valid(state.panel.win) then
 		vim.api.nvim_win_set_cursor(state.panel.win, { line, 0 })
