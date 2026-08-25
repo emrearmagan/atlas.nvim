@@ -252,8 +252,8 @@ function M.to_pull_request(raw)
 		node_id = json.safe_str(raw.id),
 		review_decision = json.safe_str(raw.reviewDecision),
 		check_status = check_status,
-		lines_added = tonumber(raw.additions),
-		lines_removed = tonumber(raw.deletions),
+		lines_added = tonumber(raw.additions) or 0,
+		lines_removed = tonumber(raw.deletions) or 0,
 	}
 end
 

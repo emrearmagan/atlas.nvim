@@ -2,8 +2,8 @@
 ---@field node_id string|nil
 ---@field review_decision string|nil
 ---@field check_status string|nil
----@field lines_added number|nil
----@field lines_removed number|nil
+---@field lines_added number
+---@field lines_removed number
 
 ---@class GitHubPullRequestDetails : PullRequestDetails
 ---@field assignees PullsAuthor[]
