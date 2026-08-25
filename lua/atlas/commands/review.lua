@@ -21,7 +21,7 @@ function M.open(value)
 	end
 
 	local root = git.repo_root()
-	local info = root and git.local_repository(root, "pulls") or nil
+	local info = root and git.local_repository(root) or nil
 	if not info then
 		no_repository()
 		return

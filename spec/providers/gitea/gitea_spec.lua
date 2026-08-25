@@ -78,15 +78,16 @@ describe("Gitea pulls", function()
 		assert.same({ body = "Reply" }, requests[1].data)
 
 		local reviews = require(REVIEWS)
-		local comment
-		reviews.create_comment = function(_, _, value, _, _, _, done)
-			comment = value
-			done({}, nil)
-		end
+		local request_count = #requests
+		local comment, comment_err
 		pr.source = { commit_hash = "abc" }
-		reviews.add(pr, "Range", { path = "init.lua", start_to = 2, to = 4 }, nil, function() end)
-		assert.equal(2, comment.new_position)
-		assert.is_nil(comment.extra_lines_count)
+		reviews.add(pr, "Range", { path = "init.lua", start_to = 2, to = 4 }, nil, function(value, err)
+			comment = value
+			comment_err = err
+		end)
+		assert.is_nil(comment)
+		assert.equal("Gitea does not support multi-line review comments", comment_err)
+		assert.equal(request_count, #requests)
 	end)
 
 	it("uses the Gitea Actions rerun and log endpoints", function()

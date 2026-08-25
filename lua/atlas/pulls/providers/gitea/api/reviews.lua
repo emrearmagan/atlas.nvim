@@ -63,10 +63,6 @@ function M.create_comment(comment_mapper, pr, raw_comment, commit_id, opts, pend
 	local base = assert(M.endpoint(pr))
 	local pending = opts and opts.pending == true or false
 	local target_review = opts and opts.review or nil
-	if pending and target_review and target_review.pending == true then
-		on_done(nil, "Gitea cannot append comments to an existing pending review; submit or discard it first")
-		return nil
-	end
 	if not pending and target_review and target_review.pending == true then
 		on_done(nil, "Submit the pending review first")
 		return nil
@@ -124,6 +120,10 @@ local function submit(pr, review, event, body, on_done)
 		return nil
 	end
 	body = tostring(body)
+	if event == "COMMENT" and vim.trim(body) == "" then
+		on_done(false, "Review body cannot be empty")
+		return nil
+	end
 	if event == "REQUEST_CHANGES" and vim.trim(body) == "" then
 		on_done(false, "Request changes body cannot be empty")
 		return nil
@@ -181,44 +181,42 @@ local function fetch_comments(pr, on_done)
 	end
 
 	local requests = request_scope.new()
-	-- TODO: Load inline-comment reactions lazily when the diff UI requests them.
-	local function start_comments(review_id)
-		return function(done)
-			return service.request("GET", string.format("%s/reviews/%s/comments", base, review_id), nil, done)
-		end
-	end
 	requests.run(function(done)
-		return pagination.fetch_all(base .. "/reviews", nil, {
-			post_filtered = true,
-		}, done)
+		return pagination.fetch_all(base .. "/reviews", nil, nil, done)
 	end, function(reviews, err)
 		if err then
 			on_done(nil, err)
 			return
 		end
-		local starts = {}
-		for index, review in ipairs(reviews) do
-			local review_id = tostring(review.id)
-			if review.comments_count ~= 0 then
-				starts[tostring(index)] = start_comments(review_id)
+
+		local pending
+		for _, review in ipairs(reviews) do
+			if
+				tostring(review.state or ""):upper() == "PENDING"
+				and (pending == nil or (tonumber(review.id) or -1) > (tonumber(pending.id) or -1))
+			then
+				pending = review
 			end
 		end
-		requests.all(starts, function(values, errors)
-			local comments = {}
-			for index, review in ipairs(reviews) do
-				local key = tostring(index)
-				if starts[key] then
-					local raw, comments_err = values[key], errors[key]
-					if comments_err then
-						on_done(nil, comments_err)
-						return
-					end
-					for _, value in ipairs(raw) do
-						table.insert(comments, mapper.to_comment(value, review))
-					end
-				end
+		if pending == nil or tonumber(pending.comments_count) == 0 then
+			on_done({}, nil, reviews)
+			return
+		end
+
+		-- Gitea has no bulk review-comment endpoint. Only hydrate the active
+		-- pending review instead of issuing one request for every old review.
+		requests.run(function(done)
+			return service.request("GET", string.format("%s/reviews/%s/comments", base, pending.id), nil, done)
+		end, function(raw, comments_err)
+			if comments_err then
+				on_done(nil, comments_err)
+				return
 			end
-			on_done(mapper.thread_comments(comments), nil, reviews)
+			local comments = {}
+			for _, value in ipairs(raw) do
+				table.insert(comments, mapper.to_comment(value, pending))
+			end
+			on_done(comments, nil, reviews)
 		end)
 	end)
 	return requests
@@ -321,8 +319,8 @@ function M.add(pr, content, inline, opts, on_done)
 	local comment = { body = content, path = context.path }
 	local position = context.new_line or context.old_line
 	if context.start_line and context.start_line ~= position then
-		-- TODO: Send the full range once Gitea supports multi-line review comments.
-		position = context.start_line
+		on_done(nil, "Gitea does not support multi-line review comments")
+		return nil
 	end
 	if context.new_line then
 		comment.new_position = position

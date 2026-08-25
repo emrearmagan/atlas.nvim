@@ -133,7 +133,7 @@ end
 
 local function gitea_forgejo_rows(pr)
 	local rows = {}
-	local mergeable = pr._raw.mergeable
+	local mergeable = pr.mergeable
 	if mergeable ~= nil and pr.state ~= "draft" then
 		local value, hl_group
 		if mergeable then
@@ -148,7 +148,7 @@ local function gitea_forgejo_rows(pr)
 
 	local reviewers = {}
 	for _, reviewer in ipairs(pr.reviewers or {}) do
-		local name = helper.user_handle(reviewer)
+		local name = presentation.user_handle(reviewer)
 		if name ~= "" then
 			reviewers[#reviewers + 1] = "@" .. name
 		end
@@ -161,12 +161,22 @@ local function gitea_forgejo_rows(pr)
 	return rows
 end
 
+local function gitea_rows(pr)
+	---@cast pr GiteaPullRequest
+	return gitea_forgejo_rows(pr)
+end
+
+local function forgejo_rows(pr)
+	---@cast pr ForgejoPullRequest
+	return gitea_forgejo_rows(pr)
+end
+
 local provider_rows = {
 	github = github_rows,
 	gitlab = gitlab_rows,
 	bitbucket = bitbucket_rows,
-	gitea = gitea_forgejo_rows,
-	forgejo = gitea_forgejo_rows,
+	gitea = gitea_rows,
+	forgejo = forgejo_rows,
 }
 
 local function render(pr, rows)

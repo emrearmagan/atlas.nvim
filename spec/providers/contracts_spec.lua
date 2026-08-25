@@ -25,11 +25,12 @@ end
 
 describe("providers contracts", function()
 	it("loads pull request providers", function()
-		assert_contract("pulls", { "bitbucket", "github", "gitlab" }, { "search_view", "views" }, {
+		assert_contract("pulls", { "bitbucket", "forgejo", "gitea", "github", "gitlab" }, { "search_view", "views" }, {
 			"fetch_user",
 			"fetch_pullrequests",
 			"fetch_by_refs",
 			"fetch_pullrequest",
+			"search_query",
 			"create_pr",
 			"update_title",
 			"set_draft",
@@ -43,9 +44,9 @@ describe("providers contracts", function()
 	it("loads issue providers", function()
 		assert_contract(
 			"issues",
-			{ "github", "gitlab", "jira" },
+			{ "forgejo", "gitea", "github", "gitlab", "jira" },
 			{ "search_view", "issue_ref", "views" },
-			{ "fetch_user", "fetch_issues", "fetch_by_refs", "fetch_issue" }
+			{ "fetch_user", "fetch_issues", "fetch_by_refs", "fetch_issue", "search_query" }
 		)
 	end)
 
@@ -56,8 +57,8 @@ describe("providers contracts", function()
 		assert_functions(reviews, { "fetch", "submit_review", "approve", "request_changes" }, "bitbucket.pulls.reviews")
 	end)
 
-	it("exposes notifications for GitHub and GitLab", function()
-		for _, id in ipairs({ "github", "gitlab" }) do
+	it("exposes notifications for supported providers", function()
+		for _, id in ipairs({ "forgejo", "gitea", "github", "gitlab" }) do
 			for _, domain in ipairs({ "pulls", "issues" }) do
 				local provider = assert(providers.load(id, domain))
 				assert_functions(

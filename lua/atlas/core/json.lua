@@ -30,20 +30,4 @@ function M.safe_table(v)
 	return v
 end
 
----Return whether v is a decoded JSON list. HTTP status metadata added by
----atlas.core.http is ignored when checking the array keys.
----@param v any
----@return boolean
-function M.is_list(v)
-	if type(v) ~= "table" then
-		return false
-	end
-	for key in pairs(v) do
-		if key ~= "__http_status" and (type(key) ~= "number" or key < 1 or key % 1 ~= 0) then
-			return false
-		end
-	end
-	return true
-end
-
 return M

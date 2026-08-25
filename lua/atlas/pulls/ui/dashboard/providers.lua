@@ -261,8 +261,34 @@ local function default()
 	}
 end
 
+local function gitea()
+	return {
+		reference = "#",
+		columns = columns(icons.general("conversation"), {}, {}),
+		values = function(_pr)
+			---@cast _pr GiteaPullRequest
+			return {}
+		end,
+		highlight = function() end,
+	}
+end
+
+local function forgejo()
+	return {
+		reference = "#",
+		columns = columns(icons.general("conversation"), {}, {}),
+		values = function(_pr)
+			---@cast _pr ForgejoPullRequest
+			return {}
+		end,
+		highlight = function() end,
+	}
+end
+
 local displays = {
 	bitbucket = bitbucket(),
+	forgejo = forgejo(),
+	gitea = gitea(),
 	github = github(),
 	gitlab = gitlab(),
 }

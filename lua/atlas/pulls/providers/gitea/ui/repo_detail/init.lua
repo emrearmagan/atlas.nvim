@@ -1,9 +1,9 @@
----@class GiteaProviderRepoPanel : PullsProviderRepoPanel
+---@type PullsProviderRepoDetail
 local M = {}
 
 local icons = require("atlas.ui.shared.icons")
 
----@return PullsRepoPanelTab[]
+---@return PullsRepoDetailTab[]
 function M.tabs()
 	local overview_icon, overview_hl = icons.general("overview")
 	local issue_icon, issue_hl = icons.issues_provider("gitea", "issue")
@@ -13,30 +13,26 @@ function M.tabs()
 		{
 			key = "overview",
 			label = "Overview",
-			icon = overview_icon,
-			icon_hl = overview_hl,
-			mod = require("atlas.pulls.ui.panel.repo.tabs.overview"),
+			icon = { icon = overview_icon, hl_group = overview_hl },
+			mod = require("atlas.pulls.ui.repo_detail.tabs.overview"),
 		},
 		{
 			key = "issues",
 			label = "Issues",
-			icon = issue_icon,
-			icon_hl = issue_hl,
-			mod = require("atlas.pulls.ui.panel.repo.tabs.issues"),
+			icon = { icon = issue_icon, hl_group = issue_hl },
+			mod = require("atlas.pulls.ui.repo_detail.tabs.issues"),
 		},
 		{
 			key = "branches",
 			label = "Branches",
-			icon = branch_icon,
-			icon_hl = branch_hl,
-			mod = require("atlas.pulls.ui.panel.repo.tabs.branches"),
+			icon = { icon = branch_icon, hl_group = branch_hl },
+			mod = require("atlas.pulls.ui.repo_detail.tabs.branches"),
 		},
 		{
 			key = "tags",
 			label = "Tags",
-			icon = tag_icon,
-			icon_hl = tag_hl,
-			mod = require("atlas.pulls.ui.panel.repo.tabs.tags"),
+			icon = { icon = tag_icon, hl_group = tag_hl },
+			mod = require("atlas.pulls.ui.repo_detail.tabs.tags"),
 		},
 	}
 end

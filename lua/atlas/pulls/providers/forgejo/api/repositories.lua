@@ -1,7 +1,6 @@
 local service = require("atlas.providers.forgejo.client")
 local pagination = require("atlas.providers.forgejo.pagination")
 local request_scope = require("atlas.core.requests")
-local json = require("atlas.core.json")
 
 local M = {}
 
@@ -154,31 +153,31 @@ function M.fetch_issues(repo, state, _opts, on_done)
 		on_done(nil, "Invalid Forgejo repository")
 		return nil
 	end
-	return pagination.fetch_all(base .. "/issues", { state = state, type = "issues" }, {
-		max_items = 50,
-		accept = function(raw)
-			return json.nilify(raw.pull_request) == nil
-		end,
-	}, function(issues, err)
-		if err then
-			on_done(nil, err)
-			return
+	return pagination.fetch_all(
+		base .. "/issues",
+		{ state = state, type = "issues" },
+		{ max_items = 50 },
+		function(issues, err)
+			if err then
+				on_done(nil, err)
+				return
+			end
+			local result = {}
+			for _, raw in ipairs(issues) do
+				local reporter = raw.user
+				table.insert(result, {
+					number = raw.number,
+					title = raw.title,
+					state = raw.state:lower() == "closed" and "closed" or "open",
+					author = reporter.login,
+					created_at = raw.created_at,
+					comments = raw.comments,
+					url = raw.html_url,
+				})
+			end
+			on_done({ entries = result, counts = nil }, nil)
 		end
-		local result = {}
-		for _, raw in ipairs(issues) do
-			local reporter = raw.user
-			table.insert(result, {
-				number = raw.number,
-				title = raw.title,
-				state = raw.state:lower() == "closed" and "closed" or "open",
-				author = reporter.login,
-				created_at = raw.created_at,
-				comments = raw.comments,
-				url = raw.html_url,
-			})
-		end
-		on_done({ entries = result, counts = nil }, nil)
-	end)
+	)
 end
 
 ---@param repo PullsRepoDetails

@@ -70,7 +70,7 @@ function M.fetch(_, on_done)
 					break
 				end
 			end
-			if #result > 0 and #notifications < limit then
+			if #result == page_size and #notifications < limit then
 				fetch(page + 1)
 				return
 			end

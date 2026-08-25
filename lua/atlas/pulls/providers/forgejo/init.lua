@@ -1,6 +1,14 @@
+---@class ForgejoPullRequest : PullRequest
+---@field lines_added number|nil
+---@field lines_removed number|nil
+---@field mergeable boolean|nil
+---@field merge_base string|nil
+
+---@class ForgejoPullRequestDetails : PullRequestDetails, ForgejoPullRequest
+---@field label_ids integer[]
+
 require("atlas.pulls.providers.forgejo.config")
 
-local checks_api = require("atlas.pulls.providers.forgejo.api.checks")
 local comments_api = require("atlas.pulls.providers.forgejo.api.comments")
 local commits_api = require("atlas.pulls.providers.forgejo.api.commits")
 local files_api = require("atlas.pulls.providers.forgejo.api.files")
@@ -9,55 +17,57 @@ local pipelines_api = require("atlas.pulls.providers.forgejo.api.pipelines")
 local pullrequests_api = require("atlas.pulls.providers.forgejo.api.pullrequests")
 local repositories_api = require("atlas.pulls.providers.forgejo.api.repositories")
 local reviews_api = require("atlas.pulls.providers.forgejo.api.reviews")
-local resolver = require("atlas.providers.resolve")
 local git = require("atlas.core.git")
 
----@param view AtlasForgejoPullsSearchConfig
----@return AtlasForgejoPullsSearchConfig
-local function resolve_cur_repo(view)
-	if not view.current_repo then
-		return view
+---@param opts PullsFetchOpts
+---@return string[]
+local function active_statuses(opts)
+	local filters = require("atlas.pulls.state").status_filters or {}
+	local explicit_status = opts.state and opts.state:upper() or nil
+	if explicit_status then
+		return { explicit_status }
 	end
-	local info = git.local_repository(nil, "pulls")
-	if not info or info.provider ~= "forgejo" then
-		return view
+
+	local statuses = {}
+	for _, status in ipairs({ "OPEN", "MERGED", "DECLINED" }) do
+		if filters[status] then
+			table.insert(statuses, status)
+		end
 	end
-	local resolved = vim.tbl_extend("force", {}, view)
-	resolved.repo = info.slug
-	return resolved
+	return #statuses > 0 and statuses or { "OPEN" }
+end
+
+---@param view AtlasPullsViewConfig
+---@param opts PullsFetchOpts
+---@return string
+local function search_query(view, opts)
+	---@cast view AtlasForgejoPullsSearchConfig
+	local repo = vim.trim(view.repo or "")
+	local query = repo == "" and { "type:pulls" } or { "repo:" .. repo }
+	for _, status in ipairs(active_statuses(opts)) do
+		table.insert(query, "is:" .. status:lower())
+	end
+	local extra_keys = vim.tbl_keys(view.extra_params or {})
+	table.sort(extra_keys)
+	for _, key in ipairs(extra_keys) do
+		local value = view.extra_params[key]
+		if value ~= nil and value ~= "" then
+			table.insert(query, key .. ":" .. tostring(value))
+		end
+	end
+	if vim.trim(view.search or "") ~= "" then
+		table.insert(query, view.search)
+	end
+	return table.concat(query, " ")
 end
 
 ---@param view AtlasForgejoPullsSearchConfig
 ---@param opts PullsFetchOpts
 ---@param on_done fun(pulls: PullRequest[], err: string[]|nil)
+---@return { cancel: fun() }|nil
 local function fetch_pullrequests(view, opts, on_done)
-	view = resolve_cur_repo(view)
-	local filters = require("atlas.pulls.state").status_filters or {}
-	local statuses = {}
-	local explicit_status = opts.state and opts.state:upper() or nil
-	if explicit_status then
-		statuses = { explicit_status }
-	else
-		for _, status in ipairs({ "OPEN", "MERGED", "DECLINED" }) do
-			if filters[status] then
-				table.insert(statuses, status)
-			end
-		end
-		if #statuses == 0 then
-			statuses = { "OPEN" }
-		end
-	end
-
+	local statuses = active_statuses(opts)
 	local global = vim.trim(view.repo or "") == ""
-	local query = global and { "type:pulls" } or { "repo:" .. view.repo }
-	for _, status in ipairs(statuses) do
-		table.insert(query, "is:" .. status:lower())
-	end
-	if vim.trim(view.search or "") ~= "" then
-		table.insert(query, view.search)
-	end
-	require("atlas.pulls.state").last_search_query = table.concat(query, " ")
-
 	local fetch = global and pullrequests_api.search_global or pullrequests_api.list
 	return fetch(view, {
 		statuses = statuses,
@@ -68,7 +78,7 @@ local function fetch_pullrequests(view, opts, on_done)
 			on_done({}, { err })
 			return
 		end
-		on_done(pulls, nil)
+		on_done(pulls or {}, nil)
 	end)
 end
 
@@ -89,33 +99,28 @@ local function fetch_conversation(pr, opts, on_done)
 			sequence = sequence + 1
 			table.insert(ordered, {
 				sequence = sequence,
-				item = {
-					id = id,
-					kind = kind,
-					created_on = created_on,
-					entity = entity,
-				},
+				item = { id = id, kind = kind, created_on = created_on, entity = entity },
 			})
 		end
 
 		for _, comment in ipairs(result.comments) do
-			if tostring(comment.id) ~= "__body__" then
-				add("comment", comment.created_on, comment, "comment:" .. tostring(comment.id))
-			end
+			add("comment", comment.created_on, comment, "comment:" .. tostring(comment.id))
 		end
 		for index, event in ipairs(result.events) do
 			local created_on = event.date
-			local id = table.concat({ "activity", created_on, event.kind, tostring(index) }, ":")
-			add("activity", created_on, event, id)
+			add(
+				"activity",
+				created_on,
+				event,
+				table.concat({ "activity", created_on, event.kind, tostring(index) }, ":")
+			)
 		end
-
 		table.sort(ordered, function(left, right)
 			if left.item.created_on == right.item.created_on then
 				return left.sequence < right.sequence
 			end
 			return left.item.created_on < right.item.created_on
 		end)
-
 		local items = {}
 		for _, value in ipairs(ordered) do
 			table.insert(items, value.item)
@@ -130,14 +135,11 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 local function add_reaction(pr, item, key, on_done)
-	local target = item.entity
-	if item.kind == "description" then
-		target = { id = "__body__" }
-	elseif item.kind ~= "comment" then
+	if item.kind ~= "comment" then
 		on_done(false, "This item does not support reactions")
 		return nil
 	end
-	return comments_api.add_reaction(pr, target, key, on_done)
+	return comments_api.add_reaction(pr, item.entity, key, on_done)
 end
 
 ---@return AtlasForgejoPullsViewConfig[]
@@ -147,122 +149,36 @@ local function views()
 	if #configured == 0 then
 		configured = { { name = "Pull Requests", key = "1", layout = "compact" } }
 	end
-	return vim.tbl_map(resolve_cur_repo, configured)
-end
-
----@param value string
----@param parsed AtlasParsedUrl|nil
----@return AtlasTarget|nil, string|nil
-local function resolve(value, parsed)
-	if not parsed then
-		return nil, nil
-	end
-	local path = resolver.path_for_base(parsed, resolver.configured_base("pulls", "forgejo"))
-	if path == nil then
-		return nil, nil
-	end
-
-	local owner, repo, number, tail = path:match("^/([^/]+)/([^/]+)/pulls/(%d+)(.*)$")
-	if owner then
-		if not resolver.valid_tail(tail) then
-			return nil, "Unsupported Forgejo pull request URL"
+	local repo
+	for _, view in ipairs(configured) do
+		if view.current_repo then
+			local target = git.local_repository()
+			if target and target.provider == "forgejo" then
+				repo = target.repo_full_name
+			end
+			break
 		end
-		return {
-			provider = "forgejo",
-			domain = "pulls",
-			entity = "pr",
-			url = value,
-			host = parsed.host,
-			owner = owner,
-			repo = repo,
-			project_path = owner .. "/" .. repo,
-			number = tonumber(number),
-		}
 	end
-
-	owner, repo = path:match("^/([^/]+)/([^/]+)/?$")
-	if owner then
-		return {
-			provider = "forgejo",
-			domain = "pulls",
-			entity = "repo",
-			url = value,
-			host = parsed.host,
-			owner = owner,
-			repo = repo,
-			project_path = owner .. "/" .. repo,
-		}
+	local resolved = {}
+	for i, view in ipairs(configured) do
+		resolved[i] = vim.tbl_extend("force", {}, view)
+		if view.current_repo and repo then
+			resolved[i].repo = repo
+		end
 	end
-
-	return nil, "Unsupported Forgejo URL. Expected a repository or pull request URL"
+	return resolved
 end
 
 ---@param target AtlasTarget
 ---@return AtlasForgejoPullsViewConfig
 local function search_view(target)
-	return { name = "Search", layout = "compact", repo = target.project_path }
-end
-
----@param info AtlasGitRemoteInfo
----@param domain AtlasDomain
----@param entity AtlasEntity
----@param number integer|nil
----@param base_url string
----@return AtlasTarget
-local function target(info, domain, entity, number, base_url)
-	local owner, repo = info.slug:match("^([^/]+)/([^/]+)$")
-	local url = string.format("%s/%s", base_url, info.slug)
-	if entity == "pr" then
-		url = string.format("%s/pulls/%d", url, assert(number))
-	end
-	return {
-		provider = "forgejo",
-		domain = domain,
-		entity = entity,
-		host = info.host,
-		owner = owner,
-		repo = repo,
-		project_path = info.slug,
-		number = number,
-		url = url,
-	}
-end
-
----@param options AtlasForgejoPullsConfig
----@return string[]
-local function repositories(options)
-	local result, seen = {}, {}
-	---@param value string|nil
-	local function add(value)
-		local repo = vim.trim(value or "")
-		if repo ~= "" and not seen[repo] then
-			seen[repo] = true
-			table.insert(result, repo)
-		end
-	end
-
-	for _, view in ipairs(options.views or {}) do
-		add(view.repo)
-	end
-
-	local bookmark_repos = {}
-	for _, bookmark in pairs((options.bookmarks or {}).items or {}) do
-		local repo = vim.trim(bookmark.repo or "")
-		if repo ~= "" then
-			table.insert(bookmark_repos, repo)
-		end
-	end
-	table.sort(bookmark_repos)
-	for _, repo in ipairs(bookmark_repos) do
-		add(repo)
-	end
-	return result
+	return { name = "Search", layout = "compact", repo = target.repo_full_name }
 end
 
 local comments = {
 	fetch_conversation = fetch_conversation,
 	reaction_options = require("atlas.ui.shared.emojis").github(),
-	comment_completion = require("atlas.pulls.providers.forgejo.completion.author").build_completion,
+	comment_completion = require("atlas.providers.forgejo.completion.author").for_pulls,
 	add_comment = comments_api.add,
 	edit_comment = comments_api.edit,
 	delete_comment = comments_api.delete,
@@ -287,18 +203,15 @@ local repository = {
 	delete_branch = repositories_api.delete_branch,
 }
 
-local actions = require("atlas.pulls.providers.forgejo.actions")
-local panel = require("atlas.pulls.providers.forgejo.ui.panel")
-
 return {
-	resolve = resolve,
+	views = views,
 	search_view = search_view,
-	target = target,
-	repositories = repositories,
 	capabilities = {
 		core = {
 			fetch_user = pullrequests_api.fetch_user,
+			search_query = search_query,
 			fetch_pullrequests = fetch_pullrequests,
+			fetch_by_refs = pullrequests_api.fetch_by_refs,
 			fetch_pullrequest = pullrequests_api.get,
 			create_pr = pullrequests_api.create,
 			fetch_default_reviewers = pullrequests_api.fetch_default_reviewers,
@@ -309,12 +222,10 @@ return {
 			decline = pullrequests_api.decline,
 			fetch_description = pullrequests_api.description,
 			fetch_reviewers = pullrequests_api.reviewers,
-			fetch_merge_checks = checks_api.fetch_merge_checks,
 			fetch_activity = comments_api.fetch_activity,
 			fetch_diffstat = files_api.diffstat,
 			fetch_commits = commits_api.fetch,
 			fetch_diff = files_api.diff,
-			views = views,
 		},
 		comments = comments,
 		reviews = reviews,
@@ -327,12 +238,11 @@ return {
 			actions = require("atlas.pulls.providers.forgejo.actions.pipelines"),
 		},
 		notifications = notifications_api,
-		actions = actions,
+		actions = require("atlas.pulls.providers.forgejo.actions"),
 		ui = {
 			setup = require("atlas.providers.forgejo.highlights").setup,
-			render = require("atlas.pulls.providers.forgejo.ui.main").render,
-			panel = panel,
-			repo_panel = require("atlas.pulls.providers.forgejo.ui.repo_panel"),
+			detail = require("atlas.pulls.providers.forgejo.ui.detail"),
+			repo_detail = require("atlas.pulls.providers.forgejo.ui.repo_detail"),
 		},
 	},
 }

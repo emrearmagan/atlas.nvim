@@ -18,14 +18,8 @@ local function user(raw)
 	}
 end
 
----@param raw table
----@return string
-local function repository_slug(raw)
-	return raw.full_name
-end
-
 ---@param values table[]
----@return table[]
+---@return ForgejoIssueLabel[]
 local function labels(values)
 	local result = {}
 	for _, raw in ipairs(values) do
@@ -52,16 +46,17 @@ local function assignees(values)
 end
 
 ---@param raw table|nil
----@return IssueMilestone|nil
+---@return ForgejoIssueMilestone|nil
 local function milestone(raw)
 	raw = json.nilify(raw)
 	if raw == nil then
 		return nil
 	end
-	local open_issues = raw.open_issues
-	local closed_issues = raw.closed_issues
+	local open_issues = tonumber(raw.open_issues) or 0
+	local closed_issues = tonumber(raw.closed_issues) or 0
 	local total = open_issues + closed_issues
 	return {
+		id = raw.id,
 		title = raw.title,
 		progress_percentage = total > 0 and (closed_issues / total) * 100 or nil,
 		open_issues = open_issues,
@@ -111,7 +106,7 @@ M.to_user = user
 
 ---@param raw table
 ---@param scoped_slug string|nil Repository slug supplied by repository-scoped endpoints.
----@return Issue|nil
+---@return ForgejoIssue|nil
 function M.to_issue(raw, scoped_slug)
 	if json.nilify(raw.pull_request) ~= nil then
 		return nil
@@ -119,11 +114,9 @@ function M.to_issue(raw, scoped_slug)
 
 	local number = raw.number
 	local url = raw.html_url
-	local slug = scoped_slug or repository_slug(raw.repository)
+	local slug = scoped_slug or (raw.repository and raw.repository.full_name or "")
 	local state = raw.state
 	local raw_assignees = json.nilify(raw.assignees) or {}
-	local issue_labels = labels(json.nilify(raw.labels) or {})
-	local raw_milestone = json.nilify(raw.milestone)
 	local reporter = user(raw.user)
 	local original_author = nonempty(raw.original_author)
 	if not reporter and original_author then
@@ -150,29 +143,22 @@ function M.to_issue(raw, scoped_slug)
 		duedate = display_due_date,
 		parent = nil,
 		url = url,
-		is_pinned = raw.pin_order > 0,
-		is_subscribed = nil,
-		_raw = {
-			number = number,
-			project_path = slug,
-			description = raw.body,
-			created_at = raw.created_at,
-			updated_at = raw.updated_at,
-			closed_at = json.nilify(raw.closed_at),
-			content_version = json.nilify(raw.content_version),
-			is_locked = json.nilify(raw.is_locked),
-			due_date = due_date,
-			labels = issue_labels,
-			assignees = raw_assignees,
-			milestone = raw_milestone,
-			comment_count = raw.comments,
-		},
+		created_at = json.nilify(raw.created_at),
+		updated_at = json.nilify(raw.updated_at),
+		closed_at = json.nilify(raw.closed_at),
+		comment_count = raw.comments,
+		is_subscribed = json.nilify(raw.subscribed),
+		number = number,
+		repo_full_name = slug,
+		is_pinned = (tonumber(raw.pin_order) or 0) > 0,
+		is_locked = json.nilify(raw.is_locked) == true,
+		due_date = due_date,
 	}
 end
 
 ---@param raw table
 ---@param scoped_slug string|nil Repository slug supplied by repository-scoped endpoints.
----@return IssueDetails|nil
+---@return ForgejoIssueDetails|nil
 function M.to_issue_details(raw, scoped_slug)
 	local issue = M.to_issue(raw, scoped_slug)
 	if issue == nil then
@@ -182,10 +168,8 @@ function M.to_issue_details(raw, scoped_slug)
 	issue.description = json.nilify(raw.body) or ""
 	issue.assignees = assignees(json.nilify(raw.assignees) or {})
 	issue.labels = labels(json.nilify(raw.labels) or {})
-	issue.milestone = milestone(raw.milestone)
+	issue.milestone = milestone(json.nilify(raw.milestone))
 	issue.reactions = nil
-	issue.sub_issues = {}
-	issue.created_at = json.nilify(raw.created_at)
 	return issue
 end
 

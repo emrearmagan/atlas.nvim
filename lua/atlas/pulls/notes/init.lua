@@ -1,5 +1,5 @@
 local notify = require("atlas.core.notify")
-local resolver = require("atlas.providers.resolve")
+local providers = require("atlas.providers")
 local storage = require("atlas.pulls.notes.storage")
 
 local M = {}
@@ -255,19 +255,18 @@ function M.resolve_target(value)
 		return normalize_target({ provider = provider, host = host, repository = repository, id = id })
 	end
 
-	local target, resolve_error = resolver.resolve(value)
+	local target, resolve_error = providers.resolve(value)
 	if not target then
 		return nil, resolve_error
 	end
 	if target.domain ~= "pulls" or target.entity ~= "pr" then
 		return nil, "Expected a pull request URL or canonical reference"
 	end
-	local ref = resolver.pull_request_ref(target)
 	return normalize_target({
 		provider = target.provider,
 		host = target.host,
-		repository = ref.repo_full_name,
-		id = ref.id,
+		repository = target.repo_full_name,
+		id = target.id,
 		url = target.url,
 	})
 end
@@ -276,10 +275,10 @@ end
 ---@return AtlasNoteTarget|nil, string|nil
 function M.target_for_pull_request(pr)
 	local url = pr.link.html
-	local parsed = resolver.parse_url(url)
+	local target = providers.resolve(url)
 	return normalize_target({
 		provider = pr.provider,
-		host = parsed and parsed.host or nil,
+		host = target and target.host or nil,
 		repository = pr.repo_full_name,
 		id = pr.id,
 		url = url,

@@ -4,21 +4,15 @@ local search = require("atlas.pulls.providers.gitea.completion.search")
 local actions = require("atlas.pulls.actions")
 local action_utils = require("atlas.pulls.actions.utils")
 local notes = require("atlas.pulls.notes")
-local picker = require("atlas.picker")
+local picker = require("atlas.ui.picker")
 local core_notify = require("atlas.core.notify")
 
 local M = {}
 
 ---@param ctx AtlasPullActionContext
----@return boolean
-local function has_pr(ctx)
-	return ctx.pr ~= nil
-end
-
----@param ctx AtlasPullActionContext
 ---@return boolean, string|nil
 local function has_repository(ctx)
-	if not has_pr(ctx) then
+	if not ctx.pr then
 		return false, "No PR selected"
 	end
 	if not ctx.pr.repo_full_name:match("^[^/]+/[^/]+$") then
@@ -81,19 +75,16 @@ local function selected_set(values, key)
 	return result
 end
 
----@param prompt string
----@param cancelled_message string
----@param on_confirm fun()
----@param done fun(result: PullsActionResult|nil, err: string|nil)
-local function confirm(prompt, cancelled_message, on_confirm, done)
-	vim.ui.input({ prompt = prompt }, function(input)
-		local answer = vim.trim(tostring(input or "")):lower()
-		if answer ~= "y" and answer ~= "yes" then
-			done({ changed_pr = false, message = cancelled_message }, nil)
-			return
-		end
-		on_confirm()
-	end)
+---@param pr PullRequest
+---@param on_done fun(pr: GiteaPullRequestDetails|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+local function with_details(pr, on_done)
+	if pr.description ~= nil then
+		---@cast pr GiteaPullRequestDetails
+		on_done(pr, nil)
+		return nil
+	end
+	return pullrequests.get(pr, {}, on_done)
 end
 
 ---@type AtlasPullAction[]
@@ -138,24 +129,26 @@ register({
 	run = function(ctx, done)
 		local pr = assert(ctx.pr)
 		local options = action_utils.merge_options()
-		confirm(
-			string.format("Confirm %s merge PR #%s? [y/N]: ", options.method, tostring(pr.id)),
-			"Merge cancelled",
-			function()
-				notify(ctx, "loading", "Merging PR...")
-				pullrequests.merge(pr, options, function(ok, err)
-					if not ok then
-						notify(ctx, "error", "Merge failed: " .. err)
-						done(nil, err)
-						return
-					end
-					notes.clear_for_pull_request(pr)
-					notify(ctx, "success", "Merge succeeded", 1200)
-					done({ changed_pr = true, message = "Merged" }, nil)
-				end)
-			end,
-			done
-		)
+		vim.ui.input({
+			prompt = string.format("Confirm %s merge PR #%s? [y/N]: ", options.method, tostring(pr.id)),
+		}, function(input)
+			local answer = vim.trim(tostring(input or "")):lower()
+			if answer ~= "y" and answer ~= "yes" then
+				done({ changed_pr = false, message = "Merge cancelled" }, nil)
+				return
+			end
+			notify(ctx, "loading", "Merging PR...")
+			pullrequests.merge(pr, options, function(ok, err)
+				if not ok then
+					notify(ctx, "error", "Merge failed: " .. err)
+					done(nil, err)
+					return
+				end
+				notes.clear_for_pull_request(pr)
+				notify(ctx, "success", "Merge succeeded", 1200)
+				done({ changed_pr = true, message = "Merged" }, nil)
+			end)
+		end)
 	end,
 })
 
@@ -190,10 +183,11 @@ register({
 	run = function(ctx, done)
 		local ref = assert(ctx.pr)
 		notify(ctx, "loading", "Loading assignees...")
-		pullrequests.get(ref, { force_load = true }, function(pr, details_err)
-			if details_err then
-				notify(ctx, "error", "Failed to load pull request: " .. details_err)
-				done(nil, details_err)
+		with_details(ref, function(pr, details_err)
+			if details_err or not pr then
+				local err = details_err or "Failed to load Gitea pull request"
+				notify(ctx, "error", "Failed to load pull request: " .. err)
+				done(nil, err)
 				return
 			end
 			pullrequests.list_assignees(pr.repo_full_name, function(users, err)
@@ -265,10 +259,11 @@ register({
 	run = function(ctx, done)
 		local ref = assert(ctx.pr)
 		notify(ctx, "loading", "Loading labels...")
-		pullrequests.get(ref, { force_load = true }, function(pr, details_err)
-			if details_err then
-				notify(ctx, "error", "Failed to load pull request: " .. details_err)
-				done(nil, details_err)
+		with_details(ref, function(pr, details_err)
+			if details_err or not pr then
+				local err = details_err or "Failed to load Gitea pull request"
+				notify(ctx, "error", "Failed to load pull request: " .. err)
+				done(nil, err)
 				return
 			end
 			pullrequests.list_labels(pr.repo_full_name, function(raw_labels, err)
@@ -277,9 +272,9 @@ register({
 					done(nil, err)
 					return
 				end
-				local raw_pr = pr._raw
+				---@cast pr GiteaPullRequestDetails
 				local original_set = {}
-				for _, id in ipairs(raw_pr.label_ids or {}) do
+				for _, id in ipairs(pr.label_ids or {}) do
 					original_set[tostring(id)] = true
 				end
 				local items, selected = {}, {}
@@ -422,26 +417,37 @@ register({
 	run = function(ctx, done)
 		local pr = assert(ctx.pr)
 		local user = ctx.current_user and ctx.current_user.username or ""
-		if user == "" then
-			done(nil, "Missing current Gitea user")
-			return
-		end
-		local function update(current)
+		local function update(current, username)
 			local subscribed = current ~= true
 			notify(ctx, "loading", subscribed and "Subscribing..." or "Unsubscribing...")
-			pullrequests.set_subscription(pr, user, subscribed, function(ok, err)
+			pullrequests.set_subscription(pr, username, subscribed, function(ok, err)
 				if not ok then
 					notify(ctx, "error", err)
 					done(nil, err)
 					return
 				end
-				pr.is_subscribed = subscribed
 				notify(ctx, "success", subscribed and "Subscribed" or "Unsubscribed", 1200)
 				done({ changed_pr = true, message = subscribed and "Subscribed" or "Unsubscribed" }, nil)
 			end)
 		end
+		local function resolve_user(current)
+			if user ~= "" then
+				update(current, user)
+				return
+			end
+			pullrequests.fetch_user(function(current_user, err)
+				local username = current_user and current_user.username or ""
+				if err or username == "" then
+					local message = tostring(err or "Missing current Gitea user")
+					notify(ctx, "error", message)
+					done(nil, message)
+					return
+				end
+				update(current, username)
+			end)
+		end
 		if pr.is_subscribed ~= nil then
-			update(pr.is_subscribed)
+			resolve_user(pr.is_subscribed)
 			return
 		end
 		notify(ctx, "loading", "Checking subscription...")
@@ -451,7 +457,7 @@ register({
 				done(nil, err)
 				return
 			end
-			update(current)
+			resolve_user(current)
 		end)
 	end,
 })

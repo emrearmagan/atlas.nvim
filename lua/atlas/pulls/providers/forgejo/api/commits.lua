@@ -21,19 +21,10 @@ local function cache_key(pr)
 	}, ":")
 end
 
----@param pr PullRequest
----@return string|nil owner, string|nil repo, string|nil id
-local function pull_parts(pr)
+function M.fetch(pr, opts, on_done)
 	local owner, repo = pr.repo_full_name:match("^([^/]+)/([^/]+)$")
 	local id = tostring(pr.id)
-	if owner and id:match("^%d+$") then
-		return owner, repo, id
-	end
-end
-
-function M.fetch(pr, opts, on_done)
-	local owner, repo, id = pull_parts(pr)
-	if not owner then
+	if not owner or not id:match("^%d+$") then
 		on_done(nil, "Invalid Forgejo repository")
 		return nil
 	end
@@ -69,7 +60,7 @@ function M.fetch(pr, opts, on_done)
 				date = author.date or value.created or "",
 				html_url = value.html_url,
 				statuses_url = string.format(
-					"/repos/%s/%s/statuses/%s",
+					"/repos/%s/%s/commits/%s/status",
 					service.url_encode(owner),
 					service.url_encode(repo),
 					service.url_encode(hash)

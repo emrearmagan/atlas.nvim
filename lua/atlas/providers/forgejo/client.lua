@@ -25,7 +25,7 @@ end
 
 ---@return string
 function client.base_url()
-	return (client.config().base_url or ""):gsub("/+$", "")
+	return vim.trim(client.config().base_url or ""):gsub("/+$", "")
 end
 
 function client.cache_ttl()

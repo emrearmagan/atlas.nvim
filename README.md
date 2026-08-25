@@ -5,7 +5,7 @@
 
 # Atlas.nvim
 
-Review GitHub, Bitbucket, and GitLab pull requests and manage Jira, GitHub, and GitLab issues without leaving Neovim.
+Review GitHub, Bitbucket, GitLab, Gitea, and Forgejo pull requests and manage Jira, GitHub, GitLab, Gitea, and Forgejo issues without leaving Neovim.
 
 <p>
   <img alt="GitHub" src="https://img.shields.io/badge/GitHub-181717?style=flat-square&logo=github&logoColor=white">
@@ -32,10 +32,14 @@ Review GitHub, Bitbucket, and GitLab pull requests and manage Jira, GitHub, and 
   - [GitHub](#github)
   - [Bitbucket](#bitbucket)
   - [GitLab](#gitlab)
+  - [Gitea](#gitea)
+  - [Forgejo](#forgejo)
 - [Issues](#issues)
   - [Jira](#jira)
   - [GitHub](#github-issues)
   - [GitLab](#gitlab-issues)
+  - [Gitea](#gitea-issues)
+  - [Forgejo](#forgejo-issues)
 - [Events](#events)
 - [Keymaps](#keymaps)
 - [Contributing](#contributing)
@@ -80,6 +84,7 @@ require("atlas").setup({})
 - Bitbucket: Bitbucket Cloud REST API 2.0 (`api.bitbucket.org`)
 - GitHub: GitHub CLI (`gh`) authenticated with `gh auth login`
 - GitLab: GitLab REST API v4 (`gitlab.com` or self-hosted), Personal Access Token with `api` scope
+- Gitea / Forgejo: REST API v1 and an API token
 
 > [!tip]
 > It's a good idea to run `:checkhealth atlas` to see if everything is set up correctly.
@@ -220,7 +225,7 @@ output:run(cmd, on_exit, { cwd = "/repo" })
 
 `:Atlas create pr` opens a form for the current branch using a configured template or a description generated from its commits. Edit the title and description, choose the target branch and reviewers, set the draft state, and preview the commits and diffstat before submitting.
 
-`:Atlas create issue` opens a provider-specific form for GitHub, GitLab, or Jira with Markdown descriptions, saved templates, and fields such as labels, assignees, milestones, and Jira issue types.
+`:Atlas create issue` opens a provider-specific form for GitHub, GitLab, Gitea, Forgejo, or Jira with Markdown descriptions, saved templates, and provider-specific fields.
 
 ### Notifications
 
@@ -228,7 +233,7 @@ output:run(cmd, on_exit, { cwd = "/repo" })
   <img width="85%" alt="Notifications" src="https://github.com/user-attachments/assets/117b5ad7-3840-4487-bd91-f2f9bf213428">
 </p>
 
-Open GitHub and GitLab notifications inside Atlas, refresh them, open the related item, and mark notifications as read or done without leaving Neovim.
+Open GitHub, GitLab, Gitea, and Forgejo notifications inside Atlas, refresh them, open the related item, and mark notifications as read or done without leaving Neovim.
 
 ### Bookmarks
 
@@ -236,7 +241,7 @@ Open GitHub and GitLab notifications inside Atlas, refresh them, open the relate
   <img width="85%" alt="Bookmarks" src="https://github.com/user-attachments/assets/f008d6af-dfc6-4b65-8af1-94cd6ce9fc99">
 </p>
 
-Turn frequently used GitHub and GitLab searches, Bitbucket repository/project views, or Jira JQL into named shortcuts. Use bookmarks for review queues, recurring project views, and the searches you return to throughout the day.
+Turn frequently used provider searches or Jira JQL into named shortcuts. Use bookmarks for review queues, recurring project views, and the searches you return to throughout the day.
 
 Bookmarks appear alongside your configured views, keeping important queries one action away.
 Star a pull request or issue with `*` to keep it at the top of lists. Starred items are saved locally and appear in the first bookmark entry.
@@ -288,6 +293,20 @@ At some point there will probably an extension for lualine.
       cache_ttl = 300, -- Set to 0 to disable caching.
     },
 
+    ---@type AtlasGiteaProviderConfig
+    gitea = {
+      base_url = "https://gitea.example.com",
+      token = vim.env.GITEA_TOKEN,
+      cache_ttl = 300,
+    },
+
+    ---@type AtlasForgejoProviderConfig
+    forgejo = {
+      base_url = "https://forgejo.example.com",
+      token = vim.env.FORGEJO_TOKEN,
+      cache_ttl = 300,
+    },
+
     ---@type AtlasBitbucketProviderConfig
     bitbucket = {
       user = vim.env.BITBUCKET_USER,
@@ -334,7 +353,7 @@ At some point there will probably an extension for lualine.
 
 ## Pulls
 
-Use `:Atlas pulls [provider]` to browse and manage pull requests from GitHub, Bitbucket, and GitLab.
+Use `:Atlas pulls [provider]` to browse and manage pull requests from GitHub, Bitbucket, GitLab, Gitea, and Forgejo.
 Shared authentication and endpoints are configured in the top-level `providers` table.
 
 ### Pulls Configuration
@@ -559,9 +578,73 @@ pulls = {
 
 </details>
 
+<a id="gitea"></a>
+
+<details>
+<summary><strong>Gitea</strong></summary>
+
+```lua
+pulls = {
+  ---@type AtlasGiteaPullsConfig
+  gitea = {
+    draft_prefix = "WIP:",
+    views = {
+      {
+        name = "Repository",
+        key = "1",
+        repo = "owner/repository",
+        extra_params = { sort = "recentupdate" },
+      },
+      { name = "Current", key = "2", current_repo = true },
+    },
+    bookmarks = {
+      key = "S",
+      label = "Search",
+      items = {
+        ["Authentication"] = { search = "authentication" },
+      },
+    },
+  },
+},
+```
+
+</details>
+
+<a id="forgejo"></a>
+
+<details>
+<summary><strong>Forgejo</strong></summary>
+
+```lua
+pulls = {
+  ---@type AtlasForgejoPullsConfig
+  forgejo = {
+    draft_prefix = "WIP:",
+    views = {
+      {
+        name = "Repository",
+        key = "1",
+        repo = "owner/repository",
+        extra_params = { sort = "recentupdate" },
+      },
+      { name = "Current", key = "2", current_repo = true },
+    },
+    bookmarks = {
+      key = "S",
+      label = "Search",
+      items = {
+        ["Authentication"] = { search = "authentication" },
+      },
+    },
+  },
+},
+```
+
+</details>
+
 ## Issues
 
-Use `:Atlas issues [provider]` to browse and manage Jira, GitHub, and GitLab issues.
+Use `:Atlas issues [provider]` to browse and manage Jira, GitHub, GitLab, Gitea, and Forgejo issues.
 Shared authentication and endpoints are configured in the top-level `providers` table.
 
 ### Issue Configuration
@@ -732,6 +815,74 @@ issues = {
   },
 },
 ```
+
+</details>
+
+<a id="gitea-issues"></a>
+
+<details>
+<summary><strong>Gitea Issues</strong></summary>
+
+```lua
+issues = {
+  ---@type AtlasGiteaIssuesConfig
+  gitea = {
+    views = {
+      {
+        name = "Assigned",
+        key = "1",
+        scope = "assigned",
+        state = "open",
+        extra_params = { milestones = "v1" },
+      },
+      { name = "Current", key = "2", current_repo = true, state = "open" },
+    },
+    bookmarks = {
+      key = "S",
+      label = "Search",
+      items = {
+        ["Bugs"] = { repo = "owner/repository", state = "open", labels = "bug" },
+      },
+    },
+  },
+},
+```
+
+`extra_params` passes additional query parameters to Gitea's issue endpoint.
+
+</details>
+
+<a id="forgejo-issues"></a>
+
+<details>
+<summary><strong>Forgejo Issues</strong></summary>
+
+```lua
+issues = {
+  ---@type AtlasForgejoIssuesConfig
+  forgejo = {
+    views = {
+      {
+        name = "Assigned",
+        key = "1",
+        scope = "assigned",
+        state = "open",
+        extra_params = { milestones = "v1" },
+      },
+      { name = "Current", key = "2", current_repo = true, state = "open" },
+    },
+    bookmarks = {
+      key = "S",
+      label = "Search",
+      items = {
+        ["Bugs"] = { repo = "owner/repository", state = "open", labels = "bug" },
+      },
+    },
+  },
+},
+```
+
+`extra_params` passes additional query parameters to Forgejo's issue endpoint.
 
 </details>
 

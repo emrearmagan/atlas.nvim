@@ -21,7 +21,11 @@ local function open(default, global)
 			if not global then
 				search_view.repo = repo
 			end
-			require("atlas.pulls.ui.main.controller").switch_view(search_view)
+			if require("atlas.ui.dashboard").is_active("pulls", "forgejo") then
+				require("atlas.pulls.ui.dashboard.controller").switch_view(search_view)
+				return
+			end
+			require("atlas").open("pulls", "forgejo", { initial_view = search_view })
 		end,
 	})
 end

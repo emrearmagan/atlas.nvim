@@ -1,7 +1,5 @@
 local M = {}
 
-local logger = require("atlas.core.logger")
-
 ---@param value any
 ---@return string
 local function one_line(value)
@@ -52,63 +50,88 @@ local function curl_fetch(method, url, headers, data, callback, follow_redirects
 	local config_input = table.concat(config, "\n") .. "\n"
 	local args = { "curl", "--config", "-" }
 
+	local out = {}
+	local err_out = {}
 	local cancelled = false
-	local finished = false
-	local function on_exit(result)
+
+	local job_opts = {
+		stdout_buffered = true,
+		stderr_buffered = true,
+		on_stdout = function(_, response)
+			if response then
+				vim.list_extend(out, response)
+			end
+		end,
+		on_stderr = function(_, response)
+			if response then
+				vim.list_extend(err_out, response)
+			end
+		end,
+		on_exit = function(_, code)
+			vim.schedule(function()
+				if cancelled then
+					return
+				end
+
+				local raw = table.concat(out, "\n")
+				local stderr_text = table.concat(err_out, "\n")
+
+				if code ~= 0 then
+					local err = "curl exited with code " .. tostring(code)
+					if stderr_text ~= "" then
+						err = err .. ": " .. one_line(stderr_text)
+					end
+					callback(nil, nil, err)
+					return
+				end
+
+				if raw == "" then
+					callback(nil, nil, "Empty response from server")
+					return
+				end
+
+				local body = raw
+				local http_status = nil
+				local marker_start, _, status_str = raw:find("__ATLAS_HTTP_CODE:(%d+)%s*$")
+				if marker_start ~= nil then
+					body = raw:sub(1, marker_start - 1)
+					http_status = tonumber(status_str)
+				end
+
+				callback(body, http_status, nil)
+			end)
+		end,
+	}
+	local started, result = pcall(vim.fn.jobstart, args, job_opts)
+	local job_id = started and result or -1
+	if job_id <= 0 then
+		local err = started and "Failed to start curl" or one_line(result)
 		vim.schedule(function()
 			if cancelled then
 				return
 			end
-			finished = true
-
-			local raw = result.stdout or ""
-			if result.code ~= 0 then
-				local err = "curl exited with code " .. tostring(result.code)
-				if result.stderr and result.stderr ~= "" then
-					err = err .. ": " .. one_line(result.stderr)
-				end
-				callback(nil, nil, err)
-				return
-			end
-
-			if raw == "" then
-				callback(nil, nil, "Empty response from server")
-				return
-			end
-
-			local body = raw
-			local http_status = nil
-			local marker_start, _, status_str = raw:find("__ATLAS_HTTP_CODE:(%d+)%s*$")
-			if marker_start ~= nil then
-				body = raw:sub(1, marker_start - 1)
-				http_status = tonumber(status_str)
-			end
-
-			callback(body, http_status, nil)
+			callback(nil, nil, err)
 		end)
-	end
-
-	local started, handle = pcall(vim.system, args, { text = true, stdin = config_input }, on_exit)
-	if not started then
-		local err = one_line(handle)
-		logger.logerror("HTTP request failed to start", { method = method, url = url, error = err })
-		vim.schedule(function()
-			if not cancelled then
-				finished = true
-				callback(nil, nil, err)
-			end
+	else
+		local sent, send_err = pcall(function()
+			vim.fn.chansend(job_id, config_input)
+			vim.fn.chanclose(job_id, "stdin")
 		end)
+		if not sent then
+			cancelled = true
+			pcall(vim.fn.jobstop, job_id)
+			vim.schedule(function()
+				callback(nil, nil, one_line(send_err))
+			end)
+		end
 	end
 
 	return {
-		job_id = started and handle.pid or -1,
+		job_id = job_id,
 		cancel = function()
-			if cancelled or finished then
-				return
-			end
 			cancelled = true
-			if started then
-				pcall(handle.kill, handle, 9)
+			if job_id and job_id > 0 then
+				pcall(vim.fn.jobstop, job_id)
 			end
 		end,
 	}

@@ -2,8 +2,8 @@ local M = {}
 local config = require("atlas.config")
 local url = require("atlas.providers.url")
 
----@alias AtlasPullsProviderId "bitbucket"|"github"|"gitlab"|"gitea"
----@alias AtlasIssuesProviderId "jira"|"github"|"gitlab"|"gitea"
+---@alias AtlasPullsProviderId "bitbucket"|"github"|"gitlab"|"gitea"|"forgejo"
+---@alias AtlasIssuesProviderId "jira"|"github"|"gitlab"|"gitea"|"forgejo"
 ---@alias AtlasProviderId AtlasPullsProviderId|AtlasIssuesProviderId
 ---@alias AtlasDomain "pulls"|"issues"
 ---@alias AtlasEntity "pr"|"issue"|"repo"
@@ -77,7 +77,7 @@ function M.load(id, domain)
 	local implementation = require(provider_domain.module)
 	implementation.id = id
 	implementation.name = provider.name
-	if provider_domain.icon ~= nil then
+	if provider_domain.icon then
 		implementation.icon = provider_domain.icon.icon
 		implementation.hl_group = provider_domain.icon.hl_group
 	end
@@ -180,16 +180,35 @@ add({
 
 add({
 	id = "gitea",
-	name = "Gitea / Forgejo",
+	name = "Gitea",
+	resolver = require("atlas.providers.gitea.resolve"),
 	domains = {
 		pulls = {
 			module = "atlas.pulls.providers.gitea",
-			icon = { icon = "", hl_group = "AtlasGiteaTheme" },
+			icon = { icon = "", hl_group = "AtlasGiteaTheme" },
 			bookmark_key = "S",
 		},
 		issues = {
 			module = "atlas.issues.providers.gitea",
-			icon = { icon = "", hl_group = "AtlasGiteaTheme" },
+			icon = { icon = "", hl_group = "AtlasGiteaTheme" },
+			bookmark_key = "S",
+		},
+	},
+})
+
+add({
+	id = "forgejo",
+	name = "Forgejo",
+	resolver = require("atlas.providers.forgejo.resolve"),
+	domains = {
+		pulls = {
+			module = "atlas.pulls.providers.forgejo",
+			icon = { icon = "", hl_group = "AtlasForgejoTheme" },
+			bookmark_key = "S",
+		},
+		issues = {
+			module = "atlas.issues.providers.forgejo",
+			icon = { icon = "", hl_group = "AtlasForgejoTheme" },
 			bookmark_key = "S",
 		},
 	},

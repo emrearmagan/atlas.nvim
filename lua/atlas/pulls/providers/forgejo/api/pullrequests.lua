@@ -100,48 +100,32 @@ local function run_requests(requests, on_done)
 end
 
 ---@param opts PullsCreatePROpts
----@return { endpoint: string, payload: table, reviewers: string[] }|nil, string|nil
-local function create_context(opts)
+---@param on_done fun(result: PullsCreatePRResult|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function api.create(opts, on_done)
 	local endpoint = repo_endpoint(opts.repo_slug)
 	if not endpoint then
-		return nil, "Invalid Forgejo repository"
+		on_done(nil, "Invalid Forgejo repository")
+		return nil
 	end
 	local title = vim.trim(opts.title)
 	local head = vim.trim(opts.head)
 	local base = vim.trim(opts.base)
 	if title == "" or head == "" or base == "" then
-		return nil, "Title, head, and base are required"
-	end
-	if head == base then
-		return nil, "Head and base branches must differ"
-	end
-	local context = {
-		endpoint = endpoint,
-		payload = {
-			base = base,
-			head = head,
-			title = with_draft_state(title, opts.draft == true),
-			body = opts.body,
-		},
-		reviewers = reviewer_logins(opts.reviewers),
-	}
-	return context, nil
-end
-
----@param opts PullsCreatePROpts
----@param on_done fun(result: PullsCreatePRResult|nil, err: string|nil)
----@return { cancel: fun() }|nil
-local function create(opts, on_done)
-	local context, err = create_context(opts)
-	if not context then
-		on_done(nil, err)
+		on_done(nil, "Title, head, and base are required")
 		return nil
 	end
-
-	local requests = request_scope.new()
-	requests.run(function(done)
-		return service.request("POST", context.endpoint .. "/pulls", context.payload, done)
-	end, function(raw, request_err)
+	if head == base then
+		on_done(nil, "Head and base branches must differ")
+		return nil
+	end
+	local payload = {
+		base = base,
+		head = head,
+		title = with_draft_state(title, opts.draft == true),
+		body = opts.body,
+	}
+	return service.request("POST", endpoint .. "/pulls", payload, function(raw, request_err)
 		if request_err then
 			on_done(nil, request_err)
 			return
@@ -152,36 +136,13 @@ local function create(opts, on_done)
 		if (raw.draft == true) ~= (opts.draft == true) then
 			table.insert(warnings, "draft state could not be applied (check draft_prefix)")
 		end
-		local function update_message()
-			result.message = "Pull request created"
-			if #warnings > 0 then
-				result.message = result.message .. "; " .. table.concat(warnings, "; ")
-			end
+		result.message = "Pull request created"
+		if #warnings > 0 then
+			result.message = result.message .. "; " .. table.concat(warnings, "; ")
 		end
-		update_message()
-		if #context.reviewers == 0 then
-			on_done(result, nil)
-			return
-		end
-		requests.run(function(done)
-			return service.request(
-				"POST",
-				string.format("%s/pulls/%s/requested_reviewers", context.endpoint, tostring(raw.number)),
-				{ reviewers = context.reviewers, team_reviewers = {} },
-				done
-			)
-		end, function(_, reviewers_err)
-			if reviewers_err then
-				table.insert(warnings, "reviewers could not be requested")
-				update_message()
-			end
-			on_done(result, nil)
-		end)
+		on_done(result, nil)
 	end)
-	return requests
 end
-
-api.create = create
 
 local function detail_cache_key(pr)
 	return string.format("%s:pr:%s:%s", cache_scope(), pr.repo_full_name, tostring(pr.id))
@@ -194,6 +155,7 @@ local function list_cache_key(view, opts, global)
 			global = global,
 			repo = view.repo,
 			search = view.search,
+			extra_params = view.extra_params,
 			statuses = opts.statuses,
 			pagelen = opts.pagelen,
 		})
@@ -227,37 +189,16 @@ local function list(view, opts, on_done)
 		on_done(nil, "Forgejo pull view requires repo = 'owner/repo'")
 		return nil
 	end
+	if vim.trim(tostring(view.search or "")) ~= "" then
+		on_done(nil, "Forgejo does not support text search in repository pull views; use a global view")
+		return nil
+	end
 	local selected = {}
 	for _, status in ipairs(opts.statuses) do
 		selected[status:upper()] = true
 	end
 	local api_state = selected.OPEN and (selected.MERGED or selected.DECLINED) and "all"
 		or (selected.OPEN and "open" or "closed")
-	local search = vim.trim(tostring(view.search or "")):lower()
-
-	---@param raw table
-	---@return boolean
-	local function accept(raw)
-		local pull_state = mapper.pull_state(raw)
-		local status = pull_state == "merged" and "MERGED" or pull_state == "declined" and "DECLINED" or "OPEN"
-		if not selected[status] then
-			return false
-		end
-		if search == "" then
-			return true
-		end
-		local user = raw.user
-		local haystack = table
-			.concat({
-				tostring(raw.number or ""),
-				tostring(raw.title or ""),
-				tostring(raw.body or ""),
-				tostring(user.login or ""),
-			}, "\n")
-			:lower()
-		return haystack:find(search, 1, true) ~= nil
-	end
-
 	local cache_key = list_cache_key(view, opts, false)
 	if opts.force_load ~= true then
 		local cached, ok = service.get_cache(cache_key)
@@ -267,15 +208,20 @@ local function list(view, opts, on_done)
 		end
 	end
 
-	return pagination.fetch_all(endpoint .. "/pulls", { state = api_state }, {
+	local params = vim.tbl_extend("force", {}, view.extra_params or {})
+	params.state = api_state
+	return pagination.fetch_all(endpoint .. "/pulls", params, {
 		max_items = opts.pagelen,
-		accept = accept,
 	}, function(raw, err)
 		if err then
 			on_done(nil, err)
 			return
 		end
-		local pulls = mapper.to_pull_requests(raw)
+		local pulls = mapper.to_pull_requests(vim.tbl_filter(function(value)
+			local pull_state = mapper.pull_state(value)
+			local status = pull_state == "merged" and "MERGED" or (pull_state == "declined" and "DECLINED" or "OPEN")
+			return selected[status] == true
+		end, raw))
 		service.set_cache(cache_key, pulls)
 		on_done(pulls, nil)
 	end)
@@ -285,6 +231,7 @@ end
 ---@param opts PullsFetchOpts
 ---@param on_done fun(pr: PullRequestDetails|nil, err: string|nil)
 function api.get(ref, opts, on_done)
+	opts = opts or {}
 	local endpoint = pull_endpoint(ref)
 	local repo = repo_endpoint(ref.repo_full_name)
 	if not endpoint then
@@ -304,24 +251,66 @@ function api.get(ref, opts, on_done)
 		details = function(done)
 			return service.request("GET", endpoint, nil, done)
 		end,
-		reactions = function(done)
-			return pagination.fetch_all(
-				string.format("%s/issues/%s/reactions", assert(repo), tostring(ref.id)),
+		subscription = function(done)
+			return service.request(
+				"GET",
+				string.format("%s/issues/%s/subscriptions/check", assert(repo), tostring(ref.id)),
 				nil,
-				nil,
-				done
+				function(raw, err)
+					done(raw and raw.subscribed, err)
+				end
 			)
 		end,
 	}, function(values, errors)
-		local request_err = errors.details or errors.reactions
-		if request_err then
-			on_done(nil, request_err)
+		if errors.details then
+			on_done(nil, errors.details)
 			return
 		end
 		local pr = mapper.to_pull_request_details(values.details)
-		pr.reactions = mapper.reaction_counts(values.reactions)
+		if errors.subscription == nil then
+			pr.is_subscribed = values.subscription
+		end
 		service.set_memory_cache(cache_key, pr)
 		on_done(pr, nil)
+	end)
+	return requests
+end
+
+---@param refs PullRequestRef[]
+---@param _opts PullsFetchOpts|nil
+---@param on_done fun(pulls: PullRequest[], err: string|nil)
+---@return { cancel: fun() }|nil
+function api.fetch_by_refs(refs, _opts, on_done)
+	if #refs == 0 then
+		on_done({}, nil)
+		return nil
+	end
+	local starts = {}
+	for index, ref in ipairs(refs) do
+		local endpoint = pull_endpoint(ref)
+		if not endpoint then
+			on_done({}, "Invalid Forgejo pull request reference")
+			return nil
+		end
+		starts[index] = function(done)
+			return service.request("GET", endpoint, nil, function(raw, err)
+				done(raw and mapper.to_pull_request(raw) or nil, err)
+			end)
+		end
+	end
+	local requests = request_scope.new()
+	requests.all(starts, function(values, errors)
+		local pulls = {}
+		for index = 1, #refs do
+			if errors[index] then
+				on_done({}, errors[index])
+				return
+			end
+			if values[index] then
+				table.insert(pulls, values[index])
+			end
+		end
+		on_done(pulls, nil)
 	end)
 	return requests
 end
@@ -343,9 +332,7 @@ function api.review_data(pr, _, on_done)
 		on_done(nil, "Invalid Forgejo repository")
 		return nil
 	end
-	return pagination.fetch_all(endpoint .. "/reviews", nil, {
-		post_filtered = true,
-	}, function(raw, err)
+	return pagination.fetch_all(endpoint .. "/reviews", nil, nil, function(raw, err)
 		if err then
 			on_done(nil, err)
 			return
@@ -363,6 +350,10 @@ end
 ---@param opts { repo_slug: string, repo_root: string|nil, head: string, base: string, pr: PullRequest|nil }
 ---@param on_done fun(reviewers: PullsCreatePRReviewer[]|nil, err: string|nil)
 function api.fetch_default_reviewers(opts, on_done)
+	if not opts.pr then
+		on_done({}, nil)
+		return nil
+	end
 	local endpoint = repo_endpoint(opts.repo_slug)
 	if not endpoint then
 		on_done(nil, "Invalid Forgejo repository")
@@ -383,10 +374,8 @@ function api.fetch_default_reviewers(opts, on_done)
 			return api.fetch_user(done)
 		end,
 	}
-	if opts.pr then
-		starts.reviews = function(done)
-			return api.review_data(opts.pr, {}, done)
-		end
+	starts.reviews = function(done)
+		return api.review_data(opts.pr, {}, done)
 	end
 	requests.all(starts, function(values, errors)
 		local err = errors.candidates or errors.current_user or errors.reviews
@@ -459,7 +448,11 @@ local function patch_title(pr, title, on_done)
 		local updated = mapper.to_pull_request_details(raw)
 		pr.title = updated.title
 		pr.state = updated.state
-		pr._raw = updated._raw
+		---@cast pr ForgejoPullRequest
+		pr.mergeable = updated.mergeable
+		pr.merge_base = updated.merge_base
+		pr.lines_added = updated.lines_added
+		pr.lines_removed = updated.lines_removed
 		service.delete_memory_cache(detail_cache_key(pr))
 		invalidate_list_cache()
 		on_done(true, nil)
@@ -546,7 +539,11 @@ function api.update_description(pr, description, on_done)
 		end
 		local updated = mapper.to_pull_request_details(raw)
 		pr.description = updated.description
-		pr._raw = updated._raw
+		---@cast pr ForgejoPullRequestDetails
+		pr.mergeable = updated.mergeable
+		pr.merge_base = updated.merge_base
+		pr.lines_added = updated.lines_added
+		pr.lines_removed = updated.lines_removed
 		service.delete_memory_cache(detail_cache_key(pr))
 		invalidate_list_cache()
 		on_done(true, nil)
@@ -650,7 +647,7 @@ function api.update_assignees(pr, assignees, on_done)
 			return
 		end
 		local updated = mapper.to_pull_request_details(raw)
-		pr.assignees, pr._raw = updated.assignees, updated._raw
+		pr.assignees = updated.assignees
 		service.delete_memory_cache(detail_cache_key(pr))
 		invalidate_list_cache()
 		on_done(true, nil)
@@ -672,7 +669,9 @@ function api.update_labels(pr, labels, on_done)
 			return
 		end
 		local updated = mapper.to_pull_request_details(raw)
-		pr.labels, pr._raw = updated.labels, updated._raw
+		pr.labels = updated.labels
+		---@cast pr ForgejoPullRequestDetails
+		pr.label_ids = updated.label_ids
 		service.delete_memory_cache(detail_cache_key(pr))
 		invalidate_list_cache()
 		on_done(true, nil)
@@ -806,7 +805,7 @@ function api.list(view, opts, on_done)
 	return list(view, opts, on_done)
 end
 
----@param view { search: string|nil }
+---@param view AtlasForgejoPullsSearchConfig
 ---@param opts { statuses: string[], pagelen: number, force_load: boolean }
 ---@param on_done fun(pulls: PullRequest[]|nil, err: string|nil)
 function api.search_global(view, opts, on_done)
@@ -827,17 +826,12 @@ function api.search_global(view, opts, on_done)
 
 	local requests = request_scope.new()
 	requests.run(function(done)
-		return pagination.fetch_all("/repos/issues/search", {
-			["type"] = "pulls",
-			q = vim.trim(tostring(view.search or "")),
-			state = api_state,
-		}, {
+		local params = vim.tbl_extend("force", {}, view.extra_params or {})
+		params.type = "pulls"
+		params.q = vim.trim(tostring(view.search or ""))
+		params.state = api_state
+		return pagination.fetch_all("/repos/issues/search", params, {
 			max_items = opts.pagelen,
-			accept = function(raw)
-				local pr = mapper.to_search_pull_request(raw)
-				local status = pr.state == "merged" and "MERGED" or pr.state == "declined" and "DECLINED" or "OPEN"
-				return selected[status] == true
-			end,
 		}, done)
 	end, function(raw, err)
 		if err then
@@ -846,7 +840,11 @@ function api.search_global(view, opts, on_done)
 		end
 		local prs = {}
 		for _, value in ipairs(raw) do
-			table.insert(prs, mapper.to_search_pull_request(value))
+			local pr = mapper.to_search_pull_request(value)
+			local status = pr.state == "merged" and "MERGED" or pr.state == "declined" and "DECLINED" or "OPEN"
+			if selected[status] then
+				table.insert(prs, pr)
+			end
 		end
 		service.set_cache(cache_key, prs)
 		on_done(prs, nil)

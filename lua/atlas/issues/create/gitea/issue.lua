@@ -2,17 +2,16 @@ local M = {}
 
 local form = require("atlas.ui.popups.form")
 local notify = require("atlas.core.notify")
-local picker = require("atlas.picker")
-local pulls_helper = require("atlas.pulls.ui.main.helper")
+local picker = require("atlas.ui.picker")
+local pulls_helper = require("atlas.pulls.ui.presentation")
 local icons = require("atlas.ui.shared.icons")
 local templates = require("atlas.issues.templates")
-local api = require("atlas.issues.providers.gitea.api").issues
+local api = require("atlas.issues.providers.gitea.api.issues")
 local request_scope = require("atlas.core.requests")
-local mapper = require("atlas.issues.providers.gitea.api.mapper")
 
 ---@class GiteaCreateIssueState
 ---@field fields { repo_slug: string, labels: table[], assignees: IssueUser[], milestone: table|nil, due_date: string|nil }
----@field issue Issue|nil
+---@field issue GiteaIssueDetails|nil
 ---@field layout AtlasFormLayout
 ---@field content_width integer
 ---@field is_submitting boolean
@@ -269,25 +268,6 @@ local function pick_due_date(state)
 	end)
 end
 
----@param value string|nil
----@return string|nil
-local function api_due_date(value)
-	return value and (value .. "T00:00:00Z") or nil
-end
-
----@param state GiteaCreateIssueState
----@return integer[], string[]
-local function selected_values(state)
-	local labels, assignees = {}, {}
-	for _, label in ipairs(state.fields.labels) do
-		table.insert(labels, label.id)
-	end
-	for _, user in ipairs(state.fields.assignees) do
-		table.insert(assignees, user.account_id)
-	end
-	return labels, assignees
-end
-
 ---@param state GiteaCreateIssueState
 ---@param result table
 local function finish(state, result)
@@ -310,9 +290,15 @@ local function submit(state)
 		form.notify("warn", "Title is required", { timeout = 1500 })
 		return
 	end
-	local labels, assignees = selected_values(state)
+	local labels, assignees = {}, {}
+	for _, label in ipairs(state.fields.labels) do
+		table.insert(labels, label.id)
+	end
+	for _, user in ipairs(state.fields.assignees) do
+		table.insert(assignees, user.account_id)
+	end
 	local milestone = state.fields.milestone and state.fields.milestone.id or nil
-	local due_date = api_due_date(state.fields.due_date)
+	local due_date = state.fields.due_date and (state.fields.due_date .. "T00:00:00Z") or nil
 	state.is_submitting = true
 	form.notify("loading", state.issue and "Updating issue..." or "Creating issue...")
 
@@ -360,14 +346,14 @@ local function submit(state)
 			return
 		end
 		state.requests.run(function(done)
-			return api.update_labels(state.issue.key, labels, done)
+			return api.update_labels(state.issue, labels, done)
 		end, function(ok, label_err)
 			if not ok then
 				failed(label_err or "Issue updated, but labels could not be updated")
 				return
 			end
 			finish(state, {
-				number = updated._raw.number,
+				number = updated.number,
 				key = updated.key,
 				url = updated.url,
 				issue = updated,
@@ -376,19 +362,7 @@ local function submit(state)
 	end)
 end
 
----@param raw table[]
----@return IssueUser[]
-local function initial_assignees(raw)
-	local result = {}
-	for _, user in ipairs(raw) do
-		local mapped = mapper.to_user(user)
-		---@cast mapped IssueUser
-		table.insert(result, mapped)
-	end
-	return result
-end
-
----@param opts { repo_slug: string, issue: Issue|nil, on_done: fun(result: table|nil, err: string|nil)|nil }
+---@param opts { repo_slug: string, issue: GiteaIssueDetails|nil, on_done: fun(result: table|nil, err: string|nil)|nil }
 function M.open(opts)
 	require("atlas.ui.shared.highlights").setup()
 	require("atlas.pulls.ui.highlights").setup()
@@ -396,12 +370,11 @@ function M.open(opts)
 
 	local labels, assignees, milestone, due_date, initial_body = {}, {}, nil, nil, ""
 	if opts.issue then
-		local raw = opts.issue._raw
-		labels = vim.deepcopy(raw.labels)
-		assignees = initial_assignees(raw.assignees)
-		milestone = vim.deepcopy(raw.milestone)
-		due_date = raw.due_date and raw.due_date:match("^%d%d%d%d%-%d%d%-%d%d") or nil
-		initial_body = raw.description
+		labels = vim.deepcopy(opts.issue.labels or {})
+		assignees = vim.deepcopy(opts.issue.assignees or {})
+		milestone = vim.deepcopy(opts.issue.milestone)
+		due_date = opts.issue.due_date and opts.issue.due_date:match("^%d%d%d%d%-%d%d%-%d%d") or nil
+		initial_body = opts.issue.description or ""
 	end
 	---@type GiteaCreateIssueState
 	local state = {

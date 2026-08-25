@@ -4,31 +4,21 @@ local mapper = require("atlas.issues.providers.gitea.api.mapper")
 
 local M = {}
 
----@param key string
----@return string|nil
-local function endpoint(key)
-	local slug, number = mapper.parse_key(key)
-	local owner, repo = slug:match("^([^/]+)/([^/]+)$")
-	if not owner or not number then
-		return nil
-	end
-	return string.format("/repos/%s/%s/issues/%d/timeline", service.url_encode(owner), service.url_encode(repo), number)
-end
-
----@param key string
+---@param issue GiteaIssue
 ---@param _ table|nil
 ---@param on_done fun(result: { comments: IssueComment[], events: IssueActivityEntry[] }|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.list(key, _, on_done)
-	local path = endpoint(key)
-	if path == nil then
+function M.list(issue, _, on_done)
+	local owner, repo = issue.repo_full_name:match("^([^/]+)/([^/]+)$")
+	local number = issue.number
+	if not owner or not number then
 		on_done(nil, "Invalid Gitea issue key")
 		return nil
 	end
+	local path =
+		string.format("/repos/%s/%s/issues/%d/timeline", service.url_encode(owner), service.url_encode(repo), number)
 
-	return pagination.fetch_all(path, nil, {
-		post_filtered = true,
-	}, function(values, err)
+	return pagination.fetch_all(path, nil, nil, function(values, err)
 		if err then
 			on_done(nil, err)
 			return

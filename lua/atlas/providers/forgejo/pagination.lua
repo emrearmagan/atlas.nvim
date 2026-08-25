@@ -5,7 +5,7 @@ local M = {}
 
 ---@param endpoint string
 ---@param params table<string, any>|nil
----@param opts { page_size?: integer, max_items?: integer, accept?: fun(value: any): boolean, post_filtered?: boolean }|nil
+---@param opts { page_size?: integer, max_items?: integer }|nil
 ---@param on_done fun(values: table[]|nil, err: string|nil)
 ---@return { cancel: fun() }
 function M.fetch_all(endpoint, params, opts, on_done)
@@ -46,19 +46,16 @@ function M.fetch_all(endpoint, params, opts, on_done)
 				finish(nil, err)
 				return
 			end
-			-- Forgejo returns JSON null after the final timeline page.
 			local items = result == vim.NIL and {} or result
 			for _, value in ipairs(items) do
-				if opts.accept == nil or opts.accept(value) then
-					table.insert(values, value)
-					if max_items and #values >= max_items then
-						finish(values, nil)
-						return
-					end
+				table.insert(values, value)
+				if max_items and #values >= max_items then
+					finish(values, nil)
+					return
 				end
 			end
 
-			if #items == 0 or (not opts.post_filtered and #items < page_size) then
+			if #items < page_size then
 				finish(values, nil)
 				return
 			end

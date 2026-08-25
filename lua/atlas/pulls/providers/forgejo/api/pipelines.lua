@@ -1,4 +1,3 @@
-local pagination = require("atlas.providers.forgejo.pagination")
 local providers = require("atlas.pulls.providers")
 local service = require("atlas.providers.forgejo.client")
 local request_scope = require("atlas.core.requests")
@@ -40,41 +39,6 @@ function M.state(value)
 		return "STOPPED"
 	end
 	return "UNKNOWN"
-end
-
----@param slug string|nil
----@param sha string|nil
----@return string|nil
-local function status_endpoint(slug, sha)
-	local owner, repo = tostring(slug or ""):match("^([^/]+)/([^/]+)$")
-	sha = tostring(sha or "")
-	if not owner or sha == "" then
-		return nil
-	end
-	return string.format(
-		"/repos/%s/%s/statuses/%s",
-		service.url_encode(owner),
-		service.url_encode(repo),
-		service.url_encode(sha)
-	)
-end
-
----@param endpoint string
----@param on_done fun(result: table[]|nil, err: string|nil)
----@return { cancel: fun() }|nil
-local function fetch_statuses(endpoint, on_done)
-	local seen = {}
-	return pagination.fetch_all(endpoint, { sort = "leastindex" }, {
-		accept = function(raw)
-			local context = raw.context or ""
-			local key = "context:" .. context
-			if seen[key] then
-				return false
-			end
-			seen[key] = true
-			return true
-		end,
-	}, on_done)
 end
 
 ---@param raw table
@@ -154,19 +118,26 @@ end
 ---@param on_done fun(pipelines: PullsPipeline[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch(pr, _opts, on_done)
-	local sha = pr.source.commit_hash
-	local endpoint = status_endpoint(pr.repo_full_name, sha)
-	if not endpoint then
+	local sha = tostring(pr.source.commit_hash or "")
+	local owner, repo = pr.repo_full_name:match("^([^/]+)/([^/]+)$")
+	if not owner or sha == "" then
 		on_done(nil, "Invalid Forgejo repository or source commit")
 		return nil
 	end
+	local endpoint = string.format(
+		"/repos/%s/%s/commits/%s/status",
+		service.url_encode(owner),
+		service.url_encode(repo),
+		service.url_encode(sha)
+	)
 
-	return fetch_statuses(endpoint, function(result, err)
+	return service.request("GET", endpoint, nil, function(raw, err)
 		if err then
 			on_done(nil, err)
 			return
 		end
-		on_done(M.map(result, sha, pr.repo_full_name), nil)
+		local statuses = type(raw.statuses) == "table" and raw.statuses or {}
+		on_done(M.map(statuses, sha, pr.repo_full_name), nil)
 	end)
 end
 
@@ -181,12 +152,13 @@ function M.fetch_commit_status(commit, _opts, on_done)
 		return nil
 	end
 
-	return fetch_statuses(endpoint, function(result, err)
+	return service.request("GET", endpoint, nil, function(raw, err)
 		if err then
 			on_done(nil, nil, err)
 			return
 		end
-		local pipelines = M.map(result, commit.hash, nil)
+		local statuses = type(raw.statuses) == "table" and raw.statuses or {}
+		local pipelines = M.map(statuses, commit.hash, nil)
 		local url
 		for _, pipeline in ipairs(pipelines) do
 			if not url then

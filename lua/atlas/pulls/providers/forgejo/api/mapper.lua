@@ -44,19 +44,6 @@ local function reviewers(values)
 	return result
 end
 
----@param values table[]|nil
----@return table<string, integer>|nil
-local function reaction_counts(values)
-	local result = {}
-	for _, value in ipairs(json.nilify(values) or {}) do
-		local key = value.content
-		if key and key ~= "" then
-			result[key] = (result[key] or 0) + 1
-		end
-	end
-	return next(result) and result or nil
-end
-
 ---@param value string|nil
 ---@return string|nil
 local function nonempty(value)
@@ -157,7 +144,6 @@ local function inline_position(raw, lines)
 end
 
 M.author = author
-M.reaction_counts = reaction_counts
 M.pull_state = state
 
 local review_history_states = {
@@ -170,7 +156,7 @@ local review_history_states = {
 ---@param raw_reviews table[]
 ---@return { reviewers: PullsReviewer[], raw: table[], pending_requests: integer, history: PullsReviewHistoryEntry[] }
 function M.to_review_data(pr, raw_reviews)
-	local latest_opinion, latest_comment, latest_request, latest_team_request = {}, {}, {}, {}
+	local latest_opinion, latest_request, latest_team_request = {}, {}, {}
 	local configured_reviewers = {}
 	for _, reviewer in ipairs(pr.reviewers or {}) do
 		if reviewer.id ~= "" then
@@ -183,15 +169,14 @@ function M.to_review_data(pr, raw_reviews)
 		local review_id = tonumber(review.id)
 		local review_state = tostring(review.state or ""):upper()
 		local is_opinion = review_state == "APPROVED" or review_state == "REQUEST_CHANGES"
-		local is_comment = review_state == "COMMENT"
 		local is_request = review_state == "REQUEST_REVIEW"
 		local user = json.nilify(review.user)
 		local team = json.nilify(review.team)
 		local mapped_author = user and author(user) or nil
 
-		if (is_opinion or is_comment or is_request) and mapped_author then
+		if (is_opinion or is_request) and mapped_author then
 			local key = mapped_author.id
-			local target = is_request and latest_request or (is_comment and latest_comment or latest_opinion)
+			local target = is_request and latest_request or latest_opinion
 			local previous = target[key]
 			if key ~= "" and (not previous or review_id > previous.id) then
 				target[key] = { id = review_id, raw = review }
@@ -229,26 +214,18 @@ function M.to_review_data(pr, raw_reviews)
 	for key in pairs(latest_request) do
 		keys[key] = true
 	end
-	for key in pairs(latest_comment) do
-		keys[key] = true
-	end
 	for key in pairs(configured_reviewers) do
 		keys[key] = true
 	end
 	for key in pairs(keys) do
 		local opinion = latest_opinion[key]
-		local comment = latest_comment[key]
 		local request = latest_request[key]
 		local configured = configured_reviewers[key]
 		local active_opinion = opinion and opinion.raw.dismissed ~= true and opinion or nil
-		local active_comment = comment and comment.raw.dismissed ~= true and comment or nil
 		local active_request = request and request.raw.dismissed ~= true and request or nil
 		local current = active_opinion
 		if active_request and (not current or active_request.id > current.id) then
 			current = active_request
-		end
-		if active_comment and (not current or (current == active_request and active_comment.id > current.id)) then
-			current = active_comment
 		end
 		if current then
 			local review = current.raw
@@ -352,14 +329,14 @@ local function pull_labels(raw)
 end
 
 ---@param raw table
----@return PullRequest
+---@return ForgejoPullRequest
 function M.to_pull_request(raw)
 	local number = raw.number
 
-	local base = raw.base
-	local head = raw.head
-	local base_repo = base.repo
-	local head_repo = head.repo
+	local base = json.safe_table(raw.base)
+	local head = json.safe_table(raw.head)
+	local base_repo = json.safe_table(base.repo)
+	local head_repo = json.safe_table(head.repo)
 	local slug = base_repo.full_name or ""
 	local workspace, repo = slug:match("^([^/]+)/([^/]+)$")
 	local source_slug = tostring(head_repo.full_name or "")
@@ -385,7 +362,6 @@ function M.to_pull_request(raw)
 			ssh_url = destination_ssh_url,
 		},
 		comments_count = (raw.comments or 0) + (raw.review_comments or 0),
-		tasks_count = 0,
 		created_on = raw.created_at or "",
 		updated_on = raw.updated_at or "",
 		link = { html = raw.html_url or "" },
@@ -396,15 +372,13 @@ function M.to_pull_request(raw)
 		reviewers = reviewers(json.nilify(raw.requested_reviewers) or {}),
 		lines_added = raw.additions,
 		lines_removed = raw.deletions,
-		_raw = {
-			mergeable = raw.mergeable,
-			merge_base = raw.merge_base,
-		},
+		mergeable = json.nilify(raw.mergeable),
+		merge_base = json.nilify(raw.merge_base),
 	}
 end
 
 ---@param raw any
----@return PullRequestDetails
+---@return ForgejoPullRequestDetails
 function M.to_pull_request_details(raw)
 	local pr = M.to_pull_request(raw)
 	local value = raw
@@ -413,12 +387,12 @@ function M.to_pull_request_details(raw)
 	pr.is_subscribed = json.nilify(value.subscribed)
 	pr.assignees = pull_assignees(value)
 	pr.labels = labels
-	pr._raw.label_ids = label_ids
+	pr.label_ids = label_ids
 	return pr
 end
 
 ---@param values table[]
----@return PullRequest[]
+---@return ForgejoPullRequest[]
 function M.to_pull_requests(values)
 	local prs = {}
 	for _, raw in ipairs(values) do
@@ -428,7 +402,7 @@ function M.to_pull_requests(values)
 end
 
 ---@param raw table
----@return PullRequest
+---@return ForgejoPullRequest
 function M.to_search_pull_request(raw)
 	local metadata = raw.pull_request
 	local repository = raw.repository
@@ -478,45 +452,6 @@ function M.to_comment(raw, review, lines)
 	}
 end
 
----@param comments PullsComment[]
----@return PullsComment[]
-function M.thread_comments(comments)
-	table.sort(comments, function(left, right)
-		local left_date = tostring(left.created_on or "")
-		local right_date = tostring(right.created_on or "")
-		if left_date ~= right_date then
-			return left_date < right_date
-		end
-		local left_id = tonumber(left.id)
-		local right_id = tonumber(right.id)
-		if left_id and right_id and left_id ~= right_id then
-			return left_id < right_id
-		end
-		return tostring(left.id or "") < tostring(right.id or "")
-	end)
-
-	local roots = {}
-	for _, comment in ipairs(comments) do
-		local inline = comment.inline
-		local path = inline and tostring(inline.path or "") or ""
-		local line = inline and (inline.to or inline.from) or nil
-		local side = inline and inline.to and "new" or "old"
-		local raw = comment._raw or {}
-		local review_id = tostring(raw.review_id or "")
-		if review_id ~= "" and path ~= "" and line then
-			local key = table.concat({ review_id, path, side, tostring(line) }, "\0")
-			local root = roots[key]
-			if root then
-				comment.parent_id = root.id
-			else
-				comment.parent_id = nil
-				roots[key] = comment
-			end
-		end
-	end
-	return comments
-end
-
 ---@param raw table
 ---@param review table|nil
 ---@return PullsActivityEntry|nil
@@ -541,11 +476,14 @@ function M.to_activity(raw, review)
 	end
 
 	if event == "pull_push" then
-		local decoded = vim.json.decode(raw.body)
-		local commits = decoded.commit_ids
+		local ok, decoded = pcall(vim.json.decode, tostring(json.nilify(raw.body) or ""))
+		decoded = ok and json.safe_table(decoded) or {}
+		local commits = json.safe_table(decoded.commit_ids)
 		local count = #commits
 		local force = decoded.is_force_push == true
-		local label = force and "force pushed" or string.format("pushed %d commit%s", count, count == 1 and "" or "s")
+		local label = force and "force pushed"
+			or (count > 0 and string.format("pushed %d commit%s", count, count == 1 and "" or "s"))
+			or "updated the source branch"
 		return {
 			kind = force and "force_pushed" or "update",
 			actor = actor,

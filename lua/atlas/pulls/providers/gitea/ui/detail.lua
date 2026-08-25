@@ -1,35 +1,34 @@
----@class GiteaProviderPRPanel : PullsProviderPRPanel
+---@type PullsProviderDetail
 local M = {}
 
 local icons = require("atlas.ui.shared.icons")
-local header = require("atlas.pulls.ui.panel.components.header")
-local pullrequests = require("atlas.pulls.providers.gitea.api.pullrequests")
+local header = require("atlas.pulls.ui.components.header")
 
 local MAX_HASH_LEN = 12
 
 ---@param _pr PullRequest
 ---@param details PullRequestDetails|nil
 ---@param loading boolean
----@return PullsPanelHeaderRow[]
-function M.header_rows(_pr, details, loading)
+---@return PullsDetailHeaderField[]
+function M.header_fields(_pr, details, loading)
+	---@cast details GiteaPullRequestDetails|nil
 	if details == nil then
-		return loading and { header.loading_assignee_row() } or {}
+		return loading and { header.loading_field("Assignees") } or {}
 	end
 	local logins = {}
 	for _, assignee in ipairs(details.assignees or {}) do
-		local login = assignee.username
+		local login = tostring(assignee.username or assignee.name or "")
 		if login ~= "" then
 			table.insert(logins, login)
 		end
 	end
-	local rows = { header.assignee_row(logins) }
-	return rows
+	return { header.assignee_field(logins) }
 end
 
 ---@param hex string
 ---@return string
 local function label_hl(hex)
-	hex = hex:gsub("^#", "")
+	hex = tostring(hex or ""):gsub("^#", "")
 	if not hex:match("^%x%x%x%x%x%x$") then
 		return "AtlasTabInactive"
 	end
@@ -41,35 +40,25 @@ end
 ---@param pr PullRequest
 ---@param details PullRequestDetails|nil
 ---@param _loading boolean
----@return PullsPanelChip[]
+---@return PullsDetailChip[]
 function M.chips(pr, details, _loading)
+	---@cast pr GiteaPullRequest
+	---@cast details GiteaPullRequestDetails|nil
 	local chips = {}
-	local hash = pr.source.commit_hash
+	local data = details or pr
+	local hash = tostring(data.source and data.source.commit_hash or "")
 	if hash ~= "" then
 		table.insert(chips, { label = hash:sub(1, MAX_HASH_LEN), hl = "AtlasTabInactive" })
 	end
 	for _, label in ipairs((details and details.labels) or {}) do
-		if label.name ~= "" then
+		if tostring(label.name or "") ~= "" then
 			table.insert(chips, { label = label.name, hl = label_hl(label.color or "") })
 		end
 	end
 	return chips
 end
 
----@param details PullRequestDetails
----@param _opts { force_refresh: boolean|nil, pr_refreshed: boolean|nil }|nil
----@param on_done fun()
----@return { cancel: fun() }|nil
-function M.fetch_header(details, _opts, on_done)
-	return pullrequests.subscription(details, function(subscribed, err)
-		if not err then
-			details.is_subscribed = subscribed
-		end
-		on_done()
-	end)
-end
-
----@return PullsPRPanelTab[]
+---@return PullsDetailTab[]
 function M.tabs()
 	local overview_icon, overview_hl = icons.general("overview")
 	local conversation_icon, conversation_hl = icons.general("conversation")
@@ -79,31 +68,26 @@ function M.tabs()
 		{
 			key = "overview",
 			label = "Overview",
-			icon = overview_icon,
-			icon_hl = overview_hl,
-			mod = require("atlas.pulls.ui.panel.pr.tabs.overview"),
-			keymaps = require("atlas.pulls.providers.gitea.ui.overview_keymaps"),
+			icon = { icon = overview_icon, hl_group = overview_hl },
+			mod = require("atlas.pulls.ui.detail.tabs.overview"),
 		},
 		{
 			key = "conversation",
 			label = "Conversation",
-			icon = conversation_icon,
-			icon_hl = conversation_hl,
-			mod = require("atlas.pulls.ui.panel.pr.tabs.conversation"),
+			icon = { icon = conversation_icon, hl_group = conversation_hl },
+			mod = require("atlas.pulls.ui.detail.tabs.conversation"),
 		},
 		{
 			key = "review",
 			label = "Review",
-			icon = review_icon,
-			icon_hl = review_hl,
-			mod = require("atlas.pulls.ui.panel.pr.tabs.review"),
+			icon = { icon = review_icon, hl_group = review_hl },
+			mod = require("atlas.pulls.ui.detail.tabs.review"),
 		},
 		{
 			key = "commits",
 			label = "Commits",
-			icon = commit_icon,
-			icon_hl = commit_hl,
-			mod = require("atlas.pulls.ui.panel.pr.tabs.commits"),
+			icon = { icon = commit_icon, hl_group = commit_hl },
+			mod = require("atlas.pulls.ui.detail.tabs.commits"),
 		},
 	}
 end

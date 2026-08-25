@@ -2,7 +2,6 @@ local service = require("atlas.providers.forgejo.client")
 local pagination = require("atlas.providers.forgejo.pagination")
 local mapper = require("atlas.pulls.providers.forgejo.api.mapper")
 local reviews = require("atlas.pulls.providers.forgejo.api.reviews")
-local pullrequests = require("atlas.pulls.providers.forgejo.api.pullrequests")
 local request_scope = require("atlas.core.requests")
 
 local M = {}
@@ -12,18 +11,6 @@ local M = {}
 local function review_id(value)
 	local id = value.review_id
 	return id and id > 0 and tostring(id) or nil
-end
-
----@param left PullsActivityEntry
----@param right PullsActivityEntry
----@return boolean
-local function same_actor(left, right)
-	local left_user = left.actor
-	local right_user = right.actor
-	if not left_user or not right_user then
-		return false
-	end
-	return left_user.id == right_user.id
 end
 
 ---@param entries PullsActivityEntry[]
@@ -53,7 +40,7 @@ local function squash_pushes(entries)
 				and tonumber(tostring(entry.label or ""):match("^pushed (%d+) commit"))
 			or nil
 		if entry_count then
-			if current and same_actor(current, entry) then
+			if current and current.actor and entry.actor and current.actor.id == entry.actor.id then
 				add(entry)
 				current.date = entry.date
 			else
@@ -84,19 +71,6 @@ end
 
 ---@param base string
 ---@param pr PullRequest
----@param comment PullsComment
----@return string|nil
-local function reactions_endpoint(base, pr, comment)
-	local id = tostring(comment.id)
-	if id == "__body__" then
-		return string.format("%s/issues/%s/reactions", base, pr.id)
-	elseif id:match("^%d+$") then
-		return string.format("%s/issues/comments/%s/reactions", base, id)
-	end
-end
-
----@param base string
----@param pr PullRequest
 ---@param timeline table[]
 ---@param on_done fun(result: { timeline: table[], reviews: table<string, table> }|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
@@ -113,9 +87,7 @@ local function enrich_review_events(base, pr, timeline, on_done)
 		return nil
 	end
 
-	return pagination.fetch_all(string.format("%s/pulls/%s/reviews", base, pr.id), nil, {
-		post_filtered = true,
-	}, function(raw_reviews, err)
+	return pagination.fetch_all(string.format("%s/pulls/%s/reviews", base, pr.id), nil, nil, function(raw_reviews, err)
 		if err then
 			on_done(nil, err)
 			return
@@ -156,9 +128,7 @@ function M.fetch(pr, opts, on_done)
 	end
 	local requests = request_scope.new()
 	requests.run(function(done)
-		return pagination.fetch_all(string.format("%s/issues/%s/timeline", base, pr.id), nil, {
-			post_filtered = true,
-		}, done)
+		return pagination.fetch_all(string.format("%s/issues/%s/timeline", base, pr.id), nil, nil, done)
 	end, function(raw, err)
 		if err then
 			on_done(nil, err)
@@ -173,17 +143,6 @@ function M.fetch(pr, opts, on_done)
 			end
 			local comments, events = {}, {}
 			local activity_only = opts.activity_only == true
-			local description = tostring(pr.description or "")
-			if not activity_only and description ~= "" then
-				table.insert(comments, {
-					id = "__body__",
-					parent_id = nil,
-					author = pr.author,
-					content_raw = description,
-					created_on = pr.created_on,
-					reactions = pr.reactions,
-				})
-			end
 			for _, value in ipairs(enriched.timeline) do
 				local event = tostring(value.type or ""):lower()
 				if event == "comment" then
@@ -224,47 +183,8 @@ function M.add(pr, content, opts, on_done)
 	end
 	local parent = opts and opts.parent or nil
 	if parent and parent.inline then
-		local raw = parent._raw
-		local parent_review_id = tostring(raw.review_id or "")
-		local inline = parent.inline
-		local path = inline.path
-		local new_line = tonumber(inline.start_to or inline.to)
-		local old_line = tonumber(inline.start_from or inline.from)
-		if not parent_review_id:match("^%d+$") or path == "" or (not new_line and not old_line) then
-			on_done(nil, "Invalid Forgejo review comment")
-			return nil
-		end
-		local payload = { body = content, path = path }
-		if new_line then
-			payload.new_position = new_line
-			local finish = tonumber(inline.to)
-			if finish and finish > new_line then
-				payload.extra_lines_count = finish - new_line
-			end
-		else
-			payload.old_position = old_line
-			local finish = tonumber(inline.from)
-			if finish and finish > old_line then
-				payload.extra_lines_count = finish - old_line
-			end
-		end
-		return service.request(
-			"POST",
-			string.format("%s/pulls/%s/reviews/%s/comments", base, pr.id, parent_review_id),
-			payload,
-			function(value, err)
-				if err then
-					on_done(nil, err)
-					return
-				end
-				local created = mapper.to_comment(value, { id = parent_review_id })
-				created.parent_id = parent.parent_id or parent.id
-				created.inline = created.inline or parent.inline
-				created.inline_hunk = created.inline_hunk or parent.inline_hunk
-				created.outdated = parent.outdated
-				on_done(created, nil)
-			end
-		)
+		on_done(nil, "Forgejo does not support replies to review comments through its API")
+		return nil
 	end
 	if opts and opts.file then
 		on_done(nil, "Forgejo does not support file-level review comments")
@@ -290,11 +210,6 @@ end
 function M.edit(pr, comment, on_done)
 	local base = endpoint(pr)
 	local id = tostring(comment.id)
-	if id == "__body__" then
-		return pullrequests.update_description(pr, comment.content_raw, function(ok, err)
-			on_done(ok and comment or nil, err)
-		end)
-	end
 	if not base or not id:match("^%d+$") then
 		on_done(nil, "Invalid Forgejo repository")
 		return nil
@@ -313,10 +228,6 @@ end
 function M.delete(pr, comment, on_done)
 	local base = endpoint(pr)
 	local id = tostring(comment.id)
-	if id == "__body__" then
-		on_done(false, "Cannot delete the pull request description")
-		return nil
-	end
 	if not base or not id:match("^%d+$") then
 		on_done(false, "Invalid Forgejo repository")
 		return nil
@@ -339,11 +250,12 @@ function M.add_reaction(pr, comment, key, on_done)
 		on_done(false, "Invalid Forgejo repository")
 		return nil
 	end
-	local target = reactions_endpoint(base, pr, comment)
-	if not target then
+	local id = tostring(comment.id)
+	if not id:match("^%d+$") then
 		on_done(false, "Invalid Forgejo comment")
 		return nil
 	end
+	local target = string.format("%s/issues/comments/%s/reactions", base, id)
 	return service.request("POST", target, { content = key }, function(_, err)
 		on_done(err == nil, err)
 	end)

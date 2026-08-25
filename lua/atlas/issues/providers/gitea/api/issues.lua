@@ -31,44 +31,25 @@ local function repo_endpoint(slug)
 	return string.format("/repos/%s/%s", service.url_encode(owner), service.url_encode(repo))
 end
 
----@param key string
----@return string|nil, integer|nil, string|nil
-local function issue_endpoint(key)
-	local slug, number = mapper.parse_key(key)
+---@param value GiteaIssue|IssueRef|string
+---@return string|nil, integer|nil, string|nil, string|nil
+local function issue_endpoint(value)
+	local slug, number
+	if type(value) == "table" then
+		---@cast value GiteaIssue
+		slug, number = value.repo_full_name, value.number
+		if not slug or not number then
+			slug, number = mapper.parse_key(value.key)
+		end
+	else
+		slug, number = mapper.parse_key(value)
+	end
 	local base = repo_endpoint(slug)
 	if not base or not number then
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	end
-	return string.format("%s/issues/%d", base, number), number, slug
-end
-
----@param raw table[]
----@param scoped_slug string|nil
----@return Issue[]
-local function map_issues(raw, scoped_slug)
-	local issues = {}
-	for _, value in ipairs(raw) do
-		if json.nilify(value.pull_request) == nil then
-			table.insert(issues, mapper.to_issue(value, scoped_slug))
-		end
-	end
-	return issues
-end
-
----@param raw table
----@return table
-local function map_label(raw)
-	return {
-		id = raw.id,
-		name = raw.name,
-		color = raw.color,
-	}
-end
-
----@param raw table
----@return table
-local function map_milestone(raw)
-	return { id = raw.id, title = raw.title }
+	local key = string.format("%s#%d", slug, number)
+	return string.format("%s/issues/%d", base, number), number, slug, key
 end
 
 ---@param on_done fun(user: IssueUser|nil, err: string|nil)
@@ -143,8 +124,13 @@ function M.list(view, opts, on_done)
 				done(nil, err)
 				return
 			end
-			local issues = map_issues(raw, base and repo or nil)
-			local has_next = #raw > 0
+			local issues = {}
+			for _, value in ipairs(raw) do
+				if json.nilify(value.pull_request) == nil then
+					table.insert(issues, mapper.to_issue(value, base and repo or nil))
+				end
+			end
+			local has_next = #raw == limit
 			local result = {
 				issues = issues,
 				next_page_token = has_next and tostring(page + 1) or nil,
@@ -181,36 +167,92 @@ function M.list(view, opts, on_done)
 	return fetch(finish)
 end
 
----@param key string
+---@param ref GiteaIssue|IssueRef|string
 ---@param opts IssuesFetchOpts|nil
 ---@param on_done fun(issue: IssueDetails|nil, err: string|nil)
-function M.get(key, opts, on_done)
-	local endpoint, _, slug = issue_endpoint(key)
+function M.get(ref, opts, on_done)
+	opts = opts or {}
+	local endpoint, _, slug, key = issue_endpoint(ref)
 	if not endpoint then
-		on_done(nil, "Invalid Gitea issue key: " .. key)
+		on_done(nil, "Invalid Gitea issue key")
 		return nil
 	end
 	local cache_key = detail_cache_key(key)
-	if not (opts and opts.force_load) then
+	if not opts.force_load then
 		local cached, ok = service.get_memory_cache(cache_key)
 		if ok then
 			on_done(cached, nil)
 			return nil
 		end
 	end
-	return service.request("GET", endpoint, nil, function(raw, err)
-		if err then
-			on_done(nil, err)
+	local requests = request_scope.new()
+	requests.all({
+		details = function(done)
+			return service.request("GET", endpoint, nil, done)
+		end,
+		subscription = function(done)
+			return service.request("GET", endpoint .. "/subscriptions/check", nil, function(raw, err)
+				done(raw and raw.subscribed, err)
+			end)
+		end,
+	}, function(values, errors)
+		if errors.details then
+			on_done(nil, errors.details)
 			return
 		end
-		local issue = mapper.to_issue_details(raw, slug)
+		local issue = mapper.to_issue_details(values.details, slug)
 		if not issue then
 			on_done(nil, "The requested number is not an issue")
 			return
 		end
+		if errors.subscription == nil then
+			issue.is_subscribed = values.subscription
+		end
 		service.set_memory_cache(cache_key, issue)
 		on_done(issue, nil)
 	end)
+	return requests
+end
+
+---@param refs IssueRef[]
+---@param _opts IssuesFetchOpts|nil
+---@param on_done fun(issues: Issue[], err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_by_refs(refs, _opts, on_done)
+	if #refs == 0 then
+		on_done({}, nil)
+		return nil
+	end
+
+	local starts = {}
+	for index, ref in ipairs(refs) do
+		local endpoint, _, slug = issue_endpoint(ref)
+		if not endpoint then
+			on_done({}, "Invalid Gitea issue key: " .. tostring(ref.key))
+			return nil
+		end
+		starts[index] = function(done)
+			return service.request("GET", endpoint, nil, function(raw, err)
+				done(raw and mapper.to_issue(raw, slug) or nil, err)
+			end)
+		end
+	end
+
+	local requests = request_scope.new()
+	requests.all(starts, function(values, errors)
+		local issues = {}
+		for index = 1, #refs do
+			if errors[index] then
+				on_done({}, errors[index])
+				return
+			end
+			if values[index] then
+				table.insert(issues, values[index])
+			end
+		end
+		on_done(issues, nil)
+	end)
+	return requests
 end
 
 ---@param opts { repo_slug: string, title: string, body: string|nil, labels: integer[]|nil, assignees: string[]|nil, milestone: integer|nil, due_date: string|nil }
@@ -236,16 +278,17 @@ function M.create(opts, on_done)
 			return
 		end
 		local issue = mapper.to_issue(raw, slug)
+		---@cast issue GiteaIssue
 		clear_issue_cache(nil)
-		on_done({ number = issue._raw.number, key = issue.key, url = issue.url, issue = issue }, nil)
+		on_done({ number = issue.number, key = issue.key, url = issue.url, issue = issue }, nil)
 	end)
 end
 
----@param key string
+---@param issue GiteaIssue
 ---@param changes table
 ---@param on_done fun(issue: Issue|nil, err: string|nil)
-function M.update(key, changes, on_done)
-	local endpoint, _, slug = issue_endpoint(key)
+function M.update(issue, changes, on_done)
+	local endpoint, _, slug, key = issue_endpoint(issue)
 	if not endpoint then
 		on_done(nil, "Invalid Gitea issue key")
 		return nil
@@ -255,9 +298,9 @@ function M.update(key, changes, on_done)
 			on_done(nil, err)
 			return
 		end
-		local issue = mapper.to_issue(raw, slug)
+		local updated = mapper.to_issue_details(raw, slug)
 		clear_issue_cache(key)
-		on_done(issue, nil)
+		on_done(updated, nil)
 	end)
 end
 
@@ -265,24 +308,25 @@ end
 ---@param changes table
 ---@param on_done fun(issue: Issue|nil, err: string|nil)
 function M.update_issue(issue, changes, on_done)
+	---@cast issue GiteaIssue
 	local payload = vim.tbl_extend("force", {}, changes)
-	payload.content_version = issue._raw.content_version
-	return M.update(issue.key, payload, on_done)
+	payload.content_version = issue.content_version
+	return M.update(issue, payload, on_done)
 end
 
----@param key string
+---@param issue GiteaIssue
 ---@param state "open"|"closed"
 ---@param on_done fun(ok: boolean, err: string|nil)
-function M.set_state(key, state, on_done)
-	return M.update(key, { state = state }, function(issue, err)
-		on_done(issue ~= nil, err)
+function M.set_state(issue, state, on_done)
+	return M.update(issue, { state = state }, function(updated, err)
+		on_done(updated ~= nil, err)
 	end)
 end
 
----@param key string
+---@param issue GiteaIssue
 ---@param on_done fun(ok: boolean, err: string|nil)
-function M.delete(key, on_done)
-	local endpoint = issue_endpoint(key)
+function M.delete(issue, on_done)
+	local endpoint, _, _, key = issue_endpoint(issue)
 	if not endpoint then
 		on_done(false, "Invalid Gitea issue key")
 		return nil
@@ -295,11 +339,11 @@ function M.delete(key, on_done)
 	end)
 end
 
----@param key string
+---@param issue GiteaIssue
 ---@param pinned boolean
 ---@param on_done fun(ok: boolean, err: string|nil)
-function M.set_pinned(key, pinned, on_done)
-	local endpoint = issue_endpoint(key)
+function M.set_pinned(issue, pinned, on_done)
+	local endpoint, _, _, key = issue_endpoint(issue)
 	if not endpoint then
 		on_done(false, "Invalid Gitea issue key")
 		return nil
@@ -312,12 +356,12 @@ function M.set_pinned(key, pinned, on_done)
 	end)
 end
 
----@param key string
+---@param issue GiteaIssue
 ---@param locked boolean
 ---@param reason string|nil
 ---@param on_done fun(ok: boolean, err: string|nil)
-function M.set_locked(key, locked, reason, on_done)
-	local endpoint = issue_endpoint(key)
+function M.set_locked(issue, locked, reason, on_done)
+	local endpoint, _, _, key = issue_endpoint(issue)
 	if not endpoint then
 		on_done(false, "Invalid Gitea issue key")
 		return nil
@@ -335,21 +379,21 @@ function M.set_locked(key, locked, reason, on_done)
 	end)
 end
 
----@param key string
+---@param issue GiteaIssue
 ---@param assignees string[]
 ---@param on_done fun(ok: boolean, err: string|nil)
-function M.update_assignees(key, assignees, on_done)
-	return M.update(key, { assignees = assignees }, function(issue, err)
-		on_done(issue ~= nil, err)
+function M.update_assignees(issue, assignees, on_done)
+	return M.update(issue, { assignees = assignees }, function(updated, err)
+		on_done(updated ~= nil, err)
 	end)
 end
 
----@param key string
+---@param issue GiteaIssue
 ---@param milestone integer|nil
 ---@param on_done fun(ok: boolean, err: string|nil)
-function M.update_milestone(key, milestone, on_done)
-	return M.update(key, { milestone = milestone or 0 }, function(issue, err)
-		on_done(issue ~= nil, err)
+function M.update_milestone(issue, milestone, on_done)
+	return M.update(issue, { milestone = milestone or 0 }, function(updated, err)
+		on_done(updated ~= nil, err)
 	end)
 end
 
@@ -368,7 +412,11 @@ function M.list_labels(slug, on_done)
 		end
 		local labels = {}
 		for _, value in ipairs(raw) do
-			table.insert(labels, map_label(value))
+			table.insert(labels, {
+				id = value.id,
+				name = value.name,
+				color = value.color,
+			})
 		end
 		on_done(labels, nil)
 	end)
@@ -410,17 +458,17 @@ function M.list_milestones(slug, on_done)
 		end
 		local milestones = {}
 		for _, value in ipairs(raw) do
-			table.insert(milestones, map_milestone(value))
+			table.insert(milestones, { id = value.id, title = value.title })
 		end
 		on_done(milestones, nil)
 	end)
 end
 
----@param key string
+---@param issue GiteaIssue
 ---@param labels (integer|string)[]
 ---@param on_done fun(ok: boolean, err: string|nil)
-function M.update_labels(key, labels, on_done)
-	local endpoint = issue_endpoint(key)
+function M.update_labels(issue, labels, on_done)
+	local endpoint, _, _, key = issue_endpoint(issue)
 	if not endpoint then
 		on_done(false, "Invalid Gitea issue key")
 		return nil
@@ -433,10 +481,10 @@ function M.update_labels(key, labels, on_done)
 	end)
 end
 
----@param key string
+---@param issue GiteaIssue
 ---@param on_done fun(subscribed: boolean|nil, err: string|nil)
-function M.check_subscription(key, on_done)
-	local endpoint = issue_endpoint(key)
+function M.check_subscription(issue, on_done)
+	local endpoint = issue_endpoint(issue)
 	if not endpoint then
 		on_done(nil, "Invalid Gitea issue key")
 		return nil
@@ -450,18 +498,21 @@ function M.check_subscription(key, on_done)
 	end)
 end
 
----@param key string
+---@param issue GiteaIssue
 ---@param login string
 ---@param subscribe boolean
 ---@param on_done fun(ok: boolean, err: string|nil)
-function M.set_subscription(key, login, subscribe, on_done)
-	local endpoint = issue_endpoint(key)
+function M.set_subscription(issue, login, subscribe, on_done)
+	local endpoint, _, _, key = issue_endpoint(issue)
 	if not endpoint or vim.trim(login) == "" then
 		on_done(false, not endpoint and "Invalid Gitea issue key" or "Missing user login")
 		return nil
 	end
 	local path = endpoint .. "/subscriptions/" .. service.url_encode(login)
 	return service.request(subscribe and "PUT" or "DELETE", path, nil, function(_, err)
+		if not err then
+			service.delete_memory_cache(detail_cache_key(key))
+		end
 		on_done(err == nil, err)
 	end)
 end

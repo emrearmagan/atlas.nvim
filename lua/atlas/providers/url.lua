@@ -45,7 +45,7 @@ function M.configured_base(provider)
 	if type(base_url) ~= "string" then
 		return nil
 	end
-	return M.parse(base_url)
+	return M.parse(vim.trim(base_url))
 end
 
 ---@param parsed AtlasParsedUrl
@@ -79,7 +79,7 @@ end
 ---@return string
 function M.base_url(provider, target_host, fallback_host)
 	local options = config.provider_options(provider) or {}
-	local configured = type(options.base_url) == "string" and options.base_url:gsub("/+$", "") or nil
+	local configured = type(options.base_url) == "string" and vim.trim(options.base_url):gsub("/+$", "") or nil
 	if configured and configured ~= "" then
 		return configured
 	end
