@@ -4,9 +4,9 @@ local M = {}
 ---@field id string
 ---@field label string
 
----@param opts { issue: Issue|nil, comments: IssueComment[], current_user: IssueUser|nil }
+---@param context AtlasIssuesCommentCompletionContext
 ---@return JiraMentionUser[]
-local function collect_users(opts)
+local function collect_users(context)
 	local seen = {}
 	---@type JiraMentionUser[]
 	local users = {}
@@ -26,10 +26,10 @@ local function collect_users(opts)
 		table.insert(users, { id = id, label = label })
 	end
 
-	add(opts.current_user)
-	add((opts.issue or {}).assignee)
-	add((opts.issue or {}).reporter)
-	for _, comment in ipairs(opts.comments) do
+	add(context.current_user)
+	add((context.issue or {}).assignee)
+	add((context.issue or {}).reporter)
+	for _, comment in ipairs(context.comments) do
 		add(comment.author)
 	end
 
@@ -40,11 +40,11 @@ local function collect_users(opts)
 	return users
 end
 
----@param opts { issue: Issue|nil, comments: IssueComment[], current_user: IssueUser|nil }
+---@param context AtlasIssuesCommentCompletionContext
 ---@return table<string, JiraMentionUser>
-local function build_map(opts)
+local function build_map(context)
 	local map = {}
-	for _, user in ipairs(collect_users(opts)) do
+	for _, user in ipairs(collect_users(context)) do
 		local id = vim.trim(tostring(user.id or ""))
 		local label = vim.trim(tostring(user.label or ""))
 		if id ~= "" and label ~= "" then
@@ -91,9 +91,9 @@ local function resolve_mention(author)
 	return string.format("[@%s](atlas-mention:%s)", mention_label, mention_id)
 end
 
----@param opts { issue: Issue|nil, comments: IssueComment[], current_user: IssueUser|nil }
+---@param context AtlasIssuesCommentCompletionContext
 ---@return AtlasMarkdownCompletionProvider
-function M.build_completion(opts)
+function M.for_issues(context)
 	return {
 		trigger = "@",
 		find_start = function(before)
@@ -105,7 +105,7 @@ function M.build_completion(opts)
 		end,
 		complete = function(base)
 			local query = vim.trim(tostring(base or "")):gsub("^@", ""):lower()
-			local mention_map = build_map(opts)
+			local mention_map = build_map(context)
 			local matches = {}
 			for _, user in pairs(mention_map) do
 				local id = tostring((user or {}).id or "")

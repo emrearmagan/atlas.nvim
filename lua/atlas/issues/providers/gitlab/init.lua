@@ -271,6 +271,7 @@ return {
 		},
 		comments = {
 			reaction_options = GITLAB_REACTION_OPTIONS,
+			comment_completion = require("atlas.providers.gitlab.completion.author").for_issues,
 			fetch_activity = M.fetch_activity,
 			fetch_conversation = M.fetch_conversation,
 			add_comment = M.add_comment,

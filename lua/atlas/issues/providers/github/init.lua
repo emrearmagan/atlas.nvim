@@ -336,6 +336,7 @@ return {
 		},
 		comments = {
 			reaction_options = require("atlas.ui.shared.emojis").github(),
+			comment_completion = require("atlas.providers.github.completion.author").for_issues,
 			fetch_activity = M.fetch_activity,
 			fetch_conversation = M.fetch_conversation,
 			add_comment = M.add_comment,

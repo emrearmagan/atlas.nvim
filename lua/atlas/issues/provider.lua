@@ -8,6 +8,11 @@
 ---@field layout "plain"|"compact"|nil
 ---@field with_relationships boolean|nil
 
+---@class AtlasIssuesCommentCompletionContext
+---@field issue Issue|nil
+---@field comments IssueComment[]
+---@field current_user IssueUser|nil
+
 ---@class IssuesViewConfig : AtlasIssuesViewConfig
 
 ---@class IssuesProvider
@@ -45,7 +50,7 @@
 ---@field delete_comment (fun(issue: Issue, comment: IssueComment, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field add_reaction (fun(issue: Issue, item: IssueConversationItem, key: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field reaction_options IssueReactionOption[]|nil
----@field comment_completion (fun(opts: { issue: Issue|nil, comments: IssueComment[], current_user: IssueUser|nil }): AtlasMarkdownCompletionProvider|nil)|nil
+---@field comment_completion (fun(context: AtlasIssuesCommentCompletionContext): AtlasMarkdownCompletionProvider|nil)|nil
 
 ---@class IssuesActionsCapability
 ---@field items AtlasIssueAction[]

@@ -244,9 +244,7 @@ return {
 			reply_comment = M.reply_comment,
 			edit_comment = M.edit_comment,
 			delete_comment = M.delete_comment,
-			comment_completion = function(opts)
-				return require("atlas.issues.providers.jira.completion.author").build_completion(opts)
-			end,
+			comment_completion = require("atlas.providers.jira.completion.author").for_issues,
 		},
 		actions = require("atlas.issues.providers.jira.actions"),
 		ui = {

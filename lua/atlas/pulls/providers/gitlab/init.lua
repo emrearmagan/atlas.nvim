@@ -276,7 +276,7 @@ return {
 		},
 		comments = {
 			reaction_options = require("atlas.ui.shared.emojis").gitlab(),
-			comment_completion = require("atlas.pulls.providers.gitlab.completion.author").build_completion,
+			comment_completion = require("atlas.providers.gitlab.completion.author").for_pulls,
 			fetch_conversation = fetch_conversation,
 			add_comment = comments_api.add_comment,
 			edit_comment = comments_api.edit_comment,

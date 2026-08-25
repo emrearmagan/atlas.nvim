@@ -94,7 +94,7 @@ end
 
 ---@param context AtlasPullsCommentCompletionContext
 ---@return AtlasMarkdownCompletionProvider|nil
-function M.build_completion(context)
+function M.for_pulls(context)
 	local mention_map = build_map(collect_authors(context))
 	return {
 		trigger = "@",

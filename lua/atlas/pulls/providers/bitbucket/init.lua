@@ -232,7 +232,7 @@ return {
 			views = views,
 		},
 		comments = {
-			comment_completion = require("atlas.pulls.providers.bitbucket.completion.author").build_completion,
+			comment_completion = require("atlas.providers.bitbucket.completion.author").for_pulls,
 			fetch_conversation = activity_api.fetch_conversation,
 			add_comment = comments_api.add_comment,
 			edit_comment = comments_api.edit_comment,
