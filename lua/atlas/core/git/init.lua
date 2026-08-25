@@ -179,6 +179,26 @@ function M.rev_exists(root, rev)
 end
 
 ---@param root string
+---@param commits string[]
+---@return boolean[]
+function M.check_commits(root, commits)
+	local queries = {}
+	for index, commit in ipairs(commits) do
+		queries[index] = commit .. "^{commit}"
+	end
+	local res = run_sync({ "-C", root, "cat-file", "--batch-check=%(objecttype)" }, {
+		text = true,
+		stdin = table.concat(queries, "\n") .. "\n",
+		env = { GIT_NO_LAZY_FETCH = "1" },
+	})
+	local exists = {}
+	for index, result in ipairs(vim.split(res.stdout or "", "\n", { plain = true, trimempty = true })) do
+		exists[index] = trim(result) == "commit"
+	end
+	return exists
+end
+
+---@param root string
 ---@param base string
 ---@param head string
 ---@return string|nil base_revision

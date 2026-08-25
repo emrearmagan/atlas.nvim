@@ -271,60 +271,47 @@ end
 -- Range and files
 
 ---@param op AtlasNativeDiffGitOperation
----@param cwd string
+---@param root string
 ---@param base_revision string
 ---@param head_revision string
 ---@param on_done fun(range: AtlasNativeDiffRange)
-local function resolve_range(op, cwd, base_revision, head_revision, on_done)
-	cwd = tostring(cwd or "")
+local function resolve_range(op, root, base_revision, head_revision, on_done)
+	root = tostring(root or "")
 	base_revision = trim(base_revision)
 	head_revision = trim(head_revision)
 
-	if cwd == "" or base_revision == "" or head_revision == "" then
+	if root == "" or base_revision == "" or head_revision == "" then
 		vim.schedule(function()
 			op:finish(nil, "Repository path, base revision, and head revision are required")
 		end)
 		return
 	end
 
-	run_git(op, { "rev-parse", "--show-toplevel" }, { cwd = cwd, text = true }, function(root_res)
-		if root_res.code ~= 0 then
-			op:finish(nil, command_error(root_res, "Failed to resolve repository root"))
-			return
-		end
-
-		local root = trim(root_res.stdout)
-		if root == "" then
-			op:finish(nil, "Git returned an empty repository root")
-			return
-		end
-
-		run_git(
-			op,
-			{ "rev-parse", "--verify", "--end-of-options", head_revision .. "^{commit}" },
-			{ cwd = root, text = true },
-			function(head_res)
-				local head_hash = trim(head_res.stdout)
-				if head_res.code ~= 0 or head_hash == "" then
-					op:finish(nil, command_error(head_res, "Failed to resolve head revision"))
-					return
-				end
-				run_git(
-					op,
-					{ "merge-base", "--", base_revision, head_hash },
-					{ cwd = root, text = true },
-					function(merge_res)
-						local merge_base = trim(merge_res.stdout)
-						if merge_res.code ~= 0 or merge_base == "" then
-							op:finish(nil, command_error(merge_res, "Failed to resolve merge base"))
-							return
-						end
-						on_done({ root = root, base_revision = merge_base, head_revision = head_hash })
-					end
-				)
+	run_git(
+		op,
+		{ "rev-parse", "--verify", "--end-of-options", head_revision .. "^{commit}" },
+		{ cwd = root, text = true },
+		function(head_res)
+			local head_hash = trim(head_res.stdout)
+			if head_res.code ~= 0 or head_hash == "" then
+				op:finish(nil, command_error(head_res, "Failed to resolve head revision"))
+				return
 			end
-		)
-	end)
+			run_git(
+				op,
+				{ "merge-base", "--", base_revision, head_hash },
+				{ cwd = root, text = true },
+				function(merge_res)
+					local merge_base = trim(merge_res.stdout)
+					if merge_res.code ~= 0 or merge_base == "" then
+						op:finish(nil, command_error(merge_res, "Failed to resolve merge base"))
+						return
+					end
+					on_done({ root = root, base_revision = merge_base, head_revision = head_hash })
+				end
+			)
+		end
+	)
 end
 
 ---@param op AtlasNativeDiffGitOperation

@@ -473,8 +473,13 @@ function M.open_argument(value)
 		notify.error("Expected an explicit base...head range", { vim_notify = true })
 		return
 	end
+	local root, root_err = git.repo_root(vim.fn.getcwd())
+	if not root then
+		notify.error(root_err or "Unable to resolve repository root", { vim_notify = true })
+		return
+	end
 	M.open_range({
-		git_root = vim.fn.getcwd(),
+		git_root = root,
 		base_revision = base,
 		head_revision = head,
 		open_cmd = "AtlasDiff",

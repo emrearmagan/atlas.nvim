@@ -137,8 +137,12 @@ function M.resolve_repo_path(repo_paths, repo_name, opts)
 	if opts.require_existing ~= false and vim.fn.isdirectory(resolved) ~= 1 then
 		return nil, string.format("mapped path does not exist: %s", resolved)
 	end
-	if opts.require_git ~= false and not git.is_inside_work_tree(resolved) then
-		return nil, string.format("mapped path is not a git repository: %s", resolved)
+	if opts.require_git ~= false then
+		local root = git.repo_root(resolved)
+		if not root then
+			return nil, string.format("mapped path is not a git repository: %s", resolved)
+		end
+		resolved = root
 	end
 	return resolved, nil
 end
@@ -248,10 +252,11 @@ function M.fetch_pr_refs(pr, repo_path, on_done, on_progress)
 	local fetch_err
 
 	local function missing_commit()
-		if not git.rev_exists(repo_path, base_revision) then
+		local exists = git.check_commits(repo_path, { base_revision, head_revision })
+		if not exists[1] then
 			return "Pull request base commit is unavailable: " .. base_revision
 		end
-		if not git.rev_exists(repo_path, head_revision) then
+		if not exists[2] then
 			return "Pull request head commit is unavailable: " .. head_revision
 		end
 	end
