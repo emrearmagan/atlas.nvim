@@ -167,7 +167,7 @@ end
 ---@param tree TableTreeTreeOpts|nil
 ---@return string
 local function cell_text(row, column, tree)
-	local raw = tostring(row[column.key] or "")
+	local raw = tostring(row[column.key] or ""):gsub("%c", " ")
 	if tree == nil or column.key ~= tree.column_key then
 		return raw
 	end

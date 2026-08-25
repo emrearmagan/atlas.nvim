@@ -99,6 +99,17 @@ local function upsert_reviewer(reviewers, reviewer)
 	table.insert(reviewers, reviewer)
 end
 
+---@param reviewers PullsReviewer[]
+---@param reviewer PullsReviewer
+local function remove_reviewer(reviewers, reviewer)
+	for index, existing in ipairs(reviewers) do
+		if same_reviewer(existing, reviewer) then
+			table.remove(reviewers, index)
+			return
+		end
+	end
+end
+
 ---@param raw any
 ---@param decision "approved"|"changes_requested"|"pending"
 ---@param role "reviewer"|"participant"
@@ -112,8 +123,7 @@ local function pull_reviewer(raw, decision, role)
 	local user = github_mapping.identity(raw) or { id = "", login = "", name = "" }
 	local slug = json.safe_str(raw.slug) or ""
 	local combined_slug = json.safe_str(raw.combinedSlug) or ""
-	local organization = json.nilify(raw.organization)
-	local organization_login = type(organization) == "table" and (json.safe_str(organization.login) or "") or ""
+	local organization_login = json.safe_str(json.safe_table(raw.organization).login) or ""
 	local team = combined_slug ~= "" and combined_slug
 		or (organization_login ~= "" and slug ~= "" and organization_login .. "/" .. slug or slug)
 	local username = user.login ~= "" and user.login or team
@@ -134,14 +144,15 @@ local function pull_reviewer(raw, decision, role)
 end
 
 ---@param raw table
----@return PullRequest
-local function map_summary(raw)
-	local number = tostring(raw.number or "")
-	local author = pull_author(raw.author)
-
-	local has_reviews = json.nilify(raw.latestOpinionatedReviews) ~= nil
+---@return PullsReviewer[]|nil
+function M.to_reviewers(raw)
+	local has_reviews = json.nilify(raw.reviews) ~= nil
 	local has_requests = json.nilify(raw.reviewRequests) ~= nil
 	local reviewers = (has_reviews or has_requests) and {} or nil
+	if reviewers == nil then
+		return nil
+	end
+
 	local requested = {}
 	for _, node in ipairs(github_mapping.connection_nodes(raw.reviewRequestEvents)) do
 		local reviewer = pull_reviewer(node.requestedReviewer, "pending", "reviewer")
@@ -159,26 +170,36 @@ local function map_summary(raw)
 		end
 	end
 
-	local function add_review(node)
+	for _, node in ipairs(github_mapping.connection_nodes(raw.reviews)) do
 		local state = tostring(node.state or ""):upper()
 		local decision = state == "APPROVED" and "approved"
 			or state == "CHANGES_REQUESTED" and "changes_requested"
 			or nil
-		local reviewer = decision and pull_reviewer(node.author, decision, "participant") or nil
+		local reviewer = pull_reviewer(node.author, decision or "pending", "participant")
 		if reviewer then
-			if requested[tostring(reviewer.provider_id):lower()] then
-				reviewer.role = "reviewer"
+			if state == "DISMISSED" then
+				remove_reviewer(reviewers, reviewer)
+			elseif decision then
+				if requested[tostring(reviewer.provider_id):lower()] then
+					reviewer.role = "reviewer"
+				end
+				upsert_reviewer(reviewers, reviewer)
 			end
-			upsert_reviewer(reviewers, reviewer)
 		end
 	end
 
-	for _, node in ipairs(github_mapping.connection_nodes(raw.latestOpinionatedReviews)) do
-		add_review(node)
-	end
 	for _, reviewer in ipairs(active) do
 		upsert_reviewer(reviewers, reviewer)
 	end
+	return reviewers
+end
+
+---@param raw table
+---@return GitHubPullRequest
+function M.to_pull_request(raw)
+	local number = tostring(raw.number or "")
+	local author = pull_author(raw.author)
+	local reviewers = M.to_reviewers(raw)
 
 	local state = "open"
 	local raw_state = tostring(raw.state or ""):upper()
@@ -195,6 +216,9 @@ local function map_summary(raw)
 	if repository_url and repository_url ~= "" and not repository_url:match("%.git$") then
 		repository_url = repository_url .. ".git"
 	end
+	local first_commit = json.safe_table(json.safe_table(json.safe_table(raw.commits).nodes)[1])
+	local commit = json.safe_table(first_commit.commit)
+	local check_status = json.safe_str(json.safe_table(commit.statusCheckRollup).state)
 
 	return {
 		id = number,
@@ -212,13 +236,9 @@ local function map_summary(raw)
 			https_url = repository_url,
 			ssh_url = json.safe_str((raw.repository or {}).sshUrl),
 		},
-		comments_count = tonumber(raw.totalCommentsCount)
-			or tonumber(raw.commentsCount)
-			or (type(raw.comments) == "table" and tonumber(raw.comments.totalCount))
-			or (type(raw.comments) == "table" and #raw.comments)
-			or tonumber(raw.comments)
-			or 0,
-		tasks_count = 0,
+		comments_count = tonumber(raw.totalCommentsCount) or tonumber(raw.commentsCount) or tonumber(
+			json.safe_table(raw.comments).totalCount
+		) or tonumber(raw.comments) or 0,
 		created_on = tostring(raw.createdAt or ""),
 		updated_on = tostring(raw.updatedAt or ""),
 		link = {
@@ -229,36 +249,28 @@ local function map_summary(raw)
 		repo = repo_name,
 		repo_full_name = repo_full_name,
 		reviewers = reviewers,
+		node_id = json.safe_str(raw.id),
+		review_decision = json.safe_str(raw.reviewDecision),
+		check_status = check_status,
 		lines_added = tonumber(raw.additions),
 		lines_removed = tonumber(raw.deletions),
-		_raw = {
-			node_id = json.safe_str(raw.id),
-			commits = json.nilify(raw.commits),
-			review_decision = json.safe_str(raw.reviewDecision),
-		},
 	}
 end
 
 ---@param raw table
----@return PullRequest
-function M.to_pull_request(raw)
-	return map_summary(raw)
-end
-
----@param raw table
----@return PullRequestDetails
+---@return GitHubPullRequestDetails
 function M.to_pull_request_details(raw)
-	local pr = map_summary(raw)
+	---@type GitHubPullRequestDetails
+	local details = {
+		description = json.safe_str(raw.body) or "",
+		assignees = pull_assignees(raw) or {},
+		labels = pull_labels(raw) or {},
+	}
 	local subscription = tostring(raw.viewerSubscription or "")
-	pr.description = tostring(raw.body or "")
 	if subscription ~= "" then
-		pr.is_subscribed = subscription == "SUBSCRIBED"
+		details.is_subscribed = subscription == "SUBSCRIBED"
 	end
-	pr.reactions = github_mapping.reaction_groups(raw.reactionGroups) or {}
-	pr.assignees = pull_assignees(raw) or {}
-	pr.reviewers = pr.reviewers or {}
-	pr.labels = pull_labels(raw) or {}
-	return pr
+	return details
 end
 
 ---@param raw table
@@ -276,7 +288,7 @@ end
 ---@return PullRequest[]
 function M.to_search_results_from_graphql(nodes)
 	local out = {}
-	for _, raw in ipairs(nodes or {}) do
+	for _, raw in ipairs(nodes) do
 		if raw.number ~= nil then
 			table.insert(out, M.to_pull_request(raw))
 		end
@@ -288,8 +300,8 @@ end
 ---@return PullsActivityEntry|nil
 function M.to_activity(item)
 	local event = tostring(item.event or "")
-	local actor_login = (type(item.actor) == "table" and tostring(item.actor.login or ""))
-		or (type(item.user) == "table" and tostring(item.user.login or ""))
+	local actor_login = json.safe_str(json.safe_table(item.actor).login)
+		or json.safe_str(json.safe_table(item.user).login)
 		or ""
 	local actor = actor_from_login(actor_login)
 	local date = tostring(item.created_at or item.submitted_at or "")
@@ -334,7 +346,7 @@ function M.to_activity(item)
 	elseif event == "head_ref_force_pushed" then
 		return { kind = "force_pushed", actor = actor, date = date, label = "force pushed" }
 	elseif event == "committed" then
-		local author = type(item.author) == "table" and item.author or {}
+		local author = json.safe_table(item.author)
 		local author_name = tostring(author.name or "")
 		local msg = tostring(item.message or ""):match("([^\n]+)") or ""
 		local sha = tostring(item.sha or ""):sub(1, 8)
@@ -347,22 +359,21 @@ function M.to_activity(item)
 	elseif event == "base_ref_force_pushed" then
 		return { kind = "force_pushed", actor = actor, date = date, label = "base branch force pushed" }
 	elseif event == "labeled" or event == "unlabeled" then
-		local label = type(item.label) == "table" and tostring(item.label.name or "") or ""
+		local label = json.safe_str(json.safe_table(item.label).name) or ""
 		if label == "" then
 			return nil
 		end
 		local verb = event == "labeled" and "added label" or "removed label"
 		return { kind = event, actor = actor, date = date, label = verb .. ": " .. label }
 	elseif event == "assigned" or event == "unassigned" then
-		local assignee = type(item.assignee) == "table" and tostring(item.assignee.login or "") or ""
+		local assignee = json.safe_str(json.safe_table(item.assignee).login) or ""
 		if assignee == "" then
 			return nil
 		end
 		local verb = event == "assigned" and "assigned" or "unassigned"
 		return { kind = event, actor = actor, date = date, label = verb .. " " .. assignee }
 	elseif event == "review_requested" then
-		local reviewer = type(item.requested_reviewer) == "table" and tostring(item.requested_reviewer.login or "")
-			or ""
+		local reviewer = json.safe_str(json.safe_table(item.requested_reviewer).login) or ""
 		return {
 			kind = "review_requested",
 			actor = actor,
@@ -418,7 +429,7 @@ end
 ---@param raw table
 ---@return PullsComment
 function M.to_activity_comment(raw)
-	local raw_user = type(raw.user) == "table" and raw.user or (type(raw.actor) == "table" and raw.actor or nil)
+	local raw_user = json.nilify(raw.user) or json.nilify(raw.actor)
 	local result = comment(raw, raw_user)
 	result.parent_id = nil
 	result.inline = nil
@@ -433,7 +444,7 @@ function M.to_conversation_review(raw)
 		return nil
 	end
 
-	local raw_user = type(raw.user) == "table" and raw.user or (type(raw.actor) == "table" and raw.actor or nil)
+	local raw_user = json.nilify(raw.user) or json.nilify(raw.actor)
 	local node_id = json.safe_str(raw.node_id)
 	local state = tostring(raw.state or ""):lower()
 	if state ~= "approved" and state ~= "changes_requested" and state ~= "commented" and state ~= "dismissed" then
@@ -482,7 +493,7 @@ function M.to_comment(raw, thread_state)
 		end
 	end
 
-	local result = comment(raw, type(raw.user) == "table" and raw.user or nil)
+	local result = comment(raw, json.nilify(raw.user))
 	result.parent_id = json.nilify(raw.in_reply_to_id)
 	result.file = file
 	result.inline = inline
@@ -539,32 +550,33 @@ function M.to_review_comment(node, thread, fallback_parent)
 	if result.parent_id == nil then
 		result.parent_id = fallback_parent
 	end
-	if result.parent_id == nil and thread.isResolved == true and type(json.nilify(thread.resolvedBy)) == "table" then
-		result.resolved_by = comment_author(thread.resolvedBy)
+	local resolved_by = comment_author(json.nilify(thread.resolvedBy))
+	if result.parent_id == nil and thread.isResolved == true and resolved_by.username ~= "" then
+		result.resolved_by = resolved_by
 	end
 	return result
 end
 
----@param comment PullsComment
+---@param review_comment PullsComment
 ---@return table
-function M.review_thread(comment)
-	local inline = comment.inline or {}
-	local file = comment.file
+function M.review_thread(review_comment)
+	local inline = review_comment.inline or {}
+	local file = review_comment.file
 	local side = not file and (inline.to ~= nil and "RIGHT" or "LEFT") or nil
 	local start_side = not file and (inline.start_to ~= nil and "RIGHT" or (inline.start_from ~= nil and "LEFT" or nil))
 		or nil
 	return {
-		id = tostring(comment.thread_id or ""),
+		id = tostring(review_comment.thread_id or ""),
 		subjectType = file and "FILE" or "LINE",
 		path = file and file.path or inline.path,
 		line = inline.to,
 		startLine = inline.start_to,
-		originalLine = (comment._raw or {}).original_line or inline.from,
+		originalLine = (review_comment._raw or {}).original_line or inline.from,
 		originalStartLine = inline.start_from,
 		diffSide = side,
 		startDiffSide = start_side,
-		isResolved = comment.state == "RESOLVED",
-		isOutdated = comment.outdated == true or comment.state == "OUTDATED",
+		isResolved = review_comment.state == "RESOLVED",
+		isOutdated = review_comment.outdated == true or review_comment.state == "OUTDATED",
 	}
 end
 

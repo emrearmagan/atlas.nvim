@@ -9,7 +9,7 @@ local LUA_PATTERN_SPECIALS = "[%^%$%(%)%%%.%[%]%+%-%?]"
 ---@return AtlasGitTransport transport
 local function configured_git_transport()
 	local value = ((config.options or {}).pulls or {}).git_transport
-	return value == "https" and "https" or "ssh"
+	return value == "ssh" and "ssh" or "https"
 end
 
 local function star_count(s)
@@ -137,8 +137,12 @@ function M.resolve_repo_path(repo_paths, repo_name, opts)
 	if opts.require_existing ~= false and vim.fn.isdirectory(resolved) ~= 1 then
 		return nil, string.format("mapped path does not exist: %s", resolved)
 	end
-	if opts.require_git ~= false and not git.is_inside_work_tree(resolved) then
-		return nil, string.format("mapped path is not a git repository: %s", resolved)
+	if opts.require_git ~= false then
+		local root = git.repo_root(resolved)
+		if not root then
+			return nil, string.format("mapped path is not a git repository: %s", resolved)
+		end
+		resolved = root
 	end
 	return resolved, nil
 end
@@ -228,8 +232,9 @@ end
 ---@param pr PullRequest
 ---@param repo_path string
 ---@param on_done fun(err: string|nil)
+---@param on_progress (fun(label: string, percent: integer))|nil
 ---@return { cancel: fun() }
-function M.fetch_pr_refs(pr, repo_path, on_done)
+function M.fetch_pr_refs(pr, repo_path, on_done, on_progress)
 	local base_revision, head_revision, revision_err = M.pr_diff_revisions(pr)
 	if not base_revision or not head_revision then
 		return schedule_result(on_done, revision_err)
@@ -247,10 +252,11 @@ function M.fetch_pr_refs(pr, repo_path, on_done)
 	local fetch_err
 
 	local function missing_commit()
-		if not git.rev_exists(repo_path, base_revision) then
+		local exists = git.check_commits(repo_path, { base_revision, head_revision })
+		if not exists[1] then
 			return "Pull request base commit is unavailable: " .. base_revision
 		end
-		if not git.rev_exists(repo_path, head_revision) then
+		if not exists[2] then
 			return "Pull request head commit is unavailable: " .. head_revision
 		end
 	end
@@ -275,7 +281,7 @@ function M.fetch_pr_refs(pr, repo_path, on_done)
 				fetch_err = err or "Failed to fetch pull request ref"
 			end
 			finish()
-		end)
+		end, on_progress)
 	end
 
 	if not missing_commit() then
@@ -293,7 +299,7 @@ function M.fetch_pr_refs(pr, repo_path, on_done)
 				fetch_err = err or "Failed to fetch pull request ref"
 			end
 			fetch_head()
-		end)
+		end, on_progress)
 	end
 	return {
 		cancel = function()
@@ -309,8 +315,8 @@ end
 ---@return string|nil cache_path
 ---@return string|nil remote_url
 local function cached_pr_repository(pr)
-	local resolver = require("atlas.providers.resolve")
-	local target = resolver.resolve(pr.link.html)
+	local providers = require("atlas.providers")
+	local target = providers.resolve(pr.link.html)
 	if not target or target.domain ~= "pulls" or target.entity ~= "pr" then
 		return nil, nil
 	end
@@ -329,8 +335,7 @@ local function cached_pr_repository(pr)
 	if transport == "ssh" then
 		return cache_path, string.format("git@%s:%s.git", target.host, repository)
 	end
-	local base_url = resolver.base_url(target):gsub("/+$", "")
-	return cache_path, string.format("%s/%s.git", base_url, repository)
+	return cache_path, target.repository_url
 end
 
 local PR_CACHE_MAX_AGE = 7 * 24 * 60 * 60
@@ -343,14 +348,23 @@ local function progress_message(action, phase, percent)
 	return string.format("%s...\n%s %d%% / 100%%", action, phase, percent)
 end
 
-local function clean_pr_cache()
-	local root = vim.fs.joinpath(vim.fn.stdpath("cache"), "atlas", "repos")
-	for _, git_dir in ipairs(vim.fs.find(".git", { path = root, type = "directory", limit = math.huge })) do
-		local last_fetch = vim.uv.fs_stat(vim.fs.joinpath(git_dir, "FETCH_HEAD")) or vim.uv.fs_stat(git_dir)
-		if last_fetch and os.time() - last_fetch.mtime.sec > PR_CACHE_MAX_AGE then
-			vim.fn.delete(vim.fs.dirname(git_dir), "rf")
+---@param active_path string
+local function clean_pr_cache(active_path)
+	active_path = vim.fs.normalize(active_path)
+	vim.schedule(function()
+		local root = vim.fs.joinpath(vim.fn.stdpath("cache"), "atlas", "repos")
+		for _, git_dir in ipairs(vim.fs.find(".git", { path = root, type = "directory", limit = math.huge })) do
+			local repo_path = vim.fs.dirname(git_dir)
+			local last_used = vim.uv.fs_stat(repo_path)
+			if
+				vim.fs.normalize(repo_path) ~= active_path
+				and last_used
+				and os.time() - last_used.mtime.sec > PR_CACHE_MAX_AGE
+			then
+				vim.fn.delete(repo_path, "rf")
+			end
 		end
-	end
+	end)
 end
 
 ---@param pr PullRequest
@@ -373,6 +387,10 @@ function M.ensure_pr_repository(pr, repo_path, on_progress, on_done)
 
 	---@param path string
 	local function fetch(path)
+		if cached then
+			local now = os.time()
+			vim.uv.fs_utime(path, now, now)
+		end
 		on_progress("Fetching pull request refs...")
 		current = M.fetch_pr_refs(pr, path, function(err)
 			current = nil
@@ -383,10 +401,9 @@ function M.ensure_pr_repository(pr, repo_path, on_progress, on_done)
 				on_done(nil, err)
 				return
 			end
-			if cached then
-				clean_pr_cache()
-			end
 			on_done(path, nil)
+		end, function(phase, percent)
+			on_progress(progress_message("Fetching pull request refs", phase, percent))
 		end)
 	end
 
@@ -410,6 +427,7 @@ function M.ensure_pr_repository(pr, repo_path, on_progress, on_done)
 	end
 	vim.fn.mkdir(vim.fs.dirname(path), "p")
 	on_progress("Cloning repository...")
+	clean_pr_cache(path)
 	-- Leave the cache without a checkout; Git loads trees and blobs when a diff needs them.
 	current = git.run({
 		"clone",
@@ -439,12 +457,8 @@ function M.ensure_pr_repository(pr, repo_path, on_progress, on_done)
 	return handle
 end
 
----@class CheckoutResult
----@field repo_path string
----@field local_branch string
-
 ---@param pr PullRequest|nil
----@param on_done fun(result: CheckoutResult|nil, err: string|nil)
+---@param on_done fun(result: { repo_path: string, local_branch: string }|nil, err: string|nil)
 function M.checkout_pr(pr, on_done)
 	on_done = on_done or function() end
 
@@ -470,11 +484,6 @@ function M.checkout_pr(pr, on_done)
 
 	git.checkout_branch(repo_path, src_branch, function(ok, checkout_err)
 		if ok then
-			logger.loginfo("checkout.checkout_pr switched existing branch", {
-				pr_id = pr.id,
-				repo_path = repo_path,
-				branch = src_branch,
-			})
 			on_done({ repo_path = repo_path, local_branch = src_branch }, nil)
 			return
 		end
@@ -518,12 +527,6 @@ function M.checkout_pr(pr, on_done)
 					on_done(nil, cerr)
 					return
 				end
-
-				logger.loginfo("checkout.checkout_pr created and switched branch", {
-					pr_id = pr.id,
-					repo_path = repo_path,
-					branch = src_branch,
-				})
 
 				on_done({ repo_path = repo_path, local_branch = src_branch }, nil)
 			end)

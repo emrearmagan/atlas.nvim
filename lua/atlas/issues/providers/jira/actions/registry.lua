@@ -2,10 +2,8 @@ local M = {}
 
 local actions = require("atlas.issues.actions")
 local icons = require("atlas.ui.shared.icons")
-local picker = require("atlas.picker")
-local statusline = require("atlas.ui.statusline")
+local picker = require("atlas.ui.picker")
 local issues_api = require("atlas.issues.providers.jira.api.issues")
-local adf = require("atlas.issues.providers.jira.converted.adf")
 local notify = require("atlas.core.notify")
 local transitions_api = require("atlas.issues.providers.jira.api.transitions")
 local users_api = require("atlas.issues.providers.jira.api.users")
@@ -16,7 +14,7 @@ local config = require("atlas.issues.providers.jira.api.config")
 ---@return boolean
 local function has_issue_key(ctx)
 	local issue = ctx.issue
-	if type(issue) ~= "table" then
+	if issue == nil then
 		return false
 	end
 	local key = tostring(issue.key or "")
@@ -25,8 +23,8 @@ end
 
 ---@return string
 local function current_jql()
-	local view = issues_state.active_view or issues_state.current_view
-	if type(view) ~= "table" then
+	local view = issues_state.current_view or issues_state.active_view
+	if view == nil then
 		return ""
 	end
 	---@cast view AtlasJiraViewConfig
@@ -40,12 +38,6 @@ M.items = ACTIONS
 ---@param action AtlasIssueAction
 local function register(action)
 	table.insert(ACTIONS, action)
-end
-
----@param ctx AtlasIssueActionContext
----@return boolean, string|nil
-local function transition_available(ctx)
-	return has_issue_key(ctx)
 end
 
 ---@param ctx AtlasIssueActionContext
@@ -67,8 +59,8 @@ local function transition(ctx, done)
 		title = string.format("Transition %s", issue_key),
 		debounce_ms = 0,
 		format_item = function(item)
-			local transition = item.value
-			local category = type(transition) == "table" and transition.to_status_category or nil
+			local transition_value = item.value
+			local category = transition_value.to_status_category
 			local icon = (category and status_category_icons[category]) or icons.fallback()
 			return string.format("%s %s", icon, item.label)
 		end,
@@ -96,13 +88,13 @@ local function transition(ctx, done)
 				end
 
 				all_items = {}
-				for _, transition in ipairs(transitions) do
-					local to_status = tostring((transition and transition.to_status_name) or "")
+				for _, candidate in ipairs(transitions) do
+					local to_status = tostring((candidate and candidate.to_status_name) or "")
 					if current_status == "" or to_status == "" or to_status ~= current_status then
 						table.insert(all_items, {
-							id = tostring(transition.id or ""),
-							label = tostring(transition.name or ""),
-							value = transition,
+							id = tostring(candidate.id or ""),
+							label = tostring(candidate.name or ""),
+							value = candidate,
 						})
 					end
 				end
@@ -111,18 +103,17 @@ local function transition(ctx, done)
 		end,
 		on_select = function(item)
 			local selected = item.value
-			statusline.notify("loading", string.format("Transitioning %s...", issue_key))
+			notify.loading(string.format("Transitioning %s...", issue_key))
 			transitions_api.transition_issue(issue_key, selected.id, function(ok, err)
 				if not ok then
-					statusline.notify("error", err or "Transition failed")
+					notify.error(err or "Transition failed")
 					done(nil, err or "Transition failed")
 					return
 				end
 
-				statusline.notify(
-					"success",
+				notify.success(
 					string.format("Transitioned %s to %s", issue_key, selected.name or ""),
-					1200
+					{ timeout = 1200 }
 				)
 				done({ issue_key = issue_key }, nil)
 			end)
@@ -134,15 +125,10 @@ local function transition(ctx, done)
 end
 
 ---@param ctx AtlasIssueActionContext
----@return boolean, string|nil
-local function assign_available(ctx)
-	return has_issue_key(ctx)
-end
-
----@param ctx AtlasIssueActionContext
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function assign(ctx, done)
 	local issue = assert(ctx.issue)
+	---@cast issue JiraIssue
 
 	local issue_key = issue.key
 	local issue_project_key = issue.project and issue.project.key or nil
@@ -150,7 +136,7 @@ local function assign(ctx, done)
 
 	local function to_picker_items(users)
 		local items = {}
-		local current_user = issues_state.current_user
+		local current_user = ctx.current_user
 		local current_user_account_id = current_user and current_user.account_id or nil
 		local current_user_item = nil
 		local seen_current_user = false
@@ -217,21 +203,21 @@ local function assign(ctx, done)
 		end,
 		on_select = function(item)
 			local selected = item.value
-			statusline.notify("loading", string.format("Assigning %s...", issue_key))
+			notify.loading(string.format("Assigning %s...", issue_key))
 			users_api.assign_issue(issue_key, selected.account_id, function(ok, err)
 				if not ok then
-					statusline.notify("error", err or "Assign failed")
+					notify.error(err or "Assign failed")
 					done(nil, err or "Assign failed")
 					return
 				end
 
 				if selected.account_id == nil then
-					statusline.notify("success", string.format("Unassigned %s", issue_key), 1200)
+					notify.success(string.format("Unassigned %s", issue_key), { timeout = 1200 })
 					done({ issue_key = issue_key }, nil)
 					return
 				end
 
-				statusline.notify("success", string.format("Assigned %s to %s", issue_key, selected.display_name), 1200)
+				notify.success(string.format("Assigned %s to %s", issue_key, selected.display_name), { timeout = 1200 })
 				done({ issue_key = issue_key }, nil)
 			end)
 		end,
@@ -242,19 +228,12 @@ local function assign(ctx, done)
 end
 
 ---@param ctx AtlasIssueActionContext
----@return boolean, string|nil
-local function reporter_available(ctx)
-	return has_issue_key(ctx)
-end
-
----@param ctx AtlasIssueActionContext
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function reporter(ctx, done)
 	local issue = assert(ctx.issue)
 
 	local issue_key = issue.key
-	local current_reporter_key =
-		vim.trim(tostring(type(issue.reporter) == "table" and issue.reporter.display_name or "")):lower()
+	local current_reporter_key = vim.trim(tostring(issue.reporter and issue.reporter.display_name or "")):lower()
 
 	local function to_picker_items(users)
 		local items = {}
@@ -284,18 +263,17 @@ local function reporter(ctx, done)
 		end,
 		on_select = function(item)
 			local selected = item.value
-			statusline.notify("loading", string.format("Changing reporter for %s...", issue_key))
+			notify.loading(string.format("Changing reporter for %s...", issue_key))
 			users_api.change_reporter(issue_key, selected.account_id, function(ok, err)
 				if not ok then
-					statusline.notify("error", err or "Reporter change failed")
+					notify.error(err or "Reporter change failed")
 					done(nil, err or "Reporter change failed")
 					return
 				end
 
-				statusline.notify(
-					"success",
+				notify.success(
 					string.format("Reporter for %s changed to %s", issue_key, selected.display_name),
-					1200
+					{ timeout = 1200 }
 				)
 				done({ issue_key = issue_key }, nil)
 			end)
@@ -304,12 +282,6 @@ local function reporter(ctx, done)
 			done(nil, nil)
 		end,
 	})
-end
-
----@param ctx AtlasIssueActionContext
----@return boolean, string|nil
-local function delete_issue_available(ctx)
-	return has_issue_key(ctx)
 end
 
 ---@param ctx AtlasIssueActionContext
@@ -331,30 +303,25 @@ local function delete_issue(ctx, done)
 			return
 		end
 
-		statusline.notify("loading", string.format("Deleting %s...", issue_key))
+		notify.loading(string.format("Deleting %s...", issue_key))
 		issues_api.delete_issue(issue_key, function(ok, err)
 			if not ok then
-				statusline.notify("error", err or "Delete failed")
+				notify.error(err or "Delete failed")
 				done(nil, err or "Delete failed")
 				return
 			end
 
-			statusline.notify("success", string.format("Deleted %s", issue_key), 1200)
+			notify.success(string.format("Deleted %s", issue_key), { timeout = 1200 })
 			done({ issue_key = issue_key, removed = true }, nil)
 		end)
 	end)
 end
 
 ---@param ctx AtlasIssueActionContext
----@return boolean, string|nil
-local function edit_issue_available(ctx)
-	return has_issue_key(ctx)
-end
-
----@param ctx AtlasIssueActionContext
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function edit_issue(ctx, done)
 	local issue = assert(ctx.issue)
+	---@cast issue JiraIssue
 
 	local issue_key = issue.key
 	local md_to_adf = require("atlas.issues.providers.jira.converted.markdown")
@@ -381,17 +348,17 @@ local function edit_issue(ctx, done)
 				payload.assignee = vim.NIL
 			end
 
-			statusline.notify("loading", string.format("Updating issue %s...", issue_key))
+			notify.loading(string.format("Updating issue %s...", issue_key))
 			issues_api.update_issue(issue_key, payload, function(ok, err)
 				if not ok then
 					local message = err or "Failed to update issue"
-					statusline.notify("error", message)
+					notify.error(message)
 					submit_done(false, message)
 					done(nil, message)
 					return
 				end
 
-				statusline.notify("success", string.format("Updated %s", issue_key), 1200)
+				notify.success(string.format("Updated %s", issue_key), { timeout = 1200 })
 				submit_done(true, nil)
 				vim.schedule(function()
 					done({ issue_key = issue_key }, nil)
@@ -414,24 +381,16 @@ local function edit_issue(ctx, done)
 		})
 	end
 
-	statusline.notify("loading", string.format("Loading description for %s...", issue_key))
-	issues_api.get_issue_description(issue_key, function(description, err)
-		if err then
-			statusline.notify("warn", string.format("Failed loading description for %s", issue_key), 1200)
+	notify.loading(string.format("Loading description for %s...", issue_key))
+	issues_api.fetch_issue({ key = issue_key }, { force_load = true }, function(details, err)
+		if err or details == nil then
+			notify.warn(string.format("Failed loading description for %s", issue_key), { timeout = 1200 })
 			open_editor("")
 			return
 		end
 
-		statusline.notify("success", string.format("Loaded description for %s", issue_key), 1200)
-		if type(description) == "table" then
-			open_editor(adf.to_markdown(description))
-			return
-		elseif type(description) == "string" then
-			-- Description is a sting in Jira server API
-			open_editor(description)
-			return
-		end
-		open_editor("")
+		notify.success(string.format("Loaded description for %s", issue_key), { timeout = 1200 })
+		open_editor(details.description)
 	end)
 end
 
@@ -462,7 +421,7 @@ local function create_issue(context, done)
 			elseif issue_type_name ~= "" then
 				api_fields.issuetype = { name = issue_type_name }
 			else
-				statusline.notify("error", "Issue type is required")
+				notify.error("Issue type is required")
 				submit_done(false, "Issue type is required")
 				done(nil, "Issue type is required")
 				return
@@ -500,7 +459,7 @@ local function create_issue(context, done)
 							commit_create(retry, true)
 							return
 						end
-						statusline.notify("error", err)
+						notify.error(err)
 						submit_done(false, err)
 						done(nil, err)
 						return
@@ -511,12 +470,18 @@ local function create_issue(context, done)
 							local update = { description = raw_desc }
 							issues_api.update_issue(result.key, update, function(ok)
 								if ok then
-									notify.info(string.format("Created %s", result.key), { timeout = 2000 })
+									notify.info(
+										string.format("Created %s", result.key),
+										{ timeout = 2000, vim_notify = true }
+									)
 									submit_done(true, nil)
 									done({ issue_key = result.key }, nil)
 									open_created_issue(result.key)
 								else
-									notify.warn("Issue created but failed to set description", { timeout = 3000 })
+									notify.warn(
+										"Issue created but failed to set description",
+										{ timeout = 3000, vim_notify = true }
+									)
 									submit_done(true, "Description not set")
 									done({ issue_key = result.key }, nil)
 									open_created_issue(result.key)
@@ -525,14 +490,14 @@ local function create_issue(context, done)
 							return
 						end
 
-						notify.info(string.format("Created %s", result.key), { timeout = 2000 })
+						notify.info(string.format("Created %s", result.key), { timeout = 2000, vim_notify = true })
 						submit_done(true, nil)
 						done({ issue_key = result.key }, nil)
 						open_created_issue(result.key)
 						return
 					end
 
-					statusline.notify("error", "Invalid response")
+					notify.error("Invalid response")
 					submit_done(false, "Invalid response")
 					done(nil, "Invalid response")
 				end)
@@ -647,7 +612,7 @@ local function create_issue(context, done)
 			run_create(item.value.key)
 		end,
 		on_cancel = function()
-			notify.info("Create issue cancelled", { timeout = 1200 })
+			notify.info("Create issue cancelled", { timeout = 1200, vim_notify = true })
 			done(nil, nil)
 		end,
 	})
@@ -664,16 +629,12 @@ local function search_issue(_, done)
 		end,
 		preview_item = function(item, preview_done)
 			local issue = item.value
-			return issues_api.get_issue_detail(issue.key, function(detail, err)
-				if err then
-					preview_done({ title = issue.key, lines = { err } })
+			return issues_api.fetch_issue({ key = issue.key }, nil, function(details, err)
+				if err or details == nil then
+					preview_done({ title = issue.key, lines = { err or "Failed to load issue" } })
 					return
 				end
-				local description = detail and detail.description
-				if type(description) == "table" then
-					description = adf.to_markdown(description)
-				end
-				description = vim.trim(tostring(description or ""))
+				local description = vim.trim(details.description)
 				preview_done({
 					title = issue.key,
 					lines = vim.split(description ~= "" and description or "No description", "\n", { plain = true }),
@@ -701,9 +662,9 @@ local function search_issue(_, done)
 		end,
 		on_select = function(item)
 			local issue = item.value
-			local issue_key = tostring((issue or {}).key or "")
+			local issue_key = tostring(issue.key or "")
 			if issue_key == "" then
-				statusline.notify("error", "Selected issue is missing key")
+				notify.error("Selected issue is missing key")
 				done(nil, "Selected issue is missing key")
 				return
 			end
@@ -725,12 +686,6 @@ local function search_jql(_, done)
 end
 
 ---@param ctx AtlasIssueActionContext
----@return boolean, string|nil
-local function browse_issue_available(ctx)
-	return has_issue_key(ctx)
-end
-
----@param ctx AtlasIssueActionContext
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function browse_issue(ctx, done)
 	local issue = assert(ctx.issue)
@@ -738,20 +693,14 @@ local function browse_issue(ctx, done)
 	local base_url = tostring(config.jira_config().base_url or ""):gsub("/$", "")
 	local issue_key = tostring(issue.key or "")
 	if base_url == "" or issue_key == "" then
-		statusline.notify("error", "No URL found for issue")
+		notify.error("No URL found for issue")
 		done(nil, "No URL found for issue")
 		return
 	end
 
 	vim.ui.open(string.format("%s/browse/%s", base_url, issue_key))
-	statusline.notify("success", string.format("Opened %s in browser", issue_key), 1200)
+	notify.success(string.format("Opened %s in browser", issue_key), { timeout = 1200 })
 	done(nil, nil)
-end
-
----@param ctx AtlasIssueActionContext
----@return boolean, string|nil
-local function copy_issue_url_available(ctx)
-	return has_issue_key(ctx)
 end
 
 ---@param ctx AtlasIssueActionContext
@@ -763,14 +712,14 @@ local function copy_issue_url(ctx, done)
 	local issue_key = tostring(issue.key or "")
 	local url = (base_url ~= "" and issue_key ~= "") and string.format("%s/browse/%s", base_url, issue_key) or ""
 	if url == "" then
-		statusline.notify("error", "No URL found for issue")
+		notify.error("No URL found for issue")
 		done(nil, "No URL found for issue")
 		return
 	end
 
 	vim.fn.setreg("+", url)
 	vim.fn.setreg('"', url)
-	statusline.notify("success", "Copied issue URL", 1200)
+	notify.success("Copied issue URL", { timeout = 1200 })
 	done(nil, nil)
 end
 
@@ -789,23 +738,23 @@ local function toggle_subscription(ctx, done)
 	local svc = require("atlas.issues.providers.jira.api.service")
 	local issue = assert(ctx.issue)
 	local issue_key = tostring(issue.key or "")
-	statusline.notify("loading", issue.is_subscribed and "Unsubscribing..." or "Subscribing...")
+	notify.loading(issue.is_subscribed and "Unsubscribing..." or "Subscribing...")
 
 	local function finish(subscribed, err)
 		if err then
-			statusline.notify("error", tostring(err))
+			notify.error(tostring(err))
 			done(nil, tostring(err))
 			return
 		end
 		issue.is_subscribed = subscribed == true
-		statusline.notify("success", issue.is_subscribed and "Subscribed" or "Unsubscribed", 1200)
+		notify.success(issue.is_subscribed and "Subscribed" or "Unsubscribed", { timeout = 1200 })
 		done({ issue_key = issue.key }, nil)
 	end
 
 	if issue.is_subscribed ~= true then
 		svc.request("POST", "/issue/" .. issue_key .. "/watchers", nil, function(_, err)
 			finish(err == nil and true or nil, err)
-		end)
+		end, { action = "Subscribe to issue", issue_key = issue_key })
 		return
 	end
 
@@ -821,12 +770,12 @@ local function toggle_subscription(ctx, done)
 			nil,
 			function(_, err)
 				finish(err == nil and false or nil, err)
-			end
+			end,
+			{ action = "Unsubscribe from issue", issue_key = issue_key }
 		)
 	end
 
-	local st = require("atlas.issues.state")
-	local current = st.current_user
+	local current = ctx.current_user
 	if current and tostring(current.account_id or "") ~= "" then
 		unsubscribe(current.account_id)
 		return
@@ -844,31 +793,31 @@ end
 register({
 	id = "transition",
 	label = "Transition",
-	is_available = transition_available,
+	is_available = has_issue_key,
 	run = transition,
 })
 register({
 	id = "assign",
 	label = "Change assignee",
-	is_available = assign_available,
+	is_available = has_issue_key,
 	run = assign,
 })
 register({
 	id = "reporter",
 	label = "Change reporter",
-	is_available = reporter_available,
+	is_available = has_issue_key,
 	run = reporter,
 })
 register({
 	id = "delete_issue",
 	label = "Delete Issue",
-	is_available = delete_issue_available,
+	is_available = has_issue_key,
 	run = delete_issue,
 })
 register({
 	id = "edit_issue",
 	label = "Edit Issue",
-	is_available = edit_issue_available,
+	is_available = has_issue_key,
 	run = edit_issue,
 })
 register({
@@ -891,7 +840,7 @@ register({
 	id = "browse_issue",
 	label = "Open Issue In Browser",
 	hidden = true,
-	is_available = browse_issue_available,
+	is_available = has_issue_key,
 	run = browse_issue,
 })
 register(actions.copy_issue_key)
@@ -899,7 +848,7 @@ register({
 	id = "copy_issue_url",
 	label = "Copy Issue URL",
 	hidden = true,
-	is_available = copy_issue_url_available,
+	is_available = has_issue_key,
 	run = copy_issue_url,
 })
 register({

@@ -1,6 +1,6 @@
 local M = {}
 
-local cli = require("atlas.providers.github.client").pulls
+local cli = require("atlas.providers.github.client")
 local json = require("atlas.core.json")
 local mapper = require("atlas.pulls.providers.github.api.mapper")
 local reviews = require("atlas.pulls.providers.github.api.reviews")
@@ -547,7 +547,7 @@ mutation($threadId:ID!,$reviewId:ID,$body:String!){
 		end
 
 		if pending then
-			return reviews.with_pending(pr, opts.review, tostring(pr.source.commit_hash or ""), add_reply, function(err)
+			return reviews.with_pending(pr, opts.review, pr.source.commit_hash, add_reply, function(err)
 				on_done(nil, err)
 			end)
 		end

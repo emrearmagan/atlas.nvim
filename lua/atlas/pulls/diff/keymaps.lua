@@ -4,7 +4,7 @@ local actions = require("atlas.pulls.diff.actions")
 local comments = require("atlas.pulls.diff.comments")
 local help = require("atlas.ui.popups.help")
 local notes = require("atlas.pulls.diff.notes")
-local picker = require("atlas.picker")
+local picker = require("atlas.ui.picker")
 local pull_actions = require("atlas.pulls.actions")
 local resolver = require("atlas.core.keymaps")
 local review = require("atlas.pulls.diff.review")
@@ -226,12 +226,12 @@ function M.register(session, opts)
 				if session.review then
 					add(items, "ui.toggle_fold", "Toggle review thread", function()
 						if not comments.toggle_at_cursor(session, buf) and vim.fn.foldlevel(".") > 0 then
-							vim.cmd.normal({ "za", bang = true })
+							vim.cmd.normal({ args = { "za" }, bang = true })
 						end
 					end)
 					add(items, "ui.toggle_all_folds", "Toggle all review threads", function()
 						if not comments.toggle_all(session) and vim.fn.foldlevel(".") > 0 then
-							vim.cmd.normal({ "zA", bang = true })
+							vim.cmd.normal({ args = { "zA" }, bang = true })
 						end
 					end)
 				end

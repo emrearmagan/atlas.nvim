@@ -1,77 +1,45 @@
 local M = {}
 
 local icons = require("atlas.ui.shared.icons")
-local providers = require("atlas.pulls.providers")
 local table_tree = require("atlas.ui.components.table_tree")
 
 ---@param pipeline PullsPipeline
----@return string
-local function pipeline_name(pipeline)
-	local name = tostring(pipeline.name or "")
-	if name == "" then
-		name = tostring(pipeline.key or "")
-	end
-	return name ~= "" and name or "Pipeline"
-end
-
----@param pipeline PullsPipeline
+---@param stage PullsPipelineStage
 ---@param job PullsPipelineJob
 ---@return table
-local function job_row(pipeline, job)
+local function job_row(pipeline, stage, job)
 	local icon, icon_hl = icons.pulls_status(tostring(job.state or "UNKNOWN"):lower())
-	local row = {
+	return {
 		icon = icon,
-		label = string.format("%s %s", icon, tostring(job.name or "Job")),
+		label = string.format("%s %s", icon, job.name),
 		icon_hl = icon_hl,
-		_item = { pipeline = pipeline, job = job },
-		children = {},
+		_item = { pipeline = pipeline, stage = stage, job = job },
 	}
-	for _, step in ipairs(job.steps or {}) do
-		local step_icon, step_icon_hl = icons.pulls_status(tostring(step.state or "UNKNOWN"):lower())
-		table.insert(row.children, {
-			icon = step_icon,
-			label = string.format("%s %s", step_icon, tostring(step.name or "Step")),
-			icon_hl = step_icon_hl,
-			_item = { pipeline = pipeline, job = job, step = step },
-		})
-	end
-	return row
 end
 
 ---@param pipeline PullsPipeline
 ---@return table[]
 local function pipeline_children(pipeline)
 	local rows = {}
-	local stages = {}
-	local stage_order = {}
-	for _, job in ipairs(pipeline.jobs or {}) do
-		local stage = tostring(job.stage or "")
-		if stage == "" then
-			table.insert(rows, job_row(pipeline, job))
-		else
-			if stages[stage] == nil then
-				stages[stage] = {}
-				table.insert(stage_order, stage)
+	for _, stage in ipairs(pipeline.stages) do
+		if stage.name == nil then
+			for _, job in ipairs(stage.jobs) do
+				table.insert(rows, job_row(pipeline, stage, job))
 			end
-			table.insert(stages[stage], job)
+		else
+			local icon, icon_hl = icons.pulls_status(tostring(stage.state or "UNKNOWN"):lower())
+			local stage_row = {
+				icon = icon,
+				label = string.format("%s %s", icon, stage.name),
+				icon_hl = icon_hl,
+				_item = { pipeline = pipeline, stage = stage },
+				children = {},
+			}
+			for _, job in ipairs(stage.jobs) do
+				table.insert(stage_row.children, job_row(pipeline, stage, job))
+			end
+			table.insert(rows, stage_row)
 		end
-	end
-
-	for _, stage in ipairs(stage_order) do
-		local jobs = stages[stage]
-		local state = providers.aggregate_pipeline_state(jobs)
-		local icon, icon_hl = icons.pulls_status(state:lower())
-		local stage_row = {
-			icon = icon,
-			label = string.format("%s %s", icon, stage),
-			icon_hl = icon_hl,
-			_item = { pipeline = pipeline, stage = stage },
-			children = {},
-		}
-		for _, job in ipairs(jobs) do
-			table.insert(stage_row.children, job_row(pipeline, job))
-		end
-		table.insert(rows, stage_row)
 	end
 	return rows
 end
@@ -87,7 +55,7 @@ local function pipeline_rows(pipelines)
 		local icon, icon_hl = icons.pulls_status(tostring(pipeline.state or "UNKNOWN"):lower())
 		table.insert(rows, {
 			icon = icon,
-			label = string.format("%s %s", icon, pipeline_name(pipeline)),
+			label = string.format("%s %s", icon, pipeline.name),
 			icon_hl = icon_hl,
 			_item = { pipeline = pipeline },
 			children = pipeline_children(pipeline),

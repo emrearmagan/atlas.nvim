@@ -360,7 +360,7 @@ function M.sanitize_lines(text)
 	return out
 end
 
-local strwidth = vim.api.nvim_strwidth
+local strwidth = vim.fn.strdisplaywidth
 local strcharpart = vim.fn.strcharpart
 local strchars = vim.fn.strchars
 
@@ -376,13 +376,12 @@ function M.truncate(str, max_dw, from_start)
 		return str
 	end
 	local marker = max_dw == 1 and "." or ".."
-	local available = max_dw - strwidth(marker)
 
-	local nchars = strchars(str)
+	local nchars = strchars(str, true)
 	if from_start then
 		for i = 1, nchars do
-			local tail = strcharpart(str, i)
-			if strwidth(tail) <= available then
+			local tail = strcharpart(str, i, nchars - i, true)
+			if strwidth(marker .. tail) <= max_dw then
 				return marker .. tail
 			end
 		end
@@ -390,8 +389,8 @@ function M.truncate(str, max_dw, from_start)
 	end
 
 	for i = nchars - 1, 0, -1 do
-		local head = strcharpart(str, 0, i)
-		if strwidth(head) <= available then
+		local head = strcharpart(str, 0, i, true)
+		if strwidth(head .. marker) <= max_dw then
 			return head .. marker
 		end
 	end
@@ -438,10 +437,10 @@ function M.wrap_line(text, max_dw)
 			break
 		end
 
-		local nchars = strchars(remaining)
+		local nchars = strchars(remaining, true)
 		local cut = nchars
 		for i = nchars - 1, 1, -1 do
-			if strwidth(strcharpart(remaining, 0, i)) <= max_dw then
+			if strwidth(strcharpart(remaining, 0, i, true)) <= max_dw then
 				cut = i
 				break
 			end
@@ -450,18 +449,18 @@ function M.wrap_line(text, max_dw)
 		local last_space = nil
 		local half = math.floor(cut * 0.5)
 		for i = cut, half, -1 do
-			if strcharpart(remaining, i - 1, 1) == " " then
+			if strcharpart(remaining, i - 1, 1, true) == " " then
 				last_space = i
 				break
 			end
 		end
 
 		if last_space then
-			result[#result + 1] = strcharpart(remaining, 0, last_space - 1)
-			remaining = strcharpart(remaining, last_space)
+			result[#result + 1] = strcharpart(remaining, 0, last_space - 1, true)
+			remaining = strcharpart(remaining, last_space, nchars - last_space, true)
 		else
-			result[#result + 1] = strcharpart(remaining, 0, cut)
-			remaining = strcharpart(remaining, cut)
+			result[#result + 1] = strcharpart(remaining, 0, cut, true)
+			remaining = strcharpart(remaining, cut, nchars - cut, true)
 		end
 	end
 

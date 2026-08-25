@@ -309,7 +309,7 @@ function M.jump(session, direction)
 		end
 	end
 	vim.api.nvim_win_set_cursor(win, { target, 0 })
-	vim.cmd.normal({ "zvzz", bang = true })
+	vim.cmd.normal({ args = { "zv" }, bang = true })
 end
 
 ---@param session AtlasDiffSession
@@ -334,12 +334,12 @@ function M.load(review)
 	end
 	local target, target_err = store.target_for_pull_request(review.pr)
 	if not target then
-		core_notify.error(target_err or "Unable to load local notes")
+		core_notify.error(target_err or "Unable to load local notes", { vim_notify = true })
 		return nil, {}
 	end
 	local items, list_err = store.list(target)
 	if not items then
-		core_notify.error(list_err or "Unable to load local notes")
+		core_notify.error(list_err or "Unable to load local notes", { vim_notify = true })
 	end
 	return target, items or {}
 end

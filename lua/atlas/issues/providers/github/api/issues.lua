@@ -1,31 +1,14 @@
 local M = {}
 
-local cli = require("atlas.providers.github.client").issues
+local cli = require("atlas.providers.github.client")
 local cache = require("atlas.issues.providers.github.api.cache")
 local normalizer = require("atlas.issues.providers.github.api.mapper")
 local json = require("atlas.core.json")
 
-local SEARCH_GQL = [[
-query($search: String!, $limit: Int!, $withRelationships: Boolean!) {
-  search(query: $search, type: ISSUE, first: $limit) {
-    nodes {
-      ... on Issue {
-        ...IssueFields
-        parent @include(if: $withRelationships) { ...IssueFields }
-        subIssues(first: 20) @include(if: $withRelationships) {
-          nodes {
-            ...IssueFields
-            parent { ...IssueFields }
-          }
-        }
-      }
-    }
-  }
-}
-
+local ISSUE_FIELDS_GQL = [[
 fragment IssueFields on Issue {
-  number title state isPinned
-  createdAt updatedAt url
+  id number title state isPinned viewerSubscription
+  createdAt updatedAt closedAt url
   repository { nameWithOwner }
   author { login ... on User { name } }
   assignees(first: 1) { nodes { login name } }
@@ -33,55 +16,65 @@ fragment IssueFields on Issue {
 }
 ]]
 
-local DETAIL_GQL = [[
-query($owner: String!, $repo: String!, $number: Int!, $withRelationships: Boolean!) {
-  repository(owner: $owner, name: $repo) {
-    issue(number: $number) {
-      ...IssueFields
-      body
-      reactionGroups { content reactors { totalCount } }
-      parent @include(if: $withRelationships) {
+local ISSUE_REF_FIELDS_GQL = [[
+fragment IssueRefFields on Issue {
+  number title
+  repository { nameWithOwner }
+}
+]]
+
+local SEARCH_GQL = [[
+query($search: String!, $limit: Int!, $withRelationships: Boolean!) {
+  search(query: $search, type: ISSUE, first: $limit) {
+    nodes {
+      ... on Issue {
         ...IssueFields
-        reactionGroups { content reactors { totalCount } }
-      }
-      subIssues(first: 20) @include(if: $withRelationships) {
-        nodes {
-          ...IssueFields
-          reactionGroups { content reactors { totalCount } }
-          parent {
+        parent @include(if: $withRelationships) { ...IssueRefFields }
+        subIssues(first: 20) @include(if: $withRelationships) {
+          nodes {
             ...IssueFields
-            reactionGroups { content reactors { totalCount } }
+            parent { ...IssueRefFields }
           }
         }
       }
     }
   }
 }
+]] .. ISSUE_FIELDS_GQL .. ISSUE_REF_FIELDS_GQL
 
-fragment IssueFields on Issue {
-  id number title state isPinned viewerSubscription
-  createdAt updatedAt closedAt url
-  repository { nameWithOwner }
-  author { login ... on User { name } }
-  assignees(first: 10) { nodes { login name } }
-  labels(first: 20) { nodes { name color } }
-  milestone {
-    number title state description progressPercentage
-    openIssues: issues(states: OPEN) { totalCount }
-    closedIssues: issues(states: CLOSED) { totalCount }
+local DETAIL_GQL = [[
+query($owner: String!, $repo: String!, $number: Int!, $withRelationships: Boolean!) {
+  repository(owner: $owner, name: $repo) {
+    issue(number: $number) {
+      body
+      assignees(first: 100) { nodes { login name } }
+      labels(first: 100) { nodes { name color } }
+      milestone {
+        title progressPercentage
+        openIssues: issues(states: OPEN) { totalCount }
+        closedIssues: issues(states: CLOSED) { totalCount }
+      }
+      subIssues(first: 20) @include(if: $withRelationships) {
+        nodes {
+          ...IssueFields
+          parent { ...IssueRefFields }
+        }
+      }
+    }
   }
-  comments { totalCount }
+}
+]] .. ISSUE_FIELDS_GQL .. ISSUE_REF_FIELDS_GQL
+
+local ASSIGNEES_GQL = [[
+query($owner: String!, $repo: String!, $number: Int!) {
+  repository(owner: $owner, name: $repo) {
+    issue(number: $number) {
+      assignees(first: 100) { nodes { login name } }
+    }
+    assignableUsers(first: 100) { nodes { login name } }
+  }
 }
 ]]
-
----@param query string
----@return string
-local function issue_search_query(query)
-	if not query:lower():find("is:issue", 1, true) then
-		query = query .. " is:issue"
-	end
-	return query
-end
 
 ---@param opts { with_relationships?: boolean, layout?: "plain"|"compact" }|nil
 ---@return boolean
@@ -101,18 +94,16 @@ end
 ---@return { cancel: fun() }|nil
 function M.search_issues(search, on_done, opts)
 	opts = opts or {}
-	local limit = math.max(1, tonumber(opts.limit) or 50)
+	local limit = math.min(100, math.max(1, tonumber(opts.limit) or 50))
 
-	local query = vim.trim(tostring(search or ""))
+	local query = vim.trim(search)
 	if query == "" then
 		on_done({}, "Missing search query")
 		return nil
 	end
-	query = issue_search_query(query)
-
 	local with_relationships = relationships_enabled(opts)
 	local cache_key =
-		string.format("github_issues:search:%s:%d:relationships:%s", query, limit, tostring(with_relationships))
+		string.format("github_issues:search:v4:%s:%d:relationships:%s", query, limit, tostring(with_relationships))
 	if not opts.force_load then
 		local cached, ok = cli.get_cache(cache_key)
 		if ok then
@@ -149,7 +140,7 @@ function M.search_issues(search, on_done, opts)
 end
 
 ---@param key string
----@param on_done fun(issue: IssueDetails|nil, err: string|nil)
+---@param on_done fun(details: IssueDetails|nil, err: string|nil)
 ---@param opts { force_load?: boolean, with_relationships?: boolean, layout?: "plain"|"compact" }|nil
 ---@return { cancel: fun() }|nil
 function M.get_issue(key, on_done, opts)
@@ -162,7 +153,7 @@ function M.get_issue(key, on_done, opts)
 
 	local with_relationships = relationships_enabled(opts)
 	local cache_key =
-		string.format("github_issues:get:%s#%d:relationships:%s", slug, number, tostring(with_relationships))
+		string.format("github_issues:details:%s#%d:relationships:%s", slug, number, tostring(with_relationships))
 	if not opts.force_load then
 		local cached, ok = cli.get_mem(cache_key)
 		if ok then
@@ -197,13 +188,158 @@ function M.get_issue(key, on_done, opts)
 		end
 
 		local repository = json.nilify(result.data.repository)
-		local issue = normalizer.to_issue_details(repository and repository.issue, slug)
-		if issue then
-			cli.set_mem(cache_key, issue)
+		local details = normalizer.to_issue_details(repository and repository.issue, slug)
+		if details then
+			cli.set_mem(cache_key, details)
 		end
-		on_done(issue, nil)
+		on_done(details, nil)
 	end, {
 		action = "Fetch issue",
+		slug = slug,
+		number = number,
+	})
+end
+
+---@param refs IssueRef[]
+---@param _opts IssuesFetchOpts
+---@param on_done fun(issues: Issue[], err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_by_refs(refs, _opts, on_done)
+	local queries = {}
+
+	for _, ref in ipairs(refs) do
+		local slug, number = normalizer.parse_key(ref.key)
+		local owner, repo = slug:match("^([^/]+)/(.+)$")
+		if number == nil or owner == nil or repo == nil then
+			on_done({}, "Invalid issue key: " .. tostring(ref.key))
+			return nil
+		end
+		table.insert(queries, { slug = slug, owner = owner, repo = repo, number = number })
+	end
+
+	if #queries == 0 then
+		on_done({}, nil)
+		return nil
+	end
+
+	local variables = {}
+	local selections = {}
+	local args = { "api", "graphql" }
+	for index, ref in ipairs(queries) do
+		ref.alias = "item" .. index
+		table.insert(variables, string.format("$owner%d: String!", index))
+		table.insert(variables, string.format("$repo%d: String!", index))
+		table.insert(variables, string.format("$number%d: Int!", index))
+		table.insert(
+			selections,
+			string.format(
+				"  %s: repository(owner: $owner%d, name: $repo%d) { issue(number: $number%d) { ...IssueFields parent { ...IssueRefFields } } }",
+				ref.alias,
+				index,
+				index,
+				index
+			)
+		)
+		table.insert(args, "-f")
+		table.insert(args, string.format("owner%d=%s", index, ref.owner))
+		table.insert(args, "-f")
+		table.insert(args, string.format("repo%d=%s", index, ref.repo))
+		table.insert(args, "-F")
+		table.insert(args, string.format("number%d=%d", index, ref.number))
+	end
+
+	local query = string.format(
+		"query(%s) {\n%s\n}\n%s",
+		table.concat(variables, ", "),
+		table.concat(selections, "\n"),
+		ISSUE_FIELDS_GQL .. ISSUE_REF_FIELDS_GQL
+	)
+	table.insert(args, "-f")
+	table.insert(args, "query=" .. query)
+
+	return cli.gh(args, function(result, err)
+		if err or type(result) ~= "table" then
+			on_done({}, err or "Failed to fetch issues")
+			return
+		end
+
+		local data = json.nilify(result.data)
+		if type(data) ~= "table" then
+			on_done({}, "Empty response")
+			return
+		end
+
+		local issues = {}
+		for _, ref in ipairs(queries) do
+			local repository = json.nilify(data[ref.alias])
+			local raw = type(repository) == "table" and json.nilify(repository.issue) or nil
+			local issue = normalizer.to_issue(raw, ref.slug)
+			if issue then
+				table.insert(issues, issue)
+			end
+		end
+		on_done(issues, nil)
+	end, {
+		action = "Fetch issues by refs",
+		count = #refs,
+	})
+end
+
+---@param key string
+---@param on_done fun(assignees: IssueUser[]|nil, assignable_users: IssueUser[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.get_assignee_options(key, on_done)
+	local slug, number = normalizer.parse_key(key)
+	if slug == "" or number == nil then
+		on_done(nil, nil, "Invalid issue key: " .. tostring(key))
+		return nil
+	end
+
+	local owner, repo = slug:match("^([^/]+)/(.+)$")
+	if owner == nil or repo == nil then
+		on_done(nil, nil, "Invalid issue repository: " .. tostring(slug))
+		return nil
+	end
+
+	return cli.gh({
+		"api",
+		"graphql",
+		"-f",
+		"query=" .. vim.trim(ASSIGNEES_GQL),
+		"-f",
+		"owner=" .. owner,
+		"-f",
+		"repo=" .. repo,
+		"-F",
+		"number=" .. tostring(number),
+	}, function(result, err)
+		if err or type(result) ~= "table" then
+			on_done(nil, nil, err or "Empty response")
+			return
+		end
+
+		local data = json.nilify(result.data)
+		local repository = type(data) == "table" and json.nilify(data.repository) or nil
+		local issue = type(repository) == "table" and json.nilify(repository.issue) or nil
+		if type(issue) ~= "table" then
+			on_done(nil, nil, "Issue not found: " .. tostring(key))
+			return
+		end
+
+		local function users(connection)
+			local result_users = {}
+			for _, raw in ipairs(json.safe_table(json.safe_table(connection).nodes)) do
+				local user = normalizer.to_user(raw)
+				if user then
+					table.insert(result_users, user)
+				end
+			end
+			return result_users
+		end
+
+		on_done(users(issue.assignees), users(repository.assignableUsers), nil)
+	end, {
+		action = "Fetch issue assignee options",
 		slug = slug,
 		number = number,
 	})
@@ -303,34 +439,23 @@ function M.update_labels(key, diff, on_done)
 	})
 end
 
----@param slug string
+---@param endpoint string
+---@param context table
 ---@param on_done fun(labels: { name: string, color: string|nil, description: string|nil }[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.list_labels(slug, on_done)
-	if type(slug) ~= "string" or slug == "" then
-		vim.schedule(function()
-			on_done(nil, "Missing repository slug")
-		end)
-		return nil
-	end
-
-	return cli.gh({
-		"api",
-		"--paginate",
-		"--slurp",
-		string.format("repos/%s/labels?per_page=100", slug),
-	}, function(result, err)
+local function fetch_labels(endpoint, context, on_done)
+	return cli.gh({ "api", "--paginate", "--slurp", endpoint }, function(result, err)
 		if err or type(result) ~= "table" then
 			on_done(nil, err or "Failed to fetch labels")
 			return
 		end
 
-		local list = {}
+		local labels = {}
 		for _, page in ipairs(result) do
 			for _, raw in ipairs(page) do
 				local name = json.safe_str(raw.name)
 				if name then
-					table.insert(list, {
+					table.insert(labels, {
 						name = name,
 						color = json.safe_str(raw.color),
 						description = json.safe_str(raw.description),
@@ -338,11 +463,42 @@ function M.list_labels(slug, on_done)
 				end
 			end
 		end
-		on_done(list, nil)
-	end, {
+		on_done(labels, nil)
+	end, context)
+end
+
+---@param key string
+---@param on_done fun(labels: IssueLabel[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_issue_labels(key, on_done)
+	local slug, number = normalizer.parse_key(key)
+	if slug == "" or number == nil then
+		on_done(nil, "Invalid issue key: " .. tostring(key))
+		return nil
+	end
+
+	return fetch_labels(string.format("repos/%s/issues/%d/labels?per_page=100", slug, number), {
+		action = "Fetch issue labels",
+		slug = slug,
+		number = number,
+	}, on_done)
+end
+
+---@param slug string
+---@param on_done fun(labels: { name: string, color: string|nil, description: string|nil }[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.list_labels(slug, on_done)
+	if slug == "" then
+		vim.schedule(function()
+			on_done(nil, "Missing repository slug")
+		end)
+		return nil
+	end
+
+	return fetch_labels(string.format("repos/%s/labels?per_page=100", slug), {
 		action = "Fetch repo labels",
 		slug = slug,
-	})
+	}, on_done)
 end
 
 ---@class GitHubMilestone
@@ -358,7 +514,7 @@ end
 ---@param on_done fun(milestones: GitHubMilestone[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.list_milestones(slug, on_done)
-	if type(slug) ~= "string" or slug == "" then
+	if slug == "" then
 		vim.schedule(function()
 			on_done(nil, "Missing repository slug")
 		end)

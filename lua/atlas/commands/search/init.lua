@@ -1,7 +1,8 @@
 local M = {}
 
+local config = require("atlas.config")
 local notify = require("atlas.core.notify")
-local picker = require("atlas.picker")
+local picker = require("atlas.ui.picker")
 local providers = require("atlas.providers")
 
 local domain_labels = {
@@ -45,7 +46,7 @@ local function configured_searches()
 	local entries = {}
 	for _, provider_config in ipairs(providers.list()) do
 		for _, domain in ipairs({ "pulls", "issues" }) do
-			if provider_config.domains[domain] and providers.options(provider_config.id, domain) then
+			if provider_config.domains[domain] and config.provider_options(provider_config.id) then
 				local provider = assert(providers.load(provider_config.id, domain))
 				local search
 				if domain == "pulls" then
@@ -101,7 +102,7 @@ function M.run(provider_id)
 			end
 		end
 		if #matches == 0 then
-			notify.error("No configured search for provider: " .. provider_id)
+			notify.error("No configured search for provider: " .. provider_id, { vim_notify = true })
 			return
 		end
 		choose(matches, "Search " .. providers[provider_id].name .. " in:")
@@ -109,7 +110,7 @@ function M.run(provider_id)
 	end
 
 	if #entries == 0 then
-		notify.error("No searchable providers configured")
+		notify.error("No searchable providers configured", { vim_notify = true })
 		return
 	end
 	choose(entries, "Search in:")

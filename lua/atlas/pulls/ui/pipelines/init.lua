@@ -4,8 +4,10 @@ local actions = require("atlas.pulls.ui.pipelines.actions")
 local keymaps = require("atlas.pulls.ui.pipelines.keymaps")
 local logs = require("atlas.pulls.ui.pipelines.logs")
 local renderer = require("atlas.pulls.ui.pipelines.renderer")
-local statusline = require("atlas.ui.statusline")
+local notify = require("atlas.core.notify")
+local request_scope = require("atlas.core.requests")
 local spinner = require("atlas.ui.components.spinner")
+local statusline = require("atlas.ui.statusline")
 local utils = require("atlas.ui.shared.utils")
 
 local valid_buf = utils.buffer.valid
@@ -16,9 +18,8 @@ local active_session
 
 ---@class PullsPipelineSelection
 ---@field pipeline PullsPipeline
----@field stage string|nil
+---@field stage PullsPipelineStage|nil
 ---@field job PullsPipelineJob|nil
----@field step PullsPipelineStep|nil
 
 ---@param buf integer
 ---@param lines string[]
@@ -63,30 +64,39 @@ local function configure_window(win, buf, title)
 	statusline.attach(win)
 end
 
----@param win integer
----@param buf integer
-local function restore_detail_window(win, buf)
-	vim.api.nvim_win_set_buf(win, buf)
-	vim.api.nvim_set_option_value("wrap", true, { win = win })
-	vim.api.nvim_set_option_value("breakindent", true, { win = win })
-	vim.api.nvim_set_option_value("winbar", " ", { win = win })
+---@return integer width, integer height
+local function window_size()
+	return math.max(1, math.min(100, vim.o.columns - 4)), math.max(1, math.min(30, vim.o.lines - 4))
 end
 
 ---@param line_map table<integer, PullsPipelineSelection>
 ---@param selected_pipeline PullsPipeline|nil
+---@param selected_stage PullsPipelineStage|nil
 ---@param selected_job PullsPipelineJob|nil
 ---@return integer
-local function selected_pipeline_line(line_map, selected_pipeline, selected_job)
+local function selected_line(line_map, selected_pipeline, selected_stage, selected_job)
 	local pipeline_line = 1
+	local selected_pipeline_id = selected_pipeline and selected_pipeline.id
+	local selected_stage_name = selected_stage and selected_stage.name
+	local selected_job_id = selected_job and selected_job.id
 	for lnum = 1, #line_map do
 		local selection = line_map[lnum]
-		if selection and selection.pipeline == selected_pipeline then
-			if selected_job and selection.job == selected_job then
+		local pipeline = selection and selection.pipeline
+		local pipeline_matches = pipeline and pipeline.id == selected_pipeline_id
+		if pipeline_matches then
+			if selected_job and selection.job and selection.job.id == selected_job_id then
 				return lnum
 			end
-			if selection.job == nil then
+			if
+				selected_stage
+				and selection.stage
+				and (selection.stage == selected_stage or selection.stage.name == selected_stage_name)
+			then
+				return lnum
+			end
+			if selection.stage == nil and selection.job == nil then
 				pipeline_line = lnum
-				if selected_job == nil then
+				if selected_stage == nil and selected_job == nil then
 					return lnum
 				end
 			end
@@ -111,12 +121,12 @@ end
 ---@param url string|nil
 local function open_url(url)
 	if type(url) ~= "string" or url == "" then
-		statusline.notify("warn", "No pipeline URL available")
+		notify.warn("No pipeline URL available")
 		return
 	end
 	local ok, result, err = pcall(vim.ui.open, url)
 	if not ok or (result == nil and err ~= nil) then
-		statusline.notify("error", string.format("Failed to open URL: %s", tostring(ok and err or result)))
+		notify.error(string.format("Failed to open URL: %s", tostring(ok and err or result)))
 		return
 	end
 end
@@ -144,11 +154,12 @@ local function render_pipelines(session, pipelines)
 		if pipeline then
 			vim.api.nvim_win_set_cursor(
 				session.pipeline_win,
-				{ selected_pipeline_line(line_map, pipeline, session.initial_job), 0 }
+				{ selected_line(line_map, pipeline, session.initial_stage, session.initial_job), 0 }
 			)
 		end
 		session.initial_selection_pending = false
 		session.initial_pipeline = nil
+		session.initial_stage = nil
 		session.initial_job = nil
 	end
 end
@@ -163,7 +174,7 @@ local function fetch_pipeline_details(session, pipelines, force_refresh, on_done
 		return
 	end
 	local capability = session.provider and session.provider.capabilities.pipelines
-	if not capability or not capability.fetch_details then
+	if not capability then
 		on_done(pipelines, nil)
 		return
 	end
@@ -172,7 +183,9 @@ local function fetch_pipeline_details(session, pipelines, force_refresh, on_done
 	local details = {}
 	local first_err
 	for index, pipeline in ipairs(pipelines) do
-		capability.fetch_details(session.pr, pipeline, { force_refresh = force_refresh }, function(result, err)
+		session.requests.run(function(done)
+			return capability.fetch_details(session.pr, pipeline, { force_refresh = force_refresh }, done)
+		end, function(result, err)
 			if session.closed then
 				return
 			end
@@ -240,7 +253,7 @@ local function reload_pipelines(session, delay_ms, force_refresh)
 	local provider = session.provider
 	local pipelines_capability = provider and provider.capabilities.pipelines
 	if not pipelines_capability then
-		statusline.notify("warn", "Pipeline refresh is not supported by this provider")
+		notify.warn("Pipeline refresh is not supported by this provider")
 		return
 	end
 
@@ -250,7 +263,9 @@ local function reload_pipelines(session, delay_ms, force_refresh)
 		if session.closed then
 			return
 		end
-		pipelines_capability.fetch(session.pr, { force_refresh = force_refresh ~= false }, function(pipelines, err)
+		session.requests.run(function(done)
+			return pipelines_capability.fetch(session.pr, { force_refresh = force_refresh ~= false }, done)
+		end, function(pipelines, err)
 			if session.closed then
 				return
 			end
@@ -258,7 +273,7 @@ local function reload_pipelines(session, delay_ms, force_refresh)
 				session.refreshing = false
 				stop_pipeline_spinner(session)
 				render_pipelines(session, session.pipelines)
-				statusline.notify("error", string.format("Failed to refresh pipelines: %s", tostring(err)))
+				notify.error(string.format("Failed to refresh pipelines: %s", tostring(err)))
 				return
 			end
 
@@ -271,10 +286,7 @@ local function reload_pipelines(session, delay_ms, force_refresh)
 					stop_pipeline_spinner(session)
 					render_pipelines(session, details)
 					if details_err then
-						statusline.notify(
-							"error",
-							string.format("Failed to load pipeline details: %s", tostring(details_err))
-						)
+						notify.error(string.format("Failed to load pipeline details: %s", tostring(details_err)))
 					end
 				end
 			)
@@ -292,18 +304,18 @@ end
 ---@param selection PullsPipelineSelection|nil
 local function open_pipeline_actions(session, selection)
 	if not selection then
-		statusline.notify("warn", "No pipeline selected")
+		notify.warn("No pipeline selected")
 		return
 	end
 
-	local ctx = { pr = session.pr, pipeline = selection.pipeline, job = selection.job }
+	local ctx = { pr = session.pr, pipeline = selection.pipeline, stage = selection.stage, job = selection.job }
 	actions.open(session.provider, ctx, function(action)
 		action.run(ctx, function(err)
 			if session.closed then
 				return
 			end
 			if err then
-				statusline.notify("error", string.format("%s failed: %s", action.label, tostring(err)))
+				notify.error(string.format("%s failed: %s", action.label, tostring(err)))
 				return
 			end
 			reload_pipelines(session, ACTION_REFRESH_DELAY_MS)
@@ -315,6 +327,11 @@ end
 local function cleanup_session(session)
 	session.closed = true
 	session.refreshing = false
+	session.requests.cancel()
+	if session.resize_autocmd then
+		pcall(vim.api.nvim_del_autocmd, session.resize_autocmd)
+		session.resize_autocmd = nil
+	end
 	stop_pipeline_spinner(session)
 	if active_session == session then
 		active_session = nil
@@ -323,19 +340,24 @@ end
 
 ---@param session table
 local function close_session(session)
-	local layout = require("atlas.ui.layout")
-	if session.owns_detail_window then
-		layout.toggle_detail()
-	else
-		restore_detail_window(session.pipeline_win, session.previous_buf)
+	cleanup_session(session)
+	if valid_win(session.pipeline_win) then
+		vim.api.nvim_win_close(session.pipeline_win, true)
+	end
+	if valid_buf(session.pipeline_buf) then
+		vim.api.nvim_buf_delete(session.pipeline_buf, { force = true })
 	end
 end
 
 ---@param pr PullRequest
----@param pipelines PullsPipeline[]|nil
----@param selected_pipeline PullsPipeline|nil
----@param selected_job PullsPipelineJob|nil
-function M.open(pr, pipelines, selected_pipeline, selected_job)
+---@param provider PullsProvider
+---@param opts { pipelines: PullsPipeline[]|nil, selected_pipeline: PullsPipeline|nil, selected_stage: PullsPipelineStage|nil, selected_job: PullsPipelineJob|nil }|nil
+function M.open(pr, provider, opts)
+	opts = opts or {}
+	local pipelines = opts.pipelines
+	local selected_pipeline = opts.selected_pipeline
+	local selected_stage = opts.selected_stage
+	local selected_job = opts.selected_job
 	local fetch_on_open = type(pipelines) ~= "table"
 	pipelines = type(pipelines) == "table" and pipelines or {}
 
@@ -343,40 +365,67 @@ function M.open(pr, pipelines, selected_pipeline, selected_job)
 		close_session(active_session)
 	end
 
-	local layout = require("atlas.ui.layout")
-	layout.ensure_open()
-	local owns_detail_window = layout.win_id("detail") == nil
-	if owns_detail_window then
-		layout.toggle_detail()
-	end
-	local pipeline_win = layout.win_id("detail")
-	if not valid_win(pipeline_win) then
-		statusline.notify("error", "Failed to open the pipeline pane")
-		return
-	end
-
-	local provider = require("atlas.pulls.state").provider
-	local lines, line_map, spans = renderer.render(pipelines, vim.api.nvim_win_get_width(pipeline_win))
+	local width, height = window_size()
+	local lines, line_map, spans = renderer.render(pipelines, width)
+	local pipeline_buf = create_buffer("atlas://pipelines", lines, spans)
+	vim.api.nvim_set_option_value("bufhidden", "wipe", { buf = pipeline_buf })
+	local pipeline_win = vim.api.nvim_open_win(pipeline_buf, true, {
+		relative = "editor",
+		style = "minimal",
+		border = "rounded",
+		title = " Pipelines ",
+		title_pos = "center",
+		width = width,
+		height = height,
+		row = math.floor((vim.o.lines - height) / 2),
+		col = math.floor((vim.o.columns - width) / 2),
+	})
 	local session = {
 		pipelines = pipelines,
 		closed = false,
 		line_map = line_map,
 		pr = pr,
 		provider = provider,
+		requests = request_scope.new(),
 		refreshing = false,
 		initial_selection_pending = true,
 		initial_pipeline = selected_pipeline,
+		initial_stage = selected_stage,
 		initial_job = selected_job,
 		pipeline_win = pipeline_win,
-		previous_buf = vim.api.nvim_win_get_buf(pipeline_win),
-		owns_detail_window = owns_detail_window,
+		pipeline_buf = pipeline_buf,
 	}
-	session.pipeline_buf = create_buffer("atlas://pipelines", lines, spans)
-	vim.api.nvim_set_option_value("bufhidden", "wipe", { buf = session.pipeline_buf })
 	active_session = session
+	session.resize_autocmd = vim.api.nvim_create_autocmd("VimResized", {
+		callback = function()
+			if session.closed or not valid_win(session.pipeline_win) then
+				return
+			end
+			local resized_width, resized_height = window_size()
+			vim.api.nvim_win_set_config(session.pipeline_win, {
+				relative = "editor",
+				width = resized_width,
+				height = resized_height,
+				row = math.floor((vim.o.lines - resized_height) / 2),
+				col = math.floor((vim.o.columns - resized_width) / 2),
+			})
+			if session.refreshing then
+				render_pipeline_loading(session)
+			else
+				render_pipelines(session, session.pipelines)
+			end
+		end,
+	})
 
 	vim.api.nvim_create_autocmd("BufWipeout", {
 		buffer = session.pipeline_buf,
+		once = true,
+		callback = function()
+			cleanup_session(session)
+		end,
+	})
+	vim.api.nvim_create_autocmd("WinClosed", {
+		pattern = tostring(session.pipeline_win),
 		once = true,
 		callback = function()
 			cleanup_session(session)
@@ -386,7 +435,7 @@ function M.open(pr, pipelines, selected_pipeline, selected_job)
 	configure_window(session.pipeline_win, session.pipeline_buf, "Pipelines")
 	vim.api.nvim_win_set_cursor(
 		session.pipeline_win,
-		{ selected_pipeline_line(line_map, selected_pipeline, selected_job), 0 }
+		{ selected_line(line_map, selected_pipeline, selected_stage, selected_job), 0 }
 	)
 
 	keymaps.setup_pipelines(session.pipeline_buf, "Pipelines", {
@@ -421,7 +470,7 @@ function M.open(pr, pipelines, selected_pipeline, selected_job)
 			stop_pipeline_spinner(session)
 			render_pipelines(session, details)
 			if err then
-				statusline.notify("error", string.format("Failed to load pipeline details: %s", tostring(err)))
+				notify.error(string.format("Failed to load pipeline details: %s", tostring(err)))
 			end
 		end)
 	end

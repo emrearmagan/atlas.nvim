@@ -118,9 +118,10 @@ end
 
 ---@return string|nil
 local function jira_url()
-	local issues = config.options.issues or {}
-	local configured_providers = issues.providers or {}
-	local jira = configured_providers.jira or {}
+	local jira = config.provider_options("jira")
+	if jira == nil then
+		return nil
+	end
 	local base_url = vim.trim(jira.base_url or ""):gsub("/+$", "")
 	if base_url == "" then
 		return nil
@@ -134,7 +135,7 @@ local function links(root)
 	local remote = git.local_repository(root)
 	return {
 		provider = remote and remote.provider or nil,
-		repo_url = remote and string.format("https://%s/%s", remote.host, remote.slug) or nil,
+		repo_url = remote and remote.url or nil,
 		jira_url = jira_url(),
 		urls = (remote and URL_PATHS[remote.provider]) or {},
 	}

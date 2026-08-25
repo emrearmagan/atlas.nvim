@@ -1,6 +1,6 @@
 local M = {}
 
-local clients = require("atlas.providers.gitlab.client")
+local client = require("atlas.providers.gitlab.client")
 local icons = require("atlas.ui.shared.icons")
 
 local TARGET_ICON = {
@@ -51,64 +51,61 @@ local function normalize(raw)
 	}
 end
 
----@param domain "pulls"|"issues"
----@return AtlasNotificationsCapability
-function M.new(domain)
-	local service = clients[domain]
-	local api = {}
+---@param opts { state: "pending"|"done"|"all"|nil, per_page: number|nil, force_load: boolean|nil }|nil
+---@param on_done fun(notifications: AtlasNotification[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch(opts, on_done)
+	opts = vim.tbl_extend("force", { state = "pending", per_page = 100 }, opts or {})
+	local per_page = math.max(1, math.min(100, tonumber(opts.per_page) or 100))
+	local state = opts.state or "pending"
 
-	---@param opts { state: "pending"|"done"|"all"|nil, per_page: number|nil, force_load: boolean|nil }|nil
-	---@param on_done fun(notifications: AtlasNotification[]|nil, err: string|nil)
-	---@return { cancel: fun() }|nil
-	function api.fetch(opts, on_done)
-		opts = vim.tbl_extend("force", { state = "pending", per_page = 100 }, opts or {})
-		local per_page = math.max(1, math.min(100, tonumber(opts.per_page) or 100))
-		local state = opts.state or "pending"
-
-		local cache_key = string.format("gitlab:%s:todos:state=%s:per_page=%d", domain, state, per_page)
-		if not opts.force_load then
-			local cached, ok = service.get_cache(cache_key)
-			if ok then
-				on_done(cached, nil)
-				return nil
-			end
+	local cache_key = string.format("gitlab:todos:state=%s:per_page=%d", state, per_page)
+	if not opts.force_load then
+		local cached, ok = client.get_memory_cache(cache_key)
+		if ok then
+			on_done(cached, nil)
+			return nil
 		end
-
-		local endpoint = string.format("/todos?per_page=%d", per_page)
-		if state ~= "all" then
-			endpoint = endpoint .. "&state=" .. state
-		end
-
-		return service.request("GET", endpoint, nil, function(result, err)
-			if err then
-				on_done(nil, err)
-				return
-			end
-			local notifications = {}
-			for _, raw in ipairs(type(result) == "table" and result or {}) do
-				table.insert(notifications, normalize(raw))
-			end
-			service.set_cache(cache_key, notifications, 60)
-			on_done(notifications, nil)
-		end)
 	end
 
-	---@param id string
-	---@param on_done fun(ok: boolean, err: string|nil)
-	---@return { cancel: fun() }|nil
-	function api.mark_done(id, on_done)
-		local endpoint = string.format("/todos/%s/mark_as_done", tostring(id))
-		return service.request("POST", endpoint, nil, function(_, err)
-			if err then
-				on_done(false, err)
-				return
-			end
-			on_done(true, nil)
-		end)
+	local endpoint = string.format("/todos?per_page=%d", per_page)
+	if state ~= "all" then
+		endpoint = endpoint .. "&state=" .. state
 	end
 
-	api.mark_read = api.mark_done
-	return api
+	return client.request("GET", endpoint, nil, function(result, err)
+		if err then
+			on_done(nil, err)
+			return
+		end
+		local notifications = {}
+		for _, raw in ipairs(type(result) == "table" and result or {}) do
+			table.insert(notifications, normalize(raw))
+		end
+		client.set_memory_cache(cache_key, notifications, 60)
+		on_done(notifications, nil)
+	end, {
+		action = "Fetch notifications",
+	})
 end
+
+---@param id string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.mark_done(id, on_done)
+	local endpoint = string.format("/todos/%s/mark_as_done", tostring(id))
+	return client.request("POST", endpoint, nil, function(_, err)
+		if err then
+			on_done(false, err)
+			return
+		end
+		on_done(true, nil)
+	end, {
+		action = "Mark notification done",
+		notification_id = id,
+	})
+end
+
+M.mark_read = M.mark_done
 
 return M

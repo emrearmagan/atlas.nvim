@@ -1,20 +1,23 @@
 local M = {}
 
-local main = require("atlas.pulls.ui.main")
+local dashboard = require("atlas.pulls.ui.dashboard")
 
 ---@param provider PullsProvider
 ---@param opts? { initial_view?: AtlasPullsViewConfig }
 function M.init(provider, opts)
-	main.init(provider, opts)
+	dashboard.init(provider, opts)
 end
 
 function M.render()
-	main.render()
+	dashboard.render()
 end
 
 function M.dispose()
-	require("atlas.pulls.ui.main.controller").dispose()
-	require("atlas.pulls.ui.panel").close()
+	local buf = require("atlas.ui.dashboard").buf()
+	if buf then
+		require("atlas.pulls.ui.dashboard.keymaps").remove(buf)
+	end
+	require("atlas.pulls.ui.dashboard.controller").dispose()
 end
 
 return M

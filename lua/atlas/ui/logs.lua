@@ -184,6 +184,23 @@ local function toggle_details()
 	end
 end
 
+local function toggle_all_details()
+	local expand = false
+	for _, row in pairs(line_map) do
+		if row._log_index and not expanded_rows[row._log_index] then
+			expand = true
+			break
+		end
+	end
+
+	for _, row in pairs(line_map) do
+		if row._log_index then
+			expanded_rows[row._log_index] = expand or nil
+		end
+	end
+	refresh_buffer()
+end
+
 local function stop_refresh_timer()
 	if refresh_timer ~= nil then
 		if not refresh_timer:is_closing() then
@@ -252,6 +269,7 @@ function M.open()
 	vim.api.nvim_set_option_value("cursorline", true, { win = logs_win })
 	vim.api.nvim_set_option_value("winfixheight", true, { win = logs_win })
 	local fold_keys = keymaps.resolve("ui.toggle_fold") or {}
+	local fold_all_keys = keymaps.resolve("ui.toggle_all_folds") or {}
 	local refresh_keys = keymaps.resolve("ui.refresh_view") or {}
 	local close_keys = keymaps.resolve("ui.close") or {}
 	local hints = {}
@@ -280,6 +298,9 @@ function M.open()
 	end
 	for _, key in ipairs(fold_keys) do
 		vim.keymap.set("n", key, toggle_details, opts)
+	end
+	for _, key in ipairs(fold_all_keys) do
+		vim.keymap.set("n", key, toggle_all_details, opts)
 	end
 
 	refresh_buffer()

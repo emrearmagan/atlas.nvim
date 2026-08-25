@@ -1,24 +1,28 @@
 -- Example:
 --   require("atlas").setup({
+--     providers = {
+--       ---@type AtlasGitLabProviderConfig
+--       gitlab = {
+--         base_url = "https://gitlab.com",
+--         token    = vim.env.GITLAB_TOKEN,
+--         cache_ttl = 300,
+--       },
+--     },
 --     pulls = {
---       providers = {
---         gitlab = {
---           base_url = "https://gitlab.com",
---           token    = vim.env.GITLAB_TOKEN,
---           cache_ttl = 300,
---           views = {
---             { name = "Assigned",  key = "1", scope = "assigned_to_me", state = "opened" },
---             { name = "Created",   key = "2", scope = "created_by_me",  state = "opened" },
---             { name = "Reviewing", key = "3", scope = "all",            state = "opened",
---               extra_params = { reviewer_id = "Me" } },
---           },
---           bookmarks = {
---             -- key   = "S",      -- default
---             -- label = "Search", -- default
---             items = {
---               ["Reviewing"]   = { scope = "all", extra_params = { reviewer_id = "Me" } },
---               ["Merged by me"] = { scope = "all", author_username = "me" },
---             },
+--       ---@type AtlasGitLabPullsConfig
+--       gitlab = {
+--         views = {
+--           { name = "Assigned",  key = "1", scope = "assigned_to_me" },
+--           { name = "Created",   key = "2", scope = "created_by_me" },
+--           { name = "Reviewing", key = "3", scope = "all",
+--             extra_params = { reviewer_id = "Me" } },
+--         },
+--         bookmarks = {
+--           -- key   = "S",      -- default
+--           -- label = "Search", -- default
+--           items = {
+--             ["Reviewing"]   = { scope = "all", extra_params = { reviewer_id = "Me" } },
+--             ["Created by me"] = { scope = "all", author_username = "me" },
 --           },
 --         },
 --       },
@@ -55,9 +59,11 @@
 ---@field label string|nil  -- default "Search"
 ---@field items table<string, AtlasGitLabPullsSearchConfig>|nil
 
----@class AtlasGitLabPullsConfig
+---@class AtlasGitLabProviderConfig
 ---@field base_url string
 ---@field token string
----@field cache_ttl number|nil
+---@field cache_ttl number|nil Cache lifetime in seconds. Set to 0 to disable caching.
+
+---@class AtlasGitLabPullsConfig
 ---@field views AtlasGitLabPullsViewConfig[]|nil
 ---@field bookmarks AtlasGitLabPullsBookmarksConfig|nil

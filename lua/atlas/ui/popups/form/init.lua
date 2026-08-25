@@ -1,6 +1,7 @@
 local M = {}
 
 local keymaps = require("atlas.core.keymaps")
+local notify = require("atlas.core.notify")
 local help = require("atlas.ui.popups.help")
 local renderer = require("atlas.ui.popups.form.renderer")
 local statusline = require("atlas.ui.statusline")
@@ -45,7 +46,7 @@ function M.close(layout)
 		return
 	end
 	layout.closing = true
-	statusline.clear_notice()
+	notify.clear()
 	local return_to_source = valid_tab(layout.tab) and vim.api.nvim_get_current_tabpage() == layout.tab
 
 	if layout.augroup then
@@ -284,7 +285,7 @@ function M.open(state, opts)
 	layout.source_win = vim.api.nvim_get_current_win()
 	layout.title_label = opts.title_label
 	layout.body_label = opts.body_label
-	statusline.clear_notice()
+	notify.clear()
 
 	next_id = next_id + 1
 	local prefix = string.format("atlas://create/%d", next_id)
@@ -356,7 +357,7 @@ function M.open(state, opts)
 		callback = function()
 			if not layout.closing and not valid_tab(layout.tab) then
 				layout.closing = true
-				statusline.clear_notice()
+				notify.clear()
 				delete_buffers(layout)
 				local augroup = layout.augroup
 				layout.augroup = nil
@@ -373,8 +374,8 @@ end
 
 M.render_meta = renderer.render_meta
 M.render_context = renderer.render_context
-M.notify = statusline.notify
-M.clear_notice = statusline.clear_notice
+M.notify = notify.show
+M.clear_notice = notify.clear
 
 ---@param layout AtlasFormLayout
 ---@return string

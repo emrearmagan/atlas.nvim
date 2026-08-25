@@ -2,21 +2,15 @@ local M = {}
 
 local registry = require("atlas.pulls.providers.bitbucket.actions.registry")
 local logger = require("atlas.core.logger")
-local statusline = require("atlas.ui.statusline")
+local core_notify = require("atlas.core.notify")
 
 M.items = registry.items
-
----@param id AtlasPullActionId
----@return AtlasPullAction|nil
-local function find(id)
-	return registry.find(id)
-end
 
 ---@param id AtlasPullActionId
 ---@param ctx AtlasPullActionContext
 ---@return boolean
 function M.is_available(id, ctx)
-	local action = find(id)
+	local action = registry.find(id)
 	return action ~= nil and (action.is_available == nil or action.is_available(ctx) == true)
 end
 
@@ -25,7 +19,7 @@ end
 ---@param on_done fun(result: PullsActionResult|nil, err: string|nil)
 ---@return boolean handled
 function M.run(id, ctx, on_done)
-	local action = find(id)
+	local action = registry.find(id)
 
 	if action == nil then
 		local err = string.format("Unknown action: %s", tostring(id))
@@ -40,9 +34,11 @@ function M.run(id, ctx, on_done)
 	end
 	if not available then
 		local err = tostring(available_err or string.format("Action is not available: %s", tostring(id)))
-		logger.logwarn("bitbucket.action.unavailable", { action_id = tostring(id), error = err })
-		local notify = ctx.notify or statusline.notify
-		notify("warn", err)
+		if ctx.notify then
+			ctx.notify("warn", err)
+		else
+			core_notify.warn(err)
+		end
 		on_done(nil, err)
 		return false
 	end

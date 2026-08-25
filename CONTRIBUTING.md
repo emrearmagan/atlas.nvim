@@ -14,4 +14,6 @@ Atlas uses [busted](https://github.com/lunarmodules/busted) for testing. Run the
 
 ```bash
 busted
+stylua --check lua spec
+selene lua spec
 ```

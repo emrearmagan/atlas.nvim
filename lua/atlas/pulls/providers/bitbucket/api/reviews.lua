@@ -2,21 +2,16 @@ local M = {}
 
 local comments = require("atlas.pulls.providers.bitbucket.api.comments")
 local pullrequests = require("atlas.pulls.providers.bitbucket.api.pullrequests")
+local request_scope = require("atlas.core.requests")
 local service = require("atlas.pulls.providers.bitbucket.api.service")
 local tasks = require("atlas.pulls.providers.bitbucket.api.tasks")
-
----@param pr PullRequest
----@param key "approve"|"request_changes"
----@return string
-local function action_url(pr, key)
-	return tostring((pr._raw.links or {})[key] or "")
-end
 
 ---@param pr PullRequest
 ---@param action "approve"|"request_changes"
 ---@return boolean
 function M.has_action(pr, action)
-	return action_url(pr, action) ~= ""
+	---@cast pr BitbucketPullRequest
+	return tostring(pr.links[action] or "") ~= ""
 end
 
 ---@param pr PullRequest
@@ -24,7 +19,7 @@ end
 ---@param on_done fun(context: PullsReviewContext|nil, err: string|nil)
 ---@return nil
 function M.fetch_review_context(pr, _opts, on_done)
-	local authors = {}
+	local mention_candidates = {}
 	local seen = {}
 	---@param author PullsAuthor|nil
 	local function add(author)
@@ -39,14 +34,11 @@ function M.fetch_review_context(pr, _opts, on_done)
 			return
 		end
 		seen[key] = true
-		table.insert(authors, author)
+		table.insert(mention_candidates, author)
 	end
 
 	add(pr.author)
-	for _, reviewer in ipairs(pr.reviewers or {}) do
-		add(reviewer)
-	end
-	on_done({ authors = authors }, nil)
+	on_done({ mention_candidates = mention_candidates }, nil)
 end
 
 ---@param user table|nil
@@ -93,7 +85,8 @@ end
 ---@param on_done fun(history: PullsReviewHistoryEntry[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 local function fetch_review_history(pr, opts, on_done)
-	local activity_url = tostring((pr._raw.links or {}).activity or "")
+	---@cast pr BitbucketPullRequest
+	local activity_url = tostring(pr.links.activity or "")
 	if activity_url == "" then
 		on_done({}, nil)
 		return nil
@@ -119,7 +112,7 @@ local function fetch_review_history(pr, opts, on_done)
 		local history = review_history(result)
 		service.set_cache(key, history)
 		on_done(history, nil)
-	end)
+	end, { action = "Fetch PR review history", repo = pr.repo_full_name, id = pr.id })
 end
 
 ---@param pr PullRequest
@@ -128,30 +121,35 @@ end
 ---@return { cancel: fun() }
 function M.fetch_review(pr, opts, on_done)
 	opts = opts or {}
-	local review_comments, review_tasks, reviewers, history
-	local first_err
-	local pending = 4
-	local handles = {}
-	local cancelled = false
-
-	local function finish()
-		pending = pending - 1
-		if cancelled or pending > 0 then
-			return
-		end
-		if first_err then
-			on_done(nil, first_err)
+	local requests = request_scope.new()
+	requests.all({
+		comments = function(done)
+			return comments.fetch_comments(pr, opts, done)
+		end,
+		tasks = function(done)
+			return tasks.fetch_tasks(pr, opts, done)
+		end,
+		reviewers = function(done)
+			return pullrequests.fetch_reviewers(pr, opts, done)
+		end,
+		history = function(done)
+			return fetch_review_history(pr, opts, done)
+		end,
+	}, function(values, errors)
+		local err = errors.comments or errors.tasks or errors.reviewers or errors.history
+		if err then
+			on_done(nil, err)
 			return
 		end
 
 		local filtered_comments = {}
-		for _, comment in ipairs(review_comments) do
+		for _, comment in ipairs(values.comments) do
 			if (comment.inline or comment.file) and comment.state ~= "DELETED" then
 				table.insert(filtered_comments, comment)
 			end
 		end
 		local has_pending = false
-		for _, items in ipairs({ review_comments, review_tasks }) do
+		for _, items in ipairs({ values.comments, values.tasks }) do
 			for _, item in ipairs(items) do
 				-- Bitbucket only exposes pending items to their author.
 				if item.state == "PENDING" then
@@ -163,47 +161,12 @@ function M.fetch_review(pr, opts, on_done)
 		on_done({
 			review = { id = nil, commit_hash = nil, pending = has_pending },
 			comments = filtered_comments,
-			tasks = review_tasks,
-			reviewers = reviewers,
-			history = history,
+			tasks = values.tasks,
+			reviewers = values.reviewers,
+			history = values.history,
 		}, nil)
-	end
-
-	local function track(handle)
-		if handle then
-			table.insert(handles, handle)
-		end
-	end
-
-	track(comments.fetch_comments(pr, opts, function(result, err)
-		first_err = first_err or err
-		review_comments = result or {}
-		finish()
-	end))
-	track(tasks.fetch_tasks(pr, opts, function(result, err)
-		first_err = first_err or err
-		review_tasks = result or {}
-		finish()
-	end))
-	track(pullrequests.fetch_review_participants(pr, opts, function(result, err)
-		first_err = first_err or err
-		reviewers = result or {}
-		finish()
-	end))
-	track(fetch_review_history(pr, opts, function(result, err)
-		first_err = first_err or err
-		history = result or {}
-		finish()
-	end))
-
-	return {
-		cancel = function()
-			cancelled = true
-			for _, handle in ipairs(handles) do
-				handle.cancel()
-			end
-		end,
-	}
+	end)
+	return requests
 end
 
 ---@param pr PullRequest
@@ -212,12 +175,20 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.approve(pr, _review, body, on_done)
-	local url = action_url(pr, "approve")
+	---@cast pr BitbucketPullRequest
+	local url = tostring(pr.links.approve or "")
 	if url == "" then
 		on_done(false, "No approve URL available")
 		return nil
 	end
-	return service.request("POST", url, nil, nil, function(_, err)
+	local requests = request_scope.new()
+	requests.run(function(done)
+		return service.request("POST", url, nil, nil, done, {
+			action = "Approve pull request",
+			repo = pr.repo_full_name,
+			id = pr.id,
+		})
+	end, function(_, err)
 		if err then
 			on_done(false, err)
 			return
@@ -227,10 +198,13 @@ function M.approve(pr, _review, body, on_done)
 			on_done(true, nil)
 			return
 		end
-		comments.add_comment(pr, body, nil, function(comment, comment_err)
+		requests.run(function(done)
+			return comments.add_comment(pr, body, nil, done)
+		end, function(comment, comment_err)
 			on_done(comment ~= nil, comment_err)
 		end)
 	end)
+	return requests
 end
 
 ---@param pr PullRequest
@@ -239,12 +213,20 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.request_changes(pr, _review, body, on_done)
-	local url = action_url(pr, "request_changes")
+	---@cast pr BitbucketPullRequest
+	local url = tostring(pr.links.request_changes or "")
 	if url == "" then
 		on_done(false, "No request changes URL available")
 		return nil
 	end
-	return service.request("POST", url, nil, nil, function(_, err)
+	local requests = request_scope.new()
+	requests.run(function(done)
+		return service.request("POST", url, nil, nil, done, {
+			action = "Request PR changes",
+			repo = pr.repo_full_name,
+			id = pr.id,
+		})
+	end, function(_, err)
 		if err then
 			on_done(false, err)
 			return
@@ -254,10 +236,13 @@ function M.request_changes(pr, _review, body, on_done)
 			on_done(true, nil)
 			return
 		end
-		comments.add_comment(pr, body, nil, function(comment, comment_err)
+		requests.run(function(done)
+			return comments.add_comment(pr, body, nil, done)
+		end, function(comment, comment_err)
 			on_done(comment ~= nil, comment_err)
 		end)
 	end)
+	return requests
 end
 
 ---@param pr PullRequest
@@ -283,87 +268,56 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }
 function M.discard_review(pr, _review, on_done)
-	local review_comments, review_tasks
-	local pending = 2
-	local first_err
-	local handles = {}
-	local current
-	local cancelled = false
+	local requests = request_scope.new()
 
 	local function delete_next(items, index)
-		if cancelled then
-			return
-		end
 		local item = items[index]
 		if not item then
 			on_done(true, nil)
 			return
 		end
-		local callback = function(_, err)
+		requests.run(function(done)
+			if item.is_task then
+				return tasks.delete_task(item, done)
+			end
+			return comments.delete_comment(pr, item, done)
+		end, function(_, err)
 			if err then
 				on_done(false, err)
 				return
 			end
 			delete_next(items, index + 1)
-		end
-		if item.is_task then
-			current = tasks.delete_task(item, callback)
-		else
-			current = comments.delete_comment(pr, item, callback)
-		end
+		end)
 	end
 
-	local function finish()
-		pending = pending - 1
-		if cancelled or pending > 0 then
-			return
-		end
-		if first_err then
-			on_done(false, first_err)
+	requests.all({
+		comments = function(done)
+			return comments.fetch_comments(pr, { force_refresh = true }, done)
+		end,
+		tasks = function(done)
+			return tasks.fetch_tasks(pr, { force_refresh = true }, done)
+		end,
+	}, function(values, errors)
+		local err = errors.comments or errors.tasks
+		if err then
+			on_done(false, err)
 			return
 		end
 
 		local items = {}
-		for _, task in ipairs(review_tasks) do
+		for _, task in ipairs(values.tasks) do
 			if task.state == "PENDING" then
 				table.insert(items, task)
 			end
 		end
-		for index = #review_comments, 1, -1 do
-			if review_comments[index].state == "PENDING" then
-				table.insert(items, review_comments[index])
+		for index = #values.comments, 1, -1 do
+			if values.comments[index].state == "PENDING" then
+				table.insert(items, values.comments[index])
 			end
 		end
 		delete_next(items, 1)
-	end
-
-	local function track(handle)
-		if handle then
-			table.insert(handles, handle)
-		end
-	end
-	track(comments.fetch_comments(pr, { force_refresh = true }, function(result, err)
-		first_err = first_err or err
-		review_comments = result or {}
-		finish()
-	end))
-	track(tasks.fetch_tasks(pr, { force_refresh = true }, function(result, err)
-		first_err = first_err or err
-		review_tasks = result or {}
-		finish()
-	end))
-
-	return {
-		cancel = function()
-			cancelled = true
-			for _, handle in ipairs(handles) do
-				handle.cancel()
-			end
-			if current then
-				current.cancel()
-			end
-		end,
-	}
+	end)
+	return requests
 end
 
 return M

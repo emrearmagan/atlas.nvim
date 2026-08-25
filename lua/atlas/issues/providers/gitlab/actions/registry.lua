@@ -2,30 +2,19 @@ local M = {}
 
 local actions = require("atlas.issues.actions")
 local icons = require("atlas.ui.shared.icons")
-local picker = require("atlas.picker")
-local statusline = require("atlas.ui.statusline")
+local picker = require("atlas.ui.picker")
+local notify = require("atlas.core.notify")
+local request_scope = require("atlas.core.requests")
 local issues_api = require("atlas.issues.providers.gitlab.api.issues")
 local users_api = require("atlas.issues.providers.gitlab.api.users")
 local labels_api = require("atlas.issues.providers.gitlab.api.labels")
-local normalizer = require("atlas.issues.providers.gitlab.api.mapper")
+local service = require("atlas.providers.gitlab.client")
 
 ---@param ctx AtlasIssueActionContext
 ---@return boolean
 local function has_issue(ctx)
 	local issue = ctx.issue
 	return issue ~= nil and tostring(issue.key or "") ~= ""
-end
-
----@param issue Issue
----@return string
-local function issue_path(issue)
-	local raw = issue._raw or {}
-	local path = tostring(raw.project_path or "")
-	if path ~= "" then
-		return path
-	end
-	local from_key, _ = normalizer.parse_key(tostring(issue.key or ""))
-	return from_key
 end
 
 ---@type AtlasIssueAction[]
@@ -51,14 +40,14 @@ end
 local function close(ctx, done)
 	local issue = assert(ctx.issue)
 	local key = tostring(issue.key or "")
-	statusline.notify("loading", string.format("Closing %s...", key))
+	notify.loading(string.format("Closing %s...", key))
 	issues_api.set_state(key, "close", function(ok, err)
 		if not ok then
-			statusline.notify("error", err or "Close failed")
+			notify.error(err or "Close failed")
 			done(nil, err or "Close failed")
 			return
 		end
-		statusline.notify("success", string.format("Closed %s", key), 1200)
+		notify.success(string.format("Closed %s", key), { timeout = 1200 })
 		done({ issue_key = key }, nil)
 	end)
 end
@@ -77,22 +66,16 @@ end
 local function reopen(ctx, done)
 	local issue = assert(ctx.issue)
 	local key = tostring(issue.key or "")
-	statusline.notify("loading", string.format("Reopening %s...", key))
+	notify.loading(string.format("Reopening %s...", key))
 	issues_api.set_state(key, "reopen", function(ok, err)
 		if not ok then
-			statusline.notify("error", err or "Reopen failed")
+			notify.error(err or "Reopen failed")
 			done(nil, err or "Reopen failed")
 			return
 		end
-		statusline.notify("success", string.format("Reopened %s", key), 1200)
+		notify.success(string.format("Reopened %s", key), { timeout = 1200 })
 		done({ issue_key = key }, nil)
 	end)
-end
-
----@param ctx AtlasIssueActionContext
----@return boolean
-local function transition_available(ctx)
-	return has_issue(ctx)
 end
 
 ---@param ctx AtlasIssueActionContext
@@ -102,61 +85,51 @@ local function transition(ctx, done)
 	local key = tostring(issue.key or "")
 	local target = issue.status_id == "closed" and "reopen" or "close"
 	local label = target == "close" and "Closing" or "Reopening"
-	statusline.notify("loading", string.format("%s %s...", label, key))
+	notify.loading(string.format("%s %s...", label, key))
 	issues_api.set_state(key, target, function(ok, err)
 		if not ok then
-			statusline.notify("error", err or (label .. " failed"))
+			notify.error(err or (label .. " failed"))
 			done(nil, err or (label .. " failed"))
 			return
 		end
 		local msg = target == "close" and "Closed" or "Reopened"
-		statusline.notify("success", string.format("%s %s", msg, key), 1200)
+		notify.success(string.format("%s %s", msg, key), { timeout = 1200 })
 		done({ issue_key = key }, nil)
 	end)
-end
-
----@param ctx AtlasIssueActionContext
----@return boolean
-local function assign_available(ctx)
-	return has_issue(ctx)
 end
 
 ---@param ctx AtlasIssueActionContext
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function assign(ctx, done)
 	local issue = assert(ctx.issue)
+	---@cast issue GitLabIssue
 	local key = tostring(issue.key or "")
-	local path = issue_path(issue)
+	local path = issue.project_path
 	if path == "" then
 		local err = "Could not determine project path"
-		statusline.notify("error", err)
+		notify.error(err)
 		done(nil, err)
 		return
 	end
 
-	statusline.notify("loading", "Loading members...")
-	users_api.list_members(path, "", function(members, err)
-		if err or members == nil then
-			statusline.notify("error", err or "Failed to load members")
-			done(nil, err or "Failed to load members")
-			return
-		end
-		statusline.clear_notice()
+	---@param current_assignees IssueUser[]
+	---@param members IssueUser[]
+	local function open_picker(current_assignees, members)
+		notify.clear()
 
 		if #members == 0 then
-			local err = "No assignable members"
-			statusline.notify("warn", err)
-			done(nil, err)
+			local message = "No assignable members"
+			notify.warn(message)
+			done(nil, message)
 			return
 		end
 
-		local raw = issue._raw or {}
 		local original = {}
 		local original_set = {}
-		for _, a in ipairs(raw.assignees or {}) do
-			local id = tonumber(a.id)
+		for _, assignee in ipairs(current_assignees) do
+			local id = tonumber(assignee.id)
 			if id then
-				table.insert(original, { id = id, username = a.username, name = a.name or a.username })
+				table.insert(original, assignee)
 				original_set[id] = true
 			end
 		end
@@ -204,62 +177,73 @@ local function assign(ctx, done)
 					return
 				end
 
-				statusline.notify("loading", string.format("Updating assignees on %s...", key))
+				notify.loading(string.format("Updating assignees on %s...", key))
 				issues_api.set_assignee_ids(key, final_ids, function(ok, set_err)
 					if not ok then
-						statusline.notify("error", set_err or "Failed")
+						notify.error(set_err or "Failed")
 						done(nil, set_err or "Failed")
 						return
 					end
 					local msg = string.format("%d assignee(s)", #final_ids)
-					statusline.notify("success", msg, 1200)
+					notify.success(msg, { timeout = 1200 })
 					done({ issue_key = key }, nil)
 				end)
 			end,
 		})
-	end)
-end
+	end
 
----@param ctx AtlasIssueActionContext
----@return boolean
-local function labels_available(ctx)
-	return has_issue(ctx)
+	notify.loading("Loading assignees...")
+	local requests = request_scope.new()
+	requests.all({
+		assignees = function(next)
+			return issues_api.get_assignees(key, next)
+		end,
+		members = function(next)
+			return users_api.list_members(path, "", next)
+		end,
+	}, function(values, errors)
+		local err = errors.assignees or errors.members
+		if err then
+			local message = tostring(err)
+			notify.error(message)
+			done(nil, message)
+			return
+		end
+		open_picker(values.assignees, values.members)
+	end)
 end
 
 ---@param ctx AtlasIssueActionContext
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function labels(ctx, done)
 	local issue = assert(ctx.issue)
+	---@cast issue GitLabIssue
 	local key = tostring(issue.key or "")
-	local path = issue_path(issue)
+	local path = issue.project_path
 	if path == "" then
 		local err = "Could not determine project path"
-		statusline.notify("error", err)
+		notify.error(err)
 		done(nil, err)
 		return
 	end
 
-	statusline.notify("loading", "Loading labels...")
-	labels_api.list(path, function(all_labels, err)
-		if err or all_labels == nil then
-			statusline.notify("error", err or "Failed to load labels")
-			done(nil, err or "Failed to load labels")
-			return
-		end
-		statusline.clear_notice()
+	---@param current_labels IssueLabel[]
+	---@param all_labels IssueLabel[]
+	local function open_picker(current_labels, all_labels)
+		notify.clear()
 		if #all_labels == 0 then
-			local err = "No labels available"
-			statusline.notify("warn", err)
-			done(nil, err)
+			local message = "No labels available"
+			notify.warn(message)
+			done(nil, message)
 			return
 		end
 
-		local raw = issue._raw or {}
 		local original = {}
 		local original_set = {}
-		for _, name in ipairs(raw.label_names or {}) do
-			if type(name) == "string" and name ~= "" then
-				table.insert(original, { name = name })
+		for _, label in ipairs(current_labels) do
+			local name = tostring(label.name or "")
+			if name ~= "" then
+				table.insert(original, { name = name, color = label.color })
 				original_set[name] = true
 			end
 		end
@@ -295,19 +279,39 @@ local function labels(ctx, done)
 					return
 				end
 
-				statusline.notify("loading", string.format("Updating labels on %s...", key))
+				notify.loading(string.format("Updating labels on %s...", key))
 				issues_api.update_labels(key, { add = adds, remove = removes }, function(ok, set_err)
 					if not ok then
-						statusline.notify("error", set_err or "Failed")
+						notify.error(set_err or "Failed")
 						done(nil, set_err or "Failed")
 						return
 					end
 					local msg = string.format("+%d / -%d label(s)", #adds, #removes)
-					statusline.notify("success", msg, 1200)
+					notify.success(msg, { timeout = 1200 })
 					done({ issue_key = key }, nil)
 				end)
 			end,
 		})
+	end
+
+	notify.loading("Loading labels...")
+	issues_api.fetch_issue_labels(key, function(current_labels, current_err)
+		if current_err or current_labels == nil then
+			local message = current_err or "Failed to load issue labels"
+			notify.error(message)
+			done(nil, message)
+			return
+		end
+
+		labels_api.list(path, function(all_labels, labels_err)
+			if labels_err or all_labels == nil then
+				local message = labels_err or "Failed to load labels"
+				notify.error(message)
+				done(nil, message)
+				return
+			end
+			open_picker(current_labels, all_labels)
+		end)
 	end)
 end
 
@@ -321,19 +325,13 @@ local function search(_, done)
 		format_item = function(item)
 			return string.format("%s %s", icons.fallback(), tostring(item.label or ""))
 		end,
-		preview_item = function(item, done)
+		preview_item = function(item, preview_done)
 			local issue = item.value
-			return issues_api.get_issue(issue.key, {}, function(detail, err)
-				if err then
-					done({ title = issue.key, lines = { err } })
-					return
-				end
-				local description = vim.trim(tostring(detail and detail.description or ""))
-				done({
-					title = issue.key,
-					lines = vim.split(description ~= "" and description or "No description", "\n", { plain = true }),
-				})
-			end)
+			local description = vim.trim(tostring(issue.description or ""))
+			preview_done({
+				title = issue.key,
+				lines = vim.split(description ~= "" and description or "No description", "\n", { plain = true }),
+			})
 		end,
 		fetch = function(query, fetch_done)
 			local q = vim.trim(query)
@@ -362,7 +360,7 @@ local function search(_, done)
 			local url = item.value and item.value.url
 			if not url or url == "" then
 				local err = "Selected issue is missing URL"
-				statusline.notify("error", err)
+				notify.error(err)
 				done(nil, err)
 				return
 			end
@@ -380,7 +378,9 @@ end
 local function create_issue(ctx, done)
 	local resolved = ctx.project_path or ""
 	if resolved == "" and has_issue(ctx) then
-		resolved = issue_path(assert(ctx.issue))
+		local issue = assert(ctx.issue)
+		---@cast issue GitLabIssue
+		resolved = issue.project_path
 	end
 	if resolved == "" then
 		local git = require("atlas.core.git")
@@ -388,8 +388,8 @@ local function create_issue(ctx, done)
 		if root then
 			local remote = git.remote_url(root, "origin")
 			local info = remote and git.parse_remote_url(remote) or nil
-			if info and info.provider == "gitlab" and info.slug and info.slug ~= "" then
-				resolved = info.slug
+			if info and info.provider == "gitlab" and info.repo_full_name and info.repo_full_name ~= "" then
+				resolved = info.repo_full_name
 			end
 		end
 	end
@@ -438,10 +438,8 @@ local function toggle_subscription_available(ctx)
 		return false, "No issue selected"
 	end
 	local issue = assert(ctx.issue)
-	local raw = issue._raw or {}
-	local iid = tonumber(raw.iid)
-	local path = tostring(raw.project_path or "")
-	if iid == nil or path == "" then
+	---@cast issue GitLabIssue
+	if issue.project_path == "" then
 		return false, "Invalid issue identifier"
 	end
 	return true, nil
@@ -450,17 +448,15 @@ end
 ---@param ctx AtlasIssueActionContext
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function toggle_subscription(ctx, done)
-	local service = require("atlas.providers.gitlab.client").issues
 	local issue = assert(ctx.issue)
-	local raw = issue._raw or {}
-	local path = tostring(raw.project_path or "")
-	local iid = tonumber(raw.iid)
+	---@cast issue GitLabIssue
 	local action = issue.is_subscribed == true and "unsubscribe" or "subscribe"
-	local endpoint = string.format("/projects/%s/issues/%d/%s", service.url_encode(path), iid, action)
-	statusline.notify("loading", issue.is_subscribed and "Unsubscribing..." or "Subscribing...")
+	local endpoint =
+		string.format("/projects/%s/issues/%d/%s", service.url_encode(issue.project_path), issue.iid, action)
+	notify.loading(issue.is_subscribed and "Unsubscribing..." or "Subscribing...")
 	service.request("POST", endpoint, nil, function(result, err)
 		if err then
-			statusline.notify("error", tostring(err))
+			notify.error(tostring(err))
 			done(nil, tostring(err))
 			return
 		end
@@ -469,9 +465,13 @@ local function toggle_subscription(ctx, done)
 			subscribed = action == "subscribe"
 		end
 		issue.is_subscribed = subscribed == true
-		statusline.notify("success", issue.is_subscribed and "Subscribed" or "Unsubscribed", 1200)
+		notify.success(issue.is_subscribed and "Subscribed" or "Unsubscribed", { timeout = 1200 })
 		done({ issue_key = issue.key }, nil)
-	end)
+	end, {
+		action = action == "subscribe" and "Subscribe to issue" or "Unsubscribe from issue",
+		project_path = issue.project_path,
+		iid = issue.iid,
+	})
 end
 
 register({ id = "close", label = "Close Issue", is_available = close_available, run = close })
@@ -479,11 +479,11 @@ register({ id = "reopen", label = "Reopen Issue", is_available = reopen_availabl
 register({
 	id = "transition",
 	label = "Toggle Open/Closed",
-	is_available = transition_available,
+	is_available = has_issue,
 	run = transition,
 })
-register({ id = "assign", label = "Edit Assignees", is_available = assign_available, run = assign })
-register({ id = "labels", label = "Edit Labels", is_available = labels_available, run = labels })
+register({ id = "assign", label = "Edit Assignees", is_available = has_issue, run = assign })
+register({ id = "labels", label = "Edit Labels", is_available = has_issue, run = labels })
 register({ id = "search", label = "Search Issues", run = search })
 register({ id = "create_issue", label = "Create Issue", run = create_issue })
 register(actions.manage_templates)

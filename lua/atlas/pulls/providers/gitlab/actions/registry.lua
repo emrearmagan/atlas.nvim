@@ -3,12 +3,12 @@ local M = {}
 local actions = require("atlas.pulls.actions")
 local action_utils = require("atlas.pulls.actions.utils")
 local icons = require("atlas.ui.shared.icons")
-local picker = require("atlas.picker")
-local statusline = require("atlas.ui.statusline")
+local picker = require("atlas.ui.picker")
+local core_notify = require("atlas.core.notify")
 local notes = require("atlas.pulls.notes")
 local pullrequests_api = require("atlas.pulls.providers.gitlab.api.pullrequests")
 local users_api = require("atlas.pulls.providers.gitlab.api.users")
-local service = require("atlas.providers.gitlab.client").pulls
+local service = require("atlas.providers.gitlab.client")
 
 ---@param ctx AtlasPullActionContext
 ---@return boolean
@@ -18,14 +18,8 @@ end
 
 ---@param pr PullRequest
 ---@return string
-local function project_path(pr)
-	return pr.repo_full_name
-end
-
----@param pr PullRequest
----@return string
 local function pr_label(pr)
-	local path = project_path(pr)
+	local path = pr.repo_full_name
 	if path ~= "" then
 		return string.format("%s!%s", path, tostring(pr.id or ""))
 	end
@@ -43,8 +37,11 @@ end
 ---@param message string
 ---@param duration integer|nil
 local function notify(ctx, level, message, duration)
-	local callback = ctx.notify or statusline.notify
-	callback(level, message, duration)
+	if ctx.notify then
+		ctx.notify(level, message, duration)
+		return
+	end
+	core_notify.show(level, message, { timeout = duration })
 end
 
 ---@type AtlasPullAction[]
@@ -149,13 +146,14 @@ end
 ---@param done fun(result: PullsActionResult|nil, err: string|nil)
 local function edit_assignees(ctx, done)
 	local pr = ctx.pr
-	local path = project_path(pr)
+	local path = pr.repo_full_name
 	if path == "" then
 		done(nil, "Could not determine project path")
 		return
 	end
 
-	local function open_picker()
+	---@param assignees PullsAuthor[]
+	local function open_picker(assignees)
 		users_api.list_members(path, "", function(members, err)
 			if err or members == nil then
 				notify(ctx, "error", err or "Failed to load members")
@@ -171,7 +169,7 @@ local function edit_assignees(ctx, done)
 
 			local original = {}
 			local original_set = {}
-			for _, a in ipairs(pr.assignees or {}) do
+			for _, a in ipairs(assignees) do
 				local id = tonumber(a.id)
 				if id then
 					table.insert(original, { id = id, username = a.username, name = a.name or a.username })
@@ -239,6 +237,10 @@ local function edit_assignees(ctx, done)
 	end
 
 	notify(ctx, "loading", "Loading members...")
+	if ctx.details then
+		open_picker(ctx.details.assignees or {})
+		return
+	end
 	pullrequests_api.fetch_pullrequest(pr, { force_load = false }, function(details, err)
 		if err or details == nil then
 			local message = tostring(err or "Failed to load merge request")
@@ -246,8 +248,7 @@ local function edit_assignees(ctx, done)
 			done(nil, message)
 			return
 		end
-		pr = details
-		open_picker()
+		open_picker(details.assignees or {})
 	end)
 end
 
@@ -283,7 +284,10 @@ local function search(ctx, done)
 					end
 				end
 				fetch_done(list, nil)
-			end)
+			end, {
+				action = "Search projects",
+				query = query,
+			})
 		end,
 		on_select = function(item)
 			local project = item.id
@@ -311,7 +315,7 @@ local function toggle_subscription_available(ctx)
 	if not has_pr(ctx) then
 		return false, "No MR selected"
 	end
-	local path = project_path(ctx.pr)
+	local path = ctx.pr.repo_full_name
 	if path == "" then
 		return false, "Missing project path"
 	end
@@ -322,19 +326,15 @@ end
 ---@param done fun(result: PullsActionResult|nil, err: string|nil)
 local function toggle_subscription(ctx, done)
 	local pr = ctx.pr
-	local path = project_path(pr)
+	local path = pr.repo_full_name
 	local iid = tonumber(pr.id)
 	if iid == nil then
 		done(nil, "Invalid MR identifier")
 		return
 	end
-	pullrequests_api.fetch_pullrequest(pr, { force_load = false }, function(details, fetch_err)
-		if fetch_err or details == nil then
-			local message = tostring(fetch_err or "Failed to load merge request")
-			notify(ctx, "error", message)
-			done(nil, message)
-			return
-		end
+
+	---@param details PullRequestDetails
+	local function toggle(details)
 		local action = details.is_subscribed == true and "unsubscribe" or "subscribe"
 		local endpoint = string.format("/projects/%s/merge_requests/%d/%s", service.url_encode(path), iid, action)
 		notify(ctx, "loading", details.is_subscribed and "Unsubscribing..." or "Subscribing...")
@@ -354,7 +354,25 @@ local function toggle_subscription(ctx, done)
 				changed_pr = true,
 				message = details.is_subscribed and "Subscribed" or "Unsubscribed",
 			}, nil)
-		end)
+		end, {
+			action = action == "subscribe" and "Subscribe to MR" or "Unsubscribe from MR",
+			project_path = path,
+			iid = iid,
+		})
+	end
+
+	if ctx.details then
+		toggle(ctx.details)
+		return
+	end
+	pullrequests_api.fetch_pullrequest(pr, { force_load = false }, function(details, fetch_err)
+		if fetch_err or details == nil then
+			local message = tostring(fetch_err or "Failed to load merge request")
+			notify(ctx, "error", message)
+			done(nil, message)
+			return
+		end
+		toggle(details)
 	end)
 end
 

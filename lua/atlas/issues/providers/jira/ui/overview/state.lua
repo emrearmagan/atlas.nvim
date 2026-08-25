@@ -1,5 +1,6 @@
+---@class JiraIssuesOverviewTabState
+---@field view_mode "markdown"|"raw"
 local M = {
-	---@type "markdown"|"raw"
 	view_mode = "markdown",
 }
 

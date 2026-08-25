@@ -1,5 +1,4 @@
 local original = {
-	tbl_extend = vim.tbl_extend,
 	islist = vim.islist,
 	empty_dict = vim.empty_dict,
 	json_encode = vim.fn.json_encode,
@@ -25,16 +24,6 @@ describe("GitLab client", function()
 	before_each(function()
 		calls = {}
 		provider_config = {}
-		rawset(vim, "tbl_extend", function(_, first, second)
-			local result = {}
-			for key, value in pairs(second) do
-				result[key] = value
-			end
-			for key, value in pairs(first) do
-				result[key] = value
-			end
-			return result
-		end)
 		vim.islist = function(_)
 			return false
 		end
@@ -46,7 +35,11 @@ describe("GitLab client", function()
 		end)
 
 		package.preload["atlas.config"] = function()
-			return { options = { pulls = { providers = { gitlab = provider_config } } } }
+			return {
+				provider_options = function(id)
+					return id == "gitlab" and provider_config or nil
+				end,
+			}
 		end
 		package.preload["atlas.core.http"] = function()
 			return {
@@ -59,11 +52,10 @@ describe("GitLab client", function()
 					end
 					return { job_id = 1, cancel = function() end }
 				end,
-				curl_text_request = function() end,
 			}
 		end
 		package.preload["atlas.core.memory_cache"] = function()
-			return { clear_all = function() end, get = function() end, set = function() end, delete = function() end }
+			return {}
 		end
 		package.preload["atlas.core.cache"] = package.preload["atlas.core.memory_cache"]
 		package.preload["atlas.core.logger"] = function()
@@ -75,7 +67,6 @@ describe("GitLab client", function()
 	end)
 
 	after_each(function()
-		vim.tbl_extend = original.tbl_extend
 		vim.islist = original.islist
 		vim.empty_dict = original.empty_dict
 		vim.fn.json_encode = original.json_encode
@@ -89,7 +80,7 @@ describe("GitLab client", function()
 	it("preserves self-hosted path prefixes for REST and GraphQL", function()
 		provider_config.base_url = "https://gitlab.example.com/company/gitlab///"
 		provider_config.token = "secret"
-		local client = load_client().pulls
+		local client = load_client()
 
 		client.request("GET", "/projects", nil, function() end)
 		client.graphql("query { currentUser { id } }", nil, function() end)
@@ -99,7 +90,7 @@ describe("GitLab client", function()
 	end)
 
 	it("requires GraphQL authentication", function()
-		local client = load_client().pulls
+		local client = load_client()
 		local auth_err
 		client.graphql("query { currentUser { id } }", nil, function(_, err)
 			auth_err = err

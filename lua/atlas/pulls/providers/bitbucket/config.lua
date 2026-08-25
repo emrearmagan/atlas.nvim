@@ -1,47 +1,51 @@
 -- Example:
 --   require("atlas").setup({
+--     providers = {
+--       ---@type AtlasBitbucketProviderConfig
+--       bitbucket = {
+--         user  = vim.env.BITBUCKET_USER,
+--         token = vim.env.BITBUCKET_TOKEN,
+--         cache_ttl = 300,
+--       },
+--     },
 --     pulls = {
---       providers = {
---         bitbucket = {
---           user  = vim.env.BITBUCKET_USER,
---           token = vim.env.BITBUCKET_TOKEN,
---           cache_ttl = 300,
---           views = {
---             {
---               name = "All",
---               key  = "1",
---               targets = {
---                 { workspace = "acme", repo = "core" },
---                 { workspace = "acme", project = "WEB" },
---               },
---             },
---             {
---               name = "Reviewing",
---               key  = "2",
---               layout = "compact",
---               targets = { { workspace = "acme", project = "CORE" } },
---               filter = function(pr, ctx)
---                 if ctx.user == nil then return true end
---                 for _, reviewer in ipairs(pr.reviewers or {}) do
---                   if reviewer.username == ctx.user.username then return true end
---                 end
---                 return false
---               end,
+--       ---@type AtlasBitbucketPullsConfig
+--       bitbucket = {
+--         views = {
+--           {
+--             name = "All",
+--             key  = "1",
+--             targets = {
+--               { workspace = "acme", repo = "core" },
+--               { workspace = "acme", project = "WEB" },
 --             },
 --           },
---           bookmarks = {
---             -- key   = "S",      -- default
---             -- label = "Search", -- default
---             items = {
---               ["Core"] = {
---                 targets = {
---                   { workspace = "acme", repo = "standalone" },
---                   { workspace = "acme", project = "CORE" },
---                 },
---                 filter = function(pr)
---                   return pr.state ~= "draft"
---                 end,
+--           {
+--             name = "Reviewing",
+--             key  = "2",
+--             layout = "compact",
+--             targets = { { workspace = "acme", project = "CORE" } },
+--             filter = function(pr, ctx)
+--               if ctx.user == nil then return true end
+--               for _, reviewer in ipairs(pr.reviewers or {}) do
+--                 if reviewer.username == ctx.user.username then return true end
+--               end
+--               return false
+--             end,
+--           },
+--         },
+--         bookmarks = {
+--           -- key   = "S",      -- default
+--           -- label = "Search", -- default
+--           items = {
+--             ["Core"] = {
+--               targets = {
+--                 { workspace = "acme", repo = "standalone" },
+--                 { workspace = "acme", project = "CORE" },
 --               },
+--               filter = function(pr)
+--                 return pr.state ~= "draft"
+--               end,
 --             },
 --           },
 --         },
@@ -75,9 +79,11 @@
 ---@field label string|nil  -- default "Search"
 ---@field items table<string, AtlasBitbucketBookmarkConfig>|nil
 
----@class AtlasBitbucketConfig
+---@class AtlasBitbucketProviderConfig
 ---@field user string
 ---@field token string
----@field cache_ttl number|nil
+---@field cache_ttl number|nil Cache lifetime in seconds. Set to 0 to disable caching.
+
+---@class AtlasBitbucketPullsConfig
 ---@field views AtlasBitbucketViewConfig[]|nil
 ---@field bookmarks AtlasBitbucketBookmarksConfig|nil

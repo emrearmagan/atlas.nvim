@@ -1,7 +1,7 @@
 local M = {}
 
 ---@class AtlasRequestScope
----@field run fun(start: fun(done: fun(...: any)): { cancel: fun() }|nil, on_done: fun(...: any)): { cancel: fun() }|nil
+---@field run fun(start: fun(done: fun(...: any)): ({ cancel: fun() }|nil), on_done: fun(...: any)): ({ cancel: fun() }|nil)
 ---@field all fun(starts: table<string, fun(done: fun(value: any, err: string|nil)): { cancel: fun() }|nil>, on_done: fun(values: table<string, any>, errors: table<string, string>))
 ---@field cancel fun()
 

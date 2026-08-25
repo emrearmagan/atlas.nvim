@@ -2,7 +2,8 @@ local M = {}
 
 local comments_api = require("atlas.pulls.providers.gitlab.api.comments")
 local json = require("atlas.core.json")
-local service = require("atlas.providers.gitlab.client").pulls
+local service = require("atlas.providers.gitlab.client")
+local request_scope = require("atlas.core.requests")
 
 local REVIEW_METADATA_QUERY = [[
 query($path:ID!,$iid:String!,$after:String){
@@ -63,19 +64,19 @@ end
 
 ---@param path string
 ---@param iid integer
-local function bust_review_caches(path, iid)
-	service.delete_memory_cache(string.format("gitlab_pulls:comments:%s!%d", path, iid))
-	service.delete_memory_cache(string.format("gitlab_pulls:general-comments:%s!%d", path, iid))
+local function invalidate_review_caches(path, iid)
+	service.delete_memory_cache(string.format("gitlab_pulls:review-comments:%s!%d", path, iid))
+	service.delete_memory_cache(string.format("gitlab_pulls:conversation-comments:%s!%d", path, iid))
 	service.delete_memory_cache(string.format("gitlab_pulls:activity:%s!%d", path, iid))
 	service.delete_memory_cache(string.format("gitlab_pulls:reviewers:%s!%d", path, iid))
 	service.delete_memory_cache(metadata_cache_key(path, iid))
 end
 
 ---@param pr PullRequest
-local function bust_pull_request_cache(pr)
+local function invalidate_details_cache(pr)
 	local path, iid = project_iid(pr)
 	if path ~= "" and iid then
-		service.delete_memory_cache(string.format("gitlab_pulls:get:%s!%d", path, iid))
+		service.delete_memory_cache(string.format("gitlab_pulls:details:%s!%d", path, iid))
 	end
 end
 
@@ -249,10 +250,10 @@ local function fetch_metadata(pr, opts, on_done)
 	}
 end
 
----@param refs table|nil
+---@param refs GitLabPullRequestDiffRefs|nil
 ---@return boolean
 local function complete_diff_refs(refs)
-	return type(refs) == "table"
+	return refs ~= nil
 		and tostring(refs.base_sha or "") ~= ""
 		and tostring(refs.start_sha or "") ~= ""
 		and tostring(refs.head_sha or "") ~= ""
@@ -285,106 +286,43 @@ end
 ---@param on_done fun(data: PullsReviewData|nil, err: string|nil)
 ---@return { cancel: fun() }
 function M.fetch(pr, opts, on_done)
-	local comments_request
-	local metadata_request
-	local cancelled = false
-	local pending = 2
-	local review_data
-	local metadata = { reviewers = {}, history = {}, diff_refs = nil }
-	local review_error, metadata_error
+	---@cast pr GitLabPullRequest
+	local requests = request_scope.new()
+	requests.all({
+		comments = function(done)
+			return comments_api.fetch_review_comments(pr, opts, done)
+		end,
+		metadata = function(done)
+			return fetch_metadata(pr, opts, done)
+		end,
+	}, function(values, errors)
+		if errors.comments or errors.metadata then
+			on_done(nil, errors.comments or errors.metadata)
+			return
+		end
 
-	local function finish()
-		if cancelled then
-			return
-		end
-		pending = pending - 1
-		if pending > 0 then
-			return
-		end
-		if review_data == nil or metadata_error then
-			on_done(nil, review_error or metadata_error or "Failed to fetch review")
-			return
-		end
-		review_data.reviewers = metadata.reviewers
-		review_data.history = metadata.history
-		mark_outdated(review_data.comments, metadata.diff_refs)
-		if complete_diff_refs(metadata.diff_refs) then
-			pr._raw.diff_refs = metadata.diff_refs
-		end
-		on_done(review_data, nil)
-	end
-
-	comments_request = comments_api.fetch(pr, opts, function(result, err)
-		if cancelled then
-			return
-		end
-		if not result then
-			review_error = err
-			finish()
-			return
-		end
+		local metadata = values.metadata
 		local comments = {}
-		local pending = false
-		for _, comment in ipairs(result) do
-			pending = pending or comment.state == "PENDING"
+		local has_pending = false
+		for _, comment in ipairs(values.comments) do
+			has_pending = has_pending or comment.state == "PENDING"
 			if comment.inline or comment.file then
 				table.insert(comments, comment)
 			end
 		end
-		review_data = {
-			review = { id = nil, commit_hash = nil, pending = pending },
+		mark_outdated(comments, metadata.diff_refs)
+		if complete_diff_refs(metadata.diff_refs) then
+			pr.diff_refs = metadata.diff_refs
+		end
+		on_done({
+			review = { id = nil, commit_hash = nil, pending = has_pending },
 			comments = comments,
 			tasks = {},
-		}
-		finish()
+			reviewers = metadata.reviewers,
+			history = metadata.history,
+		}, nil)
 	end)
-	metadata_request = fetch_metadata(pr, opts, function(result, err)
-		metadata = result or metadata
-		metadata_error = err
-		finish()
-	end)
-	return {
-		cancel = function()
-			cancelled = true
-			if comments_request then
-				comments_request.cancel()
-			end
-			if metadata_request then
-				metadata_request.cancel()
-			end
-		end,
-	}
-end
-
----@param pr PullRequest
----@param _opts { force_refresh: boolean|nil }|nil
----@param on_done fun(context: PullsReviewContext|nil, err: string|nil)
-function M.fetch_context(pr, _opts, on_done)
-	local authors = {}
-	local seen = {}
-	---@param author PullsAuthor|nil
-	local function add(author)
-		if not author then
-			return
-		end
-		local key = tostring(author.id or "")
-		if key == "" then
-			key = tostring(author.username or author.nickname or author.name or "")
-		end
-		if key == "" or seen[key] then
-			return
-		end
-		seen[key] = true
-		table.insert(authors, author)
-	end
-
-	add(pr.author)
-	for _, list in ipairs({ pr.assignees or {}, pr.reviewers or {} }) do
-		for _, user in ipairs(list) do
-			add(user)
-		end
-	end
-	on_done({ authors = authors }, nil)
+	return requests
 end
 
 ---@param pr PullRequest
@@ -407,7 +345,7 @@ function M.discard(pr, _review, on_done)
 		end
 		local draft = drafts[index]
 		if not draft then
-			bust_review_caches(path, iid)
+			invalidate_review_caches(path, iid)
 			on_done(true, nil)
 			return
 		end
@@ -417,7 +355,12 @@ function M.discard(pr, _review, on_done)
 				return
 			end
 			delete_next(drafts, index + 1)
-		end)
+		end, {
+			action = "Delete MR draft comment",
+			project_path = path,
+			iid = iid,
+			draft_note_id = tostring(draft.id),
+		})
 	end
 
 	current = service.fetch_all_pages(prefix .. "?per_page=100", function(drafts, err)
@@ -426,7 +369,11 @@ function M.discard(pr, _review, on_done)
 			return
 		end
 		delete_next(drafts or {}, 1)
-	end)
+	end, {
+		action = "Fetch MR draft comments",
+		project_path = path,
+		iid = iid,
+	})
 	return {
 		cancel = function()
 			cancelled = true
@@ -442,7 +389,7 @@ end
 ---@param body string|nil
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.publish(pr, reviewer_state, body, on_done)
+local function publish(pr, reviewer_state, body, on_done)
 	local path, iid = project_iid(pr)
 	if path == "" or iid == nil then
 		on_done(false, "Invalid MR identifier")
@@ -465,9 +412,13 @@ function M.publish(pr, reviewer_state, body, on_done)
 			on_done(false, err)
 			return
 		end
-		bust_review_caches(path, iid)
+		invalidate_review_caches(path, iid)
 		on_done(true, nil)
-	end)
+	end, {
+		action = "Publish MR review",
+		project_path = path,
+		iid = iid,
+	})
 end
 
 ---@param pr PullRequest
@@ -485,9 +436,13 @@ local function approve_pull_request(pr, on_done)
 			on_done(false, err)
 			return
 		end
-		bust_pull_request_cache(pr)
+		invalidate_details_cache(pr)
 		on_done(true, nil)
-	end)
+	end, {
+		action = "Approve MR",
+		project_path = path,
+		iid = iid,
+	})
 end
 
 ---@param pr PullRequest
@@ -496,7 +451,7 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.submit(pr, _review, body, on_done)
-	return M.publish(pr, "reviewed", body, on_done)
+	return publish(pr, "reviewed", body, on_done)
 end
 
 ---@param pr PullRequest
@@ -507,7 +462,7 @@ end
 function M.approve(pr, _review, body, on_done)
 	local cancelled = false
 	local current
-	current = M.publish(pr, "reviewed", body, function(ok, err)
+	current = publish(pr, "reviewed", body, function(ok, err)
 		if cancelled then
 			return
 		end
@@ -533,7 +488,7 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.request_changes(pr, _review, body, on_done)
-	return M.publish(pr, "requested_changes", body, on_done)
+	return publish(pr, "requested_changes", body, on_done)
 end
 
 ---@param pr PullRequest

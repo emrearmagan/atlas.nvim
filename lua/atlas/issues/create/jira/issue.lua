@@ -7,7 +7,7 @@ local users_api = require("atlas.issues.providers.jira.api.users")
 local issues_api = require("atlas.issues.providers.jira.api.issues")
 local templates = require("atlas.issues.templates")
 local spinner = require("atlas.ui.components.spinner")
-local picker = require("atlas.picker")
+local picker = require("atlas.ui.picker")
 
 ---@class IssueEditorFields
 ---@field summary string
@@ -486,7 +486,7 @@ end
 
 ---@param on_submit fun(fields: IssueEditorFields, done: fun(ok: boolean, err: string|nil))|nil
 ---@param opts IssueEditorFields
----@param editor_opts { preview_fn?: fun(markdown: string): string, current_user?: IssueUser }|nil
+---@param editor_opts { preview_fn: (fun(markdown: string): string)|nil, current_user: IssueUser|nil }|nil
 function M.open(on_submit, opts, editor_opts)
 	if valid_win(state.layout.editor_win) then
 		close_ui()
@@ -573,7 +573,7 @@ function M.open(on_submit, opts, editor_opts)
 			state.current_user_handle = nil
 			state.current_user_loading = false
 			if err then
-				form.notify("warn", "Failed to load reporter: " .. err, 2000)
+				form.notify("warn", "Failed to load reporter: " .. err, { timeout = 2000 })
 			else
 				state.current_user = user
 			end
@@ -592,7 +592,7 @@ function M.open(on_submit, opts, editor_opts)
 				state.assignees_handle = nil
 
 				if err then
-					form.notify("warn", "Failed to load assignees: " .. err, 2000)
+					form.notify("warn", "Failed to load assignees: " .. err, { timeout = 2000 })
 					state.assignees = {}
 				else
 					state.assignees = users or {}
@@ -609,7 +609,7 @@ function M.open(on_submit, opts, editor_opts)
 			state.issue_types_handle = nil
 
 			if err then
-				form.notify("warn", "Failed to load issue types: " .. err, 2000)
+				form.notify("warn", "Failed to load issue types: " .. err, { timeout = 2000 })
 				state.issue_types = {}
 				state.fields.issue_type = nil
 			else

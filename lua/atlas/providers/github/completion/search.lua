@@ -3,14 +3,6 @@ local M = {}
 local prompt = require("atlas.commands.search.prompt")
 local query_api = require("atlas.providers.github.completion.query")
 
----@param arglead string
----@param cmdline string
----@param cursorpos integer
----@return string[]
-local function complete(arglead, cmdline, cursorpos)
-	return query_api.complete_cmdline(arglead, cmdline, cursorpos)
-end
-
 ---@param query string
 ---@return "pulls"|"issues"
 local function route(query)
@@ -35,7 +27,7 @@ end
 function M.open(default)
 	prompt.open({
 		name = "AtlasGitHubSearch",
-		complete = complete,
+		complete = query_api.complete_cmdline,
 		on_submit = run,
 		default = default or "is:pr ",
 	})

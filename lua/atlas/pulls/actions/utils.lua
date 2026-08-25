@@ -3,7 +3,7 @@ local M = {}
 local git_checkout = require("atlas.core.git.checkout")
 local icons = require("atlas.ui.shared.icons")
 local logger = require("atlas.core.logger")
-local statusline = require("atlas.ui.statusline")
+local core_notify = require("atlas.core.notify")
 
 ---@param context AtlasPullActionContext
 ---@return boolean
@@ -16,7 +16,11 @@ end
 ---@param message string
 ---@param duration integer|nil
 local function notify(context, level, message, duration)
-	(context.notify or statusline.notify)(level, message, duration)
+	if context.notify then
+		context.notify(level, message, duration)
+		return
+	end
+	core_notify.show(level, message, { timeout = duration })
 end
 
 ---@param item AtlasPullsCustomAction
@@ -30,6 +34,16 @@ local function custom_action(item)
 		run = function(context, done)
 			notify(context, "loading", string.format("Running %s...", item.label))
 			local finished = false
+			local function log_failure(err)
+				local pr = context.pr
+				logger.logerror("Custom pull request action failed", {
+					action_id = item.id,
+					action = item.label,
+					repo = pr and pr.repo_full_name or nil,
+					pr_id = pr and pr.id or nil,
+					error = err,
+				})
+			end
 			local function complete_custom(ok, message)
 				if finished then
 					return
@@ -38,6 +52,7 @@ local function custom_action(item)
 				vim.schedule(function()
 					if ok == false then
 						local err = message or (item.label .. " failed")
+						log_failure(err)
 						notify(context, "error", err)
 						done(nil, err)
 						return
@@ -59,8 +74,12 @@ local function custom_action(item)
 				output = require("atlas.ui.popups.live").create,
 			}, complete_custom)
 			if not ok then
-				logger.logerror(string.format("Custom action '%s' failed: %s", item.label, tostring(err)))
-				complete_custom(false, "Custom action failed: " .. tostring(err))
+				local message = "Custom action failed: " .. tostring(err)
+				if finished then
+					log_failure(message)
+				else
+					complete_custom(false, message)
+				end
 			end
 		end,
 	}

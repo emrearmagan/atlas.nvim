@@ -1,7 +1,7 @@
 local M = {}
 
 local icons = require("atlas.ui.shared.icons")
-local helper = require("atlas.issues.ui.main.helper")
+local helper = require("atlas.issues.ui.presentation")
 
 ---@param fields IssueEditorFields
 ---@param assignees IssueUser[]|"loading"|nil

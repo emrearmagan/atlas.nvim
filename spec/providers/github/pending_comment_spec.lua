@@ -18,9 +18,8 @@ local function gh_flags(args)
 	return flags
 end
 
----@param raw table|nil overrides for the PR's `_raw`
-local function pull_request(raw)
-	return { id = "7", repo_full_name = "octo/repo", _raw = raw or {} }
+local function pull_request()
+	return { id = "7", repo_full_name = "octo/repo" }
 end
 
 local function pending_comment(overrides)

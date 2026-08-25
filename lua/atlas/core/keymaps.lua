@@ -85,9 +85,6 @@ local M = {}
 ---@field explorer? AtlasPullsReviewExplorerKeymaps
 ---@field diff? AtlasPullsReviewDiffKeymaps
 
----@class AtlasPullsPipelinesKeymaps
----@field open? AtlasKeymapValue
-
 ---@class AtlasPullsFilterKeymaps
 ---@field open? AtlasKeymapValue
 ---@field merged? AtlasKeymapValue
@@ -101,10 +98,7 @@ local M = {}
 ---@field toggle_repo_issue_state? AtlasKeymapValue
 ---@field edit_title? AtlasKeymapValue
 ---@field edit_description? AtlasKeymapValue
----@field edit_reviewers? AtlasKeymapValue
----@field edit_assignees? AtlasKeymapValue
 ---@field review? AtlasPullsReviewKeymaps
----@field pipelines? AtlasPullsPipelinesKeymaps
 ---@field filters? AtlasPullsFilterKeymaps
 
 ---@class AtlasIssuesKeymaps
@@ -165,8 +159,6 @@ local M = {}
 ---| "pulls.toggle_repo_issue_state"
 ---| "pulls.edit_title"
 ---| "pulls.edit_description"
----| "pulls.edit_reviewers"
----| "pulls.edit_assignees"
 ---| "pulls.review.approve"
 ---| "pulls.review.request_changes"
 ---| "pulls.review.submit_review"
@@ -198,7 +190,6 @@ local M = {}
 ---| "pulls.review.diff.submit_suggestion"
 ---| "pulls.review.diff.add_note"
 ---| "pulls.review.diff.toggle_resolved"
----| "pulls.pipelines.open"
 ---| "pulls.filters.open"
 ---| "pulls.filters.merged"
 ---| "pulls.filters.declined"
@@ -335,11 +326,9 @@ function M.validate()
 		{ "pulls.edit_title", "pulls.review.explorer.toggle_grouping" },
 		{ "pulls.toggle_repo_issue_state", "pulls.review.diff.toggle_layout" },
 		{ "pulls.checkout", "pulls.review.diff.toggle_compact" },
-		{ "pulls.edit_assignees", "pulls.review.approve" },
-		{ "pulls.open_diff", "pulls.review.focus_item", "pulls.pipelines.open" },
+		{ "pulls.open_diff", "pulls.review.focus_item" },
 		{
 			"ui.comments.react",
-			"pulls.edit_reviewers",
 			"pulls.review.request_changes",
 			"issues.change_reporter",
 		},
@@ -427,8 +416,7 @@ function M.validate()
 	for _, domain in ipairs({ "issues", "pulls" }) do
 		for _, provider in ipairs(require("atlas.providers").list(domain)) do
 			local provider_domain = provider.domains[domain]
-			local conflicts =
-				view_key_conflicts({ domain, "providers", provider.id }, provider_domain.bookmark_key or "S")
+			local conflicts = view_key_conflicts({ domain, provider.id }, provider_domain.bookmark_key or "S")
 			if next(conflicts) ~= nil then
 				result[string.format("%s %s views", provider.name:lower(), domain)] = conflicts
 			end

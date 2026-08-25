@@ -2,7 +2,7 @@ local M = {}
 
 local form = require("atlas.ui.popups.form")
 local notify = require("atlas.core.notify")
-local picker = require("atlas.picker")
+local picker = require("atlas.ui.picker")
 local request_scope = require("atlas.core.requests")
 local highlights = require("atlas.ui.shared.highlights")
 local icons = require("atlas.ui.shared.icons")
@@ -68,6 +68,7 @@ local function default_pickers(project_path)
 				end
 				local out = {}
 				for _, m in ipairs(items) do
+					---@cast m GitLabMilestone
 					table.insert(out, { id = m.id, title = m.title })
 				end
 				cb(out, nil)
@@ -233,7 +234,7 @@ end
 ---@param issue_state GitLabCreateIssueState
 local function pick_assignees(issue_state)
 	if not issue_state.pickers.list_assignees then
-		form.notify("warn", "Assignee picker not available", 1500)
+		form.notify("warn", "Assignee picker not available", { timeout = 1500 })
 		return
 	end
 
@@ -243,8 +244,8 @@ local function pick_assignees(issue_state)
 			form.notify("error", "Load members failed: " .. tostring(err))
 			return
 		end
-		if type(items) ~= "table" or #items == 0 then
-			form.notify("warn", "No assignable members", 1500)
+		if items == nil or #items == 0 then
+			form.notify("warn", "No assignable members", { timeout = 1500 })
 			return
 		end
 		form.clear_notice()
@@ -274,7 +275,7 @@ end
 ---@param issue_state GitLabCreateIssueState
 local function pick_labels(issue_state)
 	if not issue_state.pickers.list_labels then
-		form.notify("warn", "Label picker not available", 1500)
+		form.notify("warn", "Label picker not available", { timeout = 1500 })
 		return
 	end
 
@@ -284,8 +285,8 @@ local function pick_labels(issue_state)
 			form.notify("error", "Load labels failed: " .. tostring(err))
 			return
 		end
-		if type(items) ~= "table" or #items == 0 then
-			form.notify("warn", "No labels available", 1500)
+		if items == nil or #items == 0 then
+			form.notify("warn", "No labels available", { timeout = 1500 })
 			return
 		end
 		form.clear_notice()
@@ -310,7 +311,7 @@ end
 ---@param issue_state GitLabCreateIssueState
 local function pick_milestone(issue_state)
 	if not issue_state.pickers.list_milestones then
-		form.notify("warn", "Milestone picker not available", 1500)
+		form.notify("warn", "Milestone picker not available", { timeout = 1500 })
 		return
 	end
 
@@ -358,7 +359,7 @@ local function submit(issue_state)
 
 	local title = get_title(issue_state)
 	if title == "" then
-		form.notify("warn", "Title is required", 1500)
+		form.notify("warn", "Title is required", { timeout = 1500 })
 		return
 	end
 
@@ -401,7 +402,7 @@ local function submit(issue_state)
 
 		local url = result and result.url or nil
 		local message = "Issue created"
-		if type(url) == "string" and url ~= "" then
+		if url and url ~= "" then
 			message = message .. ": " .. url
 			pcall(vim.fn.setreg, "+", url)
 		end
@@ -415,27 +416,23 @@ local function submit(issue_state)
 		end
 
 		close(issue_state)
-		notify.info(message, { timeout = 1200 })
-		if type(url) == "string" and url ~= "" then
+		notify.info(message, { timeout = 1200, vim_notify = true })
+		if url and url ~= "" then
 			require("atlas.commands.open").open(url)
 		end
 	end)
 end
 
----@class GitLabIssueEditorOpts
----@field project_path string
----@field on_done fun(result: GitLabIssueEditorResult|nil, err: string|nil)|nil
-
----@param opts GitLabIssueEditorOpts
+---@param opts { project_path: string, on_done: fun(result: GitLabIssueEditorResult|nil, err: string|nil)|nil }
 function M.open(opts)
 	if type(opts) ~= "table" then
-		notify.warn("create_issue.open: missing options", { timeout = 1500 })
+		notify.warn("create_issue.open: missing options", { timeout = 1500, vim_notify = true })
 		return
 	end
 
 	local project_path = tostring(opts.project_path or "")
 	if project_path == "" then
-		notify.error("create_issue.open: project_path is required")
+		notify.error("create_issue.open: project_path is required", { vim_notify = true })
 		return
 	end
 

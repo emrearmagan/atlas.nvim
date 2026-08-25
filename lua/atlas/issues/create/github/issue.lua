@@ -2,11 +2,11 @@ local M = {}
 
 local form = require("atlas.ui.popups.form")
 local notify = require("atlas.core.notify")
-local picker = require("atlas.picker")
+local picker = require("atlas.ui.picker")
 local icons = require("atlas.ui.shared.icons")
 local highlights = require("atlas.ui.shared.highlights")
 local request_scope = require("atlas.core.requests")
-local users_api = require("atlas.providers.github.users").new("issues")
+local users_api = require("atlas.providers.github.users")
 local templates = require("atlas.issues.templates")
 
 ---@class CreateIssueLabel
@@ -374,27 +374,23 @@ local function submit(issue_state)
 		end
 
 		close(issue_state)
-		notify.info(message)
+		notify.info(message, { vim_notify = true })
 		if type(url) == "string" and url ~= "" then
 			require("atlas.commands.open").open(url)
 		end
 	end)
 end
 
----@class GitHubIssueEditorOpts
----@field repo_slug string
----@field on_done fun(result: GitHubIssueEditorResult|nil, err: string|nil)|nil
-
----@param opts GitHubIssueEditorOpts
+---@param opts { repo_slug: string, on_done: fun(result: GitHubIssueEditorResult|nil, err: string|nil)|nil }
 function M.open(opts)
 	if type(opts) ~= "table" then
-		notify.warn("create_issue.open: missing options")
+		notify.warn("create_issue.open: missing options", { vim_notify = true })
 		return
 	end
 
 	local repo_slug = tostring(opts.repo_slug or "")
 	if repo_slug == "" then
-		notify.error("create_issue.open: repo_slug is required")
+		notify.error("create_issue.open: repo_slug is required", { vim_notify = true })
 		return
 	end
 

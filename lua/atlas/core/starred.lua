@@ -1,6 +1,6 @@
 local M = {}
 
-local path = vim.fs.joinpath(vim.fn.stdpath("data"), "atlas", "starred.json")
+local path = vim.fs.joinpath(vim.fn.stdpath("data"), "atlas", "starred-v2.json")
 
 ---@class AtlasStarredItem
 ---@field ref string

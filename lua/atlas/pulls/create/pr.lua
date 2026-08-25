@@ -1,13 +1,35 @@
 local M = {}
 
+local config = require("atlas.config")
 local form = require("atlas.ui.popups.form")
 local git_branch = require("atlas.core.git")
 local keymaps = require("atlas.core.keymaps")
 local logger = require("atlas.core.logger")
-local picker = require("atlas.picker")
+local picker = require("atlas.ui.picker")
 local description = require("atlas.pulls.create.description")
-local pulls_helper = require("atlas.pulls.ui.main.helper")
+local presentation = require("atlas.pulls.ui.presentation")
 local notify = require("atlas.core.notify")
+
+---@class PullsCreatePRReviewer
+---@field label string
+---@field provider_id string
+---@field selected boolean|nil
+---@field default boolean|nil
+
+---@class PullsCreatePROpts
+---@field repo_slug string
+---@field title string
+---@field body string
+---@field head string
+---@field base string
+---@field draft boolean|nil
+---@field repo_root string|nil
+---@field reviewers PullsCreatePRReviewer[]|nil
+
+---@class PullsCreatePRResult
+---@field id string|number|nil
+---@field url string|nil
+---@field message string|nil
 
 ---@class CreatePRFields
 ---@field repo_slug string         -- "owner/repo"
@@ -33,10 +55,14 @@ local notify = require("atlas.core.notify")
 ---@param provider_id string
 ---@return PullsProvider|nil, string|nil
 local function load_provider(provider_id)
-	local provider = require("atlas.providers").load(provider_id, "pulls")
-	if provider == nil then
+	local providers = require("atlas.providers")
+	if providers.domain(provider_id, "pulls") == nil then
 		return nil, "Unsupported provider: " .. tostring(provider_id)
 	end
+	if config.provider_options(provider_id) == nil then
+		return nil, "Pull request provider not configured: " .. tostring(provider_id)
+	end
+	local provider = assert(providers.load(provider_id, "pulls"))
 	---@cast provider PullsProvider
 	return provider, nil
 end
@@ -99,11 +125,11 @@ local function meta_rows(pr_state)
 
 	local branch_value = string.format("%s → %s", head, base)
 	local status = draft and "DRAFT" or "READY"
-	local status_hl = draft and pulls_helper.pr_state_hl("draft") or pulls_helper.pr_state_hl("open")
+	local status_hl = draft and presentation.pr_state_hl("draft") or presentation.pr_state_hl("open")
 	local commit_label = commit_count == 1 and "1 commit" or string.format("%d commits", commit_count)
 
 	return {
-		{ "Repo:", { text = repo, hl = pulls_helper.repo_hl(repo) }, "Status:", { text = status, hl = status_hl } },
+		{ "Repo:", { text = repo, hl = presentation.repo_hl(repo) }, "Status:", { text = status, hl = status_hl } },
 		{ "Branch:", branch_value, "Commits:", commit_label },
 		{ "Reviewers:", reviewers_value(pr_state), "", "" },
 	}
@@ -325,15 +351,15 @@ local function on_success(pr_state, result)
 
 	local url = result and result.url or nil
 	if type(url) == "string" and url ~= "" then
-		notify.info("PR created: " .. url)
+		notify.info("PR created: " .. url, { vim_notify = true })
 		pcall(vim.fn.setreg, "+", url)
 		require("atlas.commands.open").open(url)
 		return
 	end
 
-	notify.info("PR created")
+	notify.info("PR created", { vim_notify = true })
 	pcall(function()
-		require("atlas.pulls.ui.main.controller").refresh_current_view()
+		require("atlas.pulls.ui.dashboard.controller").refresh_current_view()
 	end)
 end
 
@@ -547,31 +573,34 @@ end
 function M.start()
 	local root, root_err = git_branch.repo_root(nil)
 	if not root then
-		notify.error(root_err or "Not in a git repository")
+		notify.error(root_err or "Not in a git repository", { vim_notify = true })
 		return
 	end
 
 	local head, head_err = git_branch.current_branch(root)
 	if not head then
-		notify.error(head_err or "Could not detect current branch")
+		notify.error(head_err or "Could not detect current branch", { vim_notify = true })
 		return
 	end
 
 	local info = git_branch.local_repository(root)
 	if not info then
-		notify.error("Could not resolve the origin repository")
+		notify.error("Could not resolve the origin repository", { vim_notify = true })
 		return
 	end
 
 	local provider, provider_err = load_provider(info.provider)
 	if not provider then
-		notify.error(provider_err or "Provider unavailable")
+		notify.error(provider_err or "Provider unavailable", { vim_notify = true })
 		return
 	end
 	local base = git_branch.default_branch(root, "origin") or "main"
+	local repo_full_name = assert(info.repo_full_name, "Repository target missing repo_full_name")
 
 	if head == base then
-		notify.warn(string.format("HEAD '%s' is the default branch — switch to a feature branch first", head))
+		notify.warn(string.format("HEAD '%s' is the default branch — switch to a feature branch first", head), {
+			vim_notify = true,
+		})
 		return
 	end
 
@@ -585,15 +614,15 @@ function M.start()
 		end
 	end
 
-	local initial, description_err = description.build(root, info.slug, base, head)
+	local initial, description_err = description.build(root, repo_full_name, base, head)
 	if not initial then
-		notify.error(description_err or "Unable to build pull request description")
+		notify.error(description_err or "Unable to build pull request description", { vim_notify = true })
 		return
 	end
 
 	M.open({
 		provider = provider,
-		repo_slug = info.slug,
+		repo_slug = repo_full_name,
 		repo_root = root,
 		head = head,
 		base = base,
