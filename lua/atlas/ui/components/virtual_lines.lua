@@ -2,7 +2,7 @@ local M = {}
 
 ---@param lines string[]
 ---@param highlights AtlasUIHighlight[]|nil
----@param opts { width: integer|nil, background_hl_group: string|nil }|nil
+---@param opts { width: integer|nil, start_col: integer|nil, background_hl_group: string|nil }|nil
 ---@return [string, string|string[]][][]
 function M.render(lines, highlights, opts)
 	opts = opts or {}
@@ -19,7 +19,7 @@ function M.render(lines, highlights, opts)
 
 	local result = {}
 	for line_number, source in ipairs(lines) do
-		local width = vim.fn.strdisplaywidth(source)
+		local width = vim.fn.strdisplaywidth(source, opts.start_col or 0)
 		local line = source
 		if opts.width and width < opts.width then
 			line = line .. string.rep(" ", opts.width - width)
