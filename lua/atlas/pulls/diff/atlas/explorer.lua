@@ -27,6 +27,7 @@ local folder_open_icon, folder_open_icon_hl = icons.general("folder_open")
 ---@field show_commits boolean
 ---@field width integer
 ---@field initial_focus "explorer"|"diff"
+---@field preview boolean
 ---@field ignore string[]
 
 ---@alias AtlasNativeDiffPanelItem
@@ -43,6 +44,7 @@ function M.options()
 		show_commits = explorer_config.show_commits == true,
 		width = math.max(20, math.floor(tonumber(explorer_config.width) or 40)),
 		initial_focus = explorer_config.initial_focus == "diff" and "diff" or "explorer",
+		preview = explorer_config.preview == true,
 		ignore = explorer_config.ignore or {},
 	}
 end
@@ -513,6 +515,25 @@ end
 function M.file_at_cursor(session)
 	local item = item_at_cursor(session)
 	return item and item.kind == "file" and item.index or nil
+end
+
+---@param session AtlasDiffSession
+---@param group integer
+---@param on_move fun(index: integer)
+function M.attach(session, group, on_move)
+	if not session.viewer_state.explorer.preview then
+		return
+	end
+	vim.api.nvim_create_autocmd("CursorMoved", {
+		group = group,
+		buffer = session.viewer_state.panel.buf,
+		callback = function()
+			local index = M.file_at_cursor(session)
+			if index then
+				on_move(index)
+			end
+		end,
+	})
 end
 
 ---@param session AtlasDiffSession

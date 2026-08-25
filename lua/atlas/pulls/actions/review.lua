@@ -1,8 +1,12 @@
 local M = {}
 
+local config = require("atlas.config")
+local keymaps = require("atlas.core.keymaps")
 local editor = require("atlas.ui.popups.editor")
 local notes = require("atlas.pulls.notes")
 local core_notify = require("atlas.core.notify")
+local picker = require("atlas.ui.picker")
+local ui_utils = require("atlas.ui.utils")
 local review_threads = require("atlas.pulls.ui.components.review_threads")
 
 ---@class AtlasReviewActionContext: AtlasPullActionContext
@@ -47,6 +51,40 @@ local function notify(context, level, message, duration)
 		return
 	end
 	core_notify.show(level, message, { timeout = duration })
+end
+
+---@return AtlasMarkdownEditorAction|nil
+local function comment_template_action()
+	local templates = config.options.pulls.comment_templates.items
+	local key = (keymaps.resolve("pulls.review.comment_templates") or {})[1]
+	if #templates == 0 or not key then
+		return nil
+	end
+	local label_width = 0
+	for _, template in ipairs(templates) do
+		label_width = math.max(label_width, vim.fn.strdisplaywidth(template.label))
+	end
+	return {
+		key = key,
+		description = "templates",
+		callback = function(context)
+			picker.select({
+				title = "Comment templates",
+				items = templates,
+				format_item = function(template)
+					return ui_utils.pad_right(template.label, label_width) .. "  " .. template.text
+				end,
+				on_select = function(template)
+					if template then
+						context.set_text(template.text .. context.get_text())
+						if config.options.pulls.comment_templates.insert_mode then
+							vim.cmd("startinsert!")
+						end
+					end
+				end,
+			})
+		end,
+	}
 end
 
 ---@param context AtlasReviewActionContext
@@ -114,6 +152,7 @@ function M.add_comment(context, opts, on_done)
 	if preview == nil and parent then
 		preview = review_threads.render_comment(parent, math.max(math.floor(vim.o.columns * 0.5), 80))
 	end
+	local template_action = comment_template_action()
 
 	open_editor(context, {
 		key = "pr-comment",
@@ -121,6 +160,7 @@ function M.add_comment(context, opts, on_done)
 		initial_text = opts.initial_text or (mention ~= "" and (mention .. " ") or ""),
 		completion = completion,
 		preview = preview,
+		actions = template_action and { template_action } or nil,
 		on_save = function(text)
 			if vim.trim(text) == "" then
 				return

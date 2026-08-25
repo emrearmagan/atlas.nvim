@@ -37,6 +37,7 @@
 ---@field show_commits boolean|nil
 ---@field width integer|nil
 ---@field initial_focus "explorer"|"diff"|nil
+---@field preview boolean|nil
 ---@field ignore string[]|nil
 
 ---@class AtlasPullsDiffReviewPanelConfig
@@ -53,6 +54,14 @@
 ---@field comment_display "virtual_lines"|"virtual_text"|nil Initial comment and note display mode.
 ---@field explorer AtlasPullsDiffExplorerConfig|nil
 ---@field review_panel AtlasPullsDiffReviewPanelConfig|nil
+
+---@class AtlasPullsCommentTemplate
+---@field label string
+---@field text string
+
+---@class AtlasPullsCommentTemplatesConfig
+---@field insert_mode boolean|nil
+---@field items AtlasPullsCommentTemplate[]
 
 ---@class AtlasPullsCustomActionContext
 ---@field repo_path string|nil
@@ -81,6 +90,7 @@
 ---@field delete_notes boolean|nil
 ---@field default_merge_method "merge"|"squash"|nil
 ---@field default_delete_branch boolean|nil
+---@field comment_templates AtlasPullsCommentTemplatesConfig|nil
 ---@field custom_actions AtlasPullsCustomAction[]|nil
 ---@field bitbucket AtlasBitbucketPullsConfig|nil
 ---@field github AtlasGitHubPullsConfig|nil
@@ -135,6 +145,20 @@ M.options = {
 		delete_notes = false,
 		default_merge_method = "merge",
 		default_delete_branch = false,
+		comment_templates = {
+			insert_mode = true,
+			items = {
+				{ label = "Praise", text = "praise: " },
+				{ label = "Nitpick", text = "nitpick: " },
+				{ label = "Suggestion", text = "suggestion: " },
+				{ label = "Issue", text = "issue: " },
+				{ label = "Todo", text = "todo: " },
+				{ label = "Question", text = "question: " },
+				{ label = "Thought", text = "thought: " },
+				{ label = "Chore", text = "chore: " },
+				{ label = "Note", text = "note: " },
+			},
+		},
 		diff = {
 			open_cmd = "AtlasDiff",
 			layout = "inline",
@@ -151,6 +175,7 @@ M.options = {
 				show_commits = false,
 				width = 40,
 				initial_focus = "explorer",
+				preview = false,
 				ignore = { ".git/**", ".jj/**" },
 			},
 		},
@@ -215,8 +240,10 @@ M.options = {
 				request_changes = "gr",
 				submit_review = "gs",
 				add_task = "<leader>t",
+				comment_templates = "gT",
+				find_file = "<leader>ff",
 				explorer = {
-					find_file = "<leader>ff",
+					find_file = { "f", "<leader>ff" },
 					next_file = { "]f", "<Tab>" },
 					previous_file = { "[f", "<S-Tab>" },
 					next_unreviewed_file = "]u",
