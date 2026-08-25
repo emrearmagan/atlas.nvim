@@ -352,7 +352,7 @@ function M.to_pull_request(raw)
 			https_url = destination_https_url,
 			ssh_url = destination_ssh_url,
 		},
-		comments_count = (raw.comments or 0) + (raw.review_comments or 0),
+		comments_count = raw.comments or 0,
 		created_on = raw.created_at or "",
 		updated_on = raw.updated_at or "",
 		link = { html = raw.html_url or "" },
@@ -371,15 +371,14 @@ end
 ---@param raw any
 ---@return GiteaPullRequestDetails
 function M.to_pull_request_details(raw)
-	local pr = M.to_pull_request(raw)
-	local value = raw
-	local labels, label_ids = pull_labels(value)
-	pr.description = json.nilify(value.body) or ""
-	pr.is_subscribed = json.nilify(value.subscribed)
-	pr.assignees = pull_assignees(value)
-	pr.labels = labels
-	pr.label_ids = label_ids
-	return pr
+	local labels, label_ids = pull_labels(raw)
+	return {
+		description = json.nilify(raw.body) or "",
+		is_subscribed = json.nilify(raw.subscribed),
+		assignees = pull_assignees(raw),
+		labels = labels,
+		label_ids = label_ids,
+	}
 end
 
 ---@param values table[]

@@ -259,8 +259,8 @@ Use `ctx.output(title)` to show output from a custom action:
 ==============================================================================
 5. PULLS                                                          *atlas-pulls*
 
-Two-pane layout: PRs grouped by view on the left, detail tabs (overview,
-conversation, review, and commits) on the right.
+Two-pane layout: PRs grouped by view on the left and provider-specific detail
+tabs on the right.
 
 Atlas supports configurable views and bookmarks, comments and review threads,
 build and merge checks, commits and diffstats, provider notifications, and

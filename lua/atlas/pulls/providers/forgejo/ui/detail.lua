@@ -45,8 +45,7 @@ function M.chips(pr, details, _loading)
 	---@cast pr ForgejoPullRequest
 	---@cast details ForgejoPullRequestDetails|nil
 	local chips = {}
-	local data = details or pr
-	local hash = tostring(data.source and data.source.commit_hash or "")
+	local hash = tostring(pr.source and pr.source.commit_hash or "")
 	if hash ~= "" then
 		table.insert(chips, { label = hash:sub(1, MAX_HASH_LEN), hl = "AtlasTabInactive" })
 	end

@@ -75,16 +75,17 @@ local function selected_set(values, key)
 	return result
 end
 
----@param pr PullRequest
----@param on_done fun(pr: ForgejoPullRequestDetails|nil, err: string|nil)
+---@param ctx AtlasPullActionContext
+---@param on_done fun(details: ForgejoPullRequestDetails|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-local function with_details(pr, on_done)
-	if pr.description ~= nil then
-		---@cast pr ForgejoPullRequestDetails
-		on_done(pr, nil)
+local function with_details(ctx, on_done)
+	if ctx.details then
+		local details = ctx.details
+		---@cast details ForgejoPullRequestDetails
+		on_done(details, nil)
 		return nil
 	end
-	return pullrequests.get(pr, {}, on_done)
+	return pullrequests.get(assert(ctx.pr), { force_load = false }, on_done)
 end
 
 ---@type AtlasPullAction[]
@@ -181,10 +182,10 @@ register({
 	label = "Edit assignees",
 	is_available = has_repository,
 	run = function(ctx, done)
-		local ref = assert(ctx.pr)
+		local pr = assert(ctx.pr)
 		notify(ctx, "loading", "Loading assignees...")
-		with_details(ref, function(pr, details_err)
-			if details_err or not pr then
+		with_details(ctx, function(details, details_err)
+			if details_err or not details then
 				local err = details_err or "Failed to load Forgejo pull request"
 				notify(ctx, "error", "Failed to load pull request: " .. err)
 				done(nil, err)
@@ -196,7 +197,7 @@ register({
 					done(nil, err)
 					return
 				end
-				local original_set = selected_set(pr.assignees, function(user)
+				local original_set = selected_set(details.assignees, function(user)
 					return user.username
 				end)
 				local items, selected = {}, {}
@@ -257,10 +258,10 @@ register({
 	label = "Edit labels",
 	is_available = has_repository,
 	run = function(ctx, done)
-		local ref = assert(ctx.pr)
+		local pr = assert(ctx.pr)
 		notify(ctx, "loading", "Loading labels...")
-		with_details(ref, function(pr, details_err)
-			if details_err or not pr then
+		with_details(ctx, function(details, details_err)
+			if details_err or not details then
 				local err = details_err or "Failed to load Forgejo pull request"
 				notify(ctx, "error", "Failed to load pull request: " .. err)
 				done(nil, err)
@@ -272,9 +273,8 @@ register({
 					done(nil, err)
 					return
 				end
-				---@cast pr ForgejoPullRequestDetails
 				local original_set = {}
-				for _, id in ipairs(pr.label_ids or {}) do
+				for _, id in ipairs(details.label_ids or {}) do
 					original_set[tostring(id)] = true
 				end
 				local items, selected = {}, {}
@@ -416,6 +416,7 @@ register({
 	is_available = has_repository,
 	run = function(ctx, done)
 		local pr = assert(ctx.pr)
+		local details = ctx.details
 		local user = ctx.current_user and ctx.current_user.username or ""
 		local function update(current, username)
 			local subscribed = current ~= true
@@ -425,6 +426,9 @@ register({
 					notify(ctx, "error", err)
 					done(nil, err)
 					return
+				end
+				if details then
+					details.is_subscribed = subscribed
 				end
 				notify(ctx, "success", subscribed and "Subscribed" or "Unsubscribed", 1200)
 				done({ changed_pr = true, message = subscribed and "Subscribed" or "Unsubscribed" }, nil)
@@ -446,8 +450,8 @@ register({
 				update(current, username)
 			end)
 		end
-		if pr.is_subscribed ~= nil then
-			resolve_user(pr.is_subscribed)
+		if details and details.is_subscribed ~= nil then
+			resolve_user(details.is_subscribed)
 			return
 		end
 		notify(ctx, "loading", "Checking subscription...")

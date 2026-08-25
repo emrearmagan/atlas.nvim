@@ -323,8 +323,7 @@ local function cached_pr_repository(pr)
 	---@cast target AtlasTarget
 	local repository = pr.repo_full_name
 	local transport = configured_git_transport()
-	local cache_path =
-		vim.fs.joinpath(vim.fn.stdpath("cache"), "atlas", "repos", target.provider, target.host, repository)
+	local cache_path = vim.fs.joinpath(vim.fn.stdpath("cache"), "atlas", "repos", target.host, repository)
 	local advertised = transport == "ssh" and pr.destination.ssh_url or nil
 	if transport == "https" then
 		advertised = pr.destination.https_url

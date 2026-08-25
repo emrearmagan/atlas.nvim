@@ -59,7 +59,7 @@ local function configured_searches()
 				if search then
 					table.insert(entries, {
 						id = provider_config.id,
-						label = provider.name .. " " .. domain_labels[domain],
+						label = provider_config.name .. " " .. domain_labels[domain],
 						open = search,
 					})
 				end

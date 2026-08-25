@@ -33,7 +33,7 @@ local function create_issue_slug(ctx)
 	if not remote then
 		return nil, remote_err or "No origin remote configured"
 	end
-	local info, parse_err = git.parse_remote_url(remote, "issues")
+	local info, parse_err = git.parse_remote_url(remote)
 	if not info then
 		return nil, parse_err or "Could not parse remote URL"
 	end

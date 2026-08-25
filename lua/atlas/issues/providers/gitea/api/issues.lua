@@ -169,7 +169,7 @@ end
 
 ---@param ref GiteaIssue|IssueRef|string
 ---@param opts IssuesFetchOpts|nil
----@param on_done fun(issue: IssueDetails|nil, err: string|nil)
+---@param on_done fun(details: IssueDetails|nil, err: string|nil)
 function M.get(ref, opts, on_done)
 	opts = opts or {}
 	local endpoint, _, slug, key = issue_endpoint(ref)
@@ -185,33 +185,19 @@ function M.get(ref, opts, on_done)
 			return nil
 		end
 	end
-	local requests = request_scope.new()
-	requests.all({
-		details = function(done)
-			return service.request("GET", endpoint, nil, done)
-		end,
-		subscription = function(done)
-			return service.request("GET", endpoint .. "/subscriptions/check", nil, function(raw, err)
-				done(raw and raw.subscribed, err)
-			end)
-		end,
-	}, function(values, errors)
-		if errors.details then
-			on_done(nil, errors.details)
+	return service.request("GET", endpoint, nil, function(raw, err)
+		if err then
+			on_done(nil, err)
 			return
 		end
-		local issue = mapper.to_issue_details(values.details, slug)
-		if not issue then
+		local details = mapper.to_issue_details(raw, slug)
+		if not details then
 			on_done(nil, "The requested number is not an issue")
 			return
 		end
-		if errors.subscription == nil then
-			issue.is_subscribed = values.subscription
-		end
-		service.set_memory_cache(cache_key, issue)
-		on_done(issue, nil)
+		service.set_memory_cache(cache_key, details)
+		on_done(details, nil)
 	end)
-	return requests
 end
 
 ---@param refs IssueRef[]
@@ -298,9 +284,13 @@ function M.update(issue, changes, on_done)
 			on_done(nil, err)
 			return
 		end
-		local updated = mapper.to_issue_details(raw, slug)
+		local summary = mapper.to_issue(raw, slug)
+		if not summary then
+			on_done(nil, "The updated number is not an issue")
+			return
+		end
 		clear_issue_cache(key)
-		on_done(updated, nil)
+		on_done(summary, nil)
 	end)
 end
 
@@ -503,7 +493,7 @@ end
 ---@param subscribe boolean
 ---@param on_done fun(ok: boolean, err: string|nil)
 function M.set_subscription(issue, login, subscribe, on_done)
-	local endpoint, _, _, key = issue_endpoint(issue)
+	local endpoint = issue_endpoint(issue)
 	if not endpoint or vim.trim(login) == "" then
 		on_done(false, not endpoint and "Invalid Gitea issue key" or "Missing user login")
 		return nil
@@ -511,7 +501,7 @@ function M.set_subscription(issue, login, subscribe, on_done)
 	local path = endpoint .. "/subscriptions/" .. service.url_encode(login)
 	return service.request(subscribe and "PUT" or "DELETE", path, nil, function(_, err)
 		if not err then
-			service.delete_memory_cache(detail_cache_key(key))
+			service.clear_cache(cache_scope() .. ":list:")
 		end
 		on_done(err == nil, err)
 	end)

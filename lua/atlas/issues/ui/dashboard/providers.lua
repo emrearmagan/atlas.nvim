@@ -376,7 +376,7 @@ local function gitea_family(opts)
 		end
 		if col.key == "status" then
 			local issue_key = tostring(issue.key or "")
-			local hl = issue_key ~= "" and state.is_issue_reloading(issue_key) and "AtlasTextMuted"
+			local hl = issue_key ~= "" and state.reloading_issue_keys[issue_key] and "AtlasTextMuted"
 				or (issue.status_id == "closed" and opts.closed_chip_hl or opts.open_chip_hl)
 			return { { start_col = 0, end_col = #ctx.padded, hl_group = hl } }
 		end

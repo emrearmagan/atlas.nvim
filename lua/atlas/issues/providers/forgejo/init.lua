@@ -14,7 +14,7 @@
 ---@field is_locked boolean
 ---@field due_date string|nil
 
----@class ForgejoIssueDetails : IssueDetails, ForgejoIssue
+---@class ForgejoIssueDetails : IssueDetails
 ---@field labels ForgejoIssueLabel[]
 ---@field milestone ForgejoIssueMilestone|nil
 
@@ -108,14 +108,6 @@ function M.fetch_conversation(issue, opts, on_done)
 			return
 		end
 		local items = {}
-		if issue.description ~= "" then
-			table.insert(items, {
-				id = "description:" .. issue.key,
-				kind = "description",
-				created_at = issue.created_at or "",
-				entity = issue,
-			})
-		end
 		for _, comment in ipairs(result.comments) do
 			table.insert(items, {
 				id = "comment:" .. comment.id,
@@ -137,35 +129,18 @@ function M.fetch_conversation(issue, opts, on_done)
 	end)
 end
 
----@param issue IssueDetails
+---@param issue Issue
 ---@param content string
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.update_description(issue, content, on_done)
-	---@cast issue ForgejoIssueDetails
-	return issues_api.update_issue(issue, { body = content }, function(updated, err)
+	---@cast issue ForgejoIssue
+	return issues_api.update(issue, { body = content }, function(updated, err)
 		if err or not updated then
 			on_done(false, err)
 			return
 		end
-		---@cast updated ForgejoIssueDetails
-		issue.description = updated.description
 		on_done(true, nil)
-	end)
-end
-
----@param issue Issue
----@param opts IssuesFetchOpts|nil
----@param on_done fun(entries: IssueActivityEntry[]|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.fetch_activity(issue, opts, on_done)
-	---@cast issue ForgejoIssue
-	return timeline_api.list(issue, opts, function(result, err)
-		if err then
-			on_done(nil, err)
-			return
-		end
-		on_done(result.events, nil)
 	end)
 end
 
@@ -193,18 +168,13 @@ end
 ---@return { cancel: fun() }|nil
 function M.add_reaction(issue, item, key, on_done)
 	---@cast issue ForgejoIssue
-	local comment_id
-	if item.kind == "description" then
-		comment_id = "__body__"
-	elseif item.kind == "comment" then
-		local comment = item.entity
-		---@cast comment IssueComment
-		comment_id = comment.id
-	else
+	if item.kind ~= "comment" then
 		on_done(false, "This item does not support reactions")
 		return nil
 	end
-	return comments_api.add_reaction(issue, comment_id, key, on_done)
+	local comment = item.entity
+	---@cast comment IssueComment
+	return comments_api.add_reaction(issue, comment.id, key, on_done)
 end
 
 ---@return AtlasForgejoIssuesViewConfig[]
@@ -255,7 +225,6 @@ end
 ---@type IssuesCommentsCapability
 local comments = {
 	reaction_options = REACTION_OPTIONS,
-	fetch_activity = M.fetch_activity,
 	fetch_conversation = M.fetch_conversation,
 	add_comment = function(issue, content, on_done)
 		---@cast issue ForgejoIssue

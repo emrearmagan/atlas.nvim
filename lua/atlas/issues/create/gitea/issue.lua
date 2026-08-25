@@ -11,7 +11,7 @@ local request_scope = require("atlas.core.requests")
 
 ---@class GiteaCreateIssueState
 ---@field fields { repo_slug: string, labels: table[], assignees: IssueUser[], milestone: table|nil, due_date: string|nil }
----@field issue GiteaIssueDetails|nil
+---@field issue GiteaIssue|nil
 ---@field layout AtlasFormLayout
 ---@field content_width integer
 ---@field is_submitting boolean
@@ -345,6 +345,7 @@ local function submit(state)
 			failed(err or "Invalid update issue response")
 			return
 		end
+		state.issue = updated
 		state.requests.run(function(done)
 			return api.update_labels(state.issue, labels, done)
 		end, function(ok, label_err)
@@ -362,19 +363,21 @@ local function submit(state)
 	end)
 end
 
----@param opts { repo_slug: string, issue: GiteaIssueDetails|nil, on_done: fun(result: table|nil, err: string|nil)|nil }
+---@param opts { repo_slug: string, issue: GiteaIssue|nil, details: GiteaIssueDetails|nil, on_done: fun(result: table|nil, err: string|nil)|nil }
 function M.open(opts)
 	require("atlas.ui.shared.highlights").setup()
 	require("atlas.pulls.ui.highlights").setup()
 	require("atlas.issues.providers.gitea.highlights").setup()
 
 	local labels, assignees, milestone, due_date, initial_body = {}, {}, nil, nil, ""
+	if opts.details then
+		labels = vim.deepcopy(opts.details.labels)
+		assignees = vim.deepcopy(opts.details.assignees)
+		milestone = vim.deepcopy(opts.details.milestone)
+		initial_body = opts.details.description
+	end
 	if opts.issue then
-		labels = vim.deepcopy(opts.issue.labels or {})
-		assignees = vim.deepcopy(opts.issue.assignees or {})
-		milestone = vim.deepcopy(opts.issue.milestone)
 		due_date = opts.issue.due_date and opts.issue.due_date:match("^%d%d%d%d%-%d%d%-%d%d") or nil
-		initial_body = opts.issue.description or ""
 	end
 	---@type GiteaCreateIssueState
 	local state = {

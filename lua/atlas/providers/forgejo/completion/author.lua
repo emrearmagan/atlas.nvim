@@ -20,15 +20,11 @@ local function issue_logins(context)
 		add_login(user and user.account_id, seen, logins)
 	end
 
-	add(context.current_user)
 	local issue = context.issue
-	if issue then
-		add(issue.reporter)
-		add(issue.assignee)
-		---@cast issue ForgejoIssueDetails
-		for _, assignee in ipairs(issue.assignees or {}) do
-			add(assignee)
-		end
+	add(issue.reporter)
+	add(issue.assignee)
+	for _, assignee in ipairs((context.details or {}).assignees or {}) do
+		add(assignee)
 	end
 	for _, comment in ipairs(context.comments or {}) do
 		add(comment.author)
@@ -45,15 +41,16 @@ local function pull_logins(context)
 		add_login(user and user.username, seen, logins)
 	end
 
-	for _, author in ipairs((context.review_context or {}).authors or {}) do
+	for _, author in ipairs((context.review_context or {}).mention_candidates or {}) do
 		add(author)
 	end
 	local pr = context.pr
 	add(pr.author)
-	for _, users in ipairs({ pr.assignees or {}, pr.reviewers or {} }) do
-		for _, user in ipairs(users) do
-			add(user)
-		end
+	for _, user in ipairs(pr.reviewers or {}) do
+		add(user)
+	end
+	for _, assignee in ipairs((context.details or {}).assignees or {}) do
+		add(assignee)
 	end
 	for _, reviewer in ipairs(context.reviewers or {}) do
 		add(reviewer)

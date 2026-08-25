@@ -71,19 +71,4 @@ function M.diffstat(pr, opts, on_done)
 	end)
 end
 
-function M.diff(pr, _, on_done)
-	local base = endpoint(pr)
-	if not base then
-		on_done(nil, "Invalid Gitea repository")
-		return nil
-	end
-	return service.request_text("GET", base .. ".diff", function(raw, err)
-		if err then
-			on_done(nil, err)
-			return
-		end
-		on_done(require("atlas.core.git.diff_parser").parse(raw), nil)
-	end)
-end
-
 return M

@@ -1,6 +1,6 @@
 local pipelines = require("atlas.pulls.providers.gitea.api.pipelines")
 
----@param item PullsPipeline|PullsPipelineJob
+---@param item PullsPipeline|PullsPipelineStage|PullsPipelineJob
 ---@return string
 local function state(item)
 	return item.state:upper()
@@ -9,9 +9,14 @@ end
 ---@param pipeline PullsPipeline
 ---@return boolean
 local function is_running(pipeline)
-	for _, job in ipairs(pipeline.jobs) do
-		if state(job) == "INPROGRESS" then
+	for _, stage in ipairs(pipeline.stages) do
+		if state(stage) == "INPROGRESS" then
 			return true
+		end
+		for _, job in ipairs(stage.jobs) do
+			if state(job) == "INPROGRESS" then
+				return true
+			end
 		end
 	end
 	return state(pipeline) == "INPROGRESS"
@@ -34,9 +39,11 @@ local function has_rerunnable_jobs(pipeline)
 	if failed_or_cancelled(pipeline) then
 		return true
 	end
-	for _, job in ipairs(pipeline.jobs) do
-		if failed_or_cancelled(job) then
-			return true
+	for _, stage in ipairs(pipeline.stages) do
+		for _, job in ipairs(stage.jobs) do
+			if failed_or_cancelled(job) then
+				return true
+			end
 		end
 	end
 	return false

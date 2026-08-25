@@ -1,5 +1,6 @@
-local providers = require("atlas.pulls.providers")
+local pipeline_utils = require("atlas.pulls.pipelines")
 local service = require("atlas.providers.forgejo.client")
+local pullrequests = require("atlas.pulls.providers.forgejo.api.pullrequests")
 local request_scope = require("atlas.core.requests")
 
 local M = {}
@@ -26,7 +27,7 @@ function M.actions_run(slug, value)
 end
 
 ---@param value string|nil
----@return "SUCCESSFUL"|"FAILED"|"INPROGRESS"|"STOPPED"|"UNKNOWN"
+---@return PullsPipelineState
 function M.state(value)
 	local state = tostring(value or ""):lower()
 	if state == "success" then
@@ -41,104 +42,154 @@ function M.state(value)
 	return "UNKNOWN"
 end
 
+---@param started_at string|nil
+---@param completed_at string|nil
+---@return number|nil
+local function duration(started_at, completed_at)
+	if started_at == nil or completed_at == nil then
+		return nil
+	end
+	local started = vim.fn.strptime("%Y-%m-%dT%H:%M:%SZ", tostring(started_at or ""))
+	local completed = vim.fn.strptime("%Y-%m-%dT%H:%M:%SZ", tostring(completed_at or ""))
+	if started <= 0 or completed < started then
+		return nil
+	end
+	return completed - started
+end
+
 ---@param raw table
----@param sha string
+---@param index integer
 ---@return PullsPipeline
-local function external_pipeline(raw, sha)
-	local context = raw.context or ""
-	local id = tostring(raw.id)
-	local name = context ~= "" and context or (raw.description or "")
+local function external_pipeline(raw, index)
+	local context = tostring(raw.context or "")
+	local provider_id = tostring(raw.id or "")
+	local name = context ~= "" and context or tostring(raw.description or "")
+	local id = provider_id ~= "" and ("status:" .. provider_id)
+		or string.format("status:%s:%d", name ~= "" and name or "external", index)
 	return {
+		id = id,
 		name = name ~= "" and name or "Commit status",
 		state = M.state(raw.status),
-		provider_state = raw.status,
-		provider_context = context,
+		provider_state = tostring(raw.status or ""),
 		url = service.absolute_url(raw.target_url),
-		key = context ~= "" and context or (id ~= "" and id or nil),
-		provider_id = id ~= "" and id or nil,
-		commit_hash = sha,
-		jobs = {},
+		stages = {},
 	}
 end
 
 ---@param result table[]
----@param sha string
+---@param _sha string
 ---@param slug string|nil
 ---@return PullsPipeline[]
-function M.map(result, sha, slug)
+function M.map(result, _sha, slug)
 	local pipelines = {}
 	local actions_runs = {}
 
-	for _, raw in ipairs(result) do
+	for index, raw in ipairs(result) do
 		local target_url = service.absolute_url(raw.target_url)
 		local run_number, run_url = M.actions_run(slug, target_url)
 		if not run_number then
-			table.insert(pipelines, external_pipeline(raw, sha))
+			table.insert(pipelines, external_pipeline(raw, index))
 		else
-			local context = raw.context or ""
+			local context = tostring(raw.context or "")
 			local workflow, job_name = context:match("^(.-)%s+/%s+(.+)$")
 			local pipeline = actions_runs[run_number]
 			if not pipeline then
 				pipeline = {
+					id = run_number,
 					name = workflow or ("Actions run #" .. run_number),
 					state = "UNKNOWN",
+					provider_state = "",
 					url = run_url,
-					key = workflow or run_number,
-					commit_hash = sha,
-					jobs = {},
+					job_count = 0,
+					stages = {
+						{ name = nil, state = "UNKNOWN", jobs = {} },
+					},
 				}
 				actions_runs[run_number] = pipeline
 				table.insert(pipelines, pipeline)
 			end
 
-			local provider_state = raw.status
-			table.insert(pipeline.jobs, {
-				id = raw.id,
+			local provider_state = tostring(raw.status or "")
+			local job_id = target_url and target_url:match("/jobs/(%d+)")
+				or string.format("summary:%s:%s:%d", run_number, tostring(raw.id or context), index)
+			table.insert(pipeline.stages[1].jobs, {
+				id = job_id,
 				name = job_name or (context ~= "" and context or "Job"),
 				state = M.state(provider_state),
 				provider_state = provider_state,
-				provider_context = context,
 				url = target_url,
-				steps = {},
 			})
 		end
 	end
 
 	for _, pipeline in ipairs(pipelines) do
-		if #pipeline.jobs > 0 then
-			pipeline.state = providers.aggregate_pipeline_state(pipeline.jobs)
-			pipeline.provider_state = pipeline.state:lower()
+		local stage = pipeline.stages[1]
+		if stage then
+			stage.state = #stage.jobs > 0 and pipeline_utils.aggregate_state(stage.jobs) or "UNKNOWN"
+			pipeline.state = stage.state
+			pipeline.job_count = #stage.jobs
+			for _, job in ipairs(stage.jobs) do
+				if job.state == pipeline.state then
+					pipeline.provider_state = job.provider_state
+					break
+				end
+			end
 		end
 	end
 	return pipelines
 end
 
 ---@param pr PullRequest
----@param _opts { force_refresh: boolean|nil }|nil
+---@param opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(pipelines: PullsPipeline[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch(pr, _opts, on_done)
-	local sha = tostring(pr.source.commit_hash or "")
-	local owner, repo = pr.repo_full_name:match("^([^/]+)/([^/]+)$")
-	if not owner or sha == "" then
-		on_done(nil, "Invalid Forgejo repository or source commit")
-		return nil
-	end
-	local endpoint = string.format(
-		"/repos/%s/%s/commits/%s/status",
-		service.url_encode(owner),
-		service.url_encode(repo),
-		service.url_encode(sha)
-	)
+function M.fetch(pr, opts, on_done)
+	opts = opts or {}
+	local requests = request_scope.new()
 
-	return service.request("GET", endpoint, nil, function(raw, err)
-		if err then
-			on_done(nil, err)
+	---@param selected PullRequest
+	local function fetch_statuses(selected)
+		local sha = tostring(selected.source.commit_hash or "")
+		local owner, repo = selected.repo_full_name:match("^([^/]+)/([^/]+)$")
+		if not owner or sha == "" then
+			on_done(nil, "Invalid Forgejo repository or source commit")
 			return
 		end
-		local statuses = type(raw.statuses) == "table" and raw.statuses or {}
-		on_done(M.map(statuses, sha, pr.repo_full_name), nil)
+		local endpoint = string.format(
+			"/repos/%s/%s/commits/%s/status",
+			service.url_encode(owner),
+			service.url_encode(repo),
+			service.url_encode(sha)
+		)
+		requests.run(function(done)
+			return service.request("GET", endpoint, nil, done)
+		end, function(raw, err)
+			if err then
+				on_done(nil, err)
+				return
+			end
+			local statuses = type(raw.statuses) == "table" and raw.statuses or {}
+			on_done(M.map(statuses, sha, selected.repo_full_name), nil)
+		end)
+	end
+
+	if tostring(pr.source.commit_hash or "") ~= "" then
+		fetch_statuses(pr)
+		return requests
+	end
+
+	-- Global Forgejo search omits the source SHA, so load the selected PR first.
+	requests.run(function(done)
+		return pullrequests.fetch_by_refs({ pr }, { force_load = opts.force_refresh }, done)
+	end, function(pulls, err)
+		local selected = pulls and pulls[1] or nil
+		if selected == nil then
+			on_done(nil, err or "Unable to load Forgejo pull request revisions")
+			return
+		end
+		fetch_statuses(selected)
 	end)
+	return requests
 end
 
 ---@param commit PullsCommit
@@ -161,12 +212,9 @@ function M.fetch_commit_status(commit, _opts, on_done)
 		local pipelines = M.map(statuses, commit.hash, nil)
 		local url
 		for _, pipeline in ipairs(pipelines) do
-			if not url then
-				local first_job = pipeline.jobs[1]
-				url = pipeline.url or (first_job and first_job.url)
-			end
+			url = url or pipeline.url
 		end
-		on_done(providers.aggregate_pipeline_state(pipelines):lower(), url, nil)
+		on_done(pipeline_utils.aggregate_state(pipelines):lower(), url, nil)
 	end)
 end
 
@@ -197,7 +245,7 @@ local function resolve_run(pr, pipeline, on_done)
 		on_done(nil, "Invalid Forgejo Actions run")
 		return nil
 	end
-	local sha = tostring(pipeline.commit_hash or "")
+	local sha = tostring(pr.source.commit_hash or "")
 	return service.request("GET", base .. "/actions/runs" .. service.query({
 		run_number = run_number,
 		head_sha = sha ~= "" and sha or nil,
@@ -207,7 +255,7 @@ local function resolve_run(pr, pipeline, on_done)
 			on_done(nil, err)
 			return
 		end
-		local runs = raw.workflow_runs
+		local runs = type(raw.workflow_runs) == "table" and raw.workflow_runs or {}
 		local run = runs[1]
 		if
 			not run
@@ -249,26 +297,28 @@ function M.fetch_details(pr, pipeline, _opts, on_done)
 				return
 			end
 			local jobs = {}
-			for _, job in ipairs(raw) do
+			for index, job in ipairs(raw) do
+				local job_id = tostring(job.id or "")
 				table.insert(jobs, {
-					id = job.id,
-					name = job.name,
+					id = job_id ~= "" and job_id or string.format("job:%s:%d", run_id, index),
+					name = tostring(job.name or "Job"),
 					state = M.state(job.status),
-					provider_state = job.status,
-					url = nil,
-					steps = {},
+					provider_state = tostring(job.status or ""),
+					url = service.absolute_url(job.html_url),
+					started_at = job.started_at,
+					duration = duration(job.started_at, job.completed_at),
 				})
 			end
-			local result = vim.tbl_extend("force", {}, pipeline, {
-				name = pipeline.name,
-				state = M.state(run.status),
-				provider_state = run.status,
-				url = pipeline.url,
-				provider_id = tostring(run.id),
-				commit_hash = run.commit_sha,
-				jobs = jobs,
-			})
-			on_done(result, nil)
+			local stage_state = #jobs > 0 and pipeline_utils.aggregate_state(jobs) or M.state(run.status)
+			local detailed = vim.tbl_extend("force", {}, pipeline)
+			detailed.name = tostring(run.name or "") ~= "" and tostring(run.name) or pipeline.name
+			detailed.state = M.state(run.status)
+			detailed.provider_state = tostring(run.status or "")
+			detailed.job_count = #jobs
+			detailed.stages = {
+				{ name = nil, state = stage_state, jobs = jobs },
+			}
+			on_done(detailed, nil)
 		end)
 	end)
 	return requests

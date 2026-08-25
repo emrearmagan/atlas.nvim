@@ -119,8 +119,7 @@ local function enrich_review_events(base, pr, timeline, on_done)
 	end)
 end
 
-function M.fetch(pr, opts, on_done)
-	opts = opts or {}
+function M.fetch(pr, _opts, on_done)
 	local base = endpoint(pr)
 	if not base then
 		on_done(nil, "Invalid Forgejo repository")
@@ -142,13 +141,10 @@ function M.fetch(pr, opts, on_done)
 				return
 			end
 			local comments, events = {}, {}
-			local activity_only = opts.activity_only == true
 			for _, value in ipairs(enriched.timeline) do
 				local event = tostring(value.type or ""):lower()
 				if event == "comment" then
-					if not activity_only then
-						table.insert(comments, mapper.to_comment(value))
-					end
+					table.insert(comments, mapper.to_comment(value))
 				else
 					local id = review_id(value)
 					local activity = mapper.to_activity(value, id and enriched.reviews[id] or nil)
@@ -158,21 +154,11 @@ function M.fetch(pr, opts, on_done)
 				end
 			end
 			events = squash_pushes(events)
-			if activity_only then
-				on_done({ comments = {}, events = events }, nil)
-				return
-			end
 			-- TODO: Figure out how the fuck to load reactions without N+1 requests.
 			on_done({ comments = comments, events = events }, nil)
 		end)
 	end)
 	return requests
-end
-
-function M.fetch_activity(pr, _, on_done)
-	return M.fetch(pr, { activity_only = true }, function(result, err)
-		on_done(result and result.events or nil, err)
-	end)
 end
 
 function M.add(pr, content, opts, on_done)

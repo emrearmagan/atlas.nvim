@@ -80,17 +80,11 @@ local function context_slug(ctx)
 	return info and info.provider == "forgejo" and info.repo_full_name or nil
 end
 
----@param issue Issue
+---@param issue ForgejoIssue
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 ---@param run fun(details: ForgejoIssueDetails)
 local function with_details(issue, done, run)
-	---@cast issue ForgejoIssue
-	if issue.description ~= nil then
-		---@cast issue ForgejoIssueDetails
-		run(issue)
-		return
-	end
-	api.get(issue, { force_load = true }, function(details, err)
+	api.get(issue, {}, function(details, err)
 		if err or not details then
 			done(nil, err or "Failed to load Forgejo issue")
 			return
@@ -132,9 +126,10 @@ end
 ---@param issue Issue
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function edit_assignees(issue, done)
+	---@cast issue ForgejoIssue
 	notify.loading("Loading assignees...")
 	with_details(issue, done, function(details)
-		api.list_assignees(issue_slug(details), function(users, err)
+		api.list_assignees(issue_slug(issue), function(users, err)
 			if err then
 				done(nil, err)
 				return
@@ -172,7 +167,7 @@ local function edit_assignees(issue, done)
 						return
 					end
 					notify.loading("Updating assignees...")
-					api.update_assignees(details, logins, function(ok, update_err)
+					api.update_assignees(issue, logins, function(ok, update_err)
 						if not ok then
 							done(nil, update_err)
 							return
@@ -189,9 +184,10 @@ end
 ---@param issue Issue
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function edit_labels(issue, done)
+	---@cast issue ForgejoIssue
 	notify.loading("Loading labels...")
 	with_details(issue, done, function(details)
-		api.list_labels(issue_slug(details), function(labels, err)
+		api.list_labels(issue_slug(issue), function(labels, err)
 			if err then
 				done(nil, err)
 				return
@@ -227,7 +223,7 @@ local function edit_labels(issue, done)
 						return
 					end
 					notify.loading("Updating labels...")
-					api.update_labels(details, ids, function(ok, update_err)
+					api.update_labels(issue, ids, function(ok, update_err)
 						if not ok then
 							done(nil, update_err)
 							return
@@ -244,9 +240,10 @@ end
 ---@param issue Issue
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function edit_milestone(issue, done)
+	---@cast issue ForgejoIssue
 	notify.loading("Loading milestones...")
 	with_details(issue, done, function(details)
-		api.list_milestones(issue_slug(details), function(milestones, err)
+		api.list_milestones(issue_slug(issue), function(milestones, err)
 			if err then
 				done(nil, err)
 				return
@@ -271,7 +268,7 @@ local function edit_milestone(issue, done)
 						return
 					end
 					notify.loading("Updating milestone...")
-					api.update_milestone(details, choice.id, function(ok, update_err)
+					api.update_milestone(issue, choice.id, function(ok, update_err)
 						if not ok then
 							done(nil, update_err)
 							return
@@ -474,12 +471,15 @@ register({
 	label = "Edit Issue",
 	is_available = has_issue,
 	run = function(ctx, done)
-		with_details(ctx.issue, done, function(details)
+		local issue = assert(ctx.issue)
+		---@cast issue ForgejoIssue
+		with_details(issue, done, function(details)
 			create_issue.open({
-				repo_slug = issue_slug(details),
-				issue = details,
+				repo_slug = issue_slug(issue),
+				issue = issue,
+				details = details,
 				on_done = function(result, err)
-					done(result and { issue_key = ctx.issue.key } or nil, err)
+					done(result and { issue_key = issue.key } or nil, err)
 				end,
 			})
 		end)
@@ -491,7 +491,7 @@ register({
 	label = "Edit Assignees",
 	is_available = has_issue,
 	run = function(ctx, done)
-		edit_assignees(ctx.issue, done)
+		edit_assignees(assert(ctx.issue), done)
 	end,
 })
 
@@ -500,7 +500,7 @@ register({
 	label = "Edit Labels",
 	is_available = has_issue,
 	run = function(ctx, done)
-		edit_labels(ctx.issue, done)
+		edit_labels(assert(ctx.issue), done)
 	end,
 })
 
@@ -509,7 +509,7 @@ register({
 	label = "Edit Milestone",
 	is_available = has_issue,
 	run = function(ctx, done)
-		edit_milestone(ctx.issue, done)
+		edit_milestone(assert(ctx.issue), done)
 	end,
 })
 

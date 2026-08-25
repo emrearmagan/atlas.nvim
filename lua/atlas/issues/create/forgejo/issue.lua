@@ -11,7 +11,7 @@ local issues_api = require("atlas.issues.providers.forgejo.api.issues")
 
 ---@class ForgejoCreateIssueState
 ---@field fields { repo_slug: string, labels: table[], assignees: IssueUser[], milestone: table|nil, due_date: string|nil }
----@field issue ForgejoIssueDetails|nil
+---@field issue ForgejoIssue|nil
 ---@field layout AtlasFormLayout
 ---@field content_width integer
 ---@field is_submitting boolean
@@ -332,7 +332,7 @@ local function submit(state)
 	end
 
 	state.requests.run(function(done)
-		return issues_api.update_issue(state.issue, {
+		return issues_api.update(state.issue, {
 			title = title,
 			body = form.get_body(state.layout),
 			assignees = assignees,
@@ -362,19 +362,21 @@ local function submit(state)
 	end)
 end
 
----@param opts { repo_slug: string, issue: ForgejoIssueDetails|nil, on_done: fun(result: table|nil, err: string|nil)|nil }
+---@param opts { repo_slug: string, issue: ForgejoIssue|nil, details: ForgejoIssueDetails|nil, on_done: fun(result: table|nil, err: string|nil)|nil }
 function M.open(opts)
 	require("atlas.ui.shared.highlights").setup()
 	require("atlas.pulls.ui.highlights").setup()
 	require("atlas.issues.providers.forgejo.highlights").setup()
 
 	local labels, assignees, milestone, due_date, initial_body = {}, {}, nil, nil, ""
+	if opts.details then
+		labels = vim.deepcopy(opts.details.labels)
+		assignees = vim.deepcopy(opts.details.assignees)
+		milestone = vim.deepcopy(opts.details.milestone)
+		initial_body = opts.details.description
+	end
 	if opts.issue then
-		labels = vim.deepcopy(opts.issue.labels)
-		assignees = vim.deepcopy(opts.issue.assignees)
-		milestone = vim.deepcopy(opts.issue.milestone)
 		due_date = opts.issue.due_date and opts.issue.due_date:match("^%d%d%d%d%-%d%d%-%d%d") or nil
-		initial_body = opts.issue.description
 	end
 	---@type ForgejoCreateIssueState
 	local state = {

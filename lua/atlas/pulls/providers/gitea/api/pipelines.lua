@@ -1,5 +1,6 @@
 local service = require("atlas.providers.gitea.client")
-local providers = require("atlas.pulls.providers")
+local pipeline_utils = require("atlas.pulls.pipelines")
+local pullrequests = require("atlas.pulls.providers.gitea.api.pullrequests")
 local request_scope = require("atlas.core.requests")
 
 local M = {}
@@ -55,22 +56,20 @@ function M.state(value, conclusion)
 end
 
 ---@param raw table
----@param sha string
+---@param index integer
 ---@return PullsPipeline
-local function external_pipeline(raw, sha)
+local function external_pipeline(raw, index)
 	local context = raw.context or ""
-	local id = tostring(raw.id)
+	local id = tostring(raw.id or "")
 	local name = context ~= "" and context or (raw.description or "")
 	return {
+		id = "status:" .. (id ~= "" and id or (context ~= "" and context or tostring(index))),
 		name = name ~= "" and name or "Commit status",
 		state = M.state(raw.status),
 		provider_state = raw.status,
-		provider_context = context,
 		url = service.absolute_url(raw.target_url),
-		key = context ~= "" and context or (id ~= "" and id or nil),
-		provider_id = id ~= "" and id or nil,
-		commit_hash = sha,
-		jobs = {},
+		job_count = 0,
+		stages = {},
 	}
 end
 
@@ -78,81 +77,112 @@ end
 ---@param sha string
 ---@param slug string|nil
 ---@return PullsPipeline[]
-function M.map(result, sha, slug)
+function M.map(result, _sha, slug)
 	local pipelines = {}
 	local actions_runs = {}
 
-	for _, raw in ipairs(result) do
+	for index, raw in ipairs(result) do
 		local target_url = service.absolute_url(raw.target_url)
 		local run_id, run_url, job_id = M.actions_run(slug, target_url)
 		if not run_id then
-			table.insert(pipelines, external_pipeline(raw, sha))
+			table.insert(pipelines, external_pipeline(raw, index))
 		else
 			local context = raw.context or ""
 			local workflow, job_name = context:match("^(.-)%s+/%s+(.+)$")
 			local pipeline = actions_runs[run_id]
 			if not pipeline then
 				pipeline = {
+					id = run_id,
 					name = workflow or ("Actions run #" .. run_id),
 					state = "UNKNOWN",
 					url = run_url,
-					key = workflow or run_id,
-					provider_id = run_id,
-					commit_hash = sha,
-					jobs = {},
+					job_count = 0,
+					stages = {
+						{
+							name = nil,
+							state = "UNKNOWN",
+							jobs = {},
+						},
+					},
 				}
 				actions_runs[run_id] = pipeline
 				table.insert(pipelines, pipeline)
 			end
 
 			local provider_state = raw.status
-			table.insert(pipeline.jobs, {
-				id = tonumber(job_id) or raw.id,
+			table.insert(pipeline.stages[1].jobs, {
+				id = tostring(job_id or raw.id or string.format("summary:%s:%d", run_id, index)),
 				name = job_name or (context ~= "" and context or "Job"),
 				state = M.state(provider_state),
 				provider_state = provider_state,
-				provider_context = context,
 				url = target_url,
-				steps = {},
 			})
 		end
 	end
 
 	for _, pipeline in ipairs(pipelines) do
-		if #pipeline.jobs > 0 then
-			pipeline.state = providers.aggregate_pipeline_state(pipeline.jobs)
+		local stage = pipeline.stages[1]
+		if stage and #stage.jobs > 0 then
+			stage.state = pipeline_utils.aggregate_state(stage.jobs)
+			pipeline.state = stage.state
 			pipeline.provider_state = pipeline.state:lower()
+			pipeline.job_count = #stage.jobs
 		end
 	end
 	return pipelines
 end
 
 ---@param pr PullRequest
----@param _opts { force_refresh: boolean|nil }|nil
+---@param opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(pipelines: PullsPipeline[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch(pr, _opts, on_done)
-	local owner, repo = pr.repo_full_name:match("^([^/]+)/([^/]+)$")
-	local sha = tostring(pr.source.commit_hash or "")
-	if not owner or sha == "" then
-		on_done(nil, "Invalid Gitea repository or source commit")
-		return nil
-	end
-	local endpoint = string.format(
-		"/repos/%s/%s/commits/%s/status",
-		service.url_encode(owner),
-		service.url_encode(repo),
-		service.url_encode(sha)
-	)
+function M.fetch(pr, opts, on_done)
+	opts = opts or {}
+	local requests = request_scope.new()
 
-	return service.request("GET", endpoint, nil, function(raw, err)
-		if err then
-			on_done(nil, err)
+	---@param selected PullRequest
+	local function fetch_statuses(selected)
+		local owner, repo = selected.repo_full_name:match("^([^/]+)/([^/]+)$")
+		local sha = tostring(selected.source.commit_hash or "")
+		if not owner or sha == "" then
+			on_done(nil, "Invalid Gitea repository or source commit")
 			return
 		end
-		local statuses = type(raw.statuses) == "table" and raw.statuses or {}
-		on_done(M.map(statuses, sha, pr.repo_full_name), nil)
+		local endpoint = string.format(
+			"/repos/%s/%s/commits/%s/status",
+			service.url_encode(owner),
+			service.url_encode(repo),
+			service.url_encode(sha)
+		)
+		requests.run(function(done)
+			return service.request("GET", endpoint, nil, done)
+		end, function(raw, err)
+			if err then
+				on_done(nil, err)
+				return
+			end
+			local statuses = type(raw.statuses) == "table" and raw.statuses or {}
+			on_done(M.map(statuses, sha, selected.repo_full_name), nil)
+		end)
+	end
+
+	if tostring(pr.source.commit_hash or "") ~= "" then
+		fetch_statuses(pr)
+		return requests
+	end
+
+	-- Global Gitea search omits the source SHA, so load the selected PR first.
+	requests.run(function(done)
+		return pullrequests.fetch_by_refs({ pr }, { force_load = opts.force_refresh }, done)
+	end, function(pulls, err)
+		local selected = pulls and pulls[1] or nil
+		if selected == nil then
+			on_done(nil, err or "Unable to load Gitea pull request revisions")
+			return
+		end
+		fetch_statuses(selected)
 	end)
+	return requests
 end
 
 ---@param commit PullsCommit
@@ -175,12 +205,9 @@ function M.fetch_commit_status(commit, _opts, on_done)
 		local pipelines = M.map(statuses, commit.hash, nil)
 		local url
 		for _, pipeline in ipairs(pipelines) do
-			if not url then
-				local first_job = pipeline.jobs[1]
-				url = pipeline.url or (first_job and first_job.url)
-			end
+			url = url or pipeline.url
 		end
-		on_done(providers.aggregate_pipeline_state(pipelines):lower(), url, nil)
+		on_done(pipeline_utils.aggregate_state(pipelines):lower(), url, nil)
 	end)
 end
 
@@ -198,6 +225,10 @@ end
 ---@param pipeline PullsPipeline
 ---@return integer|nil
 function M.parse_run_id(pr, pipeline)
+	local id = tonumber(pipeline.id)
+	if id ~= nil then
+		return id
+	end
 	local run_id = M.actions_run(pr.repo_full_name, pipeline.url)
 	return tonumber(run_id)
 end
@@ -242,44 +273,21 @@ local function provider_state(raw)
 	return raw.status or ""
 end
 
----@param raw table
----@param job_id string|integer
----@return PullsPipelineStep
-local function map_step(raw, job_id)
-	local started_at = timestamp(raw.started_at)
-	local completed_at = timestamp(raw.completed_at)
-	return {
-		id = string.format("%s:%s", tostring(job_id), tostring(raw.number)),
-		name = raw.name,
-		state = M.state(raw.status, raw.conclusion),
-		provider_state = provider_state(raw),
-		started_at = started_at,
-		completed_at = completed_at,
-		duration = duration(started_at, completed_at),
-	}
-end
-
 ---@param raw { jobs: table[] }
 ---@return PullsPipelineJob[]
 local function map_jobs(raw)
 	local jobs = {}
-	for _, value in ipairs(raw.jobs) do
+	for _, value in ipairs(raw.jobs or {}) do
 		local started_at = timestamp(value.started_at)
 		local completed_at = timestamp(value.completed_at)
-		local steps = {}
-		for _, step in ipairs(value.steps) do
-			table.insert(steps, map_step(step, value.id))
-		end
 		table.insert(jobs, {
-			id = value.id,
-			name = value.name,
+			id = tostring(value.id or ""),
+			name = tostring(value.name or "Job"),
 			state = M.state(value.status, value.conclusion),
 			provider_state = provider_state(value),
 			url = service.absolute_url(value.html_url),
 			started_at = started_at,
-			completed_at = completed_at,
 			duration = duration(started_at, completed_at),
-			steps = steps,
 		})
 	end
 	return jobs
@@ -304,10 +312,10 @@ local function fetch_jobs(base, run_id, on_done)
 				on_done(nil, err)
 				return
 			end
-			local values = raw.jobs
-			local total = tonumber(raw.total_count)
+			local values = type(raw) == "table" and type(raw.jobs) == "table" and raw.jobs or {}
+			local total = type(raw) == "table" and tonumber(raw.total_count) or nil
 			vim.list_extend(jobs, values)
-			if #jobs >= total or #values == 0 then
+			if (total ~= nil and #jobs >= total) or #values == 0 then
 				on_done({ total_count = total, jobs = jobs }, nil)
 				return
 			end
@@ -353,13 +361,20 @@ function M.fetch_details(pr, pipeline, _opts, on_done)
 				return
 			end
 			local jobs = map_jobs(raw)
+			local state = M.state(run.status, run.conclusion)
 			local result = vim.tbl_extend("force", {}, pipeline, {
-				state = M.state(run.status, run.conclusion),
+				id = tostring(run.id or pipeline.id),
+				state = state,
 				provider_state = provider_state(run),
 				url = pipeline.url,
-				provider_id = tostring(run.id),
-				commit_hash = run.head_sha,
-				jobs = jobs,
+				job_count = tonumber(raw.total_count) or #jobs,
+				stages = {
+					{
+						name = nil,
+						state = #jobs > 0 and pipeline_utils.aggregate_state(jobs) or state,
+						jobs = jobs,
+					},
+				},
 			})
 			on_done(result, nil)
 		end)

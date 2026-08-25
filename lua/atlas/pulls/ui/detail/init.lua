@@ -161,14 +161,6 @@ local function load_active_tab(pr, opts)
 	end
 end
 
----@param pr PullRequest
----@return boolean
-local function needs_hydration(pr)
-	-- Gitea and Forgejo global search return half a PR: no commit hashes, so
-	-- dependent requests have to wait for the real thing.
-	return (pr.provider == "gitea" or pr.provider == "forgejo") and pr.source.commit_hash == ""
-end
-
 local function cancel_requests()
 	state.requests.cancel()
 	state.requests = request_scope.new()
@@ -176,8 +168,7 @@ end
 
 ---@param ref PullRequestRef
 ---@param force_refresh boolean
----@param on_loaded fun(details: PullRequestDetails)|nil
-local function load_details(ref, force_refresh, on_loaded)
+local function load_details(ref, force_refresh)
 	local provider = state.provider
 	if provider == nil then
 		return
@@ -194,8 +185,6 @@ local function load_details(ref, force_refresh, on_loaded)
 		state.details_loading = false
 		if details == nil then
 			notify.error(tostring(err or "Failed to load pull request details"))
-		elseif on_loaded then
-			on_loaded(details)
 		end
 		update_spinner()
 		render_if_open()
@@ -316,26 +305,15 @@ function M.select(pr, opts)
 
 	local same_pr = same_ref(state.current_pr, pr)
 	if same_pr and opts.force_refresh ~= true and (state.details_loading or state.current_details) then
-		state.current_pr = state.current_details and needs_hydration(pr) and state.current_details or pr
+		state.current_pr = pr
 		render()
 		return
 	end
 
 	clear_pr()
 	state.details_loading = true
-	local force_refresh = opts.force_refresh == true
-	if not needs_hydration(pr) then
-		show_pr(pr, force_refresh)
-		load_details(pr, force_refresh)
-		return
-	end
-
-	state.current_pr = pr
-	update_spinner()
-	render()
-	load_details(pr, force_refresh, function(details)
-		show_pr(details, force_refresh)
-	end)
+	show_pr(pr, opts.force_refresh == true)
+	load_details(pr, opts.force_refresh == true)
 end
 
 ---@param input PullRequest|PullRequestRef

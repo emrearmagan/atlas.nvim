@@ -4,7 +4,7 @@
 ---@field mergeable boolean|nil
 ---@field merge_base string|nil
 
----@class GiteaPullRequestDetails : PullRequestDetails, GiteaPullRequest
+---@class GiteaPullRequestDetails : PullRequestDetails
 ---@field label_ids integer[]
 
 require("atlas.pulls.providers.gitea.config")
@@ -22,15 +22,13 @@ local git = require("atlas.core.git")
 ---@param opts PullsFetchOpts
 ---@return string[]
 local function active_statuses(opts)
-	local filters = require("atlas.pulls.state").status_filters or {}
-	local explicit_status = opts.state and opts.state:upper() or nil
-	if explicit_status then
-		return { explicit_status }
+	local selected = {}
+	for _, status in ipairs(opts.states or { "open" }) do
+		selected[tostring(status):upper()] = true
 	end
-
 	local statuses = {}
 	for _, status in ipairs({ "OPEN", "MERGED", "DECLINED" }) do
-		if filters[status] then
+		if selected[status] then
 			table.insert(statuses, status)
 		end
 	end
@@ -229,10 +227,8 @@ return {
 			decline = pullrequests_api.decline,
 			fetch_description = pullrequests_api.description,
 			fetch_reviewers = pullrequests_api.reviewers,
-			fetch_activity = comments_api.fetch_activity,
 			fetch_diffstat = files_api.diffstat,
 			fetch_commits = commits_api.fetch,
-			fetch_diff = files_api.diff,
 		},
 		comments = comments,
 		reviews = reviews,

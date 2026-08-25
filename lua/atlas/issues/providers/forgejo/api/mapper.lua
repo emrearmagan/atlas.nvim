@@ -157,20 +157,18 @@ function M.to_issue(raw, scoped_slug)
 end
 
 ---@param raw table
----@param scoped_slug string|nil Repository slug supplied by repository-scoped endpoints.
+---@param _scoped_slug string|nil Repository slug supplied by repository-scoped endpoints.
 ---@return ForgejoIssueDetails|nil
-function M.to_issue_details(raw, scoped_slug)
-	local issue = M.to_issue(raw, scoped_slug)
-	if issue == nil then
+function M.to_issue_details(raw, _scoped_slug)
+	if json.nilify(raw.pull_request) ~= nil then
 		return nil
 	end
-
-	issue.description = json.nilify(raw.body) or ""
-	issue.assignees = assignees(json.nilify(raw.assignees) or {})
-	issue.labels = labels(json.nilify(raw.labels) or {})
-	issue.milestone = milestone(json.nilify(raw.milestone))
-	issue.reactions = nil
-	return issue
+	return {
+		description = json.nilify(raw.body) or "",
+		assignees = assignees(json.nilify(raw.assignees) or {}),
+		labels = labels(json.nilify(raw.labels) or {}),
+		milestone = milestone(json.nilify(raw.milestone)),
+	}
 end
 
 ---@param raw table

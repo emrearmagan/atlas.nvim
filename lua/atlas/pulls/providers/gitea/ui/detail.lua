@@ -45,8 +45,7 @@ function M.chips(pr, details, _loading)
 	---@cast pr GiteaPullRequest
 	---@cast details GiteaPullRequestDetails|nil
 	local chips = {}
-	local data = details or pr
-	local hash = tostring(data.source and data.source.commit_hash or "")
+	local hash = tostring(pr.source and pr.source.commit_hash or "")
 	if hash ~= "" then
 		table.insert(chips, { label = hash:sub(1, MAX_HASH_LEN), hl = "AtlasTabInactive" })
 	end
@@ -62,7 +61,6 @@ end
 function M.tabs()
 	local overview_icon, overview_hl = icons.general("overview")
 	local conversation_icon, conversation_hl = icons.general("conversation")
-	local review_icon, review_hl = icons.pulls("review")
 	local commit_icon, commit_hl = icons.pulls("commit")
 	return {
 		{
@@ -76,12 +74,6 @@ function M.tabs()
 			label = "Conversation",
 			icon = { icon = conversation_icon, hl_group = conversation_hl },
 			mod = require("atlas.pulls.ui.detail.tabs.conversation"),
-		},
-		{
-			key = "review",
-			label = "Review",
-			icon = { icon = review_icon, hl_group = review_hl },
-			mod = require("atlas.pulls.ui.detail.tabs.review"),
 		},
 		{
 			key = "commits",

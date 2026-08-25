@@ -335,10 +335,6 @@ end
 
 function M.description(pr, opts, on_done)
 	opts = opts or {}
-	if opts.force_refresh ~= true and pr.description ~= nil then
-		on_done(pr.description, nil)
-		return nil
-	end
 	return M.get(pr, opts, function(fresh, err)
 		on_done(fresh and fresh.description or nil, err)
 	end)
@@ -461,7 +457,7 @@ local function patch_title(pr, title, on_done)
 			on_done(false, err)
 			return
 		end
-		local updated = mapper.to_pull_request_details(raw)
+		local updated = mapper.to_pull_request(raw)
 		pr.title = updated.title
 		pr.state = updated.state
 		copy_provider_metadata(pr, updated)
@@ -549,8 +545,7 @@ function M.update_description(pr, description, on_done)
 			on_done(false, err)
 			return
 		end
-		local updated = mapper.to_pull_request_details(raw)
-		pr.description = updated.description
+		local updated = mapper.to_pull_request(raw)
 		copy_provider_metadata(pr, updated)
 		service.delete_memory_cache(detail_cache_key(pr))
 		invalidate_list_cache()
@@ -654,8 +649,7 @@ function M.update_assignees(pr, assignees, on_done)
 			on_done(false, err)
 			return
 		end
-		local updated = mapper.to_pull_request_details(raw)
-		pr.assignees = updated.assignees
+		local updated = mapper.to_pull_request(raw)
 		copy_provider_metadata(pr, updated)
 		service.delete_memory_cache(detail_cache_key(pr))
 		invalidate_list_cache()
@@ -677,11 +671,7 @@ function M.update_labels(pr, labels, on_done)
 			on_done(false, err)
 			return
 		end
-		local updated = mapper.to_pull_request_details(raw)
-		pr.labels = updated.labels
-		---@cast pr GiteaPullRequestDetails
-		---@cast updated GiteaPullRequestDetails
-		pr.label_ids = updated.label_ids
+		local updated = mapper.to_pull_request(raw)
 		copy_provider_metadata(pr, updated)
 		service.delete_memory_cache(detail_cache_key(pr))
 		invalidate_list_cache()
@@ -704,7 +694,6 @@ function M.set_subscription(pr, username, subscribed, on_done)
 		string.format("%s/issues/%s/subscriptions/%s", endpoint, tostring(pr.id), service.url_encode(username))
 	return service.request(subscribed and "PUT" or "DELETE", target, nil, function(_, err)
 		if not err then
-			pr.is_subscribed = subscribed
 			service.delete_memory_cache(detail_cache_key(pr))
 		end
 		on_done(err == nil, err)
@@ -747,7 +736,7 @@ function M.set_state(pr, state, on_done)
 			on_done(nil, err)
 			return
 		end
-		local updated = mapper.to_pull_request_details(raw)
+		local updated = mapper.to_pull_request(raw)
 		service.delete_memory_cache(detail_cache_key(pr))
 		invalidate_list_cache()
 		on_done(updated, nil)

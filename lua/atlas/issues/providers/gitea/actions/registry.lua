@@ -79,17 +79,11 @@ local function context_slug(ctx)
 	return info and info.provider == "gitea" and info.repo_full_name or nil
 end
 
----@param issue Issue
+---@param issue GiteaIssue
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 ---@param run fun(details: GiteaIssueDetails)
 local function with_details(issue, done, run)
-	---@cast issue GiteaIssue
-	if issue.description ~= nil then
-		---@cast issue GiteaIssueDetails
-		run(issue)
-		return
-	end
-	api.get(issue, { force_load = true }, function(details, err)
+	api.get(issue, {}, function(details, err)
 		if err or not details then
 			done(nil, err or "Failed to load Gitea issue")
 			return
@@ -134,7 +128,7 @@ local function edit_assignees(issue, done)
 	---@cast issue GiteaIssue
 	notify.loading("Loading assignees...")
 	with_details(issue, done, function(details)
-		api.list_assignees(issue_slug(details), function(users, err)
+		api.list_assignees(issue_slug(issue), function(users, err)
 			if err then
 				done(nil, err)
 				return
@@ -192,7 +186,7 @@ local function edit_labels(issue, done)
 	---@cast issue GiteaIssue
 	notify.loading("Loading labels...")
 	with_details(issue, done, function(details)
-		api.list_labels(issue_slug(details), function(labels, err)
+		api.list_labels(issue_slug(issue), function(labels, err)
 			if err then
 				done(nil, err)
 				return
@@ -248,7 +242,7 @@ local function edit_milestone(issue, done)
 	---@cast issue GiteaIssue
 	notify.loading("Loading milestones...")
 	with_details(issue, done, function(details)
-		api.list_milestones(issue_slug(details), function(milestones, err)
+		api.list_milestones(issue_slug(issue), function(milestones, err)
 			if err then
 				done(nil, err)
 				return
@@ -535,12 +529,15 @@ register({
 	label = "Edit Issue",
 	is_available = has_issue,
 	run = function(ctx, done)
-		with_details(ctx.issue, done, function(details)
+		local issue = assert(ctx.issue)
+		---@cast issue GiteaIssue
+		with_details(issue, done, function(details)
 			create_issue.open({
-				repo_slug = issue_slug(details),
-				issue = details,
+				repo_slug = issue_slug(issue),
+				issue = issue,
+				details = details,
 				on_done = function(result, err)
-					done(result and { issue_key = ctx.issue.key } or nil, err)
+					done(result and { issue_key = issue.key } or nil, err)
 				end,
 			})
 		end)
@@ -552,7 +549,7 @@ register({
 	label = "Edit Assignees",
 	is_available = has_issue,
 	run = function(ctx, done)
-		edit_assignees(ctx.issue, done)
+		edit_assignees(assert(ctx.issue), done)
 	end,
 })
 
@@ -561,7 +558,7 @@ register({
 	label = "Edit Labels",
 	is_available = has_issue,
 	run = function(ctx, done)
-		edit_labels(ctx.issue, done)
+		edit_labels(assert(ctx.issue), done)
 	end,
 })
 
@@ -570,7 +567,7 @@ register({
 	label = "Edit Milestone",
 	is_available = has_issue,
 	run = function(ctx, done)
-		edit_milestone(ctx.issue, done)
+		edit_milestone(assert(ctx.issue), done)
 	end,
 })
 

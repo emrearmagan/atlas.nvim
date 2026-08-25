@@ -5,6 +5,7 @@ local cases = {
 	{
 		domain = "issues",
 		module = "atlas.issues.providers.gitea",
+		expected_query = "repo:local/repo is:closed archived:false sort:updated needle",
 		fetch = function(provider, view)
 			local api = require("atlas.issues.providers.gitea.api.issues")
 			local original = api.list
@@ -24,20 +25,23 @@ local cases = {
 	{
 		domain = "pulls",
 		module = "atlas.pulls.providers.gitea",
+		expected_query = "repo:local/repo is:open is:merged archived:false sort:updated needle",
 		fetch = function(provider, view)
 			local api = require("atlas.pulls.providers.gitea.api.pullrequests")
 			local original = api.list
-			local received
-			api.list = function(value, _, done)
+			local received, received_opts
+			api.list = function(value, opts, done)
 				received = value
+				received_opts = opts
 				done({}, nil)
 			end
-			provider.capabilities.core.fetch_pullrequests(view, { state = "open" }, function() end)
+			provider.capabilities.core.fetch_pullrequests(view, { states = { "merged", "open" } }, function() end)
 			api.list = original
+			assert.same({ "OPEN", "MERGED" }, received_opts.statuses)
 			return received
 		end,
 		query = function(provider, view)
-			return provider.capabilities.core.search_query(view, { state = "open" })
+			return provider.capabilities.core.search_query(view, { states = { "merged", "open" } })
 		end,
 	},
 }
@@ -105,41 +109,11 @@ describe("Gitea provider views", function()
 					assert.is_nil(configured[1].repo)
 					assert.is_nil(configured[3].repo)
 
-					case.query(provider, resolved[1])
+					assert.equal(case.expected_query, case.query(provider, resolved[1]))
 					assert.is_true(case.fetch(provider, resolved[1]) == resolved[1])
 					assert.equal(1, calls())
 				end
 			)
-		end)
-
-		it("leaves " .. case.domain .. " views unresolved for another provider", function()
-			local configured = {
-				{ name = "Current", key = "1", current_repo = true, search = "needle" },
-			}
-			with_views(
-				case,
-				configured,
-				{ provider = "forgejo", repo_full_name = "local/repo" },
-				function(provider, calls)
-					local resolved = provider.views()
-					assert.equal(1, calls())
-					assert.is_nil(resolved[1].repo)
-					assert.is_false(resolved[1] == configured[1])
-					assert.is_nil(configured[1].repo)
-				end
-			)
-		end)
-
-		it("copies " .. case.domain .. " views without an unnecessary repository lookup", function()
-			local configured = {
-				{ name = "Configured", key = "1", repo = "configured/repo" },
-			}
-			with_views(case, configured, nil, function(provider, calls)
-				local resolved = provider.views()
-				assert.equal(0, calls())
-				assert.same(configured[1], resolved[1])
-				assert.is_false(resolved[1] == configured[1])
-			end)
 		end)
 	end
 end)

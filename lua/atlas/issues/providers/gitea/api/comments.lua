@@ -85,22 +85,21 @@ end
 ---@param content string
 ---@param on_done fun(ok: boolean, err: string|nil)
 function M.add_reaction(issue, comment_id, content, on_done)
-	local base, number = endpoint(issue)
+	local base = endpoint(issue)
 	local id = tonumber(comment_id)
-	local path
-	if base and tostring(comment_id) == "__body__" then
-		path = string.format("%s/issues/%d/reactions", base, number)
-	elseif base and id then
-		path = string.format("%s/issues/comments/%d/reactions", base, id)
-	end
 	content = vim.trim(content)
-	if not path or content == "" then
-		on_done(false, not path and "Invalid Gitea issue or comment" or "Reaction is required")
+	if not base or not id or content == "" then
+		on_done(false, (not base or not id) and "Invalid Gitea issue or comment" or "Reaction is required")
 		return nil
 	end
-	return service.request("POST", path, { content = content }, function(_, err)
-		on_done(err == nil, err)
-	end)
+	return service.request(
+		"POST",
+		string.format("%s/issues/comments/%d/reactions", base, id),
+		{ content = content },
+		function(_, err)
+			on_done(err == nil, err)
+		end
+	)
 end
 
 return M

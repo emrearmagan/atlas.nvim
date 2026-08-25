@@ -24,16 +24,17 @@ describe("Forgejo author completion", function()
 
 	it("completes issue participants by login", function()
 		local completion = author_completion.for_issues({
-			current_user = { account_id = "current" },
 			issue = {
 				reporter = { account_id = "reporter" },
 				assignee = { account_id = "assignee" },
+			},
+			details = {
 				assignees = { { account_id = "second-assignee" }, { account_id = "assignee" } },
 			},
 			comments = { { author = { account_id = "commenter" } } },
 		})
 
-		assert.same({ "@assignee", "@commenter", "@current", "@reporter", "@second-assignee" }, words(completion))
+		assert.same({ "@assignee", "@commenter", "@reporter", "@second-assignee" }, words(completion))
 		assert.same({ "@reporter" }, words(completion, "@rep"))
 		assert.equal("@forgejo-user", completion.format_mention({ account_id = "forgejo-user" }))
 	end)
@@ -42,10 +43,10 @@ describe("Forgejo author completion", function()
 		local completion = author_completion.for_pulls({
 			pr = {
 				author = { username = "author" },
-				assignees = { { username = "assignee" } },
 				reviewers = { { username = "reviewer" } },
 			},
-			review_context = { authors = { { username = "review-author" } } },
+			details = { assignees = { { username = "assignee" } } },
+			review_context = { mention_candidates = { { username = "review-author" } } },
 			reviewers = { { username = "context-reviewer" } },
 			comments = { { author = { username = "commenter" } } },
 			conversation = { { author = { username = "conversation-author" } } },

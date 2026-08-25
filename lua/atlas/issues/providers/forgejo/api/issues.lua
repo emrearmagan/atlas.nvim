@@ -186,33 +186,19 @@ function M.get(ref, opts, on_done)
 			return nil
 		end
 	end
-	local requests = request_scope.new()
-	requests.all({
-		details = function(done)
-			return service.request("GET", endpoint, nil, done)
-		end,
-		subscription = function(done)
-			return service.request("GET", endpoint .. "/subscriptions/check", nil, function(raw, err)
-				done(raw and raw.subscribed, err)
-			end)
-		end,
-	}, function(values, errors)
-		if errors.details then
-			on_done(nil, errors.details)
+	return service.request("GET", endpoint, nil, function(raw, err)
+		if err then
+			on_done(nil, err)
 			return
 		end
-		local issue = mapper.to_issue_details(values.details, repo_full_name)
-		if not issue then
+		local details = mapper.to_issue_details(raw, repo_full_name)
+		if not details then
 			on_done(nil, "The requested number is not an issue")
 			return
 		end
-		if errors.subscription == nil then
-			issue.is_subscribed = values.subscription
-		end
-		service.set_memory_cache(cache_key, issue)
-		on_done(issue, nil)
+		service.set_memory_cache(cache_key, details)
+		on_done(details, nil)
 	end)
-	return requests
 end
 
 ---@param refs IssueRef[]
@@ -299,18 +285,10 @@ function M.update(issue, changes, on_done)
 			on_done(nil, err)
 			return
 		end
-		local updated = mapper.to_issue_details(raw, repo_full_name)
+		local updated = mapper.to_issue(raw, repo_full_name)
 		clear_issue_cache(key)
 		on_done(updated, nil)
 	end)
-end
-
----@param issue IssueDetails
----@param changes table
----@param on_done fun(issue: Issue|nil, err: string|nil)
-function M.update_issue(issue, changes, on_done)
-	---@cast issue ForgejoIssueDetails
-	return M.update(issue, changes, on_done)
 end
 
 ---@param issue ForgejoIssue
@@ -479,7 +457,7 @@ end
 ---@param subscribe boolean
 ---@param on_done fun(ok: boolean, err: string|nil)
 function M.set_subscription(issue, login, subscribe, on_done)
-	local endpoint, _, _, key = issue_endpoint(issue)
+	local endpoint = issue_endpoint(issue)
 	if not endpoint or vim.trim(login) == "" then
 		on_done(false, not endpoint and "Invalid Forgejo issue key" or "Missing user login")
 		return nil
@@ -487,7 +465,7 @@ function M.set_subscription(issue, login, subscribe, on_done)
 	local path = endpoint .. "/subscriptions/" .. service.url_encode(login)
 	return service.request(subscribe and "PUT" or "DELETE", path, nil, function(_, err)
 		if not err then
-			service.delete_memory_cache(detail_cache_key(key))
+			service.clear_cache(cache_scope() .. ":list:")
 		end
 		on_done(err == nil, err)
 	end)

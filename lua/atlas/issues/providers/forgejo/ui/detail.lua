@@ -13,8 +13,7 @@ local spinner = require("atlas.ui.components.spinner")
 function M.header_fields(issue, details, loading)
 	---@cast issue ForgejoIssue
 	---@cast details ForgejoIssueDetails|nil
-	local data = details or issue
-	local reporter = data.reporter and tostring(data.reporter.display_name or "") or ""
+	local reporter = issue.reporter and tostring(issue.reporter.display_name or "") or ""
 	if reporter == "" then
 		reporter = "Unknown"
 	end
@@ -36,8 +35,8 @@ function M.header_fields(issue, details, loading)
 	local fields = {
 		{
 			label = "Status",
-			value = tostring(data.status or "Open"),
-			hl = data.status_id == "closed" and "AtlasForgejoIssueClosedChip" or "AtlasForgejoIssueOpenChip",
+			value = tostring(issue.status or "Open"),
+			hl = issue.status_id == "closed" and "AtlasForgejoIssueClosedChip" or "AtlasForgejoIssueOpenChip",
 		},
 		{
 			label = "Author",
@@ -51,7 +50,7 @@ function M.header_fields(issue, details, loading)
 	if milestone ~= "" then
 		table.insert(fields, { label = "Milestone", value = milestone, hl = "AtlasTextMuted" })
 	end
-	local created_at = data.created_at or ""
+	local created_at = issue.created_at or ""
 	if created_at ~= "" then
 		table.insert(fields, {
 			label = "Opened",
@@ -59,8 +58,8 @@ function M.header_fields(issue, details, loading)
 			hl = "AtlasTextMuted",
 		})
 	end
-	if data.duedate then
-		table.insert(fields, { label = "Due", value = data.duedate, hl = "AtlasTextWarning" })
+	if issue.duedate then
+		table.insert(fields, { label = "Due", value = issue.duedate, hl = "AtlasTextWarning" })
 	end
 	return fields
 end
@@ -104,8 +103,15 @@ end
 
 ---@return IssuesDetailTabDefinition[]
 function M.tabs()
+	local overview_icon, overview_hl = icons.general("overview")
 	local conversation_icon, conversation_hl = icons.general("conversation")
 	return {
+		{
+			key = "overview",
+			label = "Overview",
+			icon = { icon = overview_icon, hl_group = overview_hl },
+			mod = require("atlas.issues.ui.detail.tabs.overview"),
+		},
 		{
 			key = "conversation",
 			label = "Conversation",

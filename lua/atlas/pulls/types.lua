@@ -144,7 +144,6 @@
 ---@field name string
 ---@field state PullsPipelineState
 ---@field provider_state string|nil
----@field provider_context string|nil Raw commit-status context when this pipeline represents a commit status.
 ---@field url string|nil
 ---@field job_count integer|nil
 ---@field stages PullsPipelineStage[]
@@ -159,7 +158,6 @@
 ---@field name string
 ---@field state PullsPipelineState
 ---@field provider_state string|nil
----@field provider_context string|nil Raw commit-status context when this job represents a commit status.
 ---@field url string|nil
 ---@field started_at string|nil
 ---@field duration number|nil Seconds

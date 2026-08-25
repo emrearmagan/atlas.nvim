@@ -106,10 +106,13 @@ describe("Forgejo pulls", function()
 				return { cancel = function() end }
 			end,
 		})
-		local pr = { repo_full_name = "owner/repo" }
+		local pr = { repo_full_name = "owner/repo", source = { commit_hash = "abc" } }
 		local pipeline = {
+			id = "42",
+			name = "Actions run #42",
+			state = "INPROGRESS",
 			url = "https://git.example/owner/repo/actions/runs/42",
-			commit_hash = "abc",
+			stages = {},
 		}
 
 		pipelines.cancel(pr, pipeline, function() end)
@@ -118,6 +121,55 @@ describe("Forgejo pulls", function()
 		assert.same({
 			{ method = "GET", endpoint = "/repos/owner/repo/actions/runs?run" },
 			{ method = "POST", endpoint = "/repos/owner/repo/actions/runs/900/cancel" },
+		}, requests)
+	end)
+
+	it("loads the source commit before fetching pipelines when search omitted it", function()
+		local requests = {}
+		local pipelines = load_api(PIPELINES, {
+			base_url = function()
+				return "https://git.example"
+			end,
+			absolute_url = function(value)
+				return value
+			end,
+			url_encode = tostring,
+			request = function(method, endpoint, _, done)
+				table.insert(requests, { method = method, endpoint = endpoint })
+				if endpoint == "/repos/owner/repo/pulls/18" then
+					done({
+						number = 18,
+						title = "Pull",
+						state = "open",
+						user = { id = 1, login = "author" },
+						base = { ref = "main", sha = "base", repo = { full_name = "owner/repo" } },
+						head = { ref = "feature", sha = "head", repo = { full_name = "owner/repo" } },
+					}, nil)
+				else
+					done({ statuses = {} }, nil)
+				end
+				return { cancel = function() end }
+			end,
+		})
+		local result, result_err
+		pipelines.fetch(
+			{
+				id = 18,
+				repo_full_name = "owner/repo",
+				source = { commit_hash = "" },
+			},
+			nil,
+			function(value, err)
+				result = value
+				result_err = err
+			end
+		)
+
+		assert.is_nil(result_err)
+		assert.same({}, result)
+		assert.same({
+			{ method = "GET", endpoint = "/repos/owner/repo/pulls/18" },
+			{ method = "GET", endpoint = "/repos/owner/repo/commits/head/status" },
 		}, requests)
 	end)
 end)

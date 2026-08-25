@@ -140,32 +140,21 @@ describe("Forgejo provider views", function()
 		assert.equal("compact", views[1].layout)
 
 		assert.equal(
-			"repo:owner/repo is:open sort:recent needle",
-			provider.capabilities.core.search_query(views[1], { state = "open" })
+			"repo:owner/repo is:open is:merged sort:recent needle",
+			provider.capabilities.core.search_query(views[1], { states = { "merged", "open" } })
 		)
 		local pullrequests_api = require("atlas.pulls.providers.forgejo.api.pullrequests")
 		pull_list = pullrequests_api.list
-		local fetched_view
-		pullrequests_api.list = function(view, _, on_done)
+		local fetched_view, fetched_opts
+		pullrequests_api.list = function(view, opts, on_done)
 			fetched_view = view
+			fetched_opts = opts
 			on_done({}, nil)
 			return { cancel = function() end }
 		end
-		provider.capabilities.core.fetch_pullrequests(views[1], { state = "open" }, function() end)
+		provider.capabilities.core.fetch_pullrequests(views[1], { states = { "merged", "open" } }, function() end)
 		assert.is_true(fetched_view == views[1])
+		assert.same({ "OPEN", "MERGED" }, fetched_opts.statuses)
 		assert.equal(1, repository_calls)
-	end)
-
-	it("leaves views unresolved for another provider", function()
-		issue_config = { views = { { name = "Issues", current_repo = true } } }
-		pull_config = { views = { { name = "Pulls", current_repo = true } } }
-		repository = { provider = "gitea", repo_full_name = "owner/repo" }
-
-		local issue_views = require(ISSUE_PROVIDER).views()
-		local pull_views = require(PULL_PROVIDER).views()
-
-		assert.is_nil(issue_views[1].repo)
-		assert.is_nil(pull_views[1].repo)
-		assert.equal(2, repository_calls)
 	end)
 end)

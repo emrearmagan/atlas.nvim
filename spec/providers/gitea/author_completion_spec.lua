@@ -24,10 +24,11 @@ describe("Gitea author completion", function()
 
 	it("completes issue participants by login", function()
 		local completion = author_completion.for_issues({
-			current_user = { account_id = "current", display_name = "Current User" },
 			issue = {
 				reporter = { account_id = "reporter", display_name = "Reporter" },
 				assignee = { account_id = "alice", display_name = "Alice" },
+			},
+			details = {
 				assignees = {
 					{ account_id = "alice", display_name = "Alice" },
 					{ account_id = "zoe", display_name = "Zoe" },
@@ -36,7 +37,7 @@ describe("Gitea author completion", function()
 			comments = { { author = { account_id = "commenter", display_name = "Commenter" } } },
 		})
 
-		assert.same({ "@alice", "@commenter", "@current", "@reporter", "@zoe" }, words(completion.complete("")))
+		assert.same({ "@alice", "@commenter", "@reporter", "@zoe" }, words(completion.complete("")))
 		assert.same({ "@commenter" }, words(completion.complete("@com")))
 		assert.equal("@gitea-user", completion.format_mention({ account_id = "gitea-user" }))
 	end)
@@ -45,11 +46,11 @@ describe("Gitea author completion", function()
 		local completion = author_completion.for_pulls({
 			pr = {
 				author = { username = "author" },
-				assignees = { { username = "assignee" } },
 				reviewers = { { username = "pr-reviewer" } },
 			},
+			details = { assignees = { { username = "assignee" } } },
 			reviewers = { { username = "reviewer" } },
-			review_context = { authors = { { username = "review-author" } } },
+			review_context = { mention_candidates = { { username = "review-author" } } },
 			comments = { { author = { username = "commenter" } } },
 			conversation = { { author = { username = "conversation" } } },
 		})

@@ -189,32 +189,40 @@ local function fetch_comments(pr, on_done)
 			return
 		end
 
-		local pending
+		local starts = {}
 		for _, review in ipairs(reviews) do
-			if
-				tostring(review.state or ""):upper() == "PENDING"
-				and (pending == nil or (tonumber(review.id) or -1) > (tonumber(pending.id) or -1))
-			then
-				pending = review
+			local review_id = tonumber(review.id)
+			if review_id and (tonumber(review.comments_count) or 0) > 0 then
+				local endpoint = string.format("%s/reviews/%s/comments", base, review_id)
+				starts[tostring(review_id)] = function(done)
+					return service.request("GET", endpoint, nil, done)
+				end
 			end
-		end
-		if pending == nil or tonumber(pending.comments_count) == 0 then
-			on_done({}, nil, reviews)
-			return
 		end
 
-		-- Gitea has no bulk review-comment endpoint. Only hydrate the active
-		-- pending review instead of issuing one request for every old review.
-		requests.run(function(done)
-			return service.request("GET", string.format("%s/reviews/%s/comments", base, pending.id), nil, done)
-		end, function(raw, comments_err)
-			if comments_err then
-				on_done(nil, comments_err)
-				return
-			end
+		-- TODO: How the fuck do we get all Gitea review comments without one
+		-- request per comment-bearing review? There is no bulk endpoint.
+		requests.all(starts, function(values, errors)
 			local comments = {}
-			for _, value in ipairs(raw) do
-				table.insert(comments, mapper.to_comment(value, pending))
+			local fetched = false
+			local first_error
+			for _, review in ipairs(reviews) do
+				local key = tostring(review.id)
+				if starts[key] then
+					local raw = values[key]
+					if raw then
+						fetched = true
+						for _, value in ipairs(raw) do
+							table.insert(comments, mapper.to_comment(value, review))
+						end
+					elseif not first_error then
+						first_error = errors[key]
+					end
+				end
+			end
+			if next(starts) and not fetched and first_error then
+				on_done(nil, first_error, reviews)
+				return
 			end
 			on_done(comments, nil, reviews)
 		end)
@@ -260,32 +268,21 @@ end
 ---@param _opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(context: PullsReviewContext|nil, err: string|nil)
 function M.fetch_context(pr, _opts, on_done)
-	local authors, seen = {}, {}
+	local candidates, seen = {}, {}
 	---@param value PullsAuthor|PullsReviewer
 	local function add(value)
 		local key = value.id
 		if key ~= "" and not seen[key] then
 			seen[key] = true
-			table.insert(authors, value)
+			table.insert(candidates, value)
 		end
 	end
 
 	add(pr.author)
-	for _, values in ipairs({ pr.assignees or {}, pr.reviewers or {} }) do
-		for _, value in ipairs(values) do
-			add(value)
-		end
+	for _, value in ipairs(pr.reviewers or {}) do
+		add(value)
 	end
-	on_done({ authors = authors }, nil)
-end
-
----@param _pr PullRequest
----@param _review PullsReview
----@param on_done fun(ok: boolean, err: string|nil)
----@return { cancel: fun() }|nil
-function M.start_review(_pr, _review, on_done)
-	on_done(false, "Gitea starts a pending review with its first inline comment")
-	return nil
+	on_done({ mention_candidates = candidates }, nil)
 end
 
 ---@param pr PullRequest

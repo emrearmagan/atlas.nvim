@@ -31,6 +31,7 @@ describe("Gitea issue mapping", function()
 		assert.equal(2, details.assignees[1].id)
 		assert.equal(3, details.labels[1].id)
 		assert.equal(4, details.milestone.id)
+		assert.is_nil(details.key)
 		assert.is_nil(details._raw)
 	end)
 end)
@@ -51,6 +52,8 @@ describe("Gitea pull request mapping", function()
 			head = { ref = "feature", sha = "head", repo = { full_name = "owner/repo" } },
 			additions = 12,
 			deletions = 3,
+			comments = 12,
+			review_comments = 9,
 			mergeable = true,
 			merge_base = "merge-base",
 			labels = { { id = 6, name = "feature", color = "00ff00" } },
@@ -62,12 +65,14 @@ describe("Gitea pull request mapping", function()
 		assert.equal("owner/repo", summary.repo_full_name)
 		assert.equal(12, summary.lines_added)
 		assert.equal(3, summary.lines_removed)
+		assert.equal(12, summary.comments_count)
 		assert.is_true(summary.mergeable)
 		assert.equal("merge-base", summary.merge_base)
 		assert.is_nil(summary._raw)
 		assert.equal("Description", details.description)
 		assert.equal(6, details.label_ids[1])
 		assert.equal("feature", details.labels[1].name)
+		assert.is_nil(details.id)
 		assert.is_nil(details._raw)
 	end)
 end)

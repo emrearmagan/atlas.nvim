@@ -15,7 +15,7 @@
 ---@field content_version integer|nil
 ---@field due_date string|nil
 
----@class GiteaIssueDetails : IssueDetails, GiteaIssue
+---@class GiteaIssueDetails : IssueDetails
 ---@field labels GiteaIssueLabel[]
 ---@field milestone GiteaIssueMilestone|nil
 
@@ -91,7 +91,7 @@ end
 
 ---@param ref IssueRef
 ---@param opts IssuesFetchOpts|nil
----@param on_done fun(issue: IssueDetails|nil, err: string|nil)
+---@param on_done fun(details: IssueDetails|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_issue(ref, opts, on_done)
 	return issues_api.get(ref, opts, on_done)
@@ -109,14 +109,6 @@ function M.fetch_conversation(issue, opts, on_done)
 			return
 		end
 		local items = {}
-		if issue.description ~= "" then
-			table.insert(items, {
-				id = "description:" .. issue.key,
-				kind = "description",
-				created_at = issue.created_at or "",
-				entity = issue,
-			})
-		end
 		for _, comment in ipairs(result.comments) do
 			table.insert(items, {
 				id = "comment:" .. comment.id,
@@ -138,7 +130,7 @@ function M.fetch_conversation(issue, opts, on_done)
 	end)
 end
 
----@param issue IssueDetails
+---@param issue Issue
 ---@param content string
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
@@ -148,26 +140,7 @@ function M.update_description(issue, content, on_done)
 			on_done(false, err or "Invalid Gitea issue response")
 			return
 		end
-		---@cast issue GiteaIssueDetails
-		---@cast updated GiteaIssueDetails
-		issue.description = updated.description
-		issue.content_version = updated.content_version
 		on_done(true, nil)
-	end)
-end
-
----@param issue Issue
----@param opts IssuesFetchOpts|nil
----@param on_done fun(entries: IssueActivityEntry[]|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.fetch_activity(issue, opts, on_done)
-	---@cast issue GiteaIssue
-	return timeline_api.list(issue, opts, function(result, err)
-		if err then
-			on_done(nil, err)
-			return
-		end
-		on_done(result.events, nil)
 	end)
 end
 
@@ -195,9 +168,6 @@ end
 ---@return { cancel: fun() }|nil
 function M.add_reaction(issue, item, key, on_done)
 	---@cast issue GiteaIssue
-	if item.kind == "description" then
-		return comments_api.add_reaction(issue, "__body__", key, on_done)
-	end
 	if item.kind == "comment" then
 		---@type IssueComment
 		local comment = item.entity
@@ -255,7 +225,6 @@ end
 ---@type IssuesCommentsCapability
 local comments = {
 	reaction_options = REACTION_OPTIONS,
-	fetch_activity = M.fetch_activity,
 	fetch_conversation = M.fetch_conversation,
 	add_comment = function(issue, content, on_done)
 		---@cast issue GiteaIssue

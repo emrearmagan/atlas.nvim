@@ -77,7 +77,7 @@ function M.load(id, domain)
 	local implementation = require(provider_domain.module)
 	implementation.id = id
 	implementation.name = provider.name
-	if provider_domain.icon then
+	if provider_domain.icon ~= nil then
 		implementation.icon = provider_domain.icon.icon
 		implementation.hl_group = provider_domain.icon.hl_group
 	end
