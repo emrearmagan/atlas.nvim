@@ -222,7 +222,6 @@ return {
 			fetch_reviewers = pullrequests_api.reviewers,
 			fetch_diffstat = files_api.diffstat,
 			fetch_commits = commits_api.fetch,
-			fetch_diff = files_api.diff,
 		},
 		comments = comments,
 		reviews = reviews,

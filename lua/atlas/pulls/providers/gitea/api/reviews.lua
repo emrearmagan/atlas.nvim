@@ -182,7 +182,11 @@ local function fetch_comments(pr, on_done)
 
 	local requests = request_scope.new()
 	requests.run(function(done)
-		return pagination.fetch_all(base .. "/reviews", nil, nil, done)
+		return pagination.fetch_all(base .. "/reviews", nil, nil, done, {
+			action = string.format("Fetch %s#%s reviews", pr.repo_full_name, pr.id),
+			repo = pr.repo_full_name,
+			pr_id = pr.id,
+		})
 	end, function(reviews, err)
 		if err then
 			on_done(nil, err)
@@ -195,7 +199,12 @@ local function fetch_comments(pr, on_done)
 			if review_id and (tonumber(review.comments_count) or 0) > 0 then
 				local endpoint = string.format("%s/reviews/%s/comments", base, review_id)
 				starts[tostring(review_id)] = function(done)
-					return service.request("GET", endpoint, nil, done)
+					return service.request("GET", endpoint, nil, done, {
+						action = string.format("Fetch %s#%s review %s comments", pr.repo_full_name, pr.id, review_id),
+						repo = pr.repo_full_name,
+						pr_id = pr.id,
+						review_id = review_id,
+					})
 				end
 			end
 		end
@@ -212,8 +221,27 @@ local function fetch_comments(pr, on_done)
 					local raw = values[key]
 					if raw then
 						fetched = true
+						table.sort(raw, function(a, b)
+							local a_created = tostring(a.created_at or "")
+							local b_created = tostring(b.created_at or "")
+							if a_created ~= b_created then
+								return a_created < b_created
+							end
+							return (tonumber(a.id) or 0) < (tonumber(b.id) or 0)
+						end)
+						-- Gitea drops the reply parent ID, so stitch comments on the same review position back into a thread.
+						local roots = {}
 						for _, value in ipairs(raw) do
-							table.insert(comments, mapper.to_comment(value, review))
+							local comment = mapper.to_comment(value, review)
+							local inline = comment.inline
+							local side = inline and (inline.to and "RIGHT" or inline.from and "LEFT") or nil
+							local line = inline and (inline.to or inline.from) or nil
+							if side and line then
+								local thread = table.concat({ inline.path, side, tostring(line) }, "\0")
+								comment.parent_id = roots[thread]
+								roots[thread] = roots[thread] or comment.id
+							end
+							table.insert(comments, comment)
 						end
 					elseif not first_error then
 						first_error = errors[key]

@@ -51,7 +51,7 @@ local function raw_reviews()
 		{
 			id = 10,
 			state = "COMMENT",
-			comments_count = 2,
+			comments_count = 3,
 			commit_id = "old",
 			stale = true,
 			user = { id = 1, login = "published" },
@@ -104,29 +104,43 @@ describe("Gitea pull review comments", function()
 		}, nil)
 		callbacks[published]({
 			{
-				id = 101,
-				body = "first published comment",
+				id = 102,
+				body = "reply",
 				path = "published.lua",
 				position = 7,
 				commit_id = "old",
 				user = { id = 1, login = "published" },
 			},
 			{
-				id = 102,
-				body = "second published comment",
+				id = 103,
+				body = "another thread",
 				path = "published.lua",
 				position = 9,
+				commit_id = "old",
+				user = { id = 1, login = "published" },
+			},
+			{
+				id = 101,
+				body = "thread root",
+				path = "published.lua",
+				position = 7,
 				commit_id = "old",
 				user = { id = 1, login = "published" },
 			},
 		}, nil)
 
 		assert.is_nil(fetch_err)
-		assert.same({ 101, 102, 121 }, { data.comments[1].id, data.comments[2].id, data.comments[3].id })
+		assert.same(
+			{ 101, 102, 103, 121 },
+			{ data.comments[1].id, data.comments[2].id, data.comments[3].id, data.comments[4].id }
+		)
+		assert.is_nil(data.comments[1].parent_id)
+		assert.equal(101, data.comments[2].parent_id)
+		assert.is_nil(data.comments[3].parent_id)
 		assert.equal("OUTDATED", data.comments[1].state)
 		assert.equal(7, data.comments[1].inline.to)
-		assert.equal("PENDING", data.comments[3].state)
-		assert.equal(4, data.comments[3].inline.from)
+		assert.equal("PENDING", data.comments[4].state)
+		assert.equal(4, data.comments[4].inline.from)
 		assert.equal("GET /repos/owner/repo/pulls/3/reviews?page=1", requests[1])
 		local comment_requests = { requests[2], requests[3] }
 		table.sort(comment_requests)

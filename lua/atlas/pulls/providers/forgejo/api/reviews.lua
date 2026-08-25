@@ -184,32 +184,60 @@ local function fetch_comments(pr, on_done)
 			return
 		end
 
-		local pending
+		local starts = {}
 		for _, review in ipairs(reviews) do
-			if
-				tostring(review.state or ""):upper() == "PENDING"
-				and (pending == nil or (tonumber(review.id) or -1) > (tonumber(pending.id) or -1))
-			then
-				pending = review
+			local review_id = tonumber(review.id)
+			if review_id and (tonumber(review.comments_count) or 0) > 0 then
+				local endpoint = string.format("%s/reviews/%s/comments", base, review_id)
+				starts[tostring(review_id)] = function(done)
+					return service.request("GET", endpoint, nil, done)
+				end
 			end
-		end
-		if pending == nil or tonumber(pending.comments_count) == 0 then
-			on_done({}, nil, reviews)
-			return
 		end
 
-		-- Forgejo has no bulk review-comment endpoint. Only hydrate the active
-		-- pending review instead of issuing one request for every old review.
-		requests.run(function(done)
-			return service.request("GET", string.format("%s/reviews/%s/comments", base, pending.id), nil, done)
-		end, function(raw, comments_err)
-			if comments_err then
-				on_done(nil, comments_err)
-				return
-			end
+		-- Forgejo has no bulk endpoint, so fetch only the reviews that actually have comments.
+		requests.all(starts, function(values, errors)
 			local comments = {}
-			for _, value in ipairs(raw) do
-				table.insert(comments, mapper.to_comment(value, pending))
+			local fetched = false
+			local first_error
+			for _, review in ipairs(reviews) do
+				local key = tostring(review.id)
+				if starts[key] then
+					local raw = values[key]
+					if raw then
+						fetched = true
+						table.sort(raw, function(a, b)
+							local a_created = tostring(a.created_at or "")
+							local b_created = tostring(b.created_at or "")
+							if a_created ~= b_created then
+								return a_created < b_created
+							end
+							return (tonumber(a.id) or 0) < (tonumber(b.id) or 0)
+						end)
+						-- Forgejo drops the reply parent ID, so stitch comments on the same review position back into a thread.
+						local roots = {}
+						for _, value in ipairs(raw) do
+							local comment = mapper.to_comment(value, review)
+							local inline = comment.inline
+							local side = inline and (inline.to and "RIGHT" or inline.from and "LEFT") or nil
+							local line = inline and (inline.to or inline.from) or nil
+							if side and line then
+								local start_line = inline.start_to or inline.start_from or line
+								local thread =
+									table.concat({ inline.path, side, tostring(start_line), tostring(line) }, "\0")
+								comment.parent_id = roots[thread]
+								roots[thread] = roots[thread] or comment.id
+							end
+							table.insert(comments, comment)
+						end
+					elseif not first_error then
+						first_error = errors[key]
+					end
+				end
+			end
+			if next(starts) and not fetched and first_error then
+				on_done(nil, first_error, reviews)
+				return
 			end
 			on_done(comments, nil, reviews)
 		end)

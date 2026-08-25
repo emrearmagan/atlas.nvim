@@ -131,8 +131,9 @@ end
 ---@param endpoint string
 ---@param data table|nil
 ---@param on_done fun(result: any, err: string|nil, status?: integer)
+---@param ctx table|nil
 ---@return { job_id: integer, cancel: fun() }|nil
-function client.request(method, endpoint, data, on_done)
+function client.request(method, endpoint, data, on_done, ctx)
 	local _, auth_err = client.get_auth()
 	if auth_err then
 		logger.logerror("Gitea auth missing", { error = auth_err })
@@ -148,18 +149,17 @@ function client.request(method, endpoint, data, on_done)
 		payload = vim.json.encode(data)
 	end
 
-	logger.loginfo("Gitea request", {
+	local log = vim.tbl_extend("keep", {
 		provider = "gitea",
 		endpoint = endpoint,
 		method = method,
-	})
+	}, ctx or {})
+	local message = log.action or string.format("Gitea %s %s", method, endpoint)
+	log.action = nil
+	logger.loginfo(message, log)
 	return http.curl_request(method, client.url(endpoint), client.headers(), payload, function(result, err, status)
 		if err then
-			logger.logerror("Gitea request failed", {
-				endpoint = endpoint,
-				method = method,
-				error = err,
-			})
+			logger.logerror(message .. " failed", vim.tbl_extend("force", {}, log, { error = err }))
 			on_done(nil, err, status)
 			return
 		end
@@ -170,8 +170,9 @@ end
 ---@param method string
 ---@param endpoint string
 ---@param on_done fun(result: string|nil, err: string|nil, status?: integer)
+---@param ctx table|nil
 ---@return { job_id: integer, cancel: fun() }|nil
-function client.request_text(method, endpoint, on_done)
+function client.request_text(method, endpoint, on_done, ctx)
 	local _, auth_err = client.get_auth()
 	if auth_err then
 		logger.logerror("Gitea auth missing", { error = auth_err })
@@ -182,18 +183,17 @@ function client.request_text(method, endpoint, on_done)
 	end
 
 	method = method:upper()
-	logger.loginfo("Gitea request", {
+	local log = vim.tbl_extend("keep", {
 		provider = "gitea",
 		endpoint = endpoint,
 		method = method,
-	})
+	}, ctx or {})
+	local message = log.action or string.format("Gitea %s %s", method, endpoint)
+	log.action = nil
+	logger.loginfo(message, log)
 	return http.curl_text_request(method, client.url(endpoint), client.headers(), nil, function(result, err, status)
 		if err then
-			logger.logerror("Gitea request failed", {
-				endpoint = endpoint,
-				method = method,
-				error = err,
-			})
+			logger.logerror(message .. " failed", vim.tbl_extend("force", {}, log, { error = err }))
 			on_done(nil, err, status)
 			return
 		end
