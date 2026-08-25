@@ -63,7 +63,7 @@ local function threads_by_line(session, context, path, side)
 		if target and not matches and (path == context.old_path or path == context.new_path) then
 			matches = target.path == context.old_path or target.path == context.new_path
 		end
-		if matches and comment_side == side and (comment.file or comment.outdated == true) then
+		if matches and comment_side == side and (comment.file or (comment.outdated == true and line == nil)) then
 			file_threads[#file_threads + 1] = node
 		elseif matches and comment_side == side and line and line >= 1 and #lines > 0 then
 			line = math.min(line, math.max(1, #lines))
