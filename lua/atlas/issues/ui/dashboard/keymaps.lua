@@ -57,7 +57,7 @@ function M.register(buf, views)
 
 	local items = {}
 
-	for _, view in ipairs(views or {}) do
+	for _, view in ipairs(views) do
 		if view._kind ~= "bookmarks" and view.key ~= nil and view.key ~= "" then
 			local v = view
 			table.insert(items, {
@@ -78,7 +78,7 @@ function M.register(buf, views)
 			desc = "Switch to bookmarks",
 			hidden = true,
 			callback = function()
-				for _, view in ipairs(bookmarks.views(provider.id, "issues", state.provider_views)) do
+				for _, view in ipairs(state.views) do
 					if view._kind == "bookmarks" then
 						controller.switch_view(view)
 						return

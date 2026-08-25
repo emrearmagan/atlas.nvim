@@ -16,18 +16,12 @@ local PADDING_X = 1
 ---@param spans table[]
 local function apply_spans(buf, spans)
 	vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
-	for _, span in ipairs(spans or {}) do
-		if type(span) == "table" and span.line ~= nil and span.line_hl_group ~= nil then
+	for _, span in ipairs(spans) do
+		if span.line ~= nil and span.line_hl_group ~= nil then
 			vim.api.nvim_buf_set_extmark(buf, ns, span.line, 0, {
 				line_hl_group = span.line_hl_group,
 			})
-		elseif
-			type(span) == "table"
-			and span.line ~= nil
-			and span.start_col ~= nil
-			and span.end_col ~= nil
-			and span.hl_group ~= nil
-		then
+		elseif span.line ~= nil and span.start_col ~= nil and span.end_col ~= nil and span.hl_group ~= nil then
 			local line_text = vim.api.nvim_buf_get_lines(buf, span.line, span.line + 1, false)[1] or ""
 			local max_col = #line_text
 			local sc = math.min(span.start_col, max_col)
@@ -89,7 +83,7 @@ function M.render(tab_items, get_tab_module)
 	local spans = {}
 
 	if pr == nil then
-		if state.details_loading then
+		if state.pr_loading then
 			utils.push(lines, spans, spinner.with_text("Loading pull request..."), "AtlasTextMuted", PADDING_X)
 		else
 			lines = { "", "  Nothing selected..." }
@@ -108,11 +102,11 @@ function M.render(tab_items, get_tab_module)
 			or {}
 
 		-- Header
-		local h_lines, h_spans = header.render(details or pr, width, extra_fields)
+		local h_lines, h_spans = header.render(pr, width, extra_fields)
 		utils.append_block(lines, spans, { lines = h_lines, highlights = h_spans })
 
 		-- Chips
-		local chip_lines, chip_spans = chips.render(details or pr, {
+		local chip_lines, chip_spans = chips.render(pr, {
 			width = width,
 			extra_chips = extra_chips,
 			pipelines = state.pipelines,
@@ -134,8 +128,8 @@ function M.render(tab_items, get_tab_module)
 		-- Tab content
 		local tab_mod = get_tab_module(state.current_tab)
 		local content_offset = #lines
-		if tab_mod and details then
-			local tab_lines_c, tab_spans_c, tab_line_map = tab_mod.render(details, width)
+		if tab_mod then
+			local tab_lines_c, tab_spans_c, tab_line_map = tab_mod.render(pr, details, width)
 			utils.append_block(lines, spans, { lines = tab_lines_c, highlights = tab_spans_c })
 
 			-- Offset line_map keys to match buffer line numbers (1-indexed)
@@ -144,11 +138,6 @@ function M.render(tab_items, get_tab_module)
 				adjusted[content_offset + lnum] = entry
 			end
 			state.line_map = adjusted
-		elseif details == nil then
-			local text = state.details_loading and spinner.with_text("Loading pull request...")
-				or "Pull request details unavailable."
-			utils.push(lines, spans, text, "AtlasTextMuted", PADDING_X)
-			state.line_map = {}
 		else
 			table.insert(lines, "  Unknown tab: " .. tostring(state.current_tab))
 			state.line_map = {}

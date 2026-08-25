@@ -16,22 +16,22 @@ end
 ---@return string[]
 local function collect_issue_usernames(context)
 	local seen, usernames = {}, {}
+	---@param user IssueUser|nil
 	local function add(user)
-		if type(user) == "table" then
+		if user then
 			add_username(user.account_id, seen, usernames)
 		end
 	end
 
 	local issue = context.issue
-	if issue then
-		add(issue.reporter)
-		add(issue.assignee)
-		---@cast issue IssueDetails
-		for _, assignee in ipairs(issue.assignees or {}) do
+	add(issue.reporter)
+	add(issue.assignee)
+	if context.details then
+		for _, assignee in ipairs(context.details.assignees) do
 			add(assignee)
 		end
 	end
-	for _, comment in ipairs(context.comments or {}) do
+	for _, comment in ipairs(context.comments) do
 		add(comment.author)
 	end
 
@@ -43,21 +43,23 @@ end
 local function collect_pull_usernames(context)
 	local seen, usernames = {}, {}
 
-	for _, author in ipairs((context.review_context or {}).authors or {}) do
+	for _, author in ipairs((context.review_context or {}).mention_candidates or {}) do
 		add_username(author.nickname or author.username or author.name, seen, usernames)
 	end
 
 	local pr = context.pr
-	if pr then
-		add_username(pr.author and (pr.author.nickname or pr.author.name), seen, usernames)
-		for _, users in ipairs({ pr.assignees or {}, pr.reviewers or {} }) do
-			for _, user in ipairs(users) do
-				add_username(user.username or user.nickname or user.name, seen, usernames)
-			end
-		end
+	add_username(pr.author and (pr.author.nickname or pr.author.name), seen, usernames)
+	for _, user in ipairs(pr.reviewers or {}) do
+		add_username(user.username or user.nickname or user.name, seen, usernames)
+	end
+	for _, assignee in ipairs((context.details or {}).assignees or {}) do
+		add_username(assignee.username or assignee.nickname or assignee.name, seen, usernames)
+	end
+	for _, reviewer in ipairs(context.reviewers or {}) do
+		add_username(reviewer.nickname or reviewer.username or reviewer.name, seen, usernames)
 	end
 
-	for _, comment in ipairs(context.comments or {}) do
+	for _, comment in ipairs(context.comments) do
 		local author = comment.author
 		add_username(author and (author.nickname or author.name), seen, usernames)
 	end

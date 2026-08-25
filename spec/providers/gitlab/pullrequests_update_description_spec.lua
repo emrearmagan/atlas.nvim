@@ -56,7 +56,7 @@ describe("gitlab pullrequests.update_description", function()
 			callback({ iid = 12, description = "Normalized by GitLab" }, nil)
 		end)
 		local api = fresh_module()
-		local pr = { id = 12, repo_full_name = "group/project", description = "Old body" }
+		local pr = { id = 12, repo_full_name = "group/project" }
 
 		local ok, err
 		api.update_description(pr, "New body", function(success, e)
@@ -69,19 +69,21 @@ describe("gitlab pullrequests.update_description", function()
 		assert.equal("PUT", calls[1].method)
 		assert.equal("/projects/group%2Fproject/merge_requests/12", calls[1].endpoint)
 		assert.same({ description = "New body" }, calls[1].payload)
-		assert.equal("Normalized by GitLab", pr.description)
 	end)
 
-	it("falls back to the submitted description when the API returns no body", function()
+	it("accepts an empty update response", function()
 		stub_service(function(_, _, _, callback)
 			callback(nil, nil)
 		end)
 		local api = fresh_module()
-		local pr = { id = 12, repo_full_name = "group/project", description = "Old body" }
+		local pr = { id = 12, repo_full_name = "group/project" }
 
-		api.update_description(pr, "New body", function() end)
+		local ok
+		api.update_description(pr, "New body", function(success)
+			ok = success
+		end)
 
-		assert.equal("New body", pr.description)
+		assert.is_true(ok)
 	end)
 
 	it("clears the description when given an empty body", function()
@@ -90,7 +92,7 @@ describe("gitlab pullrequests.update_description", function()
 			callback({ iid = 12, description = "" }, nil)
 		end)
 		local api = fresh_module()
-		local pr = { id = 12, repo_full_name = "group/project", description = "Old body" }
+		local pr = { id = 12, repo_full_name = "group/project" }
 
 		local ok
 		api.update_description(pr, "", function(success)
@@ -99,7 +101,6 @@ describe("gitlab pullrequests.update_description", function()
 
 		assert.is_true(ok)
 		assert.same({ description = "" }, calls[1].payload)
-		assert.equal("", pr.description)
 	end)
 
 	it("propagates errors from the request", function()
@@ -107,7 +108,7 @@ describe("gitlab pullrequests.update_description", function()
 			callback(nil, "boom")
 		end)
 		local api = fresh_module()
-		local pr = { id = 12, repo_full_name = "group/project", description = "Old body" }
+		local pr = { id = 12, repo_full_name = "group/project" }
 
 		local ok, err
 		api.update_description(pr, "New body", function(success, e)
@@ -116,6 +117,5 @@ describe("gitlab pullrequests.update_description", function()
 
 		assert.is_false(ok)
 		assert.equal("boom", err)
-		assert.equal("Old body", pr.description)
 	end)
 end)

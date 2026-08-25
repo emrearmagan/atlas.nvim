@@ -98,7 +98,7 @@ end
 -- Timeline
 
 ---@class PullsConversationTimelineEntry
----@field type "comment"|"review"|"description"|"activity_run"
+---@field type "comment"|"review"|"activity_run"
 ---@field timestamp string
 ---@field thread AtlasReviewThreadNode|nil
 ---@field item PullsConversationItem|nil
@@ -107,14 +107,14 @@ end
 ---@param items PullsConversationItem[]
 ---@return PullsConversationTimelineEntry[], table<table, PullsConversationItem>
 local function build_timeline(items)
-	local mixed, description = {}, nil
+	local mixed = {}
 	local comments, by_entity = {}, {}
 	for _, item in ipairs(items) do
 		by_entity[item.entity] = item
 		if item.kind == "comment" then
-			table.insert(comments, item.entity)
-		elseif item.kind == "description" then
-			description = { kind = "description", timestamp = item.created_on, item = item }
+			---@type PullsComment
+			local comment = item.entity
+			table.insert(comments, comment)
 		else
 			table.insert(mixed, {
 				kind = item.kind,
@@ -138,10 +138,6 @@ local function build_timeline(items)
 		end
 		return ta < tb
 	end)
-	if description then
-		table.insert(mixed, 1, description)
-	end
-
 	-- Collapse consecutive activities into a single activity_run entry.
 	local entries, run = {}, {}
 	local function flush_run()
@@ -155,7 +151,7 @@ local function build_timeline(items)
 			table.insert(run, item.item)
 		else
 			flush_run()
-			if item.kind == "review" or item.kind == "description" then
+			if item.kind == "review" then
 				table.insert(entries, { type = item.kind, timestamp = item.timestamp, item = item.item })
 			else
 				table.insert(entries, {
@@ -244,30 +240,6 @@ local function render_review(item, width, has_next)
 	return lines, spans, line_map
 end
 
----@param item PullsConversationItem
----@param width integer
-local function render_description(item, width)
-	---@type PullRequestDetails
-	local pr = item.entity
-	local reactions
-	local provider = detail.provider
-	if provider and provider.id == "github" then
-		---@cast pr GitHubPullRequestDetails
-		reactions = pr.reactions
-	end
-	---@type PullsComment
-	local comment = {
-		id = item.id,
-		author = pr.author,
-		content_raw = pr.description or "",
-		created_on = pr.created_on,
-		reactions = reactions,
-	}
-	local lines, spans, line_map = render_thread({ comment = comment, children = {} }, false, width)
-	attach_item(line_map, item)
-	return lines, spans, line_map
-end
-
 ---@param entry PullsConversationTimelineEntry
 ---@param width integer
 ---@param has_next boolean
@@ -293,13 +265,13 @@ local function render_entry(entry, width, has_next, by_entity)
 		return lines, spans, line_map
 	elseif entry.type == "review" and entry.item then
 		return render_review(entry.item, width, has_next)
-	elseif entry.type == "description" and entry.item then
-		return render_description(entry.item, width)
 	elseif entry.type == "activity_run" then
 		local run_id = tostring(entry.timestamp or "")
 		local activities = {}
 		for _, item in ipairs(entry.items or {}) do
-			table.insert(activities, item.entity)
+			---@type PullsActivityEntry
+			local activity = item.entity
+			table.insert(activities, activity)
 		end
 		local lines, spans, line_map = activity_component.render(activities, width, {
 			padding_x = PADDING_X,
@@ -314,8 +286,9 @@ local function render_entry(entry, width, has_next, by_entity)
 end
 
 ---@param _pr PullRequest
+---@param _details PullRequestDetails|nil
 ---@param width integer
-function M.render(_pr, width)
+function M.render(_pr, _details, width)
 	local lines, spans, line_map = {}, {}, {}
 
 	if state.error then
@@ -333,18 +306,6 @@ function M.render(_pr, width)
 
 	---@cast state.items PullsConversationItem[]
 	local items = state.items
-	local details = detail.current_details
-	if details and details.description ~= "" then
-		items = {
-			{
-				id = "description:" .. tostring(details.repo_full_name) .. "#" .. tostring(details.id),
-				kind = "description",
-				created_on = details.created_on,
-				entity = details,
-			},
-		}
-		vim.list_extend(items, state.items)
-	end
 	local entries, by_entity = build_timeline(items)
 
 	if #entries == 0 then

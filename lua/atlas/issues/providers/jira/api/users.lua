@@ -1,7 +1,6 @@
 local M = {}
 
 local service = require("atlas.issues.providers.jira.api.service")
-local cache = require("atlas.core.cache")
 local config = require("atlas.issues.providers.jira.api.config")
 
 ---@param str string
@@ -17,9 +16,9 @@ end
 function M.get_myself(callback)
 	local jira = config.jira_config()
 	local cache_key = string.format("jira:user:me:%s:%s", tostring(jira.base_url or ""), tostring(jira.email or ""))
-	local cached = cache.get(cache_key)
-	if cached and type(cached.value) == "table" then
-		callback(cached.value, nil)
+	local cached = service.get_cache(cache_key)
+	if cached then
+		callback(cached, nil)
 		return nil
 	end
 
@@ -39,7 +38,7 @@ function M.get_myself(callback)
 			user.account_id = tostring(result.accountId or "")
 		end
 
-		cache.set(cache_key, user, service.cache_ttl())
+		service.set_cache(cache_key, user)
 		callback(user, nil)
 	end, {
 		action = "Fetch current user",
@@ -52,8 +51,8 @@ end
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.get_assignable_users(opts, query, callback)
 	opts = opts or {}
-	local project = type(opts.project) == "string" and opts.project or ""
-	local issue_key = type(opts.issue_key) == "string" and opts.issue_key or ""
+	local project = opts.project or ""
+	local issue_key = opts.issue_key or ""
 
 	if project == "" and issue_key == "" then
 		callback(nil, "Missing project or issue key")
@@ -111,11 +110,9 @@ function M.get_permissions_bulk(opts, callback)
 
 	local permissions_list = {}
 	for _, key in ipairs(opts.permissions or {}) do
-		if type(key) == "string" then
-			local value = vim.trim(key)
-			if value ~= "" then
-				table.insert(permissions_list, value)
-			end
+		local value = vim.trim(key)
+		if value ~= "" then
+			table.insert(permissions_list, value)
 		end
 	end
 
@@ -124,21 +121,8 @@ function M.get_permissions_bulk(opts, callback)
 		return nil
 	end
 
-	local project_ids = {}
-	for _, id in ipairs(opts.project_ids or {}) do
-		local project_id = tonumber(id)
-		if project_id ~= nil then
-			table.insert(project_ids, project_id)
-		end
-	end
-
-	local issue_ids = {}
-	for _, id in ipairs(opts.issue_ids or {}) do
-		local issue_id = tonumber(id)
-		if issue_id ~= nil then
-			table.insert(issue_ids, issue_id)
-		end
-	end
+	local project_ids = opts.project_ids or {}
+	local issue_ids = opts.issue_ids or {}
 
 	local payload = {
 		projectPermissions = {
@@ -150,7 +134,7 @@ function M.get_permissions_bulk(opts, callback)
 		},
 	}
 
-	if type(opts.account_id) == "string" and opts.account_id ~= "" then
+	if opts.account_id and opts.account_id ~= "" then
 		payload.accountId = opts.account_id
 	end
 
@@ -205,13 +189,13 @@ end
 ---@param callback fun(ok: boolean, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.assign_issue(issue_key, account_id, callback)
-	if type(issue_key) ~= "string" or issue_key == "" then
+	if issue_key == "" then
 		callback(false, "Missing issue key")
 		return nil
 	end
 
 	local normalized_account_id = nil
-	if type(account_id) == "string" and account_id ~= "" then
+	if account_id and account_id ~= "" then
 		normalized_account_id = account_id
 	end
 
@@ -242,12 +226,12 @@ end
 ---@param callback fun(ok: boolean, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.change_reporter(issue_key, account_id, callback)
-	if type(issue_key) ~= "string" or issue_key == "" then
+	if issue_key == "" then
 		callback(false, "Missing issue key")
 		return nil
 	end
 
-	if type(account_id) ~= "string" or account_id == "" then
+	if account_id == "" then
 		callback(false, "Missing account id")
 		return nil
 	end

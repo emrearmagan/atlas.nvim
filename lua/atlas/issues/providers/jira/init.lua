@@ -15,21 +15,29 @@
 ---@field hl_group string|nil
 ---@field display "chip"|"table"
 
----@class JiraIssueDetails : IssueDetails, JiraIssue
+---@class JiraIssueDetails : IssueDetails
 ---@field raw_description table|string|nil
 ---@field custom_fields JiraIssueCustomField[]
 
-local M = {}
+local actions = require("atlas.issues.providers.jira.actions")
+local author_completion = require("atlas.providers.jira.completion.author")
+local comments_api = require("atlas.issues.providers.jira.api.comments")
+local config = require("atlas.issues.providers.jira.api.config")
+local detail_ui = require("atlas.issues.providers.jira.ui.detail")
+local highlights = require("atlas.issues.providers.jira.highlights")
+local issues_api = require("atlas.issues.providers.jira.api.issues")
+local service = require("atlas.issues.providers.jira.api.service")
+local users_api = require("atlas.issues.providers.jira.api.users")
 
 ---@param view IssuesViewConfig
 ---@return string
-function M.search_query(view)
+local function search_query(view)
 	---@cast view AtlasJiraViewConfig
 	return tostring(view.jql or view.search or "")
 end
 
 ---@param target AtlasTarget
----@return AtlasIssuesViewConfig
+---@return AtlasJiraViewConfig
 local function search_view(target)
 	return { name = "Search", layout = "compact", jql = "key = " .. target.issue_key }
 end
@@ -42,18 +50,12 @@ local function target_issue_ref(target)
 	end
 end
 
-function M.on_refresh()
-	local service = require("atlas.issues.providers.jira.api.service")
-	service.clear_memory_cache()
-end
-
 ---@param view IssuesViewConfig
 ---@param opts IssuesFetchOpts
 ---@param on_done fun(issues: Issue[], next_page_token: string|nil, is_last: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_issues(view, opts, on_done)
-	local issues_api = require("atlas.issues.providers.jira.api.issues")
-	local jql = M.search_query(view)
+local function fetch_issues(view, opts, on_done)
+	local jql = search_query(view)
 	if jql == "" then
 		on_done({}, nil, true, "Missing Jira view JQL")
 		return nil
@@ -65,19 +67,19 @@ function M.fetch_issues(view, opts, on_done)
 			return
 		end
 
-		on_done(page.issues or {}, page.nextPageToken, page.isLast == true, nil)
+		on_done(page.issues, page.nextPageToken, page.isLast, nil)
 	end, {
-		force_load = opts and opts.force_load == true or false,
-		next_page_token = opts and opts.next_page_token or nil,
-		max_results = opts and opts.max_results or nil,
+		force_load = opts.force_load == true,
+		next_page_token = opts.next_page_token,
+		max_results = opts.max_results,
 	})
 end
 
 ---@param refs IssueRef[]
----@param opts IssuesFetchOpts|nil
+---@param opts IssuesFetchOpts
 ---@param on_done fun(issues: Issue[], err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_by_refs(refs, opts, on_done)
+local function fetch_by_refs(refs, opts, on_done)
 	if #refs == 0 then
 		on_done({}, nil)
 		return nil
@@ -88,34 +90,15 @@ function M.fetch_by_refs(refs, opts, on_done)
 		table.insert(quoted, string.format('"%s"', ref.key:gsub('"', '\\"')))
 	end
 
-	local issues_api = require("atlas.issues.providers.jira.api.issues")
 	return issues_api.search_issues("key in (" .. table.concat(quoted, ",") .. ")", function(page, err)
-		on_done(page and page.issues or {}, err)
+		if err or page == nil then
+			on_done({}, err or "Failed to fetch issues")
+			return
+		end
+		on_done(page.issues, nil)
 	end, {
-		force_load = opts and opts.force_load == true,
+		force_load = opts.force_load == true,
 		max_results = #refs,
-	})
-end
-
----@param ref IssueRef
----@param opts IssuesFetchOpts|nil
----@param on_done fun(issue: IssueDetails|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.fetch_issue(ref, opts, on_done)
-	local issues_api = require("atlas.issues.providers.jira.api.issues")
-	return issues_api.get_issue(ref.key, on_done, { force_load = opts and opts.force_load == true })
-end
-
----@param issue Issue
----@param opts IssuesFetchOpts|nil
----@param on_done fun(comments: IssueComment[]|nil, err: string|nil)
----@return { cancel: fun() }|nil
-local function fetch_comments(issue, opts, on_done)
-	local comments_api = require("atlas.issues.providers.jira.api.comments")
-	local COMMENTS_PAGE_SIZE = 100
-
-	return comments_api.get_comments_page(tostring(issue.key or ""), 0, COMMENTS_PAGE_SIZE, on_done, {
-		force_load = opts and opts.force_load or false,
 	})
 end
 
@@ -123,9 +106,8 @@ end
 ---@param content string
 ---@param on_done fun(comment: IssueComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.add_comment(issue, content, on_done)
+local function add_comment(issue, content, on_done)
 	local issue_key = tostring(issue.key or "")
-	local comments_api = require("atlas.issues.providers.jira.api.comments")
 	return comments_api.add_comment(issue_key, content, nil, on_done)
 end
 
@@ -134,9 +116,8 @@ end
 ---@param content string
 ---@param on_done fun(comment: IssueComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.reply_comment(issue, parent, content, on_done)
+local function reply_comment(issue, parent, content, on_done)
 	local issue_key = tostring(issue.key or "")
-	local comments_api = require("atlas.issues.providers.jira.api.comments")
 	return comments_api.add_comment(issue_key, content, { parent_id = tostring(parent.id) }, on_done)
 end
 
@@ -145,9 +126,8 @@ end
 ---@param content string
 ---@param on_done fun(comment: IssueComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.edit_comment(issue, comment, content, on_done)
+local function edit_comment(issue, comment, content, on_done)
 	local issue_key = tostring(issue.key or "")
-	local comments_api = require("atlas.issues.providers.jira.api.comments")
 	return comments_api.edit_comment(issue_key, tostring(comment.id), content, on_done)
 end
 
@@ -155,9 +135,9 @@ end
 ---@param opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(items: IssueConversationItem[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_conversation(issue, opts, on_done)
+local function fetch_conversation(issue, opts, on_done)
 	opts = opts or {}
-	local issue_key = tostring(issue and issue.key or "")
+	local issue_key = tostring(issue.key or "")
 	if issue_key == "" then
 		on_done(nil, "Invalid issue key")
 		return nil
@@ -165,13 +145,13 @@ function M.fetch_conversation(issue, opts, on_done)
 
 	local force = opts.force_refresh == true
 
-	return fetch_comments(issue, { force_load = force }, function(comments, err)
-		if err then
-			on_done(nil, err)
+	return comments_api.get_comments_page(issue_key, 0, 100, function(comments, err)
+		if err or comments == nil then
+			on_done(nil, err or "Failed to fetch comments")
 			return
 		end
 		local items = {}
-		for _, comment in ipairs(comments or {}) do
+		for _, comment in ipairs(comments) do
 			table.insert(items, {
 				id = "comment:" .. tostring(comment.id),
 				kind = "comment",
@@ -180,16 +160,15 @@ function M.fetch_conversation(issue, opts, on_done)
 			})
 		end
 		on_done(items, nil)
-	end)
+	end, { force_load = force })
 end
 
 ---@param issue Issue
 ---@param comment IssueComment
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.delete_comment(issue, comment, on_done)
+local function delete_comment(issue, comment, on_done)
 	local issue_key = tostring(issue.key or "")
-	local comments_api = require("atlas.issues.providers.jira.api.comments")
 	return comments_api.delete_comment(issue_key, tostring(comment.id), on_done)
 end
 
@@ -197,25 +176,24 @@ end
 ---@param opts IssuesFetchOpts|nil
 ---@param on_done fun(entries: IssueActivityEntry[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_activity(issue, opts, on_done)
-	local issues_api = require("atlas.issues.providers.jira.api.issues")
+local function fetch_activity(issue, opts, on_done)
 	return issues_api.get_issue_history_page(tostring(issue.key or ""), 0, 100, function(page, err)
 		if err or not page then
-			on_done(nil, err)
+			on_done(nil, err or "Failed to fetch issue activity")
 			return
 		end
-		on_done(page.values or {}, nil)
+		on_done(page.values, nil)
 	end, {
 		force_load = opts and opts.force_load or false,
 	})
 end
 
 ---@return AtlasJiraViewConfig[]
-function M.views()
-	local cfg = require("atlas.issues.providers.jira.api.config").jira_config()
-	local views = cfg.views
-	if not views or #views == 0 then
-		views = {
+local function views()
+	local cfg = config.jira_config()
+	local configured = cfg.views
+	if not configured or #configured == 0 then
+		configured = {
 			{
 				name = "Issues",
 				key = "1",
@@ -223,35 +201,35 @@ function M.views()
 			},
 		}
 	end
-	return views
+	return configured
 end
 
 return {
-	views = M.views,
+	views = views,
 	search_view = search_view,
 	issue_ref = target_issue_ref,
 	capabilities = {
 		core = {
-			fetch_user = require("atlas.issues.providers.jira.api.users").get_myself,
-			search_query = M.search_query,
-			fetch_issues = M.fetch_issues,
-			fetch_by_refs = M.fetch_by_refs,
-			fetch_issue = M.fetch_issue,
-			refresh = M.on_refresh,
+			fetch_user = users_api.get_myself,
+			search_query = search_query,
+			fetch_issues = fetch_issues,
+			fetch_by_refs = fetch_by_refs,
+			fetch_issue = issues_api.fetch_issue,
+			refresh = service.clear_memory_cache,
 		},
 		comments = {
-			fetch_activity = M.fetch_activity,
-			fetch_conversation = M.fetch_conversation,
-			add_comment = M.add_comment,
-			reply_comment = M.reply_comment,
-			edit_comment = M.edit_comment,
-			delete_comment = M.delete_comment,
-			comment_completion = require("atlas.providers.jira.completion.author").for_issues,
+			fetch_activity = fetch_activity,
+			fetch_conversation = fetch_conversation,
+			add_comment = add_comment,
+			reply_comment = reply_comment,
+			edit_comment = edit_comment,
+			delete_comment = delete_comment,
+			comment_completion = author_completion.for_issues,
 		},
-		actions = require("atlas.issues.providers.jira.actions"),
+		actions = actions,
 		ui = {
-			setup = require("atlas.issues.providers.jira.highlights").setup,
-			detail = require("atlas.issues.providers.jira.ui.detail"),
+			setup = highlights.setup,
+			detail = detail_ui,
 		},
 	},
 }

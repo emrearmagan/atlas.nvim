@@ -1,7 +1,7 @@
 local M = {}
 
 local presentation = require("atlas.pulls.ui.presentation")
-local providers = require("atlas.pulls.providers")
+local pipeline_utils = require("atlas.pulls.pipelines")
 local icons = require("atlas.ui.shared.icons")
 local utils = require("atlas.ui.shared.utils")
 local spinner = require("atlas.ui.components.spinner")
@@ -68,7 +68,7 @@ function M.render(pr, opts)
 	if opts.loading or opts.pipelines == "loading" then
 		table.insert(chips, { label = spinner.with_text("Loading..."), hl = "AtlasTextMuted" })
 	elseif type(opts.pipelines) == "table" and #opts.pipelines > 0 then
-		local status = providers.aggregate_pipeline_state(opts.pipelines):lower()
+		local status = pipeline_utils.aggregate_state(opts.pipelines):lower()
 		if status ~= "unknown" then
 			local icon, icon_hl = icons.pulls_status(status)
 			table.insert(chips, {

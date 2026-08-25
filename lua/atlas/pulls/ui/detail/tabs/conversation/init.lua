@@ -40,7 +40,13 @@ function M.on_select(pr, refresh, opts)
 		state.items = {}
 		if result then
 			for _, item in ipairs(result) do
-				if item.kind ~= "comment" or item.entity.state ~= "DELETED" then
+				local include = true
+				if item.kind == "comment" then
+					---@type PullsComment
+					local comment = item.entity
+					include = comment.state ~= "DELETED"
+				end
+				if include then
 					table.insert(state.items, item)
 				end
 			end
@@ -76,10 +82,17 @@ function M.on_enter(_pr, entry)
 	if not item then
 		return
 	end
-	local entity = item.entity
-	local url = item.kind == "description" and tostring((entity.link or {}).html or "")
-		or tostring(entity.html_url or entity.url or "")
-	if url ~= "" then
+	local url
+	if item.kind == "comment" then
+		---@type PullsComment
+		local comment = item.entity
+		url = comment.html_url or comment.url
+	elseif item.kind == "review" then
+		---@type PullsReviewHistoryEntry
+		local review_entry = item.entity
+		url = review_entry.url
+	end
+	if url and url ~= "" then
 		vim.ui.open(url)
 		return true
 	end

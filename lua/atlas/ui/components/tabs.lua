@@ -21,10 +21,10 @@ function M.render(items, active_tab, width, opts)
 	local spans = {}
 	local col = 0
 
-	for i, tab in ipairs(items or {}) do
+	for i, tab in ipairs(items) do
 		local icon = tab.icon and tab.icon.icon or ""
 		local icon_text = icon ~= "" and (icon .. " ") or ""
-		local part = string.format("%s%s ", icon_text, tab.label or "")
+		local part = string.format("%s%s ", icon_text, tab.label)
 		line = line .. part
 
 		---@type string|nil

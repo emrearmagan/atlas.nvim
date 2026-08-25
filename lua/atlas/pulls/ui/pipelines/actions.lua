@@ -6,6 +6,7 @@ local notify = require("atlas.core.notify")
 ---@class PullsPipelineActionContext
 ---@field pr PullRequest
 ---@field pipeline PullsPipeline
+---@field stage PullsPipelineStage|nil
 ---@field job PullsPipelineJob|nil
 
 ---@class PullsPipelineAction

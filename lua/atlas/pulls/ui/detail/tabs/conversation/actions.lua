@@ -1,7 +1,6 @@
 local M = {}
 
 local picker = require("atlas.ui.picker")
-local pull_actions = require("atlas.pulls.actions")
 local notify = require("atlas.core.notify")
 local review = require("atlas.pulls.actions.review")
 local state = require("atlas.pulls.ui.detail.tabs.conversation.state")
@@ -19,6 +18,7 @@ local function author_completion(pr)
 	local conversation = state.comments(false)
 	return comments_capability.comment_completion({
 		pr = pr,
+		details = detail.current_details,
 		comments = conversation,
 		tasks = state.comments(true),
 		reviewers = type(reviewers) == "table" and reviewers or nil,
@@ -65,7 +65,7 @@ local function complete_action(pr, on_update, result)
 	if on_update then
 		on_update(pr, result)
 	else
-		require("atlas.pulls.ui.detail").select(pr, { force_refresh = true })
+		require("atlas.pulls.ui.detail").refresh()
 	end
 end
 
@@ -103,10 +103,6 @@ function M.reply(pr, entry, refresh)
 	if not item then
 		return
 	end
-	if item.kind == "description" then
-		M.add(pr, refresh)
-		return
-	end
 	if item.kind ~= "comment" then
 		return
 	end
@@ -138,13 +134,6 @@ function M.edit(pr, entry, refresh)
 		end
 		return
 	end
-	if item.kind == "description" then
-		local provider = detail.provider
-		if provider then
-			pull_actions.run("edit_description", { provider = provider, pr = pr }, on_done(pr, refresh))
-		end
-		return
-	end
 	if item.kind ~= "comment" then
 		return
 	end
@@ -164,10 +153,6 @@ function M.delete(pr, entry, refresh)
 	if not item then
 		return
 	end
-	if item.kind == "description" then
-		notify.info("The pull request description cannot be deleted", { timeout = 1200 })
-		return
-	end
 	if item.kind ~= "comment" then
 		return
 	end
@@ -184,20 +169,10 @@ end
 ---@param refresh fun()
 function M.react(pr, entry, refresh)
 	local item = entry and entry.conversation_item or nil
-	if not item or (item.kind ~= "comment" and item.kind ~= "description") then
+	if not item or item.kind ~= "comment" then
 		return
 	end
 	local provider = detail.provider
-	if item.kind == "description" then
-		if provider == nil or provider.id ~= "github" then
-			return
-		end
-		---@type GitHubPullRequestDetails
-		local details = item.entity
-		if details.reactions == nil then
-			return
-		end
-	end
 	local comments = provider and provider.capabilities.comments
 	if not comments or not comments.add_reaction then
 		return
@@ -207,6 +182,7 @@ function M.react(pr, entry, refresh)
 		notify.warn("No reactions available for this provider")
 		return
 	end
+	---@type PullsComment
 	local target = item.entity
 	local choices = {}
 	for _, option in ipairs(options) do

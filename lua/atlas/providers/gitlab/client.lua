@@ -46,13 +46,13 @@ local function log_request(default_message, fields, ctx)
 	return message, log
 end
 
-function M.gitlab_config()
+local function gitlab_config()
 	return config.provider_options("gitlab") or {}
 end
 
 ---@return string base_url, string|nil err
-function M.get_auth()
-	local cfg = M.gitlab_config()
+local function get_auth()
+	local cfg = gitlab_config()
 	local base_url = cfg.base_url
 	local token = cfg.token
 	if not base_url or base_url == "" or not token or token == "" then
@@ -63,33 +63,30 @@ end
 
 ---@return string
 function M.base_url()
-	local raw = tostring(M.gitlab_config().base_url or "")
+	local raw = tostring(gitlab_config().base_url or "")
 	return (raw:gsub("/+$", ""))
 end
 
----@param endpoint string
----@return string
-function M.url(endpoint)
-	return M.base_url() .. API_PATH .. endpoint
-end
-
 ---@return table<string, string>
-function M.build_headers()
+local function build_headers()
 	return {
-		["PRIVATE-TOKEN"] = tostring(M.gitlab_config().token or ""),
+		["PRIVATE-TOKEN"] = tostring(gitlab_config().token or ""),
 		["Content-Type"] = "application/json",
 		Accept = "application/json",
 	}
 end
 
 ---@return number
-function M.cache_ttl()
-	return tonumber(M.gitlab_config().cache_ttl) or 300
+local function cache_ttl()
+	return tonumber(gitlab_config().cache_ttl) or 300
 end
 
 ---@param key string
 ---@return any|nil, boolean
 function M.get_memory_cache(key)
+	if cache_ttl() <= 0 then
+		return nil
+	end
 	local entry = memory_cache.get(key)
 	if not entry then
 		return nil, false
@@ -101,7 +98,10 @@ end
 ---@param value any
 ---@param ttl? number
 function M.set_memory_cache(key, value, ttl)
-	memory_cache.set(key, value, ttl or M.cache_ttl())
+	if cache_ttl() <= 0 then
+		return
+	end
+	memory_cache.set(key, value, ttl or cache_ttl())
 end
 
 ---@param key string
@@ -112,6 +112,9 @@ end
 ---@param key string
 ---@return any|nil, boolean
 function M.get_cache(key)
+	if cache_ttl() <= 0 then
+		return nil
+	end
 	local entry = cache.get(key)
 	if entry and entry.value ~= nil then
 		return entry.value, true
@@ -123,12 +126,10 @@ end
 ---@param value any
 ---@param ttl? number
 function M.set_cache(key, value, ttl)
-	cache.set(key, value, ttl or M.cache_ttl())
-end
-
----@param key string
-function M.delete_cache(key)
-	cache.delete(key)
+	if cache_ttl() <= 0 then
+		return
+	end
+	cache.set(key, value, ttl or cache_ttl())
 end
 
 ---@param prefix string
@@ -151,7 +152,7 @@ end
 ---@param ctx? table
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.request(method, endpoint, data, on_done, ctx)
-	local _, auth_err = M.get_auth()
+	local _, auth_err = get_auth()
 	if auth_err then
 		logger.logerror("GitLab auth missing", { error = auth_err })
 		on_done(nil, auth_err)
@@ -174,27 +175,33 @@ function M.request(method, endpoint, data, on_done, ctx)
 	end
 
 	local message, log = log_request("GitLab request", { method = method, endpoint = endpoint }, ctx)
-	return http.curl_request(method, M.url(endpoint), M.build_headers(), payload, function(result, err)
-		if err then
-			logger.logerror(message .. " failed", vim.tbl_extend("force", {}, log, { error = tostring(err) }))
-			on_done(nil, err)
-			return
-		end
-
-		if type(result) == "table" and not vim.islist(result) then
-			local api_err = error_message(result.message) or error_message(result.error_description)
-			if api_err == nil and result.error ~= nil and result.error ~= vim.NIL then
-				api_err = tostring(result.error)
-			end
-			if api_err ~= nil then
-				logger.logerror(message .. " failed", vim.tbl_extend("force", {}, log, { error = api_err }))
-				on_done(nil, api_err)
+	return http.curl_request(
+		method,
+		M.base_url() .. API_PATH .. endpoint,
+		build_headers(),
+		payload,
+		function(result, err)
+			if err then
+				logger.logerror(message .. " failed", vim.tbl_extend("force", {}, log, { error = tostring(err) }))
+				on_done(nil, err)
 				return
 			end
-		end
 
-		on_done(result, nil)
-	end)
+			if type(result) == "table" and not vim.islist(result) then
+				local api_err = error_message(result.message) or error_message(result.error_description)
+				if api_err == nil and result.error ~= nil and result.error ~= vim.NIL then
+					api_err = tostring(result.error)
+				end
+				if api_err ~= nil then
+					logger.logerror(message .. " failed", vim.tbl_extend("force", {}, log, { error = api_err }))
+					on_done(nil, api_err)
+					return
+				end
+			end
+
+			on_done(result, nil)
+		end
+	)
 end
 
 ---@param method string
@@ -203,7 +210,7 @@ end
 ---@param ctx? table
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.request_text(method, endpoint, on_done, ctx)
-	local _, auth_err = M.get_auth()
+	local _, auth_err = get_auth()
 	if auth_err then
 		logger.logerror("GitLab auth missing", { error = auth_err })
 		on_done(nil, auth_err)
@@ -211,14 +218,20 @@ function M.request_text(method, endpoint, on_done, ctx)
 	end
 
 	local message, log = log_request("GitLab request", { method = method, endpoint = endpoint }, ctx)
-	return http.curl_text_request(method, M.url(endpoint), M.build_headers(), nil, function(result, err)
-		if err then
-			logger.logerror(message .. " failed", vim.tbl_extend("force", {}, log, { error = tostring(err) }))
-			on_done(nil, err)
-			return
+	return http.curl_text_request(
+		method,
+		M.base_url() .. API_PATH .. endpoint,
+		build_headers(),
+		nil,
+		function(result, err)
+			if err then
+				logger.logerror(message .. " failed", vim.tbl_extend("force", {}, log, { error = tostring(err) }))
+				on_done(nil, err)
+				return
+			end
+			on_done(result, nil)
 		end
-		on_done(result, nil)
-	end)
+	)
 end
 
 ---@param query string
@@ -227,7 +240,7 @@ end
 ---@param ctx? table
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.graphql(query, variables, on_done, ctx)
-	local _, auth_err = M.get_auth()
+	local _, auth_err = get_auth()
 	if auth_err then
 		logger.logerror("GitLab auth missing", { error = auth_err })
 		on_done(nil, auth_err)
@@ -236,7 +249,7 @@ function M.graphql(query, variables, on_done, ctx)
 
 	local payload = vim.fn.json_encode({ query = query, variables = variables or vim.empty_dict() })
 	local message, log = log_request("GitLab GraphQL", { transport = "graphql" }, ctx)
-	return http.curl_request("POST", M.base_url() .. "/api/graphql", M.build_headers(), payload, function(result, err)
+	return http.curl_request("POST", M.base_url() .. "/api/graphql", build_headers(), payload, function(result, err)
 		if err then
 			logger.logerror(message .. " failed", vim.tbl_extend("force", {}, log, { error = tostring(err) }))
 			on_done(nil, err)
@@ -254,8 +267,9 @@ end
 
 ---@param endpoint string
 ---@param on_done fun(result: table[]|nil, err: string|nil)
+---@param ctx? table
 ---@return { cancel: fun() }
-function M.fetch_all_pages(endpoint, on_done)
+function M.fetch_all_pages(endpoint, on_done, ctx)
 	local values = {}
 	local current
 	local cancelled = false
@@ -285,7 +299,7 @@ function M.fetch_all_pages(endpoint, on_done)
 			end
 			page = page + 1
 			fetch_page()
-		end)
+		end, ctx)
 	end
 
 	fetch_page()

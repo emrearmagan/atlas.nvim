@@ -28,9 +28,10 @@ describe("Jira issue mapping", function()
 	it("hydrates Jira detail fields without retaining the response", function()
 		local raw = issue_raw()
 		raw.fields.description = { type = "doc", version = 1, content = {} }
+		raw.fields.labels = { "backend" }
 		raw.fields.customfield_10038 = { value = "Platform" }
 
-		local issue = mapper.to_issue_details(raw, nil, {
+		local details = mapper.to_issue_details(raw, {
 			customfield_10038 = {
 				name = "Team",
 				format = function(value)
@@ -39,14 +40,16 @@ describe("Jira issue mapping", function()
 			},
 		})
 
-		assert.same(raw.fields.description, issue.raw_description)
+		assert.same(raw.fields.description, details.raw_description)
+		assert.same({ { name = "backend" } }, details.labels)
 		assert.same({
 			{
 				name = "Team",
 				formatted = "Platform",
 				display = "chip",
 			},
-		}, issue.custom_fields)
-		assert.is_nil(issue._raw)
+		}, details.custom_fields)
+		assert.is_nil(details.key)
+		assert.is_nil(details._raw)
 	end)
 end)

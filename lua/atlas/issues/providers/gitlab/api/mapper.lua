@@ -21,18 +21,6 @@ function M.to_user(raw_user)
 end
 
 ---@param raw_assignees table[]|nil
----@return IssueUser|nil
-local function first_assignee(raw_assignees)
-	for _, raw in ipairs(json.safe_table(raw_assignees)) do
-		local user = M.to_user(raw)
-		if user then
-			return user
-		end
-	end
-	return nil
-end
-
----@param raw_assignees table[]|nil
 ---@return IssueUser[]
 local function assignees(raw_assignees)
 	local users = {}
@@ -50,7 +38,7 @@ end
 local function labels(raw_labels)
 	local result = {}
 	for _, raw in ipairs(json.safe_table(raw_labels)) do
-		local name = type(raw) == "string" and raw or json.safe_str(raw.name)
+		local name = type(raw) == "string" and raw or json.safe_str(raw.name) or json.safe_str(raw.title)
 		if name and name ~= "" then
 			table.insert(result, {
 				name = name,
@@ -73,17 +61,6 @@ local function milestone(raw)
 		return nil
 	end
 	return { title = title }
-end
-
----@param raw table
----@return table<string, integer>|nil
-local function issue_reactions(raw)
-	local upvotes = tonumber(raw.upvotes) or 0
-	local downvotes = tonumber(raw.downvotes) or 0
-	if upvotes == 0 and downvotes == 0 then
-		return nil
-	end
-	return { thumbsup = upvotes, thumbsdown = downvotes }
 end
 
 ---@param state string|nil
@@ -133,7 +110,7 @@ function M.to_issue(raw)
 	local status_name, status_id = normalize_state(raw.state)
 	local title = json.safe_str(raw.title) or ""
 
-	local issue_assignees = json.safe_table(raw.assignees)
+	local issue_assignees = assignees(raw.assignees)
 	local created_at = json.safe_str(raw.created_at)
 	local updated_at = json.safe_str(raw.updated_at)
 	local closed_at = json.safe_str(raw.closed_at)
@@ -147,7 +124,7 @@ function M.to_issue(raw)
 		status = status_name,
 		status_id = status_id,
 		type = to_issue_type(raw.issue_type),
-		assignee = first_assignee(issue_assignees),
+		assignee = issue_assignees[1],
 		reporter = M.to_user(raw.author),
 		story_points = tonumber(json.nilify(raw.weight)),
 		duedate = json.safe_str(raw.due_date),
@@ -158,33 +135,32 @@ function M.to_issue(raw)
 		closed_at = closed_at,
 		comment_count = tonumber(raw.user_notes_count) or 0,
 		is_subscribed = json.nilify(raw.subscribed),
-		confidential = raw.confidential == true,
 	}
 	return issue
 end
 
 ---@param raw any Decoded API value.
----@return GitLabIssueDetails|nil
+---@return IssueDetails|nil
 function M.to_issue_details(raw)
-	local issue = M.to_issue(raw)
-	if issue == nil then
+	raw = json.nilify(raw)
+	if type(raw) ~= "table" then
 		return nil
 	end
 
-	---@cast issue GitLabIssueDetails
-	issue.description = json.safe_str(raw.description) or ""
-	issue.assignees = assignees(raw.assignees)
-	issue.labels = labels(raw.labels)
-	issue.milestone = milestone(raw.milestone)
-	issue.reactions = issue_reactions(raw)
-	return issue
+	---@type IssueDetails
+	return {
+		description = json.safe_str(raw.description) or "",
+		assignees = assignees(json.safe_table(raw.assignees).nodes or raw.assignees),
+		labels = labels(json.safe_table(raw.labels).nodes or raw.labels),
+		milestone = milestone(raw.milestone),
+	}
 end
 
 ---@param raw_list table[]|nil
 ---@return Issue[]
 function M.to_issues_list(raw_list)
 	local out = {}
-	for _, raw in ipairs(raw_list or {}) do
+	for _, raw in ipairs(json.safe_table(raw_list)) do
 		local issue = M.to_issue(raw)
 		if issue ~= nil then
 			table.insert(out, issue)

@@ -554,7 +554,7 @@ function M.complete_cmdline(arglead, cmdline, cursorpos)
 	local static_reserved = {}
 
 	local cached, ok = autocomplete_api.get_cached_data()
-	if not ok or type(cached) ~= "table" then
+	if not ok then
 		local clause_tokens, after_connector = parse_active_clause(committed)
 		local prefix = partial ~= "" and partial or arglead
 

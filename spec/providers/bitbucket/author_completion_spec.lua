@@ -26,17 +26,17 @@ describe("Bitbucket author completion", function()
 
 	it("preserves pull request completion sources and mention formatting", function()
 		local comments = {
-			{ author = { id = "commenter", display_name = "Commenter" }, content_raw = "Hi @{author}" },
+			{ author = { id = "commenter", name = "Commenter" }, content_raw = "Hi @{author}" },
 		}
 		local completion = author_completion.for_pulls({
 			pr = {
-				author = { id = "author", display_name = "Author" },
-				reviewers = { { id = "reviewer", display_name = "Reviewer" } },
+				author = { id = "author", name = "Author" },
+				reviewers = { { id = "reviewer", name = "Reviewer" } },
 			},
 			comments = comments,
 			tasks = {},
 			review_context = {
-				authors = { { id = "review-author", display_name = "Review Author" } },
+				mention_candidates = { { id = "review-author", name = "Review Author" } },
 			},
 		})
 
@@ -50,7 +50,7 @@ describe("Bitbucket author completion", function()
 			{ { abbr = "@Reviewer", menu = "mention", word = "@{reviewer}" } },
 			completion.complete("@reviewer")
 		)
-		assert.equal("@{author}", completion.format_mention({ id = "author", display_name = "Author" }))
+		assert.equal("@{author}", completion.format_mention({ id = "author", name = "Author" }))
 
 		completion.resolve_items()
 		assert.equal("Hi @Author", comments[1].content_display)

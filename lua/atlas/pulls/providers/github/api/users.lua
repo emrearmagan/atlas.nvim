@@ -19,7 +19,7 @@ function M.fetch_user(on_done, opts)
 	end
 
 	return cli.gh({ "api", "user" }, function(result, err)
-		if err or not result or type(result) ~= "table" then
+		if err or type(result) ~= "table" then
 			on_done(nil, err or "Failed to fetch user")
 			return
 		end

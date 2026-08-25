@@ -9,13 +9,6 @@ local issues_api = require("atlas.issues.providers.github.api.issues")
 local issue_cache = require("atlas.issues.providers.github.api.cache")
 
 ---@param ctx AtlasIssueActionContext
----@return boolean
-local function has_issue(ctx)
-	local issue = ctx.issue
-	return issue ~= nil and tostring(issue.key or "") ~= ""
-end
-
----@param ctx AtlasIssueActionContext
 ---@return string|nil slug, string|nil err
 local function create_issue_slug(ctx)
 	local explicit = tostring(ctx.repo_slug or "")
@@ -23,7 +16,7 @@ local function create_issue_slug(ctx)
 		return explicit, nil
 	end
 
-	if has_issue(ctx) then
+	if ctx.issue then
 		local issue = assert(ctx.issue)
 		---@cast issue GitHubIssue
 		if issue.repo_full_name ~= "" then
@@ -62,7 +55,7 @@ end
 ---@param ctx AtlasIssueActionContext
 ---@return boolean, string|nil
 local function close_available(ctx)
-	if not has_issue(ctx) then
+	if ctx.issue == nil then
 		return false, "No issue selected"
 	end
 	return assert(ctx.issue).status_id ~= "closed", "Issue is already closed"
@@ -72,7 +65,7 @@ end
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function close(ctx, done)
 	local issue = assert(ctx.issue)
-	local key = tostring(issue.key or "")
+	local key = issue.key
 	notify.loading(string.format("Closing %s...", key))
 	issues_api.set_state(key, "closed", function(ok, err)
 		if not ok then
@@ -88,7 +81,7 @@ end
 ---@param ctx AtlasIssueActionContext
 ---@return boolean, string|nil
 local function reopen_available(ctx)
-	if not has_issue(ctx) then
+	if ctx.issue == nil then
 		return false, "No issue selected"
 	end
 	return assert(ctx.issue).status_id == "closed", "Issue is not closed"
@@ -98,7 +91,7 @@ end
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function reopen(ctx, done)
 	local issue = assert(ctx.issue)
-	local key = tostring(issue.key or "")
+	local key = issue.key
 	notify.loading(string.format("Reopening %s...", key))
 	issues_api.set_state(key, "open", function(ok, err)
 		if not ok then
@@ -114,7 +107,7 @@ end
 ---@param ctx AtlasIssueActionContext
 ---@return boolean, string|nil
 local function transition_available(ctx)
-	if not has_issue(ctx) then
+	if ctx.issue == nil then
 		return false, "No issue selected"
 	end
 	return true, nil
@@ -124,7 +117,7 @@ end
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function transition(ctx, done)
 	local issue = assert(ctx.issue)
-	local key = tostring(issue.key or "")
+	local key = issue.key
 	local is_closed = tostring(issue.status_id or "") == "closed"
 	local action = is_closed and reopen or close
 	local verb = is_closed and "Reopen" or "Close"
@@ -144,7 +137,7 @@ end
 ---@param ctx AtlasIssueActionContext
 ---@return boolean, string|nil
 local function assign_available(ctx)
-	if not has_issue(ctx) then
+	if ctx.issue == nil then
 		return false, "No issue selected"
 	end
 	return true, nil
@@ -154,7 +147,7 @@ end
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function assign(ctx, done)
 	local issue = assert(ctx.issue)
-	local key = tostring(issue.key or "")
+	local key = issue.key
 
 	notify.loading("Loading assignees...")
 	issues_api.get_assignee_options(key, function(current_assignees, assignable_users, assignees_err)
@@ -236,7 +229,7 @@ end
 ---@param ctx AtlasIssueActionContext
 ---@return boolean, string|nil
 local function labels_available(ctx)
-	if not has_issue(ctx) then
+	if ctx.issue == nil then
 		return false, "No issue selected"
 	end
 	return true, nil
@@ -247,7 +240,7 @@ end
 local function labels(ctx, done)
 	local issue = assert(ctx.issue)
 	---@cast issue GitHubIssue
-	local key = tostring(issue.key or "")
+	local key = issue.key
 	local slug = issue.repo_full_name
 	if slug == "" then
 		local err = "Could not determine repository"
@@ -386,7 +379,7 @@ end
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function search_issues(_, done)
 	local state = require("atlas.issues.state")
-	local view = state.active_view or state.current_view or {}
+	local view = state.current_view or state.active_view or {}
 	local default = vim.trim(tostring(view.search or ""))
 	if default == "" or not default:find("is:issue") then
 		default = "is:issue " .. default
@@ -448,7 +441,7 @@ end
 ---@param ctx AtlasIssueActionContext
 ---@return boolean, string|nil
 local function toggle_subscription_available(ctx)
-	if not has_issue(ctx) then
+	if ctx.issue == nil then
 		return false, "No issue selected"
 	end
 	local issue = assert(ctx.issue)
@@ -477,7 +470,7 @@ local function toggle_subscription(ctx, done)
 				done(nil, tostring(err))
 				return
 			end
-			issue_cache.invalidate(tostring(issue.key or ""))
+			issue_cache.invalidate(issue.key)
 			issue.is_subscribed = (next_state == "SUBSCRIBED")
 			notify.success(issue.is_subscribed and "Subscribed" or "Unsubscribed", { timeout = 1200 })
 			done({ issue_key = issue.key }, nil)

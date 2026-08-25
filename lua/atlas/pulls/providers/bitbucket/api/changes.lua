@@ -55,7 +55,7 @@ function M.fetch_diffstat(pr, opts, on_done)
 
 		service.set_cache(key, entries)
 		on_done(entries, nil)
-	end)
+	end, { action = "Fetch PR diffstat", repo = pr.repo_full_name, id = pr.id })
 end
 
 ---@param pr PullRequest
@@ -82,7 +82,7 @@ function M.fetch_commits(pr, opts, on_done)
 		end
 	end
 
-	return service.request("GET", url, nil, nil, function(result, err)
+	return service.fetch_all_values(url, function(result, err)
 		if err then
 			on_done(nil, err)
 			return
@@ -90,7 +90,7 @@ function M.fetch_commits(pr, opts, on_done)
 		local commits = mapper.to_commits_list(result)
 		service.set_cache(key, commits, service.cache_ttl())
 		on_done(commits, nil)
-	end)
+	end, { action = "Fetch PR commits", repo = pr.repo_full_name, id = pr.id })
 end
 
 ---@param pr PullRequest
@@ -111,7 +111,7 @@ function M.fetch_diff(pr, _opts, on_done)
 			return
 		end
 		on_done(diff_parser.parse(text or ""), nil)
-	end)
+	end, { action = "Fetch PR diff", repo = pr.repo_full_name, id = pr.id })
 end
 
 return M

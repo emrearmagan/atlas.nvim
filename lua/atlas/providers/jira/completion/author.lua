@@ -11,8 +11,9 @@ local function collect_users(context)
 	---@type JiraMentionUser[]
 	local users = {}
 
+	---@param user IssueUser|nil
 	local function add(user)
-		if type(user) ~= "table" then
+		if user == nil then
 			return
 		end
 
@@ -26,15 +27,14 @@ local function collect_users(context)
 		table.insert(users, { id = id, label = label })
 	end
 
-	add(context.current_user)
-	add((context.issue or {}).assignee)
-	add((context.issue or {}).reporter)
+	add(context.issue.assignee)
+	add(context.issue.reporter)
 	for _, comment in ipairs(context.comments) do
 		add(comment.author)
 	end
 
 	table.sort(users, function(a, b)
-		return tostring(a.label or ""):lower() < tostring(b.label or ""):lower()
+		return a.label:lower() < b.label:lower()
 	end)
 
 	return users
@@ -45,8 +45,8 @@ end
 local function build_map(context)
 	local map = {}
 	for _, user in ipairs(collect_users(context)) do
-		local id = vim.trim(tostring(user.id or ""))
-		local label = vim.trim(tostring(user.label or ""))
+		local id = vim.trim(user.id)
+		local label = vim.trim(user.label)
 		if id ~= "" and label ~= "" then
 			map[id] = { id = id, label = label }
 		end
@@ -63,8 +63,8 @@ local function is_unique_label(mention_map, label)
 		return false
 	end
 	local count = 0
-	for _, user in pairs(mention_map or {}) do
-		if vim.trim(tostring((user or {}).label or "")):lower() == target then
+	for _, user in pairs(mention_map) do
+		if vim.trim(user.label):lower() == target then
 			count = count + 1
 			if count > 1 then
 				return false
@@ -77,8 +77,11 @@ end
 ---@param author IssueUser|nil
 ---@return string
 local function resolve_mention(author)
-	local mention_id = vim.trim(tostring((author or {}).account_id or ""))
-	local mention_label = vim.trim(tostring((author or {}).display_name or ""))
+	if author == nil then
+		return ""
+	end
+	local mention_id = vim.trim(tostring(author.account_id or ""))
+	local mention_label = vim.trim(author.display_name)
 	if mention_label == "" and mention_id == "" then
 		return ""
 	end
@@ -108,8 +111,8 @@ function M.for_issues(context)
 			local mention_map = build_map(context)
 			local matches = {}
 			for _, user in pairs(mention_map) do
-				local id = tostring((user or {}).id or "")
-				local label = tostring((user or {}).label or "")
+				local id = user.id
+				local label = user.label
 				if id ~= "" and label ~= "" and (query == "" or label:lower():find(query, 1, true) == 1) then
 					local use_simple_label = is_unique_label(mention_map, label)
 					local shown_abbr = use_simple_label and ("@" .. label) or string.format("@%s (%s)", label, id)

@@ -27,6 +27,8 @@ describe("GitLab author completion", function()
 			issue = {
 				reporter = { account_id = "reporter", display_name = "Issue Reporter" },
 				assignee = { account_id = "alice", display_name = "Alice" },
+			},
+			details = {
 				assignees = {
 					{ account_id = "alice", display_name = "Alice" },
 					{ account_id = "zoe", display_name = "Zoe" },
@@ -52,11 +54,13 @@ describe("GitLab author completion", function()
 		local completion = author_completion.for_pulls({
 			pr = {
 				author = { username = "author-username", nickname = "author", name = "Author" },
-				assignees = { { username = "assignee", name = "Assignee" } },
-				reviewers = { { username = "reviewer", name = "Reviewer" } },
 			},
+			details = { assignees = { { username = "assignee", name = "Assignee" } } },
+			reviewers = { { username = "reviewer", name = "Reviewer" } },
 			review_context = {
-				authors = { { username = "review-username", nickname = "review-author", name = "Review Author" } },
+				mention_candidates = {
+					{ username = "review-username", nickname = "review-author", name = "Review Author" },
+				},
 			},
 			comments = { { author = { username = "comment-username", nickname = "commenter", name = "Commenter" } } },
 			conversation = {

@@ -26,18 +26,18 @@ local function cursor_entry()
 end
 
 ---@param refresh fun()
----@param fn fun(issue: IssueDetails, refresh: fun())
+---@param fn fun(issue: Issue, refresh: fun())
 local function dispatch_simple(refresh, fn)
-	local issue = detail.current_details
+	local issue = detail.current_issue
 	if issue then
 		fn(issue, refresh)
 	end
 end
 
 ---@param refresh fun()
----@param fn fun(issue: IssueDetails, entry: table, refresh: fun())
+---@param fn fun(issue: Issue, entry: table, refresh: fun())
 local function dispatch_with_entry(refresh, fn)
-	local issue = detail.current_details
+	local issue = detail.current_issue
 	local entry = cursor_entry()
 	if issue and entry then
 		fn(issue, entry, refresh)
@@ -89,7 +89,6 @@ end
 ---@param refresh fun()
 function M.setup(buf, refresh)
 	local provider = detail.provider
-	local core = provider and provider.capabilities.core
 	local comments = provider and provider.capabilities.comments
 	local items = {}
 
@@ -115,7 +114,7 @@ function M.setup(buf, refresh)
 			})
 		)
 	end
-	if (comments and comments.edit_comment) or (core and core.update_description) then
+	if comments and comments.edit_comment then
 		utils.insert_if(
 			items,
 			from_action("ui.comments.edit", {

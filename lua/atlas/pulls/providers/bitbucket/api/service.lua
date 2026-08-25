@@ -20,7 +20,7 @@ function M.get_auth()
 	local user = tostring(bb.user or "")
 	local token = tostring(bb.token or "")
 
-	if not user or user == "" or not token or token == "" then
+	if user == "" or token == "" then
 		return "", "", "Missing Bitbucket credentials in config (providers.bitbucket.user / providers.bitbucket.token)"
 	end
 
@@ -31,8 +31,8 @@ end
 ---@param token string
 ---@param has_body boolean|nil
 ---@return table<string, string>
-function M.build_headers(user, token, has_body)
-	local auth = vim.base64.encode(string.format("%s:%s", user or "", token or ""))
+local function build_headers(user, token, has_body)
+	local auth = vim.base64.encode(string.format("%s:%s", user, token))
 	return {
 		Authorization = "Basic " .. auth,
 		["Content-Type"] = has_body and "application/json" or nil,
@@ -42,7 +42,7 @@ end
 
 ---@param endpoint string
 ---@return string
-function M.url(endpoint)
+local function request_url(endpoint)
 	if endpoint:sub(1, 1) ~= "/" then
 		endpoint = "/" .. endpoint
 	end
@@ -63,6 +63,10 @@ end
 ---@param key string
 ---@return any|nil, boolean
 function M.get_cache(key)
+	if M.cache_ttl() <= 0 then
+		return nil, false
+	end
+
 	local entry = memory_cache.get(key)
 	if not entry then
 		return nil, false
@@ -75,12 +79,19 @@ end
 ---@param value any
 ---@param ttl number|nil
 function M.set_cache(key, value, ttl)
+	if M.cache_ttl() <= 0 then
+		return
+	end
 	memory_cache.set(key, value, ttl or M.cache_ttl())
 end
 
 ---@param key string
 ---@return any|nil, boolean
 function M.get_persistent_cache(key)
+	if M.cache_ttl() <= 0 then
+		return nil, false
+	end
+
 	local entry = cache.get(key)
 	if not entry or entry.value == nil then
 		return nil, false
@@ -92,12 +103,15 @@ end
 ---@param value any
 ---@param ttl number|nil
 function M.set_persistent_cache(key, value, ttl)
+	if M.cache_ttl() <= 0 then
+		return
+	end
 	cache.set(key, value, ttl or M.cache_ttl())
 end
 
 ---@param result table
 ---@return string|nil
-function M.api_error_message(result)
+local function api_error_message(result)
 	if result.error == nil then
 		return nil
 	end
@@ -126,7 +140,7 @@ function M.request(method, url, headers, body, callback, ctx)
 		return nil
 	end
 
-	local request_headers = M.build_headers(user, token, body ~= nil)
+	local request_headers = build_headers(user, token, body ~= nil)
 	if headers then
 		for k, v in pairs(headers) do
 			request_headers[k] = v
@@ -136,7 +150,7 @@ function M.request(method, url, headers, body, callback, ctx)
 	-- If url doesn't start with http, treat it as an endpoint
 	local full_url = url
 	if not url:match("^https?://") then
-		full_url = M.url(url)
+		full_url = request_url(url)
 	end
 
 	local log = vim.tbl_extend("keep", { method = method, endpoint = full_url }, ctx or {})
@@ -161,7 +175,7 @@ function M.request(method, url, headers, body, callback, ctx)
 			return
 		end
 
-		local api_err = M.api_error_message(result)
+		local api_err = api_error_message(result)
 		if api_err then
 			api_err = sanitize_error(api_err)
 			logger.logerror(message .. " failed", vim.tbl_extend("force", {}, log, { error = api_err }))
@@ -231,7 +245,7 @@ function M.request_text(method, url, headers, body, callback, ctx)
 		return nil
 	end
 
-	local request_headers = M.build_headers(user, token, body ~= nil)
+	local request_headers = build_headers(user, token, body ~= nil)
 	if headers then
 		for k, v in pairs(headers) do
 			request_headers[k] = v
@@ -241,7 +255,7 @@ function M.request_text(method, url, headers, body, callback, ctx)
 	-- If url doesn't start with http, treat it as an endpoint
 	local full_url = url
 	if not url:match("^https?://") then
-		full_url = M.url(url)
+		full_url = request_url(url)
 	end
 
 	local log = vim.tbl_extend("keep", { method = method, endpoint = full_url }, ctx or {})

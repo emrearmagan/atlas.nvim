@@ -8,16 +8,14 @@ describe("GitLab issue mapper", function()
 			references = { full = "group/project#42" },
 			title = "Provider types",
 			state = "opened",
-			confidential = true,
 		})
 
 		assert.are.equal("group/project", issue.project_path)
 		assert.are.equal(42, issue.iid)
-		assert.is_true(issue.confidential)
 	end)
 
-	it("keeps provider fields on issue details", function()
-		local issue = issue_mapper.to_issue_details({
+	it("maps only supplemental issue details", function()
+		local details = issue_mapper.to_issue_details({
 			iid = 7,
 			references = { full = "group/project#7" },
 			title = "Details",
@@ -25,29 +23,27 @@ describe("GitLab issue mapper", function()
 			state = "opened",
 		})
 
-		assert.are.equal("group/project", issue.project_path)
-		assert.are.equal(7, issue.iid)
-		assert.are.equal("Hydrated description", issue.description)
+		assert.is_nil(details.project_path)
+		assert.is_nil(details.iid)
+		assert.are.equal("Hydrated description", details.description)
 	end)
 end)
 
 describe("GitLab pull request details", function()
-	it("keeps GitLab metadata on the detail type", function()
-		local pr = mapper.to_pull_request_details({
-			iid = 7,
-			references = { full = "group/project!7" },
-			title = "Typed details",
+	it("maps only supplemental detail fields", function()
+		local details = mapper.to_pull_request_details({
 			description = "Description",
-			state = "opened",
-			detailed_merge_status = "mergeable",
-			diff_refs = { base_sha = "base", head_sha = "head", start_sha = "start" },
-			labels = { "backend" },
+			subscribed = true,
+			assignees = { { id = 8, name = "Assignee", username = "assignee" } },
+			labels = { { name = "backend", color = "#ffffff", text_color = "#000000" } },
 		})
 
-		assert.equal("group/project", pr.repo_full_name)
-		assert.equal("mergeable", pr.detailed_merge_status)
-		assert.equal("start", pr.diff_refs.start_sha)
-		assert.equal("backend", pr.labels[1].name)
+		assert.equal("Description", details.description)
+		assert.is_true(details.is_subscribed)
+		assert.equal("assignee", details.assignees[1].username)
+		assert.equal("backend", details.labels[1].name)
+		assert.equal("#000000", details.labels[1].text_color)
+		assert.is_nil(details.repo_full_name)
 	end)
 end)
 

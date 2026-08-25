@@ -19,14 +19,15 @@ local review_threads = require("atlas.pulls.ui.components.review_threads")
 
 ---@param provider PullsProvider
 ---@param pr PullRequest
+---@param details PullRequestDetails|nil
 ---@param comments PullsComment[]
 ---@return AtlasMarkdownCompletionProvider|nil
-local function author_completion(provider, pr, comments)
+local function author_completion(provider, pr, details, comments)
 	local capability = provider.capabilities.comments
 	if not capability or not capability.comment_completion then
 		return nil
 	end
-	return capability.comment_completion({ pr = pr, comments = comments })
+	return capability.comment_completion({ pr = pr, details = details, comments = comments })
 end
 
 ---@param context AtlasReviewActionContext
@@ -36,7 +37,7 @@ local function open_editor(context, opts)
 	opts.height_ratio = 0.18
 	opts.completion = opts.completion or context.completion
 	if opts.completion == nil and context.items then
-		opts.completion = author_completion(context.provider, context.pr, context.items)
+		opts.completion = author_completion(context.provider, context.pr, context.details, context.items)
 	end
 	editor.open(opts)
 end
@@ -130,7 +131,7 @@ function M.add_comment(context, opts, on_done)
 
 	local completion = context.completion
 	if completion == nil and context.items then
-		completion = author_completion(context.provider, context.pr, context.items)
+		completion = author_completion(context.provider, context.pr, context.details, context.items)
 	end
 	local mention = ""
 	if parent and completion and completion.format_mention then

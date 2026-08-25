@@ -165,133 +165,72 @@ function M.to_reviewers(participants)
 	return reviewers
 end
 
----@param item table
----@param workspace string
----@param repo string
----@return table
-local function normalize_pull(item, workspace, repo)
-	local pr = as_table(item) or {}
-	local author = as_table(pr.author) or {}
-	local links = as_table(pr.links) or {}
-	local source = as_table(pr.source) or {}
-	local destination = as_table(pr.destination) or {}
-	local source_branch = as_table(source.branch) or {}
-	local source_commit = as_table(source.commit) or {}
-	local source_repository = as_table(source.repository) or {}
-	local destination_branch = as_table(destination.branch) or {}
-	local destination_commit = as_table(destination.commit) or {}
-	local destination_repository = as_table(destination.repository) or {}
-	local source_https_url, source_ssh_url = clone_urls(source_repository)
-	local destination_https_url, destination_ssh_url = clone_urls(destination_repository)
-	local participants = as_table(pr.participants)
-	local repo_full_name = (workspace ~= "" and repo ~= "") and string.format("%s/%s", workspace, repo) or ""
-
-	return {
-		id = tonumber(pr.id) or 0,
-		title = tostring(pr.title or ""),
-		description = type(pr.description) == "string" and pr.description or nil,
-		comments = tonumber(pr.comment_count) or 0,
-		tasks = tonumber(pr.task_count) or 0,
-		author = {
-			name = tostring(author.display_name or ""),
-			account_id = tostring(author.account_id or ""),
-			nickname = tostring(author.nickname or ""),
-		},
-		is_draft = pr.draft == true,
-		state = tostring(pr.state or ""),
-		links = {
-			html = link_href(links, "html"),
-			self = link_href(links, "self"),
-			merge = link_href(links, "merge"),
-			decline = link_href(links, "decline"),
-			commits = link_href(links, "commits"),
-			approve = link_href(links, "approve"),
-			request_changes = link_href(links, "request_changes"),
-			diff = link_href(links, "diff"),
-			diffstat = link_href(links, "diffstat"),
-			comments = link_href(links, "comments"),
-			activity = link_href(links, "activity"),
-			statuses = link_href(links, "statuses"),
-		},
-		destination = {
-			branch = tostring(destination_branch.name or ""),
-			commit_hash = tostring(destination_commit.hash or ""),
-			https_url = destination_https_url,
-			ssh_url = destination_ssh_url,
-		},
-		source = {
-			branch = tostring(source_branch.name or ""),
-			commit_hash = tostring(source_commit.hash or ""),
-			repo_full_name = tostring(source_repository.full_name or ""),
-			https_url = source_https_url,
-			ssh_url = source_ssh_url,
-		},
-		close_source_branch = type(pr.close_source_branch) == "boolean" and pr.close_source_branch or nil,
-		created_on = tostring(pr.created_on or ""),
-		updated_on = tostring(pr.updated_on or ""),
-		reviewers = participants and M.to_reviewers(participants) or nil,
-		workspace = workspace,
-		repo = repo,
-		repo_full_name = repo_full_name,
-	}
-end
-
----@param raw table
----@return BitbucketPullRequest
-local function map_summary(raw)
-	local workspace = tostring(raw.workspace or "")
-	local repo = tostring(raw.repo or "")
-	local repo_full_name = tostring(raw.repo_full_name or string.format("%s/%s", workspace, repo))
-	local author = raw.author or {}
-	local links = raw.links or {}
-	local source = raw.source or {}
-	local source_repo_full_name = tostring(source.repo_full_name or "")
-	local source_branch = source_repo_full_name ~= "" and tostring(source.branch or "") or ""
-	local source_is_fork = source_branch ~= ""
-		and source_repo_full_name ~= ""
-		and source_repo_full_name ~= repo_full_name
-	return {
-		id = raw.id,
-		title = tostring(raw.title or ""),
-		state = map_state(raw.state, raw.is_draft == true),
-		author = {
-			name = tostring(author.name or author.display_name or "Unknown"),
-			id = tostring(author.account_id or ""),
-			username = tostring(author.nickname or ""),
-		},
-		source = {
-			branch = source_branch,
-			commit_hash = tostring(source.commit_hash or ""),
-			https_url = source_is_fork and tostring(source.https_url or "") or nil,
-			ssh_url = source_is_fork and tostring(source.ssh_url or "") or nil,
-		},
-		destination = {
-			branch = tostring((raw.destination or {}).branch or ""),
-			commit_hash = tostring((raw.destination or {}).commit_hash or ""),
-			https_url = (raw.destination or {}).https_url,
-			ssh_url = (raw.destination or {}).ssh_url,
-		},
-		comments_count = tonumber(raw.comments) or 0,
-		tasks_count = tonumber(raw.tasks) or 0,
-		created_on = tostring(raw.created_on or ""),
-		updated_on = tostring(raw.updated_on or ""),
-		link = { html = tostring(links.html or "") },
-		provider = "bitbucket",
-		workspace = workspace,
-		repo = repo,
-		repo_full_name = repo_full_name,
-		reviewers = raw.reviewers,
-		links = links,
-		close_source_branch = raw.close_source_branch,
-	}
-end
-
 ---@param raw table
 ---@param workspace string
 ---@param repo string
 ---@return BitbucketPullRequest
 function M.to_pull_request(raw, workspace, repo)
-	return map_summary(normalize_pull(raw, workspace, repo))
+	local author = as_table(raw.author) or {}
+	local links = as_table(raw.links) or {}
+	local source = as_table(raw.source) or {}
+	local destination = as_table(raw.destination) or {}
+	local source_repository = as_table(source.repository) or {}
+	local destination_repository = as_table(destination.repository) or {}
+	local source_https_url, source_ssh_url = clone_urls(source_repository)
+	local destination_https_url, destination_ssh_url = clone_urls(destination_repository)
+	local repo_full_name = workspace ~= "" and repo ~= "" and string.format("%s/%s", workspace, repo)
+		or tostring(destination_repository.full_name or "")
+	local source_repo_full_name = tostring(source_repository.full_name or "")
+	local source_is_fork = source_repo_full_name ~= "" and source_repo_full_name ~= repo_full_name
+	local participants = as_table(raw.participants)
+	local mapped_links = {
+		html = link_href(links, "html"),
+		self = link_href(links, "self"),
+		merge = link_href(links, "merge"),
+		decline = link_href(links, "decline"),
+		commits = link_href(links, "commits"),
+		approve = link_href(links, "approve"),
+		request_changes = link_href(links, "request_changes"),
+		diff = link_href(links, "diff"),
+		diffstat = link_href(links, "diffstat"),
+		comments = link_href(links, "comments"),
+		activity = link_href(links, "activity"),
+		statuses = link_href(links, "statuses"),
+	}
+
+	return {
+		id = tonumber(raw.id) or 0,
+		title = tostring(raw.title or ""),
+		state = map_state(tostring(raw.state or ""), raw.draft == true),
+		author = {
+			name = tostring(author.display_name or "Unknown"),
+			id = tostring(author.account_id or ""),
+			username = tostring(author.nickname or ""),
+		},
+		source = {
+			branch = tostring((as_table(source.branch) or {}).name or ""),
+			commit_hash = tostring((as_table(source.commit) or {}).hash or ""),
+			https_url = source_is_fork and (source_https_url or "") or nil,
+			ssh_url = source_is_fork and (source_ssh_url or "") or nil,
+		},
+		destination = {
+			branch = tostring((as_table(destination.branch) or {}).name or ""),
+			commit_hash = tostring((as_table(destination.commit) or {}).hash or ""),
+			https_url = destination_https_url,
+			ssh_url = destination_ssh_url,
+		},
+		comments_count = tonumber(raw.comment_count) or 0,
+		tasks_count = tonumber(raw.task_count) or 0,
+		created_on = tostring(raw.created_on or ""),
+		updated_on = tostring(raw.updated_on or ""),
+		link = { html = mapped_links.html },
+		provider = "bitbucket",
+		workspace = workspace,
+		repo = repo,
+		repo_full_name = repo_full_name,
+		reviewers = participants and M.to_reviewers(participants) or nil,
+		links = mapped_links,
+	}
 end
 
 ---@param result table|nil
@@ -309,19 +248,6 @@ function M.to_pull_requests_list(result, workspace, repo)
 	end
 
 	return out
-end
-
----@param raw table
----@param workspace string
----@param repo string
----@return BitbucketPullRequestDetails
-function M.to_pull_request_details(raw, workspace, repo)
-	local normalized = normalize_pull(raw, workspace, repo)
-	local pr = map_summary(normalized)
-	---@cast pr BitbucketPullRequestDetails
-	pr.description = tostring(normalized.description or "")
-	pr.reviewers = normalized.reviewers or {}
-	return pr
 end
 
 ---@param user table|nil
@@ -449,9 +375,11 @@ function M.to_comment(result)
 	local links = as_table(entry.links) or {}
 	local parent = as_table(entry.parent)
 	local resolution = as_table(entry.resolution)
+	local resolution_user = resolution and as_table(resolution.user) or nil
+	local raw_inline = as_table(entry.inline)
 	local is_thread_root = parent == nil
-	local outdated = type(entry.inline) == "table" and entry.inline.outdated == true
-	local inline, file = comment_position(entry.inline)
+	local outdated = raw_inline ~= nil and raw_inline.outdated == true
+	local inline, file = comment_position(raw_inline)
 	local state = entry.deleted == true and "DELETED"
 		or (entry.pending == true and "PENDING")
 		or (resolution ~= nil and "RESOLVED")
@@ -469,8 +397,7 @@ function M.to_comment(result)
 				and type(resolution.created_on) == "string"
 				and resolution.created_on
 			or nil,
-		resolved_by = resolution and is_thread_root and type(resolution.user) == "table" and actor(resolution.user)
-			or nil,
+		resolved_by = resolution_user and is_thread_root and actor(resolution_user) or nil,
 		file = file,
 		inline = inline,
 		is_task = nil,
@@ -532,13 +459,15 @@ end
 
 ---@param raw table|nil
 ---@param fallback_workspace string|nil
----@return PullsRepoDetails
+---@return BitbucketPullsRepoDetails
 function M.to_repo_details(raw, fallback_workspace)
-	raw = type(raw) == "table" and raw or {}
-	local workspace_obj = type(raw.workspace) == "table" and raw.workspace or {}
-	local mainbranch = type(raw.mainbranch) == "table" and raw.mainbranch or {}
+	raw = as_table(raw) or {}
+	local workspace_obj = as_table(raw.workspace) or {}
+	local mainbranch = as_table(raw.mainbranch) or {}
 	local links = as_table(raw.links) or {}
 	local html_link = as_table(links.html) or {}
+	local branches_link = as_table(links.branches) or {}
+	local tags_link = as_table(links.tags) or {}
 	local full_name = tostring(raw.full_name or raw.name or raw.slug or "")
 	local owner = tostring(workspace_obj.slug or fallback_workspace or "")
 	local repo_name = tostring(raw.slug or raw.name or "")
@@ -556,7 +485,8 @@ function M.to_repo_details(raw, fallback_workspace)
 		is_private = raw.is_private == true,
 		created_on = tostring(raw.created_on or ""),
 		readme = nil,
-		_raw = raw,
+		branches_url = tostring(branches_link.href or ""),
+		tags_url = tostring(tags_link.href or ""),
 	}
 end
 

@@ -38,7 +38,7 @@
 ---@field items table<string, string>|nil
 
 ---@class AtlasGitHubProviderConfig
----@field cache_ttl number|nil
+---@field cache_ttl number|nil Cache lifetime in seconds. Set to 0 to disable caching.
 
 ---@class AtlasGitHubPullsConfig
 ---@field views AtlasGitHubViewConfig[]|nil

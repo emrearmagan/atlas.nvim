@@ -3,6 +3,7 @@ local M = {}
 local json = require("atlas.core.json")
 local service = require("atlas.providers.gitlab.client")
 local mapper = require("atlas.pulls.providers.gitlab.api.mapper")
+local request_scope = require("atlas.core.requests")
 
 local GENERAL_COMMENTS_QUERY = [[
 query($path:ID!,$iid:String!,$after:String){
@@ -79,7 +80,7 @@ end
 ---@param opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(result: PullsComment[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch(pr, opts, on_done)
+function M.fetch_review_comments(pr, opts, on_done)
 	opts = opts or {}
 	local path, iid = project_iid(pr)
 	if path == "" or iid == nil then
@@ -89,7 +90,7 @@ function M.fetch(pr, opts, on_done)
 		return nil
 	end
 
-	local cache_key = string.format("gitlab_pulls:comments:%s!%d", path, iid)
+	local cache_key = string.format("gitlab_pulls:review-comments:%s!%d", path, iid)
 	if not opts.force_refresh then
 		local cached, ok = service.get_memory_cache(cache_key)
 		if ok then
@@ -102,24 +103,31 @@ function M.fetch(pr, opts, on_done)
 	local discussions_ep = string.format("/projects/%s/merge_requests/%d/discussions?per_page=100", encoded, iid)
 	local drafts_ep = string.format("/projects/%s/merge_requests/%d/draft_notes?per_page=100", encoded, iid)
 
-	local pending = 2
-	local discussions_result, drafts_result
-	local first_err
-	local handles = {}
-	local cancelled = false
-
-	local function finalize()
-		if cancelled then
-			return
-		end
-		if first_err or discussions_result == nil or drafts_result == nil then
-			on_done(nil, first_err or "Failed to fetch comments")
+	local requests = request_scope.new()
+	requests.all({
+		discussions = function(done)
+			return service.fetch_all_pages(discussions_ep, done, {
+				action = "Fetch MR review discussions",
+				project_path = path,
+				iid = iid,
+			})
+		end,
+		drafts = function(done)
+			return service.fetch_all_pages(drafts_ep, done, {
+				action = "Fetch MR draft comments",
+				project_path = path,
+				iid = iid,
+			})
+		end,
+	}, function(values, errors)
+		if errors.discussions or errors.drafts then
+			on_done(nil, errors.discussions or errors.drafts)
 			return
 		end
 
 		local result = {}
 		local discussion_roots = {}
-		for _, discussion in ipairs(discussions_result) do
+		for _, discussion in ipairs(values.discussions) do
 			local notes = discussion.notes
 			if #notes > 0 then
 				local first = notes[1]
@@ -141,7 +149,7 @@ function M.fetch(pr, opts, on_done)
 				end
 			end
 		end
-		for _, draft in ipairs(drafts_result or {}) do
+		for _, draft in ipairs(values.drafts) do
 			local discussion_id = type(draft.discussion_id) == "string" and draft.discussion_id or ""
 			local root = discussion_roots[discussion_id]
 			local comment = inherit_thread_context(mapper.to_draft_comment(draft, root and root.id or nil), root)
@@ -149,53 +157,13 @@ function M.fetch(pr, opts, on_done)
 		end
 		service.set_memory_cache(cache_key, result)
 		on_done(result, nil)
-	end
-
-	local function track(h)
-		if h then
-			table.insert(handles, h)
-		end
-	end
-
-	local function step()
-		if cancelled then
-			return
-		end
-		pending = pending - 1
-		if pending <= 0 then
-			finalize()
-		end
-	end
-
-	track(service.fetch_all_pages(discussions_ep, function(result, err)
-		if err then
-			first_err = first_err or err
-		else
-			discussions_result = result
-		end
-		step()
-	end))
-	track(service.fetch_all_pages(drafts_ep, function(result, err)
-		if err then
-			first_err = first_err or err
-		else
-			drafts_result = result
-		end
-		step()
-	end))
-	return {
-		cancel = function()
-			cancelled = true
-			for _, h in ipairs(handles) do
-				h.cancel()
-			end
-		end,
-	}
+	end)
+	return requests
 end
 
-local function bust_caches(path, iid)
-	service.delete_memory_cache(string.format("gitlab_pulls:comments:%s!%d", path, iid))
-	service.delete_memory_cache(string.format("gitlab_pulls:general-comments:%s!%d", path, iid))
+local function invalidate_comment_caches(path, iid)
+	service.delete_memory_cache(string.format("gitlab_pulls:review-comments:%s!%d", path, iid))
+	service.delete_memory_cache(string.format("gitlab_pulls:conversation-comments:%s!%d", path, iid))
 	service.delete_memory_cache(string.format("gitlab_pulls:activity:%s!%d", path, iid))
 end
 
@@ -203,7 +171,7 @@ end
 ---@param opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(comments: PullsComment[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_general(pr, opts, on_done)
+function M.fetch_conversation_comments(pr, opts, on_done)
 	opts = opts or {}
 	local path, iid = project_iid(pr)
 	if path == "" or iid == nil then
@@ -211,7 +179,7 @@ function M.fetch_general(pr, opts, on_done)
 		return nil
 	end
 
-	local cache_key = string.format("gitlab_pulls:general-comments:%s!%d", path, iid)
+	local cache_key = string.format("gitlab_pulls:conversation-comments:%s!%d", path, iid)
 	if not opts.force_refresh then
 		local cached, ok = service.get_memory_cache(cache_key)
 		if ok then
@@ -403,7 +371,7 @@ local function add_positioned_comment(pr, path, iid, content, target, file_level
 				return
 			end
 			if pending then
-				bust_caches(path, iid)
+				invalidate_comment_caches(path, iid)
 				finish(mapper.to_draft_comment(result, nil), nil)
 				return
 			end
@@ -412,9 +380,13 @@ local function add_positioned_comment(pr, path, iid, content, target, file_level
 				finish(nil, "Created discussion has no comment")
 				return
 			end
-			bust_caches(path, iid)
+			invalidate_comment_caches(path, iid)
 			finish(add_permalink(pr, mapper.to_comment(first, first.id, tostring(result.id or ""), false)), nil)
-		end))
+		end, {
+			action = pending and "Add MR draft comment" or "Add MR discussion",
+			project_path = path,
+			iid = iid,
+		}))
 	end
 
 	local refs = normalize_diff_refs(pr.diff_refs)
@@ -442,7 +414,11 @@ local function add_positioned_comment(pr, path, iid, content, target, file_level
 			end
 			pr.diff_refs = latest_refs
 			create(latest_refs)
-		end))
+		end, {
+			action = "Fetch MR diff refs",
+			project_path = path,
+			iid = iid,
+		}))
 	end
 
 	return {
@@ -495,11 +471,15 @@ function M.add_comment(pr, content, opts, on_done)
 				on_done(nil, err)
 				return
 			end
-			bust_caches(path, iid)
+			invalidate_comment_caches(path, iid)
 			local root_id = parent and (parent.parent_id or parent.id) or nil
 			local created = mapper.to_draft_comment(result, root_id)
 			on_done(inherit_thread_context(created, parent), nil)
-		end)
+		end, {
+			action = "Add MR draft comment",
+			project_path = path,
+			iid = iid,
+		})
 	end
 
 	local discussion_id = parent and tostring(parent.thread_id or "") or ""
@@ -526,7 +506,7 @@ function M.add_comment(pr, content, opts, on_done)
 			on_done(nil, "Empty response")
 			return
 		end
-		bust_caches(path, iid)
+		invalidate_comment_caches(path, iid)
 		local first_id = parent and (parent.parent_id or parent.id) or note.id
 		local created_discussion_id = parent and discussion_id or tostring(result.id or "")
 		on_done(
@@ -536,7 +516,11 @@ function M.add_comment(pr, content, opts, on_done)
 			),
 			nil
 		)
-	end)
+	end, {
+		action = parent and "Reply to MR discussion" or "Add MR discussion",
+		project_path = path,
+		iid = iid,
+	})
 end
 
 ---@param path string
@@ -586,7 +570,7 @@ function M.edit_comment(pr, comment, on_done)
 			on_done(nil, err)
 			return
 		end
-		bust_caches(path, iid)
+		invalidate_comment_caches(path, iid)
 		local updated
 		if draft then
 			updated = mapper.to_draft_comment(result, comment.parent_id)
@@ -602,7 +586,12 @@ function M.edit_comment(pr, comment, on_done)
 		updated.state = updated.state or comment.state
 		updated.outdated = updated.outdated or comment.outdated
 		on_done(updated, nil)
-	end)
+	end, {
+		action = "Edit MR comment",
+		project_path = path,
+		iid = iid,
+		note_id = tostring(comment.id),
+	})
 end
 
 ---@param pr PullRequest
@@ -626,9 +615,14 @@ function M.delete_comment(pr, comment, on_done)
 			on_done(false, err)
 			return
 		end
-		bust_caches(path, iid)
+		invalidate_comment_caches(path, iid)
 		on_done(true, nil)
-	end)
+	end, {
+		action = "Delete MR comment",
+		project_path = path,
+		iid = iid,
+		note_id = tostring(comment.id),
+	})
 end
 
 ---@param pr PullRequest
@@ -659,9 +653,14 @@ function M.set_thread_resolved(pr, root, resolved, on_done)
 			on_done(false, err)
 			return
 		end
-		bust_caches(path, iid)
+		invalidate_comment_caches(path, iid)
 		on_done(true, nil)
-	end)
+	end, {
+		action = resolved and "Resolve MR discussion" or "Reopen MR discussion",
+		project_path = path,
+		iid = iid,
+		discussion_id = discussion_id,
+	})
 end
 
 ---@param pr PullRequest
@@ -698,9 +697,14 @@ function M.add_reaction(pr, item, key, on_done)
 			on_done(false, err)
 			return
 		end
-		bust_caches(path, iid)
+		invalidate_comment_caches(path, iid)
 		on_done(true, nil)
-	end)
+	end, {
+		action = "Add MR comment reaction",
+		project_path = path,
+		iid = iid,
+		note_id = note_id,
+	})
 end
 
 return M

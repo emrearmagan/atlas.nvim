@@ -9,22 +9,30 @@
 ---@field open_issues integer|nil
 ---@field closed_issues integer|nil
 
----@class GitHubIssueDetails : IssueDetails, GitHubIssue
+---@class GitHubIssueDetails : IssueDetails
 ---@field milestone GitHubIssueMilestone|nil
 ---@field sub_issues GitHubIssue[]
 
-local M = {}
-
+local actions = require("atlas.issues.providers.github.actions")
+local author_completion = require("atlas.providers.github.completion.author")
+local comments_api = require("atlas.issues.providers.github.api.comments")
 local config = require("atlas.config")
+local client = require("atlas.providers.github.client")
+local emojis = require("atlas.ui.shared.emojis")
+local highlights = require("atlas.issues.providers.github.highlights")
 local issue_cache = require("atlas.issues.providers.github.api.cache")
+local issues_api = require("atlas.issues.providers.github.api.issues")
 local notifications_api = require("atlas.providers.github.notifications")
+local timeline_api = require("atlas.issues.providers.github.api.timeline")
+local ui_detail = require("atlas.issues.providers.github.ui.detail")
+local users_api = require("atlas.issues.providers.github.api.users")
 local git = require("atlas.core.git")
 
 ---@param view IssuesViewConfig
 ---@return string
-function M.search_query(view)
+local function search_query(view)
 	---@cast view AtlasGitHubIssuesViewConfig
-	local search = tostring(view.search or "")
+	local search = view.search or ""
 	if search ~= "" and not search:lower():find("is:issue", 1, true) then
 		search = search .. " is:issue"
 	end
@@ -35,16 +43,15 @@ end
 ---@param opts IssuesFetchOpts
 ---@param on_done fun(issues: Issue[], next_page_token: string|nil, is_last: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_issues(view, opts, on_done)
-	local search = M.search_query(view)
+local function fetch_issues(view, opts, on_done)
+	local search = search_query(view)
 	if search == "" then
 		on_done({}, nil, true, "Missing search query for GitHub view")
 		return nil
 	end
 
-	local issues_api = require("atlas.issues.providers.github.api.issues")
-	local limit = opts and opts.max_results or 50
-	local layout = tostring((view and view.layout) or (opts and opts.layout) or "plain")
+	local limit = opts.max_results or 50
+	local layout = view.layout or opts.layout or "plain"
 	return issues_api.search_issues(search, function(issues, err)
 		if err then
 			on_done({}, nil, true, err)
@@ -65,42 +72,35 @@ function M.fetch_issues(view, opts, on_done)
 
 		on_done(sorted, nil, true, nil)
 	end, {
-		force_load = opts and opts.force_load == true or false,
+		force_load = opts.force_load == true,
 		limit = limit,
 		with_relationships = layout ~= "compact",
 	})
 end
 
----@param refs IssueRef[]
----@param _opts IssuesFetchOpts|nil
----@param on_done fun(issues: Issue[], err: string|nil)
----@return { cancel: fun() }|nil
-function M.fetch_by_refs(refs, _opts, on_done)
-	return require("atlas.issues.providers.github.api.issues").fetch_by_refs(refs, on_done)
-end
-
 ---@param ref IssueRef
 ---@param opts IssuesFetchOpts|nil
----@param on_done fun(issue: IssueDetails|nil, err: string|nil)
+---@param on_done fun(details: IssueDetails|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_issue(ref, opts, on_done)
+local function fetch_issue(ref, opts, on_done)
 	opts = opts or {}
-	local api_opts = {}
-	for k, v in pairs(opts) do
-		api_opts[k] = v
+	local with_relationships = opts.with_relationships
+	if opts.layout == "compact" then
+		with_relationships = false
 	end
-	if api_opts.layout == "compact" then
-		api_opts.with_relationships = false
-	end
-	return require("atlas.issues.providers.github.api.issues").get_issue(ref.key, on_done, api_opts)
+	return issues_api.get_issue(ref.key, on_done, {
+		force_load = opts.force_load,
+		layout = opts.layout,
+		with_relationships = with_relationships,
+	})
 end
 
----@param issue IssueDetails
+---@param issue Issue
 ---@param content string
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.update_description(issue, content, on_done)
-	---@cast issue GitHubIssueDetails
+local function update_description(issue, content, on_done)
+	---@cast issue GitHubIssue
 	local slug = issue.repo_full_name
 	local number = issue.number
 	if slug == "" then
@@ -108,8 +108,7 @@ function M.update_description(issue, content, on_done)
 		return nil
 	end
 
-	local cli = require("atlas.providers.github.client")
-	return cli.gh({
+	return client.gh({
 		"issue",
 		"edit",
 		tostring(number),
@@ -122,8 +121,7 @@ function M.update_description(issue, content, on_done)
 			on_done(false, err)
 			return
 		end
-		issue_cache.invalidate(tostring(issue.key or ""))
-		issue.description = content
+		issue_cache.invalidate(issue.key)
 		on_done(true, nil)
 	end, {
 		action = "Update issue description",
@@ -133,59 +131,18 @@ function M.update_description(issue, content, on_done)
 end
 
 ---@param issue Issue
----@param content string
----@param on_done fun(comment: IssueComment|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.add_comment(issue, content, on_done)
-	local key = tostring(issue.key or "")
-	return require("atlas.issues.providers.github.api.comments").add(key, content, on_done)
-end
-
----@param issue Issue
----@param comment IssueComment
----@param content string
----@param on_done fun(comment: IssueComment|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.edit_comment(issue, comment, content, on_done)
-	local key = tostring(issue.key or "")
-	return require("atlas.issues.providers.github.api.comments").edit(key, tostring(comment.id), content, on_done)
-end
-
----@param issue Issue
----@param comment IssueComment
----@param on_done fun(ok: boolean, err: string|nil)
----@return { cancel: fun() }|nil
-function M.delete_comment(issue, comment, on_done)
-	local key = tostring(issue.key or "")
-	return require("atlas.issues.providers.github.api.comments").delete(key, tostring(comment.id), on_done)
-end
-
----@param issue Issue
 ---@param opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(items: IssueConversationItem[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_conversation(issue, opts, on_done)
+local function fetch_conversation(issue, opts, on_done)
 	opts = opts or {}
-	local key = tostring(issue and issue.key or "")
-	if key == "" then
-		on_done(nil, "Invalid issue key")
-		return nil
-	end
-
-	local timeline = require("atlas.issues.providers.github.api.timeline")
-	return timeline.list_conversation(key, function(result, err)
+	return timeline_api.list_conversation(issue.key, function(result, err)
 		if err or result == nil then
 			on_done(nil, err)
 			return
 		end
 
 		local items = {}
-		table.insert(items, {
-			id = "description:" .. tostring(issue.key),
-			kind = "description",
-			created_at = issue.created_at or "",
-			entity = issue,
-		})
 		for _, comment in ipairs(result.comments or {}) do
 			table.insert(items, {
 				id = "comment:" .. tostring(comment.id),
@@ -212,34 +169,28 @@ end
 ---@param key string
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.add_reaction(issue, item, key, on_done)
+local function add_reaction(issue, item, key, on_done)
 	---@cast issue GitHubIssue
 	local slug = issue.repo_full_name
-	local number = issue.number
 	if slug == "" then
 		on_done(false, "Invalid issue")
 		return nil
 	end
 
-	local endpoint
-	if item.kind == "description" then
-		endpoint = string.format("repos/%s/issues/%d/reactions", slug, number)
-	elseif item.kind == "comment" then
-		local comment = item.entity
-		---@cast comment IssueComment
-		endpoint = string.format("repos/%s/issues/comments/%s/reactions", slug, tostring(comment.id))
-	else
+	if item.kind ~= "comment" then
 		on_done(false, "This item does not support reactions")
 		return nil
 	end
+	local comment = item.entity
+	---@cast comment IssueComment
+	local endpoint = string.format("repos/%s/issues/comments/%s/reactions", slug, tostring(comment.id))
 
-	local cli = require("atlas.providers.github.client")
-	return cli.api("POST", endpoint, { content = key }, function(_, err)
+	return client.api("POST", endpoint, { content = key }, function(_, err)
 		if err then
 			on_done(false, err)
 			return
 		end
-		issue_cache.invalidate(tostring(issue.key or ""))
+		issue_cache.invalidate(issue.key)
 		on_done(true, nil)
 	end, {
 		action = "Add issue reaction",
@@ -248,27 +199,12 @@ function M.add_reaction(issue, item, key, on_done)
 	})
 end
 
----@param issue Issue
----@param opts IssuesFetchOpts|nil
----@param on_done fun(entries: IssueActivityEntry[]|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.fetch_activity(issue, opts, on_done)
-	local timeline = require("atlas.issues.providers.github.api.timeline")
-	return timeline.list_conversation(tostring(issue.key or ""), function(result, err)
-		if err or type(result) ~= "table" then
-			on_done(nil, err)
-			return
-		end
-		on_done(result.events, nil)
-	end, { force_load = opts and opts.force_load == true or false })
-end
-
 ---@return AtlasGitHubIssuesViewConfig[]
-function M.views()
+local function views()
 	local cfg = config.domain_options("github", "issues") or {}
-	local views = cfg.views
-	if not views or #views == 0 then
-		views = {
+	local configured = cfg.views
+	if not configured or #configured == 0 then
+		configured = {
 			{
 				name = "Assigned",
 				key = "1",
@@ -277,7 +213,7 @@ function M.views()
 		}
 	end
 	local repo
-	for _, view in ipairs(views) do
+	for _, view in ipairs(configured) do
 		if view.current_repo then
 			local target = git.local_repository()
 			if target and target.provider == "github" then
@@ -287,7 +223,7 @@ function M.views()
 		end
 	end
 	local resolved = {}
-	for i, view in ipairs(views) do
+	for i, view in ipairs(configured) do
 		resolved[i] = vim.tbl_extend("force", {}, view)
 		if view.current_repo and repo then
 			local additional = (view.search and view.search ~= "") and (" " .. view.search) or ""
@@ -299,7 +235,7 @@ end
 
 ---@param target AtlasTarget
 ---@return AtlasIssuesViewConfig
-function M.search_view(target)
+local function search_view(target)
 	return {
 		name = "Search",
 		layout = "compact",
@@ -314,40 +250,39 @@ end
 
 ---@param target AtlasTarget
 ---@return IssueRef|nil
-function M.issue_ref(target)
+local function issue_ref(target)
 	if target.owner and target.repo and target.number then
 		return { key = string.format("%s/%s#%d", target.owner, target.repo, target.number) }
 	end
 end
 
 return {
-	views = M.views,
-	search_view = M.search_view,
-	issue_ref = M.issue_ref,
+	views = views,
+	search_view = search_view,
+	issue_ref = issue_ref,
 	capabilities = {
 		core = {
-			fetch_user = require("atlas.issues.providers.github.api.users").get_user,
-			search_query = M.search_query,
-			fetch_issues = M.fetch_issues,
-			fetch_by_refs = M.fetch_by_refs,
-			fetch_issue = M.fetch_issue,
-			update_description = M.update_description,
+			fetch_user = users_api.get_user,
+			search_query = search_query,
+			fetch_issues = fetch_issues,
+			fetch_by_refs = issues_api.fetch_by_refs,
+			fetch_issue = fetch_issue,
+			update_description = update_description,
 		},
 		comments = {
-			reaction_options = require("atlas.ui.shared.emojis").github(),
-			comment_completion = require("atlas.providers.github.completion.author").for_issues,
-			fetch_activity = M.fetch_activity,
-			fetch_conversation = M.fetch_conversation,
-			add_comment = M.add_comment,
-			edit_comment = M.edit_comment,
-			delete_comment = M.delete_comment,
-			add_reaction = M.add_reaction,
+			reaction_options = emojis.github(),
+			comment_completion = author_completion.for_issues,
+			fetch_conversation = fetch_conversation,
+			add_comment = comments_api.add,
+			edit_comment = comments_api.edit,
+			delete_comment = comments_api.delete,
+			add_reaction = add_reaction,
 		},
 		notifications = notifications_api,
-		actions = require("atlas.issues.providers.github.actions"),
+		actions = actions,
 		ui = {
-			setup = require("atlas.issues.providers.github.highlights").setup,
-			detail = require("atlas.issues.providers.github.ui.detail"),
+			setup = highlights.setup,
+			detail = ui_detail,
 		},
 	},
 }

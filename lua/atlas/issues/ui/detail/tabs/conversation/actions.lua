@@ -13,12 +13,14 @@ local function get_comments()
 	return provider and provider.capabilities.comments or nil
 end
 
+---@param issue Issue
 ---@return AtlasMarkdownCompletionProvider|nil
-local function get_completion()
+local function get_completion(issue)
 	local comments = get_comments()
 	if comments and comments.comment_completion then
 		return comments.comment_completion({
-			issue = detail.current_details or detail.current_issue,
+			issue = issue,
+			details = detail.current_details,
 			comments = state.comments(),
 		})
 	end
@@ -50,7 +52,7 @@ function M.add(issue, refresh)
 		title = " Add Comment ",
 		width_ratio = 0.5,
 		height_ratio = 0.18,
-		completion = get_completion(),
+		completion = get_completion(issue),
 		on_save = function(text)
 			if not text or vim.trim(text) == "" then
 				return
@@ -83,10 +85,6 @@ function M.reply(issue, entry, refresh)
 	if not item then
 		return
 	end
-	if item.kind == "description" then
-		M.add(issue, refresh)
-		return
-	end
 	if item.kind ~= "comment" then
 		return
 	end
@@ -96,7 +94,7 @@ function M.reply(issue, entry, refresh)
 	if not comments or not comments.add_comment then
 		return
 	end
-	local completion = get_completion()
+	local completion = get_completion(issue)
 	local mention = ""
 	if completion and completion.format_mention then
 		mention = completion.format_mention(comment.author) or ""
@@ -149,46 +147,6 @@ function M.edit(issue, entry, refresh)
 	if not item then
 		return
 	end
-	if item.kind == "description" then
-		local provider = detail.provider
-		local core = provider and provider.capabilities.core
-		if not core or not core.update_description then
-			return
-		end
-		---@type IssueDetails
-		local details = item.entity
-		local current = tostring(details.description or "")
-		md_editor.open({
-			key = "issue-description-edit-" .. tostring(issue.key),
-			title = " Edit Description ",
-			width_ratio = 0.5,
-			height_ratio = 0.18,
-			initial_text = current,
-			completion = get_completion(),
-			on_save = function(text)
-				local updated_description = text or ""
-				if updated_description == current then
-					notify.info("Description unchanged", { timeout = 1200 })
-					return
-				end
-				notify.loading("Updating description...")
-				---@cast issue IssueDetails
-				core.update_description(issue, updated_description, function(ok, err)
-					if not state.is_current(issue) then
-						return
-					end
-					if not ok then
-						notify.error("Description update failed: " .. tostring(err or "Unknown error"))
-						return
-					end
-					issue.description = updated_description
-					notify.success("Description updated", { timeout = 1200 })
-					refresh()
-				end)
-			end,
-		})
-		return
-	end
 	if item.kind ~= "comment" then
 		return
 	end
@@ -204,7 +162,7 @@ function M.edit(issue, entry, refresh)
 		width_ratio = 0.5,
 		height_ratio = 0.18,
 		initial_text = tostring(comment.body or ""),
-		completion = get_completion(),
+		completion = get_completion(issue),
 		on_save = function(text)
 			if not text or vim.trim(text) == "" then
 				return
@@ -238,10 +196,6 @@ end
 function M.delete(issue, entry, refresh)
 	local item = entry and entry.conversation_item or nil
 	if not item then
-		return
-	end
-	if item.kind == "description" then
-		notify.info("The issue description cannot be deleted", { timeout = 1200 })
 		return
 	end
 	if item.kind ~= "comment" then
@@ -281,7 +235,7 @@ end
 ---@param refresh fun()
 function M.react(issue, entry, refresh)
 	local item = entry and entry.conversation_item or nil
-	if not item or (item.kind ~= "comment" and item.kind ~= "description") then
+	if not item or item.kind ~= "comment" then
 		return
 	end
 	local comments = get_comments()
@@ -294,6 +248,7 @@ function M.react(issue, entry, refresh)
 		notify.warn("No reactions available for this provider")
 		return
 	end
+	---@type IssueComment
 	local target = item.entity
 	local choices = {}
 	for _, opt in ipairs(options) do

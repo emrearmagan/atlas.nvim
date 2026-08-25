@@ -28,8 +28,7 @@ end
 ---@param lnum integer
 ---@return boolean
 local function is_selectable(lnum)
-	local line_map = state.line_map or {}
-	local entry = line_map[lnum]
+	local entry = state.line_map[lnum]
 	if entry == nil then
 		return false
 	end

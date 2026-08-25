@@ -9,7 +9,7 @@ local ns = vim.api.nvim_create_namespace("atlas.ui")
 ---@param spans table[]
 local function apply_spans(buf, spans)
 	vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
-	for _, span in ipairs(spans or {}) do
+	for _, span in ipairs(spans) do
 		vim.api.nvim_buf_set_extmark(buf, ns, span.line, span.start_col, {
 			end_row = span.line,
 			end_col = span.end_col,
@@ -26,16 +26,14 @@ function M.render()
 	end
 
 	local width = vim.api.nvim_win_get_width(win)
-	local height = vim.api.nvim_win_get_height(win)
 	local lines, spans, line_map = require("atlas.issues.ui.dashboard.renderer").render({
 		width = width,
-		height = height,
 	})
 
-	ui_state.line_map = line_map or {}
+	ui_state.line_map = line_map
 
 	vim.api.nvim_set_option_value("modifiable", true, { buf = buf })
-	vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines or {})
+	vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
 	apply_spans(buf, spans)
 	vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
 end
@@ -56,7 +54,7 @@ local function open_detail(issue)
 	})
 end
 
----@param item table|nil
+---@param item { kind: string, _issue: Issue|nil }|nil
 function M.select(item)
 	local detail = require("atlas.issues.ui.detail")
 	if detail.is_open() and type(item) == "table" and item.kind == "issue" and type(item._issue) == "table" then
@@ -101,12 +99,12 @@ function M.init(provider, opts)
 	end
 	state.provider = provider
 	state.provider_views = provider.views()
+	state.current_view = nil
 
 	local notifications = require("atlas.ui.notifications")
 	notifications.set_provider(provider)
 	state.error = nil
-	state.issues = nil
-	state.issue_tree = nil
+	state.set_issues({})
 	state.collapsed_issue_keys = {}
 
 	local capabilities = provider.capabilities
@@ -115,14 +113,16 @@ function M.init(provider, opts)
 		ui.setup()
 	end
 
-	local views = require("atlas.ui.shared.bookmarks").views(provider.id, "issues", state.provider_views)
-	state.active_view = (opts and opts.initial_view) or views[1]
+	state.starred_items = require("atlas.core.starred").list("issues", provider.id) or {}
+	state.views =
+		require("atlas.ui.shared.bookmarks").views(provider.id, "issues", state.provider_views, state.starred_items)
+	state.active_view = (opts and opts.initial_view) or state.views[1]
 
 	statusline.clear_items()
 
 	local buf = dashboard_host.buf()
-	if buf ~= nil and vim.api.nvim_buf_is_valid(buf) then
-		keymaps.register(buf, views)
+	if buf ~= nil then
+		keymaps.register(buf, state.views)
 	end
 
 	if state.active_view == nil then

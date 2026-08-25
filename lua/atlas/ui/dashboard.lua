@@ -5,6 +5,19 @@ local events = require("atlas.core.events")
 local statusline = require("atlas.ui.statusline")
 local utils = require("atlas.ui.shared.utils")
 
+---@class AtlasDashboardState
+---@field win integer|nil
+---@field buf integer|nil
+---@field tab integer|nil
+---@field previous_win integer|nil
+---@field session_id string|nil
+---@field group integer|nil
+---@field domain AtlasDomain|nil
+---@field provider AtlasProviderId|nil
+---@field listed boolean
+---@field options table<string, boolean|string>|nil
+---@field closing boolean
+---@type AtlasDashboardState
 local state = {
 	win = nil,
 	buf = nil,
@@ -132,10 +145,6 @@ local function reset_ui_state()
 	ui_state.line_map = {}
 end
 
-local function close_detail()
-	require("atlas.ui.detail").close(state.tab)
-end
-
 ---@param session_id string
 ---@param reason string
 ---@param close_tab boolean
@@ -157,7 +166,7 @@ local function close_session(session_id, reason, close_tab)
 	local group = state.group
 	local previous_win = state.previous_win
 
-	close_detail()
+	require("atlas.ui.detail").close(state.tab)
 	dispose_domain()
 	reset_ui_state()
 	if state.buf and utils.buffer.valid(state.buf) then
@@ -198,7 +207,7 @@ local function setup_listed_buffer(session_id)
 		buffer = state.buf,
 		callback = function()
 			if state.session_id == session_id and not state.closing and vim.api.nvim_get_current_win() == state.win then
-				close_detail()
+				require("atlas.ui.detail").close(state.tab)
 				restore_options()
 			end
 		end,
@@ -283,7 +292,7 @@ function M.open(domain, provider)
 		end
 		create()
 	elseif state.domain then
-		close_detail()
+		require("atlas.ui.detail").close(state.tab)
 		dispose_domain()
 	end
 
@@ -304,10 +313,6 @@ function M.render()
 	if M.is_active() and state.domain then
 		require("atlas." .. state.domain).render()
 	end
-end
-
-function M.is_open()
-	return window() ~= nil
 end
 
 ---@param domain AtlasDomain|nil

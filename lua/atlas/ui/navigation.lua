@@ -23,11 +23,11 @@ end
 
 function M.current_item()
 	local win = require("atlas.ui.dashboard").win()
-	if win == nil or not vim.api.nvim_win_is_valid(win) then
+	if win == nil then
 		return nil
 	end
 	local line = vim.api.nvim_win_get_cursor(win)[1]
-	return (ui_state.line_map or {})[line]
+	return ui_state.line_map[line]
 end
 
 local function on_cursor_moved()
@@ -85,10 +85,10 @@ function M.move_cursor(direction)
 	local dashboard = require("atlas.ui.dashboard")
 	local win = dashboard.win()
 	local buf = dashboard.buf()
-	if win == nil or not vim.api.nvim_win_is_valid(win) then
+	if win == nil then
 		return
 	end
-	if buf == nil or not vim.api.nvim_buf_is_valid(buf) then
+	if buf == nil then
 		return
 	end
 
@@ -97,15 +97,13 @@ function M.move_cursor(direction)
 	local col = current[2]
 	local max_line = vim.api.nvim_buf_line_count(buf)
 	local step = direction == "up" and -1 or 1
-	local line_map = ui_state.line_map or {}
+	local line_map = ui_state.line_map
 
-	if is_selectable(line_map[line]) then
-		for lnum = line + step, (direction == "up" and 1 or max_line), step do
-			if is_selectable(line_map[lnum]) then
-				vim.api.nvim_win_set_cursor(win, { lnum, col })
-				on_cursor_moved()
-				return
-			end
+	for lnum = line + step, (direction == "up" and 1 or max_line), step do
+		if is_selectable(line_map[lnum]) then
+			vim.api.nvim_win_set_cursor(win, { lnum, col })
+			on_cursor_moved()
+			return
 		end
 	end
 
@@ -120,14 +118,14 @@ function M.focus_item(predicate)
 	local dashboard = require("atlas.ui.dashboard")
 	local win = dashboard.win()
 	local buf = dashboard.buf()
-	if win == nil or not vim.api.nvim_win_is_valid(win) then
+	if win == nil then
 		return false
 	end
-	if buf == nil or not vim.api.nvim_buf_is_valid(buf) then
+	if buf == nil then
 		return false
 	end
 
-	local line_map = ui_state.line_map or {}
+	local line_map = ui_state.line_map
 	for lnum = 1, vim.api.nvim_buf_line_count(buf) do
 		local item = line_map[lnum]
 		if is_selectable(item) and predicate(item) then
@@ -149,14 +147,14 @@ function M.focus_last_item()
 	local dashboard = require("atlas.ui.dashboard")
 	local win = dashboard.win()
 	local buf = dashboard.buf()
-	if win == nil or not vim.api.nvim_win_is_valid(win) then
+	if win == nil then
 		return
 	end
-	if buf == nil or not vim.api.nvim_buf_is_valid(buf) then
+	if buf == nil then
 		return
 	end
 
-	local line_map = ui_state.line_map or {}
+	local line_map = ui_state.line_map
 	local max_line = vim.api.nvim_buf_line_count(buf)
 	for lnum = max_line, 1, -1 do
 		if is_selectable(line_map[lnum]) then

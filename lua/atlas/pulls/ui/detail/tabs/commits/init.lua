@@ -192,9 +192,10 @@ function M.on_select(pr, refresh, opts)
 end
 
 ---@param _pr PullRequest
+---@param _details PullRequestDetails|nil
 ---@param width integer
 ---@return string[], table[], table<integer, table>|nil
-function M.render(_pr, width)
+function M.render(_pr, _details, width)
 	local lines = {}
 	local spans = {}
 	local line_map = {}
@@ -236,7 +237,7 @@ function M.render(_pr, width)
 		end,
 		content_hl = function(item, row, _)
 			local out = { { start_col = 0, end_col = #row, hl_group = "AtlasTextMuted" } }
-			local pipeline_state = type(item.meta) == "table" and tostring(item.meta.pipeline_state or "") or ""
+			local pipeline_state = item.meta and tostring(item.meta.pipeline_state or "") or ""
 
 			if pipeline_state ~= "" and pipeline_state ~= "unknown" and pipeline_state ~= "loading" then
 				local marker = icons.pulls_status(pipeline_state) .. " " .. status_label(pipeline_state)

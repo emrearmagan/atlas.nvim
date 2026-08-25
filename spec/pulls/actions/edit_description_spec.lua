@@ -25,13 +25,14 @@ local function context(overrides)
 			name = "test",
 			capabilities = { core = {} },
 		},
-		pr = { id = 7, description = "cached body" },
+		pr = { id = 7 },
+		details = { description = "cached body" },
 		notify = function(level, message)
 			table.insert(notifications, { level = level, message = message })
 		end,
 	}
 	ctx.provider.capabilities.core.fetch_description = function(_, _, on_done)
-		on_done(ctx.pr.description, nil)
+		on_done(ctx.details.description, nil)
 	end
 	for key, value in pairs(overrides or {}) do
 		ctx[key] = value
@@ -113,7 +114,7 @@ describe("pulls.actions.edit_description", function()
 		opened[1].on_save("new body")
 
 		assert.equal("new body", saved)
-		assert.equal("new body", ctx.pr.description)
+		assert.equal("new body", ctx.details.description)
 		assert.is_true(result.changed_pr)
 	end)
 
@@ -129,7 +130,7 @@ describe("pulls.actions.edit_description", function()
 		opened[1].on_save("")
 
 		assert.equal("", saved)
-		assert.equal("", ctx.pr.description)
+		assert.equal("", ctx.details.description)
 	end)
 
 	it("skips the request when the text is unchanged", function()
@@ -164,7 +165,7 @@ describe("pulls.actions.edit_description", function()
 
 		assert.is_nil(result)
 		assert.equal("rejected", err)
-		assert.equal("cached body", ctx.pr.description)
+		assert.equal("cached body", ctx.details.description)
 		assert.equal("error", notifications[#notifications].level)
 	end)
 

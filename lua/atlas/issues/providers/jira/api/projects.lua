@@ -4,6 +4,14 @@ local service = require("atlas.issues.providers.jira.api.service")
 local normalizer = require("atlas.issues.providers.jira.api.mapper")
 local config = require("atlas.issues.providers.jira.api.config")
 
+---@param value string
+---@return string
+local function url_encode(value)
+	return (value:gsub("([^%w%-_.~])", function(char)
+		return string.format("%%%02X", string.byte(char))
+	end))
+end
+
 ---@class JiraProjectGroup
 ---@field category table|nil
 ---@field projects JiraIssueProject[]
@@ -16,7 +24,7 @@ function M.get_projects(opts, callback)
 	local max_results = math.max(1, tonumber(opts.maxResults) or 20)
 	local total_pages = math.max(1, tonumber(opts.total) or 1)
 	local status = tostring(opts.status or "live")
-	local query = type(opts.query) == "string" and opts.query or ""
+	local query = opts.query or ""
 
 	local projects = {}
 	local pages_loaded = 0
@@ -65,15 +73,10 @@ function M.get_projects(opts, callback)
 		if is_server then
 			endpoint = path
 		else
-			endpoint = string.format(
-				"%s?maxResults=%d&startAt=%d&status=%s",
-				path,
-				max_results,
-				start_at,
-				vim.fn.escape(status, "&=?")
-			)
+			endpoint =
+				string.format("%s?maxResults=%d&startAt=%d&status=%s", path, max_results, start_at, url_encode(status))
 			if query ~= "" then
-				endpoint = endpoint .. "&query=" .. vim.fn.escape(query, "&=?")
+				endpoint = endpoint .. "&query=" .. url_encode(query)
 			end
 		end
 

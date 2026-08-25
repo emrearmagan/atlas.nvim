@@ -41,7 +41,7 @@ function M.open(value)
 	notify.info("Fetching pull requests for " .. repo_full_name .. "...", { vim_notify = true })
 	request = provider.capabilities.core.fetch_pullrequests(view, {
 		force_load = true,
-		state = "open",
+		states = { "open" },
 	}, function(pulls, errors)
 		request = nil
 		if errors and #errors > 0 then
@@ -70,22 +70,20 @@ function M.open(value)
 				return string.format("#%s %s", tostring(pr.id), pr.title)
 			end,
 			preview_item = function(pr, done)
-				return provider.capabilities.core.fetch_pullrequest(pr, { force_load = false }, function(detail, err)
+				return provider.capabilities.core.fetch_pullrequest(pr, { force_load = false }, function(details, err)
 					if err then
 						done({ title = "#" .. tostring(pr.id), lines = { err } })
 						return
 					end
-					local current = detail or pr
-					local author = current.author.username ~= "" and "@" .. current.author.username
-						or current.author.name
-					local status = current.state .. "   updated " .. ui_utils.relative_time(current.updated_on)
-					if current.lines_added ~= nil and current.lines_removed ~= nil then
-						status = status .. string.format("   +%d -%d", current.lines_added, current.lines_removed)
+					local author = pr.author.username ~= "" and "@" .. pr.author.username or pr.author.name
+					local status = pr.state .. "   updated " .. ui_utils.relative_time(pr.updated_on)
+					if pr.lines_added ~= nil and pr.lines_removed ~= nil then
+						status = status .. string.format("   +%d -%d", pr.lines_added, pr.lines_removed)
 					end
-					local description = ui_utils.strip_markup(current.description)
+					local description = ui_utils.strip_markup(details and details.description or "")
 					local lines = {
 						author,
-						current.source.branch .. " → " .. current.destination.branch,
+						pr.source.branch .. " → " .. pr.destination.branch,
 						status,
 						"",
 					}
@@ -105,7 +103,7 @@ function M.open(value)
 				end
 				require("atlas.pulls.diff").open_pr({
 					provider = provider,
-					pr = pr,
+					ref = pr,
 					current_user = nil,
 					root = root,
 				}, function(err)

@@ -3,13 +3,14 @@ local M = {}
 local dashboard_host = require("atlas.ui.dashboard")
 local ui_state = require("atlas.ui.state")
 local statusline = require("atlas.ui.statusline")
+local starred = require("atlas.core.starred")
 local ns = vim.api.nvim_create_namespace("atlas.ui")
 
 ---@param buf integer
 ---@param spans table[]
 local function apply_spans(buf, spans)
 	vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
-	for _, span in ipairs(spans or {}) do
+	for _, span in ipairs(spans) do
 		vim.api.nvim_buf_set_extmark(buf, ns, span.line, span.start_col, {
 			end_row = span.line,
 			end_col = span.end_col,
@@ -32,10 +33,10 @@ function M.render()
 		height = height,
 	})
 
-	ui_state.line_map = line_map or {}
+	ui_state.line_map = line_map
 
 	vim.api.nvim_set_option_value("modifiable", true, { buf = buf })
-	vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines or {})
+	vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
 	apply_spans(buf, spans)
 	vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
 end
@@ -45,7 +46,7 @@ local function open_detail(pr)
 	local state = require("atlas.pulls.state")
 	require("atlas.pulls.ui.detail").open(pr, {
 		provider = state.provider,
-		on_update = require("atlas.pulls.ui.dashboard.controller").apply_action_result,
+		on_update = require("atlas.pulls.ui.dashboard.controller").refresh_pr,
 	})
 end
 
@@ -106,6 +107,13 @@ function M.init(provider, opts)
 	end
 	state.provider = provider
 	state.provider_views = provider.views()
+	state.is_loading = false
+	state.error = nil
+	state.pulls = {}
+	state.current_view = nil
+	state.reloading_pr_keys = {}
+	state.reload_spinner_frame = "⠋"
+	state.starred_items = starred.list("pulls", provider.id) or {}
 
 	local notifications = require("atlas.ui.notifications")
 	notifications.set_provider(provider)
@@ -116,14 +124,21 @@ function M.init(provider, opts)
 		ui.setup()
 	end
 
-	local views = require("atlas.ui.shared.bookmarks").views(provider.id, "pulls", state.provider_views)
-	state.active_view = (opts and opts.initial_view) or views[1]
+	state.views =
+		require("atlas.ui.shared.bookmarks").views(provider.id, "pulls", state.provider_views, state.starred_items)
+	state.active_view = (opts and opts.initial_view) or state.views[1]
 
 	statusline.clear_items()
 
 	local buf = dashboard_host.buf()
-	if buf ~= nil and vim.api.nvim_buf_is_valid(buf) then
-		keymaps.register(buf, views)
+	if buf ~= nil then
+		keymaps.register(buf, state.views)
+	end
+
+	if state.active_view == nil then
+		state.error = "No pull request view configured"
+		M.render()
+		return
 	end
 
 	M.render()

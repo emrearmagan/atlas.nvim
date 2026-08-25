@@ -26,7 +26,7 @@ local function author_completion()
 	local provider = detail.provider
 	local comments_capability = provider and provider.capabilities.comments
 	local data = state.data
-	local pr = detail.current_details
+	local pr = detail.current_pr
 	if not provider or not pr or not data or not comments_capability or not comments_capability.comment_completion then
 		return nil
 	end
@@ -34,6 +34,7 @@ local function author_completion()
 	local conversation = require("atlas.pulls.ui.detail.tabs.conversation.state").comments(false)
 	return comments_capability.comment_completion({
 		pr = pr,
+		details = detail.current_details,
 		comments = data.comments,
 		tasks = data.tasks,
 		reviewers = type(reviewers) == "table" and reviewers or nil,
@@ -167,10 +168,11 @@ function M.on_select(pr, refresh, opts)
 	end)
 end
 
----@param _pr PullRequestDetails
+---@param _pr PullRequest
+---@param _details PullRequestDetails|nil
 ---@param width integer
 ---@return string[], table[], table<integer, table>|nil
-function M.render(_pr, width)
+function M.render(_pr, _details, width)
 	local completion = author_completion()
 	if completion and completion.resolve_items then
 		completion.resolve_items()
@@ -296,7 +298,7 @@ local function run_comment_action(action, pr, entry, refresh)
 						if on_update then
 							on_update(pr, result)
 						else
-							require("atlas.pulls.ui.detail").select(pr, { force_refresh = true })
+							require("atlas.pulls.ui.detail").refresh()
 						end
 					elseif is_current(pr) then
 						refresh()
@@ -359,7 +361,7 @@ function M.add_task(pr, refresh)
 	local parent = nil
 	if win and vim.api.nvim_win_is_valid(win) then
 		local lnum = vim.api.nvim_win_get_cursor(win)[1]
-		local ent = (detail.line_map or {})[lnum]
+		local ent = detail.line_map[lnum]
 		if ent and ent.comment and not ent.comment.is_task then
 			parent = ent.comment
 		end

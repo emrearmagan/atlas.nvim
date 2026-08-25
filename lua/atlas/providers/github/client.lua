@@ -27,32 +27,37 @@ local function sanitize_error(err)
 	return (err:gsub("\n", " "):gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", ""))
 end
 
-function M.github_config()
-	return config.provider_options("github") or {}
-end
-
 function M.cache_ttl()
-	return tonumber(M.github_config().cache_ttl) or DEFAULT_CACHE_TTL
+	local options = config.provider_options("github") or {}
+	return tonumber(options.cache_ttl) or DEFAULT_CACHE_TTL
 end
 
 function M.get_cache(key)
+	if M.cache_ttl() <= 0 then
+		return nil
+	end
 	return get_cached(cache, key)
 end
 
 function M.set_cache(key, value, ttl)
+	if M.cache_ttl() <= 0 then
+		return
+	end
 	cache.set(key, value, ttl or M.cache_ttl())
 end
 
-function M.delete_cache(key)
-	cache.delete(key)
-end
-
 function M.get_mem(key)
+	if M.cache_ttl() <= 0 then
+		return nil
+	end
 	return get_cached(memory, key)
 end
 
 function M.set_mem(key, value, ttl)
-	memory.set(key, value, ttl)
+	if M.cache_ttl() <= 0 then
+		return
+	end
+	memory.set(key, value, ttl or M.cache_ttl())
 end
 
 function M.delete_mem(key)

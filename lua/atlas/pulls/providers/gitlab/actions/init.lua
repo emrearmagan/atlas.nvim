@@ -13,16 +13,10 @@ local core_notify = require("atlas.core.notify")
 M.items = registry.items
 
 ---@param id AtlasGitLabActionId
----@return AtlasPullAction|nil
-local function find(id)
-	return registry.find(id)
-end
-
----@param id AtlasGitLabActionId
 ---@param ctx AtlasPullActionContext
 ---@return boolean
 function M.is_available(id, ctx)
-	local action = find(id)
+	local action = registry.find(id)
 	return action ~= nil and (action.is_available == nil or action.is_available(ctx) == true)
 end
 
@@ -31,7 +25,7 @@ end
 ---@param on_done fun(result: PullsActionResult|nil, err: string|nil)
 ---@return boolean handled
 function M.run(id, ctx, on_done)
-	local action = find(id)
+	local action = registry.find(id)
 	if action == nil then
 		local err = string.format("Unknown action: %s", tostring(id))
 		logger.logerror("gitlab.pulls.action.unknown", { action_id = tostring(id) })

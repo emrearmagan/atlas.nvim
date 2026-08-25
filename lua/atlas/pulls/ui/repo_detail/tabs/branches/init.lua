@@ -40,7 +40,7 @@ local function cursor_entry()
 		return nil
 	end
 	local lnum = vim.api.nvim_win_get_cursor(win)[1]
-	return (detail.line_map or {})[lnum]
+	return detail.line_map[lnum]
 end
 
 ---@param repo PullsRepo|nil
@@ -231,7 +231,7 @@ function M.delete_current_branch(refresh)
 	local entry = cursor_entry()
 	local branch = entry and entry.item and entry.item.obj and entry.item.obj.branch
 	local repo = state.repo
-	if type(repo) ~= "table" or type(branch) ~= "table" then
+	if repo == nil or branch == nil then
 		notify.warn("No branch selected")
 		return
 	end

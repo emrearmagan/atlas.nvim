@@ -36,12 +36,15 @@ describe("GitHub issue mapping", function()
 		}
 	end
 
-	it("keeps the GitHub issue identity on details", function()
-		local issue = issue_mapper.to_issue_details(issue_raw())
+	it("maps only supplemental issue details", function()
+		local details = issue_mapper.to_issue_details(vim.tbl_extend("force", issue_raw(), {
+			body = "Description",
+		}))
 
-		assert.equal("owner/repo", issue.repo_full_name)
-		assert.equal(42, issue.number)
-		assert.equal("I_1", issue.node_id)
+		assert.equal("Description", details.description)
+		assert.is_nil(details.repo_full_name)
+		assert.is_nil(details.number)
+		assert.is_nil(details.node_id)
 	end)
 
 	it("maps GitHub milestone progress and sub-issues", function()
@@ -54,13 +57,13 @@ describe("GitHub issue mapping", function()
 		}
 		raw.subIssues = { nodes = { vim.tbl_extend("force", issue_raw(), { id = "I_2", number = 43 }) } }
 
-		local issue = issue_mapper.to_issue_details(raw)
+		local details = issue_mapper.to_issue_details(raw)
 
-		assert.equal(50, issue.milestone.progress_percentage)
-		assert.equal(1, issue.milestone.open_issues)
-		assert.equal(1, issue.milestone.closed_issues)
-		assert.equal("owner/repo#43", issue.sub_issues[1].key)
-		assert.equal(43, issue.sub_issues[1].number)
+		assert.equal(50, details.milestone.progress_percentage)
+		assert.equal(1, details.milestone.open_issues)
+		assert.equal(1, details.milestone.closed_issues)
+		assert.equal("owner/repo#43", details.sub_issues[1].key)
+		assert.equal(43, details.sub_issues[1].number)
 	end)
 end)
 
@@ -96,16 +99,13 @@ describe("GitHub Git remote mapping", function()
 end)
 
 describe("GitHub pull request details", function()
-	it("keeps GitHub metadata and reactions on the detail type", function()
+	it("maps only supplemental pull request fields", function()
 		local raw = base_raw()
-		raw.id = "PR_42"
-		raw.reactionGroups = { { content = "THUMBS_UP", reactors = { totalCount = 2 } } }
 
-		local pr = normalizer.to_pull_request_details(raw)
+		local details = normalizer.to_pull_request_details(raw)
 
-		assert.equal("PR_42", pr.node_id)
-		assert.equal(2, pr.reactions["+1"])
-		assert.equal("Description", pr.description)
+		assert.equal("Description", details.description)
+		assert.is_nil(rawget(details, "id"))
 	end)
 end)
 

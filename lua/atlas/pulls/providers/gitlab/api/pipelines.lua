@@ -1,25 +1,63 @@
 local M = {}
 
+local json = require("atlas.core.json")
+local pipeline_utils = require("atlas.pulls.pipelines")
 local service = require("atlas.providers.gitlab.client")
 
----@param pr PullRequest
----@return string project_path, integer|nil iid
-local function project_iid(pr)
-	return pr.repo_full_name, tonumber(pr.id)
-end
+local PIPELINE_STATES = {
+	SUCCESS = "SUCCESSFUL",
+	FAILED = "FAILED",
+	CANCELED = "STOPPED",
+	SKIPPED = "STOPPED",
+	MANUAL = "STOPPED",
+	CREATED = "INPROGRESS",
+	WAITING_FOR_RESOURCE = "INPROGRESS",
+	PREPARING = "INPROGRESS",
+	PENDING = "INPROGRESS",
+	RUNNING = "INPROGRESS",
+	SCHEDULED = "INPROGRESS",
+	CANCELING = "INPROGRESS",
+}
+
+local PIPELINES_QUERY = [[
+query($path:ID!,$iid:String!){
+  project(fullPath:$path){
+    mergeRequest(iid:$iid){
+      head_pipeline:headPipeline{
+        id
+        status
+        path
+        totalJobs
+        stages(first:100){
+          nodes{
+            name
+            status
+          }
+        }
+      }
+    }
+  }
+}
+]]
 
 ---@param status string|nil
----@return "SUCCESSFUL"|"FAILED"|"INPROGRESS"|"STOPPED"
-local function map_state(status)
-	local value = tostring(status or ""):lower()
-	if value == "success" then
-		return "SUCCESSFUL"
-	elseif value == "failed" then
-		return "FAILED"
-	elseif value == "canceled" or value == "skipped" then
-		return "STOPPED"
+---@return PullsPipelineState
+function M.to_pipeline_state(status)
+	return PIPELINE_STATES[tostring(status or ""):upper()] or "UNKNOWN"
+end
+
+---@param path any
+---@return string|nil
+local function web_url(path)
+	local value = json.safe_str(path)
+	if value == nil or value == "" then
+		return nil
 	end
-	return "INPROGRESS"
+	if value:match("^https?://") then
+		return value
+	end
+	local origin = service.base_url():match("^(https?://[^/]+)") or service.base_url()
+	return origin .. (value:sub(1, 1) == "/" and value or ("/" .. value))
 end
 
 ---@param pr PullRequest
@@ -28,7 +66,8 @@ end
 ---@return { cancel: fun() }|nil
 function M.fetch(pr, opts, on_done)
 	opts = opts or {}
-	local path, iid = project_iid(pr)
+	local path = pr.repo_full_name
+	local iid = tonumber(pr.id)
 	if path == "" or iid == nil then
 		vim.schedule(function()
 			on_done(nil, "Invalid MR identifier")
@@ -45,105 +84,143 @@ function M.fetch(pr, opts, on_done)
 		end
 	end
 
-	local cancelled = false
-	local handles = {}
-	local function track(handle)
-		if handle then
-			table.insert(handles, handle)
-		end
-	end
-
-	local project = service.url_encode(path)
-	local endpoint = string.format("/projects/%s/merge_requests/%d/pipelines?per_page=100", project, iid)
-	track(service.request("GET", endpoint, nil, function(result, err)
-		if cancelled then
-			return
-		end
+	return service.graphql(PIPELINES_QUERY, { path = path, iid = tostring(iid) }, function(result, err)
 		if err then
 			on_done(nil, err)
 			return
 		end
 
-		local pipelines = {}
-		for _, item in ipairs(result) do
-			local id = item.id
-			table.insert(pipelines, {
-				name = string.format("Pipeline #%s", tostring(id or "")),
-				state = map_state(item.status),
-				provider_state = tostring(item.status or ""),
-				url = type(item.web_url) == "string" and item.web_url or nil,
-				key = id and tostring(id) or nil,
-				provider_id = id and tostring(id) or nil,
-				commit_hash = tostring(item.sha or ""),
-				jobs = {},
-			})
-		end
-
-		if #pipelines == 0 then
-			service.set_memory_cache(cache_key, pipelines)
-			on_done(pipelines, nil)
+		local project = json.safe_table(result).project
+		local merge_request = json.nilify(json.safe_table(project).mergeRequest)
+		if merge_request == nil then
+			on_done(nil, "Merge request not found")
 			return
 		end
 
-		local pending = #pipelines
-		local first_err
-		local function finish()
-			if cancelled then
-				return
+		local pipelines = {}
+		local item = json.nilify(merge_request.head_pipeline)
+		if item then
+			local id = (json.safe_str(item.id) or ""):match("/(%d+)$")
+			local stages = {}
+			for _, raw_stage in ipairs(json.safe_table(json.safe_table(item.stages).nodes)) do
+				local stage = json.safe_table(raw_stage)
+				table.insert(stages, {
+					name = json.safe_str(stage.name) or "Stage",
+					state = M.to_pipeline_state(stage.status),
+					jobs = {},
+				})
 			end
-			pending = pending - 1
-			if pending > 0 then
-				return
-			end
-			if first_err then
-				on_done(nil, first_err)
-				return
-			end
-			service.set_memory_cache(cache_key, pipelines)
-			on_done(pipelines, nil)
+			table.insert(pipelines, {
+				name = string.format("Pipeline #%s", tostring(id or "")),
+				state = M.to_pipeline_state(item.status),
+				provider_state = json.safe_str(item.status) or "",
+				url = web_url(item.path),
+				id = tostring(id or ""),
+				job_count = tonumber(json.nilify(item.totalJobs)),
+				stages = stages,
+			})
 		end
 
-		for _, pipeline in ipairs(pipelines) do
-			local pipeline_id = tonumber(pipeline.provider_id)
-			if not pipeline_id then
-				finish()
-			else
-				local jobs_endpoint = string.format("/projects/%s/pipelines/%d/jobs?per_page=100", project, pipeline_id)
-				track(service.request("GET", jobs_endpoint, nil, function(jobs, jobs_err)
-					if cancelled then
-						return
-					end
-					if jobs_err then
-						first_err = first_err or tostring(jobs_err)
-					else
-						for _, job in ipairs(jobs) do
-							table.insert(pipeline.jobs, {
-								id = job.id or "",
-								name = tostring(job.name or "Job"),
-								state = map_state(job.status),
-								provider_state = tostring(job.status or ""),
-								url = type(job.web_url) == "string" and job.web_url or nil,
-								stage = type(job.stage) == "string" and job.stage or nil,
-								started_at = job.started_at,
-								completed_at = job.finished_at,
-								duration = tonumber(job.duration),
-							})
-						end
-					end
-					finish()
-				end))
-			end
-		end
-	end))
+		service.set_memory_cache(cache_key, pipelines)
+		on_done(pipelines, nil)
+	end, { action = "Fetch MR pipelines", project_path = path, iid = iid })
+end
 
-	return {
-		cancel = function()
-			cancelled = true
-			for _, handle in ipairs(handles) do
-				handle.cancel()
-			end
-		end,
+---@param pipeline PullsPipeline
+---@param job_details { stage_name: string, job: PullsPipelineJob }[]
+---@return PullsPipeline
+local function with_job_details(pipeline, job_details)
+	local detailed = {
+		id = pipeline.id,
+		name = pipeline.name,
+		state = pipeline.state,
+		provider_state = pipeline.provider_state,
+		url = pipeline.url,
+		job_count = pipeline.job_count,
+		stages = {},
 	}
+	local stages_by_name = {}
+	for _, stage in ipairs(pipeline.stages) do
+		local copied_stage = {
+			name = stage.name or "Stage",
+			state = stage.state,
+			jobs = {},
+		}
+		table.insert(detailed.stages, copied_stage)
+		stages_by_name[copied_stage.name] = copied_stage
+	end
+
+	local synthesized_stages = {}
+	for _, detail in ipairs(job_details) do
+		local stage_name = detail.stage_name ~= "" and detail.stage_name or "Unknown stage"
+		local stage = stages_by_name[stage_name]
+		if stage == nil then
+			stage = {
+				name = stage_name,
+				state = "UNKNOWN",
+				jobs = {},
+			}
+			stages_by_name[stage_name] = stage
+			table.insert(detailed.stages, stage)
+			synthesized_stages[stage] = true
+		end
+		local job = detail.job
+		table.insert(stage.jobs, {
+			id = job.id,
+			name = job.name,
+			state = job.state,
+			provider_state = job.provider_state,
+			url = job.url,
+			started_at = job.started_at,
+			duration = job.duration,
+		})
+	end
+
+	for stage in pairs(synthesized_stages) do
+		stage.state = pipeline_utils.aggregate_state(stage.jobs)
+	end
+	return detailed
+end
+
+---@param pr PullRequest
+---@param pipeline PullsPipeline
+---@param _opts { force_refresh: boolean|nil }|nil
+---@param on_done fun(pipeline: PullsPipeline|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_details(pr, pipeline, _opts, on_done)
+	local path = tostring(pr.repo_full_name or "")
+	local pipeline_id = tonumber(pipeline.id)
+	if path == "" or pipeline_id == nil then
+		on_done(nil, path == "" and "Missing project" or "Missing pipeline ID")
+		return nil
+	end
+
+	local endpoint = string.format("/projects/%s/pipelines/%d/jobs?per_page=100", service.url_encode(path), pipeline_id)
+	return service.request("GET", endpoint, nil, function(result, err)
+		if err then
+			on_done(nil, err)
+			return
+		end
+
+		local job_details = {}
+		for _, raw_job_value in ipairs(json.safe_table(result)) do
+			local raw_job = json.safe_table(raw_job_value)
+			table.insert(job_details, {
+				stage_name = json.safe_str(raw_job.stage) or "Unknown stage",
+				job = {
+					id = json.safe_str(raw_job.id) or "",
+					name = json.safe_str(raw_job.name) or "Job",
+					state = M.to_pipeline_state(raw_job.status),
+					provider_state = json.safe_str(raw_job.status) or "",
+					url = web_url(raw_job.web_url),
+					started_at = json.safe_str(raw_job.started_at),
+					duration = tonumber(json.nilify(raw_job.duration)),
+				},
+			})
+		end
+
+		on_done(with_job_details(pipeline, job_details), nil)
+	end, { action = "Fetch pipeline details", project = path, pipeline_id = pipeline_id })
 end
 
 ---@param pr PullRequest
@@ -196,7 +273,7 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.retry(pr, pipeline, on_done)
-	local id = tonumber(pipeline.provider_id)
+	local id = tonumber(pipeline.id)
 	if not id then
 		on_done(false, "Missing pipeline ID")
 		return nil
@@ -209,7 +286,7 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.cancel(pr, pipeline, on_done)
-	local id = tonumber(pipeline.provider_id)
+	local id = tonumber(pipeline.id)
 	if not id then
 		on_done(false, "Missing pipeline ID")
 		return nil

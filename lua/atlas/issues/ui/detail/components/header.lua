@@ -4,13 +4,6 @@ local icons = require("atlas.ui.shared.icons")
 local table_tree = require("atlas.ui.components.table_tree")
 local helper = require("atlas.issues.ui.presentation")
 
-local function text_or(v, fallback)
-	if type(v) == "string" and v ~= "" then
-		return v
-	end
-	return fallback
-end
-
 ---@param text string
 ---@param hl string|table[]|nil
 ---@return table[]|nil
@@ -29,9 +22,9 @@ end
 ---@param fields IssuesDetailHeaderField[]|nil
 ---@return string[], table[]
 function M.render(issue, width, fields)
-	local issue_type = type(issue.type) == "table" and issue.type.name or "Issue"
-	local key = text_or(issue.key, "")
-	local title = text_or(issue.title, "")
+	local issue_type = issue.type and issue.type.name or "Issue"
+	local key = issue.key
+	local title = issue.title
 
 	local type_icon, type_icon_hl = icons.issues_type(issue_type)
 	if type_icon == "" then
@@ -100,8 +93,8 @@ function M.render(issue, width, fields)
 				return nil
 			end,
 		})
-		table_lines = rendered_lines or {}
-		table_spans = rendered_spans or {}
+		table_lines = rendered_lines
+		table_spans = rendered_spans
 	end
 
 	local lines = { type_key_line, title_line, "" }

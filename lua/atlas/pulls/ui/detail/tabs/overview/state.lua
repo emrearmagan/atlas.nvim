@@ -32,7 +32,7 @@ end
 ---@param pipeline PullsPipeline
 ---@return boolean
 function M.toggle_pipeline(pipeline)
-	if type(pipeline.jobs) ~= "table" or #pipeline.jobs == 0 then
+	if #pipeline.stages == 0 then
 		return false
 	end
 	M.collapsed_pipelines[pipeline] = M.is_pipeline_expanded(pipeline) and true or nil

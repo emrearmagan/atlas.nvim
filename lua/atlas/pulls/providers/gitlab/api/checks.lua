@@ -1,18 +1,39 @@
 local M = {}
 
-local providers = require("atlas.pulls.providers")
-local pipelines_api = require("atlas.pulls.providers.gitlab.api.pipelines")
-local pullrequests_api = require("atlas.pulls.providers.gitlab.api.pullrequests")
+local json = require("atlas.core.json")
+local pipelines = require("atlas.pulls.pipelines")
+local gitlab_pipelines = require("atlas.pulls.providers.gitlab.api.pipelines")
+local service = require("atlas.providers.gitlab.client")
 
----@param pr GitLabPullRequest
----@param draft boolean
+local MERGE_CHECKS_QUERY = [[
+query($path:ID!,$iid:String!){
+  project(fullPath:$path){
+    mergeRequest(iid:$iid){
+      draft
+      detailed_merge_status:detailedMergeStatus
+      blocking_discussions_resolved:mergeableDiscussionsState
+      has_conflicts:conflicts
+      head_pipeline:headPipeline{status}
+    }
+  }
+}
+]]
+
+---@class GitLabMergeCheckState
+---@field draft boolean
+---@field detailed_merge_status string|nil
+---@field blocking_discussions_resolved boolean|nil
+---@field has_conflicts boolean
+---@field head_pipeline_status string|nil
+
+---@param state GitLabMergeCheckState
 ---@return PullsMergeCheck[]
-local function parse_merge_checks(pr, draft)
+local function parse_merge_checks(state)
 	local checks = {}
-	local dms = tostring(pr.detailed_merge_status or ""):lower()
-	local has_conflicts = pr.has_conflicts == true
+	local dms = tostring(state.detailed_merge_status or ""):lower()
+	local has_conflicts = state.has_conflicts == true
 
-	if draft then
+	if state.draft then
 		table.insert(checks, {
 			key = "draft",
 			state = "warning",
@@ -36,7 +57,7 @@ local function parse_merge_checks(pr, draft)
 		})
 	end
 
-	if pr.blocking_discussions_resolved == false or dms == "discussions_not_resolved" then
+	if state.blocking_discussions_resolved == false or dms == "discussions_not_resolved" then
 		table.insert(checks, {
 			key = "discussions",
 			state = "failed",
@@ -109,7 +130,15 @@ local function parse_merge_checks(pr, draft)
 		})
 	end
 
-	if dms == "ci_must_pass" or dms == "ci_still_running" then
+	local pipeline_status = state.head_pipeline_status
+	if pipeline_status ~= nil and pipeline_status ~= "" then
+		local pipeline_check = pipelines.to_merge_check({
+			{ state = gitlab_pipelines.to_pipeline_state(pipeline_status) },
+		}, "Pipelines")
+		if pipeline_check then
+			table.insert(checks, pipeline_check)
+		end
+	elseif dms == "ci_must_pass" or dms == "ci_still_running" then
 		table.insert(checks, {
 			key = "ci",
 			state = dms == "ci_still_running" and "inprogress" or "warning",
@@ -126,62 +155,51 @@ end
 ---@param on_done fun(checks: PullsMergeCheck[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch(pr, opts, on_done)
-	opts = opts or {}
-	local pending = 2
-	local mr, pipelines_result
-	local first_err
-
-	local function finish()
-		pending = pending - 1
-		if pending > 0 then
-			return
-		end
-		if mr == nil and pipelines_result == nil then
-			on_done(nil, first_err or "Failed to fetch merge checks")
-			return
-		end
-		local current = mr or pr
-		---@cast current GitLabPullRequest
-		local checks = parse_merge_checks(current, current.state == "draft")
-		local bc = providers.pipelines_check(pipelines_result, "Pipelines")
-		if bc then
-			table.insert(checks, bc)
-		end
-		on_done(checks, nil)
+	local path = tostring(pr.repo_full_name or "")
+	local iid = tonumber(pr.id)
+	if path == "" or iid == nil then
+		on_done(nil, "Invalid MR identifier")
+		return nil
 	end
 
-	local h_mr = pullrequests_api.fetch_pullrequest(
-		pr,
-		{ force_refresh = opts.force_refresh == true },
-		function(fresh, err)
-			if err then
-				first_err = first_err or err
-			elseif fresh then
-				mr = fresh
-			end
-			finish()
+	local cache_key = string.format("gitlab_pulls:merge-checks:%s!%d", path, iid)
+	if not (opts or {}).force_refresh then
+		local cached, ok = service.get_memory_cache(cache_key)
+		if ok then
+			on_done(cached, nil)
+			return nil
 		end
-	)
+	end
 
-	local h_pipelines = pipelines_api.fetch(pr, opts, function(result, err)
+	return service.graphql(MERGE_CHECKS_QUERY, { path = path, iid = tostring(iid) }, function(result, err)
 		if err then
-			first_err = first_err or err
-		else
-			pipelines_result = result
+			on_done(nil, err)
+			return
 		end
-		finish()
-	end)
 
-	return {
-		cancel = function()
-			if h_mr and h_mr.cancel then
-				h_mr.cancel()
-			end
-			if h_pipelines and h_pipelines.cancel then
-				h_pipelines.cancel()
-			end
-		end,
-	}
+		local project = json.safe_table(result).project
+		local raw = json.nilify(json.safe_table(project).mergeRequest)
+		if raw == nil then
+			on_done(nil, "Merge request not found")
+			return
+		end
+
+		local discussions_resolved = json.nilify(raw.blocking_discussions_resolved)
+		local head_pipeline = json.nilify(raw.head_pipeline)
+		local checks = parse_merge_checks({
+			draft = raw.draft == true,
+			detailed_merge_status = json.safe_str(raw.detailed_merge_status),
+			blocking_discussions_resolved = discussions_resolved,
+			has_conflicts = raw.has_conflicts == true,
+			head_pipeline_status = head_pipeline and json.safe_str(head_pipeline.status) or nil,
+		})
+		service.set_memory_cache(cache_key, checks)
+		on_done(checks, nil)
+	end, {
+		action = "Fetch MR merge state",
+		project_path = path,
+		iid = iid,
+	})
 end
 
 return M

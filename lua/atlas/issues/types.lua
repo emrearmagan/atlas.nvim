@@ -33,12 +33,11 @@
 ---@field is_starred boolean|nil
 ---@field is_subscribed boolean|nil
 
----@class IssueDetails : Issue
+---@class IssueDetails
 ---@field description string
 ---@field assignees IssueUser[]
 ---@field labels IssueLabel[]
 ---@field milestone IssueMilestone|nil
----@field reactions table<string, integer>|nil
 
 --------------------------------------------------------------------------------
 -- Label
@@ -128,13 +127,13 @@
 ---@field deleted boolean|nil
 ---@field always_render boolean|nil
 
----@alias IssueConversationItemKind "comment"|"description"|"activity"
+---@alias IssueConversationItemKind "comment"|"activity"
 
 ---@class IssueConversationItem
 ---@field id string
 ---@field kind IssueConversationItemKind
 ---@field created_at string
----@field entity IssueComment|Issue|IssueActivityEntry
+---@field entity IssueComment|IssueActivityEntry
 
 ---@class IssueReactionOption
 ---@field key string

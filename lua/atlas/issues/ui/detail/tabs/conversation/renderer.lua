@@ -74,15 +74,6 @@ local function render_thread(thread, collapsed, width)
 end
 
 ---@param line_map table<integer, table>
----@param item IssueConversationItem
-local function attach_item(line_map, item)
-	for _, entry in pairs(line_map) do
-		entry.conversation_item = item
-		entry.entity_kind = item.kind
-	end
-end
-
----@param line_map table<integer, table>
 ---@param by_entity table<table, IssueConversationItem>
 local function attach_entities(line_map, by_entity)
 	for _, entry in pairs(line_map) do
@@ -94,23 +85,22 @@ local function attach_entities(line_map, by_entity)
 end
 
 ---@class IssuesConversationTimelineEntry
----@field type "comment"|"description"|"activity_run"
+---@field type "comment"|"activity_run"
 ---@field timestamp string
 ---@field thread IssuesCommentThreadNode|nil
----@field item IssueConversationItem|nil
 ---@field items IssueConversationItem[]|nil
 
 ---@param items IssueConversationItem[]
 ---@return IssuesConversationTimelineEntry[], table<table, IssueConversationItem>
 local function build_timeline(items)
-	local mixed, description = {}, nil
+	local mixed = {}
 	local comments, by_entity = {}, {}
 	for _, item in ipairs(items) do
 		by_entity[item.entity] = item
 		if item.kind == "comment" then
-			table.insert(comments, item.entity)
-		elseif item.kind == "description" then
-			description = { kind = "description", timestamp = item.created_at, item = item }
+			---@type IssueComment
+			local comment = item.entity
+			table.insert(comments, comment)
 		else
 			table.insert(mixed, {
 				kind = "activity",
@@ -134,9 +124,6 @@ local function build_timeline(items)
 		end
 		return left_time < right_time
 	end)
-	if description then
-		table.insert(mixed, 1, description)
-	end
 
 	local entries = {}
 	local run = {}
@@ -148,7 +135,9 @@ local function build_timeline(items)
 	end
 	for _, item in ipairs(mixed) do
 		if item.kind == "activity" then
-			if item.item.entity.always_render then
+			---@type IssueActivityEntry
+			local activity = item.item.entity
+			if activity.always_render then
 				flush_run()
 				table.insert(entries, {
 					type = "activity_run",
@@ -160,38 +149,15 @@ local function build_timeline(items)
 			end
 		else
 			flush_run()
-			if item.kind == "description" then
-				table.insert(entries, { type = "description", timestamp = item.timestamp, item = item.item })
-			else
-				table.insert(entries, {
-					type = "comment",
-					timestamp = item.timestamp,
-					thread = item.thread,
-				})
-			end
+			table.insert(entries, {
+				type = "comment",
+				timestamp = item.timestamp,
+				thread = item.thread,
+			})
 		end
 	end
 	flush_run()
 	return entries, by_entity
-end
-
----@param item IssueConversationItem
----@param width integer
-local function render_description(item, width)
-	---@type IssueDetails
-	local issue = item.entity
-	---@type IssueComment
-	local comment = {
-		id = item.id,
-		url = issue.url,
-		author = issue.reporter,
-		body = issue.description,
-		created = issue.created_at,
-		reactions = issue.reactions,
-	}
-	local lines, spans, line_map = render_thread({ comment = comment, children = {} }, false, width)
-	attach_item(line_map, item)
-	return lines, spans, line_map
 end
 
 ---@param entry IssuesConversationTimelineEntry
@@ -210,14 +176,14 @@ local function render_entry(entry, width, has_next, by_entity)
 		attach_entities(line_map, by_entity)
 		return lines, spans, line_map
 	end
-	if entry.type == "description" and entry.item then
-		return render_description(entry.item, width)
-	end
 	if entry.type == "activity_run" then
 		local run_id = tostring(entry.timestamp or "")
+		---@type IssueActivityEntry[]
 		local activities = {}
 		for _, item in ipairs(entry.items or {}) do
-			table.insert(activities, item.entity)
+			---@type IssueActivityEntry
+			local activity = item.entity
+			table.insert(activities, activity)
 		end
 		local lines, spans, line_map = activity_component.render(activities, width, {
 			padding_x = PADDING_X,
@@ -231,9 +197,10 @@ local function render_entry(entry, width, has_next, by_entity)
 	return {}, {}, {}
 end
 
----@param issue IssueDetails
+---@param _issue Issue
+---@param _details IssueDetails|nil
 ---@param width integer
-function M.render(issue, width)
+function M.render(_issue, _details, width)
 	local lines, spans, line_map = {}, {}, {}
 
 	if state.error then
@@ -250,20 +217,7 @@ function M.render(issue, width)
 	end
 
 	---@cast state.items IssueConversationItem[]
-	local items = {}
-	for _, item in ipairs(state.items) do
-		if item.kind == "description" and issue.description ~= "" then
-			table.insert(items, {
-				id = item.id,
-				kind = item.kind,
-				created_at = item.created_at,
-				entity = issue,
-			})
-		elseif item.kind ~= "description" then
-			table.insert(items, item)
-		end
-	end
-	local entries, by_entity = build_timeline(items)
+	local entries, by_entity = build_timeline(state.items)
 
 	if #entries == 0 then
 		utils.push(lines, spans, "No conversation yet.", "AtlasTextMuted", PADDING_X)

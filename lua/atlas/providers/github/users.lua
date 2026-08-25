@@ -8,7 +8,7 @@ local mapping = require("atlas.providers.github.mapping")
 ---@param on_done fun(users: { account_id: string, display_name: string }[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.get_assignable_users(slug, query, on_done)
-	if type(slug) ~= "string" or slug == "" then
+	if slug == "" then
 		on_done(nil, "Missing repository slug")
 		return nil
 	end

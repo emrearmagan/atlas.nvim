@@ -7,8 +7,8 @@ local json = require("atlas.core.json")
 
 local ISSUE_FIELDS_GQL = [[
 fragment IssueFields on Issue {
-  number title state isPinned
-  createdAt updatedAt url
+  id number title state isPinned viewerSubscription
+  createdAt updatedAt closedAt url
   repository { nameWithOwner }
   author { login ... on User { name } }
   assignees(first: 1) { nodes { login name } }
@@ -46,36 +46,24 @@ local DETAIL_GQL = [[
 query($owner: String!, $repo: String!, $number: Int!, $withRelationships: Boolean!) {
   repository(owner: $owner, name: $repo) {
     issue(number: $number) {
-      ...IssueFields
       body
-      reactionGroups { content reactors { totalCount } }
-      parent @include(if: $withRelationships) { ...IssueRefFields }
+      assignees(first: 100) { nodes { login name } }
+      labels(first: 100) { nodes { name color } }
+      milestone {
+        title progressPercentage
+        openIssues: issues(states: OPEN) { totalCount }
+        closedIssues: issues(states: CLOSED) { totalCount }
+      }
       subIssues(first: 20) @include(if: $withRelationships) {
         nodes {
           ...IssueFields
-          reactionGroups { content reactors { totalCount } }
           parent { ...IssueRefFields }
         }
       }
     }
   }
 }
-
-fragment IssueFields on Issue {
-  id number title state isPinned viewerSubscription
-  createdAt updatedAt closedAt url
-  repository { nameWithOwner }
-  author { login ... on User { name } }
-  assignees(first: 10) { nodes { login name } }
-  labels(first: 20) { nodes { name color } }
-  milestone {
-    number title state description progressPercentage
-    openIssues: issues(states: OPEN) { totalCount }
-    closedIssues: issues(states: CLOSED) { totalCount }
-  }
-  comments { totalCount }
-}
-]] .. ISSUE_REF_FIELDS_GQL
+]] .. ISSUE_FIELDS_GQL .. ISSUE_REF_FIELDS_GQL
 
 local ASSIGNEES_GQL = [[
 query($owner: String!, $repo: String!, $number: Int!) {
@@ -87,15 +75,6 @@ query($owner: String!, $repo: String!, $number: Int!) {
   }
 }
 ]]
-
----@param query string
----@return string
-local function issue_search_query(query)
-	if not query:lower():find("is:issue", 1, true) then
-		query = query .. " is:issue"
-	end
-	return query
-end
 
 ---@param opts { with_relationships?: boolean, layout?: "plain"|"compact" }|nil
 ---@return boolean
@@ -115,18 +94,16 @@ end
 ---@return { cancel: fun() }|nil
 function M.search_issues(search, on_done, opts)
 	opts = opts or {}
-	local limit = math.max(1, tonumber(opts.limit) or 50)
+	local limit = math.min(100, math.max(1, tonumber(opts.limit) or 50))
 
-	local query = vim.trim(tostring(search or ""))
+	local query = vim.trim(search)
 	if query == "" then
 		on_done({}, "Missing search query")
 		return nil
 	end
-	query = issue_search_query(query)
-
 	local with_relationships = relationships_enabled(opts)
 	local cache_key =
-		string.format("github_issues:search:v3:%s:%d:relationships:%s", query, limit, tostring(with_relationships))
+		string.format("github_issues:search:v4:%s:%d:relationships:%s", query, limit, tostring(with_relationships))
 	if not opts.force_load then
 		local cached, ok = cli.get_cache(cache_key)
 		if ok then
@@ -163,7 +140,7 @@ function M.search_issues(search, on_done, opts)
 end
 
 ---@param key string
----@param on_done fun(issue: GitHubIssueDetails|nil, err: string|nil)
+---@param on_done fun(details: IssueDetails|nil, err: string|nil)
 ---@param opts { force_load?: boolean, with_relationships?: boolean, layout?: "plain"|"compact" }|nil
 ---@return { cancel: fun() }|nil
 function M.get_issue(key, on_done, opts)
@@ -176,7 +153,7 @@ function M.get_issue(key, on_done, opts)
 
 	local with_relationships = relationships_enabled(opts)
 	local cache_key =
-		string.format("github_issues:get:%s#%d:relationships:%s", slug, number, tostring(with_relationships))
+		string.format("github_issues:details:%s#%d:relationships:%s", slug, number, tostring(with_relationships))
 	if not opts.force_load then
 		local cached, ok = cli.get_mem(cache_key)
 		if ok then
@@ -211,11 +188,11 @@ function M.get_issue(key, on_done, opts)
 		end
 
 		local repository = json.nilify(result.data.repository)
-		local issue = normalizer.to_issue_details(repository and repository.issue, slug)
-		if issue then
-			cli.set_mem(cache_key, issue)
+		local details = normalizer.to_issue_details(repository and repository.issue, slug)
+		if details then
+			cli.set_mem(cache_key, details)
 		end
-		on_done(issue, nil)
+		on_done(details, nil)
 	end, {
 		action = "Fetch issue",
 		slug = slug,
@@ -224,9 +201,10 @@ function M.get_issue(key, on_done, opts)
 end
 
 ---@param refs IssueRef[]
+---@param _opts IssuesFetchOpts
 ---@param on_done fun(issues: Issue[], err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_by_refs(refs, on_done)
+function M.fetch_by_refs(refs, _opts, on_done)
 	local queries = {}
 
 	for _, ref in ipairs(refs) do
@@ -255,7 +233,7 @@ function M.fetch_by_refs(refs, on_done)
 		table.insert(
 			selections,
 			string.format(
-				"  %s: repository(owner: $owner%d, name: $repo%d) { issue(number: $number%d) { ...IssueFields } }",
+				"  %s: repository(owner: $owner%d, name: $repo%d) { issue(number: $number%d) { ...IssueFields parent { ...IssueRefFields } } }",
 				ref.alias,
 				index,
 				index,
@@ -274,7 +252,7 @@ function M.fetch_by_refs(refs, on_done)
 		"query(%s) {\n%s\n}\n%s",
 		table.concat(variables, ", "),
 		table.concat(selections, "\n"),
-		ISSUE_FIELDS_GQL
+		ISSUE_FIELDS_GQL .. ISSUE_REF_FIELDS_GQL
 	)
 	table.insert(args, "-f")
 	table.insert(args, "query=" .. query)
@@ -510,7 +488,7 @@ end
 ---@param on_done fun(labels: { name: string, color: string|nil, description: string|nil }[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.list_labels(slug, on_done)
-	if type(slug) ~= "string" or slug == "" then
+	if slug == "" then
 		vim.schedule(function()
 			on_done(nil, "Missing repository slug")
 		end)
@@ -536,7 +514,7 @@ end
 ---@param on_done fun(milestones: GitHubMilestone[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.list_milestones(slug, on_done)
-	if type(slug) ~= "string" or slug == "" then
+	if slug == "" then
 		vim.schedule(function()
 			on_done(nil, "Missing repository slug")
 		end)

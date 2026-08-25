@@ -60,24 +60,42 @@ function M.fetch_detail(repo, opts, on_done)
 	end
 
 	local requests = request_scope.new()
-	requests.run(function(done)
-		return cli.gh(
-			{
-				"repo",
-				"view",
-				slug,
-				"--json",
-				"name,nameWithOwner,owner,description,defaultBranchRef,isPrivate,createdAt,diskUsage,url,stargazerCount,forkCount,watchers",
-			},
-			done,
-			{
-				action = "Fetch repository",
-				repo = slug,
-			}
-		)
-	end, function(result, err)
-		if err or type(result) ~= "table" then
-			on_done(nil, err or "Failed to fetch repo details")
+	requests.all({
+		details = function(done)
+			return cli.gh(
+				{
+					"repo",
+					"view",
+					slug,
+					"--json",
+					"name,nameWithOwner,owner,description,defaultBranchRef,isPrivate,createdAt,diskUsage,url,stargazerCount,forkCount,watchers",
+				},
+				done,
+				{
+					action = "Fetch repository",
+					repo = slug,
+				}
+			)
+		end,
+		readme = function(done)
+			return cli.gh(
+				{
+					"api",
+					string.format("repos/%s/readme", slug),
+					"--header",
+					"Accept: application/vnd.github.raw+json",
+				},
+				done,
+				{
+					action = "Fetch repository README",
+					repo = slug,
+				}
+			)
+		end,
+	}, function(results, errors)
+		local result = results.details
+		if errors.details or type(result) ~= "table" then
+			on_done(nil, errors.details or "Failed to fetch repo details")
 			return
 		end
 
@@ -104,27 +122,11 @@ function M.fetch_detail(repo, opts, on_done)
 			watchers = tonumber(watchers.totalCount),
 		}
 
-		requests.run(function(done)
-			return cli.gh(
-				{
-					"api",
-					string.format("repos/%s/readme", slug),
-					"--header",
-					"Accept: application/vnd.github.raw+json",
-				},
-				done,
-				{
-					action = "Fetch repository README",
-					repo = slug,
-				}
-			)
-		end, function(readme_result, readme_err)
-			if not readme_err and readme_result then
-				details.readme = tostring(readme_result)
-			end
-			cli.set_mem(cache_key, details)
-			on_done(details, nil)
-		end)
+		if not errors.readme and results.readme then
+			details.readme = tostring(results.readme)
+		end
+		cli.set_mem(cache_key, details)
+		on_done(details, nil)
 	end)
 	return requests
 end

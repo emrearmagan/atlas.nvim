@@ -152,7 +152,8 @@ local function edit_assignees(ctx, done)
 		return
 	end
 
-	local function open_picker()
+	---@param assignees PullsAuthor[]
+	local function open_picker(assignees)
 		users_api.list_members(path, "", function(members, err)
 			if err or members == nil then
 				notify(ctx, "error", err or "Failed to load members")
@@ -168,7 +169,7 @@ local function edit_assignees(ctx, done)
 
 			local original = {}
 			local original_set = {}
-			for _, a in ipairs(pr.assignees or {}) do
+			for _, a in ipairs(assignees) do
 				local id = tonumber(a.id)
 				if id then
 					table.insert(original, { id = id, username = a.username, name = a.name or a.username })
@@ -236,6 +237,10 @@ local function edit_assignees(ctx, done)
 	end
 
 	notify(ctx, "loading", "Loading members...")
+	if ctx.details then
+		open_picker(ctx.details.assignees or {})
+		return
+	end
 	pullrequests_api.fetch_pullrequest(pr, { force_load = false }, function(details, err)
 		if err or details == nil then
 			local message = tostring(err or "Failed to load merge request")
@@ -243,8 +248,7 @@ local function edit_assignees(ctx, done)
 			done(nil, message)
 			return
 		end
-		pr = details
-		open_picker()
+		open_picker(details.assignees or {})
 	end)
 end
 
@@ -280,7 +284,10 @@ local function search(ctx, done)
 					end
 				end
 				fetch_done(list, nil)
-			end)
+			end, {
+				action = "Search projects",
+				query = query,
+			})
 		end,
 		on_select = function(item)
 			local project = item.id
@@ -325,13 +332,9 @@ local function toggle_subscription(ctx, done)
 		done(nil, "Invalid MR identifier")
 		return
 	end
-	pullrequests_api.fetch_pullrequest(pr, { force_load = false }, function(details, fetch_err)
-		if fetch_err or details == nil then
-			local message = tostring(fetch_err or "Failed to load merge request")
-			notify(ctx, "error", message)
-			done(nil, message)
-			return
-		end
+
+	---@param details PullRequestDetails
+	local function toggle(details)
 		local action = details.is_subscribed == true and "unsubscribe" or "subscribe"
 		local endpoint = string.format("/projects/%s/merge_requests/%d/%s", service.url_encode(path), iid, action)
 		notify(ctx, "loading", details.is_subscribed and "Unsubscribing..." or "Subscribing...")
@@ -351,7 +354,25 @@ local function toggle_subscription(ctx, done)
 				changed_pr = true,
 				message = details.is_subscribed and "Subscribed" or "Unsubscribed",
 			}, nil)
-		end)
+		end, {
+			action = action == "subscribe" and "Subscribe to MR" or "Unsubscribe from MR",
+			project_path = path,
+			iid = iid,
+		})
+	end
+
+	if ctx.details then
+		toggle(ctx.details)
+		return
+	end
+	pullrequests_api.fetch_pullrequest(pr, { force_load = false }, function(details, fetch_err)
+		if fetch_err or details == nil then
+			local message = tostring(fetch_err or "Failed to load merge request")
+			notify(ctx, "error", message)
+			done(nil, message)
+			return
+		end
+		toggle(details)
 	end)
 end
 

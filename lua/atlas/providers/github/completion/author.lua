@@ -53,13 +53,10 @@ end
 local function collect_issue_logins(context)
 	local logins, add = login_collector()
 	local issue = context.issue
-	if issue then
-		add(issue.reporter and issue.reporter.account_id)
-		add(issue.assignee and issue.assignee.account_id)
-		---@cast issue IssueDetails
-		for _, assignee in ipairs(issue.assignees or {}) do
-			add(assignee.account_id)
-		end
+	add(issue.reporter and issue.reporter.account_id)
+	add(issue.assignee and issue.assignee.account_id)
+	for _, assignee in ipairs((context.details or {}).assignees or {}) do
+		add(assignee.account_id)
 	end
 	for _, comment in ipairs(context.comments) do
 		add(comment.author and comment.author.account_id)
@@ -72,7 +69,7 @@ end
 local function collect_pull_logins(context)
 	local logins, add = login_collector()
 	local pr = context.pr
-	for _, author in ipairs((context.review_context or {}).authors or {}) do
+	for _, author in ipairs((context.review_context or {}).mention_candidates or {}) do
 		add(author.nickname or author.username or author.name)
 	end
 	if pr and pr.author then
@@ -80,15 +77,13 @@ local function collect_pull_logins(context)
 	end
 
 	local reviewers = context.reviewers or {}
-	if type(reviewers) == "table" then
-		---@cast reviewers PullsReviewer[]
-		for _, reviewer in ipairs(reviewers) do
-			add(reviewer.nickname or reviewer.name)
-		end
+	for _, reviewer in ipairs(reviewers) do
+		add(reviewer.nickname or reviewer.name)
 	end
 
-	if pr then
-		for _, assignee in ipairs(pr.assignees or {}) do
+	if context.details then
+		---@cast context.details GitHubPullRequestDetails
+		for _, assignee in ipairs(context.details.assignees) do
 			add(assignee.username)
 		end
 	end

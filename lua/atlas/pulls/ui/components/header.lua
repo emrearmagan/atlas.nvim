@@ -94,12 +94,12 @@ end
 function M.render(pr, width, extra_fields)
 	local author_name = presentation.user_handle(pr.author)
 	local created_text = utils.relative_time_text(pr.created_on)
-	local repo_name = tostring(pr.repo_full_name or "")
-	local src = tostring((pr.source or {}).branch or "?")
-	local dst = tostring((pr.destination or {}).branch or "?")
+	local repo_name = pr.repo_full_name
+	local src = pr.source.branch
+	local dst = pr.destination.branch
 
-	local id_text = string.format("#%s", tostring(pr.id or "?"))
-	local title_text = tostring(pr.title or "")
+	local id_text = string.format("#%s", pr.id)
+	local title_text = pr.title
 	local title_lines = utils.wrap_line(string.format("%s %s", id_text, title_text), math.max(1, width - 1))
 	for index, line in ipairs(title_lines) do
 		title_lines[index] = " " .. line

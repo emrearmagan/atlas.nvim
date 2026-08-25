@@ -4,7 +4,6 @@ local actions = require("atlas.issues.actions")
 local icons = require("atlas.ui.shared.icons")
 local picker = require("atlas.ui.picker")
 local issues_api = require("atlas.issues.providers.jira.api.issues")
-local adf = require("atlas.issues.providers.jira.converted.adf")
 local notify = require("atlas.core.notify")
 local transitions_api = require("atlas.issues.providers.jira.api.transitions")
 local users_api = require("atlas.issues.providers.jira.api.users")
@@ -15,7 +14,7 @@ local config = require("atlas.issues.providers.jira.api.config")
 ---@return boolean
 local function has_issue_key(ctx)
 	local issue = ctx.issue
-	if type(issue) ~= "table" then
+	if issue == nil then
 		return false
 	end
 	local key = tostring(issue.key or "")
@@ -24,8 +23,8 @@ end
 
 ---@return string
 local function current_jql()
-	local view = issues_state.active_view or issues_state.current_view
-	if type(view) ~= "table" then
+	local view = issues_state.current_view or issues_state.active_view
+	if view == nil then
 		return ""
 	end
 	---@cast view AtlasJiraViewConfig
@@ -39,12 +38,6 @@ M.items = ACTIONS
 ---@param action AtlasIssueAction
 local function register(action)
 	table.insert(ACTIONS, action)
-end
-
----@param ctx AtlasIssueActionContext
----@return boolean, string|nil
-local function transition_available(ctx)
-	return has_issue_key(ctx)
 end
 
 ---@param ctx AtlasIssueActionContext
@@ -67,7 +60,7 @@ local function transition(ctx, done)
 		debounce_ms = 0,
 		format_item = function(item)
 			local transition_value = item.value
-			local category = type(transition_value) == "table" and transition_value.to_status_category or nil
+			local category = transition_value.to_status_category
 			local icon = (category and status_category_icons[category]) or icons.fallback()
 			return string.format("%s %s", icon, item.label)
 		end,
@@ -129,12 +122,6 @@ local function transition(ctx, done)
 			done(nil, nil)
 		end,
 	})
-end
-
----@param ctx AtlasIssueActionContext
----@return boolean, string|nil
-local function assign_available(ctx)
-	return has_issue_key(ctx)
 end
 
 ---@param ctx AtlasIssueActionContext
@@ -241,19 +228,12 @@ local function assign(ctx, done)
 end
 
 ---@param ctx AtlasIssueActionContext
----@return boolean, string|nil
-local function reporter_available(ctx)
-	return has_issue_key(ctx)
-end
-
----@param ctx AtlasIssueActionContext
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function reporter(ctx, done)
 	local issue = assert(ctx.issue)
 
 	local issue_key = issue.key
-	local current_reporter_key =
-		vim.trim(tostring(type(issue.reporter) == "table" and issue.reporter.display_name or "")):lower()
+	local current_reporter_key = vim.trim(tostring(issue.reporter and issue.reporter.display_name or "")):lower()
 
 	local function to_picker_items(users)
 		local items = {}
@@ -305,12 +285,6 @@ local function reporter(ctx, done)
 end
 
 ---@param ctx AtlasIssueActionContext
----@return boolean, string|nil
-local function delete_issue_available(ctx)
-	return has_issue_key(ctx)
-end
-
----@param ctx AtlasIssueActionContext
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function delete_issue(ctx, done)
 	local issue = assert(ctx.issue)
@@ -341,12 +315,6 @@ local function delete_issue(ctx, done)
 			done({ issue_key = issue_key, removed = true }, nil)
 		end)
 	end)
-end
-
----@param ctx AtlasIssueActionContext
----@return boolean, string|nil
-local function edit_issue_available(ctx)
-	return has_issue_key(ctx)
 end
 
 ---@param ctx AtlasIssueActionContext
@@ -414,23 +382,15 @@ local function edit_issue(ctx, done)
 	end
 
 	notify.loading(string.format("Loading description for %s...", issue_key))
-	issues_api.get_issue_description(issue_key, function(description, err)
-		if err then
+	issues_api.fetch_issue({ key = issue_key }, { force_load = true }, function(details, err)
+		if err or details == nil then
 			notify.warn(string.format("Failed loading description for %s", issue_key), { timeout = 1200 })
 			open_editor("")
 			return
 		end
 
 		notify.success(string.format("Loaded description for %s", issue_key), { timeout = 1200 })
-		if type(description) == "table" then
-			open_editor(adf.to_markdown(description))
-			return
-		elseif type(description) == "string" then
-			-- Description is a sting in Jira server API
-			open_editor(description)
-			return
-		end
-		open_editor("")
+		open_editor(details.description)
 	end)
 end
 
@@ -669,16 +629,12 @@ local function search_issue(_, done)
 		end,
 		preview_item = function(item, preview_done)
 			local issue = item.value
-			return issues_api.get_issue_detail(issue.key, function(detail, err)
-				if err then
-					preview_done({ title = issue.key, lines = { err } })
+			return issues_api.fetch_issue({ key = issue.key }, nil, function(details, err)
+				if err or details == nil then
+					preview_done({ title = issue.key, lines = { err or "Failed to load issue" } })
 					return
 				end
-				local description = detail and detail.description
-				if type(description) == "table" then
-					description = adf.to_markdown(description)
-				end
-				description = vim.trim(tostring(description or ""))
+				local description = vim.trim(details.description)
 				preview_done({
 					title = issue.key,
 					lines = vim.split(description ~= "" and description or "No description", "\n", { plain = true }),
@@ -706,7 +662,7 @@ local function search_issue(_, done)
 		end,
 		on_select = function(item)
 			local issue = item.value
-			local issue_key = tostring((issue or {}).key or "")
+			local issue_key = tostring(issue.key or "")
 			if issue_key == "" then
 				notify.error("Selected issue is missing key")
 				done(nil, "Selected issue is missing key")
@@ -730,12 +686,6 @@ local function search_jql(_, done)
 end
 
 ---@param ctx AtlasIssueActionContext
----@return boolean, string|nil
-local function browse_issue_available(ctx)
-	return has_issue_key(ctx)
-end
-
----@param ctx AtlasIssueActionContext
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function browse_issue(ctx, done)
 	local issue = assert(ctx.issue)
@@ -751,12 +701,6 @@ local function browse_issue(ctx, done)
 	vim.ui.open(string.format("%s/browse/%s", base_url, issue_key))
 	notify.success(string.format("Opened %s in browser", issue_key), { timeout = 1200 })
 	done(nil, nil)
-end
-
----@param ctx AtlasIssueActionContext
----@return boolean, string|nil
-local function copy_issue_url_available(ctx)
-	return has_issue_key(ctx)
 end
 
 ---@param ctx AtlasIssueActionContext
@@ -810,7 +754,7 @@ local function toggle_subscription(ctx, done)
 	if issue.is_subscribed ~= true then
 		svc.request("POST", "/issue/" .. issue_key .. "/watchers", nil, function(_, err)
 			finish(err == nil and true or nil, err)
-		end)
+		end, { action = "Subscribe to issue", issue_key = issue_key })
 		return
 	end
 
@@ -826,7 +770,8 @@ local function toggle_subscription(ctx, done)
 			nil,
 			function(_, err)
 				finish(err == nil and false or nil, err)
-			end
+			end,
+			{ action = "Unsubscribe from issue", issue_key = issue_key }
 		)
 	end
 
@@ -848,31 +793,31 @@ end
 register({
 	id = "transition",
 	label = "Transition",
-	is_available = transition_available,
+	is_available = has_issue_key,
 	run = transition,
 })
 register({
 	id = "assign",
 	label = "Change assignee",
-	is_available = assign_available,
+	is_available = has_issue_key,
 	run = assign,
 })
 register({
 	id = "reporter",
 	label = "Change reporter",
-	is_available = reporter_available,
+	is_available = has_issue_key,
 	run = reporter,
 })
 register({
 	id = "delete_issue",
 	label = "Delete Issue",
-	is_available = delete_issue_available,
+	is_available = has_issue_key,
 	run = delete_issue,
 })
 register({
 	id = "edit_issue",
 	label = "Edit Issue",
-	is_available = edit_issue_available,
+	is_available = has_issue_key,
 	run = edit_issue,
 })
 register({
@@ -895,7 +840,7 @@ register({
 	id = "browse_issue",
 	label = "Open Issue In Browser",
 	hidden = true,
-	is_available = browse_issue_available,
+	is_available = has_issue_key,
 	run = browse_issue,
 })
 register(actions.copy_issue_key)
@@ -903,7 +848,7 @@ register({
 	id = "copy_issue_url",
 	label = "Copy Issue URL",
 	hidden = true,
-	is_available = copy_issue_url_available,
+	is_available = has_issue_key,
 	run = copy_issue_url,
 })
 register({

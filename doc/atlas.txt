@@ -88,11 +88,11 @@ up and what's missing.
       bitbucket = {
         user = vim.env.BITBUCKET_USER,
         token = vim.env.BITBUCKET_TOKEN,
-        cache_ttl = 300,
+        cache_ttl = 300, -- Set to 0 to disable caching.
       },
       ---@type AtlasGitHubProviderConfig
       github = {
-        cache_ttl = 300,
+        cache_ttl = 300, -- Set to 0 to disable caching.
       },
       ---@type AtlasGitLabProviderConfig
       gitlab = {
@@ -100,7 +100,7 @@ up and what's missing.
         -- Personal Access Token with `api` scope:
         -- https://docs.gitlab.com/ee/user/profile/personal_access_tokens.html
         token = vim.env.GITLAB_TOKEN,
-        cache_ttl = 300,
+        cache_ttl = 300, -- Set to 0 to disable caching.
       },
       ---@type AtlasJiraProviderConfig
       jira = {
@@ -110,7 +110,7 @@ up and what's missing.
         token = "your_jira_api_token",
         auth_method = "basic", -- "basic" or "bearer"
         api_type = "cloud", -- "cloud" (v3) or "server" (v2)
-        cache_ttl = 300,
+        cache_ttl = 300, -- Set to 0 to disable caching.
 
         project_config = {
           -- Global story points field. Defaults to "customfield_10016".
@@ -455,7 +455,7 @@ project, or to a whole group.
         -- label = "Search", -- default
         items = {
           ["Reviewing"]    = { scope = "all", extra_params = { reviewer_id = "Me" } },
-          ["Merged by me"] = { scope = "all", state = "merged", author_username = "me" },
+          ["Created by me"] = { scope = "all", author_username = "me" },
         },
       },
     },

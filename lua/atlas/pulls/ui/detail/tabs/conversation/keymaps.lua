@@ -22,13 +22,13 @@ local function cursor_entry()
 		return nil
 	end
 	local lnum = vim.api.nvim_win_get_cursor(win)[1]
-	return (detail.line_map or {})[lnum]
+	return detail.line_map[lnum]
 end
 
 ---@param refresh fun()
 ---@param fn fun(pr: PullRequest, refresh: fun())
 local function dispatch_simple(refresh, fn)
-	local pr = detail.current_details or detail.current_pr
+	local pr = detail.current_pr
 	if pr == nil then
 		return
 	end
@@ -38,7 +38,7 @@ end
 ---@param refresh fun()
 ---@param fn fun(pr: PullRequest, entry: table, refresh: fun())
 local function dispatch_with_entry(refresh, fn)
-	local pr = detail.current_details or detail.current_pr
+	local pr = detail.current_pr
 	if pr == nil then
 		return
 	end

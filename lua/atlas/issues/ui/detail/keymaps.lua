@@ -24,7 +24,7 @@ local function open_current_line()
 
 	local lnum = vim.api.nvim_win_get_cursor(win)[1]
 	local entry = state.line_map[lnum]
-	local issue = state.current_details or state.current_issue
+	local issue = state.current_issue
 	if not entry or not issue then
 		return false
 	end
@@ -34,6 +34,26 @@ local function open_current_line()
 		return tab.on_enter(issue, entry) == true
 	end
 	return false
+end
+
+---@param issue Issue
+---@param on_update (fun(issue: Issue|nil, result: IssuesActionResult|nil))|nil
+---@param result IssuesActionResult|nil
+local function complete_action(issue, on_update, result)
+	if not result or not result.issue_key then
+		return
+	end
+	if on_update then
+		on_update(issue, result)
+		return
+	end
+
+	local detail = require("atlas.issues.ui.detail")
+	if result.removed then
+		detail.close()
+	else
+		detail.refresh()
+	end
 end
 
 ---@param action_id AtlasKeymapActionId|string
@@ -106,19 +126,13 @@ function M.register(buf)
 			item("ui.open_actions", {
 				desc = "Open issue actions",
 				callback = function()
-					local issue = state.current_details or state.current_issue
+					local issue = state.current_issue
 					if issue == nil then
 						return
 					end
 					local on_update = state.on_update
 					actions.open(context(issue), function(result)
-						if result and result.issue_key then
-							if on_update then
-								on_update(issue, result)
-							else
-								require("atlas.issues.ui.detail").select(issue, { force_refresh = true })
-							end
-						end
+						complete_action(issue, on_update, result)
 					end)
 				end,
 			})
@@ -134,7 +148,7 @@ function M.register(buf)
 				if open_current_line() then
 					return
 				end
-				local issue = state.current_details or state.current_issue
+				local issue = state.current_issue
 				if issue then
 					actions.run("browse_issue", context(issue))
 				end
@@ -148,17 +162,11 @@ function M.register(buf)
 			desc = "Toggle subscription",
 			opts = { nowait = true, silent = true },
 			callback = function()
-				local issue = state.current_details or state.current_issue
+				local issue = state.current_issue
 				if issue then
 					local on_update = state.on_update
 					actions.run("toggle_subscription", context(issue), function(result)
-						if result and result.issue_key then
-							if on_update then
-								on_update(issue, result)
-							else
-								require("atlas.issues.ui.detail").select(issue, { force_refresh = true })
-							end
-						end
+						complete_action(issue, on_update, result)
 					end)
 				end
 			end,

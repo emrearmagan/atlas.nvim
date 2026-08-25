@@ -18,6 +18,7 @@ local function action_context(pr, buf)
 	return {
 		provider = provider,
 		pr = pr,
+		details = state.current_details,
 		buf = buf,
 		notify = function(level, message, duration)
 			notify.show(level, message, { timeout = duration })
@@ -35,7 +36,7 @@ local function complete_action(pr, on_update, result)
 	if on_update then
 		on_update(pr, result)
 	else
-		require("atlas.pulls.ui.detail").select(pr, { force_refresh = true })
+		require("atlas.pulls.ui.detail").refresh()
 	end
 end
 
@@ -92,8 +93,8 @@ local function open_current_line()
 	end
 
 	local lnum = vim.api.nvim_win_get_cursor(win)[1]
-	local entry = (state.line_map or {})[lnum]
-	local pr = state.current_details or state.current_pr
+	local entry = state.line_map[lnum]
+	local pr = state.current_pr
 	if not entry or not pr then
 		return false
 	end
@@ -141,7 +142,7 @@ function M.register(buf)
 				if open_current_line() then
 					return
 				end
-				local pr = state.current_details or state.current_pr
+				local pr = state.current_pr
 				if pr == nil then
 					return
 				end
@@ -169,7 +170,7 @@ function M.register(buf)
 			item("ui.open_actions", {
 				desc = "Open PR actions",
 				callback = function()
-					local pr = state.current_details or state.current_pr
+					local pr = state.current_pr
 					if pr == nil then
 						return
 					end
@@ -191,7 +192,7 @@ function M.register(buf)
 			desc = "Open PR diff",
 			opts = { nowait = true },
 			callback = function()
-				local pr = state.current_details or state.current_pr
+				local pr = state.current_pr
 				if pr == nil then
 					return
 				end
@@ -209,7 +210,7 @@ function M.register(buf)
 			desc = "Checkout PR branch",
 			opts = { nowait = true },
 			callback = function()
-				local pr = state.current_details or state.current_pr
+				local pr = state.current_pr
 				if pr == nil then
 					return
 				end
@@ -228,7 +229,7 @@ function M.register(buf)
 				desc = "Edit PR title",
 				opts = { nowait = true, silent = true },
 				callback = function()
-					local pr = state.current_details or state.current_pr
+					local pr = state.current_pr
 					if pr == nil then
 						return
 					end
@@ -251,7 +252,7 @@ function M.register(buf)
 				desc = "Edit PR description",
 				opts = { nowait = true, silent = true },
 				callback = function()
-					local pr = state.current_details or state.current_pr
+					local pr = state.current_pr
 					if pr == nil then
 						return
 					end
@@ -274,7 +275,7 @@ function M.register(buf)
 				desc = "Toggle subscription",
 				opts = { nowait = true, silent = true },
 				callback = function()
-					local pr = state.current_details or state.current_pr
+					local pr = state.current_pr
 					if pr == nil then
 						return
 					end

@@ -35,6 +35,7 @@ local notify = utils.notify
 ---@class AtlasPullActionContext
 ---@field provider PullsProvider
 ---@field pr PullRequest|nil
+---@field details PullRequestDetails|nil
 ---@field current_user PullsUser|nil
 ---@field buf integer|nil
 ---@field notify fun(level: "loading"|"success"|"info"|"warn"|"error", message: string, duration: integer|nil)|nil
@@ -223,8 +224,8 @@ M.edit_description = {
 							done(nil, message)
 							return
 						end
-						if pr.description ~= nil then
-							pr.description = description
+						if context.details then
+							context.details.description = description
 						end
 						notify(context, "success", "Description updated", 1200)
 						done({ changed_pr = true, message = "Description updated" }, nil)
@@ -392,7 +393,7 @@ M.open_diff = {
 	is_available = has_pr,
 	run = function(context, done)
 		require("atlas.pulls.diff").open_pr({
-			pr = assert(context.pr),
+			ref = assert(context.pr),
 			provider = context.provider,
 			current_user = context.current_user,
 		}, function(err, level)
@@ -412,25 +413,38 @@ M.checkout = {
 	is_available = has_pr,
 	run = function(context, done)
 		local pr = assert(context.pr)
-		notify(context, "loading", string.format("Checking out PR #%s", tostring(pr.id or "")))
-		context.provider.capabilities.core.fetch_pullrequest(pr, { force_load = true }, function(current, fetch_err)
-			if not current then
-				local err = tostring(fetch_err or "Unable to load pull request")
-				notify(context, "error", "Checkout failed: " .. err)
-				done(nil, err)
-				return
-			end
-			git_checkout.checkout_pr(current, function(_, err)
+
+		---@param selected PullRequest
+		local function checkout(selected)
+			notify(context, "loading", string.format("Checking out PR #%s", tostring(selected.id or "")))
+			git_checkout.checkout_pr(selected, function(_, err)
 				vim.schedule(function()
 					if err then
 						notify(context, "error", string.format("Checkout failed: %s", tostring(err)))
 						done(nil, tostring(err))
 						return
 					end
-					notify(context, "success", string.format("Checked out PR #%s", tostring(pr.id or "")))
+					notify(context, "success", string.format("Checked out PR #%s", tostring(selected.id or "")))
 					done({ changed_pr = false, message = "Checked out PR" }, nil)
 				end)
 			end)
+		end
+
+		if pr.source.commit_hash ~= "" and pr.destination.commit_hash ~= "" then
+			checkout(pr)
+			return
+		end
+
+		notify(context, "loading", "Loading pull request revisions...")
+		context.provider.capabilities.core.fetch_by_refs({ pr }, { force_load = false }, function(pulls, err)
+			local fresh = pulls and pulls[1] or nil
+			if fresh == nil then
+				local message = tostring(err or "Unable to load pull request revisions")
+				notify(context, "error", message)
+				done(nil, message)
+				return
+			end
+			checkout(fresh)
 		end)
 	end,
 }

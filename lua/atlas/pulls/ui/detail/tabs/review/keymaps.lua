@@ -33,7 +33,7 @@ function M.setup(buf, refresh)
 			return nil
 		end
 		local lnum = vim.api.nvim_win_get_cursor(win)[1]
-		return (detail.line_map or {})[lnum]
+		return detail.line_map[lnum]
 	end
 
 	local items = {}
@@ -43,7 +43,7 @@ function M.setup(buf, refresh)
 			desc = "Reply to comment",
 			opts = { nowait = true, silent = true },
 			callback = function()
-				local pr = detail.current_details or detail.current_pr
+				local pr = detail.current_pr
 				local entry = cursor_entry()
 				if pr and entry then
 					tab.reply_comment(pr, entry, refresh)
@@ -57,7 +57,7 @@ function M.setup(buf, refresh)
 			desc = edit_description,
 			opts = { nowait = true, silent = true },
 			callback = function()
-				local pr = detail.current_details or detail.current_pr
+				local pr = detail.current_pr
 				local entry = cursor_entry()
 				if pr and entry then
 					tab.edit_comment(pr, entry, refresh)
@@ -72,7 +72,7 @@ function M.setup(buf, refresh)
 				desc = "Add task",
 				opts = { nowait = true, silent = true },
 				callback = function()
-					local pr = detail.current_details or detail.current_pr
+					local pr = detail.current_pr
 					if pr then
 						tab.add_task(pr, refresh)
 					end
@@ -86,7 +86,7 @@ function M.setup(buf, refresh)
 			desc = delete_description,
 			opts = { nowait = true, silent = true },
 			callback = function()
-				local pr = detail.current_details or detail.current_pr
+				local pr = detail.current_pr
 				local entry = cursor_entry()
 				if pr and entry then
 					tab.delete_comment(pr, entry, refresh)
@@ -100,7 +100,7 @@ function M.setup(buf, refresh)
 			desc = "Toggle resolved",
 			opts = { nowait = true, silent = true },
 			callback = function()
-				local pr = detail.current_details or detail.current_pr
+				local pr = detail.current_pr
 				local entry = cursor_entry()
 				if pr and entry then
 					tab.toggle_resolved(pr, entry, refresh)
@@ -169,7 +169,7 @@ function M.setup(buf, refresh)
 				if win == nil or not vim.api.nvim_win_is_valid(win) then
 					return
 				end
-				local map = detail.line_map or {}
+				local map = detail.line_map
 				local lnum = vim.api.nvim_win_get_cursor(win)[1]
 				local last = vim.api.nvim_buf_line_count(vim.api.nvim_win_get_buf(win))
 				for ln = lnum + 1, last do
@@ -192,7 +192,7 @@ function M.setup(buf, refresh)
 				if win == nil or not vim.api.nvim_win_is_valid(win) then
 					return
 				end
-				local map = detail.line_map or {}
+				local map = detail.line_map
 				local lnum = vim.api.nvim_win_get_cursor(win)[1]
 				for ln = lnum - 1, 1, -1 do
 					local e = map[ln]

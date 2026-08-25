@@ -13,18 +13,12 @@ local PADDING_X = 1
 ---@param spans table[]
 local function apply_spans(buf, spans)
 	vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
-	for _, span in ipairs(spans or {}) do
-		if type(span) == "table" and span.line ~= nil and span.line_hl_group ~= nil then
+	for _, span in ipairs(spans) do
+		if span.line ~= nil and span.line_hl_group ~= nil then
 			vim.api.nvim_buf_set_extmark(buf, ns, span.line, 0, {
 				line_hl_group = span.line_hl_group,
 			})
-		elseif
-			type(span) == "table"
-			and span.line ~= nil
-			and span.start_col ~= nil
-			and span.end_col ~= nil
-			and span.hl_group ~= nil
-		then
+		elseif span.line ~= nil and span.start_col ~= nil and span.end_col ~= nil and span.hl_group ~= nil then
 			vim.api.nvim_buf_set_extmark(buf, ns, span.line, span.start_col, {
 				end_row = span.line,
 				end_col = span.end_col,

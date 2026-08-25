@@ -82,7 +82,7 @@
 ---@field token string
 ---@field api_type string|nil
 ---@field auth_method "basic"|"bearer"|nil
----@field cache_ttl number|nil
+---@field cache_ttl number|nil Cache lifetime in seconds. Set to 0 to disable caching.
 ---@field project_config AtlasJiraProjectConfig|nil
 
 ---@class AtlasJiraIssuesConfig

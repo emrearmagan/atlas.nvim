@@ -68,6 +68,7 @@ local function default_pickers(project_path)
 				end
 				local out = {}
 				for _, m in ipairs(items) do
+					---@cast m GitLabMilestone
 					table.insert(out, { id = m.id, title = m.title })
 				end
 				cb(out, nil)
@@ -243,7 +244,7 @@ local function pick_assignees(issue_state)
 			form.notify("error", "Load members failed: " .. tostring(err))
 			return
 		end
-		if type(items) ~= "table" or #items == 0 then
+		if items == nil or #items == 0 then
 			form.notify("warn", "No assignable members", { timeout = 1500 })
 			return
 		end
@@ -284,7 +285,7 @@ local function pick_labels(issue_state)
 			form.notify("error", "Load labels failed: " .. tostring(err))
 			return
 		end
-		if type(items) ~= "table" or #items == 0 then
+		if items == nil or #items == 0 then
 			form.notify("warn", "No labels available", { timeout = 1500 })
 			return
 		end
@@ -401,7 +402,7 @@ local function submit(issue_state)
 
 		local url = result and result.url or nil
 		local message = "Issue created"
-		if type(url) == "string" and url ~= "" then
+		if url and url ~= "" then
 			message = message .. ": " .. url
 			pcall(vim.fn.setreg, "+", url)
 		end
@@ -416,7 +417,7 @@ local function submit(issue_state)
 
 		close(issue_state)
 		notify.info(message, { timeout = 1200, vim_notify = true })
-		if type(url) == "string" and url ~= "" then
+		if url and url ~= "" then
 			require("atlas.commands.open").open(url)
 		end
 	end)

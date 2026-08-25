@@ -13,14 +13,13 @@ local spinner = require("atlas.ui.components.spinner")
 ---@param loading boolean
 ---@return IssuesDetailHeaderField[]
 function M.header_fields(issue, details, loading)
-	local data = details or issue
-	---@cast data JiraIssue
+	---@cast issue JiraIssue
 	local user_icon = icons.general("user")
-	local priority = tostring(data.priority or "-")
+	local priority = tostring(issue.priority or "-")
 	local priority_icon, priority_hl = icons.issues_priority(priority)
 	local priority_text = priority_icon ~= "" and string.format("%s %s", priority_icon, priority) or priority
-	local assignee_name = type(data.assignee) == "table" and tostring(data.assignee.display_name or "") or ""
-	local reporter_name = type(data.reporter) == "table" and tostring(data.reporter.display_name or "") or ""
+	local assignee_name = issue.assignee and issue.assignee.display_name or ""
+	local reporter_name = issue.reporter and issue.reporter.display_name or ""
 
 	if assignee_name == "" then
 		assignee_name = "Unassigned"
@@ -32,8 +31,8 @@ function M.header_fields(issue, details, loading)
 	local fields = {
 		{
 			label = "Status",
-			value = tostring(data.status or "Unknown"),
-			hl = helper.status_hl(data.status_id),
+			value = tostring(issue.status or "Unknown"),
+			hl = helper.status_hl(issue.status_id),
 		},
 		{
 			label = "Priority",
@@ -77,10 +76,9 @@ end
 ---@param loading boolean
 ---@return IssuesDetailChip[]
 function M.chips(issue, details, loading)
-	local data = details or issue
 	local chips = {}
 
-	local parent_key = data.parent and data.parent.key or nil
+	local parent_key = issue.parent and issue.parent.key or nil
 	if parent_key then
 		table.insert(chips, {
 			label = string.format("%s %s", icons.pulls("branch"), parent_key),
@@ -88,15 +86,15 @@ function M.chips(issue, details, loading)
 		})
 	end
 
-	local sp = data.story_points
-	if type(sp) == "number" then
+	local sp = issue.story_points
+	if sp ~= nil then
 		table.insert(chips, {
 			label = string.format("%s %s", icons.issues_provider("jira", "provider"), sp),
 			hl = "AtlasJiraChipStoryPoints",
 		})
 	end
 
-	local due = utils.format_date(data.duedate)
+	local due = utils.format_date(issue.duedate)
 	if due ~= "" then
 		table.insert(chips, {
 			label = string.format("%s %s", icons.general("created"), due),

@@ -12,6 +12,7 @@ local request_scope = require("atlas.core.requests")
 ---@field on_update fun(issue: Issue|nil, result: IssuesActionResult|nil)|nil
 ---@field line_map table<integer, table>
 ---@field details_loading boolean
+---@field issue_loading boolean
 ---@field requests AtlasRequestScope
 ---@field spinner_timer uv.uv_timer_t|nil
 local M = {
@@ -26,6 +27,7 @@ local M = {
 	on_update = nil,
 	line_map = {},
 	details_loading = false,
+	issue_loading = false,
 	requests = request_scope.new(),
 	spinner_timer = nil,
 }
@@ -42,6 +44,7 @@ function M.reset()
 	M.on_update = nil
 	M.line_map = {}
 	M.details_loading = false
+	M.issue_loading = false
 	M.requests.cancel()
 	M.requests = request_scope.new()
 	M.spinner_timer = nil

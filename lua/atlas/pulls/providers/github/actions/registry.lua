@@ -10,12 +10,6 @@ local core_notify = require("atlas.core.notify")
 local users_api = require("atlas.providers.github.users")
 
 ---@param ctx AtlasPullActionContext
----@return boolean
-local function has_pr(ctx)
-	return ctx.pr ~= nil and ctx.pr.id ~= nil
-end
-
----@param ctx AtlasPullActionContext
 ---@param level "loading"|"success"|"warn"|"error"|"info"
 ---@param message string
 ---@param duration integer|nil
@@ -39,7 +33,7 @@ end
 ---@param ctx AtlasPullActionContext
 ---@return boolean, string|nil
 local function review_available(ctx)
-	if not has_pr(ctx) or ctx.pr == nil then
+	if ctx.pr == nil then
 		return false, "No PR selected"
 	end
 	if ctx.pr.repo_full_name == "" then
@@ -54,7 +48,7 @@ end
 ---@param ctx AtlasPullActionContext
 ---@return boolean, string|nil
 local function merge_available(ctx)
-	if not has_pr(ctx) or ctx.pr == nil then
+	if ctx.pr == nil then
 		return false, "No PR selected"
 	end
 	if ctx.pr.repo_full_name == "" then
@@ -111,7 +105,7 @@ end
 ---@param ctx AtlasPullActionContext
 ---@return boolean, string|nil
 local function reopen_available(ctx)
-	if not has_pr(ctx) or ctx.pr == nil then
+	if ctx.pr == nil then
 		return false, "No PR selected"
 	end
 	if ctx.pr.repo_full_name == "" then
@@ -159,7 +153,7 @@ end
 ---@param ctx AtlasPullActionContext
 ---@return boolean, string|nil
 local function edit_assignees_available(ctx)
-	if not has_pr(ctx) or ctx.pr == nil then
+	if ctx.pr == nil then
 		return false, "No PR selected"
 	end
 	if ctx.pr.repo_full_name == "" then
@@ -178,7 +172,8 @@ local function edit_assignees(ctx, done)
 	end
 
 	local slug = pr.repo_full_name
-	local function open_picker()
+	---@param assignees PullsAuthor[]
+	local function open_picker(assignees)
 		users_api.get_assignable_users(slug, nil, function(items, err)
 			if err then
 				notify(ctx, "error", string.format("Failed to load assignees: %s", tostring(err)))
@@ -186,7 +181,7 @@ local function edit_assignees(ctx, done)
 				return
 			end
 
-			items = type(items) == "table" and items or {}
+			items = items or {}
 			if #items == 0 then
 				notify(ctx, "warn", "No assignees available")
 				done({ changed_pr = false, message = "No assignees available" }, nil)
@@ -195,7 +190,7 @@ local function edit_assignees(ctx, done)
 
 			local original = {}
 			local original_set = {}
-			for _, assignee in ipairs(pr.assignees or {}) do
+			for _, assignee in ipairs(assignees) do
 				local login = assignee.username
 				if login ~= "" and not original_set[login] then
 					original_set[login] = true
@@ -259,6 +254,7 @@ local function edit_assignees(ctx, done)
 							done(nil, tostring(edit_err))
 							return
 						end
+						cli.delete_mem(string.format("github:pr:%s:%s", slug, tostring(pr.id)))
 						local message = string.format("+%d / -%d assignee(s)", #adds, #removes)
 						notify(ctx, "success", message, 1200)
 						done({ changed_pr = true, message = message }, nil)
@@ -275,6 +271,11 @@ local function edit_assignees(ctx, done)
 	end
 
 	notify(ctx, "loading", "Loading assignees...")
+	if ctx.details then
+		---@cast ctx.details GitHubPullRequestDetails
+		open_picker(ctx.details.assignees)
+		return
+	end
 	pullrequests.get_pr(pr.workspace, pr.repo, pr.id, function(details, err)
 		if err or details == nil then
 			local message = tostring(err or "Failed to load pull request")
@@ -282,14 +283,14 @@ local function edit_assignees(ctx, done)
 			done(nil, message)
 			return
 		end
-		pr = details
-		open_picker()
+		---@cast details GitHubPullRequestDetails
+		open_picker(details.assignees)
 	end)
 end
 ---@param ctx AtlasPullActionContext
 ---@return boolean, string|nil
 local function edit_labels_available(ctx)
-	if not has_pr(ctx) or ctx.pr == nil then
+	if ctx.pr == nil then
 		return false, "No PR selected"
 	end
 	if ctx.pr.repo_full_name == "" then
@@ -315,6 +316,7 @@ local function edit_labels(ctx, done)
 			done(nil, current_err or "Failed to load PR labels")
 			return
 		end
+		---@cast current GitHubPullRequestDetails
 
 		pullrequests.list_labels(slug, function(labels, err)
 			if err or labels == nil then
@@ -336,7 +338,7 @@ local function edit_labels(ctx, done)
 
 			local original = {}
 			local original_set = {}
-			for _, label in ipairs(current.labels or {}) do
+			for _, label in ipairs(current.labels) do
 				local name = tostring(label.name or "")
 				if name ~= "" then
 					table.insert(original, { name = name, color = label.color })
@@ -397,7 +399,7 @@ end
 ---@param ctx AtlasPullActionContext
 ---@return boolean, string|nil
 local function create_issue_available(ctx)
-	if not has_pr(ctx) or ctx.pr == nil then
+	if ctx.pr == nil then
 		return false, "No PR selected"
 	end
 	if ctx.pr.repo_full_name == "" then
@@ -495,7 +497,7 @@ end
 ---@param ctx AtlasPullActionContext
 ---@return boolean, string|nil
 local function toggle_subscription_available(ctx)
-	if not has_pr(ctx) or ctx.pr == nil then
+	if ctx.pr == nil then
 		return false, "No PR selected"
 	end
 	local pr = ctx.pr
@@ -515,15 +517,9 @@ local function toggle_subscription(ctx, done)
 		return
 	end
 	---@cast pr GitHubPullRequest
-	pullrequests.get_pr(pr.workspace, pr.repo, pr.id, function(details, fetch_err)
-		if fetch_err or details == nil then
-			local message = tostring(fetch_err or "Failed to load pull request")
-			notify(ctx, "error", message)
-			done(nil, message)
-			return
-		end
-		local github_pr = details --[[@as GitHubPullRequest]]
-		local node_id = github_pr.node_id or ""
+	---@param details PullRequestDetails
+	local function update(details)
+		local node_id = pr.node_id or ""
 		local next_state = details.is_subscribed == true and "UNSUBSCRIBED" or "SUBSCRIBED"
 		local gql =
 			"mutation($id: ID!, $state: SubscriptionState!) { updateSubscription(input: { subscribableId: $id, state: $state }) { subscribable { ... on PullRequest { viewerSubscription } } } }"
@@ -545,10 +541,24 @@ local function toggle_subscription(ctx, done)
 			end,
 			{
 				action = details.is_subscribed and "Unsubscribe from PR" or "Subscribe to PR",
-				repo = details.repo_full_name,
-				number = details.id,
+				repo = pr.repo_full_name,
+				number = pr.id,
 			}
 		)
+	end
+
+	if ctx.details then
+		update(ctx.details)
+		return
+	end
+	pullrequests.get_pr(pr.workspace, pr.repo, pr.id, function(details, fetch_err)
+		if fetch_err or details == nil then
+			local message = tostring(fetch_err or "Failed to load pull request details")
+			notify(ctx, "error", message)
+			done(nil, message)
+			return
+		end
+		update(details)
 	end)
 end
 

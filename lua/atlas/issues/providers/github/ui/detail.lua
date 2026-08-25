@@ -104,27 +104,22 @@ end
 ---@param details IssueDetails|nil
 ---@param loading boolean
 ---@return IssuesDetailHeaderField[]
-function M.header_fields(issue, details, loading)
+function M.header_fields(issue, details, _loading)
 	---@cast issue GitHubIssue
 	---@cast details GitHubIssueDetails|nil
-	local data = details or issue
-	local reporter_name = data.reporter and tostring(data.reporter.display_name or "") or ""
+	local reporter_name = issue.reporter and tostring(issue.reporter.display_name or "") or ""
 	if reporter_name == "" then
 		reporter_name = "Unknown"
 	end
 
 	local assignees = details and details.assignees or (issue.assignee and { issue.assignee } or {})
 	local assignees_text, assignees_hl = assignees_display(assignees)
-	if loading and details == nil then
-		assignees_text = spinner.with_text("Loading...")
-		assignees_hl = "AtlasTextMuted"
-	end
 
 	local fields = {
 		{
 			label = "Status",
-			value = tostring(data.status or "Open"),
-			hl = data.status_id == "closed" and "AtlasGHIssueClosedChip" or "AtlasGHIssueOpenChip",
+			value = tostring(issue.status or "Open"),
+			hl = issue.status_id == "closed" and "AtlasGHIssueClosedChip" or "AtlasGHIssueOpenChip",
 		},
 		{
 			label = "Reporter",
@@ -134,9 +129,9 @@ function M.header_fields(issue, details, loading)
 		{ label = "Assignee", value = assignees_text, hl = assignees_hl },
 	}
 
-	local parent = data.parent
-	if parent and parent.key then
-		local pkey = tostring(parent.key)
+	local parent = issue.parent
+	if parent then
+		local pkey = parent.key
 		local title = tostring(parent.title or "")
 		local text = title ~= "" and string.format("%s %s", pkey, title) or pkey
 		local hl = helper.issue_hl and helper.issue_hl(pkey) or "AtlasTextMuted"
@@ -213,8 +208,15 @@ end
 
 ---@return IssuesDetailTabDefinition[]
 function M.tabs()
+	local overview_icon, overview_hl = icons.general("overview")
 	local conversation_icon, conversation_hl = icons.general("conversation")
 	return {
+		{
+			key = "overview",
+			label = "Overview",
+			icon = { icon = overview_icon, hl_group = overview_hl },
+			mod = require("atlas.issues.ui.detail.tabs.overview"),
+		},
 		{
 			key = "conversation",
 			label = "Conversation",

@@ -84,7 +84,9 @@ function M.fetch(opts, on_done)
 		end
 		client.set_memory_cache(cache_key, notifications, 60)
 		on_done(notifications, nil)
-	end)
+	end, {
+		action = "Fetch notifications",
+	})
 end
 
 ---@param id string
@@ -98,7 +100,10 @@ function M.mark_done(id, on_done)
 			return
 		end
 		on_done(true, nil)
-	end)
+	end, {
+		action = "Mark notification done",
+		notification_id = id,
+	})
 end
 
 M.mark_read = M.mark_done

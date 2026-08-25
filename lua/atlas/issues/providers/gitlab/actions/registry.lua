@@ -4,9 +4,11 @@ local actions = require("atlas.issues.actions")
 local icons = require("atlas.ui.shared.icons")
 local picker = require("atlas.ui.picker")
 local notify = require("atlas.core.notify")
+local request_scope = require("atlas.core.requests")
 local issues_api = require("atlas.issues.providers.gitlab.api.issues")
 local users_api = require("atlas.issues.providers.gitlab.api.users")
 local labels_api = require("atlas.issues.providers.gitlab.api.labels")
+local service = require("atlas.providers.gitlab.client")
 
 ---@param ctx AtlasIssueActionContext
 ---@return boolean
@@ -77,12 +79,6 @@ local function reopen(ctx, done)
 end
 
 ---@param ctx AtlasIssueActionContext
----@return boolean
-local function transition_available(ctx)
-	return has_issue(ctx)
-end
-
----@param ctx AtlasIssueActionContext
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function transition(ctx, done)
 	local issue = assert(ctx.issue)
@@ -103,12 +99,6 @@ local function transition(ctx, done)
 end
 
 ---@param ctx AtlasIssueActionContext
----@return boolean
-local function assign_available(ctx)
-	return has_issue(ctx)
-end
-
----@param ctx AtlasIssueActionContext
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function assign(ctx, done)
 	local issue = assert(ctx.issue)
@@ -122,23 +112,9 @@ local function assign(ctx, done)
 		return
 	end
 
-	local current_assignees = nil
-	local members = nil
-	local failed = false
-
-	local function fail(message)
-		if failed then
-			return
-		end
-		failed = true
-		notify.error(message)
-		done(nil, message)
-	end
-
-	local function open_picker()
-		if failed or current_assignees == nil or members == nil then
-			return
-		end
+	---@param current_assignees IssueUser[]
+	---@param members IssueUser[]
+	local function open_picker(current_assignees, members)
 		notify.clear()
 
 		if #members == 0 then
@@ -217,28 +193,24 @@ local function assign(ctx, done)
 	end
 
 	notify.loading("Loading assignees...")
-	issues_api.get_assignees(key, function(result, err)
-		if err or result == nil then
-			fail(err or "Failed to load current assignees")
+	local requests = request_scope.new()
+	requests.all({
+		assignees = function(next)
+			return issues_api.get_assignees(key, next)
+		end,
+		members = function(next)
+			return users_api.list_members(path, "", next)
+		end,
+	}, function(values, errors)
+		local err = errors.assignees or errors.members
+		if err then
+			local message = tostring(err)
+			notify.error(message)
+			done(nil, message)
 			return
 		end
-		current_assignees = result
-		open_picker()
+		open_picker(values.assignees, values.members)
 	end)
-	users_api.list_members(path, "", function(result, err)
-		if err or result == nil then
-			fail(err or "Failed to load members")
-			return
-		end
-		members = result
-		open_picker()
-	end)
-end
-
----@param ctx AtlasIssueActionContext
----@return boolean
-local function labels_available(ctx)
-	return has_issue(ctx)
 end
 
 ---@param ctx AtlasIssueActionContext
@@ -256,7 +228,7 @@ local function labels(ctx, done)
 	end
 
 	---@param current_labels IssueLabel[]
-	---@param all_labels GitLabLabel[]
+	---@param all_labels IssueLabel[]
 	local function open_picker(current_labels, all_labels)
 		notify.clear()
 		if #all_labels == 0 then
@@ -476,7 +448,6 @@ end
 ---@param ctx AtlasIssueActionContext
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function toggle_subscription(ctx, done)
-	local service = require("atlas.providers.gitlab.client")
 	local issue = assert(ctx.issue)
 	---@cast issue GitLabIssue
 	local action = issue.is_subscribed == true and "unsubscribe" or "subscribe"
@@ -496,7 +467,11 @@ local function toggle_subscription(ctx, done)
 		issue.is_subscribed = subscribed == true
 		notify.success(issue.is_subscribed and "Subscribed" or "Unsubscribed", { timeout = 1200 })
 		done({ issue_key = issue.key }, nil)
-	end)
+	end, {
+		action = action == "subscribe" and "Subscribe to issue" or "Unsubscribe from issue",
+		project_path = issue.project_path,
+		iid = issue.iid,
+	})
 end
 
 register({ id = "close", label = "Close Issue", is_available = close_available, run = close })
@@ -504,11 +479,11 @@ register({ id = "reopen", label = "Reopen Issue", is_available = reopen_availabl
 register({
 	id = "transition",
 	label = "Toggle Open/Closed",
-	is_available = transition_available,
+	is_available = has_issue,
 	run = transition,
 })
-register({ id = "assign", label = "Edit Assignees", is_available = assign_available, run = assign })
-register({ id = "labels", label = "Edit Labels", is_available = labels_available, run = labels })
+register({ id = "assign", label = "Edit Assignees", is_available = has_issue, run = assign })
+register({ id = "labels", label = "Edit Labels", is_available = has_issue, run = labels })
 register({ id = "search", label = "Search Issues", run = search })
 register({ id = "create_issue", label = "Create Issue", run = create_issue })
 register(actions.manage_templates)

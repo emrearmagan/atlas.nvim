@@ -9,9 +9,9 @@
 ---@field with_relationships boolean|nil
 
 ---@class AtlasIssuesCommentCompletionContext
----@field issue Issue|nil
+---@field issue Issue
+---@field details IssueDetails|nil
 ---@field comments IssueComment[]
----@field current_user IssueUser|nil
 
 ---@class IssuesViewConfig : AtlasIssuesViewConfig
 
@@ -37,8 +37,8 @@
 ---@field search_query fun(view: IssuesViewConfig, opts: IssuesFetchOpts): string
 ---@field fetch_issues fun(view: IssuesViewConfig, opts: IssuesFetchOpts, on_done: fun(issues: Issue[], next_page_token: string|nil, is_last: boolean, err: string|nil)): { cancel: fun() }|nil
 ---@field fetch_by_refs fun(refs: IssueRef[], opts: IssuesFetchOpts, on_done: fun(issues: Issue[], err: string|nil)): { cancel: fun() }|nil
----@field fetch_issue fun(ref: IssueRef, opts: IssuesFetchOpts|nil, on_done: fun(issue: IssueDetails|nil, err: string|nil)): { cancel: fun() }|nil
----@field update_description (fun(issue: IssueDetails, content: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field fetch_issue fun(ref: IssueRef, opts: IssuesFetchOpts|nil, on_done: fun(details: IssueDetails|nil, err: string|nil)): { cancel: fun() }|nil
+---@field update_description (fun(issue: Issue, content: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field refresh fun()|nil
 
 ---@class IssuesCommentsCapability
@@ -88,7 +88,7 @@
 ---@field hl string|nil
 
 ---@class IssuesDetailTabModule
----@field render fun(issue: IssueDetails, width: integer): string[], table[], table<integer, table>|nil
+---@field render fun(issue: Issue, details: IssueDetails|nil, width: integer): string[], table[], table<integer, table>|nil
 ---@field on_select (fun(issue: Issue, refresh: fun(), opts: { force_refresh: boolean|nil }|nil))|nil
 ---@field reset fun()|nil
 ---@field activate (fun(buf: integer, refresh: fun()))|nil

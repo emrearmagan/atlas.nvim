@@ -5,18 +5,17 @@ local icons = require("atlas.ui.shared.icons")
 
 local MAX_HASH_LEN = 12
 
----@param pr PullRequest
+---@param _pr PullRequest
 ---@param details PullRequestDetails|nil
 ---@param _loading boolean
 ---@return PullsDetailHeaderField[]
-function M.header_fields(pr, details, _loading)
-	pr = details or pr
-	---@cast pr BitbucketPullRequestDetails|BitbucketPullRequest
+function M.header_fields(_pr, details, _loading)
+	---@cast details BitbucketPullRequestDetails|nil
 	local fields = {}
 
-	if pr.close_source_branch ~= nil then
+	if details and details.close_source_branch ~= nil then
 		local state_icon, state_icon_hl
-		if pr.close_source_branch then
+		if details.close_source_branch then
 			state_icon, state_icon_hl = icons.general("success")
 		else
 			state_icon, state_icon_hl = icons.general("error")
@@ -32,14 +31,13 @@ function M.header_fields(pr, details, _loading)
 end
 
 ---@param pr PullRequest
----@param details PullRequestDetails|nil
+---@param _details PullRequestDetails|nil
 ---@param _loading boolean
 ---@return PullsDetailChip[]
-function M.chips(pr, details, _loading)
+function M.chips(pr, _details, _loading)
 	local chips = {}
-	local data = details or pr
 
-	local hash = tostring(data.source and data.source.commit_hash or "")
+	local hash = pr.source.commit_hash
 	if hash ~= "" then
 		if #hash > MAX_HASH_LEN then
 			hash = hash:sub(1, MAX_HASH_LEN)

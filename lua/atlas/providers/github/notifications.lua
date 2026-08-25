@@ -3,10 +3,12 @@ local M = {}
 local client = require("atlas.providers.github.client")
 local icons = require("atlas.ui.shared.icons")
 
+local pull_icon, pull_icon_hl = icons.pulls("pr")
+local checks_icon, checks_icon_hl = icons.pulls("tasks")
 local SUBJECT_ICON = {
-	PullRequest = { icons.pulls("pr") },
+	PullRequest = { icon = pull_icon, hl = pull_icon_hl },
 	Issue = { icon = icons.issues("issue"), hl = "AtlasPROpen" },
-	CheckSuite = { icons.pulls("tasks") },
+	CheckSuite = { icon = checks_icon, hl = checks_icon_hl },
 }
 
 local FALLBACK_ICON = { icon = icons.general("info"), hl = "AtlasTextMuted" }
@@ -24,7 +26,7 @@ end
 ---@return AtlasNotification
 local function normalize(raw)
 	local subject = raw.subject or {}
-	local repo = type(raw.repository) == "table" and tostring(raw.repository.full_name or "") or ""
+	local repo = tostring((raw.repository or {}).full_name or "")
 	local subject_type = tostring(subject.type or "")
 	local subject_url = subject.url and tostring(subject.url) or nil
 	local raw_title = tostring(subject.title or "")
@@ -59,8 +61,8 @@ local function normalize(raw)
 		title = raw_title,
 		subtitle = table.concat(subtitle_parts, "  "),
 		timestamp = updated_at ~= "" and updated_at or nil,
-		icon = icon_def.icon or icon_def[1],
-		icon_hl = icon_def.hl or icon_def[2],
+		icon = icon_def.icon,
+		icon_hl = icon_def.hl,
 		unread = raw.unread == true,
 		url = html_url,
 	}

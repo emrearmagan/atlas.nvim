@@ -15,30 +15,16 @@ local function state_chip_hl(status_id)
 	return "AtlasGLIssueOpenChip"
 end
 
----@param milestone IssueMilestone|nil
----@return string
-local function milestone_display(milestone)
-	if milestone == nil then
-		return ""
-	end
-	local title = tostring(milestone.title or "")
-	if title == "" then
-		return ""
-	end
-	return title
-end
-
 ---@param issue Issue
 ---@param details IssueDetails|nil
 ---@param loading boolean
 ---@return IssuesDetailHeaderField[]
-function M.header_fields(issue, details, loading)
-	---@cast details GitLabIssueDetails|nil
-	local data = details or issue
+function M.header_fields(issue, details, _loading)
 	local user_icon = icons.general("user")
 
-	local assignee_name = data.assignee and tostring(data.assignee.display_name or "") or ""
-	local reporter_name = data.reporter and tostring(data.reporter.display_name or "") or ""
+	local assignee = details and details.assignees[1] or issue.assignee
+	local assignee_name = assignee and tostring(assignee.display_name or "") or ""
+	local reporter_name = issue.reporter and tostring(issue.reporter.display_name or "") or ""
 	if assignee_name == "" then
 		assignee_name = "Unassigned"
 	end
@@ -46,19 +32,15 @@ function M.header_fields(issue, details, loading)
 		reporter_name = "Unknown"
 	end
 
-	local milestone_text = milestone_display(details and details.milestone or nil)
+	local milestone_text = details and details.milestone and details.milestone.title or ""
 	local assignee_text = string.format("%s %s", user_icon, assignee_name)
-	local assignee_hl = helper.person_hl(data.assignee and data.assignee.display_name or nil)
-	if loading and details == nil then
-		assignee_text = spinner.with_text("Loading...")
-		assignee_hl = "AtlasTextMuted"
-	end
+	local assignee_hl = helper.person_hl(assignee and assignee.display_name or nil)
 
 	local fields = {
 		{
 			label = "Status",
-			value = tostring(data.status or "Open"),
-			hl = state_chip_hl(data.status_id),
+			value = tostring(issue.status or "Open"),
+			hl = state_chip_hl(issue.status_id),
 		},
 		{
 			label = "Author",
@@ -71,7 +53,7 @@ function M.header_fields(issue, details, loading)
 		table.insert(fields, { label = "Milestone", value = milestone_text, hl = "AtlasTextMuted" })
 	end
 
-	local created_at = details and details.created_at or ""
+	local created_at = issue.created_at or ""
 	if created_at ~= "" then
 		table.insert(fields, {
 			label = "Opened",
@@ -105,7 +87,6 @@ end
 ---@param loading boolean
 ---@return IssuesDetailChip[]
 function M.chips(_issue, details, loading)
-	---@cast details GitLabIssueDetails|nil
 	local chips = {}
 	if loading then
 		table.insert(chips, { label = spinner.with_text("Loading..."), hl = "AtlasTextMuted" })
@@ -123,8 +104,15 @@ end
 
 ---@return IssuesDetailTabDefinition[]
 function M.tabs()
+	local overview_icon, overview_hl = icons.general("overview")
 	local conversation_icon, conversation_hl = icons.general("conversation")
 	return {
+		{
+			key = "overview",
+			label = "Overview",
+			icon = { icon = overview_icon, hl_group = overview_hl },
+			mod = require("atlas.issues.ui.detail.tabs.overview"),
+		},
 		{
 			key = "conversation",
 			label = "Conversation",

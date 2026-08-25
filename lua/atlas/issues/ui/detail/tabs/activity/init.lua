@@ -104,9 +104,10 @@ function M.on_select(issue, refresh, opts)
 end
 
 ---@param _issue Issue
+---@param _details IssueDetails|nil
 ---@param width integer
 ---@return string[], table[], table<integer, table>|nil
-function M.render(_issue, width)
+function M.render(_issue, _details, width)
 	local lines = {}
 	local spans = {}
 

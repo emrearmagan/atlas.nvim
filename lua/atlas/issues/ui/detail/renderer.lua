@@ -15,7 +15,7 @@ local PADDING_X = 1
 ---@param spans table[]
 local function apply_spans(buf, spans)
 	vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
-	for _, span in ipairs(spans or {}) do
+	for _, span in ipairs(spans) do
 		if span.line ~= nil and span.line_hl_group ~= nil then
 			vim.api.nvim_buf_set_extmark(buf, ns, span.line, 0, {
 				line_hl_group = span.line_hl_group,
@@ -49,7 +49,7 @@ function M.render(tab_items, get_tab_module)
 	local spans = {}
 
 	if issue == nil then
-		if state.details_loading then
+		if state.issue_loading then
 			utils.push(lines, spans, spinner.with_text("Loading issue..."), "AtlasTextMuted", PADDING_X)
 		else
 			lines = { "", "  Nothing selected..." }
@@ -66,7 +66,7 @@ function M.render(tab_items, get_tab_module)
 				and provider_detail.chips(issue, details, state.details_loading)
 			or {}
 
-		local header_lines, header_spans = header.render(details or issue, width, extra_fields)
+		local header_lines, header_spans = header.render(issue, width, extra_fields)
 		utils.append_block(lines, spans, { lines = header_lines, highlights = header_spans })
 
 		local chip_lines, chip_spans = chips.render({ width = width, extra_chips = extra_chips })
@@ -88,8 +88,8 @@ function M.render(tab_items, get_tab_module)
 		local tab_mod = get_tab_module(state.current_tab)
 
 		local content_offset = #lines
-		if tab_mod and tab_mod.render and details then
-			local tab_lines, tab_spans, tab_line_map = tab_mod.render(details, width)
+		if tab_mod and tab_mod.render then
+			local tab_lines, tab_spans, tab_line_map = tab_mod.render(issue, details, width)
 			utils.append_block(lines, spans, { lines = tab_lines, highlights = tab_spans })
 
 			local adjusted = {}
@@ -97,6 +97,14 @@ function M.render(tab_items, get_tab_module)
 				adjusted[content_offset + lnum] = entry
 			end
 			state.line_map = adjusted
+			if details == nil and state.current_tab == "overview" then
+				if #tab_lines > 0 then
+					table.insert(lines, "")
+				end
+				local text = state.details_loading and spinner.with_text("Loading issue details...")
+					or "Issue details unavailable."
+				utils.push(lines, spans, text, "AtlasTextMuted", PADDING_X)
+			end
 		elseif details == nil then
 			local text = state.details_loading and spinner.with_text("Loading issue...") or "Issue details unavailable."
 			utils.push(lines, spans, text, "AtlasTextMuted", PADDING_X)

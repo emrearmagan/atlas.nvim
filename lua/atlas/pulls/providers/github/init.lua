@@ -5,59 +5,111 @@
 ---@field lines_added number|nil
 ---@field lines_removed number|nil
 
----@class GitHubPullRequestDetails : PullRequestDetails, GitHubPullRequest
----@field reactions table<string, integer>|nil
+---@class GitHubPullRequestDetails : PullRequestDetails
+---@field assignees PullsAuthor[]
+---@field labels PullsLabel[]
 
 local actions = require("atlas.pulls.providers.github.actions")
 local activity_api = require("atlas.pulls.providers.github.api.activity")
+local author_completion = require("atlas.providers.github.completion.author")
 local changes_api = require("atlas.pulls.providers.github.api.changes")
 local checks_api = require("atlas.pulls.providers.github.api.checks")
 local config = require("atlas.config")
 local cli = require("atlas.providers.github.client")
 local comments_api = require("atlas.pulls.providers.github.api.comments")
+local emojis = require("atlas.ui.shared.emojis")
+local highlights = require("atlas.pulls.providers.github.highlights")
 local notifications_api = require("atlas.providers.github.notifications")
+local pipeline_actions = require("atlas.pulls.providers.github.actions.pipelines")
 local pipelines_api = require("atlas.pulls.providers.github.api.pipelines")
 local pullrequests_api = require("atlas.pulls.providers.github.api.pullrequests")
 local repositories_api = require("atlas.pulls.providers.github.api.repositories")
 local reviews_api = require("atlas.pulls.providers.github.api.reviews")
+local ui_detail = require("atlas.pulls.providers.github.ui.detail")
+local ui_repo_detail = require("atlas.pulls.providers.github.ui.repo_detail")
 local users_api = require("atlas.pulls.providers.github.api.users")
 local git = require("atlas.core.git")
+local request_scope = require("atlas.core.requests")
 
----@param on_done fun(user: PullsUser|nil, err: string|nil)
----@return { cancel: fun() }|nil
-local function fetch_user(on_done)
-	return users_api.fetch_user(function(user, err)
-		if user then
-			require("atlas.pulls.providers.github.state").current_user = user
+---@param opts PullsFetchOpts
+---@return table<PullsStateFilter, boolean>
+local function selected_states(opts)
+	local selected = {}
+	for _, state in ipairs(opts.states or { "open" }) do
+		selected[state] = true
+	end
+	return selected
+end
+
+---@param view AtlasPullsViewConfig
+---@param opts PullsFetchOpts
+---@return string[]
+local function search_queries(view, opts)
+	---@cast view AtlasGitHubViewConfig
+	local search = view.search or ""
+	if search == "" then
+		return {}
+	end
+
+	local base = search:find("is:pr", 1, true) and search or "is:pr " .. search
+	if base:find("is:open", 1, true) or base:find("is:closed", 1, true) or base:find("is:merged", 1, true) then
+		return { base }
+	end
+	local states = selected_states(opts)
+	local open = states.open == true
+	local merged = states.merged == true
+	local declined = states.declined == true
+	if open and merged and declined then
+		return { base }
+	end
+	if merged and declined and not open then
+		return { base .. " is:closed" }
+	end
+
+	local queries = {}
+	if open then
+		table.insert(queries, base .. " is:open")
+	end
+	if merged then
+		table.insert(queries, base .. " is:merged")
+	end
+	if declined then
+		table.insert(queries, base .. " is:closed -is:merged")
+	end
+	return #queries > 0 and queries or { base .. " is:open" }
+end
+
+---@param batches table<integer, PullRequest[]>
+---@param limit integer
+---@return PullRequest[]
+local function merge_results(batches, limit)
+	local pulls, seen = {}, {}
+	for _, batch in pairs(batches) do
+		for _, pr in ipairs(batch) do
+			local key = pr.repo_full_name .. ":" .. tostring(pr.id)
+			if not seen[key] then
+				seen[key] = true
+				table.insert(pulls, pr)
+			end
 		end
-		on_done(user, err)
+	end
+	table.sort(pulls, function(left, right)
+		if left.updated_on == right.updated_on then
+			return left.repo_full_name .. ":" .. tostring(left.id) < right.repo_full_name .. ":" .. tostring(right.id)
+		end
+		return left.updated_on > right.updated_on
 	end)
+	while #pulls > limit do
+		table.remove(pulls)
+	end
+	return pulls
 end
 
 ---@param view AtlasPullsViewConfig
 ---@param opts PullsFetchOpts
 ---@return string
 local function search_query(view, opts)
-	---@cast view AtlasGitHubViewConfig
-	local search = view.search or ""
-	if search == "" then
-		return ""
-	end
-
-	local query = search:find("is:pr") and search or "is:pr " .. search
-	local filters = require("atlas.pulls.state").status_filters or {}
-	local open, merged, declined = filters.OPEN, filters.MERGED, filters.DECLINED
-	if opts.state == "open" or (opts.state == nil and open and not merged and not declined) then
-		query = query .. " is:open"
-	elseif opts.state == "merged" or (opts.state == nil and merged and not open and not declined) then
-		query = query .. " is:merged"
-	elseif opts.state == "declined" or (opts.state == nil and declined and not open and not merged) then
-		query = query .. " is:closed -is:merged"
-	elseif opts.state == nil and merged and declined and not open then
-		query = query .. " is:closed"
-	end
-
-	return query
+	return table.concat(search_queries(view, opts), " OR ")
 end
 
 ---@param view AtlasPullsViewConfig
@@ -65,30 +117,48 @@ end
 ---@param on_done fun(pulls: PullRequest[], err: string[]|nil)
 ---@return { cancel: fun() }|nil
 local function fetch_pullrequests(view, opts, on_done)
-	local query = search_query(view, opts)
-	if query == "" then
+	local queries = search_queries(view, opts)
+	if #queries == 0 then
 		vim.schedule(function()
 			on_done({}, { "No search query configured for view" })
 		end)
 		return nil
 	end
-	return pullrequests_api.search_prs(query, on_done, {
-		force_load = opts.force_load == true,
-		limit = opts.pagelen,
-	})
-end
 
----@param refs PullRequestRef[]
----@param _opts PullsFetchOpts
----@param on_done fun(pulls: PullRequest[], err: string|nil)
----@return { cancel: fun() }|nil
-local function fetch_by_refs(refs, _opts, on_done)
-	return pullrequests_api.fetch_by_refs(refs, on_done)
+	local limit = math.min(100, math.max(1, tonumber(opts.pagelen) or 50))
+	local request_opts = {
+		force_load = opts.force_load == true,
+		limit = limit,
+	}
+	if #queries == 1 then
+		return pullrequests_api.search_prs(queries[1], on_done, request_opts)
+	end
+
+	local scope = request_scope.new()
+	local starts = {}
+	for index, query in ipairs(queries) do
+		local planned_query = query
+		starts[index] = function(done)
+			return pullrequests_api.search_prs(planned_query, function(pulls, errors)
+				done(pulls, errors and errors[1])
+			end, request_opts)
+		end
+	end
+	scope.all(starts, function(results, errors)
+		local collected_errors = {}
+		for index = 1, #queries do
+			if errors[index] then
+				table.insert(collected_errors, errors[index])
+			end
+		end
+		on_done(merge_results(results, limit), #collected_errors > 0 and collected_errors or nil)
+	end)
+	return scope
 end
 
 ---@param ref PullRequestRef
 ---@param opts PullsFetchOpts
----@param on_done fun(pr: PullRequestDetails|nil, err: string|nil)
+---@param on_done fun(details: PullRequestDetails|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 local function fetch_pullrequest(ref, opts, on_done)
 	local owner, repo = ref.repo_full_name:match("^([^/]+)/(.+)$")
@@ -102,39 +172,28 @@ local function fetch_pullrequest(ref, opts, on_done)
 end
 
 ---@param pr PullRequest
----@param opts { force_refresh: boolean|nil }|nil
----@param on_done fun(items: PullsConversationItem[]|nil, err: string|nil)
----@return { cancel: fun() }|nil
-local function fetch_conversation(pr, opts, on_done)
-	return activity_api.fetch_conversation(pr, opts, on_done)
-end
-
----@param pr PullRequest
 ---@param item PullsConversationItem
 ---@param key string
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 local function add_reaction(pr, item, key, on_done)
-	local repo_slug = pr.repo_full_name or ""
+	local repo_slug = pr.repo_full_name
 	if repo_slug == "" then
 		on_done(false, "Missing repo")
 		return nil
 	end
 
-	local endpoint
-	if item.kind == "description" then
-		endpoint = string.format("repos/%s/issues/%s/reactions", repo_slug, tostring(pr.id))
-	elseif item.kind == "comment" then
-		---@type PullsComment
-		local comment = item.entity
-		if comment.inline or comment.file then
-			endpoint = string.format("repos/%s/pulls/comments/%s/reactions", repo_slug, tostring(comment.id))
-		else
-			endpoint = string.format("repos/%s/issues/comments/%s/reactions", repo_slug, tostring(comment.id))
-		end
-	else
+	if item.kind ~= "comment" then
 		on_done(false, "This item does not support reactions")
 		return nil
+	end
+	---@type PullsComment
+	local comment = item.entity
+	local endpoint
+	if comment.inline or comment.file then
+		endpoint = string.format("repos/%s/pulls/comments/%s/reactions", repo_slug, tostring(comment.id))
+	else
+		endpoint = string.format("repos/%s/issues/comments/%s/reactions", repo_slug, tostring(comment.id))
 	end
 	return cli.gh({ "api", "-X", "POST", endpoint, "-f", "content=" .. key }, function(_, err)
 		on_done(err == nil, err)
@@ -194,14 +253,14 @@ return {
 	search_view = search_view,
 	capabilities = {
 		core = {
-			fetch_user = fetch_user,
+			fetch_user = users_api.fetch_user,
 			search_query = search_query,
 			fetch_pullrequests = fetch_pullrequests,
-			fetch_by_refs = fetch_by_refs,
+			fetch_by_refs = pullrequests_api.fetch_by_refs,
 			fetch_pullrequest = fetch_pullrequest,
 			create_pr = pullrequests_api.create_pr,
 			fetch_default_reviewers = pullrequests_api.fetch_default_reviewers,
-			fetch_reviewers = pullrequests_api.get_reviewers,
+			fetch_reviewers = reviews_api.fetch_reviewers,
 			update_reviewers = pullrequests_api.update_reviewers,
 			update_title = pullrequests_api.update_title,
 			update_description = pullrequests_api.update_description,
@@ -210,14 +269,13 @@ return {
 			fetch_description = pullrequests_api.get_description,
 			fetch_merge_checks = checks_api.fetch,
 			fetch_diffstat = changes_api.fetch_diffstat,
-			fetch_activity = activity_api.fetch_activity,
 			fetch_commits = changes_api.fetch_commits,
 			fetch_diff = changes_api.fetch_diff,
 		},
 		comments = {
-			reaction_options = require("atlas.ui.shared.emojis").github(),
-			comment_completion = require("atlas.providers.github.completion.author").for_pulls,
-			fetch_conversation = fetch_conversation,
+			reaction_options = emojis.github(),
+			comment_completion = author_completion.for_pulls,
+			fetch_conversation = activity_api.fetch_conversation,
 			add_comment = comments_api.add_comment,
 			edit_comment = comments_api.edit_comment,
 			delete_comment = comments_api.delete_comment,
@@ -245,14 +303,14 @@ return {
 			fetch = pipelines_api.fetch,
 			fetch_details = pipelines_api.fetch_details,
 			fetch_job_log = pipelines_api.fetch_job_log,
-			actions = require("atlas.pulls.providers.github.actions.pipelines"),
+			actions = pipeline_actions,
 		},
 		notifications = notifications_api,
 		actions = actions,
 		ui = {
-			setup = require("atlas.pulls.providers.github.highlights").setup,
-			detail = require("atlas.pulls.providers.github.ui.detail"),
-			repo_detail = require("atlas.pulls.providers.github.ui.repo_detail"),
+			setup = highlights.setup,
+			detail = ui_detail,
+			repo_detail = ui_repo_detail,
 		},
 	},
 }

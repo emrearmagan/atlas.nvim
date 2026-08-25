@@ -4,6 +4,7 @@ local cli = require("atlas.providers.github.client")
 local json = require("atlas.core.json")
 local mapper = require("atlas.pulls.providers.github.api.mapper")
 local github_mapping = require("atlas.providers.github.mapping")
+local request_scope = require("atlas.core.requests")
 
 local REVIEW_QUERY = [[
 query($owner:String!,$name:String!,$number:Int!,$endCursor:String){
@@ -75,6 +76,46 @@ query($owner:String!,$repo:String!,$number:Int!,$endCursor:String){
 }
 ]]
 
+local REVIEWERS_QUERY = [[
+query($owner:String!,$name:String!,$number:Int!,$endCursor:String){
+  repository(owner:$owner,name:$name){
+    pullRequest(number:$number){
+      reviews(first:100,after:$endCursor){
+        pageInfo{hasNextPage endCursor}
+        nodes{
+          state
+          author{login ... on User{id name} ... on Bot{id}}
+        }
+      }
+      reviewRequests(first:100){
+        nodes{
+          requestedReviewer{
+            ... on User{id login name}
+            ... on Bot{id login}
+            ... on Mannequin{id login name}
+            ... on Team{id name slug organization{login}}
+            ... on EnterpriseTeam{id name slug combinedSlug}
+          }
+        }
+      }
+      reviewRequestEvents:timelineItems(last:100,itemTypes:[REVIEW_REQUESTED_EVENT]){
+        nodes{
+          ... on ReviewRequestedEvent{
+            requestedReviewer{
+              ... on User{id login name}
+              ... on Bot{id login}
+              ... on Mannequin{id login name}
+              ... on Team{id name slug organization{login}}
+              ... on EnterpriseTeam{id name slug combinedSlug}
+            }
+          }
+        }
+      }
+    }
+  }
+}
+]]
+
 local REVIEW_DETAILS_QUERY = [[
 query($owner:String!,$name:String!,$number:Int!,$endCursor:String){
   repository(owner:$owner,name:$name){
@@ -137,9 +178,11 @@ mutation($pullRequestId:ID!,$path:String!){
 ---@param node table|nil
 ---@return PullsReview
 local function from_node(node)
+	local id = node and tostring(node.id or "") or ""
+	local commit_hash = node and tostring((node.commit or {}).oid or "") or ""
 	return {
-		id = node and tostring(node.id or "") ~= "" and tostring(node.id) or nil,
-		commit_hash = node and tostring((node.commit or {}).oid or "") ~= "" and tostring(node.commit.oid) or nil,
+		id = id ~= "" and id or nil,
+		commit_hash = commit_hash ~= "" and commit_hash or nil,
 		pending = node ~= nil and node.state == "PENDING",
 	}
 end
@@ -173,6 +216,19 @@ end
 ---@return string
 local function review_details_cache_key(pr)
 	return string.format("github:review-details:%s:%s", pr.repo_full_name, tostring(pr.id))
+end
+
+---@param pr PullRequest
+---@return string
+local function reviewers_cache_key(pr)
+	return string.format("github:reviewers:%s:%s", pr.repo_full_name, tostring(pr.id))
+end
+
+---@param pr PullRequest
+local function clear_review_caches(pr)
+	cli.delete_mem(review_details_cache_key(pr))
+	cli.delete_mem(reviewers_cache_key(pr))
+	cli.delete_mem(string.format("github:merge-checks:%s:%s", pr.repo_full_name, tostring(pr.id)))
 end
 
 ---@param review PullsReview|nil
@@ -338,7 +394,7 @@ local function finish(pr, review, event, body, on_done)
 	local function done(ok, err)
 		if ok then
 			M.update(review, nil)
-			cli.delete_mem(review_details_cache_key(pr))
+			clear_review_caches(pr)
 		end
 		on_done(ok, err)
 	end
@@ -431,7 +487,7 @@ function M.discard(pr, review, on_done)
 			return
 		end
 		M.update(review, nil)
-		cli.delete_mem(review_details_cache_key(pr))
+		clear_review_caches(pr)
 		on_done(true, nil)
 	end, {
 		action = "Discard review",
@@ -491,7 +547,7 @@ function M.edit_review(pr, review_id, body, on_done)
 			on_done(false, err)
 			return
 		end
-		cli.delete_mem(review_details_cache_key(pr))
+		clear_review_caches(pr)
 		on_done(true, nil)
 	end, {
 		action = "Edit review",
@@ -630,6 +686,79 @@ local function fetch_review_details(pr, opts, on_done)
 end
 
 ---@param pr PullRequest
+---@param opts { force_refresh: boolean|nil }|nil
+---@param on_done fun(reviewers: PullsReviewer[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_reviewers(pr, opts, on_done)
+	local owner, name = pr.workspace, pr.repo
+	if owner == "" or name == "" then
+		vim.schedule(function()
+			on_done(nil, "Missing repo")
+		end)
+		return nil
+	end
+
+	local cache_key = reviewers_cache_key(pr)
+	if not (opts or {}).force_refresh then
+		local cached, ok = cli.get_mem(cache_key)
+		if ok then
+			on_done(cached, nil)
+			return nil
+		end
+	end
+
+	return cli.gh({
+		"api",
+		"graphql",
+		"--paginate",
+		"--slurp",
+		"-F",
+		"owner=" .. owner,
+		"-F",
+		"name=" .. name,
+		"-F",
+		"number=" .. tostring(pr.id),
+		"-f",
+		"query=" .. REVIEWERS_QUERY,
+	}, function(result, err)
+		if err or type(result) ~= "table" then
+			on_done(nil, err or "Failed to fetch reviewers")
+			return
+		end
+
+		local pull_request
+		local review_nodes = {}
+		for _, page in ipairs(result) do
+			local data = json.nilify(page.data)
+			local repository = data and json.nilify(data.repository)
+			local current = repository and json.nilify(repository.pullRequest)
+			if not current then
+				on_done(nil, "Missing pull request reviewers")
+				return
+			end
+			pull_request = pull_request or current
+			vim.list_extend(review_nodes, ((current.reviews or {}).nodes or {}))
+		end
+		if not pull_request then
+			on_done(nil, "Missing pull request reviewers")
+			return
+		end
+
+		local reviewers = mapper.to_reviewers({
+			reviews = { nodes = review_nodes },
+			reviewRequests = pull_request.reviewRequests,
+			reviewRequestEvents = pull_request.reviewRequestEvents,
+		}) or {}
+		cli.set_mem(cache_key, reviewers, cli.cache_ttl())
+		on_done(reviewers, nil)
+	end, {
+		action = "Fetch PR reviewers",
+		repo = pr.repo_full_name,
+		number = pr.id,
+	})
+end
+
+---@param pr PullRequest
 ---@param _opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(result: { review: PullsReview, comments: PullsComment[] }|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
@@ -755,55 +884,31 @@ end
 ---@param on_done fun(data: PullsReviewData|nil, err: string|nil)
 ---@return { cancel: fun() }
 function M.fetch(pr, opts, on_done)
-	local remaining = 3
-	local review_result, tasks_result, details_result
-	local review_err, details_err
-	local function finish_fetch()
-		remaining = remaining - 1
-		if remaining > 0 then
-			return
-		end
-		if review_err or details_err then
-			on_done(nil, review_err or details_err)
+	local requests = request_scope.new()
+	requests.all({
+		comments = function(done)
+			return fetch_comments(pr, opts, done)
+		end,
+		tasks = function(done)
+			return fetch_tasks(pr, opts, done)
+		end,
+		details = function(done)
+			return fetch_review_details(pr, opts, done)
+		end,
+	}, function(results, errors)
+		if errors.comments or errors.details then
+			on_done(nil, errors.comments or errors.details)
 			return
 		end
 		on_done({
-			review = review_result.review,
-			comments = review_result.comments,
-			tasks = tasks_result,
-			reviewers = details_result.reviewers,
-			history = details_result.history,
+			review = results.comments.review,
+			comments = results.comments.comments,
+			tasks = results.tasks or {},
+			reviewers = results.details.reviewers,
+			history = results.details.history,
 		}, nil)
-	end
-
-	local comments_handle = fetch_comments(pr, opts, function(result, err)
-		review_result = result
-		review_err = err
-		finish_fetch()
 	end)
-	local tasks_handle = fetch_tasks(pr, opts, function(tasks)
-		tasks_result = tasks or {}
-		finish_fetch()
-	end)
-	local details_handle = fetch_review_details(pr, opts, function(result, err)
-		details_result = result or { reviewers = {}, history = {} }
-		details_err = err
-		finish_fetch()
-	end)
-
-	return {
-		cancel = function()
-			if comments_handle then
-				comments_handle.cancel()
-			end
-			if tasks_handle then
-				tasks_handle.cancel()
-			end
-			if details_handle then
-				details_handle.cancel()
-			end
-		end,
-	}
+	return requests
 end
 
 ---@param pr PullRequest
@@ -828,6 +933,9 @@ function M.set_file_reviewed(pr, path, reviewed, on_done)
 		"-f",
 		"path=" .. path,
 	}, function(_, err)
+		if err == nil then
+			cli.delete_mem(string.format("github:review-context:%s:%s", pr.repo_full_name, tostring(pr.id)))
+		end
 		on_done(err == nil, err)
 	end, {
 		action = reviewed and "Mark file reviewed" or "Mark file unreviewed",
@@ -959,7 +1067,7 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.start(pr, review, on_done)
-	return M.with_pending(pr, review, tostring(pr.source.commit_hash or ""), function()
+	return M.with_pending(pr, review, pr.source.commit_hash, function()
 		on_done(true, nil)
 		return nil
 	end, function(err)
@@ -1032,7 +1140,7 @@ function M.fetch_context(pr, opts, on_done)
 		end
 		pr.node_id = tostring(pull_request.id or "")
 
-		local authors = {}
+		local mention_candidates = {}
 		local seen = {}
 		local function add(author)
 			if author == nil then
@@ -1041,7 +1149,7 @@ function M.fetch_context(pr, opts, on_done)
 			local key = tostring(author.username or author.nickname or author.name or ""):lower()
 			if key ~= "" and not seen[key] then
 				seen[key] = true
-				table.insert(authors, author)
+				table.insert(mention_candidates, author)
 			end
 		end
 
@@ -1056,7 +1164,7 @@ function M.fetch_context(pr, opts, on_done)
 			add(review_author(raw.requestedReviewer or raw))
 		end
 
-		local context = { authors = authors, reviewed_files = reviewed_files }
+		local context = { mention_candidates = mention_candidates, reviewed_files = reviewed_files }
 		cli.set_mem(cache_key, context, cli.cache_ttl())
 		on_done(context, nil)
 	end, {

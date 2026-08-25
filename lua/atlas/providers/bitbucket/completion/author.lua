@@ -4,8 +4,9 @@ local M = {}
 ---@return PullsAuthor[]
 local function collect_authors(context)
 	local authors = {}
+	---@param author PullsAuthor|nil
 	local function add(author)
-		if type(author) ~= "table" then
+		if author == nil then
 			return
 		end
 		local id = tostring(author.id or "")
@@ -18,7 +19,7 @@ local function collect_authors(context)
 		end
 		local name = tostring(author.name or "")
 		if name == "" then
-			name = tostring(author.display_name or username)
+			name = username
 		end
 		authors[id] = {
 			id = id,
@@ -27,17 +28,14 @@ local function collect_authors(context)
 		}
 	end
 
-	local pr = context.pr
-	for _, author in ipairs((context.review_context or {}).authors or {}) do
+	for _, author in ipairs((context.review_context or {}).mention_candidates or {}) do
 		add(author)
 	end
-	if pr then
-		add(pr.author)
-		for _, reviewer in ipairs(pr.reviewers or {}) do
-			add(reviewer)
-		end
+	add(context.pr.author)
+	for _, reviewer in ipairs(context.pr.reviewers or {}) do
+		add(reviewer)
 	end
-	for _, items in ipairs({ context.comments or {}, context.tasks or {}, context.conversation or {} }) do
+	for _, items in ipairs({ context.comments, context.tasks or {}, context.conversation or {} }) do
 		for _, item in ipairs(items) do
 			add(item.author)
 		end
@@ -81,7 +79,7 @@ end
 ---@return { id: string, label: string }[]
 local function to_mentions(mention_map)
 	local users = {}
-	for id, label in pairs(mention_map or {}) do
+	for id, label in pairs(mention_map) do
 		if id ~= "" and label ~= "" then
 			table.insert(users, { id = id, label = label })
 		end
@@ -99,7 +97,7 @@ function M.for_pulls(context)
 	return {
 		trigger = "@",
 		resolve_items = function()
-			for _, items in ipairs({ context.comments or {}, context.tasks or {} }) do
+			for _, items in ipairs({ context.comments, context.tasks or {} }) do
 				for _, item in ipairs(items) do
 					item.content_display = resolve(item.content_raw, mention_map)
 				end
@@ -131,16 +129,19 @@ function M.for_pulls(context)
 			return matches
 		end,
 		format_mention = function(author)
-			local id = tostring((author or {}).id or "")
+			if author == nil then
+				return ""
+			end
+			local id = tostring(author.id or "")
 			if id ~= "" then
 				return "@{" .. id .. "}"
 			end
-			local name = tostring((author or {}).nickname or "")
+			local name = tostring(author.nickname or "")
 			if name == "" then
-				name = tostring((author or {}).username or "")
+				name = tostring(author.username or "")
 			end
 			if name == "" then
-				name = tostring((author or {}).name or "")
+				name = tostring(author.name or "")
 			end
 			return name ~= "" and ("@" .. name) or ""
 		end,

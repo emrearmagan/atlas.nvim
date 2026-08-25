@@ -11,12 +11,6 @@ local repositories = require("atlas.pulls.providers.bitbucket.api.repositories")
 local core_notify = require("atlas.core.notify")
 
 ---@param ctx AtlasPullActionContext
----@return boolean
-local function has_pr(ctx)
-	return ctx.pr ~= nil and ctx.pr.id ~= nil
-end
-
----@param ctx AtlasPullActionContext
 ---@param level "loading"|"success"|"warn"|"error"|"info"
 ---@param message string
 ---@param duration integer|nil
@@ -40,7 +34,7 @@ end
 ---@param ctx AtlasPullActionContext
 ---@return boolean, string|nil
 local function approve_available(ctx)
-	if not has_pr(ctx) or ctx.pr == nil then
+	if ctx.pr == nil then
 		return false, "No PR selected"
 	end
 	if not reviews.has_action(ctx.pr, "approve") then
@@ -52,7 +46,7 @@ end
 ---@param ctx AtlasPullActionContext
 ---@return boolean, string|nil
 local function merge_available(ctx)
-	if not has_pr(ctx) or ctx.pr == nil then
+	if ctx.pr == nil then
 		return false, "No PR selected"
 	end
 	if not pullrequests.has_action(ctx.pr, "merge") then
@@ -76,7 +70,7 @@ end
 ---@param ctx AtlasPullActionContext
 ---@return boolean, string|nil
 local function request_changes_available(ctx)
-	if not has_pr(ctx) or ctx.pr == nil then
+	if ctx.pr == nil then
 		return false, "No PR selected"
 	end
 	if not reviews.has_action(ctx.pr, "request_changes") then
@@ -149,8 +143,9 @@ local function search(ctx, done)
 
 		notify(ctx, "info", string.format("Loaded %d workspaces", #ws), 1200)
 
+		---@param selected_ws BitbucketWorkspace
 		local function continue_with_workspace(selected_ws)
-			if type(selected_ws) ~= "table" or tostring(selected_ws.slug or "") == "" then
+			if selected_ws.slug == "" then
 				notify(ctx, "warn", "Invalid workspace selection")
 				done({ changed_pr = false, message = "Invalid workspace" }, nil)
 				return

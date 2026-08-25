@@ -262,15 +262,16 @@ local function default()
 end
 
 local displays = {
-	bitbucket = bitbucket,
-	github = github,
-	gitlab = gitlab,
+	bitbucket = bitbucket(),
+	github = github(),
+	gitlab = gitlab(),
 }
+local fallback = default()
 
 ---@param provider string|nil
 ---@return table
 function M.get(provider)
-	return (displays[provider] or default)()
+	return displays[provider] or fallback
 end
 
 return M

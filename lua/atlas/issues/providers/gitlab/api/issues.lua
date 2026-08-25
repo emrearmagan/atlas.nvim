@@ -26,10 +26,23 @@ query($path: ID!, $iid: String!) {
 }
 ]]
 
+local ISSUE_DETAILS_GQL = [[
+query($path: ID!, $iid: String!) {
+  project(fullPath: $path) {
+    issue(iid: $iid) {
+      description
+      assignees(first: 100) { nodes { id username name } }
+      labels(first: 100) { nodes { title color } }
+      milestone { title }
+    }
+  }
+}
+]]
+
 ---@param path string
 ---@param iid integer
 local function invalidate_issue(path, iid)
-	service.delete_memory_cache(string.format("gitlab:issue:%s#%d", path, iid))
+	service.delete_memory_cache(string.format("gitlab:issue-details:%s#%d", path, iid))
 	service.clear_cache(LIST_CACHE_PREFIX)
 end
 
@@ -37,7 +50,7 @@ end
 ---@return string
 local function build_query(params)
 	local keys = {}
-	for k, v in pairs(params or {}) do
+	for k, v in pairs(params) do
 		if (type(v) == "table" and #v > 0) or (type(v) ~= "table" and v ~= nil and v ~= "") then
 			table.insert(keys, k)
 		end
@@ -65,7 +78,7 @@ end
 
 ---@param view AtlasGitLabIssuesViewConfig
 ---@param opts { force_load?: boolean, max_results?: number }|nil
----@param on_done fun(issues: Issue[]|nil, err: string|nil)
+---@param on_done fun(issues: Issue[], err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.list_issues(view, opts, on_done)
 	opts = opts or {}
@@ -92,10 +105,8 @@ function M.list_issues(view, opts, on_done)
 	if view.search and view.search ~= "" then
 		params.search = view.search
 	end
-	if type(view.extra_params) == "table" then
-		for k, v in pairs(view.extra_params) do
-			params[k] = v
-		end
+	for k, v in pairs(view.extra_params or {}) do
+		params[k] = v
 	end
 
 	local endpoint = (
@@ -129,7 +140,7 @@ end
 
 ---@param refs IssueRef[]
 ---@param opts { force_load?: boolean }|nil
----@param on_done fun(issues: Issue[]|nil, err: string|nil)
+---@param on_done fun(issues: Issue[], err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_by_refs(refs, opts, on_done)
 	opts = opts or {}
@@ -142,7 +153,7 @@ function M.fetch_by_refs(refs, opts, on_done)
 	for _, ref in ipairs(refs) do
 		local path, iid = normalizer.parse_key(ref.key)
 		if path == "" or iid == nil then
-			on_done(nil, "Invalid issue key: " .. tostring(ref.key))
+			on_done({}, "Invalid issue key: " .. tostring(ref.key))
 			return nil
 		end
 		iids_by_project[path] = iids_by_project[path] or {}
@@ -169,7 +180,7 @@ function M.fetch_by_refs(refs, opts, on_done)
 		local issues = {}
 		for path in pairs(iids_by_project) do
 			if errors[path] then
-				on_done(nil, errors[path])
+				on_done({}, errors[path])
 				return
 			end
 			vim.list_extend(issues, values[path] or {})
@@ -179,19 +190,20 @@ function M.fetch_by_refs(refs, opts, on_done)
 	return requests
 end
 
----@param key string
+---@param ref IssueRef
 ---@param opts { force_load?: boolean }|nil
----@param on_done fun(issue: GitLabIssueDetails|nil, err: string|nil)
+---@param on_done fun(details: IssueDetails|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.get_issue(key, opts, on_done)
+function M.fetch_issue(ref, opts, on_done)
 	opts = opts or {}
+	local key = ref.key
 	local path, iid = normalizer.parse_key(key)
 	if path == "" or iid == nil then
 		on_done(nil, "Invalid issue key: " .. tostring(key))
 		return nil
 	end
 
-	local cache_key = string.format("gitlab:issue:%s#%d", path, iid)
+	local cache_key = string.format("gitlab:issue-details:%s#%d", path, iid)
 	if not opts.force_load then
 		local cached, ok = service.get_memory_cache(cache_key)
 		if ok then
@@ -200,21 +212,25 @@ function M.get_issue(key, opts, on_done)
 		end
 	end
 
-	local endpoint = string.format("/projects/%s/issues/%d", service.url_encode(path), iid)
-	return service.request("GET", endpoint, nil, function(result, err)
+	return service.graphql(ISSUE_DETAILS_GQL, { path = path, iid = tostring(iid) }, function(data, err)
 		if err then
 			on_done(nil, err)
 			return
 		end
-		local issue = normalizer.to_issue_details(result)
-		if issue then
-			service.set_memory_cache(cache_key, issue)
+		local project = json.safe_table(data).project
+		local raw = json.safe_table(project).issue
+		local details = normalizer.to_issue_details(raw)
+		if details then
+			service.set_memory_cache(cache_key, details)
+			on_done(details, nil)
+			return
 		end
-		on_done(issue, nil)
+		on_done(nil, "Issue not found")
 	end, {
 		action = "Fetch issue",
 		path = path,
 		iid = iid,
+		transport = "graphql",
 	})
 end
 
@@ -234,17 +250,15 @@ function M.get_assignees(key, on_done)
 			return
 		end
 
-		data = json.nilify(data)
-		local project = type(data) == "table" and json.nilify(data.project) or nil
-		local issue = type(project) == "table" and json.nilify(project.issue) or nil
-		if type(issue) ~= "table" then
+		local project = json.safe_table(data).project
+		local issue = json.nilify(json.safe_table(project).issue)
+		if issue == nil then
 			on_done(nil, "Issue not found")
 			return
 		end
 
-		local connection = json.nilify(issue.assignees)
 		local assignees = {}
-		for _, raw in ipairs(type(connection) == "table" and json.safe_table(connection.nodes) or {}) do
+		for _, raw in ipairs(json.safe_table(json.safe_table(issue.assignees).nodes)) do
 			local user = normalizer.to_user(raw)
 			local id = tonumber((json.safe_str(raw.id) or ""):match("(%d+)$"))
 			if user and id then
@@ -260,12 +274,12 @@ function M.get_assignees(key, on_done)
 	})
 end
 
----@param key string
+---@param issue Issue
 ---@param description string
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.update_description(key, description, on_done)
-	local path, iid = normalizer.parse_key(key)
+function M.update_description(issue, description, on_done)
+	local path, iid = normalizer.parse_key(tostring(issue.key or ""))
 	if path == "" or iid == nil then
 		on_done(false, "Invalid issue key")
 		return nil
@@ -324,10 +338,10 @@ function M.update_labels(key, diff, on_done)
 	end
 
 	local payload = {}
-	if type(diff.add) == "table" and #diff.add > 0 then
+	if diff.add and #diff.add > 0 then
 		payload.add_labels = table.concat(diff.add, ",")
 	end
-	if type(diff.remove) == "table" and #diff.remove > 0 then
+	if diff.remove and #diff.remove > 0 then
 		payload.remove_labels = table.concat(diff.remove, ",")
 	end
 	if next(payload) == nil then
@@ -368,17 +382,15 @@ function M.fetch_issue_labels(key, on_done)
 			return
 		end
 
-		data = json.nilify(data)
-		local project = type(data) == "table" and json.nilify(data.project) or nil
-		local issue = type(project) == "table" and json.nilify(project.issue) or nil
-		if type(issue) ~= "table" then
+		local project = json.safe_table(data).project
+		local issue = json.nilify(json.safe_table(project).issue)
+		if issue == nil then
 			on_done(nil, "Issue not found")
 			return
 		end
 
-		local connection = json.nilify(issue.labels)
 		local labels = {}
-		for _, raw in ipairs(type(connection) == "table" and json.safe_table(connection.nodes) or {}) do
+		for _, raw in ipairs(json.safe_table(json.safe_table(issue.labels).nodes)) do
 			local name = json.safe_str(raw.title)
 			if name then
 				table.insert(labels, { name = name, color = json.safe_str(raw.color) })
@@ -425,29 +437,10 @@ function M.set_assignee_ids(key, ids, on_done)
 	})
 end
 
----@class GitLabCreateIssueOpts
----@field project_path string  -- "group/project"
----@field title string
----@field description string|nil
----@field assignee_ids integer[]|nil
----@field labels string[]|nil  -- list of label names - joined with comma for the API
----@field milestone_id integer|nil
----@field due_date string|nil  -- "YYYY-MM-DD"
----@field confidential boolean|nil
-
----@class GitLabCreateIssueResult
----@field key string|nil  -- "group/project#iid"
----@field iid integer|nil
----@field url string|nil
-
----@param opts GitLabCreateIssueOpts
----@param on_done fun(result: GitLabCreateIssueResult|nil, err: string|nil)
+---@param opts { project_path: string, title: string, description: string|nil, assignee_ids: integer[]|nil, labels: string[]|nil, milestone_id: integer|nil, due_date: string|nil, confidential: boolean|nil }
+---@param on_done fun(result: { key: string|nil, iid: integer|nil, url: string|nil }|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.create_issue(opts, on_done)
-	if type(opts) ~= "table" then
-		on_done(nil, "Missing options")
-		return nil
-	end
 	local path = tostring(opts.project_path or "")
 	if path == "" then
 		on_done(nil, "Missing project_path")
@@ -460,19 +453,19 @@ function M.create_issue(opts, on_done)
 	end
 
 	local payload = { title = title }
-	if type(opts.description) == "string" and opts.description ~= "" then
+	if opts.description and opts.description ~= "" then
 		payload.description = opts.description
 	end
-	if type(opts.assignee_ids) == "table" and #opts.assignee_ids > 0 then
+	if opts.assignee_ids and #opts.assignee_ids > 0 then
 		payload.assignee_ids = opts.assignee_ids
 	end
-	if type(opts.labels) == "table" and #opts.labels > 0 then
+	if opts.labels and #opts.labels > 0 then
 		payload.labels = table.concat(opts.labels, ",")
 	end
-	if type(opts.milestone_id) == "number" then
+	if opts.milestone_id then
 		payload.milestone_id = opts.milestone_id
 	end
-	if type(opts.due_date) == "string" and opts.due_date ~= "" then
+	if opts.due_date and opts.due_date ~= "" then
 		payload.due_date = opts.due_date
 	end
 	if opts.confidential == true then
@@ -488,13 +481,15 @@ function M.create_issue(opts, on_done)
 		end
 
 		local issue = normalizer.to_issue(result)
-		local iid = issue and issue.iid
-		local key = (issue and issue.key) or (iid and string.format("%s#%d", path, iid) or nil)
+		if issue == nil then
+			on_done(nil, "GitLab returned an invalid issue")
+			return
+		end
 		service.clear_cache(LIST_CACHE_PREFIX)
 		on_done({
-			key = key,
-			iid = iid,
-			url = (issue and issue.url) or (type(result.web_url) == "string" and result.web_url or nil),
+			key = issue.key,
+			iid = issue.iid,
+			url = issue.url,
 		}, nil)
 	end, {
 		action = "Create issue",

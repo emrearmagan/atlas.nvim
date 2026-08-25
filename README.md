@@ -274,7 +274,7 @@ At some point there will probably an extension for lualine.
   providers = {
     ---@type AtlasGitHubProviderConfig
     github = {
-      cache_ttl = 300,
+      cache_ttl = 300, -- Set to 0 to disable caching.
     },
 
     ---@type AtlasGitLabProviderConfig
@@ -283,14 +283,14 @@ At some point there will probably an extension for lualine.
       -- Personal Access Token with `api` scope:
       -- https://docs.gitlab.com/ee/user/profile/personal_access_tokens.html
       token = vim.env.GITLAB_TOKEN,
-      cache_ttl = 300,
+      cache_ttl = 300, -- Set to 0 to disable caching.
     },
 
     ---@type AtlasBitbucketProviderConfig
     bitbucket = {
       user = vim.env.BITBUCKET_USER,
       token = vim.env.BITBUCKET_TOKEN,
-      cache_ttl = 300,
+      cache_ttl = 300, -- Set to 0 to disable caching.
     },
 
     ---@type AtlasJiraProviderConfig
@@ -301,7 +301,7 @@ At some point there will probably an extension for lualine.
       token = "your_jira_api_token",
       auth_method = "basic", -- "basic" or "bearer", defaults to "basic". If using bearer, set `token` to your API token.
       api_type = "cloud", -- either "cloud" or "server", defaults to "cloud". Cloud API is v3, server API is v2
-      cache_ttl = 300,
+      cache_ttl = 300, -- Set to 0 to disable caching.
 
       project_config = {
         -- The Jira custom field ID used for story points. Defaults to "customfield_10016".
@@ -569,7 +569,7 @@ pulls = {
       label = "Search", -- default
       items = {
         ["Reviewing"]    = { scope = "all", extra_params = { reviewer_id = "Me" } },
-        ["Merged by me"] = { scope = "all", state = "merged", author_username = "me" },
+        ["Created by me"] = { scope = "all", author_username = "me" },
       },
     },
   },

@@ -20,7 +20,7 @@ end
 ---@return { name: string, value: any }[]
 local function sorted_items(items)
 	local out = {}
-	for name, value in pairs(items or {}) do
+	for name, value in pairs(items) do
 		table.insert(out, { name = tostring(name), value = value })
 	end
 	table.sort(out, function(a, b)
@@ -33,12 +33,12 @@ end
 ---@param provider AtlasProviderId
 ---@param domain "pulls"|"issues"
 ---@param base_views V[]
+---@param saved_items AtlasStarredItem[]
 ---@return V[]
-function M.views(provider, domain, base_views)
+function M.views(provider, domain, base_views, saved_items)
 	local options = config.domain_options(provider, domain) or {}
 	local bookmarks = options.bookmarks
-	local saved = require("atlas.core.starred").list(domain, provider) or {}
-	if (bookmarks == nil or next(bookmarks.items or {}) == nil) and #saved == 0 then
+	if (bookmarks == nil or next(bookmarks.items or {}) == nil) and #saved_items == 0 then
 		return base_views
 	end
 
@@ -108,15 +108,15 @@ end
 ---@param items_table table<string, any>
 ---@param width integer
 ---@param starred { domain: "pulls"|"issues", provider: string }|nil
-function M.render(lines, spans, line_map, items_table, width, starred)
+---@param saved_items AtlasStarredItem[]
+function M.render(lines, spans, line_map, items_table, width, starred, saved_items)
 	local items = sorted_items(items_table)
 	if starred then
-		local saved = require("atlas.core.starred").list(starred.domain, starred.provider) or {}
-		if #saved > 0 then
+		if #saved_items > 0 then
 			table.insert(items, 1, {
 				name = "Starred",
 				value = { _kind = "starred" },
-				preview = string.format("%d item%s", #saved, #saved == 1 and "" or "s"),
+				preview = string.format("%d item%s", #saved_items, #saved_items == 1 and "" or "s"),
 			})
 		end
 	end

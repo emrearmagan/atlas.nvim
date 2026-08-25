@@ -21,12 +21,13 @@ end
 ---@param loading boolean
 ---@return PullsDetailHeaderField[]
 function M.header_fields(_pr, details, loading)
+	---@cast details GitHubPullRequestDetails|nil
 	if details == nil then
 		return loading and { header.loading_field("Assignees") } or {}
 	end
 
 	local logins = {}
-	for _, assignee in ipairs(details.assignees or {}) do
+	for _, assignee in ipairs(details.assignees) do
 		local login = assignee.username
 		if login ~= "" then
 			table.insert(logins, login)
@@ -41,10 +42,10 @@ end
 ---@param _loading boolean
 ---@return PullsDetailChip[]
 function M.chips(pr, details, _loading)
+	---@cast details GitHubPullRequestDetails|nil
 	local chips = {}
-	local data = details or pr
 
-	local hash = tostring(data.source and data.source.commit_hash or "")
+	local hash = pr.source.commit_hash
 	if hash ~= "" then
 		if #hash > MAX_HASH_LEN then
 			hash = hash:sub(1, MAX_HASH_LEN)
@@ -52,7 +53,7 @@ function M.chips(pr, details, _loading)
 		table.insert(chips, { label = hash, hl = "AtlasTabInactive" })
 	end
 
-	for _, lbl in ipairs((details and details.labels) or {}) do
+	for _, lbl in ipairs(details and details.labels or {}) do
 		local name = tostring(lbl.name or "")
 		if name ~= "" then
 			local color = tostring(lbl.color or "")

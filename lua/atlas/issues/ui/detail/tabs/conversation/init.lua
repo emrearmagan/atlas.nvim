@@ -60,7 +60,8 @@ function M.on_select(issue, refresh, opts)
 	end)
 end
 
----@param issue IssueDetails
+---@param issue Issue
+---@param details IssueDetails|nil
 ---@param width integer
 M.render = renderer.render
 
@@ -76,10 +77,12 @@ end
 ---@return boolean|nil
 function M.on_enter(_issue, entry)
 	local item = entry and entry.conversation_item or nil
-	if not item or (item.kind ~= "description" and item.kind ~= "comment") then
+	if not item or item.kind ~= "comment" then
 		return
 	end
-	local url = tostring(item.entity.url or "")
+	---@type IssueComment
+	local comment = item.entity
+	local url = tostring(comment.url or "")
 	if url ~= "" then
 		vim.ui.open(url)
 		return true

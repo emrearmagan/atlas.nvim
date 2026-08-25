@@ -3,17 +3,11 @@ local M = {}
 local json = require("atlas.core.json")
 local service = require("atlas.providers.gitlab.client")
 
----@class GitLabLabel
----@field id integer
----@field name string
----@field color string|nil
----@field description string|nil
-
 ---@param project_path string
----@param on_done fun(labels: GitLabLabel[]|nil, err: string|nil)
+---@param on_done fun(labels: IssueLabel[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.list(project_path, on_done)
-	if type(project_path) ~= "string" or project_path == "" then
+	if project_path == "" then
 		on_done(nil, "Missing project path")
 		return nil
 	end
@@ -24,17 +18,19 @@ function M.list(project_path, on_done)
 			return
 		end
 		local out = {}
-		for _, raw in ipairs(result) do
-			local color = json.safe_str(raw.color)
-			if color and color:sub(1, 1) == "#" then
-				color = color:sub(2)
+		for _, raw_value in ipairs(json.safe_table(result)) do
+			local raw = json.safe_table(raw_value)
+			local name = json.safe_str(raw.name)
+			if name and name ~= "" then
+				local color = json.safe_str(raw.color)
+				if color and color:sub(1, 1) == "#" then
+					color = color:sub(2)
+				end
+				table.insert(out, {
+					name = name,
+					color = color,
+				})
 			end
-			table.insert(out, {
-				id = tonumber(raw.id),
-				name = raw.name,
-				color = color,
-				description = json.safe_str(raw.description),
-			})
 		end
 		on_done(out, nil)
 	end, {

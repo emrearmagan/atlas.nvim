@@ -12,9 +12,9 @@
 --       ---@type AtlasGitLabPullsConfig
 --       gitlab = {
 --         views = {
---           { name = "Assigned",  key = "1", scope = "assigned_to_me", state = "opened" },
---           { name = "Created",   key = "2", scope = "created_by_me",  state = "opened" },
---           { name = "Reviewing", key = "3", scope = "all",            state = "opened",
+--           { name = "Assigned",  key = "1", scope = "assigned_to_me" },
+--           { name = "Created",   key = "2", scope = "created_by_me" },
+--           { name = "Reviewing", key = "3", scope = "all",
 --             extra_params = { reviewer_id = "Me" } },
 --         },
 --         bookmarks = {
@@ -22,7 +22,7 @@
 --           -- label = "Search", -- default
 --           items = {
 --             ["Reviewing"]   = { scope = "all", extra_params = { reviewer_id = "Me" } },
---             ["Merged by me"] = { scope = "all", author_username = "me" },
+--             ["Created by me"] = { scope = "all", author_username = "me" },
 --           },
 --         },
 --       },
@@ -62,7 +62,7 @@
 ---@class AtlasGitLabProviderConfig
 ---@field base_url string
 ---@field token string
----@field cache_ttl number|nil
+---@field cache_ttl number|nil Cache lifetime in seconds. Set to 0 to disable caching.
 
 ---@class AtlasGitLabPullsConfig
 ---@field views AtlasGitLabPullsViewConfig[]|nil

@@ -2,6 +2,7 @@ local M = {}
 
 local service = require("atlas.providers.gitlab.client")
 local mapper = require("atlas.pulls.providers.gitlab.api.mapper")
+local json = require("atlas.core.json")
 
 ---@param on_done fun(user: PullsUser|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
@@ -23,7 +24,9 @@ function M.fetch_user(on_done)
 			service.set_cache(cache_key, user)
 		end
 		on_done(user, nil)
-	end)
+	end, {
+		action = "Fetch current user",
+	})
 end
 
 ---@param project_path string
@@ -31,7 +34,7 @@ end
 ---@param on_done fun(users: PullsUser[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.list_members(project_path, query, on_done)
-	if type(project_path) ~= "string" or project_path == "" then
+	if project_path == "" then
 		on_done(nil, "Missing project path")
 		return nil
 	end
@@ -47,14 +50,18 @@ function M.list_members(project_path, query, on_done)
 			return
 		end
 		local out = {}
-		for _, raw in ipairs(result) do
+		for _, raw in ipairs(json.safe_table(result)) do
 			local user = mapper.to_user(raw)
 			if user then
 				table.insert(out, user)
 			end
 		end
 		on_done(out, nil)
-	end)
+	end, {
+		action = "List project members",
+		project_path = project_path,
+		query = q,
+	})
 end
 
 return M

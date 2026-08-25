@@ -40,7 +40,7 @@ function M.setup(buf, refresh)
 			opts = { nowait = true, silent = true },
 			callback = function()
 				local lnum = vim.api.nvim_win_get_cursor(0)[1]
-				local entry = (detail.line_map or {})[lnum]
+				local entry = detail.line_map[lnum]
 				if entry and entry.kind == "pipeline" and entry.pipeline and state.toggle_pipeline(entry.pipeline) then
 					refresh()
 				elseif entry and entry.kind == "description" then
@@ -59,13 +59,14 @@ function M.setup(buf, refresh)
 			opts = { nowait = true, silent = true },
 			callback = function()
 				local lnum = vim.api.nvim_win_get_cursor(0)[1]
-				local entry = (detail.line_map or {})[lnum]
+				local entry = detail.line_map[lnum]
 				local pr = detail.current_pr
-				if pr and entry and entry.kind == "pipeline" and entry.pipeline then
+				if pr and entry and entry.pipeline then
 					local pipelines = type(detail.pipelines) == "table" and detail.pipelines or { entry.pipeline }
 					require("atlas.pulls.ui.pipelines").open(pr, detail.provider, {
 						pipelines = pipelines,
 						selected_pipeline = entry.pipeline,
+						selected_stage = entry.stage,
 						selected_job = entry.job,
 					})
 				end

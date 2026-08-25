@@ -43,7 +43,7 @@ local function stop_spinner()
 end
 
 local function is_loading()
-	if state.details_loading then
+	if state.issue_loading or state.details_loading then
 		return true
 	end
 	if state.current_issue == nil then
@@ -149,40 +149,29 @@ local function load_active_tab(issue, opts)
 	end
 end
 
----@param issue Issue
----@param details IssueDetails|nil
+---@param ref IssueRef
 ---@param force_refresh boolean
-local function load_issue(issue, details, force_refresh)
+local function load_details(ref, force_refresh)
 	local provider = state.provider
 	if provider == nil then
 		return
 	end
 
-	local refresh = refresh_callback(issue)
 	state.details_loading = true
-
-	if details then
-		state.current_details = details
-		state.details_loading = false
-		load_active_tab(details, { force_refresh = force_refresh })
-		return
-	end
-
-	load_active_tab(issue, { force_refresh = force_refresh })
 	state.requests.run(function(done)
-		return provider.capabilities.core.fetch_issue(issue, { force_load = force_refresh }, done)
+		return provider.capabilities.core.fetch_issue(ref, { force_load = force_refresh }, done)
 	end, function(fetched_details, err)
-		if state.provider ~= provider or not same_ref(state.current_issue, issue) then
+		if state.provider ~= provider or not same_ref(state.current_issue or pending_ref, ref) then
 			return
 		end
 		state.details_loading = false
 		if fetched_details == nil then
-			notify.error(tostring(err or "Failed to load issue"))
-			refresh()
-			return
+			notify.error(tostring(err or "Failed to load issue details"))
+		else
+			state.current_details = fetched_details
 		end
-		state.current_details = fetched_details
-		refresh()
+		update_spinner()
+		render_if_open()
 	end)
 end
 
@@ -194,16 +183,17 @@ local function clear_issue()
 	state.current_issue = nil
 	state.current_details = nil
 	state.details_loading = false
+	state.issue_loading = false
 	state.line_map = {}
 end
 
 ---@param issue Issue
----@param details IssueDetails|nil
 ---@param force_refresh boolean
-local function show_issue(issue, details, force_refresh)
+local function show_issue(issue, force_refresh)
 	state.current_issue = issue
 	pending_ref = nil
-	load_issue(issue, details, force_refresh)
+	state.issue_loading = false
+	load_active_tab(issue, { force_refresh = force_refresh })
 	update_spinner()
 	render()
 end
@@ -263,11 +253,9 @@ function M.select(issue, opts)
 	end
 
 	clear_issue()
-	local details = nil
-	if opts.force_refresh ~= true and issue.description ~= nil then
-		details = issue --[[@as IssueDetails]]
-	end
-	show_issue(issue, details, opts.force_refresh == true)
+	state.details_loading = true
+	show_issue(issue, opts.force_refresh == true)
+	load_details(issue, opts.force_refresh == true)
 end
 
 ---@param input Issue|IssueRef
@@ -304,7 +292,7 @@ function M.open(input, opts)
 	if
 		opts.force_refresh ~= true
 		and same_ref(state.current_issue or pending_ref, ref)
-		and (state.details_loading or state.current_details)
+		and (state.issue_loading or state.details_loading or state.current_details)
 	then
 		render()
 		return
@@ -312,36 +300,44 @@ function M.open(input, opts)
 
 	clear_issue()
 	pending_ref = ref
-	state.details_loading = true
+	state.issue_loading = true
+	load_details(ref, opts.force_refresh == true)
 	update_spinner()
 	render()
 	state.requests.run(function(done)
-		return provider.capabilities.core.fetch_issue(ref, { force_load = opts.force_refresh == true }, done)
-	end, function(loaded_issue, err)
+		return provider.capabilities.core.fetch_by_refs(
+			{ ref },
+			{ force_load = opts.force_refresh == true, max_results = 1 },
+			done
+		)
+	end, function(issues, err)
 		if state.provider ~= provider or not same_ref(pending_ref, ref) then
 			return
 		end
+		local loaded_issue = issues and issues[1] or nil
 		if loaded_issue == nil then
 			pending_ref = nil
+			state.issue_loading = false
 			state.details_loading = false
+			state.current_details = nil
 			update_spinner()
 			render()
 			notify.error(tostring(err or "Failed to load issue"))
 			return
 		end
-		show_issue(loaded_issue, loaded_issue, opts.force_refresh == true)
+		show_issue(loaded_issue, opts.force_refresh == true)
 	end)
 end
 
----@param ref IssueRef|nil
-function M.refresh(ref)
+function M.refresh()
 	if not M.is_open() or state.current_issue == nil then
 		return
 	end
-	if ref ~= nil and not same_ref(state.current_issue, ref) then
-		return
-	end
-	M.select(state.current_issue, { force_refresh = true })
+	M.open({ key = state.current_issue.key }, {
+		provider = state.provider,
+		force_refresh = true,
+		on_update = state.on_update,
+	})
 end
 
 ---@param step 1|-1
@@ -359,7 +355,7 @@ local function change_tab(step)
 	end
 
 	set_tab(items[(index - 1 + step) % #items + 1].key)
-	local issue = state.current_details or state.current_issue
+	local issue = state.current_issue
 	if issue then
 		load_active_tab(issue)
 		update_spinner()

@@ -1,11 +1,34 @@
 local M = {}
 
 local config = require("atlas.config")
+local json = require("atlas.core.json")
 local service = require("atlas.pulls.providers.bitbucket.api.service")
 local mapper = require("atlas.pulls.providers.bitbucket.api.mapper")
 local logger = require("atlas.core.logger")
 local request_scope = require("atlas.core.requests")
 local state = require("atlas.pulls.providers.bitbucket.state")
+
+local SUMMARY_FIELDS = {
+	"id",
+	"title",
+	"state",
+	"draft",
+	"author",
+	"source",
+	"destination",
+	"comment_count",
+	"task_count",
+	"created_on",
+	"updated_on",
+	"participants",
+	"links",
+}
+local PULL_REQUEST_FIELDS = table.concat(SUMMARY_FIELDS, ",")
+local list_fields = { "next" }
+for _, field in ipairs(SUMMARY_FIELDS) do
+	table.insert(list_fields, "values." .. field)
+end
+local PULL_REQUEST_LIST_FIELDS = table.concat(list_fields, ",")
 
 ---@param pr PullRequest
 ---@param action "merge"|"decline"
@@ -49,11 +72,12 @@ local function fetch_pullrequests_single(workspace, repo, opts, on_done)
 		table.insert(state_params, "state=" .. s)
 	end
 	local endpoint = string.format(
-		"/repositories/%s/%s/pullrequests?%s&pagelen=%d&fields=%%2Bvalues.participants",
+		"/repositories/%s/%s/pullrequests?%s&pagelen=%d&fields=%s",
 		workspace,
 		repo,
 		table.concat(state_params, "&"),
-		pagelen
+		pagelen,
+		PULL_REQUEST_LIST_FIELDS
 	)
 	return service.request("GET", endpoint, nil, nil, function(result, err)
 		if err then
@@ -197,8 +221,13 @@ function M.fetch_by_refs(refs, _opts, on_done)
 	local starts = {}
 	for index, item in ipairs(parsed) do
 		starts[index] = function(done)
-			local endpoint =
-				string.format("/repositories/%s/%s/pullrequests/%s", item.workspace, item.repo, tostring(item.ref.id))
+			local endpoint = string.format(
+				"/repositories/%s/%s/pullrequests/%s?fields=%s",
+				item.workspace,
+				item.repo,
+				tostring(item.ref.id),
+				PULL_REQUEST_FIELDS
+			)
 			return service.request("GET", endpoint, nil, nil, function(result, err)
 				if err then
 					done(nil, err)
@@ -206,7 +235,7 @@ function M.fetch_by_refs(refs, _opts, on_done)
 				end
 				local pull = mapper.to_pull_request(result, item.workspace, item.repo)
 				done(pull, nil)
-			end)
+			end, { action = "Fetch pull request", repo = item.ref.repo_full_name, id = item.ref.id })
 		end
 	end
 
@@ -247,17 +276,26 @@ function M.fetch_pullrequest(ref, opts, on_done)
 		end
 	end
 
-	local endpoint = string.format("/repositories/%s/%s/pullrequests/%s", workspace, repo, tostring(ref.id))
+	local endpoint = string.format(
+		"/repositories/%s/%s/pullrequests/%s?fields=description,close_source_branch",
+		workspace,
+		repo,
+		tostring(ref.id)
+	)
 	return service.request("GET", endpoint, nil, nil, function(result, err)
 		if err then
 			on_done(nil, err)
 			return
 		end
 
-		local detail = mapper.to_pull_request_details(result, workspace, repo)
-		service.set_cache(key, detail, service.cache_ttl())
-		on_done(detail, nil)
-	end)
+		---@type BitbucketPullRequestDetails
+		local details = {
+			description = json.safe_str(result.description) or "",
+			close_source_branch = json.nilify(result.close_source_branch),
+		}
+		service.set_cache(key, details, service.cache_ttl())
+		on_done(details, nil)
+	end, { action = "Fetch pull request details", repo = ref.repo_full_name, id = ref.id })
 end
 
 ---@param pr PullRequest
@@ -278,8 +316,8 @@ function M.fetch_description(pr, _opts, on_done)
 			on_done(nil, err)
 			return
 		end
-		on_done(tostring(result.description or ""), nil)
-	end)
+		on_done(json.safe_str(result.description) or "", nil)
+	end, { action = "Fetch PR description", repo = pr.repo_full_name, id = pr.id })
 end
 
 ---@param pr PullRequest
@@ -301,7 +339,7 @@ local function update_pullrequest(pr, fields, on_done)
 		end
 		service.clear_cache()
 		on_done(true, nil)
-	end)
+	end, { action = "Update pull request", repo = pr.repo_full_name, id = pr.id })
 end
 
 ---@param pr PullRequest
@@ -344,10 +382,10 @@ function M.merge(pr, opts, on_done)
 	if opts.close_source_branch ~= nil then
 		payload.close_source_branch = opts.close_source_branch == true
 	end
-	if type(opts.merge_strategy) == "string" and opts.merge_strategy ~= "" then
+	if opts.merge_strategy and opts.merge_strategy ~= "" then
 		payload.merge_strategy = opts.merge_strategy
 	end
-	if type(opts.message) == "string" and opts.message ~= "" then
+	if opts.message and opts.message ~= "" then
 		payload.message = opts.message
 	end
 
@@ -359,7 +397,7 @@ function M.merge(pr, opts, on_done)
 		end
 		service.clear_cache()
 		on_done(result, nil)
-	end)
+	end, { action = "Merge pull request", repo = pr.repo_full_name, id = pr.id })
 end
 
 ---@param pr PullRequest
@@ -379,7 +417,7 @@ function M.decline(pr, on_done)
 		end
 		service.clear_cache()
 		on_done(true, nil)
-	end)
+	end, { action = "Decline pull request", repo = pr.repo_full_name, id = pr.id })
 end
 
 ---@param pr PullRequest
@@ -401,7 +439,11 @@ local function fetch_participants(pr, on_done)
 			return
 		end
 		on_done((result or {}).participants, nil)
-	end)
+	end, {
+		action = "Fetch PR reviewers",
+		repo = pr.repo_full_name,
+		number = pr.id,
+	})
 end
 
 ---@param pr PullRequest
@@ -409,29 +451,9 @@ end
 ---@param on_done fun(reviewers: PullsReviewer[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_reviewers(pr, opts, on_done)
-	if not (opts or {}).force_refresh and pr.reviewers ~= nil then
-		on_done(pr.reviewers, nil)
-		return nil
-	end
-
-	return fetch_participants(pr, function(participants, err)
-		if err then
-			on_done(nil, err)
-			return
-		end
-		pr.reviewers = mapper.to_reviewers(participants)
-		on_done(pr.reviewers, nil)
-	end)
-end
-
----@param pr PullRequest
----@param opts { force_refresh: boolean|nil }|nil
----@param on_done fun(reviewers: PullsReviewer[]|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.fetch_review_participants(pr, opts, on_done)
 	---@cast pr BitbucketPullRequest
 	local self_url = tostring(pr.links.self or "")
-	local key = "bitbucket:pr:review-participants:" .. self_url
+	local key = "bitbucket:pr:reviewers:" .. self_url
 	if not (opts or {}).force_refresh then
 		local cached, ok = service.get_cache(key)
 		if ok then
@@ -534,25 +556,40 @@ function M.fetch_default_reviewers(opts, on_done)
 	end
 
 	local endpoint = string.format("/repositories/%s/%s/effective-default-reviewers", workspace, repo)
-	return service.request("GET", endpoint, nil, nil, function(result, err)
+	local starts = {
+		defaults = function(done)
+			return service.request("GET", endpoint, nil, nil, done, {
+				action = "Fetch default reviewers",
+				repo = slug,
+			})
+		end,
+	}
+	if opts.pr then
+		starts.current = function(done)
+			return M.fetch_reviewers(opts.pr, { force_refresh = true }, done)
+		end
+	end
+
+	local requests = request_scope.new()
+	requests.all(starts, function(results, errors)
+		local err = errors.defaults or errors.current
 		if err then
 			on_done(nil, err)
 			return
 		end
 
+		local current = results.current or {}
 		local selected = {}
-		local current = {}
-		for _, reviewer in ipairs((opts.pr and opts.pr.reviewers) or {}) do
+		for _, reviewer in ipairs(current) do
 			local id = reviewer.role == "reviewer" and tostring(reviewer.provider_id or "") or ""
 			if id ~= "" then
 				selected[id] = true
-				current[id] = reviewer
 			end
 		end
 
 		local reviewers = {}
 		local found = {}
-		local values = result.values or {}
+		local values = (results.defaults or {}).values or {}
 		for _, entry in ipairs(values) do
 			local user = entry.user
 			local uuid = tostring(user.uuid or "")
@@ -570,8 +607,9 @@ function M.fetch_default_reviewers(opts, on_done)
 			end
 		end
 
-		for uuid, reviewer in pairs(current) do
-			if not found[uuid] then
+		for _, reviewer in ipairs(current) do
+			local uuid = reviewer.role == "reviewer" and tostring(reviewer.provider_id or "") or ""
+			if uuid ~= "" and not found[uuid] then
 				local nickname = tostring(reviewer.nickname or reviewer.username or "")
 				local name = tostring(reviewer.name or "")
 				table.insert(reviewers, {
@@ -584,6 +622,7 @@ function M.fetch_default_reviewers(opts, on_done)
 
 		on_done(reviewers, nil)
 	end)
+	return requests
 end
 
 return M

@@ -348,14 +348,23 @@ local function progress_message(action, phase, percent)
 	return string.format("%s...\n%s %d%% / 100%%", action, phase, percent)
 end
 
-local function clean_pr_cache()
-	local root = vim.fs.joinpath(vim.fn.stdpath("cache"), "atlas", "repos")
-	for _, git_dir in ipairs(vim.fs.find(".git", { path = root, type = "directory", limit = math.huge })) do
-		local last_fetch = vim.uv.fs_stat(vim.fs.joinpath(git_dir, "FETCH_HEAD")) or vim.uv.fs_stat(git_dir)
-		if last_fetch and os.time() - last_fetch.mtime.sec > PR_CACHE_MAX_AGE then
-			vim.fn.delete(vim.fs.dirname(git_dir), "rf")
+---@param active_path string
+local function clean_pr_cache(active_path)
+	active_path = vim.fs.normalize(active_path)
+	vim.schedule(function()
+		local root = vim.fs.joinpath(vim.fn.stdpath("cache"), "atlas", "repos")
+		for _, git_dir in ipairs(vim.fs.find(".git", { path = root, type = "directory", limit = math.huge })) do
+			local repo_path = vim.fs.dirname(git_dir)
+			local last_used = vim.uv.fs_stat(repo_path)
+			if
+				vim.fs.normalize(repo_path) ~= active_path
+				and last_used
+				and os.time() - last_used.mtime.sec > PR_CACHE_MAX_AGE
+			then
+				vim.fn.delete(repo_path, "rf")
+			end
 		end
-	end
+	end)
 end
 
 ---@param pr PullRequest
@@ -378,6 +387,10 @@ function M.ensure_pr_repository(pr, repo_path, on_progress, on_done)
 
 	---@param path string
 	local function fetch(path)
+		if cached then
+			local now = os.time()
+			vim.uv.fs_utime(path, now, now)
+		end
 		on_progress("Fetching pull request refs...")
 		current = M.fetch_pr_refs(pr, path, function(err)
 			current = nil
@@ -387,9 +400,6 @@ function M.ensure_pr_repository(pr, repo_path, on_progress, on_done)
 			if err then
 				on_done(nil, err)
 				return
-			end
-			if cached then
-				clean_pr_cache()
 			end
 			on_done(path, nil)
 		end, function(phase, percent)
@@ -417,6 +427,7 @@ function M.ensure_pr_repository(pr, repo_path, on_progress, on_done)
 	end
 	vim.fn.mkdir(vim.fs.dirname(path), "p")
 	on_progress("Cloning repository...")
+	clean_pr_cache(path)
 	-- Leave the cache without a checkout; Git loads trees and blobs when a diff needs them.
 	current = git.run({
 		"clone",

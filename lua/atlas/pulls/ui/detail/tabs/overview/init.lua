@@ -13,7 +13,7 @@ local request_scope = require("atlas.core.requests")
 
 local PADDING_X = 1
 local PADDING = string.rep(" ", PADDING_X)
-local MAX_DESCRIPTION_LINES = 15
+local MAX_DESCRIPTION_LINES = 10
 
 ---@param pr PullRequest
 ---@return boolean
@@ -157,47 +157,11 @@ local function decision_content(decisions, groups, width)
 	return { lines = box_lines, spans = box_spans }
 end
 
----@param pr PullRequestDetails
 ---@param width integer
 ---@param lines string[]
 ---@param spans table[]
-local function render_reviewers(pr, width, lines, spans)
-	if state.reviewers == nil then
-		return
-	end
-
-	if state.reviewers == "loading" then
-		local approved_count = 0
-		local reviewer_count = 0
-		for _, reviewer in ipairs(pr.reviewers or {}) do
-			if reviewer.role ~= "participant" then
-				reviewer_count = reviewer_count + 1
-				if reviewer.decision == "approved" then
-					approved_count = approved_count + 1
-				end
-			end
-		end
-		local count_text = pr.reviewers and string.format("(%d/%d)", approved_count, reviewer_count) or "(...)"
-		local header_text = "Reviewers " .. count_text
-		utils.push(lines, spans, header_text, "AtlasColumnHeader", PADDING_X)
-		table.insert(spans, {
-			line = #lines - 1,
-			start_col = PADDING_X + #header_text - #count_text,
-			end_col = PADDING_X + #header_text,
-			hl_group = "AtlasTextMuted",
-		})
-		local loading_text = spinner.with_text("Loading reviewers...")
-		utils.append_block(
-			lines,
-			spans,
-			box.render({
-				{
-					lines = { loading_text },
-					spans = { { line = 0, start_col = 0, end_col = #loading_text, hl_group = "AtlasTextMuted" } },
-				},
-			}, { width = width, padding_x = PADDING_X })
-		)
-		table.insert(lines, "")
+local function render_reviewers(width, lines, spans)
+	if state.reviewers == nil or state.reviewers == "loading" then
 		return
 	end
 
@@ -297,10 +261,46 @@ local PIPELINE_STATUS_LABEL = {
 	STOPPED = "Stopped",
 }
 
+local PIPELINE_STATUS_PRIORITY = {
+	FAILED = 1,
+	INPROGRESS = 2,
+	STOPPED = 3,
+	UNKNOWN = 4,
+	SUCCESSFUL = 5,
+}
+
+local MAX_OVERVIEW_JOBS = 5
+
 ---@param status string
 ---@return string
 local function status_label(status)
 	return PIPELINE_STATUS_LABEL[tostring(status or ""):upper()] or "Unknown"
+end
+
+---@generic T: { state: string }
+---@param items T[]
+---@return T[]
+local function sort_by_status(items)
+	local indexed = {}
+	for index, item in ipairs(items) do
+		table.insert(indexed, { item = item, index = index })
+	end
+	table.sort(indexed, function(a, b)
+		local a_state = tostring(a.item.state or "UNKNOWN"):upper()
+		local b_state = tostring(b.item.state or "UNKNOWN"):upper()
+		local a_priority = PIPELINE_STATUS_PRIORITY[a_state] or PIPELINE_STATUS_PRIORITY.UNKNOWN
+		local b_priority = PIPELINE_STATUS_PRIORITY[b_state] or PIPELINE_STATUS_PRIORITY.UNKNOWN
+		if a_priority == b_priority then
+			return a.index < b.index
+		end
+		return a_priority < b_priority
+	end)
+
+	local sorted = {}
+	for _, entry in ipairs(indexed) do
+		table.insert(sorted, entry.item)
+	end
+	return sorted
 end
 
 ---@param _pr PullRequest
@@ -309,24 +309,7 @@ end
 ---@param spans table[]
 ---@param line_map table<integer, table>
 local function render_pipelines(_pr, width, lines, spans, line_map)
-	if detail.pipelines == nil then
-		return
-	end
-
-	if detail.pipelines == "loading" then
-		utils.push(lines, spans, "Pipelines", "AtlasColumnHeader", PADDING_X)
-		local loading_text = spinner.with_text("Loading pipelines...")
-		utils.append_block(
-			lines,
-			spans,
-			box.render({
-				{
-					lines = { loading_text },
-					spans = { { line = 0, start_col = 0, end_col = #loading_text, hl_group = "AtlasTextMuted" } },
-				},
-			}, { width = width, padding_x = PADDING_X })
-		)
-		table.insert(lines, "")
+	if detail.pipelines == nil or detail.pipelines == "loading" then
 		return
 	end
 
@@ -347,7 +330,7 @@ local function render_pipelines(_pr, width, lines, spans, line_map)
 		return
 	end
 
-	local entries = detail.pipelines
+	local entries = sort_by_status(detail.pipelines)
 
 	if #entries == 0 then
 		return
@@ -362,10 +345,13 @@ local function render_pipelines(_pr, width, lines, spans, line_map)
 		end
 		local state_value = tostring(pipeline.state or "UNKNOWN"):upper()
 		local icon = icons.pulls_status(state_value:lower())
-		local jobs = pipeline.jobs or {}
-		local job_count = string.format("%d %s", #jobs, #jobs == 1 and "job" or "jobs")
+		local label = pipeline.name
+		local job_count = tonumber(pipeline.job_count)
+		if job_count ~= nil then
+			label = string.format("%s  %d %s", label, job_count, job_count == 1 and "job" or "jobs")
+		end
 		local row = {
-			label = string.format("%s  %s", tostring(pipeline.name or pipeline.key or "Pipeline"), job_count),
+			label = label,
 			status = string.format("%s %s", icon, status_label(state_value)),
 			status_hl = PIPELINE_HL[state_value] or "AtlasPipelineLinkMuted",
 			kind = "pipeline",
@@ -373,18 +359,60 @@ local function render_pipelines(_pr, width, lines, spans, line_map)
 			url = tostring(pipeline.url or ""),
 			children = {},
 		}
-		for _, job in ipairs(jobs) do
+		local unnamed_jobs = {}
+		local has_named_stage = false
+		for _, pipeline_stage in ipairs(pipeline.stages) do
+			if pipeline_stage.name == nil then
+				for _, job in ipairs(pipeline_stage.jobs) do
+					table.insert(unnamed_jobs, { state = job.state, stage = pipeline_stage, job = job })
+				end
+			else
+				has_named_stage = true
+			end
+		end
+		for _, pipeline_stage in ipairs(sort_by_status(pipeline.stages)) do
+			if pipeline_stage.name ~= nil then
+				local stage_state = tostring(pipeline_stage.state or "UNKNOWN"):upper()
+				local stage_icon = icons.pulls_status(stage_state:lower())
+				table.insert(row.children, {
+					label = string.format("%s %s", stage_icon, pipeline_stage.name),
+					status = "",
+					status_icon = stage_icon,
+					status_hl = PIPELINE_HL[stage_state] or "AtlasPipelineLinkMuted",
+					kind = "stage",
+					pipeline = pipeline,
+					stage = pipeline_stage,
+				})
+			end
+		end
+		local sorted_jobs = sort_by_status(unnamed_jobs)
+		local visible_jobs = math.min(#sorted_jobs, MAX_OVERVIEW_JOBS)
+		for index = 1, visible_jobs do
+			local entry = sorted_jobs[index]
+			local job = entry.job
 			local job_state = tostring(job.state or "UNKNOWN"):upper()
 			local job_icon = icons.pulls_status(job_state:lower())
 			table.insert(row.children, {
-				label = string.format("%s %s", job_icon, tostring(job.name or "Job")),
+				label = string.format("%s %s", job_icon, job.name),
 				status = "",
 				status_icon = job_icon,
 				status_hl = PIPELINE_HL[job_state] or "AtlasPipelineLinkMuted",
 				kind = "pipeline",
 				pipeline = pipeline,
+				stage = entry.stage,
 				job = job,
 				url = tostring(job.url or pipeline.url or ""),
+			})
+		end
+		local total_unnamed_jobs = #unnamed_jobs
+		if not has_named_stage then
+			total_unnamed_jobs = math.max(tonumber(pipeline.job_count) or 0, total_unnamed_jobs)
+		end
+		if total_unnamed_jobs > visible_jobs then
+			table.insert(row.children, {
+				label = string.format("+%d more", total_unnamed_jobs - visible_jobs),
+				status = "",
+				muted = true,
 			})
 		end
 		table.insert(rows, row)
@@ -411,6 +439,9 @@ local function render_pipelines(_pr, width, lines, spans, line_map)
 		cell_hl = function(row, column, context)
 			if row.kind == "separator" then
 				return nil
+			end
+			if row.muted then
+				return "AtlasTextMuted"
 			end
 			if column.key == "label" and row.status_icon then
 				local start_col = context.text:find(row.status_icon, 1, true)
@@ -446,12 +477,12 @@ end
 
 -- Description
 
----@param pr PullRequestDetails
+---@param details PullRequestDetails
 ---@param width integer
 ---@param lines string[]
 ---@param spans table[]
 ---@param line_map table<integer, table>
-local function render_description(pr, width, lines, spans, line_map)
+local function render_description(details, width, lines, spans, line_map)
 	local start_line = #lines + 1
 	local function map_lines()
 		for lnum = start_line, #lines do
@@ -461,7 +492,7 @@ local function render_description(pr, width, lines, spans, line_map)
 
 	utils.push(lines, spans, "Description", "AtlasColumnHeader", PADDING_X)
 
-	local desc_text = utils.strip_markup(pr.description)
+	local desc_text = utils.strip_markup(details.description)
 	if desc_text == "" then
 		utils.push(lines, spans, "No description provided.", "AtlasTextMuted", PADDING_X)
 		table.insert(lines, "")
@@ -580,30 +611,18 @@ local function render_merge_check_message_group(text, hl_group, width)
 	return { lines = lines, spans = spans }
 end
 
----@param _pr PullRequest
 ---@param width integer
 ---@param lines string[]
 ---@param spans table[]
-local function render_merge_checks(_pr, width, lines, spans)
-	if state.merge_checks == nil then
+local function render_merge_checks(width, lines, spans)
+	if state.merge_checks == nil or state.merge_checks == "loading" then
+		return
+	end
+	if type(state.merge_checks) == "table" and #state.merge_checks == 0 then
 		return
 	end
 
 	utils.push(lines, spans, "Merge Checks", "AtlasColumnHeader", PADDING_X)
-
-	if state.merge_checks == "loading" then
-		local loading_text = spinner.with_text("Loading merge checks...")
-		utils.append_block(
-			lines,
-			spans,
-			box.render(
-				{ render_merge_check_message_group(loading_text, "AtlasTextMuted", width) },
-				{ width = width, padding_x = PADDING_X }
-			)
-		)
-		table.insert(lines, "")
-		return
-	end
 
 	if type(state.merge_checks) == "string" then
 		local err_text = state.merge_checks --[[@as string]]
@@ -620,11 +639,6 @@ local function render_merge_checks(_pr, width, lines, spans)
 	end
 
 	local checks = vim.list_slice(state.merge_checks --[[@as PullsMergeCheck[] ]])
-	if #checks == 0 then
-		table.insert(lines, "")
-		return
-	end
-
 	table.sort(checks, function(a, b)
 		return (MERGE_CHECK_PRIORITY[a.state] or math.huge) < (MERGE_CHECK_PRIORITY[b.state] or math.huge)
 	end)
@@ -639,17 +653,33 @@ local function render_merge_checks(_pr, width, lines, spans)
 end
 
 ---@param pr PullRequest
+---@param details PullRequestDetails|nil
 ---@param width integer
 ---@return string[], table[], table<integer, table>|nil
-function M.render(pr, width)
+function M.render(pr, details, width)
 	local lines = {}
 	local spans = {}
 	local line_map = {}
 
-	render_description(pr, width, lines, spans, line_map)
-	render_reviewers(pr, width, lines, spans)
-	render_merge_checks(pr, width, lines, spans)
+	if details then
+		render_description(details, width, lines, spans, line_map)
+	elseif not detail.details_loading then
+		utils.push(lines, spans, "Pull request details unavailable.", "AtlasTextMuted", PADDING_X)
+		table.insert(lines, "")
+	end
+	render_reviewers(width, lines, spans)
+	render_merge_checks(width, lines, spans)
 	render_pipelines(pr, width, lines, spans, line_map)
+
+	if
+		state.reviewers == "loading"
+		or state.merge_checks == "loading"
+		or detail.details_loading
+		or detail.pipelines == "loading"
+		or detail.diffstat == "loading"
+	then
+		utils.push(lines, spans, spinner.with_text("Loading overview..."), "AtlasTextMuted", PADDING_X)
+	end
 
 	return lines, spans, line_map
 end
@@ -658,7 +688,7 @@ end
 ---@param entry table
 ---@return boolean
 function M.is_selectable_line(_lnum, entry)
-	return entry.kind == "pipeline"
+	return entry.pipeline ~= nil
 end
 
 ---@param _pr PullRequest

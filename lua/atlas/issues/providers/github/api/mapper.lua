@@ -106,14 +106,6 @@ end
 
 ---@param raw any Decoded API value.
 ---@param fallback_slug string|nil
----@return IssueRef|nil
-local function to_issue_ref(raw, fallback_slug)
-	local ref = issue_identity(raw, fallback_slug)
-	return ref
-end
-
----@param raw any Decoded API value.
----@param fallback_slug string|nil
 ---@return GitHubIssue|nil
 function M.to_issue(raw, fallback_slug)
 	raw = json.nilify(raw)
@@ -126,7 +118,7 @@ function M.to_issue(raw, fallback_slug)
 	local author = M.to_user(raw.author)
 
 	local issue_assignees = github_mapping.connection_nodes(raw.assignees)
-	local parent = to_issue_ref(json.nilify(raw.parent), fallback_slug)
+	local parent = issue_identity(json.nilify(raw.parent), fallback_slug)
 	local subscription = json.safe_str(raw.viewerSubscription)
 	local is_subscribed = subscription and subscription == "SUBSCRIBED"
 	local created_at = json.safe_str(raw.createdAt) or json.safe_str(raw.created_at) or ""
@@ -135,9 +127,8 @@ function M.to_issue(raw, fallback_slug)
 
 	local comments_field = json.nilify(raw.comments)
 	local comment_count = tonumber(raw.commentsCount)
-		or (type(comments_field) == "number" and comments_field)
-		or (type(comments_field) == "table" and tonumber(comments_field.totalCount))
-		or (type(comments_field) == "table" and #comments_field)
+		or tonumber(json.safe_table(comments_field).totalCount)
+		or tonumber(comments_field)
 		or 0
 
 	---@type GitHubIssue
@@ -170,25 +161,26 @@ end
 ---@param fallback_slug string|nil
 ---@return GitHubIssueDetails|nil
 function M.to_issue_details(raw, fallback_slug)
-	local issue = M.to_issue(raw, fallback_slug)
-	if issue == nil then
+	raw = json.nilify(raw)
+	if type(raw) ~= "table" then
 		return nil
 	end
-	---@cast issue GitHubIssueDetails
 
-	issue.description = json.safe_str(raw.body) or ""
-	issue.assignees = assignees(github_mapping.connection_nodes(raw.assignees))
-	issue.labels = labels(github_mapping.connection_nodes(raw.labels))
-	issue.milestone = milestone(raw.milestone)
-	issue.reactions = github_mapping.reaction_groups(raw.reactionGroups)
-	issue.sub_issues = {}
+	---@type GitHubIssueDetails
+	local details = {
+		description = json.safe_str(raw.body) or "",
+		assignees = assignees(github_mapping.connection_nodes(raw.assignees)),
+		labels = labels(github_mapping.connection_nodes(raw.labels)),
+		milestone = milestone(raw.milestone),
+		sub_issues = {},
+	}
 	for _, child in ipairs(github_mapping.connection_nodes(raw.subIssues)) do
 		local sub_issue = M.to_issue(child, fallback_slug)
 		if sub_issue then
-			table.insert(issue.sub_issues, sub_issue)
+			table.insert(details.sub_issues, sub_issue)
 		end
 	end
-	return issue
+	return details
 end
 
 ---@param nodes table[]|nil
@@ -197,8 +189,9 @@ function M.to_search_results(nodes)
 	local out = {}
 	local seen = {}
 
+	---@param issue GitHubIssue|nil
 	local function insert_issue(issue)
-		local key = type(issue) == "table" and tostring(issue.key or "") or ""
+		local key = issue and issue.key or ""
 		if key == "" or seen[key] then
 			return
 		end
@@ -206,14 +199,14 @@ function M.to_search_results(nodes)
 		table.insert(out, issue)
 	end
 
-	for _, raw in ipairs(nodes or {}) do
+	for _, raw in ipairs(nodes) do
 		local issue = M.to_issue(raw, nil)
-		if type(issue) == "table" then
+		if issue then
 			insert_issue(issue)
 
 			for _, child_raw in ipairs(github_mapping.connection_nodes(raw.subIssues)) do
 				local child = M.to_issue(child_raw, nil)
-				if type(child) == "table" and child.parent == nil then
+				if child and child.parent == nil then
 					child.parent = { key = issue.key, title = issue.title }
 				end
 				insert_issue(child)
@@ -262,7 +255,7 @@ end
 ---@param raw any Decoded API value.
 ---@return IssueComment|nil
 function M.to_comment(raw)
-	return to_comment(raw, type(raw) == "table" and raw.user or nil)
+	return to_comment(raw, json.safe_table(raw).user)
 end
 
 local EVENT_LABELS = {
@@ -320,24 +313,21 @@ function M.to_timeline_entry(raw)
 		entry.label = "commented"
 		entry.body = body ~= "" and body or nil
 	elseif event == "labeled" or event == "unlabeled" then
-		local label = json.nilify(raw.label)
-		local name = type(label) == "table" and (json.safe_str(label.name) or "") or ""
+		local name = json.safe_str(json.safe_table(raw.label).name) or ""
 		local verb = event == "labeled" and "added label" or "removed label"
 		entry.label = name ~= "" and (verb .. ": " .. name) or verb
 	elseif event == "assigned" or event == "unassigned" then
-		local assignee = json.nilify(raw.assignee)
-		local login = type(assignee) == "table" and (json.safe_str(assignee.login) or "") or ""
+		local login = json.safe_str(json.safe_table(raw.assignee).login) or ""
 		local verb = event == "assigned" and "assigned" or "unassigned"
 		entry.label = login ~= "" and (verb .. " " .. login) or verb
 	elseif event == "milestoned" or event == "demilestoned" then
-		local event_milestone = json.nilify(raw.milestone)
-		local title = type(event_milestone) == "table" and (json.safe_str(event_milestone.title) or "") or ""
+		local title = json.safe_str(json.safe_table(raw.milestone).title) or ""
 		local verb = event == "milestoned" and "added milestone" or "removed milestone"
 		entry.label = title ~= "" and (verb .. ": " .. title) or verb
 	elseif event == "renamed" then
-		local rename = json.nilify(raw.rename)
-		local from = type(rename) == "table" and (json.safe_str(rename.from) or "") or ""
-		local to = type(rename) == "table" and (json.safe_str(rename.to) or "") or ""
+		local rename = json.safe_table(raw.rename)
+		local from = json.safe_str(rename.from) or ""
+		local to = json.safe_str(rename.to) or ""
 		entry.label = "renamed"
 		if from ~= "" or to ~= "" then
 			entry.body = from .. " → " .. to
@@ -353,10 +343,7 @@ function M.to_timeline_entry(raw)
 			end
 		end
 	elseif event == "cross-referenced" then
-		local source = json.nilify(raw.source)
-		source = type(source) == "table" and source or {}
-		local issue = json.nilify(source.issue)
-		issue = type(issue) == "table" and issue or {}
+		local issue = json.safe_table(json.safe_table(raw.source).issue)
 		local title = json.safe_str(issue.title) or ""
 		local url = json.safe_str(issue.html_url) or ""
 		entry.label = "referenced"

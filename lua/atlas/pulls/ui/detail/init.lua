@@ -54,7 +54,7 @@ local function stop_spinner()
 end
 
 local function is_loading()
-	if state.details_loading or state.diffstat == "loading" or state.pipelines == "loading" then
+	if state.pr_loading or state.details_loading or state.diffstat == "loading" or state.pipelines == "loading" then
 		return true
 	end
 	if state.current_pr == nil then
@@ -166,10 +166,34 @@ local function cancel_requests()
 	state.requests = request_scope.new()
 end
 
----@param pr PullRequest
----@param details PullRequestDetails|nil
+---@param ref PullRequestRef
 ---@param force_refresh boolean
-local function load_pr(pr, details, force_refresh)
+local function load_details(ref, force_refresh)
+	local provider = state.provider
+	if provider == nil then
+		return
+	end
+	local core = provider.capabilities.core
+	state.details_loading = true
+	state.requests.run(function(done)
+		return core.fetch_pullrequest(ref, { force_load = force_refresh }, done)
+	end, function(details, err)
+		if not same_ref(state.current_pr or pending_ref, ref) then
+			return
+		end
+		state.current_details = details
+		state.details_loading = false
+		if details == nil then
+			notify.error(tostring(err or "Failed to load pull request details"))
+		end
+		update_spinner()
+		render_if_open()
+	end)
+end
+
+---@param pr PullRequest
+---@param force_refresh boolean
+local function load_pr(pr, force_refresh)
 	local provider = state.provider
 	if provider == nil then
 		return
@@ -177,33 +201,7 @@ local function load_pr(pr, details, force_refresh)
 
 	local tab_refresh = refresh_callback(pr)
 	local core = provider.capabilities.core
-	state.details_loading = true
-
-	if details then
-		state.current_details = details
-		state.details_loading = false
-		load_active_tab(details, { force_refresh = force_refresh })
-	else
-		-- Start the active tab request alongside the details request. Targets are
-		-- hydrated before reaching this function, so their requests remain sequential.
-		load_active_tab(pr, { force_refresh = force_refresh })
-		state.requests.run(function(done)
-			return core.fetch_pullrequest(pr, { force_load = force_refresh }, done)
-		end, function(fetched_details, err)
-			if not same_ref(state.current_pr, pr) then
-				return
-			end
-			if fetched_details == nil then
-				state.details_loading = false
-				notify.error(tostring(err or "Failed to load pull request"))
-				tab_refresh()
-				return
-			end
-			state.current_details = fetched_details
-			state.details_loading = false
-			tab_refresh()
-		end)
-	end
+	load_active_tab(pr, { force_refresh = force_refresh })
 
 	if core.fetch_diffstat then
 		state.diffstat = "loading"
@@ -242,17 +240,18 @@ local function clear_pr()
 	state.current_details = nil
 	state.diffstat = nil
 	state.pipelines = nil
+	state.pr_loading = false
 	state.details_loading = false
 	state.line_map = {}
 end
 
 ---@param pr PullRequest
----@param details PullRequestDetails|nil
 ---@param force_refresh boolean
-local function show_pr(pr, details, force_refresh)
+local function show_pr(pr, force_refresh)
 	state.current_pr = pr
 	pending_ref = nil
-	load_pr(pr, details, force_refresh)
+	state.pr_loading = false
+	load_pr(pr, force_refresh)
 	update_spinner()
 	render()
 end
@@ -312,11 +311,9 @@ function M.select(pr, opts)
 	end
 
 	clear_pr()
-	local details = nil
-	if opts.force_refresh ~= true and pr.description ~= nil then
-		details = pr --[[@as PullRequestDetails]]
-	end
-	show_pr(pr, details, opts.force_refresh == true)
+	state.details_loading = true
+	show_pr(pr, opts.force_refresh == true)
+	load_details(pr, opts.force_refresh == true)
 end
 
 ---@param input PullRequest|PullRequestRef
@@ -355,7 +352,7 @@ function M.open(input, opts)
 	if
 		opts.force_refresh ~= true
 		and same_ref(state.current_pr or pending_ref, ref)
-		and (state.details_loading or state.current_details)
+		and (state.pr_loading or state.details_loading or state.current_details)
 	then
 		render()
 		return
@@ -363,32 +360,41 @@ function M.open(input, opts)
 
 	clear_pr()
 	pending_ref = ref
+	state.pr_loading = true
 	state.details_loading = true
 	update_spinner()
 	render()
+	load_details(ref, opts.force_refresh == true)
 	state.requests.run(function(done)
-		return provider.capabilities.core.fetch_pullrequest(ref, { force_load = opts.force_refresh == true }, done)
-	end, function(loaded_pr, err)
+		return provider.capabilities.core.fetch_by_refs({ ref }, { force_load = opts.force_refresh == true }, done)
+	end, function(pulls, err)
 		if state.provider ~= provider or not same_ref(pending_ref, ref) then
 			return
 		end
+		local loaded_pr = pulls and pulls[1] or nil
 		if loaded_pr == nil then
 			pending_ref = nil
+			state.pr_loading = false
+			state.current_details = nil
 			state.details_loading = false
 			update_spinner()
 			render()
 			notify.error(tostring(err or "Failed to load pull request"))
 			return
 		end
-		show_pr(loaded_pr, loaded_pr, opts.force_refresh == true)
+		show_pr(loaded_pr, opts.force_refresh == true)
 	end)
 end
 
----@param ref PullRequestRef|nil
-function M.refresh(ref)
-	if M.is_open() and state.current_pr and (ref == nil or same_ref(state.current_pr, ref)) then
-		M.select(state.current_pr, { force_refresh = true })
+function M.refresh()
+	if not M.is_open() or state.current_pr == nil then
+		return
 	end
+	M.open({ id = state.current_pr.id, repo_full_name = state.current_pr.repo_full_name }, {
+		provider = state.provider,
+		force_refresh = true,
+		on_update = state.on_update,
+	})
 end
 
 ---@param step 1|-1
@@ -411,7 +417,7 @@ local function change_tab(step)
 
 	set_tab(items[(idx - 1 + step) % #items + 1].key)
 
-	local pr = state.current_details or state.current_pr
+	local pr = state.current_pr
 	if pr then
 		load_active_tab(pr)
 		update_spinner()

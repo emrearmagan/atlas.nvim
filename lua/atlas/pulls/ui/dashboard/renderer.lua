@@ -36,9 +36,10 @@ end
 ---@return string
 local function displayed_pr_icon(pr)
 	if state.is_pr_reloading(pr.repo_full_name, pr.id) then
-		return state.reload_spinner_frame or "⠋"
+		return state.reload_spinner_frame
 	end
-	return pr_icon(pr)
+	local icon = pr_icon(pr)
+	return icon
 end
 
 ---@param pulls PullRequest[]
@@ -84,15 +85,17 @@ local function statusline_items(pulls)
 			hl_group = "AtlasFooterInfo",
 		},
 	}
-	local user = state.current_user or {}
-	local user_name = tostring(user.username or user.name or "")
-	if user_name ~= "" then
-		table.insert(items, {
-			text = string.format("%s @%s", icons.general("user"), user_name),
-			hl_group = "AtlasFooterText",
-			priority = 50,
-			min_width = 8,
-		})
+	local user = state.current_user
+	if user ~= nil then
+		local user_name = tostring(user.username or user.name or "")
+		if user_name ~= "" then
+			table.insert(items, {
+				text = string.format("%s @%s", icons.general("user"), user_name),
+				hl_group = "AtlasFooterText",
+				priority = 50,
+				min_width = 8,
+			})
+		end
 	end
 	if #repo_names > 0 then
 		table.insert(items, {
@@ -140,7 +143,7 @@ local function cell_hl(row, col, ctx, display)
 		end
 		table.insert(spans, {
 			start_col = 0,
-			end_col = #(state.reload_spinner_frame or "⠋"),
+			end_col = #state.reload_spinner_frame,
 			hl_group = icon_hl,
 		})
 		return spans
@@ -321,13 +324,19 @@ end
 ---@param spans table[]
 local function append_search_text(lines, spans)
 	local view = state.active_view
-	if type(view) == "table" and view._kind == "bookmarks" then
+	if view ~= nil and view._kind == "bookmarks" then
 		view = state.current_view
 	end
-	if type(view) ~= "table" or view._kind ~= nil or state.provider == nil then
+	if view == nil or view._kind ~= nil or state.provider == nil then
 		return
 	end
-	local text = state.provider.capabilities.core.search_query(view, {})
+	local states = {}
+	for _, status in ipairs({ "OPEN", "MERGED", "DECLINED" }) do
+		if state.status_filters[status] then
+			table.insert(states, status:lower())
+		end
+	end
+	local text = state.provider.capabilities.core.search_query(view, { states = states })
 	if text == "" then
 		return
 	end
@@ -349,8 +358,7 @@ local function render_header(lines, spans, width)
 	local hl = state.provider and state.provider.hl_group or "Title"
 	utils.append_block(lines, spans, header.render({ width = width, icon = icon, title = title, hl_group = hl }))
 
-	local source = bookmarks.views(state.provider.id, "pulls", state.provider_views)
-	local views = vim.list_extend({}, source)
+	local views = vim.list_extend({}, state.views)
 	local active_id = view_id(state.active_view)
 	local found = false
 	for _, view in ipairs(views) do
@@ -403,9 +411,9 @@ end
 ---@return string[], table[], table<integer, table>
 function M.render(opts)
 	local lines, spans, line_map = {}, {}, {}
-	local pulls = starred_first(state.pulls or {})
+	local pulls = starred_first(state.pulls)
 	local display = providers.get(state.provider and state.provider.id)
-	local loading = string.format("%s Loading...", state.reload_spinner_frame or "⠋")
+	local loading = string.format("%s Loading...", state.reload_spinner_frame)
 	statusline.set_items(statusline_items(pulls))
 
 	table.insert(lines, "")
@@ -413,9 +421,17 @@ function M.render(opts)
 	table.insert(lines, "")
 
 	local active = state.active_view
-	if type(active) == "table" and active._kind == "bookmarks" then
+	if active ~= nil and active._kind == "bookmarks" then
 		append_search_text(lines, spans)
-		bookmarks.render(lines, spans, line_map, active._bookmarks or {}, opts.width, active._starred)
+		bookmarks.render(
+			lines,
+			spans,
+			line_map,
+			active._bookmarks or {},
+			opts.width,
+			active._starred,
+			state.starred_items
+		)
 		if state.error then
 			local text = "Error: " .. tostring(state.error):gsub("[\r\n]+", " | ")
 			table.insert(lines, "")
@@ -428,7 +444,8 @@ function M.render(opts)
 			append_centered_loading(lines, loading, opts.width, opts.height)
 		elseif #pulls > 0 then
 			table.insert(lines, "")
-			local body_lines, body_spans, body_map = render_table(pulls, "grouped", opts.width, display)
+			local layout = state.current_view and state.current_view.layout or "compact"
+			local body_lines, body_spans, body_map = render_table(pulls, layout, opts.width, display)
 			local base = #lines
 			utils.append_block(lines, spans, { lines = body_lines, highlights = body_spans })
 			for lnum, item in pairs(body_map) do

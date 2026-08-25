@@ -26,6 +26,9 @@ describe("GitHub author completion", function()
 		local completion = author_completion.for_issues({
 			issue = {
 				reporter = { account_id = "reporter", display_name = "Reporter Name" },
+				assignee = { account_id = "reporter", display_name = "Duplicate" },
+			},
+			details = {
 				assignees = {
 					{ account_id = "z-assignee", display_name = "Zed" },
 					{ account_id = "reporter", display_name = "Duplicate" },
@@ -46,11 +49,11 @@ describe("GitHub author completion", function()
 		local completion = author_completion.for_pulls({
 			pr = {
 				author = { nickname = "pull-author", name = "Pull Author" },
-				assignees = { { username = "assignee" } },
 			},
+			details = { assignees = { { username = "assignee" } } },
 			comments = { { author = { nickname = "commenter" } } },
 			reviewers = { { nickname = "reviewer" } },
-			review_context = { authors = { { nickname = "review-author" } } },
+			review_context = { mention_candidates = { { nickname = "review-author" } } },
 		})
 
 		assert.same({ "@assignee", "@commenter", "@pull-author", "@review-author", "@reviewer" }, words(completion))

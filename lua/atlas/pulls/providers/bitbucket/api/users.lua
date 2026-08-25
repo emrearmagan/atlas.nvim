@@ -1,8 +1,6 @@
 local M = {}
 
 local service = require("atlas.pulls.providers.bitbucket.api.service")
-local cache = require("atlas.core.cache")
-local memory_cache = require("atlas.core.memory_cache")
 local logger = require("atlas.core.logger")
 
 ---@param on_done fun(user: PullsUser|nil, err: string|nil)
@@ -16,9 +14,9 @@ function M.fetch_current_user(on_done)
 	end
 
 	local cachekey = string.format("bitbucket:user_profile:%s", user)
-	local cached = cache.get(cachekey)
-	if cached and cached.value then
-		on_done(cached.value, nil)
+	local cached = service.get_persistent_cache(cachekey)
+	if cached then
+		on_done(cached, nil)
 		return nil
 	end
 
@@ -36,7 +34,7 @@ function M.fetch_current_user(on_done)
 			username = tostring(raw.nickname or raw.username or ""),
 		}
 
-		cache.set(cachekey, current_user, 86400)
+		service.set_persistent_cache(cachekey, current_user, 86400)
 		on_done(current_user, nil)
 	end, { action = "Fetch current user", user = user })
 end
@@ -50,11 +48,10 @@ end
 ---@param on_done fun(workspaces: BitbucketWorkspace[]|nil, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.fetch_workspaces(on_done)
-	local ttl = service.cache_ttl()
 	local workspace_cache_key = "bitbucket:mem:user_workspaces"
-	local workspace_cached = memory_cache.get(workspace_cache_key)
-	if workspace_cached and workspace_cached.value then
-		on_done(workspace_cached.value, nil)
+	local workspace_cached = service.get_cache(workspace_cache_key)
+	if workspace_cached then
+		on_done(workspace_cached, nil)
 		return nil
 	end
 
@@ -78,7 +75,7 @@ function M.fetch_workspaces(on_done)
 			})
 		end
 
-		memory_cache.set(workspace_cache_key, workspaces, ttl)
+		service.set_cache(workspace_cache_key, workspaces)
 
 		on_done(workspaces, nil)
 	end, { action = "Fetch workspaces" })

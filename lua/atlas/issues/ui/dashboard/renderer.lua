@@ -31,7 +31,7 @@ end
 ---@param view IssuesViewConfig|nil
 ---@return string
 local function search_text(view)
-	if type(view) ~= "table" or view._kind ~= nil or state.provider == nil then
+	if view == nil or view._kind ~= nil or state.provider == nil then
 		return ""
 	end
 	return state.provider.capabilities.core.search_query(view, {})
@@ -78,13 +78,33 @@ local function blank_row(columns)
 	return row
 end
 
+---@param row table
+---@param col table
+---@param ctx { text: string, padded: string, width: integer }
+---@return table[]|nil
+local function cell_hl(row, col, ctx)
+	if row.kind == "meta" then
+		return { { start_col = 0, end_col = #ctx.padded, hl_group = "AtlasTextMuted" } }
+	end
+	if col.key == "icon" and row._fold_icon_hl then
+		return { { start_col = 0, end_col = #ctx.padded, hl_group = row._fold_icon_hl } }
+	end
+	local display = providers.get(state.provider and state.provider.id)
+	local spans = display.highlights and display.highlights(row, col, ctx) or nil
+	if col.key == "name" and row._issue and row._issue.is_starred then
+		spans = spans or {}
+		table.insert(spans, 1, { start_col = 0, end_col = #STAR_ICON, hl_group = STAR_ICON_HL })
+	end
+	return spans
+end
+
 ---@param issue_groups IssuesGroup[]
 ---@param columns table[]
 ---@return table[]
 local function issues_to_rows(issue_groups, columns)
 	local rows = {}
 	for i, group in ipairs(issue_groups) do
-		local children = group.children or {}
+		local children = group.children
 		local root_row = issue_to_row(group.issue, false, "plain")
 
 		for _, child in ipairs(children) do
@@ -93,7 +113,7 @@ local function issues_to_rows(issue_groups, columns)
 		local provider_id = state.provider and state.provider.id or ""
 		if #children > 0 and provider_id ~= "jira" then
 			local issue_key = tostring(group.issue.key or "")
-			local collapsed = (state.collapsed_issue_keys or {})[issue_key] == true
+			local collapsed = state.collapsed_issue_keys[issue_key] == true
 			root_row.icon, root_row._fold_icon_hl = icons.general(collapsed and "fold_closed" or "fold_open")
 		end
 
@@ -115,15 +135,13 @@ local function should_show_indicator(issue_groups)
 	if not state.provider or state.provider.id ~= "jira" then
 		return false
 	end
-	for _, group in ipairs(issue_groups or {}) do
-		if #(group.children or {}) > 0 then
+	for _, group in ipairs(issue_groups) do
+		if #group.children > 0 then
 			return true
 		end
 	end
 	return false
 end
-
-local cell_hl
 
 ---@param opts { width: integer }
 ---@param issue_groups IssuesGroup[]
@@ -135,7 +153,7 @@ local function render_issue_table(opts, issue_groups)
 	if state.is_loading then
 		table.insert(rows, blank_row(columns))
 		local loading = blank_row(columns)
-		loading.icon = state.reload_spinner_frame or "⠋"
+		loading.icon = state.reload_spinner_frame
 		loading.name = "Loading..."
 		table.insert(rows, loading)
 	end
@@ -158,7 +176,7 @@ local function render_issue_table(opts, issue_groups)
 				if issue_key == "" then
 					return true
 				end
-				return (state.collapsed_issue_keys or {})[issue_key] ~= true
+				return state.collapsed_issue_keys[issue_key] ~= true
 			end,
 		},
 		cell_hl = cell_hl,
@@ -201,13 +219,13 @@ local function issue_meta_text(issue)
 	return table.concat(parts, "  ")
 end
 
----@param issues Issue[]|nil
+---@param issues Issue[]
 ---@return table[], table[]
 local function compact_rows(issues)
 	local display = providers.get(state.provider and state.provider.id)
 	local columns = display.columns("compact")
 	local rows = {}
-	for _, issue in ipairs(issues or {}) do
+	for _, issue in ipairs(issues) do
 		local row = issue_to_row(issue, false, "compact")
 		row.children = nil
 		table.insert(rows, row)
@@ -232,14 +250,14 @@ local function compact_rows(issues)
 end
 
 ---@param opts { width: integer }
----@param issues Issue[]|nil
+---@param issues Issue[]
 ---@return string[], table<integer, table>, table[]
 local function render_compact_table(opts, issues)
 	local rows, columns = compact_rows(issues)
 	if state.is_loading then
 		table.insert(rows, blank_row(columns))
 		local loading = blank_row(columns)
-		loading.icon = state.reload_spinner_frame or "⠋"
+		loading.icon = state.reload_spinner_frame
 		loading.name = "Loading..."
 		table.insert(rows, loading)
 	end
@@ -253,34 +271,14 @@ local function render_compact_table(opts, issues)
 	})
 end
 
----@param row table
----@param col table
----@param ctx { text: string, padded: string, width: integer }
----@return table[]|nil
-function cell_hl(row, col, ctx)
-	if row.kind == "meta" then
-		return { { start_col = 0, end_col = #ctx.padded, hl_group = "AtlasTextMuted" } }
-	end
-	if col.key == "icon" and row._fold_icon_hl then
-		return { { start_col = 0, end_col = #ctx.padded, hl_group = row._fold_icon_hl } }
-	end
-	local display = providers.get(state.provider and state.provider.id)
-	local spans = display.highlights and display.highlights(row, col, ctx) or nil
-	if col.key == "name" and row._issue and row._issue.is_starred then
-		spans = spans or {}
-		table.insert(spans, 1, { start_col = 0, end_col = #STAR_ICON, hl_group = STAR_ICON_HL })
-	end
-	return spans
-end
-
----@param opts { width: integer, height: integer }
+---@param opts { width: integer }
 ---@return string[], table[], table<integer, table>
 function M.render(opts)
 	local provider = state.provider
 	local provider_icon = provider and provider.icon or icons.fallback()
 	local provider_name = provider and provider.name or "Issues"
 	local provider_hl = provider and provider.hl_group or "Title"
-	local issue_count = #(state.issues or {})
+	local issue_count = #state.issues
 	local statusline_items = {
 		{ text = string.format("%d issues", issue_count), hl_group = "AtlasFooterText" },
 	}
@@ -295,7 +293,7 @@ function M.render(opts)
 	end
 	statusline.set_items(statusline_items)
 
-	local views = bookmarks.views(provider.id, "issues", state.provider_views)
+	local views = state.views
 	local active = state.active_view
 	local active_id = view_id(active)
 
@@ -313,7 +311,7 @@ function M.render(opts)
 		})
 	end
 
-	if not active_is_listed and type(active) == "table" then
+	if not active_is_listed and active ~= nil then
 		table.insert(nav_items, {
 			label = tostring(active.name or "-"),
 			active = true,
@@ -372,12 +370,20 @@ function M.render(opts)
 
 	table.insert(lines, "")
 
-	if type(active) == "table" and active._kind == "bookmarks" then
+	if active and active._kind == "bookmarks" then
 		append_search_text(lines, spans, search_text(state.current_view))
-		bookmarks.render(lines, spans, line_map, active._bookmarks or {}, opts.width, active._starred)
+		bookmarks.render(
+			lines,
+			spans,
+			line_map,
+			active._bookmarks or {},
+			opts.width,
+			active._starred,
+			state.starred_items
+		)
 
-		local issues = state.issues or {}
-		local issue_groups = state.issue_tree or {}
+		local issues = state.issues
+		local issue_groups = state.issue_tree
 		if state.error then
 			local err_text = "Error: " .. state.error
 			table.insert(lines, "")
@@ -389,10 +395,23 @@ function M.render(opts)
 			})
 		elseif state.is_loading then
 			table.insert(lines, "")
-			table.insert(lines, "Loading...")
-		elseif #issues > 0 or #issue_groups > 0 then
+			table.insert(lines, string.format("%s Loading...", state.reload_spinner_frame))
+		else
+			local layout = state.current_view and state.current_view.layout or "plain"
+			local has_rows = #issue_groups > 0
+			if layout == "compact" then
+				has_rows = #issues > 0
+			end
+			if not has_rows then
+				return lines, spans, line_map
+			end
 			table.insert(lines, "")
-			local tbl_lines, tbl_map, tbl_spans = render_issue_table(opts, issue_groups)
+			local tbl_lines, tbl_map, tbl_spans
+			if layout == "compact" then
+				tbl_lines, tbl_map, tbl_spans = render_compact_table(opts, issues)
+			else
+				tbl_lines, tbl_map, tbl_spans = render_issue_table(opts, issue_groups)
+			end
 			local table_base = #lines
 			utils.append_block(lines, spans, { lines = tbl_lines, highlights = tbl_spans })
 			for lnum, node in pairs(tbl_map) do
@@ -409,12 +428,12 @@ function M.render(opts)
 			},
 		})
 	else
-		local issue_groups = state.issue_tree or {}
-		local layout = type(active) == "table" and tostring(active.layout or "plain") or "plain"
+		local issue_groups = state.issue_tree
+		local layout = active and tostring(active.layout or "plain") or "plain"
 		if layout ~= "compact" then
 			layout = "plain"
 		end
-		local issues = state.issues or {}
+		local issues = state.issues
 		append_search_text(lines, spans, search_text(active))
 
 		local has_rows = #issue_groups > 0

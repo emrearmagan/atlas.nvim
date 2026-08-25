@@ -9,6 +9,7 @@ local logger = require("atlas.core.logger")
 local notes = require("atlas.pulls.diff.notes")
 local notify = require("atlas.core.notify")
 local providers = require("atlas.providers")
+local request_scope = require("atlas.core.requests")
 local review_api = require("atlas.pulls.diff.review")
 local session_api = require("atlas.pulls.diff.session")
 local statusline = require("atlas.ui.statusline")
@@ -36,7 +37,7 @@ end
 
 ---@class AtlasReviewOpenContext
 ---@field provider PullsProvider
----@field pr PullRequest
+---@field ref PullRequestRef
 ---@field current_user PullsUser|nil
 ---@field root string|nil
 
@@ -56,9 +57,9 @@ end
 
 -- Prefer an existing checkout; nil makes Atlas use its shared cache.
 ---@param context AtlasReviewOpenContext
+---@param pr PullRequest
 ---@return string|nil
-local function repository_path(context)
-	local pr = context.pr
+local function repository_path(context, pr)
 	if context.root then
 		return context.root
 	end
@@ -249,8 +250,8 @@ local function start_pr(context, command, refresh, on_done, target, existing)
 	local log = {
 		viewer = viewer_id or command,
 		provider = context.provider.id,
-		repo = context.pr.repo_full_name,
-		pr_id = context.pr.id,
+		repo = context.ref.repo_full_name,
+		pr_id = context.ref.id,
 	}
 	logger.loginfo(operation, log)
 	local request = { cancel = function() end }
@@ -311,93 +312,99 @@ local function start_pr(context, command, refresh, on_done, target, existing)
 		end) or request
 	end
 
-	---@param source AtlasDiffSource
-	---@param review AtlasDiffReview|nil
-	---@param warnings string[]
-	local function load_commits(source, review, warnings)
-		log.root = source.root
-		log.base_revision = source.base_revision
-		log.head_revision = source.head_revision
-		if not viewer_id then
-			local err = open_external(command, source)
-			view:finish()
-			complete(err)
-			return
-		end
+	---@param pr PullRequest
+	local function load_data(pr)
 		local core = context.provider.capabilities.core
-		if viewer_id ~= "atlas" or not core.fetch_commits then
-			launch(source, review, {}, warnings)
-			return
-		end
+		local pending = request_scope.new()
+		request = pending
+		local starts = {}
+		local repo_path = repository_path(context, pr)
 
-		view:update(refresh and "Refreshing commits..." or "Loading commits...")
-		request = core.fetch_commits(context.pr, refresh and { force_refresh = true } or {}, function(commits, err)
-			later(function()
-				if err then
-					warnings[#warnings + 1] = "Unable to load commits: " .. tostring(err)
-				end
-				launch(source, review, commits or {}, warnings)
-			end)
-		end) or request
-	end
-
-	---@param source AtlasDiffSource
-	local function load_review(source)
-		if not viewer_id then
-			load_commits(source, nil, {})
-			return
-		end
-		view:update(refresh and "Refreshing review..." or "Loading review...")
-		local review = existing and existing.review
-			or {
-				provider = context.provider,
-				pr = context.pr,
-				current_user = context.current_user,
-				context = nil,
-				data = {
-					review = { pending = false },
-					comments = {},
-					tasks = {},
-					reviewers = {},
-					history = {},
-				},
-			}
-		review.provider = context.provider
-		review.pr = context.pr
-		review.current_user = review.current_user or context.current_user
-		request = review_api.load(review, refresh, function(loaded, warnings)
-			later(load_commits, source, loaded, warnings)
-		end) or request
-	end
-
-	local function load_repository()
-		request = checkout.ensure_pr_repository(context.pr, repository_path(context), function(message)
-			view:update(message)
-		end, function(root, err)
-			later(function()
+		starts.repository = function(done)
+			return checkout.ensure_pr_repository(pr, repo_path, function(message)
+				view:update(message)
+			end, function(root, err)
 				if not root then
-					fail(tostring(err or "Unable to load pull request repository"))
+					pending.cancel()
+					later(fail, tostring(err or "Unable to load pull request repository"))
 					return
 				end
-				local base, head, revision_err = checkout.pr_diff_revisions(context.pr)
+				local base, head, revision_err = checkout.pr_diff_revisions(pr)
 				if not base or not head then
-					fail(tostring(revision_err or "Unable to resolve pull request revisions"))
+					pending.cancel()
+					later(fail, tostring(revision_err or "Unable to resolve pull request revisions"))
 					return
 				end
-				load_review({ root = root, base_revision = base, head_revision = head })
+				done({ root = root, base_revision = base, head_revision = head }, nil)
 			end)
-		end) or request
+		end
+
+		if viewer_id then
+			local review = existing and existing.review
+				or {
+					provider = context.provider,
+					pr = pr,
+					current_user = context.current_user,
+					context = nil,
+					data = {
+						review = { pending = false },
+						comments = {},
+						tasks = {},
+						reviewers = {},
+						history = {},
+					},
+				}
+			review.provider = context.provider
+			review.pr = pr
+			review.current_user = review.current_user or context.current_user
+			starts.review = function(done)
+				return review_api.load(review, refresh, function(loaded, warnings)
+					done({ review = loaded, warnings = warnings }, nil)
+				end)
+			end
+		end
+
+		if viewer_id == "atlas" and core.fetch_commits then
+			starts.commits = function(done)
+				return core.fetch_commits(pr, { force_refresh = true }, done)
+			end
+		end
+
+		view:update(refresh and "Refreshing diff data..." or "Loading diff data...")
+		pending.all(starts, function(values, errors)
+			later(function()
+				local source = values.repository
+				log.root = source.root
+				log.base_revision = source.base_revision
+				log.head_revision = source.head_revision
+
+				if not viewer_id then
+					local err = open_external(command, source)
+					view:finish()
+					complete(err)
+					return
+				end
+
+				local review_result = values.review or { review = nil, warnings = {} }
+				local warnings = review_result.warnings
+				if errors.commits then
+					warnings[#warnings + 1] = "Unable to load commits: " .. tostring(errors.commits)
+				end
+				launch(source, review_result.review, values.commits or {}, warnings)
+			end)
+		end)
 	end
 
 	view:update(refresh and "Refreshing pull request..." or "Loading pull request...")
-	request = context.provider.capabilities.core.fetch_pullrequest(context.pr, { force_load = true }, function(pr, err)
+	local core = context.provider.capabilities.core
+	request = core.fetch_by_refs({ context.ref }, { force_load = refresh }, function(pulls, err)
 		later(function()
-			if not pr then
+			local pr = pulls and pulls[1] or nil
+			if pr == nil then
 				fail(tostring(err or "Unable to load pull request"))
 				return
 			end
-			context.pr = pr
-			load_repository()
+			load_data(pr)
 		end)
 	end) or request
 	return {
@@ -440,7 +447,7 @@ function M.open_pull_request(value, requested)
 	return start_pr(
 		{
 			provider = provider,
-			pr = ref,
+			ref = ref,
 			current_user = nil,
 		},
 		command,

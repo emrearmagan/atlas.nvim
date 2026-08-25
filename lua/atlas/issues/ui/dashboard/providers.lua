@@ -29,8 +29,8 @@ end
 ---@return string
 local function status_value(issue)
 	local issue_key = tostring(issue.key or "")
-	if issue_key ~= "" and state.is_issue_reloading(issue_key) then
-		return string.format(" %s ", state.reload_spinner_frame or "⠋")
+	if issue_key ~= "" and state.reloading_issue_keys[issue_key] then
+		return string.format(" %s ", state.reload_spinner_frame)
 	end
 	return string.format(" %s ", issue.status or "")
 end
@@ -200,7 +200,7 @@ local function github()
 		end
 		if col.key == "status" then
 			local issue_key = tostring(issue.key or "")
-			local hl = issue_key ~= "" and state.is_issue_reloading(issue_key) and "AtlasTextMuted"
+			local hl = issue_key ~= "" and state.reloading_issue_keys[issue_key] and "AtlasTextMuted"
 				or state_chip_hl(issue.status_id)
 			return { { start_col = 0, end_col = #ctx.padded, hl_group = hl } }
 		end
@@ -289,7 +289,7 @@ local function gitlab()
 
 		if col.key == "status" then
 			local issue_key = tostring(issue.key or "")
-			local hl = issue_key ~= "" and state.is_issue_reloading(issue_key) and "AtlasTextMuted"
+			local hl = issue_key ~= "" and state.reloading_issue_keys[issue_key] and "AtlasTextMuted"
 				or state_chip_hl(issue.status_id)
 			return { { start_col = 0, end_col = #ctx.padded, hl_group = hl } }
 		end
@@ -373,7 +373,7 @@ local function jira()
 
 		if col.key == "status" then
 			local issue_key = tostring(issue.key or "")
-			local hl = issue_key ~= "" and state.is_issue_reloading(issue_key) and "AtlasTextMuted"
+			local hl = issue_key ~= "" and state.reloading_issue_keys[issue_key] and "AtlasTextMuted"
 				or helper.status_hl(issue.status_id)
 			return { { start_col = 0, end_col = #ctx.padded, hl_group = hl } }
 		end
@@ -410,11 +410,12 @@ local displays = {
 	gitlab = gitlab(),
 	jira = jira(),
 }
+local fallback = default()
 
 ---@param provider_id string|nil
 ---@return table
 function M.get(provider_id)
-	return displays[provider_id] or default()
+	return displays[provider_id] or fallback
 end
 
 return M

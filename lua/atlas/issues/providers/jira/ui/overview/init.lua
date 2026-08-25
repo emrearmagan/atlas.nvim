@@ -8,15 +8,19 @@ local state = require("atlas.issues.providers.jira.ui.overview.state")
 local PADDING_X = 1
 local PADDING = string.rep(" ", PADDING_X)
 
----@param issue IssueDetails
+---@param _issue Issue
+---@param details IssueDetails|nil
 ---@param width integer
 ---@return string[], table[], table<integer, table>|nil
-function M.render(issue, width)
-	---@cast issue JiraIssueDetails
+function M.render(_issue, details, width)
+	if details == nil then
+		return {}, {}, {}
+	end
+	---@cast details JiraIssueDetails
 	local lines = {}
 	local spans = {}
 	local line_map = {}
-	local raw_description = issue.raw_description
+	local raw_description = details.raw_description
 
 	local label = "Description"
 	local mode_text = state.view_mode == "raw" and "Raw (m)" or "Markdown (m)"
@@ -46,7 +50,7 @@ function M.render(issue, width)
 			table.insert(lines, PADDING .. line)
 		end
 	else
-		local description = tostring(issue.description or "")
+		local description = tostring(details.description or "")
 		if description == "" then
 			utils.push(lines, spans, "No description", "AtlasTextMuted", PADDING_X)
 		else

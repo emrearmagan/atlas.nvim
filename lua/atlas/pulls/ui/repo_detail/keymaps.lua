@@ -61,7 +61,7 @@ local function open_current_line()
 	end
 
 	local lnum = vim.api.nvim_win_get_cursor(win)[1]
-	local entry = (state.line_map or {})[lnum]
+	local entry = state.line_map[lnum]
 	local details = state.current_repo_details
 	local repo = type(details) == "table" and details or state.current_repo
 

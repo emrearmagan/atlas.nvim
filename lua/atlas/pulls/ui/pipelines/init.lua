@@ -18,9 +18,8 @@ local active_session
 
 ---@class PullsPipelineSelection
 ---@field pipeline PullsPipeline
----@field stage string|nil
+---@field stage PullsPipelineStage|nil
 ---@field job PullsPipelineJob|nil
----@field step PullsPipelineStep|nil
 
 ---@param buf integer
 ---@param lines string[]
@@ -72,19 +71,32 @@ end
 
 ---@param line_map table<integer, PullsPipelineSelection>
 ---@param selected_pipeline PullsPipeline|nil
+---@param selected_stage PullsPipelineStage|nil
 ---@param selected_job PullsPipelineJob|nil
 ---@return integer
-local function selected_pipeline_line(line_map, selected_pipeline, selected_job)
+local function selected_line(line_map, selected_pipeline, selected_stage, selected_job)
 	local pipeline_line = 1
+	local selected_pipeline_id = selected_pipeline and selected_pipeline.id
+	local selected_stage_name = selected_stage and selected_stage.name
+	local selected_job_id = selected_job and selected_job.id
 	for lnum = 1, #line_map do
 		local selection = line_map[lnum]
-		if selection and selection.pipeline == selected_pipeline then
-			if selected_job and selection.job == selected_job then
+		local pipeline = selection and selection.pipeline
+		local pipeline_matches = pipeline and pipeline.id == selected_pipeline_id
+		if pipeline_matches then
+			if selected_job and selection.job and selection.job.id == selected_job_id then
 				return lnum
 			end
-			if selection.job == nil then
+			if
+				selected_stage
+				and selection.stage
+				and (selection.stage == selected_stage or selection.stage.name == selected_stage_name)
+			then
+				return lnum
+			end
+			if selection.stage == nil and selection.job == nil then
 				pipeline_line = lnum
-				if selected_job == nil then
+				if selected_stage == nil and selected_job == nil then
 					return lnum
 				end
 			end
@@ -142,11 +154,12 @@ local function render_pipelines(session, pipelines)
 		if pipeline then
 			vim.api.nvim_win_set_cursor(
 				session.pipeline_win,
-				{ selected_pipeline_line(line_map, pipeline, session.initial_job), 0 }
+				{ selected_line(line_map, pipeline, session.initial_stage, session.initial_job), 0 }
 			)
 		end
 		session.initial_selection_pending = false
 		session.initial_pipeline = nil
+		session.initial_stage = nil
 		session.initial_job = nil
 	end
 end
@@ -161,7 +174,7 @@ local function fetch_pipeline_details(session, pipelines, force_refresh, on_done
 		return
 	end
 	local capability = session.provider and session.provider.capabilities.pipelines
-	if not capability or not capability.fetch_details then
+	if not capability then
 		on_done(pipelines, nil)
 		return
 	end
@@ -295,7 +308,7 @@ local function open_pipeline_actions(session, selection)
 		return
 	end
 
-	local ctx = { pr = session.pr, pipeline = selection.pipeline, job = selection.job }
+	local ctx = { pr = session.pr, pipeline = selection.pipeline, stage = selection.stage, job = selection.job }
 	actions.open(session.provider, ctx, function(action)
 		action.run(ctx, function(err)
 			if session.closed then
@@ -338,11 +351,12 @@ end
 
 ---@param pr PullRequest
 ---@param provider PullsProvider
----@param opts { pipelines: PullsPipeline[]|nil, selected_pipeline: PullsPipeline|nil, selected_job: PullsPipelineJob|nil }|nil
+---@param opts { pipelines: PullsPipeline[]|nil, selected_pipeline: PullsPipeline|nil, selected_stage: PullsPipelineStage|nil, selected_job: PullsPipelineJob|nil }|nil
 function M.open(pr, provider, opts)
 	opts = opts or {}
 	local pipelines = opts.pipelines
 	local selected_pipeline = opts.selected_pipeline
+	local selected_stage = opts.selected_stage
 	local selected_job = opts.selected_job
 	local fetch_on_open = type(pipelines) ~= "table"
 	pipelines = type(pipelines) == "table" and pipelines or {}
@@ -376,6 +390,7 @@ function M.open(pr, provider, opts)
 		refreshing = false,
 		initial_selection_pending = true,
 		initial_pipeline = selected_pipeline,
+		initial_stage = selected_stage,
 		initial_job = selected_job,
 		pipeline_win = pipeline_win,
 		pipeline_buf = pipeline_buf,
@@ -420,7 +435,7 @@ function M.open(pr, provider, opts)
 	configure_window(session.pipeline_win, session.pipeline_buf, "Pipelines")
 	vim.api.nvim_win_set_cursor(
 		session.pipeline_win,
-		{ selected_pipeline_line(line_map, selected_pipeline, selected_job), 0 }
+		{ selected_line(line_map, selected_pipeline, selected_stage, selected_job), 0 }
 	)
 
 	keymaps.setup_pipelines(session.pipeline_buf, "Pipelines", {

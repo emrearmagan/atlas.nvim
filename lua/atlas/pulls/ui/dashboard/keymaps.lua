@@ -14,10 +14,7 @@ local function selected_pr()
 	if type(node) ~= "table" then
 		return nil, nil
 	end
-	if node.kind == "pr" and type(node.pr) == "table" then
-		return node.pr, node.repo
-	end
-	if node.kind == "pr_meta" and type(node.pr) == "table" then
+	if (node.kind == "pr" or node.kind == "pr_meta") and type(node.pr) == "table" then
 		return node.pr, node.repo
 	end
 	return nil, nil
@@ -60,14 +57,16 @@ function M.register(buf, views)
 				current_user = state.current_user,
 				buf = buf,
 			}, function(result)
-				require("atlas.pulls.ui.dashboard.controller").apply_action_result(pr, result)
+				if pr ~= nil and result ~= nil and result.changed_pr then
+					require("atlas.pulls.ui.dashboard.controller").refresh_pr(pr)
+				end
 			end)
 		end
 	end
 
 	local items = {}
 
-	for _, view in ipairs(views or {}) do
+	for _, view in ipairs(views) do
 		if view._kind ~= "bookmarks" and view.key ~= nil and view.key ~= "" then
 			local v = view
 			table.insert(items, {
@@ -89,7 +88,7 @@ function M.register(buf, views)
 			desc = "Switch to bookmarks",
 			hidden = true,
 			callback = function()
-				for _, view in ipairs(bookmarks.views(state.provider.id, "pulls", state.provider_views)) do
+				for _, view in ipairs(state.views) do
 					if view._kind == "bookmarks" then
 						require("atlas.pulls.ui.dashboard.controller").switch_view(view)
 						return
@@ -147,7 +146,9 @@ function M.register(buf, views)
 							current_user = state.current_user,
 							buf = buf,
 						}, function(result)
-							require("atlas.pulls.ui.dashboard.controller").apply_action_result(pr, result)
+							if pr ~= nil and result ~= nil and result.changed_pr then
+								require("atlas.pulls.ui.dashboard.controller").refresh_pr(pr)
+							end
 						end)
 					end
 				end,

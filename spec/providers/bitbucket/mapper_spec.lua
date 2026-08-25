@@ -61,24 +61,3 @@ describe("Bitbucket Git remote mapping", function()
 		assert.equal("", pr.source.ssh_url)
 	end)
 end)
-
-describe("Bitbucket pull request details", function()
-	it("keeps Bitbucket metadata on the detail type", function()
-		local pr = mapper.to_pull_request_details({
-			id = 42,
-			state = "OPEN",
-			title = "Typed details",
-			description = "Description",
-			task_count = 3,
-			close_source_branch = true,
-			links = { self = { href = "https://api.bitbucket.org/pullrequests/42" } },
-			source = { branch = { name = "feature" }, commit = { hash = "head" } },
-			destination = { branch = { name = "main" }, commit = { hash = "base" } },
-		}, "acme", "repo")
-
-		assert.equal("Description", pr.description)
-		assert.equal(3, pr.tasks_count)
-		assert.is_true(pr.close_source_branch)
-		assert.equal("https://api.bitbucket.org/pullrequests/42", pr.links.self)
-	end)
-end)

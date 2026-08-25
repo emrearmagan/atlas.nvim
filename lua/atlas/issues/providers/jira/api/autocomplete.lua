@@ -95,13 +95,11 @@ end
 ---@return JiraJqlAutocompleteData|nil, boolean
 function M.get_cached_data()
 	local cached, ok = service.get_memory_cache(CACHE_KEY)
-	if not ok or type(cached) ~= "table" then
+	if not ok then
 		return nil, false
 	end
-
-	local normalized = normalize_payload(cached)
-	service.set_memory_cache(CACHE_KEY, normalized)
-	return normalized, true
+	---@cast cached JiraJqlAutocompleteData
+	return cached, true
 end
 
 ---@param on_done fun(data: JiraJqlAutocompleteData|nil, err: string|nil)
