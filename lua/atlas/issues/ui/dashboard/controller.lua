@@ -549,7 +549,7 @@ local function refresh_issue(issue)
 	local ref = issue
 	local detail = require("atlas.issues.ui.detail")
 	if detail.is_open() then
-		detail.refresh()
+		detail.refresh(issue)
 	end
 	issue_reload_requests.run(function(done)
 		return provider.capabilities.core.fetch_by_refs({ ref }, { force_load = true }, done)

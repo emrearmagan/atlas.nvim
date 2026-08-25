@@ -333,15 +333,32 @@ function M.open_ref(ref, opts)
 	end)
 end
 
-function M.refresh()
-	if not M.is_open() or state.current_issue == nil then
+---@param ref IssueRef|nil
+function M.refresh(ref)
+	local issue = state.current_issue
+	local provider = state.provider
+	if not M.is_open() or issue == nil or provider == nil or (ref ~= nil and not same_ref(issue, ref)) then
 		return
 	end
-	M.open_ref({ key = state.current_issue.key }, {
-		provider = state.provider,
-		force_refresh = true,
-		on_update = state.on_update,
-	})
+	M.select(issue, { force_refresh = true })
+	state.issue_loading = true
+	update_spinner()
+	state.requests.run(function(done)
+		return provider.capabilities.core.fetch_by_refs({ issue }, { force_load = true, max_results = 1 }, done)
+	end, function(issues, err)
+		if state.provider ~= provider or not same_ref(state.current_issue, issue) then
+			return
+		end
+		state.issue_loading = false
+		local fetched_issue = issues and issues[1] or nil
+		if fetched_issue == nil then
+			notify.error(tostring(err or "Failed to reload issue"))
+		else
+			state.current_issue = fetched_issue
+		end
+		update_spinner()
+		render_if_open()
+	end)
 end
 
 ---@param step 1|-1

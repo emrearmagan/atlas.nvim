@@ -373,7 +373,7 @@ function M.refresh_pr(pr)
 	begin_pr_reload(repo_id, pr_id)
 	local detail = require("atlas.pulls.ui.detail")
 	if detail.is_open() then
-		detail.refresh()
+		detail.refresh(pr)
 	end
 
 	pr_reload_requests.run(function(done)

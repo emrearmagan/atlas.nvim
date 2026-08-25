@@ -386,15 +386,33 @@ function M.open(input, opts)
 	end)
 end
 
-function M.refresh()
-	if not M.is_open() or state.current_pr == nil then
+---@param ref PullRequestRef|nil
+function M.refresh(ref)
+	local pr = state.current_pr
+	local provider = state.provider
+	if not M.is_open() or pr == nil or provider == nil or (ref ~= nil and not same_ref(pr, ref)) then
 		return
 	end
-	M.open({ id = state.current_pr.id, repo_full_name = state.current_pr.repo_full_name }, {
-		provider = state.provider,
-		force_refresh = true,
-		on_update = state.on_update,
-	})
+
+	M.select(pr, { force_refresh = true })
+	state.pr_loading = true
+	update_spinner()
+	state.requests.run(function(done)
+		return provider.capabilities.core.fetch_by_refs({ pr }, { force_load = true }, done)
+	end, function(pulls, err)
+		if state.provider ~= provider or not same_ref(state.current_pr, pr) then
+			return
+		end
+		state.pr_loading = false
+		local refreshed_pr = pulls and pulls[1] or nil
+		if refreshed_pr then
+			state.current_pr = refreshed_pr
+		else
+			notify.error(tostring(err or "Failed to reload pull request"))
+		end
+		update_spinner()
+		render_if_open()
+	end)
 end
 
 ---@param step 1|-1
