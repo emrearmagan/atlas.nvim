@@ -68,17 +68,6 @@ local function basename(path)
 	return path:match("([^/]+)$") or path
 end
 
----@param file DiffFile
----@return string
-local function file_label(file)
-	local name = basename(file.path)
-	if file.status ~= "renamed" or not file.old_path then
-		return name
-	end
-	local old_name = basename(file.old_path)
-	return old_name ~= name and (old_name .. " -> " .. name) or name
-end
-
 ---@param filename string
 ---@return string|nil, string|nil
 local function web_icon(filename)
@@ -365,7 +354,7 @@ function M.render(session, annotated_paths)
 	---@param show_directory boolean
 	local function add_file(file_index, branch, show_directory)
 		local file = session.viewer_state.files[file_index]
-		local label = file_label(file)
+		local label = basename(file.path)
 		local parent = directory(file.path)
 		local status, status_highlight = status_marker(file.status)
 		local annotation = annotated_paths[file.path]
@@ -402,10 +391,6 @@ function M.render(session, annotated_paths)
 		if vim.fn.strdisplaywidth(label .. " " .. suffix) > available then
 			suffix_parts = { status_part }
 			suffix = status
-		end
-		if vim.fn.strdisplaywidth(label .. " " .. suffix) > available then
-			suffix_parts = {}
-			suffix = ""
 		end
 		local suffix_width = suffix ~= "" and vim.fn.strdisplaywidth(suffix) + 1 or 0
 		local content_width = math.max(1, available - suffix_width)
@@ -635,27 +620,29 @@ function M.show_path(session)
 		return
 	end
 
-	local path = item.kind == "folder" and vim.fs.joinpath(session.source.root, item.path) or nil
+	local lines = item.kind == "folder" and { item.path } or nil
+	local title = " Path "
 	if item.kind == "file" then
 		local file = session.viewer_state.files[item.index]
 		if not file then
 			return
 		end
-		path = vim.fs.joinpath(session.source.root, file.path)
+		lines = { file.path }
 		if file.status == "renamed" and file.old_path then
-			path = vim.fs.joinpath(session.source.root, file.old_path) .. " -> " .. path
+			lines = { "From: " .. file.old_path, "To:   " .. file.path }
+			title = " Rename "
 		end
 	end
-	if not path then
+	if not lines then
 		return
 	end
 	local width = math.max(1, math.min(100, vim.o.columns - 4))
-	vim.lsp.util.open_floating_preview({ path }, "text", {
+	vim.lsp.util.open_floating_preview(lines, "text", {
 		border = "rounded",
 		focusable = false,
 		max_width = width,
 		wrap_at = width,
-		title = " Path ",
+		title = title,
 	})
 end
 
