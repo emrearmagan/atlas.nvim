@@ -1,4 +1,4 @@
----@class AtlasForgejoProviderConfig
+---@class AtlasForgejoConfig
 ---@field base_url string
 ---@field token string
 ---@field cache_ttl number|nil

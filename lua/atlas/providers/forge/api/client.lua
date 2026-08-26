@@ -13,7 +13,7 @@ function M.new(provider_id)
 	local provider_name = provider_id == "gitea" and "Gitea" or "Forgejo"
 	local client = {}
 
-	---@return AtlasGiteaProviderConfig|AtlasForgejoProviderConfig
+	---@return AtlasGiteaConfig|AtlasForgejoConfig
 	function client.config()
 		return config.provider_options(provider_id) or {}
 	end

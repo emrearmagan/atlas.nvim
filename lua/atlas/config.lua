@@ -78,12 +78,12 @@
 -- Configs
 
 ---@class AtlasProvidersConfig
----@field bitbucket AtlasBitbucketProviderConfig|nil
----@field github AtlasGitHubProviderConfig|nil
----@field gitlab AtlasGitLabProviderConfig|nil
----@field gitea AtlasGiteaProviderConfig|nil
----@field forgejo AtlasForgejoProviderConfig|nil
----@field jira AtlasJiraProviderConfig|nil
+---@field bitbucket AtlasBitbucketConfig|nil
+---@field github AtlasGitHubConfig|nil
+---@field gitlab AtlasGitLabConfig|nil
+---@field gitea AtlasGiteaConfig|nil
+---@field forgejo AtlasForgejoConfig|nil
+---@field jira AtlasJiraConfig|nil
 
 ---@class AtlasPullsConfig
 ---@field git_transport AtlasGitTransport|nil Git transport for Atlas-managed repositories (default: "https").
@@ -173,7 +173,7 @@ M.options = {
 			show_review_panel = false,
 			comment_display = "virtual_lines",
 			review_panel = {
-				height = 15,
+				height = 10,
 			},
 			explorer = {
 				grouped = true,
@@ -264,6 +264,7 @@ M.options = {
 					next_hunk = "]h",
 					previous_hunk = "[h",
 					toggle_review_panel = "gR",
+					toggle_detail_panel = "gD",
 					toggle_comments = "gH",
 					next_comment = "]c",
 					previous_comment = "[c",

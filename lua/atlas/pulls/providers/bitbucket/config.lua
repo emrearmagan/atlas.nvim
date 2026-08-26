@@ -1,7 +1,7 @@
 -- Example:
 --   require("atlas").setup({
 --     providers = {
---       ---@type AtlasBitbucketProviderConfig
+--       ---@type AtlasBitbucketConfig
 --       bitbucket = {
 --         user  = vim.env.BITBUCKET_USER,
 --         token = vim.env.BITBUCKET_TOKEN,
@@ -79,7 +79,7 @@
 ---@field label string|nil  -- default "Search"
 ---@field items table<string, AtlasBitbucketBookmarkConfig>|nil
 
----@class AtlasBitbucketProviderConfig
+---@class AtlasBitbucketConfig
 ---@field user string
 ---@field token string
 ---@field cache_ttl number|nil Cache lifetime in seconds. Set to 0 to disable caching.

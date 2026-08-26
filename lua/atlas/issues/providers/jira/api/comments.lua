@@ -3,7 +3,6 @@ local M = {}
 local service = require("atlas.issues.providers.jira.api.service")
 local normalizer = require("atlas.issues.providers.jira.api.mapper")
 local markdown = require("atlas.issues.providers.jira.converted.markdown")
-local config = require("atlas.issues.providers.jira.api.config")
 
 ---@param raw table
 ---@param issue_key string
@@ -68,7 +67,7 @@ function M.add_comment(issue_key, comment, opts, callback)
 
 	local endpoint = string.format("/issue/%s/comment", issue_key)
 	local payload = { body = "" }
-	if config.jira_config().api_type == "cloud" then
+	if not service.is_server() then
 		payload.body = markdown.to_adf(body)
 	else
 		payload.body = body
@@ -117,7 +116,7 @@ function M.edit_comment(issue_key, comment_id, comment, callback)
 
 	local endpoint = string.format("/issue/%s/comment/%s", issue_key, id)
 	local payload = { body = "" }
-	if config.jira_config().api_type == "cloud" then
+	if not service.is_server() then
 		payload.body = markdown.to_adf(body)
 	else
 		payload.body = body

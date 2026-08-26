@@ -1,7 +1,7 @@
 local M = {}
 
 local service = require("atlas.issues.providers.jira.api.service")
-local config = require("atlas.issues.providers.jira.api.config")
+local config = require("atlas.config")
 
 ---@param str string
 ---@return string
@@ -14,7 +14,7 @@ end
 ---@param callback fun(user: IssueUser|nil, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.get_myself(callback)
-	local jira = config.jira_config()
+	local jira = config.provider_options("jira") or {}
 	local cache_key = string.format("jira:user:me:%s:%s", tostring(jira.base_url or ""), tostring(jira.email or ""))
 	local cached = service.get_cache(cache_key)
 	if cached then
@@ -59,7 +59,7 @@ function M.get_assignable_users(opts, query, callback)
 		return nil
 	end
 
-	local is_server = config.jira_config().api_type == "server"
+	local is_server = service.is_server()
 
 	local q = tostring(query or "")
 	local params = {}
@@ -201,7 +201,7 @@ function M.assign_issue(issue_key, account_id, callback)
 
 	local endpoint = string.format("/issue/%s/assignee", issue_key)
 	local payload = {}
-	if config.jira_config().api_type == "server" then
+	if service.is_server() then
 		payload.name = normalized_account_id or vim.NIL
 	else
 		payload.accountId = normalized_account_id or vim.NIL
@@ -238,7 +238,7 @@ function M.change_reporter(issue_key, account_id, callback)
 
 	local endpoint = string.format("/issue/%s", issue_key)
 	local payload = { fields = { reporter = {} } }
-	if config.jira_config().api_type == "server" then
+	if service.is_server() then
 		payload.fields.reporter.name = account_id
 	else
 		payload.fields.reporter.accountId = account_id

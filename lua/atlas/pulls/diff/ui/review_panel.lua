@@ -18,7 +18,7 @@ local namespace = vim.api.nvim_create_namespace("atlas_diff_review_panel")
 local function panel_height()
 	local diff_config = (config.options.pulls or {}).diff or {}
 	local panel_config = diff_config.review_panel or {}
-	local height = math.max(4, math.floor(tonumber(panel_config.height) or 15))
+	local height = math.max(4, math.floor(tonumber(panel_config.height) or 10))
 	return math.min(height, math.max(4, vim.o.lines - 8))
 end
 

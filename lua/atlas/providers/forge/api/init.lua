@@ -27,7 +27,7 @@ local pagination_factory = require("atlas.providers.forge.api.pagination")
 ---@field max_items integer|nil
 
 ---@class ForgeClient
----@field config fun(): AtlasGiteaProviderConfig|AtlasForgejoProviderConfig
+---@field config fun(): AtlasGiteaConfig|AtlasForgejoConfig
 ---@field get_auth fun(): string, string|nil
 ---@field base_url fun(): string
 ---@field cache_ttl fun(): number

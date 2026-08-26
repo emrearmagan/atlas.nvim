@@ -22,7 +22,7 @@
 local actions = require("atlas.issues.providers.jira.actions")
 local author_completion = require("atlas.providers.jira.completion.author")
 local comments_api = require("atlas.issues.providers.jira.api.comments")
-local config = require("atlas.issues.providers.jira.api.config")
+local config = require("atlas.config")
 local detail_ui = require("atlas.issues.providers.jira.ui.detail")
 local highlights = require("atlas.issues.providers.jira.highlights")
 local issues_api = require("atlas.issues.providers.jira.api.issues")
@@ -190,8 +190,7 @@ end
 
 ---@return AtlasJiraViewConfig[]
 local function views()
-	local cfg = config.jira_config()
-	local configured = cfg.views
+	local configured = (config.domain_options("jira", "issues") or {}).views
 	if not configured or #configured == 0 then
 		configured = {
 			{
