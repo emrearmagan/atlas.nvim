@@ -307,7 +307,7 @@ At some point there will probably an extension for lualine.
       cache_ttl = 300, -- Set to 0 to disable caching.
     },
 
-    ---@type AtlasShortcutProviderConfig
+    ---@type AtlasShortcutConfig
     shortcut = {
       -- Create a token at https://app.shortcut.com/settings/account/api-tokens
       token = vim.env.SHORTCUT_TOKEN,
@@ -752,7 +752,7 @@ Shortcut uses its fixed REST API v3 endpoint. Create a token in [Shortcut API to
 
 ```lua
 providers = {
-  ---@type AtlasShortcutProviderConfig
+  ---@type AtlasShortcutConfig
   shortcut = {
     token = vim.env.SHORTCUT_TOKEN,
     cache_ttl = 300, -- Set to 0 to disable caching.

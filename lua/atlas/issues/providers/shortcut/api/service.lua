@@ -9,7 +9,7 @@ local logger = require("atlas.core.logger")
 local API_BASE_URL = "https://api.app.shortcut.com/api/v3"
 local CACHE_PREFIX = "shortcut:"
 
----@return AtlasShortcutProviderConfig
+---@return AtlasShortcutConfig
 local function shortcut_config()
 	return config.provider_options("shortcut") or {}
 end

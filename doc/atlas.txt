@@ -114,7 +114,7 @@ up and what's missing.
         api_type = "cloud", -- "cloud" (v3) or "server" (v2)
         cache_ttl = 300, -- Set to 0 to disable caching.
       },
-      ---@type AtlasShortcutProviderConfig
+      ---@type AtlasShortcutConfig
       shortcut = {
         -- https://app.shortcut.com/settings/account/api-tokens
         token = vim.env.SHORTCUT_TOKEN,
@@ -667,7 +667,7 @@ https://app.shortcut.com/settings/account/api-tokens and configure Story views:
 
 >lua
   providers = {
-    ---@type AtlasShortcutProviderConfig
+    ---@type AtlasShortcutConfig
     shortcut = {
       token = vim.env.SHORTCUT_TOKEN,
       cache_ttl = 300, -- Set to 0 to disable caching.
