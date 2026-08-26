@@ -1,5 +1,5 @@
-local issue_mapper = require("atlas.issues.providers.gitea.api.mapper")
-local pull_mapper = require("atlas.pulls.providers.gitea.api.mapper")
+local issue_mapper = require("atlas.issues.providers.forge.gitea.api").mapper
+local pull_mapper = require("atlas.pulls.providers.forge.gitea.api").mapper
 
 describe("Gitea issue mapping", function()
 	it("keeps summary metadata separate from hydrated details", function()

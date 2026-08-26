@@ -1,12 +1,10 @@
-local CLIENT = "atlas.providers.gitea.client"
-local PAGINATION = "atlas.providers.gitea.pagination"
-local REVIEWS = "atlas.pulls.providers.gitea.api.reviews"
-local PREFIX = "atlas.pulls.providers.gitea"
+local TRANSPORT = "atlas.providers.forge.gitea.api"
+local REVIEWS = "atlas.pulls.providers.forge.gitea.api.reviews"
+local PREFIX = "atlas.pulls.providers.forge.gitea"
 
 local function cleanup()
-	package.loaded[CLIENT] = nil
-	package.preload[CLIENT] = nil
-	package.loaded[PAGINATION] = nil
+	package.loaded[TRANSPORT] = nil
+	package.preload[TRANSPORT] = nil
 	for module in pairs(package.loaded) do
 		if module:sub(1, #PREFIX) == PREFIX then
 			package.loaded[module] = nil
@@ -24,24 +22,29 @@ local function pull_request()
 end
 
 local function load_reviews(raw_reviews, requests, pending_callbacks)
-	package.preload[CLIENT] = function()
-		return {
-			url_encode = tostring,
-			query = function(params)
-				assert.equal(1, params.page)
-				assert.equal(50, params.limit)
-				return "?page=1"
-			end,
-			request = function(method, endpoint, _, done)
-				table.insert(requests, method .. " " .. endpoint)
-				if endpoint:match("/reviews%?page=1$") then
-					done(raw_reviews, nil)
-				else
-					pending_callbacks[endpoint] = done
-				end
-				return { cancel = function() end }
-			end,
-		}
+	local service = {
+		id = "gitea",
+		name = "Gitea",
+		url_encode = tostring,
+		query = function(params)
+			assert.equal(1, params.page)
+			assert.equal(50, params.limit)
+			return "?page=1"
+		end,
+		request = function(method, endpoint, _, done)
+			table.insert(requests, method .. " " .. endpoint)
+			if endpoint:match("/reviews%?page=1$") then
+				done(raw_reviews, nil)
+			else
+				pending_callbacks[endpoint] = done
+			end
+			return { cancel = function() end }
+		end,
+	}
+	service.fetch_all = require("atlas.providers.forge.api.pagination").new(service).fetch_all
+	service.notifications = {}
+	package.preload[TRANSPORT] = function()
+		return service
 	end
 	return require(REVIEWS)
 end

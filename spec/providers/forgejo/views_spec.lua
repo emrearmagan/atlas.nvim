@@ -1,5 +1,5 @@
-local ISSUE_PROVIDER = "atlas.issues.providers.forgejo"
-local PULL_PROVIDER = "atlas.pulls.providers.forgejo"
+local ISSUE_PROVIDER = "atlas.issues.providers.forge.forgejo"
+local PULL_PROVIDER = "atlas.pulls.providers.forge.forgejo"
 
 local config = require("atlas.config")
 local git = require("atlas.core.git")
@@ -39,11 +39,11 @@ describe("Forgejo provider views", function()
 		config.domain_options = original_domain_options
 		git.local_repository = original_local_repository
 		if issue_list then
-			require("atlas.issues.providers.forgejo.api.issues").list = issue_list
+			require("atlas.issues.providers.forge.forgejo.api").issues.list = issue_list
 			issue_list = nil
 		end
 		if pull_list then
-			require("atlas.pulls.providers.forgejo.api.pullrequests").list = pull_list
+			require("atlas.pulls.providers.forge.forgejo.api").pullrequests.list = pull_list
 			pull_list = nil
 		end
 		unload_providers()
@@ -91,7 +91,7 @@ describe("Forgejo provider views", function()
 			"repo:owner/repo is:closed scope:created labels:bug direction:desc needle",
 			provider.capabilities.core.search_query(views[1])
 		)
-		local issues_api = require("atlas.issues.providers.forgejo.api.issues")
+		local issues_api = require("atlas.issues.providers.forge.forgejo.api").issues
 		issue_list = issues_api.list
 		local fetched_view
 		issues_api.list = function(view, _, on_done)
@@ -143,7 +143,7 @@ describe("Forgejo provider views", function()
 			"repo:owner/repo is:open is:merged sort:recent needle",
 			provider.capabilities.core.search_query(views[1], { states = { "merged", "open" } })
 		)
-		local pullrequests_api = require("atlas.pulls.providers.forgejo.api.pullrequests")
+		local pullrequests_api = require("atlas.pulls.providers.forge.forgejo.api").pullrequests
 		pull_list = pullrequests_api.list
 		local fetched_view, fetched_opts
 		pullrequests_api.list = function(view, opts, on_done)

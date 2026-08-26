@@ -1,13 +1,13 @@
-local CLIENT = "atlas.providers.forgejo.client"
-local COMMENTS = "atlas.pulls.providers.forgejo.api.comments"
-local PIPELINES = "atlas.pulls.providers.forgejo.api.pipelines"
-local PROVIDER = "atlas.pulls.providers.forgejo"
-local REVIEWS = "atlas.pulls.providers.forgejo.api.reviews"
-local PREFIX = "atlas.pulls.providers.forgejo"
+local TRANSPORT = "atlas.providers.forge.forgejo.api"
+local COMMENTS = "atlas.pulls.providers.forge.forgejo.api.comments"
+local PIPELINES = "atlas.pulls.providers.forge.forgejo.api.pipelines"
+local PROVIDER = "atlas.pulls.providers.forge.forgejo"
+local REVIEWS = "atlas.pulls.providers.forge.forgejo.api.reviews"
+local PREFIX = "atlas.pulls.providers.forge.forgejo"
 
 local function cleanup()
-	package.loaded[CLIENT] = nil
-	package.preload[CLIENT] = nil
+	package.loaded[TRANSPORT] = nil
+	package.preload[TRANSPORT] = nil
 	for module in pairs(package.loaded) do
 		if module:sub(1, #PREFIX) == PREFIX then
 			package.loaded[module] = nil
@@ -17,8 +17,12 @@ end
 
 local function load_api(module, service)
 	package.loaded[module] = nil
-	package.loaded[CLIENT] = nil
-	package.preload[CLIENT] = function()
+	package.loaded[TRANSPORT] = nil
+	service.id = "forgejo"
+	service.name = "Forgejo"
+	service.fetch_all = require("atlas.providers.forge.api.pagination").new(service).fetch_all
+	service.notifications = {}
+	package.preload[TRANSPORT] = function()
 		return service
 	end
 	return require(module)
@@ -37,9 +41,8 @@ describe("Forgejo pulls", function()
 		assert.equal(comments.add, provider.capabilities.comments.add_comment)
 		assert.equal(reviews.start_review, provider.capabilities.reviews.start_review)
 		assert.equal(pipelines.fetch_details, provider.capabilities.pipelines.fetch_details)
-		assert.equal(require("atlas.pulls.providers.forgejo.actions"), provider.capabilities.actions)
 		assert.equal(
-			require("atlas.pulls.providers.forgejo.actions.pipelines"),
+			require("atlas.pulls.providers.forge.forgejo.actions.pipelines"),
 			provider.capabilities.pipelines.actions
 		)
 		assert.is_nil(provider.capabilities.comments.set_thread_resolved)

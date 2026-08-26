@@ -4,10 +4,10 @@ local git = require("atlas.core.git")
 local cases = {
 	{
 		domain = "issues",
-		module = "atlas.issues.providers.gitea",
+		module = "atlas.issues.providers.forge.gitea",
 		expected_query = "repo:local/repo is:closed archived:false sort:updated needle",
 		fetch = function(provider, view)
-			local api = require("atlas.issues.providers.gitea.api.issues")
+			local api = require("atlas.issues.providers.forge.gitea.api").issues
 			local original = api.list
 			local received
 			api.list = function(value, _, done)
@@ -24,10 +24,10 @@ local cases = {
 	},
 	{
 		domain = "pulls",
-		module = "atlas.pulls.providers.gitea",
+		module = "atlas.pulls.providers.forge.gitea",
 		expected_query = "repo:local/repo is:open is:merged archived:false sort:updated needle",
 		fetch = function(provider, view)
-			local api = require("atlas.pulls.providers.gitea.api.pullrequests")
+			local api = require("atlas.pulls.providers.forge.gitea.api").pullrequests
 			local original = api.list
 			local received, received_opts
 			api.list = function(value, opts, done)

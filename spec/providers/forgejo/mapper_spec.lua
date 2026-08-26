@@ -1,5 +1,5 @@
-local issue_mapper = require("atlas.issues.providers.forgejo.api.mapper")
-local pull_mapper = require("atlas.pulls.providers.forgejo.api.mapper")
+local issue_mapper = require("atlas.issues.providers.forge.forgejo.api").mapper
+local pull_mapper = require("atlas.pulls.providers.forge.forgejo.api").mapper
 
 describe("Forgejo issue mapping", function()
 	it("keeps summary metadata separate from hydrated details", function()

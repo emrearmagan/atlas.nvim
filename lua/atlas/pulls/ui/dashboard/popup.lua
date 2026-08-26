@@ -131,7 +131,7 @@ local function bitbucket_rows(pr)
 	return rows
 end
 
-local function gitea_forgejo_rows(pr)
+local function forge_rows(pr)
 	local rows = {}
 	local mergeable = pr.mergeable
 	if mergeable ~= nil and pr.state ~= "draft" then
@@ -163,12 +163,12 @@ end
 
 local function gitea_rows(pr)
 	---@cast pr GiteaPullRequest
-	return gitea_forgejo_rows(pr)
+	return forge_rows(pr)
 end
 
 local function forgejo_rows(pr)
 	---@cast pr ForgejoPullRequest
-	return gitea_forgejo_rows(pr)
+	return forge_rows(pr)
 end
 
 local provider_rows = {

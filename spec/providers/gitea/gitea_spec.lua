@@ -1,13 +1,13 @@
-local CLIENT = "atlas.providers.gitea.client"
-local COMMENTS = "atlas.pulls.providers.gitea.api.comments"
-local PIPELINES = "atlas.pulls.providers.gitea.api.pipelines"
-local PROVIDER = "atlas.pulls.providers.gitea"
-local REVIEWS = "atlas.pulls.providers.gitea.api.reviews"
-local PREFIX = "atlas.pulls.providers.gitea"
+local TRANSPORT = "atlas.providers.forge.gitea.api"
+local COMMENTS = "atlas.pulls.providers.forge.gitea.api.comments"
+local PIPELINES = "atlas.pulls.providers.forge.gitea.api.pipelines"
+local PROVIDER = "atlas.pulls.providers.forge.gitea"
+local REVIEWS = "atlas.pulls.providers.forge.gitea.api.reviews"
+local PREFIX = "atlas.pulls.providers.forge.gitea"
 
 local function cleanup()
-	package.loaded[CLIENT] = nil
-	package.preload[CLIENT] = nil
+	package.loaded[TRANSPORT] = nil
+	package.preload[TRANSPORT] = nil
 	for module in pairs(package.loaded) do
 		if module:sub(1, #PREFIX) == PREFIX then
 			package.loaded[module] = nil
@@ -17,8 +17,12 @@ end
 
 local function load_api(module, service)
 	package.loaded[module] = nil
-	package.loaded[CLIENT] = nil
-	package.preload[CLIENT] = function()
+	package.loaded[TRANSPORT] = nil
+	service.id = "gitea"
+	service.name = "Gitea"
+	service.fetch_all = require("atlas.providers.forge.api.pagination").new(service).fetch_all
+	service.notifications = {}
+	package.preload[TRANSPORT] = function()
 		return service
 	end
 	return require(module)
@@ -44,8 +48,10 @@ describe("Gitea pulls", function()
 		assert.equal(comments.add, provider.capabilities.comments.add_comment)
 		assert.equal(comments.set_thread_resolved, provider.capabilities.comments.set_thread_resolved)
 		assert.equal(pipelines.fetch_details, provider.capabilities.pipelines.fetch_details)
-		assert.equal(require("atlas.pulls.providers.gitea.actions"), provider.capabilities.actions)
-		assert.equal(require("atlas.pulls.providers.gitea.actions.pipelines"), provider.capabilities.pipelines.actions)
+		assert.equal(
+			require("atlas.pulls.providers.forge.gitea.actions.pipelines"),
+			provider.capabilities.pipelines.actions
+		)
 	end)
 
 	it("uses the Gitea 1.27 review-thread endpoints", function()
