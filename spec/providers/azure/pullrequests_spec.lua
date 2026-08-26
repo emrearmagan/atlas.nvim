@@ -4,6 +4,8 @@ local module_names = {
 	"atlas.pulls.providers.azure.api.users",
 	"atlas.pulls.providers.azure.api.mapper",
 	"atlas.pulls.providers.azure.api.pullrequests",
+	"atlas.pulls.providers.azure.api.reviews",
+	"atlas.pulls.providers.azure.api.checks",
 	"atlas.pulls.providers.azure.init",
 }
 
@@ -17,7 +19,7 @@ local pull_request = {
 	creationDate = "2026-09-07T12:00:00Z",
 	sourceRefName = "refs/heads/feature/azure",
 	targetRefName = "refs/heads/main",
-	repository = { name = "api", project = { name = "Platform" } },
+	repository = { name = "api", project = { id = "project-id", name = "Platform" } },
 }
 
 describe("Azure DevOps pull requests", function()
@@ -135,5 +137,92 @@ describe("Azure DevOps pull requests", function()
 			{ method = "PATCH", payload = { title = "Updated title" } },
 		}, requests)
 		assert.same({}, cache)
+	end)
+
+	it("loads reviewers, merge status and branch policies for Overview", function()
+		local service = require(service_name)
+		local evaluated_at = "2026-09-07T12:00:00Z"
+		package.loaded[service_name] = {
+			base_url = function()
+				return "https://dev.azure.com/acme"
+			end,
+			url_encode = service.url_encode,
+			build_query = service.build_query,
+			get_cache = function()
+				return nil, false
+			end,
+			set_cache = function() end,
+			request = function(method, endpoint, _, done, _, api_version)
+				assert.equal("GET", method)
+				if endpoint == "/Platform/_apis/git/repositories/api/pullrequests/1/reviewers" then
+					done({
+						value = {
+							{
+								id = "reviewer-id",
+								displayName = "Reviewer",
+								uniqueName = "reviewer@example.com",
+								vote = 10,
+							},
+						},
+					}, nil)
+					return
+				end
+				assert.equal(
+					"/Platform/_apis/policy/evaluations?artifactId=vstfs%3A%2F%2F%2FCodeReview%2FCodeReviewId%2Fproject-id%2F1",
+					endpoint
+				)
+				assert.equal("7.1-preview.1", api_version)
+				done({
+					value = {
+						{
+							evaluationId = "required",
+							status = "rejected",
+							startedDate = evaluated_at,
+							configuration = {
+								isBlocking = true,
+								type = { displayName = "Minimum number of reviewers" },
+								settings = {},
+							},
+						},
+						{
+							evaluationId = "optional",
+							status = "rejected",
+							completedDate = evaluated_at,
+							configuration = {
+								isBlocking = false,
+								type = { displayName = "Build" },
+								settings = { displayName = "Tests" },
+							},
+						},
+					},
+				}, nil)
+			end,
+		}
+		local core = require("atlas.pulls.providers.azure.init").capabilities.core
+		local pr = require("atlas.pulls.providers.azure.api.mapper").to_pull_request(pull_request)
+		pr.merge_status = "conflicts"
+		local completed = 0
+		core.fetch_reviewers(pr, {}, function(reviewers, err)
+			assert.is_nil(err)
+			assert.equal("Reviewer", reviewers[1].nickname)
+			assert.equal("approved", reviewers[1].decision)
+			completed = completed + 1
+		end)
+		core.fetch_merge_checks(pr, {}, function(checks, err)
+			assert.is_nil(err)
+			local when = require("atlas.ui.shared.utils").relative_time_text(evaluated_at)
+			assert.same({
+				{ key = "merge", state = "failed", label = "Merge conflicts must be resolved" },
+				{
+					key = "required",
+					state = "failed",
+					label = "Minimum number of reviewers",
+					details = { "Evaluation started " .. when },
+				},
+				{ key = "optional", state = "warning", label = "Build: Tests", details = { "Completed " .. when } },
+			}, checks)
+			completed = completed + 1
+		end)
+		assert.equal(2, completed)
 	end)
 end)

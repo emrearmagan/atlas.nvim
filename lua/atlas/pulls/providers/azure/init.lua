@@ -1,10 +1,21 @@
+---@alias AzurePullRequestMergeStatus
+---| "notSet"
+---| "queued"
+---| "conflicts"
+---| "succeeded"
+---| "rejectedByPolicy"
+---| "failure"
+
 ---@class AzurePullRequest : PullRequest
----@field merge_status string|nil
+---@field merge_status AzurePullRequestMergeStatus|nil
+---@field project_id string
 
 local config = require("atlas.config")
 local search_query = require("atlas.providers.azure.query")
 local pullrequests_api = require("atlas.pulls.providers.azure.api.pullrequests")
 local users_api = require("atlas.pulls.providers.azure.api.users")
+local reviews_api = require("atlas.pulls.providers.azure.api.reviews")
+local checks_api = require("atlas.pulls.providers.azure.api.checks")
 local actions = require("atlas.pulls.providers.azure.actions")
 local detail_ui = require("atlas.pulls.providers.azure.ui.detail")
 
@@ -39,7 +50,7 @@ return {
 			fetch_by_refs = pullrequests_api.fetch_by_refs,
 			fetch_pullrequest = pullrequests_api.fetch_pullrequest,
 			-- create_pr = pullrequests_api.create_pr,
-			-- fetch_reviewers = reviews_api.fetch_reviewers,
+			fetch_reviewers = reviews_api.fetch_reviewers,
 			-- update_reviewers = pullrequests_api.update_reviewers,
 			update_title = pullrequests_api.update_title,
 			update_description = pullrequests_api.update_description,
@@ -47,7 +58,7 @@ return {
 			decline = pullrequests_api.decline,
 			fetch_description = pullrequests_api.fetch_description,
 			-- fetch_default_reviewers = pullrequests_api.fetch_default_reviewers,
-			-- fetch_merge_checks = checks_api.fetch,
+			fetch_merge_checks = checks_api.fetch,
 			-- fetch_diffstat = changes_api.fetch_diffstat,
 			-- fetch_commits = changes_api.fetch_commits,
 			-- fetch_diff = changes_api.fetch_diff,

@@ -30,7 +30,7 @@ end
 
 ---@param raw_list table[]|nil
 ---@return PullsReviewer[]|nil
-local function to_reviewers(raw_list)
+function M.to_reviewers(raw_list)
 	if json.nilify(raw_list) == nil then
 		return nil
 	end
@@ -88,10 +88,11 @@ function M.to_pull_request(raw)
 			),
 		},
 		provider = "azure",
+		project_id = repository.project.id,
 		workspace = project,
 		repo = repository.name,
 		repo_full_name = project .. "/" .. repository.name,
-		reviewers = to_reviewers(raw.reviewers),
+		reviewers = M.to_reviewers(raw.reviewers),
 	}
 end
 
