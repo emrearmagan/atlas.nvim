@@ -10,6 +10,7 @@
 require("atlas.pulls.providers.forgejo.config")
 
 local comments_api = require("atlas.pulls.providers.forgejo.api.comments")
+local checks_api = require("atlas.pulls.providers.forgejo.api.checks")
 local commits_api = require("atlas.pulls.providers.forgejo.api.commits")
 local files_api = require("atlas.pulls.providers.forgejo.api.files")
 local notifications_api = require("atlas.providers.forgejo.notifications")
@@ -222,6 +223,7 @@ return {
 			fetch_reviewers = pullrequests_api.reviewers,
 			fetch_diffstat = files_api.diffstat,
 			fetch_commits = commits_api.fetch,
+			fetch_merge_checks = checks_api.fetch,
 		},
 		comments = comments,
 		reviews = reviews,
