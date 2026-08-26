@@ -117,6 +117,9 @@ function M.register(session, opts)
 			end
 
 			if session.review then
+				add(items, "pulls.review.diff.toggle_detail_panel", "Toggle pull request details", function()
+					actions.toggle_detail_panel(session)
+				end)
 				add(items, "ui.open_actions", "Review actions", function()
 					actions.open(session)
 				end)

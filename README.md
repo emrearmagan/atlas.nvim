@@ -831,6 +831,7 @@ keymaps = {
         next_hunk = "]h",
         previous_hunk = "[h",
         toggle_review_panel = "gR",
+        toggle_detail_panel = "gD",
         toggle_comments = "gH",
         next_comment = "]c",
         previous_comment = "[c",
