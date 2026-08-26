@@ -200,6 +200,22 @@ end
 
 ---@param session AtlasDiffSession
 ---@param index integer
+---@return integer|nil
+local function next_file_in_tree(session, index)
+	local order = explorer.ordered_indices(session)
+	if #order < 2 then
+		return nil
+	end
+	for order_index, candidate in ipairs(order) do
+		if candidate == index then
+			return order[(order_index % #order) + 1]
+		end
+	end
+	return nil
+end
+
+---@param session AtlasDiffSession
+---@param index integer
 ---@param direction 1|-1
 ---@return integer|nil
 local function unreviewed_file(session, index, direction)
@@ -236,7 +252,7 @@ local function toggle_file_reviewed(session)
 		context = review.action_context(session)
 	end
 
-	local next_index = reviewed and unreviewed_file(session, index, 1) or nil
+	local next_index = next_file_in_tree(session, index)
 	session.reviewed_files[file.path] = reviewed or nil
 	if next_index then
 		select_file(session, next_index)

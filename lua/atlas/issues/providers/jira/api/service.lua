@@ -1,14 +1,19 @@
 local M = {}
 
 local cache = require("atlas.core.cache")
-local config = require("atlas.issues.providers.jira.api.config")
+local config = require("atlas.config")
 local http = require("atlas.core.http")
 local memory_cache = require("atlas.core.memory_cache")
 local logger = require("atlas.core.logger")
 
+---@return AtlasJiraConfig
+local function provider_options()
+	return config.provider_options("jira") or {}
+end
+
 ---@return string, string, string|nil
 local function get_auth()
-	local jira = config.jira_config()
+	local jira = provider_options()
 	local base_url = jira.base_url
 	local email = jira.email or ""
 	local token = jira.token
@@ -25,7 +30,7 @@ end
 
 ---@return table<string, string>
 local function build_headers()
-	local jira = config.jira_config()
+	local jira = provider_options()
 	local email = jira.email or ""
 	local token = jira.token or ""
 	local auth_header = "Basic " .. vim.base64.encode(string.format("%s:%s", email, token))
@@ -41,21 +46,22 @@ end
 
 ---@return string
 function M.base_url()
-	return tostring(config.jira_config().base_url or "")
+	return tostring(provider_options().base_url or "")
+end
+
+---@return boolean
+function M.is_server()
+	return provider_options().api_type == "server"
 end
 
 ---@return string
 local function api_path()
-	local version = "3"
-	if config.jira_config().api_type == "server" then
-		version = "2"
-	end
-	return "/rest/api/" .. version
+	return "/rest/api/" .. (M.is_server() and "2" or "3")
 end
 
 ---@return number
 local function cache_ttl()
-	return tonumber(config.jira_config().cache_ttl) or 300
+	return tonumber(provider_options().cache_ttl) or 300
 end
 
 function M.clear_memory_cache()

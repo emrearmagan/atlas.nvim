@@ -2,7 +2,6 @@ local M = {}
 
 local service = require("atlas.issues.providers.jira.api.service")
 local normalizer = require("atlas.issues.providers.jira.api.mapper")
-local config = require("atlas.issues.providers.jira.api.config")
 
 ---@param value string
 ---@return string
@@ -67,7 +66,7 @@ function M.get_projects(opts, callback)
 		if cancelled then
 			return
 		end
-		local is_server = config.jira_config().api_type == "server"
+		local is_server = service.is_server()
 		local path = is_server and "/project" or "/project/search"
 		local endpoint
 		if is_server then

@@ -84,17 +84,17 @@ up and what's missing.
     },
 
     providers = {
-      ---@type AtlasBitbucketProviderConfig
+      ---@type AtlasBitbucketConfig
       bitbucket = {
         user = vim.env.BITBUCKET_USER,
         token = vim.env.BITBUCKET_TOKEN,
         cache_ttl = 300, -- Set to 0 to disable caching.
       },
-      ---@type AtlasGitHubProviderConfig
+      ---@type AtlasGitHubConfig
       github = {
         cache_ttl = 300, -- Set to 0 to disable caching.
       },
-      ---@type AtlasGitLabProviderConfig
+      ---@type AtlasGitLabConfig
       gitlab = {
         base_url = "https://gitlab.com",
         -- Personal Access Token with `api` scope:
@@ -102,7 +102,7 @@ up and what's missing.
         token = vim.env.GITLAB_TOKEN,
         cache_ttl = 300, -- Set to 0 to disable caching.
       },
-      ---@type AtlasJiraProviderConfig
+      ---@type AtlasJiraConfig
       jira = {
         base_url = "https://your-site.atlassian.net",
         email = "you@example.com", -- Required for basic authentication only.
@@ -278,7 +278,7 @@ Shared config that applies to all pulls providers:
         show_review_panel = false, -- set true to show the review panel initially
         comment_display = "virtual_lines", -- or compact "virtual_text" hints
         review_panel = {
-          height = 15,
+          height = 10,
         },
 
         -- AtlasDiff options; external viewers use their own configuration.
@@ -775,6 +775,7 @@ Defaults live under `keymaps` in `setup()`. Each entry accepts:
             next_hunk             = "]h",
             previous_hunk         = "[h",
             toggle_review_panel   = "gR",
+            toggle_detail_panel   = "gD",
             toggle_comments       = "gH",
             next_comment          = "]c",
             previous_comment      = "[c",

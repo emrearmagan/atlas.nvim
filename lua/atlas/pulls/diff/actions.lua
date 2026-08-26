@@ -44,6 +44,33 @@ local function open_in_browser(session)
 end
 
 ---@param session AtlasDiffSession
+function M.toggle_detail_panel(session)
+	local context = session.review
+	if context == nil then
+		return
+	end
+
+	local detail_ui = require("atlas.ui.detail")
+	local detail = require("atlas.pulls.ui.detail")
+	if detail_ui.is_showing("pulls", session.tabpage) then
+		detail.close()
+		return
+	end
+
+	detail.open(context.pr, {
+		provider = context.provider,
+		on_update = function(pr)
+			detail.refresh(pr)
+			if session.closed or session.review == nil then
+				return
+			end
+			session.review.pr = pr
+			review_api.reload(session)
+		end,
+	})
+end
+
+---@param session AtlasDiffSession
 function M.start_or_submit(session)
 	local review = session.review
 	if not review or (review.pr.state ~= "open" and review.pr.state ~= "draft") then
@@ -102,7 +129,12 @@ function M.open(session)
 	local reviews = review.provider.capabilities.reviews or {}
 	local pending = review.data.review.pending == true
 	local reviewable = review.pr.state == "open" or review.pr.state == "draft"
-	local items = {}
+	local items = {
+		{
+			id = "toggle_detail_panel",
+			label = "Toggle pull request details",
+		},
+	}
 
 	if pending then
 		if reviewable and reviews.submit_review then
@@ -129,10 +161,6 @@ function M.open(session)
 	if can_complete and reviews.request_changes and pull_actions.is_available("request_changes", context) then
 		items[#items + 1] = pull_actions.request_changes
 	end
-	if #items == 0 then
-		return
-	end
-
 	picker.select({
 		title = "Review action",
 		items = items,
@@ -142,6 +170,10 @@ function M.open(session)
 		end,
 		on_select = function(action)
 			if not action then
+				return
+			end
+			if action.id == "toggle_detail_panel" then
+				M.toggle_detail_panel(session)
 				return
 			end
 			run(session, action)

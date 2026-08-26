@@ -272,12 +272,12 @@ At some point there will probably an extension for lualine.
   },
 
   providers = {
-    ---@type AtlasGitHubProviderConfig
+    ---@type AtlasGitHubConfig
     github = {
       cache_ttl = 300, -- Set to 0 to disable caching.
     },
 
-    ---@type AtlasGitLabProviderConfig
+    ---@type AtlasGitLabConfig
     gitlab = {
       base_url = "https://gitlab.com",
       -- Personal Access Token with `api` scope:
@@ -286,14 +286,14 @@ At some point there will probably an extension for lualine.
       cache_ttl = 300, -- Set to 0 to disable caching.
     },
 
-    ---@type AtlasBitbucketProviderConfig
+    ---@type AtlasBitbucketConfig
     bitbucket = {
       user = vim.env.BITBUCKET_USER,
       token = vim.env.BITBUCKET_TOKEN,
       cache_ttl = 300, -- Set to 0 to disable caching.
     },
 
-    ---@type AtlasJiraProviderConfig
+    ---@type AtlasJiraConfig
     jira = {
       base_url = "https://your-site.atlassian.net",
       email = "you@example.com", -- Required for basic authentication only.
@@ -360,7 +360,7 @@ pulls = {
     show_review_panel = false, -- Set true to show the review panel when a diff opens.
     comment_display = "virtual_lines", -- "virtual_lines" or compact "virtual_text" hints.
     review_panel = {
-      height = 15,
+      height = 10,
     },
 
     -- AtlasDiff options; external viewers use their own configuration.
@@ -831,6 +831,7 @@ keymaps = {
         next_hunk = "]h",
         previous_hunk = "[h",
         toggle_review_panel = "gR",
+        toggle_detail_panel = "gD",
         toggle_comments = "gH",
         next_comment = "]c",
         previous_comment = "[c",

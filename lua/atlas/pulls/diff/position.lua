@@ -27,8 +27,11 @@ function M.comment(document, comment)
 	else
 		side, line = M.location(comment.inline)
 	end
-	if comment.outdated == true then
-		return side, nil
+	if comment.outdated == true and not comment.file then
+		local lines = side == "LEFT" and document.old.lines or side == "RIGHT" and document.new.lines or nil
+		if document.binary or not lines or type(line) ~= "number" or line < 1 or line > #lines then
+			return side, nil
+		end
 	end
 	return side, line
 end

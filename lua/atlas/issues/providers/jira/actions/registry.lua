@@ -4,11 +4,11 @@ local actions = require("atlas.issues.actions")
 local icons = require("atlas.ui.shared.icons")
 local picker = require("atlas.ui.picker")
 local issues_api = require("atlas.issues.providers.jira.api.issues")
+local service = require("atlas.issues.providers.jira.api.service")
 local notify = require("atlas.core.notify")
 local transitions_api = require("atlas.issues.providers.jira.api.transitions")
 local users_api = require("atlas.issues.providers.jira.api.users")
 local issues_state = require("atlas.issues.state")
-local config = require("atlas.issues.providers.jira.api.config")
 
 ---@param ctx AtlasIssueActionContext
 ---@return boolean
@@ -329,7 +329,7 @@ local function edit_issue(ctx, done)
 
 	local function open_editor(initial_description)
 		issue_editor.open(function(fields, submit_done)
-			local is_server = config.jira_config().api_type == "server"
+			local is_server = service.is_server()
 
 			local desc = fields.description
 			local payload = {
@@ -427,7 +427,7 @@ local function create_issue(context, done)
 				return
 			end
 
-			local is_server = config.jira_config().api_type == "server"
+			local is_server = service.is_server()
 			if fields.reporter and fields.reporter.account_id then
 				api_fields.reporter = is_server and { name = fields.reporter.account_id }
 					or { accountId = fields.reporter.account_id }
@@ -690,7 +690,7 @@ end
 local function browse_issue(ctx, done)
 	local issue = assert(ctx.issue)
 
-	local base_url = tostring(config.jira_config().base_url or ""):gsub("/$", "")
+	local base_url = service.base_url():gsub("/$", "")
 	local issue_key = tostring(issue.key or "")
 	if base_url == "" or issue_key == "" then
 		notify.error("No URL found for issue")
@@ -708,7 +708,7 @@ end
 local function copy_issue_url(ctx, done)
 	local issue = assert(ctx.issue)
 
-	local base_url = tostring(config.jira_config().base_url or ""):gsub("/$", "")
+	local base_url = service.base_url():gsub("/$", "")
 	local issue_key = tostring(issue.key or "")
 	local url = (base_url ~= "" and issue_key ~= "") and string.format("%s/browse/%s", base_url, issue_key) or ""
 	if url == "" then
@@ -760,7 +760,7 @@ local function toggle_subscription(ctx, done)
 
 	local function unsubscribe(account_id)
 		local param_name = "accountId"
-		if config.jira_config().api_type == "server" then
+		if service.is_server() then
 			param_name = "username"
 		end
 

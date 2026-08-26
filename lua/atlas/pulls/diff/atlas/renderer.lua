@@ -117,7 +117,6 @@ function M.inline_deleted_lines(document, right_buf, comments, hints)
 						start_col = textoff,
 						background_hl_group = "AtlasDiffRemoveLine",
 					})[1]
-					table.insert(row, 1, { string.rep(" ", textoff), "Normal" })
 					table.insert(rows, row)
 					vim.list_extend(rows, (comments and comments[line]) or {})
 				end
@@ -132,7 +131,7 @@ function M.inline_deleted_lines(document, right_buf, comments, hints)
 				vim.api.nvim_buf_set_extmark(right_buf, inline_namespace, anchor, 0, {
 					virt_lines = rows,
 					virt_lines_above = above,
-					virt_lines_leftcol = true,
+					virt_lines_overflow = vim.fn.has("nvim-0.11") == 1 and "scroll" or nil,
 					priority = 90,
 				})
 			end

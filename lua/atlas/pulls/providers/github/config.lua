@@ -1,7 +1,7 @@
 -- Example:
 --   require("atlas").setup({
 --     providers = {
---       ---@type AtlasGitHubProviderConfig
+--       ---@type AtlasGitHubConfig
 --       github = {
 --         cache_ttl = 300,
 --       },
@@ -37,7 +37,7 @@
 ---@field label string|nil  -- default "Search"
 ---@field items table<string, string>|nil
 
----@class AtlasGitHubProviderConfig
+---@class AtlasGitHubConfig
 ---@field cache_ttl number|nil Cache lifetime in seconds. Set to 0 to disable caching.
 
 ---@class AtlasGitHubPullsConfig

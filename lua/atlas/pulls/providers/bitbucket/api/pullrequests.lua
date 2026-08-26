@@ -151,6 +151,9 @@ function M.fetch_pullrequests(view_repos, opts, on_done)
 			for result_index = 1, #view_repos do
 				vim.list_extend(all_prs, results[result_index])
 			end
+			table.sort(all_prs, function(left, right)
+				return left.updated_on > right.updated_on
+			end)
 
 			if #errors > 0 then
 				on_done(all_prs, errors)
