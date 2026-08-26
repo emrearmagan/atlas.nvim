@@ -1,7 +1,7 @@
 -- Example:
 --   require("atlas").setup({
 --     providers = {
---       ---@type AtlasGitLabProviderConfig
+--       ---@type AtlasGitLabConfig
 --       gitlab = {
 --         base_url = "https://gitlab.com",
 --         token    = vim.env.GITLAB_TOKEN,
@@ -59,7 +59,7 @@
 ---@field label string|nil  -- default "Search"
 ---@field items table<string, AtlasGitLabPullsSearchConfig>|nil
 
----@class AtlasGitLabProviderConfig
+---@class AtlasGitLabConfig
 ---@field base_url string
 ---@field token string
 ---@field cache_ttl number|nil Cache lifetime in seconds. Set to 0 to disable caching.

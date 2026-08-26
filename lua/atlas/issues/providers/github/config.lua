@@ -1,7 +1,7 @@
 -- Example:
 --   require("atlas").setup({
 --     providers = {
---       ---@type AtlasGitHubProviderConfig
+--       ---@type AtlasGitHubConfig
 --       github = {
 --         cache_ttl = 300,
 --       },

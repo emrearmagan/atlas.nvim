@@ -272,12 +272,12 @@ At some point there will probably an extension for lualine.
   },
 
   providers = {
-    ---@type AtlasGitHubProviderConfig
+    ---@type AtlasGitHubConfig
     github = {
       cache_ttl = 300, -- Set to 0 to disable caching.
     },
 
-    ---@type AtlasGitLabProviderConfig
+    ---@type AtlasGitLabConfig
     gitlab = {
       base_url = "https://gitlab.com",
       -- Personal Access Token with `api` scope:
@@ -286,14 +286,14 @@ At some point there will probably an extension for lualine.
       cache_ttl = 300, -- Set to 0 to disable caching.
     },
 
-    ---@type AtlasBitbucketProviderConfig
+    ---@type AtlasBitbucketConfig
     bitbucket = {
       user = vim.env.BITBUCKET_USER,
       token = vim.env.BITBUCKET_TOKEN,
       cache_ttl = 300, -- Set to 0 to disable caching.
     },
 
-    ---@type AtlasJiraProviderConfig
+    ---@type AtlasJiraConfig
     jira = {
       base_url = "https://your-site.atlassian.net",
       email = "you@example.com", -- Required for basic authentication only.

@@ -1,7 +1,7 @@
 -- Example:
 --   require("atlas").setup({
 --     providers = {
---       ---@type AtlasJiraProviderConfig
+--       ---@type AtlasJiraConfig
 --       jira = {
 --         base_url = "https://your-domain.atlassian.net",
 --         email    = vim.env.JIRA_EMAIL,
@@ -76,7 +76,7 @@
 ---@field label string|nil  -- default "JQL"
 ---@field items table<string, string>|nil
 
----@class AtlasJiraProviderConfig
+---@class AtlasJiraConfig
 ---@field base_url string
 ---@field email string|nil Required for basic authentication.
 ---@field token string
@@ -85,8 +85,6 @@
 ---@field cache_ttl number|nil Cache lifetime in seconds. Set to 0 to disable caching.
 
 ---@class AtlasJiraIssuesConfig
----@field project_config AtlasJiraProjectConfig|nil
 ---@field views AtlasJiraViewConfig[]|nil
 ---@field bookmarks AtlasJiraBookmarksConfig|nil
-
----@class AtlasJiraConfig : AtlasJiraProviderConfig, AtlasJiraIssuesConfig
+---@field project_config AtlasJiraProjectConfig|nil

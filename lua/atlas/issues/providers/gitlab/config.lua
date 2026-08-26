@@ -1,7 +1,7 @@
 -- Example:
 --   require("atlas").setup({
 --     providers = {
---       ---@type AtlasGitLabProviderConfig
+--       ---@type AtlasGitLabConfig
 --       gitlab = {
 --         base_url = "https://gitlab.com",
 --         token    = vim.env.GITLAB_TOKEN,

@@ -3,11 +3,14 @@ local M = {}
 local service = require("atlas.issues.providers.jira.api.service")
 local normalizer = require("atlas.issues.providers.jira.api.mapper")
 local json = require("atlas.core.json")
-local config = require("atlas.issues.providers.jira.api.config")
+local config = require("atlas.config")
+
+local function project_config()
+	return (config.domain_options("jira", "issues") or {}).project_config or {}
+end
 
 local function story_points_field()
-	local project_config = config.jira_config().project_config or {}
-	return tostring(project_config.story_points_field or "customfield_10016")
+	return tostring(project_config().story_points_field or "customfield_10016")
 end
 
 local function search_fields()
@@ -29,11 +32,11 @@ local function search_fields()
 	}
 end
 
----@param project_config AtlasJiraProjectFieldsConfig
+---@param fields_config AtlasJiraProjectFieldsConfig
 ---@return string[]
-local function custom_field_ids(project_config)
+local function custom_field_ids(fields_config)
 	local ids = {}
-	for field_id in pairs(project_config) do
+	for field_id in pairs(fields_config) do
 		table.insert(ids, field_id)
 	end
 	table.sort(ids)
@@ -61,7 +64,7 @@ end
 ---@param ctx table|nil
 ---@return { job_id: integer, cancel: fun() }|nil
 local function search_jql_request(data, on_done, ctx)
-	if config.jira_config().api_type == "server" then
+	if service.is_server() then
 		local payload = vim.deepcopy(data)
 		payload.startAt = tonumber(payload.nextPageToken) or 0
 		payload.nextPageToken = nil
@@ -211,8 +214,8 @@ function M.fetch_issue(ref, opts, callback)
 	end
 
 	local project_key = issue_key:match("^([^-]+)-")
-	local project_config = (config.jira_config().project_config or {})[project_key] or {}
-	local extra_fields = custom_field_ids(project_config)
+	local configured = project_config()[project_key] or {}
+	local extra_fields = custom_field_ids(configured)
 	local endpoint = string.format("/issue/%s?fields=%s", issue_key, table.concat(detail_fields(extra_fields), ","))
 
 	return service.request("GET", endpoint, nil, function(result, err)
@@ -221,7 +224,7 @@ function M.fetch_issue(ref, opts, callback)
 			return
 		end
 
-		local details = normalizer.to_issue_details(result, project_config)
+		local details = normalizer.to_issue_details(result, configured)
 		service.set_memory_cache(cache_key, details)
 		callback(details, nil)
 	end, {
@@ -255,7 +258,7 @@ function M.get_issue_history_page(issue_key, start_at, max_results, on_done, opt
 		end
 	end
 
-	local is_server = config.jira_config().api_type == "server"
+	local is_server = service.is_server()
 
 	local endpoint
 	if is_server then
@@ -390,7 +393,7 @@ function M.get_create_meta(project_key, callback)
 
 	local escaped_key = url_encode(project_key)
 
-	if config.jira_config().api_type == "server" then
+	if service.is_server() then
 		local endpoint = string.format("/issue/createmeta/%s/issuetypes", escaped_key)
 		return service.request("GET", endpoint, nil, function(result, err)
 			if err ~= nil then

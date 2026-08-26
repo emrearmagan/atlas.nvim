@@ -78,10 +78,10 @@
 -- Configs
 
 ---@class AtlasProvidersConfig
----@field bitbucket AtlasBitbucketProviderConfig|nil
----@field github AtlasGitHubProviderConfig|nil
----@field gitlab AtlasGitLabProviderConfig|nil
----@field jira AtlasJiraProviderConfig|nil
+---@field bitbucket AtlasBitbucketConfig|nil
+---@field github AtlasGitHubConfig|nil
+---@field gitlab AtlasGitLabConfig|nil
+---@field jira AtlasJiraConfig|nil
 
 ---@class AtlasPullsConfig
 ---@field git_transport AtlasGitTransport|nil Git transport for Atlas-managed repositories (default: "https").
