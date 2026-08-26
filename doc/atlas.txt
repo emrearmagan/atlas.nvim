@@ -278,7 +278,7 @@ Shared config that applies to all pulls providers:
         show_review_panel = false, -- set true to show the review panel initially
         comment_display = "virtual_lines", -- or compact "virtual_text" hints
         review_panel = {
-          height = 15,
+          height = 10,
         },
 
         -- AtlasDiff options; external viewers use their own configuration.
