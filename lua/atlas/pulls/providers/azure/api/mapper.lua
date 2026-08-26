@@ -95,6 +95,20 @@ function M.to_pull_request(raw)
 	}
 end
 
+---@param raw table
+---@param raw_labels table[]
+---@return PullRequestDetails
+function M.to_pull_request_details(raw, raw_labels)
+	local labels = {}
+	for _, label in ipairs(raw_labels) do
+		table.insert(labels, { name = label.name })
+	end
+	return {
+		description = json.safe_str(raw.description) or "",
+		labels = labels,
+	}
+end
+
 ---@param raw_list table[]
 ---@return AzurePullRequest[]
 function M.to_pull_requests(raw_list)

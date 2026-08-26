@@ -5,6 +5,8 @@ local config = require("atlas.config")
 local search_query = require("atlas.providers.azure.query")
 local pullrequests_api = require("atlas.pulls.providers.azure.api.pullrequests")
 local users_api = require("atlas.pulls.providers.azure.api.users")
+local actions = require("atlas.pulls.providers.azure.actions")
+local detail_ui = require("atlas.pulls.providers.azure.ui.detail")
 
 ---@return AtlasAzurePullsViewConfig[]
 local function views()
@@ -34,16 +36,16 @@ return {
 			fetch_pullrequests = function(view, opts, on_done)
 				return pullrequests_api.fetch_states(view, search_query.api_states(view), opts, on_done)
 			end,
-			-- fetch_by_refs = pullrequests_api.fetch_by_refs,
-			-- fetch_pullrequest = pullrequests_api.fetch_pullrequest,
+			fetch_by_refs = pullrequests_api.fetch_by_refs,
+			fetch_pullrequest = pullrequests_api.fetch_pullrequest,
 			-- create_pr = pullrequests_api.create_pr,
 			-- fetch_reviewers = reviews_api.fetch_reviewers,
 			-- update_reviewers = pullrequests_api.update_reviewers,
-			-- update_title = pullrequests_api.update_title,
-			-- update_description = pullrequests_api.update_description,
-			-- set_draft = pullrequests_api.set_draft,
-			-- decline = pullrequests_api.decline,
-			-- fetch_description = pullrequests_api.fetch_description,
+			update_title = pullrequests_api.update_title,
+			update_description = pullrequests_api.update_description,
+			set_draft = pullrequests_api.set_draft,
+			decline = pullrequests_api.decline,
+			fetch_description = pullrequests_api.fetch_description,
 			-- fetch_default_reviewers = pullrequests_api.fetch_default_reviewers,
 			-- fetch_merge_checks = checks_api.fetch,
 			-- fetch_diffstat = changes_api.fetch_diffstat,
@@ -90,10 +92,10 @@ return {
 		-- 	actions = pipeline_actions,
 		-- },
 		-- notifications = notifications_api,
-		-- actions = actions,
-		-- ui = {
-		-- 	detail = detail_ui,
-		-- 	repo_detail = repo_detail_ui,
-		-- },
+		actions = actions,
+		ui = {
+			detail = detail_ui,
+			-- repo_detail = repo_detail_ui,
+		},
 	},
 }

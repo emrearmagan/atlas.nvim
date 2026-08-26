@@ -1,9 +1,48 @@
 local M = {}
 
+local json = require("atlas.core.json")
 local service = require("atlas.pulls.providers.azure.api.service")
 local mapper = require("atlas.pulls.providers.azure.api.mapper")
 local users_api = require("atlas.pulls.providers.azure.api.users")
 local request_scope = require("atlas.core.requests")
+
+---@param ref PullRequestRef
+---@return string
+local function pullrequest_endpoint(ref)
+	local project, repository = ref.repo_full_name:match("^([^/]+)/(.+)$")
+	return string.format(
+		"/%s/_apis/git/repositories/%s/pullrequests/%s",
+		service.url_encode(project),
+		service.url_encode(repository),
+		tostring(ref.id)
+	)
+end
+
+---@param ref PullRequestRef
+---@param opts { force_refresh?: boolean }|nil
+---@param on_done fun(result: table|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+local function fetch_pullrequest(ref, opts, on_done)
+	opts = opts or {}
+	local endpoint = pullrequest_endpoint(ref)
+	local cache_key = "pullrequest:" .. endpoint
+	if not opts.force_refresh then
+		local cached, ok = service.get_cache(cache_key)
+		if ok then
+			on_done(cached, nil)
+			return nil
+		end
+	end
+
+	return service.request("GET", endpoint, nil, function(result, err)
+		if err then
+			on_done(nil, err)
+			return
+		end
+		service.set_cache(cache_key, result)
+		on_done(result, nil)
+	end, { action = "Fetch pull request", repo = ref.repo_full_name, id = ref.id })
+end
 
 ---@param view AtlasAzurePullsViewConfig
 ---@param opts { force_refresh?: boolean, pagelen: integer, state: string, skip?: integer, user_id?: string }
@@ -132,6 +171,133 @@ function M.fetch_states(view, api_states, opts, on_done)
 		end)
 	end
 	return scope
+end
+
+---@param refs PullRequestRef[]
+---@param opts PullsFetchOpts
+---@param on_done fun(pulls: PullRequest[], err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_by_refs(refs, opts, on_done)
+	local scope = request_scope.new()
+	local starts = {}
+	for index, ref in ipairs(refs) do
+		starts[index] = function(done)
+			return fetch_pullrequest(ref, opts, done)
+		end
+	end
+	scope.all(starts, function(results, errors)
+		local pulls = {}
+		for index = 1, #refs do
+			if errors[index] then
+				on_done({}, errors[index])
+				return
+			end
+			table.insert(pulls, mapper.to_pull_request(results[index]))
+		end
+		on_done(pulls, nil)
+	end)
+	return scope
+end
+
+---@param ref PullRequestRef
+---@param opts { force_refresh?: boolean }|nil
+---@param on_done fun(details: PullRequestDetails|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_pullrequest(ref, opts, on_done)
+	opts = opts or {}
+	local endpoint = pullrequest_endpoint(ref)
+	local cache_key = "pullrequest:details:" .. endpoint
+	if not opts.force_refresh then
+		local cached, ok = service.get_cache(cache_key)
+		if ok then
+			on_done(cached, nil)
+			return nil
+		end
+	end
+
+	local scope = request_scope.new()
+	scope.all({
+		pullrequest = function(done)
+			return fetch_pullrequest(ref, opts, done)
+		end,
+		labels = function(done)
+			return service.request("GET", endpoint .. "/labels", nil, done, {
+				action = "Fetch pull request labels",
+				repo = ref.repo_full_name,
+				id = ref.id,
+			})
+		end,
+	}, function(results, errors)
+		local err = errors.pullrequest or errors.labels
+		if err then
+			on_done(nil, err)
+			return
+		end
+		local details = mapper.to_pull_request_details(results.pullrequest, results.labels.value)
+		service.set_cache(cache_key, details)
+		on_done(details, nil)
+	end)
+	return scope
+end
+
+---@param pr PullRequest
+---@param opts { force_refresh?: boolean }|nil
+---@param on_done fun(description: string|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_description(pr, opts, on_done)
+	return fetch_pullrequest(pr, opts, function(result, err)
+		if err then
+			on_done(nil, err)
+			return
+		end
+		on_done(json.safe_str(result.description) or "", nil)
+	end)
+end
+
+---@param pr PullRequest
+---@param fields table
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+local function update_pullrequest(pr, fields, on_done)
+	return service.request("PATCH", pullrequest_endpoint(pr), fields, function(_, err)
+		if err then
+			on_done(false, err)
+			return
+		end
+		service.clear_cache()
+		on_done(true, nil)
+	end, { action = "Update pull request", repo = pr.repo_full_name, id = pr.id })
+end
+
+---@param pr PullRequest
+---@param title string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.update_title(pr, title, on_done)
+	return update_pullrequest(pr, { title = title }, on_done)
+end
+
+---@param pr PullRequest
+---@param description string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.update_description(pr, description, on_done)
+	return update_pullrequest(pr, { description = description }, on_done)
+end
+
+---@param pr PullRequest
+---@param draft boolean
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.set_draft(pr, draft, on_done)
+	return update_pullrequest(pr, { isDraft = draft }, on_done)
+end
+
+---@param pr PullRequest
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.decline(pr, on_done)
+	return update_pullrequest(pr, { status = "abandoned" }, on_done)
 end
 
 return M
