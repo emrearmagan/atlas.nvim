@@ -6,6 +6,8 @@ local module_names = {
 	"atlas.pulls.providers.azure.api.pullrequests",
 	"atlas.pulls.providers.azure.api.reviews",
 	"atlas.pulls.providers.azure.api.checks",
+	"atlas.pulls.providers.azure.api.activity",
+	"atlas.pulls.providers.azure.api.changes",
 	"atlas.pulls.providers.azure.init",
 }
 
@@ -137,6 +139,91 @@ describe("Azure DevOps pull requests", function()
 			{ method = "PATCH", payload = { title = "Updated title" } },
 		}, requests)
 		assert.same({}, cache)
+	end)
+
+	it("loads Conversation threads and paginated Commits", function()
+		local service = require(service_name)
+		local function comment(id, parent, content, kind)
+			return {
+				id = id,
+				parentCommentId = parent,
+				content = content,
+				commentType = kind or "text",
+				author = pull_request.createdBy,
+				publishedDate = pull_request.creationDate,
+			}
+		end
+		package.loaded[service_name] = {
+			base_url = function()
+				return "https://dev.azure.com/acme"
+			end,
+			url_encode = service.url_encode,
+			build_query = service.build_query,
+			get_cache = function()
+				return nil, false
+			end,
+			set_cache = function() end,
+			request = function(method, endpoint, _, done)
+				assert.equal("GET", method)
+				local base = "/Platform/_apis/git/repositories/api/pullrequests/1"
+				if endpoint == base .. "/threads" then
+					done({
+						value = {
+							{
+								id = 1,
+								status = "active",
+								comments = { comment(1, 0, "Question"), comment(2, 1, "Reply") },
+							},
+							{ id = 2, status = "fixed", comments = { comment(1, 0, "Resolved") } },
+							{ id = 3, comments = { comment(1, 0, "Branch updated", "system") } },
+							{
+								id = 4,
+								threadContext = { filePath = "/main.lua" },
+								comments = { comment(1, 0, "Inline") },
+							},
+						},
+					}, nil)
+					return
+				end
+				local first = endpoint == base .. "/commits?$top=100"
+				if not first then
+					assert.equal(base .. "/commits?$top=100&continuationToken=next%2Fpage", endpoint)
+				end
+				done({
+					value = {
+						{
+							commitId = string.rep(first and "a" or "b", 40),
+							comment = "Add Azure support",
+							author = { name = "Emre Armagan", date = pull_request.creationDate },
+							remoteUrl = "https://dev.azure.com/acme/Platform/_git/api/commit/example",
+						},
+					},
+				}, nil, first and { ["x-ms-continuationtoken"] = "next/page" } or {})
+			end,
+		}
+		local capabilities = require("atlas.pulls.providers.azure.init").capabilities
+		local pr = require("atlas.pulls.providers.azure.api.mapper").to_pull_request(pull_request)
+		local completed = 0
+		capabilities.comments.fetch_conversation(pr, {}, function(items, err)
+			assert.is_nil(err)
+			assert.equal(4, #items)
+			assert.equal("Emre Armagan", items[1].entity.author.nickname)
+			assert.equal("1:1", items[2].entity.parent_id)
+			assert.equal("2:1", items[3].entity.id)
+			assert.equal("RESOLVED", items[3].entity.state)
+			assert.equal("activity", items[4].kind)
+			assert.equal("Branch updated", items[4].entity.label)
+			completed = completed + 1
+		end)
+		capabilities.core.fetch_commits(pr, {}, function(commits, err)
+			assert.is_nil(err)
+			assert.equal(2, #commits)
+			assert.equal("aaaaaaaa", commits[1].short_hash)
+			assert.equal("bbbbbbbb", commits[2].short_hash)
+			assert.equal("Emre Armagan", commits[1].author_name)
+			completed = completed + 1
+		end)
+		assert.equal(2, completed)
 	end)
 
 	it("loads reviewers, merge status and branch policies for Overview", function()

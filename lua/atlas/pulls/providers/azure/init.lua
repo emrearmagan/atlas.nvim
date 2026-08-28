@@ -16,6 +16,8 @@ local pullrequests_api = require("atlas.pulls.providers.azure.api.pullrequests")
 local users_api = require("atlas.pulls.providers.azure.api.users")
 local reviews_api = require("atlas.pulls.providers.azure.api.reviews")
 local checks_api = require("atlas.pulls.providers.azure.api.checks")
+local changes_api = require("atlas.pulls.providers.azure.api.changes")
+local activity_api = require("atlas.pulls.providers.azure.api.activity")
 local actions = require("atlas.pulls.providers.azure.actions")
 local detail_ui = require("atlas.pulls.providers.azure.ui.detail")
 
@@ -60,18 +62,18 @@ return {
 			-- fetch_default_reviewers = pullrequests_api.fetch_default_reviewers,
 			fetch_merge_checks = checks_api.fetch,
 			-- fetch_diffstat = changes_api.fetch_diffstat,
-			-- fetch_commits = changes_api.fetch_commits,
+			fetch_commits = changes_api.fetch_commits,
 			-- fetch_diff = changes_api.fetch_diff,
 		},
-		-- comments = {
-		-- 	comment_completion = author_completion.for_pulls,
-		-- 	fetch_conversation = activity_api.fetch_conversation,
-		-- 	add_comment = comments_api.add_comment,
-		-- 	edit_comment = comments_api.edit_comment,
-		-- 	delete_comment = comments_api.delete_comment,
-		-- 	add_reaction = comments_api.add_reaction,
-		-- 	set_thread_resolved = comments_api.set_thread_resolved,
-		-- },
+		comments = {
+			-- comment_completion = author_completion.for_pulls,
+			fetch_conversation = activity_api.fetch_conversation,
+			-- add_comment = comments_api.add_comment,
+			-- edit_comment = comments_api.edit_comment,
+			-- delete_comment = comments_api.delete_comment,
+			-- add_reaction = comments_api.add_reaction,
+			-- set_thread_resolved = comments_api.set_thread_resolved,
+		},
 		-- reviews = {
 		-- 	fetch = reviews_api.fetch,
 		-- 	fetch_review_context = reviews_api.fetch_review_context,

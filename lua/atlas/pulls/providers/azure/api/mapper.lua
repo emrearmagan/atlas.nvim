@@ -17,6 +17,28 @@ local decisions = {
 	[-10] = "changes_requested",
 }
 
+local thread_states = {
+	fixed = "RESOLVED",
+	wontFix = "RESOLVED",
+	closed = "RESOLVED",
+	byDesign = "RESOLVED",
+}
+
+local activity_actors = {
+	VoteUpdate = "CodeReviewVotedByIdentity",
+	RefUpdate = "CodeReviewRefUpdatedByIdentity",
+	ReviewersUpdate = "CodeReviewReviewersUpdatedByIdentity",
+	IsDraftUpdate = "CodeReviewIsDraftUpdatedByIdentity",
+}
+
+local activity_votes = {
+	[10] = { kind = "approval", label = "approved" },
+	[5] = { kind = "approval", label = "approved with suggestions" },
+	[0] = { kind = "unapproval", label = "reset their vote" },
+	[-5] = { kind = "changes_requested", label = "is waiting for the author" },
+	[-10] = { kind = "changes_requested", label = "rejected" },
+}
+
 ---@param raw table
 ---@return PullsAuthor
 local function to_author(raw)
@@ -118,6 +140,101 @@ function M.to_pull_requests(raw_list)
 		table.insert(pulls, M.to_pull_request(raw))
 	end
 	return pulls
+end
+
+---@param raw table
+---@param thread table
+---@return PullsActivityEntry
+local function to_activity(raw, thread)
+	local properties = {}
+	for key, property in pairs(json.safe_table(thread.properties)) do
+		properties[key] = property["$value"]
+	end
+	local event = properties.CodeReviewThreadType
+	local identity = json.safe_table(thread.identities)[properties[activity_actors[event]]]
+	local actor = to_author(identity or raw.author)
+	local kind = "update"
+	local label = raw.content
+	local prefix = actor.name .. " "
+	if label:sub(1, #prefix) == prefix then
+		label = label:sub(#prefix + 1)
+	end
+
+	if event == "VoteUpdate" then
+		local vote = activity_votes[tonumber(properties.CodeReviewVoteResult)]
+		kind = vote.kind
+		label = vote.label
+	elseif event == "RefUpdate" then
+		kind = "committed"
+		label = "pushed to " .. properties.CodeReviewRefName:gsub("^refs/heads/", "")
+	elseif event == "ReviewersUpdate" then
+		kind = "review_requested"
+	elseif event == "IsDraftUpdate" then
+		local draft = properties.CodeReviewIsDraftNowSet == "1"
+		kind = draft and "convert_to_draft" or "ready_for_review"
+		label = draft and "marked as draft" or "marked as ready for review"
+	end
+
+	return {
+		kind = kind,
+		actor = actor,
+		date = raw.publishedDate,
+		label = label,
+	}
+end
+
+---@param raw table
+---@param thread table
+---@param pr PullRequest
+---@return PullsConversationItem|nil
+local function to_conversation_item(raw, thread, pr)
+	if raw.isDeleted then
+		return nil
+	end
+	local id = thread.id .. ":" .. raw.id
+	if raw.commentType == "text" then
+		return {
+			id = "comment:" .. id,
+			kind = "comment",
+			created_on = raw.publishedDate,
+			entity = {
+				id = id,
+				parent_id = raw.parentCommentId > 0 and (thread.id .. ":" .. raw.parentCommentId) or nil,
+				thread_id = tostring(thread.id),
+				author = to_author(raw.author),
+				content_raw = raw.content,
+				created_on = raw.publishedDate,
+				state = thread_states[thread.status],
+				html_url = pr.link.html,
+			},
+		}
+	elseif raw.commentType == "system" then
+		return {
+			id = "activity:" .. id,
+			kind = "activity",
+			created_on = raw.publishedDate,
+			entity = to_activity(raw, thread),
+		}
+	end
+	return nil
+end
+
+---@param raw_list table[]
+---@param pr PullRequest
+---@return PullsConversationItem[]
+function M.to_conversation(raw_list, pr)
+	local items = {}
+	for _, thread in ipairs(raw_list) do
+		if not thread.isDeleted and json.nilify(thread.threadContext) == nil then
+			for _, raw in ipairs(thread.comments) do
+				local item = to_conversation_item(raw, thread, pr)
+				if item then
+					table.insert(items, item)
+				end
+			end
+		end
+	end
+	return items
 end
 
 return M

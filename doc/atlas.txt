@@ -60,7 +60,7 @@ With vim.pack (Neovim 0.12+):
 REQUIREMENTS                                               *atlas-requirements*
 
   - Neovim 0.10+
-  - `git` and `curl` on `$PATH`
+  - `git` and `curl` 7.83+ on `$PATH`
   - For GitHub: the `gh` CLI, authenticated via `gh auth login`
   - For Bitbucket: Bitbucket Cloud API token (`api.bitbucket.org`)
   - For GitLab: REST API v4 and a Personal Access Token with the `api` scope

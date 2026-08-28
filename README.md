@@ -60,7 +60,7 @@ require("atlas").setup({})
 ### Requirements
 
 - Neovim: `0.10+`
-- `git` and `curl` on `$PATH`
+- `git` and `curl` 7.83+ on `$PATH`
 - Jira: Jira Cloud REST API v3 (`*.atlassian.net`) or Jira Server REST API v2
 - Bitbucket: Bitbucket Cloud REST API 2.0 (`api.bitbucket.org`)
 - GitHub: GitHub CLI (`gh`) authenticated with `gh auth login`

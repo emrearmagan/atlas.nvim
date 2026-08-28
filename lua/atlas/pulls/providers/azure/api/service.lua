@@ -97,7 +97,7 @@ end
 ---@param method string
 ---@param endpoint string
 ---@param data? table
----@param on_done fun(result: any, err: string|nil)
+---@param on_done fun(result: any, err: string|nil, headers?: table<string, string>)
 ---@param ctx? table
 ---@param api_version? string
 ---@return { job_id: integer, cancel: fun() }|nil
@@ -124,13 +124,13 @@ function M.request(method, endpoint, data, on_done, ctx, api_version)
 	log.action = nil
 	logger.loginfo(message, log)
 
-	return http.curl_request(method, M.base_url() .. endpoint, headers, payload, function(result, err)
+	return http.curl_request(method, M.base_url() .. endpoint, headers, payload, function(result, err, response_headers)
 		if err then
 			logger.logerror(message .. " failed", vim.tbl_extend("force", {}, log, { error = tostring(err) }))
 			on_done(nil, err)
 			return
 		end
-		on_done(result, nil)
+		on_done(result, nil, response_headers)
 	end)
 end
 
