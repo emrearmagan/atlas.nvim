@@ -89,6 +89,20 @@ describe("Shortcut Story mapper", function()
 		}, details.tasks)
 	end)
 
+	it("keeps Stories with an unknown workflow state", function()
+		local issue = mapper.to_issues({
+			{
+				id = 123,
+				name = "New workflow state",
+				story_type = "feature",
+				workflow_state_id = 99,
+			},
+		}, {}, {})[1]
+
+		assert.equal("Unknown", issue.status)
+		assert.equal("99", issue.status_id)
+	end)
+
 	it("maps Story comments", function()
 		local author = { account_id = "author", display_name = "Ada Author", mention_name = "ada" }
 		local comment = mapper.to_comment({

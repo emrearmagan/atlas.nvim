@@ -93,7 +93,7 @@ end
 
 ---@param raw table
 ---@param users IssueUser[]
----@param state ShortcutWorkflowState
+---@param state ShortcutWorkflowState|nil
 ---@return ShortcutIssue
 function M.to_issue(raw, users, state)
 	local parent_id = tonumber(json.nilify(raw.parent_story_id))
@@ -101,8 +101,8 @@ function M.to_issue(raw, users, state)
 	local mapped_labels = labels(raw.labels or {})
 	local comments = raw.comment_ids or raw.comments
 	local story_type = tostring(raw.story_type)
-	local status = raw.archived and "Archived" or state.name
-	local status_id = raw.archived and "archived" or tostring(state.id)
+	local status = raw.archived and "Archived" or (state and state.name) or "Unknown"
+	local status_id = raw.archived and "archived" or tostring(raw.workflow_state_id)
 
 	---@type ShortcutIssue
 	local issue = {
@@ -169,7 +169,6 @@ function M.to_issues(stories, users, states)
 	local result = {}
 	for _, story in ipairs(stories) do
 		local state = states_by_id[story.workflow_state_id]
-		---@cast state ShortcutWorkflowState
 		table.insert(result, M.to_issue(story, users, state))
 	end
 	return result
