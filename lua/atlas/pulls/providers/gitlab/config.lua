@@ -52,12 +52,13 @@
 ---@field extra_params table<string, string>|nil
 
 ---@class AtlasGitLabPullsViewConfig : AtlasPullsViewConfig, AtlasGitLabPullsSearchConfig
----@field current_repo boolean|nil
+
+---@class AtlasGitLabPullsBookmarkConfig : AtlasPullsBookmarkConfig, AtlasGitLabPullsSearchConfig
 
 ---@class AtlasGitLabPullsBookmarksConfig
 ---@field key string|nil    -- default "S"
 ---@field label string|nil  -- default "Search"
----@field items table<string, AtlasGitLabPullsSearchConfig>|nil
+---@field items table<string, AtlasGitLabPullsBookmarkConfig>|nil
 
 ---@class AtlasGitLabConfig
 ---@field base_url string

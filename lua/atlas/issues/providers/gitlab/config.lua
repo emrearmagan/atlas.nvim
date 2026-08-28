@@ -54,10 +54,12 @@
 ---@class AtlasGitLabIssuesViewConfig : IssuesViewConfig, AtlasGitLabIssuesSearchConfig
 ---@field current_repo boolean|nil
 
+---@class AtlasGitLabIssuesBookmarkConfig : AtlasIssuesBookmarkConfig, AtlasGitLabIssuesSearchConfig
+
 ---@class AtlasGitLabIssuesBookmarksConfig
 ---@field key string|nil    -- default "S"
 ---@field label string|nil  -- default "Search"
----@field items table<string, AtlasGitLabIssuesSearchConfig>|nil
+---@field items table<string, AtlasGitLabIssuesBookmarkConfig>|nil
 
 ---@class AtlasGitLabIssuesConfig
 ---@field views AtlasGitLabIssuesViewConfig[]|nil

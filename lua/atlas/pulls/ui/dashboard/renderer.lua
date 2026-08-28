@@ -275,7 +275,7 @@ local function list_rows(pulls, layout, display)
 end
 
 ---@param pulls PullRequest[]
----@param layout "compact"|"grouped"|"plain"
+---@param layout AtlasPullsViewLayout
 ---@param width integer
 ---@param display table
 ---@return string[], table[], table<integer, table>

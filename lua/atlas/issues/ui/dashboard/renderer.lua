@@ -53,7 +53,7 @@ end
 
 ---@param issue Issue
 ---@param is_child boolean|nil
----@param layout "plain"|"compact"
+---@param layout AtlasIssuesViewLayout
 ---@return table
 local function issue_to_row(issue, is_child, layout)
 	local display = providers.get(state.provider and state.provider.id)

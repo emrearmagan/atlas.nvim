@@ -30,12 +30,14 @@
 
 ---@class AtlasGitHubViewConfig : AtlasPullsViewConfig
 ---@field search string
----@field current_repo boolean|nil
+
+---@class AtlasGitHubBookmarkConfig : AtlasPullsBookmarkConfig
+---@field search string
 
 ---@class AtlasGitHubBookmarksConfig
 ---@field key string|nil    -- default "S"
 ---@field label string|nil  -- default "Search"
----@field items table<string, string>|nil
+---@field items table<string, string|AtlasGitHubBookmarkConfig>|nil
 
 ---@class AtlasGitHubConfig
 ---@field cache_ttl number|nil Cache lifetime in seconds. Set to 0 to disable caching.

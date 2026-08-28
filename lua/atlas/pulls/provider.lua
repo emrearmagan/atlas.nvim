@@ -1,5 +1,8 @@
 ---@alias PullsStateFilter "open"|"merged"|"declined"
 
+---@class AtlasPullsBookmarkConfig
+---@field layout AtlasPullsViewLayout|nil
+
 ---@class PullsFetchOpts
 ---@field force_load boolean|nil
 ---@field force_refresh boolean|nil

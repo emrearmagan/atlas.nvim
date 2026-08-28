@@ -31,10 +31,13 @@
 ---@field search string
 ---@field current_repo boolean|nil
 
+---@class AtlasGitHubIssuesBookmarkConfig : AtlasIssuesBookmarkConfig
+---@field search string
+
 ---@class AtlasGitHubIssuesBookmarksConfig
 ---@field key string|nil    -- default "S"
 ---@field label string|nil  -- default "Search"
----@field items table<string, string>|nil
+---@field items table<string, string|AtlasGitHubIssuesBookmarkConfig>|nil
 
 ---@class AtlasGitHubIssuesConfig
 ---@field views AtlasGitHubIssuesViewConfig[]|nil

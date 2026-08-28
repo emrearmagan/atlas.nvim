@@ -5,11 +5,14 @@
 -- Pulls Provider Config
 
 ---@alias AtlasGitTransport "https"|"ssh"
+---@alias AtlasPullsViewLayout "compact"|"grouped"|"plain"
+---@alias AtlasIssuesViewLayout "compact"|"plain"
 
 ---@class AtlasPullsViewConfig
 ---@field name string
 ---@field key string|nil
----@field layout "compact"|"grouped"|"plain"|nil
+---@field layout AtlasPullsViewLayout|nil
+---@field current_repo boolean|nil Resolve the view against the current Git repository.
 ---@field _kind "bookmarks"|"starred"|nil
 ---@field _bookmarks table<string, any>|nil
 ---@field _starred { domain: "pulls", provider: string }|nil
@@ -17,7 +20,7 @@
 ---@class AtlasIssuesViewConfig
 ---@field name string
 ---@field key string|nil
----@field layout "plain"|"compact"|nil
+---@field layout AtlasIssuesViewLayout|nil
 ---@field search string|nil
 ---@field _kind "bookmarks"|"starred"|nil
 ---@field _bookmarks table<string, any>|nil

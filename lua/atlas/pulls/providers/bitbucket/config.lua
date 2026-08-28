@@ -67,10 +67,8 @@
 ---@field targets AtlasBitbucketTarget[]
 ---@field filter? fun(pr: PullRequest, ctx: { user: PullsUser|nil }): boolean|nil
 ---@field status? "OPEN"|"MERGED"|"DECLINED"|"SUPERSEDED"
----@field current_repo boolean|nil
 
----@class AtlasBitbucketBookmarkConfig
----@field layout "compact"|"grouped"|"plain"|nil
+---@class AtlasBitbucketBookmarkConfig : AtlasPullsBookmarkConfig
 ---@field targets AtlasBitbucketTarget[]
 ---@field filter? fun(pr: PullRequest, ctx: { user: PullsUser|nil }): boolean|nil
 

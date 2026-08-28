@@ -1,19 +1,22 @@
 -- Provider Interface
 --------------------------------------------------------------------------------
 
+---@class IssuesViewConfig : AtlasIssuesViewConfig
+
+---@class AtlasIssuesBookmarkConfig
+---@field layout AtlasIssuesViewLayout|nil
+
 ---@class IssuesFetchOpts
 ---@field force_load boolean|nil
 ---@field max_results number|nil
 ---@field next_page_token string|nil
----@field layout "plain"|"compact"|nil
+---@field layout AtlasIssuesViewLayout|nil
 ---@field with_relationships boolean|nil
 
 ---@class AtlasIssuesCommentCompletionContext
 ---@field issue Issue
 ---@field details IssueDetails|nil
 ---@field comments IssueComment[]
-
----@class IssuesViewConfig : AtlasIssuesViewConfig
 
 ---@class IssuesProvider
 ---@field id string
