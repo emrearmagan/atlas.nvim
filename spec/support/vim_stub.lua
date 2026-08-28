@@ -55,15 +55,15 @@ _G.vim = {
 		fn()
 	end,
 
+	trim = function(value)
+		return value:match("^%s*(.-)%s*$")
+	end,
+
 	api = {
 		nvim_create_namespace = function()
 			return 1
 		end,
 	},
-
-	trim = function(value)
-		return tostring(value or ""):gsub("^%s+", ""):gsub("%s+$", "")
-	end,
 
 	-- vim.tbl_extend(behavior, ...) -> shallow merge honoring "keep"/"force"/"error"
 	tbl_extend = function(behavior, ...)
