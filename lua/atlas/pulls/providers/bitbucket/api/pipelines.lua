@@ -2,6 +2,7 @@ local M = {}
 
 local pipeline_utils = require("atlas.pulls.pipelines")
 local service = require("atlas.pulls.providers.bitbucket.api.service")
+local encode_path_segment = require("atlas.core.utils").url_encode
 
 ---@param url string
 ---@return string|nil
@@ -56,14 +57,6 @@ local function aggregate_statuses(values)
 	end
 
 	return pipeline_utils.aggregate_state(statuses):lower(), first_url
-end
-
----@param value string
----@return string
-local function encode_path_segment(value)
-	return (value:gsub("[^%w%-._~]", function(char)
-		return string.format("%%%02X", string.byte(char))
-	end))
 end
 
 ---@param result table|nil

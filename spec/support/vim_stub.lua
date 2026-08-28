@@ -55,6 +55,10 @@ _G.vim = {
 		fn()
 	end,
 
+	trim = function(value)
+		return value:match("^%s*(.-)%s*$")
+	end,
+
 	api = {
 		nvim_create_namespace = function()
 			return 1

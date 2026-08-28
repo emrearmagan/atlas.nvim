@@ -272,7 +272,6 @@ local function load_view(view, force_load, on_done)
 		return provider.capabilities.core.fetch_pullrequests(view, {
 			force_load = force_load,
 			states = selected_states(),
-			current_user = state.current_user,
 		}, done)
 	end, function(pulls, err)
 		state.is_loading = false

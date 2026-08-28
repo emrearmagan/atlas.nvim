@@ -8,7 +8,6 @@
 ---@field force_refresh boolean|nil
 ---@field pagelen number|nil
 ---@field states PullsStateFilter[]|nil
----@field current_user PullsUser|nil
 
 ---@class AtlasPullsCommentCompletionContext
 ---@field pr PullRequest

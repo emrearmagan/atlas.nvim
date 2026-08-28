@@ -38,6 +38,7 @@ local pullrequests_api = require("atlas.pulls.providers.bitbucket.api.pullreques
 local repo_detail_ui = require("atlas.pulls.providers.bitbucket.ui.repo_detail")
 local repositories_api = require("atlas.pulls.providers.bitbucket.api.repositories")
 local reviews_api = require("atlas.pulls.providers.bitbucket.api.reviews")
+local search = require("atlas.providers.bitbucket.completion.search")
 local tasks_api = require("atlas.pulls.providers.bitbucket.api.tasks")
 local users_api = require("atlas.pulls.providers.bitbucket.api.users")
 local request_scope = require("atlas.core.requests")
@@ -48,17 +49,13 @@ local function search_view(target)
 	return {
 		name = "Search",
 		layout = "compact",
-		targets = { { workspace = target.workspace, repo = target.repo } },
+		search = search.for_repo(target.workspace, target.repo),
 	}
 end
 
----@param view AtlasBitbucketViewConfig
 ---@param opts PullsFetchOpts
 ---@return string[]
-local function active_statuses(view, opts)
-	if view.status ~= nil then
-		return { view.status }
-	end
+local function active_statuses(opts)
 	local statuses = {}
 	for _, status in ipairs(opts.states or {}) do
 		table.insert(statuses, status:upper())
@@ -70,67 +67,36 @@ local function active_statuses(view, opts)
 end
 
 ---@param view AtlasPullsViewConfig
----@param opts PullsFetchOpts
+---@param _opts PullsFetchOpts
 ---@return string
-local function search_query(view, opts)
+local function search_query(view, _opts)
 	---@cast view AtlasBitbucketViewConfig
-	local parts = {}
-	for _, target_ref in ipairs(view.targets or view.repos or {}) do
-		if target_ref.repo then
-			table.insert(parts, string.format("repo:%s/%s", target_ref.workspace, target_ref.repo))
-		else
-			table.insert(parts, string.format("project:%s/%s", target_ref.workspace, target_ref.project))
-		end
-	end
-	for _, status in ipairs(active_statuses(view, opts)) do
-		table.insert(parts, string.format("is:%s", status:lower()))
-	end
-	return table.concat(parts, " ")
+	return vim.trim(view.search or "")
 end
 
 ---@param view AtlasBitbucketViewConfig
 ---@param opts PullsFetchOpts
 ---@param on_done fun(pulls: PullRequest[], err: string[]|nil)
 ---@return { cancel: fun() }|nil
-local function fetch_unfiltered(view, opts, on_done)
-	local targets = view.targets or view.repos or {}
-	local statuses = active_statuses(view, opts)
+local function fetch_view_pullrequests(view, opts, on_done)
+	---@cast view AtlasBitbucketViewConfig
+	local parsed, parse_err = search.parse(view.search)
+	if parsed == nil then
+		on_done({}, { parse_err })
+		return nil
+	end
+	local statuses = active_statuses(opts)
 
 	local scope = request_scope.new()
-	local starts = {}
-	for index, target_ref in ipairs(targets) do
-		if target_ref.project then
-			local project = target_ref
-			starts[index] = function(done)
-				return repositories_api.fetch_project_repositories(project, opts, done)
-			end
-		end
-	end
-
-	scope.all(starts, function(project_repos, project_errors)
-		local repos, errors, seen = {}, {}, {}
-		for index, target_ref in ipairs(targets) do
-			local resolved = target_ref.repo and { target_ref } or project_repos[index] or {}
-			for _, repo in ipairs(resolved) do
-				local key = repo.workspace .. "/" .. repo.repo
-				if not seen[key] then
-					seen[key] = true
-					table.insert(repos, repo)
-				end
-			end
-			if project_errors[index] then
-				table.insert(
-					errors,
-					string.format("%s/%s: %s", target_ref.workspace, target_ref.project, project_errors[index])
-				)
-			end
-		end
-
+	scope.run(function(done)
+		return repositories_api.resolve_targets(parsed.targets, opts, done)
+	end, function(repos, errors)
 		scope.run(function(done)
-			return pullrequests_api.fetch_pullrequests(repos, {
+			return pullrequests_api.fetch_for_repositories(repos, {
 				force_load = opts.force_load == true,
 				pagelen = opts.pagelen,
 				statuses = statuses,
+				query = parsed.query,
 			}, done)
 		end, function(pulls, fetch_errors)
 			vim.list_extend(errors, fetch_errors or {})
@@ -138,59 +104,6 @@ local function fetch_unfiltered(view, opts, on_done)
 		end)
 	end)
 
-	return { cancel = scope.cancel }
-end
-
----@param pulls PullRequest[]
----@param filter fun(pr: PullRequest, ctx: { user: PullsUser|nil }): boolean|nil
----@param current_user PullsUser|nil
----@return PullRequest[]
-local function apply_filter(pulls, filter, current_user)
-	local filtered = {}
-	for _, pr in ipairs(pulls) do
-		local ok, keep = pcall(filter, pr, { user = current_user })
-		if ok and keep ~= false then
-			table.insert(filtered, pr)
-		end
-	end
-	return filtered
-end
-
----@param view AtlasPullsViewConfig
----@param opts PullsFetchOpts
----@param on_done fun(pulls: PullRequest[], err: string[]|nil)
----@return { cancel: fun() }|nil
-local function fetch_pullrequests(view, opts, on_done)
-	---@cast view AtlasBitbucketViewConfig
-	local filter = view.filter
-	if filter == nil then
-		return fetch_unfiltered(view, opts, on_done)
-	end
-
-	if opts.current_user ~= nil then
-		return fetch_unfiltered(view, opts, function(pulls, errors)
-			on_done(apply_filter(pulls, filter, opts.current_user), errors)
-		end)
-	end
-
-	local scope = request_scope.new()
-	scope.all({
-		pulls = function(done)
-			return fetch_unfiltered(view, opts, function(pulls, errors)
-				done({ items = pulls, errors = errors }, nil)
-			end)
-		end,
-		user = function(done)
-			return users_api.fetch_current_user(done)
-		end,
-	}, function(values, request_errors)
-		local result = values.pulls
-		local errors = vim.list_extend({}, result.errors or {})
-		if request_errors.user then
-			table.insert(errors, "Current user: " .. request_errors.user)
-		end
-		on_done(apply_filter(result.items, filter, values.user), #errors > 0 and errors or nil)
-	end)
 	return scope
 end
 
@@ -198,6 +111,9 @@ end
 local function views()
 	local options = config.domain_options("bitbucket", "pulls") or {}
 	local configured = options.views or {}
+	if #configured == 0 then
+		configured = { { name = "Pull Requests", key = "1", layout = "compact", current_repo = true } }
+	end
 	local current_repo
 	for _, view in ipairs(configured) do
 		if view.current_repo then
@@ -212,11 +128,8 @@ local function views()
 	for i, view in ipairs(configured) do
 		result[i] = vim.tbl_extend("force", {}, view)
 		if view.current_repo and current_repo then
-			result[i].targets = { current_repo }
+			result[i].search = search.for_repo(current_repo.workspace, current_repo.repo, view.search)
 		end
-	end
-	if #result == 0 then
-		table.insert(result, { name = "Pull Requests", key = "1", layout = "compact", targets = {} })
 	end
 	return result
 end
@@ -228,7 +141,7 @@ return {
 		core = {
 			fetch_user = users_api.fetch_current_user,
 			search_query = search_query,
-			fetch_pullrequests = fetch_pullrequests,
+			fetch_pullrequests = fetch_view_pullrequests,
 			fetch_by_refs = pullrequests_api.fetch_by_refs,
 			fetch_pullrequest = pullrequests_api.fetch_pullrequest,
 			fetch_description = pullrequests_api.fetch_description,

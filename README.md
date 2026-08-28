@@ -457,25 +457,14 @@ pulls = {
         name = "Me",
         key = "M",
         layout = "compact", -- "compact", "grouped", or "plain"
-        targets = {
-          { workspace = "your-workspace", repo = "standalone-repo" },
-          { workspace = "your-workspace", project = "CORE" },
-        },
-
-        ---@param pr PullRequest
-        ---@param ctx { user: PullsUser|nil }
-        filter = function(pr, ctx)
-          local user = ctx.user
-          return pr.author and user and pr.author.id == user.id
-        end,
+        -- https://developer.atlassian.com/cloud/bitbucket/rest/#filter-and-sort-api-objects
+        search = 'repo:your-workspace/standalone-repo project:your-workspace/CORE author.nickname = "your-name"',
       },
       {
         name = "Team",
         key = "1",
         layout = "grouped",
-        targets = {
-          { workspace = "your-workspace", project = "TEAM" },
-        },
+        search = 'project:your-workspace/TEAM destination.branch.name = "main"',
       },
     },
 
@@ -484,21 +473,14 @@ pulls = {
       label = "Search", -- default
       items = {
         ["Atlas"] = {
-          targets = {
-            { workspace = "your-workspace", repo = "atlas" },
-            { workspace = "your-workspace", project = "ATLAS" },
-          },
-          filter = function(pr)
-            return pr.state ~= "draft"
-          end,
+          layout = "grouped",
+          search = 'repo:your-workspace/atlas project:your-workspace/ATLAS title ~ "atlas"',
         },
       },
     },
   },
 },
 ```
-
-Each Bitbucket target selects one repository with `repo`, or every repository in a project with its `project` key. Views and bookmarks can mix both target types and narrow the resulting PRs with `filter`.
 
 <img alt="Bitbucket pull requests" src="https://github.com/user-attachments/assets/bcdd0c9c-e15f-4e82-81fd-cde38aa68a2d">
 

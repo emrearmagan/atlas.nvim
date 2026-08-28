@@ -2,8 +2,10 @@ local M = {}
 
 local actions = require("atlas.pulls.actions")
 local action_utils = require("atlas.pulls.actions.utils")
+local bitbucket_search = require("atlas.providers.bitbucket.completion.search")
 local notes = require("atlas.pulls.notes")
 local picker = require("atlas.ui.picker")
+local pulls_state = require("atlas.pulls.state")
 local pullrequests = require("atlas.pulls.providers.bitbucket.api.pullrequests")
 local reviews = require("atlas.pulls.providers.bitbucket.api.reviews")
 local users_api = require("atlas.pulls.providers.bitbucket.api.users")
@@ -165,12 +167,7 @@ local function search(ctx, done)
 						name = "Search",
 						key = nil,
 						layout = "compact",
-						targets = {
-							{
-								workspace = tostring(repo.owner or ""),
-								repo = tostring(repo.repo_name or ""),
-							},
-						},
+						search = bitbucket_search.for_repo(repo.owner, repo.repo_name),
 					}
 
 					notify(ctx, "success", string.format("Search view -> %s", tostring(repo.full_name or repo.name)))
@@ -204,6 +201,15 @@ local function search(ctx, done)
 			end,
 		})
 	end)
+end
+
+---@param _ AtlasPullActionContext
+---@param done fun(result: PullsActionResult|nil, err: string|nil)
+local function search_pull_requests(_, done)
+	local view = pulls_state.current_view or pulls_state.active_view or { search = "" }
+	---@cast view AtlasBitbucketViewConfig
+	bitbucket_search.open(view)
+	done(nil, nil)
 end
 
 register({
@@ -244,6 +250,12 @@ register({
 	id = "search",
 	label = "Search repositories",
 	run = search,
+})
+
+register({
+	id = "search_pull_requests",
+	label = "Search pull requests",
+	run = search_pull_requests,
 })
 
 register(actions.open_pipelines)

@@ -2,14 +2,7 @@ local M = {}
 
 local service = require("atlas.issues.providers.jira.api.service")
 local normalizer = require("atlas.issues.providers.jira.api.mapper")
-
----@param value string
----@return string
-local function url_encode(value)
-	return (value:gsub("([^%w%-_.~])", function(char)
-		return string.format("%%%02X", string.byte(char))
-	end))
-end
+local url_encode = require("atlas.core.utils").url_encode
 
 ---@class JiraProjectGroup
 ---@field category table|nil

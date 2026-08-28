@@ -349,10 +349,7 @@ GitHub search expression.
 ------------------------------------------------------------------------------
 BITBUCKET PULLS                                        *atlas-pulls-bitbucket*
 
-Bitbucket Cloud only. Auth uses an app password (or API token). Views target
-individual `workspace/repo` repositories or every repository in a
-`workspace/project` - Bitbucket doesn't have a cross-workspace search like
-GitHub does.
+Bitbucket Cloud only. Auth uses an app password (or API token).
 
 >lua
   pulls = {
@@ -363,24 +360,14 @@ GitHub does.
           name   = "Me",
           key    = "M",
           layout = "compact", -- "compact", "grouped", or "plain"
-          targets = {
-            { workspace = "your-workspace", repo = "standalone-repo" },
-            { workspace = "your-workspace", project = "CORE" },
-          },
-          ---@param pr PullRequest
-          ---@param ctx { user: PullsUser|nil }
-          filter = function(pr, ctx)
-            local user = ctx.user
-            return pr.author and user and pr.author.id == user.id
-          end,
+          -- https://developer.atlassian.com/cloud/bitbucket/rest/#filter-and-sort-api-objects
+          search = 'repo:your-workspace/standalone-repo project:your-workspace/CORE author.nickname = "your-name"',
         },
         {
           name   = "Team",
           key    = "1",
           layout = "grouped",
-          targets = {
-            { workspace = "your-workspace", project = "TEAM" },
-          },
+          search = 'project:your-workspace/TEAM destination.branch.name = "main"',
         },
       },
       bookmarks = {
@@ -388,24 +375,14 @@ GitHub does.
         -- label = "Search", -- default
         items = {
           ["Atlas"] = {
-            targets = {
-              { workspace = "your-workspace", repo = "atlas" },
-              { workspace = "your-workspace", project = "ATLAS" },
-            },
-            filter = function(pr)
-              return pr.state ~= "draft"
-            end,
+            layout = "grouped",
+            search = 'repo:your-workspace/atlas project:your-workspace/ATLAS title ~ "atlas"',
           },
         },
       },
     },
   }
 <
-Each target selects one repository with `repo`, or every repository in a
-project with its `project` key. View and bookmark `filter` callbacks narrow
-the result further at runtime (e.g. PRs you authored).
-
-------------------------------------------------------------------------------
 GITLAB PULLS                                              *atlas-pulls-gitlab*
 
 Auth uses a Personal Access Token with the `api` scope. Set
