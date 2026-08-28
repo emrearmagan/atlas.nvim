@@ -9,13 +9,13 @@ function M.new(provider_id, default_host)
 	local provider_name = provider_id == "gitea" and "Gitea" or "Forgejo"
 	local resolver = {}
 
-	---@param parsed AtlasParsedUrl
+	---@param host string
 	---@param owner string
 	---@param repo string
 	---@return string, string, string
-	local function repository(parsed, owner, repo)
+	local function repository(host, owner, repo)
 		local full_name = owner .. "/" .. repo
-		local web_url = url.base_url(provider_id, parsed.host, default_host) .. "/" .. full_name
+		local web_url = url.base_url(provider_id, host, default_host) .. "/" .. full_name
 		return full_name, web_url, web_url .. ".git"
 	end
 
@@ -30,9 +30,18 @@ function M.new(provider_id, default_host)
 		if base == nil and default_host ~= nil then
 			base = { host = default_host, path = "", remote = false }
 		end
-		if base == nil or parsed.host ~= base.host then
+		if base == nil then
 			return nil, nil
 		end
+		local git_transport = parsed.remote and value:lower():match("^https?://") == nil
+		local host_matches = parsed.host == base.host
+		if git_transport then
+			host_matches = parsed.host:gsub(":%d+$", "") == base.host:gsub(":%d+$", "")
+		end
+		if not host_matches then
+			return nil, nil
+		end
+		local host = git_transport and base.host or parsed.host
 		local path = url.path(parsed, base)
 		if path == nil and parsed.remote then
 			path = parsed.path
@@ -47,14 +56,14 @@ function M.new(provider_id, default_host)
 			if owner == nil then
 				return nil, "Unsupported " .. provider_name .. " remote. Expected owner/repository"
 			end
-			local full_name, web_url, repository_url = repository(parsed, owner, repo)
+			local full_name, web_url, repository_url = repository(host, owner, repo)
 			return {
 				provider = provider_id,
 				domain = "pulls",
 				entity = "repo",
 				url = web_url,
 				repository_url = repository_url,
-				host = parsed.host,
+				host = host,
 				owner = owner,
 				repo = repo,
 				repo_full_name = full_name,
@@ -72,14 +81,14 @@ function M.new(provider_id, default_host)
 				return nil, "Unsupported " .. provider_name .. " URL"
 			end
 			local id = assert(tonumber(number))
-			local full_name, _, repository_url = repository(parsed, owner, repo)
+			local full_name, _, repository_url = repository(host, owner, repo)
 			return {
 				provider = provider_id,
 				domain = domain,
 				entity = entity,
 				url = value,
 				repository_url = repository_url,
-				host = parsed.host,
+				host = host,
 				owner = owner,
 				repo = repo,
 				repo_full_name = full_name,
@@ -91,14 +100,14 @@ function M.new(provider_id, default_host)
 
 		owner, repo = path:match("^/([^/]+)/([^/]+)$")
 		if owner then
-			local full_name, web_url, repository_url = repository(parsed, owner, repo)
+			local full_name, web_url, repository_url = repository(host, owner, repo)
 			return {
 				provider = provider_id,
 				domain = "pulls",
 				entity = "repo",
 				url = web_url,
 				repository_url = repository_url,
-				host = parsed.host,
+				host = host,
 				owner = owner,
 				repo = repo,
 				repo_full_name = full_name,

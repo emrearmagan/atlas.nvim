@@ -39,11 +39,17 @@ function M.new(provider_id)
 	end
 
 	function client.get_cache(key)
+		if client.cache_ttl() <= 0 then
+			return nil, false
+		end
 		local entry = cache.get(key)
 		return entry and entry.value or nil, entry ~= nil and entry.value ~= nil
 	end
 
 	function client.set_cache(key, value)
+		if client.cache_ttl() <= 0 then
+			return
+		end
 		cache.set(key, value, client.cache_ttl())
 	end
 
@@ -52,11 +58,17 @@ function M.new(provider_id)
 	end
 
 	function client.get_memory_cache(key)
+		if client.cache_ttl() <= 0 then
+			return nil, false
+		end
 		local entry = memory_cache.get(key)
 		return entry and entry.value or nil, entry ~= nil and entry.value ~= nil
 	end
 
 	function client.set_memory_cache(key, value)
+		if client.cache_ttl() <= 0 then
+			return
+		end
 		memory_cache.set(key, value, client.cache_ttl())
 	end
 

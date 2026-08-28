@@ -130,6 +130,18 @@ describe("providers.resolve", function()
 		end
 	end)
 
+	it("ignores SSH transport ports for Forge remotes", function()
+		config.options.providers.forgejo.base_url = "https://forgejo.example.com:3000"
+
+		local gitea = assert(providers.resolve("ssh://git@gitea.example.com:2222/owner/repo.git"))
+		local forgejo = assert(providers.resolve("git@forgejo.example.com:owner/repo.git"))
+
+		assert.are.equal("gitea.example.com", gitea.host)
+		assert.are.equal("https://gitea.example.com/owner/repo", gitea.url)
+		assert.are.equal("forgejo.example.com:3000", forgejo.host)
+		assert.are.equal("https://forgejo.example.com:3000/owner/repo", forgejo.url)
+	end)
+
 	it("preserves configured base paths", function()
 		config.options.providers.gitlab.base_url = "https://gitlab.example.com/gitlab"
 		config.options.providers.jira.base_url = "https://jira.example.com/jira"
