@@ -186,6 +186,128 @@ end
 ---@param raw table
 ---@param thread table
 ---@param pr PullRequest
+---@return PullsComment
+function M.to_comment(raw, thread, pr)
+	local comment = {
+		id = thread.id .. ":" .. raw.id,
+		parent_id = raw.parentCommentId > 0 and (thread.id .. ":" .. raw.parentCommentId) or nil,
+		thread_id = tostring(thread.id),
+		author = to_author(raw.author),
+		content_raw = raw.content,
+		created_on = raw.publishedDate,
+		state = thread_states[thread.status],
+		html_url = pr.link.html,
+	}
+	local context = json.nilify(thread.threadContext)
+	if context then
+		local path = context.filePath:gsub("^/", "")
+		local from = json.safe_table(context.leftFileEnd).line
+		local to = json.safe_table(context.rightFileEnd).line
+		if from or to then
+			comment.inline = {
+				path = path,
+				from = from,
+				to = to,
+				start_from = json.safe_table(context.leftFileStart).line,
+				start_to = json.safe_table(context.rightFileStart).line,
+			}
+		else
+			comment.file = { path = path }
+		end
+	end
+	return comment
+end
+
+---@param raw_list table[]
+---@param pr PullRequest
+---@return PullsComment[]
+function M.to_review_comments(raw_list, pr)
+	local comments = {}
+	for _, thread in ipairs(raw_list) do
+		if not thread.isDeleted and json.nilify(thread.threadContext) ~= nil then
+			for _, raw in ipairs(thread.comments) do
+				if not raw.isDeleted and raw.commentType == "text" then
+					table.insert(comments, M.to_comment(raw, thread, pr))
+				end
+			end
+		end
+	end
+	return comments
+end
+
+---@param raw table
+---@return DiffHunk
+local function to_diff_hunk(raw)
+	local original = json.safe_table(raw.originalLines)
+	local modified = json.safe_table(raw.modifiedLines)
+	local unchanged = raw.changeType == "none"
+	local hunk = {
+		header = string.format(
+			"@@ -%d,%d +%d,%d @@",
+			raw.originalLineNumberStart,
+			#original,
+			raw.modifiedLineNumberStart,
+			#modified
+		),
+		context = "",
+		old_start = raw.originalLineNumberStart,
+		old_count = #original,
+		new_start = raw.modifiedLineNumberStart,
+		new_count = #modified,
+		additions = unchanged and 0 or #modified,
+		deletions = unchanged and 0 or #original,
+		lines = {},
+	}
+	for index, content in ipairs(original) do
+		table.insert(hunk.lines, {
+			kind = unchanged and "context" or "remove",
+			text = (unchanged and " " or "-") .. content,
+			content = content,
+			old_line = raw.originalLineNumberStart + index - 1,
+			new_line = unchanged and (raw.modifiedLineNumberStart + index - 1) or nil,
+		})
+	end
+	if not unchanged then
+		for index, content in ipairs(modified) do
+			table.insert(hunk.lines, {
+				kind = "add",
+				text = "+" .. content,
+				content = content,
+				new_line = raw.modifiedLineNumberStart + index - 1,
+			})
+		end
+	end
+	return hunk
+end
+
+---@param raw_list table[]
+---@return DiffFile[]
+function M.to_diff_files(raw_list)
+	local files = {}
+	for _, raw in ipairs(raw_list) do
+		local path = (json.safe_str(raw.path) or raw.originalPath):gsub("^/", "")
+		local original = json.safe_str(raw.originalPath)
+		local old_path = original and original:gsub("^/", "") or nil
+		local file = {
+			path = path,
+			old_path = old_path ~= path and old_path or nil,
+			status = raw.changeType == "add" and "added"
+				or raw.changeType == "delete" and "deleted"
+				or old_path and old_path ~= path and "renamed"
+				or "modified",
+			hunks = {},
+		}
+		for _, block in ipairs(raw.lineDiffBlocks) do
+			table.insert(file.hunks, to_diff_hunk(block))
+		end
+		table.insert(files, file)
+	end
+	return files
+end
+
+---@param raw table
+---@param thread table
+---@param pr PullRequest
 ---@return PullsConversationItem|nil
 local function to_conversation_item(raw, thread, pr)
 	if raw.isDeleted then
@@ -197,16 +319,7 @@ local function to_conversation_item(raw, thread, pr)
 			id = "comment:" .. id,
 			kind = "comment",
 			created_on = raw.publishedDate,
-			entity = {
-				id = id,
-				parent_id = raw.parentCommentId > 0 and (thread.id .. ":" .. raw.parentCommentId) or nil,
-				thread_id = tostring(thread.id),
-				author = to_author(raw.author),
-				content_raw = raw.content,
-				created_on = raw.publishedDate,
-				state = thread_states[thread.status],
-				html_url = pr.link.html,
-			},
+			entity = M.to_comment(raw, thread, pr),
 		}
 	elseif raw.commentType == "system" then
 		return {
