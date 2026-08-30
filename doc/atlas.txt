@@ -1,4 +1,4 @@
-*atlas.txt*  Pull requests and issues in Neovim   Last change: 2026 Aug 25
+*atlas.txt*  Pull requests and issues in Neovim   Last change: 2026 Aug 30
 
 Author: Emre Armagan
 License: MIT
@@ -26,8 +26,8 @@ CONTENTS                                                       *atlas-contents*
 ==============================================================================
 1. INTRODUCTION                              *atlas* *atlas.nvim* *atlas-introduction*
 
-Atlas manages pull requests and issues across GitHub, Bitbucket, GitLab and
-Jira from inside Neovim.
+Review pull requests and manage issues across GitHub, GitLab, Bitbucket and Jira
+without leaving your editor.
 
 ==============================================================================
 2. INSTALLATION                                            *atlas-installation*
@@ -242,21 +242,12 @@ Use `ctx.output(title)` to show output from a custom action:
 ==============================================================================
 5. PULLS                                                          *atlas-pulls*
 
-Two-pane layout: PRs grouped by view on the left, detail tabs (overview,
-conversation, review, and commits) on the right.
-
-Atlas supports configurable views and bookmarks, comments and review threads,
-build and merge checks, commits and diffstats, provider notifications, and
-pull request actions. GitHub and GitLab also expose repository issues
-alongside the repository overview, branches, and tags.
-
-Shared provider authentication and endpoints are configured in
+Use `:Atlas pulls [provider]` to browse and manage pull requests from GitHub,
+Bitbucket, and GitLab. Shared authentication and endpoints are configured in
 |atlas-configuration|.
 
 PULLS CONFIGURATION                              *atlas-pulls-configuration*
 
-Shared config that applies to all pulls providers:
->lua
   require("atlas").setup({
     pulls = {
       delete_notes = false, -- delete local notes after approval or merge
@@ -387,8 +378,7 @@ GITLAB PULLS                                              *atlas-pulls-gitlab*
 
 Auth uses a Personal Access Token with the `api` scope. Set
 `providers.gitlab.base_url` to `https://gitlab.com` for the SaaS or your
-self-hosted URL. Views can be scoped to assigned/created/all, to a single
-project, or to a whole group.
+self-hosted URL.
 
 >lua
   pulls = {
@@ -418,80 +408,11 @@ project, or to a whole group.
 `extra_params` is passed through to the MR list endpoint. Use it for
 anything not covered by the explicit view fields.
 
-------------------------------------------------------------------------------
-REVIEW PULL REQUESTS                         *atlas-review-pull-requests*
-                                                     *atlas-pulls-review*
 
-Run `:Atlas review` inside a Git repository to pick an open or draft pull
-request, or pass a pull-request URL directly. You can also press the
-configured `pulls.open_diff` key (`gd` by default) on a pull request.
-
-  - See pending, resolved, and outdated provider threads at their diff
-    locations.
-  - Add inline or file-level comments and suggestions; reply to, edit, delete,
-    resolve, or reopen threads when supported.
-  - Submit pending comments with an optional review summary, approve, or
-    request changes when supported.
-  - Merge pull requests using the methods supported by each provider.
-  - Review provider tasks and GitHub checklists alongside their comments.
-  - Browse comments, tasks, and local notes in the review panel.
-  - Mark files reviewed in AtlasDiff; GitHub syncs the state with the pull
-    request.
-
-CodeDiff, sindrets/diffview.nvim, and dlyongemallo/diffview-plus.nvim can
-display Atlas comment, task, and local-note overlays, but their integrations
-rely on plugin internals and may break after upstream changes.
-
-LOCAL NOTES                                      *atlas-local-notes*
-                                                   *atlas-pulls-notes*
-
-Local notes let you leave something on a diff without posting it to the pull
-request. Each note is attached to a file and line and can be an `ISSUE`,
-`SUGGESTION`, `NOTE`, or `PRAISE`. Diff views mark notes as outdated when their
-saved line changes.
-
-For scripts, use `bin/atlas-notes`. Notes added there appear in AtlasDiff,
-CodeDiff, Diffview, Diffview-plus, and `:Atlas notes`:
->sh
-  ./bin/atlas-notes add \
-    --target https://github.com/owner/repository/pull/123 \
-    --file lua/review_queue.lua --line 19 \
-    --context "local item = queue[index]" \
-    --type suggestion --body "Should this be a bool?"
-<
-
-An example Pi integration is available here:
-https://github.com/emrearmagan/dotfiles/blob/main/config/pi/extensions/atlas-notes.ts
-
-------------------------------------------------------------------------------
-CREATE PULL REQUESTS                         *atlas-create-pull-requests*
-                                                    *atlas-pulls-create*
-
-`:Atlas create pr` opens the pull request form for the current branch. The
-newest commit supplies the title. Atlas first reads the configured
-`pr_template`, or `.github/pull_request_template.md` by default.
-
-Without a template, Atlas groups conventional commits into sections,
-recognizes leading Jira keys such as `[JIRA-123]`, links commit hashes and
-issue references, collects references under Related, and appends the
-diffstat. If no commits use a conventional prefix, it uses a linked plain
-commit list instead.
-
-Edit the title and description, choose the target branch and reviewers, set
-the draft state, or preview commits and diffstat before submitting.
-
-==============================================================================
 6. ISSUES                                                        *atlas-issues*
 
-Same layout as |atlas-pulls|: list on the left, detail tabs (overview,
-conversation, activity) on the right.
-
-Atlas supports configurable views and bookmarks, comments, provider fields and
-actions, parent and subissue relationships, notifications, custom actions, and
-issue creation. Jira also supports JQL completion, project-specific fields,
-and Markdown/ADF descriptions.
-
-Shared provider authentication and endpoints are configured in
+Use `:Atlas issues [provider]` to browse and manage Jira, GitHub, and GitLab
+issues. Shared authentication and endpoints are configured in
 |atlas-configuration|.
 
 ISSUES CONFIGURATION                            *atlas-issues-configuration*
@@ -562,9 +483,6 @@ overview tab can toggle between Markdown and ADF to inspect the conversion.
   }
 <
 
-Jira display settings and custom fields are grouped by project key under
-`issues.jira.project_config`.
-
 ------------------------------------------------------------------------------
 GITHUB ISSUES                                            *atlas-issues-github*
 
@@ -598,9 +516,7 @@ issue search expression.
 ------------------------------------------------------------------------------
 GITLAB ISSUES                                            *atlas-issues-gitlab*
 
-Same shared `providers.gitlab` auth as |atlas-pulls-gitlab|. Views take a `scope`
-(`assigned_to_me`, `created_by_me`, `all`) and a `state` (`opened`,
-`closed`). Anything else goes through `extra_params`.
+Uses the shared `providers.gitlab` authentication from |atlas-configuration|.
 
 >lua
   issues = {
@@ -627,21 +543,6 @@ Same shared `providers.gitlab` auth as |atlas-pulls-gitlab|. Views take a `scope
     },
   }
 <
-
-------------------------------------------------------------------------------
-CREATE ISSUES                                      *atlas-create-issues*
-                                                    *atlas-issues-create*
-
-`:Atlas create issue` opens the creation flow for the configured issue
-providers. GitHub and GitLab use the current repository, while Jira uses the
-configured instance. The forms support Markdown descriptions and
-provider-specific fields such as labels, assignees, milestones, and Jira
-issue types.
-
-GitHub, GitLab, and Jira can apply a saved Markdown template or save the
-current description as a new one. Templates are shared between providers and
-stored under Neovim's data directory.
-
 ==============================================================================
 7. EVENTS                                                        *atlas-events*
 
@@ -660,17 +561,12 @@ Atlas emits these `User` events after setup or cleanup completes:
 ==============================================================================
 8. KEYMAPS                                                      *atlas-keymaps*
 
-Defaults live under `keymaps` in `setup()`. Each entry accepts:
-  - a string -> single key
-  - a list of strings -> aliases
-  - `false` -> disables the action
-
 >lua
   require("atlas").setup({
     keymaps = {
       ui = {
         help                    = "g?",    -- { "g?", "<leader>?" } for aliases
-        close                   = "q",
+        close                   = "q",     -- `false` will disable the keymap
         next_item               = "j",
         previous_item           = "k",
         first_item              = "gg",

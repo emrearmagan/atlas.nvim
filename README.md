@@ -5,7 +5,7 @@
 
 # Atlas.nvim
 
-Review GitHub, Bitbucket, and GitLab pull requests and manage Jira, GitHub, and GitLab issues without leaving Neovim.
+Review pull requests and manage issues across GitHub, GitLab, Bitbucket and Jira without leaving your editor.
 
 <p>
   <img alt="GitHub" src="https://img.shields.io/badge/GitHub-181717?style=flat-square&logo=github&logoColor=white">
@@ -19,28 +19,10 @@ Review GitHub, Bitbucket, and GitLab pull requests and manage Jira, GitHub, and 
 > [!CAUTION]
 > **Still in early development, will have breaking changes!**
 
-## Table of Contents
-
-- [Installation](#installation)
-  - [Requirements](#requirements)
-- [Features](#features)
-- [Configuration](#configuration)
-- [Commands](#commands)
-- [Pulls](#pulls)
-  - [GitHub](#github)
-  - [Bitbucket](#bitbucket)
-  - [GitLab](#gitlab)
-- [Issues](#issues)
-  - [Jira](#jira)
-  - [GitHub](#github-issues)
-  - [GitLab](#gitlab-issues)
-- [Events](#events)
-- [Keymaps](#keymaps)
-- [Contributing](#contributing)
-
 ## Installation
 
-### Using [lazy.nvim](https://github.com/folke/lazy.nvim)
+<details>
+<summary><strong>Using <a href="https://github.com/folke/lazy.nvim">lazy.nvim</a></strong></summary>
 
 ```lua
 ---@module "atlas"
@@ -59,7 +41,10 @@ Review GitHub, Bitbucket, and GitLab pull requests and manage Jira, GitHub, and 
 }
 ```
 
-### Using [vim.pack](https://neovim.io/doc/user/pack/#vim.pack) (Neovim 0.12+)
+</details>
+
+<details>
+<summary><strong>Using <a href="https://neovim.io/doc/user/pack/#vim.pack">vim.pack</a> (Neovim 0.12+)</strong></summary>
 
 ```lua
 vim.pack.add({
@@ -69,6 +54,8 @@ vim.pack.add({
 -- See Configuration below
 require("atlas").setup({})
 ```
+
+</details>
 
 ### Requirements
 
@@ -88,30 +75,22 @@ require("atlas").setup({})
 
 <img alt="AtlasDiff" src="https://github.com/user-attachments/assets/7280373a-f6e9-4847-be64-89e245d461cd">
 
-Run `:Atlas review` inside a Git repository to pick one of its open or draft pull requests, or pass a pull-request URL directly. Atlas opens the configured diff viewer.
-Or press the configured `pulls.open_diff` key (`gd` by default) on a pull request to start a review.
+Run `:Atlas review` in a Git repository to pick a pull request, or pass a PR URL directly. Atlas opens it in your configured diff viewer.
 
-- See pending, resolved, and outdated provider threads inline at their diff locations.
-- Add inline or file-level comments and suggestions; reply to, edit, delete, resolve, or reopen threads when supported.
-- Submit pending comments with an optional review summary, approve, or request changes when supported.
-- Merge pull requests from Atlas using the methods supported by each provider.
-- Review provider tasks and GitHub checklists alongside their comments.
-- Browse comments, tasks, and local notes.
-- Mark files reviewed in AtlasDiff; GitHub syncs the state with the pull request.
+- Browse files, commits, hunks, and review history.
+- Comment, suggest changes, manage threads, or leave local notes.
+- Track tasks, checklists, and reviewed files.
+- Submit, approve, request changes, or merge.
 
 > [!NOTE]
 > **Alternative viewers:** [CodeDiff](https://github.com/esmuellert/codediff.nvim), [Diffview](https://github.com/sindrets/diffview.nvim), and [Diffview-plus](https://github.com/dlyongemallo/diffview-plus.nvim) can display Atlas comment, task, and local-note overlays, but their integrations rely on plugin internals and may break after upstream changes.
 
-#### Local notes
-
-<p align="center">
-  <img width="85%" alt="Local review notes" src="https://github.com/user-attachments/assets/8652d731-b57f-45f8-896e-d62d0ec8d7f4">
-</p>
-
-Local notes let you leave something on a diff without posting it to the pull request. Each note is attached to a file and line and can be an `ISSUE`, `SUGGESTION`, `NOTE`, or `PRAISE`. Diff views mark notes as outdated when their saved line changes.
-
 <details>
-<summary><strong>Script and integration</strong></summary>
+<summary><strong>Notes</strong> - annotate a diff without posting anything</summary>
+
+Local notes let you leave something on a diff without posting it to the pull request. Each note is attached to a file and line and can be an `ISSUE`, `SUGGESTION`, `NOTE`, or `PRAISE`.
+
+#### Script and integration
 
 For scripts, use `bin/atlas-notes`. Notes added there appear in AtlasDiff, CodeDiff, Diffview, Diffview-plus, and `:Atlas notes`:
 
@@ -127,7 +106,10 @@ My dotfiles include a [Pi extension that wraps this script](https://github.com/e
 
 </details>
 
-### View Pipelines
+### Also included
+
+<details>
+<summary><strong>Pipelines</strong> - View jobs and logs, retry failures, or cancel running work</summary>
 
 <p align="center">
   <img width="85%" alt="View pipelines" src="https://github.com/user-attachments/assets/c625c4e8-b1ad-4772-b46b-24718ba6fbb7">
@@ -135,16 +117,16 @@ My dotfiles include a [Pi extension that wraps this script](https://github.com/e
 
 View pipelines and their jobs, inspect their status, and read job logs directly in Atlas. Retry failed pipelines or jobs and cancel work that is still running.
 
-### Custom Actions
+</details>
+
+<details>
+<summary><strong>Custom actions</strong> - Run project-specific actions for pull requests and issues</summary>
 
 <p align="center">
   <img width="85%" alt="Atlas custom action" src="https://github.com/user-attachments/assets/a8ca355b-09e2-428c-b3fb-3280fd161110">
 </p>
 
 Add project-specific actions to pull requests and issues. Custom actions receive the current item and provider context, making it possible to call local scripts, open repositories in tmux, copy branch names, or connect Atlas to your own tooling.
-
-<details>
-<summary><strong>Configuration</strong></summary>
 
 ```lua
 pulls = {
@@ -210,17 +192,19 @@ output:run(cmd, on_exit, { cwd = "/repo" })
 
 </details>
 
-### Create Pull Requests and Issues
+<details>
+<summary><strong>Create</strong> - Create pull requests and issues from Neovim</summary>
 
 <p align="center">
   <img width="50%" alt="Create pull request" src="https://github.com/user-attachments/assets/d6335c66-35f7-4495-b83a-53819d7ec7d5"><img width="50%" alt="Create issue" src="https://github.com/user-attachments/assets/8f3b06d8-763d-4e0f-ab93-9c3754065ca3">
 </p>
 
-`:Atlas create pr` opens a form for the current branch using a configured template or a description generated from its commits. Edit the title and description, choose the target branch and reviewers, set the draft state, and preview the commits and diffstat before submitting.
+Use `:Atlas create [pr|issue]` to create a pull request from the current branch or a new issue. For pull requests, Atlas can fill the description from your template or commits.
 
-`:Atlas create issue` opens a provider-specific form for GitHub, GitLab, or Jira with Markdown descriptions, saved templates, and fields such as labels, assignees, milestones, and Jira issue types.
+</details>
 
-### Notifications
+<details>
+<summary><strong>Notifications</strong> - Read and clear GitHub and GitLab notifications</summary>
 
 <p align="center">
   <img width="85%" alt="Notifications" src="https://github.com/user-attachments/assets/117b5ad7-3840-4487-bd91-f2f9bf213428">
@@ -228,35 +212,18 @@ output:run(cmd, on_exit, { cwd = "/repo" })
 
 Open GitHub and GitLab notifications inside Atlas, refresh them, open the related item, and mark notifications as read or done without leaving Neovim.
 
-### Bookmarks
+</details>
+
+<details>
+<summary><strong>Bookmarks</strong> - Save searches and star items locally</summary>
 
 <p align="center">
   <img width="85%" alt="Bookmarks" src="https://github.com/user-attachments/assets/f008d6af-dfc6-4b65-8af1-94cd6ce9fc99">
 </p>
 
-Turn frequently used GitHub and GitLab searches, Bitbucket repository/project views, or Jira JQL into named shortcuts. Use bookmarks for review queues, recurring project views, and the searches you return to throughout the day.
+Save searches as bookmarks, or press `*` to star a pull request or issue. Both appear alongside your configured views.
 
-Bookmarks appear alongside your configured views, keeping important queries one action away.
-Star a pull request or issue with `*` to keep it at the top of lists. Starred items are saved locally and appear in the first bookmark entry.
-
-### Statusline
-
-Atlas comes with its own statusline for key hints, loading progress, and notifications. Keeping it enabled is recommended because most interaction and feedback goes through it.
-
-If you use lualine, disable its statusline for Atlas buffers so it does not replace the Atlas statusline:
-
-```lua
-require("lualine").setup({
-  options = {
-    disabled_filetypes = {
-      statusline = { "atlas" },
-      winbar = {},
-    },
-  },
-})
-```
-
-At some point there will probably an extension for lualine.
+</details>
 
 ## Configuration
 
@@ -313,17 +280,35 @@ At some point there will probably an extension for lualine.
 }
 ```
 
+### Statusline
+
+Atlas comes with its own statusline for key hints, loading progress, and notifications. Keeping it enabled is recommended because most interaction and feedback goes through it.
+
+If you use lualine, disable its statusline for Atlas buffers so it does not replace the Atlas statusline:
+
+```lua
+require("lualine").setup({
+  options = {
+    disabled_filetypes = {
+      statusline = { "atlas" },
+      winbar = {},
+    },
+  },
+})
+```
+
+At some point there will probably an extension for lualine.
+
 ## Commands
 
 - `:Atlas` - Pick a command
 - `:Atlas pulls [provider]` - Open a pull-request provider dashboard
 - `:Atlas issues [provider]` - Open an issue provider dashboard
 - `:Atlas review [pull-request-url]` - Review a pull request with the configured diff viewer
-- `:Atlas diff <base>...<head>` - Open a Git range in native AtlasDiff
-- `:Atlas diff <pull-request-url>` - Open a pull request in native AtlasDiff
-- `:Atlas create <pr|issue>` - Create a pull request or issue
+- `:Atlas diff [target]` - Open a Git range or pull request in native AtlasDiff
+- `:Atlas create [pr|issue]` - Create a pull request or issue
 - `:Atlas search [provider]` - Search configured pull-request and issue providers
-- `:Atlas open <target|.>` - Open a provider URL, Jira key, a PR/issue number in the current repository, or the current repository
+- `:Atlas open [target|.]` - Open a provider URL, Jira key, a PR/issue number in the current repository, or the current repository
 - `:Atlas notes [target]` - Inspect local review notes
 - `:Atlas clear [cache|notes|stars]` - Clear all Atlas data or only cached data and cloned repositories, local review notes, or starred items
 - `:Atlas logs` - Toggle Atlas logs
@@ -390,7 +375,7 @@ pulls = {
       },
     },
   },
-  custom_actions = {}, -- See Custom Actions below.
+  custom_actions = {}, -- See :help atlas-custom-actions.
 },
 ```
 
@@ -550,7 +535,7 @@ Shared authentication and endpoints are configured in the top-level `providers` 
 issues = {
   max_results = 100,
   with_relationships = true, -- Fetch parent/subissue relationships for plain issue tree views.
-  custom_actions = {}, -- See Custom Actions below.
+  custom_actions = {}, -- See :help atlas-custom-actions.
 }
 ```
 
