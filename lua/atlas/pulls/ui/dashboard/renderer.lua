@@ -15,7 +15,6 @@ local utils = require("atlas.ui.shared.utils")
 local PR_ICON, PR_ICON_HL = icons.pulls("pr")
 local MERGED_PR_ICON, MERGED_PR_ICON_HL = icons.pulls("merged_pr")
 local DECLINED_PR_ICON, DECLINED_PR_ICON_HL = icons.pulls("declined_pr")
-local REPO_ICON = icons.pulls("repo")
 local STAR_ICON, STAR_ICON_HL = icons.general("star")
 
 local PR_STATE_ICON = {
@@ -71,20 +70,29 @@ end
 ---@param pulls PullRequest[]
 ---@return table[]
 local function statusline_items(pulls)
-	local repo_names, seen = {}, {}
-	for _, pr in ipairs(pulls) do
-		local name = pr.repo_full_name
-		if name ~= nil and name ~= "" and not seen[name] then
-			seen[name] = true
-			table.insert(repo_names, name)
-		end
-	end
 	local items = {
 		{
 			text = string.format("%s %d PR%s", PR_ICON, #pulls, #pulls == 1 and "" or "s"),
 			hl_group = "AtlasFooterInfo",
 		},
 	}
+	local page = state.page_history[state.current_page]
+	if page ~= nil and (state.current_page > 1 or page.next_cursor ~= nil) then
+		table.insert(items, {
+			text = "Page",
+			hl_group = "AtlasFooterText",
+		})
+		table.insert(items, {
+			text = tostring(state.current_page),
+			hl_group = "AtlasFooterActive",
+		})
+		if page.total_pages ~= nil then
+			table.insert(items, {
+				text = "of " .. page.total_pages,
+				hl_group = "AtlasFooterText",
+			})
+		end
+	end
 	local user = state.current_user
 	if user ~= nil then
 		local user_name = tostring(user.username or user.name or "")
@@ -96,14 +104,6 @@ local function statusline_items(pulls)
 				min_width = 8,
 			})
 		end
-	end
-	if #repo_names > 0 then
-		table.insert(items, {
-			text = string.format("%s %s", REPO_ICON, table.concat(repo_names, ", ")),
-			hl_group = "AtlasFooterText",
-			priority = 10,
-			min_width = 8,
-		})
 	end
 	return items
 end

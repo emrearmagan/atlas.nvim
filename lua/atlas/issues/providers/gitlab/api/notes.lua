@@ -43,7 +43,7 @@ local function discussions_cache_key(path, iid)
 end
 
 ---@param issue Issue
----@param opts { force_load?: boolean }|nil
+---@param opts { force_refresh?: boolean }|nil
 ---@param on_done fun(discussions: table[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 local function fetch_discussions(issue, opts, on_done)
@@ -55,7 +55,7 @@ local function fetch_discussions(issue, opts, on_done)
 	end
 
 	local cache_key = discussions_cache_key(path, iid)
-	if not opts.force_load then
+	if not opts.force_refresh then
 		local cached, ok = service.get_memory_cache(cache_key)
 		if ok then
 			on_done(cached, nil)
@@ -109,7 +109,7 @@ local function map_discussions(discussions)
 end
 
 ---@param issue Issue
----@param opts { force_load?: boolean }|nil
+---@param opts { force_refresh?: boolean }|nil
 ---@param on_done fun(result: { comments: IssueComment[], events: IssueActivityEntry[] }|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.list_conversation(issue, opts, on_done)

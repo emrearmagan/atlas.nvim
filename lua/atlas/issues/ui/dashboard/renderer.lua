@@ -273,6 +273,20 @@ function M.render(opts)
 	local statusline_items = {
 		{ text = string.format("%d issues", issue_count), hl_group = "AtlasFooterText" },
 	}
+	local page = state.page_history[state.current_page]
+	if page ~= nil and (state.current_page > 1 or page.next_cursor ~= nil) then
+		statusline_items[#statusline_items + 1] = { text = "Page", hl_group = "AtlasFooterText" }
+		statusline_items[#statusline_items + 1] = {
+			text = tostring(state.current_page),
+			hl_group = "AtlasFooterActive",
+		}
+		if page.total_pages ~= nil then
+			statusline_items[#statusline_items + 1] = {
+				text = "of " .. page.total_pages,
+				hl_group = "AtlasFooterText",
+			}
+		end
+	end
 	local user_name = (state.current_user and state.current_user.display_name) or ""
 	if user_name ~= "" then
 		statusline_items[#statusline_items + 1] = {

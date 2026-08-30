@@ -110,7 +110,6 @@
 ---@field run fun(issue: Issue, ctx: AtlasIssuesCustomActionContext, done: fun(ok: boolean|nil, message: string|nil))
 
 ---@class AtlasIssuesConfig
----@field max_results number|nil
 ---@field with_relationships boolean|nil
 ---@field custom_actions AtlasIssuesCustomAction[]|nil
 ---@field github AtlasGitHubIssuesConfig|nil
@@ -216,6 +215,8 @@ M.options = {
 			toggle_star = "*",
 			refresh = "r",
 			refresh_view = "R",
+			next_page = "]p",
+			previous_page = "[p",
 			open_actions = "A",
 			open_in_browser = "gx",
 			copy_id = "y",

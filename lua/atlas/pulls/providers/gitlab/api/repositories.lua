@@ -52,7 +52,7 @@ function M.fetch_detail(repo, opts, on_done)
 	end
 
 	local cache_key = string.format("gitlab:repo_details:%s", path)
-	if not opts.force_load then
+	if not opts.force_refresh then
 		local cached, ok = service.get_memory_cache(cache_key)
 		if ok then
 			on_done(cached, nil)
@@ -146,7 +146,7 @@ function M.fetch_branches(repo, opts, on_done)
 	end
 
 	local cache_key = string.format("gitlab:branches:%s", path)
-	if not opts.force_load then
+	if not opts.force_refresh then
 		local cached, ok = service.get_memory_cache(cache_key)
 		if ok then
 			on_done(cached, nil)
@@ -198,7 +198,7 @@ function M.fetch_tags(repo, opts, on_done)
 	end
 
 	local cache_key = string.format("gitlab:tags:%s", path)
-	if not opts.force_load then
+	if not opts.force_refresh then
 		local cached, ok = service.get_memory_cache(cache_key)
 		if ok then
 			on_done(cached, nil)

@@ -43,7 +43,7 @@ local function fetch_pullrequest(ref, opts, on_done)
 		end)
 		return nil
 	end
-	return pullrequests_api.get_pr(owner, repo, ref.id, on_done, { force_load = opts.force_load == true })
+	return pullrequests_api.get_pr(owner, repo, ref.id, on_done, { force_refresh = opts.force_refresh == true })
 end
 
 ---@param pr PullRequest

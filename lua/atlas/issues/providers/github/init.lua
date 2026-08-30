@@ -41,20 +41,18 @@ end
 
 ---@param view IssuesViewConfig
 ---@param opts IssuesFetchOpts
----@param on_done fun(issues: Issue[], next_page_token: string|nil, is_last: boolean, err: string|nil)
+---@param on_done fun(page: IssuesPage, err: string|nil)
 ---@return { cancel: fun() }|nil
 local function fetch_issues(view, opts, on_done)
 	local search = resolve_search(view)
-	local limit = opts.max_results or 50
-	local layout = view.layout or opts.layout or "plain"
-	return issues_api.search_issues(search, function(issues, err)
+	return issues_api.search_issues(search, function(page, err)
 		if err then
-			on_done({}, nil, true, err)
+			on_done({ items = {} }, err)
 			return
 		end
 
 		local pinned, rest = {}, {}
-		for _, issue in ipairs(issues or {}) do
+		for _, issue in ipairs(page.items) do
 			---@cast issue GitHubIssue
 			if issue.is_pinned == true then
 				table.insert(pinned, issue)
@@ -64,12 +62,13 @@ local function fetch_issues(view, opts, on_done)
 		end
 		local sorted = vim.list_extend({}, pinned)
 		vim.list_extend(sorted, rest)
+		page.items = sorted
 
-		on_done(sorted, nil, true, nil)
+		on_done(page, nil)
 	end, {
-		force_load = opts.force_load == true,
-		limit = limit,
-		with_relationships = layout ~= "compact",
+		force_refresh = opts.force_refresh == true,
+		pagelen = opts.pagelen,
+		cursor = opts.cursor,
 	})
 end
 
@@ -79,14 +78,8 @@ end
 ---@return { cancel: fun() }|nil
 local function fetch_issue(ref, opts, on_done)
 	opts = opts or {}
-	local with_relationships = opts.with_relationships
-	if opts.layout == "compact" then
-		with_relationships = false
-	end
 	return issues_api.get_issue(ref.key, on_done, {
-		force_load = opts.force_load,
-		layout = opts.layout,
-		with_relationships = with_relationships,
+		force_refresh = opts.force_refresh,
 	})
 end
 
@@ -156,7 +149,7 @@ local function fetch_conversation(issue, opts, on_done)
 		end
 
 		on_done(items, nil)
-	end, { force_load = opts.force_refresh == true })
+	end, { force_refresh = opts.force_refresh == true })
 end
 
 ---@param issue Issue

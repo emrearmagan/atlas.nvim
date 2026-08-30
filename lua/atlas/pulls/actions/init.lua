@@ -440,7 +440,7 @@ M.checkout = {
 		end
 
 		notify(context, "loading", "Loading pull request revisions...")
-		context.provider.capabilities.core.fetch_by_refs({ pr }, { force_load = false }, function(pulls, err)
+		context.provider.capabilities.core.fetch_by_refs({ pr }, { force_refresh = false }, function(pulls, err)
 			local fresh = pulls and pulls[1] or nil
 			if fresh == nil then
 				local message = tostring(err or "Unable to load pull request revisions")

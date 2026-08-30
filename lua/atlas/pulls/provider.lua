@@ -4,9 +4,14 @@
 ---@field layout AtlasPullsViewLayout|nil
 
 ---@class PullsFetchOpts
----@field force_load boolean|nil
 ---@field force_refresh boolean|nil
 ---@field pagelen number|nil
+---@field cursor table<string, string>|nil
+
+---@class PullsPage
+---@field items PullRequest[]
+---@field next_cursor table<string, string>|nil
+---@field total_pages integer|nil
 
 ---@class AtlasPullsCommentCompletionContext
 ---@field pr PullRequest
@@ -40,7 +45,7 @@
 
 ---@class PullsCoreCapability
 ---@field fetch_user fun(on_done: fun(user: PullsUser|nil, err: string|nil)): { cancel: fun() }|nil
----@field fetch_pullrequests fun(view: AtlasPullsViewConfig, opts: PullsFetchOpts, on_done: fun(pulls: PullRequest[], err: string[]|nil)): { cancel: fun() }|nil Fetch the view, including when its states have not been initialized by the dashboard.
+---@field fetch_pullrequests fun(view: AtlasPullsViewConfig, opts: PullsFetchOpts, on_done: fun(page: PullsPage, err: string[]|nil)): { cancel: fun() }|nil Fetch the view, including when its states have not been initialized by the dashboard.
 ---@field fetch_by_refs fun(refs: PullRequestRef[], opts: PullsFetchOpts, on_done: fun(pulls: PullRequest[], err: string|nil)): { cancel: fun() }|nil
 ---@field fetch_pullrequest fun(ref: PullRequestRef, opts: PullsFetchOpts, on_done: fun(details: PullRequestDetails|nil, err: string|nil)): { cancel: fun() }|nil
 ---@field create_pr fun(opts: PullsCreatePROpts, on_done: fun(result: PullsCreatePRResult|nil, err: string|nil)): { cancel: fun() }|nil
