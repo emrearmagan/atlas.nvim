@@ -212,8 +212,8 @@ function M.to_issue_details(raw, project_config)
 	for field_id, field_config in pairs(project_config or {}) do
 		local value = json.nilify(fields[field_id])
 		if value ~= nil then
-			local formatted = field_config.format(value)
-			if formatted and formatted ~= "" then
+			local ok, formatted = pcall(field_config.format, value)
+			if ok and formatted and formatted ~= "" then
 				table.insert(details.custom_fields, {
 					name = field_config.name or field_id,
 					formatted = formatted,

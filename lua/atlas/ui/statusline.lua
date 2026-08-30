@@ -42,7 +42,9 @@ local next_id = 0
 ---@field disposed boolean
 
 local function redraw()
-	vim.cmd("redrawstatus")
+	if M.enabled() then
+		vim.cmd("redrawstatus")
+	end
 end
 
 ---@param text any

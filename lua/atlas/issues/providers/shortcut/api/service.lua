@@ -38,14 +38,6 @@ function M.url(endpoint)
 	return API_BASE_URL .. endpoint
 end
 
----@param value string
----@return string
-function M.url_encode(value)
-	return (value:gsub("([^%w%-_.~])", function(char)
-		return string.format("%%%02X", string.byte(char))
-	end))
-end
-
 ---@return number
 function M.cache_ttl()
 	return tonumber(shortcut_config().cache_ttl) or 300

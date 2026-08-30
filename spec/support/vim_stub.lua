@@ -55,6 +55,10 @@ _G.vim = {
 		fn()
 	end,
 
+	trim = function(value)
+		return value:match("^%s*(.-)%s*$")
+	end,
+
 	api = {
 		nvim_create_namespace = function()
 			return 1
@@ -105,6 +109,9 @@ _G.vim = {
 	fn = {
 		fnamemodify = function(path, _)
 			return path
+		end,
+		strdisplaywidth = function(value)
+			return #value
 		end,
 		stdpath = function(_)
 			return "/tmp"

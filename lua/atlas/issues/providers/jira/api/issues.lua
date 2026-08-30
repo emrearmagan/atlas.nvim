@@ -4,6 +4,7 @@ local service = require("atlas.issues.providers.jira.api.service")
 local normalizer = require("atlas.issues.providers.jira.api.mapper")
 local json = require("atlas.core.json")
 local config = require("atlas.config")
+local url_encode = require("atlas.core.utils").url_encode
 
 local function project_config()
 	return (config.domain_options("jira", "issues") or {}).project_config or {}
@@ -49,14 +50,6 @@ local function detail_fields(extra_fields)
 	local fields = { "description", "labels" }
 	vim.list_extend(fields, extra_fields)
 	return fields
-end
-
----@param str string
----@return string
-local function url_encode(str)
-	return (str:gsub("([^%w%-_.~])", function(c)
-		return string.format("%%%02X", string.byte(c))
-	end))
 end
 
 ---@param data table

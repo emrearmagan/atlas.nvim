@@ -19,7 +19,7 @@
 --           -- label = "Search", -- default
 --           items = {
 --             ["Open bugs"] = "type:bug !is:done !is:archived",
---             ["Needs review"] = 'label:"needs-review" !is:done',
+--             ["Needs review"] = { search = 'label:"needs-review" !is:done', layout = "plain" },
 --           },
 --         },
 --       },
@@ -33,10 +33,13 @@
 ---@class AtlasShortcutIssuesViewConfig : IssuesViewConfig
 ---@field search string
 
+---@class AtlasShortcutIssuesBookmarkConfig : AtlasIssuesBookmarkConfig
+---@field search string
+
 ---@class AtlasShortcutIssuesBookmarksConfig
 ---@field key string|nil    -- default "S"
 ---@field label string|nil  -- default "Search"
----@field items table<string, string>|nil
+---@field items table<string, string|AtlasShortcutIssuesBookmarkConfig>|nil
 
 ---@class AtlasShortcutIssuesConfig
 ---@field views AtlasShortcutIssuesViewConfig[]|nil

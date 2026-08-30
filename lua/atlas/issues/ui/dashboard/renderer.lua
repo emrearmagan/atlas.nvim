@@ -28,15 +28,6 @@ local function key_label(action_id)
 	return keys and keys[1] or nil
 end
 
----@param view IssuesViewConfig|nil
----@return string
-local function search_text(view)
-	if view == nil or view._kind ~= nil or state.provider == nil then
-		return ""
-	end
-	return state.provider.capabilities.core.search_query(view, {})
-end
-
 ---@param lines string[]
 ---@param spans table[]
 ---@param text string
@@ -53,7 +44,7 @@ end
 
 ---@param issue Issue
 ---@param is_child boolean|nil
----@param layout "plain"|"compact"
+---@param layout AtlasIssuesViewLayout
 ---@return table
 local function issue_to_row(issue, is_child, layout)
 	local display = providers.get(state.provider and state.provider.id)
@@ -294,8 +285,8 @@ function M.render(opts)
 	statusline.set_items(statusline_items)
 
 	local views = state.views
-	local active = state.active_view
-	local active_id = view_id(active)
+	local view = state.view
+	local active_id = view_id(view)
 
 	local nav_items = {}
 	local active_is_listed = false
@@ -311,9 +302,9 @@ function M.render(opts)
 		})
 	end
 
-	if not active_is_listed and active ~= nil then
+	if not active_is_listed and view ~= nil then
 		table.insert(nav_items, {
-			label = tostring(active.name or "-"),
+			label = tostring(view.name or "-"),
 			active = true,
 		})
 	end
@@ -370,56 +361,20 @@ function M.render(opts)
 
 	table.insert(lines, "")
 
-	if active and active._kind == "bookmarks" then
-		append_search_text(lines, spans, search_text(state.current_view))
-		bookmarks.render(
-			lines,
-			spans,
-			line_map,
-			active._bookmarks or {},
-			opts.width,
-			active._starred,
-			state.starred_items
-		)
-
-		local issues = state.issues
-		local issue_groups = state.issue_tree
-		if state.error then
-			local err_text = "Error: " .. state.error
-			table.insert(lines, "")
-			utils.append_block(lines, spans, {
-				lines = { err_text },
-				highlights = {
-					{ line = 0, start_col = 0, end_col = #err_text, hl_group = "AtlasLogError" },
-				},
-			})
-		elseif state.is_loading then
-			table.insert(lines, "")
-			table.insert(lines, string.format("%s Loading...", state.reload_spinner_frame))
-		else
-			local layout = state.current_view and state.current_view.layout or "plain"
-			local has_rows = #issue_groups > 0
-			if layout == "compact" then
-				has_rows = #issues > 0
-			end
-			if not has_rows then
-				return lines, spans, line_map
-			end
-			table.insert(lines, "")
-			local tbl_lines, tbl_map, tbl_spans
-			if layout == "compact" then
-				tbl_lines, tbl_map, tbl_spans = render_compact_table(opts, issues)
-			else
-				tbl_lines, tbl_map, tbl_spans = render_issue_table(opts, issue_groups)
-			end
-			local table_base = #lines
-			utils.append_block(lines, spans, { lines = tbl_lines, highlights = tbl_spans })
-			for lnum, node in pairs(tbl_map) do
-				line_map[table_base + lnum] = node
-			end
+	local bookmark_state = state.bookmarks
+	if bookmark_state ~= nil and view == bookmark_state.tab then
+		bookmarks.render(lines, spans, line_map, opts.width, bookmark_state, state.starred_items)
+		if bookmark_state.selection == nil then
+			return lines, spans, line_map
 		end
-	elseif state.error then
-		append_search_text(lines, spans, search_text(active))
+		table.insert(lines, "")
+	end
+
+	local search_view = state.search_view()
+	if state.error then
+		if search_view ~= nil then
+			append_search_text(lines, spans, state.query)
+		end
 		local err_text = "Error: " .. state.error
 		utils.append_block(lines, spans, {
 			lines = { err_text },
@@ -429,12 +384,14 @@ function M.render(opts)
 		})
 	else
 		local issue_groups = state.issue_tree
-		local layout = active and tostring(active.layout or "plain") or "plain"
+		local layout = search_view and tostring(search_view.layout or "plain") or "compact"
 		if layout ~= "compact" then
 			layout = "plain"
 		end
 		local issues = state.issues
-		append_search_text(lines, spans, search_text(active))
+		if search_view ~= nil then
+			append_search_text(lines, spans, state.query)
+		end
 
 		local has_rows = #issue_groups > 0
 		if layout == "compact" then

@@ -1,11 +1,16 @@
 -- Provider Interface
 --------------------------------------------------------------------------------
 
+---@class IssuesViewConfig : AtlasIssuesViewConfig
+
+---@class AtlasIssuesBookmarkConfig
+---@field layout AtlasIssuesViewLayout|nil
+
 ---@class IssuesFetchOpts
 ---@field force_load boolean|nil
 ---@field max_results number|nil
 ---@field next_page_token string|nil
----@field layout "plain"|"compact"|nil
+---@field layout AtlasIssuesViewLayout|nil
 ---@field with_relationships boolean|nil
 
 ---@class AtlasIssuesCommentCompletionContext
@@ -13,15 +18,14 @@
 ---@field details IssueDetails|nil
 ---@field comments IssueComment[]
 
----@class IssuesViewConfig : AtlasIssuesViewConfig
-
 ---@class IssuesProvider
 ---@field id string
 ---@field name string
 ---@field icon string
 ---@field hl_group string
 ---@field views fun(): IssuesViewConfig[]
----@field search_view fun(target: AtlasTarget): IssuesViewConfig
+---@field view_for_target fun(target: AtlasTarget): IssuesViewConfig
+---@field resolve_search fun(view: IssuesViewConfig): string
 ---@field issue_ref fun(target: AtlasTarget): IssueRef|nil
 ---@field capabilities IssuesProviderCapabilities
 
@@ -34,7 +38,6 @@
 
 ---@class IssuesCoreCapability
 ---@field fetch_user fun(on_done: fun(user: IssueUser|nil, err: string|nil)): { cancel: fun() }|nil
----@field search_query fun(view: IssuesViewConfig, opts: IssuesFetchOpts): string
 ---@field fetch_issues fun(view: IssuesViewConfig, opts: IssuesFetchOpts, on_done: fun(issues: Issue[], next_page_token: string|nil, is_last: boolean, err: string|nil)): { cancel: fun() }|nil
 ---@field fetch_by_refs fun(refs: IssueRef[], opts: IssuesFetchOpts, on_done: fun(issues: Issue[], err: string|nil)): { cancel: fun() }|nil
 ---@field fetch_issue fun(ref: IssueRef, opts: IssuesFetchOpts|nil, on_done: fun(details: IssueDetails|nil, err: string|nil)): { cancel: fun() }|nil

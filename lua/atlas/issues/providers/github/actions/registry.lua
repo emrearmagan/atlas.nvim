@@ -379,12 +379,7 @@ end
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function search_issues(_, done)
 	local state = require("atlas.issues.state")
-	local view = state.current_view or state.active_view or {}
-	local default = vim.trim(tostring(view.search or ""))
-	if default == "" or not default:find("is:issue") then
-		default = "is:issue " .. default
-	end
-	require("atlas.providers.github.completion.search").open(vim.trim(default) .. " ")
+	require("atlas.providers.github.completion.search").open(state.query .. " ")
 	done(nil, nil)
 end
 

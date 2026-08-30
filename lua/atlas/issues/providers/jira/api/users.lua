@@ -2,14 +2,7 @@ local M = {}
 
 local service = require("atlas.issues.providers.jira.api.service")
 local config = require("atlas.config")
-
----@param str string
----@return string
-local function url_encode(str)
-	return (str:gsub("([^%w%-_.~])", function(c)
-		return string.format("%%%02X", string.byte(c))
-	end))
-end
+local url_encode = require("atlas.core.utils").url_encode
 
 ---@param callback fun(user: IssueUser|nil, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil

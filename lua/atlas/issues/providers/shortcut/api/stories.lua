@@ -5,6 +5,7 @@ local mapper = require("atlas.issues.providers.shortcut.api.mapper")
 local members = require("atlas.issues.providers.shortcut.api.members")
 local requests = require("atlas.core.requests")
 local service = require("atlas.issues.providers.shortcut.api.service")
+local url_encode = require("atlas.core.utils").url_encode
 local workflows = require("atlas.issues.providers.shortcut.api.workflows")
 
 ---@param story_id integer
@@ -26,7 +27,7 @@ end
 local function search_endpoint(query, opts)
 	return string.format(
 		"/search/stories?query=%s&page_size=%d&detail=slim",
-		service.url_encode(query),
+		url_encode(query),
 		page_size(opts.max_results)
 	)
 end

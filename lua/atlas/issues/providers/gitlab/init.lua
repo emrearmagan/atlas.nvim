@@ -16,7 +16,7 @@ local git = require("atlas.core.git")
 
 ---@param view IssuesViewConfig
 ---@return string
-local function search_query(view)
+local function resolve_search(view)
 	---@cast view AtlasGitLabIssuesViewConfig
 	local parts = { "is:" .. tostring(view.state or "opened") }
 	for _, field in ipairs({ "project", "scope", "labels", "milestone", "assignee_username", "author_username" }) do
@@ -129,7 +129,7 @@ end
 
 ---@param target AtlasTarget
 ---@return AtlasIssuesViewConfig
-local function search_view(target)
+local function view_for_target(target)
 	return {
 		name = "Search",
 		layout = "compact",
@@ -149,12 +149,12 @@ end
 
 return {
 	views = views,
-	search_view = search_view,
+	view_for_target = view_for_target,
+	resolve_search = resolve_search,
 	issue_ref = issue_ref,
 	capabilities = {
 		core = {
 			fetch_user = users_api.get_user,
-			search_query = search_query,
 			fetch_issues = fetch_issues,
 			fetch_by_refs = issues_api.fetch_by_refs,
 			fetch_issue = issues_api.fetch_issue,

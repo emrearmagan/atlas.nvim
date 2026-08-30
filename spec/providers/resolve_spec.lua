@@ -9,9 +9,9 @@ describe("providers.resolve", function()
 		config.options = {
 			providers = {
 				github = {},
-				gitlab = { base_url = "https://gitlab.example.com" },
-				bitbucket = {},
-				jira = { base_url = "https://jira.example.com" },
+				gitlab = { base_url = "https://gitlab.example.com", token = "gitlab-test-token" },
+				bitbucket = { user = "bitbucket-test-user", token = "bitbucket-test-token" },
+				jira = { base_url = "https://jira.example.com", token = "jira-test-token" },
 				shortcut = { token = "shortcut-test-token" },
 			},
 			pulls = {
@@ -130,6 +130,12 @@ describe("providers.resolve", function()
 		assert.are.equal(123, story.number)
 		assert.are.equal(123, story.id)
 		assert.are.equal("123", story.issue_key)
+
+		local provider = assert(providers.load("shortcut", "issues"))
+		local view = provider.view_for_target(story)
+		assert.same({ name = "Search", layout = "compact", search = "id:123" }, view)
+		assert.are.equal("id:123", provider.resolve_search(view))
+		assert.same({ key = "123", workspace = "acme" }, provider.issue_ref(story))
 	end)
 
 	it("rejects unsupported URLs", function()

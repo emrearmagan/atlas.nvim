@@ -23,12 +23,7 @@ end
 
 ---@return string
 local function current_jql()
-	local view = issues_state.current_view or issues_state.active_view
-	if view == nil then
-		return ""
-	end
-	---@cast view AtlasJiraViewConfig
-	return tostring(view.jql or "")
+	return issues_state.query
 end
 
 ---@type AtlasIssueAction[]

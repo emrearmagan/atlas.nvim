@@ -31,14 +31,14 @@ local users_api = require("atlas.issues.providers.jira.api.users")
 
 ---@param view IssuesViewConfig
 ---@return string
-local function search_query(view)
+local function resolve_search(view)
 	---@cast view AtlasJiraViewConfig
 	return tostring(view.jql or view.search or "")
 end
 
 ---@param target AtlasTarget
 ---@return AtlasJiraViewConfig
-local function search_view(target)
+local function view_for_target(target)
 	return { name = "Search", layout = "compact", jql = "key = " .. target.issue_key }
 end
 
@@ -55,7 +55,7 @@ end
 ---@param on_done fun(issues: Issue[], next_page_token: string|nil, is_last: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 local function fetch_issues(view, opts, on_done)
-	local jql = search_query(view)
+	local jql = resolve_search(view)
 	if jql == "" then
 		on_done({}, nil, true, "Missing Jira view JQL")
 		return nil
@@ -205,12 +205,12 @@ end
 
 return {
 	views = views,
-	search_view = search_view,
+	view_for_target = view_for_target,
+	resolve_search = resolve_search,
 	issue_ref = target_issue_ref,
 	capabilities = {
 		core = {
 			fetch_user = users_api.get_myself,
-			search_query = search_query,
 			fetch_issues = fetch_issues,
 			fetch_by_refs = fetch_by_refs,
 			fetch_issue = issues_api.fetch_issue,

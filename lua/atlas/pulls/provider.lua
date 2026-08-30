@@ -1,11 +1,12 @@
 ---@alias PullsStateFilter "open"|"merged"|"declined"
 
+---@class AtlasPullsBookmarkConfig
+---@field layout AtlasPullsViewLayout|nil
+
 ---@class PullsFetchOpts
 ---@field force_load boolean|nil
 ---@field force_refresh boolean|nil
 ---@field pagelen number|nil
----@field states PullsStateFilter[]|nil
----@field current_user PullsUser|nil
 
 ---@class AtlasPullsCommentCompletionContext
 ---@field pr PullRequest
@@ -22,7 +23,8 @@
 ---@field icon string
 ---@field hl_group string
 ---@field views fun(): AtlasPullsViewConfig[]
----@field search_view fun(target: AtlasTarget): AtlasPullsViewConfig
+---@field view_for_target fun(target: AtlasTarget): AtlasPullsViewConfig
+---@field resolve_search fun(view: AtlasPullsViewConfig): string, PullsStateFilter[]
 ---@field capabilities PullsProviderCapabilities
 
 ---@class PullsProviderCapabilities
@@ -38,8 +40,7 @@
 
 ---@class PullsCoreCapability
 ---@field fetch_user fun(on_done: fun(user: PullsUser|nil, err: string|nil)): { cancel: fun() }|nil
----@field search_query fun(view: AtlasPullsViewConfig, opts: PullsFetchOpts): string
----@field fetch_pullrequests fun(view: AtlasPullsViewConfig, opts: PullsFetchOpts, on_done: fun(pulls: PullRequest[], err: string[]|nil)): { cancel: fun() }|nil
+---@field fetch_pullrequests fun(view: AtlasPullsViewConfig, opts: PullsFetchOpts, on_done: fun(pulls: PullRequest[], err: string[]|nil)): { cancel: fun() }|nil Fetch the view, including when its states have not been initialized by the dashboard.
 ---@field fetch_by_refs fun(refs: PullRequestRef[], opts: PullsFetchOpts, on_done: fun(pulls: PullRequest[], err: string|nil)): { cancel: fun() }|nil
 ---@field fetch_pullrequest fun(ref: PullRequestRef, opts: PullsFetchOpts, on_done: fun(details: PullRequestDetails|nil, err: string|nil)): { cancel: fun() }|nil
 ---@field create_pr fun(opts: PullsCreatePROpts, on_done: fun(result: PullsCreatePRResult|nil, err: string|nil)): { cancel: fun() }|nil
