@@ -273,6 +273,26 @@ function M.register(buf, views)
 		})
 	)
 
+	utils.insert_if(
+		items,
+		item("ui.previous_page", {
+			desc = "Previous page",
+			callback = function()
+				require("atlas.pulls.ui.dashboard.controller").previous_page()
+			end,
+		})
+	)
+
+	utils.insert_if(
+		items,
+		item("ui.next_page", {
+			desc = "Next page",
+			callback = function()
+				require("atlas.pulls.ui.dashboard.controller").next_page()
+			end,
+		})
+	)
+
 	help.register(provider_name, items, { index = 220, buffer = buf })
 
 	local general = {}

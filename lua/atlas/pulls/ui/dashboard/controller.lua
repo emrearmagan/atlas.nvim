@@ -65,6 +65,10 @@ local function replace_pr(updated)
 		return false, nil
 	end
 	state.pulls = mark_starred(pulls)
+	local page = state.page_history[state.current_page]
+	if page ~= nil then
+		page.items = state.pulls
+	end
 	if not updated.is_starred then
 		return true, nil
 	end
@@ -133,6 +137,7 @@ local function cancel_active_requests()
 	active_requests = requests.new()
 	pr_reload_requests.cancel()
 	pr_reload_requests = requests.new()
+	state.is_loading = false
 	stop_loading_spinner()
 	state.reloading_pr_keys = {}
 end
@@ -201,9 +206,59 @@ local function get_current_user(scope, on_done)
 	end)
 end
 
----@param force_load boolean
+---@param provider PullsProvider
+---@param view AtlasPullsViewConfig
+---@param page_number integer
+---@param cursor table<string, string>|nil
+---@param force_refresh boolean
 ---@param on_done fun()|nil
-local function load_view(force_load, on_done)
+local function load_page(provider, view, page_number, cursor, force_refresh, on_done)
+	state.is_loading = true
+	state.error = nil
+	sync_loading_spinner()
+	notify.loading("Loading pull requests...")
+	render_if_active()
+
+	active_requests.run(function(done)
+		return provider.capabilities.core.fetch_pullrequests(view, {
+			force_refresh = force_refresh,
+			pagelen = 50,
+			cursor = cursor,
+		}, done)
+	end, function(page, err)
+		state.is_loading = false
+		sync_loading_spinner()
+		local first_err = err and err[1]
+		local has_pulls = #page.items > 0
+		if first_err ~= nil and not has_pulls then
+			if page_number == 1 then
+				state.error = tostring(first_err)
+				state.pulls = {}
+			end
+			notify.error(string.format("Failed to fetch pull requests: %s", tostring(first_err)))
+		else
+			page.items = mark_starred(page.items)
+			state.error = nil
+			state.current_page = page_number
+			state.page_history[page_number] = page
+			state.pulls = page.items
+			if first_err ~= nil then
+				notify.warn(string.format("Pull requests loaded with errors: %s", tostring(first_err)))
+			else
+				notify.success("Pull requests loaded", { timeout = 1200 })
+			end
+		end
+
+		render_if_active()
+		if on_done then
+			on_done()
+		end
+	end)
+end
+
+---@param force_refresh boolean
+---@param on_done fun()|nil
+local function load_view(force_refresh, on_done)
 	local view = state.search_view()
 	local provider = state.provider
 	if provider == nil then
@@ -214,6 +269,8 @@ local function load_view(force_load, on_done)
 	end
 
 	cancel_active_requests()
+	state.current_page = 1
+	state.page_history = {}
 	if state.view == nil then
 		state.is_loading = false
 		state.error = "No pull request view configured"
@@ -258,42 +315,50 @@ local function load_view(force_load, on_done)
 	if view == nil then
 		return
 	end
-
-	state.is_loading = true
-	state.error = nil
 	state.pulls = {}
-	sync_loading_spinner()
-	notify.loading("Loading pull requests...")
-	render_if_active()
+	load_page(provider, view, 1, nil, force_refresh, on_done)
+end
 
-	load_requests.run(function(done)
-		return provider.capabilities.core.fetch_pullrequests(view, { force_load = force_load }, done)
-	end, function(pulls, err)
-		state.is_loading = false
-		sync_loading_spinner()
-		local first_err = err and err[1]
-		local has_pulls = #pulls > 0
-		if first_err ~= nil then
-			if has_pulls then
-				state.error = nil
-				state.pulls = mark_starred(pulls)
-				notify.warn(string.format("Pull requests loaded with errors: %s", tostring(first_err)))
-			else
-				state.error = tostring(first_err)
-				state.pulls = {}
-				notify.error(string.format("Failed to fetch pull requests: %s", tostring(first_err)))
-			end
-		else
-			state.error = nil
-			state.pulls = mark_starred(pulls)
-			notify.success("Pull requests loaded", { timeout = 1200 })
-		end
+function M.next_page()
+	local current = state.page_history[state.current_page]
+	if current == nil or current.next_cursor == nil then
+		return
+	end
 
+	local page_number = state.current_page + 1
+	local cached = state.page_history[page_number]
+	if cached ~= nil then
+		state.current_page = page_number
+		state.pulls = cached.items
+		state.error = nil
 		render_if_active()
-		if on_done then
-			on_done()
-		end
+		navigation.focus_first_item()
+		return
+	end
+
+	local provider = state.provider
+	local view = state.search_view()
+	if provider == nil or view == nil then
+		return
+	end
+	cancel_active_requests()
+	load_page(provider, view, page_number, current.next_cursor, false, function()
+		navigation.focus_first_item()
 	end)
+end
+
+function M.previous_page()
+	local page_number = state.current_page - 1
+	local page = state.page_history[page_number]
+	if page == nil then
+		return
+	end
+	cancel_active_requests()
+	state.current_page = page_number
+	state.pulls = page.items
+	state.error = nil
+	render_if_active()
+	navigation.focus_first_item()
 end
 
 function M.refresh_view()
@@ -372,7 +437,7 @@ function M.refresh_pr(pr)
 	end
 
 	pr_reload_requests.run(function(done)
-		return core.fetch_by_refs({ pr }, { force_load = true }, done)
+		return core.fetch_by_refs({ pr }, { force_refresh = true }, done)
 	end, function(fetched_prs, err)
 		local fetched_pr = fetched_prs[1]
 		if err ~= nil or fetched_pr == nil then

@@ -118,7 +118,7 @@ function M.fetch_project_repositories(project, opts, on_done)
 	local project_key = project.project
 
 	local cache_key = string.format("bitbucket:project_repos:%s/%s", workspace, project_key)
-	if opts.force_load ~= true then
+	if opts.force_refresh ~= true then
 		local cached, ok = service.get_cache(cache_key)
 		if ok then
 			on_done(cached, nil)
@@ -246,9 +246,9 @@ function M.fetch_branches(repo, opts, on_done)
 	end
 
 	local sep = branches_url:find("?") and "&" or "?"
-	local url = string.format("%s%spagelen=%d", branches_url, sep, tonumber(opts.pagelen) or 100)
+	local url = string.format("%s%spagelen=100", branches_url, sep)
 	local key = "bitbucket:repo:branches:" .. url
-	if opts.force_load ~= true then
+	if opts.force_refresh ~= true then
 		local cached, ok = service.get_cache(key)
 		if ok then
 			on_done(cached, nil)
@@ -302,9 +302,9 @@ function M.fetch_tags(repo, opts, on_done)
 	end
 
 	local sep = tags_url:find("?") and "&" or "?"
-	local url = string.format("%s%spagelen=%d", tags_url, sep, tonumber(opts.pagelen) or 100)
+	local url = string.format("%s%spagelen=100", tags_url, sep)
 	local key = "bitbucket:repo:tags:" .. url
-	if opts.force_load ~= true then
+	if opts.force_refresh ~= true then
 		local cached, ok = service.get_cache(key)
 		if ok then
 			on_done(cached, nil)

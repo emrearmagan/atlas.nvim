@@ -52,26 +52,25 @@ end
 
 ---@param view IssuesViewConfig
 ---@param opts IssuesFetchOpts
----@param on_done fun(issues: Issue[], next_page_token: string|nil, is_last: boolean, err: string|nil)
+---@param on_done fun(page: IssuesPage, err: string|nil)
 ---@return { cancel: fun() }|nil
 local function fetch_issues(view, opts, on_done)
 	local jql = resolve_search(view)
 	if jql == "" then
-		on_done({}, nil, true, "Missing Jira view JQL")
+		on_done({ items = {} }, "Missing Jira view JQL")
 		return nil
 	end
 
 	return issues_api.search_issues(jql, function(page, err)
 		if err or page == nil then
-			on_done({}, nil, true, err or "Failed to fetch issues")
+			on_done({ items = {} }, err or "Failed to fetch issues")
 			return
 		end
-
-		on_done(page.issues, page.nextPageToken, page.isLast, nil)
+		on_done(page, nil)
 	end, {
-		force_load = opts.force_load == true,
-		next_page_token = opts.next_page_token,
-		max_results = opts.max_results,
+		force_refresh = opts.force_refresh == true,
+		pagelen = opts.pagelen,
+		cursor = opts.cursor,
 	})
 end
 
@@ -95,10 +94,10 @@ local function fetch_by_refs(refs, opts, on_done)
 			on_done({}, err or "Failed to fetch issues")
 			return
 		end
-		on_done(page.issues, nil)
+		on_done(page.items, nil)
 	end, {
-		force_load = opts.force_load == true,
-		max_results = #refs,
+		force_refresh = opts.force_refresh == true,
+		pagelen = #refs,
 	})
 end
 
@@ -136,16 +135,13 @@ end
 ---@param on_done fun(items: IssueConversationItem[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 local function fetch_conversation(issue, opts, on_done)
-	opts = opts or {}
 	local issue_key = tostring(issue.key or "")
 	if issue_key == "" then
 		on_done(nil, "Invalid issue key")
 		return nil
 	end
 
-	local force = opts.force_refresh == true
-
-	return comments_api.get_comments_page(issue_key, 0, 100, function(comments, err)
+	return comments_api.get_comments(issue_key, function(comments, err)
 		if err or comments == nil then
 			on_done(nil, err or "Failed to fetch comments")
 			return
@@ -160,7 +156,7 @@ local function fetch_conversation(issue, opts, on_done)
 			})
 		end
 		on_done(items, nil)
-	end, { force_load = force })
+	end, opts)
 end
 
 ---@param issue Issue
@@ -170,22 +166,6 @@ end
 local function delete_comment(issue, comment, on_done)
 	local issue_key = tostring(issue.key or "")
 	return comments_api.delete_comment(issue_key, tostring(comment.id), on_done)
-end
-
----@param issue Issue
----@param opts IssuesFetchOpts|nil
----@param on_done fun(entries: IssueActivityEntry[]|nil, err: string|nil)
----@return { cancel: fun() }|nil
-local function fetch_activity(issue, opts, on_done)
-	return issues_api.get_issue_history_page(tostring(issue.key or ""), 0, 100, function(page, err)
-		if err or not page then
-			on_done(nil, err or "Failed to fetch issue activity")
-			return
-		end
-		on_done(page.values, nil)
-	end, {
-		force_load = opts and opts.force_load or false,
-	})
 end
 
 ---@return AtlasJiraViewConfig[]
@@ -217,7 +197,9 @@ return {
 			refresh = service.clear_memory_cache,
 		},
 		comments = {
-			fetch_activity = fetch_activity,
+			fetch_activity = function(issue, opts, on_done)
+				return issues_api.get_issue_history(tostring(issue.key or ""), on_done, opts)
+			end,
 			fetch_conversation = fetch_conversation,
 			add_comment = add_comment,
 			reply_comment = reply_comment,

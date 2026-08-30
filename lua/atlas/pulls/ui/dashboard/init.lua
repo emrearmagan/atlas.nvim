@@ -112,6 +112,8 @@ function M.init(provider, opts)
 	state.is_loading = false
 	state.error = nil
 	state.pulls = {}
+	state.current_page = 1
+	state.page_history = {}
 	state.query = ""
 	state.reloading_pr_keys = {}
 	state.reload_spinner_frame = "⠋"
@@ -148,7 +150,7 @@ function M.init(provider, opts)
 	controller.switch_view(state.view)
 
 	if provider.capabilities.notifications then
-		notifications.refresh({ force_load = false, on_done = M.render })
+		notifications.refresh({ on_done = M.render })
 	end
 end
 

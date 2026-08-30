@@ -68,18 +68,19 @@ local function build_query(params)
 end
 
 ---@param view AtlasGitLabPullsViewConfig
----@param opts { force_load?: boolean, pagelen?: number, state?: "opened"|"closed"|"merged"|"all" }|nil
----@param on_done fun(pulls: PullRequest[], err: string|nil)
+---@param opts { force_refresh?: boolean, pagelen: integer, state?: "opened"|"closed"|"merged"|"all", page?: integer }
+---@param on_done fun(page: PullsPage, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_pullrequests(view, opts, on_done)
-	opts = opts or {}
-	local per_page = math.max(1, math.min(100, tonumber(opts.pagelen) or 100))
 	local project = view.project ~= nil and tostring(view.project) ~= "" and view.project or nil
 	local group = view.group ~= nil and tostring(view.group) ~= "" and view.group or nil
+	local state = opts.state or "opened"
+	local page = opts.page or 1
 
 	local params = {
-		state = opts.state or "opened",
-		per_page = tostring(per_page),
+		state = state,
+		per_page = tostring(opts.pagelen),
+		page = tostring(page),
 		order_by = view.order_by or "updated_at",
 		sort = view.sort or "desc",
 	}
@@ -104,7 +105,7 @@ function M.fetch_pullrequests(view, opts, on_done)
 		params.search = view.search
 	end
 	for k, v in pairs(view.extra_params or {}) do
-		if k ~= "state" then
+		if k ~= "state" and k ~= "page" and k ~= "per_page" then
 			params[k] = v
 		end
 	end
@@ -121,84 +122,84 @@ function M.fetch_pullrequests(view, opts, on_done)
 	end
 
 	local cache_key = "gitlab_pulls:merge_requests:" .. endpoint
-	if not opts.force_load then
+	if not opts.force_refresh then
 		local cached, ok = service.get_cache(cache_key)
 		if ok then
-			on_done(cached, nil)
+			local next_cursor = #cached == opts.pagelen and { [state] = tostring(page + 1) } or nil
+			on_done({ items = cached, next_cursor = next_cursor }, nil)
 			return nil
 		end
 	end
 
 	return service.request("GET", endpoint, nil, function(result, err)
 		if err then
-			on_done({}, err)
+			on_done({ items = {} }, err)
 			return
 		end
 		local pulls = mapper.to_pull_requests(result)
 		service.set_cache(cache_key, pulls)
-		on_done(pulls, nil)
+		local next_cursor = #pulls == opts.pagelen and { [state] = tostring(page + 1) } or nil
+		on_done({ items = pulls, next_cursor = next_cursor }, nil)
 	end, {
 		action = "List MRs",
 		endpoint = endpoint,
 	})
 end
 
----@param batches table<integer, PullRequest[]>
----@param limit integer
+---@param pages table<string, PullsPage>
 ---@return PullRequest[]
-local function merge_results(batches, limit)
+local function merge_results(pages)
 	local pulls = {}
-	for _, batch in pairs(batches) do
-		vim.list_extend(pulls, batch)
+	for _, page in pairs(pages) do
+		vim.list_extend(pulls, page.items)
 	end
 	table.sort(pulls, function(left, right)
 		return left.updated_on > right.updated_on
 	end)
-	while #pulls > limit do
-		table.remove(pulls)
-	end
 	return pulls
 end
 
 ---@param view AtlasGitLabPullsViewConfig
 ---@param api_states ("opened"|"closed"|"merged"|"all")[]
 ---@param opts PullsFetchOpts
----@param on_done fun(pulls: PullRequest[], err: string[]|nil)
+---@param on_done fun(page: PullsPage, err: string[]|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_states(view, api_states, opts, on_done)
-	local limit = math.min(100, math.max(1, tonumber(opts.pagelen) or 50))
-	local request_opts = {
-		force_load = opts.force_load == true,
-		pagelen = limit,
-	}
-	if #api_states == 1 then
-		request_opts.state = api_states[1]
-		return M.fetch_pullrequests(view, request_opts, function(pulls, err)
-			on_done(pulls, err and { err } or nil)
-		end)
+	local states = {}
+	for _, state in ipairs(api_states) do
+		if opts.cursor == nil or opts.cursor[state] ~= nil then
+			table.insert(states, state)
+		end
 	end
 
 	local scope = request_scope.new()
 	local starts = {}
-	for index, api_state in ipairs(api_states) do
-		local planned_state = api_state
-		starts[index] = function(done)
+	for _, state in ipairs(states) do
+		local planned_state = state
+		starts[planned_state] = function(done)
 			return M.fetch_pullrequests(view, {
-				force_load = request_opts.force_load,
-				pagelen = request_opts.pagelen,
+				force_refresh = opts.force_refresh,
+				pagelen = opts.pagelen,
 				state = planned_state,
+				page = opts.cursor and tonumber(opts.cursor[planned_state]) or nil,
 			}, done)
 		end
 	end
-	scope.all(starts, function(results, errors)
-		---@cast results table<integer, PullRequest[]>
+	scope.all(starts, function(pages, errors)
+		---@cast pages table<string, PullsPage>
 		local collected_errors = {}
-		for index = 1, #api_states do
-			if errors[index] then
-				table.insert(collected_errors, errors[index])
+		local next_cursor = {}
+		for _, state in ipairs(states) do
+			if errors[state] then
+				table.insert(collected_errors, errors[state])
+			elseif pages[state].next_cursor then
+				next_cursor[state] = pages[state].next_cursor[state]
 			end
 		end
-		on_done(merge_results(results, limit), #collected_errors > 0 and collected_errors or nil)
+		on_done({
+			items = merge_results(pages),
+			next_cursor = next(next_cursor) and next_cursor or nil,
+		}, #collected_errors > 0 and collected_errors or nil)
 	end)
 	return scope
 end
@@ -232,7 +233,7 @@ function M.fetch_by_refs(refs, opts, on_done)
 			local sorted_iids = vim.deepcopy(iids)
 			table.sort(sorted_iids)
 			local cache_key = string.format("gitlab_pulls:refs:%s!%s", path, table.concat(sorted_iids, ","))
-			if not (opts.force_load or opts.force_refresh) then
+			if not opts.force_refresh then
 				local cached, ok = service.get_memory_cache(cache_key)
 				if ok then
 					done(cached, nil)
@@ -278,7 +279,7 @@ function M.fetch_by_refs(refs, opts, on_done)
 end
 
 ---@param pr PullRequestRef
----@param opts { force_load?: boolean, force_refresh?: boolean }|nil
+---@param opts PullsFetchOpts|nil
 ---@param on_done fun(pr: PullRequestDetails|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_pullrequest(pr, opts, on_done)
@@ -291,7 +292,7 @@ function M.fetch_pullrequest(pr, opts, on_done)
 	end
 
 	local cache_key = string.format("gitlab_pulls:details:%s!%d", path, iid)
-	if not (opts.force_load or opts.force_refresh) then
+	if not opts.force_refresh then
 		local cached, ok = service.get_memory_cache(cache_key)
 		if ok then
 			on_done(cached, nil)

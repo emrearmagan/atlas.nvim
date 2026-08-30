@@ -8,6 +8,8 @@
 ---@field error string|nil
 ---@field current_user PullsUser|nil
 ---@field pulls PullRequest[]
+---@field current_page integer
+---@field page_history PullsPage[]
 ---@field provider PullsProvider|nil
 ---@field provider_views AtlasPullsViewConfig[]
 ---@field starred_items AtlasStarredItem[]
@@ -23,6 +25,8 @@ local M = {
 	error = nil,
 	current_user = nil,
 	pulls = {},
+	current_page = 1,
+	page_history = {},
 	provider = nil,
 	provider_views = {},
 	starred_items = {},

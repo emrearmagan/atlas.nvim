@@ -542,7 +542,6 @@ Shared authentication and endpoints are configured in the top-level `providers` 
 
 ```lua
 issues = {
-  max_results = 100,
   with_relationships = true, -- Fetch parent/subissue relationships for plain issue tree views.
   custom_actions = {}, -- See :help atlas-custom-actions.
 }
@@ -803,6 +802,8 @@ keymaps = {
     toggle_star = "*",
     refresh = "r",
     refresh_view = "R",
+    next_page = "]p",
+    previous_page = "[p",
     open_actions = "A",
     open_in_browser = "gx",
     copy_id = "y",

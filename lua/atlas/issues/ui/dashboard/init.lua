@@ -105,6 +105,8 @@ function M.init(provider, opts)
 	notifications.set_provider(provider)
 	state.error = nil
 	state.set_issues({})
+	state.current_page = 1
+	state.page_history = {}
 	state.collapsed_issue_keys = {}
 
 	local capabilities = provider.capabilities
@@ -136,7 +138,7 @@ function M.init(provider, opts)
 	controller.switch_view(state.view)
 
 	if capabilities.notifications then
-		notifications.refresh({ force_load = false, on_done = M.render })
+		notifications.refresh({ on_done = M.render })
 	end
 end
 

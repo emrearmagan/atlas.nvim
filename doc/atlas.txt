@@ -428,7 +428,6 @@ ISSUES CONFIGURATION                            *atlas-issues-configuration*
 Shared config that applies to all issue providers:
 >lua
   issues = {
-    max_results = 100,
     with_relationships = true, -- fetch parent/subissue relationships
     custom_actions = {}, -- see |atlas-issues-custom-actions|
   }
@@ -639,6 +638,8 @@ Atlas emits these `User` events after setup or cleanup completes:
         toggle_star             = "*",
         refresh                 = "r",
         refresh_view            = "R",
+        next_page               = "]p",
+        previous_page           = "[p",
         open_actions            = "A",
         open_in_browser         = "gx",
         copy_id                 = "y",

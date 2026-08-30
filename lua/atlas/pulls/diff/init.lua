@@ -397,7 +397,7 @@ local function start_pr(context, command, refresh, on_done, target, existing)
 
 	view:update(refresh and "Refreshing pull request..." or "Loading pull request...")
 	local core = context.provider.capabilities.core
-	request = core.fetch_by_refs({ context.ref }, { force_load = refresh }, function(pulls, err)
+	request = core.fetch_by_refs({ context.ref }, { force_refresh = refresh }, function(pulls, err)
 		later(function()
 			local pr = pulls and pulls[1] or nil
 			if pr == nil then

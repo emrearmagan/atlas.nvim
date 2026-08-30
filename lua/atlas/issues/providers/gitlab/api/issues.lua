@@ -77,16 +77,17 @@ local function build_query(params)
 end
 
 ---@param view AtlasGitLabIssuesViewConfig
----@param opts { force_load?: boolean, max_results?: number }|nil
----@param on_done fun(issues: Issue[], err: string|nil)
+---@param opts { force_refresh?: boolean, pagelen: integer, cursor?: string }
+---@param on_done fun(page: IssuesPage, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.list_issues(view, opts, on_done)
-	opts = opts or {}
 	local scoped_project = view.project ~= nil and tostring(view.project) ~= ""
+	local page = tonumber(opts.cursor) or 1
 	local params = {
 		scope = view.scope or "assigned_to_me",
 		state = view.state or "opened",
-		per_page = tostring(opts.max_results or 50),
+		per_page = tostring(opts.pagelen),
+		page = tostring(page),
 		order_by = view.order_by or "updated_at",
 		sort = view.sort or "desc",
 	}
@@ -106,7 +107,9 @@ function M.list_issues(view, opts, on_done)
 		params.search = view.search
 	end
 	for k, v in pairs(view.extra_params or {}) do
-		params[k] = v
+		if k ~= "page" and k ~= "per_page" then
+			params[k] = v
+		end
 	end
 
 	local endpoint = (
@@ -114,24 +117,26 @@ function M.list_issues(view, opts, on_done)
 	) .. build_query(params)
 	local cache_key = LIST_CACHE_PREFIX .. endpoint
 
-	if not opts.force_load then
+	if not opts.force_refresh then
 		local cached, ok = service.get_cache(cache_key)
 		if ok then
-			on_done(cached, nil)
+			local next_cursor = #cached == opts.pagelen and tostring(page + 1) or nil
+			on_done({ items = cached, next_cursor = next_cursor }, nil)
 			return nil
 		end
 	end
 
 	return service.request("GET", endpoint, nil, function(result, err)
 		if err then
-			on_done(nil, err)
+			on_done({ items = {} }, err)
 			return
 		end
 		-- TODO: GitLab's /issues REST API does not include parent refs. We either need to switch this
 		-- to GraphQL and map the view config, or make another request here to fetch those refs.
 		local issues = normalizer.to_issues_list(result)
 		service.set_cache(cache_key, issues)
-		on_done(issues, nil)
+		local next_cursor = #issues == opts.pagelen and tostring(page + 1) or nil
+		on_done({ items = issues, next_cursor = next_cursor }, nil)
 	end, {
 		action = "List issues",
 		endpoint = endpoint,
@@ -139,7 +144,7 @@ function M.list_issues(view, opts, on_done)
 end
 
 ---@param refs IssueRef[]
----@param opts { force_load?: boolean }|nil
+---@param opts { force_refresh?: boolean }|nil
 ---@param on_done fun(issues: Issue[], err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_by_refs(refs, opts, on_done)
@@ -169,9 +174,11 @@ function M.fetch_by_refs(refs, opts, on_done)
 				state = "all",
 				extra_params = { ["iids[]"] = iids },
 			}, {
-				force_load = opts.force_load == true,
-				max_results = #iids,
-			}, done)
+				force_refresh = opts.force_refresh == true,
+				pagelen = #iids,
+			}, function(page, err)
+				done(page.items, err)
+			end)
 		end
 	end
 
@@ -191,7 +198,7 @@ function M.fetch_by_refs(refs, opts, on_done)
 end
 
 ---@param ref IssueRef
----@param opts { force_load?: boolean }|nil
+---@param opts { force_refresh?: boolean }|nil
 ---@param on_done fun(details: IssueDetails|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_issue(ref, opts, on_done)
@@ -204,7 +211,7 @@ function M.fetch_issue(ref, opts, on_done)
 	end
 
 	local cache_key = string.format("gitlab:issue-details:%s#%d", path, iid)
-	if not opts.force_load then
+	if not opts.force_refresh then
 		local cached, ok = service.get_memory_cache(cache_key)
 		if ok then
 			on_done(cached, nil)
@@ -499,7 +506,7 @@ function M.create_issue(opts, on_done)
 end
 
 ---@param query string
----@param opts { force_load?: boolean, max_results?: number }|nil
+---@param opts { max_results?: number }|nil
 ---@param on_done fun(items: { id: any, key: string, title: string, url: string|nil, description: string }[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.search_issues_picker(query, opts, on_done)

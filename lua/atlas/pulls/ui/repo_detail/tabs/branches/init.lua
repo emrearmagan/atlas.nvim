@@ -131,7 +131,7 @@ end
 
 ---@param repo PullsRepo|nil
 ---@param refresh fun()
----@param opts PullsFetchOpts|nil
+---@param opts { force_refresh: boolean|nil }|nil
 function M.on_select(repo, refresh, opts)
 	opts = opts or {}
 	local repo_details = detail.current_repo_details
@@ -180,8 +180,7 @@ function M.on_select(repo, refresh, opts)
 
 	state.requests.run(function(done)
 		return repository.fetch_branches(repo_details, {
-			force_load = opts.force_load == true or opts.force_refresh == true,
-			pagelen = opts.pagelen,
+			force_refresh = opts.force_refresh == true,
 		}, done)
 	end, function(branches, err)
 		local active_detail = detail.current_repo_details

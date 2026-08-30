@@ -176,7 +176,7 @@ local function load_details(ref, force_refresh)
 	local core = provider.capabilities.core
 	state.details_loading = true
 	state.requests.run(function(done)
-		return core.fetch_pullrequest(ref, { force_load = force_refresh }, done)
+		return core.fetch_pullrequest(ref, { force_refresh = force_refresh }, done)
 	end, function(details, err)
 		if not same_ref(state.current_pr or pending_ref, ref) then
 			return
@@ -366,7 +366,7 @@ function M.open(input, opts)
 	render()
 	load_details(ref, opts.force_refresh == true)
 	state.requests.run(function(done)
-		return provider.capabilities.core.fetch_by_refs({ ref }, { force_load = opts.force_refresh == true }, done)
+		return provider.capabilities.core.fetch_by_refs({ ref }, { force_refresh = opts.force_refresh == true }, done)
 	end, function(pulls, err)
 		if state.provider ~= provider or not same_ref(pending_ref, ref) then
 			return
@@ -398,7 +398,7 @@ function M.refresh(ref)
 	state.pr_loading = true
 	update_spinner()
 	state.requests.run(function(done)
-		return provider.capabilities.core.fetch_by_refs({ pr }, { force_load = true }, done)
+		return provider.capabilities.core.fetch_by_refs({ pr }, { force_refresh = true }, done)
 	end, function(pulls, err)
 		if state.provider ~= provider or not same_ref(state.current_pr, pr) then
 			return

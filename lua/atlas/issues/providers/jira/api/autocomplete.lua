@@ -103,12 +103,12 @@ function M.get_cached_data()
 end
 
 ---@param on_done fun(data: JiraJqlAutocompleteData|nil, err: string|nil)
----@param opts { force_load?: boolean }|nil
+---@param opts { force_refresh?: boolean }|nil
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.get_data(on_done, opts)
 	opts = opts or {}
 
-	if not opts.force_load then
+	if not opts.force_refresh then
 		local cached, ok = M.get_cached_data()
 		if ok then
 			on_done(cached, nil)

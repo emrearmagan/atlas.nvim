@@ -398,7 +398,7 @@ end
 local function complete_cmdline(arglead, cmdline, cursorpos)
 	if not autocomplete_fetch_started then
 		autocomplete_fetch_started = true
-		autocomplete_api.get_data(function() end, { force_load = false })
+		autocomplete_api.get_data(function() end)
 	end
 
 	local left = cmdline:sub(1, cursorpos):gsub("^%s*:", "")

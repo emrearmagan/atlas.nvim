@@ -4,18 +4,14 @@ local cli = require("atlas.providers.github.client")
 local mapper = require("atlas.pulls.providers.github.api.mapper")
 
 ---@param on_done fun(user: PullsUser|nil, err: string|nil)
----@param opts { force_load?: boolean }|nil
 ---@return { job_id: integer, cancel: fun() }|nil
-function M.fetch_user(on_done, opts)
-	opts = opts or {}
+function M.fetch_user(on_done)
 	local cache_key = "github:user:me"
 
-	if not opts.force_load then
-		local cached, ok = cli.get_cache(cache_key)
-		if ok then
-			on_done(cached, nil)
-			return nil
-		end
+	local cached, ok = cli.get_cache(cache_key)
+	if ok then
+		on_done(cached, nil)
+		return nil
 	end
 
 	return cli.gh({ "api", "user" }, function(result, err)

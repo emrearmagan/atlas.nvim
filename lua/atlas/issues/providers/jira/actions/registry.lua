@@ -377,7 +377,7 @@ local function edit_issue(ctx, done)
 	end
 
 	notify.loading(string.format("Loading description for %s...", issue_key))
-	issues_api.fetch_issue({ key = issue_key }, { force_load = true }, function(details, err)
+	issues_api.fetch_issue({ key = issue_key }, { force_refresh = true }, function(details, err)
 		if err or details == nil then
 			notify.warn(string.format("Failed loading description for %s", issue_key), { timeout = 1200 })
 			open_editor("")
