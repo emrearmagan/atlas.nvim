@@ -41,18 +41,18 @@ end
 
 ---@param view IssuesViewConfig
 ---@param opts IssuesFetchOpts
----@param on_done fun(issues: Issue[], err: string|nil)
+---@param on_done fun(page: IssuesPage, err: string|nil)
 ---@return { cancel: fun() }|nil
 local function fetch_issues(view, opts, on_done)
 	local search = resolve_search(view)
-	return issues_api.search_issues(search, function(issues, err)
+	return issues_api.search_issues(search, function(page, err)
 		if err then
-			on_done({}, err)
+			on_done({ items = {} }, err)
 			return
 		end
 
 		local pinned, rest = {}, {}
-		for _, issue in ipairs(issues or {}) do
+		for _, issue in ipairs(page.items) do
 			---@cast issue GitHubIssue
 			if issue.is_pinned == true then
 				table.insert(pinned, issue)
@@ -62,11 +62,13 @@ local function fetch_issues(view, opts, on_done)
 		end
 		local sorted = vim.list_extend({}, pinned)
 		vim.list_extend(sorted, rest)
+		page.items = sorted
 
-		on_done(sorted, nil)
+		on_done(page, nil)
 	end, {
 		force_refresh = opts.force_refresh == true,
 		pagelen = opts.pagelen,
+		cursor = opts.cursor,
 	})
 end
 

@@ -331,6 +331,26 @@ function M.register(buf, views)
 		})
 	)
 
+	utils.insert_if(
+		items,
+		item("ui.previous_page", {
+			desc = "Previous page",
+			callback = function()
+				controller.previous_page()
+			end,
+		})
+	)
+
+	utils.insert_if(
+		items,
+		item("ui.next_page", {
+			desc = "Next page",
+			callback = function()
+				controller.next_page()
+			end,
+		})
+	)
+
 	M.remove(buf)
 	help.register(provider_name, items, {
 		index = 230,

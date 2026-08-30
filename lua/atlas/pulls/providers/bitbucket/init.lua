@@ -54,17 +54,18 @@ end
 
 ---@param view AtlasBitbucketViewConfig
 ---@param opts PullsFetchOpts
----@param on_done fun(pulls: PullRequest[], err: string[]|nil)
+---@param on_done fun(page: PullsPage, err: string[]|nil)
 ---@return { cancel: fun() }|nil
 local function fetch_pullrequests(view, opts, on_done)
 	---@cast view AtlasBitbucketViewConfig
 	local parsed, parse_err = search_query.parse(view.search)
 	if parsed == nil then
-		on_done({}, { parse_err })
+		on_done({ items = {}, next_cursor = nil }, { parse_err })
 		return nil
 	end
 	local states = view._states or parsed.states or { "open" }
 	return pullrequests_api.fetch_for_targets(parsed.targets, {
+		cursor = opts.cursor,
 		force_refresh = opts.force_refresh == true,
 		pagelen = opts.pagelen,
 		query = search_query.filter(parsed, states),

@@ -40,24 +40,6 @@ local function resolve_search(view)
 	return table.concat(parts, " ")
 end
 
----@param view IssuesViewConfig
----@param opts IssuesFetchOpts
----@param on_done fun(issues: Issue[], err: string|nil)
----@return { cancel: fun() }|nil
-local function fetch_issues(view, opts, on_done)
-	---@cast view AtlasGitLabIssuesViewConfig
-	return issues_api.list_issues(view, {
-		force_refresh = opts.force_refresh == true,
-		pagelen = opts.pagelen,
-	}, function(issues, err)
-		if err then
-			on_done({}, err)
-			return
-		end
-		on_done(issues, nil)
-	end)
-end
-
 ---@param issue Issue
 ---@param opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(items: IssueConversationItem[]|nil, err: string|nil)
@@ -155,7 +137,7 @@ return {
 	capabilities = {
 		core = {
 			fetch_user = users_api.get_user,
-			fetch_issues = fetch_issues,
+			fetch_issues = issues_api.list_issues,
 			fetch_by_refs = issues_api.fetch_by_refs,
 			fetch_issue = issues_api.fetch_issue,
 			update_description = issues_api.update_description,

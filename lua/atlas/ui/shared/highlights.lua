@@ -50,6 +50,7 @@ local groups = {
 
 	AtlasFooterBackground = { bg = "#202635" },
 	AtlasFooterText = { fg = "#7f849c", bg = "#202635" },
+	AtlasFooterActive = { fg = "#cdd6f4", bg = "#202635", bold = true },
 	AtlasFooterInfo = { fg = "#89b4fa", bg = "#202635", bold = true },
 	AtlasFooterNote = { fg = "#f5bde6", bg = "#202635", bold = true },
 	AtlasFooterWarning = { fg = "#f9e2af", bg = "#202635", bold = true },

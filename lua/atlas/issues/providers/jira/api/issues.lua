@@ -53,11 +53,11 @@ local function detail_fields(extra_fields)
 end
 
 ---@param jql string
----@param on_done fun(issues: Issue[]|nil, err: string|nil)
----@param opts { force_refresh?: boolean, pagelen: integer }
+---@param on_done fun(page: IssuesPage|nil, err: string|nil)
+---@param opts { force_refresh?: boolean, pagelen: integer, cursor?: string }
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.search_issues(jql, on_done, opts)
-	local cache_key = string.format("jira:search:v3:%s:%d", jql, opts.pagelen)
+	local cache_key = string.format("jira:search:v4:%s:%d:%s", jql, opts.pagelen, opts.cursor or "first")
 
 	if not opts.force_refresh then
 		local cached = service.get_cache(cache_key)
@@ -73,9 +73,13 @@ function M.search_issues(jql, on_done, opts)
 		maxResults = opts.pagelen,
 	}
 	local endpoint = "/search/jql"
+	local start_at = 0
 	if service.is_server() then
 		endpoint = "/search"
-		data.startAt = 0
+		start_at = tonumber(opts.cursor) or 0
+		data.startAt = start_at
+	elseif opts.cursor then
+		data.nextPageToken = opts.cursor
 	end
 
 	return service.request("POST", endpoint, data, function(result, err)
@@ -84,9 +88,23 @@ function M.search_issues(jql, on_done, opts)
 			return
 		end
 
-		local issues = normalizer.to_issues_list(result.issues or {}, story_points_field())
-		service.set_cache(cache_key, issues)
-		on_done(issues, nil)
+		local items = normalizer.to_issues_list(result.issues or {}, story_points_field())
+		local next_cursor
+		local total_pages
+		if service.is_server() then
+			local total = tonumber(result.total) or #items
+			local next_start = start_at + #items
+			if next_start < total then
+				next_cursor = tostring(next_start)
+			end
+			total_pages = math.max(1, math.ceil(total / opts.pagelen))
+		elseif result.isLast == false then
+			next_cursor = result.nextPageToken
+		end
+
+		local page = { items = items, next_cursor = next_cursor, total_pages = total_pages }
+		service.set_cache(cache_key, page)
+		on_done(page, nil)
 	end, {
 		action = "Search issues",
 		jql = jql,
@@ -192,26 +210,22 @@ function M.fetch_issue(ref, opts, callback)
 end
 
 ---@param issue_key string
----@param start_at number|nil
----@param max_results number|nil
----@param on_done fun(page: { values: IssueActivityEntry[], total: number, is_last: boolean }|nil, err: string|nil)
+---@param on_done fun(entries: IssueActivityEntry[]|nil, err: string|nil)
 ---@param opts { force_refresh?: boolean }|nil
 ---@return { job_id: integer, cancel: fun() }|nil
-function M.get_issue_history_page(issue_key, start_at, max_results, on_done, opts)
+function M.get_issue_history(issue_key, on_done, opts)
 	if issue_key == "" then
 		on_done(nil, "Missing issue key")
 		return nil
 	end
 
 	opts = opts or {}
-	local start = math.max(0, tonumber(start_at) or 0)
-	local size = math.max(1, tonumber(max_results) or 100)
-	local cache_key = string.format("jira:panel:history:%s:start:%d:size:%d", issue_key, start, size)
+	local cache_key = "jira:panel:history:" .. issue_key
 
 	if not opts.force_refresh then
-		local cached_page, ok = service.get_memory_cache(cache_key)
+		local cached, ok = service.get_memory_cache(cache_key)
 		if ok then
-			on_done(cached_page, nil)
+			on_done(cached, nil)
 			return nil
 		end
 	end
@@ -222,7 +236,7 @@ function M.get_issue_history_page(issue_key, start_at, max_results, on_done, opt
 	if is_server then
 		endpoint = string.format("/issue/%s?expand=changelog", issue_key)
 	else
-		endpoint = string.format("/issue/%s/changelog?startAt=%d&maxResults=%d", issue_key, start, size)
+		endpoint = string.format("/issue/%s/changelog?maxResults=100", issue_key)
 	end
 
 	return service.request("GET", endpoint, nil, function(result, err)
@@ -236,14 +250,12 @@ function M.get_issue_history_page(issue_key, start_at, max_results, on_done, opt
 			raw = json.safe_table(result.changelog)
 		end
 
-		local page = normalizer.to_history_page(raw, start, size)
-		service.set_memory_cache(cache_key, page)
-		on_done(page, nil)
+		local entries = normalizer.to_history(raw)
+		service.set_memory_cache(cache_key, entries)
+		on_done(entries, nil)
 	end, {
-		action = "Fetch issue history page",
+		action = "Fetch issue history",
 		issue_key = issue_key,
-		start_at = start,
-		max_results = size,
 	})
 end
 

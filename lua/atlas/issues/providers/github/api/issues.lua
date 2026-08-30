@@ -24,14 +24,16 @@ fragment IssueRefFields on Issue {
 ]]
 
 local SEARCH_GQL = [[
-query($search: String!, $limit: Int!) {
-  search(query: $search, type: ISSUE, first: $limit) {
+query($search: String!, $limit: Int!, $after: String) {
+  search(query: $search, type: ISSUE, first: $limit, after: $after) {
+    issueCount
     nodes {
       ... on Issue {
         ...IssueFields
         parent { ...IssueRefFields }
       }
     }
+    pageInfo { hasNextPage endCursor }
   }
 }
 ]] .. ISSUE_FIELDS_GQL .. ISSUE_REF_FIELDS_GQL
@@ -71,16 +73,16 @@ query($owner: String!, $repo: String!, $number: Int!) {
 ]]
 
 ---@param search string
----@param on_done fun(issues: Issue[]|nil, err: string|nil)
----@param opts { force_refresh?: boolean, pagelen: integer }
+---@param on_done fun(page: IssuesPage, err: string|nil)
+---@param opts IssuesFetchOpts
 ---@return { cancel: fun() }|nil
 function M.search_issues(search, on_done, opts)
 	local query = vim.trim(search)
 	if query == "" then
-		on_done({}, "Missing search query")
+		on_done({ items = {} }, "Missing search query")
 		return nil
 	end
-	local cache_key = string.format("github_issues:search:v5:%s:%d", query, opts.pagelen)
+	local cache_key = string.format("github_issues:search:v6:%s:%d:%s", query, opts.pagelen, opts.cursor or "first")
 	if not opts.force_refresh then
 		local cached, ok = cli.get_cache(cache_key)
 		if ok then
@@ -89,7 +91,7 @@ function M.search_issues(search, on_done, opts)
 		end
 	end
 
-	return cli.gh({
+	local args = {
 		"api",
 		"graphql",
 		"-f",
@@ -98,15 +100,25 @@ function M.search_issues(search, on_done, opts)
 		"search=" .. query,
 		"-F",
 		"limit=" .. tostring(opts.pagelen),
-	}, function(result, err)
+	}
+	if opts.cursor ~= nil then
+		vim.list_extend(args, { "-f", "after=" .. opts.cursor })
+	end
+
+	return cli.gh(args, function(result, err)
 		if err or type(result) ~= "table" then
-			on_done(nil, err or "Failed to search issues")
+			on_done({ items = {} }, err or "Failed to search issues")
 			return
 		end
 
-		local issues = normalizer.to_search_results(result.data.search.nodes or {})
-		cli.set_cache(cache_key, issues)
-		on_done(issues, nil)
+		local search_result = result.data.search
+		local page = {
+			items = normalizer.to_search_results(search_result.nodes or {}),
+			next_cursor = search_result.pageInfo.hasNextPage and search_result.pageInfo.endCursor or nil,
+			total_pages = math.max(1, math.ceil(math.min(search_result.issueCount, 1000) / opts.pagelen)),
+		}
+		cli.set_cache(cache_key, page)
+		on_done(page, nil)
 	end, {
 		action = "GraphQL issues search",
 		query = query,

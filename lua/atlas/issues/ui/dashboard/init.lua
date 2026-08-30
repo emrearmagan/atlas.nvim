@@ -105,6 +105,8 @@ function M.init(provider, opts)
 	notifications.set_provider(provider)
 	state.error = nil
 	state.set_issues({})
+	state.current_page = 1
+	state.page_history = {}
 	state.collapsed_issue_keys = {}
 
 	local capabilities = provider.capabilities

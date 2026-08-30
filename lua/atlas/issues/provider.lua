@@ -9,6 +9,12 @@
 ---@class IssuesFetchOpts
 ---@field force_refresh boolean|nil
 ---@field pagelen number|nil
+---@field cursor string|nil
+
+---@class IssuesPage
+---@field items Issue[]
+---@field next_cursor string|nil
+---@field total_pages integer|nil
 
 ---@class AtlasIssuesCommentCompletionContext
 ---@field issue Issue
@@ -35,7 +41,7 @@
 
 ---@class IssuesCoreCapability
 ---@field fetch_user fun(on_done: fun(user: IssueUser|nil, err: string|nil)): { cancel: fun() }|nil
----@field fetch_issues fun(view: IssuesViewConfig, opts: IssuesFetchOpts, on_done: fun(issues: Issue[], err: string|nil)): { cancel: fun() }|nil
+---@field fetch_issues fun(view: IssuesViewConfig, opts: IssuesFetchOpts, on_done: fun(page: IssuesPage, err: string|nil)): { cancel: fun() }|nil
 ---@field fetch_by_refs fun(refs: IssueRef[], opts: IssuesFetchOpts, on_done: fun(issues: Issue[], err: string|nil)): { cancel: fun() }|nil
 ---@field fetch_issue fun(ref: IssueRef, opts: IssuesFetchOpts|nil, on_done: fun(details: IssueDetails|nil, err: string|nil)): { cancel: fun() }|nil
 ---@field update_description (fun(issue: Issue, content: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil

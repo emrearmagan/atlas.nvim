@@ -6,6 +6,8 @@
 ---@field error string|nil
 ---@field current_user IssueUser|nil
 ---@field issues Issue[]
+---@field current_page integer
+---@field page_history IssuesPage[]
 ---@field issue_tree IssuesGroup[]
 ---@field collapsed_issue_keys table<string, boolean>
 ---@field provider IssuesProvider|nil
@@ -22,6 +24,8 @@ local M = {
 	error = nil,
 	current_user = nil,
 	issues = {},
+	current_page = 1,
+	page_history = {},
 	issue_tree = {},
 	collapsed_issue_keys = {},
 	provider = nil,

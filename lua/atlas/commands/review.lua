@@ -42,13 +42,14 @@ function M.open(value)
 	request = provider.capabilities.core.fetch_pullrequests(
 		view,
 		{ force_refresh = true, pagelen = 50 },
-		function(pulls, errors)
+		function(page, errors)
 			request = nil
 			if errors and #errors > 0 then
 				notify.error(table.concat(errors, "; "), { vim_notify = true })
 				return
 			end
 
+			local pulls = page.items
 			local pull_requests = {}
 			for _, pr in ipairs(pulls) do
 				if pr.state == "open" or pr.state == "draft" then

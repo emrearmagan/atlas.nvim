@@ -15,16 +15,12 @@ local function map_comments(raw, issue_key)
 end
 
 ---@param issue_key string
----@param start_at number|nil
----@param max_results number|nil
 ---@param callback fun(comments: IssueComment[]|nil, err: string|nil)
 ---@param opts { force_refresh?: boolean }|nil
 ---@return { job_id: integer, cancel: fun() }|nil
-function M.get_comments_page(issue_key, start_at, max_results, callback, opts)
+function M.get_comments(issue_key, callback, opts)
 	opts = opts or {}
-	local start = tonumber(start_at) or 0
-	local size = tonumber(max_results) or 100
-	local cache_key = string.format("jira:panel:comments:%s:start:%d:size:%d", issue_key, start, size)
+	local cache_key = "jira:panel:comments:" .. issue_key
 
 	if not opts.force_refresh then
 		local cached, ok = service.get_memory_cache(cache_key)
@@ -34,7 +30,7 @@ function M.get_comments_page(issue_key, start_at, max_results, callback, opts)
 		end
 	end
 
-	local endpoint = string.format("/issue/%s/comment?startAt=%d&maxResults=%d", issue_key, start, size)
+	local endpoint = string.format("/issue/%s/comment?maxResults=100", issue_key)
 
 	return service.request("GET", endpoint, nil, function(result, err)
 		if err or not result then
@@ -46,10 +42,8 @@ function M.get_comments_page(issue_key, start_at, max_results, callback, opts)
 		service.set_memory_cache(cache_key, comments)
 		callback(comments, nil)
 	end, {
-		action = "Fetch comments page",
+		action = "Fetch comments",
 		issue_key = issue_key,
-		start_at = start,
-		max_results = size,
 	})
 end
 

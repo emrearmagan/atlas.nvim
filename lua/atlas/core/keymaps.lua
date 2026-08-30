@@ -21,6 +21,8 @@ local M = {}
 ---@field toggle_star? AtlasKeymapValue
 ---@field refresh? AtlasKeymapValue
 ---@field refresh_view? AtlasKeymapValue
+---@field next_page? AtlasKeymapValue
+---@field previous_page? AtlasKeymapValue
 ---@field open_actions? AtlasKeymapValue
 ---@field open_in_browser? AtlasKeymapValue
 ---@field copy_id? AtlasKeymapValue
@@ -142,6 +144,8 @@ local M = {}
 ---| "ui.toggle_star"
 ---| "ui.refresh"
 ---| "ui.refresh_view"
+---| "ui.next_page"
+---| "ui.previous_page"
 ---| "ui.open_actions"
 ---| "ui.open_in_browser"
 ---| "ui.copy_id"
