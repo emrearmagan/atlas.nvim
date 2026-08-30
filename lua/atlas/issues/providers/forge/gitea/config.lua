@@ -11,10 +11,12 @@ require("atlas.providers.forge.gitea.config")
 
 ---@class AtlasGiteaIssuesViewConfig : AtlasIssuesViewConfig, AtlasGiteaIssuesSearchConfig
 
+---@class AtlasGiteaIssuesBookmarkConfig : AtlasIssuesBookmarkConfig, AtlasGiteaIssuesSearchConfig
+
 ---@class AtlasGiteaIssuesBookmarksConfig
 ---@field key string|nil
 ---@field label string|nil
----@field items table<string, AtlasGiteaIssuesSearchConfig>|nil
+---@field items table<string, string|AtlasGiteaIssuesBookmarkConfig>|nil
 
 ---@class AtlasGiteaIssuesConfig
 ---@field views AtlasGiteaIssuesViewConfig[]|nil

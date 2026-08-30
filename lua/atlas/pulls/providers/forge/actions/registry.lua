@@ -400,8 +400,8 @@ function M.new(provider_id, pullrequests, repositories)
 					end)
 				end,
 				on_select = function(item)
-					local search_view = { name = "Search", layout = "compact", repo = item.id }
-					require("atlas").open("pulls", provider_id, { initial_view = search_view })
+					local view = { name = "Search", layout = "compact", repo = item.id }
+					require("atlas").open("pulls", provider_id, { initial_view = view })
 					notify(ctx, "success", string.format("Search view -> %s", item.id), 1200)
 					done({ changed_pr = false, message = "Search view switched" }, nil)
 				end,

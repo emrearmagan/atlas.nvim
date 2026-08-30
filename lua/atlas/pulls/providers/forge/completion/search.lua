@@ -16,27 +16,31 @@ function M.new(provider_id)
 	---@param global boolean
 	local function open(default, global)
 		local state = require("atlas.pulls.state")
-		---@type AtlasGiteaPullsViewConfig|AtlasForgejoPullsViewConfig
-		local view = state.active_view
-		local repo = view.repo or ""
+		local view = state.search_view()
+		---@cast view AtlasGiteaPullsViewConfig|AtlasForgejoPullsViewConfig|nil
+		local repo = (view and view.repo) or ""
 		if not global and repo == "" then
 			notify.warn("Select a " .. provider_name .. " repository first")
 			return
 		end
 		require("atlas.commands.search.prompt").open({
 			name = "Atlas" .. provider_name .. "PullSearch",
-			default = default or view.search or "",
+			default = default or state.query,
 			on_submit = function(query)
 				query = vim.trim(query)
-				local search_view = { name = "Search", layout = view.layout or "compact", search = query }
+				local target_view = {
+					name = "Search",
+					layout = (view and view.layout) or "compact",
+					search = query,
+				}
 				if not global then
-					search_view.repo = repo
+					target_view.repo = repo
 				end
 				if require("atlas.ui.dashboard").is_active("pulls", provider_id) then
-					require("atlas.pulls.ui.dashboard.controller").switch_view(search_view)
+					require("atlas.pulls.ui.dashboard.controller").switch_view(target_view)
 					return
 				end
-				require("atlas").open("pulls", provider_id, { initial_view = search_view })
+				require("atlas").open("pulls", provider_id, { initial_view = target_view })
 			end,
 		})
 	end

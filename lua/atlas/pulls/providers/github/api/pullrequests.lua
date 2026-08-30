@@ -34,8 +34,26 @@ fragment PullRequestFields on PullRequest {
 ]]
 
 local SEARCH_GQL = [[
-query($search: String!, $limit: Int!) {
-  search(query: $search, type: ISSUE, first: $limit) {
+query(
+  $query1: String!
+  $query2: String!
+  $query3: String!
+  $include1: Boolean!
+  $include2: Boolean!
+  $include3: Boolean!
+  $limit: Int!
+) {
+  search1: search(query: $query1, type: ISSUE, first: $limit) @include(if: $include1) {
+    nodes {
+      ... on PullRequest { ...PullRequestFields }
+    }
+  }
+  search2: search(query: $query2, type: ISSUE, first: $limit) @include(if: $include2) {
+    nodes {
+      ... on PullRequest { ...PullRequestFields }
+    }
+  }
+  search3: search(query: $query3, type: ISSUE, first: $limit) @include(if: $include3) {
     nodes {
       ... on PullRequest { ...PullRequestFields }
     }
@@ -43,14 +61,13 @@ query($search: String!, $limit: Int!) {
 }
 ]] .. PULL_REQUEST_FIELDS_GQL
 
----@param search string
+---@param queries string[]
+---@param opts PullsFetchOpts
 ---@param on_done fun(pulls: PullRequest[], err: string[]|nil)
----@param opts { force_load?: boolean, limit?: number }|nil
 ---@return { cancel: fun() }|nil
-function M.search_prs(search, on_done, opts)
-	opts = opts or {}
-	local limit = math.min(100, math.max(1, tonumber(opts.limit) or 50))
-	local cache_key = string.format("github:pulls:search:%s:limit:%d", search, limit)
+function M.fetch_search(queries, opts, on_done)
+	local limit = math.min(100, math.max(1, tonumber(opts.pagelen) or 50))
+	local cache_key = string.format("github:pulls:search:%s:limit:%d", vim.json.encode(queries), limit)
 
 	if not opts.force_load then
 		local cached, ok = cli.get_cache(cache_key)
@@ -66,7 +83,17 @@ function M.search_prs(search, on_done, opts)
 		"-f",
 		"query=" .. vim.trim(SEARCH_GQL),
 		"-f",
-		"search=" .. search,
+		"query1=" .. (queries[1] or ""),
+		"-f",
+		"query2=" .. (queries[2] or ""),
+		"-f",
+		"query3=" .. (queries[3] or ""),
+		"-F",
+		"include1=" .. tostring(queries[1] ~= nil),
+		"-F",
+		"include2=" .. tostring(queries[2] ~= nil),
+		"-F",
+		"include3=" .. tostring(queries[3] ~= nil),
 		"-F",
 		"limit=" .. tostring(limit),
 	}, function(result, err)
@@ -75,12 +102,21 @@ function M.search_prs(search, on_done, opts)
 			return
 		end
 
-		local prs = mapper.to_search_results_from_graphql(result.data.search.nodes or {})
-		cli.set_cache(cache_key, prs)
-		on_done(prs, nil)
+		local pulls = {}
+		for index = 1, #queries do
+			vim.list_extend(pulls, mapper.to_search_results_from_graphql(result.data["search" .. index].nodes))
+		end
+		table.sort(pulls, function(left, right)
+			return left.updated_on > right.updated_on
+		end)
+		while #pulls > limit do
+			table.remove(pulls)
+		end
+		cli.set_cache(cache_key, pulls)
+		on_done(pulls, nil)
 	end, {
 		action = "Search PRs",
-		search = search,
+		queries = queries,
 		limit = limit,
 	})
 end

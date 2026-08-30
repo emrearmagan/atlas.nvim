@@ -11,10 +11,12 @@ require("atlas.providers.forge.forgejo.config")
 
 ---@class AtlasForgejoIssuesViewConfig : AtlasIssuesViewConfig, AtlasForgejoIssuesSearchConfig
 
+---@class AtlasForgejoIssuesBookmarkConfig : AtlasIssuesBookmarkConfig, AtlasForgejoIssuesSearchConfig
+
 ---@class AtlasForgejoIssuesBookmarksConfig
 ---@field key string|nil
 ---@field label string|nil
----@field items table<string, AtlasForgejoIssuesSearchConfig>|nil
+---@field items table<string, string|AtlasForgejoIssuesBookmarkConfig>|nil
 
 ---@class AtlasForgejoIssuesConfig
 ---@field views AtlasForgejoIssuesViewConfig[]|nil

@@ -363,7 +363,7 @@ local function on_success(pr_state, result)
 
 	notify.info(message, { vim_notify = true })
 	pcall(function()
-		require("atlas.pulls.ui.dashboard.controller").refresh_current_view()
+		require("atlas.pulls.ui.dashboard.controller").refresh_view()
 	end)
 end
 

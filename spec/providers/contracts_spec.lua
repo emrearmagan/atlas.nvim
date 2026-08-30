@@ -25,28 +25,32 @@ end
 
 describe("providers contracts", function()
 	it("loads pull request providers", function()
-		assert_contract("pulls", { "bitbucket", "forgejo", "gitea", "github", "gitlab" }, { "search_view", "views" }, {
-			"fetch_user",
-			"fetch_pullrequests",
-			"fetch_by_refs",
-			"fetch_pullrequest",
-			"search_query",
-			"create_pr",
-			"update_title",
-			"set_draft",
-			"decline",
-			"fetch_default_reviewers",
-			"fetch_description",
-			"update_reviewers",
-		})
+		assert_contract(
+			"pulls",
+			{ "bitbucket", "forgejo", "gitea", "github", "gitlab" },
+			{ "resolve_search", "view_for_target", "views" },
+			{
+				"fetch_user",
+				"fetch_pullrequests",
+				"fetch_by_refs",
+				"fetch_pullrequest",
+				"create_pr",
+				"update_title",
+				"set_draft",
+				"decline",
+				"fetch_default_reviewers",
+				"fetch_description",
+				"update_reviewers",
+			}
+		)
 	end)
 
 	it("loads issue providers", function()
 		assert_contract(
 			"issues",
 			{ "forgejo", "gitea", "github", "gitlab", "jira" },
-			{ "search_view", "issue_ref", "views" },
-			{ "fetch_user", "fetch_issues", "fetch_by_refs", "fetch_issue", "search_query" }
+			{ "resolve_search", "view_for_target", "issue_ref", "views" },
+			{ "fetch_user", "fetch_issues", "fetch_by_refs", "fetch_issue" }
 		)
 	end)
 

@@ -29,6 +29,7 @@ local notify = utils.notify
 ---| "convert_to_draft"
 ---| "edit_reviewers"
 ---| "search"
+---| "search_pull_requests"
 ---| "approve"
 ---| "request_changes"
 

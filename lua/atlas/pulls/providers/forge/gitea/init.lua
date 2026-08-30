@@ -20,57 +20,18 @@ local pullrequests_api = api.pullrequests
 local repositories_api = api.repositories
 local reviews_api = require("atlas.pulls.providers.forge.gitea.api.reviews")
 local git = require("atlas.core.git")
+local query = require("atlas.pulls.providers.forge.query")
 
----@param opts PullsFetchOpts
----@return string[]
-local function active_statuses(opts)
-	local selected = {}
-	for _, status in ipairs(opts.states or { "open" }) do
-		selected[tostring(status):upper()] = true
-	end
-	local statuses = {}
-	for _, status in ipairs({ "OPEN", "MERGED", "DECLINED" }) do
-		if selected[status] then
-			table.insert(statuses, status)
-		end
-	end
-	return #statuses > 0 and statuses or { "OPEN" }
-end
-
----@param view AtlasPullsViewConfig
----@param opts PullsFetchOpts
----@return string
-local function search_query(view, opts)
-	---@cast view AtlasGiteaPullsSearchConfig
-	local repo = vim.trim(view.repo or "")
-	local query = repo == "" and { "type:pulls" } or { "repo:" .. repo }
-	for _, status in ipairs(active_statuses(opts)) do
-		table.insert(query, "is:" .. status:lower())
-	end
-	local extra_keys = vim.tbl_keys(view.extra_params or {})
-	table.sort(extra_keys)
-	for _, key in ipairs(extra_keys) do
-		local value = view.extra_params[key]
-		if value ~= nil and value ~= "" then
-			table.insert(query, key .. ":" .. tostring(value))
-		end
-	end
-	if vim.trim(view.search or "") ~= "" then
-		table.insert(query, view.search)
-	end
-	return table.concat(query, " ")
-end
-
----@param view AtlasGiteaPullsSearchConfig
+---@param view AtlasGiteaPullsViewConfig
 ---@param opts PullsFetchOpts
 ---@param on_done fun(pulls: PullRequest[], err: string[]|nil)
 ---@return { cancel: fun() }|nil
 local function fetch_pullrequests(view, opts, on_done)
-	local statuses = active_statuses(opts)
+	local api_view, statuses = query.for_api(view)
 
-	local global = vim.trim(view.repo or "") == ""
+	local global = vim.trim(api_view.repo or "") == ""
 	local fetch = global and pullrequests_api.search_global or pullrequests_api.list
-	return fetch(view, {
+	return fetch(api_view, {
 		statuses = statuses,
 		pagelen = opts.pagelen or 50,
 		force_load = opts.force_load == true,
@@ -175,7 +136,7 @@ end
 
 ---@param target AtlasTarget
 ---@return AtlasGiteaPullsViewConfig
-local function search_view(target)
+local function view_for_target(target)
 	return { name = "Search", layout = "compact", repo = target.repo_full_name }
 end
 
@@ -213,11 +174,11 @@ local pipeline_actions = require("atlas.pulls.providers.forge.gitea.actions.pipe
 
 return {
 	views = views,
-	search_view = search_view,
+	view_for_target = view_for_target,
+	resolve_search = query.resolve,
 	capabilities = {
 		core = {
 			fetch_user = pullrequests_api.fetch_user,
-			search_query = search_query,
 			fetch_pullrequests = fetch_pullrequests,
 			fetch_by_refs = pullrequests_api.fetch_by_refs,
 			fetch_pullrequest = pullrequests_api.get,

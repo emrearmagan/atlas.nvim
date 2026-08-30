@@ -33,7 +33,7 @@ local REACTION_OPTIONS = require("atlas.ui.shared.emojis").github()
 
 ---@param view IssuesViewConfig
 ---@return string
-function M.search_query(view)
+function M.resolve_search(view)
 	---@cast view AtlasForgejoIssuesViewConfig
 	local repo = vim.trim(view.repo or "")
 	local parts = { repo ~= "" and ("repo:" .. repo) or "type:issues", "is:" .. (view.state or "open") }
@@ -211,7 +211,7 @@ end
 
 ---@param target AtlasTarget
 ---@return AtlasForgejoIssuesViewConfig
-function M.search_view(target)
+function M.view_for_target(target)
 	return { name = "Search", layout = "compact", repo = target.repo_full_name, state = "all" }
 end
 
@@ -243,12 +243,12 @@ local comments = {
 
 return {
 	views = M.views,
-	search_view = M.search_view,
+	view_for_target = M.view_for_target,
+	resolve_search = M.resolve_search,
 	issue_ref = M.issue_ref,
 	capabilities = {
 		core = {
 			fetch_user = issues_api.fetch_user,
-			search_query = M.search_query,
 			fetch_issues = M.fetch_issues,
 			fetch_by_refs = M.fetch_by_refs,
 			fetch_issue = M.fetch_issue,

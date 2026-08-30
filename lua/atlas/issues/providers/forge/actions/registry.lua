@@ -85,7 +85,9 @@ function M.new(provider_id, api)
 					return configured
 				end
 			end
-			local configured = view_repo(issues_state.current_view) or view_repo(issues_state.active_view)
+			local view = issues_state.search_view()
+			---@cast view AtlasGiteaIssuesViewConfig|AtlasForgejoIssuesViewConfig|nil
+			local configured = view_repo(view)
 			if configured then
 				return configured
 			end
@@ -120,8 +122,11 @@ function M.new(provider_id, api)
 		---@type AtlasGiteaIssuesConfig|AtlasForgejoIssuesConfig
 		local configured = config.domain_options(provider_id, "issues") or {}
 		local result, seen = {}, {}
-		---@param value AtlasGiteaIssuesSearchConfig|AtlasForgejoIssuesSearchConfig
+		---@param value string|AtlasGiteaIssuesSearchConfig|AtlasForgejoIssuesSearchConfig
 		local function add(value)
+			if type(value) ~= "table" then
+				return
+			end
 			local repo = vim.trim(value.repo or "")
 			if repo:match("^[^/%s]+/[^/%s]+$") and not seen[repo] then
 				seen[repo] = true

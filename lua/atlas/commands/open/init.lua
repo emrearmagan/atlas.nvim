@@ -21,7 +21,7 @@ local function open_target(target, provider, entity)
 	end
 
 	if target.entity == "repo" then
-		require("atlas").open(target.domain, target.provider, { initial_view = provider.search_view(target) })
+		require("atlas").open(target.domain, target.provider, { initial_view = provider.view_for_target(target) })
 	elseif target.entity == "pr" then
 		---@cast entity PullRequest|nil
 		---@cast provider PullsProvider|nil

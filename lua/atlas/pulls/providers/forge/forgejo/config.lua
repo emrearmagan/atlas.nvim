@@ -37,10 +37,12 @@ require("atlas.providers.forge.forgejo.config")
 
 ---@class AtlasForgejoPullsViewConfig : AtlasPullsViewConfig, AtlasForgejoPullsSearchConfig
 
+---@class AtlasForgejoPullsBookmarkConfig : AtlasPullsBookmarkConfig, AtlasForgejoPullsSearchConfig
+
 ---@class AtlasForgejoPullsBookmarksConfig
 ---@field key string|nil
 ---@field label string|nil
----@field items table<string, AtlasForgejoPullsSearchConfig>|nil
+---@field items table<string, string|AtlasForgejoPullsBookmarkConfig>|nil
 
 ---@class AtlasForgejoPullsConfig
 ---@field draft_prefix string|nil Enabled server prefix used to mark pull requests as drafts. Defaults to `WIP:`.

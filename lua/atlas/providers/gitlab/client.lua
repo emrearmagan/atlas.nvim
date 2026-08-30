@@ -5,6 +5,7 @@ local http = require("atlas.core.http")
 local memory_cache = require("atlas.core.memory_cache")
 local cache = require("atlas.core.cache")
 local logger = require("atlas.core.logger")
+local utils = require("atlas.core.utils")
 
 local API_PATH = "/api/v4"
 
@@ -137,13 +138,7 @@ function M.clear_cache(prefix)
 	cache.clear_prefix(prefix)
 end
 
----@param str string
----@return string
-function M.url_encode(str)
-	return (str:gsub("([^%w%-_.~])", function(char)
-		return string.format("%%%02X", string.byte(char))
-	end))
-end
+M.url_encode = utils.url_encode
 
 ---@param method string
 ---@param endpoint string

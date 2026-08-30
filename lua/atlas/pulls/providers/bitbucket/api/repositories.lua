@@ -6,14 +6,7 @@ local api_utils = require("atlas.core.utils")
 local mapper = require("atlas.pulls.providers.bitbucket.api.mapper")
 local request_scope = require("atlas.core.requests")
 local as_table = api_utils.as_table
-
----@param value string
----@return string
-local function url_encode(value)
-	return (value:gsub("([^%w%-_.~])", function(char)
-		return string.format("%%%02X", string.byte(char))
-	end))
-end
+local url_encode = api_utils.url_encode
 
 ---@param repo PullsRepo
 ---@return string|nil
@@ -116,9 +109,9 @@ function M.fetch_workspace_repositories(workspace, search, on_done)
 	})
 end
 
----@param project AtlasBitbucketProjectTarget
+---@param project BitbucketProjectTarget
 ---@param opts PullsFetchOpts
----@param on_done fun(repositories: AtlasBitbucketRepoTarget[]|nil, err: string|nil)
+---@param on_done fun(repositories: BitbucketRepoTarget[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_project_repositories(project, opts, on_done)
 	local workspace = project.workspace
@@ -154,6 +147,45 @@ function M.fetch_project_repositories(project, opts, on_done)
 		workspace = workspace,
 		project = project_key,
 	})
+end
+
+---@param targets BitbucketPullTarget[]
+---@param opts PullsFetchOpts
+---@param on_done fun(repositories: BitbucketRepoTarget[], errors: string[])
+---@return AtlasRequestScope
+function M.resolve_targets(targets, opts, on_done)
+	local requests = request_scope.new()
+	local starts = {}
+	for index, target_ref in ipairs(targets) do
+		local target = target_ref
+		starts[index] = function(done)
+			if target.repo then
+				done({ target }, nil)
+				return nil
+			end
+			---@cast target BitbucketProjectTarget
+			return M.fetch_project_repositories(target, opts, done)
+		end
+	end
+
+	requests.all(starts, function(resolved_targets, target_errors)
+		local repositories, errors, seen = {}, {}, {}
+		for index, target in ipairs(targets) do
+			for _, repository in ipairs(resolved_targets[index] or {}) do
+				local key = repository.workspace .. "/" .. repository.repo
+				if not seen[key] then
+					seen[key] = true
+					table.insert(repositories, repository)
+				end
+			end
+			if target_errors[index] then
+				table.insert(errors, string.format("%s/%s: %s", target.workspace, target.project, target_errors[index]))
+			end
+		end
+		on_done(repositories, errors)
+	end)
+
+	return requests
 end
 
 ---@param repo PullsRepo

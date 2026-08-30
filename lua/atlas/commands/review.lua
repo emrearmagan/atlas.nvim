@@ -34,15 +34,12 @@ function M.open(value)
 	local provider = assert(providers.load(info.provider, "pulls"))
 	---@cast provider PullsProvider
 	local repo_full_name = assert(info.repo_full_name, "Repository target missing repo_full_name")
-	local view = provider.search_view(info)
+	local view = provider.view_for_target(info)
 	if request then
 		request.cancel()
 	end
 	notify.info("Fetching pull requests for " .. repo_full_name .. "...", { vim_notify = true })
-	request = provider.capabilities.core.fetch_pullrequests(view, {
-		force_load = true,
-		states = { "open" },
-	}, function(pulls, errors)
+	request = provider.capabilities.core.fetch_pullrequests(view, { force_load = true }, function(pulls, errors)
 		request = nil
 		if errors and #errors > 0 then
 			notify.error(table.concat(errors, "; "), { vim_notify = true })

@@ -76,7 +76,7 @@ query($owner: String!, $repo: String!, $number: Int!) {
 }
 ]]
 
----@param opts { with_relationships?: boolean, layout?: "plain"|"compact" }|nil
+---@param opts { with_relationships?: boolean, layout?: AtlasIssuesViewLayout }|nil
 ---@return boolean
 local function relationships_enabled(opts)
 	opts = opts or {}
@@ -90,7 +90,7 @@ end
 
 ---@param search string
 ---@param on_done fun(issues: Issue[]|nil, err: string|nil)
----@param opts { force_load?: boolean, limit?: number, with_relationships?: boolean, layout?: "plain"|"compact" }|nil
+---@param opts { force_load?: boolean, limit?: number, with_relationships?: boolean, layout?: AtlasIssuesViewLayout }|nil
 ---@return { cancel: fun() }|nil
 function M.search_issues(search, on_done, opts)
 	opts = opts or {}
@@ -141,7 +141,7 @@ end
 
 ---@param key string
 ---@param on_done fun(details: IssueDetails|nil, err: string|nil)
----@param opts { force_load?: boolean, with_relationships?: boolean, layout?: "plain"|"compact" }|nil
+---@param opts { force_load?: boolean, with_relationships?: boolean, layout?: AtlasIssuesViewLayout }|nil
 ---@return { cancel: fun() }|nil
 function M.get_issue(key, on_done, opts)
 	opts = opts or {}

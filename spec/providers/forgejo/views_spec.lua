@@ -12,6 +12,7 @@ local repository
 local repository_calls
 local issue_list
 local pull_list
+local pull_search_global
 
 local function unload_providers()
 	package.loaded[ISSUE_PROVIDER] = nil
@@ -45,6 +46,10 @@ describe("Forgejo provider views", function()
 		if pull_list then
 			require("atlas.pulls.providers.forge.forgejo.api").pullrequests.list = pull_list
 			pull_list = nil
+		end
+		if pull_search_global then
+			require("atlas.pulls.providers.forge.forgejo.api").pullrequests.search_global = pull_search_global
+			pull_search_global = nil
 		end
 		unload_providers()
 	end)
@@ -89,7 +94,7 @@ describe("Forgejo provider views", function()
 
 		assert.equal(
 			"repo:owner/repo is:closed scope:created labels:bug direction:desc needle",
-			provider.capabilities.core.search_query(views[1])
+			provider.resolve_search(views[1])
 		)
 		local issues_api = require("atlas.issues.providers.forge.forgejo.api").issues
 		issue_list = issues_api.list
@@ -112,7 +117,6 @@ describe("Forgejo provider views", function()
 				key = "1",
 				current_repo = true,
 				repo = "configured/repo",
-				search = "needle",
 				extra_params = extra_params,
 				layout = "compact",
 			},
@@ -139,10 +143,9 @@ describe("Forgejo provider views", function()
 		assert.is_true(views[1].extra_params == extra_params)
 		assert.equal("compact", views[1].layout)
 
-		assert.equal(
-			"repo:owner/repo is:open is:merged sort:recent needle",
-			provider.capabilities.core.search_query(views[1], { states = { "merged", "open" } })
-		)
+		local query, states = provider.resolve_search(views[1])
+		assert.equal("repo:owner/repo is:open sort:recent", query)
+		assert.same({ "open" }, states)
 		local pullrequests_api = require("atlas.pulls.providers.forge.forgejo.api").pullrequests
 		pull_list = pullrequests_api.list
 		local fetched_view, fetched_opts
@@ -152,9 +155,38 @@ describe("Forgejo provider views", function()
 			on_done({}, nil)
 			return { cancel = function() end }
 		end
-		provider.capabilities.core.fetch_pullrequests(views[1], { states = { "merged", "open" } }, function() end)
-		assert.is_true(fetched_view == views[1])
-		assert.same({ "OPEN", "MERGED" }, fetched_opts.statuses)
+		provider.capabilities.core.fetch_pullrequests(views[1], {}, function() end)
+		assert.is_false(fetched_view == views[1])
+		assert.equal("", fetched_view.search)
+		assert.same({ "OPEN" }, fetched_opts.statuses)
 		assert.equal(1, repository_calls)
+	end)
+
+	it("keeps displayed pull states and API statuses aligned", function()
+		local provider = require(PULL_PROVIDER)
+		local api = require("atlas.pulls.providers.forge.forgejo.api").pullrequests
+		pull_search_global = api.search_global
+		local fetched_view, fetched_opts
+		api.search_global = function(view, opts, on_done)
+			fetched_view = view
+			fetched_opts = opts
+			on_done({}, nil)
+			return { cancel = function() end }
+		end
+
+		local view = { name = "Search", search = "is:merged needle" }
+		local query, states = provider.resolve_search(view)
+		assert.equal("type:pulls is:merged needle", query)
+		assert.same({ "merged" }, states)
+		provider.capabilities.core.fetch_pullrequests(view, {}, function() end)
+		assert.equal("needle", fetched_view.search)
+		assert.same({ "MERGED" }, fetched_opts.statuses)
+
+		view._states = { "declined" }
+		query, states = provider.resolve_search(view)
+		assert.equal("type:pulls is:declined needle", query)
+		assert.same({ "declined" }, states)
+		provider.capabilities.core.fetch_pullrequests(view, {}, function() end)
+		assert.same({ "DECLINED" }, fetched_opts.statuses)
 	end)
 end)

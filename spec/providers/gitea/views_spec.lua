@@ -16,16 +16,13 @@ local cases = {
 			end
 			provider.capabilities.core.fetch_issues(view, {}, function() end)
 			api.list = original
-			return received
-		end,
-		query = function(provider, view)
-			return provider.capabilities.core.search_query(view)
+			assert.is_true(received == view)
 		end,
 	},
 	{
 		domain = "pulls",
 		module = "atlas.pulls.providers.forge.gitea",
-		expected_query = "repo:local/repo is:open is:merged archived:false sort:updated needle",
+		expected_query = "repo:local/repo is:open archived:false sort:updated",
 		fetch = function(provider, view)
 			local api = require("atlas.pulls.providers.forge.gitea.api").pullrequests
 			local original = api.list
@@ -35,13 +32,11 @@ local cases = {
 				received_opts = opts
 				done({}, nil)
 			end
-			provider.capabilities.core.fetch_pullrequests(view, { states = { "merged", "open" } }, function() end)
+			provider.capabilities.core.fetch_pullrequests(view, {}, function() end)
 			api.list = original
-			assert.same({ "OPEN", "MERGED" }, received_opts.statuses)
-			return received
-		end,
-		query = function(provider, view)
-			return provider.capabilities.core.search_query(view, { states = { "merged", "open" } })
+			assert.is_false(received == view)
+			assert.same({ "OPEN" }, received_opts.statuses)
+			assert.equal("", received.search)
 		end,
 	},
 }
@@ -79,7 +74,7 @@ describe("Gitea provider views", function()
 					name = "Current one",
 					key = "1",
 					current_repo = true,
-					search = "needle",
+					search = case.domain == "issues" and "needle" or nil,
 					scope = "all",
 					state = "closed",
 					extra_params = extra_params,
@@ -109,11 +104,48 @@ describe("Gitea provider views", function()
 					assert.is_nil(configured[1].repo)
 					assert.is_nil(configured[3].repo)
 
-					assert.equal(case.expected_query, case.query(provider, resolved[1]))
-					assert.is_true(case.fetch(provider, resolved[1]) == resolved[1])
+					local query, states = provider.resolve_search(resolved[1])
+					assert.equal(case.expected_query, query)
+					if case.domain == "pulls" then
+						assert.same({ "open" }, states)
+					end
+					case.fetch(provider, resolved[1])
 					assert.equal(1, calls())
 				end
 			)
 		end)
 	end
+
+	it("keeps displayed pull states and API statuses aligned", function()
+		local provider = require("atlas.pulls.providers.forge.gitea")
+		local api = require("atlas.pulls.providers.forge.gitea.api").pullrequests
+		local original = api.search_global
+		local received_view, received_opts
+		api.search_global = function(view, opts, done)
+			received_view = view
+			received_opts = opts
+			done({}, nil)
+		end
+
+		local view = { name = "Search", search = "is:merged needle" }
+		local ok, err = xpcall(function()
+			local query, states = provider.resolve_search(view)
+			assert.equal("type:pulls is:merged needle", query)
+			assert.same({ "merged" }, states)
+			provider.capabilities.core.fetch_pullrequests(view, {}, function() end)
+			assert.equal("needle", received_view.search)
+			assert.same({ "MERGED" }, received_opts.statuses)
+
+			view._states = { "declined" }
+			query, states = provider.resolve_search(view)
+			assert.equal("type:pulls is:declined needle", query)
+			assert.same({ "declined" }, states)
+			provider.capabilities.core.fetch_pullrequests(view, {}, function() end)
+			assert.same({ "DECLINED" }, received_opts.statuses)
+		end, debug.traceback)
+		api.search_global = original
+		if not ok then
+			error(err, 0)
+		end
+	end)
 end)

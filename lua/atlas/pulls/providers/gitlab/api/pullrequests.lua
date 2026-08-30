@@ -104,7 +104,9 @@ function M.fetch_pullrequests(view, opts, on_done)
 		params.search = view.search
 	end
 	for k, v in pairs(view.extra_params or {}) do
-		params[k] = v
+		if k ~= "state" then
+			params[k] = v
+		end
 	end
 
 	local endpoint
@@ -139,6 +141,66 @@ function M.fetch_pullrequests(view, opts, on_done)
 		action = "List MRs",
 		endpoint = endpoint,
 	})
+end
+
+---@param batches table<integer, PullRequest[]>
+---@param limit integer
+---@return PullRequest[]
+local function merge_results(batches, limit)
+	local pulls = {}
+	for _, batch in pairs(batches) do
+		vim.list_extend(pulls, batch)
+	end
+	table.sort(pulls, function(left, right)
+		return left.updated_on > right.updated_on
+	end)
+	while #pulls > limit do
+		table.remove(pulls)
+	end
+	return pulls
+end
+
+---@param view AtlasGitLabPullsViewConfig
+---@param api_states ("opened"|"closed"|"merged"|"all")[]
+---@param opts PullsFetchOpts
+---@param on_done fun(pulls: PullRequest[], err: string[]|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_states(view, api_states, opts, on_done)
+	local limit = math.min(100, math.max(1, tonumber(opts.pagelen) or 50))
+	local request_opts = {
+		force_load = opts.force_load == true,
+		pagelen = limit,
+	}
+	if #api_states == 1 then
+		request_opts.state = api_states[1]
+		return M.fetch_pullrequests(view, request_opts, function(pulls, err)
+			on_done(pulls, err and { err } or nil)
+		end)
+	end
+
+	local scope = request_scope.new()
+	local starts = {}
+	for index, api_state in ipairs(api_states) do
+		local planned_state = api_state
+		starts[index] = function(done)
+			return M.fetch_pullrequests(view, {
+				force_load = request_opts.force_load,
+				pagelen = request_opts.pagelen,
+				state = planned_state,
+			}, done)
+		end
+	end
+	scope.all(starts, function(results, errors)
+		---@cast results table<integer, PullRequest[]>
+		local collected_errors = {}
+		for index = 1, #api_states do
+			if errors[index] then
+				table.insert(collected_errors, errors[index])
+			end
+		end
+		on_done(merge_results(results, limit), #collected_errors > 0 and collected_errors or nil)
+	end)
+	return scope
 end
 
 ---@param refs PullRequestRef[]

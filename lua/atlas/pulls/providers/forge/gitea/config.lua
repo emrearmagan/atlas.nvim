@@ -37,10 +37,12 @@ require("atlas.providers.forge.gitea.config")
 
 ---@class AtlasGiteaPullsViewConfig : AtlasPullsViewConfig, AtlasGiteaPullsSearchConfig
 
+---@class AtlasGiteaPullsBookmarkConfig : AtlasPullsBookmarkConfig, AtlasGiteaPullsSearchConfig
+
 ---@class AtlasGiteaPullsBookmarksConfig
 ---@field key string|nil
 ---@field label string|nil
----@field items table<string, AtlasGiteaPullsSearchConfig>|nil
+---@field items table<string, string|AtlasGiteaPullsBookmarkConfig>|nil
 
 ---@class AtlasGiteaPullsConfig
 ---@field draft_prefix string|nil Enabled server prefix used to mark pull requests as drafts. Defaults to `WIP:`.

@@ -34,131 +34,11 @@ local pullrequests_api = require("atlas.pulls.providers.gitlab.api.pullrequests"
 local repositories_api = require("atlas.pulls.providers.gitlab.api.repositories")
 local reviews_api = require("atlas.pulls.providers.gitlab.api.reviews")
 local repo_detail_ui = require("atlas.pulls.providers.gitlab.ui.repo_detail")
+local gitlab_query = require("atlas.providers.gitlab.query")
 local users_api = require("atlas.pulls.providers.gitlab.api.users")
 local git = require("atlas.core.git")
 local request_scope = require("atlas.core.requests")
 local GITLAB_REACTION_OPTIONS = require("atlas.ui.shared.emojis").gitlab()
-
-local API_STATES = { open = "opened", merged = "merged", declined = "closed" }
-
----@param opts PullsFetchOpts
----@return PullsStateFilter[]
-local function selected_states(opts)
-	local configured = {}
-	for _, state in ipairs(opts.states or { "open" }) do
-		configured[state] = true
-	end
-	local selected = {}
-	for _, state in ipairs({ "open", "merged", "declined" }) do
-		if configured[state] then
-			table.insert(selected, state)
-		end
-	end
-	return #selected > 0 and selected or { "open" }
-end
-
----@param batches table<integer, PullRequest[]>
----@param limit integer
----@return PullRequest[]
-local function merge_results(batches, limit)
-	local pulls, seen = {}, {}
-	for _, batch in pairs(batches) do
-		for _, pr in ipairs(batch) do
-			local key = pr.repo_full_name .. ":" .. tostring(pr.id)
-			if not seen[key] then
-				seen[key] = true
-				table.insert(pulls, pr)
-			end
-		end
-	end
-	table.sort(pulls, function(left, right)
-		if left.updated_on == right.updated_on then
-			return left.repo_full_name .. ":" .. tostring(left.id) < right.repo_full_name .. ":" .. tostring(right.id)
-		end
-		return left.updated_on > right.updated_on
-	end)
-	while #pulls > limit do
-		table.remove(pulls)
-	end
-	return pulls
-end
-
----@param view AtlasPullsViewConfig
----@param opts PullsFetchOpts
----@return string
-local function search_query(view, opts)
-	---@cast view AtlasGitLabPullsViewConfig
-	local parts = { "is:" .. table.concat(selected_states(opts), ",") }
-	for _, field in ipairs({
-		"project",
-		"group",
-		"scope",
-		"labels",
-		"milestone",
-		"author_username",
-		"assignee_username",
-	}) do
-		local value = view[field]
-		if value ~= nil and value ~= "" then
-			table.insert(parts, string.format("%s:%s", field:gsub("_username$", ""), tostring(value)))
-		end
-	end
-	if view.search and view.search ~= "" then
-		table.insert(parts, tostring(view.search))
-	end
-	return table.concat(parts, " ")
-end
-
----@param view AtlasPullsViewConfig
----@param opts PullsFetchOpts
----@param on_done fun(pulls: PullRequest[], err: string[]|nil)
----@return { cancel: fun() }|nil
-local function fetch_pullrequests(view, opts, on_done)
-	---@cast view AtlasGitLabPullsViewConfig
-	local states = selected_states(opts)
-	local api_states = {}
-	if #states == 3 then
-		api_states = { "all" }
-	else
-		for _, state in ipairs(states) do
-			table.insert(api_states, API_STATES[state])
-		end
-	end
-	local limit = math.min(100, math.max(1, tonumber(opts.pagelen) or 50))
-	local request_opts = {
-		force_load = opts.force_load == true,
-		pagelen = limit,
-	}
-	if #api_states == 1 then
-		request_opts.state = api_states[1]
-		return pullrequests_api.fetch_pullrequests(view, request_opts, function(pulls, err)
-			on_done(pulls, err and { err } or nil)
-		end)
-	end
-
-	local scope = request_scope.new()
-	local starts = {}
-	for index, api_state in ipairs(api_states) do
-		local planned_state = api_state
-		starts[index] = function(done)
-			return pullrequests_api.fetch_pullrequests(view, {
-				force_load = request_opts.force_load,
-				pagelen = request_opts.pagelen,
-				state = planned_state,
-			}, done)
-		end
-	end
-	scope.all(starts, function(results, errors)
-		local collected_errors = {}
-		for index = 1, #api_states do
-			if errors[index] then
-				table.insert(collected_errors, errors[index])
-			end
-		end
-		on_done(merge_results(results, limit), #collected_errors > 0 and collected_errors or nil)
-	end)
-	return scope
-end
 
 ---@param pr PullRequest
 ---@param opts { force_refresh: boolean|nil }|nil
@@ -233,7 +113,7 @@ end
 
 ---@param target AtlasTarget
 ---@return AtlasPullsViewConfig
-local function search_view(target)
+local function view_for_target(target)
 	return {
 		name = "Search",
 		layout = "compact",
@@ -244,12 +124,15 @@ end
 
 return {
 	views = views,
-	search_view = search_view,
+	view_for_target = view_for_target,
+	resolve_search = gitlab_query.query,
 	capabilities = {
 		core = {
 			fetch_user = users_api.fetch_user,
-			search_query = search_query,
-			fetch_pullrequests = fetch_pullrequests,
+			fetch_pullrequests = function(view, opts, on_done)
+				---@cast view AtlasGitLabPullsViewConfig
+				return pullrequests_api.fetch_states(view, gitlab_query.api_states(view), opts, on_done)
+			end,
 			fetch_by_refs = pullrequests_api.fetch_by_refs,
 			fetch_pullrequest = pullrequests_api.fetch_pullrequest,
 			create_pr = pullrequests_api.create_pr,

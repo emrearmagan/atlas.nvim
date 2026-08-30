@@ -110,6 +110,9 @@ _G.vim = {
 		fnamemodify = function(path, _)
 			return path
 		end,
+		strdisplaywidth = function(value)
+			return #value
+		end,
 		stdpath = function(_)
 			return "/tmp"
 		end,
