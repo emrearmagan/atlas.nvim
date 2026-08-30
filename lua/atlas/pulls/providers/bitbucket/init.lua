@@ -38,73 +38,37 @@ local pullrequests_api = require("atlas.pulls.providers.bitbucket.api.pullreques
 local repo_detail_ui = require("atlas.pulls.providers.bitbucket.ui.repo_detail")
 local repositories_api = require("atlas.pulls.providers.bitbucket.api.repositories")
 local reviews_api = require("atlas.pulls.providers.bitbucket.api.reviews")
-local search = require("atlas.providers.bitbucket.completion.search")
+local search_query = require("atlas.providers.bitbucket.query")
 local tasks_api = require("atlas.pulls.providers.bitbucket.api.tasks")
 local users_api = require("atlas.pulls.providers.bitbucket.api.users")
-local request_scope = require("atlas.core.requests")
 
 ---@param target AtlasTarget
 ---@return AtlasBitbucketViewConfig
-local function search_view(target)
+local function view_for_target(target)
 	return {
 		name = "Search",
 		layout = "compact",
-		search = search.for_repo(target.workspace, target.repo),
+		search = search_query.for_repo(target.workspace, target.repo),
 	}
-end
-
----@param opts PullsFetchOpts
----@return string[]
-local function active_statuses(opts)
-	local statuses = {}
-	for _, status in ipairs(opts.states or {}) do
-		table.insert(statuses, status:upper())
-	end
-	if #statuses == 0 then
-		statuses = { "OPEN" }
-	end
-	return statuses
-end
-
----@param view AtlasPullsViewConfig
----@param _opts PullsFetchOpts
----@return string
-local function search_query(view, _opts)
-	---@cast view AtlasBitbucketViewConfig
-	return vim.trim(view.search or "")
 end
 
 ---@param view AtlasBitbucketViewConfig
 ---@param opts PullsFetchOpts
 ---@param on_done fun(pulls: PullRequest[], err: string[]|nil)
 ---@return { cancel: fun() }|nil
-local function fetch_view_pullrequests(view, opts, on_done)
+local function fetch_pullrequests(view, opts, on_done)
 	---@cast view AtlasBitbucketViewConfig
-	local parsed, parse_err = search.parse(view.search)
+	local parsed, parse_err = search_query.parse(view.search)
 	if parsed == nil then
 		on_done({}, { parse_err })
 		return nil
 	end
-	local statuses = active_statuses(opts)
-
-	local scope = request_scope.new()
-	scope.run(function(done)
-		return repositories_api.resolve_targets(parsed.targets, opts, done)
-	end, function(repos, errors)
-		scope.run(function(done)
-			return pullrequests_api.fetch_for_repositories(repos, {
-				force_load = opts.force_load == true,
-				pagelen = opts.pagelen,
-				statuses = statuses,
-				query = parsed.query,
-			}, done)
-		end, function(pulls, fetch_errors)
-			vim.list_extend(errors, fetch_errors or {})
-			on_done(pulls, #errors > 0 and errors or nil)
-		end)
-	end)
-
-	return scope
+	local states = view._states or parsed.states or { "open" }
+	return pullrequests_api.fetch_for_targets(parsed.targets, {
+		force_load = opts.force_load == true,
+		pagelen = opts.pagelen,
+		query = search_query.filter(parsed, states),
+	}, on_done)
 end
 
 ---@return AtlasBitbucketViewConfig[]
@@ -128,7 +92,7 @@ local function views()
 	for i, view in ipairs(configured) do
 		result[i] = vim.tbl_extend("force", {}, view)
 		if view.current_repo and current_repo then
-			result[i].search = search.for_repo(current_repo.workspace, current_repo.repo, view.search)
+			result[i].search = search_query.for_repo(current_repo.workspace, current_repo.repo, view.search)
 		end
 	end
 	return result
@@ -136,12 +100,12 @@ end
 
 return {
 	views = views,
-	search_view = search_view,
+	view_for_target = view_for_target,
+	resolve_search = search_query.query,
 	capabilities = {
 		core = {
 			fetch_user = users_api.fetch_current_user,
-			search_query = search_query,
-			fetch_pullrequests = fetch_view_pullrequests,
+			fetch_pullrequests = fetch_pullrequests,
 			fetch_by_refs = pullrequests_api.fetch_by_refs,
 			fetch_pullrequest = pullrequests_api.fetch_pullrequest,
 			fetch_description = pullrequests_api.fetch_description,

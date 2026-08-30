@@ -323,20 +323,11 @@ end
 ---@param lines string[]
 ---@param spans table[]
 local function append_search_text(lines, spans)
-	local view = state.active_view
-	if view ~= nil and view._kind == "bookmarks" then
-		view = state.current_view
-	end
-	if view == nil or view._kind ~= nil or state.provider == nil then
+	local view = state.search_view()
+	if view == nil then
 		return
 	end
-	local states = {}
-	for _, status in ipairs({ "OPEN", "MERGED", "DECLINED" }) do
-		if state.status_filters[status] then
-			table.insert(states, status:lower())
-		end
-	end
-	local text = state.provider.capabilities.core.search_query(view, { states = states })
+	local text = state.query
 	if text == "" then
 		return
 	end
@@ -359,7 +350,8 @@ local function render_header(lines, spans, width)
 	utils.append_block(lines, spans, header.render({ width = width, icon = icon, title = title, hl_group = hl }))
 
 	local views = vim.list_extend({}, state.views)
-	local active_id = view_id(state.active_view)
+	local active_view = state.view
+	local active_id = view_id(active_view)
 	local found = false
 	for _, view in ipairs(views) do
 		if view_id(view) == active_id then
@@ -367,8 +359,8 @@ local function render_header(lines, spans, width)
 			break
 		end
 	end
-	if state.active_view ~= nil and active_id ~= "" and not found then
-		table.insert(views, state.active_view)
+	if active_view ~= nil and active_id ~= "" and not found then
+		table.insert(views, active_view)
 	end
 	local nav_items = {}
 	for _, view in ipairs(views) do
@@ -379,15 +371,23 @@ local function render_header(lines, spans, width)
 	end
 
 	local actions = {}
-	for _, status in ipairs({ "OPEN", "MERGED", "DECLINED" }) do
-		local label = status:sub(1, 1):upper() .. status:sub(2):lower()
-		table.insert(actions, {
-			label = label,
-			hl_group = state.status_filters[status] and "AtlasLogInfo" or "AtlasTextMuted",
-		})
+	if state.search_view() then
+		local selected = {}
+		for _, value in ipairs(state.selected_states()) do
+			selected[value] = true
+		end
+		for _, status in ipairs(state.available_states) do
+			local label = status:sub(1, 1):upper() .. status:sub(2):lower()
+			table.insert(actions, {
+				label = label,
+				hl_group = selected[status] and "AtlasLogInfo" or "AtlasTextMuted",
+			})
+		end
 	end
 	if state.provider and state.provider.capabilities.notifications then
-		table.insert(actions, { label = "|", hl_group = "AtlasTextMuted" })
+		if #actions > 0 then
+			table.insert(actions, { label = "|", hl_group = "AtlasTextMuted" })
+		end
 		local count = require("atlas.ui.notifications.state").unread_count or 0
 		local bell, bell_hl = icons.general(count > 0 and "bell_unread" or "bell")
 		table.insert(actions, {
@@ -420,39 +420,14 @@ function M.render(opts)
 	render_header(lines, spans, opts.width)
 	table.insert(lines, "")
 
-	local active = state.active_view
-	if active ~= nil and active._kind == "bookmarks" then
-		append_search_text(lines, spans)
-		bookmarks.render(
-			lines,
-			spans,
-			line_map,
-			active._bookmarks or {},
-			opts.width,
-			active._starred,
-			state.starred_items
-		)
-		if state.error then
-			local text = "Error: " .. tostring(state.error):gsub("[\r\n]+", " | ")
-			table.insert(lines, "")
-			utils.append_block(lines, spans, {
-				lines = { text },
-				highlights = { { line = 0, start_col = 0, end_col = #text, hl_group = "AtlasLogError" } },
-			})
-		elseif state.is_loading then
-			table.insert(lines, "")
-			append_centered_loading(lines, loading, opts.width, opts.height)
-		elseif #pulls > 0 then
-			table.insert(lines, "")
-			local layout = state.current_view and state.current_view.layout or "compact"
-			local body_lines, body_spans, body_map = render_table(pulls, layout, opts.width, display)
-			local base = #lines
-			utils.append_block(lines, spans, { lines = body_lines, highlights = body_spans })
-			for lnum, item in pairs(body_map) do
-				line_map[base + lnum] = item
-			end
+	local view = state.view
+	local bookmark_state = state.bookmarks
+	if bookmark_state ~= nil and view == bookmark_state.tab then
+		bookmarks.render(lines, spans, line_map, opts.width, bookmark_state, state.starred_items)
+		if bookmark_state.selection == nil then
+			return lines, spans, line_map
 		end
-		return lines, spans, line_map
+		table.insert(lines, "")
 	end
 
 	append_search_text(lines, spans)
@@ -465,7 +440,8 @@ function M.render(opts)
 	elseif state.is_loading then
 		append_centered_loading(lines, loading, opts.width, opts.height)
 	else
-		local layout = state.active_view and state.active_view.layout or "compact"
+		local search_view = state.search_view()
+		local layout = search_view and search_view.layout or "compact"
 		local body_lines, body_spans, body_map = render_table(pulls, layout, opts.width, display)
 		local base = #lines
 		utils.append_block(lines, spans, { lines = body_lines, highlights = body_spans })

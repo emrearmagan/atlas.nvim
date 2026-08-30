@@ -48,7 +48,7 @@ describe("commands.open", function()
 		}
 
 		local pull_provider = {
-			search_view = function(target)
+			view_for_target = function(target)
 				return { target = target }
 			end,
 			capabilities = {

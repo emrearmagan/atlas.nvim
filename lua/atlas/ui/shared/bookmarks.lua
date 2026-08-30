@@ -6,18 +6,17 @@ local providers = require("atlas.providers")
 local utils = require("atlas.ui.shared.utils")
 local ui_utils = require("atlas.ui.utils")
 
----@param domain "pulls"|"issues"
----@param provider string
----@return string
-function M.key(domain, provider)
-	local options = config.domain_options(provider, domain) or {}
-	local configured = options.bookmarks and options.bookmarks.key
-	local provider_domain = providers.domain(provider, domain)
-	return configured or (provider_domain and provider_domain.bookmark_key) or "S"
-end
+---@class AtlasBookmarkSelection
+---@field kind "bookmark"|"starred"
+---@field view AtlasPullsViewConfig|IssuesViewConfig|nil
+
+---@class AtlasBookmarksState
+---@field tab AtlasPullsViewConfig|IssuesViewConfig
+---@field items table<string, any>
+---@field selection AtlasBookmarkSelection|nil
 
 ---@param items table<string, any>
----@return { name: string, value: any }[]
+---@return { name: string, value: any, kind: "starred"|nil, preview: string|nil }[]
 local function sorted_items(items)
 	local out = {}
 	for name, value in pairs(items) do
@@ -26,34 +25,6 @@ local function sorted_items(items)
 	table.sort(out, function(a, b)
 		return a.name:lower() < b.name:lower()
 	end)
-	return out
-end
-
----@generic V
----@param provider AtlasProviderId
----@param domain "pulls"|"issues"
----@param base_views V[]
----@param saved_items AtlasStarredItem[]
----@return V[]
-function M.views(provider, domain, base_views, saved_items)
-	local options = config.domain_options(provider, domain) or {}
-	local bookmarks = options.bookmarks
-	if (bookmarks == nil or next(bookmarks.items or {}) == nil) and #saved_items == 0 then
-		return base_views
-	end
-
-	local provider_domain = providers.domain(provider, domain)
-	local out = vim.list_extend({}, base_views)
-	table.insert(out, {
-		name = tostring(
-			(bookmarks and bookmarks.label) or (provider_domain and provider_domain.bookmark_label) or "Search"
-		),
-		key = tostring(M.key(domain, provider)),
-		layout = domain == "pulls" and "grouped" or "plain",
-		_kind = "bookmarks",
-		_bookmarks = (bookmarks and bookmarks.items) or {},
-		_starred = { domain = domain, provider = provider },
-	})
 	return out
 end
 
@@ -91,23 +62,70 @@ local function preview_text(value)
 	return table.concat(parts, " ")
 end
 
+---@param name string
+---@param value any
+---@return AtlasPullsViewConfig|IssuesViewConfig
+local function bookmark_view(name, value)
+	local view = { name = name, layout = "compact" }
+
+	-- Supports either a simple search: "is:pr is:open" or a full view:
+	-- { layout = "grouped", search = "is:pr is:open review-requested:@me" }
+	if type(value) == "string" then
+		view.search = value
+	else
+		for key, field in pairs(value) do
+			view[key] = field
+		end
+	end
+	return view
+end
+
+---@param provider AtlasProviderId
+---@param domain "pulls"|"issues"
+---@return AtlasBookmarksState
+function M.new(provider, domain)
+	local options = config.domain_options(provider, domain) or {}
+	local configured = options.bookmarks or {}
+	local provider_domain = providers.domain(provider, domain)
+	return {
+		tab = {
+			name = tostring(configured.label or (provider_domain and provider_domain.bookmark_label) or "Search"),
+			key = tostring(configured.key or (provider_domain and provider_domain.bookmark_key) or "S"),
+		},
+		items = configured.items or {},
+		selection = nil,
+	}
+end
+
+---@generic V
+---@param base_views V[]
+---@param bookmark_state AtlasBookmarksState
+---@param saved_items AtlasStarredItem[]
+---@return V[]
+function M.views(base_views, bookmark_state, saved_items)
+	if next(bookmark_state.items) == nil and #saved_items == 0 then
+		return base_views
+	end
+
+	local views = vim.list_extend({}, base_views)
+	table.insert(views, bookmark_state.tab)
+	return views
+end
+
 ---@param lines string[]
 ---@param spans table[]
 ---@param line_map table<integer, table>
----@param items_table table<string, any>
 ---@param width integer
----@param starred { domain: "pulls"|"issues", provider: string }|nil
+---@param bookmark_state AtlasBookmarksState
 ---@param saved_items AtlasStarredItem[]
-function M.render(lines, spans, line_map, items_table, width, starred, saved_items)
-	local items = sorted_items(items_table)
-	if starred then
-		if #saved_items > 0 then
-			table.insert(items, 1, {
-				name = "Starred",
-				value = { _kind = "starred" },
-				preview = string.format("%d item%s", #saved_items, #saved_items == 1 and "" or "s"),
-			})
-		end
+function M.render(lines, spans, line_map, width, bookmark_state, saved_items)
+	local items = sorted_items(bookmark_state.items)
+	if #saved_items > 0 then
+		table.insert(items, 1, {
+			kind = "starred",
+			name = "Starred",
+			preview = string.format("%d item%s", #saved_items, #saved_items == 1 and "" or "s"),
+		})
 	end
 	local bookmark = icons.general("star")
 	local arrow = icons.general("arrow_right") or "▸"
@@ -157,7 +175,11 @@ function M.render(lines, spans, line_map, items_table, width, starred, saved_ite
 			table.insert(spans, { line = lnum, start_col = preview_start, end_col = #row, hl_group = "AtlasTextMuted" })
 		end
 
-		line_map[#lines] = { kind = "bookmark", name = item.name, value = item.value }
+		if item.kind == "starred" then
+			line_map[#lines] = { kind = "starred" }
+		else
+			line_map[#lines] = { kind = "bookmark", view = bookmark_view(item.name, item.value) }
+		end
 	end
 end
 

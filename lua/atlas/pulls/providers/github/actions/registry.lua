@@ -485,12 +485,7 @@ end
 ---@param done fun(result: PullsActionResult|nil, err: string|nil)
 local function search_pull_requests(_, done)
 	local state = require("atlas.pulls.state")
-	local view = state.active_view or state.current_view or {}
-	local query = vim.trim(tostring(view.search or ""))
-	if query == "" or not query:find("is:pr", 1, true) then
-		query = "is:pr " .. query
-	end
-	require("atlas.providers.github.completion.search").open(vim.trim(query) .. " ")
+	require("atlas.providers.github.completion.search").open(state.query .. " ")
 	done(nil, nil)
 end
 

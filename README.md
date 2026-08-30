@@ -506,14 +506,14 @@ pulls = {
       {
         name = "Reviewing",
         key = "3",
-        scope = "all",
-        extra_params = { reviewer_id = "Me" },
+        scope = "reviews_for_me",
       },
       -- Single project
       {
         name = "GitLab",
         key = "G",
         project = "gitlab-org/gitlab",
+        extra_params = { target_branch = "main" },
       },
       -- Whole group, all projects under it
       {
@@ -527,7 +527,7 @@ pulls = {
       key   = "S",      -- default
       label = "Search", -- default
       items = {
-        ["Reviewing"]    = { scope = "all", extra_params = { reviewer_id = "Me" } },
+        ["Reviewing"]    = { scope = "reviews_for_me" },
         ["Created by me"] = { scope = "all", author_username = "me" },
       },
     },

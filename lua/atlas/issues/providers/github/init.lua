@@ -30,11 +30,11 @@ local git = require("atlas.core.git")
 
 ---@param view IssuesViewConfig
 ---@return string
-local function search_query(view)
+local function resolve_search(view)
 	---@cast view AtlasGitHubIssuesViewConfig
 	local search = view.search or ""
-	if search ~= "" and not search:lower():find("is:issue", 1, true) then
-		search = search .. " is:issue"
+	if not search:lower():find("is:issue", 1, true) then
+		search = vim.trim(search .. " is:issue")
 	end
 	return search
 end
@@ -44,12 +44,7 @@ end
 ---@param on_done fun(issues: Issue[], next_page_token: string|nil, is_last: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 local function fetch_issues(view, opts, on_done)
-	local search = search_query(view)
-	if search == "" then
-		on_done({}, nil, true, "Missing search query for GitHub view")
-		return nil
-	end
-
+	local search = resolve_search(view)
 	local limit = opts.max_results or 50
 	local layout = view.layout or opts.layout or "plain"
 	return issues_api.search_issues(search, function(issues, err)
@@ -235,7 +230,7 @@ end
 
 ---@param target AtlasTarget
 ---@return AtlasIssuesViewConfig
-local function search_view(target)
+local function view_for_target(target)
 	return {
 		name = "Search",
 		layout = "compact",
@@ -258,12 +253,12 @@ end
 
 return {
 	views = views,
-	search_view = search_view,
+	view_for_target = view_for_target,
+	resolve_search = resolve_search,
 	issue_ref = issue_ref,
 	capabilities = {
 		core = {
 			fetch_user = users_api.get_user,
-			search_query = search_query,
 			fetch_issues = fetch_issues,
 			fetch_by_refs = issues_api.fetch_by_refs,
 			fetch_issue = fetch_issue,

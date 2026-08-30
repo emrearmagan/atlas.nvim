@@ -78,107 +78,23 @@ local function lower_trim(value)
 	return vim.trim(tostring(value or "")):lower()
 end
 
----@param cmdline string
----@param cursorpos integer
----@return string
-local function extract_query(cmdline, cursorpos)
-	local raw = tostring(cmdline or "")
-	local pos = math.max(0, math.min(tonumber(cursorpos) or #raw, #raw))
-	local left = raw:sub(1, pos)
-	left = left:gsub("^%s*:", "")
-
-	local _, cmd_end = left:find("^[^%s]+%s*")
-	if not cmd_end then
-		return ""
-	end
-
-	return left:sub(cmd_end + 1)
-end
-
----@param value string
----@param token string
----@return boolean
-local function token_match(value, token)
-	if token == "" then
-		return true
-	end
-	local v = lower_trim(value)
-	if #token <= 3 then
-		return v:sub(1, #token) == token
-	end
-	return v:find(token, 1, true) ~= nil
-end
-
----@param query string
----@return string[], boolean
-local function tokenize_query(query)
-	local text = tostring(query or "")
-	local tokens = {}
-	local buf = {}
-	local in_quotes = false
-
-	for i = 1, #text do
-		local ch = text:sub(i, i)
-		if ch == '"' then
-			in_quotes = not in_quotes
-			table.insert(buf, ch)
-		elseif ch:match("%s") and not in_quotes then
-			if #buf > 0 then
-				table.insert(tokens, table.concat(buf))
-				buf = {}
-			end
-		else
-			table.insert(buf, ch)
-		end
-	end
-
-	if #buf > 0 then
-		table.insert(tokens, table.concat(buf))
-	end
-
-	return tokens, text:match("%s$") ~= nil
-end
-
+---@param items string[]
 ---@param prefix string
+---@param qualifier string|nil
 ---@return string[]
-local function complete_qualifier(prefix)
+local function matches(items, prefix, qualifier)
 	local results = {}
-	for _, q in ipairs(QUALIFIERS) do
-		if token_match(q, prefix) then
-			table.insert(results, q .. ":")
+	for _, item in ipairs(items) do
+		local value = lower_trim(item)
+		local matched = prefix == ""
+			or (#prefix <= 3 and value:sub(1, #prefix) == prefix)
+			or (#prefix > 3 and value:find(prefix, 1, true) ~= nil)
+		if matched then
+			table.insert(results, qualifier and (qualifier .. ":" .. item) or (item .. ":"))
 		end
 	end
 	table.sort(results)
 	return results
-end
-
----@param qualifier string
----@param prefix string
----@return string[]
-local function complete_value(qualifier, prefix)
-	local values = VALUES[qualifier:lower()]
-	if values == nil then
-		return {}
-	end
-
-	local results = {}
-	for _, v in ipairs(values) do
-		if token_match(v, prefix) then
-			table.insert(results, string.format("%s:%s", qualifier, v))
-		end
-	end
-	table.sort(results)
-	return results
-end
-
----@param token string
----@return string|nil qualifier, string|nil value_prefix
-local function split_token(token)
-	local q, v = token:match("^([%w%-]+):(.*)$")
-	if q == nil then
-		return nil, nil
-	end
-	return q, v or ""
 end
 
 ---@param _arglead string
@@ -186,42 +102,42 @@ end
 ---@param cursorpos integer
 ---@return string[]
 local function complete_cmdline(_arglead, cmdline, cursorpos)
-	local query = extract_query(cmdline, cursorpos)
-	local tokens, trailing_space = tokenize_query(query)
+	local left = cmdline:sub(1, cursorpos):gsub("^%s*:", "")
+	local _, command_end = left:find("^[^%s]+%s*")
+	local query = command_end and left:sub(command_end + 1) or ""
+	local tokens, current = {}, {}
+	local quoted = false
+	for i = 1, #query do
+		local char = query:sub(i, i)
+		if char == '"' then
+			quoted = not quoted
+			table.insert(current, char)
+		elseif char:match("%s") and not quoted then
+			if #current > 0 then
+				table.insert(tokens, table.concat(current))
+				current = {}
+			end
+		else
+			table.insert(current, char)
+		end
+	end
+	if #current > 0 then
+		table.insert(tokens, table.concat(current))
+	end
 
 	local partial = ""
-	if not trailing_space and #tokens > 0 then
+	if not query:match("%s$") and #tokens > 0 then
 		partial = tokens[#tokens]
 	end
 
 	if partial:find(":") then
-		local qualifier, value_prefix = split_token(partial)
+		local qualifier, value_prefix = partial:match("^([%w%-]+):(.*)$")
 		if qualifier ~= nil then
-			return complete_value(qualifier, lower_trim(value_prefix or ""))
+			return matches(VALUES[qualifier:lower()] or {}, lower_trim(value_prefix), qualifier)
 		end
 	end
 
-	return complete_qualifier(lower_trim(partial))
-end
-
----@param query string
----@return "pulls"|"issues"
-local function route(query)
-	if query:find("is:issue") then
-		return "issues"
-	end
-	return "pulls"
-end
-
----@param query string
-local function run(query)
-	query = vim.trim(tostring(query or ""))
-	if query == "" then
-		return
-	end
-	require("atlas").open(route(query), "github", {
-		initial_view = { name = "Search", layout = "compact", search = query },
-	})
+	return matches(QUALIFIERS, lower_trim(partial), nil)
 end
 
 ---@param default? string
@@ -229,7 +145,16 @@ function M.open(default)
 	prompt.open({
 		name = "AtlasGitHubSearch",
 		complete = complete_cmdline,
-		on_submit = run,
+		on_submit = function(query)
+			query = vim.trim(tostring(query or ""))
+			if query == "" then
+				return
+			end
+			local kind = query:find("is:issue") and "issues" or "pulls"
+			require("atlas").open(kind, "github", {
+				initial_view = { name = "Search", layout = "compact", search = query },
+			})
+		end,
 		default = default or "is:pr ",
 	})
 end

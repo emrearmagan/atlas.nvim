@@ -1,27 +1,12 @@
--- Bitbucket query language:
--- https://developer.atlassian.com/cloud/bitbucket/rest/#filter-and-sort-api-objects
-
 local M = {}
 
 local notify = require("atlas.core.notify")
 local prompt = require("atlas.commands.search.prompt")
-
----@class BitbucketRepoTarget
----@field workspace string
----@field repo string
-
----@class BitbucketProjectTarget
----@field workspace string
----@field project string
-
----@alias BitbucketPullTarget BitbucketRepoTarget|BitbucketProjectTarget
-
----@class BitbucketParsedSearch
----@field targets BitbucketPullTarget[]
----@field query string|nil
+local query = require("atlas.providers.bitbucket.query")
 
 local FIELDS = {
 	"id",
+	"state",
 	"title",
 	"description",
 	"draft",
@@ -40,14 +25,14 @@ local FIELDS = {
 }
 
 local EQUALITY_OPERATORS = { "=", "!=" }
+local STATE_OPERATORS = { "=", "IN" }
 local TEXT_OPERATORS = { "=", "!=", "~", "!~", "IN", "NOT" }
 local COMPARISON_OPERATORS = { "=", "!=", ">", ">=", "<", "<=", "IN", "NOT" }
 local LOGICAL_OPERATORS = { "AND", "OR" }
 local SCOPE_QUALIFIERS = { "repo:", "project:" }
-local SCOPE_KINDS = { repo = true, project = true }
-
 local VALUES = {
 	draft = { "true", "false", "null" },
+	state = { '"OPEN"', '"MERGED"', '"DECLINED"' },
 }
 
 local FIELD_SET = {}
@@ -79,119 +64,6 @@ local QUERY_TAIL_ITEMS = {}
 vim.list_extend(QUERY_TAIL_ITEMS, LOGICAL_OPERATORS)
 vim.list_extend(QUERY_TAIL_ITEMS, SCOPE_QUALIFIERS)
 
----@param query string
----@return string[], boolean
-local function tokenize(query)
-	local tokens, current = {}, {}
-	local quoted = false
-	for i = 1, #query do
-		local char = query:sub(i, i)
-		if char == '"' then
-			quoted = not quoted
-			table.insert(current, char)
-		elseif char:match("%s") and not quoted then
-			if #current > 0 then
-				table.insert(tokens, table.concat(current))
-				current = {}
-			end
-		else
-			table.insert(current, char)
-		end
-	end
-	if #current > 0 then
-		table.insert(tokens, table.concat(current))
-	end
-	return tokens, query:match("%s$") ~= nil
-end
-
----@param token string
----@return BitbucketPullTarget|nil, string|nil
-local function scope_from_token(token)
-	local kind, value = token:match("^([%a]+):(.*)$")
-	if not SCOPE_KINDS[kind] then
-		return nil, nil
-	end
-
-	local workspace, name = value:match("^([^/%s]+)/([^/%s]+)$")
-	if workspace == nil or name == nil then
-		local target_name = kind == "project" and "key" or "name"
-		return nil, string.format("%s must use %s:workspace/%s", kind, kind, target_name)
-	end
-
-	if kind == "repo" then
-		return { workspace = workspace, repo = name }, nil
-	end
-	return { workspace = workspace, project = name }, nil
-end
-
----@param tokens string[]
----@return BitbucketPullTarget[], string[], string|nil
-local function split_scopes(tokens)
-	local targets, query_tokens, seen = {}, {}, {}
-	for _, token in ipairs(tokens) do
-		local target, err = scope_from_token(token)
-		if err then
-			return {}, {}, err
-		end
-		if target then
-			if not seen[token] then
-				seen[token] = true
-				table.insert(targets, target)
-			end
-		else
-			table.insert(query_tokens, token)
-		end
-	end
-	return targets, query_tokens, nil
-end
-
----@param token string
----@return boolean
-local function is_logical_operator(token)
-	local upper = token:upper()
-	return upper == "AND" or upper == "OR"
-end
-
----@param input string|nil
----@return BitbucketParsedSearch|nil, string|nil
-function M.parse(input)
-	local tokens = tokenize(vim.trim(input or ""))
-	local targets, query_tokens, err = split_scopes(tokens)
-	if err then
-		return nil, err
-	end
-
-	if #targets == 0 then
-		return nil, "Add repo:workspace/name or project:workspace/key"
-	end
-
-	local query = table.concat(query_tokens, " ")
-	local parsed = {
-		targets = targets,
-		query = query ~= "" and query or nil,
-	}
-	return parsed, nil
-end
-
----@param workspace string
----@param repo string
----@param query string|nil
----@return string
-function M.for_repo(workspace, repo, query)
-	local scope = string.format("repo:%s/%s", workspace, repo)
-	query = vim.trim(query or "")
-	return query == "" and scope or (scope .. " " .. query)
-end
-
----@param cmdline string
----@param cursorpos integer
----@return string
-local function extract_query(cmdline, cursorpos)
-	local left = cmdline:sub(1, cursorpos):gsub("^%s*:", "")
-	local _, command_end = left:find("^[^%s]+%s*")
-	return command_end and left:sub(command_end + 1) or ""
-end
-
 ---@param token string
 ---@return string
 local function clean(token)
@@ -218,16 +90,45 @@ end
 ---@param cursorpos integer
 ---@return string[]
 local function complete_cmdline(_arglead, cmdline, cursorpos)
-	local query = extract_query(cmdline, cursorpos)
-	local tokens, trailing_space = tokenize(query)
-	local partial = trailing_space and "" or table.remove(tokens) or ""
+	local left = cmdline:sub(1, cursorpos):gsub("^%s*:", "")
+	local _, command_end = left:find("^[^%s]+%s*")
+	local value = command_end and left:sub(command_end + 1) or ""
+	local tokens, current = {}, {}
+	local quoted = false
+	for i = 1, #value do
+		local char = value:sub(i, i)
+		if char == '"' then
+			quoted = not quoted
+			table.insert(current, char)
+		elseif char:match("%s") and not quoted then
+			if #current > 0 then
+				table.insert(tokens, table.concat(current))
+				current = {}
+			end
+		else
+			table.insert(current, char)
+		end
+	end
+	if #current > 0 then
+		table.insert(tokens, table.concat(current))
+	end
+
+	local partial = value:match("%s$") and "" or table.remove(tokens) or ""
 	local opening = partial:match("^(%(*).*$") or ""
 	local prefix = clean(partial)
-	local targets, query_tokens, err = split_scopes(tokens)
-	if err then
-		return {}
+	local query_tokens = {}
+	local has_scope = false
+	for _, token in ipairs(tokens) do
+		local kind, scope = token:match("^([%a]+):(.*)$")
+		if kind == "repo" or kind == "project" then
+			if not scope:match("^([^/%s]+)/([^/%s]+)$") then
+				return {}
+			end
+			has_scope = true
+		else
+			table.insert(query_tokens, token)
+		end
 	end
-	local has_scope = #targets > 0
 	tokens = query_tokens
 	if #tokens == 0 then
 		if partial:match("^[%a]+:") then
@@ -242,7 +143,8 @@ local function complete_cmdline(_arglead, cmdline, cursorpos)
 	local previous_upper = previous:upper()
 
 	if previous == "" or previous_upper == "AND" or previous_upper == "OR" then
-		if #tokens == 1 or is_logical_operator(tokens[#tokens - 1]) then
+		local prior = clean(tokens[#tokens - 1] or ""):upper()
+		if #tokens == 1 or prior == "AND" or prior == "OR" then
 			return {}
 		end
 		return matches(FIELDS, prefix, opening)
@@ -250,7 +152,9 @@ local function complete_cmdline(_arglead, cmdline, cursorpos)
 
 	if FIELD_SET[previous] then
 		local operators = TEXT_OPERATORS
-		if EQUALITY_FIELDS[previous] then
+		if previous == "state" then
+			operators = STATE_OPERATORS
+		elseif EQUALITY_FIELDS[previous] then
 			operators = EQUALITY_OPERATORS
 		elseif COMPARABLE_FIELDS[previous] then
 			operators = COMPARISON_OPERATORS
@@ -293,7 +197,7 @@ function M.open(view)
 			if value == "" then
 				return
 			end
-			local _, err = M.parse(value)
+			local _, err = query.parse(value)
 			if err then
 				notify.warn(err)
 				return

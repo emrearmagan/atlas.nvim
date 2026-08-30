@@ -397,10 +397,10 @@ project, or to a whole group.
       views = {
         { name = "Assigned",  key = "1", layout = "grouped", -- "compact", "grouped", or "plain"
           scope = "assigned_to_me" },
-        { name = "Reviewing", key = "3", scope = "all",
-          extra_params = { reviewer_id = "Me" } },
+        { name = "Reviewing", key = "3", scope = "reviews_for_me" },
         -- One project:
-        { name = "GitLab",    key = "G", project = "gitlab-org/gitlab" },
+        { name = "GitLab",    key = "G", project = "gitlab-org/gitlab",
+          extra_params = { target_branch = "main" } },
         -- All projects in a group:
         { name = "GitLab Org", key = "O", group = "gitlab-org" },
       },
@@ -408,7 +408,7 @@ project, or to a whole group.
         -- key   = "S",      -- default
         -- label = "Search", -- default
         items = {
-          ["Reviewing"]    = { scope = "all", extra_params = { reviewer_id = "Me" } },
+          ["Reviewing"]    = { scope = "reviews_for_me" },
           ["Created by me"] = { scope = "all", author_username = "me" },
         },
       },

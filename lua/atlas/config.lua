@@ -12,19 +12,14 @@
 ---@field name string
 ---@field key string|nil
 ---@field layout AtlasPullsViewLayout|nil
----@field current_repo boolean|nil Resolve the view against the current Git repository.
----@field _kind "bookmarks"|"starred"|nil
----@field _bookmarks table<string, any>|nil
----@field _starred { domain: "pulls", provider: string }|nil
+---@field current_repo boolean|nil
+---@field _states PullsStateFilter[]|nil
 
 ---@class AtlasIssuesViewConfig
 ---@field name string
 ---@field key string|nil
 ---@field layout AtlasIssuesViewLayout|nil
 ---@field search string|nil
----@field _kind "bookmarks"|"starred"|nil
----@field _bookmarks table<string, any>|nil
----@field _starred { domain: "issues", provider: string }|nil
 
 ---@class AtlasPullsRepoConfig
 ---@field settings table<string, AtlasPullsRepoSettings>|nil
@@ -54,7 +49,7 @@
 ---@field compact boolean|nil
 ---@field compact_context_lines integer|nil
 ---@field show_review_panel boolean|nil
----@field comment_display "virtual_lines"|"virtual_text"|nil Initial comment and note display mode.
+---@field comment_display "virtual_lines"|"virtual_text"|nil
 ---@field explorer AtlasPullsDiffExplorerConfig|nil
 ---@field review_panel AtlasPullsDiffReviewPanelConfig|nil
 

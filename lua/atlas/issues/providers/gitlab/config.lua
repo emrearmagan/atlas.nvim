@@ -39,7 +39,7 @@
 -- Anything not covered above can be passed via `extra_params = { key = "value", ... }`.
 
 ---@class AtlasGitLabIssuesSearchConfig
----@field scope "created_by_me"|"assigned_to_me"|"all"|nil
+---@field scope string|nil
 ---@field project string|number|nil
 ---@field state "opened"|"closed"|"all"|nil
 ---@field labels string|nil
@@ -48,7 +48,7 @@
 ---@field author_username string|nil
 ---@field search string|nil
 ---@field sort "asc"|"desc"|nil
----@field order_by "created_at"|"updated_at"|"priority"|"due_date"|"label_priority"|"milestone_due"|"popularity"|"weight"|"title"|nil
+---@field order_by string|nil
 ---@field extra_params table<string, string>|nil
 
 ---@class AtlasGitLabIssuesViewConfig : IssuesViewConfig, AtlasGitLabIssuesSearchConfig
