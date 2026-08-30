@@ -201,9 +201,9 @@ local function get_current_user(scope, on_done)
 	end)
 end
 
----@param force_load boolean
+---@param force_refresh boolean
 ---@param on_done fun()|nil
-local function load_view(force_load, on_done)
+local function load_view(force_refresh, on_done)
 	local view = state.search_view()
 	local provider = state.provider
 	if provider == nil then
@@ -267,7 +267,11 @@ local function load_view(force_load, on_done)
 	render_if_active()
 
 	load_requests.run(function(done)
-		return provider.capabilities.core.fetch_pullrequests(view, { force_load = force_load }, done)
+		return provider.capabilities.core.fetch_pullrequests(
+			view,
+			{ force_refresh = force_refresh, pagelen = 50 },
+			done
+		)
 	end, function(pulls, err)
 		state.is_loading = false
 		sync_loading_spinner()
@@ -372,7 +376,7 @@ function M.refresh_pr(pr)
 	end
 
 	pr_reload_requests.run(function(done)
-		return core.fetch_by_refs({ pr }, { force_load = true }, done)
+		return core.fetch_by_refs({ pr }, { force_refresh = true }, done)
 	end, function(fetched_prs, err)
 		local fetched_pr = fetched_prs[1]
 		if err ~= nil or fetched_pr == nil then

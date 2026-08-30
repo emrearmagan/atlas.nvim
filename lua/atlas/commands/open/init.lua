@@ -52,7 +52,7 @@ local function fetch_candidate(target, on_done)
 		---@type PullRequestRef
 		local ref = { id = assert(target.id), repo_full_name = assert(target.repo_full_name) }
 		requests.run(function(done)
-			return provider.capabilities.core.fetch_by_refs({ ref }, { force_load = true }, done)
+			return provider.capabilities.core.fetch_by_refs({ ref }, { force_refresh = true }, done)
 		end, function(pulls, err)
 			on_done(pulls and pulls[1] or nil, provider, err)
 		end)
@@ -66,7 +66,7 @@ local function fetch_candidate(target, on_done)
 		return
 	end
 	requests.run(function(done)
-		return provider.capabilities.core.fetch_by_refs({ ref }, { force_load = true }, done)
+		return provider.capabilities.core.fetch_by_refs({ ref }, { force_refresh = true }, done)
 	end, function(issues, err)
 		on_done(issues and issues[1] or nil, provider, err)
 	end)

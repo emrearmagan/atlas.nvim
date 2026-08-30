@@ -7,11 +7,8 @@
 ---@field layout AtlasIssuesViewLayout|nil
 
 ---@class IssuesFetchOpts
----@field force_load boolean|nil
----@field max_results number|nil
----@field next_page_token string|nil
----@field layout AtlasIssuesViewLayout|nil
----@field with_relationships boolean|nil
+---@field force_refresh boolean|nil
+---@field pagelen number|nil
 
 ---@class AtlasIssuesCommentCompletionContext
 ---@field issue Issue
@@ -38,7 +35,7 @@
 
 ---@class IssuesCoreCapability
 ---@field fetch_user fun(on_done: fun(user: IssueUser|nil, err: string|nil)): { cancel: fun() }|nil
----@field fetch_issues fun(view: IssuesViewConfig, opts: IssuesFetchOpts, on_done: fun(issues: Issue[], next_page_token: string|nil, is_last: boolean, err: string|nil)): { cancel: fun() }|nil
+---@field fetch_issues fun(view: IssuesViewConfig, opts: IssuesFetchOpts, on_done: fun(issues: Issue[], err: string|nil)): { cancel: fun() }|nil
 ---@field fetch_by_refs fun(refs: IssueRef[], opts: IssuesFetchOpts, on_done: fun(issues: Issue[], err: string|nil)): { cancel: fun() }|nil
 ---@field fetch_issue fun(ref: IssueRef, opts: IssuesFetchOpts|nil, on_done: fun(details: IssueDetails|nil, err: string|nil)): { cancel: fun() }|nil
 ---@field update_description (fun(issue: Issue, content: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil

@@ -24,18 +24,12 @@ fragment IssueRefFields on Issue {
 ]]
 
 local SEARCH_GQL = [[
-query($search: String!, $limit: Int!, $withRelationships: Boolean!) {
+query($search: String!, $limit: Int!) {
   search(query: $search, type: ISSUE, first: $limit) {
     nodes {
       ... on Issue {
         ...IssueFields
-        parent @include(if: $withRelationships) { ...IssueRefFields }
-        subIssues(first: 20) @include(if: $withRelationships) {
-          nodes {
-            ...IssueFields
-            parent { ...IssueRefFields }
-          }
-        }
+        parent { ...IssueRefFields }
       }
     }
   }
@@ -76,35 +70,18 @@ query($owner: String!, $repo: String!, $number: Int!) {
 }
 ]]
 
----@param opts { with_relationships?: boolean, layout?: AtlasIssuesViewLayout }|nil
----@return boolean
-local function relationships_enabled(opts)
-	opts = opts or {}
-	if opts.with_relationships == false or opts.layout == "compact" then
-		return false
-	end
-
-	local issues_cfg = require("atlas.config").options.issues or {}
-	return issues_cfg.with_relationships ~= false
-end
-
 ---@param search string
 ---@param on_done fun(issues: Issue[]|nil, err: string|nil)
----@param opts { force_load?: boolean, limit?: number, with_relationships?: boolean, layout?: AtlasIssuesViewLayout }|nil
+---@param opts { force_refresh?: boolean, pagelen: integer }
 ---@return { cancel: fun() }|nil
 function M.search_issues(search, on_done, opts)
-	opts = opts or {}
-	local limit = math.min(100, math.max(1, tonumber(opts.limit) or 50))
-
 	local query = vim.trim(search)
 	if query == "" then
 		on_done({}, "Missing search query")
 		return nil
 	end
-	local with_relationships = relationships_enabled(opts)
-	local cache_key =
-		string.format("github_issues:search:v4:%s:%d:relationships:%s", query, limit, tostring(with_relationships))
-	if not opts.force_load then
+	local cache_key = string.format("github_issues:search:v5:%s:%d", query, opts.pagelen)
+	if not opts.force_refresh then
 		local cached, ok = cli.get_cache(cache_key)
 		if ok then
 			on_done(cached, nil)
@@ -120,9 +97,7 @@ function M.search_issues(search, on_done, opts)
 		"-f",
 		"search=" .. query,
 		"-F",
-		"limit=" .. tostring(limit),
-		"-F",
-		"withRelationships=" .. tostring(with_relationships),
+		"limit=" .. tostring(opts.pagelen),
 	}, function(result, err)
 		if err or type(result) ~= "table" then
 			on_done(nil, err or "Failed to search issues")
@@ -135,13 +110,13 @@ function M.search_issues(search, on_done, opts)
 	end, {
 		action = "GraphQL issues search",
 		query = query,
-		limit = limit,
+		limit = opts.pagelen,
 	})
 end
 
 ---@param key string
 ---@param on_done fun(details: IssueDetails|nil, err: string|nil)
----@param opts { force_load?: boolean, with_relationships?: boolean, layout?: AtlasIssuesViewLayout }|nil
+---@param opts { force_refresh?: boolean }|nil
 ---@return { cancel: fun() }|nil
 function M.get_issue(key, on_done, opts)
 	opts = opts or {}
@@ -151,10 +126,11 @@ function M.get_issue(key, on_done, opts)
 		return nil
 	end
 
-	local with_relationships = relationships_enabled(opts)
+	local issues_cfg = require("atlas.config").options.issues or {}
+	local with_relationships = issues_cfg.with_relationships ~= false
 	local cache_key =
 		string.format("github_issues:details:%s#%d:relationships:%s", slug, number, tostring(with_relationships))
-	if not opts.force_load then
+	if not opts.force_refresh then
 		local cached, ok = cli.get_mem(cache_key)
 		if ok then
 			on_done(cached, nil)

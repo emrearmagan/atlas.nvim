@@ -77,16 +77,15 @@ local function build_query(params)
 end
 
 ---@param view AtlasGitLabIssuesViewConfig
----@param opts { force_load?: boolean, max_results?: number }|nil
+---@param opts { force_refresh?: boolean, pagelen: integer }
 ---@param on_done fun(issues: Issue[], err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.list_issues(view, opts, on_done)
-	opts = opts or {}
 	local scoped_project = view.project ~= nil and tostring(view.project) ~= ""
 	local params = {
 		scope = view.scope or "assigned_to_me",
 		state = view.state or "opened",
-		per_page = tostring(opts.max_results or 50),
+		per_page = tostring(opts.pagelen),
 		order_by = view.order_by or "updated_at",
 		sort = view.sort or "desc",
 	}
@@ -114,7 +113,7 @@ function M.list_issues(view, opts, on_done)
 	) .. build_query(params)
 	local cache_key = LIST_CACHE_PREFIX .. endpoint
 
-	if not opts.force_load then
+	if not opts.force_refresh then
 		local cached, ok = service.get_cache(cache_key)
 		if ok then
 			on_done(cached, nil)
@@ -139,7 +138,7 @@ function M.list_issues(view, opts, on_done)
 end
 
 ---@param refs IssueRef[]
----@param opts { force_load?: boolean }|nil
+---@param opts { force_refresh?: boolean }|nil
 ---@param on_done fun(issues: Issue[], err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_by_refs(refs, opts, on_done)
@@ -169,8 +168,8 @@ function M.fetch_by_refs(refs, opts, on_done)
 				state = "all",
 				extra_params = { ["iids[]"] = iids },
 			}, {
-				force_load = opts.force_load == true,
-				max_results = #iids,
+				force_refresh = opts.force_refresh == true,
+				pagelen = #iids,
 			}, done)
 		end
 	end
@@ -191,7 +190,7 @@ function M.fetch_by_refs(refs, opts, on_done)
 end
 
 ---@param ref IssueRef
----@param opts { force_load?: boolean }|nil
+---@param opts { force_refresh?: boolean }|nil
 ---@param on_done fun(details: IssueDetails|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_issue(ref, opts, on_done)
@@ -204,7 +203,7 @@ function M.fetch_issue(ref, opts, on_done)
 	end
 
 	local cache_key = string.format("gitlab:issue-details:%s#%d", path, iid)
-	if not opts.force_load then
+	if not opts.force_refresh then
 		local cached, ok = service.get_memory_cache(cache_key)
 		if ok then
 			on_done(cached, nil)
@@ -499,7 +498,7 @@ function M.create_issue(opts, on_done)
 end
 
 ---@param query string
----@param opts { force_load?: boolean, max_results?: number }|nil
+---@param opts { max_results?: number }|nil
 ---@param on_done fun(items: { id: any, key: string, title: string, url: string|nil, description: string }[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.search_issues_picker(query, opts, on_done)

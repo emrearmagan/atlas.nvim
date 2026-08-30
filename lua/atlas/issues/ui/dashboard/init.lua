@@ -136,7 +136,7 @@ function M.init(provider, opts)
 	controller.switch_view(state.view)
 
 	if capabilities.notifications then
-		notifications.refresh({ force_load = false, on_done = M.render })
+		notifications.refresh({ on_done = M.render })
 	end
 end
 

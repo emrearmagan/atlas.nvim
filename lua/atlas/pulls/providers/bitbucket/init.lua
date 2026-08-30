@@ -65,7 +65,7 @@ local function fetch_pullrequests(view, opts, on_done)
 	end
 	local states = view._states or parsed.states or { "open" }
 	return pullrequests_api.fetch_for_targets(parsed.targets, {
-		force_load = opts.force_load == true,
+		force_refresh = opts.force_refresh == true,
 		pagelen = opts.pagelen,
 		query = search_query.filter(parsed, states),
 	}, on_done)

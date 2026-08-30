@@ -207,7 +207,7 @@ local function load_repo(repo, force_refresh)
 	update_spinner()
 	render()
 	state.requests.run(function(done)
-		return repository.fetch_details(repo, { force_load = force_refresh }, done)
+		return repository.fetch_details(repo, { force_refresh = force_refresh }, done)
 	end, function(details, err)
 		if details then
 			state.current_repo_details = details

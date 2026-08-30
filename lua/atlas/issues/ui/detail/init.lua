@@ -159,7 +159,7 @@ local function load_details(ref, force_refresh)
 
 	state.details_loading = true
 	state.requests.run(function(done)
-		return provider.capabilities.core.fetch_issue(ref, { force_load = force_refresh }, done)
+		return provider.capabilities.core.fetch_issue(ref, { force_refresh = force_refresh }, done)
 	end, function(fetched_details, err)
 		if state.provider ~= provider or not same_ref(state.current_issue or pending_ref, ref) then
 			return
@@ -313,7 +313,7 @@ function M.open_ref(ref, opts)
 	update_spinner()
 	render()
 	state.requests.run(function(done)
-		return provider.capabilities.core.fetch_by_refs({ ref }, { force_load = force_refresh, max_results = 1 }, done)
+		return provider.capabilities.core.fetch_by_refs({ ref }, { force_refresh = force_refresh }, done)
 	end, function(issues, err)
 		if state.provider ~= provider or not same_ref(pending_ref, ref) then
 			return
@@ -344,7 +344,7 @@ function M.refresh(ref)
 	state.issue_loading = true
 	update_spinner()
 	state.requests.run(function(done)
-		return provider.capabilities.core.fetch_by_refs({ issue }, { force_load = true, max_results = 1 }, done)
+		return provider.capabilities.core.fetch_by_refs({ issue }, { force_refresh = true }, done)
 	end, function(issues, err)
 		if state.provider ~= provider or not same_ref(state.current_issue, issue) then
 			return

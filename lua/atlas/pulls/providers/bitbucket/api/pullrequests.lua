@@ -25,7 +25,7 @@ local SUMMARY_FIELDS = {
 	"links",
 }
 local PULL_REQUEST_FIELDS = table.concat(SUMMARY_FIELDS, ",")
-local list_fields = { "next" }
+local list_fields = {}
 for _, field in ipairs(SUMMARY_FIELDS) do
 	table.insert(list_fields, "values." .. field)
 end
@@ -54,14 +54,13 @@ end
 
 ---@param workspace string
 ---@param repo string
----@param opts { cache_ttl: number, force: boolean, pagelen: number|nil, query: string }
+---@param opts { cache_ttl: number, force_refresh: boolean, pagelen: number, query: string }
 ---@param on_done fun(prs: PullRequest[], err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
 local function fetch_pullrequests_single(workspace, repo, opts, on_done)
-	local pagelen = tonumber(opts.pagelen) or 50
-	local query = build_query(pagelen, opts.query)
+	local query = build_query(opts.pagelen, opts.query)
 	local key = string.format("bitbucket:prs:%s/%s:%s", workspace, repo, query)
-	if not opts.force then
+	if not opts.force_refresh then
 		local cached, ok = service.get_persistent_cache(key)
 		if ok then
 			on_done(cached, nil)
@@ -83,7 +82,7 @@ local function fetch_pullrequests_single(workspace, repo, opts, on_done)
 end
 
 ---@param repos BitbucketRepoTarget[]
----@param opts { force_load: boolean, pagelen: number|nil, query: string }
+---@param opts { force_refresh: boolean, pagelen: number, query: string }
 ---@param on_done fun(pulls: PullRequest[], err: string[]|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_for_repositories(repos, opts, on_done)
@@ -107,7 +106,7 @@ function M.fetch_for_repositories(repos, opts, on_done)
 		starts[index] = function(done)
 			return fetch_pullrequests_single(repo.workspace, repo.repo, {
 				cache_ttl = ttl,
-				force = opts.force_load,
+				force_refresh = opts.force_refresh,
 				pagelen = opts.pagelen,
 				query = opts.query,
 			}, done)
@@ -134,7 +133,7 @@ function M.fetch_for_repositories(repos, opts, on_done)
 end
 
 ---@param targets BitbucketPullTarget[]
----@param opts { force_load: boolean, pagelen: number|nil, query: string }
+---@param opts { force_refresh: boolean, pagelen: number, query: string }
 ---@param on_done fun(pulls: PullRequest[], err: string[]|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_for_targets(targets, opts, on_done)
@@ -211,7 +210,7 @@ function M.fetch_by_refs(refs, _opts, on_done)
 end
 
 ---@param ref PullRequestRef
----@param opts? { force_load?: boolean }
+---@param opts? { force_refresh?: boolean }
 ---@param on_done fun(detail: PullRequestDetails|nil, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.fetch_pullrequest(ref, opts, on_done)
@@ -223,7 +222,7 @@ function M.fetch_pullrequest(ref, opts, on_done)
 	end
 
 	local key = string.format("bitbucket:pr:detail:%s/%s/%s", workspace, repo, tostring(ref.id))
-	if opts.force_load ~= true then
+	if opts.force_refresh ~= true then
 		local cached, ok = service.get_cache(key)
 		if ok then
 			on_done(cached, nil)

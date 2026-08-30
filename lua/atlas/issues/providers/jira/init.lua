@@ -52,26 +52,24 @@ end
 
 ---@param view IssuesViewConfig
 ---@param opts IssuesFetchOpts
----@param on_done fun(issues: Issue[], next_page_token: string|nil, is_last: boolean, err: string|nil)
+---@param on_done fun(issues: Issue[], err: string|nil)
 ---@return { cancel: fun() }|nil
 local function fetch_issues(view, opts, on_done)
 	local jql = resolve_search(view)
 	if jql == "" then
-		on_done({}, nil, true, "Missing Jira view JQL")
+		on_done({}, "Missing Jira view JQL")
 		return nil
 	end
 
-	return issues_api.search_issues(jql, function(page, err)
-		if err or page == nil then
-			on_done({}, nil, true, err or "Failed to fetch issues")
+	return issues_api.search_issues(jql, function(issues, err)
+		if err or issues == nil then
+			on_done({}, err or "Failed to fetch issues")
 			return
 		end
-
-		on_done(page.issues, page.nextPageToken, page.isLast, nil)
+		on_done(issues, nil)
 	end, {
-		force_load = opts.force_load == true,
-		next_page_token = opts.next_page_token,
-		max_results = opts.max_results,
+		force_refresh = opts.force_refresh == true,
+		pagelen = opts.pagelen,
 	})
 end
 
@@ -90,15 +88,15 @@ local function fetch_by_refs(refs, opts, on_done)
 		table.insert(quoted, string.format('"%s"', ref.key:gsub('"', '\\"')))
 	end
 
-	return issues_api.search_issues("key in (" .. table.concat(quoted, ",") .. ")", function(page, err)
-		if err or page == nil then
+	return issues_api.search_issues("key in (" .. table.concat(quoted, ",") .. ")", function(issues, err)
+		if err or issues == nil then
 			on_done({}, err or "Failed to fetch issues")
 			return
 		end
-		on_done(page.issues, nil)
+		on_done(issues, nil)
 	end, {
-		force_load = opts.force_load == true,
-		max_results = #refs,
+		force_refresh = opts.force_refresh == true,
+		pagelen = #refs,
 	})
 end
 
@@ -143,7 +141,7 @@ local function fetch_conversation(issue, opts, on_done)
 		return nil
 	end
 
-	local force = opts.force_refresh == true
+	local force_refresh = opts.force_refresh == true
 
 	return comments_api.get_comments_page(issue_key, 0, 100, function(comments, err)
 		if err or comments == nil then
@@ -160,7 +158,7 @@ local function fetch_conversation(issue, opts, on_done)
 			})
 		end
 		on_done(items, nil)
-	end, { force_load = force })
+	end, { force_refresh = force_refresh })
 end
 
 ---@param issue Issue
@@ -184,7 +182,7 @@ local function fetch_activity(issue, opts, on_done)
 		end
 		on_done(page.values, nil)
 	end, {
-		force_load = opts and opts.force_load or false,
+		force_refresh = opts and opts.force_refresh or false,
 	})
 end
 

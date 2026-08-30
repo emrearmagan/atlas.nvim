@@ -241,7 +241,7 @@ local function edit_assignees(ctx, done)
 		open_picker(ctx.details.assignees or {})
 		return
 	end
-	pullrequests_api.fetch_pullrequest(pr, { force_load = false }, function(details, err)
+	pullrequests_api.fetch_pullrequest(pr, { force_refresh = false }, function(details, err)
 		if err or details == nil then
 			local message = tostring(err or "Failed to load merge request")
 			notify(ctx, "error", message)
@@ -365,7 +365,7 @@ local function toggle_subscription(ctx, done)
 		toggle(ctx.details)
 		return
 	end
-	pullrequests_api.fetch_pullrequest(pr, { force_load = false }, function(details, fetch_err)
+	pullrequests_api.fetch_pullrequest(pr, { force_refresh = false }, function(details, fetch_err)
 		if fetch_err or details == nil then
 			local message = tostring(fetch_err or "Failed to load merge request")
 			notify(ctx, "error", message)

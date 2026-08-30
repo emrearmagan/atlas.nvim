@@ -59,8 +59,8 @@ end
 
 ---@param details PullsRepoDetails
 ---@param refresh fun()
----@param force_load boolean
-local function fetch_issues(details, refresh, force_load)
+---@param force_refresh boolean
+local function fetch_issues(details, refresh, force_refresh)
 	stop_requests()
 	local key = repo_key(details)
 	if state.repo_key ~= key then
@@ -75,7 +75,7 @@ local function fetch_issues(details, refresh, force_load)
 	local repository = detail.provider.capabilities.repository
 	local run = assert(repository.fetch_issues)
 	state.requests.run(function(done)
-		return run(details, state.filter, { force_load = force_load }, done)
+		return run(details, state.filter, { force_refresh = force_refresh }, done)
 	end, function(result, err)
 		local current = detail.current_repo_details
 		if type(current) ~= "table" or repo_key(current) ~= key then
@@ -95,7 +95,7 @@ end
 
 ---@param repo PullsRepo|nil
 ---@param refresh fun()
----@param opts PullsFetchOpts|nil
+---@param opts { force_refresh: boolean|nil }|nil
 function M.on_select(repo, refresh, opts)
 	opts = opts or {}
 	local details = detail.current_repo_details
@@ -125,7 +125,7 @@ function M.on_select(repo, refresh, opts)
 		return
 	end
 
-	fetch_issues(details, refresh, opts.force_load == true or opts.force_refresh == true)
+	fetch_issues(details, refresh, opts.force_refresh == true)
 end
 
 ---@return boolean

@@ -193,10 +193,10 @@ end
 ---@param provider IssuesProvider
 ---@param view IssuesViewConfig
 ---@param issues Issue[]
----@param force_load boolean
+---@param force_refresh boolean
 ---@param scope AtlasRequestScope
 ---@param on_done fun(issues: Issue[])
-local function fetch_missing_parents(provider, view, issues, force_load, scope, on_done)
+local function fetch_missing_parents(provider, view, issues, force_refresh, scope, on_done)
 	local fetch = provider.capabilities.core.fetch_by_refs
 	if not relationships_enabled(view) then
 		on_done(issues)
@@ -210,7 +210,7 @@ local function fetch_missing_parents(provider, view, issues, force_load, scope, 
 	end
 
 	scope.run(function(done)
-		return fetch(refs, { force_load = force_load }, done)
+		return fetch(refs, { force_refresh = force_refresh }, done)
 	end, function(parents, err)
 		if err then
 			notify.warn("Failed to fetch parent issues: " .. tostring(err))
@@ -222,9 +222,9 @@ local function fetch_missing_parents(provider, view, issues, force_load, scope, 
 end
 
 ---@param view IssuesViewConfig
----@param force_load boolean
+---@param force_refresh boolean
 ---@param on_done fun()|nil
-local function load_query(view, force_load, on_done)
+local function load_query(view, force_refresh, on_done)
 	on_done = on_done or function() end
 
 	local provider = state.provider
@@ -255,85 +255,31 @@ local function load_query(view, force_load, on_done)
 		end
 	end
 
-	local function finalize_fetch_failure(err, issues)
-		finish_loading()
-
-		if #issues > 0 then
-			state.error = nil
-			state.set_issues(mark_starred(issues))
-			notify.warn(string.format("Stopped at %d issues: %s", #issues, tostring(err)))
-		else
+	load_requests.run(function(done)
+		return provider.capabilities.core.fetch_issues(view, {
+			force_refresh = force_refresh,
+			pagelen = 50,
+		}, done)
+	end, function(issues, err)
+		if err ~= nil then
+			finish_loading()
 			state.error = tostring(err)
 			state.set_issues({})
 			notify.error(string.format("Failed to fetch issues: %s", tostring(err)))
+			render_if_active()
+			on_done()
+			return
 		end
 
-		render_if_active()
-		on_done()
-	end
-
-	local function finalize_fetch_success(issues)
 		state.error = nil
-		fetch_missing_parents(provider, view, issues, force_load, load_requests, function(enriched)
+		fetch_missing_parents(provider, view, issues, force_refresh, load_requests, function(enriched)
 			state.set_issues(mark_starred(enriched))
 			finish_loading()
-
 			notify.success(string.format("Loaded %d issues", #enriched), { timeout = 1200 })
 			render_if_active()
 			on_done()
 		end)
-	end
-
-	local configured_max = tonumber(issues_config().max_results)
-	local max_results = (configured_max and configured_max > 0) and math.floor(configured_max) or 100
-
-	local function fetch_page(next_page_token, issues)
-		local remaining = max_results - #issues
-		if remaining <= 0 then
-			finalize_fetch_success(issues)
-			return
-		end
-
-		load_requests.run(function(done)
-			return provider.capabilities.core.fetch_issues(view, {
-				force_load = force_load,
-				next_page_token = next_page_token,
-				max_results = remaining,
-				layout = view.layout or "plain",
-				with_relationships = relationships_enabled(view),
-			}, done)
-		end, function(page_issues, next_token, is_last, err)
-			if err ~= nil then
-				finalize_fetch_failure(err, issues)
-				return
-			end
-
-			for _, issue in ipairs(page_issues) do
-				if #issues >= max_results then
-					break
-				end
-				table.insert(issues, issue)
-			end
-
-			state.error = nil
-			state.set_issues(mark_starred(issues))
-			render_if_active()
-
-			if #issues >= max_results then
-				finalize_fetch_success(issues)
-				return
-			end
-
-			if is_last ~= true and next_token ~= nil and next_token ~= "" then
-				fetch_page(next_token, issues)
-				return
-			end
-
-			finalize_fetch_success(issues)
-		end)
-	end
-
-	fetch_page(nil, {})
+	end)
 end
 
 ---@param on_done fun()|nil
@@ -377,9 +323,9 @@ local function load_starred(on_done)
 	end
 end
 
----@param force_load boolean
+---@param force_refresh boolean
 ---@param on_done fun()|nil
-local function load_view(force_load, on_done)
+local function load_view(force_refresh, on_done)
 	if state.view == nil then
 		state.is_loading = false
 		state.error = "No issues views configured"
@@ -413,7 +359,7 @@ local function load_view(force_load, on_done)
 
 	local view = state.search_view()
 	if view ~= nil then
-		load_query(view, force_load, on_done)
+		load_query(view, force_refresh, on_done)
 		return
 	end
 end
@@ -541,7 +487,7 @@ local function refresh_issue(issue)
 		detail.refresh(issue)
 	end
 	issue_reload_requests.run(function(done)
-		return provider.capabilities.core.fetch_by_refs({ ref }, { force_load = true }, done)
+		return provider.capabilities.core.fetch_by_refs({ ref }, { force_refresh = true }, done)
 	end, function(fetched_issues, err)
 		local fetched_issue = fetched_issues[1]
 		if err ~= nil or fetched_issue == nil then

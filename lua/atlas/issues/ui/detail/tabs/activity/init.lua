@@ -86,7 +86,7 @@ function M.on_select(issue, refresh, opts)
 	local issue_key = tostring(issue.key or "")
 	notify.loading(string.format("Loading history for %s...", issue_key))
 	state.requests.run(function(done)
-		return comments.fetch_activity(issue, { force_load = force_refresh }, done)
+		return comments.fetch_activity(issue, { force_refresh = force_refresh }, done)
 	end, function(entries, err)
 		state.loading = false
 		if err then

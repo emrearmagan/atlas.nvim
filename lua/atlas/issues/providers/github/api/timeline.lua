@@ -6,7 +6,7 @@ local json = require("atlas.core.json")
 
 ---@param key string
 ---@param on_done fun(result: { comments: IssueComment[], events: IssueActivityEntry[] }|nil, err: string|nil)
----@param opts { force_load?: boolean }|nil
+---@param opts { force_refresh?: boolean }|nil
 ---@return { cancel: fun() }|nil
 function M.list_conversation(key, on_done, opts)
 	opts = opts or {}
@@ -17,7 +17,7 @@ function M.list_conversation(key, on_done, opts)
 	end
 
 	local cache_key = string.format("github_issues:conversation:%s#%d", slug, number)
-	if not opts.force_load then
+	if not opts.force_refresh then
 		local cached, ok = cli.get_mem(cache_key)
 		if ok then
 			on_done(cached, nil)

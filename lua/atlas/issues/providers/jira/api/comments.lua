@@ -18,7 +18,7 @@ end
 ---@param start_at number|nil
 ---@param max_results number|nil
 ---@param callback fun(comments: IssueComment[]|nil, err: string|nil)
----@param opts { force_load?: boolean }|nil
+---@param opts { force_refresh?: boolean }|nil
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.get_comments_page(issue_key, start_at, max_results, callback, opts)
 	opts = opts or {}
@@ -26,7 +26,7 @@ function M.get_comments_page(issue_key, start_at, max_results, callback, opts)
 	local size = tonumber(max_results) or 100
 	local cache_key = string.format("jira:panel:comments:%s:start:%d:size:%d", issue_key, start, size)
 
-	if not opts.force_load then
+	if not opts.force_refresh then
 		local cached, ok = service.get_memory_cache(cache_key)
 		if ok then
 			callback(cached, nil)

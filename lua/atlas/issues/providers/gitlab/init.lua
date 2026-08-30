@@ -42,19 +42,19 @@ end
 
 ---@param view IssuesViewConfig
 ---@param opts IssuesFetchOpts
----@param on_done fun(issues: Issue[], next_page_token: string|nil, is_last: boolean, err: string|nil)
+---@param on_done fun(issues: Issue[], err: string|nil)
 ---@return { cancel: fun() }|nil
 local function fetch_issues(view, opts, on_done)
 	---@cast view AtlasGitLabIssuesViewConfig
 	return issues_api.list_issues(view, {
-		force_load = opts and opts.force_load == true or false,
-		max_results = opts and opts.max_results or 50,
+		force_refresh = opts.force_refresh == true,
+		pagelen = opts.pagelen,
 	}, function(issues, err)
 		if err then
-			on_done({}, nil, true, err)
+			on_done({}, err)
 			return
 		end
-		on_done(issues or {}, nil, true, nil)
+		on_done(issues, nil)
 	end)
 end
 
@@ -64,13 +64,13 @@ end
 ---@return { cancel: fun() }|nil
 local function fetch_conversation(issue, opts, on_done)
 	opts = opts or {}
-	local force = opts.force_refresh == true
+	local force_refresh = opts.force_refresh == true
 	if tostring(issue.key or "") == "" then
 		on_done(nil, "Invalid issue key")
 		return nil
 	end
 
-	return notes_api.list_conversation(issue, { force_load = force }, function(result, err)
+	return notes_api.list_conversation(issue, { force_refresh = force_refresh }, function(result, err)
 		if err or result == nil then
 			on_done(nil, err)
 			return

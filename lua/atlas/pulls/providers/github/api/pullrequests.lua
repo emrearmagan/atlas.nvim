@@ -66,10 +66,9 @@ query(
 ---@param on_done fun(pulls: PullRequest[], err: string[]|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_search(queries, opts, on_done)
-	local limit = math.min(100, math.max(1, tonumber(opts.pagelen) or 50))
-	local cache_key = string.format("github:pulls:search:%s:limit:%d", vim.json.encode(queries), limit)
+	local cache_key = string.format("github:pulls:search:%s:limit:%d", vim.json.encode(queries), opts.pagelen)
 
-	if not opts.force_load then
+	if not opts.force_refresh then
 		local cached, ok = cli.get_cache(cache_key)
 		if ok then
 			on_done(cached, nil)
@@ -95,7 +94,7 @@ function M.fetch_search(queries, opts, on_done)
 		"-F",
 		"include3=" .. tostring(queries[3] ~= nil),
 		"-F",
-		"limit=" .. tostring(limit),
+		"limit=" .. tostring(opts.pagelen),
 	}, function(result, err)
 		if err or type(result) ~= "table" then
 			on_done({}, { err or "Failed to search pull requests" })
@@ -109,7 +108,7 @@ function M.fetch_search(queries, opts, on_done)
 		table.sort(pulls, function(left, right)
 			return left.updated_on > right.updated_on
 		end)
-		while #pulls > limit do
+		while #pulls > opts.pagelen do
 			table.remove(pulls)
 		end
 		cli.set_cache(cache_key, pulls)
@@ -117,7 +116,7 @@ function M.fetch_search(queries, opts, on_done)
 	end, {
 		action = "Search PRs",
 		queries = queries,
-		limit = limit,
+		limit = opts.pagelen,
 	})
 end
 
@@ -194,14 +193,14 @@ end
 ---@param repo string
 ---@param number number|string
 ---@param on_done fun(details: PullRequestDetails|nil, err: string|nil)
----@param opts { force_load?: boolean }|nil
+---@param opts { force_refresh?: boolean }|nil
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.get_pr(owner, repo, number, on_done, opts)
 	opts = opts or {}
 	local repo_slug = string.format("%s/%s", owner, repo)
 	local cache_key = string.format("github:pr:%s:%s", repo_slug, tostring(number))
 
-	if not opts.force_load then
+	if not opts.force_refresh then
 		local cached, ok = cli.get_mem(cache_key)
 		if ok then
 			on_done(cached, nil)

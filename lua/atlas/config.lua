@@ -106,7 +106,6 @@
 ---@field run fun(issue: Issue, ctx: AtlasIssuesCustomActionContext, done: fun(ok: boolean|nil, message: string|nil))
 
 ---@class AtlasIssuesConfig
----@field max_results number|nil
 ---@field with_relationships boolean|nil
 ---@field custom_actions AtlasIssuesCustomAction[]|nil
 ---@field github AtlasGitHubIssuesConfig|nil

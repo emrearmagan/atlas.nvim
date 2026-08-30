@@ -4,7 +4,6 @@
 ---@field layout AtlasPullsViewLayout|nil
 
 ---@class PullsFetchOpts
----@field force_load boolean|nil
 ---@field force_refresh boolean|nil
 ---@field pagelen number|nil
 

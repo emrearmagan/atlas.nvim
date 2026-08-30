@@ -420,7 +420,6 @@ ISSUES CONFIGURATION                            *atlas-issues-configuration*
 Shared config that applies to all issue providers:
 >lua
   issues = {
-    max_results = 100,
     with_relationships = true, -- fetch parent/subissue relationships
     custom_actions = {}, -- see |atlas-issues-custom-actions|
   }
