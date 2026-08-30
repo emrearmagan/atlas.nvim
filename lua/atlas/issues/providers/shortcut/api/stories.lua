@@ -8,6 +8,8 @@ local service = require("atlas.issues.providers.shortcut.api.service")
 local url_encode = require("atlas.core.utils").url_encode
 local workflows = require("atlas.issues.providers.shortcut.api.workflows")
 
+local API_PATH = "/api/v3"
+
 ---@param story_id integer
 local function invalidate(story_id)
 	service.clear_cache("story:" .. tostring(story_id))
@@ -22,24 +24,35 @@ local function page_size(value)
 end
 
 ---@param query string
----@param opts { max_results?: number }
+---@param opts IssuesFetchOpts
 ---@return string
 local function search_endpoint(query, opts)
+	if opts.cursor then
+		return opts.cursor
+	end
 	return string.format(
 		"/search/stories?query=%s&page_size=%d&detail=slim",
 		url_encode(query),
-		page_size(opts.max_results)
+		page_size(opts.pagelen)
 	)
 end
 
 ---@param query string
 ---@param opts? IssuesFetchOpts
----@param on_done fun(issues: ShortcutIssue[], next_page_token: string|nil, is_last: boolean, err: string|nil)
----@return AtlasRequestScope
+---@param on_done fun(page: IssuesPage, err: string|nil)
+---@return AtlasRequestScope|nil
 function M.search(query, opts, on_done)
 	opts = opts or {}
 	local endpoint = search_endpoint(query, opts)
-	local cache_key = "search:" .. endpoint
+	local cache_key = "search:v2:" .. endpoint
+	if not opts.force_refresh then
+		local cached, found = service.get_cache(cache_key)
+		if found then
+			on_done(cached, nil)
+			return nil
+		end
+	end
+
 	local scope = requests.new()
 
 	scope.all({
@@ -52,7 +65,7 @@ function M.search(query, opts, on_done)
 	}, function(values, errors)
 		local lookup_err = errors.users or errors.states
 		if lookup_err then
-			on_done({}, nil, true, lookup_err)
+			on_done({ items = {} }, lookup_err)
 			return
 		end
 		---@type IssueUser[]
@@ -60,28 +73,24 @@ function M.search(query, opts, on_done)
 		---@type ShortcutWorkflowState[]
 		local states = values.states
 
-		if not opts.force_load then
-			local cached, found = service.get_cache(cache_key)
-			if found then
-				on_done(mapper.to_issues(cached.stories, users, states), nil, true, nil)
-				return
-			end
-		end
-
 		scope.run(function(done)
 			return service.request("GET", endpoint, nil, done, { action = "Search Shortcut Stories" })
 		end, function(result, err)
 			if err then
-				on_done({}, nil, true, err)
+				on_done({ items = {} }, err)
 				return
 			end
 			---@cast result table
 
+			local next_path = json.safe_str(result.next)
+			local size = page_size(opts.pagelen)
 			local page = {
-				stories = result.data,
+				items = mapper.to_issues(result.data, users, states),
+				next_cursor = next_path and next_path:sub(#API_PATH + 1) or nil,
+				total_pages = math.max(1, math.ceil(math.min(result.total, 1000) / size)),
 			}
 			service.set_cache(cache_key, page)
-			on_done(mapper.to_issues(page.stories, users, states), nil, true, nil)
+			on_done(page, nil)
 		end)
 	end)
 	return scope
@@ -93,7 +102,7 @@ end
 ---@return { cancel: fun() }|nil
 local function get_story(story_id, opts, on_done)
 	local cache_key = "story:" .. tostring(story_id)
-	if not opts.force_load then
+	if not opts.force_refresh then
 		local cached, found = service.get_memory_cache(cache_key)
 		if found then
 			on_done(cached, nil)
@@ -158,10 +167,10 @@ function M.fetch_by_refs(refs, opts, on_done)
 
 	opts = opts or {}
 	return M.search("id:" .. tostring(story_id), {
-		force_load = opts.force_load,
-		max_results = 1,
-	}, function(issues, _, _, err)
-		on_done(issues, err)
+		force_refresh = opts.force_refresh,
+		pagelen = 1,
+	}, function(page, err)
+		on_done(page.items, err)
 	end)
 end
 

@@ -35,7 +35,7 @@ describe("Shortcut config", function()
 			received = { query = query, opts = opts, on_done = on_done }
 		end)
 
-		local opts = { max_results = 25 }
+		local opts = { pagelen = 25 }
 		local on_done = function() end
 		provider.capabilities.core.fetch_issues(view, opts, on_done)
 

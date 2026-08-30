@@ -103,12 +103,12 @@ end
 
 ---@param view IssuesViewConfig
 ---@param opts IssuesFetchOpts
----@param on_done fun(issues: Issue[], next_page_token: string|nil, is_last: boolean, err: string|nil)
+---@param on_done fun(page: IssuesPage, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_issues(view, opts, on_done)
 	local query = M.resolve_search(view)
 	if query == "" then
-		on_done({}, nil, true, "Missing Shortcut Story search query")
+		on_done({ items = {} }, "Missing Shortcut Story search query")
 		return nil
 	end
 	return api.stories.search(query, opts, on_done)
@@ -156,7 +156,7 @@ end
 ---@param on_done fun(items: IssueConversationItem[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_conversation(issue, opts, on_done)
-	return api.comments.list(issue, { force_load = opts and opts.force_refresh }, function(comments, err)
+	return api.comments.list(issue, opts, function(comments, err)
 		if err or comments == nil then
 			on_done(nil, err)
 			return

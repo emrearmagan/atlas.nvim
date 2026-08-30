@@ -40,14 +40,14 @@ local function map_comments(raw_comments, users)
 end
 
 ---@param issue Issue
----@param opts { force_load?: boolean }|nil
+---@param opts { force_refresh?: boolean }|nil
 ---@param on_done fun(comments: IssueComment[]|nil, err: string|nil)
 ---@return AtlasRequestScope|nil
 function M.list(issue, opts, on_done)
 	---@cast issue ShortcutIssue
 	local story_id = issue.id
 	opts = opts or {}
-	if not opts.force_load then
+	if not opts.force_refresh then
 		local cached, found = service.get_memory_cache(cache_key(story_id))
 		if found then
 			on_done(cached, nil)

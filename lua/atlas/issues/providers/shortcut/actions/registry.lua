@@ -490,7 +490,7 @@ local function edit_issue(ctx, done)
 	---@cast issue ShortcutIssue
 
 	notify.loading(string.format("Loading #%s...", issue.key))
-	return stories_api.get(issue.id, { force_load = true }, function(details, err)
+	return stories_api.get(issue.id, { force_refresh = true }, function(details, err)
 		if err or details == nil then
 			local message = err or "Failed to load Story"
 			notify.error(message)
@@ -591,13 +591,13 @@ local function search(_ctx, done)
 				fetch_done({}, nil)
 				return nil
 			end
-			return stories_api.search(query, { max_results = 20 }, function(issues, _, _, err)
+			return stories_api.search(query, { pagelen = 20 }, function(page, err)
 				if err then
 					fetch_done(nil, err)
 					return
 				end
 				local items = {}
-				for _, issue in ipairs(issues) do
+				for _, issue in ipairs(page.items) do
 					table.insert(items, { id = issue.key, value = issue })
 				end
 				fetch_done(items, nil)

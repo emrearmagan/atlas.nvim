@@ -13,7 +13,7 @@ function M.fetch(issue, opts, on_done)
 	local cache_key = "story:" .. tostring(story_id) .. ":history"
 	opts = opts or {}
 
-	if not opts.force_load then
+	if not opts.force_refresh then
 		local cached, found = service.get_memory_cache(cache_key)
 		if found then
 			on_done(cached, nil)
