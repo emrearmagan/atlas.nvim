@@ -12,7 +12,7 @@ local cases = {
 			local received
 			api.list = function(value, _, done)
 				received = value
-				done({}, nil, true, nil)
+				done({ items = {} }, nil)
 			end
 			provider.capabilities.core.fetch_issues(view, {}, function() end)
 			api.list = original
@@ -26,16 +26,28 @@ local cases = {
 		fetch = function(provider, view)
 			local api = require("atlas.pulls.providers.forge.gitea.api").pullrequests
 			local original = api.list
-			local received, received_opts
-			api.list = function(value, opts, done)
+			local received, received_statuses, received_opts, received_page
+			local page = { items = {}, next_cursor = { page = "3" } }
+			api.list = function(value, statuses, opts, done)
 				received = value
+				received_statuses = statuses
 				received_opts = opts
-				done({}, nil)
+				done(page, nil)
 			end
-			provider.capabilities.core.fetch_pullrequests(view, {}, function() end)
+			provider.capabilities.core.fetch_pullrequests(
+				view,
+				{ cursor = { page = "2" }, pagelen = 7, force_refresh = true },
+				function(result)
+					received_page = result
+				end
+			)
 			api.list = original
 			assert.is_false(received == view)
-			assert.same({ "OPEN" }, received_opts.statuses)
+			assert.same({ "OPEN" }, received_statuses)
+			assert.same({ page = "2" }, received_opts.cursor)
+			assert.equal(7, received_opts.pagelen)
+			assert.is_true(received_opts.force_refresh)
+			assert.is_true(received_page == page)
 			assert.equal("", received.search)
 		end,
 	},
@@ -120,11 +132,11 @@ describe("Gitea provider views", function()
 		local provider = require("atlas.pulls.providers.forge.gitea")
 		local api = require("atlas.pulls.providers.forge.gitea.api").pullrequests
 		local original = api.search_global
-		local received_view, received_opts
-		api.search_global = function(view, opts, done)
+		local received_view, received_statuses
+		api.search_global = function(view, statuses, _, done)
 			received_view = view
-			received_opts = opts
-			done({}, nil)
+			received_statuses = statuses
+			done({ items = {} }, nil)
 		end
 
 		local view = { name = "Search", search = "is:merged needle" }
@@ -134,14 +146,14 @@ describe("Gitea provider views", function()
 			assert.same({ "merged" }, states)
 			provider.capabilities.core.fetch_pullrequests(view, {}, function() end)
 			assert.equal("needle", received_view.search)
-			assert.same({ "MERGED" }, received_opts.statuses)
+			assert.same({ "MERGED" }, received_statuses)
 
 			view._states = { "declined" }
 			query, states = provider.resolve_search(view)
 			assert.equal("type:pulls is:declined needle", query)
 			assert.same({ "declined" }, states)
 			provider.capabilities.core.fetch_pullrequests(view, {}, function() end)
-			assert.same({ "DECLINED" }, received_opts.statuses)
+			assert.same({ "DECLINED" }, received_statuses)
 		end, debug.traceback)
 		api.search_global = original
 		if not ok then

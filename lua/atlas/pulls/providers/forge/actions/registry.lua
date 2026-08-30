@@ -12,7 +12,6 @@ local M = {}
 ---@field find fun(id: string): AtlasPullAction|nil
 
 ---@param provider_id "gitea"|"forgejo"
----@param pullrequests ForgePullRequestsApi
 ---@param repositories ForgeRepositoriesApi
 ---@return ForgePullActionsRegistry
 function M.new(provider_id, pullrequests, repositories)
@@ -95,7 +94,7 @@ function M.new(provider_id, pullrequests, repositories)
 			on_done(details, nil)
 			return nil
 		end
-		return pullrequests.get(assert(ctx.pr), { force_load = false }, on_done)
+		return pullrequests.get(assert(ctx.pr), { force_refresh = false }, on_done)
 	end
 
 	---@type AtlasPullAction[]

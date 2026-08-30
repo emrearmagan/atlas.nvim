@@ -1,40 +1,12 @@
----@class ForgePullRequestsApi
----@field create fun(opts: PullsCreatePROpts, on_done: fun(result: PullsCreatePRResult|nil, err: string|nil)): { cancel: fun() }|nil
----@field fetch_user fun(on_done: fun(user: PullsUser|nil, err: string|nil)): { cancel: fun() }|nil
----@field get fun(ref: PullRequestRef, opts: PullsFetchOpts, on_done: fun(details: GiteaPullRequestDetails|ForgejoPullRequestDetails|nil, err: string|nil)): { cancel: fun() }|nil
----@field fetch_by_refs fun(refs: PullRequestRef[], opts: PullsFetchOpts|nil, on_done: fun(pulls: PullRequest[], err: string|nil)): { cancel: fun() }|nil
----@field description fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(description: string|nil, err: string|nil)): { cancel: fun() }|nil
----@field review_data fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(data: { reviewers: PullsReviewer[], raw: table[], pending_requests: integer, history: PullsReviewHistoryEntry[] }|nil, err: string|nil)): { cancel: fun() }|nil
----@field reviewers fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(reviewers: PullsReviewer[]|nil, err: string|nil)): { cancel: fun() }|nil
----@field fetch_default_reviewers fun(opts: { repo_slug: string, repo_root: string|nil, head: string, base: string, pr: PullRequest|nil }, on_done: fun(reviewers: PullsCreatePRReviewer[]|nil, err: string|nil)): { cancel: fun() }|nil
----@field update_title fun(pr: PullRequest, title: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil
----@field set_draft fun(pr: PullRequest, draft: boolean, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil
----@field update_description fun(pr: PullRequest, description: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil
----@field update_reviewers fun(pr: PullRequest, selected: PullsCreatePRReviewer[], original: PullsCreatePRReviewer[], on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil
----@field list_assignees fun(slug: string, on_done: fun(users: PullsAuthor[]|nil, err: string|nil)): { cancel: fun() }|nil
----@field list_labels fun(slug: string, on_done: fun(labels: table[]|nil, err: string|nil)): { cancel: fun() }|nil
----@field update_assignees fun(pr: PullRequest, assignees: string[], on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil
----@field update_labels fun(pr: PullRequest, labels: integer[], on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil
----@field set_subscription fun(pr: PullRequest, username: string, subscribed: boolean, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil
----@field subscription fun(pr: PullRequest, on_done: fun(subscribed: boolean|nil, err: string|nil)): { cancel: fun() }|nil
----@field set_state fun(pr: PullRequest, state: "open"|"closed", on_done: fun(pr: PullRequest|nil, err: string|nil)): { cancel: fun() }|nil
----@field decline fun(pr: PullRequest, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil
----@field update_branch fun(pr: PullRequest, style: "merge"|"rebase"|nil, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil
----@field merge fun(pr: PullRequest, opts: { method: "merge"|"squash", delete_branch: boolean }, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil
----@field list fun(view: AtlasGiteaPullsSearchConfig|AtlasForgejoPullsSearchConfig, opts: { statuses: string[], pagelen: number, force_load: boolean }, on_done: fun(pulls: PullRequest[]|nil, err: string|nil)): { cancel: fun() }|nil
----@field search_global fun(view: AtlasGiteaPullsSearchConfig|AtlasForgejoPullsSearchConfig, opts: { statuses: string[], pagelen: number, force_load: boolean }, on_done: fun(pulls: PullRequest[]|nil, err: string|nil)): { cancel: fun() }|nil
-
 local config = require("atlas.config")
 local request_scope = require("atlas.core.requests")
 
 ---@param service ForgeService
 ---@param mapper ForgePullMapper
----@return ForgePullRequestsApi
 local function new(service, mapper)
 	local provider = service.id
 	local provider_name = service.name
 	local invalid_repository = "Invalid " .. provider_name .. " repository"
-	---@type ForgePullRequestsApi
 	local M = {}
 
 	local function cache_scope()
@@ -204,16 +176,18 @@ local function new(service, mapper)
 		end
 	end
 
-	local function list_cache_key(view, opts, global)
+	local function list_cache_key(view, statuses, global, page, pagelen)
 		return cache_scope()
 			.. ":list:"
 			.. vim.json.encode({
+				version = 2,
 				global = global,
 				repo = view.repo,
 				search = view.search,
 				extra_params = view.extra_params,
-				statuses = opts.statuses,
-				pagelen = opts.pagelen,
+				statuses = statuses,
+				pagelen = pagelen,
+				page = page,
 			})
 	end
 
@@ -237,26 +211,32 @@ local function new(service, mapper)
 	end
 
 	---@param view AtlasGiteaPullsSearchConfig|AtlasForgejoPullsSearchConfig
-	---@param opts { statuses: string[], pagelen: number, force_load: boolean }
-	---@param on_done fun(pulls: PullRequest[]|nil, err: string|nil)
-	local function list(view, opts, on_done)
+	---@param statuses string[]
+	---@param opts PullsFetchOpts
+	---@param on_done fun(page: PullsPage, err: string|nil)
+	local function list(view, statuses, opts, on_done)
 		local endpoint = repo_endpoint(view.repo)
 		if not endpoint then
-			on_done(nil, provider_name .. " pull view requires repo = 'owner/repo'")
+			on_done({ items = {} }, provider_name .. " pull view requires repo = 'owner/repo'")
 			return nil
 		end
 		if vim.trim(tostring(view.search or "")) ~= "" then
-			on_done(nil, provider_name .. " does not support text search in repository pull views; use a global view")
+			on_done(
+				{ items = {} },
+				provider_name .. " does not support text search in repository pull views; use a global view"
+			)
 			return nil
 		end
 		local selected = {}
-		for _, status in ipairs(opts.statuses) do
+		for _, status in ipairs(statuses) do
 			selected[status:upper()] = true
 		end
 		local api_state = selected.OPEN and (selected.MERGED or selected.DECLINED) and "all"
 			or (selected.OPEN and "open" or "closed")
-		local cache_key = list_cache_key(view, opts, false)
-		if opts.force_load ~= true then
+		local page_number = math.max(1, tonumber(opts.cursor and opts.cursor.page) or 1)
+		local limit = math.max(1, math.min(50, opts.pagelen or 50))
+		local cache_key = list_cache_key(view, statuses, false, page_number, limit)
+		if not opts.force_refresh then
 			local cached, ok = service.get_cache(cache_key)
 			if ok then
 				on_done(cached, nil)
@@ -266,22 +246,31 @@ local function new(service, mapper)
 
 		local params = vim.tbl_extend("force", {}, view.extra_params or {})
 		params.state = api_state
-		return service.fetch_all(endpoint .. "/pulls", params, {
-			max_items = opts.pagelen,
-		}, function(raw, err)
+		params.page = page_number
+		params.limit = limit
+		return service.request("GET", endpoint .. "/pulls" .. service.query(params), nil, function(raw, err)
 			if err then
-				on_done(nil, err)
+				on_done({ items = {} }, err)
 				return
 			end
-			local pulls = mapper.to_pull_requests(vim.tbl_filter(function(value)
+			raw = raw == vim.NIL and {} or raw
+			local filtered = {}
+			for _, value in ipairs(raw) do
 				local pull_state = mapper.pull_state(value)
 				local status = pull_state == "merged" and "MERGED"
 					or (pull_state == "declined" and "DECLINED" or "OPEN")
-				return selected[status] == true
-			end, raw))
-			service.set_cache(cache_key, pulls)
-			on_done(pulls, nil)
-		end)
+				if selected[status] then
+					table.insert(filtered, value)
+				end
+			end
+			local pulls = mapper.to_pull_requests(filtered)
+			local page = {
+				items = pulls,
+				next_cursor = #raw == limit and { page = tostring(page_number + 1) } or nil,
+			}
+			service.set_cache(cache_key, page)
+			on_done(page, nil)
+		end, { action = "List pull requests", repo = view.repo })
 	end
 
 	---@param ref PullRequestRef
@@ -296,7 +285,7 @@ local function new(service, mapper)
 			return nil
 		end
 		local cache_key = detail_cache_key(ref)
-		if opts.force_load ~= true and opts.force_refresh ~= true then
+		if opts.force_refresh ~= true then
 			local cached, ok = service.get_memory_cache(cache_key)
 			if ok then
 				on_done(cached, nil)
@@ -844,22 +833,25 @@ local function new(service, mapper)
 		end)
 	end
 
-	function M.list(view, opts, on_done)
-		return list(view, opts, on_done)
+	function M.list(view, statuses, opts, on_done)
+		return list(view, statuses, opts, on_done)
 	end
 
 	---@param view AtlasGiteaPullsSearchConfig|AtlasForgejoPullsSearchConfig
-	---@param opts { statuses: string[], pagelen: number, force_load: boolean }
-	---@param on_done fun(pulls: PullRequest[]|nil, err: string|nil)
-	function M.search_global(view, opts, on_done)
+	---@param statuses string[]
+	---@param opts PullsFetchOpts
+	---@param on_done fun(page: PullsPage, err: string|nil)
+	function M.search_global(view, statuses, opts, on_done)
 		local selected = {}
-		for _, status in ipairs(opts.statuses) do
+		for _, status in ipairs(statuses) do
 			selected[status:upper()] = true
 		end
 		local api_state = selected.OPEN and (selected.MERGED or selected.DECLINED) and "all"
 			or (selected.OPEN and "open" or "closed")
-		local cache_key = list_cache_key(view, opts, true)
-		if opts.force_load ~= true then
+		local page_number = math.max(1, tonumber(opts.cursor and opts.cursor.page) or 1)
+		local limit = math.max(1, math.min(50, opts.pagelen or 50))
+		local cache_key = list_cache_key(view, statuses, true, page_number, limit)
+		if not opts.force_refresh then
 			local cached, ok = service.get_cache(cache_key)
 			if ok then
 				on_done(cached, nil)
@@ -867,20 +859,18 @@ local function new(service, mapper)
 			end
 		end
 
-		local requests = request_scope.new()
-		requests.run(function(done)
-			local params = vim.tbl_extend("force", {}, view.extra_params or {})
-			params.type = "pulls"
-			params.q = vim.trim(tostring(view.search or ""))
-			params.state = api_state
-			return service.fetch_all("/repos/issues/search", params, {
-				max_items = opts.pagelen,
-			}, done)
-		end, function(raw, err)
+		local params = vim.tbl_extend("force", {}, view.extra_params or {})
+		params.type = "pulls"
+		params.q = vim.trim(tostring(view.search or ""))
+		params.state = api_state
+		params.page = page_number
+		params.limit = limit
+		return service.request("GET", "/repos/issues/search" .. service.query(params), nil, function(raw, err)
 			if err then
-				on_done(nil, err)
+				on_done({ items = {} }, err)
 				return
 			end
+			raw = raw == vim.NIL and {} or raw
 			local prs = {}
 			for _, value in ipairs(raw) do
 				local pr = mapper.to_search_pull_request(value)
@@ -889,10 +879,13 @@ local function new(service, mapper)
 					table.insert(prs, pr)
 				end
 			end
-			service.set_cache(cache_key, prs)
-			on_done(prs, nil)
-		end)
-		return { cancel = requests.cancel }
+			local page = {
+				items = prs,
+				next_cursor = #raw == limit and { page = tostring(page_number + 1) } or nil,
+			}
+			service.set_cache(cache_key, page)
+			on_done(page, nil)
+		end, { action = "Search pull requests" })
 	end
 
 	return M

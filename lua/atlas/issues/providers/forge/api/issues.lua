@@ -30,7 +30,7 @@ local M = {}
 
 ---@class ForgeIssuesApi
 ---@field fetch_user fun(on_done: fun(user: IssueUser|nil, err: string|nil)): ForgeRequestHandle|nil
----@field list fun(view: AtlasGiteaIssuesViewConfig|AtlasForgejoIssuesViewConfig, opts: IssuesFetchOpts, on_done: fun(issues: Issue[]|nil, next_page_token: string|nil, is_last: boolean, err: string|nil)): ForgeRequestHandle|AtlasRequestScope|nil
+---@field list fun(view: AtlasGiteaIssuesViewConfig|AtlasForgejoIssuesViewConfig, opts: IssuesFetchOpts, on_done: fun(page: IssuesPage, err: string|nil)): ForgeRequestHandle|AtlasRequestScope|nil
 ---@field get fun(ref: GiteaIssue|ForgejoIssue|IssueRef|string, opts: IssuesFetchOpts|nil, on_done: fun(details: GiteaIssueDetails|ForgejoIssueDetails|nil, err: string|nil)): ForgeRequestHandle|nil
 ---@field fetch_by_refs fun(refs: IssueRef[], opts: IssuesFetchOpts|nil, on_done: fun(issues: Issue[], err: string|nil)): AtlasRequestScope|nil
 ---@field create fun(opts: ForgeIssueCreateParams, on_done: fun(result: ForgeIssueCreateResult|nil, err: string|nil)): ForgeRequestHandle|nil
@@ -126,20 +126,20 @@ function M.new(service, mapper)
 
 	---@param view AtlasGiteaIssuesViewConfig|AtlasForgejoIssuesViewConfig
 	---@param opts IssuesFetchOpts
-	---@param on_done fun(issues: Issue[]|nil, next_page_token: string|nil, is_last: boolean, err: string|nil)
+	---@param on_done fun(page: IssuesPage, err: string|nil)
 	function api.list(view, opts, on_done)
-		local page = math.max(1, tonumber(opts.next_page_token) or 1)
-		local limit = math.max(1, math.min(50, opts.max_results or 50))
+		local page_number = math.max(1, tonumber(opts.cursor) or 1)
+		local limit = math.max(1, math.min(50, opts.pagelen or 50))
 		local scope = view.scope or ""
 		local has_scoped_filter = scope == "assigned" or scope == "created" or scope == "mentioned"
 		if scope ~= "" and scope ~= "all" and not has_scoped_filter then
-			on_done(nil, nil, true, "Invalid " .. provider_name .. " issue scope: " .. scope)
+			on_done({ items = {} }, "Invalid " .. provider_name .. " issue scope: " .. scope)
 			return nil
 		end
 		local repo = vim.trim(view.repo or "")
 		local base = repo_endpoint(repo)
 		if repo ~= "" and not base then
-			on_done(nil, nil, true, "Invalid " .. provider_name .. " repository")
+			on_done({ items = {} }, "Invalid " .. provider_name .. " repository")
 			return nil
 		end
 		local params = {}
@@ -149,7 +149,7 @@ function M.new(service, mapper)
 		local endpoint = base and (base .. "/issues") or "/repos/issues/search"
 		params.state = view.state or "open"
 		params.type = "issues"
-		params.page = page
+		params.page = page_number
 		params.limit = limit
 		params.q = view.search
 		params.labels = view.labels
@@ -162,8 +162,8 @@ function M.new(service, mapper)
 
 		local function fetch(done)
 			local request_endpoint = endpoint .. service.query(params)
-			local cache_key = cache_scope() .. ":list:" .. request_endpoint
-			if not opts.force_load then
+			local cache_key = cache_scope() .. ":list:v2:" .. request_endpoint
+			if not opts.force_refresh then
 				local cached, ok = service.get_cache(cache_key)
 				if ok then
 					done(cached, nil)
@@ -175,35 +175,34 @@ function M.new(service, mapper)
 					done(nil, err)
 					return
 				end
+				raw = raw == vim.NIL and {} or raw
 				local issues = {}
 				for _, value in ipairs(raw) do
 					if json.nilify(value.pull_request) == nil then
 						table.insert(issues, mapper.to_issue(value, base and repo or nil))
 					end
 				end
-				local has_next = #raw == limit
 				local result = {
-					issues = issues,
-					next_page_token = has_next and tostring(page + 1) or nil,
-					is_last = not has_next,
+					items = issues,
+					next_cursor = #raw == limit and tostring(page_number + 1) or nil,
 				}
 				service.set_cache(cache_key, result)
 				done(result, nil)
-			end)
+			end, { action = base and "List issues" or "Search issues", repo = base and repo or nil })
 		end
 		local function finish(result, err)
 			if err then
-				on_done(nil, nil, true, err)
+				on_done({ items = {} }, err)
 				return
 			end
-			on_done(result.issues, result.next_page_token, result.is_last, nil)
+			on_done(result, nil)
 		end
 
 		if base and has_scoped_filter then
 			local requests = request_scope.new()
 			requests.run(api.fetch_user, function(user, err)
 				if err then
-					on_done(nil, nil, true, err)
+					on_done({ items = {} }, err)
 					return
 				end
 				local login = user.account_id
@@ -230,7 +229,7 @@ function M.new(service, mapper)
 			return nil
 		end
 		local cache_key = detail_cache_key(key)
-		if not opts.force_load then
+		if not opts.force_refresh then
 			local cached, ok = service.get_memory_cache(cache_key)
 			if ok then
 				on_done(cached, nil)

@@ -62,21 +62,22 @@ end
 
 ---@param view AtlasGiteaIssuesViewConfig
 ---@param opts IssuesFetchOpts
----@param on_done fun(issues: Issue[], next_page_token: string|nil, is_last: boolean, err: string|nil)
+---@param on_done fun(page: IssuesPage, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_issues(view, opts, on_done)
-	return issues_api.list(view, opts, function(issues, next_page_token, is_last, err)
+	return issues_api.list(view, opts, function(page, err)
 		if err then
-			on_done({}, next_page_token, is_last, err)
+			on_done({ items = {} }, err)
 			return
 		end
 		local pinned, rest = {}, {}
-		for _, issue in ipairs(issues or {}) do
+		for _, issue in ipairs(page.items) do
 			---@cast issue GiteaIssue
 			table.insert(issue.is_pinned and pinned or rest, issue)
 		end
 		vim.list_extend(pinned, rest)
-		on_done(pinned, next_page_token, is_last, err)
+		page.items = pinned
+		on_done(page, nil)
 	end)
 end
 

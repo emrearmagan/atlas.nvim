@@ -101,7 +101,7 @@ describe("Forgejo provider views", function()
 		local fetched_view
 		issues_api.list = function(view, _, on_done)
 			fetched_view = view
-			on_done({}, nil, true, nil)
+			on_done({ items = {} }, nil)
 			return { cancel = function() end }
 		end
 		provider.capabilities.core.fetch_issues(views[1], {}, function() end)
@@ -148,17 +148,29 @@ describe("Forgejo provider views", function()
 		assert.same({ "open" }, states)
 		local pullrequests_api = require("atlas.pulls.providers.forge.forgejo.api").pullrequests
 		pull_list = pullrequests_api.list
-		local fetched_view, fetched_opts
-		pullrequests_api.list = function(view, opts, on_done)
+		local fetched_view, fetched_statuses, fetched_opts, fetched_page
+		local page = { items = {}, next_cursor = { page = "3" } }
+		pullrequests_api.list = function(view, statuses, opts, on_done)
 			fetched_view = view
+			fetched_statuses = statuses
 			fetched_opts = opts
-			on_done({}, nil)
+			on_done(page, nil)
 			return { cancel = function() end }
 		end
-		provider.capabilities.core.fetch_pullrequests(views[1], {}, function() end)
+		provider.capabilities.core.fetch_pullrequests(
+			views[1],
+			{ cursor = { page = "2" }, pagelen = 7, force_refresh = true },
+			function(result)
+				fetched_page = result
+			end
+		)
 		assert.is_false(fetched_view == views[1])
 		assert.equal("", fetched_view.search)
-		assert.same({ "OPEN" }, fetched_opts.statuses)
+		assert.same({ "OPEN" }, fetched_statuses)
+		assert.same({ page = "2" }, fetched_opts.cursor)
+		assert.equal(7, fetched_opts.pagelen)
+		assert.is_true(fetched_opts.force_refresh)
+		assert.is_true(fetched_page == page)
 		assert.equal(1, repository_calls)
 	end)
 
@@ -166,11 +178,11 @@ describe("Forgejo provider views", function()
 		local provider = require(PULL_PROVIDER)
 		local api = require("atlas.pulls.providers.forge.forgejo.api").pullrequests
 		pull_search_global = api.search_global
-		local fetched_view, fetched_opts
-		api.search_global = function(view, opts, on_done)
+		local fetched_view, fetched_statuses
+		api.search_global = function(view, statuses, _, on_done)
 			fetched_view = view
-			fetched_opts = opts
-			on_done({}, nil)
+			fetched_statuses = statuses
+			on_done({ items = {} }, nil)
 			return { cancel = function() end }
 		end
 
@@ -180,13 +192,13 @@ describe("Forgejo provider views", function()
 		assert.same({ "merged" }, states)
 		provider.capabilities.core.fetch_pullrequests(view, {}, function() end)
 		assert.equal("needle", fetched_view.search)
-		assert.same({ "MERGED" }, fetched_opts.statuses)
+		assert.same({ "MERGED" }, fetched_statuses)
 
 		view._states = { "declined" }
 		query, states = provider.resolve_search(view)
 		assert.equal("type:pulls is:declined needle", query)
 		assert.same({ "declined" }, states)
 		provider.capabilities.core.fetch_pullrequests(view, {}, function() end)
-		assert.same({ "DECLINED" }, fetched_opts.statuses)
+		assert.same({ "DECLINED" }, fetched_statuses)
 	end)
 end)

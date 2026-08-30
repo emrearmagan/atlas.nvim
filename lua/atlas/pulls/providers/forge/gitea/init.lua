@@ -24,23 +24,19 @@ local query = require("atlas.pulls.providers.forge.query")
 
 ---@param view AtlasGiteaPullsViewConfig
 ---@param opts PullsFetchOpts
----@param on_done fun(pulls: PullRequest[], err: string[]|nil)
+---@param on_done fun(page: PullsPage, err: string[]|nil)
 ---@return { cancel: fun() }|nil
 local function fetch_pullrequests(view, opts, on_done)
 	local api_view, statuses = query.for_api(view)
 
 	local global = vim.trim(api_view.repo or "") == ""
 	local fetch = global and pullrequests_api.search_global or pullrequests_api.list
-	return fetch(api_view, {
-		statuses = statuses,
-		pagelen = opts.pagelen or 50,
-		force_load = opts.force_load == true,
-	}, function(pulls, err)
+	return fetch(api_view, statuses, opts, function(page, err)
 		if err then
-			on_done({}, { err })
+			on_done({ items = {} }, { err })
 			return
 		end
-		on_done(pulls or {}, nil)
+		on_done(page, nil)
 	end)
 end
 

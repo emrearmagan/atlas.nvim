@@ -174,7 +174,7 @@ function M.fetch(pr, opts, on_done)
 
 	-- Global Gitea search omits the source SHA, so load the selected PR first.
 	requests.run(function(done)
-		return pullrequests.fetch_by_refs({ pr }, { force_load = opts.force_refresh }, done)
+		return pullrequests.fetch_by_refs({ pr }, { force_refresh = opts.force_refresh }, done)
 	end, function(pulls, err)
 		local selected = pulls and pulls[1] or nil
 		if selected == nil then
