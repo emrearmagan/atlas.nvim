@@ -11,8 +11,8 @@ local function register(action)
 	table.insert(ACTIONS, action)
 end
 
--- register(actions.approve)
--- register(actions.request_changes)
+register(actions.approve)
+register(actions.request_changes)
 register(actions.decline)
 register(actions.edit_title)
 register(actions.edit_description)

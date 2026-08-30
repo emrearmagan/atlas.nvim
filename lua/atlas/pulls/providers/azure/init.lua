@@ -18,6 +18,8 @@ local reviews_api = require("atlas.pulls.providers.azure.api.reviews")
 local checks_api = require("atlas.pulls.providers.azure.api.checks")
 local changes_api = require("atlas.pulls.providers.azure.api.changes")
 local activity_api = require("atlas.pulls.providers.azure.api.activity")
+local comments_api = require("atlas.pulls.providers.azure.api.comments")
+local author_completion = require("atlas.providers.azure.completion.author")
 local actions = require("atlas.pulls.providers.azure.actions")
 local detail_ui = require("atlas.pulls.providers.azure.ui.detail")
 
@@ -61,35 +63,25 @@ return {
 			fetch_description = pullrequests_api.fetch_description,
 			-- fetch_default_reviewers = pullrequests_api.fetch_default_reviewers,
 			fetch_merge_checks = checks_api.fetch,
-			-- fetch_diffstat = changes_api.fetch_diffstat,
 			fetch_commits = changes_api.fetch_commits,
 		},
 		comments = {
-			-- comment_completion = author_completion.for_pulls,
+			comment_completion = author_completion.for_pulls,
 			fetch_conversation = activity_api.fetch_conversation,
-			-- add_comment = comments_api.add_comment,
-			-- edit_comment = comments_api.edit_comment,
-			-- delete_comment = comments_api.delete_comment,
-			-- add_reaction = comments_api.add_reaction,
-			-- set_thread_resolved = comments_api.set_thread_resolved,
+			add_comment = comments_api.add_comment,
+			edit_comment = comments_api.edit_comment,
+			delete_comment = comments_api.delete_comment,
+			reaction_options = { { key = "like", emoji = "👍", label = "Like" } },
+			add_reaction = comments_api.add_reaction,
+			set_thread_resolved = comments_api.set_thread_resolved,
 		},
 		reviews = {
 			fetch = reviews_api.fetch,
 			fetch_threads = reviews_api.fetch_threads,
-			-- fetch_review_context = reviews_api.fetch_review_context,
-			-- edit_review = reviews_api.edit_review,
-			-- start_review = reviews_api.start,
-			-- submit_review = reviews_api.submit,
-			-- approve = reviews_api.approve,
-			-- request_changes = reviews_api.request_changes,
-			-- discard_review = reviews_api.discard,
-			-- set_file_reviewed = reviews_api.set_file_reviewed,
+			fetch_review_context = reviews_api.fetch_review_context,
+			approve = reviews_api.approve,
+			request_changes = reviews_api.request_changes,
 		},
-		-- tasks = {
-		-- 	add_task = tasks_api.add_task,
-		-- 	edit_task = tasks_api.edit_task,
-		-- 	delete_task = tasks_api.delete_task,
-		-- },
 		-- repository = {
 		-- 	fetch_details = repositories_api.fetch_detail,
 		-- 	fetch_branches = repositories_api.fetch_branches,

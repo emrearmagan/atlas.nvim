@@ -209,6 +209,8 @@
 ---@field old_path string|nil
 ---@field from integer|nil
 ---@field to integer|nil
+---@field from_offset integer|nil -- Exclusive end column (1-based UTF-16) on the old side.
+---@field to_offset integer|nil -- Exclusive end column (1-based UTF-16) on the new side.
 ---@field start_from integer|nil
 ---@field start_to integer|nil
 ---@field commit_hash string|nil

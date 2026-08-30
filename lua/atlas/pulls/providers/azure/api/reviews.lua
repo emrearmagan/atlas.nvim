@@ -4,6 +4,9 @@ local diff_parser = require("atlas.core.git.diff_parser")
 local request_scope = require("atlas.core.requests")
 local service = require("atlas.pulls.providers.azure.api.service")
 local mapper = require("atlas.pulls.providers.azure.api.mapper")
+local changes = require("atlas.pulls.providers.azure.api.changes")
+local comments_api = require("atlas.pulls.providers.azure.api.comments")
+local users = require("atlas.pulls.providers.azure.api.users")
 
 ---@param pr PullRequest
 ---@param opts { force_refresh?: boolean }|nil
@@ -35,39 +38,6 @@ function M.fetch_reviewers(pr, opts, on_done)
 		service.set_cache(cache_key, reviewers)
 		on_done(reviewers, nil)
 	end, { action = "Fetch pull request reviewers", repo = pr.repo_full_name, id = pr.id })
-end
-
----@param endpoint string
----@param iteration integer
----@param on_done fun(files: DiffFile[]|nil, err: string|nil)
----@return { cancel: fun() }
-local function fetch_file_diffs(endpoint, iteration, on_done)
-	local files = {}
-	local scope = request_scope.new()
-	local context = { action = "Fetch pull request thread snippets" }
-
-	---@param skip integer
-	local function fetch_page(skip)
-		local query =
-			service.build_query({ iteration = iteration, baseIteration = 0, ["$top"] = 100, ["$skip"] = skip })
-		scope.run(function(done)
-			return service.request("GET", endpoint .. "/filesdiff" .. query, nil, done, context, "7.2-preview.1")
-		end, function(result, err)
-			if err then
-				on_done(nil, err)
-				return
-			end
-			vim.list_extend(files, mapper.to_diff_files(result.fileDiffs))
-			if #result.fileDiffs == 100 then
-				fetch_page(skip + 100)
-				return
-			end
-			on_done(files, nil)
-		end)
-	end
-
-	fetch_page(0)
-	return scope
 end
 
 ---@param pr PullRequest
@@ -109,7 +79,7 @@ local function fetch_review(pr, opts, include_hunks, on_done)
 		}
 		if include_hunks then
 			starts.files = function(done)
-				return fetch_file_diffs(endpoint, iteration, done)
+				return changes.fetch_file_diffs(pr, iteration, opts, done)
 			end
 		end
 		scope.all(starts, function(values, errors)
@@ -164,6 +134,79 @@ end
 ---@return { cancel: fun() }|nil
 function M.fetch_threads(pr, opts, on_done)
 	return fetch_review(pr, opts, true, on_done)
+end
+
+---@param pr PullRequest
+---@param _opts { force_refresh?: boolean }|nil
+---@param on_done fun(context: PullsReviewContext|nil, err: string|nil)
+---@return nil
+function M.fetch_review_context(pr, _opts, on_done)
+	local authors = { pr.author }
+	vim.list_extend(authors, pr.reviewers or {})
+	on_done({ mention_candidates = authors }, nil)
+end
+
+---@param pr PullRequest
+---@param vote integer
+---@param body string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }
+local function set_vote(pr, vote, body, on_done)
+	local scope = request_scope.new()
+	scope.run(users.fetch_user, function(user, user_err)
+		if user_err then
+			on_done(false, user_err)
+			return
+		end
+		local endpoint = string.format(
+			"/%s/_apis/git/repositories/%s/pullrequests/%s/reviewers/%s",
+			service.url_encode(pr.workspace),
+			service.url_encode(pr.repo),
+			tostring(pr.id),
+			service.url_encode(user.id)
+		)
+		scope.run(function(done)
+			return service.request("PUT", endpoint, { id = user.id, vote = vote }, done, {
+				action = "Update pull request vote",
+				repo = pr.repo_full_name,
+				id = pr.id,
+			})
+		end, function(_, err)
+			if err then
+				on_done(false, err)
+				return
+			end
+			service.clear_cache()
+			if vim.trim(body) == "" then
+				on_done(true, nil)
+				return
+			end
+			scope.run(function(done)
+				return comments_api.add_comment(pr, body, nil, done)
+			end, function(comment, comment_err)
+				on_done(comment ~= nil, comment_err)
+			end)
+		end)
+	end)
+	return scope
+end
+
+---@param pr PullRequest
+---@param _review PullsReview|nil
+---@param body string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }
+function M.approve(pr, _review, body, on_done)
+	return set_vote(pr, 10, body, on_done)
+end
+
+---@param pr PullRequest
+---@param _review PullsReview|nil
+---@param body string
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }
+function M.request_changes(pr, _review, body, on_done)
+	return set_vote(pr, -5, body, on_done)
 end
 
 return M

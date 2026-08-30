@@ -196,6 +196,7 @@ function M.to_comment(raw, thread, pr)
 		content_raw = raw.content,
 		created_on = raw.publishedDate,
 		state = thread_states[thread.status],
+		reactions = { like = #json.safe_table(raw.usersLiked) },
 		html_url = pr.link.html,
 	}
 	local context = json.nilify(thread.threadContext)

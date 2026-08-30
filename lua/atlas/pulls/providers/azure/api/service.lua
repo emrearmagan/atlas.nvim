@@ -117,6 +117,7 @@ function M.request(method, endpoint, data, on_done, ctx, api_version)
 	local headers = {
 		Authorization = "Basic " .. vim.base64.encode(":" .. cfg.token),
 		["Content-Type"] = "application/json",
+		["Content-Length"] = method == "POST" and payload == nil and "0" or nil,
 		Accept = "application/json",
 	}
 	local log = vim.tbl_extend("keep", { method = method, endpoint = endpoint }, ctx or {})
