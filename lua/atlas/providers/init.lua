@@ -141,7 +141,7 @@ add({
 		},
 		issues = {
 			module = "atlas.issues.providers.github",
-			icon = { icon = "", hl_group = "AtlasGHIssuesTheme" },
+			icon = { icon = "", hl_group = "AtlasGitHubTheme" },
 			bookmark_key = "S",
 		},
 	},
@@ -172,7 +172,7 @@ add({
 		},
 		issues = {
 			module = "atlas.issues.providers.gitlab",
-			icon = { icon = "", hl_group = "AtlasGLIssuesTheme" },
+			icon = { icon = "", hl_group = "AtlasGitLabTheme" },
 			bookmark_key = "S",
 		},
 	},

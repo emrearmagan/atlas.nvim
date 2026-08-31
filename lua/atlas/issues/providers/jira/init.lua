@@ -24,7 +24,6 @@ local author_completion = require("atlas.providers.jira.completion.author")
 local comments_api = require("atlas.issues.providers.jira.api.comments")
 local config = require("atlas.config")
 local detail_ui = require("atlas.issues.providers.jira.ui.detail")
-local highlights = require("atlas.issues.providers.jira.highlights")
 local issues_api = require("atlas.issues.providers.jira.api.issues")
 local service = require("atlas.issues.providers.jira.api.service")
 local users_api = require("atlas.issues.providers.jira.api.users")
@@ -209,7 +208,6 @@ return {
 		},
 		actions = actions,
 		ui = {
-			setup = highlights.setup,
 			detail = detail_ui,
 		},
 	},

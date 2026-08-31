@@ -176,9 +176,9 @@ local function meta_rows(issue_state)
 	local milestone = issue_state.fields.milestone
 
 	local milestone_text = format_milestone(milestone)
-	local milestone_hl = milestone and "AtlasText" or "AtlasTextMuted"
+	local milestone_hl = milestone and "Normal" or "AtlasTextMuted"
 	local assignees_text = format_assignees(assignees)
-	local assignees_hl = #assignees > 0 and "AtlasText" or "AtlasTextMuted"
+	local assignees_hl = #assignees > 0 and "Normal" or "AtlasTextMuted"
 
 	return {
 		{
@@ -436,8 +436,7 @@ function M.open(opts)
 		return
 	end
 
-	highlights.setup()
-	require("atlas.issues.providers.gitlab.highlights").setup()
+	require("atlas.issues.ui.highlights").setup()
 
 	---@type GitLabCreateIssueState
 	local issue_state = {
@@ -510,7 +509,6 @@ function M.open(opts)
 						set_description = function(description)
 							return form.set_body(issue_state.layout, description)
 						end,
-						menu_kind = "atlas_gitlab_templates_menu",
 					})
 				end,
 			},

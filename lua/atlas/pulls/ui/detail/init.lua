@@ -338,10 +338,6 @@ function M.open(input, opts)
 	state.on_update = opts.on_update
 
 	require("atlas.pulls.ui.highlights").setup()
-	local ui = provider.capabilities.ui
-	if ui and ui.setup then
-		ui.setup()
-	end
 
 	if pr then
 		M.select(pr, { force_refresh = opts.force_refresh })

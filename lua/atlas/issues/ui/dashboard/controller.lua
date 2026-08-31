@@ -243,6 +243,8 @@ local function load_page(view, page_number, cursor, force_refresh, on_done)
 		on_done()
 		return
 	end
+	local previous_page = state.current_page
+	state.current_page = page_number
 
 	cancel_active_requests()
 	local load_requests = active_requests
@@ -276,6 +278,7 @@ local function load_page(view, page_number, cursor, force_refresh, on_done)
 		}, done)
 	end, function(page, err)
 		if err ~= nil then
+			state.current_page = previous_page
 			finish_loading()
 			if page_number == 1 then
 				state.error = tostring(err)
@@ -291,7 +294,6 @@ local function load_page(view, page_number, cursor, force_refresh, on_done)
 		fetch_missing_parents(provider, view, page.items, force_refresh, load_requests, function(enriched)
 			state.set_issues(mark_starred(enriched))
 			page.items = state.issues
-			state.current_page = page_number
 			state.page_history[page_number] = page
 			finish_loading()
 			notify.success(string.format("Loaded %d issues", #enriched), { timeout = 1200 })

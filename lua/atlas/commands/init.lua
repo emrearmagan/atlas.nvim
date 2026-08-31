@@ -141,7 +141,12 @@ M.register({
 		if args[1] then
 			start(args[1]:lower())
 		else
-			picker.select({ title = "Create:", items = { "pr", "issue" }, on_select = start })
+			picker.select({
+				title = "Create:",
+				items = { "pr", "issue" },
+				size = { width = 0.35, height = 0.15 },
+				on_select = start,
+			})
 		end
 	end,
 })

@@ -7,7 +7,7 @@ local pull_icon, pull_icon_hl = icons.pulls("pr")
 local checks_icon, checks_icon_hl = icons.pulls("tasks")
 local SUBJECT_ICON = {
 	PullRequest = { icon = pull_icon, hl = pull_icon_hl },
-	Issue = { icon = icons.issues("issue"), hl = "AtlasPROpen" },
+	Issue = { icon = icons.issues("issue"), hl = "AtlasTextPositive" },
 	CheckSuite = { icon = checks_icon, hl = checks_icon_hl },
 }
 

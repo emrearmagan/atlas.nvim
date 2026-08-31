@@ -273,10 +273,7 @@ local function prepare_open(opts)
 	set_provider(provider)
 	state.on_update = opts.on_update
 
-	local ui = provider.capabilities.ui
-	if ui and ui.setup then
-		ui.setup()
-	end
+	require("atlas.issues.ui.highlights").setup()
 	return provider, opts.force_refresh == true
 end
 

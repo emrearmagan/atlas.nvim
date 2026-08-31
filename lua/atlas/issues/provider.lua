@@ -68,7 +68,6 @@
 ---@field removed boolean|nil
 
 ---@class IssuesUICapability
----@field setup fun()|nil
 ---@field detail IssuesProviderDetail|nil
 
 --------------------------------------------------------------------------------

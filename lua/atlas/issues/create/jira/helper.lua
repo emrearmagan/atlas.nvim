@@ -88,7 +88,7 @@ function M.meta_rows(fields, assignees, issue_types, reporter, reporter_loading,
 					{
 						start_col = #provider_icon + 1,
 						end_col = #provider_icon + 1 + #project_name,
-						hl_group = "AtlasProjectKey",
+						hl_group = "AtlasJiraKey",
 					},
 				},
 			},

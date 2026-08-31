@@ -129,7 +129,6 @@ function M.open(context, on_done)
 	picker.select({
 		title = string.format("Choose %s action%s", context.provider.name, target),
 		items = items,
-		kind = "atlas_pulls_actions",
 		format_item = function(action)
 			return action.label
 		end,

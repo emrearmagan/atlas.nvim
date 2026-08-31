@@ -132,7 +132,7 @@ function M.open(session)
 	local items = {
 		{
 			id = "toggle_detail_panel",
-			label = "Toggle pull request details",
+			label = "Show details",
 		},
 	}
 
@@ -164,7 +164,6 @@ function M.open(session)
 	picker.select({
 		title = "Review action",
 		items = items,
-		kind = "atlas_diff_actions",
 		format_item = function(action)
 			return action.label
 		end,

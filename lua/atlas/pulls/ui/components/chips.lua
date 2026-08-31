@@ -92,9 +92,9 @@ function M.render_repo(repo, opts)
 		},
 		{
 			label = string.format("%s %s", icons.pulls("branch"), tostring(repo.default_branch or "-")),
-			hl = "AtlasBitbucketPRMerged",
+			hl = "AtlasPROpenChip",
 		},
-		repo.is_private == true and { label = "private", hl = "AtlasBitbucketPRDraft" }
+		repo.is_private == true and { label = "private", hl = "AtlasPRDraftChip" }
 			or { label = "public", hl = "AtlasTextPositive" },
 	}
 

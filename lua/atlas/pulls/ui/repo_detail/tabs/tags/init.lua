@@ -106,7 +106,7 @@ function M.render(_repo, width)
 		mode = "linked",
 		content_max_lines = 1,
 		author_hl = function()
-			return "AtlasText"
+			return "Normal"
 		end,
 		content_hl = function(_, row)
 			return { { start_col = 0, end_col = #row, hl_group = "AtlasTextMuted" } }

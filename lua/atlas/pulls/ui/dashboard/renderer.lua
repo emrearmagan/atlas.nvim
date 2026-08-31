@@ -77,21 +77,22 @@ local function statusline_items(pulls)
 		},
 	}
 	local page = state.page_history[state.current_page]
+	if page == nil and state.is_loading then
+		page = state.page_history[state.current_page - 1]
+	end
 	if page ~= nil and (state.current_page > 1 or page.next_cursor ~= nil) then
+		local page_number = tostring(state.current_page)
+		if page.total_pages ~= nil then
+			page_number = page_number .. "/" .. page.total_pages
+		end
 		table.insert(items, {
 			text = "Page",
 			hl_group = "AtlasFooterText",
 		})
 		table.insert(items, {
-			text = tostring(state.current_page),
+			text = page_number,
 			hl_group = "AtlasFooterActive",
 		})
-		if page.total_pages ~= nil then
-			table.insert(items, {
-				text = "of " .. page.total_pages,
-				hl_group = "AtlasFooterText",
-			})
-		end
 	end
 	local user = state.current_user
 	if user ~= nil then

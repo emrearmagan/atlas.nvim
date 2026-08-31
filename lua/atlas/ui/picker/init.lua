@@ -22,6 +22,7 @@ local config = require("atlas.config")
 ---@field multi boolean
 ---@field selected any[]
 ---@field initial_index integer|nil
+---@field size { width: number, height: number }
 ---@field fetch_on_open boolean|nil
 ---@field debounce_ms integer|nil
 ---@field on_done fun(value: any|any[])
@@ -31,6 +32,12 @@ local picker_modules = {
 	default = "atlas.ui.picker.atlas",
 	snacks = "atlas.ui.picker.snacks",
 	["fzf-lua"] = "atlas.ui.picker.fzf_lua",
+}
+
+local sizes = {
+	compact = { width = 0.5, height = 0.3 },
+	list = { width = 0.5, height = 0.5 },
+	preview = { width = 0.7, height = 0.7 },
 }
 
 ---@param name string
@@ -59,28 +66,21 @@ end
 ---@param opts {
 --- title: string,
 --- items: any[],
---- kind: string|nil,
---- format_item: (fun(item: any): string)|nil,
---- on_select: (fun(item: any|nil, index: integer|nil)),
+--- format_item: AtlasPickerFormatItem|nil,
+--- initial_index: integer|nil,
+--- size: { width: number, height: number }|nil,
+--- on_select: fun(item: any|nil),
 ---}
 function M.select(opts)
-	vim.ui.select(opts.items, {
-		prompt = opts.title,
-		kind = opts.kind,
-		format_item = opts.format_item,
-	}, opts.on_select)
-end
-
----@param opts { title: string, items: any[], key: (fun(item: any): string), format_item: AtlasPickerFormatItem, initial_index: integer|nil, on_select: (fun(item: any|nil)) }
-function M.find(opts)
 	open_backend({
 		title = opts.title,
 		items = opts.items,
-		format_item = opts.format_item,
-		key = opts.key,
+		format_item = opts.format_item or tostring,
+		key = tostring,
 		multi = false,
 		selected = {},
 		initial_index = opts.initial_index,
+		size = opts.size or sizes.compact,
 		on_done = opts.on_select,
 		on_cancel = function()
 			opts.on_select(nil)
@@ -88,7 +88,7 @@ function M.find(opts)
 	})
 end
 
----@param opts { title: string, items: any[], key: (fun(item: any): string), format_item: AtlasPickerFormatItem, preview_item: AtlasPickerPreviewItem, on_select: (fun(item: any|nil)) }
+---@param opts { title: string, items: any[], key: (fun(item: any): string), format_item: AtlasPickerFormatItem, preview_item: AtlasPickerPreviewItem, size: { width: number, height: number }|nil, on_select: (fun(item: any|nil)) }
 function M.select_with_preview(opts)
 	open_backend({
 		title = opts.title,
@@ -98,6 +98,7 @@ function M.select_with_preview(opts)
 		preview_item = opts.preview_item,
 		multi = false,
 		selected = {},
+		size = opts.size or sizes.preview,
 		on_done = opts.on_select,
 		on_cancel = function()
 			opts.on_select(nil)
@@ -105,7 +106,7 @@ function M.select_with_preview(opts)
 	})
 end
 
----@param opts { title: string, items: any[], selected: any[], key: (fun(item: any): string), format_item: AtlasPickerFormatItem, on_done: (fun(selected: any[])) }
+---@param opts { title: string, items: any[], selected: any[], key: (fun(item: any): string), format_item: AtlasPickerFormatItem, size: { width: number, height: number }|nil, on_done: (fun(selected: any[])) }
 function M.multi_select(opts)
 	local available = {}
 	for _, item in ipairs(opts.items) do
@@ -119,6 +120,7 @@ function M.multi_select(opts)
 		key = opts.key,
 		multi = true,
 		selected = opts.selected,
+		size = opts.size or sizes.list,
 		on_done = function(selected)
 			local selected_keys = {}
 			for _, item in ipairs(selected) do
@@ -143,6 +145,7 @@ end
 --- initial_items: any[]|nil,
 --- debounce_ms: integer|nil,
 --- fetch_on_open: boolean|nil,
+--- size: { width: number, height: number }|nil,
 --- format_item: AtlasPickerFormatItem,
 --- preview_item: AtlasPickerPreviewItem|nil,
 --- fetch: AtlasPickerFetch,
@@ -161,6 +164,7 @@ function M.search(opts)
 		fetch = opts.fetch,
 		multi = false,
 		selected = {},
+		size = opts.size or (opts.preview_item and sizes.preview or sizes.list),
 		fetch_on_open = opts.fetch_on_open,
 		debounce_ms = opts.debounce_ms == nil and 250 or opts.debounce_ms,
 		on_done = opts.on_select,

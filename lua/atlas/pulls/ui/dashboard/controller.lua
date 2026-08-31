@@ -213,6 +213,8 @@ end
 ---@param force_refresh boolean
 ---@param on_done fun()|nil
 local function load_page(provider, view, page_number, cursor, force_refresh, on_done)
+	local previous_page = state.current_page
+	state.current_page = page_number
 	state.is_loading = true
 	state.error = nil
 	sync_loading_spinner()
@@ -231,6 +233,7 @@ local function load_page(provider, view, page_number, cursor, force_refresh, on_
 		local first_err = err and err[1]
 		local has_pulls = #page.items > 0
 		if first_err ~= nil and not has_pulls then
+			state.current_page = previous_page
 			if page_number == 1 then
 				state.error = tostring(first_err)
 				state.pulls = {}
@@ -239,7 +242,6 @@ local function load_page(provider, view, page_number, cursor, force_refresh, on_
 		else
 			page.items = mark_starred(page.items)
 			state.error = nil
-			state.current_page = page_number
 			state.page_history[page_number] = page
 			state.pulls = page.items
 			if first_err ~= nil then

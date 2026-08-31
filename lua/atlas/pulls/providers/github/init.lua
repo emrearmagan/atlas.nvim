@@ -18,7 +18,6 @@ local config = require("atlas.config")
 local cli = require("atlas.providers.github.client")
 local comments_api = require("atlas.pulls.providers.github.api.comments")
 local emojis = require("atlas.ui.shared.emojis")
-local highlights = require("atlas.pulls.providers.github.highlights")
 local notifications_api = require("atlas.providers.github.notifications")
 local pipeline_actions = require("atlas.pulls.providers.github.actions.pipelines")
 local pipelines_api = require("atlas.pulls.providers.github.api.pipelines")
@@ -185,7 +184,6 @@ return {
 		notifications = notifications_api,
 		actions = actions,
 		ui = {
-			setup = highlights.setup,
 			detail = ui_detail,
 			repo_detail = ui_repo_detail,
 		},
