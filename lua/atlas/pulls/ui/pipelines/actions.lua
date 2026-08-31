@@ -36,7 +36,6 @@ function M.open(provider, ctx, on_select)
 	picker.select({
 		title = "Choose pipeline action",
 		items = available,
-		kind = "atlas_pipeline_actions",
 		format_item = function(action)
 			return action.label
 		end,

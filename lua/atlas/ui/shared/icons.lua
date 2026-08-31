@@ -15,7 +15,6 @@ local ICONS = {
 		search = { icon = "", hl_group = "AtlasTextMuted" },
 		folder_closed = { icon = "", hl_group = "AtlasLogInfo" },
 		folder_open = { icon = "", hl_group = "AtlasLogInfo" },
-		refresh = { icon = "󰑐", hl_group = "AtlasTextMuted" },
 		overview = { icon = "", hl_group = "AtlasTextMuted" },
 		comment = { icon = "", hl_group = "AtlasTextMuted" },
 		conversation = { icon = "", hl_group = "AtlasTextMuted" },
@@ -43,14 +42,13 @@ local ICONS = {
 		arrow_right = { icon = "", hl_group = "AtlasTextMuted" },
 		fold_open = { icon = "", hl_group = "AtlasTextMuted" },
 		fold_closed = { icon = "", hl_group = "AtlasTextMuted" },
-		custom_action = { icon = "", hl_group = "AtlasTextMuted" },
 		tag = { icon = "", hl_group = "AtlasTextWarning" },
 	},
 
 	pulls = {
 		fork = { icon = "", hl_group = "AtlasLogInfo" },
 		repo = { icon = "", hl_group = "AtlasTextMuted" },
-		pr = { icon = "", hl_group = "AtlasPROpen" },
+		pr = { icon = "", hl_group = "AtlasTextPositive" },
 		merged_pr = { icon = "", hl_group = "AtlasPRMerged" },
 		declined_pr = { icon = "", hl_group = "AtlasPRDeclined" },
 		pipeline = { icon = "󰜎", hl_group = "AtlasTextWarning" },
@@ -71,7 +69,7 @@ local ICONS = {
 	},
 
 	issues = {
-		issue = { icon = "", hl_group = "AtlasGHIssueOpen" },
+		issue = { icon = "", hl_group = "AtlasTextPositive" },
 		type = {
 			epic = { icon = "", hl_group = "AtlasJiraEpic" },
 			story = { icon = "󰃀", hl_group = "AtlasTextPositive" },
@@ -91,12 +89,26 @@ local ICONS = {
 	},
 }
 
+ICONS.picker = {
+	prompt = { icon = "›", hl_group = "AtlasTextNote" },
+	selected = ICONS.general.success,
+	unselected = { icon = "○", hl_group = "AtlasTextMuted" },
+}
+
 ---@param style AtlasIconStyle|nil
 ---@param fallback AtlasIconStyle|nil
 ---@return string, string
 local function get(style, fallback)
 	style = style or fallback or ICONS.fallback
 	return style.icon, style.hl_group
+end
+
+-- Picker
+
+---@param name string
+---@return string, string
+function M.picker(name)
+	return get(ICONS.picker[name])
 end
 
 -- General

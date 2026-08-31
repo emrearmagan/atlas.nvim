@@ -61,13 +61,13 @@ end
 local function github()
 	local function state_icon(status_id)
 		if status_id == "closed" then
-			return icons.pulls_status("successful"), "AtlasGHIssueClosed"
+			return icons.pulls_status("successful"), "AtlasIssueClosed"
 		end
-		return icons.issues("issue"), "AtlasGHIssueOpen"
+		return icons.issues("issue"), "AtlasIssueOpen"
 	end
 
 	local function state_chip_hl(status_id)
-		return status_id == "closed" and "AtlasGHIssueClosedChip" or "AtlasGHIssueOpenChip"
+		return status_id == "closed" and "AtlasIssueClosedChip" or "AtlasIssueOpenChip"
 	end
 
 	---@param issue GitHubIssue
@@ -217,13 +217,13 @@ end
 local function gitlab()
 	local function state_icon(status_id)
 		if status_id == "closed" then
-			return icons.pulls_status("successful"), "AtlasGLIssueClosed"
+			return icons.pulls_status("successful"), "AtlasIssueClosed"
 		end
-		return icons.issues("issue"), "AtlasGLIssueOpen"
+		return icons.issues("issue"), "AtlasIssueOpen"
 	end
 
 	local function state_chip_hl(status_id)
-		return status_id == "closed" and "AtlasGLIssueClosedChip" or "AtlasGLIssueOpenChip"
+		return status_id == "closed" and "AtlasIssueClosedChip" or "AtlasIssueOpenChip"
 	end
 
 	---@param issue GitLabIssue

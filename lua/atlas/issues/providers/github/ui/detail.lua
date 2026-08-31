@@ -119,7 +119,7 @@ function M.header_fields(issue, details, _loading)
 		{
 			label = "Status",
 			value = tostring(issue.status or "Open"),
-			hl = issue.status_id == "closed" and "AtlasGHIssueClosedChip" or "AtlasGHIssueOpenChip",
+			hl = issue.status_id == "closed" and "AtlasIssueClosedChip" or "AtlasIssueOpenChip",
 		},
 		{
 			label = "Reporter",

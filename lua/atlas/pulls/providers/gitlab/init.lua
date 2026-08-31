@@ -26,7 +26,6 @@ local checks_api = require("atlas.pulls.providers.gitlab.api.checks")
 local comments_api = require("atlas.pulls.providers.gitlab.api.comments")
 local config = require("atlas.config")
 local detail_ui = require("atlas.pulls.providers.gitlab.ui.detail")
-local highlights = require("atlas.pulls.providers.gitlab.highlights")
 local notifications_api = require("atlas.providers.gitlab.notifications")
 local pipeline_actions = require("atlas.pulls.providers.gitlab.actions.pipelines")
 local pipelines_api = require("atlas.pulls.providers.gitlab.api.pipelines")
@@ -182,7 +181,6 @@ return {
 		notifications = notifications_api,
 		actions = actions,
 		ui = {
-			setup = highlights.setup,
 			detail = detail_ui,
 			repo_detail = repo_detail_ui,
 		},

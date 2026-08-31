@@ -492,8 +492,7 @@ function M.open(on_submit, opts, editor_opts)
 		close_ui()
 	end
 
-	require("atlas.ui.shared.highlights").setup()
-	require("atlas.issues.providers.jira.highlights").setup()
+	require("atlas.issues.ui.highlights").setup()
 
 	state.on_submit = on_submit
 	state.fields = opts
@@ -541,7 +540,6 @@ function M.open(on_submit, opts, editor_opts)
 					templates.open({
 						get_description = get_active_markdown_description,
 						set_description = set_description_markdown,
-						menu_kind = "atlas_issue_templates_menu",
 					})
 				end,
 				desc = "templates",

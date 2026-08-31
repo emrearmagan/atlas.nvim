@@ -109,11 +109,7 @@ function M.init(provider, opts)
 	state.page_history = {}
 	state.collapsed_issue_keys = {}
 
-	local capabilities = provider.capabilities
-	local ui = capabilities.ui
-	if ui and ui.setup then
-		ui.setup()
-	end
+	require("atlas.issues.ui.highlights").setup()
 
 	state.starred_items = require("atlas.core.starred").list("issues", provider.id) or {}
 	local bookmarks = require("atlas.ui.shared.bookmarks")
@@ -137,7 +133,7 @@ function M.init(provider, opts)
 	M.render()
 	controller.switch_view(state.view)
 
-	if capabilities.notifications then
+	if provider.capabilities.notifications then
 		notifications.refresh({ on_done = M.render })
 	end
 end

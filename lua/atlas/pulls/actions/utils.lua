@@ -1,7 +1,6 @@
 local M = {}
 
 local git_checkout = require("atlas.core.git.checkout")
-local icons = require("atlas.ui.shared.icons")
 local logger = require("atlas.core.logger")
 local core_notify = require("atlas.core.notify")
 
@@ -28,7 +27,7 @@ end
 local function custom_action(item)
 	return {
 		id = item.id,
-		label = icons.general("custom_action") .. "  " .. item.label,
+		label = item.label,
 		custom = true,
 		is_available = has_pr,
 		run = function(context, done)

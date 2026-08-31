@@ -7,7 +7,6 @@ local actions = require("atlas.issues.providers.gitlab.actions")
 local author_completion = require("atlas.providers.gitlab.completion.author")
 local config = require("atlas.config")
 local detail_ui = require("atlas.issues.providers.gitlab.ui.detail")
-local highlights = require("atlas.issues.providers.gitlab.highlights")
 local issues_api = require("atlas.issues.providers.gitlab.api.issues")
 local notes_api = require("atlas.issues.providers.gitlab.api.notes")
 local users_api = require("atlas.issues.providers.gitlab.api.users")
@@ -155,7 +154,6 @@ return {
 		notifications = notifications_api,
 		actions = actions,
 		ui = {
-			setup = highlights.setup,
 			detail = detail_ui,
 		},
 	},

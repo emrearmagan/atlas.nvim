@@ -114,6 +114,5 @@
 ---@field run fun(action_id: string, ctx: AtlasPullActionContext, on_done: fun(result: PullsActionResult|nil, err: string|nil)): boolean
 
 ---@class PullsUICapability
----@field setup fun()|nil
 ---@field detail PullsProviderDetail|nil
 ---@field repo_detail PullsProviderRepoDetail|nil

@@ -31,7 +31,6 @@ local comments_api = require("atlas.pulls.providers.bitbucket.api.comments")
 local config = require("atlas.config")
 local detail_ui = require("atlas.pulls.providers.bitbucket.ui.detail")
 local git = require("atlas.core.git")
-local highlights = require("atlas.pulls.providers.bitbucket.highlights")
 local pipeline_actions = require("atlas.pulls.providers.bitbucket.actions.pipelines")
 local pipelines_api = require("atlas.pulls.providers.bitbucket.api.pipelines")
 local pullrequests_api = require("atlas.pulls.providers.bitbucket.api.pullrequests")
@@ -158,7 +157,6 @@ return {
 		},
 		actions = actions,
 		ui = {
-			setup = highlights.setup,
 			detail = detail_ui,
 			repo_detail = repo_detail_ui,
 		},

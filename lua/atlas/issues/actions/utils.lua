@@ -1,6 +1,5 @@
 local M = {}
 
-local icons = require("atlas.ui.shared.icons")
 local logger = require("atlas.core.logger")
 local notify = require("atlas.core.notify")
 
@@ -15,7 +14,7 @@ end
 local function custom_action(item)
 	return {
 		id = item.id,
-		label = icons.general("custom_action") .. "  " .. item.label,
+		label = item.label,
 		custom = true,
 		is_available = has_issue,
 		run = function(context, done)
