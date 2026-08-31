@@ -19,7 +19,6 @@ local comments_api = require("atlas.issues.providers.github.api.comments")
 local config = require("atlas.config")
 local client = require("atlas.providers.github.client")
 local emojis = require("atlas.ui.shared.emojis")
-local highlights = require("atlas.issues.providers.github.highlights")
 local issue_cache = require("atlas.issues.providers.github.api.cache")
 local issues_api = require("atlas.issues.providers.github.api.issues")
 local notifications_api = require("atlas.providers.github.notifications")
@@ -269,7 +268,6 @@ return {
 		notifications = notifications_api,
 		actions = actions,
 		ui = {
-			setup = highlights.setup,
 			detail = ui_detail,
 		},
 	},

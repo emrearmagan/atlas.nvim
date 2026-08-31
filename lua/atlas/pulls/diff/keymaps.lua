@@ -47,6 +47,7 @@ local function with_item(session, buf, on_comment, on_note)
 		picker.select({
 			title = "Select review item",
 			items = { "Comment thread", "Local notes" },
+			size = { width = 0.35, height = 0.15 },
 			on_select = function(choice)
 				if choice == "Comment thread" then
 					on_comment()
@@ -117,7 +118,7 @@ function M.register(session, opts)
 			end
 
 			if session.review then
-				add(items, "pulls.review.diff.toggle_detail_panel", "Toggle pull request details", function()
+				add(items, "pulls.review.diff.toggle_detail_panel", "Show details", function()
 					actions.toggle_detail_panel(session)
 				end)
 				add(items, "ui.open_actions", "Review actions", function()

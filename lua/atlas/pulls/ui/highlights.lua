@@ -1,5 +1,7 @@
 local M = {}
 
+local shared = require("atlas.ui.shared.highlights")
+
 ---@type table<string, table>
 local groups = {
 	AtlasPROpen = { fg = "#86efac" },
@@ -24,6 +26,7 @@ local groups = {
 }
 
 function M.setup()
+	shared.setup()
 	for name, opts in pairs(groups) do
 		vim.api.nvim_set_hl(0, name, opts)
 	end

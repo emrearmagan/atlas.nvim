@@ -123,10 +123,6 @@ function M.init(provider, opts)
 	notifications.set_provider(provider)
 
 	require("atlas.pulls.ui.highlights").setup()
-	local ui = provider.capabilities.ui
-	if ui and ui.setup then
-		ui.setup()
-	end
 
 	local bookmarks = require("atlas.ui.shared.bookmarks")
 	state.bookmarks = bookmarks.new(provider.id, "pulls")

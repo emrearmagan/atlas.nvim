@@ -5,7 +5,7 @@ local icons = require("atlas.ui.shared.icons")
 
 local TARGET_ICON = {
 	MergeRequest = { icons.pulls("pr") },
-	Issue = { icon = icons.issues("issue"), hl = "AtlasPROpen" },
+	Issue = { icon = icons.issues("issue"), hl = "AtlasTextPositive" },
 }
 local FALLBACK_ICON = { icon = icons.general("info"), hl = "AtlasTextMuted" }
 

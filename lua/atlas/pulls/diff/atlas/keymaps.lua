@@ -66,13 +66,10 @@ function M.register(session, actions)
 		for index, file in ipairs(state.files) do
 			files[index] = { index = index, path = file.path }
 		end
-		picker.find({
+		picker.select({
 			title = "Changed files",
 			items = files,
 			initial_index = state.pending_index or state.selected_index,
-			key = function(file)
-				return file.path
-			end,
 			format_item = function(file)
 				return file.path
 			end,

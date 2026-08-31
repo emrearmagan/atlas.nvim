@@ -32,6 +32,11 @@ end
 
 ---@type table<string, table>
 local groups = {
+	AtlasGitHubTheme = { bg = "#1f2328", fg = "#f0f6fc", bold = true },
+	AtlasGitLabTheme = { fg = "#1e1e2e", bg = "#fc6d26", bold = true },
+	AtlasBitbucketTheme = { bg = "#1e3a8a", bold = true },
+	AtlasJiraTheme = { bg = "#1e3a8a", bold = true },
+
 	AtlasTabInactive = { link = "CursorLine" },
 	AtlasColumnHeader = { fg = "#7f849c", bold = true },
 	AtlasSectionHeader = { fg = "#7f849c", bold = true, underline = true },

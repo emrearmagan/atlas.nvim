@@ -10,9 +10,9 @@ local spinner = require("atlas.ui.components.spinner")
 ---@return string
 local function state_chip_hl(status_id)
 	if status_id == "closed" then
-		return "AtlasGLIssueClosedChip"
+		return "AtlasIssueClosedChip"
 	end
-	return "AtlasGLIssueOpenChip"
+	return "AtlasIssueOpenChip"
 end
 
 ---@param issue Issue

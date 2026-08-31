@@ -471,8 +471,7 @@ end
 
 ---@param opts CreatePROpenOpts
 function M.open(opts)
-	--- Atlas might not be open when this is called, so we need to load the highlights
-	require("atlas.ui.shared.highlights").setup()
+	--- Atlas might not be open when this is called, so load the highlights.
 	require("atlas.pulls.ui.highlights").setup()
 
 	---@type CreatePRState

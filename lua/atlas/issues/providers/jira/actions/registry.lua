@@ -522,14 +522,13 @@ local function create_issue(context, done)
 		title = "Create Issue",
 		debounce_ms = 0,
 		format_item = function(item)
-			local provider_icon, provider_hl = icons.issues_provider("jira", "provider")
+			local provider_icon = icons.issues_provider("jira", "provider")
 			local project = item.value
 			local category_name = project.category and project.category.name or ""
 			if category_name ~= "" then
-				return string.format("%s %s - %s (%s)", provider_icon, item.label, project.name, category_name),
-					provider_hl
+				return string.format("%s %s - %s (%s)", provider_icon, item.label, project.name, category_name)
 			end
-			return string.format("%s %s - %s", provider_icon, item.label, project.name), provider_hl
+			return string.format("%s %s - %s", provider_icon, item.label, project.name)
 		end,
 		fetch = function(query, fetch_done)
 			if all_items then

@@ -189,7 +189,6 @@ local function search(ctx, done)
 		picker.select({
 			title = "Select workspace",
 			items = ws,
-			kind = "atlas_bitbucket_workspace_select",
 			format_item = function(item)
 				return item.slug
 			end,

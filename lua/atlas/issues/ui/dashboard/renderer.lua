@@ -274,18 +274,19 @@ function M.render(opts)
 		{ text = string.format("%d issues", issue_count), hl_group = "AtlasFooterText" },
 	}
 	local page = state.page_history[state.current_page]
+	if page == nil and state.is_loading then
+		page = state.page_history[state.current_page - 1]
+	end
 	if page ~= nil and (state.current_page > 1 or page.next_cursor ~= nil) then
+		local page_number = tostring(state.current_page)
+		if page.total_pages ~= nil then
+			page_number = page_number .. "/" .. page.total_pages
+		end
 		statusline_items[#statusline_items + 1] = { text = "Page", hl_group = "AtlasFooterText" }
 		statusline_items[#statusline_items + 1] = {
-			text = tostring(state.current_page),
+			text = page_number,
 			hl_group = "AtlasFooterActive",
 		}
-		if page.total_pages ~= nil then
-			statusline_items[#statusline_items + 1] = {
-				text = "of " .. page.total_pages,
-				hl_group = "AtlasFooterText",
-			}
-		end
 	end
 	local user_name = (state.current_user and state.current_user.display_name) or ""
 	if user_name ~= "" then

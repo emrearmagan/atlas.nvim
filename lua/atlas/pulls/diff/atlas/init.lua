@@ -15,7 +15,6 @@ local pulls_highlights = require("atlas.pulls.ui.highlights")
 local review_panel = require("atlas.pulls.diff.ui.review_panel")
 local review = require("atlas.pulls.diff.review")
 local session_api = require("atlas.pulls.diff.session")
-local shared_highlights = require("atlas.ui.shared.highlights")
 local view = require("atlas.pulls.diff.atlas.view")
 
 ---@param session AtlasDiffSession
@@ -518,7 +517,6 @@ end
 ---@param on_done fun(err: string|nil)
 ---@return { cancel: fun() }
 function M.open(session, loading_view, on_done)
-	shared_highlights.setup()
 	pulls_highlights.setup()
 	if not session.source.head_revision then
 		loading_view:finish()
