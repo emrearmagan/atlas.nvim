@@ -8,7 +8,10 @@ describe("issues.ui.highlights", function()
 	it("defines its groups when nothing has set them yet", function()
 		highlights.setup()
 
-		assert.are.same({ fg = "#a6e3a1", bold = true, default = true }, vim.api.nvim_get_hl(0, { name = "AtlasIssueOpen" }))
+		assert.are.same(
+			{ fg = "#a6e3a1", bold = true, default = true },
+			vim.api.nvim_get_hl(0, { name = "AtlasIssueOpen" })
+		)
 	end)
 
 	it("does not clobber a group a colorscheme already defined", function()

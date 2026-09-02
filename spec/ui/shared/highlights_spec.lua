@@ -8,7 +8,10 @@ describe("ui.shared.highlights", function()
 	it("defines its groups when nothing has set them yet", function()
 		highlights.setup()
 
-		assert.are.same({ bg = "#1f2328", fg = "#f0f6fc", bold = true, default = true }, vim.api.nvim_get_hl(0, { name = "AtlasGitHubTheme" }))
+		assert.are.same(
+			{ bg = "#1f2328", fg = "#f0f6fc", bold = true, default = true },
+			vim.api.nvim_get_hl(0, { name = "AtlasGitHubTheme" })
+		)
 	end)
 
 	it("does not clobber a group a colorscheme already defined", function()
