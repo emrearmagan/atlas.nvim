@@ -13,6 +13,10 @@ function M.open(opts)
 	local cmd_name = opts.name
 	pcall(vim.api.nvim_del_user_command, cmd_name)
 
+	local buf = vim.api.nvim_get_current_buf()
+	local had_completion = vim.b[buf].completion
+	vim.b[buf].completion = false
+
 	local cleaned = false
 	local function cleanup()
 		if cleaned then
@@ -20,6 +24,9 @@ function M.open(opts)
 		end
 		cleaned = true
 		pcall(vim.api.nvim_del_user_command, cmd_name)
+		if vim.api.nvim_buf_is_valid(buf) then
+			vim.b[buf].completion = had_completion
+		end
 	end
 
 	vim.api.nvim_create_user_command(cmd_name, function(cmd_opts)
