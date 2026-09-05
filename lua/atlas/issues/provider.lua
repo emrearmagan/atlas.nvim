@@ -1,19 +1,25 @@
 -- Provider Interface
 --------------------------------------------------------------------------------
 
+---@class IssuesViewConfig : AtlasIssuesViewConfig
+
+---@class AtlasIssuesBookmarkConfig
+---@field layout AtlasIssuesViewLayout|nil
+
 ---@class IssuesFetchOpts
----@field force_load boolean|nil
----@field max_results number|nil
----@field next_page_token string|nil
----@field layout "plain"|"compact"|nil
----@field with_relationships boolean|nil
+---@field force_refresh boolean|nil
+---@field pagelen number|nil
+---@field cursor string|nil
+
+---@class IssuesPage
+---@field items Issue[]
+---@field next_cursor string|nil
+---@field total_pages integer|nil
 
 ---@class AtlasIssuesCommentCompletionContext
 ---@field issue Issue
 ---@field details IssueDetails|nil
 ---@field comments IssueComment[]
-
----@class IssuesViewConfig : AtlasIssuesViewConfig
 
 ---@class IssuesProvider
 ---@field id string
@@ -21,7 +27,8 @@
 ---@field icon string
 ---@field hl_group string
 ---@field views fun(): IssuesViewConfig[]
----@field search_view fun(target: AtlasTarget): IssuesViewConfig
+---@field view_for_target fun(target: AtlasTarget): IssuesViewConfig
+---@field resolve_search fun(view: IssuesViewConfig): string
 ---@field issue_ref fun(target: AtlasTarget): IssueRef|nil
 ---@field capabilities IssuesProviderCapabilities
 
@@ -34,8 +41,7 @@
 
 ---@class IssuesCoreCapability
 ---@field fetch_user fun(on_done: fun(user: IssueUser|nil, err: string|nil)): { cancel: fun() }|nil
----@field search_query fun(view: IssuesViewConfig, opts: IssuesFetchOpts): string
----@field fetch_issues fun(view: IssuesViewConfig, opts: IssuesFetchOpts, on_done: fun(issues: Issue[], next_page_token: string|nil, is_last: boolean, err: string|nil)): { cancel: fun() }|nil
+---@field fetch_issues fun(view: IssuesViewConfig, opts: IssuesFetchOpts, on_done: fun(page: IssuesPage, err: string|nil)): { cancel: fun() }|nil
 ---@field fetch_by_refs fun(refs: IssueRef[], opts: IssuesFetchOpts, on_done: fun(issues: Issue[], err: string|nil)): { cancel: fun() }|nil
 ---@field fetch_issue fun(ref: IssueRef, opts: IssuesFetchOpts|nil, on_done: fun(details: IssueDetails|nil, err: string|nil)): { cancel: fun() }|nil
 ---@field update_description (fun(issue: Issue, content: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
@@ -62,7 +68,6 @@
 ---@field removed boolean|nil
 
 ---@class IssuesUICapability
----@field setup fun()|nil
 ---@field detail IssuesProviderDetail|nil
 
 --------------------------------------------------------------------------------

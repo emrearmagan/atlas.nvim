@@ -1,119 +1,68 @@
 local M = {}
 
 local keymaps = require("atlas.core.keymaps")
-local namespace = vim.api.nvim_create_namespace("atlas_loading")
 local spinner = require("atlas.ui.components.spinner")
 local utils = require("atlas.ui.shared.utils")
 
----@param buf integer
-function M.clear(buf)
-	if vim.api.nvim_buf_is_valid(buf) then
-		vim.api.nvim_buf_clear_namespace(buf, namespace, 0, -1)
-	end
-end
+local namespace = vim.api.nvim_create_namespace("atlas_loading")
 
----@param buf integer
----@param win integer|nil
+---@class AtlasLoadingView
+---@field update fun(self: AtlasLoadingView, message: string)
+---@field finish fun(self: AtlasLoadingView)
+---@field cancel fun(self: AtlasLoadingView)
+
+---@param view table
 ---@param text string
-function M.render(buf, win, text)
-	if not win or not vim.api.nvim_win_is_valid(win) or not vim.api.nvim_buf_is_valid(buf) then
+local function render(view, text)
+	if not vim.api.nvim_win_is_valid(view.win) or not vim.api.nvim_buf_is_valid(view.buf) then
 		return
 	end
-	local height = math.max(1, vim.api.nvim_win_get_height(win))
-	local reset_lines = vim.api.nvim_buf_line_count(buf) ~= height
-	if reset_lines then
+
+	local height = vim.api.nvim_win_get_height(view.win)
+	if vim.api.nvim_buf_line_count(view.buf) ~= height then
 		local lines = {}
 		for _ = 1, height do
-			table.insert(lines, "")
+			lines[#lines + 1] = ""
 		end
-		local modifiable = vim.bo[buf].modifiable
-		local readonly = vim.bo[buf].readonly
-		vim.bo[buf].readonly = false
-		vim.bo[buf].modifiable = true
-		vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-		vim.bo[buf].modified = false
-		vim.bo[buf].modifiable = modifiable
-		vim.bo[buf].readonly = readonly
+		vim.bo[view.buf].modifiable = true
+		vim.api.nvim_buf_set_lines(view.buf, 0, -1, false, lines)
+		vim.bo[view.buf].modifiable = false
 	end
-	local width = vim.api.nvim_win_get_width(win)
-	M.clear(buf)
+
+	local width = vim.api.nvim_win_get_width(view.win)
 	local row = math.floor((height - 1) / 2)
-	for index, line in ipairs(vim.split(tostring(text):gsub("\r", ""), "\n", { plain = true })) do
+	vim.api.nvim_buf_clear_namespace(view.buf, namespace, 0, -1)
+	for index, line in ipairs(vim.split(text:gsub("\r", ""), "\n", { plain = true })) do
 		if row + index > height then
 			break
 		end
 		line = utils.truncate(line, math.max(1, width - 4))
-		local col = math.max(0, math.floor((width - vim.fn.strdisplaywidth(line)) / 2))
-		vim.api.nvim_buf_set_extmark(buf, namespace, row + index - 1, 0, {
+		vim.api.nvim_buf_set_extmark(view.buf, namespace, row + index - 1, 0, {
 			virt_text = { { line, "Normal" } },
-			virt_text_win_col = col,
+			virt_text_win_col = math.max(0, math.floor((width - vim.fn.strdisplaywidth(line)) / 2)),
 		})
 	end
 end
 
----@class AtlasDiffLifecycle
----@field session_id string
----@field opened boolean
----@field closed boolean
-
----@class AtlasLoadingTarget
----@field tabpage integer
----@field buf integer
----@field win integer
----@field number boolean
----@field relativenumber boolean
----@field statuscolumn string
----@field winbar string
----@field diff_lifecycle AtlasDiffLifecycle|nil
----@field on_abandon (fun(reason: string))|nil
-
----@class AtlasLoadingView
----@field tabpage integer
----@field buf integer
----@field win integer
----@field message string
----@field closed boolean
----@field update fun(self: AtlasLoadingView, message: string)
----@field finish fun(self: AtlasLoadingView)
----@field cancel fun(self: AtlasLoadingView)
----@field handoff fun(self: AtlasLoadingView): AtlasLoadingTarget|nil
-
 ---@param message string
 ---@param on_cancel fun()|nil
----@param target AtlasLoadingTarget|nil
 ---@return AtlasLoadingView
-function M.open(message, on_cancel, target)
-	local tabpage, win, buf
-	local number, relativenumber
-	local statuscolumn, winbar, diff_lifecycle, on_abandon
-	if target then
-		tabpage, win, buf = target.tabpage, target.win, target.buf
-		number, relativenumber = target.number, target.relativenumber
-		statuscolumn, winbar = target.statuscolumn, target.winbar
-		diff_lifecycle = target.diff_lifecycle
-		on_abandon = target.on_abandon
-		vim.api.nvim_set_current_tabpage(tabpage)
-		vim.api.nvim_set_current_win(win)
-	else
-		local source_win = vim.api.nvim_get_current_win()
-		statuscolumn = vim.wo[source_win].statuscolumn
-		winbar = vim.wo[source_win].winbar
-		vim.cmd("tabnew")
-		tabpage = vim.api.nvim_get_current_tabpage()
-		win = vim.api.nvim_get_current_win()
-		buf = vim.api.nvim_get_current_buf()
-		number = vim.wo[win].number
-		relativenumber = vim.wo[win].relativenumber
-	end
-	vim.bo[buf].bufhidden = "wipe"
-	vim.bo[buf].buflisted = false
-	vim.bo[buf].buftype = "nofile"
-	vim.bo[buf].filetype = "atlas.loading"
-	vim.bo[buf].syntax = "OFF"
-	pcall(vim.treesitter.stop, buf)
-	vim.bo[buf].swapfile = false
-	vim.bo[buf].undolevels = -1
-	local window_options = {
+function M.open(message, on_cancel)
+	vim.cmd("tabnew")
+	local view = {
+		tabpage = vim.api.nvim_get_current_tabpage(),
+		win = vim.api.nvim_get_current_win(),
+		buf = vim.api.nvim_get_current_buf(),
+	}
+	vim.bo[view.buf].bufhidden = "wipe"
+	vim.bo[view.buf].buflisted = false
+	vim.bo[view.buf].buftype = "nofile"
+	vim.bo[view.buf].filetype = "atlas.loading"
+	vim.bo[view.buf].syntax = "OFF"
+	vim.bo[view.buf].swapfile = false
+	vim.bo[view.buf].undolevels = -1
+	pcall(vim.treesitter.stop, view.buf)
+	for name, value in pairs({
 		cursorline = false,
 		diff = false,
 		foldcolumn = "0",
@@ -123,73 +72,45 @@ function M.open(message, on_cancel, target)
 		statuscolumn = "",
 		winbar = " ",
 		wrap = false,
-	}
-	for name, value in pairs(window_options) do
-		vim.api.nvim_set_option_value(name, value, { win = win, scope = "local" })
+	}) do
+		vim.api.nvim_set_option_value(name, value, { win = view.win, scope = "local" })
 	end
 
-	local group = vim.api.nvim_create_augroup("AtlasLoading" .. tabpage, { clear = true })
+	local active = true
+	local text = message
+	local group = vim.api.nvim_create_augroup("AtlasLoading" .. view.tabpage, { clear = true })
 	local indicator
-	local view = {
-		tabpage = tabpage,
-		buf = buf,
-		win = win,
-		message = message,
-		closed = false,
-	}
+
 	local function draw()
-		if not view.closed then
-			M.render(view.buf, view.win, indicator:text(view.message))
+		if active then
+			render(view, indicator:text(text))
 		end
 	end
-	local function delete_group()
-		if not pcall(vim.api.nvim_del_augroup_by_id, group) then
-			vim.schedule(function()
-				pcall(vim.api.nvim_del_augroup_by_id, group)
-			end)
+
+	local function stop()
+		if not active then
+			return false
 		end
+		active = false
+		indicator:stop()
+		pcall(vim.api.nvim_del_augroup_by_id, group)
+		return true
 	end
+
 	local function close(cancelled)
-		if view.closed then
+		if not stop() then
 			return
 		end
-		view.closed = true
-		indicator:stop()
-		delete_group()
 		if vim.api.nvim_tabpage_is_valid(view.tabpage) then
 			pcall(vim.cmd, vim.api.nvim_tabpage_get_number(view.tabpage) .. "tabclose")
-		end
-		if vim.api.nvim_buf_is_valid(view.buf) then
-			pcall(vim.api.nvim_buf_delete, view.buf, { force = true })
-		end
-		if on_abandon then
-			on_abandon(cancelled and "user_close" or "reload_failed")
 		end
 		if cancelled and on_cancel then
 			on_cancel()
 		end
 	end
-	local function handoff()
-		if view.closed or not vim.api.nvim_tabpage_is_valid(tabpage) or not vim.api.nvim_win_is_valid(win) then
-			return nil
-		end
-		view.closed = true
-		indicator:stop()
-		delete_group()
-		return {
-			tabpage = tabpage,
-			buf = buf,
-			win = win,
-			number = number,
-			relativenumber = relativenumber,
-			statuscolumn = statuscolumn,
-			winbar = winbar,
-			diff_lifecycle = diff_lifecycle,
-			on_abandon = on_abandon,
-		}
-	end
+
 	view.update = function(_, next_message)
-		view.message = next_message
+		text = next_message
 		draw()
 	end
 	view.finish = function()
@@ -198,12 +119,11 @@ function M.open(message, on_cancel, target)
 	view.cancel = function()
 		close(true)
 	end
-	view.handoff = handoff
 	---@cast view AtlasLoadingView
 
 	indicator = spinner.create({ on_tick = draw })
 	for _, key in ipairs(keymaps.resolve("ui.close") or {}) do
-		vim.keymap.set("n", key, view.cancel, { buffer = buf, silent = true, nowait = true, desc = "Cancel" })
+		vim.keymap.set("n", key, view.cancel, { buffer = view.buf, silent = true, nowait = true, desc = "Cancel" })
 	end
 	vim.api.nvim_create_autocmd({ "VimResized", "WinResized" }, {
 		group = group,
@@ -219,11 +139,9 @@ function M.open(message, on_cancel, target)
 	})
 	vim.api.nvim_create_autocmd("BufWipeout", {
 		group = group,
-		buffer = buf,
+		buffer = view.buf,
 		callback = function()
-			vim.schedule(function()
-				view:cancel()
-			end)
+			vim.schedule(view.cancel)
 		end,
 	})
 	indicator:start()

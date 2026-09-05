@@ -7,7 +7,7 @@ local pull_icon, pull_icon_hl = icons.pulls("pr")
 local checks_icon, checks_icon_hl = icons.pulls("tasks")
 local SUBJECT_ICON = {
 	PullRequest = { icon = pull_icon, hl = pull_icon_hl },
-	Issue = { icon = icons.issues("issue"), hl = "AtlasPROpen" },
+	Issue = { icon = icons.issues("issue"), hl = "AtlasTextPositive" },
 	CheckSuite = { icon = checks_icon, hl = checks_icon_hl },
 }
 
@@ -68,7 +68,7 @@ local function normalize(raw)
 	}
 end
 
----@param opts { all: boolean|nil, per_page: number|nil, force_load: boolean|nil }|nil
+---@param opts { all: boolean|nil, per_page: number|nil, force_refresh: boolean|nil }|nil
 ---@param on_done fun(notifications: AtlasNotification[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch(opts, on_done)
@@ -78,7 +78,7 @@ function M.fetch(opts, on_done)
 
 	local cache_key = string.format("github:notifications:all=%s:per_page=%d", tostring(all), per_page)
 
-	if not opts.force_load then
+	if not opts.force_refresh then
 		local cached, ok = client.get_mem(cache_key)
 		if ok then
 			on_done(cached, nil)

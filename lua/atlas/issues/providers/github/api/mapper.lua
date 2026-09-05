@@ -183,38 +183,17 @@ function M.to_issue_details(raw, fallback_slug)
 	return details
 end
 
----@param nodes table[]|nil
+---@param nodes table[]
 ---@return Issue[]
 function M.to_search_results(nodes)
-	local out = {}
-	local seen = {}
-
-	---@param issue GitHubIssue|nil
-	local function insert_issue(issue)
-		local key = issue and issue.key or ""
-		if key == "" or seen[key] then
-			return
-		end
-		seen[key] = true
-		table.insert(out, issue)
-	end
-
+	local issues = {}
 	for _, raw in ipairs(nodes) do
 		local issue = M.to_issue(raw, nil)
 		if issue then
-			insert_issue(issue)
-
-			for _, child_raw in ipairs(github_mapping.connection_nodes(raw.subIssues)) do
-				local child = M.to_issue(child_raw, nil)
-				if child and child.parent == nil then
-					child.parent = { key = issue.key, title = issue.title }
-				end
-				insert_issue(child)
-			end
+			table.insert(issues, issue)
 		end
 	end
-
-	return out
+	return issues
 end
 
 ---@param key string

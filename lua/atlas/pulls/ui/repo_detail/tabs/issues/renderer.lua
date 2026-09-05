@@ -41,13 +41,13 @@ local function render_filter_bar(state, width, lines, spans)
 		line = line_index,
 		start_col = open_start,
 		end_col = open_end,
-		hl_group = state.filter == "open" and "AtlasText" or "AtlasTextMuted",
+		hl_group = state.filter == "open" and "Normal" or "AtlasTextMuted",
 	})
 	table.insert(spans, {
 		line = line_index,
 		start_col = closed_start,
 		end_col = closed_start + #closed_label,
-		hl_group = state.filter == "closed" and "AtlasText" or "AtlasTextMuted",
+		hl_group = state.filter == "closed" and "Normal" or "AtlasTextMuted",
 	})
 	append_separator(width, lines, spans)
 end

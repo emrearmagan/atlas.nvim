@@ -19,7 +19,6 @@ local comments_api = require("atlas.issues.providers.github.api.comments")
 local config = require("atlas.config")
 local client = require("atlas.providers.github.client")
 local emojis = require("atlas.ui.shared.emojis")
-local highlights = require("atlas.issues.providers.github.highlights")
 local issue_cache = require("atlas.issues.providers.github.api.cache")
 local issues_api = require("atlas.issues.providers.github.api.issues")
 local notifications_api = require("atlas.providers.github.notifications")
@@ -30,36 +29,29 @@ local git = require("atlas.core.git")
 
 ---@param view IssuesViewConfig
 ---@return string
-local function search_query(view)
+local function resolve_search(view)
 	---@cast view AtlasGitHubIssuesViewConfig
 	local search = view.search or ""
-	if search ~= "" and not search:lower():find("is:issue", 1, true) then
-		search = search .. " is:issue"
+	if not search:lower():find("is:issue", 1, true) then
+		search = vim.trim(search .. " is:issue")
 	end
 	return search
 end
 
 ---@param view IssuesViewConfig
 ---@param opts IssuesFetchOpts
----@param on_done fun(issues: Issue[], next_page_token: string|nil, is_last: boolean, err: string|nil)
+---@param on_done fun(page: IssuesPage, err: string|nil)
 ---@return { cancel: fun() }|nil
 local function fetch_issues(view, opts, on_done)
-	local search = search_query(view)
-	if search == "" then
-		on_done({}, nil, true, "Missing search query for GitHub view")
-		return nil
-	end
-
-	local limit = opts.max_results or 50
-	local layout = view.layout or opts.layout or "plain"
-	return issues_api.search_issues(search, function(issues, err)
+	local search = resolve_search(view)
+	return issues_api.search_issues(search, function(page, err)
 		if err then
-			on_done({}, nil, true, err)
+			on_done({ items = {} }, err)
 			return
 		end
 
 		local pinned, rest = {}, {}
-		for _, issue in ipairs(issues or {}) do
+		for _, issue in ipairs(page.items) do
 			---@cast issue GitHubIssue
 			if issue.is_pinned == true then
 				table.insert(pinned, issue)
@@ -69,12 +61,13 @@ local function fetch_issues(view, opts, on_done)
 		end
 		local sorted = vim.list_extend({}, pinned)
 		vim.list_extend(sorted, rest)
+		page.items = sorted
 
-		on_done(sorted, nil, true, nil)
+		on_done(page, nil)
 	end, {
-		force_load = opts.force_load == true,
-		limit = limit,
-		with_relationships = layout ~= "compact",
+		force_refresh = opts.force_refresh == true,
+		pagelen = opts.pagelen,
+		cursor = opts.cursor,
 	})
 end
 
@@ -84,14 +77,8 @@ end
 ---@return { cancel: fun() }|nil
 local function fetch_issue(ref, opts, on_done)
 	opts = opts or {}
-	local with_relationships = opts.with_relationships
-	if opts.layout == "compact" then
-		with_relationships = false
-	end
 	return issues_api.get_issue(ref.key, on_done, {
-		force_load = opts.force_load,
-		layout = opts.layout,
-		with_relationships = with_relationships,
+		force_refresh = opts.force_refresh,
 	})
 end
 
@@ -161,7 +148,7 @@ local function fetch_conversation(issue, opts, on_done)
 		end
 
 		on_done(items, nil)
-	end, { force_load = opts.force_refresh == true })
+	end, { force_refresh = opts.force_refresh == true })
 end
 
 ---@param issue Issue
@@ -235,7 +222,7 @@ end
 
 ---@param target AtlasTarget
 ---@return AtlasIssuesViewConfig
-local function search_view(target)
+local function view_for_target(target)
 	return {
 		name = "Search",
 		layout = "compact",
@@ -258,12 +245,12 @@ end
 
 return {
 	views = views,
-	search_view = search_view,
+	view_for_target = view_for_target,
+	resolve_search = resolve_search,
 	issue_ref = issue_ref,
 	capabilities = {
 		core = {
 			fetch_user = users_api.get_user,
-			search_query = search_query,
 			fetch_issues = fetch_issues,
 			fetch_by_refs = issues_api.fetch_by_refs,
 			fetch_issue = fetch_issue,
@@ -281,7 +268,6 @@ return {
 		notifications = notifications_api,
 		actions = actions,
 		ui = {
-			setup = highlights.setup,
 			detail = ui_detail,
 		},
 	},

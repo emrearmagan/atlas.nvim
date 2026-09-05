@@ -23,12 +23,7 @@ end
 
 ---@return string
 local function current_jql()
-	local view = issues_state.current_view or issues_state.active_view
-	if view == nil then
-		return ""
-	end
-	---@cast view AtlasJiraViewConfig
-	return tostring(view.jql or "")
+	return issues_state.query
 end
 
 ---@type AtlasIssueAction[]
@@ -382,7 +377,7 @@ local function edit_issue(ctx, done)
 	end
 
 	notify.loading(string.format("Loading description for %s...", issue_key))
-	issues_api.fetch_issue({ key = issue_key }, { force_load = true }, function(details, err)
+	issues_api.fetch_issue({ key = issue_key }, { force_refresh = true }, function(details, err)
 		if err or details == nil then
 			notify.warn(string.format("Failed loading description for %s", issue_key), { timeout = 1200 })
 			open_editor("")
@@ -527,14 +522,13 @@ local function create_issue(context, done)
 		title = "Create Issue",
 		debounce_ms = 0,
 		format_item = function(item)
-			local provider_icon, provider_hl = icons.issues_provider("jira", "provider")
+			local provider_icon = icons.issues_provider("jira", "provider")
 			local project = item.value
 			local category_name = project.category and project.category.name or ""
 			if category_name ~= "" then
-				return string.format("%s %s - %s (%s)", provider_icon, item.label, project.name, category_name),
-					provider_hl
+				return string.format("%s %s - %s (%s)", provider_icon, item.label, project.name, category_name)
 			end
-			return string.format("%s %s - %s", provider_icon, item.label, project.name), provider_hl
+			return string.format("%s %s - %s", provider_icon, item.label, project.name)
 		end,
 		fetch = function(query, fetch_done)
 			if all_items then

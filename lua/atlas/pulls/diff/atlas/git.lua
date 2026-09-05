@@ -484,22 +484,12 @@ end
 
 -- Initial diff data
 
----@param options { git_root: string, base_revision: string, head_revision: string, filter: (fun(files: DiffFile[]): DiffFile[])|nil, on_progress: (fun(message: string))|nil }
+---@param options { git_root: string, base_revision: string, head_revision: string, filter: (fun(files: DiffFile[]): DiffFile[])|nil }
 ---@param on_done fun(result: AtlasNativeDiffData|nil, err: string|nil)
 ---@return { cancel: fun() }
 function M.load(options, on_done)
 	local op = new_operation(on_done)
-
-	---@param message string
-	local function progress(message)
-		if options.on_progress then
-			pcall(options.on_progress, message)
-		end
-	end
-
-	progress("Resolving diff range...")
 	resolve_range(op, options.git_root, options.base_revision, options.head_revision, function(range)
-		progress("Loading changed files...")
 		list_files(op, range, function(files)
 			if options.filter then
 				local ok, filtered = pcall(options.filter, files)
@@ -514,7 +504,6 @@ function M.load(options, on_done)
 				return
 			end
 
-			progress("Loading diff...")
 			load_document(op, range, files[1], function(document)
 				op:finish({ range = range, files = files, document = document }, nil)
 			end)

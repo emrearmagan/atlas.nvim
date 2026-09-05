@@ -6,14 +6,7 @@ local api_utils = require("atlas.core.utils")
 local mapper = require("atlas.pulls.providers.bitbucket.api.mapper")
 local request_scope = require("atlas.core.requests")
 local as_table = api_utils.as_table
-
----@param value string
----@return string
-local function url_encode(value)
-	return (value:gsub("([^%w%-_.~])", function(char)
-		return string.format("%%%02X", string.byte(char))
-	end))
-end
+local url_encode = api_utils.url_encode
 
 ---@param repo PullsRepo
 ---@return string|nil
@@ -116,16 +109,16 @@ function M.fetch_workspace_repositories(workspace, search, on_done)
 	})
 end
 
----@param project AtlasBitbucketProjectTarget
+---@param project BitbucketProjectTarget
 ---@param opts PullsFetchOpts
----@param on_done fun(repositories: AtlasBitbucketRepoTarget[]|nil, err: string|nil)
+---@param on_done fun(repositories: BitbucketRepoTarget[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_project_repositories(project, opts, on_done)
 	local workspace = project.workspace
 	local project_key = project.project
 
 	local cache_key = string.format("bitbucket:project_repos:%s/%s", workspace, project_key)
-	if opts.force_load ~= true then
+	if opts.force_refresh ~= true then
 		local cached, ok = service.get_cache(cache_key)
 		if ok then
 			on_done(cached, nil)
@@ -154,6 +147,45 @@ function M.fetch_project_repositories(project, opts, on_done)
 		workspace = workspace,
 		project = project_key,
 	})
+end
+
+---@param targets BitbucketPullTarget[]
+---@param opts PullsFetchOpts
+---@param on_done fun(repositories: BitbucketRepoTarget[], errors: string[])
+---@return AtlasRequestScope
+function M.resolve_targets(targets, opts, on_done)
+	local requests = request_scope.new()
+	local starts = {}
+	for index, target_ref in ipairs(targets) do
+		local target = target_ref
+		starts[index] = function(done)
+			if target.repo then
+				done({ target }, nil)
+				return nil
+			end
+			---@cast target BitbucketProjectTarget
+			return M.fetch_project_repositories(target, opts, done)
+		end
+	end
+
+	requests.all(starts, function(resolved_targets, target_errors)
+		local repositories, errors, seen = {}, {}, {}
+		for index, target in ipairs(targets) do
+			for _, repository in ipairs(resolved_targets[index] or {}) do
+				local key = repository.workspace .. "/" .. repository.repo
+				if not seen[key] then
+					seen[key] = true
+					table.insert(repositories, repository)
+				end
+			end
+			if target_errors[index] then
+				table.insert(errors, string.format("%s/%s: %s", target.workspace, target.project, target_errors[index]))
+			end
+		end
+		on_done(repositories, errors)
+	end)
+
+	return requests
 end
 
 ---@param repo PullsRepo
@@ -214,9 +246,9 @@ function M.fetch_branches(repo, opts, on_done)
 	end
 
 	local sep = branches_url:find("?") and "&" or "?"
-	local url = string.format("%s%spagelen=%d", branches_url, sep, tonumber(opts.pagelen) or 100)
+	local url = string.format("%s%spagelen=100", branches_url, sep)
 	local key = "bitbucket:repo:branches:" .. url
-	if opts.force_load ~= true then
+	if opts.force_refresh ~= true then
 		local cached, ok = service.get_cache(key)
 		if ok then
 			on_done(cached, nil)
@@ -270,9 +302,9 @@ function M.fetch_tags(repo, opts, on_done)
 	end
 
 	local sep = tags_url:find("?") and "&" or "?"
-	local url = string.format("%s%spagelen=%d", tags_url, sep, tonumber(opts.pagelen) or 100)
+	local url = string.format("%s%spagelen=100", tags_url, sep)
 	local key = "bitbucket:repo:tags:" .. url
-	if opts.force_load ~= true then
+	if opts.force_refresh ~= true then
 		local cached, ok = service.get_cache(key)
 		if ok then
 			on_done(cached, nil)

@@ -106,7 +106,7 @@ function M.render(_repo, width)
 		mode = "linked",
 		content_max_lines = 1,
 		author_hl = function()
-			return "AtlasText"
+			return "Normal"
 		end,
 		content_hl = function(_, row)
 			return { { start_col = 0, end_col = #row, hl_group = "AtlasTextMuted" } }
@@ -120,7 +120,7 @@ end
 
 ---@param repo PullsRepo|nil
 ---@param refresh fun()
----@param opts PullsFetchOpts|nil
+---@param opts { force_refresh: boolean|nil }|nil
 function M.on_select(repo, refresh, opts)
 	opts = opts or {}
 	local repo_details = detail.current_repo_details
@@ -169,8 +169,7 @@ function M.on_select(repo, refresh, opts)
 
 	state.requests.run(function(done)
 		return repository.fetch_tags(repo_details, {
-			force_load = opts.force_load == true or opts.force_refresh == true,
-			pagelen = opts.pagelen,
+			force_refresh = opts.force_refresh == true,
 		}, done)
 	end, function(tags, err)
 		local active_detail = detail.current_repo_details

@@ -7,22 +7,6 @@ local resolver = require("atlas.core.keymaps")
 local review_keymaps = require("atlas.pulls.diff.keymaps")
 local review_panel = require("atlas.pulls.diff.ui.review_panel")
 
----@class AtlasNativeDiffKeymapActions
----@field close fun()
----@field reload fun()
----@field refresh_review fun()
----@field toggle_layout fun()
----@field toggle_compact fun()
----@field navigate_hunk fun(direction: 1|-1)
----@field navigate_file fun(direction: 1|-1)
----@field navigate_unreviewed_file fun(direction: 1|-1)
----@field toggle_file_reviewed fun()
----@field toggle_explorer fun()
----@field toggle_commits fun()
----@field select_file fun(index: integer, focus_diff: boolean|nil)
----@field show_commit fun()
----@field add_file_comment fun(pending: boolean)
-
 ---@param action AtlasKeymapActionId
 ---@param definition AtlasHelpKeyItem
 ---@return AtlasHelpKeyItem|nil
@@ -55,7 +39,22 @@ local function guard(session, callback)
 end
 
 ---@param session AtlasDiffSession
----@param actions AtlasNativeDiffKeymapActions
+---@param actions {
+--- close: fun(),
+--- reopen: fun(),
+--- refresh_review: fun(),
+--- toggle_layout: fun(),
+--- toggle_compact: fun(),
+--- navigate_hunk: fun(direction: 1|-1),
+--- navigate_file: fun(direction: 1|-1),
+--- navigate_unreviewed_file: fun(direction: 1|-1),
+--- toggle_file_reviewed: fun(),
+--- toggle_explorer: fun(),
+--- toggle_commits: fun(),
+--- select_file: fun(index: integer, focus_diff: boolean|nil),
+--- show_commit: fun(),
+--- add_file_comment: fun(pending: boolean),
+---}
 function M.register(session, actions)
 	local state = session.viewer_state --[[@as AtlasNativeDiffState]]
 	local run = function(callback)
@@ -66,13 +65,10 @@ function M.register(session, actions)
 		for index, file in ipairs(state.files) do
 			files[index] = { index = index, path = file.path }
 		end
-		picker.find({
+		picker.select({
 			title = "Changed files",
 			items = files,
 			initial_index = state.pending_index or state.selected_index,
-			key = function(file)
-				return file.path
-			end,
 			format_item = function(file)
 				return file.path
 			end,
@@ -235,7 +231,7 @@ function M.register(session, actions)
 				item("ui.refresh_view", {
 					desc = "Reload diff",
 					index = 8,
-					callback = run(actions.reload),
+					callback = run(actions.reopen),
 					opts = { silent = true, nowait = true },
 				})
 			)
@@ -359,7 +355,7 @@ function M.register(session, actions)
 	end
 	review_keymaps.register(session, {
 		buffers = review_buffers,
-		reload = actions.reload,
+		reopen = actions.reopen,
 		file_buffers = { state.panel.buf },
 		add_file_comment = actions.add_file_comment,
 	})

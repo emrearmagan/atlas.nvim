@@ -207,8 +207,8 @@ local function notification_under_cursor()
 	return nil
 end
 
----@param force_load boolean
-local function load(force_load)
+---@param force_refresh boolean
+local function load(force_refresh)
 	local provider = current_provider
 	if provider == nil or provider.capabilities.notifications == nil then
 		state.is_loading = false
@@ -224,7 +224,7 @@ local function load(force_load)
 	state.error = nil
 	rerender()
 
-	active_handle = notifications_api.fetch({ force_load = force_load }, function(notifications, err)
+	active_handle = notifications_api.fetch({ force_refresh = force_refresh }, function(notifications, err)
 		active_handle = nil
 		if current_provider ~= provider then
 			return
@@ -436,7 +436,7 @@ function M.open()
 	end
 end
 
----@param opts { force_load: boolean|nil, on_done: fun()|nil }|nil
+---@param opts { force_refresh: boolean|nil, on_done: fun()|nil }|nil
 function M.refresh(opts)
 	opts = opts or {}
 
@@ -447,7 +447,7 @@ function M.refresh(opts)
 	local notifications_api = provider.capabilities.notifications
 	---@cast notifications_api AtlasNotificationsCapability
 
-	notifications_api.fetch({ force_load = opts.force_load == true }, function(notifications, err)
+	notifications_api.fetch({ force_refresh = opts.force_refresh == true }, function(notifications, err)
 		if current_provider ~= provider then
 			return
 		end

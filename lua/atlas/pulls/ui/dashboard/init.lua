@@ -106,11 +106,15 @@ function M.init(provider, opts)
 		state.current_user = nil
 	end
 	state.provider = provider
-	state.provider_views = provider.views()
+	state.provider_views = vim.tbl_map(function(view)
+		return vim.tbl_extend("force", {}, view)
+	end, provider.views())
 	state.is_loading = false
 	state.error = nil
 	state.pulls = {}
-	state.current_view = nil
+	state.current_page = 1
+	state.page_history = {}
+	state.query = ""
 	state.reloading_pr_keys = {}
 	state.reload_spinner_frame = "⠋"
 	state.starred_items = starred.list("pulls", provider.id) or {}
@@ -119,14 +123,12 @@ function M.init(provider, opts)
 	notifications.set_provider(provider)
 
 	require("atlas.pulls.ui.highlights").setup()
-	local ui = provider.capabilities.ui
-	if ui and ui.setup then
-		ui.setup()
-	end
 
-	state.views =
-		require("atlas.ui.shared.bookmarks").views(provider.id, "pulls", state.provider_views, state.starred_items)
-	state.active_view = (opts and opts.initial_view) or state.views[1]
+	local bookmarks = require("atlas.ui.shared.bookmarks")
+	state.bookmarks = bookmarks.new(provider.id, "pulls")
+	state.views = bookmarks.views(state.provider_views, state.bookmarks, state.starred_items)
+	local initial_view = opts and opts.initial_view
+	state.view = initial_view and vim.tbl_extend("force", {}, initial_view) or state.views[1]
 
 	statusline.clear_items()
 
@@ -135,17 +137,16 @@ function M.init(provider, opts)
 		keymaps.register(buf, state.views)
 	end
 
-	if state.active_view == nil then
+	if state.view == nil then
 		state.error = "No pull request view configured"
 		M.render()
 		return
 	end
 
-	M.render()
-	controller.switch_view(state.active_view)
+	controller.switch_view(state.view)
 
 	if provider.capabilities.notifications then
-		notifications.refresh({ force_load = false, on_done = M.render })
+		notifications.refresh({ on_done = M.render })
 	end
 end
 

@@ -55,11 +55,47 @@ _G.vim = {
 		fn()
 	end,
 
-	api = {
-		nvim_create_namespace = function()
-			return 1
-		end,
-	},
+	trim = function(value)
+		return value:match("^%s*(.-)%s*$")
+	end,
+
+	api = (function()
+		-- Fakes just enough of nvim_set_hl/nvim_get_hl to test highlight setup
+		-- code: `default = true` must behave like `:highlight default`, i.e. it
+		-- only fills a group in when nothing has defined it yet.
+		local highlights = {}
+
+		return {
+			nvim_create_namespace = function()
+				return 1
+			end,
+
+			nvim_set_hl = function(_, name, val)
+				if val.default and highlights[name] ~= nil then
+					return
+				end
+				highlights[name] = val
+			end,
+
+			nvim_get_hl = function(_, filter)
+				local name = filter and filter.name
+				local existing = name and highlights[name]
+				if not existing then
+					return {}
+				end
+				local copy = {}
+				for k, v in pairs(existing) do
+					copy[k] = v
+				end
+				return copy
+			end,
+
+			-- Test-only: clears recorded highlights between specs.
+			__reset_highlights = function()
+				highlights = {}
+			end,
+		}
+	end)(),
 
 	-- vim.tbl_extend(behavior, ...) -> shallow merge honoring "keep"/"force"/"error"
 	tbl_extend = function(behavior, ...)

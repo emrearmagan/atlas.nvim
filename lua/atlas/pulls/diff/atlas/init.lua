@@ -8,23 +8,19 @@ local explorer = require("atlas.pulls.diff.atlas.explorer")
 local git = require("atlas.pulls.diff.atlas.git")
 local keymaps = require("atlas.pulls.diff.atlas.keymaps")
 local logger = require("atlas.core.logger")
-local notify = require("atlas.core.notify")
 local notes = require("atlas.pulls.diff.notes")
 local position = require("atlas.pulls.diff.position")
 local pulls_highlights = require("atlas.pulls.ui.highlights")
-local review_panel = require("atlas.pulls.diff.ui.review_panel")
 local review = require("atlas.pulls.diff.review")
 local session_api = require("atlas.pulls.diff.session")
-local shared_highlights = require("atlas.ui.shared.highlights")
 local view = require("atlas.pulls.diff.atlas.view")
 
 ---@param session AtlasDiffSession
 ---@param reason string|nil
 ---@return table
 local function event_data(session, reason)
-	local lifecycle = session.viewer_state.lifecycle
 	local data = {
-		session_id = lifecycle and lifecycle.session_id or session.id,
+		session_id = session.id,
 		viewer = "atlas",
 		tabpage = session.tabpage,
 		root = session.source.root,
@@ -35,16 +31,6 @@ local function event_data(session, reason)
 		data.reason = reason
 	end
 	return data
-end
-
----@param session AtlasDiffSession
----@param reason string
-local function emit_closed(session, reason)
-	local lifecycle = session.viewer_state.lifecycle
-	if lifecycle.opened and not lifecycle.closed then
-		lifecycle.closed = true
-		events.emit("AtlasDiffClosed", event_data(session, reason))
-	end
 end
 
 ---@param session AtlasDiffSession
@@ -353,29 +339,12 @@ local function navigate_hunk(session, direction)
 end
 
 ---@param session AtlasDiffSession
-local function reload(session)
-	local target = view.replace_with_loading(session)
-	if not target then
-		return
-	end
-	target.on_abandon = function(reason)
-		emit_closed(session, reason)
-	end
-	M.detach(session, "reload")
-	if session.reload then
-		session.reload(target)
-	end
-end
-
----@param session AtlasDiffSession
 local function register_keymaps(session)
 	keymaps.register(session, {
 		close = function()
-			M.detach(session, "user_close")
+			session.close("user_close")
 		end,
-		reload = function()
-			reload(session)
-		end,
+		reopen = session.reopen,
 		refresh_review = function()
 			review.reload(session)
 			notes.reload(session)
@@ -514,17 +483,10 @@ local function options(explorer_options)
 end
 
 ---@param session AtlasDiffSession
----@param loading_view AtlasLoadingView
 ---@param on_done fun(err: string|nil)
 ---@return { cancel: fun() }
-function M.open(session, loading_view, on_done)
-	shared_highlights.setup()
+function M.open(session, on_done)
 	pulls_highlights.setup()
-	if not session.source.head_revision then
-		loading_view:finish()
-		on_done("AtlasDiff does not support working-tree diffs yet")
-		return { cancel = function() end }
-	end
 	local explorer_options = explorer.options()
 	local cancelled = false
 	local request = git.load({
@@ -534,28 +496,24 @@ function M.open(session, loading_view, on_done)
 		filter = function(files)
 			return explorer.filter(files, explorer_options, session.reviewed_files)
 		end,
-		on_progress = function(message)
-			loading_view:update(message)
-		end,
 	}, function(data, err)
 		vim.schedule(function()
 			if cancelled then
 				return
 			end
 			if not data then
-				loading_view:finish()
 				on_done(tostring(err or "Unable to prepare diff"))
-				return
-			end
-			local target = loading_view:handoff()
-			if not target then
-				on_done("The diff loading view was closed")
 				return
 			end
 			session.source = data.range
 			local viewer_options = options(explorer_options)
-			local ok, create_err = pcall(view.create, session, data, target, viewer_options)
-			if not ok or create_err then
+			local previous_tab = vim.api.nvim_get_current_tabpage()
+			local ok, create_err = pcall(view.create, session, data, viewer_options)
+			if not ok then
+				local tabpage = vim.api.nvim_get_current_tabpage()
+				if tabpage ~= previous_tab then
+					pcall(vim.cmd, vim.api.nvim_tabpage_get_number(tabpage) .. "tabclose")
+				end
 				on_done("Unable to create diff view: " .. tostring(create_err))
 				return
 			end
@@ -563,8 +521,9 @@ function M.open(session, loading_view, on_done)
 			local state = session.viewer_state --[[@as AtlasNativeDiffState]]
 			session_api.attach(session, {
 				tabpage = state.tabpage,
-				notify = function(level, message, duration)
-					notify.show(level, message, { timeout = duration })
+				close = function(reason)
+					M.detach(session, reason)
+					return true
 				end,
 				focus_item = function(item, focus_diff)
 					focus_item(session, item, focus_diff)
@@ -580,7 +539,6 @@ function M.open(session, loading_view, on_done)
 			if session.review or session.note_target then
 				panel =
 					session_api.create_review_panel(session, string.format("atlas-diff://%d/review", session.tabpage))
-				review_panel.configure(panel)
 			end
 			session_api.set_current(session, view.current(session))
 			local selected_line = explorer.line_for_file(session, state.selected_index)
@@ -589,15 +547,11 @@ function M.open(session, loading_view, on_done)
 			end
 			session_api.review_attached(session)
 			register_keymaps(session)
-			review_panel.register_keymaps(panel)
 			register_events(session)
 			if panel and viewer_options.show_review_panel then
 				view.toggle_review_panel(session, false)
 			end
-			if not state.lifecycle.opened then
-				state.lifecycle.opened = true
-				events.emit("AtlasDiffOpened", event_data(session))
-			end
+			events.emit("AtlasDiffOpened", event_data(session))
 			on_done(nil)
 		end)
 	end)
@@ -622,13 +576,11 @@ function M.detach(session, reason)
 		pcall(vim.api.nvim_del_augroup_by_id, state.group)
 	end
 	session_api.detach(session, reason)
-	if reason ~= "reload" and session.tabpage and vim.api.nvim_tabpage_is_valid(session.tabpage) then
+	if session.tabpage and vim.api.nvim_tabpage_is_valid(session.tabpage) then
 		pcall(vim.cmd, vim.api.nvim_tabpage_get_number(session.tabpage) .. "tabclose")
 	end
 	view.delete_buffers(session)
-	if reason ~= "reload" then
-		emit_closed(session, reason or "viewer_closed")
-	end
+	events.emit("AtlasDiffClosed", event_data(session, reason or "viewer_closed"))
 end
 
 return M

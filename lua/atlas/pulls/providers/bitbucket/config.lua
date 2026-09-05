@@ -15,23 +15,14 @@
 --           {
 --             name = "All",
 --             key  = "1",
---             targets = {
---               { workspace = "acme", repo = "core" },
---               { workspace = "acme", project = "WEB" },
---             },
+--             -- https://developer.atlassian.com/cloud/bitbucket/rest/#filter-and-sort-api-objects
+--             search = "repo:acme/core project:acme/WEB",
 --           },
 --           {
---             name = "Reviewing",
+--             name = "Authored",
 --             key  = "2",
 --             layout = "compact",
---             targets = { { workspace = "acme", project = "CORE" } },
---             filter = function(pr, ctx)
---               if ctx.user == nil then return true end
---               for _, reviewer in ipairs(pr.reviewers or {}) do
---                 if reviewer.username == ctx.user.username then return true end
---               end
---               return false
---             end,
+--             search = 'project:acme/CORE author.nickname = "my-name"',
 --           },
 --         },
 --         bookmarks = {
@@ -39,13 +30,8 @@
 --           -- label = "Search", -- default
 --           items = {
 --             ["Core"] = {
---               targets = {
---                 { workspace = "acme", repo = "standalone" },
---                 { workspace = "acme", project = "CORE" },
---               },
---               filter = function(pr)
---                 return pr.state ~= "draft"
---               end,
+--               layout = "grouped",
+--               search = 'repo:acme/standalone project:acme/CORE title ~ "core"',
 --             },
 --           },
 --         },
@@ -53,31 +39,16 @@
 --     },
 --   })
 
----@class AtlasBitbucketRepoTarget
----@field workspace string
----@field repo string
-
----@class AtlasBitbucketProjectTarget
----@field workspace string
----@field project string
-
----@alias AtlasBitbucketTarget AtlasBitbucketRepoTarget|AtlasBitbucketProjectTarget
-
 ---@class AtlasBitbucketViewConfig : AtlasPullsViewConfig
----@field targets AtlasBitbucketTarget[]
----@field filter? fun(pr: PullRequest, ctx: { user: PullsUser|nil }): boolean|nil
----@field status? "OPEN"|"MERGED"|"DECLINED"|"SUPERSEDED"
----@field current_repo boolean|nil
+---@field search string|nil Bitbucket query containing Atlas scopes and repository fields
 
----@class AtlasBitbucketBookmarkConfig
----@field layout "compact"|"grouped"|"plain"|nil
----@field targets AtlasBitbucketTarget[]
----@field filter? fun(pr: PullRequest, ctx: { user: PullsUser|nil }): boolean|nil
+---@class AtlasBitbucketBookmarkConfig : AtlasPullsBookmarkConfig
+---@field search string
 
 ---@class AtlasBitbucketBookmarksConfig
 ---@field key string|nil    -- default "S"
 ---@field label string|nil  -- default "Search"
----@field items table<string, AtlasBitbucketBookmarkConfig>|nil
+---@field items table<string, string|AtlasBitbucketBookmarkConfig>|nil
 
 ---@class AtlasBitbucketConfig
 ---@field user string

@@ -25,8 +25,6 @@ local session_api = require("atlas.pulls.diff.session")
 ---@field preferred_layout AtlasDiffLayout
 ---@field compact boolean
 ---@field compact_context_lines integer
----@field number boolean
----@field relativenumber boolean
 ---@field explorer AtlasNativeDiffExplorerOptions
 ---@field collapsed_folders table<string, boolean>
 ---@field panel_items table<integer, AtlasNativeDiffPanelItem>
@@ -43,7 +41,6 @@ local session_api = require("atlas.pulls.diff.session")
 ---@field job { cancel: fun() }|nil
 ---@field group integer|nil
 ---@field closing boolean
----@field lifecycle AtlasDiffLifecycle
 
 ---@param name string|nil
 ---@param buftype "nofile"|"nowrite"|nil
@@ -205,8 +202,8 @@ function M.configure_content_window(session, win)
 	options.foldcolumn = "0"
 	options.foldmethod = "manual"
 	options.list = false
-	options.number = state.number
-	options.relativenumber = state.relativenumber
+	options.number = vim.go.number
+	options.relativenumber = vim.go.relativenumber
 	options.spell = false
 	options.diff = side_by_side
 	options.scrollbind = side_by_side
@@ -276,7 +273,7 @@ function M.set_document(session, document)
 	local state = session.viewer_state
 	state.document = document
 	name_content_buffer(session, state.left.buf, session.source.base_revision, document.old.path)
-	name_content_buffer(session, state.right.buf, session.source.head_revision or "WORKTREE", document.new.path)
+	name_content_buffer(session, state.right.buf, session.source.head_revision, document.new.path)
 	set_buffer(state.left.buf, document.old.lines, document.old.path)
 	set_buffer(state.right.buf, document.new.lines, document.new.path)
 	arrange_content_windows(session)
@@ -455,29 +452,12 @@ end
 
 ---@param session AtlasDiffSession
 ---@param data AtlasNativeDiffData
----@param target AtlasLoadingTarget|nil
 ---@param options AtlasNativeDiffOptions
----@return string|nil
-function M.create(session, data, target, options)
-	local restore_options = target ~= nil
-	if not target then
-		vim.cmd("tabnew")
-		local win = vim.api.nvim_get_current_win()
-		target = {
-			tabpage = vim.api.nvim_get_current_tabpage(),
-			win = win,
-			buf = vim.api.nvim_get_current_buf(),
-			number = vim.wo[win].number,
-			relativenumber = vim.wo[win].relativenumber,
-		}
-	end
-	local tabpage = target.tabpage
-	local right_win = target.win
-	local launcher_buf = target.buf
-	local number = target.number
-	local relativenumber = target.relativenumber
-	vim.api.nvim_set_current_tabpage(tabpage)
-	vim.api.nvim_set_current_win(right_win)
+function M.create(session, data, options)
+	vim.cmd("tabnew")
+	local tabpage = vim.api.nvim_get_current_tabpage()
+	local right_win = vim.api.nvim_get_current_win()
+	local launcher_buf = vim.api.nvim_get_current_buf()
 	local right_buf = create_buffer(nil, "nowrite")
 	local left_buf = create_buffer(nil, "nowrite")
 	local panel_buf = create_buffer(string.format("atlas-diff://%d/files", tabpage))
@@ -501,13 +481,11 @@ function M.create(session, data, target, options)
 				math.min(options.explorer.width, math.max(20, vim.o.columns - 40))
 			)
 		or nil
-	if restore_options then
-		for name, value in pairs({
-			statuscolumn = target.statuscolumn,
-			winbar = target.winbar,
-		}) do
-			vim.api.nvim_set_option_value(name, value, { win = right_win, scope = "local" })
-		end
+	for name, value in pairs({
+		statuscolumn = vim.go.statuscolumn,
+		winbar = vim.go.winbar,
+	}) do
+		vim.api.nvim_set_option_value(name, value, { win = right_win, scope = "local" })
 	end
 
 	local additions, deletions = 0, 0
@@ -528,8 +506,6 @@ function M.create(session, data, target, options)
 		preferred_layout = options.layout,
 		compact = options.compact,
 		compact_context_lines = options.compact_context_lines,
-		number = number,
-		relativenumber = relativenumber,
 		explorer = options.explorer,
 		collapsed_folders = {},
 		panel_items = {},
@@ -546,7 +522,6 @@ function M.create(session, data, target, options)
 		job = nil,
 		group = nil,
 		closing = false,
-		lifecycle = target and target.diff_lifecycle or { session_id = session.id, opened = false, closed = false },
 	}
 	explorer.configure(session)
 	if panel_win then
@@ -556,7 +531,6 @@ function M.create(session, data, target, options)
 	M.open_commits(session)
 	local focus = options.explorer.initial_focus == "explorer" and panel_win or right_win
 	vim.api.nvim_set_current_win(focus)
-	return nil
 end
 
 ---@param session AtlasDiffSession
@@ -567,36 +541,6 @@ function M.delete_buffers(session)
 			pcall(vim.api.nvim_buf_delete, buf, { force = true })
 		end
 	end
-end
-
----@param session AtlasDiffSession
----@return AtlasLoadingTarget|nil
-function M.replace_with_loading(session)
-	local state = session.viewer_state
-	local tabpage, win = session.tabpage, content_window(state)
-	if not tabpage or not vim.api.nvim_tabpage_is_valid(tabpage) or not win or not vim.api.nvim_win_is_valid(win) then
-		return nil
-	end
-	local target = {
-		tabpage = tabpage,
-		buf = vim.api.nvim_create_buf(false, true),
-		win = win,
-		number = state.number,
-		relativenumber = state.relativenumber,
-		statuscolumn = vim.wo[win].statuscolumn,
-		winbar = vim.wo[win].winbar,
-		diff_lifecycle = state.lifecycle,
-	}
-	vim.api.nvim_set_current_tabpage(tabpage)
-	vim.api.nvim_set_current_win(win)
-	vim.api.nvim_win_set_buf(win, target.buf)
-	for _, other in ipairs(vim.api.nvim_tabpage_list_wins(tabpage)) do
-		if other ~= win then
-			pcall(vim.api.nvim_win_close, other, true)
-		end
-	end
-	M.delete_buffers(session)
-	return target
 end
 
 return M

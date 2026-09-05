@@ -18,143 +18,17 @@ local config = require("atlas.config")
 local cli = require("atlas.providers.github.client")
 local comments_api = require("atlas.pulls.providers.github.api.comments")
 local emojis = require("atlas.ui.shared.emojis")
-local highlights = require("atlas.pulls.providers.github.highlights")
 local notifications_api = require("atlas.providers.github.notifications")
 local pipeline_actions = require("atlas.pulls.providers.github.actions.pipelines")
 local pipelines_api = require("atlas.pulls.providers.github.api.pipelines")
 local pullrequests_api = require("atlas.pulls.providers.github.api.pullrequests")
 local repositories_api = require("atlas.pulls.providers.github.api.repositories")
 local reviews_api = require("atlas.pulls.providers.github.api.reviews")
+local search_query = require("atlas.providers.github.query")
 local ui_detail = require("atlas.pulls.providers.github.ui.detail")
 local ui_repo_detail = require("atlas.pulls.providers.github.ui.repo_detail")
 local users_api = require("atlas.pulls.providers.github.api.users")
 local git = require("atlas.core.git")
-local request_scope = require("atlas.core.requests")
-
----@param opts PullsFetchOpts
----@return table<PullsStateFilter, boolean>
-local function selected_states(opts)
-	local selected = {}
-	for _, state in ipairs(opts.states or { "open" }) do
-		selected[state] = true
-	end
-	return selected
-end
-
----@param view AtlasPullsViewConfig
----@param opts PullsFetchOpts
----@return string[]
-local function search_queries(view, opts)
-	---@cast view AtlasGitHubViewConfig
-	local search = view.search or ""
-	if search == "" then
-		return {}
-	end
-
-	local base = search:find("is:pr", 1, true) and search or "is:pr " .. search
-	if base:find("is:open", 1, true) or base:find("is:closed", 1, true) or base:find("is:merged", 1, true) then
-		return { base }
-	end
-	local states = selected_states(opts)
-	local open = states.open == true
-	local merged = states.merged == true
-	local declined = states.declined == true
-	if open and merged and declined then
-		return { base }
-	end
-	if merged and declined and not open then
-		return { base .. " is:closed" }
-	end
-
-	local queries = {}
-	if open then
-		table.insert(queries, base .. " is:open")
-	end
-	if merged then
-		table.insert(queries, base .. " is:merged")
-	end
-	if declined then
-		table.insert(queries, base .. " is:closed -is:merged")
-	end
-	return #queries > 0 and queries or { base .. " is:open" }
-end
-
----@param batches table<integer, PullRequest[]>
----@param limit integer
----@return PullRequest[]
-local function merge_results(batches, limit)
-	local pulls, seen = {}, {}
-	for _, batch in pairs(batches) do
-		for _, pr in ipairs(batch) do
-			local key = pr.repo_full_name .. ":" .. tostring(pr.id)
-			if not seen[key] then
-				seen[key] = true
-				table.insert(pulls, pr)
-			end
-		end
-	end
-	table.sort(pulls, function(left, right)
-		if left.updated_on == right.updated_on then
-			return left.repo_full_name .. ":" .. tostring(left.id) < right.repo_full_name .. ":" .. tostring(right.id)
-		end
-		return left.updated_on > right.updated_on
-	end)
-	while #pulls > limit do
-		table.remove(pulls)
-	end
-	return pulls
-end
-
----@param view AtlasPullsViewConfig
----@param opts PullsFetchOpts
----@return string
-local function search_query(view, opts)
-	return table.concat(search_queries(view, opts), " OR ")
-end
-
----@param view AtlasPullsViewConfig
----@param opts PullsFetchOpts
----@param on_done fun(pulls: PullRequest[], err: string[]|nil)
----@return { cancel: fun() }|nil
-local function fetch_pullrequests(view, opts, on_done)
-	local queries = search_queries(view, opts)
-	if #queries == 0 then
-		vim.schedule(function()
-			on_done({}, { "No search query configured for view" })
-		end)
-		return nil
-	end
-
-	local limit = math.min(100, math.max(1, tonumber(opts.pagelen) or 50))
-	local request_opts = {
-		force_load = opts.force_load == true,
-		limit = limit,
-	}
-	if #queries == 1 then
-		return pullrequests_api.search_prs(queries[1], on_done, request_opts)
-	end
-
-	local scope = request_scope.new()
-	local starts = {}
-	for index, query in ipairs(queries) do
-		local planned_query = query
-		starts[index] = function(done)
-			return pullrequests_api.search_prs(planned_query, function(pulls, errors)
-				done(pulls, errors and errors[1])
-			end, request_opts)
-		end
-	end
-	scope.all(starts, function(results, errors)
-		local collected_errors = {}
-		for index = 1, #queries do
-			if errors[index] then
-				table.insert(collected_errors, errors[index])
-			end
-		end
-		on_done(merge_results(results, limit), #collected_errors > 0 and collected_errors or nil)
-	end)
-	return scope
-end
 
 ---@param ref PullRequestRef
 ---@param opts PullsFetchOpts
@@ -168,7 +42,7 @@ local function fetch_pullrequest(ref, opts, on_done)
 		end)
 		return nil
 	end
-	return pullrequests_api.get_pr(owner, repo, ref.id, on_done, { force_load = opts.force_load == true })
+	return pullrequests_api.get_pr(owner, repo, ref.id, on_done, { force_refresh = opts.force_refresh == true })
 end
 
 ---@param pr PullRequest
@@ -236,7 +110,7 @@ end
 
 ---@param target AtlasTarget
 ---@return AtlasPullsViewConfig
-local function search_view(target)
+local function view_for_target(target)
 	local search = string.format("repo:%s/%s is:pr", target.owner, target.repo)
 	if target.number then
 		search = search .. " " .. tostring(target.number)
@@ -250,12 +124,14 @@ end
 
 return {
 	views = views,
-	search_view = search_view,
+	view_for_target = view_for_target,
+	resolve_search = search_query.query,
 	capabilities = {
 		core = {
 			fetch_user = users_api.fetch_user,
-			search_query = search_query,
-			fetch_pullrequests = fetch_pullrequests,
+			fetch_pullrequests = function(view, opts, on_done)
+				return pullrequests_api.fetch_search(search_query.queries(view), opts, on_done)
+			end,
 			fetch_by_refs = pullrequests_api.fetch_by_refs,
 			fetch_pullrequest = fetch_pullrequest,
 			create_pr = pullrequests_api.create_pr,
@@ -308,7 +184,6 @@ return {
 		notifications = notifications_api,
 		actions = actions,
 		ui = {
-			setup = highlights.setup,
 			detail = ui_detail,
 			repo_detail = ui_repo_detail,
 		},

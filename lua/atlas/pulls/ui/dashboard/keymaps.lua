@@ -3,7 +3,6 @@ local M = {}
 local notify = require("atlas.core.notify")
 local resolver = require("atlas.core.keymaps")
 local utils = require("atlas.ui.shared.utils")
-local bookmarks = require("atlas.ui.shared.bookmarks")
 local actions = require("atlas.pulls.actions")
 local registrations = {}
 
@@ -67,7 +66,7 @@ function M.register(buf, views)
 	local items = {}
 
 	for _, view in ipairs(views) do
-		if view._kind ~= "bookmarks" and view.key ~= nil and view.key ~= "" then
+		if view ~= state.bookmarks.tab and view.key ~= nil and view.key ~= "" then
 			local v = view
 			table.insert(items, {
 				key = v.key,
@@ -81,22 +80,20 @@ function M.register(buf, views)
 		end
 	end
 
-	local bookmark_key = state.provider and bookmarks.key("pulls", state.provider.id)
-	if bookmark_key then
-		table.insert(items, {
-			key = bookmark_key,
-			desc = "Switch to bookmarks",
-			hidden = true,
-			callback = function()
-				for _, view in ipairs(state.views) do
-					if view._kind == "bookmarks" then
-						require("atlas.pulls.ui.dashboard.controller").switch_view(view)
-						return
-					end
+	local bookmark_view = state.bookmarks.tab
+	table.insert(items, {
+		key = bookmark_view.key,
+		desc = "Switch to bookmarks",
+		hidden = true,
+		callback = function()
+			for _, view in ipairs(state.views) do
+				if view == bookmark_view then
+					require("atlas.pulls.ui.dashboard.controller").switch_view(view)
+					return
 				end
-			end,
-		})
-	end
+			end
+		end,
+	})
 
 	utils.insert_if(
 		items,
@@ -105,27 +102,22 @@ function M.register(buf, views)
 			callback = function()
 				local navigation = require("atlas.ui.navigation")
 				local node = navigation.current_item()
-				if type(node) == "table" and node.kind == "bookmark" then
-					require("atlas.pulls.ui.dashboard.controller").run_bookmark(node.name, node.value)
+				if type(node) == "table" and (node.kind == "bookmark" or node.kind == "starred") then
+					require("atlas.pulls.ui.dashboard.controller").select_bookmark(node)
 				end
 			end,
 		})
 	)
 
-	local STATUS_TOGGLES = {
-		{ status = "OPEN", action_id = "pulls.filters.open" },
-		{ status = "MERGED", action_id = "pulls.filters.merged" },
-		{ status = "DECLINED", action_id = "pulls.filters.declined" },
-	}
-	for _, sf in ipairs(STATUS_TOGGLES) do
-		local s = sf
+	for _, status in ipairs(state.available_states) do
+		local value = status
 		utils.insert_if(
 			items,
-			item(s.action_id, {
-				desc = string.format("Toggle %s filter", s.status:lower()),
+			item("pulls.filters." .. value, {
+				desc = string.format("Toggle %s filter", value),
 				callback = function()
 					local controller = require("atlas.pulls.ui.dashboard.controller")
-					controller.toggle_status_filter(s.status)
+					controller.toggle_status_filter(value)
 				end,
 			})
 		)
@@ -276,7 +268,27 @@ function M.register(buf, views)
 		item("ui.refresh_view", {
 			desc = "Refresh current view",
 			callback = function()
-				require("atlas.pulls.ui.dashboard.controller").refresh_current_view()
+				require("atlas.pulls.ui.dashboard.controller").refresh_view()
+			end,
+		})
+	)
+
+	utils.insert_if(
+		items,
+		item("ui.previous_page", {
+			desc = "Previous page",
+			callback = function()
+				require("atlas.pulls.ui.dashboard.controller").previous_page()
+			end,
+		})
+	)
+
+	utils.insert_if(
+		items,
+		item("ui.next_page", {
+			desc = "Next page",
+			callback = function()
+				require("atlas.pulls.ui.dashboard.controller").next_page()
 			end,
 		})
 	)

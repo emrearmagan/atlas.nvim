@@ -14,14 +14,13 @@
 --         views = {
 --           { name = "Assigned",  key = "1", scope = "assigned_to_me" },
 --           { name = "Created",   key = "2", scope = "created_by_me" },
---           { name = "Reviewing", key = "3", scope = "all",
---             extra_params = { reviewer_id = "Me" } },
+--           { name = "Reviewing", key = "3", scope = "reviews_for_me" },
 --         },
 --         bookmarks = {
 --           -- key   = "S",      -- default
 --           -- label = "Search", -- default
 --           items = {
---             ["Reviewing"]   = { scope = "all", extra_params = { reviewer_id = "Me" } },
+--             ["Reviewing"]   = { scope = "reviews_for_me" },
 --             ["Created by me"] = { scope = "all", author_username = "me" },
 --           },
 --         },
@@ -30,7 +29,7 @@
 --   })
 --
 -- View options map directly to GitLab API:
---   scope:    "created_by_me" | "assigned_to_me" | "all"
+--   scope:    "created_by_me" | "assigned_to_me" | "reviews_for_me" | "all"
 --   labels, milestone, assignee_username, author_username, search
 --   order_by: "created_at" | "updated_at" | "title" | ...
 --   sort:     "asc" | "desc"
@@ -39,7 +38,7 @@
 -- TODO: It should work in theory, but i have not tested it yet...
 
 ---@class AtlasGitLabPullsSearchConfig
----@field scope "created_by_me"|"assigned_to_me"|"all"|nil
+---@field scope string|nil
 ---@field project string|number|nil
 ---@field group string|number|nil
 ---@field labels string|nil
@@ -48,16 +47,17 @@
 ---@field author_username string|nil
 ---@field search string|nil
 ---@field sort "asc"|"desc"|nil
----@field order_by "created_at"|"updated_at"|"title"|nil
+---@field order_by string|nil
 ---@field extra_params table<string, string>|nil
 
 ---@class AtlasGitLabPullsViewConfig : AtlasPullsViewConfig, AtlasGitLabPullsSearchConfig
----@field current_repo boolean|nil
+
+---@class AtlasGitLabPullsBookmarkConfig : AtlasPullsBookmarkConfig, AtlasGitLabPullsSearchConfig
 
 ---@class AtlasGitLabPullsBookmarksConfig
 ---@field key string|nil    -- default "S"
 ---@field label string|nil  -- default "Search"
----@field items table<string, AtlasGitLabPullsSearchConfig>|nil
+---@field items table<string, AtlasGitLabPullsBookmarkConfig>|nil
 
 ---@class AtlasGitLabConfig
 ---@field base_url string

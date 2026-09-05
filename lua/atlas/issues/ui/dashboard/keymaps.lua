@@ -3,7 +3,6 @@ local M = {}
 local notify = require("atlas.core.notify")
 local resolver = require("atlas.core.keymaps")
 local utils = require("atlas.ui.shared.utils")
-local bookmarks = require("atlas.ui.shared.bookmarks")
 local actions = require("atlas.issues.actions")
 local registrations = {}
 
@@ -58,7 +57,7 @@ function M.register(buf, views)
 	local items = {}
 
 	for _, view in ipairs(views) do
-		if view._kind ~= "bookmarks" and view.key ~= nil and view.key ~= "" then
+		if view ~= state.bookmarks.tab and view.key ~= nil and view.key ~= "" then
 			local v = view
 			table.insert(items, {
 				key = v.key,
@@ -71,22 +70,20 @@ function M.register(buf, views)
 		end
 	end
 
-	local bookmark_key = bookmarks.key("issues", provider.id)
-	if bookmark_key then
-		table.insert(items, {
-			key = bookmark_key,
-			desc = "Switch to bookmarks",
-			hidden = true,
-			callback = function()
-				for _, view in ipairs(state.views) do
-					if view._kind == "bookmarks" then
-						controller.switch_view(view)
-						return
-					end
+	local bookmark_view = state.bookmarks.tab
+	table.insert(items, {
+		key = bookmark_view.key,
+		desc = "Switch to bookmarks",
+		hidden = true,
+		callback = function()
+			for _, view in ipairs(state.views) do
+				if view == bookmark_view then
+					controller.switch_view(view)
+					return
 				end
-			end,
-		})
-	end
+			end
+		end,
+	})
 
 	utils.insert_if(
 		items,
@@ -95,8 +92,8 @@ function M.register(buf, views)
 			callback = function()
 				local navigation = require("atlas.ui.navigation")
 				local node = navigation.current_item()
-				if type(node) == "table" and node.kind == "bookmark" then
-					controller.run_bookmark(node.name, node.value)
+				if type(node) == "table" and (node.kind == "bookmark" or node.kind == "starred") then
+					controller.select_bookmark(node)
 				end
 			end,
 		})
@@ -183,7 +180,7 @@ function M.register(buf, views)
 			desc = "Refresh current view",
 			index = 7,
 			callback = function()
-				controller.refresh_current_view()
+				controller.refresh_view()
 			end,
 		})
 	)
@@ -330,6 +327,26 @@ function M.register(buf, views)
 					return
 				end
 				actions.run("browse_issue", context(issue))
+			end,
+		})
+	)
+
+	utils.insert_if(
+		items,
+		item("ui.previous_page", {
+			desc = "Previous page",
+			callback = function()
+				controller.previous_page()
+			end,
+		})
+	)
+
+	utils.insert_if(
+		items,
+		item("ui.next_page", {
+			desc = "Next page",
+			callback = function()
+				controller.next_page()
 			end,
 		})
 	)

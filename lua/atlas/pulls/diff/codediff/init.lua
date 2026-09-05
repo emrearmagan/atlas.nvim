@@ -2,7 +2,6 @@ local M = {}
 
 local config = require("atlas.config")
 local keymaps = require("atlas.core.keymaps")
-local core_notify = require("atlas.core.notify")
 local comments = require("atlas.pulls.diff.comments")
 local position = require("atlas.pulls.diff.position")
 local review_keymaps = require("atlas.pulls.diff.keymaps")
@@ -66,8 +65,6 @@ local FILE_STATUSES = {
 ---@field generation integer
 ---@field auto_open_panel boolean
 ---@field closed boolean
----@field reloading boolean
----@field reload_view (fun())|nil
 
 ---@param value string|nil
 ---@return string
@@ -330,7 +327,7 @@ local function register_review_buffers(session, buffers)
 	end
 	review_keymaps.register(session, {
 		buffers = valid,
-		reload = state.reload_view,
+		reopen = session.reopen,
 		help_key = keymaps.resolve("pulls.external_help"),
 		file_buffers = { state.lifecycle.get_explorer(state.tabpage).bufnr },
 		add_file_comment = function(pending)
@@ -501,7 +498,7 @@ local function register_events(session, state)
 				return
 			end
 			vim.schedule(function()
-				if session.viewer_state == state and not state.reloading and not state.closed then
+				if session.viewer_state == state and not state.closed then
 					M.detach(session, "viewer_closed")
 				end
 			end)
@@ -519,36 +516,6 @@ local function register_events(session, state)
 end
 
 ---@param session AtlasDiffSession
-local function reload_view(session)
-	local state = session.viewer_state --[[@as AtlasCodeDiffState]]
-	if state.closed or state.reloading or not session.reload then
-		return
-	end
-	local reload = session.reload
-	vim.cmd("tabnew")
-	local win = vim.api.nvim_get_current_win()
-	local target = {
-		tabpage = vim.api.nvim_get_current_tabpage(),
-		buf = vim.api.nvim_get_current_buf(),
-		win = win,
-		number = vim.wo[win].number,
-		relativenumber = vim.wo[win].relativenumber,
-		statuscolumn = vim.wo[win].statuscolumn,
-		winbar = vim.wo[win].winbar,
-	}
-	state.reloading = true
-	if not state.lifecycle.close(state.tabpage) then
-		state.reloading = false
-		vim.cmd("tabclose")
-		return
-	end
-	M.detach(session, "reload")
-	vim.schedule(function()
-		reload(target)
-	end)
-end
-
----@param session AtlasDiffSession
 ---@param lifecycle AtlasCodeDiffLifecycle
 ---@param tabpage integer
 local function attach(session, lifecycle, tabpage)
@@ -563,16 +530,16 @@ local function attach(session, lifecycle, tabpage)
 		auto_open_panel = diff_config.show_review_panel == true
 			and (session.review ~= nil or session.note_target ~= nil),
 		closed = false,
-		reloading = false,
 	}
 	session.viewer_state = state
-	state.reload_view = function()
-		reload_view(session)
-	end
 	session_api.attach(session, {
 		tabpage = tabpage,
-		notify = function(level, message, duration)
-			core_notify.show(level, message, { timeout = duration })
+		close = function(reason)
+			if not state.lifecycle.close(state.tabpage) then
+				return false
+			end
+			M.detach(session, reason)
+			return true
 		end,
 		focus_item = function(item, focus_diff)
 			focus_item(session, item, focus_diff)
@@ -588,8 +555,6 @@ local function attach(session, lifecycle, tabpage)
 	local panel
 	if session.review or session.note_target then
 		panel = session_api.create_review_panel(session, string.format("atlas-diff-codediff://%d/review", tabpage))
-		review_panel.configure(panel)
-		review_panel.register_keymaps(panel)
 	end
 	register_events(session, state)
 
@@ -622,12 +587,10 @@ local function attach(session, lifecycle, tabpage)
 end
 
 ---@param session AtlasDiffSession
----@param loading_view AtlasLoadingView
 ---@param on_done fun(err: string|nil)
 ---@return { cancel: fun() }
-function M.open(session, loading_view, on_done)
+function M.open(session, on_done)
 	local finished = false
-	local cancelled = false
 	local opened_tabpage
 	local autocmd_id
 
@@ -640,10 +603,6 @@ function M.open(session, loading_view, on_done)
 			pcall(vim.api.nvim_del_autocmd, autocmd_id)
 			autocmd_id = nil
 		end
-		if cancelled then
-			return
-		end
-		loading_view:finish()
 		on_done(err)
 	end
 
@@ -660,17 +619,13 @@ function M.open(session, loading_view, on_done)
 				return
 			end
 			opened_tabpage = tabpage
-			if cancelled then
-				pcall(lifecycle.close, tabpage)
-				finish(nil)
-				return
-			end
 			local ok, err = pcall(attach, session, lifecycle, tabpage)
 			if not ok then
 				local state = session.viewer_state --[[@as AtlasCodeDiffState]]
-				if state.lifecycle == lifecycle and state.tabpage == tabpage then
+				if state and state.lifecycle == lifecycle and state.tabpage == tabpage then
 					M.detach(session, "attach_failed")
 				end
+				pcall(lifecycle.close, tabpage)
 			end
 			vim.schedule(function()
 				if ok then
@@ -683,13 +638,8 @@ function M.open(session, loading_view, on_done)
 	})
 
 	local source = session.source
-	local args = { "--repo", source.root }
-	if source.head_revision then
-		args[#args + 1] = source.base_revision .. "..." .. source.head_revision
-	end
-	local ok, err = pcall(vim.api.nvim_win_call, loading_view.win, function()
-		vim.api.nvim_cmd({ cmd = "CodeDiff", args = args }, {})
-	end)
+	local args = { "--repo", source.root, source.base_revision .. "..." .. source.head_revision }
+	local ok, err = pcall(vim.api.nvim_cmd, { cmd = "CodeDiff", args = args }, {})
 	if not ok then
 		finish(tostring(err))
 	end
@@ -701,17 +651,16 @@ function M.open(session, loading_view, on_done)
 
 	return {
 		cancel = function()
-			if finished or cancelled then
+			if finished then
 				return
 			end
-			cancelled = true
 			if opened_tabpage then
 				local loaded, lifecycle = pcall(require, "codediff.ui.lifecycle")
 				if loaded then
 					pcall(lifecycle.close, opened_tabpage)
 				end
-				finish(nil)
 			end
+			finish(nil)
 		end,
 	}
 end

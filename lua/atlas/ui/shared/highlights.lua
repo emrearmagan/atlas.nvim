@@ -32,6 +32,11 @@ end
 
 ---@type table<string, table>
 local groups = {
+	AtlasGitHubTheme = { bg = "#1f2328", fg = "#f0f6fc", bold = true },
+	AtlasGitLabTheme = { fg = "#1e1e2e", bg = "#fc6d26", bold = true },
+	AtlasBitbucketTheme = { bg = "#1e3a8a", bold = true },
+	AtlasJiraTheme = { bg = "#1e3a8a", bold = true },
+
 	AtlasTabInactive = { link = "CursorLine" },
 	AtlasColumnHeader = { fg = "#7f849c", bold = true },
 	AtlasSectionHeader = { fg = "#7f849c", bold = true, underline = true },
@@ -50,6 +55,7 @@ local groups = {
 
 	AtlasFooterBackground = { bg = "#202635" },
 	AtlasFooterText = { fg = "#7f849c", bg = "#202635" },
+	AtlasFooterActive = { fg = "#cdd6f4", bg = "#202635", bold = true },
 	AtlasFooterInfo = { fg = "#89b4fa", bg = "#202635", bold = true },
 	AtlasFooterNote = { fg = "#f5bde6", bg = "#202635", bold = true },
 	AtlasFooterWarning = { fg = "#f9e2af", bg = "#202635", bold = true },
@@ -61,14 +67,14 @@ local groups = {
 
 function M.setup()
 	for name, opts in pairs(groups) do
-		vim.api.nvim_set_hl(0, name, opts)
+		vim.api.nvim_set_hl(0, name, vim.tbl_extend("force", opts, { default = true }))
 	end
 
 	for idx, color in ipairs(dynamic_palette) do
 		local fg_name = string.format("AtlasDynColor%02d", idx)
 		local bg_name = string.format("AtlasDynBgColor%02d", idx)
-		vim.api.nvim_set_hl(0, fg_name, { fg = color })
-		vim.api.nvim_set_hl(0, bg_name, { fg = "#1e1e2e", bg = color })
+		vim.api.nvim_set_hl(0, fg_name, { fg = color, default = true })
+		vim.api.nvim_set_hl(0, bg_name, { fg = "#1e1e2e", bg = color, default = true })
 	end
 end
 

@@ -233,7 +233,7 @@ function M.render(_pr, _details, width)
 		padding_x = PADDING_X,
 		mode = "linked",
 		author_hl = function()
-			return "AtlasText"
+			return "Normal"
 		end,
 		content_hl = function(item, row, _)
 			local out = { { start_col = 0, end_col = #row, hl_group = "AtlasTextMuted" } }

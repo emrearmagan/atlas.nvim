@@ -6,7 +6,8 @@ local service = require("atlas.pulls.providers.bitbucket.api.service")
 local mapper = require("atlas.pulls.providers.bitbucket.api.mapper")
 local logger = require("atlas.core.logger")
 local request_scope = require("atlas.core.requests")
-local state = require("atlas.pulls.providers.bitbucket.state")
+local repositories_api = require("atlas.pulls.providers.bitbucket.api.repositories")
+local url_encode = require("atlas.core.utils").url_encode
 
 local SUMMARY_FIELDS = {
 	"id",
@@ -24,11 +25,26 @@ local SUMMARY_FIELDS = {
 	"links",
 }
 local PULL_REQUEST_FIELDS = table.concat(SUMMARY_FIELDS, ",")
-local list_fields = { "next" }
+local list_fields = {}
 for _, field in ipairs(SUMMARY_FIELDS) do
 	table.insert(list_fields, "values." .. field)
 end
+table.insert(list_fields, "next")
+table.insert(list_fields, "size")
 local PULL_REQUEST_LIST_FIELDS = table.concat(list_fields, ",")
+
+---@param pagelen integer
+---@param query string
+---@return string
+local function build_query(pagelen, query)
+	local parts = {
+		"fields=" .. url_encode(PULL_REQUEST_LIST_FIELDS),
+		"pagelen=" .. tostring(pagelen),
+		"q=" .. url_encode(query),
+	}
+	table.sort(parts)
+	return table.concat(parts, "&")
+end
 
 ---@param pr PullRequest
 ---@param action "merge"|"decline"
@@ -38,27 +54,15 @@ function M.has_action(pr, action)
 	return tostring(pr.links[action] or "") ~= ""
 end
 
----@param workspace string
----@param repo string
----@param statuses string[]
----@param pagelen integer
----@return string
-local function cache_key(workspace, repo, statuses, pagelen)
-	local sorted = vim.deepcopy(statuses)
-	table.sort(sorted)
-	return string.format("bitbucket:prs:%s/%s:%s:pagelen:%d", workspace, repo, table.concat(sorted, ","), pagelen)
-end
-
----@param workspace string
----@param repo string
----@param opts { cache_ttl: number, force: boolean, pagelen: number|nil, statuses: string[]|nil }
----@param on_done fun(prs: PullRequest[], err: string|nil)
+---@param repo_full_name string
+---@param url string
+---@param opts { force_refresh: boolean, pagelen: number }
+---@param on_done fun(page: { items: PullRequest[], next_url: string|nil, total_pages: integer|nil }, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
-local function fetch_pullrequests_single(workspace, repo, opts, on_done)
-	local statuses_for_key = opts.statuses or { state.pr_state }
-	local pagelen = tonumber(opts.pagelen) or 50
-	local key = cache_key(workspace, repo, statuses_for_key, pagelen)
-	if not opts.force then
+local function fetch_page(repo_full_name, url, opts, on_done)
+	local workspace, repo = repo_full_name:match("^([^/]+)/(.+)$")
+	local key = "bitbucket:prs:page:" .. url
+	if not opts.force_refresh then
 		local cached, ok = service.get_persistent_cache(key)
 		if ok then
 			on_done(cached, nil)
@@ -66,138 +70,121 @@ local function fetch_pullrequests_single(workspace, repo, opts, on_done)
 		end
 	end
 
-	local statuses = opts.statuses or { state.pr_state }
-	local state_params = {}
-	for _, s in ipairs(statuses) do
-		table.insert(state_params, "state=" .. s)
-	end
-	local endpoint = string.format(
-		"/repositories/%s/%s/pullrequests?%s&pagelen=%d&fields=%s",
-		workspace,
-		repo,
-		table.concat(state_params, "&"),
-		pagelen,
-		PULL_REQUEST_LIST_FIELDS
-	)
-	return service.request("GET", endpoint, nil, nil, function(result, err)
+	return service.request("GET", url, nil, nil, function(result, err)
 		if err then
-			on_done({}, err)
+			on_done({ items = {}, next_url = nil }, err)
 			return
 		end
 
-		local normalized = mapper.to_pull_requests_list(result, workspace, repo)
-		service.set_persistent_cache(key, normalized, opts.cache_ttl)
-		on_done(normalized, nil)
+		local next_url = result.next
+		if type(next_url) ~= "string" or next_url == "" then
+			next_url = nil
+		end
+		local size = tonumber(result.size)
+		local page = {
+			items = mapper.to_pull_requests_list(result, workspace, repo),
+			next_url = next_url,
+			total_pages = size and math.max(1, math.ceil(size / opts.pagelen)) or nil,
+		}
+		service.set_persistent_cache(key, page, service.cache_ttl())
+		on_done(page, nil)
 	end, { action = "Fetch pull requests", workspace = workspace, repo = repo })
 end
 
----@param view_repos AtlasBitbucketRepoTarget[]
----@param opts { force_load: boolean, pagelen: number|nil, statuses: string[]|nil }
----@param on_done fun(pulls: PullRequest[], err: string[]|nil)
+---@param urls table<string, string> Repository full name to request URL.
+---@param opts { force_refresh: boolean, pagelen: number }
+---@param on_done fun(page: PullsPage, err: string[]|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_pullrequests(view_repos, opts, on_done)
-	local MAX_CONCURRENT_REQUESTS = 8
-	if view_repos == nil or #view_repos == 0 then
-		on_done({}, nil)
+local function fetch_pages(urls, opts, on_done)
+	if next(urls) == nil then
+		on_done({ items = {}, next_cursor = nil }, nil)
 		return nil
 	end
 
-	local ttl = service.cache_ttl()
 	local _, _, auth_err = service.get_auth()
 	if auth_err then
-		logger.logerror("Fetch pull requests failed", { repo_count = #view_repos, error = auth_err })
-		on_done({}, { tostring(auth_err) })
+		logger.logerror("Fetch pull requests failed", { error = auth_err })
+		on_done({ items = {}, next_cursor = nil }, { tostring(auth_err) })
 		return nil
 	end
 
-	local pending = #view_repos
-	local next_index = 1
-	local active = 0
-	local done = false
-	local pumping = false
-	local results = {}
-	local errors = {}
-	local handles = {}
-
-	local function cancel_all()
-		done = true
-		for _, handle in pairs(handles) do
-			if handle and handle.cancel then
-				pcall(handle.cancel)
-			end
+	local requests = request_scope.new()
+	local starts = {}
+	for name, page_url in pairs(urls) do
+		local repo_full_name, url = name, page_url
+		starts[repo_full_name] = function(done)
+			return fetch_page(repo_full_name, url, opts, done)
 		end
-		handles = {}
 	end
 
-	local pump
-
-	local function finish(index, prs, err)
-		if done then
-			return
-		end
-
-		handles[index] = nil
-		active = active - 1
-		if err then
-			table.insert(errors, tostring(err))
-		end
-
-		results[index] = prs or {}
-
-		pending = pending - 1
-		if pending == 0 then
-			done = true
-			local all_prs = {}
-			for result_index = 1, #view_repos do
-				vim.list_extend(all_prs, results[result_index])
+	requests.all(starts, function(results, request_errors)
+		local pulls, next_cursor, errors = {}, {}, {}
+		local total_pages, has_total = 1, true
+		for repo_full_name in pairs(urls) do
+			local page = results[repo_full_name]
+			if page then
+				vim.list_extend(pulls, page.items)
+				if page.total_pages then
+					total_pages = math.max(total_pages, page.total_pages)
+				else
+					has_total = false
+				end
+				if page.next_url then
+					next_cursor[repo_full_name] = page.next_url
+				end
 			end
-			table.sort(all_prs, function(left, right)
-				return left.updated_on > right.updated_on
-			end)
-
-			if #errors > 0 then
-				on_done(all_prs, errors)
-			else
-				on_done(all_prs, nil)
+			if request_errors[repo_full_name] then
+				table.insert(errors, request_errors[repo_full_name])
 			end
-			return
 		end
+		table.sort(pulls, function(left, right)
+			return left.updated_on > right.updated_on
+		end)
+		on_done({
+			items = pulls,
+			next_cursor = next(next_cursor) and next_cursor or nil,
+			total_pages = has_total and total_pages or nil,
+		}, #errors > 0 and errors or nil)
+	end)
 
-		pump()
+	return requests
+end
+
+---@param repos BitbucketRepoTarget[]
+---@param opts { force_refresh: boolean, pagelen: number, query: string }
+---@param on_done fun(page: PullsPage, err: string[]|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_for_repositories(repos, opts, on_done)
+	local urls = {}
+	local query = build_query(opts.pagelen, opts.query)
+	for _, repo in ipairs(repos) do
+		local repo_full_name = repo.workspace .. "/" .. repo.repo
+		urls[repo_full_name] = string.format("/repositories/%s/%s/pullrequests?%s", repo.workspace, repo.repo, query)
+	end
+	return fetch_pages(urls, opts, on_done)
+end
+
+---@param targets BitbucketPullTarget[]
+---@param opts { force_refresh: boolean, pagelen: number, query: string, cursor: table<string, string>|nil }
+---@param on_done fun(page: PullsPage, err: string[]|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_for_targets(targets, opts, on_done)
+	if opts.cursor then
+		return fetch_pages(opts.cursor, opts, on_done)
 	end
 
-	pump = function()
-		if done or pumping then
-			return
-		end
-		pumping = true
-		while not done and active < MAX_CONCURRENT_REQUESTS and next_index <= #view_repos do
-			local index = next_index
-			local repo = view_repos[index]
-			next_index = next_index + 1
-			active = active + 1
-			local completed = false
-			local handle = fetch_pullrequests_single(repo.workspace, repo.repo, {
-				cache_ttl = ttl,
-				force = opts.force_load,
-				pagelen = opts.pagelen,
-				statuses = opts.statuses,
-			}, function(prs, err)
-				completed = true
-				finish(index, prs, err)
-			end)
-			if handle ~= nil and not completed and not done then
-				handles[index] = handle
-			end
-		end
-		pumping = false
-	end
-
-	pump()
-
-	return {
-		cancel = cancel_all,
-	}
+	local requests = request_scope.new()
+	requests.run(function(done)
+		return repositories_api.resolve_targets(targets, opts, done)
+	end, function(repos, errors)
+		requests.run(function(done)
+			return M.fetch_for_repositories(repos, opts, done)
+		end, function(page, fetch_errors)
+			vim.list_extend(errors, fetch_errors or {})
+			on_done(page, #errors > 0 and errors or nil)
+		end)
+	end)
+	return requests
 end
 
 ---@param refs PullRequestRef[]
@@ -259,7 +246,7 @@ function M.fetch_by_refs(refs, _opts, on_done)
 end
 
 ---@param ref PullRequestRef
----@param opts? { force_load?: boolean }
+---@param opts? { force_refresh?: boolean }
 ---@param on_done fun(detail: PullRequestDetails|nil, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.fetch_pullrequest(ref, opts, on_done)
@@ -271,7 +258,7 @@ function M.fetch_pullrequest(ref, opts, on_done)
 	end
 
 	local key = string.format("bitbucket:pr:detail:%s/%s/%s", workspace, repo, tostring(ref.id))
-	if opts.force_load ~= true then
+	if opts.force_refresh ~= true then
 		local cached, ok = service.get_cache(key)
 		if ok then
 			on_done(cached, nil)

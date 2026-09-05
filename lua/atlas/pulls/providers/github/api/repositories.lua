@@ -51,7 +51,7 @@ function M.fetch_detail(repo, opts, on_done)
 	local slug = owner .. "/" .. repo_name
 	local cache_key = string.format("github:repo_details:%s", slug)
 
-	if not opts.force_load then
+	if not opts.force_refresh then
 		local cached, ok = cli.get_mem(cache_key)
 		if ok then
 			on_done(cached, nil)
@@ -145,7 +145,7 @@ function M.fetch_branches(repo, opts, on_done)
 	end
 
 	local cache_key = string.format("github:branches:%s", slug)
-	if not opts.force_load then
+	if not opts.force_refresh then
 		local cached, ok = cli.get_mem(cache_key)
 		if ok then
 			on_done(cached, nil)
@@ -197,7 +197,7 @@ function M.fetch_tags(repo, opts, on_done)
 	end
 
 	local cache_key = string.format("github:tags:%s", slug)
-	if not opts.force_load then
+	if not opts.force_refresh then
 		local cached, ok = cli.get_mem(cache_key)
 		if ok then
 			on_done(cached, nil)

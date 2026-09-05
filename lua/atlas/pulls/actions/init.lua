@@ -29,6 +29,7 @@ local notify = utils.notify
 ---| "convert_to_draft"
 ---| "edit_reviewers"
 ---| "search"
+---| "search_pull_requests"
 ---| "approve"
 ---| "request_changes"
 
@@ -128,7 +129,6 @@ function M.open(context, on_done)
 	picker.select({
 		title = string.format("Choose %s action%s", context.provider.name, target),
 		items = items,
-		kind = "atlas_pulls_actions",
 		format_item = function(action)
 			return action.label
 		end,
@@ -396,9 +396,9 @@ M.open_diff = {
 			ref = assert(context.pr),
 			provider = context.provider,
 			current_user = context.current_user,
-		}, function(err, level)
+		}, function(err)
 			if err then
-				notify(context, level or "error", "Unable to open diff: " .. tostring(err))
+				notify(context, "error", "Unable to open diff: " .. tostring(err))
 				done(nil, err)
 				return
 			end
@@ -436,7 +436,7 @@ M.checkout = {
 		end
 
 		notify(context, "loading", "Loading pull request revisions...")
-		context.provider.capabilities.core.fetch_by_refs({ pr }, { force_load = false }, function(pulls, err)
+		context.provider.capabilities.core.fetch_by_refs({ pr }, { force_refresh = false }, function(pulls, err)
 			local fresh = pulls and pulls[1] or nil
 			if fresh == nil then
 				local message = tostring(err or "Unable to load pull request revisions")

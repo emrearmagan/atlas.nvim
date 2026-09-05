@@ -12,7 +12,6 @@ local templates_root = vim.fn.stdpath("data") .. "/atlas/issues/templates"
 ---@class AtlasIssueTemplateContext
 ---@field get_description fun(): string
 ---@field set_description fun(description: string): boolean
----@field menu_kind string
 
 ---@param name string|nil
 ---@return string|nil
@@ -211,7 +210,7 @@ function M.manage(on_done)
 	picker.select({
 		title = "Templates",
 		items = options,
-		kind = "atlas_issue_template_actions",
+		size = { width = 0.35, height = 0.15 },
 		format_item = function(item)
 			return item.label
 		end,
@@ -448,7 +447,7 @@ function M.open(context)
 	picker.select({
 		title = "Issue templates",
 		items = actions,
-		kind = context.menu_kind,
+		size = { width = 0.35, height = 0.15 },
 		format_item = function(action)
 			return action.label
 		end,

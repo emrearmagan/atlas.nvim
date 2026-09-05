@@ -1,10 +1,13 @@
 ---@class IssuesState
----@field active_view IssuesViewConfig|nil
----@field current_view IssuesViewConfig|nil
+---@field view IssuesViewConfig|nil
+---@field bookmarks AtlasBookmarksState|nil
+---@field query string
 ---@field is_loading boolean
 ---@field error string|nil
 ---@field current_user IssueUser|nil
 ---@field issues Issue[]
+---@field current_page integer
+---@field page_history IssuesPage[]
 ---@field issue_tree IssuesGroup[]
 ---@field collapsed_issue_keys table<string, boolean>
 ---@field provider IssuesProvider|nil
@@ -14,12 +17,15 @@
 ---@field reloading_issue_keys table<string, boolean>
 ---@field reload_spinner_frame string
 local M = {
-	active_view = nil,
-	current_view = nil,
+	view = nil,
+	bookmarks = nil,
+	query = "",
 	is_loading = false,
 	error = nil,
 	current_user = nil,
 	issues = {},
+	current_page = 1,
+	page_history = {},
 	issue_tree = {},
 	collapsed_issue_keys = {},
 	provider = nil,
@@ -71,6 +77,18 @@ local function build_issue_tree(issues)
 		end
 	end
 	return roots
+end
+
+---@return IssuesViewConfig|nil
+function M.search_view()
+	local bookmarks = M.bookmarks
+	if bookmarks ~= nil and M.view == bookmarks.tab then
+		local selection = bookmarks.selection
+		local view = selection and selection.kind == "bookmark" and selection.view or nil
+		---@cast view IssuesViewConfig|nil
+		return view
+	end
+	return M.view
 end
 
 ---@param issues Issue[]

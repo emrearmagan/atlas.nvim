@@ -39,19 +39,16 @@ function M.start()
 		return
 	end
 
-	local labels = {}
-	for _, c in ipairs(choices) do
-		table.insert(labels, c.label)
-	end
-
 	picker.select({
 		title = "Create issue with:",
-		items = labels,
-		on_select = function(_, index)
-			if index == nil then
-				return
+		items = choices,
+		format_item = function(choice)
+			return choice.label
+		end,
+		on_select = function(choice)
+			if choice then
+				create(choice.provider)
 			end
-			create(choices[index].provider)
 		end,
 	})
 end

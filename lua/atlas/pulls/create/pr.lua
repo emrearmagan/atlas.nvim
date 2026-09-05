@@ -183,9 +183,9 @@ local function preview_diff(pr_state)
 		return
 	end
 	require("atlas.pulls.diff").open_range({
-		git_root = pr_state.fields.repo_root,
-		base_revision = base,
-		head_revision = head,
+		root = pr_state.fields.repo_root,
+		base = base,
+		head = head,
 	}, function(open_err)
 		if open_err then
 			form.notify("error", "Unable to open diff: " .. tostring(open_err))
@@ -359,7 +359,7 @@ local function on_success(pr_state, result)
 
 	notify.info("PR created", { vim_notify = true })
 	pcall(function()
-		require("atlas.pulls.ui.dashboard.controller").refresh_current_view()
+		require("atlas.pulls.ui.dashboard.controller").refresh_view()
 	end)
 end
 
@@ -467,8 +467,7 @@ end
 
 ---@param opts CreatePROpenOpts
 function M.open(opts)
-	--- Atlas might not be open when this is called, so we need to load the highlights
-	require("atlas.ui.shared.highlights").setup()
+	--- Atlas might not be open when this is called, so load the highlights.
 	require("atlas.pulls.ui.highlights").setup()
 
 	---@type CreatePRState

@@ -58,13 +58,12 @@ function M.open(request)
 	local source_win = vim.api.nvim_get_current_win()
 	local has_preview = request.preview_item ~= nil
 
-	local function layout(item_count)
-		local total_width = math.min(has_preview and 100 or 70, vim.o.columns - 4)
-		local max_items = math.max(1, math.min(has_preview and 18 or 10, vim.o.lines - 8))
-		local item_height = has_preview and max_items or math.max(1, math.min(item_count, max_items))
+	local function layout()
+		local total_width = math.max(1, math.min(math.floor(vim.o.columns * request.size.width), vim.o.columns - 4))
+		local height = math.max(3, math.min(math.floor(vim.o.lines * request.size.height), vim.o.lines - 6))
+		local item_height = height - 2
 		local main_width = has_preview and math.floor(total_width * 0.42) or total_width
 		local preview_width = has_preview and total_width - main_width - 1 or 0
-		local height = item_height + 2
 		local outer_width = has_preview and main_width + preview_width + 4 or main_width + 2
 		return {
 			main_width = main_width,
@@ -76,7 +75,7 @@ function M.open(request)
 		}
 	end
 
-	local initial_layout = layout(#request.items)
+	local picker_layout = layout()
 	local main_buf = vim.api.nvim_create_buf(false, true)
 	local preview_buf = has_preview and vim.api.nvim_create_buf(false, true) or nil
 	vim.bo[main_buf].filetype = "atlas.picker"
@@ -90,10 +89,10 @@ function M.open(request)
 	end
 	local main_win = vim.api.nvim_open_win(main_buf, true, {
 		relative = "editor",
-		row = initial_layout.row,
-		col = initial_layout.col,
-		width = initial_layout.main_width,
-		height = initial_layout.height,
+		row = picker_layout.row,
+		col = picker_layout.col,
+		width = picker_layout.main_width,
+		height = picker_layout.height,
 		style = "minimal",
 		border = "rounded",
 		title = " " .. request.title .. " ",
@@ -102,10 +101,10 @@ function M.open(request)
 	local preview_win = preview_buf
 			and vim.api.nvim_open_win(preview_buf, false, {
 				relative = "editor",
-				row = initial_layout.row,
-				col = initial_layout.col + initial_layout.main_width + 2,
-				width = initial_layout.preview_width,
-				height = initial_layout.height,
+				row = picker_layout.row,
+				col = picker_layout.col + picker_layout.main_width + 2,
+				width = picker_layout.preview_width,
+				height = picker_layout.height,
 				style = "minimal",
 				border = "rounded",
 				title = " Preview ",
@@ -140,21 +139,21 @@ function M.open(request)
 		state.selected[request.key(item)] = item
 	end
 
-	local function resize(next_layout)
+	local function resize(new_layout)
 		vim.api.nvim_win_set_config(main_win, {
 			relative = "editor",
-			row = next_layout.row,
-			col = next_layout.col,
-			width = next_layout.main_width,
-			height = next_layout.height,
+			row = new_layout.row,
+			col = new_layout.col,
+			width = new_layout.main_width,
+			height = new_layout.height,
 		})
 		if preview_win then
 			vim.api.nvim_win_set_config(preview_win, {
 				relative = "editor",
-				row = next_layout.row,
-				col = next_layout.col + next_layout.main_width + 2,
-				width = next_layout.preview_width,
-				height = next_layout.height,
+				row = new_layout.row,
+				col = new_layout.col + new_layout.main_width + 2,
+				width = new_layout.preview_width,
+				height = new_layout.height,
 			})
 		end
 	end
@@ -211,6 +210,8 @@ function M.open(request)
 				vim.api.nvim_set_option_value("modifiable", false, { buf = preview_buf })
 				vim.api.nvim_set_option_value("filetype", "markdown", { buf = preview_buf })
 				if preview_win and vim.api.nvim_win_is_valid(preview_win) then
+					vim.api.nvim_set_option_value("number", false, { win = preview_win })
+					vim.api.nvim_set_option_value("relativenumber", false, { win = preview_win })
 					vim.api.nvim_win_set_config(preview_win, { title = " " .. (value.title or request.title) .. " " })
 				end
 			end)
@@ -221,13 +222,12 @@ function M.open(request)
 		local rows, highlights = {}, {}
 		local has_items = not state.loading and not state.err and #state.items > 0
 		state.index = has_items and math.min(math.max(1, state.index), #state.items) or 1
-		local next_layout = layout(has_items and #state.items or 1)
 
 		if state.loading then
 			local text = state.spinner and state.spinner:text("Searching...") or "Searching..."
-			rows[1] = "  " .. text
+			rows[1] = text
 		elseif state.err then
-			rows[1] = "  " .. state.err:gsub("[\r\n]+", " ")
+			rows[1] = state.err:gsub("[\r\n]+", " ")
 			table.insert(highlights, {
 				line = 1,
 				start_col = 0,
@@ -236,7 +236,7 @@ function M.open(request)
 			})
 		elseif #state.items == 0 then
 			local message = request.fetch and state.query == "" and "Type to search..." or "No results"
-			rows[1] = "  " .. message
+			rows[1] = message
 			table.insert(highlights, {
 				line = 1,
 				start_col = 0,
@@ -244,34 +244,34 @@ function M.open(request)
 				hl_group = "AtlasTextMuted",
 			})
 		else
-			local first = math.max(1, state.index - next_layout.item_height + 1)
-			first = math.min(first, math.max(1, #state.items - next_layout.item_height + 1))
-			for index = first, math.min(#state.items, first + next_layout.item_height - 1) do
+			local first = math.max(1, state.index - picker_layout.item_height + 1)
+			first = math.min(first, math.max(1, #state.items - picker_layout.item_height + 1))
+			for index = first, math.min(#state.items, first + picker_layout.item_height - 1) do
 				local item = state.items[index]
 				local marker, marker_hl = "", nil
 				if request.multi then
 					if state.selected[request.key(item)] then
-						marker, marker_hl = icons.general("success")
+						marker, marker_hl = icons.picker("selected")
 					else
-						marker, marker_hl = "○", "AtlasTextMuted"
+						marker, marker_hl = icons.picker("unselected")
 					end
 					marker = marker .. " "
 				end
 				local text, hl = request.format_item(item)
-				table.insert(rows, " " .. marker .. tostring(text or ""))
+				table.insert(rows, marker .. tostring(text or ""))
 				local row = #rows
 				if marker_hl then
 					table.insert(highlights, {
 						line = row,
-						start_col = 1,
-						end_col = 1 + #marker,
+						start_col = 0,
+						end_col = #marker,
 						hl_group = marker_hl,
 					})
 				end
 				if hl then
 					table.insert(highlights, {
 						line = row,
-						start_col = 1 + #marker,
+						start_col = #marker,
 						end_col = #rows[row],
 						hl_group = hl,
 					})
@@ -287,8 +287,7 @@ function M.open(request)
 			end
 		end
 
-		resize(next_layout)
-		local separator = string.rep("─", next_layout.main_width)
+		local separator = string.rep("─", picker_layout.main_width)
 		table.insert(rows, 1, separator)
 		table.insert(highlights, {
 			line = 0,
@@ -298,12 +297,10 @@ function M.open(request)
 		})
 		vim.api.nvim_buf_clear_namespace(main_buf, namespace, 0, -1)
 		vim.api.nvim_buf_set_extmark(main_buf, namespace, 0, 0, {
-			virt_lines = virtual_lines.render(rows, highlights, { width = next_layout.main_width }),
+			virt_lines = virtual_lines.render(rows, highlights, { width = picker_layout.main_width }),
 		})
-		vim.api.nvim_buf_set_extmark(main_buf, namespace, 0, 0, {
-			sign_text = "›",
-			sign_hl_group = "AtlasTextNote",
-		})
+		local prompt, prompt_hl = icons.picker("prompt")
+		vim.api.nvim_buf_set_extmark(main_buf, namespace, 0, 0, { sign_text = prompt, sign_hl_group = prompt_hl })
 		if not state.loading and not state.err then
 			vim.api.nvim_buf_set_extmark(main_buf, namespace, 0, 0, {
 				virt_text = { { string.format("%d/%d", #state.items, #all_items), "AtlasTextMuted" } },
@@ -445,6 +442,8 @@ function M.open(request)
 		buffer = main_buf,
 		callback = function()
 			if not state.closed then
+				picker_layout = layout()
+				resize(picker_layout)
 				render(false)
 			end
 		end,
@@ -466,7 +465,11 @@ function M.open(request)
 	else
 		render()
 	end
-	vim.cmd("startinsert")
+	vim.schedule(function()
+		if not state.closed and vim.api.nvim_get_current_win() == main_win then
+			vim.cmd("startinsert")
+		end
+	end)
 end
 
 return M

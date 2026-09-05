@@ -71,10 +71,13 @@
 ---@field issue_types AtlasJiraIssueTypesConfig|nil
 ---@field [string] AtlasJiraProjectFieldsConfig
 
+---@class AtlasJiraBookmarkConfig : AtlasIssuesBookmarkConfig
+---@field jql string
+
 ---@class AtlasJiraBookmarksConfig
 ---@field key string|nil    -- default "J"
 ---@field label string|nil  -- default "JQL"
----@field items table<string, string>|nil
+---@field items table<string, string|AtlasJiraBookmarkConfig>|nil
 
 ---@class AtlasJiraConfig
 ---@field base_url string

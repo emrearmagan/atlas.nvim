@@ -14,6 +14,15 @@ local bookmarks = require("atlas.ui.shared.bookmarks")
 local active_requests = requests.new()
 local issue_reload_requests = requests.new()
 
+---@param view IssuesViewConfig|nil
+local function resolve_view(view)
+	if view ~= nil then
+		state.query = state.provider.resolve_search(view)
+	else
+		state.query = ""
+	end
+end
+
 local function render_if_active()
 	local provider = state.provider
 	if provider == nil or not dashboard_host.is_active("issues", provider.id) then
@@ -67,6 +76,7 @@ local function cancel_active_requests()
 
 	issue_reload_requests.cancel()
 	issue_reload_requests = requests.new()
+	state.is_loading = false
 	reset_reload_state()
 end
 
@@ -141,7 +151,7 @@ end
 ---@param items AtlasStarredItem[]
 local function cache_starred_items(items)
 	state.starred_items = items
-	state.views = bookmarks.views(state.provider.id, "issues", state.provider_views, items)
+	state.views = bookmarks.views(state.provider_views, state.bookmarks, items)
 end
 
 ---@param issues Issue[]
@@ -167,6 +177,13 @@ local function save_starred_issue(issue)
 	return err
 end
 
+local function update_current_page()
+	local page = state.page_history[state.current_page]
+	if page ~= nil then
+		page.items = state.issues
+	end
+end
+
 ---@param updated Issue
 ---@return boolean, string|nil
 local function replace_issue(updated)
@@ -175,6 +192,7 @@ local function replace_issue(updated)
 		if current.key == updated.key then
 			issues[index] = updated
 			state.set_issues(mark_starred(issues))
+			update_current_page()
 			return true, save_starred_issue(updated)
 		end
 	end
@@ -184,10 +202,10 @@ end
 ---@param provider IssuesProvider
 ---@param view IssuesViewConfig
 ---@param issues Issue[]
----@param force_load boolean
+---@param force_refresh boolean
 ---@param scope AtlasRequestScope
 ---@param on_done fun(issues: Issue[])
-local function fetch_missing_parents(provider, view, issues, force_load, scope, on_done)
+local function fetch_missing_parents(provider, view, issues, force_refresh, scope, on_done)
 	local fetch = provider.capabilities.core.fetch_by_refs
 	if not relationships_enabled(view) then
 		on_done(issues)
@@ -201,7 +219,7 @@ local function fetch_missing_parents(provider, view, issues, force_load, scope, 
 	end
 
 	scope.run(function(done)
-		return fetch(refs, { force_load = force_load }, done)
+		return fetch(refs, { force_refresh = force_refresh }, done)
 	end, function(parents, err)
 		if err then
 			notify.warn("Failed to fetch parent issues: " .. tostring(err))
@@ -213,9 +231,11 @@ local function fetch_missing_parents(provider, view, issues, force_load, scope, 
 end
 
 ---@param view IssuesViewConfig
----@param force_load boolean
+---@param page_number integer
+---@param cursor string|nil
+---@param force_refresh boolean
 ---@param on_done fun()|nil
-local function load_query(view, force_load, on_done)
+local function load_page(view, page_number, cursor, force_refresh, on_done)
 	on_done = on_done or function() end
 
 	local provider = state.provider
@@ -223,6 +243,8 @@ local function load_query(view, force_load, on_done)
 		on_done()
 		return
 	end
+	local previous_page = state.current_page
+	state.current_page = page_number
 
 	cancel_active_requests()
 	local load_requests = active_requests
@@ -230,10 +252,10 @@ local function load_query(view, force_load, on_done)
 
 	state.is_loading = true
 	state.error = nil
-	state.set_issues({})
-	state.current_view = view
-	local bookmark_query = state.active_view ~= nil and state.active_view._kind == "bookmarks"
-	notify.loading(bookmark_query and "Running query..." or "Loading issues...")
+	if page_number == 1 then
+		state.set_issues({})
+	end
+	notify.loading("Loading issues...")
 	if not refresh_status_spinner:is_running() then
 		refresh_status_spinner:start()
 	end
@@ -248,134 +270,43 @@ local function load_query(view, force_load, on_done)
 		end
 	end
 
-	local function finalize_fetch_failure(err, issues)
-		finish_loading()
-
-		if #issues > 0 then
-			state.error = nil
-			state.set_issues(mark_starred(issues))
-			notify.warn(string.format("Stopped at %d issues: %s", #issues, tostring(err)))
-		else
-			state.error = tostring(err)
-			state.set_issues({})
-			local message = bookmark_query and "Query failed: %s" or "Failed to fetch issues: %s"
-			notify.error(string.format(message, tostring(err)))
+	load_requests.run(function(done)
+		return provider.capabilities.core.fetch_issues(view, {
+			force_refresh = force_refresh,
+			pagelen = 50,
+			cursor = cursor,
+		}, done)
+	end, function(page, err)
+		if err ~= nil then
+			state.current_page = previous_page
+			finish_loading()
+			if page_number == 1 then
+				state.error = tostring(err)
+				state.set_issues({})
+			end
+			notify.error(string.format("Failed to fetch issues: %s", tostring(err)))
+			render_if_active()
+			on_done()
+			return
 		end
 
-		render_if_active()
-		on_done()
-	end
-
-	local function finalize_fetch_success(issues)
 		state.error = nil
-		fetch_missing_parents(provider, view, issues, force_load, load_requests, function(enriched)
+		fetch_missing_parents(provider, view, page.items, force_refresh, load_requests, function(enriched)
 			state.set_issues(mark_starred(enriched))
+			page.items = state.issues
+			state.page_history[page_number] = page
 			finish_loading()
-
 			notify.success(string.format("Loaded %d issues", #enriched), { timeout = 1200 })
 			render_if_active()
 			on_done()
 		end)
-	end
-
-	local configured_max = tonumber(issues_config().max_results)
-	local max_results = (configured_max and configured_max > 0) and math.floor(configured_max) or 100
-
-	local function fetch_page(next_page_token, issues)
-		local remaining = max_results - #issues
-		if remaining <= 0 then
-			finalize_fetch_success(issues)
-			return
-		end
-
-		load_requests.run(function(done)
-			return provider.capabilities.core.fetch_issues(view, {
-				force_load = force_load,
-				next_page_token = next_page_token,
-				max_results = remaining,
-				layout = view.layout or "plain",
-				with_relationships = relationships_enabled(view),
-			}, done)
-		end, function(page_issues, next_token, is_last, err)
-			if err ~= nil then
-				finalize_fetch_failure(err, issues)
-				return
-			end
-
-			for _, issue in ipairs(page_issues) do
-				if #issues >= max_results then
-					break
-				end
-				table.insert(issues, issue)
-			end
-
-			state.error = nil
-			state.set_issues(mark_starred(issues))
-			render_if_active()
-
-			if #issues >= max_results then
-				finalize_fetch_success(issues)
-				return
-			end
-
-			if is_last ~= true and next_token ~= nil and next_token ~= "" then
-				fetch_page(next_token, issues)
-				return
-			end
-
-			finalize_fetch_success(issues)
-		end)
-	end
-
-	fetch_page(nil, {})
+	end)
 end
 
----@param force_load boolean
 ---@param on_done fun()|nil
-local function load_active_view(force_load, on_done)
-	local view = state.active_view
-	if view == nil then
-		state.is_loading = false
-		state.error = "No issues views configured"
-		notify.error(state.error)
-		render_if_active()
-		if on_done then
-			on_done()
-		end
-		return
-	end
-
-	if view._kind ~= "bookmarks" then
-		load_query(view, force_load, on_done)
-		return
-	end
-
-	cancel_active_requests()
-	local provider = state.provider
-	if provider ~= nil then
-		fetch_current_user(provider, active_requests)
-	end
-	state.is_loading = false
-	state.error = nil
-	state.set_issues({})
-	state.current_view = view
-	render_if_active()
-	if on_done then
-		on_done()
-	end
-end
-
----@param view IssuesViewConfig
----@param force_load boolean
----@param on_done fun()|nil
-local function load_bookmark(view, force_load, on_done)
+local function load_starred(on_done)
 	local provider = state.provider
 	if provider == nil then
-		return
-	end
-
-	if view._kind ~= "starred" then
-		load_query(view, force_load, on_done)
 		return
 	end
 
@@ -383,23 +314,22 @@ local function load_bookmark(view, force_load, on_done)
 	fetch_current_user(provider, active_requests)
 	state.is_loading = false
 	state.error = nil
-	state.current_view = view
 	local saved, err = starred.list("issues", provider.id)
-	if err then
+	if saved == nil then
 		state.error = err
 		state.set_issues({})
 	elseif #saved == 0 then
 		cache_starred_items({})
+		state.bookmarks.selection = nil
 		local detail = require("atlas.issues.ui.detail")
 		if detail.is_open() then
 			detail.close()
 		end
-		if next(state.active_view._bookmarks) == nil then
+		state.set_issues({})
+		if next(state.bookmarks.items) == nil then
 			M.switch_view(state.provider_views[1])
 			return
 		end
-		state.current_view = state.active_view
-		state.set_issues({})
 	else
 		cache_starred_items(saved)
 		local issues = {}
@@ -414,20 +344,98 @@ local function load_bookmark(view, force_load, on_done)
 	end
 end
 
-function M.refresh_current_view()
+---@param force_refresh boolean
+---@param on_done fun()|nil
+local function load_view(force_refresh, on_done)
+	state.current_page = 1
+	state.page_history = {}
+	if state.view == nil then
+		state.is_loading = false
+		state.error = "No issues views configured"
+		notify.error(state.error)
+		render_if_active()
+		if on_done then
+			on_done()
+		end
+		return
+	end
+
+	local bookmark_state = state.bookmarks
+	if bookmark_state ~= nil and state.view == bookmark_state.tab then
+		local selection = bookmark_state.selection
+		if selection == nil then
+			cancel_active_requests()
+			state.is_loading = false
+			state.error = nil
+			state.set_issues({})
+			render_if_active()
+			if on_done then
+				on_done()
+			end
+			return
+		end
+		if selection.kind == "starred" then
+			load_starred(on_done)
+			return
+		end
+	end
+
+	local view = state.search_view()
+	if view ~= nil then
+		load_page(view, 1, nil, force_refresh, on_done)
+		return
+	end
+end
+
+function M.next_page()
+	local current = state.page_history[state.current_page]
+	if current == nil or current.next_cursor == nil then
+		return
+	end
+
+	local page_number = state.current_page + 1
+	local cached = state.page_history[page_number]
+	if cached ~= nil then
+		state.current_page = page_number
+		state.set_issues(cached.items)
+		state.error = nil
+		render_if_active()
+		navigation.focus_first_item()
+		return
+	end
+
+	local view = state.search_view()
+	if view == nil then
+		return
+	end
+	load_page(view, page_number, current.next_cursor, false, function()
+		navigation.focus_first_item()
+	end)
+end
+
+function M.previous_page()
+	local page_number = state.current_page - 1
+	local page = state.page_history[page_number]
+	if page == nil then
+		return
+	end
+	cancel_active_requests()
+	state.current_page = page_number
+	state.set_issues(page.items)
+	state.error = nil
+	render_if_active()
+	navigation.focus_first_item()
+end
+
+function M.refresh_view()
 	local provider = state.provider
 	local refresh = provider and provider.capabilities.core.refresh
 	if refresh then
 		refresh()
 	end
 	local selected = navigation.current_item()
+	local selected_bookmark = selected and (selected.kind == "bookmark" or selected.kind == "starred")
 	local selected_key = selected and selected.kind == "issue" and selected._issue and selected._issue.key or nil
-	local current_view = state.current_view
-	local bookmark_active = state.active_view
-		and state.active_view._kind == "bookmarks"
-		and current_view
-		and current_view._kind ~= "bookmarks"
-
 	local function finish()
 		local focused = false
 		if selected_key then
@@ -435,7 +443,7 @@ function M.refresh_current_view()
 				return item.kind == "issue" and item._issue and item._issue.key == selected_key
 			end)
 		end
-		if not focused then
+		if not focused and not selected_bookmark then
 			navigation.focus_first_item()
 		end
 		local item = navigation.current_item()
@@ -449,34 +457,24 @@ function M.refresh_current_view()
 		end
 	end
 
-	if bookmark_active then
-		load_bookmark(current_view, true, finish)
-	else
-		load_active_view(true, finish)
-	end
+	load_view(true, finish)
 end
 
 ---@param view IssuesViewConfig|nil
 function M.switch_view(view)
-	state.active_view = view
-	load_active_view(false, function()
+	state.view = view
+	state.bookmarks.selection = nil
+	resolve_view(state.search_view())
+	load_view(false, function()
 		navigation.focus_first_item()
 	end)
 end
 
----@param name string
----@param value any
-function M.run_bookmark(name, value)
-	local view = { name = name, layout = "compact" }
-	if type(value) == "string" then
-		view.search = value
-	elseif type(value) == "table" then
-		for k, v in pairs(value) do
-			view[k] = v
-		end
-	end
-
-	load_bookmark(view, false)
+---@param bookmark AtlasBookmarkSelection
+function M.select_bookmark(bookmark)
+	state.bookmarks.selection = bookmark
+	resolve_view(state.search_view())
+	load_view(false)
 end
 
 ---@param issue Issue|nil
@@ -492,15 +490,16 @@ function M.toggle_issue_star(issue)
 		return
 	end
 
-	local starred_view = state.current_view and state.current_view._kind == "starred"
+	local selected = state.bookmarks and state.bookmarks.selection
 	notify.success(now_starred and "Issue starred" or "Issue unstarred", { timeout = 1200 })
-	if starred_view then
-		load_bookmark(state.current_view, false)
+	if selected and selected.kind == "starred" then
+		load_starred()
 		return
 	end
 	local saved = starred.list("issues", state.provider.id) or {}
 	cache_starred_items(saved)
 	state.set_issues(mark_starred(state.issues))
+	update_current_page()
 	render_if_active()
 end
 
@@ -529,6 +528,7 @@ end
 ---@param issue Issue
 local function refresh_issue(issue)
 	local issue_key = issue.key
+	local page_number = state.current_page
 	if issue_key == "" then
 		notify.warn("Issue key missing")
 		return
@@ -552,8 +552,12 @@ local function refresh_issue(issue)
 		detail.refresh(issue)
 	end
 	issue_reload_requests.run(function(done)
-		return provider.capabilities.core.fetch_by_refs({ ref }, { force_load = true }, done)
+		return provider.capabilities.core.fetch_by_refs({ ref }, { force_refresh = true }, done)
 	end, function(fetched_issues, err)
+		if state.current_page ~= page_number then
+			end_issue_reload(issue_key)
+			return
+		end
 		local fetched_issue = fetched_issues[1]
 		if err ~= nil or fetched_issue == nil then
 			end_issue_reload(issue_key)
@@ -569,6 +573,7 @@ local function refresh_issue(issue)
 			local issues = state.issues
 			table.insert(issues, fetched_issue)
 			state.set_issues(mark_starred(issues))
+			update_current_page()
 			snapshot_err = save_starred_issue(fetched_issue)
 		end
 		end_issue_reload(issue_key)
@@ -597,7 +602,7 @@ function M.apply_action_result(result)
 	if issue and not result.removed then
 		refresh_issue(issue)
 	else
-		M.refresh_current_view()
+		M.refresh_view()
 	end
 end
 

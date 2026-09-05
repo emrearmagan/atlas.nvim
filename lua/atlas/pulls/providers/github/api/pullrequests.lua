@@ -34,25 +34,52 @@ fragment PullRequestFields on PullRequest {
 ]]
 
 local SEARCH_GQL = [[
-query($search: String!, $limit: Int!) {
-  search(query: $search, type: ISSUE, first: $limit) {
+query(
+  $query1: String!
+  $query2: String!
+  $query3: String!
+  $include1: Boolean!
+  $include2: Boolean!
+  $include3: Boolean!
+  $limit: Int!
+  $after1: String
+  $after2: String
+  $after3: String
+) {
+  search1: search(query: $query1, type: ISSUE, first: $limit, after: $after1) @include(if: $include1) {
+    issueCount
     nodes {
       ... on PullRequest { ...PullRequestFields }
     }
+    pageInfo { hasNextPage endCursor }
+  }
+  search2: search(query: $query2, type: ISSUE, first: $limit, after: $after2) @include(if: $include2) {
+    issueCount
+    nodes {
+      ... on PullRequest { ...PullRequestFields }
+    }
+    pageInfo { hasNextPage endCursor }
+  }
+  search3: search(query: $query3, type: ISSUE, first: $limit, after: $after3) @include(if: $include3) {
+    issueCount
+    nodes {
+      ... on PullRequest { ...PullRequestFields }
+    }
+    pageInfo { hasNextPage endCursor }
   }
 }
 ]] .. PULL_REQUEST_FIELDS_GQL
 
----@param search string
----@param on_done fun(pulls: PullRequest[], err: string[]|nil)
----@param opts { force_load?: boolean, limit?: number }|nil
+---@param queries string[]
+---@param opts PullsFetchOpts
+---@param on_done fun(page: PullsPage, err: string[]|nil)
 ---@return { cancel: fun() }|nil
-function M.search_prs(search, on_done, opts)
-	opts = opts or {}
-	local limit = math.min(100, math.max(1, tonumber(opts.limit) or 50))
-	local cache_key = string.format("github:pulls:search:%s:limit:%d", search, limit)
+function M.fetch_search(queries, opts, on_done)
+	local cursor_key = opts.cursor == nil and "first" or vim.json.encode(opts.cursor)
+	local cache_key =
+		string.format("github:pulls:search:%s:limit:%d:cursor:%s", vim.json.encode(queries), opts.pagelen, cursor_key)
 
-	if not opts.force_load then
+	if not opts.force_refresh then
 		local cached, ok = cli.get_cache(cache_key)
 		if ok then
 			on_done(cached, nil)
@@ -60,28 +87,61 @@ function M.search_prs(search, on_done, opts)
 		end
 	end
 
-	return cli.gh({
+	local args = {
 		"api",
 		"graphql",
 		"-f",
 		"query=" .. vim.trim(SEARCH_GQL),
 		"-f",
-		"search=" .. search,
-		"-F",
-		"limit=" .. tostring(limit),
-	}, function(result, err)
+		"query1=" .. (queries[1] or ""),
+		"-f",
+		"query2=" .. (queries[2] or ""),
+		"-f",
+		"query3=" .. (queries[3] or ""),
+	}
+	local included = {}
+	for index = 1, 3 do
+		local key = tostring(index)
+		included[index] = queries[index] ~= nil and (opts.cursor == nil or opts.cursor[key] ~= nil)
+		vim.list_extend(args, { "-F", string.format("include%d=%s", index, tostring(included[index])) })
+		if opts.cursor ~= nil and opts.cursor[key] ~= nil then
+			vim.list_extend(args, { "-f", string.format("after%d=%s", index, opts.cursor[key]) })
+		end
+	end
+	vim.list_extend(args, { "-F", "limit=" .. tostring(opts.pagelen) })
+
+	return cli.gh(args, function(result, err)
 		if err or type(result) ~= "table" then
-			on_done({}, { err or "Failed to search pull requests" })
+			on_done({ items = {} }, { err or "Failed to search pull requests" })
 			return
 		end
 
-		local prs = mapper.to_search_results_from_graphql(result.data.search.nodes or {})
-		cli.set_cache(cache_key, prs)
-		on_done(prs, nil)
+		local pulls = {}
+		local next_cursor = {}
+		local total_pages = 1
+		for index = 1, #queries do
+			if included[index] then
+				local search = result.data["search" .. index]
+				vim.list_extend(pulls, mapper.to_search_results_from_graphql(search.nodes))
+				total_pages = math.max(total_pages, math.ceil(math.min(search.issueCount, 1000) / opts.pagelen))
+				if search.pageInfo.hasNextPage then
+					next_cursor[tostring(index)] = search.pageInfo.endCursor
+				end
+			end
+		end
+		table.sort(pulls, function(left, right)
+			return left.updated_on > right.updated_on
+		end)
+		if next(next_cursor) == nil then
+			next_cursor = nil
+		end
+		local page = { items = pulls, next_cursor = next_cursor, total_pages = total_pages }
+		cli.set_cache(cache_key, page)
+		on_done(page, nil)
 	end, {
 		action = "Search PRs",
-		search = search,
-		limit = limit,
+		queries = queries,
+		limit = opts.pagelen,
 	})
 end
 
@@ -158,14 +218,14 @@ end
 ---@param repo string
 ---@param number number|string
 ---@param on_done fun(details: PullRequestDetails|nil, err: string|nil)
----@param opts { force_load?: boolean }|nil
+---@param opts { force_refresh?: boolean }|nil
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.get_pr(owner, repo, number, on_done, opts)
 	opts = opts or {}
 	local repo_slug = string.format("%s/%s", owner, repo)
 	local cache_key = string.format("github:pr:%s:%s", repo_slug, tostring(number))
 
-	if not opts.force_load then
+	if not opts.force_refresh then
 		local cached, ok = cli.get_mem(cache_key)
 		if ok then
 			on_done(cached, nil)

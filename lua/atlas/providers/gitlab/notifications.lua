@@ -5,7 +5,7 @@ local icons = require("atlas.ui.shared.icons")
 
 local TARGET_ICON = {
 	MergeRequest = { icons.pulls("pr") },
-	Issue = { icon = icons.issues("issue"), hl = "AtlasPROpen" },
+	Issue = { icon = icons.issues("issue"), hl = "AtlasTextPositive" },
 }
 local FALLBACK_ICON = { icon = icons.general("info"), hl = "AtlasTextMuted" }
 
@@ -51,7 +51,7 @@ local function normalize(raw)
 	}
 end
 
----@param opts { state: "pending"|"done"|"all"|nil, per_page: number|nil, force_load: boolean|nil }|nil
+---@param opts { state: "pending"|"done"|"all"|nil, per_page: number|nil, force_refresh: boolean|nil }|nil
 ---@param on_done fun(notifications: AtlasNotification[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch(opts, on_done)
@@ -60,7 +60,7 @@ function M.fetch(opts, on_done)
 	local state = opts.state or "pending"
 
 	local cache_key = string.format("gitlab:todos:state=%s:per_page=%d", state, per_page)
-	if not opts.force_load then
+	if not opts.force_refresh then
 		local cached, ok = client.get_memory_cache(cache_key)
 		if ok then
 			on_done(cached, nil)

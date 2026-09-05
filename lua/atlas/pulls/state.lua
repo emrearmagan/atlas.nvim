@@ -1,32 +1,54 @@
 ---@class PullsState
----@field active_view AtlasPullsViewConfig|nil
----@field current_view AtlasPullsViewConfig|nil
+---@field available_states PullsStateFilter[]
+---@field view AtlasPullsViewConfig|nil
 ---@field views AtlasPullsViewConfig[]
+---@field bookmarks AtlasBookmarksState|nil
+---@field query string
 ---@field is_loading boolean
 ---@field error string|nil
 ---@field current_user PullsUser|nil
 ---@field pulls PullRequest[]
+---@field current_page integer
+---@field page_history PullsPage[]
 ---@field provider PullsProvider|nil
 ---@field provider_views AtlasPullsViewConfig[]
 ---@field starred_items AtlasStarredItem[]
 ---@field reloading_pr_keys table<string, boolean>
 ---@field reload_spinner_frame string
----@field status_filters table<string, boolean>
 local M = {
-	active_view = nil,
-	current_view = nil,
+	available_states = { "open", "merged", "declined" },
+	view = nil,
 	views = {},
+	bookmarks = nil,
+	query = "",
 	is_loading = false,
 	error = nil,
 	current_user = nil,
 	pulls = {},
+	current_page = 1,
+	page_history = {},
 	provider = nil,
 	provider_views = {},
 	starred_items = {},
 	reloading_pr_keys = {},
 	reload_spinner_frame = "⠋",
-	status_filters = { OPEN = true, MERGED = false, DECLINED = false },
 }
+
+---@return AtlasPullsViewConfig|nil
+function M.search_view()
+	local bookmarks = M.bookmarks
+	if bookmarks ~= nil and M.view == bookmarks.tab then
+		local selection = bookmarks.selection
+		return selection and selection.kind == "bookmark" and selection.view or nil
+	end
+	return M.view
+end
+
+---@return PullsStateFilter[]
+function M.selected_states()
+	local view = M.search_view()
+	return (view and view._states) or {}
+end
 
 ---@param repo_id string
 ---@param pr_id string|number

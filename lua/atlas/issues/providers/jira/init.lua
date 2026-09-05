@@ -24,21 +24,20 @@ local author_completion = require("atlas.providers.jira.completion.author")
 local comments_api = require("atlas.issues.providers.jira.api.comments")
 local config = require("atlas.config")
 local detail_ui = require("atlas.issues.providers.jira.ui.detail")
-local highlights = require("atlas.issues.providers.jira.highlights")
 local issues_api = require("atlas.issues.providers.jira.api.issues")
 local service = require("atlas.issues.providers.jira.api.service")
 local users_api = require("atlas.issues.providers.jira.api.users")
 
 ---@param view IssuesViewConfig
 ---@return string
-local function search_query(view)
+local function resolve_search(view)
 	---@cast view AtlasJiraViewConfig
 	return tostring(view.jql or view.search or "")
 end
 
 ---@param target AtlasTarget
 ---@return AtlasJiraViewConfig
-local function search_view(target)
+local function view_for_target(target)
 	return { name = "Search", layout = "compact", jql = "key = " .. target.issue_key }
 end
 
@@ -52,26 +51,25 @@ end
 
 ---@param view IssuesViewConfig
 ---@param opts IssuesFetchOpts
----@param on_done fun(issues: Issue[], next_page_token: string|nil, is_last: boolean, err: string|nil)
+---@param on_done fun(page: IssuesPage, err: string|nil)
 ---@return { cancel: fun() }|nil
 local function fetch_issues(view, opts, on_done)
-	local jql = search_query(view)
+	local jql = resolve_search(view)
 	if jql == "" then
-		on_done({}, nil, true, "Missing Jira view JQL")
+		on_done({ items = {} }, "Missing Jira view JQL")
 		return nil
 	end
 
 	return issues_api.search_issues(jql, function(page, err)
 		if err or page == nil then
-			on_done({}, nil, true, err or "Failed to fetch issues")
+			on_done({ items = {} }, err or "Failed to fetch issues")
 			return
 		end
-
-		on_done(page.issues, page.nextPageToken, page.isLast, nil)
+		on_done(page, nil)
 	end, {
-		force_load = opts.force_load == true,
-		next_page_token = opts.next_page_token,
-		max_results = opts.max_results,
+		force_refresh = opts.force_refresh == true,
+		pagelen = opts.pagelen,
+		cursor = opts.cursor,
 	})
 end
 
@@ -95,10 +93,10 @@ local function fetch_by_refs(refs, opts, on_done)
 			on_done({}, err or "Failed to fetch issues")
 			return
 		end
-		on_done(page.issues, nil)
+		on_done(page.items, nil)
 	end, {
-		force_load = opts.force_load == true,
-		max_results = #refs,
+		force_refresh = opts.force_refresh == true,
+		pagelen = #refs,
 	})
 end
 
@@ -136,16 +134,13 @@ end
 ---@param on_done fun(items: IssueConversationItem[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 local function fetch_conversation(issue, opts, on_done)
-	opts = opts or {}
 	local issue_key = tostring(issue.key or "")
 	if issue_key == "" then
 		on_done(nil, "Invalid issue key")
 		return nil
 	end
 
-	local force = opts.force_refresh == true
-
-	return comments_api.get_comments_page(issue_key, 0, 100, function(comments, err)
+	return comments_api.get_comments(issue_key, function(comments, err)
 		if err or comments == nil then
 			on_done(nil, err or "Failed to fetch comments")
 			return
@@ -160,7 +155,7 @@ local function fetch_conversation(issue, opts, on_done)
 			})
 		end
 		on_done(items, nil)
-	end, { force_load = force })
+	end, opts)
 end
 
 ---@param issue Issue
@@ -170,22 +165,6 @@ end
 local function delete_comment(issue, comment, on_done)
 	local issue_key = tostring(issue.key or "")
 	return comments_api.delete_comment(issue_key, tostring(comment.id), on_done)
-end
-
----@param issue Issue
----@param opts IssuesFetchOpts|nil
----@param on_done fun(entries: IssueActivityEntry[]|nil, err: string|nil)
----@return { cancel: fun() }|nil
-local function fetch_activity(issue, opts, on_done)
-	return issues_api.get_issue_history_page(tostring(issue.key or ""), 0, 100, function(page, err)
-		if err or not page then
-			on_done(nil, err or "Failed to fetch issue activity")
-			return
-		end
-		on_done(page.values, nil)
-	end, {
-		force_load = opts and opts.force_load or false,
-	})
 end
 
 ---@return AtlasJiraViewConfig[]
@@ -205,19 +184,21 @@ end
 
 return {
 	views = views,
-	search_view = search_view,
+	view_for_target = view_for_target,
+	resolve_search = resolve_search,
 	issue_ref = target_issue_ref,
 	capabilities = {
 		core = {
 			fetch_user = users_api.get_myself,
-			search_query = search_query,
 			fetch_issues = fetch_issues,
 			fetch_by_refs = fetch_by_refs,
 			fetch_issue = issues_api.fetch_issue,
 			refresh = service.clear_memory_cache,
 		},
 		comments = {
-			fetch_activity = fetch_activity,
+			fetch_activity = function(issue, opts, on_done)
+				return issues_api.get_issue_history(tostring(issue.key or ""), on_done, opts)
+			end,
 			fetch_conversation = fetch_conversation,
 			add_comment = add_comment,
 			reply_comment = reply_comment,
@@ -227,7 +208,6 @@ return {
 		},
 		actions = actions,
 		ui = {
-			setup = highlights.setup,
 			detail = detail_ui,
 		},
 	},

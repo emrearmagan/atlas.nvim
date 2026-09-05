@@ -212,8 +212,8 @@ function M.to_issue_details(raw, project_config)
 	for field_id, field_config in pairs(project_config or {}) do
 		local value = json.nilify(fields[field_id])
 		if value ~= nil then
-			local formatted = field_config.format(value)
-			if formatted and formatted ~= "" then
+			local ok, formatted = pcall(field_config.format, value)
+			if ok and formatted and formatted ~= "" then
 				table.insert(details.custom_fields, {
 					name = field_config.name or field_id,
 					formatted = formatted,
@@ -419,12 +419,10 @@ local function activity_from_history_item(raw_item, actor, date)
 end
 
 ---@param raw any Decoded API value.
----@param fallback_start_at number|nil
----@param fallback_max_results number|nil
----@return { start_at: number, max_results: number, total: number, is_last: boolean, values: IssueActivityEntry[] }
-function M.to_history_page(raw, fallback_start_at, fallback_max_results)
+---@return IssueActivityEntry[]
+function M.to_history(raw)
 	local payload = json.safe_table(raw)
-	local values = {}
+	local entries = {}
 	for _, raw_entry in ipairs(json.safe_table(payload.values or payload.histories)) do
 		local entry = json.safe_table(raw_entry)
 		local actor = normalize_issue_user(entry.author)
@@ -432,18 +430,12 @@ function M.to_history_page(raw, fallback_start_at, fallback_max_results)
 		for _, raw_item in ipairs(json.safe_table(entry.items)) do
 			local item = json.safe_table(raw_item)
 			if next(item) ~= nil then
-				table.insert(values, activity_from_history_item(item, actor, date))
+				table.insert(entries, activity_from_history_item(item, actor, date))
 			end
 		end
 	end
 
-	return {
-		start_at = tonumber(payload.startAt) or tonumber(fallback_start_at) or 0,
-		max_results = tonumber(payload.maxResults) or tonumber(fallback_max_results) or 100,
-		total = tonumber(payload.total) or #values,
-		is_last = payload.isLast == true,
-		values = values,
-	}
+	return entries
 end
 
 return M
