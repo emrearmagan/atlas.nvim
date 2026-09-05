@@ -19,7 +19,7 @@ local groups = {
 function M.setup()
 	shared.setup()
 	for name, opts in pairs(groups) do
-		vim.api.nvim_set_hl(0, name, opts)
+		vim.api.nvim_set_hl(0, name, vim.tbl_extend("force", opts, { default = true }))
 	end
 end
 
