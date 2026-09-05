@@ -95,11 +95,11 @@ local function meta_rows(state)
 			"Repo:",
 			{ text = state.fields.repo_slug, hl = pulls_helper.repo_hl(state.fields.repo_slug) },
 			"Milestone:",
-			{ text = milestone, hl = state.fields.milestone and "AtlasText" or "AtlasTextMuted" },
+			{ text = milestone, hl = state.fields.milestone and "Normal" or "AtlasTextMuted" },
 		},
 		{
 			"Assignees:",
-			{ text = assignee_text, hl = #assignees > 0 and "AtlasText" or "AtlasTextMuted" },
+			{ text = assignee_text, hl = #assignees > 0 and "Normal" or "AtlasTextMuted" },
 			"Due:",
 			{ text = due_date, hl = state.fields.due_date and "AtlasTextWarning" or "AtlasTextMuted" },
 		},
@@ -379,11 +379,8 @@ end
 ---@param opts ForgeCreateIssueOpts
 ---@param provider_id ForgeProviderId
 ---@param api ForgeIssuesApi
----@param setup_highlights fun()
-local function open(opts, provider_id, api, setup_highlights)
-	require("atlas.ui.shared.highlights").setup()
-	require("atlas.pulls.ui.highlights").setup()
-	setup_highlights()
+local function open(opts, provider_id, api)
+	require("atlas.issues.ui.highlights").setup()
 
 	local labels, assignees, milestone, due_date, initial_body = {}, {}, nil, nil, ""
 	if opts.details then
@@ -487,8 +484,6 @@ local function open(opts, provider_id, api, setup_highlights)
 						set_description = function(description)
 							return not state.closed and form.set_body(state.layout, description) or false
 						end,
-						picker_kind = "atlas_" .. provider_id .. "_templates",
-						menu_kind = "atlas_" .. provider_id .. "_templates_menu",
 					})
 				end,
 			},
@@ -504,13 +499,12 @@ end
 
 ---@param provider_id ForgeProviderId
 ---@param api ForgeIssuesApi
----@param setup_highlights fun()
 ---@return ForgeCreateIssue
-function M.new(provider_id, api, setup_highlights)
+function M.new(provider_id, api)
 	---@type ForgeCreateIssue
 	return {
 		open = function(opts)
-			open(opts, provider_id, api, setup_highlights)
+			open(opts, provider_id, api)
 		end,
 	}
 end

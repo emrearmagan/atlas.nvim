@@ -259,7 +259,6 @@ return {
 		notifications = notifications_api,
 		actions = require("atlas.issues.providers.forge.actions.registry").new("gitea", issues_api),
 		ui = {
-			setup = require("atlas.providers.forge.highlights").setup,
 			detail = require("atlas.issues.providers.forge.ui.detail").new("gitea"),
 		},
 	},

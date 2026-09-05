@@ -43,11 +43,7 @@ end
 ---@return ForgeIssueActionsRegistry
 function M.new(provider_id, api)
 	local provider_name = provider_id == "gitea" and "Gitea" or "Forgejo"
-	local create_issue = require("atlas.issues.create.forge.issue").new(
-		provider_id,
-		api,
-		require("atlas.providers.forge.highlights").setup
-	)
+	local create_issue = require("atlas.issues.create.forge.issue").new(provider_id, api)
 	local search = require("atlas.issues.providers.forge.completion.search").new(provider_id)
 	local set_locked_api = api.set_locked
 	---@type ForgeIssueActionsRegistry

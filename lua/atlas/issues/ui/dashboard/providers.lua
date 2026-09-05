@@ -299,14 +299,13 @@ local function gitlab()
 	return { columns = columns, values = values, highlights = highlights }
 end
 
----@param opts { open_hl: string, closed_hl: string, open_chip_hl: string, closed_chip_hl: string }
 ---@return table
-local function gitea_family(opts)
+local function gitea_family()
 	local function state_icon(status_id)
 		if status_id == "closed" then
-			return icons.pulls_status("successful"), opts.closed_hl
+			return icons.pulls_status("successful"), "AtlasIssueClosed"
 		end
-		return icons.issues("issue"), opts.open_hl
+		return icons.issues("issue"), "AtlasIssueOpen"
 	end
 
 	local function key_label(issue)
@@ -377,7 +376,7 @@ local function gitea_family(opts)
 		if col.key == "status" then
 			local issue_key = tostring(issue.key or "")
 			local hl = issue_key ~= "" and state.reloading_issue_keys[issue_key] and "AtlasTextMuted"
-				or (issue.status_id == "closed" and opts.closed_chip_hl or opts.open_chip_hl)
+				or (issue.status_id == "closed" and "AtlasIssueClosedChip" or "AtlasIssueOpenChip")
 			return { { start_col = 0, end_col = #ctx.padded, hl_group = hl } }
 		end
 		return person_highlight(issue, col, ctx)
@@ -387,12 +386,7 @@ local function gitea_family(opts)
 end
 
 local function gitea()
-	local display = gitea_family({
-		open_hl = "AtlasGiteaIssueOpen",
-		closed_hl = "AtlasGiteaIssueClosed",
-		open_chip_hl = "AtlasGiteaIssueOpenChip",
-		closed_chip_hl = "AtlasGiteaIssueClosedChip",
-	})
+	local display = gitea_family()
 	local values = display.values
 	display.values = function(issue, is_child, layout)
 		---@cast issue GiteaIssue
@@ -402,12 +396,7 @@ local function gitea()
 end
 
 local function forgejo()
-	local display = gitea_family({
-		open_hl = "AtlasForgejoIssueOpen",
-		closed_hl = "AtlasForgejoIssueClosed",
-		open_chip_hl = "AtlasForgejoIssueOpenChip",
-		closed_chip_hl = "AtlasForgejoIssueClosedChip",
-	})
+	local display = gitea_family()
 	local values = display.values
 	display.values = function(issue, is_child, layout)
 		---@cast issue ForgejoIssue
