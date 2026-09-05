@@ -10,7 +10,6 @@ describe("Shortcut Story mapper", function()
 			workflow_id = 7,
 			workflow_name = "Development",
 			name = "Ready for Review",
-			type = "started",
 			position = 3,
 		}
 		local issue = assert(mapper.to_issue({
@@ -39,7 +38,6 @@ describe("Shortcut Story mapper", function()
 			assignee = { account_id = "owner", display_name = "Ada Owner" },
 			owner_ids = { "owner", "other" },
 			follower_ids = { "follower" },
-			owner_count = 2,
 			labels = { { id = 9, name = "api", color = "#123456" } },
 			comment_count = 2,
 			updated_at = "2026-08-23T10:00:00Z",
@@ -55,7 +53,6 @@ describe("Shortcut Story mapper", function()
 			assignee = issue.assignee,
 			owner_ids = issue.owner_ids,
 			follower_ids = issue.follower_ids,
-			owner_count = issue.owner_count,
 			labels = issue.labels,
 			comment_count = issue.comment_count,
 			updated_at = issue.updated_at,
@@ -71,9 +68,7 @@ describe("Shortcut Story mapper", function()
 			story_type = "feature",
 			workflow_state_id = 1,
 			description = "Full description",
-			parent_story_id = 122,
 			owner_ids = {},
-			sub_task_story_ids = { 124, 125 },
 			tasks = {
 				{ id = 2, description = "Second", complete = false, position = 2 },
 				{ id = 1, description = "First", complete = true, position = 1 },
@@ -81,8 +76,6 @@ describe("Shortcut Story mapper", function()
 		}, {})
 
 		assert.equal("Full description", details.description)
-		assert.same({ key = "122" }, details.parent)
-		assert.same({ { key = "124" }, { key = "125" } }, details.sub_issues)
 		assert.same({
 			{ id = 1, description = "First", complete = true, position = 1 },
 			{ id = 2, description = "Second", complete = false, position = 2 },

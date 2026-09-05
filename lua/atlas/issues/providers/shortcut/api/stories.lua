@@ -1,3 +1,21 @@
+---@class ShortcutStoryCreate
+---@field name string
+---@field description string
+---@field story_type ShortcutStoryType
+---@field workflow_state_id integer
+---@field owner_ids string[]
+
+---@class ShortcutStoryUpdate
+---@field archived boolean|nil
+---@field name string|nil
+---@field description string|nil
+---@field story_type ShortcutStoryType|nil
+---@field labels { name: string }[]|nil
+---@field workflow_state_id integer|nil
+---@field owner_ids string[]|nil
+---@field requested_by_id string|nil
+---@field follower_ids string[]|nil
+
 local M = {}
 
 local json = require("atlas.core.json")
@@ -175,7 +193,7 @@ function M.fetch_by_refs(refs, opts, on_done)
 end
 
 ---@param fields ShortcutStoryCreate
----@param on_done fun(story: ShortcutStoryCreated|nil, err: string|nil)
+---@param on_done fun(story: { key: string, url: string|nil }|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.create(fields, on_done)
 	return service.request("POST", "/stories", fields, function(result, err)
@@ -185,7 +203,7 @@ function M.create(fields, on_done)
 		end
 		---@cast result table
 		service.clear_cache("search:")
-		on_done({ id = result.id, key = tostring(result.id), url = json.safe_str(result.app_url) }, nil)
+		on_done({ key = tostring(result.id), url = json.safe_str(result.app_url) }, nil)
 	end, { action = "Create Shortcut Story" })
 end
 

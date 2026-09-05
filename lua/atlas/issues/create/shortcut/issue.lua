@@ -98,7 +98,7 @@ local function owners_cell(owners)
 	for _, owner in ipairs(owners) do
 		table.insert(names, owner.display_name)
 	end
-	return { text = icons.general("user") .. " " .. table.concat(names, ", "), hl = "AtlasText" }
+	return { text = icons.general("user") .. " " .. table.concat(names, ", "), hl = "Normal" }
 end
 
 ---@param state ShortcutStoryEditorState
@@ -111,7 +111,7 @@ local function meta_rows(state)
 			"Type:",
 			{ text = string.format("%s %s", type_icon, state.fields.story_type), hl = type_hl },
 			"State:",
-			{ text = state_name, hl = state.fields.workflow_state_id and "AtlasText" or "AtlasTextMuted" },
+			{ text = state_name, hl = state.fields.workflow_state_id and "Normal" or "AtlasTextMuted" },
 		},
 		{ "Owners:", owners_cell(state.fields.owners) },
 	}
@@ -124,12 +124,9 @@ end
 
 ---@param state ShortcutStoryEditorState
 local function pick_story_type(state)
-	picker.find({
+	picker.select({
 		title = "Story type",
 		items = STORY_TYPES,
-		key = function(story_type)
-			return story_type
-		end,
 		format_item = function(story_type)
 			local icon = icons.issues_type(story_type, "shortcut")
 			return string.format("%s %s", icon, story_type)
@@ -163,12 +160,9 @@ local function pick_workflow_state(state)
 		end)
 		form.clear_notice()
 
-		picker.find({
+		picker.select({
 			title = "Workflow state",
 			items = states,
-			key = function(workflow_state)
-				return tostring(workflow_state.id)
-			end,
 			format_item = function(workflow_state)
 				return string.format("%s — %s", workflow_state.workflow_name, workflow_state.name)
 			end,
@@ -264,6 +258,8 @@ end
 ---@param initial ShortcutStoryEditorFields
 ---@param on_cancel? fun()
 function M.open(on_submit, initial, on_cancel)
+	require("atlas.issues.ui.highlights").setup()
+
 	---@type ShortcutStoryEditorState
 	local state = {
 		fields = vim.deepcopy(initial),
@@ -331,7 +327,6 @@ function M.open(on_submit, initial, on_cancel)
 						set_description = function(value)
 							return form.set_body(state.layout, value)
 						end,
-						menu_kind = "atlas_shortcut_templates_menu",
 					})
 				end,
 			},

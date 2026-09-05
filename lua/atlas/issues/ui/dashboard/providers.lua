@@ -441,8 +441,8 @@ local function shortcut()
 		end
 
 		local assignee = person_value(issue.assignee, "Unassigned")
-		if issue.owner_count > 1 then
-			assignee = string.format("%s +%d", assignee, issue.owner_count - 1)
+		if #issue.owner_ids > 1 then
+			assignee = string.format("%s +%d", assignee, #issue.owner_ids - 1)
 		end
 
 		return {

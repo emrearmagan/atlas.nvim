@@ -100,12 +100,9 @@ local function transition(ctx, done)
 		end)
 		notify.clear()
 
-		picker.find({
+		picker.select({
 			title = string.format("Workflow state for #%s", issue.key),
 			items = items,
-			key = function(state)
-				return tostring(state.id)
-			end,
 			format_item = function(state)
 				return state.name
 			end,
@@ -202,12 +199,9 @@ local function reporter(ctx, done)
 		users = active_users(users)
 		notify.clear()
 
-		picker.find({
+		picker.select({
 			title = string.format("Requester for #%s", issue.key),
 			items = users,
-			key = function(user)
-				return user.account_id
-			end,
 			format_item = function(user)
 				return string.format("%s %s", icons.general("user"), user.display_name)
 			end,

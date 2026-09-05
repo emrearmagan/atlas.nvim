@@ -20,8 +20,8 @@ local function owners_text(issue, details)
 	if issue.assignee == nil then
 		return "Unassigned"
 	end
-	if issue.owner_count > 1 then
-		return string.format("%s +%d", issue.assignee.display_name, issue.owner_count - 1)
+	if #issue.owner_ids > 1 then
+		return string.format("%s +%d", issue.assignee.display_name, #issue.owner_ids - 1)
 	end
 	return issue.assignee.display_name
 end
@@ -107,9 +107,9 @@ function M.chips(issue, details, _loading)
 		})
 	end
 
-	if details and details.parent then
+	if issue.parent then
 		table.insert(chips, {
-			label = string.format("%s #%s", icons.pulls("branch"), details.parent.key),
+			label = string.format("%s #%s", icons.pulls("branch"), issue.parent.key),
 			hl = "AtlasShortcutChipParent",
 		})
 	end

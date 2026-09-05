@@ -1,3 +1,10 @@
+---@class ShortcutWorkflowState
+---@field id integer
+---@field workflow_id integer
+---@field workflow_name string
+---@field name string
+---@field position integer
+
 local M = {}
 
 local service = require("atlas.issues.providers.shortcut.api.service")
@@ -26,7 +33,6 @@ function M.list_states(on_done)
 					workflow_id = workflow.id,
 					workflow_name = tostring(workflow.name),
 					name = tostring(state.name),
-					type = tostring(state.type),
 					position = state.position,
 				})
 			end

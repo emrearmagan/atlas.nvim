@@ -129,7 +129,6 @@ function M.to_issue(raw, users, state)
 		comment_count = comments and #comments or nil,
 		owner_ids = owner_ids,
 		follower_ids = raw.follower_ids or {},
-		owner_count = #owner_ids,
 		labels = mapped_labels,
 	}
 	return issue
@@ -139,20 +138,14 @@ end
 ---@param users IssueUser[]
 ---@return ShortcutIssueDetails
 function M.to_issue_details(raw, users)
-	local parent_id = tonumber(json.nilify(raw.parent_story_id))
 	---@type ShortcutIssueDetails
 	local details = {
 		description = json.safe_str(raw.description) or "",
 		assignees = owners(users, raw.owner_ids or {}),
 		labels = labels(raw.labels or {}),
 		milestone = nil,
-		parent = parent_id and shallow_story(parent_id) or nil,
-		sub_issues = {},
 		tasks = story_tasks(raw.tasks or {}),
 	}
-	for _, id in ipairs(raw.sub_task_story_ids or {}) do
-		table.insert(details.sub_issues, shallow_story(id))
-	end
 	return details
 end
 
