@@ -68,14 +68,14 @@ local groups = {
 
 function M.setup()
 	for name, opts in pairs(groups) do
-		vim.api.nvim_set_hl(0, name, opts)
+		vim.api.nvim_set_hl(0, name, vim.tbl_extend("force", opts, { default = true }))
 	end
 
 	for idx, color in ipairs(dynamic_palette) do
 		local fg_name = string.format("AtlasDynColor%02d", idx)
 		local bg_name = string.format("AtlasDynBgColor%02d", idx)
-		vim.api.nvim_set_hl(0, fg_name, { fg = color })
-		vim.api.nvim_set_hl(0, bg_name, { fg = "#1e1e2e", bg = color })
+		vim.api.nvim_set_hl(0, fg_name, { fg = color, default = true })
+		vim.api.nvim_set_hl(0, bg_name, { fg = "#1e1e2e", bg = color, default = true })
 	end
 end
 

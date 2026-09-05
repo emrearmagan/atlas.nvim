@@ -109,7 +109,6 @@ function M.open(value)
 					require("atlas.pulls.diff").open_pr({
 						provider = provider,
 						ref = pr,
-						current_user = nil,
 						root = root,
 					}, function(err)
 						if err then
