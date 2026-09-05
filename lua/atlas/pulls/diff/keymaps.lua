@@ -81,7 +81,7 @@ local function add_range(items, action, desc, callback)
 end
 
 ---@param session AtlasDiffSession
----@param opts { buffers: integer[], reload: fun()|nil, help_key: string|string[]|nil, file_buffers: integer[]|nil, add_file_comment: (fun(pending: boolean))|nil }
+---@param opts { buffers: integer[], reopen: fun(), help_key: string|string[]|nil, file_buffers: integer[]|nil, add_file_comment: (fun(pending: boolean))|nil }
 function M.register(session, opts)
 	local action_context = session.review and review.action_context(session) or nil
 	local reviews = session.review and session.review.provider.capabilities.reviews or {}
@@ -106,9 +106,7 @@ function M.register(session, opts)
 					end
 				end)
 			end
-			if opts.reload then
-				add(items, "ui.refresh_view", "Reload diff", opts.reload)
-			end
+			add(items, "ui.refresh_view", "Reload diff", opts.reopen)
 			if has_review_items then
 				add(items, "pulls.review.diff.toggle_review_panel", "Toggle review panel", function()
 					if session.toggle_review_panel then

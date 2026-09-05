@@ -2,14 +2,13 @@ local M = {}
 
 local config = require("atlas.config")
 local git = require("atlas.core.git")
-local logger = require("atlas.core.logger")
+local providers = require("atlas.providers")
 
 local LUA_PATTERN_SPECIALS = "[%^%$%(%)%%%.%[%]%+%-%?]"
 
 ---@return AtlasGitTransport transport
 local function configured_git_transport()
-	local value = ((config.options or {}).pulls or {}).git_transport
-	return value == "ssh" and "ssh" or "https"
+	return config.options.pulls.git_transport == "ssh" and "ssh" or "https"
 end
 
 local function star_count(s)
@@ -19,9 +18,6 @@ end
 
 -- Split "workspace/seg" -> ws, seg. Returns nil if the key has extra slashes.
 local function split_key(key)
-	if type(key) ~= "string" then
-		return nil, nil
-	end
 	return key:match("^([^/]+)/([^/]+)$")
 end
 
@@ -91,8 +87,6 @@ end
 ---@return string|nil repo_path
 ---@return string|nil err
 function M.resolve_repo_path(repo_paths, repo_name, opts)
-	opts = opts or {}
-
 	local ok, err = M.validate_repo_paths(repo_paths)
 	if not ok then
 		return nil, err
@@ -106,11 +100,11 @@ function M.resolve_repo_path(repo_paths, repo_name, opts)
 	-- Exact match wins over any wildcard.
 	---@type string|nil
 	local resolved = repo_paths[repo_name]
-	if type(resolved) ~= "string" or resolved == "" then
+	if not resolved or resolved == "" then
 		local best
 		for key, value in pairs(repo_paths) do
 			local ws, seg = split_key(key)
-			if ws == workspace and seg and seg:find("*", 1, true) and type(value) == "string" and value ~= "" then
+			if ws == workspace and seg:find("*", 1, true) and value ~= "" then
 				local captures = { repo:match(seg_to_pattern(seg)) }
 				if captures[1] then
 					local stars = star_count(seg)
@@ -129,7 +123,7 @@ function M.resolve_repo_path(repo_paths, repo_name, opts)
 		resolved = best and best.value or nil
 	end
 
-	if type(resolved) ~= "string" or resolved == "" then
+	if not resolved or resolved == "" then
 		return nil, string.format("no repo_paths mapping for '%s'", repo_name)
 	end
 	resolved = normalize_path(resolved)
@@ -147,22 +141,17 @@ function M.resolve_repo_path(repo_paths, repo_name, opts)
 	return resolved, nil
 end
 
----@param pr PullRequest|nil
+---@param pr PullRequest
 ---@param opts {require_git: boolean|nil, require_existing: boolean|nil }
 ---@return string|nil repo_path
 ---@return string|nil err
 function M.resolve_repo_path_for_pr(pr, opts)
-	if pr == nil then
-		return nil, "no PR selected"
-	end
-
-	local repo_id = tostring(pr.repo_full_name or "")
+	local repo_id = pr.repo_full_name
 	if repo_id == "" then
 		return nil, "missing PR repo_full_name"
 	end
 
-	local pulls_cfg = (config.options.pulls or {})
-	local mapping = (pulls_cfg.repo_config or {}).paths or {}
+	local mapping = (config.options.pulls.repo_config or {}).paths or {}
 	return M.resolve_repo_path(mapping, repo_id, opts)
 end
 
@@ -171,8 +160,8 @@ end
 ---@return string|nil head_revision
 ---@return string|nil err
 function M.pr_diff_revisions(pr)
-	local base = tostring(pr.destination.commit_hash or "")
-	local head = tostring(pr.source.commit_hash or "")
+	local base = pr.destination.commit_hash
+	local head = pr.source.commit_hash
 	if base == "" then
 		return nil, nil, "Pull request base commit is missing"
 	end
@@ -185,12 +174,7 @@ end
 ---@param ref PullsRef
 ---@return string remote_ref
 local function fetch_ref(ref)
-	local remote_ref = tostring(ref.fetch_ref or "")
-	if remote_ref == "" then
-		local branch = tostring(ref.branch or "")
-		remote_ref = branch ~= "" and "refs/heads/" .. branch or ""
-	end
-	return remote_ref
+	return ref.fetch_ref or (ref.branch ~= "" and "refs/heads/" .. ref.branch or "")
 end
 
 ---@param ref PullsRef
@@ -200,11 +184,11 @@ end
 ---@return string|nil err
 local function source_remote(ref, transport, provider)
 	if ref.https_url ~= nil or ref.ssh_url ~= nil then
-		local selected = transport == "ssh" and ref.ssh_url or nil
-		if transport == "https" then
-			selected = ref.https_url
+		local selected = ref.https_url
+		if transport == "ssh" then
+			selected = ref.ssh_url
 		end
-		if type(selected) ~= "string" or selected == "" then
+		if not selected or selected == "" then
 			return "", string.format("%s did not provide a %s Git remote URL", provider, transport)
 		end
 		return selected, nil
@@ -212,95 +196,79 @@ local function source_remote(ref, transport, provider)
 	return "origin", nil
 end
 
----@param on_done fun(err: string|nil)
----@param err string|nil
----@return { cancel: fun() }
-local function schedule_result(on_done, err)
-	local cancelled = false
-	vim.schedule(function()
-		if not cancelled then
-			on_done(err)
-		end
-	end)
-	return {
-		cancel = function()
-			cancelled = true
-		end,
-	}
-end
-
 ---@param pr PullRequest
 ---@param repo_path string
 ---@param on_done fun(err: string|nil)
 ---@param on_progress (fun(label: string, percent: integer))|nil
----@return { cancel: fun() }
+---@return { cancel: fun() }|nil
 function M.fetch_pr_refs(pr, repo_path, on_done, on_progress)
 	local base_revision, head_revision, revision_err = M.pr_diff_revisions(pr)
 	if not base_revision or not head_revision then
-		return schedule_result(on_done, revision_err)
+		on_done(revision_err)
+		return nil
 	end
-	local transport = configured_git_transport()
-	local base_remote = "origin"
-	local base_ref = fetch_ref(pr.destination)
-	local head_remote, remote_err = source_remote(pr.source, transport, pr.provider)
-	if remote_err then
-		return schedule_result(on_done, remote_err)
-	end
-	local head_ref = fetch_ref(pr.source)
-	local cancelled = false
-	local current
-	local fetch_err
 
-	local function missing_commit()
-		local exists = git.check_commits(repo_path, { base_revision, head_revision })
-		if not exists[1] then
-			return "Pull request base commit is unavailable: " .. base_revision
-		end
-		if not exists[2] then
-			return "Pull request head commit is unavailable: " .. head_revision
+	local exists = git.check_commits(repo_path, { base_revision, head_revision })
+	if exists[1] and exists[2] then
+		on_done(nil)
+		return nil
+	end
+
+	local refs = {}
+	if not exists[1] then
+		local ref = fetch_ref(pr.destination)
+		if ref ~= "" then
+			refs[#refs + 1] = { remote = "origin", ref = ref }
 		end
 	end
+	if not exists[2] then
+		local remote, remote_err = source_remote(pr.source, configured_git_transport(), pr.provider)
+		if remote_err then
+			on_done(remote_err)
+			return nil
+		end
+		local ref = fetch_ref(pr.source)
+		if ref ~= "" then
+			refs[#refs + 1] = { remote = remote, ref = ref }
+		end
+	end
+
+	local current
+	local cancelled = false
+	local index = 0
 
 	local function finish()
-		local missing = missing_commit()
-		on_done(missing and (fetch_err and missing .. ": " .. fetch_err or missing) or nil)
+		exists = git.check_commits(repo_path, { base_revision, head_revision })
+		local err
+		if not exists[1] then
+			err = "Pull request base commit is unavailable: " .. base_revision
+		elseif not exists[2] then
+			err = "Pull request head commit is unavailable: " .. head_revision
+		end
+		on_done(err)
 	end
 
-	local function fetch_head()
-		if not missing_commit() or head_ref == "" then
+	local function next_ref()
+		index = index + 1
+		local ref = refs[index]
+		if not ref then
 			finish()
 			return
 		end
-
-		current = git.fetch_refs(repo_path, head_remote, { head_ref }, function(ok, err)
+		current = git.fetch_refs(repo_path, ref.remote, { ref.ref }, function(ok, err)
 			current = nil
 			if cancelled then
 				return
 			end
 			if not ok then
-				fetch_err = err or "Failed to fetch pull request ref"
+				on_done(err or "Failed to fetch pull request ref")
+				return
 			end
-			finish()
+			next_ref()
 		end, on_progress)
 	end
 
-	if not missing_commit() then
-		return schedule_result(on_done, nil)
-	end
-	if base_ref == "" then
-		fetch_head()
-	else
-		current = git.fetch_refs(repo_path, base_remote, { base_ref }, function(ok, err)
-			current = nil
-			if cancelled then
-				return
-			end
-			if not ok then
-				fetch_err = err or "Failed to fetch pull request ref"
-			end
-			fetch_head()
-		end, on_progress)
-	end
+	next_ref()
 	return {
 		cancel = function()
 			cancelled = true
@@ -315,7 +283,6 @@ end
 ---@return string|nil cache_path
 ---@return string|nil remote_url
 local function cached_pr_repository(pr)
-	local providers = require("atlas.providers")
 	local target = providers.resolve(pr.link.html)
 	if not target or target.domain ~= "pulls" or target.entity ~= "pr" then
 		return nil, nil
@@ -324,11 +291,11 @@ local function cached_pr_repository(pr)
 	local repository = pr.repo_full_name
 	local transport = configured_git_transport()
 	local cache_path = vim.fs.joinpath(vim.fn.stdpath("cache"), "atlas", "repos", target.host, repository)
-	local advertised = transport == "ssh" and pr.destination.ssh_url or nil
-	if transport == "https" then
-		advertised = pr.destination.https_url
+	local advertised = pr.destination.https_url
+	if transport == "ssh" then
+		advertised = pr.destination.ssh_url
 	end
-	if type(advertised) == "string" and advertised ~= "" then
+	if advertised and advertised ~= "" then
 		return cache_path, advertised
 	end
 
@@ -338,8 +305,6 @@ local function cached_pr_repository(pr)
 	return cache_path, target.repository_url
 end
 
-local PR_CACHE_MAX_AGE = 7 * 24 * 60 * 60
-
 ---@param action string
 ---@param phase string
 ---@param percent integer
@@ -348,37 +313,15 @@ local function progress_message(action, phase, percent)
 	return string.format("%s...\n%s %d%% / 100%%", action, phase, percent)
 end
 
----@param active_path string
-local function clean_pr_cache(active_path)
-	active_path = vim.fs.normalize(active_path)
-	vim.schedule(function()
-		local root = vim.fs.joinpath(vim.fn.stdpath("cache"), "atlas", "repos")
-		for _, git_dir in ipairs(vim.fs.find(".git", { path = root, type = "directory", limit = math.huge })) do
-			local repo_path = vim.fs.dirname(git_dir)
-			local last_used = vim.uv.fs_stat(repo_path)
-			if
-				vim.fs.normalize(repo_path) ~= active_path
-				and last_used
-				and os.time() - last_used.mtime.sec > PR_CACHE_MAX_AGE
-			then
-				vim.fn.delete(repo_path, "rf")
-			end
-		end
-	end)
-end
-
 ---@param pr PullRequest
 ---@param repo_path string|nil
 ---@param on_progress fun(message: string)
 ---@param on_done fun(repo_path: string|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.ensure_pr_repository(pr, repo_path, on_progress, on_done)
-	local cached = repo_path == nil
+local function ensure_repository(pr, repo_path, on_progress, on_done)
 	local current
-	local cancelled = false
 	local handle = {
 		cancel = function()
-			cancelled = true
 			if current then
 				current.cancel()
 			end
@@ -387,16 +330,9 @@ function M.ensure_pr_repository(pr, repo_path, on_progress, on_done)
 
 	---@param path string
 	local function fetch(path)
-		if cached then
-			local now = os.time()
-			vim.uv.fs_utime(path, now, now)
-		end
 		on_progress("Fetching pull request refs...")
 		current = M.fetch_pr_refs(pr, path, function(err)
 			current = nil
-			if cancelled then
-				return
-			end
 			if err then
 				on_done(nil, err)
 				return
@@ -427,7 +363,6 @@ function M.ensure_pr_repository(pr, repo_path, on_progress, on_done)
 	end
 	vim.fn.mkdir(vim.fs.dirname(path), "p")
 	on_progress("Cloning repository...")
-	clean_pr_cache(path)
 	-- Leave the cache without a checkout; Git loads trees and blobs when a diff needs them.
 	current = git.run({
 		"clone",
@@ -440,9 +375,6 @@ function M.ensure_pr_repository(pr, repo_path, on_progress, on_done)
 		path,
 	}, { text = true }, function(result)
 		current = nil
-		if cancelled then
-			return
-		end
 		if result.code ~= 0 then
 			vim.fn.delete(path, "rf")
 			local err = vim.trim(tostring(result.stderr or ""))
@@ -457,17 +389,53 @@ function M.ensure_pr_repository(pr, repo_path, on_progress, on_done)
 	return handle
 end
 
----@param pr PullRequest|nil
----@param on_done fun(result: { repo_path: string, local_branch: string }|nil, err: string|nil)
-function M.checkout_pr(pr, on_done)
-	on_done = on_done or function() end
+---@param pr PullRequest
+---@return string|nil
+local function current_repo_path(pr)
+	local root = git.repo_root()
+	local current = root and git.local_repository(root) or nil
+	local target = providers.resolve(pr.link.html)
+	if
+		current
+		and target
+		and current.provider == target.provider
+		and current.host:lower() == target.host:lower()
+		and tostring(current.repo_full_name):lower() == tostring(pr.repo_full_name):lower()
+	then
+		return root
+	end
+	return nil
+end
 
-	if pr == nil then
-		on_done(nil, "no PR selected")
-		return
+---@param pr PullRequest
+---@param preferred_root string|nil
+---@param on_progress fun(message: string)
+---@param on_done fun(source: AtlasDiffSource|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.prepare_diff(pr, preferred_root, on_progress, on_done)
+	local base, head, revision_err = M.pr_diff_revisions(pr)
+	if not base or not head then
+		on_done(nil, revision_err)
+		return nil
 	end
 
-	local src_branch = tostring(pr.source.branch or "")
+	local repo_path = preferred_root
+		or current_repo_path(pr)
+		or M.resolve_repo_path_for_pr(pr, { require_git = true, require_existing = true })
+
+	return ensure_repository(pr, repo_path, on_progress, function(root, err)
+		if not root then
+			on_done(nil, err or "Unable to load pull request repository")
+			return
+		end
+		on_done({ root = root, base_revision = base, head_revision = head }, nil)
+	end)
+end
+
+---@param pr PullRequest
+---@param on_done fun(result: { repo_path: string, local_branch: string }|nil, err: string|nil)
+function M.checkout_pr(pr, on_done)
+	local src_branch = pr.source.branch
 	if src_branch == "" then
 		on_done(nil, "PR source branch is missing")
 		return
@@ -482,55 +450,27 @@ function M.checkout_pr(pr, on_done)
 		return
 	end
 
-	git.checkout_branch(repo_path, src_branch, function(ok, checkout_err)
-		if ok then
-			on_done({ repo_path = repo_path, local_branch = src_branch }, nil)
-			return
-		end
-		if git.rev_exists(repo_path, "refs/heads/" .. src_branch) then
-			local err = checkout_err or "Unable to switch to the existing branch"
-			logger.logerror("checkout.checkout_pr switch existing branch failed", {
-				pr_id = pr.id,
-				repo_path = repo_path,
-				branch = src_branch,
-				error = err,
-			})
+	if git.rev_exists(repo_path, "refs/heads/" .. src_branch) then
+		git.checkout_branch(repo_path, src_branch, function(ok, err)
+			on_done(ok and { repo_path = repo_path, local_branch = src_branch } or nil, err)
+		end)
+		return
+	end
+
+	M.fetch_pr_refs(pr, repo_path, function(err)
+		if err then
 			on_done(nil, err)
 			return
 		end
-
-		M.fetch_pr_refs(pr, repo_path, function(ferr)
-			if ferr then
-				logger.logerror("checkout.checkout_pr fetch failed", {
-					pr_id = pr.id,
-					repo_path = repo_path,
-					branch = src_branch,
-					error = ferr,
-				})
-				on_done(nil, ferr)
-				return
-			end
-
-			local _, start_point, revision_err = M.pr_diff_revisions(pr)
-			if not start_point then
-				on_done(nil, revision_err)
-				return
-			end
-			git.checkout_new_branch(repo_path, src_branch, start_point, function(create_ok, cerr)
-				if not create_ok then
-					logger.logerror("checkout.checkout_pr create branch failed", {
-						pr_id = pr.id,
-						repo_path = repo_path,
-						branch = src_branch,
-						error = cerr,
-					})
-					on_done(nil, cerr)
-					return
-				end
-
-				on_done({ repo_path = repo_path, local_branch = src_branch }, nil)
-			end)
+		local _, head, revision_err = M.pr_diff_revisions(pr)
+		if not head then
+			on_done(nil, revision_err)
+			return
+		end
+		git.checkout_new_branch(repo_path, src_branch, head, function(ok, checkout_err)
+			on_done(ok and { repo_path = repo_path, local_branch = src_branch } or nil, checkout_err)
 		end)
 	end)
 end
+
 return M

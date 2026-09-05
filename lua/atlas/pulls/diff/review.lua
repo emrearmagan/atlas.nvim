@@ -37,11 +37,10 @@ local function notify(session, level, message, duration)
 end
 
 ---@param context AtlasDiffReview
----@param force_refresh boolean
 ---@param on_done fun(review: AtlasDiffReview, warnings: string[])
 ---@return { cancel: fun() }
-function M.load(context, force_refresh, on_done)
-	local options = force_refresh and { force_refresh = true } or {}
+local function load(context, on_done)
+	local options = { force_refresh = true }
 	local starts = {}
 	local reviews = context.provider.capabilities.reviews
 	if reviews and reviews.fetch_review_context then
@@ -87,6 +86,27 @@ function M.load(context, force_refresh, on_done)
 	return pending
 end
 
+---@param provider PullsProvider
+---@param pr PullRequest
+---@param current_user PullsUser|nil
+---@param on_done fun(review: AtlasDiffReview, warnings: string[])
+---@return { cancel: fun() }
+function M.load(provider, pr, current_user, on_done)
+	return load({
+		provider = provider,
+		pr = pr,
+		current_user = current_user,
+		context = nil,
+		data = {
+			review = { pending = false },
+			comments = {},
+			tasks = {},
+			reviewers = {},
+			history = {},
+		},
+	}, on_done)
+end
+
 ---@param session AtlasDiffSession
 ---@param comment PullsComment|nil
 ---@return AtlasReviewActionContext|nil
@@ -121,7 +141,7 @@ function M.reload(session)
 	local pending = request_scope.new()
 	session.review_request = pending
 	pending.run(function(done)
-		return M.load(review, true, done)
+		return load(review, done)
 	end, function(loaded, warnings)
 		session.review_request = nil
 		session.review = loaded

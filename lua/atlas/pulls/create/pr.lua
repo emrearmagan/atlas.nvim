@@ -183,9 +183,9 @@ local function preview_diff(pr_state)
 		return
 	end
 	require("atlas.pulls.diff").open_range({
-		git_root = pr_state.fields.repo_root,
-		base_revision = base,
-		head_revision = head,
+		root = pr_state.fields.repo_root,
+		base = base,
+		head = head,
 	}, function(open_err)
 		if open_err then
 			form.notify("error", "Unable to open diff: " .. tostring(open_err))
