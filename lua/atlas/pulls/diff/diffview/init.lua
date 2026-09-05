@@ -3,7 +3,6 @@ local M = {}
 local comments = require("atlas.pulls.diff.comments")
 local config = require("atlas.config")
 local keymaps = require("atlas.core.keymaps")
-local notify = require("atlas.core.notify")
 local hints = require("atlas.pulls.diff.ui.hints")
 local notes = require("atlas.pulls.diff.notes")
 local position = require("atlas.pulls.diff.position")
@@ -33,8 +32,6 @@ local FILE_STATUSES = {
 ---@field additions integer
 ---@field deletions integer
 ---@field closed boolean
----@field reloading boolean
----@field reload_view (fun())|nil
 
 ---@param value string|nil
 ---@return string
@@ -187,41 +184,6 @@ local function finish_pending_jump(session)
 end
 
 ---@param session AtlasDiffSession
-local function reload_view(session)
-	local state = session.viewer_state --[[@as AtlasDiffviewState]]
-	if state.closed or state.reloading or not session.reload then
-		return
-	end
-	local reload = session.reload
-	vim.cmd("tabnew")
-	local win = vim.api.nvim_get_current_win()
-	local target = {
-		tabpage = vim.api.nvim_get_current_tabpage(),
-		buf = vim.api.nvim_get_current_buf(),
-		win = win,
-		number = vim.wo[win].number,
-		relativenumber = vim.wo[win].relativenumber,
-		statuscolumn = vim.wo[win].statuscolumn,
-		winbar = vim.wo[win].winbar,
-	}
-	state.reloading = true
-	local ok, err = pcall(function()
-		state.view:close()
-		require("diffview.lib").dispose_view(state.view)
-	end)
-	if not ok then
-		state.reloading = false
-		vim.cmd("tabclose")
-		session_api.notify(session, "error", "Unable to close Diffview: " .. tostring(err))
-		return
-	end
-	M.detach(session, "reload")
-	vim.schedule(function()
-		reload(target)
-	end)
-end
-
----@param session AtlasDiffSession
 local function register_review_buffers(session)
 	local current = session.current
 	if not current then
@@ -242,7 +204,7 @@ local function register_review_buffers(session)
 	end
 	review_keymaps.register(session, {
 		buffers = buffers,
-		reload = state.reload_view,
+		reopen = session.reopen,
 		help_key = keymaps.resolve("pulls.external_help"),
 		file_buffers = diffview_panel_buf and { diffview_panel_buf } or nil,
 		add_file_comment = function(pending)
@@ -452,7 +414,6 @@ local function register_events(session)
 			vim.schedule(function()
 				if
 					session.viewer_state == state
-					and not state.reloading
 					and not state.closed
 					and not session.closed
 					and session.tabpage
@@ -463,6 +424,16 @@ local function register_events(session)
 			end)
 		end,
 	})
+end
+
+---@param view table
+---@return boolean, string|nil
+local function close_view(view)
+	local ok, err = pcall(function()
+		view:close()
+		require("diffview.lib").dispose_view(view)
+	end)
+	return ok, not ok and tostring(err) or nil
 end
 
 ---@param session AtlasDiffSession
@@ -482,24 +453,23 @@ local function attach(session, view, tabpage)
 		additions = 0,
 		deletions = 0,
 		closed = false,
-		reloading = false,
 	}
 	session.viewer_state = state
-	state.reload_view = function()
-		reload_view(session)
-	end
 
 	if session.review or session.note_target then
-		local panel =
-			session_api.create_review_panel(session, string.format("atlas-diff-diffview://%d/review", tabpage))
-		review_panel.configure(panel)
-		review_panel.register_keymaps(panel)
+		session_api.create_review_panel(session, string.format("atlas-diff-diffview://%d/review", tabpage))
 	end
 	register_events(session)
 	session_api.attach(session, {
 		tabpage = tabpage,
-		notify = function(level, message, duration)
-			notify.show(level, message, { timeout = duration })
+		close = function(reason)
+			local ok, err = close_view(state.view)
+			if not ok then
+				session_api.notify(session, "error", "Unable to close Diffview: " .. tostring(err))
+				return false
+			end
+			M.detach(session, reason)
+			return true
 		end,
 		focus_item = function(item, focus_diff)
 			focus_item(session, item, focus_diff)
@@ -515,53 +485,38 @@ local function attach(session, view, tabpage)
 end
 
 ---@param session AtlasDiffSession
----@param loading_view AtlasLoadingView
 ---@param on_done fun(err: string|nil)
----@return nil
-function M.open(session, loading_view, on_done)
-	local finished = false
-	local function finish(err)
-		if finished then
-			return
-		end
-		finished = true
-		loading_view:finish()
-		vim.schedule(function()
-			on_done(err)
-		end)
-	end
-
+function M.open(session, on_done)
 	local source = session.source
-	local range = source.head_revision and source.base_revision .. "..." .. source.head_revision or source.base_revision
-	local ok, view = pcall(vim.api.nvim_win_call, loading_view.win, function()
-		vim.cmd("tcd " .. vim.fn.fnameescape(source.root))
+	local range = source.base_revision .. "..." .. source.head_revision
+	local ok, view = pcall(function()
 		vim.api.nvim_cmd({
 			cmd = "DiffviewOpen",
-			args = { range },
+			args = { "-C" .. source.root, range },
 		}, {})
 		return require("diffview.lib").get_current_view()
 	end)
 	if not ok then
-		finish(tostring(view))
-		return nil
+		on_done(tostring(view))
+		return
 	end
 	local tabpage = view and view.tabpage or nil
 	if not tabpage or not vim.api.nvim_tabpage_is_valid(tabpage) then
-		finish("Diffview session is unavailable")
-		return nil
+		on_done("Diffview session is unavailable")
+		return
 	end
 
 	local attached, attach_err = pcall(attach, session, view, tabpage)
 	if not attached then
 		local state = session.viewer_state --[[@as AtlasDiffviewState]]
-		if state.view == view then
+		if state and state.view == view then
 			M.detach(session, "attach_failed")
 		end
-		finish("Unable to attach review to Diffview: " .. tostring(attach_err))
-		return nil
+		close_view(view)
+		on_done("Unable to attach review to Diffview: " .. tostring(attach_err))
+		return
 	end
-	finish(nil)
-	return nil
+	on_done(nil)
 end
 
 ---@param session AtlasDiffSession

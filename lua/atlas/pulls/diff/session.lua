@@ -2,6 +2,7 @@ local M = {}
 
 local comments = require("atlas.pulls.diff.comments")
 local config = require("atlas.config")
+local core_notify = require("atlas.core.notify")
 local events = require("atlas.core.events")
 local icons = require("atlas.ui.shared.icons")
 local keymaps = require("atlas.core.keymaps")
@@ -50,7 +51,7 @@ local review_progress = { "󰝦", "󰪞", "󰪟", "󰪠", "󰪡", "󰪢", "󰪣"
 ---@class AtlasDiffSource
 ---@field root string
 ---@field base_revision string
----@field head_revision string|nil Nil means the working tree.
+---@field head_revision string
 
 ---@class AtlasDiffReviewPanelSelection
 ---@field kind "comment"|"note"
@@ -59,7 +60,7 @@ local review_progress = { "󰝦", "󰪞", "󰪟", "󰪠", "󰪡", "󰪢", "󰪣"
 
 ---@class AtlasDiffSessionCallbacks
 ---@field tabpage integer
----@field notify fun(level: "loading"|"success"|"warn"|"error"|"info", message: string, duration?: integer)
+---@field close fun(reason: string): boolean|nil
 ---@field focus_item fun(item: AtlasDiffReviewPanelSelection, focus_diff: boolean)
 ---@field render_view fun(output: AtlasDiffRenderOutput)
 ---@field toggle_review_panel fun(focus?: boolean)
@@ -86,7 +87,8 @@ local review_progress = { "󰝦", "󰪞", "󰪟", "󰪠", "󰪡", "󰪢", "󰪣"
 ---@field closed boolean
 ---@field render fun(self: AtlasDiffSession)
 ---@field notify (fun(level: "loading"|"success"|"warn"|"error"|"info", message: string, duration?: integer))|nil
----@field reload (fun(target?: AtlasLoadingTarget))|nil
+---@field close (fun(reason: string): boolean|nil)|nil
+---@field reopen fun()
 ---@field focus_item (fun(item: AtlasDiffReviewPanelSelection, focus_diff: boolean))|nil
 ---@field render_view (fun(output: AtlasDiffRenderOutput))|nil
 ---@field toggle_review_panel (fun(focus?: boolean))|nil
@@ -106,7 +108,7 @@ local function statusline_items(session)
 		or string.format(
 			"%s...%s",
 			tostring(session.source.base_revision):sub(1, 8),
-			session.source.head_revision and tostring(session.source.head_revision):sub(1, 8) or "WORKTREE"
+			tostring(session.source.head_revision):sub(1, 8)
 		)
 	local state = session.viewer_state
 	local items = {
@@ -171,13 +173,15 @@ local function statusline_items(session)
 	return items
 end
 
----@param opts { viewer_id: string, source: AtlasDiffSource, review: AtlasDiffReview|nil, commits: PullsCommit[]|nil }
+---@param opts { viewer_id: string, source: AtlasDiffSource, review: AtlasDiffReview|nil, commits: PullsCommit[]|nil, open_again: fun(on_done: fun(err: string|nil)) }
 ---@return AtlasDiffSession
 function M.new(opts)
 	local note_target, note_items = notes.load(opts.review)
 	local help_action = opts.viewer_id == "atlas" and "ui.help" or "pulls.external_help"
 	local help_key = (keymaps.resolve(help_action) or {})[1]
-	local session = {
+	---@type AtlasDiffSession
+	local session
+	session = {
 		id = events.new_id(opts.viewer_id),
 		viewer_id = opts.viewer_id,
 		tabpage = nil,
@@ -197,6 +201,21 @@ function M.new(opts)
 		help_key = help_key,
 		review_attached = false,
 		closed = false,
+		close = nil,
+		reopen = function()
+			if session.close and session.close("refresh") ~= false then
+				vim.schedule(function()
+					opts.open_again(function(err)
+						if err then
+							core_notify.error("Unable to reopen diff: " .. tostring(err), { vim_notify = true })
+						end
+					end)
+				end)
+			end
+		end,
+		notify = function(level, message, duration)
+			core_notify.show(level, message, { timeout = duration })
+		end,
 		render = M.render,
 	}
 	return session
@@ -211,7 +230,7 @@ function M.attach(session, callbacks)
 		end
 	end
 	session.tabpage = callbacks.tabpage
-	session.notify = callbacks.notify
+	session.close = callbacks.close
 	session.focus_item = callbacks.focus_item
 	session.render_view = callbacks.render_view
 	session.toggle_review_panel = callbacks.toggle_review_panel
@@ -223,6 +242,7 @@ end
 ---@return AtlasDiffReviewPanel
 function M.create_review_panel(session, name)
 	local panel = review_panel.create(name, session)
+	review_panel.register_keymaps(panel)
 	session.review_panel = panel
 	return panel
 end
@@ -300,15 +320,6 @@ function M.get(tabpage)
 	return sessions[tabpage or vim.api.nvim_get_current_tabpage()]
 end
 
----@return AtlasDiffSession[]
-function M.all()
-	local result = {}
-	for _, session in pairs(sessions) do
-		table.insert(result, session)
-	end
-	return result
-end
-
 ---@param session AtlasDiffSession
 ---@param reason string|nil
 function M.detach(session, reason)
@@ -317,6 +328,7 @@ function M.detach(session, reason)
 	end
 	session.closed = true
 	session.notify = nil
+	session.close = nil
 	if session.review_request then
 		session.review_request.cancel()
 		session.review_request = nil

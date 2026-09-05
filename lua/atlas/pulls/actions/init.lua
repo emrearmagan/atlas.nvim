@@ -399,9 +399,9 @@ M.open_diff = {
 			ref = assert(context.pr),
 			provider = context.provider,
 			current_user = context.current_user,
-		}, function(err, level)
+		}, function(err)
 			if err then
-				notify(context, level or "error", "Unable to open diff: " .. tostring(err))
+				notify(context, "error", "Unable to open diff: " .. tostring(err))
 				done(nil, err)
 				return
 			end
