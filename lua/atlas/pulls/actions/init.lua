@@ -31,6 +31,7 @@ local notify = utils.notify
 ---| "edit_reviewers"
 ---| "search"
 ---| "search_pull_requests"
+---| "edit_search"
 ---| "approve"
 ---| "request_changes"
 

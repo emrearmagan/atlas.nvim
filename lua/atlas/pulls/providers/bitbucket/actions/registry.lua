@@ -259,6 +259,23 @@ register({
 	end,
 })
 
+register({
+	id = "edit_search",
+	label = "Edit search",
+	icon = icons.action("search"),
+	run = function(_, done)
+		bitbucket_search.edit({ name = "Search", search = state.query }, function(query)
+			local view = state.search_view()
+			if view then
+				view.search = query
+				view._states = nil
+				require("atlas.pulls.ui.dashboard.controller").refresh_view()
+			end
+		end)
+		done(nil, nil)
+	end,
+})
+
 register(actions.open_pipelines)
 register(actions.open_diff)
 register(actions.checkout)

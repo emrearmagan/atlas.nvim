@@ -101,6 +101,7 @@ local M = {}
 ---@field toggle_repo_issue_state? AtlasKeymapValue
 ---@field edit_title? AtlasKeymapValue
 ---@field edit_description? AtlasKeymapValue
+---@field edit_search? AtlasKeymapValue
 ---@field review? AtlasPullsReviewKeymaps
 ---@field filters? AtlasPullsFilterKeymaps
 
@@ -109,6 +110,7 @@ local M = {}
 ---@field change_assignee? AtlasKeymapValue
 ---@field change_reporter? AtlasKeymapValue
 ---@field edit_issue? AtlasKeymapValue
+---@field edit_search? AtlasKeymapValue
 ---@field create_issue? AtlasKeymapValue
 ---@field toggle_description_mode? AtlasKeymapValue
 
@@ -164,6 +166,7 @@ local M = {}
 ---| "pulls.toggle_repo_issue_state"
 ---| "pulls.edit_title"
 ---| "pulls.edit_description"
+---| "pulls.edit_search"
 ---| "pulls.review.approve"
 ---| "pulls.review.request_changes"
 ---| "pulls.review.submit_review"
@@ -203,6 +206,7 @@ local M = {}
 ---| "issues.change_assignee"
 ---| "issues.change_reporter"
 ---| "issues.edit_issue"
+---| "issues.edit_search"
 ---| "issues.create_issue"
 ---| "issues.toggle_description_mode"
 
@@ -325,6 +329,7 @@ function M.validate()
 	-- TODO: Give these actions unique default mappings.
 	---@type AtlasKeymapActionId[][]
 	local ALLOWED_CONFLICTS = {
+		{ "ui.comments.add", "pulls.edit_search", "issues.edit_search" },
 		{ "pulls.review.find_file", "pulls.review.explorer.find_file" },
 		{ "ui.next_panel_tab", "pulls.review.explorer.next_file" },
 		{ "ui.previous_panel_tab", "pulls.review.explorer.previous_file" },

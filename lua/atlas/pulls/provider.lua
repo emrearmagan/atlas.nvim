@@ -2,6 +2,7 @@
 
 ---@class AtlasPullsBookmarkConfig
 ---@field layout AtlasPullsViewLayout|nil
+---@field search string|nil
 
 ---@class PullsFetchOpts
 ---@field force_refresh boolean|nil

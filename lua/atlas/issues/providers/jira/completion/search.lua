@@ -653,13 +653,24 @@ function M.open_query(query)
 end
 
 ---@param default? string
-function M.open(default)
+---@param on_submit fun(query: string)
+function M.edit(default, on_submit)
 	prompt.open({
 		name = "AtlasJqlSearch",
 		complete = complete_cmdline,
-		on_submit = M.open_query,
+		on_submit = function(query)
+			query = vim.trim(tostring(query or ""))
+			if query ~= "" then
+				on_submit(query)
+			end
+		end,
 		default = default,
 	})
+end
+
+---@param default? string
+function M.open(default)
+	M.edit(default, M.open_query)
 end
 
 return M

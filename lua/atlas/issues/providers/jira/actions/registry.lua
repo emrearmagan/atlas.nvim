@@ -944,6 +944,23 @@ register({
 	icon = icons.action("search"),
 	run = search_jql,
 })
+register({
+	id = "edit_search",
+	label = "Edit search",
+	icon = icons.action("search"),
+	run = function(_, done)
+		require("atlas.issues.providers.jira.completion.search").edit(current_jql(), function(query)
+			local view = issues_state.search_view()
+			if view then
+				---@cast view AtlasJiraViewConfig
+				view.jql = query
+				view.search = nil
+				require("atlas.issues.ui.dashboard.controller").refresh_view()
+			end
+		end)
+		done(nil, nil)
+	end,
+})
 register(actions.manage_templates)
 register({
 	id = "browse_issue",

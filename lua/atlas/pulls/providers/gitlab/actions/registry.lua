@@ -9,6 +9,7 @@ local notes = require("atlas.pulls.notes")
 local pullrequests_api = require("atlas.pulls.providers.gitlab.api.pullrequests")
 local users_api = require("atlas.pulls.providers.gitlab.api.users")
 local service = require("atlas.providers.gitlab.client")
+local gitlab_query = require("atlas.providers.gitlab.query")
 
 ---@param ctx AtlasPullActionContext
 ---@return boolean
@@ -559,6 +560,35 @@ register({
 	label = "Open Project",
 	icon = icons.action("search"),
 	run = open_project,
+})
+
+register({
+	id = "edit_search",
+	label = "Edit search",
+	icon = icons.action("search"),
+	run = function(_, done)
+		local state = require("atlas.pulls.state")
+		vim.ui.input({ prompt = "Search: ", default = state.query }, function(input)
+			if input == nil or vim.trim(input) == "" then
+				done(nil, nil)
+				return
+			end
+			local view = state.search_view()
+			if view == nil then
+				done(nil, nil)
+				return
+			end
+			---@cast view AtlasGitLabPullsViewConfig
+			local ok, err = gitlab_query.apply(view, input)
+			if not ok then
+				core_notify.warn(err)
+				done(nil, err)
+				return
+			end
+			require("atlas.pulls.ui.dashboard.controller").refresh_view()
+			done(nil, nil)
+		end)
+	end,
 })
 
 register({

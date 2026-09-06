@@ -10,6 +10,7 @@ local utils = require("atlas.issues.actions.utils")
 ---| "assign"
 ---| "create_issue"
 ---| "search"
+---| "edit_search"
 ---| "browse_issue"
 ---| "copy_issue_key"
 ---| "copy_issue_url"

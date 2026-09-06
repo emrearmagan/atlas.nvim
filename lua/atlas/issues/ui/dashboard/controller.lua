@@ -428,6 +428,7 @@ function M.previous_page()
 end
 
 function M.refresh_view()
+	resolve_view(state.search_view())
 	local provider = state.provider
 	local refresh = provider and provider.capabilities.core.refresh
 	if refresh then

@@ -250,6 +250,16 @@ function M.register(buf, views)
 
 	utils.insert_if(
 		items,
+		item("pulls.edit_search", {
+			desc = "Edit search",
+			callback = function()
+				run_action("edit_search", false)
+			end,
+		})
+	)
+
+	utils.insert_if(
+		items,
 		item("ui.refresh", {
 			desc = "Refetch selected PR",
 			callback = function()

@@ -364,6 +364,7 @@ function M.previous_page()
 end
 
 function M.refresh_view()
+	resolve_view(state.search_view())
 	local view = state.view
 	if view == nil then
 		return
@@ -542,7 +543,6 @@ function M.toggle_status_filter(status)
 			table.insert(view._states, value)
 		end
 	end
-	resolve_view(view)
 	M.refresh_view()
 end
 

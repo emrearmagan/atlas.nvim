@@ -588,14 +588,6 @@ local function open_repo(_, done)
 	})
 end
 
----@param _ AtlasPullActionContext
----@param done fun(result: PullsActionResult|nil, err: string|nil)
-local function search_pull_requests(_, done)
-	local state = require("atlas.pulls.state")
-	require("atlas.providers.github.completion.search").open(state.query .. " ")
-	done(nil, nil)
-end
-
 ---@param ctx AtlasPullActionContext
 ---@return boolean, string|nil
 local function toggle_subscription_available(ctx)
@@ -738,7 +730,29 @@ register({
 	id = "search_pull_requests",
 	label = "Open Search View",
 	icon = icons.action("search"),
-	run = search_pull_requests,
+	run = function(_, done)
+		local query = require("atlas.pulls.state").query
+		require("atlas.providers.github.completion.search").open(query .. " ")
+		done(nil, nil)
+	end,
+})
+
+register({
+	id = "edit_search",
+	label = "Edit search",
+	icon = icons.action("search"),
+	run = function(_, done)
+		local state = require("atlas.pulls.state")
+		require("atlas.providers.github.completion.search").edit(state.query .. " ", function(query)
+			local view = state.search_view()
+			if view then
+				view.search = query
+				view._states = nil
+				require("atlas.pulls.ui.dashboard.controller").refresh_view()
+			end
+		end)
+		done(nil, nil)
+	end,
 })
 
 register({

@@ -9,6 +9,7 @@ local issues_api = require("atlas.issues.providers.gitlab.api.issues")
 local users_api = require("atlas.issues.providers.gitlab.api.users")
 local labels_api = require("atlas.issues.providers.gitlab.api.labels")
 local service = require("atlas.providers.gitlab.client")
+local gitlab_query = require("atlas.providers.gitlab.query")
 
 ---@param ctx AtlasIssueActionContext
 ---@return boolean
@@ -620,6 +621,34 @@ register({
 })
 register({ id = "labels", label = "Edit Labels", icon = icons.action("label"), is_available = has_issue, run = labels })
 register({ id = "search", label = "Search Issues", icon = icons.action("search"), run = search })
+register({
+	id = "edit_search",
+	label = "Edit search",
+	icon = icons.action("search"),
+	run = function(_, done)
+		local state = require("atlas.issues.state")
+		vim.ui.input({ prompt = "Search: ", default = state.query }, function(input)
+			if input == nil or vim.trim(input) == "" then
+				done(nil, nil)
+				return
+			end
+			local view = state.search_view()
+			if view == nil then
+				done(nil, nil)
+				return
+			end
+			---@cast view AtlasGitLabIssuesViewConfig
+			local ok, err = gitlab_query.apply_issue(view, input)
+			if not ok then
+				notify.warn(err)
+				done(nil, err)
+				return
+			end
+			require("atlas.issues.ui.dashboard.controller").refresh_view()
+			done(nil, nil)
+		end)
+	end,
+})
 register({ id = "open_project", label = "Open Project", icon = icons.action("search"), run = open_project })
 register(actions.manage_templates)
 register(actions.browse_issue)
