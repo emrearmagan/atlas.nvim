@@ -80,6 +80,8 @@
 ---@field bitbucket AtlasBitbucketConfig|nil
 ---@field github AtlasGitHubConfig|nil
 ---@field gitlab AtlasGitLabConfig|nil
+---@field gitea AtlasGiteaConfig|nil
+---@field forgejo AtlasForgejoConfig|nil
 ---@field jira AtlasJiraConfig|nil
 
 ---@class AtlasPullsConfig
@@ -94,6 +96,8 @@
 ---@field bitbucket AtlasBitbucketPullsConfig|nil
 ---@field github AtlasGitHubPullsConfig|nil
 ---@field gitlab AtlasGitLabPullsConfig|nil
+---@field gitea AtlasGiteaPullsConfig|nil
+---@field forgejo AtlasForgejoPullsConfig|nil
 
 ---@class AtlasIssuesCustomActionContext
 ---@field issue Issue|nil
@@ -112,6 +116,8 @@
 ---@field custom_actions AtlasIssuesCustomAction[]|nil
 ---@field github AtlasGitHubIssuesConfig|nil
 ---@field gitlab AtlasGitLabIssuesConfig|nil
+---@field gitea AtlasGiteaIssuesConfig|nil
+---@field forgejo AtlasForgejoIssuesConfig|nil
 ---@field jira AtlasJiraIssuesConfig|nil
 
 -- Config
@@ -331,6 +337,7 @@ local function migrate_legacy(opts)
 						local domain_scoped = key == "views"
 							or key == "bookmarks"
 							or (domain == "issues" and id == "jira" and key == "project_config")
+							or ((id == "gitea" or id == "forgejo") and domain == "pulls" and key == "draft_prefix")
 						if domain_scoped then
 							if domain_config[key] == nil then
 								domain_config[key] = value

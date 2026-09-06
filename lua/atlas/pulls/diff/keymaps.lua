@@ -132,7 +132,7 @@ function M.register(session, opts)
 						actions.request_changes(session)
 					end)
 				end
-				if reviewable and (session.review.data.review.pending or reviews.start_review) then
+				if reviewable and (pending or reviews.start_review or reviews.submit_review) then
 					add(items, "pulls.review.submit_review", "Start / submit review", function()
 						actions.start_or_submit(session)
 					end)

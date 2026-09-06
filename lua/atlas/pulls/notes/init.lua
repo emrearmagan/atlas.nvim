@@ -1,4 +1,5 @@
 local notify = require("atlas.core.notify")
+local providers = require("atlas.providers")
 local storage = require("atlas.pulls.notes.storage")
 
 local M = {}
@@ -254,32 +255,19 @@ function M.resolve_target(value)
 		return normalize_target({ provider = provider, host = host, repository = repository, id = id })
 	end
 
-	local url_host, path = value:match("^https?://([^/?#]+)([^?#]*)")
-	if not url_host then
+	local target, resolve_error = providers.resolve(value)
+	if not target then
+		return nil, resolve_error
+	end
+	if target.domain ~= "pulls" or target.entity ~= "pr" then
 		return nil, "Expected a pull request URL or canonical reference"
 	end
-	local owner, repo
-	owner, repo, id = path:match("^/([^/]+)/([^/]+)/pull/(%d+)/?$")
-	if owner then
-		provider, repository = "github", owner .. "/" .. repo
-	else
-		owner, repo, id = path:match("^/([^/]+)/([^/]+)/pull%-requests/(%d+)/?$")
-		if owner then
-			provider, repository = "bitbucket", owner .. "/" .. repo
-		else
-			repository, id = path:match("^/(.-)/%-/merge_requests/(%d+)/?$")
-			provider = repository and "gitlab" or nil
-		end
-	end
-	if not provider or not repository or not id then
-		return nil, "Unsupported pull request URL"
-	end
 	return normalize_target({
-		provider = provider,
-		host = url_host,
-		repository = repository,
-		id = id,
-		url = value,
+		provider = target.provider,
+		host = target.host,
+		repository = target.repo_full_name,
+		id = target.id,
+		url = target.url,
 	})
 end
 
@@ -287,9 +275,10 @@ end
 ---@return AtlasNoteTarget|nil, string|nil
 function M.target_for_pull_request(pr)
 	local url = pr.link.html
+	local target = providers.resolve(url)
 	return normalize_target({
 		provider = pr.provider,
-		host = url:match("^https?://([^/?#]+)"),
+		host = target and target.host or nil,
 		repository = pr.repo_full_name,
 		id = pr.id,
 		url = url,

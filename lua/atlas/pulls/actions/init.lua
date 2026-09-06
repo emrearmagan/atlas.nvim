@@ -156,6 +156,7 @@ M.edit_title = {
 	is_available = has_pr,
 	run = function(context, done)
 		local pr = assert(context.pr)
+		local original_title = pr.title
 		md_editor.open({
 			key = "pr-title-edit-" .. tostring(pr.id),
 			title = " Edit Title ",
@@ -176,7 +177,9 @@ M.edit_title = {
 						done(nil, message)
 						return
 					end
-					pr.title = title
+					if pr.title == original_title then
+						pr.title = title
+					end
 					notify(context, "success", "Title updated", 1200)
 					done({ changed_pr = true, message = "Title updated" }, nil)
 				end)

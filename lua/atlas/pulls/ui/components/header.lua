@@ -95,8 +95,8 @@ function M.render(pr, width, extra_fields)
 	local author_name = presentation.user_handle(pr.author)
 	local created_text = utils.relative_time_text(pr.created_on)
 	local repo_name = pr.repo_full_name
-	local src = pr.source.branch
-	local dst = pr.destination.branch
+	local src = tostring(pr.source.branch or "")
+	local dst = tostring(pr.destination.branch or "")
 
 	local id_text = string.format("#%s", pr.id)
 	local title_text = pr.title
@@ -131,11 +131,13 @@ function M.render(pr, width, extra_fields)
 	for _, field in ipairs(extra_fields or {}) do
 		table.insert(fields, field)
 	end
-	table.insert(fields, {
-		label = "Branch",
-		value = string.format("%s %s → %s", icons.pulls("branch"), src, dst),
-		hl = "AtlasTextMuted",
-	})
+	if src ~= "" and dst ~= "" then
+		table.insert(fields, {
+			label = "Branch",
+			value = string.format("%s %s → %s", icons.pulls("branch"), src, dst),
+			hl = "AtlasTextMuted",
+		})
+	end
 
 	local rows = {}
 	for index = 1, #fields, 2 do

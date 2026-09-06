@@ -16,18 +16,22 @@ CONTENTS                                                       *atlas-contents*
      GitHub ................................. |atlas-pulls-github|
      Bitbucket .............................. |atlas-pulls-bitbucket|
      GitLab ................................. |atlas-pulls-gitlab|
+     Gitea .................................. |atlas-pulls-gitea|
+     Forgejo ................................ |atlas-pulls-forgejo|
   6. Issues ................................. |atlas-issues|
      Jira ................................... |atlas-issues-jira|
      GitHub ................................. |atlas-issues-github|
      GitLab ................................. |atlas-issues-gitlab|
+     Gitea .................................. |atlas-issues-gitea|
+     Forgejo ................................ |atlas-issues-forgejo|
   7. Events ................................. |atlas-events|
   8. Keymaps ................................ |atlas-keymaps|
 
 ==============================================================================
 1. INTRODUCTION                              *atlas* *atlas.nvim* *atlas-introduction*
 
-Review pull requests and manage issues across GitHub, GitLab, Bitbucket and Jira
-without leaving your editor.
+Review pull requests and manage issues across GitHub, GitLab, Bitbucket, Gitea,
+Forgejo, and Jira without leaving your editor.
 
 ==============================================================================
 2. INSTALLATION                                            *atlas-installation*
@@ -64,6 +68,7 @@ REQUIREMENTS                                               *atlas-requirements*
   - For GitHub: the `gh` CLI, authenticated via `gh auth login`
   - For Bitbucket: Bitbucket Cloud API token (`api.bitbucket.org`)
   - For GitLab: REST API v4 and a Personal Access Token with the `api` scope
+  - For Gitea / Forgejo: REST API v1 and an API token
   - For Jira: Cloud REST API v3 or Server REST API v2
 
 Run `:checkhealth atlas` after configuring providers to see what's wired
@@ -101,6 +106,18 @@ up and what's missing.
         -- https://docs.gitlab.com/ee/user/profile/personal_access_tokens.html
         token = vim.env.GITLAB_TOKEN,
         cache_ttl = 300, -- Set to 0 to disable caching.
+      },
+      ---@type AtlasGiteaConfig
+      gitea = {
+        base_url = "https://gitea.example.com",
+        token = vim.env.GITEA_TOKEN,
+        cache_ttl = 300,
+      },
+      ---@type AtlasForgejoConfig
+      forgejo = {
+        base_url = "https://forgejo.example.com",
+        token = vim.env.FORGEJO_TOKEN,
+        cache_ttl = 300,
       },
       ---@type AtlasJiraConfig
       jira = {
@@ -245,11 +262,13 @@ Use `ctx.output(title)` to show output from a custom action:
 5. PULLS                                                          *atlas-pulls*
 
 Use `:Atlas pulls [provider]` to browse and manage pull requests from GitHub,
-Bitbucket, and GitLab. Shared authentication and endpoints are configured in
+Bitbucket, GitLab, Gitea, and Forgejo. Shared authentication and endpoints are
+configured in
 |atlas-configuration|.
 
 PULLS CONFIGURATION                              *atlas-pulls-configuration*
 
+>lua
   require("atlas").setup({
     pulls = {
       delete_notes = false, -- delete local notes after approval or merge
@@ -410,11 +429,71 @@ self-hosted URL.
 `extra_params` is passed through to the MR list endpoint. Use it for
 anything not covered by the explicit view fields.
 
+------------------------------------------------------------------------------
+GITEA PULLS                                              *atlas-pulls-gitea*
 
+>lua
+  pulls = {
+    ---@type AtlasGiteaPullsConfig
+    gitea = {
+      draft_prefix = "WIP:",
+      views = {
+        {
+          name = "Repository",
+          key = "1",
+          repo = "owner/repository",
+          extra_params = { sort = "recentupdate" },
+        },
+        { name = "Current", key = "2", current_repo = true },
+      },
+      bookmarks = {
+        key = "S",
+        label = "Search",
+        items = {
+          ["Authentication"] = {
+            search = "authentication",
+          },
+        },
+      },
+    },
+  }
+<
+
+------------------------------------------------------------------------------
+FORGEJO PULLS                                          *atlas-pulls-forgejo*
+
+>lua
+  pulls = {
+    ---@type AtlasForgejoPullsConfig
+    forgejo = {
+      draft_prefix = "WIP:",
+      views = {
+        {
+          name = "Repository",
+          key = "1",
+          repo = "owner/repository",
+          extra_params = { sort = "recentupdate" },
+        },
+        { name = "Current", key = "2", current_repo = true },
+      },
+      bookmarks = {
+        key = "S",
+        label = "Search",
+        items = {
+          ["Authentication"] = {
+            search = "authentication",
+          },
+        },
+      },
+    },
+  }
+<
+
+==============================================================================
 6. ISSUES                                                        *atlas-issues*
 
-Use `:Atlas issues [provider]` to browse and manage Jira, GitHub, and GitLab
-issues. Shared authentication and endpoints are configured in
+Use `:Atlas issues [provider]` to browse and manage Jira, GitHub, GitLab, Gitea,
+and Forgejo issues. Shared authentication and endpoints are configured in
 |atlas-configuration|.
 
 ISSUES CONFIGURATION                            *atlas-issues-configuration*
@@ -544,6 +623,55 @@ Uses the shared `providers.gitlab` authentication from |atlas-configuration|.
     },
   }
 <
+
+------------------------------------------------------------------------------
+GITEA ISSUES                                            *atlas-issues-gitea*
+
+>lua
+  issues = {
+    ---@type AtlasGiteaIssuesConfig
+    gitea = {
+      views = {
+        { name = "Assigned", key = "1", scope = "assigned", state = "open",
+          extra_params = { milestones = "v1" } },
+        { name = "Current", key = "2", current_repo = true, state = "open" },
+      },
+      bookmarks = {
+        key = "S",
+        label = "Search",
+        items = {
+          ["Bugs"] = { repo = "owner/repository", state = "open", labels = "bug" },
+        },
+      },
+    },
+  }
+<
+`extra_params` passes additional query parameters to Gitea's issue endpoint.
+
+------------------------------------------------------------------------------
+FORGEJO ISSUES                                        *atlas-issues-forgejo*
+
+>lua
+  issues = {
+    ---@type AtlasForgejoIssuesConfig
+    forgejo = {
+      views = {
+        { name = "Assigned", key = "1", scope = "assigned", state = "open",
+          extra_params = { milestones = "v1" } },
+        { name = "Current", key = "2", current_repo = true, state = "open" },
+      },
+      bookmarks = {
+        key = "S",
+        label = "Search",
+        items = {
+          ["Bugs"] = { repo = "owner/repository", state = "open", labels = "bug" },
+        },
+      },
+    },
+  }
+<
+`extra_params` passes additional query parameters to Forgejo's issue endpoint.
+
 ==============================================================================
 7. EVENTS                                                        *atlas-events*
 

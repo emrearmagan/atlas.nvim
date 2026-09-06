@@ -1,9 +1,10 @@
 local M = {}
 local config = require("atlas.config")
+local forge_resolve = require("atlas.providers.forge.resolve")
 local url = require("atlas.providers.url")
 
----@alias AtlasPullsProviderId "bitbucket"|"github"|"gitlab"
----@alias AtlasIssuesProviderId "jira"|"github"|"gitlab"
+---@alias AtlasPullsProviderId "bitbucket"|"github"|"gitlab"|"gitea"|"forgejo"
+---@alias AtlasIssuesProviderId "jira"|"github"|"gitlab"|"gitea"|"forgejo"
 ---@alias AtlasProviderId AtlasPullsProviderId|AtlasIssuesProviderId
 ---@alias AtlasDomain "pulls"|"issues"
 ---@alias AtlasEntity "pr"|"issue"|"repo"
@@ -173,6 +174,42 @@ add({
 		issues = {
 			module = "atlas.issues.providers.gitlab",
 			icon = { icon = "", hl_group = "AtlasGitLabTheme" },
+			bookmark_key = "S",
+		},
+	},
+})
+
+add({
+	id = "gitea",
+	name = "Gitea",
+	resolver = forge_resolve.new("gitea", "gitea.com"),
+	domains = {
+		pulls = {
+			module = "atlas.pulls.providers.forge.gitea",
+			icon = { icon = "", hl_group = "AtlasGiteaTheme" },
+			bookmark_key = "S",
+		},
+		issues = {
+			module = "atlas.issues.providers.forge.gitea",
+			icon = { icon = "", hl_group = "AtlasGiteaTheme" },
+			bookmark_key = "S",
+		},
+	},
+})
+
+add({
+	id = "forgejo",
+	name = "Forgejo",
+	resolver = forge_resolve.new("forgejo"),
+	domains = {
+		pulls = {
+			module = "atlas.pulls.providers.forge.forgejo",
+			icon = { icon = "", hl_group = "AtlasForgejoTheme" },
+			bookmark_key = "S",
+		},
+		issues = {
+			module = "atlas.issues.providers.forge.forgejo",
+			icon = { icon = "", hl_group = "AtlasForgejoTheme" },
 			bookmark_key = "S",
 		},
 	},

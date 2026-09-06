@@ -131,10 +131,52 @@ local function bitbucket_rows(pr)
 	return rows
 end
 
+local function forge_rows(pr)
+	local rows = {}
+	local mergeable = pr.mergeable
+	if mergeable ~= nil and pr.state ~= "draft" then
+		local value, hl_group
+		if mergeable then
+			value, hl_group = status_value("successful", "Mergeable")
+		else
+			local icon
+			icon, hl_group = icons.general("warning")
+			value = icon .. " Not mergeable"
+		end
+		add(rows, "Merge", value, hl_group)
+	end
+
+	local reviewers = {}
+	for _, reviewer in ipairs(pr.reviewers or {}) do
+		local name = presentation.user_handle(reviewer)
+		if name ~= "" then
+			reviewers[#reviewers + 1] = "@" .. name
+		end
+	end
+	add(rows, "Reviewers", table.concat(reviewers, ", "))
+
+	if pr.lines_added ~= nil or pr.lines_removed ~= nil then
+		add(rows, "Changes", string.format("+%d / -%d", pr.lines_added or 0, pr.lines_removed or 0))
+	end
+	return rows
+end
+
+local function gitea_rows(pr)
+	---@cast pr GiteaPullRequest
+	return forge_rows(pr)
+end
+
+local function forgejo_rows(pr)
+	---@cast pr ForgejoPullRequest
+	return forge_rows(pr)
+end
+
 local provider_rows = {
 	github = github_rows,
 	gitlab = gitlab_rows,
 	bitbucket = bitbucket_rows,
+	gitea = gitea_rows,
+	forgejo = forgejo_rows,
 }
 
 local function render(pr, rows)

@@ -154,6 +154,50 @@ local function check_gitlab()
 	check_provider_views("gitlab")
 end
 
+local function check_gitea()
+	local provider = config.provider_options("gitea")
+	if provider == nil then
+		vim.health.info("Gitea not configured")
+		return
+	end
+
+	check_credentials(provider, { "base_url", "token" }, "Gitea")
+	local pulls = config.domain_options("gitea", "pulls") or {}
+	if pulls.views and #pulls.views > 0 then
+		check_views(pulls.views, "Gitea pulls")
+	else
+		vim.health.ok("Gitea pulls: using default views")
+	end
+	local issues = config.domain_options("gitea", "issues") or {}
+	if issues.views and #issues.views > 0 then
+		check_views(issues.views, "Gitea issues")
+	else
+		vim.health.ok("Gitea issues: using default views")
+	end
+end
+
+local function check_forgejo()
+	local provider = config.provider_options("forgejo")
+	if provider == nil then
+		vim.health.info("Forgejo not configured")
+		return
+	end
+
+	check_credentials(provider, { "base_url", "token" }, "Forgejo")
+	local pulls = config.domain_options("forgejo", "pulls") or {}
+	if pulls.views and #pulls.views > 0 then
+		check_views(pulls.views, "Forgejo pulls")
+	else
+		vim.health.ok("Forgejo pulls: using default views")
+	end
+	local issues = config.domain_options("forgejo", "issues") or {}
+	if issues.views and #issues.views > 0 then
+		check_views(issues.views, "Forgejo issues")
+	else
+		vim.health.ok("Forgejo issues: using default views")
+	end
+end
+
 local function check_jira()
 	local provider = config.provider_options("jira")
 	if provider == nil then
@@ -213,6 +257,12 @@ function M.check()
 
 	vim.health.start("GitLab")
 	check_gitlab()
+
+	vim.health.start("Gitea")
+	check_gitea()
+
+	vim.health.start("Forgejo")
+	check_forgejo()
 
 	vim.health.start("Jira")
 	check_jira()

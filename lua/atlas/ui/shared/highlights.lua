@@ -35,6 +35,8 @@ local groups = {
 	AtlasGitHubTheme = { bg = "#1f2328", fg = "#f0f6fc", bold = true },
 	AtlasGitLabTheme = { fg = "#1e1e2e", bg = "#fc6d26", bold = true },
 	AtlasBitbucketTheme = { bg = "#1e3a8a", bold = true },
+	AtlasGiteaTheme = { bg = "#609926", fg = "#1e1e2e", bold = true },
+	AtlasForgejoTheme = { bg = "#fb923c", fg = "#1e1e2e", bold = true },
 	AtlasJiraTheme = { bg = "#1e3a8a", bold = true },
 
 	AtlasTabInactive = { link = "CursorLine" },

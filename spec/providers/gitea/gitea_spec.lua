@@ -1,0 +1,191 @@
+local TRANSPORT = "atlas.providers.forge.gitea.api"
+local COMMENTS = "atlas.pulls.providers.forge.gitea.api.comments"
+local PIPELINES = "atlas.pulls.providers.forge.gitea.api.pipelines"
+local PROVIDER = "atlas.pulls.providers.forge.gitea"
+local REVIEWS = "atlas.pulls.providers.forge.gitea.api.reviews"
+local PREFIX = "atlas.pulls.providers.forge.gitea"
+
+local function cleanup()
+	package.loaded[TRANSPORT] = nil
+	package.preload[TRANSPORT] = nil
+	for module in pairs(package.loaded) do
+		if module:sub(1, #PREFIX) == PREFIX then
+			package.loaded[module] = nil
+		end
+	end
+end
+
+local function load_api(module, service)
+	package.loaded[module] = nil
+	package.loaded[TRANSPORT] = nil
+	service.id = "gitea"
+	service.name = "Gitea"
+	service.fetch_all = require("atlas.providers.forge.api.pagination").new(service).fetch_all
+	service.notifications = {}
+	package.preload[TRANSPORT] = function()
+		return service
+	end
+	return require(module)
+end
+
+local function endpoints(requests)
+	local result = {}
+	for _, request in ipairs(requests) do
+		table.insert(result, request.method .. " " .. request.endpoint)
+	end
+	return result
+end
+
+describe("Gitea pulls", function()
+	before_each(cleanup)
+	after_each(cleanup)
+
+	it("wires the Gitea implementation", function()
+		local provider = require(PROVIDER)
+		local comments = require(COMMENTS)
+		local pipelines = require(PIPELINES)
+
+		assert.equal(comments.add, provider.capabilities.comments.add_comment)
+		assert.equal(comments.set_thread_resolved, provider.capabilities.comments.set_thread_resolved)
+		assert.equal(pipelines.fetch_details, provider.capabilities.pipelines.fetch_details)
+		assert.equal(
+			require("atlas.pulls.providers.forge.gitea.actions.pipelines"),
+			provider.capabilities.pipelines.actions
+		)
+	end)
+
+	it("uses the Gitea 1.27 review-thread endpoints", function()
+		local requests = {}
+		local service = {
+			url_encode = tostring,
+			request = function(method, endpoint, data, done)
+				table.insert(requests, { method = method, endpoint = endpoint, data = data })
+				done({ id = 12, body = data and data.body }, nil)
+				return { cancel = function() end }
+			end,
+		}
+		local comments = load_api(COMMENTS, service)
+		local pr = { id = 3, repo_full_name = "owner/repo" }
+		local root = { id = 9, inline = { path = "init.lua", to = 2 } }
+		local reply
+
+		comments.add(pr, "Reply", { parent = root }, function(value)
+			reply = value
+		end)
+		comments.set_thread_resolved(pr, root, true, function() end)
+		comments.set_thread_resolved(pr, root, false, function() end)
+
+		assert.equal(9, reply.parent_id)
+		assert.same({
+			"POST /repos/owner/repo/pulls/3/comments/9/replies",
+			"POST /repos/owner/repo/pulls/comments/9/resolve",
+			"POST /repos/owner/repo/pulls/comments/9/unresolve",
+		}, endpoints(requests))
+		assert.same({ body = "Reply" }, requests[1].data)
+
+		local reviews = require(REVIEWS)
+		local request_count = #requests
+		local comment, comment_err
+		pr.source = { commit_hash = "abc" }
+		reviews.add(pr, "Range", { path = "init.lua", start_to = 2, to = 4 }, nil, function(value, err)
+			comment = value
+			comment_err = err
+		end)
+		assert.is_nil(comment)
+		assert.equal("Gitea does not support multi-line review comments", comment_err)
+		assert.equal(request_count, #requests)
+	end)
+
+	it("uses the Gitea Actions rerun and log endpoints", function()
+		local requests = {}
+		local pipelines = load_api(PIPELINES, {
+			base_url = function()
+				return "https://git.example"
+			end,
+			absolute_url = function(value)
+				return value
+			end,
+			url_encode = tostring,
+			request = function(method, endpoint, _, done)
+				table.insert(requests, { method = method, endpoint = endpoint })
+				done({}, nil)
+				return { cancel = function() end }
+			end,
+			request_text = function(method, endpoint, done)
+				table.insert(requests, { method = method, endpoint = endpoint })
+				done("log", nil)
+				return { cancel = function() end }
+			end,
+		})
+		local pr = { repo_full_name = "owner/repo" }
+		local pipeline = {
+			id = "42",
+			name = "Actions run #42",
+			state = "FAILED",
+			url = "https://git.example/owner/repo/actions/runs/42",
+			stages = {},
+		}
+		local job = { id = 91 }
+
+		pipelines.rerun(pr, pipeline, false, function() end)
+		pipelines.rerun(pr, pipeline, true, function() end)
+		pipelines.rerun_job(pr, pipeline, job, function() end)
+		pipelines.fetch_job_log(pr, pipeline, job, function() end)
+
+		assert.same({
+			"POST /repos/owner/repo/actions/runs/42/rerun",
+			"POST /repos/owner/repo/actions/runs/42/rerun-failed-jobs",
+			"POST /repos/owner/repo/actions/runs/42/jobs/91/rerun",
+			"GET /repos/owner/repo/actions/jobs/91/logs",
+		}, endpoints(requests))
+	end)
+
+	it("loads the source commit before fetching pipelines when search omitted it", function()
+		local requests = {}
+		local pipelines = load_api(PIPELINES, {
+			base_url = function()
+				return "https://git.example"
+			end,
+			absolute_url = function(value)
+				return value
+			end,
+			url_encode = tostring,
+			request = function(method, endpoint, _, done)
+				table.insert(requests, { method = method, endpoint = endpoint })
+				if endpoint == "/repos/owner/repo/pulls/18" then
+					done({
+						number = 18,
+						title = "Pull",
+						state = "open",
+						user = { id = 1, login = "author" },
+						base = { ref = "main", sha = "base", repo = { full_name = "owner/repo" } },
+						head = { ref = "feature", sha = "head", repo = { full_name = "owner/repo" } },
+					}, nil)
+				else
+					done({ statuses = {} }, nil)
+				end
+				return { cancel = function() end }
+			end,
+		})
+		local result, result_err
+		pipelines.fetch(
+			{
+				id = 18,
+				repo_full_name = "owner/repo",
+				source = { commit_hash = "" },
+			},
+			nil,
+			function(value, err)
+				result = value
+				result_err = err
+			end
+		)
+
+		assert.is_nil(result_err)
+		assert.same({}, result)
+		assert.same({
+			"GET /repos/owner/repo/pulls/18",
+			"GET /repos/owner/repo/commits/head/status",
+		}, endpoints(requests))
+	end)
+end)

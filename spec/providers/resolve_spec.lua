@@ -11,16 +11,22 @@ describe("providers.resolve", function()
 				github = {},
 				gitlab = { base_url = "https://gitlab.example.com" },
 				bitbucket = {},
+				gitea = { base_url = "https://gitea.example.com" },
+				forgejo = { base_url = "https://forgejo.example.com" },
 				jira = { base_url = "https://jira.example.com" },
 			},
 			pulls = {
 				github = {},
 				gitlab = {},
 				bitbucket = {},
+				gitea = {},
+				forgejo = {},
 			},
 			issues = {
 				github = {},
 				gitlab = {},
+				gitea = {},
+				forgejo = {},
 				jira = {},
 			},
 		}
@@ -35,6 +41,8 @@ describe("providers.resolve", function()
 		local jira = assert(providers.resolve("https://jira.example.com/browse/ATLAS-123"))
 		local gitlab = assert(providers.resolve("https://gitlab.example.com/emrearmagan/atlas.nvim/-/issues/8"))
 		local bitbucket = assert(providers.resolve("https://bitbucket.org/emrearmagan/atlas.nvim/pull-requests/7"))
+		local gitea = assert(providers.resolve("https://gitea.example.com/emrearmagan/atlas.nvim/pulls/9"))
+		local forgejo = assert(providers.resolve("https://forgejo.example.com/emrearmagan/atlas.nvim/issues/10"))
 
 		assert.are.equal("pr", github.entity)
 		assert.are.equal(42, github.number)
@@ -46,6 +54,15 @@ describe("providers.resolve", function()
 		assert.are.equal("https://gitlab.example.com/emrearmagan/atlas.nvim.git", gitlab.repository_url)
 		assert.are.equal("emrearmagan", bitbucket.workspace)
 		assert.are.equal(7, bitbucket.id)
+		assert.are.equal("gitea", gitea.provider)
+		assert.are.equal("pulls", gitea.domain)
+		assert.are.equal(9, gitea.id)
+		assert.are.equal("emrearmagan/atlas.nvim", gitea.repo_full_name)
+		assert.are.equal("https://gitea.example.com/emrearmagan/atlas.nvim.git", gitea.repository_url)
+		assert.are.equal("forgejo", forgejo.provider)
+		assert.are.equal("issues", forgejo.domain)
+		assert.are.equal(10, forgejo.number)
+		assert.are.equal("emrearmagan/atlas.nvim#10", forgejo.issue_key)
 	end)
 
 	it("resolves Jira keys", function()
@@ -86,6 +103,20 @@ describe("providers.resolve", function()
 				"https://github.com/owner/repo",
 				"https://github.com/owner/repo.git",
 			},
+			{
+				"https://gitea.example.com/owner/repo.git",
+				"gitea",
+				"owner/repo",
+				"https://gitea.example.com/owner/repo",
+				"https://gitea.example.com/owner/repo.git",
+			},
+			{
+				"git@forgejo.example.com:owner/repo.git",
+				"forgejo",
+				"owner/repo",
+				"https://forgejo.example.com/owner/repo",
+				"https://forgejo.example.com/owner/repo.git",
+			},
 		}
 
 		for _, case in ipairs(cases) do
@@ -97,6 +128,18 @@ describe("providers.resolve", function()
 			assert.are.equal(case[4], target.url)
 			assert.are.equal(case[5], target.repository_url)
 		end
+	end)
+
+	it("ignores SSH transport ports for Forge remotes", function()
+		config.options.providers.forgejo.base_url = "https://forgejo.example.com:3000"
+
+		local gitea = assert(providers.resolve("ssh://git@gitea.example.com:2222/owner/repo.git"))
+		local forgejo = assert(providers.resolve("git@forgejo.example.com:owner/repo.git"))
+
+		assert.are.equal("gitea.example.com", gitea.host)
+		assert.are.equal("https://gitea.example.com/owner/repo", gitea.url)
+		assert.are.equal("forgejo.example.com:3000", forgejo.host)
+		assert.are.equal("https://forgejo.example.com:3000/owner/repo", forgejo.url)
 	end)
 
 	it("preserves configured base paths", function()
