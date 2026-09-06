@@ -84,7 +84,7 @@ function M.list_issues(view, opts, on_done)
 	local scoped_project = view.project ~= nil and tostring(view.project) ~= ""
 	local page = tonumber(opts.cursor) or 1
 	local params = {
-		scope = view.scope or "assigned_to_me",
+		scope = view.scope or "all",
 		state = view.state or "opened",
 		per_page = tostring(opts.pagelen),
 		page = tostring(page),
