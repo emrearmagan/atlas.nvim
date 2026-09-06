@@ -37,10 +37,12 @@ local ICONS = {
 		activity_more = { icon = "󰉺", hl_group = "AtlasTextMuted" },
 		star = { icon = "󰓎", hl_group = "AtlasTextWarning" },
 		watching = { icon = "", hl_group = "AtlasTextPositive" },
+		tasks = { icon = "󰘽", hl_group = "AtlasTextWarning" },
 		arrow_up = { icon = "", hl_group = "AtlasTextMuted" },
 		arrow_right = { icon = "", hl_group = "AtlasTextMuted" },
 		fold_open = { icon = "", hl_group = "AtlasTextMuted" },
 		fold_closed = { icon = "", hl_group = "AtlasTextMuted" },
+		tag = { icon = "", hl_group = "AtlasTextWarning" },
 	},
 
 	pulls = {
@@ -49,13 +51,11 @@ local ICONS = {
 		pr = { icon = "", hl_group = "AtlasTextPositive" },
 		merged_pr = { icon = "", hl_group = "AtlasPRMerged" },
 		declined_pr = { icon = "", hl_group = "AtlasPRDeclined" },
-		tasks = { icon = "󰘽", hl_group = "AtlasTextWarning" },
 		pipeline = { icon = "󰜎", hl_group = "AtlasTextWarning" },
 		commit = { icon = "", hl_group = "AtlasTextMuted" },
 		changes = { icon = "󱓉", hl_group = "AtlasTextMuted" },
 		file = { icon = "", hl_group = "AtlasTextMuted" },
 		activity = { icon = "󱐋", hl_group = "AtlasTextMuted" },
-		tag = { icon = "", hl_group = "AtlasTextWarning" },
 		branch = { icon = "", hl_group = "AtlasLogInfo" },
 		review = { icon = "", hl_group = "AtlasTextMuted" },
 
@@ -183,9 +183,19 @@ function M.issues(name)
 end
 
 ---@param name string|nil
+---@param provider_id AtlasIssuesProviderId|nil
 ---@return string, string
-function M.issues_type(name)
+function M.issues_type(name, provider_id)
 	local key = tostring(name or "")
+	if provider_id == "shortcut" then
+		key = key == "feature" and "story" or key == "chore" and "task" or key
+		local style = ICONS.issues.type[key]
+		if style then
+			return get(style)
+		end
+		return "", "AtlasTextMuted"
+	end
+
 	local default = ICONS.issues.type[key:lower()]
 	local jira = config.domain_options("jira", "issues") or {}
 	local configured = ((jira.project_config or {}).issue_types or {})[key]

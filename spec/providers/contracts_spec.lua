@@ -48,7 +48,7 @@ describe("providers contracts", function()
 	it("loads issue providers", function()
 		assert_contract(
 			"issues",
-			{ "github", "gitlab", "jira" },
+			{ "github", "gitlab", "jira", "shortcut" },
 			{ "resolve_search", "view_for_target", "issue_ref", "views" },
 			{ "fetch_user", "fetch_issues", "fetch_by_refs", "fetch_issue" }
 		)
@@ -72,5 +72,20 @@ describe("providers contracts", function()
 				)
 			end
 		end
+	end)
+
+	it("exposes Shortcut comments", function()
+		local provider = assert(providers.load("shortcut", "issues"))
+		assert_functions(provider.capabilities.comments, {
+			"comment_completion",
+			"fetch_activity",
+			"fetch_conversation",
+			"add_comment",
+			"reply_comment",
+			"edit_comment",
+			"delete_comment",
+			"add_reaction",
+		}, "shortcut.issues.comments")
+		assert.is_true(#provider.capabilities.comments.reaction_options > 0)
 	end)
 end)

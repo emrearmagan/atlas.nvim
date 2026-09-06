@@ -20,14 +20,15 @@ CONTENTS                                                       *atlas-contents*
      Jira ................................... |atlas-issues-jira|
      GitHub ................................. |atlas-issues-github|
      GitLab ................................. |atlas-issues-gitlab|
+     Shortcut ............................... |atlas-issues-shortcut|
   7. Events ................................. |atlas-events|
   8. Keymaps ................................ |atlas-keymaps|
 
 ==============================================================================
 1. INTRODUCTION                              *atlas* *atlas.nvim* *atlas-introduction*
 
-Review pull requests and manage issues across GitHub, GitLab, Bitbucket and Jira
-without leaving your editor.
+Review pull requests and manage issues across GitHub, GitLab, Bitbucket, Jira and
+Shortcut without leaving your editor.
 
 ==============================================================================
 2. INSTALLATION                                            *atlas-installation*
@@ -65,6 +66,7 @@ REQUIREMENTS                                               *atlas-requirements*
   - For Bitbucket: Bitbucket Cloud API token (`api.bitbucket.org`)
   - For GitLab: REST API v4 and a Personal Access Token with the `api` scope
   - For Jira: Cloud REST API v3 or Server REST API v2
+  - For Shortcut: REST API v3 and a personal API token
 
 Run `:checkhealth atlas` after configuring providers to see what's wired
 up and what's missing.
@@ -110,6 +112,12 @@ up and what's missing.
         token = "your_jira_api_token",
         auth_method = "basic", -- "basic" or "bearer"
         api_type = "cloud", -- "cloud" (v3) or "server" (v2)
+        cache_ttl = 300, -- Set to 0 to disable caching.
+      },
+      ---@type AtlasShortcutConfig
+      shortcut = {
+        -- https://app.shortcut.com/settings/account/api-tokens
+        token = vim.env.SHORTCUT_TOKEN,
         cache_ttl = 300, -- Set to 0 to disable caching.
       },
     },
@@ -414,8 +422,8 @@ anything not covered by the explicit view fields.
 6. ISSUES                                                        *atlas-issues*
 
 Use `:Atlas issues [provider]` to browse and manage Jira, GitHub, and GitLab
-issues. Shared authentication and endpoints are configured in
-|atlas-configuration|.
+issues and Shortcut Stories. Shared authentication and endpoints are
+configured in |atlas-configuration|.
 
 ISSUES CONFIGURATION                            *atlas-issues-configuration*
 
@@ -544,6 +552,43 @@ Uses the shared `providers.gitlab` authentication from |atlas-configuration|.
     },
   }
 <
+------------------------------------------------------------------------------
+SHORTCUT STORIES                                        *atlas-issues-shortcut*
+
+Create a personal token at
+https://app.shortcut.com/settings/account/api-tokens and configure Story views:
+
+>lua
+  providers = {
+    ---@type AtlasShortcutConfig
+    shortcut = {
+      token = vim.env.SHORTCUT_TOKEN,
+      cache_ttl = 300, -- Set to 0 to disable caching.
+    },
+  },
+
+  issues = {
+    ---@type AtlasShortcutIssuesConfig
+    shortcut = {
+      ---@type AtlasShortcutIssuesViewConfig[]
+      views = {
+        { name = "Mine", key = "1", layout = "plain",
+          -- https://www.shortcut.com/help/fields-and-features/search-operators/
+          search = "owner:johnsmith !is:done !is:archived" },
+        { name = "Bugs", key = "2", layout = "compact",
+          search = "type:bug !is:done !is:archived" },
+      },
+      bookmarks = {
+        -- key   = "S",      -- default
+        -- label = "Search", -- default
+        items = {
+          ["Open bugs"] = "type:bug !is:done !is:archived",
+          ["Needs review"] = 'label:"needs-review" !is:done',
+        },
+      },
+    },
+  }
+<
 ==============================================================================
 7. EVENTS                                                        *atlas-events*
 
@@ -617,6 +662,7 @@ Atlas emits these `User` events after setup or cleanup completes:
         change_reporter  = "gr",
         edit_issue       = "ge",
         create_issue     = "c",
+        toggle_task      = "x",
         toggle_description_mode = "m",
       },
       pulls = {

@@ -5,13 +5,14 @@
 
 # Atlas.nvim
 
-Review pull requests and manage issues across GitHub, GitLab, Bitbucket and Jira without leaving your editor.
+Review pull requests and manage issues across GitHub, GitLab, Bitbucket, Jira and Shortcut without leaving your editor.
 
 <p>
   <img alt="GitHub" src="https://img.shields.io/badge/GitHub-181717?style=flat-square&logo=github&logoColor=white">
   <img alt="Bitbucket" src="https://img.shields.io/badge/Bitbucket-0052CC?style=flat-square&logo=bitbucket&logoColor=white">
   <img alt="GitLab" src="https://img.shields.io/badge/GitLab-FC6D26?style=flat-square&logo=gitlab&logoColor=white">
   <img alt="Jira" src="https://img.shields.io/badge/Jira-0052CC?style=flat-square&logo=jira&logoColor=white">
+  <img alt="Shortcut" src="https://img.shields.io/badge/Shortcut-494BCB?style=flat-square&logo=shortcut&logoColor=white">
 </p>
 
 <img alt="Atlas UI" src="https://github.com/user-attachments/assets/de6459f9-f123-40a6-acbd-097a17e7ae86" />
@@ -65,6 +66,7 @@ require("atlas").setup({})
 - Bitbucket: Bitbucket Cloud REST API 2.0 (`api.bitbucket.org`)
 - GitHub: GitHub CLI (`gh`) authenticated with `gh auth login`
 - GitLab: GitLab REST API v4 (`gitlab.com` or self-hosted), Personal Access Token with `api` scope
+- Shortcut: Shortcut REST API v3 and a [personal API token](https://app.shortcut.com/settings/account/api-tokens)
 
 > [!tip]
 > It's a good idea to run `:checkhealth atlas` to see if everything is set up correctly.
@@ -270,6 +272,13 @@ Save searches as bookmarks, or press `*` to star a pull request or issue. Both a
       token = "your_jira_api_token",
       auth_method = "basic", -- "basic" or "bearer", defaults to "basic". If using bearer, set `token` to your API token.
       api_type = "cloud", -- either "cloud" or "server", defaults to "cloud". Cloud API is v3, server API is v2
+      cache_ttl = 300, -- Set to 0 to disable caching.
+    },
+
+    ---@type AtlasShortcutConfig
+    shortcut = {
+      -- Create a token at https://app.shortcut.com/settings/account/api-tokens
+      token = vim.env.SHORTCUT_TOKEN,
       cache_ttl = 300, -- Set to 0 to disable caching.
     },
   },
@@ -528,7 +537,7 @@ pulls = {
 
 ## Issues
 
-Use `:Atlas issues [provider]` to browse and manage Jira, GitHub, and GitLab issues.
+Use `:Atlas issues [provider]` to browse and manage Jira, GitHub, and GitLab issues and Shortcut Stories.
 Shared authentication and endpoints are configured in the top-level `providers` table.
 
 ### Issue Configuration
@@ -701,6 +710,56 @@ issues = {
 
 </details>
 
+<a id="shortcut-issues"></a>
+
+<details>
+<summary><strong>Shortcut Stories</strong></summary>
+
+Shortcut uses its fixed REST API v3 endpoint. Create a token in [Shortcut API token settings](https://app.shortcut.com/settings/account/api-tokens), store it in an environment variable, and configure the provider separately from its issue views:
+
+```lua
+providers = {
+  ---@type AtlasShortcutConfig
+  shortcut = {
+    token = vim.env.SHORTCUT_TOKEN,
+    cache_ttl = 300, -- Set to 0 to disable caching.
+  },
+},
+
+issues = {
+  ---@type AtlasShortcutIssuesConfig
+  shortcut = {
+    ---@type AtlasShortcutIssuesViewConfig[]
+    views = {
+      {
+        name = "Mine",
+        key = "1",
+        layout = "plain",
+        -- https://www.shortcut.com/help/fields-and-features/search-operators/
+        search = "owner:johnsmith !is:done !is:archived",
+      },
+      {
+        name = "Bugs",
+        key = "2",
+        layout = "compact",
+        search = "type:bug !is:done !is:archived",
+      },
+    },
+
+    bookmarks = {
+      key   = "S",      -- default
+      label = "Search", -- default
+      items = {
+        ["Open bugs"]    = "type:bug !is:done !is:archived",
+        ["Needs review"] = 'label:"needs-review" !is:done',
+      },
+    },
+  },
+},
+```
+
+</details>
+
 ## Events
 
 Atlas emits these `User` events after the corresponding cleanup or setup has completed:
@@ -767,6 +826,7 @@ keymaps = {
     change_reporter = "gr",
     edit_issue = "ge",
     create_issue = "c",
+    toggle_task = "x",
     toggle_description_mode = "m",
   },
   pulls = {
