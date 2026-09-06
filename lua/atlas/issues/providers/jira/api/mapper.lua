@@ -194,6 +194,8 @@ end
 ---@return JiraIssueDetails
 function M.to_issue_details(raw, project_config)
 	local fields = json.safe_table(raw.fields)
+	local status = extract_status(safe_get(fields, "status"))
+	local assignee = normalize_issue_user(safe_get(fields, "assignee"))
 	local labels = {}
 	for _, name in ipairs(json.safe_table(fields.labels)) do
 		if type(name) == "string" and name ~= "" then
@@ -203,7 +205,10 @@ function M.to_issue_details(raw, project_config)
 	---@type JiraIssueDetails
 	local details = {
 		description = extract_description(fields.description),
-		assignees = {},
+		status = status,
+		priority = safe_get(fields, "priority", "name"),
+		reporter = normalize_issue_user(safe_get(fields, "reporter")),
+		assignees = assignee and { assignee } or {},
 		labels = labels,
 		milestone = nil,
 		raw_description = json.nilify(fields.description),

@@ -8,6 +8,7 @@ local notify = require("atlas.core.notify")
 ---| "close"
 ---| "reopen"
 ---| "labels"
+---| "open_project"
 
 M.items = registry.items
 

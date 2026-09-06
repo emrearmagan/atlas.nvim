@@ -240,7 +240,7 @@ function M.register(buf, views)
 		utils.insert_if(
 			items,
 			item("ui.search", {
-				desc = "Search repositories",
+				desc = "Search",
 				callback = function()
 					run_action("search", false)
 				end,

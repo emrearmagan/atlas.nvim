@@ -427,11 +427,17 @@ local function create_issue(ctx, done)
 	done({ changed_pr = false, message = "Opened issue editor" }, nil)
 end
 
----@param ctx AtlasPullActionContext
----@param done fun(result: PullsActionResult|nil, err: string|nil)
-local function search(ctx, done)
+---@param opts {
+--- title: string,
+--- include_all: boolean,
+--- on_select: fun(repo: string),
+--- on_cancel: fun(),
+---}
+local function select_repository(opts)
+	local initial_items = opts.include_all and { { id = "all", label = "All repositories", repo = "" } } or {}
 	picker.search({
-		title = "Search repositories",
+		title = opts.title,
+		initial_items = initial_items,
 		fetch_on_open = false,
 		format_item = function(item)
 			return item.label
@@ -439,7 +445,7 @@ local function search(ctx, done)
 		fetch = function(query, fetch_done)
 			query = vim.trim(query)
 			if query == "" then
-				fetch_done({}, nil)
+				fetch_done(initial_items, nil)
 				return
 			end
 
@@ -449,34 +455,134 @@ local function search(ctx, done)
 					return
 				end
 
-				local list = {}
-				for _, item in ipairs(type(result) == "table" and result or {}) do
-					local full_name = tostring(item.fullName or "")
-					if full_name ~= "" then
-						table.insert(list, { id = full_name, label = full_name })
-					end
+				local items = {}
+				for _, repo in ipairs(result) do
+					table.insert(items, { id = repo.fullName, label = repo.fullName, repo = repo.fullName })
 				end
-				fetch_done(list, nil)
+				fetch_done(items, nil)
 			end, {
 				action = "Search repositories",
 				query = query,
 			})
 		end,
 		on_select = function(item)
-			local repo = item.id
-			---@type AtlasGitHubViewConfig
-			local search_view = {
-				name = "Search",
-				key = nil,
-				search = string.format("repo:%s is:pr", repo),
-			}
+			opts.on_select(item.repo)
+		end,
+		on_cancel = opts.on_cancel,
+	})
+end
 
-			notify(ctx, "success", string.format("Search view -> %s", repo))
-			require("atlas").open("pulls", "github", { initial_view = search_view })
-			done({ changed_pr = false, message = "Search view switched" }, nil)
+---@param repo string
+---@param ctx AtlasPullActionContext
+---@param done fun(result: PullsActionResult|nil, err: string|nil)
+local function search_results(repo, ctx, done)
+	picker.search({
+		title = repo ~= "" and "Search " .. repo .. " Pull Requests" or "Search GitHub Pull Requests",
+		fetch_on_open = false,
+		format_item = function(item)
+			return item.label
+		end,
+		preview_item = function(item, preview_done)
+			local pr = item.value
+			return pullrequests.get_pr(pr.workspace, pr.repo, pr.id, function(details, err)
+				if err or details == nil then
+					preview_done({ title = item.label, lines = { err or "Failed to load pull request" } })
+					return
+				end
+				---@cast details GitHubPullRequestDetails
+
+				local assignees = vim.tbl_map(function(user)
+					return "@" .. user.username
+				end, details.assignees)
+				local labels = vim.tbl_map(function(label)
+					return label.name
+				end, details.labels)
+				local lines = {
+					"**Status:** " .. pr.state,
+					"**Author:** @" .. pr.author.username,
+					string.format("**Branches:** %s -> %s", pr.source.branch, pr.destination.branch),
+				}
+				if #assignees > 0 then
+					table.insert(lines, "**Assignees:** " .. table.concat(assignees, ", "))
+				end
+				if #labels > 0 then
+					table.insert(lines, "**Labels:** " .. table.concat(labels, ", "))
+				end
+				vim.list_extend(lines, { "", "## Description", "" })
+				local description = vim.trim(details.description)
+				vim.list_extend(
+					lines,
+					vim.split(description ~= "" and description or "No description", "\n", { plain = true })
+				)
+				preview_done({ title = item.label, lines = lines })
+			end)
+		end,
+		fetch = function(query, fetch_done)
+			query = vim.trim(query)
+			if query == "" then
+				fetch_done({}, nil)
+				return
+			end
+			local search = query .. " is:pr"
+			if repo ~= "" then
+				search = "repo:" .. repo .. " " .. search
+			end
+			return pullrequests.fetch_search({ search }, { force_refresh = false, pagelen = 30 }, function(page, errors)
+				if errors then
+					fetch_done(nil, table.concat(errors, "\n"))
+					return
+				end
+				local items = {}
+				for _, pr in ipairs(page.items) do
+					local id = string.format("%s#%s", pr.repo_full_name, tostring(pr.id))
+					table.insert(items, { id = id, label = id .. " - " .. pr.title, value = pr })
+				end
+				fetch_done(items, nil)
+			end)
+		end,
+		on_select = function(item)
+			require("atlas.pulls.ui.detail").open(item.value, { provider = ctx.provider })
+			done(nil, nil)
 		end,
 		on_cancel = function()
-			done({ changed_pr = false, message = "Search cancelled" }, nil)
+			done(nil, nil)
+		end,
+	})
+end
+
+---@param ctx AtlasPullActionContext
+---@param done fun(result: PullsActionResult|nil, err: string|nil)
+local function search(ctx, done)
+	select_repository({
+		title = "Search Pull Requests - Repository",
+		include_all = true,
+		on_select = function(repo)
+			search_results(repo, ctx, done)
+		end,
+		on_cancel = function()
+			done(nil, nil)
+		end,
+	})
+end
+
+---@param _ AtlasPullActionContext
+---@param done fun(result: PullsActionResult|nil, err: string|nil)
+local function open_repo(_, done)
+	select_repository({
+		title = "Open Repo",
+		include_all = false,
+		on_select = function(repo)
+			require("atlas").open("pulls", "github", {
+				initial_view = {
+					name = "Search",
+					layout = "compact",
+					search = "repo:" .. repo .. " is:pr",
+				},
+			})
+			done(nil, nil)
+		end,
+		on_cancel = function()
+			done(nil, nil)
 		end,
 	})
 end
@@ -617,13 +723,19 @@ register({
 
 register({
 	id = "search",
-	label = "Search repositories",
+	label = "Search Pull Requests",
 	run = search,
 })
 
 register({
+	id = "open_repo",
+	label = "Open Repo",
+	run = open_repo,
+})
+
+register({
 	id = "search_pull_requests",
-	label = "Search pull requests",
+	label = "Open Search View",
 	run = search_pull_requests,
 })
 

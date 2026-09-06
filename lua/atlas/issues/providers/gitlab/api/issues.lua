@@ -505,45 +505,4 @@ function M.create_issue(opts, on_done)
 	})
 end
 
----@param query string
----@param opts { max_results?: number }|nil
----@param on_done fun(items: { id: any, key: string, title: string, url: string|nil, description: string }[]|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.search_issues_picker(query, opts, on_done)
-	opts = opts or {}
-	local params = {
-		scope = "all",
-		state = "all",
-		search = query,
-		per_page = tostring(opts.max_results or 30),
-		order_by = "updated_at",
-		sort = "desc",
-	}
-	local endpoint = "/issues" .. build_query(params)
-
-	return service.request("GET", endpoint, nil, function(result, err)
-		if err then
-			on_done(nil, err)
-			return
-		end
-		local items = {}
-		for _, raw in ipairs(json.safe_table(result)) do
-			local issue = normalizer.to_issue(raw)
-			if issue then
-				table.insert(items, {
-					id = issue.key,
-					key = issue.key,
-					title = issue.title,
-					url = issue.url,
-					description = json.safe_str(raw.description) or "",
-				})
-			end
-		end
-		on_done(items, nil)
-	end, {
-		action = "Issue search picker",
-		query = query,
-	})
-end
-
 return M

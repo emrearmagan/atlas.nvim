@@ -375,19 +375,17 @@ local function create_issue(ctx, done)
 	})
 end
 
----@param _ AtlasIssueActionContext
----@param done fun(result: IssuesActionResult|nil, err: string|nil)
-local function search_issues(_, done)
-	local state = require("atlas.issues.state")
-	require("atlas.providers.github.completion.search").open(state.query .. " ")
-	done(nil, nil)
-end
-
----@param _ AtlasIssueActionContext
----@param done fun(result: IssuesActionResult|nil, err: string|nil)
-local function search(_, done)
+---@param opts {
+--- title: string,
+--- include_all: boolean,
+--- on_select: fun(repo: string),
+--- on_cancel: fun(),
+---}
+local function select_repository(opts)
+	local initial_items = opts.include_all and { { id = "all", label = "All repositories", repo = "" } } or {}
 	picker.search({
-		title = "Search repositories",
+		title = opts.title,
+		initial_items = initial_items,
 		fetch_on_open = false,
 		format_item = function(item)
 			return item.label
@@ -395,7 +393,7 @@ local function search(_, done)
 		fetch = function(query, fetch_done)
 			query = vim.trim(query)
 			if query == "" then
-				fetch_done({}, nil)
+				fetch_done(initial_items, nil)
 				return
 			end
 
@@ -406,11 +404,8 @@ local function search(_, done)
 				end
 
 				local items = {}
-				for _, repo in ipairs(type(result) == "table" and result or {}) do
-					local full_name = tostring(repo.fullName or "")
-					if full_name ~= "" then
-						table.insert(items, { id = full_name, label = full_name })
-					end
+				for _, repo in ipairs(result) do
+					table.insert(items, { id = repo.fullName, label = repo.fullName, repo = repo.fullName })
 				end
 				fetch_done(items, nil)
 			end, {
@@ -419,12 +414,127 @@ local function search(_, done)
 			})
 		end,
 		on_select = function(item)
-			---@type AtlasGitHubIssuesViewConfig
-			local view = {
-				name = "Search",
-				search = string.format("repo:%s is:issue", item.id),
-			}
-			require("atlas").open("issues", "github", { initial_view = view })
+			opts.on_select(item.repo)
+		end,
+		on_cancel = opts.on_cancel,
+	})
+end
+
+---@param repo string
+---@param ctx AtlasIssueActionContext
+---@param done fun(result: IssuesActionResult|nil, err: string|nil)
+local function search_issues(repo, ctx, done)
+	picker.search({
+		title = repo ~= "" and "Search " .. repo .. " Issues" or "Search GitHub Issues",
+		fetch_on_open = false,
+		format_item = function(item)
+			return item.label
+		end,
+		preview_item = function(item, preview_done)
+			local issue = item.value
+			return issues_api.get_issue(issue.key, function(details, err)
+				if err or details == nil then
+					preview_done({ title = issue.key, lines = { err or "Failed to load issue" } })
+					return
+				end
+				local assignees = vim.tbl_map(function(user)
+					return "@" .. tostring(user.account_id or user.display_name)
+				end, details.assignees)
+				local label_names = vim.tbl_map(function(label)
+					return label.name
+				end, details.labels)
+				local author = issue.reporter and issue.reporter.display_name or "Unknown"
+				local lines = {
+					"**Status:** " .. tostring(issue.status or "Open"),
+					"**Author:** " .. author,
+					"**Assignees:** " .. (#assignees > 0 and table.concat(assignees, ", ") or "Unassigned"),
+				}
+				if #label_names > 0 then
+					table.insert(lines, "**Labels:** " .. table.concat(label_names, ", "))
+				end
+				if details.milestone then
+					table.insert(lines, "**Milestone:** " .. details.milestone.title)
+				end
+				vim.list_extend(lines, { "", "## Description", "" })
+				local description = vim.trim(details.description)
+				vim.list_extend(
+					lines,
+					vim.split(description ~= "" and description or "No description", "\n", { plain = true })
+				)
+				preview_done({
+					title = string.format("%s - %s", issue.key, issue.title),
+					lines = lines,
+				})
+			end)
+		end,
+		fetch = function(query, fetch_done)
+			query = vim.trim(query)
+			if query == "" then
+				fetch_done({}, nil)
+				return
+			end
+			local search = query .. " is:issue"
+			if repo ~= "" then
+				search = "repo:" .. repo .. " " .. search
+			end
+			return issues_api.search_issues(search, function(page, err)
+				if err ~= nil then
+					fetch_done(nil, err)
+					return
+				end
+				local items = {}
+				for _, issue in ipairs(page.items) do
+					table.insert(items, {
+						id = issue.key,
+						label = string.format("%s - %s", issue.key, issue.title),
+						value = issue,
+					})
+				end
+				fetch_done(items, nil)
+			end, {
+				force_refresh = false,
+				pagelen = 30,
+			})
+		end,
+		on_select = function(item)
+			require("atlas.issues.ui.detail").open(item.value, { provider = ctx.provider })
+			done(nil, nil)
+		end,
+		on_cancel = function()
+			done(nil, nil)
+		end,
+	})
+end
+
+---@param ctx AtlasIssueActionContext
+---@param done fun(result: IssuesActionResult|nil, err: string|nil)
+local function search(ctx, done)
+	select_repository({
+		title = "Search Issues - Repository",
+		include_all = true,
+		on_select = function(repo)
+			search_issues(repo, ctx, done)
+		end,
+		on_cancel = function()
+			done(nil, nil)
+		end,
+	})
+end
+
+---@param _ AtlasIssueActionContext
+---@param done fun(result: IssuesActionResult|nil, err: string|nil)
+local function open_repo(_, done)
+	select_repository({
+		title = "Open Repo",
+		include_all = false,
+		on_select = function(repo)
+			require("atlas").open("issues", "github", {
+				initial_view = {
+					name = "Search",
+					layout = "compact",
+					search = "repo:" .. repo .. " is:issue",
+				},
+			})
 			done(nil, nil)
 		end,
 		on_cancel = function()
@@ -489,8 +599,8 @@ register({
 register({ id = "assign", label = "Edit Assignees", is_available = assign_available, run = assign })
 register({ id = "labels", label = "Edit Labels", is_available = labels_available, run = labels })
 register({ id = "create_issue", label = "Create Issue", run = create_issue })
-register({ id = "search", label = "Search repositories", run = search })
-register({ id = "search_issues", label = "Search issues", run = search_issues })
+register({ id = "search", label = "Search Issues", run = search })
+register({ id = "open_repo", label = "Open Repo", run = open_repo })
 register(actions.manage_templates)
 register(actions.browse_issue)
 register(actions.copy_issue_key)

@@ -315,56 +315,172 @@ local function labels(ctx, done)
 	end)
 end
 
----@param _ AtlasIssueActionContext
----@param done fun(result: IssuesActionResult|nil, err: string|nil)
-local function search(_, done)
-	local prev_items = nil
+---@param opts {
+--- title: string,
+--- include_all: boolean,
+--- on_select: fun(project: string),
+--- on_cancel: fun(),
+---}
+local function select_project(opts)
+	local initial_items = opts.include_all and { { id = "all", label = "All projects", project = "" } } or {}
 	picker.search({
-		title = "Search GitLab Issues",
+		title = opts.title,
+		initial_items = initial_items,
 		fetch_on_open = false,
 		format_item = function(item)
-			return string.format("%s %s", icons.fallback(), tostring(item.label or ""))
+			return item.label
+		end,
+		fetch = function(query, fetch_done)
+			query = vim.trim(query)
+			if query == "" then
+				fetch_done(initial_items, nil)
+				return
+			end
+
+			local endpoint = string.format(
+				"/projects?search=%s&per_page=20&order_by=last_activity_at&with_issues_enabled=true",
+				service.url_encode(query)
+			)
+			return service.request("GET", endpoint, nil, function(result, err)
+				if err then
+					fetch_done(nil, tostring(err))
+					return
+				end
+
+				local items = {}
+				for _, project in ipairs(result) do
+					local path = project.path_with_namespace
+					table.insert(items, { id = path, label = path, project = path })
+				end
+				fetch_done(items, nil)
+			end, {
+				action = "Search projects",
+				query = query,
+			})
+		end,
+		on_select = function(item)
+			opts.on_select(item.project)
+		end,
+		on_cancel = opts.on_cancel,
+	})
+end
+
+---@param project string
+---@param ctx AtlasIssueActionContext
+---@param done fun(result: IssuesActionResult|nil, err: string|nil)
+local function search_issues(project, ctx, done)
+	picker.search({
+		title = project ~= "" and "Search " .. project .. " Issues" or "Search GitLab Issues",
+		fetch_on_open = false,
+		format_item = function(item)
+			return item.label
 		end,
 		preview_item = function(item, preview_done)
 			local issue = item.value
-			local description = vim.trim(tostring(issue.description or ""))
-			preview_done({
-				title = issue.key,
-				lines = vim.split(description ~= "" and description or "No description", "\n", { plain = true }),
-			})
+			return issues_api.fetch_issue(issue, nil, function(details, err)
+				if err or details == nil then
+					preview_done({ title = issue.key, lines = { err or "Failed to load issue" } })
+					return
+				end
+				local assignees = vim.tbl_map(function(user)
+					return "@" .. user.account_id
+				end, details.assignees)
+				local label_names = vim.tbl_map(function(label)
+					return label.name
+				end, details.labels)
+				local author = issue.reporter and issue.reporter.display_name or "Unknown"
+				local lines = {
+					"**Status:** " .. (issue.status or "Open"),
+					"**Author:** " .. author,
+					"**Assignees:** " .. (#assignees > 0 and table.concat(assignees, ", ") or "Unassigned"),
+				}
+				if #label_names > 0 then
+					table.insert(lines, "**Labels:** " .. table.concat(label_names, ", "))
+				end
+				if details.milestone then
+					table.insert(lines, "**Milestone:** " .. details.milestone.title)
+				end
+				vim.list_extend(lines, { "", "## Description", "" })
+				local description = vim.trim(details.description)
+				vim.list_extend(
+					lines,
+					vim.split(description ~= "" and description or "No description", "\n", { plain = true })
+				)
+				preview_done({
+					title = string.format("%s - %s", issue.key, issue.title),
+					lines = lines,
+				})
+			end)
 		end,
 		fetch = function(query, fetch_done)
-			local q = vim.trim(query)
-			if q == "" then
-				fetch_done(prev_items or {}, nil)
+			query = vim.trim(query)
+			if query == "" then
+				fetch_done({}, nil)
 				return
 			end
-			return issues_api.search_issues_picker(q, {}, function(items, err)
-				if err or items == nil then
+
+			---@type AtlasGitLabIssuesViewConfig
+			local view = { name = "Search", scope = "all", state = "all", search = query }
+			if project ~= "" then
+				view.project = project
+			end
+			return issues_api.list_issues(view, { force_refresh = false, pagelen = 30 }, function(page, err)
+				if err then
 					fetch_done(nil, err or "Search failed")
 					return
 				end
-				local picker_items = {}
-				for _, it in ipairs(items) do
-					table.insert(picker_items, {
-						id = it.key,
-						label = string.format("%s - %s", it.key, it.title),
-						value = it,
+				local items = {}
+				for _, issue in ipairs(page.items) do
+					table.insert(items, {
+						id = issue.key,
+						label = string.format("%s - %s", issue.key, issue.title),
+						value = issue,
 					})
 				end
-				prev_items = picker_items
-				fetch_done(picker_items, nil)
+				fetch_done(items, nil)
 			end)
 		end,
 		on_select = function(item)
-			local url = item.value and item.value.url
-			if not url or url == "" then
-				local err = "Selected issue is missing URL"
-				notify.error(err)
-				done(nil, err)
-				return
-			end
-			require("atlas.commands.open").open(url)
+			require("atlas.issues.ui.detail").open(item.value, { provider = ctx.provider })
+			done(nil, nil)
+		end,
+		on_cancel = function()
+			done(nil, nil)
+		end,
+	})
+end
+
+---@param ctx AtlasIssueActionContext
+---@param done fun(result: IssuesActionResult|nil, err: string|nil)
+local function search(ctx, done)
+	select_project({
+		title = "Search Issues - Project",
+		include_all = true,
+		on_select = function(project)
+			search_issues(project, ctx, done)
+		end,
+		on_cancel = function()
+			done(nil, nil)
+		end,
+	})
+end
+
+---@param _ AtlasIssueActionContext
+---@param done fun(result: IssuesActionResult|nil, err: string|nil)
+local function open_project(_, done)
+	select_project({
+		title = "Open Project",
+		include_all = false,
+		on_select = function(project)
+			require("atlas").open("issues", "gitlab", {
+				initial_view = {
+					name = "Search",
+					layout = "compact",
+					project = project,
+					scope = "all",
+					state = "all",
+				},
+			})
 			done(nil, nil)
 		end,
 		on_cancel = function()
@@ -485,6 +601,7 @@ register({
 register({ id = "assign", label = "Edit Assignees", is_available = has_issue, run = assign })
 register({ id = "labels", label = "Edit Labels", is_available = has_issue, run = labels })
 register({ id = "search", label = "Search Issues", run = search })
+register({ id = "open_project", label = "Open Project", run = open_project })
 register({ id = "create_issue", label = "Create Issue", run = create_issue })
 register(actions.manage_templates)
 register(actions.browse_issue)

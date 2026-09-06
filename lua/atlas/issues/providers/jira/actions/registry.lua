@@ -4,6 +4,7 @@ local actions = require("atlas.issues.actions")
 local icons = require("atlas.ui.shared.icons")
 local picker = require("atlas.ui.picker")
 local issues_api = require("atlas.issues.providers.jira.api.issues")
+local projects_api = require("atlas.issues.providers.jira.api.projects")
 local service = require("atlas.issues.providers.jira.api.service")
 local notify = require("atlas.core.notify")
 local transitions_api = require("atlas.issues.providers.jira.api.transitions")
@@ -392,7 +393,6 @@ end
 ---@param context AtlasIssueActionContext
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function create_issue(context, done)
-	local projects_api = require("atlas.issues.providers.jira.api.projects")
 	local md_to_adf = require("atlas.issues.providers.jira.converted.markdown")
 	local issue_editor = require("atlas.issues.create.jira.issue")
 	local function open_created_issue(key)
@@ -522,36 +522,24 @@ local function create_issue(context, done)
 		title = "Create Issue",
 		debounce_ms = 0,
 		format_item = function(item)
-			local provider_icon = icons.issues_provider("jira", "provider")
 			local project = item.value
-			local category_name = project.category and project.category.name or ""
-			if category_name ~= "" then
-				return string.format("%s %s - %s (%s)", provider_icon, item.label, project.name, category_name)
-			end
-			return string.format("%s %s - %s", provider_icon, item.label, project.name)
+			local label =
+				string.format("%s %s - %s", icons.issues_provider("jira", "provider"), item.label, project.name)
+			local category = project.category and project.category.name or ""
+			return category ~= "" and label .. " (" .. category .. ")" or label
 		end,
 		fetch = function(query, fetch_done)
 			if all_items then
-				local normalized = vim.trim(query):lower()
-				if normalized == "" then
-					fetch_done(all_items, nil)
-					return
-				end
-				local filtered = {}
-				for _, item in ipairs(all_items) do
-					local project = item.value
-					local haystack = (
-						item.label
-						.. " "
-						.. (project.name or "")
-						.. " "
-						.. (project.category and project.category.name or "")
-					):lower()
-					if haystack:find(normalized, 1, true) then
-						table.insert(filtered, item)
-					end
-				end
-				fetch_done(filtered, nil)
+				query = vim.trim(query):lower()
+				fetch_done(
+					vim.tbl_filter(function(item)
+						local project = item.value
+						local category = project.category and project.category.name or ""
+						local text = string.format("%s %s %s", item.label, project.name, category):lower()
+						return text:find(query, 1, true) ~= nil
+					end, all_items),
+					nil
+				)
 				return
 			end
 
@@ -563,9 +551,7 @@ local function create_issue(context, done)
 
 				local projects = {}
 				for _, group in ipairs(groups) do
-					for _, project in ipairs(group.projects or {}) do
-						table.insert(projects, project)
-					end
+					vim.list_extend(projects, group.projects)
 				end
 
 				local project_ids = {}
@@ -612,11 +598,12 @@ local function create_issue(context, done)
 	})
 end
 
----@param _ AtlasIssueActionContext
+---@param project JiraIssueProject|nil
+---@param ctx AtlasIssueActionContext
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
-local function search_issue(_, done)
+local function search_issues(project, ctx, done)
 	picker.search({
-		title = "Search Issues",
+		title = project and "Search " .. project.key .. " Issues" or "Search Issues",
 		debounce_ms = 200,
 		format_item = function(item)
 			return tostring(item.label or "")
@@ -628,15 +615,46 @@ local function search_issue(_, done)
 					preview_done({ title = issue.key, lines = { err or "Failed to load issue" } })
 					return
 				end
+				---@cast details JiraIssueDetails
+				local assignee = details.assignees[1]
+				local status = "**Status:** " .. (details.status or "Unknown")
+				local assignee_name = "**Assignee:** " .. (assignee and assignee.display_name or "Unassigned")
+				local column = math.max(vim.fn.strdisplaywidth(status), vim.fn.strdisplaywidth(assignee_name)) + 4
+				local lines = {
+					status
+						.. string.rep(" ", column - vim.fn.strdisplaywidth(status))
+						.. "**Priority:** "
+						.. (details.priority or "None"),
+					assignee_name
+						.. string.rep(" ", column - vim.fn.strdisplaywidth(assignee_name))
+						.. "**Reporter:** "
+						.. (details.reporter and details.reporter.display_name or "Unknown"),
+				}
+				local labels = vim.tbl_map(function(label)
+					return label.name
+				end, details.labels)
+				if #labels > 0 then
+					table.insert(lines, "**Labels:** " .. table.concat(labels, ", "))
+				end
+				for _, field in ipairs(details.custom_fields) do
+					table.insert(lines, string.format("**%s:** %s", field.name, field.formatted))
+				end
+				table.insert(lines, "")
+				table.insert(lines, "## Description")
+				table.insert(lines, "")
 				local description = vim.trim(details.description)
+				vim.list_extend(
+					lines,
+					vim.split(description ~= "" and description or "No description", "\n", { plain = true })
+				)
 				preview_done({
-					title = issue.key,
-					lines = vim.split(description ~= "" and description or "No description", "\n", { plain = true }),
+					title = string.format("%s - %s", issue.key, issue.title),
+					lines = lines,
 				})
 			end)
 		end,
 		fetch = function(query, fetch_done)
-			return issues_api.search_issue(vim.trim(query), function(items, err)
+			return issues_api.search_issue(project, vim.trim(query), function(items, err)
 				if err ~= nil or items == nil then
 					fetch_done(nil, err or "Failed to search tickets")
 					return
@@ -656,20 +674,116 @@ local function search_issue(_, done)
 		end,
 		on_select = function(item)
 			local issue = item.value
-			local issue_key = tostring(issue.key or "")
-			if issue_key == "" then
-				notify.error("Selected issue is missing key")
-				done(nil, "Selected issue is missing key")
-				return
-			end
-
-			require("atlas.issues.providers.jira.completion.search").open_query(string.format('key = "%s"', issue_key))
+			require("atlas.issues.ui.detail").open_ref({ key = issue.key }, { provider = ctx.provider })
 			done(nil, nil)
 		end,
 		on_cancel = function()
 			done(nil, nil)
 		end,
 	})
+end
+
+---@param ctx AtlasIssueActionContext
+---@param done fun(result: IssuesActionResult|nil, err: string|nil)
+local function search_issue(ctx, done)
+	return projects_api.get_projects({ maxResults = 50, total = 2, status = "live" }, function(groups, err)
+		if err or not groups then
+			notify.error(err or "Failed to load projects")
+			done(nil, err or "Failed to load projects")
+			return
+		end
+
+		local projects = {}
+		for _, group in ipairs(groups) do
+			vim.list_extend(projects, group.projects)
+		end
+		if #projects <= 1 then
+			search_issues(projects[1], ctx, done)
+			return
+		end
+
+		local items = vim.tbl_map(function(project)
+			return { id = project.id, label = project.key, value = project }
+		end, projects)
+		table.insert(items, 1, { id = "all", label = "All projects" })
+		picker.search({
+			title = "Search Issues - Project",
+			initial_items = items,
+			fetch_on_open = false,
+			debounce_ms = 0,
+			format_item = function(item)
+				local project = item.value
+				if not project then
+					return icons.issues_provider("jira", "provider") .. " " .. item.label
+				end
+				local label =
+					string.format("%s %s - %s", icons.issues_provider("jira", "provider"), item.label, project.name)
+				local category = project.category and project.category.name or ""
+				return category ~= "" and label .. " (" .. category .. ")" or label
+			end,
+			fetch = function(query, fetch_done)
+				query = vim.trim(query):lower()
+				fetch_done(
+					vim.tbl_filter(function(item)
+						local project = item.value
+						local name = project and project.name or ""
+						local category = project and project.category and project.category.name or ""
+						local text = string.format("%s %s %s", item.label, name, category):lower()
+						return text:find(query, 1, true) ~= nil
+					end, items),
+					nil
+				)
+			end,
+			on_select = function(item)
+				search_issues(item.value, ctx, done)
+			end,
+			on_cancel = function()
+				done(nil, nil)
+			end,
+		})
+	end)
+end
+
+---@param _ AtlasIssueActionContext
+---@param done fun(result: IssuesActionResult|nil, err: string|nil)
+local function open_project(_, done)
+	return projects_api.get_projects({ maxResults = 50, total = 2, status = "live" }, function(groups, err)
+		if err or not groups then
+			notify.error(err or "Failed to load projects")
+			done(nil, err or "Failed to load projects")
+			return
+		end
+
+		local projects = {}
+		for _, group in ipairs(groups) do
+			vim.list_extend(projects, group.projects)
+		end
+		if #projects == 0 then
+			notify.info("No Jira projects found")
+			done(nil, nil)
+			return
+		end
+		picker.select({
+			title = "Open Project",
+			items = projects,
+			format_item = function(project)
+				local label =
+					string.format("%s %s - %s", icons.issues_provider("jira", "provider"), project.key, project.name)
+				local category = project.category and project.category.name or ""
+				return category ~= "" and label .. " (" .. category .. ")" or label
+			end,
+			on_select = function(project)
+				if not project then
+					done(nil, nil)
+					return
+				end
+				require("atlas.issues.providers.jira.completion.search").open_query(
+					"project = " .. project.key .. " ORDER BY updated DESC"
+				)
+				done(nil, nil)
+			end,
+		})
+	end)
 end
 
 ---@param _ AtlasIssueActionContext
@@ -823,6 +937,11 @@ register({
 	id = "search",
 	label = "Search Issue",
 	run = search_issue,
+})
+register({
+	id = "open_project",
+	label = "Open Project",
+	run = open_project,
 })
 register({
 	id = "search_jql",

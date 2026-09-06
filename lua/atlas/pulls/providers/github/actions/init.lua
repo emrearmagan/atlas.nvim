@@ -10,6 +10,7 @@ local core_notify = require("atlas.core.notify")
 ---| "edit_assignees"
 ---| "create_issue"
 ---| "labels"
+---| "open_repo"
 ---| "toggle_subscription"
 
 M.items = registry.items

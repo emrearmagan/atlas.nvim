@@ -143,7 +143,9 @@ function M.open(request)
 				end
 				confirmed = true
 				picker:close()
-				request.on_done(value)
+				vim.schedule(function()
+					request.on_done(value)
+				end)
 			end,
 		},
 		on_show = function(picker)
