@@ -1,3 +1,4 @@
+local icons = require("atlas.ui.shared.icons")
 local pipelines = require("atlas.pulls.providers.github.api.pipelines")
 
 ---@param pipeline PullsPipeline
@@ -21,6 +22,7 @@ return {
 	{
 		id = "rerun_failed_jobs",
 		label = "Re-run failed jobs",
+		icon = icons.action("retry"),
 		is_available = function(ctx)
 			return tonumber(ctx.pipeline.id) ~= nil and ctx.pipeline.state == "FAILED" and not is_running(ctx.pipeline)
 		end,
@@ -33,6 +35,7 @@ return {
 	{
 		id = "rerun_pipeline",
 		label = "Re-run pipeline",
+		icon = icons.action("retry"),
 		is_available = function(ctx)
 			return tonumber(ctx.pipeline.id) ~= nil and not is_running(ctx.pipeline)
 		end,
@@ -45,6 +48,7 @@ return {
 	{
 		id = "cancel_pipeline",
 		label = "Cancel pipeline",
+		icon = icons.action("close"),
 		confirm = "Cancel this pipeline?",
 		is_available = function(ctx)
 			return tonumber(ctx.pipeline.id) ~= nil and is_running(ctx.pipeline)
@@ -58,6 +62,7 @@ return {
 	{
 		id = "rerun_job",
 		label = "Re-run job",
+		icon = icons.action("retry"),
 		is_available = function(ctx)
 			return ctx.job ~= nil
 				and tonumber(ctx.job.id) ~= nil

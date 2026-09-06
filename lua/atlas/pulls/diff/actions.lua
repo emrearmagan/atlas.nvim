@@ -1,5 +1,6 @@
 local M = {}
 
+local icons = require("atlas.ui.shared.icons")
 local picker = require("atlas.ui.picker")
 
 local pull_actions = require("atlas.pulls.actions")
@@ -133,6 +134,7 @@ function M.open(session)
 		{
 			id = "toggle_detail_panel",
 			label = "Show details",
+			icon = icons.action("details"),
 		},
 	}
 
@@ -143,6 +145,7 @@ function M.open(session)
 			items[#items + 1] = {
 				id = "finish_review",
 				label = "Finish review in browser",
+				icon = icons.action("open_in_browser"),
 				run = function()
 					open_in_browser(session)
 				end,
@@ -164,9 +167,7 @@ function M.open(session)
 	picker.select({
 		title = "Review action",
 		items = items,
-		format_item = function(action)
-			return action.label
-		end,
+		format_item = icons.format_action,
 		on_select = function(action)
 			if not action then
 				return

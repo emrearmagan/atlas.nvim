@@ -70,6 +70,7 @@
 ---@class AtlasPullsCustomAction
 ---@field id string
 ---@field label string
+---@field icon string|nil
 ---@field confirmation boolean|nil
 ---@field run fun(pr: PullRequest, ctx: AtlasPullsCustomActionContext, done: fun(ok: boolean|nil, message: string|nil))
 
@@ -102,6 +103,7 @@
 ---@class AtlasIssuesCustomAction
 ---@field id string
 ---@field label string
+---@field icon string|nil
 ---@field confirmation boolean|nil
 ---@field run fun(issue: Issue, ctx: AtlasIssuesCustomActionContext, done: fun(ok: boolean|nil, message: string|nil))
 

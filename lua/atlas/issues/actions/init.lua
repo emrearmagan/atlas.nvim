@@ -1,5 +1,6 @@
 local M = {}
 
+local icons = require("atlas.ui.shared.icons")
 local picker = require("atlas.ui.picker")
 local templates = require("atlas.issues.templates")
 local utils = require("atlas.issues.actions.utils")
@@ -25,6 +26,7 @@ local utils = require("atlas.issues.actions.utils")
 ---@class AtlasIssueAction
 ---@field id string
 ---@field label string
+---@field icon string|nil
 ---@field hidden boolean|nil
 ---@field custom boolean|nil
 ---@field is_available (fun(context: AtlasIssueActionContext): boolean, string|nil)|nil
@@ -72,9 +74,7 @@ function M.open(context, on_done)
 	picker.select({
 		title = string.format("Choose %s action%s", context.provider.name, target),
 		items = items,
-		format_item = function(action)
-			return action.label
-		end,
+		format_item = icons.format_action,
 		on_select = function(action)
 			if not action then
 				if on_done then
@@ -97,6 +97,7 @@ M.copy_issue_url = utils.copy_issue_url
 M.manage_templates = {
 	id = "manage_templates",
 	label = "Manage Issue Templates",
+	icon = icons.action("edit"),
 	run = function(_, done)
 		templates.manage(function(err)
 			done(nil, err)

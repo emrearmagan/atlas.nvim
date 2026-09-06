@@ -2,6 +2,7 @@ local M = {}
 
 local actions = require("atlas.pulls.actions")
 local action_utils = require("atlas.pulls.actions.utils")
+local icons = require("atlas.ui.shared.icons")
 local cli = require("atlas.providers.github.client")
 local notes = require("atlas.pulls.notes")
 local picker = require("atlas.ui.picker")
@@ -666,6 +667,7 @@ end
 register({
 	id = actions.approve.id,
 	label = actions.approve.label,
+	icon = actions.approve.icon,
 	is_available = review_available,
 	run = actions.approve.run,
 })
@@ -673,6 +675,7 @@ register({
 register({
 	id = actions.request_changes.id,
 	label = actions.request_changes.label,
+	icon = actions.request_changes.icon,
 	is_available = review_available,
 	run = actions.request_changes.run,
 })
@@ -680,29 +683,31 @@ register({
 register({
 	id = "merge",
 	label = "Merge",
+	icon = icons.action("merge"),
 	is_available = merge_available,
 	run = merge,
 })
 
-register(actions.edit_title)
-register(actions.edit_description)
-
 register(actions.decline)
+register(actions.convert_to_draft)
+register(actions.ready_for_review)
 
 register({
 	id = "reopen",
 	label = "Reopen PR",
+	icon = icons.action("reopen"),
 	is_available = reopen_available,
 	run = reopen,
 })
 
-register(actions.ready_for_review)
-register(actions.convert_to_draft)
+register(actions.edit_title)
+register(actions.edit_description)
 register(actions.edit_reviewers)
 
 register({
 	id = "edit_assignees",
 	label = "Edit assignees",
+	icon = icons.action("user"),
 	is_available = edit_assignees_available,
 	run = edit_assignees,
 })
@@ -710,38 +715,36 @@ register({
 register({
 	id = "labels",
 	label = "Edit labels",
+	icon = icons.action("label"),
 	is_available = edit_labels_available,
 	run = edit_labels,
 })
 
 register({
-	id = "create_issue",
-	label = "Create issue",
-	is_available = create_issue_available,
-	run = create_issue,
-})
-
-register({
 	id = "search",
 	label = "Search Pull Requests",
+	icon = icons.action("search"),
 	run = search,
 })
 
 register({
 	id = "open_repo",
 	label = "Open Repo",
+	icon = icons.action("search"),
 	run = open_repo,
 })
 
 register({
 	id = "search_pull_requests",
 	label = "Open Search View",
+	icon = icons.action("search"),
 	run = search_pull_requests,
 })
 
 register({
 	id = "toggle_subscription",
 	label = "Toggle subscription",
+	icon = icons.action("notification"),
 	is_available = toggle_subscription_available,
 	run = toggle_subscription,
 })
@@ -749,6 +752,14 @@ register({
 register(actions.open_pipelines)
 register(actions.open_diff)
 register(actions.checkout)
+
+register({
+	id = "create_issue",
+	label = "Create issue",
+	icon = icons.action("create"),
+	is_available = create_issue_available,
+	run = create_issue,
+})
 
 register(actions.copy_id)
 register(actions.copy_url)

@@ -1,6 +1,7 @@
 local M = {}
 
 local git_checkout = require("atlas.core.git.checkout")
+local icons = require("atlas.ui.shared.icons")
 local md_editor = require("atlas.ui.popups.editor")
 local picker = require("atlas.ui.picker")
 local review = require("atlas.pulls.actions.review")
@@ -43,7 +44,8 @@ local notify = utils.notify
 
 ---@class AtlasPullAction
 ---@field id string
----@field label string|nil
+---@field label string
+---@field icon string|nil
 ---@field hidden boolean|nil
 ---@field custom boolean|nil
 ---@field is_available (fun(context: AtlasPullActionContext): boolean, string|nil)|nil
@@ -57,6 +59,7 @@ local function draft_action(draft)
 	return {
 		id = id,
 		label = label,
+		icon = icons.action(draft and "edit" or "review"),
 		is_available = function(context)
 			if not context.pr then
 				return false, "No PR selected"
@@ -129,9 +132,7 @@ function M.open(context, on_done)
 	picker.select({
 		title = string.format("Choose %s action%s", context.provider.name, target),
 		items = items,
-		format_item = function(action)
-			return action.label
-		end,
+		format_item = icons.format_action,
 		on_select = function(action)
 			if not action then
 				if on_done then
@@ -151,6 +152,7 @@ end
 M.edit_title = {
 	id = "edit_title",
 	label = "Edit title",
+	icon = icons.action("edit"),
 	is_available = has_pr,
 	run = function(context, done)
 		local pr = assert(context.pr)
@@ -189,6 +191,7 @@ M.edit_title = {
 M.edit_description = {
 	id = "edit_description",
 	label = "Edit description",
+	icon = icons.action("edit"),
 	is_available = function(context)
 		if not has_pr(context) then
 			return false, "No PR selected"
@@ -259,6 +262,7 @@ M.convert_to_draft = draft_action(true)
 M.decline = {
 	id = "decline",
 	label = "Decline",
+	icon = icons.action("close"),
 	is_available = function(context)
 		return context.pr ~= nil and (context.pr.state == "open" or context.pr.state == "draft")
 	end,
@@ -288,6 +292,7 @@ M.decline = {
 M.edit_reviewers = {
 	id = "edit_reviewers",
 	label = "Edit reviewers",
+	icon = icons.action("user"),
 	is_available = function(context)
 		if not context.pr then
 			return false, "No PR selected"
@@ -377,6 +382,7 @@ M.edit_reviewers = {
 M.open_pipelines = {
 	id = "open_pipelines",
 	label = "Open Pipelines",
+	icon = icons.action("pipeline"),
 	is_available = function(context)
 		return has_pr(context) and context.provider.capabilities.pipelines ~= nil
 	end,
@@ -390,6 +396,7 @@ M.open_pipelines = {
 M.open_diff = {
 	id = "open_diff",
 	label = "Open diff",
+	icon = icons.action("changes"),
 	is_available = has_pr,
 	run = function(context, done)
 		require("atlas.pulls.diff").open_pr({
@@ -410,6 +417,7 @@ M.open_diff = {
 M.checkout = {
 	id = "checkout",
 	label = "Checkout PR branch",
+	icon = icons.action("checkout"),
 	is_available = has_pr,
 	run = function(context, done)
 		local pr = assert(context.pr)

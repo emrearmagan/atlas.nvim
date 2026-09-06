@@ -142,6 +142,7 @@ to your own tooling. They appear in the action menu (default `A`).
       {
         id = "show_repo_status",
         label = "Show repository status",
+        icon = "",
         confirmation = true,
         ---@param pr PullRequest
         ---@param ctx AtlasPullsCustomActionContext
@@ -172,6 +173,7 @@ to your own tooling. They appear in the action menu (default `A`).
       {
         id = "copy_branch_name",
         label = "Copy branch name",
+        icon = "",
         ---@param issue Issue
         ---@param ctx AtlasIssuesCustomActionContext
         ---@param done fun(ok: boolean|nil, message: string|nil)

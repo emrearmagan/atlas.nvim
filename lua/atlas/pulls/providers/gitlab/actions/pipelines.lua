@@ -1,3 +1,4 @@
+local icons = require("atlas.ui.shared.icons")
 local pipelines = require("atlas.pulls.providers.gitlab.api.pipelines")
 
 ---@param item PullsPipeline|PullsPipelineJob
@@ -36,6 +37,7 @@ return {
 	{
 		id = "retry_pipeline",
 		label = "Retry pipeline",
+		icon = icons.action("retry"),
 		is_available = function(ctx)
 			return tonumber(ctx.pipeline.id) ~= nil and can_retry(ctx.pipeline)
 		end,
@@ -48,6 +50,7 @@ return {
 	{
 		id = "cancel_pipeline",
 		label = "Cancel pipeline",
+		icon = icons.action("close"),
 		confirm = "Cancel this pipeline?",
 		is_available = function(ctx)
 			return tonumber(ctx.pipeline.id) ~= nil and can_cancel(ctx.pipeline)
@@ -61,6 +64,7 @@ return {
 	{
 		id = "retry_job",
 		label = "Retry job",
+		icon = icons.action("retry"),
 		is_available = function(ctx)
 			return ctx.job ~= nil and tonumber(ctx.job.id) ~= nil and can_retry(ctx.job)
 		end,
@@ -73,6 +77,7 @@ return {
 	{
 		id = "cancel_job",
 		label = "Cancel job",
+		icon = icons.action("close"),
 		confirm = "Cancel this job?",
 		is_available = function(ctx)
 			return ctx.job ~= nil and tonumber(ctx.job.id) ~= nil and can_cancel(ctx.job)

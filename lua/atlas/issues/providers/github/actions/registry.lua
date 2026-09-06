@@ -587,29 +587,55 @@ local function toggle_subscription(ctx, done)
 	)
 end
 
-register({ id = "close", label = "Close Issue", is_available = close_available, run = close })
-register({ id = "reopen", label = "Reopen Issue", is_available = reopen_available, run = reopen })
+register({
+	id = "close",
+	label = "Close Issue",
+	icon = icons.action("close"),
+	is_available = close_available,
+	run = close,
+})
+register({
+	id = "reopen",
+	label = "Reopen Issue",
+	icon = icons.action("reopen"),
+	is_available = reopen_available,
+	run = reopen,
+})
 register({
 	id = "transition",
 	label = "Transition Issue",
+	icon = icons.action("transition"),
 	hidden = true,
 	is_available = transition_available,
 	run = transition,
 })
-register({ id = "assign", label = "Edit Assignees", is_available = assign_available, run = assign })
-register({ id = "labels", label = "Edit Labels", is_available = labels_available, run = labels })
-register({ id = "create_issue", label = "Create Issue", run = create_issue })
-register({ id = "search", label = "Search Issues", run = search })
-register({ id = "open_repo", label = "Open Repo", run = open_repo })
+register({
+	id = "assign",
+	label = "Edit Assignees",
+	icon = icons.action("user"),
+	is_available = assign_available,
+	run = assign,
+})
+register({
+	id = "labels",
+	label = "Edit Labels",
+	icon = icons.action("label"),
+	is_available = labels_available,
+	run = labels,
+})
+register({ id = "search", label = "Search Issues", icon = icons.action("search"), run = search })
+register({ id = "open_repo", label = "Open Repo", icon = icons.action("search"), run = open_repo })
 register(actions.manage_templates)
 register(actions.browse_issue)
 register(actions.copy_issue_key)
 register({
 	id = "toggle_subscription",
 	label = "Toggle subscription",
+	icon = icons.action("notification"),
 	is_available = toggle_subscription_available,
 	run = toggle_subscription,
 })
+register({ id = "create_issue", label = "Create Issue", icon = icons.action("create"), run = create_issue })
 register(actions.copy_issue_url)
 
 ---@param id AtlasGitHubIssueActionId

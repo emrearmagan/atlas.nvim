@@ -1,5 +1,6 @@
 local M = {}
 
+local icons = require("atlas.ui.shared.icons")
 local markdown_editor = require("atlas.ui.popups.editor")
 local notify = require("atlas.core.notify")
 local picker = require("atlas.ui.picker")
@@ -203,17 +204,15 @@ function M.manage(on_done)
 	end
 
 	local options = {
-		{ id = "create", label = "Create template" },
-		{ id = "edit", label = "Edit template" },
+		{ id = "create", label = "Create template", icon = icons.action("create") },
+		{ id = "edit", label = "Edit template", icon = icons.action("edit") },
 	}
 
 	picker.select({
 		title = "Templates",
 		items = options,
 		size = { width = 0.35, height = 0.15 },
-		format_item = function(item)
-			return item.label
-		end,
+		format_item = icons.format_action,
 		on_select = function(choice)
 			if choice == nil then
 				finish()
@@ -440,17 +439,15 @@ end
 ---@param context AtlasIssueTemplateContext
 function M.open(context)
 	local actions = {
-		{ id = "apply", label = "Apply template" },
-		{ id = "save", label = "Save current description as template" },
+		{ id = "apply", label = "Apply template", icon = icons.action("success") },
+		{ id = "save", label = "Save current description as template", icon = icons.action("save") },
 	}
 
 	picker.select({
 		title = "Issue templates",
 		items = actions,
 		size = { width = 0.35, height = 0.15 },
-		format_item = function(action)
-			return action.label
-		end,
+		format_item = icons.format_action,
 		on_select = function(action)
 			if action == nil then
 				return

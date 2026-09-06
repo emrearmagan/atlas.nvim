@@ -901,51 +901,47 @@ end
 register({
 	id = "transition",
 	label = "Transition",
+	icon = icons.action("transition"),
 	is_available = has_issue_key,
 	run = transition,
 })
 register({
 	id = "assign",
-	label = "Change assignee",
+	label = "Edit Assignee",
+	icon = icons.action("edit"),
 	is_available = has_issue_key,
 	run = assign,
 })
 register({
 	id = "reporter",
-	label = "Change reporter",
+	label = "Edit Reporter",
+	icon = icons.action("edit"),
 	is_available = has_issue_key,
 	run = reporter,
 })
 register({
-	id = "delete_issue",
-	label = "Delete Issue",
-	is_available = has_issue_key,
-	run = delete_issue,
-})
-register({
 	id = "edit_issue",
 	label = "Edit Issue",
+	icon = icons.action("edit"),
 	is_available = has_issue_key,
 	run = edit_issue,
 })
 register({
-	id = "create_issue",
-	label = "Create Issue",
-	run = create_issue,
-})
-register({
 	id = "search",
 	label = "Search Issue",
+	icon = icons.action("search"),
 	run = search_issue,
 })
 register({
 	id = "open_project",
 	label = "Open Project",
+	icon = icons.action("search"),
 	run = open_project,
 })
 register({
 	id = "search_jql",
 	label = "Search JQL",
+	icon = icons.action("search"),
 	run = search_jql,
 })
 register(actions.manage_templates)
@@ -967,8 +963,22 @@ register({
 register({
 	id = "toggle_subscription",
 	label = "Toggle subscription",
+	icon = icons.action("notification"),
 	is_available = toggle_subscription_available,
 	run = toggle_subscription,
+})
+register({
+	id = "create_issue",
+	label = "Create Issue",
+	icon = icons.action("create"),
+	run = create_issue,
+})
+register({
+	id = "delete_issue",
+	label = "Delete Issue",
+	icon = icons.action("delete"),
+	is_available = has_issue_key,
+	run = delete_issue,
 })
 
 ---@param id AtlasJiraIssueActionId

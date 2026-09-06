@@ -2,6 +2,7 @@ local M = {}
 
 local actions = require("atlas.pulls.actions")
 local action_utils = require("atlas.pulls.actions.utils")
+local icons = require("atlas.ui.shared.icons")
 local bitbucket_query = require("atlas.providers.bitbucket.query")
 local bitbucket_search = require("atlas.providers.bitbucket.completion.search")
 local notes = require("atlas.pulls.notes")
@@ -206,6 +207,7 @@ end
 register({
 	id = actions.approve.id,
 	label = actions.approve.label,
+	icon = actions.approve.icon,
 	is_available = approve_available,
 	run = actions.approve.run,
 })
@@ -213,6 +215,7 @@ register({
 register({
 	id = actions.request_changes.id,
 	label = actions.request_changes.label,
+	icon = actions.request_changes.icon,
 	is_available = request_changes_available,
 	run = actions.request_changes.run,
 })
@@ -220,6 +223,7 @@ register({
 register({
 	id = "merge",
 	label = "Merge",
+	icon = icons.action("merge"),
 	is_available = merge_available,
 	run = merge,
 })
@@ -227,6 +231,7 @@ register({
 register({
 	id = actions.decline.id,
 	label = actions.decline.label,
+	icon = actions.decline.icon,
 	is_available = decline_available,
 	run = actions.decline.run,
 })
@@ -240,12 +245,14 @@ register(actions.edit_reviewers)
 register({
 	id = "search",
 	label = "Search repositories",
+	icon = icons.action("search"),
 	run = search,
 })
 
 register({
 	id = "search_pull_requests",
 	label = "Search pull requests",
+	icon = icons.action("search"),
 	run = function(_, done)
 		bitbucket_search.open({ name = "Search", search = state.query })
 		done(nil, nil)

@@ -502,6 +502,7 @@ end
 register({
 	id = actions.approve.id,
 	label = actions.approve.label,
+	icon = actions.approve.icon,
 	is_available = review_available,
 	run = actions.approve.run,
 })
@@ -509,6 +510,7 @@ register({
 register({
 	id = actions.request_changes.id,
 	label = actions.request_changes.label,
+	icon = actions.request_changes.icon,
 	is_available = review_available,
 	run = actions.request_changes.run,
 })
@@ -516,29 +518,31 @@ register({
 register({
 	id = "merge",
 	label = "Merge MR",
+	icon = icons.action("merge"),
 	is_available = merge_available,
 	run = merge,
 })
 
-register(actions.edit_title)
-register(actions.edit_description)
-
 register(actions.decline)
+register(actions.convert_to_draft)
+register(actions.ready_for_review)
 
 register({
 	id = "reopen",
 	label = "Reopen MR",
+	icon = icons.action("reopen"),
 	is_available = reopen_available,
 	run = reopen,
 })
 
-register(actions.convert_to_draft)
-register(actions.ready_for_review)
+register(actions.edit_title)
+register(actions.edit_description)
 register(actions.edit_reviewers)
 
 register({
 	id = "edit_assignees",
 	label = "Edit assignees",
+	icon = icons.action("user"),
 	is_available = edit_assignees_available,
 	run = edit_assignees,
 })
@@ -546,18 +550,21 @@ register({
 register({
 	id = "search",
 	label = "Search Merge Requests",
+	icon = icons.action("search"),
 	run = search,
 })
 
 register({
 	id = "open_project",
 	label = "Open Project",
+	icon = icons.action("search"),
 	run = open_project,
 })
 
 register({
 	id = "toggle_subscription",
 	label = "Toggle subscription",
+	icon = icons.action("notification"),
 	is_available = toggle_subscription_available,
 	run = toggle_subscription,
 })

@@ -2,6 +2,7 @@ local M = {}
 
 local config = require("atlas.config")
 local keymaps = require("atlas.core.keymaps")
+local icons = require("atlas.ui.shared.icons")
 local editor = require("atlas.ui.popups.editor")
 local notes = require("atlas.pulls.notes")
 local core_notify = require("atlas.core.notify")
@@ -492,6 +493,7 @@ end
 M.start_review = {
 	id = "start_review",
 	label = "Start review",
+	icon = icons.action("review"),
 	run = function(context, on_done)
 		local data = context.data
 		local reviews = context.provider.capabilities.reviews
@@ -517,6 +519,7 @@ M.start_review = {
 M.submit_review = {
 	id = "submit_review",
 	label = "Submit review",
+	icon = icons.action("review"),
 	run = function(context, on_done)
 		return open_review_editor(
 			context,
@@ -532,6 +535,7 @@ M.submit_review = {
 M.approve = {
 	id = "approve",
 	label = "Approve",
+	icon = icons.action("success"),
 	run = function(context, on_done)
 		return open_review_editor(context, "approve", " Approve ", "Approving...", "Approved", on_done)
 	end,
@@ -540,6 +544,7 @@ M.approve = {
 M.request_changes = {
 	id = "request_changes",
 	label = "Request changes",
+	icon = icons.action("changes"),
 	run = function(context, on_done)
 		return open_review_editor(
 			context,
@@ -555,6 +560,7 @@ M.request_changes = {
 M.discard_review = {
 	id = "discard_review",
 	label = "Discard review",
+	icon = icons.action("delete"),
 	run = function(context, on_done)
 		local data = context.data
 		local reviews = context.provider.capabilities.reviews
