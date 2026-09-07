@@ -115,10 +115,12 @@ return {
 			fetch_by_refs = issues_api.fetch_by_refs,
 			fetch_issue = issues_api.fetch_issue,
 			update_description = issues_api.update_description,
+			-- refresh = issues_api.refresh,
 		},
 		comments = {
 			reaction_options = GITLAB_REACTION_OPTIONS,
 			comment_completion = author_completion.for_issues,
+			-- fetch_activity = notes_api.fetch_activity,
 			fetch_conversation = fetch_conversation,
 			add_comment = notes_api.add_comment,
 			reply_comment = notes_api.reply_comment,

@@ -4,9 +4,14 @@ local registry = require("atlas.pulls.providers.azure.actions.registry")
 local logger = require("atlas.core.logger")
 local core_notify = require("atlas.core.notify")
 
+---@alias AtlasAzureActionId
+---| AtlasPullActionId
+---| "reopen"
+---| "labels"
+
 M.items = registry.items
 
----@param id AtlasPullActionId
+---@param id AtlasAzureActionId
 ---@param ctx AtlasPullActionContext
 ---@return boolean
 function M.is_available(id, ctx)
@@ -14,7 +19,7 @@ function M.is_available(id, ctx)
 	return action ~= nil and (action.is_available == nil or action.is_available(ctx) == true)
 end
 
----@param id AtlasPullActionId
+---@param id AtlasAzureActionId
 ---@param ctx AtlasPullActionContext
 ---@param on_done fun(result: PullsActionResult|nil, err: string|nil)
 ---@return boolean handled

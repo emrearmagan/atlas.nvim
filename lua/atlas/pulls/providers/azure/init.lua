@@ -19,9 +19,11 @@ local checks_api = require("atlas.pulls.providers.azure.api.checks")
 local changes_api = require("atlas.pulls.providers.azure.api.changes")
 local activity_api = require("atlas.pulls.providers.azure.api.activity")
 local comments_api = require("atlas.pulls.providers.azure.api.comments")
+local repositories_api = require("atlas.pulls.providers.azure.api.repositories")
 local author_completion = require("atlas.providers.azure.completion.author")
 local actions = require("atlas.pulls.providers.azure.actions")
 local detail_ui = require("atlas.pulls.providers.azure.ui.detail")
+local repo_detail_ui = require("atlas.pulls.providers.azure.ui.repo_detail")
 
 ---@return AtlasAzurePullsViewConfig[]
 local function views()
@@ -82,13 +84,13 @@ return {
 			approve = reviews_api.approve,
 			request_changes = reviews_api.request_changes,
 		},
-		-- repository = {
-		-- 	fetch_details = repositories_api.fetch_detail,
-		-- 	fetch_branches = repositories_api.fetch_branches,
-		-- 	fetch_tags = repositories_api.fetch_tags,
-		-- 	fetch_issues = repositories_api.fetch_issues,
-		-- 	delete_branch = repositories_api.delete_branch,
-		-- },
+		repository = {
+			fetch_details = repositories_api.fetch_detail,
+			fetch_branches = repositories_api.fetch_branches,
+			fetch_tags = repositories_api.fetch_tags,
+			-- fetch_issues = repositories_api.fetch_issues,
+			delete_branch = repositories_api.delete_branch,
+		},
 		-- pipelines = {
 		-- 	fetch = pipelines_api.fetch,
 		-- 	fetch_details = pipelines_api.fetch_details,
@@ -100,7 +102,7 @@ return {
 		actions = actions,
 		ui = {
 			detail = detail_ui,
-			-- repo_detail = repo_detail_ui,
+			repo_detail = repo_detail_ui,
 		},
 	},
 }

@@ -41,11 +41,21 @@
 ---@field token string Personal Access Token used with Basic authentication.
 ---@field cache_ttl number|nil Cache lifetime in seconds. Set to 0 to disable caching.
 
----@class AtlasAzurePullsViewConfig : AtlasPullsViewConfig
+---@class AtlasAzurePullsSearchConfig
 ---@field project string
 ---@field repository string|nil
 ---@field scope "assigned_to_me"|"created_by_me"|"all"|nil
 ---@field extra_params table<string, string>|nil
 
+---@class AtlasAzurePullsViewConfig : AtlasPullsViewConfig, AtlasAzurePullsSearchConfig
+
+---@class AtlasAzurePullsBookmarkConfig : AtlasPullsBookmarkConfig, AtlasAzurePullsSearchConfig
+
+---@class AtlasAzurePullsBookmarksConfig
+---@field key string|nil
+---@field label string|nil
+---@field items table<string, AtlasAzurePullsBookmarkConfig>|nil
+
 ---@class AtlasAzurePullsConfig
 ---@field views AtlasAzurePullsViewConfig[]|nil
+---@field bookmarks AtlasAzurePullsBookmarksConfig|nil

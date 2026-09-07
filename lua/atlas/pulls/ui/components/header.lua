@@ -236,20 +236,31 @@ end
 ---@return string[], table[]
 function M.render_repo(repo, width)
 	local full_name = repo_full_name(repo)
-	local workspace = repo_workspace(repo)
-	local created_text = utils.relative_time_text(tostring(repo.created_on or ""))
-
 	local title = string.format(" %s", full_name)
-	local author_icon, author_icon_hl = icons.general("user")
-	local by_prefix = string.format(" %s by @", author_icon)
-	local by_sep = " - "
-	local byline = by_prefix .. workspace .. by_sep .. created_text
-
-	local lines = {
-		title,
-		byline,
-		"",
+	local lines = { title }
+	local spans = {
+		{ line = 0, line_hl_group = "AtlasTabInactive" },
 	}
+	add_span(spans, lines, 0, 1, 1 + #full_name, highlights.dynamic_for(full_name) or "AtlasTextMuted")
+
+	if repo.created_on and repo.created_on ~= "" then
+		local workspace = repo_workspace(repo)
+		local created_text = utils.relative_time_text(repo.created_on)
+		local author_icon, author_icon_hl = icons.general("user")
+		local by_prefix = string.format(" %s by @", author_icon)
+		local by_sep = " - "
+		table.insert(lines, by_prefix .. workspace .. by_sep .. created_text)
+		table.insert(spans, { line = 1, line_hl_group = "AtlasTabInactive" })
+		add_span(spans, lines, 1, 1, 1 + #author_icon, author_icon_hl)
+
+		local owner_start = #by_prefix - 1
+		local owner_end = owner_start + #("@" .. workspace)
+		add_span(spans, lines, 1, owner_start, owner_end, presentation.author_hl(workspace))
+
+		local ts_start = owner_end + #by_sep
+		add_span(spans, lines, 1, ts_start, ts_start + #created_text, "AtlasTextMuted")
+	end
+	table.insert(lines, "")
 
 	local rows = {}
 
@@ -297,6 +308,7 @@ function M.render_repo(repo, width)
 	end
 
 	if #rows > 0 then
+		local table_offset = #lines
 		local tbl_lines, _, tbl_spans = table_tree.render({
 			width = width,
 			margin = 1,
@@ -337,46 +349,16 @@ function M.render_repo(repo, width)
 		end
 		table.insert(lines, "")
 
-		local spans = {
-			{ line = 0, line_hl_group = "AtlasTabInactive" },
-			{ line = 1, line_hl_group = "AtlasTabInactive" },
-		}
-
-		add_span(spans, lines, 0, 1, 1 + #full_name, highlights.dynamic_for(full_name) or "AtlasTextMuted")
-		add_span(spans, lines, 1, 1, 1 + #author_icon, author_icon_hl)
-
-		local owner_start = #by_prefix - 1
-		local owner_end = owner_start + #("@" .. workspace)
-		add_span(spans, lines, 1, owner_start, owner_end, presentation.author_hl(workspace))
-
-		local ts_start = owner_end + #by_sep
-		local ts_end = ts_start + #created_text
-		add_span(spans, lines, 1, ts_start, ts_end, "AtlasTextMuted")
-
 		for _, span in ipairs(tbl_spans) do
 			table.insert(spans, {
-				line = span.line + 3,
+				line = span.line + table_offset,
 				start_col = span.start_col,
 				end_col = span.end_col,
 				hl_group = span.hl_group,
 			})
 		end
-
-		return lines, spans
 	end
 
-	local spans = {
-		{ line = 0, line_hl_group = "AtlasTabInactive" },
-		{ line = 1, line_hl_group = "AtlasTabInactive" },
-	}
-	add_span(spans, lines, 0, 1, 1 + #full_name, highlights.dynamic_for(full_name) or "AtlasTextMuted")
-	add_span(spans, lines, 1, 1, 1 + #author_icon, author_icon_hl)
-	local owner_start = #by_prefix - 1
-	local owner_end = owner_start + #("@" .. workspace)
-	add_span(spans, lines, 1, owner_start, owner_end, presentation.author_hl(workspace))
-	local ts_start = owner_end + #by_sep
-	local ts_end = ts_start + #created_text
-	add_span(spans, lines, 1, ts_start, ts_end, "AtlasTextMuted")
 	return lines, spans
 end
 

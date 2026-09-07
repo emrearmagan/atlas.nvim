@@ -100,8 +100,9 @@ end
 ---@param on_done fun(result: any, err: string|nil, headers?: table<string, string>)
 ---@param ctx? table
 ---@param api_version? string
+---@param content_type? string
 ---@return { job_id: integer, cancel: fun() }|nil
-function M.request(method, endpoint, data, on_done, ctx, api_version)
+function M.request(method, endpoint, data, on_done, ctx, api_version, content_type)
 	local cfg = azure_config()
 	if not cfg.base_url or cfg.base_url == "" or not cfg.token or cfg.token == "" then
 		local err = "Missing Azure DevOps credentials in config"
@@ -116,8 +117,8 @@ function M.request(method, endpoint, data, on_done, ctx, api_version)
 
 	local headers = {
 		Authorization = "Basic " .. vim.base64.encode(":" .. cfg.token),
-		["Content-Type"] = "application/json",
-		["Content-Length"] = method == "POST" and payload == nil and "0" or nil,
+		["Content-Type"] = content_type or "application/json",
+		["Content-Length"] = (method == "POST" or method == "PUT") and payload == nil and "0" or nil,
 		Accept = "application/json",
 	}
 	local log = vim.tbl_extend("keep", { method = method, endpoint = endpoint }, ctx or {})
