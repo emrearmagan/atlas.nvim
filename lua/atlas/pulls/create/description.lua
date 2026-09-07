@@ -22,6 +22,7 @@ local git = require("atlas.core.git")
 local DEFAULT_PR_TEMPLATE = ".github/pull_request_template.md"
 
 local URL_PATHS = {
+	azure = { commit = "/commit/" },
 	github = { issue = "/issues/", commit = "/commit/" },
 	gitlab = { issue = "/-/issues/", commit = "/-/commit/" },
 	bitbucket = { issue = "/issues/", commit = "/commits/" },
@@ -151,8 +152,8 @@ local function add_links(text, context)
 		end)
 	end
 
-	if context.repo_url then
-		local issue_path = context.urls.issue or "/issues/"
+	if context.repo_url and context.urls.issue then
+		local issue_path = context.urls.issue
 		text = text:gsub("%[?#(%d+)%]?", function(number)
 			return string.format("[#%s](%s%s%s)", number, context.repo_url, issue_path, number)
 		end)

@@ -4,6 +4,7 @@ local json = require("atlas.core.json")
 local service = require("atlas.pulls.providers.azure.api.service")
 local mapper = require("atlas.pulls.providers.azure.api.mapper")
 local users_api = require("atlas.pulls.providers.azure.api.users")
+local reviews_api = require("atlas.pulls.providers.azure.api.reviews")
 local request_scope = require("atlas.core.requests")
 
 ---@param ref PullRequestRef
@@ -252,6 +253,138 @@ function M.fetch_description(pr, opts, on_done)
 		end
 		on_done(json.safe_str(result.description) or "", nil)
 	end)
+end
+
+---@param opts PullsCreatePROpts
+---@param on_done fun(result: PullsCreatePRResult|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.create_pr(opts, on_done)
+	local project, repository = opts.repo_slug:match("^([^/]+)/(.+)$")
+	local reviewers = {}
+	for _, reviewer in ipairs(opts.reviewers or {}) do
+		table.insert(reviewers, { id = reviewer.provider_id })
+	end
+	local endpoint = string.format(
+		"/%s/_apis/git/repositories/%s/pullrequests",
+		service.url_encode(project),
+		service.url_encode(repository)
+	)
+	local body = {
+		title = opts.title,
+		description = opts.body,
+		sourceRefName = "refs/heads/" .. opts.head,
+		targetRefName = "refs/heads/" .. opts.base,
+		isDraft = opts.draft == true,
+		reviewers = reviewers,
+	}
+	return service.request("POST", endpoint, body, function(result, err)
+		if err then
+			on_done(nil, err)
+			return
+		end
+		service.clear_cache()
+		local pr = mapper.to_pull_request(result)
+		on_done({ id = pr.id, url = pr.link.html, message = "PR created" }, nil)
+	end, { action = "Create PR", repo = opts.repo_slug, head = opts.head, base = opts.base })
+end
+
+---@param opts { repo_slug: string, repo_root: string|nil, head: string, base: string, pr: PullRequest|nil }
+---@param on_done fun(reviewers: PullsCreatePRReviewer[]|nil, err: string|nil)
+---@return AtlasRequestScope
+function M.fetch_default_reviewers(opts, on_done)
+	local project = opts.repo_slug:match("^([^/]+)/")
+	local starts = {
+		members = function(done)
+			return users_api.fetch_project_members(project, done)
+		end,
+	}
+	if opts.pr then
+		starts.current = function(done)
+			return reviews_api.fetch_reviewers(opts.pr, { force_refresh = true }, done)
+		end
+	end
+	local scope = request_scope.new()
+	scope.all(starts, function(values, errors)
+		local err = errors.members or errors.current
+		if err then
+			on_done(nil, err)
+			return
+		end
+		local reviewers = {}
+		local by_id = {}
+		for _, member in ipairs(values.members) do
+			if not by_id[member.id] then
+				local reviewer = {
+					label = member.displayName,
+					provider_id = member.id,
+					selected = false,
+					default = false,
+				}
+				by_id[member.id] = reviewer
+				table.insert(reviewers, reviewer)
+			end
+		end
+		for _, current in ipairs(values.current or {}) do
+			local reviewer = by_id[current.provider_id]
+			if reviewer then
+				reviewer.selected = true
+			else
+				table.insert(reviewers, {
+					label = current.name,
+					provider_id = current.provider_id,
+					selected = true,
+					default = false,
+				})
+			end
+		end
+		on_done(reviewers, nil)
+	end)
+	return scope
+end
+
+---@param pr PullRequest
+---@param selected PullsCreatePRReviewer[]
+---@param original PullsCreatePRReviewer[]
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }
+function M.update_reviewers(pr, selected, original, on_done)
+	local selected_ids = {}
+	for _, reviewer in ipairs(selected) do
+		selected_ids[reviewer.provider_id] = true
+	end
+	local original_ids = {}
+	for _, reviewer in ipairs(original) do
+		original_ids[reviewer.provider_id] = true
+	end
+	local added = {}
+	for _, reviewer in ipairs(selected) do
+		if not original_ids[reviewer.provider_id] then
+			table.insert(added, { id = reviewer.provider_id })
+		end
+	end
+	local endpoint = pullrequest_endpoint(pr) .. "/reviewers"
+	local context = { action = "Update PR reviewers", repo = pr.repo_full_name, id = pr.id }
+	local starts = {}
+	if #added > 0 then
+		starts.add = function(done)
+			return service.request("POST", endpoint, added, done, context)
+		end
+	end
+	for _, reviewer in ipairs(original) do
+		local id = reviewer.provider_id
+		if not selected_ids[id] then
+			starts[id] = function(done)
+				return service.request("DELETE", endpoint .. "/" .. service.url_encode(id), nil, done, context)
+			end
+		end
+	end
+	local scope = request_scope.new()
+	scope.all(starts, function(_, errors)
+		service.clear_cache()
+		local _, err = next(errors)
+		on_done(err == nil, err)
+	end)
+	return scope
 end
 
 ---@param pr PullRequest
