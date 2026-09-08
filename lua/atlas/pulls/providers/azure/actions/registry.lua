@@ -116,7 +116,7 @@ register(actions.ready_for_review)
 register(actions.convert_to_draft)
 register(actions.edit_reviewers)
 
--- register(actions.open_pipelines)
+register(actions.open_pipelines)
 register(actions.open_diff)
 register(actions.checkout)
 

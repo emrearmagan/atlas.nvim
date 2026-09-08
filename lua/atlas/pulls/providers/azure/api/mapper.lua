@@ -84,6 +84,7 @@ function M.to_pull_request(raw)
 		title = raw.title,
 		state = raw.status == "active" and raw.isDraft == true and "draft" or states[raw.status],
 		merge_status = json.safe_str(raw.mergeStatus),
+		merge_commit_hash = json.safe_table(raw.lastMergeCommit).commitId,
 		author = to_author(raw.createdBy),
 		source = {
 			branch = raw.sourceRefName:gsub("^refs/heads/", ""),
@@ -111,6 +112,7 @@ function M.to_pull_request(raw)
 		},
 		provider = "azure",
 		project_id = repository.project.id,
+		repository_id = repository.id,
 		workspace = project,
 		repo = repository.name,
 		repo_full_name = project .. "/" .. repository.name,

@@ -96,6 +96,12 @@ function M.fetch_commits(pr, opts, on_done)
 					author_name = raw.author.name,
 					date = raw.author.date,
 					html_url = raw.remoteUrl,
+					statuses_url = string.format(
+						"/%s/_apis/git/repositories/%s/commits/%s/statuses",
+						service.url_encode(pr.workspace),
+						service.url_encode(pr.repo),
+						raw.commitId
+					),
 				})
 			end
 			local next_token = headers["x-ms-continuationtoken"]
