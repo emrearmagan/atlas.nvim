@@ -388,6 +388,55 @@ function M.update_reviewers(pr, selected, original, on_done)
 end
 
 ---@param pr PullRequest
+---@param on_done fun(labels: { name: string }[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_labels(pr, on_done)
+	return service.request("GET", pullrequest_endpoint(pr) .. "/labels", nil, function(result, err)
+		on_done(result and result.value or nil, err)
+	end, { action = "Fetch pull request labels", repo = pr.repo_full_name, id = pr.id })
+end
+
+---@param pr PullRequest
+---@param selected string[]
+---@param original { name: string }[]
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return AtlasRequestScope
+function M.update_labels(pr, selected, original, on_done)
+	local selected_names = {}
+	for _, name in ipairs(selected) do
+		selected_names[name] = true
+	end
+	local original_names = {}
+	for _, label in ipairs(original) do
+		original_names[label.name] = true
+	end
+	local endpoint = pullrequest_endpoint(pr) .. "/labels"
+	local context = { action = "Update pull request labels", repo = pr.repo_full_name, id = pr.id }
+	local starts = {}
+	for name in pairs(selected_names) do
+		if not original_names[name] then
+			starts[name] = function(done)
+				return service.request("POST", endpoint, { name = name }, done, context)
+			end
+		end
+	end
+	for name in pairs(original_names) do
+		if not selected_names[name] then
+			starts[name] = function(done)
+				return service.request("DELETE", endpoint .. "/" .. service.url_encode(name), nil, done, context)
+			end
+		end
+	end
+	local scope = request_scope.new()
+	scope.all(starts, function(_, errors)
+		service.clear_cache()
+		local _, err = next(errors)
+		on_done(err == nil, err)
+	end)
+	return scope
+end
+
+---@param pr PullRequest
 ---@param fields table
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
@@ -431,6 +480,28 @@ end
 ---@return { cancel: fun() }|nil
 function M.decline(pr, on_done)
 	return update_pullrequest(pr, { status = "abandoned" }, on_done)
+end
+
+---@param pr PullRequest
+---@param opts { method: "merge"|"squash", delete_branch: boolean }
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.merge(pr, opts, on_done)
+	return update_pullrequest(pr, {
+		status = "completed",
+		lastMergeSourceCommit = { commitId = pr.source.commit_hash },
+		completionOptions = {
+			mergeStrategy = opts.method == "squash" and "squash" or "noFastForward",
+			deleteSourceBranch = opts.delete_branch,
+		},
+	}, on_done)
+end
+
+---@param pr PullRequest
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.reopen(pr, on_done)
+	return update_pullrequest(pr, { status = "active" }, on_done)
 end
 
 return M
