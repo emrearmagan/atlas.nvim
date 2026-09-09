@@ -106,6 +106,27 @@ My dotfiles include a [Pi extension that wraps this script](https://github.com/e
 
 </details>
 
+<details>
+<summary><strong>LSP for Reviews</strong> - attach LSP to the new side of a diff</summary>
+
+Both sides of a pull request diff are normally built from Git revisions, and Neovim does not attach language servers to such buffers. Set `pulls.diff.lsp.enabled` to attach them to the new side:
+
+```lua
+pulls = { diff = { lsp = { enabled = true } } }
+```
+
+Atlas then creates a detached worktree at the pull request head and opens the new side from it, so those buffers are real files that language servers, `gd`, and hover all work, if there are no competing mappings. Your checkout and current branch are untouched. The old side stays a revision buffer without a language server.
+
+The worktree lives under `stdpath("cache")/atlas/worktrees` and is removed when the diff closes; `pulls.diff.lsp.dir` overrides the location with a path or a function. Files with no counterpart in the worktree (deleted files, binaries, submodules) fall back to revision buffers.
+
+A fresh worktree has no `node_modules`, `.venv`, or other build output, so servers that need them resolve nothing. List those directories in `pulls.diff.lsp.link` to symlink them from your checkout.
+
+The linked directories are read from the repository Atlas diffs against. That is your local clone when Neovim is inside it, or the path mapped in repo_config.paths. Otherwise Atlas diffs against its own cache clone, which has no working tree, and every link entry is skipped.
+
+They are the same directories on disk, so a server that writes into them writes into your project.
+
+</details>
+
 ### Also included
 
 <details>
@@ -354,6 +375,18 @@ pulls = {
     layout = "inline", -- "inline" or "side-by-side".
     compact = true, -- Start with only changed hunks and surrounding context visible.
     compact_context_lines = 3, -- Context lines shown around hunks in compact mode.
+    lsp = {
+      -- Back the new side of the diff with a detached worktree at the PR head so it is made of
+      -- real files and your language servers attach to it (AtlasDiff only). Off by default.
+      enabled = false,
+      -- Where the worktree lives. Defaults to `stdpath("cache")/atlas/worktrees/<repo>-<sha>`.
+      -- May be an absolute path, or a function receiving
+      -- { repo_root, repo_full_name, pr_id, head_sha, default } that returns a path or nil.
+      dir = nil,
+      -- Directories symlinked from your checkout into the worktree so servers can resolve
+      -- dependencies. These are the same directories on disk, not copies.
+      link = {}, -- e.g. { "node_modules", ".venv" }
+    },
     explorer = {
       grouped = true, -- Group changed files by directory.
       hidden = false,

@@ -1,8 +1,12 @@
 local M = {}
 
 local commits = require("atlas.pulls.diff.atlas.commits")
+local comments = require("atlas.pulls.diff.ui.comments")
 local diff = require("atlas.ui.components.diff_hunks")
 local explorer = require("atlas.pulls.diff.atlas.explorer")
+local keymaps = require("atlas.pulls.diff.atlas.keymaps")
+local logger = require("atlas.core.logger")
+local notes = require("atlas.pulls.diff.notes")
 local renderer = require("atlas.pulls.diff.atlas.renderer")
 local review_panel = require("atlas.pulls.diff.ui.review_panel")
 local session_api = require("atlas.pulls.diff.session")
@@ -41,6 +45,7 @@ local session_api = require("atlas.pulls.diff.session")
 ---@field job { cancel: fun() }|nil
 ---@field group integer|nil
 ---@field closing boolean
+---@field keymap_actions AtlasNativeDiffKeymapActions|nil Kept so a swapped head buffer can be re-bound.
 
 ---@param name string|nil
 ---@param buftype "nofile"|"nowrite"|nil
@@ -267,15 +272,119 @@ local function focus_first_hunk(session)
 	end
 end
 
+-- Everything inside a worktree is a throwaway checkout, including files reached by jumping out of
+-- the diff. Keep them read only so edits cannot be lost with the directory, and unlisted so a
+-- review does not add a second entry per file to the buffer list.
+---@param buf integer
+function M.mark_worktree_buffer(buf)
+	if not vim.api.nvim_buf_is_valid(buf) then
+		return
+	end
+	vim.bo[buf].buflisted = false
+	vim.bo[buf].modifiable = false
+	vim.bo[buf].readonly = true
+end
+
+-- Head side buffers
+--
+-- Neovim only attaches language servers to buffers whose buftype is empty, so the new side has to
+-- be a real file. When the session owns a worktree at the PR head we load the file straight from
+-- it; everything else (deleted files, binaries, no worktree) keeps the revision buffer.
+---@param session AtlasDiffSession
+---@param document AtlasDiffDocument
+---@return integer buf
+local function resolve_right_buffer(session, document)
+	local state = session.viewer_state
+	local fallback = state.right.virtual_buf or state.right.buf
+	local worktree = session.worktree
+	local path = document.new.path
+	if not worktree or document.binary or document.status == "deleted" or path == "" then
+		return fallback
+	end
+
+	local full = tostring(worktree.root):gsub("/+$", "") .. "/" .. path:gsub("^/+", "")
+	if vim.fn.filereadable(full) ~= 1 then
+		return fallback
+	end
+
+	local added, buf = pcall(vim.fn.bufadd, full)
+	if not added or not buf or buf == 0 then
+		return fallback
+	end
+	local was_loaded = vim.api.nvim_buf_is_loaded(buf)
+	if not was_loaded and not pcall(vim.fn.bufload, buf) then
+		return fallback
+	end
+
+	-- Hunk highlighting and comment anchoring are line addressed, so a worktree file that does not
+	-- match the blob we diffed (CRLF, symlink, submodule, dirty worktree) has to be rejected.
+	if vim.api.nvim_buf_line_count(buf) ~= #document.new.lines then
+		logger.logwarn("diff.worktree file does not match the diffed revision", { path = full })
+		if not was_loaded then
+			pcall(vim.api.nvim_buf_delete, buf, { force = true })
+		end
+		return fallback
+	end
+
+	state.right.owned_bufs[buf] = true
+	vim.bo[buf].bufhidden = "hide"
+	M.mark_worktree_buffer(buf)
+	return buf
+end
+
+-- Real worktree buffers outlive the file switch, so every overlay and mapping this session added
+-- has to come off before we move on. Otherwise the user meets them again in a normal edit session.
+---@param session AtlasDiffSession
+---@param buf integer
+local function detach_content_buffer(session, buf)
+	local state = session.viewer_state
+	if buf == state.right.virtual_buf or not vim.api.nvim_buf_is_valid(buf) then
+		return
+	end
+	renderer.clear(buf)
+	notes.clear_buffer(buf)
+	comments.clear_buffer(buf)
+	keymaps.unregister_buffer(buf)
+end
+
+---@param session AtlasDiffSession
+---@param buf integer
+local function attach_content_buffer(session, buf)
+	local state = session.viewer_state
+	if buf == state.right.virtual_buf or not vim.api.nvim_buf_is_valid(buf) then
+		return
+	end
+	local actions = state.keymap_actions
+	if not actions then
+		return
+	end
+	keymaps.register_buffer(session, buf, actions)
+	keymaps.register_review_buffer(session, buf, actions.reopen)
+end
+
 ---@param session AtlasDiffSession
 ---@param document AtlasDiffDocument
 function M.set_document(session, document)
 	local state = session.viewer_state
 	state.document = document
+
+	local previous = state.right.buf
+	local right_buf = resolve_right_buffer(session, document)
+	if right_buf ~= previous then
+		detach_content_buffer(session, previous)
+		state.right.buf = right_buf
+		if state.right.win and vim.api.nvim_win_is_valid(state.right.win) then
+			vim.api.nvim_win_set_buf(state.right.win, right_buf)
+		end
+		attach_content_buffer(session, right_buf)
+	end
+
 	name_content_buffer(session, state.left.buf, session.source.base_revision, document.old.path)
-	name_content_buffer(session, state.right.buf, session.source.head_revision, document.new.path)
 	set_buffer(state.left.buf, document.old.lines, document.old.path)
-	set_buffer(state.right.buf, document.new.lines, document.new.path)
+	if right_buf == state.right.virtual_buf then
+		name_content_buffer(session, right_buf, session.source.head_revision or "WORKTREE", document.new.path)
+		set_buffer(right_buf, document.new.lines, document.new.path)
+	end
 	arrange_content_windows(session)
 	if state.left.win then
 		M.configure_content_window(session, state.left.win)
@@ -514,7 +623,7 @@ function M.create(session, data, options)
 		commits_visible = options.explorer.show_commits and #session.commits > 0,
 		commit_items = {},
 		left = { buf = left_buf, win = nil },
-		right = { buf = right_buf, win = right_win },
+		right = { buf = right_buf, win = right_win, virtual_buf = right_buf, owned_bufs = {} },
 		annotated_paths = {},
 		inline_deleted_lines = true,
 		additions = additions,
@@ -536,8 +645,29 @@ end
 ---@param session AtlasDiffSession
 function M.delete_buffers(session)
 	local state = session.viewer_state
-	for _, buf in ipairs({ state.panel.buf, state.commits_panel.buf, state.left.buf, state.right.buf }) do
-		if vim.api.nvim_buf_is_valid(buf) then
+	local buffers = {
+		state.panel.buf,
+		state.commits_panel.buf,
+		state.left.buf,
+		state.right.buf,
+		state.right.virtual_buf,
+	}
+	-- Every buffer under the worktree points into a directory that is about to be removed, including
+	-- files the user reached by jumping out of the diff. Leaving them behind dangles them.
+	for buf in pairs(state.right.owned_bufs or {}) do
+		buffers[#buffers + 1] = buf
+	end
+	local root = session.worktree and session.worktree.root or nil
+	if root then
+		local prefix = tostring(root):gsub("/+$", "") .. "/"
+		for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+			if vim.api.nvim_buf_get_name(buf):sub(1, #prefix) == prefix then
+				buffers[#buffers + 1] = buf
+			end
+		end
+	end
+	for _, buf in ipairs(buffers) do
+		if buf and vim.api.nvim_buf_is_valid(buf) then
 			pcall(vim.api.nvim_buf_delete, buf, { force = true })
 		end
 	end

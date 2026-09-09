@@ -7,6 +7,22 @@ local resolver = require("atlas.core.keymaps")
 local review_keymaps = require("atlas.pulls.diff.keymaps")
 local review_panel = require("atlas.pulls.diff.ui.review_panel")
 
+---@class AtlasNativeDiffKeymapActions
+---@field close fun()
+---@field reopen fun()
+---@field refresh_review fun()
+---@field toggle_layout fun()
+---@field toggle_compact fun()
+---@field navigate_hunk fun(direction: 1|-1)
+---@field navigate_file fun(direction: 1|-1)
+---@field navigate_unreviewed_file fun(direction: 1|-1)
+---@field toggle_file_reviewed fun()
+---@field toggle_explorer fun()
+---@field toggle_commits fun()
+---@field select_file fun(index: integer, focus_diff: boolean|nil)
+---@field show_commit fun()
+---@field add_file_comment fun(pending: boolean)
+
 ---@param action AtlasKeymapActionId
 ---@param definition AtlasHelpKeyItem
 ---@return AtlasHelpKeyItem|nil
@@ -38,47 +54,10 @@ local function guard(session, callback)
 	end
 end
 
----@param session AtlasDiffSession
----@param actions {
---- close: fun(),
---- reopen: fun(),
---- refresh_review: fun(),
---- toggle_layout: fun(),
---- toggle_compact: fun(),
---- navigate_hunk: fun(direction: 1|-1),
---- navigate_file: fun(direction: 1|-1),
---- navigate_unreviewed_file: fun(direction: 1|-1),
---- toggle_file_reviewed: fun(),
---- toggle_explorer: fun(),
---- toggle_commits: fun(),
---- select_file: fun(index: integer, focus_diff: boolean|nil),
---- show_commit: fun(),
---- add_file_comment: fun(pending: boolean),
----}
-function M.register(session, actions)
-	local state = session.viewer_state --[[@as AtlasNativeDiffState]]
-	local run = function(callback)
-		return guard(session, callback)
-	end
-	local find_file = run(function()
-		local files = {}
-		for index, file in ipairs(state.files) do
-			files[index] = { index = index, path = file.path }
-		end
-		picker.select({
-			title = "Changed files",
-			items = files,
-			initial_index = state.pending_index or state.selected_index,
-			format_item = function(file)
-				return file.path
-			end,
-			on_select = function(file)
-				if file then
-					actions.select_file(file.index, true)
-				end
-			end,
-		})
-	end)
+---@param actions AtlasNativeDiffKeymapActions
+---@param run fun(callback: fun()): fun()
+---@return AtlasHelpKeyItem[]
+local function content_navigation(actions, run)
 	local navigation = {}
 	add(
 		navigation,
@@ -146,15 +125,50 @@ function M.register(session, actions)
 			opts = { silent = true, nowait = true },
 		})
 	)
-	for _, buf in ipairs({ state.panel.buf, state.commits_panel.buf, state.left.buf, state.right.buf }) do
-		local find_action = buf == state.panel.buf and "pulls.review.explorer.find_file" or "pulls.review.find_file"
-		local find_item = item(find_action, {
-			desc = "Find changed file",
-			index = 7,
-			callback = find_file,
-			opts = { silent = true, nowait = true },
-		})
 
+	return navigation
+end
+
+-- Registered per buffer so the head side can be re-bound when it swaps to a real worktree file.
+---@param session AtlasDiffSession
+---@param buf integer
+---@param actions AtlasNativeDiffKeymapActions
+function M.register_buffer(session, buf, actions)
+	if not vim.api.nvim_buf_is_valid(buf) then
+		return
+	end
+	local state = session.viewer_state --[[@as AtlasNativeDiffState]]
+	local run = function(callback)
+		return guard(session, callback)
+	end
+	local navigation = content_navigation(actions, run)
+	local find_file = run(function()
+		local files = {}
+		for index, file in ipairs(state.files) do
+			files[index] = { index = index, path = file.path }
+		end
+		picker.select({
+			title = "Changed files",
+			items = files,
+			initial_index = state.pending_index or state.selected_index,
+			format_item = function(file)
+				return file.path
+			end,
+			on_select = function(file)
+				if file then
+					actions.select_file(file.index, true)
+				end
+			end,
+		})
+	end)
+	local find_action = buf == state.panel.buf and "pulls.review.explorer.find_file" or "pulls.review.find_file"
+	local find_item = item(find_action, {
+		desc = "Find changed file",
+		index = 7,
+		callback = find_file,
+		opts = { silent = true, nowait = true },
+	})
+	do
 		local general = {}
 		add(
 			general,
@@ -264,6 +278,18 @@ function M.register(session, actions)
 			help.register("Navigation", { find_item }, { index = 120, buffer = buf })
 		end
 	end
+end
+
+---@param session AtlasDiffSession
+---@param actions AtlasNativeDiffKeymapActions
+function M.register(session, actions)
+	local state = session.viewer_state --[[@as AtlasNativeDiffState]]
+	local run = function(callback)
+		return guard(session, callback)
+	end
+	for _, buf in ipairs({ state.panel.buf, state.commits_panel.buf, state.left.buf, state.right.buf }) do
+		M.register_buffer(session, buf, actions)
+	end
 
 	local panel_actions = {}
 	add(
@@ -367,6 +393,24 @@ function M.register(session, actions)
 			state.right.buf,
 		})
 	end
+end
+
+-- Review mappings for a single buffer, for the same reason as `register_buffer`.
+---@param session AtlasDiffSession
+---@param buf integer
+---@param reopen fun()|nil
+function M.register_review_buffer(session, buf, reopen)
+	review_keymaps.register(session, { buffers = { buf }, reopen = reopen })
+end
+
+-- Strip everything this session mapped on a content buffer. Worktree buffers are real files that
+-- outlive the diff, so leaving `q` or `<CR>` bound on them would follow the user around.
+---@param buf integer
+function M.unregister_buffer(buf)
+	if not buf then
+		return
+	end
+	help.remove_buffer(buf)
 end
 
 return M

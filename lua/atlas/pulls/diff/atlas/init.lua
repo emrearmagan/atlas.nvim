@@ -339,8 +339,18 @@ local function navigate_hunk(session, direction)
 end
 
 ---@param session AtlasDiffSession
+local function release_worktree(session)
+	local worktree = session.worktree
+	session.worktree = nil
+	if worktree then
+		pcall(worktree.release)
+	end
+end
+
+---@param session AtlasDiffSession
 local function register_keymaps(session)
-	keymaps.register(session, {
+	---@type AtlasNativeDiffKeymapActions
+	local actions = {
 		close = function()
 			session.close("user_close")
 		end,
@@ -406,7 +416,10 @@ local function register_keymaps(session)
 				comments.add_to_file(session, { path = file.path, old_path = file.old_path }, pending)
 			end
 		end,
-	})
+	}
+	local state = session.viewer_state --[[@as AtlasNativeDiffState]]
+	state.keymap_actions = actions
+	keymaps.register(session, actions)
 end
 
 ---@param session AtlasDiffSession
@@ -580,7 +593,97 @@ function M.detach(session, reason)
 		pcall(vim.cmd, vim.api.nvim_tabpage_get_number(session.tabpage) .. "tabclose")
 	end
 	view.delete_buffers(session)
+	-- Buffers first: they point into the worktree we are about to remove. A reload resolves the head
+	-- again and claims its own worktree, so it releases here too.
+	release_worktree(session)
 	events.emit("AtlasDiffClosed", event_data(session, reason or "viewer_closed"))
 end
+
+local worktree_group = vim.api.nvim_create_augroup("AtlasDiffWorktree", { clear = true })
+
+---@param session AtlasDiffSession
+---@param buf integer
+---@return string|nil path Path relative to the worktree root.
+local function worktree_path(session, buf)
+	local root = session.worktree and session.worktree.root or nil
+	if not root or not vim.api.nvim_buf_is_valid(buf) then
+		return nil
+	end
+	local name = vim.api.nvim_buf_get_name(buf)
+	if name == "" then
+		return nil
+	end
+	local prefix = tostring(root):gsub("/+$", "") .. "/"
+	if name:sub(1, #prefix) ~= prefix then
+		return nil
+	end
+	return name:sub(#prefix + 1)
+end
+
+-- Jumping with gd or references lands on a worktree file. When that file belongs to the pull
+-- request, sync the session to it rather than leaving a plain file sitting in the diff window: the
+-- buffer the jump opened is the same buffer the head side would have loaded anyway. Hooking the
+-- buffer display instead of the LSP handlers keeps every picker and the quickfix list working.
+vim.api.nvim_create_autocmd("BufWinEnter", {
+	group = worktree_group,
+	callback = function(args)
+		local buf = args.buf
+		local session, path
+		for _, candidate in pairs(session_api.all()) do
+			local state = candidate.viewer_state
+			if state and not state.closing then
+				local relative = worktree_path(candidate, buf)
+				if relative then
+					session, path = candidate, relative
+					break
+				end
+			end
+		end
+		if not session then
+			return
+		end
+		view.mark_worktree_buffer(buf)
+
+		local state = session.viewer_state --[[@as AtlasNativeDiffState]]
+		local win = vim.api.nvim_get_current_win()
+		if win ~= state.right.win or buf == state.right.buf then
+			return
+		end
+		local index = file_index(session, path)
+		if not index or index == state.selected_index then
+			return
+		end
+		-- Deferred so the jump has positioned the cursor; that line is kept through the reload.
+		vim.schedule(function()
+			if state.closing or not vim.api.nvim_win_is_valid(win) then
+				return
+			end
+			local line = vim.api.nvim_win_get_cursor(win)[1]
+			select_file(session, index, function()
+				local target = state.right.win
+				if not target or not vim.api.nvim_win_is_valid(target) then
+					return
+				end
+				local count = vim.api.nvim_buf_line_count(state.right.buf)
+				vim.api.nvim_win_set_cursor(target, { math.max(1, math.min(line, count)), 0 })
+				pcall(vim.api.nvim_win_call, target, function()
+					vim.cmd("normal! zvzz")
+				end)
+			end)
+		end)
+	end,
+})
+
+-- Worktrees are cheap to recreate but should not pile up in the cache directory. Anything that
+-- still slips through (a crash, a kill) is cleaned up by worktree.prune on the next open.
+vim.api.nvim_create_autocmd("VimLeavePre", {
+	group = worktree_group,
+	callback = function()
+		for _, session in pairs(session_api.all()) do
+			session.worktree = nil
+		end
+		pcall(require("atlas.core.git.worktree").shutdown)
+	end,
+})
 
 return M

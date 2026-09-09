@@ -21,6 +21,8 @@ local review_progress = { "󰝦", "󰪞", "󰪟", "󰪠", "󰪡", "󰪢", "󰪣"
 ---@class AtlasDiffWindow
 ---@field buf integer
 ---@field win integer|nil
+---@field virtual_buf integer|nil Scratch fallback used when the head side has no real file.
+---@field owned_bufs table<integer, true>|nil Real worktree buffers loaded by this session.
 
 ---@class AtlasDiffLineChange
 ---@field old_start integer
@@ -79,6 +81,7 @@ local review_progress = { "󰝦", "󰪞", "󰪟", "󰪠", "󰪡", "󰪢", "󰪣"
 ---@field review_panel AtlasDiffReviewPanel|nil
 ---@field review_request { cancel: fun() }|nil
 ---@field note_target AtlasNoteTarget|nil
+---@field worktree AtlasDiffWorktree|nil Detached worktree backing the head side, when one was claimed.
 ---@field viewer_state table
 ---@field expanded_threads table<string, boolean>
 ---@field expanded_overlays boolean
@@ -318,6 +321,17 @@ end
 ---@return AtlasDiffSession|nil
 function M.get(tabpage)
 	return sessions[tabpage or vim.api.nvim_get_current_tabpage()]
+end
+
+-- Every attached session, in no particular order. Used by the worktree autocmds, which need to find
+-- the session that owns a buffer without knowing its tabpage.
+---@return AtlasDiffSession[]
+function M.all()
+	local result = {}
+	for _, session in pairs(sessions) do
+		table.insert(result, session)
+	end
+	return result
 end
 
 ---@param session AtlasDiffSession

@@ -278,6 +278,11 @@ PULLS CONFIGURATION                              *atlas-pulls-configuration*
         layout = "inline", -- "inline" or "side-by-side"
         compact = true, -- initially show hunks plus surrounding context
         compact_context_lines = 3, -- context lines around hunks in compact mode
+        lsp = {
+          enabled = false, -- real files on the new side, so LSP attaches
+          dir = nil,       -- absolute path or fun(ctx): string|nil
+          link = {},       -- e.g. { "node_modules", ".venv" }
+        },
         explorer = {
           grouped = true, -- group changed files by directory
           hidden = false,

@@ -45,6 +45,7 @@ local function ensure_state(bufnr)
 			keys = {},
 			commands = {},
 			group_opts = {},
+			mapped = {},
 		}
 
 		vim.api.nvim_create_autocmd("BufWipeout", {
@@ -128,6 +129,7 @@ function M.register(group, items, opts)
 		if item.callback then
 			for _, k in ipairs(keys) do
 				vim.keymap.set(mode, k, item.callback, key_opts)
+				table.insert(bstate.mapped, { mode = mode, key = k })
 			end
 		end
 
@@ -179,6 +181,27 @@ function M.register_command(group, items, opts)
 			})
 		end
 	end
+end
+
+-- Drop every mapping and help entry Atlas registered on a buffer. Needed for buffers that outlive
+-- the view that mapped them, such as the worktree files behind a diff's head side.
+---@param bufnr integer
+function M.remove_buffer(bufnr)
+	local bstate = state.buffers[bufnr]
+	if not bstate then
+		return
+	end
+	if vim.api.nvim_buf_is_valid(bufnr) then
+		for _, mapping in ipairs(bstate.mapped or {}) do
+			pcall(vim.keymap.del, mapping.mode, mapping.key, { buffer = bufnr })
+		end
+		for _, commands in pairs(bstate.commands) do
+			for _, entry in ipairs(commands) do
+				pcall(vim.api.nvim_buf_del_user_command, bufnr, entry.name)
+			end
+		end
+	end
+	state.buffers[bufnr] = nil
 end
 
 ---@param group string The name of the group

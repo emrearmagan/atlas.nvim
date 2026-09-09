@@ -48,6 +48,86 @@ local function start_loading(message, context, on_done)
 	return view, requests, finish
 end
 
+---@class AtlasDiffWorktree
+---@field root string
+---@field release fun()
+
+-- A detached worktree at the PR head turns the new side of the diff into real files, which is the
+-- only way a language server will attach (Neovim skips buffers whose buftype is not empty).
+-- Failure is never fatal: the diff falls back to revision buffers without LSP.
+---@param session AtlasDiffSession
+---@param view AtlasLoadingView
+---@param on_done fun(worktree: AtlasDiffWorktree|nil)
+---@return { cancel: fun() }|nil
+local function prepare_worktree(session, view, on_done)
+	local lsp_cfg = (((config.options.pulls or {}).diff or {}).lsp or {})
+	-- if they dont have lsp enabled, just short it
+	if not lsp_cfg.enabled then
+		on_done(nil)
+		return nil
+	end
+
+	local worktree = require("atlas.core.git.worktree")
+	local git_root = session.source.root
+	local head_sha = session.source.head_revision
+	-- No head revision means the new side already is the working tree: real files a language server
+	-- attaches to on its own, and nothing a detached worktree could check out.
+	if not head_sha then
+		on_done(nil)
+		return nil
+	end
+
+	local pr = session.review and session.review.pr or nil
+	---@type AtlasWorktreeContext
+	local context = {
+		repo_root = git_root,
+		repo_full_name = pr and pr.repo_full_name or nil,
+		pr_id = pr and pr.id or nil,
+		head_sha = head_sha,
+	}
+
+	local dir, claim_err = worktree.claim(context, lsp_cfg)
+	if not dir then
+		logger.logwarn("diff.worktree claim failed", { error = tostring(claim_err) })
+		on_done(nil)
+		return nil
+	end
+
+	pcall(worktree.prune, git_root)
+	view:update("Preparing worktree...")
+	local released = false
+	local function release()
+		if released then
+			return
+		end
+		released = true
+		worktree.discard(git_root, dir)
+	end
+
+	local handle = worktree.ensure({
+		repo_root = git_root,
+		head_sha = head_sha,
+		dir = dir,
+		link = lsp_cfg.link,
+	}, function(created, err)
+		if not created then
+			logger.logwarn("diff.worktree unavailable", { dir = dir, error = tostring(err) })
+			released = true
+			worktree.discard(git_root, dir)
+			on_done(nil)
+			return
+		end
+		on_done({ root = created, release = release })
+	end)
+
+	return {
+		cancel = function()
+			pcall(handle.cancel)
+			release()
+		end,
+	}
+end
+
 ---@param command string
 ---@param source AtlasDiffSource
 ---@return string|nil
@@ -70,10 +150,11 @@ end
 
 ---@param command string
 ---@param data { source: AtlasDiffSource, review: AtlasDiffReview|nil, commits: PullsCommit[], warnings: string[] }
+---@param view AtlasLoadingView
 ---@param open_again fun(on_done: fun(err: string|nil))
 ---@param on_done fun(err: string|nil)
 ---@return { cancel: fun() }|nil
-local function open_viewer(command, data, open_again, on_done)
+local function open_viewer(command, data, view, open_again, on_done)
 	local viewer = VIEWERS[command]
 	if not viewer then
 		on_done(open_command(command, data.source))
@@ -87,14 +168,55 @@ local function open_viewer(command, data, open_again, on_done)
 		commits = data.commits,
 		open_again = open_again,
 	})
-	return viewer.open(session, function(err)
+
+	local function finish(err)
 		if err then
 			session_api.detach(session, "open_failed")
 		elseif #data.warnings > 0 then
 			session_api.notify(session, "warn", table.concat(data.warnings, "; "))
 		end
 		on_done(err)
+	end
+
+	-- Only the native viewer reads worktree backed buffers; the others diff revisions themselves.
+	if viewer.id ~= "atlas" or not data.source.head_revision then
+		return viewer.open(session, finish)
+	end
+
+	local cancelled = false
+	local current
+	local request = prepare_worktree(session, view, function(worktree)
+		if cancelled then
+			if worktree then
+				worktree.release()
+			end
+			return
+		end
+		session.worktree = worktree
+		current = viewer.open(session, function(err)
+			-- The viewer releases the worktree when it detaches, so only clean up when it never attached.
+			if err then
+				local claimed = session.worktree
+				session.worktree = nil
+				if claimed then
+					pcall(claimed.release)
+				end
+			end
+			finish(err)
+		end)
 	end)
+
+	return {
+		cancel = function()
+			cancelled = true
+			if request then
+				pcall(request.cancel)
+			end
+			if current then
+				current.cancel()
+			end
+		end,
+	}
 end
 
 ---@param opts { provider: PullsProvider, current_user: PullsUser|nil, root: string|nil }
@@ -181,7 +303,7 @@ function M.open_pr(opts, on_done)
 					return
 				end
 				requests.run(function(done)
-					return open_viewer(command, data, function(reopen_done)
+					return open_viewer(command, data, view, function(reopen_done)
 						M.open_pr({
 							provider = opts.provider,
 							ref = opts.ref,
@@ -212,11 +334,11 @@ function M.open_range(opts, on_done)
 		base_revision = source.base_revision,
 		head_revision = source.head_revision,
 	}
-	local _, requests, finish = start_loading("Preparing diff...", context, on_done)
+	local view, requests, finish = start_loading("Preparing diff...", context, on_done)
 	local data = { source = source, commits = {}, warnings = {} }
 
 	requests.run(function(done)
-		return open_viewer(command, data, function(reopen_done)
+		return open_viewer(command, data, view, function(reopen_done)
 			M.open_range({
 				root = source.root,
 				base = source.base_revision,
