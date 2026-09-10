@@ -4,6 +4,36 @@ local request_scope = require("atlas.core.requests")
 local service = require("atlas.pulls.providers.azure.api.service")
 local mapper = require("atlas.pulls.providers.azure.api.mapper")
 
+-- Azure calls PR updates "iterations". Pick the one matching the displayed commit
+-- so comments use the code on screen, even if someone pushes while we're reviewing.
+-- https://learn.microsoft.com/en-us/rest/api/azure/devops/git/pull-request-iterations/list?view=azure-devops-rest-7.1#gitpullrequestiteration
+---@param pr PullRequest
+---@param commit_hash string
+---@param on_done fun(iteration: integer|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_iteration(pr, commit_hash, on_done)
+	local endpoint = string.format(
+		"/%s/_apis/git/repositories/%s/pullrequests/%s/iterations",
+		service.url_encode(pr.workspace),
+		service.url_encode(pr.repo),
+		tostring(pr.id)
+	)
+	return service.request("GET", endpoint, nil, function(result, err)
+		if err then
+			on_done(nil, err)
+			return
+		end
+		for index = #result.value, 1, -1 do
+			local iteration = result.value[index]
+			if iteration.sourceRefCommit.commitId == commit_hash then
+				on_done(iteration.id, nil)
+				return
+			end
+		end
+		on_done(nil, "Pull request iteration not found for commit: " .. commit_hash)
+	end, { action = "Fetch pull request iteration", repo = pr.repo_full_name, id = pr.id })
+end
+
 ---@param pr PullRequest
 ---@param iteration integer
 ---@param opts { force_refresh?: boolean }|nil

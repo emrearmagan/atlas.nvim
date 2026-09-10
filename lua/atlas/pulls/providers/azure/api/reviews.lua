@@ -41,18 +41,19 @@ function M.fetch_reviewers(pr, opts, on_done)
 end
 
 ---@param pr PullRequest
----@param opts { force_refresh?: boolean }|nil
+---@param opts { force_refresh?: boolean, commit_hash?: string }|nil
 ---@param include_hunks boolean
 ---@param on_done fun(data: PullsReviewData|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 local function fetch_review(pr, opts, include_hunks, on_done)
+	local commit_hash = (opts or {}).commit_hash or pr.source.commit_hash
 	local endpoint = string.format(
 		"/%s/_apis/git/repositories/%s/pullrequests/%s",
 		service.url_encode(pr.workspace),
 		service.url_encode(pr.repo),
 		tostring(pr.id)
 	)
-	local cache_key = (include_hunks and "review-threads:" or "review:") .. endpoint
+	local cache_key = (include_hunks and "review-threads:" or "review:") .. endpoint .. ":" .. commit_hash
 	if not (opts or {}).force_refresh then
 		local cached, ok = service.get_cache(cache_key)
 		if ok then
@@ -64,13 +65,12 @@ local function fetch_review(pr, opts, include_hunks, on_done)
 	local scope = request_scope.new()
 	local context = { action = "Fetch pull request review", repo = pr.repo_full_name, id = pr.id }
 	scope.run(function(done)
-		return service.request("GET", endpoint .. "/iterations", nil, done, context)
-	end, function(result, err)
+		return changes.fetch_iteration(pr, commit_hash, done)
+	end, function(iteration, err)
 		if err then
 			on_done(nil, err)
 			return
 		end
-		local iteration = result.value[#result.value].id
 		local query = service.build_query({ ["$iteration"] = iteration, ["$baseIteration"] = 0 })
 		local starts = {
 			comments = function(done)
@@ -107,7 +107,7 @@ local function fetch_review(pr, opts, include_hunks, on_done)
 				end
 			end
 			local data = {
-				review = { pending = false, commit_hash = pr.source.commit_hash },
+				review = { pending = false, commit_hash = commit_hash },
 				comments = comments,
 				tasks = {},
 				reviewers = pr.reviewers or {},
@@ -121,7 +121,7 @@ local function fetch_review(pr, opts, include_hunks, on_done)
 end
 
 ---@param pr PullRequest
----@param opts { force_refresh?: boolean }|nil
+---@param opts { force_refresh?: boolean, commit_hash?: string }|nil
 ---@param on_done fun(data: PullsReviewData|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch(pr, opts, on_done)
@@ -129,7 +129,7 @@ function M.fetch(pr, opts, on_done)
 end
 
 ---@param pr PullRequest
----@param opts { force_refresh?: boolean }|nil
+---@param opts { force_refresh?: boolean, commit_hash?: string }|nil
 ---@param on_done fun(data: PullsReviewData|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_threads(pr, opts, on_done)

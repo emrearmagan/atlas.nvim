@@ -3,6 +3,7 @@ local M = {}
 local request_scope = require("atlas.core.requests")
 local service = require("atlas.pulls.providers.azure.api.service")
 local mapper = require("atlas.pulls.providers.azure.api.mapper")
+local changes_api = require("atlas.pulls.providers.azure.api.changes")
 
 ---@param pr PullRequest
 ---@return string
@@ -29,20 +30,20 @@ end
 
 ---@param pr PullRequest
 ---@param path string
+---@param commit_hash string
 ---@param on_done fun(context: table|nil, err: string|nil)
 ---@return { cancel: fun() }
-local function fetch_thread_context(pr, path, on_done)
+local function fetch_thread_context(pr, path, commit_hash, on_done)
 	local endpoint = pullrequest_endpoint(pr)
 	local scope = request_scope.new()
 	local context = { action = "Fetch comment position", repo = pr.repo_full_name, id = pr.id }
 	scope.run(function(done)
-		return service.request("GET", endpoint .. "/iterations", nil, done, context)
-	end, function(result, err)
+		return changes_api.fetch_iteration(pr, commit_hash, done)
+	end, function(iteration, err)
 		if err then
 			on_done(nil, err)
 			return
 		end
-		local iteration = result.value[#result.value].id
 		local function fetch_page(skip)
 			local query = service.build_query({ ["$compareTo"] = 0, ["$top"] = 100, ["$skip"] = skip })
 			local changes_endpoint = endpoint .. "/iterations/" .. iteration .. "/changes" .. query
@@ -144,7 +145,7 @@ function M.add_comment(pr, content, opts, on_done)
 	}
 	local scope = request_scope.new()
 	scope.run(function(done)
-		return fetch_thread_context(pr, position.path, done)
+		return fetch_thread_context(pr, position.path, position.commit_hash or pr.source.commit_hash, done)
 	end, function(context, err)
 		if err then
 			on_done(nil, err)

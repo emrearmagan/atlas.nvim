@@ -79,8 +79,8 @@
 ---@field set_thread_resolved (fun(pr: PullRequest, root: PullsComment, resolved: boolean, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
 
 ---@class PullsReviewsCapability
----@field fetch fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(data: PullsReviewData|nil, err: string|nil)): { cancel: fun() }|nil
----@field fetch_threads fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(data: PullsReviewData|nil, err: string|nil)): { cancel: fun() }|nil
+---@field fetch fun(pr: PullRequest, opts: { force_refresh: boolean|nil, commit_hash?: string }|nil, on_done: fun(data: PullsReviewData|nil, err: string|nil)): { cancel: fun() }|nil
+---@field fetch_threads fun(pr: PullRequest, opts: { force_refresh: boolean|nil, commit_hash?: string }|nil, on_done: fun(data: PullsReviewData|nil, err: string|nil)): { cancel: fun() }|nil
 ---@field edit_review (fun(pr: PullRequest, review_id: string, body: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field fetch_review_context (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(context: PullsReviewContext|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field start_review (fun(pr: PullRequest, review: PullsReview, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
