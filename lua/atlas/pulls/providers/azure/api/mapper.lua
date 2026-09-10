@@ -195,7 +195,8 @@ function M.to_comment(raw, thread, pr)
 		parent_id = raw.parentCommentId > 0 and (thread.id .. ":" .. raw.parentCommentId) or nil,
 		thread_id = tostring(thread.id),
 		author = to_author(raw.author),
-		content_raw = raw.content,
+		content_raw = raw.isDeleted and "" or raw.content,
+		deleted = raw.isDeleted,
 		created_on = raw.publishedDate,
 		state = thread_states[thread.status],
 		reactions = { like = #json.safe_table(raw.usersLiked) },
@@ -229,7 +230,7 @@ function M.to_review_comments(raw_list, pr)
 	for _, thread in ipairs(raw_list) do
 		if not thread.isDeleted and json.nilify(thread.threadContext) ~= nil then
 			for _, raw in ipairs(thread.comments) do
-				if not raw.isDeleted and raw.commentType == "text" then
+				if raw.commentType == "text" then
 					table.insert(comments, M.to_comment(raw, thread, pr))
 				end
 			end
@@ -313,9 +314,6 @@ end
 ---@param pr PullRequest
 ---@return PullsConversationItem|nil
 local function to_conversation_item(raw, thread, pr)
-	if raw.isDeleted then
-		return nil
-	end
 	local id = thread.id .. ":" .. raw.id
 	if raw.commentType == "text" then
 		return {
@@ -324,7 +322,7 @@ local function to_conversation_item(raw, thread, pr)
 			created_on = raw.publishedDate,
 			entity = M.to_comment(raw, thread, pr),
 		}
-	elseif raw.commentType == "system" then
+	elseif raw.commentType == "system" and not raw.isDeleted then
 		return {
 			id = "activity:" .. id,
 			kind = "activity",

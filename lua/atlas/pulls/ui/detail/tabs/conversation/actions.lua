@@ -169,7 +169,7 @@ end
 ---@param refresh fun()
 function M.react(pr, entry, refresh)
 	local item = entry and entry.conversation_item or nil
-	if not item or item.kind ~= "comment" then
+	if not item or item.kind ~= "comment" or item.entity.deleted then
 		return
 	end
 	local provider = detail.provider

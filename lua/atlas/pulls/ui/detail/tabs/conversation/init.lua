@@ -37,20 +37,7 @@ function M.on_select(pr, refresh, opts)
 		if not state.is_current(pr) then
 			return
 		end
-		state.items = {}
-		if result then
-			for _, item in ipairs(result) do
-				local include = true
-				if item.kind == "comment" then
-					---@type PullsComment
-					local comment = item.entity
-					include = comment.state ~= "DELETED"
-				end
-				if include then
-					table.insert(state.items, item)
-				end
-			end
-		end
+		state.items = result or {}
 
 		state.error = nil
 		if err then

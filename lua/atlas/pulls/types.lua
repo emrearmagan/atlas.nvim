@@ -235,7 +235,8 @@
 ---@field file PullsFileCommentPosition|nil
 ---@field is_task boolean|nil                            -- true = render as task (checkbox)
 ---@field task_label string|nil                          -- display name override; defaults to "Task"
----@field state "PENDING"|"RESOLVED"|"DELETED"|"OUTDATED"|nil -- primary state; nil = active/open
+---@field state "PENDING"|"RESOLVED"|"OUTDATED"|nil -- primary state; nil = active/open
+---@field deleted boolean|nil
 ---@field outdated boolean|nil                           -- may coexist with RESOLVED
 ---@field reactions table<string, integer>|nil
 ---@field url string|nil

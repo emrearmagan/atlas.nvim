@@ -141,12 +141,12 @@ function M.render(width, comments, tasks)
 	end
 
 	---@cast comments PullsComment[]
-	if #comments == 0 then
+	local roots = review_threads.group_comments(comments, type(tasks) == "table" and tasks or nil)
+	if #roots == 0 then
 		utils.push(lines, spans, "No comments yet.", "AtlasTextMuted", PADDING_X)
 		return lines, spans, line_map
 	end
 
-	local roots = review_threads.group_comments(comments, type(tasks) == "table" and tasks or nil)
 	for _, thread in ipairs(roots) do
 		emit_thread(lines, spans, line_map, max_width, thread)
 		table.insert(lines, "")

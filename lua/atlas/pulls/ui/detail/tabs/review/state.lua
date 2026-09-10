@@ -1,4 +1,5 @@
 local request_scope = require("atlas.core.requests")
+local review_threads = require("atlas.pulls.ui.components.review_threads")
 
 ---@class PullsReviewState
 ---@field data PullsReviewData|nil
@@ -57,15 +58,9 @@ end
 ---@param comments PullsComment[]
 ---@return PullsComment[]
 local function thread_roots(comments)
-	local ids = {}
-	for _, comment in ipairs(comments) do
-		ids[tostring(comment.id)] = true
-	end
 	local roots = {}
-	for _, comment in ipairs(comments) do
-		if comment.parent_id == nil or not ids[tostring(comment.parent_id)] then
-			table.insert(roots, comment)
-		end
+	for _, thread in ipairs(review_threads.group_comments(comments, M.data and M.data.tasks)) do
+		table.insert(roots, thread.comment)
 	end
 	return roots
 end

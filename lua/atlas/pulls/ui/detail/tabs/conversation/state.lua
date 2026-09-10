@@ -121,7 +121,7 @@ end
 ---@param comment PullsComment
 ---@return boolean
 local function is_comment_long(comment)
-	if comment.is_task or comment.state == "DELETED" then
+	if comment.is_task or comment.deleted then
 		return false
 	end
 	local content = utils.strip_markup(comment.content_display or comment.content_raw or "")
