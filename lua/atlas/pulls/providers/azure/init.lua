@@ -13,6 +13,8 @@
 ---@field repository_id string
 
 local config = require("atlas.config")
+local git = require("atlas.core.git")
+local emojis = require("atlas.ui.shared.emojis")
 local search_query = require("atlas.providers.azure.query")
 local pullrequests_api = require("atlas.pulls.providers.azure.api.pullrequests")
 local users_api = require("atlas.pulls.providers.azure.api.users")
@@ -32,7 +34,20 @@ local repo_detail_ui = require("atlas.pulls.providers.azure.ui.repo_detail")
 ---@return AtlasAzurePullsViewConfig[]
 local function views()
 	local options = config.domain_options("azure", "pulls") or {}
-	return options.views or {}
+	local configured = options.views or {}
+	local resolved = {}
+	for index, view in ipairs(configured) do
+		resolved[index] = vim.tbl_extend("force", {}, view)
+		if view.current_repo then
+			local target = git.local_repository()
+			if target and target.provider == "azure" then
+				resolved[index].project = target.owner
+				resolved[index].repository = target.repo
+				resolved[index].scope = view.scope or "all"
+			end
+		end
+	end
+	return resolved
 end
 
 ---@param target AtlasTarget
@@ -69,6 +84,7 @@ return {
 			fetch_description = pullrequests_api.fetch_description,
 			fetch_default_reviewers = pullrequests_api.fetch_default_reviewers,
 			fetch_merge_checks = checks_api.fetch,
+			-- fetch_diffstat = changes_api.fetch_diffstat,
 			fetch_commits = changes_api.fetch_commits,
 		},
 		comments = {
@@ -77,7 +93,7 @@ return {
 			add_comment = comments_api.add_comment,
 			edit_comment = comments_api.edit_comment,
 			delete_comment = comments_api.delete_comment,
-			reaction_options = { { key = "like", emoji = "👍", label = "Like" } },
+			reaction_options = { { key = "like", emoji = emojis.glyph("+1"), label = "Like" } },
 			add_reaction = comments_api.add_reaction,
 			set_thread_resolved = comments_api.set_thread_resolved,
 		},
@@ -85,9 +101,19 @@ return {
 			fetch = reviews_api.fetch,
 			fetch_threads = reviews_api.fetch_threads,
 			fetch_review_context = reviews_api.fetch_review_context,
+			-- edit_review = reviews_api.edit_review,
+			-- start_review = reviews_api.start,
+			-- submit_review = reviews_api.submit,
 			approve = reviews_api.approve,
 			request_changes = reviews_api.request_changes,
+			-- discard_review = reviews_api.discard,
+			-- set_file_reviewed = reviews_api.set_file_reviewed,
 		},
+		-- tasks = {
+		-- 	add_task = tasks_api.add_task,
+		-- 	edit_task = tasks_api.edit_task,
+		-- 	delete_task = tasks_api.delete_task,
+		-- },
 		repository = {
 			fetch_details = repositories_api.fetch_detail,
 			fetch_branches = repositories_api.fetch_branches,
