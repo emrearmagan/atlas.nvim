@@ -128,6 +128,7 @@ function M.open(request)
 	end
 	local opts = {
 		title = request.title,
+		main = { current = true },
 		prompt = "",
 		live = request.fetch ~= nil,
 		show_empty = true,
