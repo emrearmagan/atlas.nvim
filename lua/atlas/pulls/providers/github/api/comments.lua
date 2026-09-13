@@ -17,19 +17,7 @@ reactionGroups { content users { totalCount } }
 pullRequestReview { id state commit { oid } }
 ]]
 
----@param pr PullRequest
----@param content string
----@param target PullsInlineCommentPosition|PullsFileCommentPosition
----@param file_level boolean
----@param review_id string
----@param pending_review PullsReview|nil
----@param on_done fun(comment: PullsComment|nil, err: string|nil)
----@return { cancel: fun() }|nil
-local function add_review_thread(pr, content, target, file_level, review_id, pending_review, on_done)
-	local side = not file_level and (target.to and "RIGHT" or "LEFT") or nil
-	local line = not file_level and (target.to or target.from) or nil
-	local start_line = not file_level and (side == "RIGHT" and target.start_to or target.start_from) or nil
-	local query = ([[
+local ADD_REVIEW_THREAD_MUTATION = ([[
 mutation($reviewId:ID!,$path:String!,$body:String!,$subjectType:PullRequestReviewThreadSubjectType!,$line:Int,$side:DiffSide,$startLine:Int,$startSide:DiffSide){
   addPullRequestReviewThread(input:{
     pullRequestReviewId:$reviewId
@@ -58,6 +46,19 @@ mutation($reviewId:ID!,$path:String!,$body:String!,$subjectType:PullRequestRevie
   }
 }
 ]]):format(REVIEW_COMMENT_FIELDS)
+
+---@param pr PullRequest
+---@param content string
+---@param target PullsInlineCommentPosition|PullsFileCommentPosition
+---@param file_level boolean
+---@param review_id string
+---@param pending_review PullsReview|nil
+---@param on_done fun(comment: PullsComment|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+local function add_review_thread(pr, content, target, file_level, review_id, pending_review, on_done)
+	local side = not file_level and (target.to and "RIGHT" or "LEFT") or nil
+	local line = not file_level and (target.to or target.from) or nil
+	local start_line = not file_level and (side == "RIGHT" and target.start_to or target.start_from) or nil
 	local args = {
 		"api",
 		"graphql",
@@ -75,7 +76,7 @@ mutation($reviewId:ID!,$path:String!,$body:String!,$subjectType:PullRequestRevie
 		end
 	end
 	vim.list_extend(args, { "-f", "reviewId=" .. review_id })
-	vim.list_extend(args, { "-f", "query=" .. query })
+	vim.list_extend(args, { "-f", "query=" .. ADD_REVIEW_THREAD_MUTATION })
 
 	return cli.gh(args, function(result, err)
 		if err or type(result) ~= "table" then
@@ -231,7 +232,7 @@ mutation($commentId:ID!,$body:String!){
 local DELETE_REVIEW_COMMENT_MUTATION = [[
 mutation($commentId:ID!){
   deletePullRequestReviewComment(input:{id:$commentId}){
-    pullRequestReview{id state commit{oid}}
+    clientMutationId
   }
 }
 ]]
@@ -413,7 +414,7 @@ function M.set_thread_resolved(pr, root, resolved, on_done)
 	return cli.gh({
 		"api",
 		"graphql",
-		"-F",
+		"-f",
 		"threadId=" .. thread_id,
 		"-f",
 		"query=" .. SET_THREAD_RESOLVED_MUTATIONS[resolved and "resolve" or "reopen"],
@@ -425,6 +426,18 @@ function M.set_thread_resolved(pr, root, resolved, on_done)
 		number = pr.id,
 	})
 end
+
+local ADD_REVIEW_REPLY_MUTATION = ([[
+mutation($threadId:ID!,$reviewId:ID!,$body:String!){
+  addPullRequestReviewThreadReply(input:{
+    pullRequestReviewThreadId:$threadId
+    pullRequestReviewId:$reviewId
+    body:$body
+  }){
+    comment{%s}
+  }
+}
+]]):format(REVIEW_COMMENT_FIELDS)
 
 ---@param pr PullRequest
 ---@param parent PullsComment
@@ -449,17 +462,6 @@ reply_comment = function(pr, parent, content, opts, on_done)
 			return nil
 		end
 
-		local query = ([[
-mutation($threadId:ID!,$reviewId:ID!,$body:String!){
-  addPullRequestReviewThreadReply(input:{
-    pullRequestReviewThreadId:$threadId
-    pullRequestReviewId:$reviewId
-    body:$body
-  }){
-    comment{%s}
-  }
-}
-]]):format(REVIEW_COMMENT_FIELDS)
 		local function add_reply(review_id, done)
 			local args = {
 				"api",
@@ -470,8 +472,9 @@ mutation($threadId:ID!,$reviewId:ID!,$body:String!){
 				"body=" .. content,
 				"-f",
 				"reviewId=" .. review_id,
+				"-f",
+				"query=" .. ADD_REVIEW_REPLY_MUTATION,
 			}
-			vim.list_extend(args, { "-f", "query=" .. query })
 
 			return cli.gh(args, function(result, err)
 				if err or type(result) ~= "table" then

@@ -318,6 +318,22 @@ function M.edit_review(context, entry, on_done)
 	return true
 end
 
+---@param data PullsReviewData
+---@param target PullsComment
+---@return boolean
+local function has_other_pending_items(data, target)
+	local target_kind = target.is_task and "tasks" or "comments"
+	for _, kind in ipairs({ "comments", "tasks" }) do
+		for _, item in ipairs(data[kind] or {}) do
+			local is_target = kind == target_kind and tostring(item.id) == tostring(target.id)
+			if item.state == "PENDING" and not is_target then
+				return true
+			end
+		end
+	end
+	return false
+end
+
 ---@param context AtlasReviewActionContext
 ---@param comment PullsComment
 ---@param on_done fun(result: PullsActionResult|nil, err: string|nil)
@@ -356,7 +372,8 @@ function M.delete_comment(context, comment, on_done)
 			end
 			local pending = comment.state == "PENDING"
 			local message = comment.is_task and "Task deleted" or "Comment deleted"
-			if pending and context.data then
+			-- Deleting the final pending item can also remove its draft review.
+			if pending and context.data and not has_other_pending_items(context.data, comment) then
 				context.provider.capabilities.reviews.fetch(context.pr, { force_refresh = true }, function(data)
 					if data then
 						context.data.review = data.review
