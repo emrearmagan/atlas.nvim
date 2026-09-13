@@ -13,21 +13,6 @@ function M.setup(opts)
 	require("atlas.core.logger").clear()
 end
 
-local function bootstrap_common()
-	require("atlas.ui.shared.highlights").setup()
-
-	local commands = { { name = "Atlas", desc = "Choose a command" } }
-	for _, command in ipairs(require("atlas.commands").commands) do
-		table.insert(commands, { name = "Atlas " .. (command.usage or command.name), desc = command.description })
-	end
-	table.insert(commands, { name = "AtlasDiff", desc = "Open native diff or pull request" })
-	require("atlas.ui.popups.help").register_command(
-		"Commands",
-		commands,
-		{ index = 999, buffer = require("atlas.ui.dashboard").buf() }
-	)
-end
-
 ---@param domain "pulls"|"issues"
 ---@return string[]
 local function configured_provider_ids(domain)
@@ -61,7 +46,7 @@ local function open_with_provider(domain, id, opts)
 	end
 
 	require("atlas.ui.dashboard").open(domain, provider.id)
-	bootstrap_common()
+	require("atlas.ui.shared.highlights").setup()
 	if domain == "pulls" then
 		---@cast provider PullsProvider
 		require("atlas.pulls").init(provider, opts)

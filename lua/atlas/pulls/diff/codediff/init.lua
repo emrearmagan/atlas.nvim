@@ -1,12 +1,12 @@
 local M = {}
 
 local config = require("atlas.config")
-local keymaps = require("atlas.core.keymaps")
-local comments = require("atlas.pulls.diff.comments")
+local keymaps = require("atlas.pulls.diff.codediff.keymaps")
 local position = require("atlas.pulls.diff.position")
-local review_keymaps = require("atlas.pulls.diff.keymaps")
 local review_panel = require("atlas.pulls.diff.ui.review_panel")
+local explorer_ui = require("atlas.pulls.diff.codediff.explorer")
 local session_api = require("atlas.pulls.diff.session")
+local relative_path = explorer_ui.relative_path
 
 local READY_RETRIES = 80
 
@@ -37,21 +37,6 @@ local FILE_STATUSES = {
 ---@field layout "side-by-side"|"inline"
 ---@field stored_diff_result { changes: AtlasCodeDiffChange[] }|nil
 
----@class AtlasCodeDiffSelection
----@field path string
----@field old_path string|nil
----@field status string|nil
----@field group string|nil
-
----@class AtlasCodeDiffExplorer
----@field bufnr integer|nil
----@field winid integer|nil
----@field current_selection AtlasCodeDiffSelection|nil
----@field current_file_path string|nil
----@field status_result table<string, AtlasCodeDiffSelection[]>|nil
----@field tree table|nil
----@field on_file_select (fun(selection: AtlasCodeDiffSelection, opts: { no_jump: boolean }|nil))|nil
-
 ---@class AtlasCodeDiffLifecycle
 ---@field get_session fun(tabpage: integer): AtlasCodeDiffSession|nil
 ---@field get_explorer (fun(tabpage: integer): AtlasCodeDiffExplorer|nil)|nil
@@ -61,49 +46,15 @@ local FILE_STATUSES = {
 
 ---@class AtlasCodeDiffState
 ---@field lifecycle AtlasCodeDiffLifecycle
+---@field scroll { refresh: fun(tabpage: integer, leader: integer) }|nil
 ---@field tabpage integer
 ---@field pending_selection table|nil
 ---@field group integer
 ---@field generation integer
 ---@field auto_open_panel boolean
 ---@field closed boolean
-
----@param lifecycle AtlasCodeDiffLifecycle
----@param tabpage integer
----@return AtlasCodeDiffExplorer|nil
-local function get_explorer(lifecycle, tabpage)
-	-- CodeDiff v2.67.2 changed explorer and history access under the panel API.
-	if lifecycle.get_panel_view then
-		if lifecycle.get_panel_name and lifecycle.get_panel_name(tabpage) ~= "explorer" then
-			return nil
-		end
-		return lifecycle.get_panel_view(tabpage)
-	end
-	if lifecycle.get_explorer then
-		return lifecycle.get_explorer(tabpage)
-	end
-	return nil
-end
-
----@param value string|nil
----@return string
-local function clean_path(value)
-	local path = tostring(value or "")
-	return (path:gsub("\\", "/"):gsub("/+$", ""))
-end
-
----@param root string
----@param path string|nil
----@return string
-local function relative_path(root, path)
-	path = clean_path(path)
-	root = clean_path(root)
-	local prefix = root ~= "" and root .. "/" or ""
-	if prefix ~= "" and path:sub(1, #prefix) == prefix then
-		return path:sub(#prefix + 1)
-	end
-	return (path:gsub("^%./", ""))
-end
+---@field explorer AtlasCodeDiffExplorer|nil
+---@field annotated_paths table<string, { comments: boolean, notes: boolean }>
 
 ---@param buf integer
 ---@param path string
@@ -192,7 +143,7 @@ end
 local function find_review_file(session, path)
 	local state = session.viewer_state --[[@as AtlasCodeDiffState]]
 	path = relative_path(session.source.root, path)
-	local explorer = get_explorer(state.lifecycle, state.tabpage)
+	local explorer = explorer_ui.get(state.lifecycle, state.tabpage)
 	if not explorer then
 		return nil
 	end
@@ -310,7 +261,7 @@ local function focus_item(session, item, focus_diff)
 		comment = comment,
 		focus_diff = focus_diff,
 	}
-	local explorer = get_explorer(state.lifecycle, state.tabpage)
+	local explorer = explorer_ui.get(state.lifecycle, state.tabpage)
 	if explorer and explorer.on_file_select then
 		explorer.on_file_select(file, { no_jump = true })
 	else
@@ -325,45 +276,15 @@ local function refresh_view(session)
 	if state.closed or not current then
 		return
 	end
+	explorer_ui.render(session, state.explorer)
+	if not state.scroll then
+		return
+	end
 	local active_win = vim.api.nvim_get_current_win()
 	local diff_win = active_win == current.left.win or active_win == current.right.win
 	local leader = diff_win and active_win or current.right.win or current.left.win
 	if leader then
-		require("codediff.ui.scroll").refresh(state.tabpage, leader)
-	end
-end
-
----@param session AtlasDiffSession
----@param buffers integer[]
-local function register_review_buffers(session, buffers)
-	local state = session.viewer_state --[[@as AtlasCodeDiffState]]
-	local explorer = get_explorer(state.lifecycle, state.tabpage)
-	local valid, seen = {}, {}
-	for _, buf in ipairs(buffers) do
-		if buf and not seen[buf] and vim.api.nvim_buf_is_valid(buf) then
-			seen[buf] = true
-			valid[#valid + 1] = buf
-		end
-	end
-	review_keymaps.register(session, {
-		buffers = valid,
-		reopen = session.reopen,
-		help_key = keymaps.resolve("pulls.external_help"),
-		file_buffers = explorer and explorer.bufnr and { explorer.bufnr } or {},
-		add_file_comment = function(pending)
-			local current_explorer = get_explorer(state.lifecycle, state.tabpage)
-			local node = current_explorer and current_explorer.tree and current_explorer.tree:get_node() or nil
-			local file = node and node.data or nil
-			if file and file.type ~= "group" and file.type ~= "directory" then
-				comments.add_to_file(session, {
-					path = relative_path(session.source.root, file.path),
-					old_path = file.old_path and relative_path(session.source.root, file.old_path) or nil,
-				}, pending)
-			end
-		end,
-	})
-	if session.review_panel then
-		review_panel.register_toggle(session.review_panel, valid)
+		state.scroll.refresh(state.tabpage, leader)
 	end
 end
 
@@ -383,7 +304,7 @@ local function sync(session)
 	if not codediff or not codediff.stored_diff_result then
 		return false
 	end
-	local explorer = get_explorer(state.lifecycle, state.tabpage)
+	local explorer = explorer_ui.get(state.lifecycle, state.tabpage)
 	if not explorer then
 		return false
 	end
@@ -453,7 +374,7 @@ local function sync(session)
 	session_api.set_current(session, current)
 	session_api.review_attached(session)
 	if buffers_changed then
-		register_review_buffers(session, { left_buf, right_buf, explorer.bufnr })
+		keymaps.register(session)
 	end
 	if state.auto_open_panel and open_review_panel(session, false) then
 		state.auto_open_panel = false
@@ -540,9 +461,12 @@ end
 ---@param tabpage integer
 local function attach(session, lifecycle, tabpage)
 	local diff_config = (config.options.pulls or {}).diff or {}
+	-- CodeDiff v4.0.4 replaced its scroll module with native scrollbind
+	local has_scroll, scroll = pcall(require, "codediff.ui.scroll")
 	---@type AtlasCodeDiffState
 	local state = {
 		lifecycle = lifecycle,
+		scroll = has_scroll and scroll or nil,
 		tabpage = tabpage,
 		pending_selection = nil,
 		group = vim.api.nvim_create_augroup("AtlasCodeDiff" .. session.id, { clear = true }),
@@ -550,6 +474,7 @@ local function attach(session, lifecycle, tabpage)
 		auto_open_panel = diff_config.show_review_panel == true
 			and (session.review ~= nil or session.note_target ~= nil),
 		closed = false,
+		annotated_paths = {},
 	}
 	session.viewer_state = state
 	session_api.attach(session, {
@@ -579,7 +504,9 @@ local function attach(session, lifecycle, tabpage)
 	register_events(session, state)
 
 	local codediff = lifecycle.get_session(tabpage)
-	local explorer = get_explorer(lifecycle, tabpage)
+	local explorer = explorer_ui.get(lifecycle, tabpage)
+	state.explorer = explorer
+	explorer_ui.attach(session, explorer)
 	for _, win in pairs({
 		codediff and codediff.original_win,
 		codediff and codediff.modified_win,
@@ -587,19 +514,7 @@ local function attach(session, lifecycle, tabpage)
 	}) do
 		session.statusline:attach(win)
 	end
-	local buffers = panel and { panel.buf } or {}
-	for _, buf in pairs({
-		codediff and codediff.original_bufnr,
-		codediff and codediff.modified_bufnr,
-		explorer and explorer.bufnr,
-	}) do
-		if buf and vim.api.nvim_buf_is_valid(buf) then
-			buffers[#buffers + 1] = buf
-		end
-	end
-	if panel then
-		review_panel.register_toggle(panel, buffers)
-	end
+	keymaps.register(session)
 	if panel and state.auto_open_panel and open_review_panel(session, false) then
 		state.auto_open_panel = false
 	end
@@ -697,6 +612,7 @@ function M.detach(session, reason)
 	state.pending_selection = nil
 	pcall(vim.api.nvim_del_augroup_by_id, state.group)
 	session_api.detach(session, reason)
+	explorer_ui.render(session, state.explorer)
 end
 
 return M

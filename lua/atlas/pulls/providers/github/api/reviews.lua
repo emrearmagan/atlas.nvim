@@ -180,12 +180,13 @@ mutation($pullRequestId:ID!,$path:String!){
 ---@param node table|nil
 ---@return PullsReview
 local function from_node(node)
-	local id = node and tostring(node.id or "") or ""
-	local commit_hash = node and tostring((node.commit or {}).oid or "") or ""
+	node = json.safe_table(node)
+	local id = json.safe_str(node.id) or ""
+	local commit_hash = json.safe_str(json.safe_table(node.commit).oid) or ""
 	return {
 		id = id ~= "" and id or nil,
 		commit_hash = commit_hash ~= "" and commit_hash or nil,
-		pending = node ~= nil and node.state == "PENDING",
+		pending = node.state == "PENDING",
 	}
 end
 
@@ -660,9 +661,9 @@ local function fetch_review_details(pr, opts, on_done)
 		"graphql",
 		"--paginate",
 		"--slurp",
-		"-F",
+		"-f",
 		"owner=" .. owner,
-		"-F",
+		"-f",
 		"name=" .. name,
 		"-F",
 		"number=" .. tostring(pr.id),
@@ -714,9 +715,9 @@ function M.fetch_reviewers(pr, opts, on_done)
 		"graphql",
 		"--paginate",
 		"--slurp",
-		"-F",
+		"-f",
 		"owner=" .. owner,
-		"-F",
+		"-f",
 		"name=" .. name,
 		"-F",
 		"number=" .. tostring(pr.id),
@@ -779,9 +780,9 @@ local function fetch_comments(pr, include_hunks, on_done)
 		"graphql",
 		"--paginate",
 		"--slurp",
-		"-F",
+		"-f",
 		"owner=" .. owner,
-		"-F",
+		"-f",
 		"name=" .. name,
 		"-F",
 		"number=" .. tostring(pr.id),
@@ -970,9 +971,11 @@ function M.set_file_reviewed(pr, path, reviewed, on_done)
 	})
 end
 
+-- GitHub can fail creating an empty draft when body is omitted, despite it
+-- being optional in the schema. Send an explicit empty body for draft reviews.
 local CREATE_PENDING_REVIEW_MUTATION = [[
 mutation($pullRequestId:ID!,$commitOID:GitObjectID){
-  addPullRequestReview(input:{pullRequestId:$pullRequestId commitOID:$commitOID}){
+  addPullRequestReview(input:{pullRequestId:$pullRequestId commitOID:$commitOID body:""}){
     pullRequestReview{id state commit{oid}}
   }
 }
