@@ -111,6 +111,7 @@
 ---@field run fun(issue: Issue, ctx: AtlasIssuesCustomActionContext, done: fun(ok: boolean|nil, message: string|nil))
 
 ---@class AtlasIssuesConfig
+---@field azure AtlasAzureIssuesConfig|nil
 ---@field with_relationships boolean|nil
 ---@field custom_actions AtlasIssuesCustomAction[]|nil
 ---@field github AtlasGitHubIssuesConfig|nil

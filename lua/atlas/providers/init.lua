@@ -3,7 +3,7 @@ local config = require("atlas.config")
 local url = require("atlas.providers.url")
 
 ---@alias AtlasPullsProviderId "azure"|"bitbucket"|"github"|"gitlab"
----@alias AtlasIssuesProviderId "jira"|"github"|"gitlab"
+---@alias AtlasIssuesProviderId "azure"|"jira"|"github"|"gitlab"
 ---@alias AtlasProviderId AtlasPullsProviderId|AtlasIssuesProviderId
 ---@alias AtlasDomain "pulls"|"issues"
 ---@alias AtlasEntity "pr"|"issue"|"repo"
@@ -124,6 +124,12 @@ add({
 		pulls = {
 			module = "atlas.pulls.providers.azure",
 			icon = { icon = "", hl_group = "AtlasAzureTheme" },
+		},
+		issues = {
+			module = "atlas.issues.providers.azure",
+			icon = { icon = "", hl_group = "AtlasAzureTheme" },
+			bookmark_key = "S",
+			bookmark_label = "WIQL",
 		},
 	},
 })
