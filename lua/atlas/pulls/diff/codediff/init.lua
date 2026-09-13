@@ -61,6 +61,7 @@ local FILE_STATUSES = {
 
 ---@class AtlasCodeDiffState
 ---@field lifecycle AtlasCodeDiffLifecycle
+---@field scroll { refresh: fun(tabpage: integer, leader: integer) }|nil
 ---@field tabpage integer
 ---@field pending_selection table|nil
 ---@field group integer
@@ -322,14 +323,14 @@ end
 local function refresh_view(session)
 	local state = session.viewer_state --[[@as AtlasCodeDiffState]]
 	local current = session.current
-	if state.closed or not current then
+	if state.closed or not current or not state.scroll then
 		return
 	end
 	local active_win = vim.api.nvim_get_current_win()
 	local diff_win = active_win == current.left.win or active_win == current.right.win
 	local leader = diff_win and active_win or current.right.win or current.left.win
 	if leader then
-		require("codediff.ui.scroll").refresh(state.tabpage, leader)
+		state.scroll.refresh(state.tabpage, leader)
 	end
 end
 
@@ -540,9 +541,12 @@ end
 ---@param tabpage integer
 local function attach(session, lifecycle, tabpage)
 	local diff_config = (config.options.pulls or {}).diff or {}
+	-- CodeDiff v4.0.4 replaced its scroll module with native scrollbind
+	local has_scroll, scroll = pcall(require, "codediff.ui.scroll")
 	---@type AtlasCodeDiffState
 	local state = {
 		lifecycle = lifecycle,
+		scroll = has_scroll and scroll or nil,
 		tabpage = tabpage,
 		pending_selection = nil,
 		group = vim.api.nvim_create_augroup("AtlasCodeDiff" .. session.id, { clear = true }),
