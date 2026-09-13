@@ -94,6 +94,7 @@
 ---@field url string|nil
 ---@field author IssueUser|nil
 ---@field body string|nil
+---@field body_display string|nil
 ---@field created string|nil
 ---@field updated string|nil
 ---@field parent_id string|number|nil

@@ -14,6 +14,7 @@ local issues_api = require("atlas.issues.providers.azure.api.issues")
 local users_api = require("atlas.issues.providers.azure.api.users")
 local comments_api = require("atlas.issues.providers.azure.api.comments")
 local history_api = require("atlas.issues.providers.azure.api.history")
+local author_completion = require("atlas.providers.azure.completion.author")
 local service = require("atlas.pulls.providers.azure.api.service")
 
 ---@return AtlasAzureIssuesViewConfig[]
@@ -70,7 +71,7 @@ return {
 			delete_comment = comments_api.delete_comment,
 			add_reaction = comments_api.add_reaction,
 			reaction_options = comments_api.reaction_options,
-			-- comment_completion = author_completion.for_issues,
+			comment_completion = author_completion.for_issues,
 		},
 		-- notifications = notifications_api,
 		actions = require("atlas.issues.providers.azure.actions"),

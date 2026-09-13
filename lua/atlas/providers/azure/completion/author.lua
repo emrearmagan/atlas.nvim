@@ -2,7 +2,7 @@ local M = {}
 
 ---@param context AtlasPullsCommentCompletionContext
 ---@return table<string, string>
-local function collect_authors(context)
+local function collect_pull_authors(context)
 	local authors = {}
 	---@param author PullsAuthor|nil
 	local function add(author)
@@ -29,21 +29,34 @@ local function collect_authors(context)
 	return authors
 end
 
----@param context AtlasPullsCommentCompletionContext
+---@param context AtlasIssuesCommentCompletionContext
+---@return table<string, string>
+local function collect_issue_authors(context)
+	local authors = {}
+	---@param author IssueUser|nil
+	local function add(author)
+		if author then
+			authors[author.account_id] = author.display_name
+		end
+	end
+
+	add(context.issue.reporter)
+	add(context.issue.assignee)
+	for _, assignee in ipairs((context.details or {}).assignees or {}) do
+		add(assignee)
+	end
+	for _, comment in ipairs(context.comments) do
+		add(comment.author)
+	end
+	return authors
+end
+
+---@param authors table<string, string>
+---@param format_mention fun(author: IssueUser|PullsAuthor|nil): string
 ---@return AtlasMarkdownCompletionProvider
-function M.for_pulls(context)
-	local authors = collect_authors(context)
+local function build_completion(authors, format_mention)
 	return {
 		trigger = "@",
-		resolve_items = function()
-			for _, items in ipairs({ context.comments, context.conversation or {} }) do
-				for _, item in ipairs(items) do
-					item.content_display = item.content_raw:gsub("@<([^>]+)>", function(id)
-						return authors[id] and ("@" .. authors[id]) or ("@<" .. id .. ">")
-					end)
-				end
-			end
-		end,
 		find_start = function(before)
 			local start_after_at = before:match(".*@()[-%w_]*$")
 			return start_after_at and start_after_at - 2 or nil
@@ -65,10 +78,52 @@ function M.for_pulls(context)
 			end)
 			return matches
 		end,
-		format_mention = function(author)
-			return author and ("@<" .. author.id .. ">") or ""
-		end,
+		format_mention = format_mention,
 	}
+end
+
+---@param text string
+---@param authors table<string, string>
+---@return string
+local function resolve_mentions(text, authors)
+	local display = text:gsub("@<([^>]+)>", function(id)
+		return authors[id] and ("@" .. authors[id]) or ("@<" .. id .. ">")
+	end)
+	return display
+end
+
+---@param context AtlasIssuesCommentCompletionContext
+---@return AtlasMarkdownCompletionProvider
+function M.for_issues(context)
+	local authors = collect_issue_authors(context)
+	local completion = build_completion(authors, function(author)
+		---@cast author IssueUser|nil
+		return author and ("@<" .. author.account_id .. ">") or ""
+	end)
+	completion.resolve_items = function()
+		for _, comment in ipairs(context.comments) do
+			comment.body_display = resolve_mentions(comment.body or "", authors)
+		end
+	end
+	return completion
+end
+
+---@param context AtlasPullsCommentCompletionContext
+---@return AtlasMarkdownCompletionProvider
+function M.for_pulls(context)
+	local authors = collect_pull_authors(context)
+	local completion = build_completion(authors, function(author)
+		---@cast author PullsAuthor|nil
+		return author and ("@<" .. author.id .. ">") or ""
+	end)
+	completion.resolve_items = function()
+		for _, items in ipairs({ context.comments, context.conversation or {} }) do
+			for _, item in ipairs(items) do
+				item.content_display = resolve_mentions(item.content_raw, authors)
+			end
+		end
+	end
+	return completion
 end
 
 return M

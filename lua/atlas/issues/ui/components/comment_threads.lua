@@ -26,7 +26,7 @@ end
 ---@return AtlasThreadV2Item
 local function comment_item(comment, reaction_options)
 	local deleted = comment.deleted == true
-	local content = deleted and "(deleted comment)" or utils.strip_markup(comment.body or "")
+	local content = deleted and "(deleted comment)" or utils.strip_markup(comment.body_display or comment.body or "")
 	if content == "" then
 		content = "(empty comment)"
 	end
