@@ -48,7 +48,7 @@ describe("providers contracts", function()
 	it("loads issue providers", function()
 		assert_contract(
 			"issues",
-			{ "github", "gitlab", "jira" },
+			{ "azure", "github", "gitlab", "jira" },
 			{ "resolve_search", "view_for_target", "issue_ref", "views" },
 			{ "fetch_user", "fetch_issues", "fetch_by_refs", "fetch_issue" }
 		)

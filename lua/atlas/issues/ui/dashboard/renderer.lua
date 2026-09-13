@@ -36,7 +36,7 @@ local function append_search_text(lines, spans, text)
 		return
 	end
 
-	local line = string.format(" %s %s", icons.general("search"), text)
+	local line = string.format(" %s %s", icons.general("search"), vim.trim(text:gsub("%s+", " ")))
 	table.insert(lines, line)
 	table.insert(spans, { line = #lines - 1, start_col = 0, end_col = #line, hl_group = "AtlasTextMuted" })
 	table.insert(lines, "")
