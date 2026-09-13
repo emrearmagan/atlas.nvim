@@ -63,4 +63,72 @@ function M.to_issue_details(raw)
 	}
 end
 
+local HISTORY_FIELDS = {
+	{ "System.Title", "title" },
+	{ "System.State", "state" },
+	{ "System.AssignedTo", "assignee" },
+	{ "System.WorkItemType", "work item type" },
+	{ "System.Tags", "tags" },
+	{ "System.Description", "description" },
+	{ "System.AreaPath", "area" },
+	{ "System.IterationPath", "iteration" },
+	{ "Microsoft.VSTS.Common.Priority", "priority" },
+	{ "Microsoft.VSTS.Common.Severity", "severity" },
+	{ "Microsoft.VSTS.Scheduling.StoryPoints", "story points" },
+	{ "Microsoft.VSTS.Scheduling.Effort", "effort" },
+	{ "Microsoft.VSTS.Scheduling.OriginalEstimate", "original estimate" },
+	{ "Microsoft.VSTS.Scheduling.RemainingWork", "remaining work" },
+	{ "Microsoft.VSTS.Scheduling.CompletedWork", "completed work" },
+	{ "Microsoft.VSTS.Scheduling.DueDate", "due date" },
+}
+
+---@param field string
+---@param value any
+---@return string|nil
+local function history_value(field, value)
+	value = json.nilify(value)
+	if value == nil then
+		return nil
+	end
+	if field == "System.AssignedTo" then
+		return value.displayName
+	end
+	return tostring(value)
+end
+
+---@param updates table[]
+---@return IssueActivityEntry[]
+function M.to_history(updates)
+	local entries = {}
+	for _, raw in ipairs(updates) do
+		local fields = raw.fields or {}
+		local actor = M.to_user(raw.revisedBy)
+		local date = fields["System.ChangedDate"] and fields["System.ChangedDate"].newValue
+		if raw.id == 1 then
+			table.insert(entries, { kind = "created", actor = actor, date = date, label = "created the work item" })
+		else
+			for _, field in ipairs(HISTORY_FIELDS) do
+				local change = fields[field[1]]
+				if change then
+					local from = history_value(field[1], change.oldValue)
+					local to = history_value(field[1], change.newValue)
+					local empty = field[1] == "System.AssignedTo" and "Unassigned" or "None"
+					if from ~= to then
+						table.insert(entries, {
+							kind = field[1],
+							actor = actor,
+							date = date,
+							label = "updated " .. field[2],
+							body = field[1] ~= "System.Description"
+									and string.format("%s -> %s", from or empty, to or empty)
+								or nil,
+						})
+					end
+				end
+			end
+		end
+	end
+	return entries
+end
+
 return M
