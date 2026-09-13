@@ -39,12 +39,19 @@ end
 ---@return IssuesDetailTabDefinition[]
 function M.tabs()
 	local overview_icon, overview_hl = icons.general("overview")
+	local conversation_icon, conversation_hl = icons.general("conversation")
 	return {
 		{
 			key = "overview",
 			label = "Overview",
 			icon = { icon = overview_icon, hl_group = overview_hl },
 			mod = require("atlas.issues.ui.detail.tabs.overview"),
+		},
+		{
+			key = "conversation",
+			label = "Conversation",
+			icon = { icon = conversation_icon, hl_group = conversation_hl },
+			mod = require("atlas.issues.ui.detail.tabs.conversation"),
 		},
 	}
 end

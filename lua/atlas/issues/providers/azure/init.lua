@@ -12,6 +12,7 @@
 local config = require("atlas.config")
 local issues_api = require("atlas.issues.providers.azure.api.issues")
 local users_api = require("atlas.issues.providers.azure.api.users")
+local comments_api = require("atlas.issues.providers.azure.api.comments")
 local service = require("atlas.pulls.providers.azure.api.service")
 
 ---@return AtlasAzureIssuesViewConfig[]
@@ -56,9 +57,22 @@ return {
 			fetch_issues = issues_api.list_issues,
 			fetch_by_refs = issues_api.fetch_by_refs,
 			fetch_issue = issues_api.fetch_issue,
+			update_description = issues_api.update_description,
 			refresh = service.clear_cache,
 		},
+		comments = {
+			-- fetch_activity = history_api.fetch,
+			fetch_conversation = comments_api.fetch_conversation,
+			add_comment = comments_api.add_comment,
+			-- reply_comment = comments_api.reply_comment,
+			edit_comment = comments_api.edit_comment,
+			delete_comment = comments_api.delete_comment,
+			add_reaction = comments_api.add_reaction,
+			reaction_options = comments_api.reaction_options,
+			-- comment_completion = author_completion.for_issues,
+		},
 		-- notifications = notifications_api,
+		actions = require("atlas.issues.providers.azure.actions"),
 		ui = {
 			detail = require("atlas.issues.providers.azure.ui.detail"),
 		},
