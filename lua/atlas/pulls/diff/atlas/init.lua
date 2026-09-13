@@ -231,15 +231,8 @@ local function toggle_file_reviewed(session)
 		return
 	end
 	local reviewed = not session.reviewed_files[file.path]
-	local current_review = session.review
-	local reviews = current_review and current_review.provider.capabilities.reviews
-	local context
-	if reviews and reviews.set_file_reviewed then
-		context = review.action_context(session)
-	end
-
 	local next_index = next_file_in_tree(session, index)
-	session.reviewed_files[file.path] = reviewed or nil
+	review.set_file_reviewed(session, file.path, reviewed)
 	if next_index then
 		select_file(session, next_index)
 		index = next_index
@@ -251,15 +244,6 @@ local function toggle_file_reviewed(session)
 	if line and state.panel.win and vim.api.nvim_win_is_valid(state.panel.win) then
 		vim.api.nvim_win_set_cursor(state.panel.win, { line, 0 })
 	end
-
-	if not context then
-		return
-	end
-	reviews.set_file_reviewed(current_review.pr, file.path, reviewed, function(ok, err)
-		if not ok then
-			session_api.notify(session, "error", "Unable to update reviewed file: " .. tostring(err))
-		end
-	end)
 end
 
 ---@param session AtlasDiffSession

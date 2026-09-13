@@ -81,7 +81,14 @@ local function add_range(items, action, desc, callback)
 end
 
 ---@param session AtlasDiffSession
----@param opts { buffers: integer[], reopen: fun(), help_key: string|string[]|nil, file_buffers: integer[]|nil, add_file_comment: (fun(pending: boolean))|nil }
+---@param opts {
+--- buffers: integer[],
+--- reopen: fun(),
+--- help_key: string|string[]|nil,
+--- file_buffers: integer[]|nil,
+--- add_file_comment: (fun(pending: boolean))|nil,
+--- toggle_file_reviewed: (fun())|nil,
+---}
 function M.register(session, opts)
 	local action_context = session.review and review.action_context(session) or nil
 	local reviews = session.review and session.review.provider.capabilities.reviews or {}
@@ -256,6 +263,14 @@ function M.register(session, opts)
 					end,
 					opts = { nowait = true, silent = true },
 				}
+			end
+			if session.review and opts.toggle_file_reviewed then
+				add(
+					items,
+					"pulls.review.explorer.toggle_file_reviewed",
+					"Toggle file reviewed",
+					opts.toggle_file_reviewed
+				)
 			end
 			help.register("Review", items, { buffer = buf, index = 110 })
 		end

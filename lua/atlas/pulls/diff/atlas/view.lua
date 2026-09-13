@@ -1,6 +1,7 @@
 local M = {}
 
 local commits = require("atlas.pulls.diff.atlas.commits")
+local comments = require("atlas.pulls.diff.comments")
 local diff = require("atlas.ui.components.diff_hunks")
 local explorer = require("atlas.pulls.diff.atlas.explorer")
 local renderer = require("atlas.pulls.diff.atlas.renderer")
@@ -303,11 +304,11 @@ end
 ---@param output AtlasDiffRenderOutput
 function M.render(session, output)
 	local state = session.viewer_state
-	state.annotated_paths = output.annotated_paths
+	state.annotated_paths = comments.annotated_paths(session, state.files)
 	if state.layout == "inline" and state.right.win then
 		renderer.inline_deleted_lines(state.document, state.right.buf, output.deleted_lines, output.deleted_hints)
 	end
-	explorer.render(session, output.annotated_paths)
+	explorer.render(session, state.annotated_paths)
 	commits.render(session)
 end
 
