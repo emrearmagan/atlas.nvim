@@ -668,6 +668,22 @@ register({
 	run = create_checklist_item,
 })
 register({ id = "search", label = "Search Stories", icon = icons.action("search"), run = search })
+register({
+	id = "edit_search",
+	label = "Edit search",
+	icon = icons.action("search"),
+	run = function(_, done)
+		local state = require("atlas.issues.state")
+		require("atlas.providers.shortcut.completion.search").edit(state.query .. " ", function(query)
+			local view = state.search_view()
+			if view then
+				view.search = query
+				require("atlas.issues.ui.dashboard.controller").refresh_view()
+			end
+		end)
+		done(nil, nil)
+	end,
+})
 register(actions.manage_templates)
 register(actions.browse_issue)
 register(actions.copy_issue_key)
