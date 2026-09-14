@@ -54,12 +54,7 @@ local function stop_spinner()
 end
 
 local function is_loading()
-	if
-		state.pr_loading
-		or state.details_loading
-		or state.diffstat == "loading"
-		or state.merge_checks == "loading"
-	then
+	if state.pr_loading or state.details_loading or state.diffstat == "loading" or state.merge_checks == "loading" then
 		return true
 	end
 	if state.current_pr == nil then
