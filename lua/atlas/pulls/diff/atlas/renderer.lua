@@ -154,9 +154,9 @@ function M.file(document, opts)
 	vim.api.nvim_buf_clear_namespace(right_buf, namespace, 0, -1)
 	vim.api.nvim_buf_clear_namespace(right_buf, inline_namespace, 0, -1)
 	local hunks = document.changes
-	if document.status == "added" then
+	if document.status == "added" and not document.binary then
 		highlight_lines(right_buf, 1, #document.new.lines, "AtlasDiffAddLine")
-	elseif document.status == "deleted" then
+	elseif document.status == "deleted" and not document.binary then
 		highlight_lines(left_buf, 1, #document.old.lines, "AtlasDiffRemoveLine")
 	elseif opts.layout == "inline" and not document.binary then
 		for _, hunk in ipairs(hunks) do

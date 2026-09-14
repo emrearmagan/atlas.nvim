@@ -4,6 +4,7 @@ local commits = require("atlas.pulls.diff.atlas.commits")
 local comments = require("atlas.pulls.diff.comments")
 local diff = require("atlas.ui.components.diff_hunks")
 local explorer = require("atlas.pulls.diff.atlas.explorer")
+local images = require("atlas.pulls.diff.atlas.images")
 local renderer = require("atlas.pulls.diff.atlas.renderer")
 local review_panel = require("atlas.pulls.diff.ui.review_panel")
 local session_api = require("atlas.pulls.diff.session")
@@ -130,7 +131,7 @@ local function arrange_content_windows(session)
 	end
 
 	local single_sided = state.document.status == "added" or state.document.status == "deleted"
-	state.layout = single_sided and "side-by-side" or state.preferred_layout
+	state.layout = (single_sided or state.document.binary) and "side-by-side" or state.preferred_layout
 	if state.layout == "side-by-side" and not single_sided then
 		if not state.right.win then
 			state.right.win = primary
@@ -192,7 +193,10 @@ function M.configure_content_window(session, win)
 		return
 	end
 	local state = session.viewer_state
-	local side_by_side = state.layout == "side-by-side" and state.left.win ~= nil and state.right.win ~= nil
+	local side_by_side = state.layout == "side-by-side"
+		and state.left.win ~= nil
+		and state.right.win ~= nil
+		and not state.document.binary
 	local is_left = vim.api.nvim_win_get_buf(win) == state.left.buf
 	local options = vim.wo[win][0]
 	options.colorcolumn = ""
@@ -234,6 +238,7 @@ function M.configure_content_window(session, win)
 		marker
 	)
 	session.statusline:attach(win)
+	images.configure_window(state.document, win)
 end
 
 ---@param session AtlasDiffSession
@@ -272,6 +277,7 @@ end
 ---@param document AtlasDiffDocument
 function M.set_document(session, document)
 	local state = session.viewer_state
+	images.clear(state)
 	state.document = document
 	name_content_buffer(session, state.left.buf, session.source.base_revision, document.old.path)
 	name_content_buffer(session, state.right.buf, session.source.head_revision, document.new.path)
@@ -285,6 +291,7 @@ function M.set_document(session, document)
 		M.configure_content_window(session, state.right.win)
 	end
 	M.render_document(session)
+	images.attach(session)
 	focus_first_hunk(session)
 end
 
@@ -410,7 +417,7 @@ end
 ---@return AtlasDiffCurrent|nil, string|nil
 function M.toggle_layout(session)
 	local state = session.viewer_state
-	if state.document.status == "added" or state.document.status == "deleted" then
+	if state.document.status == "added" or state.document.status == "deleted" or state.document.binary then
 		return M.current(session), nil
 	end
 	local anchor = content_window(state)
