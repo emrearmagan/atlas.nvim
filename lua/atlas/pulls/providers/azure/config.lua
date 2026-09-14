@@ -36,11 +36,6 @@
 -- `scope` is the only first-class search filter. Any additional Azure
 -- pull-request query parameter can be passed through `extra_params`.
 
----@class AtlasAzureConfig
----@field base_url string Azure DevOps organization URL, for example https://dev.azure.com/your-organization.
----@field token string Personal Access Token used with Basic authentication.
----@field cache_ttl number|nil Cache lifetime in seconds. Set to 0 to disable caching.
-
 ---@class AtlasAzurePullsSearchConfig
 ---@field project string
 ---@field repository string|nil
