@@ -101,6 +101,9 @@ function M.open(request)
 		prompt = "",
 		winopts = {
 			title = request.title,
+			on_create = function(win)
+				vim.b[win.bufnr].completion = false
+			end,
 			on_close = function()
 				active = false
 				cancel(fetch_handle)

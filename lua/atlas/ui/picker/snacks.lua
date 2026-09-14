@@ -132,6 +132,7 @@ function M.open(request)
 		prompt = "",
 		live = request.fetch ~= nil,
 		show_empty = true,
+		win = { input = { b = { completion = false } } },
 		finder = picker_finder,
 		format = function(item)
 			return { { item.text, item.hl_group } }
