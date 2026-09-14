@@ -77,28 +77,6 @@ function M.fetch_issues(view, opts, on_done)
 	return api.stories.search(query, opts, on_done)
 end
 
----@param refs IssueRef[]
----@param opts IssuesFetchOpts
----@param on_done fun(issues: Issue[], err: string|nil)
----@return { cancel: fun() }|nil
-function M.fetch_by_refs(refs, opts, on_done)
-	return api.stories.fetch_by_refs(refs, opts, function(issues, err)
-		if err or #refs ~= 1 or #issues ~= 1 then
-			on_done(issues, err)
-			return
-		end
-
-		---@cast refs ShortcutIssueRef[]
-		local workspace = refs[1].workspace
-		local issue_workspace = tostring(issues[1].url or ""):match("^https://app%.shortcut%.com/([^/]+)/story/")
-		if workspace and issue_workspace ~= workspace then
-			on_done({}, "Shortcut Story does not belong to workspace " .. workspace)
-			return
-		end
-		on_done(issues, nil)
-	end)
-end
-
 ---@param ref IssueRef
 ---@param opts IssuesFetchOpts|nil
 ---@param on_done fun(details: IssueDetails|nil, err: string|nil)
@@ -160,7 +138,7 @@ return {
 		core = {
 			fetch_user = api.members.get_current,
 			fetch_issues = M.fetch_issues,
-			fetch_by_refs = M.fetch_by_refs,
+			fetch_by_refs = api.stories.fetch_by_refs,
 			fetch_issue = M.fetch_issue,
 			-- update_description = M.update_description,
 			refresh = M.refresh,

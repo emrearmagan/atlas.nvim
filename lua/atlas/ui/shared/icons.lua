@@ -104,7 +104,7 @@ ICONS.actions = {
 	reopen = { icon = "", hl_group = "AtlasTextPositive" },
 	review = ICONS.pulls.review,
 	user = ICONS.general.user,
-	label = ICONS.pulls.tag,
+	label = ICONS.general.tag,
 	create = ICONS.issues.issue,
 	search = ICONS.general.search,
 	notification = ICONS.general.bell,

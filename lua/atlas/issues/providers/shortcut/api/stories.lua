@@ -172,24 +172,53 @@ function M.fetch_by_refs(refs, opts, on_done)
 		on_done({}, nil)
 		return nil
 	end
-	if #refs > 1 then
-		on_done({}, "Shortcut does not support bulk Story fetches")
-		return nil
-	end
-
-	local story_id = tonumber(refs[1].key)
-	if story_id == nil or story_id < 1 then
-		on_done({}, "Invalid Shortcut Story key: " .. refs[1].key)
-		return nil
+	local story_ids = {}
+	for index, ref in ipairs(refs) do
+		local key = tostring(ref.key)
+		local story_id = key:match("^%d+$") and tonumber(key) or nil
+		if story_id == nil or story_id < 1 then
+			on_done({}, "Invalid Shortcut Story key: " .. key)
+			return nil
+		end
+		story_ids[index] = story_id
 	end
 
 	opts = opts or {}
-	return M.search("id:" .. tostring(story_id), {
-		force_refresh = opts.force_refresh,
-		pagelen = 1,
-	}, function(page, err)
-		on_done(page.items, err)
+	local starts = {}
+	for index, story_id in ipairs(story_ids) do
+		---@cast refs ShortcutIssueRef[]
+		local workspace = refs[index].workspace
+		starts[index] = function(done)
+			return M.search("id:" .. tostring(story_id), {
+				force_refresh = opts.force_refresh,
+				pagelen = 1,
+			}, function(page, err)
+				if not err and workspace and #page.items == 1 then
+					local issue_workspace =
+						tostring(page.items[1].url or ""):match("^https://app%.shortcut%.com/([^/]+)/story/")
+					if issue_workspace ~= workspace then
+						done({}, "Shortcut Story does not belong to workspace " .. workspace)
+						return
+					end
+				end
+				done(page.items, err)
+			end)
+		end
+	end
+
+	local scope = requests.new()
+	scope.all(starts, function(values, errors)
+		local issues = {}
+		local messages = {}
+		for index, story_id in ipairs(story_ids) do
+			vim.list_extend(issues, values[index] or {})
+			if errors[index] then
+				table.insert(messages, string.format("#%s: %s", story_id, errors[index]))
+			end
+		end
+		on_done(issues, #messages > 0 and table.concat(messages, "\n") or nil)
 	end)
+	return scope
 end
 
 ---@param fields ShortcutStoryCreate

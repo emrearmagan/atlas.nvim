@@ -608,28 +608,66 @@ local function search(_ctx, done)
 	})
 end
 
-register({ id = "transition", label = "Change Workflow State", is_available = has_issue, run = transition })
-register({ id = "assign", label = "Edit Owners", is_available = has_issue, run = assign })
-register({ id = "reporter", label = "Change Requester", is_available = has_issue, run = reporter })
-register({ id = "labels", label = "Edit Labels", is_available = has_issue, run = labels })
-register({ id = "archive", label = "Archive Story", is_available = archive_available, run = archive })
-register({ id = "unarchive", label = "Unarchive Story", is_available = unarchive_available, run = unarchive })
+register({
+	id = "transition",
+	label = "Change Workflow State",
+	icon = icons.action("transition"),
+	is_available = has_issue,
+	run = transition,
+})
+register({ id = "assign", label = "Edit Owners", icon = icons.action("user"), is_available = has_issue, run = assign })
+register({
+	id = "reporter",
+	label = "Change Requester",
+	icon = icons.action("user"),
+	is_available = has_issue,
+	run = reporter,
+})
+register({ id = "labels", label = "Edit Labels", icon = icons.action("label"), is_available = has_issue, run = labels })
+register({
+	id = "archive",
+	label = "Archive Story",
+	icon = icons.action("close"),
+	is_available = archive_available,
+	run = archive,
+})
+register({
+	id = "unarchive",
+	label = "Unarchive Story",
+	icon = icons.action("reopen"),
+	is_available = unarchive_available,
+	run = unarchive,
+})
 register({
 	id = "toggle_subscription",
 	label = "Follow / Unfollow Story",
+	icon = icons.action("notification"),
 	is_available = has_issue,
 	run = toggle_subscription,
 })
-register({ id = "delete_issue", label = "Delete Story", is_available = has_issue, run = delete_issue })
-register({ id = "edit_issue", label = "Edit Story", is_available = has_issue, run = edit_issue })
-register({ id = "create_issue", label = "Create Story", run = create_issue })
+register({
+	id = "delete_issue",
+	label = "Delete Story",
+	icon = icons.action("delete"),
+	is_available = has_issue,
+	run = delete_issue,
+})
+register({
+	id = "edit_issue",
+	label = "Edit Story",
+	icon = icons.action("edit"),
+	is_available = has_issue,
+	run = edit_issue,
+})
+register({ id = "create_issue", label = "Create Story", icon = icons.action("create"), run = create_issue })
 register({
 	id = "create_checklist_item",
 	label = "Add Checklist Item",
+	icon = icons.action("create"),
 	is_available = has_issue,
 	run = create_checklist_item,
 })
-register({ id = "search", label = "Search Stories", run = search })
+register({ id = "search", label = "Search Stories", icon = icons.action("search"), run = search })
 register(actions.manage_templates)
 register(actions.browse_issue)
 register(actions.copy_issue_key)
