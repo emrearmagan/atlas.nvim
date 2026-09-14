@@ -422,7 +422,6 @@ function M.render(opts)
 				tbl_lines, tbl_map, tbl_spans = require("atlas.issues.ui.dashboard.board").render({
 					issues = issues,
 					statuses = page and page.statuses,
-					issue_statuses = page and page.issue_statuses,
 					provider_id = provider and provider.id,
 				})
 				if state.is_loading then

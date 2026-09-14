@@ -13,7 +13,7 @@ local function clean(value)
 	return (tostring(value or ""):gsub("%c", " "))
 end
 
-local function group_issues(issues, provider_id, statuses, issue_statuses)
+local function group_issues(issues, provider_id, statuses)
 	local columns, by_status = {}, {}
 
 	local function add_column(id, name)
@@ -23,7 +23,7 @@ local function group_issues(issues, provider_id, statuses, issue_statuses)
 		return column
 	end
 
-	if issue_statuses == nil and (provider_id == "github" or provider_id == "gitlab") then
+	if statuses == nil and (provider_id == "github" or provider_id == "gitlab") then
 		add_column("id:open", "Open")
 		add_column("id:closed", "Closed")
 	end
@@ -43,8 +43,9 @@ local function group_issues(issues, provider_id, statuses, issue_statuses)
 	end
 	for _, issue in ipairs(issues) do
 		local column
-		if issue_statuses ~= nil then
-			column = by_status["id:" .. (issue_statuses[issue.key] or "no_status")] or by_status["id:no_status"]
+		if provider_id == "github" and statuses then
+			---@cast issue GitHubIssue
+			column = by_status["id:" .. (issue.project_status_id or "no_status")] or by_status["id:no_status"]
 		else
 			column = status_column(issue.status_id, issue.status)
 		end
@@ -94,12 +95,12 @@ local function issue_text(issue)
 	return text, spans
 end
 
----@param opts { issues: Issue[], provider_id: string, statuses?: IssueStatus[], issue_statuses?: table<string, string> }
+---@param opts { issues: Issue[], provider_id: string, statuses?: IssueStatus[] }
 ---@return string[] lines
 ---@return table<integer, table> line_map
 ---@return table[] spans
 function M.render(opts)
-	local columns = group_issues(opts.issues or {}, opts.provider_id, opts.statuses, opts.issue_statuses)
+	local columns = group_issues(opts.issues or {}, opts.provider_id, opts.statuses)
 	if #columns == 0 then
 		return { " No issues found." }, {}, {}
 	end

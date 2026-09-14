@@ -14,7 +14,6 @@
 ---@class IssuesPage
 ---@field items Issue[]
 ---@field statuses IssueStatus[]|nil
----@field issue_statuses table<string, string>|nil Issue key to column status ID.
 ---@field next_cursor string|nil
 ---@field total_pages integer|nil
 

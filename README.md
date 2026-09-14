@@ -644,6 +644,12 @@ issues = {
         layout = "plain",
         search = "mentions:@me is:open",
       },
+      {
+        name = "Board",
+        key = "4",
+        layout = "board",
+        project = { owner = "your-org", number = 1 },
+      },
     },
 
     bookmarks = {

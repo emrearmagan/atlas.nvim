@@ -3,6 +3,7 @@
 ---@field number integer
 ---@field node_id string|nil
 ---@field is_pinned boolean
+---@field project_status_id string|nil
 
 ---@class GitHubIssueMilestone : IssueMilestone
 ---@field progress_percentage number|nil
@@ -44,6 +45,9 @@ end
 ---@return { cancel: fun() }|nil
 local function fetch_issues(view, opts, on_done)
 	local search = resolve_search(view)
+	if view.layout == "board" and view.project then
+		return issues_api.search_project_issues(view.project, search, on_done, opts)
+	end
 	return issues_api.search_issues(search, function(page, err)
 		if err then
 			on_done({ items = {} }, err)
