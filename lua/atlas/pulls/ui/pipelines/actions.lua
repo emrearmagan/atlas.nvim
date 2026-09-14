@@ -1,5 +1,6 @@
 local M = {}
 
+local icons = require("atlas.ui.shared.icons")
 local picker = require("atlas.ui.picker")
 local notify = require("atlas.core.notify")
 
@@ -12,6 +13,7 @@ local notify = require("atlas.core.notify")
 ---@class PullsPipelineAction
 ---@field id string
 ---@field label string
+---@field icon string
 ---@field confirm string|nil
 ---@field is_available fun(ctx: PullsPipelineActionContext): boolean, string|nil
 ---@field run fun(ctx: PullsPipelineActionContext, done: fun(err: string|nil))
@@ -36,9 +38,7 @@ function M.open(provider, ctx, on_select)
 	picker.select({
 		title = "Choose pipeline action",
 		items = available,
-		format_item = function(action)
-			return action.label
-		end,
+		format_item = icons.format_action,
 		on_select = function(action)
 			if not action then
 				return

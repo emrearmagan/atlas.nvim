@@ -47,7 +47,7 @@ end
 ---@param extra_fields string[]
 ---@return string[]
 local function detail_fields(extra_fields)
-	local fields = { "description", "labels" }
+	local fields = { "description", "labels", "status", "priority", "assignee", "reporter" }
 	vim.list_extend(fields, extra_fields)
 	return fields
 end
@@ -116,28 +116,27 @@ end
 ---@field key string
 ---@field title string
 
+---@param project JiraIssueProject|nil
 ---@param query string
 ---@param on_done fun(items: JiraIssuePickerItem[]|nil, err: string|nil)
----@param opts { force_refresh?: boolean }|nil
 ---@return { job_id: integer, cancel: fun() }|nil
-function M.search_issue(query, on_done, opts)
-	opts = opts or {}
+function M.search_issue(project, query, on_done)
 	local q = vim.trim(tostring(query or ""))
+	local project_key = project and project.key
 
-	local cache_key = "jira:issue_picker:" .. q
-	if not opts.force_refresh then
-		local cached_items, ok = service.get_memory_cache(cache_key)
-		if ok then
-			on_done(cached_items, nil)
-			return nil
-		end
+	local cache_key = string.format("jira:issue_picker:%s:%s", project_key or "all", q)
+	local cached_items, ok = service.get_memory_cache(cache_key)
+	if ok then
+		on_done(cached_items, nil)
+		return nil
 	end
 
-	local endpoint = "/issue/picker?query="
-		.. url_encode(q)
-		.. "&currentJQL="
-		.. url_encode("ORDER BY updated DESC")
-		.. "&showSubTasks=true&showSubTaskParent=true"
+	local jql = project_key and "project = " .. project_key .. " ORDER BY updated DESC" or "ORDER BY updated DESC"
+	local endpoint = "/issue/picker?query=" .. url_encode(q) .. "&currentJQL=" .. url_encode(jql)
+	if project then
+		endpoint = endpoint .. "&currentProjectId=" .. url_encode(project.id)
+	end
+	endpoint = endpoint .. "&showSubTasks=true&showSubTaskParent=true"
 
 	return service.request("GET", endpoint, nil, function(result, err)
 		if err ~= nil then
@@ -150,7 +149,7 @@ function M.search_issue(query, on_done, opts)
 		for _, section in ipairs(result.sections or {}) do
 			for _, issue in ipairs(section.issues or {}) do
 				local key = tostring(issue.key or "")
-				if key ~= "" then
+				if not project_key or key:find(project_key .. "-", 1, true) == 1 then
 					local title = tostring(issue.summaryText or issue.summary or "")
 					table.insert(items, {
 						id = tostring(issue.id or key),

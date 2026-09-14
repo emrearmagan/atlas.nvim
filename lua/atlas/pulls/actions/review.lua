@@ -2,6 +2,7 @@ local M = {}
 
 local config = require("atlas.config")
 local keymaps = require("atlas.core.keymaps")
+local icons = require("atlas.ui.shared.icons")
 local editor = require("atlas.ui.popups.editor")
 local notes = require("atlas.pulls.notes")
 local core_notify = require("atlas.core.notify")
@@ -98,6 +99,7 @@ local function upsert_comment(context, comment)
 	local items = assert(context.items)
 	for index, existing in ipairs(items) do
 		if tostring(existing.id) == tostring(comment.id) then
+			comment.hunk = comment.hunk or existing.hunk
 			items[index] = comment
 			return
 		end
@@ -316,6 +318,22 @@ function M.edit_review(context, entry, on_done)
 	return true
 end
 
+---@param data PullsReviewData
+---@param target PullsComment
+---@return boolean
+local function has_other_pending_items(data, target)
+	local target_kind = target.is_task and "tasks" or "comments"
+	for _, kind in ipairs({ "comments", "tasks" }) do
+		for _, item in ipairs(data[kind] or {}) do
+			local is_target = kind == target_kind and tostring(item.id) == tostring(target.id)
+			if item.state == "PENDING" and not is_target then
+				return true
+			end
+		end
+	end
+	return false
+end
+
 ---@param context AtlasReviewActionContext
 ---@param comment PullsComment
 ---@param on_done fun(result: PullsActionResult|nil, err: string|nil)
@@ -354,7 +372,8 @@ function M.delete_comment(context, comment, on_done)
 			end
 			local pending = comment.state == "PENDING"
 			local message = comment.is_task and "Task deleted" or "Comment deleted"
-			if pending and context.data then
+			-- Deleting the final pending item can also remove its draft review.
+			if pending and context.data and not has_other_pending_items(context.data, comment) then
 				context.provider.capabilities.reviews.fetch(context.pr, { force_refresh = true }, function(data)
 					if data then
 						context.data.review = data.review
@@ -492,6 +511,7 @@ end
 M.start_review = {
 	id = "start_review",
 	label = "Start review",
+	icon = icons.action("review"),
 	run = function(context, on_done)
 		local data = context.data
 		local reviews = context.provider.capabilities.reviews
@@ -517,6 +537,7 @@ M.start_review = {
 M.submit_review = {
 	id = "submit_review",
 	label = "Submit review",
+	icon = icons.action("review"),
 	run = function(context, on_done)
 		return open_review_editor(
 			context,
@@ -532,6 +553,7 @@ M.submit_review = {
 M.approve = {
 	id = "approve",
 	label = "Approve",
+	icon = icons.action("success"),
 	run = function(context, on_done)
 		return open_review_editor(context, "approve", " Approve ", "Approving...", "Approved", on_done)
 	end,
@@ -540,6 +562,7 @@ M.approve = {
 M.request_changes = {
 	id = "request_changes",
 	label = "Request changes",
+	icon = icons.action("changes"),
 	run = function(context, on_done)
 		return open_review_editor(
 			context,
@@ -555,6 +578,7 @@ M.request_changes = {
 M.discard_review = {
 	id = "discard_review",
 	label = "Discard review",
+	icon = icons.action("delete"),
 	run = function(context, on_done)
 		local data = context.data
 		local reviews = context.provider.capabilities.reviews

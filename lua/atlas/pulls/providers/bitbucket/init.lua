@@ -119,7 +119,6 @@ return {
 			decline = pullrequests_api.decline,
 			fetch_diffstat = changes_api.fetch_diffstat,
 			fetch_commits = changes_api.fetch_commits,
-			fetch_diff = changes_api.fetch_diff,
 		},
 		comments = {
 			comment_completion = author_completion.for_pulls,
@@ -131,6 +130,7 @@ return {
 		},
 		reviews = {
 			fetch = reviews_api.fetch_review,
+			fetch_threads = reviews_api.fetch_threads,
 			fetch_review_context = reviews_api.fetch_review_context,
 			submit_review = reviews_api.submit_review,
 			approve = reviews_api.approve,

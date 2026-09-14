@@ -96,7 +96,6 @@ local review_progress = { "󰝦", "󰪞", "󰪟", "󰪠", "󰪡", "󰪢", "󰪣"
 ---@class AtlasDiffRenderOutput
 ---@field deleted_lines table<integer, [string, string][][]>
 ---@field deleted_hints table<integer, [string, string][]>
----@field annotated_paths table<string, { comments: boolean, notes: boolean }>
 
 ---@param session AtlasDiffSession
 ---@return AtlasStatuslineSegment[]
@@ -264,7 +263,7 @@ function M.render(session)
 	if session.closed then
 		return
 	end
-	local output = { deleted_lines = {}, deleted_hints = {}, annotated_paths = comments.annotated_paths(session) }
+	local output = { deleted_lines = {}, deleted_hints = {} }
 	if session.current then
 		if session.expanded_overlays then
 			hints.clear(session.current)

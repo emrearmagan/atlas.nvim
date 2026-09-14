@@ -15,6 +15,7 @@ local function custom_action(item)
 	return {
 		id = item.id,
 		label = item.label,
+		icon = item.icon,
 		custom = true,
 		is_available = has_issue,
 		run = function(context, done)

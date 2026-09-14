@@ -358,10 +358,6 @@ function M.render(session, annotated_paths)
 		local parent = directory(file.path)
 		local status, status_highlight = status_marker(file.status)
 		local annotation = annotated_paths[file.path]
-		local old_annotation = file.old_path and annotated_paths[file.old_path]
-		local has_comments = (annotation and annotation.comments) or (old_annotation and old_annotation.comments)
-		local has_notes = file.status ~= "deleted"
-			and ((annotation and annotation.notes) or (old_annotation and old_annotation.notes))
 		local devicon, devicon_hl = web_icon(basename(file.path))
 		local status_part = { text = status, hl_group = status_highlight }
 		local suffix_parts = stat_parts(file)
@@ -373,10 +369,10 @@ function M.render(session, annotated_paths)
 		local suffix = table.concat(suffix_texts, " ")
 
 		local prefix_parts = {}
-		if has_comments then
+		if annotation and annotation.comments then
 			table.insert(prefix_parts, { text = comment_icon, hl_group = "AtlasLogInfo" })
 		end
-		if has_notes then
+		if annotation and annotation.notes then
 			table.insert(prefix_parts, { text = note_icon, hl_group = note_icon_hl })
 		end
 		if devicon then

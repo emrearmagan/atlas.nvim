@@ -9,6 +9,7 @@ local notes = require("atlas.pulls.notes")
 local pullrequests_api = require("atlas.pulls.providers.gitlab.api.pullrequests")
 local users_api = require("atlas.pulls.providers.gitlab.api.users")
 local service = require("atlas.providers.gitlab.client")
+local gitlab_query = require("atlas.providers.gitlab.query")
 
 ---@param ctx AtlasPullActionContext
 ---@return boolean
@@ -252,11 +253,17 @@ local function edit_assignees(ctx, done)
 	end)
 end
 
----@param ctx AtlasPullActionContext
----@param done fun(result: PullsActionResult|nil, err: string|nil)
-local function search(ctx, done)
+---@param opts {
+--- title: string,
+--- include_all: boolean,
+--- on_select: fun(project: string),
+--- on_cancel: fun(),
+---}
+local function select_project(opts)
+	local initial_items = opts.include_all and { { id = "all", label = "All projects", project = "" } } or {}
 	picker.search({
-		title = "Search projects",
+		title = opts.title,
+		initial_items = initial_items,
 		fetch_on_open = false,
 		format_item = function(item)
 			return item.label
@@ -264,7 +271,7 @@ local function search(ctx, done)
 		fetch = function(query, fetch_done)
 			query = vim.trim(query)
 			if query == "" then
-				fetch_done({}, nil)
+				fetch_done(initial_items, nil)
 				return
 			end
 
@@ -276,35 +283,152 @@ local function search(ctx, done)
 					return
 				end
 
-				local list = {}
-				for _, item in ipairs(type(result) == "table" and result or {}) do
-					local full_path = tostring(item.path_with_namespace or "")
-					if full_path ~= "" then
-						table.insert(list, { id = full_path, label = full_path })
-					end
+				local items = {}
+				for _, project in ipairs(result) do
+					local path = project.path_with_namespace
+					table.insert(items, { id = path, label = path, project = path })
 				end
-				fetch_done(list, nil)
+				fetch_done(items, nil)
 			end, {
 				action = "Search projects",
 				query = query,
 			})
 		end,
 		on_select = function(item)
-			local project = item.id
-			---@type AtlasGitLabPullsViewConfig
-			local search_view = {
-				name = "Search",
-				key = nil,
-				project = project,
-				scope = "all",
-			}
+			opts.on_select(item.project)
+		end,
+		on_cancel = opts.on_cancel,
+	})
+end
 
-			notify(ctx, "success", string.format("Search view -> %s", project))
-			require("atlas").open("pulls", "gitlab", { initial_view = search_view })
-			done({ changed_pr = false, message = "Search view switched" }, nil)
+---@param project string
+---@param ctx AtlasPullActionContext
+---@param done fun(result: PullsActionResult|nil, err: string|nil)
+local function search_merge_requests(project, ctx, done)
+	picker.search({
+		title = project ~= "" and "Search " .. project .. " Merge Requests" or "Search GitLab Merge Requests",
+		fetch_on_open = false,
+		format_item = function(item)
+			return item.label
+		end,
+		preview_item = function(item, preview_done)
+			local pr = item.value
+			return pullrequests_api.fetch_pullrequest(pr, nil, function(details, err)
+				if err or details == nil then
+					preview_done({ title = pr_label(pr), lines = { err or "Failed to load merge request" } })
+					return
+				end
+				local reviewers = vim.tbl_map(function(user)
+					return "@" .. user.username
+				end, pr.reviewers or {})
+				local assignees = vim.tbl_map(function(user)
+					return "@" .. user.username
+				end, details.assignees)
+				local labels = vim.tbl_map(function(label)
+					return label.name
+				end, details.labels)
+				local lines = {
+					"**Status:** " .. pr.state,
+					"**Author:** " .. pr.author.name,
+					string.format("**Branches:** %s -> %s", pr.source.branch, pr.destination.branch),
+				}
+				if #reviewers > 0 then
+					table.insert(lines, "**Reviewers:** " .. table.concat(reviewers, ", "))
+				end
+				if #assignees > 0 then
+					table.insert(lines, "**Assignees:** " .. table.concat(assignees, ", "))
+				end
+				if #labels > 0 then
+					table.insert(lines, "**Labels:** " .. table.concat(labels, ", "))
+				end
+				vim.list_extend(lines, { "", "## Description", "" })
+				local description = vim.trim(details.description)
+				vim.list_extend(
+					lines,
+					vim.split(description ~= "" and description or "No description", "\n", { plain = true })
+				)
+				preview_done({
+					title = string.format("%s - %s", pr_label(pr), pr.title),
+					lines = lines,
+				})
+			end)
+		end,
+		fetch = function(query, fetch_done)
+			query = vim.trim(query)
+			if query == "" then
+				fetch_done({}, nil)
+				return
+			end
+
+			---@type AtlasGitLabPullsViewConfig
+			local view = { name = "Search", scope = "all", search = query }
+			if project ~= "" then
+				view.project = project
+			end
+			return pullrequests_api.fetch_pullrequests(view, {
+				force_refresh = false,
+				pagelen = 30,
+				state = "all",
+			}, function(page, err)
+				if err then
+					fetch_done(nil, err)
+					return
+				end
+				local items = {}
+				for _, pr in ipairs(page.items) do
+					table.insert(items, {
+						id = pr.repo_full_name .. "!" .. tostring(pr.id),
+						label = string.format("%s - %s", pr_label(pr), pr.title),
+						value = pr,
+					})
+				end
+				fetch_done(items, nil)
+			end)
+		end,
+		on_select = function(item)
+			require("atlas.pulls.ui.detail").open(item.value, { provider = ctx.provider })
+			done(nil, nil)
 		end,
 		on_cancel = function()
-			done({ changed_pr = false, message = "Search cancelled" }, nil)
+			done(nil, nil)
+		end,
+	})
+end
+
+---@param ctx AtlasPullActionContext
+---@param done fun(result: PullsActionResult|nil, err: string|nil)
+local function search(ctx, done)
+	select_project({
+		title = "Search Merge Requests - Project",
+		include_all = true,
+		on_select = function(project)
+			search_merge_requests(project, ctx, done)
+		end,
+		on_cancel = function()
+			done(nil, nil)
+		end,
+	})
+end
+
+---@param _ AtlasPullActionContext
+---@param done fun(result: PullsActionResult|nil, err: string|nil)
+local function open_project(_, done)
+	select_project({
+		title = "Open Project",
+		include_all = false,
+		on_select = function(project)
+			require("atlas").open("pulls", "gitlab", {
+				initial_view = {
+					name = "Search",
+					layout = "compact",
+					project = project,
+					scope = "all",
+				},
+			})
+			done(nil, nil)
+		end,
+		on_cancel = function()
+			done(nil, nil)
 		end,
 	})
 end
@@ -379,6 +503,7 @@ end
 register({
 	id = actions.approve.id,
 	label = actions.approve.label,
+	icon = actions.approve.icon,
 	is_available = review_available,
 	run = actions.approve.run,
 })
@@ -386,6 +511,7 @@ register({
 register({
 	id = actions.request_changes.id,
 	label = actions.request_changes.label,
+	icon = actions.request_changes.icon,
 	is_available = review_available,
 	run = actions.request_changes.run,
 })
@@ -393,42 +519,82 @@ register({
 register({
 	id = "merge",
 	label = "Merge MR",
+	icon = icons.action("merge"),
 	is_available = merge_available,
 	run = merge,
 })
 
-register(actions.edit_title)
-register(actions.edit_description)
-
 register(actions.decline)
+register(actions.convert_to_draft)
+register(actions.ready_for_review)
 
 register({
 	id = "reopen",
 	label = "Reopen MR",
+	icon = icons.action("reopen"),
 	is_available = reopen_available,
 	run = reopen,
 })
 
-register(actions.convert_to_draft)
-register(actions.ready_for_review)
+register(actions.edit_title)
+register(actions.edit_description)
 register(actions.edit_reviewers)
 
 register({
 	id = "edit_assignees",
 	label = "Edit assignees",
+	icon = icons.action("user"),
 	is_available = edit_assignees_available,
 	run = edit_assignees,
 })
 
 register({
 	id = "search",
-	label = "Search projects",
+	label = "Search Merge Requests",
+	icon = icons.action("search"),
 	run = search,
+})
+
+register({
+	id = "open_project",
+	label = "Open Project",
+	icon = icons.action("search"),
+	run = open_project,
+})
+
+register({
+	id = "edit_search",
+	label = "Edit search",
+	icon = icons.action("search"),
+	run = function(_, done)
+		local state = require("atlas.pulls.state")
+		vim.ui.input({ prompt = "Search: ", default = state.query }, function(input)
+			if input == nil or vim.trim(input) == "" then
+				done(nil, nil)
+				return
+			end
+			local view = state.search_view()
+			if view == nil then
+				done(nil, nil)
+				return
+			end
+			---@cast view AtlasGitLabPullsViewConfig
+			local ok, err = gitlab_query.apply(view, input)
+			if not ok then
+				core_notify.warn(err)
+				done(nil, err)
+				return
+			end
+			require("atlas.pulls.ui.dashboard.controller").refresh_view()
+			done(nil, nil)
+		end)
+	end,
 })
 
 register({
 	id = "toggle_subscription",
 	label = "Toggle subscription",
+	icon = icons.action("notification"),
 	is_available = toggle_subscription_available,
 	run = toggle_subscription,
 })

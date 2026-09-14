@@ -5,6 +5,42 @@ local service = require("atlas.providers.gitlab.client")
 local mapper = require("atlas.pulls.providers.gitlab.api.mapper")
 local request_scope = require("atlas.core.requests")
 
+local REVIEW_COMMENTS_QUERY = [[
+query($path:ID!,$iid:String!,$after:String){
+  project(fullPath:$path){
+    mergeRequest(iid:$iid){
+      notes(filter:ONLY_COMMENTS,first:100,after:$after){
+        pageInfo{hasNextPage endCursor}
+        nodes{
+          id
+          body
+          created_at:createdAt
+          web_url:url
+          author{id name username}
+          award_emoji:awardEmoji(first:100){nodes{name}}
+          position{
+            position_type:positionType
+            old_path:oldPath
+            new_path:newPath
+            old_line:oldLine
+            new_line:newLine
+            diff_refs:diffRefs{base_sha:baseSha start_sha:startSha head_sha:headSha}
+          }
+          discussion{
+            id
+            resolved
+            resolved_at:resolvedAt
+            resolved_by:resolvedBy{id name username}
+            notes(first:1){nodes{id}}
+            truncatedDiffLines{type oldLine newLine text}
+          }
+        }
+      }
+    }
+  }
+}
+]]
+
 local GENERAL_COMMENTS_QUERY = [[
 query($path:ID!,$iid:String!,$after:String){
   project(fullPath:$path){
@@ -161,8 +197,128 @@ function M.fetch_review_comments(pr, opts, on_done)
 	return requests
 end
 
+---@param note table
+---@return PullsComment
+local function to_graphql_comment(note)
+	local discussion = note.discussion
+	local position = json.nilify(note.position)
+	if position then
+		position.base_sha = position.diff_refs.base_sha
+		position.start_sha = position.diff_refs.start_sha
+		position.head_sha = position.diff_refs.head_sha
+	end
+	note.id = id_tail(note.id)
+	local author = json.nilify(note.author)
+	if author then
+		author.id = id_tail(author.id)
+	end
+	local resolved_by = json.nilify(discussion.resolved_by)
+	if resolved_by then
+		resolved_by.id = id_tail(resolved_by.id)
+	end
+	note.award_emoji = json.safe_table(json.safe_table(note.award_emoji).nodes)
+	note.resolved_at = discussion.resolved_at
+	note.resolved_by = resolved_by
+	return mapper.to_comment(note, id_tail(discussion.notes.nodes[1].id), id_tail(discussion.id), discussion.resolved)
+end
+
+---@param pr PullRequest
+---@param opts { force_refresh?: boolean }|nil
+---@param on_done fun(result: PullsComment[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_review_threads(pr, opts, on_done)
+	local path, iid = project_iid(pr)
+	local cache_key = string.format("gitlab_pulls:review-threads:%s!%d", path, iid)
+	if not (opts and opts.force_refresh) then
+		local cached, ok = service.get_memory_cache(cache_key)
+		if ok then
+			on_done(cached, nil)
+			return nil
+		end
+	end
+
+	local requests = request_scope.new()
+	requests.all({
+		notes = function(done)
+			local records = {}
+			local pages = request_scope.new()
+			local function fetch_page(after)
+				pages.run(function(callback)
+					return service.graphql(
+						REVIEW_COMMENTS_QUERY,
+						{
+							path = path,
+							iid = tostring(iid),
+							after = after,
+						},
+						callback,
+						{
+							action = "Fetch MR review threads",
+							project_path = path,
+							iid = iid,
+						}
+					)
+				end, function(result, err)
+					local project = json.nilify(result and result.project)
+					local merge_request = project and json.nilify(project.mergeRequest)
+					if err or not merge_request then
+						done(nil, err or "GitLab did not return the merge request")
+						return
+					end
+					local notes = merge_request.notes
+					vim.list_extend(records, notes.nodes)
+					if notes.pageInfo.hasNextPage then
+						fetch_page(notes.pageInfo.endCursor)
+					else
+						done(records, nil)
+					end
+				end)
+			end
+			fetch_page(nil)
+			return pages
+		end,
+		drafts = function(done)
+			local endpoint =
+				string.format("/projects/%s/merge_requests/%d/draft_notes?per_page=100", service.url_encode(path), iid)
+			return service.fetch_all_pages(endpoint, done, {
+				action = "Fetch MR draft comments",
+				project_path = path,
+				iid = iid,
+			})
+		end,
+	}, function(values, errors)
+		if errors.notes or errors.drafts then
+			on_done(nil, errors.notes or errors.drafts)
+			return
+		end
+		local comments, roots = {}, {}
+		for _, note in ipairs(values.notes) do
+			local comment = to_graphql_comment(note)
+			table.insert(comments, comment)
+			if comment.parent_id == nil then
+				roots[comment.thread_id] = comment
+				comment.hunk = mapper.to_diff_hunk(note.discussion.truncatedDiffLines)
+			end
+		end
+		for _, comment in ipairs(comments) do
+			if comment.parent_id then
+				inherit_thread_context(comment, roots[comment.thread_id])
+			end
+		end
+		for _, draft in ipairs(values.drafts) do
+			local root = roots[draft.discussion_id]
+			local comment = inherit_thread_context(mapper.to_draft_comment(draft, root and root.id or nil), root)
+			table.insert(comments, comment)
+		end
+		service.set_memory_cache(cache_key, comments)
+		on_done(comments, nil)
+	end)
+	return requests
+end
+
 local function invalidate_comment_caches(path, iid)
 	service.delete_memory_cache(string.format("gitlab_pulls:review-comments:%s!%d", path, iid))
+	service.delete_memory_cache(string.format("gitlab_pulls:review-threads:%s!%d", path, iid))
 	service.delete_memory_cache(string.format("gitlab_pulls:conversation-comments:%s!%d", path, iid))
 	service.delete_memory_cache(string.format("gitlab_pulls:activity:%s!%d", path, iid))
 end

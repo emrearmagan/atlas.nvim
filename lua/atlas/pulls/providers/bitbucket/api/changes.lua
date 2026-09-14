@@ -1,6 +1,5 @@
 local M = {}
 
-local diff_parser = require("atlas.core.git.diff_parser")
 local json = require("atlas.core.json")
 local mapper = require("atlas.pulls.providers.bitbucket.api.mapper")
 local service = require("atlas.pulls.providers.bitbucket.api.service")
@@ -91,27 +90,6 @@ function M.fetch_commits(pr, opts, on_done)
 		service.set_cache(key, commits, service.cache_ttl())
 		on_done(commits, nil)
 	end, { action = "Fetch PR commits", repo = pr.repo_full_name, id = pr.id })
-end
-
----@param pr PullRequest
----@param _opts { force_refresh: boolean|nil }|nil
----@param on_done fun(files: DiffFile[]|nil, err: string|nil)
----@return { cancel: fun() }|nil
-function M.fetch_diff(pr, _opts, on_done)
-	---@cast pr BitbucketPullRequest
-	local diff_url = tostring(pr.links.diff or "")
-	if diff_url == "" then
-		on_done({}, nil)
-		return nil
-	end
-
-	return service.request_text("GET", diff_url, nil, nil, function(text, err)
-		if err then
-			on_done(nil, err)
-			return
-		end
-		on_done(diff_parser.parse(text or ""), nil)
-	end, { action = "Fetch PR diff", repo = pr.repo_full_name, id = pr.id })
 end
 
 return M

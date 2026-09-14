@@ -66,6 +66,7 @@ end
 ---@param iid integer
 local function invalidate_review_caches(path, iid)
 	service.delete_memory_cache(string.format("gitlab_pulls:review-comments:%s!%d", path, iid))
+	service.delete_memory_cache(string.format("gitlab_pulls:review-threads:%s!%d", path, iid))
 	service.delete_memory_cache(string.format("gitlab_pulls:conversation-comments:%s!%d", path, iid))
 	service.delete_memory_cache(string.format("gitlab_pulls:activity:%s!%d", path, iid))
 	service.delete_memory_cache(string.format("gitlab_pulls:reviewers:%s!%d", path, iid))
@@ -284,13 +285,14 @@ end
 ---@param pr PullRequest
 ---@param opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(data: PullsReviewData|nil, err: string|nil)
+---@param fetch_comments function
 ---@return { cancel: fun() }
-function M.fetch(pr, opts, on_done)
+local function fetch_review(pr, opts, on_done, fetch_comments)
 	---@cast pr GitLabPullRequest
 	local requests = request_scope.new()
 	requests.all({
 		comments = function(done)
-			return comments_api.fetch_review_comments(pr, opts, done)
+			return fetch_comments(pr, opts, done)
 		end,
 		metadata = function(done)
 			return fetch_metadata(pr, opts, done)
@@ -323,6 +325,22 @@ function M.fetch(pr, opts, on_done)
 		}, nil)
 	end)
 	return requests
+end
+
+---@param pr PullRequest
+---@param opts { force_refresh?: boolean }|nil
+---@param on_done fun(data: PullsReviewData|nil, err: string|nil)
+---@return { cancel: fun() }
+function M.fetch(pr, opts, on_done)
+	return fetch_review(pr, opts, on_done, comments_api.fetch_review_comments)
+end
+
+---@param pr PullRequest
+---@param opts { force_refresh?: boolean }|nil
+---@param on_done fun(data: PullsReviewData|nil, err: string|nil)
+---@return { cancel: fun() }
+function M.fetch_threads(pr, opts, on_done)
+	return fetch_review(pr, opts, on_done, comments_api.fetch_review_threads)
 end
 
 ---@param pr PullRequest

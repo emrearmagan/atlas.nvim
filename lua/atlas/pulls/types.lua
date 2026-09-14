@@ -229,6 +229,7 @@
 ---@field resolved_on string|nil
 ---@field resolved_by PullsAuthor|nil
 ---@field inline PullsInlineCommentPosition|nil
+---@field hunk DiffHunk|nil
 ---@field file PullsFileCommentPosition|nil
 ---@field is_task boolean|nil                            -- true = render as task (checkbox)
 ---@field task_label string|nil                          -- display name override; defaults to "Task"

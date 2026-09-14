@@ -4,7 +4,6 @@ local notify = require("atlas.core.notify")
 local spinner = require("atlas.ui.components.spinner")
 local state = require("atlas.pulls.state")
 local dashboard_host = require("atlas.ui.dashboard")
-local presentation = require("atlas.pulls.ui.presentation")
 local navigation = require("atlas.ui.navigation")
 local info_popup = require("atlas.ui.popups.info")
 local requests = require("atlas.core.requests")
@@ -46,7 +45,7 @@ local function render_if_active()
 end
 
 ---@param updated PullRequest
----@return boolean, string|nil
+---@return boolean
 local function replace_pr(updated)
 	local pulls = state.pulls
 	local replaced = false
@@ -62,31 +61,14 @@ local function replace_pr(updated)
 	end
 
 	if not replaced then
-		return false, nil
+		return false
 	end
 	state.pulls = mark_starred(pulls)
 	local page = state.page_history[state.current_page]
 	if page ~= nil then
 		page.items = state.pulls
 	end
-	if not updated.is_starred then
-		return true, nil
-	end
-	local saved, err = starred.add(updated, state.provider.id, presentation.repo(updated))
-	if saved ~= nil then
-		local replaced_snapshot = false
-		for index, record in ipairs(state.starred_items) do
-			if record.ref == saved.ref then
-				state.starred_items[index] = saved
-				replaced_snapshot = true
-				break
-			end
-		end
-		if not replaced_snapshot then
-			table.insert(state.starred_items, saved)
-		end
-	end
-	return true, err
+	return true
 end
 
 local loading_spinner = spinner.create({
@@ -168,12 +150,38 @@ local function load_starred(on_done)
 			return
 		end
 	else
-		local pulls = {}
+		local refs = {}
 		for _, record in ipairs(records) do
-			record.item.is_starred = true
-			table.insert(pulls, record.item)
+			table.insert(refs, record.item)
 		end
-		state.pulls = pulls
+		state.pulls = {}
+		state.is_loading = true
+		sync_loading_spinner()
+		notify.loading("Loading starred pull requests...")
+		render_if_active()
+
+		active_requests.run(function(done)
+			return state.provider.capabilities.core.fetch_by_refs(refs, { force_refresh = true }, done)
+		end, function(pulls, fetch_err)
+			state.is_loading = false
+			sync_loading_spinner()
+			state.pulls = mark_starred(pulls or {})
+			if fetch_err and #state.pulls == 0 then
+				state.error = tostring(fetch_err)
+				notify.error("Failed to fetch starred pull requests: " .. tostring(fetch_err))
+			elseif fetch_err then
+				notify.warn("Starred pull requests loaded with errors: " .. tostring(fetch_err))
+			elseif #state.pulls < #refs then
+				notify.warn("Some starred pull requests could not be found")
+			else
+				notify.success("Starred pull requests loaded", { timeout = 1200 })
+			end
+			render_if_active()
+			if on_done then
+				on_done()
+			end
+		end)
+		return
 	end
 
 	render_if_active()
@@ -364,6 +372,7 @@ function M.previous_page()
 end
 
 function M.refresh_view()
+	resolve_view(state.search_view())
 	local view = state.view
 	if view == nil then
 		return
@@ -448,14 +457,10 @@ function M.refresh_pr(pr)
 			return
 		end
 
-		local _, snapshot_err = replace_pr(fetched_pr)
+		replace_pr(fetched_pr)
 		end_pr_reload(repo_id, pr_id)
 
-		if snapshot_err then
-			notify.warn(snapshot_err)
-		else
-			notify.success(string.format("Reloaded PR #%s", tostring(pr_id)), { timeout = 1200 })
-		end
+		notify.success(string.format("Reloaded PR #%s", tostring(pr_id)), { timeout = 1200 })
 	end)
 end
 
@@ -477,9 +482,8 @@ function M.show_pr_details(source_buf)
 end
 
 ---@param pr PullRequest
----@param repo PullsRepo
-function M.toggle_star(pr, repo)
-	local now_starred, err = starred.toggle(pr, state.provider.id, repo)
+function M.toggle_star(pr)
+	local now_starred, err = starred.toggle(pr, state.provider.id)
 	if now_starred == nil then
 		notify.error(err or "Unable to update starred pull request")
 		return
@@ -542,7 +546,6 @@ function M.toggle_status_filter(status)
 			table.insert(view._states, value)
 		end
 	end
-	resolve_view(view)
 	M.refresh_view()
 end
 

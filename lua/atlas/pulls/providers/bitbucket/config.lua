@@ -40,10 +40,8 @@
 --   })
 
 ---@class AtlasBitbucketViewConfig : AtlasPullsViewConfig
----@field search string|nil Bitbucket query containing Atlas scopes and repository fields
 
 ---@class AtlasBitbucketBookmarkConfig : AtlasPullsBookmarkConfig
----@field search string
 
 ---@class AtlasBitbucketBookmarksConfig
 ---@field key string|nil    -- default "S"

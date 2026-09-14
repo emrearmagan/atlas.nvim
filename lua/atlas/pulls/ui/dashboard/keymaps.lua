@@ -197,12 +197,12 @@ function M.register(buf, views)
 		item("ui.toggle_star", {
 			desc = "Star or unstar PR",
 			callback = function()
-				local pr, repo = selected_pr()
-				if pr == nil or repo == nil then
+				local pr = selected_pr()
+				if pr == nil then
 					notify.warn("No PR selected")
 					return
 				end
-				require("atlas.pulls.ui.dashboard.controller").toggle_star(pr, repo)
+				require("atlas.pulls.ui.dashboard.controller").toggle_star(pr)
 			end,
 		})
 	)
@@ -240,13 +240,23 @@ function M.register(buf, views)
 		utils.insert_if(
 			items,
 			item("ui.search", {
-				desc = "Search repositories",
+				desc = "Search",
 				callback = function()
 					run_action("search", false)
 				end,
 			})
 		)
 	end
+
+	utils.insert_if(
+		items,
+		item("pulls.edit_search", {
+			desc = "Edit search",
+			callback = function()
+				run_action("edit_search", false)
+			end,
+		})
+	)
 
 	utils.insert_if(
 		items,

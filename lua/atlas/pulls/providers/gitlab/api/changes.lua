@@ -86,7 +86,7 @@ end
 ---@param opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(files: DiffFile[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_diff(pr, opts, on_done)
+local function fetch_diff(pr, opts, on_done)
 	opts = opts or {}
 	local path, iid = project_iid(pr)
 	if path == "" or iid == nil then
@@ -130,7 +130,7 @@ end
 ---@param on_done fun(entries: PullsDiffstatEntry[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_diffstat(pr, opts, on_done)
-	return M.fetch_diff(pr, opts, function(files, err)
+	return fetch_diff(pr, opts, function(files, err)
 		if not files then
 			on_done(nil, err)
 			return

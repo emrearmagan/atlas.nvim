@@ -167,16 +167,6 @@ local function mark_starred(issues)
 	return issues
 end
 
----@param issue Issue
----@return string|nil
-local function save_starred_issue(issue)
-	if not issue.is_starred then
-		return nil
-	end
-	local _, err = starred.add(issue, state.provider.id)
-	return err
-end
-
 local function update_current_page()
 	local page = state.page_history[state.current_page]
 	if page ~= nil then
@@ -185,7 +175,7 @@ local function update_current_page()
 end
 
 ---@param updated Issue
----@return boolean, string|nil
+---@return boolean
 local function replace_issue(updated)
 	local issues = state.issues
 	for index, current in ipairs(issues) do
@@ -193,10 +183,10 @@ local function replace_issue(updated)
 			issues[index] = updated
 			state.set_issues(mark_starred(issues))
 			update_current_page()
-			return true, save_starred_issue(updated)
+			return true
 		end
 	end
-	return false, nil
+	return false
 end
 
 ---@param provider IssuesProvider
@@ -305,19 +295,21 @@ end
 
 ---@param on_done fun()|nil
 local function load_starred(on_done)
+	on_done = on_done or function() end
 	local provider = state.provider
 	if provider == nil then
+		on_done()
 		return
 	end
 
 	cancel_active_requests()
-	fetch_current_user(provider, active_requests)
-	state.is_loading = false
+	local load_requests = active_requests
+	fetch_current_user(provider, load_requests)
 	state.error = nil
+	state.set_issues({})
 	local saved, err = starred.list("issues", provider.id)
 	if saved == nil then
 		state.error = err
-		state.set_issues({})
 	elseif #saved == 0 then
 		cache_starred_items({})
 		state.bookmarks.selection = nil
@@ -332,16 +324,42 @@ local function load_starred(on_done)
 		end
 	else
 		cache_starred_items(saved)
-		local issues = {}
+		local refs = {}
 		for _, item in ipairs(saved) do
-			table.insert(issues, item.item)
+			table.insert(refs, item.item)
 		end
-		state.set_issues(mark_starred(issues))
+		state.is_loading = true
+		notify.loading("Loading starred issues...")
+		refresh_status_spinner:start()
+		state.reload_spinner_frame = refresh_status_spinner:current_frame()
+		render_if_active()
+
+		load_requests.run(function(done)
+			return provider.capabilities.core.fetch_by_refs(refs, { force_refresh = true }, done)
+		end, function(issues, fetch_err)
+			issues = issues or {}
+			state.is_loading = false
+			if next(state.reloading_issue_keys) == nil then
+				refresh_status_spinner:stop()
+			end
+			state.set_issues(mark_starred(issues))
+			if fetch_err and #issues == 0 then
+				state.error = tostring(fetch_err)
+				notify.error("Failed to fetch starred issues: " .. tostring(fetch_err))
+			elseif fetch_err then
+				notify.warn("Some starred issues could not be fetched: " .. tostring(fetch_err))
+			elseif #issues < #refs then
+				notify.warn("Some starred issues are unavailable; their stars have been kept")
+			else
+				notify.success(string.format("Loaded %d starred issues", #issues), { timeout = 1200 })
+			end
+			render_if_active()
+			on_done()
+		end)
+		return
 	end
 	render_if_active()
-	if on_done then
-		on_done()
-	end
+	on_done()
 end
 
 ---@param force_refresh boolean
@@ -428,6 +446,7 @@ function M.previous_page()
 end
 
 function M.refresh_view()
+	resolve_view(state.search_view())
 	local provider = state.provider
 	local refresh = provider and provider.capabilities.core.refresh
 	if refresh then
@@ -568,21 +587,16 @@ local function refresh_issue(issue)
 			fetched_issue.parent = issue.parent
 		end
 
-		local replaced, snapshot_err = replace_issue(fetched_issue)
+		local replaced = replace_issue(fetched_issue)
 		if not replaced then
 			local issues = state.issues
 			table.insert(issues, fetched_issue)
 			state.set_issues(mark_starred(issues))
 			update_current_page()
-			snapshot_err = save_starred_issue(fetched_issue)
 		end
 		end_issue_reload(issue_key)
 
-		if snapshot_err then
-			notify.warn(snapshot_err)
-		else
-			notify.success(string.format("Reloaded %s", issue_key), { timeout = 1200 })
-		end
+		notify.success(string.format("Reloaded %s", issue_key), { timeout = 1200 })
 	end)
 end
 
@@ -609,11 +623,11 @@ end
 ---@param issue Issue
 ---@return boolean, string|nil
 function M.update_issue(issue)
-	local updated, err = replace_issue(issue)
+	local updated = replace_issue(issue)
 	if updated then
 		render_if_active()
 	end
-	return updated, err
+	return updated, nil
 end
 
 function M.toggle_current_issue_collapsed()

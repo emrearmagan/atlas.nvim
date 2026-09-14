@@ -9,6 +9,7 @@ local core_notify = require("atlas.core.notify")
 ---| "reopen"
 ---| "edit_assignees"
 ---| "toggle_subscription"
+---| "open_project"
 
 M.items = registry.items
 

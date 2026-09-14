@@ -12,32 +12,7 @@ local notes_api = require("atlas.issues.providers.gitlab.api.notes")
 local users_api = require("atlas.issues.providers.gitlab.api.users")
 local notifications_api = require("atlas.providers.gitlab.notifications")
 local git = require("atlas.core.git")
-
----@param view IssuesViewConfig
----@return string
-local function resolve_search(view)
-	---@cast view AtlasGitLabIssuesViewConfig
-	local parts = { "is:" .. tostring(view.state or "opened") }
-	for _, field in ipairs({ "project", "scope", "labels", "milestone", "assignee_username", "author_username" }) do
-		local value = view[field]
-		if value ~= nil and value ~= "" then
-			table.insert(parts, string.format("%s:%s", field:gsub("_username$", ""), tostring(value)))
-		end
-	end
-	if view.search and view.search ~= "" then
-		table.insert(parts, tostring(view.search))
-	end
-
-	local extra_keys = vim.tbl_keys(view.extra_params or {})
-	table.sort(extra_keys)
-	for _, key in ipairs(extra_keys) do
-		local value = view.extra_params[key]
-		if value ~= nil and value ~= "" then
-			table.insert(parts, string.format("%s:%s", key, tostring(value)))
-		end
-	end
-	return table.concat(parts, " ")
-end
+local gitlab_query = require("atlas.providers.gitlab.query")
 
 ---@param issue Issue
 ---@param opts { force_refresh: boolean|nil }|nil
@@ -131,7 +106,7 @@ end
 return {
 	views = views,
 	view_for_target = view_for_target,
-	resolve_search = resolve_search,
+	resolve_search = gitlab_query.issue_query,
 	issue_ref = issue_ref,
 	capabilities = {
 		core = {

@@ -16,6 +16,9 @@
 ---@field display "chip"|"table"
 
 ---@class JiraIssueDetails : IssueDetails
+---@field status string|nil
+---@field priority string|nil
+---@field reporter IssueUser|nil
 ---@field raw_description table|string|nil
 ---@field custom_fields JiraIssueCustomField[]
 

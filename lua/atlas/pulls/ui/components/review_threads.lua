@@ -94,8 +94,22 @@ end
 ---@param marker string
 ---@param marker_hl string|table[]|nil
 ---@return string, string|table[]|nil
-local function resolution_status(comment, marker, marker_hl)
-	return status_text(resolution_text(comment) or "", marker, marker_hl)
+local function comment_status(comment, marker, marker_hl)
+	local status = resolution_text(comment) or ""
+	local outdated = comment.outdated == true or comment.state == "OUTDATED"
+	if outdated then
+		status = status ~= "" and (status .. "  outdated") or "outdated"
+	end
+	local text, spans = status_text(status, marker, marker_hl)
+	if outdated then
+		---@cast spans table[]
+		table.insert(spans, {
+			start_col = #status - #"outdated",
+			end_col = #status,
+			hl_group = "AtlasTextWarning",
+		})
+	end
+	return text, spans
 end
 
 ---@param name string|nil
@@ -122,14 +136,14 @@ function M.status_marker(comment)
 	local outdated = comment.outdated == true or comment.state == "OUTDATED"
 	if resolved and outdated then
 		local resolved_icon, resolved_hl = icons.general("success")
-		local outdated_icon, outdated_hl = icons.general("progress")
+		local outdated_icon = icons.general("progress")
 		return resolved_icon .. " " .. outdated_icon,
 			{
 				{ start_col = 0, end_col = #resolved_icon, hl_group = resolved_hl },
 				{
 					start_col = #resolved_icon + 1,
 					end_col = #resolved_icon + 1 + #outdated_icon,
-					hl_group = outdated_hl,
+					hl_group = "AtlasTextWarning",
 				},
 			}
 	end
@@ -137,7 +151,8 @@ function M.status_marker(comment)
 		return icons.general("success")
 	end
 	if outdated then
-		return icons.general("progress")
+		local icon = icons.general("progress")
+		return icon, "AtlasTextWarning"
 	end
 	return "", "AtlasTextMuted"
 end
@@ -220,7 +235,7 @@ local function comment_item(comment, opts, is_root)
 
 		local user_icon, user_icon_hl = icons.general("user")
 		local marker, marker_hl = M.status_marker(comment)
-		marker, marker_hl = resolution_status(comment, marker, marker_hl)
+		marker, marker_hl = comment_status(comment, marker, marker_hl)
 		return {
 			icon = user_icon,
 			icon_hl = user_icon_hl,
@@ -290,7 +305,7 @@ local function comment_item(comment, opts, is_root)
 	local marker, marker_hl
 	if is_root then
 		marker, marker_hl = M.status_marker(comment)
-		marker, marker_hl = resolution_status(comment, marker, marker_hl)
+		marker, marker_hl = comment_status(comment, marker, marker_hl)
 	end
 	local user_icon, user_icon_hl = icons.general("user")
 	local additional = utils.relative_time(comment.created_on)
@@ -480,7 +495,13 @@ end
 ---@param node AtlasReviewThreadNode
 ---@return boolean
 local function is_collapsible(node)
-	return not node.comment.is_task and (#node.children > 0 or node.comment.state == "RESOLVED")
+	return not node.comment.is_task
+		and (
+			#node.children > 0
+			or node.comment.state == "RESOLVED"
+			or node.comment.state == "OUTDATED"
+			or node.comment.outdated == true
+		)
 end
 
 ---@param nodes AtlasReviewThreadNode[]
@@ -516,7 +537,7 @@ local function build_item(node, opts, is_root, root)
 	item.line_map.thread_has_replies = not is_root or #node.children > 0
 	if is_root and not node.comment.is_task and not opts.expanded(node.comment) then
 		item.children = {}
-		if node.comment.state == "RESOLVED" then
+		if node.comment.state == "RESOLVED" or node.comment.state == "OUTDATED" or node.comment.outdated == true then
 			item.content = nil
 			item.content_block = nil
 			item.footer_items = {}
@@ -641,11 +662,7 @@ function M.render_compact(node, width, expanded, location, opts)
 	item.icon_hl = expander_hl
 	item.author = "@" .. author_name(comment.author)
 	item.additional = metadata
-	local status = resolution_text(comment) or ""
-	if comment.outdated == true or comment.state == "OUTDATED" then
-		status = status ~= "" and (status .. "  outdated") or "outdated"
-	end
-	item.right_text, item.meta.right_text_hl = status_text(status, marker, marker_hl)
+	item.right_text, item.meta.right_text_hl = comment_status(comment, marker, marker_hl)
 	item.line_map.tree_key = M.comment_key(comment)
 	item.meta.additional_hl = metadata_hl
 	if not expanded then
