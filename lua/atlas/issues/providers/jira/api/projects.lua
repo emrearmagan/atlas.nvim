@@ -3,6 +3,34 @@ local M = {}
 local service = require("atlas.issues.providers.jira.api.service")
 local normalizer = require("atlas.issues.providers.jira.api.mapper")
 local url_encode = require("atlas.core.utils").url_encode
+local json = require("atlas.core.json")
+
+---@param project string Project ID or key.
+---@param callback fun(statuses: JiraIssueStatus[]|nil, err: string|nil)
+---@return { job_id: integer, cancel: fun() }|nil
+function M.get_statuses(project, callback)
+	return service.request("GET", "/project/" .. url_encode(project) .. "/statuses", nil, function(result, err)
+		if err or not result then
+			callback(nil, err or "Empty response")
+			return
+		end
+		local statuses, seen = {}, {}
+		for _, issue_type in ipairs(result) do
+			for _, status in ipairs(json.safe_table(issue_type.statuses)) do
+				local id, name = json.safe_str(status.id), json.safe_str(status.name)
+				if id and name and not seen[id] then
+					seen[id] = true
+					statuses[#statuses + 1] = {
+						id = id,
+						name = name,
+						category = json.safe_str(json.safe_table(status.statusCategory).key),
+					}
+				end
+			end
+		end
+		callback(statuses, nil)
+	end, { action = "Fetch project statuses", project = project })
+end
 
 ---@class JiraProjectGroup
 ---@field category table|nil
