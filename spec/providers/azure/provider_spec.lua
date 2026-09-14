@@ -37,12 +37,12 @@ describe("Azure DevOps provider registration", function()
 		config.options = original_options
 	end)
 
-	it("registers a pulls-only Azure DevOps provider", function()
+	it("registers an Azure DevOps provider for pulls and issues", function()
 		local registered = assert(providers.azure)
 		assert.equal("Azure DevOps", registered.name)
 		assert.equal("function", type(registered.resolver.resolve))
 		assert.is_table(registered.domains.pulls)
-		assert.is_nil(registered.domains.issues)
+		assert.is_table(registered.domains.issues)
 
 		local provider = assert(providers.load("azure", "pulls"))
 		assert.equal("azure", provider.id)
@@ -137,7 +137,7 @@ describe("Azure DevOps provider registration", function()
 			},
 			{
 				value = "https://dev.azure.com/v3/acme/Platform/api",
-				err = "Unsupported Azure DevOps URL. Expected a repository or pull request URL",
+				err = "Unsupported Azure DevOps URL. Expected a repository, pull request, or work item URL",
 			},
 			{
 				value = "git@ssh.dev.azure.com:acme/Platform/_git/api",
