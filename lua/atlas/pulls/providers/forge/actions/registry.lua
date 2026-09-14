@@ -5,6 +5,8 @@ local notes = require("atlas.pulls.notes")
 local picker = require("atlas.ui.picker")
 local core_notify = require("atlas.core.notify")
 local icons = require("atlas.ui.shared.icons")
+local query = require("atlas.pulls.providers.forge.query")
+local search_prompt = require("atlas.providers.forge.completion.search")
 
 local M = {}
 
@@ -17,7 +19,6 @@ local M = {}
 ---@return ForgePullActionsRegistry
 function M.new(provider_id, pullrequests, repositories)
 	local provider_name = provider_id == "gitea" and "Gitea" or "Forgejo"
-	local search = require("atlas.pulls.providers.forge.completion.search").new(provider_id)
 
 	---@param ctx AtlasPullActionContext
 	---@return boolean, string|nil
@@ -96,6 +97,128 @@ function M.new(provider_id, pullrequests, repositories)
 			return nil
 		end
 		return pullrequests.get(assert(ctx.pr), { force_refresh = false }, on_done)
+	end
+
+	---@param opts { title: string, include_all: boolean, on_select: fun(repo: string), on_cancel: fun() }
+	local function select_repository(opts)
+		local initial_items = opts.include_all and { { id = "", label = "All repositories" } } or {}
+		picker.search({
+			title = opts.title,
+			initial_items = initial_items,
+			fetch_on_open = false,
+			format_item = function(item)
+				return item.label
+			end,
+			fetch = function(input, fetch_done)
+				input = vim.trim(input)
+				if input == "" then
+					fetch_done(initial_items, nil)
+					return
+				end
+				return repositories.search(input, function(matches, err)
+					if err then
+						fetch_done(nil, err)
+						return
+					end
+					local items = {}
+					for _, repo in ipairs(matches or {}) do
+						table.insert(items, { id = repo, label = repo })
+					end
+					fetch_done(items, nil)
+				end)
+			end,
+			on_select = function(item)
+				opts.on_select(item.id)
+			end,
+			on_cancel = opts.on_cancel,
+		})
+	end
+
+	---@param repo string
+	---@param ctx AtlasPullActionContext
+	---@param done fun(result: PullsActionResult|nil, err: string|nil)
+	local function search_results(repo, ctx, done)
+		picker.search({
+			title = repo ~= "" and ("Search " .. repo .. " Pull Requests")
+				or ("Search " .. provider_name .. " Pull Requests"),
+			fetch_on_open = false,
+			format_item = function(item)
+				return item.label
+			end,
+			preview_item = function(item, preview_done)
+				local pr = item.value
+				return pullrequests.get(pr, { force_refresh = false }, function(details, err)
+					if err or not details then
+						preview_done({ title = item.label, lines = { err or "Failed to load pull request" } })
+						return
+					end
+					local lines = { "**Status:** " .. pr.state, "**Author:** @" .. pr.author.username }
+					local assignees, labels = {}, {}
+					for _, user in ipairs(details.assignees or {}) do
+						table.insert(assignees, "@" .. user.username)
+					end
+					for _, label in ipairs(details.labels or {}) do
+						table.insert(labels, label.name)
+					end
+					if #assignees > 0 then
+						table.insert(lines, "**Assignees:** " .. table.concat(assignees, ", "))
+					end
+					if #labels > 0 then
+						table.insert(lines, "**Labels:** " .. table.concat(labels, ", "))
+					end
+					vim.list_extend(lines, { "", "## Description", "" })
+					local description = vim.trim(details.description or "")
+					vim.list_extend(
+						lines,
+						vim.split(description ~= "" and description or "No description", "\n", { plain = true })
+					)
+					preview_done({ title = item.label, lines = lines })
+				end)
+			end,
+			fetch = function(input, fetch_done)
+				input = vim.trim(input)
+				if input == "" then
+					fetch_done({}, nil)
+					return
+				end
+				local view = { name = "Search" }
+				local ok, err = query.apply(view, input, { "open", "merged", "declined" })
+				if not ok then
+					fetch_done(nil, err)
+					return
+				end
+				view.repo = view.repo or repo
+				local api_view, statuses = query.for_api(view)
+				return pullrequests.search_global(
+					api_view,
+					statuses,
+					{ force_refresh = false, pagelen = 30 },
+					function(page, fetch_err)
+						if fetch_err then
+							fetch_done(nil, fetch_err)
+							return
+						end
+						local items = {}
+						for _, pr in ipairs(page.items) do
+							local id = string.format("%s#%s", pr.repo_full_name, tostring(pr.id))
+							table.insert(items, { id = id, label = id .. " - " .. pr.title, value = pr })
+						end
+						fetch_done(items, nil)
+					end
+				)
+			end,
+			on_select = function(item)
+				local pr = item.value
+				require("atlas.pulls.ui.detail").open(
+					{ id = pr.id, repo_full_name = pr.repo_full_name },
+					{ provider = ctx.provider }
+				)
+				done(nil, nil)
+			end,
+			on_cancel = function()
+				done(nil, nil)
+			end,
+		})
 	end
 
 	---@type AtlasPullAction[]
@@ -385,36 +508,40 @@ function M.new(provider_id, pullrequests, repositories)
 
 	register({
 		id = "search",
-		label = "Search repositories",
+		label = "Search Pull Requests",
 		icon = icons.action("search"),
 		run = function(ctx, done)
-			picker.search({
-				title = "Search " .. provider_name .. " repositories",
-				fetch_on_open = false,
-				format_item = function(item)
-					return item.label
-				end,
-				fetch = function(query, fetch_done)
-					return repositories.search(query, function(matches, err)
-						if err then
-							fetch_done(nil, err)
-							return
-						end
-						local items = {}
-						for _, repo in ipairs(matches) do
-							table.insert(items, { id = repo, label = repo })
-						end
-						fetch_done(items, nil)
-					end)
-				end,
-				on_select = function(item)
-					local view = { name = "Search", layout = "compact", repo = item.id }
-					require("atlas").open("pulls", provider_id, { initial_view = view })
-					notify(ctx, "success", string.format("Search view -> %s", item.id), 1200)
-					done({ changed_pr = false, message = "Search view switched" }, nil)
+			select_repository({
+				title = "Search Pull Requests - Repository",
+				include_all = true,
+				on_select = function(repo)
+					search_results(repo, ctx, done)
 				end,
 				on_cancel = function()
-					done({ changed_pr = false, message = "Search cancelled" }, nil)
+					done(nil, nil)
+				end,
+			})
+		end,
+	})
+
+	register({
+		id = "open_repo",
+		label = "Open Repo",
+		icon = icons.action("search"),
+		run = function(_, done)
+			select_repository({
+				title = "Open " .. provider_name .. " Repo",
+				include_all = false,
+				on_select = function(repo)
+					require("atlas").open(
+						"pulls",
+						provider_id,
+						{ initial_view = { name = "Search", layout = "compact", repo = repo } }
+					)
+					done(nil, nil)
+				end,
+				on_cancel = function()
+					done(nil, nil)
 				end,
 			})
 		end,
@@ -422,10 +549,58 @@ function M.new(provider_id, pullrequests, repositories)
 
 	register({
 		id = "search_pull_requests",
-		label = "Search pull requests",
+		label = "Open Search View",
 		icon = icons.action("search"),
 		run = function(_, done)
-			search.open_global()
+			local state = require("atlas.pulls.state")
+			local current = state.provider and state.provider.id == provider_id and state.search_view() or nil
+			search_prompt.edit(
+				provider_id,
+				"pulls",
+				current and (state.query .. " ") or "type:pulls is:open ",
+				function(input)
+					local view = { name = "Search", layout = current and current.layout or "compact" }
+					local ok, err = query.apply(view, input)
+					if not ok then
+						core_notify.warn(err)
+						return
+					end
+					if require("atlas.ui.dashboard").is_active("pulls", provider_id) then
+						require("atlas.pulls.ui.dashboard.controller").switch_view(view)
+					else
+						require("atlas").open("pulls", provider_id, { initial_view = view })
+					end
+				end
+			)
+			done(nil, nil)
+		end,
+	})
+
+	register({
+		id = "edit_search",
+		label = "Edit search",
+		icon = icons.action("search"),
+		is_available = function()
+			local state = require("atlas.pulls.state")
+			return state.provider ~= nil and state.provider.id == provider_id and state.search_view() ~= nil
+		end,
+		run = function(_, done)
+			local state = require("atlas.pulls.state")
+			local view = state.provider and state.provider.id == provider_id and state.search_view() or nil
+			if view == nil then
+				done(nil, nil)
+				return
+			end
+			search_prompt.edit(provider_id, "pulls", state.query .. " ", function(input)
+				if state.provider and state.provider.id == provider_id and state.search_view() == view then
+					local ok, err = query.apply(view, input)
+					if not ok then
+						core_notify.warn(err)
+						return
+					end
+					require("atlas.pulls.ui.dashboard.controller").refresh_view()
+				end
+			end)
 			done(nil, nil)
 		end,
 	})

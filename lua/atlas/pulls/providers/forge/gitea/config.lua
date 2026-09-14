@@ -31,7 +31,7 @@ require("atlas.providers.forge.gitea.config")
 
 ---@class AtlasGiteaPullsSearchConfig
 ---@field repo string|nil
----@field search string|nil Global pull request search text. Omit `repo` when using it.
+---@field search string|nil Pull request search text, with optional `repo:` and `is:` filters.
 ---@field current_repo boolean|nil
 ---@field extra_params table<string, string|number|boolean>|nil Additional API query parameters.
 

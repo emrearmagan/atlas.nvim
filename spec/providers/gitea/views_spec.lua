@@ -5,7 +5,7 @@ local cases = {
 	{
 		domain = "issues",
 		module = "atlas.issues.providers.forge.gitea",
-		expected_query = "repo:local/repo is:closed archived:false sort:updated needle",
+		expected_query = "repo:local/repo is:closed param.archived:false param.sort:updated search:needle",
 		fetch = function(provider, view)
 			local api = require("atlas.issues.providers.forge.gitea.api").issues
 			local original = api.list
@@ -22,7 +22,7 @@ local cases = {
 	{
 		domain = "pulls",
 		module = "atlas.pulls.providers.forge.gitea",
-		expected_query = "repo:local/repo is:open archived:false sort:updated",
+		expected_query = "repo:local/repo is:open param.archived:false param.sort:updated",
 		fetch = function(provider, view)
 			local api = require("atlas.pulls.providers.forge.gitea.api").pullrequests
 			local original = api.list
@@ -142,7 +142,7 @@ describe("Gitea provider views", function()
 		local view = { name = "Search", search = "is:merged needle" }
 		local ok, err = xpcall(function()
 			local query, states = provider.resolve_search(view)
-			assert.equal("type:pulls is:merged needle", query)
+			assert.equal("type:pulls is:merged search:needle", query)
 			assert.same({ "merged" }, states)
 			provider.capabilities.core.fetch_pullrequests(view, {}, function() end)
 			assert.equal("needle", received_view.search)
@@ -150,7 +150,7 @@ describe("Gitea provider views", function()
 
 			view._states = { "declined" }
 			query, states = provider.resolve_search(view)
-			assert.equal("type:pulls is:declined needle", query)
+			assert.equal("type:pulls is:declined search:needle", query)
 			assert.same({ "declined" }, states)
 			provider.capabilities.core.fetch_pullrequests(view, {}, function() end)
 			assert.same({ "DECLINED" }, received_statuses)

@@ -30,6 +30,7 @@ local M = {}
 
 ---@class ForgeIssuesApi
 ---@field fetch_user fun(on_done: fun(user: IssueUser|nil, err: string|nil)): ForgeRequestHandle|nil
+---@field search_repositories fun(term: string, on_done: fun(repositories: string[]|nil, err: string|nil)): ForgeRequestHandle|nil
 ---@field list fun(view: AtlasGiteaIssuesViewConfig|AtlasForgejoIssuesViewConfig, opts: IssuesFetchOpts, on_done: fun(page: IssuesPage, err: string|nil)): ForgeRequestHandle|AtlasRequestScope|nil
 ---@field get fun(ref: GiteaIssue|ForgejoIssue|IssueRef|string, opts: IssuesFetchOpts|nil, on_done: fun(details: GiteaIssueDetails|ForgejoIssueDetails|nil, err: string|nil)): ForgeRequestHandle|nil
 ---@field fetch_by_refs fun(refs: IssueRef[], opts: IssuesFetchOpts|nil, on_done: fun(issues: Issue[], err: string|nil)): AtlasRequestScope|nil
@@ -215,6 +216,35 @@ function M.new(service, mapper)
 		end
 
 		return fetch(finish)
+	end
+
+	---@param term string
+	---@param on_done fun(repositories: string[]|nil, err: string|nil)
+	function api.search_repositories(term, on_done)
+		term = vim.trim(term)
+		if term == "" then
+			on_done({}, nil)
+			return nil
+		end
+		return service.request(
+			"GET",
+			"/repos/search" .. service.query({ q = term, limit = 20 }),
+			nil,
+			function(raw, err)
+				if err then
+					on_done(nil, err)
+					return
+				end
+				local result = {}
+				for _, repo in ipairs(json.safe_table(json.safe_table(raw).data)) do
+					local name = json.safe_str(repo.full_name)
+					if name and name ~= "" and repo.has_issues ~= false then
+						result[#result + 1] = name
+					end
+				end
+				on_done(result, nil)
+			end
+		)
 	end
 
 	---@param ref GiteaIssue|ForgejoIssue|IssueRef|string

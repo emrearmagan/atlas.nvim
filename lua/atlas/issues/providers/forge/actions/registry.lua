@@ -44,7 +44,7 @@ end
 function M.new(provider_id, api)
 	local provider_name = provider_id == "gitea" and "Gitea" or "Forgejo"
 	local create_issue = require("atlas.issues.create.forge.issue").new(provider_id, api)
-	local search = require("atlas.issues.providers.forge.completion.search").new(provider_id)
+	local search = require("atlas.issues.providers.forge.actions.search").new(provider_id, api)
 	local set_locked_api = api.set_locked
 	---@type ForgeIssueActionsRegistry
 	local registry = {}
@@ -677,11 +677,16 @@ function M.new(provider_id, api)
 		id = "search",
 		label = "Search Issues",
 		icon = icons.action("search"),
-		run = function(_, done)
-			search.open()
-			done(nil, nil)
-		end,
+		run = search.search,
 	})
+	register({
+		id = "edit_search",
+		label = "Edit search",
+		icon = icons.action("search"),
+		is_available = search.can_edit,
+		run = search.edit,
+	})
+	register({ id = "open_repo", label = "Open Repo", icon = icons.action("search"), run = search.open_repo })
 
 	register(actions.manage_templates)
 	register(actions.browse_issue)

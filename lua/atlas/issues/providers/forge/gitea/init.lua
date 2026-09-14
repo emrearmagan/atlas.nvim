@@ -31,34 +31,7 @@ local git = require("atlas.core.git")
 local M = {}
 local REACTION_OPTIONS = require("atlas.ui.shared.emojis").github()
 
----@param view IssuesViewConfig
----@return string
-function M.resolve_search(view)
-	---@cast view AtlasGiteaIssuesViewConfig
-	local repo = vim.trim(view.repo or "")
-	local parts = { repo ~= "" and ("repo:" .. repo) or "type:issues", "is:" .. (view.state or "open") }
-	local scope = view.scope or ""
-	if scope ~= "" and scope ~= "all" then
-		table.insert(parts, "scope:" .. scope)
-	end
-	local labels = vim.trim(view.labels or "")
-	if labels ~= "" then
-		table.insert(parts, "labels:" .. labels)
-	end
-	local extra_keys = vim.tbl_keys(view.extra_params or {})
-	table.sort(extra_keys)
-	for _, key in ipairs(extra_keys) do
-		local value = view.extra_params[key]
-		if value ~= nil and value ~= "" then
-			table.insert(parts, key .. ":" .. tostring(value))
-		end
-	end
-	local search = vim.trim(view.search or "")
-	if search ~= "" then
-		table.insert(parts, search)
-	end
-	return table.concat(parts, " ")
-end
+M.resolve_search = require("atlas.issues.providers.forge.query").resolve
 
 ---@param view AtlasGiteaIssuesViewConfig
 ---@param opts IssuesFetchOpts

@@ -93,7 +93,7 @@ describe("Forgejo provider views", function()
 		assert.equal("compact", views[1].layout)
 
 		assert.equal(
-			"repo:owner/repo is:closed scope:created labels:bug direction:desc needle",
+			"repo:owner/repo is:closed scope:created labels:bug param.direction:desc search:needle",
 			provider.resolve_search(views[1])
 		)
 		local issues_api = require("atlas.issues.providers.forge.forgejo.api").issues
@@ -144,7 +144,7 @@ describe("Forgejo provider views", function()
 		assert.equal("compact", views[1].layout)
 
 		local query, states = provider.resolve_search(views[1])
-		assert.equal("repo:owner/repo is:open sort:recent", query)
+		assert.equal("repo:owner/repo is:open param.sort:recent", query)
 		assert.same({ "open" }, states)
 		local pullrequests_api = require("atlas.pulls.providers.forge.forgejo.api").pullrequests
 		pull_list = pullrequests_api.list
@@ -188,7 +188,7 @@ describe("Forgejo provider views", function()
 
 		local view = { name = "Search", search = "is:merged needle" }
 		local query, states = provider.resolve_search(view)
-		assert.equal("type:pulls is:merged needle", query)
+		assert.equal("type:pulls is:merged search:needle", query)
 		assert.same({ "merged" }, states)
 		provider.capabilities.core.fetch_pullrequests(view, {}, function() end)
 		assert.equal("needle", fetched_view.search)
@@ -196,7 +196,7 @@ describe("Forgejo provider views", function()
 
 		view._states = { "declined" }
 		query, states = provider.resolve_search(view)
-		assert.equal("type:pulls is:declined needle", query)
+		assert.equal("type:pulls is:declined search:needle", query)
 		assert.same({ "declined" }, states)
 		provider.capabilities.core.fetch_pullrequests(view, {}, function() end)
 		assert.same({ "DECLINED" }, fetched_statuses)

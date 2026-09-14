@@ -1,4 +1,5 @@
 local config = require("atlas.config")
+local json = require("atlas.core.json")
 local request_scope = require("atlas.core.requests")
 
 ---@param service ForgeService
@@ -221,11 +222,7 @@ local function new(service, mapper)
 			return nil
 		end
 		if vim.trim(tostring(view.search or "")) ~= "" then
-			on_done(
-				{ items = {} },
-				provider_name .. " does not support text search in repository pull views; use a global view"
-			)
-			return nil
+			return M.search_global(view, statuses, opts, on_done)
 		end
 		local selected = {}
 		for _, status in ipairs(statuses) do
@@ -842,6 +839,12 @@ local function new(service, mapper)
 	---@param opts PullsFetchOpts
 	---@param on_done fun(page: PullsPage, err: string|nil)
 	function M.search_global(view, statuses, opts, on_done)
+		local repo = vim.trim(view.repo or "")
+		local base = repo ~= "" and repo_endpoint(repo) or nil
+		if repo ~= "" and not base then
+			on_done({ items = {} }, invalid_repository)
+			return nil
+		end
 		local selected = {}
 		for _, status in ipairs(statuses) do
 			selected[status:upper()] = true
@@ -865,7 +868,8 @@ local function new(service, mapper)
 		params.state = api_state
 		params.page = page_number
 		params.limit = limit
-		return service.request("GET", "/repos/issues/search" .. service.query(params), nil, function(raw, err)
+		local endpoint = base and (base .. "/issues") or "/repos/issues/search"
+		return service.request("GET", endpoint .. service.query(params), nil, function(raw, err)
 			if err then
 				on_done({ items = {} }, err)
 				return
@@ -873,10 +877,15 @@ local function new(service, mapper)
 			raw = raw == vim.NIL and {} or raw
 			local prs = {}
 			for _, value in ipairs(raw) do
-				local pr = mapper.to_search_pull_request(value)
-				local status = pr.state == "merged" and "MERGED" or pr.state == "declined" and "DECLINED" or "OPEN"
-				if selected[status] then
-					table.insert(prs, pr)
+				if json.nilify(value.pull_request) then
+					if base and not json.nilify(value.repository) then
+						value = vim.tbl_extend("force", {}, value, { repository = { full_name = repo } })
+					end
+					local pr = mapper.to_search_pull_request(value)
+					local status = pr.state == "merged" and "MERGED" or pr.state == "declined" and "DECLINED" or "OPEN"
+					if selected[status] then
+						table.insert(prs, pr)
+					end
 				end
 			end
 			local page = {
