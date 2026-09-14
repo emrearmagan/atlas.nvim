@@ -37,20 +37,7 @@ function M.on_select(pr, refresh, opts)
 		if not state.is_current(pr) then
 			return
 		end
-		state.items = {}
-		if result then
-			for _, item in ipairs(result) do
-				local include = true
-				if item.kind == "comment" then
-					---@type PullsComment
-					local comment = item.entity
-					include = comment.state ~= "DELETED"
-				end
-				if include then
-					table.insert(state.items, item)
-				end
-			end
-		end
+		state.items = result or {}
 
 		state.error = nil
 		if err then
@@ -67,7 +54,25 @@ function M.on_select(pr, refresh, opts)
 	end)
 end
 
-M.render = renderer.render
+---@param pr PullRequest
+---@param details PullRequestDetails|nil
+---@param width integer
+function M.render(pr, details, width)
+	local provider = detail.provider
+	local comments = provider and provider.capabilities.comments
+	local completion = comments
+		and comments.comment_completion
+		and comments.comment_completion({
+			pr = pr,
+			details = details,
+			comments = state.comments(false),
+			tasks = state.comments(true),
+		})
+	if completion and completion.resolve_items then
+		completion.resolve_items()
+	end
+	return renderer.render(pr, details, width)
+end
 
 ---@param _lnum integer
 ---@param entry table

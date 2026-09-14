@@ -211,7 +211,8 @@ local function remove_comment(context, comment)
 	for _, existing in ipairs(items) do
 		if tostring(existing.parent_id or "") == id then
 			comment.content_raw = ""
-			comment.state = "DELETED"
+			comment.content_display = nil
+			comment.deleted = true
 			if context.upsert_comment then
 				context.upsert_comment(comment)
 			end
@@ -235,6 +236,9 @@ end
 ---@param on_done fun(result: PullsActionResult|nil, err: string|nil)
 ---@return boolean handled
 function M.edit_comment(context, comment, on_done)
+	if comment.deleted then
+		return false
+	end
 	local update
 	if comment.is_task then
 		local tasks = context.provider.capabilities.tasks
@@ -339,6 +343,9 @@ end
 ---@param on_done fun(result: PullsActionResult|nil, err: string|nil)
 ---@return boolean handled
 function M.delete_comment(context, comment, on_done)
+	if comment.deleted then
+		return false
+	end
 	local remove
 	if comment.is_task then
 		local tasks = context.provider.capabilities.tasks

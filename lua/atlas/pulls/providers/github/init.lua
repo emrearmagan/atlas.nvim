@@ -169,15 +169,22 @@ return {
 			discard_review = reviews_api.discard,
 			set_file_reviewed = reviews_api.set_file_reviewed,
 		},
+		-- tasks = {
+		-- 	add_task = tasks_api.add_task,
+		-- 	edit_task = tasks_api.edit_task,
+		-- 	delete_task = tasks_api.delete_task,
+		-- },
 		repository = {
 			fetch_details = repositories_api.fetch_detail,
 			fetch_branches = repositories_api.fetch_branches,
 			fetch_tags = repositories_api.fetch_tags,
 			fetch_issues = repositories_api.fetch_issues,
+			-- delete_branch = repositories_api.delete_branch,
 		},
 		pipelines = {
 			fetch = pipelines_api.fetch,
 			fetch_details = pipelines_api.fetch_details,
+			-- fetch_commit_status = pipelines_api.fetch_commit_status,
 			fetch_job_log = pipelines_api.fetch_job_log,
 			actions = pipeline_actions,
 		},

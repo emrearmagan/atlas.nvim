@@ -1,5 +1,6 @@
 {
   "runtime.version": "LuaJIT",
+  "runtime.pathStrict": true,
   "workspace.checkThirdParty": false,
   "workspace.maxPreload": 10000,
   "workspace.preloadFileSize": 1000,

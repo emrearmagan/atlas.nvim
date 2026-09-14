@@ -125,7 +125,7 @@ end
 ---@param comment PullsComment
 ---@return string text, string|table[] hl
 function M.status_marker(comment)
-	if comment.state == "DELETED" then
+	if comment.deleted then
 		return icons.general("delete")
 	end
 	if comment.state == "PENDING" then
@@ -199,7 +199,7 @@ end
 ---@param is_root? boolean
 ---@return AtlasThreadV2Item
 local function comment_item(comment, opts, is_root)
-	local is_deleted = comment.state == "DELETED"
+	local is_deleted = comment.deleted == true
 	local is_resolved = comment.state == "RESOLVED"
 
 	if comment.is_task then
@@ -271,7 +271,7 @@ local function comment_item(comment, opts, is_root)
 
 	local author = author_name(comment.author)
 	local footer_items = {}
-	if opts.show_reactions ~= false then
+	if not is_deleted and opts.show_reactions ~= false then
 		local reactions, reaction_highlights = emojis.format(comment.reactions, opts.reaction_options)
 		if reactions ~= "" then
 			table.insert(footer_items, { text = reactions, highlights = reaction_highlights })
@@ -286,7 +286,7 @@ local function comment_item(comment, opts, is_root)
 		}
 		for _, action in ipairs(actions) do
 			local key = opts.action_keys[action.key]
-			if key then
+			if key and (not is_deleted or action.key == "reply") then
 				table.insert(footer_items, {
 					text = string.format("%s %s", key, action.label),
 					hl_group = "AtlasTextMuted",
@@ -463,10 +463,14 @@ function M.group_comments(comments, tasks)
 	end
 
 	local function sort_tree(list)
-		table.sort(list, node_sort)
-		for _, node in ipairs(list) do
+		for index = #list, 1, -1 do
+			local node = list[index]
 			sort_tree(node.children)
+			if node.comment.deleted and #node.children == 0 then
+				table.remove(list, index)
+			end
 		end
+		table.sort(list, node_sort)
 	end
 	sort_tree(roots)
 	return roots

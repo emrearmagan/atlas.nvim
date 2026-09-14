@@ -38,9 +38,10 @@ end
 
 ---@param context AtlasDiffReview
 ---@param on_done fun(review: AtlasDiffReview, warnings: string[])
+---@param commit_hash string|nil
 ---@return { cancel: fun() }
-local function load(context, on_done)
-	local options = { force_refresh = true }
+local function load(context, on_done, commit_hash)
+	local options = { force_refresh = true, commit_hash = commit_hash }
 	local starts = {}
 	local reviews = context.provider.capabilities.reviews
 	if reviews and reviews.fetch_review_context then
@@ -161,7 +162,7 @@ function M.reload(session)
 	local pending = request_scope.new()
 	session.review_request = pending
 	pending.run(function(done)
-		return load(review, done)
+		return load(review, done, session.source.head_revision)
 	end, function(loaded, warnings)
 		session.review_request = nil
 		session.review = loaded
