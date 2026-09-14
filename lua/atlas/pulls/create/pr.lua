@@ -349,15 +349,19 @@ local function on_success(pr_state, result)
 	pr_state.is_submitting = false
 	close(pr_state)
 
+	local message = vim.trim(tostring(result and result.message or ""))
+	if message == "" then
+		message = "PR created"
+	end
 	local url = result and result.url or nil
 	if type(url) == "string" and url ~= "" then
-		notify.info("PR created: " .. url, { vim_notify = true })
+		notify.info(message .. ": " .. url, { vim_notify = true })
 		pcall(vim.fn.setreg, "+", url)
 		require("atlas.commands.open").open(url)
 		return
 	end
 
-	notify.info("PR created", { vim_notify = true })
+	notify.info(message, { vim_notify = true })
 	pcall(function()
 		require("atlas.pulls.ui.dashboard.controller").refresh_view()
 	end)
