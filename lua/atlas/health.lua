@@ -154,6 +154,22 @@ local function check_gitlab()
 	check_provider_views("gitlab")
 end
 
+local function check_azure()
+	local provider = config.provider_options("azure")
+	if provider == nil then
+		vim.health.info("Azure DevOps not configured")
+		return
+	end
+	check_credentials(provider, { "base_url", "token" }, "Azure DevOps")
+	check_https_url(provider.base_url, "providers.azure.base_url")
+	for _, domain in ipairs({ "pulls", "issues" }) do
+		local options = config.domain_options("azure", domain)
+		if options then
+			check_views(options.views, "Azure DevOps " .. domain)
+		end
+	end
+end
+
 local function check_jira()
 	local provider = config.provider_options("jira")
 	if provider == nil then
@@ -213,6 +229,9 @@ function M.check()
 
 	vim.health.start("GitLab")
 	check_gitlab()
+
+	vim.health.start("Azure DevOps")
+	check_azure()
 
 	vim.health.start("Jira")
 	check_jira()
