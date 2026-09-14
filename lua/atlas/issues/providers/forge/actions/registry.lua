@@ -356,6 +356,7 @@ function M.new(provider_id, api)
 	register({
 		id = "close",
 		label = "Close Issue",
+		icon = icons.action("close"),
 		is_available = function(ctx)
 			local ok, err = has_issue(ctx)
 			if not ok then
@@ -381,6 +382,7 @@ function M.new(provider_id, api)
 	register({
 		id = "reopen",
 		label = "Reopen Issue",
+		icon = icons.action("reopen"),
 		is_available = function(ctx)
 			local ok, err = has_issue(ctx)
 			if not ok then
@@ -406,6 +408,7 @@ function M.new(provider_id, api)
 	register({
 		id = "transition",
 		label = "Transition Issue",
+		icon = icons.action("transition"),
 		hidden = true,
 		is_available = has_issue,
 		run = function(ctx, done)
@@ -429,6 +432,7 @@ function M.new(provider_id, api)
 	register({
 		id = "pin",
 		label = "Pin Issue",
+		icon = icons.action("save"),
 		is_available = function(ctx)
 			local ok, err = has_issue(ctx)
 			if not ok then
@@ -457,6 +461,7 @@ function M.new(provider_id, api)
 	register({
 		id = "unpin",
 		label = "Unpin Issue",
+		icon = icons.action("save"),
 		is_available = function(ctx)
 			local ok, err = has_issue(ctx)
 			if not ok then
@@ -506,6 +511,7 @@ function M.new(provider_id, api)
 		register({
 			id = "lock_issue",
 			label = "Lock Issue",
+			icon = icons.action("close"),
 			is_available = function(ctx)
 				local ok, err = has_issue(ctx)
 				if not ok then
@@ -529,6 +535,7 @@ function M.new(provider_id, api)
 		register({
 			id = "unlock_issue",
 			label = "Unlock Issue",
+			icon = icons.action("reopen"),
 			is_available = function(ctx)
 				local ok, err = has_issue(ctx)
 				if not ok then
@@ -547,6 +554,7 @@ function M.new(provider_id, api)
 	register({
 		id = "edit_issue",
 		label = "Edit Issue",
+		icon = icons.action("edit"),
 		is_available = has_issue,
 		run = function(ctx, done)
 			local issue = assert(ctx.issue)
@@ -567,6 +575,7 @@ function M.new(provider_id, api)
 	register({
 		id = "assign",
 		label = "Edit Assignees",
+		icon = icons.action("user"),
 		is_available = has_issue,
 		run = function(ctx, done)
 			edit_assignees(assert(ctx.issue), done)
@@ -576,6 +585,7 @@ function M.new(provider_id, api)
 	register({
 		id = "labels",
 		label = "Edit Labels",
+		icon = icons.action("label"),
 		is_available = has_issue,
 		run = function(ctx, done)
 			edit_labels(assert(ctx.issue), done)
@@ -585,6 +595,7 @@ function M.new(provider_id, api)
 	register({
 		id = "milestone",
 		label = "Edit Milestone",
+		icon = icons.action("label"),
 		is_available = has_issue,
 		run = function(ctx, done)
 			edit_milestone(assert(ctx.issue), done)
@@ -594,6 +605,7 @@ function M.new(provider_id, api)
 	register({
 		id = "toggle_subscription",
 		label = "Toggle Subscription",
+		icon = icons.action("notification"),
 		is_available = has_issue,
 		run = function(ctx, done)
 			toggle_subscription(ctx, done)
@@ -603,6 +615,7 @@ function M.new(provider_id, api)
 	register({
 		id = "delete_issue",
 		label = "Delete Issue",
+		icon = icons.action("delete"),
 		is_available = has_issue,
 		run = function(ctx, done)
 			local issue = assert(ctx.issue)
@@ -628,6 +641,7 @@ function M.new(provider_id, api)
 	register({
 		id = "create_issue",
 		label = "Create Issue",
+		icon = icons.action("create"),
 		is_available = function(ctx)
 			return #create_repositories(ctx) > 0, "Could not determine repository"
 		end,
@@ -662,6 +676,7 @@ function M.new(provider_id, api)
 	register({
 		id = "search",
 		label = "Search Issues",
+		icon = icons.action("search"),
 		run = function(_, done)
 			search.open()
 			done(nil, nil)

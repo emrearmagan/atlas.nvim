@@ -145,6 +145,7 @@ local comments = {
 
 local reviews = {
 	fetch = reviews_api.fetch,
+	fetch_threads = reviews_api.fetch,
 	fetch_review_context = reviews_api.fetch_context,
 	start_review = reviews_api.start_review,
 	submit_review = reviews_api.submit_review,

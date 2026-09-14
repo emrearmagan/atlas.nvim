@@ -190,7 +190,7 @@ function M.add(pr, content, opts, on_done)
 				local created = mapper.to_comment(raw)
 				created.parent_id = parent.parent_id or parent.id
 				created.inline = created.inline or parent.inline
-				created.inline_hunk = created.inline_hunk or parent.inline_hunk
+				created.hunk = created.hunk or parent.hunk
 				created.outdated = parent.outdated
 				on_done(created, nil)
 			end

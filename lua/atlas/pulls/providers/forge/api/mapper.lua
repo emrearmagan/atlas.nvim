@@ -450,7 +450,7 @@ local function new(provider)
 	---@return PullsComment
 	function M.to_comment(raw, review, lines)
 		review = json.nilify(review)
-		local inline, inline_hunk = inline_position(raw, lines or M.review_lines(raw))
+		local inline, hunk = inline_position(raw, lines or M.review_lines(raw))
 		local review_state = review and tostring(review.state or ""):upper() or ""
 		local resolver = json.nilify(raw.resolver)
 		local comment_state = resolver and "RESOLVED"
@@ -465,7 +465,7 @@ local function new(provider)
 			content_raw = raw.body or "",
 			created_on = raw.created_at or "",
 			inline = inline,
-			inline_hunk = inline_hunk,
+			hunk = hunk,
 			state = comment_state,
 			resolved_by = resolver and author(resolver) or nil,
 			outdated = outdated,

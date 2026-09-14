@@ -66,7 +66,11 @@ describe("Gitea pulls", function()
 		}
 		local comments = load_api(COMMENTS, service)
 		local pr = { id = 3, repo_full_name = "owner/repo" }
-		local root = { id = 9, inline = { path = "init.lua", to = 2 } }
+		local root = {
+			id = 9,
+			inline = { path = "init.lua", to = 2 },
+			hunk = require("atlas.core.git.diff_parser").parse_hunk("@@ -1 +1,2 @@\n before\n+after"),
+		}
 		local reply
 
 		comments.add(pr, "Reply", { parent = root }, function(value)
@@ -76,6 +80,8 @@ describe("Gitea pulls", function()
 		comments.set_thread_resolved(pr, root, false, function() end)
 
 		assert.equal(9, reply.parent_id)
+		assert.same(root.inline, reply.inline)
+		assert.same(root.hunk, reply.hunk)
 		assert.same({
 			"POST /repos/owner/repo/pulls/3/comments/9/replies",
 			"POST /repos/owner/repo/pulls/comments/9/resolve",

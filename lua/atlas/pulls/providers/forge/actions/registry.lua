@@ -4,6 +4,7 @@ local logger = require("atlas.core.logger")
 local notes = require("atlas.pulls.notes")
 local picker = require("atlas.ui.picker")
 local core_notify = require("atlas.core.notify")
+local icons = require("atlas.ui.shared.icons")
 
 local M = {}
 
@@ -110,6 +111,7 @@ function M.new(provider_id, pullrequests, repositories)
 	register({
 		id = actions.approve.id,
 		label = actions.approve.label,
+		icon = actions.approve.icon,
 		is_available = can_submit_review,
 		run = actions.approve.run,
 	})
@@ -117,6 +119,7 @@ function M.new(provider_id, pullrequests, repositories)
 	register({
 		id = actions.request_changes.id,
 		label = actions.request_changes.label,
+		icon = actions.request_changes.icon,
 		is_available = can_submit_review,
 		run = actions.request_changes.run,
 	})
@@ -124,6 +127,7 @@ function M.new(provider_id, pullrequests, repositories)
 	register({
 		id = "merge",
 		label = "Merge PR",
+		icon = icons.action("merge"),
 		is_available = function(ctx)
 			local ok, err = has_repository(ctx)
 			if not ok then
@@ -166,6 +170,7 @@ function M.new(provider_id, pullrequests, repositories)
 	register({
 		id = "update_branch",
 		label = "Update branch",
+		icon = icons.action("checkout"),
 		is_available = can_review,
 		run = function(ctx, done)
 			local pr = assert(ctx.pr)
@@ -190,6 +195,7 @@ function M.new(provider_id, pullrequests, repositories)
 	register({
 		id = "edit_assignees",
 		label = "Edit assignees",
+		icon = icons.action("user"),
 		is_available = has_repository,
 		run = function(ctx, done)
 			local pr = assert(ctx.pr)
@@ -266,6 +272,7 @@ function M.new(provider_id, pullrequests, repositories)
 	register({
 		id = "labels",
 		label = "Edit labels",
+		icon = icons.action("label"),
 		is_available = has_repository,
 		run = function(ctx, done)
 			local pr = assert(ctx.pr)
@@ -348,6 +355,7 @@ function M.new(provider_id, pullrequests, repositories)
 	register({
 		id = "reopen",
 		label = "Reopen PR",
+		icon = icons.action("reopen"),
 		is_available = function(ctx)
 			local ok, err = has_repository(ctx)
 			if not ok then
@@ -378,6 +386,7 @@ function M.new(provider_id, pullrequests, repositories)
 	register({
 		id = "search",
 		label = "Search repositories",
+		icon = icons.action("search"),
 		run = function(ctx, done)
 			picker.search({
 				title = "Search " .. provider_name .. " repositories",
@@ -414,6 +423,7 @@ function M.new(provider_id, pullrequests, repositories)
 	register({
 		id = "search_pull_requests",
 		label = "Search pull requests",
+		icon = icons.action("search"),
 		run = function(_, done)
 			search.open_global()
 			done(nil, nil)
@@ -423,6 +433,7 @@ function M.new(provider_id, pullrequests, repositories)
 	register({
 		id = "toggle_subscription",
 		label = "Toggle subscription",
+		icon = icons.action("notification"),
 		is_available = has_repository,
 		run = function(ctx, done)
 			local pr = assert(ctx.pr)
