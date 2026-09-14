@@ -62,7 +62,7 @@ function M.setup(buf, refresh)
 				local entry = detail.line_map[lnum]
 				local pr = detail.current_pr
 				if pr and entry and entry.pipeline then
-					local pipelines = type(detail.pipelines) == "table" and detail.pipelines or { entry.pipeline }
+					local pipelines = type(state.pipelines) == "table" and state.pipelines or { entry.pipeline }
 					require("atlas.pulls.ui.pipelines").open(pr, detail.provider, {
 						pipelines = pipelines,
 						selected_pipeline = entry.pipeline,

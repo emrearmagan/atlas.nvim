@@ -2,13 +2,13 @@ local request_scope = require("atlas.core.requests")
 
 ---@class PullsOverviewState
 ---@field reviewers PullsReviewer[]|"loading"|string|nil
----@field merge_checks PullsMergeCheck[]|"loading"|string|nil
+---@field pipelines PullsPipeline[]|"loading"|string|nil
 ---@field description_expanded boolean
 ---@field collapsed_pipelines table<PullsPipeline, boolean>
 ---@field requests AtlasRequestScope
 local M = {
 	reviewers = nil,
-	merge_checks = nil,
+	pipelines = nil,
 	description_expanded = false,
 	collapsed_pipelines = {},
 	requests = request_scope.new(),
@@ -16,7 +16,7 @@ local M = {
 
 function M.reset()
 	M.reviewers = nil
-	M.merge_checks = nil
+	M.pipelines = nil
 	M.description_expanded = false
 	M.collapsed_pipelines = {}
 	M.requests.cancel()
