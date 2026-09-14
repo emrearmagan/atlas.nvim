@@ -6,7 +6,7 @@
 
 ---@alias AtlasGitTransport "https"|"ssh"
 ---@alias AtlasPullsViewLayout "compact"|"grouped"|"plain"
----@alias AtlasIssuesViewLayout "compact"|"plain"
+---@alias AtlasIssuesViewLayout "compact"|"plain"|"board"
 
 ---@class AtlasPullsViewConfig
 ---@field name string
@@ -185,6 +185,8 @@ M.options = {
 		ui = {
 			next_item = "j",
 			previous_item = "k",
+			previous_column = "h",
+			next_column = "l",
 			first_item = "gg",
 			last_item = "G",
 			select = "<CR>",
