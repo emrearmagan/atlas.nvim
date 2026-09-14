@@ -48,11 +48,6 @@
 ---@field label string|nil  -- default "Search"
 ---@field items table<string, string|AtlasBitbucketBookmarkConfig>|nil
 
----@class AtlasBitbucketConfig
----@field user string
----@field token string
----@field cache_ttl number|nil Cache lifetime in seconds. Set to 0 to disable caching.
-
 ---@class AtlasBitbucketPullsConfig
 ---@field views AtlasBitbucketViewConfig[]|nil
 ---@field bookmarks AtlasBitbucketBookmarksConfig|nil
