@@ -1,6 +1,9 @@
 local M = {}
 
 local comments = require("atlas.pulls.providers.bitbucket.api.comments")
+local diff_parser = require("atlas.core.git.diff_parser")
+local json = require("atlas.core.json")
+local mapper = require("atlas.pulls.providers.bitbucket.api.mapper")
 local pullrequests = require("atlas.pulls.providers.bitbucket.api.pullrequests")
 local request_scope = require("atlas.core.requests")
 local service = require("atlas.pulls.providers.bitbucket.api.service")
@@ -117,13 +120,54 @@ end
 
 ---@param pr PullRequest
 ---@param opts { force_refresh: boolean|nil }|nil
+---@param on_done fun(comments: PullsComment[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+local function fetch_thread_comments(pr, opts, on_done)
+	---@cast pr BitbucketPullRequest
+	local sep = pr.links.comments:find("?") and "&" or "?"
+	local fields = "%2Bvalues.resolution.user%2C%2Bvalues.resolution.created_on%2C%2Bvalues.inline.*"
+		.. "%2C-values.inline.src_rev%2C-values.inline.dest_rev%2C-values.inline.base_rev"
+	local url = string.format("%s%spagelen=100&fields=%s", pr.links.comments, sep, fields)
+	local key = "bitbucket:pr:threads:" .. url
+	if not (opts or {}).force_refresh then
+		local cached, ok = service.get_cache(key)
+		if ok then
+			on_done(cached, nil)
+			return nil
+		end
+	end
+	return service.fetch_all_values(url, function(result, err)
+		if err then
+			on_done(nil, err)
+			return
+		end
+		local items = {}
+		for _, raw in ipairs(result.values) do
+			local comment = mapper.to_comment(raw)
+			if comment then
+				local inline = json.safe_table(raw.inline)
+				comment.hunk = diff_parser.parse_hunk(json.safe_str(inline.context_lines) or "")
+				table.insert(items, comment)
+			end
+		end
+		service.set_cache(key, items, service.cache_ttl())
+		on_done(items, nil)
+	end, { action = "Fetch PR threads", repo = pr.repo_full_name, id = pr.id })
+end
+
+---@param pr PullRequest
+---@param opts { force_refresh: boolean|nil }|nil
+---@param include_hunks boolean
 ---@param on_done fun(data: PullsReviewData|nil, err: string|nil)
 ---@return { cancel: fun() }
-function M.fetch_review(pr, opts, on_done)
+local function fetch_review(pr, opts, include_hunks, on_done)
 	opts = opts or {}
 	local requests = request_scope.new()
 	requests.all({
 		comments = function(done)
+			if include_hunks then
+				return fetch_thread_comments(pr, opts, done)
+			end
 			return comments.fetch_comments(pr, opts, done)
 		end,
 		tasks = function(done)
@@ -167,6 +211,22 @@ function M.fetch_review(pr, opts, on_done)
 		}, nil)
 	end)
 	return requests
+end
+
+---@param pr PullRequest
+---@param opts { force_refresh: boolean|nil }|nil
+---@param on_done fun(data: PullsReviewData|nil, err: string|nil)
+---@return { cancel: fun() }
+function M.fetch_review(pr, opts, on_done)
+	return fetch_review(pr, opts, false, on_done)
+end
+
+---@param pr PullRequest
+---@param opts { force_refresh: boolean|nil }|nil
+---@param on_done fun(data: PullsReviewData|nil, err: string|nil)
+---@return { cancel: fun() }
+function M.fetch_threads(pr, opts, on_done)
+	return fetch_review(pr, opts, true, on_done)
 end
 
 ---@param pr PullRequest

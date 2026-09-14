@@ -3,14 +3,12 @@ local request_scope = require("atlas.core.requests")
 ---@class PullsReviewState
 ---@field data PullsReviewData|nil
 ---@field status string|nil
----@field hunks_by_comment table<string, { hunk: DiffHunk, anchor: integer }>
 ---@field expanded_threads table<string, boolean>
 ---@field requests AtlasRequestScope
 ---@field current_pr PullRequest|nil
 local M = {
 	data = nil,
 	status = nil,
-	hunks_by_comment = {},
 	expanded_threads = {},
 	requests = request_scope.new(),
 	current_pr = nil,
@@ -19,7 +17,6 @@ local M = {
 function M.reset()
 	M.data = nil
 	M.status = nil
-	M.hunks_by_comment = {}
 	M.expanded_threads = {}
 	M.requests.cancel()
 	M.requests = request_scope.new()

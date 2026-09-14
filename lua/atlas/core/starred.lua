@@ -1,19 +1,17 @@
 local M = {}
 
-local path = vim.fs.joinpath(vim.fn.stdpath("data"), "atlas", "starred-v2.json")
+local path = vim.fs.joinpath(vim.fn.stdpath("data"), "atlas", "starred-v3.json")
 
 ---@class AtlasStarredItem
 ---@field ref string
 ---@field domain "pulls"|"issues"
 ---@field provider string
----@field item PullRequest|Issue
----@field repo PullsRepo|nil
+---@field item PullRequestRef|IssueRef
 
----@param value PullRequest|Issue
+---@param value PullRequestRef|IssueRef
 ---@param provider string
----@param repo PullsRepo|nil
 ---@return AtlasStarredItem
-local function to_item(value, provider, repo)
+local function to_item(value, provider)
 	local domain = value.key and "issues" or "pulls"
 	local id = value.key or (value.repo_full_name .. "#" .. tostring(value.id))
 
@@ -21,34 +19,15 @@ local function to_item(value, provider, repo)
 		ref = string.format("%s:%s/%s", provider, domain, id),
 		domain = domain,
 		provider = provider,
-		item = value,
-		repo = repo,
+		item = domain == "issues" and { key = value.key } or { id = value.id, repo_full_name = value.repo_full_name },
 	}
 end
 
----@param value PullRequest|Issue
+---@param value PullRequestRef|IssueRef
 ---@param provider string
 ---@return string
 function M.ref(value, provider)
 	return to_item(value, provider).ref
-end
-
----@return table<string, AtlasStarredItem>|nil, string|nil
-local function load()
-	if vim.fn.filereadable(path) == 0 then
-		return {}, nil
-	end
-	local ok, value = pcall(vim.json.decode, table.concat(vim.fn.readfile(path), "\n"))
-	if not ok or type(value) ~= "table" then
-		return nil, "Unable to read starred items: " .. path
-	end
-	for ref, item in pairs(value) do
-		if type(item) ~= "table" then
-			return nil, "Unable to read starred items: " .. path
-		end
-		item.ref = tostring(ref)
-	end
-	return value, nil
 end
 
 ---@param values table<string, AtlasStarredItem>
@@ -62,7 +41,8 @@ local function write(values)
 	end
 
 	local directory = vim.fs.dirname(path)
-	if vim.fn.mkdir(directory, "p") == 0 and vim.fn.isdirectory(directory) == 0 then
+	local mkdir_ok, created = pcall(vim.fn.mkdir, directory, "p")
+	if not mkdir_ok or (created == 0 and vim.fn.isdirectory(directory) == 0) then
 		return "Unable to create Atlas data directory"
 	end
 
@@ -71,7 +51,9 @@ local function write(values)
 		return "Unable to encode starred items"
 	end
 	local temp = path .. ".tmp." .. tostring(vim.uv.hrtime())
-	if vim.fn.writefile({ encoded }, temp) ~= 0 then
+	local write_ok, result = pcall(vim.fn.writefile, { encoded }, temp)
+	if not write_ok or result ~= 0 then
+		vim.fn.delete(temp)
 		return "Unable to write starred items"
 	end
 	local renamed, err = vim.uv.fs_rename(temp, path)
@@ -80,6 +62,28 @@ local function write(values)
 		return "Unable to save starred items: " .. tostring(err)
 	end
 	return nil
+end
+
+---@return table<string, AtlasStarredItem>|nil, string|nil
+local function load()
+	if vim.fn.filereadable(path) == 0 then
+		return {}, nil
+	end
+	local ok, value = pcall(function()
+		return vim.json.decode(table.concat(vim.fn.readfile(path), "\n"))
+	end)
+	local read_error = "Unable to read starred items: " .. path
+	if not ok or type(value) ~= "table" then
+		return nil, read_error
+	end
+
+	for ref, item in pairs(value) do
+		if type(item) ~= "table" then
+			return nil, read_error
+		end
+		item.ref = tostring(ref)
+	end
+	return value, nil
 end
 
 ---@param domain "pulls"|"issues"|nil
@@ -102,12 +106,11 @@ function M.list(domain, provider)
 	return result, nil
 end
 
----@param value PullRequest|Issue
+---@param value PullRequestRef|IssueRef
 ---@param provider string
----@param repo PullsRepo|nil
 ---@return AtlasStarredItem|nil, string|nil
-function M.add(value, provider, repo)
-	local item = to_item(value, provider, repo)
+function M.add(value, provider)
+	local item = to_item(value, provider)
 	local items, err = load()
 	if items == nil then
 		return nil, err
@@ -120,12 +123,11 @@ function M.add(value, provider, repo)
 	return item, nil
 end
 
----@param value PullRequest|Issue
+---@param value PullRequestRef|IssueRef
 ---@param provider string
----@param repo PullsRepo|nil
 ---@return boolean|nil, string|nil
-function M.toggle(value, provider, repo)
-	local item = to_item(value, provider, repo)
+function M.toggle(value, provider)
+	local item = to_item(value, provider)
 	local items, err = load()
 	if items == nil then
 		return nil, err

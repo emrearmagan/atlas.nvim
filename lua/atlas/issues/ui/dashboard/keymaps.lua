@@ -140,6 +140,18 @@ function M.register(buf, views)
 		)
 	end
 
+	if actions.is_available("edit_search", context(nil)) then
+		utils.insert_if(
+			items,
+			item("issues.edit_search", {
+				desc = "Edit search",
+				callback = function()
+					actions.run("edit_search", context(nil), controller.apply_action_result)
+				end,
+			})
+		)
+	end
+
 	utils.insert_if(
 		items,
 		item("ui.show_details", {

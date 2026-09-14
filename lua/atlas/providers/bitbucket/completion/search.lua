@@ -182,7 +182,8 @@ local function complete_cmdline(_arglead, cmdline, cursorpos)
 end
 
 ---@param view AtlasBitbucketViewConfig
-function M.open(view)
+---@param on_submit fun(query: string)
+function M.edit(view, on_submit)
 	local default = vim.trim(view.search or "")
 	if default ~= "" then
 		default = default .. " "
@@ -202,15 +203,22 @@ function M.open(view)
 				notify.warn(err)
 				return
 			end
-			require("atlas").open("pulls", "bitbucket", {
-				initial_view = {
-					name = "Search",
-					layout = "compact",
-					search = value,
-				},
-			})
+			on_submit(value)
 		end,
 	})
+end
+
+---@param view AtlasBitbucketViewConfig
+function M.open(view)
+	M.edit(view, function(value)
+		require("atlas").open("pulls", "bitbucket", {
+			initial_view = {
+				name = "Search",
+				layout = "compact",
+				search = value,
+			},
+		})
+	end)
 end
 
 return M

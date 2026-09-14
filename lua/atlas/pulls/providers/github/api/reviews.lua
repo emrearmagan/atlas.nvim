@@ -2,12 +2,13 @@ local M = {}
 
 local cli = require("atlas.providers.github.client")
 local json = require("atlas.core.json")
+local diff_parser = require("atlas.core.git.diff_parser")
 local mapper = require("atlas.pulls.providers.github.api.mapper")
 local github_mapping = require("atlas.providers.github.mapping")
 local request_scope = require("atlas.core.requests")
 
 local REVIEW_QUERY = [[
-query($owner:String!,$name:String!,$number:Int!,$endCursor:String){
+query($owner:String!,$name:String!,$number:Int!,$endCursor:String,$includeHunks:Boolean!){
   repository(owner:$owner,name:$name){
     pullRequest(number:$number){
       id
@@ -34,6 +35,7 @@ query($owner:String!,$name:String!,$number:Int!,$endCursor:String){
               id
               databaseId
               body
+              diffHunk @include(if:$includeHunks)
               url
               createdAt
               author{login ... on User{databaseId} ... on Bot{databaseId}}
@@ -178,12 +180,13 @@ mutation($pullRequestId:ID!,$path:String!){
 ---@param node table|nil
 ---@return PullsReview
 local function from_node(node)
-	local id = node and tostring(node.id or "") or ""
-	local commit_hash = node and tostring((node.commit or {}).oid or "") or ""
+	node = json.safe_table(node)
+	local id = json.safe_str(node.id) or ""
+	local commit_hash = json.safe_str(json.safe_table(node.commit).oid) or ""
 	return {
 		id = id ~= "" and id or nil,
 		commit_hash = commit_hash ~= "" and commit_hash or nil,
-		pending = node ~= nil and node.state == "PENDING",
+		pending = node.state == "PENDING",
 	}
 end
 
@@ -658,9 +661,9 @@ local function fetch_review_details(pr, opts, on_done)
 		"graphql",
 		"--paginate",
 		"--slurp",
-		"-F",
+		"-f",
 		"owner=" .. owner,
-		"-F",
+		"-f",
 		"name=" .. name,
 		"-F",
 		"number=" .. tostring(pr.id),
@@ -712,9 +715,9 @@ function M.fetch_reviewers(pr, opts, on_done)
 		"graphql",
 		"--paginate",
 		"--slurp",
-		"-F",
+		"-f",
 		"owner=" .. owner,
-		"-F",
+		"-f",
 		"name=" .. name,
 		"-F",
 		"number=" .. tostring(pr.id),
@@ -759,10 +762,10 @@ function M.fetch_reviewers(pr, opts, on_done)
 end
 
 ---@param pr PullRequest
----@param _opts { force_refresh: boolean|nil }|nil
+---@param include_hunks boolean
 ---@param on_done fun(result: { review: PullsReview, comments: PullsComment[] }|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-local function fetch_comments(pr, _opts, on_done)
+local function fetch_comments(pr, include_hunks, on_done)
 	---@cast pr GitHubPullRequest
 	local owner, name = pr.workspace, pr.repo
 	if owner == "" or name == "" then
@@ -777,12 +780,14 @@ local function fetch_comments(pr, _opts, on_done)
 		"graphql",
 		"--paginate",
 		"--slurp",
-		"-F",
+		"-f",
 		"owner=" .. owner,
-		"-F",
+		"-f",
 		"name=" .. name,
 		"-F",
 		"number=" .. tostring(pr.id),
+		"-F",
+		"includeHunks=" .. tostring(include_hunks),
 		"-f",
 		"query=" .. REVIEW_QUERY,
 	}, function(result, err)
@@ -818,7 +823,11 @@ local function fetch_comments(pr, _opts, on_done)
 			local nodes = thread.comments and thread.comments.nodes or {}
 			for index, node in ipairs(nodes) do
 				local root_id = index > 1 and nodes[1] and nodes[1].databaseId or nil
-				table.insert(comments, mapper.to_review_comment(node, thread, root_id))
+				local comment = mapper.to_review_comment(node, thread, root_id)
+				table.insert(comments, comment)
+				if include_hunks then
+					comment.hunk = diff_parser.parse_hunk(json.safe_str(node.diffHunk) or "")
+				end
 			end
 		end
 		table.sort(comments, function(a, b)
@@ -881,13 +890,14 @@ end
 
 ---@param pr PullRequest
 ---@param opts { force_refresh: boolean|nil }|nil
+---@param include_hunks boolean
 ---@param on_done fun(data: PullsReviewData|nil, err: string|nil)
 ---@return { cancel: fun() }
-function M.fetch(pr, opts, on_done)
+local function fetch_review(pr, opts, include_hunks, on_done)
 	local requests = request_scope.new()
 	requests.all({
 		comments = function(done)
-			return fetch_comments(pr, opts, done)
+			return fetch_comments(pr, include_hunks, done)
 		end,
 		tasks = function(done)
 			return fetch_tasks(pr, opts, done)
@@ -909,6 +919,22 @@ function M.fetch(pr, opts, on_done)
 		}, nil)
 	end)
 	return requests
+end
+
+---@param pr PullRequest
+---@param opts { force_refresh: boolean|nil }|nil
+---@param on_done fun(data: PullsReviewData|nil, err: string|nil)
+---@return { cancel: fun() }
+function M.fetch(pr, opts, on_done)
+	return fetch_review(pr, opts, false, on_done)
+end
+
+---@param pr PullRequest
+---@param opts { force_refresh: boolean|nil }|nil
+---@param on_done fun(data: PullsReviewData|nil, err: string|nil)
+---@return { cancel: fun() }
+function M.fetch_threads(pr, opts, on_done)
+	return fetch_review(pr, opts, true, on_done)
 end
 
 ---@param pr PullRequest
@@ -945,13 +971,73 @@ function M.set_file_reviewed(pr, path, reviewed, on_done)
 	})
 end
 
+-- GitHub can fail creating an empty draft when body is omitted, despite it
+-- being optional in the schema. Send an explicit empty body for draft reviews.
 local CREATE_PENDING_REVIEW_MUTATION = [[
 mutation($pullRequestId:ID!,$commitOID:GitObjectID){
-  addPullRequestReview(input:{pullRequestId:$pullRequestId commitOID:$commitOID}){
+  addPullRequestReview(input:{pullRequestId:$pullRequestId commitOID:$commitOID body:""}){
     pullRequestReview{id state commit{oid}}
   }
 }
 ]]
+
+---@param pr PullRequest
+---@param pull_request_id string
+---@param review PullsReview|nil
+---@param commit_oid string
+---@param on_done fun(review_id: string|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+local function create_pending(pr, pull_request_id, review, commit_oid, on_done)
+	local args = {
+		"api",
+		"graphql",
+		"-f",
+		"pullRequestId=" .. pull_request_id,
+		"-f",
+		"query=" .. CREATE_PENDING_REVIEW_MUTATION,
+	}
+	if commit_oid ~= "" then
+		vim.list_extend(args, { "-f", "commitOID=" .. commit_oid })
+	end
+
+	return cli.gh(args, function(result, err)
+		if err or type(result) ~= "table" then
+			on_done(nil, err or "Failed to create pending review")
+			return
+		end
+		local data = json.safe_table(result.data)
+		local created = json.nilify(json.safe_table(data.addPullRequestReview).pullRequestReview)
+		if not created or tostring(created.id or "") == "" then
+			on_done(nil, "GitHub did not return the pending review")
+			return
+		end
+		M.update(review, created)
+		on_done(tostring(created.id), nil)
+	end, {
+		action = "Create pending review",
+		repo = pr.repo_full_name,
+		number = pr.id,
+	})
+end
+
+---@param pr PullRequest
+---@param review PullsReview|nil
+---@param commit_oid string
+---@param on_done fun(review_id: string|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.create_pending(pr, review, commit_oid, on_done)
+	---@cast pr GitHubPullRequest
+	if review and review.pending then
+		on_done(nil, "Submit the pending review first")
+		return nil
+	end
+	local pull_request_id = pr.node_id or ""
+	if pull_request_id == "" then
+		on_done(nil, "Missing pull request node id")
+		return nil
+	end
+	return create_pending(pr, pull_request_id, review, commit_oid, on_done)
+end
 
 ---@param pr PullRequest
 ---@param review PullsReview|nil
@@ -973,53 +1059,25 @@ function M.with_pending(pr, review, commit_oid, use_review, on_error)
 		return use(review)
 	end
 
-	local function create_pending(pull_request_id)
-		local args = {
-			"api",
-			"graphql",
-			"-f",
-			"pullRequestId=" .. pull_request_id,
-			"-f",
-			"query=" .. CREATE_PENDING_REVIEW_MUTATION,
-		}
-		if commit_oid ~= "" then
-			vim.list_extend(args, { "-f", "commitOID=" .. commit_oid })
+	local requests = request_scope.new()
+	local cancelled = false
+	local current_handle
+	local function continue_with(value)
+		current_handle = use(value)
+		if cancelled and current_handle then
+			current_handle.cancel()
 		end
-
-		local cancelled = false
-		local current_handle
-		current_handle = cli.gh(args, function(result, err)
-			if cancelled then
+	end
+	local function create_review(pull_request_id)
+		requests.run(function(done)
+			return create_pending(pr, pull_request_id, review, commit_oid, done)
+		end, function(review_id, err)
+			if err then
+				on_error(err)
 				return
 			end
-			if err or type(result) ~= "table" then
-				on_error(err or "Failed to create pending review")
-				return
-			end
-			local data = result.data
-			local created = json.nilify(data.addPullRequestReview and data.addPullRequestReview.pullRequestReview)
-			if not created or tostring(created.id or "") == "" then
-				on_error("GitHub did not return the pending review")
-				return
-			end
-			M.update(review, created)
-			current_handle = use_review(tostring(created.id))
-			if cancelled and current_handle then
-				current_handle.cancel()
-			end
-		end, {
-			action = "Create pending review",
-			repo = pr.repo_full_name,
-			number = pr.id,
-		})
-		return {
-			cancel = function()
-				cancelled = true
-				if current_handle then
-					current_handle.cancel()
-				end
-			end,
-		}
+			continue_with({ id = review_id })
+		end)
 	end
 
 	local pull_request_id = pr.node_id or ""
@@ -1028,33 +1086,28 @@ function M.with_pending(pr, review, commit_oid, use_review, on_error)
 			on_error("Missing pull request node id")
 			return nil
 		end
-		return create_pending(pull_request_id)
+		create_review(pull_request_id)
+	else
+		requests.run(function(done)
+			return find_pending(pr, done)
+		end, function(found_pr_id, pending, err)
+			if err then
+				on_error(err)
+				return
+			end
+			local found = from_node(pending)
+			M.update(review, pending)
+			if found.pending and found.id then
+				continue_with(found)
+			else
+				create_review(tostring(found_pr_id))
+			end
+		end)
 	end
-
-	local cancelled = false
-	local current_handle
-	current_handle = find_pending(pr, function(found_pr_id, pending, err)
-		if cancelled then
-			return
-		end
-		if err then
-			on_error(err)
-			return
-		end
-		local found = from_node(pending)
-		M.update(review, pending)
-		if found.pending and found.id then
-			current_handle = use(found)
-		else
-			current_handle = create_pending(tostring(found_pr_id))
-		end
-		if cancelled and current_handle then
-			current_handle.cancel()
-		end
-	end)
 	return {
 		cancel = function()
 			cancelled = true
+			requests.cancel()
 			if current_handle then
 				current_handle.cancel()
 			end

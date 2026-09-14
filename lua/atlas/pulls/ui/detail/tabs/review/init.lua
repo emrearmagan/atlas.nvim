@@ -1,6 +1,5 @@
 local M = {}
 
-local diff_parser = require("atlas.core.git.diff_parser")
 local request_scope = require("atlas.core.requests")
 local md_editor = require("atlas.ui.popups.editor")
 local notify = require("atlas.core.notify")
@@ -54,32 +53,6 @@ function M.reset()
 	notify.clear()
 end
 
----@param comments PullsComment[]
----@param files DiffFile[]
-local function set_hunks(comments, files)
-	local by_path = {}
-	for _, file in ipairs(files) do
-		by_path[file.path] = file
-		if file.old_path and by_path[file.old_path] == nil then
-			by_path[file.old_path] = file
-		end
-	end
-
-	local hunks = {}
-	for _, comment in ipairs(comments) do
-		local inline = comment.inline
-		local anchor = inline and (inline.to or inline.from)
-		if inline and anchor and comment.outdated ~= true then
-			local side = inline.to ~= nil and "new" or "old"
-			local hunk = diff_parser.find_hunk(by_path[inline.path], side, anchor)
-			if hunk then
-				hunks[tostring(comment.id)] = { hunk = hunk, anchor = anchor }
-			end
-		end
-	end
-	state.hunks_by_comment = hunks
-end
-
 ---@param opts { key: string, title: string, initial_text: string|nil, preview: AtlasMarkdownEditorPreview|nil, on_save: fun(text: string|nil) }
 local function open_md_editor(opts)
 	md_editor.open({
@@ -116,7 +89,7 @@ function M.on_select(pr, refresh, opts)
 	notify.loading(string.format("Loading review for #%s...", pr_id))
 
 	state.requests.run(function(done)
-		return reviews.fetch(pr, opts, done)
+		return reviews.fetch_threads(pr, opts, done)
 	end, function(data, err)
 		if not is_current(pr) then
 			return
@@ -129,41 +102,10 @@ function M.on_select(pr, refresh, opts)
 			return
 		end
 
-		local fetch_diff = provider.capabilities.core.fetch_diff
-		local needs_diff = false
-		for _, comment in ipairs(data.comments) do
-			local inline = comment.inline
-			if comment.outdated ~= true and inline and inline.path and (inline.to or inline.from) then
-				needs_diff = true
-				break
-			end
-		end
-		if not needs_diff or not fetch_diff then
-			state.data = data
-			state.status = nil
-			notify.success(string.format("Review loaded for #%s", pr_id), { timeout = 1200 })
-			refresh()
-			return
-		end
-
-		notify.loading(string.format("Loading diff context for #%s...", pr_id))
-		state.requests.run(function(done)
-			return fetch_diff(pr, opts, done)
-		end, function(files, diff_err)
-			if not is_current(pr) then
-				return
-			end
-			if files then
-				set_hunks(data.comments, files)
-				notify.success(string.format("Review loaded for #%s", pr_id), { timeout = 1200 })
-			else
-				local message = tostring(diff_err or "Provider returned no diff data")
-				notify.warn("Review loaded without diff context: " .. message)
-			end
-			state.data = data
-			state.status = nil
-			refresh()
-		end)
+		state.data = data
+		state.status = nil
+		notify.success(string.format("Review loaded for #%s", pr_id), { timeout = 1200 })
+		refresh()
 	end)
 end
 
@@ -180,7 +122,7 @@ function M.render(_pr, _details, width)
 		return renderer.render(width, state.status, nil)
 	end
 	local data = state.data
-	return renderer.render(width, data and data.comments or nil, data and data.tasks or nil, state.hunks_by_comment)
+	return renderer.render(width, data and data.comments or nil, data and data.tasks or nil)
 end
 
 ---@param _lnum integer

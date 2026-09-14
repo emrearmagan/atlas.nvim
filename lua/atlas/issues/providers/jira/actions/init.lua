@@ -8,6 +8,7 @@ local notify = require("atlas.core.notify")
 ---| "reporter"
 ---| "delete_issue"
 ---| "edit_issue"
+---| "open_project"
 ---| "search_jql"
 
 M.items = registry.items

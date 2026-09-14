@@ -65,7 +65,7 @@ local function create()
 	local source = beside_dashboard and dashboard.win() or vim.api.nvim_get_current_win()
 	local buf = utils.buffer.create("atlas://detail", "atlas.detail")
 	vim.api.nvim_set_option_value("bufhidden", "wipe", { buf = buf })
-	local win = utils.window.create(source, "rightbelow vsplit", buf, configure)
+	local win = utils.window.create(source, "botright vsplit", buf, configure)
 	pcall(vim.api.nvim_win_set_width, win, math.max(math.floor(vim.o.columns * 0.45), 40))
 	if not beside_dashboard then
 		vim.api.nvim_set_current_win(win)

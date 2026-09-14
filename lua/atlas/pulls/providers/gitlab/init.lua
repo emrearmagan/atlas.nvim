@@ -146,7 +146,6 @@ return {
 			fetch_merge_checks = checks_api.fetch,
 			fetch_diffstat = changes_api.fetch_diffstat,
 			fetch_commits = changes_api.fetch_commits,
-			fetch_diff = changes_api.fetch_diff,
 		},
 		comments = {
 			reaction_options = GITLAB_REACTION_OPTIONS,
@@ -160,6 +159,8 @@ return {
 		},
 		reviews = {
 			fetch = reviews_api.fetch,
+			-- INFO: Requires GitLab 19.1+ for comment diff snippets.
+			fetch_threads = reviews_api.fetch_threads,
 			submit_review = reviews_api.submit,
 			approve = reviews_api.approve,
 			request_changes = reviews_api.request_changes,

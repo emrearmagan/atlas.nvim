@@ -146,7 +146,6 @@ return {
 			fetch_merge_checks = checks_api.fetch,
 			fetch_diffstat = changes_api.fetch_diffstat,
 			fetch_commits = changes_api.fetch_commits,
-			fetch_diff = changes_api.fetch_diff,
 		},
 		comments = {
 			reaction_options = emojis.github(),
@@ -160,6 +159,7 @@ return {
 		},
 		reviews = {
 			fetch = reviews_api.fetch,
+			fetch_threads = reviews_api.fetch_threads,
 			fetch_review_context = reviews_api.fetch_context,
 			edit_review = reviews_api.edit_review,
 			start_review = reviews_api.start,

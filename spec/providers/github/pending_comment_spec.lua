@@ -35,7 +35,7 @@ local function pending_comment(overrides)
 	}, overrides or {})
 end
 
-describe("github pending review comments", function()
+describe("github review comments", function()
 	local gh_calls, api_calls
 
 	before_each(function()
@@ -99,15 +99,25 @@ describe("github pending review comments", function()
 			assert.equal("PRRC_node", updated._raw.comment_id)
 		end)
 
-		it("keeps using REST for published comments", function()
-			local endpoint
+		it("updates published review comments over GraphQL", function()
 			github_client.install({
-				gh = function(args)
+				gh = function(args, callback)
 					table.insert(gh_calls, args)
+					callback({
+						data = {
+							updatePullRequestReviewComment = {
+								pullRequestReviewComment = {
+									id = "PRRC_node",
+									databaseId = 4242,
+									body = "updated body",
+									pullRequestReview = { id = "PRR_node", state = "COMMENTED" },
+								},
+							},
+						},
+					}, nil)
 				end,
-				api = function(_, path, _, callback)
-					endpoint = path
-					callback({ id = 4242, body = "updated body", user = { login = "octocat" } }, nil)
+				api = function()
+					table.insert(api_calls, true)
 				end,
 			})
 			local api = fresh_module()
@@ -115,14 +125,18 @@ describe("github pending review comments", function()
 			local published = pending_comment()
 			published.state = nil
 
-			local err
-			api.edit_comment(pull_request(), published, function(_, e)
-				err = e
+			local updated, err
+			api.edit_comment(pull_request(), published, function(result, e)
+				updated, err = result, e
 			end)
 
 			assert.is_nil(err)
-			assert.equal(0, #gh_calls)
-			assert.equal("repos/octo/repo/pulls/comments/4242", endpoint)
+			assert.equal(0, #api_calls)
+			assert.equal(1, #gh_calls)
+			assert.equal("PRRC_node", gh_flags(gh_calls[1]).commentId)
+			assert.equal("updated body", updated.content_raw)
+			assert.equal("PRRT_node", updated.thread_id)
+			assert.is_nil(updated.state)
 		end)
 
 		it("fails when the pending comment has no node id", function()
@@ -191,15 +205,14 @@ describe("github pending review comments", function()
 			assert.is_truthy(flags.query:find("deletePullRequestReviewComment", 1, true))
 		end)
 
-		it("keeps using REST for published comments", function()
-			local endpoint
+		it("deletes published review comments over GraphQL", function()
 			github_client.install({
-				gh = function(args)
+				gh = function(args, callback)
 					table.insert(gh_calls, args)
+					callback({ data = { deletePullRequestReviewComment = {} } }, nil)
 				end,
-				api = function(_, path, _, callback)
-					endpoint = path
-					callback(nil, nil)
+				api = function()
+					table.insert(api_calls, true)
 				end,
 			})
 			local api = fresh_module()
@@ -213,8 +226,9 @@ describe("github pending review comments", function()
 			end)
 
 			assert.is_true(ok)
-			assert.equal(0, #gh_calls)
-			assert.equal("repos/octo/repo/pulls/comments/4242", endpoint)
+			assert.equal(0, #api_calls)
+			assert.equal(1, #gh_calls)
+			assert.equal("PRRC_node", gh_flags(gh_calls[1]).commentId)
 		end)
 
 		it("fails when the pending comment has no node id", function()

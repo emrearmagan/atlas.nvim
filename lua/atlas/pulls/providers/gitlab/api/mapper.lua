@@ -349,6 +349,51 @@ function M.to_draft_comment(draft, discussion_first_id)
 	return comment
 end
 
+---@param values table|nil
+---@return DiffHunk|nil
+function M.to_diff_hunk(values)
+	local lines = json.safe_table(values)
+	if #lines == 0 then
+		return nil
+	end
+	local hunk = {
+		header = "",
+		context = "",
+		old_start = 0,
+		old_count = 0,
+		new_start = 0,
+		new_count = 0,
+		additions = 0,
+		deletions = 0,
+		lines = {},
+	}
+	local kinds = { new = "add", old = "remove", [""] = "context" }
+	for _, line in ipairs(lines) do
+		local kind = kinds[json.safe_str(line.type) or ""] or "meta"
+		local text = (json.safe_str(line.text) or ""):gsub("\r?\n$", "")
+		local old_line = tonumber(line.oldLine)
+		local new_line = tonumber(line.newLine)
+		table.insert(hunk.lines, {
+			kind = kind,
+			text = text,
+			content = kind == "meta" and text or text:sub(2),
+			old_line = old_line,
+			new_line = new_line,
+		})
+		if old_line then
+			hunk.old_start = hunk.old_start == 0 and old_line or hunk.old_start
+			hunk.old_count = hunk.old_count + 1
+		end
+		if new_line then
+			hunk.new_start = hunk.new_start == 0 and new_line or hunk.new_start
+			hunk.new_count = hunk.new_count + 1
+		end
+		hunk.additions = hunk.additions + (kind == "add" and 1 or 0)
+		hunk.deletions = hunk.deletions + (kind == "remove" and 1 or 0)
+	end
+	return hunk
+end
+
 ---@param note table
 ---@return GitLabPullsActivityEntry|nil
 local function to_inline_thread_activity(note)

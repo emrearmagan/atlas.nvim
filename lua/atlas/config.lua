@@ -13,6 +13,7 @@
 ---@field key string|nil
 ---@field layout AtlasPullsViewLayout|nil
 ---@field current_repo boolean|nil
+---@field search string|nil
 ---@field _states PullsStateFilter[]|nil
 
 ---@class AtlasIssuesViewConfig
@@ -70,6 +71,7 @@
 ---@class AtlasPullsCustomAction
 ---@field id string
 ---@field label string
+---@field icon string|nil
 ---@field confirmation boolean|nil
 ---@field run fun(pr: PullRequest, ctx: AtlasPullsCustomActionContext, done: fun(ok: boolean|nil, message: string|nil))
 
@@ -103,6 +105,7 @@
 ---@class AtlasIssuesCustomAction
 ---@field id string
 ---@field label string
+---@field icon string|nil
 ---@field confirmation boolean|nil
 ---@field run fun(issue: Issue, ctx: AtlasIssuesCustomActionContext, done: fun(ok: boolean|nil, message: string|nil))
 
@@ -235,6 +238,7 @@ M.options = {
 			toggle_repo_issue_state = "t",
 			edit_title = "T",
 			edit_description = "D",
+			edit_search = "i",
 			review = {
 				focus_item = "gd",
 				approve = "ga",
@@ -284,6 +288,7 @@ M.options = {
 			change_assignee = "ga",
 			change_reporter = "gr",
 			edit_issue = "ge",
+			edit_search = "i",
 			create_issue = "c",
 			toggle_task = "x",
 			toggle_description_mode = "m",

@@ -45,7 +45,6 @@
 ---@field milestone string|nil
 ---@field assignee_username string|nil
 ---@field author_username string|nil
----@field search string|nil
 ---@field sort "asc"|"desc"|nil
 ---@field order_by string|nil
 ---@field extra_params table<string, string>|nil

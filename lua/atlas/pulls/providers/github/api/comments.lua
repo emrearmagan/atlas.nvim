@@ -4,6 +4,7 @@ local cli = require("atlas.providers.github.client")
 local json = require("atlas.core.json")
 local mapper = require("atlas.pulls.providers.github.api.mapper")
 local reviews = require("atlas.pulls.providers.github.api.reviews")
+local request_scope = require("atlas.core.requests")
 
 local REVIEW_COMMENT_FIELDS = [[
 id
@@ -12,22 +13,11 @@ body
 url
 createdAt
 author { login ... on User { databaseId } ... on Bot { databaseId } }
+reactionGroups { content users { totalCount } }
 pullRequestReview { id state commit { oid } }
 ]]
 
----@param pr PullRequest
----@param content string
----@param target PullsInlineCommentPosition|PullsFileCommentPosition
----@param file_level boolean
----@param review_id string
----@param pending_review PullsReview|nil
----@param on_done fun(comment: PullsComment|nil, err: string|nil)
----@return { cancel: fun() }|nil
-local function add_review_thread(pr, content, target, file_level, review_id, pending_review, on_done)
-	local side = not file_level and (target.to and "RIGHT" or "LEFT") or nil
-	local line = not file_level and (target.to or target.from) or nil
-	local start_line = not file_level and (side == "RIGHT" and target.start_to or target.start_from) or nil
-	local query = ([[
+local ADD_REVIEW_THREAD_MUTATION = ([[
 mutation($reviewId:ID!,$path:String!,$body:String!,$subjectType:PullRequestReviewThreadSubjectType!,$line:Int,$side:DiffSide,$startLine:Int,$startSide:DiffSide){
   addPullRequestReviewThread(input:{
     pullRequestReviewId:$reviewId
@@ -56,6 +46,19 @@ mutation($reviewId:ID!,$path:String!,$body:String!,$subjectType:PullRequestRevie
   }
 }
 ]]):format(REVIEW_COMMENT_FIELDS)
+
+---@param pr PullRequest
+---@param content string
+---@param target PullsInlineCommentPosition|PullsFileCommentPosition
+---@param file_level boolean
+---@param review_id string
+---@param pending_review PullsReview|nil
+---@param on_done fun(comment: PullsComment|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+local function add_review_thread(pr, content, target, file_level, review_id, pending_review, on_done)
+	local side = not file_level and (target.to and "RIGHT" or "LEFT") or nil
+	local line = not file_level and (target.to or target.from) or nil
+	local start_line = not file_level and (side == "RIGHT" and target.start_to or target.start_from) or nil
 	local args = {
 		"api",
 		"graphql",
@@ -73,7 +76,7 @@ mutation($reviewId:ID!,$path:String!,$body:String!,$subjectType:PullRequestRevie
 		end
 	end
 	vim.list_extend(args, { "-f", "reviewId=" .. review_id })
-	vim.list_extend(args, { "-f", "query=" .. query })
+	vim.list_extend(args, { "-f", "query=" .. ADD_REVIEW_THREAD_MUTATION })
 
 	return cli.gh(args, function(result, err)
 		if err or type(result) ~= "table" then
@@ -118,58 +121,46 @@ mutation($reviewId:ID!,$path:String!,$body:String!,$subjectType:PullRequestRevie
 end
 
 ---@param pr PullRequest
----@param content string
----@param target PullsInlineCommentPosition|PullsFileCommentPosition
----@param file_level boolean
+---@param review PullsReview|nil
+---@param commit_oid string
+---@param add_comment fun(review_id: string, done: fun(comment: PullsComment|nil, err: string|nil)): { cancel: fun() }|nil
 ---@param on_done fun(comment: PullsComment|nil, err: string|nil)
----@return { cancel: fun() }|nil
-local function add_published_review_comment(pr, content, target, file_level, on_done)
-	local commit_id = tostring(target.commit_hash or pr.source.commit_hash or "")
-	if commit_id == "" then
-		vim.schedule(function()
-			on_done(nil, "Missing source commit hash")
-		end)
-		return nil
-	end
-
-	local args = {
-		"api",
-		"-X",
-		"POST",
-		string.format("repos/%s/pulls/%s/comments", pr.repo_full_name, tostring(pr.id)),
-		"-f",
-		"body=" .. content,
-		"-f",
-		"commit_id=" .. commit_id,
-		"-f",
-		"path=" .. target.path,
-	}
-	if file_level then
-		vim.list_extend(args, { "-f", "subject_type=file" })
-	else
-		local side = target.to and "RIGHT" or "LEFT"
-		local line = target.to or target.from
-		vim.list_extend(args, { "-f", "side=" .. side, "-F", "line=" .. tostring(line) })
-		local start_line = side == "RIGHT" and target.start_to or target.start_from
-		if start_line then
-			vim.list_extend(args, { "-F", "start_line=" .. tostring(start_line), "-f", "start_side=" .. side })
-		end
-	end
-
-	return cli.gh(args, function(result, err)
-		if err or type(result) ~= "table" then
-			on_done(nil, err or "Failed to create review comment")
+---@return { cancel: fun() }
+local function publish_comment(pr, review, commit_oid, add_comment, on_done)
+	local pending_review = review or { pending = false }
+	local requests = request_scope.new()
+	requests.run(function(done)
+		return reviews.create_pending(pr, pending_review, commit_oid, done)
+	end, function(review_id, err)
+		if err then
+			on_done(nil, err)
 			return
 		end
-		result.subject_type = result.subject_type or (file_level and "file" or "line")
-		local created = mapper.to_comment(result)
-		on_done(created, nil)
-	end, {
-		action = "Add comment",
-		repo = pr.repo_full_name,
-		number = pr.id,
-		inline = not file_level,
-	})
+		requests.run(function(done)
+			return add_comment(review_id, done)
+		end, function(created, create_err)
+			if create_err then
+				on_done(nil, create_err)
+				return
+			end
+			requests.run(function(done)
+				return reviews.submit(pr, { id = review_id, pending = true }, "", done)
+			end, function(ok, submit_err)
+				if not ok then
+					on_done(
+						nil,
+						"Comment saved as pending; refresh and submit the review: "
+							.. (submit_err or "Failed to publish comment")
+					)
+					return
+				end
+				reviews.update(pending_review, nil)
+				created.state = created.outdated and "OUTDATED" or nil
+				on_done(created, nil)
+			end)
+		end)
+	end)
+	return requests
 end
 
 local reply_comment
@@ -199,13 +190,9 @@ function M.add_comment(pr, content, opts, on_done)
 		local file_level = opts.file ~= nil
 		local commit_oid = tostring(target.commit_hash or pr.source.commit_hash or "")
 		if not opts.pending then
-			if opts.review and opts.review.pending then
-				vim.schedule(function()
-					on_done(nil, "Submit the pending review first")
-				end)
-				return nil
-			end
-			return add_published_review_comment(pr, content, target, file_level, on_done)
+			return publish_comment(pr, opts.review, commit_oid, function(review_id, done)
+				return add_review_thread(pr, content, target, file_level, review_id, nil, done)
+			end, on_done)
 		end
 		return reviews.with_pending(pr, opts.review, commit_oid, function(review_id)
 			return add_review_thread(pr, content, target, file_level, review_id, opts.review, on_done)
@@ -245,7 +232,7 @@ mutation($commentId:ID!,$body:String!){
 local DELETE_REVIEW_COMMENT_MUTATION = [[
 mutation($commentId:ID!){
   deletePullRequestReviewComment(input:{id:$commentId}){
-    pullRequestReview{id state commit{oid}}
+    clientMutationId
   }
 }
 ]]
@@ -255,7 +242,7 @@ mutation($commentId:ID!){
 ---@param node_id string
 ---@param on_done fun(comment: PullsComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-local function edit_pending_comment(pr, comment, node_id, on_done)
+local function edit_review_comment(pr, comment, node_id, on_done)
 	return cli.gh({
 		"api",
 		"graphql",
@@ -278,6 +265,7 @@ local function edit_pending_comment(pr, comment, node_id, on_done)
 			return
 		end
 		local updated = mapper.to_review_comment(node, mapper.review_thread(comment), comment.parent_id)
+		updated.resolved_by = comment.resolved_by
 		on_done(updated, nil)
 	end, {
 		action = "Edit comment",
@@ -292,7 +280,7 @@ end
 ---@param node_id string
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-local function delete_pending_comment(pr, target, node_id, on_done)
+local function delete_review_comment(pr, target, node_id, on_done)
 	return cli.gh({
 		"api",
 		"graphql",
@@ -327,18 +315,16 @@ function M.edit_comment(pr, comment, on_done)
 		return nil
 	end
 
-	if comment.state == "PENDING" then
+	if comment.inline or comment.file or comment.state == "PENDING" then
 		local node_id = tostring((comment._raw or {}).comment_id or "")
 		if node_id == "" then
 			on_done(nil, "Missing review comment id")
 			return nil
 		end
-		return edit_pending_comment(pr, comment, node_id, on_done)
+		return edit_review_comment(pr, comment, node_id, on_done)
 	end
 
-	local endpoint = (comment.inline ~= nil or comment.file ~= nil)
-			and string.format("repos/%s/pulls/comments/%s", repo_slug, tostring(comment.id))
-		or string.format("repos/%s/issues/comments/%s", repo_slug, tostring(comment.id))
+	local endpoint = string.format("repos/%s/issues/comments/%s", repo_slug, tostring(comment.id))
 	local body = tostring(comment.content_raw or "")
 
 	return cli.api("PATCH", endpoint, { body = body }, function(result, err)
@@ -347,11 +333,6 @@ function M.edit_comment(pr, comment, on_done)
 			return
 		end
 		local updated = mapper.to_comment(result)
-		updated.file = updated.file or comment.file
-		updated.state = comment.state
-		updated.outdated = comment.outdated
-		updated.thread_id = comment.thread_id
-		updated._raw = comment._raw
 		on_done(updated, nil)
 	end, {
 		action = "Edit comment",
@@ -374,18 +355,16 @@ function M.delete_comment(pr, target, on_done)
 		return nil
 	end
 
-	if target.state == "PENDING" then
+	if target.inline or target.file or target.state == "PENDING" then
 		local node_id = tostring((target._raw or {}).comment_id or "")
 		if node_id == "" then
 			on_done(false, "Missing review comment id")
 			return nil
 		end
-		return delete_pending_comment(pr, target, node_id, on_done)
+		return delete_review_comment(pr, target, node_id, on_done)
 	end
 
-	local endpoint = (target.inline ~= nil or target.file ~= nil)
-			and string.format("repos/%s/pulls/comments/%s", repo_slug, tostring(target.id))
-		or string.format("repos/%s/issues/comments/%s", repo_slug, tostring(target.id))
+	local endpoint = string.format("repos/%s/issues/comments/%s", repo_slug, tostring(target.id))
 
 	return cli.api("DELETE", endpoint, nil, function(_, err)
 		if err then
@@ -435,7 +414,7 @@ function M.set_thread_resolved(pr, root, resolved, on_done)
 	return cli.gh({
 		"api",
 		"graphql",
-		"-F",
+		"-f",
 		"threadId=" .. thread_id,
 		"-f",
 		"query=" .. SET_THREAD_RESOLVED_MUTATIONS[resolved and "resolve" or "reopen"],
@@ -447,6 +426,18 @@ function M.set_thread_resolved(pr, root, resolved, on_done)
 		number = pr.id,
 	})
 end
+
+local ADD_REVIEW_REPLY_MUTATION = ([[
+mutation($threadId:ID!,$reviewId:ID!,$body:String!){
+  addPullRequestReviewThreadReply(input:{
+    pullRequestReviewThreadId:$threadId
+    pullRequestReviewId:$reviewId
+    body:$body
+  }){
+    comment{%s}
+  }
+}
+]]):format(REVIEW_COMMENT_FIELDS)
 
 ---@param pr PullRequest
 ---@param parent PullsComment
@@ -467,48 +458,11 @@ reply_comment = function(pr, parent, content, opts, on_done)
 		local pending = opts.pending == true
 		local thread_id = tostring(parent.thread_id or "")
 		if thread_id == "" then
-			if pending then
-				on_done(nil, "Missing review thread id")
-				return nil
-			end
-			local root_id = parent.parent_id or parent.id
-			return cli.api(
-				"POST",
-				string.format("repos/%s/pulls/%s/comments/%s/replies", repo_slug, tostring(pr.id), tostring(root_id)),
-				{ body = content },
-				function(result, err)
-					if err or type(result) ~= "table" then
-						on_done(nil, err or "Failed to create reply")
-						return
-					end
-					local created = mapper.to_comment(result)
-					created.parent_id = root_id
-					created.file = created.file or parent.file
-					created.state = parent.state
-					created.outdated = parent.outdated
-					on_done(created, nil)
-				end,
-				{
-					action = "Reply comment",
-					repo = pr.repo_full_name,
-					number = pr.id,
-					parent_id = root_id,
-				}
-			)
+			on_done(nil, "Missing review thread id")
+			return nil
 		end
 
-		local query = ([[
-mutation($threadId:ID!,$reviewId:ID,$body:String!){
-  addPullRequestReviewThreadReply(input:{
-    pullRequestReviewThreadId:$threadId
-    pullRequestReviewId:$reviewId
-    body:$body
-  }){
-    comment{%s}
-  }
-}
-]]):format(REVIEW_COMMENT_FIELDS)
-		local function add_reply(review_id)
+		local function add_reply(review_id, done)
 			local args = {
 				"api",
 				"graphql",
@@ -516,28 +470,30 @@ mutation($threadId:ID!,$reviewId:ID,$body:String!){
 				"threadId=" .. thread_id,
 				"-f",
 				"body=" .. content,
+				"-f",
+				"reviewId=" .. review_id,
+				"-f",
+				"query=" .. ADD_REVIEW_REPLY_MUTATION,
 			}
-			if review_id ~= "" then
-				vim.list_extend(args, { "-f", "reviewId=" .. review_id })
-			end
-			vim.list_extend(args, { "-f", "query=" .. query })
 
 			return cli.gh(args, function(result, err)
 				if err or type(result) ~= "table" then
-					on_done(nil, err or "Failed to create reply")
+					done(nil, err or "Failed to create reply")
 					return
 				end
 				local payload = json.nilify(result.data.addPullRequestReviewThreadReply)
 				local reply = payload and json.nilify(payload.comment)
 				if not reply or json.nilify(reply.databaseId) == nil then
-					on_done(nil, "GitHub did not return the created reply")
+					done(nil, "GitHub did not return the created reply")
 					return
 				end
 				local review = json.safe_table(reply.pullRequestReview)
-				reviews.update(opts.review, review)
+				if pending then
+					reviews.update(opts.review, review)
+				end
 				local created =
 					mapper.to_review_comment(reply, mapper.review_thread(parent), parent.parent_id or parent.id)
-				on_done(created, nil)
+				done(created, nil)
 			end, {
 				action = "Reply comment",
 				repo = pr.repo_full_name,
@@ -547,11 +503,18 @@ mutation($threadId:ID!,$reviewId:ID,$body:String!){
 		end
 
 		if pending then
-			return reviews.with_pending(pr, opts.review, pr.source.commit_hash, add_reply, function(err)
+			return reviews.with_pending(pr, opts.review, pr.source.commit_hash, function(review_id)
+				return add_reply(review_id, on_done)
+			end, function(err)
 				on_done(nil, err)
 			end)
 		end
-		return add_reply("")
+		return publish_comment(pr, opts.review, pr.source.commit_hash, add_reply, function(created, err)
+			if created and parent.state == "RESOLVED" then
+				created.state = "RESOLVED"
+			end
+			on_done(created, err)
+		end)
 	end
 
 	return M.add_comment(pr, content, nil, on_done)

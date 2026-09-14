@@ -140,8 +140,9 @@ local function complete_cmdline(_arglead, cmdline, cursorpos)
 	return matches(QUALIFIERS, lower_trim(partial), nil)
 end
 
----@param default? string
-function M.open(default)
+---@param default string
+---@param on_submit fun(query: string)
+function M.edit(default, on_submit)
 	prompt.open({
 		name = "AtlasGitHubSearch",
 		complete = complete_cmdline,
@@ -150,13 +151,20 @@ function M.open(default)
 			if query == "" then
 				return
 			end
-			local kind = query:find("is:issue") and "issues" or "pulls"
-			require("atlas").open(kind, "github", {
-				initial_view = { name = "Search", layout = "compact", search = query },
-			})
+			on_submit(query)
 		end,
-		default = default or "is:pr ",
+		default = default,
 	})
+end
+
+---@param default? string
+function M.open(default)
+	M.edit(default or "is:pr ", function(query)
+		local kind = query:find("is:issue") and "issues" or "pulls"
+		require("atlas").open(kind, "github", {
+			initial_view = { name = "Search", layout = "compact", search = query },
+		})
+	end)
 end
 
 return M

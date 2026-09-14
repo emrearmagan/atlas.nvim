@@ -95,6 +95,32 @@ ICONS.picker = {
 	unselected = { icon = "○", hl_group = "AtlasTextMuted" },
 }
 
+ICONS.actions = {
+	success = ICONS.general.success,
+	changes = ICONS.pulls.changes,
+	merge = ICONS.pulls.merged_pr,
+	edit = ICONS.general.edit,
+	close = ICONS.general.error,
+	reopen = { icon = "", hl_group = "AtlasTextPositive" },
+	review = ICONS.pulls.review,
+	user = ICONS.general.user,
+	label = ICONS.pulls.tag,
+	create = ICONS.issues.issue,
+	search = ICONS.general.search,
+	notification = ICONS.general.bell,
+	pipeline = ICONS.pulls.pipeline,
+	checkout = ICONS.pulls.branch,
+	open_in_browser = { icon = "󰖟", hl_group = "AtlasTextMuted" },
+	transition = ICONS.general.progress,
+	delete = ICONS.general.delete,
+	run = { icon = "", hl_group = "AtlasTextPositive" },
+	stop = ICONS.pulls.status.stopped,
+	retry = { icon = "󰑐", hl_group = "AtlasLogInfo" },
+	details = ICONS.general.overview,
+	save = { icon = "", hl_group = "AtlasTextMuted" },
+	custom = { icon = "", hl_group = "AtlasTextMuted" },
+}
+
 ---@param style AtlasIconStyle|nil
 ---@param fallback AtlasIconStyle|nil
 ---@return string, string
@@ -109,6 +135,21 @@ end
 ---@return string, string
 function M.picker(name)
 	return get(ICONS.picker[name])
+end
+
+-- Actions
+
+---@param name string
+---@return string, string
+function M.action(name)
+	return get(ICONS.actions[name])
+end
+
+---@param action { label: string, icon?: string }
+---@return string
+function M.format_action(action)
+	local icon = action.icon or M.action("custom")
+	return icon .. "  " .. action.label
 end
 
 -- General

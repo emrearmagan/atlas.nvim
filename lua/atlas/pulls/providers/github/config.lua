@@ -29,10 +29,8 @@
 --   })
 
 ---@class AtlasGitHubViewConfig : AtlasPullsViewConfig
----@field search string
 
 ---@class AtlasGitHubBookmarkConfig : AtlasPullsBookmarkConfig
----@field search string
 
 ---@class AtlasGitHubBookmarksConfig
 ---@field key string|nil    -- default "S"

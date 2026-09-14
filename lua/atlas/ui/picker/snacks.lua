@@ -128,6 +128,7 @@ function M.open(request)
 	end
 	local opts = {
 		title = request.title,
+		main = { current = true },
 		prompt = "",
 		live = request.fetch ~= nil,
 		show_empty = true,
@@ -143,7 +144,9 @@ function M.open(request)
 				end
 				confirmed = true
 				picker:close()
-				request.on_done(value)
+				vim.schedule(function()
+					request.on_done(value)
+				end)
 			end,
 		},
 		on_show = function(picker)

@@ -150,6 +150,7 @@ function M.parse(raw)
 				cur_file.path = line:match("^rename to (.+)$")
 			end
 		elseif line:match("^%-%-%- ") then
+			cur_file = cur_file or { path = "", status = "modified", hunks = {} }
 			-- Extract old path; /dev/null means the file is new
 			if cur_file then
 				local p = line:match("^%-%-%- a/(.+)$") or line:match("^%-%-%- (.+)$")
@@ -168,6 +169,7 @@ function M.parse(raw)
 			end
 		elseif line:match("^@@ ") then
 			flush_hunk()
+			cur_file = cur_file or { path = "", status = "modified", hunks = {} }
 			if cur_file then
 				local oa, ob, na, nb, ctx = line:match("^@@ %-(%d+),?(%d*) %+(%d+),?(%d*) @@ ?(.*)$")
 				local old_start = tonumber(oa) or 0
@@ -244,6 +246,13 @@ function M.parse(raw)
 
 	flush_file()
 	return files
+end
+
+---@param raw string
+---@return DiffHunk|nil
+function M.parse_hunk(raw)
+	local file = M.parse(raw)[1]
+	return file and file.hunks[1] or nil
 end
 
 ---Return a clipped hunk centered on one old/new line, with a header and counts

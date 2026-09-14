@@ -129,6 +129,26 @@ function M.action_context(session, comment)
 end
 
 ---@param session AtlasDiffSession
+---@param path string
+---@param reviewed boolean
+function M.set_file_reviewed(session, path, reviewed)
+	if session.review_request then
+		return
+	end
+	session.reviewed_files[path] = reviewed or nil
+	local current_review = session.review
+	local reviews = current_review and current_review.provider.capabilities.reviews
+	if not reviews or not reviews.set_file_reviewed then
+		return
+	end
+	reviews.set_file_reviewed(current_review.pr, path, reviewed, function(ok, err)
+		if not ok then
+			notify(session, "error", "Unable to update reviewed file: " .. tostring(err))
+		end
+	end)
+end
+
+---@param session AtlasDiffSession
 function M.reload(session)
 	local review = session.review
 	if not review then
