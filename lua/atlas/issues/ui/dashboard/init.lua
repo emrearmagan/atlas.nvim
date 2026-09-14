@@ -26,9 +26,13 @@ function M.render()
 	end
 
 	local width = vim.api.nvim_win_get_width(win)
+	local navigation = require("atlas.ui.navigation")
 	local lines, spans, line_map = require("atlas.issues.ui.dashboard.renderer").render({
 		width = width,
 	})
+	local state = require("atlas.issues.state")
+	local view = state.search_view()
+	local board = view ~= nil and view.layout == "board" and not state.error
 
 	ui_state.line_map = line_map
 
@@ -36,6 +40,12 @@ function M.render()
 	vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
 	apply_spans(buf, spans)
 	vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
+	if not board then
+		vim.api.nvim_win_call(win, function()
+			vim.fn.winrestview({ leftcol = 0 })
+		end)
+	end
+	navigation.highlight_current_item()
 end
 
 ---@param issue Issue

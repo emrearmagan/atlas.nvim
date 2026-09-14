@@ -28,8 +28,14 @@
 --   })
 
 ---@class AtlasGitHubIssuesViewConfig : IssuesViewConfig
----@field search string
+---@field search string|nil
 ---@field current_repo boolean|nil
+---@field project AtlasGitHubIssuesProjectConfig|nil Project source for board views.
+
+---@class AtlasGitHubIssuesProjectConfig
+---@field owner string
+---@field number integer
+---@field status_field string|nil Defaults to "Status".
 
 ---@class AtlasGitHubIssuesBookmarkConfig : AtlasIssuesBookmarkConfig
 ---@field search string

@@ -400,7 +400,7 @@ function M.render(opts)
 	else
 		local issue_groups = state.issue_tree
 		local layout = search_view and tostring(search_view.layout or "plain") or "compact"
-		if layout ~= "compact" then
+		if layout ~= "compact" and layout ~= "board" then
 			layout = "plain"
 		end
 		local issues = state.issues
@@ -409,14 +409,26 @@ function M.render(opts)
 		end
 
 		local has_rows = #issue_groups > 0
-		if layout == "compact" then
+		if layout == "compact" or layout == "board" then
 			has_rows = #issues > 0
 		end
-		if state.is_loading ~= true and not has_rows then
+		if layout == "board" and state.is_loading and not has_rows then
+			table.insert(lines, " " .. state.reload_spinner_frame .. " Loading...")
+		elseif state.is_loading ~= true and not has_rows and layout ~= "board" then
 			table.insert(lines, "No issues found.")
 		else
 			local tbl_lines, tbl_spans, tbl_map
-			if layout == "compact" then
+			if layout == "board" then
+				tbl_lines, tbl_map, tbl_spans = require("atlas.issues.ui.dashboard.board").render({
+					issues = issues,
+					statuses = page and page.statuses,
+					provider_id = provider and provider.id,
+				})
+				if state.is_loading then
+					table.insert(tbl_lines, "")
+					table.insert(tbl_lines, " " .. state.reload_spinner_frame .. " Loading...")
+				end
+			elseif layout == "compact" then
 				tbl_lines, tbl_map, tbl_spans = render_compact_table(opts, issues)
 			else
 				tbl_lines, tbl_map, tbl_spans = render_issue_table(opts, issue_groups)
