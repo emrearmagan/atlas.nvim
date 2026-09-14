@@ -30,8 +30,8 @@ local review_progress = { "󰝦", "󰪞", "󰪟", "󰪠", "󰪡", "󰪢", "󰪣"
 
 ---@class AtlasDiffDocument
 ---@field status DiffFileStatus
----@field old { path: string, lines: string[] }
----@field new { path: string, lines: string[] }
+---@field old { path: string, lines: string[], binary_content?: string }
+---@field new { path: string, lines: string[], binary_content?: string }
 ---@field changes AtlasDiffLineChange[]
 ---@field binary boolean
 

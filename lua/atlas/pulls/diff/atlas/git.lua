@@ -451,8 +451,8 @@ local function load_document(op, range, file, on_done)
 		end
 		on_done({
 			status = file.status,
-			old = { path = old_path, lines = old_lines },
-			new = { path = file.path, lines = new_lines },
+			old = { path = old_path, lines = old_lines, binary_content = old_binary and result.old or nil },
+			new = { path = file.path, lines = new_lines, binary_content = new_binary and result.new or nil },
 			changes = hunks,
 			binary = binary,
 		})
