@@ -26,10 +26,6 @@
 --     },
 --   })
 
----@class AtlasShortcutConfig
----@field token string
----@field cache_ttl number|nil Cache lifetime in seconds (default: 300); values <= 0 disable caching.
-
 ---@class AtlasShortcutIssuesViewConfig : IssuesViewConfig
 ---@field search string
 
