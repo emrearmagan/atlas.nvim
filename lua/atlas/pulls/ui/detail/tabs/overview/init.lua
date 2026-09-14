@@ -44,24 +44,24 @@ function M.on_select(pr, refresh, opts)
 		return
 	end
 	local core = provider.capabilities.core
+	local pipelines = provider.capabilities.pipelines
 
 	local force_refresh = opts.force_refresh == true
 	local can_fetch_reviewers = core.fetch_reviewers ~= nil
-	local can_fetch_merge_checks = core.fetch_merge_checks ~= nil
 	local should_fetch_reviewers = can_fetch_reviewers
 		and (force_refresh or state.reviewers == nil or state.reviewers == "loading")
-	local should_fetch_merge_checks = can_fetch_merge_checks
-		and (force_refresh or state.merge_checks == nil or state.merge_checks == "loading")
+	local should_fetch_pipelines = pipelines ~= nil
+		and (force_refresh or state.pipelines == nil or state.pipelines == "loading")
 
-	if should_fetch_reviewers or should_fetch_merge_checks then
+	if should_fetch_reviewers or should_fetch_pipelines then
 		reset_requests()
 	end
 
 	if should_fetch_reviewers then
 		state.reviewers = "loading"
 	end
-	if should_fetch_merge_checks then
-		state.merge_checks = "loading"
+	if should_fetch_pipelines then
+		state.pipelines = "loading"
 	end
 
 	if should_fetch_reviewers then
@@ -80,18 +80,14 @@ function M.on_select(pr, refresh, opts)
 		end)
 	end
 
-	if should_fetch_merge_checks then
+	if should_fetch_pipelines then
 		state.requests.run(function(done)
-			return core.fetch_merge_checks(pr, opts, done)
-		end, function(checks, err)
+			return pipelines.fetch(pr, opts, done)
+		end, function(items, err)
 			if not is_current(pr) then
 				return
 			end
-			if err then
-				state.merge_checks = err
-			else
-				state.merge_checks = checks or {}
-			end
+			state.pipelines = err or items or {}
 			refresh()
 		end)
 	end
@@ -308,13 +304,13 @@ end
 ---@param spans table[]
 ---@param line_map table<integer, table>
 local function render_pipelines(_pr, width, lines, spans, line_map)
-	if detail.pipelines == nil or detail.pipelines == "loading" then
+	if state.pipelines == nil or state.pipelines == "loading" then
 		return
 	end
 
-	if type(detail.pipelines) == "string" then
+	if type(state.pipelines) == "string" then
 		utils.push(lines, spans, "Pipelines", "AtlasColumnHeader", PADDING_X)
-		local err_text = detail.pipelines
+		local err_text = state.pipelines
 		utils.append_block(
 			lines,
 			spans,
@@ -329,7 +325,7 @@ local function render_pipelines(_pr, width, lines, spans, line_map)
 		return
 	end
 
-	local entries = sort_by_status(detail.pipelines)
+	local entries = sort_by_status(state.pipelines)
 
 	if #entries == 0 then
 		return
@@ -614,17 +610,17 @@ end
 ---@param lines string[]
 ---@param spans table[]
 local function render_merge_checks(width, lines, spans)
-	if state.merge_checks == nil or state.merge_checks == "loading" then
+	if detail.merge_checks == nil or detail.merge_checks == "loading" then
 		return
 	end
-	if type(state.merge_checks) == "table" and #state.merge_checks == 0 then
+	if type(detail.merge_checks) == "table" and #detail.merge_checks == 0 then
 		return
 	end
 
 	utils.push(lines, spans, "Merge Checks", "AtlasColumnHeader", PADDING_X)
 
-	if type(state.merge_checks) == "string" then
-		local err_text = state.merge_checks --[[@as string]]
+	if type(detail.merge_checks) == "string" then
+		local err_text = detail.merge_checks --[[@as string]]
 		utils.append_block(
 			lines,
 			spans,
@@ -637,7 +633,7 @@ local function render_merge_checks(width, lines, spans)
 		return
 	end
 
-	local checks = vim.list_slice(state.merge_checks --[[@as PullsMergeCheck[] ]])
+	local checks = vim.list_slice(detail.merge_checks --[[@as PullsMergeCheck[] ]])
 	table.sort(checks, function(a, b)
 		return (MERGE_CHECK_PRIORITY[a.state] or math.huge) < (MERGE_CHECK_PRIORITY[b.state] or math.huge)
 	end)
@@ -672,9 +668,9 @@ function M.render(pr, details, width)
 
 	if
 		state.reviewers == "loading"
-		or state.merge_checks == "loading"
+		or detail.merge_checks == "loading"
 		or detail.details_loading
-		or detail.pipelines == "loading"
+		or state.pipelines == "loading"
 		or detail.diffstat == "loading"
 	then
 		utils.push(lines, spans, spinner.with_text("Loading overview..."), "AtlasTextMuted", PADDING_X)
@@ -702,7 +698,7 @@ end
 
 ---@return boolean
 function M.is_loading()
-	return state.reviewers == "loading" or state.merge_checks == "loading"
+	return state.reviewers == "loading" or state.pipelines == "loading"
 end
 
 function M.activate(buf, refresh)

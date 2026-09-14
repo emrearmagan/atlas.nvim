@@ -58,11 +58,6 @@
 ---@field label string|nil  -- default "Search"
 ---@field items table<string, AtlasGitLabPullsBookmarkConfig>|nil
 
----@class AtlasGitLabConfig
----@field base_url string
----@field token string
----@field cache_ttl number|nil Cache lifetime in seconds. Set to 0 to disable caching.
-
 ---@class AtlasGitLabPullsConfig
 ---@field views AtlasGitLabPullsViewConfig[]|nil
 ---@field bookmarks AtlasGitLabPullsBookmarksConfig|nil

@@ -103,7 +103,7 @@ local function github()
 
 	return {
 		reference = "#",
-		columns = columns(icons.general("conversation"), { ci_column, review_column }, { diff_column }),
+		columns = columns(icons.general("conversation"), { review_column, ci_column }, { diff_column }),
 		values = function(pr)
 			---@cast pr GitHubPullRequest
 			local ci = { icons.pulls_status("inprogress"), "AtlasTextMuted" }
