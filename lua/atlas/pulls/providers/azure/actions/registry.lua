@@ -4,6 +4,7 @@ local actions = require("atlas.pulls.actions")
 local action_utils = require("atlas.pulls.actions.utils")
 local icons = require("atlas.ui.shared.icons")
 local pullrequests_api = require("atlas.pulls.providers.azure.api.pullrequests")
+local search = require("atlas.pulls.providers.azure.actions.search")
 
 ---@type AtlasPullAction[]
 local ACTIONS = {}
@@ -82,6 +83,7 @@ register({
 				done(nil, err)
 				return
 			end
+			---@cast labels { name: string }[]
 			local names = vim.tbl_map(function(label)
 				return label.name
 			end, labels)
@@ -115,6 +117,25 @@ register({
 register(actions.ready_for_review)
 register(actions.convert_to_draft)
 register(actions.edit_reviewers)
+
+register({ id = "search", label = "Search Pull Requests", icon = icons.action("search"), run = search.search })
+register({ id = "open_repo", label = "Open Repo", icon = icons.action("search"), run = search.open_repo })
+register({
+	id = "search_pull_requests",
+	label = "Open Search View",
+	icon = icons.action("search"),
+	run = search.open_view,
+})
+register({
+	id = "edit_search",
+	label = "Edit search",
+	icon = icons.action("search"),
+	is_available = function(context)
+		local state = require("atlas.pulls.state")
+		return state.provider == context.provider and state.search_view() ~= nil
+	end,
+	run = search.edit,
+})
 
 register(actions.open_pipelines)
 register(actions.open_diff)

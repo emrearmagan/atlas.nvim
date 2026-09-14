@@ -23,6 +23,25 @@ local function configured_readme_path(repo)
 	return entry.readme or "README.md"
 end
 
+---@param on_done fun(repositories: table[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_repositories(on_done)
+	local cached, ok = service.get_cache("repositories")
+	if ok then
+		on_done(cached, nil)
+		return nil
+	end
+
+	return service.request("GET", "/_apis/git/repositories", nil, function(result, err)
+		if err then
+			on_done(nil, err)
+			return
+		end
+		service.set_cache("repositories", result.value)
+		on_done(result.value, nil)
+	end, { action = "Fetch repositories" })
+end
+
 ---@param repo PullsRepo
 ---@param opts PullsFetchOpts
 ---@param on_done fun(details: PullsRepoDetails|nil, err: string|nil)

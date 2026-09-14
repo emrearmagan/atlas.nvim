@@ -8,6 +8,7 @@ local core_notify = require("atlas.core.notify")
 ---| AtlasPullActionId
 ---| "reopen"
 ---| "labels"
+---| "open_repo"
 
 M.items = registry.items
 

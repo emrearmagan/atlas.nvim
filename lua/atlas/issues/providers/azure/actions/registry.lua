@@ -5,6 +5,7 @@ local icons = require("atlas.ui.shared.icons")
 local issues_api = require("atlas.issues.providers.azure.api.issues")
 local notify = require("atlas.core.notify")
 local picker = require("atlas.ui.picker")
+local search = require("atlas.issues.providers.azure.actions.search")
 
 ---@type AtlasIssueAction[]
 local ACTIONS = {}
@@ -75,6 +76,7 @@ register({
 				return
 			end
 			notify.clear()
+			---@cast states table[]
 			picker.select({
 				title = "Work item state",
 				items = states,
@@ -145,6 +147,7 @@ register({
 				done(nil, err)
 				return
 			end
+			---@cast details IssueDetails
 			local names = vim.tbl_map(function(label)
 				return label.name
 			end, details.labels)
@@ -173,6 +176,7 @@ register({
 					return
 				end
 				notify.clear()
+				---@cast types table[]
 				require("atlas.issues.create.azure.issue").open(project, types, function(issue, create_err)
 					if issue then
 						notify.success("Work item created", { timeout = 1200 })
@@ -213,7 +217,21 @@ register({
 
 register({
 	id = "search",
-	label = "Search work items (WIQL)",
+	label = "Search work items",
+	icon = icons.action("search"),
+	run = search.issues,
+})
+
+register({
+	id = "open_project",
+	label = "Open Project",
+	icon = icons.action("search"),
+	run = search.project,
+})
+
+register({
+	id = "search_wiql",
+	label = "Search WIQL",
 	icon = icons.action("search"),
 	run = function(context, done)
 		with_project(context, function(project)
@@ -238,7 +256,8 @@ register({
 	icon = icons.action("search"),
 	run = function(_, done)
 		local state = require("atlas.issues.state")
-		vim.ui.input({ prompt = "WIQL: ", default = state.query }, function(input)
+		local query = vim.trim(state.query:gsub("[\r\n\t]+[ \t]*", " "))
+		vim.ui.input({ prompt = "WIQL: ", default = query }, function(input)
 			local view = state.search_view()
 			if view and input and vim.trim(input) ~= "" then
 				view.search = input
