@@ -166,6 +166,17 @@ local function check_jira()
 	check_provider_views("jira")
 end
 
+local function check_shortcut()
+	local provider = config.provider_options("shortcut")
+	if provider == nil then
+		vim.health.info("Shortcut not configured")
+		return
+	end
+
+	check_credentials(provider, { "token" }, "Shortcut")
+	check_provider_views("shortcut")
+end
+
 local function validate_keymaps()
 	local by_context = keymaps.validate()
 	local context_names = vim.tbl_keys(by_context)
@@ -216,6 +227,9 @@ function M.check()
 
 	vim.health.start("Jira")
 	check_jira()
+
+	vim.health.start("Shortcut")
+	check_shortcut()
 
 	vim.health.start("Keymaps")
 	validate_keymaps()

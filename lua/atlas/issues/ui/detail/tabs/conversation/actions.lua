@@ -6,6 +6,7 @@ local comment_threads = require("atlas.issues.ui.components.comment_threads")
 local notify = require("atlas.core.notify")
 local state = require("atlas.issues.ui.detail.tabs.conversation.state")
 local detail = require("atlas.issues.ui.detail.state")
+local activity = require("atlas.issues.ui.detail.tabs.activity")
 
 ---@return IssuesCommentsCapability|nil
 local function get_comments()
@@ -66,6 +67,7 @@ function M.add(issue, refresh)
 					notify.error("Add comment failed: " .. err)
 					return
 				end
+				activity.reset()
 				if created then
 					state.upsert_comment(created)
 					adjust_comment_count(issue, 1)
@@ -123,6 +125,7 @@ function M.reply(issue, entry, refresh)
 					notify.error("Reply failed: " .. err)
 					return
 				end
+				activity.reset()
 				if created then
 					state.upsert_comment(created)
 					adjust_comment_count(issue, 1)
@@ -176,6 +179,7 @@ function M.edit(issue, entry, refresh)
 					notify.error("Edit failed: " .. err)
 					return
 				end
+				activity.reset()
 				if updated then
 					updated.parent_id = updated.parent_id or comment.parent_id
 					updated._raw = vim.tbl_extend("keep", updated._raw or {}, comment._raw or {})
@@ -222,6 +226,7 @@ function M.delete(issue, entry, refresh)
 				notify.error("Delete failed: " .. err)
 				return
 			end
+			activity.reset()
 			state.remove_comment(comment)
 			adjust_comment_count(issue, -1)
 			notify.success("Comment deleted", { timeout = 1200 })
@@ -276,6 +281,7 @@ function M.react(issue, entry, refresh)
 					notify.error("Reaction failed: " .. tostring(err))
 					return
 				end
+				activity.reset()
 				if ok then
 					target.reactions = target.reactions or {}
 					target.reactions[selected.key] = (tonumber(target.reactions[selected.key]) or 0) + 1

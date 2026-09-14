@@ -66,7 +66,8 @@ function M.render(tab_items, get_tab_module)
 				and provider_detail.chips(issue, details, state.details_loading)
 			or {}
 
-		local header_lines, header_spans = header.render(issue, width, extra_fields)
+		local provider_id = state.provider and state.provider.id or nil
+		local header_lines, header_spans = header.render(issue, width, extra_fields, provider_id)
 		utils.append_block(lines, spans, { lines = header_lines, highlights = header_spans })
 
 		local chip_lines, chip_spans = chips.render({ width = width, extra_chips = extra_chips })

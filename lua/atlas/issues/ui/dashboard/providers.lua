@@ -390,6 +390,115 @@ local function jira()
 	return { columns = columns, values = values, highlights = highlights }
 end
 
+local function shortcut()
+	---@param issue ShortcutIssue
+	---@return string
+	local function compact_meta(issue)
+		local parts = { issue.type.name }
+		if issue.story_points ~= nil then
+			table.insert(parts, string.format("%s pts", tostring(issue.story_points)))
+		end
+
+		local due = utils.format_date(issue.duedate)
+		if due ~= "" then
+			table.insert(parts, string.format("%s %s", icons.general("created"), due))
+		end
+
+		local labels = {}
+		for _, label in ipairs(issue.labels) do
+			table.insert(labels, label.name)
+		end
+		if #labels > 0 then
+			table.insert(parts, string.format("%s %s", icons.general("tag"), table.concat(labels, ", ")))
+		end
+		if issue.comment_count and issue.comment_count > 0 then
+			table.insert(parts, string.format("%s %d", icons.general("comment"), issue.comment_count))
+		end
+		return table.concat(parts, "  ")
+	end
+
+	local function values(issue, is_child, layout)
+		---@cast issue ShortcutIssue
+		local row_icon = icons.issues_type(issue.type.name, "shortcut")
+		local label = "#" .. issue.key
+		local name = label .. " " .. issue.title
+		if is_child then
+			name = string.format("  %s  %s", row_icon, name)
+		end
+
+		if layout == "plain" then
+			local meta = {}
+			if issue.story_points ~= nil then
+				table.insert(meta, string.format("%s pts", tostring(issue.story_points)))
+			end
+			local due = utils.format_date(issue.duedate)
+			if due ~= "" then
+				table.insert(meta, string.format("%s %s", icons.general("created"), due))
+			end
+			if #meta > 0 then
+				name = name .. "  " .. table.concat(meta, "  ")
+			end
+		end
+
+		local assignee = person_value(issue.assignee, "Unassigned")
+		if #issue.owner_ids > 1 then
+			assignee = string.format("%s +%d", assignee, #issue.owner_ids - 1)
+		end
+
+		return {
+			icon = is_child and "" or row_icon,
+			name = name,
+			_key_label = label,
+			_meta = layout == "compact" and compact_meta(issue) or nil,
+			assignee = assignee,
+			reporter = person_value(issue.reporter, "Unknown"),
+			status = status_value(issue),
+		}
+	end
+
+	local function highlights(table_row, col, ctx)
+		local issue = table_row._issue
+		if issue == nil then
+			return nil
+		end
+		---@cast issue ShortcutIssue
+
+		if col.key == "icon" then
+			local icon, icon_hl = icons.issues_type(issue.type.name, "shortcut")
+			local start_col, end_col = ctx.text:find(icon, 1, true)
+			if start_col then
+				return { { start_col = start_col - 1, end_col = end_col, hl_group = icon_hl } }
+			end
+		end
+
+		if col.key == "name" then
+			local spans = {}
+			if (tonumber(table_row._tv2_depth) or 0) > 0 then
+				local icon, icon_hl = icons.issues_type(issue.type.name, "shortcut")
+				local start_col, end_col = ctx.text:find(icon, 1, true)
+				if start_col then
+					table.insert(spans, { start_col = start_col - 1, end_col = end_col, hl_group = icon_hl })
+				end
+			end
+
+			local label = table_row._key_label or ("#" .. issue.key)
+			local start_col, end_col = ctx.text:find(label, 1, true)
+			if start_col then
+				table.insert(spans, { start_col = start_col - 1, end_col = end_col, hl_group = "AtlasTextMuted" })
+			end
+			return #spans > 0 and spans or nil
+		end
+
+		if col.key == "status" then
+			local hl = state.reloading_issue_keys[issue.key] and "AtlasTextMuted" or helper.status_hl(issue.status_id)
+			return { { start_col = 0, end_col = #ctx.padded, hl_group = hl } }
+		end
+		return person_highlight(issue, col, ctx)
+	end
+
+	return { columns = columns, values = values, highlights = highlights }
+end
+
 local function default()
 	return {
 		columns = columns,
@@ -409,6 +518,7 @@ local displays = {
 	github = github(),
 	gitlab = gitlab(),
 	jira = jira(),
+	shortcut = shortcut(),
 }
 local fallback = default()
 

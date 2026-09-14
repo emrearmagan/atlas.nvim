@@ -14,6 +14,7 @@ local groups = {
 	AtlasJiraChipStoryPoints = { bg = "#f38ba8", bold = true },
 	AtlasJiraChipDueDate = { bg = "#f9e2af", bold = true },
 	AtlasJiraChipParent = { link = "AtlasJiraTheme" },
+	AtlasShortcutChipParent = { link = "AtlasShortcutTheme" },
 }
 
 function M.setup()
