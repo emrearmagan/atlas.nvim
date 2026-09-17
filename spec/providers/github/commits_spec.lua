@@ -54,10 +54,7 @@ describe("github pulls.fetch_commits", function()
 		end)
 
 		assert.equal(1, #commits)
-		assert.equal(
-			"Fix bug\n\nThis explains why the fix is needed.\nSecond body line.",
-			commits[1].message
-		)
+		assert.equal("Fix bug\n\nThis explains why the fix is needed.\nSecond body line.", commits[1].message)
 		assert.equal("abc123def456", commits[1].hash)
 		assert.equal("abc123d", commits[1].short_hash)
 		assert.equal("alice", commits[1].author_nickname)
