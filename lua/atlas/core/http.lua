@@ -158,7 +158,7 @@ function M.curl_request(method, url, headers, data, callback)
 		end
 
 		callback(result, nil, response_headers)
-	end)
+	end, method == "GET")
 end
 
 ---@param method string

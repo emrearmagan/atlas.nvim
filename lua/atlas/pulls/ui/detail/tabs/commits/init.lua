@@ -7,6 +7,7 @@ local threads = require("atlas.ui.components.threadsv2")
 local notify = require("atlas.core.notify")
 local request_scope = require("atlas.core.requests")
 local detail = require("atlas.pulls.ui.detail.state")
+local keymaps = require("atlas.pulls.ui.detail.tabs.commits.keymaps")
 
 local PADDING_X = 1
 local MAX_STATUS_COMMITS = 5
@@ -32,6 +33,7 @@ end
 
 function M.reset()
 	reset_requests()
+	keymaps.close_pin()
 	state.current_pr = nil
 	state.commits = nil
 	state.status_by_hash = {}
@@ -294,7 +296,22 @@ function M.is_loading()
 	return false
 end
 
-function M.deactivate()
+---@param buf integer
+---@param refresh fun()
+function M.activate(buf, refresh)
+	if not (buf and vim.api.nvim_buf_is_valid(buf)) then
+		return
+	end
+	if refresh ~= nil then
+		keymaps.setup(buf, refresh)
+	end
+end
+
+---@param buf integer
+function M.deactivate(buf)
+	if buf and vim.api.nvim_buf_is_valid(buf) then
+		keymaps.teardown(buf)
+	end
 	M.reset()
 	notify.clear()
 end

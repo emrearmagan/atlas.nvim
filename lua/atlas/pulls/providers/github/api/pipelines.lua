@@ -28,14 +28,6 @@ local CHECK_CONCLUSION_STATES = {
 	timed_out = "FAILED",
 }
 
-local STATUS_CONTEXT_STATES = {
-	error = "FAILED",
-	expected = "INPROGRESS",
-	failure = "FAILED",
-	pending = "INPROGRESS",
-	success = "SUCCESSFUL",
-}
-
 local INPROGRESS_STATUSES = {
 	in_progress = true,
 	pending = true,
@@ -64,30 +56,6 @@ local function conclusion_state(conclusion)
 	return CHECK_CONCLUSION_STATES[normalize_state(conclusion)] or "UNKNOWN"
 end
 
----@param check any
----@return PullsPipelineState
-function M.status_check_state(check)
-	if type(check) ~= "table" then
-		return "UNKNOWN"
-	end
-
-	local context_state = STATUS_CONTEXT_STATES[normalize_state(check.state)]
-	if context_state then
-		return context_state
-	end
-
-	local conclusion = normalize_state(check.conclusion)
-	if conclusion ~= "" then
-		return conclusion_state(conclusion)
-	end
-
-	local status = normalize_state(check.status)
-	if INPROGRESS_STATUSES[status] then
-		return "INPROGRESS"
-	end
-	return "UNKNOWN"
-end
-
 ---@param status any
 ---@param conclusion any
 ---@return PullsPipelineState
@@ -99,12 +67,6 @@ local function detail_state(status, conclusion)
 		return "INPROGRESS"
 	end
 	return "UNKNOWN"
-end
-
----@param check table
----@return PullsPipelineState
-local function summary_state(check)
-	return CHECK_BUCKET_STATES[normalize_state(check.bucket)] or M.status_check_state(check)
 end
 
 ---@param value any
@@ -218,14 +180,14 @@ function M.fetch(pr, opts, on_done)
 
 	return cli.gh({
 		"pr",
-		"view",
+		"checks",
 		tostring(pr.id),
 		"--repo",
 		repo_slug,
 		"--json",
-		"statusCheckRollup",
+		"name,workflow,state,bucket,link,startedAt,completedAt",
 	}, function(result, err)
-		if err then
+		if err and not err:match("^no checks reported") then
 			on_done(nil, err)
 			return
 		end
@@ -238,10 +200,10 @@ function M.fetch(pr, opts, on_done)
 
 		local pipelines = {}
 		local pipelines_by_id = {}
-		for index, check in ipairs(json.safe_table(result.statusCheckRollup)) do
-			local url = json.safe_str(check.detailsUrl) or json.safe_str(check.targetUrl)
+		for index, check in ipairs(result) do
+			local url = json.safe_str(check.link)
 			local run_id, job_id, run_url = summary_ids(url)
-			local name = summary_group_name(check.workflowName)
+			local name = summary_group_name(check.workflow)
 			local pipeline_id = run_id or ("external:" .. name)
 			local pipeline = pipelines_by_id[pipeline_id]
 			if pipeline == nil then
@@ -264,12 +226,12 @@ function M.fetch(pr, opts, on_done)
 				table.insert(pipelines, pipeline)
 			end
 
-			local check_name = json.safe_str(check.name) or json.safe_str(check.context) or "Check"
+			local check_name = json.safe_str(check.name) or "Check"
 			local synthetic_job_id = string.format("summary:%s:%s:%d", pipeline_id, check_name, index)
 			table.insert(pipeline.stages[1].jobs, {
 				id = (run_id and job_id) or synthetic_job_id,
 				name = check_name,
-				state = summary_state(check),
+				state = CHECK_BUCKET_STATES[check.bucket] or "UNKNOWN",
 				provider_state = json.safe_str(check.state) or json.safe_str(check.bucket) or "",
 				url = url,
 				started_at = json.safe_str(check.startedAt),

@@ -1,10 +1,34 @@
 local M = {}
 
 local presentation = require("atlas.pulls.ui.presentation")
-local pipeline_utils = require("atlas.pulls.pipelines")
 local icons = require("atlas.ui.shared.icons")
 local utils = require("atlas.ui.shared.utils")
 local spinner = require("atlas.ui.components.spinner")
+
+local CHECK_STATES = {
+	muted = { priority = 0, label = "", icon = "unknown" },
+	successful = { priority = 1, label = "Checks passed", icon = "successful" },
+	inprogress = { priority = 2, label = "Checks pending", icon = "inprogress" },
+	warning = { priority = 3, label = "Checks pending", icon = "inprogress" },
+	failed = { priority = 4, label = "Checks failed", icon = "failed" },
+}
+
+---@param checks PullsMergeCheck[]
+---@return PullsDetailChip|nil
+local function checks_chip(checks)
+	local status = CHECK_STATES.muted
+	for _, check in ipairs(checks) do
+		local current = CHECK_STATES[check.state]
+		if current.priority > status.priority then
+			status = current
+		end
+	end
+	if status == CHECK_STATES.muted then
+		return nil
+	end
+	local icon, hl = icons.pulls_status(status.icon)
+	return { label = icon .. " " .. status.label, hl = hl }
+end
 
 ---@param chips PullsDetailChip[]
 ---@param opts { width: integer, padding_x?: integer }
@@ -54,7 +78,7 @@ local function render_chips(chips, opts)
 end
 
 ---@param pr PullRequest
----@param opts { width: integer, padding_x?: integer, extra_chips?: PullsDetailChip[], pipelines?: PullsPipeline[]|"loading"|string, loading?: boolean }
+---@param opts { width: integer, padding_x?: integer, extra_chips?: PullsDetailChip[], checks?: PullsMergeCheck[]|"loading"|string, loading?: boolean }
 ---@return string[], table[]
 function M.render(pr, opts)
 	local chips = {
@@ -65,17 +89,11 @@ function M.render(pr, opts)
 		table.insert(chips, chip)
 	end
 
-	if opts.loading or opts.pipelines == "loading" then
+	local checks = opts.checks
+	if opts.loading or checks == "loading" then
 		table.insert(chips, { label = spinner.with_text("Loading..."), hl = "AtlasTextMuted" })
-	elseif type(opts.pipelines) == "table" and #opts.pipelines > 0 then
-		local status = pipeline_utils.aggregate_state(opts.pipelines):lower()
-		if status ~= "unknown" then
-			local icon, icon_hl = icons.pulls_status(status)
-			table.insert(chips, {
-				label = string.format("%s %s%s", icon, status:sub(1, 1):upper(), status:sub(2)),
-				hl = icon_hl,
-			})
-		end
+	elseif type(checks) == "table" then
+		table.insert(chips, checks_chip(checks))
 	end
 
 	return render_chips(chips, opts)

@@ -27,6 +27,7 @@ local actions = require("atlas.pulls.providers.bitbucket.actions")
 local author_completion = require("atlas.providers.bitbucket.completion.author")
 local activity_api = require("atlas.pulls.providers.bitbucket.api.activity")
 local changes_api = require("atlas.pulls.providers.bitbucket.api.changes")
+local checks_api = require("atlas.pulls.providers.bitbucket.api.checks")
 local comments_api = require("atlas.pulls.providers.bitbucket.api.comments")
 local config = require("atlas.config")
 local detail_ui = require("atlas.pulls.providers.bitbucket.ui.detail")
@@ -112,6 +113,7 @@ return {
 			create_pr = pullrequests_api.create_pr,
 			fetch_default_reviewers = pullrequests_api.fetch_default_reviewers,
 			fetch_reviewers = pullrequests_api.fetch_reviewers,
+			fetch_merge_checks = checks_api.fetch,
 			update_reviewers = pullrequests_api.update_reviewers,
 			update_title = pullrequests_api.update_title,
 			update_description = pullrequests_api.update_description,
