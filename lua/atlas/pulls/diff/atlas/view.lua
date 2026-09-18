@@ -334,6 +334,7 @@ end
 
 ---@param session AtlasDiffSession
 function M.close_commits(session)
+	commits.close_pin()
 	local state = session.viewer_state
 	local win = state.commits_panel.win
 	state.commits_panel.win = nil

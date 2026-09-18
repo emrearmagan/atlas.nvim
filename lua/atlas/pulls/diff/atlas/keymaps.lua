@@ -238,7 +238,7 @@ function M.register(session, actions)
 			add(
 				general,
 				item("ui.show_details", {
-					desc = "Show commit details",
+					desc = "Show full commit message (stays open while navigating)",
 					index = 9,
 					callback = run(actions.show_commit),
 					opts = { silent = true, nowait = true },
