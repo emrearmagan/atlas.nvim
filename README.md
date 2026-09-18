@@ -127,6 +127,28 @@ Jump from an issue to its PR and back, or browse related issues and sub-issues.
 
 View pipelines and their jobs, inspect their status, and read job logs directly in Atlas. Retry failed pipelines or jobs and cancel work that is still running.
 
+<details>
+<summary><strong>Configuration</strong></summary>
+
+Atlas uses native CI by default. Set `providers.<provider>.ci.backend` to use another backend:
+
+```lua
+providers = {
+  bitbucket = {
+    user = vim.env.BITBUCKET_USER,
+    token = vim.env.BITBUCKET_TOKEN,
+    ci = {
+      backend = require("atlas.pulls.pipelines.bamboo").new({
+        host = vim.env.BAMBOO_HOST,
+        user = vim.env.BAMBOO_USER,
+        password = vim.env.BAMBOO_PASSWORD,
+      }),
+    },
+  },
+}
+```
+</details>
+
 </details>
 
 <details>

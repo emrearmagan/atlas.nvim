@@ -1,4 +1,4 @@
-*atlas.txt*  Pull requests and issues in Neovim   Last change: 2026 Aug 30
+*atlas.txt*  Pull requests and issues in Neovim   Last change: 2026 Sep 18
 
 Author: Emre Armagan
 License: MIT
@@ -13,6 +13,7 @@ CONTENTS                                                       *atlas-contents*
      Custom actions ......................... |atlas-custom-actions|
   4. Commands ............................... |atlas-commands|
   5. Pulls .................................. |atlas-pulls|
+     Pipelines .............................. |atlas-pulls-pipelines|
      GitHub ................................. |atlas-pulls-github|
      Bitbucket .............................. |atlas-pulls-bitbucket|
      GitLab ................................. |atlas-pulls-gitlab|
@@ -305,6 +306,28 @@ PULLS CONFIGURATION                              *atlas-pulls-configuration*
       custom_actions = {}, -- see |atlas-pulls-custom-actions|
     },
   })
+<
+
+------------------------------------------------------------------------------
+PIPELINES                                             *atlas-pulls-pipelines*
+
+Atlas uses native CI by default. Set `providers.<provider>.ci.backend` to
+use another backend:
+
+>lua
+  providers = {
+    bitbucket = {
+      user = vim.env.BITBUCKET_USER,
+      token = vim.env.BITBUCKET_TOKEN,
+      ci = {
+        backend = require("atlas.pulls.pipelines.bamboo").new({
+          host = vim.env.BAMBOO_HOST,
+          user = vim.env.BAMBOO_USER,
+          password = vim.env.BAMBOO_PASSWORD,
+        }),
+      },
+    },
+  }
 <
 
 ------------------------------------------------------------------------------
