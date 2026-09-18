@@ -6,8 +6,8 @@
 ---@field project string
 ---@field description_format string|nil
 
----@class AzureIssueDetails : IssueDetails
----@field description_format string|nil
+---@class AzureIssueComment : IssueComment
+---@field body_format string
 
 local config = require("atlas.config")
 local issues_api = require("atlas.issues.providers.azure.api.issues")

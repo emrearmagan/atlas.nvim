@@ -593,6 +593,12 @@ Uses the shared `providers.azure` authentication from |atlas-configuration|.
 Views use flat WIQL queries.
 Syntax: https://learn.microsoft.com/en-us/azure/devops/boards/queries/wiql-syntax?view=azure-devops
 
+Azure supports both HTML and Markdown for work-item descriptions and comments.
+Pandoc (https://pandoc.org) is needed to view and edit HTML as Markdown.
+Saving converted content switches it to Markdown permanently.
+Descriptions: https://devblogs.microsoft.com/devops/markdown-support-arrives-for-work-items/
+Comments: https://learn.microsoft.com/en-us/rest/api/azure/devops/wit/comments/get-comments?view=azure-devops-rest-7.1#commentformat
+
 >lua
   issues = {
     ---@type AtlasAzureIssuesConfig

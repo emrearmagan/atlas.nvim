@@ -1,6 +1,7 @@
 local M = {}
 
 local mapper = require("atlas.issues.providers.azure.api.mapper")
+local markdown = require("atlas.issues.providers.azure.markdown")
 local request_scope = require("atlas.core.requests")
 local service = require("atlas.pulls.providers.azure.api.service")
 
@@ -140,15 +141,26 @@ end
 ---@param ref IssueRef
 ---@param opts IssuesFetchOpts|nil
 ---@param on_done fun(details: IssueDetails|nil, err: string|nil)
----@return { cancel: fun() }|nil
+---@return AtlasRequestScope
 function M.fetch_issue(ref, opts, on_done)
-	return get("/_apis/wit/workitems/" .. service.url_encode(ref.key), opts or {}, function(result, err)
+	local scope = request_scope.new()
+	scope.run(function(done)
+		return get("/_apis/wit/workitems/" .. service.url_encode(ref.key), opts or {}, done)
+	end, function(result, err)
 		if err then
 			on_done(nil, err)
 			return
 		end
-		on_done(mapper.to_issue_details(result), nil)
+		local details = mapper.to_issue_details(result)
+		scope.run(function(done)
+			return markdown.to_markdown(details.description, details.description_format, done)
+		end, function(description, format)
+			details.description = description
+			details.description_format = format
+			on_done(details, nil)
+		end)
 	end)
+	return scope
 end
 
 ---@param fields table<string, any>
@@ -179,9 +191,22 @@ end
 ---@param issue Issue
 ---@param content string
 ---@param on_done fun(ok: boolean, err: string|nil)
+---@param opts { format?: string }|nil
 ---@return { cancel: fun() }|nil
-function M.update_description(issue, content, on_done)
-	return M.update(issue, { ["System.Description"] = content }, on_done)
+function M.update_description(issue, content, on_done, opts)
+	local patch = field_patch({ ["System.Description"] = content })
+	if opts and opts.format == "markdown" then
+		-- Azure's HTML-to-Markdown format switch is permanent.
+		table.insert(patch, { op = "add", path = "/multilineFieldsFormat/System.Description", value = "Markdown" })
+	end
+	return service.request("PATCH", "/_apis/wit/workitems/" .. issue.key, patch, function(_, err)
+		if err then
+			on_done(false, err)
+			return
+		end
+		service.clear_cache()
+		on_done(true, nil)
+	end, { action = "Update work item description", issue_key = issue.key }, nil, "application/json-patch+json")
 end
 
 ---@param issue Issue

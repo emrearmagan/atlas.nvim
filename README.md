@@ -753,6 +753,8 @@ issues = {
 
 Uses the shared `providers.azure` authentication. Views use flat [WIQL queries](https://learn.microsoft.com/en-us/azure/devops/boards/queries/wiql-syntax?view=azure-devops).
 
+Azure supports both HTML and Markdown for work-item [descriptions](https://devblogs.microsoft.com/devops/markdown-support-arrives-for-work-items/) and [comments](https://learn.microsoft.com/en-us/rest/api/azure/devops/wit/comments/get-comments?view=azure-devops-rest-7.1#commentformat). [Pandoc](https://pandoc.org) is needed to view and edit HTML as Markdown. Saving converted content switches it to Markdown permanently.
+
 ```lua
 issues = {
   ---@type AtlasAzureIssuesConfig

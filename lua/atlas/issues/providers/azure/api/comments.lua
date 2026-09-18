@@ -5,6 +5,7 @@ local M = {}
 local json = require("atlas.core.json")
 local requests = require("atlas.core.requests")
 local mapper = require("atlas.issues.providers.azure.api.mapper")
+local markdown = require("atlas.issues.providers.azure.markdown")
 local service = require("atlas.pulls.providers.azure.api.service")
 local emojis = require("atlas.ui.shared.emojis")
 
@@ -24,7 +25,7 @@ local function comments_endpoint(issue)
 end
 
 ---@param raw table
----@return IssueComment
+---@return AzureIssueComment
 local function to_comment(raw)
 	local reactions = {}
 	for _, reaction in ipairs(raw.reactions or {}) do
@@ -34,7 +35,8 @@ local function to_comment(raw)
 		id = tostring(raw.id),
 		self = raw.url,
 		author = mapper.to_user(raw.createdBy),
-		body = raw.text,
+		body = raw.text or "",
+		body_format = (raw.format or "html"):lower(),
 		created = raw.createdDate,
 		updated = raw.modifiedDate,
 		reactions = reactions,
@@ -77,22 +79,35 @@ function M.fetch_conversation(issue, opts, on_done)
 				on_done(nil, err)
 				return
 			end
-			for _, raw in ipairs(result.comments) do
-				local comment = to_comment(raw)
-				table.insert(items, {
-					id = "comment:" .. comment.id,
-					kind = "comment",
-					created_at = comment.created,
-					entity = comment,
-				})
+			local function convert_comment(index)
+				if index > #result.comments then
+					local next_token = json.safe_str(result.continuationToken)
+					if next_token and next_token ~= "" then
+						fetch_page(next_token)
+						return
+					end
+					service.set_cache(cache_key, items)
+					on_done(items, nil)
+					return
+				end
+
+				local raw = result.comments[index]
+				scope.run(function(done)
+					return markdown.to_markdown(raw.text or "", raw.format, done)
+				end, function(body, format)
+					local comment = to_comment(raw)
+					comment.body = body
+					comment.body_format = format
+					table.insert(items, {
+						id = "comment:" .. comment.id,
+						kind = "comment",
+						created_at = comment.created,
+						entity = comment,
+					})
+					convert_comment(index + 1)
+				end)
 			end
-			local next_token = json.safe_str(result.continuationToken)
-			if next_token and next_token ~= "" then
-				fetch_page(next_token)
-				return
-			end
-			service.set_cache(cache_key, items)
-			on_done(items, nil)
+			convert_comment(1)
 		end)
 	end
 	fetch_page(nil)
@@ -129,7 +144,8 @@ end
 ---@return { cancel: fun() }|nil
 function M.edit_comment(issue, comment, text, on_done)
 	---@cast issue AzureIssue
-	local query = service.build_query({ format = comment._raw.format or "html" })
+	---@cast comment AzureIssueComment
+	local query = service.build_query({ format = comment.body_format })
 	local endpoint = comments_endpoint(issue) .. "/" .. comment.id .. query
 	return service.request("PATCH", endpoint, { text = text }, function(result, err)
 		if err then
