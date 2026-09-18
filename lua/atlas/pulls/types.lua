@@ -290,6 +290,7 @@
 
 ---@class PullsCommit
 ---@field hash string
+---@field repo_full_name string|nil
 ---@field short_hash string|nil
 ---@field message string
 ---@field author_name string

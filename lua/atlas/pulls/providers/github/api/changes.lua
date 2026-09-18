@@ -42,6 +42,7 @@ function M.fetch_commits(pr, _opts, on_done)
 
 			table.insert(commits, {
 				hash = hash,
+				repo_full_name = repo_slug,
 				short_hash = #hash > 7 and hash:sub(1, 7) or hash,
 				message = tostring(raw.messageHeadline or raw.messageBody or ""),
 				author_name = author_name,

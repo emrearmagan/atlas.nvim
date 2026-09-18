@@ -4,6 +4,34 @@ local pipeline_utils = require("atlas.pulls.pipelines")
 local cli = require("atlas.providers.github.client")
 local json = require("atlas.core.json")
 
+local COMMIT_STATUS_QUERY = [[
+query($owner: String!, $repo: String!, $sha: String!) {
+  repository(owner: $owner, name: $repo) {
+    object(expression: $sha) {
+      ... on Commit {
+        statusCheckRollup {
+          state
+          contexts(first: 1) {
+            nodes {
+              ... on CheckRun { url: detailsUrl }
+              ... on StatusContext { url: targetUrl }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+]]
+
+local COMMIT_STATUS_STATES = {
+	ERROR = "failed",
+	EXPECTED = "inprogress",
+	FAILURE = "failed",
+	PENDING = "inprogress",
+	SUCCESS = "successful",
+}
+
 ---@param started_at string|nil
 ---@param completed_at string|nil
 ---@return number|nil
@@ -348,6 +376,59 @@ function M.fetch_job_log(pr, _pipeline, job, on_done)
 		action = "Fetch workflow job log",
 		repo = repo_slug,
 		job_id = job_id,
+	})
+end
+
+---@param commit PullsCommit
+---@param opts { force_refresh: boolean|nil }|nil
+---@param on_done fun(status: string|nil, url: string|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_commit_status(commit, opts, on_done)
+	local owner, repo = (commit.repo_full_name or ""):match("^([^/]+)/([^/]+)$")
+	if not owner then
+		on_done(nil, nil, "Missing repo")
+		return nil
+	end
+
+	local cache_key = string.format("github:commit:statuses:%s:%s", commit.repo_full_name, commit.hash)
+	if not (opts or {}).force_refresh then
+		local cached, ok = cli.get_mem(cache_key)
+		if ok then
+			on_done(cached.status, cached.url, nil)
+			return nil
+		end
+	end
+
+	return cli.gh({
+		"api",
+		"graphql",
+		"-f",
+		"query=" .. COMMIT_STATUS_QUERY,
+		"-f",
+		"owner=" .. owner,
+		"-f",
+		"repo=" .. repo,
+		"-f",
+		"sha=" .. commit.hash,
+	}, function(result, err)
+		if err then
+			on_done(nil, nil, err)
+			return
+		end
+
+		local repository = json.safe_table(json.safe_table(result.data).repository)
+		local raw_commit = json.safe_table(repository.object)
+		local rollup = json.safe_table(raw_commit.statusCheckRollup)
+		local contexts = json.safe_table(rollup.contexts)
+		local context = json.safe_table(json.safe_table(contexts.nodes)[1])
+		local status = COMMIT_STATUS_STATES[rollup.state] or "unknown"
+		local url = json.safe_str(context.url)
+		cli.set_mem(cache_key, { status = status, url = url })
+		on_done(status, url, nil)
+	end, {
+		action = "Fetch commit status",
+		repo = commit.repo_full_name,
+		commit_hash = commit.hash,
 	})
 end
 
