@@ -1,7 +1,7 @@
 local M = {}
 
 local request_scope = require("atlas.core.requests")
-local pipeline_utils = require("atlas.pulls.pipelines")
+local pipeline_utils = require("atlas.pulls.pipelines.utils")
 local pipelines = require("atlas.pulls.providers.bitbucket.api.pipelines")
 local service = require("atlas.pulls.providers.bitbucket.api.service")
 

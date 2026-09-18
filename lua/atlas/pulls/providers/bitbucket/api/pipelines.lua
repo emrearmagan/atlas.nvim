@@ -1,6 +1,6 @@
 local M = {}
 
-local pipeline_utils = require("atlas.pulls.pipelines")
+local pipeline_utils = require("atlas.pulls.pipelines.utils")
 local service = require("atlas.pulls.providers.bitbucket.api.service")
 local encode_path_segment = require("atlas.core.utils").url_encode
 
@@ -33,7 +33,7 @@ local function pipeline_state(state)
 	end
 
 	local name = type(state) == "table" and tostring(state.name or ""):upper() or value
-	if name == "PENDING" or name == "IN_PROGRESS" then
+	if name == "PENDING" or name == "IN_PROGRESS" or name == "INPROGRESS" then
 		return "INPROGRESS"
 	end
 	return "UNKNOWN"

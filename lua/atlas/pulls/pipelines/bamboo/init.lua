@@ -3,6 +3,7 @@ local M = {}
 local http = require("atlas.core.http")
 local logger = require("atlas.core.logger")
 local actions = require("atlas.pulls.pipelines.bamboo.actions")
+local pipeline_utils = require("atlas.pulls.pipelines.utils")
 
 ---@param value any
 ---@return table[]
@@ -127,13 +128,7 @@ function M.new(opts)
 		return send(method, url, headers, nil, on_done)
 	end
 
-	---@type PullsPipelineBackend
-	local backend = {
-		fetch_commit_status = require("atlas.pulls.pipelines.bitbucket").fetch_commit_status,
-		actions = actions.new(web_base, request),
-	}
-
-	function backend.fetch(pr, fetch_opts, on_done)
+	local function fetch(pr, fetch_opts, on_done)
 		local native = require("atlas.pulls.pipelines." .. pr.provider)
 		return native.fetch(pr, fetch_opts, function(pipelines, err)
 			if err then
@@ -151,7 +146,7 @@ function M.new(opts)
 		end)
 	end
 
-	function backend.fetch_details(_pr, pipeline, _opts, on_done)
+	local function fetch_details(_pr, pipeline, _opts, on_done)
 		local url = string.format(
 			"%s/result/%s.json?expand=stages.stage.results.result&max-results=1000&os_authType=basic",
 			api_base,
@@ -169,7 +164,7 @@ function M.new(opts)
 		end)
 	end
 
-	function backend.fetch_job_log(_pr, _pipeline, job, on_done)
+	local function fetch_job_log(_pr, _pipeline, job, on_done)
 		local key = job.id or ""
 		local job_key = key:match("^(.*)%-%d+$")
 		if not job_key then
@@ -181,7 +176,50 @@ function M.new(opts)
 		return request("GET", url, "job log", on_done, true)
 	end
 
-	return backend
+	local function fetch_commit_status(commit, _opts, on_done)
+		local url = string.format("%s/result/byCheckoutChangeset/%s?os_authType=basic", api_base, commit.hash)
+		return request("GET", url, "commit status", function(body, err)
+			if err then
+				on_done(nil, nil, err)
+				return
+			end
+
+			local latest = {}
+			for _, result in ipairs(as_list(body.results.result)) do
+				local plan_key, number = result.key:match("^(.*)%-(%d+)$")
+				local build_number = tonumber(number)
+				if not latest[plan_key] or build_number > latest[plan_key].number then
+					latest[plan_key] = {
+						number = build_number,
+						state = map_state(result),
+						url = web_base .. "/browse/" .. result.key,
+					}
+				end
+			end
+
+			local builds = {}
+			for _, build in pairs(latest) do
+				table.insert(builds, build)
+			end
+			local state = pipeline_utils.aggregate_state(builds)
+			local build_url
+			for _, build in ipairs(builds) do
+				if build.state == state then
+					build_url = build.url
+					break
+				end
+			end
+			on_done(state:lower(), build_url, nil)
+		end)
+	end
+
+	return {
+		fetch = fetch,
+		fetch_details = fetch_details,
+		fetch_job_log = fetch_job_log,
+		fetch_commit_status = fetch_commit_status,
+		actions = actions.new(web_base, request),
+	}
 end
 
 return M
