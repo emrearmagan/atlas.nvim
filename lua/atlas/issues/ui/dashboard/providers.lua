@@ -299,6 +299,112 @@ local function gitlab()
 	return { columns = columns, values = values, highlights = highlights }
 end
 
+---@return table
+local function gitea_family()
+	local function state_icon(status_id)
+		if status_id == "closed" then
+			return icons.pulls_status("successful"), "AtlasIssueClosed"
+		end
+		return icons.issues("issue"), "AtlasIssueOpen"
+	end
+
+	local function key_label(issue)
+		return string.format("#%d", issue.number)
+	end
+
+	local function values(issue, is_child, layout)
+		local label = key_label(issue)
+		local row_icon = issue.is_pinned and icons.general("pin") or state_icon(issue.status_id)
+		local result = {
+			icon = is_child and "" or row_icon,
+			name = is_child and ("  " .. row_icon .. "  " .. label .. " " .. issue.title)
+				or (label .. " " .. issue.title),
+			_key_label = label,
+			comments = tostring(tonumber(issue.comment_count) or 0),
+			assignee = person_value(issue.assignee, "Unassigned"),
+			reporter = person_value(issue.reporter, "Unknown"),
+			status = status_value(issue),
+		}
+		if layout == "compact" then
+			result.created = utils.relative_time(issue.created_at)
+			result.updated = utils.relative_time(issue.updated_at)
+			result._meta = issue.repo_full_name
+		end
+		return result
+	end
+
+	local function highlights(table_row, col, ctx)
+		local issue = table_row._issue
+		if issue == nil then
+			return nil
+		end
+
+		if col.key == "icon" then
+			local icon, icon_hl = state_icon(issue.status_id)
+			if issue.is_pinned then
+				icon, icon_hl = icons.general("pin")
+			end
+			local start_col, end_col = ctx.text:find(icon, 1, true)
+			if start_col then
+				return { { start_col = start_col - 1, end_col = end_col, hl_group = icon_hl } }
+			end
+		end
+
+		if col.key == "name" then
+			local spans = {}
+			if (tonumber(table_row._tv2_depth) or 0) > 0 then
+				local icon, icon_hl = state_icon(issue.status_id)
+				if issue.is_pinned then
+					icon, icon_hl = icons.general("pin")
+				end
+				local start_col, end_col = ctx.text:find(icon, 1, true)
+				if start_col then
+					table.insert(spans, { start_col = start_col - 1, end_col = end_col, hl_group = icon_hl })
+				end
+			end
+			local label = table_row._key_label or key_label(issue)
+			local start_col, end_col = ctx.text:find(label, 1, true)
+			if start_col then
+				table.insert(spans, { start_col = start_col - 1, end_col = end_col, hl_group = "AtlasTextMuted" })
+			end
+			return #spans > 0 and spans or nil
+		end
+
+		if col.key == "comments" or col.key == "created" or col.key == "updated" then
+			return { { start_col = 0, end_col = #ctx.padded, hl_group = "AtlasTextMuted" } }
+		end
+		if col.key == "status" then
+			local issue_key = tostring(issue.key or "")
+			local hl = issue_key ~= "" and state.reloading_issue_keys[issue_key] and "AtlasTextMuted"
+				or (issue.status_id == "closed" and "AtlasIssueClosedChip" or "AtlasIssueOpenChip")
+			return { { start_col = 0, end_col = #ctx.padded, hl_group = hl } }
+		end
+		return person_highlight(issue, col, ctx)
+	end
+
+	return { columns = github().columns, values = values, highlights = highlights }
+end
+
+local function gitea()
+	local display = gitea_family()
+	local values = display.values
+	display.values = function(issue, is_child, layout)
+		---@cast issue GiteaIssue
+		return values(issue, is_child, layout)
+	end
+	return display
+end
+
+local function forgejo()
+	local display = gitea_family()
+	local values = display.values
+	display.values = function(issue, is_child, layout)
+		---@cast issue ForgejoIssue
+		return values(issue, is_child, layout)
+	end
+	return display
+end
+
 local function jira()
 	local function values(issue, is_child)
 		---@cast issue JiraIssue
@@ -406,6 +512,8 @@ local function default()
 end
 
 local displays = {
+	forgejo = forgejo(),
+	gitea = gitea(),
 	github = github(),
 	gitlab = gitlab(),
 	jira = jira(),
