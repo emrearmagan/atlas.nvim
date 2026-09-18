@@ -47,6 +47,7 @@ function M.fetch_commits(pr, opts, on_done)
 			local message = tostring(raw.message or raw.title or "")
 			table.insert(commits, {
 				hash = hash,
+				repo_full_name = path,
 				short_hash = short ~= "" and short or nil,
 				message = message,
 				author_name = tostring(raw.author_name or ""),

@@ -246,6 +246,39 @@ function M.fetch_job_log(pr, _pipeline, job, on_done)
 	})
 end
 
+---@param commit PullsCommit
+---@param opts { force_refresh: boolean|nil }|nil
+---@param on_done fun(status: string|nil, url: string|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_commit_status(commit, opts, on_done)
+	local path = commit.repo_full_name
+	local cache_key = string.format("gitlab_pulls:commit_status:%s:%s", path, commit.hash)
+	if not (opts or {}).force_refresh then
+		local cached, ok = service.get_memory_cache(cache_key)
+		if ok then
+			on_done(cached.status, cached.url, nil)
+			return nil
+		end
+	end
+
+	local endpoint =
+		string.format("/projects/%s/repository/commits/%s/statuses?per_page=100", service.url_encode(path), commit.hash)
+	return service.fetch_all_pages(endpoint, function(result, err)
+		if err then
+			on_done(nil, nil, err)
+			return
+		end
+		local statuses, url = {}, nil
+		for _, item in ipairs(result) do
+			table.insert(statuses, { state = M.to_pipeline_state(item.status) })
+			url = url or web_url(item.target_url)
+		end
+		local status = pipeline_utils.aggregate_state(statuses):lower()
+		service.set_memory_cache(cache_key, { status = status, url = url })
+		on_done(status, url, nil)
+	end, { action = "Fetch commit status", project = path, commit_hash = commit.hash })
+end
+
 ---@param pr PullRequest
 ---@param endpoint string
 ---@param action string
