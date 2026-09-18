@@ -15,7 +15,7 @@ end
 ---@param follow_redirects? boolean
 ---@return { job_id: integer, cancel: fun() }
 local function curl_fetch(method, url, headers, data, callback, follow_redirects)
-	local args = { "curl", "-sS" }
+	local args = { "curl", "-sS", "-g" }
 	if follow_redirects then
 		table.insert(args, "-L")
 	end

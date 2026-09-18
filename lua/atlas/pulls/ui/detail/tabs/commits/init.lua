@@ -7,6 +7,7 @@ local threads = require("atlas.ui.components.threadsv2")
 local notify = require("atlas.core.notify")
 local request_scope = require("atlas.core.requests")
 local detail = require("atlas.pulls.ui.detail.state")
+local pipeline_api = require("atlas.pulls.pipelines")
 
 local PADDING_X = 1
 local MAX_STATUS_COMMITS = 5
@@ -127,7 +128,7 @@ function M.on_select(pr, refresh, opts)
 		return
 	end
 	local core = provider.capabilities.core
-	local pipelines = provider.capabilities.pipelines
+	local pipelines = pipeline_api.get(provider)
 
 	local force_refresh = opts.force_refresh == true
 	local should_fetch = force_refresh
@@ -161,7 +162,7 @@ function M.on_select(pr, refresh, opts)
 		state.commits = commits or {}
 		notify.success(string.format("Commits loaded for #%s", pr_id), { timeout = 1200 })
 
-		-- Fetch pipeline statuses for the first N commits
+		-- Fetch statuses for the first N commits.
 		if pipelines and pipelines.fetch_commit_status and type(state.commits) == "table" then
 			local count = math.min(MAX_STATUS_COMMITS, #state.commits)
 			for i = 1, count do

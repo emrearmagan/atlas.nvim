@@ -1,5 +1,5 @@
+local api = require("atlas.pulls.providers.bitbucket.api.pipelines")
 local icons = require("atlas.ui.shared.icons")
-local pipelines = require("atlas.pulls.providers.bitbucket.api.pipelines")
 
 ---@type PullsPipelineAction[]
 return {
@@ -11,7 +11,7 @@ return {
 			return tonumber(ctx.pipeline.id) ~= nil and ctx.pipeline.state ~= "INPROGRESS"
 		end,
 		run = function(ctx, done)
-			pipelines.run_pipeline(ctx.pr, function(_, err)
+			api.run_pipeline(ctx.pr, function(_, err)
 				done(err)
 			end)
 		end,
@@ -25,7 +25,7 @@ return {
 			return tonumber(ctx.pipeline.id) ~= nil and ctx.pipeline.state == "INPROGRESS"
 		end,
 		run = function(ctx, done)
-			pipelines.stop_pipeline(ctx.pr, ctx.pipeline, function(_, err)
+			api.stop_pipeline(ctx.pr, ctx.pipeline, function(_, err)
 				done(err)
 			end)
 		end,

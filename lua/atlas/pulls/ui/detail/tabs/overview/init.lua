@@ -9,6 +9,7 @@ local state = require("atlas.pulls.ui.detail.tabs.overview.state")
 local detail = require("atlas.pulls.ui.detail.state")
 local keymaps = require("atlas.pulls.ui.detail.tabs.overview.keymaps")
 local presentation = require("atlas.pulls.ui.presentation")
+local pipeline_api = require("atlas.pulls.pipelines")
 local request_scope = require("atlas.core.requests")
 
 local PADDING_X = 1
@@ -44,7 +45,7 @@ function M.on_select(pr, refresh, opts)
 		return
 	end
 	local core = provider.capabilities.core
-	local pipelines = provider.capabilities.pipelines
+	local pipelines = pipeline_api.get(provider)
 
 	local force_refresh = opts.force_refresh == true
 	local can_fetch_reviewers = core.fetch_reviewers ~= nil

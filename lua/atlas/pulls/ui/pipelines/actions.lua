@@ -2,30 +2,17 @@ local M = {}
 
 local icons = require("atlas.ui.shared.icons")
 local picker = require("atlas.ui.picker")
+local pipeline_api = require("atlas.pulls.pipelines")
 local notify = require("atlas.core.notify")
-
----@class PullsPipelineActionContext
----@field pr PullRequest
----@field pipeline PullsPipeline
----@field stage PullsPipelineStage|nil
----@field job PullsPipelineJob|nil
-
----@class PullsPipelineAction
----@field id string
----@field label string
----@field icon string
----@field confirm string|nil
----@field is_available fun(ctx: PullsPipelineActionContext): boolean, string|nil
----@field run fun(ctx: PullsPipelineActionContext, done: fun(err: string|nil))
 
 ---@param provider PullsProvider|nil
 ---@param ctx PullsPipelineActionContext
 ---@param on_select fun(action: PullsPipelineAction)
 function M.open(provider, ctx, on_select)
 	local available = {}
-	local pipelines = provider and provider.capabilities.pipelines
-	local actions = (pipelines and pipelines.actions) or {}
-	for _, action in ipairs(actions) do
+	local pipelines = provider and pipeline_api.get(provider)
+	local pipeline_actions = pipelines and pipelines.actions or {}
+	for _, action in ipairs(pipeline_actions) do
 		if action.is_available(ctx) then
 			table.insert(available, action)
 		end

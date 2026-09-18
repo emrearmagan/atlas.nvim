@@ -32,8 +32,6 @@ local comments_api = require("atlas.pulls.providers.bitbucket.api.comments")
 local config = require("atlas.config")
 local detail_ui = require("atlas.pulls.providers.bitbucket.ui.detail")
 local git = require("atlas.core.git")
-local pipeline_actions = require("atlas.pulls.providers.bitbucket.actions.pipelines")
-local pipelines_api = require("atlas.pulls.providers.bitbucket.api.pipelines")
 local pullrequests_api = require("atlas.pulls.providers.bitbucket.api.pullrequests")
 local repo_detail_ui = require("atlas.pulls.providers.bitbucket.ui.repo_detail")
 local repositories_api = require("atlas.pulls.providers.bitbucket.api.repositories")
@@ -139,6 +137,7 @@ return {
 			request_changes = reviews_api.request_changes,
 			discard_review = reviews_api.discard_review,
 		},
+		pipelines = require("atlas.pulls.pipelines.bitbucket"),
 		tasks = {
 			add_task = tasks_api.add_task,
 			edit_task = tasks_api.edit_task,
@@ -149,13 +148,6 @@ return {
 			fetch_branches = repositories_api.fetch_branches,
 			fetch_tags = repositories_api.fetch_tags,
 			delete_branch = repositories_api.delete_branch,
-		},
-		pipelines = {
-			fetch = pipelines_api.fetch,
-			fetch_details = pipelines_api.fetch_details,
-			fetch_commit_status = pipelines_api.fetch_commit_status,
-			fetch_job_log = pipelines_api.fetch_job_log,
-			actions = pipeline_actions,
 		},
 		actions = actions,
 		ui = {

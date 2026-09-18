@@ -27,8 +27,6 @@ local comments_api = require("atlas.pulls.providers.gitlab.api.comments")
 local config = require("atlas.config")
 local detail_ui = require("atlas.pulls.providers.gitlab.ui.detail")
 local notifications_api = require("atlas.providers.gitlab.notifications")
-local pipeline_actions = require("atlas.pulls.providers.gitlab.actions.pipelines")
-local pipelines_api = require("atlas.pulls.providers.gitlab.api.pipelines")
 local pullrequests_api = require("atlas.pulls.providers.gitlab.api.pullrequests")
 local repositories_api = require("atlas.pulls.providers.gitlab.api.repositories")
 local reviews_api = require("atlas.pulls.providers.gitlab.api.reviews")
@@ -173,13 +171,8 @@ return {
 			fetch_issues = repositories_api.fetch_issues,
 			delete_branch = repositories_api.delete_branch,
 		},
-		pipelines = {
-			fetch = pipelines_api.fetch,
-			fetch_details = pipelines_api.fetch_details,
-			fetch_job_log = pipelines_api.fetch_job_log,
-			actions = pipeline_actions,
-		},
 		notifications = notifications_api,
+		pipelines = require("atlas.pulls.pipelines.gitlab"),
 		actions = actions,
 		ui = {
 			detail = detail_ui,

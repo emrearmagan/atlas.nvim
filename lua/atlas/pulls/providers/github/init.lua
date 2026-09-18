@@ -19,8 +19,6 @@ local cli = require("atlas.providers.github.client")
 local comments_api = require("atlas.pulls.providers.github.api.comments")
 local emojis = require("atlas.ui.shared.emojis")
 local notifications_api = require("atlas.providers.github.notifications")
-local pipeline_actions = require("atlas.pulls.providers.github.actions.pipelines")
-local pipelines_api = require("atlas.pulls.providers.github.api.pipelines")
 local pullrequests_api = require("atlas.pulls.providers.github.api.pullrequests")
 local repositories_api = require("atlas.pulls.providers.github.api.repositories")
 local reviews_api = require("atlas.pulls.providers.github.api.reviews")
@@ -175,13 +173,8 @@ return {
 			fetch_tags = repositories_api.fetch_tags,
 			fetch_issues = repositories_api.fetch_issues,
 		},
-		pipelines = {
-			fetch = pipelines_api.fetch,
-			fetch_details = pipelines_api.fetch_details,
-			fetch_job_log = pipelines_api.fetch_job_log,
-			actions = pipeline_actions,
-		},
 		notifications = notifications_api,
+		pipelines = require("atlas.pulls.pipelines.github"),
 		actions = actions,
 		ui = {
 			detail = ui_detail,

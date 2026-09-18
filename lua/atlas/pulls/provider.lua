@@ -39,7 +39,7 @@
 ---@field reviews PullsReviewsCapability|nil
 ---@field tasks PullsTasksCapability|nil
 ---@field repository PullsRepositoryCapability|nil
----@field pipelines PullsPipelinesCapability|nil
+---@field pipelines PullsPipelineBackend|nil
 ---@field notifications AtlasNotificationsCapability|nil
 ---@field actions PullsActionsCapability|nil
 ---@field ui PullsUICapability|nil
@@ -101,13 +101,6 @@
 ---@field fetch_tags fun(repo: PullsRepoDetails, opts: PullsFetchOpts, on_done: fun(tags: PullsRepoTags|nil, err: string|nil)): { cancel: fun() }|nil
 ---@field fetch_issues (fun(repo: PullsRepoDetails, state: "open"|"closed", opts: PullsFetchOpts, on_done: fun(result: { entries: PullsRepoIssue[], counts: { open: integer, closed: integer }|nil }|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field delete_branch (fun(repo: PullsRepoDetails, branch: PullsRepoBranch, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
-
----@class PullsPipelinesCapability
----@field fetch fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(pipelines: PullsPipeline[]|nil, err: string|nil)): { cancel: fun() }|nil
----@field fetch_commit_status (fun(commit: PullsCommit, opts: { force_refresh: boolean|nil }|nil, on_done: fun(status: string|nil, url: string|nil, err: string|nil)): { cancel: fun() }|nil)|nil
----@field fetch_details fun(pr: PullRequest, pipeline: PullsPipeline, opts: { force_refresh: boolean|nil }|nil, on_done: fun(pipeline: PullsPipeline|nil, err: string|nil)): { cancel: fun() }|nil
----@field fetch_job_log (fun(pr: PullRequest, pipeline: PullsPipeline, job: PullsPipelineJob, on_done: fun(log: string|nil, err: string|nil)): { cancel: fun() }|nil)|nil
----@field actions PullsPipelineAction[]|nil
 
 ---@class PullsActionsCapability
 ---@field items AtlasPullAction[]
