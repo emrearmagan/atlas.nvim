@@ -176,9 +176,15 @@ end
 ---@param issue Issue
 ---@param fields table<string, any>
 ---@param on_done fun(ok: boolean, err: string|nil)
+---@param opts { format?: string }|nil
 ---@return { cancel: fun() }|nil
-function M.update(issue, fields, on_done)
-	return service.request("PATCH", "/_apis/wit/workitems/" .. issue.key, field_patch(fields), function(_, err)
+function M.update(issue, fields, on_done, opts)
+	local patch = field_patch(fields)
+	if fields["System.Description"] and opts and opts.format == "markdown" then
+		-- Azure's HTML-to-Markdown format switch is permanent.
+		table.insert(patch, { op = "add", path = "/multilineFieldsFormat/System.Description", value = "Markdown" })
+	end
+	return service.request("PATCH", "/_apis/wit/workitems/" .. issue.key, patch, function(_, err)
 		if err then
 			on_done(false, err)
 			return
@@ -194,19 +200,7 @@ end
 ---@param opts { format?: string }|nil
 ---@return { cancel: fun() }|nil
 function M.update_description(issue, content, on_done, opts)
-	local patch = field_patch({ ["System.Description"] = content })
-	if opts and opts.format == "markdown" then
-		-- Azure's HTML-to-Markdown format switch is permanent.
-		table.insert(patch, { op = "add", path = "/multilineFieldsFormat/System.Description", value = "Markdown" })
-	end
-	return service.request("PATCH", "/_apis/wit/workitems/" .. issue.key, patch, function(_, err)
-		if err then
-			on_done(false, err)
-			return
-		end
-		service.clear_cache()
-		on_done(true, nil)
-	end, { action = "Update work item description", issue_key = issue.key }, nil, "application/json-patch+json")
+	return M.update(issue, { ["System.Description"] = content }, on_done, opts)
 end
 
 ---@param issue Issue

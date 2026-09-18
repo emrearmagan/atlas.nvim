@@ -96,6 +96,47 @@ register({
 })
 
 register({
+	id = "edit_issue",
+	label = "Edit Issue",
+	icon = icons.action("edit"),
+	is_available = has_issue,
+	run = function(context, done)
+		local issue = assert(context.issue)
+		---@cast issue AzureIssue
+		notify.loading("Loading work item...")
+		issues_api.fetch_issue(issue, { force_refresh = true }, function(details, err)
+			if err then
+				notify.error(err)
+				done(nil, err)
+				return
+			end
+			---@cast details IssueDetails
+			issues_api.list_types(issue.project, function(types, types_err)
+				if types_err then
+					notify.error(types_err)
+					done(nil, types_err)
+					return
+				end
+				notify.clear()
+				---@cast types table[]
+				require("atlas.issues.create.azure.issue").open(issue.project, types, function(updated, update_err)
+					if updated then
+						notify.success("Work item updated", { timeout = 1200 })
+						done({ issue_key = updated.key }, nil)
+					else
+						done(nil, update_err)
+					end
+				end, {
+					issue = issue,
+					description = details.description,
+					description_format = details.description_format,
+				})
+			end)
+		end)
+	end,
+})
+
+register({
 	id = "edit_title",
 	label = "Edit title",
 	icon = icons.action("edit"),
