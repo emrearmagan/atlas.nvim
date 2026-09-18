@@ -3,7 +3,7 @@ local config = require("atlas.config")
 local url = require("atlas.providers.url")
 
 ---@alias AtlasPullsProviderId "bitbucket"|"github"|"gitlab"
----@alias AtlasIssuesProviderId "jira"|"github"|"gitlab"
+---@alias AtlasIssuesProviderId "jira"|"github"|"gitlab"|"shortcut"
 ---@alias AtlasProviderId AtlasPullsProviderId|AtlasIssuesProviderId
 ---@alias AtlasDomain "pulls"|"issues"
 ---@alias AtlasEntity "pr"|"issue"|"repo"
@@ -114,6 +114,20 @@ function M.configured(domain)
 	end
 	return result
 end
+
+add({
+	id = "shortcut",
+	name = "Shortcut",
+	resolver = require("atlas.providers.shortcut.resolve"),
+	domains = {
+		issues = {
+			module = "atlas.issues.providers.shortcut",
+			icon = { icon = "S", hl_group = "AtlasShortcutTheme" },
+			bookmark_key = "S",
+			bookmark_label = "Search",
+		},
+	},
+})
 
 add({
 	id = "jira",

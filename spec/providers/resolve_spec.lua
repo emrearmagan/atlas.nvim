@@ -9,9 +9,10 @@ describe("providers.resolve", function()
 		config.options = {
 			providers = {
 				github = {},
-				gitlab = { base_url = "https://gitlab.example.com" },
-				bitbucket = {},
-				jira = { base_url = "https://jira.example.com" },
+				gitlab = { base_url = "https://gitlab.example.com", token = "gitlab-test-token" },
+				bitbucket = { user = "bitbucket-test-user", token = "bitbucket-test-token" },
+				jira = { base_url = "https://jira.example.com", token = "jira-test-token" },
+				shortcut = { token = "shortcut-test-token" },
 			},
 			pulls = {
 				github = {},
@@ -22,6 +23,7 @@ describe("providers.resolve", function()
 				github = {},
 				gitlab = {},
 				jira = {},
+				shortcut = {},
 			},
 		}
 	end)
@@ -117,6 +119,23 @@ describe("providers.resolve", function()
 		assert.are.equal(repository.repository_url, merge_request.repository_url)
 		assert.are.equal(12, merge_request.id)
 		assert.are.equal("https://jira.example.com/jira/browse/ATLAS-123", jira.url)
+	end)
+
+	it("resolves Shortcut Story URLs", function()
+		local story = assert(providers.resolve("https://app.shortcut.com/acme/story/123/example-story"))
+		assert.are.equal("shortcut", story.provider)
+		assert.are.equal("issues", story.domain)
+		assert.are.equal("issue", story.entity)
+		assert.are.equal("acme", story.workspace)
+		assert.are.equal(123, story.number)
+		assert.are.equal(123, story.id)
+		assert.are.equal("123", story.issue_key)
+
+		local provider = assert(providers.load("shortcut", "issues"))
+		local view = provider.view_for_target(story)
+		assert.same({ name = "Search", layout = "compact", search = "id:123" }, view)
+		assert.are.equal("id:123", provider.resolve_search(view))
+		assert.same({ key = "123", workspace = "acme" }, provider.issue_ref(story))
 	end)
 
 	it("rejects unsupported URLs", function()

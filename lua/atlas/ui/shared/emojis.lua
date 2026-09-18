@@ -102,4 +102,13 @@ function M.gitlab()
 	end)
 end
 
+---@return IssueReactionOption[]
+function M.shortcut()
+	local options = M.gitlab()
+	for _, option in ipairs(options) do
+		option.key = ":" .. option.key .. ":"
+	end
+	return options
+end
+
 return M

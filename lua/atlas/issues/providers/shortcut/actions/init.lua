@@ -1,0 +1,54 @@
+local M = {}
+
+local notify = require("atlas.core.notify")
+local registry = require("atlas.issues.providers.shortcut.actions.registry")
+
+---@alias AtlasShortcutIssueActionId
+---| AtlasIssueActionId
+---| "reporter"
+---| "labels"
+---| "archive"
+---| "unarchive"
+---| "delete_issue"
+---| "edit_issue"
+---| "create_checklist_item"
+
+M.items = registry.items
+
+---@param action_id AtlasShortcutIssueActionId
+---@param ctx AtlasIssueActionContext
+---@return boolean
+function M.is_available(action_id, ctx)
+	local action = registry.find(action_id)
+	return action ~= nil and (action.is_available == nil or action.is_available(ctx) == true)
+end
+
+---@param action_id AtlasShortcutIssueActionId
+---@param ctx AtlasIssueActionContext
+---@param on_done fun(result: IssuesActionResult|nil, err: string|nil)
+---@return boolean handled
+function M.run(action_id, ctx, on_done)
+	local action = registry.find(action_id)
+	if action == nil then
+		local err = string.format("Unknown action: %s", tostring(action_id))
+		notify.warn(err)
+		on_done(nil, err)
+		return false
+	end
+
+	local available, err = true, nil
+	if action.is_available then
+		available, err = action.is_available(ctx)
+	end
+	if not available then
+		err = tostring(err or "Action is not available")
+		notify.warn(err)
+		on_done(nil, err)
+		return false
+	end
+
+	action.run(ctx, on_done)
+	return true
+end
+
+return M

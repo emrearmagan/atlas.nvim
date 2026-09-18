@@ -82,6 +82,7 @@
 ---@field github AtlasGitHubConfig|nil
 ---@field gitlab AtlasGitLabConfig|nil
 ---@field jira AtlasJiraConfig|nil
+---@field shortcut AtlasShortcutConfig|nil
 
 ---@class AtlasPullsConfig
 ---@field git_transport AtlasGitTransport|nil Git transport for Atlas-managed repositories (default: "https").
@@ -114,6 +115,7 @@
 ---@field github AtlasGitHubIssuesConfig|nil
 ---@field gitlab AtlasGitLabIssuesConfig|nil
 ---@field jira AtlasJiraIssuesConfig|nil
+---@field shortcut AtlasShortcutIssuesConfig|nil
 
 -- Config
 
@@ -288,6 +290,7 @@ M.options = {
 			edit_issue = "ge",
 			edit_search = "i",
 			create_issue = "c",
+			toggle_task = "x",
 			toggle_description_mode = "m",
 		},
 	},

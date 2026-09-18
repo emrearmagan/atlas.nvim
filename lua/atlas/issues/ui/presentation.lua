@@ -15,7 +15,7 @@ function M.issue_hl(key)
 	if lower == "" or lower == "none" then
 		return "LineNr"
 	end
-	if lower:find("#", 1, true) then
+	if lower:find("#", 1, true) or lower:match("^%d+$") then
 		return "AtlasTextMuted"
 	end
 

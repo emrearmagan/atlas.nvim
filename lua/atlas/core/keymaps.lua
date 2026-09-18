@@ -112,6 +112,7 @@ local M = {}
 ---@field edit_issue? AtlasKeymapValue
 ---@field edit_search? AtlasKeymapValue
 ---@field create_issue? AtlasKeymapValue
+---@field toggle_task? AtlasKeymapValue
 ---@field toggle_description_mode? AtlasKeymapValue
 
 ---@class AtlasKeymapsConfig
@@ -208,6 +209,7 @@ local M = {}
 ---| "issues.edit_issue"
 ---| "issues.edit_search"
 ---| "issues.create_issue"
+---| "issues.toggle_task"
 ---| "issues.toggle_description_mode"
 
 ---@param value AtlasKeymapValue

@@ -20,13 +20,14 @@ end
 ---@param issue Issue
 ---@param width integer
 ---@param fields IssuesDetailHeaderField[]|nil
+---@param provider_id AtlasIssuesProviderId|nil
 ---@return string[], table[]
-function M.render(issue, width, fields)
+function M.render(issue, width, fields, provider_id)
 	local issue_type = issue.type and issue.type.name or "Issue"
 	local key = issue.key
 	local title = issue.title
 
-	local type_icon, type_icon_hl = icons.issues_type(issue_type)
+	local type_icon, type_icon_hl = icons.issues_type(issue_type, provider_id)
 	if type_icon == "" then
 		type_icon, type_icon_hl = icons.issues("issue")
 	end
