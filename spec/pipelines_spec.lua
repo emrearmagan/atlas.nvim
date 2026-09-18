@@ -38,7 +38,7 @@ describe("Bamboo pipelines", function()
 	before_each(function()
 		requests = {}
 		response = {}
-		pipeline = { url = "http://ci.example.com/bamboo/browse/PROJ-PLAN-1", state = "FAILED" }
+		pipeline = { id = "native-status", url = "http://ci.example.com/bamboo/browse/PROJ-PLAN-1", state = "FAILED" }
 		original = {
 			base64 = vim.base64,
 			http = package.loaded["atlas.core.http"],
@@ -106,11 +106,14 @@ describe("Bamboo pipelines", function()
 		backend.fetch({ provider = "bitbucket" }, nil, function(value)
 			result = value
 		end)
-		assert.same({ pipeline }, result)
+		assert.equal(1, #result)
+		assert.equal("PROJ-PLAN-1", result[1].id)
+		assert.equal("native-status", pipeline.id)
 		backend.fetch_details({}, result[1], nil, function(value)
 			result = value
 		end)
 
+		assert.matches("/result/PROJ-PLAN-1.json", requests[1][2], 1, true)
 		assert.equal("STOPPED", result.state)
 		assert.equal("STOPPED", result.stages[1].state)
 		assert.equal("Compile", result.stages[1].jobs[1].name)
@@ -134,7 +137,7 @@ describe("Bamboo pipelines", function()
 		end
 		local ctx = {
 			pr = {},
-			pipeline = { url = "http://ci.example.com/bamboo/browse/PROJ-PLAN-1" },
+			pipeline = { id = "PROJ-PLAN-1" },
 			job = { id = "PROJ-PLAN-JOB-1" },
 		}
 		local function done(err)
