@@ -1,6 +1,6 @@
 local M = {}
 
-local pipeline_utils = require("atlas.pulls.pipelines")
+local pipeline_utils = require("atlas.pulls.pipelines.utils")
 local cli = require("atlas.providers.github.client")
 local json = require("atlas.core.json")
 

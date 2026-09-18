@@ -1,7 +1,7 @@
 local M = {}
 
 local json = require("atlas.core.json")
-local pipeline_utils = require("atlas.pulls.pipelines")
+local pipeline_utils = require("atlas.pulls.pipelines.utils")
 local service = require("atlas.providers.gitlab.client")
 
 local PIPELINE_STATES = {

@@ -1,7 +1,7 @@
 local M = {}
 
 local json = require("atlas.core.json")
-local pipelines = require("atlas.pulls.pipelines")
+local pipeline_utils = require("atlas.pulls.pipelines.utils")
 local gitlab_pipelines = require("atlas.pulls.providers.gitlab.api.pipelines")
 local service = require("atlas.providers.gitlab.client")
 
@@ -132,7 +132,7 @@ local function parse_merge_checks(state)
 
 	local pipeline_status = state.head_pipeline_status
 	if pipeline_status ~= nil and pipeline_status ~= "" then
-		local pipeline_check = pipelines.to_merge_check({
+		local pipeline_check = pipeline_utils.to_merge_check({
 			{ state = gitlab_pipelines.to_pipeline_state(pipeline_status) },
 		}, "Pipelines")
 		if pipeline_check then

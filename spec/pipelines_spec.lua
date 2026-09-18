@@ -83,6 +83,29 @@ describe("Bamboo pipelines", function()
 		package.loaded["atlas.pulls.pipelines.bitbucket"] = original.bitbucket
 	end)
 
+	it("fetches Bamboo commit status using the latest run of each plan", function()
+		response = {
+			results = {
+				result = {
+					{ key = "PROJ-BUILD-12", state = "Successful", lifeCycleState = "Finished" },
+					{ key = "PROJ-BUILD-9", state = "Failed", lifeCycleState = "Finished" },
+					{ key = "PROJ-TEST-3", state = "Unknown", lifeCycleState = "InProgress" },
+				},
+			},
+		}
+		local result
+		backend.fetch_commit_status({ hash = "abc123" }, nil, function(...)
+			result = { ... }
+		end)
+		assert.same({ "inprogress", "http://ci.example.com/bamboo/browse/PROJ-TEST-3" }, result)
+		assert.same({
+			{
+				"GET",
+				"http://ci.example.com/bamboo/rest/api/latest/result/byCheckoutChangeset/abc123?os_authType=basic",
+			},
+		}, requests)
+	end)
+
 	it("finds linked Bamboo builds and loads their statuses, jobs, and logs", function()
 		response = {
 			state = "Unknown",
