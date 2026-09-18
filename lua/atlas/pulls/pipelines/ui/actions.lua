@@ -1,20 +1,17 @@
-local M = {}
-
+local notify = require("atlas.core.notify")
 local icons = require("atlas.ui.shared.icons")
 local picker = require("atlas.ui.picker")
-local pipeline_api = require("atlas.pulls.pipelines")
-local notify = require("atlas.core.notify")
 
----@param provider PullsProvider|nil
+local M = {}
+
+---@param backend PullsPipelineBackend|nil
 ---@param ctx PullsPipelineActionContext
 ---@param on_select fun(action: PullsPipelineAction)
-function M.open(provider, ctx, on_select)
+function M.open(backend, ctx, on_select)
 	local available = {}
-	local pipelines = provider and pipeline_api.get(provider)
-	local pipeline_actions = pipelines and pipelines.actions or {}
-	for _, action in ipairs(pipeline_actions) do
+	for _, action in ipairs(backend and backend.actions or {}) do
 		if action.is_available(ctx) then
-			table.insert(available, action)
+			available[#available + 1] = action
 		end
 	end
 	if #available == 0 then
@@ -23,7 +20,7 @@ function M.open(provider, ctx, on_select)
 	end
 
 	picker.select({
-		title = "Choose pipeline action",
+		title = "Actions: " .. (ctx.job and ctx.job.name or ctx.stage and ctx.stage.name or ctx.pipeline.name),
 		items = available,
 		format_item = icons.format_action,
 		on_select = function(action)
@@ -35,7 +32,7 @@ function M.open(provider, ctx, on_select)
 				return
 			end
 			vim.ui.input({ prompt = action.confirm .. " [y/N]: " }, function(input)
-				local answer = vim.trim(tostring(input or "")):lower()
+				local answer = vim.trim(input or ""):lower()
 				if answer == "y" or answer == "yes" then
 					on_select(action)
 				end

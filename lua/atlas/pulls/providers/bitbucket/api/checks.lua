@@ -1,9 +1,9 @@
-local M = {}
-
 local request_scope = require("atlas.core.requests")
 local pipeline_utils = require("atlas.pulls.pipelines.utils")
 local pipelines = require("atlas.pulls.providers.bitbucket.api.pipelines")
 local service = require("atlas.pulls.providers.bitbucket.api.service")
+
+local M = {}
 
 -- NOTE: Went hunting for full merge checks. Found two tickets and a browser API
 -- that wants session cookies. Conflicts and builds it is.
@@ -37,7 +37,11 @@ function M.fetch(pr, opts, on_done)
 			})
 		end,
 		pipelines = function(done)
-			return pipelines.fetch(pr, opts, done)
+			return pipelines.fetch(
+				{ provider = "bitbucket", repo_full_name = pr.repo_full_name, target = pr },
+				opts,
+				done
+			)
 		end,
 	}, function(results, errors)
 		if errors.conflicts or errors.pipelines then

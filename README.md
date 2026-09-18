@@ -119,18 +119,16 @@ Jump from an issue to its PR and back, or browse related issues and sub-issues.
 </details>
 
 <details>
-<summary><strong>Pipelines</strong> - View jobs and logs, retry failures, or cancel running work</summary>
+<summary><strong>Pipelines</strong> - Browse jobs, steps, and logs</summary>
 
 <p align="center">
   <img width="85%" alt="View pipelines" src="https://github.com/user-attachments/assets/c625c4e8-b1ad-4772-b46b-24718ba6fbb7">
 </p>
 
-View pipelines and their jobs, inspect their status, and read job logs directly in Atlas. Retry failed pipelines or jobs and cancel work that is still running.
+View pipelines and their jobs, inspect their status, and read job logs directly in Atlas.
 
 <details>
 <summary><strong>Configuration</strong></summary>
-
-Atlas uses native CI by default. Set `providers.<provider>.ci.backend` to use another backend:
 
 ```lua
 providers = {
@@ -143,10 +141,15 @@ providers = {
         user = vim.env.BAMBOO_USER,
         password = vim.env.BAMBOO_PASSWORD,
       }),
+      highlights = {
+        { pattern = "^FAIL%s", level = "error" },
+        { pattern = "deprecated", level = "warn", hl_group = "DiagnosticWarn" },
+      },
     },
   },
 }
 ```
+
 </details>
 
 </details>
@@ -343,6 +346,7 @@ At some point there will probably an extension for lualine.
 - `:Atlas issues [provider]` - Open an issue provider dashboard
 - `:Atlas review [pull-request-url]` - Review a pull request with the configured diff viewer
 - `:Atlas diff [target]` - Open a Git range or pull request in native AtlasDiff
+- `:Atlas pipelines [target|.]` - Open pipelines by branch name, PR URL or number, or build URL; `.` uses the current branch
 - `:Atlas create [pr|issue]` - Create a pull request or issue
 - `:Atlas search [provider]` - Search configured pull-request and issue providers
 - `:Atlas open [target|.]` - Open a provider URL, Jira key, a PR/issue number in the current repository, or the current repository

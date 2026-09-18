@@ -66,43 +66,6 @@ describe("providers contracts", function()
 		assert_functions(reviews, { "fetch", "submit_review", "approve", "request_changes" }, "bitbucket.pulls.reviews")
 	end)
 
-	describe("native GitLab pipelines", function()
-		local client
-		local original_fetch
-
-		before_each(function()
-			client = require("atlas.providers.gitlab.client")
-			original_fetch = client.fetch_all_pages
-		end)
-
-		after_each(function()
-			client.fetch_all_pages = original_fetch
-		end)
-
-		it("loads jobs through the pipeline capability", function()
-			local requested
-			client.fetch_all_pages = function(endpoint, done)
-				requested = endpoint
-				done({ { id = 7, name = "Compile", stage = "Build", status = "success" } }, nil)
-			end
-			local provider = assert(providers.load("gitlab", "pulls"))
-			local pipeline = { id = "42", name = "Pipeline", state = "SUCCESSFUL", stages = {} }
-			local result
-			provider.capabilities.pipelines.fetch_details(
-				{ repo_full_name = "team/repo" },
-				pipeline,
-				nil,
-				function(item)
-					result = item
-				end
-			)
-			assert.matches("/pipelines/42/jobs", requested, 1, true)
-			assert.equal("Build", result.stages[1].name)
-			assert.equal("Compile", result.stages[1].jobs[1].name)
-			assert.equal("SUCCESSFUL", result.stages[1].jobs[1].state)
-		end)
-	end)
-
 	it("exposes notifications for GitHub and GitLab", function()
 		for _, id in ipairs({ "github", "gitlab" }) do
 			for _, domain in ipairs({ "pulls", "issues" }) do

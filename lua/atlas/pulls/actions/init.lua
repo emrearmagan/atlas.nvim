@@ -416,8 +416,7 @@ M.open_pipelines = {
 		return pipeline_api.get(context.provider) ~= nil
 	end,
 	run = function(context, done)
-		require("atlas.pulls.ui.pipelines").open(assert(context.pr), context.provider)
-		notify(context, "success", "Opened Pipelines", 1200)
+		pipeline_api.open(assert(context.pr), context.provider)
 		done({ changed_pr = false, message = "Opened Pipelines" }, nil)
 	end,
 }

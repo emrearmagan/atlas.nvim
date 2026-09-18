@@ -342,8 +342,6 @@ function M.open(input, opts)
 	set_provider(provider)
 	state.on_update = opts.on_update
 
-	require("atlas.pulls.ui.highlights").setup()
-
 	if pr then
 		M.select(pr, { force_refresh = opts.force_refresh })
 		return

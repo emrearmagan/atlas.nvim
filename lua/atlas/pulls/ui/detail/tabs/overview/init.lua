@@ -10,6 +10,7 @@ local detail = require("atlas.pulls.ui.detail.state")
 local keymaps = require("atlas.pulls.ui.detail.tabs.overview.keymaps")
 local presentation = require("atlas.pulls.ui.presentation")
 local pipeline_api = require("atlas.pulls.pipelines")
+local pipeline_utils = require("atlas.pulls.pipelines.utils")
 local request_scope = require("atlas.core.requests")
 
 local PADDING_X = 1
@@ -83,7 +84,11 @@ function M.on_select(pr, refresh, opts)
 
 	if should_fetch_pipelines then
 		state.requests.run(function(done)
-			return pipelines.fetch(pr, opts, done)
+			return pipelines.fetch(
+				{ provider = pr.provider, repo_full_name = pr.repo_full_name, target = pr },
+				opts,
+				done
+			)
 		end, function(items, err)
 			if not is_current(pr) then
 				return
@@ -243,61 +248,7 @@ end
 
 -- Pipelines
 
-local PIPELINE_HL = {
-	SUCCESSFUL = "AtlasPipelineLinkSuccess",
-	FAILED = "AtlasPipelineLinkFailed",
-	INPROGRESS = "AtlasPipelineLinkInProgress",
-	STOPPED = "AtlasPipelineLinkMuted",
-}
-
-local PIPELINE_STATUS_LABEL = {
-	SUCCESSFUL = "Passed",
-	FAILED = "Failed",
-	INPROGRESS = "Running",
-	STOPPED = "Stopped",
-}
-
-local PIPELINE_STATUS_PRIORITY = {
-	FAILED = 1,
-	INPROGRESS = 2,
-	STOPPED = 3,
-	UNKNOWN = 4,
-	SUCCESSFUL = 5,
-}
-
 local MAX_OVERVIEW_JOBS = 5
-
----@param status string
----@return string
-local function status_label(status)
-	return PIPELINE_STATUS_LABEL[tostring(status or ""):upper()] or "Unknown"
-end
-
----@generic T: { state: string }
----@param items T[]
----@return T[]
-local function sort_by_status(items)
-	local indexed = {}
-	for index, item in ipairs(items) do
-		table.insert(indexed, { item = item, index = index })
-	end
-	table.sort(indexed, function(a, b)
-		local a_state = tostring(a.item.state or "UNKNOWN"):upper()
-		local b_state = tostring(b.item.state or "UNKNOWN"):upper()
-		local a_priority = PIPELINE_STATUS_PRIORITY[a_state] or PIPELINE_STATUS_PRIORITY.UNKNOWN
-		local b_priority = PIPELINE_STATUS_PRIORITY[b_state] or PIPELINE_STATUS_PRIORITY.UNKNOWN
-		if a_priority == b_priority then
-			return a.index < b.index
-		end
-		return a_priority < b_priority
-	end)
-
-	local sorted = {}
-	for _, entry in ipairs(indexed) do
-		table.insert(sorted, entry.item)
-	end
-	return sorted
-end
 
 ---@param _pr PullRequest
 ---@param width integer
@@ -326,7 +277,7 @@ local function render_pipelines(_pr, width, lines, spans, line_map)
 		return
 	end
 
-	local entries = sort_by_status(state.pipelines)
+	local entries = pipeline_utils.sort_by_state(state.pipelines)
 
 	if #entries == 0 then
 		return
@@ -340,7 +291,7 @@ local function render_pipelines(_pr, width, lines, spans, line_map)
 			table.insert(rows, { kind = "separator" })
 		end
 		local state_value = tostring(pipeline.state or "UNKNOWN"):upper()
-		local icon = icons.pulls_status(state_value:lower())
+		local icon, status_hl = icons.pulls_status(state_value:lower())
 		local label = pipeline.name
 		local job_count = tonumber(pipeline.job_count)
 		if job_count ~= nil then
@@ -348,8 +299,8 @@ local function render_pipelines(_pr, width, lines, spans, line_map)
 		end
 		local row = {
 			label = label,
-			status = string.format("%s %s", icon, status_label(state_value)),
-			status_hl = PIPELINE_HL[state_value] or "AtlasPipelineLinkMuted",
+			status = string.format("%s %s", icon, pipeline_utils.state_label(state_value)),
+			status_hl = status_hl,
 			kind = "pipeline",
 			pipeline = pipeline,
 			url = tostring(pipeline.url or ""),
@@ -366,33 +317,33 @@ local function render_pipelines(_pr, width, lines, spans, line_map)
 				has_named_stage = true
 			end
 		end
-		for _, pipeline_stage in ipairs(sort_by_status(pipeline.stages)) do
+		for _, pipeline_stage in ipairs(pipeline_utils.sort_by_state(pipeline.stages)) do
 			if pipeline_stage.name ~= nil then
 				local stage_state = tostring(pipeline_stage.state or "UNKNOWN"):upper()
-				local stage_icon = icons.pulls_status(stage_state:lower())
+				local stage_icon, stage_hl = icons.pulls_status(stage_state:lower())
 				table.insert(row.children, {
 					label = string.format("%s %s", stage_icon, pipeline_stage.name),
 					status = "",
 					status_icon = stage_icon,
-					status_hl = PIPELINE_HL[stage_state] or "AtlasPipelineLinkMuted",
+					status_hl = stage_hl,
 					kind = "stage",
 					pipeline = pipeline,
 					stage = pipeline_stage,
 				})
 			end
 		end
-		local sorted_jobs = sort_by_status(unnamed_jobs)
+		local sorted_jobs = pipeline_utils.sort_by_state(unnamed_jobs)
 		local visible_jobs = math.min(#sorted_jobs, MAX_OVERVIEW_JOBS)
 		for index = 1, visible_jobs do
 			local entry = sorted_jobs[index]
 			local job = entry.job
 			local job_state = tostring(job.state or "UNKNOWN"):upper()
-			local job_icon = icons.pulls_status(job_state:lower())
+			local job_icon, job_hl = icons.pulls_status(job_state:lower())
 			table.insert(row.children, {
 				label = string.format("%s %s", job_icon, job.name),
 				status = "",
 				status_icon = job_icon,
-				status_hl = PIPELINE_HL[job_state] or "AtlasPipelineLinkMuted",
+				status_hl = job_hl,
 				kind = "pipeline",
 				pipeline = pipeline,
 				stage = entry.stage,
@@ -421,7 +372,7 @@ local function render_pipelines(_pr, width, lines, spans, line_map)
 		column_gap = 1,
 		columns = {
 			{ key = "label", name = "", can_grow = true },
-			{ key = "status", name = "", can_grow = false },
+			{ key = "status", name = "", align = "right", can_grow = false },
 		},
 		rows = rows,
 		tree = {

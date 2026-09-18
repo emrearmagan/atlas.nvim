@@ -21,7 +21,7 @@ function M.new(web_base, request)
 			label = "Run pipeline",
 			icon = icons.action("run"),
 			is_available = function(ctx)
-				return ctx.pipeline.state ~= "INPROGRESS"
+				return ctx.pipeline.state ~= "INPROGRESS" and ctx.pipeline.state ~= "MANUAL"
 			end,
 			run = function(ctx, done)
 				local key = ctx.pipeline.id:match("^(.*)%-%d+$")

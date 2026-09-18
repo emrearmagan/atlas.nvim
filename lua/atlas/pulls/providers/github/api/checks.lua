@@ -1,10 +1,10 @@
-local M = {}
-
 local pipeline_utils = require("atlas.pulls.pipelines.utils")
 local cli = require("atlas.providers.github.client")
 local json = require("atlas.core.json")
 local github_pipelines = require("atlas.pulls.providers.github.api.pipelines")
 local request_scope = require("atlas.core.requests")
+
+local M = {}
 
 ---@class GitHubMergeState
 ---@field mergeable string
@@ -185,7 +185,11 @@ function M.fetch(pr, opts, on_done)
 			return fetch_merge_state(pr, done)
 		end,
 		pipelines = function(done)
-			return github_pipelines.fetch(pr, opts, done)
+			return github_pipelines.fetch({
+				provider = "github",
+				repo_full_name = pr.repo_full_name,
+				target = pr,
+			}, opts, done)
 		end,
 	}, function(results, errors)
 		local mc_result = results.merge_state

@@ -112,8 +112,6 @@ function M.init(provider, opts)
 	state.page_history = {}
 	state.collapsed_issue_keys = {}
 
-	require("atlas.issues.ui.highlights").setup()
-
 	state.starred_items = require("atlas.core.starred").list("issues", provider.id) or {}
 	local bookmarks = require("atlas.ui.shared.bookmarks")
 	state.bookmarks = bookmarks.new(provider.id, "issues")

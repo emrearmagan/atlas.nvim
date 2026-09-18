@@ -8,6 +8,7 @@ local notify = require("atlas.core.notify")
 local request_scope = require("atlas.core.requests")
 local detail = require("atlas.pulls.ui.detail.state")
 local pipeline_api = require("atlas.pulls.pipelines")
+local pipeline_utils = require("atlas.pulls.pipelines.utils")
 local keymaps = require("atlas.pulls.ui.detail.tabs.commits.keymaps")
 
 local PADDING_X = 1
@@ -49,31 +50,6 @@ local function is_current(pr)
 		and tostring(state.current_pr.repo_full_name or "") == tostring(pr.repo_full_name or "")
 end
 
----@param state_name string|nil
----@return string
-local function status_hl(state_name)
-	if state_name == "successful" then
-		return "AtlasTextPositive"
-	end
-	if state_name == "failed" then
-		return "AtlasLogError"
-	end
-	if state_name == "inprogress" then
-		return "AtlasTextWarning"
-	end
-	return "AtlasTextMuted"
-end
-
----@param status string
----@return string
-local function status_label(status)
-	local s = tostring(status or ""):lower()
-	if s == "" then
-		return "Unknown"
-	end
-	return s:sub(1, 1):upper() .. s:sub(2)
-end
-
 ---@param commit PullsCommit
 ---@param width integer
 ---@return AtlasThreadV2Item
@@ -91,7 +67,11 @@ local function to_thread_item(commit, width)
 	if pipeline_state == "loading" then
 		content = content .. "  " .. icons.pulls_status("inprogress") .. " pipelines"
 	elseif pipeline_state ~= nil and pipeline_state ~= "unknown" then
-		content = content .. "  " .. icons.pulls_status(pipeline_state) .. " " .. status_label(pipeline_state)
+		content = content
+			.. "  "
+			.. icons.pulls_status(pipeline_state)
+			.. " "
+			.. pipeline_utils.state_label(pipeline_state)
 	end
 
 	-- Truncate message to leave room for hash + icon + gaps
@@ -243,13 +223,14 @@ function M.render(_pr, _details, width)
 			local pipeline_state = item.meta and tostring(item.meta.pipeline_state or "") or ""
 
 			if pipeline_state ~= "" and pipeline_state ~= "unknown" and pipeline_state ~= "loading" then
-				local marker = icons.pulls_status(pipeline_state) .. " " .. status_label(pipeline_state)
+				local icon, hl = icons.pulls_status(pipeline_state)
+				local marker = icon .. " " .. pipeline_utils.state_label(pipeline_state)
 				local start_col, end_col = row:find(marker, 1, true)
 				if start_col ~= nil and end_col ~= nil then
 					table.insert(out, {
 						start_col = start_col - 1,
 						end_col = end_col,
-						hl_group = status_hl(pipeline_state),
+						hl_group = hl,
 					})
 				end
 			end

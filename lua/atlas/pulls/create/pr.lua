@@ -467,9 +467,6 @@ end
 
 ---@param opts CreatePROpenOpts
 function M.open(opts)
-	--- Atlas might not be open when this is called, so load the highlights.
-	require("atlas.pulls.ui.highlights").setup()
-
 	---@type CreatePRState
 	local pr_state = {
 		fields = {

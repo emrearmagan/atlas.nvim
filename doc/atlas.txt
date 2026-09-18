@@ -215,6 +215,12 @@ Use `ctx.output(title)` to show output from a custom action:
         Open a Git range (`base...head`) or pull-request URL in native
         AtlasDiff. Without a target, Atlas prompts for one.
 
+:Atlas pipelines [target|.]
+        Open pipelines by branch name, PR URL or number (`123`, `#123`, or
+        GitLab `!123`), or a GitHub Actions, GitLab pipeline, or Bitbucket
+        Pipelines build URL. Branch names use the local repository;
+        `.` uses the current branch.
+
 :Atlas notes [target]
         Open the local-notes manager, optionally filtered to a target.
 
@@ -226,8 +232,9 @@ Use `ctx.output(title)` to show output from a custom action:
         Search configured pull-request and issue providers.
 
 :Atlas open [target|.]
-        Open a provider URL or Jira key. A PR/issue number is resolved in the
-        current Git repository. Use `.` to open the current repository.
+        Open a provider URL or Jira key. A PR/issue number (`123` or `#123`)
+        or GitLab merge request (`!123`) is resolved in the current Git
+        repository. Use `.` to open the current repository.
         Without a target, Atlas prompts for one.
 
 :Atlas clear [cache|notes|stars]
@@ -325,6 +332,10 @@ use another backend:
           user = vim.env.BAMBOO_USER,
           password = vim.env.BAMBOO_PASSWORD,
         }),
+        highlights = {
+          { pattern = "^FAIL%s", level = "error" },
+          { pattern = "deprecated", level = "warn", hl_group = "DiagnosticWarn" },
+        },
       },
     },
   }
