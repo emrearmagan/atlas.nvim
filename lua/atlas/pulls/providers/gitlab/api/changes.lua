@@ -44,12 +44,12 @@ function M.fetch_commits(pr, opts, on_done)
 			local raw = json.safe_table(raw_value)
 			local hash = tostring(raw.id or "")
 			local short = tostring(raw.short_id or (hash ~= "" and hash:sub(1, 8) or ""))
-			local title = tostring(raw.title or raw.message or "")
+			local message = tostring(raw.message or raw.title or "")
 			table.insert(commits, {
 				hash = hash,
 				repo_full_name = path,
 				short_hash = short ~= "" and short or nil,
-				message = title:match("([^\r\n]+)") or title,
+				message = message,
 				author_name = tostring(raw.author_name or ""),
 				author_nickname = nil,
 				date = tostring(raw.authored_date or raw.committed_date or ""),

@@ -40,11 +40,15 @@ function M.fetch_commits(pr, _opts, on_done)
 				author_login = tostring(authors[1].login or "")
 			end
 
+			local headline = tostring(raw.messageHeadline or "")
+			local body = tostring(raw.messageBody or "")
+			local message = body ~= "" and (headline ~= "" and (headline .. "\n\n" .. body) or body) or headline
+
 			table.insert(commits, {
 				hash = hash,
 				repo_full_name = repo_slug,
 				short_hash = #hash > 7 and hash:sub(1, 7) or hash,
-				message = tostring(raw.messageHeadline or raw.messageBody or ""),
+				message = message,
 				author_name = author_name,
 				author_nickname = author_login,
 				date = tostring(raw.authoredDate or raw.committedDate or ""),
