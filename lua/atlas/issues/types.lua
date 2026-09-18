@@ -35,6 +35,8 @@
 
 ---@class IssueDetails
 ---@field description string
+--- Azure work-item formats: https://devblogs.microsoft.com/devops/markdown-support-arrives-for-work-items/
+---@field description_format string|nil Format of the displayed description.
 ---@field assignees IssueUser[]
 ---@field labels IssueLabel[]
 ---@field milestone IssueMilestone|nil
@@ -94,6 +96,7 @@
 ---@field url string|nil
 ---@field author IssueUser|nil
 ---@field body string|nil
+---@field body_display string|nil
 ---@field created string|nil
 ---@field updated string|nil
 ---@field parent_id string|number|nil

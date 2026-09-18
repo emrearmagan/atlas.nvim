@@ -196,6 +196,7 @@ return {
 			fetch_issues = fetch_issues,
 			fetch_by_refs = fetch_by_refs,
 			fetch_issue = issues_api.fetch_issue,
+			-- update_description = issues_api.update_description,
 			refresh = service.clear_memory_cache,
 		},
 		comments = {
@@ -207,8 +208,11 @@ return {
 			reply_comment = reply_comment,
 			edit_comment = edit_comment,
 			delete_comment = delete_comment,
+			-- add_reaction = comments_api.add_reaction,
+			-- reaction_options = {},
 			comment_completion = author_completion.for_issues,
 		},
+		-- notifications = notifications_api,
 		actions = actions,
 		ui = {
 			detail = detail_ui,

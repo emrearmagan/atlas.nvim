@@ -1,4 +1,4 @@
-*atlas.txt*  Pull requests and issues in Neovim   Last change: 2026 Aug 30
+*atlas.txt*  Pull requests and issues in Neovim   Last change: 2026 Sep 08
 
 Author: Emre Armagan
 License: MIT
@@ -16,18 +16,20 @@ CONTENTS                                                       *atlas-contents*
      GitHub ................................. |atlas-pulls-github|
      Bitbucket .............................. |atlas-pulls-bitbucket|
      GitLab ................................. |atlas-pulls-gitlab|
+     Azure DevOps ........................... |atlas-pulls-azure|
   6. Issues ................................. |atlas-issues|
      Jira ................................... |atlas-issues-jira|
      GitHub ................................. |atlas-issues-github|
      GitLab ................................. |atlas-issues-gitlab|
+     Azure DevOps ........................... |atlas-issues-azure|
   7. Events ................................. |atlas-events|
   8. Keymaps ................................ |atlas-keymaps|
 
 ==============================================================================
 1. INTRODUCTION                              *atlas* *atlas.nvim* *atlas-introduction*
 
-Review pull requests and manage issues across GitHub, GitLab, Bitbucket and Jira
-without leaving your editor.
+Review pull requests and manage issues across GitHub, GitLab, Bitbucket,
+Azure DevOps and Jira without leaving your editor.
 
 ==============================================================================
 2. INSTALLATION                                            *atlas-installation*
@@ -60,10 +62,11 @@ With vim.pack (Neovim 0.12+):
 REQUIREMENTS                                               *atlas-requirements*
 
   - Neovim 0.10+
-  - `git` and `curl` on `$PATH`
+  - `git` and `curl` 7.83+ on `$PATH`
   - For GitHub: the `gh` CLI, authenticated via `gh auth login`
   - For Bitbucket: Bitbucket Cloud API token (`api.bitbucket.org`)
   - For GitLab: REST API v4 and a Personal Access Token with the `api` scope
+  - For Azure DevOps: Personal Access Token (`dev.azure.com`)
   - For Jira: Cloud REST API v3 or Server REST API v2
 
 Run `:checkhealth atlas` after configuring providers to see what's wired
@@ -100,6 +103,13 @@ up and what's missing.
         -- Personal Access Token with `api` scope:
         -- https://docs.gitlab.com/ee/user/profile/personal_access_tokens.html
         token = vim.env.GITLAB_TOKEN,
+        cache_ttl = 300, -- Set to 0 to disable caching.
+      },
+      ---@type AtlasAzureConfig
+      azure = {
+        base_url = "https://dev.azure.com/your-organization",
+        -- https://learn.microsoft.com/en-us/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate
+        token = vim.env.AZURE_DEVOPS_TOKEN,
         cache_ttl = 300, -- Set to 0 to disable caching.
       },
       ---@type AtlasJiraConfig
@@ -245,7 +255,7 @@ Use `ctx.output(title)` to show output from a custom action:
 5. PULLS                                                          *atlas-pulls*
 
 Use `:Atlas pulls [provider]` to browse and manage pull requests from GitHub,
-Bitbucket, and GitLab. Shared authentication and endpoints are configured in
+Bitbucket, GitLab, and Azure DevOps. Shared authentication is configured in
 |atlas-configuration|.
 
 PULLS CONFIGURATION                              *atlas-pulls-configuration*
@@ -411,10 +421,41 @@ self-hosted URL.
 anything not covered by the explicit view fields.
 
 
+------------------------------------------------------------------------------
+AZURE DEVOPS PULLS                                          *atlas-pulls-azure*
+
+>lua
+  pulls = {
+    ---@type AtlasAzurePullsConfig
+    azure = {
+      views = {
+        {
+          name = "Reviewing",
+          key = "1",
+          layout = "grouped", -- "compact", "grouped", or "plain"
+          project = "YourProject",
+          repository = "YourRepository", -- Optional; defaults to all in project.
+          scope = "assigned_to_me",
+        },
+        {
+          name = "Created",
+          key = "2",
+          project = "YourProject",
+          scope = "created_by_me", -- Or "all".
+          extra_params = {
+            ["searchCriteria.targetRefName"] = "refs/heads/main",
+          },
+        },
+      },
+    },
+  }
+<
+
+==============================================================================
 6. ISSUES                                                        *atlas-issues*
 
-Use `:Atlas issues [provider]` to browse and manage Jira, GitHub, and GitLab
-issues. Shared authentication and endpoints are configured in
+Use `:Atlas issues [provider]` to browse and manage Jira, GitHub, GitLab, and
+Azure DevOps issues. Shared authentication and endpoints are configured in
 |atlas-configuration|.
 
 ISSUES CONFIGURATION                            *atlas-issues-configuration*
@@ -539,6 +580,39 @@ Uses the shared `providers.gitlab` authentication from |atlas-configuration|.
           ["No labels"] = { scope = "all", state = "opened",
                             extra_params = { ["not[labels]"] = "*" } },
           ["Closed"]    = { scope = "created_by_me", state = "closed" },
+        },
+      },
+    },
+  }
+<
+
+------------------------------------------------------------------------------
+AZURE DEVOPS WORK ITEMS                                   *atlas-issues-azure*
+
+Uses the shared `providers.azure` authentication from |atlas-configuration|.
+Views use flat WIQL queries.
+Syntax: https://learn.microsoft.com/en-us/azure/devops/boards/queries/wiql-syntax?view=azure-devops
+
+Azure supports both HTML and Markdown for work-item descriptions and comments.
+Pandoc (https://pandoc.org) is needed to view and edit HTML as Markdown.
+Saving converted content switches it to Markdown permanently.
+Descriptions: https://devblogs.microsoft.com/devops/markdown-support-arrives-for-work-items/
+Comments: https://learn.microsoft.com/en-us/rest/api/azure/devops/wit/comments/get-comments?view=azure-devops-rest-7.1#commentformat
+
+>lua
+  issues = {
+    ---@type AtlasAzureIssuesConfig
+    azure = {
+      views = {
+        {
+          name = "Assigned",
+          key = "1",
+          project = "YourProject",
+          search = [[
+            SELECT [System.Id] FROM WorkItems
+            WHERE [System.TeamProject] = @project AND [System.AssignedTo] = @Me
+            ORDER BY [System.ChangedDate] DESC
+          ]],
         },
       },
     },

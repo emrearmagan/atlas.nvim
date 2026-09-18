@@ -131,7 +131,36 @@ local function bitbucket_rows(pr)
 	return rows
 end
 
+local function azure_rows(pr)
+	---@cast pr AzurePullRequest
+	local rows = {}
+	local merge = {
+		notSet = "unknown",
+		queued = "inprogress",
+		conflicts = "failed",
+		succeeded = "successful",
+		rejectedByPolicy = "failed",
+		failure = "failed",
+	}
+	add(rows, "Merge", icons.pulls_status(merge[pr.merge_status] or "unknown"))
+
+	local reviewers = {}
+	local review = "inprogress"
+	for _, reviewer in ipairs(pr.reviewers or {}) do
+		reviewers[#reviewers + 1] = presentation.user_handle(reviewer)
+		if reviewer.decision == "changes_requested" then
+			review = "failed"
+		elseif reviewer.decision == "approved" and review == "inprogress" then
+			review = "successful"
+		end
+	end
+	add(rows, "Review", icons.pulls_status(review))
+	add(rows, "Reviewers", table.concat(reviewers, ", "))
+	return rows
+end
+
 local provider_rows = {
+	azure = azure_rows,
 	github = github_rows,
 	gitlab = gitlab_rows,
 	bitbucket = bitbucket_rows,
@@ -139,7 +168,7 @@ local provider_rows = {
 
 local function render(pr, rows)
 	local id = tostring(pr.id or "")
-	local marker = pr.provider == "gitlab" and "!" or "#"
+	local marker = (pr.provider == "gitlab" or pr.provider == "azure") and "!" or "#"
 
 	local lines = { string.format(" %s%s: %s", marker, id, tostring(pr.title or "")), "" }
 	---@type AtlasUIHighlight[]

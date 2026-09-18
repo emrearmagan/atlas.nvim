@@ -100,7 +100,7 @@ function M.activate(buf, refresh)
 							details.description = updated
 							notify.success("Description updated", { timeout = 1200 })
 							refresh()
-						end)
+						end, { format = details.description_format })
 					end,
 				})
 			end,
