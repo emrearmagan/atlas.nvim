@@ -1,6 +1,7 @@
 local M = {}
 
 local keymaps = require("atlas.pulls.ui.pipelines.keymaps")
+local pipeline_api = require("atlas.pulls.pipelines")
 local statusline = require("atlas.ui.statusline")
 local icons = require("atlas.ui.shared.icons")
 local spinner = require("atlas.ui.components.spinner")
@@ -389,7 +390,7 @@ local function fetch_log(session)
 	render(session)
 	start_spinner(session)
 
-	local pipelines = session.provider and session.provider.capabilities.pipelines
+	local pipelines = session.provider and pipeline_api.get(session.provider)
 	if not pipelines or not pipelines.fetch_job_log then
 		stop_spinner(session)
 		session.status = "error"

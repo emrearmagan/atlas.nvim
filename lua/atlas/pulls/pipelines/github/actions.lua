@@ -1,5 +1,5 @@
+local api = require("atlas.pulls.providers.github.api.pipelines")
 local icons = require("atlas.ui.shared.icons")
-local pipelines = require("atlas.pulls.providers.github.api.pipelines")
 
 ---@param pipeline PullsPipeline
 ---@return boolean
@@ -27,7 +27,7 @@ return {
 			return tonumber(ctx.pipeline.id) ~= nil and ctx.pipeline.state == "FAILED" and not is_running(ctx.pipeline)
 		end,
 		run = function(ctx, done)
-			pipelines.rerun(ctx.pr, ctx.pipeline, true, function(_, err)
+			api.rerun(ctx.pr, ctx.pipeline, true, function(_, err)
 				done(err)
 			end)
 		end,
@@ -40,7 +40,7 @@ return {
 			return tonumber(ctx.pipeline.id) ~= nil and not is_running(ctx.pipeline)
 		end,
 		run = function(ctx, done)
-			pipelines.rerun(ctx.pr, ctx.pipeline, false, function(_, err)
+			api.rerun(ctx.pr, ctx.pipeline, false, function(_, err)
 				done(err)
 			end)
 		end,
@@ -54,7 +54,7 @@ return {
 			return tonumber(ctx.pipeline.id) ~= nil and is_running(ctx.pipeline)
 		end,
 		run = function(ctx, done)
-			pipelines.cancel(ctx.pr, ctx.pipeline, function(_, err)
+			api.cancel(ctx.pr, ctx.pipeline, function(_, err)
 				done(err)
 			end)
 		end,
@@ -70,7 +70,7 @@ return {
 				and not is_running(ctx.pipeline)
 		end,
 		run = function(ctx, done)
-			pipelines.rerun_job(ctx.pr, ctx.job, function(_, err)
+			api.rerun_job(ctx.pr, ctx.job, function(_, err)
 				done(err)
 			end)
 		end,

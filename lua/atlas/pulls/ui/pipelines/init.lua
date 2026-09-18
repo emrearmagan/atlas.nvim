@@ -3,6 +3,7 @@ local M = {}
 local actions = require("atlas.pulls.ui.pipelines.actions")
 local keymaps = require("atlas.pulls.ui.pipelines.keymaps")
 local logs = require("atlas.pulls.ui.pipelines.logs")
+local pipeline_api = require("atlas.pulls.pipelines")
 local renderer = require("atlas.pulls.ui.pipelines.renderer")
 local notify = require("atlas.core.notify")
 local request_scope = require("atlas.core.requests")
@@ -173,8 +174,8 @@ local function fetch_pipeline_details(session, pipelines, force_refresh, on_done
 		on_done(pipelines, nil)
 		return
 	end
-	local capability = session.provider and session.provider.capabilities.pipelines
-	if not capability then
+	local backend = session.provider and pipeline_api.get(session.provider)
+	if not backend or not backend.fetch_details then
 		on_done(pipelines, nil)
 		return
 	end
@@ -184,7 +185,7 @@ local function fetch_pipeline_details(session, pipelines, force_refresh, on_done
 	local first_err
 	for index, pipeline in ipairs(pipelines) do
 		session.requests.run(function(done)
-			return capability.fetch_details(session.pr, pipeline, { force_refresh = force_refresh }, done)
+			return backend.fetch_details(session.pr, pipeline, { force_refresh = force_refresh }, done)
 		end, function(result, err)
 			if session.closed then
 				return
@@ -250,9 +251,8 @@ local function reload_pipelines(session, delay_ms, force_refresh)
 	if session.closed or session.refreshing then
 		return
 	end
-	local provider = session.provider
-	local pipelines_capability = provider and provider.capabilities.pipelines
-	if not pipelines_capability then
+	local backend = session.provider and pipeline_api.get(session.provider)
+	if not backend then
 		notify.warn("Pipeline refresh is not supported by this provider")
 		return
 	end
@@ -264,7 +264,7 @@ local function reload_pipelines(session, delay_ms, force_refresh)
 			return
 		end
 		session.requests.run(function(done)
-			return pipelines_capability.fetch(session.pr, { force_refresh = force_refresh ~= false }, done)
+			return backend.fetch(session.pr, { force_refresh = force_refresh ~= false }, done)
 		end, function(pipelines, err)
 			if session.closed then
 				return

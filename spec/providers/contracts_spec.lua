@@ -18,6 +18,11 @@ local function assert_contract(domain, expected_ids, provider_functions, core_fu
 		assert.equal(registered.name, provider.name)
 		assert_functions(provider, provider_functions, label)
 		assert_functions(provider.capabilities and provider.capabilities.core, core_functions, label .. ".core")
+		if domain == "pulls" then
+			local pipelines = provider.capabilities and provider.capabilities.pipelines
+			assert_functions(pipelines, { "fetch" }, label .. ".pipelines")
+			assert.equal("table", type(pipelines.actions), label .. ".pipelines.actions")
+		end
 	end
 	table.sort(ids)
 	assert.same(expected_ids, ids)
@@ -59,6 +64,43 @@ describe("providers contracts", function()
 		local reviews = assert(provider.capabilities.reviews)
 
 		assert_functions(reviews, { "fetch", "submit_review", "approve", "request_changes" }, "bitbucket.pulls.reviews")
+	end)
+
+	describe("native GitLab pipelines", function()
+		local client
+		local original_fetch
+
+		before_each(function()
+			client = require("atlas.providers.gitlab.client")
+			original_fetch = client.fetch_all_pages
+		end)
+
+		after_each(function()
+			client.fetch_all_pages = original_fetch
+		end)
+
+		it("loads jobs through the pipeline capability", function()
+			local requested
+			client.fetch_all_pages = function(endpoint, done)
+				requested = endpoint
+				done({ { id = 7, name = "Compile", stage = "Build", status = "success" } }, nil)
+			end
+			local provider = assert(providers.load("gitlab", "pulls"))
+			local pipeline = { id = "42", name = "Pipeline", state = "SUCCESSFUL", stages = {} }
+			local result
+			provider.capabilities.pipelines.fetch_details(
+				{ repo_full_name = "team/repo" },
+				pipeline,
+				nil,
+				function(item)
+					result = item
+				end
+			)
+			assert.matches("/pipelines/42/jobs", requested, 1, true)
+			assert.equal("Build", result.stages[1].name)
+			assert.equal("Compile", result.stages[1].jobs[1].name)
+			assert.equal("SUCCESSFUL", result.stages[1].jobs[1].state)
+		end)
 	end)
 
 	it("exposes notifications for GitHub and GitLab", function()
