@@ -109,8 +109,8 @@ function M.render(tab_items, get_tab_module)
 		local chip_lines, chip_spans = chips.render(pr, {
 			width = width,
 			extra_chips = extra_chips,
-			pipelines = state.pipelines,
-			loading = state.details_loading or state.pipelines == "loading",
+			checks = state.merge_checks,
+			loading = state.details_loading,
 		})
 		if #chip_lines > 0 then
 			utils.append_block(lines, spans, { lines = chip_lines, highlights = chip_spans })
