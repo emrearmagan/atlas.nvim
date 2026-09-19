@@ -9,6 +9,9 @@
 ---@field project JiraIssueProject|nil
 ---@field priority string|nil
 
+---@class JiraIssueStatus : IssueStatus
+---@field category string|nil
+
 ---@class JiraIssueCustomField
 ---@field name string
 ---@field formatted string
@@ -28,8 +31,14 @@ local comments_api = require("atlas.issues.providers.jira.api.comments")
 local config = require("atlas.config")
 local detail_ui = require("atlas.issues.providers.jira.ui.detail")
 local issues_api = require("atlas.issues.providers.jira.api.issues")
+local projects_api = require("atlas.issues.providers.jira.api.projects")
 local service = require("atlas.issues.providers.jira.api.service")
 local users_api = require("atlas.issues.providers.jira.api.users")
+local requests = require("atlas.core.requests")
+local notify = require("atlas.core.notify")
+local icons = require("atlas.ui.shared.icons")
+
+local CATEGORY_ORDER = { new = 1, indeterminate = 2, done = 3 }
 
 ---@param view IssuesViewConfig
 ---@return string
@@ -63,17 +72,58 @@ local function fetch_issues(view, opts, on_done)
 		return nil
 	end
 
-	return issues_api.search_issues(jql, function(page, err)
+	local scope = requests.new()
+	scope.run(function(done)
+		return issues_api.search_issues(jql, done, {
+			force_refresh = opts.force_refresh == true,
+			pagelen = opts.pagelen,
+			cursor = opts.cursor,
+		})
+	end, function(page, err)
 		if err or page == nil then
 			on_done({ items = {} }, err or "Failed to fetch issues")
 			return
 		end
-		on_done(page, nil)
-	end, {
-		force_refresh = opts.force_refresh == true,
-		pagelen = opts.pagelen,
-		cursor = opts.cursor,
-	})
+		if view.layout ~= "board" then
+			on_done(page, nil)
+			return
+		end
+		local projects = {}
+		for _, issue in ipairs(page.items) do
+			local project = issue.project and (issue.project.id or issue.project.key)
+			if project and project ~= "" then
+				projects[project] = function(done)
+					return projects_api.get_statuses(project, done)
+				end
+			end
+		end
+		scope.all(projects, function(results, errors)
+			---@type JiraIssueStatus[]
+			local statuses = {}
+			for _, result in pairs(results) do
+				vim.list_extend(statuses, result)
+			end
+			table.sort(statuses, function(a, b)
+				local a_rank, b_rank = CATEGORY_ORDER[a.category] or 4, CATEGORY_ORDER[b.category] or 4
+				if a_rank ~= b_rank then
+					return a_rank < b_rank
+				end
+				if a.name:lower() ~= b.name:lower() then
+					return a.name:lower() < b.name:lower()
+				end
+				return a.id < b.id
+			end)
+			for _, status in ipairs(statuses) do
+				local icon = icons.issues_status(status.category, status.name)
+				status.name = icon ~= "" and (icon .. " " .. status.name) or status.name
+			end
+			if next(errors) then
+				notify.warn("Failed to load board statuses: " .. table.concat(vim.tbl_values(errors), "; "))
+			end
+			on_done(vim.tbl_extend("force", page, { statuses = statuses }), nil)
+		end)
+	end)
+	return { cancel = scope.cancel }
 end
 
 ---@param refs IssueRef[]

@@ -45,20 +45,12 @@ local function transition(ctx, done)
 	local current_status = tostring(issue.status or "")
 	local all_items = nil
 
-	local status_category_icons = {
-		new = icons.fallback(),
-		indeterminate = icons.general("info"),
-		done = icons.general("success"),
-	}
-
 	picker.search({
 		title = string.format("Transition %s", issue_key),
 		debounce_ms = 0,
 		format_item = function(item)
-			local transition_value = item.value
-			local category = transition_value.to_status_category
-			local icon = (category and status_category_icons[category]) or icons.fallback()
-			return string.format("%s %s", icon, item.label)
+			local icon = icons.issues_status(item.value.to_status_category, item.label)
+			return icon ~= "" and string.format("%s %s", icon, item.label) or item.label
 		end,
 		fetch = function(query, fetch_done)
 			if all_items then
@@ -89,7 +81,7 @@ local function transition(ctx, done)
 					if current_status == "" or to_status == "" or to_status ~= current_status then
 						table.insert(all_items, {
 							id = tostring(candidate.id or ""),
-							label = tostring(candidate.name or ""),
+							label = to_status,
 							value = candidate,
 						})
 					end
@@ -107,10 +99,7 @@ local function transition(ctx, done)
 					return
 				end
 
-				notify.success(
-					string.format("Transitioned %s to %s", issue_key, selected.name or ""),
-					{ timeout = 1200 }
-				)
+				notify.success(string.format("Transitioned %s to %s", issue_key, item.label), { timeout = 1200 })
 				done({ issue_key = issue_key }, nil)
 			end)
 		end,

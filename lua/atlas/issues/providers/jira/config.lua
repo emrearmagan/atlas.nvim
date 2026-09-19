@@ -69,6 +69,7 @@
 ---@class AtlasJiraProjectConfig
 ---@field story_points_field string|nil
 ---@field issue_types AtlasJiraIssueTypesConfig|nil
+---@field status_icons table<string, string>|nil Icons by status name or category (new, indeterminate, done).
 ---@field [string] AtlasJiraProjectFieldsConfig
 
 ---@class AtlasJiraBookmarkConfig : AtlasIssuesBookmarkConfig

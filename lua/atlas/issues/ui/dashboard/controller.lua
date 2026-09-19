@@ -106,7 +106,7 @@ end
 ---@param view IssuesViewConfig
 ---@return boolean
 local function relationships_enabled(view)
-	return view.layout ~= "compact" and issues_config().with_relationships ~= false
+	return view.layout ~= "compact" and view.layout ~= "board" and issues_config().with_relationships ~= false
 end
 
 ---@param issues Issue[]
@@ -631,6 +631,10 @@ function M.update_issue(issue)
 end
 
 function M.toggle_current_issue_collapsed()
+	local view = state.search_view()
+	if view and view.layout == "board" then
+		return
+	end
 	local node = navigation.current_item()
 	if type(node) ~= "table" or node.kind ~= "issue" or type(node._issue) ~= "table" then
 		return
@@ -641,6 +645,10 @@ function M.toggle_current_issue_collapsed()
 end
 
 function M.toggle_all_issues_collapsed()
+	local view = state.search_view()
+	if view and view.layout == "board" then
+		return
+	end
 	if state.toggle_all_issues_collapsed() then
 		render_if_active()
 	end

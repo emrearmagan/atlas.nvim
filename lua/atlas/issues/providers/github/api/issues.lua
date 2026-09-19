@@ -38,6 +38,35 @@ query($search: String!, $limit: Int!, $after: String) {
 }
 ]] .. ISSUE_FIELDS_GQL .. ISSUE_REF_FIELDS_GQL
 
+local PROJECT_GQL = [[
+query($owner: String!, $number: Int!, $field: String!, $search: String!, $limit: Int!, $after: String) {
+  repositoryOwner(login: $owner) {
+    ... on ProjectV2Owner {
+      projectV2(number: $number) {
+        field(name: $field) {
+          ... on ProjectV2SingleSelectField { options { id name } }
+        }
+        items(first: $limit, after: $after, query: $search) {
+          nodes {
+            status: fieldValueByName(name: $field) {
+              ... on ProjectV2ItemFieldSingleSelectValue { optionId }
+            }
+            content {
+              ... on Issue {
+                ...IssueFields
+                parent { ...IssueRefFields }
+              }
+            }
+          }
+          totalCount
+          pageInfo { hasNextPage endCursor }
+        }
+      }
+    }
+  }
+}
+]] .. ISSUE_FIELDS_GQL .. ISSUE_REF_FIELDS_GQL
+
 local DETAIL_GQL = [[
 query($owner: String!, $repo: String!, $number: Int!, $withRelationships: Boolean!) {
   repository(owner: $owner, name: $repo) {
@@ -126,6 +155,72 @@ function M.search_issues(search, on_done, opts)
 	})
 end
 
+---@param project AtlasGitHubIssuesProjectConfig
+---@param search string Project filter query.
+---@param on_done fun(page: IssuesPage, err: string|nil)
+---@param opts IssuesFetchOpts
+---@return { cancel: fun() }|nil
+function M.search_project_issues(project, search, on_done, opts)
+	project = type(project) == "table" and project or {}
+	local owner, number = vim.trim(tostring(project.owner or "")), tonumber(project.number)
+	if owner == "" or not number or number < 1 or number % 1 ~= 0 then
+		on_done({ items = {} }, "GitHub project requires an owner and a positive project number")
+		return nil
+	end
+	local field = project.status_field or "Status"
+	local limit = math.max(1, math.min(100, opts.pagelen or 50))
+	local cache_key = string.format(
+		"github_issues:project:v2:%s:%d:%s:%s:%d:%s",
+		owner,
+		number,
+		field,
+		search,
+		limit,
+		opts.cursor or "first"
+	)
+	if not opts.force_refresh then
+		local cached, ok = cli.get_cache(cache_key)
+		if ok then
+			on_done(cached, nil)
+			return nil
+		end
+	end
+	local args = {
+		"api",
+		"graphql",
+		"-f",
+		"query=" .. vim.trim(PROJECT_GQL),
+		"-f",
+		"owner=" .. owner,
+		"-F",
+		"number=" .. number,
+		"-f",
+		"field=" .. field,
+		"-f",
+		"search=" .. search,
+		"-F",
+		"limit=" .. limit,
+	}
+	if opts.cursor then
+		vim.list_extend(args, { "-f", "after=" .. opts.cursor })
+	end
+	return cli.gh(args, function(result, err)
+		if err or type(result) ~= "table" then
+			on_done({ items = {} }, err or "Failed to fetch GitHub project")
+			return
+		end
+		local data = json.safe_table(result.data)
+		local value = json.nilify(json.safe_table(data.repositoryOwner).projectV2)
+		if not value then
+			on_done({ items = {} }, "GitHub project not found or inaccessible")
+			return
+		end
+		local page = normalizer.to_project_page(value, limit)
+		cli.set_cache(cache_key, page)
+		on_done(page, nil)
+	end, { action = "Fetch project issues", owner = owner, number = number })
+end
+
 ---@param key string
 ---@param on_done fun(details: IssueDetails|nil, err: string|nil)
 ---@param opts { force_refresh?: boolean }|nil
@@ -196,13 +291,20 @@ function M.fetch_by_refs(refs, _opts, on_done)
 	local queries = {}
 
 	for _, ref in ipairs(refs) do
+		---@cast ref GitHubIssue
 		local slug, number = normalizer.parse_key(ref.key)
 		local owner, repo = slug:match("^([^/]+)/(.+)$")
 		if number == nil or owner == nil or repo == nil then
 			on_done({}, "Invalid issue key: " .. tostring(ref.key))
 			return nil
 		end
-		table.insert(queries, { slug = slug, owner = owner, repo = repo, number = number })
+		table.insert(queries, {
+			slug = slug,
+			owner = owner,
+			repo = repo,
+			number = number,
+			project_status_id = ref.project_status_id,
+		})
 	end
 
 	if #queries == 0 then
@@ -263,6 +365,7 @@ function M.fetch_by_refs(refs, _opts, on_done)
 			local raw = type(repository) == "table" and json.nilify(repository.issue) or nil
 			local issue = normalizer.to_issue(raw, ref.slug)
 			if issue then
+				issue.project_status_id = ref.project_status_id
 				table.insert(issues, issue)
 			end
 		end
