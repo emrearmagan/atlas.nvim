@@ -19,7 +19,7 @@ local function assert_contract(domain, expected_ids, provider_functions, core_fu
 		assert_functions(provider, provider_functions, label)
 		assert_functions(provider.capabilities and provider.capabilities.core, core_functions, label .. ".core")
 		if domain == "pulls" then
-			local pipelines = provider.capabilities and provider.capabilities.pipelines
+			local pipelines = assert(provider.capabilities and provider.capabilities.pipelines)
 			assert_functions(pipelines, { "fetch" }, label .. ".pipelines")
 			assert.equal("table", type(pipelines.actions), label .. ".pipelines.actions")
 		end

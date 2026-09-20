@@ -303,7 +303,6 @@ end
 function M.open(context, backend, opts)
 	opts = opts or {}
 	vim.cmd("tabnew")
-	---@type PullsPipelinesSession
 	local session = {
 		tab = vim.api.nvim_get_current_tabpage(),
 		closed = false,
@@ -312,6 +311,7 @@ function M.open(context, backend, opts)
 		logs = { context = context, backend = backend, collapsed = {}, line_map = {}, entry_rows = {} },
 		config = { context = context, backend = backend },
 	}
+	---@cast session PullsPipelinesSession
 	setup_buffers(session)
 	setup_windows(session)
 	setup_events(session)

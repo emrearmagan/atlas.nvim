@@ -199,11 +199,10 @@ local function fetch_jobs(scope, raw_pipeline, request_context, on_done)
 end
 
 ---@param context PullsPipelineContext
----@param pipeline PullsPipeline
+---@param pipeline { id: string, project_path?: string }
 ---@param on_done fun(pipelines: PullsPipeline[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 local function fetch_pipeline(context, pipeline, on_done)
-	---@cast pipeline GitLabPipeline
 	local id = tonumber(pipeline.id)
 	local path = pipeline.project_path or context.repo_full_name
 	if id == nil then
@@ -239,13 +238,14 @@ local function fetch_pipeline(context, pipeline, on_done)
 end
 
 ---@param context PullsPipelineContext
----@param opts { force_refresh: boolean|nil, pipeline: PullsPipeline|nil }|nil
+---@param opts { force_refresh?: boolean|nil, pipeline?: PullsPipeline }|nil
 ---@param on_done fun(pipelines: PullsPipeline[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch(context, opts, on_done)
 	local target = context.target
 	local selected = (opts or {}).pipeline or (type(target) == "table" and target.stages and target or nil)
 	if selected then
+		---@cast selected PullsPipeline
 		return fetch_pipeline(context, selected, on_done)
 	end
 
@@ -285,6 +285,7 @@ function M.fetch(context, opts, on_done)
 	end
 
 	if not pr then
+		---@cast branch string
 		local endpoint = string.format(
 			"/projects/%s/pipelines?ref=%s&per_page=1&order_by=id&sort=desc",
 			service.url_encode(path),
@@ -358,7 +359,7 @@ function M.fetch_history(context, pipeline, on_done)
 		or string.format(
 			"/projects/%s/pipelines?ref=%s&per_page=30&order_by=id&sort=desc",
 			service.url_encode(path),
-			service.url_encode(branch)
+			service.url_encode(branch --[[@as string]])
 		)
 	return service.request("GET", endpoint, nil, function(result, err)
 		if err then
@@ -491,6 +492,10 @@ end
 ---@return { cancel: fun() }|nil
 function M.fetch_commit_status(commit, opts, on_done)
 	local path = commit.repo_full_name
+	if not path or path == "" then
+		on_done(nil, nil, "Missing project")
+		return nil
+	end
 	local cache_key = string.format("gitlab_pulls:commit_status:%s:%s", path, commit.hash)
 	if not (opts or {}).force_refresh then
 		local cached, ok = service.get_memory_cache(cache_key)
@@ -507,6 +512,7 @@ function M.fetch_commit_status(commit, opts, on_done)
 			on_done(nil, nil, err)
 			return
 		end
+		---@cast result table[]
 		local statuses, url = {}, nil
 		for _, item in ipairs(result) do
 			table.insert(statuses, { state = M.to_pipeline_state(item.status) })

@@ -10,19 +10,18 @@ describe("pipeline logs", function()
 
 	before_each(function()
 		original_strptime, original_hlexists = vim.fn.strptime, vim.fn.hlexists
-		vim.fn.strptime = function(_, value)
+		rawset(vim.fn, "strptime", function(_, value)
 			local times = {
 				["2026-09-20T14:30:12+0000"] = 100,
 				["2026-09-20T14:30:15+0000"] = 103,
 				["20-Sep-2026 14:30:12"] = 100,
 				["20-Sep-2026 14:30:15"] = 103,
 			}
-			assert.is_not_nil(times[value], value)
-			return times[value]
-		end
-		vim.fn.hlexists = function(name)
+			return assert(times[value], value)
+		end)
+		rawset(vim.fn, "hlexists", function(name)
 			return name == "CustomLog" and 1 or 0
-		end
+		end)
 	end)
 
 	after_each(function()
@@ -194,11 +193,13 @@ describe("pipeline logs", function()
 	end)
 
 	it("lets the last valid custom rule override defaults and ignores invalid rules", function()
+		---@type table
+		local invalid_rule = { pattern = ".*", level = "invalid" }
 		local format, counts = highlights.new({
 			{ pattern = "^Error:", level = "warn" },
 			{ pattern = "^Error:", level = "info", hl_group = "CustomLog" },
 			{ pattern = "[", level = "error" },
-			{ pattern = ".*", level = "invalid" },
+			invalid_rule,
 			{ pattern = ".*", hl_group = "MissingHighlight" },
 		})
 		assert.same({ "Error: Broken", { { start_col = 0, end_col = 13, hl_group = "CustomLog" } } }, {

@@ -173,8 +173,9 @@ local function build_content(pane)
 	local options = config.provider_options(pane.context.provider) or {}
 	local format, counts = highlights.new(options.ci and options.ci.highlights)
 	local prepared = {}
-	if selection.job and type(pane.log) == "table" then
-		prepare_entries(pane.log, format, prepared)
+	local log = pane.log
+	if selection.job and type(log) == "table" then
+		prepare_entries(log, format, prepared)
 		pane.counts = counts
 	end
 

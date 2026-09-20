@@ -92,6 +92,7 @@ end
 ---@param opts { selected_pipeline?: PullsPipeline, selected_stage?: PullsPipelineStage, selected_job?: PullsPipelineJob }|nil
 function M.open(context, provider, opts)
 	if context.source then
+		---@cast context PullRequest
 		context = { provider = context.provider, repo_full_name = context.repo_full_name, target = context }
 	end
 	---@cast context PullsPipelineContext

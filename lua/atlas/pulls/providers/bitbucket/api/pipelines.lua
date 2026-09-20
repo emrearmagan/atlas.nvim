@@ -298,13 +298,14 @@ function M.fetch_history(context, pipeline, on_done)
 end
 
 ---@param context PullsPipelineContext
----@param opts { force_refresh: boolean|nil, pipeline: PullsPipeline|nil }|nil
+---@param opts { force_refresh?: boolean|nil, pipeline?: PullsPipeline }|nil
 ---@param on_done fun(pipelines: PullsPipeline[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch(context, opts, on_done)
 	local target = context.target
 	local selected = (opts or {}).pipeline or (type(target) == "table" and target.stages and target or nil)
 	if selected then
+		---@cast selected PullsPipeline
 		return fetch_pipeline(context, selected, function(pipeline, err)
 			on_done(pipeline and { pipeline } or nil, err)
 		end)

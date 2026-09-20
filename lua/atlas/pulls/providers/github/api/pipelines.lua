@@ -498,7 +498,7 @@ local function fetch_run(context, pipeline, on_done)
 end
 
 ---@param context PullsPipelineContext
----@param opts { force_refresh: boolean|nil, pipeline: PullsPipeline|nil }|nil
+---@param opts { force_refresh?: boolean|nil, pipeline?: PullsPipeline }|nil
 ---@param on_done fun(pipelines: PullsPipeline[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch(context, opts, on_done)
@@ -512,6 +512,7 @@ function M.fetch(context, opts, on_done)
 	local target = context.target
 	local pipeline = opts.pipeline or (type(target) == "table" and target.stages and target or nil)
 	if pipeline then
+		---@cast pipeline PullsPipeline
 		return fetch_run(context, pipeline, on_done)
 	end
 	local pr = type(target) == "table" and target.source and target or nil
@@ -647,7 +648,7 @@ function M.fetch_config(_context, pipeline, on_done)
 	---@cast pipeline GitHubPipeline
 	local file = pipeline.workflow_file
 	local repo, ref = (file and file.repositoryFileUrl or ""):match("^https?://[^/]+/([^/]+/[^/]+)/blob/([^/]+)/")
-	if not repo then
+	if not file or not repo then
 		on_done(nil, "No workflow file available for this pipeline")
 		return nil
 	end
@@ -734,6 +735,7 @@ function M.fetch_commit_status(commit, opts, on_done)
 	if not (opts or {}).force_refresh then
 		local cached, ok = cli.get_mem(cache_key)
 		if ok then
+			---@cast cached { status: string, url?: string }
 			on_done(cached.status, cached.url, nil)
 			return nil
 		end

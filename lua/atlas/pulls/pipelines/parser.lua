@@ -64,8 +64,9 @@ end
 ---@param parse PullsPipelineParse|nil
 ---@return (PullsLogLine|PullsLogGroup)[]
 function M.parse(log, parse)
-	log.lines = clean_lines(log.raw)
-	return parse and parse(log) or log.lines
+	local lines = clean_lines(log.raw)
+	log.lines = lines
+	return parse and parse(log) or lines
 end
 
 return M

@@ -52,11 +52,12 @@ end
 ---@param pane PullsPipelinesLogs
 ---@param target PullsLogLine|PullsLogGroup
 function M.jump(pane, target)
-	if type(pane.log) ~= "table" or not utils.window.valid(pane.win) then
+	local log = pane.log
+	if type(log) ~= "table" or not utils.window.valid(pane.win) then
 		return
 	end
 	if not pane.show_raw then
-		if not reveal(pane.log, target, pane.collapsed) then
+		if not reveal(log, target, pane.collapsed) then
 			return
 		end
 	end
@@ -72,12 +73,13 @@ end
 ---@param pane PullsPipelinesLogs
 local function jump_to_step(pane)
 	local selection = pane.selection
+	local log = pane.log
 	local resolve = pane.backend and pane.backend.step_target
-	if not selection or not selection.job or not selection.step or type(pane.log) ~= "table" or not resolve then
+	if not selection or not selection.job or not selection.step or type(log) ~= "table" or not resolve then
 		return
 	end
 	local step = selection.job.steps and selection.job.steps[selection.step]
-	local entries = pane.show_raw and pane.source.lines or pane.log
+	local entries = pane.show_raw and pane.source.lines or log
 	local target = step and resolve(entries, step)
 	if target then
 		M.jump(pane, target)

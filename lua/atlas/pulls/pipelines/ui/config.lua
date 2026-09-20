@@ -28,8 +28,12 @@ end
 ---@param pane PullsPipelinesConfig
 function M.render(pane)
 	local file = pane.file
-	local content = type(file) == "table" and file.content or (file ~= "loading" and file or "")
-	local path = type(file) == "table" and file.path or "Configuration"
+	local content, path = "", "Configuration"
+	if type(file) == "table" then
+		content, path = file.content, file.path
+	elseif type(file) == "string" and file ~= "loading" then
+		content = file
+	end
 	local filetype = type(file) == "table" and (vim.filetype.match({ filename = path }) or "") or ""
 	local lines = vim.split(content:gsub("\r\n", "\n"), "\n", { plain = true })
 	if lines[#lines] == "" then

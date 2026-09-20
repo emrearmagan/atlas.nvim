@@ -88,12 +88,13 @@ end
 ---@param opts? { repository?: AtlasTarget, domain?: AtlasDomain }
 ---@return AtlasTarget|nil, string|nil
 function M.resolve(value, opts)
+	opts = opts or {}
 	local cleaned = tostring(value or ""):gsub("^%s+", ""):gsub("%s+$", "")
 	cleaned = cleaned:match("^<(.*)>$") or cleaned
 
 	local prefix, number = cleaned:match("^([#!]?)(%d+)$")
 	if number then
-		local repository = opts and opts.repository
+		local repository = opts.repository
 		if not repository then
 			return nil, "A numeric reference requires a supported local Git repository"
 		end

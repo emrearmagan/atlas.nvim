@@ -73,6 +73,7 @@ function M.parse(log)
 			parent.group.duration = utils.duration(parent.group.timestamp, line.timestamp)
 			stack[#stack] = nil
 		elseif command == "start-action" then
+			---@cast value string
 			local action = properties(value)
 			local group = {
 				name = action.display,
@@ -82,6 +83,7 @@ function M.parse(log)
 			current[#current + 1] = group
 			stack[#stack + 1] = { group = group, id = action.id }
 		elseif command == "end-action" and parent then
+			---@cast value string
 			local action = properties(value)
 			if action.id == parent.id then
 				parent.group.state = STATES[action.conclusion]
@@ -137,12 +139,15 @@ local function find_groups(entries, name, range, matches)
 					(second ~= range.first or fraction >= range.fraction)
 					and (second ~= range.last or fraction <= range.fraction)
 				then
+					---@type string|nil
 					local title = entry.name
 					if not entry.entries then
+						---@cast entry PullsLogLine
 						local command, value = marker(entry, false)
 						if command == "group" then
 							title = value
 						elseif command == "start-action" then
+							---@cast value string
 							title = properties(value).display
 						end
 					end
