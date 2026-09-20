@@ -70,6 +70,7 @@
 
 ---@class IssuesUICapability
 ---@field detail IssuesProviderDetail|nil
+---@field repository { pages: fun(): RepositoryPage[] }|nil
 
 --------------------------------------------------------------------------------
 -- Detail interface

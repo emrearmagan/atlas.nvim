@@ -204,6 +204,9 @@ local function search(ctx, done)
 	end)
 end
 
+-- TODO: move down, don't keep at top.
+register(actions.browse_repository)
+
 register({
 	id = actions.approve.id,
 	label = actions.approve.label,

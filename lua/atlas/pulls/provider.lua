@@ -111,3 +111,4 @@
 ---@class PullsUICapability
 ---@field detail PullsProviderDetail|nil
 ---@field repo_detail PullsProviderRepoDetail|nil
+---@field repository { pages: fun(): RepositoryPage[] }|nil

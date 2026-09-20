@@ -3,6 +3,8 @@ local M = {}
 local icons = require("atlas.ui.shared.icons")
 local notify = require("atlas.core.notify")
 local picker = require("atlas.ui.picker")
+local providers = require("atlas.providers")
+local repository = require("atlas.ui.repository")
 local templates = require("atlas.issues.templates")
 local utils = require("atlas.issues.actions.utils")
 
@@ -13,6 +15,7 @@ local utils = require("atlas.issues.actions.utils")
 ---| "search"
 ---| "edit_search"
 ---| "browse_issue"
+---| "browse_repository"
 ---| "copy_issue_key"
 ---| "copy_issue_url"
 ---| "manage_templates"
@@ -116,6 +119,25 @@ function M.open(context, on_done, extra_items)
 		end,
 	})
 end
+
+M.browse_repository = {
+	id = "browse_repository",
+	label = "Browse Repository",
+	icon = icons.general("overview"),
+	is_available = function(context)
+		return context.issue ~= nil and context.issue.url ~= nil
+	end,
+	run = function(context, done)
+		local issue = assert(context.issue)
+		local target, err = providers.resolve(assert(issue.url))
+		if not target or not target.repo_full_name then
+			done(nil, err or "Missing repository info")
+			return
+		end
+		repository.open({ full_name = target.repo_full_name }, context.provider)
+		done(nil, nil)
+	end,
+}
 
 M.browse_issue = utils.browse_issue
 M.copy_issue_key = utils.copy_issue_key

@@ -5,6 +5,7 @@ local icons = require("atlas.ui.shared.icons")
 local md_editor = require("atlas.ui.popups.editor")
 local picker = require("atlas.ui.picker")
 local pipeline_api = require("atlas.pulls.pipelines")
+local repository = require("atlas.ui.repository")
 local review = require("atlas.pulls.actions.review")
 local utils = require("atlas.pulls.actions.utils")
 local ui_utils = require("atlas.ui.shared.utils")
@@ -21,6 +22,7 @@ local notify = utils.notify
 ---| "copy_url"
 ---| "open_in_browser"
 ---| "open_pipelines"
+---| "browse_repository"
 ---| "open_diff"
 ---| "checkout"
 ---| "merge"
@@ -402,6 +404,18 @@ M.edit_reviewers = {
 				end,
 			})
 		end)
+	end,
+}
+
+M.browse_repository = {
+	id = "browse_repository",
+	label = "Browse Repository",
+	icon = icons.general("overview"),
+	is_available = has_pr,
+	run = function(context, done)
+		local pr = assert(context.pr)
+		repository.open({ full_name = pr.repo_full_name }, context.provider)
+		done({ changed_pr = false }, nil)
 	end,
 }
 

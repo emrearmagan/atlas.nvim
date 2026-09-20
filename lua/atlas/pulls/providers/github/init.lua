@@ -26,6 +26,7 @@ local reviews_api = require("atlas.pulls.providers.github.api.reviews")
 local search_query = require("atlas.providers.github.query")
 local ui_detail = require("atlas.pulls.providers.github.ui.detail")
 local ui_repo_detail = require("atlas.pulls.providers.github.ui.repo_detail")
+local ui_repository = require("atlas.providers.github.ui.repository")
 local users_api = require("atlas.pulls.providers.github.api.users")
 local git = require("atlas.core.git")
 
@@ -181,6 +182,7 @@ return {
 		ui = {
 			detail = ui_detail,
 			repo_detail = ui_repo_detail,
+			repository = ui_repository,
 		},
 	},
 }

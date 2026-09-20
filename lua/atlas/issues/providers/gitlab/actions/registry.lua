@@ -591,6 +591,9 @@ local function toggle_subscription(ctx, done)
 	})
 end
 
+-- TODO: move down, don't keep at top.
+register(actions.browse_repository)
+
 register({
 	id = "close",
 	label = "Close Issue",

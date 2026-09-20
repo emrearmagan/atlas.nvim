@@ -25,6 +25,7 @@ local links_api = require("atlas.providers.github.links")
 local notifications_api = require("atlas.providers.github.notifications")
 local timeline_api = require("atlas.issues.providers.github.api.timeline")
 local ui_detail = require("atlas.issues.providers.github.ui.detail")
+local ui_repository = require("atlas.providers.github.ui.repository")
 local users_api = require("atlas.issues.providers.github.api.users")
 local git = require("atlas.core.git")
 
@@ -271,6 +272,7 @@ return {
 		actions = actions,
 		ui = {
 			detail = ui_detail,
+			repository = ui_repository,
 		},
 	},
 }

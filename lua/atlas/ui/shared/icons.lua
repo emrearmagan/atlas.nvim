@@ -16,6 +16,7 @@ local ICONS = {
 		folder_closed = { icon = "", hl_group = "AtlasLogInfo" },
 		folder_open = { icon = "", hl_group = "AtlasLogInfo" },
 		overview = { icon = "", hl_group = "AtlasTextMuted" },
+		deployment = { icon = "", hl_group = "AtlasTextMuted" },
 		comment = { icon = "", hl_group = "AtlasTextMuted" },
 		conversation = { icon = "", hl_group = "AtlasTextMuted" },
 		link = { icon = "", hl_group = "AtlasTextMuted" },
