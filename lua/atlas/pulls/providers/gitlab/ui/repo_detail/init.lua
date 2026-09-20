@@ -5,33 +5,33 @@ local icons = require("atlas.ui.shared.icons")
 
 ---@return PullsRepoDetailTab[]
 function M.tabs()
-	local overview_icon, overview_hl = icons.general("overview")
-	local issue_icon, issue_hl = icons.issues_provider("gitlab", "issue")
-	local branch_icon, branch_hl = icons.pulls("branch")
-	local tag_icon, tag_hl = icons.pulls("tag")
+	local overview_icon = icons.general("overview")
+	local issue_icon = icons.issues_provider("gitlab", "issue")
+	local branch_icon = icons.pulls("branch")
+	local tag_icon = icons.pulls("tag")
 	return {
 		{
 			key = "overview",
 			label = "Overview",
-			icon = { icon = overview_icon, hl_group = overview_hl },
+			icon = { icon = overview_icon },
 			mod = require("atlas.pulls.ui.repo_detail.tabs.overview"),
 		},
 		{
 			key = "issues",
 			label = "Issues",
-			icon = { icon = issue_icon, hl_group = issue_hl },
+			icon = { icon = issue_icon },
 			mod = require("atlas.pulls.ui.repo_detail.tabs.issues"),
 		},
 		{
 			key = "branches",
 			label = "Branches",
-			icon = { icon = branch_icon, hl_group = branch_hl },
+			icon = { icon = branch_icon },
 			mod = require("atlas.pulls.ui.repo_detail.tabs.branches"),
 		},
 		{
 			key = "tags",
 			label = "Tags",
-			icon = { icon = tag_icon, hl_group = tag_hl },
+			icon = { icon = tag_icon },
 			mod = require("atlas.pulls.ui.repo_detail.tabs.tags"),
 		},
 	}

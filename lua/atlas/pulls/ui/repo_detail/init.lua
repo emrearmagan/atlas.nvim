@@ -8,27 +8,27 @@ local icons = require("atlas.ui.shared.icons")
 local notify = require("atlas.core.notify")
 local request_scope = require("atlas.core.requests")
 
-local overview_icon, overview_icon_hl = icons.general("overview")
-local branch_icon, branch_icon_hl = icons.pulls("branch")
-local tag_icon, tag_icon_hl = icons.pulls("tag")
+local overview_icon = icons.general("overview")
+local branch_icon = icons.pulls("branch")
+local tag_icon = icons.pulls("tag")
 
 local DEFAULT_TABS = {
 	{
 		key = "overview",
 		label = "Overview",
-		icon = { icon = overview_icon, hl_group = overview_icon_hl },
+		icon = { icon = overview_icon },
 		mod = require("atlas.pulls.ui.repo_detail.tabs.overview"),
 	},
 	{
 		key = "branches",
 		label = "Branches",
-		icon = { icon = branch_icon, hl_group = branch_icon_hl },
+		icon = { icon = branch_icon },
 		mod = require("atlas.pulls.ui.repo_detail.tabs.branches"),
 	},
 	{
 		key = "tags",
 		label = "Tags",
-		icon = { icon = tag_icon, hl_group = tag_icon_hl },
+		icon = { icon = tag_icon },
 		mod = require("atlas.pulls.ui.repo_detail.tabs.tags"),
 	},
 }
