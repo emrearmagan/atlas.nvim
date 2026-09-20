@@ -127,20 +127,34 @@ Jump from an issue to its PR and back, or browse related issues and sub-issues.
 
 View pipelines and their jobs, inspect their status, and read job logs directly in Atlas.
 
+Use `:Atlas pipelines <target>` with a branch name, PR URL or number (`123`, `#123`, or GitLab `!123`), or a build URL. Branch names use the local repository; `:Atlas pipelines .` opens builds for the current branch.
+
 <details>
 <summary><strong>Configuration</strong></summary>
 
+Atlas uses your provider's CI by default. Set `ci.backend` to use your own. For Bamboo on Bitbucket, use `require("atlas.pulls.pipelines.bamboo").new(opts)` with `host`, `user`, and `password`.
+
 ```lua
 providers = {
-  bitbucket = {
-    user = vim.env.BITBUCKET_USER,
-    token = vim.env.BITBUCKET_TOKEN,
+  github = {
     ci = {
-      backend = require("atlas.pulls.pipelines.bamboo").new({
-        host = vim.env.BAMBOO_HOST,
-        user = vim.env.BAMBOO_USER,
-        password = vim.env.BAMBOO_PASSWORD,
-      }),
+      backend = {
+        fetch = function(context, opts, done)
+          -- Fetch pipelines with their stages and jobs.
+          done({}, nil)
+        end,
+        fetch_job = function(context, pipeline, job, done)
+          -- Fetch the updated job, including any steps.
+          done(job, nil)
+        end,
+        fetch_job_log = function(context, pipeline, job, done)
+          done({ raw = "Your log output here" }, nil)
+        end,
+        parse = function(log)
+          -- Return cleaned lines or your own nested groups.
+          return log.lines
+        end,
+      },
       highlights = {
         { pattern = "^FAIL%s", level = "error" },
         { pattern = "deprecated", level = "warn", hl_group = "DiagnosticWarn" },
@@ -149,6 +163,8 @@ providers = {
   },
 }
 ```
+
+`ci.highlights` controls log highlighting using Lua patterns. Set `level` for a severity color or `hl_group` for an existing Neovim highlight group.
 
 </details>
 

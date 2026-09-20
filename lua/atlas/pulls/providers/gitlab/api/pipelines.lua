@@ -231,8 +231,8 @@ local function fetch_pipeline(context, pipeline, on_done)
 			on_done(nil, "Pipeline not found")
 			return
 		end
-		fetch_jobs(scope, item, request_context, function(result, jobs_err)
-			on_done(result and { result } or nil, jobs_err)
+		fetch_jobs(scope, item, request_context, function(updated, jobs_err)
+			on_done(updated and { updated } or nil, jobs_err)
 		end)
 	end)
 	return { cancel = scope.cancel }

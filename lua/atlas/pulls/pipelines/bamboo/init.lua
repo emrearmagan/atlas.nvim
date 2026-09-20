@@ -224,8 +224,8 @@ function M.new(opts)
 		local target = context.target
 		local pipeline = (fetch_opts and fetch_opts.pipeline) or (type(target) == "table" and target.stages and target)
 		if pipeline and pipeline.id:match("^[%w%-_]+%-%d+$") then
-			return fetch_result(vim.tbl_extend("force", {}, pipeline), function(pipeline, err)
-				on_done(pipeline and { pipeline } or nil, err)
+			return fetch_result(vim.tbl_extend("force", {}, pipeline), function(result, err)
+				on_done(result and { result } or nil, err)
 			end)
 		end
 

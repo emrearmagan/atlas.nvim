@@ -125,7 +125,8 @@ function M.new(custom_rules)
 			spans[1] = { start_col = 0, end_col = #body, hl_group = highlight, hl_eol = hl_eol }
 		end
 		return body, spans
-	end, counts
+	end,
+		counts
 end
 
 return M

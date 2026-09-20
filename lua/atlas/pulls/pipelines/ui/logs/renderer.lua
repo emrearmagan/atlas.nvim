@@ -88,9 +88,7 @@ local function append_entries(pane, entries, lines, spans, prepared, depth, pare
 				if entry.duration > 0 and entry.duration < 1 then
 					elapsed = string.format("%.1fms", entry.duration * 1000)
 				end
-				line = line
-					.. string.rep(" ", math.max(2, width - vim.fn.strdisplaywidth(line) - #elapsed))
-					.. elapsed
+				line = line .. string.rep(" ", math.max(2, width - vim.fn.strdisplaywidth(line) - #elapsed)) .. elapsed
 				spans[#spans + 1] = {
 					line = #lines,
 					start_col = #line - #elapsed,
