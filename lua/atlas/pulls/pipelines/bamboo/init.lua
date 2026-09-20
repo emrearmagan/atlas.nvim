@@ -267,19 +267,33 @@ function M.new(opts)
 			return nil
 		end
 
-		local url = string.format("%s/plan/%s/specs?format=YAML", api_base, key)
-		return request("GET", url, "plan configuration", function(body, err)
+		local scope = requests.new()
+		scope.run(function(done)
+			local url = string.format("%s/plan/%s.json?expand=master&os_authType=basic", api_base, key)
+			return request("GET", url, "plan details", done)
+		end, function(plan, err)
 			if err then
 				on_done(nil, err)
 				return
 			end
-			local content = body.spec and body.spec.code
-			if type(content) ~= "string" then
-				on_done(nil, "Bamboo did not return a plan configuration")
-				return
-			end
-			on_done({ path = key .. ".yaml", content = content }, nil)
+			local config_key = json.safe_table(plan.master).key or key
+			scope.run(function(done)
+				local url = string.format("%s/plan/%s/specs?format=YAML", api_base, config_key)
+				return request("GET", url, "plan configuration", done)
+			end, function(body, config_err)
+				if config_err then
+					on_done(nil, config_err)
+					return
+				end
+				local content = body.spec and body.spec.code
+				if type(content) ~= "string" then
+					on_done(nil, "Bamboo did not return a plan configuration")
+					return
+				end
+				on_done({ path = config_key .. ".yaml", content = content }, nil)
+			end)
 		end)
+		return scope
 	end
 
 	---@param _context PullsPipelineContext
