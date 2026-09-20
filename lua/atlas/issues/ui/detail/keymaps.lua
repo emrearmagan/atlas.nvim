@@ -5,6 +5,7 @@ local resolver = require("atlas.core.keymaps")
 local utils = require("atlas.ui.shared.utils")
 local actions = require("atlas.issues.actions")
 local state = require("atlas.issues.ui.detail.state")
+local registrations = {}
 
 ---@return IssuesDetailTabModule|nil
 local function current_tab_mod()
@@ -232,11 +233,28 @@ function M.register(buf)
 		})
 	)
 
+	local custom_items = resolver.custom_items("issues", function(callback)
+		local issue = state.current_issue
+		if issue == nil then
+			return
+		end
+		local on_update = state.on_update
+		return callback(context(issue), function(result)
+			complete_action(issue, on_update, result)
+		end)
+	end)
+	vim.list_extend(general, custom_items)
 	help.register("General", general, { index = 300, buffer = buf })
+	registrations[buf] = custom_items
 end
 
 ---@param buf integer
 function M.remove(buf)
+	local registered = registrations[buf]
+	if registered then
+		help.remove("General", registered, { buffer = buf })
+		registrations[buf] = nil
+	end
 	local general = {}
 	utils.insert_if(general, remove_item("ui.next_item"))
 	utils.insert_if(general, remove_item("ui.previous_item"))

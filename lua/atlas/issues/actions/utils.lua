@@ -1,12 +1,17 @@
 local M = {}
 
+local config = require("atlas.config")
+local live = require("atlas.ui.popups.live")
 local logger = require("atlas.core.logger")
 local notify = require("atlas.core.notify")
 
 ---@param context AtlasIssueActionContext
----@return boolean
+---@return boolean, string|nil
 local function has_issue(context)
-	return context.issue ~= nil and tostring(context.issue.key or "") ~= ""
+	if not context.issue or tostring(context.issue.key or "") == "" then
+		return false, "No issue selected"
+	end
+	return true
 end
 
 ---@param item AtlasIssuesCustomAction
@@ -16,7 +21,6 @@ local function custom_action(item)
 		id = item.id,
 		label = item.label,
 		icon = item.icon,
-		custom = true,
 		is_available = has_issue,
 		run = function(context, done)
 			notify.loading(string.format("Running %s...", item.label))
@@ -51,7 +55,7 @@ local function custom_action(item)
 			local ok, err = pcall(item.run, context.issue, {
 				issue = context.issue,
 				user = context.current_user,
-				output = require("atlas.ui.popups.live").create,
+				output = live.create,
 			}, complete)
 			if not ok then
 				local message = "Custom action failed: " .. tostring(err)
@@ -65,14 +69,10 @@ local function custom_action(item)
 	}
 end
 
----@param context AtlasIssueActionContext
 ---@return AtlasIssueAction[]
-function M.custom_actions(context)
+function M.custom_actions()
 	local actions = {}
-	if not has_issue(context) then
-		return actions
-	end
-	for _, item in ipairs((require("atlas.config").options.issues or {}).custom_actions or {}) do
+	for _, item in ipairs((config.options.issues or {}).custom_actions or {}) do
 		if
 			type(item) == "table"
 			and type(item.id) == "string"
@@ -83,6 +83,16 @@ function M.custom_actions(context)
 		end
 	end
 	return actions
+end
+
+---@param id string
+---@return AtlasIssueAction|nil
+function M.find_custom_action(id)
+	for _, action in ipairs(M.custom_actions()) do
+		if action.id == id then
+			return action
+		end
+	end
 end
 
 M.browse_issue = {

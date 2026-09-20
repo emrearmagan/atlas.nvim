@@ -272,6 +272,14 @@ function M.register(session, opts)
 					opts.toggle_file_reviewed
 				)
 			end
+			if session.review then
+				vim.list_extend(
+					items,
+					resolver.custom_items("pulls", function(callback)
+						return actions.run(session, callback)
+					end)
+				)
+			end
 			help.register("Review", items, { buffer = buf, index = 110 })
 		end
 	end

@@ -1,13 +1,18 @@
 local M = {}
 
+local config = require("atlas.config")
 local git_checkout = require("atlas.core.git.checkout")
+local live = require("atlas.ui.popups.live")
 local logger = require("atlas.core.logger")
 local core_notify = require("atlas.core.notify")
 
 ---@param context AtlasPullActionContext
----@return boolean
+---@return boolean, string|nil
 local function has_pr(context)
-	return context.pr ~= nil
+	if not context.pr then
+		return false, "No PR selected"
+	end
+	return true
 end
 
 ---@param context AtlasPullActionContext
@@ -29,7 +34,6 @@ local function custom_action(item)
 		id = item.id,
 		label = item.label,
 		icon = item.icon,
-		custom = true,
 		is_available = has_pr,
 		run = function(context, done)
 			notify(context, "loading", string.format("Running %s...", item.label))
@@ -71,7 +75,7 @@ local function custom_action(item)
 				repo_path = repo_path,
 				pr = pr,
 				user = context.current_user,
-				output = require("atlas.ui.popups.live").create,
+				output = live.create,
 			}, complete_custom)
 			if not ok then
 				local message = "Custom action failed: " .. tostring(err)
@@ -85,14 +89,10 @@ local function custom_action(item)
 	}
 end
 
----@param context AtlasPullActionContext
 ---@return AtlasPullAction[]
-function M.custom_actions(context)
+function M.custom_actions()
 	local actions = {}
-	if not has_pr(context) then
-		return actions
-	end
-	for _, item in ipairs((require("atlas.config").options.pulls or {}).custom_actions or {}) do
+	for _, item in ipairs((config.options.pulls or {}).custom_actions or {}) do
 		if
 			type(item) == "table"
 			and type(item.id) == "string"
@@ -105,12 +105,22 @@ function M.custom_actions(context)
 	return actions
 end
 
+---@param id string
+---@return AtlasPullAction|nil
+function M.find_custom_action(id)
+	for _, action in ipairs(M.custom_actions()) do
+		if action.id == id then
+			return action
+		end
+	end
+end
+
 ---@return { method: "merge"|"squash", delete_branch: boolean }
 function M.merge_options()
-	local config = require("atlas.config").options.pulls or {}
+	local options = config.options.pulls or {}
 	return {
-		method = config.default_merge_method or "merge",
-		delete_branch = config.default_delete_branch == true,
+		method = options.default_merge_method or "merge",
+		delete_branch = options.default_delete_branch == true,
 	}
 end
 

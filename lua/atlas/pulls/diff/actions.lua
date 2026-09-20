@@ -19,13 +19,14 @@ local function reload_notes(session)
 end
 
 ---@param session AtlasDiffSession
----@param action AtlasPullAction
-local function run(session, action)
+---@param callback fun(context: AtlasPullActionContext, done: fun(result: PullsActionResult|nil, err: string|nil)): any
+---@return any
+function M.run(session, callback)
 	local context = review_api.action_context(session)
 	if not context then
 		return
 	end
-	action.run(context, function(result, err)
+	return callback(context, function(result, err)
 		if session.closed then
 			return
 		end
@@ -80,12 +81,12 @@ function M.start_or_submit(session)
 	local reviews = review.provider.capabilities.reviews or {}
 	if review.data.review.pending then
 		if reviews.submit_review then
-			run(session, pull_actions.submit_review)
+			M.run(session, pull_actions.submit_review.run)
 		else
 			open_in_browser(session)
 		end
 	elseif reviews.start_review then
-		run(session, pull_actions.start_review)
+		M.run(session, pull_actions.start_review.run)
 	end
 end
 
@@ -100,7 +101,7 @@ function M.approve(session)
 		open_in_browser(session)
 		return
 	end
-	run(session, pull_actions.approve)
+	M.run(session, pull_actions.approve.run)
 end
 
 ---@param session AtlasDiffSession
@@ -114,7 +115,7 @@ function M.request_changes(session)
 		open_in_browser(session)
 		return
 	end
-	run(session, pull_actions.request_changes)
+	M.run(session, pull_actions.request_changes.run)
 end
 
 ---@param session AtlasDiffSession
@@ -176,7 +177,7 @@ function M.open(session)
 				M.toggle_detail_panel(session)
 				return
 			end
-			run(session, action)
+			M.run(session, action.run)
 		end,
 	})
 end

@@ -1,5 +1,7 @@
 local M = {}
 
+local config = require("atlas.config")
+
 ---@class AtlasUIKeymaps
 ---@field next_item? AtlasKeymapValue
 ---@field previous_item? AtlasKeymapValue
@@ -93,7 +95,15 @@ local M = {}
 ---@field merged? AtlasKeymapValue
 ---@field declined? AtlasKeymapValue
 
+---@class AtlasPullsCustomKeymap
+---@field key string|string[]
+---@field desc string
+---@field callback fun(context: AtlasPullActionContext, done: fun(result: PullsActionResult|nil, err: string|nil)): any
+---@field mode? string|string[]
+---@field opts? table
+
 ---@class AtlasPullsKeymaps
+---@field custom? AtlasPullsCustomKeymap[]
 ---@field open_diff? AtlasKeymapValue
 ---@field checkout? AtlasKeymapValue
 ---@field external_help? AtlasKeymapValue
@@ -105,7 +115,15 @@ local M = {}
 ---@field review? AtlasPullsReviewKeymaps
 ---@field filters? AtlasPullsFilterKeymaps
 
+---@class AtlasIssuesCustomKeymap
+---@field key string|string[]
+---@field desc string
+---@field callback fun(context: AtlasIssueActionContext, done: fun(result: IssuesActionResult|nil, err: string|nil)): any
+---@field mode? string|string[]
+---@field opts? table
+
 ---@class AtlasIssuesKeymaps
+---@field custom? AtlasIssuesCustomKeymap[]
 ---@field transition_issue? AtlasKeymapValue
 ---@field change_assignee? AtlasKeymapValue
 ---@field change_reporter? AtlasKeymapValue
@@ -245,7 +263,7 @@ end
 ---@param action_id AtlasKeymapActionId|string
 ---@return AtlasKeymapValue
 local function from_config(action_id)
-	local value = require("atlas.config").options.keymaps
+	local value = config.options.keymaps
 	for key in tostring(action_id):gmatch("[^.]+") do
 		if type(value) ~= "table" then
 			return nil
@@ -259,6 +277,21 @@ end
 ---@return string[]|nil
 function M.resolve(action_id)
 	return normalize(from_config(action_id))
+end
+
+---@param domain "pulls"|"issues"
+---@param run fun(callback: function): any
+---@return AtlasHelpKeyItem[]
+function M.custom_items(domain, run)
+	local items = {}
+	for _, mapping in ipairs((config.options.keymaps[domain] or {}).custom or {}) do
+		local item = vim.deepcopy(mapping)
+		item.callback = function()
+			return run(mapping.callback)
+		end
+		items[#items + 1] = item
+	end
+	return items
 end
 
 ---@param section_path string[]
@@ -366,12 +399,19 @@ function M.validate()
 		return false
 	end
 
+	local custom_keys = {}
 	local function collect_actions(node, path, action_ids)
 		for name, value in pairs(node) do
 			local action_id = path .. "." .. name
 			local notification_action = action_id == "ui.notifications.mark_read"
 				or action_id == "ui.notifications.mark_done"
-			if not notification_action then
+			if name == "custom" then
+				for index, mapping in ipairs(value) do
+					local id = action_id .. "." .. index
+					custom_keys[id] = normalize(mapping.key)
+					table.insert(action_ids, id)
+				end
+			elseif not notification_action then
 				if normalize(value) then
 					table.insert(action_ids, action_id)
 				elseif type(value) == "table" then
@@ -393,7 +433,7 @@ function M.validate()
 	local function conflicts_for(action_ids)
 		local seen_by_key = {}
 		for _, action_id in ipairs(action_ids) do
-			for _, key in ipairs(M.resolve(action_id) or {}) do
+			for _, key in ipairs(custom_keys[action_id] or M.resolve(action_id) or {}) do
 				seen_by_key[key] = seen_by_key[key] or {}
 				seen_by_key[key][action_id] = true
 			end

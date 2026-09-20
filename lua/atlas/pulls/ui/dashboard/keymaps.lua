@@ -4,6 +4,7 @@ local notify = require("atlas.core.notify")
 local resolver = require("atlas.core.keymaps")
 local utils = require("atlas.ui.shared.utils")
 local actions = require("atlas.pulls.actions")
+local controller = require("atlas.pulls.ui.dashboard.controller")
 local registrations = {}
 
 ---@return PullRequest|nil, PullsRepo|nil
@@ -73,7 +74,6 @@ function M.register(buf, views)
 				desc = string.format("Switch to %s", v.name),
 				hidden = true,
 				callback = function()
-					local controller = require("atlas.pulls.ui.dashboard.controller")
 					controller.switch_view(v)
 				end,
 			})
@@ -116,7 +116,6 @@ function M.register(buf, views)
 			item("pulls.filters." .. value, {
 				desc = string.format("Toggle %s filter", value),
 				callback = function()
-					local controller = require("atlas.pulls.ui.dashboard.controller")
 					controller.toggle_status_filter(value)
 				end,
 			})
@@ -303,6 +302,24 @@ function M.register(buf, views)
 		})
 	)
 
+	vim.list_extend(
+		items,
+		resolver.custom_items("pulls", function(callback)
+			local pr = selected_pr()
+			if state.provider then
+				return callback({
+					provider = state.provider,
+					pr = pr,
+					current_user = state.current_user,
+					buf = buf,
+				}, function(result)
+					if pr and result and result.changed_pr then
+						controller.refresh_pr(pr)
+					end
+				end)
+			end
+		end)
+	)
 	help.register(provider_name, items, { index = 220, buffer = buf })
 
 	local general = {}

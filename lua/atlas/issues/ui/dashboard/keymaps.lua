@@ -363,6 +363,14 @@ function M.register(buf, views)
 		})
 	)
 
+	vim.list_extend(
+		items,
+		resolver.custom_items("issues", function(callback)
+			local issue = selected_issue()
+			return callback(context(issue), controller.apply_action_result)
+		end)
+	)
+
 	M.remove(buf)
 	help.register(provider_name, items, {
 		index = 230,

@@ -1,6 +1,7 @@
 local M = {}
 
 local icons = require("atlas.ui.shared.icons")
+local notify = require("atlas.core.notify")
 local picker = require("atlas.ui.picker")
 local templates = require("atlas.issues.templates")
 local utils = require("atlas.issues.actions.utils")
@@ -29,7 +30,6 @@ local utils = require("atlas.issues.actions.utils")
 ---@field label string
 ---@field icon string|nil
 ---@field hidden boolean|nil
----@field custom boolean|nil
 ---@field is_available (fun(context: AtlasIssueActionContext): boolean, string|nil)|nil
 ---@field run fun(context: AtlasIssueActionContext, on_done: fun(result: IssuesActionResult|nil, err: string|nil))
 
@@ -37,6 +37,10 @@ local utils = require("atlas.issues.actions.utils")
 ---@param context AtlasIssueActionContext
 ---@return boolean
 function M.is_available(id, context)
+	local action = utils.find_custom_action(id)
+	if action then
+		return action.is_available == nil or action.is_available(context) == true
+	end
 	local actions = context.provider.capabilities.actions
 	return actions ~= nil and actions.is_available(id, context)
 end
@@ -46,11 +50,26 @@ end
 ---@param on_done fun(result: IssuesActionResult|nil, err: string|nil)|nil
 ---@return boolean handled
 function M.run(id, context, on_done)
+	on_done = on_done or function() end
+	local action = utils.find_custom_action(id)
+	if action then
+		if action.is_available then
+			local available, err = action.is_available(context)
+			if not available then
+				err = err or "Action is not available"
+				notify.warn(err)
+				on_done(nil, err)
+				return false
+			end
+		end
+		action.run(context, on_done)
+		return true
+	end
 	local actions = context.provider.capabilities.actions
 	if not actions then
 		return false
 	end
-	return actions.run(id, context, on_done or function() end)
+	return actions.run(id, context, on_done)
 end
 
 ---@param context AtlasIssueActionContext
@@ -59,11 +78,15 @@ function M.open(context, on_done)
 	local actions = context.provider.capabilities.actions
 	local items = {}
 	for _, action in ipairs(actions and actions.items or {}) do
-		if not action.hidden and M.is_available(action.id, context) then
+		if not action.hidden and not utils.find_custom_action(action.id) and M.is_available(action.id, context) then
 			table.insert(items, action)
 		end
 	end
-	vim.list_extend(items, utils.custom_actions(context))
+	for _, action in ipairs(utils.custom_actions()) do
+		if action.is_available == nil or action.is_available(context) == true then
+			table.insert(items, action)
+		end
+	end
 	if #items == 0 then
 		if on_done then
 			on_done(nil, "No actions available")
@@ -81,10 +104,6 @@ function M.open(context, on_done)
 				if on_done then
 					on_done(nil, nil)
 				end
-				return
-			end
-			if action.custom then
-				action.run(context, on_done or function() end)
 				return
 			end
 			M.run(action.id, context, on_done)
