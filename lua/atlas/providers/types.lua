@@ -1,0 +1,21 @@
+---@alias AtlasRelationship
+---| "closes"
+---| "closed by"
+---| "blocks"
+---| "blocked by"
+---| "is blocked by"
+---| "parent"
+---| "sub-issue"
+---| "child"
+---| "references"
+---| "referenced by"
+---| "relates to"
+---| "linked"
+---| string
+
+---@class AtlasRelatedItem
+---@field kind "issue"|"pr"|"external"
+---@field url string Canonical web URL; never resolved relative to the current repository.
+---@field key string|nil
+---@field title string|nil
+---@field relationship AtlasRelationship|nil

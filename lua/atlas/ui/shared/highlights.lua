@@ -63,6 +63,7 @@ local groups = {
 	AtlasFooterSuccess = { fg = "#a6da95", bg = "#202635", bold = true },
 
 	AtlasChipActive = { fg = "#1e1e2e", bg = "#89b4fa", bold = true },
+	AtlasRelatedChip = { fg = "#ffffff", bg = "#202635", bold = true },
 }
 
 function M.setup()

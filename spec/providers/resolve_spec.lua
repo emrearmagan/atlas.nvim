@@ -56,6 +56,15 @@ describe("providers.resolve", function()
 		assert.are.equal("https://jira.example.com/browse/ATLAS-123", jira.url)
 	end)
 
+	it("opens project work items as issues and leaves group work items external", function()
+		local target = assert(providers.resolve("https://gitlab.example.com/group/subgroup/repo/-/work_items/8"))
+		assert.equal("issues", target.domain)
+		assert.equal("issue", target.entity)
+		assert.equal("group/subgroup/repo", target.repo_full_name)
+		assert.equal(8, target.number)
+		assert.is_nil(providers.resolve("https://gitlab.example.com/groups/group/-/work_items/8"))
+	end)
+
 	it("resolves Git remotes as repository targets", function()
 		local cases = {
 			{

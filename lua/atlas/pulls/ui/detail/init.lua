@@ -8,6 +8,7 @@ local detail_keymaps = require("atlas.pulls.ui.detail.keymaps")
 local icons = require("atlas.ui.shared.icons")
 local notify = require("atlas.core.notify")
 local request_scope = require("atlas.core.requests")
+local links = require("atlas.ui.links")
 local overview_icon = icons.general("overview")
 
 local SPINNER_INTERVAL_MS = 100
@@ -54,6 +55,9 @@ local function stop_spinner()
 end
 
 local function is_loading()
+	if state.links and state.links.loading then
+		return true
+	end
 	if state.pr_loading or state.details_loading or state.diffstat == "loading" or state.merge_checks == "loading" then
 		return true
 	end
@@ -242,6 +246,7 @@ local function clear_pr()
 	state.pr_loading = false
 	state.details_loading = false
 	state.line_map = {}
+	links.reset(state)
 end
 
 ---@param pr PullRequest
@@ -250,6 +255,7 @@ local function show_pr(pr, force_refresh)
 	state.current_pr = pr
 	pending_ref = nil
 	state.pr_loading = false
+	links.load(state, pr, force_refresh, refresh_callback(pr))
 	load_pr(pr, force_refresh)
 	update_spinner()
 	render()

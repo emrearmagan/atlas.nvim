@@ -216,6 +216,7 @@ M.options = {
 			previous_page = "[p",
 			open_actions = "A",
 			open_in_browser = "gx",
+			open_references = "gl",
 			copy_id = "y",
 			copy_url = "Y",
 			show_details = "K",

@@ -74,7 +74,8 @@ end
 
 ---@param context AtlasIssueActionContext
 ---@param on_done fun(result: IssuesActionResult|nil, err: string|nil)|nil
-function M.open(context, on_done)
+---@param extra_items { label: string, icon?: string, callback: fun() }[]|nil
+function M.open(context, on_done, extra_items)
 	local actions = context.provider.capabilities.actions
 	local items = {}
 	for _, action in ipairs(actions and actions.items or {}) do
@@ -87,6 +88,7 @@ function M.open(context, on_done)
 			table.insert(items, action)
 		end
 	end
+	vim.list_extend(items, extra_items or {})
 	if #items == 0 then
 		if on_done then
 			on_done(nil, "No actions available")
@@ -106,7 +108,11 @@ function M.open(context, on_done)
 				end
 				return
 			end
-			M.run(action.id, context, on_done)
+			if action.callback then
+				action.callback()
+			else
+				M.run(action.id, context, on_done)
+			end
 		end,
 	})
 end

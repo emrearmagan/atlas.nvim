@@ -109,6 +109,15 @@ My dotfiles include a [Pi extension that wraps this script](https://github.com/e
 ### Also included
 
 <details>
+<summary><strong>Linked issues and PRs</strong> - Jump between issues and pull requests</summary>
+
+// TODO: Add a screenshot of linked issues and PRs.
+
+Jump from an issue to its PR and back, or browse related issues and sub-issues.
+
+</details>
+
+<details>
 <summary><strong>Pipelines</strong> - View jobs and logs, retry failures, or cancel running work</summary>
 
 <p align="center">
@@ -749,6 +758,7 @@ keymaps = {
     previous_page = "[p",
     open_actions = "A",
     open_in_browser = "gx",
+    open_references = "gl",
     copy_id = "y",
     copy_url = "Y",
     show_details = "K",

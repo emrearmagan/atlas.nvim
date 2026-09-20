@@ -27,6 +27,7 @@ local config = require("atlas.config")
 ---@field previous_page? AtlasKeymapValue
 ---@field open_actions? AtlasKeymapValue
 ---@field open_in_browser? AtlasKeymapValue
+---@field open_references? AtlasKeymapValue
 ---@field copy_id? AtlasKeymapValue
 ---@field copy_url? AtlasKeymapValue
 ---@field show_details? AtlasKeymapValue
@@ -168,6 +169,7 @@ local config = require("atlas.config")
 ---| "ui.previous_page"
 ---| "ui.open_actions"
 ---| "ui.open_in_browser"
+---| "ui.open_references"
 ---| "ui.copy_id"
 ---| "ui.copy_url"
 ---| "ui.show_details"

@@ -5,6 +5,7 @@ local renderer = require("atlas.issues.ui.detail.renderer")
 local notify = require("atlas.core.notify")
 local request_scope = require("atlas.core.requests")
 local state = require("atlas.issues.ui.detail.state")
+local links = require("atlas.ui.links")
 
 local SPINNER_INTERVAL_MS = 100
 
@@ -43,7 +44,7 @@ local function stop_spinner()
 end
 
 local function is_loading()
-	if state.issue_loading or state.details_loading then
+	if state.issue_loading or state.details_loading or (state.links and state.links.loading) then
 		return true
 	end
 	if state.current_issue == nil then
@@ -185,6 +186,7 @@ local function clear_issue()
 	state.details_loading = false
 	state.issue_loading = false
 	state.line_map = {}
+	links.reset(state)
 end
 
 ---@param issue Issue
@@ -193,6 +195,7 @@ local function show_issue(issue, force_refresh)
 	state.current_issue = issue
 	pending_ref = nil
 	state.issue_loading = false
+	links.load(state, issue, force_refresh, refresh_callback(issue))
 	load_active_tab(issue, { force_refresh = force_refresh })
 	update_spinner()
 	render()

@@ -18,6 +18,7 @@ local ICONS = {
 		overview = { icon = "", hl_group = "AtlasTextMuted" },
 		comment = { icon = "", hl_group = "AtlasTextMuted" },
 		conversation = { icon = "", hl_group = "AtlasTextMuted" },
+		link = { icon = "", hl_group = "AtlasTextMuted" },
 		created = { icon = "󰃭", hl_group = "AtlasTextMuted" },
 		updated = { icon = "󰥔", hl_group = "AtlasTextMuted" },
 		user = { icon = "", hl_group = "AtlasTextMuted" },

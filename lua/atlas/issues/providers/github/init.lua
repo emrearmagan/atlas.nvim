@@ -21,6 +21,7 @@ local client = require("atlas.providers.github.client")
 local emojis = require("atlas.ui.shared.emojis")
 local issue_cache = require("atlas.issues.providers.github.api.cache")
 local issues_api = require("atlas.issues.providers.github.api.issues")
+local links_api = require("atlas.providers.github.links")
 local notifications_api = require("atlas.providers.github.notifications")
 local timeline_api = require("atlas.issues.providers.github.api.timeline")
 local ui_detail = require("atlas.issues.providers.github.ui.detail")
@@ -254,6 +255,7 @@ return {
 			fetch_issues = fetch_issues,
 			fetch_by_refs = issues_api.fetch_by_refs,
 			fetch_issue = fetch_issue,
+			fetch_links = links_api.fetch_issue,
 			update_description = update_description,
 		},
 		comments = {
