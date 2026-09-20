@@ -152,7 +152,16 @@ function M.resolve_repo_path_for_pr(pr, opts)
 	end
 
 	local mapping = (config.options.pulls.repo_config or {}).paths or {}
-	return M.resolve_repo_path(mapping, repo_id, opts)
+	local root, err = M.resolve_repo_path(mapping, repo_id, opts)
+	if not root or opts.require_git == false then
+		return root, err
+	end
+	local current = git.local_repository(root)
+	local target = providers.resolve(pr.link.html)
+	if current and target and (current.provider ~= target.provider or current.host:lower() ~= target.host:lower()) then
+		return nil, "mapped repository does not match the pull request remote: " .. root
+	end
+	return root, nil
 end
 
 ---@param pr PullRequest

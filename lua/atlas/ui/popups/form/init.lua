@@ -359,6 +359,9 @@ function M.open(state, opts)
 				layout.closing = true
 				notify.clear()
 				delete_buffers(layout)
+				if opts.on_closed then
+					pcall(opts.on_closed)
+				end
 				local augroup = layout.augroup
 				layout.augroup = nil
 				vim.schedule(function()
