@@ -114,8 +114,6 @@ My dotfiles include a [Pi extension that wraps this script](https://github.com/e
 <details>
 <summary><strong>Linked issues and PRs</strong> - Jump between issues and pull requests</summary>
 
-// TODO: Add a screenshot of linked issues and PRs.
-
 Jump from an issue to its PR and back, or browse related issues and sub-issues.
 
 </details>
