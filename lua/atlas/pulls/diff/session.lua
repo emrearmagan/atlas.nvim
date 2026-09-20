@@ -102,7 +102,9 @@ local review_progress = { "󰝦", "󰪞", "󰪟", "󰪠", "󰪡", "󰪢", "󰪣"
 local function statusline_items(session)
 	local review = session.review
 	local pr = review and review.pr
-	local review_comments = review and review.data.comments or {}
+	local review_comments = vim.tbl_filter(function(comment)
+		return not comment.deleted
+	end, review and review.data.comments or {})
 	local identity = pr and string.format("#%s %s", tostring(pr.id), tostring(pr.title))
 		or string.format(
 			"%s...%s",

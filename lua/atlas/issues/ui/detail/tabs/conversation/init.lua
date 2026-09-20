@@ -63,7 +63,21 @@ end
 ---@param issue Issue
 ---@param details IssueDetails|nil
 ---@param width integer
-M.render = renderer.render
+function M.render(issue, details, width)
+	local provider = detail.provider
+	local comments = provider and provider.capabilities.comments
+	local completion = comments
+		and comments.comment_completion
+		and comments.comment_completion({
+			issue = issue,
+			details = details,
+			comments = state.comments(),
+		})
+	if completion and completion.resolve_items then
+		completion.resolve_items()
+	end
+	return renderer.render(issue, details, width)
+end
 
 ---@param _lnum integer
 ---@param entry table

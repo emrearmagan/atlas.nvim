@@ -112,7 +112,12 @@ end
 function M.annotated_paths(session, files)
 	local paths = {}
 	local current_review = session.review
-	for _, comment in ipairs(current_review and current_review.data.comments or {}) do
+	local threads = review_threads.group_comments(
+		current_review and current_review.data.comments or {},
+		current_review and current_review.data.tasks
+	)
+	for _, thread in ipairs(threads) do
+		local comment = thread.comment
 		local target = comment.file or comment.inline
 		if target then
 			paths[target.path] = paths[target.path] or { comments = false, notes = false }

@@ -103,6 +103,8 @@ function M.from_line(document, side, line)
 			result.from = opposite
 		end
 	end
+	result.from_offset = result.from and (vim.fn.strutf16len(document.old.lines[result.from], true) + 1) or nil
+	result.to_offset = result.to and (vim.fn.strutf16len(document.new.lines[result.to], true) + 1) or nil
 	return result, nil
 end
 

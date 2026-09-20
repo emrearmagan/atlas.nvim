@@ -390,6 +390,38 @@ local function jira()
 	return { columns = columns, values = values, highlights = highlights }
 end
 
+local function azure()
+	local function values(issue, is_child)
+		local type_icon = icons.issues_type(issue.type and issue.type.name)
+		local title = issue.key .. " " .. issue.title
+		return {
+			icon = is_child and "" or type_icon,
+			name = is_child and ("  " .. type_icon .. " " .. title) or title,
+			assignee = person_value(issue.assignee, "Unassigned"),
+			reporter = person_value(issue.reporter, "Unknown"),
+			status = status_value(issue),
+		}
+	end
+
+	local function highlights(table_row, col, ctx)
+		local issue = table_row._issue
+		if issue == nil then
+			return nil
+		end
+		if col.key == "status" then
+			local hl = state.reloading_issue_keys[issue.key] and "AtlasTextMuted" or helper.status_hl(issue.status_id)
+			return { { start_col = 0, end_col = #ctx.padded, hl_group = hl } }
+		end
+		if col.key == "icon" then
+			local _, hl = icons.issues_type(issue.type and issue.type.name)
+			return { { start_col = 0, end_col = #ctx.padded, hl_group = hl } }
+		end
+		return person_highlight(issue, col, ctx)
+	end
+
+	return { columns = columns, values = values, highlights = highlights }
+end
+
 local function default()
 	return {
 		columns = columns,
@@ -406,6 +438,7 @@ local function default()
 end
 
 local displays = {
+	azure = azure(),
 	github = github(),
 	gitlab = gitlab(),
 	jira = jira(),

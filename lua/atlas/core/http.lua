@@ -11,7 +11,7 @@ end
 ---@param url string
 ---@param headers table<string, string>
 ---@param data? string
----@param callback fun(body?: string, status?: integer|nil, err?: string)
+---@param callback fun(body?: string, status?: integer|nil, err?: string, headers?: table<string, string>)
 ---@param follow_redirects? boolean
 ---@return { job_id: integer, cancel: fun() }
 local function curl_fetch(method, url, headers, data, callback, follow_redirects)
@@ -32,7 +32,7 @@ local function curl_fetch(method, url, headers, data, callback, follow_redirects
 	end
 
 	table.insert(args, "-w")
-	table.insert(args, "__ATLAS_HTTP_CODE:%{http_code}")
+	table.insert(args, "__ATLAS_HTTP_CODE:%{http_code}\n%{header_json}")
 	table.insert(args, url)
 
 	local out = {}
@@ -75,15 +75,13 @@ local function curl_fetch(method, url, headers, data, callback, follow_redirects
 					return
 				end
 
-				local body = raw
-				local http_status = nil
-				local marker_start, _, status_str = raw:find("__ATLAS_HTTP_CODE:(%d+)%s*$")
-				if marker_start ~= nil then
-					body = raw:sub(1, marker_start - 1)
-					http_status = tonumber(status_str)
+				local body, status_str, header_json = raw:match("^(.*)__ATLAS_HTTP_CODE:(%d+)\n(.*)$")
+				local response_headers = {}
+				for key, values in pairs(vim.json.decode(header_json)) do
+					response_headers[key] = values[1]
 				end
 
-				callback(body, http_status, nil)
+				callback(body, tonumber(status_str), nil, response_headers)
 			end)
 		end,
 	}
@@ -114,10 +112,10 @@ end
 ---@param url string Full URL
 ---@param headers table<string, string> HTTP headers
 ---@param data? string JSON data for POST/PUT
----@param callback fun(result?: table, err?: string)
+---@param callback fun(result?: table, err?: string, headers?: table<string, string>)
 ---@return { job_id: integer, cancel: fun() }
 function M.curl_request(method, url, headers, data, callback)
-	return curl_fetch(method, url, headers, data, function(body, http_status, err)
+	return curl_fetch(method, url, headers, data, function(body, http_status, err, response_headers)
 		if err ~= nil then
 			callback(nil, err)
 			return
@@ -125,7 +123,7 @@ function M.curl_request(method, url, headers, data, callback)
 
 		if body == nil or body == "" then
 			if http_status ~= nil and http_status >= 200 and http_status < 300 then
-				callback({ __http_status = http_status }, nil)
+				callback({ __http_status = http_status }, nil, response_headers)
 				return
 			end
 			callback(nil, string.format("HTTP %s", tostring(http_status or "?")))
@@ -159,7 +157,7 @@ function M.curl_request(method, url, headers, data, callback)
 			result.__http_status = http_status
 		end
 
-		callback(result, nil)
+		callback(result, nil, response_headers)
 	end, method == "GET")
 end
 

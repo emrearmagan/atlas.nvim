@@ -188,7 +188,7 @@ local function fetch_review(pr, opts, include_hunks, on_done)
 
 		local filtered_comments = {}
 		for _, comment in ipairs(values.comments) do
-			if (comment.inline or comment.file) and comment.state ~= "DELETED" then
+			if comment.inline or comment.file then
 				table.insert(filtered_comments, comment)
 			end
 		end

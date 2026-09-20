@@ -209,6 +209,8 @@
 ---@field old_path string|nil
 ---@field from integer|nil
 ---@field to integer|nil
+---@field from_offset integer|nil -- Exclusive end column (1-based UTF-16) on the old side.
+---@field to_offset integer|nil -- Exclusive end column (1-based UTF-16) on the new side.
 ---@field start_from integer|nil
 ---@field start_to integer|nil
 ---@field commit_hash string|nil
@@ -233,7 +235,8 @@
 ---@field file PullsFileCommentPosition|nil
 ---@field is_task boolean|nil                            -- true = render as task (checkbox)
 ---@field task_label string|nil                          -- display name override; defaults to "Task"
----@field state "PENDING"|"RESOLVED"|"DELETED"|"OUTDATED"|nil -- primary state; nil = active/open
+---@field state "PENDING"|"RESOLVED"|"OUTDATED"|nil -- primary state; nil = active/open
+---@field deleted boolean|nil
 ---@field outdated boolean|nil                           -- may coexist with RESOLVED
 ---@field reactions table<string, integer>|nil
 ---@field url string|nil

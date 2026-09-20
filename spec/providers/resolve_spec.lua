@@ -8,12 +8,14 @@ describe("providers.resolve", function()
 		original_options = config.options
 		config.options = {
 			providers = {
+				azure = { base_url = "https://dev.azure.com/acme" },
 				github = {},
 				gitlab = { base_url = "https://gitlab.example.com" },
 				bitbucket = {},
 				jira = { base_url = "https://jira.example.com" },
 			},
 			pulls = {
+				azure = {},
 				github = {},
 				gitlab = {},
 				bitbucket = {},
@@ -31,11 +33,21 @@ describe("providers.resolve", function()
 	end)
 
 	it("parses supported provider URLs", function()
+		local azure = assert(providers.resolve("https://dev.azure.com/acme/platform/_git/api/pullrequest/17"))
+		local azure_encoded = assert(providers.resolve("https://dev.azure.com/acme/platform/_git/sdk%252Fcore"))
 		local github = assert(providers.resolve("https://github.com/emrearmagan/atlas.nvim/pull/42"))
 		local jira = assert(providers.resolve("https://jira.example.com/browse/ATLAS-123"))
 		local gitlab = assert(providers.resolve("https://gitlab.example.com/emrearmagan/atlas.nvim/-/issues/8"))
 		local bitbucket = assert(providers.resolve("https://bitbucket.org/emrearmagan/atlas.nvim/pull-requests/7"))
 
+		assert.are.equal("pr", azure.entity)
+		assert.are.equal("platform/api", azure.project_path)
+		assert.are.equal("platform/api", azure.repo_full_name)
+		assert.are.equal(17, azure.id)
+		assert.are.equal(17, azure.number)
+		assert.are.equal("https://dev.azure.com/acme/platform/_git/api", azure.repository_url)
+		assert.are.equal("sdk%2Fcore", azure_encoded.repo)
+		assert.are.equal("https://dev.azure.com/acme/platform/_git/sdk%252Fcore", azure_encoded.url)
 		assert.are.equal("pr", github.entity)
 		assert.are.equal(42, github.number)
 		assert.are.equal(42, github.id)
@@ -86,6 +98,27 @@ describe("providers.resolve", function()
 				"https://github.com/owner/repo",
 				"https://github.com/owner/repo.git",
 			},
+			{
+				"https://acme@dev.azure.com/acme/Team%20Project/_git/api%20service",
+				"azure",
+				"Team Project/api service",
+				"https://dev.azure.com/acme/Team%20Project/_git/api%20service",
+				"https://dev.azure.com/acme/Team%20Project/_git/api%20service",
+			},
+			{
+				"git@ssh.dev.azure.com:v3/acme/Platform/api",
+				"azure",
+				"Platform/api",
+				"https://dev.azure.com/acme/Platform/_git/api",
+				"https://dev.azure.com/acme/Platform/_git/api",
+			},
+			{
+				"ssh://git@ssh.dev.azure.com/v3/acme/Platform/api",
+				"azure",
+				"Platform/api",
+				"https://dev.azure.com/acme/Platform/_git/api",
+				"https://dev.azure.com/acme/Platform/_git/api",
+			},
 		}
 
 		for _, case in ipairs(cases) do
@@ -131,5 +164,9 @@ describe("providers.resolve", function()
 			"Bitbucket Server/Data Center URLs are recognized, but this Atlas provider currently supports Bitbucket Cloud only",
 			err
 		)
+
+		target, err = providers.resolve("https://dev.azure.com/other/platform/_git/api/pullrequest/17")
+		assert.is_nil(target)
+		assert.are.equal("Azure DevOps URL organization does not match providers.azure.base_url", err)
 	end)
 end)

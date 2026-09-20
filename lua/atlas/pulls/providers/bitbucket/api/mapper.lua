@@ -380,8 +380,7 @@ function M.to_comment(result)
 	local is_thread_root = parent == nil
 	local outdated = raw_inline ~= nil and raw_inline.outdated == true
 	local inline, file = comment_position(raw_inline)
-	local state = entry.deleted == true and "DELETED"
-		or (entry.pending == true and "PENDING")
+	local state = (entry.pending == true and "PENDING")
 		or (resolution ~= nil and "RESOLVED")
 		or (outdated and "OUTDATED")
 		or nil
@@ -402,6 +401,7 @@ function M.to_comment(result)
 		inline = inline,
 		is_task = nil,
 		state = state,
+		deleted = entry.deleted,
 		outdated = outdated,
 		url = tostring((as_table(links.self) or {}).href or ""),
 		html_url = tostring((as_table(links.html) or {}).href or ""),
