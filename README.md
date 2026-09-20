@@ -826,6 +826,39 @@ keymaps = {
 },
 ```
 
+### Custom Keymaps
+
+You can add custom keymaps to run Atlas actions, commands, or your own Lua functions.
+
+```lua
+local actions = require("atlas.pulls.actions")
+
+keymaps = {
+  pulls = {
+    custom = {
+      {
+        key = "gP",
+        desc = "Open pipelines",
+        callback = function(context, done)
+          actions.run("open_pipelines", context, done)
+        end,
+      },
+    },
+  },
+  issues = {
+    custom = {
+      {
+        key = "<leader>as",
+        desc = "Atlas search",
+        callback = function()
+          vim.cmd("Atlas search")
+        end,
+      },
+    },
+  },
+}
+```
+
 ## Credits
 
 Thank you to everyone who has contributed to Atlas! ❤️

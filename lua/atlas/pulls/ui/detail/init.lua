@@ -8,7 +8,7 @@ local detail_keymaps = require("atlas.pulls.ui.detail.keymaps")
 local icons = require("atlas.ui.shared.icons")
 local notify = require("atlas.core.notify")
 local request_scope = require("atlas.core.requests")
-local overview_icon, overview_icon_hl = icons.general("overview")
+local overview_icon = icons.general("overview")
 
 local SPINNER_INTERVAL_MS = 100
 
@@ -16,7 +16,7 @@ local DEFAULT_TABS = {
 	{
 		key = "overview",
 		label = "Overview",
-		icon = { icon = overview_icon, hl_group = overview_icon_hl },
+		icon = { icon = overview_icon },
 		mod = require("atlas.pulls.ui.detail.tabs.overview"),
 	},
 }

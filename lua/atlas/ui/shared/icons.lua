@@ -5,7 +5,7 @@ local providers = require("atlas.providers")
 
 ---@class AtlasIconStyle
 ---@field icon string
----@field hl_group string
+---@field hl_group string|nil
 
 ---@type table
 local ICONS = {
@@ -21,14 +21,14 @@ local ICONS = {
 		created = { icon = "󰃭", hl_group = "AtlasTextMuted" },
 		updated = { icon = "󰥔", hl_group = "AtlasTextMuted" },
 		user = { icon = "", hl_group = "AtlasTextMuted" },
-		reply = { icon = "", hl_group = "AtlasLogInfo" },
-		edit = { icon = "", hl_group = "AtlasLogInfo" },
+		reply = { icon = "", hl_group = "AtlasTextMuted" },
+		edit = { icon = "", hl_group = "AtlasTextMuted" },
 		delete = { icon = "󰆴", hl_group = "AtlasLogError" },
 		progress = { icon = "󰦖", hl_group = "AtlasTextMuted" },
 		success = { icon = "", hl_group = "AtlasTextPositive" },
-		warning = { icon = "", hl_group = "AtlasLogWarn" },
+		warning = { icon = "", hl_group = "AtlasTextMuted" },
 		error = { icon = "", hl_group = "AtlasLogError" },
-		info = { icon = "", hl_group = "AtlasLogInfo" },
+		info = { icon = "", hl_group = "AtlasTextMuted" },
 		bell = { icon = "󰂚", hl_group = "AtlasTextMuted" },
 		bell_no = { icon = "󰂛", hl_group = "AtlasTextMuted" },
 		bell_unread = { icon = "󱅫", hl_group = "AtlasLogInfo" },
@@ -50,13 +50,13 @@ local ICONS = {
 		merged_pr = { icon = "", hl_group = "AtlasPRMerged" },
 		declined_pr = { icon = "", hl_group = "AtlasPRDeclined" },
 		tasks = { icon = "󰘽", hl_group = "AtlasTextWarning" },
-		pipeline = { icon = "󰜎", hl_group = "AtlasTextWarning" },
+		pipeline = { icon = "󰜎", hl_group = "AtlasTextMuted" },
 		commit = { icon = "", hl_group = "AtlasTextMuted" },
 		changes = { icon = "󱓉", hl_group = "AtlasTextMuted" },
 		file = { icon = "", hl_group = "AtlasTextMuted" },
 		activity = { icon = "󱐋", hl_group = "AtlasTextMuted" },
-		tag = { icon = "", hl_group = "AtlasTextWarning" },
-		branch = { icon = "", hl_group = "AtlasLogInfo" },
+		tag = { icon = "", hl_group = "AtlasTextMuted" },
+		branch = { icon = "", hl_group = "AtlasTextMuted" },
 		review = { icon = "", hl_group = "AtlasTextMuted" },
 
 		status = {
@@ -101,7 +101,7 @@ ICONS.actions = {
 	merge = ICONS.pulls.merged_pr,
 	edit = ICONS.general.edit,
 	close = ICONS.general.error,
-	reopen = { icon = "", hl_group = "AtlasTextPositive" },
+	reopen = { icon = "", hl_group = "AtlasTextMuted" },
 	review = ICONS.pulls.review,
 	user = ICONS.general.user,
 	label = ICONS.pulls.tag,
@@ -113,9 +113,9 @@ ICONS.actions = {
 	open_in_browser = { icon = "󰖟", hl_group = "AtlasTextMuted" },
 	transition = ICONS.general.progress,
 	delete = ICONS.general.delete,
-	run = { icon = "", hl_group = "AtlasTextPositive" },
+	run = { icon = "", hl_group = "AtlasTextMuted" },
 	stop = ICONS.pulls.status.stopped,
-	retry = { icon = "󰑐", hl_group = "AtlasLogInfo" },
+	retry = { icon = "󰑐", hl_group = "AtlasTextMuted" },
 	details = ICONS.general.overview,
 	save = { icon = "", hl_group = "AtlasTextMuted" },
 	custom = { icon = "", hl_group = "AtlasTextMuted" },
