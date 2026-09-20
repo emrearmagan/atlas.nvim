@@ -9,7 +9,6 @@ local state = require("atlas.pulls.ui.detail.tabs.overview.state")
 local detail = require("atlas.pulls.ui.detail.state")
 local keymaps = require("atlas.pulls.ui.detail.tabs.overview.keymaps")
 local presentation = require("atlas.pulls.ui.presentation")
-local pipeline_api = require("atlas.pulls.pipelines")
 local pipeline_utils = require("atlas.pulls.pipelines.utils")
 local request_scope = require("atlas.core.requests")
 
@@ -46,27 +45,14 @@ function M.on_select(pr, refresh, opts)
 		return
 	end
 	local core = provider.capabilities.core
-	local pipelines = pipeline_api.get(provider)
 
 	local force_refresh = opts.force_refresh == true
 	local can_fetch_reviewers = core.fetch_reviewers ~= nil
 	local should_fetch_reviewers = can_fetch_reviewers
 		and (force_refresh or state.reviewers == nil or state.reviewers == "loading")
-	local should_fetch_pipelines = pipelines ~= nil
-		and (force_refresh or state.pipelines == nil or state.pipelines == "loading")
-
-	if should_fetch_reviewers or should_fetch_pipelines then
+	if should_fetch_reviewers then
 		reset_requests()
-	end
-
-	if should_fetch_reviewers then
 		state.reviewers = "loading"
-	end
-	if should_fetch_pipelines then
-		state.pipelines = "loading"
-	end
-
-	if should_fetch_reviewers then
 		state.requests.run(function(done)
 			return core.fetch_reviewers(pr, opts, done)
 		end, function(reviewers, err)
@@ -78,22 +64,6 @@ function M.on_select(pr, refresh, opts)
 			else
 				state.reviewers = reviewers or {}
 			end
-			refresh()
-		end)
-	end
-
-	if should_fetch_pipelines then
-		state.requests.run(function(done)
-			return pipelines.fetch(
-				{ provider = pr.provider, repo_full_name = pr.repo_full_name, target = pr },
-				opts,
-				done
-			)
-		end, function(items, err)
-			if not is_current(pr) then
-				return
-			end
-			state.pipelines = err or items or {}
 			refresh()
 		end)
 	end
@@ -256,13 +226,13 @@ local MAX_OVERVIEW_JOBS = 5
 ---@param spans table[]
 ---@param line_map table<integer, table>
 local function render_pipelines(_pr, width, lines, spans, line_map)
-	if state.pipelines == nil or state.pipelines == "loading" then
+	if detail.pipelines == nil or detail.pipelines == "loading" then
 		return
 	end
 
-	if type(state.pipelines) == "string" then
+	if type(detail.pipelines) == "string" then
 		utils.push(lines, spans, "Pipelines", "AtlasColumnHeader", PADDING_X)
-		local err_text = state.pipelines
+		local err_text = detail.pipelines
 		utils.append_block(
 			lines,
 			spans,
@@ -277,7 +247,7 @@ local function render_pipelines(_pr, width, lines, spans, line_map)
 		return
 	end
 
-	local entries = pipeline_utils.sort_by_state(state.pipelines)
+	local entries = pipeline_utils.sort_by_state(detail.pipelines)
 
 	if #entries == 0 then
 		return
@@ -544,49 +514,28 @@ local function render_merge_check_group(check, width)
 	return { lines = lines, spans = spans }
 end
 
----@param text string
----@param hl_group string
----@param width integer
----@return BoxContentGroup
-local function render_merge_check_message_group(text, hl_group, width)
-	local content_width = math.max(2, width - (PADDING_X * 2) - 3)
-	local lines = utils.wrap_line(text, content_width)
-	local spans = {}
-	for index, line in ipairs(lines) do
-		table.insert(spans, { line = index - 1, start_col = 0, end_col = #line, hl_group = hl_group })
-	end
-	return { lines = lines, spans = spans }
-end
-
 ---@param width integer
 ---@param lines string[]
 ---@param spans table[]
 local function render_merge_checks(width, lines, spans)
-	if detail.merge_checks == nil or detail.merge_checks == "loading" then
+	if detail.merge_checks == "loading" then
 		return
 	end
-	if type(detail.merge_checks) == "table" and #detail.merge_checks == 0 then
+
+	local checks = detail.get_merge_checks()
+	if #checks == 0 then
 		return
 	end
 
 	utils.push(lines, spans, "Merge Checks", "AtlasColumnHeader", PADDING_X)
 
-	if type(detail.merge_checks) == "string" then
-		local err_text = detail.merge_checks --[[@as string]]
-		utils.append_block(
-			lines,
-			spans,
-			box.render(
-				{ render_merge_check_message_group(err_text, "AtlasLogError", width) },
-				{ width = width, padding_x = PADDING_X }
-			)
-		)
-		table.insert(lines, "")
-		return
-	end
-
-	local checks = vim.list_slice(detail.merge_checks --[[@as PullsMergeCheck[] ]])
 	table.sort(checks, function(a, b)
+		if a.key == "pipelines" then
+			return false
+		end
+		if b.key == "pipelines" then
+			return true
+		end
 		return (MERGE_CHECK_PRIORITY[a.state] or math.huge) < (MERGE_CHECK_PRIORITY[b.state] or math.huge)
 	end)
 
@@ -622,7 +571,7 @@ function M.render(pr, details, width)
 		state.reviewers == "loading"
 		or detail.merge_checks == "loading"
 		or detail.details_loading
-		or state.pipelines == "loading"
+		or detail.pipelines == "loading"
 		or detail.diffstat == "loading"
 	then
 		utils.push(lines, spans, spinner.with_text("Loading overview..."), "AtlasTextMuted", PADDING_X)
@@ -650,7 +599,7 @@ end
 
 ---@return boolean
 function M.is_loading()
-	return state.reviewers == "loading" or state.pipelines == "loading"
+	return state.reviewers == "loading" or detail.pipelines == "loading"
 end
 
 function M.activate(buf, refresh)
