@@ -122,15 +122,14 @@ Jump from an issue to its PR and back, or browse related issues and sub-issues.
 <summary><strong>Pipelines</strong> - Browse jobs, steps, and logs</summary>
 
 <p align="center">
-  <img width="85%" alt="View pipelines" src="https://github.com/user-attachments/assets/c625c4e8-b1ad-4772-b46b-24718ba6fbb7">
+  <img width="85%" alt="View pipelines" src="https://github.com/user-attachments/assets/ccdffb3d-2411-435d-a498-8c291d92d2b0">
 </p>
 
 View pipelines and their jobs, inspect their status, and read job logs directly in Atlas.
 
 Use `:Atlas pipelines <target>` with a branch name, PR URL or number (`123`, `#123`, or GitLab `!123`), or a build URL. Branch names use the local repository; `:Atlas pipelines .` opens builds for the current branch.
 
-<details>
-<summary><strong>Configuration</strong></summary>
+### Configuration
 
 Atlas uses your provider's CI by default. Set `ci.backend` to use your own. For Bamboo on Bitbucket, use `require("atlas.pulls.pipelines.bamboo").new(opts)` with `host`, `user`, and `password`.
 
@@ -165,8 +164,6 @@ providers = {
 ```
 
 `ci.highlights` controls log highlighting using Lua patterns. Set `level` for a severity color or `hl_group` for an existing Neovim highlight group.
-
-</details>
 
 </details>
 
