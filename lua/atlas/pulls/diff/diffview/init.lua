@@ -447,7 +447,7 @@ local function attach(session, view, tabpage)
 		group = vim.api.nvim_create_augroup("AtlasDiffview" .. tabpage, { clear = true }),
 		sync_scheduled = false,
 		suspended = false,
-		auto_open_panel = diff_config.show_review_panel == true
+		auto_open_panel = (diff_config.review_panel or {}).hidden == false
 			and (session.review ~= nil or session.note_target ~= nil),
 		pending_jump = nil,
 		additions = 0,

@@ -471,7 +471,7 @@ local function attach(session, lifecycle, tabpage)
 		pending_selection = nil,
 		group = vim.api.nvim_create_augroup("AtlasCodeDiff" .. session.id, { clear = true }),
 		generation = 0,
-		auto_open_panel = diff_config.show_review_panel == true
+		auto_open_panel = (diff_config.review_panel or {}).hidden == false
 			and (session.review ~= nil or session.note_target ~= nil),
 		closed = false,
 		annotated_paths = {},

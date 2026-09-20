@@ -57,7 +57,8 @@ require("atlas").setup({})
 
 </details>
 
-### Requirements
+<details>
+<summary><strong>Requirements</strong></summary>
 
 - Neovim: `0.10+`
 - `git` and `curl` on `$PATH`
@@ -68,6 +69,8 @@ require("atlas").setup({})
 
 > [!tip]
 > It's a good idea to run `:checkhealth atlas` to see if everything is set up correctly.
+
+</details>
 
 ## Features
 
@@ -291,7 +294,8 @@ Save searches as bookmarks, or press `*` to star a pull request or issue. Both a
 }
 ```
 
-### Statusline
+<details>
+<summary><strong>Statusline</strong></summary>
 
 Atlas comes with its own statusline for key hints, loading progress, and notifications. Keeping it enabled is recommended because most interaction and feedback goes through it.
 
@@ -309,6 +313,8 @@ require("lualine").setup({
 ```
 
 At some point there will probably an extension for lualine.
+
+</details>
 
 ## Commands
 
@@ -353,9 +359,9 @@ pulls = {
   diff = {
     -- Any command that accepts explicit <base>...<head> Git revisions.
     open_cmd = "AtlasDiff", -- default; for example "DiffviewOpen" or "CodeDiff".
-    show_review_panel = false, -- Set true to show the review panel when a diff opens.
     comment_display = "virtual_lines", -- "virtual_lines" or compact "virtual_text" hints.
     review_panel = {
+      hidden = true, -- Set false to show the review panel when a diff opens.
       height = 10,
     },
 
