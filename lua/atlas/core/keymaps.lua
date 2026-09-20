@@ -5,6 +5,8 @@ local config = require("atlas.config")
 ---@class AtlasUIKeymaps
 ---@field next_item? AtlasKeymapValue
 ---@field previous_item? AtlasKeymapValue
+---@field previous_column? AtlasKeymapValue
+---@field next_column? AtlasKeymapValue
 ---@field first_item? AtlasKeymapValue
 ---@field last_item? AtlasKeymapValue
 ---@field select? AtlasKeymapValue
@@ -141,6 +143,8 @@ local config = require("atlas.config")
 ---@alias AtlasKeymapActionId
 ---| "ui.next_item"
 ---| "ui.previous_item"
+---| "ui.previous_column"
+---| "ui.next_column"
 ---| "ui.first_item"
 ---| "ui.last_item"
 ---| "ui.select"

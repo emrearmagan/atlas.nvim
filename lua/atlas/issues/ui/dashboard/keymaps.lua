@@ -55,6 +55,34 @@ function M.register(buf, views)
 	end
 
 	local items = {}
+	utils.insert_if(
+		items,
+		item("ui.previous_column", {
+			desc = "Previous status column (board)",
+			callback = function()
+				local view = state.search_view()
+				if view and view.layout == "board" then
+					require("atlas.ui.navigation").move_column(-vim.v.count1)
+				else
+					vim.cmd("normal! " .. vim.v.count1 .. "h")
+				end
+			end,
+		})
+	)
+	utils.insert_if(
+		items,
+		item("ui.next_column", {
+			desc = "Next status column (board)",
+			callback = function()
+				local view = state.search_view()
+				if view and view.layout == "board" then
+					require("atlas.ui.navigation").move_column(vim.v.count1)
+				else
+					vim.cmd("normal! " .. vim.v.count1 .. "l")
+				end
+			end,
+		})
+	)
 
 	for _, view in ipairs(views) do
 		if view ~= state.bookmarks.tab and view.key ~= nil and view.key ~= "" then

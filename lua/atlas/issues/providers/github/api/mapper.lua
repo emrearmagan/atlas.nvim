@@ -196,6 +196,34 @@ function M.to_search_results(nodes)
 	return issues
 end
 
+---@param project table
+---@param pagelen integer
+---@return IssuesPage
+function M.to_project_page(project, pagelen)
+	local items = json.safe_table(project.items)
+	local page_info = json.safe_table(items.pageInfo)
+	local page = {
+		items = {},
+		next_cursor = page_info.hasNextPage and json.safe_str(page_info.endCursor) or nil,
+		total_pages = math.max(1, math.ceil((tonumber(items.totalCount) or 0) / pagelen)),
+	}
+	local options = json.nilify(json.safe_table(project.field).options)
+	if type(options) == "table" then
+		page.statuses = vim.list_extend({}, options)
+		page.statuses[#page.statuses + 1] = { id = "no_status", name = "No status" }
+	end
+	for _, item in ipairs(json.safe_table(items.nodes)) do
+		local issue = M.to_issue(item.content)
+		if issue then
+			page.items[#page.items + 1] = issue
+			if page.statuses then
+				issue.project_status_id = json.safe_str(json.safe_table(item.status).optionId) or "no_status"
+			end
+		end
+	end
+	return page
+end
+
 ---@param key string
 ---@return string slug, integer|nil number
 function M.parse_key(key)

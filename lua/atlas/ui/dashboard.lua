@@ -306,6 +306,7 @@ function M.open(domain, provider)
 		vim.api.nvim_set_current_win(state.win)
 		vim.api.nvim_win_set_buf(state.win, state.buf)
 	end
+	configure_window()
 	require("atlas.ui.keymaps").register(state.buf)
 end
 

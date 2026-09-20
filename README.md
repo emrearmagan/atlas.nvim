@@ -585,6 +585,13 @@ issues = {
         ["Maintenance"] = { icon = "", hl_group = "AtlasTextWarning" },
         ["Infrastructure"] = { icon = "󰒋", hl_group = "AtlasLogInfo" },
       },
+      -- Icons for board columns and the transition picker; names override categories.
+      status_icons = {
+        new = "󰄱",
+        indeterminate = "󰦖",
+        done = "",
+        ["Blocked"] = "",
+      },
 
       KAN = {
         customfield_10003 = {
@@ -636,6 +643,12 @@ issues = {
         key = "3",
         layout = "plain",
         search = "mentions:@me is:open",
+      },
+      {
+        name = "Board",
+        key = "4",
+        layout = "board",
+        project = { owner = "your-org", number = 1 },
       },
     },
 
