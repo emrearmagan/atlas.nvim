@@ -97,6 +97,26 @@ function M.select(pane)
 end
 
 ---@param pane PullsPipelinesExplorer
+---@param direction 1|-1
+---@param selection PullsPipelinesSelection|nil
+function M.navigate_job(pane, direction, selection)
+	if not utils.window.valid(pane.win) then
+		return
+	end
+	local row = selection and renderer.find_selection(pane, selection) or vim.api.nvim_win_get_cursor(pane.win)[1]
+	local current_job = selection and selection.job
+	local boundary = direction > 0 and vim.api.nvim_buf_line_count(pane.buf) or 1
+	for target = row + direction, boundary, direction do
+		local entry = pane.line_map[target]
+		if entry and entry.job and not entry.step and entry.job ~= current_job then
+			vim.api.nvim_win_set_cursor(pane.win, { target, 0 })
+			show_selection(pane, entry)
+			return
+		end
+	end
+end
+
+---@param pane PullsPipelinesExplorer
 ---@param selection PullsPipelinesSelection|nil
 function M.reload_job(pane, selection)
 	selection = selection or M.current_selection(pane)

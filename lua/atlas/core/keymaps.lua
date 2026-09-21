@@ -96,6 +96,12 @@ local config = require("atlas.config")
 ---@field merged? AtlasKeymapValue
 ---@field declined? AtlasKeymapValue
 
+---@class AtlasPullsPipelinesKeymaps
+---@field next_job? AtlasKeymapValue
+---@field previous_job? AtlasKeymapValue
+---@field show_history? AtlasKeymapValue
+---@field toggle_raw_logs? AtlasKeymapValue
+
 ---@class AtlasPullsCustomKeymap
 ---@field key string|string[]
 ---@field desc string
@@ -113,6 +119,7 @@ local config = require("atlas.config")
 ---@field edit_title? AtlasKeymapValue
 ---@field edit_description? AtlasKeymapValue
 ---@field edit_search? AtlasKeymapValue
+---@field pipelines? AtlasPullsPipelinesKeymaps
 ---@field review? AtlasPullsReviewKeymaps
 ---@field filters? AtlasPullsFilterKeymaps
 
@@ -187,6 +194,10 @@ local config = require("atlas.config")
 ---| "pulls.edit_title"
 ---| "pulls.edit_description"
 ---| "pulls.edit_search"
+---| "pulls.pipelines.next_job"
+---| "pulls.pipelines.previous_job"
+---| "pulls.pipelines.show_history"
+---| "pulls.pipelines.toggle_raw_logs"
 ---| "pulls.review.approve"
 ---| "pulls.review.request_changes"
 ---| "pulls.review.submit_review"
@@ -373,6 +384,7 @@ function M.validate()
 		{ "pulls.toggle_repo_issue_state", "pulls.review.diff.toggle_layout" },
 		{ "pulls.checkout", "pulls.review.diff.toggle_compact" },
 		{ "pulls.open_diff", "pulls.review.focus_item" },
+		{ "pulls.pipelines.show_history", "pulls.review.diff.toggle_comments" },
 		{
 			"ui.comments.react",
 			"pulls.review.request_changes",

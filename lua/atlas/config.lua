@@ -238,6 +238,12 @@ M.options = {
 			edit_title = "T",
 			edit_description = "D",
 			edit_search = "i",
+			pipelines = {
+				next_job = "]j",
+				previous_job = "[j",
+				show_history = "gH",
+				toggle_raw_logs = "gL",
+			},
 			review = {
 				focus_item = "gd",
 				approve = "ga",

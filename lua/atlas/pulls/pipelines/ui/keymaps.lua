@@ -27,7 +27,25 @@ local function shared_items(pane, explorer_pane, logs_pane, close, open_actions)
 	local close_keys = keymaps.resolve("ui.close") or {}
 	local items = {
 		{
-			key = { "gH" },
+			key = keymaps.resolve("pulls.pipelines.next_job") or {},
+			desc = "Next job",
+			callback = function()
+				explorer.navigate_job(explorer_pane, 1, current_selection(pane, explorer_pane))
+			end,
+			index = 7,
+			opts = { nowait = true, silent = true },
+		},
+		{
+			key = keymaps.resolve("pulls.pipelines.previous_job") or {},
+			desc = "Previous job",
+			callback = function()
+				explorer.navigate_job(explorer_pane, -1, current_selection(pane, explorer_pane))
+			end,
+			index = 8,
+			opts = { nowait = true, silent = true },
+		},
+		{
+			key = keymaps.resolve("pulls.pipelines.show_history") or {},
 			desc = "Show build history",
 			callback = function()
 				explorer.show_history(explorer_pane, current_selection(pane, explorer_pane))
@@ -77,7 +95,7 @@ local function shared_items(pane, explorer_pane, logs_pane, close, open_actions)
 	}
 	if pane == explorer_pane or pane == logs_pane then
 		items[#items + 1] = {
-			key = { "gL" },
+			key = keymaps.resolve("pulls.pipelines.toggle_raw_logs") or {},
 			desc = "Toggle raw logs",
 			callback = function()
 				logs.toggle_raw(logs_pane)
