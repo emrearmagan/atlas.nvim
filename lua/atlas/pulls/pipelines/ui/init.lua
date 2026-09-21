@@ -1,6 +1,5 @@
 local resolver = require("atlas.core.keymaps")
 local notify = require("atlas.core.notify")
-local pipeline_utils = require("atlas.pulls.pipelines.utils")
 local actions = require("atlas.pulls.pipelines.ui.actions")
 local config = require("atlas.pulls.pipelines.ui.config")
 local explorer = require("atlas.pulls.pipelines.ui.explorer")
@@ -22,16 +21,37 @@ local utils = require("atlas.ui.shared.utils")
 
 local M = {}
 
-local STATUS_HIGHLIGHTS = {
-	FAILED = "AtlasFooterError",
-	INPROGRESS = "AtlasFooterInfo",
-	CANCELED = "AtlasFooterWarning",
-	SKIPPED = "AtlasFooterText",
-	MANUAL = "AtlasFooterWarning",
-	STOPPED = "AtlasFooterWarning",
-	SUCCESSFUL = "AtlasFooterSuccess",
-	UNKNOWN = "AtlasFooterText",
-}
+---@param pane PullsPipelinesLogs
+---@return AtlasStatuslineSegment[]
+local function log_counts(pane)
+	local items = {}
+	local counts = pane.counts
+	if not counts then
+		return items
+	end
+	for _, counter in ipairs({
+		{ "error", "error", "AtlasFooterError" },
+		{ "warn", "warning", "AtlasFooterWarning" },
+		{ "canceled", "canceled", "AtlasFooterWarning" },
+		{ "success", "successful", "AtlasFooterSuccess" },
+		{ "skipped", "skipped", "AtlasFooterText" },
+	}) do
+		local count = counts[counter[1]] or 0
+		if count > 0 then
+			local label = counter[2]
+			if count > 1 and (counter[1] == "error" or counter[1] == "warn") then
+				label = label .. "s"
+			end
+			items[#items + 1] = {
+				text = count .. " " .. label,
+				hl_group = counter[3],
+				align = "right",
+				priority = 1,
+			}
+		end
+	end
+	return items
+end
 
 ---@param session PullsPipelinesSession
 local function update_statusline(session)
@@ -43,35 +63,15 @@ local function update_statusline(session)
 	elseif target.source then
 		title = string.format("#%s %s", target.id, target.title)
 	end
-	local selection = session.config.selection or session.logs.selection
-	local items = {
-		{
-			text = title,
-			hl_group = "AtlasFooterText",
-			priority = 5,
-			min_width = 12,
-		},
+	local heading = {
+		text = title,
+		hl_group = "AtlasFooterText",
+		priority = 5,
+		min_width = 12,
 	}
-	if selection and selection.pipeline then
-		local names = { pipeline_utils.display_name(selection.pipeline) }
-		if selection.stage and selection.stage.name and selection.stage.name ~= "" then
-			names[#names + 1] = selection.stage.name
-		end
-		if selection.job then
-			names[#names + 1] = selection.job.name
-		end
-		local item = selection.job or selection.stage or selection.pipeline
-		---@cast item -nil
-		local icon = icons.pulls_status(item.state:lower())
-		items[#items + 1] = {
-			text = icon .. " " .. table.concat(names, " - "),
-			hl_group = STATUS_HIGHLIGHTS[item.state],
-			align = "right",
-			priority = -1,
-		}
-	end
+	local items = vim.list_extend({ heading }, log_counts(session.logs))
 
-	local job = selection and selection.job
+	local job = session.logs.selection and session.logs.selection.job
 	if job then
 		if job.duration then
 			local duration = job.duration < 60 and string.format("%ds", math.floor(job.duration))
@@ -91,22 +91,6 @@ local function update_statusline(session)
 				align = "right",
 				priority = 0,
 			}
-		end
-		local counts = session.logs.counts
-		if counts then
-			for _, counter in ipairs({
-				{ counts.warn, "warning", "AtlasFooterWarning" },
-				{ counts.error, "error", "AtlasFooterError" },
-			}) do
-				if counter[1] > 0 then
-					items[#items + 1] = {
-						text = icons.general(counter[2]) .. " " .. counter[1],
-						hl_group = counter[3],
-						align = "right",
-						priority = 1,
-					}
-				end
-			end
 		end
 	end
 

@@ -13,7 +13,7 @@ local utils = require("atlas.ui.shared.utils")
 ---@field selection PullsPipelinesSelection|nil
 ---@field log (PullsLogLine|PullsLogGroup)[]|"loading"|string|nil
 ---@field source PullsLog|nil
----@field counts { error: integer, warn: integer }|nil
+---@field counts table<PullsLogLevel, integer>|nil
 ---@field show_raw boolean|nil
 ---@field collapsed table<PullsLogGroup, boolean>
 ---@field line_map table<integer, PullsLogGroup>

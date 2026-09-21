@@ -27,7 +27,7 @@ local function append_highlights(styles, spans, row, column)
 end
 
 ---@param entries (PullsLogLine|PullsLogGroup)[]
----@param format fun(value: string, is_group: boolean): string, table[]
+---@param format fun(value: string, is_group: boolean, level?: PullsLogLevel): string, table[]
 ---@param prepared table<PullsLogLine|PullsLogGroup, { text: string, spans: table[] }>
 local function prepare_entries(entries, format, prepared)
 	for _, entry in ipairs(entries) do
@@ -35,7 +35,7 @@ local function prepare_entries(entries, format, prepared)
 		if entry.text and entry.timestamp and body:sub(1, #entry.timestamp) == entry.timestamp then
 			body = body:sub(#entry.timestamp + 2)
 		end
-		local formatted, spans = format(body, entry.entries ~= nil)
+		local formatted, spans = format(body, entry.entries ~= nil, entry.level)
 		prepared[entry] = { text = formatted, spans = spans }
 		if entry.entries then
 			prepare_entries(entry.entries, format, prepared)
@@ -80,8 +80,8 @@ local function append_entries(pane, entries, lines, spans, prepared, depth, pare
 					hl_group = hl,
 				}
 			end
-			if entry.state then
-				local status_icon, status_hl = icons.pulls_status(entry.state:lower())
+			if entry.level then
+				local status_icon, status_hl = icons.log_level(entry.level)
 				spans[#spans + 1] = {
 					line = #lines,
 					start_col = #prefix,

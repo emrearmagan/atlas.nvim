@@ -1,7 +1,7 @@
 local M = {}
 
----@type table<string, PullsPipelineState>
-local states = { Success = "SUCCESSFUL", Failed = "FAILED" }
+---@type table<string, PullsLogLevel>
+local levels = { Success = "success", Failed = "error" }
 
 ---@param log PullsLog
 ---@return (PullsLogLine|PullsLogGroup)[]
@@ -34,7 +34,7 @@ function M.parse(log)
 				for index = #stack, 1, -1 do
 					if stack[index].name == finished_name then
 						local group = stack[index]
-						group.state = states[result]
+						group.level = levels[result]
 						local started = vim.fn.strptime("%d-%b-%Y %H:%M:%S", group.timestamp)
 						local finished = vim.fn.strptime("%d-%b-%Y %H:%M:%S", timestamp)
 						if started > 0 and finished >= started then

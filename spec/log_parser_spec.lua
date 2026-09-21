@@ -102,7 +102,7 @@ describe("pipeline logs", function()
 		}, entries)
 	end)
 
-	it("reads GitHub action names, status and duration from markers", function()
+	it("reads GitHub action names, log levels and duration from markers", function()
 		local entries = parser.parse({
 			raw = table.concat({
 				"##[start-action display=Build%3B test%5D%25;id=build]",
@@ -111,7 +111,7 @@ describe("pipeline logs", function()
 			}, "\n"),
 		}, github.parse)
 		assert.same({
-			{ name = "Build; test]%", state = "FAILED", duration = 1.5, entries = { { text = "Compiling" } } },
+			{ name = "Build; test]%", level = "error", duration = 1.5, entries = { { text = "Compiling" } } },
 		}, entries)
 	end)
 
@@ -133,7 +133,7 @@ describe("pipeline logs", function()
 	end)
 
 	it("parses Bamboo task results without treating build output as task markers", function()
-		for result, state in pairs({ Success = "SUCCESSFUL", Failed = "FAILED" }) do
+		for result, level in pairs({ Success = "success", Failed = "error" }) do
 			local entries = parser.parse({
 				raw = table.concat({
 					"simple 20-Sep-2026 14:30:12 Starting task 'Build' of type 'script'",
@@ -145,7 +145,7 @@ describe("pipeline logs", function()
 				{
 					name = "Build",
 					timestamp = "20-Sep-2026 14:30:12",
-					state = state,
+					level = level,
 					duration = 3,
 					entries = {
 						{ text = "Starting task 'Echoed' of type 'script'", timestamp = "20-Sep-2026 14:30:12" },
@@ -163,7 +163,7 @@ describe("pipeline logs", function()
 		assert.same({ { text = "##[group]Build" }, { text = "Compiling" } }, entries)
 	end)
 
-	it("applies default highlights and counts only errors and warnings", function()
+	it("applies default highlights and counts log levels", function()
 		local format, counts = highlights.new()
 		for _, case in ipairs({
 			{ "##[error]Broken", "Error: Broken", "AtlasLogErrorLine", true },
@@ -184,11 +184,13 @@ describe("pipeline logs", function()
 			assert.equal(case[2], text)
 			assert.same({ { start_col = 0, end_col = #text, hl_group = case[3], hl_eol = case[4] } }, spans)
 		end
-		assert.same({ error = 3, warn = 3 }, counts)
+		assert.same({ error = 3, warn = 3, success = 0, canceled = 0, skipped = 0 }, counts)
 		assert.same({ "[ERROR] group", { { start_col = 0, end_col = 13, hl_group = "AtlasLogGroup" } } }, {
 			format("[ERROR] group", true),
 		})
-		assert.same({ error = 3, warn = 3 }, counts)
+		assert.same({ error = 3, warn = 3, success = 0, canceled = 0, skipped = 0 }, counts)
+		format("Failed group", true, "error")
+		assert.equal(4, counts.error)
 		assert.same({ "ordinary output", {} }, { format("ordinary output", false) })
 	end)
 
@@ -205,6 +207,6 @@ describe("pipeline logs", function()
 		assert.same({ "Error: Broken", { { start_col = 0, end_col = 13, hl_group = "CustomLog" } } }, {
 			format("##[error]Broken", false),
 		})
-		assert.same({ error = 0, warn = 0 }, counts)
+		assert.same({ error = 0, warn = 0, success = 0, canceled = 0, skipped = 0 }, counts)
 	end)
 end)

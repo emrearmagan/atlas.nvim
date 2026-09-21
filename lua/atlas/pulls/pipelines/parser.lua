@@ -1,3 +1,5 @@
+---@alias PullsLogLevel "error"|"warn"|"info"|"debug"|"success"|"canceled"|"skipped"
+
 ---@class PullsLog
 ---@field raw string
 ---@field lines PullsLogLine[]|nil
@@ -5,12 +7,13 @@
 ---@class PullsLogLine
 ---@field text string
 ---@field timestamp string|nil
+---@field level PullsLogLevel|nil
 
 ---@class PullsLogGroup
 ---@field name string
 ---@field timestamp string|nil
 ---@field duration number|nil Seconds.
----@field state PullsPipelineState|nil
+---@field level PullsLogLevel|nil
 ---@field entries (PullsLogLine|PullsLogGroup)[]
 
 local M = {}

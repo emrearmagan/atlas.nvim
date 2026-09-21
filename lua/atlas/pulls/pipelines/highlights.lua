@@ -1,6 +1,6 @@
 ---@class AtlasLogRule
 ---@field pattern string Lua pattern.
----@field level "error"|"warn"|"info"|"debug"|"success"|nil
+---@field level PullsLogLevel|nil
 ---@field hl_group string|nil
 
 local M = {}
@@ -11,6 +11,8 @@ local LEVELS = {
 	info = "AtlasLogInfo",
 	debug = "AtlasLogDebug",
 	success = "AtlasTextPositive",
+	canceled = "AtlasTextMuted",
+	skipped = "AtlasTextMuted",
 }
 
 local defaults = {
@@ -76,16 +78,16 @@ local function matches(rule, text)
 end
 
 ---@param custom_rules AtlasLogRule[]|nil
----@return fun(value: string, is_group: boolean): string, table[]
----@return { error: integer, warn: integer } counts
+---@return fun(value: string, is_group: boolean, level?: PullsLogLevel): string, table[]
+---@return table<PullsLogLevel, integer> counts
 function M.new(custom_rules)
 	local rules = type(custom_rules) == "table" and custom_rules or {}
-	local counts = { error = 0, warn = 0 }
+	local counts = { error = 0, warn = 0, success = 0, canceled = 0, skipped = 0 }
 
-	return function(value, is_group)
+	return function(value, is_group, level)
 		local body = value:gsub("\r", " ")
-		local level, hl_eol
-		local highlight = is_group and "AtlasLogGroup" or nil
+		local hl_eol
+		local highlight = is_group and "AtlasLogGroup" or LEVELS[level]
 		if is_group then
 			body = body:gsub("[%z\1-\31\127]", " ")
 		else
@@ -117,7 +119,7 @@ function M.new(custom_rules)
 			hl_eol = nil
 		end
 
-		if not is_group and counts[level] then
+		if counts[level] then
 			counts[level] = counts[level] + 1
 		end
 		local spans = {}

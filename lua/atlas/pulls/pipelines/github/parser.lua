@@ -2,11 +2,12 @@ local utils = require("atlas.pulls.pipelines.utils")
 
 local M = {}
 
-local STATES = {
-	success = "SUCCESSFUL",
-	failure = "FAILED",
-	cancelled = "CANCELED",
-	skipped = "SKIPPED",
+---@type table<string, PullsLogLevel>
+local LEVELS = {
+	success = "success",
+	failure = "error",
+	cancelled = "canceled",
+	skipped = "skipped",
 }
 
 local ESCAPES = { ["%3B"] = ";", ["%5D"] = "]", ["%0D"] = "\r", ["%0A"] = "\n", ["%25"] = "%" }
@@ -86,7 +87,7 @@ function M.parse(log)
 			---@cast value string
 			local action = properties(value)
 			if action.id == parent.id then
-				parent.group.state = STATES[action.conclusion]
+				parent.group.level = LEVELS[action.conclusion]
 				local milliseconds = tonumber(action.duration_ms)
 				parent.group.duration = milliseconds and milliseconds / 1000 or nil
 				stack[#stack] = nil
