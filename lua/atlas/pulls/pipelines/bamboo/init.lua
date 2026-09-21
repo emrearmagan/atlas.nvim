@@ -103,7 +103,6 @@ local function parse_pipeline(web_base, result, name)
 		url = string.format("%s/browse/%s", web_base, key),
 		number = tonumber(result.buildNumber or result.number) or tonumber(key:match("%-(%d+)$")),
 		commit = json.safe_str(result.vcsRevisionKey),
-		branch = json.safe_str(plan.vcsBranchName),
 		started_at = json.safe_str(result.buildStartedTime),
 		stages = {},
 	}
@@ -188,6 +187,44 @@ function M.new(opts)
 		return request("GET", url, "commit builds", on_done)
 	end
 
+	local function fetch_builds(context, fetch_opts, on_done)
+		local target = context.target
+		if type(target) ~= "string" then
+			return bitbucket.fetch(context, fetch_opts, function(pipelines, err)
+				on_done(pipelines and linked_builds(pipelines, web_base), err)
+			end)
+		end
+
+		local branch = url_encode(target)
+		local endpoint = string.format(
+			"/repositories/%s/commit/%s/statuses?refname=%s&pagelen=100",
+			context.repo_full_name,
+			branch,
+			branch
+		)
+		return bitbucket_service.fetch_all_values(endpoint, function(body, err)
+			if err then
+				on_done(nil, err)
+				return
+			end
+			local builds = {}
+			for _, status in ipairs(body.values) do
+				local key = result_key_from_url(status.url, web_base)
+				if key then
+					table.insert(builds, {
+						id = key,
+						name = status.name,
+						url = status.url,
+						branch = json.safe_str(status.refname),
+						state = "UNKNOWN",
+						stages = {},
+					})
+				end
+			end
+			on_done(builds, nil)
+		end, { action = "Fetch branch builds", branch = target, repo = context.repo_full_name })
+	end
+
 	local function fetch_plan_history(key, name, on_done)
 		local url = string.format(
 			"%s/result/%s.json?expand=results.result&includeAllStates=true&start-index=0&max-results=30&os_authType=basic",
@@ -247,39 +284,19 @@ function M.new(opts)
 			end)
 		end
 
-		local function fetch_for_commit(hash)
+		local target = context.target
+		if type(target) ~= "string" and not target.source then
+			fetch_plans({ target })
+		else
 			scope.run(function(done)
-				return fetch_commit_results(hash, done)
-			end, function(body, err)
+				return fetch_builds(context, nil, done)
+			end, function(builds, err)
 				if err then
 					on_done(nil, err)
 					return
-				end
-				local builds = {}
-				for _, result in ipairs(body.results.result) do
-					table.insert(builds, parse_pipeline(web_base, result))
 				end
 				fetch_plans(builds)
 			end)
-		end
-
-		local target = context.target
-		if type(target) == "string" then
-			scope.run(function(done)
-				local branch = url_encode(target)
-				local endpoint = string.format("/repositories/%s/refs/branches/%s", context.repo_full_name, branch)
-				return bitbucket_service.request("GET", endpoint, nil, nil, done, { action = "Fetch branch" })
-			end, function(branch, err)
-				if err then
-					on_done(nil, err)
-					return
-				end
-				fetch_for_commit(branch.target.hash)
-			end)
-		elseif target.source then
-			fetch_for_commit(target.source.commit_hash)
-		else
-			fetch_plans({ target })
 		end
 		return scope
 	end
@@ -300,14 +317,13 @@ function M.new(opts)
 
 		local scope = requests.new()
 		scope.run(function(done)
-			return bitbucket.fetch(context, fetch_opts, done)
-		end, function(pipelines, err)
+			return fetch_builds(context, fetch_opts, done)
+		end, function(builds, err)
 			if err then
 				on_done(nil, err)
 				return
 			end
 
-			local builds = linked_builds(pipelines, web_base)
 			local starts = {}
 			for index, build in ipairs(builds) do
 				starts[tostring(index)] = function(done)
