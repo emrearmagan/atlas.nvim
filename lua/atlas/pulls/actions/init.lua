@@ -414,7 +414,7 @@ M.browse_repository = {
 	is_available = has_pr,
 	run = function(context, done)
 		local pr = assert(context.pr)
-		repository.open({ full_name = pr.repo_full_name }, context.provider)
+		repository.open(pr.repo_full_name, context.provider)
 		done({ changed_pr = false }, nil)
 	end,
 }

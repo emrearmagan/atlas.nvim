@@ -134,7 +134,7 @@ M.browse_repository = {
 			done(nil, err or "Missing repository info")
 			return
 		end
-		repository.open({ full_name = target.repo_full_name }, context.provider)
+		repository.open(target.repo_full_name, context.provider)
 		done(nil, nil)
 	end,
 }

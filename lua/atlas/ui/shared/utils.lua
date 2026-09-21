@@ -1,3 +1,5 @@
+local ui_utils = require("atlas.ui.utils")
+
 local M = {
 	window = {},
 	buffer = {},
@@ -64,6 +66,23 @@ function M.buffer.delete(buf)
 	if M.buffer.valid(buf) then
 		pcall(vim.api.nvim_buf_delete, buf, { force = true })
 	end
+end
+
+---@param buf integer
+---@param win integer
+---@param text string
+function M.buffer.center_message(buf, win, text)
+	if not M.buffer.valid(buf) or not M.window.valid(win) then
+		return
+	end
+	local lines = {}
+	for _ = 1, math.floor((vim.api.nvim_win_get_height(win) - 1) / 2) do
+		lines[#lines + 1] = ""
+	end
+	lines[#lines + 1] = ui_utils.center_text(text, vim.api.nvim_win_get_width(win))
+	vim.bo[buf].modifiable = true
+	vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+	vim.bo[buf].modifiable = false
 end
 
 -- Tab

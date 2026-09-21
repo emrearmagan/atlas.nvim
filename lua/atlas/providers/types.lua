@@ -50,6 +50,7 @@
 
 ---@class AtlasRepositoryDetails : AtlasRepository
 ---@field description string|nil
+---@field topics string[]|nil
 ---@field size number|nil
 ---@field default_branch string|nil
 ---@field is_private boolean|nil

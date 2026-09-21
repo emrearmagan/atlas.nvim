@@ -1,4 +1,7 @@
 local resolver = require("atlas.core.keymaps")
+local notify = require("atlas.core.notify")
+local request_scope = require("atlas.core.requests")
+local loading = require("atlas.ui.loading")
 local pages = require("atlas.ui.repository.pages")
 local keymaps = require("atlas.ui.repository.keymaps")
 local sidebar = require("atlas.ui.repository.sidebar")
@@ -11,6 +14,9 @@ local utils = require("atlas.ui.shared.utils")
 ---@field closed boolean
 ---@field sidebar RepositorySidebar
 ---@field content { buf: integer, win: integer }
+---@field repo AtlasRepositoryDetails
+---@field provider PullsProvider|IssuesProvider
+---@field page RepositoryPage|nil
 ---@field statusline AtlasStatusline
 
 local M = {}
@@ -18,10 +24,30 @@ local M = {}
 ---@param session RepositoryBrowser
 ---@param index integer
 local function select_page(session, index)
+	local page = session.sidebar.pages[index]
+	if session.page == page then
+		return
+	end
+	if session.page then
+		session.page.close(session.content.buf)
+	end
+	session.page = page
 	session.sidebar.selected = index
 	sidebar.render(session.sidebar)
 	vim.api.nvim_win_set_cursor(session.sidebar.win, { index, 0 })
-	vim.wo[session.content.win].winbar = session.sidebar.pages[index].label
+	vim.wo[session.content.win].winbar = page.label
+	vim.bo[session.content.buf].modifiable = true
+	vim.api.nvim_buf_set_lines(session.content.buf, 0, -1, false, {})
+	vim.bo[session.content.buf].modifiable = false
+	vim.api.nvim_win_set_cursor(session.content.win, { 1, 0 })
+	page.open({
+		buf = session.content.buf,
+		win = session.content.win,
+		sidebar_buf = session.sidebar.buf,
+		repo = session.repo,
+		provider = session.provider,
+		statusline = session.statusline,
+	})
 end
 
 ---@param session RepositoryBrowser
@@ -70,6 +96,9 @@ local function close(session)
 	end
 	session.closed = true
 	vim.api.nvim_del_augroup_by_id(session.group)
+	if session.page then
+		session.page.close(session.content.buf)
+	end
 	session.statusline:dispose()
 	if utils.tab.valid(session.tab) then
 		if #vim.api.nvim_list_tabpages() > 1 then
@@ -104,13 +133,16 @@ local function setup_events(session)
 	})
 end
 
----@param repo { full_name: string }
+---@param repo AtlasRepositoryDetails
 ---@param provider PullsProvider|IssuesProvider
-function M.open(repo, provider)
+---@param page_key string|nil
+local function show(repo, provider, page_key)
 	vim.cmd("tabnew")
 	local session = {
 		tab = vim.api.nvim_get_current_tabpage(),
 		closed = false,
+		repo = repo,
+		provider = provider,
 		sidebar = { pages = pages.get(provider), selected = 1 },
 		content = {},
 		statusline = statusline.new({ help_key = (resolver.resolve("ui.help") or {})[1] }),
@@ -124,10 +156,41 @@ function M.open(repo, provider)
 	end, function(index)
 		select_page(session, index)
 	end)
-	select_page(session, 1)
 	session.statusline:set_items({
-		{ text = provider.name .. " / " .. repo.full_name, hl_group = "AtlasFooterText" },
+		{ text = provider.name .. " / " .. (repo.full_name or repo.name), hl_group = "AtlasFooterText" },
 	})
+	for index, page in ipairs(session.sidebar.pages) do
+		if page.key == (page_key or "overview") then
+			select_page(session, index)
+			return
+		end
+	end
+	select_page(session, 1)
+end
+
+---@param repo_full_name string
+---@param provider PullsProvider|IssuesProvider
+---@param opts { page?: string }|nil
+function M.open(repo_full_name, provider, opts)
+	local repository = provider.capabilities.repository
+	if not repository then
+		notify.error("Repository details are not available")
+		return
+	end
+	local owner, name = repo_full_name:match("^(.*)/([^/]+)$")
+	local repo = { id = repo_full_name, full_name = repo_full_name, name = name, owner = owner, repo_name = name }
+	local requests = request_scope.new()
+	local view = loading.open("Loading repository...", requests.cancel)
+	requests.run(function(done)
+		return repository.fetch_details(repo, {}, done)
+	end, function(details, err)
+		view:finish()
+		if not details then
+			notify.error(err or "Failed to load repository")
+			return
+		end
+		show(details, provider, opts and opts.page)
+	end)
 end
 
 return M

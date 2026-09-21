@@ -89,6 +89,7 @@ function M.fetch_details(repo, opts, on_done)
 			repo_name = name,
 			html_url = json.safe_str(result.web_url) or "",
 			description = json.safe_str(result.description) or "",
+			topics = json.safe_table(result.topics),
 			size = tonumber(statistics.repository_size),
 			default_branch = json.safe_str(result.default_branch) or "",
 			is_private = json.safe_str(result.visibility) == "private",

@@ -68,7 +68,7 @@ function M.fetch_details(repo, opts, on_done)
 					"view",
 					slug,
 					"--json",
-					"name,nameWithOwner,owner,description,defaultBranchRef,isPrivate,createdAt,diskUsage,url,stargazerCount,forkCount,watchers",
+					"name,nameWithOwner,owner,description,defaultBranchRef,isPrivate,createdAt,diskUsage,url,stargazerCount,forkCount,watchers,repositoryTopics",
 				},
 				done,
 				{
@@ -112,6 +112,9 @@ function M.fetch_details(repo, opts, on_done)
 			repo_name = tostring(result.name or repo_name),
 			html_url = tostring(result.url or ""),
 			description = tostring(result.description or ""),
+			topics = vim.tbl_map(function(topic)
+				return topic.name
+			end, json.safe_table(result.repositoryTopics)),
 			size = tonumber(result.diskUsage) or nil,
 			default_branch = default_branch and tostring(default_branch.name or "") or nil,
 			is_private = result.isPrivate == true,

@@ -1,9 +1,10 @@
-local M = {}
-
+local chips_component = require("atlas.ui.components.chips")
 local presentation = require("atlas.pulls.ui.presentation")
 local icons = require("atlas.ui.shared.icons")
 local utils = require("atlas.ui.shared.utils")
 local spinner = require("atlas.ui.components.spinner")
+
+local M = {}
 
 local CHECK_STATES = {
 	muted = { priority = 0, label = "", icon = "unknown" },
@@ -30,53 +31,6 @@ local function checks_chip(checks)
 	return { label = icon .. " " .. status.label, hl = hl }
 end
 
----@param chips PullsDetailChip[]
----@param opts { width: integer, padding_x?: integer }
----@return string[], table[]
-local function render_chips(chips, opts)
-	local pad = math.max(0, opts.padding_x or 1)
-	local padding = string.rep(" ", pad)
-	local width = math.max(1, opts.width)
-	local lines = {}
-	local line = padding
-	local spans = {}
-	local line_width = pad
-	local has_chip = false
-
-	for _, chip in ipairs(chips) do
-		if chip ~= nil then
-			local label = string.format(" %s ", chip.label)
-			local gap = has_chip and " " or ""
-			if has_chip and line_width + vim.api.nvim_strwidth(gap .. label) > width then
-				table.insert(lines, line)
-				line = padding
-				line_width = pad
-				gap = ""
-				has_chip = false
-			end
-
-			line = line .. gap
-			local start_col = #line
-			line = line .. label
-			if chip.hl ~= nil then
-				table.insert(spans, {
-					line = #lines,
-					start_col = start_col,
-					end_col = start_col + #label,
-					hl_group = chip.hl,
-				})
-			end
-			line_width = vim.api.nvim_strwidth(line)
-			has_chip = true
-		end
-	end
-
-	if has_chip then
-		table.insert(lines, line)
-	end
-	return lines, spans
-end
-
 ---@param pr PullRequest
 ---@param opts { width: integer, padding_x?: integer, extra_chips?: PullsDetailChip[], checks?: PullsMergeCheck[]|"loading"|string, loading?: boolean }
 ---@return string[], table[]
@@ -96,7 +50,7 @@ function M.render(pr, opts)
 		table.insert(chips, checks_chip(checks))
 	end
 
-	return render_chips(chips, opts)
+	return chips_component.render(chips, opts)
 end
 
 ---@param repo AtlasRepositoryDetails
@@ -120,14 +74,14 @@ function M.render_repo(repo, opts)
 		table.insert(chips, chip)
 	end
 
-	return render_chips(chips, opts)
+	return chips_component.render(chips, opts)
 end
 
 ---@param text string|nil
 ---@param opts { width: integer, padding_x?: integer }
 ---@return string[], table[]
 function M.render_loading(text, opts)
-	return render_chips({ { label = spinner.with_text(text or "Loading..."), hl = "AtlasTextMuted" } }, opts)
+	return chips_component.render({ { label = spinner.with_text(text or "Loading..."), hl = "AtlasTextMuted" } }, opts)
 end
 
 return M
