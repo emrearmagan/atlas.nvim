@@ -197,7 +197,7 @@ function M.toggle_fold(pane)
 	local row = vim.api.nvim_win_get_cursor(pane.win)[1]
 	local group = pane.line_map[row]
 	if group then
-		pane.collapsed[group] = not pane.collapsed[group]
+		pane.collapsed[group] = pane.collapsed[group] == false
 		M.render(pane)
 	end
 end
@@ -212,7 +212,7 @@ function M.toggle_all_folds(pane)
 	local groups = {}
 	local collapse = false
 	for _, entry in ipairs(log) do
-		if entry.entries and pane.collapsed[entry] ~= true then
+		if entry.entries and pane.collapsed[entry] == false then
 			collapse = true
 			break
 		end

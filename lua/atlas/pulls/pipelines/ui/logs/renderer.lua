@@ -58,7 +58,7 @@ local function append_entries(pane, entries, lines, spans, prepared, depth, pare
 		pane.entry_rows[entry] = #lines + 1
 		if entry.entries then
 			---@cast entry PullsLogGroup
-			local collapsed = pane.collapsed[entry] == true
+			local collapsed = pane.collapsed[entry] ~= false
 			local icon, hl = icons.general(collapsed and "fold_closed" or "fold_open")
 			if #entry.entries == 0 then
 				icon = " "
