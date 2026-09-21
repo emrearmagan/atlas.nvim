@@ -27,9 +27,9 @@ function M.items(pane, content_win)
 		},
 		{
 			key = keymaps.resolve("ui.refresh_view") or {},
-			desc = "Refresh latest pipelines",
+			desc = "Refresh build",
 			callback = function()
-				explorer.refresh(pane)
+				explorer.reload_pipeline(pane)
 			end,
 		},
 		{

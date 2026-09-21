@@ -7,7 +7,9 @@ local requests = require("atlas.core.requests")
 local actions = require("atlas.pulls.pipelines.bamboo.actions")
 local parser = require("atlas.pulls.pipelines.bamboo.parser")
 local bitbucket = require("atlas.pulls.pipelines.bitbucket")
+local bitbucket_service = require("atlas.pulls.providers.bitbucket.api.service")
 local pipeline_utils = require("atlas.pulls.pipelines.utils")
+local url_encode = require("atlas.core.utils").url_encode
 
 ---@param result table
 ---@return PullsPipelineState
@@ -89,14 +91,14 @@ end
 
 ---@param web_base string
 ---@param result table
----@param name string
+---@param name string|nil
 ---@return PullsPipeline
 local function parse_pipeline(web_base, result, name)
 	local key = tostring(result.key)
 	local plan = json.safe_table(result.plan)
 	return {
 		id = key,
-		name = name,
+		name = name or json.safe_str(plan.name) or key,
 		state = map_state(result),
 		url = string.format("%s/browse/%s", web_base, key),
 		number = tonumber(result.buildNumber or result.number) or tonumber(key:match("%-(%d+)$")),
@@ -181,17 +183,12 @@ function M.new(opts)
 		end)
 	end
 
-	---@param _context PullsPipelineContext
-	---@param pipeline PullsPipeline
-	---@param on_done fun(pipelines: PullsPipeline[]|nil, err: string|nil)
-	---@return { cancel: fun() }|nil
-	local function fetch_history(_context, pipeline, on_done)
-		local key = pipeline.id:match("^(.*)%-%d+$")
-		if not key then
-			on_done(nil, "Invalid Bamboo pipeline identifier")
-			return nil
-		end
+	local function fetch_commit_results(hash, on_done)
+		local url = string.format("%s/result/byCheckoutChangeset/%s?os_authType=basic", api_base, hash)
+		return request("GET", url, "commit builds", on_done)
+	end
 
+	local function fetch_plan_history(key, name, on_done)
 		local url = string.format(
 			"%s/result/%s.json?expand=results.result&includeAllStates=true&start-index=0&max-results=30&os_authType=basic",
 			api_base,
@@ -202,17 +199,89 @@ function M.new(opts)
 				on_done(nil, err)
 				return
 			end
-			local history = {}
-			for _, result in ipairs(json.safe_table(body.results).result or {}) do
-				if tostring(result.key):match("^(.*)%-%d+$") == key then
-					table.insert(history, parse_pipeline(web_base, result, pipeline.name))
+			local runs = {}
+			for _, result in ipairs(body.results.result) do
+				if result.key:match("^(.*)%-%d+$") == key then
+					table.insert(runs, parse_pipeline(web_base, result, name))
 				end
 			end
-			table.sort(history, function(a, b)
-				return (a.number or 0) > (b.number or 0)
-			end)
-			on_done(history, nil)
+			on_done(runs, nil)
 		end)
+	end
+
+	---@param context PullsPipelineContext
+	---@param on_done fun(pipelines: PullsPipeline[]|nil, err: string|nil)
+	---@return { cancel: fun() }|nil
+	local function fetch_history(context, on_done)
+		if context.provider ~= "bitbucket" then
+			on_done(nil, "The Bamboo backend currently supports Bitbucket only.")
+			return nil
+		end
+
+		local scope = requests.new()
+		local function fetch_plans(builds)
+			local starts = {}
+			for _, build in ipairs(builds) do
+				local key = build.id:match("^(.*)%-%d+$")
+				if not key then
+					on_done(nil, "Invalid Bamboo pipeline identifier")
+					return
+				end
+				starts[key] = function(done)
+					return fetch_plan_history(key, build.name, done)
+				end
+			end
+			scope.all(starts, function(results, errors)
+				for _, err in pairs(errors) do
+					on_done(nil, err)
+					return
+				end
+				local history = {}
+				for _, runs in pairs(results) do
+					vim.list_extend(history, runs)
+				end
+				table.sort(history, function(a, b)
+					return (a.started_at or "") > (b.started_at or "")
+				end)
+				on_done(history, nil)
+			end)
+		end
+
+		local function fetch_for_commit(hash)
+			scope.run(function(done)
+				return fetch_commit_results(hash, done)
+			end, function(body, err)
+				if err then
+					on_done(nil, err)
+					return
+				end
+				local builds = {}
+				for _, result in ipairs(body.results.result) do
+					table.insert(builds, parse_pipeline(web_base, result))
+				end
+				fetch_plans(builds)
+			end)
+		end
+
+		local target = context.target
+		if type(target) == "string" then
+			scope.run(function(done)
+				local branch = url_encode(target)
+				local endpoint = string.format("/repositories/%s/refs/branches/%s", context.repo_full_name, branch)
+				return bitbucket_service.request("GET", endpoint, nil, nil, done, { action = "Fetch branch" })
+			end, function(branch, err)
+				if err then
+					on_done(nil, err)
+					return
+				end
+				fetch_for_commit(branch.target.hash)
+			end)
+		elseif target.source then
+			fetch_for_commit(target.source.commit_hash)
+		else
+			fetch_plans({ target })
+		end
+		return scope
 	end
 
 	local function fetch(context, fetch_opts, on_done)
@@ -327,8 +396,7 @@ function M.new(opts)
 	end
 
 	local function fetch_commit_status(commit, _opts, on_done)
-		local url = string.format("%s/result/byCheckoutChangeset/%s?os_authType=basic", api_base, commit.hash)
-		return request("GET", url, "commit status", function(body, err)
+		return fetch_commit_results(commit.hash, function(body, err)
 			if err then
 				on_done(nil, nil, err)
 				return

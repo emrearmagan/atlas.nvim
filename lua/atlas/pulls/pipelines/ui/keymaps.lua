@@ -48,7 +48,7 @@ local function shared_items(pane, explorer_pane, logs_pane, close, open_actions)
 			key = keymaps.resolve("pulls.pipelines.show_history") or {},
 			desc = "Show build history",
 			callback = function()
-				explorer.show_history(explorer_pane, current_selection(pane, explorer_pane))
+				explorer.show_history(explorer_pane)
 			end,
 			index = 6,
 			opts = { nowait = true, silent = true },

@@ -340,58 +340,80 @@ function M.fetch(context, opts, on_done)
 end
 
 ---@param context PullsPipelineContext
----@param pipeline PullsPipeline
 ---@param on_done fun(pipelines: PullsPipeline[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_history(context, pipeline, on_done)
-	---@cast pipeline GitLabPipeline
-	local pr = type(context.target) == "table" and context.target.source and context.target or nil
-	local path = tostring((not pr and pipeline.project_path) or context.repo_full_name or "")
-	local iid = pr and tonumber(pr.id)
-	local branch = pipeline.branch or (type(context.target) == "string" and context.target or nil)
-	if path == "" or (pr and not iid) or (not pr and (not branch or branch == "")) then
-		on_done(nil, pr and "Invalid MR identifier" or "Missing pipeline repository or branch")
-		return nil
+function M.fetch_history(context, on_done)
+	local target = context.target
+	local is_branch = type(target) == "string"
+	local pr = not is_branch and target.source and target or nil
+	local pipeline = not is_branch and not pr and target or nil
+	local path = (pipeline and pipeline.project_path) or context.repo_full_name
+	local branch = is_branch and target or (pipeline and pipeline.branch)
+	local scope = requests.new()
+	local request_context = { action = "Fetch pipeline history", project_path = path }
+
+	local function fetch_runs(ref)
+		local endpoint = pr
+				and string.format(
+					"/projects/%s/merge_requests/%s/pipelines?per_page=30",
+					service.url_encode(path),
+					pr.id
+				)
+			or string.format(
+				"/projects/%s/pipelines?ref=%s&per_page=30&order_by=id&sort=desc",
+				service.url_encode(path),
+				service.url_encode(ref)
+			)
+		scope.run(function(done)
+			return service.request("GET", endpoint, nil, done, request_context)
+		end, function(result, err)
+			if err then
+				on_done(nil, err)
+				return
+			end
+			local pipelines = {}
+			for _, item in ipairs(result) do
+				local id = tostring(item.id)
+				local url = web_url(item.web_url)
+				local base_url = service.base_url()
+				local project_path = url
+					and url:sub(1, #base_url + 1) == base_url .. "/"
+					and url:sub(#base_url + 1):match("^/(.-)/%-/pipelines/%d+")
+				table.insert(pipelines, {
+					id = id,
+					name = "Pipeline #" .. id,
+					number = tonumber(id),
+					commit = json.safe_str(item.sha),
+					branch = json.safe_str(item.ref),
+					started_at = json.safe_str(item.started_at) or json.safe_str(item.created_at),
+					title = json.safe_str(item.name),
+					state = M.to_pipeline_state(item.status),
+					status = json.safe_str(item.status) or "",
+					project_path = project_path or (not pr and path) or nil,
+					sha = json.safe_str(item.sha),
+					url = url,
+					stages = {},
+				})
+			end
+			on_done(pipelines, nil)
+		end)
 	end
 
-	local endpoint = pr
-			and string.format("/projects/%s/merge_requests/%d/pipelines?per_page=30", service.url_encode(path), iid)
-		or string.format(
-			"/projects/%s/pipelines?ref=%s&per_page=30&order_by=id&sort=desc",
-			service.url_encode(path),
-			service.url_encode(branch --[[@as string]])
-		)
-	return service.request("GET", endpoint, nil, function(result, err)
-		if err then
-			on_done(nil, err)
-			return
-		end
-		local pipelines = {}
-		for _, item in ipairs(json.safe_table(result)) do
-			local id = tostring(json.nilify(item.id) or "")
-			local url = web_url(item.web_url)
-			local base_url = service.base_url()
-			local project_path = url
-				and url:sub(1, #base_url + 1) == base_url .. "/"
-				and url:sub(#base_url + 1):match("^/(.-)/%-/pipelines/%d+")
-			table.insert(pipelines, {
-				id = id,
-				name = "Pipeline #" .. id,
-				number = tonumber(id),
-				commit = json.safe_str(item.sha),
-				branch = json.safe_str(item.ref),
-				started_at = json.safe_str(item.started_at) or json.safe_str(item.created_at),
-				title = json.safe_str(item.name),
-				state = M.to_pipeline_state(item.status),
-				status = json.safe_str(item.status) or "",
-				project_path = project_path or (not pr and path) or nil,
-				sha = json.safe_str(item.sha),
-				url = url,
-				stages = {},
-			})
-		end
-		on_done(pipelines, nil)
-	end, { action = "Fetch pipeline history", project_path = path, iid = iid, branch = branch })
+	if pipeline and not branch then
+		scope.run(function(done)
+			local endpoint = string.format("/projects/%s/pipelines/%s", service.url_encode(path), pipeline.id)
+			return service.request("GET", endpoint, nil, done, request_context)
+		end, function(result, err)
+			if err then
+				on_done(nil, err)
+				return
+			end
+			fetch_runs(result.ref)
+		end)
+	else
+		fetch_runs(branch)
+	end
+	return scope
 end
 
 ---@param context PullsPipelineContext

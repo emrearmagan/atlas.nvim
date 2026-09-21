@@ -9,7 +9,7 @@ local M = {}
 ---@return string, string
 local function format_run(pipeline)
 	local icon, hl = icons.pulls_status(pipeline.state:lower())
-	local parts = { icon, "#" .. (pipeline.number or pipeline.id) }
+	local parts = { icon, pipeline_utils.display_name(pipeline) }
 	if pipeline.commit then
 		parts[#parts + 1] = pipeline.commit:sub(1, 7)
 	end
@@ -33,30 +33,26 @@ end
 
 ---@param context PullsPipelineContext
 ---@param backend PullsPipelineBackend
----@param pipeline PullsPipeline
 ---@param on_select fun(pipeline: PullsPipeline)
-function M.open(context, backend, pipeline, on_select)
+function M.open(context, backend, on_select)
 	---@type PullsPipeline[]|nil
 	local runs
 	picker.search({
-		title = "Recent builds: " .. pipeline.name,
+		title = "Recent builds",
 		debounce_ms = 0,
 		fetch_on_open = true,
-		format_item = function(run)
-			local text, hl = format_run(run)
-			return text .. (run.id == pipeline.id and " (selected)" or ""), hl
-		end,
+		format_item = format_run,
 		fetch = function(query, done)
 			if runs then
 				done(filter(runs, query), nil)
 				return
 			end
-			return backend.fetch_history(context, pipeline, function(items, err)
+			return backend.fetch_history(context, function(items, err)
 				if err then
 					done(nil, err)
 					return
 				end
-				runs = items or {}
+				runs = items
 				done(filter(runs, query), nil)
 			end)
 		end,

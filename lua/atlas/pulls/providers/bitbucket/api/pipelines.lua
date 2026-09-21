@@ -198,47 +198,19 @@ local function fetch_pipeline(context, pipeline, on_done)
 end
 
 ---@param context PullsPipelineContext
----@param pipeline PullsPipeline
 ---@param on_done fun(pipelines: PullsPipeline[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_history(context, pipeline, on_done)
-	local pr = type(context.target) == "table" and context.target.source and context.target or nil
-	local repo = tostring(context.repo_full_name or "")
-	local id = tostring(pipeline.id)
-	if repo == "" or not id:match("^%d+$") then
-		on_done(nil, "No build history available for this Bitbucket status")
-		return nil
-	end
-
+function M.fetch_history(context, on_done)
+	local target = context.target
+	local is_branch = type(target) == "string"
+	local pr = not is_branch and target.source and target or nil
+	local repo = context.repo_full_name
 	local scope = requests.new()
-	local request_context = { action = "Fetch pipeline history", repo = repo, pipeline_id = id }
-	scope.run(function(done)
-		local endpoint = string.format("/repositories/%s/pipelines/%s", repo, id)
-		return service.request("GET", endpoint, nil, nil, done, request_context)
-	end, function(result, err)
-		if err then
-			on_done(nil, err)
-			return
-		end
+	local request_context = { action = "Fetch pipeline history", repo = repo }
 
-		local pipeline_target = json.safe_table(result.target)
+	local function fetch_runs(pipeline_target)
 		local selector = json.safe_table(pipeline_target.selector)
-		local branch = json.safe_str(pipeline_target.ref_name) or json.safe_str(pipeline_target.source)
 		local pullrequest = json.safe_str(json.safe_table(pipeline_target.pullrequest).id)
-		if pipeline_target.type == "pipeline_pullrequest_target" or selector.type == "pull-requests" then
-			if not pullrequest then
-				on_done(nil, "Bitbucket did not return the pipeline's pull request identifier")
-				return
-			elseif pr and pullrequest ~= tostring(pr.id) then
-				on_done(nil, "This pipeline belongs to another pull request")
-				return
-			end
-		end
-		if not branch and not selector.type then
-			on_done(nil, "Missing Bitbucket pipeline history scope")
-			return
-		end
-
 		local fields = "values.build_number,values.state,values.target,values.created_on,values.links.html"
 		local endpoint =
 			string.format("/repositories/%s/pipelines/?pagelen=30&sort=-created_on&fields=%s", repo, fields)
@@ -250,50 +222,48 @@ function M.fetch_history(context, pipeline, on_done)
 			["target.selector.pattern"] = selector.pattern,
 		}
 		for key, value in pairs(filters) do
-			if json.safe_str(value) then
-				endpoint = endpoint .. "&" .. key .. "=" .. encode_path_segment(tostring(value))
+			local text = json.safe_str(value)
+			if text then
+				endpoint = endpoint .. "&" .. key .. "=" .. encode_path_segment(text)
 			end
 		end
-
 		scope.run(function(done)
 			return service.request("GET", endpoint, nil, nil, done, request_context)
-		end, function(page, page_err)
-			if page_err then
-				on_done(nil, page_err)
+		end, function(page, err)
+			if err then
+				on_done(nil, err)
 				return
 			end
 			local history = {}
-			local missing_pullrequest = false
-			for _, item in ipairs(page.values or {}) do
-				local candidate = json.safe_table(item.target)
-				local candidate_selector = json.safe_table(candidate.selector)
-				local candidate_branch = json.safe_str(candidate.ref_name) or json.safe_str(candidate.source)
+			for _, item in ipairs(page.values) do
+				local candidate = item.target
 				local candidate_pr = json.safe_str(json.safe_table(candidate.pullrequest).id)
-				if
-					candidate.type == pipeline_target.type
-					and candidate.ref_type == pipeline_target.ref_type
-					and candidate_branch == branch
-					and candidate_selector.type == selector.type
-					and candidate_selector.pattern == selector.pattern
-					and tonumber(item.build_number)
-				then
-					if candidate_pr == pullrequest then
-						local summary = parse_pipeline(item, pipeline.name)
-						summary.url = summary.url
-							or string.format("https://bitbucket.org/%s/pipelines/results/%s", repo, summary.id)
-						table.insert(history, summary)
-					elseif pullrequest and not candidate_pr then
-						missing_pullrequest = true
-					end
+				if not pullrequest or candidate_pr == pullrequest or (pr and not candidate_pr) then
+					local run = parse_pipeline(item)
+					run.url = run.url or string.format("https://bitbucket.org/%s/pipelines/results/%s", repo, run.id)
+					table.insert(history, run)
 				end
-			end
-			if #history == 0 and missing_pullrequest then
-				on_done(nil, "Bitbucket did not return pull request identifiers for recent builds")
-				return
 			end
 			on_done(history, nil)
 		end)
-	end)
+	end
+
+	if is_branch then
+		fetch_runs({ source = target })
+	elseif pr then
+		fetch_runs({ source = pr.source.branch, pullrequest = { id = pr.id } })
+	else
+		scope.run(function(done)
+			local endpoint = string.format("/repositories/%s/pipelines/%s", repo, target.id)
+			return service.request("GET", endpoint, nil, nil, done, request_context)
+		end, function(result, err)
+			if err then
+				on_done(nil, err)
+				return
+			end
+			fetch_runs(result.target)
+		end)
+	end
 	return scope
 end
 

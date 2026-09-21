@@ -225,54 +225,60 @@ function M.refresh(pane, selection)
 end
 
 ---@param pane PullsPipelinesExplorer
----@param selection PullsPipelinesSelection|nil
-function M.show_history(pane, selection)
-	local pipeline = selection and selection.pipeline
-	local backend = pane.backend
-	if not pipeline then
-		notify.warn("Select a pipeline first")
+---@param run PullsPipeline
+---@param index integer|nil
+local function load_pipeline(pane, run, index)
+	if not pane.on_select then
 		return
 	end
+	local pipelines = index and pane.pipelines or {}
+	if pane.requests then
+		pane.requests.cancel()
+	end
+	pane.requests = requests.new()
+	pane.pipelines = "loading"
+	pane.on_select(nil)
+	start_spinner(pane)
+	pane.requests.run(function(done)
+		return pane.backend.fetch(pane.context, { pipeline = run, force_refresh = true }, done)
+	end, function(result, err)
+		if err then
+			finish_loading(pane, nil, err)
+			return
+		end
+		local loaded = result[1]
+		pipelines[index or 1] = loaded
+		finish_loading(pane, pipelines, nil)
+		if loaded and not pane.selection then
+			M.render(pane, { pipeline = loaded })
+		end
+	end)
+end
+
+---@param pane PullsPipelinesExplorer
+function M.reload_pipeline(pane)
+	local selection = M.current_selection(pane)
+	if selection and selection.pipeline then
+		for index, pipeline in ipairs(pane.pipelines) do
+			if pipeline == selection.pipeline then
+				load_pipeline(pane, pipeline, index)
+				return
+			end
+		end
+	end
+end
+
+---@param pane PullsPipelinesExplorer
+function M.show_history(pane)
+	local backend = pane.backend
 	if not backend or not backend.fetch_history then
 		notify.warn("Build history is not available for this provider")
 		return
 	end
 
-	history.open(pane.context, backend, pipeline, function(run)
-		if not pane.on_select or type(pane.pipelines) ~= "table" then
-			return
-		end
-		local pipelines = vim.list_extend({}, pane.pipelines)
-		local index
-		for position, current in ipairs(pipelines) do
-			if current == pipeline then
-				index = position
-				break
-			end
-		end
-		if not index then
-			return
-		end
-		if pane.requests then
-			pane.requests.cancel()
-		end
-		pane.requests = requests.new()
-		pane.pipelines = "loading"
-		pane.on_select(nil)
-		start_spinner(pane)
-		pane.requests.run(function(done)
-			return backend.fetch(pane.context, { pipeline = run, force_refresh = true }, done)
-		end, function(result, err)
-			local loaded = result and result[1]
-			if loaded then
-				pipelines[index] = loaded
-				pane.selection = { pipeline = loaded }
-			end
-			finish_loading(pane, pipelines, nil)
-			if err then
-				notify.error("Failed to load build: " .. err)
-			end
-		end)
+	history.open(pane.context, backend, function(run)
+		pane.selection = nil
+		load_pipeline(pane, run)
 	end)
 end
 

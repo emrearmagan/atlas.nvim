@@ -401,17 +401,15 @@ local function map_pipelines(checks, metadata)
 end
 
 ---@param run table
----@param previous GitHubPipeline|nil
 ---@return GitHubPipeline
-local function map_run(run, previous)
-	previous = previous or {}
+local function map_run(run)
 	return {
 		id = tostring(run.id),
 		node_id = json.safe_str(run.node_id),
 		workflow_id = json.safe_str(run.workflow_id),
 		event = json.safe_str(run.event),
-		source_repository = previous.source_repository or json.safe_str(json.safe_table(run.head_repository).full_name),
-		name = json.safe_str(run.name) or previous.name or "GitHub Actions",
+		source_repository = json.safe_str(json.safe_table(run.head_repository).full_name),
+		name = json.safe_str(run.name) or "GitHub Actions",
 		number = tonumber(json.nilify(run.run_number)),
 		commit = json.safe_str(run.head_sha),
 		branch = json.safe_str(run.head_branch),
@@ -572,72 +570,82 @@ function M.fetch(context, opts, on_done)
 	})
 end
 
----@param context PullsPipelineContext
----@param pipeline GitHubPipeline
+---@param pr PullRequest|nil
+---@param source_repository string|nil
 ---@param run table
 ---@return boolean
-local function matches_history(context, pipeline, run)
-	if
-		json.safe_str(run.workflow_id) ~= pipeline.workflow_id
-		or run.event ~= pipeline.event
-		or run.head_branch ~= pipeline.branch
-	then
-		return false
-	end
-
-	local target = context.target
-	if type(target) == "table" and target.source then
-		local pull_requests = json.safe_table(run.pull_requests)
-		for _, pull in ipairs(pull_requests) do
-			if tostring(pull.number) == tostring(target.id) then
+local function matches_history(pr, source_repository, run)
+	local pulls = json.safe_table(run.pull_requests)
+	if pr and #pulls > 0 then
+		for _, pull in ipairs(pulls) do
+			if tostring(pull.number) == tostring(pr.id) then
 				return true
 			end
 		end
-		if #pull_requests > 0 then
-			return false
-		end
+		return false
 	end
-
-	-- Fork runs may omit pull_requests; branch names alone cannot identify their source.
 	local repository = json.safe_str(json.safe_table(run.head_repository).full_name)
-	return repository ~= nil
-		and pipeline.source_repository ~= nil
-		and repository:lower() == pipeline.source_repository:lower()
+	return repository ~= nil and source_repository ~= nil and repository:lower() == source_repository:lower()
 end
 
 ---@param context PullsPipelineContext
----@param pipeline PullsPipeline
 ---@param on_done fun(pipelines: PullsPipeline[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_history(context, pipeline, on_done)
-	---@cast pipeline GitHubPipeline
-	local repo = context.repo_full_name or ""
-	if repo == "" or not pipeline.workflow_id or not pipeline.event or not pipeline.branch then
-		on_done(nil, "Build history is unavailable for this pipeline")
-		return nil
+function M.fetch_history(context, on_done)
+	local target = context.target
+	local is_branch = type(target) == "string"
+	local pr = not is_branch and target.source and target or nil
+	local repo = context.repo_full_name
+	local scope = requests.new()
+	local request_context = { action = "Fetch workflow history", repo = repo }
+
+	local function fetch_runs(branch, source_repository, workflow_id)
+		local path = workflow_id and ("actions/workflows/" .. workflow_id .. "/runs") or "actions/runs"
+		local endpoint = string.format("repos/%s/%s?per_page=30&branch=%s", repo, path, url_encode(branch))
+		scope.run(function(done)
+			return cli.gh({ "api", endpoint }, done, request_context)
+		end, function(result, err)
+			if err then
+				on_done(nil, err)
+				return
+			end
+			local pipelines = {}
+			for _, run in ipairs(result.workflow_runs) do
+				if matches_history(pr, source_repository, run) then
+					pipelines[#pipelines + 1] = map_run(run)
+				end
+			end
+			on_done(pipelines, nil)
+		end)
 	end
 
-	local endpoint = string.format(
-		"repos/%s/actions/workflows/%s/runs?per_page=30&branch=%s&event=%s",
-		repo,
-		url_encode(pipeline.workflow_id),
-		url_encode(pipeline.branch),
-		url_encode(pipeline.event)
-	)
-	return cli.gh({ "api", endpoint }, function(result, err)
-		if err or type(result) ~= "table" then
-			on_done(nil, err or "Failed to fetch build history")
-			return
-		end
-
-		local pipelines = {}
-		for _, run in ipairs(json.safe_table(result.workflow_runs)) do
-			if matches_history(context, pipeline, run) then
-				pipelines[#pipelines + 1] = map_run(run, pipeline)
+	if is_branch then
+		fetch_runs(target, repo)
+	elseif pr then
+		scope.run(function(done)
+			return cli.gh({ "api", string.format("repos/%s/pulls/%s", repo, pr.id) }, done, request_context)
+		end, function(pull, err)
+			if err then
+				on_done(nil, err)
+				return
 			end
-		end
-		on_done(pipelines, nil)
-	end, { action = "Fetch workflow history", repo = repo, pipeline_id = pipeline.id })
+			local head = pull.head
+			fetch_runs(head.ref, json.safe_str(json.safe_table(head.repo).full_name))
+		end)
+	elseif target.workflow_id then
+		fetch_runs(target.branch, target.source_repository, target.workflow_id)
+	else
+		scope.run(function(done)
+			return cli.gh({ "api", string.format("repos/%s/actions/runs/%s", repo, target.id) }, done, request_context)
+		end, function(run, err)
+			if err then
+				on_done(nil, err)
+				return
+			end
+			fetch_runs(run.head_branch, json.safe_str(json.safe_table(run.head_repository).full_name), run.workflow_id)
+		end)
+	end
+	return scope
 end
 
 ---@param _context PullsPipelineContext
