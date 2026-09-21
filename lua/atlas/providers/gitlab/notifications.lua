@@ -1,13 +1,11 @@
 local M = {}
 
 local client = require("atlas.providers.gitlab.client")
-local icons = require("atlas.ui.shared.icons")
 
-local TARGET_ICON = {
-	MergeRequest = { icons.pulls("pr") },
-	Issue = { icon = icons.issues("issue"), hl = "AtlasTextPositive" },
+local TARGET_KIND = {
+	MergeRequest = "pr",
+	Issue = "issue",
 }
-local FALLBACK_ICON = { icon = icons.general("info"), hl = "AtlasTextMuted" }
 
 ---@param action string|nil
 ---@return string
@@ -36,15 +34,12 @@ local function normalize(raw)
 		table.insert(subtitle_parts, action)
 	end
 
-	local icon_def = TARGET_ICON[target_type] or FALLBACK_ICON
-
 	return {
 		id = tostring(raw.id or ""),
 		title = tostring(target.title or raw.body or ""),
 		subtitle = table.concat(subtitle_parts, "  "),
 		timestamp = tostring(raw.updated_at or raw.created_at or ""),
-		icon = icon_def.icon or icon_def[1],
-		icon_hl = icon_def.hl or icon_def[2],
+		kind = TARGET_KIND[target_type],
 		unread = tostring(raw.state or "") == "pending",
 		url = type(raw.target_url) == "string" and raw.target_url or nil,
 		_raw = raw,

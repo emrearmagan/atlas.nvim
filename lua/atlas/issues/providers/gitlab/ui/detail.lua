@@ -23,8 +23,8 @@ function M.header_fields(issue, details, _loading)
 	local user_icon = icons.general("user")
 
 	local assignee = details and details.assignees[1] or issue.assignee
-	local assignee_name = assignee and tostring(assignee.display_name or "") or ""
-	local reporter_name = issue.reporter and tostring(issue.reporter.display_name or "") or ""
+	local assignee_name = assignee and tostring(assignee.name or "") or ""
+	local reporter_name = issue.reporter and tostring(issue.reporter.name or "") or ""
 	if assignee_name == "" then
 		assignee_name = "Unassigned"
 	end
@@ -34,7 +34,7 @@ function M.header_fields(issue, details, _loading)
 
 	local milestone_text = details and details.milestone and details.milestone.title or ""
 	local assignee_text = string.format("%s %s", user_icon, assignee_name)
-	local assignee_hl = helper.person_hl(assignee and assignee.display_name or nil)
+	local assignee_hl = helper.person_hl(assignee and assignee.name or nil)
 
 	local fields = {
 		{

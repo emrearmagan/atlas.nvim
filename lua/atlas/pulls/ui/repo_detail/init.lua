@@ -143,7 +143,7 @@ local function set_tab(tab_key)
 	end
 end
 
----@param repo PullsRepo
+---@param repo AtlasRepository
 ---@param opts { force_refresh: boolean|nil }|nil
 local function load_tab(repo, opts)
 	local tab_mod = tab_module(state.current_tab)
@@ -192,7 +192,7 @@ local function cleanup()
 	state.reset()
 end
 
----@param repo PullsRepo
+---@param repo AtlasRepository
 ---@param force_refresh boolean
 local function load_repo(repo, force_refresh)
 	state.current_repo = repo
@@ -225,7 +225,7 @@ function M.is_open()
 	return detail_ui.is_showing("repo")
 end
 
----@param repo PullsRepo
+---@param repo AtlasRepository
 ---@param opts { provider: PullsProvider|nil, force_refresh: boolean|nil }|nil
 function M.open(repo, opts)
 	opts = opts or {}
@@ -240,7 +240,7 @@ function M.open(repo, opts)
 	M.select(repo, { force_refresh = opts.force_refresh })
 end
 
----@param repo PullsRepo|nil
+---@param repo AtlasRepository|nil
 function M.refresh(repo)
 	local current = state.current_repo
 	if M.is_open() and current and (repo == nil or tostring(current.id or "") == tostring(repo.id or "")) then
@@ -248,7 +248,7 @@ function M.refresh(repo)
 	end
 end
 
----@param repo PullsRepo
+---@param repo AtlasRepository
 ---@param opts { force_refresh: boolean|nil }|nil
 function M.select(repo, opts)
 	if not M.is_open() then

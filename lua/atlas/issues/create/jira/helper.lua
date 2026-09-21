@@ -4,7 +4,7 @@ local icons = require("atlas.ui.shared.icons")
 local helper = require("atlas.issues.ui.presentation")
 
 ---@param fields IssueEditorFields
----@param assignees IssueUser[]|"loading"|nil
+---@param assignees AtlasUser[]|"loading"|nil
 ---@param spinner_instance SpinnerInstance|nil
 ---@return string
 ---@return string
@@ -15,8 +15,7 @@ local function get_assignee_display(fields, assignees, spinner_instance)
 	end
 
 	if fields.assignee then
-		return icons.general("user") .. " " .. fields.assignee.display_name,
-			helper.person_hl(fields.assignee.display_name)
+		return icons.general("user") .. " " .. fields.assignee.name, helper.person_hl(fields.assignee.name)
 	end
 
 	return icons.general("user") .. " Unassigned", helper.person_hl(nil)
@@ -43,7 +42,7 @@ local function get_issue_type_display(fields, issue_types, spinner_instance)
 	return "None", icon_hl
 end
 
----@param reporter IssueUser|nil
+---@param reporter AtlasUser|nil
 ---@param loading boolean
 ---@param spinner_instance SpinnerInstance|nil
 ---@return string
@@ -54,14 +53,14 @@ local function get_reporter_display(reporter, loading, spinner_instance)
 		return frame .. " Loading...", "AtlasTextMuted"
 	end
 
-	local name = reporter and reporter.display_name or "Unknown"
+	local name = reporter and reporter.name or "Unknown"
 	return icons.general("user") .. " " .. name, helper.person_hl(name)
 end
 
 ---@param fields IssueEditorFields
----@param assignees IssueUser[]|"loading"|nil
+---@param assignees AtlasUser[]|"loading"|nil
 ---@param issue_types IssueType[]|"loading"|nil
----@param reporter IssueUser|nil
+---@param reporter AtlasUser|nil
 ---@param reporter_loading boolean
 ---@param spinner_instance SpinnerInstance|nil
 ---@return AtlasFormMetaRow[]

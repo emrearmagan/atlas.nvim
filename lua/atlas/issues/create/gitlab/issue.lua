@@ -7,6 +7,9 @@ local request_scope = require("atlas.core.requests")
 local highlights = require("atlas.ui.shared.highlights")
 local icons = require("atlas.ui.shared.icons")
 local templates = require("atlas.issues.templates")
+local labels_api = require("atlas.issues.providers.gitlab.api.labels")
+local milestones_api = require("atlas.issues.providers.gitlab.api.milestones")
+local users_api = require("atlas.providers.gitlab.users")
 
 ---@class GitLabCreateIssueLabel
 ---@field name string
@@ -18,13 +21,13 @@ local templates = require("atlas.issues.templates")
 
 ---@class GitLabCreateIssuePickers
 ---@field list_labels fun(on_done: fun(items: GitLabCreateIssueLabel[]|nil, err: string|nil)): { cancel: fun() }|nil
----@field list_assignees fun(on_done: fun(items: IssueUser[]|nil, err: string|nil)): { cancel: fun() }|nil
+---@field list_assignees fun(on_done: fun(items: AtlasUser[]|nil, err: string|nil)): { cancel: fun() }|nil
 ---@field list_milestones fun(on_done: fun(items: GitLabCreateIssueMilestone[]|nil, err: string|nil)): { cancel: fun() }|nil
 
 ---@class GitLabCreateIssueFields
 ---@field project_path string
 ---@field labels GitLabCreateIssueLabel[]
----@field assignees IssueUser[]
+---@field assignees AtlasUser[]
 ---@field milestone GitLabCreateIssueMilestone|nil
 
 ---@class GitLabCreateIssueState
@@ -39,10 +42,6 @@ local templates = require("atlas.issues.templates")
 ---@param project_path string
 ---@return GitLabCreateIssuePickers
 local function default_pickers(project_path)
-	local labels_api = require("atlas.issues.providers.gitlab.api.labels")
-	local users_api = require("atlas.issues.providers.gitlab.api.users")
-	local milestones_api = require("atlas.issues.providers.gitlab.api.milestones")
-
 	return {
 		list_labels = function(cb)
 			return labels_api.list(project_path, function(items, err)
@@ -91,7 +90,7 @@ end
 ---@field key string|nil
 ---@field iid integer|nil
 
----@param assignees IssueUser[]
+---@param assignees AtlasUser[]
 ---@return string
 local function format_assignees(assignees)
 	if #assignees == 0 then
@@ -100,7 +99,7 @@ local function format_assignees(assignees)
 
 	local parts = {}
 	for _, a in ipairs(assignees) do
-		table.insert(parts, "@" .. tostring(a.account_id or ""))
+		table.insert(parts, "@" .. tostring(a.username or ""))
 	end
 
 	return icons.general("user") .. " " .. table.concat(parts, ", ")
@@ -253,15 +252,10 @@ local function pick_assignees(issue_state)
 			items = items,
 			selected = issue_state.fields.assignees,
 			key = function(item)
-				return tostring(item.id or item.account_id or "")
+				return tostring(item.id or item.username or "")
 			end,
 			format_item = function(item)
-				return string.format(
-					"%s %s (@%s)",
-					icons.general("user"),
-					item.display_name or item.account_id,
-					item.account_id
-				)
+				return string.format("%s %s (@%s)", icons.general("user"), item.name or item.username, item.username)
 			end,
 			title = "Assignees",
 			on_done = function(selected)

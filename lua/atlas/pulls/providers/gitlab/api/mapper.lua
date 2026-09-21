@@ -187,25 +187,6 @@ function M.to_pull_requests(raw_list)
 	return pulls
 end
 
----@param raw any Decoded API value.
----@return PullsUser|nil
-function M.to_user(raw)
-	raw = json.nilify(raw)
-	if type(raw) ~= "table" then
-		return nil
-	end
-	local username = json.safe_str(raw.username) or ""
-	if username == "" then
-		return nil
-	end
-	local name = json.safe_str(raw.name) or ""
-	return {
-		name = name ~= "" and name or username,
-		id = tostring(raw.id or ""),
-		username = username,
-	}
-end
-
 ---@param user any
 ---@return PullsAuthor|nil
 local function actor_from(user)

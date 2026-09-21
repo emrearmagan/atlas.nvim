@@ -10,8 +10,8 @@ local picker = require("atlas.ui.picker")
 local state = require("atlas.pulls.state")
 local pullrequests = require("atlas.pulls.providers.bitbucket.api.pullrequests")
 local reviews = require("atlas.pulls.providers.bitbucket.api.reviews")
-local users_api = require("atlas.pulls.providers.bitbucket.api.users")
-local repositories = require("atlas.pulls.providers.bitbucket.api.repositories")
+local users_api = require("atlas.providers.bitbucket.users")
+local repositories = require("atlas.providers.bitbucket.repositories")
 local core_notify = require("atlas.core.notify")
 
 ---@param ctx AtlasPullActionContext

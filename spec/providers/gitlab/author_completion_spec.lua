@@ -25,17 +25,17 @@ describe("GitLab author completion", function()
 	it("completes issue reporters, assignees, and comment authors by username", function()
 		local completion = author_completion.for_issues({
 			issue = {
-				reporter = { account_id = "reporter", display_name = "Issue Reporter" },
-				assignee = { account_id = "alice", display_name = "Alice" },
+				reporter = { username = "reporter", name = "Issue Reporter" },
+				assignee = { username = "alice", name = "Alice" },
 			},
 			details = {
 				assignees = {
-					{ account_id = "alice", display_name = "Alice" },
-					{ account_id = "zoe", display_name = "Zoe" },
+					{ username = "alice", name = "Alice" },
+					{ username = "zoe", name = "Zoe" },
 				},
 			},
 			comments = {
-				{ author = { account_id = "commenter", display_name = "Comment Author" } },
+				{ author = { username = "commenter", name = "Comment Author" } },
 			},
 		})
 
@@ -44,8 +44,8 @@ describe("GitLab author completion", function()
 		assert.equal(
 			"@gitlab-user",
 			completion.format_mention({
-				account_id = "gitlab-user",
-				display_name = "Display Name",
+				username = "gitlab-user",
+				name = "Display Name",
 			})
 		)
 	end)

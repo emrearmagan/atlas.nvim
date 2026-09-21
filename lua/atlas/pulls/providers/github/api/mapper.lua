@@ -273,17 +273,6 @@ function M.to_pull_request_details(raw)
 	return details
 end
 
----@param raw table
----@return PullsUser
-function M.to_user(raw)
-	local user = github_mapping.identity(raw) or { id = "", login = "", name = "" }
-	return {
-		name = user.name,
-		id = user.id,
-		username = user.login,
-	}
-end
-
 ---@param nodes table[]
 ---@return PullRequest[]
 function M.to_search_results_from_graphql(nodes)

@@ -7,7 +7,7 @@ local actions = require("atlas.pulls.actions")
 local controller = require("atlas.pulls.ui.dashboard.controller")
 local registrations = {}
 
----@return PullRequest|nil, PullsRepo|nil
+---@return PullRequest|nil, AtlasRepository|nil
 local function selected_pr()
 	local navigation = require("atlas.ui.navigation")
 	local node = navigation.current_item()

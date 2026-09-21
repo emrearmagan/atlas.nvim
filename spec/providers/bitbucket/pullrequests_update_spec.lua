@@ -4,7 +4,7 @@ local function fresh_module()
 end
 
 local function stub_service(request, clear_cache)
-	package.preload["atlas.pulls.providers.bitbucket.api.service"] = function()
+	package.preload["atlas.providers.bitbucket.client"] = function()
 		return {
 			request = request,
 			clear_cache = clear_cache or function() end,
@@ -19,12 +19,12 @@ describe("bitbucket pull request updates", function()
 	before_each(function()
 		calls = {}
 		cache_cleared = 0
-		package.loaded["atlas.pulls.providers.bitbucket.api.service"] = nil
+		package.loaded["atlas.providers.bitbucket.client"] = nil
 	end)
 
 	after_each(function()
-		package.preload["atlas.pulls.providers.bitbucket.api.service"] = nil
-		package.loaded["atlas.pulls.providers.bitbucket.api.service"] = nil
+		package.preload["atlas.providers.bitbucket.client"] = nil
+		package.loaded["atlas.providers.bitbucket.client"] = nil
 		package.loaded["atlas.pulls.providers.bitbucket.api.pullrequests"] = nil
 	end)
 

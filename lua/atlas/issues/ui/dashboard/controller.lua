@@ -83,12 +83,11 @@ end
 ---@param provider IssuesProvider
 ---@param scope AtlasRequestScope
 local function fetch_current_user(provider, scope)
-	if state.current_user ~= nil then
+	local users = provider.capabilities.users
+	if state.current_user ~= nil or not users then
 		return
 	end
-	scope.run(function(done)
-		return provider.capabilities.core.fetch_user(done)
-	end, function(user, err)
+	scope.run(users.fetch_user, function(user, err)
 		if err then
 			notify.warn(string.format("Failed to fetch current user: %s", tostring(err)))
 			return

@@ -22,11 +22,9 @@ local emojis = require("atlas.ui.shared.emojis")
 local issue_cache = require("atlas.issues.providers.github.api.cache")
 local issues_api = require("atlas.issues.providers.github.api.issues")
 local links_api = require("atlas.providers.github.links")
-local notifications_api = require("atlas.providers.github.notifications")
 local timeline_api = require("atlas.issues.providers.github.api.timeline")
 local ui_detail = require("atlas.issues.providers.github.ui.detail")
 local ui_repository = require("atlas.providers.github.ui.repository")
-local users_api = require("atlas.issues.providers.github.api.users")
 local git = require("atlas.core.git")
 
 ---@param view IssuesViewConfig
@@ -252,7 +250,6 @@ return {
 	issue_ref = issue_ref,
 	capabilities = {
 		core = {
-			fetch_user = users_api.get_user,
 			fetch_issues = fetch_issues,
 			fetch_by_refs = issues_api.fetch_by_refs,
 			fetch_issue = fetch_issue,
@@ -268,7 +265,6 @@ return {
 			delete_comment = comments_api.delete,
 			add_reaction = add_reaction,
 		},
-		notifications = notifications_api,
 		actions = actions,
 		ui = {
 			detail = ui_detail,

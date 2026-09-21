@@ -35,11 +35,11 @@ local function status_value(issue)
 	return string.format(" %s ", issue.status or "")
 end
 
----@param user IssueUser|nil
+---@param user AtlasUser|nil
 ---@param fallback string
 ---@return string
 local function person_value(user, fallback)
-	local name = user and user.display_name or fallback
+	local name = user and user.name or fallback
 	return string.format("%s %s", icons.general("user"), utils.shorten_name(name, 20))
 end
 
@@ -49,11 +49,11 @@ end
 ---@return table[]|nil
 local function person_highlight(issue, col, ctx)
 	if col.key == "assignee" then
-		local name = issue.assignee and issue.assignee.display_name or nil
+		local name = issue.assignee and issue.assignee.name or nil
 		return { { start_col = 0, end_col = #ctx.padded, hl_group = helper.person_hl(name) } }
 	end
 	if col.key == "reporter" then
-		local name = issue.reporter and issue.reporter.display_name or nil
+		local name = issue.reporter and issue.reporter.name or nil
 		return { { start_col = 0, end_col = #ctx.padded, hl_group = helper.person_hl(name) } }
 	end
 end
@@ -397,8 +397,8 @@ local function default()
 			return {
 				icon = "",
 				name = (issue.key or "") .. " " .. (issue.title or ""),
-				assignee = (issue.assignee and issue.assignee.display_name) or "Unassigned",
-				reporter = (issue.reporter and issue.reporter.display_name) or "Unknown",
+				assignee = (issue.assignee and issue.assignee.name) or "Unassigned",
+				reporter = (issue.reporter and issue.reporter.name) or "Unknown",
 				status = string.format(" %s ", issue.status or ""),
 			}
 		end,

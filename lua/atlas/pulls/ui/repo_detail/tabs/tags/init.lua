@@ -11,7 +11,7 @@ local request_scope = require("atlas.core.requests")
 local PADDING_X = 1
 
 ---@class PullsRepoTagsTabState
----@field repo PullsRepoDetails|nil
+---@field repo AtlasRepositoryDetails|nil
 ---@field tags PullsRepoTags|"loading"|string|nil
 ---@field requests AtlasRequestScope
 local state = { repo = nil, tags = nil, requests = request_scope.new() }
@@ -31,7 +31,7 @@ function M.reset()
 	reset_state()
 end
 
----@param repo PullsRepoDetails
+---@param repo AtlasRepositoryDetails
 ---@return AtlasThreadV2Item[]
 local function to_items(repo)
 	local items = {}
@@ -65,7 +65,7 @@ local function to_items(repo)
 	return items
 end
 
----@param _repo PullsRepo
+---@param _repo AtlasRepository
 ---@param width integer
 ---@return string[], table[], table<integer, table>
 function M.render(_repo, width)
@@ -118,7 +118,7 @@ function M.render(_repo, width)
 	return lines, spans, line_map
 end
 
----@param repo PullsRepo|nil
+---@param repo AtlasRepository|nil
 ---@param refresh fun()
 ---@param opts { force_refresh: boolean|nil }|nil
 function M.on_select(repo, refresh, opts)

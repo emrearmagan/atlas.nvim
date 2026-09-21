@@ -1,7 +1,7 @@
 local requests = require("atlas.core.requests")
 local json = require("atlas.core.json")
 local pipeline_utils = require("atlas.pulls.pipelines.utils")
-local service = require("atlas.pulls.providers.bitbucket.api.service")
+local service = require("atlas.providers.bitbucket.client")
 local encode_path_segment = require("atlas.core.utils").url_encode
 
 local M = {}

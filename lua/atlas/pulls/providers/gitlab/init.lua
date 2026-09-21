@@ -27,13 +27,10 @@ local comments_api = require("atlas.pulls.providers.gitlab.api.comments")
 local config = require("atlas.config")
 local detail_ui = require("atlas.pulls.providers.gitlab.ui.detail")
 local links_api = require("atlas.providers.gitlab.links")
-local notifications_api = require("atlas.providers.gitlab.notifications")
 local pullrequests_api = require("atlas.pulls.providers.gitlab.api.pullrequests")
-local repositories_api = require("atlas.pulls.providers.gitlab.api.repositories")
 local reviews_api = require("atlas.pulls.providers.gitlab.api.reviews")
 local repo_detail_ui = require("atlas.pulls.providers.gitlab.ui.repo_detail")
 local gitlab_query = require("atlas.providers.gitlab.query")
-local users_api = require("atlas.pulls.providers.gitlab.api.users")
 local git = require("atlas.core.git")
 local request_scope = require("atlas.core.requests")
 local GITLAB_REACTION_OPTIONS = require("atlas.ui.shared.emojis").gitlab()
@@ -126,7 +123,6 @@ return {
 	resolve_search = gitlab_query.query,
 	capabilities = {
 		core = {
-			fetch_user = users_api.fetch_user,
 			fetch_pullrequests = function(view, opts, on_done)
 				---@cast view AtlasGitLabPullsViewConfig
 				return pullrequests_api.fetch_states(view, gitlab_query.api_states(view), opts, on_done)
@@ -166,14 +162,6 @@ return {
 			request_changes = reviews_api.request_changes,
 			discard_review = reviews_api.discard,
 		},
-		repository = {
-			fetch_details = repositories_api.fetch_detail,
-			fetch_branches = repositories_api.fetch_branches,
-			fetch_tags = repositories_api.fetch_tags,
-			fetch_issues = repositories_api.fetch_issues,
-			delete_branch = repositories_api.delete_branch,
-		},
-		notifications = notifications_api,
 		pipelines = require("atlas.pulls.pipelines.gitlab"),
 		actions = actions,
 		ui = {

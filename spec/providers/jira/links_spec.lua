@@ -32,7 +32,7 @@ describe("Jira links API", function()
 
 	before_each(function()
 		original_options = config.options
-		original_service = package.loaded["atlas.issues.providers.jira.api.service"]
+		original_service = package.loaded["atlas.providers.jira.client"]
 		original_links = package.loaded["atlas.issues.providers.jira.api.links"]
 		config.options = {
 			providers = {
@@ -43,7 +43,7 @@ describe("Jira links API", function()
 			},
 		}
 		callbacks = {}
-		package.loaded["atlas.issues.providers.jira.api.service"] = {
+		package.loaded["atlas.providers.jira.client"] = {
 			base_url = function()
 				return "https://jira.example/jira"
 			end,
@@ -63,7 +63,7 @@ describe("Jira links API", function()
 
 	after_each(function()
 		config.options = original_options
-		package.loaded["atlas.issues.providers.jira.api.service"] = original_service
+		package.loaded["atlas.providers.jira.client"] = original_service
 		package.loaded["atlas.issues.providers.jira.api.links"] = original_links
 	end)
 

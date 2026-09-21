@@ -33,19 +33,16 @@
 ---@field resolve_search fun(view: AtlasPullsViewConfig): string, PullsStateFilter[]
 ---@field capabilities PullsProviderCapabilities
 
----@class PullsProviderCapabilities
+---@class PullsProviderCapabilities : AtlasProviderCapabilities
 ---@field core PullsCoreCapability
 ---@field comments PullsCommentsCapability|nil
 ---@field reviews PullsReviewsCapability|nil
 ---@field tasks PullsTasksCapability|nil
----@field repository PullsRepositoryCapability|nil
 ---@field pipelines PullsPipelineBackend|nil
----@field notifications AtlasNotificationsCapability|nil
 ---@field actions PullsActionsCapability|nil
 ---@field ui PullsUICapability|nil
 
 ---@class PullsCoreCapability
----@field fetch_user fun(on_done: fun(user: PullsUser|nil, err: string|nil)): { cancel: fun() }|nil
 ---@field fetch_pullrequests fun(view: AtlasPullsViewConfig, opts: PullsFetchOpts, on_done: fun(page: PullsPage, err: string[]|nil)): { cancel: fun() }|nil Fetch the view, including when its states have not been initialized by the dashboard.
 ---@field fetch_by_refs fun(refs: PullRequestRef[], opts: PullsFetchOpts, on_done: fun(pulls: PullRequest[], err: string|nil)): { cancel: fun() }|nil
 ---@field fetch_pullrequest fun(ref: PullRequestRef, opts: PullsFetchOpts, on_done: fun(details: PullRequestDetails|nil, err: string|nil)): { cancel: fun() }|nil
@@ -95,13 +92,6 @@
 ---@field add_task (fun(pr: PullRequest, content: string, parent: PullsComment|nil, on_done: fun(comment: PullsComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field edit_task (fun(task: PullsComment, on_done: fun(task: PullsComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field delete_task (fun(task: PullsComment, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
-
----@class PullsRepositoryCapability
----@field fetch_details fun(repo: PullsRepo, opts: PullsFetchOpts, on_done: fun(repo: PullsRepoDetails|nil, err: string|nil)): { cancel: fun() }|nil
----@field fetch_branches fun(repo: PullsRepoDetails, opts: PullsFetchOpts, on_done: fun(branches: PullsRepoBranches|nil, err: string|nil)): { cancel: fun() }|nil
----@field fetch_tags fun(repo: PullsRepoDetails, opts: PullsFetchOpts, on_done: fun(tags: PullsRepoTags|nil, err: string|nil)): { cancel: fun() }|nil
----@field fetch_issues (fun(repo: PullsRepoDetails, state: "open"|"closed", opts: PullsFetchOpts, on_done: fun(result: { entries: PullsRepoIssue[], counts: { open: integer, closed: integer }|nil }|nil, err: string|nil)): { cancel: fun() }|nil)|nil
----@field delete_branch (fun(repo: PullsRepoDetails, branch: PullsRepoBranch, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
 
 ---@class PullsActionsCapability
 ---@field items AtlasPullAction[]

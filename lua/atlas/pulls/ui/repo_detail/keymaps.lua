@@ -39,7 +39,7 @@ local function remove_item(action_id)
 	return { key = (#keys == 1 and keys[1] or keys) }
 end
 
----@param repo PullsRepo|nil
+---@param repo AtlasRepository|nil
 ---@return string|nil
 local function repo_url(repo)
 	if repo == nil then

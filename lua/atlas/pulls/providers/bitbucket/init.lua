@@ -19,10 +19,6 @@
 ---@class BitbucketPullRequestDetails : PullRequestDetails
 ---@field close_source_branch boolean|nil
 
----@class BitbucketPullsRepoDetails : PullsRepoDetails
----@field branches_url string
----@field tags_url string
-
 local actions = require("atlas.pulls.providers.bitbucket.actions")
 local author_completion = require("atlas.providers.bitbucket.completion.author")
 local activity_api = require("atlas.pulls.providers.bitbucket.api.activity")
@@ -35,11 +31,9 @@ local git = require("atlas.core.git")
 local pullrequests_api = require("atlas.pulls.providers.bitbucket.api.pullrequests")
 local repo_detail_ui = require("atlas.pulls.providers.bitbucket.ui.repo_detail")
 local repository_ui = require("atlas.providers.bitbucket.ui.repository")
-local repositories_api = require("atlas.pulls.providers.bitbucket.api.repositories")
 local reviews_api = require("atlas.pulls.providers.bitbucket.api.reviews")
 local search_query = require("atlas.providers.bitbucket.query")
 local tasks_api = require("atlas.pulls.providers.bitbucket.api.tasks")
-local users_api = require("atlas.pulls.providers.bitbucket.api.users")
 
 ---@param target AtlasTarget
 ---@return AtlasBitbucketViewConfig
@@ -104,7 +98,6 @@ return {
 	resolve_search = search_query.query,
 	capabilities = {
 		core = {
-			fetch_user = users_api.fetch_current_user,
 			fetch_pullrequests = fetch_pullrequests,
 			fetch_by_refs = pullrequests_api.fetch_by_refs,
 			fetch_pullrequest = pullrequests_api.fetch_pullrequest,
@@ -143,12 +136,6 @@ return {
 			add_task = tasks_api.add_task,
 			edit_task = tasks_api.edit_task,
 			delete_task = tasks_api.delete_task,
-		},
-		repository = {
-			fetch_details = repositories_api.fetch_detail,
-			fetch_branches = repositories_api.fetch_branches,
-			fetch_tags = repositories_api.fetch_tags,
-			delete_branch = repositories_api.delete_branch,
 		},
 		actions = actions,
 		ui = {

@@ -25,11 +25,11 @@ describe("Jira author completion", function()
 	it("completes issue participants and comment authors", function()
 		local completion = author_completion.for_issues({
 			issue = {
-				assignee = { account_id = "assignee", display_name = "Assigned User" },
-				reporter = { account_id = "reporter", display_name = "Reporter User" },
+				assignee = { id = "assignee", name = "Assigned User" },
+				reporter = { id = "reporter", name = "Reporter User" },
 			},
 			comments = {
-				{ author = { account_id = "commenter", display_name = "Comment Author" } },
+				{ author = { id = "commenter", name = "Comment Author" } },
 			},
 		})
 
@@ -50,7 +50,7 @@ describe("Jira author completion", function()
 		assert.same({}, completion.complete(""))
 		assert.equal(
 			"[@Example User](atlas-mention:account-id)",
-			completion.format_mention({ account_id = "account-id", display_name = "Example User" })
+			completion.format_mention({ id = "account-id", name = "Example User" })
 		)
 	end)
 end)

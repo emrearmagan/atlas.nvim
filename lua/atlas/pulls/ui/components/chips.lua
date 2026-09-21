@@ -99,7 +99,7 @@ function M.render(pr, opts)
 	return render_chips(chips, opts)
 end
 
----@param repo PullsRepoDetails
+---@param repo AtlasRepositoryDetails
 ---@param opts { width: integer, padding_x?: integer, extra_chips?: PullsDetailChip[] }
 ---@return string[], table[]
 function M.render_repo(repo, opts)

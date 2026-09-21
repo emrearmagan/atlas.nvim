@@ -5,7 +5,7 @@ local service = require("atlas.providers.gitlab.client")
 local config = require("atlas.config")
 local json = require("atlas.core.json")
 
----@param repo PullsRepo
+---@param repo AtlasRepository
 ---@return string
 local function configured_readme_path(repo)
 	local repo_cfg = (((config.options or {}).pulls or {}).repo_config or {})
@@ -22,7 +22,7 @@ local function configured_readme_path(repo)
 	return "README.md"
 end
 
----@param repo PullsRepo
+---@param repo AtlasRepository
 ---@return string
 local function repo_path(repo)
 	local id = tostring(repo.id or "")
@@ -37,11 +37,11 @@ local function repo_path(repo)
 	return owner .. "/" .. name
 end
 
----@param repo PullsRepo
+---@param repo AtlasRepository
 ---@param opts PullsFetchOpts
----@param on_done fun(details: PullsRepoDetails|nil, err: string|nil)
+---@param on_done fun(details: AtlasRepositoryDetails|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_detail(repo, opts, on_done)
+function M.fetch_details(repo, opts, on_done)
 	opts = opts or {}
 	local path = repo_path(repo)
 	if path == "" then
@@ -80,7 +80,7 @@ function M.fetch_detail(repo, opts, on_done)
 
 		local statistics = json.safe_table(result.statistics)
 
-		---@type PullsRepoDetails
+		---@type AtlasRepositoryDetails
 		local details = {
 			id = full_path,
 			name = name,
@@ -131,7 +131,7 @@ function M.fetch_detail(repo, opts, on_done)
 	return requests
 end
 
----@param repo PullsRepoDetails
+---@param repo AtlasRepositoryDetails
 ---@param opts PullsFetchOpts
 ---@param on_done fun(branches: PullsRepoBranches|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
@@ -183,7 +183,7 @@ function M.fetch_branches(repo, opts, on_done)
 	})
 end
 
----@param repo PullsRepoDetails
+---@param repo AtlasRepositoryDetails
 ---@param opts PullsFetchOpts
 ---@param on_done fun(tags: PullsRepoTags|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
@@ -235,7 +235,7 @@ function M.fetch_tags(repo, opts, on_done)
 	})
 end
 
----@param repo PullsRepoDetails
+---@param repo AtlasRepositoryDetails
 ---@param state "open"|"closed"
 ---@param _opts PullsFetchOpts
 ---@param on_done fun(result: { entries: PullsRepoIssue[], counts: { open: integer, closed: integer }|nil }|nil, err: string|nil)
@@ -306,7 +306,7 @@ function M.fetch_issues(repo, state, _opts, on_done)
 	return requests
 end
 
----@param repo PullsRepoDetails
+---@param repo AtlasRepositoryDetails
 ---@param branch PullsRepoBranch
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil

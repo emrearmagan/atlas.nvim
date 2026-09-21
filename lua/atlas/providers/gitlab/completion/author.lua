@@ -16,10 +16,10 @@ end
 ---@return string[]
 local function collect_issue_usernames(context)
 	local seen, usernames = {}, {}
-	---@param user IssueUser|nil
+	---@param user AtlasUser|nil
 	local function add(user)
 		if user then
-			add_username(user.account_id, seen, usernames)
+			add_username(user.username, seen, usernames)
 		end
 	end
 
@@ -72,7 +72,7 @@ local function collect_pull_usernames(context)
 end
 
 ---@param collect_usernames fun(): string[]
----@param format_mention fun(author: table|nil): string
+---@param format_mention fun(author: AtlasUser|PullsAuthor|nil): string
 ---@return AtlasMarkdownCompletionProvider
 local function build_completion(collect_usernames, format_mention)
 	return {
@@ -111,8 +111,8 @@ function M.for_issues(context)
 	return build_completion(function()
 		return collect_issue_usernames(context)
 	end, function(author)
-		---@cast author IssueUser|nil
-		local username = tostring((author or {}).account_id or "")
+		---@cast author AtlasUser|nil
+		local username = tostring((author or {}).username or "")
 		return username ~= "" and ("@" .. username) or ""
 	end)
 end

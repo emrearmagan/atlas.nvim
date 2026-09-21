@@ -97,7 +97,7 @@ local function open_viewer(command, data, open_again, on_done)
 	end)
 end
 
----@param opts { provider: PullsProvider, current_user: PullsUser|nil, root: string|nil }
+---@param opts { provider: PullsProvider, current_user: AtlasUser|nil, root: string|nil }
 ---@param pr PullRequest
 ---@param viewer { id: string }|nil
 ---@param view AtlasLoadingView
@@ -151,7 +151,7 @@ local function load_pr(opts, pr, viewer, view, requests, on_done)
 	)
 end
 
----@param opts { provider: PullsProvider, ref: PullRequestRef, current_user?: PullsUser, root?: string, command?: string }
+---@param opts { provider: PullsProvider, ref: PullRequestRef, current_user?: AtlasUser, root?: string, command?: string }
 ---@param on_done (fun(err: string|nil))|nil
 function M.open_pr(opts, on_done)
 	local command = diff_command(opts.command)

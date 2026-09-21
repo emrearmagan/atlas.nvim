@@ -52,7 +52,7 @@ local function starred_first(pulls)
 end
 
 ---@param pulls PullRequest[]
----@return { repo: PullsRepo, pulls: PullRequest[] }[]
+---@return { repo: AtlasRepository, pulls: PullRequest[] }[]
 local function group_by_repo(pulls)
 	local groups, by_repo = {}, {}
 	for _, pr in ipairs(pulls) do

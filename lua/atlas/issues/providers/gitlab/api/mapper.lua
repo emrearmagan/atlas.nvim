@@ -2,26 +2,10 @@ local M = {}
 
 local json = require("atlas.core.json")
 
----@param raw_user any Decoded API value.
----@return IssueUser|nil
-function M.to_user(raw_user)
-	raw_user = json.nilify(raw_user)
-	if type(raw_user) ~= "table" then
-		return nil
-	end
-	local username = json.safe_str(raw_user.username) or ""
-	if username == "" then
-		return nil
-	end
-	local name = json.safe_str(raw_user.name) or ""
-	return {
-		account_id = username,
-		display_name = name ~= "" and name or username,
-	}
-end
+M.to_user = require("atlas.providers.gitlab.users").to_user
 
 ---@param raw_assignees table[]|nil
----@return IssueUser[]
+---@return AtlasUser[]
 local function assignees(raw_assignees)
 	local users = {}
 	for _, raw in ipairs(json.safe_table(raw_assignees)) do

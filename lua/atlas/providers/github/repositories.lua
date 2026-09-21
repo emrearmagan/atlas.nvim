@@ -33,11 +33,11 @@ query($owner: String!, $repo: String!, $states: [IssueState!]!) {
 }
 ]]
 
----@param repo PullsRepo
+---@param repo AtlasRepository
 ---@param opts PullsFetchOpts
----@param on_done fun(details: PullsRepoDetails|nil, err: string|nil)
+---@param on_done fun(details: AtlasRepositoryDetails|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_detail(repo, opts, on_done)
+function M.fetch_details(repo, opts, on_done)
 	local owner = tostring(repo.owner or "")
 	local repo_name = tostring(repo.repo_name or repo.name or "")
 
@@ -103,7 +103,7 @@ function M.fetch_detail(repo, opts, on_done)
 		local default_branch = json.nilify(result.defaultBranchRef)
 		local watchers = json.safe_table(result.watchers)
 
-		---@type PullsRepoDetails
+		---@type AtlasRepositoryDetails
 		local details = {
 			id = tostring(result.nameWithOwner or slug),
 			name = tostring(result.name or repo_name),
@@ -131,7 +131,7 @@ function M.fetch_detail(repo, opts, on_done)
 	return requests
 end
 
----@param repo PullsRepoDetails
+---@param repo AtlasRepositoryDetails
 ---@param opts PullsFetchOpts
 ---@param on_done fun(branches: PullsRepoBranches|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
@@ -183,7 +183,7 @@ function M.fetch_branches(repo, opts, on_done)
 	})
 end
 
----@param repo PullsRepoDetails
+---@param repo AtlasRepositoryDetails
 ---@param opts PullsFetchOpts
 ---@param on_done fun(tags: PullsRepoTags|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
@@ -235,7 +235,7 @@ function M.fetch_tags(repo, opts, on_done)
 	})
 end
 
----@param repo PullsRepoDetails
+---@param repo AtlasRepositoryDetails
 ---@param state "open"|"closed"
 ---@param _opts PullsFetchOpts
 ---@param on_done fun(result: { entries: PullsRepoIssue[], counts: { open: integer, closed: integer }|nil }|nil, err: string|nil)

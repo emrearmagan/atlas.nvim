@@ -193,9 +193,9 @@ local function edit_assignees(ctx, done)
 			local original_set = {}
 			for _, assignee in ipairs(assignees) do
 				local login = assignee.username
-				if login ~= "" and not original_set[login] then
+				if login and login ~= "" and not original_set[login] then
 					original_set[login] = true
-					table.insert(original, { account_id = login, display_name = assignee.name, email = "" })
+					table.insert(original, { id = assignee.id, username = login, name = assignee.name })
 				end
 			end
 			notify(ctx, "success", "Assignees loaded", 1200)
@@ -204,21 +204,20 @@ local function edit_assignees(ctx, done)
 				items = items,
 				selected = vim.deepcopy(original),
 				key = function(item)
-					return item.account_id
+					return item.username
 				end,
 				format_item = function(item)
 					return string.format(
 						"@%s%s",
-						item.account_id,
-						item.display_name and item.display_name ~= item.account_id and (" — " .. item.display_name)
-							or ""
+						item.username,
+						item.name ~= "" and item.name ~= item.username and (" — " .. item.name) or ""
 					)
 				end,
 				title = string.format("Assignees for PR #%s", tostring(pr.id or "")),
 				on_done = function(selected)
 					local selected_set = {}
 					for _, item in ipairs(selected) do
-						selected_set[item.account_id] = true
+						selected_set[item.username] = true
 					end
 
 					local adds, removes = {}, {}

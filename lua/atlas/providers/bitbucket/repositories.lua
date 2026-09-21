@@ -1,14 +1,50 @@
 local M = {}
 
-local service = require("atlas.pulls.providers.bitbucket.api.service")
+local service = require("atlas.providers.bitbucket.client")
 local config = require("atlas.config")
 local api_utils = require("atlas.core.utils")
-local mapper = require("atlas.pulls.providers.bitbucket.api.mapper")
 local request_scope = require("atlas.core.requests")
 local as_table = api_utils.as_table
 local url_encode = api_utils.url_encode
 
----@param repo PullsRepo
+---@class BitbucketRepositoryDetails : AtlasRepositoryDetails
+---@field branches_url string
+---@field tags_url string
+
+---@param raw table|nil
+---@param fallback_workspace string|nil
+---@return BitbucketRepositoryDetails
+local function to_repo_details(raw, fallback_workspace)
+	raw = as_table(raw) or {}
+	local workspace_obj = as_table(raw.workspace) or {}
+	local mainbranch = as_table(raw.mainbranch) or {}
+	local links = as_table(raw.links) or {}
+	local html_link = as_table(links.html) or {}
+	local branches_link = as_table(links.branches) or {}
+	local tags_link = as_table(links.tags) or {}
+	local full_name = tostring(raw.full_name or raw.name or raw.slug or "")
+	local owner = tostring(workspace_obj.slug or fallback_workspace or "")
+	local repo_name = tostring(raw.slug or raw.name or "")
+
+	return {
+		id = full_name ~= "" and full_name or repo_name,
+		name = tostring(raw.name or repo_name or full_name),
+		full_name = full_name,
+		owner = owner,
+		repo_name = repo_name,
+		html_url = tostring(html_link.href or ""),
+		description = tostring(raw.description or ""),
+		size = tonumber(raw.size) or 0,
+		default_branch = tostring(mainbranch.name or ""),
+		is_private = raw.is_private == true,
+		created_on = tostring(raw.created_on or ""),
+		readme = nil,
+		branches_url = tostring(branches_link.href or ""),
+		tags_url = tostring(tags_link.href or ""),
+	}
+end
+
+---@param repo AtlasRepository
 ---@return string|nil
 local function configured_readme_path(repo)
 	local repo_cfg = (((config.options or {}).pulls or {}).repo_config or {})
@@ -69,7 +105,7 @@ end
 
 ---@param workspace string
 ---@param search string
----@param on_done fun(repositories: PullsRepoDetails[]|nil, err: string|nil)
+---@param on_done fun(repositories: AtlasRepositoryDetails[]|nil, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.fetch_workspace_repositories(workspace, search, on_done)
 	if workspace == "" then
@@ -95,10 +131,10 @@ function M.fetch_workspace_repositories(workspace, search, on_done)
 		end
 
 		local values = (result or {}).values or {}
-		---@type PullsRepoDetails[]
+		---@type AtlasRepositoryDetails[]
 		local repositories = {}
 		for _, raw in ipairs(values) do
-			table.insert(repositories, mapper.to_repo_details(raw, workspace))
+			table.insert(repositories, to_repo_details(raw, workspace))
 		end
 
 		on_done(repositories, nil)
@@ -188,11 +224,11 @@ function M.resolve_targets(targets, opts, on_done)
 	return requests
 end
 
----@param repo PullsRepo
+---@param repo AtlasRepository
 ---@param _opts PullsFetchOpts
----@param on_done fun(repo: PullsRepoDetails|nil, err: string|nil)
+---@param on_done fun(repo: AtlasRepositoryDetails|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_detail(repo, _opts, on_done)
+function M.fetch_details(repo, _opts, on_done)
 	local owner = tostring(repo.owner or "")
 	local repo_name = tostring(repo.repo_name or "")
 
@@ -215,7 +251,7 @@ function M.fetch_detail(repo, _opts, on_done)
 			return
 		end
 
-		local detail = mapper.to_repo_details(result, owner)
+		local detail = to_repo_details(result, owner)
 		local readme_path = configured_readme_path(repo)
 		local ref = tostring(detail.default_branch or "")
 
@@ -231,12 +267,12 @@ function M.fetch_detail(repo, _opts, on_done)
 	return requests
 end
 
----@param repo PullsRepoDetails
+---@param repo AtlasRepositoryDetails
 ---@param opts PullsFetchOpts
 ---@param on_done fun(branches: PullsRepoBranches|nil, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.fetch_branches(repo, opts, on_done)
-	---@cast repo BitbucketPullsRepoDetails
+	---@cast repo BitbucketRepositoryDetails
 	opts = opts or {}
 	local branches_url = repo.branches_url
 
@@ -287,12 +323,12 @@ function M.fetch_branches(repo, opts, on_done)
 	end, { action = "Fetch repository branches", repo = repo.full_name or repo.name })
 end
 
----@param repo PullsRepoDetails
+---@param repo AtlasRepositoryDetails
 ---@param opts PullsFetchOpts
 ---@param on_done fun(tags: PullsRepoTags|nil, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.fetch_tags(repo, opts, on_done)
-	---@cast repo BitbucketPullsRepoDetails
+	---@cast repo BitbucketRepositoryDetails
 	opts = opts or {}
 	local tags_url = repo.tags_url
 
@@ -341,7 +377,7 @@ function M.fetch_tags(repo, opts, on_done)
 	end, { action = "Fetch repository tags", repo = repo.full_name or repo.name })
 end
 
----@param repo PullsRepoDetails
+---@param repo AtlasRepositoryDetails
 ---@param branch PullsRepoBranch
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil

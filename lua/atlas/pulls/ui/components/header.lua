@@ -214,13 +214,13 @@ function M.render(pr, width, extra_fields)
 	return lines, spans
 end
 
----@param repo PullsRepo
+---@param repo AtlasRepository
 ---@return string
 local function repo_full_name(repo)
 	return tostring(repo.full_name or repo.name or repo.id or "Repository")
 end
 
----@param repo PullsRepo
+---@param repo AtlasRepository
 ---@return string
 local function repo_workspace(repo)
 	local workspace = tostring(repo.workspace or "")
@@ -231,7 +231,7 @@ local function repo_workspace(repo)
 	return tostring(full_name:match("^([^/]+)/") or full_name)
 end
 
----@param repo PullsRepo
+---@param repo AtlasRepository
 ---@param width integer
 ---@return string[], table[]
 function M.render_repo(repo, width)

@@ -142,7 +142,7 @@ end
 local function user_name(value)
 	local user = json.safe_table(value)
 	local username = clean_preview(user.username)
-	return first(user.display_name, user.name, username ~= "" and "@" .. username or nil)
+	return first(user.name, username ~= "" and "@" .. username or nil)
 end
 
 local function names(values, format)

@@ -19,7 +19,7 @@
 ---@class JiraIssueDetails : IssueDetails
 ---@field status string|nil
 ---@field priority string|nil
----@field reporter IssueUser|nil
+---@field reporter AtlasUser|nil
 ---@field raw_description table|string|nil
 ---@field custom_fields JiraIssueCustomField[]
 
@@ -30,8 +30,7 @@ local config = require("atlas.config")
 local detail_ui = require("atlas.issues.providers.jira.ui.detail")
 local issues_api = require("atlas.issues.providers.jira.api.issues")
 local links_api = require("atlas.issues.providers.jira.api.links")
-local service = require("atlas.issues.providers.jira.api.service")
-local users_api = require("atlas.issues.providers.jira.api.users")
+local service = require("atlas.providers.jira.client")
 
 ---@param view IssuesViewConfig
 ---@return string
@@ -194,7 +193,6 @@ return {
 	issue_ref = target_issue_ref,
 	capabilities = {
 		core = {
-			fetch_user = users_api.get_myself,
 			fetch_issues = fetch_issues,
 			fetch_by_refs = fetch_by_refs,
 			fetch_issue = issues_api.fetch_issue,

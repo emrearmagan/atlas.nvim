@@ -28,11 +28,11 @@ function M.status_hl(status_id)
 	return highlights.dynamic_for_bg(status_id and ("jira-status:" .. status_id) or nil) or "AtlasTextMuted"
 end
 
----@param name string|IssueUser|nil
+---@param name string|AtlasUser|nil
 ---@return string
 function M.person_hl(name)
 	if type(name) == "table" then
-		name = name.display_name
+		name = name.name
 	end
 
 	if type(name) ~= "string" then

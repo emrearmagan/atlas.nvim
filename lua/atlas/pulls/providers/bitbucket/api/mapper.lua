@@ -460,37 +460,4 @@ function M.to_tasks_list(result)
 	return entries
 end
 
----@param raw table|nil
----@param fallback_workspace string|nil
----@return BitbucketPullsRepoDetails
-function M.to_repo_details(raw, fallback_workspace)
-	raw = as_table(raw) or {}
-	local workspace_obj = as_table(raw.workspace) or {}
-	local mainbranch = as_table(raw.mainbranch) or {}
-	local links = as_table(raw.links) or {}
-	local html_link = as_table(links.html) or {}
-	local branches_link = as_table(links.branches) or {}
-	local tags_link = as_table(links.tags) or {}
-	local full_name = tostring(raw.full_name or raw.name or raw.slug or "")
-	local owner = tostring(workspace_obj.slug or fallback_workspace or "")
-	local repo_name = tostring(raw.slug or raw.name or "")
-
-	return {
-		id = full_name ~= "" and full_name or repo_name,
-		name = tostring(raw.name or repo_name or full_name),
-		full_name = full_name,
-		owner = owner,
-		repo_name = repo_name,
-		html_url = tostring(html_link.href or ""),
-		description = tostring(raw.description or ""),
-		size = tonumber(raw.size) or 0,
-		default_branch = tostring(mainbranch.name or ""),
-		is_private = raw.is_private == true,
-		created_on = tostring(raw.created_on or ""),
-		readme = nil,
-		branches_url = tostring(branches_link.href or ""),
-		tags_url = tostring(tags_link.href or ""),
-	}
-end
-
 return M

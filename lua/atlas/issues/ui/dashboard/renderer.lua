@@ -288,7 +288,7 @@ function M.render(opts)
 			hl_group = "AtlasFooterActive",
 		}
 	end
-	local user_name = (state.current_user and state.current_user.display_name) or ""
+	local user_name = (state.current_user and state.current_user.name) or ""
 	if user_name ~= "" then
 		statusline_items[#statusline_items + 1] = {
 			text = "| @" .. user_name,

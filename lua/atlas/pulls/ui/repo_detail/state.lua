@@ -1,8 +1,8 @@
 local request_scope = require("atlas.core.requests")
 
 ---@class PullsRepoDetailState
----@field current_repo PullsRepo|nil
----@field current_repo_details PullsRepoDetails|"loading"|string|nil
+---@field current_repo AtlasRepository|nil
+---@field current_repo_details AtlasRepositoryDetails|"loading"|string|nil
 ---@field current_tab string|nil
 ---@field tabs PullsRepoDetailTab[]
 ---@field line_map table<integer, table>

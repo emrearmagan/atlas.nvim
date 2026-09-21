@@ -42,7 +42,7 @@ local notify = utils.notify
 ---@field provider PullsProvider
 ---@field pr PullRequest|nil
 ---@field details PullRequestDetails|nil
----@field current_user PullsUser|nil
+---@field current_user AtlasUser|nil
 ---@field buf integer|nil
 ---@field notify fun(level: "loading"|"success"|"info"|"warn"|"error", message: string, duration: integer|nil)|nil
 

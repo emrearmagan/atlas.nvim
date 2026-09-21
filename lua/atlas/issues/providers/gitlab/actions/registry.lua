@@ -6,7 +6,7 @@ local picker = require("atlas.ui.picker")
 local notify = require("atlas.core.notify")
 local request_scope = require("atlas.core.requests")
 local issues_api = require("atlas.issues.providers.gitlab.api.issues")
-local users_api = require("atlas.issues.providers.gitlab.api.users")
+local users_api = require("atlas.providers.gitlab.users")
 local labels_api = require("atlas.issues.providers.gitlab.api.labels")
 local service = require("atlas.providers.gitlab.client")
 local gitlab_query = require("atlas.providers.gitlab.query")
@@ -113,8 +113,8 @@ local function assign(ctx, done)
 		return
 	end
 
-	---@param current_assignees IssueUser[]
-	---@param members IssueUser[]
+	---@param current_assignees AtlasUser[]
+	---@param members AtlasUser[]
 	local function open_picker(current_assignees, members)
 		notify.clear()
 
@@ -139,15 +139,10 @@ local function assign(ctx, done)
 			items = members,
 			selected = vim.deepcopy(original),
 			key = function(item)
-				return tostring(item.id or item.account_id or "")
+				return tostring(item.id or item.username or "")
 			end,
 			format_item = function(item)
-				return string.format(
-					"%s %s (@%s)",
-					icons.general("user"),
-					item.display_name or item.account_id or item.name or item.username,
-					item.account_id or item.username
-				)
+				return string.format("%s %s (@%s)", icons.general("user"), item.name or item.username, item.username)
 			end,
 			title = string.format("Assignees for %s", key),
 			on_done = function(selected)
@@ -384,12 +379,12 @@ local function search_issues(project, ctx, done)
 					return
 				end
 				local assignees = vim.tbl_map(function(user)
-					return "@" .. user.account_id
+					return "@" .. user.username
 				end, details.assignees)
 				local label_names = vim.tbl_map(function(label)
 					return label.name
 				end, details.labels)
-				local author = issue.reporter and issue.reporter.display_name or "Unknown"
+				local author = issue.reporter and issue.reporter.name or "Unknown"
 				local lines = {
 					"**Status:** " .. (issue.status or "Open"),
 					"**Author:** " .. author,

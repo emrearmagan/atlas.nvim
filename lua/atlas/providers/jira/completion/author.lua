@@ -11,14 +11,14 @@ local function collect_users(context)
 	---@type JiraMentionUser[]
 	local users = {}
 
-	---@param user IssueUser|nil
+	---@param user AtlasUser|nil
 	local function add(user)
 		if user == nil then
 			return
 		end
 
-		local id = vim.trim(tostring(user.account_id or ""))
-		local label = vim.trim(tostring(user.display_name or ""))
+		local id = vim.trim(tostring(user.id or ""))
+		local label = vim.trim(tostring(user.name or ""))
 		if id == "" or label == "" or seen[id] then
 			return
 		end
@@ -74,14 +74,14 @@ local function is_unique_label(mention_map, label)
 	return true
 end
 
----@param author IssueUser|nil
+---@param author AtlasUser|nil
 ---@return string
 local function resolve_mention(author)
 	if author == nil then
 		return ""
 	end
-	local mention_id = vim.trim(tostring(author.account_id or ""))
-	local mention_label = vim.trim(author.display_name)
+	local mention_id = vim.trim(tostring(author.id or ""))
+	local mention_label = vim.trim(author.name)
 	if mention_label == "" and mention_id == "" then
 		return ""
 	end
@@ -117,8 +117,8 @@ function M.for_issues(context)
 					local use_simple_label = is_unique_label(mention_map, label)
 					local shown_abbr = use_simple_label and ("@" .. label) or string.format("@%s (%s)", label, id)
 					local insert_word = resolve_mention({
-						account_id = id,
-						display_name = label,
+						id = id,
+						name = label,
 					})
 					table.insert(matches, {
 						word = insert_word,

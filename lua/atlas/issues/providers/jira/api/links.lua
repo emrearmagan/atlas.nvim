@@ -2,7 +2,7 @@ local M = {}
 
 local json = require("atlas.core.json")
 local request_scope = require("atlas.core.requests")
-local service = require("atlas.issues.providers.jira.api.service")
+local service = require("atlas.providers.jira.client")
 local url_encode = require("atlas.core.utils").url_encode
 
 ---@param links AtlasRelatedItem[]

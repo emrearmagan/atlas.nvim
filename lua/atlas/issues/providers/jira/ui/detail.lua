@@ -18,8 +18,8 @@ function M.header_fields(issue, details, loading)
 	local priority = tostring(issue.priority or "-")
 	local priority_icon, priority_hl = icons.issues_priority(priority)
 	local priority_text = priority_icon ~= "" and string.format("%s %s", priority_icon, priority) or priority
-	local assignee_name = issue.assignee and issue.assignee.display_name or ""
-	local reporter_name = issue.reporter and issue.reporter.display_name or ""
+	local assignee_name = issue.assignee and issue.assignee.name or ""
+	local reporter_name = issue.reporter and issue.reporter.name or ""
 
 	if assignee_name == "" then
 		assignee_name = "Unassigned"

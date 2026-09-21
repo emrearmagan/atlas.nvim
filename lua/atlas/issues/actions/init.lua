@@ -24,7 +24,7 @@ local utils = require("atlas.issues.actions.utils")
 ---@class AtlasIssueActionContext
 ---@field provider IssuesProvider
 ---@field issue Issue|nil
----@field current_user IssueUser|nil
+---@field current_user AtlasUser|nil
 ---@field repo_slug string|nil
 ---@field project_path string|nil
 

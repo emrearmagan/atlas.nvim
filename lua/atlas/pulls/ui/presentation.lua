@@ -63,7 +63,7 @@ function M.pr_state_hl(pr_state)
 end
 
 ---@param pr PullRequest
----@return PullsRepo
+---@return AtlasRepository
 function M.repo(pr)
 	return {
 		id = pr.repo_full_name,

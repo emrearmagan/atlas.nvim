@@ -61,37 +61,8 @@
 ---@field labels PullsLabel[]|nil
 
 --------------------------------------------------------------------------------
--- User (current authenticated user)
---------------------------------------------------------------------------------
-
----@class PullsUser
----@field name string
----@field id string
----@field username string
-
---------------------------------------------------------------------------------
 -- Repository
 --------------------------------------------------------------------------------
-
----@class PullsRepo
----@field id string
----@field name string
----@field owner string|nil
----@field repo_name string|nil
----@field html_url string|nil
----@field full_name string|nil
----@field workspace string|nil
----@field created_on string|nil
----@field stars number|nil
----@field watchers number|nil
----@field forks number|nil
-
----@class PullsRepoDetails : PullsRepo
----@field description string|nil
----@field size number|nil
----@field default_branch string|nil
----@field is_private boolean|nil
----@field readme string|nil
 
 ---@class PullsRepoBranch
 ---@field name string
@@ -308,14 +279,14 @@
 ---@field tabs (fun(): PullsRepoDetailTab[])|nil
 
 ---@class PullsRepoDetailTabModule
----@field render fun(repo: PullsRepo, width: integer): string[], table[], table<integer, table>|nil
----@field on_select (fun(repo: PullsRepo, refresh: fun(), opts: { force_refresh: boolean|nil }|nil))|nil
+---@field render fun(repo: AtlasRepository, width: integer): string[], table[], table<integer, table>|nil
+---@field on_select (fun(repo: AtlasRepository, refresh: fun(), opts: { force_refresh: boolean|nil }|nil))|nil
 ---@field reset (fun())|nil
 ---@field activate (fun(buf: integer, refresh: fun()))|nil
 ---@field deactivate (fun(buf: integer))|nil
 ---@field is_loading (fun(): boolean)|nil
 ---@field is_selectable_line (fun(lnum: integer, entry: table): boolean)|nil
----@field on_enter (fun(repo: PullsRepo, entry: table): boolean|nil)|nil
+---@field on_enter (fun(repo: AtlasRepository, entry: table): boolean|nil)|nil
 
 ---@class PullsRepoDetailTab
 ---@field key string

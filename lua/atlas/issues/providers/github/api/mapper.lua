@@ -3,18 +3,10 @@ local M = {}
 local json = require("atlas.core.json")
 local github_mapping = require("atlas.providers.github.mapping")
 
----@param raw_user any Decoded API value.
----@return IssueUser|nil
-function M.to_user(raw_user)
-	local user = github_mapping.identity(raw_user)
-	if user == nil or user.login == "" then
-		return nil
-	end
-	return { account_id = user.login, display_name = user.name }
-end
+M.to_user = require("atlas.providers.github.users").to_user
 
 ---@param raw_assignees table[]|nil
----@return IssueUser|nil
+---@return AtlasUser|nil
 local function first_assignee(raw_assignees)
 	for _, raw in ipairs(json.safe_table(raw_assignees)) do
 		local user = M.to_user(raw)
@@ -26,7 +18,7 @@ local function first_assignee(raw_assignees)
 end
 
 ---@param raw_assignees table[]|nil
----@return IssueUser[]
+---@return AtlasUser[]
 local function assignees(raw_assignees)
 	local users = {}
 	for _, raw in ipairs(json.safe_table(raw_assignees)) do
@@ -215,8 +207,7 @@ local function to_comment(raw, raw_user)
 	if type(raw) ~= "table" or json.nilify(raw.id) == nil then
 		return nil
 	end
-	local user = github_mapping.identity(raw_user)
-	local author = user and user.login ~= "" and { account_id = user.login, display_name = user.login } or nil
+	local author = M.to_user(raw_user)
 	return {
 		id = tostring(raw.id),
 		self = nil,

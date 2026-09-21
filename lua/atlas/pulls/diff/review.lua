@@ -53,10 +53,9 @@ local function load(context, on_done)
 			return reviews.fetch(context.pr, options, done)
 		end
 	end
-	if not context.current_user then
-		starts.current_user = function(done)
-			return context.provider.capabilities.core.fetch_user(done)
-		end
+	local users = context.provider.capabilities.users
+	if not context.current_user and users then
+		starts.current_user = users.fetch_user
 	end
 
 	local pending = request_scope.new()
@@ -88,7 +87,7 @@ end
 
 ---@param provider PullsProvider
 ---@param pr PullRequest
----@param current_user PullsUser|nil
+---@param current_user AtlasUser|nil
 ---@param on_done fun(review: AtlasDiffReview, warnings: string[])
 ---@return { cancel: fun() }
 function M.load(provider, pr, current_user, on_done)
