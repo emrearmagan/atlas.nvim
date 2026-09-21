@@ -4,15 +4,23 @@ local keymaps = require("atlas.core.keymaps")
 local explorer = require("atlas.pulls.pipelines.ui.explorer")
 
 ---@param pane PullsPipelinesExplorer
+---@param content_win integer
 ---@return AtlasHelpKeyItem[]
-function M.items(pane)
+function M.items(pane, content_win)
 	local items = {}
-	local select_keys = keymaps.resolve("ui.select") or {}
-	vim.list_extend(select_keys, keymaps.resolve("ui.show_details") or {})
 	for index, item in ipairs({
 		{
-			key = select_keys,
-			desc = "Show pipeline, job or step",
+			key = keymaps.resolve("ui.select") or {},
+			desc = "Open logs",
+			callback = function()
+				if explorer.select(pane) then
+					vim.api.nvim_set_current_win(content_win)
+				end
+			end,
+		},
+		{
+			key = keymaps.resolve("ui.show_details") or {},
+			desc = "Preview logs",
 			callback = function()
 				explorer.select(pane)
 			end,

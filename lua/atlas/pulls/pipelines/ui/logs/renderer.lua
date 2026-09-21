@@ -55,21 +55,31 @@ local function append_entries(pane, entries, lines, spans, prepared, depth, pare
 	local width = vim.api.nvim_win_get_width(pane.win)
 	for _, entry in ipairs(entries) do
 		local formatted = prepared[entry]
+		if entry.entries and depth == 0 and #lines > 0 then
+			lines[#lines + 1] = ""
+		end
 		pane.entry_rows[entry] = #lines + 1
 		if entry.entries then
 			---@cast entry PullsLogGroup
-			local collapsed = pane.collapsed[entry] ~= false
-			local icon, hl = icons.general(collapsed and "fold_closed" or "fold_open")
-			if #entry.entries == 0 then
-				icon = " "
-			end
-			local prefix = indent .. icon .. " "
 			spans[#spans + 1] = {
 				line = #lines,
-				start_col = #indent,
-				end_col = #indent + #icon,
-				hl_group = hl,
+				start_col = 0,
+				hl_group = "AtlasLogGroup",
+				hl_eol = true,
+				priority = 99,
 			}
+			local collapsed = pane.collapsed[entry] ~= false
+			local prefix = indent
+			if #entry.entries > 0 then
+				local icon, hl = icons.general(collapsed and "fold_closed" or "fold_open")
+				prefix = prefix .. icon .. " "
+				spans[#spans + 1] = {
+					line = #lines,
+					start_col = #indent,
+					end_col = #indent + #icon,
+					hl_group = hl,
+				}
+			end
 			if entry.state then
 				local status_icon, status_hl = icons.pulls_status(entry.state:lower())
 				spans[#spans + 1] = {
@@ -202,7 +212,7 @@ local function write_buffer(buf, lines, spans)
 			end_col = span.hl_eol and 0 or span.end_col,
 			hl_eol = span.hl_eol,
 			hl_group = span.hl_group,
-			priority = 100,
+			priority = span.priority or 100,
 		})
 	end
 

@@ -64,9 +64,10 @@ function M.jump(pane, target)
 	M.render(pane)
 	local row = pane.entry_rows[target]
 	if row then
-		vim.api.nvim_set_current_win(pane.win)
 		vim.api.nvim_win_set_cursor(pane.win, { row, 0 })
-		vim.cmd("normal! zz")
+		vim.api.nvim_win_call(pane.win, function()
+			vim.cmd("normal! zz")
+		end)
 	end
 end
 

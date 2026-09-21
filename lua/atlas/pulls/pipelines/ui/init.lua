@@ -67,7 +67,7 @@ local function update_statusline(session)
 			text = icon .. " " .. table.concat(names, " - "),
 			hl_group = STATUS_HIGHLIGHTS[item.state],
 			align = "right",
-			priority = 2,
+			priority = -1,
 		}
 	end
 

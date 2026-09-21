@@ -833,8 +833,8 @@ keymaps = {
     edit_description = "D",
     edit_search = "i",
     pipelines = {
-      next_job = "]j",
-      previous_job = "[j",
+      next_job = { "]j", "<Tab>" },
+      previous_job = { "[j", "<S-Tab>" },
       show_history = "gH",
       toggle_raw_logs = "gL",
     },

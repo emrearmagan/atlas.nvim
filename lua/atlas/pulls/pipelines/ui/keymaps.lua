@@ -121,7 +121,7 @@ end
 ---@param close fun()
 ---@param open_actions fun(selection: PullsPipelinesSelection|nil)
 function M.setup(session, close, open_actions)
-	local explorer_items = explorer_keymaps.items(session.explorer)
+	local explorer_items = explorer_keymaps.items(session.explorer, session.logs.win)
 	local logs_items = logs_keymaps.items(session.logs)
 
 	for _, pane in ipairs({ session.explorer, session.logs, session.config }) do

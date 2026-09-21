@@ -377,8 +377,8 @@ function M.validate()
 	local ALLOWED_CONFLICTS = {
 		{ "ui.comments.add", "pulls.edit_search", "issues.edit_search" },
 		{ "pulls.review.find_file", "pulls.review.explorer.find_file" },
-		{ "ui.next_panel_tab", "pulls.review.explorer.next_file" },
-		{ "ui.previous_panel_tab", "pulls.review.explorer.previous_file" },
+		{ "ui.next_panel_tab", "pulls.review.explorer.next_file", "pulls.pipelines.next_job" },
+		{ "ui.previous_panel_tab", "pulls.review.explorer.previous_file", "pulls.pipelines.previous_job" },
 		{ "ui.comments.reply", "pulls.review.diff.add_comment", "issues.create_issue" },
 		{ "pulls.edit_title", "pulls.review.explorer.toggle_grouping" },
 		{ "pulls.toggle_repo_issue_state", "pulls.review.diff.toggle_layout" },

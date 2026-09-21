@@ -89,11 +89,14 @@ local function show_selection(pane, selection)
 end
 
 ---@param pane PullsPipelinesExplorer
+---@return boolean
 function M.select(pane)
 	local selection = M.current_selection(pane)
 	if selection and selection.pipeline then
 		show_selection(pane, selection)
+		return true
 	end
+	return false
 end
 
 ---@param pane PullsPipelinesExplorer
