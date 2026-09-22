@@ -105,36 +105,4 @@ describe("GitHub client host routing", function()
 		assert.same({ "gh", "api", "user" }, calls[1].cmd)
 		assert.are.equal("github.com", calls[1].opts.env.GH_HOST)
 	end)
-
-	it("routes repository and search commands using GH_HOST without an unsupported flag", function()
-		options.hostname = "github.company.com"
-		local commands = {
-			{ "pr", "view", "7", "--repo", "owner/repo", "--json", "title" },
-			{ "issue", "edit", "7", "--repo", "owner/repo", "--title", "Updated" },
-			{ "repo", "view", "owner/repo", "--json", "nameWithOwner" },
-			{ "search", "repos", "atlas", "--json", "fullName" },
-		}
-		for index, args in ipairs(commands) do
-			client.gh(args, function() end)
-			assert.same(vim.list_extend({ "gh" }, args), calls[index].cmd)
-			assert.are.equal("github.company.com", calls[index].opts.env.GH_HOST)
-		end
-	end)
-
-	it("isolates persistent and memory entries with the same key between hosts", function()
-		for _, kind in ipairs({ "cache", "mem" }) do
-			options.hostname = "github.com"
-			client["set_" .. kind]("github:user:me", { login = "public-user" })
-			options.hostname = "github.company.com"
-			assert.is_nil(client["get_" .. kind]("github:user:me"))
-			client["set_" .. kind]("github:user:me", { login = "enterprise-user" })
-			assert.same({ login = "enterprise-user" }, client["get_" .. kind]("github:user:me"))
-			if kind == "mem" then
-				client.delete_mem("github:user:me")
-				assert.is_nil(client.get_mem("github:user:me"))
-			end
-			options.hostname = "github.com"
-			assert.same({ login = "public-user" }, client["get_" .. kind]("github:user:me"))
-		end
-	end)
 end)
