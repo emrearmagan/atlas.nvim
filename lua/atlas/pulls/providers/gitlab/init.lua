@@ -26,6 +26,7 @@ local checks_api = require("atlas.pulls.providers.gitlab.api.checks")
 local comments_api = require("atlas.pulls.providers.gitlab.api.comments")
 local config = require("atlas.config")
 local detail_ui = require("atlas.pulls.providers.gitlab.ui.detail")
+local links_api = require("atlas.providers.gitlab.links")
 local notifications_api = require("atlas.providers.gitlab.notifications")
 local pipeline_actions = require("atlas.pulls.providers.gitlab.actions.pipelines")
 local pipelines_api = require("atlas.pulls.providers.gitlab.api.pipelines")
@@ -134,6 +135,7 @@ return {
 			end,
 			fetch_by_refs = pullrequests_api.fetch_by_refs,
 			fetch_pullrequest = pullrequests_api.fetch_pullrequest,
+			fetch_links = links_api.fetch_pullrequest,
 			create_pr = pullrequests_api.create_pr,
 			fetch_reviewers = reviews_api.fetch_reviewers,
 			update_reviewers = pullrequests_api.update_reviewers,

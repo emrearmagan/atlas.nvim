@@ -178,8 +178,11 @@ function M.to_pull_request(raw, workspace, repo)
 	local destination_repository = as_table(destination.repository) or {}
 	local source_https_url, source_ssh_url = clone_urls(source_repository)
 	local destination_https_url, destination_ssh_url = clone_urls(destination_repository)
+	local destination_repo_full_name = tostring(destination_repository.full_name or "")
+	local destination_workspace, destination_repo = destination_repo_full_name:match("^([^/]+)/([^/]+)$")
+	workspace, repo = destination_workspace or workspace, destination_repo or repo
 	local repo_full_name = workspace ~= "" and repo ~= "" and string.format("%s/%s", workspace, repo)
-		or tostring(destination_repository.full_name or "")
+		or destination_repo_full_name
 	local source_repo_full_name = tostring(source_repository.full_name or "")
 	local source_is_fork = source_repo_full_name ~= "" and source_repo_full_name ~= repo_full_name
 	local participants = as_table(raw.participants)

@@ -268,9 +268,9 @@ PULLS CONFIGURATION                              *atlas-pulls-configuration*
       diff = {
         -- Any command that accepts explicit <base>...<head> Git revisions.
         open_cmd = "AtlasDiff", -- default; e.g. "DiffviewOpen" or "CodeDiff"
-        show_review_panel = false, -- set true to show the review panel initially
         comment_display = "virtual_lines", -- or compact "virtual_text" hints
         review_panel = {
+          hidden = true, -- set false to show the review panel initially
           height = 10,
         },
 
@@ -599,6 +599,7 @@ Atlas emits these `User` events after setup or cleanup completes:
         previous_page           = "[p",
         open_actions            = "A",
         open_in_browser         = "gx",
+        open_references         = "gl",
         copy_id                 = "y",
         copy_url                = "Y",
         show_details            = "K",

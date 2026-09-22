@@ -18,6 +18,7 @@ local config = require("atlas.config")
 local cli = require("atlas.providers.github.client")
 local comments_api = require("atlas.pulls.providers.github.api.comments")
 local emojis = require("atlas.ui.shared.emojis")
+local links_api = require("atlas.providers.github.links")
 local notifications_api = require("atlas.providers.github.notifications")
 local pipeline_actions = require("atlas.pulls.providers.github.actions.pipelines")
 local pipelines_api = require("atlas.pulls.providers.github.api.pipelines")
@@ -134,6 +135,7 @@ return {
 			end,
 			fetch_by_refs = pullrequests_api.fetch_by_refs,
 			fetch_pullrequest = fetch_pullrequest,
+			fetch_links = links_api.fetch_pr,
 			create_pr = pullrequests_api.create_pr,
 			fetch_default_reviewers = pullrequests_api.fetch_default_reviewers,
 			fetch_reviewers = reviews_api.fetch_reviewers,

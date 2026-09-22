@@ -113,7 +113,7 @@ function M.set_cache(key, value)
 end
 
 ---@param method string
----@param endpoint string
+---@param endpoint string Relative to the Jira API, or a full /rest/ path.
 ---@param data table|nil
 ---@param on_done fun(result: table|nil, err: string|nil)
 ---@param ctx table|nil   optional extra context merged into the request log line (e.g. { action, issue_key, ... })
@@ -126,7 +126,8 @@ function M.request(method, endpoint, data, on_done, ctx)
 		return nil
 	end
 
-	local url = M.base_url() .. api_path() .. endpoint
+	local path = endpoint:match("^/rest/") and endpoint or api_path() .. endpoint
+	local url = M.base_url() .. path
 	local headers = build_headers()
 	local payload = nil
 	if data ~= nil then

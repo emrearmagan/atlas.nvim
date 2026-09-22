@@ -3,8 +3,6 @@ local M = {}
 
 local icons = require("atlas.ui.shared.icons")
 
-local MAX_HASH_LEN = 12
-
 ---@param _pr PullRequest
 ---@param details PullRequestDetails|nil
 ---@param _loading boolean
@@ -28,24 +26,6 @@ function M.header_fields(_pr, details, _loading)
 	end
 
 	return fields
-end
-
----@param pr PullRequest
----@param _details PullRequestDetails|nil
----@param _loading boolean
----@return PullsDetailChip[]
-function M.chips(pr, _details, _loading)
-	local chips = {}
-
-	local hash = pr.source.commit_hash
-	if hash ~= "" then
-		if #hash > MAX_HASH_LEN then
-			hash = hash:sub(1, MAX_HASH_LEN)
-		end
-		table.insert(chips, { label = hash, hl = "AtlasTabInactive" })
-	end
-
-	return chips
 end
 
 ---@return PullsDetailTab[]

@@ -68,6 +68,10 @@ function M.resolve(value, parsed)
 		project_path, number, tail = path:match("^/(.-)/%-/issues/(%d+)(.*)$")
 		domain, entity = "issues", "issue"
 	end
+	if project_path == nil and not path:match("^/groups/") then
+		project_path, number, tail = path:match("^/(.-)/%-/work_items/(%d+)(.*)$")
+		domain, entity = "issues", "issue"
+	end
 	local owner, repo = split_project(project_path)
 	if owner then
 		if not url.valid_tail(tail) then

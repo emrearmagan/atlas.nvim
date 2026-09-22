@@ -57,7 +57,8 @@ require("atlas").setup({})
 
 </details>
 
-### Requirements
+<details>
+<summary><strong>Requirements</strong></summary>
 
 - Neovim: `0.10+`
 - `git` and `curl` on `$PATH`
@@ -68,6 +69,8 @@ require("atlas").setup({})
 
 > [!tip]
 > It's a good idea to run `:checkhealth atlas` to see if everything is set up correctly.
+
+</details>
 
 ## Features
 
@@ -107,6 +110,13 @@ My dotfiles include a [Pi extension that wraps this script](https://github.com/e
 </details>
 
 ### Also included
+
+<details>
+<summary><strong>Linked issues and PRs</strong> - Jump between issues and pull requests</summary>
+
+Jump from an issue to its PR and back, or browse related issues and sub-issues.
+
+</details>
 
 <details>
 <summary><strong>Pipelines</strong> - View jobs and logs, retry failures, or cancel running work</summary>
@@ -282,7 +292,8 @@ Save searches as bookmarks, or press `*` to star a pull request or issue. Both a
 }
 ```
 
-### Statusline
+<details>
+<summary><strong>Statusline</strong></summary>
 
 Atlas comes with its own statusline for key hints, loading progress, and notifications. Keeping it enabled is recommended because most interaction and feedback goes through it.
 
@@ -300,6 +311,8 @@ require("lualine").setup({
 ```
 
 At some point there will probably an extension for lualine.
+
+</details>
 
 ## Commands
 
@@ -344,9 +357,9 @@ pulls = {
   diff = {
     -- Any command that accepts explicit <base>...<head> Git revisions.
     open_cmd = "AtlasDiff", -- default; for example "DiffviewOpen" or "CodeDiff".
-    show_review_panel = false, -- Set true to show the review panel when a diff opens.
     comment_display = "virtual_lines", -- "virtual_lines" or compact "virtual_text" hints.
     review_panel = {
+      hidden = true, -- Set false to show the review panel when a diff opens.
       height = 10,
     },
 
@@ -749,6 +762,7 @@ keymaps = {
     previous_page = "[p",
     open_actions = "A",
     open_in_browser = "gx",
+    open_references = "gl",
     copy_id = "y",
     copy_url = "Y",
     show_details = "K",
