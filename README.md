@@ -243,6 +243,7 @@ Save searches as bookmarks, or press `*` to star a pull request or issue. Both a
   providers = {
     ---@type AtlasGitHubConfig
     github = {
+      -- hostname = "github.company.com", -- Defaults to GH_HOST, then github.com.
       cache_ttl = 300, -- Set to 0 to disable caching.
     },
 

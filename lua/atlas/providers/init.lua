@@ -33,6 +33,7 @@ local url = require("atlas.providers.url")
 ---@class AtlasProvider
 ---@field id AtlasProviderId
 ---@field name string
+---@field hostname fun(): string|nil
 ---@field resolver { resolve: fun(value: string, parsed: AtlasParsedUrl|nil): AtlasTarget|nil, string|nil }
 ---@field domains table<"pulls"|"issues", AtlasProviderDomain>
 
@@ -118,6 +119,10 @@ end
 add({
 	id = "jira",
 	name = "Jira",
+	hostname = function()
+		local base = url.configured_base("jira")
+		return base and base.host or nil
+	end,
 	resolver = require("atlas.providers.jira.resolve"),
 	domains = {
 		issues = {
@@ -132,6 +137,7 @@ add({
 add({
 	id = "github",
 	name = "GitHub",
+	hostname = require("atlas.providers.github.client").hostname,
 	resolver = require("atlas.providers.github.resolve"),
 	domains = {
 		pulls = {
@@ -150,6 +156,9 @@ add({
 add({
 	id = "bitbucket",
 	name = "Bitbucket",
+	hostname = function()
+		return "bitbucket.org"
+	end,
 	resolver = require("atlas.providers.bitbucket.resolve"),
 	domains = {
 		pulls = {
@@ -163,6 +172,10 @@ add({
 add({
 	id = "gitlab",
 	name = "GitLab",
+	hostname = function()
+		local base = url.configured_base("gitlab")
+		return base and base.host or nil
+	end,
 	resolver = require("atlas.providers.gitlab.resolve"),
 	domains = {
 		pulls = {

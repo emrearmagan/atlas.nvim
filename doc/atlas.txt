@@ -92,6 +92,7 @@ up and what's missing.
       },
       ---@type AtlasGitHubConfig
       github = {
+        -- hostname = "github.company.com", -- Defaults to GH_HOST, then github.com.
         cache_ttl = 300, -- Set to 0 to disable caching.
       },
       ---@type AtlasGitLabConfig
