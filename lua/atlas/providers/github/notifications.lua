@@ -36,9 +36,9 @@ local function normalize(raw)
 		local number = subject_url:match("/(%d+)$")
 		if number then
 			if subject_type == "PullRequest" then
-				html_url = string.format("https://github.com/%s/pull/%s", repo, number)
+				html_url = string.format("https://%s/%s/pull/%s", client.hostname(), repo, number)
 			elseif subject_type == "Issue" then
-				html_url = string.format("https://github.com/%s/issues/%s", repo, number)
+				html_url = string.format("https://%s/%s/issues/%s", client.hostname(), repo, number)
 			end
 		end
 	end

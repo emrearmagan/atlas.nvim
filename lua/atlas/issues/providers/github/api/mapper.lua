@@ -95,9 +95,9 @@ local function issue_identity(raw, fallback_slug)
 	end
 
 	local _, _, slug = github_mapping.repository(raw.repository, fallback_slug)
-	local url = json.safe_str(raw.url) or json.safe_str(raw.html_url) or ""
+	local url = json.safe_str(raw.html_url) or json.safe_str(raw.url) or ""
 	if slug == "" then
-		slug = url:match("github%.com/([^/]+/[^/]+)/issues/") or ""
+		slug = url:match("^https?://[^/]+/([^/]+/[^/]+)/issues/%d+") or ""
 	end
 
 	local key = slug ~= "" and string.format("%s#%d", slug, number) or string.format("#%d", number)
@@ -113,7 +113,7 @@ function M.to_issue(raw, fallback_slug)
 	if ref == nil or number == nil then
 		return nil
 	end
-	local url = json.safe_str(raw.url) or json.safe_str(raw.html_url) or ""
+	local url = json.safe_str(raw.html_url) or json.safe_str(raw.url) or ""
 	local status_name, status_id = normalize_state(raw.state)
 	local author = M.to_user(raw.author)
 

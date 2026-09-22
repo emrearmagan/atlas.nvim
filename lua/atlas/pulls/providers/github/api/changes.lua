@@ -51,7 +51,7 @@ function M.fetch_commits(pr, _opts, on_done)
 				author_name = author_name,
 				author_nickname = author_login,
 				date = tostring(raw.authoredDate or raw.committedDate or ""),
-				html_url = repo_slug ~= "" and string.format("https://github.com/%s/commit/%s", repo_slug, hash) or nil,
+				html_url = string.format("https://%s/%s/commit/%s", cli.hostname(), repo_slug, hash),
 			})
 		end
 
