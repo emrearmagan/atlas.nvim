@@ -56,6 +56,19 @@ query($owner:String!,$repo:String!,$number:Int!,$endCursor:String){
   repository(owner:$owner,name:$repo){
     pullRequest(number:$number){
       id
+      files(first:100,after:$endCursor){
+        pageInfo{hasNextPage endCursor}
+        nodes{path viewerViewedState}
+      }
+    }
+  }
+}
+]]
+
+local REVIEW_MENTIONS_QUERY = [[
+query($owner:String!,$repo:String!,$number:Int!){
+  repository(owner:$owner,name:$repo){
+    pullRequest(number:$number){
       assignees(first:100){nodes{id login name}}
       reviews(first:100){nodes{author{login}}}
       reviewRequests(first:100){
@@ -64,14 +77,10 @@ query($owner:String!,$repo:String!,$number:Int!,$endCursor:String){
             ... on User{id login name}
             ... on Bot{id login}
             ... on Mannequin{id login name}
-            ... on Team{id name slug organization{login}}
-            ... on EnterpriseTeam{id name slug combinedSlug}
+            ... on Team{id teamName:name slug organization{login}}
+            ... on EnterpriseTeam{id teamName:name slug combinedSlug}
           }
         }
-      }
-      files(first:100,after:$endCursor){
-        pageInfo{hasNextPage endCursor}
-        nodes{path viewerViewedState}
       }
     }
   }
@@ -95,8 +104,8 @@ query($owner:String!,$name:String!,$number:Int!,$endCursor:String){
             ... on User{id login name}
             ... on Bot{id login}
             ... on Mannequin{id login name}
-            ... on Team{id name slug organization{login}}
-            ... on EnterpriseTeam{id name slug combinedSlug}
+            ... on Team{id teamName:name slug organization{login}}
+            ... on EnterpriseTeam{id teamName:name slug combinedSlug}
           }
         }
       }
@@ -107,8 +116,8 @@ query($owner:String!,$name:String!,$number:Int!,$endCursor:String){
               ... on User{id login name}
               ... on Bot{id login}
               ... on Mannequin{id login name}
-              ... on Team{id name slug organization{login}}
-              ... on EnterpriseTeam{id name slug combinedSlug}
+              ... on Team{id teamName:name slug organization{login}}
+              ... on EnterpriseTeam{id teamName:name slug combinedSlug}
             }
           }
         }
@@ -141,8 +150,8 @@ query($owner:String!,$name:String!,$number:Int!,$endCursor:String){
             ... on User{id login name}
             ... on Bot{id login}
             ... on Mannequin{id login name}
-            ... on Team{id name slug organization{login}}
-            ... on EnterpriseTeam{id name slug combinedSlug}
+            ... on Team{id teamName:name slug organization{login}}
+            ... on EnterpriseTeam{id teamName:name slug combinedSlug}
           }
         }
       }
@@ -153,8 +162,8 @@ query($owner:String!,$name:String!,$number:Int!,$endCursor:String){
               ... on User{id login name}
               ... on Bot{id login}
               ... on Mannequin{id login name}
-              ... on Team{id name slug organization{login}}
-              ... on EnterpriseTeam{id name slug combinedSlug}
+              ... on Team{id teamName:name slug organization{login}}
+              ... on EnterpriseTeam{id teamName:name slug combinedSlug}
             }
           }
         }
@@ -163,6 +172,17 @@ query($owner:String!,$name:String!,$number:Int!,$endCursor:String){
   }
 }
 ]]
+
+-- EnterpriseTeam may be unavailable on older GitHub Enterprise Server versions.
+-- https://docs.github.com/en/graphql/overview/changelog#schema-changes-for-2026-05-21
+---@param query string
+---@return string
+local function reviewer_query(query)
+	if cli.is_enterprise_server() then
+		return (query:gsub("%.%.%. on EnterpriseTeam%b{}", ""))
+	end
+	return query
+end
 
 local SET_FILE_REVIEWED_MUTATIONS = {
 	[true] = [[
@@ -209,7 +229,7 @@ local function review_author(raw)
 	end
 	return {
 		id = user.id ~= "" and user.id or login,
-		name = user.name ~= "" and user.name or (json.safe_str(raw.name) or login),
+		name = user.name ~= "" and user.name or (json.safe_str(raw.teamName) or login),
 		username = login,
 		nickname = login,
 	}
@@ -668,7 +688,7 @@ local function fetch_review_details(pr, opts, on_done)
 		"-F",
 		"number=" .. tostring(pr.id),
 		"-f",
-		"query=" .. REVIEW_DETAILS_QUERY,
+		"query=" .. reviewer_query(REVIEW_DETAILS_QUERY),
 	}, function(result, err)
 		if err or type(result) ~= "table" then
 			on_done(nil, err or "Failed to fetch review history")
@@ -722,7 +742,7 @@ function M.fetch_reviewers(pr, opts, on_done)
 		"-F",
 		"number=" .. tostring(pr.id),
 		"-f",
-		"query=" .. REVIEWERS_QUERY,
+		"query=" .. reviewer_query(REVIEWERS_QUERY),
 	}, function(result, err)
 		if err or type(result) ~= "table" then
 			on_done(nil, err or "Failed to fetch reviewers")
@@ -1153,31 +1173,49 @@ function M.fetch_context(pr, opts, on_done)
 		end
 	end
 
-	return cli.gh({
-		"api",
-		"graphql",
-		"--paginate",
-		"--slurp",
-		"-f",
-		"query=" .. REVIEW_CONTEXT_QUERY,
-		"-f",
-		"owner=" .. owner,
-		"-f",
-		"repo=" .. repo,
-		"-F",
-		"number=" .. tostring(pr.id),
-	}, function(result, err)
-		if err or type(result) ~= "table" then
-			on_done(nil, err or "Failed to fetch review context")
+	local function fetch(query, paginate, action, done)
+		local args = {
+			"api",
+			"graphql",
+			"-f",
+			"query=" .. reviewer_query(query),
+			"-f",
+			"owner=" .. owner,
+			"-f",
+			"repo=" .. repo,
+			"-F",
+			"number=" .. tostring(pr.id),
+		}
+		if paginate then
+			vim.list_extend(args, { "--paginate", "--slurp" })
+		end
+		return cli.gh(args, done, { action = action, repo = repo_slug, number = pr.id })
+	end
+
+	local function pull_request_from_response(response)
+		local data = json.safe_table(json.safe_table(response).data)
+		return json.nilify(json.safe_table(data.repository).pullRequest)
+	end
+
+	local requests = request_scope.new()
+	requests.all({
+		files = function(done)
+			return fetch(REVIEW_CONTEXT_QUERY, true, "Fetch PR reviewed files", done)
+		end,
+		mentions = function(done)
+			return fetch(REVIEW_MENTIONS_QUERY, false, "Fetch PR review mentions", done)
+		end,
+	}, function(results, errors)
+		if errors.files or type(results.files) ~= "table" then
+			on_done(nil, errors.files or "Failed to fetch reviewed files")
 			return
 		end
 		local pull_request
 		local reviewed_files = {}
-		for _, page in ipairs(result) do
-			local repository = json.nilify(page.data.repository)
-			local current = repository and json.nilify(repository.pullRequest)
+		for _, page in ipairs(results.files) do
+			local current = pull_request_from_response(page)
 			if not current then
-				on_done(nil, "Failed to fetch review context")
+				on_done(nil, "Failed to fetch reviewed files")
 				return
 			end
 			pull_request = pull_request or current
@@ -1188,10 +1226,18 @@ function M.fetch_context(pr, opts, on_done)
 			end
 		end
 		if not pull_request then
-			on_done(nil, "Failed to fetch review context")
+			on_done(nil, "Failed to fetch reviewed files")
 			return
 		end
 		pr.node_id = tostring(pull_request.id or "")
+		local mentions = pull_request_from_response(results.mentions)
+		local mention_error = errors.mentions
+		if type(mentions) ~= "table" then
+			mention_error = mention_error or "Missing pull request mention data"
+		end
+		if mention_error then
+			mentions = {}
+		end
 
 		local mention_candidates = {}
 		local seen = {}
@@ -1207,24 +1253,23 @@ function M.fetch_context(pr, opts, on_done)
 		end
 
 		add(pr.author)
-		for _, raw in ipairs(((pull_request.assignees or {}).nodes or {})) do
+		for _, raw in ipairs(((mentions.assignees or {}).nodes or {})) do
 			add(review_author(raw))
 		end
-		for _, raw in ipairs(((pull_request.reviews or {}).nodes or {})) do
+		for _, raw in ipairs(((mentions.reviews or {}).nodes or {})) do
 			add(review_author(raw.author))
 		end
-		for _, raw in ipairs(((pull_request.reviewRequests or {}).nodes or {})) do
+		for _, raw in ipairs(((mentions.reviewRequests or {}).nodes or {})) do
 			add(review_author(raw.requestedReviewer or raw))
 		end
 
 		local context = { mention_candidates = mention_candidates, reviewed_files = reviewed_files }
-		cli.set_mem(cache_key, context, cli.cache_ttl())
-		on_done(context, nil)
-	end, {
-		action = "Fetch PR review context",
-		repo = repo_slug,
-		number = pr.id,
-	})
+		if not mention_error then
+			cli.set_mem(cache_key, context, cli.cache_ttl())
+		end
+		on_done(context, mention_error and ("Mention suggestions unavailable: " .. mention_error) or nil)
+	end)
+	return requests
 end
 
 return M

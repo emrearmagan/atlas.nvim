@@ -74,7 +74,7 @@ local function load(context, on_done)
 		if not errors.current_user and values.current_user then
 			context.current_user = values.current_user
 		end
-		if not errors.review_context and values.review_context then
+		if values.review_context then
 			context.context = values.review_context
 		end
 		if not errors.review and values.review then
