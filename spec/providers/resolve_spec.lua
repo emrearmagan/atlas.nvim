@@ -8,7 +8,7 @@ describe("providers.resolve", function()
 		original_options = config.options
 		config.options = {
 			providers = {
-				github = {},
+				github = { hostname = "github.com" },
 				gitlab = { base_url = "https://gitlab.example.com" },
 				bitbucket = {},
 				jira = { base_url = "https://jira.example.com" },
@@ -54,6 +54,44 @@ describe("providers.resolve", function()
 		assert.are.equal("issues", jira.domain)
 		assert.are.equal("ATLAS-123", jira.issue_key)
 		assert.are.equal("https://jira.example.com/browse/ATLAS-123", jira.url)
+	end)
+
+	it("resolves Enterprise Server browser URLs and Git remotes on the active host", function()
+		config.options.providers.github.hostname = "github.company.test"
+		local cases = {
+			{ "https://github.company.test/team/repo/pull/42", "pr", 42 },
+			{ "https://github.company.test/team/repo/issues/8", "issue", 8 },
+			{ "https://github.company.test/team/repo", "repo" },
+			{ "https://github.company.test/team/repo.git", "repo" },
+			{ "git@github.company.test:team/repo.git", "repo" },
+			{ "ssh://git@github.company.test/team/repo.git", "repo" },
+		}
+		for _, case in ipairs(cases) do
+			local target = assert(providers.resolve(case[1]))
+			assert.equal("github", target.provider)
+			assert.equal("github.company.test", target.host)
+			assert.equal("team/repo", target.repo_full_name)
+			assert.equal(case[2], target.entity)
+			assert.equal(case[3], target.number)
+			assert.equal("https://github.company.test/team/repo.git", target.repository_url)
+		end
+	end)
+
+	it("rejects GitHub.com URLs when the active host is Enterprise Server", function()
+		config.options.providers.github.hostname = "github.company.test"
+		local target, err = providers.resolve("https://github.com/team/repo/pull/42")
+		assert.is_nil(target)
+		assert.equal("Unsupported Atlas URL", err)
+	end)
+
+	it("leaves other providers and unknown custom hosts to their own resolvers", function()
+		config.options.providers.github.hostname = "github.company.test"
+		assert.equal("gitlab", assert(providers.resolve("https://gitlab.example.com/team/repo/-/issues/8")).provider)
+		assert.equal("jira", assert(providers.resolve("https://jira.example.com/browse/ATLAS-123")).provider)
+		assert.equal("bitbucket", assert(providers.resolve("https://bitbucket.org/team/repo/pull-requests/8")).provider)
+		local target, err = providers.resolve("https://unrelated.example.com/team/repo/issues/8")
+		assert.is_nil(target)
+		assert.equal("Unsupported Atlas URL", err)
 	end)
 
 	it("resolves Git remotes as repository targets", function()
