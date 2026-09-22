@@ -182,7 +182,7 @@ local function load_details(ref, force_refresh)
 	state.requests.run(function(done)
 		return core.fetch_pullrequest(ref, { force_refresh = force_refresh }, done)
 	end, function(details, err)
-		if not same_ref(state.current_pr or pending_ref, ref) then
+		if state.current_pr == nil and not same_ref(pending_ref, ref) then
 			return
 		end
 		state.current_details = details
