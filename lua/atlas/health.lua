@@ -135,11 +135,13 @@ local function check_github()
 	end
 	vim.health.ok("gh CLI found")
 
-	if vim.system({ "gh", "auth", "status" }, { text = true }):wait().code ~= 0 then
-		vim.health.error("gh not authenticated", { "Run: gh auth login" })
+	local hostname = providers.github.hostname()
+	vim.health.info("GitHub host: " .. hostname)
+	if vim.system({ "gh", "auth", "status", "--hostname", hostname }, { text = true }):wait().code ~= 0 then
+		vim.health.error("gh not authenticated for " .. hostname, { "Run: gh auth login --hostname " .. hostname })
 		return
 	end
-	vim.health.ok("gh authenticated")
+	vim.health.ok("gh authenticated for " .. hostname)
 end
 
 local function check_gitlab()
