@@ -5,7 +5,28 @@ local config = require("atlas.config")
 local logger = require("atlas.core.logger")
 local memory = require("atlas.core.memory_cache")
 
+local DEFAULT_HOST = "github.com"
 local DEFAULT_CACHE_TTL = 300
+
+---@return string
+function M.hostname()
+	local options = config.provider_options("github") or {}
+	local hostname = options.hostname
+	if hostname == nil or hostname == "" then
+		hostname = vim.env.GH_HOST
+	end
+	if hostname == nil or hostname == "" then
+		return DEFAULT_HOST
+	end
+
+	return vim.trim(hostname):lower()
+end
+
+---@param key string
+---@return string
+local function cache_key(key)
+	return "github:" .. M.hostname() .. ":" .. key
+end
 
 ---@param store table
 ---@param key string
@@ -27,6 +48,11 @@ local function sanitize_error(err)
 	return (err:gsub("\n", " "):gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", ""))
 end
 
+---@return boolean
+function M.is_enterprise_server()
+	return M.hostname() ~= DEFAULT_HOST
+end
+
 function M.cache_ttl()
 	local options = config.provider_options("github") or {}
 	return tonumber(options.cache_ttl) or DEFAULT_CACHE_TTL
@@ -36,32 +62,32 @@ function M.get_cache(key)
 	if M.cache_ttl() <= 0 then
 		return nil
 	end
-	return get_cached(cache, key)
+	return get_cached(cache, cache_key(key))
 end
 
 function M.set_cache(key, value, ttl)
 	if M.cache_ttl() <= 0 then
 		return
 	end
-	cache.set(key, value, ttl or M.cache_ttl())
+	cache.set(cache_key(key), value, ttl or M.cache_ttl())
 end
 
 function M.get_mem(key)
 	if M.cache_ttl() <= 0 then
 		return nil
 	end
-	return get_cached(memory, key)
+	return get_cached(memory, cache_key(key))
 end
 
 function M.set_mem(key, value, ttl)
 	if M.cache_ttl() <= 0 then
 		return
 	end
-	memory.set(key, value, ttl or M.cache_ttl())
+	memory.set(cache_key(key), value, ttl or M.cache_ttl())
 end
 
 function M.delete_mem(key)
-	memory.delete(key)
+	memory.delete(cache_key(key))
 end
 
 ---@param args string[]
@@ -70,7 +96,9 @@ end
 ---@param ctx table|nil
 ---@return { job_id: integer, cancel: fun() }|nil
 local function run(args, parse_json, callback, ctx)
+	local hostname = M.hostname()
 	local log = vim.tbl_extend("keep", {}, ctx or {})
+	log.hostname = hostname
 	local message = log.action or "GitHub CLI"
 	log.action = nil
 	logger.loginfo(message, log)
@@ -120,7 +148,7 @@ local function run(args, parse_json, callback, ctx)
 		end)
 	end
 
-	local started, handle = pcall(vim.system, cmd, { text = true }, on_exit)
+	local started, handle = pcall(vim.system, cmd, { text = true, env = { GH_HOST = hostname } }, on_exit)
 	if not started then
 		logger.logerror(message .. " failed", vim.tbl_extend("force", {}, log, { error = tostring(handle) }))
 		vim.schedule(function()
