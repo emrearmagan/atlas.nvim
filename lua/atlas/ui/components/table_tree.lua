@@ -17,6 +17,7 @@ end
 ---@field default_expanded? boolean When row has no expanded field.
 ---@field indent? string Per depth level (default "  ").
 ---@field leaf_prefix? string For non-branch rows at depth > 0 (default "└─ ").
+---@field leaf_hl? string Highlight group for the leaf prefix.
 ---@field show_indicator? boolean Branch expand/collapse glyphs (default true).
 ---@field separator? string If set, inserts a full-width separator line between root siblings.
 ---@field is_expanded? fun(row:table):boolean Overrides expanded_field when set.
@@ -35,6 +36,7 @@ local function resolve_tree(tree)
 		default_expanded = tree.default_expanded == true,
 		indent = tree.indent or "  ",
 		leaf_prefix = tree.leaf_prefix or "└─ ",
+		leaf_hl = tree.leaf_hl,
 		show_indicator = tree.show_indicator ~= false,
 		separator = tree.separator,
 		is_expanded = tree.is_expanded,
@@ -414,6 +416,28 @@ function M.render(opts)
 						end_col = col_start + #padded,
 						hl_group = c.hl,
 					})
+				end
+
+				if
+					tree
+					and tree.leaf_hl
+					and c.key == tree.column_key
+					and row._tv2_depth > 0
+					and (not tree.show_indicator or not row._tv2_has_children)
+				then
+					local prefix = tree_glyphs_for_row(row, tree)
+					if cell:sub(1, #prefix) == prefix then
+						local padding = #padded - #cell
+						local offset = c.align == "right" and padding
+							or c.align == "center" and math.floor(padding / 2)
+							or 0
+						table.insert(spans, {
+							line = #lines,
+							start_col = col_start + offset,
+							end_col = col_start + offset + #prefix,
+							hl_group = tree.leaf_hl,
+						})
+					end
 				end
 
 				col_start = col_start + #padded + gap_after(i)

@@ -3,7 +3,7 @@ local M = {}
 local icons = require("atlas.ui.shared.icons")
 local picker = require("atlas.ui.picker")
 
-local pull_actions = require("atlas.pulls.actions")
+local review_actions = require("atlas.pulls.actions.review")
 local review_api = require("atlas.pulls.diff.review")
 local notes = require("atlas.pulls.notes")
 
@@ -37,11 +37,20 @@ function M.run(session, callback)
 	end)
 end
 
+---@param id string
+---@param context AtlasPullActionContext
+---@return boolean
+function M.is_available(id, context)
+	local actions = context.provider.capabilities.actions
+	return actions ~= nil and actions.is_available(id, context)
+end
+
 ---@param session AtlasDiffSession
 local function open_in_browser(session)
 	local context = review_api.action_context(session)
-	if context then
-		pull_actions.run("open_in_browser", context)
+	local actions = context and context.provider.capabilities.actions
+	if context and actions then
+		actions.run("open_in_browser", context, function() end)
 	end
 end
 
@@ -81,12 +90,12 @@ function M.start_or_submit(session)
 	local reviews = review.provider.capabilities.reviews or {}
 	if review.data.review.pending then
 		if reviews.submit_review then
-			M.run(session, pull_actions.submit_review.run)
+			M.run(session, review_actions.submit_review.run)
 		else
 			open_in_browser(session)
 		end
 	elseif reviews.start_review then
-		M.run(session, pull_actions.start_review.run)
+		M.run(session, review_actions.start_review.run)
 	end
 end
 
@@ -94,28 +103,28 @@ end
 function M.approve(session)
 	local review = session.review
 	local context = review_api.action_context(session)
-	if not review or not context or not pull_actions.is_available("approve", context) then
+	if not review or not context or not M.is_available("approve", context) then
 		return
 	end
 	if review.data.review.pending and not (review.provider.capabilities.reviews or {}).submit_review then
 		open_in_browser(session)
 		return
 	end
-	M.run(session, pull_actions.approve.run)
+	M.run(session, review_actions.approve.run)
 end
 
 ---@param session AtlasDiffSession
 function M.request_changes(session)
 	local review = session.review
 	local context = review_api.action_context(session)
-	if not review or not context or not pull_actions.is_available("request_changes", context) then
+	if not review or not context or not M.is_available("request_changes", context) then
 		return
 	end
 	if review.data.review.pending and not (review.provider.capabilities.reviews or {}).submit_review then
 		open_in_browser(session)
 		return
 	end
-	M.run(session, pull_actions.request_changes.run)
+	M.run(session, review_actions.request_changes.run)
 end
 
 ---@param session AtlasDiffSession
@@ -141,7 +150,7 @@ function M.open(session)
 
 	if pending then
 		if reviewable and reviews.submit_review then
-			items[#items + 1] = pull_actions.submit_review
+			items[#items + 1] = review_actions.submit_review
 		elseif reviewable then
 			items[#items + 1] = {
 				id = "finish_review",
@@ -153,17 +162,17 @@ function M.open(session)
 			}
 		end
 		if reviews.discard_review then
-			items[#items + 1] = pull_actions.discard_review
+			items[#items + 1] = review_actions.discard_review
 		end
 	elseif reviewable and reviews.start_review then
-		items[#items + 1] = pull_actions.start_review
+		items[#items + 1] = review_actions.start_review
 	end
 	local can_complete = reviewable and (not pending or reviews.submit_review ~= nil)
-	if can_complete and reviews.approve and pull_actions.is_available("approve", context) then
-		items[#items + 1] = pull_actions.approve
+	if can_complete and reviews.approve and M.is_available("approve", context) then
+		items[#items + 1] = review_actions.approve
 	end
-	if can_complete and reviews.request_changes and pull_actions.is_available("request_changes", context) then
-		items[#items + 1] = pull_actions.request_changes
+	if can_complete and reviews.request_changes and M.is_available("request_changes", context) then
+		items[#items + 1] = review_actions.request_changes
 	end
 	picker.select({
 		title = "Review action",

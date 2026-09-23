@@ -14,7 +14,7 @@ local PADDING_X = 1
 
 ---@class PullsRepoBranchesTabState
 ---@field repo AtlasRepositoryDetails|nil
----@field branches PullsRepoBranches|"loading"|string|nil
+---@field branches AtlasRepositoryBranches|"loading"|string|nil
 ---@field requests AtlasRequestScope
 local state = { repo = nil, branches = nil, requests = request_scope.new() }
 

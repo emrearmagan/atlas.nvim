@@ -134,7 +134,7 @@ end
 
 ---@param repo AtlasRepositoryDetails
 ---@param opts PullsFetchOpts
----@param on_done fun(branches: PullsRepoBranches|nil, err: string|nil)
+---@param on_done fun(branches: AtlasRepositoryBranches|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_branches(repo, opts, on_done)
 	opts = opts or {}
@@ -156,25 +156,32 @@ function M.fetch_branches(repo, opts, on_done)
 	end
 
 	local endpoint = string.format("/projects/%s/repository/branches?per_page=100", service.url_encode(path))
-	return service.request("GET", endpoint, nil, function(result, err)
+	return service.fetch_all_pages(endpoint, function(result, err)
 		if err then
 			on_done(nil, err)
 			return
 		end
 
+		---@type AtlasRepositoryBranch[]
 		local entries = {}
 		for _, branch_value in ipairs(json.safe_table(result)) do
 			local branch = json.safe_table(branch_value)
 			local commit = json.safe_table(branch.commit)
-			table.insert(entries, {
+			---@type AtlasRepositoryBranch
+			local entry = {
 				name = json.safe_str(branch.name) or "",
-				hash = (json.safe_str(commit.short_id) or json.safe_str(commit.id) or ""):sub(1, 8),
+				hash = json.safe_str(commit.id) or "",
 				date = json.safe_str(commit.committed_date) or "",
-				message = json.safe_str(commit.title) or "",
+				message = json.safe_str(commit.message) or json.safe_str(commit.title) or "",
 				author = json.safe_str(commit.author_name) or "",
-			})
+			}
+			if type(branch.protected) == "boolean" then
+				entry.protected = branch.protected
+			end
+			table.insert(entries, entry)
 		end
 
+		---@type AtlasRepositoryBranches
 		local branches = { entries = entries }
 		service.set_memory_cache(cache_key, branches)
 		on_done(branches, nil)
@@ -308,7 +315,7 @@ function M.fetch_issues(repo, state, _opts, on_done)
 end
 
 ---@param repo AtlasRepositoryDetails
----@param branch PullsRepoBranch
+---@param branch AtlasRepositoryBranch
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.delete_branch(repo, branch, on_done)

@@ -64,17 +64,6 @@
 -- Repository
 --------------------------------------------------------------------------------
 
----@class PullsRepoBranch
----@field name string
----@field hash string
----@field date string|nil
----@field message string|nil
----@field author string|nil
----@field api_url string|nil
-
----@class PullsRepoBranches
----@field entries PullsRepoBranch[]
-
 ---@class PullsRepoTag
 ---@field name string
 ---@field hash string

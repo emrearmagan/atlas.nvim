@@ -36,9 +36,7 @@ local function render(state)
 	end
 	local width = vim.api.nvim_win_get_width(state.win)
 	local lines, spans = {}, {}
-	if type(state.details) == "table" then
-		lines, spans = renderer.render(state.details, width)
-	elseif type(state.details) == "string" then
+	if type(state.details) == "string" then
 		local loading = state.details == "loading"
 		local text = loading and state.spinner:text("Loading...") or state.details:gsub("[\r\n]+", " ")
 		local padding = math.max(0, math.floor((width - vim.fn.strdisplaywidth(text)) / 2))
@@ -46,6 +44,8 @@ local function render(state)
 			table.insert(lines, "")
 		end
 		utils.push(lines, spans, text, loading and "AtlasTextMuted" or "AtlasLogError", padding)
+	elseif state.details then
+		lines, spans = renderer.render(state.details, width)
 	end
 
 	vim.bo[state.buf].modifiable = true

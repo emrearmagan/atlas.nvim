@@ -269,12 +269,12 @@ end
 
 ---@param repo AtlasRepositoryDetails
 ---@param opts PullsFetchOpts
----@param on_done fun(branches: PullsRepoBranches|nil, err: string|nil)
----@return { job_id: integer, cancel: fun() }|nil
+---@param on_done fun(branches: AtlasRepositoryBranches|nil, err: string|nil)
+---@return { cancel: fun() }|nil
 function M.fetch_branches(repo, opts, on_done)
 	---@cast repo BitbucketRepositoryDetails
 	opts = opts or {}
-	local branches_url = repo.branches_url
+	local branches_url = repo.branches_url or ""
 
 	if branches_url == "" then
 		on_done(nil, "Missing branches URL")
@@ -292,13 +292,14 @@ function M.fetch_branches(repo, opts, on_done)
 		end
 	end
 
-	return service.request("GET", url, nil, nil, function(result, err)
+	return service.fetch_all_values(url, function(result, err)
 		if err ~= nil then
 			on_done(nil, err)
 			return
 		end
 
 		local payload = as_table(result) or {}
+		---@type AtlasRepositoryBranch[]
 		local entries = {}
 		for _, item in ipairs(payload.values or {}) do
 			local branch = as_table(item) or {}
@@ -317,6 +318,7 @@ function M.fetch_branches(repo, opts, on_done)
 				api_url = tostring(self_link.href or ""),
 			})
 		end
+		---@type AtlasRepositoryBranches
 		local branches = { entries = entries }
 		service.set_cache(key, branches, service.cache_ttl())
 		on_done(branches, nil)
@@ -378,7 +380,7 @@ function M.fetch_tags(repo, opts, on_done)
 end
 
 ---@param repo AtlasRepositoryDetails
----@param branch PullsRepoBranch
+---@param branch AtlasRepositoryBranch
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.delete_branch(repo, branch, on_done)

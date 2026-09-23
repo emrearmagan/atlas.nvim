@@ -3,6 +3,7 @@ local M = {}
 local request_scope = require("atlas.core.requests")
 local cli = require("atlas.providers.github.client")
 local json = require("atlas.core.json")
+local utils = require("atlas.core.utils")
 
 local ISSUE_TYPE_COLORS = {
 	RED = "d73a49",
@@ -28,6 +29,25 @@ query($owner: String!, $repo: String!, $states: [IssueState!]!) {
         issueType { name color }
         comments { totalCount }
       }
+    }
+  }
+}
+]]
+
+local BRANCHES_QUERY = [[
+query($owner: String!, $repo: String!, $endCursor: String) {
+  repository(owner: $owner, name: $repo) {
+    refs(refPrefix: "refs/heads/", first: 100, after: $endCursor, orderBy: {field: ALPHABETICAL, direction: ASC}) {
+      nodes {
+        name
+        target {
+          ... on Commit {
+            oid committedDate message
+            author { name }
+          }
+        }
+      }
+      pageInfo { hasNextPage endCursor }
     }
   }
 }
@@ -136,11 +156,12 @@ end
 
 ---@param repo AtlasRepositoryDetails
 ---@param opts PullsFetchOpts
----@param on_done fun(branches: PullsRepoBranches|nil, err: string|nil)
+---@param on_done fun(branches: AtlasRepositoryBranches|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_branches(repo, opts, on_done)
 	local slug = tostring(repo.full_name or "")
-	if slug == "" then
+	local owner, name = slug:match("^([^/]+)/([^/]+)$")
+	if not owner then
 		vim.schedule(function()
 			on_done(nil, "Missing repository info")
 		end)
@@ -158,25 +179,46 @@ function M.fetch_branches(repo, opts, on_done)
 
 	return cli.gh({
 		"api",
-		string.format("repos/%s/branches?per_page=100", slug),
+		"graphql",
+		"--paginate",
+		"--slurp",
+		"-f",
+		"query=" .. BRANCHES_QUERY,
+		"-f",
+		"owner=" .. owner,
+		"-f",
+		"repo=" .. name,
 	}, function(result, err)
 		if err or type(result) ~= "table" then
 			on_done(nil, err or "Failed to fetch branches")
 			return
 		end
 
+		---@type AtlasRepositoryBranch[]
 		local entries = {}
-		for _, branch in ipairs(result) do
-			local commit = branch.commit
-			table.insert(entries, {
-				name = tostring(branch.name or ""),
-				hash = tostring(commit.sha or ""):sub(1, 8),
-				date = nil,
-				message = nil,
-				author = nil,
-			})
+		for _, page in ipairs(result) do
+			local data = json.safe_table(page.data)
+			local repository = json.nilify(data.repository)
+			if not repository then
+				on_done(nil, "Repository not found")
+				return
+			end
+
+			local refs = json.safe_table(repository.refs)
+			for _, branch in ipairs(json.safe_table(refs.nodes)) do
+				local commit = json.safe_table(branch.target)
+				local author = json.safe_table(commit.author)
+				table.insert(entries, {
+					name = json.safe_str(branch.name) or "",
+					hash = json.safe_str(commit.oid) or "",
+					date = json.safe_str(commit.committedDate),
+					message = json.safe_str(commit.message),
+					author = json.safe_str(author.name),
+				})
+			end
 		end
 
+		---@type AtlasRepositoryBranches
 		local branches = { entries = entries }
 		cli.set_mem(cache_key, branches)
 		on_done(branches, nil)
@@ -311,6 +353,35 @@ function M.fetch_issues(repo, state, _opts, on_done)
 		action = "Fetch repository issues",
 		repo = slug,
 		state = state,
+	})
+end
+
+---@param repo AtlasRepositoryDetails
+---@param branch AtlasRepositoryBranch
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.delete_branch(repo, branch, on_done)
+	local slug = tostring(repo.full_name or "")
+	local name = tostring(branch.name or "")
+	if not slug:match("^[^/]+/[^/]+$") or name == "" then
+		vim.schedule(function()
+			on_done(false, "Missing branch info")
+		end)
+		return nil
+	end
+
+	local endpoint = string.format("repos/%s/git/refs/heads/%s", slug, utils.url_encode(name))
+	return cli.api("DELETE", endpoint, nil, function(_, err)
+		if err then
+			on_done(false, err)
+			return
+		end
+		cli.delete_mem(string.format("github:branches:%s", slug))
+		on_done(true, nil)
+	end, {
+		action = "Delete repository branch",
+		repo = slug,
+		branch = name,
 	})
 end
 

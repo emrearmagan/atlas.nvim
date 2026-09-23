@@ -8,7 +8,7 @@ local M = {}
 ---@param select_page fun(index: integer)
 function M.setup(session, close, select_page)
 	for _, pane in ipairs({ session.sidebar, session.content }) do
-		help.register("General", {
+		local items = {
 			{
 				key = resolver.resolve("ui.close") or {},
 				desc = "Close repository",
@@ -23,9 +23,7 @@ function M.setup(session, close, select_page)
 				end,
 				opts = { nowait = true, silent = true },
 			},
-		}, { buffer = pane.buf })
-
-		local items = {}
+		}
 		for _, direction in ipairs({
 			{ "ui.next_panel_tab", "Next page", 1 },
 			{ "ui.previous_panel_tab", "Previous page", -1 },
@@ -51,7 +49,7 @@ function M.setup(session, close, select_page)
 				opts = { nowait = true, silent = true },
 			})
 		end
-		help.register("Pages", items, { buffer = pane.buf })
+		help.register("General", items, { buffer = pane.buf })
 	end
 end
 
