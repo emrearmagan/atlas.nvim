@@ -93,20 +93,21 @@ local function load(state, id)
 end
 
 ---@param state RepositoryReleases
-local function search(state)
+---@param on_done fun(releases: AtlasRepositoryRelease[])
+local function fetch_releases(state, on_done)
 	if state.release == "loading" then
 		return
 	end
 	local repository = state.provider.capabilities.repository
-	local fetch_releases = repository and repository.fetch_releases
-	if not fetch_releases then
+	local fetch = repository and repository.fetch_releases
+	if not fetch then
 		return
 	end
 	state.requests.cancel()
 	state.requests = requests.new()
 	state.statusline:notify("loading", "Loading releases...")
 	state.requests.run(function(done)
-		return fetch_releases(state.repo, {}, done)
+		return fetch(state.repo, {}, done)
 	end, function(releases, err)
 		state.statusline:clear_notice()
 		if not releases then
@@ -117,6 +118,13 @@ local function search(state)
 			notify.info("No releases found")
 			return
 		end
+		on_done(releases)
+	end)
+end
+
+---@param state RepositoryReleases
+local function search(state)
+	fetch_releases(state, function(releases)
 		picker.select({
 			title = "Releases",
 			items = releases,
@@ -143,6 +151,28 @@ local function search(state)
 				end
 			end,
 		})
+	end)
+end
+
+---@param state RepositoryReleases
+---@param direction 1|-1
+local function change_release(state, direction)
+	if type(state.release) == "string" then
+		return
+	end
+	local id = state.release.id
+	fetch_releases(state, function(releases)
+		for index, release in ipairs(releases) do
+			if release.id == id then
+				local next_release = releases[index + direction]
+				if next_release then
+					load(state, next_release.id)
+				else
+					notify.info(direction == 1 and "No next release" or "No previous release")
+				end
+				return
+			end
+		end
 	end)
 end
 
@@ -204,6 +234,20 @@ function M.open(opts)
 			"Search releases",
 			function()
 				search(state)
+			end,
+		},
+		{
+			resolver.resolve("ui.next_page"),
+			"Next release",
+			function()
+				change_release(state, 1)
+			end,
+		},
+		{
+			resolver.resolve("ui.previous_page"),
+			"Previous release",
+			function()
+				change_release(state, -1)
 			end,
 		},
 	}
