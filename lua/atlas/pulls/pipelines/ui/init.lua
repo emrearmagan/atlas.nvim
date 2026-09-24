@@ -101,7 +101,7 @@ local function update_statusline(session)
 		session.statusline:notify("loading", "Loading pipelines...")
 	elseif session.explorer.spinner then
 		session.statusline:notify("loading", "Refreshing job...")
-	elseif session.logs.log == "loading" then
+	elseif session.logs.refreshing then
 		session.statusline:notify("loading", "Loading logs...")
 	elseif session.config.file == "loading" then
 		session.statusline:notify("loading", "Loading configuration...")
@@ -263,8 +263,8 @@ local function setup_panes(session)
 	end
 	logs.setup(session.logs, function()
 		update_statusline(session)
-	end, function(selection)
-		explorer.reload_job(session.explorer, selection)
+	end, function(selection, opts)
+		explorer.reload_job(session.explorer, selection, opts)
 	end)
 	explorer.setup(session.explorer, function(selection, opts)
 		if selection and selection.pipeline and not selection.job then

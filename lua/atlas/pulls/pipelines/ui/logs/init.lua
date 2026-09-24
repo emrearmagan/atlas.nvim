@@ -1,3 +1,4 @@
+local logger = require("atlas.core.logger")
 local requests = require("atlas.core.requests")
 local parser = require("atlas.pulls.pipelines.parser")
 local renderer = require("atlas.pulls.pipelines.ui.logs.renderer")
@@ -15,12 +16,14 @@ local utils = require("atlas.ui.shared.utils")
 ---@field source PullsLog|nil
 ---@field counts table<PullsLogLevel, integer>|nil
 ---@field show_raw boolean|nil
----@field collapsed table<PullsLogGroup, boolean>
+---@field collapsed table<string, boolean>
 ---@field line_map table<integer, PullsLogGroup>
 ---@field entry_rows table<PullsLogLine|PullsLogGroup, integer>
 ---@field spinner SpinnerInstance|nil
+---@field refresh_timer uv.uv_timer_t|nil
+---@field refreshing boolean|nil
 ---@field on_update fun()|nil
----@field on_reload fun(selection: PullsPipelinesSelection)|nil
+---@field on_reload fun(selection: PullsPipelinesSelection, opts?: { background?: boolean })|nil
 
 local M = {}
 
@@ -31,18 +34,18 @@ end
 
 ---@param entries (PullsLogLine|PullsLogGroup)[]
 ---@param target PullsLogLine|PullsLogGroup
----@param collapsed table<PullsLogGroup, boolean>
+---@param collapsed table<string, boolean>
 ---@return boolean
 local function reveal(entries, target, collapsed)
 	for _, entry in ipairs(entries) do
 		if entry == target then
 			if entry.entries then
-				collapsed[entry] = false
+				collapsed[entry.fold_key] = false
 			end
 			return true
 		end
 		if entry.entries and reveal(entry.entries, target, collapsed) then
-			collapsed[entry] = false
+			collapsed[entry.fold_key] = false
 			return true
 		end
 	end
@@ -105,7 +108,7 @@ end
 
 ---@param pane PullsPipelinesLogs
 ---@param on_update fun()
----@param on_reload fun(selection: PullsPipelinesSelection)
+---@param on_reload fun(selection: PullsPipelinesSelection, opts?: { background?: boolean })
 function M.setup(pane, on_update, on_reload)
 	pane.on_update = on_update
 	pane.on_reload = on_reload
@@ -116,10 +119,14 @@ end
 
 ---@param pane PullsPipelinesLogs
 ---@param selection PullsPipelinesSelection|nil
----@param opts { force_refresh?: boolean }|nil
+---@param opts { force_refresh?: boolean, background?: boolean, reset_folds?: boolean }|nil
 function M.show(pane, selection, opts)
 	opts = opts or {}
 	local same_job = selection and selection.job and pane.selection and selection.job == pane.selection.job
+	local background = opts.background and same_job
+	if not same_job or opts.reset_folds then
+		pane.collapsed = {}
+	end
 	if same_job and opts.force_refresh ~= true and pane.log ~= nil then
 		pane.selection = selection
 		update(pane)
@@ -130,13 +137,15 @@ function M.show(pane, selection, opts)
 	if pane.requests then
 		pane.requests.cancel()
 	end
+	pane.refreshing = false
 	stop_spinner(pane)
 	pane.selection = selection
-	pane.log = nil
-	pane.source = nil
-	pane.counts = nil
-	pane.collapsed = {}
-	pane.line_map = {}
+	if not background then
+		pane.log = nil
+		pane.source = nil
+		pane.counts = nil
+		pane.line_map = {}
+	end
 	if not same_job then
 		vim.api.nvim_win_set_cursor(pane.win, { 1, 0 })
 	end
@@ -154,34 +163,70 @@ function M.show(pane, selection, opts)
 	end
 
 	pane.requests = requests.new()
-	pane.log = "loading"
-	---@type SpinnerInstance
-	local loading_spinner
-	loading_spinner = spinner.create({
-		on_tick = function()
-			if pane.spinner == loading_spinner then
-				M.render(pane)
-			end
-		end,
-	})
-	pane.spinner = loading_spinner
-	update(pane)
-	loading_spinner:start()
+	pane.refreshing = true
+	if not background then
+		pane.log = "loading"
+		---@type SpinnerInstance
+		local loading_spinner
+		loading_spinner = spinner.create({
+			on_tick = function()
+				if pane.spinner == loading_spinner then
+					M.render(pane)
+				end
+			end,
+		})
+		pane.spinner = loading_spinner
+		M.render(pane)
+		loading_spinner:start()
+	end
+	if pane.on_update then
+		pane.on_update()
+	end
 
 	pane.requests.run(function(done)
 		return fetch(pane.context, selection.pipeline, selection.job, done)
 	end, function(log, err)
+		pane.refreshing = false
 		stop_spinner(pane)
 		if err then
-			pane.log = err
-		else
-			log = log or { raw = "" }
-			pane.source = log
-			pane.log = parser.parse(log, pane.backend.parse)
+			logger.logerror("Fetch job logs failed", { job_id = selection.job.id, error = err })
+			if not background then
+				pane.log = err
+				M.render(pane)
+			end
+		elseif not pane.source or pane.source.raw ~= (log and log.raw or "") then
+			pane.source = log or { raw = "" }
+			pane.log = parser.parse(pane.source, pane.backend.parse)
+			M.render(pane)
 		end
-		update(pane)
-		jump_to_step(pane)
+		if pane.on_update then
+			pane.on_update()
+		end
+		if not background then
+			jump_to_step(pane)
+		end
 	end)
+end
+
+---@param pane PullsPipelinesLogs
+function M.toggle_auto_refresh(pane)
+	if pane.refresh_timer then
+		pane.refresh_timer:close()
+		pane.refresh_timer = nil
+	else
+		local timer = vim.uv.new_timer()
+		pane.refresh_timer = timer
+		timer:start(
+			5000,
+			5000,
+			vim.schedule_wrap(function()
+				if pane.refresh_timer == timer and pane.selection and pane.selection.job and not pane.refreshing then
+					pane.on_reload(pane.selection, { background = true })
+				end
+			end)
+		)
+	end
+	M.render(pane)
 end
 
 ---@param pane PullsPipelinesLogs
@@ -198,7 +243,7 @@ function M.toggle_fold(pane)
 	local row = vim.api.nvim_win_get_cursor(pane.win)[1]
 	local group = pane.line_map[row]
 	if group then
-		pane.collapsed[group] = pane.collapsed[group] == false
+		pane.collapsed[group.fold_key] = pane.collapsed[group.fold_key] == false
 		M.render(pane)
 	end
 end
@@ -213,7 +258,7 @@ function M.toggle_all_folds(pane)
 	local groups = {}
 	local collapse = false
 	for _, entry in ipairs(log) do
-		if entry.entries and pane.collapsed[entry] == false then
+		if entry.entries and pane.collapsed[entry.fold_key] == false then
 			collapse = true
 			break
 		end
@@ -233,16 +278,21 @@ function M.toggle_all_folds(pane)
 	end
 
 	for _, group in ipairs(groups) do
-		pane.collapsed[group] = collapse
+		pane.collapsed[group.fold_key] = collapse
 	end
 	M.render(pane)
 end
 
 ---@param pane PullsPipelinesLogs
 function M.dispose(pane)
+	if pane.refresh_timer then
+		pane.refresh_timer:close()
+		pane.refresh_timer = nil
+	end
 	if pane.requests then
 		pane.requests.cancel()
 	end
+	pane.refreshing = false
 	stop_spinner(pane)
 	pane.on_update = nil
 	pane.on_reload = nil

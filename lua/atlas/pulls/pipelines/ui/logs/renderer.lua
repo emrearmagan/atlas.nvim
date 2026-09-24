@@ -29,8 +29,9 @@ end
 ---@param entries (PullsLogLine|PullsLogGroup)[]
 ---@param format fun(value: string, is_group: boolean, level?: PullsLogLevel): string, table[]
 ---@param prepared table<PullsLogLine|PullsLogGroup, { text: string, spans: table[] }>
-local function prepare_entries(entries, format, prepared)
-	for _, entry in ipairs(entries) do
+---@param prefix string
+local function prepare_entries(entries, format, prepared, prefix)
+	for index, entry in ipairs(entries) do
 		local body = entry.name or entry.text
 		if entry.text and entry.timestamp and body:sub(1, #entry.timestamp) == entry.timestamp then
 			body = body:sub(#entry.timestamp + 2)
@@ -38,7 +39,8 @@ local function prepare_entries(entries, format, prepared)
 		local formatted, spans = format(body, entry.entries ~= nil, entry.level)
 		prepared[entry] = { text = formatted, spans = spans }
 		if entry.entries then
-			prepare_entries(entry.entries, format, prepared)
+			entry.fold_key = prefix .. index
+			prepare_entries(entry.entries, format, prepared, entry.fold_key .. ".")
 		end
 	end
 end
@@ -68,7 +70,7 @@ local function append_entries(pane, entries, lines, spans, prepared, depth, pare
 				hl_eol = true,
 				priority = 99,
 			}
-			local collapsed = pane.collapsed[entry] ~= false
+			local collapsed = pane.collapsed[entry.fold_key] ~= false
 			local prefix = indent
 			if #entry.entries > 0 then
 				local icon, hl = icons.general(collapsed and "fold_closed" or "fold_open")
@@ -185,7 +187,7 @@ local function build_content(pane)
 	local prepared = {}
 	local log = pane.log
 	if selection.job and type(log) == "table" then
-		prepare_entries(log, format, prepared)
+		prepare_entries(log, format, prepared, "")
 		pane.counts = counts
 	end
 
@@ -231,7 +233,12 @@ function M.render(pane)
 
 	local view = pane.log == "loading" and { lnum = 1, col = 0, topline = 1, leftcol = 0 }
 		or vim.api.nvim_win_call(pane.win, vim.fn.winsaveview)
-	vim.api.nvim_set_option_value("winbar", pane.show_raw and " Raw logs " or " Logs ", { win = pane.win })
+	local title = pane.show_raw and "Raw logs" or "Logs"
+	vim.api.nvim_set_option_value(
+		"winbar",
+		" " .. title .. (pane.refresh_timer and " (auto) " or " "),
+		{ win = pane.win }
+	)
 	pane.line_map = {}
 	pane.entry_rows = {}
 	local lines, spans = build_content(pane)

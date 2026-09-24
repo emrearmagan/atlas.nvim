@@ -11,11 +11,12 @@
 ---@field selection PullsPipelinesSelection|nil
 ---@field spinner SpinnerInstance|nil
 ---@field loading_jobs table<string, string>
----@field on_select fun(selection: PullsPipelinesSelection|nil, opts?: { force_refresh?: boolean })|nil
+---@field on_select fun(selection: PullsPipelinesSelection|nil, opts?: { force_refresh?: boolean, background?: boolean })|nil
 ---@field on_update fun()|nil
 
 local M = {}
 
+local logger = require("atlas.core.logger")
 local notify = require("atlas.core.notify")
 local requests = require("atlas.core.requests")
 local history = require("atlas.pulls.pipelines.ui.history")
@@ -121,7 +122,12 @@ end
 
 ---@param pane PullsPipelinesExplorer
 ---@param selection PullsPipelinesSelection|nil
-function M.reload_job(pane, selection)
+---@param opts { background?: boolean }|nil
+function M.reload_job(pane, selection, opts)
+	opts = opts or {}
+	if opts.background and pane.spinner then
+		return
+	end
 	selection = selection or M.current_selection(pane)
 	local current = selection and selection.job
 	if not selection or not selection.pipeline or not current then
@@ -137,7 +143,7 @@ function M.reload_job(pane, selection)
 		pane.on_update()
 	end
 	if pane.selection and pane.selection.job == current and pane.on_select then
-		pane.on_select(pane.selection, { force_refresh = true })
+		pane.on_select(pane.selection, { force_refresh = true, background = opts.background })
 	end
 
 	pane.requests.run(function(done)
@@ -160,8 +166,9 @@ function M.reload_job(pane, selection)
 			pane.on_update()
 		end
 		if err then
+			logger.logerror("Fetch job failed", { job_id = current.id, error = err })
 			notify.error("Failed to refresh job: " .. err)
-		elseif pane.selection and pane.selection.job == current and pane.on_select then
+		elseif not opts.background and pane.selection and pane.selection.job == current and pane.on_select then
 			pane.on_select(pane.selection, { force_refresh = false })
 		end
 	end)
@@ -295,7 +302,7 @@ function M.dispose(pane)
 end
 
 ---@param pane PullsPipelinesExplorer
----@param on_select fun(selection: PullsPipelinesSelection|nil, opts?: { force_refresh?: boolean })
+---@param on_select fun(selection: PullsPipelinesSelection|nil, opts?: { force_refresh?: boolean, background?: boolean })
 ---@param on_update fun()
 function M.setup(pane, on_select, on_update)
 	pane.on_select = on_select

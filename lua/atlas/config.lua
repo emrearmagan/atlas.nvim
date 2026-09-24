@@ -243,6 +243,7 @@ M.options = {
 				previous_job = { "[j", "<S-Tab>" },
 				show_history = "gH",
 				toggle_raw_logs = "gL",
+				toggle_auto_refresh = "gR",
 			},
 			review = {
 				focus_item = "gd",

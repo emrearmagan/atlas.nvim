@@ -104,6 +104,15 @@ local function shared_items(pane, explorer_pane, logs_pane, close, open_actions)
 	}
 	if pane == explorer_pane or pane == logs_pane then
 		items[#items + 1] = {
+			key = keymaps.resolve("pulls.pipelines.toggle_auto_refresh") or {},
+			desc = "Toggle auto refresh",
+			callback = function()
+				logs.toggle_auto_refresh(logs_pane)
+			end,
+			index = 9,
+			opts = { nowait = true, silent = true },
+		}
+		items[#items + 1] = {
 			key = keymaps.resolve("pulls.pipelines.toggle_raw_logs") or {},
 			desc = "Toggle raw logs",
 			callback = function()

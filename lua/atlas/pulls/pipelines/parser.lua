@@ -11,6 +11,7 @@
 
 ---@class PullsLogGroup
 ---@field name string
+---@field fold_key string|nil
 ---@field timestamp string|nil
 ---@field duration number|nil Seconds.
 ---@field level PullsLogLevel|nil

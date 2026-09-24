@@ -101,6 +101,7 @@ local config = require("atlas.config")
 ---@field previous_job? AtlasKeymapValue
 ---@field show_history? AtlasKeymapValue
 ---@field toggle_raw_logs? AtlasKeymapValue
+---@field toggle_auto_refresh? AtlasKeymapValue
 
 ---@class AtlasPullsCustomKeymap
 ---@field key string|string[]
@@ -198,6 +199,7 @@ local config = require("atlas.config")
 ---| "pulls.pipelines.previous_job"
 ---| "pulls.pipelines.show_history"
 ---| "pulls.pipelines.toggle_raw_logs"
+---| "pulls.pipelines.toggle_auto_refresh"
 ---| "pulls.review.approve"
 ---| "pulls.review.request_changes"
 ---| "pulls.review.submit_review"
@@ -385,6 +387,7 @@ function M.validate()
 		{ "pulls.checkout", "pulls.review.diff.toggle_compact" },
 		{ "pulls.open_diff", "pulls.review.focus_item" },
 		{ "pulls.pipelines.show_history", "pulls.review.diff.toggle_comments" },
+		{ "pulls.pipelines.toggle_auto_refresh", "pulls.review.diff.toggle_review_panel" },
 		{
 			"ui.comments.react",
 			"pulls.review.request_changes",
