@@ -5,6 +5,22 @@ local service = require("atlas.providers.gitlab.client")
 local config = require("atlas.config")
 local json = require("atlas.core.json")
 
+local RELEASES_QUERY = [[
+query($path: ID!, $cursor: String) {
+  project(fullPath: $path) {
+    releases(first: 100, after: $cursor) {
+      nodes {
+        name
+        tagName
+        releasedAt
+        links { selfUrl }
+      }
+      pageInfo { hasNextPage endCursor }
+    }
+  }
+}
+]]
+
 ---@param repo AtlasRepository
 ---@return string
 local function configured_readme_path(repo)
@@ -248,6 +264,144 @@ function M.fetch_tags(repo, opts, on_done)
 	end, {
 		action = "Fetch repository tags",
 		repo = path,
+	})
+end
+
+---@param repo AtlasRepositoryDetails
+---@param opts PullsFetchOpts
+---@param on_done fun(releases: AtlasRepositoryRelease[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_releases(repo, opts, on_done)
+	opts = opts or {}
+	local path = tostring(repo.full_name or "")
+	if path == "" then
+		vim.schedule(function()
+			on_done(nil, "Missing repository info")
+		end)
+		return nil
+	end
+
+	local cache_key = string.format("gitlab:releases:%s", path)
+	if not opts.force_refresh then
+		local cached, ok = service.get_memory_cache(cache_key)
+		if ok then
+			on_done(cached, nil)
+			return nil
+		end
+	end
+
+	local requests = request_scope.new()
+	---@type AtlasRepositoryRelease[]
+	local entries = {}
+	local function fetch_page(cursor)
+		requests.run(function(done)
+			return service.graphql(RELEASES_QUERY, { path = path, cursor = cursor }, done, {
+				action = "Fetch repository releases",
+				repo = path,
+			})
+		end, function(result, err)
+			if err then
+				on_done(nil, err)
+				return
+			end
+			local project = json.nilify(json.safe_table(result).project)
+			if project == nil then
+				on_done(nil, "Repository not found")
+				return
+			end
+			local releases = json.safe_table(project.releases)
+			for _, release in ipairs(json.safe_table(releases.nodes)) do
+				local links = json.safe_table(release.links)
+				local tag = json.safe_str(release.tagName) or ""
+				local name = json.safe_str(release.name)
+				local browser_url = repo.html_url or ""
+				table.insert(entries, {
+					id = tag,
+					name = name and name ~= "" and name or tag,
+					tag = tag,
+					url = json.safe_str(links.selfUrl)
+						or (browser_url ~= "" and browser_url .. "/-/releases/" .. service.url_encode(tag) or ""),
+					published_at = json.safe_str(release.releasedAt),
+				})
+			end
+
+			local page_info = json.safe_table(releases.pageInfo)
+			if page_info.hasNextPage then
+				fetch_page(page_info.endCursor)
+				return
+			end
+			service.set_memory_cache(cache_key, entries)
+			on_done(entries, nil)
+		end)
+	end
+	fetch_page(nil)
+	return requests
+end
+
+---@param repo AtlasRepositoryDetails
+---@param opts { id?: string }
+---@param on_done fun(release: AtlasRepositoryReleaseDetails|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_release(repo, opts, on_done)
+	opts = opts or {}
+	local path = repo_path(repo)
+	if path == "" then
+		vim.schedule(function()
+			on_done(nil, "Missing repository info")
+		end)
+		return nil
+	end
+
+	local release_path = opts.id and service.url_encode(opts.id) or "permalink/latest"
+	local endpoint = string.format("/projects/%s/releases/%s", service.url_encode(path), release_path)
+	return service.request("GET", endpoint, nil, function(result, err)
+		if err then
+			on_done(nil, err)
+			return
+		end
+		if json.nilify(result) == nil then
+			on_done(nil, nil)
+			return
+		end
+		local release = json.safe_table(result)
+		local author = json.safe_table(release.author)
+		local links = json.safe_table(release._links)
+		local release_assets = json.safe_table(release.assets)
+		local tag = json.safe_str(release.tag_name) or ""
+		local name = json.safe_str(release.name)
+		local browser_url = repo.html_url or ""
+		---@type AtlasRepositoryReleaseAsset[]
+		local assets = {}
+		for _, asset in ipairs(json.safe_table(release_assets.links)) do
+			table.insert(assets, {
+				name = json.safe_str(asset.name) or "",
+				url = json.safe_str(asset.direct_asset_url) or json.safe_str(asset.url) or "",
+			})
+		end
+		for _, source in ipairs(json.safe_table(release_assets.sources)) do
+			table.insert(assets, {
+				name = "Source code (" .. (json.safe_str(source.format) or "archive") .. ")",
+				url = json.safe_str(source.url) or "",
+			})
+		end
+
+		---@type AtlasRepositoryReleaseDetails
+		local details = {
+			id = tag,
+			name = name and name ~= "" and name or tag,
+			tag = tag,
+			description = json.safe_str(release.description) or "",
+			url = json.safe_str(links.self)
+				or (browser_url ~= "" and browser_url .. "/-/releases/" .. service.url_encode(tag) or ""),
+			author = json.safe_str(author.username) or json.safe_str(author.name),
+			published_at = json.safe_str(release.released_at),
+			assets = assets,
+		}
+		on_done(details, nil)
+	end, {
+		action = "Fetch repository release",
+		repo = path,
+		id = opts.id,
 	})
 end
 

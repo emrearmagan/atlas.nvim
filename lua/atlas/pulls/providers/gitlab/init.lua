@@ -30,6 +30,7 @@ local links_api = require("atlas.providers.gitlab.links")
 local pullrequests_api = require("atlas.pulls.providers.gitlab.api.pullrequests")
 local reviews_api = require("atlas.pulls.providers.gitlab.api.reviews")
 local repo_detail_ui = require("atlas.pulls.providers.gitlab.ui.repo_detail")
+local repository_ui = require("atlas.providers.gitlab.ui.repository")
 local gitlab_query = require("atlas.providers.gitlab.query")
 local git = require("atlas.core.git")
 local request_scope = require("atlas.core.requests")
@@ -167,6 +168,7 @@ return {
 		ui = {
 			detail = detail_ui,
 			repo_detail = repo_detail_ui,
+			repository = repository_ui,
 		},
 	},
 }

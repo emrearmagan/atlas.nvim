@@ -10,6 +10,7 @@ local detail_ui = require("atlas.issues.providers.gitlab.ui.detail")
 local issues_api = require("atlas.issues.providers.gitlab.api.issues")
 local links_api = require("atlas.providers.gitlab.links")
 local notes_api = require("atlas.issues.providers.gitlab.api.notes")
+local repository_ui = require("atlas.providers.gitlab.ui.repository")
 local git = require("atlas.core.git")
 local gitlab_query = require("atlas.providers.gitlab.query")
 
@@ -128,6 +129,7 @@ return {
 		actions = actions,
 		ui = {
 			detail = detail_ui,
+			repository = repository_ui,
 		},
 	},
 }

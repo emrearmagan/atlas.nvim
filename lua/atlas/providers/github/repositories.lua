@@ -85,6 +85,19 @@ query($owner: String!, $repo: String!, $endCursor: String) {
 }
 ]]
 
+local RELEASES_QUERY = [[
+query($owner: String!, $repo: String!, $endCursor: String) {
+  repository(owner: $owner, name: $repo) {
+    releases(first: 100, after: $endCursor, orderBy: {field: CREATED_AT, direction: DESC}) {
+      nodes {
+        databaseId name tagName url publishedAt isDraft isPrerelease
+      }
+      pageInfo { hasNextPage endCursor }
+    }
+  }
+}
+]]
+
 ---@param repo AtlasRepository
 ---@param opts PullsFetchOpts
 ---@param on_done fun(details: AtlasRepositoryDetails|nil, err: string|nil)
@@ -339,6 +352,142 @@ function M.fetch_tags(repo, opts, on_done)
 	end, {
 		action = "Fetch repository tags",
 		repo = slug,
+	})
+end
+
+---@param repo AtlasRepositoryDetails
+---@param opts PullsFetchOpts
+---@param on_done fun(releases: AtlasRepositoryRelease[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_releases(repo, opts, on_done)
+	opts = opts or {}
+	local slug = tostring(repo.full_name or "")
+	local owner, name = slug:match("^([^/]+)/([^/]+)$")
+	if not owner then
+		vim.schedule(function()
+			on_done(nil, "Missing repository info")
+		end)
+		return nil
+	end
+
+	local cache_key = string.format("github:releases:%s", slug)
+	if not opts.force_refresh then
+		local cached, ok = cli.get_mem(cache_key)
+		if ok then
+			on_done(cached, nil)
+			return nil
+		end
+	end
+
+	return cli.gh({
+		"api",
+		"graphql",
+		"--paginate",
+		"--slurp",
+		"-f",
+		"query=" .. RELEASES_QUERY,
+		"-f",
+		"owner=" .. owner,
+		"-f",
+		"repo=" .. name,
+	}, function(result, err)
+		if err or type(result) ~= "table" then
+			on_done(nil, err or "Failed to fetch releases")
+			return
+		end
+
+		---@type AtlasRepositoryRelease[]
+		local entries = {}
+		for _, page in ipairs(result) do
+			local data = json.safe_table(page.data)
+			local repository = json.nilify(data.repository)
+			if not repository then
+				on_done(nil, "Repository not found")
+				return
+			end
+
+			local releases = json.safe_table(repository.releases)
+			for _, release in ipairs(json.safe_table(releases.nodes)) do
+				local tag = json.safe_str(release.tagName) or ""
+				local release_name = json.safe_str(release.name)
+				table.insert(entries, {
+					id = tostring(release.databaseId),
+					name = release_name and release_name ~= "" and release_name or tag,
+					tag = tag,
+					url = json.safe_str(release.url) or "",
+					published_at = json.safe_str(release.publishedAt),
+					draft = release.isDraft == true,
+					prerelease = release.isPrerelease == true,
+				})
+			end
+		end
+
+		cli.set_mem(cache_key, entries)
+		on_done(entries, nil)
+	end, {
+		action = "Fetch repository releases",
+		repo = slug,
+	})
+end
+
+---@param repo AtlasRepositoryDetails
+---@param opts { id?: string }
+---@param on_done fun(release: AtlasRepositoryReleaseDetails|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_release(repo, opts, on_done)
+	local slug = tostring(repo.full_name or "")
+	if not slug:match("^[^/]+/[^/]+$") then
+		vim.schedule(function()
+			on_done(nil, "Missing repository info")
+		end)
+		return nil
+	end
+
+	local endpoint = string.format("repos/%s/releases/%s", slug, opts.id or "latest")
+	return cli.gh({ "api", endpoint }, function(result, err)
+		if err or type(result) ~= "table" then
+			on_done(nil, err or "Failed to fetch release")
+			return
+		end
+
+		local author = json.safe_table(result.author)
+		local tag = json.safe_str(result.tag_name) or ""
+		local name = json.safe_str(result.name)
+		---@type AtlasRepositoryReleaseAsset[]
+		local assets = {}
+		for _, asset in ipairs(json.safe_table(result.assets)) do
+			table.insert(assets, {
+				name = json.safe_str(asset.name) or "",
+				url = json.safe_str(asset.browser_download_url) or "",
+				size = tonumber(asset.size),
+				downloads = tonumber(asset.download_count),
+			})
+		end
+		for _, source in ipairs({
+			{ name = "Source code (zip)", url = json.safe_str(result.zipball_url) },
+			{ name = "Source code (tar.gz)", url = json.safe_str(result.tarball_url) },
+		}) do
+			if source.url and source.url ~= "" then
+				table.insert(assets, source)
+			end
+		end
+
+		on_done({
+			id = tostring(result.id),
+			name = name and name ~= "" and name or tag,
+			tag = tag,
+			description = json.safe_str(result.body) or "",
+			url = json.safe_str(result.html_url) or "",
+			author = json.safe_str(author.login),
+			published_at = json.safe_str(result.published_at),
+			draft = result.draft == true,
+			prerelease = result.prerelease == true,
+			assets = assets,
+		}, nil)
+	end, {
+		action = "Fetch repository release",
+		repo = slug,
+		id = opts.id,
 	})
 end
 
