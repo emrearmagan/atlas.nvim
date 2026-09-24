@@ -26,6 +26,7 @@ function M.render(state, width)
 			local hl_group = "AtlasTextMuted"
 			if commits == "loading" then
 				message = "Loading commits..."
+				hl_group = "Normal"
 			elseif type(commits) == "string" then
 				message = commits
 				hl_group = "AtlasLogError"

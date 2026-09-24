@@ -61,6 +61,7 @@ local function render(state)
 	local hl_group = "AtlasTextMuted"
 	if tags == "loading" then
 		message = state.spinner:text("Loading tags...")
+		hl_group = "Normal"
 	elseif type(tags) == "string" then
 		message = tags:gsub("[\r\n]+", " ")
 		hl_group = "AtlasLogError"

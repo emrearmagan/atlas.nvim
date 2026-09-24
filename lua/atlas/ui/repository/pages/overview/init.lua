@@ -43,7 +43,7 @@ local function render(state)
 		for _ = 1, math.floor((vim.api.nvim_win_get_height(state.win) - 1) / 2) do
 			table.insert(lines, "")
 		end
-		utils.push(lines, spans, text, loading and "AtlasTextMuted" or "AtlasLogError", padding)
+		utils.push(lines, spans, text, loading and "Normal" or "AtlasLogError", padding)
 	elseif state.details then
 		lines, spans = renderer.render(state.details, width)
 	end

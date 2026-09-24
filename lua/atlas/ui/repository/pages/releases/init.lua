@@ -44,7 +44,7 @@ local function render(state)
 		local message = release == "loading" and state.spinner:text("Loading release...") or release
 		utils.buffer.center_message(state.buf, state.win, message:gsub("[\r\n]+", " "))
 		vim.api.nvim_buf_set_extmark(state.buf, namespace, vim.api.nvim_buf_line_count(state.buf) - 1, 0, {
-			line_hl_group = "AtlasTextMuted",
+			line_hl_group = release == "loading" and "Normal" or "AtlasTextMuted",
 		})
 		return
 	end

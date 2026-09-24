@@ -64,6 +64,7 @@ local function render(state)
 	local hl_group = "AtlasTextMuted"
 	if branches == "loading" then
 		message = state.spinner:text("Loading branches...")
+		hl_group = "Normal"
 	elseif type(branches) == "string" then
 		message = branches:gsub("[\r\n]+", " ")
 		hl_group = "AtlasLogError"
