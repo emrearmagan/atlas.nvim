@@ -19,18 +19,21 @@ function M.setup(buf, sidebar_buf, callbacks)
 		opts = { nowait = true, silent = true },
 	}
 	local actions = {
-		{ "ui.search", "Search branches", callbacks.search },
-		{ "ui.select", "Toggle branch history", callbacks.select },
-		{ "ui.toggle_fold", "Toggle branch history", callbacks.select },
-		{ "pulls.open_diff", "Open branch or commit diff", callbacks.diff },
-		{ "ui.show_details", "Show branch or commit details", callbacks.details },
-		{ "ui.open_actions", "Open branch actions", callbacks.actions },
-		{ "ui.delete", "Delete branch", callbacks.delete },
+		{ resolver.resolve("ui.search"), "Search branches", callbacks.search },
+		{
+			vim.list_extend(resolver.resolve("ui.select") or {}, resolver.resolve("ui.toggle_fold") or {}),
+			"Toggle branch history",
+			callbacks.select,
+		},
+		{ resolver.resolve("pulls.open_diff"), "Open branch or commit diff", callbacks.diff },
+		{ resolver.resolve("ui.show_details"), "Show branch or commit details", callbacks.details },
+		{ resolver.resolve("ui.open_actions"), "Open branch actions", callbacks.actions },
+		{ resolver.resolve("ui.delete"), "Delete branch", callbacks.delete },
 	}
 	local items = { refresh }
 	for _, action in ipairs(actions) do
-		local keys = resolver.resolve(action[1])
-		if keys and action[3] then
+		local keys = action[1]
+		if keys and #keys > 0 and action[3] then
 			table.insert(items, {
 				key = keys,
 				desc = action[2],
