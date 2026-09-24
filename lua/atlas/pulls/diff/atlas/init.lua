@@ -553,7 +553,7 @@ function M.detach(session, reason)
 		return
 	end
 	state.closing = true
-	commits.close_pin()
+	commits.close_pin(session)
 	cancel_job(session)
 	if state.group then
 		pcall(vim.api.nvim_del_augroup_by_id, state.group)

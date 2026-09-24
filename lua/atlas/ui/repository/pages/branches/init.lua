@@ -337,10 +337,15 @@ function M.open(opts)
 			select_current(state)
 		end,
 		details = function()
-			local selection = selection_at_cursor(state)
-			if selection then
-				info.show({ lines = renderer.preview(selection.branch, selection.commit).lines, source_buf = state.buf })
-			end
+			info.toggle({
+				source_win = state.win,
+				content = function(line)
+					local selection = state.line_map[line]
+					if selection then
+						return renderer.preview(selection.branch, selection.commit)
+					end
+				end,
+			})
 		end,
 		diff = function()
 			local selection = selection_at_cursor(state)
@@ -379,6 +384,7 @@ end
 ---@param buf integer
 function M.close(buf)
 	local state = states[buf]
+	info.close(state.win)
 	states[buf] = nil
 	clear_commits(state)
 	state.requests.cancel()
