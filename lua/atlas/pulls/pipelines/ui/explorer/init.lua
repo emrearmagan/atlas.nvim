@@ -256,8 +256,9 @@ local function load_pipeline(pane, run, index)
 end
 
 ---@param pane PullsPipelinesExplorer
-function M.reload_pipeline(pane)
-	local selection = M.current_selection(pane)
+---@param selection PullsPipelinesSelection|nil
+function M.reload_pipeline(pane, selection)
+	selection = selection or M.current_selection(pane)
 	if selection and selection.pipeline then
 		for index, pipeline in ipairs(pane.pipelines) do
 			if pipeline == selection.pipeline then
@@ -266,6 +267,7 @@ function M.reload_pipeline(pane)
 			end
 		end
 	end
+	M.refresh(pane, selection)
 end
 
 ---@param pane PullsPipelinesExplorer

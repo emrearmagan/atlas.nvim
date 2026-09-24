@@ -27,6 +27,15 @@ local function shared_items(pane, explorer_pane, logs_pane, close, open_actions)
 	local close_keys = keymaps.resolve("ui.close") or {}
 	local items = {
 		{
+			key = keymaps.resolve("ui.refresh_view") or {},
+			desc = "Refresh build",
+			callback = function()
+				explorer.reload_pipeline(explorer_pane, current_selection(pane, explorer_pane))
+			end,
+			index = 0,
+			opts = { nowait = true, silent = true },
+		},
+		{
 			key = keymaps.resolve("pulls.pipelines.next_job") or {},
 			desc = "Next job",
 			callback = function()

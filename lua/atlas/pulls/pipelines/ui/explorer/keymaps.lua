@@ -26,13 +26,6 @@ function M.items(pane, content_win)
 			end,
 		},
 		{
-			key = keymaps.resolve("ui.refresh_view") or {},
-			desc = "Refresh build",
-			callback = function()
-				explorer.reload_pipeline(pane)
-			end,
-		},
-		{
 			key = keymaps.resolve("ui.refresh") or {},
 			desc = "Refresh job under cursor",
 			callback = function()
