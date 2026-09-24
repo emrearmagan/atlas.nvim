@@ -55,7 +55,8 @@ local function render(state)
 	if not utils.buffer.valid(state.buf) or not utils.window.valid(state.win) then
 		return
 	end
-	local selection = selection_at_cursor(state)
+	local cursor = vim.api.nvim_win_get_cursor(state.win)
+	local selection = state.line_map[cursor[1]]
 	vim.api.nvim_buf_clear_namespace(state.buf, namespace, 0, -1)
 	state.line_map = {}
 	local branches = state.branches
@@ -92,7 +93,7 @@ local function render(state)
 		if selection and entry.branch.name == selection.branch.name then
 			local same_commit = selection.commit and entry.commit and selection.commit.hash == entry.commit.hash
 			if same_commit or (not selection.commit and not entry.commit) then
-				vim.api.nvim_win_set_cursor(state.win, { row, 0 })
+				vim.api.nvim_win_set_cursor(state.win, { row, cursor[2] })
 				break
 			end
 		end
@@ -427,8 +428,10 @@ function M.open(opts)
 	})
 	vim.api.nvim_create_autocmd({ "WinResized", "VimResized" }, {
 		group = state.group,
-		callback = function()
-			render(state)
+		callback = function(event)
+			if event.event == "VimResized" or vim.tbl_contains(vim.v.event.windows, state.win) then
+				render(state)
+			end
 		end,
 	})
 	load(state)
