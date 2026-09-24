@@ -20,6 +20,7 @@ local logger = require("atlas.core.logger")
 local notify = require("atlas.core.notify")
 local requests = require("atlas.core.requests")
 local history = require("atlas.pulls.pipelines.ui.history")
+local pipeline_utils = require("atlas.pulls.pipelines.utils")
 local renderer = require("atlas.pulls.pipelines.ui.explorer.renderer")
 local spinner = require("atlas.ui.components.spinner")
 local utils = require("atlas.ui.shared.utils")
@@ -159,6 +160,9 @@ function M.reload_job(pane, selection, opts)
 			end
 			for key, value in pairs(job) do
 				current[key] = value
+			end
+			if selection.stage then
+				selection.stage.state = pipeline_utils.aggregate_state(selection.stage.jobs)
 			end
 		end
 		M.render(pane)
