@@ -29,6 +29,7 @@ local defaults = {
 	{ pattern = "^##%[command%]", replacement = "", hl_group = "AtlasLogCommand" },
 	{ pattern = "^##%[section%]", replacement = "", hl_group = "AtlasLogGroup" },
 	{ pattern = "^%[command%]", replacement = "", hl_group = "AtlasLogCommand" },
+	{ pattern = "^%s*%++%s", hl_group = "AtlasLogCommand" },
 	{
 		pattern = "^::error::",
 		replacement = "Error: ",
