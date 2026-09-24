@@ -22,7 +22,7 @@ function M.setup(buf, sidebar_buf, callbacks)
 		{ "ui.search", "Search branches", callbacks.search },
 		{ "ui.select", "Toggle branch history", callbacks.select },
 		{ "ui.toggle_fold", "Toggle branch history", callbacks.select },
-		{ "pulls.open_diff", "Open commit diff", callbacks.diff },
+		{ "pulls.open_diff", "Open branch or commit diff", callbacks.diff },
 		{ "ui.show_details", "Show branch or commit details", callbacks.details },
 		{ "ui.open_actions", "Open branch actions", callbacks.actions },
 		{ "ui.delete", "Delete branch", callbacks.delete },

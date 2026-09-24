@@ -42,19 +42,60 @@ function M.resolve(repo)
 end
 
 ---@param root string
+---@param branches AtlasRepositoryBranch[]
+---@param opts { repo_url: string|nil }
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch(root, branches, opts, on_done)
+	local hashes = {}
+	for _, branch in ipairs(branches) do
+		if branch.hash == "" then
+			on_done(false, "The branch has no commit to load: " .. branch.name)
+			return
+		end
+		table.insert(hashes, branch.hash)
+	end
+
+	local exists = git.check_commits(root, hashes)
+	local refs = {}
+	for index, branch in ipairs(branches) do
+		if not exists[index] then
+			table.insert(refs, "refs/heads/" .. branch.name)
+		end
+	end
+	if #refs == 0 then
+		on_done(true, nil)
+		return
+	end
+	local remote = git.local_repository(root)
+	local target = opts.repo_url and providers.resolve(opts.repo_url) or nil
+	if
+		not remote
+		or not target
+		or remote.provider ~= target.provider
+		or remote.host:lower() ~= target.host:lower()
+		or tostring(remote.repo_full_name):lower() ~= tostring(target.repo_full_name):lower()
+	then
+		on_done(false, "Branch commits are missing locally and origin does not match this repository")
+		return
+	end
+	return git.fetch_refs(root, "origin", refs, on_done)
+end
+
+---@param root string
 ---@param branch AtlasRepositoryBranch
 ---@param opts { repo_url: string|nil }
 ---@param on_done fun(commits: RepositoryBranchCommit[]|nil, err: string|nil)
 ---@return AtlasRequestScope
 function M.load(root, branch, opts, on_done)
 	local scope = requests.new()
-	local hash = branch.hash
-	if hash == "" then
-		on_done(nil, "The branch has no commit to load")
-		return scope
-	end
-
-	local function load_commits()
+	scope.run(function(done)
+		return M.fetch(root, { branch }, opts, done)
+	end, function(ok, err)
+		if not ok then
+			on_done(nil, err)
+			return
+		end
 		scope.run(function(done)
 			return git.run({
 				"log",
@@ -63,7 +104,7 @@ function M.load(root, branch, opts, on_done)
 				"-z",
 				"--format=%H%x00%P%x00%an%x00%cI%x00%B",
 				"--end-of-options",
-				hash,
+				branch.hash,
 				"--",
 			}, { cwd = root, text = false }, done)
 		end, function(result)
@@ -74,33 +115,7 @@ function M.load(root, branch, opts, on_done)
 			end
 			on_done(parse_commits(result.stdout or ""), nil)
 		end)
-	end
-
-	if git.check_commits(root, { hash })[1] then
-		load_commits()
-	else
-		local remote = git.local_repository(root)
-		local target = opts.repo_url and providers.resolve(opts.repo_url) or nil
-		if
-			not remote
-			or not target
-			or remote.provider ~= target.provider
-			or remote.host:lower() ~= target.host:lower()
-			or tostring(remote.repo_full_name):lower() ~= tostring(target.repo_full_name):lower()
-		then
-			on_done(nil, "Branch commits are missing locally and origin does not match this repository")
-			return scope
-		end
-		scope.run(function(done)
-			return git.fetch_refs(root, "origin", { "refs/heads/" .. branch.name }, done)
-		end, function(ok, fetch_err)
-			if not ok then
-				on_done(nil, fetch_err or "Failed to fetch branch commits")
-				return
-			end
-			load_commits()
-		end)
-	end
+	end)
 	return scope
 end
 

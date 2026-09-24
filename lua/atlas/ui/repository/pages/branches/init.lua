@@ -230,18 +230,74 @@ local function open_pipeline(provider_id, repo, branch)
 	}, provider)
 end
 
----@param root string
----@param commit RepositoryBranchCommit
-local function open_diff(root, commit)
-	if not commit.parent then
-		notify.warn("This commit has no local parent to compare")
+---@param state RepositoryBranches
+local function open_diff(state)
+	local selection = selection_at_cursor(state)
+	if not selection then
 		return
 	end
-	diff.open_range({ root = root, base = commit.parent, head = commit.hash }, function(err)
-		if err then
-			notify.error(err)
+	local root = state.root
+	if not root then
+		notify.warn("Configure this repository under pulls.repo_config.paths to open diffs")
+		return
+	end
+	local commit = selection.commit
+	if commit then
+		if not commit.parent then
+			notify.warn("This commit has no local parent to compare")
+			return
 		end
-	end)
+		diff.open_range({ root = root, base = commit.parent, head = commit.hash }, function(err)
+			if err then
+				notify.error(err)
+			end
+		end)
+		return
+	end
+
+	local branch = selection.branch
+	local branches = state.branches --[[@as AtlasRepositoryBranches]]
+	local bases, initial_index = {}, 1
+	for _, candidate in ipairs(branches.entries) do
+		if candidate.name ~= branch.name then
+			table.insert(bases, candidate)
+			if candidate.name == state.repo.default_branch then
+				initial_index = #bases
+			end
+		end
+	end
+	if #bases == 0 then
+		notify.warn("No other branch to compare with")
+		return
+	end
+	picker.select({
+		title = "Compare " .. branch.name .. " against",
+		items = bases,
+		initial_index = initial_index,
+		format_item = function(base)
+			return base.name
+		end,
+		on_select = function(base)
+			if not base or states[state.buf] ~= state then
+				return
+			end
+			state.statusline:notify("loading", "Preparing branch diff...")
+			state.requests.run(function(done)
+				return history.fetch(root, { base, branch }, { repo_url = state.repo.html_url }, done)
+			end, function(ok, err)
+				state.statusline:clear_notice()
+				if not ok then
+					notify.error(err or "Failed to fetch branch commits")
+					return
+				end
+				diff.open_range({ root = root, base = base.hash, head = branch.hash }, function(open_err)
+					if open_err then
+						notify.error(open_err)
+					end
+				end)
+			end)
+		end,
+	})
 end
 
 ---@param state RepositoryBranches
@@ -348,10 +404,7 @@ function M.open(opts)
 			})
 		end,
 		diff = function()
-			local selection = selection_at_cursor(state)
-			if selection and selection.commit and state.root then
-				open_diff(state.root, selection.commit)
-			end
+			open_diff(state)
 		end,
 		actions = function()
 			local selection = selection_at_cursor(state)
