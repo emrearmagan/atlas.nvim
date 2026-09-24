@@ -351,7 +351,7 @@ query($owner:String!,$name:String!,$number:Int!){
 ---@param on_done fun(pull_request_id: string|nil, review: table|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 local function find_pending(pr, on_done)
-	local owner, name = pr.workspace, pr.repo
+	local owner, name = pr.repo.owner, pr.repo.repo_name
 	if owner == "" or name == "" then
 		on_done(nil, nil, "Missing repo")
 		return nil
@@ -639,7 +639,7 @@ end
 ---@param on_done fun(result: { reviewers: PullsReviewer[], history: PullsReviewHistoryEntry[] }|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 local function fetch_review_details(pr, opts, on_done)
-	local owner, name = pr.workspace, pr.repo
+	local owner, name = pr.repo.owner, pr.repo.repo_name
 	if owner == "" or name == "" then
 		vim.schedule(function()
 			on_done(nil, "Missing repo")
@@ -693,7 +693,7 @@ end
 ---@param on_done fun(reviewers: PullsReviewer[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_reviewers(pr, opts, on_done)
-	local owner, name = pr.workspace, pr.repo
+	local owner, name = pr.repo.owner, pr.repo.repo_name
 	if owner == "" or name == "" then
 		vim.schedule(function()
 			on_done(nil, "Missing repo")
@@ -767,7 +767,7 @@ end
 ---@return { cancel: fun() }|nil
 local function fetch_comments(pr, include_hunks, on_done)
 	---@cast pr GitHubPullRequest
-	local owner, name = pr.workspace, pr.repo
+	local owner, name = pr.repo.owner, pr.repo.repo_name
 	if owner == "" or name == "" then
 		vim.schedule(function()
 			on_done(nil, "Missing repo")
@@ -1135,7 +1135,7 @@ end
 function M.fetch_context(pr, opts, on_done)
 	---@cast pr GitHubPullRequest
 	local repo_slug = pr.repo_full_name
-	local owner, repo = pr.workspace, pr.repo
+	local owner, repo = pr.repo.owner, pr.repo.repo_name
 	if owner == "" or repo == "" then
 		vim.schedule(function()
 			on_done(nil, "Missing repository info")

@@ -8,41 +8,57 @@ local json = require("atlas.core.json")
 local as_table = api_utils.as_table
 local url_encode = api_utils.url_encode
 
----@class BitbucketRepositoryDetails : AtlasRepositoryDetails
----@field branches_url string
----@field tags_url string
+---@class BitbucketRepository : AtlasRepository
+---@field branches_url string|nil
+---@field tags_url string|nil
+
+---@class BitbucketRepositoryDetails : AtlasRepositoryDetails, BitbucketRepository
+
+---@param raw table|nil
+---@param fallback_workspace string|nil
+---@param fallback_repo string|nil
+---@return BitbucketRepository
+function M.to_repository(raw, fallback_workspace, fallback_repo)
+	raw = as_table(raw) or {}
+	local workspace_obj = as_table(raw.workspace) or {}
+	local links = as_table(raw.links) or {}
+	local html_link = as_table(links.html) or {}
+	local branches_link = as_table(links.branches) or {}
+	local tags_link = as_table(links.tags) or {}
+	local full_name = tostring(raw.full_name or "")
+	local full_owner, full_repo = full_name:match("^([^/]+)/(.+)$")
+	local owner = tostring(workspace_obj.slug or full_owner or fallback_workspace or "")
+	local repo_name = tostring(raw.slug or full_repo or fallback_repo or raw.name or "")
+	if full_name == "" then
+		full_name = owner ~= "" and repo_name ~= "" and (owner .. "/" .. repo_name) or repo_name
+	end
+
+	return {
+		id = full_name,
+		name = tostring(raw.name or repo_name),
+		full_name = full_name,
+		owner = owner,
+		repo_name = repo_name,
+		html_url = tostring(html_link.href or ""),
+		branches_url = json.safe_str(branches_link.href),
+		tags_url = json.safe_str(tags_link.href),
+	}
+end
 
 ---@param raw table|nil
 ---@param fallback_workspace string|nil
 ---@return BitbucketRepositoryDetails
 local function to_repo_details(raw, fallback_workspace)
 	raw = as_table(raw) or {}
-	local workspace_obj = as_table(raw.workspace) or {}
 	local mainbranch = as_table(raw.mainbranch) or {}
-	local links = as_table(raw.links) or {}
-	local html_link = as_table(links.html) or {}
-	local branches_link = as_table(links.branches) or {}
-	local tags_link = as_table(links.tags) or {}
-	local full_name = tostring(raw.full_name or raw.name or raw.slug or "")
-	local owner = tostring(workspace_obj.slug or fallback_workspace or "")
-	local repo_name = tostring(raw.slug or raw.name or "")
-
-	return {
-		id = full_name ~= "" and full_name or repo_name,
-		name = tostring(raw.name or repo_name or full_name),
-		full_name = full_name,
-		owner = owner,
-		repo_name = repo_name,
-		html_url = tostring(html_link.href or ""),
-		description = tostring(raw.description or ""),
-		size = tonumber(raw.size) or 0,
-		default_branch = tostring(mainbranch.name or ""),
-		is_private = raw.is_private == true,
-		created_on = tostring(raw.created_on or ""),
-		readme = nil,
-		branches_url = tostring(branches_link.href or ""),
-		tags_url = tostring(tags_link.href or ""),
-	}
+	local repo = M.to_repository(raw, fallback_workspace)
+	---@cast repo BitbucketRepositoryDetails
+	repo.description = tostring(raw.description or "")
+	repo.size = tonumber(raw.size) or 0
+	repo.default_branch = tostring(mainbranch.name or "")
+	repo.is_private = raw.is_private == true
+	repo.created_on = tostring(raw.created_on or "")
+	return repo
 end
 
 ---@param repo AtlasRepository
@@ -268,19 +284,15 @@ function M.fetch_details(repo, _opts, on_done)
 	return requests
 end
 
----@param repo AtlasRepositoryDetails
+---@param repo AtlasRepository
 ---@param opts PullsFetchOpts
 ---@param on_done fun(branches: AtlasRepositoryBranches|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_branches(repo, opts, on_done)
-	---@cast repo BitbucketRepositoryDetails
+	---@cast repo BitbucketRepository
 	opts = opts or {}
-	local branches_url = repo.branches_url or ""
-
-	if branches_url == "" then
-		on_done(nil, "Missing branches URL")
-		return nil
-	end
+	local branches_url = repo.branches_url
+		or string.format("/repositories/%s/%s/refs/branches", url_encode(repo.owner), url_encode(repo.repo_name))
 
 	local sep = branches_url:find("?") and "&" or "?"
 	local url = string.format("%s%spagelen=100", branches_url, sep)
@@ -326,19 +338,15 @@ function M.fetch_branches(repo, opts, on_done)
 	end, { action = "Fetch repository branches", repo = repo.full_name or repo.name })
 end
 
----@param repo AtlasRepositoryDetails
+---@param repo AtlasRepository
 ---@param opts PullsFetchOpts
 ---@param on_done fun(tags: AtlasRepositoryTag[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_tags(repo, opts, on_done)
-	---@cast repo BitbucketRepositoryDetails
+	---@cast repo BitbucketRepository
 	opts = opts or {}
-	local tags_url = repo.tags_url or ""
-
-	if tags_url == "" then
-		on_done(nil, "Missing tags URL")
-		return nil
-	end
+	local tags_url = repo.tags_url
+		or string.format("/repositories/%s/%s/refs/tags", url_encode(repo.owner), url_encode(repo.repo_name))
 
 	local sep = tags_url:find("?") and "&" or "?"
 	local url = string.format("%s%spagelen=100", tags_url, sep)
@@ -395,7 +403,7 @@ function M.fetch_tags(repo, opts, on_done)
 	end, { action = "Fetch repository tags", repo = repo.full_name or repo.name })
 end
 
----@param repo AtlasRepositoryDetails
+---@param repo AtlasRepository
 ---@param branch AtlasRepositoryBranch
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil

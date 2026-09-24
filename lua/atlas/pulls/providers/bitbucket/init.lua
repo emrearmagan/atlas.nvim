@@ -13,6 +13,7 @@
 ---@field statuses string|nil
 
 ---@class BitbucketPullRequest : PullRequest
+---@field repo BitbucketRepository
 ---@field tasks_count number
 ---@field links BitbucketPullRequestLinks
 
@@ -28,6 +29,7 @@ local comments_api = require("atlas.pulls.providers.bitbucket.api.comments")
 local config = require("atlas.config")
 local detail_ui = require("atlas.pulls.providers.bitbucket.ui.detail")
 local git = require("atlas.core.git")
+local pipelines = require("atlas.pulls.pipelines.bitbucket")
 local pullrequests_api = require("atlas.pulls.providers.bitbucket.api.pullrequests")
 local repo_detail_ui = require("atlas.pulls.providers.bitbucket.ui.repo_detail")
 local repository_ui = require("atlas.providers.bitbucket.ui.repository")
@@ -131,7 +133,7 @@ return {
 			request_changes = reviews_api.request_changes,
 			discard_review = reviews_api.discard_review,
 		},
-		pipelines = require("atlas.pulls.pipelines.bitbucket"),
+		pipelines = pipelines,
 		tasks = {
 			add_task = tasks_api.add_task,
 			edit_task = tasks_api.edit_task,

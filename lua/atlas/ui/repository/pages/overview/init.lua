@@ -118,7 +118,6 @@ function M.open(opts)
 		end
 	end
 	vim.bo[state.buf].filetype = "markdown"
-	vim.bo[state.buf].syntax = "markdown"
 	vim.wo[state.win].wrap = true
 	vim.api.nvim_create_autocmd({ "WinResized", "VimResized" }, {
 		group = state.group,
@@ -156,9 +155,6 @@ function M.close(buf)
 		vim.wo[state.win].wrap = false
 	end
 	if utils.buffer.valid(state.buf) then
-		pcall(vim.treesitter.stop, state.buf)
-		vim.bo[state.buf].filetype = "atlas.repository"
-		vim.bo[state.buf].syntax = "OFF"
 		vim.api.nvim_buf_clear_namespace(state.buf, namespace, 0, -1)
 	end
 end

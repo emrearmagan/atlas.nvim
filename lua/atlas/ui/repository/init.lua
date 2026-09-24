@@ -22,35 +22,6 @@ local utils = require("atlas.ui.shared.utils")
 local M = {}
 
 ---@param session RepositoryBrowser
----@param index integer
-local function select_page(session, index)
-	local page = session.sidebar.pages[index]
-	if session.page == page then
-		return
-	end
-	if session.page then
-		session.page.close(session.content.buf)
-	end
-	session.page = page
-	session.sidebar.selected = index
-	sidebar.render(session.sidebar)
-	vim.api.nvim_win_set_cursor(session.sidebar.win, { index, 0 })
-	vim.wo[session.content.win].winbar = page.label
-	vim.bo[session.content.buf].modifiable = true
-	vim.api.nvim_buf_set_lines(session.content.buf, 0, -1, false, {})
-	vim.bo[session.content.buf].modifiable = false
-	vim.api.nvim_win_set_cursor(session.content.win, { 1, 0 })
-	page.open({
-		buf = session.content.buf,
-		win = session.content.win,
-		sidebar_buf = session.sidebar.buf,
-		repo = session.repo,
-		provider = session.provider,
-		statusline = session.statusline,
-	})
-end
-
----@param session RepositoryBrowser
 local function setup_buffers(session)
 	local prefix = "atlas://repository/" .. session.tab
 	session.sidebar.buf = utils.buffer.create(prefix .. "/sidebar", "atlas.repository")
@@ -120,6 +91,44 @@ local function close(session)
 end
 
 ---@param session RepositoryBrowser
+---@param index integer
+local function select_page(session, index)
+	local page = session.sidebar.pages[index]
+	if session.page == page then
+		return
+	end
+	if session.page then
+		local previous_buf = session.content.buf
+		session.page.close(previous_buf)
+		session.content.buf =
+			utils.buffer.create("atlas://repository/" .. session.tab .. "/content/" .. page.key, "atlas.repository")
+		vim.api.nvim_win_set_buf(session.content.win, session.content.buf)
+		utils.buffer.delete(previous_buf)
+	end
+	session.page = page
+	session.sidebar.selected = index
+	sidebar.render(session.sidebar)
+	vim.api.nvim_win_set_cursor(session.sidebar.win, { index, 0 })
+	vim.wo[session.content.win].winbar = page.label
+	vim.wo[session.content.win].conceallevel = 0
+	vim.wo[session.content.win].concealcursor = ""
+	vim.api.nvim_win_set_cursor(session.content.win, { 1, 0 })
+	keymaps.setup(session, function()
+		close(session)
+	end, function(next_index)
+		select_page(session, next_index)
+	end)
+	page.open({
+		buf = session.content.buf,
+		win = session.content.win,
+		sidebar_buf = session.sidebar.buf,
+		repo = session.repo,
+		provider = session.provider,
+		statusline = session.statusline,
+	})
+end
+
+---@param session RepositoryBrowser
 local function setup_events(session)
 	session.group = vim.api.nvim_create_augroup("AtlasRepository" .. session.tab, { clear = true })
 	vim.api.nvim_create_autocmd("WinClosed", {
@@ -151,11 +160,6 @@ local function show(repo, provider, page_key)
 	setup_buffers(session)
 	setup_windows(session)
 	setup_events(session)
-	keymaps.setup(session, function()
-		close(session)
-	end, function(index)
-		select_page(session, index)
-	end)
 	session.statusline:set_items({
 		{ text = provider.name .. " / " .. (repo.full_name or repo.name), hl_group = "AtlasFooterText" },
 	})
@@ -177,7 +181,11 @@ function M.open(repo_full_name, provider, opts)
 		notify.error("Repository details are not available")
 		return
 	end
-	local owner, name = repo_full_name:match("^(.*)/([^/]+)$")
+	local owner, name = repo_full_name:match("^(.+)/([^/]+)$")
+	if not owner or not name then
+		notify.error("Repository must use owner/name")
+		return
+	end
 	local repo = { id = repo_full_name, full_name = repo_full_name, name = name, owner = owner, repo_name = name }
 	local requests = request_scope.new()
 	local view = loading.open("Loading repository...", requests.cancel)

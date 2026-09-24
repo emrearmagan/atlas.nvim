@@ -30,12 +30,12 @@ local function parse_commits(output)
 	return commits
 end
 
----@param repo AtlasRepositoryDetails
+---@param repo AtlasRepository
 ---@return string|nil root
 ---@return string|nil err
 function M.resolve(repo)
 	local paths = (config.options.pulls.repo_config or {}).paths or {}
-	return checkout.resolve_repo_path(paths, repo.full_name or repo.name, {
+	return checkout.resolve_repo_path(paths, repo.full_name, {
 		require_existing = true,
 		require_git = true,
 	})

@@ -276,7 +276,7 @@ local function edit_assignees(ctx, done)
 		open_picker(ctx.details.assignees)
 		return
 	end
-	pullrequests.get_pr(pr.workspace, pr.repo, pr.id, function(details, err)
+	pullrequests.get_pr(pr.repo.owner, pr.repo.repo_name, pr.id, function(details, err)
 		if err or details == nil then
 			local message = tostring(err or "Failed to load pull request")
 			notify(ctx, "error", "Failed to load assignees: " .. message)
@@ -310,7 +310,7 @@ local function edit_labels(ctx, done)
 	local slug = pr.repo_full_name
 
 	notify(ctx, "loading", "Loading labels...")
-	pullrequests.get_pr(pr.workspace, pr.repo, pr.id, function(current, current_err)
+	pullrequests.get_pr(pr.repo.owner, pr.repo.repo_name, pr.id, function(current, current_err)
 		if current_err or current == nil then
 			notify(ctx, "error", current_err or "Failed to load PR labels")
 			done(nil, current_err or "Failed to load PR labels")
@@ -484,7 +484,7 @@ local function search_results(repo, ctx, done)
 		end,
 		preview_item = function(item, preview_done)
 			local pr = item.value
-			return pullrequests.get_pr(pr.workspace, pr.repo, pr.id, function(details, err)
+			return pullrequests.get_pr(pr.repo.owner, pr.repo.repo_name, pr.id, function(details, err)
 				if err or details == nil then
 					preview_done({ title = item.label, lines = { err or "Failed to load pull request" } })
 					return
@@ -644,7 +644,7 @@ local function toggle_subscription(ctx, done)
 		update(ctx.details)
 		return
 	end
-	pullrequests.get_pr(pr.workspace, pr.repo, pr.id, function(details, fetch_err)
+	pullrequests.get_pr(pr.repo.owner, pr.repo.repo_name, pr.id, function(details, fetch_err)
 		if fetch_err or details == nil then
 			local message = tostring(fetch_err or "Failed to load pull request details")
 			notify(ctx, "error", message)

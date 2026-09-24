@@ -199,7 +199,7 @@ function M.fetch_details(repo, opts, on_done)
 	return requests
 end
 
----@param repo AtlasRepositoryDetails
+---@param repo AtlasRepository
 ---@param opts PullsFetchOpts
 ---@param on_done fun(branches: AtlasRepositoryBranches|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
@@ -273,7 +273,7 @@ function M.fetch_branches(repo, opts, on_done)
 	})
 end
 
----@param repo AtlasRepositoryDetails
+---@param repo AtlasRepository
 ---@param opts PullsFetchOpts
 ---@param on_done fun(tags: AtlasRepositoryTag[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
@@ -355,7 +355,7 @@ function M.fetch_tags(repo, opts, on_done)
 	})
 end
 
----@param repo AtlasRepositoryDetails
+---@param repo AtlasRepository
 ---@param opts PullsFetchOpts
 ---@param on_done fun(releases: AtlasRepositoryRelease[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
@@ -430,7 +430,7 @@ function M.fetch_releases(repo, opts, on_done)
 	})
 end
 
----@param repo AtlasRepositoryDetails
+---@param repo AtlasRepository
 ---@param opts { id?: string }
 ---@param on_done fun(release: AtlasRepositoryReleaseDetails|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
@@ -491,7 +491,7 @@ function M.fetch_release(repo, opts, on_done)
 	})
 end
 
----@param repo AtlasRepositoryDetails
+---@param repo AtlasRepository
 ---@param state "open"|"closed"
 ---@param _opts PullsFetchOpts
 ---@param on_done fun(result: { entries: PullsRepoIssue[], counts: { open: integer, closed: integer }|nil }|nil, err: string|nil)
@@ -567,7 +567,7 @@ function M.fetch_issues(repo, state, _opts, on_done)
 	})
 end
 
----@param repo AtlasRepositoryDetails
+---@param repo AtlasRepository
 ---@param branch AtlasRepositoryBranch
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil

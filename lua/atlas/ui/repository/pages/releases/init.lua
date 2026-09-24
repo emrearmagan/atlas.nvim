@@ -43,6 +43,9 @@ local function render(state)
 	if type(release) == "string" then
 		local message = release == "loading" and state.spinner:text("Loading release...") or release
 		utils.buffer.center_message(state.buf, state.win, message:gsub("[\r\n]+", " "))
+		vim.api.nvim_buf_set_extmark(state.buf, namespace, vim.api.nvim_buf_line_count(state.buf) - 1, 0, {
+			line_hl_group = "AtlasTextMuted",
+		})
 		return
 	end
 	local lines, line_map, spans = renderer.render(release)
@@ -57,6 +60,7 @@ local function render(state)
 		})
 	end
 	vim.bo[state.buf].modifiable = false
+	vim.bo[state.buf].filetype = "markdown"
 end
 
 ---@param state RepositoryReleases
@@ -73,6 +77,7 @@ local function load(state, id)
 	state.requests = requests.new()
 	state.selected_id = id
 	state.release = "loading"
+	vim.bo[state.buf].filetype = "atlas.repository"
 	state.spinner:start()
 	state.statusline:notify("loading", "Loading release...")
 	render(state)
@@ -184,8 +189,6 @@ function M.open(opts)
 			render(state)
 		end
 	end
-	vim.bo[state.buf].filetype = "markdown"
-	vim.bo[state.buf].syntax = "markdown"
 	vim.wo[state.win].wrap = true
 
 	local actions = {
@@ -272,9 +275,6 @@ function M.close(buf)
 		vim.wo[state.win].wrap = false
 	end
 	if utils.buffer.valid(state.buf) then
-		pcall(vim.treesitter.stop, state.buf)
-		vim.bo[state.buf].filetype = "atlas.repository"
-		vim.bo[state.buf].syntax = "OFF"
 		vim.api.nvim_buf_clear_namespace(state.buf, namespace, 0, -1)
 	end
 end

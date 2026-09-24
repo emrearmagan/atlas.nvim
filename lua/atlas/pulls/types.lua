@@ -49,8 +49,7 @@
 ---@field updated_on string
 ---@field link PullsLink
 ---@field provider string
----@field workspace string
----@field repo string
+---@field repo AtlasRepository
 ---@field is_starred boolean|nil
 ---@field reviewers PullsReviewer[]|nil
 

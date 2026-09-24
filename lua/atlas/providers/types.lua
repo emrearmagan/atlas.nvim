@@ -38,15 +38,10 @@
 ---@class AtlasRepository
 ---@field id string
 ---@field name string
----@field owner string|nil
----@field repo_name string|nil
+---@field owner string
+---@field repo_name string
 ---@field html_url string|nil
----@field full_name string|nil
----@field workspace string|nil
----@field created_on string|nil
----@field stars number|nil
----@field watchers number|nil
----@field forks number|nil
+---@field full_name string
 
 ---@class AtlasRepositoryDetails : AtlasRepository
 ---@field description string|nil
@@ -55,6 +50,10 @@
 ---@field default_branch string|nil
 ---@field is_private boolean|nil
 ---@field readme string|nil
+---@field created_on string|nil
+---@field stars number|nil
+---@field watchers number|nil
+---@field forks number|nil
 
 ---@class AtlasRepositoryBranch
 ---@field name string
@@ -62,7 +61,7 @@
 ---@field date string|nil
 ---@field message string|nil
 ---@field author string|nil
----@field protected boolean|nil
+---@field ["protected"] boolean|nil
 ---@field api_url string|nil
 
 ---@class AtlasRepositoryBranches
@@ -99,9 +98,9 @@
 
 ---@class AtlasRepositoryCapability
 ---@field fetch_details fun(repo: AtlasRepository, opts: PullsFetchOpts, on_done: fun(repo: AtlasRepositoryDetails|nil, err: string|nil)): { cancel: fun() }|nil
----@field fetch_branches fun(repo: AtlasRepositoryDetails, opts: PullsFetchOpts, on_done: fun(branches: AtlasRepositoryBranches|nil, err: string|nil)): { cancel: fun() }|nil
----@field fetch_tags fun(repo: AtlasRepositoryDetails, opts: PullsFetchOpts, on_done: fun(tags: AtlasRepositoryTag[]|nil, err: string|nil)): { cancel: fun() }|nil
----@field fetch_releases (fun(repo: AtlasRepositoryDetails, opts: PullsFetchOpts, on_done: fun(releases: AtlasRepositoryRelease[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
----@field fetch_release (fun(repo: AtlasRepositoryDetails, opts: { id?: string }, on_done: fun(release: AtlasRepositoryReleaseDetails|nil, err: string|nil)): { cancel: fun() }|nil)|nil
----@field fetch_issues (fun(repo: AtlasRepositoryDetails, state: "open"|"closed", opts: PullsFetchOpts, on_done: fun(result: { entries: PullsRepoIssue[], counts: { open: integer, closed: integer }|nil }|nil, err: string|nil)): { cancel: fun() }|nil)|nil
----@field delete_branch (fun(repo: AtlasRepositoryDetails, branch: AtlasRepositoryBranch, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field fetch_branches fun(repo: AtlasRepository, opts: PullsFetchOpts, on_done: fun(branches: AtlasRepositoryBranches|nil, err: string|nil)): { cancel: fun() }|nil
+---@field fetch_tags fun(repo: AtlasRepository, opts: PullsFetchOpts, on_done: fun(tags: AtlasRepositoryTag[]|nil, err: string|nil)): { cancel: fun() }|nil
+---@field fetch_releases (fun(repo: AtlasRepository, opts: PullsFetchOpts, on_done: fun(releases: AtlasRepositoryRelease[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field fetch_release (fun(repo: AtlasRepository, opts: { id?: string }, on_done: fun(release: AtlasRepositoryReleaseDetails|nil, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field fetch_issues (fun(repo: AtlasRepository, state: "open"|"closed", opts: PullsFetchOpts, on_done: fun(result: { entries: PullsRepoIssue[], counts: { open: integer, closed: integer }|nil }|nil, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field delete_branch (fun(repo: AtlasRepository, branch: AtlasRepositoryBranch, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil

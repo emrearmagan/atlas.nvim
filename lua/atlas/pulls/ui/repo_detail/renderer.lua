@@ -42,7 +42,8 @@ function M.render(tab_items, get_tab_module)
 	vim.api.nvim_set_option_value("winbar", " ", { win = win })
 
 	local repo = state.current_repo
-	local repo_details = type(state.current_repo_details) == "table" and state.current_repo_details or nil
+	local details = state.current_repo_details
+	local repo_details = type(details) == "table" and details or nil
 	local width = vim.api.nvim_win_get_width(win)
 	local lines = {}
 	local spans = {}
@@ -51,7 +52,7 @@ function M.render(tab_items, get_tab_module)
 		lines = { "", "  Nothing selected..." }
 		state.line_map = {}
 	else
-		local header_lines, header_spans = detail_header.render_repo(repo_details or repo, width)
+		local header_lines, header_spans = detail_header.render_repo(repo_details or repo, width, repo_details)
 		utils.append_block(lines, spans, { lines = header_lines, highlights = header_spans })
 
 		local chip_lines, chip_spans
@@ -77,9 +78,8 @@ function M.render(tab_items, get_tab_module)
 
 		local tab_mod = get_tab_module(state.current_tab)
 		local content_offset = #lines
-		local detail_error = type(state.current_repo_details) == "string" and state.current_repo_details ~= "loading"
-		if detail_error then
-			utils.push(lines, spans, state.current_repo_details, "AtlasLogError", PADDING_X)
+		if type(details) == "string" and details ~= "loading" then
+			utils.push(lines, spans, details, "AtlasLogError", PADDING_X)
 			state.line_map = {}
 		elseif tab_mod then
 			local tab_lines_c, tab_spans_c, tab_line_map = tab_mod.render(repo, width)

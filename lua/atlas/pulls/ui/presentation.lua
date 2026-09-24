@@ -62,17 +62,4 @@ function M.pr_state_hl(pr_state)
 	return "AtlasTextMuted"
 end
 
----@param pr PullRequest
----@return AtlasRepository
-function M.repo(pr)
-	return {
-		id = pr.repo_full_name,
-		name = pr.repo_full_name,
-		full_name = pr.repo_full_name,
-		owner = pr.workspace,
-		workspace = pr.workspace,
-		repo_name = pr.repo,
-	}
-end
-
 return M

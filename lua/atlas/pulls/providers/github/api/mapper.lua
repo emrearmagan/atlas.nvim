@@ -211,10 +211,12 @@ function M.to_pull_request(raw)
 		state = "draft"
 	end
 
-	local owner, repo_name, repo_full_name = github_mapping.repository(raw.repository)
-	local repository_url = json.safe_str((raw.repository or {}).url)
-	if repository_url and repository_url ~= "" and not repository_url:match("%.git$") then
-		repository_url = repository_url .. ".git"
+	local raw_repository = json.safe_table(raw.repository)
+	local owner, repo_name, repo_full_name = github_mapping.repository(raw_repository)
+	local repository_url = json.safe_str(raw_repository.url)
+	local https_url = repository_url
+	if https_url and https_url ~= "" and not https_url:match("%.git$") then
+		https_url = https_url .. ".git"
 	end
 	local first_commit = json.safe_table(json.safe_table(json.safe_table(raw.commits).nodes)[1])
 	local commit = json.safe_table(first_commit.commit)
@@ -233,8 +235,8 @@ function M.to_pull_request(raw)
 		destination = {
 			branch = tostring(raw.baseRefName or ""),
 			commit_hash = tostring(raw.baseRefOid or ""),
-			https_url = repository_url,
-			ssh_url = json.safe_str((raw.repository or {}).sshUrl),
+			https_url = https_url,
+			ssh_url = json.safe_str(raw_repository.sshUrl),
 		},
 		comments_count = tonumber(raw.totalCommentsCount) or tonumber(raw.commentsCount) or tonumber(
 			json.safe_table(raw.comments).totalCount
@@ -245,8 +247,14 @@ function M.to_pull_request(raw)
 			html = tostring(raw.url or ""),
 		},
 		provider = "github",
-		workspace = owner,
-		repo = repo_name,
+		repo = {
+			id = repo_full_name,
+			name = repo_name,
+			owner = owner,
+			repo_name = repo_name,
+			full_name = repo_full_name,
+			html_url = repository_url,
+		},
 		repo_full_name = repo_full_name,
 		reviewers = reviewers,
 		node_id = json.safe_str(raw.id),

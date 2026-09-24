@@ -215,29 +215,13 @@ function M.render(pr, width, extra_fields)
 end
 
 ---@param repo AtlasRepository
----@return string
-local function repo_full_name(repo)
-	return tostring(repo.full_name or repo.name or repo.id or "Repository")
-end
-
----@param repo AtlasRepository
----@return string
-local function repo_workspace(repo)
-	local workspace = tostring(repo.workspace or "")
-	if workspace ~= "" then
-		return workspace
-	end
-	local full_name = repo_full_name(repo)
-	return tostring(full_name:match("^([^/]+)/") or full_name)
-end
-
----@param repo AtlasRepository
 ---@param width integer
+---@param details AtlasRepositoryDetails|nil
 ---@return string[], table[]
-function M.render_repo(repo, width)
-	local full_name = repo_full_name(repo)
-	local workspace = repo_workspace(repo)
-	local created_text = utils.relative_time_text(tostring(repo.created_on or ""))
+function M.render_repo(repo, width, details)
+	local full_name = repo.full_name
+	local workspace = repo.owner
+	local created_text = utils.relative_time_text(details and details.created_on or "")
 
 	local title = string.format(" %s", full_name)
 	local author_icon, author_icon_hl = icons.general("user")
@@ -253,22 +237,22 @@ function M.render_repo(repo, width)
 
 	local rows = {}
 
-	local has_stars = tonumber(repo.stars) ~= nil
-	local has_forks = tonumber(repo.forks) ~= nil
-	local has_watchers = tonumber(repo.watchers) ~= nil
+	local stars = details and details.stars
+	local forks = details and details.forks
+	local watchers = details and details.watchers
 
-	if has_stars or has_forks then
+	if stars or forks then
 		local k1, k1_hl, v1
-		if has_stars then
+		if stars then
 			k1, k1_hl = icons.general("star")
-			v1 = string.format("Stars: %s", repo.stars)
+			v1 = string.format("Stars: %s", stars)
 		else
 			k1, k1_hl, v1 = "", "AtlasTextMuted", "Stars: -"
 		end
 		local k2, k2_hl, v2
-		if has_forks then
+		if forks then
 			k2, k2_hl = icons.pulls("fork")
-			v2 = string.format("Forks: %s", repo.forks)
+			v2 = string.format("Forks: %s", forks)
 		else
 			k2, k2_hl, v2 = "", "AtlasTextMuted", "Forks: -"
 		end
@@ -283,12 +267,12 @@ function M.render_repo(repo, width)
 			v2_hl = "AtlasTextMuted",
 		})
 	end
-	if has_watchers then
+	if watchers then
 		local watching_icon, watching_hl = icons.general("watching")
 		table.insert(rows, {
 			k1 = watching_icon,
 			k1_hl = watching_hl,
-			v1 = string.format("Watchers: %s", repo.watchers),
+			v1 = string.format("Watchers: %s", watchers),
 			v1_hl = "AtlasTextMuted",
 			k2 = "",
 			v2 = "",

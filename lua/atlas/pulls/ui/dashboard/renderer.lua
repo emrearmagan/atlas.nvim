@@ -58,7 +58,7 @@ local function group_by_repo(pulls)
 	for _, pr in ipairs(pulls) do
 		local group = by_repo[pr.repo_full_name]
 		if group == nil then
-			group = { repo = presentation.repo(pr), pulls = {} }
+			group = { repo = pr.repo, pulls = {} }
 			by_repo[pr.repo_full_name] = group
 			table.insert(groups, group)
 		end
@@ -181,7 +181,7 @@ end
 local function compact_rows(pulls, display)
 	local rows = {}
 	for _, pr in ipairs(pulls) do
-		local repo = presentation.repo(pr)
+		local repo = pr.repo
 		local icon, icon_hl = pr_icon(pr)
 		local author = presentation.user_handle(pr.author)
 		local row = {
@@ -207,7 +207,7 @@ local function compact_rows(pulls, display)
 		table.insert(rows, {
 			kind = "meta",
 			pr_icon = "",
-			repo_pr = repo.name,
+			repo_pr = repo.full_name,
 			separator = true,
 			_item = { kind = "pr_meta", id = pr.id, repo = repo, pr = pr },
 		})
@@ -225,7 +225,7 @@ local function list_rows(pulls, layout, display)
 	if not grouped then
 		groups = {}
 		for _, pr in ipairs(pulls) do
-			table.insert(groups, { repo = presentation.repo(pr), pulls = { pr } })
+			table.insert(groups, { repo = pr.repo, pulls = { pr } })
 		end
 	end
 
@@ -237,7 +237,7 @@ local function list_rows(pulls, layout, display)
 			end
 			table.insert(rows, {
 				kind = "repo",
-				name = group.repo.name,
+				name = group.repo.full_name,
 				_item = { kind = "repo", repo = group.repo },
 			})
 			table.insert(rows, { kind = "spacer" })

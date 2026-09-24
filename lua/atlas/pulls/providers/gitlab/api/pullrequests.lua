@@ -25,6 +25,7 @@ query($path:ID!,$iids:[String!]!){
     mergeRequests(iids:$iids,first:100){
       nodes{
         iid
+        reference(full:true)
         title
         state
         draft
@@ -121,7 +122,7 @@ function M.fetch_pullrequests(view, opts, on_done)
 		endpoint = "/merge_requests" .. build_query(params)
 	end
 
-	local cache_key = "gitlab_pulls:merge_requests:" .. endpoint
+	local cache_key = "gitlab_pulls:merge_requests:v2:" .. endpoint
 	if not opts.force_refresh then
 		local cached, ok = service.get_cache(cache_key)
 		if ok then
