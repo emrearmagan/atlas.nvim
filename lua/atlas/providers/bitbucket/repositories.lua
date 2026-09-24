@@ -4,6 +4,7 @@ local service = require("atlas.providers.bitbucket.client")
 local config = require("atlas.config")
 local api_utils = require("atlas.core.utils")
 local request_scope = require("atlas.core.requests")
+local json = require("atlas.core.json")
 local as_table = api_utils.as_table
 local url_encode = api_utils.url_encode
 
@@ -327,12 +328,12 @@ end
 
 ---@param repo AtlasRepositoryDetails
 ---@param opts PullsFetchOpts
----@param on_done fun(tags: PullsRepoTags|nil, err: string|nil)
----@return { job_id: integer, cancel: fun() }|nil
+---@param on_done fun(tags: AtlasRepositoryTag[]|nil, err: string|nil)
+---@return { cancel: fun() }|nil
 function M.fetch_tags(repo, opts, on_done)
 	---@cast repo BitbucketRepositoryDetails
 	opts = opts or {}
-	local tags_url = repo.tags_url
+	local tags_url = repo.tags_url or ""
 
 	if tags_url == "" then
 		on_done(nil, "Missing tags URL")
@@ -350,7 +351,7 @@ function M.fetch_tags(repo, opts, on_done)
 		end
 	end
 
-	return service.request("GET", url, nil, nil, function(result, err)
+	return service.fetch_all_values(url, function(result, err)
 		if err ~= nil then
 			on_done(nil, err)
 			return
@@ -358,24 +359,39 @@ function M.fetch_tags(repo, opts, on_done)
 
 		local values = (as_table(result) or {}).values or {}
 
+		---@type AtlasRepositoryTag[]
 		local entries = {}
 		for _, item in ipairs(values) do
 			local tag = as_table(item) or {}
 			local target = as_table(tag.target) or {}
 			local author = as_table(target.author) or {}
 			local user = as_table(author.user) or {}
-			local name = user.nickname or user.display_name or author.raw or ""
+			local tagger = as_table(tag.tagger) or {}
+			local tagger_user = as_table(tagger.user) or {}
+			local links = as_table(tag.links) or {}
+			local html_link = as_table(links.html) or {}
+			local name = json.safe_str(tagger_user.nickname)
+				or json.safe_str(tagger_user.display_name)
+				or json.safe_str(tagger.raw)
+				or json.safe_str(user.nickname)
+				or json.safe_str(user.display_name)
+				or json.safe_str(author.raw)
+			local annotation = json.safe_str(tag.message)
+			if annotation == "" then
+				annotation = nil
+			end
 			table.insert(entries, {
 				name = tostring(tag.name or ""),
 				hash = tostring(target.hash or ""),
-				date = tostring(target.date or ""),
-				message = tostring(target.message or ""),
-				author = tostring(name),
+				tag_date = json.safe_str(tag.date),
+				description = annotation,
+				message = annotation or json.safe_str(target.message),
+				author = name,
+				url = json.safe_str(html_link.href),
 			})
 		end
-		local tags = { entries = entries }
-		service.set_cache(key, tags, service.cache_ttl())
-		on_done(tags, nil)
+		service.set_cache(key, entries, service.cache_ttl())
+		on_done(entries, nil)
 	end, { action = "Fetch repository tags", repo = repo.full_name or repo.name })
 end
 

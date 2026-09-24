@@ -53,6 +53,38 @@ query($owner: String!, $repo: String!, $endCursor: String) {
 }
 ]]
 
+local TAGS_QUERY = [[
+query($owner: String!, $repo: String!, $endCursor: String) {
+  repository(owner: $owner, name: $repo) {
+    url
+    refs(refPrefix: "refs/tags/", first: 100, after: $endCursor, orderBy: {field: TAG_COMMIT_DATE, direction: DESC}) {
+      nodes {
+        name
+        target {
+          oid
+          ... on Commit {
+            message
+            author { name }
+          }
+          ... on Tag {
+            annotation: message
+            tagger { name date }
+            target {
+              oid
+              ... on Commit {
+                message
+                author { name }
+              }
+            }
+          }
+        }
+      }
+      pageInfo { hasNextPage endCursor }
+    }
+  }
+}
+]]
+
 ---@param repo AtlasRepository
 ---@param opts PullsFetchOpts
 ---@param on_done fun(details: AtlasRepositoryDetails|nil, err: string|nil)
@@ -230,11 +262,13 @@ end
 
 ---@param repo AtlasRepositoryDetails
 ---@param opts PullsFetchOpts
----@param on_done fun(tags: PullsRepoTags|nil, err: string|nil)
+---@param on_done fun(tags: AtlasRepositoryTag[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_tags(repo, opts, on_done)
+	opts = opts or {}
 	local slug = tostring(repo.full_name or "")
-	if slug == "" then
+	local owner, name = slug:match("^([^/]+)/([^/]+)$")
+	if not owner then
 		vim.schedule(function()
 			on_done(nil, "Missing repository info")
 		end)
@@ -252,28 +286,56 @@ function M.fetch_tags(repo, opts, on_done)
 
 	return cli.gh({
 		"api",
-		string.format("repos/%s/tags?per_page=100", slug),
+		"graphql",
+		"--paginate",
+		"--slurp",
+		"-f",
+		"query=" .. TAGS_QUERY,
+		"-f",
+		"owner=" .. owner,
+		"-f",
+		"repo=" .. name,
 	}, function(result, err)
 		if err or type(result) ~= "table" then
 			on_done(nil, err or "Failed to fetch tags")
 			return
 		end
 
+		---@type AtlasRepositoryTag[]
 		local entries = {}
-		for _, tag in ipairs(result) do
-			local commit = tag.commit
-			table.insert(entries, {
-				name = tostring(tag.name or ""),
-				hash = tostring(commit.sha or ""):sub(1, 8),
-				date = nil,
-				message = nil,
-				author = nil,
-			})
+		for _, page in ipairs(result) do
+			local data = json.safe_table(page.data)
+			local repository = json.nilify(data.repository)
+			if not repository then
+				on_done(nil, "Repository not found")
+				return
+			end
+
+			local refs = json.safe_table(repository.refs)
+			for _, tag in ipairs(json.safe_table(refs.nodes)) do
+				local target = json.safe_table(tag.target)
+				local commit = json.safe_table(json.nilify(target.target) or target)
+				local tagger = json.safe_table(target.tagger)
+				local author = json.safe_table(commit.author)
+				local tag_name = json.safe_str(tag.name) or ""
+				local annotation = json.safe_str(target.annotation)
+				if annotation == "" then
+					annotation = nil
+				end
+				table.insert(entries, {
+					name = tag_name,
+					hash = json.safe_str(commit.oid) or "",
+					tag_date = json.safe_str(tagger.date),
+					description = annotation,
+					message = annotation or json.safe_str(commit.message),
+					author = json.safe_str(tagger.name) or json.safe_str(author.name),
+					url = repository.url .. "/releases/tag/" .. utils.url_encode(tag_name),
+				})
+			end
 		end
 
-		local tags = { entries = entries }
-		cli.set_mem(cache_key, tags)
-		on_done(tags, nil)
+		cli.set_mem(cache_key, entries)
+		on_done(entries, nil)
 	end, {
 		action = "Fetch repository tags",
 		repo = slug,

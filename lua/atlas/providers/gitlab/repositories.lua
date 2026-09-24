@@ -193,7 +193,7 @@ end
 
 ---@param repo AtlasRepositoryDetails
 ---@param opts PullsFetchOpts
----@param on_done fun(tags: PullsRepoTags|nil, err: string|nil)
+---@param on_done fun(tags: AtlasRepositoryTag[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_tags(repo, opts, on_done)
 	opts = opts or {}
@@ -215,28 +215,36 @@ function M.fetch_tags(repo, opts, on_done)
 	end
 
 	local endpoint = string.format("/projects/%s/repository/tags?per_page=100", service.url_encode(path))
-	return service.request("GET", endpoint, nil, function(result, err)
+	return service.fetch_all_pages(endpoint, function(result, err)
 		if err then
 			on_done(nil, err)
 			return
 		end
 
+		---@type AtlasRepositoryTag[]
 		local entries = {}
 		for _, tag_value in ipairs(json.safe_table(result)) do
 			local tag = json.safe_table(tag_value)
 			local commit = json.safe_table(tag.commit)
+			local name = json.safe_str(tag.name) or ""
+			local browser_url = repo.html_url or ""
+			local annotation = json.safe_str(tag.message)
+			if annotation == "" then
+				annotation = nil
+			end
 			table.insert(entries, {
-				name = json.safe_str(tag.name) or "",
-				hash = (json.safe_str(commit.short_id) or json.safe_str(commit.id) or ""):sub(1, 8),
-				date = json.safe_str(commit.committed_date) or "",
-				message = json.safe_str(tag.message) or json.safe_str(commit.title) or "",
-				author = json.safe_str(commit.author_name) or "",
+				name = name,
+				hash = json.safe_str(commit.id) or "",
+				tag_date = json.safe_str(tag.created_at),
+				description = annotation,
+				message = annotation or json.safe_str(commit.message) or json.safe_str(commit.title),
+				author = json.safe_str(commit.author_name),
+				url = browser_url ~= "" and browser_url .. "/-/tags/" .. service.url_encode(name) or nil,
 			})
 		end
 
-		local tags = { entries = entries }
-		service.set_memory_cache(cache_key, tags)
-		on_done(tags, nil)
+		service.set_memory_cache(cache_key, entries)
+		on_done(entries, nil)
 	end, {
 		action = "Fetch repository tags",
 		repo = path,

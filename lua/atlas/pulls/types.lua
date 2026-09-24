@@ -64,16 +64,6 @@
 -- Repository
 --------------------------------------------------------------------------------
 
----@class PullsRepoTag
----@field name string
----@field hash string
----@field date string|nil
----@field message string|nil
----@field author string|nil
-
----@class PullsRepoTags
----@field entries PullsRepoTag[]
-
 ---@class PullsRepoIssue
 ---@field number integer|string
 ---@field title string

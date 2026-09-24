@@ -12,7 +12,7 @@ local PADDING_X = 1
 
 ---@class PullsRepoTagsTabState
 ---@field repo AtlasRepositoryDetails|nil
----@field tags PullsRepoTags|"loading"|string|nil
+---@field tags AtlasRepositoryTag[]|"loading"|string|nil
 ---@field requests AtlasRequestScope
 local state = { repo = nil, tags = nil, requests = request_scope.new() }
 
@@ -32,10 +32,11 @@ function M.reset()
 end
 
 ---@param repo AtlasRepositoryDetails
+---@param tags AtlasRepositoryTag[]
 ---@return AtlasThreadV2Item[]
-local function to_items(repo)
+local function to_items(repo, tags)
 	local items = {}
-	for _, tag in ipairs((state.tags or {}).entries or {}) do
+	for _, tag in ipairs(tags) do
 		local first_line = tag.message and tostring(tag.message:match("^[^\n\r]*") or "") or nil
 		if first_line == "" then
 			first_line = nil
@@ -57,7 +58,7 @@ local function to_items(repo)
 			icon = tag_icon,
 			author = tostring(tag.name or ""),
 			additional = tag.hash and tostring(tag.hash):sub(1, 8) or nil,
-			right_text = tag.date and utils.relative_time_text(tag.date) or nil,
+			right_text = tag.tag_date and utils.relative_time_text(tag.tag_date) or "—",
 			content = content,
 			obj = { repo = repo, tag = tag },
 		})
@@ -95,13 +96,12 @@ function M.render(_repo, width)
 		return lines, spans, line_map
 	end
 
-	local entries = state.tags.entries or {}
-	if #entries == 0 then
+	if #state.tags == 0 then
 		utils.push(lines, spans, "No tags found.", "AtlasTextMuted", PADDING_X)
 		return lines, spans, line_map
 	end
 
-	local thread_lines, thread_spans, thread_map = threads.render(to_items(repo), width, {
+	local thread_lines, thread_spans, thread_map = threads.render(to_items(repo, state.tags), width, {
 		padding_x = PADDING_X,
 		mode = "linked",
 		content_max_lines = 1,
@@ -161,7 +161,7 @@ function M.on_select(repo, refresh, opts)
 	local provider = detail.provider
 	local repository = provider and provider.capabilities.repository
 	if repository == nil then
-		state.tags = { entries = {} }
+		state.tags = {}
 		notify.error("Tag listing is not supported by this provider")
 		refresh()
 		return
@@ -181,7 +181,7 @@ function M.on_select(repo, refresh, opts)
 			state.tags = tostring(err)
 			notify.error(string.format("Failed to load tags for %s", repo_label))
 		else
-			state.tags = tags or { entries = {} }
+			state.tags = tags or {}
 			notify.success(string.format("Tags loaded for %s", repo_label), { timeout = 1200 })
 		end
 		refresh()
