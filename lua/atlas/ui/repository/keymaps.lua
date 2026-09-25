@@ -1,5 +1,6 @@
 local resolver = require("atlas.core.keymaps")
 local help = require("atlas.ui.popups.help")
+local navigation = require("atlas.ui.repository.navigation")
 
 local M = {}
 
@@ -7,7 +8,8 @@ local M = {}
 ---@param close fun()
 ---@param select_page fun(index: integer)
 function M.setup(session, close, select_page)
-	for _, pane in ipairs({ session.sidebar, session.content }) do
+	local nav = session.navigation
+	for _, pane in ipairs({ nav, session.content }) do
 		local items = {
 			{
 				key = resolver.resolve("ui.close") or {},
@@ -32,23 +34,56 @@ function M.setup(session, close, select_page)
 				key = resolver.resolve(direction[1]) or {},
 				desc = direction[2],
 				callback = function()
-					local index = (session.sidebar.selected - 1 + direction[3]) % #session.sidebar.pages + 1
+					local index = (nav.selected - 1 + direction[3]) % #nav.pages + 1
 					select_page(index)
 				end,
 				opts = { nowait = true, silent = true },
 			})
 		end
-		if pane == session.sidebar then
+		if pane == nav then
 			table.insert(items, {
 				key = resolver.resolve("ui.select") or {},
 				desc = "Open page",
 				callback = function()
-					select_page(vim.api.nvim_win_get_cursor(pane.win)[1])
-					vim.api.nvim_set_current_win(session.content.win)
+					local index = navigation.index_at_cursor(nav)
+					if index then
+						select_page(index)
+						vim.api.nvim_set_current_win(session.content.win)
+					end
 				end,
 				opts = { nowait = true, silent = true },
 			})
+			for _, direction in ipairs({
+				{ { "h", "<Left>" }, "Previous page", -1 },
+				{ { "l", "<Right>" }, "Next page", 1 },
+			}) do
+				table.insert(items, {
+					key = direction[1],
+					desc = direction[2],
+					callback = function()
+						select_page((nav.selected - 1 + direction[3]) % #nav.pages + 1)
+					end,
+					opts = { nowait = true, silent = true },
+				})
+			end
 		end
+		vim.keymap.set("n", "<LeftMouse>", function()
+			local mouse = vim.fn.getmousepos()
+			if mouse.winid == nav.win and mouse.line > 0 and mouse.column > 0 then
+				vim.schedule(function()
+					if session.closed then
+						return
+					end
+					vim.api.nvim_win_set_cursor(nav.win, { mouse.line, mouse.column - 1 })
+					local index = navigation.index_at_cursor(nav)
+					if index then
+						select_page(index)
+						vim.api.nvim_set_current_win(session.content.win)
+					end
+				end)
+			end
+			return "<LeftMouse>"
+		end, { buffer = pane.buf, expr = true, silent = true })
 		help.register("General", items, { buffer = pane.buf })
 	end
 end

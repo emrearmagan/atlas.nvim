@@ -7,11 +7,11 @@ local M = {}
 local installed = {}
 
 ---@param buf integer
----@param sidebar_buf integer
+---@param navigation_buf integer
 ---@param callbacks { search: fun(), refresh: fun(), next_page: fun(), previous_page: fun(), select: fun(), diff: fun(), details: fun(), browser: fun(), copy: fun(), copy_url: fun() }
-function M.setup(buf, sidebar_buf, callbacks)
+function M.setup(buf, navigation_buf, callbacks)
 	M.clear(buf)
-	M.clear(sidebar_buf)
+	M.clear(navigation_buf)
 	local refresh = {
 		key = resolver.resolve("ui.refresh") or {},
 		desc = "Refresh tags",
@@ -47,8 +47,8 @@ function M.setup(buf, sidebar_buf, callbacks)
 	end
 	installed[buf] = items
 	help.register("Tags", items, { buffer = buf })
-	installed[sidebar_buf] = { refresh }
-	help.register("Tags", installed[sidebar_buf], { buffer = sidebar_buf })
+	installed[navigation_buf] = { refresh }
+	help.register("Tags", installed[navigation_buf], { buffer = navigation_buf })
 end
 
 ---@param buf integer

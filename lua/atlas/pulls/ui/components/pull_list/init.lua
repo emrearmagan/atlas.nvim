@@ -227,7 +227,7 @@ function M.render(opts, pulls)
 		margin = 1,
 		columns = compact and display.columns.compact or display.columns.list,
 		rows = compact and compact_rows(pulls, display, opts) or list_rows(pulls, layout, display, opts),
-		hide_columns = { "author", "created", "updated", "diff", "conversation", "tasks", "review", "ci" },
+		hide_columns = { "diff", "author", "created", "updated" },
 		cell_hl = function(row, col, ctx)
 			return cell_hl(row, col, ctx, display)
 		end,

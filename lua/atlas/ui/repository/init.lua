@@ -4,7 +4,7 @@ local request_scope = require("atlas.core.requests")
 local loading = require("atlas.ui.loading")
 local pages = require("atlas.ui.repository.pages")
 local keymaps = require("atlas.ui.repository.keymaps")
-local sidebar = require("atlas.ui.repository.sidebar")
+local navigation = require("atlas.ui.repository.navigation")
 local statusline = require("atlas.ui.statusline")
 local utils = require("atlas.ui.shared.utils")
 
@@ -12,7 +12,7 @@ local utils = require("atlas.ui.shared.utils")
 ---@field tab integer
 ---@field group integer
 ---@field closed boolean
----@field sidebar RepositorySidebar
+---@field navigation RepositoryNavigation
 ---@field content { buf: integer, win: integer }
 ---@field repo AtlasRepositoryDetails
 ---@field provider PullsProvider|IssuesProvider
@@ -42,7 +42,7 @@ end
 ---@param session RepositoryBrowser
 local function setup_buffers(session)
 	local prefix = "atlas://repository/" .. session.tab
-	session.sidebar.buf = utils.buffer.create(prefix .. "/sidebar", "atlas.repository")
+	session.navigation.buf = utils.buffer.create(prefix .. "/navigation", "atlas.repository")
 	session.content.buf = utils.buffer.create(prefix .. "/content", "atlas.repository")
 end
 
@@ -52,19 +52,23 @@ local function setup_windows(session)
 	session.content.win = vim.api.nvim_get_current_win()
 	vim.api.nvim_win_set_buf(session.content.win, session.content.buf)
 	utils.buffer.delete(placeholder)
-	session.sidebar.win = vim.api.nvim_open_win(session.sidebar.buf, true, {
-		split = "left",
-		win = session.content.win,
-		width = math.min(22, math.max(14, math.floor(vim.o.columns * 0.2))),
-	})
-	for _, pane in ipairs({ session.sidebar, session.content }) do
-		setup_window(pane.win)
-		session.statusline:attach(pane.win)
-	end
-	vim.wo[session.sidebar.win].winfixwidth = true
-	vim.wo[session.sidebar.win].cursorline = true
-	vim.wo[session.sidebar.win].winbar = "Repository"
+	setup_window(session.content.win)
+	session.statusline:attach(session.content.win)
 	vim.wo[session.content.win].winbar = ""
+	local nav = session.navigation
+	nav.win = vim.api.nvim_open_win(nav.buf, false, {
+		split = "above",
+		win = session.content.win,
+		height = 1,
+	})
+	setup_window(nav.win)
+	vim.wo[nav.win].winfixheight = true
+	vim.wo[nav.win].winbar = ""
+	if vim.o.laststatus == 3 then
+		session.statusline:attach(nav.win)
+	else
+		vim.wo[nav.win].statusline = "%#WinSeparator#"
+	end
 end
 
 ---@param session RepositoryBrowser
@@ -82,7 +86,7 @@ local function close(session)
 		if #vim.api.nvim_list_tabpages() > 1 then
 			vim.cmd(vim.api.nvim_tabpage_get_number(session.tab) .. "tabclose")
 		else
-			for _, pane in ipairs({ session.sidebar, session.content }) do
+			for _, pane in ipairs({ session.navigation, session.content }) do
 				if utils.window.valid(pane.win) then
 					if #vim.api.nvim_tabpage_list_wins(session.tab) > 1 then
 						vim.api.nvim_win_close(pane.win, true)
@@ -93,14 +97,14 @@ local function close(session)
 			end
 		end
 	end
-	utils.buffer.delete(session.sidebar.buf)
+	utils.buffer.delete(session.navigation.buf)
 	utils.buffer.delete(session.content.buf)
 end
 
 ---@param session RepositoryBrowser
 ---@param index integer
 local function select_page(session, index)
-	local page = session.sidebar.pages[index]
+	local page = session.navigation.pages[index]
 	if session.page == page then
 		return
 	end
@@ -113,12 +117,12 @@ local function select_page(session, index)
 		utils.buffer.delete(previous_buf)
 	end
 	session.page = page
-	session.sidebar.selected = index
-	sidebar.render(session.sidebar)
-	vim.api.nvim_win_set_cursor(session.sidebar.win, { index, 0 })
+	session.navigation.selected = index
+	navigation.render(session.navigation)
+	navigation.focus(session.navigation)
 	setup_window(session.content.win)
 	session.statusline:attach(session.content.win)
-	vim.wo[session.content.win].winbar = page.label
+	vim.wo[session.content.win].winbar = page.label:gsub("%%", "%%%%")
 	vim.api.nvim_win_set_cursor(session.content.win, { 1, 0 })
 	keymaps.setup(session, function()
 		close(session)
@@ -128,7 +132,7 @@ local function select_page(session, index)
 	page.open({
 		buf = session.content.buf,
 		win = session.content.win,
-		sidebar_buf = session.sidebar.buf,
+		navigation_buf = session.navigation.buf,
 		repo = session.repo,
 		provider = session.provider,
 		statusline = session.statusline,
@@ -140,11 +144,20 @@ local function setup_events(session)
 	session.group = vim.api.nvim_create_augroup("AtlasRepository" .. session.tab, { clear = true })
 	vim.api.nvim_create_autocmd("WinClosed", {
 		group = session.group,
-		pattern = { tostring(session.sidebar.win), tostring(session.content.win) },
+		pattern = { tostring(session.navigation.win), tostring(session.content.win) },
 		callback = function()
 			vim.schedule(function()
 				close(session)
 			end)
+		end,
+	})
+	vim.api.nvim_create_autocmd({ "WinResized", "VimResized" }, {
+		group = session.group,
+		callback = function()
+			if utils.window.valid(session.navigation.win) then
+				navigation.render(session.navigation)
+				navigation.focus(session.navigation)
+			end
 		end,
 	})
 end
@@ -159,7 +172,7 @@ local function show(repo, provider, page_key)
 		closed = false,
 		repo = repo,
 		provider = provider,
-		sidebar = { pages = pages.get(provider), selected = 1 },
+		navigation = { pages = pages.get(provider), selected = 1, positions = {} },
 		content = {},
 		statusline = statusline.new({ help_key = (resolver.resolve("ui.help") or {})[1] }),
 	}
@@ -170,7 +183,7 @@ local function show(repo, provider, page_key)
 	session.statusline:set_items({
 		{ text = provider.name .. " / " .. (repo.full_name or repo.name), hl_group = "AtlasFooterText" },
 	})
-	for index, page in ipairs(session.sidebar.pages) do
+	for index, page in ipairs(session.navigation.pages) do
 		if page.key == (page_key or "overview") then
 			select_page(session, index)
 			return

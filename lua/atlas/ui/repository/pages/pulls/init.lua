@@ -13,7 +13,7 @@ local utils = require("atlas.ui.shared.utils")
 ---@class RepositoryPulls
 ---@field buf integer
 ---@field win integer
----@field sidebar_buf integer
+---@field navigation_buf integer
 ---@field provider PullsProvider|nil
 ---@field view AtlasPullsViewConfig|nil
 ---@field statusline AtlasStatusline
@@ -196,7 +196,7 @@ local function register(state, buf, actions)
 	help.register("Pull Requests", items, { buffer = buf })
 end
 
----@param opts { buf: integer, win: integer, sidebar_buf: integer, repo: AtlasRepositoryDetails, provider: PullsProvider|IssuesProvider, statusline: AtlasStatusline }
+---@param opts { buf: integer, win: integer, navigation_buf: integer, repo: AtlasRepositoryDetails, provider: PullsProvider|IssuesProvider, statusline: AtlasStatusline }
 function M.open(opts)
 	local provider = providers.load(opts.provider.id, "pulls")
 	---@cast provider PullsProvider|nil
@@ -205,7 +205,7 @@ function M.open(opts)
 	local state = {
 		buf = opts.buf,
 		win = opts.win,
-		sidebar_buf = opts.sidebar_buf,
+		navigation_buf = opts.navigation_buf,
 		provider = provider,
 		view = provider and target and provider.view_for_target(target),
 		statusline = opts.statusline,
@@ -278,7 +278,7 @@ function M.open(opts)
 			end,
 		}
 	end
-	register(state, state.sidebar_buf, actions)
+	register(state, state.navigation_buf, actions)
 	local panel_keys = resolver.resolve("ui.select") or {}
 	if not vim.tbl_contains(panel_keys, "p") then
 		panel_keys[#panel_keys + 1] = "p"

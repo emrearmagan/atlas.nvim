@@ -9,7 +9,7 @@ local tags = require("atlas.ui.repository.pages.tags")
 ---@field key string
 ---@field label string
 ---@field icon string
----@field open fun(opts: { buf: integer, win: integer, sidebar_buf: integer, repo: AtlasRepositoryDetails, provider: PullsProvider|IssuesProvider, statusline: AtlasStatusline })
+---@field open fun(opts: { buf: integer, win: integer, navigation_buf: integer, repo: AtlasRepositoryDetails, provider: PullsProvider|IssuesProvider, statusline: AtlasStatusline })
 ---@field close fun(buf: integer)
 
 local M = {}
