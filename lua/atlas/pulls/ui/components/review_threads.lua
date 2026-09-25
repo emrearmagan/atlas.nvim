@@ -117,7 +117,7 @@ end
 local function author_hl(name)
 	local normalized = name and vim.trim(name):lower() or ""
 	if normalized == "" or normalized == "unknown" or normalized == "none" then
-		return "AtlasTextMutedItalic"
+		return "AtlasTextMuted"
 	end
 	return highlights.dynamic_for(normalized) or "AtlasTextMuted"
 end
@@ -385,7 +385,7 @@ local function threads_opts(padding_x, opts)
 					})
 				end
 			elseif meta.is_deleted then
-				table.insert(segments, { start_col = 0, end_col = #row, hl_group = "AtlasTextMutedItalic" })
+				table.insert(segments, { start_col = 0, end_col = #row, hl_group = "AtlasTextMuted" })
 			end
 			return #segments > 0 and segments or nil
 		end,

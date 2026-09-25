@@ -6,11 +6,11 @@ local highlights = require("atlas.ui.shared.highlights")
 ---@return string
 function M.author_hl(name)
 	if name == nil then
-		return "AtlasTextMutedItalic"
+		return "AtlasTextMuted"
 	end
 	local lower = vim.trim(name):lower()
 	if lower == "" or lower == "unknown" or lower == "none" then
-		return "AtlasTextMutedItalic"
+		return "AtlasTextMuted"
 	end
 	return highlights.dynamic_for(lower) or "AtlasTextMuted"
 end
@@ -34,11 +34,11 @@ end
 ---@return string
 function M.repo_hl(repo)
 	if repo == nil then
-		return "AtlasTextMutedItalic"
+		return "AtlasTextMuted"
 	end
 	local lower = vim.trim(repo):lower()
 	if lower == "" or lower == "none" then
-		return "AtlasTextMutedItalic"
+		return "AtlasTextMuted"
 	end
 	return highlights.dynamic_for(lower) or "AtlasTextMuted"
 end

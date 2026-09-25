@@ -80,7 +80,7 @@ end
 ---@return string
 local function repo_hl(repo)
 	if repo == "" then
-		return "AtlasTextMutedItalic"
+		return "AtlasTextMuted"
 	end
 	return highlights.dynamic_for(repo:lower()) or "AtlasTextMuted"
 end

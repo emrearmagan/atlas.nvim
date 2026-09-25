@@ -82,7 +82,7 @@ local function render_options(padding_x, opts)
 		end,
 		content_hl = function(item, row)
 			if item.meta.deleted then
-				return { { start_col = 0, end_col = #row, hl_group = "AtlasTextMutedItalic" } }
+				return { { start_col = 0, end_col = #row, hl_group = "AtlasTextMuted" } }
 			end
 		end,
 	}
