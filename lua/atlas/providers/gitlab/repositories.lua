@@ -313,7 +313,7 @@ end
 
 ---@param repo AtlasRepository
 ---@param opts { id?: string }
----@param on_done fun(release: AtlasRepositoryReleaseDetails|nil, err: string|nil)
+---@param on_done fun(release: AtlasRepositoryReleaseDetails|nil, err: string|nil, status?: integer)
 ---@return { cancel: fun() }|nil
 function M.fetch_release(repo, opts, on_done)
 	opts = opts or {}
@@ -327,13 +327,13 @@ function M.fetch_release(repo, opts, on_done)
 
 	local release_path = opts.id and service.url_encode(opts.id) or "permalink/latest"
 	local endpoint = string.format("/projects/%s/releases/%s", service.url_encode(path), release_path)
-	return service.request("GET", endpoint, nil, function(result, err)
+	return service.request("GET", endpoint, nil, function(result, err, status)
 		if err then
-			on_done(nil, err)
+			on_done(nil, err, status)
 			return
 		end
 		if json.nilify(result) == nil then
-			on_done(nil, nil)
+			on_done(nil, nil, status)
 			return
 		end
 		local release = json.safe_table(result)
@@ -370,7 +370,7 @@ function M.fetch_release(repo, opts, on_done)
 			published_at = json.safe_str(release.released_at),
 			assets = assets,
 		}
-		on_done(details, nil)
+		on_done(details, nil, status)
 	end, {
 		action = "Fetch repository release",
 		repo = path,

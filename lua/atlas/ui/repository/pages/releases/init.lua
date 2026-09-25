@@ -84,10 +84,14 @@ local function load(state, id)
 	render(state)
 	state.requests.run(function(done)
 		return fetch_release(state.repo, { id = id }, done)
-	end, function(release, err)
+	end, function(release, err, status)
 		state.spinner:stop()
 		state.statusline:clear_notice()
-		state.release = release or err or "No releases found"
+		if not id and status == 404 then
+			state.release = "No releases found"
+		else
+			state.release = release or err or "No releases found"
+		end
 		render(state)
 		vim.api.nvim_win_set_cursor(state.win, { 1, 0 })
 	end)
