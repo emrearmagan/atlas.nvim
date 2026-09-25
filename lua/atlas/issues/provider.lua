@@ -68,7 +68,7 @@
 
 ---@class IssuesUICapability
 ---@field detail IssuesProviderDetail|nil
----@field repository { pages: fun(): RepositoryPage[] }|nil
+---@field repository { pages: fun(pages: table<string, RepositoryPage>): RepositoryPage[] }|nil
 
 --------------------------------------------------------------------------------
 -- Detail interface

@@ -17,12 +17,18 @@ local M = {}
 ---@param provider PullsProvider|IssuesProvider
 ---@return RepositoryPage[]
 function M.get(provider)
-	local pages = { overview, issues, pulls, builds, branches, tags }
 	local ui = provider.capabilities.ui and provider.capabilities.ui.repository
 	if ui then
-		vim.list_extend(pages, ui.pages())
+		return ui.pages({
+			overview = overview,
+			issues = issues,
+			pulls = pulls,
+			builds = builds,
+			branches = branches,
+			tags = tags,
+		})
 	end
-	return pages
+	return { overview, issues, pulls, builds, branches, tags }
 end
 
 return M
