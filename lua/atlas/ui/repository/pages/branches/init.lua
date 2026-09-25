@@ -6,7 +6,7 @@ local pipelines = require("atlas.pulls.pipelines")
 local spinner = require("atlas.ui.components.spinner")
 local picker = require("atlas.ui.picker")
 local info = require("atlas.ui.popups.info")
-local history = require("atlas.ui.repository.pages.branches.git")
+local git = require("atlas.ui.repository.pages.branches.git")
 local keymaps = require("atlas.ui.repository.pages.branches.keymaps")
 local renderer = require("atlas.ui.repository.pages.branches.renderer")
 local icons = require("atlas.ui.shared.icons")
@@ -27,7 +27,7 @@ local utils = require("atlas.ui.shared.utils")
 ---@field commits RepositoryBranchCommit[]|"loading"|string|nil
 ---@field commit_request AtlasRequestScope|nil
 ---@field line_map table<integer, RepositoryBranchSelection>
----@field deleting string|nil
+---@field busy boolean
 ---@field requests AtlasRequestScope
 ---@field spinner SpinnerInstance
 ---@field statusline AtlasStatusline
@@ -113,7 +113,7 @@ local function clear_commits(state)
 	end
 	state.expanded = nil
 	state.commits = nil
-	if not state.deleting then
+	if not state.busy then
 		state.statusline:clear_notice()
 	end
 end
@@ -130,8 +130,8 @@ local function load_history(state, branch)
 	state.commits = "loading"
 	state.statusline:notify("loading", "Loading commits...")
 	render(state)
-	state.commit_request = history.load(state.root, branch, { repo_url = state.repo.html_url }, function(result, err)
-		if not state.deleting then
+	state.commit_request = git.load(state.root, branch, { repo_url = state.repo.html_url }, function(result, err)
+		if not state.busy then
 			state.statusline:clear_notice()
 		end
 		state.commits = result or err or "Failed to load commits"
@@ -142,7 +142,7 @@ end
 ---@param state RepositoryBranches
 ---@param page integer|nil
 local function load(state, page)
-	if state.deleting then
+	if state.busy then
 		return
 	end
 	local repository = state.provider.capabilities.repository
@@ -195,7 +195,7 @@ end
 ---@param state RepositoryBranches
 local function search(state)
 	local repository = state.provider.capabilities.repository
-	if not repository or state.deleting then
+	if not repository or state.busy then
 		return
 	end
 	local branches = state.branches
@@ -324,7 +324,7 @@ local function open_diff(state)
 			end
 			state.statusline:notify("loading", "Preparing branch diff...")
 			state.requests.run(function(done)
-				return history.fetch(root, { base, branch }, { repo_url = state.repo.html_url }, done)
+				return git.fetch(root, { base, branch }, { repo_url = state.repo.html_url }, done)
 			end, function(ok, err)
 				state.statusline:clear_notice()
 				if not ok then
@@ -344,7 +344,7 @@ end
 ---@param state RepositoryBranches
 local function select_current(state)
 	local selection = selection_at_cursor(state)
-	if not selection or selection.commit then
+	if not selection or selection.commit or state.busy then
 		return
 	end
 	if state.expanded == selection.branch.name then
@@ -356,9 +356,35 @@ local function select_current(state)
 end
 
 ---@param state RepositoryBranches
+---@param branch AtlasRepositoryBranch
+local function checkout_branch(state, branch)
+	if state.busy then
+		return
+	end
+	local root = state.root
+	if not root then
+		notify.warn("Configure this repository under pulls.repo_config.paths to check out branches")
+		return
+	end
+	state.busy = true
+	state.statusline:notify("loading", "Checking out " .. branch.name .. "...")
+	state.requests.run(function(done)
+		return git.checkout(root, branch, { repo_url = state.repo.html_url }, done)
+	end, function(ok, err)
+		state.busy = false
+		state.statusline:clear_notice()
+		if not ok then
+			notify.error(err or "Failed to check out branch")
+			return
+		end
+		notify.success("Checked out " .. branch.name)
+	end)
+end
+
+---@param state RepositoryBranches
 local function delete_branch(state)
 	local selection = selection_at_cursor(state)
-	if not selection or selection.commit or state.deleting then
+	if not selection or selection.commit or state.busy then
 		return
 	end
 	local branch = selection.branch
@@ -378,15 +404,15 @@ local function delete_branch(state)
 		),
 	}, function(answer)
 		local confirmed = answer and vim.trim(answer):lower()
-		if (confirmed ~= "y" and confirmed ~= "yes") or states[state.buf] ~= state or state.deleting then
+		if (confirmed ~= "y" and confirmed ~= "yes") or states[state.buf] ~= state or state.busy then
 			return
 		end
-		state.deleting = branch.name
+		state.busy = true
 		state.statusline:notify("loading", "Deleting branch...")
 		state.requests.run(function(done)
 			return repository.delete_branch(state.repo, branch, done)
 		end, function(ok, err)
-			state.deleting = nil
+			state.busy = false
 			state.statusline:clear_notice()
 			if not ok then
 				notify.error(err or "Failed to delete branch")
@@ -411,7 +437,8 @@ function M.open(opts)
 		branches = "loading",
 		page = 1,
 		cursors = {},
-		root = history.resolve(opts.repo),
+		root = git.resolve(opts.repo),
+		busy = false,
 		line_map = {},
 		requests = requests.new(),
 		spinner = spinner.create(),
@@ -459,17 +486,31 @@ function M.open(opts)
 		diff = function()
 			open_diff(state)
 		end,
+		checkout = function()
+			local selection = selection_at_cursor(state)
+			if selection and not selection.commit then
+				checkout_branch(state, selection.branch)
+			end
+		end,
 		actions = function()
 			local selection = selection_at_cursor(state)
-			if not selection then
+			if not selection or state.busy then
 				return
+			end
+			local actions = { "Open builds" }
+			if state.root and not selection.commit then
+				actions[#actions + 1] = "Checkout branch"
 			end
 			picker.select({
 				title = "Branch actions",
-				items = { "Open builds" },
+				items = actions,
 				on_select = function(item)
 					if item and states[state.buf] == state then
-						open_pipeline(state.provider.id, state.repo, selection.branch)
+						if item == "Checkout branch" then
+							checkout_branch(state, selection.branch)
+						else
+							open_pipeline(state.provider.id, state.repo, selection.branch)
+						end
 					end
 				end,
 			})

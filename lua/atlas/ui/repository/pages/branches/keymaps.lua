@@ -8,7 +8,7 @@ local installed = {}
 
 ---@param buf integer
 ---@param navigation_buf integer
----@param callbacks { search: fun(), refresh: fun(), next_page: fun(), previous_page: fun(), select: fun(), diff: fun(), details: fun(), actions: fun(), delete?: fun() }
+---@param callbacks { search: fun(), refresh: fun(), next_page: fun(), previous_page: fun(), select: fun(), diff: fun(), details: fun(), actions: fun(), checkout: fun(), delete?: fun() }
 function M.setup(buf, navigation_buf, callbacks)
 	M.clear(buf)
 	M.clear(navigation_buf)
@@ -28,6 +28,7 @@ function M.setup(buf, navigation_buf, callbacks)
 			callbacks.select,
 		},
 		{ resolver.resolve("pulls.open_diff"), "Open branch or commit diff", callbacks.diff },
+		{ resolver.resolve("pulls.checkout"), "Checkout branch", callbacks.checkout },
 		{ resolver.resolve("ui.show_details"), "Show branch or commit details", callbacks.details },
 		{ resolver.resolve("ui.open_actions"), "Open branch actions", callbacks.actions },
 		{ resolver.resolve("ui.delete"), "Delete branch", callbacks.delete },
