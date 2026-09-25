@@ -55,7 +55,7 @@ local function render(state, selected_id)
 		utils.buffer.center_message(state.buf, state.win, message)
 		return
 	end
-	if #state.runs ~= 0 then
+	if #state.runs == 0 then
 		utils.buffer.center_message(
 			state.buf,
 			state.win,
