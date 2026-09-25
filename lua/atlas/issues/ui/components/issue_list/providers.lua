@@ -11,12 +11,14 @@ local function columns()
 		{
 			key = "assignee",
 			name = string.format("%s Assignee", icons.general("user")),
+			min_width = 10,
 			max_width = 22,
 			can_grow = false,
 		},
 		{
 			key = "reporter",
 			name = string.format("%s Reporter", icons.general("user")),
+			min_width = 10,
 			max_width = 22,
 			can_grow = false,
 		},
@@ -89,6 +91,7 @@ local function github(opts)
 			{
 				key = "assignee",
 				name = string.format("%s Assignee", icons.general("user")),
+				min_width = 10,
 				max_width = 22,
 				can_grow = false,
 				header_hl = "AtlasColumnHeader",
@@ -96,6 +99,7 @@ local function github(opts)
 			{
 				key = "reporter",
 				name = string.format("%s Reporter", icons.general("user")),
+				min_width = 10,
 				max_width = 22,
 				can_grow = false,
 				header_hl = "AtlasColumnHeader",

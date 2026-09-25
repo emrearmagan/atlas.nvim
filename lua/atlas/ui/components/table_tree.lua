@@ -204,12 +204,12 @@ end
 ---@param gap_after fun(index:number):number
 ---@param tree TableTreeTreeOpts|nil
 ---@param fill boolean|nil
-local function compute_widths(columns, rows, available_width, gap_after, tree, fill)
+---@param hide_columns string[]|nil
+local function compute_widths(columns, rows, available_width, gap_after, tree, fill, hide_columns)
 	local widths = {}
 	for i, c in ipairs(columns) do
 		widths[i] = natural_width(c, rows, tree)
 	end
-	local desired = vim.deepcopy(widths)
 
 	local function total_used()
 		local sum = 0
@@ -221,6 +221,35 @@ local function compute_widths(columns, rows, available_width, gap_after, tree, f
 		end
 		return sum
 	end
+
+	for _, key in ipairs(hide_columns or {}) do
+		local overflow = total_used() - available_width
+		if overflow <= 0 then
+			break
+		end
+		for i, column in ipairs(columns) do
+			if column.key == key then
+				if not column.width and column.min_width then
+					widths[i] = math.max(column.min_width, widths[i] - overflow)
+				end
+				break
+			end
+		end
+	end
+
+	for _, key in ipairs(hide_columns or {}) do
+		if total_used() <= available_width then
+			break
+		end
+		for i, column in ipairs(columns) do
+			if column.key == key then
+				table.remove(columns, i)
+				table.remove(widths, i)
+				break
+			end
+		end
+	end
+	local desired = vim.deepcopy(widths)
 
 	while total_used() > available_width do
 		local widest_idx = nil
@@ -282,6 +311,7 @@ end
 ---@field show_header? boolean
 ---@field column_gap? integer
 ---@field fill? boolean
+---@field hide_columns? string[] Columns to shrink to min_width, then hide, in order.
 ---@field tree? TableTreeTreeOpts
 ---@field cell_hl? fun(row:table, col:table, ctx:{text:string, padded:string, width:integer}):string|table[]|nil
 ---@field align_title? boolean If true and header_align is nil, header uses column align.
@@ -324,7 +354,7 @@ function M.render(opts)
 		return out
 	end
 
-	compute_widths(columns, rows, math.max(width - (margin * 2), 1), gap_after, tree, fill)
+	compute_widths(columns, rows, math.max(width - (margin * 2), 1), gap_after, tree, fill, opts.hide_columns)
 
 	local lines = {}
 	local line_map = {}

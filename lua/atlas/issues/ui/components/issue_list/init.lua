@@ -96,6 +96,7 @@ function M.render_plain(opts, issue_groups)
 		margin = 1,
 		columns = columns,
 		rows = rows,
+		hide_columns = { "reporter", "assignee" },
 		tree = {
 			column_key = "icon",
 			children_key = "children",
@@ -199,6 +200,7 @@ function M.render_compact(opts, issues)
 		margin = 1,
 		columns = columns,
 		rows = rows,
+		hide_columns = { "reporter", "assignee" },
 		cell_hl = function(row, col, ctx)
 			return cell_hl(display, row, col, ctx)
 		end,
