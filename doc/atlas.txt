@@ -237,6 +237,10 @@ Use `ctx.output(title)` to show output from a custom action:
         repository. Use `.` to open the current repository.
         Without a target, Atlas prompts for one.
 
+:Atlas browse [repository URL|.] [page]
+        Open the repository browser. Use `.` for the current repository.
+        Example: `:Atlas browse . branches`
+
 :Atlas clear [cache|notes|stars]
         Clear all Atlas data, or only cached data and cloned repositories,
         local review notes, or locally starred items.
