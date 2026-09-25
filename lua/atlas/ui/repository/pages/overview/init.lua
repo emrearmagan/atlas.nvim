@@ -9,7 +9,7 @@ local utils = require("atlas.ui.shared.utils")
 ---@class RepositoryOverview
 ---@field buf integer
 ---@field win integer
----@field navigation_buf integer
+---@field sidebar_buf integer
 ---@field repo AtlasRepositoryDetails
 ---@field provider PullsProvider|IssuesProvider
 ---@field details AtlasRepositoryDetails|"loading"|string|nil
@@ -95,13 +95,13 @@ local function load(state)
 	end)
 end
 
----@param opts { buf: integer, win: integer, navigation_buf: integer, repo: AtlasRepositoryDetails, provider: PullsProvider|IssuesProvider, statusline: AtlasStatusline }
+---@param opts { buf: integer, win: integer, sidebar_buf: integer, repo: AtlasRepositoryDetails, provider: PullsProvider|IssuesProvider, statusline: AtlasStatusline }
 function M.open(opts)
 	---@type RepositoryOverview
 	local state = {
 		buf = opts.buf,
 		win = opts.win,
-		navigation_buf = opts.navigation_buf,
+		sidebar_buf = opts.sidebar_buf,
 		repo = opts.repo,
 		details = opts.repo,
 		provider = opts.provider,
@@ -125,7 +125,7 @@ function M.open(opts)
 			render(state)
 		end,
 	})
-	for _, buf in ipairs({ state.buf, state.navigation_buf }) do
+	for _, buf in ipairs({ state.buf, state.sidebar_buf }) do
 		help.register("Overview", {
 			{
 				key = state.refresh_keys,
@@ -148,7 +148,7 @@ function M.close(buf)
 	state.spinner:stop()
 	state.statusline:clear_notice()
 	vim.api.nvim_del_augroup_by_id(state.group)
-	for _, buffer in ipairs({ state.buf, state.navigation_buf }) do
+	for _, buffer in ipairs({ state.buf, state.sidebar_buf }) do
 		help.remove("Overview", { { key = state.refresh_keys } }, { buffer = buffer })
 	end
 	if utils.window.valid(state.win) then

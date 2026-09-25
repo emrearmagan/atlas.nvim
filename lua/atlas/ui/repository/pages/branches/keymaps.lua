@@ -7,11 +7,11 @@ local M = {}
 local installed = {}
 
 ---@param buf integer
----@param navigation_buf integer
+---@param sidebar_buf integer
 ---@param callbacks { search: fun(), refresh: fun(), next_page: fun(), previous_page: fun(), select: fun(), diff: fun(), details: fun(), actions: fun(), checkout: fun(), delete?: fun() }
-function M.setup(buf, navigation_buf, callbacks)
+function M.setup(buf, sidebar_buf, callbacks)
 	M.clear(buf)
-	M.clear(navigation_buf)
+	M.clear(sidebar_buf)
 	local refresh = {
 		key = resolver.resolve("ui.refresh") or {},
 		desc = "Refresh branches",
@@ -47,8 +47,8 @@ function M.setup(buf, navigation_buf, callbacks)
 	end
 	installed[buf] = items
 	help.register("Branches", items, { buffer = buf })
-	installed[navigation_buf] = { refresh }
-	help.register("Branches", installed[navigation_buf], { buffer = navigation_buf })
+	installed[sidebar_buf] = { refresh }
+	help.register("Branches", installed[sidebar_buf], { buffer = sidebar_buf })
 end
 
 ---@param buf integer

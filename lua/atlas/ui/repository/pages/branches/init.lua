@@ -15,7 +15,7 @@ local utils = require("atlas.ui.shared.utils")
 ---@class RepositoryBranches
 ---@field buf integer
 ---@field win integer
----@field navigation_buf integer
+---@field sidebar_buf integer
 ---@field repo AtlasRepositoryDetails
 ---@field provider PullsProvider|IssuesProvider
 ---@field branches AtlasRepositoryBranches|"loading"|string
@@ -424,14 +424,14 @@ local function delete_branch(state)
 	end)
 end
 
----@param opts { buf: integer, win: integer, navigation_buf: integer, repo: AtlasRepositoryDetails, provider: PullsProvider|IssuesProvider, statusline: AtlasStatusline }
+---@param opts { buf: integer, win: integer, sidebar_buf: integer, repo: AtlasRepositoryDetails, provider: PullsProvider|IssuesProvider, statusline: AtlasStatusline }
 function M.open(opts)
 	local repository = opts.provider.capabilities.repository
 	---@type RepositoryBranches
 	local state = {
 		buf = opts.buf,
 		win = opts.win,
-		navigation_buf = opts.navigation_buf,
+		sidebar_buf = opts.sidebar_buf,
 		repo = opts.repo,
 		provider = opts.provider,
 		branches = "loading",
@@ -452,7 +452,7 @@ function M.open(opts)
 		end
 	end
 	vim.wo[state.win].cursorline = true
-	keymaps.setup(state.buf, state.navigation_buf, {
+	keymaps.setup(state.buf, state.sidebar_buf, {
 		search = function()
 			search(state)
 		end,
@@ -541,7 +541,7 @@ function M.close(buf)
 	state.statusline:clear_notice()
 	vim.api.nvim_del_augroup_by_id(state.group)
 	keymaps.clear(state.buf)
-	keymaps.clear(state.navigation_buf)
+	keymaps.clear(state.sidebar_buf)
 	if utils.window.valid(state.win) then
 		vim.wo[state.win].cursorline = false
 	end

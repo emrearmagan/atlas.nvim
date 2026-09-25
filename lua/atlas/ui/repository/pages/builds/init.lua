@@ -13,7 +13,7 @@ local utils = require("atlas.ui.shared.utils")
 ---@class RepositoryBuilds
 ---@field buf integer
 ---@field win integer
----@field navigation_buf integer
+---@field sidebar_buf integer
 ---@field repo AtlasRepositoryDetails
 ---@field provider PullsProvider|nil
 ---@field backend PullsPipelineBackend|nil
@@ -189,7 +189,7 @@ local function register(state, buf, actions)
 	help.register("Builds", items, { buffer = buf })
 end
 
----@param opts { buf: integer, win: integer, navigation_buf: integer, repo: AtlasRepositoryDetails, provider: PullsProvider|IssuesProvider, statusline: AtlasStatusline }
+---@param opts { buf: integer, win: integer, sidebar_buf: integer, repo: AtlasRepositoryDetails, provider: PullsProvider|IssuesProvider, statusline: AtlasStatusline }
 function M.open(opts)
 	local provider = providers.load(opts.provider.id, "pulls")
 	---@cast provider PullsProvider|nil
@@ -197,7 +197,7 @@ function M.open(opts)
 	local state = {
 		buf = opts.buf,
 		win = opts.win,
-		navigation_buf = opts.navigation_buf,
+		sidebar_buf = opts.sidebar_buf,
 		repo = opts.repo,
 		provider = provider,
 		backend = provider and pipelines.get(provider),
@@ -233,7 +233,7 @@ function M.open(opts)
 			end,
 		},
 	}
-	register(state, state.navigation_buf, actions)
+	register(state, state.sidebar_buf, actions)
 	vim.list_extend(actions, {
 		{
 			resolver.resolve("ui.select"),
