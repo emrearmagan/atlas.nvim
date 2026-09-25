@@ -199,12 +199,13 @@ function M.open(repo_full_name, provider, opts)
 	requests.run(function(done)
 		return repository.fetch_details(repo, done)
 	end, function(details, err)
-		view:finish()
 		if not details then
+			view:finish()
 			notify.error(err or "Failed to load repository")
 			return
 		end
 		show(details, provider, opts and opts.page)
+		view:finish()
 	end)
 end
 
