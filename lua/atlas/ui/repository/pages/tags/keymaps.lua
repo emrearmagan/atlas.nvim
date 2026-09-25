@@ -8,7 +8,7 @@ local installed = {}
 
 ---@param buf integer
 ---@param sidebar_buf integer
----@param callbacks { search: fun(), refresh: fun(), select: fun(), diff: fun(), details: fun(), browser: fun(), copy: fun(), copy_url: fun() }
+---@param callbacks { search: fun(), refresh: fun(), next_page: fun(), previous_page: fun(), select: fun(), diff: fun(), details: fun(), browser: fun(), copy: fun(), copy_url: fun() }
 function M.setup(buf, sidebar_buf, callbacks)
 	M.clear(buf)
 	M.clear(sidebar_buf)
@@ -19,6 +19,8 @@ function M.setup(buf, sidebar_buf, callbacks)
 		opts = { nowait = true, silent = true },
 	}
 	local actions = {
+		{ resolver.resolve("ui.next_page"), "Next page", callbacks.next_page },
+		{ resolver.resolve("ui.previous_page"), "Previous page", callbacks.previous_page },
 		{ resolver.resolve("ui.search"), "Search tags", callbacks.search },
 		{
 			vim.list_extend(resolver.resolve("ui.select") or {}, resolver.resolve("ui.toggle_fold") or {}),

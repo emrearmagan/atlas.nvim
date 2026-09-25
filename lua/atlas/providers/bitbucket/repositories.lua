@@ -338,8 +338,8 @@ function M.fetch_branches(repo, opts, on_done)
 end
 
 ---@param repo AtlasRepository
----@param opts PullsFetchOpts
----@param on_done fun(tags: AtlasRepositoryTag[]|nil, err: string|nil)
+---@param opts { cursor?: string, search?: string }
+---@param on_done fun(tags: AtlasRepositoryTag[]|nil, err: string|nil, next_cursor: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_tags(repo, opts, on_done)
 	---@cast repo BitbucketRepository
@@ -349,26 +349,23 @@ function M.fetch_tags(repo, opts, on_done)
 
 	local sep = tags_url:find("?") and "&" or "?"
 	local url = string.format("%s%spagelen=100", tags_url, sep)
-	local key = "bitbucket:repo:tags:" .. url
-	if opts.force_refresh ~= true then
-		local cached, ok = service.get_cache(key)
-		if ok then
-			on_done(cached, nil)
-			return nil
-		end
+	if opts.search and opts.search ~= "" then
+		url = url .. "&q=" .. url_encode("name~" .. vim.json.encode(opts.search))
+	end
+	local cursor = opts.cursor
+	if cursor and cursor ~= "" then
+		url = cursor
 	end
 
-	return service.fetch_all_values(url, function(result, err)
-		if err ~= nil then
-			on_done(nil, err)
+	return service.request("GET", url, nil, nil, function(result, err)
+		if err ~= nil or type(result) ~= "table" then
+			on_done(nil, err or "Invalid paginated response")
 			return
 		end
 
-		local values = (as_table(result) or {}).values or {}
-
 		---@type AtlasRepositoryTag[]
 		local entries = {}
-		for _, item in ipairs(values) do
+		for _, item in ipairs(result.values or {}) do
 			local tag = as_table(item) or {}
 			local target = as_table(tag.target) or {}
 			local author = as_table(target.author) or {}
@@ -397,8 +394,11 @@ function M.fetch_tags(repo, opts, on_done)
 				url = json.safe_str(html_link.href),
 			})
 		end
-		service.set_cache(key, entries, service.cache_ttl())
-		on_done(entries, nil)
+		local next_cursor = json.safe_str(result.next)
+		if next_cursor == "" then
+			next_cursor = nil
+		end
+		on_done(entries, nil, next_cursor)
 	end, { action = "Fetch repository tags", repo = repo.full_name or repo.name })
 end
 

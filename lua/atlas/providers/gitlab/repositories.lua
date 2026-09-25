@@ -208,8 +208,8 @@ function M.fetch_branches(repo, opts, on_done)
 end
 
 ---@param repo AtlasRepository
----@param opts PullsFetchOpts
----@param on_done fun(tags: AtlasRepositoryTag[]|nil, err: string|nil)
+---@param opts { cursor?: string, search?: string }
+---@param on_done fun(tags: AtlasRepositoryTag[]|nil, err: string|nil, next_cursor: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_tags(repo, opts, on_done)
 	opts = opts or {}
@@ -221,25 +221,20 @@ function M.fetch_tags(repo, opts, on_done)
 		return nil
 	end
 
-	local cache_key = string.format("gitlab:tags:%s", path)
-	if not opts.force_refresh then
-		local cached, ok = service.get_memory_cache(cache_key)
-		if ok then
-			on_done(cached, nil)
-			return nil
-		end
+	local page = math.max(1, math.floor(tonumber(opts.cursor) or 1))
+	local endpoint = string.format("/projects/%s/repository/tags?per_page=100&page=%d", service.url_encode(path), page)
+	if opts.search and opts.search ~= "" then
+		endpoint = endpoint .. "&search=" .. service.url_encode(opts.search)
 	end
 
-	local endpoint = string.format("/projects/%s/repository/tags?per_page=100", service.url_encode(path))
-	return service.fetch_all_pages(endpoint, function(result, err)
-		if err then
-			on_done(nil, err)
+	return service.request("GET", endpoint, nil, function(result, err)
+		if err or type(result) ~= "table" then
+			on_done(nil, err or "Invalid paginated response")
 			return
 		end
-
 		---@type AtlasRepositoryTag[]
 		local entries = {}
-		for _, tag_value in ipairs(json.safe_table(result)) do
+		for _, tag_value in ipairs(result) do
 			local tag = json.safe_table(tag_value)
 			local commit = json.safe_table(tag.commit)
 			local name = json.safe_str(tag.name) or ""
@@ -258,9 +253,8 @@ function M.fetch_tags(repo, opts, on_done)
 				url = browser_url ~= "" and browser_url .. "/-/tags/" .. service.url_encode(name) or nil,
 			})
 		end
-
-		service.set_memory_cache(cache_key, entries)
-		on_done(entries, nil)
+		local next_cursor = #result == 100 and tostring(page + 1) or nil
+		on_done(entries, nil, next_cursor)
 	end, {
 		action = "Fetch repository tags",
 		repo = path,

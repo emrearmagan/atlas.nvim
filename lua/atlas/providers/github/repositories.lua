@@ -54,10 +54,10 @@ query($owner: String!, $repo: String!, $endCursor: String, $search: String) {
 ]]
 
 local TAGS_QUERY = [[
-query($owner: String!, $repo: String!, $endCursor: String) {
+query($owner: String!, $repo: String!, $endCursor: String, $search: String) {
   repository(owner: $owner, name: $repo) {
     url
-    refs(refPrefix: "refs/tags/", first: 100, after: $endCursor, orderBy: {field: TAG_COMMIT_DATE, direction: DESC}) {
+    refs(refPrefix: "refs/tags/", first: 100, after: $endCursor, query: $search, orderBy: {field: TAG_COMMIT_DATE, direction: DESC}) {
       nodes {
         name
         target {
@@ -263,85 +263,41 @@ function M.fetch_branches(repo, opts, on_done)
 end
 
 ---@param repo AtlasRepository
----@param opts PullsFetchOpts
----@param on_done fun(tags: AtlasRepositoryTag[]|nil, err: string|nil)
+---@param opts { cursor?: string, search?: string }
+---@param on_done fun(tags: AtlasRepositoryTag[]|nil, err: string|nil, next_cursor: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_tags(repo, opts, on_done)
-	opts = opts or {}
-	local slug = tostring(repo.full_name or "")
-	local owner, name = slug:match("^([^/]+)/([^/]+)$")
-	if not owner then
-		vim.schedule(function()
-			on_done(nil, "Missing repository info")
-		end)
-		return nil
-	end
+	local slug = repo.full_name
 
-	local cache_key = string.format("github:tags:%s", slug)
-	if not opts.force_refresh then
-		local cached, ok = cli.get_mem(cache_key)
-		if ok then
-			on_done(cached, nil)
-			return nil
-		end
-	end
-
-	return cli.gh({
-		"api",
-		"graphql",
-		"--paginate",
-		"--slurp",
-		"-f",
-		"query=" .. TAGS_QUERY,
-		"-f",
-		"owner=" .. owner,
-		"-f",
-		"repo=" .. name,
-	}, function(result, err)
-		if err or type(result) ~= "table" then
-			on_done(nil, err or "Failed to fetch tags")
+	return fetch_refs(slug, TAGS_QUERY, opts, function(repository, err, next_cursor)
+		if not repository then
+			on_done(nil, err, nil)
 			return
 		end
-
 		---@type AtlasRepositoryTag[]
-		local entries = {}
-		for _, page in ipairs(result) do
-			local data = json.safe_table(page.data)
-			local repository = json.nilify(data.repository)
-			if not repository then
-				on_done(nil, "Repository not found")
-				return
+		local tags = {}
+		for _, tag in ipairs(repository.refs.nodes) do
+			local target = json.safe_table(tag.target)
+			local commit = json.safe_table(json.nilify(target.target) or target)
+			local tagger = json.safe_table(target.tagger)
+			local author = json.safe_table(commit.author)
+			local tag_name = json.safe_str(tag.name) or ""
+			local annotation = json.safe_str(target.annotation)
+			if annotation == "" then
+				annotation = nil
 			end
-
-			local refs = json.safe_table(repository.refs)
-			for _, tag in ipairs(json.safe_table(refs.nodes)) do
-				local target = json.safe_table(tag.target)
-				local commit = json.safe_table(json.nilify(target.target) or target)
-				local tagger = json.safe_table(target.tagger)
-				local author = json.safe_table(commit.author)
-				local tag_name = json.safe_str(tag.name) or ""
-				local annotation = json.safe_str(target.annotation)
-				if annotation == "" then
-					annotation = nil
-				end
-				table.insert(entries, {
-					name = tag_name,
-					hash = json.safe_str(commit.oid) or "",
-					tag_date = json.safe_str(tagger.date),
-					description = annotation,
-					message = annotation or json.safe_str(commit.message),
-					author = json.safe_str(tagger.name) or json.safe_str(author.name),
-					url = repository.url .. "/releases/tag/" .. utils.url_encode(tag_name),
-				})
-			end
+			table.insert(tags, {
+				name = tag_name,
+				hash = json.safe_str(commit.oid) or "",
+				tag_date = json.safe_str(tagger.date),
+				description = annotation,
+				message = annotation or json.safe_str(commit.message),
+				author = json.safe_str(tagger.name) or json.safe_str(author.name),
+				url = repository.url .. "/releases/tag/" .. utils.url_encode(tag_name),
+			})
 		end
-
-		cli.set_mem(cache_key, entries)
-		on_done(entries, nil)
-	end, {
-		action = "Fetch repository tags",
-		repo = slug,
-	})
+		on_done(tags, nil, next_cursor)
+	end)
 end
 
 ---@param repo AtlasRepository

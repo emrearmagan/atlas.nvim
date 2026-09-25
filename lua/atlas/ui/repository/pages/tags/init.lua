@@ -18,6 +18,9 @@ local utils = require("atlas.ui.shared.utils")
 ---@field repo AtlasRepositoryDetails
 ---@field provider PullsProvider|IssuesProvider
 ---@field tags AtlasRepositoryTag[]|"loading"|string
+---@field page integer
+---@field cursors table<integer, string>
+---@field next_cursor string|nil
 ---@field root string|nil
 ---@field expanded string|nil
 ---@field line_map table<integer, RepositoryTagSelection>
@@ -105,8 +108,8 @@ local function render(state)
 end
 
 ---@param state RepositoryTags
----@param force_refresh boolean|nil
-local function load(state, force_refresh)
+---@param page integer|nil
+local function load(state, page)
 	local repository = state.provider.capabilities.repository
 	if not repository then
 		state.tags = "Tags are not available for this provider"
@@ -115,16 +118,25 @@ local function load(state, force_refresh)
 	end
 	state.requests.cancel()
 	state.requests = requests.new()
+	state.page = page or 1
+	if state.page == 1 then
+		state.cursors = {}
+	end
+	state.next_cursor = nil
 	state.tags = "loading"
 	state.spinner:start()
 	render(state)
 	state.statusline:notify("loading", "Loading tags...")
 	state.requests.run(function(done)
-		return repository.fetch_tags(state.repo, { force_refresh = force_refresh }, done)
-	end, function(tags, err)
+		return repository.fetch_tags(state.repo, {
+			cursor = state.cursors[state.page],
+		}, done)
+	end, function(tags, err, next_cursor)
 		state.spinner:stop()
 		state.statusline:clear_notice()
 		state.tags = tags or err or "Failed to load tags"
+		state.next_cursor = next_cursor
+		state.cursors[state.page + 1] = next_cursor
 		render(state)
 		if utils.window.valid(state.win) and state.line_map[1] then
 			vim.api.nvim_win_set_cursor(state.win, { 1, 0 })
@@ -134,13 +146,14 @@ end
 
 ---@param state RepositoryTags
 local function search(state)
-	local tags = state.tags
-	if type(tags) == "string" or #tags == 0 then
+	local repository = state.provider.capabilities.repository
+	if not repository then
 		return
 	end
-	picker.select_with_preview({
+	local tags = state.tags
+	picker.search({
 		title = "Tags",
-		items = tags,
+		initial_items = type(tags) == "table" and tags or {},
 		key = function(tag)
 			return tag.name
 		end,
@@ -150,10 +163,17 @@ local function search(state)
 		preview_item = function(tag, done)
 			done(renderer.preview(tag))
 		end,
+		fetch = function(query, done)
+			return state.requests.run(function(finish)
+				return repository.fetch_tags(state.repo, { search = query }, finish)
+			end, done)
+		end,
 		on_select = function(tag)
 			if not tag or states[state.buf] ~= state or not utils.window.valid(state.win) then
 				return
 			end
+			state.requests.cancel()
+			state.requests = requests.new()
 			for row, entry in pairs(state.line_map) do
 				if entry.tag.name == tag.name and not entry.detail then
 					vim.api.nvim_set_current_win(state.win)
@@ -161,6 +181,16 @@ local function search(state)
 					return
 				end
 			end
+			state.page = 1
+			state.cursors = {}
+			state.next_cursor = nil
+			state.expanded = nil
+			state.tags = { tag }
+			state.spinner:stop()
+			state.statusline:clear_notice()
+			render(state)
+			vim.api.nvim_set_current_win(state.win)
+			vim.api.nvim_win_set_cursor(state.win, { 1, 0 })
 		end,
 	})
 end
@@ -206,6 +236,8 @@ function M.open(opts)
 		repo = opts.repo,
 		provider = opts.provider,
 		tags = "loading",
+		page = 1,
+		cursors = {},
 		root = history.resolve(opts.repo),
 		line_map = {},
 		requests = requests.new(),
@@ -225,7 +257,17 @@ function M.open(opts)
 			search(state)
 		end,
 		refresh = function()
-			load(state, true)
+			load(state)
+		end,
+		next_page = function()
+			if state.tags ~= "loading" and state.next_cursor then
+				load(state, state.page + 1)
+			end
+		end,
+		previous_page = function()
+			if state.tags ~= "loading" and state.page > 1 then
+				load(state, state.page - 1)
+			end
 		end,
 		select = function()
 			local tag = tag_at_cursor(state)
