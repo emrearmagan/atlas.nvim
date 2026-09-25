@@ -26,7 +26,7 @@ local function pr_icon(pr, opts)
 	if opts.reloading and opts.reloading[key] then
 		return opts.spinner or "⠋", "AtlasTextMuted"
 	end
-	local style = PR_STATE_ICON[tostring(pr.state or ""):lower()] or PR_STATE_ICON.open
+	local style = PR_STATE_ICON[pr.state]
 	return style[1], style[2]
 end
 
@@ -133,10 +133,10 @@ local function compact_rows(pulls, display, opts)
 			_pr_icon_hl = icon_hl,
 			repo_pr = (pr.is_starred and STAR_ICON .. " " or "")
 				.. display.reference
-				.. tostring(pr.id or "")
+				.. tostring(pr.id)
 				.. " "
-				.. tostring(pr.title or ""),
-			conversation = tostring(pr.comments_count or 0),
+				.. pr.title,
+			conversation = tostring(pr.comments_count),
 			author = string.format("%s %s", icons.general("user"), utils.shorten_name(author, 20)),
 			author_hl = author,
 			created = utils.relative_time(pr.created_on),
@@ -163,9 +163,8 @@ end
 ---@return table[]
 local function list_rows(pulls, layout, display, opts)
 	local grouped = layout == "grouped"
-	local groups = group_by_repo(pulls)
+	local groups = grouped and group_by_repo(pulls) or {}
 	if not grouped then
-		groups = {}
 		for _, pr in ipairs(pulls) do
 			table.insert(groups, { repo = pr.repo, pulls = { pr } })
 		end
@@ -196,9 +195,9 @@ local function list_rows(pulls, layout, display, opts)
 				_pr_icon_str = icon,
 				_pr_icon_hl = icon_hl,
 				name = icon .. " " .. (pr.is_starred and STAR_ICON .. " " or "") .. display.reference .. tostring(
-					pr.id or ""
-				) .. " " .. tostring(pr.title or ""),
-				conversation = tostring(pr.comments_count or 0),
+					pr.id
+				) .. " " .. pr.title,
+				conversation = tostring(pr.comments_count),
 				author = string.format("%s %s", icons.general("user"), utils.shorten_name(author, 20)),
 				author_hl = author,
 				created = utils.relative_time(pr.created_on),

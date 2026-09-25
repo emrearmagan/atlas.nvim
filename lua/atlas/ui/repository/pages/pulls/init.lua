@@ -47,7 +47,6 @@ local function render(state)
 	if not utils.buffer.valid(state.buf) or not utils.window.valid(state.win) then
 		return
 	end
-	local selected = current(state)
 	local cursor = vim.api.nvim_win_get_cursor(state.win)
 	state.line_map = {}
 	vim.api.nvim_buf_clear_namespace(state.buf, namespace, 0, -1)
@@ -100,13 +99,6 @@ local function render(state)
 	end
 	if #pulls == 0 then
 		return
-	end
-	for row = 1, #lines do
-		local pr = state.line_map[row]
-		if pr and selected and pr.id == selected.id then
-			vim.api.nvim_win_set_cursor(state.win, { row, cursor[2] })
-			return
-		end
 	end
 	vim.api.nvim_win_set_cursor(state.win, { math.min(cursor[1], #lines), cursor[2] })
 end
@@ -169,8 +161,16 @@ local function search(state)
 			return string.format("%s  %s  %s", pr.id, pr.title:gsub("%c", " "), pr.author.name)
 		end,
 		on_select = function(pr)
-			if pr and states[state.buf] == state then
-				opener.open(pr.link.html)
+			if not pr or states[state.buf] ~= state or not utils.window.valid(state.win) then
+				return
+			end
+			for row = 1, vim.api.nvim_buf_line_count(state.buf) do
+				local entry = state.line_map[row]
+				if entry and entry.id == pr.id then
+					vim.api.nvim_set_current_win(state.win)
+					vim.api.nvim_win_set_cursor(state.win, { row, 0 })
+					return
+				end
 			end
 		end,
 	})
