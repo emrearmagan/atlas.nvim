@@ -17,6 +17,18 @@ local ISSUE_TYPE_COLORS = {
 	GRAY = "6a737d",
 }
 
+local ISSUE_SUMMARY_QUERY = [[
+query($owner: String!, $repo: String!) {
+  repository(owner: $owner, name: $repo) {
+    open: issues(states: OPEN) { totalCount }
+    closed: issues(states: CLOSED) { totalCount }
+    unassigned: issues(states: OPEN, filterBy: {assignee: null}) { totalCount }
+    labels { totalCount }
+    milestones(states: OPEN) { totalCount }
+  }
+}
+]]
+
 local ISSUES_QUERY = [[
 query($owner: String!, $repo: String!, $states: [IssueState!]!) {
   repository(owner: $owner, name: $repo) {
@@ -433,6 +445,59 @@ function M.fetch_release(repo, opts, on_done)
 		action = "Fetch repository release",
 		repo = slug,
 		id = opts.id,
+	})
+end
+
+---@param repo AtlasRepository
+---@param on_done fun(summary: AtlasRepositoryIssueSummary|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_issue_summary(repo, on_done)
+	local slug = tostring(repo.full_name or "")
+	local owner, repo_name = slug:match("^([^/]+)/([^/]+)$")
+	if owner == nil then
+		on_done(nil, "Missing repository info")
+		return nil
+	end
+
+	return cli.gh({
+		"api",
+		"graphql",
+		"-f",
+		"query=" .. vim.trim(ISSUE_SUMMARY_QUERY),
+		"-f",
+		"owner=" .. owner,
+		"-f",
+		"repo=" .. repo_name,
+	}, function(result, err)
+		if err or type(result) ~= "table" then
+			on_done(nil, err or "Failed to fetch repository issue summary")
+			return
+		end
+
+		local repository = json.safe_table(json.safe_table(result.data).repository)
+		local open_count = tonumber(json.safe_table(repository.open).totalCount)
+		local closed_count = tonumber(json.safe_table(repository.closed).totalCount)
+		if open_count == nil or closed_count == nil then
+			on_done(nil, "Invalid repository issue summary")
+			return
+		end
+
+		local items = {}
+		for _, item in ipairs({
+			{ field = "unassigned", label = "Open unassigned" },
+			{ field = "labels", label = "Labels" },
+			{ field = "milestones", label = "Open milestones" },
+		}) do
+			local count = tonumber(json.safe_table(repository[item.field]).totalCount)
+			if count ~= nil then
+				table.insert(items, { label = item.label, value = count })
+			end
+		end
+
+		on_done({ open = open_count, closed = closed_count, items = items }, nil)
+	end, {
+		action = "Fetch repository issue summary",
+		repo = slug,
 	})
 end
 

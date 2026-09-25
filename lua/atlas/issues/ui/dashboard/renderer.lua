@@ -1,16 +1,15 @@
-local M = {}
-
 local resolver = require("atlas.core.keymaps")
 local state = require("atlas.issues.state")
 local header = require("atlas.ui.components.header")
 local navbar = require("atlas.ui.components.navbar")
-local table_tree = require("atlas.ui.components.table_tree")
 local utils = require("atlas.ui.shared.utils")
 local statusline = require("atlas.ui.statusline")
 local icons = require("atlas.ui.shared.icons")
 local bookmarks = require("atlas.ui.shared.bookmarks")
-local providers = require("atlas.issues.ui.dashboard.providers")
-local STAR_ICON, STAR_ICON_HL = icons.general("star")
+local issue_list = require("atlas.issues.ui.components.issue_list")
+local notif_state = require("atlas.ui.notifications.state")
+
+local M = {}
 
 ---@param view IssuesViewConfig|nil
 ---@return string
@@ -40,226 +39,6 @@ local function append_search_text(lines, spans, text)
 	table.insert(lines, line)
 	table.insert(spans, { line = #lines - 1, start_col = 0, end_col = #line, hl_group = "AtlasTextMuted" })
 	table.insert(lines, "")
-end
-
----@param issue Issue
----@param is_child boolean|nil
----@param layout AtlasIssuesViewLayout
----@return table
-local function issue_to_row(issue, is_child, layout)
-	local display = providers.get(state.provider and state.provider.id)
-	local row_data = display.values(issue, is_child == true, layout)
-
-	if issue.is_starred then
-		row_data.name = STAR_ICON .. " " .. row_data.name
-	end
-	row_data._item = { kind = "issue", key = issue.key, _issue = issue }
-	row_data._issue = issue
-	row_data.children = row_data.children or {}
-	return row_data
-end
-
----@param columns table[]
----@return table
-local function blank_row(columns)
-	local row = {}
-	for _, column in ipairs(columns) do
-		row[column.key] = ""
-	end
-	return row
-end
-
----@param row table
----@param col table
----@param ctx { text: string, padded: string, width: integer }
----@return table[]|nil
-local function cell_hl(row, col, ctx)
-	if row.kind == "meta" then
-		return { { start_col = 0, end_col = #ctx.padded, hl_group = "AtlasTextMuted" } }
-	end
-	if col.key == "icon" and row._fold_icon_hl then
-		return { { start_col = 0, end_col = #ctx.padded, hl_group = row._fold_icon_hl } }
-	end
-	local display = providers.get(state.provider and state.provider.id)
-	local spans = display.highlights and display.highlights(row, col, ctx) or nil
-	if col.key == "name" and row._issue and row._issue.is_starred then
-		spans = spans or {}
-		table.insert(spans, 1, { start_col = 0, end_col = #STAR_ICON, hl_group = STAR_ICON_HL })
-	end
-	return spans
-end
-
----@param issue_groups IssuesGroup[]
----@param columns table[]
----@return table[]
-local function issues_to_rows(issue_groups, columns)
-	local rows = {}
-	for i, group in ipairs(issue_groups) do
-		local children = group.children
-		local root_row = issue_to_row(group.issue, false, "plain")
-
-		for _, child in ipairs(children) do
-			table.insert(root_row.children, issue_to_row(child, true, "plain"))
-		end
-		local provider_id = state.provider and state.provider.id or ""
-		if #children > 0 and provider_id ~= "jira" then
-			local issue_key = tostring(group.issue.key or "")
-			local collapsed = state.collapsed_issue_keys[issue_key] == true
-			root_row.icon, root_row._fold_icon_hl = icons.general(collapsed and "fold_closed" or "fold_open")
-		end
-
-		table.insert(rows, root_row)
-
-		if i < #issue_groups then
-			local separator = blank_row(columns)
-			separator.kind = "separator"
-			separator.children = {}
-			table.insert(rows, separator)
-		end
-	end
-	return rows
-end
-
----@param issue_groups IssuesGroup[]
----@return boolean
-local function should_show_indicator(issue_groups)
-	if not state.provider or state.provider.id ~= "jira" then
-		return false
-	end
-	for _, group in ipairs(issue_groups) do
-		if #group.children > 0 then
-			return true
-		end
-	end
-	return false
-end
-
----@param opts { width: integer }
----@param issue_groups IssuesGroup[]
----@return string[], table<integer, table>, table[]
-local function render_issue_table(opts, issue_groups)
-	local display = providers.get(state.provider and state.provider.id)
-	local columns = display.columns("plain")
-	local rows = issues_to_rows(issue_groups, columns)
-	if state.is_loading then
-		table.insert(rows, blank_row(columns))
-		local loading = blank_row(columns)
-		loading.icon = state.reload_spinner_frame
-		loading.name = "Loading..."
-		table.insert(rows, loading)
-	end
-
-	return table_tree.render({
-		width = opts.width,
-		margin = 1,
-		columns = columns,
-		rows = rows,
-		tree = {
-			column_key = "icon",
-			children_key = "children",
-			default_expanded = true,
-			indent = "",
-			show_indicator = should_show_indicator(issue_groups),
-			leaf_prefix = "",
-			is_expanded = function(row)
-				local issue = row._issue
-				local issue_key = issue and tostring(issue.key or "") or ""
-				if issue_key == "" then
-					return true
-				end
-				return state.collapsed_issue_keys[issue_key] ~= true
-			end,
-		},
-		cell_hl = cell_hl,
-	})
-end
-
----@param issue Issue
----@return string
-local function issue_meta_text(issue)
-	local parts = {}
-	local provider_id = state.provider and state.provider.id
-	local repository
-	if provider_id == "github" then
-		---@cast issue GitHubIssue
-		repository = issue.repo_full_name
-	elseif provider_id == "gitlab" then
-		---@cast issue GitLabIssue
-		repository = issue.project_path
-	end
-	if repository and repository ~= "" then
-		table.insert(parts, repository)
-	end
-	local type_name = issue.type and tostring(issue.type.name or "") or ""
-	if type_name ~= "" then
-		table.insert(parts, type_name)
-	end
-	if provider_id == "jira" then
-		---@cast issue JiraIssue
-		if issue.priority and issue.priority ~= "" then
-			table.insert(parts, issue.priority)
-		end
-	end
-	local due = utils.format_date(issue.duedate)
-	if due ~= "" then
-		table.insert(parts, string.format("%s %s", icons.general("created"), due))
-	end
-	if issue.story_points ~= nil then
-		table.insert(parts, string.format("%s pts", tostring(issue.story_points)))
-	end
-	return table.concat(parts, "  ")
-end
-
----@param issues Issue[]
----@return table[], table[]
-local function compact_rows(issues)
-	local display = providers.get(state.provider and state.provider.id)
-	local columns = display.columns("compact")
-	local rows = {}
-	for _, issue in ipairs(issues) do
-		local row = issue_to_row(issue, false, "compact")
-		row.children = nil
-		table.insert(rows, row)
-
-		local meta_text = row._meta
-		if meta_text == nil then
-			meta_text = issue_meta_text(issue)
-		end
-		if meta_text ~= "" then
-			local meta = blank_row(columns)
-			meta.kind = "meta"
-			meta.name = meta_text
-			meta.separator = true
-			meta._item = { kind = "issue_meta", key = issue.key, _issue = issue }
-			table.insert(rows, meta)
-		else
-			row.separator = true
-		end
-	end
-
-	return rows, columns
-end
-
----@param opts { width: integer }
----@param issues Issue[]
----@return string[], table<integer, table>, table[]
-local function render_compact_table(opts, issues)
-	local rows, columns = compact_rows(issues)
-	if state.is_loading then
-		table.insert(rows, blank_row(columns))
-		local loading = blank_row(columns)
-		loading.icon = state.reload_spinner_frame
-		loading.name = "Loading..."
-		table.insert(rows, loading)
-	end
-
-	return table_tree.render({
-		width = opts.width,
-		margin = 1,
-		columns = columns,
-		rows = rows,
-		cell_hl = cell_hl,
-	})
 end
 
 ---@param opts { width: integer }
@@ -327,7 +106,6 @@ function M.render(opts)
 	local actions = {}
 
 	if provider and provider.capabilities.notifications then
-		local notif_state = require("atlas.ui.notifications.state")
 		local count = notif_state.unread_count or 0
 		local bell_icon, bell_hl
 		if count > 0 then
@@ -415,11 +193,19 @@ function M.render(opts)
 		if state.is_loading ~= true and not has_rows then
 			table.insert(lines, "No issues found.")
 		else
+			local list_opts = {
+				width = opts.width,
+				provider_id = provider and provider.id,
+				loading = state.is_loading,
+				reloading = state.reloading_issue_keys,
+				spinner = state.reload_spinner_frame,
+				collapsed = state.collapsed_issue_keys,
+			}
 			local tbl_lines, tbl_spans, tbl_map
 			if layout == "compact" then
-				tbl_lines, tbl_map, tbl_spans = render_compact_table(opts, issues)
+				tbl_lines, tbl_map, tbl_spans = issue_list.render_compact(list_opts, issues)
 			else
-				tbl_lines, tbl_map, tbl_spans = render_issue_table(opts, issue_groups)
+				tbl_lines, tbl_map, tbl_spans = issue_list.render_plain(list_opts, issue_groups)
 			end
 
 			local table_base = #lines

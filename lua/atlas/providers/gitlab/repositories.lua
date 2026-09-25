@@ -21,6 +21,17 @@ query($path: ID!, $cursor: String) {
 }
 ]]
 
+local ISSUE_SUMMARY_QUERY = [[
+query($path: ID!, $overdueBefore: Time!) {
+  project(fullPath: $path) {
+    issueStatusCounts { opened closed }
+    unassigned: issueStatusCounts(assigneeId: "NONE") { opened }
+    overdue: issueStatusCounts(dueBefore: $overdueBefore) { opened }
+    labels { count }
+  }
+}
+]]
+
 ---@param repo AtlasRepository
 ---@return string
 local function configured_readme_path(repo)
@@ -396,6 +407,54 @@ function M.fetch_release(repo, opts, on_done)
 		action = "Fetch repository release",
 		repo = path,
 		id = opts.id,
+	})
+end
+
+---@param repo AtlasRepository
+---@param on_done fun(summary: AtlasRepositoryIssueSummary|nil, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_issue_summary(repo, on_done)
+	local path = repo.full_name
+	if path == "" then
+		on_done(nil, "Missing repository info")
+		return nil
+	end
+
+	-- dueBefore is inclusive, so exclude issues due today.
+	local variables = { path = path, overdueBefore = os.date("!%Y-%m-%dT23:59:59Z", os.time() - 86400) }
+	return service.graphql(ISSUE_SUMMARY_QUERY, variables, function(result, err)
+		if err or type(result) ~= "table" then
+			on_done(nil, err or "Failed to fetch repository issue summary")
+			return
+		end
+
+		local project = json.nilify(result.project)
+		if project == nil then
+			on_done(nil, "Repository not found")
+			return
+		end
+		local counts = json.safe_table(project.issueStatusCounts)
+		local open_count = tonumber(counts.opened)
+		local closed_count = tonumber(counts.closed)
+		if open_count == nil or closed_count == nil then
+			on_done(nil, "Invalid repository issue summary")
+			return
+		end
+
+		local items = {}
+		for _, item in ipairs({
+			{ label = "Open unassigned", value = tonumber(json.safe_table(project.unassigned).opened) },
+			{ label = "Open overdue", value = tonumber(json.safe_table(project.overdue).opened) },
+			{ label = "Labels", value = tonumber(json.safe_table(project.labels).count) },
+		}) do
+			if item.value ~= nil then
+				table.insert(items, item)
+			end
+		end
+		on_done({ open = open_count, closed = closed_count, items = items }, nil)
+	end, {
+		action = "Fetch repository issue summary",
+		repo = path,
 	})
 end
 

@@ -1,9 +1,8 @@
-local M = {}
-
 local helper = require("atlas.issues.ui.presentation")
 local icons = require("atlas.ui.shared.icons")
-local state = require("atlas.issues.state")
 local utils = require("atlas.ui.shared.utils")
+
+local M = {}
 
 local function columns()
 	return {
@@ -26,11 +25,12 @@ local function columns()
 end
 
 ---@param issue Issue
+---@param opts { reloading?: table<string, boolean>, spinner?: string }
 ---@return string
-local function status_value(issue)
+local function status_value(issue, opts)
 	local issue_key = tostring(issue.key or "")
-	if issue_key ~= "" and state.reloading_issue_keys[issue_key] then
-		return string.format(" %s ", state.reload_spinner_frame)
+	if opts.reloading and opts.reloading[issue_key] then
+		return string.format(" %s ", opts.spinner)
 	end
 	return string.format(" %s ", issue.status or "")
 end
@@ -58,7 +58,7 @@ local function person_highlight(issue, col, ctx)
 	end
 end
 
-local function github()
+local function github(opts)
 	local function state_icon(status_id)
 		if status_id == "closed" then
 			return icons.pulls_status("successful"), "AtlasIssueClosed"
@@ -139,7 +139,7 @@ local function github()
 			comments = tostring(tonumber(issue.comment_count) or 0),
 			assignee = person_value(issue.assignee, "Unassigned"),
 			reporter = person_value(issue.reporter, "Unknown"),
-			status = status_value(issue),
+			status = status_value(issue, opts),
 		}
 		if layout == "compact" then
 			result.created = utils.relative_time(issue.created_at)
@@ -200,7 +200,7 @@ local function github()
 		end
 		if col.key == "status" then
 			local issue_key = tostring(issue.key or "")
-			local hl = issue_key ~= "" and state.reloading_issue_keys[issue_key] and "AtlasTextMuted"
+			local hl = opts.reloading and opts.reloading[issue_key] and "AtlasTextMuted"
 				or state_chip_hl(issue.status_id)
 			return { { start_col = 0, end_col = #ctx.padded, hl_group = hl } }
 		end
@@ -214,7 +214,7 @@ local function github()
 	}
 end
 
-local function gitlab()
+local function gitlab(opts)
 	local function state_icon(status_id)
 		if status_id == "closed" then
 			return icons.pulls_status("successful"), "AtlasIssueClosed"
@@ -242,7 +242,7 @@ local function gitlab()
 			_key_label = label,
 			assignee = person_value(issue.assignee, "Unassigned"),
 			reporter = person_value(issue.reporter, "Unknown"),
-			status = status_value(issue),
+			status = status_value(issue, opts),
 		}
 	end
 
@@ -289,7 +289,7 @@ local function gitlab()
 
 		if col.key == "status" then
 			local issue_key = tostring(issue.key or "")
-			local hl = issue_key ~= "" and state.reloading_issue_keys[issue_key] and "AtlasTextMuted"
+			local hl = opts.reloading and opts.reloading[issue_key] and "AtlasTextMuted"
 				or state_chip_hl(issue.status_id)
 			return { { start_col = 0, end_col = #ctx.padded, hl_group = hl } }
 		end
@@ -299,7 +299,7 @@ local function gitlab()
 	return { columns = columns, values = values, highlights = highlights }
 end
 
-local function jira()
+local function jira(opts)
 	local function values(issue, is_child)
 		---@cast issue JiraIssue
 		local type_icon = icons.issues_type(issue.type and issue.type.name or nil)
@@ -318,7 +318,7 @@ local function jira()
 			name = is_child and ("  " .. name) or name,
 			assignee = person_value(issue.assignee, "Unassigned"),
 			reporter = person_value(issue.reporter, "Unknown"),
-			status = status_value(issue),
+			status = status_value(issue, opts),
 		}
 	end
 
@@ -373,7 +373,7 @@ local function jira()
 
 		if col.key == "status" then
 			local issue_key = tostring(issue.key or "")
-			local hl = issue_key ~= "" and state.reloading_issue_keys[issue_key] and "AtlasTextMuted"
+			local hl = opts.reloading and opts.reloading[issue_key] and "AtlasTextMuted"
 				or helper.status_hl(issue.status_id)
 			return { { start_col = 0, end_col = #ctx.padded, hl_group = hl } }
 		end
@@ -406,16 +406,18 @@ local function default()
 end
 
 local displays = {
-	github = github(),
-	gitlab = gitlab(),
-	jira = jira(),
+	github = github,
+	gitlab = gitlab,
+	jira = jira,
 }
 local fallback = default()
 
 ---@param provider_id string|nil
+---@param opts { reloading?: table<string, boolean>, spinner?: string }|nil
 ---@return table
-function M.get(provider_id)
-	return displays[provider_id] or fallback
+function M.get(provider_id, opts)
+	local display = displays[provider_id]
+	return display and display(opts or {}) or fallback
 end
 
 return M
