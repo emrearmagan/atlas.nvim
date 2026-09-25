@@ -69,14 +69,15 @@ local function render(state)
 		message = state.spinner:text("Loading branches...")
 		hl_group = "Normal"
 	elseif type(branches) == "string" then
-		message = branches:gsub("[\r\n]+", " ")
+		message = branches
 		hl_group = "AtlasLogError"
 	elseif #branches.entries == 0 then
 		message = "No branches found"
 	end
 	if message then
 		utils.buffer.center_message(state.buf, state.win, message)
-		vim.api.nvim_buf_set_extmark(state.buf, namespace, vim.api.nvim_buf_line_count(state.buf) - 1, 0, {
+		vim.api.nvim_buf_set_extmark(state.buf, namespace, 0, 0, {
+			end_row = vim.api.nvim_buf_line_count(state.buf),
 			line_hl_group = hl_group,
 		})
 		return

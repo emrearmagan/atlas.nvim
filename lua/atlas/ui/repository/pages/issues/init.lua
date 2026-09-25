@@ -51,8 +51,9 @@ local function render(state)
 	if type(issues) == "string" then
 		---@cast issues string
 		local message = issues == "loading" and state.spinner:text("Loading " .. state.filter .. " issues...") or issues
-		utils.buffer.center_message(state.buf, state.win, message:gsub("[\r\n]+", " "))
-		vim.api.nvim_buf_set_extmark(state.buf, namespace, vim.api.nvim_buf_line_count(state.buf) - 1, 0, {
+		utils.buffer.center_message(state.buf, state.win, message)
+		vim.api.nvim_buf_set_extmark(state.buf, namespace, 0, 0, {
+			end_row = vim.api.nvim_buf_line_count(state.buf),
 			line_hl_group = issues == "loading" and "Normal" or "AtlasTextMuted",
 		})
 		return
@@ -98,7 +99,7 @@ local function render(state)
 	end
 	lines[#lines + 1] = ""
 	if #issues == 0 then
-		utils.push(lines, spans, "No " .. state.filter .. " issues found.", "AtlasTextMuted", 1)
+		utils.buffer.center_message(state.buf, state.win, "No " .. state.filter .. " issues found.", lines)
 	else
 		local table_lines, table_map, table_spans = issue_list.render_compact({
 			width = width,
@@ -111,16 +112,19 @@ local function render(state)
 				state.line_map[offset + row] = node._issue
 			end
 		end
+		vim.bo[state.buf].modifiable = true
+		vim.api.nvim_buf_set_lines(state.buf, 0, -1, false, lines)
+		vim.bo[state.buf].modifiable = false
 	end
-	vim.bo[state.buf].modifiable = true
-	vim.api.nvim_buf_set_lines(state.buf, 0, -1, false, lines)
 	for _, span in ipairs(spans) do
 		vim.api.nvim_buf_set_extmark(state.buf, namespace, span.line, span.start_col or 0, {
 			end_col = span.end_col,
 			hl_group = span.hl_group,
 		})
 	end
-	vim.bo[state.buf].modifiable = false
+	if #issues == 0 then
+		return
+	end
 	for row = 1, #lines do
 		local issue = state.line_map[row]
 		if issue and selected and issue.key == selected.key then

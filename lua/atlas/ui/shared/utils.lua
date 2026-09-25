@@ -71,18 +71,31 @@ end
 ---@param buf integer
 ---@param win integer
 ---@param text string
-function M.buffer.center_message(buf, win, text)
+---@param header string[]|nil
+function M.buffer.center_message(buf, win, text, header)
 	if not M.buffer.valid(buf) or not M.window.valid(win) then
 		return
 	end
-	local lines = {}
-	for _ = 1, math.floor((vim.api.nvim_win_get_height(win) - 1) / 2) do
+	local width = vim.api.nvim_win_get_width(win)
+	local message = {}
+	for _, line in ipairs(vim.split(text:gsub("\r\n", "\n"), "\n", { plain = true })) do
+		vim.list_extend(message, M.wrap_line(line:gsub("%c", " "), width))
+	end
+	local lines = header or {}
+	local padding = math.max(0, math.floor((vim.api.nvim_win_get_height(win) - #lines - #message) / 2))
+	for _ = 1, padding do
 		lines[#lines + 1] = ""
 	end
-	lines[#lines + 1] = ui_utils.center_text(text, vim.api.nvim_win_get_width(win))
+	for _, line in ipairs(message) do
+		lines[#lines + 1] = ui_utils.center_text(line, width)
+	end
 	vim.bo[buf].modifiable = true
 	vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
 	vim.bo[buf].modifiable = false
+	vim.api.nvim_win_set_cursor(win, { 1, 0 })
+	vim.api.nvim_win_call(win, function()
+		vim.fn.winrestview({ topline = 1, leftcol = 0, skipcol = 0 })
+	end)
 end
 
 -- Tab

@@ -34,23 +34,24 @@ local function render(state)
 	if not utils.buffer.valid(state.buf) or not utils.window.valid(state.win) then
 		return
 	end
-	local width = vim.api.nvim_win_get_width(state.win)
-	local lines, spans = {}, {}
+	vim.api.nvim_buf_clear_namespace(state.buf, namespace, 0, -1)
 	if type(state.details) == "string" then
 		local loading = state.details == "loading"
-		local text = loading and state.spinner:text("Loading...") or state.details:gsub("[\r\n]+", " ")
-		local padding = math.max(0, math.floor((width - vim.fn.strdisplaywidth(text)) / 2))
-		for _ = 1, math.floor((vim.api.nvim_win_get_height(state.win) - 1) / 2) do
-			table.insert(lines, "")
-		end
-		utils.push(lines, spans, text, loading and "Normal" or "AtlasLogError", padding)
-	elseif state.details then
-		lines, spans = renderer.render(state.details, width)
+		local text = loading and state.spinner:text("Loading...") or state.details
+		utils.buffer.center_message(state.buf, state.win, text)
+		vim.api.nvim_buf_set_extmark(state.buf, namespace, 0, 0, {
+			end_row = vim.api.nvim_buf_line_count(state.buf),
+			line_hl_group = loading and "Normal" or "AtlasLogError",
+		})
+		return
+	end
+	local lines, spans = {}, {}
+	if state.details then
+		lines, spans = renderer.render(state.details, vim.api.nvim_win_get_width(state.win))
 	end
 
 	vim.bo[state.buf].modifiable = true
 	vim.api.nvim_buf_set_lines(state.buf, 0, -1, false, lines)
-	vim.api.nvim_buf_clear_namespace(state.buf, namespace, 0, -1)
 	for _, span in ipairs(spans) do
 		vim.api.nvim_buf_set_extmark(state.buf, namespace, span.line, span.start_col or 0, {
 			end_col = span.end_col,
