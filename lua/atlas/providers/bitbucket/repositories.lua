@@ -285,8 +285,8 @@ function M.fetch_details(repo, _opts, on_done)
 end
 
 ---@param repo AtlasRepository
----@param opts PullsFetchOpts
----@param on_done fun(branches: AtlasRepositoryBranches|nil, err: string|nil)
+---@param opts { cursor?: string, search?: string }
+---@param on_done fun(branches: AtlasRepositoryBranches|nil, err: string|nil, next_cursor: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_branches(repo, opts, on_done)
 	---@cast repo BitbucketRepository
@@ -296,25 +296,23 @@ function M.fetch_branches(repo, opts, on_done)
 
 	local sep = branches_url:find("?") and "&" or "?"
 	local url = string.format("%s%spagelen=100", branches_url, sep)
-	local key = "bitbucket:repo:branches:" .. url
-	if opts.force_refresh ~= true then
-		local cached, ok = service.get_cache(key)
-		if ok then
-			on_done(cached, nil)
-			return nil
-		end
+	if opts.search and opts.search ~= "" then
+		url = url .. "&q=" .. url_encode("name~" .. vim.json.encode(opts.search))
+	end
+	local cursor = opts.cursor
+	if cursor and cursor ~= "" then
+		url = cursor
 	end
 
-	return service.fetch_all_values(url, function(result, err)
-		if err ~= nil then
-			on_done(nil, err)
+	return service.request("GET", url, nil, nil, function(result, err)
+		if err ~= nil or type(result) ~= "table" then
+			on_done(nil, err or "Invalid paginated response")
 			return
 		end
 
-		local payload = as_table(result) or {}
-		---@type AtlasRepositoryBranch[]
-		local entries = {}
-		for _, item in ipairs(payload.values or {}) do
+		---@type AtlasRepositoryBranches
+		local branches = { entries = {} }
+		for _, item in ipairs(result.values or {}) do
 			local branch = as_table(item) or {}
 			local target = as_table(branch.target) or {}
 			local author = as_table(target.author) or {}
@@ -322,7 +320,7 @@ function M.fetch_branches(repo, opts, on_done)
 			local links = as_table(branch.links) or {}
 			local self_link = as_table(links.self) or {}
 			local name = user.nickname or user.display_name or author.raw or ""
-			table.insert(entries, {
+			table.insert(branches.entries, {
 				name = tostring(branch.name or ""),
 				hash = tostring(target.hash or ""),
 				date = tostring(target.date or ""),
@@ -331,10 +329,11 @@ function M.fetch_branches(repo, opts, on_done)
 				api_url = tostring(self_link.href or ""),
 			})
 		end
-		---@type AtlasRepositoryBranches
-		local branches = { entries = entries }
-		service.set_cache(key, branches, service.cache_ttl())
-		on_done(branches, nil)
+		local next_cursor = json.safe_str(result.next)
+		if next_cursor == "" then
+			next_cursor = nil
+		end
+		on_done(branches, nil, next_cursor)
 	end, { action = "Fetch repository branches", repo = repo.full_name or repo.name })
 end
 

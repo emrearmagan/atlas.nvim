@@ -9,18 +9,26 @@ local detail = require("atlas.pulls.ui.repo_detail.state")
 local core_utils = require("atlas.core.utils")
 local keymaps = require("atlas.pulls.ui.repo_detail.tabs.branches.keymaps")
 local request_scope = require("atlas.core.requests")
+local picker = require("atlas.ui.picker")
+local navigation = require("atlas.pulls.ui.repo_detail.navigation")
 
 local PADDING_X = 1
 
 ---@class PullsRepoBranchesTabState
 ---@field repo AtlasRepositoryDetails|nil
 ---@field branches AtlasRepositoryBranches|"loading"|string|nil
+---@field page integer
+---@field cursors table<integer, string>
+---@field next_cursor string|nil
 ---@field requests AtlasRequestScope
-local state = { repo = nil, branches = nil, requests = request_scope.new() }
+local state = { repo = nil, branches = nil, page = 1, cursors = {}, requests = request_scope.new() }
 
 local function reset_state()
 	state.repo = nil
 	state.branches = nil
+	state.page = 1
+	state.cursors = {}
+	state.next_cursor = nil
 end
 
 local function stop_requests()
@@ -51,10 +59,11 @@ local function is_current_repo(repo)
 end
 
 ---@param repo AtlasRepositoryDetails
+---@param branches AtlasRepositoryBranch[]
 ---@return AtlasThreadV2Item[]
-local function to_items(repo)
+local function to_items(repo, branches)
 	local items = {}
-	for _, branch in ipairs((state.branches or {}).entries or {}) do
+	for _, branch in ipairs(branches) do
 		local msg = branch.message and tostring(branch.message:match("^[^\n\r]*") or "") or nil
 		if msg == "" then
 			msg = nil
@@ -83,20 +92,21 @@ function M.render(_repo, width)
 	local lines = {}
 	local spans = {}
 	local line_map = {}
+	local branches = state.branches
 
-	if state.branches == nil then
+	if branches == nil then
 		if detail.current_repo_details == "loading" then
 			utils.push(lines, spans, spinner.with_text("Loading repository details..."), "AtlasTextMuted", PADDING_X)
 		end
 		return lines, spans, line_map
 	end
 
-	if state.branches == "loading" then
+	if branches == "loading" then
 		utils.push(lines, spans, spinner.with_text("Loading branches..."), "AtlasTextMuted", PADDING_X)
 		return lines, spans, line_map
 	end
-	if type(state.branches) == "string" then
-		utils.push(lines, spans, state.branches, "AtlasLogError", PADDING_X)
+	if type(branches) == "string" then
+		utils.push(lines, spans, branches, "AtlasLogError", PADDING_X)
 		return lines, spans, line_map
 	end
 
@@ -106,13 +116,13 @@ function M.render(_repo, width)
 		return lines, spans, line_map
 	end
 
-	local entries = state.branches.entries or {}
+	local entries = branches.entries or {}
 	if #entries == 0 then
 		utils.push(lines, spans, "No branches found.", "AtlasTextMuted", PADDING_X)
 		return lines, spans, line_map
 	end
 
-	local thread_lines, thread_spans, thread_map = threads.render(to_items(repo), width, {
+	local thread_lines, thread_spans, thread_map = threads.render(to_items(repo, entries), width, {
 		padding_x = PADDING_X,
 		mode = "linked",
 		content_max_lines = 1,
@@ -129,49 +139,23 @@ function M.render(_repo, width)
 	return lines, spans, line_map
 end
 
----@param repo AtlasRepository|nil
 ---@param refresh fun()
----@param opts { force_refresh: boolean|nil }|nil
-function M.on_select(repo, refresh, opts)
-	opts = opts or {}
-	local repo_details = detail.current_repo_details
+local function load_page(refresh)
+	local repo = state.repo
 	if repo == nil then
-		reset_state()
-		refresh()
 		return
 	end
-	if repo_details == "loading" then
-		state.branches = "loading"
-		refresh()
-		return
-	end
-	if type(repo_details) ~= "table" then
-		reset_state()
-		refresh()
-		return
-	end
-
-	local prev_name = state.repo and state.repo.full_name or ""
-	local next_name = tostring(repo_details.full_name or "")
-	local repo_label = next_name ~= "" and next_name or tostring(repo.name or repo.id or "")
-	local should_fetch = opts.force_refresh == true
-		or state.branches == nil
-		or state.branches == "loading"
-		or prev_name ~= next_name
-	state.repo = repo_details
-	if not should_fetch then
-		refresh()
-		return
-	end
-
+	local repo_name = tostring(repo.full_name or "")
+	local repo_label = repo_name ~= "" and repo_name or tostring(repo.name or repo.id or "")
 	stop_requests()
 	state.branches = "loading"
+	state.next_cursor = nil
 	notify.loading(string.format("Loading branches for %s...", repo_label))
 	refresh()
 
 	local provider = detail.provider
 	local repository = provider and provider.capabilities.repository
-	if repository == nil then
+	if repository == nil or repository.fetch_branches == nil then
 		state.branches = { entries = {} }
 		notify.error("Branch listing is not supported by this provider")
 		refresh()
@@ -179,12 +163,12 @@ function M.on_select(repo, refresh, opts)
 	end
 
 	state.requests.run(function(done)
-		return repository.fetch_branches(repo_details, {
-			force_refresh = opts.force_refresh == true,
+		return repository.fetch_branches(repo, {
+			cursor = state.cursors[state.page],
 		}, done)
-	end, function(branches, err)
+	end, function(branches, err, next_cursor)
 		local active_detail = detail.current_repo_details
-		if type(active_detail) ~= "table" or tostring(active_detail.full_name or "") ~= next_name then
+		if type(active_detail) ~= "table" or tostring(active_detail.full_name or "") ~= repo_name then
 			return
 		end
 		state.repo = active_detail
@@ -193,10 +177,112 @@ function M.on_select(repo, refresh, opts)
 			notify.error(string.format("Failed to load branches for %s", repo_label))
 		else
 			state.branches = branches or { entries = {} }
+			state.next_cursor = next_cursor
 			notify.success(string.format("Branches loaded for %s", repo_label), { timeout = 1200 })
 		end
 		refresh()
 	end)
+end
+
+---@param repo AtlasRepository|nil
+---@param refresh fun()
+---@param opts { force_refresh: boolean|nil }|nil
+function M.on_select(repo, refresh, opts)
+	opts = opts or {}
+	local repo_details = detail.current_repo_details
+	if repo_details == "loading" then
+		state.branches = "loading"
+		refresh()
+		return
+	end
+	if repo == nil or type(repo_details) ~= "table" then
+		M.reset()
+		refresh()
+		return
+	end
+	local changed = state.repo == nil or state.repo.full_name ~= repo_details.full_name
+	local should_fetch = opts.force_refresh == true or changed or state.branches == nil or state.branches == "loading"
+	if changed or opts.force_refresh then
+		reset_state()
+	end
+	state.repo = repo_details
+	if should_fetch then
+		load_page(refresh)
+	else
+		refresh()
+	end
+end
+
+---@param direction integer
+---@param refresh fun()
+function M.change_page(direction, refresh)
+	if state.branches == "loading" or state.repo == nil then
+		return
+	end
+	if direction > 0 then
+		if state.next_cursor == nil then
+			return
+		end
+		state.cursors[state.page + 1] = state.next_cursor
+		state.page = state.page + 1
+	elseif state.page > 1 then
+		state.page = state.page - 1
+	else
+		return
+	end
+	load_page(refresh)
+end
+
+---@param refresh fun()
+function M.search(refresh)
+	local repo = state.repo
+	local provider = detail.provider
+	local repository = provider and provider.capabilities.repository
+	if repo == nil or repository == nil or repository.fetch_branches == nil then
+		return
+	end
+	local current_repo = detail.current_repo
+	picker.search({
+		title = "Branches",
+		fetch_on_open = true,
+		key = function(branch)
+			return branch.name
+		end,
+		format_item = function(branch)
+			return branch.name
+		end,
+		fetch = function(query, done)
+			return state.requests.run(function(finish)
+				return repository.fetch_branches(repo, { search = query }, finish)
+			end, function(branches, err)
+				done(branches and branches.entries or nil, err)
+			end)
+		end,
+		on_select = function(branch)
+			if branch == nil or not is_current_repo(current_repo) or detail.current_tab ~= "branches" then
+				return
+			end
+			local win = detail.win
+			if win == nil or not vim.api.nvim_win_is_valid(win) then
+				return
+			end
+			for row, entry in pairs(detail.line_map) do
+				local item = entry.item and entry.item.obj and entry.item.obj.branch
+				if entry.kind == "header" and item and item.name == branch.name then
+					vim.api.nvim_set_current_win(win)
+					vim.api.nvim_win_set_cursor(win, { row, 0 })
+					return
+				end
+			end
+			stop_requests()
+			state.branches = { entries = { branch } }
+			state.page = 1
+			state.cursors = {}
+			state.next_cursor = nil
+			refresh()
+			navigation.focus_first()
+		end,
+	})
 end
 
 ---@return boolean
@@ -215,7 +301,22 @@ function M.activate(buf, refresh)
 	if buf == nil or refresh == nil then
 		return
 	end
-	keymaps.setup(buf, refresh)
+	local provider = detail.provider
+	local repository = provider and provider.capabilities.repository
+	keymaps.setup(buf, {
+		search = function()
+			M.search(refresh)
+		end,
+		next_page = function()
+			M.change_page(1, refresh)
+		end,
+		previous_page = function()
+			M.change_page(-1, refresh)
+		end,
+		delete = repository and repository.delete_branch and function()
+			M.delete_current_branch(refresh)
+		end or nil,
+	})
 end
 
 ---@param refresh fun()

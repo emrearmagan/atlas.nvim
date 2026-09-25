@@ -35,9 +35,9 @@ query($owner: String!, $repo: String!, $states: [IssueState!]!) {
 ]]
 
 local BRANCHES_QUERY = [[
-query($owner: String!, $repo: String!, $endCursor: String) {
+query($owner: String!, $repo: String!, $endCursor: String, $search: String) {
   repository(owner: $owner, name: $repo) {
-    refs(refPrefix: "refs/heads/", first: 100, after: $endCursor, orderBy: {field: ALPHABETICAL, direction: ASC}) {
+    refs(refPrefix: "refs/heads/", first: 100, after: $endCursor, query: $search, orderBy: {field: ALPHABETICAL, direction: ASC}) {
       nodes {
         name
         target {
@@ -199,78 +199,67 @@ function M.fetch_details(repo, opts, on_done)
 	return requests
 end
 
----@param repo AtlasRepository
----@param opts PullsFetchOpts
----@param on_done fun(branches: AtlasRepositoryBranches|nil, err: string|nil)
+---@param slug string
+---@param query string
+---@param opts { cursor?: string, search?: string }
+---@param on_done fun(repository: table|nil, err: string|nil, next_cursor: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_branches(repo, opts, on_done)
-	local slug = tostring(repo.full_name or "")
+local function fetch_refs(slug, query, opts, on_done)
 	local owner, name = slug:match("^([^/]+)/([^/]+)$")
 	if not owner then
-		vim.schedule(function()
-			on_done(nil, "Missing repository info")
-		end)
+		on_done(nil, "Missing repository info", nil)
 		return nil
 	end
-
-	local cache_key = string.format("github:branches:%s", slug)
-	if not opts.force_refresh then
-		local cached, ok = cli.get_mem(cache_key)
-		if ok then
-			on_done(cached, nil)
-			return nil
-		end
+	local args = { "api", "graphql", "-f", "query=" .. query, "-f", "owner=" .. owner, "-f", "repo=" .. name }
+	if opts.cursor then
+		vim.list_extend(args, { "-f", "endCursor=" .. opts.cursor })
 	end
-
-	return cli.gh({
-		"api",
-		"graphql",
-		"--paginate",
-		"--slurp",
-		"-f",
-		"query=" .. BRANCHES_QUERY,
-		"-f",
-		"owner=" .. owner,
-		"-f",
-		"repo=" .. name,
-	}, function(result, err)
-		if err or type(result) ~= "table" then
-			on_done(nil, err or "Failed to fetch branches")
+	if opts.search and opts.search ~= "" then
+		vim.list_extend(args, { "-f", "search=" .. opts.search })
+	end
+	return cli.gh(args, function(result, err)
+		if err then
+			on_done(nil, err, nil)
 			return
 		end
-
-		---@type AtlasRepositoryBranch[]
-		local entries = {}
-		for _, page in ipairs(result) do
-			local data = json.safe_table(page.data)
-			local repository = json.nilify(data.repository)
-			if not repository then
-				on_done(nil, "Repository not found")
-				return
-			end
-
-			local refs = json.safe_table(repository.refs)
-			for _, branch in ipairs(json.safe_table(refs.nodes)) do
-				local commit = json.safe_table(branch.target)
-				local author = json.safe_table(commit.author)
-				table.insert(entries, {
-					name = json.safe_str(branch.name) or "",
-					hash = json.safe_str(commit.oid) or "",
-					date = json.safe_str(commit.committedDate),
-					message = json.safe_str(commit.message),
-					author = json.safe_str(author.name),
-				})
-			end
+		local data = json.safe_table(result and result.data)
+		local repository = json.nilify(data.repository)
+		if not repository then
+			on_done(nil, "Repository not found", nil)
+			return
 		end
+		local page = repository.refs.pageInfo
+		on_done(repository, nil, page.hasNextPage and page.endCursor or nil)
+	end, { action = "Fetch repository refs", repo = slug })
+end
 
+---@param repo AtlasRepository
+---@param opts { cursor?: string, search?: string }
+---@param on_done fun(branches: AtlasRepositoryBranches|nil, err: string|nil, next_cursor: string|nil)
+---@return { cancel: fun() }|nil
+function M.fetch_branches(repo, opts, on_done)
+	local slug = repo.full_name
+
+	return fetch_refs(slug, BRANCHES_QUERY, opts, function(repository, err, next_cursor)
+		if not repository then
+			on_done(nil, err, nil)
+			return
+		end
 		---@type AtlasRepositoryBranches
-		local branches = { entries = entries }
-		cli.set_mem(cache_key, branches)
-		on_done(branches, nil)
-	end, {
-		action = "Fetch repository branches",
-		repo = slug,
-	})
+		local branches = { entries = {} }
+		for _, branch in ipairs(repository.refs.nodes) do
+			local commit = json.safe_table(branch.target)
+			local author = json.safe_table(commit.author)
+			table.insert(branches.entries, {
+				name = json.safe_str(branch.name) or "",
+				hash = json.safe_str(commit.oid) or "",
+				date = json.safe_str(commit.committedDate),
+				message = json.safe_str(commit.message),
+				author = json.safe_str(author.name),
+			})
+		end
+		on_done(branches, nil, next_cursor)
+	end)
 end
 
 ---@param repo AtlasRepository
@@ -587,7 +576,6 @@ function M.delete_branch(repo, branch, on_done)
 			on_done(false, err)
 			return
 		end
-		cli.delete_mem(string.format("github:branches:%s", slug))
 		on_done(true, nil)
 	end, {
 		action = "Delete repository branch",

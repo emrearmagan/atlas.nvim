@@ -19,6 +19,9 @@ local utils = require("atlas.ui.shared.utils")
 ---@field repo AtlasRepositoryDetails
 ---@field provider PullsProvider|IssuesProvider
 ---@field branches AtlasRepositoryBranches|"loading"|string
+---@field page integer
+---@field cursors table<integer, string>
+---@field next_cursor string|nil
 ---@field root string|nil
 ---@field expanded string|nil
 ---@field commits RepositoryBranchCommit[]|"loading"|string|nil
@@ -136,8 +139,8 @@ local function load_history(state, branch)
 end
 
 ---@param state RepositoryBranches
----@param force_refresh boolean|nil
-local function load(state, force_refresh)
+---@param page integer|nil
+local function load(state, page)
 	if state.deleting then
 		return
 	end
@@ -151,25 +154,31 @@ local function load(state, force_refresh)
 	clear_commits(state)
 	state.requests.cancel()
 	state.requests = requests.new()
+	state.page = page or 1
+	if state.page == 1 then
+		state.cursors = {}
+	end
+	state.next_cursor = nil
 	state.branches = "loading"
 	state.spinner:start()
 	render(state)
 	state.statusline:notify("loading", "Loading branches...")
 	state.requests.run(function(done)
-		return repository.fetch_branches(state.repo, { force_refresh = force_refresh }, done)
-	end, function(branches, err)
+		return repository.fetch_branches(state.repo, {
+			cursor = state.cursors[state.page],
+		}, done)
+	end, function(branches, err, next_cursor)
 		state.spinner:stop()
 		state.statusline:clear_notice()
 		if not utils.buffer.valid(state.buf) or not utils.window.valid(state.win) then
 			return
 		end
 		state.branches = branches or err or "Failed to load branches"
+		state.next_cursor = next_cursor
+		state.cursors[state.page + 1] = next_cursor
 		render(state)
-		for row = 1, vim.api.nvim_buf_line_count(state.buf) do
-			if state.line_map[row] then
-				vim.api.nvim_win_set_cursor(state.win, { row, 0 })
-				break
-			end
+		if utils.window.valid(state.win) and state.line_map[1] then
+			vim.api.nvim_win_set_cursor(state.win, { 1, 0 })
 		end
 		if expanded and branches then
 			for _, branch in ipairs(branches.entries) do
@@ -184,13 +193,14 @@ end
 
 ---@param state RepositoryBranches
 local function search(state)
-	local branches = state.branches
-	if type(branches) == "string" or #branches.entries == 0 then
+	local repository = state.provider.capabilities.repository
+	if not repository or state.deleting then
 		return
 	end
-	picker.select_with_preview({
+	local branches = state.branches
+	picker.search({
 		title = "Branches",
-		items = branches.entries,
+		initial_items = type(branches) == "table" and branches.entries or {},
 		key = function(branch)
 			return branch.name
 		end,
@@ -200,10 +210,19 @@ local function search(state)
 		preview_item = function(branch, done)
 			done(renderer.preview(branch))
 		end,
+		fetch = function(query, done)
+			return state.requests.run(function(finish)
+				return repository.fetch_branches(state.repo, { search = query }, finish)
+			end, function(result, err)
+				done(result and result.entries, err)
+			end)
+		end,
 		on_select = function(branch)
 			if not branch or states[state.buf] ~= state or not utils.window.valid(state.win) then
 				return
 			end
+			state.requests.cancel()
+			state.requests = requests.new()
 			for row, entry in pairs(state.line_map) do
 				if entry.branch.name == branch.name and not entry.commit then
 					vim.api.nvim_set_current_win(state.win)
@@ -211,6 +230,15 @@ local function search(state)
 					return
 				end
 			end
+			clear_commits(state)
+			state.page = 1
+			state.cursors = {}
+			state.next_cursor = nil
+			state.branches = { entries = { branch } }
+			state.spinner:stop()
+			render(state)
+			vim.api.nvim_set_current_win(state.win)
+			vim.api.nvim_win_set_cursor(state.win, { 1, 0 })
 		end,
 	})
 end
@@ -257,27 +285,37 @@ local function open_diff(state)
 		return
 	end
 
+	local repository = state.provider.capabilities.repository
+	if not repository then
+		return
+	end
 	local branch = selection.branch
 	local branches = state.branches --[[@as AtlasRepositoryBranches]]
-	local bases, initial_index = {}, 1
+	local bases = {}
 	for _, candidate in ipairs(branches.entries) do
 		if candidate.name ~= branch.name then
 			table.insert(bases, candidate)
-			if candidate.name == state.repo.default_branch then
-				initial_index = #bases
-			end
 		end
 	end
-	if #bases == 0 then
-		notify.warn("No other branch to compare with")
-		return
-	end
-	picker.select({
+	picker.search({
 		title = "Compare " .. branch.name .. " against",
-		items = bases,
-		initial_index = initial_index,
+		initial_items = bases,
+		key = function(base)
+			return base.name
+		end,
 		format_item = function(base)
 			return base.name
+		end,
+		fetch = function(query, done)
+			return state.requests.run(function(finish)
+				return repository.fetch_branches(state.repo, { search = query }, finish)
+			end, function(result, err)
+				local matches = result
+					and vim.tbl_filter(function(candidate)
+						return candidate.name ~= branch.name
+					end, result.entries)
+				done(matches, err)
+			end)
 		end,
 		on_select = function(base)
 			if not base or states[state.buf] ~= state then
@@ -354,7 +392,7 @@ local function delete_branch(state)
 				return
 			end
 			notify.success("Deleted branch " .. branch.name)
-			load(state, true)
+			load(state)
 		end)
 	end)
 end
@@ -370,6 +408,8 @@ function M.open(opts)
 		repo = opts.repo,
 		provider = opts.provider,
 		branches = "loading",
+		page = 1,
+		cursors = {},
 		root = history.resolve(opts.repo),
 		line_map = {},
 		requests = requests.new(),
@@ -389,7 +429,17 @@ function M.open(opts)
 			search(state)
 		end,
 		refresh = function()
-			load(state, true)
+			load(state)
+		end,
+		next_page = function()
+			if state.branches ~= "loading" and state.next_cursor then
+				load(state, state.page + 1)
+			end
+		end,
+		previous_page = function()
+			if state.branches ~= "loading" and state.page > 1 then
+				load(state, state.page - 1)
+			end
 		end,
 		select = function()
 			select_current(state)
