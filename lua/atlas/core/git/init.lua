@@ -411,8 +411,9 @@ end
 ---@param root string
 ---@param branch string
 ---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }
 function M.checkout_branch(root, branch, on_done)
-	M.run({ "checkout", branch }, { cwd = root, text = true }, function(res)
+	return M.run({ "checkout", branch }, { cwd = root, text = true }, function(res)
 		on_done(command_result(res, "git checkout branch failed"))
 	end)
 end
@@ -421,8 +422,9 @@ end
 ---@param branch string
 ---@param start_point string
 ---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }
 function M.checkout_new_branch(root, branch, start_point, on_done)
-	M.run({ "checkout", "-b", branch, start_point }, { cwd = root, text = true }, function(res)
+	return M.run({ "checkout", "-b", branch, start_point }, { cwd = root, text = true }, function(res)
 		on_done(command_result(res, "git checkout branch failed"))
 	end)
 end

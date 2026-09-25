@@ -20,6 +20,10 @@ local utils = require("atlas.ui.shared.utils")
 ---@field statusline AtlasStatusline
 ---@field issues Issue[]|string
 ---@field filter "open"|"closed"
+---@field page integer
+---@field cursors table<integer, string>
+---@field next_cursor string|nil
+---@field total_pages integer|nil
 ---@field summary AtlasRepositoryIssueSummary|nil
 ---@field line_map table<integer, Issue>
 ---@field requests AtlasRequestScope
@@ -72,6 +76,11 @@ local function render(state)
 			hl_group = state.filter == filter and "Normal" or "AtlasTextMuted",
 		}
 		header = header .. label .. "  "
+	end
+	if state.page > 1 or state.next_cursor then
+		local page = "Page " .. state.page .. (state.total_pages and ("/" .. state.total_pages) or "")
+		spans[#spans + 1] = { line = 0, start_col = #header, end_col = #header + #page, hl_group = "AtlasTextMuted" }
+		header = header .. page
 	end
 	local lines = { header }
 	for index, item in ipairs(state.summary and state.summary.items or {}) do
@@ -142,6 +151,7 @@ local function load(state, force_refresh)
 	state.requests = requests.new()
 	state.spinner:stop()
 	state.statusline:clear_notice()
+	state.next_cursor = nil
 	local fetch = state.issue_provider and state.issue_provider.capabilities.core.fetch_issues
 	---@type IssuesViewConfig|nil
 	local view
@@ -173,7 +183,11 @@ local function load(state, force_refresh)
 	state.statusline:notify("loading", "Loading " .. filter .. " issues...")
 	render(state)
 	state.requests.run(function(done)
-		return fetch(view, { force_refresh = force_refresh == true, pagelen = 50 }, done)
+		return fetch(view, {
+			force_refresh = force_refresh == true,
+			pagelen = 50,
+			cursor = state.cursors[state.page],
+		}, done)
 	end, function(result, err)
 		state.spinner:stop()
 		state.statusline:clear_notice()
@@ -183,6 +197,8 @@ local function load(state, force_refresh)
 			return
 		end
 		state.issues = result.items
+		state.next_cursor = result.next_cursor
+		state.total_pages = result.total_pages
 		render(state)
 		if utils.window.valid(state.win) then
 			for row = 1, vim.api.nvim_buf_line_count(state.buf) do
@@ -203,7 +219,7 @@ local function search(state)
 	end
 	---@cast issues Issue[]
 	picker.select({
-		title = state.filter:gsub("^%l", string.upper) .. " issues",
+		title = state.filter:gsub("^%l", string.upper) .. " issues on this page",
 		items = issues,
 		format_item = function(issue)
 			return string.format(
@@ -277,6 +293,8 @@ function M.open(opts)
 		statusline = opts.statusline,
 		issues = "loading",
 		filter = "open",
+		page = 1,
+		cursors = {},
 		line_map = {},
 		requests = requests.new(),
 		summary_requests = requests.new(),
@@ -298,12 +316,13 @@ function M.open(opts)
 			resolver.resolve("ui.refresh"),
 			"Refresh issues",
 			function()
+				state.page, state.cursors = 1, {}
 				load(state, true)
 			end,
 		},
 		{
 			resolver.resolve("ui.search"),
-			"Search issues",
+			"Search this page",
 			function()
 				search(state)
 			end,
@@ -313,7 +332,30 @@ function M.open(opts)
 			"Toggle open/closed issues",
 			function()
 				state.filter = state.filter == "open" and "closed" or "open"
+				state.page, state.cursors = 1, {}
 				load(state)
+			end,
+		},
+		{
+			resolver.resolve("ui.next_page"),
+			"Next issues",
+			function()
+				if state.issues == "loading" or not state.next_cursor then
+					return
+				end
+				state.page = state.page + 1
+				state.cursors[state.page] = state.next_cursor
+				load(state)
+			end,
+		},
+		{
+			resolver.resolve("ui.previous_page"),
+			"Previous issues",
+			function()
+				if state.issues ~= "loading" and state.page > 1 then
+					state.page = state.page - 1
+					load(state)
+				end
 			end,
 		},
 	}
