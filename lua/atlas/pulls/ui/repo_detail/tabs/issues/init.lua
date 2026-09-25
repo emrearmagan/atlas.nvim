@@ -59,8 +59,7 @@ end
 
 ---@param details AtlasRepositoryDetails
 ---@param refresh fun()
----@param force_refresh boolean
-local function fetch_issues(details, refresh, force_refresh)
+local function fetch_issues(details, refresh)
 	stop_requests()
 	local key = repo_key(details)
 	if state.repo_key ~= key then
@@ -75,7 +74,7 @@ local function fetch_issues(details, refresh, force_refresh)
 	local repository = detail.provider.capabilities.repository
 	local run = assert(repository.fetch_issues)
 	state.requests.run(function(done)
-		return run(details, state.filter, { force_refresh = force_refresh }, done)
+		return run(details, state.filter, done)
 	end, function(result, err)
 		local current = detail.current_repo_details
 		if type(current) ~= "table" or repo_key(current) ~= key then
@@ -125,7 +124,7 @@ function M.on_select(repo, refresh, opts)
 		return
 	end
 
-	fetch_issues(details, refresh, opts.force_refresh == true)
+	fetch_issues(details, refresh)
 end
 
 ---@return boolean

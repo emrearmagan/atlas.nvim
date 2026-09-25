@@ -62,8 +62,7 @@ local function render(state)
 end
 
 ---@param state RepositoryOverview
----@param opts PullsFetchOpts|nil
-local function load(state, opts)
+local function load(state)
 	local repository = state.provider.capabilities.repository
 	if not repository then
 		state.details = "Repository details are not available"
@@ -78,7 +77,7 @@ local function load(state, opts)
 	vim.api.nvim_win_set_cursor(state.win, { 1, 0 })
 	state.statusline:notify("loading", "Loading overview...")
 	state.requests.run(function(done)
-		return repository.fetch_details(state.repo, opts or {}, done)
+		return repository.fetch_details(state.repo, done)
 	end, function(details, err)
 		state.spinner:stop()
 		if details then
@@ -131,7 +130,7 @@ function M.open(opts)
 				key = state.refresh_keys,
 				desc = "Reload overview",
 				callback = function()
-					load(state, { force_refresh = true })
+					load(state)
 				end,
 				opts = { nowait = true, silent = true },
 			},

@@ -107,7 +107,7 @@ local function fetch_releases(state, on_done)
 	state.requests = requests.new()
 	state.statusline:notify("loading", "Loading releases...")
 	state.requests.run(function(done)
-		return fetch(state.repo, {}, done)
+		return fetch(state.repo, done)
 	end, function(releases, err)
 		state.statusline:clear_notice()
 		if not releases then

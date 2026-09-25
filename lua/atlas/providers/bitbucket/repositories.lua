@@ -242,10 +242,9 @@ function M.resolve_targets(targets, opts, on_done)
 end
 
 ---@param repo AtlasRepository
----@param _opts PullsFetchOpts
 ---@param on_done fun(repo: AtlasRepositoryDetails|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_details(repo, _opts, on_done)
+function M.fetch_details(repo, on_done)
 	local owner = tostring(repo.owner or "")
 	local repo_name = tostring(repo.repo_name or "")
 

@@ -21,6 +21,24 @@ local utils = require("atlas.ui.shared.utils")
 
 local M = {}
 
+---@param win integer
+local function setup_window(win)
+	for option, value in pairs({
+		number = false,
+		relativenumber = false,
+		signcolumn = "no",
+		statuscolumn = "",
+		foldcolumn = "0",
+		foldenable = false,
+		wrap = false,
+		cursorline = false,
+		conceallevel = 0,
+		concealcursor = "",
+	}) do
+		vim.api.nvim_set_option_value(option, value, { win = win })
+	end
+end
+
 ---@param session RepositoryBrowser
 local function setup_buffers(session)
 	local prefix = "atlas://repository/" .. session.tab
@@ -40,18 +58,7 @@ local function setup_windows(session)
 		width = math.min(22, math.max(14, math.floor(vim.o.columns * 0.2))),
 	})
 	for _, pane in ipairs({ session.sidebar, session.content }) do
-		for option, value in pairs({
-			number = false,
-			relativenumber = false,
-			signcolumn = "no",
-			statuscolumn = "",
-			foldcolumn = "0",
-			foldenable = false,
-			wrap = false,
-			cursorline = false,
-		}) do
-			vim.api.nvim_set_option_value(option, value, { win = pane.win })
-		end
+		setup_window(pane.win)
 		session.statusline:attach(pane.win)
 	end
 	vim.wo[session.sidebar.win].winfixwidth = true
@@ -109,9 +116,9 @@ local function select_page(session, index)
 	session.sidebar.selected = index
 	sidebar.render(session.sidebar)
 	vim.api.nvim_win_set_cursor(session.sidebar.win, { index, 0 })
+	setup_window(session.content.win)
+	session.statusline:attach(session.content.win)
 	vim.wo[session.content.win].winbar = page.label
-	vim.wo[session.content.win].conceallevel = 0
-	vim.wo[session.content.win].concealcursor = ""
 	vim.api.nvim_win_set_cursor(session.content.win, { 1, 0 })
 	keymaps.setup(session, function()
 		close(session)
@@ -190,7 +197,7 @@ function M.open(repo_full_name, provider, opts)
 	local requests = request_scope.new()
 	local view = loading.open("Loading repository...", requests.cancel)
 	requests.run(function(done)
-		return repository.fetch_details(repo, {}, done)
+		return repository.fetch_details(repo, done)
 	end, function(details, err)
 		view:finish()
 		if not details then

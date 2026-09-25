@@ -102,11 +102,11 @@
 ---@field items { label: string, value: string|number }[]|nil
 
 ---@class AtlasRepositoryCapability
----@field fetch_details fun(repo: AtlasRepository, opts: PullsFetchOpts, on_done: fun(repo: AtlasRepositoryDetails|nil, err: string|nil)): { cancel: fun() }|nil
+---@field fetch_details fun(repo: AtlasRepository, on_done: fun(repo: AtlasRepositoryDetails|nil, err: string|nil)): { cancel: fun() }|nil
 ---@field fetch_branches fun(repo: AtlasRepository, opts: { cursor?: string, search?: string }, on_done: fun(branches: AtlasRepositoryBranches|nil, err: string|nil, next_cursor: string|nil)): { cancel: fun() }|nil
 ---@field fetch_tags fun(repo: AtlasRepository, opts: { cursor?: string, search?: string }, on_done: fun(tags: AtlasRepositoryTag[]|nil, err: string|nil, next_cursor: string|nil)): { cancel: fun() }|nil
----@field fetch_releases (fun(repo: AtlasRepository, opts: PullsFetchOpts, on_done: fun(releases: AtlasRepositoryRelease[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field fetch_releases (fun(repo: AtlasRepository, on_done: fun(releases: AtlasRepositoryRelease[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field fetch_release (fun(repo: AtlasRepository, opts: { id?: string }, on_done: fun(release: AtlasRepositoryReleaseDetails|nil, err: string|nil)): { cancel: fun() }|nil)|nil
----@field fetch_issues (fun(repo: AtlasRepository, state: "open"|"closed", opts: PullsFetchOpts, on_done: fun(result: { entries: PullsRepoIssue[], counts: { open: integer, closed: integer }|nil }|nil, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field fetch_issues (fun(repo: AtlasRepository, state: "open"|"closed", on_done: fun(result: { entries: PullsRepoIssue[], counts: { open: integer, closed: integer }|nil }|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field fetch_issue_summary (fun(repo: AtlasRepository, on_done: fun(summary: AtlasRepositoryIssueSummary|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field delete_branch (fun(repo: AtlasRepository, branch: AtlasRepositoryBranch, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil

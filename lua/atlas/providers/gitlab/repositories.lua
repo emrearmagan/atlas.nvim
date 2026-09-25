@@ -65,26 +65,15 @@ local function repo_path(repo)
 end
 
 ---@param repo AtlasRepository
----@param opts PullsFetchOpts
 ---@param on_done fun(details: AtlasRepositoryDetails|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_details(repo, opts, on_done)
-	opts = opts or {}
+function M.fetch_details(repo, on_done)
 	local path = repo_path(repo)
 	if path == "" then
 		vim.schedule(function()
 			on_done(nil, "Missing repository info")
 		end)
 		return nil
-	end
-
-	local cache_key = string.format("gitlab:repo_details:%s", path)
-	if not opts.force_refresh then
-		local cached, ok = service.get_memory_cache(cache_key)
-		if ok then
-			on_done(cached, nil)
-			return nil
-		end
 	end
 
 	local endpoint = string.format("/projects/%s?statistics=true", service.url_encode(path))
@@ -130,7 +119,6 @@ function M.fetch_details(repo, opts, on_done)
 		local project_id = tonumber(result.id)
 		local default_branch = details.default_branch or ""
 		if project_id == nil or default_branch == "" then
-			service.set_memory_cache(cache_key, details)
 			on_done(details, nil)
 			return
 		end
@@ -152,7 +140,6 @@ function M.fetch_details(repo, opts, on_done)
 			if body and body ~= "" then
 				details.readme = body
 			end
-			service.set_memory_cache(cache_key, details)
 			on_done(details, nil)
 		end)
 	end)
@@ -160,8 +147,8 @@ function M.fetch_details(repo, opts, on_done)
 end
 
 ---@param repo AtlasRepository
----@param opts PullsFetchOpts
----@param on_done fun(branches: AtlasRepositoryBranches|nil, err: string|nil)
+---@param opts { cursor?: string, search?: string }
+---@param on_done fun(branches: AtlasRepositoryBranches|nil, err: string|nil, next_cursor: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_branches(repo, opts, on_done)
 	opts = opts or {}
@@ -173,25 +160,21 @@ function M.fetch_branches(repo, opts, on_done)
 		return nil
 	end
 
-	local cache_key = string.format("gitlab:branches:%s", path)
-	if not opts.force_refresh then
-		local cached, ok = service.get_memory_cache(cache_key)
-		if ok then
-			on_done(cached, nil)
-			return nil
-		end
+	local page = math.max(1, math.floor(tonumber(opts.cursor) or 1))
+	local endpoint =
+		string.format("/projects/%s/repository/branches?per_page=100&page=%d", service.url_encode(path), page)
+	if opts.search and opts.search ~= "" then
+		endpoint = endpoint .. "&search=" .. service.url_encode(opts.search)
 	end
 
-	local endpoint = string.format("/projects/%s/repository/branches?per_page=100", service.url_encode(path))
-	return service.fetch_all_pages(endpoint, function(result, err)
-		if err then
-			on_done(nil, err)
+	return service.request("GET", endpoint, nil, function(result, err)
+		if err or type(result) ~= "table" then
+			on_done(nil, err or "Invalid paginated response")
 			return
 		end
-
-		---@type AtlasRepositoryBranch[]
-		local entries = {}
-		for _, branch_value in ipairs(json.safe_table(result)) do
+		---@type AtlasRepositoryBranches
+		local branches = { entries = {} }
+		for _, branch_value in ipairs(result) do
 			local branch = json.safe_table(branch_value)
 			local commit = json.safe_table(branch.commit)
 			---@type AtlasRepositoryBranch
@@ -205,13 +188,10 @@ function M.fetch_branches(repo, opts, on_done)
 			if type(branch.protected) == "boolean" then
 				entry.protected = branch.protected
 			end
-			table.insert(entries, entry)
+			table.insert(branches.entries, entry)
 		end
-
-		---@type AtlasRepositoryBranches
-		local branches = { entries = entries }
-		service.set_memory_cache(cache_key, branches)
-		on_done(branches, nil)
+		local next_cursor = #result == 100 and tostring(page + 1) or nil
+		on_done(branches, nil, next_cursor)
 	end, {
 		action = "Fetch repository branches",
 		repo = path,
@@ -273,26 +253,15 @@ function M.fetch_tags(repo, opts, on_done)
 end
 
 ---@param repo AtlasRepository
----@param opts PullsFetchOpts
 ---@param on_done fun(releases: AtlasRepositoryRelease[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_releases(repo, opts, on_done)
-	opts = opts or {}
+function M.fetch_releases(repo, on_done)
 	local path = tostring(repo.full_name or "")
 	if path == "" then
 		vim.schedule(function()
 			on_done(nil, "Missing repository info")
 		end)
 		return nil
-	end
-
-	local cache_key = string.format("gitlab:releases:%s", path)
-	if not opts.force_refresh then
-		local cached, ok = service.get_memory_cache(cache_key)
-		if ok then
-			on_done(cached, nil)
-			return nil
-		end
 	end
 
 	local requests = request_scope.new()
@@ -335,7 +304,6 @@ function M.fetch_releases(repo, opts, on_done)
 				fetch_page(page_info.endCursor)
 				return
 			end
-			service.set_memory_cache(cache_key, entries)
 			on_done(entries, nil)
 		end)
 	end
@@ -460,10 +428,9 @@ end
 
 ---@param repo AtlasRepository
 ---@param state "open"|"closed"
----@param _opts PullsFetchOpts
 ---@param on_done fun(result: { entries: PullsRepoIssue[], counts: { open: integer, closed: integer }|nil }|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_issues(repo, state, _opts, on_done)
+function M.fetch_issues(repo, state, on_done)
 	local path = repo_path(repo)
 	if path == "" then
 		on_done(nil, "Missing repository info")
@@ -550,7 +517,6 @@ function M.delete_branch(repo, branch, on_done)
 			on_done(false, err)
 			return
 		end
-		service.delete_memory_cache(string.format("gitlab:branches:%s", path))
 		on_done(true, nil)
 	end, {
 		action = "Delete repository branch",

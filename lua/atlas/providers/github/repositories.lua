@@ -111,10 +111,9 @@ query($owner: String!, $repo: String!, $endCursor: String) {
 ]]
 
 ---@param repo AtlasRepository
----@param opts PullsFetchOpts
 ---@param on_done fun(details: AtlasRepositoryDetails|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_details(repo, opts, on_done)
+function M.fetch_details(repo, on_done)
 	local owner = tostring(repo.owner or "")
 	local repo_name = tostring(repo.repo_name or repo.name or "")
 
@@ -126,15 +125,6 @@ function M.fetch_details(repo, opts, on_done)
 	end
 
 	local slug = owner .. "/" .. repo_name
-	local cache_key = string.format("github:repo_details:%s", slug)
-
-	if not opts.force_refresh then
-		local cached, ok = cli.get_mem(cache_key)
-		if ok then
-			on_done(cached, nil)
-			return nil
-		end
-	end
 
 	local requests = request_scope.new()
 	requests.all({
@@ -205,7 +195,6 @@ function M.fetch_details(repo, opts, on_done)
 		if not errors.readme and results.readme then
 			details.readme = tostring(results.readme)
 		end
-		cli.set_mem(cache_key, details)
 		on_done(details, nil)
 	end)
 	return requests
@@ -313,11 +302,9 @@ function M.fetch_tags(repo, opts, on_done)
 end
 
 ---@param repo AtlasRepository
----@param opts PullsFetchOpts
 ---@param on_done fun(releases: AtlasRepositoryRelease[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_releases(repo, opts, on_done)
-	opts = opts or {}
+function M.fetch_releases(repo, on_done)
 	local slug = tostring(repo.full_name or "")
 	local owner, name = slug:match("^([^/]+)/([^/]+)$")
 	if not owner then
@@ -325,15 +312,6 @@ function M.fetch_releases(repo, opts, on_done)
 			on_done(nil, "Missing repository info")
 		end)
 		return nil
-	end
-
-	local cache_key = string.format("github:releases:%s", slug)
-	if not opts.force_refresh then
-		local cached, ok = cli.get_mem(cache_key)
-		if ok then
-			on_done(cached, nil)
-			return nil
-		end
 	end
 
 	return cli.gh({
@@ -379,7 +357,6 @@ function M.fetch_releases(repo, opts, on_done)
 			end
 		end
 
-		cli.set_mem(cache_key, entries)
 		on_done(entries, nil)
 	end, {
 		action = "Fetch repository releases",
@@ -503,10 +480,9 @@ end
 
 ---@param repo AtlasRepository
 ---@param state "open"|"closed"
----@param _opts PullsFetchOpts
 ---@param on_done fun(result: { entries: PullsRepoIssue[], counts: { open: integer, closed: integer }|nil }|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_issues(repo, state, _opts, on_done)
+function M.fetch_issues(repo, state, on_done)
 	local slug = tostring(repo.full_name or "")
 	local parts = vim.split(slug, "/", { plain = true })
 	local owner = parts[1] or ""
