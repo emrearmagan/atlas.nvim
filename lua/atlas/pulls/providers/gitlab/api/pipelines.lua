@@ -103,7 +103,6 @@ local function parse_pipeline(item, raw_jobs)
 		state = M.to_pipeline_state(item.status),
 		status = json.safe_str(item.status) or "",
 		project_path = item.project.fullPath,
-		sha = item.sha,
 		config_path = item.project.ciConfigPathOrDefault,
 		url = web_url(item.path),
 		job_count = #raw_jobs,
@@ -390,7 +389,6 @@ function M.fetch_history(context, on_done)
 					state = M.to_pipeline_state(item.status),
 					status = json.safe_str(item.status) or "",
 					project_path = project_path or (not pr and path) or nil,
-					sha = json.safe_str(item.sha),
 					url = url,
 					stages = {},
 				})
@@ -424,7 +422,7 @@ function M.fetch_config(context, pipeline, on_done)
 	---@cast pipeline GitLabPipeline
 	local path = pipeline.config_path or ".gitlab-ci.yml"
 	local project = pipeline.project_path or context.repo_full_name
-	local ref = pipeline.sha or pipeline.commit
+	local ref = pipeline.commit
 	if not ref or ref == "" then
 		on_done(nil, "Missing pipeline commit")
 		return nil

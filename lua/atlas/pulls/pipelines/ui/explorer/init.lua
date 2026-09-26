@@ -10,7 +10,7 @@
 ---@field line_map table<integer, PullsPipelinesSelection>
 ---@field selection PullsPipelinesSelection|nil
 ---@field spinner SpinnerInstance|nil
----@field loading_jobs table<string, string>
+---@field loading_job_id string|nil
 ---@field on_select fun(selection: PullsPipelinesSelection|nil, opts?: { force_refresh?: boolean, background?: boolean })|nil
 ---@field on_update fun()|nil
 
@@ -31,7 +31,7 @@ local function stop_spinner(pane)
 		pane.spinner:stop()
 		pane.spinner = nil
 	end
-	pane.loading_jobs = {}
+	pane.loading_job_id = nil
 end
 
 ---@param pane PullsPipelinesExplorer
@@ -41,11 +41,8 @@ local function start_spinner(pane, job)
 		---@type SpinnerInstance
 		local loading_spinner
 		loading_spinner = spinner.create({
-			on_tick = function(frame)
+			on_tick = function()
 				if pane.spinner == loading_spinner then
-					for id in pairs(pane.loading_jobs) do
-						pane.loading_jobs[id] = frame
-					end
 					renderer.render_loading(pane)
 				end
 			end,
@@ -53,7 +50,7 @@ local function start_spinner(pane, job)
 		pane.spinner = loading_spinner
 		loading_spinner:start()
 	end
-	pane.loading_jobs = job and { [job.id] = pane.spinner:current_frame() } or {}
+	pane.loading_job_id = job and job.id
 	M.render(pane)
 end
 
@@ -80,7 +77,7 @@ local function show_selection(pane, selection)
 		return
 	end
 
-	if not job and next(pane.loading_jobs) then
+	if not job and pane.loading_job_id then
 		pane.requests.cancel()
 		stop_spinner(pane)
 	end

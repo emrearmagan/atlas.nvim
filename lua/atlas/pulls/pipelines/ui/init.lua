@@ -291,7 +291,7 @@ function M.open(context, backend, opts)
 		tab = vim.api.nvim_get_current_tabpage(),
 		closed = false,
 		statusline = statusline.new({ help_key = (resolver.resolve("ui.help") or {})[1] }),
-		explorer = { context = context, backend = backend, pipelines = "loading", line_map = {}, loading_jobs = {} },
+		explorer = { context = context, backend = backend, pipelines = "loading", line_map = {} },
 		logs = { context = context, backend = backend, collapsed = {}, line_map = {}, entry_rows = {} },
 		config = { context = context, backend = backend },
 	}

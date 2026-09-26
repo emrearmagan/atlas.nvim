@@ -5,7 +5,6 @@ local parser = require("atlas.pulls.pipelines.gitlab.parser")
 ---@class GitLabPipeline : PullsPipeline
 ---@field status string
 ---@field project_path string
----@field sha string
 ---@field config_path string
 
 ---@class GitLabPipelineJob : PullsPipelineJob

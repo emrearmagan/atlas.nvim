@@ -119,12 +119,12 @@ end
 
 ---@param pane PullsPipelinesLogs
 ---@param selection PullsPipelinesSelection|nil
----@param opts { force_refresh?: boolean, background?: boolean, reset_folds?: boolean }|nil
+---@param opts { force_refresh?: boolean, background?: boolean }|nil
 function M.show(pane, selection, opts)
 	opts = opts or {}
 	local same_job = selection and selection.job and pane.selection and selection.job == pane.selection.job
 	local background = opts.background and same_job
-	if not same_job or opts.reset_folds then
+	if not same_job then
 		pane.collapsed = {}
 	end
 	if same_job and opts.force_refresh ~= true and pane.log ~= nil then

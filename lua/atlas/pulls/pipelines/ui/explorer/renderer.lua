@@ -11,13 +11,13 @@ local namespace = vim.api.nvim_create_namespace("atlas.pipelines.explorer")
 ---@param pipeline PullsPipeline
 ---@param stage PullsPipelineStage
 ---@param job PullsPipelineJob
----@param loading_jobs table<string, string>
+---@param loading_frame string|nil
 ---@param selection PullsPipelinesSelection|nil
 ---@return table
-local function job_row(pipeline, stage, job, loading_jobs, selection)
+local function job_row(pipeline, stage, job, loading_frame, selection)
 	local icon, icon_hl = icons.pulls_status(tostring(job.state or "UNKNOWN"):lower())
-	if loading_jobs[job.id] then
-		icon, icon_hl = loading_jobs[job.id], "AtlasTextMuted"
+	if loading_frame then
+		icon, icon_hl = loading_frame, "AtlasTextMuted"
 	end
 	local row = {
 		icon = icon,
@@ -44,16 +44,17 @@ local function job_row(pipeline, stage, job, loading_jobs, selection)
 end
 
 ---@param pipeline PullsPipeline
----@param loading_jobs table<string, string>
+---@param loading_job_id string|nil
+---@param loading_frame string|nil
 ---@param selection PullsPipelinesSelection|nil
 ---@return table[], boolean
-local function pipeline_children(pipeline, loading_jobs, selection)
+local function pipeline_children(pipeline, loading_job_id, loading_frame, selection)
 	local rows = {}
 	local has_steps = false
 	for _, stage in ipairs(pipeline.stages) do
 		local jobs = {}
 		for _, job in ipairs(stage.jobs) do
-			local row = job_row(pipeline, stage, job, loading_jobs, selection)
+			local row = job_row(pipeline, stage, job, job.id == loading_job_id and loading_frame or nil, selection)
 			jobs[#jobs + 1] = row
 			if row.children and #row.children > 0 then
 				has_steps = true
@@ -124,12 +125,13 @@ local function build_content(pane)
 
 	local rows = {}
 	local columns = { { key = "label", name = "", can_grow = true } }
+	local loading_frame = pane.spinner and pane.spinner:current_frame()
 	for _, pipeline in ipairs(pipelines) do
 		if #rows > 0 then
 			table.insert(rows, { kind = "separator" })
 		end
 		local icon, icon_hl = icons.pulls_status(tostring(pipeline.state or "UNKNOWN"):lower())
-		local children, has_steps = pipeline_children(pipeline, pane.loading_jobs, pane.selection)
+		local children, has_steps = pipeline_children(pipeline, pane.loading_job_id, loading_frame, pane.selection)
 		if has_steps then
 			columns[2] = { key = "duration", name = "", align = "right", hl = "AtlasTextMuted", can_grow = false }
 		end
