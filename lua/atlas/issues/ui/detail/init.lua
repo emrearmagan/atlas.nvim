@@ -276,7 +276,6 @@ local function prepare_open(opts)
 	set_provider(provider)
 	state.on_update = opts.on_update
 
-	require("atlas.issues.ui.highlights").setup()
 	return provider, opts.force_refresh == true
 end
 

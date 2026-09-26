@@ -52,6 +52,10 @@ local groups = {
 	AtlasLogInfo = { fg = "#89b4fa", bold = true },
 	AtlasLogWarn = { fg = "#f9e2af", bold = true },
 	AtlasLogError = { fg = "#f38ba8", bold = true },
+	AtlasLogErrorLine = { fg = "#f38ba8", bg = "#3b2028" },
+	AtlasLogGroup = { fg = "#cdd6f4", bg = "#313244", bold = true },
+	AtlasLogCommand = { fg = "#89b4fa" },
+	AtlasLogDebug = { link = "AtlasTextMuted" },
 
 	AtlasFooterBackground = { bg = "#202635" },
 	AtlasFooterText = { fg = "#7f849c", bg = "#202635" },

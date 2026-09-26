@@ -2,6 +2,7 @@ local M = {}
 
 local detail_ui = require("atlas.ui.detail")
 local providers = require("atlas.providers")
+local pipelines = require("atlas.pulls.pipelines")
 local state = require("atlas.pulls.ui.detail.state")
 local renderer = require("atlas.pulls.ui.detail.renderer")
 local detail_keymaps = require("atlas.pulls.ui.detail.keymaps")
@@ -55,10 +56,14 @@ local function stop_spinner()
 end
 
 local function is_loading()
-	if state.links and state.links.loading then
-		return true
-	end
-	if state.pr_loading or state.details_loading or state.diffstat == "loading" or state.merge_checks == "loading" then
+	if
+		state.pr_loading
+		or state.details_loading
+		or state.diffstat == "loading"
+		or state.merge_checks == "loading"
+		or state.pipelines == "loading"
+		or (state.links and state.links.loading)
+	then
 		return true
 	end
 	if state.current_pr == nil then
@@ -205,10 +210,28 @@ local function load_pr(pr, force_refresh)
 
 	local tab_refresh = refresh_callback(pr)
 	local core = provider.capabilities.core
+	local backend = pipelines.get(provider)
+	state.merge_checks = core.fetch_merge_checks and "loading" or nil
+	state.pipelines = backend and "loading" or nil
 	load_active_tab(pr, { force_refresh = force_refresh })
 
+	if backend then
+		state.requests.run(function(done)
+			return backend.fetch(
+				{ provider = pr.provider, repo_full_name = pr.repo_full_name, target = pr },
+				{ force_refresh = force_refresh },
+				done
+			)
+		end, function(items, err)
+			if not same_ref(state.current_pr, pr) then
+				return
+			end
+			state.pipelines = err or items or {}
+			tab_refresh()
+		end)
+	end
+
 	if core.fetch_merge_checks then
-		state.merge_checks = "loading"
 		state.requests.run(function(done)
 			return core.fetch_merge_checks(pr, { force_refresh = force_refresh }, done)
 		end, function(checks, err)
@@ -243,6 +266,7 @@ local function clear_pr()
 	state.current_details = nil
 	state.diffstat = nil
 	state.merge_checks = nil
+	state.pipelines = nil
 	state.pr_loading = false
 	state.details_loading = false
 	state.line_map = {}
@@ -341,8 +365,6 @@ function M.open(input, opts)
 	state.win, state.buf = detail_ui.open("pulls", cleanup, render)
 	set_provider(provider)
 	state.on_update = opts.on_update
-
-	require("atlas.pulls.ui.highlights").setup()
 
 	if pr then
 		M.select(pr, { force_refresh = opts.force_refresh })

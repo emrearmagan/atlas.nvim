@@ -72,6 +72,10 @@ function M.resolve(value, parsed)
 		project_path, number, tail = path:match("^/(.-)/%-/work_items/(%d+)(.*)$")
 		domain, entity = "issues", "issue"
 	end
+	if project_path == nil then
+		project_path, number, tail = path:match("^/(.-)/%-/pipelines/(%d+)(.*)$")
+		domain, entity = "pulls", "pipeline"
+	end
 	local owner, repo = split_project(project_path)
 	if owner then
 		if not url.valid_tail(tail) then
@@ -90,7 +94,7 @@ function M.resolve(value, parsed)
 			repo = repo,
 			project_path = project_path,
 			repo_full_name = project_path,
-			id = entity == "pr" and id or nil,
+			id = entity ~= "issue" and id or nil,
 			number = id,
 		}
 	end
@@ -115,6 +119,6 @@ function M.resolve(value, parsed)
 		end
 	end
 
-	return nil, "Unsupported GitLab URL. Expected a repository, issue, or merge request URL"
+	return nil, "Unsupported GitLab URL. Expected a repository, issue, merge request, or pipeline URL"
 end
 return M

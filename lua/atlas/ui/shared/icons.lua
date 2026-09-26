@@ -64,6 +64,9 @@ local ICONS = {
 			successful = { icon = "", hl_group = "AtlasTextPositive" },
 			failed = { icon = "", hl_group = "AtlasLogError" },
 			inprogress = { icon = "󰦖", hl_group = "AtlasTextWarning" },
+			canceled = { icon = "󰓛", hl_group = "AtlasTextMuted" },
+			skipped = { icon = "", hl_group = "AtlasTextMuted" },
+			manual = { icon = "", hl_group = "AtlasTextWarning" },
 			stopped = { icon = "󰓛", hl_group = "AtlasTextMuted" },
 			unknown = { icon = "", hl_group = "AtlasTextMuted" },
 		},
@@ -88,6 +91,16 @@ local ICONS = {
 			lowest = { icon = "", hl_group = "AtlasTextPositive" },
 		},
 	},
+}
+
+ICONS.log = {
+	error = ICONS.general.error,
+	warn = ICONS.general.warning,
+	info = ICONS.general.info,
+	debug = ICONS.general.info,
+	success = ICONS.general.success,
+	canceled = ICONS.pulls.status.canceled,
+	skipped = ICONS.pulls.status.skipped,
 }
 
 ICONS.picker = {
@@ -159,6 +172,12 @@ end
 ---@return string, string
 function M.general(name)
 	return get(ICONS.general[name])
+end
+
+---@param level PullsLogLevel
+---@return string, string
+function M.log_level(level)
+	return get(ICONS.log[level])
 end
 
 -- Pulls

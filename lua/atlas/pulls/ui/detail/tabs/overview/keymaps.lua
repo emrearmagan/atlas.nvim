@@ -2,6 +2,7 @@ local M = {}
 
 local help = require("atlas.ui.popups.help")
 local resolver = require("atlas.core.keymaps")
+local pipelines = require("atlas.pulls.pipelines")
 local utils = require("atlas.ui.shared.utils")
 local detail = require("atlas.pulls.ui.detail.state")
 local state = require("atlas.pulls.ui.detail.tabs.overview.state")
@@ -62,9 +63,7 @@ function M.setup(buf, refresh)
 				local entry = detail.line_map[lnum]
 				local pr = detail.current_pr
 				if pr and entry and entry.pipeline then
-					local pipelines = type(state.pipelines) == "table" and state.pipelines or { entry.pipeline }
-					require("atlas.pulls.ui.pipelines").open(pr, detail.provider, {
-						pipelines = pipelines,
+					pipelines.open(pr, detail.provider, {
 						selected_pipeline = entry.pipeline,
 						selected_stage = entry.stage,
 						selected_job = entry.job,

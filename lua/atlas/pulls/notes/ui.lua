@@ -177,7 +177,6 @@ end
 ---@param opts { target: string|nil }|nil
 function M.open(opts)
 	opts = opts or {}
-	require("atlas.ui.shared.highlights").setup()
 	local target, err
 	if opts.target and opts.target ~= "" then
 		target, err = notes.resolve_target(opts.target)

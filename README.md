@@ -119,13 +119,51 @@ Jump from an issue to its PR and back, or browse related issues and sub-issues.
 </details>
 
 <details>
-<summary><strong>Pipelines</strong> - View jobs and logs, retry failures, or cancel running work</summary>
+<summary><strong>Pipelines</strong> - Browse jobs, steps, and logs</summary>
 
 <p align="center">
-  <img width="85%" alt="View pipelines" src="https://github.com/user-attachments/assets/c625c4e8-b1ad-4772-b46b-24718ba6fbb7">
+  <img width="85%" alt="View pipelines" src="https://github.com/user-attachments/assets/ccdffb3d-2411-435d-a498-8c291d92d2b0">
 </p>
 
-View pipelines and their jobs, inspect their status, and read job logs directly in Atlas. Retry failed pipelines or jobs and cancel work that is still running.
+View pipelines and their jobs, inspect their status, and read job logs directly in Atlas.
+
+Use `:Atlas pipelines <target>` with a branch name, PR URL or number (`123`, `#123`, or GitLab `!123`), or a build URL. Branch names use the local repository; `:Atlas pipelines .` opens builds for the current branch.
+
+### Configuration
+
+Atlas uses your provider's CI by default. Set `ci.backend` to use your own. For Bamboo on Bitbucket, use `require("atlas.pulls.pipelines.bamboo").new(opts)` with `host`, `user`, and `password`.
+
+```lua
+providers = {
+  github = {
+    ci = {
+      backend = {
+        fetch = function(context, opts, done)
+          -- Fetch pipelines with their stages and jobs.
+          done({}, nil)
+        end,
+        fetch_job = function(context, pipeline, job, done)
+          -- Fetch the updated job, including any steps.
+          done(job, nil)
+        end,
+        fetch_job_log = function(context, pipeline, job, done)
+          done({ raw = "Your log output here" }, nil)
+        end,
+        parse = function(log)
+          -- Return cleaned lines or your own nested groups.
+          return log.lines
+        end,
+      },
+      highlights = {
+        { pattern = "^FAIL%s", level = "error" },
+        { pattern = "deprecated", level = "warn", hl_group = "DiagnosticWarn" },
+      },
+    },
+  },
+}
+```
+
+`ci.highlights` controls log highlighting using Lua patterns. Set `level` for a severity color or `hl_group` for an existing Neovim highlight group.
 
 </details>
 
@@ -321,6 +359,7 @@ At some point there will probably an extension for lualine.
 - `:Atlas issues [provider]` - Open an issue provider dashboard
 - `:Atlas review [pull-request-url]` - Review a pull request with the configured diff viewer
 - `:Atlas diff [target]` - Open a Git range or pull request in native AtlasDiff
+- `:Atlas pipelines [target|.]` - Open pipelines by branch name, PR URL or number, or build URL; `.` uses the current branch
 - `:Atlas create [pr|issue]` - Create a pull request or issue
 - `:Atlas search [provider]` - Search configured pull-request and issue providers
 - `:Atlas open [target|.]` - Open a provider URL, Jira key, a PR/issue number in the current repository, or the current repository
@@ -793,6 +832,12 @@ keymaps = {
     edit_title = "T",
     edit_description = "D",
     edit_search = "i",
+    pipelines = {
+      next_job = { "]j", "<Tab>" },
+      previous_job = { "[j", "<S-Tab>" },
+      show_history = "gH",
+      toggle_raw_logs = "gL",
+    },
     review = {
       focus_item = "gd",
       approve = "ga",

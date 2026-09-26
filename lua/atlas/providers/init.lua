@@ -6,7 +6,7 @@ local url = require("atlas.providers.url")
 ---@alias AtlasIssuesProviderId "jira"|"github"|"gitlab"
 ---@alias AtlasProviderId AtlasPullsProviderId|AtlasIssuesProviderId
 ---@alias AtlasDomain "pulls"|"issues"
----@alias AtlasEntity "pr"|"issue"|"repo"
+---@alias AtlasEntity "pr"|"issue"|"repo"|"pipeline"
 
 ---@class AtlasTarget
 ---@field provider AtlasProviderId
@@ -85,10 +85,35 @@ function M.load(id, domain)
 end
 
 ---@param value string
+---@param opts? { repository?: AtlasTarget, domain?: AtlasDomain }
 ---@return AtlasTarget|nil, string|nil
-function M.resolve(value)
+function M.resolve(value, opts)
+	opts = opts or {}
 	local cleaned = tostring(value or ""):gsub("^%s+", ""):gsub("%s+$", "")
 	cleaned = cleaned:match("^<(.*)>$") or cleaned
+
+	local prefix, number = cleaned:match("^([#!]?)(%d+)$")
+	if number then
+		local repository = opts.repository
+		if not repository then
+			return nil, "A numeric reference requires a supported local Git repository"
+		end
+		local domain = opts.domain or repository.domain
+		if prefix == "!" and (repository.provider ~= "gitlab" or domain ~= "pulls") then
+			return nil, "! references are only supported for GitLab merge requests"
+		end
+		if not M.domain(repository.provider, domain) then
+			return nil, string.format("Provider does not support %s: %s", domain, repository.provider)
+		end
+		local id = assert(tonumber(number))
+		---@cast id integer
+		return vim.tbl_extend("force", {}, repository, {
+			domain = domain,
+			entity = domain == "pulls" and "pr" or "issue",
+			id = id,
+			number = id,
+		})
+	end
 
 	local parsed, parse_err = url.parse(cleaned)
 	local resolve_err

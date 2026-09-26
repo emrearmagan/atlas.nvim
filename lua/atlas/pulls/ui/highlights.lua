@@ -14,11 +14,6 @@ local groups = {
 	AtlasPRDeclinedChip = { fg = "#0b1320", bg = "#fca5a5", bold = true },
 	AtlasPRDraftChip = { fg = "#111827", bg = "#fcd34d", bold = true },
 
-	AtlasPipelineLinkSuccess = { fg = "#a6da95" },
-	AtlasPipelineLinkFailed = { fg = "#f38ba8" },
-	AtlasPipelineLinkInProgress = { fg = "#f9e2af" },
-	AtlasPipelineLinkMuted = { fg = "#7f849c" },
-
 	AtlasDiffAddLine = { link = "DiffAdd" },
 	AtlasDiffChangeLine = { link = "DiffChange" },
 	AtlasDiffDeleteFiller = { link = "Comment" },

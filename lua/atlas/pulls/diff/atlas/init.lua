@@ -10,7 +10,6 @@ local keymaps = require("atlas.pulls.diff.atlas.keymaps")
 local logger = require("atlas.core.logger")
 local notes = require("atlas.pulls.diff.notes")
 local position = require("atlas.pulls.diff.position")
-local pulls_highlights = require("atlas.pulls.ui.highlights")
 local review = require("atlas.pulls.diff.review")
 local session_api = require("atlas.pulls.diff.session")
 local view = require("atlas.pulls.diff.atlas.view")
@@ -470,7 +469,6 @@ end
 ---@param on_done fun(err: string|nil)
 ---@return { cancel: fun() }
 function M.open(session, on_done)
-	pulls_highlights.setup()
 	local explorer_options = explorer.options()
 	local cancelled = false
 	local request = git.load({

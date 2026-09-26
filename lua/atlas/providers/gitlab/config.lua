@@ -1,4 +1,3 @@
----@class AtlasGitLabConfig
+---@class AtlasGitLabConfig : AtlasProviderConfig
 ---@field base_url string
 ---@field token string
----@field cache_ttl number|nil Cache lifetime in seconds. Set to 0 to disable caching.

@@ -4,6 +4,7 @@ local git_checkout = require("atlas.core.git.checkout")
 local icons = require("atlas.ui.shared.icons")
 local md_editor = require("atlas.ui.popups.editor")
 local picker = require("atlas.ui.picker")
+local pipeline_api = require("atlas.pulls.pipelines")
 local review = require("atlas.pulls.actions.review")
 local utils = require("atlas.pulls.actions.utils")
 local ui_utils = require("atlas.ui.shared.utils")
@@ -409,11 +410,13 @@ M.open_pipelines = {
 	label = "Open Pipelines",
 	icon = icons.action("pipeline"),
 	is_available = function(context)
-		return has_pr(context) and context.provider.capabilities.pipelines ~= nil
+		if not has_pr(context) then
+			return false
+		end
+		return pipeline_api.get(context.provider) ~= nil
 	end,
 	run = function(context, done)
-		require("atlas.pulls.ui.pipelines").open(assert(context.pr), context.provider)
-		notify(context, "success", "Opened Pipelines", 1200)
+		pipeline_api.open(assert(context.pr), context.provider)
 		done({ changed_pr = false, message = "Opened Pipelines" }, nil)
 	end,
 }

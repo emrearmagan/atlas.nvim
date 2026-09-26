@@ -1,35 +1,22 @@
+local api = require("atlas.pulls.providers.gitlab.api.pipelines")
 local icons = require("atlas.ui.shared.icons")
-local pipelines = require("atlas.pulls.providers.gitlab.api.pipelines")
-
----@param item PullsPipeline|PullsPipelineJob
----@return string
-local function state(item)
-	return tostring(item.state or "UNKNOWN"):upper()
-end
 
 ---@param item PullsPipeline|PullsPipelineJob
 ---@return boolean
 local function can_retry(item)
-	local value = tostring(item.provider_state or ""):lower()
-	if value ~= "" then
-		return value == "failed" or value == "canceled"
-	end
-	value = state(item)
-	return value == "FAILED" or value == "STOPPED"
+	return item.state == "FAILED" or item.state == "CANCELED"
 end
 
 ---@param item PullsPipeline|PullsPipelineJob
 ---@return boolean
 local function can_cancel(item)
-	local value = tostring(item.provider_state or ""):lower()
-	if value ~= "" then
-		return value == "created"
-			or value == "waiting_for_resource"
-			or value == "preparing"
-			or value == "pending"
-			or value == "running"
-	end
-	return state(item) == "INPROGRESS"
+	---@cast item GitLabPipeline|GitLabPipelineJob
+	local status = (item.status or ""):lower()
+	return status == "created"
+		or status == "waiting_for_resource"
+		or status == "preparing"
+		or status == "pending"
+		or status == "running"
 end
 
 ---@type PullsPipelineAction[]
@@ -42,7 +29,7 @@ return {
 			return tonumber(ctx.pipeline.id) ~= nil and can_retry(ctx.pipeline)
 		end,
 		run = function(ctx, done)
-			pipelines.retry(ctx.pr, ctx.pipeline, function(_, err)
+			api.retry(ctx.context, ctx.pipeline, function(_, err)
 				done(err)
 			end)
 		end,
@@ -56,7 +43,7 @@ return {
 			return tonumber(ctx.pipeline.id) ~= nil and can_cancel(ctx.pipeline)
 		end,
 		run = function(ctx, done)
-			pipelines.cancel(ctx.pr, ctx.pipeline, function(_, err)
+			api.cancel(ctx.context, ctx.pipeline, function(_, err)
 				done(err)
 			end)
 		end,
@@ -69,7 +56,7 @@ return {
 			return ctx.job ~= nil and tonumber(ctx.job.id) ~= nil and can_retry(ctx.job)
 		end,
 		run = function(ctx, done)
-			pipelines.retry_job(ctx.pr, ctx.job, function(_, err)
+			api.retry_job(ctx.context, ctx.job, function(_, err)
 				done(err)
 			end)
 		end,
@@ -83,7 +70,7 @@ return {
 			return ctx.job ~= nil and tonumber(ctx.job.id) ~= nil and can_cancel(ctx.job)
 		end,
 		run = function(ctx, done)
-			pipelines.cancel_job(ctx.pr, ctx.job, function(_, err)
+			api.cancel_job(ctx.context, ctx.job, function(_, err)
 				done(err)
 			end)
 		end,

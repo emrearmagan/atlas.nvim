@@ -1,2 +1,1 @@
----@class AtlasGitHubConfig
----@field cache_ttl number|nil Cache lifetime in seconds. Set to 0 to disable caching.
+---@class AtlasGitHubConfig : AtlasProviderConfig

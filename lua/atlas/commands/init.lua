@@ -1,7 +1,9 @@
 local M = {}
 
+local git = require("atlas.core.git")
 local notify = require("atlas.core.notify")
 local picker = require("atlas.ui.picker")
+local pipelines = require("atlas.commands.pipelines")
 local providers = require("atlas.providers")
 local ui_utils = require("atlas.ui.utils")
 
@@ -156,6 +158,23 @@ M.register({
 	description = "Open native AtlasDiff",
 	run = function(args)
 		with_argument(args, "Git range or pull request: ", require("atlas.pulls.diff").open_argument)
+	end,
+})
+
+M.register({
+	name = "pipelines",
+	usage = "pipelines [target|.]",
+	description = "Open branch, pull request, or build pipelines",
+	complete = function(arglead)
+		local options = { "." }
+		local root = git.repo_root()
+		if root then
+			vim.list_extend(options, git.list_remote_branches(root, "origin"))
+		end
+		return complete_options(arglead, options)
+	end,
+	run = function(args)
+		with_argument(args, "Branch, pull request, or pipeline URL: ", pipelines.open)
 	end,
 })
 
