@@ -67,8 +67,8 @@ local function configured_readme_path(repo)
 	local repo_cfg = (((config.options or {}).pulls or {}).repo_config or {})
 	local settings = repo_cfg.settings or {}
 	local keys = {
-		tostring(repo.id or ""),
-		tostring(repo.name or ""),
+		repo.id,
+		repo.name,
 	}
 
 	for _, key in ipairs(keys) do
@@ -95,7 +95,7 @@ local function fetch_readme(owner, repo_name, ref, readme_path, on_done)
 		return nil
 	end
 
-	local path = tostring(readme_path or "")
+	local path = readme_path or ""
 	if path == "" then
 		path = "README.md"
 	end
@@ -129,11 +129,9 @@ function M.fetch_workspace_repositories(workspace, search, on_done)
 		on_done(nil, "Missing workspace slug")
 		return nil
 	end
-	local term = tostring(search or "")
-
 	local query_prefix = ""
-	if term ~= "" then
-		local escaped_term = term:gsub('"', '\\"')
+	if search ~= "" then
+		local escaped_term = search:gsub('"', '\\"')
 		local q_expression = string.format('name~"%s"', escaped_term)
 		local encoded_q = q_expression:gsub('"', "%%22"):gsub(" ", "%%20")
 		query_prefix = string.format("q=%s&", encoded_q)
@@ -158,7 +156,7 @@ function M.fetch_workspace_repositories(workspace, search, on_done)
 	end, {
 		action = "Fetch repositories",
 		workspace = workspace,
-		search = term,
+		search = search,
 	})
 end
 
@@ -245,8 +243,8 @@ end
 ---@param on_done fun(repo: AtlasRepositoryDetails|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_details(repo, on_done)
-	local owner = tostring(repo.owner or "")
-	local repo_name = tostring(repo.repo_name or "")
+	local owner = repo.owner
+	local repo_name = repo.repo_name
 
 	if owner == "" or repo_name == "" then
 		on_done(nil, "Repository missing owner/name")
@@ -269,7 +267,7 @@ function M.fetch_details(repo, on_done)
 
 		local detail = to_repo_details(result, owner)
 		local readme_path = configured_readme_path(repo)
-		local ref = tostring(detail.default_branch or "")
+		local ref = detail.default_branch or ""
 
 		requests.run(function(done)
 			return fetch_readme(owner, repo_name, ref, readme_path, done)
@@ -285,11 +283,10 @@ end
 
 ---@param repo AtlasRepository
 ---@param opts { cursor?: string, search?: string }
----@param on_done fun(branches: AtlasRepositoryBranches|nil, err: string|nil, next_cursor: string|nil)
+---@param on_done fun(branches: AtlasRepositoryBranch[]|nil, err: string|nil, next_cursor: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_branches(repo, opts, on_done)
 	---@cast repo BitbucketRepository
-	opts = opts or {}
 	local branches_url = repo.branches_url
 		or string.format("/repositories/%s/%s/refs/branches", url_encode(repo.owner), url_encode(repo.repo_name))
 
@@ -309,8 +306,8 @@ function M.fetch_branches(repo, opts, on_done)
 			return
 		end
 
-		---@type AtlasRepositoryBranches
-		local branches = { entries = {} }
+		---@type AtlasRepositoryBranch[]
+		local branches = {}
 		for _, item in ipairs(result.values or {}) do
 			local branch = as_table(item) or {}
 			local target = as_table(branch.target) or {}
@@ -319,7 +316,7 @@ function M.fetch_branches(repo, opts, on_done)
 			local links = as_table(branch.links) or {}
 			local self_link = as_table(links.self) or {}
 			local name = user.nickname or user.display_name or author.raw or ""
-			table.insert(branches.entries, {
+			table.insert(branches, {
 				name = tostring(branch.name or ""),
 				hash = tostring(target.hash or ""),
 				date = tostring(target.date or ""),
@@ -333,7 +330,7 @@ function M.fetch_branches(repo, opts, on_done)
 			next_cursor = nil
 		end
 		on_done(branches, nil, next_cursor)
-	end, { action = "Fetch repository branches", repo = repo.full_name or repo.name })
+	end, { action = "Fetch repository branches", repo = repo.full_name })
 end
 
 ---@param repo AtlasRepository
@@ -342,7 +339,6 @@ end
 ---@return { cancel: fun() }|nil
 function M.fetch_tags(repo, opts, on_done)
 	---@cast repo BitbucketRepository
-	opts = opts or {}
 	local tags_url = repo.tags_url
 		or string.format("/repositories/%s/%s/refs/tags", url_encode(repo.owner), url_encode(repo.repo_name))
 
@@ -398,7 +394,7 @@ function M.fetch_tags(repo, opts, on_done)
 			next_cursor = nil
 		end
 		on_done(entries, nil, next_cursor)
-	end, { action = "Fetch repository tags", repo = repo.full_name or repo.name })
+	end, { action = "Fetch repository tags", repo = repo.full_name })
 end
 
 ---@param repo AtlasRepository
@@ -406,14 +402,14 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.delete_branch(repo, branch, on_done)
-	local branch_name = tostring(branch.name or "")
+	local branch_name = branch.name
 
 	if branch_name == "" then
 		on_done(false, "Branch name is missing")
 		return nil
 	end
 
-	local endpoint = tostring(branch.api_url or "")
+	local endpoint = branch.api_url or ""
 	if endpoint == "" then
 		on_done(false, "Branch API URL is missing")
 		return nil
@@ -427,7 +423,7 @@ function M.delete_branch(repo, branch, on_done)
 
 		service.clear_cache()
 		on_done(true, nil)
-	end, { action = "Delete repository branch", repo = repo.full_name or repo.name, branch = branch_name })
+	end, { action = "Delete repository branch", repo = repo.full_name, branch = branch_name })
 end
 
 return M

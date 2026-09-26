@@ -9,7 +9,7 @@ local M = {}
 ---@return string[], table[]
 local function render_header(repo, width)
 	local lines, spans = {}, {}
-	utils.push(lines, spans, repo.full_name or repo.name, "AtlasColumnHeader")
+	utils.push(lines, spans, repo.full_name, "AtlasColumnHeader")
 	table.insert(lines, "")
 
 	local metadata = { repo.is_private and "Private" or "Public" }

@@ -17,8 +17,8 @@ local function collect_users(context)
 			return
 		end
 
-		local id = vim.trim(tostring(user.id or ""))
-		local label = vim.trim(tostring(user.name or ""))
+		local id = vim.trim(user.id or "")
+		local label = vim.trim(user.name)
 		if id == "" or label == "" or seen[id] then
 			return
 		end
@@ -80,7 +80,7 @@ local function resolve_mention(author)
 	if author == nil then
 		return ""
 	end
-	local mention_id = vim.trim(tostring(author.id or ""))
+	local mention_id = vim.trim(author.id or "")
 	local mention_label = vim.trim(author.name)
 	if mention_label == "" and mention_id == "" then
 		return ""

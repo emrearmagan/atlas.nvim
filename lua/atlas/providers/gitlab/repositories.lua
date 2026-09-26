@@ -37,7 +37,7 @@ query($path: ID!, $overdueBefore: Time!) {
 local function configured_readme_path(repo)
 	local repo_cfg = (((config.options or {}).pulls or {}).repo_config or {})
 	local settings = repo_cfg.settings or {}
-	local keys = { tostring(repo.id or ""), tostring(repo.name or "") }
+	local keys = { repo.id, repo.name }
 	for _, key in ipairs(keys) do
 		if key ~= "" then
 			local entry = settings[key]
@@ -50,25 +50,10 @@ local function configured_readme_path(repo)
 end
 
 ---@param repo AtlasRepository
----@return string
-local function repo_path(repo)
-	local id = tostring(repo.id or "")
-	if id ~= "" then
-		return id
-	end
-	local owner = tostring(repo.owner or "")
-	local name = tostring(repo.repo_name or repo.name or "")
-	if owner == "" or name == "" then
-		return ""
-	end
-	return owner .. "/" .. name
-end
-
----@param repo AtlasRepository
 ---@param on_done fun(details: AtlasRepositoryDetails|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_details(repo, on_done)
-	local path = repo_path(repo)
+	local path = repo.full_name
 	if path == "" then
 		vim.schedule(function()
 			on_done(nil, "Missing repository info")
@@ -90,7 +75,7 @@ function M.fetch_details(repo, on_done)
 		end
 		result = json.safe_table(result)
 
-		local name = json.safe_str(result.path) or tostring(repo.repo_name or repo.name or "")
+		local name = json.safe_str(result.path) or repo.repo_name
 		local full_path = json.safe_str(result.path_with_namespace) or path
 		local owner = full_path:match("^(.-)/[^/]+$") or ""
 
@@ -148,11 +133,10 @@ end
 
 ---@param repo AtlasRepository
 ---@param opts { cursor?: string, search?: string }
----@param on_done fun(branches: AtlasRepositoryBranches|nil, err: string|nil, next_cursor: string|nil)
+---@param on_done fun(branches: AtlasRepositoryBranch[]|nil, err: string|nil, next_cursor: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_branches(repo, opts, on_done)
-	opts = opts or {}
-	local path = repo_path(repo)
+	local path = repo.full_name
 	if path == "" then
 		vim.schedule(function()
 			on_done(nil, "Missing repository info")
@@ -172,8 +156,8 @@ function M.fetch_branches(repo, opts, on_done)
 			on_done(nil, err or "Invalid paginated response")
 			return
 		end
-		---@type AtlasRepositoryBranches
-		local branches = { entries = {} }
+		---@type AtlasRepositoryBranch[]
+		local branches = {}
 		for _, branch_value in ipairs(result) do
 			local branch = json.safe_table(branch_value)
 			local commit = json.safe_table(branch.commit)
@@ -188,7 +172,7 @@ function M.fetch_branches(repo, opts, on_done)
 			if type(branch.protected) == "boolean" then
 				entry.protected = branch.protected
 			end
-			table.insert(branches.entries, entry)
+			table.insert(branches, entry)
 		end
 		local next_cursor = #result == 100 and tostring(page + 1) or nil
 		on_done(branches, nil, next_cursor)
@@ -203,8 +187,7 @@ end
 ---@param on_done fun(tags: AtlasRepositoryTag[]|nil, err: string|nil, next_cursor: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_tags(repo, opts, on_done)
-	opts = opts or {}
-	local path = repo_path(repo)
+	local path = repo.full_name
 	if path == "" then
 		vim.schedule(function()
 			on_done(nil, "Missing repository info")
@@ -256,7 +239,7 @@ end
 ---@param on_done fun(releases: AtlasRepositoryRelease[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_releases(repo, on_done)
-	local path = tostring(repo.full_name or "")
+	local path = repo.full_name
 	if path == "" then
 		vim.schedule(function()
 			on_done(nil, "Missing repository info")
@@ -316,8 +299,7 @@ end
 ---@param on_done fun(release: AtlasRepositoryReleaseDetails|nil, err: string|nil, status?: integer)
 ---@return { cancel: fun() }|nil
 function M.fetch_release(repo, opts, on_done)
-	opts = opts or {}
-	local path = repo_path(repo)
+	local path = repo.full_name
 	if path == "" then
 		vim.schedule(function()
 			on_done(nil, "Missing repository info")
@@ -431,7 +413,7 @@ end
 ---@param on_done fun(result: { entries: PullsRepoIssue[], counts: { open: integer, closed: integer }|nil }|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_issues(repo, state, on_done)
-	local path = repo_path(repo)
+	local path = repo.full_name
 	if path == "" then
 		on_done(nil, "Missing repository info")
 		return nil
@@ -501,8 +483,8 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.delete_branch(repo, branch, on_done)
-	local path = repo_path(repo)
-	local name = tostring(branch.name or "")
+	local path = repo.full_name
+	local name = branch.name
 	if path == "" or name == "" then
 		vim.schedule(function()
 			on_done(false, "Missing branch info")

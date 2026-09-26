@@ -157,12 +157,11 @@ local function compact_rows(pulls, display, opts)
 end
 
 ---@param pulls PullRequest[]
----@param layout "grouped"|"plain"
+---@param grouped boolean
 ---@param display table
 ---@param opts table
 ---@return table[]
-local function list_rows(pulls, layout, display, opts)
-	local grouped = layout == "grouped"
+local function list_rows(pulls, grouped, display, opts)
 	local groups = grouped and group_by_repo(pulls) or {}
 	if not grouped then
 		for _, pr in ipairs(pulls) do
@@ -226,7 +225,7 @@ function M.render(opts, pulls)
 		width = opts.width,
 		margin = 1,
 		columns = compact and display.columns.compact or display.columns.list,
-		rows = compact and compact_rows(pulls, display, opts) or list_rows(pulls, layout, display, opts),
+		rows = compact and compact_rows(pulls, display, opts) or list_rows(pulls, layout == "grouped", display, opts),
 		hide_columns = { "diff", "author", "created", "updated" },
 		cell_hl = function(row, col, ctx)
 			return cell_hl(row, col, ctx, display)

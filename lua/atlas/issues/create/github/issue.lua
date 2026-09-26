@@ -67,7 +67,7 @@ local function format_assignees(assignees)
 
 	local parts = {}
 	for _, assignee in ipairs(assignees) do
-		table.insert(parts, "@" .. tostring(assignee.username or ""))
+		table.insert(parts, "@" .. (assignee.username or ""))
 	end
 
 	return icons.general("user") .. " " .. table.concat(parts, ", ")

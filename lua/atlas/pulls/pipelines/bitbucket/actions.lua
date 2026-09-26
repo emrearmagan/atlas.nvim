@@ -24,6 +24,7 @@ return {
 			local branch = ctx.pipeline.branch
 				or (type(target) == "string" and target)
 				or (type(target) == "table" and target.source and target.source.branch)
+				or nil
 			api.run_pipeline(ctx.context.repo_full_name, branch, function(_, err)
 				done(err)
 			end)

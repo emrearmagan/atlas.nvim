@@ -53,7 +53,6 @@ local function render(state)
 	vim.api.nvim_buf_clear_namespace(state.buf, namespace, 0, -1)
 	local issues = state.issues
 	if type(issues) == "string" then
-		---@cast issues string
 		local message = issues == "loading" and state.spinner:text("Loading " .. state.filter .. " issues...") or issues
 		utils.buffer.center_message(state.buf, state.win, message)
 		vim.api.nvim_buf_set_extmark(state.buf, namespace, 0, 0, {
@@ -217,7 +216,6 @@ local function search(state)
 	if type(issues) == "string" or #issues == 0 then
 		return
 	end
-	---@cast issues Issue[]
 	picker.select({
 		title = state.filter:gsub("^%l", string.upper) .. " issues on this page",
 		items = issues,

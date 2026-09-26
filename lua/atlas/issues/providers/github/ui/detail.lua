@@ -27,7 +27,7 @@ end
 local function assignees_display(assignees)
 	local usernames = {}
 	for _, assignee in ipairs(assignees) do
-		local username = tostring(assignee.username or assignee.name or "")
+		local username = assignee.username or assignee.name
 		if username ~= "" then
 			table.insert(usernames, username)
 		end
@@ -107,7 +107,7 @@ end
 function M.header_fields(issue, details, _loading)
 	---@cast issue GitHubIssue
 	---@cast details GitHubIssueDetails|nil
-	local reporter_name = issue.reporter and tostring(issue.reporter.name or "") or ""
+	local reporter_name = issue.reporter and issue.reporter.name or ""
 	if reporter_name == "" then
 		reporter_name = "Unknown"
 	end

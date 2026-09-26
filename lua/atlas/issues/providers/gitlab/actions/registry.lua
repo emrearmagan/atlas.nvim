@@ -139,7 +139,7 @@ local function assign(ctx, done)
 			items = members,
 			selected = vim.deepcopy(original),
 			key = function(item)
-				return tostring(item.id or item.username or "")
+				return item.id or item.username or ""
 			end,
 			format_item = function(item)
 				return string.format("%s %s (@%s)", icons.general("user"), item.name or item.username, item.username)

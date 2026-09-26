@@ -168,7 +168,7 @@ local function assign(ctx, done)
 
 		local original_set = {}
 		for _, assignee in ipairs(current_assignees) do
-			local login = tostring(assignee.username or "")
+			local login = assignee.username or ""
 			if login ~= "" then
 				original_set[login] = true
 			end
@@ -178,7 +178,7 @@ local function assign(ctx, done)
 			items = assignable_users,
 			selected = vim.deepcopy(current_assignees),
 			key = function(item)
-				return tostring(item.username or "")
+				return item.username or ""
 			end,
 			format_item = function(item)
 				return string.format("%s %s", icons.general("user"), item.name or item.username)
@@ -187,7 +187,7 @@ local function assign(ctx, done)
 			on_done = function(selected)
 				local selected_set = {}
 				for _, item in ipairs(selected) do
-					local login = tostring(item.username or "")
+					local login = item.username or ""
 					if login ~= "" then
 						selected_set[login] = true
 					end
@@ -438,7 +438,7 @@ local function search_issues(repo, ctx, done)
 					return
 				end
 				local assignees = vim.tbl_map(function(user)
-					return "@" .. tostring(user.username or user.name)
+					return "@" .. (user.username or user.name)
 				end, details.assignees)
 				local label_names = vim.tbl_map(function(label)
 					return label.name

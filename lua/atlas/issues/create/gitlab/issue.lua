@@ -99,7 +99,7 @@ local function format_assignees(assignees)
 
 	local parts = {}
 	for _, a in ipairs(assignees) do
-		table.insert(parts, "@" .. tostring(a.username or ""))
+		table.insert(parts, "@" .. (a.username or ""))
 	end
 
 	return icons.general("user") .. " " .. table.concat(parts, ", ")
@@ -252,7 +252,7 @@ local function pick_assignees(issue_state)
 			items = items,
 			selected = issue_state.fields.assignees,
 			key = function(item)
-				return tostring(item.id or item.username or "")
+				return item.id or item.username or ""
 			end,
 			format_item = function(item)
 				return string.format("%s %s (@%s)", icons.general("user"), item.name or item.username, item.username)

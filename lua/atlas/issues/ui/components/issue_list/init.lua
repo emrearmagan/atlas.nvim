@@ -130,7 +130,7 @@ local function issue_meta_text(issue, provider_id)
 	if repository and repository ~= "" then
 		table.insert(parts, repository)
 	end
-	local type_name = issue.type and tostring(issue.type.name or "") or ""
+	local type_name = issue.type and issue.type.name or ""
 	if type_name ~= "" then
 		table.insert(parts, type_name)
 	end

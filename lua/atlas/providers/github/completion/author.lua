@@ -102,7 +102,7 @@ function M.for_issues(context)
 		return collect_issue_logins(context)
 	end, function(author)
 		---@cast author AtlasUser|nil
-		local handle = tostring((author or {}).username or "")
+		local handle = author and author.username or ""
 		return handle ~= "" and ("@" .. handle) or ""
 	end)
 end

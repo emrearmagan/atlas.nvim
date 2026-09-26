@@ -112,7 +112,7 @@ function M.for_issues(context)
 		return collect_issue_usernames(context)
 	end, function(author)
 		---@cast author AtlasUser|nil
-		local username = tostring((author or {}).username or "")
+		local username = author and author.username or ""
 		return username ~= "" and ("@" .. username) or ""
 	end)
 end

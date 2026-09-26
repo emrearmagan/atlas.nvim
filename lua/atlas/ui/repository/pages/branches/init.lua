@@ -18,7 +18,7 @@ local utils = require("atlas.ui.shared.utils")
 ---@field sidebar_buf integer
 ---@field repo AtlasRepositoryDetails
 ---@field provider PullsProvider|IssuesProvider
----@field branches AtlasRepositoryBranches|"loading"|string
+---@field branches AtlasRepositoryBranch[]|"loading"|string
 ---@field page integer
 ---@field cursors table<integer, string>
 ---@field next_cursor string|nil
@@ -71,7 +71,7 @@ local function render(state)
 	elseif type(branches) == "string" then
 		message = branches
 		hl_group = "AtlasLogError"
-	elseif #branches.entries == 0 then
+	elseif #branches == 0 then
 		message = "No branches found"
 	end
 	if message then
@@ -182,7 +182,7 @@ local function load(state, page)
 			vim.api.nvim_win_set_cursor(state.win, { 1, 0 })
 		end
 		if expanded and branches then
-			for _, branch in ipairs(branches.entries) do
+			for _, branch in ipairs(branches) do
 				if branch.name == expanded then
 					load_history(state, branch)
 					break
@@ -201,7 +201,7 @@ local function search(state)
 	local branches = state.branches
 	picker.search({
 		title = "Branches",
-		initial_items = type(branches) == "table" and branches.entries or {},
+		initial_items = type(branches) == "table" and branches or {},
 		key = function(branch)
 			return branch.name
 		end,
@@ -214,9 +214,7 @@ local function search(state)
 		fetch = function(query, done)
 			return state.requests.run(function(finish)
 				return repository.fetch_branches(state.repo, { search = query }, finish)
-			end, function(result, err)
-				done(result and result.entries, err)
-			end)
+			end, done)
 		end,
 		on_select = function(branch)
 			if not branch or states[state.buf] ~= state or not utils.window.valid(state.win) then
@@ -235,7 +233,7 @@ local function search(state)
 			state.page = 1
 			state.cursors = {}
 			state.next_cursor = nil
-			state.branches = { entries = { branch } }
+			state.branches = { branch }
 			state.spinner:stop()
 			render(state)
 			vim.api.nvim_set_current_win(state.win)
@@ -256,7 +254,7 @@ local function open_pipeline(provider_id, repo, branch)
 	end
 	pipelines.open({
 		provider = provider.id,
-		repo_full_name = repo.full_name or repo.name,
+		repo_full_name = repo.full_name,
 		target = branch.name,
 	}, provider)
 end
@@ -291,9 +289,10 @@ local function open_diff(state)
 		return
 	end
 	local branch = selection.branch
-	local branches = state.branches --[[@as AtlasRepositoryBranches]]
+	local branches = state.branches
+	---@cast branches AtlasRepositoryBranch[]
 	local bases = {}
-	for _, candidate in ipairs(branches.entries) do
+	for _, candidate in ipairs(branches) do
 		if candidate.name ~= branch.name then
 			table.insert(bases, candidate)
 		end
@@ -314,7 +313,7 @@ local function open_diff(state)
 				local matches = result
 					and vim.tbl_filter(function(candidate)
 						return candidate.name ~= branch.name
-					end, result.entries)
+					end, result)
 				done(matches, err)
 			end)
 		end,
@@ -397,11 +396,7 @@ local function delete_branch(state)
 		return
 	end
 	vim.ui.input({
-		prompt = string.format(
-			"Delete remote branch '%s' from '%s'? [y/N]: ",
-			branch.name,
-			state.repo.full_name or state.repo.name
-		),
+		prompt = string.format("Delete remote branch '%s' from '%s'? [y/N]: ", branch.name, state.repo.full_name),
 	}, function(answer)
 		local confirmed = answer and vim.trim(answer):lower()
 		if (confirmed ~= "y" and confirmed ~= "yes") or states[state.buf] ~= state or state.busy then

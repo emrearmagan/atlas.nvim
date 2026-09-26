@@ -4,10 +4,10 @@ local utils = require("atlas.ui.shared.utils")
 
 local M = {}
 
----@param value string|nil
+---@param value string
 ---@return string
 local function clean(value)
-	return ((value or ""):gsub("%c", " "))
+	return (value:gsub("%c", " "))
 end
 
 ---@param state RepositoryBuilds

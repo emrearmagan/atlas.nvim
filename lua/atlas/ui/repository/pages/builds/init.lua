@@ -49,17 +49,17 @@ local function render(state, selected_id)
 	end
 	state.line_map = {}
 	vim.api.nvim_buf_clear_namespace(state.buf, namespace, 0, -1)
-	if type(state.runs) == "string" then
-		local message = state.runs == "loading" and state.spinner:text("Loading builds...") or state.runs
-		---@cast message string
+	local runs = state.runs
+	if type(runs) == "string" then
+		local message = runs == "loading" and state.spinner:text("Loading builds...") or runs
 		utils.buffer.center_message(state.buf, state.win, message)
 		vim.api.nvim_buf_set_extmark(state.buf, namespace, 0, 0, {
 			end_row = vim.api.nvim_buf_line_count(state.buf),
-			line_hl_group = state.runs == "loading" and "Normal" or "AtlasLogError",
+			line_hl_group = runs == "loading" and "Normal" or "AtlasLogError",
 		})
 		return
 	end
-	if #state.runs == 0 then
+	if #runs == 0 then
 		utils.buffer.center_message(
 			state.buf,
 			state.win,
@@ -113,7 +113,7 @@ local function load(state)
 	state.requests.run(function(done)
 		return state.backend.fetch_history({
 			provider = state.provider.id,
-			repo_full_name = state.repo.full_name or state.repo.name,
+			repo_full_name = state.repo.full_name,
 			target = state.branch,
 		}, done)
 	end, function(runs, err)
@@ -142,7 +142,7 @@ local function change_branch(state)
 		return
 	end
 	local repository = state.provider.capabilities.repository
-	if not repository or not repository.fetch_branches then
+	if not repository then
 		notify.info("Branches are not available for this repository")
 		return
 	end
@@ -158,9 +158,7 @@ local function change_branch(state)
 		fetch = function(query, done)
 			return state.requests.run(function(finish)
 				return repository.fetch_branches(state.repo, { search = query }, finish)
-			end, function(result, err)
-				done(result and result.entries or nil, err)
-			end)
+			end, done)
 		end,
 		on_select = function(branch)
 			if not branch or states[state.buf] ~= state then
@@ -247,7 +245,7 @@ function M.open(opts)
 				if run then
 					pipelines.open({
 						provider = state.provider.id,
-						repo_full_name = state.repo.full_name or state.repo.name,
+						repo_full_name = state.repo.full_name,
 						target = run,
 					}, state.provider)
 				end

@@ -9,8 +9,8 @@ local M = {}
 function M.render(state, width)
 	local rows = {}
 	local branches = state.branches
-	---@cast branches AtlasRepositoryBranches
-	for _, branch in ipairs(branches.entries) do
+	---@cast branches AtlasRepositoryBranch[]
+	for _, branch in ipairs(branches) do
 		local row = {
 			name = branch.name .. (branch.name == state.repo.default_branch and " (default)" or ""),
 			message = (branch.message or ""):match("^[^\r\n]*"),

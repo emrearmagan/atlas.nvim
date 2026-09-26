@@ -47,11 +47,11 @@ end
 local function to_items(repo, tags)
 	local items = {}
 	for _, tag in ipairs(tags) do
-		local first_line = tag.message and tostring(tag.message:match("^[^\n\r]*") or "") or nil
+		local first_line = tag.message and tag.message:match("^[^\n\r]*")
 		if first_line == "" then
 			first_line = nil
 		end
-		local author_str = tag.author and tostring(tag.author) or nil
+		local author_str = tag.author
 		if author_str == "" then
 			author_str = nil
 		end
@@ -66,8 +66,8 @@ local function to_items(repo, tags)
 		local tag_icon = icons.pulls("tag")
 		table.insert(items, {
 			icon = tag_icon,
-			author = tostring(tag.name or ""),
-			additional = tag.hash and tostring(tag.hash):sub(1, 8) or nil,
+			author = tag.name,
+			additional = tag.hash:sub(1, 8),
 			right_text = tag.tag_date and utils.relative_time_text(tag.tag_date) or "—",
 			content = content,
 			obj = { repo = repo, tag = tag },
@@ -135,17 +135,16 @@ local function load_page(refresh)
 	if repo == nil then
 		return
 	end
-	local repo_name = tostring(repo.full_name or "")
-	local repo_label = repo_name ~= "" and repo_name or tostring(repo.name or repo.id or "")
+	local repo_name = repo.full_name
 	stop_requests()
 	state.tags = "loading"
 	state.next_cursor = nil
-	notify.loading(string.format("Loading tags for %s...", repo_label))
+	notify.loading(string.format("Loading tags for %s...", repo_name))
 	refresh()
 
 	local provider = detail.provider
 	local repository = provider and provider.capabilities.repository
-	if repository == nil or repository.fetch_tags == nil then
+	if repository == nil then
 		state.tags = {}
 		notify.error("Tag listing is not supported by this provider")
 		refresh()
@@ -158,17 +157,17 @@ local function load_page(refresh)
 		}, done)
 	end, function(tags, err, next_cursor)
 		local active_detail = detail.current_repo_details
-		if type(active_detail) ~= "table" or tostring(active_detail.full_name or "") ~= repo_name then
+		if type(active_detail) ~= "table" or active_detail.full_name ~= repo_name then
 			return
 		end
 		state.repo = active_detail
 		if err then
-			state.tags = tostring(err)
-			notify.error(string.format("Failed to load tags for %s", repo_label))
+			state.tags = err
+			notify.error(string.format("Failed to load tags for %s", repo_name))
 		else
 			state.tags = tags or {}
 			state.next_cursor = next_cursor
-			notify.success(string.format("Tags loaded for %s", repo_label), { timeout = 1200 })
+			notify.success(string.format("Tags loaded for %s", repo_name), { timeout = 1200 })
 		end
 		refresh()
 	end)
@@ -228,7 +227,7 @@ local function search(refresh)
 	local repo = state.repo
 	local provider = detail.provider
 	local repository = provider and provider.capabilities.repository
-	if repo == nil or repository == nil or repository.fetch_tags == nil then
+	if repo == nil or repository == nil then
 		return
 	end
 	picker.search({
@@ -243,9 +242,7 @@ local function search(refresh)
 		fetch = function(query, done)
 			return state.requests.run(function(finish)
 				return repository.fetch_tags(repo, { search = query }, finish)
-			end, function(tags, err)
-				done(tags, err)
-			end)
+			end, done)
 		end,
 		on_select = function(tag)
 			local current_repo = detail.current_repo_details

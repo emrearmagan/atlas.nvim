@@ -114,8 +114,8 @@ query($owner: String!, $repo: String!, $endCursor: String) {
 ---@param on_done fun(details: AtlasRepositoryDetails|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_details(repo, on_done)
-	local owner = tostring(repo.owner or "")
-	local repo_name = tostring(repo.repo_name or repo.name or "")
+	local owner = repo.owner
+	local repo_name = repo.repo_name
 
 	if owner == "" or repo_name == "" then
 		vim.schedule(function()
@@ -236,7 +236,7 @@ end
 
 ---@param repo AtlasRepository
 ---@param opts { cursor?: string, search?: string }
----@param on_done fun(branches: AtlasRepositoryBranches|nil, err: string|nil, next_cursor: string|nil)
+---@param on_done fun(branches: AtlasRepositoryBranch[]|nil, err: string|nil, next_cursor: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_branches(repo, opts, on_done)
 	local slug = repo.full_name
@@ -246,12 +246,12 @@ function M.fetch_branches(repo, opts, on_done)
 			on_done(nil, err, nil)
 			return
 		end
-		---@type AtlasRepositoryBranches
-		local branches = { entries = {} }
+		---@type AtlasRepositoryBranch[]
+		local branches = {}
 		for _, branch in ipairs(repository.refs.nodes) do
 			local commit = json.safe_table(branch.target)
 			local author = json.safe_table(commit.author)
-			table.insert(branches.entries, {
+			table.insert(branches, {
 				name = json.safe_str(branch.name) or "",
 				hash = json.safe_str(commit.oid) or "",
 				date = json.safe_str(commit.committedDate),
@@ -305,7 +305,7 @@ end
 ---@param on_done fun(releases: AtlasRepositoryRelease[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_releases(repo, on_done)
-	local slug = tostring(repo.full_name or "")
+	local slug = repo.full_name
 	local owner, name = slug:match("^([^/]+)/([^/]+)$")
 	if not owner then
 		vim.schedule(function()
@@ -369,7 +369,7 @@ end
 ---@param on_done fun(release: AtlasRepositoryReleaseDetails|nil, err: string|nil, status?: integer)
 ---@return { cancel: fun() }|nil
 function M.fetch_release(repo, opts, on_done)
-	local slug = tostring(repo.full_name or "")
+	local slug = repo.full_name
 	if not slug:match("^[^/]+/[^/]+$") then
 		vim.schedule(function()
 			on_done(nil, "Missing repository info")
@@ -429,7 +429,7 @@ end
 ---@param on_done fun(summary: AtlasRepositoryIssueSummary|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_issue_summary(repo, on_done)
-	local slug = tostring(repo.full_name or "")
+	local slug = repo.full_name
 	local owner, repo_name = slug:match("^([^/]+)/([^/]+)$")
 	if owner == nil then
 		on_done(nil, "Missing repository info")
@@ -483,7 +483,7 @@ end
 ---@param on_done fun(result: { entries: PullsRepoIssue[], counts: { open: integer, closed: integer }|nil }|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_issues(repo, state, on_done)
-	local slug = tostring(repo.full_name or "")
+	local slug = repo.full_name
 	local parts = vim.split(slug, "/", { plain = true })
 	local owner = parts[1] or ""
 	local repo_name = parts[2] or ""
@@ -558,8 +558,8 @@ end
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.delete_branch(repo, branch, on_done)
-	local slug = tostring(repo.full_name or "")
-	local name = tostring(branch.name or "")
+	local slug = repo.full_name
+	local name = branch.name
 	if not slug:match("^[^/]+/[^/]+$") or name == "" then
 		vim.schedule(function()
 			on_done(false, "Missing branch info")

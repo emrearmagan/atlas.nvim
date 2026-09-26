@@ -12,7 +12,7 @@ local utils = require("atlas.ui.shared.utils")
 ---@field sidebar_buf integer
 ---@field repo AtlasRepositoryDetails
 ---@field provider PullsProvider|IssuesProvider
----@field details AtlasRepositoryDetails|"loading"|string|nil
+---@field details AtlasRepositoryDetails|"loading"|string
 ---@field requests AtlasRequestScope
 ---@field spinner SpinnerInstance
 ---@field statusline AtlasStatusline
@@ -35,9 +35,10 @@ local function render(state)
 		return
 	end
 	vim.api.nvim_buf_clear_namespace(state.buf, namespace, 0, -1)
-	if type(state.details) == "string" then
-		local loading = state.details == "loading"
-		local text = loading and state.spinner:text("Loading...") or state.details
+	local details = state.details
+	if type(details) == "string" then
+		local loading = details == "loading"
+		local text = loading and state.spinner:text("Loading...") or details
 		utils.buffer.center_message(state.buf, state.win, text)
 		vim.api.nvim_buf_set_extmark(state.buf, namespace, 0, 0, {
 			end_row = vim.api.nvim_buf_line_count(state.buf),
@@ -45,10 +46,7 @@ local function render(state)
 		})
 		return
 	end
-	local lines, spans = {}, {}
-	if state.details then
-		lines, spans = renderer.render(state.details, vim.api.nvim_win_get_width(state.win))
-	end
+	local lines, spans = renderer.render(details, vim.api.nvim_win_get_width(state.win))
 
 	vim.bo[state.buf].modifiable = true
 	vim.api.nvim_buf_set_lines(state.buf, 0, -1, false, lines)

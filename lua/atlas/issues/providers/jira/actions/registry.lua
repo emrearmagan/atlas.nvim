@@ -879,7 +879,7 @@ local function toggle_subscription(ctx, done)
 	end
 
 	local current = ctx.current_user
-	if current and tostring(current.id or "") ~= "" then
+	if current and (current.id or "") ~= "" then
 		unsubscribe(current.id)
 		return
 	end

@@ -23,8 +23,8 @@ function M.header_fields(issue, details, _loading)
 	local user_icon = icons.general("user")
 
 	local assignee = details and details.assignees[1] or issue.assignee
-	local assignee_name = assignee and tostring(assignee.name or "") or ""
-	local reporter_name = issue.reporter and tostring(issue.reporter.name or "") or ""
+	local assignee_name = assignee and assignee.name or ""
+	local reporter_name = issue.reporter and issue.reporter.name or ""
 	if assignee_name == "" then
 		assignee_name = "Unassigned"
 	end

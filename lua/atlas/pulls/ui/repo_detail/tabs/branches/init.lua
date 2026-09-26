@@ -16,7 +16,7 @@ local PADDING_X = 1
 
 ---@class PullsRepoBranchesTabState
 ---@field repo AtlasRepositoryDetails|nil
----@field branches AtlasRepositoryBranches|"loading"|string|nil
+---@field branches AtlasRepositoryBranch[]|"loading"|string|nil
 ---@field page integer
 ---@field cursors table<integer, string>
 ---@field next_cursor string|nil
@@ -55,7 +55,7 @@ end
 ---@return boolean
 local function is_current_repo(repo)
 	local current = detail.current_repo
-	return current ~= nil and tostring(current.id or "") == tostring(repo and repo.id or "")
+	return current ~= nil and repo ~= nil and current.id == repo.id
 end
 
 ---@param repo AtlasRepositoryDetails
@@ -64,18 +64,18 @@ end
 local function to_items(repo, branches)
 	local items = {}
 	for _, branch in ipairs(branches) do
-		local msg = branch.message and tostring(branch.message:match("^[^\n\r]*") or "") or nil
+		local msg = branch.message and branch.message:match("^[^\n\r]*")
 		if msg == "" then
 			msg = nil
 		end
-		local author = branch.author and tostring(branch.author) or nil
+		local author = branch.author
 		if author == "" then
 			author = nil
 		end
 		local branch_icon = icons.pulls("branch")
 		table.insert(items, {
 			icon = branch_icon,
-			author = tostring(branch.name or ""),
+			author = branch.name,
 			additional = author,
 			right_text = branch.date and utils.relative_time_text(branch.date) or nil,
 			content = msg,
@@ -116,13 +116,12 @@ function M.render(_repo, width)
 		return lines, spans, line_map
 	end
 
-	local entries = branches.entries or {}
-	if #entries == 0 then
+	if #branches == 0 then
 		utils.push(lines, spans, "No branches found.", "AtlasTextMuted", PADDING_X)
 		return lines, spans, line_map
 	end
 
-	local thread_lines, thread_spans, thread_map = threads.render(to_items(repo, entries), width, {
+	local thread_lines, thread_spans, thread_map = threads.render(to_items(repo, branches), width, {
 		padding_x = PADDING_X,
 		mode = "linked",
 		content_max_lines = 1,
@@ -145,18 +144,17 @@ local function load_page(refresh)
 	if repo == nil then
 		return
 	end
-	local repo_name = tostring(repo.full_name or "")
-	local repo_label = repo_name ~= "" and repo_name or tostring(repo.name or repo.id or "")
+	local repo_name = repo.full_name
 	stop_requests()
 	state.branches = "loading"
 	state.next_cursor = nil
-	notify.loading(string.format("Loading branches for %s...", repo_label))
+	notify.loading(string.format("Loading branches for %s...", repo_name))
 	refresh()
 
 	local provider = detail.provider
 	local repository = provider and provider.capabilities.repository
-	if repository == nil or repository.fetch_branches == nil then
-		state.branches = { entries = {} }
+	if repository == nil then
+		state.branches = {}
 		notify.error("Branch listing is not supported by this provider")
 		refresh()
 		return
@@ -168,17 +166,17 @@ local function load_page(refresh)
 		}, done)
 	end, function(branches, err, next_cursor)
 		local active_detail = detail.current_repo_details
-		if type(active_detail) ~= "table" or tostring(active_detail.full_name or "") ~= repo_name then
+		if type(active_detail) ~= "table" or active_detail.full_name ~= repo_name then
 			return
 		end
 		state.repo = active_detail
 		if err then
-			state.branches = tostring(err)
-			notify.error(string.format("Failed to load branches for %s", repo_label))
+			state.branches = err
+			notify.error(string.format("Failed to load branches for %s", repo_name))
 		else
-			state.branches = branches or { entries = {} }
+			state.branches = branches or {}
 			state.next_cursor = next_cursor
-			notify.success(string.format("Branches loaded for %s", repo_label), { timeout = 1200 })
+			notify.success(string.format("Branches loaded for %s", repo_name), { timeout = 1200 })
 		end
 		refresh()
 	end)
@@ -238,7 +236,7 @@ function M.search(refresh)
 	local repo = state.repo
 	local provider = detail.provider
 	local repository = provider and provider.capabilities.repository
-	if repo == nil or repository == nil or repository.fetch_branches == nil then
+	if repo == nil or repository == nil then
 		return
 	end
 	local current_repo = detail.current_repo
@@ -254,9 +252,7 @@ function M.search(refresh)
 		fetch = function(query, done)
 			return state.requests.run(function(finish)
 				return repository.fetch_branches(repo, { search = query }, finish)
-			end, function(branches, err)
-				done(branches and branches.entries or nil, err)
-			end)
+			end, done)
 		end,
 		on_select = function(branch)
 			if branch == nil or not is_current_repo(current_repo) or detail.current_tab ~= "branches" then
@@ -275,7 +271,7 @@ function M.search(refresh)
 				end
 			end
 			stop_requests()
-			state.branches = { entries = { branch } }
+			state.branches = { branch }
 			state.page = 1
 			state.cursors = {}
 			state.next_cursor = nil
@@ -336,12 +332,12 @@ function M.delete_current_branch(refresh)
 		return
 	end
 
-	local branch_name = tostring(branch.name or "")
+	local branch_name = branch.name
 	if branch_name == "" then
 		notify.warn("Branch name is missing")
 		return
 	end
-	if branch_name == tostring(repo.default_branch or "") then
+	if branch_name == repo.default_branch then
 		notify.warn("Refusing to delete the default branch")
 		return
 	end
@@ -362,20 +358,19 @@ function M.delete_current_branch(refresh)
 				return
 			end
 			if err ~= nil then
-				notify.error("Delete branch failed: " .. tostring(err))
+				notify.error("Delete branch failed: " .. err)
 				return
 			end
 
 			if ok then
 				local branches = core_utils.as_table(state.branches) or {}
-				local entries = core_utils.as_table(branches.entries) or {}
-				for i, existing in ipairs(entries) do
-					if tostring(existing.name or "") == branch_name then
-						table.remove(entries, i)
+				for i, existing in ipairs(branches) do
+					if existing.name == branch_name then
+						table.remove(branches, i)
 						break
 					end
 				end
-				state.branches = { entries = entries }
+				state.branches = branches
 			end
 
 			notify.success(string.format("Deleted branch %s", branch_name), { timeout = 1200 })

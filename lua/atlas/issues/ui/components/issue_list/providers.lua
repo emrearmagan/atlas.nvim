@@ -417,7 +417,7 @@ local displays = {
 local fallback = default()
 
 ---@param provider_id string|nil
----@param opts { reloading?: table<string, boolean>, spinner?: string }|nil
+---@param opts { reloading: table<string, boolean>|nil, spinner: string|nil }|nil
 ---@return table
 function M.get(provider_id, opts)
 	local display = displays[provider_id]
