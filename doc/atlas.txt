@@ -286,6 +286,11 @@ PULLS CONFIGURATION                              *atlas-pulls-configuration*
         layout = "inline", -- "inline" or "side-by-side"
         compact = true, -- initially show hunks plus surrounding context
         compact_context_lines = 3, -- context lines around hunks in compact mode
+        lsp = {
+          enabled = false, -- real files on the new side, so LSP attaches
+          dir = nil,       -- absolute path or fun(ctx): string|nil
+          link = {},       -- e.g. { "node_modules", ".venv" }
+        },
         explorer = {
           grouped = true, -- group changed files by directory
           hidden = false,
@@ -688,14 +693,16 @@ Atlas emits these `User` events after setup or cleanup completes:
           toggle_raw_logs      = "gL",
         },
         review = {
-          focus_item            = "gd",
-          approve               = "ga",
-          request_changes       = "gr",
-          submit_review         = "gs",
+          open_item             = "<CR>", -- open file, review item, or comment/note
+          show_details          = "K",
+          approve               = "<leader>ga",
+          request_changes       = "<leader>gr",
+          submit_review         = "<leader>gs",
           add_task              = "<leader>t",
           comment_templates      = "gT",
           find_file              = "<leader>ff",
           explorer = {
+            toggle_explorer       = "<leader>b",
             find_file             = { "f", "<leader>ff" },
             next_file             = { "]f", "<Tab>" },
             previous_file         = { "[f", "<S-Tab>" },

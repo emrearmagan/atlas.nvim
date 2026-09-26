@@ -56,14 +56,14 @@ describe("core.keymaps", function()
 		end)
 
 		it("reports unexpected conflicts inside nested groups", function()
-			config.options.keymaps.pulls.checkout = "gr"
+			local key = config.options.keymaps.pulls.review.request_changes
+			config.options.keymaps.pulls.checkout = key
 
 			local pulls_conflicts = keymaps.validate().pulls
 			assert.are.same({
 				"pulls.checkout",
 				"pulls.review.request_changes",
-				"ui.comments.react",
-			}, pulls_conflicts["gr"])
+			}, pulls_conflicts[key])
 		end)
 	end)
 end)

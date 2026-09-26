@@ -44,13 +44,24 @@ local function comment_location(comment)
 	return line and (side .. tostring(line)) or ""
 end
 
+---@param buf integer
+local function clear(buf)
+	if vim.api.nvim_buf_is_valid(buf) then
+		vim.api.nvim_buf_clear_namespace(buf, namespace, 0, -1)
+	end
+end
+
 ---@param current AtlasDiffCurrent
 function M.clear(current)
 	for _, side in ipairs({ current.left, current.right }) do
-		if vim.api.nvim_buf_is_valid(side.buf) then
-			vim.api.nvim_buf_clear_namespace(side.buf, namespace, 0, -1)
-		end
+		clear(side.buf)
 	end
+end
+
+-- Clearing a single buffer matters for worktree backed head buffers, which outlive the file switch.
+---@param buf integer
+function M.clear_buffer(buf)
+	clear(buf)
 end
 
 ---@param context AtlasCommentRendererContext
