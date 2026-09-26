@@ -14,6 +14,15 @@ Review pull requests and manage issues across GitHub, GitLab, Bitbucket and Jira
   <img alt="Jira" src="https://img.shields.io/badge/Jira-0052CC?style=flat-square&logo=jira&logoColor=white">
 </p>
 
+**Quick links**
+
+- [Configuration](#configuration)
+- [Commands](#commands)
+- GitHub: [Pull requests](#github) · [Issues](#github-issues)
+- GitLab: [Pull requests](#gitlab) · [Issues](#gitlab-issues)
+- [Bitbucket](#bitbucket)
+- [Jira](#jira)
+
 <img alt="Atlas UI" src="https://github.com/user-attachments/assets/62909665-e036-44be-bec0-1d27da613eb6" />
 
 > [!CAUTION]
@@ -112,39 +121,26 @@ My dotfiles include a [Pi extension that wraps this script](https://github.com/e
 <details>
 <summary><strong>LSP for Reviews</strong> - attach LSP to the new side of a diff</summary>
 
-Both sides of a pull request diff are normally built from Git revisions, and Neovim does not attach language servers to such buffers. Set `pulls.diff.lsp.enabled` to attach them to the new side:
+Use your configured language servers for hover and go-to-definition on the new side of AtlasDiff.
 
 ```lua
 pulls = {
   diff = {
     lsp = {
-      enabled = true
-    }
-  }
+      enabled = true,
+      -- link = { "node_modules", ".venv" }, -- optional dependencies
+    },
+  },
 }
 ```
 
-Atlas then creates a detached worktree at the pull request head and opens the new side from it, so those buffers are real files that language servers, `gd`, and hover all work, if there are no competing mappings. Your checkout and current branch are untouched. The old side stays a revision buffer without a language server.
+Atlas uses a temporary worktree and removes it when the diff closes. Set `link` to symlink dependency folders from your local checkout. See [Pulls Configuration](#pulls-configuration) for all options.
 
-The worktree lives under `stdpath("cache")/atlas/worktrees` and is removed when the diff closes; `pulls.diff.lsp.dir` overrides the location with a path or a function. Files with no counterpart in the worktree (deleted files, binaries, submodules) fall back to revision buffers.
-
-A fresh worktree has no `node_modules`, `.venv`, or other build output, so servers that need them resolve nothing. List those directories in `pulls.diff.lsp.link` to symlink them from your checkout.
-
-The linked directories are read from the repository Atlas diffs against. That is your local clone when Neovim is inside it, or the path mapped in repo_config.paths. Otherwise Atlas diffs against its own cache clone, which has no working tree, and every link entry is skipped.
-
-They are the same directories on disk, so a server that writes into them writes into your project.
 <img alt="lsp-support" src="https://github.com/user-attachments/assets/9d67cd02-f1fa-4ee3-94ad-d11fa1388dbd" />
 
 </details>
 
 ### Also included
-
-<details>
-<summary><strong>Linked issues and PRs</strong> - Jump between issues and pull requests</summary>
-
-Jump from an issue to its PR and back, or browse related issues and sub-issues.
-
-</details>
 
 <details>
 <summary><strong>Pipelines</strong> - Browse jobs, steps, and logs</summary>
@@ -157,7 +153,7 @@ View pipelines and their jobs, inspect their status, and read job logs directly 
 
 Use `:Atlas pipelines <target>` with a branch name, PR URL or number (`123`, `#123`, or GitLab `!123`), or a build URL. Branch names use the local repository; `:Atlas pipelines .` opens builds for the current branch.
 
-### Configuration
+#### Pipeline Configuration
 
 Atlas uses your provider's CI by default. Set `ci.backend` to use your own. For Bamboo on Bitbucket, use `require("atlas.pulls.pipelines.bamboo").new(opts)` with `host`, `user`, and `password`.
 
@@ -283,17 +279,6 @@ Use `:Atlas create [pr|issue]` to create a pull request from the current branch 
 </details>
 
 <details>
-<summary><strong>Notifications</strong> - Read and clear GitHub and GitLab notifications</summary>
-
-<p align="center">
-  <img width="85%" alt="Notifications" src="https://github.com/user-attachments/assets/3088776e-ebb0-49cc-85ec-b74d23e6cb05">
-</p>
-
-Open GitHub and GitLab notifications inside Atlas, refresh them, open the related item, and mark notifications as read or done without leaving Neovim.
-
-</details>
-
-<details>
 <summary><strong>Bookmarks</strong> - Save searches and star items locally</summary>
 
 <p align="center">
@@ -303,6 +288,18 @@ Open GitHub and GitLab notifications inside Atlas, refresh them, open the relate
 Save searches as bookmarks, or press `*` to star a pull request or issue. Both appear alongside your configured views.
 
 </details>
+
+### Other features
+
+- Compare branches or commits with `:Atlas diff main...HEAD`.
+- Search with GitHub queries or Jira JQL, with query completion.
+- Use Conventional Comments templates or define your own.
+- Save issue descriptions as templates and reuse them when creating issues.
+- Close or reopen GitHub/GitLab issues and change Jira workflow states.
+- Jump between linked issues and pull requests, or browse related issues and sub-issues.
+- Read GitHub and GitLab notifications, open the related item, and mark them as read or done.
+- Remap shortcuts or assign multiple keys to the same action.
+- Set local repository paths and PR templates per project.
 
 ## Configuration
 
