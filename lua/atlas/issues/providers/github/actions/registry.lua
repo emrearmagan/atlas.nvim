@@ -525,7 +525,7 @@ end
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function open_repo(_, done)
 	select_repository({
-		title = "Open Repo",
+		title = "Open Repository",
 		include_all = false,
 		on_select = function(repo)
 			require("atlas").open("issues", "github", {
@@ -587,9 +587,6 @@ local function toggle_subscription(ctx, done)
 	)
 end
 
--- TODO: move down, don't keep at top.
-register(actions.browse_repository)
-
 register({
 	id = "close",
 	label = "Close Issue",
@@ -629,7 +626,7 @@ register({
 register({ id = "search", label = "Search Issues", icon = icons.action("search"), run = search })
 register({
 	id = "edit_search",
-	label = "Edit search",
+	label = "Edit Current Search",
 	icon = icons.action("search"),
 	run = function(_, done)
 		local state = require("atlas.issues.state")
@@ -643,7 +640,26 @@ register({
 		done(nil, nil)
 	end,
 })
-register({ id = "open_repo", label = "Open Repo", icon = icons.action("search"), run = open_repo })
+register({ id = "open_repo", label = "Open Repository", icon = icons.action("search"), run = open_repo })
+register(actions.browse_repository)
+register({
+	id = "browse_repositories",
+	label = "Browse Repository",
+	icon = icons.general("overview"),
+	run = function(ctx, done)
+		select_repository({
+			title = "Browse Repository",
+			include_all = false,
+			on_select = function(repo)
+				require("atlas.ui.repository").open(repo, ctx.provider)
+				done(nil, nil)
+			end,
+			on_cancel = function()
+				done(nil, nil)
+			end,
+		})
+	end,
+})
 register(actions.manage_templates)
 register(actions.browse_issue)
 register(actions.copy_issue_key)

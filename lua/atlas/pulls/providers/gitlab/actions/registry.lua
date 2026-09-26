@@ -500,9 +500,6 @@ local function toggle_subscription(ctx, done)
 	end)
 end
 
--- TODO: move down, don't keep at top.
-register(actions.browse_repository)
-
 register({
 	id = actions.approve.id,
 	label = actions.approve.label,
@@ -565,9 +562,29 @@ register({
 	run = open_project,
 })
 
+register(actions.browse_repository)
+register({
+	id = "browse_repositories",
+	label = "Browse Repository",
+	icon = icons.general("overview"),
+	run = function(ctx, done)
+		select_project({
+			title = "Browse Repository",
+			include_all = false,
+			on_select = function(project)
+				require("atlas.ui.repository").open(project, ctx.provider)
+				done(nil, nil)
+			end,
+			on_cancel = function()
+				done(nil, nil)
+			end,
+		})
+	end,
+})
+
 register({
 	id = "edit_search",
-	label = "Edit search",
+	label = "Edit Current Search",
 	icon = icons.action("search"),
 	run = function(_, done)
 		local state = require("atlas.pulls.state")

@@ -16,6 +16,7 @@ local utils = require("atlas.issues.actions.utils")
 ---| "edit_search"
 ---| "browse_issue"
 ---| "browse_repository"
+---| "browse_repositories"
 ---| "copy_issue_key"
 ---| "copy_issue_url"
 ---| "manage_templates"
@@ -122,7 +123,7 @@ end
 
 M.browse_repository = {
 	id = "browse_repository",
-	label = "Browse Repository",
+	label = "Browse Current Repository",
 	icon = icons.general("overview"),
 	is_available = function(context)
 		return context.issue ~= nil and context.issue.url ~= nil

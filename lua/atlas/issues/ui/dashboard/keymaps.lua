@@ -144,7 +144,7 @@ function M.register(buf, views)
 		utils.insert_if(
 			items,
 			item("issues.edit_search", {
-				desc = "Edit search",
+				desc = "Edit Current Search",
 				callback = function()
 					actions.run("edit_search", context(nil), controller.apply_action_result)
 				end,

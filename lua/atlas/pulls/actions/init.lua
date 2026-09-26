@@ -23,6 +23,7 @@ local notify = utils.notify
 ---| "open_in_browser"
 ---| "open_pipelines"
 ---| "browse_repository"
+---| "browse_repositories"
 ---| "open_diff"
 ---| "checkout"
 ---| "merge"
@@ -409,7 +410,7 @@ M.edit_reviewers = {
 
 M.browse_repository = {
 	id = "browse_repository",
-	label = "Browse Repository",
+	label = "Browse Current Repository",
 	icon = icons.general("overview"),
 	is_available = has_pr,
 	run = function(context, done)

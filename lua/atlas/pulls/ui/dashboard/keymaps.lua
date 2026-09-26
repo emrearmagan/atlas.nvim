@@ -250,7 +250,7 @@ function M.register(buf, views)
 	utils.insert_if(
 		items,
 		item("pulls.edit_search", {
-			desc = "Edit search",
+			desc = "Edit Current Search",
 			callback = function()
 				run_action("edit_search", false)
 			end,

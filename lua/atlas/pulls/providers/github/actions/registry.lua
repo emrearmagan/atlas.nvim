@@ -569,7 +569,7 @@ end
 ---@param done fun(result: PullsActionResult|nil, err: string|nil)
 local function open_repo(_, done)
 	select_repository({
-		title = "Open Repo",
+		title = "Open Repository",
 		include_all = false,
 		on_select = function(repo)
 			require("atlas").open("pulls", "github", {
@@ -655,9 +655,6 @@ local function toggle_subscription(ctx, done)
 	end)
 end
 
--- TODO: move down, don't keep at top.
-register(actions.browse_repository)
-
 register({
 	id = actions.approve.id,
 	label = actions.approve.label,
@@ -723,14 +720,34 @@ register({
 
 register({
 	id = "open_repo",
-	label = "Open Repo",
+	label = "Open Repository",
 	icon = icons.action("search"),
 	run = open_repo,
 })
 
+register(actions.browse_repository)
+register({
+	id = "browse_repositories",
+	label = "Browse Repository",
+	icon = icons.general("overview"),
+	run = function(ctx, done)
+		select_repository({
+			title = "Browse Repository",
+			include_all = false,
+			on_select = function(repo)
+				require("atlas.ui.repository").open(repo, ctx.provider)
+				done(nil, nil)
+			end,
+			on_cancel = function()
+				done(nil, nil)
+			end,
+		})
+	end,
+})
+
 register({
 	id = "search_pull_requests",
-	label = "Open Search View",
+	label = "New Search",
 	icon = icons.action("search"),
 	run = function(_, done)
 		local query = require("atlas.pulls.state").query
@@ -741,7 +758,7 @@ register({
 
 register({
 	id = "edit_search",
-	label = "Edit search",
+	label = "Edit Current Search",
 	icon = icons.action("search"),
 	run = function(_, done)
 		local state = require("atlas.pulls.state")

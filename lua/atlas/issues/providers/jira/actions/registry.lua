@@ -941,7 +941,7 @@ register({
 })
 register({
 	id = "edit_search",
-	label = "Edit search",
+	label = "Edit Current Search",
 	icon = icons.action("search"),
 	run = function(_, done)
 		require("atlas.issues.providers.jira.completion.search").edit(current_jql(), function(query)

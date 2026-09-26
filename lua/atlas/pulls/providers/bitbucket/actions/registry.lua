@@ -128,8 +128,9 @@ local function merge(ctx, done)
 end
 
 ---@param ctx AtlasPullActionContext
+---@param on_select fun(repo: AtlasRepository)
 ---@param done fun(result: PullsActionResult|nil, err: string|nil)
-local function search(ctx, done)
+local function select_repository(ctx, on_select, done)
 	notify(ctx, "loading", "Loading workspaces...")
 	users_api.fetch_workspaces(function(workspaces, err)
 		if err ~= nil then
@@ -163,19 +164,7 @@ local function search(ctx, done)
 				fetch = function(query, fetch_done)
 					return repositories.fetch_workspace_repositories(selected_ws.slug, vim.trim(query), fetch_done)
 				end,
-				on_select = function(repo)
-					---@type AtlasBitbucketViewConfig
-					local search_view = {
-						name = "Search",
-						key = nil,
-						layout = "compact",
-						search = bitbucket_query.for_repo(repo.owner, repo.repo_name),
-					}
-
-					notify(ctx, "success", string.format("Search view -> %s", tostring(repo.full_name or repo.name)))
-					require("atlas").open("pulls", "bitbucket", { initial_view = search_view })
-					done({ changed_pr = false, message = "Search view switched" }, nil)
-				end,
+				on_select = on_select,
 				on_cancel = function()
 					done({ changed_pr = false, message = "Search cancelled" }, nil)
 				end,
@@ -203,9 +192,6 @@ local function search(ctx, done)
 		})
 	end)
 end
-
--- TODO: move down, don't keep at top.
-register(actions.browse_repository)
 
 register({
 	id = actions.approve.id,
@@ -249,12 +235,37 @@ register({
 	id = "search",
 	label = "Search repositories",
 	icon = icons.action("search"),
-	run = search,
+	run = function(ctx, done)
+		select_repository(ctx, function(repo)
+			---@type AtlasBitbucketViewConfig
+			local search_view = {
+				name = "Search",
+				layout = "compact",
+				search = bitbucket_query.for_repo(repo.owner, repo.repo_name),
+			}
+			notify(ctx, "success", string.format("Search view -> %s", repo.full_name))
+			require("atlas").open("pulls", "bitbucket", { initial_view = search_view })
+			done({ changed_pr = false, message = "Search view switched" }, nil)
+		end, done)
+	end,
+})
+
+register(actions.browse_repository)
+register({
+	id = "browse_repositories",
+	label = "Browse Repository",
+	icon = icons.general("overview"),
+	run = function(ctx, done)
+		select_repository(ctx, function(repo)
+			require("atlas.ui.repository").open(repo.full_name, ctx.provider)
+			done(nil, nil)
+		end, done)
+	end,
 })
 
 register({
 	id = "search_pull_requests",
-	label = "Search pull requests",
+	label = "New Search",
 	icon = icons.action("search"),
 	run = function(_, done)
 		bitbucket_search.open({ name = "Search", search = state.query })
@@ -264,7 +275,7 @@ register({
 
 register({
 	id = "edit_search",
-	label = "Edit search",
+	label = "Edit Current Search",
 	icon = icons.action("search"),
 	run = function(_, done)
 		bitbucket_search.edit({ name = "Search", search = state.query }, function(query)
