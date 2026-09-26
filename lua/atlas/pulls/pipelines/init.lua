@@ -45,7 +45,7 @@
 ---@alias PullsPipelineFetch fun(context: PullsPipelineContext, opts: { force_refresh?: boolean, pipeline?: PullsPipeline }|nil, on_done: fun(pipelines: PullsPipeline[]|nil, err: string|nil)): { cancel: fun() }|nil
 ---@alias PullsPipelineFetchHistory fun(context: PullsPipelineContext, on_done: fun(pipelines: PullsPipeline[]|nil, err: string|nil)): { cancel: fun() }|nil
 ---@alias PullsPipelineFetchJob fun(context: PullsPipelineContext, pipeline: PullsPipeline, job: PullsPipelineJob, on_done: fun(job: PullsPipelineJob|nil, err: string|nil)): { cancel: fun() }|nil
----@alias PullsPipelineFetchJobLog fun(context: PullsPipelineContext, pipeline: PullsPipeline, job: PullsPipelineJob, on_done: fun(log: PullsLog|nil, err: string|nil)): { cancel: fun() }|nil
+---@alias PullsPipelineFetchJobLog fun(context: PullsPipelineContext, pipeline: PullsPipeline, job: PullsPipelineJob, on_done: fun(log: PullsLog|nil, err: string|nil, status?: integer)): { cancel: fun() }|nil
 ---@alias PullsPipelineFetchConfig fun(context: PullsPipelineContext, pipeline: PullsPipeline, on_done: fun(file: { path: string, content: string }|nil, err: string|nil)): { cancel: fun() }|nil
 ---@alias PullsPipelineParse fun(log: PullsLog): table<integer, PullsLogLine|PullsLogGroup>
 ---@alias PullsPipelineFetchCommitStatus fun(commit: PullsCommit, opts: { force_refresh: boolean|nil }|nil, on_done: fun(status: string|nil, url: string|nil, err: string|nil)): { cancel: fun() }|nil

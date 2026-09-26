@@ -16,6 +16,7 @@ local url_encode = require("atlas.core.utils").url_encode
 ---@field pipeline_id string|nil
 ---@field pipeline_name string|nil
 ---@field pipeline_url string|nil
+---@field branch string|nil
 ---@field commit string|nil
 ---@field started_at string|nil
 ---@field duration number|nil
@@ -69,6 +70,7 @@ function M.fetch(repo, done)
 		.. ",values.step.state.name,values.step.state.stage.name"
 		.. ",values.state.url,values.state.started_on,values.state.completed_on,values.release.pipeline.build_number"
 		.. ",values.release.name,values.release.url,values.release.commit.hash"
+		.. ",values.release.pipeline.target.ref_name,values.release.pipeline.target.ref_type,values.release.pipeline.target.source"
 	local endpoint = string.format(
 		"/repositories/%s/%s/deployments?pagelen=100&sort=-state.started_on&fields=%s",
 		url_encode(repo.owner),
@@ -86,6 +88,7 @@ function M.fetch(repo, done)
 		for _, raw in ipairs(result.values) do
 			local release = json.safe_table(raw.release)
 			local pipeline = json.safe_table(release.pipeline)
+			local target = json.safe_table(pipeline.target)
 			local commit = json.safe_table(release.commit)
 			local status = json.safe_table(raw.state.status)
 			local state = states[status.name or raw.state.name] or "UNKNOWN"
@@ -103,6 +106,7 @@ function M.fetch(repo, done)
 				pipeline_id = json.safe_str(pipeline.build_number),
 				pipeline_name = json.safe_str(release.name),
 				pipeline_url = json.safe_str(release.url),
+				branch = json.safe_str(target.ref_type == "branch" and target.ref_name or target.source),
 				commit = json.safe_str(commit.hash),
 				started_at = started_at,
 				duration = pipeline_utils.duration(started_at, json.safe_str(raw.state.completed_on)),

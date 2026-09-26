@@ -2,15 +2,10 @@ local config = require("atlas.config")
 local highlights = require("atlas.pulls.pipelines.highlights")
 local icons = require("atlas.ui.shared.icons")
 local utils = require("atlas.ui.shared.utils")
-local ui_utils = require("atlas.ui.utils")
 
 local M = {}
 
 local namespace = vim.api.nvim_create_namespace("atlas.pipelines.logs")
-
-local function text(value)
-	return (tostring(value or ""):gsub("[%z\1-\31\127]", " "))
-end
 
 ---@param styles table[]
 ---@param spans table[]
@@ -140,16 +135,7 @@ end
 local function append_log(pane, lines, spans, prepared)
 	local log = pane.log
 
-	if log == "loading" then
-		for _ = 1, math.floor((vim.api.nvim_win_get_height(pane.win) - 1) / 2) do
-			lines[#lines + 1] = ""
-		end
-		local message = pane.spinner and pane.spinner:text("Loading logs...") or "Loading logs..."
-		local centered = ui_utils.center_text(message, vim.api.nvim_win_get_width(pane.win))
-		utils.push(lines, spans, centered, "AtlasTextMuted")
-	elseif type(log) == "string" then
-		utils.push(lines, spans, text(log), "AtlasLogError", 2)
-	elseif pane.show_raw and pane.source and pane.source.raw ~= "" then
+	if pane.show_raw and pane.source and pane.source.raw ~= "" then
 		local raw_lines = vim.split(pane.source.raw:gsub("\r\n", "\n"), "\n", { plain = true })
 		if raw_lines[#raw_lines] == "" then
 			table.remove(raw_lines)
@@ -159,10 +145,7 @@ local function append_log(pane, lines, spans, prepared)
 		end
 		vim.list_extend(lines, raw_lines)
 	elseif log then
-		if #log == 0 then
-			utils.push(lines, spans, "No log output.", "AtlasTextMuted", 2)
-			return
-		end
+		---@cast log (PullsLogLine|PullsLogGroup)[]
 		append_entries(pane, log, lines, spans, prepared, 0, nil)
 	end
 end
@@ -170,30 +153,18 @@ end
 ---@param pane PullsPipelinesLogs
 ---@return string[], table[]
 local function build_content(pane)
-	pane.counts = nil
-	local selection = pane.selection
-	if not selection or not selection.pipeline then
-		local lines, spans = {}, {}
-		for _ = 1, math.floor((vim.api.nvim_win_get_height(pane.win) - 1) / 2) do
-			lines[#lines + 1] = ""
-		end
-		local prompt = ui_utils.center_text("Select a job to view logs", vim.api.nvim_win_get_width(pane.win))
-		utils.push(lines, spans, prompt, "AtlasTextMuted")
-		return lines, spans
-	end
-
 	local options = config.provider_options(pane.context.provider) or {}
 	local format, counts = highlights.new(options.ci and options.ci.highlights)
 	local prepared = {}
 	local log = pane.log
-	if selection.job and type(log) == "table" then
+	if type(log) == "table" then
 		prepare_entries(log, format, prepared, "")
 		pane.counts = counts
 	end
 
 	local lines, spans = {}, {}
 
-	if selection.job and pane.log then
+	if log then
 		append_log(pane, lines, spans, prepared)
 	end
 
@@ -231,8 +202,6 @@ function M.render(pane)
 		return
 	end
 
-	local view = pane.log == "loading" and { lnum = 1, col = 0, topline = 1, leftcol = 0 }
-		or vim.api.nvim_win_call(pane.win, vim.fn.winsaveview)
 	local title = pane.show_raw and "Raw logs" or "Logs"
 	vim.api.nvim_set_option_value(
 		"winbar",
@@ -241,6 +210,30 @@ function M.render(pane)
 	)
 	pane.line_map = {}
 	pane.entry_rows = {}
+	pane.counts = nil
+	local log = pane.log
+	local selection = pane.selection
+	local message, hl
+	if not selection or not selection.job then
+		message, hl = "Select a job to view logs", "AtlasTextMuted"
+	elseif log == "loading" then
+		message = pane.spinner and pane.spinner:text("Loading logs...") or "Loading logs..."
+		hl = "Normal"
+	elseif type(log) == "string" then
+		message, hl = log, "AtlasLogError"
+	elseif log and #log == 0 and not (pane.show_raw and pane.source and pane.source.raw ~= "") then
+		message, hl = "No logs available.", "AtlasTextMuted"
+	end
+	if message then
+		vim.api.nvim_buf_clear_namespace(pane.buf, namespace, 0, -1)
+		utils.buffer.center_message(pane.buf, pane.win, message)
+		vim.api.nvim_buf_set_extmark(pane.buf, namespace, 0, 0, {
+			end_row = vim.api.nvim_buf_line_count(pane.buf),
+			hl_group = hl,
+		})
+		return
+	end
+	local view = vim.api.nvim_win_call(pane.win, vim.fn.winsaveview)
 	local lines, spans = build_content(pane)
 	write_buffer(pane.buf, lines, spans)
 	vim.api.nvim_win_call(pane.win, function()

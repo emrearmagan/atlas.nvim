@@ -148,7 +148,10 @@ local function open_actions(state, row, action)
 	picker.select({
 		title = "Actions: " .. row.environment.name,
 		items = available,
-		format_item = icons.format_action,
+		format_item = function(item)
+			local label = type(item.label) == "function" and item.label(ctx) or item.label
+			return icons.format_action({ label = label, icon = item.icon })
+		end,
 		on_select = run,
 	})
 end

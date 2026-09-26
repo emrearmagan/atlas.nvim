@@ -96,6 +96,9 @@ function M.render(environments, width, expanded)
 				details[#details + 1] = deployment.pipeline_name
 			end
 			details[#details + 1] = label
+			if deployment.branch then
+				details[#details + 1] = icons.pulls("branch") .. " " .. deployment.branch
+			end
 
 			if deployment.commit and deployment.commit ~= "" then
 				details[#details + 1] = deployment.commit:sub(1, 8)

@@ -468,7 +468,7 @@ end
 ---@param context PullsPipelineContext
 ---@param pipeline PullsPipeline
 ---@param job PullsPipelineJob
----@param on_done fun(log: PullsLog|nil, err: string|nil)
+---@param on_done fun(log: PullsLog|nil, err: string|nil, status?: integer)
 ---@return { cancel: fun() }|nil
 function M.fetch_job_log(context, pipeline, job, on_done)
 	local repo = tostring(context.repo_full_name or "")
@@ -480,8 +480,8 @@ function M.fetch_job_log(context, pipeline, job, on_done)
 	end
 
 	local endpoint = string.format("/repositories/%s/pipelines/%s/steps/%s/log", repo, id, encode_path_segment(job_id))
-	return service.request_text("GET", endpoint, { Accept = "*/*" }, nil, function(raw, err)
-		on_done(raw and { raw = raw } or nil, err)
+	return service.request_text("GET", endpoint, { Accept = "*/*" }, nil, function(raw, err, status)
+		on_done(raw and { raw = raw } or nil, err, status)
 	end, {
 		action = "Fetch pipeline job log",
 		repo = repo,
@@ -490,18 +490,12 @@ function M.fetch_job_log(context, pipeline, job, on_done)
 	})
 end
 
----@param context PullsPipelineContext
----@param pipeline PullsPipeline
+---@param repo string
+---@param branch string|nil
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.run_pipeline(context, pipeline, on_done)
-	local repo = tostring(context.repo_full_name or "")
-	local target = context.target
-	local branch = pipeline.branch
-		or (type(target) == "string" and target)
-		or (type(target) == "table" and target.source and target.source.branch)
-		or ""
-	if repo == "" or branch == "" then
+function M.run_pipeline(repo, branch, on_done)
+	if repo == "" or not branch or branch == "" then
 		on_done(false, repo == "" and "Missing repo" or "Missing source branch")
 		return nil
 	end
