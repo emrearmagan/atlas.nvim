@@ -66,7 +66,7 @@ end
 
 ---@param args string[]
 ---@param parse_json boolean
----@param callback fun(result: any, err: string|nil)
+---@param callback fun(result: any, err: string|nil, status?: integer)
 ---@param ctx table|nil
 ---@return { job_id: integer, cancel: fun() }|nil
 local function run(args, parse_json, callback, ctx)
@@ -90,33 +90,41 @@ local function run(args, parse_json, callback, ctx)
 			if cancelled then
 				return
 			end
+			local stdout = result.stdout or ""
+			local status
+			if parse_json and args[1] == "api" and vim.tbl_contains(args, "--include") then
+				local headers, body = stdout:match("^(.-)\n\n(.*)$")
+				if headers then
+					status = tonumber(headers:match("^HTTP/%S+ (%d+)"))
+					stdout = body
+				end
+			end
 			if result.code ~= 0 then
 				local err = sanitize_error(result.stderr)
 				logger.logerror(
 					message .. " failed",
 					vim.tbl_extend("force", {}, log, { code = result.code, error = err })
 				)
-				callback(nil, err)
+				callback(nil, err, status)
 				return
 			end
 
-			local stdout = result.stdout or ""
 			if parse_json then
 				stdout = vim.trim(stdout)
 			end
 			if stdout == "" then
-				callback(nil, nil)
+				callback(nil, nil, status)
 				return
 			end
 
 			if parse_json then
 				local ok, parsed = pcall(vim.json.decode, stdout)
 				if ok then
-					callback(parsed, nil)
+					callback(parsed, nil, status)
 					return
 				end
 			end
-			callback(stdout, nil)
+			callback(stdout, nil, status)
 		end)
 	end
 

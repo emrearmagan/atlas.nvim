@@ -53,6 +53,10 @@ local function render(state, selected_id)
 		local message = state.runs == "loading" and state.spinner:text("Loading builds...") or state.runs
 		---@cast message string
 		utils.buffer.center_message(state.buf, state.win, message)
+		vim.api.nvim_buf_set_extmark(state.buf, namespace, 0, 0, {
+			end_row = vim.api.nvim_buf_line_count(state.buf),
+			line_hl_group = state.runs == "loading" and "Normal" or "AtlasLogError",
+		})
 		return
 	end
 	if #state.runs == 0 then

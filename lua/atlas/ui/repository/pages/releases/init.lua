@@ -15,7 +15,7 @@ local utils = require("atlas.ui.shared.utils")
 ---@field repo AtlasRepositoryDetails
 ---@field provider PullsProvider|IssuesProvider
 ---@field statusline AtlasStatusline
----@field release AtlasRepositoryReleaseDetails|string
+---@field release AtlasRepositoryReleaseDetails|string|nil
 ---@field selected_id string|nil
 ---@field line_map table<integer, RepositoryReleaseSelection>
 ---@field requests AtlasRequestScope
@@ -40,12 +40,17 @@ local function render(state)
 	state.line_map = {}
 	vim.api.nvim_buf_clear_namespace(state.buf, namespace, 0, -1)
 	local release = state.release
-	if type(release) == "string" then
-		local message = release == "loading" and state.spinner:text("Loading release...") or release
+	if not release or type(release) == "string" then
+		local message = release or "No releases found"
+		local hl_group = release and "AtlasLogError" or "AtlasTextMuted"
+		if release == "loading" then
+			message = state.spinner:text("Loading release...")
+			hl_group = "Normal"
+		end
 		utils.buffer.center_message(state.buf, state.win, message)
 		vim.api.nvim_buf_set_extmark(state.buf, namespace, 0, 0, {
 			end_row = vim.api.nvim_buf_line_count(state.buf),
-			line_hl_group = release == "loading" and "Normal" or "AtlasTextMuted",
+			line_hl_group = hl_group,
 		})
 		return
 	end
@@ -88,9 +93,9 @@ local function load(state, id)
 		state.spinner:stop()
 		state.statusline:clear_notice()
 		if not id and status == 404 then
-			state.release = "No releases found"
+			state.release = nil
 		else
-			state.release = release or err or "No releases found"
+			state.release = release or err
 		end
 		render(state)
 		vim.api.nvim_win_set_cursor(state.win, { 1, 0 })
@@ -162,7 +167,7 @@ end
 ---@param state RepositoryReleases
 ---@param direction 1|-1
 local function change_release(state, direction)
-	if type(state.release) == "string" then
+	if not state.release or type(state.release) == "string" then
 		return
 	end
 	local id = state.release.id
@@ -299,7 +304,7 @@ function M.open(opts)
 		group = state.group,
 		callback = function(event)
 			if
-				type(state.release) == "string"
+				(not state.release or type(state.release) == "string")
 				and (event.event == "VimResized" or vim.tbl_contains(vim.v.event.windows, state.win))
 			then
 				render(state)

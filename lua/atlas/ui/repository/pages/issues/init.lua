@@ -58,7 +58,7 @@ local function render(state)
 		utils.buffer.center_message(state.buf, state.win, message)
 		vim.api.nvim_buf_set_extmark(state.buf, namespace, 0, 0, {
 			end_row = vim.api.nvim_buf_line_count(state.buf),
-			line_hl_group = issues == "loading" and "Normal" or "AtlasTextMuted",
+			line_hl_group = issues == "loading" and "Normal" or "AtlasLogError",
 		})
 		return
 	end
