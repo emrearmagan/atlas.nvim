@@ -171,7 +171,7 @@ local function show(repo, provider, page_key)
 	setup_windows(session)
 	setup_events(session)
 	session.statusline:set_items({
-		{ text = provider.name .. " / " .. (repo.full_name or repo.name), hl_group = "AtlasFooterText" },
+		{ text = repo.full_name or repo.name, hl_group = "AtlasFooterText" },
 	})
 	for index, page in ipairs(session.sidebar.pages) do
 		if page.key == (page_key or "overview") then
