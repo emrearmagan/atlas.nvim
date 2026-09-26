@@ -12,20 +12,14 @@ local function pipeline_id(url)
 	return url:match("/pipelines/results/(%d+)")
 end
 
----@param state any
----@return string
-local function provider_state(state)
-	if type(state) ~= "table" then
-		return tostring(state or "")
-	end
-	local result = type(state.result) == "table" and state.result.name or nil
-	return tostring(result or state.name or "")
-end
-
----@param state any
+---@param state table|string|nil
 ---@return PullsPipelineState
 local function pipeline_state(state)
-	local value = provider_state(state):upper()
+	local value = state
+	if type(state) == "table" then
+		value = (state.result and state.result.name) or (state.stage and state.stage.name) or state.name
+	end
+	value = tostring(value or ""):upper()
 	if value == "SUCCESSFUL" then
 		return "SUCCESSFUL"
 	elseif value == "FAILED" or value == "ERROR" then
@@ -36,10 +30,15 @@ local function pipeline_state(state)
 		return type(state) == "table" and "CANCELED" or "STOPPED"
 	elseif value == "EXPIRED" or value == "SUPERSEDED" then
 		return "STOPPED"
-	end
-
-	local name = type(state) == "table" and tostring(state.name or ""):upper() or value
-	if name == "PENDING" or name == "READY" or name == "IN_PROGRESS" or name == "INPROGRESS" then
+	elseif value == "HALTED" then
+		return "PAUSED"
+	elseif value == "PAUSED" then
+		return "MANUAL"
+	elseif value == "PENDING" then
+		return "PENDING"
+	elseif value == "READY" then
+		return "QUEUED"
+	elseif value == "RUNNING" or value == "IN_PROGRESS" or value == "INPROGRESS" then
 		return "INPROGRESS"
 	end
 	return "UNKNOWN"

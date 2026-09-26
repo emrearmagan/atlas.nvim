@@ -1,4 +1,4 @@
----@alias PullsPipelineState "UNKNOWN"|"STOPPED"|"CANCELED"|"SKIPPED"|"MANUAL"|"SUCCESSFUL"|"INPROGRESS"|"FAILED"
+---@alias PullsPipelineState "UNKNOWN"|"STOPPED"|"CANCELED"|"SKIPPED"|"PENDING"|"QUEUED"|"PAUSED"|"MANUAL"|"SUCCESSFUL"|"INPROGRESS"|"FAILED"
 
 ---@class PullsPipeline
 ---@field id string
