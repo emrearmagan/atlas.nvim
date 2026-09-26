@@ -889,7 +889,7 @@ function M.register_keymaps(panel)
 			M.render(panel)
 		end
 	end
-	local function show_selected(focus_diff)
+	local function open_selected(focus_diff)
 		local session = active_session(panel)
 		if not session then
 			return
@@ -951,11 +951,11 @@ function M.register_keymaps(panel)
 		end
 	end
 	local entries = {}
-	add_mapping(entries, { "ui.select", "ui.show_details" }, "Show item in diff", 1, function()
-		show_selected(false)
+	add_mapping(entries, "pulls.review.open_item", "Open item in diff", 1, function()
+		open_selected(true)
 	end)
-	add_mapping(entries, "pulls.review.focus_item", "Focus item in diff", 2, function()
-		show_selected(true)
+	add_mapping(entries, "pulls.review.show_details", "Preview item in diff", 2, function()
+		open_selected(false)
 	end)
 	add_mapping(entries, "ui.open_in_browser", "Open item in browser", 3, function()
 		local entry = selected_entry(panel)

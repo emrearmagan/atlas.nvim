@@ -109,6 +109,18 @@ local function check_pulls()
 	else
 		vim.health.error(string.format("pulls.diff.open_cmd not found: %s", diff_cmd))
 	end
+
+	local lsp = (pulls.diff or {}).lsp or {}
+	local lsp_ok, lsp_err = require("atlas.core.git.worktree").validate(lsp)
+	if not lsp_ok then
+		vim.health.error(string.format("pulls.diff.lsp is invalid: %s", tostring(lsp_err)))
+	elseif not lsp.enabled then
+		vim.health.info("pulls.diff.lsp.enabled is off (diff buffers have no language server)")
+	elseif diff_cmd ~= "AtlasDiff" then
+		vim.health.warn(string.format("pulls.diff.lsp.enabled requires open_cmd AtlasDiff (got %s)", diff_cmd))
+	else
+		vim.health.ok("pulls.diff.lsp enabled")
+	end
 end
 
 local function check_bitbucket()

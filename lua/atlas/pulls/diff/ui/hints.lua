@@ -36,12 +36,17 @@ function M.chunks(items)
 	return chunks
 end
 
+---@param buf integer
+function M.clear_buffer(buf)
+	if vim.api.nvim_buf_is_valid(buf) then
+		vim.api.nvim_buf_clear_namespace(buf, namespace, 0, -1)
+	end
+end
+
 ---@param current AtlasDiffCurrent
 function M.clear(current)
 	for _, side in ipairs({ current.left, current.right }) do
-		if vim.api.nvim_buf_is_valid(side.buf) then
-			vim.api.nvim_buf_clear_namespace(side.buf, namespace, 0, -1)
-		end
+		M.clear_buffer(side.buf)
 	end
 end
 

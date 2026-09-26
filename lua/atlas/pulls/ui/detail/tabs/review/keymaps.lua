@@ -110,7 +110,7 @@ function M.setup(buf, refresh)
 	)
 	utils.insert_if(
 		items,
-		from_action("ui.show_details", {
+		from_action("pulls.review.show_details", {
 			desc = "Show details",
 			opts = { nowait = true, silent = true },
 			callback = function()
@@ -230,7 +230,7 @@ function M.teardown(buf)
 	utils.insert_if(items, remove_item("ui.toggle_all_folds"))
 	utils.insert_if(items, remove_item("pulls.review.diff.next_hunk"))
 	utils.insert_if(items, remove_item("pulls.review.diff.previous_hunk"))
-	utils.insert_if(items, remove_item("ui.show_details"))
+	utils.insert_if(items, remove_item("pulls.review.show_details"))
 	help.remove("Detail", items, { buffer = buf })
 end
 

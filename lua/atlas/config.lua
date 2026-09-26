@@ -45,6 +45,15 @@
 
 ---@alias AtlasPullsDiffOpenCommand "AtlasDiff"|"DiffviewOpen"|"CodeDiff"
 
+-- Backs the diff with a detached worktree at the PR head so the new side is a real file buffer and
+-- language servers attach to it. `dir` receives an AtlasWorktreeContext and may return nil to keep
+-- the default location. `link` names directories symlinked from the main checkout (node_modules,
+-- .venv, ...) so servers can resolve dependencies; they are the same directories on disk.
+---@class AtlasPullsDiffLspConfig
+---@field enabled boolean|nil
+---@field dir string|(fun(ctx: AtlasWorktreeContext): string|nil)|nil
+---@field link string[]|nil
+
 ---@class AtlasPullsDiffConfig
 ---@field open_cmd AtlasPullsDiffOpenCommand|string|nil
 ---@field layout "side-by-side"|"inline"|nil
@@ -53,6 +62,7 @@
 ---@field comment_display "virtual_lines"|"virtual_text"|nil
 ---@field explorer AtlasPullsDiffExplorerConfig|nil
 ---@field review_panel AtlasPullsDiffReviewPanelConfig|nil
+---@field lsp AtlasPullsDiffLspConfig|nil
 
 ---@class AtlasPullsCommentTemplate
 ---@field label string
@@ -169,6 +179,12 @@ M.options = {
 				hidden = true,
 				height = 10,
 			},
+			lsp = {
+				enabled = false,
+				dir = nil,
+				-- Keep empty: setup() deep extends, which merges lists element-wise.
+				link = {},
+			},
 			explorer = {
 				grouped = true,
 				hidden = false,
@@ -246,14 +262,16 @@ M.options = {
 				toggle_auto_refresh = "gR",
 			},
 			review = {
-				focus_item = "gd",
-				approve = "ga",
-				request_changes = "gr",
-				submit_review = "gs",
+				open_item = "<CR>",
+				show_details = "K",
+				approve = "<leader>ga",
+				request_changes = "<leader>gr",
+				submit_review = "<leader>gs",
 				add_task = "<leader>t",
 				comment_templates = "gT",
 				find_file = "<leader>ff",
 				explorer = {
+					toggle_explorer = "<leader>b",
 					find_file = { "f", "<leader>ff" },
 					next_file = { "]f", "<Tab>" },
 					previous_file = { "[f", "<S-Tab>" },
