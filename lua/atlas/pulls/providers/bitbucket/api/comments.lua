@@ -1,6 +1,6 @@
 local M = {}
 
-local service = require("atlas.pulls.providers.bitbucket.api.service")
+local service = require("atlas.providers.bitbucket.client")
 local mapper = require("atlas.pulls.providers.bitbucket.api.mapper")
 
 ---@param raw_content string

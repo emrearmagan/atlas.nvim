@@ -1,9 +1,10 @@
 local M = {}
 
-local service = require("atlas.issues.providers.jira.api.service")
+local service = require("atlas.providers.jira.client")
 local normalizer = require("atlas.issues.providers.jira.api.mapper")
 local json = require("atlas.core.json")
 local config = require("atlas.config")
+local users_api = require("atlas.providers.jira.users")
 local url_encode = require("atlas.core.utils").url_encode
 
 local function project_config()
@@ -57,7 +58,7 @@ end
 ---@param opts { force_refresh?: boolean, pagelen: integer, cursor?: string }
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.search_issues(jql, on_done, opts)
-	local cache_key = string.format("jira:search:v5:%s:%d:%s", jql, opts.pagelen, opts.cursor or "first")
+	local cache_key = string.format("jira:search:v6:%s:%d:%s", jql, opts.pagelen, opts.cursor or "first")
 
 	if not opts.force_refresh then
 		local cached = service.get_cache(cache_key)
@@ -418,6 +419,215 @@ function M.get_create_meta(project_key, callback)
 	end, {
 		action = "Fetch create metadata",
 		project_key = project_key,
+	})
+end
+
+---@param opts { project: string|nil, issue_key: string|nil }
+---@param query string|nil
+---@param callback fun(users: AtlasUser[]|nil, err: string|nil)
+---@return { job_id: integer, cancel: fun() }|nil
+function M.get_assignable_users(opts, query, callback)
+	opts = opts or {}
+	local project = opts.project or ""
+	local issue_key = opts.issue_key or ""
+
+	if project == "" and issue_key == "" then
+		callback(nil, "Missing project or issue key")
+		return nil
+	end
+
+	local is_server = service.is_server()
+
+	local q = tostring(query or "")
+	local params = {}
+	if is_server then
+		table.insert(params, "username=" .. url_encode(q))
+	else
+		table.insert(params, "query=" .. url_encode(q))
+	end
+	if issue_key ~= "" then
+		table.insert(params, "issueKey=" .. url_encode(issue_key))
+	end
+	if project ~= "" then
+		table.insert(params, "project=" .. url_encode(project))
+	end
+	local endpoint = "/user/assignable/search?" .. table.concat(params, "&")
+
+	return service.request("GET", endpoint, nil, function(result, err)
+		if err ~= nil then
+			callback(nil, err or "Empty response")
+			return
+		end
+
+		local users = {}
+		for _, raw in ipairs(result) do
+			local user = users_api.to_user(raw)
+			if user then
+				table.insert(users, user)
+			end
+		end
+
+		callback(users, nil)
+	end, {
+		action = "Fetch assignable users",
+		issue_key = issue_key,
+		project = project,
+		query = q,
+	})
+end
+
+---@param opts { permissions?: string[]|nil, project_ids?: integer[]|nil, issue_ids?: integer[]|nil, account_id?: string|nil }
+---@param callback fun(permissions: table<string, table<number, boolean>>|nil, err: string|nil)
+---@return { job_id: integer, cancel: fun() }|nil
+function M.get_permissions_bulk(opts, callback)
+	opts = opts or {}
+
+	local permissions_list = {}
+	for _, key in ipairs(opts.permissions or {}) do
+		local value = vim.trim(key)
+		if value ~= "" then
+			table.insert(permissions_list, value)
+		end
+	end
+
+	if #permissions_list == 0 then
+		callback(nil, "Missing permissions")
+		return nil
+	end
+
+	local project_ids = opts.project_ids or {}
+	local issue_ids = opts.issue_ids or {}
+
+	local payload = {
+		projectPermissions = {
+			{
+				permissions = permissions_list,
+				projects = project_ids,
+				issues = issue_ids,
+			},
+		},
+	}
+
+	if opts.account_id and opts.account_id ~= "" then
+		payload.accountId = opts.account_id
+	end
+
+	return service.request("POST", "/permissions/check", payload, function(result, err)
+		if err ~= nil then
+			-- Handle 404 as a fallback since Jira server API don't have bulk permissions endpoint
+			if err and err:find("HTTP 404", 1, true) == 1 then
+				local fallback = {}
+				for _, key in ipairs(permissions_list) do
+					fallback[key] = {}
+					for _, pid in ipairs(project_ids) do
+						fallback[key][pid] = true
+					end
+					for _, iid in ipairs(issue_ids) do
+						fallback[key][iid] = true
+					end
+				end
+				callback(fallback, nil)
+				return
+			end
+			callback(nil, err or "Empty response")
+			return
+		end
+
+		---@type table<string, table<number, boolean>>
+		local permissions = {}
+		for _, entry in ipairs(result.projectPermissions or {}) do
+			local permission_key = type(entry.permission) == "string" and entry.permission or ""
+			if permission_key ~= "" then
+				permissions[permission_key] = permissions[permission_key] or {}
+				for _, project_id in ipairs(entry.projects or {}) do
+					local id_num = tonumber(project_id)
+					if id_num ~= nil then
+						permissions[permission_key][id_num] = true
+					end
+				end
+			end
+		end
+
+		callback(permissions, nil)
+	end, {
+		action = "Fetch bulk permissions",
+		permissions = permissions_list,
+		project_count = #project_ids,
+		issue_count = #issue_ids,
+		account_id = opts.account_id,
+	})
+end
+
+---@param issue_key string
+---@param account_id string|nil
+---@param callback fun(ok: boolean, err: string|nil)
+---@return { job_id: integer, cancel: fun() }|nil
+function M.assign_issue(issue_key, account_id, callback)
+	if issue_key == "" then
+		callback(false, "Missing issue key")
+		return nil
+	end
+
+	local normalized_account_id = nil
+	if account_id and account_id ~= "" then
+		normalized_account_id = account_id
+	end
+
+	local endpoint = string.format("/issue/%s/assignee", issue_key)
+	local payload = {}
+	if service.is_server() then
+		payload.name = normalized_account_id or vim.NIL
+	else
+		payload.accountId = normalized_account_id or vim.NIL
+	end
+
+	return service.request("PUT", endpoint, payload, function(_, err)
+		if err ~= nil then
+			callback(false, err)
+			return
+		end
+
+		callback(true, nil)
+	end, {
+		action = "Assign issue",
+		issue_key = issue_key,
+		unassign = normalized_account_id == nil,
+	})
+end
+
+---@param issue_key string
+---@param account_id string
+---@param callback fun(ok: boolean, err: string|nil)
+---@return { job_id: integer, cancel: fun() }|nil
+function M.change_reporter(issue_key, account_id, callback)
+	if issue_key == "" then
+		callback(false, "Missing issue key")
+		return nil
+	end
+
+	if account_id == "" then
+		callback(false, "Missing account id")
+		return nil
+	end
+
+	local endpoint = string.format("/issue/%s", issue_key)
+	local payload = { fields = { reporter = {} } }
+	if service.is_server() then
+		payload.fields.reporter.name = account_id
+	else
+		payload.fields.reporter.accountId = account_id
+	end
+
+	return service.request("PUT", endpoint, payload, function(_, err)
+		if err ~= nil then
+			callback(false, err)
+			return
+		end
+
+		callback(true, nil)
+	end, {
+		action = "Change reporter",
+		issue_key = issue_key,
 	})
 end
 

@@ -7,7 +7,7 @@ local requests = require("atlas.core.requests")
 local actions = require("atlas.pulls.pipelines.bamboo.actions")
 local parser = require("atlas.pulls.pipelines.bamboo.parser")
 local bitbucket = require("atlas.pulls.pipelines.bitbucket")
-local bitbucket_service = require("atlas.pulls.providers.bitbucket.api.service")
+local bitbucket_service = require("atlas.providers.bitbucket.client")
 local pipeline_utils = require("atlas.pulls.pipelines.utils")
 local url_encode = require("atlas.core.utils").url_encode
 

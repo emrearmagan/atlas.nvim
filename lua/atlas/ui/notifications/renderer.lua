@@ -34,8 +34,14 @@ function M.render(notifications, width)
 			dot_hl = "AtlasLogInfo"
 		end
 
-		local type_icon = n.icon or ""
-		local type_hl = n.icon_hl or "AtlasTextMuted"
+		local type_icon, type_hl = icons.general("info")
+		if n.kind == "pr" then
+			type_icon, type_hl = icons.pulls("pr")
+		elseif n.kind == "issue" then
+			type_icon, type_hl = icons.issues("issue")
+		elseif n.kind == "checks" then
+			type_icon, type_hl = icons.pulls("tasks")
+		end
 
 		local prefix
 		if type_icon ~= "" then

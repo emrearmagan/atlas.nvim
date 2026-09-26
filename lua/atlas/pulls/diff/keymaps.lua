@@ -5,7 +5,6 @@ local comments = require("atlas.pulls.diff.comments")
 local help = require("atlas.ui.popups.help")
 local notes = require("atlas.pulls.diff.notes")
 local picker = require("atlas.ui.picker")
-local pull_actions = require("atlas.pulls.actions")
 local resolver = require("atlas.core.keymaps")
 local review = require("atlas.pulls.diff.review")
 local session_api = require("atlas.pulls.diff.session")
@@ -129,12 +128,12 @@ function M.register(session, opts)
 				add(items, "ui.open_actions", "Review actions", function()
 					actions.open(session)
 				end)
-				if can_complete and action_context and pull_actions.is_available("approve", action_context) then
+				if can_complete and action_context and actions.is_available("approve", action_context) then
 					add(items, "pulls.review.approve", "Approve", function()
 						actions.approve(session)
 					end)
 				end
-				if can_complete and action_context and pull_actions.is_available("request_changes", action_context) then
+				if can_complete and action_context and actions.is_available("request_changes", action_context) then
 					add(items, "pulls.review.request_changes", "Request changes", function()
 						actions.request_changes(session)
 					end)

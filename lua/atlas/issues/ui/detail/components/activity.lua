@@ -8,17 +8,20 @@ local helper = require("atlas.issues.ui.presentation")
 local COLLAPSE_KEEP = 2
 local COLLAPSE_THRESHOLD = 4
 
----@param actor IssueUser|nil
+---@param actor AtlasUser|nil
 ---@return string
 local function actor_name(actor)
 	if actor == nil then
 		return "Unknown"
 	end
-	if actor.display_name and actor.display_name ~= "" then
-		return actor.display_name
+	if actor.name and actor.name ~= "" then
+		return actor.name
 	end
-	if actor.account_id and actor.account_id ~= "" then
-		return actor.account_id
+	if actor.username and actor.username ~= "" then
+		return actor.username
+	end
+	if actor.id and actor.id ~= "" then
+		return actor.id
 	end
 	return "Unknown"
 end

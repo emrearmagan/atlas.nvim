@@ -76,8 +76,12 @@ query(
 ---@return { cancel: fun() }|nil
 function M.fetch_search(queries, opts, on_done)
 	local cursor_key = opts.cursor == nil and "first" or vim.json.encode(opts.cursor)
-	local cache_key =
-		string.format("github:pulls:search:%s:limit:%d:cursor:%s", vim.json.encode(queries), opts.pagelen, cursor_key)
+	local cache_key = string.format(
+		"github:pulls:search:v2:%s:limit:%d:cursor:%s",
+		vim.json.encode(queries),
+		opts.pagelen,
+		cursor_key
+	)
 
 	if not opts.force_refresh then
 		local cached, ok = cli.get_cache(cache_key)

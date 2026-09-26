@@ -108,21 +108,21 @@ function M.to_pull_request(raw)
 		return nil
 	end
 
-	-- references.full looks like "group/proj!7"
+	-- REST references.full and GraphQL reference look like "group/proj!7".
 	local refs = json.nilify(raw.references)
-	local full_ref = type(refs) == "table" and json.safe_str(refs.full) or nil
+	local full_ref = json.safe_str(raw.reference) or (type(refs) == "table" and json.safe_str(refs.full) or nil)
+	local web_url = json.safe_str(raw.web_url) or ""
 	local project_path = ""
 	if full_ref then
 		project_path = full_ref:match("^(.-)!%d+$") or ""
 	end
 	if project_path == "" then
-		local web = json.safe_str(raw.web_url) or ""
-		project_path = web:match("^https?://[^/]+/(.+)/%-/merge_requests/") or ""
+		project_path = web_url:match("^https?://[^/]+/(.+)/%-/merge_requests/") or ""
 	end
 
-	local workspace, repo = project_path:match("^(.*)/([^/]+)$")
-	workspace = workspace or ""
-	repo = repo or project_path
+	local owner, name = project_path:match("^(.*)/([^/]+)$")
+	owner = owner or ""
+	name = name or project_path
 
 	local source_branch = json.safe_str(raw.source_branch) or ""
 	local target_branch = json.safe_str(raw.target_branch) or ""
@@ -146,10 +146,16 @@ function M.to_pull_request(raw)
 		comments_count = tonumber(raw.user_notes_count) or 0,
 		created_on = json.safe_str(raw.created_at) or "",
 		updated_on = json.safe_str(raw.updated_at) or "",
-		link = { html = json.safe_str(raw.web_url) or "" },
+		link = { html = web_url },
 		provider = "gitlab",
-		workspace = workspace,
-		repo = repo,
+		repo = {
+			id = project_path,
+			name = name,
+			owner = owner,
+			repo_name = name,
+			full_name = project_path,
+			html_url = web_url:match("^(.-)/%-/merge_requests/%d+") or "",
+		},
 		repo_full_name = project_path,
 		reviewers = normalize_optional_reviewers(json.safe_table(raw.reviewers).nodes or raw.reviewers),
 		merge_status = json.safe_str(raw.merge_status),
@@ -185,25 +191,6 @@ function M.to_pull_requests(raw_list)
 		end
 	end
 	return pulls
-end
-
----@param raw any Decoded API value.
----@return PullsUser|nil
-function M.to_user(raw)
-	raw = json.nilify(raw)
-	if type(raw) ~= "table" then
-		return nil
-	end
-	local username = json.safe_str(raw.username) or ""
-	if username == "" then
-		return nil
-	end
-	local name = json.safe_str(raw.name) or ""
-	return {
-		name = name ~= "" and name or username,
-		id = tostring(raw.id or ""),
-		username = username,
-	}
 end
 
 ---@param user any

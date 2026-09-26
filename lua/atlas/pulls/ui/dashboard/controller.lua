@@ -202,9 +202,12 @@ local function get_current_user(scope, on_done)
 		on_done("no provider")
 		return
 	end
-	scope.run(function(done)
-		return provider.capabilities.core.fetch_user(done)
-	end, function(user, err)
+	local users = provider.capabilities.users
+	if not users then
+		on_done(nil)
+		return
+	end
+	scope.run(users.fetch_user, function(user, err)
 		if err ~= nil then
 			on_done(tostring(err))
 			return

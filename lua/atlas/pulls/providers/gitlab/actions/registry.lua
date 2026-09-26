@@ -7,7 +7,7 @@ local picker = require("atlas.ui.picker")
 local core_notify = require("atlas.core.notify")
 local notes = require("atlas.pulls.notes")
 local pullrequests_api = require("atlas.pulls.providers.gitlab.api.pullrequests")
-local users_api = require("atlas.pulls.providers.gitlab.api.users")
+local users_api = require("atlas.providers.gitlab.users")
 local service = require("atlas.providers.gitlab.client")
 local gitlab_query = require("atlas.providers.gitlab.query")
 
@@ -173,7 +173,7 @@ local function edit_assignees(ctx, done)
 			for _, a in ipairs(assignees) do
 				local id = tonumber(a.id)
 				if id then
-					table.insert(original, { id = id, username = a.username, name = a.name or a.username })
+					table.insert(original, { id = tostring(id), username = a.username, name = a.name or a.username })
 					original_set[id] = true
 				end
 			end
@@ -186,10 +186,10 @@ local function edit_assignees(ctx, done)
 				end,
 				format_item = function(item)
 					return string.format(
-						"%s %s (@%s)",
+						"%s %s%s",
 						icons.general("user"),
-						item.name or item.username,
-						item.username
+						item.name,
+						item.username and item.username ~= "" and (" (@" .. item.username .. ")") or ""
 					)
 				end,
 				title = string.format("Assignees for %s", pr_label(pr)),
@@ -562,9 +562,29 @@ register({
 	run = open_project,
 })
 
+register(actions.browse_repository)
+register({
+	id = "browse_repositories",
+	label = "Browse Repository",
+	icon = icons.general("overview"),
+	run = function(ctx, done)
+		select_project({
+			title = "Browse Repository",
+			include_all = false,
+			on_select = function(project)
+				require("atlas.ui.repository").open(project, ctx.provider)
+				done(nil, nil)
+			end,
+			on_cancel = function()
+				done(nil, nil)
+			end,
+		})
+	end,
+})
+
 register({
 	id = "edit_search",
-	label = "Edit search",
+	label = "Edit Current Search",
 	icon = icons.action("search"),
 	run = function(_, done)
 		local state = require("atlas.pulls.state")

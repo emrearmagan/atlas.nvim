@@ -5,10 +5,10 @@ local icons = require("atlas.ui.shared.icons")
 local picker = require("atlas.ui.picker")
 local issues_api = require("atlas.issues.providers.jira.api.issues")
 local projects_api = require("atlas.issues.providers.jira.api.projects")
-local service = require("atlas.issues.providers.jira.api.service")
+local service = require("atlas.providers.jira.client")
 local notify = require("atlas.core.notify")
 local transitions_api = require("atlas.issues.providers.jira.api.transitions")
-local users_api = require("atlas.issues.providers.jira.api.users")
+local users_api = require("atlas.providers.jira.users")
 local issues_state = require("atlas.issues.state")
 
 ---@param ctx AtlasIssueActionContext
@@ -128,28 +128,27 @@ local function assign(ctx, done)
 
 	local issue_key = issue.key
 	local issue_project_key = issue.project and issue.project.key or nil
-	local current_assignee_key = vim.trim(tostring(issue.assignee and issue.assignee.display_name or "")):lower()
+	local current_assignee_id = issue.assignee and issue.assignee.id or nil
 
 	local function to_picker_items(users)
 		local items = {}
 		local current_user = ctx.current_user
-		local current_user_account_id = current_user and current_user.account_id or nil
+		local current_user_id = current_user and current_user.id or nil
 		local current_user_item = nil
 		local seen_current_user = false
 
-		if current_assignee_key ~= "" and current_assignee_key ~= "unassigned" then
+		if current_assignee_id then
 			table.insert(items, {
 				id = "__unassign__",
 				label = "Unassign",
-				value = { account_id = nil, display_name = "Unassign" },
+				value = { id = nil, name = "Unassign" },
 			})
 		end
 
 		for _, user in ipairs(users or {}) do
-			local user_name = vim.trim(tostring(user.display_name or "")):lower()
-			if user_name ~= current_assignee_key then
-				local item = { id = user.account_id or "", label = user.display_name or "", value = user }
-				if current_user_account_id and user.account_id == current_user_account_id then
+			if user.id ~= current_assignee_id then
+				local item = { id = user.id or "", label = user.name or "", value = user }
+				if current_user_id and user.id == current_user_id then
 					seen_current_user = true
 					current_user_item = item
 				else
@@ -158,11 +157,11 @@ local function assign(ctx, done)
 			end
 		end
 
-		if current_user_account_id and current_user then
+		if current_user_id and current_user_id ~= current_assignee_id and current_user then
 			if not seen_current_user then
 				current_user_item = {
-					id = current_user_account_id,
-					label = current_user.display_name or "",
+					id = current_user_id,
+					label = current_user.name or "",
 					value = current_user,
 				}
 			end
@@ -185,7 +184,7 @@ local function assign(ctx, done)
 			return string.format("%s %s", icons.general("user"), item.label)
 		end,
 		fetch = function(query, fetch_done)
-			return users_api.get_assignable_users(
+			return issues_api.get_assignable_users(
 				{ issue_key = issue_key, project = issue_project_key },
 				query,
 				function(users, err)
@@ -200,20 +199,20 @@ local function assign(ctx, done)
 		on_select = function(item)
 			local selected = item.value
 			notify.loading(string.format("Assigning %s...", issue_key))
-			users_api.assign_issue(issue_key, selected.account_id, function(ok, err)
+			issues_api.assign_issue(issue_key, selected.id, function(ok, err)
 				if not ok then
 					notify.error(err or "Assign failed")
 					done(nil, err or "Assign failed")
 					return
 				end
 
-				if selected.account_id == nil then
+				if selected.id == nil then
 					notify.success(string.format("Unassigned %s", issue_key), { timeout = 1200 })
 					done({ issue_key = issue_key }, nil)
 					return
 				end
 
-				notify.success(string.format("Assigned %s to %s", issue_key, selected.display_name), { timeout = 1200 })
+				notify.success(string.format("Assigned %s to %s", issue_key, selected.name), { timeout = 1200 })
 				done({ issue_key = issue_key }, nil)
 			end)
 		end,
@@ -229,14 +228,13 @@ local function reporter(ctx, done)
 	local issue = assert(ctx.issue)
 
 	local issue_key = issue.key
-	local current_reporter_key = vim.trim(tostring(issue.reporter and issue.reporter.display_name or "")):lower()
+	local current_reporter_id = issue.reporter and issue.reporter.id or nil
 
 	local function to_picker_items(users)
 		local items = {}
 		for _, user in ipairs(users or {}) do
-			local user_name = vim.trim(tostring(user.display_name or "")):lower()
-			if user_name ~= current_reporter_key then
-				table.insert(items, { id = user.account_id or "", label = user.display_name or "", value = user })
+			if user.id ~= current_reporter_id then
+				table.insert(items, { id = user.id or "", label = user.name or "", value = user })
 			end
 		end
 		return items
@@ -249,7 +247,7 @@ local function reporter(ctx, done)
 			return string.format("%s %s", icons.general("user"), item.label)
 		end,
 		fetch = function(query, fetch_done)
-			return users_api.get_assignable_users({ issue_key = issue_key, project = nil }, query, function(users, err)
+			return issues_api.get_assignable_users({ issue_key = issue_key, project = nil }, query, function(users, err)
 				if err then
 					fetch_done(nil, err)
 					return
@@ -260,7 +258,7 @@ local function reporter(ctx, done)
 		on_select = function(item)
 			local selected = item.value
 			notify.loading(string.format("Changing reporter for %s...", issue_key))
-			users_api.change_reporter(issue_key, selected.account_id, function(ok, err)
+			issues_api.change_reporter(issue_key, selected.id, function(ok, err)
 				if not ok then
 					notify.error(err or "Reporter change failed")
 					done(nil, err or "Reporter change failed")
@@ -268,7 +266,7 @@ local function reporter(ctx, done)
 				end
 
 				notify.success(
-					string.format("Reporter for %s changed to %s", issue_key, selected.display_name),
+					string.format("Reporter for %s changed to %s", issue_key, selected.name),
 					{ timeout = 1200 }
 				)
 				done({ issue_key = issue_key }, nil)
@@ -337,9 +335,8 @@ local function edit_issue(ctx, done)
 				payload.issuetype = { id = fields.issue_type.id }
 			end
 
-			if fields.assignee and fields.assignee.account_id then
-				payload.assignee = is_server and { name = fields.assignee.account_id }
-					or { id = fields.assignee.account_id }
+			if fields.assignee and fields.assignee.id then
+				payload.assignee = is_server and { name = fields.assignee.id } or { id = fields.assignee.id }
 			else
 				payload.assignee = vim.NIL
 			end
@@ -423,9 +420,8 @@ local function create_issue(context, done)
 			end
 
 			local is_server = service.is_server()
-			if fields.reporter and fields.reporter.account_id then
-				api_fields.reporter = is_server and { name = fields.reporter.account_id }
-					or { accountId = fields.reporter.account_id }
+			if fields.reporter and fields.reporter.id then
+				api_fields.reporter = is_server and { name = fields.reporter.id } or { accountId = fields.reporter.id }
 			end
 
 			local desc = fields.description
@@ -433,9 +429,8 @@ local function create_issue(context, done)
 				api_fields.description = is_server and desc or md_to_adf.to_adf(desc)
 			end
 
-			if fields.assignee and fields.assignee.account_id then
-				api_fields.assignee = is_server and { name = fields.assignee.account_id }
-					or { id = fields.assignee.account_id }
+			if fields.assignee and fields.assignee.id then
+				api_fields.assignee = is_server and { name = fields.assignee.id } or { id = fields.assignee.id }
 			end
 
 			local raw_desc = desc
@@ -562,7 +557,7 @@ local function create_issue(context, done)
 					end
 				end
 
-				users_api.get_permissions_bulk({
+				issues_api.get_permissions_bulk({
 					permissions = { "CREATE_ISSUES" },
 					project_ids = project_ids,
 				}, function(permission_map, perm_err)
@@ -618,7 +613,7 @@ local function search_issues(project, ctx, done)
 				---@cast details JiraIssueDetails
 				local assignee = details.assignees[1]
 				local status = "**Status:** " .. (details.status or "Unknown")
-				local assignee_name = "**Assignee:** " .. (assignee and assignee.display_name or "Unassigned")
+				local assignee_name = "**Assignee:** " .. (assignee and assignee.name or "Unassigned")
 				local column = math.max(vim.fn.strdisplaywidth(status), vim.fn.strdisplaywidth(assignee_name)) + 4
 				local lines = {
 					status
@@ -628,7 +623,7 @@ local function search_issues(project, ctx, done)
 					assignee_name
 						.. string.rep(" ", column - vim.fn.strdisplaywidth(assignee_name))
 						.. "**Reporter:** "
-						.. (details.reporter and details.reporter.display_name or "Unknown"),
+						.. (details.reporter and details.reporter.name or "Unknown"),
 				}
 				local labels = vim.tbl_map(function(label)
 					return label.name
@@ -843,7 +838,7 @@ end
 ---@param ctx AtlasIssueActionContext
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function toggle_subscription(ctx, done)
-	local svc = require("atlas.issues.providers.jira.api.service")
+	local svc = require("atlas.providers.jira.client")
 	local issue = assert(ctx.issue)
 	local issue_key = tostring(issue.key or "")
 	notify.loading(issue.is_subscribed and "Unsubscribing..." or "Subscribing...")
@@ -884,17 +879,17 @@ local function toggle_subscription(ctx, done)
 	end
 
 	local current = ctx.current_user
-	if current and tostring(current.account_id or "") ~= "" then
-		unsubscribe(current.account_id)
+	if current and (current.id or "") ~= "" then
+		unsubscribe(current.id)
 		return
 	end
 
-	require("atlas.issues.providers.jira.api.users").get_myself(function(user, err)
-		if err or not user or user.account_id == "" then
+	users_api.fetch_user(function(user, err)
+		if err or not user or user.id == "" then
 			finish(nil, err or "Failed to fetch Jira user")
 			return
 		end
-		unsubscribe(user.account_id)
+		unsubscribe(user.id)
 	end)
 end
 
@@ -946,7 +941,7 @@ register({
 })
 register({
 	id = "edit_search",
-	label = "Edit search",
+	label = "Edit Current Search",
 	icon = icons.action("search"),
 	run = function(_, done)
 		require("atlas.issues.providers.jira.completion.search").edit(current_jql(), function(query)

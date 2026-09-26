@@ -6,7 +6,7 @@
 ---@field query string
 ---@field is_loading boolean
 ---@field error string|nil
----@field current_user PullsUser|nil
+---@field current_user AtlasUser|nil
 ---@field pulls PullRequest[]
 ---@field current_page integer
 ---@field page_history PullsPage[]

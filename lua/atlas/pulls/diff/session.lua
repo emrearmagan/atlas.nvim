@@ -44,7 +44,7 @@ local review_progress = { "󰝦", "󰪞", "󰪟", "󰪠", "󰪡", "󰪢", "󰪣"
 ---@class AtlasDiffReview
 ---@field provider PullsProvider
 ---@field pr PullRequest
----@field current_user PullsUser|nil
+---@field current_user AtlasUser|nil
 ---@field context PullsReviewContext|nil
 ---@field data PullsReviewData
 

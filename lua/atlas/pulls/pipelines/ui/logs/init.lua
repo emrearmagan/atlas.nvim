@@ -83,7 +83,7 @@ local function jump_to_step(pane)
 		return
 	end
 	local step = selection.job.steps and selection.job.steps[selection.step]
-	local entries = pane.show_raw and pane.source.lines or log
+	local entries = pane.show_raw and pane.source and pane.source.lines or log
 	local target = step and resolve(entries, step)
 	if target then
 		M.jump(pane, target)
@@ -185,13 +185,13 @@ function M.show(pane, selection, opts)
 
 	pane.requests.run(function(done)
 		return fetch(pane.context, selection.pipeline, selection.job, done)
-	end, function(log, err)
+	end, function(log, err, status)
 		pane.refreshing = false
 		stop_spinner(pane)
 		if err then
 			logger.logerror("Fetch job logs failed", { job_id = selection.job.id, error = err })
 			if not background then
-				pane.log = err
+				pane.log = status == 404 and {} or err
 				M.render(pane)
 			end
 		elseif not pane.source or pane.source.raw ~= (log and log.raw or "") then

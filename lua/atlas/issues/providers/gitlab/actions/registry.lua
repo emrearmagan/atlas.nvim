@@ -6,7 +6,7 @@ local picker = require("atlas.ui.picker")
 local notify = require("atlas.core.notify")
 local request_scope = require("atlas.core.requests")
 local issues_api = require("atlas.issues.providers.gitlab.api.issues")
-local users_api = require("atlas.issues.providers.gitlab.api.users")
+local users_api = require("atlas.providers.gitlab.users")
 local labels_api = require("atlas.issues.providers.gitlab.api.labels")
 local service = require("atlas.providers.gitlab.client")
 local gitlab_query = require("atlas.providers.gitlab.query")
@@ -113,8 +113,8 @@ local function assign(ctx, done)
 		return
 	end
 
-	---@param current_assignees IssueUser[]
-	---@param members IssueUser[]
+	---@param current_assignees AtlasUser[]
+	---@param members AtlasUser[]
 	local function open_picker(current_assignees, members)
 		notify.clear()
 
@@ -139,15 +139,10 @@ local function assign(ctx, done)
 			items = members,
 			selected = vim.deepcopy(original),
 			key = function(item)
-				return tostring(item.id or item.account_id or "")
+				return item.id or item.username or ""
 			end,
 			format_item = function(item)
-				return string.format(
-					"%s %s (@%s)",
-					icons.general("user"),
-					item.display_name or item.account_id or item.name or item.username,
-					item.account_id or item.username
-				)
+				return string.format("%s %s (@%s)", icons.general("user"), item.name or item.username, item.username)
 			end,
 			title = string.format("Assignees for %s", key),
 			on_done = function(selected)
@@ -319,6 +314,7 @@ end
 ---@param opts {
 --- title: string,
 --- include_all: boolean,
+--- with_issues_enabled: boolean|nil,
 --- on_select: fun(project: string),
 --- on_cancel: fun(),
 ---}
@@ -338,10 +334,11 @@ local function select_project(opts)
 				return
 			end
 
-			local endpoint = string.format(
-				"/projects?search=%s&per_page=20&order_by=last_activity_at&with_issues_enabled=true",
-				service.url_encode(query)
-			)
+			local endpoint =
+				string.format("/projects?search=%s&per_page=20&order_by=last_activity_at", service.url_encode(query))
+			if opts.with_issues_enabled ~= false then
+				endpoint = endpoint .. "&with_issues_enabled=true"
+			end
 			return service.request("GET", endpoint, nil, function(result, err)
 				if err then
 					fetch_done(nil, tostring(err))
@@ -384,12 +381,12 @@ local function search_issues(project, ctx, done)
 					return
 				end
 				local assignees = vim.tbl_map(function(user)
-					return "@" .. user.account_id
+					return "@" .. user.username
 				end, details.assignees)
 				local label_names = vim.tbl_map(function(label)
 					return label.name
 				end, details.labels)
-				local author = issue.reporter and issue.reporter.display_name or "Unknown"
+				local author = issue.reporter and issue.reporter.name or "Unknown"
 				local lines = {
 					"**Status:** " .. (issue.status or "Open"),
 					"**Author:** " .. author,
@@ -623,7 +620,7 @@ register({ id = "labels", label = "Edit Labels", icon = icons.action("label"), i
 register({ id = "search", label = "Search Issues", icon = icons.action("search"), run = search })
 register({
 	id = "edit_search",
-	label = "Edit search",
+	label = "Edit Current Search",
 	icon = icons.action("search"),
 	run = function(_, done)
 		local state = require("atlas.issues.state")
@@ -650,6 +647,26 @@ register({
 	end,
 })
 register({ id = "open_project", label = "Open Project", icon = icons.action("search"), run = open_project })
+register(actions.browse_repository)
+register({
+	id = "browse_repositories",
+	label = "Browse Repository",
+	icon = icons.general("overview"),
+	run = function(ctx, done)
+		select_project({
+			title = "Browse Repository",
+			include_all = false,
+			with_issues_enabled = false,
+			on_select = function(project)
+				require("atlas.ui.repository").open(project, ctx.provider)
+				done(nil, nil)
+			end,
+			on_cancel = function()
+				done(nil, nil)
+			end,
+		})
+	end,
+})
 register(actions.manage_templates)
 register(actions.browse_issue)
 register(actions.copy_issue_key)

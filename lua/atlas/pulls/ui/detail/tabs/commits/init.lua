@@ -145,7 +145,7 @@ function M.on_select(pr, refresh, opts)
 		notify.success(string.format("Commits loaded for #%s", pr_id), { timeout = 1200 })
 
 		-- Fetch statuses for the first N commits.
-		if pipelines and pipelines.fetch_commit_status and type(state.commits) == "table" then
+		if pipelines and pipelines.fetch_commit_status then
 			local count = math.min(MAX_STATUS_COMMITS, #state.commits)
 			for i = 1, count do
 				local commit = state.commits[i]

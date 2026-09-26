@@ -1,15 +1,15 @@
 local M = {}
 
 local mapper = require("atlas.pulls.providers.bitbucket.api.mapper")
-local service = require("atlas.pulls.providers.bitbucket.api.service")
+local service = require("atlas.providers.bitbucket.client")
 
 ---@param pr PullRequest
 ---@return string
 local function endpoint(pr)
 	return string.format(
 		"/repositories/%s/%s/pullrequests/%s/tasks",
-		tostring(pr.workspace or ""),
-		tostring(pr.repo or ""),
+		pr.repo.owner,
+		pr.repo.repo_name,
 		tostring(pr.id or "")
 	)
 end
@@ -40,12 +40,7 @@ function M.fetch_tasks(pr, opts, on_done)
 		"next",
 	}, ",")
 	local url = string.format("%s?pagelen=100&fields=%s", endpoint(pr), fields)
-	local key = string.format(
-		"bitbucket:pr:tasks:%s/%s/%s",
-		tostring(pr.workspace or ""),
-		tostring(pr.repo or ""),
-		tostring(pr.id or "")
-	)
+	local key = string.format("bitbucket:pr:tasks:%s/%s/%s", pr.repo.owner, pr.repo.repo_name, tostring(pr.id or ""))
 	if not (opts or {}).force_refresh then
 		local cached, ok = service.get_cache(key)
 		if ok then

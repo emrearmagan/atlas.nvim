@@ -1,21 +1,74 @@
 local M = {}
 
-local service = require("atlas.pulls.providers.bitbucket.api.service")
+local service = require("atlas.providers.bitbucket.client")
 local config = require("atlas.config")
 local api_utils = require("atlas.core.utils")
-local mapper = require("atlas.pulls.providers.bitbucket.api.mapper")
 local request_scope = require("atlas.core.requests")
+local json = require("atlas.core.json")
 local as_table = api_utils.as_table
 local url_encode = api_utils.url_encode
 
----@param repo PullsRepo
+---@class BitbucketRepository : AtlasRepository
+---@field branches_url string|nil
+---@field tags_url string|nil
+
+---@class BitbucketRepositoryDetails : AtlasRepositoryDetails, BitbucketRepository
+
+---@param raw table|nil
+---@param fallback_workspace string|nil
+---@param fallback_repo string|nil
+---@return BitbucketRepository
+function M.to_repository(raw, fallback_workspace, fallback_repo)
+	raw = as_table(raw) or {}
+	local workspace_obj = as_table(raw.workspace) or {}
+	local links = as_table(raw.links) or {}
+	local html_link = as_table(links.html) or {}
+	local branches_link = as_table(links.branches) or {}
+	local tags_link = as_table(links.tags) or {}
+	local full_name = tostring(raw.full_name or "")
+	local full_owner, full_repo = full_name:match("^([^/]+)/(.+)$")
+	local owner = tostring(workspace_obj.slug or full_owner or fallback_workspace or "")
+	local repo_name = tostring(raw.slug or full_repo or fallback_repo or raw.name or "")
+	if full_name == "" then
+		full_name = owner ~= "" and repo_name ~= "" and (owner .. "/" .. repo_name) or repo_name
+	end
+
+	return {
+		id = full_name,
+		name = tostring(raw.name or repo_name),
+		full_name = full_name,
+		owner = owner,
+		repo_name = repo_name,
+		html_url = tostring(html_link.href or ""),
+		branches_url = json.safe_str(branches_link.href),
+		tags_url = json.safe_str(tags_link.href),
+	}
+end
+
+---@param raw table|nil
+---@param fallback_workspace string|nil
+---@return BitbucketRepositoryDetails
+local function to_repo_details(raw, fallback_workspace)
+	raw = as_table(raw) or {}
+	local mainbranch = as_table(raw.mainbranch) or {}
+	local repo = M.to_repository(raw, fallback_workspace)
+	---@cast repo BitbucketRepositoryDetails
+	repo.description = tostring(raw.description or "")
+	repo.size = tonumber(raw.size) or 0
+	repo.default_branch = tostring(mainbranch.name or "")
+	repo.is_private = raw.is_private == true
+	repo.created_on = tostring(raw.created_on or "")
+	return repo
+end
+
+---@param repo AtlasRepository
 ---@return string|nil
 local function configured_readme_path(repo)
 	local repo_cfg = (((config.options or {}).pulls or {}).repo_config or {})
 	local settings = repo_cfg.settings or {}
 	local keys = {
-		tostring(repo.id or ""),
-		tostring(repo.name or ""),
+		repo.id,
+		repo.name,
 	}
 
 	for _, key in ipairs(keys) do
@@ -42,7 +95,7 @@ local function fetch_readme(owner, repo_name, ref, readme_path, on_done)
 		return nil
 	end
 
-	local path = tostring(readme_path or "")
+	local path = readme_path or ""
 	if path == "" then
 		path = "README.md"
 	end
@@ -69,18 +122,16 @@ end
 
 ---@param workspace string
 ---@param search string
----@param on_done fun(repositories: PullsRepoDetails[]|nil, err: string|nil)
+---@param on_done fun(repositories: AtlasRepositoryDetails[]|nil, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.fetch_workspace_repositories(workspace, search, on_done)
 	if workspace == "" then
 		on_done(nil, "Missing workspace slug")
 		return nil
 	end
-	local term = tostring(search or "")
-
 	local query_prefix = ""
-	if term ~= "" then
-		local escaped_term = term:gsub('"', '\\"')
+	if search ~= "" then
+		local escaped_term = search:gsub('"', '\\"')
 		local q_expression = string.format('name~"%s"', escaped_term)
 		local encoded_q = q_expression:gsub('"', "%%22"):gsub(" ", "%%20")
 		query_prefix = string.format("q=%s&", encoded_q)
@@ -95,17 +146,17 @@ function M.fetch_workspace_repositories(workspace, search, on_done)
 		end
 
 		local values = (result or {}).values or {}
-		---@type PullsRepoDetails[]
+		---@type AtlasRepositoryDetails[]
 		local repositories = {}
 		for _, raw in ipairs(values) do
-			table.insert(repositories, mapper.to_repo_details(raw, workspace))
+			table.insert(repositories, to_repo_details(raw, workspace))
 		end
 
 		on_done(repositories, nil)
 	end, {
 		action = "Fetch repositories",
 		workspace = workspace,
-		search = term,
+		search = search,
 	})
 end
 
@@ -188,13 +239,12 @@ function M.resolve_targets(targets, opts, on_done)
 	return requests
 end
 
----@param repo PullsRepo
----@param _opts PullsFetchOpts
----@param on_done fun(repo: PullsRepoDetails|nil, err: string|nil)
+---@param repo AtlasRepository
+---@param on_done fun(repo: AtlasRepositoryDetails|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_detail(repo, _opts, on_done)
-	local owner = tostring(repo.owner or "")
-	local repo_name = tostring(repo.repo_name or "")
+function M.fetch_details(repo, on_done)
+	local owner = repo.owner
+	local repo_name = repo.repo_name
 
 	if owner == "" or repo_name == "" then
 		on_done(nil, "Repository missing owner/name")
@@ -215,9 +265,9 @@ function M.fetch_detail(repo, _opts, on_done)
 			return
 		end
 
-		local detail = mapper.to_repo_details(result, owner)
+		local detail = to_repo_details(result, owner)
 		local readme_path = configured_readme_path(repo)
-		local ref = tostring(detail.default_branch or "")
+		local ref = detail.default_branch or ""
 
 		requests.run(function(done)
 			return fetch_readme(owner, repo_name, ref, readme_path, done)
@@ -231,40 +281,34 @@ function M.fetch_detail(repo, _opts, on_done)
 	return requests
 end
 
----@param repo PullsRepoDetails
----@param opts PullsFetchOpts
----@param on_done fun(branches: PullsRepoBranches|nil, err: string|nil)
----@return { job_id: integer, cancel: fun() }|nil
+---@param repo AtlasRepository
+---@param opts { cursor?: string, search?: string }
+---@param on_done fun(branches: AtlasRepositoryBranch[]|nil, err: string|nil, next_cursor: string|nil)
+---@return { cancel: fun() }|nil
 function M.fetch_branches(repo, opts, on_done)
-	---@cast repo BitbucketPullsRepoDetails
-	opts = opts or {}
+	---@cast repo BitbucketRepository
 	local branches_url = repo.branches_url
-
-	if branches_url == "" then
-		on_done(nil, "Missing branches URL")
-		return nil
-	end
+		or string.format("/repositories/%s/%s/refs/branches", url_encode(repo.owner), url_encode(repo.repo_name))
 
 	local sep = branches_url:find("?") and "&" or "?"
 	local url = string.format("%s%spagelen=100", branches_url, sep)
-	local key = "bitbucket:repo:branches:" .. url
-	if opts.force_refresh ~= true then
-		local cached, ok = service.get_cache(key)
-		if ok then
-			on_done(cached, nil)
-			return nil
-		end
+	if opts.search and opts.search ~= "" then
+		url = url .. "&q=" .. url_encode("name~" .. vim.json.encode(opts.search))
+	end
+	local cursor = opts.cursor
+	if cursor and cursor ~= "" then
+		url = cursor
 	end
 
 	return service.request("GET", url, nil, nil, function(result, err)
-		if err ~= nil then
-			on_done(nil, err)
+		if err ~= nil or type(result) ~= "table" then
+			on_done(nil, err or "Invalid paginated response")
 			return
 		end
 
-		local payload = as_table(result) or {}
-		local entries = {}
-		for _, item in ipairs(payload.values or {}) do
+		---@type AtlasRepositoryBranch[]
+		local branches = {}
+		for _, item in ipairs(result.values or {}) do
 			local branch = as_table(item) or {}
 			local target = as_table(branch.target) or {}
 			local author = as_table(target.author) or {}
@@ -272,7 +316,7 @@ function M.fetch_branches(repo, opts, on_done)
 			local links = as_table(branch.links) or {}
 			local self_link = as_table(links.self) or {}
 			local name = user.nickname or user.display_name or author.raw or ""
-			table.insert(entries, {
+			table.insert(branches, {
 				name = tostring(branch.name or ""),
 				hash = tostring(target.hash or ""),
 				date = tostring(target.date or ""),
@@ -281,79 +325,91 @@ function M.fetch_branches(repo, opts, on_done)
 				api_url = tostring(self_link.href or ""),
 			})
 		end
-		local branches = { entries = entries }
-		service.set_cache(key, branches, service.cache_ttl())
-		on_done(branches, nil)
-	end, { action = "Fetch repository branches", repo = repo.full_name or repo.name })
+		local next_cursor = json.safe_str(result.next)
+		if next_cursor == "" then
+			next_cursor = nil
+		end
+		on_done(branches, nil, next_cursor)
+	end, { action = "Fetch repository branches", repo = repo.full_name })
 end
 
----@param repo PullsRepoDetails
----@param opts PullsFetchOpts
----@param on_done fun(tags: PullsRepoTags|nil, err: string|nil)
----@return { job_id: integer, cancel: fun() }|nil
+---@param repo AtlasRepository
+---@param opts { cursor?: string, search?: string }
+---@param on_done fun(tags: AtlasRepositoryTag[]|nil, err: string|nil, next_cursor: string|nil)
+---@return { cancel: fun() }|nil
 function M.fetch_tags(repo, opts, on_done)
-	---@cast repo BitbucketPullsRepoDetails
-	opts = opts or {}
+	---@cast repo BitbucketRepository
 	local tags_url = repo.tags_url
-
-	if tags_url == "" then
-		on_done(nil, "Missing tags URL")
-		return nil
-	end
+		or string.format("/repositories/%s/%s/refs/tags", url_encode(repo.owner), url_encode(repo.repo_name))
 
 	local sep = tags_url:find("?") and "&" or "?"
 	local url = string.format("%s%spagelen=100", tags_url, sep)
-	local key = "bitbucket:repo:tags:" .. url
-	if opts.force_refresh ~= true then
-		local cached, ok = service.get_cache(key)
-		if ok then
-			on_done(cached, nil)
-			return nil
-		end
+	if opts.search and opts.search ~= "" then
+		url = url .. "&q=" .. url_encode("name~" .. vim.json.encode(opts.search))
+	end
+	local cursor = opts.cursor
+	if cursor and cursor ~= "" then
+		url = cursor
 	end
 
 	return service.request("GET", url, nil, nil, function(result, err)
-		if err ~= nil then
-			on_done(nil, err)
+		if err ~= nil or type(result) ~= "table" then
+			on_done(nil, err or "Invalid paginated response")
 			return
 		end
 
-		local values = (as_table(result) or {}).values or {}
-
+		---@type AtlasRepositoryTag[]
 		local entries = {}
-		for _, item in ipairs(values) do
+		for _, item in ipairs(result.values or {}) do
 			local tag = as_table(item) or {}
 			local target = as_table(tag.target) or {}
 			local author = as_table(target.author) or {}
 			local user = as_table(author.user) or {}
-			local name = user.nickname or user.display_name or author.raw or ""
+			local tagger = as_table(tag.tagger) or {}
+			local tagger_user = as_table(tagger.user) or {}
+			local links = as_table(tag.links) or {}
+			local html_link = as_table(links.html) or {}
+			local name = json.safe_str(tagger_user.nickname)
+				or json.safe_str(tagger_user.display_name)
+				or json.safe_str(tagger.raw)
+				or json.safe_str(user.nickname)
+				or json.safe_str(user.display_name)
+				or json.safe_str(author.raw)
+			local annotation = json.safe_str(tag.message)
+			if annotation == "" then
+				annotation = nil
+			end
 			table.insert(entries, {
 				name = tostring(tag.name or ""),
 				hash = tostring(target.hash or ""),
-				date = tostring(target.date or ""),
-				message = tostring(target.message or ""),
-				author = tostring(name),
+				tag_date = json.safe_str(tag.date),
+				description = annotation,
+				message = annotation or json.safe_str(target.message),
+				author = name,
+				url = json.safe_str(html_link.href),
 			})
 		end
-		local tags = { entries = entries }
-		service.set_cache(key, tags, service.cache_ttl())
-		on_done(tags, nil)
-	end, { action = "Fetch repository tags", repo = repo.full_name or repo.name })
+		local next_cursor = json.safe_str(result.next)
+		if next_cursor == "" then
+			next_cursor = nil
+		end
+		on_done(entries, nil, next_cursor)
+	end, { action = "Fetch repository tags", repo = repo.full_name })
 end
 
----@param repo PullsRepoDetails
----@param branch PullsRepoBranch
+---@param repo AtlasRepository
+---@param branch AtlasRepositoryBranch
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.delete_branch(repo, branch, on_done)
-	local branch_name = tostring(branch.name or "")
+	local branch_name = branch.name
 
 	if branch_name == "" then
 		on_done(false, "Branch name is missing")
 		return nil
 	end
 
-	local endpoint = tostring(branch.api_url or "")
+	local endpoint = branch.api_url or ""
 	if endpoint == "" then
 		on_done(false, "Branch API URL is missing")
 		return nil
@@ -367,7 +423,7 @@ function M.delete_branch(repo, branch, on_done)
 
 		service.clear_cache()
 		on_done(true, nil)
-	end, { action = "Delete repository branch", repo = repo.full_name or repo.name, branch = branch_name })
+	end, { action = "Delete repository branch", repo = repo.full_name, branch = branch_name })
 end
 
 return M

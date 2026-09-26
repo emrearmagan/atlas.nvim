@@ -1,7 +1,7 @@
 local M = {}
 
 ---@param collect_logins fun(): string[]
----@param format_mention fun(author: IssueUser|PullsAuthor|nil): string
+---@param format_mention fun(author: AtlasUser|PullsAuthor|nil): string
 ---@return AtlasMarkdownCompletionProvider
 local function build_completion(collect_logins, format_mention)
 	return {
@@ -53,13 +53,13 @@ end
 local function collect_issue_logins(context)
 	local logins, add = login_collector()
 	local issue = context.issue
-	add(issue.reporter and issue.reporter.account_id)
-	add(issue.assignee and issue.assignee.account_id)
+	add(issue.reporter and issue.reporter.username)
+	add(issue.assignee and issue.assignee.username)
 	for _, assignee in ipairs((context.details or {}).assignees or {}) do
-		add(assignee.account_id)
+		add(assignee.username)
 	end
 	for _, comment in ipairs(context.comments) do
-		add(comment.author and comment.author.account_id)
+		add(comment.author and comment.author.username)
 	end
 	return logins
 end
@@ -101,8 +101,8 @@ function M.for_issues(context)
 	return build_completion(function()
 		return collect_issue_logins(context)
 	end, function(author)
-		---@cast author IssueUser|nil
-		local handle = tostring((author or {}).account_id or "")
+		---@cast author AtlasUser|nil
+		local handle = author and author.username or ""
 		return handle ~= "" and ("@" .. handle) or ""
 	end)
 end

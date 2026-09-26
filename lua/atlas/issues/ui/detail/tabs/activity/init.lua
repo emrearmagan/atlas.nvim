@@ -28,7 +28,7 @@ local state = {
 local function to_thread_items(entries)
 	local out = {}
 	for _, entry in ipairs(entries or {}) do
-		local author = entry.actor and entry.actor.display_name or "Unknown"
+		local author = entry.actor and entry.actor.name or "Unknown"
 		local timestamp = utils.relative_time_text(entry.date)
 		local user_icon, user_icon_hl = icons.general("user")
 		table.insert(out, {

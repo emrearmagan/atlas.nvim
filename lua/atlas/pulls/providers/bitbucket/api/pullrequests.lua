@@ -2,11 +2,11 @@ local M = {}
 
 local config = require("atlas.config")
 local json = require("atlas.core.json")
-local service = require("atlas.pulls.providers.bitbucket.api.service")
+local service = require("atlas.providers.bitbucket.client")
 local mapper = require("atlas.pulls.providers.bitbucket.api.mapper")
 local logger = require("atlas.core.logger")
 local request_scope = require("atlas.core.requests")
-local repositories_api = require("atlas.pulls.providers.bitbucket.api.repositories")
+local repositories_api = require("atlas.providers.bitbucket.repositories")
 local url_encode = require("atlas.core.utils").url_encode
 
 local SUMMARY_FIELDS = {
@@ -61,7 +61,7 @@ end
 ---@return { job_id: integer, cancel: fun() }|nil
 local function fetch_page(repo_full_name, url, opts, on_done)
 	local workspace, repo = repo_full_name:match("^([^/]+)/(.+)$")
-	local key = "bitbucket:prs:page:" .. url
+	local key = "bitbucket:prs:page:v2:" .. url
 	if not opts.force_refresh then
 		local cached, ok = service.get_persistent_cache(key)
 		if ok then
@@ -293,7 +293,7 @@ end
 ---@param on_done fun(description: string|nil, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.fetch_description(pr, _opts, on_done)
-	local workspace, repo = pr.workspace, pr.repo
+	local workspace, repo = pr.repo.owner, pr.repo.repo_name
 	if workspace == "" or repo == "" then
 		on_done(nil, "PR missing workspace/repo info")
 		return nil

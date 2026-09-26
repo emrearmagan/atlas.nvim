@@ -6,17 +6,20 @@ local helper = require("atlas.issues.ui.presentation")
 local icons = require("atlas.ui.shared.icons")
 local utils = require("atlas.ui.shared.utils")
 
----@param author IssueUser|nil
+---@param author AtlasUser|nil
 ---@return string
 local function author_name(author)
 	if author == nil then
 		return "Unknown"
 	end
-	if author.display_name and author.display_name ~= "" then
-		return author.display_name
+	if author.name and author.name ~= "" then
+		return author.name
 	end
-	if author.account_id and author.account_id ~= "" then
-		return author.account_id
+	if author.username and author.username ~= "" then
+		return author.username
+	end
+	if author.id and author.id ~= "" then
+		return author.id
 	end
 	return "Unknown"
 end
@@ -79,7 +82,7 @@ local function render_options(padding_x, opts)
 		end,
 		content_hl = function(item, row)
 			if item.meta.deleted then
-				return { { start_col = 0, end_col = #row, hl_group = "AtlasTextMutedItalic" } }
+				return { { start_col = 0, end_col = #row, hl_group = "AtlasTextMuted" } }
 			end
 		end,
 	}

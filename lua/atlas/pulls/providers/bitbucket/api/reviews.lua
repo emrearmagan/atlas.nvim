@@ -6,7 +6,7 @@ local json = require("atlas.core.json")
 local mapper = require("atlas.pulls.providers.bitbucket.api.mapper")
 local pullrequests = require("atlas.pulls.providers.bitbucket.api.pullrequests")
 local request_scope = require("atlas.core.requests")
-local service = require("atlas.pulls.providers.bitbucket.api.service")
+local service = require("atlas.providers.bitbucket.client")
 local tasks = require("atlas.pulls.providers.bitbucket.api.tasks")
 
 ---@param pr PullRequest

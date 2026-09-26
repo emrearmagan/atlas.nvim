@@ -82,7 +82,7 @@ function M.search_issues(search, on_done, opts)
 		on_done({ items = {} }, "Missing search query")
 		return nil
 	end
-	local cache_key = string.format("github_issues:search:v6:%s:%d:%s", query, opts.pagelen, opts.cursor or "first")
+	local cache_key = string.format("github_issues:search:v7:%s:%d:%s", query, opts.pagelen, opts.cursor or "first")
 	if not opts.force_refresh then
 		local cached, ok = cli.get_cache(cache_key)
 		if ok then
@@ -274,7 +274,7 @@ function M.fetch_by_refs(refs, _opts, on_done)
 end
 
 ---@param key string
----@param on_done fun(assignees: IssueUser[]|nil, assignable_users: IssueUser[]|nil, err: string|nil)
+---@param on_done fun(assignees: AtlasUser[]|nil, assignable_users: AtlasUser[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.get_assignee_options(key, on_done)
 	local slug, number = normalizer.parse_key(key)

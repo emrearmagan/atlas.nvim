@@ -233,7 +233,7 @@ end
 ---@param url string Full URL or endpoint
 ---@param headers table|nil Optional headers (will merge with auth headers)
 ---@param body string|nil Optional body
----@param callback fun(text: string|nil, err: string|nil)
+---@param callback fun(text: string|nil, err: string|nil, status?: integer)
 ---@param ctx table|nil
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.request_text(method, url, headers, body, callback, ctx)
@@ -263,15 +263,15 @@ function M.request_text(method, url, headers, body, callback, ctx)
 	log.action = nil
 	logger.loginfo(message, log)
 
-	return http.curl_text_request(method, full_url, request_headers, body, function(text, err)
+	return http.curl_text_request(method, full_url, request_headers, body, function(text, err, status)
 		if err then
 			local safe_err = sanitize_error(err)
 			logger.logerror(message .. " failed", vim.tbl_extend("force", {}, log, { error = safe_err }))
-			callback(nil, safe_err)
+			callback(nil, safe_err, status)
 			return
 		end
 
-		callback(text, nil)
+		callback(text, nil, status)
 	end)
 end
 

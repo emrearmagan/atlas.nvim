@@ -143,7 +143,7 @@ local function set_tab(tab_key)
 	end
 end
 
----@param repo PullsRepo
+---@param repo AtlasRepository
 ---@param opts { force_refresh: boolean|nil }|nil
 local function load_tab(repo, opts)
 	local tab_mod = tab_module(state.current_tab)
@@ -192,12 +192,12 @@ local function cleanup()
 	state.reset()
 end
 
----@param repo PullsRepo
+---@param repo AtlasRepository
 ---@param force_refresh boolean
 local function load_repo(repo, force_refresh)
 	state.current_repo = repo
 	local repository = state.provider and state.provider.capabilities.repository
-	if repository == nil or repository.fetch_details == nil then
+	if repository == nil then
 		load_tab(repo, { force_refresh = force_refresh })
 		refresh()
 		return
@@ -207,13 +207,13 @@ local function load_repo(repo, force_refresh)
 	update_spinner()
 	render()
 	state.requests.run(function(done)
-		return repository.fetch_details(repo, { force_refresh = force_refresh }, done)
+		return repository.fetch_details(repo, done)
 	end, function(details, err)
 		if details then
 			state.current_repo_details = details
 		else
-			state.current_repo_details = tostring(err or "Unknown error")
-			notify.error("Failed to load repository: " .. tostring(err or "Unknown error"))
+			state.current_repo_details = err or "Unknown error"
+			notify.error("Failed to load repository: " .. (err or "Unknown error"))
 		end
 		load_tab(repo, { force_refresh = force_refresh })
 		refresh()
@@ -225,7 +225,7 @@ function M.is_open()
 	return detail_ui.is_showing("repo")
 end
 
----@param repo PullsRepo
+---@param repo AtlasRepository
 ---@param opts { provider: PullsProvider|nil, force_refresh: boolean|nil }|nil
 function M.open(repo, opts)
 	opts = opts or {}
@@ -240,15 +240,15 @@ function M.open(repo, opts)
 	M.select(repo, { force_refresh = opts.force_refresh })
 end
 
----@param repo PullsRepo|nil
+---@param repo AtlasRepository|nil
 function M.refresh(repo)
 	local current = state.current_repo
-	if M.is_open() and current and (repo == nil or tostring(current.id or "") == tostring(repo.id or "")) then
+	if M.is_open() and current and (repo == nil or current.id == repo.id) then
 		M.select(current, { force_refresh = true })
 	end
 end
 
----@param repo PullsRepo
+---@param repo AtlasRepository
 ---@param opts { force_refresh: boolean|nil }|nil
 function M.select(repo, opts)
 	if not M.is_open() then
@@ -256,7 +256,7 @@ function M.select(repo, opts)
 	end
 	opts = opts or {}
 
-	local same_repo = state.current_repo ~= nil and tostring(state.current_repo.id or "") == tostring(repo.id or "")
+	local same_repo = state.current_repo ~= nil and state.current_repo.id == repo.id
 	if
 		same_repo
 		and opts.force_refresh ~= true

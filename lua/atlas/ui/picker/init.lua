@@ -156,6 +156,7 @@ end
 ---@param opts {
 --- title: string,
 --- initial_items: any[]|nil,
+--- key: (fun(item: any): string)|nil,
 --- debounce_ms: integer|nil,
 --- fetch_on_open: boolean|nil,
 --- size: { width: number, height: number }|nil,
@@ -170,7 +171,7 @@ function M.search(opts)
 		title = opts.title,
 		items = opts.initial_items or {},
 		format_item = opts.format_item,
-		key = function(item)
+		key = opts.key or function(item)
 			return tostring(item.id)
 		end,
 		preview_item = opts.preview_item,

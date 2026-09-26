@@ -1,4 +1,4 @@
-local service = require("atlas.pulls.providers.bitbucket.api.service")
+local service = require("atlas.providers.bitbucket.client")
 
 local M = {}
 

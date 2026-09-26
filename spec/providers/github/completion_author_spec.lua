@@ -25,24 +25,24 @@ describe("GitHub author completion", function()
 	it("completes issue reporters, assignees, and comment authors by login", function()
 		local completion = author_completion.for_issues({
 			issue = {
-				reporter = { account_id = "reporter", display_name = "Reporter Name" },
-				assignee = { account_id = "reporter", display_name = "Duplicate" },
+				reporter = { username = "reporter", name = "Reporter Name" },
+				assignee = { username = "reporter", name = "Duplicate" },
 			},
 			details = {
 				assignees = {
-					{ account_id = "z-assignee", display_name = "Zed" },
-					{ account_id = "reporter", display_name = "Duplicate" },
+					{ username = "z-assignee", name = "Zed" },
+					{ username = "reporter", name = "Duplicate" },
 				},
 			},
 			comments = {
-				{ author = { account_id = "commenter", display_name = "Comment Author" } },
-				{ author = { account_id = nil, display_name = "No Login" } },
+				{ author = { username = "commenter", name = "Comment Author" } },
+				{ author = { username = nil, name = "No Login" } },
 			},
 		})
 
 		assert.same({ "@commenter", "@reporter", "@z-assignee" }, words(completion))
 		assert.same({ "@reporter" }, words(completion, "@rep"))
-		assert.equal("@commenter", completion.format_mention({ account_id = "commenter", display_name = "Name" }))
+		assert.equal("@commenter", completion.format_mention({ username = "commenter", name = "Name" }))
 	end)
 
 	it("preserves pull request completion sources and mention formatting", function()

@@ -19,13 +19,13 @@ local templates = require("atlas.issues.templates")
 
 ---@class CreateIssuePickers
 ---@field list_labels (fun(on_done: fun(items: CreateIssueLabel[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
----@field list_assignees (fun(on_done: fun(items: IssueUser[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field list_assignees (fun(on_done: fun(items: AtlasUser[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field list_milestones (fun(on_done: fun(items: CreateIssueMilestone[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 
 ---@class CreateIssueFields
 ---@field repo_slug string
 ---@field labels CreateIssueLabel[]
----@field assignees IssueUser[]
+---@field assignees AtlasUser[]
 ---@field milestone CreateIssueMilestone|nil
 
 ---@class CreateIssueState
@@ -58,7 +58,7 @@ end
 ---@field url string|nil
 ---@field number integer|nil
 
----@param assignees IssueUser[]
+---@param assignees AtlasUser[]
 ---@return string
 local function format_assignees(assignees)
 	if #assignees == 0 then
@@ -67,7 +67,7 @@ local function format_assignees(assignees)
 
 	local parts = {}
 	for _, assignee in ipairs(assignees) do
-		table.insert(parts, "@" .. tostring(assignee.account_id or ""))
+		table.insert(parts, "@" .. (assignee.username or ""))
 	end
 
 	return icons.general("user") .. " " .. table.concat(parts, ", ")
@@ -216,13 +216,13 @@ local function pick_assignees(issue_state)
 			items = items,
 			selected = issue_state.fields.assignees,
 			key = function(item)
-				return item.account_id
+				return item.username
 			end,
 			format_item = function(item)
 				return string.format(
 					"@%s%s",
-					item.account_id,
-					item.display_name and item.display_name ~= item.account_id and (" — " .. item.display_name) or ""
+					item.username,
+					item.name and item.name ~= item.username and (" — " .. item.name) or ""
 				)
 			end,
 			title = "Assignees",
@@ -335,7 +335,7 @@ local function submit(issue_state)
 
 	local assignee_logins = {}
 	for _, assignee in ipairs(issue_state.fields.assignees) do
-		table.insert(assignee_logins, assignee.account_id)
+		table.insert(assignee_logins, assignee.username)
 	end
 
 	issue_state.is_submitting = true

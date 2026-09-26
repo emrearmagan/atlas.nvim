@@ -1,7 +1,7 @@
 local requests = require("atlas.core.requests")
 local json = require("atlas.core.json")
 local pipeline_utils = require("atlas.pulls.pipelines.utils")
-local service = require("atlas.pulls.providers.bitbucket.api.service")
+local service = require("atlas.providers.bitbucket.client")
 local encode_path_segment = require("atlas.core.utils").url_encode
 
 local M = {}
@@ -12,20 +12,14 @@ local function pipeline_id(url)
 	return url:match("/pipelines/results/(%d+)")
 end
 
----@param state any
----@return string
-local function provider_state(state)
-	if type(state) ~= "table" then
-		return tostring(state or "")
-	end
-	local result = type(state.result) == "table" and state.result.name or nil
-	return tostring(result or state.name or "")
-end
-
----@param state any
+---@param state table|string|nil
 ---@return PullsPipelineState
 local function pipeline_state(state)
-	local value = provider_state(state):upper()
+	local value = state
+	if type(state) == "table" then
+		value = (state.result and state.result.name) or (state.stage and state.stage.name) or state.name
+	end
+	value = tostring(value or ""):upper()
 	if value == "SUCCESSFUL" then
 		return "SUCCESSFUL"
 	elseif value == "FAILED" or value == "ERROR" then
@@ -36,10 +30,15 @@ local function pipeline_state(state)
 		return type(state) == "table" and "CANCELED" or "STOPPED"
 	elseif value == "EXPIRED" or value == "SUPERSEDED" then
 		return "STOPPED"
-	end
-
-	local name = type(state) == "table" and tostring(state.name or ""):upper() or value
-	if name == "PENDING" or name == "READY" or name == "IN_PROGRESS" or name == "INPROGRESS" then
+	elseif value == "HALTED" then
+		return "PAUSED"
+	elseif value == "PAUSED" then
+		return "MANUAL"
+	elseif value == "PENDING" then
+		return "PENDING"
+	elseif value == "READY" then
+		return "QUEUED"
+	elseif value == "RUNNING" or value == "IN_PROGRESS" or value == "INPROGRESS" then
 		return "INPROGRESS"
 	end
 	return "UNKNOWN"
@@ -469,7 +468,7 @@ end
 ---@param context PullsPipelineContext
 ---@param pipeline PullsPipeline
 ---@param job PullsPipelineJob
----@param on_done fun(log: PullsLog|nil, err: string|nil)
+---@param on_done fun(log: PullsLog|nil, err: string|nil, status?: integer)
 ---@return { cancel: fun() }|nil
 function M.fetch_job_log(context, pipeline, job, on_done)
 	local repo = tostring(context.repo_full_name or "")
@@ -481,8 +480,8 @@ function M.fetch_job_log(context, pipeline, job, on_done)
 	end
 
 	local endpoint = string.format("/repositories/%s/pipelines/%s/steps/%s/log", repo, id, encode_path_segment(job_id))
-	return service.request_text("GET", endpoint, { Accept = "*/*" }, nil, function(raw, err)
-		on_done(raw and { raw = raw } or nil, err)
+	return service.request_text("GET", endpoint, { Accept = "*/*" }, nil, function(raw, err, status)
+		on_done(raw and { raw = raw } or nil, err, status)
 	end, {
 		action = "Fetch pipeline job log",
 		repo = repo,
@@ -491,18 +490,12 @@ function M.fetch_job_log(context, pipeline, job, on_done)
 	})
 end
 
----@param context PullsPipelineContext
----@param pipeline PullsPipeline
+---@param repo string
+---@param branch string|nil
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.run_pipeline(context, pipeline, on_done)
-	local repo = tostring(context.repo_full_name or "")
-	local target = context.target
-	local branch = pipeline.branch
-		or (type(target) == "string" and target)
-		or (type(target) == "table" and target.source and target.source.branch)
-		or ""
-	if repo == "" or branch == "" then
+function M.run_pipeline(repo, branch, on_done)
+	if repo == "" or not branch or branch == "" then
 		on_done(false, repo == "" and "Missing repo" or "Missing source branch")
 		return nil
 	end

@@ -3,7 +3,7 @@ local M = {}
 local icons = require("atlas.ui.shared.icons")
 local form = require("atlas.ui.popups.form")
 local issue_helper = require("atlas.issues.create.jira.helper")
-local users_api = require("atlas.issues.providers.jira.api.users")
+local users_api = require("atlas.providers.jira.users")
 local issues_api = require("atlas.issues.providers.jira.api.issues")
 local templates = require("atlas.issues.templates")
 local spinner = require("atlas.ui.components.spinner")
@@ -12,8 +12,8 @@ local picker = require("atlas.ui.picker")
 ---@class IssueEditorFields
 ---@field summary string
 ---@field description table|string|nil
----@field assignee IssueUser|nil
----@field reporter IssueUser|nil
+---@field assignee AtlasUser|nil
+---@field reporter AtlasUser|nil
 ---@field project string
 ---@field issue_key string|nil
 ---@field issue_type IssueType|nil
@@ -25,9 +25,9 @@ local picker = require("atlas.ui.picker")
 ---@field initial_summary string
 ---@field initial_description string
 ---@field fields IssueEditorFields
----@field assignees IssueUser[]|"loading"|nil
+---@field assignees AtlasUser[]|"loading"|nil
 ---@field issue_types IssueType[]|"loading"|nil
----@field current_user IssueUser|nil
+---@field current_user AtlasUser|nil
 ---@field current_user_loading boolean
 ---@field spinner SpinnerInstance|nil
 ---@field assignees_handle { job_id: integer, cancel: fun() }|nil
@@ -293,14 +293,14 @@ local function show_assignee_picker()
 	table.insert(initial_items, {
 		id = "__unassign__",
 		label = "Unassign",
-		value = { account_id = nil, display_name = "Unassign" },
+		value = { id = nil, name = "Unassign" },
 	})
 
 	if state.assignees and state.assignees ~= "loading" then
 		for _, user in ipairs(state.assignees) do
 			table.insert(initial_items, {
-				id = user.account_id or "",
-				label = user.display_name or "",
+				id = user.id or "",
+				label = user.name or "",
 				value = user,
 			})
 		end
@@ -317,7 +317,7 @@ local function show_assignee_picker()
 			return string.format("%s %s", icons.general("user"), item.label or "")
 		end,
 		fetch = function(query, done)
-			return users_api.get_assignable_users(
+			return issues_api.get_assignable_users(
 				{ project = state.fields.project, issue_key = state.fields.issue_key },
 				query,
 				function(users, err)
@@ -329,12 +329,12 @@ local function show_assignee_picker()
 					table.insert(items, {
 						id = "__unassign__",
 						label = "Unassign",
-						value = { account_id = nil, display_name = "Unassign" },
+						value = { id = nil, name = "Unassign" },
 					})
 					for _, u in ipairs(users or {}) do
 						table.insert(items, {
-							id = u.account_id or "",
-							label = u.display_name or "",
+							id = u.id or "",
+							label = u.name or "",
 							value = u,
 						})
 					end
@@ -360,8 +360,8 @@ local function show_reporter_picker()
 	if state.assignees and state.assignees ~= "loading" then
 		for _, user in ipairs(state.assignees) do
 			table.insert(initial_items, {
-				id = user.account_id or "",
-				label = user.display_name or "",
+				id = user.id or "",
+				label = user.name or "",
 				value = user,
 			})
 		end
@@ -375,7 +375,7 @@ local function show_reporter_picker()
 			return string.format("%s %s", icons.general("user"), item.label or "")
 		end,
 		fetch = function(query, done)
-			return users_api.get_assignable_users(
+			return issues_api.get_assignable_users(
 				{ project = state.fields.project, issue_key = state.fields.issue_key },
 				query,
 				function(users, err)
@@ -386,8 +386,8 @@ local function show_reporter_picker()
 					local items = {}
 					for _, u in ipairs(users or {}) do
 						table.insert(items, {
-							id = u.account_id or "",
-							label = u.display_name or "",
+							id = u.id or "",
+							label = u.name or "",
 							value = u,
 						})
 					end
@@ -401,7 +401,7 @@ local function show_reporter_picker()
 				state.current_user_handle = nil
 			end
 			state.current_user_loading = false
-			if state.current_user and item.value.account_id == state.current_user.account_id then
+			if state.current_user and item.value.id == state.current_user.id then
 				state.fields.reporter = nil
 			else
 				state.fields.reporter = item.value
@@ -486,7 +486,7 @@ end
 
 ---@param on_submit fun(fields: IssueEditorFields, done: fun(ok: boolean, err: string|nil))|nil
 ---@param opts IssueEditorFields
----@param editor_opts { preview_fn: (fun(markdown: string): string)|nil, current_user: IssueUser|nil }|nil
+---@param editor_opts { preview_fn: (fun(markdown: string): string)|nil, current_user: AtlasUser|nil }|nil
 function M.open(on_submit, opts, editor_opts)
 	if valid_win(state.layout.editor_win) then
 		close_ui()
@@ -565,7 +565,7 @@ function M.open(on_submit, opts, editor_opts)
 	render_meta()
 
 	if state.current_user_loading then
-		state.current_user_handle = users_api.get_myself(function(user, err)
+		state.current_user_handle = users_api.fetch_user(function(user, err)
 			state.current_user_handle = nil
 			state.current_user_loading = false
 			if err then
@@ -581,7 +581,7 @@ function M.open(on_submit, opts, editor_opts)
 	end
 
 	if state.fields.project ~= "" then
-		state.assignees_handle = users_api.get_assignable_users(
+		state.assignees_handle = issues_api.get_assignable_users(
 			{ project = state.fields.project, issue_key = state.fields.issue_key },
 			"",
 			function(users, err)

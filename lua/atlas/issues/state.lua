@@ -4,7 +4,7 @@
 ---@field query string
 ---@field is_loading boolean
 ---@field error string|nil
----@field current_user IssueUser|nil
+---@field current_user AtlasUser|nil
 ---@field issues Issue[]
 ---@field current_page integer
 ---@field page_history IssuesPage[]

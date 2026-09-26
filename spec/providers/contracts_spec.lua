@@ -18,6 +18,7 @@ local function assert_contract(domain, expected_ids, provider_functions, core_fu
 		assert.equal(registered.name, provider.name)
 		assert_functions(provider, provider_functions, label)
 		assert_functions(provider.capabilities and provider.capabilities.core, core_functions, label .. ".core")
+		assert_functions(provider.capabilities.users, { "fetch_user" }, label .. ".users")
 		if domain == "pulls" then
 			local pipelines = assert(provider.capabilities and provider.capabilities.pipelines)
 			assert_functions(pipelines, { "fetch" }, label .. ".pipelines")
@@ -35,7 +36,6 @@ describe("providers contracts", function()
 			{ "bitbucket", "github", "gitlab" },
 			{ "resolve_search", "view_for_target", "views" },
 			{
-				"fetch_user",
 				"fetch_pullrequests",
 				"fetch_by_refs",
 				"fetch_pullrequest",
@@ -55,7 +55,7 @@ describe("providers contracts", function()
 			"issues",
 			{ "github", "gitlab", "jira" },
 			{ "resolve_search", "view_for_target", "issue_ref", "views" },
-			{ "fetch_user", "fetch_issues", "fetch_by_refs", "fetch_issue" }
+			{ "fetch_issues", "fetch_by_refs", "fetch_issue" }
 		)
 	end)
 

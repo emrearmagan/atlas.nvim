@@ -114,7 +114,7 @@ end
 local function reviewer_hl(name)
 	local normalized = vim.trim(name):lower()
 	if normalized == "" or normalized == "unknown" or normalized == "none" then
-		return "AtlasTextMutedItalic"
+		return "AtlasTextMuted"
 	end
 	return highlights.dynamic_for(normalized) or "AtlasTextMuted"
 end

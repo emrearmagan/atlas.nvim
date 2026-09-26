@@ -363,6 +363,7 @@ At some point there will probably an extension for lualine.
 - `:Atlas create [pr|issue]` - Create a pull request or issue
 - `:Atlas search [provider]` - Search configured pull-request and issue providers
 - `:Atlas open [target|.]` - Open a provider URL, Jira key, a PR/issue number in the current repository, or the current repository
+- `:Atlas browse [repository URL|.] [page]` - Open the repository browser, e.g. `:Atlas browse . branches`
 - `:Atlas notes [target]` - Inspect local review notes
 - `:Atlas clear [cache|notes|stars]` - Clear all Atlas data or only cached data and cloned repositories, local review notes, or starred items
 - `:Atlas logs` - Toggle Atlas logs

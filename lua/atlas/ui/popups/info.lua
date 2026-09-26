@@ -1,30 +1,20 @@
 local M = {}
 
 local ns = vim.api.nvim_create_namespace("atlas.popup.info")
+local group = vim.api.nvim_create_augroup("AtlasInfoPopup", { clear = true })
 
 local win = nil
 local buf = nil
+local source_win = nil
 
-local function valid_buf(b)
-	return type(b) == "number" and vim.api.nvim_buf_is_valid(b)
-end
-
-local function valid_win(w)
-	return type(w) == "number" and vim.api.nvim_win_is_valid(w)
-end
-
-local function close_win()
-	if win and valid_win(win) then
+local function hide()
+	if win and vim.api.nvim_win_is_valid(win) then
 		vim.api.nvim_win_close(win, true)
 	end
-	win = nil
-end
-
-local function delete_buf()
-	if buf and valid_buf(buf) then
+	if buf and vim.api.nvim_buf_is_valid(buf) then
 		vim.api.nvim_buf_delete(buf, { force = true })
 	end
-	buf = nil
+	win, buf = nil, nil
 end
 
 local function max_line_width(lines)
@@ -35,13 +25,19 @@ local function max_line_width(lines)
 	return width
 end
 
-local function popup_config(lines)
+local function popup_config(lines, owner)
 	local content_width = max_line_width(lines)
 	local width = math.max(10, math.min(content_width + 2, math.max(vim.o.columns - 4, 10)))
-	local height = math.max(1, math.min(#lines, math.max(vim.o.lines - 4, 1)))
+	local height = 0
+	for _, line in ipairs(lines) do
+		height = height + math.max(1, math.ceil(vim.fn.strdisplaywidth(line) / width))
+	end
+	local cursor = vim.api.nvim_win_get_cursor(owner)
 
 	return {
-		relative = "cursor",
+		relative = "win",
+		win = owner,
+		bufpos = { cursor[1] - 1, cursor[2] },
 		row = 1,
 		col = 0,
 		style = "minimal",
@@ -49,14 +45,13 @@ local function popup_config(lines)
 		focusable = false,
 		zindex = 260,
 		width = width,
-		height = height,
+		height = math.max(1, math.min(height, vim.o.lines - 4)),
 	}
 end
 
 ---@return integer
 local function ensure_buf()
-	if valid_buf(buf) then
-		---@cast buf integer
+	if buf and vim.api.nvim_buf_is_valid(buf) then
 		return buf
 	end
 
@@ -89,45 +84,106 @@ local function apply_highlights(target_buf, highlights)
 	end
 end
 
-function M.close()
-	close_win()
-	delete_buf()
+---@param owner integer|nil
+function M.close(owner)
+	if owner and owner ~= source_win then
+		return
+	end
+	vim.api.nvim_clear_autocmds({ group = group })
+	source_win = nil
+	hide()
 end
 
----@param opts { lines: string[], highlights: AtlasUIHighlight[]|nil, source_buf: integer|nil }
-function M.show(opts)
-	opts = opts or {}
-	local lines = opts.lines or {}
-	if #lines == 0 then
+---@param content { lines: string[], title?: string, filetype?: string, highlights?: AtlasUIHighlight[] }|nil
+---@param owner integer
+local function draw(content, owner)
+	if not content or #content.lines == 0 then
+		hide()
 		return
 	end
 
-	local source_buf = opts.source_buf
-	if not valid_buf(source_buf) then
-		source_buf = vim.api.nvim_get_current_buf()
-	end
-
-	M.close()
-
 	local target_buf = ensure_buf()
 	vim.api.nvim_set_option_value("modifiable", true, { buf = target_buf })
-	vim.api.nvim_buf_set_lines(target_buf, 0, -1, false, lines)
+	vim.api.nvim_buf_set_lines(target_buf, 0, -1, false, content.lines)
 	vim.api.nvim_set_option_value("modifiable", false, { buf = target_buf })
-	apply_highlights(target_buf, opts.highlights or {})
+	local filetype = content.filetype or ""
+	if vim.bo[target_buf].filetype ~= filetype then
+		vim.bo[target_buf].filetype = filetype
+	end
+	apply_highlights(target_buf, content.highlights or {})
 
-	win = vim.api.nvim_open_win(target_buf, false, popup_config(lines))
-	vim.api.nvim_set_option_value(
-		"winhighlight",
-		"Normal:NormalFloat,NormalNC:NormalFloat,EndOfBuffer:NormalFloat,FloatBorder:FloatBorder",
-		{ win = win }
-	)
+	local config = popup_config(content.lines, owner)
+	config.title = content.title or ""
+	if win and vim.api.nvim_win_is_valid(win) then
+		vim.api.nvim_win_set_config(win, config)
+	else
+		win = vim.api.nvim_open_win(target_buf, false, config)
+		vim.wo[win].wrap = true
+		vim.wo[win].linebreak = true
+		vim.wo[win].winhighlight =
+			"Normal:NormalFloat,NormalNC:NormalFloat,EndOfBuffer:NormalFloat,FloatBorder:FloatBorder"
+	end
+end
 
-	vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI", "BufLeave" }, {
+---@param owner integer
+---@param source_buf integer
+local function watch_source(owner, source_buf)
+	vim.api.nvim_create_autocmd({ "BufLeave", "WinLeave", "BufWipeout" }, {
+		group = group,
 		buffer = source_buf,
-		once = true,
+		callback = function()
+			M.close(owner)
+		end,
+	})
+	vim.api.nvim_create_autocmd("WinClosed", {
+		group = group,
+		pattern = tostring(owner),
+		callback = function()
+			M.close(owner)
+		end,
+	})
+end
+
+---@param opts { lines: string[], highlights?: AtlasUIHighlight[], source_buf?: integer, title?: string, filetype?: string }
+function M.show(opts)
+	if #opts.lines == 0 then
+		return
+	end
+	M.close()
+	source_win = vim.api.nvim_get_current_win()
+	local source_buf = opts.source_buf or vim.api.nvim_get_current_buf()
+	draw(opts, source_win)
+	watch_source(source_win, source_buf)
+
+	vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
+		group = group,
+		buffer = source_buf,
 		callback = function()
 			M.close()
 		end,
+	})
+end
+
+---@param opts { source_win: integer, content: fun(line: integer): { lines: string[], title?: string, filetype?: string, highlights?: AtlasUIHighlight[] }|nil }
+function M.toggle(opts)
+	local owner = opts.source_win
+	if source_win == owner then
+		M.close()
+		return
+	end
+	M.close()
+	source_win = owner
+	local source_buf = vim.api.nvim_win_get_buf(owner)
+	watch_source(owner, source_buf)
+
+	local function update()
+		draw(opts.content(vim.api.nvim_win_get_cursor(owner)[1]), owner)
+	end
+	update()
+	vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
+		group = group,
+		buffer = source_buf,
+		callback = update,
 	})
 end
 

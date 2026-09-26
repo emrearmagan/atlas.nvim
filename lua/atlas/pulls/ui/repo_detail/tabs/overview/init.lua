@@ -31,7 +31,7 @@ local function render_text_block(title, value, width, lines, spans)
 	table.insert(lines, "")
 end
 
----@param repo PullsRepo
+---@param repo AtlasRepository
 ---@param width integer
 ---@return string[], table[], table<integer, table>
 function M.render(repo, width)

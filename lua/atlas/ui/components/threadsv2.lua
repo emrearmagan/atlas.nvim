@@ -185,12 +185,12 @@ end
 ---@return string
 local function default_author_hl(_, author)
 	if author == "" then
-		return "AtlasTextMutedItalic"
+		return "AtlasTextMuted"
 	end
 
 	local normalized = vim.trim(author):lower()
 	if normalized == "" or normalized == "unknown" or normalized == "none" or normalized == "unassigned" then
-		return "AtlasTextMutedItalic"
+		return "AtlasTextMuted"
 	end
 
 	return highlights.dynamic_for(normalized) or "AtlasTextMuted"

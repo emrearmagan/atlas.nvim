@@ -4,7 +4,7 @@ local service = require("atlas.providers.gitlab.client")
 local normalizer = require("atlas.issues.providers.gitlab.api.mapper")
 local request_scope = require("atlas.core.requests")
 local json = require("atlas.core.json")
-local LIST_CACHE_PREFIX = "gitlab:issues:list:v3:"
+local LIST_CACHE_PREFIX = "gitlab:issues:list:v4:"
 
 local ISSUE_LABELS_GQL = [[
 query($path: ID!, $iid: String!) {
@@ -242,7 +242,7 @@ function M.fetch_issue(ref, opts, on_done)
 end
 
 ---@param key string
----@param on_done fun(assignees: IssueUser[]|nil, err: string|nil)
+---@param on_done fun(assignees: AtlasUser[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.get_assignees(key, on_done)
 	local path, iid = normalizer.parse_key(key)
@@ -267,9 +267,7 @@ function M.get_assignees(key, on_done)
 		local assignees = {}
 		for _, raw in ipairs(json.safe_table(json.safe_table(issue.assignees).nodes)) do
 			local user = normalizer.to_user(raw)
-			local id = tonumber((json.safe_str(raw.id) or ""):match("(%d+)$"))
-			if user and id then
-				user.id = id
+			if user and tonumber(user.id) then
 				table.insert(assignees, user)
 			end
 		end

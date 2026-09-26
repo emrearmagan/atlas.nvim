@@ -32,7 +32,7 @@ function M.reset()
 	reset_state()
 end
 
----@param repo PullsRepoDetails
+---@param repo AtlasRepositoryDetails
 ---@return string
 local function repo_key(repo)
 	return detail.provider.id .. ":" .. tostring(repo.full_name or "")
@@ -50,17 +50,16 @@ local function issue_type_hl(color)
 	return name
 end
 
----@param _repo PullsRepo
+---@param _repo AtlasRepository
 ---@param width integer
 ---@return string[], table[], table<integer, table>
 function M.render(_repo, width)
 	return renderer.render(state, width, detail.current_repo_details == "loading", issue_type_hl)
 end
 
----@param details PullsRepoDetails
+---@param details AtlasRepositoryDetails
 ---@param refresh fun()
----@param force_refresh boolean
-local function fetch_issues(details, refresh, force_refresh)
+local function fetch_issues(details, refresh)
 	stop_requests()
 	local key = repo_key(details)
 	if state.repo_key ~= key then
@@ -75,7 +74,7 @@ local function fetch_issues(details, refresh, force_refresh)
 	local repository = detail.provider.capabilities.repository
 	local run = assert(repository.fetch_issues)
 	state.requests.run(function(done)
-		return run(details, state.filter, { force_refresh = force_refresh }, done)
+		return run(details, state.filter, done)
 	end, function(result, err)
 		local current = detail.current_repo_details
 		if type(current) ~= "table" or repo_key(current) ~= key then
@@ -93,7 +92,7 @@ local function fetch_issues(details, refresh, force_refresh)
 	end)
 end
 
----@param repo PullsRepo|nil
+---@param repo AtlasRepository|nil
 ---@param refresh fun()
 ---@param opts { force_refresh: boolean|nil }|nil
 function M.on_select(repo, refresh, opts)
@@ -125,7 +124,7 @@ function M.on_select(repo, refresh, opts)
 		return
 	end
 
-	fetch_issues(details, refresh, opts.force_refresh == true)
+	fetch_issues(details, refresh)
 end
 
 ---@return boolean
@@ -140,7 +139,7 @@ function M.is_selectable_line(_lnum, entry)
 	return entry.kind == "issue"
 end
 
----@param _repo PullsRepo
+---@param _repo AtlasRepository
 ---@param entry table
 ---@return boolean|nil
 function M.on_enter(_repo, entry)

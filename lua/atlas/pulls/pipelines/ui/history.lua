@@ -6,10 +6,10 @@ local utils = require("atlas.ui.shared.utils")
 local M = {}
 
 ---@param pipeline PullsPipeline
----@return string, string
+---@return string, AtlasPickerChunk[]
 local function format_run(pipeline)
 	local icon, hl = icons.pulls_status(pipeline.state:lower())
-	local parts = { icon, pipeline_utils.display_name(pipeline) }
+	local parts = { pipeline_utils.display_name(pipeline) }
 	if pipeline.commit then
 		parts[#parts + 1] = pipeline.commit:sub(1, 7)
 	end
@@ -19,7 +19,8 @@ local function format_run(pipeline)
 	if pipeline.title then
 		parts[#parts + 1] = pipeline.title:gsub("[\r\n]+", " ")
 	end
-	return table.concat(parts, "  "), hl
+	local text = "  " .. table.concat(parts, "  ")
+	return icon .. text, { { icon, hl }, { text, "Normal" } }
 end
 
 ---@param runs PullsPipeline[]

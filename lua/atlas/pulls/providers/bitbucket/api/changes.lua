@@ -2,7 +2,7 @@ local M = {}
 
 local json = require("atlas.core.json")
 local mapper = require("atlas.pulls.providers.bitbucket.api.mapper")
-local service = require("atlas.pulls.providers.bitbucket.api.service")
+local service = require("atlas.providers.bitbucket.client")
 
 ---@param pr PullRequest
 ---@param opts { force_refresh: boolean|nil }|nil

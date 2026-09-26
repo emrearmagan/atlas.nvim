@@ -70,6 +70,14 @@ _G.vim = {
 				return 1
 			end,
 
+			nvim_create_augroup = function()
+				return 1
+			end,
+
+			nvim_create_autocmd = function()
+				return 1
+			end,
+
 			nvim_set_hl = function(_, name, val)
 				if val.default and highlights[name] ~= nil then
 					return

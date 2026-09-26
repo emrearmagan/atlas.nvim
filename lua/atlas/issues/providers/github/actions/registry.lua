@@ -168,7 +168,7 @@ local function assign(ctx, done)
 
 		local original_set = {}
 		for _, assignee in ipairs(current_assignees) do
-			local login = tostring(assignee.account_id or "")
+			local login = assignee.username or ""
 			if login ~= "" then
 				original_set[login] = true
 			end
@@ -178,16 +178,16 @@ local function assign(ctx, done)
 			items = assignable_users,
 			selected = vim.deepcopy(current_assignees),
 			key = function(item)
-				return tostring(item.account_id or "")
+				return item.username or ""
 			end,
 			format_item = function(item)
-				return string.format("%s %s", icons.general("user"), item.display_name or item.account_id)
+				return string.format("%s %s", icons.general("user"), item.name or item.username)
 			end,
 			title = string.format("Assignees for %s", key),
 			on_done = function(selected)
 				local selected_set = {}
 				for _, item in ipairs(selected) do
-					local login = tostring(item.account_id or "")
+					local login = item.username or ""
 					if login ~= "" then
 						selected_set[login] = true
 					end
@@ -438,12 +438,12 @@ local function search_issues(repo, ctx, done)
 					return
 				end
 				local assignees = vim.tbl_map(function(user)
-					return "@" .. tostring(user.account_id or user.display_name)
+					return "@" .. (user.username or user.name)
 				end, details.assignees)
 				local label_names = vim.tbl_map(function(label)
 					return label.name
 				end, details.labels)
-				local author = issue.reporter and issue.reporter.display_name or "Unknown"
+				local author = issue.reporter and issue.reporter.name or "Unknown"
 				local lines = {
 					"**Status:** " .. tostring(issue.status or "Open"),
 					"**Author:** " .. author,
@@ -525,7 +525,7 @@ end
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function open_repo(_, done)
 	select_repository({
-		title = "Open Repo",
+		title = "Open Repository",
 		include_all = false,
 		on_select = function(repo)
 			require("atlas").open("issues", "github", {
@@ -626,7 +626,7 @@ register({
 register({ id = "search", label = "Search Issues", icon = icons.action("search"), run = search })
 register({
 	id = "edit_search",
-	label = "Edit search",
+	label = "Edit Current Search",
 	icon = icons.action("search"),
 	run = function(_, done)
 		local state = require("atlas.issues.state")
@@ -640,7 +640,26 @@ register({
 		done(nil, nil)
 	end,
 })
-register({ id = "open_repo", label = "Open Repo", icon = icons.action("search"), run = open_repo })
+register({ id = "open_repo", label = "Open Repository", icon = icons.action("search"), run = open_repo })
+register(actions.browse_repository)
+register({
+	id = "browse_repositories",
+	label = "Browse Repository",
+	icon = icons.general("overview"),
+	run = function(ctx, done)
+		select_repository({
+			title = "Browse Repository",
+			include_all = false,
+			on_select = function(repo)
+				require("atlas.ui.repository").open(repo, ctx.provider)
+				done(nil, nil)
+			end,
+			on_cancel = function()
+				done(nil, nil)
+			end,
+		})
+	end,
+})
 register(actions.manage_templates)
 register(actions.browse_issue)
 register(actions.copy_issue_key)

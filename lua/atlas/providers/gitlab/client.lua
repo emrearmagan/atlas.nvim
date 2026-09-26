@@ -143,7 +143,7 @@ M.url_encode = utils.url_encode
 ---@param method string
 ---@param endpoint string
 ---@param data? table
----@param on_done fun(result: any, err: string|nil)
+---@param on_done fun(result: any, err: string|nil, status?: integer)
 ---@param ctx? table
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.request(method, endpoint, data, on_done, ctx)
@@ -175,10 +175,10 @@ function M.request(method, endpoint, data, on_done, ctx)
 		M.base_url() .. API_PATH .. endpoint,
 		build_headers(),
 		payload,
-		function(result, err)
+		function(result, err, status)
 			if err then
 				logger.logerror(message .. " failed", vim.tbl_extend("force", {}, log, { error = tostring(err) }))
-				on_done(nil, err)
+				on_done(nil, err, status)
 				return
 			end
 
@@ -189,12 +189,12 @@ function M.request(method, endpoint, data, on_done, ctx)
 				end
 				if api_err ~= nil then
 					logger.logerror(message .. " failed", vim.tbl_extend("force", {}, log, { error = api_err }))
-					on_done(nil, api_err)
+					on_done(nil, api_err, status)
 					return
 				end
 			end
 
-			on_done(result, nil)
+			on_done(result, nil, status)
 		end
 	)
 end

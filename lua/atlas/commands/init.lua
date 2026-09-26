@@ -12,7 +12,7 @@ local ui_utils = require("atlas.ui.utils")
 ---@field usage string|nil
 ---@field description string
 ---@field run fun(args: string[])
----@field complete (fun(arglead: string): string[])|nil
+---@field complete (fun(arglead: string, args?: string[]): string[])|nil
 
 ---@type AtlasCommand[]
 M.commands = {}
@@ -119,6 +119,24 @@ M.register({
 	end,
 	run = function(args)
 		with_argument(args, "Open: ", require("atlas.commands.open").open)
+	end,
+})
+
+M.register({
+	name = "browse",
+	usage = "browse [repository URL|.] [page]",
+	description = "Open the repository browser",
+	complete = function(arglead, args)
+		return require("atlas.commands.repository").complete(arglead, args)
+	end,
+	run = function(args)
+		if #args > 2 then
+			notify.error("Usage: :Atlas browse [repository URL|.] [page]", { vim_notify = true })
+			return
+		end
+		with_argument({ args[1] }, "Repository URL: ", function(value)
+			require("atlas.commands.repository").open(value, args[2])
+		end)
 	end,
 })
 
@@ -359,8 +377,10 @@ end
 
 ---@param arglead string
 ---@param cmdline string
+---@param cursorpos integer
 ---@return string[]
-local function complete(arglead, cmdline)
+local function complete(arglead, cmdline, cursorpos)
+	cmdline = cmdline:sub(1, cursorpos)
 	local words = vim.split(vim.trim(cmdline), "%s+")
 	if #words < 2 or (#words == 2 and not cmdline:match("%s$")) then
 		return vim.tbl_filter(
@@ -374,7 +394,11 @@ local function complete(arglead, cmdline)
 	end
 
 	local command = find_command(words[2])
-	return command and command.complete and command.complete(arglead) or {}
+	local args = vim.list_slice(words, 3)
+	if cmdline:match("%s$") then
+		args[#args + 1] = ""
+	end
+	return command and command.complete and command.complete(arglead, args) or {}
 end
 
 function M.setup()

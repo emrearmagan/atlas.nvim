@@ -193,9 +193,9 @@ local function edit_assignees(ctx, done)
 			local original_set = {}
 			for _, assignee in ipairs(assignees) do
 				local login = assignee.username
-				if login ~= "" and not original_set[login] then
+				if login and login ~= "" and not original_set[login] then
 					original_set[login] = true
-					table.insert(original, { account_id = login, display_name = assignee.name, email = "" })
+					table.insert(original, { id = assignee.id, username = login, name = assignee.name })
 				end
 			end
 			notify(ctx, "success", "Assignees loaded", 1200)
@@ -204,21 +204,20 @@ local function edit_assignees(ctx, done)
 				items = items,
 				selected = vim.deepcopy(original),
 				key = function(item)
-					return item.account_id
+					return item.username
 				end,
 				format_item = function(item)
 					return string.format(
 						"@%s%s",
-						item.account_id,
-						item.display_name and item.display_name ~= item.account_id and (" — " .. item.display_name)
-							or ""
+						item.username,
+						item.name ~= "" and item.name ~= item.username and (" — " .. item.name) or ""
 					)
 				end,
 				title = string.format("Assignees for PR #%s", tostring(pr.id or "")),
 				on_done = function(selected)
 					local selected_set = {}
 					for _, item in ipairs(selected) do
-						selected_set[item.account_id] = true
+						selected_set[item.username] = true
 					end
 
 					local adds, removes = {}, {}
@@ -277,7 +276,7 @@ local function edit_assignees(ctx, done)
 		open_picker(ctx.details.assignees)
 		return
 	end
-	pullrequests.get_pr(pr.workspace, pr.repo, pr.id, function(details, err)
+	pullrequests.get_pr(pr.repo.owner, pr.repo.repo_name, pr.id, function(details, err)
 		if err or details == nil then
 			local message = tostring(err or "Failed to load pull request")
 			notify(ctx, "error", "Failed to load assignees: " .. message)
@@ -311,7 +310,7 @@ local function edit_labels(ctx, done)
 	local slug = pr.repo_full_name
 
 	notify(ctx, "loading", "Loading labels...")
-	pullrequests.get_pr(pr.workspace, pr.repo, pr.id, function(current, current_err)
+	pullrequests.get_pr(pr.repo.owner, pr.repo.repo_name, pr.id, function(current, current_err)
 		if current_err or current == nil then
 			notify(ctx, "error", current_err or "Failed to load PR labels")
 			done(nil, current_err or "Failed to load PR labels")
@@ -485,7 +484,7 @@ local function search_results(repo, ctx, done)
 		end,
 		preview_item = function(item, preview_done)
 			local pr = item.value
-			return pullrequests.get_pr(pr.workspace, pr.repo, pr.id, function(details, err)
+			return pullrequests.get_pr(pr.repo.owner, pr.repo.repo_name, pr.id, function(details, err)
 				if err or details == nil then
 					preview_done({ title = item.label, lines = { err or "Failed to load pull request" } })
 					return
@@ -570,7 +569,7 @@ end
 ---@param done fun(result: PullsActionResult|nil, err: string|nil)
 local function open_repo(_, done)
 	select_repository({
-		title = "Open Repo",
+		title = "Open Repository",
 		include_all = false,
 		on_select = function(repo)
 			require("atlas").open("pulls", "github", {
@@ -645,7 +644,7 @@ local function toggle_subscription(ctx, done)
 		update(ctx.details)
 		return
 	end
-	pullrequests.get_pr(pr.workspace, pr.repo, pr.id, function(details, fetch_err)
+	pullrequests.get_pr(pr.repo.owner, pr.repo.repo_name, pr.id, function(details, fetch_err)
 		if fetch_err or details == nil then
 			local message = tostring(fetch_err or "Failed to load pull request details")
 			notify(ctx, "error", message)
@@ -721,14 +720,34 @@ register({
 
 register({
 	id = "open_repo",
-	label = "Open Repo",
+	label = "Open Repository",
 	icon = icons.action("search"),
 	run = open_repo,
 })
 
+register(actions.browse_repository)
+register({
+	id = "browse_repositories",
+	label = "Browse Repository",
+	icon = icons.general("overview"),
+	run = function(ctx, done)
+		select_repository({
+			title = "Browse Repository",
+			include_all = false,
+			on_select = function(repo)
+				require("atlas.ui.repository").open(repo, ctx.provider)
+				done(nil, nil)
+			end,
+			on_cancel = function()
+				done(nil, nil)
+			end,
+		})
+	end,
+})
+
 register({
 	id = "search_pull_requests",
-	label = "Open Search View",
+	label = "New Search",
 	icon = icons.action("search"),
 	run = function(_, done)
 		local query = require("atlas.pulls.state").query
@@ -739,7 +758,7 @@ register({
 
 register({
 	id = "edit_search",
-	label = "Edit search",
+	label = "Edit Current Search",
 	icon = icons.action("search"),
 	run = function(_, done)
 		local state = require("atlas.pulls.state")

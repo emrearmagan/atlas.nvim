@@ -32,15 +32,13 @@
 ---@field issue_ref fun(target: AtlasTarget): IssueRef|nil
 ---@field capabilities IssuesProviderCapabilities
 
----@class IssuesProviderCapabilities
+---@class IssuesProviderCapabilities : AtlasProviderCapabilities
 ---@field core IssuesCoreCapability
 ---@field comments IssuesCommentsCapability|nil
----@field notifications AtlasNotificationsCapability|nil
 ---@field actions IssuesActionsCapability|nil
 ---@field ui IssuesUICapability|nil
 
 ---@class IssuesCoreCapability
----@field fetch_user fun(on_done: fun(user: IssueUser|nil, err: string|nil)): { cancel: fun() }|nil
 ---@field fetch_issues fun(view: IssuesViewConfig, opts: IssuesFetchOpts, on_done: fun(page: IssuesPage, err: string|nil)): { cancel: fun() }|nil
 ---@field fetch_by_refs fun(refs: IssueRef[], opts: IssuesFetchOpts, on_done: fun(issues: Issue[], err: string|nil)): { cancel: fun() }|nil
 ---@field fetch_issue fun(ref: IssueRef, opts: IssuesFetchOpts|nil, on_done: fun(details: IssueDetails|nil, err: string|nil)): { cancel: fun() }|nil
@@ -70,6 +68,7 @@
 
 ---@class IssuesUICapability
 ---@field detail IssuesProviderDetail|nil
+---@field repository { pages: fun(pages: table<string, RepositoryPage>): RepositoryPage[] }|nil
 
 --------------------------------------------------------------------------------
 -- Detail interface

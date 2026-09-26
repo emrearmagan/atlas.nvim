@@ -10,8 +10,7 @@ local detail_ui = require("atlas.issues.providers.gitlab.ui.detail")
 local issues_api = require("atlas.issues.providers.gitlab.api.issues")
 local links_api = require("atlas.providers.gitlab.links")
 local notes_api = require("atlas.issues.providers.gitlab.api.notes")
-local users_api = require("atlas.issues.providers.gitlab.api.users")
-local notifications_api = require("atlas.providers.gitlab.notifications")
+local repository_ui = require("atlas.providers.gitlab.ui.repository")
 local git = require("atlas.core.git")
 local gitlab_query = require("atlas.providers.gitlab.query")
 
@@ -111,7 +110,6 @@ return {
 	issue_ref = issue_ref,
 	capabilities = {
 		core = {
-			fetch_user = users_api.get_user,
 			fetch_issues = issues_api.list_issues,
 			fetch_by_refs = issues_api.fetch_by_refs,
 			fetch_issue = issues_api.fetch_issue,
@@ -128,10 +126,10 @@ return {
 			delete_comment = notes_api.delete_comment,
 			add_reaction = notes_api.add_reaction,
 		},
-		notifications = notifications_api,
 		actions = actions,
 		ui = {
 			detail = detail_ui,
+			repository = repository_ui,
 		},
 	},
 }

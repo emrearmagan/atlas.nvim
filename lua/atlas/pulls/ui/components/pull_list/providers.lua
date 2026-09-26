@@ -1,6 +1,6 @@
-local M = {}
-
 local icons = require("atlas.ui.shared.icons")
+
+local M = {}
 
 local function columns(conversation, before_author, after_author)
 	local function build(title_key, compact)
@@ -26,7 +26,7 @@ local function columns(conversation, before_author, after_author)
 		table.insert(result, {
 			key = "author",
 			name = string.format("%s Author", icons.general("user")),
-			min_width = 3,
+			min_width = 10,
 			can_grow = false,
 			header_hl = "AtlasColumnHeader",
 		})
@@ -34,12 +34,14 @@ local function columns(conversation, before_author, after_author)
 		table.insert(result, {
 			key = "created",
 			name = icons.general("created"),
+			min_width = 4,
 			can_grow = false,
 			header_hl = "AtlasColumnHeader",
 		})
 		table.insert(result, {
 			key = "updated",
 			name = icons.general("updated"),
+			min_width = 4,
 			can_grow = false,
 			header_hl = "AtlasColumnHeader",
 		})
@@ -96,6 +98,7 @@ local function github()
 	local diff_column = {
 		key = "diff",
 		name = icons.pulls("changes"),
+		min_width = 5,
 		max_width = 15,
 		can_grow = false,
 		header_hl = "AtlasColumnHeader",

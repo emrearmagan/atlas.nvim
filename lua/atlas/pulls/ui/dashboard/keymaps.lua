@@ -7,7 +7,7 @@ local actions = require("atlas.pulls.actions")
 local controller = require("atlas.pulls.ui.dashboard.controller")
 local registrations = {}
 
----@return PullRequest|nil, PullsRepo|nil
+---@return PullRequest|nil, AtlasRepository|nil
 local function selected_pr()
 	local navigation = require("atlas.ui.navigation")
 	local node = navigation.current_item()
@@ -250,7 +250,7 @@ function M.register(buf, views)
 	utils.insert_if(
 		items,
 		item("pulls.edit_search", {
-			desc = "Edit search",
+			desc = "Edit Current Search",
 			callback = function()
 				run_action("edit_search", false)
 			end,
