@@ -1,5 +1,6 @@
 local M = {}
 
+local keymaps = require("atlas.core.keymaps")
 local icons = require("atlas.ui.shared.icons")
 local form = require("atlas.ui.popups.form")
 local issue_helper = require("atlas.issues.create.jira.helper")
@@ -503,6 +504,7 @@ function M.open(on_submit, opts, editor_opts)
 	local initial_desc = type(state.fields.description) == "string" and state.fields.description or ""
 	state.initial_summary = tostring(state.fields.summary or "")
 	state.initial_description = initial_desc
+	local preview_keys = keymaps.resolve("ui.toggle_description_mode")
 
 	form.open(state, {
 		title_label = "Summary",
@@ -542,12 +544,12 @@ function M.open(on_submit, opts, editor_opts)
 				end,
 				desc = "templates",
 			},
-			{
-				key = "m",
+			preview_keys and {
+				key = preview_keys,
 				buffers = { "editor" },
 				action = toggle_preview,
 				desc = "raw preview",
-			},
+			} or nil,
 		},
 	})
 
