@@ -56,10 +56,33 @@ function M.inline.link(text)
 end
 
 -- ![logo](https://example.com/logo.png)
+-- <img src="https://example.com/logo.png" alt="logo" />
 -- { text = "󰋩 logo", style = "image", url = "https://example.com/logo.png" }.
 -- An empty label displays "image".
 function M.inline.image(text)
-	return parse_link(text, true)
+	local fragment, consumed_bytes = parse_link(text, true)
+	if fragment then
+		return fragment, consumed_bytes
+	end
+
+	local tag = text:match("^<img%s[^>]*>")
+	if not tag then
+		return
+	end
+
+	local attributes = {}
+	for name, _, value in tag:gmatch("([%w_-]+)%s*=%s*(['\"])(.-)%2") do
+		attributes[name] = value
+	end
+	if not attributes.src or attributes.src == "" then
+		return
+	end
+
+	local label = attributes.alt
+	if not label or label == "" then
+		label = "image"
+	end
+	return { text = "󰋩 " .. label, style = "image", url = attributes.src }, #tag
 end
 
 -- `**bold**`

@@ -273,18 +273,22 @@ describe("Markdown parsing", function()
 		end
 	end)
 
-	for _, case in ipairs({
-		{ "alt text", "![photo](https://example.com/image.png)", "photo", "https://example.com/image.png" },
-		{ "placeholder text", "![](image.png)", "image", "image.png" },
-	}) do
-		it("renders images as highlighted " .. case[1], function()
+	it("renders Markdown and HTML images with labels and destinations", function()
+		local url = "https://github.com/user-attachments/assets/925926a0-a795-4fc1-b62c-b05ca6a4acd1"
+		local label = "659439788-01d01980-3584-409b-84e2-a19468ec2185"
+		for _, case in ipairs({
+			{ "![photo](https://example.com/image.png)", "photo", "https://example.com/image.png" },
+			{ "![](image.png)", "image", "image.png" },
+			{ '<img width="1366" height="1118" alt="' .. label .. '" src="' .. url .. '" />', label, url },
+			{ "<img src='image.png'>", "image", "image.png" },
+		}) do
 			assert.are.same({
-				lines = { "é 󰋩 " .. case[3] .. "!" },
-				targets = { target("image", case[4], 0, #"é ", #"é 󰋩 " + #case[3]) },
-				highlights = { span(0, #"é ", #"é 󰋩 " + #case[3], "AtlasMarkdownImage") },
-			}, markdown.parse("é " .. case[2] .. "!"))
-		end)
-	end
+				lines = { "é 󰋩 " .. case[2] .. "!" },
+				targets = { target("image", case[3], 0, #"é ", #"é 󰋩 " + #case[2]) },
+				highlights = { span(0, #"é ", #"é 󰋩 " + #case[2], "AtlasMarkdownImage") },
+			}, markdown.parse("é " .. case[1] .. "!"))
+		end
+	end)
 
 	it("returns link and image destinations with rendered Unicode byte ranges", function()
 		local result = markdown.parse(table.concat({
@@ -351,10 +355,10 @@ describe("Markdown parsing", function()
 
 	it("does not return targets for links inside literal code or comments", function()
 		for _, source in ipairs({
-			"`[link](url) ![image](image.png)`",
-			"```\n[link](url) ![image](image.png)\n```",
-			"text <!-- [link](url) ![image](image.png) --> after",
-			"<!--\n[link](url) ![image](image.png)\n-->",
+			"`[link](url) ![image](image.png) <img src='image.png'>`",
+			"```\n[link](url) ![image](image.png) <img src='image.png'>\n```",
+			"text <!-- [link](url) ![image](image.png) <img src='image.png'> --> after",
+			"<!--\n[link](url) ![image](image.png) <img src='image.png'>\n-->",
 		}) do
 			assert.are.same({}, markdown.parse(source).targets)
 		end
