@@ -117,8 +117,9 @@ function M.open(opts)
 			render(state)
 		end
 	end
-	vim.bo[state.buf].filetype = "markdown"
+	vim.bo[state.buf].filetype = "atlas.repository"
 	vim.wo[state.win].wrap = true
+	vim.wo[state.win].linebreak = true
 	vim.api.nvim_create_autocmd({ "WinResized", "VimResized" }, {
 		group = state.group,
 		callback = function()
