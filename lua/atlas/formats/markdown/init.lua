@@ -35,6 +35,14 @@ local block_handlers = {
 ---@field start_col integer Zero-based byte offset.
 ---@field end_col integer Exclusive byte offset.
 
+-- Maps original Markdown lines to rendered lines in the editor.
+-- For example, a table written on 3 lines may take 8 lines after wrapping.
+---@class AtlasMarkdownSourceRange
+---@field source_start integer
+---@field source_end integer
+---@field display_start integer
+---@field display_end integer
+
 local function append_row(result, row, opts)
 	local line = elements.join(row)
 	if row.pad then
@@ -91,8 +99,8 @@ end
 ---Parse Markdown into display lines, highlights and link/image targets.
 ---Width affects tables, rules and code blocks. The UI wraps ordinary text.
 ---@param source string
----@param opts? { width?: integer, hl?: table<string, string> }
----@return { lines: string[], highlights: AtlasMarkdownHighlight[], targets: AtlasMarkdownTarget[] }
+---@param opts? { width?: integer, hl?: table<string, string>, source_map?: boolean }
+---@return { lines: string[], highlights: AtlasMarkdownHighlight[], targets: AtlasMarkdownTarget[], source_map?: AtlasMarkdownSourceRange[] }
 function M.parse(source, opts)
 	opts = opts or {}
 
@@ -103,6 +111,9 @@ function M.parse(source, opts)
 	end
 
 	local result = { lines = {}, highlights = {}, targets = {} }
+	if opts.source_map then
+		result.source_map = {}
+	end
 	local width = opts.width
 	if width ~= nil and (type(width) ~= "number" or width < 1 or width % 1 ~= 0) then
 		result.lines = lines
@@ -120,8 +131,17 @@ function M.parse(source, opts)
 			end
 		end
 
+		local display_start = #result.lines
 		for _, row in ipairs(rows) do
 			append_row(result, row, opts)
+		end
+		if result.source_map then
+			result.source_map[#result.source_map + 1] = {
+				source_start = index - 1,
+				source_end = next_index - 1,
+				display_start = display_start,
+				display_end = #result.lines,
+			}
 		end
 
 		index = next_index

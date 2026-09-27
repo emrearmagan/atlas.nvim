@@ -57,6 +57,20 @@ describe("Markdown parsing", function()
 		}, markdown.parse("\r\nfirst\r\r\n  second\n"))
 	end)
 
+	it("tracks source blocks when rendering adds lines", function()
+		local result = markdown.parse("# Title\n\n| A | B |\n| --- | --- |\n| x | y |\n\n```\ncode\n```", {
+			width = 30,
+			source_map = true,
+		})
+		assert.are.same({
+			{ source_start = 0, source_end = 1, display_start = 0, display_end = 1 },
+			{ source_start = 1, source_end = 2, display_start = 1, display_end = 2 },
+			{ source_start = 2, source_end = 5, display_start = 2, display_end = 7 },
+			{ source_start = 5, source_end = 6, display_start = 7, display_end = 8 },
+			{ source_start = 6, source_end = 9, display_start = 8, display_end = 11 },
+		}, result.source_map)
+	end)
+
 	it("renders single-level inline marks with byte offsets", function()
 		for _, case in ipairs({
 			{ "**bold**", "bold", "AtlasMarkdownStrong" },
