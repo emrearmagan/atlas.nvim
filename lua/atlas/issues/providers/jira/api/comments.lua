@@ -2,7 +2,7 @@ local M = {}
 
 local service = require("atlas.providers.jira.client")
 local normalizer = require("atlas.issues.providers.jira.api.mapper")
-local markdown = require("atlas.issues.providers.jira.converted.markdown")
+local markdown = require("atlas.formats.adf.from_markdown")
 
 ---@param raw table
 ---@param issue_key string

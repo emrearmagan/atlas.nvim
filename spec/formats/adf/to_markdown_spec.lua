@@ -1,4 +1,4 @@
-local adf = require("atlas.issues.providers.jira.converted.adf")
+local adf = require("atlas.formats.adf.to_markdown")
 
 local function doc(content)
 	return { type = "doc", version = 1, content = content }
