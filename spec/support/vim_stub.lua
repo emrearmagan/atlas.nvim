@@ -1,6 +1,4 @@
--- Minimal stub for the `vim` global so specs can run outside Neovim via busted.
--- Loaded once as a busted helper (--helper=spec/support/vim_stub.lua).
--- Individual spec files no longer need their own `if vim == nil then` blocks.
+-- Neovim API stubs for Busted.
 
 if vim ~= nil then
 	return
@@ -34,7 +32,6 @@ _G.vim = {
 	NIL = {},
 	o = { background = "dark" },
 
-	-- vim.split(s, sep, {plain=true|false})
 	split = function(s, sep, opts)
 		local plain = opts and opts.plain
 		local result = {}
@@ -51,7 +48,7 @@ _G.vim = {
 		return result
 	end,
 
-	-- vim.schedule(fn) -> run immediately; specs are single-threaded
+	-- Run scheduled callbacks immediately in tests.
 	schedule = function(fn)
 		fn()
 	end,
@@ -66,6 +63,23 @@ _G.vim = {
 		end,
 		dirname = function(path)
 			return path:match("^(.+)/[^/]*$") or (path:sub(1, 1) == "/" and "/" or ".")
+		end,
+	},
+
+	filetype = {
+		match = function()
+			return nil
+		end,
+	},
+
+	treesitter = {
+		language = {
+			get_lang = function(filetype)
+				return filetype
+			end,
+		},
+		get_string_parser = function()
+			error("No Tree-sitter parsers in the test environment")
 		end,
 	},
 
@@ -88,7 +102,6 @@ _G.vim = {
 		end,
 	},
 
-	-- vim.tbl_extend(behavior, ...) -> shallow merge honoring "keep"/"force"/"error"
 	tbl_extend = function(behavior, ...)
 		assert(
 			behavior == "keep" or behavior == "force" or behavior == "error",
@@ -107,7 +120,6 @@ _G.vim = {
 		return out
 	end,
 
-	-- vim.list_extend(dst, src) -> append src onto dst in place
 	list_extend = function(dst, src)
 		for _, v in ipairs(src or {}) do
 			table.insert(dst, v)
@@ -115,7 +127,6 @@ _G.vim = {
 		return dst
 	end,
 
-	-- vim.tbl_keys(t) -> list of the table's keys
 	tbl_keys = function(t)
 		local keys = {}
 		for k in pairs(t) do
@@ -126,10 +137,14 @@ _G.vim = {
 
 	env = { HOME = os.getenv("HOME") or "" },
 
-	-- vim.json.encode(value) -> minimal JSON encoder for plain Lua values
 	json = { encode = json_encode },
 
 	fn = {
+		-- Layout fixtures use one-cell characters, including accented text and icons.
+		strdisplaywidth = function(text)
+			local _, width = text:gsub("[^\128-\191]", "")
+			return width
+		end,
 		fnamemodify = function(path, _)
 			return path
 		end,
