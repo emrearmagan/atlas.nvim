@@ -396,20 +396,11 @@ end
 ---@param width integer
 ---@param lines string[]
 ---@param spans table[]
----@param line_map table<integer, table>
-local function render_description(details, width, lines, spans, line_map)
-	local start_line = #lines + 1
-	local function map_lines()
-		for lnum = start_line, #lines do
-			line_map[lnum] = { kind = "description" }
-		end
-	end
-
+local function render_description(details, width, lines, spans)
 	local desc_text = details.description or ""
 	if vim.trim(desc_text) == "" then
 		utils.push(lines, spans, "No description provided.", "AtlasTextMuted", PADDING_X)
 		table.insert(lines, "")
-		map_lines()
 		return
 	end
 
@@ -470,7 +461,6 @@ local function render_description(details, width, lines, spans, line_map)
 	end
 
 	table.insert(lines, "")
-	map_lines()
 end
 
 -- Merge checks
@@ -569,7 +559,7 @@ function M.render(pr, details, width)
 	local line_map = {}
 
 	if details then
-		render_description(details, width, lines, spans, line_map)
+		render_description(details, width, lines, spans)
 	elseif not detail.details_loading then
 		utils.push(lines, spans, "Pull request details unavailable.", "AtlasTextMuted", PADDING_X)
 		table.insert(lines, "")

@@ -39,7 +39,6 @@ With lazy.nvim:
     "emrearmagan/atlas.nvim",
     dependencies = {
       "nvim-tree/nvim-web-devicons",              -- optional, recommended
-      "MeanderingProgrammer/render-markdown.nvim", -- optional, recommended
       "esmuellert/codediff.nvim",                  -- optional, PR diffs
       "sindrets/diffview.nvim", -- optional; or "dlyongemallo/diffview-plus.nvim"
     },
