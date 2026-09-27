@@ -187,7 +187,7 @@ end
 
 ---@param comment IssueComment
 ---@param width integer
----@return AtlasMarkdownEditorPreview
+---@return AtlasEditorPreview
 function M.render_comment(comment, width)
 	local lines, highlights = M.render({ { comment = comment, children = {} } }, width, {
 		expanded = function()
