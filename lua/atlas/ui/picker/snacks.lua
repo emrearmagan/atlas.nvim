@@ -1,7 +1,9 @@
 local Snacks = require("snacks")
 
 local M = {}
+local markdown = require("atlas.formats.markdown")
 local notify = require("atlas.core.notify")
+local namespace = vim.api.nvim_create_namespace("atlas.picker.snacks")
 
 ---@param request AtlasPickerRequest
 ---@param item any
@@ -186,14 +188,24 @@ function M.open(request)
 			ctx.preview:set_lines({ "Loading..." })
 			preview_handle = request.preview_item(ctx.item.item, function(preview)
 				vim.schedule(function()
-					if ctx.picker.closed or generation ~= preview_generation then
+					if ctx.picker.closed or generation ~= preview_generation or not ctx.preview.win:valid() then
 						return
 					end
 					ctx.preview:reset()
 					ctx.preview:set_title(preview.title or request.title)
 					ctx.picker:update_titles()
-					ctx.preview:set_lines(preview.lines)
-					ctx.preview:highlight({ ft = "markdown" })
+					local width = vim.api.nvim_win_get_width(ctx.win) - vim.fn.getwininfo(ctx.win)[1].textoff
+					local result = markdown.parse(table.concat(preview.lines, "\n"), { width = width })
+					ctx.preview:set_lines(result.lines)
+					vim.bo[ctx.buf].filetype = "atlas-markdown"
+					vim.bo[ctx.buf].syntax = "OFF"
+					ctx.preview:wo({ wrap = true, linebreak = true })
+					for _, span in ipairs(result.highlights) do
+						vim.api.nvim_buf_set_extmark(ctx.buf, namespace, span.line, span.start_col, {
+							end_col = span.end_col,
+							hl_group = span.hl_group,
+						})
+					end
 				end)
 			end)
 		end

@@ -3,7 +3,9 @@ local fzf_actions = require("fzf-lua.actions")
 local fzf_utils = require("fzf-lua.utils")
 
 local M = {}
+local markdown = require("atlas.formats.markdown")
 local notify = require("atlas.core.notify")
+local namespace = vim.api.nvim_create_namespace("atlas.picker.fzf-lua")
 
 ---@param handle { cancel: fun() }|nil
 local function cancel(handle)
@@ -158,13 +160,31 @@ function M.open(request)
 					self:set_preview_buf(buf)
 					preview_handle = request.preview_item(item, function(preview)
 						vim.schedule(function()
-							if not active or generation ~= preview_generation or not vim.api.nvim_buf_is_valid(buf) then
+							if
+								not active
+								or generation ~= preview_generation
+								or not vim.api.nvim_buf_is_valid(buf)
+								or not self.win:validate_preview()
+							then
 								return
 							end
+							local preview_win = self.win.preview_winid
+							local width = vim.api.nvim_win_get_width(preview_win)
+								- vim.fn.getwininfo(preview_win)[1].textoff
+							local result = markdown.parse(table.concat(preview.lines, "\n"), { width = width })
 							vim.bo[buf].modifiable = true
-							vim.api.nvim_buf_set_lines(buf, 0, -1, false, preview.lines)
+							vim.api.nvim_buf_set_lines(buf, 0, -1, false, result.lines)
 							vim.bo[buf].modifiable = false
-							vim.bo[buf].filetype = "markdown"
+							vim.bo[buf].filetype = "atlas-markdown"
+							vim.bo[buf].syntax = "OFF"
+							vim.wo[preview_win].wrap = true
+							vim.wo[preview_win].linebreak = true
+							for _, span in ipairs(result.highlights) do
+								vim.api.nvim_buf_set_extmark(buf, namespace, span.line, span.start_col, {
+									end_col = span.end_col,
+									hl_group = span.hl_group,
+								})
+							end
 							self.win:update_preview_title(preview.title or request.title)
 						end)
 					end)
