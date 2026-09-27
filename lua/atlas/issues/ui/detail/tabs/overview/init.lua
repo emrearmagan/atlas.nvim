@@ -3,19 +3,19 @@ local M = {}
 local help = require("atlas.ui.popups.help")
 local keymaps = require("atlas.core.keymaps")
 local utils = require("atlas.ui.shared.utils")
+local markdown = require("atlas.formats.markdown")
 local editor = require("atlas.ui.popups.editor")
 local notify = require("atlas.core.notify")
 local detail = require("atlas.issues.ui.detail.state")
 local conversation = require("atlas.issues.ui.detail.tabs.conversation.state")
 
 local PADDING_X = 1
-local PADDING = string.rep(" ", PADDING_X)
 
 ---@param _issue Issue
 ---@param details IssueDetails|nil
----@param _width integer
+---@param width integer
 ---@return string[], table[], table<integer, table>
-function M.render(_issue, details, _width)
+function M.render(_issue, details, width)
 	if details == nil then
 		return {}, {}, {}
 	end
@@ -25,13 +25,14 @@ function M.render(_issue, details, _width)
 	utils.push(lines, spans, "Description", "AtlasColumnHeader", PADDING_X)
 	table.insert(lines, "")
 
-	local description = tostring(details.description or "")
+	local description = details.description or ""
 	if description == "" then
 		utils.push(lines, spans, "No description", "AtlasTextMuted", PADDING_X)
 	else
-		for _, line in ipairs(utils.sanitize_lines(description)) do
-			table.insert(lines, PADDING .. line)
-		end
+		local block = markdown.parse(description, {
+			width = math.max(1, width - 2 * PADDING_X),
+		})
+		utils.append_block(lines, spans, block, PADDING_X)
 	end
 
 	return lines, spans, {}
@@ -40,9 +41,6 @@ end
 ---@param buf integer
 ---@param refresh fun()
 function M.activate(buf, refresh)
-	vim.api.nvim_set_option_value("filetype", "markdown", { buf = buf })
-	vim.api.nvim_set_option_value("syntax", "markdown", { buf = buf })
-
 	local provider = detail.provider
 	local core = provider and provider.capabilities.core
 	local update_description = core and core.update_description
@@ -114,9 +112,6 @@ function M.deactivate(buf)
 	if keys then
 		help.remove("Detail", { { key = #keys == 1 and keys[1] or keys } }, { buffer = buf })
 	end
-	vim.api.nvim_set_option_value("filetype", "atlas.detail", { buf = buf })
-	vim.api.nvim_set_option_value("syntax", "OFF", { buf = buf })
-	pcall(vim.treesitter.stop, buf)
 end
 
 return M

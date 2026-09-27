@@ -22,6 +22,7 @@ local function configure(win)
 		foldmethod = "manual",
 		foldenable = false,
 		wrap = true,
+		linebreak = true,
 		breakindent = true,
 		cursorline = true,
 		scrollbind = false,
@@ -145,13 +146,19 @@ function M.close(tab)
 	require("atlas.ui.dashboard").render()
 end
 
-vim.api.nvim_create_autocmd("VimResized", {
+vim.api.nvim_create_autocmd({ "VimResized", "WinResized" }, {
 	group = vim.api.nvim_create_augroup("AtlasDetailResize", { clear = true }),
-	callback = function()
+	callback = function(event)
 		if not M.is_open() then
 			return
 		end
-		pcall(vim.api.nvim_win_set_width, state.win, math.max(math.floor(vim.o.columns * 0.45), 40))
+
+		if event.event == "VimResized" then
+			pcall(vim.api.nvim_win_set_width, state.win, math.max(math.floor(vim.o.columns * 0.45), 40))
+		elseif not vim.tbl_contains(vim.v.event.windows, state.win) then
+			return
+		end
+
 		if state.render then
 			state.render()
 		end

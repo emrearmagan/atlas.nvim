@@ -128,9 +128,14 @@ end
 ---@param lines string[]
 ---@param spans AtlasUIHighlight[]
 ---@param block { lines: string[], highlights: AtlasUIHighlight[]|nil }
-function M.append_block(lines, spans, block)
+---@param padding integer|nil
+function M.append_block(lines, spans, block, padding)
 	local base = #lines
-	vim.list_extend(lines, block.lines or {})
+	local pad = padding or 0
+	local prefix = string.rep(" ", pad)
+	for _, line in ipairs(block.lines or {}) do
+		table.insert(lines, prefix .. line)
+	end
 	for _, span in ipairs(block.highlights or {}) do
 		if span.line_hl_group ~= nil then
 			table.insert(spans, {
@@ -140,8 +145,8 @@ function M.append_block(lines, spans, block)
 		else
 			table.insert(spans, {
 				line = base + span.line,
-				start_col = span.start_col,
-				end_col = span.end_col,
+				start_col = pad + span.start_col,
+				end_col = pad + span.end_col,
 				hl_group = span.hl_group,
 			})
 		end

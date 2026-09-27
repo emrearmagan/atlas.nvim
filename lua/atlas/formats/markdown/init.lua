@@ -3,6 +3,7 @@ local M = {}
 local elements = require("atlas.formats.markdown.elements")
 local parse_table = require("atlas.formats.markdown.table")
 local highlight_groups = require("atlas.formats.markdown.highlights").groups
+local utils = require("atlas.ui.shared.utils")
 
 -- Order matters: checked top to bottom, stopping at the first match.
 --
@@ -96,7 +97,7 @@ function M.parse(source, opts)
 	opts = opts or {}
 
 	local lines = {}
-	source = source:gsub("\r\n", "\n") .. "\n"
+	source = utils.normalize_newlines(source) .. "\n"
 	for line in source:gmatch("(.-)\n") do
 		lines[#lines + 1] = line
 	end

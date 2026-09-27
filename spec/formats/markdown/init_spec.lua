@@ -54,7 +54,7 @@ describe("Markdown parsing", function()
 			lines = { "", "first", "", "  second", "" },
 			targets = {},
 			highlights = {},
-		}, markdown.parse("\r\nfirst\r\n\r\n  second\r\n"))
+		}, markdown.parse("\r\nfirst\r\r\n  second\n"))
 	end)
 
 	it("renders single-level inline marks with byte offsets", function()
