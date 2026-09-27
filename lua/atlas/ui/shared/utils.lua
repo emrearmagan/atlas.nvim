@@ -79,7 +79,8 @@ function M.buffer.center_message(buf, win, text, header)
 	local width = vim.api.nvim_win_get_width(win)
 	local message = {}
 	for _, line in ipairs(vim.split(text:gsub("\r\n", "\n"), "\n", { plain = true })) do
-		vim.list_extend(message, M.wrap_line(line:gsub("%c", " "), width))
+		local wrapped = M.wrap_line(line:gsub("%c", " "), width)
+		vim.list_extend(message, wrapped)
 	end
 	local lines = header or {}
 	local padding = math.max(0, math.floor((vim.api.nvim_win_get_height(win) - #lines - #message) / 2))
@@ -460,15 +461,17 @@ end
 
 ---@param text string
 ---@param max_dw integer
----@return string[]
+---@return string[] lines
+---@return integer[] offsets Zero-based byte offsets in the source.
 function M.wrap_line(text, max_dw)
 	if max_dw < 2 or strwidth(text) <= max_dw then
-		return { text }
+		return { text }, { 0 }
 	end
 
-	local result = {}
+	local result, offsets = {}, {}
 	local remaining = text
 	while remaining ~= "" do
+		offsets[#result + 1] = #text - #remaining
 		if strwidth(remaining) <= max_dw then
 			result[#result + 1] = remaining
 			break
@@ -501,7 +504,7 @@ function M.wrap_line(text, max_dw)
 		end
 	end
 
-	return result
+	return result, offsets
 end
 
 ---@param text string|nil

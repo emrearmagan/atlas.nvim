@@ -2,7 +2,7 @@ local M = {}
 
 local utils = require("atlas.ui.shared.utils")
 local icons = require("atlas.ui.shared.icons")
-local threads = require("atlas.ui.components.threadsv2")
+local threads = require("atlas.ui.components.threads")
 
 local COLLAPSE_KEEP = 3
 local COLLAPSE_THRESHOLD = 5
@@ -71,7 +71,7 @@ end
 
 ---@param entries PullsActivityEntry[]
 ---@param run_id string|nil
----@return AtlasThreadV2Item[]
+---@return AtlasThreadItem[]
 local function to_thread_items(entries, run_id)
 	local items = {}
 	for _, e in ipairs(entries) do
@@ -94,7 +94,7 @@ local function to_thread_items(entries, run_id)
 	return items
 end
 
----@param item AtlasThreadV2Item
+---@param item AtlasThreadItem
 ---@param _text string
 ---@return string|nil
 local function additional_hl(item, _text)
@@ -111,7 +111,7 @@ local function additional_hl(item, _text)
 	return "AtlasTextMuted"
 end
 
----@param item AtlasThreadV2Item
+---@param item AtlasThreadItem
 ---@param row string
 ---@param _row_index integer
 ---@return table[]|nil

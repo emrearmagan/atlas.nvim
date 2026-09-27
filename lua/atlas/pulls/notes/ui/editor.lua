@@ -93,7 +93,7 @@ end
 ---@param target AtlasNoteTarget
 ---@param source_buf integer
 function M.details(note, target, source_buf)
-	local lines, highlights = renderer.render_details(note, target)
+	local lines, highlights = renderer.render_details(note, target, math.max(10, vim.o.columns - 4))
 	info.show({
 		lines = lines,
 		highlights = highlights,

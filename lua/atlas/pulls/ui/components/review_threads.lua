@@ -1,14 +1,11 @@
 --TODO: Holy complex fuck pls refactor
 local M = {}
 
-local threadsv2 = require("atlas.ui.components.threadsv2")
-local code_preview = require("atlas.ui.components.code_preview")
+local threads = require("atlas.ui.components.threads")
 local emojis = require("atlas.ui.shared.emojis")
 local highlights = require("atlas.ui.shared.highlights")
 local icons = require("atlas.ui.shared.icons")
 local utils = require("atlas.ui.shared.utils")
-
-local SUGGESTION_PATTERN = "^(.-)```suggestion[^\n]*\n(.-)\n```(.*)$"
 
 ---@alias AtlasReviewThreadAction "add_comment"|"edit"|"delete"|"toggle_task"|"toggle_resolved"
 
@@ -158,46 +155,9 @@ function M.status_marker(comment)
 end
 
 ---@param comment PullsComment
----@return string|nil, AtlasThreadContentBlock|nil
-local function suggestion_content(comment)
-	if not comment.inline then
-		return nil, nil
-	end
-	local raw = tostring(comment.content_raw or ""):gsub("\r\n", "\n")
-	local before, replacement, after = raw:match(SUGGESTION_PATTERN)
-	if replacement == nil then
-		return nil, nil
-	end
-
-	local prose = utils.strip_markup(before)
-	local trailing = utils.strip_markup(after)
-	if trailing ~= "" then
-		prose = prose ~= "" and (prose .. "\n\n" .. trailing) or trailing
-	end
-	local start_line = comment.inline.start_to or comment.inline.to or 1
-	local lines = vim.split(replacement, "\n", { plain = true })
-	if #lines == 0 then
-		lines = { "" }
-	end
-	local preview = code_preview.render({
-		file_path = comment.inline.path,
-		lines = lines,
-		start_line = start_line,
-		show_line_numbers = false,
-		background_hl_group = "AtlasDiffChangeLine",
-	})
-	return prose ~= "" and prose or nil,
-		{
-			title = "Suggestion",
-			lines = preview.lines,
-			highlights = preview.highlights,
-		}
-end
-
----@param comment PullsComment
 ---@param opts AtlasReviewThreadRenderOptions
 ---@param is_root? boolean
----@return AtlasThreadV2Item
+---@return AtlasThreadItem
 local function comment_item(comment, opts, is_root)
 	local is_deleted = comment.state == "DELETED"
 	local is_resolved = comment.state == "RESOLVED"
@@ -256,16 +216,8 @@ local function comment_item(comment, opts, is_root)
 		}
 	end
 
-	local text, content_block
-	if is_deleted then
-		text = "(deleted comment)"
-	else
-		text, content_block = suggestion_content(comment)
-		if not content_block then
-			text = utils.strip_markup(comment.content_display or comment.content_raw or "")
-		end
-	end
-	if text == "" and not content_block then
+	local text = is_deleted and "(deleted comment)" or (comment.content_display or comment.content_raw or "")
+	if text == "" then
 		text = "(empty comment)"
 	end
 
@@ -325,7 +277,7 @@ local function comment_item(comment, opts, is_root)
 		additional = additional,
 		right_text = marker,
 		content = text,
-		content_block = content_block,
+		markdown = not is_deleted,
 		children = {},
 		footer_items = footer_items,
 		line_map = { comment = comment, entity_kind = "comment" },
@@ -341,7 +293,7 @@ end
 
 ---@param padding_x integer
 ---@param opts AtlasReviewThreadRenderOptions
----@return AtlasThreadV2RenderOpts
+---@return AtlasThreadRenderOpts
 local function threads_opts(padding_x, opts)
 	local content_max_lines = opts.content_max_lines
 	if type(content_max_lines) == "function" then
@@ -529,7 +481,7 @@ end
 ---@param opts AtlasReviewThreadRenderOptions
 ---@param is_root boolean
 ---@param root PullsComment|nil
----@return AtlasThreadV2Item
+---@return AtlasThreadItem
 local function build_item(node, opts, is_root, root)
 	root = root or node.comment
 	local item = comment_item(node.comment, opts, is_root)
@@ -539,7 +491,6 @@ local function build_item(node, opts, is_root, root)
 		item.children = {}
 		if node.comment.state == "RESOLVED" or node.comment.state == "OUTDATED" or node.comment.outdated == true then
 			item.content = nil
-			item.content_block = nil
 			item.footer_items = {}
 		elseif #node.children > 0 then
 			local count = descendant_count(node)
@@ -588,7 +539,7 @@ function M.render(nodes, width, opts)
 	for _, node in ipairs(nodes or {}) do
 		table.insert(rendered, build_item(node, opts, true, nil))
 	end
-	return threadsv2.render(rendered, width, threads_opts(opts.padding_x or 1, opts))
+	return threads.render(rendered, width, threads_opts(opts.padding_x or 1, opts))
 end
 
 ---@param node AtlasReviewThreadNode
@@ -608,7 +559,7 @@ function M.render_task_compact(node, width, opts)
 	if timestamp ~= "" then
 		item.additional = item.additional ~= "" and (item.additional .. "  " .. timestamp) or timestamp
 	end
-	return threadsv2.render({ item }, width, threads_opts(opts.padding_x or 1, opts))
+	return threads.render({ item }, width, threads_opts(opts.padding_x or 1, opts))
 end
 
 ---@param node AtlasReviewThreadNode
@@ -667,12 +618,11 @@ function M.render_compact(node, width, expanded, location, opts)
 	item.meta.additional_hl = metadata_hl
 	if not expanded then
 		item.content = nil
-		item.content_block = nil
 		item.children = {}
 		item.footer_items = {}
 	end
 
-	return threadsv2.render({ item }, math.max(1, width - 2), threads_opts(0, opts))
+	return threads.render({ item }, math.max(1, width - 2), threads_opts(0, opts))
 end
 
 ---@param comment PullsComment
