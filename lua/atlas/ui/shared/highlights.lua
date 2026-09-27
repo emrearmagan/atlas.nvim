@@ -74,6 +74,11 @@ local groups = {
 }
 
 function M.setup()
+	vim.api.nvim_set_hl(0, "AtlasCodeBackground", {
+		bg = vim.o.background == "dark" and "#20242d" or "#f1f2f4",
+		default = true,
+	})
+
 	for name, opts in pairs(groups) do
 		vim.api.nvim_set_hl(0, name, vim.tbl_extend("force", opts, { default = true }))
 	end

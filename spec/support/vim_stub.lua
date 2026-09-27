@@ -32,6 +32,7 @@ end
 _G.vim = {
 	-- Sentinel used by the Neovim C layer for JSON null / GraphQL null values.
 	NIL = {},
+	o = { background = "dark" },
 
 	-- vim.split(s, sep, {plain=true|false})
 	split = function(s, sep, opts)

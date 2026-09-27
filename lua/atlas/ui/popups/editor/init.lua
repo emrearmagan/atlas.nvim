@@ -17,7 +17,7 @@ local function render_preview(buf, preview, width)
 	vim.api.nvim_buf_clear_namespace(buf, preview_namespace, 0, -1)
 	local lines = virtual_lines.render(preview.lines, preview.highlights, {
 		width = width,
-		background_hl_group = "CursorLine",
+		background_hl_group = "AtlasCodeBackground",
 	})
 	table.insert(lines, { { string.rep("─", width), "AtlasBorder" } })
 	vim.api.nvim_buf_set_extmark(buf, preview_namespace, 0, 0, {
