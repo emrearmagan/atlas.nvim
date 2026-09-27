@@ -407,8 +407,6 @@ local function render_description(details, width, lines, spans, line_map)
 		end
 	end
 
-	utils.push(lines, spans, "Description", "AtlasColumnHeader", PADDING_X)
-
 	local desc_text = details.description or ""
 	if vim.trim(desc_text) == "" then
 		utils.push(lines, spans, "No description provided.", "AtlasTextMuted", PADDING_X)

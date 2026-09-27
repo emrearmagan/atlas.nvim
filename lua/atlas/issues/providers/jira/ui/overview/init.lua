@@ -23,8 +23,6 @@ function M.render(_issue, details, width)
 	local line_map = {}
 	local raw_description = details.raw_description
 
-	utils.push(lines, spans, "Description", "AtlasTextMuted", PADDING_X)
-
 	if state.view_mode == "raw" then
 		local raw_text = type(raw_description) == "table" and vim.inspect(raw_description)
 			or tostring(raw_description or "")
