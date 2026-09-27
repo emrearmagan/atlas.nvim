@@ -117,7 +117,7 @@ local config = require("atlas.config")
 ---@field open_diff? AtlasKeymapValue
 ---@field checkout? AtlasKeymapValue
 ---@field external_help? AtlasKeymapValue
----@field toggle_repo_panel? AtlasKeymapValue
+---@field open_repository? AtlasKeymapValue
 ---@field toggle_repo_issue_state? AtlasKeymapValue
 ---@field edit_title? AtlasKeymapValue
 ---@field edit_description? AtlasKeymapValue
@@ -192,7 +192,7 @@ local config = require("atlas.config")
 ---| "pulls.open_diff"
 ---| "pulls.checkout"
 ---| "pulls.external_help"
----| "pulls.toggle_repo_panel"
+---| "pulls.open_repository"
 ---| "pulls.toggle_repo_issue_state"
 ---| "pulls.edit_title"
 ---| "pulls.edit_description"

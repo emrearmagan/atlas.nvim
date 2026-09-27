@@ -59,12 +59,7 @@ function M.select(item)
 	if not detail.is_open(vim.api.nvim_get_current_tabpage()) then
 		return
 	end
-	local repo_detail = require("atlas.pulls.ui.repo_detail")
-	if repo_detail.is_open() then
-		repo_detail.select(item.repo)
-	else
-		open_detail(item.pr)
-	end
+	open_detail(item.pr)
 end
 
 function M.toggle_detail()
@@ -80,19 +75,13 @@ function M.toggle_detail()
 end
 
 function M.next_detail_tab()
-	local repo_detail = require("atlas.pulls.ui.repo_detail")
-	if repo_detail.is_open() then
-		repo_detail.next_tab()
-	elseif require("atlas.pulls.ui.detail").is_open() then
+	if require("atlas.pulls.ui.detail").is_open() then
 		require("atlas.pulls.ui.detail").next_tab()
 	end
 end
 
 function M.prev_detail_tab()
-	local repo_detail = require("atlas.pulls.ui.repo_detail")
-	if repo_detail.is_open() then
-		repo_detail.prev_tab()
-	elseif require("atlas.pulls.ui.detail").is_open() then
+	if require("atlas.pulls.ui.detail").is_open() then
 		require("atlas.pulls.ui.detail").prev_tab()
 	end
 end

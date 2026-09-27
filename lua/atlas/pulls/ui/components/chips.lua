@@ -1,7 +1,6 @@
 local chips_component = require("atlas.ui.components.chips")
 local presentation = require("atlas.pulls.ui.presentation")
 local icons = require("atlas.ui.shared.icons")
-local utils = require("atlas.ui.shared.utils")
 local spinner = require("atlas.ui.components.spinner")
 
 local M = {}
@@ -51,37 +50,6 @@ function M.render(pr, opts)
 	end
 
 	return chips_component.render(chips, opts)
-end
-
----@param repo AtlasRepositoryDetails
----@param opts { width: integer, padding_x?: integer, extra_chips?: PullsDetailChip[] }
----@return string[], table[]
-function M.render_repo(repo, opts)
-	local chips = {
-		{
-			label = string.format("%s %s", icons.pulls("file"), utils.human_size(repo.size)),
-			hl = "AtlasTabInactive",
-		},
-		{
-			label = string.format("%s %s", icons.pulls("branch"), tostring(repo.default_branch or "-")),
-			hl = "AtlasPROpenChip",
-		},
-		repo.is_private == true and { label = "private", hl = "AtlasPRDraftChip" }
-			or { label = "public", hl = "AtlasTextPositive" },
-	}
-
-	for _, chip in ipairs(opts.extra_chips or {}) do
-		table.insert(chips, chip)
-	end
-
-	return chips_component.render(chips, opts)
-end
-
----@param text string|nil
----@param opts { width: integer, padding_x?: integer }
----@return string[], table[]
-function M.render_loading(text, opts)
-	return chips_component.render({ { label = spinner.with_text(text or "Loading..."), hl = "AtlasTextMuted" } }, opts)
 end
 
 return M

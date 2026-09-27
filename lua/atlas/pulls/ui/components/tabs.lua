@@ -2,7 +2,7 @@ local M = {}
 
 local tabs = require("atlas.ui.components.tabs")
 
----@param items PullsDetailTab[]|PullsRepoDetailTab[]
+---@param items PullsDetailTab[]
 ---@param active_tab string
 ---@param opts { width: integer, padding_x?: integer }
 ---@return string[], table[]

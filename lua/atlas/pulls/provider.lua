@@ -101,5 +101,4 @@
 
 ---@class PullsUICapability
 ---@field detail PullsProviderDetail|nil
----@field repo_detail PullsProviderRepoDetail|nil
 ---@field repository { pages: fun(pages: table<string, RepositoryPage>): RepositoryPage[] }|nil

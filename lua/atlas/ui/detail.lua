@@ -87,7 +87,7 @@ local function create()
 	})
 end
 
----@param kind "issues"|"pulls"|"repo"
+---@param kind "issues"|"pulls"
 ---@param cleanup fun()
 ---@param render fun()
 ---@return integer win, integer buf
@@ -120,7 +120,7 @@ function M.is_open(tab)
 		and (tab == nil or vim.api.nvim_win_get_tabpage(state.win) == tab)
 end
 
----@param kind "issues"|"pulls"|"repo"
+---@param kind "issues"|"pulls"
 ---@param tab integer|nil
 ---@return boolean
 function M.is_showing(kind, tab)

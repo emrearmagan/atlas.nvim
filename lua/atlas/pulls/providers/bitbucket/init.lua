@@ -31,7 +31,6 @@ local detail_ui = require("atlas.pulls.providers.bitbucket.ui.detail")
 local git = require("atlas.core.git")
 local pipelines = require("atlas.pulls.pipelines.bitbucket")
 local pullrequests_api = require("atlas.pulls.providers.bitbucket.api.pullrequests")
-local repo_detail_ui = require("atlas.pulls.providers.bitbucket.ui.repo_detail")
 local repository_ui = require("atlas.providers.bitbucket.ui.repository")
 local reviews_api = require("atlas.pulls.providers.bitbucket.api.reviews")
 local search_query = require("atlas.providers.bitbucket.query")
@@ -142,7 +141,6 @@ return {
 		actions = actions,
 		ui = {
 			detail = detail_ui,
-			repo_detail = repo_detail_ui,
 			repository = repository_ui,
 		},
 	},
