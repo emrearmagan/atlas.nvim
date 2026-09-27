@@ -50,57 +50,34 @@ describe("gitlab pullrequests.update_description", function()
 		assert.equal(0, #calls)
 	end)
 
-	it("PUTs the new description to the merge request endpoint", function()
+	it("PUTs descriptions including an empty body and accepts empty responses", function()
+		local response
 		stub_service(function(method, endpoint, payload, callback)
 			table.insert(calls, { method = method, endpoint = endpoint, payload = payload })
-			callback({ iid = 12, description = "Normalized by GitLab" }, nil)
+			callback(response, nil)
 		end)
 		local api = fresh_module()
 		local pr = { id = 12, repo_full_name = "group/project" }
 
-		local ok, err
-		api.update_description(pr, "New body", function(success, e)
-			ok, err = success, e
-		end)
-
-		assert.is_true(ok)
-		assert.is_nil(err)
-		assert.equal(1, #calls)
-		assert.equal("PUT", calls[1].method)
-		assert.equal("/projects/group%2Fproject/merge_requests/12", calls[1].endpoint)
-		assert.same({ description = "New body" }, calls[1].payload)
-	end)
-
-	it("accepts an empty update response", function()
-		stub_service(function(_, _, _, callback)
-			callback(nil, nil)
-		end)
-		local api = fresh_module()
-		local pr = { id = 12, repo_full_name = "group/project" }
-
-		local ok
-		api.update_description(pr, "New body", function(success)
-			ok = success
-		end)
-
-		assert.is_true(ok)
-	end)
-
-	it("clears the description when given an empty body", function()
-		stub_service(function(_, _, payload, callback)
-			table.insert(calls, { payload = payload })
-			callback({ iid = 12, description = "" }, nil)
-		end)
-		local api = fresh_module()
-		local pr = { id = 12, repo_full_name = "group/project" }
-
-		local ok
-		api.update_description(pr, "", function(success)
-			ok = success
-		end)
-
-		assert.is_true(ok)
-		assert.same({ description = "" }, calls[1].payload)
+		for index, case in ipairs({
+			{ body = "New body", response = { iid = 12, description = "Normalized by GitLab" } },
+			{ body = "New body" },
+			{ body = "", response = { iid = 12, description = "" } },
+		}) do
+			response = case.response
+			local ok, err
+			api.update_description(pr, case.body, function(success, e)
+				ok, err = success, e
+			end)
+			assert.is_true(ok)
+			assert.is_nil(err)
+			assert.same({
+				method = "PUT",
+				endpoint = "/projects/group%2Fproject/merge_requests/12",
+				payload = { description = case.body },
+			}, calls[index])
+		end
+		assert.equal(3, #calls)
 	end)
 
 	it("propagates errors from the request", function()

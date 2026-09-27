@@ -1,245 +1,129 @@
 local parser = require("atlas.core.git.diff_parser")
 
 describe("core.git.diff_parser", function()
-	describe("hunk header parsing", function()
-		it("captures starts, counts, and function context", function()
-			local raw = table.concat({
-				"diff --git a/foo.lua b/foo.lua",
-				"--- a/foo.lua",
-				"+++ b/foo.lua",
-				"@@ -10,4 +12,5 @@ function bar(x)",
-				" context one",
-				"-removed line",
-				"+added line",
-				" context two",
-				" context three",
-				"",
-			}, "\n")
-
-			local files = parser.parse(raw)
-			assert.are.equal(1, #files)
-			local h = files[1].hunks[1]
-			assert.are.equal(10, h.old_start)
-			assert.are.equal(4, h.old_count)
-			assert.are.equal(12, h.new_start)
-			assert.are.equal(5, h.new_count)
-			assert.are.equal("function bar(x)", h.context)
-			assert.are.equal("@@ -10,4 +12,5 @@ function bar(x)", h.header)
-		end)
-
-		it("treats omitted count as 1", function()
-			local raw = "diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -5 +7 @@\n-old\n+new\n"
-			local files = parser.parse(raw)
-			local h = files[1].hunks[1]
-			assert.are.equal(1, h.old_count)
-			assert.are.equal(1, h.new_count)
-		end)
-
-		it("preserves count = 0 for empty side", function()
-			local raw = "diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -5,0 +7,2 @@\n+a\n+b\n"
-			local files = parser.parse(raw)
-			local h = files[1].hunks[1]
-			assert.are.equal(0, h.old_count)
-			assert.are.equal(2, h.new_count)
-		end)
+	it("parses hunk ranges, omitted counts, empty sides and function context", function()
+		for _, case in ipairs({
+			{ "@@ -10,4 +12,5 @@ function bar(x)", { 10, 4, 12, 5 }, "function bar(x)" },
+			{ "@@ -5 +7 @@", { 5, 1, 7, 1 }, "" },
+			{ "@@ -5,0 +7,2 @@", { 5, 0, 7, 2 }, "" },
+		}) do
+			local hunk = parser.parse("diff --git a/x b/x\n" .. case[1])[1].hunks[1]
+			assert.same(case[2], { hunk.old_start, hunk.old_count, hunk.new_start, hunk.new_count })
+			assert.equals(case[3], hunk.context)
+			assert.equals(case[1], hunk.header)
+		end
 	end)
 
-	describe("per-line numbering", function()
-		it("advances new_line only on adds, old_line only on removes", function()
-			local raw = table.concat({
-				"diff --git a/x b/x",
-				"--- a/x",
-				"+++ b/x",
-				"@@ -10,3 +20,4 @@",
-				" alpha",
-				"-beta",
-				"+gamma",
-				"+delta",
-			}, "\n")
+	it("numbers context, removals and additions without counting metadata as content", function()
+		local hunk = parser.parse(table.concat({
+			"diff --git a/x b/x",
+			"--- a/x",
+			"+++ b/x",
+			"@@ -10,2 +20,3 @@",
+			" alpha",
+			"-beta",
+			"+gamma",
+			"+delta",
+			"\\ No newline at end of file",
+		}, "\n"))[1].hunks[1]
 
-			local hunk = parser.parse(raw)[1].hunks[1]
-			local lines = hunk.lines
-			assert.are.equal(4, #lines)
-
-			assert.are.equal("context", lines[1].kind)
-			assert.are.equal(10, lines[1].old_line)
-			assert.are.equal(20, lines[1].new_line)
-
-			assert.are.equal("remove", lines[2].kind)
-			assert.are.equal(11, lines[2].old_line)
-			assert.is_nil(lines[2].new_line)
-
-			assert.are.equal("add", lines[3].kind)
-			assert.is_nil(lines[3].old_line)
-			assert.are.equal(21, lines[3].new_line)
-
-			assert.are.equal("add", lines[4].kind)
-			assert.are.equal(22, lines[4].new_line)
-
-			assert.are.same({ "alpha", "beta", "gamma", "delta" }, {
-				lines[1].content,
-				lines[2].content,
-				lines[3].content,
-				lines[4].content,
-			})
-			assert.are.equal("+gamma", lines[3].text)
-			assert.are.equal(2, hunk.additions)
-			assert.are.equal(1, hunk.deletions)
-		end)
+		assert.same({
+			{ kind = "context", content = "alpha", text = " alpha", old_line = 10, new_line = 20 },
+			{ kind = "remove", content = "beta", text = "-beta", old_line = 11 },
+			{ kind = "add", content = "gamma", text = "+gamma", new_line = 21 },
+			{ kind = "add", content = "delta", text = "+delta", new_line = 22 },
+			{ kind = "meta", content = "\\ No newline at end of file", text = "\\ No newline at end of file" },
+		}, hunk.lines)
+		assert.equals(2, hunk.additions)
+		assert.equals(1, hunk.deletions)
 	end)
 
-	describe("file status", function()
-		it("detects added files via 'new file mode'", function()
-			local raw = table.concat({
-				"diff --git a/new.lua b/new.lua",
-				"new file mode 100644",
-				"--- /dev/null",
-				"+++ b/new.lua",
-				"@@ -0,0 +1,2 @@",
-				"+local M = {}",
-				"+return M",
-				"",
-			}, "\n")
-
-			local files = parser.parse(raw)
-			assert.are.equal("added", files[1].status)
-			assert.are.equal("new.lua", files[1].path)
-		end)
-
-		it("detects deleted files via 'deleted file mode'", function()
-			local raw = table.concat({
-				"diff --git a/gone.lua b/gone.lua",
-				"deleted file mode 100644",
-				"--- a/gone.lua",
-				"+++ /dev/null",
-				"@@ -1,2 +0,0 @@",
-				"-local M = {}",
-				"-return M",
-				"",
-			}, "\n")
-
-			local files = parser.parse(raw)
-			assert.are.equal("deleted", files[1].status)
-			assert.are.equal("gone.lua", files[1].path)
-		end)
-
-		it("detects renames", function()
-			local raw = table.concat({
-				"diff --git a/old.lua b/new.lua",
-				"similarity index 90%",
-				"rename from old.lua",
-				"rename to new.lua",
-				"--- a/old.lua",
-				"+++ b/new.lua",
-				"@@ -1,2 +1,2 @@",
-				" foo",
-				"-bar",
-				"+baz",
-				"",
-			}, "\n")
-
-			local files = parser.parse(raw)
-			assert.are.equal("renamed", files[1].status)
-			assert.are.equal("old.lua", files[1].old_path)
-			assert.are.equal("new.lua", files[1].path)
-		end)
-
-		it("defaults to modified for plain in-place changes", function()
-			local raw = table.concat({
-				"diff --git a/x.lua b/x.lua",
-				"--- a/x.lua",
-				"+++ b/x.lua",
-				"@@ -1,1 +1,1 @@",
-				"-a",
-				"+b",
-				"",
-			}, "\n")
-
-			assert.are.equal("modified", parser.parse(raw)[1].status)
-		end)
+	it("recognizes file status and paths", function()
+		for _, case in ipairs({
+			{
+				"diff --git a/new.lua b/new.lua\nnew file mode 100644\n--- /dev/null\n+++ b/new.lua",
+				"added",
+				"new.lua",
+			},
+			{
+				"diff --git a/gone.lua b/gone.lua\ndeleted file mode 100644\n--- a/gone.lua\n+++ /dev/null",
+				"deleted",
+				"gone.lua",
+			},
+			{
+				"diff --git a/old.lua b/new.lua\nrename from old.lua\nrename to new.lua",
+				"renamed",
+				"new.lua",
+				"old.lua",
+			},
+			{
+				"diff --git a/x.lua b/x.lua\n--- a/x.lua\n+++ b/x.lua\n@@ -1 +1 @@\n-old\n+new",
+				"modified",
+				"x.lua",
+			},
+		}) do
+			local file = parser.parse(case[1])[1]
+			assert.equals(case[2], file.status)
+			assert.equals(case[3], file.path)
+			if case[4] then
+				assert.equals(case[4], file.old_path)
+			end
+		end
 	end)
 
-	describe("multi-file / multi-hunk", function()
-		it("returns one DiffFile per 'diff --git'", function()
-			local raw = table.concat({
-				"diff --git a/a.lua b/a.lua",
-				"--- a/a.lua",
-				"+++ b/a.lua",
-				"@@ -1,1 +1,1 @@",
-				"-1",
-				"+1!",
-				"diff --git a/b.lua b/b.lua",
-				"--- a/b.lua",
-				"+++ b/b.lua",
-				"@@ -1,1 +1,1 @@",
-				"-2",
-				"+2!",
-				"",
-			}, "\n")
+	it("keeps separate files and their hunks", function()
+		local files = parser.parse(table.concat({
+			"diff --git a/a.lua b/a.lua",
+			"--- a/a.lua",
+			"+++ b/a.lua",
+			"@@ -1 +1 @@",
+			"-1",
+			"+1!",
+			"diff --git a/b.lua b/b.lua",
+			"--- a/b.lua",
+			"+++ b/b.lua",
+			"@@ -1 +1 @@",
+			"-2",
+			"+2!",
+		}, "\n"))
 
-			local files = parser.parse(raw)
-			assert.are.equal(2, #files)
-			assert.are.equal("a.lua", files[1].path)
-			assert.are.equal("b.lua", files[2].path)
-		end)
-
-		it("returns multiple hunks per file", function()
-			local raw = table.concat({
-				"diff --git a/x b/x",
-				"--- a/x",
-				"+++ b/x",
-				"@@ -1,1 +1,1 @@",
-				"-a",
-				"+A",
-				"@@ -50,2 +50,2 @@",
-				" before",
-				"-x",
-				"+X",
-				"",
-			}, "\n")
-
-			local hunks = parser.parse(raw)[1].hunks
-			assert.are.equal(2, #hunks)
-			assert.are.equal(1, hunks[1].new_start)
-			assert.are.equal(50, hunks[2].new_start)
-		end)
+		assert.equals(2, #files)
+		assert.equals("a.lua", files[1].path)
+		assert.equals("b.lua", files[2].path)
+		assert.equals(1, #files[1].hunks)
+		assert.equals(1, #files[2].hunks)
 	end)
 
-	describe("meta line", function()
-		it("captures '\\ No newline at end of file' as kind=meta", function()
-			local raw = table.concat({
-				"diff --git a/x b/x",
-				"--- a/x",
-				"+++ b/x",
-				"@@ -1,1 +1,1 @@",
-				"-old",
-				"+new",
-				"\\ No newline at end of file",
-			}, "\n")
+	it("keeps multiple hunks in one file", function()
+		local hunks = parser.parse(table.concat({
+			"diff --git a/x b/x",
+			"@@ -1 +1 @@",
+			"-a",
+			"+A",
+			"@@ -50,2 +50,2 @@",
+			" before",
+			"-x",
+			"+X",
+		}, "\n"))[1].hunks
 
-			local lines = parser.parse(raw)[1].hunks[1].lines
-			assert.are.equal(3, #lines)
-			assert.are.equal("meta", lines[3].kind)
-		end)
+		assert.equals(2, #hunks)
+		assert.equals(1, hunks[1].new_start)
+		assert.equals(50, hunks[2].new_start)
 	end)
 
-	describe("edge cases", function()
-		it("returns empty list for empty input", function()
-			assert.are.same({}, parser.parse(""))
-		end)
+	it("returns no files for an empty diff", function()
+		assert.same({}, parser.parse(""))
+	end)
 
-		it("does not crash on a file block without hunks", function()
-			local raw = table.concat({
-				"diff --git a/empty.bin b/empty.bin",
-				"new file mode 100644",
-				"Binary files /dev/null and b/empty.bin differ",
-				"",
-			}, "\n")
+	it("preserves binary files without text hunks", function()
+		local files = parser.parse(table.concat({
+			"diff --git a/empty.bin b/empty.bin",
+			"new file mode 100644",
+			"Binary files /dev/null and b/empty.bin differ",
+		}, "\n"))
 
-			local files = parser.parse(raw)
-			assert.are.equal(1, #files)
-			assert.are.equal("added", files[1].status)
-			assert.are.equal(0, #files[1].hunks)
-		end)
+		assert.equals(1, #files)
+		assert.equals("added", files[1].status)
+		assert.same({}, files[1].hunks)
 	end)
 end)

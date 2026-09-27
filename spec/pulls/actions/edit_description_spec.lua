@@ -17,8 +17,7 @@ local function capture_editor()
 	}, opened
 end
 
----@param overrides table|nil
-local function context(overrides)
+local function context()
 	local notifications = {}
 	local ctx = {
 		provider = {
@@ -33,9 +32,6 @@ local function context(overrides)
 	}
 	ctx.provider.capabilities.core.fetch_description = function(_, _, on_done)
 		on_done(ctx.details.description, nil)
-	end
-	for key, value in pairs(overrides or {}) do
-		ctx[key] = value
 	end
 	return ctx, notifications
 end
@@ -53,7 +49,9 @@ describe("pulls.actions.edit_description", function()
 	end)
 
 	it("is unavailable without a PR or without provider support", function()
-		local no_pr = context({ pr = nil })
+		local no_pr = context()
+		no_pr.pr = nil
+		no_pr.provider.capabilities.core.update_description = function() end
 		assert.is_false(actions.edit_description.is_available(no_pr))
 
 		local unsupported = context()
