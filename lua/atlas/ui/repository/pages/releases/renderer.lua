@@ -1,3 +1,4 @@
+local markdown = require("atlas.formats.markdown")
 local icons = require("atlas.ui.shared.icons")
 local utils = require("atlas.ui.shared.utils")
 
@@ -14,11 +15,12 @@ local function single_line(value)
 end
 
 ---@param release AtlasRepositoryReleaseDetails
+---@param width integer
 ---@return string[], table<integer, RepositoryReleaseSelection>, AtlasUIHighlight[]
-function M.render(release)
+function M.render(release, width)
 	local lines, line_map, spans = {}, {}, {}
 	local name = single_line(release.name)
-	local heading = "# " .. (name ~= "" and name or single_line(release.tag))
+	local heading = name ~= "" and name or single_line(release.tag)
 	local title_end = #heading
 	local badges = {}
 	if release.draft then
@@ -59,13 +61,13 @@ function M.render(release)
 	end
 	lines[#lines + 1] = ""
 	if vim.trim(release.description) ~= "" then
-		vim.list_extend(lines, utils.sanitize_lines(release.description))
+		utils.append_block(lines, spans, markdown.parse(release.description, { width = width }))
 	else
 		utils.push(lines, spans, "No release notes.", "AtlasTextMuted")
 	end
 	if #release.assets > 0 then
 		lines[#lines + 1] = ""
-		utils.push(lines, spans, "## Assets (" .. #release.assets .. ")", "AtlasColumnHeader")
+		utils.push(lines, spans, "Assets (" .. #release.assets .. ")", "AtlasColumnHeader")
 		lines[#lines + 1] = ""
 		for _, asset in ipairs(release.assets) do
 			local asset_name = single_line(asset.name):gsub("([\\%[%]])", "\\%1")
@@ -78,8 +80,12 @@ function M.render(release)
 				details[#details + 1] =
 					string.format("%d %s", asset.downloads, asset.downloads == 1 and "download" or "downloads")
 			end
-			lines[#lines + 1] = line .. (#details > 0 and "  ·  " .. table.concat(details, "  ·  ") or "")
-			line_map[#lines] = { release = release, asset = asset }
+			local first_line = #lines + 1
+			local text = line .. (#details > 0 and "  ·  " .. table.concat(details, "  ·  ") or "")
+			utils.append_block(lines, spans, markdown.parse(text, { width = width }))
+			for row = first_line, #lines do
+				line_map[row] = { release = release, asset = asset }
+			end
 		end
 	end
 	for line = 1, #lines do
